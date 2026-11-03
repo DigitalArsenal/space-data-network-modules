@@ -161,6 +161,121 @@ inline double period_minutes(const ephemerisDataBlock* blk) {
   return kTwoPi * std::sqrt(el[0] * el[0] * el[0] / twobody::kMuEarth) / 60.0;
 }
 
+/// SPEC 12.8, the arc check of a fit. A data gap: two consecutive fitted states more than kArcGapMinutes apart. An
+/// along-track step (a maneuver indicator): the fit residuals' along-track component (model minus data on the model's
+/// velocity direction), averaged per revolution over bins of at least 3 states, is regressed on a quadratic in time and
+/// on the quadratic plus a hinge, max(0, t - t_h), at each boundary between bins with at least 3 bins on either side;
+/// the hinge that lowers the residual sum the most is the candidate, its F ratio (the drop over the hinged fit's
+/// residual variance) and the velocity step its rate change c implies, |c| / 3 (a tangential step dv changes the
+/// along-track drift rate by 3 dv). A step is flagged when both pass kStepMinimumF and kStepMinimumMs.
+constexpr double kArcGapMinutes = 180.0;
+constexpr double kStepMinimumMs = 0.05;
+constexpr double kStepMinimumF = 100.0;
+struct ArcCheck {
+  double gap_minutes = 0.0;  ///< the largest interval between consecutive fitted states
+  double gap_at = 0.0;       ///< its start, minutes from the epoch
+  double step_ms = 0.0;      ///< the candidate hinge's velocity step, m/s
+  double step_at = 0.0;      ///< its time, minutes from the epoch
+  double step_f = 0.0;       ///< its F ratio
+  int bins = 0;              ///< the revolution bins tested (0: too few for the test)
+  bool gap = false, step = false;
+};
+inline ArcCheck arc_check(const ElementRow& row, const double* t, const double* r, int count) {
+  ArcCheck c;
+  if (count < 2 || !(row.mean_motion_rev_day > 0.0)) return c;
+  std::vector<int> order(static_cast<size_t>(count));
+  for (int k = 0; k < count; ++k) order[static_cast<size_t>(k)] = k;
+  std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return t[a] < t[b]; });
+  for (int k = 1; k < count; ++k) {
+    const double d = t[order[static_cast<size_t>(k)]] - t[order[static_cast<size_t>(k - 1)]];
+    if (d > c.gap_minutes) { c.gap_minutes = d; c.gap_at = t[order[static_cast<size_t>(k - 1)]]; }
+  }
+  c.gap = c.gap_minutes > kArcGapMinutes;
+  const Elements e = elements_of(row);
+  xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  if (s == nullptr) return c;
+  bool ok = xpt::xp_init(e, *s) == kPropOk;
+  const double period = kMinutesPerDay / row.mean_motion_rev_day, t0 = t[order[0]];
+  std::vector<double> sum_t, sum_a;
+  std::vector<int> num;
+  for (int q = 0; ok && q < count; ++q) {
+    const int k = order[static_cast<size_t>(q)];
+    double rm[3], vm[3];
+    if (xpt::xp_propagate(*s, t[k], rm, vm) != kPropOk) { ok = false; break; }
+    const double vn = std::sqrt(vm[0] * vm[0] + vm[1] * vm[1] + vm[2] * vm[2]);
+    if (!(vn > 0.0)) { ok = false; break; }
+    double along = 0.0;
+    for (int j = 0; j < 3; ++j) along += (rm[j] - r[3 * k + j]) * vm[j] / vn;
+    const size_t bin = static_cast<size_t>(std::floor((t[k] - t0) / period));
+    if (bin >= num.size()) { sum_t.resize(bin + 1, 0.0); sum_a.resize(bin + 1, 0.0); num.resize(bin + 1, 0); }
+    sum_t[bin] += t[k];
+    sum_a[bin] += along;
+    ++num[bin];
+  }
+  xpt::xp_release(*s);
+  std::free(s);
+  if (!ok) return c;
+  std::vector<double> bt, ba;  // bin mean time (days from the arc's middle) and along-track residual (km)
+  const double mid = 0.5 * (t0 + t[order[static_cast<size_t>(count - 1)]]);
+  for (size_t b = 0; b < num.size(); ++b)
+    if (num[b] >= 3) { bt.push_back((sum_t[b] / num[b] - mid) / kMinutesPerDay); ba.push_back(sum_a[b] / num[b]); }
+  const int K = static_cast<int>(bt.size());
+  if (K < 9) return c;
+  c.bins = K;
+  // least squares of ba on [1, tau, tau^2] and, with hinge >= 0, max(0, tau - tau_h): the residual sum, the hinge's slope
+  auto regress = [&](double tau_h, bool hinge, double& slope) -> double {
+    const int p = hinge ? 4 : 3;
+    double A[16] = {}, y[4] = {};
+    auto col = [&](int i, double tau) { return i == 0 ? 1.0 : i == 1 ? tau : i == 2 ? tau * tau : std::fmax(0.0, tau - tau_h); };
+    for (int k = 0; k < K; ++k)
+      for (int i = 0; i < p; ++i) {
+        y[i] += col(i, bt[static_cast<size_t>(k)]) * ba[static_cast<size_t>(k)];
+        for (int j = 0; j < p; ++j) A[i * p + j] += col(i, bt[static_cast<size_t>(k)]) * col(j, bt[static_cast<size_t>(k)]);
+      }
+    if (!fit::solve(A, y, p)) return -1.0;
+    double rss = 0.0;
+    for (int k = 0; k < K; ++k) {
+      double m = 0.0;
+      for (int i = 0; i < p; ++i) m += y[i] * col(i, bt[static_cast<size_t>(k)]);
+      const double d = ba[static_cast<size_t>(k)] - m;
+      rss += d * d;
+    }
+    slope = hinge ? y[3] : 0.0;
+    return rss;
+  };
+  double unused = 0.0;
+  const double rss0 = regress(0.0, false, unused);
+  if (!(rss0 >= 0.0)) return c;
+  double best = -1.0;
+  for (int h = 3; h <= K - 3; ++h) {
+    const double tau_h = 0.5 * (bt[static_cast<size_t>(h - 1)] + bt[static_cast<size_t>(h)]);
+    double slope = 0.0;
+    const double rss1 = regress(tau_h, true, slope);
+    if (!(rss1 >= 0.0)) continue;
+    const double f = rss1 > 0.0 ? (rss0 - rss1) / (rss1 / (K - 4)) : (rss0 > rss1 ? 1e300 : 0.0);
+    if (f > best) {
+      best = f;
+      c.step_f = f;
+      c.step_ms = std::fabs(slope) * 1000.0 / 86400.0 / 3.0;  // km/day of along-track rate to m/s of velocity
+      c.step_at = mid + tau_h * kMinutesPerDay;
+    }
+  }
+  c.step = c.step_f >= kStepMinimumF && c.step_ms >= kStepMinimumMs;
+  return c;
+}
+
+/// SPEC 12.8, the drag prior's fall-back. After a fit of at least kFallbackArcHours under NRLMSISE-00 at 800 to 1400 km on
+/// the band default (the wide sigma of the log), the fit is redone under the band median's prior of 0.4.11 (median 0.0005
+/// m^2/kg, sigma of the log ln 10) when the posterior sigma of the log exceeds kFallbackSigmaLog (B), or BTERM moved more
+/// than kFallbackMovedSigmas (k) posterior sigmas from the band median while the fit RMS exceeds kBandMedianRmsKm by
+/// more than 25 %, or the arc check flags a data gap or an along-track step.
+constexpr double kFallbackArcHours = 71.0;
+constexpr double kFallbackSigmaLog = 0.5;
+constexpr double kFallbackMovedSigmas = 3.0;
+constexpr double kBandMedianRmsKm = 0.01516;
+constexpr double kFallbackRmsRatio = 1.25;
+constexpr double kBandMedianBterm = 0.0005;
+
 }  // namespace fitoem
 }  // namespace sdnap
 
@@ -324,6 +439,7 @@ static int fit_blocks() {
         double first_pass_rms = 0.0;
         double fit_begin_min = 0.0, fit_end_min = 0.0;  ///< the fit interval's first and last state, minutes from the epoch
         pcf::Prior srp{};                                ///< AGOM's prior as used (SPEC 12.1 short-arc rule)
+        bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       pcf::Prior used_drag = po.drag_prior;
@@ -422,6 +538,7 @@ static int fit_blocks() {
         // SPEC 12.8: FIT.DRAG_PRIOR unset under NRLMSISE-00 or a < 24 h minimum span takes its median by mean altitude
         // (above e 0.3 the perigee's), and under NRLMSISE-00 at 800 to 1400 km the wide sigma of the log; a stated prior
         // is fitted as given
+        bool wide_band = false;
         if (drag_override == nullptr && !po.drag_prior_given && (po.msis || po.minimum_span_h < 24.0) &&
             row.mean_motion_rev_day > 0.0) {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
@@ -429,7 +546,10 @@ static int fit_blocks() {
           const double h_km = (row.eccentricity > xpt::tess::kWideE ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
           if (h_km >= 800.0) eff_drag.mean = 0.0005;
           else if (h_km >= 600.0) eff_drag.mean = 0.002;
-          if (po.msis && h_km >= 800.0 && h_km < 1400.0) eff_drag.sigma = pcf::kDragPriorWideLogSigma;
+          if (po.msis && h_km >= 800.0 && h_km < 1400.0) {
+            eff_drag.sigma = pcf::kDragPriorWideLogSigma;
+            wide_band = true;
+          }
         }
         if (drag_override == nullptr) used_drag = eff_drag;
         // a LOG_NORMAL term starts at its prior's median and stays > 0: the 2-revolution stage holds BTERM there, and
@@ -494,6 +614,7 @@ static int fit_blocks() {
         P.fit_begin_min = fit_begin_min;
         P.fit_end_min = fit_end_min;
         P.srp = eff_srp;
+        P.wide_band = wide_band;
         return 0;
       };
       // the default span: 48 h; 24 h for eccentric orbits (e > 0.5: the lane's THEMIS and Chandra windows lost
@@ -597,6 +718,39 @@ static int fit_blocks() {
           }
         }
       }
+      // SPEC 12.8: the drag prior's fall-back (fitoem::kFallback*), judged on the band default's fit
+      char drag_path[360];
+      std::snprintf(drag_path, sizeof drag_path, "%s",
+                    po.drag_prior_given ? "stated (FIT.DRAG_PRIOR), fitted as given"
+                    : chosen.wide_band  ? "band default at 800-1400 km, no fall-back"
+                                        : "band default");
+      if (chosen.wide_band && chosen.res.rms_km <= po.implausible_rms_km &&
+          (chosen.fit_end_min - chosen.fit_begin_min) / 60.0 >= fitoem::kFallbackArcHours) {
+        cov::Set first_cov;
+        double first_ng = 0.0;
+        const bool first_have = cov::of_fit(chosen.row, chosen.opt, chosen.t_fit.data(), chosen.r_fit.data(),
+                                            static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, first_cov, first_ng);
+        const double sl = first_have ? first_cov.log_sigma[0] : 0.0;
+        const fitoem::ArcCheck first_arc =
+            fitoem::arc_check(chosen.row, chosen.t_fit.data(), chosen.r_fit.data(), static_cast<int>(chosen.t_fit.size()));
+        const double moved = sl > 0.0 && chosen.row.bterm > 0.0 ? std::fabs(std::log(chosen.row.bterm / fitoem::kBandMedianBterm)) / sl : 0.0;
+        const bool wide = !(sl > 0.0) || sl > fitoem::kFallbackSigmaLog;
+        const bool rough = moved > fitoem::kFallbackMovedSigmas && chosen.res.rms_km > fitoem::kFallbackRmsRatio * fitoem::kBandMedianRmsKm;
+        if (wide || rough || first_arc.gap || first_arc.step) {
+          const pcf::Prior band = {fitoem::kBandMedianBterm, pcf::kDragPriorDefault.sigma, pcfPriorForm_LOG_NORMAL};
+          Pass f;
+          if (run_pass(span_used > 0.0 ? span_used : default_span, f, last_useable, -1, &band) == 0 && f.res.rms_km <= po.implausible_rms_km) {
+            const char* why = wide ? "posterior sigma of the log above 0.5"
+                              : rough ? "BTERM more than 3 posterior sigmas from the band median with the fit RMS more than 25 % above the band's"
+                              : first_arc.gap ? "a data gap in the arc" : "an along-track step in the arc";
+            std::snprintf(drag_path, sizeof drag_path,
+                          "fall-back to the band median's prior (0.0005 m^2/kg, sigma of the log ln 10): %s; the band default's fit: BTERM %.9g m^2/kg, posterior sigma of the log %.6g, fit RMS %.6f km",
+                          why, chosen.row.bterm, sl, chosen.res.rms_km);
+            used_drag = band;
+            chosen = std::move(f);
+          }
+        }
+      }
       // Two-stage decoupled fit (R17): when FIT.MINIMUM_SPAN_HOURS < 24 h (e.g. 17.1 h, the 12 h order-2 tesseral
       // resonance null) and FIT.DEFAULT_SPAN_HOURS >= 24 h on a non-eccentric orbit, Stage 1 above solved BTERM and AGOM
       // over the long drag span; Stage 2 pins BTERM and AGOM to Stage 1's solution and fits the 6 Brouwer mean elements
@@ -634,6 +788,23 @@ static int fit_blocks() {
       const int iterations = chosen.iterations;
       const double first_pass_rms = chosen.first_pass_rms;
       const double fit_begin_min = chosen.fit_begin_min, fit_end_min = chosen.fit_end_min;
+      // SPEC 12.8: the final fit's arc check, reported with the drag path
+      const fitoem::ArcCheck arc = fitoem::arc_check(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()));
+      char arc_text[360];
+      {
+        char gap_at[48], step_at[48];
+        oem::iso_text(e0.whole, e0.frac, arc.gap_at, gap_at, sizeof gap_at);
+        oem::iso_text(e0.whole, e0.frac, arc.step_at, step_at, sizeof step_at);
+        int k = std::snprintf(arc_text, sizeof arc_text, "arc %.3f h; largest gap %.3f h from %s (%s); ", (fit_end_min - fit_begin_min) / 60.0,
+                              arc.gap_minutes / 60.0, gap_at, arc.gap ? "a data gap" : "no gap");
+        if (k > 0 && static_cast<size_t>(k) < sizeof arc_text) {
+          if (arc.bins == 0)
+            std::snprintf(arc_text + k, sizeof arc_text - static_cast<size_t>(k), "along-track step test: too few revolutions");
+          else
+            std::snprintf(arc_text + k, sizeof arc_text - static_cast<size_t>(k), "along-track step test over %d revolutions: %.4f m/s at %s, F %.4g (%s)",
+                          arc.bins, arc.step_ms, step_at, arc.step_f, arc.step ? "a step" : "no step");
+        }
+      }
       // SGP4XP: the set the library reads, at the two-line text's digits searched on their lattice. An AP set (SPEC 16.1,
       // marked as 16.5 states) flies on AP only and keeps the solution's full precision (16.9).
       double best_pass_rms = std::fmin(first_pass_rms, res.rms_km);
@@ -702,12 +873,12 @@ static int fit_blocks() {
       flatbuffers::FlatBufferBuilder fbb(1024);
       char epoch_text[48];
       oem::iso_text(row.epoch_jd_whole, row.epoch_jd_frac, 0.0, epoch_text, sizeof epoch_text);
-      char comment[400];
+      char comment[1200];
       std::snprintf(comment, sizeof comment,
-                    "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s)%s",
+                    "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s); drag prior: %s; %s%s",
                     static_cast<unsigned>(t_fit.size()), static_cast<unsigned>(t_out.size()), res.rms_km, res.max_km, held_rms,
                     iterations, (fitoem::epoch_placement() == 0 && fit_begin_min >= 0.0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : long_arc && span_used > default_span ? "above e 0.3 with drag: the longest arc up to 7 days (SPEC 12.8)" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
-                    "");
+                    drag_path, arc_text, "");
       const auto s_epoch = fbb.CreateString(epoch_text);
       const auto s_comment = fbb.CreateString(comment);
       const auto s_center = fbb.CreateString("EARTH");
@@ -814,7 +985,7 @@ static int fit_blocks() {
         const auto o_end = ob.CreateString(end_text);
         const auto o_from = ob.CreateString(epoch_text);
         const auto o_source = ob.CreateString("sdn-ap-propagator fit: Levenberg-Marquardt on TEME position residuals, unit weights, km; theory SGP4XP at the two-line text's digits");
-        char bmodel[640], amodel[400];
+        char bmodel[1600], amodel[400];
         // the posterior sigma of BTERM and AGOM themselves: their rows of the epoch covariance
         double sigma_b = 0.0, sigma_a = 0.0;
         if (have_cov) {
@@ -834,6 +1005,10 @@ static int fit_blocks() {
           std::snprintf(bmodel + used, sizeof bmodel - used,
                         "; drag coefficient not separable on this arc (e above 0.3, %.1f h of 168 h): posterior width from the RMS floor, formal sigma %.9g m^2/kg",
                         arc_hours, formal_b);
+        }
+        {
+          const size_t used = std::strlen(bmodel);
+          std::snprintf(bmodel + used, sizeof bmodel - used, "; drag prior: %s; %s", drag_path, arc_text);
         }
         fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, have_cov, row.agom, sigma_a,
                            amodel, sizeof amodel);
