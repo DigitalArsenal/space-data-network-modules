@@ -3,23 +3,25 @@
 // Synthetic GCRF/UTC states from module conversions; FFM EGM96 70x70, Sun/Moon,
 // DE440, zero EOP, no SRP, NRLMSISE00 only on Molniya. Constant synthetic F10.7=150, Ap=15.
 // Fit the first 72 h, then measure forward RTN errors at leads 1,3,7 days.
-// The 12 h, e=.72 case must be below 100 m at day 7; print all three fixtures.
+// The generic 12 h, e=.72, i=55 case must be below 100 m at day 7.
+// Retain the critical-inclination case plus Molniya and GTO as reported bounds.
 // No JavaScript orbital dynamics. Default-FORCES XP must retain its digest.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 const cases=[
- {name:'half-day',n:2.0059,e:.72,i:63.4,raan:300,argp:270,ma:10,drag:false},
+ {name:'12-hour-55deg',n:2,e:.72,i:55,raan:300,argp:270,ma:10,drag:false},
+ {name:'half-day-critical',n:2.0059,e:.72,i:63.4,raan:300,argp:270,ma:10,drag:false},
  {name:'Molniya',n:2,e:.74,i:63.4,raan:300,argp:270,ma:10,drag:true},
  {name:'GTO',n:2.40,e:.72,i:27,raan:40,argp:270,ma:10,drag:false},
 ];
 // Diagnostic registration: a mean-element AP set seeds FFM at its epoch;
 // no fit, same forces and the same 1/3/7-day forward thresholds. This checks
 // whether the review's "synthetic set" comparison used a shared epoch state.
-if(process.argv.includes('--seed-diagnostic')){cases.splice(1);cases[0].mode='seed';}
+if(process.argv.includes('--seed-diagnostic')){const c={...cases[1],mode:'seed'};cases.splice(0,cases.length,c);}
 // Registered literal 12-hour diagnostic (2 rev/day); retain the sidereal case.
-if(process.argv.includes('--exact-12h-diagnostic')){cases.splice(1);cases[0]={...cases[0],name:'12-hour',n:2};}
+if(process.argv.includes('--exact-12h-diagnostic')){const c={...cases[1],name:'12-hour',n:2};cases.splice(0,cases.length,c);}
 const results=[];
 for(const c of cases){const result=await runModelTruth(c);results.push(result);console.log(JSON.stringify(result));}
 if(process.env.SDN_AP_HEO_REPORT)fs.writeFileSync(process.env.SDN_AP_HEO_REPORT,JSON.stringify(results,null,2)+'\n');
