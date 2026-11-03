@@ -117,7 +117,8 @@ if (!isMainThread) {
     const a = results[`0.4.16 ${f}`], b = results[`release ${f}`];
     console.log(JSON.stringify({lowE: f, identical: a.omm === b.omm, modelAt0416: a.model, model: b.model}));
     assert.equal(b.omm, a.omm, `${f}: the fitted set byte-identical to 0.4.16's`);
-    assert.equal(b.model, a.model, `${f}: the determination text unchanged`);
+    // from 0.4.18 the determination states the arc check after the posterior (SPEC 12.8): the text before it unchanged
+    assert.equal(b.model.replace(/; arc [0-9.]+ h; largest gap .*$/, ''), a.model, `${f}: the determination text unchanged before the arc check`);
   }
   execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
     {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
