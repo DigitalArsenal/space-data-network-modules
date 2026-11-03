@@ -1,0 +1,17 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
+import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
+if(!process.argv.includes('--unsigned'))throw new Error('Explicit --unsigned required; owner signs installation artifacts.');
+const root=fileURLToPath(new URL('.',import.meta.url));
+const {header,version}=await generateSdsHeaders(['SWS','SWA','SFE'],import.meta.url);
+const read=p=>fs.readFile(path.resolve(root,p),'utf8');
+const sourceCode=[header,await read('../../propagator/sgp4/src/cpp/include/nlohmann/json.hpp'),await read('../../files/orbit-products/src/sha256.hpp'),await read('src/module.cpp')].join('\n');
+const manifest=JSON.parse(await read('plugin-manifest.json'));
+await fs.mkdir(path.join(root,'dist/isomorphic'),{recursive:true});
+export const compilation=await compileModuleFromSource({manifest,sourceCode,language:'c++',outputPath:path.join(root,'dist/isomorphic/module.wasm'),threadModel:'wasi-sequential'});
+if(!compilation.report?.ok)throw new Error(JSON.stringify(compilation.report?.issues));
+await fs.copyFile(path.join(root,'plugin-manifest.json'),path.join(root,'dist/plugin-manifest.json'));
+await fs.writeFile(path.join(root,'dist/build-provenance.txt'),`spacedatastandards.org=${version}\nunsigned=true\nthreadModel=wasi-sequential\n`);
+console.log(`PASS unsigned swpc-realtime build SDS ${version}`);
