@@ -733,6 +733,8 @@ struct RateContext {
   double theta_g0;      ///< Greenwich angle at epoch (SPEC 1.2)
   const atm::Atmosphere* atmosphere;  ///< the drag's atmosphere (null: the theory's own, SPEC 3; atmosphere.inc)
   double e0, i0;                      ///< AP: epoch e and i (rad), the shallow terms to first order about them
+  const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
+  int32_t half_day_count;
   uint8_t ap_resonance;               ///< AP: section 6's classes at the current elements, by the correct functions
   uint8_t ap_frame;                   ///< AP: mean elements in the epoch's axes, states carried to TEME of date (SPEC 16.4)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
@@ -791,6 +793,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       res::ResCoef terms[29];
       const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
       res::resonance_six(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
+      if (cls == 2 && ctx.half_day != nullptr)
+        tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.e0, ctx.i0, t, k,
+                          fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
     }
   }
   if (ctx.shallow != nullptr) {
@@ -1128,6 +1133,12 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     s.ctx.zt_degree = zd;
   }
   const int sd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
+  if (res == 2 && sd >= 6) {
+    tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd) * sizeof(tess::HalfDayCoef)));
+    if (table == nullptr) return false;
+    s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table);
+    s.ctx.half_day = table;
+  }
   if (sd >= 2 && res == 0 && !s.ctx.long_period) {
     tess::ShallowTerms scratch;
     const int count = tess::shallow_terms(sd, n0, e.eo, e.xincl, scratch);
@@ -1203,6 +1214,9 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
 /// Frees what xp_init allocated (the resonance expansion); the XpSat stays usable
 /// for nothing but a new xp_init.
 inline void xp_release(XpSat& s) {
+  std::free(const_cast<tess::HalfDayCoef*>(s.ctx.half_day));
+  s.ctx.half_day = nullptr;
+  s.ctx.half_day_count = 0;
   std::free(const_cast<res::ResCoef*>(s.ctx.res_epoch));
   s.ctx.res_epoch = nullptr;
   s.ctx.res_count = 0;

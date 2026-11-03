@@ -250,7 +250,7 @@ inline const HansenSeries* hansen_series(int l, int p, int q) {
 /// by the trapezoid rule in eccentric anomaly (geometric convergence: the
 /// e^s cos(s E) content falls below rounding well inside N samples).
 inline double hansen_G(int l, int p, int q, double e) {
-  const int kN = e < 0.01 ? 32 : e < 0.1 ? 64 : e < 0.8 ? 128 : (e < 0.95 ? 512 : 4096);
+  const int kN = e < 0.01 ? 32 : e < 0.1 ? 64 : e < 0.8 ? (l > 8 ? 512 : 128) : (e < 0.95 ? (l > 8 ? 2048 : 512) : 4096);
   const double eta = std::sqrt(1.0 - e * e);
   const int j = l - 2 * p, k = l - 2 * p + q;
   double sum = 0.0;

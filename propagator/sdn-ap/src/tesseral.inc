@@ -252,6 +252,8 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
   int count = 0;
   const auto add = [&](int l, int m, int p, int q, double fv, double dfv) {
     const int w = l - 2 * p, j = w + q;
+    // The half-day tail is integrated, including away from exact commensurability.
+    if (cls == 2 && l > 5 && l <= near_degree && (m & 1) == 0 && j == m / 2) return;
     const res::TermSet carried = res::class_terms(cls);
     for (int c = 0; c < carried.count; ++c)
       if (carried.t[c].l == l && carried.t[c].m == m && carried.t[c].p == p && carried.t[c].q == q) return;
@@ -404,6 +406,59 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
   six[3] += (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
   six[4] += sI / (na2 * eta);
   six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI + 3.0 * ia * ia * sL;
+}
+
+/// Half-day resonant tail: every even order m, k=m/2, degree 6..31.
+/// Normalized F and dF/di at the epoch; G is cubic about the epoch eccentricity.
+struct HalfDayCoef {
+  int8_t l, m, p, k;
+  double f, df;
+  res::GTaylor g;
+};
+inline int half_day_bound(int degree) {
+  int count = 0;
+  for (int l = 6; l <= degree; ++l) count += (l / 2) * (l + 1);
+  return count;
+}
+inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out) {
+  int count = 0;
+  double f[72], fp[72], fm[72];
+  const double h = 1e-5;
+  // Adjacent degrees share one angle in resonance_six.
+  for (int m = 2; m <= degree; m += 2) {
+    for (int w = -degree; w <= degree; ++w) {
+      normalized_Fk(m, w, degree, i0, f);
+      normalized_Fk(m, w, degree, i0 + h, fp);
+      normalized_Fk(m, w, degree, i0 - h, fm);
+      int first = std::max(6, std::max(m, std::abs(w)));
+      if ((first - w) & 1) ++first;
+      for (int l = first; l <= degree; l += 2) {
+        const int p = (l - w) / 2, k = m / 2;
+        out[count++] = HalfDayCoef{static_cast<int8_t>(l), static_cast<int8_t>(m),
+          static_cast<int8_t>(p), static_cast<int8_t>(k), f[l], (fp[l]-fm[l])/(2*h), res::g_taylor(l,p,k-w,e0)};
+      }
+    }
+  }
+  return count;
+}
+inline void half_day_six(const HalfDayCoef* table, int count, double e0, double i0,
+                        double t, const Kepler& k, double n, double eta, double si,
+                        double ci, double theta, double* six) {
+  // Fixed-size blocks retain bounded stack usage; coefficients remain per object.
+  constexpr int block = 64;
+  res::ResCoef terms[block];
+  const double d = k.e - e0, di = k.i - i0;
+  for (int first = 0; first < count; first += block) {
+    const int size = std::min(block, count - first);
+    for (int j = 0; j < size; ++j) {
+      const HalfDayCoef& c = table[first+j];
+      const double G = c.g.g0+d*(c.g.g1+d*(0.5*c.g.g2+d*c.g.g3/6.0));
+      const double dG = c.g.g1+d*(c.g.g2+0.5*d*c.g.g3), F = c.f+c.df*di;
+      terms[j] = res::ResCoef{c.l,c.m,c.p,c.k,static_cast<int8_t>((c.l-c.m)&1),
+        kEgmC[c.l][c.m],kEgmS[c.l][c.m],F*G,F*dG,c.df*G};
+    }
+    res::resonance_six(terms,size,t,k,n,eta,si,ci,theta,six);
+  }
 }
 
 /// The zonal tail, J_l for 6 <= l <= the degree (SPEC 2 carries J2-J5), first order in the

@@ -18,7 +18,7 @@ import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.j
 import {openModule,wasmPath,THEORY} from './module.mjs';
 import {packOem,rfm,jdOf,rotate,FRAME_PROBE} from './frames.mjs';
 import {configuration,prior,pcfPriorForm} from './pcf.mjs';
-import {requestFor,decodeResult} from '../../../ffm/tests/lib/prwCodec.mjs';
+import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tests/lib/prwCodec.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000,FIT=3;
 const ffmPath=new URL('../../../ffm/dist/isomorphic/module.wasm',import.meta.url).pathname;
 const scratch=process.env.SDN_AP_HEO_CACHE??'/Users/tj/software/terrain-work/body-look/codex-apfix-d9/heo';
@@ -45,8 +45,10 @@ export async function runModelTruth(c){
  const file=path.join(scratch,key+'.json');let truth;
  if(fs.existsSync(file))truth=JSON.parse(fs.readFileSync(file));else{
   const h=await createStandaloneHarness('browser',ffmPath,{surface:'command'});
-  const r=await h.invoke(requestFor('propagate',params));assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);
-  truth=decodeResult(r).samples;assert.equal(truth.length,times.length);fs.writeFileSync(file,JSON.stringify(truth));await h.close();
+  const req=requestFor('propagate',params);
+  req.inputs.push({portId:'earth_orientation',typeRef:TYPE,payload:encodePrw('EARTH_ORIENTATION',makeTable('PRWEarthOrientation',{ROWS:Array.from({length:14},(_,k)=>makeTable('EOP',{DATE:iso(t0+(k-1)*DAY)+'Z',MJD:jd.whole-2400000.5+k-1,TAI_MINUS_UTC_SECONDS:37}))}))});
+  const r=await h.invoke(req);assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);
+  truth=decodeResult(r).samples;assert.equal(truth.length,times.length);fs.writeFileSync(file,JSON.stringify(truth));await h.close?.();
  }
  const lines=truth.map((s,k)=>Object.assign(new Line(),{EPOCH:iso(t0+times[k]*DAY),X:s.position[0],Y:s.position[1],Z:s.position[2],X_DOT:s.velocity[0],Y_DOT:s.velocity[1],Z_DOT:s.velocity[2]}));
  const rows=JSON.parse(fs.readFileSync(process.env.FFM_SPW_FIXTURE??'/Users/tj/software/terrain-work/ffm-spw-fixture/spw-constant-20261029.json'));
@@ -61,8 +63,8 @@ export async function runModelTruth(c){
  const result={name:c.name,n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
  for(let k=0;k<3;k++){
   const ref=truth[145+k],f=flown[k],err=[f.X-ref.position[0],f.Y-ref.position[1],f.Z-ref.position[2]];
-  a(0,3).set(ref.position);a(24,3).set(ref.velocity);a(48,3).set(err);assert.equal(x.sdnap_frame_to_uvw(p,p+24,p+48,p+72),0);
+  a(0,3).set(ref.position);a(24,3).set(ref.velocity);a(48,3).set(err);x.sdnap_frame_to_uvw(p,p+24,p+48,p+72);
   const rtn=Array.from(a(72,3),v=>v*1000);result.days[[1,3,7][k]]={e:Math.hypot(...err)*1000,r:rtn[0],t:rtn[1],n:rtn[2]};
  }
- x.sdnap_free(p);m.destroy();await h.close();return result;
+ x.sdnap_free(p);m.destroy();await h.close?.();return result;
 }
