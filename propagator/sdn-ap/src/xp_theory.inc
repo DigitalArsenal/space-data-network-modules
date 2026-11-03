@@ -1047,12 +1047,22 @@ inline double long_period_step(const RateContext& ctx) {
   return ctx.ap_frame && ctx.resonance == 1 ? 38.0 : kLongPeriodStep;
 }
 
+/// The averaged regime's grid step (SPEC 9): two revolutions; AP's half-day class (SPEC 16.10) at most a sixteenth of
+/// the period of its resonant angle lambda - 2 theta, 2 pi / |n - 2 omega_E|, which near the commensurability leaves
+/// the two revolutions and away from it (a GTO at 2.40 rev/day: 2.5 days) resolves the class terms.
+inline double averaged_step(const RateContext& ctx, double n) {
+  const double two_revolutions = 2.0 * kTwoPi / n;
+  if (!(ctx.ap_frame && ctx.resonance == 2)) return two_revolutions;
+  const double slip = std::fabs(n - 2.0 * kOmegaE);
+  return slip > 0.0 ? std::fmin(two_revolutions, kTwoPi / slip / 16.0) : two_revolutions;
+}
+
 inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out) {
   double h;
   if (ctx.long_period)
     h = long_period_step(ctx);
   else
-    h = 2.0 * kTwoPi / a.y[kN];
+    h = averaged_step(ctx, a.y[kN]);
   out.index = a.index + dir;
   // a failed stage retries the step once at 90 minutes; a node whose own rates fail, or a step that still fails, ends
   // the grid: every time after the last good node is refused (SPEC 8.4, 9). 9.9 has no further fallback
@@ -1384,7 +1394,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
-  const double step = s.ctx.long_period ? long_period_step(s.ctx) : 2.0 * kTwoPi / n0;
+  const double step = s.ctx.long_period ? long_period_step(s.ctx) : averaged_step(s.ctx, n0);
   const double span = 8.0 * kMinutesPerDay;
   int32_t stride = static_cast<int32_t>(std::ceil(span / (kSparse * step)));
   s.stride = stride < 1 ? 1 : stride;
