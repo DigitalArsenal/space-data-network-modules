@@ -82,6 +82,18 @@ against the SHA-256 in its `.provenance.json`, whose URL is recorded as the
 source, and every arc that meets the days `--from` to `--to` is converted.
 Output goes outside the repository, by default `~/.cache/sdn-reference-states`.
 
+`--dry-run` prints, as JSON, the plan of the run and exits: every file it would
+request (name, URL, whether `--out` already holds it) or read from the local
+archive, for the given days and products, including `kp` (GFZ Kp, fetched by the
+space-weather collector and only named here). It opens no connection and writes
+nothing. `--offline` runs the conversion with the network shut: files already
+under `--out/products` (or the local archive) are converted, any other is skipped.
+The script needs only this module's install (`npm ci`: the SDK and the standards
+its `package.json` declares); `scripts/product-sources.mjs` holds the URLs and file
+names, and `tests/fetch-offline.e2e.mjs` checks the install, a fixed range's plan
+and one spent day (ESA0OPSFIN 2024-09-24, 77 objects) converted offline, byte for
+byte against `/opt/data/sdn-archive/reference-states`.
+
 | Product | Objects | Spacing | Uncertainty |
 | --- | --- | --- | --- |
 | IGS final orbits (`IGS0OPSFIN`; ESA's `ESA0OPSFIN`, 5 min, for days BKG no longer holds) | GPS, identified from the IGS satellite metadata SINEX (PRN → SVN → COSPAR, catalog number) at the file's midpoint | 15 min | SP3 record standard deviations |

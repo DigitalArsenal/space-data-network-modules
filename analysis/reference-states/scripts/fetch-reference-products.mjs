@@ -6,7 +6,12 @@
 //
 //   node scripts/fetch-reference-products.mjs --from 2026-09-01 --to 2026-09-07 \
 //     [--products gps,slr,slr-daily,sentinel1,swarm,doris,gfz-rso,cosmic2,mgex] \
-//     [--local-archive DIR] [--out DIR]
+//     [--local-archive DIR] [--out DIR] [--dry-run] [--offline]
+//
+// --dry-run prints, as JSON, the plan of the run (every file it would request or read, from scripts/product-sources.mjs) and
+// exits: no network, no download, no conversion. --offline runs the conversion with the network shut: a file that is not
+// already under <out>/products (or the local archive) is not fetched and not converted. Product `kp` appears in the plan only
+// (GFZ Kp is fetched by the space-weather collector).
 //
 // Products (all public):
 //   gps        IGS final orbits (IGS0OPSFIN, 15 min, IGS20; ESA0OPSFIN, 5 min,
@@ -69,6 +74,11 @@ import { gunzipSync, inflateRawSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/host/browser-module';
+import {
+  DAY, DORIS, EOP_URLS, GFZ_RSO, S1, SLR, SLR_DAILY, SWARM, SINEX_URL, PRODUCTS, S1_NAME_PATTERN, cosmic2Dir, cosmic2Tarball, dorisArcs, dorisDir,
+  gfzRsoArcs, gfzRsoDir, gpsFiles, mgexFile, plan, sentinel1Base, slrArcBase, slrDailyFile, slrNamePattern, slrYearListing, swarmDay, swarmDirs,
+  swarmDownloadUrl, swarmKinPattern, swarmListUrl, swarmRdPattern, yymmdd,
+} from './product-sources.mjs';
 
 const { values } = parseArgs({ options: {
   from: { type: 'string' }, to: { type: 'string' },
@@ -82,22 +92,30 @@ const { values } = parseArgs({ options: {
   // mgex: the analysis centre's product prefix and the systems taken (GPS is the gps product's).
   'mgex-product': { type: 'string', default: 'GFZ0MGXRAP_' },
   'mgex-systems': { type: 'string', default: 'C,E,R,J' },
+  'dry-run': { type: 'boolean', default: false },
+  offline: { type: 'boolean', default: false },
 } });
 if (!['c04', 'finals'].includes(values.eop)) throw new Error('--eop is c04 or finals.');
 if (!values.from || !values.to) throw new Error('--from and --to (YYYY-MM-DD) are required.');
-const DAY = 86400000;
 const from = Date.parse(`${values.from}T00:00:00Z`), to = Date.parse(`${values.to}T00:00:00Z`);
 if (!(to >= from)) throw new Error('--to must not precede --from.');
 const out = path.resolve(values.out);
 const products = new Set(values.products.split(','));
+for (const p of products) if (!PRODUCTS.includes(p)) throw new Error(`--products: unknown product ${p} (${PRODUCTS.join(', ')}).`);
 
 const sdsRoot = path.dirname(createRequire(import.meta.url).resolve('spacedatastandards.org/package.json'));
 const flatbuffers = createRequire(path.join(sdsRoot, 'package.json'))('flatbuffers');
 const load = async (code) => import(pathToFileURL(path.join(sdsRoot, `lib/js/${code}/main.js`)));
 const [OEM, NCD, EOP] = await Promise.all(['OEM', 'NCD', 'EOP'].map(load));
-// eop-parser takes the file as one $FIL on "body" (its tests' body() helper, against the same standards checkout).
+// eop-parser takes the file as one $FIL on "body" (data-source/eop-parser/tests/frames.mjs, against the same standards checkout).
 process.env.SPACE_DATA_STANDARDS_ROOT ??= sdsRoot;
-const { body: eopBody } = await import(new URL('../../../data-source/eop-parser/tests/harness.mjs', import.meta.url).href);
+const { body: eopBody } = await import(new URL('../../../data-source/eop-parser/tests/frames.mjs', import.meta.url).href);
+// The plan of the run, then nothing else: no network, no download, no conversion.
+if (values['dry-run']) {
+  const entries = plan({ from, to, products: [...products], out, localArchive: values['local-archive'], eop: values.eop, mgexProduct: values['mgex-product'] });
+  console.log(JSON.stringify({ from: values.from, to: values.to, products: [...products], eop: values.eop, out, localArchive: values['local-archive'], entries }, null, 1));
+  process.exit(0);
+}
 const modules = new URL('../../../', import.meta.url);
 async function harness(dir, config) {
   const wasmSource = fs.readFileSync(new URL(`${dir}/dist/isomorphic/module.wasm`, modules));
@@ -111,6 +129,7 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 async function fetchCached(url, dir = 'products', name = path.basename(new URL(url).pathname)) {
   const file = path.join(out, dir, name);
   if (fs.existsSync(file)) return fs.readFileSync(file);
+  if (values.offline) return null;
   for (let attempt = 1; ; ++attempt) {
     const response = await fetch(url).catch((error) => ({ ok: false, status: error.message }));
     if (response.ok) {
@@ -127,6 +146,7 @@ async function fetchCached(url, dir = 'products', name = path.basename(new URL(u
   }
 }
 async function listing(url, pattern) {
+  if (values.offline) return [];
   const response = await fetch(url).catch(() => null);
   if (!response?.ok) return [];
   return [...new Set((await response.text()).match(pattern) ?? [])];
@@ -152,7 +172,7 @@ function unzipFirst(zip) {  // one stored or deflated entry
 }
 
 // ── Earth orientation: IERS rows (C04 or observed finals2000A) bracketing each file ──
-const EOP_URL = values.eop === 'c04' ? 'https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now' : 'https://datacenter.iers.org/data/9/finals2000A.all';
+const EOP_URL = EOP_URLS[values.eop];
 let eopRows = null;
 // finals2000A up to the last row whose polar motion (column 17) and UT1-UTC
 // (column 58) are both flagged I (IERS observed); predictions are dropped.
@@ -228,7 +248,6 @@ async function referenceStates(key, sp3, identities, provenance) {
 }
 
 // ── GPS: IGS final orbits ──
-const SINEX_URL = 'https://files.igs.org/pub/station/general/igs_satellite_metadata.snx';
 async function gnssIdentities(midMs) {
   const text = (await fetchCached(SINEX_URL))?.toString();
   if (!text) throw new Error(`IGS satellite metadata unavailable: ${SINEX_URL}`);
@@ -244,17 +263,12 @@ async function gnssIdentities(midMs) {
   return { satellites, sinexSha256: sha256(Buffer.from(text)) };
 }
 async function gps(day) {
-  const d = new Date(day), doy = Math.round((day - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAY) + 1;
-  const week = Math.floor((day - Date.UTC(1980, 0, 6)) / (7 * DAY));
-  // The IGS combined final orbit from BKG's mirror; where BKG no longer holds
-  // the day (older weeks), ESA's final orbit (an IGS analysis centre, 5 min).
-  const day3 = `${d.getUTCFullYear()}${String(doy).padStart(3, '0')}`;
-  let name = `IGS0OPSFIN_${day3}0000_01D_15M_ORB.SP3.gz`;
-  let url = `https://igs.bkg.bund.de/root_ftp/IGS/products/${week}/${name}`;
+  // The IGS combined final orbit from BKG's mirror; where BKG no longer holds the day (older weeks), ESA's final orbit.
+  const files = gpsFiles(day);
+  let { name, url } = files.primary;
   let gz = await fetchCached(url);
   if (!gz) {
-    const esa = `ESA0OPSFIN_${day3}0000_01D_05M_ORB.SP3.gz`;
-    const esaUrl = `https://navigation-office.esa.int/products/gnss-products/${week}/${esa}`;
+    const { name: esa, url: esaUrl } = files.fallback;
     gz = await fetchCached(esaUrl);
     if (gz) { console.warn(`gps: ${name} not at BKG; using ${esa}`); name = esa; url = esaUrl; }
   }
@@ -275,10 +289,7 @@ function mgexMaxCode(sp3, systems) {
 }
 let mgexSeriesMax = null;
 async function mgex(day) {
-  const d = new Date(day), doy = Math.round((day - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAY) + 1;
-  const week = Math.floor((day - Date.UTC(1980, 0, 6)) / (7 * DAY));
-  const name = `${values['mgex-product']}${d.getUTCFullYear()}${String(doy).padStart(3, '0')}0000_01D_05M_ORB.SP3.gz`;
-  const file = path.join(values['local-archive'], 'cddis', 'gnss', 'products', String(week), name);
+  const { name, file } = mgexFile(day, values['mgex-product'], values['local-archive']);
   if (!fs.existsSync(file)) return console.warn(`mgex: ${name} is not in the local archive`);
   const copy = localCopy(file);
   if (!copy) return;
@@ -304,8 +315,6 @@ async function mgex(day) {
 }
 
 // ── SLR: ILRS combined weekly arcs ──
-const SLR = { lageos1: { norad: 8820, objectId: '1976-039A', name: 'LAGEOS 1' }, lageos2: { norad: 22195, objectId: '1992-070B', name: 'LAGEOS 2' },
-  etalon1: { norad: 19751, objectId: '1989-001C', name: 'ETALON 1' }, etalon2: { norad: 20026, objectId: '1989-039C', name: 'ETALON 2' } };
 function sp3Positions(text) {  // epoch -> km position of the file's one satellite
   const rows = new Map();
   let epoch = null;
@@ -328,10 +337,10 @@ function overlapRms(a, b) {
   return { sigma: count ? Math.sqrt(sum / count) * 1000 : 0, epochs: count / 3 };
 }
 async function slr(arc) {
-  const yymmdd = new Date(arc).toISOString().slice(2, 10).replaceAll('-', '');
+  const yymmddArc = yymmdd(arc);
   for (const [sat, identity] of Object.entries(SLR)) {
-    const base = `https://edc.dgfi.tum.de/pub/slr/products/orbits/TRF/${sat}/20${yymmdd.slice(0, 2)}/${yymmdd}/`;  // EDC layout since October 2026
-    const names = await listing(base, new RegExp(`[a-z]+\\.orb\\.${sat}\\.${yymmdd}\\.v\\d+\\.sp3\\.gz`, 'g'));
+    const base = slrArcBase(sat, arc);  // EDC layout since October 2026
+    const names = await listing(base, new RegExp(slrNamePattern(sat, arc), 'g'));
     // The combination with positions: EDC also lists versions published empty
     // (header only), so each is tried in version order.
     let combined = null, gz = null, sp3 = null, truth = null;
@@ -346,7 +355,7 @@ async function slr(arc) {
       combined = name; gz = bytes; sp3 = Buffer.from(text); truth = positions;
       break;
     }
-    if (!combined) { console.warn(`slr: no ilrsa arc with positions for ${sat} ${yymmdd}`); continue; }
+    if (!combined) { console.warn(`slr: no ilrsa arc with positions for ${sat} ${yymmddArc}`); continue; }
     // Stated sigma: per-axis RMS of the analysis centres about the
     // combination (precision; shared data make it a lower bound on error).
     let sum = 0, count = 0;
@@ -362,7 +371,7 @@ async function slr(arc) {
         if (c) { sum += r.reduce((s, x, i) => s + (x - c[i]) ** 2, 0); count += 3; }
       }
     }
-    if (count < 300) { console.warn(`slr: ${sat} ${yymmdd} has too few analysis-centre epochs to state a sigma`); continue; }
+    if (count < 300) { console.warn(`slr: ${sat} ${yymmddArc} has too few analysis-centre epochs to state a sigma`); continue; }
     const sigma = Math.sqrt(sum / count) * 1000;
     const id = sp3.toString().match(/^\+\s+1\s+(\S{3})/m)?.[1];
     const basis = `the per-axis RMS (${sigma.toFixed(4)} m) of the ${centres.join(', ')} analysis-centre orbits about the ILRS combination over the arc`;
@@ -373,8 +382,6 @@ async function slr(arc) {
 }
 
 // ── Sentinel-1: AUX_POEORB transcribed to SP3-c ──
-const S1 = { S1A: { norad: 39634, objectId: '2014-016A', name: 'SENTINEL 1A' }, S1C: { norad: 62261, objectId: '2024-235A', name: 'SENTINEL 1C' },
-  S1D: { norad: 66315, objectId: '2025-251A', name: 'SENTINEL-1D' } };
 const S1_SIGMA_M = 0.05 / Math.sqrt(3);
 const S1_BASIS = 'the Sentinel-1 precise-orbit (AUX_POEORB) accuracy requirement, 5 cm 3D RMS, as a per-axis sigma';
 function eofToSp3(xml, id) {
@@ -402,11 +409,11 @@ function eofToSp3(xml, id) {
   return Buffer.from(`${lines.join('\n')}\n`);
 }
 async function sentinel1(day) {
-  const d = new Date(day), month = `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  const d = new Date(day);
   const validity = `V${d.toISOString().slice(0, 10).replaceAll('-', '')}T`;  // files valid from 22:59:42 the day before
   for (const [unit, identity] of Object.entries(S1)) {
-    const base = `https://step.esa.int/auxdata/orbits/Sentinel-1/POEORB/${unit}/${month}/`;
-    const names = (await listing(base, /S1[A-D]_OPER_AUX_POEORB_OPOD_\w+?\.EOF\.zip/g)).filter((n) => {
+    const base = sentinel1Base(unit, day);
+    const names = (await listing(base, new RegExp(S1_NAME_PATTERN, 'g'))).filter((n) => {
       const start = n.match(/_V(\d{8})T/)?.[1];
       return start && Date.parse(`${start.slice(0, 4)}-${start.slice(4, 6)}-${start.slice(6, 8)}T00:00:00Z`) === day - DAY;
     });
@@ -423,16 +430,11 @@ async function sentinel1(day) {
 }
 
 // ── SLR daily: NSGF 4-day arcs, sigma from the overlap with the next arc ──
-const SLR_DAILY = { ajisai: { norad: 16908, objectId: '1986-061A', name: 'AJISAI' }, starlette: { norad: 7646, objectId: '1975-010A', name: 'STARLETTE' },
-  stella: { norad: 22824, objectId: '1993-061B', name: 'STELLA' }, larets: { norad: 27944, objectId: '2003-042F', name: 'LARETS' },
-  westpac: { norad: 25398, objectId: '1998-043E', name: 'WESTPAC' }, lares: { norad: 38077, objectId: '2012-006A', name: 'LARES' },
-  lares2: { norad: 53105, objectId: '2022-080A', name: 'LARES-2' } };
-const yymmdd = (ms) => new Date(ms).toISOString().slice(2, 10).replaceAll('-', '');
 async function slrDaily(arcStart) {
   // The arc in file F spans F-4 00:00 to F-1; the next file's arc overlaps it by 3 days.
   for (const [sat, identity] of Object.entries(SLR_DAILY)) {
     // EDC layout since October 2026: rapid/<sat>/<yyyy>/<yymmdd>/, daily files, version v000.
-    const file = (ms) => `https://edc.dgfi.tum.de/pub/slr/products/orbits/rapid/${sat}/${new Date(ms).getUTCFullYear()}/${yymmdd(ms)}/nsgf.orb.${sat}.${yymmdd(ms)}.v000.sp3.gz`;
+    const file = (ms) => slrDailyFile(sat, ms);
     const gz = await fetchCached(file(arcStart + 4 * DAY));
     const next = await fetchCached(file(arcStart + 5 * DAY));
     if (!gz || !next) { console.warn(`slr-daily: ${sat} arc from ${yymmdd(arcStart)} or its successor not published`); continue; }
@@ -452,13 +454,10 @@ async function slrDaily(arcStart) {
 }
 
 // ── Swarm: TU Delft reduced-dynamic orbits, sigma from kinematic minus reduced-dynamic ──
-const SWARM = { A: { norad: 39452, objectId: '2013-067B', name: 'SWARM A' }, B: { norad: 39451, objectId: '2013-067A', name: 'SWARM B' },
-  C: { norad: 39453, objectId: '2013-067C', name: 'SWARM C' } };
-const SWARM_SERVER = 'https://swarm-diss.eo.esa.int/';
 const swarmListings = new Map();
 async function swarmList(dir) {
   if (!swarmListings.has(dir)) {
-    const response = await fetch(`${SWARM_SERVER}?do=list&maxfiles=10000&pos=0&file=${encodeURIComponent(dir)}`).catch(() => null);
+    const response = values.offline ? null : await fetch(swarmListUrl(dir)).catch(() => null);
     swarmListings.set(dir, response?.ok ? (await response.json()).results.map((r) => r.name) : []);
   }
   return swarmListings.get(dir);
@@ -466,16 +465,16 @@ async function swarmList(dir) {
 async function swarmFile(dir, pattern) {
   const name = (await swarmList(dir)).filter((n) => pattern.test(n)).sort().at(-1);
   if (!name) return null;
-  const url = `${SWARM_SERVER}?do=download&file=${encodeURIComponent(`${dir}/${name}`)}`;
+  const url = swarmDownloadUrl(dir, name);
   const zip = await fetchCached(url, 'products', name);
   return zip && { name, url, zip, sp3: unzipEntry(zip, '.sp3') };
 }
 async function swarm(day) {
-  const d = new Date(day - DAY).toISOString().slice(0, 10).replaceAll('-', '');  // files run 23:59:42 the day before to the day's end
+  const d = swarmDay(day);  // files run 23:59:42 the day before to the day's end
   for (const [sat, identity] of Object.entries(SWARM)) {
-    const span = new RegExp(`^SW_OPER_SP3${sat}(COM|RD_)_2__${d}T235942_`);
-    const rd = await swarmFile(`swarm/Level2daily/Latest_baselines/POD/RD/Sat_${sat}`, span);
-    const kin = await swarmFile(`swarm/Level2daily/Latest_baselines/POD/KIN/Sat_${sat}`, new RegExp(`^SW_OPER_SP3${sat}KIN_2__${d}T235942_`));
+    const dirs = swarmDirs(sat);
+    const rd = await swarmFile(dirs.rd, swarmRdPattern(sat, day));
+    const kin = await swarmFile(dirs.kin, swarmKinPattern(sat, day));
     if (!rd?.sp3 || !kin?.sp3) { console.warn(`swarm: Swarm ${sat} ${d} not published (reduced-dynamic and kinematic both needed)`); continue; }
     const truth = sp3Positions(rd.sp3.toString());
     let sum = 0, count = 0, excluded = 0;
@@ -546,19 +545,13 @@ async function localArcs(arcs, lo, hi, minEpochs, identity, note = '') {
 }
 
 // ── DORIS: CNES SSALTO precise orbits (IDS), ssa<sat><version>.b<yyddd>.e<yyddd>.<type>.sp3.<nnn>.Z ──
-const DORIS = { cs2: { norad: 36508, objectId: '2010-013A', name: 'CRYOSAT 2' }, srl: { norad: 39086, objectId: '2013-009A', name: 'SARAL' },
-  s3a: { norad: 41335, objectId: '2016-011A', name: 'SENTINEL 3A' }, s3b: { norad: 43437, objectId: '2018-039A', name: 'SENTINEL 3B' },
-  swo: { norad: 54754, objectId: '2022-173A', name: 'SWOT' } };
-const yyddd = (s) => Date.UTC(2000 + Number(s.slice(0, 2)), 0, Number(s.slice(2)));
 async function doris(lo, hi) {
-  const dir = path.join(values['local-archive'], 'ids-doris', 'ssa');
-  const names = fs.readdirSync(dir).filter((n) => /^ssa\w{5}\.b\d{5}\.e\d{5}\.\w{3}\.sp3\.\d{3}\.Z$/.test(n)).sort();
+  const dir = dorisDir(values['local-archive']);
   for (const [sat, identity] of Object.entries(DORIS)) {
     // One arc per first day, the latest version; .Z (LZW) is read by gzip.
-    const byStart = new Map(names.filter((n) => n.slice(3, 6) === sat).map((n) => [n.slice(10, 15), n]));
-    const arcs = [...byStart].sort().map(([b, file]) => ({ name: file.replace(/\.sp3\.\d{3}\.Z$/, ''), file, start: yyddd(b), stop: yyddd(file.slice(17, 22)) + DAY,
+    const arcs = dorisArcs(values['local-archive'])[sat].map((a) => ({ ...a,
       read: () => {
-        const copy = localCopy(path.join(dir, file));
+        const copy = localCopy(path.join(dir, a.file));
         const sp3 = copy && execFileSync('gzip', ['-dc'], { input: copy.bytes, maxBuffer: 1 << 28 });
         return copy && { ...copy, sp3, sp3Sha256: sha256(sp3) };
       } }));
@@ -569,17 +562,12 @@ async function doris(lo, hi) {
 // ── GRACE-FO and TerraSAR-X: GFZ rapid science orbits (ISDC), GFZOP_RSO_<code>_G_<start>_<stop>_v<nn>.sp3.gz ──
 // L64's positions are those of ESA's GRACE-FO 1 density product (DNS1ACC);
 // L65 is the other satellite; L13 is TerraSAR-X.
-const GFZ_RSO = { L64: { norad: 43476, objectId: '2018-047A', name: 'GRACE-FO 1' }, L65: { norad: 43477, objectId: '2018-047B', name: 'GRACE-FO 2' },
-  L13: { norad: 31698, objectId: '2007-026A', name: 'TerraSAR-X' } };
-const stamp = (s) => Date.parse(`${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(9, 11)}:${s.slice(11, 13)}:${s.slice(13, 15)}Z`);
 async function gfzRso(lo, hi) {
   for (const [code, identity] of Object.entries(GFZ_RSO)) {
-    const dir = path.join(values['local-archive'], 'gfz-isdc-rso', 'RSO', code);
-    const names = fs.readdirSync(dir).filter((n) => /^GFZOP_RSO_L\d\d_G_\d{8}_\d{6}_\d{8}_\d{6}_v\d\d\.sp3\.gz$/.test(n)).sort();
-    const byStart = new Map(names.map((n) => [n.slice(16, 31), n]));  // the latest version
-    const arcs = [...byStart].sort().map(([start, file]) => ({ name: file.replace('.sp3.gz', ''), file, start: stamp(start), stop: stamp(file.slice(32, 47)),
+    const dir = gfzRsoDir(values['local-archive'], code);
+    const arcs = gfzRsoArcs(values['local-archive'], code).map((a) => ({ ...a,
       read: () => {
-        const copy = localCopy(path.join(dir, file));
+        const copy = localCopy(path.join(dir, a.file));
         const text = copy && gunzipSync(copy.bytes);
         // Header columns 47-51 carry the frame; "CTS  " is the conventional terrestrial system.
         return copy && { ...copy, sp3: Buffer.from(text.toString().replace(/^(#[cd][PV].{43})CTS  /, '$1ITRF ')), sp3Sha256: sha256(text) };
@@ -594,7 +582,7 @@ const COSMIC2 = { '001': { norad: 44349, objectId: '2019-036L', name: 'FORMOSAT7
   '003': { norad: 44343, objectId: '2019-036E', name: 'FORMOSAT7-3/COSMIC2-3' }, '004': { norad: 44350, objectId: '2019-036M', name: 'FORMOSAT7-4/COSMIC2-4' },
   '005': { norad: 44358, objectId: '2019-036V', name: 'FORMOSAT7-5/COSMIC2-5' }, '006': { norad: 44353, objectId: '2019-036Q', name: 'FORMOSAT7-6/COSMIC2-6' } };
 async function cosmic2(lo, hi) {
-  const dir = path.join(values['local-archive'], 'ucar-cosmic2', 'nrt-leoOrb');
+  const dir = cosmic2Dir(values['local-archive']);
   const opened = new Map();  // the last few tarballs read
   const tarball = (name) => {
     if (!opened.has(name)) {
@@ -607,8 +595,7 @@ async function cosmic2(lo, hi) {
   const byFm = new Map();
   // A day's tarball holds the arcs that begin from about 22:00 the day before.
   for (let day = lo - DAY; day <= hi; day += DAY) {
-    const d = new Date(day), doy = Math.round((day - Date.UTC(d.getUTCFullYear(), 0, 1)) / DAY) + 1;
-    const name = `leoOrb_nrt_${d.getUTCFullYear()}_${String(doy).padStart(3, '0')}.tar.gz`;
+    const name = cosmic2Tarball(day);
     const t = fs.existsSync(path.join(dir, name)) ? tarball(name) : null;
     if (!t) { console.warn(`cosmic2: ${name} is not in the local archive`); continue; }
     for (const [member, bytes] of t.files) {
@@ -639,10 +626,9 @@ for (let day = from; day <= to; day += DAY) {
   if (products.has('sentinel1')) await sentinel1(day);
   // ILRS arcs are named by their last day, one each week.
   if (products.has('slr')) {
-    const yymmdd = new Date(day).toISOString().slice(2, 10).replaceAll('-', '');
     const years = [...new Set([new Date(from).getUTCFullYear(), new Date(to).getUTCFullYear()])];
-    arcs ??= (await Promise.all(years.map((y) => listing(`https://edc.dgfi.tum.de/pub/slr/products/orbits/TRF/lageos1/${y}/`, /lageos1\/\d{4}\/(\d{6})/g)))).flat();
-    if (arcs.some((x) => x.endsWith(yymmdd))) await slr(day);
+    arcs ??= (await Promise.all(years.map((y) => listing(slrYearListing(y), /lageos1\/\d{4}\/(\d{6})/g)))).flat();
+    if (arcs.some((x) => x.endsWith(yymmdd(day)))) await slr(day);
   }
 }
 // Local arcs that meet the days --from to --to.
