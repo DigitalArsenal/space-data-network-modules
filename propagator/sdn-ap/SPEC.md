@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.13.
+Version 0.4.14.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1145,8 +1145,8 @@ and e >= 0.5) are not used for type 4.
 
 AP adds the half-day terms of degrees 6 through min(d, 31), for every even order m and p = 0..l,
 with k = m/2 and q = k - l + 2p (16.2). SGP4XP keeps the class table below.
-Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters at 0.4.11 are 123.8/121.4/202.0
-for the half-day fixture, 208.3/253.4/338.0 for Molniya with drag, 253.7/112.3/2,444.4 for GTO,
+Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters at 0.4.14 are 123.8/121.4/202.0
+for the half-day fixture, 208.3/253.4/338.0 for Molniya with drag, 237.8/175.8/924.7 for GTO (16.10's step),
 and 139.7/177.2/303.2 for the 55-degree fixture. Section 16.6 defines the fixtures and signed RTN errors.
 
 A term is labeled (l, m, p, q). Its resonant angle is
@@ -2000,8 +2000,9 @@ quadrature, 16.8 at every eccentricity) the 3D errors at days 1, 3 and 7 are 123
 208.3, 253.4 and 338.0 m (Molniya), 253.7, 112.3 and 2444.4 m (GTO) and 139.7, 177.2 and 303.2 m (12-hour 55 deg); the
 half-day day-7 sample falls 1 h after a perigee, and `test/heo-model-truth.e2e.mjs` pins it within 0.5 m. Flown
 hourly, the day-7 whole-day RMS along-track/radial is 84.2/75.3, 149.8/175.9, 960.8/935.3 and 158.0/105.5 m (0.4.10:
-228/85, 687/391, 885/860 and 232/60 m); `test/third-body-short-period-eccentric.e2e.mjs` checks them. The force
-contributions responsible for the Molniya and GTO gaps are not isolated; 16.8 separates the third bodies' share.
+228/85, 687/391, 885/860 and 232/60 m); `test/third-body-short-period-eccentric.e2e.mjs` checks them. From 0.4.14
+the half-day class's step (16.10) brings GTO to 237.8, 175.8 and 924.7 m and 419.3/455.9 m whole-day. The force
+contributions responsible for the Molniya gap are not isolated; 16.8 separates the third bodies' share.
 The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
 and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
 
@@ -2025,7 +2026,8 @@ reaches 2.403874454 and stays inside the band.
 | All AP tables rebuilt | -31,291.823 | -26,506.785 | 18.052% |
 
 At 0.4.11 (5.4's quadrature, 16.8 at every eccentricity) the rebuilt and held arms carry -26,674.861 and
--27,708.115 m and the companion -22,815.885 m (16.914%).
+-27,708.115 m and the companion -22,815.885 m (16.914%); at 0.4.14 (16.10's step) -25,681.230, -26,849.503 and
+-22,083.870 m (16.290%).
 Rebuilding is retained because it has the smaller FFM along-track error and consistent rate/output tables.
 The E2E allows a 25% difference from the companion and requires rebuilding to improve on epoch hold.
 The fixture's remaining absolute error is attributed to perigee-drag and third-body force detail absent from
@@ -2118,6 +2120,38 @@ Etalon-2 23.55 to 9.74 m; medians LAGEOS-1 14.10 to 7.81 m, LAGEOS-2 12.24 to 6.
 654.1 to 700.4 m, GTO 2326.6 to 2356.1 m, 12-hour 55 deg 188.7 to 175.5 m. `test/twelve-hour-class-terms.e2e.mjs`
 prints every number. The AP covariance calibration of 12.7 is re-measured on these sets with its noise constants
 unchanged: one of its eight cells (ABOVE, day 1) is now inside the band, none was before.
+
+**16.10 The half-day class's step.** The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
+2.406 rev/day) carries resonant terms in lambda - 2 theta, whose period 2 pi / |n - 2 omega_E| is long near the
+commensurability (the half-day, Molniya and GPS orbits: hundreds of days) and short away from it (GTO at 2.40 rev/day:
+2.5 days; Galileo at 1.70: 3.3 days; BeiDou at 1.86: 6.9 days); two revolutions, 20 h on GTO, do not resolve the
+latter. From 0.4.14 the class steps at most a 32nd of that period: 114 min on GTO, 150 on Galileo, 312 on BeiDou and
+361 on Etalon and GLONASS; near the commensurability the two revolutions stand, and the half-day, Molniya, 12-hour 55
+deg and GPS cases are bit for bit 0.4.13's. Against the class stepped at 23.75 min (11.875 min moves that by under
+0.003 m in 7 days), on seeded FORCES 31,20 sets: GTO 0.065 m RMS over one orbit (two revolutions: 84.5 m, and 261 m
+over 7 days), the 500 km perigee GTO 0.057 m, and over 7 days Galileo-, BeiDou- and Etalon-like orbits 0.004, 0.013
+and 0.016 m.
+
+On FFM model truth without Sun or Moon on either side (2-minute samples; day-7 3D RMS, m), the geopotential cut on both
+sides, the class stepped two revolutions and 95 min:
+
+| Field (AP degrees) | GTO, 220 km perigee | GTO, 95 min | 500 km perigee | 500 km, 95 min |
+| --- | --: | --: | --: | --: |
+| 4x4 (4,4) | 237.5 | 233.2 | 195.8 | 189.3 |
+| 8x8 (8,8) | 604.6 | 558.1 | 451.7 | 427.0 |
+| 12x12 (12,12) | 822.1 | 472.0 | 585.1 | 379.1 |
+| 20x20 (20,20) | 1,147.4 | 494.7 | 753.9 | 380.3 |
+| 70x70 (31,20) | 1,369.8 | 627.6 | 831.1 | 418.4 |
+
+On GTO at 70x70 the class stepped 600, 450, 300, 190, 95 and 47.5 min gives 639.0, 623.6, 626.3, 627.2, 627.6 and
+627.7 m. With zonals only the comparison does not separate the fields: XP's own half-day resonance terms (SPEC 6)
+have no counterpart in a zonal truth (4x0 against AP 0,4: 600.3 m). What remains on GTO grows with the degree (233 to
+628 m from 4x4 to 70x70): high-degree terms at perigee that AP does not carry, an open part.
+
+FFM model truth with Sun and Moon (`test/gto-geopotential-perigee.e2e.mjs`; hourly, day-7 whole-day RMS
+along-track/radial against 0.4.13): GTO 960.82/935.27 to 419.32/455.90 m (day-7 sample 2449.15 to 929.45 m), the 500 km
+perigee GTO 605.15/576.31 to 295.44/304.96 m; on the read AP6 windows Etalon-1 and -2 move by +0.07 and +0.14 m (paired
+day 3), LAGEOS, LARES-2, IG and GE not at all.
 
 ---
 
