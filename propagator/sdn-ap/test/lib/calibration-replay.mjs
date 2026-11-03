@@ -161,6 +161,7 @@ function metric(P,e){
  const [a,b,c,d,f,g]=P, det=a*(c*g-f*f)-b*(b*g-f*d)+d*(b*f-c*d);
  if(!(a>0&&a*c-b*b>0&&det>0))return null;
  const d2=((c*g-f*f)*e[0]**2+(a*g-d*d)*e[1]**2+(a*c-b*b)*e[2]**2+2*(d*f-b*g)*e[0]*e[1]+2*(b*f-c*d)*e[0]*e[2]+2*(b*d-a*f)*e[1]*e[2])/det;
+ if(!Number.isFinite(d2)||d2<0)return null;
  return {d2,logDet:Math.log(det)};
 }
 export function calibrate(results){
