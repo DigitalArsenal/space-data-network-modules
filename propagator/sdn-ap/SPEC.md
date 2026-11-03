@@ -1849,9 +1849,10 @@ returns Sentinel-3A and -3B to 0.4.11 in the band, its gains with its losses: 0.
 0.128 and 0.114 km at day 3 back to 1.506, 0.502 and 0.482 km. Jason-3 2025-10-10 (day 3 0.203 / 0.250 km, sigma of the
 log 0.039, fit RMS 16.1 m) is not reached by the rule.
 
-Cost: the mean fit time of a 72 h DO arc (12 workers on the owner Mac) outside the band 1,754 to 1,781 ms (the arc
-check), on the band default kept 1,907 to 2,301 ms (the first fit's covariance and arc check), on a fall-back 1,876 to
-3,606 ms (the second fit); per object-day of the arc a third of that. Propagation does not change (XP digest
+Cost: the mean fit time of a 72 h DO arc, 0.4.17 to 0.4.18 (12 workers on the owner Mac), outside the band 1,680 to
+1,706 ms (the arc check), on the band default kept 1,834 to 2,210 ms (the first fit's covariance and arc check), on a
+fall-back 1,790 to 3,430 ms (the second fit); per object-day of the arc a third of that (560 to 569, 611 to 737 and 597
+to 1,143 ms). Propagation does not change (XP digest
 72dcf6005046). `test/drag-prior-fallback.e2e.mjs` measures every number here.
 
 **Above e 0.3.** Until 0.4.16 Molniya's band default followed its mean altitude (20,180 km, median 0.0005) and the 72 h

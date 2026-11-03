@@ -468,4 +468,4 @@ Sentinel-3A 2025-10-15 returns to 0.087 km at day 3 (0.4.17: 0.312) and Sentinel
 (1.335), HY-2C/D, SWOT and Jason-3 keep 0.4.17's gains, SARAL and CryoSat-2 are unchanged, and Sentinel-3 in the band
 returns to 0.4.11 with its gains as well as its losses; Jason-3 2025-10-10 is not reached. A 0.5 m/s step after the arc
 leaves the fit bit for bit; one inside it is flagged and falls back. A fit of a 72 h arc costs 2 % more outside the
-band, 21 % more where the band default is kept and 92 % more where it falls back (`test/drag-prior-fallback.e2e.mjs`).
+band, 20 % more where the band default is kept and 92 % more where it falls back (`test/drag-prior-fallback.e2e.mjs`).
