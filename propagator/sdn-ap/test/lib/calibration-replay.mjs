@@ -2,6 +2,7 @@
 // UTC/GCRF km. Refit the registered AP5/AP6 arcs under LOG_NORMAL and FORCES
 // 31,20. Signed errors and covariance must share epochs: stored daily RTN RMS
 // cannot substitute for signed errors. No held-out or operator source is opened.
+// Score exact days 1,2,3,7 across windows; stored bin RMS is not endpoint error.
 // Each window supplies P0 and four noise bases from the module. Fit nonnegative
 // squared noise sizes by Gaussian likelihood; report SPEC 12.7 unchanged.
 import fs from 'node:fs';
@@ -22,7 +23,7 @@ const scratch=process.env.SDN_AP_CALIBRATION_CACHE??'/Users/tj/software/terrain-
 const imp=p=>import(path.join(external,'experiments',p));
 const readRows=dir=>fs.readdirSync(dir).filter(f=>/^rows-\d+\.jsonl$/.test(f)).sort().flatMap(f=>fs.readFileSync(path.join(dir,f),'utf8').split('\n').filter(Boolean).map(JSON.parse));
 const checksum=createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex');
-const filename=w=>path.join(scratch,createHash('sha256').update(checksum+w.key+w.arm).digest('hex')+'.json.gz');
+const filename=w=>path.join(scratch,createHash('sha256').update(checksum+"exact-leads-v1"+w.key+w.arm).digest('hex')+'.json.gz');
 function windows(){
  const base=path.join(archive,'operator-theory/ap/b040');
  const ap=new Map(readRows(path.join(base,'truth2')).map(r=>[r.key,r]));
@@ -85,7 +86,13 @@ async function replay(list){
    if(thin.length<8)throw Error('too few fit states');
    const after=all.filter(l=>ms(l.epoch)>cutoff);
    const gridMs=Math.max(300000,Math.ceil((ms(after[1].epoch)-ms(after[0].epoch))/300000)*300000);
-   const scored=after.filter(l=>(ms(l.epoch)-ms(after[0].epoch))%gridMs===0&&w.stored.days[Math.ceil((ms(l.epoch)-cutoff)/DAY)]);
+   // Exact lead days required by the task. The stored rows identify entered bins;
+   // their RMS is reported separately and is never treated as a signed vector.
+   const scored=[1,2,3,7].filter(day=>w.stored.days[day]).map(day=>{
+    const l=after.find(l=>Math.abs(ms(l.epoch)-(cutoff+day*DAY))<1);
+    if(!l)throw Error(`no exact day-${day} truth epoch`);
+    return l;
+   });
    const vacuum=['HE','HX'].includes(w.group);
    const weather=vacuum?null:W.rowsO(cutoff-6*DAY,cutoff);
    if(weather?.excluded)throw Error(weather.excluded);
