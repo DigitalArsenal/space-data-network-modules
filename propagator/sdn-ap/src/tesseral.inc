@@ -37,6 +37,24 @@ constexpr double kShallowBand = 0.045;
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
+/// Above this epoch eccentricity a perigee pass spreads a term over the harmonics of M (SPEC 16.11): the zonal tail
+/// carries every long-period term and the first-order set every q to |q| <= kWideQ.
+constexpr double kWideE = 0.3;
+constexpr int kWideQ = 10;
+
+/// The mean over M of (a/r)^k, k >= 2: eta^-(2k-3) sum_j C(k-2, 2j) C(2j, j) (e/2)^(2j). It bounds |G| of every
+/// term of degree k - 1.
+inline double mean_a_over_r(int k, double e) {
+  const int m = k - 2;
+  double s = 0.0;
+  for (int j = 0; 2 * j <= m; ++j) {
+    double c1 = 1.0, c2 = 1.0;
+    for (int r = 0; r < 2 * j; ++r) c1 = c1 * (m - r) / (r + 1);
+    for (int r = 0; r < j; ++r) c2 = c2 * (2 * j - r) / (r + 1);
+    s += c1 * c2 * std::pow(0.25 * e * e, j);
+  }
+  return s / std::pow(1.0 - e * e, k - 1.5);
+}
 
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {
@@ -231,11 +249,11 @@ inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
   }
 }
 
-/// The upper bound of the table: the general set of `degree` and kNearMax near-resonant terms.
+/// The upper bound of the table: the general set of `degree` (`wide`: |q| <= kWideQ) and kNearMax near-resonant terms.
 constexpr int kNearMax = 500;
-inline int sp_bound(int degree) {
+inline int sp_bound(int degree, bool wide) {
   int c = kNearMax;
-  for (int l = 2; l <= degree; ++l) c += l * (l + 1) * 3;
+  for (int l = 2; l <= degree; ++l) c += l * (l + 1) * (wide ? 2 * kWideQ + 1 : 3);
   return c;
 }
 
@@ -250,14 +268,16 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
   const double h = 1e-5;
   const double na2 = n0 * a0 * a0, keep = kSpKeepM * 1e-3 / kRe;
   int count = 0;
-  const auto add = [&](int l, int m, int p, int q, double fv, double dfv) {
+  const bool wide = e0 > kWideE;
+  // The term's weight (0: not kept here) and its angle rate.
+  const auto weight_of = [&](int l, int m, int p, int q, double& psidot) -> double {
     const int w = l - 2 * p, j = w + q;
     // The half-day tail is integrated, including away from exact commensurability.
-    if (cls == 2 && l > 5 && l <= near_degree && (m & 1) == 0 && j == m / 2) return;
+    if (cls == 2 && l > 5 && l <= near_degree && (m & 1) == 0 && j == m / 2) return 0.0;
     const res::TermSet carried = res::class_terms(cls);
     for (int c = 0; c < carried.count; ++c)
-      if (carried.t[c].l == l && carried.t[c].m == m && carried.t[c].p == p && carried.t[c].q == q) return;
-    const double psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
+      if (carried.t[c].l == l && carried.t[c].m == m && carried.t[c].p == p && carried.t[c].q == q) return 0.0;
+    psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
     double weight = 1.0;
     const double x = std::fabs(psidot) / (kShallowBand * n0);
     if (low) {
@@ -270,9 +290,11 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
     } else if (x < 1.0) {
       weight = 0.0;
     }
-    if (weight == 0.0) return;
-    double g0, g1;
-    sp_g(l, p, q, e0, g0, g1);
+    return weight;
+  };
+  const auto put = [&](int l, int m, int p, int q, double fv, double dfv, double g0, double g1, double weight,
+                       double psidot) {
+    const int w = l - 2 * p, j = w + q;
     const double G = g0 + g1 * e0;
     const double sv = std::hypot(kEgmC[l][m], kEgmS[l][m]);
     const double A = kMu * std::pow(1.0 / a0, l + 1) * sv * weight;
@@ -282,6 +304,14 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
     if (mag < keep) return;
     out[count++] = SpCoef{static_cast<int8_t>(l), static_cast<int8_t>(m), static_cast<int8_t>(w), static_cast<int8_t>(j),
                           static_cast<float>(fv * weight), static_cast<float>(dfv * weight), static_cast<float>(g0), static_cast<float>(g1)};
+  };
+  const auto add = [&](int l, int m, int p, int q, double fv, double dfv) {
+    double psidot = 0.0;
+    const double weight = weight_of(l, m, p, q, psidot);
+    if (weight == 0.0) return;
+    double g0, g1;
+    sp_g(l, p, q, e0, g0, g1);
+    put(l, m, p, q, fv, dfv, g0, g1, weight, psidot);
   };
   double f[72], fp[72], fm[72];
   // A term cannot pass `keep` if this bound on its amplitude does not: Fbar <= sqrt(2 (2 l + 1)), dFbar/di <= l Fbar,
@@ -297,7 +327,60 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
     const double bound = a0 * A * Fb * (Gb * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * ll / (na2 * ap)) + ll * ll / (na2 * ap) + l * Gb / (na2 * ap));
     return bound >= keep;
   };
-  for (int l = 2; l <= degree; ++l)
+  // Above kWideE every q to |q| <= kWideQ (|j| <= 33): G and dG/de exact at e0 per (l, p, q), the screen bounding |G| by
+  // the mean of (a/r)^(l+1) and |dG/de| by (l + 1) times that of (a/r)^(l+2) plus 3 l of the former over eta^2.
+  const auto can_pass_wide = [&](int l, int m, int w, int q, double Gb, double dGb) {
+    const int j = w + q;
+    const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE));
+    if (ap < 1e-3 * n0) return false;
+    const double ll = l + 1.0, Fb = std::sqrt(2.0 * (2.0 * l + 1.0));
+    const double A = kMu * std::pow(1.0 / a0, l + 1) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+    const double bound = a0 * A * Fb * (Gb * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * ll / (na2 * ap)) + dGb / (na2 * ap) + l * Gb / (na2 * ap));
+    return bound >= keep;
+  };
+  if (wide) {
+    constexpr int kQn = 2 * kWideQ + 1;
+    for (int l = 2; l <= degree; ++l) {
+      const double Gb = mean_a_over_r(l + 1, e0);
+      const double dGb = (l + 1) * mean_a_over_r(l + 2, e0) + 3.0 * l * Gb / (eta * eta);
+      double gv0[kSpCap + 1][kQn], gv1[kSpCap + 1][kQn];
+      bool have_g[kSpCap + 1][kQn] = {};
+      for (int m = 1; m <= l; ++m)
+        for (int p = 0; p <= l; ++p) {
+          const int w = l - 2 * p;
+          bool any = false;
+          for (int q = -kWideQ; q <= kWideQ && !any; ++q) any = !(q == 0 && w == 0) && can_pass_wide(l, m, w, q, Gb, dGb);
+          if (!any) continue;
+          normalized_Fk(m, w, l, i0, f);
+          double dfv = 0.0;
+          bool have_df = false;
+          for (int q = -kWideQ; q <= kWideQ; ++q) {
+            const int j = w + q;
+            if ((q == 0 && w == 0) || j < -33 || j > 33) continue;  // the m-daily set; the table's harmonics of M
+            if (!can_pass_wide(l, m, w, q, Gb, dGb)) continue;
+            double psidot = 0.0;
+            const double weight = weight_of(l, m, p, q, psidot);
+            if (weight == 0.0) continue;
+            if (!have_df) {
+              normalized_Fk(m, w, l, i0 + h, fp);
+              normalized_Fk(m, w, l, i0 - h, fm);
+              dfv = (fp[l] - fm[l]) / (2.0 * h);
+              have_df = true;
+            }
+            const int qi = q + kWideQ;
+            if (!have_g[p][qi]) {
+              double G, dG;
+              res::exact_G(l, p, q, e0, G, dG);
+              gv1[p][qi] = dG;
+              gv0[p][qi] = G - dG * e0;
+              have_g[p][qi] = true;
+            }
+            put(l, m, p, q, f[l], dfv, gv0[p][qi], gv1[p][qi], weight, psidot);
+          }
+        }
+    }
+  }
+  for (int l = 2; l <= degree && !wide; ++l)
     for (int m = 1; m <= l; ++m)
       for (int p = 0; p <= l; ++p) {
         const int w = l - 2 * p;
@@ -336,7 +419,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
         if ((l0 - w) & 1) ++l0;
         for (int l = l0; l <= near_degree; l += 2) {
           if (l <= degree || !can_pass(l, m, w, q)) continue;
-          if (count >= sp_bound(degree)) break;
+          if (count >= sp_bound(degree, wide)) break;
           add(l, m, (l - w) / 2, q, f[l], (fp[l] - fm[l]) / (2.0 * h));
         }
       }
@@ -511,20 +594,22 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
 
 /// The zonal tail, J_l for 6 <= l <= the degree (SPEC 2 carries J2-J5), first order in the
 /// rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l (w = l - 2p = +-1,
-/// q = -w: psi = w omega, O(e) in G and O(1) in the eccentricity vector). Per term at the epoch (float):
-/// Fbar, dFbar/di, G = g0 + g1 e; G is taken at the current e.
-inline int zonal_count(int degree) {
+/// q = -w: psi = w omega, O(e) in G and O(1) in the eccentricity vector); `wide` (epoch e above kWideE, SPEC 16.11):
+/// every long-period term, w = l - 2p for p = 0..l, G = O(e^|w|). Per term at the epoch (float): Fbar, dFbar/di,
+/// G = g0 + g1 e; G is taken at the current e.
+inline int zonal_count(int degree, bool wide) {
   int c = 0;
-  for (int l = 6; l <= degree; ++l) c += (l & 1) ? 2 : 1;
+  for (int l = 6; l <= degree; ++l) c += wide ? l + 1 : (l & 1) ? 2 : 1;
   return c;
 }
 
-inline void zonal_visit_terms(int degree, double i0, double e0, float* F) {
+inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float* F) {
   double f[72], fp[72], fm[72];
   const double h = 1e-5;
   int idx = 0;
   for (int l = 6; l <= degree; ++l) {
-    for (int w = (l & 1) ? -1 : 0; w <= ((l & 1) ? 1 : 0); w += 2) {
+    const int wl = wide ? l : (l & 1);
+    for (int w = -wl; w <= wl; w += 2) {
       const int p = (l - w) / 2, q = -w;
       normalized_Fk(0, w, l, i0, f);
       normalized_Fk(0, w, l, i0 + h, fp);
@@ -557,22 +642,31 @@ inline void zonal_visit_terms(int degree, double i0, double e0, float* F) {
 
 /// The zonal tail's contribution to the six rates (n-dot, e-dot, i-dot, e varpi-dot, sin i Omega-dot,
 /// lambda-dot - n), at the current mean elements.
-inline void zonal_six(const float* F, int degree, const Kepler& kp, double n, double eta, double si, double ci,
+inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, double n, double eta, double si, double ci,
                       double* six) {
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
   double sw, cw;
   fm::sincos(kp.argp, sw, cw);
+  double ck[72], sk[72];  // cos and sin of k omega, `wide`
+  ck[0] = 1.0;
+  sk[0] = 0.0;
+  for (int k = 1; wide && k <= degree; ++k) {
+    ck[k] = ck[k - 1] * cw - sk[k - 1] * sw;
+    sk[k] = sk[k - 1] * cw + ck[k - 1] * sw;
+  }
   const double ia = 1.0 / a;
   double A = kMu * std::pow(ia, 7);  // mu / a^(l+1), l = 6
   double sW = 0, sE = 0, sI = 0, sA = 0;
   int idx = 0;
   for (int l = 6; l <= degree; ++l) {
     const double C = kEgmC[l][0];
-    for (int w = (l & 1) ? -1 : 0; w <= ((l & 1) ? 1 : 0); w += 2) {
+    const int wl = wide ? l : (l & 1);
+    for (int w = -wl; w <= wl; w += 2) {
       const float* f = F + 4 * idx++;
       // psi = w omega; S = C cos psi (l even), C sin psi (l odd; S_l0 = 0)
-      const double sp = w * sw, cp = cw;  // sin(w omega), cos(w omega) for w = +-1; w = 0: psi = 0
+      const int aw = w < 0 ? -w : w;
+      const double sp = wide ? (w < 0 ? -sk[aw] : sk[aw]) : w * sw, cp = wide ? ck[aw] : cw;
       const double Sv = (l & 1) ? C * sp : (w == 0 ? C : C * cp);
       const double dS = (l & 1) ? C * cp : (w == 0 ? 0.0 : -C * sp);
       const double G = f[2] + f[3] * e, dG = f[3];

@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.14.
+Version 0.4.15.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -130,8 +130,8 @@ SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a 
 (`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
 
 The half-day tail adds every even-order resonant term through degree 31. Against FFM after a 72 h fit, the
-day-7 errors are 202.0 m for the half-day case (a sample 1 h after a perigee; the day's RMS is 84 m along-track and
-75 m radial), 338.0 m for Molniya with drag and 924.7 m for GTO.
+day-7 errors are 60.1 m for the half-day case (a sample 1 h after a perigee; the day's RMS is 34 m along-track and
+23 m radial), 419.4 m for Molniya with drag (its fitted drag coefficient; SPEC 16.11) and 244.3 m for GTO.
 SPEC 16.6 and `test/results/heo-model-truth.json` give the fixtures and day-1, 3 and 7 RTN errors.
 
 At a resonance-class crossing, AP rebuilds its rate and output tables together. On the decaying-GTO fixture,
@@ -417,3 +417,15 @@ along-track RMS falls to 1.65-3.22 m at the four nodes (1.77-6.76 m at 0.4.11); 
 (`test/gto-geopotential-perigee.e2e.mjs`). What remains on GTO grows with the field's degree (233 to 628 m from 4x4 to
 70x70 without Sun or Moon): high-degree terms at perigee that AP does not carry. A propagation on a 1 h grid costs
 16.2 ms per object-day on GTO and 10.5 ms on Galileo-like orbits (12.0 and 5.8 before).
+
+Above e 0.3 AP's zonal tail carries every long-period term (w = l - 2p for every p, G = O(e^|w|)) and its first-order
+tesseral set every q to |q| <= 10 (SPEC 16.11); at e 0.3 and below both are 0.4.14's, byte for byte. On FFM model truth
+the GTO fixture's day-7 whole-day RMS (along-track/radial) falls from 419.32/455.90 to 204.15/133.92 m, the 500 km
+perigee fixture's from 295.44/304.96 to 109.46/70.85 m, the half-day's from 84.22/75.28 to 34.33/23.12 m and the 12-hour
+55 deg's from 158.02/105.47 to 67.25/25.32 m. Molniya with drag, its coefficient fitted, rises from 149.82/175.90 to
+291.41/219.72 m: the fit takes 0.0457 m^2/kg against the truth's 0.044 and the along-track error grows quadratically;
+with the coefficient pinned at the truth it is 144/120 m (0.4.14: 159/92). The 4x4 case of SPEC 16.10 compared XP's J5
+with a truth without it; with J5 zero on AP's side it is 98.9 m (0.4.14) and 89.6 m. Against independent integrations
+over one GTO orbit the new terms agree within 0.0002 m per element (`test/gto-high-degree-perigee-terms.e2e.mjs`). A
+propagation on a 1 h grid costs 37.0 ms per object-day on GTO, 30.3 on the half-day and 30.5 on Molniya (24.6, 16.3 and
+18.2 before).

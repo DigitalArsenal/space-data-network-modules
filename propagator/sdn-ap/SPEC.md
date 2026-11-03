@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.14.
+Version 0.4.15.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1145,9 +1145,9 @@ and e >= 0.5) are not used for type 4.
 
 AP adds the half-day terms of degrees 6 through min(d, 31), for every even order m and p = 0..l,
 with k = m/2 and q = k - l + 2p (16.2). SGP4XP keeps the class table below.
-Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters at 0.4.14 are 123.8/121.4/202.0
-for the half-day fixture, 208.3/253.4/338.0 for Molniya with drag, 237.8/175.8/924.7 for GTO (16.10's step),
-and 139.7/177.2/303.2 for the 55-degree fixture. Section 16.6 defines the fixtures and signed RTN errors.
+Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters at 0.4.15 are 27.5/70.0/60.1
+for the half-day fixture, 45.9/27.0/419.4 for Molniya with drag (its fitted drag coefficient, 16.11), 115.3/79.2/244.3
+for GTO, and 22.2/61.4/56.4 for the 55-degree fixture (16.11). Section 16.6 defines the fixtures and signed RTN errors.
 
 A term is labeled (l, m, p, q). Its resonant angle is
 
@@ -2001,7 +2001,10 @@ quadrature, 16.8 at every eccentricity) the 3D errors at days 1, 3 and 7 are 123
 half-day day-7 sample falls 1 h after a perigee, and `test/heo-model-truth.e2e.mjs` pins it within 0.5 m. Flown
 hourly, the day-7 whole-day RMS along-track/radial is 84.2/75.3, 149.8/175.9, 960.8/935.3 and 158.0/105.5 m (0.4.10:
 228/85, 687/391, 885/860 and 232/60 m); `test/third-body-short-period-eccentric.e2e.mjs` checks them. From 0.4.14
-the half-day class's step (16.10) brings GTO to 237.8, 175.8 and 924.7 m and 419.3/455.9 m whole-day. The force
+the half-day class's step (16.10) brings GTO to 237.8, 175.8 and 924.7 m and 419.3/455.9 m whole-day. From 0.4.15 (16.11)
+the four are 27.5, 70.0 and 60.1 m (half-day; the sample `test/heo-model-truth.e2e.mjs` pins), 45.9, 27.0 and 419.4 m
+(Molniya), 115.3, 79.2 and 244.3 m (GTO) and 22.2, 61.4 and 56.4 m (12-hour 55 deg), and whole-day 34.3/23.1,
+291.4/219.7, 204.2/133.9 and 67.3/25.3 m. The force
 contributions responsible for the Molniya gap are not isolated; 16.8 separates the third bodies' share.
 The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
 and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
@@ -2027,7 +2030,7 @@ reaches 2.403874454 and stays inside the band.
 
 At 0.4.11 (5.4's quadrature, 16.8 at every eccentricity) the rebuilt and held arms carry -26,674.861 and
 -27,708.115 m and the companion -22,815.885 m (16.914%); at 0.4.14 (16.10's step) -25,681.230, -26,849.503 and
--22,083.870 m (16.290%).
+-22,083.870 m (16.290%); at 0.4.15 (16.11) -35,994.920, -37,165.537 and -31,352.148 m (14.808%).
 Rebuilding is retained because it has the smaller FFM along-track error and consistent rate/output tables.
 The E2E allows a 25% difference from the companion and requires rebuilding to improve on epoch hold.
 The fixture's remaining absolute error is attributed to perigee-drag and third-body force detail absent from
@@ -2159,6 +2162,72 @@ Cost (owner Mac under load, browser host, `propagate` over 7 days, the two relea
 milliseconds per object-day from 0.4.13 to 0.4.14): on a 1 h grid GTO 12.0 to 16.2, Galileo-like 5.8 to 10.5 and
 Etalon-like 5.1 to 6.1; on a 1 min grid 121.3 to 124.3, 86.6 to 89.7 and 74.9 to 76.4; LEO, GPS-like, half-day,
 Molniya and GEO-like unchanged (2.1, 5.2, 11.7, 11.6 and 1.4 ms on the 1 h grid).
+
+**16.11 Wide terms above e 0.3.** A perigee pass spreads each term of the field over the harmonics of M. From 0.4.15,
+above an epoch eccentricity of 0.3, AP's zonal tail (16.3) carries every long-period term, w = l - 2p for p = 0..l with
+q = -w (G = O(e^|w|)), not only w = 0 and +-1; and its first-order tesseral set (16.2) takes every q with |q| <= 10 and
+|j| <= 33, G and dG/de exact at the epoch eccentricity for each (l, p, q), a term screened by |G| <= the mean over M of
+(a/r)^(l+1) and |dG/de| <= (l + 1) times the mean of (a/r)^(l+2) plus 3 l times that of (a/r)^(l+1) over eta^2 before
+the 0.5 m position test of 16.2. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO,
+Etalon- and GPS-like seeded sets are byte-identical.
+
+The 4x4 case of 16.10 measured a mismatch: XP carries J5 (2) at every FORCES and the 4x4 truth has none. With J5 zero on
+AP's side 0.4.14 is at 98.9 m on day 7 (2-minute samples, Sun and Moon off both sides, 72 h fits, 3D RMS), flat over the
+7 days. The zonal fields alone on both sides, XP's resonance terms off on AP's side: J2 20.8 m, J2-J3 49.8, J2-J4 48.9,
+J2-J5 46.6; with XP's J2^2 terms removed 1,873 m. The flat 30 to 50 m is the J3 to J5 short-period set, which XP does
+not carry and this release does not derive; it is open. 24 h fits give 66.2 m (J2) and 159.5 m (J2-J4).
+
+The zonal tail's missing long-period terms carried a linear drift. Zonal fields alone, AP (0, d), day-7 3D RMS from 0.4.14
+to 0.4.15: 8x0 561.6 to 40.3 m, 12x0 347.5 to 45.1, 20x0 400.1 to 45.1, 40x0 442.7 to 44.8; at degree 70 the fit does
+not converge in either release. On GTO the tesseral set's slow terms outside the class carry much of the rest: (m, j) =
+(5, 2) and (7, 3) drift at 0.089 n and 0.075 n (4.7 and 5.5 days); keeping only the new terms faster than 0.2 n leaves
+the GTO fixture at 721.97/511.68 m.
+
+| Field (AP degrees), Sun and Moon off both sides | 0.4.14 | 0.4.15 |
+| --- | --: | --: |
+| 4x4 (4,4), J5 zero on AP's side | 98.9 | 89.6 |
+| 8x8 (8,8) | 558.1 | 59.3 |
+| 12x12 (12,12) | 471.9 | 63.1 |
+| 20x20 (20,20) | 494.7 | 85.3 |
+| 40x40 (31,40) | 612.9 | 138.3 |
+| 70x70 (31,20) | 627.6 | 201.9 |
+| 70x70 (31,20), 500 km perigee | 418.3 | 90.9 |
+
+FFM model truth with Sun and Moon (`test/gto-high-degree-perigee-terms.e2e.mjs`; hourly, day-7 whole-day RMS
+along-track/radial, m):
+
+| Fixture | 0.4.14 | 0.4.15 |
+| --- | --: | --: |
+| GTO | 419.32 / 455.90 | 204.15 / 133.92 |
+| GTO, 500 km perigee | 295.44 / 304.96 | 109.46 / 70.85 |
+| half-day | 84.22 / 75.28 | 34.33 / 23.12 |
+| 12 hours at 55 deg | 158.02 / 105.47 | 67.25 / 25.32 |
+| Molniya with drag, coefficient fitted | 149.82 / 175.90 | 291.41 / 219.72 |
+| Molniya with drag, coefficient pinned at the truth's 0.044 | 159 / 92 | 144 / 120 |
+
+Molniya with its drag coefficient fitted regresses: the 72 h fit takes 0.0457 m^2/kg against the truth's 0.044 (0.4.14:
+0.0451), and the along-track error grows quadratically after the fit (33, 41, 51, 86, 142, 209 and 291 m whole-day on
+days 1 to 7). Without drag it improves from 108/102 to 51/36 m; with the coefficient pinned at the truth every build
+lands at 141 to 159 m along-track. The drag fit at high eccentricity absorbs a different gravity residual
+(modules-sdn-ap-drag-high-eccentricity-20261103).
+
+Against independent integrations at the GTO fixture's elements (argument of perigee 270 deg, and 300 deg, where the zonal
+e and i rates do not vanish), J6-J20 and the 1,888 tesseral terms kept there: the zonal tail's rates against the potential
+averaged over M by quadrature (8,192 points in E) differ by at most 6.5e-6 m over one orbit, the rates moving the elements
+by up to 21 m; the tesseral displacements against a numerical integration of their rates (RK4, 0.1 min) by at most
+1.1e-9 m RMS (sizes 20 to 165 m), and against Hansen coefficients by quadrature in M (8,192 points; worst relative
+difference 8.2e-6) by at most 1.6e-4 m RMS.
+
+Cost (owner Mac under load, browser host, `propagate` over 7 days, the two releases interleaved, median of 9 runs, ms per
+object-day from 0.4.14 to 0.4.15):
+
+| Orbit | 1 h grid | 1 min grid |
+| --- | --: | --: |
+| GTO | 24.6 to 37.0 | 133.5 to 161.9 |
+| half-day | 16.3 to 30.3 | 123.6 to 152.6 |
+| Molniya | 18.2 to 30.5 | 118.1 to 159.1 |
+
+Orbits at e 0.3 and below run 0.4.14's path.
 
 ---
 

@@ -38,6 +38,10 @@ const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoo
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);
 fs.writeFileSync(baseline, execFileSync('git', ['-C', modules, 'show', `${BASE}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26}));
+// 1-3 measure the 0.4.14 release (git 8fdf5b1af), the build this registration is about: 0.4.15 (SPEC 16.11) moves the
+// eccentric fixtures, test/gto-high-degree-perigee-terms.e2e.mjs.
+const release = path.join(scratch, 'release-8fdf5b1af.wasm');
+fs.writeFileSync(release, execFileSync('git', ['-C', modules, 'show', '8fdf5b1af:propagator/sdn-ap/dist/isomorphic/module.wasm'], {maxBuffer: 1 << 26}));
 const reference = (() => {
   const tree = path.join(scratch, 'reference'), copy = path.join(tree, 'propagator/sdn-ap');
   fs.rmSync(tree, {recursive: true, force: true});
@@ -68,7 +72,7 @@ const FIXTURES = {
 const fixtures = {};
 for (const [name, c] of Object.entries(FIXTURES)) {
   fixtures[name] = {};
-  for (const [arm, modulePath] of [['0.4.13', baseline], ['release', wasmPath]]) {
+  for (const [arm, modulePath] of [['0.4.13', baseline], ['release', release]]) {
     const r = await runModelTruth({...c, hourly: true, modulePath});
     fixtures[name][arm] = {alongTrack: r.wholeDay[7].t, radial: r.wholeDay[7].r, crossTrack: r.wholeDay[7].n, singleSample: r.days[7].e};
   }
