@@ -2,7 +2,7 @@
 // Registered acceptance: modules-sdn-ap-covariance-noise-ap-20261103.
 // --theory SDNAP --forces 31,20 joins b040/compare-truth2 window keys to
 // b040/truth2 AP24/AP72 arms, plus b040/regimes calibration windows.
-// Refit the registered arcs and score signed GCRF errors at matching covariance
+// Refit the registered arcs and score signed TEME errors at matching covariance
 // epochs in lead bins 1,2,3,7 counted from cutoff; no held-out sources.
 // Print sample counts, mean d^2/3 and coverage for every regime/lead cell.
 // SPEC 12.7 is fixed: [0.8,1.25] and [0.93,0.97], jointly. A cell outside

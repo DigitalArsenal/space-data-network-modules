@@ -1,5 +1,5 @@
 // Registered replay for modules-sdn-ap-covariance-noise-ap-20261103.
-// UTC/GCRF km. Refit the registered AP5/AP6 arcs under LOG_NORMAL and FORCES
+// UTC/TEME km, reference axes carried by the registered foundation/frames module. Refit the registered AP5/AP6 arcs under LOG_NORMAL and FORCES
 // 31,20. Signed errors and covariance must share epochs: stored daily RTN RMS
 // cannot substitute for signed errors. No held-out or operator source is opened.
 // Score days 1,2,3,7 on a 30-minute grid, matching covariance-realism sampling.
@@ -24,7 +24,7 @@ process.env.SDN_MODULES_ROOT ??= path.resolve(new URL('../../../../', import.met
 const imp=p=>import(path.join(external,'experiments',p));
 const readRows=dir=>fs.readdirSync(dir).filter(f=>/^rows-\d+\.jsonl$/.test(f)).sort().flatMap(f=>fs.readFileSync(path.join(dir,f),'utf8').split('\n').filter(Boolean).map(JSON.parse));
 const checksum=createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex');
-const filename=w=>path.join(scratch,createHash('sha256').update(checksum+"lead-bins-30min-v1"+w.key+w.arm).digest('hex')+'.json.gz');
+const filename=w=>path.join(scratch,createHash('sha256').update(checksum+"lead-bins-30min-teme-v2"+w.key+w.arm).digest('hex')+'.json.gz');
 function windows(){
  const base=path.join(archive,'operator-theory/ap/b040');
  const ap=new Map(readRows(path.join(base,'truth2')).map(r=>[r.key,r]));
@@ -46,6 +46,8 @@ async function replay(list){
  const SRC=await imp('sdn-gp-starlink-ffm-match/lib/sources.mjs');
  const {STATIC,TESS,HX}=await imp('operator-theory/lib/regimes.mjs');
  const h=await createStandaloneHarness('browser',wasmPath,{surface:'direct'});
+ const {openAxes}=await imp('operator-theory/lib/host.mjs');
+ const referenceAxes=await openAxes();
  const objects=new Map();
  let weather6=null;
  async function lines(w){
@@ -121,7 +123,8 @@ async function replay(list){
     continue;
    }
    const ta=Number(ud.SDNAP_COV_NOISE.split(' ')[4]);
-   const grid=S.oemBytes({frame:'GCRF',lines:scored});
+   const reference=await referenceAxes.convert(scored,'GCRF','TEME');
+   const grid=S.oemBytes({frame:'TEME',lines:scored});
    const runs=[];
    for(let k=-1;k<4;k++){
     omm.USER_DEFINED_PARAMETERS.find(p=>p.PARAM_NAME==='SDNAP_COV_NOISE').PARAM_VALUE=[...[0,1,2,3].map(j=>j===k?UNIT:0),ta].join(' ');
@@ -130,13 +133,14 @@ async function replay(list){
     runs.push(OEM.getRootAsOEM(new fb.ByteBuffer(out.find(o=>o.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0]);
    }
    const pos=c=>[c.CX_X,c.CY_X,c.CY_Y,c.CZ_X,c.CZ_Y,c.CZ_Z];
-   const samples=scored.map((l,i)=>{const state=runs[0].EPHEMERIS_DATA_LINES[i],P0=pos(runs[0].COVARIANCE_MATRIX_LINES[i]);return{day:Math.ceil((ms(l.epoch)-cutoff)/DAY),e:[state.X-l.r[0],state.Y-l.r[1],state.Z-l.r[2]],P0,B:runs.slice(1).map(r=>pos(r.COVARIANCE_MATRIX_LINES[i]).map((v,j)=>(v-P0[j])/UNIT**2))};});
+   const samples=scored.map((l,i)=>{const state=runs[0].EPHEMERIS_DATA_LINES[i],P0=pos(runs[0].COVARIANCE_MATRIX_LINES[i]);return{day:Math.ceil((ms(l.epoch)-cutoff)/DAY),e:[state.X-reference[i].r[0],state.Y-reference[i].r[1],state.Z-reference[i].r[2]],P0,B:runs.slice(1).map(r=>pos(r.COVARIANCE_MATRIX_LINES[i]).map((v,j)=>(v-P0[j])/UNIT**2))};});
    const result={noise:ud.SDNAP_COV_NOISE.split(' ').map(Number),key:w.key,arm:w.arm,group:w.group,regime:ud.SDNAP_COV_REGIME,ngRate:Number(ud.SDNAP_COV_NG_RATE),nDay:omm.MEAN_MOTION*2*Math.PI,samples,stored:w.stored.days};
    fs.writeFileSync(file,zlib.gzipSync(JSON.stringify(result)));
    console.log(`${w.key} ${w.arm}: ${samples.length} covariance samples`);
    await new Promise(resolve=>setImmediate(resolve));
   }catch(e){console.error(`${w.key} ${w.arm}: ${e.stack}`);throw e;}
  }
+ await referenceAxes.close();
 }
 export async function runReplay(){
  fs.mkdirSync(scratch,{recursive:true});
