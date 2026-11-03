@@ -48,8 +48,14 @@ import { wasmPath } from "./lib/module.mjs";
 import { configuration } from "./lib/pcf.mjs";
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : fallback; };
-const SET = arg("set", "held-out");
-const THEORY = "SGP4XP";
+const THEORY = arg("theory", "SGP4XP");
+if (!["SGP4XP", "SDNAP"].includes(THEORY)) throw new Error("--theory must be SGP4XP or SDNAP");
+const SET = arg("set", THEORY === "SDNAP" ? "calibration" : "held-out");
+const forceText = arg("forces", THEORY === "SDNAP" ? "31,20" : "0,0");
+if (!/^\d+,\d+$/.test(forceText)) throw new Error("--forces must be tesseral,zonal degrees");
+const [tesseral, zonal] = forceText.split(",").map(Number);
+if (tesseral > 70 || zonal > 70 || (THEORY === "SGP4XP" && (tesseral || zonal)))
+  throw new Error("--forces must be in [0,70]; SGP4XP requires 0,0");
 const OUT = arg("out", null);
 const LIMIT = Number(arg("limit", "0"));
 const ARCHIVE = process.env.SDN_ARCHIVE ?? "/opt/data/sdn-archive";
@@ -57,6 +63,47 @@ const REFERENCE = path.join(ARCHIVE, "reference-states/reference");
 const ROWS = path.join(ARCHIVE, "sdn-gp-starlink-ffm-match/rows");
 const DAY = 86400000, SAMPLE = 1800000, FIT = DAY, LEAD_DAYS = 3, UNIT = 1e-6;
 const CHI2_3_95 = 7.814727903251178, CHI2_3_MEDIAN = 2.365973884375338;
+
+// Validate the explicitly supplied calibration inventory before creating a host or
+// entering the legacy laser-reference path. Never substitute another population.
+if (THEORY === "SDNAP") {
+  if (SET !== "calibration" || forceText !== "31,20")
+    throw new Error("AP calibration is registered only for --set calibration --forces 31,20");
+  const inventory = [];
+  for (const source of ["compare-truth2", "regimes"]) {
+    const dir = path.join(ARCHIVE, "operator-theory/ap/b040", source);
+    const files = fs.readdirSync(dir).filter((f) => /^rows-\d+\.jsonl$/.test(f)).sort();
+    const counts = { source, files: files.length, rows: 0, AP24: 0, AP72: 0, forwardSamples: 0, covarianceSamples: 0 };
+    for (const file of files) {
+      for (const line of fs.readFileSync(path.join(dir, file), "utf8").split("\n").filter(Boolean)) {
+        const row = JSON.parse(line);
+        ++counts.rows;
+        for (const arm of ["AP24", "AP72"]) {
+          const forecast = row.arms?.[arm];
+          if (!forecast?.ok) continue;
+          ++counts[arm];
+          for (const day of [1, 2, 3, 7]) {
+            const sample = forecast.days?.[day];
+            if (!sample || ![sample.r, sample.t, sample.n].every(Number.isFinite)) continue;
+            ++counts.forwardSamples;
+            if (Array.isArray(sample.P) && sample.P.length === 6 && sample.P.every(Number.isFinite))
+              ++counts.covarianceSamples;
+          }
+        }
+      }
+    }
+    inventory.push(counts);
+    console.log(JSON.stringify(counts));
+  }
+  const report = { theory: THEORY, forces: forceText, inventory, acceptance: {
+    meanD2Over3: [0.8, 1.25], coverage95: [0.93, 0.97], measured: false,
+  }, status: "missing-calibration-inputs" };
+  if (OUT) fs.writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`);
+  console.error("FAIL: AP calibration needs fitted AP sets and their covariance bases at each lead (or replayable calibration arcs). " +
+    "Forward RTN errors and fit RMS alone cannot identify SPEC 12.5 element-rate noise or measure SPEC 12.7 realism. " +
+    "No held-out references were opened; no realism claim is made.");
+  process.exit(1);
+}
 
 const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
 const CONFIG = configuration({ theory: THEORY });
