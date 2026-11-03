@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {buildDiagnostic,CLASS_PROBE} from './lib/ap-diagnostic.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
-const probePath=buildDiagnostic('class-probe',CLASS_PROBE);
+const probePath=process.env.SDN_AP_CLASS_PROBE??buildDiagnostic('class-probe',CLASS_PROBE);
 const edge=2.4066852459,results=[];let selected;
 for(const bterm of [.04,.06,.08,.1]){
  const pair=[];
