@@ -381,8 +381,9 @@ inline int read_object_priors(const PCF* c, ObjectPriors& out) {
     return refuse("configuration", kWhat);
   const PCFFitPolicy* f = c->FIT();
   if (f == nullptr) return 0;
+  if (f->CANDIDATE_SPANS_HOURS() != nullptr && f->CANDIDATE_SPANS_HOURS()->size() != 0) return refuse("configuration", kWhat);
   for (const uint16_t vt : {PCFFitPolicy::VT_DEFAULT_SPAN_HOURS, PCFFitPolicy::VT_MINIMUM_SPAN_HOURS,
-                            PCFFitPolicy::VT_MAXIMUM_SPAN_HOURS, PCFFitPolicy::VT_CANDIDATE_SPANS_HOURS,
+                            PCFFitPolicy::VT_MAXIMUM_SPAN_HOURS,
                             PCFFitPolicy::VT_TAIL_HOURS, PCFFitPolicy::VT_EXTENSION_MARGIN, PCFFitPolicy::VT_HOLDOUT_HOURS,
                             PCFFitPolicy::VT_HAS_HOLDOUT_HOURS, PCFFitPolicy::VT_ECCENTRICITY_THRESHOLD,
                             PCFFitPolicy::VT_ECCENTRIC_DEFAULT_SPAN_HOURS, PCFFitPolicy::VT_ECCENTRIC_EXTENSION_MARGIN,
