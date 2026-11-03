@@ -87,6 +87,8 @@ if (!isMainThread) {
     const v = rows.filter((r) => r.key.split('|')[1] === name && !r.error && d3(r.arms[0]) !== null && d3(r.arms[1]) !== null && d3(ffm.get(r.key)?.arms?.F72) !== null);
     if (!v.length) continue;
     const f = (r) => d3(ffm.get(r.key).arms.F72), scored = v.filter((r) => f(r) < 10000);
+    for (const r of v.filter((r) => !(f(r) < 10000)))
+      console.log(JSON.stringify({excludedWindow: r.key, ffmDay3Meters: f(r), apDay3At0411: d3(r.arms[0]), apDay3Here: d3(r.arms[1])}));
     objects[name] = {n: v.length, pairedAt0411: median(v.map((r) => d3(r.arms[0]) - f(r))), pairedHere: median(v.map((r) => d3(r.arms[1]) - f(r))),
       scored: scored.length, scoredAt0411: scored.length ? median(scored.map((r) => d3(r.arms[0]) - f(r))) : null,
       scoredHere: scored.length ? median(scored.map((r) => d3(r.arms[1]) - f(r))) : null};

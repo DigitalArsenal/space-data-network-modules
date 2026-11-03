@@ -1764,8 +1764,10 @@ median as before; that is the per-object path's case.
 The read AP6 altimetry windows (descriptive; paired day-3 AP minus FFM's archived F72 arm, median per object, 0.4.11 to
 0.4.12): HY-2C 575.7 to 34.2 m, HY-2D 523.2 to 19.0, SWOT 463.7 to 208.2, Jason-3 180.2 to 34.5, Sentinel-6
 82.6 to 53.3, Sentinel-3A 43.9 to -1.8, Sentinel-3B 25.9 to 6.6, CryoSat-2 55.7 and SARAL 47.7 (600-800 km)
-unchanged; all 121 windows 167.2 to 34.2 m. Sentinel-6B's windows are its commissioning: FFM misses four of five by
-1.9 to 2,626 km, and on the two that FFM keeps under 10 km the paired value goes from 191.7 to 3.9 m.
+unchanged; all 121 windows 167.2 to 34.2 m. A read window counts only where FFM's own day-3 error is under 10 km, since
+a maneuver in the truth is not propagation error; the E2E prints each excluded window with FFM's error. Sentinel-6B's
+windows are its commissioning: FFM misses four of five by 1.9 to 2,626 km, and on the two that FFM keeps under 10 km
+the paired value goes from 191.7 to 3.9 m.
 `test/fit-bterm-700-1400-km.e2e.mjs` measures every number of the default and per-object paths and of the windows.
 
 ---
