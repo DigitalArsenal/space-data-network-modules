@@ -944,7 +944,6 @@ inline double eccentric_longitude(const double* y) {
 
 /// The drag's part of the averaged rates (SPEC 3.4), added to `out`. AP above e 0.3 (SPEC 16.12): the mean of the
 /// perigee passages before and after t, each at its own time.
-constexpr bool kDragPassShortPeriod = true;
 inline void drag_part(const RateContext& ctx, double t, const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag,
                       const Bodies& b, double* out) {
   if (ctx.drag_pass) {
@@ -1285,7 +1284,7 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
       for (int j = 0; j < 6; ++j) y[j] += d[j];
     }
   }
-  if (ctx.drag_pass && ctx.bterm > 0.0 && kDragPassShortPeriod) {
+  if (ctx.drag_pass && ctx.bterm > 0.0) {
     // AP above e 0.3 (SPEC 16.12): the drag's short-period terms of a pass narrow against the orbit, so the osculating
     // elements step at perigee where the mean elements ramp: each element y_j + (ydot_j / n)(pi - M), M in [0, 2 pi), and
     // lambda also + (ndot / n^2)(pi M - M^2 / 2 - pi^2 / 3), the integral of the mean motion's own sawtooth

@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.15.
+Version 0.4.16.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -429,3 +429,20 @@ with a truth without it; with J5 zero on AP's side it is 98.9 m (0.4.14) and 89.
 over one GTO orbit the new terms agree within 0.0002 m per element (`test/gto-high-degree-perigee-terms.e2e.mjs`). A
 propagation on a 1 h grid costs 37.0 ms per object-day on GTO, 30.3 on the half-day and 30.5 on Molniya (24.6, 16.3 and
 18.2 before).
+
+Above e 0.3 AP's drag is evaluated per perigee passage (SPEC 16.12): the mean of the passages before and after the
+rate's time, each node at the Earth angle and date of its own time on the pass, over the whole orbit, with the pass's
+short-period steps in the output so the osculating elements step at perigee where the mean elements ramp. At e 0.3 and
+below, and without drag, propagations are 0.4.15's byte for byte. Seeded at the truth's drag coefficient with the Sun
+and Moon off, AP's drag energy per pass over FFM's goes from 0.9840, 0.9907 and 0.9958 to 1.0026, 0.9991 and 0.9987
+(Molniya, GTO, 500 km perigee GTO), and the drag theory's own day-7 along-track error with the Sun and Moon on from 594 m,
+99.6 km and 1,118 m to 26.5 m, 3.26 km and 32.0 m. Molniya with the coefficient pinned at the truth falls from 165.9 to
+70.9 m along-track at day 7 (AGOM pinned at 0; 78.3 m with AGOM fitted, 0.4.15: 144 m). Against the module's
+independent integral over one orbit the drag's rates agree within 0.023 m RMS per element. A 72 h arc at e 0.74 does
+not separate the drag coefficient from the third bodies' and the field's residuals (SPEC 12.8): Molniya's fitted case
+moves from 291.41/219.72 to 276.44/208.33 m and the 500 km perigee GTO's from 322.5 to 736.2 m along-track on a wide
+prior; seven days determine the coefficient to 0.5 %, and carried into the next 72 h arc with the sigma of the log at
+least 0.005 they give 103.5 and 87.7 m with the coefficient within 0.5 %. Above e 0.3 the band default's median follows
+the perigee's altitude (`test/drag-high-eccentricity.e2e.mjs`). With drag a propagation on a 1 h grid costs 22.5, 34.9 and 31.5 ms
+per object-day on Molniya, GTO and GTO-500 (20.5, 27.1 and 25.8 before) and on a 1 min grid about twice 0.4.15's, the
+output's short-period steps evaluating the drag's rates at every sample.

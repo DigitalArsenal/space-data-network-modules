@@ -20,8 +20,9 @@
         "epoch": "2026-10-29T00:00:00.000000",
         "n": 1.9939591071627882,
         "e": 0.7211141738995464,
-        "bterm": 7.162770669988188e-22,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 7.16277067e-22 +- 1e-10 m^2/kg"
+        "bterm": 7.158083095739183e-22,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 7.1580831e-22 +- 1e-10 m^2/kg",
+        "wrms": 0.03711081615238842
       },
       "classDiagnostics": [],
       "fixture": {
@@ -111,7 +112,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
+      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -145,10 +146,11 @@
       "name": "Molniya",
       "fitted": {
         "epoch": "2026-10-29T00:00:00.000000",
-        "n": 1.9851614077269837,
-        "e": 0.7412896493141139,
-        "bterm": 0.04569816553404447,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0.044 +- 0.1 m^2/kg; posterior 0.0456981655 +- 0.000497593373 m^2/kg"
+        "n": 1.985161476415658,
+        "e": 0.7412896556851021,
+        "bterm": 0.04478178960773632,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0.044 +- 0.1 m^2/kg; posterior 0.0447817896 +- 0.000483775122 m^2/kg",
+        "wrms": 0.042677330968808234
       },
       "classDiagnostics": [],
       "fixture": {
@@ -238,7 +240,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
+      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -248,22 +250,22 @@
       "fitHours": 72,
       "days": {
         "1": {
-          "e": 45.93166305936652,
-          "r": 32.48482119450698,
-          "t": 4.699464147804912,
-          "n": -32.13050108671793
+          "e": 44.40804023595768,
+          "r": 30.16358350538639,
+          "t": 5.416613045164229,
+          "n": -32.138646064060865
         },
         "3": {
-          "e": 27.019270398892633,
-          "r": -6.191311674656676,
-          "t": -3.7779520110047904,
-          "n": -26.02759518738296
+          "e": 27.495213734935387,
+          "r": -7.874351978737707,
+          "t": -3.95793429758636,
+          "n": -26.04450259345951
         },
         "7": {
-          "e": 419.4456557580728,
-          "r": -285.78727799941447,
-          "t": 306.16275134056144,
-          "n": -22.905448251073768
+          "e": 392.64579201434896,
+          "r": -266.41735947625756,
+          "t": 287.5173594828893,
+          "n": -22.940718215892524
         }
       },
       "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
@@ -274,8 +276,9 @@
         "epoch": "2026-10-29T00:00:00.000000",
         "n": 2.4043687366910866,
         "e": 0.719528633783678,
-        "bterm": 3.8979758718591387e-17,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 3.89797587e-17 +- 1e-10 m^2/kg"
+        "bterm": 3.929180412118312e-17,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 3.92918041e-17 +- 1e-10 m^2/kg",
+        "wrms": 0.08046247877132404
       },
       "classDiagnostics": [],
       "fixture": {
@@ -365,7 +368,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
+      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -401,8 +404,9 @@
         "epoch": "2026-10-29T00:00:00.000000",
         "n": 1.9913251550289361,
         "e": 0.7207876082347004,
-        "bterm": 5.091209142144012e-22,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 5.09120914e-22 +- 1e-10 m^2/kg"
+        "bterm": 5.088161170615002e-22,
+        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 5.08816117e-22 +- 1e-10 m^2/kg",
+        "wrms": 0.037654742314389776
       },
       "classDiagnostics": [],
       "fixture": {
@@ -492,7 +496,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
+      "apSha256": "544cb58c5eb0bf11520f191f4825da7eee5de86d4743893a6c6c07dce589d3ed",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -1335,6 +1339,6 @@
     "GTO": "not isolated"
   },
   "version": "0.4.2",
-  "currentVersion": "0.4.15",
-  "currentNote": "0.4.15 fixtures: above e 0.3 the zonal tail carries every long-period term and the first-order tesseral set every q to |q| <= 10 (SPEC 16.11); half-day, GTO and 12 h at 55 deg improve; Molniya with drag moves through its fitted drag coefficient (SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103); measured on the 0.4.15 release"
+  "currentVersion": "0.4.16",
+  "currentNote": "0.4.16 fixtures: above e 0.3 the drag is evaluated per perigee passage, over the whole orbit, with the pass short-period steps (SPEC 16.12); Molniya with drag moves through its fitted drag coefficient (SPEC 12.8); half-day, GTO and 12 h at 55 deg unchanged; measured on the 0.4.16 release"
 }

@@ -1747,8 +1747,8 @@ before 0.4.13, the Sentinel-3-like object is at 3,176.9 m. A posterior carried f
 estimate (SWOT-like's 0.0463 against 0.044), so the carried prior gains only as the running estimate converges over
 successive arcs, which is the catalog's work. `test/fit-per-object-prior-multi.e2e.mjs` measures these numbers. Unset, the prior is LOG_NORMAL with median 0.01
 m^2/kg and sigma of the log ln 10; under NRLMSISE-00 (or a minimum span below 24 h) the median follows the mean altitude
-(0.01 below 600 km, 0.002 at 600-800 km, 0.0005 above), and under NRLMSISE-00 at 800-1400 km the sigma of the log is
-10 ln 10.
+(0.01 below 600 km, 0.002 at 600-800 km, 0.0005 above; above e 0.3 the perigee's altitude, where the drag acts), and
+under NRLMSISE-00 at 800-1400 km the sigma of the log is 10 ln 10.
 
 The fit estimates ln B by Gauss-Newton from the median. At B = 0.0005 the arc's sensitivity to ln B is B times its
 sensitivity to B, so under sigma ln 10 the prior's curvature dominates and the estimate stays at the median whatever
@@ -1784,6 +1784,31 @@ a maneuver in the truth is not propagation error; the E2E prints each excluded w
 windows are its commissioning: FFM misses four of five by 1.9 to 2,626 km, and on the two that FFM keeps under 10 km
 the paired value goes from 191.7 to 3.9 m.
 `test/fit-bterm-700-1400-km.e2e.mjs` measures every number of the default and per-object paths and of the windows.
+
+**Above e 0.3.** Until 0.4.16 Molniya's band default followed its mean altitude (20,180 km, median 0.0005) and the 72 h
+fit stayed there (0.000831 against the truth's 0.044, 11,063 m along-track at day 7); at its 541 km perigee the median is
+0.01. The arc then determines BTERM, but a 72 h arc at e 0.72-0.74 does not separate it from the third bodies' and the
+field's residuals. FFM model truth of 16.12 (Sun and Moon on both sides, AGOM pinned at 0, 10-minute grid; day-7
+whole-day RMS along-track/radial after the arc, m; B against the truth's 0.044 and the posterior's sigma):
+
+| Arc, prior | Molniya | GTO-500 |
+| --- | --- | --- |
+| 72 h, Gaussian 0.044 +- 0.1, 0.4.15 | +3.86 %, 1.09 %; 294.97 / 200.89 | +1.56 %, 0.67 %; 322.48 / 215.92 |
+| 72 h, Gaussian 0.044 +- 0.1 | +1.78 %, 1.08 %; 279.49 / 190.28 | +2.42 %, 0.67 %; 736.18 / 473.69 |
+| 72 h, Gaussian, Sun and Moon off on both sides | +0.13 %, 0.97 %; 110.03 / 91.29 | +1.92 %, 0.67 %; 566.03 / 364.48 |
+| 7 days, band default (day 3 after the arc) | -0.46 %, 0.16 %; 46.64 / 36.98 | -0.28 %, 0.09 %; 157.22 / 105.55 |
+| 72 h, the 7-day posterior carried (sigma of the log 0.005), days 7 to 10 | -0.46 %, 0.46 %; 103.54 / 75.20 | -0.29 %, 0.39 %; 87.69 / 48.37 |
+
+On Molniya's 72 h arc the fit's weighted RMS is flat in B to 2 % (0.04319 at 0.044, 0.04240 at 0.0458, the arc's
+minimum at +4.1 %, and 0.04250 at 0.0466, BTERM pinned at each), while the forecast from those values is 70.9, 557 and
+776 m at day 7; the posterior's 1.1 % does not bound that bias, and where the fit stops on the floor moves with any
+change of the model (+3.86 % at 0.4.15, +1.78 % here). On GTO-500 the arc's bias is the field's (+1.92 % without the
+Sun and Moon), and with AP's drag now right it maps whole into the forecast: 322.48 to 736.18 m along-track, a
+regression of the 72 h arc on a wide prior, which the carried prior removes (87.69 m;
+modules-sdn-ap-drag-high-eccentricity-20261103). Seven days determine B to 0.5 % on both fixtures. So above e 0.3 a catalog that refits daily carries BTERM with the sigma of the log at least 0.005
+rather than 0.3: the 72 h arc's own pull (+4.1 % at a sigma of 1.1 %) moves a prior that narrow by at most
+4.1 / (1 + (1.1 / 0.5)^2) = 0.7 %, and the 7-day arcs' errors (0.46 % and less) fit inside it. `test/drag-high-eccentricity.e2e.mjs`
+measures the carried and Gaussian rows.
 
 ---
 
@@ -2004,8 +2029,8 @@ hourly, the day-7 whole-day RMS along-track/radial is 84.2/75.3, 149.8/175.9, 96
 the half-day class's step (16.10) brings GTO to 237.8, 175.8 and 924.7 m and 419.3/455.9 m whole-day. From 0.4.15 (16.11)
 the four are 27.5, 70.0 and 60.1 m (half-day; the sample `test/heo-model-truth.e2e.mjs` pins), 45.9, 27.0 and 419.4 m
 (Molniya), 115.3, 79.2 and 244.3 m (GTO) and 22.2, 61.4 and 56.4 m (12-hour 55 deg), and whole-day 34.3/23.1,
-291.4/219.7, 204.2/133.9 and 67.3/25.3 m. The force
-contributions responsible for the Molniya gap are not isolated; 16.8 separates the third bodies' share.
+291.4/219.7, 204.2/133.9 and 67.3/25.3 m. From 0.4.16 (16.12, 12.8) Molniya is 44.4, 27.5 and 392.6 m and whole-day
+276.4/208.3 m, the rest unchanged. Molniya's gap is its 72 h arc's fitted drag coefficient (12.8).
 The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
 and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
 
@@ -2208,8 +2233,8 @@ along-track/radial, m):
 Molniya with its drag coefficient fitted regresses: the 72 h fit takes 0.0457 m^2/kg against the truth's 0.044 (0.4.14:
 0.0451), and the along-track error grows quadratically after the fit (33, 41, 51, 86, 142, 209 and 291 m whole-day on
 days 1 to 7). Without drag it improves from 108/102 to 51/36 m; with the coefficient pinned at the truth every build
-lands at 141 to 159 m along-track. The drag fit at high eccentricity absorbs a different gravity residual
-(modules-sdn-ap-drag-high-eccentricity-20261103).
+lands at 141 to 159 m along-track. From 0.4.16 the pinned case is 70.9 m with AGOM pinned at 0 (16.12) and the fitted
+case 276.4/208.3 m; the 72 h arc does not separate the coefficient at e 0.74 (12.8).
 
 Against independent integrations at the GTO fixture's elements (argument of perigee 270 deg, and 300 deg, where the zonal
 e and i rates do not vanish), J6-J20 and the 1,888 tesseral terms kept there: the zonal tail's rates against the potential
@@ -2228,6 +2253,75 @@ object-day from 0.4.14 to 0.4.15):
 | Molniya | 18.2 to 30.5 | 118.1 to 159.1 |
 
 Orbits at e 0.3 and below run 0.4.14's path.
+
+**16.12 Drag above e 0.3.** A drag pass at perigee is narrow against the orbit: the energy goes in a step, at the
+Earth angle of the passage. From 0.4.16, above an epoch eccentricity of 0.3 (the set of 16.11), AP evaluates 3.4's drag
+per perigee passage:
+
+- **Time.** The rate at t is the mean of the passages before and after t, t_p = t - M/n and t_p + 2 pi/n. Each node of
+  a pass takes the date and the Earth angle of its own time on it, t_p + M(nu)/n, M(nu) by Kepler's equation; the flux
+  and date terms are the passage's. The rate at t's own Earth angle averaged the density over every longitude, while a
+  repeating ground track (Molniya, 2 rev/day) passes perigee at two, alternating. The nearer passage alone is biased by
+  the two-revolution step, whose stages fall unequally on the two (+0.4 % in energy on Molniya).
+- **Arc.** The arcs nu_c < |nu| < pi are added, 13 Gauss-Legendre nodes each at nu = nu_c + (pi - nu_c) s^2, s_j =
+  (x_j + 1)/2, weight w_j (pi - nu_c) s_j / nu_c in the units of the perigee arc's sums; the co-rotating air at the
+  node's radius r: V = sqrt(1 + 2 e cos nu + e^2 - 2 q theta rho + q^2 cos^2 phi' rho^2 / D^2), rho = r D / p.
+- **Short-period steps.** In the output, each element y_j + (ydot_j / n)(pi - M), M in [0, 2 pi) and ydot the drag's
+  rates at the output time, and lambda also + (ndot / n^2)(pi M - M^2/2 - pi^2/3), the integral of n's own sawtooth: the
+  osculating elements step at perigee where the mean elements ramp.
+
+At e 0.3 and below, and without drag, the path is 0.4.15's, byte for byte (the XP digest and the drag-off runs below).
+
+Isolation, Sun and Moon off on both sides (AP's masses zero in a test build; FFM without third bodies). AP's set at B =
+0.044 flown 7 days against FFM from AP's own epoch state, drag on minus drag off on both sides (the shared gravity
+residual cancels); AP's drag energy per perigee pass over FFM's, all passes, and the day-7 whole-day along-track RMS (m):
+
+| AP | Molniya | GTO | GTO-500 |
+| --- | --- | --- | --- |
+| 0.4.15 | 0.9840, 582 | 0.9907, 102,584 | 0.9958, 1,130 |
+| passage times | 1.0002, 669 | 0.9916, 102,030 | 0.9963, 1,127 |
+| and the whole orbit | 1.0024, 691 | 0.9995, 117,131 | 0.9990, 1,181 |
+| and the short-period steps | 1.0026, 22 | 0.9991, 2,480 | 0.9987, 26 |
+
+AP's density and path were not the error: along FFM's path AP's NRLMSISE-00 integrates to FFM's pass loss within 0.01 %,
+and AP's own flown path carries the same work within 0.01 %, its perigee within 2 to 31 m of FFM's. The arc beyond nu_c
+held 0.23, 0.88 and 0.30 % of the pass's work, the passage times 1.6 % on Molniya and nothing on the two GTOs, whose
+perigee longitudes do not repeat; the quadrature's order changes nothing (13 Gauss-Legendre nodes against 401 Simpson
+points). The seeded along-track error was the ramp: a continuous rate against a step is a mean-motion offset of half
+the per-pass period change, 582 m to 103 km a week, which a fit takes into the mean motion. With BTERM pinned at the
+truth and AGOM pinned at 0 (a 72 h fit) the energy ratio follows the seeded one, 0.9916 to 1.0054 (Molniya) and
+0.9963 to 0.9995 (GTO-500), and day 7 goes from 157.2 to 93.4 m and 176.5 to 93.5 m. A pinned fit that leaves AGOM free
+takes 0.0007 (Molniya) to 0.0034 m^2/kg (GTO-500) against a truth without SRP and moves the apparent drag by +0.8 and
++1.7 %, of opposite effect on the two fixtures' forecasts.
+
+FFM model truth with the Sun and Moon (`test/drag-high-eccentricity.e2e.mjs`; 72 h fits from an osculating perigee,
+7 days on a 10-minute grid, day-7 whole-day RMS along-track/radial, m):
+
+| Case | 0.4.15 | 0.4.16 |
+| --- | --: | --: |
+| Molniya, BTERM pinned at 0.044 and AGOM at 0 | 165.88 / 125.20 | 70.86 / 48.56 |
+| drag theory, seeded, on minus off: Molniya | 593.72 / 411.57 | 26.51 / 20.59 |
+| drag theory: GTO | 99,624 / 66,866 | 3,259 / 3,408 |
+| drag theory: GTO-500 | 1,118.17 / 728.27 | 31.97 / 29.34 |
+| Molniya, drag off | 44.63 / 34.38 | 44.63 / 34.38 |
+
+The fitted coefficient is 12.8's. Against the module's independent integral over one orbit
+(`sdnap_drag_orbit_check`: the Gauss equations of -(1/2) rho B |v_rel| v_rel along the mean orbit, the density and the
+co-rotating air at the radius of 3.4, every sample at its own time, 20,000 Simpson points per pass) the six elements'
+changes over one period agree within 0.0003 m RMS on Molniya and GTO-500 and 0.023 m on GTO (2,168 m in a per orbit),
+at days 0, 1, 3 and 7.
+
+Cost (owner Mac under load, browser host, `propagate` of the seeded set over 7 days with drag, the two releases
+interleaved, median of 9 runs, ms per object-day from 0.4.15 to 0.4.16):
+
+| Orbit | 1 h grid | 1 min grid |
+| --- | --: | --: |
+| Molniya | 20.5 to 22.5 | 104.0 to 206.2 |
+| GTO | 27.1 to 34.9 | 111.5 to 253.1 |
+| GTO-500 | 25.8 to 31.5 | 105.0 to 207.1 |
+
+A rate evaluation takes two passes of 39 nodes against 13; the 1 min grid doubles because every output sample evaluates
+the drag's rates for its short-period steps. Orbits at e 0.3 and below, and without drag, run 0.4.15's path.
 
 ---
 

@@ -9,7 +9,7 @@
 //    419.32 / 455.90);
 // 2. re-recorded as improvements, each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 109.46 /
 //    70.85, half-day 34.33 / 23.12, 12 h at 55 deg 67.25 / 25.32;
-// 3. Molniya with drag, its coefficient fitted: re-recorded at 291.41 / 219.72 within 0.5 (0.4.14: 149.82 / 175.90; the
+// 3. Molniya with drag, its coefficient fitted: re-recorded at 276.44 / 208.33 within 0.5 (0.4.16, SPEC 16.12; 0.4.15: 291.41 / 219.72) (0.4.14: 149.82 / 175.90; the
 //    fitted coefficient 0.0457 against the truth's 0.044, SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103);
 //    with the coefficient pinned at the truth's 0.044: along-track no worse than 0.4.14's;
 // 4. the field cut to 4x4 on both sides, the Sun, Moon and J5 off on both sides, 2-minute samples: day-7 3D RMS at most
@@ -308,7 +308,8 @@ for (const [name, [t, r]] of Object.entries({'GTO-500': [109.46, 70.85], 'half-d
   assert.ok(near(fixtures[name].release.alongTrack, t, 0.5) && near(fixtures[name].release.radial, r, 0.5), `${name}: within 0.5 m of ${t} / ${r}`);
   assert.ok(fixtures[name].release.alongTrack < fixtures[name]['0.4.14'].alongTrack && fixtures[name].release.radial < fixtures[name]['0.4.14'].radial, `${name}: below 0.4.14`);
 }
-assert.ok(near(fixtures.Molniya.release.alongTrack, 291.41, 0.5) && near(fixtures.Molniya.release.radial, 219.72, 0.5), 'Molniya, coefficient fitted: within 0.5 m of 291.41 / 219.72');
+// Molniya re-recorded at 0.4.16 (SPEC 16.12, 12.8; 291.41 / 219.72 at 0.4.15)
+assert.ok(near(fixtures.Molniya.release.alongTrack, 276.44, 0.5) && near(fixtures.Molniya.release.radial, 208.33, 0.5), 'Molniya, coefficient fitted: within 0.5 m of 276.44 / 208.33');
 assert.ok(fixtures['Molniya-pinned'].release.alongTrack <= fixtures['Molniya-pinned']['0.4.14'].alongTrack, 'Molniya, coefficient pinned: along-track no worse than 0.4.14');
 assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {

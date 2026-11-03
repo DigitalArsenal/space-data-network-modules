@@ -13,8 +13,8 @@
 // 2. degree 4 up off (OFF; FFM EGM96 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
 //    fixture at most 95 m and of the Molniya fixture at most 85 m;
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
-//    radial RMS within 0.5 m of half-day 34.33/23.12, Molniya 291.41/219.72 and 12 h at 55 deg 67.25/25.32 m, GTO no
-//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 60.02, 419.70, 56.38
+//    radial RMS within 0.5 m of half-day 34.33/23.12, Molniya 276.44/208.33 (0.4.16; 291.41/219.72 at 0.4.15) and 12 h at 55 deg 67.25/25.32 m, GTO no
+//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 60.02, 392.90 (419.70 at 0.4.15), 56.38
 //    and 249.02 m (re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04,
 //    338.22, 303.15 before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
 // 4. default-FORCES XP digest bit-exact.
@@ -263,8 +263,9 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   assert.ok(Math.abs(g1 - 298.2) <= 1, `G1 e 0.72: the closed form's mean-longitude error ${g1} m RMS`);
   assert.ok(report.offDay1AlongTrack['half-day'] <= 95, 'half-day day-1 along-track, degree 4 up off');
   assert.ok(report.offDay1AlongTrack.Molniya <= 85, 'Molniya day-1 along-track, degree 4 up off');
-  // re-recorded at 0.4.15 (SPEC 16.11; Molniya through its fitted drag coefficient, modules-sdn-ap-drag-high-eccentricity-20261103)
-  for (const [f, [t, r, s]] of Object.entries({'half-day': [34.33, 23.12, 60.02], Molniya: [291.41, 219.72, 419.70], '12-hour-55deg': [67.25, 25.32, 56.38]})) {
+  // re-recorded at 0.4.15 (SPEC 16.11); Molniya re-recorded at 0.4.16 (SPEC 16.12, 12.8: the drag at the perigee
+  // passages; 291.41 / 219.72 / 419.70 at 0.4.15, through the 72 h arc's fitted coefficient)
+  for (const [f, [t, r, s]] of Object.entries({'half-day': [34.33, 23.12, 60.02], Molniya: [276.44, 208.33, 392.90], '12-hour-55deg': [67.25, 25.32, 56.38]})) {
     assert.ok(Math.abs(report.releaseDay7[f].alongTrack - t) <= 0.5, `${f}: day-7 along-track RMS ${report.releaseDay7[f].alongTrack} m`);
     assert.ok(Math.abs(report.releaseDay7[f].radial - r) <= 0.5, `${f}: day-7 radial RMS ${report.releaseDay7[f].radial} m`);
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);

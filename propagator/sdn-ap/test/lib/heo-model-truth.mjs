@@ -57,6 +57,13 @@ export async function runModelTruth(c){
   const v=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
   initial={status:0,out:[v.X,v.Y,v.Z,v.X_DOT,v.Y_DOT,v.Z_DOT]};
  }
+ // c.costGridMinutes (seed mode): the wall time (ms) of one propagate of the seeded set over 7 days on that grid, and nothing else
+ if(c.costGridMinutes){
+  const grid=oem([...Array(Math.round(7*1440/c.costGridMinutes))].map((_,k)=>Object.assign(new Line(),{EPOCH:iso(t0+(k+1)*c.costGridMinutes*60000)})));
+  const start=performance.now();
+  await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:seed},{portId:'grid',typeRef:type('OEM'),payload:grid}]);
+  const ms=performance.now()-start;x.sdnap_free(p);m.destroy();await h.close?.();return{costMs:ms};
+ }
  // c.hourly: every c.gridMinutes (60) of the 7 days after the fit (whole-day RMS), days 1, 3 and 7 among them
  const gm=c.hourly?(c.gridMinutes??60):0;
  const times=c.mode==='seed'?(c.seedGridMin?[...Array(Math.round((c.seedDays??7)*1440/c.seedGridMin)+1)].map((_,k)=>k*c.seedGridMin/1440):[0,1,3,7]):(S>0?[0]:[]).concat([...Array(NF)].map((_,k)=>S+k/48)).concat(c.hourly?[...Array(Math.round((c.forecastDays??7)*1440/gm))].map((_,k)=>S+FIT+(k+1)*gm/1440):[4,6,10].map(d=>S+d));
@@ -69,7 +76,7 @@ export async function runModelTruth(c){
  if(fs.existsSync(file))truth=JSON.parse(fs.readFileSync(file));else{
   const h=await createStandaloneHarness('browser',ffmPath,{surface:'command'});
   const req=requestFor('propagate',params,kernel);
-  req.inputs.push({portId:'earth_orientation',typeRef:TYPE,payload:encodePrw('EARTH_ORIENTATION',makeTable('PRWEarthOrientation',{ROWS:Array.from({length:14},(_,k)=>makeTable('EOP',{DATE:iso(t0+(k-1)*DAY)+'Z',MJD:jd.whole-2400000.5+k-1,TAI_MINUS_UTC_SECONDS:37}))}))});
+  req.inputs.push({portId:'earth_orientation',typeRef:TYPE,payload:encodePrw('EARTH_ORIENTATION',makeTable('PRWEarthOrientation',{ROWS:Array.from({length:Math.max(14,Math.ceil(times.at(-1))+3)},(_,k)=>makeTable('EOP',{DATE:iso(t0+(k-1)*DAY)+'Z',MJD:jd.whole-2400000.5+k-1,TAI_MINUS_UTC_SECONDS:37}))}))});
   const r=await h.invoke(req);assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);
   truth=decodeResult(r).samples;assert.equal(truth.length,times.length);fs.writeFileSync(file,JSON.stringify(truth));await h.close?.();
  }
