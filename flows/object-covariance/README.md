@@ -49,7 +49,7 @@ function of the history). Module SQL sees the engine's resident window of a lane
 (`storage.engine_hot_window` for `$OMM`, 400K records by default;
 `engine_generic_hot_window` for `$OCM`): the histories the covariance is derived
 from are the OMMs in that window, so a node that holds fewer than 30 days of the
-catalog derives from fewer sets and labels more rows with the population rule.
+catalog derives its (unapplied) history statistics from fewer sets.
 
 ## The record
 
@@ -59,17 +59,14 @@ celestrak-gp-object-covariance`, relation `OCM@celestrak-gp-object-covariance`):
 new OMM's epoch, one row per age (GCRF state in km and km/s, the covariance's
 21-value lower triangle in km², km²/s, km²/s² in GCRF, one CVR in `COV_REALISM`),
 and `PROVENANCE` naming the CelesTrak GP element sets. A row's CVR is
-EmpiricalHistoryShrunk (SDS 1.261.0 rule 5) with `HISTORY_SAMPLES`,
-`HISTORY_SETS`, `HISTORY_WINDOW` and `SHRINKAGE_WEIGHT` when the object's history
-supports the age, else the population model's SourceModel/PooledModel rule. An
+the population model's SourceModel/PooledModel rule: the covariance is the stratum prior
+for every object (gp-error-model 0.14.0, `population-prior`), and the object's history is
+not applied. An
 age the model cannot cover (a regime with no cells, or beyond its bins) has its
 row with NaN covariance and a rule-0 CVR whose `EVIDENCE` says why, so the record
 is still the cursor. The labels come from the module; the controller moves bytes.
 `analysis/gp-error-model/README.md` has the full contract.
 
-Ages 0 usually label as the population rule: the empirical history has
-residual pairs only from the spacing of the object's own element sets (hours),
-so the youngest age bin rarely holds enough distinct older sets.
 
 ## Acceptance
 
