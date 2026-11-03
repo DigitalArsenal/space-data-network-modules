@@ -745,6 +745,7 @@ struct RateContext {
   int32_t shallow_count;
   const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
   int32_t zt_degree;
+  uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
   const float* mdaily;                ///< AP: m-daily Fbar, dFbar/di pairs, at output time (owned, xp_release)
   int32_t mdaily_degree;
   const tess::SpCoef* sp;             ///< AP: the other first-order tesseral terms, at output time (owned, xp_release)
@@ -978,7 +979,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     }
     res::resonance_six(terms, ctx.shallow_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
   }
-  if (ctx.zt != nullptr) tess::zonal_six(ctx.zt, ctx.zt_degree, k, fr.n, fr.eta, ag.si, ag.ci, six);
+  if (ctx.zt != nullptr) tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, six);
   six_to_equinoctial(ag, six, out);
   out[kLam] += fr.n;  // the set carries lambda-dot - n
   if (ctx.ap_third_body && !ctx.long_period) third_body_tail(y, fr, b, out);
@@ -1304,7 +1305,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
-    tess::SpCoef* table = static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd) * sizeof(tess::SpCoef)));
+    tess::SpCoef* table = static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd, e.eo > tess::kWideE) * sizeof(tess::SpCoef)));
     if (table == nullptr) return false;
     const int count = tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, n0, e.xincl, e.eo, table);
     tess::SpCoef* kept = static_cast<tess::SpCoef*>(std::realloc(table, (count > 0 ? count : 1) * sizeof(tess::SpCoef)));
@@ -1314,11 +1315,13 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   }
   const int zd = t.zonal > 70 ? 70 : t.zonal;
   if (zd >= 6) {
-    float* kept = static_cast<float*>(std::malloc(4 * tess::zonal_count(zd) * sizeof(float)));
+    const bool wide = e.eo > tess::kWideE;
+    float* kept = static_cast<float*>(std::malloc(4 * tess::zonal_count(zd, wide) * sizeof(float)));
     if (kept == nullptr) return false;
-    tess::zonal_visit_terms(zd, e.xincl, e.eo, kept);
+    tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
     s.ctx.zt = kept;
     s.ctx.zt_degree = zd;
+    s.ctx.zt_wide = wide ? 1 : 0;
   }
   const int sd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
   if (res == 2 && sd >= 6) {
