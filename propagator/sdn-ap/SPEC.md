@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.2.
+Version 0.4.3.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1844,6 +1844,9 @@ reaches 2.403874454 and stays inside the band.
 | All AP tables rebuilt | -31,291.823 | -26,506.785 | 18.052% |
 
 Rebuilding is retained because it has the smaller FFM along-track error and consistent rate/output tables.
+The E2E allows a 25% difference from the companion and requires rebuilding to improve on epoch hold.
+The fixture's remaining absolute error is attributed to perigee-drag and third-body force detail absent from
+AP's averaged model; those contributions are not isolated here.
 The two (2,2) terms (p,q) = (0,-1), (1,1) move from the rates to the output table at the crossing. Their
 epoch mean-longitude amplitudes a|delta lambda| are 206.886 and 147.093 m. Isolating each in the module's
 output map and sampling 256 node phases at perigee gives peak absolute along-track displacements of

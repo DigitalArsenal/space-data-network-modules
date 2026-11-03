@@ -1,7 +1,7 @@
 {
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, SGP4XP with its atmosphere and gravity replaced ($PCF FORCES). Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded memory per object, fixed at ingest; any time costs at most one checkpoint interval of integration, and results do not depend on the order times are requested in.",
   "pluginFamily": "propagator",
   "capabilities": [],
