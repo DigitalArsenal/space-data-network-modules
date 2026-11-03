@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "gp-error-model e2b and e14 methods, the catalog pipeline and the element fit",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "9635bfd1982874735cc40e6d646ed76fc417d595294f6834c7026da5fa034b73",
-  "moduleSha256": "9635bfd1982874735cc40e6d646ed76fc417d595294f6834c7026da5fa034b73",
+  "artifactSha256": "4a7d50c5539a2206870e0955b88e103db21275342012e4d3fd8175d50827b628",
+  "moduleSha256": "4a7d50c5539a2206870e0955b88e103db21275342012e4d3fd8175d50827b628",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 17,
-      "durationMs": 1261
+      "durationMs": 1076
     },
     {
       "lane": "wasmedge",
       "runs": 17,
-      "durationMs": 70710
+      "durationMs": 52212
     }
   ],
   "cases": [

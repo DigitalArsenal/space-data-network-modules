@@ -290,11 +290,12 @@ particle's noise responses equal q[[t³/3, t²/2], [t²/2, t]] exactly.
 
 ### `object_covariance`
 
-Derives a 6×6 Cartesian covariance for each requested SGP4 object from that
-object's own OMM history, using the population error model as prior and fallback.
-The rule is `empirical-history-shrunk`. This is a deterministic pure function of
-the selected model, configuration and history up to the set in force; calling it
-again when a new OMM arrives updates that object's estimate. Physics runs in C++.
+Gives each requested SGP4 object a 6×6 Cartesian covariance that is never below
+the population error model's: the population covariance at the requested age, raised
+only where the object's own OMM history shows more error than the population does.
+The rule is `empirical-history-inflated` (below). This is a deterministic pure
+function of the selected model, configuration and history up to the set in force;
+calling it again when a new OMM arrives updates that object's estimate. Physics runs in C++.
 
 All ports carry size-prefixed FlatBuffers streams:
 
@@ -329,9 +330,8 @@ All ports carry size-prefixed FlatBuffers streams:
   anchor's SGP4 TEME state goes through the foundation/frames axis engine,
   then the RTN matrix rotates with B = blockdiag(R, R), as in
   `calibrate_covariance`. Matrices are finite and exactly symmetric.
-  Table `RULE` is `empirical-history-shrunk`; `CALIBRATION_VERSION` is
-  `0.8.0:<model ID>` (unchanged in release 0.8.1 because the numerical rule is
-  unchanged).
+  Table `RULE` is `empirical-history-inflated`; `CALIBRATION_VERSION` is
+  `0.8.0:<model ID>`.
 - `report`: one `$ERM` `ATTACH_REPORT`, one entry per request in the same order,
   with `OBJECT_KEY = ID`, `EPOCH = SET_EPOCH`, `THEORY = SGP4`, rule, method,
   calibration flag, one CVR row and refusal notes. Nothing is encoded in
@@ -345,7 +345,6 @@ Configuration is `plugin.getConfig`, exclusively under `object.`:
 | `maxAgeDays` | 8 | Exclusive upper limit on pair ages, also capped by the last model bin edge |
 | `minimumSets` | 8 | Distinct older sets in the selected history |
 | `minimumBinSets` | 12 | Distinct older sets contributing retained pairs to the requested age bin |
-| `shrinkage` | 30 | Prior weight in w = n / (n + shrinkage) |
 
 History is restricted to the same NORAD ID, epochs at or before the set in force,
 within `historyDays`, capped at the newest 200 distinct epochs including that
@@ -360,22 +359,59 @@ not gate the clip. All six components enter the retained second moment about
 zero M = Σrrᵀ/m. This is not the centered sample covariance from `finalize`.
 Counts m (pairs) and n (distinct older sets) are after clipping.
 
-For each usable population bin, P_pop is its second moment times its factor;
-w is n/(n + shrinkage) when n >= minimumBinSets, otherwise zero. The empirical
-bin matrix is w M + (1 − w) P_pop. Missing population bins have no value and
-zero weight; interpolation skips them. Matrices and weights interpolate linearly
-between populated bin centers and hold beyond the first/last center.
+**The rule (0.13.0).** P_pop is the population covariance at the requested age: the
+model's second moment and its factor, each interpolated linearly between populated bin
+centers (held beyond the first and last), then multiplied (`calibrate_covariance`'s
+evaluator, bit for bit). For each populated bin b with at least `minimumBinSets`
+distinct older sets, the object's history gives a second moment M_b; the variance
+ratio on axis k (R, T, N, Ṙ, Ṫ, Ṅ) is d²_b,k = max(1, M_b,kk / (P_pop,b,kk · f_b)), where
+P_pop,b is the bin's moment and f_b its factor. A bin with fewer sets has ratio 1 on
+every axis. The ratios interpolate between bin centers by the same rule as P_pop, so
+d²_k ≥ 1. With D = diag(d_k), S = diag(√P_pop,kk) and C = S⁻¹ P_pop S⁻¹, the answer is
+
+    P_o = P_pop + S [D C D − C]₊ S
+
+where [·]₊ keeps the positive eigenvalues of the symmetric matrix (Jacobi) and a
+rounding guard of 10⁻¹² · max(1, max d²_k) of each variance is added, so the stored
+P_o − P_pop is positive semidefinite in exact arithmetic. P_o is at least P_pop in the
+Loewner order: no covariance direction, and no projection of it (the 2-D encounter
+plane at any crossing angle, for one), is smaller than the population's. The history
+only raises; M is never blended in, and the weight n/(n + 30) of 0.12.0 and earlier is gone.
+Nothing changes when no axis exceeds the prior (P_o = P_pop bit for bit). The inflated
+matrix is rotated to GCRF as before.
+
+Why the shrinking rule is gone (it was `empirical-history-shrunk`): it mixed the object's
+history moment into the prior with weight n/(n + 30), so wherever M < P_pop it shipped a
+covariance below the prior with no truth behind it. M is a pair moment: an older set
+predicted onto a newer set, which share their errors (the section below: pair moments
+understate the error 4 to 11 times along-track above 600 km and overstate it 10 to 90
+times below 600 km beyond a day). A covariance shrinks only when independent truth shows the
+error shrank. Diagonal inflation alone is not enough: with correlated axes D P D can be
+below P along some direction (P = [[1, 0.9], [0.9, 1]], D = diag(1.25, 1): the direction
+(1, −2) goes from 1.40 to 1.06), so the rule adds the positive part of D P D − P. The
+population strata are unchanged; the covariance study replaces them.
+
+Measured on 300 catalog objects (60 per regime LEO-L, LEO-M, LEO-H, MEO, GEO; archived GP
+history 2026-08-23 to 2026-09-27; Starlink and Galileo skipped; 6,888 object-days: up to
+3 sets in force per object at 6 prediction ages from 0 to 7 days; 5,022 of them with at
+least 8 older sets): 0.12.0 shipped a covariance below P_pop in at least one direction in
+3,875 of those 5,022 object-days (77.2 %; 99.1 % of the 3,912 where it blended
+its history); 0.13.0 in none (smallest eigenvalue of P_pop^(−1/2) P_o P_pop^(−1/2) 1 − 1.4·10⁻¹³ in
+rounding; the 2-D projections at crossing angles 10, 45, 90, 135 and 170 degrees the same).
+0.13.0 raises 1,584 (31.5 %) of the 5,022 object-days; the median of the largest directional
+factor over the raised object-days is 10.0, and 1.0 over all (the median object-day is
+not raised; LEO-L alone raises its median to 2.8). Objects with fewer than 8 older
+sets get P_pop exactly. `tests/inflate-only.e2e.mjs` runs this (`--measure` and
+`--module <wasm>` print the same numbers for another build).
 
 STATUS is EMPIRICAL only when the overall and containing-bin set thresholds
 pass, the containing population bin is usable, and the requested age does not
 exceed the largest available pair age or reach `maxAgeDays`. Otherwise it is
-POPULATION and **all empirical weights are zero for that request**. Different
-ages requested for one set can therefore have different statuses. Population
-fallback reuses `calibrate_covariance`'s evaluator and multiplication order,
-bit for bit: it interpolates the unscaled moment and factor separately, then
-multiplies. Empirical interpolation instead uses the already-scaled bin priors
-specified above. These differ between centers when factors vary; this preserves
-both the existing fallback contract and the per-bin shrinkage formula.
+POPULATION and **the history raises nothing for that request**: the answer is P_pop.
+Different ages requested for one set can therefore have different statuses. P_pop is
+`calibrate_covariance`'s evaluator and multiplication order, bit for bit: it
+interpolates the unscaled moment and factor separately, then multiplies; EMPIRICAL
+starts from that same P_pop.
 
 OUTSIDE means age outside the model's support or an uncovered regime;
 NO_MODEL means the selected model has no usable cells in the regime (or a supplied
@@ -386,7 +422,7 @@ Refusals contain no covariance. SGP4 propagation failures at a requested
 prediction epoch fail the invocation explicitly.
 
 EMPIRICAL carries rule EmpiricalHistoryShrunk (SDS 1.261.0 `covarianceRule` 5; 0.9.0 and
-earlier wrote 2, ScaledFit, which is an orbit fit's rule), method `empirical-history-shrunk`, and is always
+earlier wrote 2, ScaledFit, which is an orbit fit's rule), method `empirical-history-inflated`, and is always
 **Uncalibrated**. POPULATION uses SourceModel/PooledModel and the corresponding
 `attach_covariance` method name (`e14-s3-kc` / `e14-s3-kc-pooled`), and is also
 always **Uncalibrated**: a population model's cells give no Calibrated verdict
@@ -403,19 +439,18 @@ Calibrated when its numbers passed.
 
 The report's CVR keeps what the console reads from it: SAMPLES (retained history
 pairs in the containing bin), OBJECTS (their distinct older sets) and
-SCALE_FACTOR (the interpolated history weight w, zero for POPULATION and for a
-refusal). Beside them it carries the SDS 1.261.0 evidence of the empirical
-rule, EMPIRICAL rows only: HISTORY_SAMPLES and HISTORY_SETS (the same pairs and
+SCALE_FACTOR (the history's weight in the covariance: 0, since the population prior is
+never given up, and 0 for POPULATION and for a refusal). Beside them it carries the SDS 1.261.0 evidence of the
+empirical rule, EMPIRICAL rows only: HISTORY_SAMPLES and HISTORY_SETS (the same pairs and
 sets), HISTORY_WINDOW (the ISO 8601 interval from the oldest element set the
-fit used to the set in force) and SHRINKAGE_WEIGHT (alpha = 1 - w, the
-population prior's share in `(1 - alpha) H + alpha P_prior`). EVIDENCE names the
-estimator, the configuration, the bin that holds the age, and each bin the
-blend interpolated between with its share, distinct older sets n, pairs m and
-history weight w, so the blend can be rebuilt:
-`empirical-history-shrunk/1 clip=5 historyDays=30 maxAgeDays=8 minimumSets=8 minimumBinSets=12 shrinkage=30 bin=2 blend=<bin>:<share>:<n>:<m>:<w> ...`
+history used to the set in force) and SHRINKAGE_WEIGHT (1: the population prior's share is
+whole). EVIDENCE names the estimator, the configuration, the bin that holds the age, each
+bin the raise interpolated between with its share, distinct older sets n and pairs m, and the six
+variance ratios d² the raise was built from:
+`empirical-history-inflated/1 clip=5 historyDays=30 maxAgeDays=8 minimumSets=8 minimumBinSets=12 bin=2 raise=<bin>:<share>:<n>:<m> ... d2=<R T N Rdot Tdot Ndot>`
 (the estimator is the second moment about zero of the older/newer residual
 pairs in the later set's RTN axes, pairs beyond `clip` robust sigma of position
-rejected; w = n/(n+shrinkage) once n >= minimumBinSets; alpha = 1 - sum(share*w));
+rejected; a bin under minimumBinSets has ratio 1);
 for POPULATION it is the model's own evidence. EMPIRICAL has NaN MEAN_D2_OVER_3/COVERAGE_95 and empty
 TEST_WINDOW. NOTES explains
 each failed empirical condition, including insufficient sets, insufficient bin
@@ -438,7 +473,7 @@ epoch order. `METADATA.OBJECT_DESIGNATOR` is the NORAD ID, `START_TIME` and
 source in `PROVENANCE` and `HEADER.MESSAGE_ID` `object-covariance|<object key>|<first epoch>|<method>|<ID of the group's first
 request entry>`: a reader of a lane whose store exposes only a record's body searches the bytes for `object-covariance|`
 for the key, and a caller that stores the record as its cursor puts its position in that request ID. A row's CVR is the record's meaning of SDS 1.261.0:
-EmpiricalHistoryShrunk with SAMPLES and OBJECTS 0 (no held-out test), SCALE_FACTOR NaN and the HISTORY_* evidence
+EmpiricalHistoryShrunk (the SDS 1.261.0 wire value of the rule; the enum has no inflate-only name) with SAMPLES and OBJECTS 0 (no held-out test), SCALE_FACTOR NaN and the HISTORY_* evidence
 above; or SourceModel/PooledModel with the population cell's own held-out counts. An entry that has no
 covariance (NO_SET, OUTSIDE, NO_MODEL, or an SGP4 failure at the epoch, which fails the call without `object.source`) still has its row,
 with NaN covariance (and NaN state without a set) and a CVR with rule 0 whose EVIDENCE says why, so a caller that
@@ -456,7 +491,7 @@ the console needs no model file on any lane.
 `tests/object_covariance.test.mjs` uses a seeded 73-set synthetic Vallado LEO
 history over 30 UTC days. Its residual oracle is `common_epoch`, already checked
 against python-sgp4/pyerfa in `tests/stm-reference.json`; test arithmetic forms
-histograms, clipping, second moments, shrinkage and interpolation. `finalize`
+histograms, clipping, second moments, the variance ratios, the positive part and interpolation. `finalize`
 checks the histogram/clipping statistics, and `calibrate_covariance` checks
 population fallback and the independent GCRF rotation path. Tests compare both
 output frames byte for byte between the embedded and explicit frozen model for
