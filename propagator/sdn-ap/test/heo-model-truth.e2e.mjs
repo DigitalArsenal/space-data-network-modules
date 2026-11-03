@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Registered before model-truth generation: modules-sdn-ap-heo-half-day-20261103.
 // Synthetic GCRF/UTC states from module conversions; FFM EGM96 70x70, Sun/Moon,
-// no SRP, NRLMSISE00 only on Molniya. Constant synthetic F10.7=150, Ap=15.
+// DE440, zero EOP, no SRP, NRLMSISE00 only on Molniya. Constant synthetic F10.7=150, Ap=15.
 // Fit the first 72 h, then measure forward RTN errors at leads 1,3,7 days.
 // The 12 h, e=.72 case must be below 100 m at day 7; print all three fixtures.
 // No JavaScript orbital dynamics. Default-FORCES XP must retain its digest.
@@ -18,8 +18,6 @@ const cases=[
 // no fit, same forces and the same 1/3/7-day forward thresholds. This checks
 // whether the review's "synthetic set" comparison used a shared epoch state.
 if(process.argv.includes('--seed-diagnostic')){cases.splice(1);cases[0].mode='seed';}
-// Registered reference diagnostic: the same windows with the pinned DE440 kernel.
-if(process.argv.includes('--kernel-diagnostic'))for(const c of cases)c.kernel=true;
 const results=[];
 for(const c of cases){const result=await runModelTruth(c);results.push(result);console.log(JSON.stringify(result));}
 if(process.env.SDN_AP_HEO_REPORT)fs.writeFileSync(process.env.SDN_AP_HEO_REPORT,JSON.stringify(results,null,2)+'\n');
