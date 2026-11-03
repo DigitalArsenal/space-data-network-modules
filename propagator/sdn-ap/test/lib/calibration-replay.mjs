@@ -47,6 +47,7 @@ async function replay(list){
  const {STATIC,TESS,HX}=await imp('operator-theory/lib/regimes.mjs');
  const h=await createStandaloneHarness('browser',wasmPath,{surface:'direct'});
  const objects=new Map();
+ let weather6=null;
  async function lines(w){
   const cutoff=ms(w.cutoff),hours=Number(w.arm.slice(2));
   if(['P','S1','GN'].includes(w.group)){
@@ -92,7 +93,13 @@ async function replay(list){
    const sampleMs=Math.max(1800000,Math.ceil(1800000/gridMs)*gridMs);
    const scored=after.filter(l=>(ms(l.epoch)-ms(after[0].epoch))%sampleMs===0&&w.stored.days[Math.ceil((ms(l.epoch)-cutoff)/DAY)]);
    const vacuum=['HE','HX'].includes(w.group);
-   const weather=vacuum?null:W.rowsO(cutoff-6*DAY,cutoff);
+   if(!vacuum&&!['P','S1','GN'].includes(w.group)&&!weather6){
+    // cycle-ap6 runs through XP2F's normalized 2024/2025 RSGA inventory.
+    const xp2=JSON.parse(fs.readFileSync(path.join(external,'experiments/xp2-fit-design/config.json')));
+    XM.config.spaceWeather.rsgaDirs=[path.join(xp2.store,'rsga/normalized')];
+    weather6=await import(path.join(external,'experiments/xp-atmosphere-merit/lib/weather.mjs')+'?ap6');
+   }
+   const weather=vacuum?null:(['P','S1','GN'].includes(w.group)?W:weather6).rowsO(cutoff-6*DAY,cutoff);
    if(weather?.excluded)throw Error(weather.excluded);
    const config=S.pcfBytes({forces:{...(vacuum?{}:XM.config.arms.X2.forces),HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:31,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:20},fit:null});
    const common=[{portId:'configuration',typeRef:S.TYPE('PCF'),payload:config},...(weather?[{portId:'space_weather',typeRef:S.TYPE('SPW'),payload:S.spwBytes(weather.rows)}]:[])];
