@@ -1,0 +1,128 @@
+// Registered replay for modules-sdn-ap-covariance-noise-ap-20261103.
+// UTC/GCRF km. Refit the registered AP5/AP6 arcs under LOG_NORMAL and FORCES
+// 31,20. Signed errors and covariance must share epochs: stored daily RTN RMS
+// cannot substitute for signed errors. No held-out or operator source is opened.
+// Each window supplies P0 and four noise bases from the module. Fit nonnegative
+// squared noise sizes by Gaussian likelihood; report SPEC 12.7 unchanged.
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { Worker, isMainThread, workerData } from 'node:worker_threads';
+import { createHash } from 'node:crypto';
+import { createStandaloneHarness } from 'space-data-module-sdk/testing/isomorphic';
+import * as fb from 'flatbuffers';
+import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
+import { OEM } from 'spacedatastandards.org/lib/js/OEM/OEM.js';
+import { wasmPath } from './module.mjs';
+const DAY=86400000, HOUR=3600000, UNIT=1e-6;
+const ms=s=>Date.parse(s.endsWith('Z')?s:s+'Z');
+const archive=process.env.SDN_ARCHIVE??'/opt/data/sdn-archive';
+const external=process.env.SDN_AP_EXPERIMENTS_ROOT??'/Users/tj/software/private/coordinator-d9/orbit-accuracy-experiments-ap';
+const scratch=process.env.SDN_AP_CALIBRATION_CACHE??'/Users/tj/software/terrain-work/body-look/codex-apfix-d9/replay';
+const imp=p=>import(path.join(external,'experiments',p));
+const readRows=dir=>fs.readdirSync(dir).filter(f=>/^rows-\d+\.jsonl$/.test(f)).sort().flatMap(f=>fs.readFileSync(path.join(dir,f),'utf8').split('\n').filter(Boolean).map(JSON.parse));
+const checksum=createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex');
+const filename=w=>path.join(scratch,createHash('sha256').update(checksum+w.key+w.arm).digest('hex')+'.json.gz');
+function windows(){
+ const base=path.join(archive,'operator-theory/ap/b040');
+ const ap=new Map(readRows(path.join(base,'truth2')).map(r=>[r.key,r]));
+ const rows=readRows(path.join(base,'compare-truth2')).map(r=>({...r,arms:ap.get(r.key)?.arms??{}})).concat(readRows(path.join(base,'regimes')));
+ const held=new Set([43567,37847,41862,41174,43055,41175]);
+ const out=new Map();
+ for(const r of rows){
+  if(held.has(r.norad)) throw Error('held Galileo in calibration inventory');
+  if(['P','S1','GN'].includes(r.group)&&r.cutoff>='2026-06-01') throw Error('held cutoff');
+  for(const arm of ['AP24','AP72']) if(r.arms?.[arm]?.ok) out.set(r.key+arm,{...r,arm,stored:r.arms[arm],arms:undefined});
+ }
+ return [...out.values()];
+}
+async function replay(list){
+ const S=await imp('xp-atmosphere-merit/lib/sds.mjs');
+ const T=await imp('xp-atmosphere-merit/lib/truth.mjs');
+ const W=await imp('xp-atmosphere-merit/lib/weather.mjs');
+ const XM=await imp('xp-atmosphere-merit/common.mjs');
+ const SRC=await imp('sdn-gp-starlink-ffm-match/lib/sources.mjs');
+ const {STATIC,TESS,HX}=await imp('operator-theory/lib/regimes.mjs');
+ const h=await createStandaloneHarness('browser',wasmPath,{surface:'direct'});
+ const objects=new Map();
+ async function lines(w){
+  const cutoff=ms(w.cutoff),hours=Number(w.arm.slice(2));
+  if(['P','S1','GN'].includes(w.group)){
+   const o=XM.config.groups[w.group].objects.find(o=>o.norad===w.norad);
+   if(!o)throw Error('unregistered object');
+   return T.series(o,cutoff-hours*HOUR,cutoff+7*DAY).lines;
+  }
+  if(!objects.has(w.norad)){
+   let s;
+   if(['LS','DO','GD'].includes(w.group)){
+    const clean=s=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
+    const o=STATIC.find(o=>o.group===w.group&&clean(o.name)===clean(w.name));
+    if(!o)throw Error('static object mapping: '+w.name);
+    s=SRC.chain(o.files()).lines;
+   }else if(['IG','GE'].includes(w.group)){
+    const root=path.join(archive,'e14-covariance-realism/reference');
+    const files=Array.from({length:20},(_,i)=>path.join(root,`GFZ0MGXRAP_2025${274+i}0000_01D_05M_ORB`,`${w.norad}.oem`)).filter(f=>fs.existsSync(f));
+    s=SRC.chain(files).lines;
+   }else{
+    const {spkObjectSeries}=await imp('sdn-gp-starlink-ffm-match/lib/spk-sources.mjs');
+    const {openAxes}=await imp('operator-theory/lib/host.mjs');
+    const o=w.group==='HE'?TESS:HX.find(o=>o.norad===w.norad);
+    if(!o)throw Error('unregistered kernel');
+    const files=w.group==='HE'?fs.readdirSync(o.dir).filter(f=>/^TESS_EPH_DEF_.*\.bsp$/.test(f)).sort().map(f=>path.join(o.dir,f)):[o.file];
+    const raw=await spkObjectSeries(process.env.SDN_MODULES_ROOT,{files,source:'ap6-heo',id:w.group==='HE'?'TESS (-95)':o.id,name:o.name,norad:o.norad,fromUtc:o.from,toUtc:o.to,stride:1});
+    const first=Math.round(ms(raw.lines[0].epoch)/1000)*1000;
+    const thin=raw.lines.filter(l=>(Math.round(ms(l.epoch)/1000)*1000-first)%300000===0).map(l=>({...l,epoch:new Date(Math.round(ms(l.epoch)/1000)*1000).toISOString()}));
+    const axes=await openAxes(); s=await axes.convert(thin,'EME2000','GCRF'); await axes.close();
+   }
+   objects.set(w.norad,s);
+  }
+  return objects.get(w.norad).filter(l=>ms(l.epoch)>=cutoff-hours*HOUR&&ms(l.epoch)<=cutoff+7*DAY);
+ }
+ for(const w of list){
+  const file=filename(w); if(fs.existsSync(file))continue;
+  try{
+   const cutoff=ms(w.cutoff),all=await lines(w),thin=T.thinned(all.filter(l=>ms(l.epoch)<=cutoff)).chosen;
+   if(thin.length<8)throw Error('too few fit states');
+   const after=all.filter(l=>ms(l.epoch)>cutoff);
+   const gridMs=Math.max(300000,Math.ceil((ms(after[1].epoch)-ms(after[0].epoch))/300000)*300000);
+   const scored=after.filter(l=>(ms(l.epoch)-ms(after[0].epoch))%gridMs===0&&w.stored.days[Math.ceil((ms(l.epoch)-cutoff)/DAY)]);
+   const vacuum=['HE','HX'].includes(w.group);
+   const weather=vacuum?null:W.rowsO(cutoff-6*DAY,cutoff);
+   if(weather?.excluded)throw Error(weather.excluded);
+   const config=S.pcfBytes({forces:{...(vacuum?{}:XM.config.arms.X2.forces),HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:31,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:20},fit:null});
+   const common=[{portId:'configuration',typeRef:S.TYPE('PCF'),payload:config},...(weather?[{portId:'space_weather',typeRef:S.TYPE('SPW'),payload:S.spwBytes(weather.rows)}]:[])];
+   const call=async(methodId,inputs)=>{const r=await h.invoke({methodId,inputs:[...common,...inputs]});if(r.statusCode!==0)throw Error(r.errorCode+': '+r.errorMessage);return r.outputs;};
+   const fit=await call('fit',[{portId:'ephemeris',typeRef:S.TYPE('OEM'),payload:S.oemBytes({frame:'GCRF',object:{name:w.name,norad:w.norad},lines:thin,useableStart:thin[0].epoch,useableStop:w.cutoff})}]);
+   const omm=OMM.getRootAsOMM(new fb.ByteBuffer(fit.find(o=>o.portId==='elements').payload)).unpack();
+   const ud=Object.fromEntries(omm.USER_DEFINED_PARAMETERS.map(p=>[p.PARAM_NAME,p.PARAM_VALUE]));
+   if(!ud.SDNAP_COV_NOISE)throw Error('fit returned no covariance');
+   const ta=Number(ud.SDNAP_COV_NOISE.split(' ')[4]);
+   const grid=S.oemBytes({frame:'GCRF',lines:scored});
+   const runs=[];
+   for(let k=-1;k<4;k++){
+    omm.USER_DEFINED_PARAMETERS.find(p=>p.PARAM_NAME==='SDNAP_COV_NOISE').PARAM_VALUE=[...[0,1,2,3].map(j=>j===k?UNIT:0),ta].join(' ');
+    const b=new fb.Builder(8192); OMM.finishOMMBuffer(b,omm.pack(b));
+    const out=await call('propagate',[{portId:'omm',typeRef:S.TYPE('OMM'),payload:b.asUint8Array()},{portId:'grid',typeRef:S.TYPE('OEM'),payload:grid}]);
+    runs.push(OEM.getRootAsOEM(new fb.ByteBuffer(out.find(o=>o.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0]);
+   }
+   const pos=c=>[c.CX_X,c.CY_X,c.CY_Y,c.CZ_X,c.CZ_Y,c.CZ_Z];
+   const samples=scored.map((l,i)=>{const state=runs[0].EPHEMERIS_DATA_LINES[i],P0=pos(runs[0].COVARIANCE_MATRIX_LINES[i]);return{day:Math.ceil((ms(l.epoch)-cutoff)/DAY),e:[state.X-l.r[0],state.Y-l.r[1],state.Z-l.r[2]],P0,B:runs.slice(1).map(r=>pos(r.COVARIANCE_MATRIX_LINES[i]).map((v,j)=>(v-P0[j])/UNIT**2))};});
+   const result={key:w.key,arm:w.arm,group:w.group,regime:ud.SDNAP_COV_REGIME,ngRate:Number(ud.SDNAP_COV_NG_RATE),nDay:omm.MEAN_MOTION*2*Math.PI,samples,stored:w.stored.days};
+   fs.writeFileSync(file,zlib.gzipSync(JSON.stringify(result)));
+   console.log(`${w.key} ${w.arm}: ${samples.length} covariance samples`);
+  }catch(e){console.error(`${w.key} ${w.arm}: ${e.stack}`);throw e;}
+ }
+}
+export async function runReplay(){
+ fs.mkdirSync(scratch,{recursive:true});
+ let list=windows();
+ const limit=Number(process.env.SDN_AP_CALIBRATION_LIMIT??0);if(limit)list=list.slice(0,limit);
+ console.log(`registered AP windows: ${list.length}; module ${checksum}`);
+ const n=Math.min(12,list.length);
+ await Promise.all(Array.from({length:n},(_,k)=>new Promise((resolve,reject)=>{const w=new Worker(new URL(import.meta.url),{workerData:{list:list.filter((_,i)=>i%n===k)}});w.on('error',reject);w.on('exit',code=>code?reject(Error(`worker exit ${code}`)):resolve());})));
+ const results=list.map(w=>JSON.parse(zlib.gunzipSync(fs.readFileSync(filename(w)))));
+ fs.writeFileSync(path.join(scratch,'index.json'),JSON.stringify({checksum,files:list.map(filename)}));
+ console.log(`replayed ${results.length} windows; covariance bases in ${scratch}`);
+ return results;
+}
+if(!isMainThread)await replay(workerData.list);

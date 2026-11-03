@@ -67,52 +67,9 @@ const CHI2_3_95 = 7.814727903251178, CHI2_3_MEDIAN = 2.365973884375338;
 // Validate the explicitly supplied calibration inventory before creating a host or
 // entering the legacy laser-reference path. Never substitute another population.
 if (THEORY === "SDNAP") {
-  if (SET !== "calibration" || forceText !== "31,20")
-    throw new Error("AP calibration is registered only for --set calibration --forces 31,20");
-  const inventory = [];
-  const cells = new Map();
-  for (const source of ["compare-truth2", "regimes"]) {
-    const dir = path.join(ARCHIVE, "operator-theory/ap/b040", source);
-    const files = fs.readdirSync(dir).filter((f) => /^rows-\d+\.jsonl$/.test(f)).sort();
-    const counts = { source, files: files.length, rows: 0, AP24: 0, AP72: 0, XP24: 0, XP72: 0, forwardSamples: 0, covarianceSamples: 0, fittedSets: 0, armsPresent: {} };
-    for (const file of files) {
-      for (const line of fs.readFileSync(path.join(dir, file), "utf8").split("\n").filter(Boolean)) {
-        const row = JSON.parse(line);
-        ++counts.rows;
-        for (const arm of Object.keys(row.arms ?? {}))
-          counts.armsPresent[arm] = (counts.armsPresent[arm] ?? 0) + 1;
-        for (const arm of ["AP24", "AP72", "XP24", "XP72"]) {
-          const forecast = row.arms?.[arm];
-          if (!forecast || forecast.ok === false) continue;
-          ++counts[arm];
-          if (forecast.omm || forecast.elements || forecast.set) ++counts.fittedSets;
-          for (const day of [1, 2, 3, 7]) {
-            const sample = forecast.days?.[day];
-            if (!sample || ![sample.r, sample.t, sample.n].every(Number.isFinite)) continue;
-            ++counts.forwardSamples;
-            const key = `${source}/${arm}/${row.group}/${day}`;
-            if (!cells.has(key)) cells.set(key, new Set());
-            cells.get(key).add(row.key);
-            if (Array.isArray(sample.P) && sample.P.length === 6 && sample.P.every(Number.isFinite))
-              ++counts.covarianceSamples;
-          }
-        }
-      }
-    }
-    inventory.push(counts);
-    console.log(JSON.stringify(counts));
-  }
-  const cellCounts = [...cells].map(([cell, windows]) => ({ cell, windows: windows.size,
-    meanD2Over3: null, coverage95: null, status: "missing-covariance-basis" }));
-  for (const cell of cellCounts) console.log(JSON.stringify(cell));
-  const report = { theory: THEORY, forces: forceText, inventory, cells: cellCounts, acceptance: {
-    meanD2Over3: [0.8, 1.25], coverage95: [0.93, 0.97], measured: false,
-  }, status: "missing-calibration-inputs" };
-  if (OUT) fs.writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`);
-  console.error("FAIL: AP calibration needs fitted AP sets and their covariance bases at each lead (or replayable calibration arcs). " +
-    "compare-truth2 has no AP arms; replay needs the matching fitted sets and covariance bases or calibration arcs. " +
-    "Forward RTN errors and fit RMS alone cannot identify SPEC 12.5 element-rate noise or measure SPEC 12.7 realism. " +
-    "No held-out references were opened; no realism claim is made.");
+  const { runReplay } = await import("./lib/calibration-replay.mjs");
+  await runReplay();
+  console.error("FAIL: replay complete; noise optimization and band verification pending");
   process.exit(1);
 }
 
