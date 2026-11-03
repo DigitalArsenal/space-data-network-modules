@@ -829,25 +829,42 @@ struct NodeIntegral {
   double at;                           ///< at F
   double nodes[kThirdBodyTailNodes];   ///< at each node
 };
+struct NodeTrig {
+  double c[kThirdBodyTailNodes], s[kThirdBodyTailNodes];  ///< cos, sin of 2 pi k / kThirdBodyTailNodes
+};
+inline const NodeTrig& node_trig() {
+  static const NodeTrig t = [] {
+    NodeTrig r{};
+    for (int k = 0; k < kThirdBodyTailNodes; ++k) {
+      r.c[k] = std::cos(kTwoPi * k / kThirdBodyTailNodes);
+      r.s[k] = std::sin(kTwoPi * k / kThirdBodyTailNodes);
+    }
+    return r;
+  }();
+  return t;
+}
 inline NodeIntegral integrate_nodes(const double* g, double F) {
   constexpr int N = kThirdBodyTailNodes, M = N / 2;
+  const NodeTrig& t = node_trig();
   NodeIntegral out{};
+  double sF, cF;
+  fm::sincos(F, sF, cF);
+  double sm = 0.0, cm = 1.0;  // sin mF, cos mF
   for (int m = 1; m <= M; ++m) {
+    const double s1 = sm * cF + cm * sF;
+    cm = cm * cF - sm * sF;
+    sm = s1;
     double a = 0.0, bm = 0.0;
-    for (int j = 0; j < N; ++j) {
-      const double ang = kTwoPi * m * j / N;
-      a += g[j] * std::cos(ang);
-      bm += g[j] * std::sin(ang);
+    for (int j = 0, k = 0; j < N; ++j, k = (k + m) % N) {
+      a += g[j] * t.c[k];
+      bm += g[j] * t.s[k];
     }
     // the Nyquist term (m = N / 2) carries half the cosine sum and no sine
     const double scale = m == M ? 1.0 / N : 2.0 / N;
     a *= scale;
     bm = m == M ? 0.0 : bm * scale;
-    out.at += (a * std::sin(m * F) + bm * (1.0 - std::cos(m * F))) / m;
-    for (int j = 0; j < N; ++j) {
-      const double ang = kTwoPi * m * j / N;
-      out.nodes[j] += (a * std::sin(ang) + bm * (1.0 - std::cos(ang))) / m;
-    }
+    out.at += (a * sm + bm * (1.0 - cm)) / m;
+    for (int j = 0, k = 0; j < N; ++j, k = (k + m) % N) out.nodes[j] += (a * t.s[k] + bm * (1.0 - t.c[k])) / m;
   }
   return out;
 }
