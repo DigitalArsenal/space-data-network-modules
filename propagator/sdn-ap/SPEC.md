@@ -1785,6 +1785,74 @@ windows are its commissioning: FFM misses four of five by 1.9 to 2,626 km, and o
 the paired value goes from 191.7 to 3.9 m.
 `test/fit-bterm-700-1400-km.e2e.mjs` measures every number of the default and per-object paths and of the windows.
 
+**Diagnostics and the fall-back (0.4.18).** Every fit's $OMM COMMENT and its $OBD BALLISTIC_COEFF_MODEL carry, after
+the prior and the posterior above (BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT and AGOM_MODEL, the arc in FIT_SPAN), the
+drag path and the arc check: `drag prior: band default`, `band default at 800-1400 km, no fall-back`, `stated
+(FIT.DRAG_PRIOR), fitted as given`, or `fall-back to the band median's prior (...) on <reasons>; the band default's
+fit: BTERM, posterior sigma of the log, sigmas from the band median, fit RMS`; then the arc's hours, its largest gap
+and where it starts, and the step test's revolutions, velocity step, time, F and verdict. $OBD 0.0.3 has no numeric
+field for a width, a prior or a flag, so they are its model text; nothing goes in USER_DEFINED_PARAMETERS.
+
+The arc check. A data gap: two consecutive fitted states more than two revolutions apart. An along-track step (a
+maneuver indicator): the fit residuals' along-track component (model minus data along the model's velocity), averaged
+per revolution over bins of at least 3 states (9 bins at least), is fitted by least squares with a quadratic in time
+and with the quadratic plus a hinge max(0, t - t_h) at each bin boundary with 3 bins on either side; the hinge that
+lowers the residual sum the most gives F = (RSS_0 - RSS_h) / (RSS_h / (K - 4)) over K bins and, from its slope c, the
+velocity step |c| / 3 (a tangential step dv changes the along-track drift rate by 3 dv). A step is flagged at F >= 100
+and at least 0.002 m/s. On the nine step-free model-truth arcs below F is at most 26.5 and the step at most 0.0003 m/s;
+tangential steps of 0.005, 0.01, 0.02, 0.05 and 0.5 m/s 36 h into the SWOT-like and Sentinel-3-like arcs are recovered
+as 0.0047 to 0.4992 m/s at F 1,335 to 6,550, every one flagged. On the read windows below no arc with a fit RMS under
+30 m is flagged (the largest F 139, at 0.0008 m/s) and 17 of the 18 above 80 m are (0.005 to 0.030 m/s; Sentinel-6B
+2025-12-14 0.51 m/s); Sentinel-6B 2025-12-19 (1.7 km, its commissioning) gives 0.17 m/s at F 85. A step after the arc's end, its states in the $OEM after USEABLE_STOP_TIME, leaves the fit bit for
+bit.
+
+The rule. After a fit of at least 71 h (the 72 h arc and longer) under NRLMSISE-00 at 800-1400 km on the band default,
+the fit is redone under 0.4.11's band-median prior (median 0.0005 m^2/kg, sigma of the log ln 10, which is 0.4.11's fit
+bit for bit) when the posterior sigma of the log exceeds B = 0.5, or BTERM is more than k = 3 posterior sigmas from the
+band median while the fit RMS exceeds the band's median, 15.16 m, by more than 25 % (18.95 m), or the arc check flags a
+gap or a step. B, k and the band median come from the model truth of 0.4.12's table (the band default's fit; the band
+median's prior, as 0.4.11; day-3 3D RMS, m):
+
+| Orbit, true B | Band default: B, sigma of the log, fit RMS (m), day 3 | Band median prior: B, day 3 | 0.4.18 |
+| --- | --- | --- | --- |
+| SWOT-like, 0.044 | 0.0463, 0.011, 14.48, 82.0 | 0.0005, 1,314.5 | default |
+| SWOT-like, 0.01 | 0.0110, 0.048, 14.73, 42.9 | 0.0005, 279.2 | default |
+| SWOT-like, 0.001 | 0.00069, 0.795, 15.16, 15.2 | 0.0005, 15.9 | fall-back, 15.9 |
+| Sentinel-3-like, 0.044 | 0.0447, 0.005, 18.52, 63.6 | 0.0008, 3,957.3 | default |
+| Sentinel-3-like, 0.01 | 0.0105, 0.021, 18.55, 49.4 | 0.0005, 867.1 | default |
+| Sentinel-3-like, 0.001 | 0.00115, 0.196, 18.68, 24.1 | 0.0005, 50.7 | default |
+| Jason-like, 1,336 km, 0.044 | 0.00058, 5.36, 17.27, 263.0 | 0.0005, 263.5 | fall-back, 263.5 |
+| Jason-like, 0.01 | 0.00052, 4.23, 12.08, 61.5 | 0.0005, 61.6 | fall-back, 61.6 |
+| Jason-like, 0.001 | 0.00051, 4.12, 11.48, 14.07 | 0.0005, 14.09 | fall-back, 14.09 |
+
+Where the arc determines B (sigma of the log 0.196 or less) the wide prior gains 26.6 to 3,893.7 m; where it does not
+(0.795 or more) B stays near the median and the two priors agree within 0.7 m. B = 0.5 lies between, the covariance's
+prior-limited mark. B moves 4.2 to 896 posterior sigmas from the median where the arc determines it and 0.4 or less
+where it does not: k = 3. The band median RMS is the median of the nine fits' RMS; no fixture exceeds 18.95 m (the
+largest 18.68 m, Sentinel-3-like), so on the model truth the fall-back is taken only where B is undetermined.
+
+AP8's read altimetry windows (DO, 136 paired AP72 windows; descriptive, these windows were read by AP8 and its
+diagnosis), 0.4.11 / 0.4.17 / 0.4.18: Sentinel-3A 2025-10-15 day 3 0.087 / 0.312 / 0.087 km and Sentinel-3B 2025-10-25
+day 7 0.113 / 1.335 / 0.113 km. 37 windows fall back, each to 0.4.11's fit bit for bit: 13 on k and the RMS (every
+Sentinel-3A and -3B window in the band with B determined, fit RMS 19.2 to 86.5 m), 15 on the sigma alone (12 of
+Sentinel-6 Michael Freilich's arcs, Jason-3 2025-12-04 and 12-19, Sentinel-6B 2025-12-19) and 9 on the sigma with a
+step (fit RMS 145 m to 25.5 km). The day-3 median
+change against 0.4.11 stays 0.4.17's on HY-2C (-84.3 %), HY-2D (-90.9 %), SWOT (-48.2 %) and Jason-3 (-69.1 %); SARAL
+and CryoSat-2 (600-800 km) are 0.4.17's bit for bit. The diagnostics show the mechanism: on 11 of the 13 Sentinel-3 windows
+both priors leave B determined by the arc (posterior sigma of the log 0.004 to 0.012), and 0.4.17 fits it 5 to 26 %
+higher at a lower RMS (2025-10-15: 0.0217 at 21.1 m against 0.0190 at 23.8 m), so the losses are a determined estimate
+that does not carry forward, which the width B never flags; the arc's RMS above the band's model-truth median separates
+them. On the other two (Sentinel-3A 2025-11-24 and 12-19) 0.4.11 left B near the median (sigma 0.53 and 0.56). The rule
+returns Sentinel-3A and -3B to 0.4.11 in the band, its gains with its losses: 0.4.17's -41 % day-1 median change goes
+(day 1 median 0.058 to 0.090 km on Sentinel-3A), and 2025-11-24, 2025-10-30 and Sentinel-3B 2025-10-30 go from 0.072,
+0.128 and 0.114 km at day 3 back to 1.506, 0.502 and 0.482 km. Jason-3 2025-10-10 (day 3 0.203 / 0.250 km, sigma of the
+log 0.039, fit RMS 16.1 m) is not reached by the rule.
+
+Cost: the mean fit time of a 72 h DO arc (12 workers on the owner Mac) outside the band 1,754 to 1,781 ms (the arc
+check), on the band default kept 1,907 to 2,301 ms (the first fit's covariance and arc check), on a fall-back 1,876 to
+3,606 ms (the second fit); per object-day of the arc a third of that. Propagation does not change (XP digest
+72dcf6005046). `test/drag-prior-fallback.e2e.mjs` measures every number here.
+
 **Above e 0.3.** Until 0.4.16 Molniya's band default followed its mean altitude (20,180 km, median 0.0005) and the 72 h
 fit stayed there (0.000831 against the truth's 0.044, 11,063 m along-track at day 7); at its 541 km perigee the median is
 0.01. The arc then determines BTERM, but a 72 h arc at e 0.72-0.74 does not separate it from the third bodies' and the
@@ -1932,7 +2000,7 @@ between nodes and held at the end values outside them; the density is NRLMSISE-0
 call's atmosphere, with finite-difference Jacobian fallback (`fit::jacobian_fallback`) enabled under NRLMSISE-00 and
 short-span (`< 24 h`) passes. When FIT.DRAG_PRIOR is unset under NRLMSISE-00 or `< 24 h` minimum span, BTERM's
 LOG_NORMAL prior takes its median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at
-`>= 800 km`), and under NRLMSISE-00 at `800-1400 km` the sigma of the log `10 ln 10` (12.8); a stated FIT.DRAG_PRIOR is
+`>= 800 km`), and under NRLMSISE-00 at `800-1400 km` the sigma of the log `10 ln 10`, with 12.8's fall-back; a stated FIT.DRAG_PRIOR is
 fitted as given. When `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a
 non-eccentric orbit without `USEABLE_START_TIME`, `fit` runs a two-stage decoupled solve: Stage 1 fits the `48-72 h`
 span to determine `BTERM` and `AGOM`; Stage 2 fits the trailing `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2

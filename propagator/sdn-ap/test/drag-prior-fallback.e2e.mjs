@@ -99,11 +99,11 @@ if (!isMainThread) {
         here: median(p.map((r) => day(r.arms[2], k))), change0417: median(p.map((r) => day(r.arms[1], k) / day(r.arms[0], k) - 1)),
         changeHere: median(p.map((r) => day(r.arms[2], k) / day(r.arms[0], k) - 1))} : null;
     }
-    out.fallBack = v.filter((r) => /fall-back/.test(r.arms[2]?.comment ?? '')).length;
+    out.fallBack = v.filter((r) => /drag prior: fall-back/.test(r.arms[2]?.comment ?? '')).length;
     objects[o] = out;
     console.log(JSON.stringify({object: o, ...out}));
   }
-  for (const r of rows.filter((r) => /fall-back/.test(r.arms[2]?.comment ?? '')).sort((a, b) => a.key.localeCompare(b.key)))
+  for (const r of rows.filter((r) => /drag prior: fall-back/.test(r.arms[2]?.comment ?? '')).sort((a, b) => a.key.localeCompare(b.key)))
     console.log(JSON.stringify({fallBack: r.key, why: /drag prior: (.*?); arc /.exec(r.arms[2].comment)[1], day3: [0, 1, 2].map((a) => day(r.arms[a], '3'))}));
   const fitMs = [0, 1, 2].map((a) => { const t = rows.filter((r) => r.arms[a]?.ok).map((r) => r.arms[a].fitMs); return t.reduce((s, x) => s + x, 0) / t.length; });
   console.log(JSON.stringify({meanFitMsPer72hArc: {'0.4.11': fitMs[0], '0.4.17': fitMs[1], release: fitMs[2]}, windows: rows.filter((r) => r.arms[2]?.ok).length}));
