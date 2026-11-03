@@ -738,8 +738,8 @@ struct RateContext {
   int32_t half_day_count;
   uint8_t ap_resonance;               ///< AP: tables follow the current class; functions at the current elements
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
-  uint8_t ap_third_body;              ///< AP: the third bodies' tidal terms of degree 4 up in the averaged rates (SPEC 16.8)
-  uint8_t ap_short_period;            ///< AP: the third bodies' short-period terms by quadrature (SPEC 5.4)
+  uint8_t ap_third_body;              ///< AP: the third bodies' degree 4-10 averaged rates and degree 2-10 short-period
+                                      ///< terms by quadrature (SPEC 5.4, 16.8)
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
@@ -771,9 +771,6 @@ inline int state_test(const RateContext& ctx, const double* y) {
 /// mu_b r^(l-1) / r_b^(l+1) [(l P_l - u P_l') r_hat + P_l' s_hat], u = r_hat . s_hat.
 constexpr int kThirdBodyTailDegree = 10;
 constexpr int kThirdBodyTailNodes = 32;
-/// The terms apply below this epoch eccentricity: measured to help near-circular orbits, they raise the errors of the
-/// e 0.72-0.74 model-truth fixtures (SPEC 16.6, 16.8).
-constexpr double kThirdBodyTailMaxE = 0.1;
 inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio, int lo, int hi) {
   const double rn = norm(r);
   const Vec3 ru = (1.0 / rn) * r;
@@ -1113,11 +1110,11 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
     const double n = ym[kN], etam = std::sqrt(1.0 - km.e * km.e);
     const AngleTrig agm = angle_trig(km);
     const Perifocal pfm = perifocal_of(agm);
-    if (!ctx.long_period && ctx.ap_short_period) {
-      // AP (SPEC 5.4): the third bodies' short-period terms by quadrature, degrees 2 and 3 and, where SPEC 16.8's
-      // terms apply, 4 to 10; the bodies at the output time
+    if (!ctx.long_period && ctx.ap_third_body) {
+      // AP (SPEC 5.4): the third bodies' short-period terms of degree 2 to 10 by quadrature, the bodies at the output
+      // time
       double d[6] = {0, 0, 0, 0, 0, 0};
-      third_body_short_period(ym, frame_of(ym), b, eccentric_longitude(ym), 2, ctx.ap_third_body ? kThirdBodyTailDegree : 3, d);
+      third_body_short_period(ym, frame_of(ym), b, eccentric_longitude(ym), 2, kThirdBodyTailDegree, d);
       for (int j = 0; j < 6; ++j) y[j] += d[j];
     } else if (!ctx.long_period) {
       // SPEC 5.4: the Sun and Moon output-time corrections, added to the
@@ -1273,8 +1270,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // convention. A second epoch-axis rotation is not part of that branch.
   // This one ingest-time policy is shared by fit residuals and every flight.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
-  s.ctx.ap_third_body = (t.tesseral > 0 || t.zonal > 0) && e.eo < kThirdBodyTailMaxE;
-  s.ctx.ap_short_period = t.tesseral > 0 || t.zonal > 0;
+  s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
