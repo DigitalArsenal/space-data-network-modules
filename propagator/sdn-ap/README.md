@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.9.
+Version 0.4.10.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -381,3 +381,7 @@ RMS falls from 22-23 m to under 0.8 m and the along-track RMS to under 7 m. On t
 (exploratory) the day-3 errors fall to 10.12 and 9.74 m paired against the numerical reference on Etalon-1 and -2,
 and the medians to 7.81 m (LAGEOS-1), 6.78 m (LAGEOS-2), 9.73 m (LARES-2), 17.10 m (IG) and 45.86 m (GE)
 (`test/twelve-hour-class-terms.e2e.mjs`).
+
+The degree 4 to 10 tidal terms apply below e 0.1. Swept against the numerical reference on 12-hour orbits in three
+orientations, they help at every e up to 0.085 and first turn near e 0.09; the turn comes from SPEC 5.4's closed-form
+degree 2 and 3 short-period terms, whose error grows with e (SPEC 16.8, `test/tidal-degree4-eccentric.e2e.mjs`).

@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.9.
+Version 0.4.10.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1975,9 +1975,35 @@ AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and f
 the epoch moved by whole sidereal days (the Earth's geometry fixed) the mean along-track offset swings between -47
 and +39 m with the Moon, and removing the Moon from AP and the reference leaves about 2 m. Most of the rest of
 Etalon's gap was the two-line lattice of the fitted set (16.9). `test/etalon-resonance.e2e.mjs` prints every window
-and median. On the e 0.72-0.74 fixtures of 16.6 the same terms raised the day-7 errors (half-day
-104.7 to 479.7 m, Molniya 654.1 to 1555.8 m; computed over all degrees from 2 the averages equal 5's closed form there
-too), hence the eccentricity bound: those fixtures keep their 16.6 values.
+and median.
+
+**The bound.** On orbits of n 2.0059 rev/day in three orientations (G1: i 63.4, node 300, perigee 270 deg; G2: 63.4,
+60, 90; G3: 55, 180, 0), against FFM EGM96 70x70 with Sun and Moon (72 h fits, 7 days flown hourly), the day-7 3D RMS
+with the terms, the bound lifted, and without them:
+
+| e | G1 on / off (m) | G2 on / off (m) | G3 on / off (m) |
+| --: | --: | --: | --: |
+| 0.05 | 58.9 / 133.3 | 18.0 / 56.7 | 37.5 / 95.3 |
+| 0.07 | 75.3 / 149.4 | 27.9 / 47.9 | 39.4 / 94.9 |
+| 0.085 | 87.5 / 161.3 | 36.1 / 41.8 | 42.0 / 93.9 |
+| 0.1 | 100.1 / 173.8 | 44.2 / 36.3 | 44.5 / 93.3 |
+| 0.2 | 182.3 / 255.2 | 100.5 / 28.8 | 72.8 / 85.9 |
+| 0.3 | 261.9 / 328.8 | 155.2 / 62.3 | 114.1 / 81.8 |
+| 0.5 | 2079.5 / 2242.5 | 255.5 / 172.3 | 223.9 / 213.3 |
+| 0.72 | 503.0 / 254.9 | 377.5 / 427.4 | 402.6 / 194.4 |
+| 0.74 | 518.9 / 254.2 | 371.8 / 417.0 | 506.5 / 248.3 |
+
+The terms help at every e up to 0.085 in all three. The first turn is G2's, between e 0.085 (-5.7 m) and 0.1
+(+7.8 m); G3 turns between 0.2 and 0.3 and G1 between 0.5 and 0.72. The terms are not the cause: the
+quadrature over all degrees from 2 reproduces 5's closed-form averages within 0.1 m at e 0.72, and short-period
+terms of degree 4 to 10 computed by the same quadrature leave every sign of the sweep unchanged. With 5.4's closed-form
+degree 2 and 3 short-period terms replaced by their numerical first-order form, the terms help at every e in G1 and G2
+and up to e 0.5 in G3. The turn is therefore the closed-form degree 2 and 3 short-period error, which grows with e
+(on the e 0.72 half-day fixture the day-1 along-track RMS is 184 m with the closed form and 91 m with the numerical
+form, 61 m with no Moon on either side) and which the fit absorbs differently with and without the terms. The terms
+apply below e 0.1; G2's first turn lies just below the bound (at e 0.1 the terms cost it 7.8 m at day 7). The
+fixtures of 16.6 keep their values at day 7 (half-day 91.4 m, Molniya 700.4 m; with the bound lifted
+421.4 and 1517.6 m). `test/tidal-degree4-eccentric.e2e.mjs` prints the sweep and pins the turn.
 
 **16.9 AP sets at full precision.** `fit` rounds an SGP4XP set to the two-line text's digits and searches their
 lattice (mean motion 1e-8 rev/day, eccentricity 1e-7, angles 1e-4 deg), the set the Space Force library reads. An AP
