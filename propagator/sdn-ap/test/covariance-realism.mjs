@@ -9,6 +9,8 @@
 // either interval must be reported as unsupported, never claimed realistic.
 // Calibration replays the module fit and five covariance propagations (zero
 // noise and four unit bases); neither fit RMS nor daily RTN RMS is covariance.
+// Without --calibrate, score the noise emitted by the module. --calibrate fits
+// candidate sizes and applies the same band; a candidate is not a shipped table.
 // Verify theory selection through fit/propagate and retain default XP digest.
 // Covariance realism of the SGP4XP fit (SPEC 12) on laser-ranged precise orbits, and the fit of its process noise.
 //

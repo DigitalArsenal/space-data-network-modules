@@ -1,6 +1,6 @@
 {
   "task": "modules-sdn-ap-covariance-noise-ap-20261103",
-  "status": "band-failed-search-pending",
+  "status": "acceptance-failed",
   "protocol": {
     "theory": "SDNAP",
     "forces": [
@@ -35,7 +35,13 @@
         0.97
       ],
       "minimumWindows": 30
-    }
+    },
+    "readerCommit": "421e20592e9e5a595165e351a9c699cb9a1ae192",
+    "stores": [
+      "operator-theory/ap/b040/compare-truth2",
+      "operator-theory/ap/b040/truth2",
+      "operator-theory/ap/b040/regimes"
+    ]
   },
   "shipped": {
     "kind": "shipped",
@@ -249,5 +255,118 @@
     ],
     "pass": false,
     "method": "Gaussian likelihood, two log-coordinate starts, resolution 1/128 decade"
-  }
+  },
+  "searches": {
+    "target": "mean-only feasibility, every replay sample; neither search found a passing table",
+    "proofOfInfeasibility": false,
+    "differentialEvolution": {
+      "seed": 20261103,
+      "populationMultiplier": 10,
+      "maximumGenerations": 80,
+      "log10Bounds": {
+        "s_e": [
+          -12,
+          -1
+        ],
+        "s_i": [
+          -12,
+          -1
+        ],
+        "s_l": [
+          -12,
+          -1
+        ],
+        "c": [
+          -12,
+          8
+        ]
+      },
+      "positiveDefiniteRequired": true,
+      "results": {
+        "DRAG": {
+          "theta": [
+            0.0034334565692197045,
+            1.3777009478753921e-06,
+            0.0008335467191340119,
+            0.31312021837691184
+          ],
+          "loss": 0.103634454451423,
+          "margins": [
+            -0.23744652170546632,
+            -0.19735487408137797,
+            0.08381966354616488,
+            0.5411298933266244,
+            0.6874465217054663,
+            0.6473548740813779,
+            0.3661803364538351,
+            -0.09112989332662447
+          ]
+        },
+        "ABOVE": {
+          "theta": [
+            1.0324953584014068e-06,
+            3.1848644709753274e-07,
+            5.585383785636336e-06
+          ],
+          "loss": 0.018145942547129743,
+          "margins": [
+            -0.0015969136279012641,
+            0.4898175911841063,
+            -0.12595637332254472,
+            0.476323826958136,
+            0.4515969136279012,
+            -0.03981759118410633,
+            0.5759563733225447,
+            -0.026323826958136065
+          ]
+        }
+      }
+    },
+    "minimax": {
+      "method": "SLSQP with analytic gradients",
+      "starts": 20,
+      "seed": 20261103,
+      "positiveDefiniteRequired": true,
+      "results": {
+        "DRAG": {
+          "violation": 0.22229556479372337,
+          "means": [
+            0.5777044352062767,
+            0.6380493176917369,
+            0.9490243613611429,
+            1.4722955594216516
+          ],
+          "theta": [
+            0.0030020720101006817,
+            1.3729304605949328e-06,
+            0.00022005794330391744,
+            0.5245440617486178
+          ],
+          "seed": 4
+        },
+        "ABOVE": {
+          "violation": 0.09386213362323759,
+          "means": [
+            0.7061378663767625,
+            1.3438621336229661,
+            0.7061378663769452,
+            1.3438621336229248
+          ],
+          "theta": [
+            9.696153866117182e-07,
+            8.153112791954473e-07,
+            4.753573962018311e-06
+          ],
+          "seed": 1
+        }
+      }
+    }
+  },
+  "storedCalibrationExample": {
+    "key": "DO|SENTINEL-6B|2025-12-09",
+    "arm": "AP72",
+    "fitRmsKm": 0.019259,
+    "day7ForecastRmsKm": 7654.697717439888
+  },
+  "remaining": "No passing AP table was found. Production noise and version remain unchanged. Changing the fixed SPEC 12.5 model or registered window eligibility requires an owner decision."
 }
