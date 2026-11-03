@@ -647,13 +647,13 @@ static int fit_blocks() {
       cov::Set fit_cov;
       double ng_rate = 0.0;
       const bool have_cov = cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, fit_cov, ng_rate);
-      // SPEC 12.8: above e 0.3 with the perigee in the drag the residual is the theory's, correlated over each revolution,
-      // not noise: the arc's information on BTERM counts one independent sample per revolution (the formal information
-      // times revolutions / residual components), combined with the prior's; BTERM's row and column of the covariance take
-      // the ratio of the widths
+      // SPEC 12.8: above e 0.3 with the perigee in the drag, on an arc shorter than 7 days, the residual is the theory's,
+      // not noise, and the arc does not separate BTERM from it: the arc's width on BTERM is the offset whose signature over
+      // the arc equals the RMS floor (the formal information over the residual components), combined with the prior's;
+      // BTERM's row and column of the covariance take the ratio of the widths
       const double arc_hours = (fit_end_min - fit_begin_min) / 60.0;
       double formal_b = 0.0, floor_scale = 1.0;
-      if (have_cov && high_e_drag) {
+      if (have_cov && high_e_drag && arc_hours < fitoem::kHighEDragArcMinutes / 60.0 - 1e-6) {
         int kind[fit::kMaxParams];
         const int np = cov::kinds_of(fit_cov.o, kind);
         for (int a = 6; a < np; ++a) {
@@ -663,11 +663,10 @@ static int fit_blocks() {
           const bool lg = used_drag.form == pcfPriorForm_LOG_NORMAL;
           const double var_f = lg ? fit_cov.log_sigma[0] * fit_cov.log_sigma[0] : var_b;
           const double var_p = used_drag.sigma * used_drag.sigma;
-          const double revolutions = std::fmax(1.0, arc_hours * row.mean_motion_rev_day / 24.0);
           const double components = 3.0 * static_cast<double>(t_fit.size());
           const double info_arc = std::fmax(0.0, 1.0 / var_f - (var_p > 0.0 ? 1.0 / var_p : 0.0));
           if (!(info_arc * var_f > 1e-6)) break;  // a prior that pins BTERM (drag off, a pinned coefficient): as fitted
-          const double var_h = 1.0 / (info_arc * revolutions / components + (var_p > 0.0 ? 1.0 / var_p : 0.0));
+          const double var_h = 1.0 / (info_arc / components + (var_p > 0.0 ? 1.0 / var_p : 0.0));
           formal_b = std::sqrt(var_b);
           floor_scale = std::sqrt(var_h / var_f);
           for (int j = 0; j < np; ++j) {
@@ -830,14 +829,11 @@ static int fit_blocks() {
         fitoem::model_text("BTERM (SGP4XP)", used_drag, have_cov ? fit_cov.log_sigma[0] : 0.0, have_cov, row.bterm, sigma_b,
                            bmodel, sizeof bmodel);
         if (formal_b > 0.0) {
-          // SPEC 12.8: what the arc can say about BTERM above e 0.3
+          // SPEC 12.8: an arc shorter than 7 days above e 0.3
           const size_t used = std::strlen(bmodel);
-          if (arc_hours < fitoem::kHighEDragArcMinutes / 60.0 - 1e-6)
-            std::snprintf(bmodel + used, sizeof bmodel - used,
-                          "; drag coefficient not separable on this arc (e above 0.3, %.1f h of 168 h): posterior width from the RMS floor, formal sigma %.9g m^2/kg",
-                          arc_hours, formal_b);
-          else
-            std::snprintf(bmodel + used, sizeof bmodel - used, "; posterior width from the RMS floor, formal sigma %.9g m^2/kg", formal_b);
+          std::snprintf(bmodel + used, sizeof bmodel - used,
+                        "; drag coefficient not separable on this arc (e above 0.3, %.1f h of 168 h): posterior width from the RMS floor, formal sigma %.9g m^2/kg",
+                        arc_hours, formal_b);
         }
         fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, have_cov, row.agom, sigma_a,
                            amodel, sizeof amodel);

@@ -62,8 +62,11 @@ export async function runModelTruth(c){
  if(c.costGridMinutes){
   const grid=oem([...Array(Math.round(7*1440/c.costGridMinutes))].map((_,k)=>Object.assign(new Line(),{EPOCH:iso(t0+(k+1)*c.costGridMinutes*60000)})));
   const start=performance.now();
-  await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:seed},{portId:'grid',typeRef:type('OEM'),payload:grid}]);
-  const ms=performance.now()-start;x.sdnap_free(p);m.destroy();await h.close?.();return{costMs:ms};
+  const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:seed},{portId:'grid',typeRef:type('OEM'),payload:grid}]);
+  const ms=performance.now()-start;
+  // c.costFlown: the flown positions (km) as well
+  const flown=c.costFlown?OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map(f=>[f.X,f.Y,f.Z]):undefined;
+  x.sdnap_free(p);m.destroy();await h.close?.();return{costMs:ms,flown};
  }
  // c.hourly: every c.gridMinutes (60) of the 7 days after the fit (whole-day RMS), days 1, 3 and 7 among them
  const gm=c.hourly?(c.gridMinutes??60):0;
