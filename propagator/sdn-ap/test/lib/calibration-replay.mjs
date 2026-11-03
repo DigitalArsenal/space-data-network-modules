@@ -85,7 +85,9 @@ async function replay(list){
   return objects.get(w.norad).filter(l=>ms(l.epoch)>=cutoff-hours*HOUR&&ms(l.epoch)<=cutoff+7*DAY);
  }
  for(const w of list){
-  const file=filename(w); if(fs.existsSync(file))continue;
+  const file=filename(w);
+  const cached=fs.existsSync(file)?JSON.parse(zlib.gunzipSync(fs.readFileSync(file))):null;
+  if(cached?.noise)continue;
   try{
    const cutoff=ms(w.cutoff),all=await lines(w),thin=T.thinned(all.filter(l=>ms(l.epoch)<=cutoff)).chosen;
    if(thin.length<8)throw Error('too few fit states');
@@ -111,6 +113,13 @@ async function replay(list){
    const omm=OMM.getRootAsOMM(new fb.ByteBuffer(fit.find(o=>o.portId==='elements').payload)).unpack();
    const ud=Object.fromEntries(omm.USER_DEFINED_PARAMETERS.map(p=>[p.PARAM_NAME,p.PARAM_VALUE]));
    if(!ud.SDNAP_COV_NOISE)throw Error('fit returned no covariance');
+   if(cached){
+    if(cached.ngRate!==Number(ud.SDNAP_COV_NG_RATE))throw Error('cached replay fit changed');
+    cached.noise=ud.SDNAP_COV_NOISE.split(' ').map(Number);
+    fs.writeFileSync(file,zlib.gzipSync(JSON.stringify(cached)));
+    await new Promise(resolve=>setImmediate(resolve));
+    continue;
+   }
    const ta=Number(ud.SDNAP_COV_NOISE.split(' ')[4]);
    const grid=S.oemBytes({frame:'GCRF',lines:scored});
    const runs=[];
@@ -134,7 +143,7 @@ export async function runReplay(){
  let list=windows();
  const limit=Number(process.env.SDN_AP_CALIBRATION_LIMIT??0);if(limit)list=list.slice(0,limit);
  console.log(`registered AP windows: ${list.length}; module ${checksum}`);
- const n=Math.min(12,list.length);
+ const n=Math.min(12,Number(process.env.SDN_AP_CALIBRATION_WORKERS??12),list.length);
  await Promise.all(Array.from({length:n},(_,k)=>new Promise((resolve,reject)=>{const w=new Worker(new URL(import.meta.url),{workerData:{list:list.filter((_,i)=>i%n===k)}});w.on('error',reject);w.on('exit',code=>code?reject(Error(`worker exit ${code}`)):resolve());})));
  const results=list.map(w=>JSON.parse(zlib.gunzipSync(fs.readFileSync(filename(w)))));
  fs.writeFileSync(path.join(scratch,'index.json'),JSON.stringify({checksum,files:list.map(filename)}));
@@ -182,5 +191,24 @@ export function calibrate(results){
  }
  report.pass=report.cells.every(c=>!c.required||c.pass);
  fs.writeFileSync(path.join(scratch,'calibration.json'),JSON.stringify(report,null,2)+'\n');
+ return report;
+}
+
+export function evaluate(results){
+ const report={kind:"shipped",moduleSha256:checksum,created:new Date().toISOString(),forces:[31,20],windows:results.length,cells:[]};
+ for(const regime of ['DRAG','ABOVE'])for(const day of [1,2,3,7]){
+  const samples=results.filter(r=>r.regime===regime).flatMap(r=>r.samples.filter(s=>s.day===day).map(s=>({key:r.key,s,noise:r.noise})));
+  const d2=samples.map(({s,noise})=>{
+   if(!noise)throw Error('cached fit has no emitted noise');
+   const P=s.P0.map((v,j)=>v+s.B.reduce((a,b,k)=>a+noise[k]**2*b[j],0));
+   const m=metric(P,s.e);if(!m)throw Error('non-positive-definite covariance');return m.d2;
+  });
+  const windows=new Set(samples.map(s=>s.key)).size;
+  const meanD2Over3=d2.reduce((a,b)=>a+b,0)/(3*d2.length),coverage95=d2.filter(v=>v<=7.814727903251178).length/d2.length;
+  const cell={regime,day,windows,samples:d2.length,meanD2Over3,coverage95,required:windows>=30,pass:meanD2Over3>=.8&&meanD2Over3<=1.25&&coverage95>=.93&&coverage95<=.97};
+  report.cells.push(cell);console.log(JSON.stringify(cell));
+ }
+ report.pass=report.cells.every(c=>!c.required||c.pass);
+ fs.writeFileSync(path.join(scratch,'shipped.json'),JSON.stringify(report,null,2)+'\n');
  return report;
 }

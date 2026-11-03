@@ -34,6 +34,7 @@
 // Reference: /opt/data/sdn-archive/reference-states/reference (ILRS combination and NSGF analysis-centre orbits as GCRF
 // $OEM, made by analysis/reference-states).
 // JS moves bytes and does statistics on the module's numbers; it computes no orbit and no frame.
+import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -70,11 +71,12 @@ const CHI2_3_95 = 7.814727903251178, CHI2_3_MEDIAN = 2.365973884375338;
 if (THEORY === "SDNAP") {
   if (SET !== "calibration" || forceText !== "31,20")
     throw new Error("AP replay is registered for calibration at FORCES 31,20");
-  const { runReplay, calibrate } = await import("./lib/calibration-replay.mjs");
-  const report = calibrate(await runReplay());
+  const { runReplay, calibrate, evaluate } = await import("./lib/calibration-replay.mjs");
+  const results = await runReplay();
+  const report = process.argv.includes("--calibrate") ? calibrate(results) : evaluate(results);
   if (OUT) fs.writeFileSync(OUT, JSON.stringify(report, null, 2) + "\n");
-  console.error("FAIL: candidate calibration only; shipped-table verification pending");
-  process.exit(1);
+  assert.ok(report.pass, "SPEC 12.7: every supported regime/lead cell must meet both unchanged bands");
+  process.exit(0);
 }
 
 const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
