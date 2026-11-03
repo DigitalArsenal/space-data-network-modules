@@ -10,8 +10,6 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import * as fb from 'flatbuffers';
 import {PCF} from 'spacedatastandards.org/lib/js/PCF/PCF.js';
-import {PCFOutputT} from 'spacedatastandards.org/lib/js/PCF/PCFOutput.js';
-import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js';
 const experiments='/Users/tj/software/private/coordinator-d9/orbit-accuracy-experiments-fiveday';
 const modules=fileURLToPath(new URL('../../../../',import.meta.url));
 const scratch='/Users/tj/software/terrain-work/body-look/codex-apfix-d9/heo-frame';
@@ -37,9 +35,10 @@ export async function tessWindows(modulePath){
  }
  const store='/opt/data/sdn-archive/operator-theory/ap/b040/regimes',old=new Map();
  for(const f of fs.readdirSync(store).filter(f=>/^rows-.*\.jsonl$/.test(f)))for(const line of fs.readFileSync(path.join(store,f),'utf8').split('\n').filter(Boolean)){const r=JSON.parse(line);if(r.group==='HE'&&r.norad===43435)old.set(r.cutoff.slice(0,10),r);}
- const a=await openAp(modulePath),cfg={};for(const theory of ['AP','XP']){
+ const a=await openAp(modulePath),outputAxes=await openAxes(),cfg={};for(const theory of ['AP','XP']){
   const obj=PCF.getRootAsPCF(new fb.ByteBuffer(S.pcfBytes({forces:theory==='AP'?apForces({}, {tesseral:31,zonal:20,atmosphere:false}):{},fit:null}))).unpack();
-  obj.OUTPUT=Object.assign(new PCFOutputT(),{OUTPUT_FRAME:pcfOutputFrame.GCRF});const b=new fb.Builder(1024);PCF.finishPCFBuffer(b,obj.pack(b));cfg[theory]=b.asUint8Array().slice();
+  // AP6 scores TEME output after its pinned foundation/frames conversion.
+  const b=new fb.Builder(1024);PCF.finishPCFBuffer(b,obj.pack(b));cfg[theory]=b.asUint8Array().slice();
  }
  const rows=[];
  for(let index=0;index<7;index++){
@@ -47,9 +46,9 @@ export async function tessWindows(modulePath){
   const row={cutoff:date,archivedAP:prior.arms.AP72.days,archivedXP:prior.arms.XP72.days};
   const fit=lines.filter(l=>ms(l)>=cutoff-3*DAY&&ms(l)<=cutoff);assert.ok(fit.length>=.9*864,'fit coverage');
   const bins=[1,3,7].map(d=>lines.filter(l=>ms(l)>cutoff+(d-1)*DAY&&ms(l)<=cutoff+d*DAY));assert.ok(bins.every(b=>b.length>=260),'lead coverage');
-  const truth=bins.flat(),grid=S.oemBytes({frame:'GCRF',lines:truth.map(l=>({epoch:l.epoch,r:[0,0,0]}))}),oem=S.oemBytes({frame:'GCRF',object:{name:'TESS',norad:43435,id:'2018-038A'},lines:fit,useableStart:fit[0].epoch,useableStop:new Date(cutoff).toISOString()});
-  for(const theory of ['AP','XP']){const f=await a.fit(oem,cfg[theory]);assert.ok(f.ok,f.error);const states=await a.propagate(f.omm,grid,cfg[theory],undefined,truth.length);let at=0;row[theory]={};for(let k=0;k<3;k++){let sum=0;for(const t of bins[k]){const p=states[at++];sum+=p.r.reduce((v,x,j)=>v+(x-t.r[j])**2,0);}row[theory][[1,3,7][k]]=1000*Math.sqrt(sum/bins[k].length);}}
+  const truth=bins.flat(),grid=S.gridBytes(truth.map(l=>l.epoch)),oem=S.oemBytes({frame:'GCRF',object:{name:'TESS',norad:43435,id:'2018-038A'},lines:fit,useableStart:fit[0].epoch,useableStop:new Date(cutoff).toISOString()});
+  for(const theory of ['AP','XP']){const f=await a.fit(oem,cfg[theory]);assert.ok(f.ok,f.error);const native=await a.propagate(f.omm,grid,cfg[theory],undefined,truth.length);const states=await outputAxes.convert(native.map((v,k)=>({...v,epoch:truth[k].epoch})),'TEME','GCRF');let at=0;row[theory]={};for(let k=0;k<3;k++){let sum=0;for(const t of bins[k]){const p=states[at++];sum+=p.r.reduce((v,x,j)=>v+(x-t.r[j])**2,0);}row[theory][[1,3,7][k]]=1000*Math.sqrt(sum/bins[k].length);}}
   row.day3DifferenceMeters=row.AP[3]-row.XP[3];rows.push(row);console.log(JSON.stringify({exploratoryTess:row}));
  }
- return{exploratory:true,units:'forward daily-bin 3D RMS meters; archived errors in km',inputs,moduleSha256:hash(fs.readFileSync(modulePath)),rows,pairedDay3DifferenceMeters:median(rows.map(r=>r.day3DifferenceMeters)),historicalPairedDay3DifferenceMeters:median(rows.map(r=>1000*(r.archivedAP[3].e-r.archivedXP[3].e)))};
+ await outputAxes.close();return{exploratory:true,units:'forward daily-bin 3D RMS meters; archived errors in km',inputs,moduleSha256:hash(fs.readFileSync(modulePath)),rows,pairedDay3DifferenceMeters:median(rows.map(r=>r.day3DifferenceMeters)),historicalPairedDay3DifferenceMeters:median(rows.map(r=>1000*(r.archivedAP[3].e-r.archivedXP[3].e)))};
 }
