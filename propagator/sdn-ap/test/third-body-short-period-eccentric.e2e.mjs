@@ -15,7 +15,7 @@
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
 //    radial RMS within 0.5 m of half-day 84.22/75.28, Molniya 149.82/175.90 and 12 h at 55 deg 158.02/105.47 m, GTO no
 //    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 202.04, 338.22, 303.15
-//    and 2449.15 m;
+//    and 929.45 m (GTO re-recorded at 0.4.14, SPEC 16.10; 2449.15 m before);
 // 4. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -268,7 +268,8 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);
   }
   assert.ok(report.releaseDay7.GTO.alongTrack <= 961.5 && report.releaseDay7.GTO.radial <= 935.5, 'GTO: day 7 no worse than 961/935 m');
-  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 2449.15) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
+  // re-recorded at 0.4.14 (the half-day class's step, SPEC 16.10): 2449.15 m at 0.4.11-0.4.13
+  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 929.45) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
   execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
     {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
   console.log('third-body short-period eccentric E2E: PASS');
