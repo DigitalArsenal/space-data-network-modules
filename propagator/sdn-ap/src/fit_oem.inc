@@ -136,6 +136,20 @@ inline bool eccentric_block(const ephemerisDataBlock* blk, double e_min) {
   return twobody::elements_of(twobody::kMuEarth, r, v, el) && el[1] > e_min;
 }
 
+/// SPEC 12.8: a block whose first state is above e 0.3 (xpt::tess::kWideE) with its perigee below 2,500 km, where 3.4's
+/// density acts: a 72 h arc there does not separate BTERM from the residuals of the field and the third bodies.
+constexpr double kHighEDragArcMinutes = 7.0 * kMinutesPerDay;  ///< the arc the policy fits when the ephemeris allows
+inline bool high_e_drag_block(const ephemerisDataBlock* blk) {
+  const auto* lines = blk->EPHEMERIS_DATA_LINES();
+  if (lines == nullptr || lines->size() == 0) return false;
+  const ephemerisDataLine* L = lines->Get(0);
+  const double r[3] = {L->X(), L->Y(), L->Z()}, v[3] = {L->X_DOT(), L->Y_DOT(), L->Z_DOT()};
+  if (v[0] == 0.0 && v[1] == 0.0 && v[2] == 0.0) return false;
+  double el[6];
+  return twobody::elements_of(twobody::kMuEarth, r, v, el) && el[1] > xpt::tess::kWideE && el[0] > 0.0 &&
+         el[0] * (1.0 - el[1]) - xpt::kRe < 2500.0;
+}
+
 /// The osculating period (minutes) of a block's first state about the Earth (0 when it carries no velocity).
 inline double period_minutes(const ephemerisDataBlock* blk) {
   const auto* lines = blk->EPHEMERIS_DATA_LINES();
@@ -501,7 +515,24 @@ static int fit_blocks() {
         }
       }
       double span_used = start_given ? -1.0 : default_span;
-      if (!start_given) {
+      // SPEC 12.8: above e 0.3 with the perigee in the drag and no stated drag prior, the longest arc the ephemeris holds
+      // up to 7 days, ending at the latest useable state
+      const bool high_e_drag = fitoem::high_e_drag_block(blk);
+      const bool long_arc = !start_given && high_e_drag && !po.drag_prior_given;
+      if (long_arc) {
+        const double span = std::fmin(fitoem::kHighEDragArcMinutes,
+                                      fitoem::minutes_between(all[0].whole, all[0].frac, all[last_useable].whole, all[last_useable].frac));
+        if (span > default_span + 1e-6) {
+          const bool saved_before = atm::active() != nullptr && atm::active()->before_rows;
+          Pass f;
+          if (run_pass(span, f, last_useable) == 0 && !(atm::active() != nullptr && atm::active()->before_rows && !saved_before)) {
+            chosen = std::move(f);
+            span_used = span;
+          } else if (atm::active() != nullptr) {
+            atm::active()->before_rows = saved_before;
+          }
+        }
+      } else if (!start_given) {
         // the extension validated on the data: each span (48, 72, 120 h) fitted to the data before the latest
         // tail_minutes() and scored on that tail; the span with the smallest tail error (a longer one only when it is
         // at least 10 % better than the best shorter one) is refitted on all the data
@@ -616,6 +647,37 @@ static int fit_blocks() {
       cov::Set fit_cov;
       double ng_rate = 0.0;
       const bool have_cov = cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, fit_cov, ng_rate);
+      // SPEC 12.8: above e 0.3 with the perigee in the drag the residual is the theory's, correlated over each revolution,
+      // not noise: the arc's information on BTERM counts one independent sample per revolution (the formal information
+      // times revolutions / residual components), combined with the prior's; BTERM's row and column of the covariance take
+      // the ratio of the widths
+      const double arc_hours = (fit_end_min - fit_begin_min) / 60.0;
+      double formal_b = 0.0, floor_scale = 1.0;
+      if (have_cov && high_e_drag) {
+        int kind[fit::kMaxParams];
+        const int np = cov::kinds_of(fit_cov.o, kind);
+        for (int a = 6; a < np; ++a) {
+          if (kind[a] != 6) continue;
+          const double var_b = fit_cov.C[a * np + a];
+          if (!(var_b > 0.0) || !(row.mean_motion_rev_day > 0.0)) break;
+          const bool lg = used_drag.form == pcfPriorForm_LOG_NORMAL;
+          const double var_f = lg ? fit_cov.log_sigma[0] * fit_cov.log_sigma[0] : var_b;
+          const double var_p = used_drag.sigma * used_drag.sigma;
+          const double revolutions = std::fmax(1.0, arc_hours * row.mean_motion_rev_day / 24.0);
+          const double components = 3.0 * static_cast<double>(t_fit.size());
+          const double info_arc = std::fmax(0.0, 1.0 / var_f - (var_p > 0.0 ? 1.0 / var_p : 0.0));
+          if (!(info_arc * var_f > 1e-6)) break;  // a prior that pins BTERM (drag off, a pinned coefficient): as fitted
+          const double var_h = 1.0 / (info_arc * revolutions / components + (var_p > 0.0 ? 1.0 / var_p : 0.0));
+          formal_b = std::sqrt(var_b);
+          floor_scale = std::sqrt(var_h / var_f);
+          for (int j = 0; j < np; ++j) {
+            fit_cov.C[a * np + j] *= floor_scale;
+            if (j != a) fit_cov.C[j * np + a] *= floor_scale;
+          }
+          if (lg) fit_cov.log_sigma[0] *= floor_scale;
+          break;
+        }
+      }
       // held-out score
       double held_rms = 0.0, held_lead_days = 0.0;
       for (double t : t_out) held_lead_days += (t - fit_end_min) / kMinutesPerDay;
@@ -645,7 +707,7 @@ static int fit_blocks() {
       std::snprintf(comment, sizeof comment,
                     "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s)%s",
                     static_cast<unsigned>(t_fit.size()), static_cast<unsigned>(t_out.size()), res.rms_km, res.max_km, held_rms,
-                    iterations, (fitoem::epoch_placement() == 0 && fit_begin_min >= 0.0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
+                    iterations, (fitoem::epoch_placement() == 0 && fit_begin_min >= 0.0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : long_arc && span_used > default_span ? "above e 0.3 with drag: the longest arc up to 7 days (SPEC 12.8)" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
                     "");
       const auto s_epoch = fbb.CreateString(epoch_text);
       const auto s_comment = fbb.CreateString(comment);
@@ -753,7 +815,7 @@ static int fit_blocks() {
         const auto o_end = ob.CreateString(end_text);
         const auto o_from = ob.CreateString(epoch_text);
         const auto o_source = ob.CreateString("sdn-ap-propagator fit: Levenberg-Marquardt on TEME position residuals, unit weights, km; theory SGP4XP at the two-line text's digits");
-        char bmodel[400], amodel[400];
+        char bmodel[640], amodel[400];
         // the posterior sigma of BTERM and AGOM themselves: their rows of the epoch covariance
         double sigma_b = 0.0, sigma_a = 0.0;
         if (have_cov) {
@@ -767,6 +829,16 @@ static int fit_blocks() {
         }
         fitoem::model_text("BTERM (SGP4XP)", used_drag, have_cov ? fit_cov.log_sigma[0] : 0.0, have_cov, row.bterm, sigma_b,
                            bmodel, sizeof bmodel);
+        if (formal_b > 0.0) {
+          // SPEC 12.8: what the arc can say about BTERM above e 0.3
+          const size_t used = std::strlen(bmodel);
+          if (arc_hours < fitoem::kHighEDragArcMinutes / 60.0 - 1e-6)
+            std::snprintf(bmodel + used, sizeof bmodel - used,
+                          "; drag coefficient not separable on this arc (e above 0.3, %.1f h of 168 h): posterior width from the RMS floor, formal sigma %.9g m^2/kg",
+                          arc_hours, formal_b);
+          else
+            std::snprintf(bmodel + used, sizeof bmodel - used, "; posterior width from the RMS floor, formal sigma %.9g m^2/kg", formal_b);
+        }
         fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, have_cov, row.agom, sigma_a,
                            amodel, sizeof amodel);
         const auto o_bmodel = ob.CreateString(bmodel);

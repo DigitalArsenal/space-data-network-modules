@@ -32,6 +32,7 @@ function oem(lines,fit=false){
  return packOem(Object.assign(new OEMT(),{EPHEMERIS_DATA_BLOCK:[b]}));
 }
 export async function runModelTruth(c){
+ // c.fitUseable false: the fit's $OEM states no USEABLE_START_TIME / STOP_TIME (the fitter's span policy chooses the arc)
  // c.agomPrior [mean, sigma]: FIT.SRP_PRIOR with c.fitPolicy (otherwise the call's default; the truth has no SRP)
  // c.fitStartDays (S): the fit's arc starts S days after the truth's start (the truth carries its start state first)
  const FIT=c.fitDays??3,NF=FIT*48+1,S=c.fitStartDays??0,lead=S>0?1:0;
@@ -84,8 +85,8 @@ export async function runModelTruth(c){
  const lines=truth.map((s,k)=>Object.assign(new Line(),{EPOCH:iso(t0+times[k]*DAY),X:s.position[0],Y:s.position[1],Z:s.position[2],X_DOT:s.velocity[0],Y_DOT:s.velocity[1],Z_DOT:s.velocity[2]}));
  // c.fitInput: return the fit's $OEM, $PCF and $SPW frames instead of fitting (a caller's own fit call, SPEC 12.8); c.omm: fly
  // that set instead of fitting
- if(c.fitInput){m.destroy();await h.close?.();return{ephemeris:{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(lead,lead+NF),true)},configuration:cfg,spaceWeather:{portId:'space_weather',typeRef:type('SPW'),payload:weather}};}
- const fit=seed||c.omm?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(lead,lead+NF),true)}]);
+ if(c.fitInput){m.destroy();await h.close?.();return{ephemeris:{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(lead,lead+NF),c.fitUseable!==false)},configuration:cfg,spaceWeather:{portId:'space_weather',typeRef:type('SPW'),payload:weather}};}
+ const fit=seed||c.omm?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(lead,lead+NF),c.fitUseable!==false)}]);
  const omm=c.omm??seed??fit.find(v=>v.portId==='elements').payload;
  const obd=fit?.find(v=>v.portId==='determination');
  const obdT=obd?OBD.getRootAsOBD(new fb.ByteBuffer(obd.payload)).unpack():null,bModel=obdT?obdT.BALLISTIC_COEFF_MODEL:null,wrms=obdT?obdT.WRMS:null;
