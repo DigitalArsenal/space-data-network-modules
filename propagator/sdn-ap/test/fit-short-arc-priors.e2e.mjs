@@ -53,18 +53,19 @@ const summary = (list) => ({
   afterMinusTestedMeters: median(list.map((p) => m(p.after, 3) - m(p.tested, 3))),
   medianDay3Meters: {XP24before: median(list.map((p) => m(p.before, 3))), XP24after: median(list.map((p) => m(p.after, 3))), XP_PRIOR24: median(list.map((p) => m(p.tested, 3))), U24: median(list.map((p) => m(p.u, 3)))},
 });
-for (const norad of norads) console.log(JSON.stringify({gn24: {norad, ...summary(p24.filter((p) => p.r.norad === norad))}}));
+const perObject = norads.map((norad) => ({norad, ...summary(p24.filter((p) => p.r.norad === norad))}));
+for (const o of perObject) console.log(JSON.stringify({gn24: o}));
 const total = summary(p24);
 const fidelityMeters = Math.max(...p24.flatMap((p) => Object.keys(p.archived.days).map((k) => Math.abs(m(p.tested, k) - m(p.archived, k)))));
 const long72 = Object.fromEntries([1, 3, 7].map((k) => [k, median(p72.filter((p) => p.before.days[k] && p.after.days[k]).map((p) => m(p.after, k) - m(p.before, k)))]));
 const result = {
   exploratory: true, units: 'meters; forward daily-bin 3D RMS, leads from the fit end', moduleSha256: createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),
   windows: {replayed: rows.length, paired24: p24.length, paired72: p72.length, failures: failed},
-  gn24: total, fidelityMaxMeters: fidelityMeters,
+  gn24: total, gn24PerObject: perObject, fidelityMaxMeters: fidelityMeters,
   gn72: {n: p72.length, medianPairedChangeMeters: long72, medianDay3Meters: {before: median(p72.map((p) => m(p.before, 3))), after: median(p72.map((p) => m(p.after, 3)))}},
 };
 console.log(JSON.stringify({gn24: total, fidelityMaxMeters: fidelityMeters, gn72: result.gn72, failures: failed.length}));
-if (process.env.SDN_AP_SHORT_ARC_REPORT) fs.writeFileSync(process.env.SDN_AP_SHORT_ARC_REPORT, JSON.stringify({...result, rows}, null, 2) + '\n');
+if (process.env.SDN_AP_SHORT_ARC_REPORT) fs.writeFileSync(process.env.SDN_AP_SHORT_ARC_REPORT, JSON.stringify(result, null, 2) + '\n');
 if (!process.argv.includes('--measure')) {
   assert.equal(failed.length, 0, 'every archived window fits');
   assert.ok(fidelityMeters < 0.001, 'XP_PRIOR24 reproduces the archive within 1 mm');

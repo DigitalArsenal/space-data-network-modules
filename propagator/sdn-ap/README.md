@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.6.
+Version 0.4.7.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -94,7 +94,10 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
   xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
   no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
-  GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg. Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
+  GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg on arcs of 36 h or more and the Space Force wrapper's 0 +- 0.1 m^2/kg on shorter
+  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). On 748 already-read 24 h GNSS windows (exploratory) the
+  median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
+  windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
   prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never
   <= 0. The set is rounded to the two-line digits and searched on their lattice; a term whose prior sigma, in its own
   units (sigma of the log times the term under LOG_NORMAL), is at most one unit of its last digit is not stepped. The

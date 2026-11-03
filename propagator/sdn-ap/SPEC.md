@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.6.
+Version 0.4.7.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1560,8 +1560,13 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   under LOG_NORMAL sigma is that of the log). BTERM's prior, where FIT.DRAG_PRIOR is absent or without a sigma and
   FIT.DRAG_PRIOR_FORM is unset, is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free
   fits of experiments xp2-fit-design (1,214 windows, every one converged); AGOM's is GAUSSIAN_SIGNED with mean 0 and
-  sigma 0.05 m^2/kg. A Gaussian on BTERM is stated by its mean and sigma (FIT.DRAG_PRIOR with HAS_SIGMA true): 0 +- 0.05
-  ended at BTERM <= 0, no drag at all, on the real ISS window of test/fit.e2e.mjs;
+  sigma 0.05 m^2/kg on an arc of 36 h or more and, on a shorter arc (the fit interval's first to last state), the
+  Space Force wrapper's AGOM prior, GAUSSIAN_SIGNED 0 +- 0.1 m^2/kg (`propagator/sgp4-xp/src/fit.hpp`
+  SGP4XP_PRIOR_SIGMA_AGOM); a FIT.SRP_PRIOR stated with its sigma holds on every arc. Both theories the fit solves
+  (SGP4XP, and AP with its FORCES) take the rule. BTERM's prior keeps its form on short arcs: the wrapper's 0 +- 0.05
+  moves no drag-free orbit and, below, ended at BTERM <= 0. A Gaussian on BTERM is stated by its mean and sigma
+  (FIT.DRAG_PRIOR with HAS_SIGMA true): 0 +- 0.05 ended at BTERM <= 0, no drag at all, on the real ISS window of
+  test/fit.e2e.mjs;
 - P_p = A^-1; a term estimated as its log is carried back to m^2/kg by the Jacobian (the delta method): its rows and
   columns of P_p times the term, so sigma_B = B sigma_lnB. The $OBD gives the posterior sigma of the log and marks the
   term's covariance prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands
@@ -1575,6 +1580,13 @@ against 0.96 to 1.19 m from the former default's start at no drag; B of 0.01 and
 500 km. A caller that knows its object's B states a LOG_NORMAL median near it. On 94 real ISS windows (NASA's daily
 files, every eighth from 2020-09-10 to 2026-10-13, the first 24 h of each) the former default ended at BTERM <= 0 on 42
 (median fit RMS 472 m) and this one on none (457 m; lower on 65, never more than 5 % higher).
+
+Short-arc AGOM prior *[exploratory, 2026-11-03: the AP5 GNSS windows of the 2026-11-03 gap diagnosis, already read]*.
+On 748 windows of five GNSS satellites (24 h arcs, 2026-01-01 to 2026-05-31, leads from the fit end), the median paired
+day-3 error of SGP4XP minus the Space Force library's fitted SGP4-XP falls from +56.107 m to -4.097 m (medians 211.8
+and 152.3 m against the library's 149.4 m); the wrapper's two prior constants stated in $PCF FIT give -4.097 m, within
+0.001 m of the AGOM prior alone. On 746 windows of 72 h arcs the errors are unchanged (median paired change 0.000 m at
+days 1, 3 and 7). `test/fit-short-arc-priors.e2e.mjs` prints both; unread-window confirmation is separate.
 
 **12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s) and F(x) the theory
 floor (12.4) at the epoch state, the $OMM carries
