@@ -1835,9 +1835,37 @@ eccentric-anomaly quadrature. The class's original 29 terms retain their exact i
 **16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
 (w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
 
-**16.4 Frame.** With d or z above 0 a set's mean elements hold the axes of its epoch, and each state is carried to TEME of its own
-date by M(t) M(t0)^T, M the GCRF to TEME matrix of `gcrf.inc`, linear between 12 h nodes. SGP4XP has neither precession nor nutation, so
-read as TEME of date the plane of a fixed orbit seems to turn by about 3 microradians in 4 days. `fit` and every flight take the same path.
+**16.4 Frame.** Frame policy is selected once by `xp_init` from the epoch propagation branch and the
+selected gravity replacements. With d or z above 0, epoch periods below 1100 minutes and the nonzero
+resonance classes carry epoch-axis states to TEME of date by M(t) M(t0)^T. M is the GCRF-to-TEME matrix
+of `gcrf.inc`, linear between 12-hour nodes. The nonresonant long-period branch (epoch period at least
+1100 minutes, class 0) retains its native TEME-of-date convention without this additional rotation.
+Its instantaneous third-body geometry does not take the epoch-axis output correction.
+
+Fit residuals and propagation share `xp_propagate`, including this policy; there is no separate fit-only
+rotation. GCRF fit inputs are converted to TEME at each sample date, and GCRF output converts the propagated
+TEME state at that date. Default FORCES retains the XP path bit for bit. The one-day class retains its frame
+correction and 38-minute grid; the half-day and GTO fixtures retain their previous paths.
+
+The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS windows, 72-hour fits, the
+original 300-second grid, and AP6's pinned foundation/frames conversion for scoring. Leads start at fit end.
+The day-3 median paired AP-minus-XP error changes from +420.105792 m to -0.000784 m (acceptance: within
+50 m of zero). This is a correction to the model's frame policy; independent-window confirmation is separate.
+
+| Fit end UTC | Previous AP day 3 (m) | AP day 3 (m) | XP day 3 (m) | AP minus XP (m) |
+|---|---:|---:|---:|---:|
+| 2026-07-27 | 2009.249179 | 1280.596477 | 1280.868413 | -0.271936 |
+| 2026-08-03 | 2496.529273 | 2684.873011 | 2684.869564 | 0.003447 |
+| 2026-08-10 | 1463.232922 | 1214.681850 | 1214.683662 | -0.001812 |
+| 2026-08-17 | 1211.231855 | 791.128364 | 791.126063 | 0.002301 |
+| 2026-08-24 | 1850.254952 | 1385.636736 | 1385.640624 | -0.003888 |
+| 2026-08-31 | 2017.233821 | 1833.692391 | 1833.693176 | -0.000784 |
+| 2026-09-07 | 2157.517187 | 1574.829241 | 1574.457639 | 0.371603 |
+
+`test/heo-frame.e2e.mjs` prints every window and all four synthetic HEO fixtures from the half-day test.
+Their day-1/3/7 3D errors change by 0.000 m (acceptance: less than 1 m); the half-day day-7 error remains
+104.725 m. XP reproduces the archived AP6 scores within 0.001 m and retains its conformance digest.
+`test/results/heo-frame.json` records the per-window errors, fixture checks and kernel hashes.
 
 **16.5 Mark.** A set fitted with either degree set records `SDNAP_GRAVITY_TERMS` (`"<d>,<z>"`) in
 `$OMM.USER_DEFINED_PARAMETERS`. `propagate`, `load_epochs` and `propagate_epochs` refuse a set whose mark differs from the call's

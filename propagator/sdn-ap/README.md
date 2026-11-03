@@ -357,3 +357,9 @@ When the local Hansen expansion is selected (SPEC 6.4), the original AP resonanc
 to numerical-integral precision and third order within |de| <= 0.02. Measured per-term relative truncation
 errors are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05; these are not uniform error bounds.
 SPEC 6.4 and 16.2 distinguish this approximation from the added high-degree half-day tail.
+
+The nonresonant long-period AP branch uses one native TEME-of-date path in fitting and propagation, without
+an additional epoch-axis rotation (SPEC 16.4). On the seven already-read AP6 TESS windows, the exploratory
+median paired day-3 AP-minus-XP error falls from +420.105792 to -0.000784 m, within the 50 m bound. All four
+synthetic HEO fixtures retain their day-1/3/7 errors exactly (0.000 m change, <1 m allowed), and XP retains
+its digest. `test/heo-frame.e2e.mjs` prints every window and fixture; unread-window confirmation is separate.
