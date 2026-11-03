@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.3.
+Version 0.4.4.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -249,7 +249,7 @@ checkpoint. Results do not depend on the order times are requested in.
 ## SGP4XP status
 
 `src/xp_theory.inc` is the semi-analytic theory of SPEC.md (side A, closed-modules main ef9e2169): six mean equinoctial elements
-integrated on an epoch-anchored grid (two mean periods, or 95 min at epoch periods of 1100 min and up) by the
+integrated on an epoch-anchored grid (two mean periods, or 95 min at epoch periods of 1100 min and up; 38 min for AP with selected gravity replacements in the epoch one-day class) by the
 third-order Runge-Kutta step with its fallbacks, cubic Hermite between nodes, Brouwer J2 short-periodics to TEME.
 
 | SPEC | state |

@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.3.
+Version 0.4.4.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1409,9 +1409,11 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
 - h_k = 4 pi / n_k, two mean periods at the mean motion n_k (rad/min) of node k, for orbits whose epoch period
   2 pi / n_0 is below 1100 minutes;
 - h = 95 minutes for orbits whose epoch period is 1100 minutes or more (this class is fixed at initialization).
+  AP with a selected gravity replacement and the epoch one-day resonance class uses 38 minutes instead;
+  the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state, so a state does not depend on which times were requested before, nor in
-what order *[probe 9.1: direct, 1-minute stepped and backward-approach requests agree to 0 mm]*. GEO nodes fall on
+what order *[probe 9.1: direct, 1-minute stepped and backward-approach requests agree to 0 mm]*. SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 
