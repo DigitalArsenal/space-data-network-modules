@@ -1115,6 +1115,9 @@ reproduces the change of n to the next node to 1e-7 of that change, before and a
 and F, G of the current elements it misses by up to 4e-3 after the crossing, and with no resonance terms by 6e-4
 to 3e-3 throughout]*. A native-element report is different: it re-initializes the set at the requested time (1.5), so its rates
 take the class of the mean motion at that time *[probe 6.9]*.
+AP differs at a class change: section 16.7 rebuilds its rate and output tables together. The epoch hold above
+is the SGP4XP behavior.
+
 The legacy SGP4 bands (synchronous for 0.0034906585 < n < 0.0052359877 rad/min; half-day for 8.26e-3 <= n <= 9.24e-3
 and e >= 0.5) are not used for type 4.
 
@@ -1820,6 +1823,33 @@ The half-day case measured 3,116.083 m at day 7 before the degree-31 tail and 10
 the E2E bound is 120 m. The force contributions responsible for the Molniya and GTO gaps are not isolated.
 The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
 and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
+
+**16.7 Class changes in AP.** A current class different from the epoch class rebuilds all selected AP tables
+from the current mean eccentricity, inclination and mean motion for that rate or output evaluation. The original
+frame epoch, atmosphere and force selection remain fixed. Coefficients are local to the evaluation; rebuilding
+does not modify shared force configuration. The new class uses its own Hansen expansion, and terms leaving the
+rates enter the short-period output table when its selection admits them. A term is never counted in both.
+
+Model truth: an AP mean-element GTO at 2026-10-29 00:00 UTC seeds FFM with the same GCRF state. There is no fit.
+The primary has n = 2.40 rev/day, e = 0.72, i = 27 degrees, RAAN = 40 degrees, argument of perigee = 270 degrees,
+M = 0, BTERM = 0.06 m^2/kg and AGOM = 0. The companion changes only n to 2.3966852459, 0.01 rev/day below
+the half-day upper edge. FFM uses 16.6's gravity, DE440, zero EOP and constant-weather NRLMSISE-00 forces;
+AP uses FORCES 31,20 and NRLMSISE-00. The primary reaches 2.408342057 rev/day at day 7; the companion
+reaches 2.403874454 and stays inside the band.
+
+| AP treatment | Primary day-7 T error (m) | Companion day-7 T error (m) | Relative difference |
+| --- | ---: | ---: | ---: |
+| Class switched with epoch tables | -31,518.276 | -26,506.785 | 18.906% |
+| Epoch class held | -32,325.032 | -26,506.785 | 21.950% |
+| All AP tables rebuilt | -31,291.823 | -26,506.785 | 18.052% |
+
+Rebuilding is retained because it has the smaller FFM along-track error and consistent rate/output tables.
+The two (2,2) terms (p,q) = (0,-1), (1,1) move from the rates to the output table at the crossing. Their
+epoch mean-longitude amplitudes a|delta lambda| are 206.886 and 147.093 m. Isolating each in the module's
+output map and sampling 256 node phases at perigee gives peak absolute along-track displacements of
+552.685 and 592.770 m. These are amplitudes for this fixture, not universal constants.
+`test/class-crossing.e2e.mjs` prints the crossings, term counts and errors;
+`test/results/class-crossing.json` preserves every evaluated pair and both alternatives.
 
 ---
 

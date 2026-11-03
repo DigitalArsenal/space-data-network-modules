@@ -1,0 +1,5362 @@
+{
+  "task": "modules-sdn-ap-class-hold-20261103",
+  "measuredUtc": "2026-11-03T05:08:28.954249+00:00",
+  "registrationCommit": "80dd6025b",
+  "units": "signed forecast-minus-FFM RTN errors in meters; mean motion rev/day",
+  "selection": "first registered B in [.04,.06,.08,.1] that crosses in the primary and not in the companion; no accuracy-based selection",
+  "choice": "rebuild every AP table together; smaller day-7 along-track error than epoch hold on this fixture",
+  "acceptance": {
+    "relativeDifferenceLimit": 0.1,
+    "relativeDifference": 0.1805212539630281,
+    "pass": false,
+    "crossingMeanMotion": 2.4083420573165752,
+    "companionMeanMotion": 2.4038744539920356,
+    "oldTermsInOutputAfterCrossing": 2
+  },
+  "probeColumns": [
+    "meanMotion",
+    "epochClass",
+    "activeClass",
+    "namedTermsInRates",
+    "namedTermsInShortPeriodOutput",
+    "term0LongitudeAmplitudeMeters",
+    "term1LongitudeAmplitudeMeters",
+    "term0PerigeeAlongTrackAmplitudeMeters",
+    "term1PerigeeAlongTrackAmplitudeMeters"
+  ],
+  "production": {
+    "edge": 2.4066852459,
+    "results": [
+      {
+        "bterm": 0.04,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.400753199783504,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.40233473186235,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.405544126777373,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              }
+            ],
+            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17795.166570586727,
+                  30329.993771568916,
+                  17765.794720205748
+                ],
+                "velocity": [
+                  -1.7259214320347058,
+                  -0.4225283818862041,
+                  0.3945893016219598
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3428.7085672833796,
+                  27208.716218032325,
+                  11964.910745630805
+                ],
+                "velocity": [
+                  -2.3861227308919037,
+                  1.4794383898059174,
+                  1.3537006017067081
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 66,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -25368.248639768462,
+                  4466.4517022071595,
+                  9656.899310384873
+                ],
+                "velocity": [
+                  1.6056025474006599,
+                  -2.642360984064407,
+                  -1.5736057446221894
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 149,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1488.6925433451177,
+                "r": 106.88085283841087,
+                "t": -1483.6096420693937,
+                "n": 60.699274020495146
+              },
+              "3": {
+                "e": 5876.594332705492,
+                "r": -3438.2422674483546,
+                "t": -4765.643468329355,
+                "n": -38.644459986671094
+              },
+              "7": {
+                "e": 33263.41053387964,
+                "r": 23658.349933757443,
+                "t": -23382.40053658668,
+                "n": -17.432840428035945
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3973403925370427,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3987046382581796,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4014743613758873,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              }
+            ],
+            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17601.780543020224,
+                  30408.90138512321,
+                  17734.008843414893
+                ],
+                "velocity": [
+                  -1.7390822535231822,
+                  -0.39827177000261743,
+                  0.40846136557522755
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 19,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2534.906460066872,
+                  26653.28824146723,
+                  11457.028399378723
+                ],
+                "velocity": [
+                  -2.402081823372357,
+                  1.6350262566242197,
+                  1.4209806424197056
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1112,
+                "integrationRejections": 67,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26691.42563937619,
+                  6892.142456070531,
+                  11055.666079652945
+                ],
+                "velocity": [
+                  1.192090816842823,
+                  -2.5515809995886483,
+                  -1.40881229472015
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2557,
+                "integrationRejections": 142,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1371.4624854984681,
+                "r": 85.30351534354102,
+                "t": -1367.4147532181098,
+                "n": 61.72156901056184
+              },
+              "3": {
+                "e": 5742.535912729419,
+                "r": -3463.624354294086,
+                "t": -4580.280617260536,
+                "n": -32.473196261137986
+              },
+              "7": {
+                "e": 27243.133575398944,
+                "r": 18979.506662625197,
+                "t": -19543.926030077608,
+                "n": -40.11460145907897
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      },
+      {
+        "bterm": 0.06,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.40111883897242,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.403495780547024,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4083420573165752,
+                  2,
+                  3,
+                  0,
+                  2,
+                  206.88598664193302,
+                  147.09336490486467,
+                  552.6846142992792,
+                  592.7700141652853
+                ]
+              }
+            ],
+            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17804.303327149148,
+                  30323.605641670114,
+                  17766.244255368445
+                ],
+                "velocity": [
+                  -1.7253138697791308,
+                  -0.42393638973292336,
+                  0.3938354827912947
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3570.3063509216545,
+                  27288.993049238383,
+                  12042.248433244795
+                ],
+                "velocity": [
+                  -2.3835253983050575,
+                  1.455023791247501,
+                  1.3431155787596771
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1114,
+                "integrationRejections": 68,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -24756.90330551751,
+                  3525.7354386120096,
+                  9084.36085844966
+                ],
+                "velocity": [
+                  1.7829143039494308,
+                  -2.6717015361903766,
+                  -1.640349067382587
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 152,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1877.385823898929,
+                "r": 173.93977115620936,
+                "t": -1868.3239656763997,
+                "n": 60.72929331052727
+              },
+              "3": {
+                "e": 6745.132258506734,
+                "r": -3797.196262634147,
+                "t": -5574.633632229828,
+                "n": -39.61810441549307
+              },
+              "7": {
+                "e": 44806.453305680676,
+                "r": 32068.75895208077,
+                "t": -31291.823471148775,
+                "n": 186.38926456359073
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3976568910787,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3997080457523756,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4038744539920356,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996,
+                  561.6015462538704,
+                  601.5061104435223
+                ]
+              }
+            ],
+            "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17609.782690165688,
+                  30403.50004633923,
+                  17734.479051162063
+                ],
+                "velocity": [
+                  -1.7385619442370308,
+                  -0.3994968937849113,
+                  0.4078081747034167
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 18,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2658.6116066231793,
+                  26731.260470561243,
+                  11527.726694900239
+                ],
+                "velocity": [
+                  -2.4003555848125666,
+                  1.6125775275319312,
+                  1.411459823937001
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 65,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26294.22647084423,
+                  6103.824128629078,
+                  10611.44246504076
+                ],
+                "velocity": [
+                  1.3189896120439966,
+                  -2.58371983422223,
+                  -1.461126367378291
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2560,
+                "integrationRejections": 137,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1702.970281640006,
+                "r": 146.03497923771164,
+                "t": -1695.573826532668,
+                "n": 61.733003858956074
+              },
+              "3": {
+                "e": 6479.927530316587,
+                "r": -3782.568481325227,
+                "t": -5261.228266340566,
+                "n": -33.37082106928957
+              },
+              "7": {
+                "e": 37119.88193226922,
+                "r": 25986.052200200844,
+                "t": -26506.785342577816,
+                "n": -32.50410044515917
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      }
+    ],
+    "selected": {
+      "bterm": 0.06,
+      "pair": [
+        {
+          "name": "crossing",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.4,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.4,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467,
+                552.6846142992792,
+                592.7700141652853
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.40111883897242,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467,
+                552.6846142992792,
+                592.7700141652853
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.403495780547024,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467,
+                552.6846142992792,
+                592.7700141652853
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.4083420573165752,
+                2,
+                3,
+                0,
+                2,
+                206.88598664193302,
+                147.09336490486467,
+                552.6846142992792,
+                592.7700141652853
+              ]
+            }
+          ],
+          "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+          "fixture": {
+            "name": "crossing",
+            "n": 2.4,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3743.0421141759753,
+              -4524.155603838794,
+              -3002.553664572608,
+              7.850453099519121,
+              6.508101125867974,
+              -0.020507798245868902
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17804.303327149148,
+                30323.605641670114,
+                17766.244255368445
+              ],
+              "velocity": [
+                -1.7253138697791308,
+                -0.42393638973292336,
+                0.3938354827912947
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 371,
+              "integrationRejections": 22,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -3570.3063509216545,
+                27288.993049238383,
+                12042.248433244795
+              ],
+              "velocity": [
+                -2.3835253983050575,
+                1.455023791247501,
+                1.3431155787596771
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1114,
+              "integrationRejections": 68,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -24756.90330551751,
+                3525.7354386120096,
+                9084.36085844966
+              ],
+              "velocity": [
+                1.7829143039494308,
+                -2.6717015361903766,
+                -1.640349067382587
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2562,
+              "integrationRejections": 152,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.4,
+          "e": 0.72,
+          "perigeeKm": 219.96729979299926,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1877.385823898929,
+              "r": 173.93977115620936,
+              "t": -1868.3239656763997,
+              "n": 60.72929331052727
+            },
+            "3": {
+              "e": 6745.132258506734,
+              "r": -3797.196262634147,
+              "t": -5574.633632229828,
+              "n": -39.61810441549307
+            },
+            "7": {
+              "e": 44806.453305680676,
+              "r": 32068.75895208077,
+              "t": -31291.823471148775,
+              "n": 186.38926456359073
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        },
+        {
+          "name": "companion",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.3966852459,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996,
+                561.6015462538704,
+                601.5061104435223
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.3976568910787,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996,
+                561.6015462538704,
+                601.5061104435223
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.3997080457523756,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996,
+                561.6015462538704,
+                601.5061104435223
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.4038744539920356,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996,
+                561.6015462538704,
+                601.5061104435223
+              ]
+            }
+          ],
+          "classProbeSha256": "4d4fbc37c764b26c518a1ac75d019dc4738a93250be835eb46fdcc9511238071",
+          "fixture": {
+            "name": "companion",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3746.5064636839643,
+              -4528.320432334783,
+              -3005.3262622008474,
+              7.846824121637736,
+              6.505107766124912,
+              -0.02049249584341829
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17609.782690165688,
+                30403.50004633923,
+                17734.479051162063
+              ],
+              "velocity": [
+                -1.7385619442370308,
+                -0.3994968937849113,
+                0.4078081747034167
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 370,
+              "integrationRejections": 18,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -2658.6116066231793,
+                26731.260470561243,
+                11527.726694900239
+              ],
+              "velocity": [
+                -2.4003555848125666,
+                1.6125775275319312,
+                1.411459823937001
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1113,
+              "integrationRejections": 65,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -26294.22647084423,
+                6103.824128629078,
+                10611.44246504076
+              ],
+              "velocity": [
+                1.3189896120439966,
+                -2.58371983422223,
+                -1.461126367378291
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2560,
+              "integrationRejections": 137,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "4da4920708e7079b2a2b0239ef20dce8411a29798cc16b0cae66a308ee928f73",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.3966852459,
+          "e": 0.72,
+          "perigeeKm": 226.04960264255806,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1702.970281640006,
+              "r": 146.03497923771164,
+              "t": -1695.573826532668,
+              "n": 61.733003858956074
+            },
+            "3": {
+              "e": 6479.927530316587,
+              "r": -3782.568481325227,
+              "t": -5261.228266340566,
+              "n": -33.37082106928957
+            },
+            "7": {
+              "e": 37119.88193226922,
+              "r": 25986.052200200844,
+              "t": -26506.785342577816,
+              "n": -32.50410044515917
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        }
+      ]
+    }
+  },
+  "before": {
+    "edge": 2.4066852459,
+    "results": [
+      {
+        "bterm": 0.04,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.400753199783504,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.40233473186235,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.405544126777373,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              }
+            ],
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17795.166570586727,
+                  30329.993771568916,
+                  17765.794720205748
+                ],
+                "velocity": [
+                  -1.7259214320347058,
+                  -0.4225283818862041,
+                  0.3945893016219598
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3428.7085672833796,
+                  27208.716218032325,
+                  11964.910745630805
+                ],
+                "velocity": [
+                  -2.3861227308919037,
+                  1.4794383898059174,
+                  1.3537006017067081
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 66,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -25368.248639768462,
+                  4466.4517022071595,
+                  9656.899310384873
+                ],
+                "velocity": [
+                  1.6056025474006599,
+                  -2.642360984064407,
+                  -1.5736057446221894
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 149,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1488.6925433451177,
+                "r": 106.88085283841087,
+                "t": -1483.6096420693937,
+                "n": 60.699274020495146
+              },
+              "3": {
+                "e": 5876.594332705492,
+                "r": -3438.2422674483546,
+                "t": -4765.643468329355,
+                "n": -38.644459986671094
+              },
+              "7": {
+                "e": 33263.41053387964,
+                "r": 23658.349933757443,
+                "t": -23382.40053658668,
+                "n": -17.432840428035945
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3973403925370427,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3987046382581796,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4014743613758873,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              }
+            ],
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17601.780543020224,
+                  30408.90138512321,
+                  17734.008843414893
+                ],
+                "velocity": [
+                  -1.7390822535231822,
+                  -0.39827177000261743,
+                  0.40846136557522755
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 19,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2534.906460066872,
+                  26653.28824146723,
+                  11457.028399378723
+                ],
+                "velocity": [
+                  -2.402081823372357,
+                  1.6350262566242197,
+                  1.4209806424197056
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1112,
+                "integrationRejections": 67,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26691.42563937619,
+                  6892.142456070531,
+                  11055.666079652945
+                ],
+                "velocity": [
+                  1.192090816842823,
+                  -2.5515809995886483,
+                  -1.40881229472015
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2557,
+                "integrationRejections": 142,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1371.4624854984681,
+                "r": 85.30351534354102,
+                "t": -1367.4147532181098,
+                "n": 61.72156901056184
+              },
+              "3": {
+                "e": 5742.535912729419,
+                "r": -3463.624354294086,
+                "t": -4580.280617260536,
+                "n": -32.473196261137986
+              },
+              "7": {
+                "e": 27243.133575398944,
+                "r": 18979.506662625197,
+                "t": -19543.926030077608,
+                "n": -40.11460145907897
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      },
+      {
+        "bterm": 0.06,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.40111883897242,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.403495780547024,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.408342052985468,
+                  2,
+                  3,
+                  0,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              }
+            ],
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17804.303327149148,
+                  30323.605641670114,
+                  17766.244255368445
+                ],
+                "velocity": [
+                  -1.7253138697791308,
+                  -0.42393638973292336,
+                  0.3938354827912947
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3570.3063509216545,
+                  27288.993049238383,
+                  12042.248433244795
+                ],
+                "velocity": [
+                  -2.3835253983050575,
+                  1.455023791247501,
+                  1.3431155787596771
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1114,
+                "integrationRejections": 68,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -24756.90330551751,
+                  3525.7354386120096,
+                  9084.36085844966
+                ],
+                "velocity": [
+                  1.7829143039494308,
+                  -2.6717015361903766,
+                  -1.640349067382587
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 152,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1877.385823898929,
+                "r": 173.93977115620936,
+                "t": -1868.3239656763997,
+                "n": 60.72929331052727
+              },
+              "3": {
+                "e": 6745.132258506734,
+                "r": -3797.196262634147,
+                "t": -5574.633632229828,
+                "n": -39.61810441549307
+              },
+              "7": {
+                "e": 45063.18645813517,
+                "r": 32205.59080757838,
+                "t": -31518.276125308505,
+                "n": 298.26931502866216
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3976568910787,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3997080457523756,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4038744539920356,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              }
+            ],
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17609.782690165688,
+                  30403.50004633923,
+                  17734.479051162063
+                ],
+                "velocity": [
+                  -1.7385619442370308,
+                  -0.3994968937849113,
+                  0.4078081747034167
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 18,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2658.6116066231793,
+                  26731.260470561243,
+                  11527.726694900239
+                ],
+                "velocity": [
+                  -2.4003555848125666,
+                  1.6125775275319312,
+                  1.411459823937001
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 65,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26294.22647084423,
+                  6103.824128629078,
+                  10611.44246504076
+                ],
+                "velocity": [
+                  1.3189896120439966,
+                  -2.58371983422223,
+                  -1.461126367378291
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2560,
+                "integrationRejections": 137,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1702.970281640006,
+                "r": 146.03497923771164,
+                "t": -1695.573826532668,
+                "n": 61.733003858956074
+              },
+              "3": {
+                "e": 6479.927530316587,
+                "r": -3782.568481325227,
+                "t": -5261.228266340566,
+                "n": -33.37082106928957
+              },
+              "7": {
+                "e": 37119.88193226922,
+                "r": 25986.052200200844,
+                "t": -26506.785342577816,
+                "n": -32.50410044515917
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      }
+    ],
+    "selected": {
+      "bterm": 0.06,
+      "pair": [
+        {
+          "name": "crossing",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.4,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.4,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.40111883897242,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.403495780547024,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.408342052985468,
+                2,
+                3,
+                0,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            }
+          ],
+          "fixture": {
+            "name": "crossing",
+            "n": 2.4,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3743.0421141759753,
+              -4524.155603838794,
+              -3002.553664572608,
+              7.850453099519121,
+              6.508101125867974,
+              -0.020507798245868902
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17804.303327149148,
+                30323.605641670114,
+                17766.244255368445
+              ],
+              "velocity": [
+                -1.7253138697791308,
+                -0.42393638973292336,
+                0.3938354827912947
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 371,
+              "integrationRejections": 22,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -3570.3063509216545,
+                27288.993049238383,
+                12042.248433244795
+              ],
+              "velocity": [
+                -2.3835253983050575,
+                1.455023791247501,
+                1.3431155787596771
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1114,
+              "integrationRejections": 68,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -24756.90330551751,
+                3525.7354386120096,
+                9084.36085844966
+              ],
+              "velocity": [
+                1.7829143039494308,
+                -2.6717015361903766,
+                -1.640349067382587
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2562,
+              "integrationRejections": 152,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.4,
+          "e": 0.72,
+          "perigeeKm": 219.96729979299926,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1877.385823898929,
+              "r": 173.93977115620936,
+              "t": -1868.3239656763997,
+              "n": 60.72929331052727
+            },
+            "3": {
+              "e": 6745.132258506734,
+              "r": -3797.196262634147,
+              "t": -5574.633632229828,
+              "n": -39.61810441549307
+            },
+            "7": {
+              "e": 45063.18645813517,
+              "r": 32205.59080757838,
+              "t": -31518.276125308505,
+              "n": 298.26931502866216
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        },
+        {
+          "name": "companion",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.3966852459,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.3976568910787,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.3997080457523756,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.4038744539920356,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            }
+          ],
+          "fixture": {
+            "name": "companion",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3746.5064636839643,
+              -4528.320432334783,
+              -3005.3262622008474,
+              7.846824121637736,
+              6.505107766124912,
+              -0.02049249584341829
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17609.782690165688,
+                30403.50004633923,
+                17734.479051162063
+              ],
+              "velocity": [
+                -1.7385619442370308,
+                -0.3994968937849113,
+                0.4078081747034167
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 370,
+              "integrationRejections": 18,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -2658.6116066231793,
+                26731.260470561243,
+                11527.726694900239
+              ],
+              "velocity": [
+                -2.4003555848125666,
+                1.6125775275319312,
+                1.411459823937001
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1113,
+              "integrationRejections": 65,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -26294.22647084423,
+                6103.824128629078,
+                10611.44246504076
+              ],
+              "velocity": [
+                1.3189896120439966,
+                -2.58371983422223,
+                -1.461126367378291
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2560,
+              "integrationRejections": 137,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.3966852459,
+          "e": 0.72,
+          "perigeeKm": 226.04960264255806,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1702.970281640006,
+              "r": 146.03497923771164,
+              "t": -1695.573826532668,
+              "n": 61.733003858956074
+            },
+            "3": {
+              "e": 6479.927530316587,
+              "r": -3782.568481325227,
+              "t": -5261.228266340566,
+              "n": -33.37082106928957
+            },
+            "7": {
+              "e": 37119.88193226922,
+              "r": 25986.052200200844,
+              "t": -26506.785342577816,
+              "n": -32.50410044515917
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        }
+      ]
+    }
+  },
+  "epochHold": {
+    "edge": 2.4066852459,
+    "results": [
+      {
+        "bterm": 0.04,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.400753199783504,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.40233473186235,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.405544126777373,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              }
+            ],
+            "classProbeSha256": "e8d020da2d86960a310016666e13c333fd3ea4b74b10f26764abe181cc08f02f",
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17795.166570586727,
+                  30329.993771568916,
+                  17765.794720205748
+                ],
+                "velocity": [
+                  -1.7259214320347058,
+                  -0.4225283818862041,
+                  0.3945893016219598
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3428.7085672833796,
+                  27208.716218032325,
+                  11964.910745630805
+                ],
+                "velocity": [
+                  -2.3861227308919037,
+                  1.4794383898059174,
+                  1.3537006017067081
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 66,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -25368.248639768462,
+                  4466.4517022071595,
+                  9656.899310384873
+                ],
+                "velocity": [
+                  1.6056025474006599,
+                  -2.642360984064407,
+                  -1.5736057446221894
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 149,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "9d35ffd70edc58791b7aa51d246dc14e7b26a638bebf4d15c52aa857f35bcc5d",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1488.6925433451177,
+                "r": 106.88085283841087,
+                "t": -1483.6096420693937,
+                "n": 60.699274020495146
+              },
+              "3": {
+                "e": 5876.594332705492,
+                "r": -3438.2422674483546,
+                "t": -4765.643468329355,
+                "n": -38.644459986671094
+              },
+              "7": {
+                "e": 33263.41053387964,
+                "r": 23658.349933757443,
+                "t": -23382.40053658668,
+                "n": -17.432840428035945
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3973403925370427,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3987046382581796,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4014743613758873,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              }
+            ],
+            "classProbeSha256": "e8d020da2d86960a310016666e13c333fd3ea4b74b10f26764abe181cc08f02f",
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17601.780543020224,
+                  30408.90138512321,
+                  17734.008843414893
+                ],
+                "velocity": [
+                  -1.7390822535231822,
+                  -0.39827177000261743,
+                  0.40846136557522755
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 19,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2534.906460066872,
+                  26653.28824146723,
+                  11457.028399378723
+                ],
+                "velocity": [
+                  -2.402081823372357,
+                  1.6350262566242197,
+                  1.4209806424197056
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1112,
+                "integrationRejections": 67,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26691.42563937619,
+                  6892.142456070531,
+                  11055.666079652945
+                ],
+                "velocity": [
+                  1.192090816842823,
+                  -2.5515809995886483,
+                  -1.40881229472015
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2557,
+                "integrationRejections": 142,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "9d35ffd70edc58791b7aa51d246dc14e7b26a638bebf4d15c52aa857f35bcc5d",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1371.4624854984681,
+                "r": 85.30351534354102,
+                "t": -1367.4147532181098,
+                "n": 61.72156901056184
+              },
+              "3": {
+                "e": 5742.535912729419,
+                "r": -3463.624354294086,
+                "t": -4580.280617260536,
+                "n": -32.473196261137986
+              },
+              "7": {
+                "e": 27243.133575398944,
+                "r": 18979.506662625197,
+                "t": -19543.926030077608,
+                "n": -40.11460145907897
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      },
+      {
+        "bterm": 0.06,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.40111883897242,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.403495780547024,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4083242707814274,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              }
+            ],
+            "classProbeSha256": "e8d020da2d86960a310016666e13c333fd3ea4b74b10f26764abe181cc08f02f",
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17804.303327149148,
+                  30323.605641670114,
+                  17766.244255368445
+                ],
+                "velocity": [
+                  -1.7253138697791308,
+                  -0.42393638973292336,
+                  0.3938354827912947
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3570.3063509216545,
+                  27288.993049238383,
+                  12042.248433244795
+                ],
+                "velocity": [
+                  -2.3835253983050575,
+                  1.455023791247501,
+                  1.3431155787596771
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1114,
+                "integrationRejections": 68,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -24756.90330551751,
+                  3525.7354386120096,
+                  9084.36085844966
+                ],
+                "velocity": [
+                  1.7829143039494308,
+                  -2.6717015361903766,
+                  -1.640349067382587
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 152,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "9d35ffd70edc58791b7aa51d246dc14e7b26a638bebf4d15c52aa857f35bcc5d",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1877.385823898929,
+                "r": 173.93977115620936,
+                "t": -1868.3239656763997,
+                "n": 60.72929331052727
+              },
+              "3": {
+                "e": 6745.132258506734,
+                "r": -3797.196262634147,
+                "t": -5574.633632229828,
+                "n": -39.61810441549307
+              },
+              "7": {
+                "e": 46120.85109062928,
+                "r": 32897.19014832332,
+                "t": -32325.03215135335,
+                "n": -9.059968583731148
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3976568910787,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3997080457523756,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4038744539920356,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              }
+            ],
+            "classProbeSha256": "e8d020da2d86960a310016666e13c333fd3ea4b74b10f26764abe181cc08f02f",
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17609.782690165688,
+                  30403.50004633923,
+                  17734.479051162063
+                ],
+                "velocity": [
+                  -1.7385619442370308,
+                  -0.3994968937849113,
+                  0.4078081747034167
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 18,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2658.6116066231793,
+                  26731.260470561243,
+                  11527.726694900239
+                ],
+                "velocity": [
+                  -2.4003555848125666,
+                  1.6125775275319312,
+                  1.411459823937001
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 65,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26294.22647084423,
+                  6103.824128629078,
+                  10611.44246504076
+                ],
+                "velocity": [
+                  1.3189896120439966,
+                  -2.58371983422223,
+                  -1.461126367378291
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2560,
+                "integrationRejections": 137,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "9d35ffd70edc58791b7aa51d246dc14e7b26a638bebf4d15c52aa857f35bcc5d",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1702.970281640006,
+                "r": 146.03497923771164,
+                "t": -1695.573826532668,
+                "n": 61.733003858956074
+              },
+              "3": {
+                "e": 6479.927530316587,
+                "r": -3782.568481325227,
+                "t": -5261.228266340566,
+                "n": -33.37082106928957
+              },
+              "7": {
+                "e": 37119.88193226922,
+                "r": 25986.052200200844,
+                "t": -26506.785342577816,
+                "n": -32.50410044515917
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      }
+    ],
+    "selected": {
+      "bterm": 0.06,
+      "pair": [
+        {
+          "name": "crossing",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.4,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.4,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.40111883897242,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.403495780547024,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.4083242707814274,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            }
+          ],
+          "classProbeSha256": "e8d020da2d86960a310016666e13c333fd3ea4b74b10f26764abe181cc08f02f",
+          "fixture": {
+            "name": "crossing",
+            "n": 2.4,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3743.0421141759753,
+              -4524.155603838794,
+              -3002.553664572608,
+              7.850453099519121,
+              6.508101125867974,
+              -0.020507798245868902
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17804.303327149148,
+                30323.605641670114,
+                17766.244255368445
+              ],
+              "velocity": [
+                -1.7253138697791308,
+                -0.42393638973292336,
+                0.3938354827912947
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 371,
+              "integrationRejections": 22,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -3570.3063509216545,
+                27288.993049238383,
+                12042.248433244795
+              ],
+              "velocity": [
+                -2.3835253983050575,
+                1.455023791247501,
+                1.3431155787596771
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1114,
+              "integrationRejections": 68,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -24756.90330551751,
+                3525.7354386120096,
+                9084.36085844966
+              ],
+              "velocity": [
+                1.7829143039494308,
+                -2.6717015361903766,
+                -1.640349067382587
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2562,
+              "integrationRejections": 152,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "9d35ffd70edc58791b7aa51d246dc14e7b26a638bebf4d15c52aa857f35bcc5d",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.4,
+          "e": 0.72,
+          "perigeeKm": 219.96729979299926,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1877.385823898929,
+              "r": 173.93977115620936,
+              "t": -1868.3239656763997,
+              "n": 60.72929331052727
+            },
+            "3": {
+              "e": 6745.132258506734,
+              "r": -3797.196262634147,
+              "t": -5574.633632229828,
+              "n": -39.61810441549307
+            },
+            "7": {
+              "e": 46120.85109062928,
+              "r": 32897.19014832332,
+              "t": -32325.03215135335,
+              "n": -9.059968583731148
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        },
+        {
+          "name": "companion",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.3966852459,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.3976568910787,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.3997080457523756,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.4038744539920356,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            }
+          ],
+          "classProbeSha256": "e8d020da2d86960a310016666e13c333fd3ea4b74b10f26764abe181cc08f02f",
+          "fixture": {
+            "name": "companion",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3746.5064636839643,
+              -4528.320432334783,
+              -3005.3262622008474,
+              7.846824121637736,
+              6.505107766124912,
+              -0.02049249584341829
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17609.782690165688,
+                30403.50004633923,
+                17734.479051162063
+              ],
+              "velocity": [
+                -1.7385619442370308,
+                -0.3994968937849113,
+                0.4078081747034167
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 370,
+              "integrationRejections": 18,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -2658.6116066231793,
+                26731.260470561243,
+                11527.726694900239
+              ],
+              "velocity": [
+                -2.4003555848125666,
+                1.6125775275319312,
+                1.411459823937001
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1113,
+              "integrationRejections": 65,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -26294.22647084423,
+                6103.824128629078,
+                10611.44246504076
+              ],
+              "velocity": [
+                1.3189896120439966,
+                -2.58371983422223,
+                -1.461126367378291
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2560,
+              "integrationRejections": 137,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "9d35ffd70edc58791b7aa51d246dc14e7b26a638bebf4d15c52aa857f35bcc5d",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.3966852459,
+          "e": 0.72,
+          "perigeeKm": 226.04960264255806,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1702.970281640006,
+              "r": 146.03497923771164,
+              "t": -1695.573826532668,
+              "n": 61.733003858956074
+            },
+            "3": {
+              "e": 6479.927530316587,
+              "r": -3782.568481325227,
+              "t": -5261.228266340566,
+              "n": -33.37082106928957
+            },
+            "7": {
+              "e": 37119.88193226922,
+              "r": 25986.052200200844,
+              "t": -26506.785342577816,
+              "n": -32.50410044515917
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        }
+      ]
+    }
+  },
+  "testRebuild": {
+    "edge": 2.4066852459,
+    "results": [
+      {
+        "bterm": 0.04,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.400753199783504,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.40233473186235,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.405544126777373,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              }
+            ],
+            "classProbeSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17795.166570586727,
+                  30329.993771568916,
+                  17765.794720205748
+                ],
+                "velocity": [
+                  -1.7259214320347058,
+                  -0.4225283818862041,
+                  0.3945893016219598
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3428.7085672833796,
+                  27208.716218032325,
+                  11964.910745630805
+                ],
+                "velocity": [
+                  -2.3861227308919037,
+                  1.4794383898059174,
+                  1.3537006017067081
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 66,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -25368.248639768462,
+                  4466.4517022071595,
+                  9656.899310384873
+                ],
+                "velocity": [
+                  1.6056025474006599,
+                  -2.642360984064407,
+                  -1.5736057446221894
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 149,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1488.6925433451177,
+                "r": 106.88085283841087,
+                "t": -1483.6096420693937,
+                "n": 60.699274020495146
+              },
+              "3": {
+                "e": 5876.594332705492,
+                "r": -3438.2422674483546,
+                "t": -4765.643468329355,
+                "n": -38.644459986671094
+              },
+              "7": {
+                "e": 33263.41053387964,
+                "r": 23658.349933757443,
+                "t": -23382.40053658668,
+                "n": -17.432840428035945
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.04
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3973403925370427,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3987046382581796,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4014743613758873,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              }
+            ],
+            "classProbeSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.04,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17601.780543020224,
+                  30408.90138512321,
+                  17734.008843414893
+                ],
+                "velocity": [
+                  -1.7390822535231822,
+                  -0.39827177000261743,
+                  0.40846136557522755
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 19,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2534.906460066872,
+                  26653.28824146723,
+                  11457.028399378723
+                ],
+                "velocity": [
+                  -2.402081823372357,
+                  1.6350262566242197,
+                  1.4209806424197056
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1112,
+                "integrationRejections": 67,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26691.42563937619,
+                  6892.142456070531,
+                  11055.666079652945
+                ],
+                "velocity": [
+                  1.192090816842823,
+                  -2.5515809995886483,
+                  -1.40881229472015
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2557,
+                "integrationRejections": 142,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1371.4624854984681,
+                "r": 85.30351534354102,
+                "t": -1367.4147532181098,
+                "n": 61.72156901056184
+              },
+              "3": {
+                "e": 5742.535912729419,
+                "r": -3463.624354294086,
+                "t": -4580.280617260536,
+                "n": -32.473196261137986
+              },
+              "7": {
+                "e": 27243.133575398944,
+                "r": 18979.506662625197,
+                "t": -19543.926030077608,
+                "n": -40.11460145907897
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      },
+      {
+        "bterm": 0.06,
+        "pair": [
+          {
+            "name": "crossing",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.4,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.4,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.40111883897242,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.403495780547024,
+                  2,
+                  2,
+                  2,
+                  0,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4083420573165752,
+                  2,
+                  3,
+                  0,
+                  2,
+                  206.88598664193302,
+                  147.09336490486467
+                ]
+              }
+            ],
+            "classProbeSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "fixture": {
+              "name": "crossing",
+              "n": 2.4,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3743.0421141759753,
+                -4524.155603838794,
+                -3002.553664572608,
+                7.850453099519121,
+                6.508101125867974,
+                -0.020507798245868902
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17804.303327149148,
+                  30323.605641670114,
+                  17766.244255368445
+                ],
+                "velocity": [
+                  -1.7253138697791308,
+                  -0.42393638973292336,
+                  0.3938354827912947
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 371,
+                "integrationRejections": 22,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -3570.3063509216545,
+                  27288.993049238383,
+                  12042.248433244795
+                ],
+                "velocity": [
+                  -2.3835253983050575,
+                  1.455023791247501,
+                  1.3431155787596771
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1114,
+                "integrationRejections": 68,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -24756.90330551751,
+                  3525.7354386120096,
+                  9084.36085844966
+                ],
+                "velocity": [
+                  1.7829143039494308,
+                  -2.6717015361903766,
+                  -1.640349067382587
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2562,
+                "integrationRejections": 152,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.4,
+            "e": 0.72,
+            "perigeeKm": 219.96729979299926,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1877.385823898929,
+                "r": 173.93977115620936,
+                "t": -1868.3239656763997,
+                "n": 60.72929331052727
+              },
+              "3": {
+                "e": 6745.132258506734,
+                "r": -3797.196262634147,
+                "t": -5574.633632229828,
+                "n": -39.61810441549307
+              },
+              "7": {
+                "e": 44806.453305680676,
+                "r": 32068.75895208077,
+                "t": -31291.823471148775,
+                "n": 186.38926456359073
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          },
+          {
+            "name": "companion",
+            "fitted": {
+              "epoch": "2026-10-29T00:00:00.000",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "bterm": 0.06
+            },
+            "classDiagnostics": [
+              {
+                "day": 0,
+                "values": [
+                  2.3966852459,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 1,
+                "values": [
+                  2.3976568910787,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 3,
+                "values": [
+                  2.3997080457523756,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              },
+              {
+                "day": 7,
+                "values": [
+                  2.4038744539920356,
+                  2,
+                  2,
+                  2,
+                  0,
+                  210.3848879587223,
+                  150.04951193261996
+                ]
+              }
+            ],
+            "classProbeSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "fixture": {
+              "name": "companion",
+              "n": 2.3966852459,
+              "e": 0.72,
+              "i": 27,
+              "raan": 40,
+              "argp": 270,
+              "ma": 0,
+              "drag": true,
+              "bterm": 0.06,
+              "dragSigma": 1e-10,
+              "mode": "seed",
+              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "initialization": "AP mean-element epoch state",
+              "initialGcrfKm": [
+                3746.5064636839643,
+                -4528.320432334783,
+                -3005.3262622008474,
+                7.846824121637736,
+                6.505107766124912,
+                -0.02049249584341829
+              ],
+              "fitEnd": "2026-10-29T00:00:00.000",
+              "referenceIntegrator": {
+                "tolerance": 1e-12,
+                "minStep": 0.01,
+                "maxStep": 300
+              }
+            },
+            "referenceStates": [
+              {
+                "epochJD": 2461343.500800723,
+                "position": [
+                  -17609.782690165688,
+                  30403.50004633923,
+                  17734.479051162063
+                ],
+                "velocity": [
+                  -1.7385619442370308,
+                  -0.3994968937849113,
+                  0.4078081747034167
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 370,
+                "integrationRejections": 18,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461345.500800723,
+                "position": [
+                  -2658.6116066231793,
+                  26731.260470561243,
+                  11527.726694900239
+                ],
+                "velocity": [
+                  -2.4003555848125666,
+                  1.6125775275319312,
+                  1.411459823937001
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 1113,
+                "integrationRejections": 65,
+                "burnSummary": []
+              },
+              {
+                "epochJD": 2461349.500800724,
+                "position": [
+                  -26294.22647084423,
+                  6103.824128629078,
+                  10611.44246504076
+                ],
+                "velocity": [
+                  1.3189896120439966,
+                  -2.58371983422223,
+                  -1.461126367378291
+                ],
+                "frame": "GCRF",
+                "epochTimeScale": "TDB",
+                "positionUnits": "km",
+                "velocityUnits": "km/s",
+                "integrationSteps": 2560,
+                "integrationRejections": 137,
+                "burnSummary": []
+              }
+            ],
+            "apSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+            "epoch": "2026-10-29T00:00:00.000",
+            "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+            "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "perigeeKm": 226.04960264255806,
+            "fitHours": 0,
+            "days": {
+              "1": {
+                "e": 1702.970281640006,
+                "r": 146.03497923771164,
+                "t": -1695.573826532668,
+                "n": 61.733003858956074
+              },
+              "3": {
+                "e": 6479.927530316587,
+                "r": -3782.568481325227,
+                "t": -5261.228266340566,
+                "n": -33.37082106928957
+              },
+              "7": {
+                "e": 37119.88193226922,
+                "r": 25986.052200200844,
+                "t": -26506.785342577816,
+                "n": -32.50410044515917
+              }
+            },
+            "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+          }
+        ]
+      }
+    ],
+    "selected": {
+      "bterm": 0.06,
+      "pair": [
+        {
+          "name": "crossing",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.4,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.4,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.40111883897242,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.403495780547024,
+                2,
+                2,
+                2,
+                0,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.4083420573165752,
+                2,
+                3,
+                0,
+                2,
+                206.88598664193302,
+                147.09336490486467
+              ]
+            }
+          ],
+          "classProbeSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+          "fixture": {
+            "name": "crossing",
+            "n": 2.4,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3743.0421141759753,
+              -4524.155603838794,
+              -3002.553664572608,
+              7.850453099519121,
+              6.508101125867974,
+              -0.020507798245868902
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17804.303327149148,
+                30323.605641670114,
+                17766.244255368445
+              ],
+              "velocity": [
+                -1.7253138697791308,
+                -0.42393638973292336,
+                0.3938354827912947
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 371,
+              "integrationRejections": 22,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -3570.3063509216545,
+                27288.993049238383,
+                12042.248433244795
+              ],
+              "velocity": [
+                -2.3835253983050575,
+                1.455023791247501,
+                1.3431155787596771
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1114,
+              "integrationRejections": 68,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -24756.90330551751,
+                3525.7354386120096,
+                9084.36085844966
+              ],
+              "velocity": [
+                1.7829143039494308,
+                -2.6717015361903766,
+                -1.640349067382587
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2562,
+              "integrationRejections": 152,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.4,
+          "e": 0.72,
+          "perigeeKm": 219.96729979299926,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1877.385823898929,
+              "r": 173.93977115620936,
+              "t": -1868.3239656763997,
+              "n": 60.72929331052727
+            },
+            "3": {
+              "e": 6745.132258506734,
+              "r": -3797.196262634147,
+              "t": -5574.633632229828,
+              "n": -39.61810441549307
+            },
+            "7": {
+              "e": 44806.453305680676,
+              "r": 32068.75895208077,
+              "t": -31291.823471148775,
+              "n": 186.38926456359073
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        },
+        {
+          "name": "companion",
+          "fitted": {
+            "epoch": "2026-10-29T00:00:00.000",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "bterm": 0.06
+          },
+          "classDiagnostics": [
+            {
+              "day": 0,
+              "values": [
+                2.3966852459,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 1,
+              "values": [
+                2.3976568910787,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 3,
+              "values": [
+                2.3997080457523756,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            },
+            {
+              "day": 7,
+              "values": [
+                2.4038744539920356,
+                2,
+                2,
+                2,
+                0,
+                210.3848879587223,
+                150.04951193261996
+              ]
+            }
+          ],
+          "classProbeSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+          "fixture": {
+            "name": "companion",
+            "n": 2.3966852459,
+            "e": 0.72,
+            "i": 27,
+            "raan": 40,
+            "argp": 270,
+            "ma": 0,
+            "drag": true,
+            "bterm": 0.06,
+            "dragSigma": 1e-10,
+            "mode": "seed",
+            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "initialization": "AP mean-element epoch state",
+            "initialGcrfKm": [
+              3746.5064636839643,
+              -4528.320432334783,
+              -3005.3262622008474,
+              7.846824121637736,
+              6.505107766124912,
+              -0.02049249584341829
+            ],
+            "fitEnd": "2026-10-29T00:00:00.000",
+            "referenceIntegrator": {
+              "tolerance": 1e-12,
+              "minStep": 0.01,
+              "maxStep": 300
+            }
+          },
+          "referenceStates": [
+            {
+              "epochJD": 2461343.500800723,
+              "position": [
+                -17609.782690165688,
+                30403.50004633923,
+                17734.479051162063
+              ],
+              "velocity": [
+                -1.7385619442370308,
+                -0.3994968937849113,
+                0.4078081747034167
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 370,
+              "integrationRejections": 18,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461345.500800723,
+              "position": [
+                -2658.6116066231793,
+                26731.260470561243,
+                11527.726694900239
+              ],
+              "velocity": [
+                -2.4003555848125666,
+                1.6125775275319312,
+                1.411459823937001
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 1113,
+              "integrationRejections": 65,
+              "burnSummary": []
+            },
+            {
+              "epochJD": 2461349.500800724,
+              "position": [
+                -26294.22647084423,
+                6103.824128629078,
+                10611.44246504076
+              ],
+              "velocity": [
+                1.3189896120439966,
+                -2.58371983422223,
+                -1.461126367378291
+              ],
+              "frame": "GCRF",
+              "epochTimeScale": "TDB",
+              "positionUnits": "km",
+              "velocityUnits": "km/s",
+              "integrationSteps": 2560,
+              "integrationRejections": 137,
+              "burnSummary": []
+            }
+          ],
+          "apSha256": "e61a870e2a2125172ab229f28eda0809934b71b0a5806b2ab2bf486037137c65",
+          "epoch": "2026-10-29T00:00:00.000",
+          "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+          "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+          "n": 2.3966852459,
+          "e": 0.72,
+          "perigeeKm": 226.04960264255806,
+          "fitHours": 0,
+          "days": {
+            "1": {
+              "e": 1702.970281640006,
+              "r": 146.03497923771164,
+              "t": -1695.573826532668,
+              "n": 61.733003858956074
+            },
+            "3": {
+              "e": 6479.927530316587,
+              "r": -3782.568481325227,
+              "t": -5261.228266340566,
+              "n": -33.37082106928957
+            },
+            "7": {
+              "e": 37119.88193226922,
+              "r": 25986.052200200844,
+              "t": -26506.785342577816,
+              "n": -32.50410044515917
+            }
+          },
+          "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+        }
+      ]
+    }
+  },
+  "fitPilot": [
+    {
+      "name": "crossing",
+      "fitted": {
+        "epoch": "2026-10-29T00:00:00.000000",
+        "n": 2.40436721,
+        "e": 0.7195362,
+        "bterm": 0.049999999999999996
+      },
+      "classDiagnostics": [
+        {
+          "day": 0,
+          "values": [
+            2.407079110075432,
+            2,
+            3,
+            0,
+            0,
+            202.27183025290483,
+            143.12653802854743
+          ]
+        },
+        {
+          "day": 1,
+          "values": [
+            2.408044999898153,
+            2,
+            3,
+            0,
+            0,
+            202.27183025290483,
+            143.12653802854743
+          ]
+        },
+        {
+          "day": 3,
+          "values": [
+            2.409941434543798,
+            2,
+            3,
+            0,
+            0,
+            202.27183025290483,
+            143.12653802854743
+          ]
+        },
+        {
+          "day": 7,
+          "values": [
+            2.4133869207773793,
+            2,
+            3,
+            0,
+            0,
+            202.27183025290483,
+            143.12653802854743
+          ]
+        }
+      ],
+      "fixture": {
+        "name": "crossing",
+        "n": 2.4,
+        "e": 0.72,
+        "i": 27,
+        "raan": 40,
+        "argp": 270,
+        "ma": 0,
+        "drag": true,
+        "bterm": 0.05,
+        "dragSigma": 1e-10,
+        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
+        "initialGcrfKm": [
+          3743.968740905301,
+          -4526.214383375025,
+          -3005.168112000841,
+          7.8478163361406095,
+          6.505298994657251,
+          -0.02076384034794649
+        ],
+        "fitEnd": "2026-11-01T00:00:00.000",
+        "referenceIntegrator": {
+          "tolerance": 1e-12,
+          "minStep": 0.01,
+          "maxStep": 300
+        }
+      },
+      "referenceStates": [
+        {
+          "epochJD": 2461346.5008007237,
+          "position": [
+            -27746.94431615221,
+            20645.54916807283,
+            17096.57005223618
+          ],
+          "velocity": [
+            -0.5169477226558946,
+            -1.7722881097481342,
+            -0.5476232292777009
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 1616,
+          "integrationRejections": 81,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461348.5008007237,
+          "position": [
+            -21246.55198677783,
+            28647.770401144917,
+            18253.056443690737
+          ],
+          "velocity": [
+            -1.5251868913451416,
+            -0.760559453801563,
+            0.16618519559830186
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 2358,
+          "integrationRejections": 128,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461352.5008007246,
+          "position": [
+            5375.216615231587,
+            17168.532934846513,
+            5514.28657985714
+          ],
+          "velocity": [
+            -2.2754155649656576,
+            3.869793328802706,
+            2.2879533474155127
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 3840,
+          "integrationRejections": 212,
+          "burnSummary": []
+        }
+      ],
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+      "epoch": "2026-10-29T00:00:00.000",
+      "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+      "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+      "n": 2.4,
+      "e": 0.72,
+      "perigeeKm": 219.96729979299926,
+      "fitHours": 72,
+      "days": {
+        "1": {
+          "e": 3117.6219222200043,
+          "r": 1765.3800014766362,
+          "t": -2567.067426071916,
+          "n": -114.73765856776674
+        },
+        "3": {
+          "e": 6172.8664125080295,
+          "r": -464.2863777734767,
+          "t": -6147.379161449198,
+          "n": -313.76320922615037
+        },
+        "7": {
+          "e": 56469.95389339054,
+          "r": -40232.71235504092,
+          "t": -39625.358079523015,
+          "n": -124.68499416947765
+        }
+      },
+      "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+    },
+    {
+      "name": "companion",
+      "fitted": {
+        "epoch": "2026-10-29T00:00:00.000000",
+        "n": 2.40104221,
+        "e": 0.7195302999999997,
+        "bterm": 0.049999999999999996
+      },
+      "classDiagnostics": [
+        {
+          "day": 0,
+          "values": [
+            2.4033968364886618,
+            2,
+            2,
+            2,
+            0,
+            205.66615651031208,
+            145.9859822404664
+          ]
+        },
+        {
+          "day": 1,
+          "values": [
+            2.4042264121802592,
+            2,
+            2,
+            2,
+            0,
+            205.66615651031208,
+            145.9859822404664
+          ]
+        },
+        {
+          "day": 3,
+          "values": [
+            2.4058717896809423,
+            2,
+            2,
+            2,
+            0,
+            205.66615651031208,
+            145.9859822404664
+          ]
+        },
+        {
+          "day": 7,
+          "values": [
+            2.4088255988459717,
+            2,
+            3,
+            0,
+            0,
+            205.66615651031208,
+            145.9859822404664
+          ]
+        }
+      ],
+      "fixture": {
+        "name": "companion",
+        "n": 2.3966852459,
+        "e": 0.72,
+        "i": 27,
+        "raan": 40,
+        "argp": 270,
+        "ma": 0,
+        "drag": true,
+        "bterm": 0.05,
+        "dragSigma": 1e-10,
+        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
+        "initialGcrfKm": [
+          3747.4200289737178,
+          -4530.386765886065,
+          -3007.9383543736512,
+          7.844201674088927,
+          6.502302688882032,
+          -0.02075427663461043
+        ],
+        "fitEnd": "2026-11-01T00:00:00.000",
+        "referenceIntegrator": {
+          "tolerance": 1e-12,
+          "minStep": 0.01,
+          "maxStep": 300
+        }
+      },
+      "referenceStates": [
+        {
+          "epochJD": 2461346.5008007237,
+          "position": [
+            -27485.30924374038,
+            21559.500010527005,
+            17380.791133835013
+          ],
+          "velocity": [
+            -0.6132733326563042,
+            -1.6974355931205696,
+            -0.486948999746461
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 1618,
+          "integrationRejections": 81,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461348.5008007237,
+          "position": [
+            -20013.972692998897,
+            29230.782988547966,
+            18105.831645847396
+          ],
+          "velocity": [
+            -1.6269717849706236,
+            -0.6157334954765319,
+            0.25678557129161056
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 2358,
+          "integrationRejections": 121,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461352.5008007246,
+          "position": [
+            8054.933241605619,
+            10491.422733675574,
+            1939.0799343231213
+          ],
+          "velocity": [
+            -1.2765881105323347,
+            5.773193046170894,
+            2.778633181062149
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 3835,
+          "integrationRejections": 201,
+          "burnSummary": []
+        }
+      ],
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+      "epoch": "2026-10-29T00:00:00.000",
+      "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+      "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+      "n": 2.3966852459,
+      "e": 0.72,
+      "perigeeKm": 226.04960264255806,
+      "fitHours": 72,
+      "days": {
+        "1": {
+          "e": 2362.6900408329457,
+          "r": 1019.0956666576019,
+          "t": -2129.1429257795858,
+          "n": -102.46293404753315
+        },
+        "3": {
+          "e": 5937.294810360942,
+          "r": -964.24349071401,
+          "t": -5858.256592397327,
+          "n": 50.33739552167371
+        },
+        "7": {
+          "e": 82338.08581468572,
+          "r": -52756.16171522314,
+          "t": -63216.642618419435,
+          "n": -62.231493691715656
+        }
+      },
+      "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+    },
+    {
+      "name": "crossing",
+      "fitted": {
+        "epoch": "2026-10-29T00:00:00.000000",
+        "n": 2.40437044,
+        "e": 0.7195284999999998,
+        "bterm": 0.1
+      },
+      "classDiagnostics": [
+        {
+          "day": 0,
+          "values": [
+            2.409790783971492,
+            2,
+            3,
+            0,
+            0,
+            202.26686553425117,
+            143.1168434552079
+          ]
+        },
+        {
+          "day": 1,
+          "values": [
+            2.4117215135356114,
+            2,
+            3,
+            0,
+            0,
+            202.26686553425117,
+            143.1168434552079
+          ]
+        },
+        {
+          "day": 3,
+          "values": [
+            2.4155111809950602,
+            2,
+            3,
+            0,
+            0,
+            202.26686553425117,
+            143.1168434552079
+          ]
+        },
+        {
+          "day": 7,
+          "values": [
+            2.4224161176696364,
+            2,
+            3,
+            0,
+            0,
+            202.26686553425117,
+            143.1168434552079
+          ]
+        }
+      ],
+      "fixture": {
+        "name": "crossing",
+        "n": 2.4,
+        "e": 0.72,
+        "i": 27,
+        "raan": 40,
+        "argp": 270,
+        "ma": 0,
+        "drag": true,
+        "bterm": 0.1,
+        "dragSigma": 1e-10,
+        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
+        "initialGcrfKm": [
+          3743.968740905301,
+          -4526.214383375025,
+          -3005.168112000841,
+          7.8478163361406095,
+          6.505298994657251,
+          -0.02076384034794649
+        ],
+        "fitEnd": "2026-11-01T00:00:00.000",
+        "referenceIntegrator": {
+          "tolerance": 1e-12,
+          "minStep": 0.01,
+          "maxStep": 300
+        }
+      },
+      "referenceStates": [
+        {
+          "epochJD": 2461346.5008007237,
+          "position": [
+            -27845.096343699905,
+            20154.341806907065,
+            16930.426553542555
+          ],
+          "velocity": [
+            -0.4672738141222809,
+            -1.8109382160672134,
+            -0.5789143391606384
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 1620,
+          "integrationRejections": 85,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461348.5008007237,
+          "position": [
+            -22086.16830098961,
+            28116.08702166496,
+            18298.62738037656
+          ],
+          "velocity": [
+            -1.4483284723167826,
+            -0.8658619678890095,
+            0.09946203104379371
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 2359,
+          "integrationRejections": 125,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461352.5008007246,
+          "position": [
+            1378.0046607550075,
+            22309.078934686382,
+            8845.699817137727
+          ],
+          "velocity": [
+            -2.5257656606445247,
+            2.5443895935105005,
+            1.8127807712455264
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 3836,
+          "integrationRejections": 204,
+          "burnSummary": []
+        }
+      ],
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+      "epoch": "2026-10-29T00:00:00.000",
+      "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+      "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+      "n": 2.4,
+      "e": 0.72,
+      "perigeeKm": 219.96729979299926,
+      "fitHours": 72,
+      "days": {
+        "1": {
+          "e": 5451.396961668268,
+          "r": 2631.9081523826835,
+          "t": -4773.338456810476,
+          "n": -77.64204944346287
+        },
+        "3": {
+          "e": 13151.86508948141,
+          "r": -329.2696741681371,
+          "t": -13146.592727201858,
+          "n": -173.88639589195267
+        },
+        "7": {
+          "e": 100023.78088661043,
+          "r": -71822.19104806728,
+          "t": -69615.58457471296,
+          "n": 0.4780878130858923
+        }
+      },
+      "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+    },
+    {
+      "name": "companion",
+      "fitted": {
+        "epoch": "2026-10-29T00:00:00.000000",
+        "n": 2.4010449300000003,
+        "e": 0.7195299999999998,
+        "bterm": 0.1
+      },
+      "classDiagnostics": [
+        {
+          "day": 0,
+          "values": [
+            2.4057419443289714,
+            2,
+            2,
+            2,
+            0,
+            205.66326044597838,
+            145.98341833576845
+          ]
+        },
+        {
+          "day": 1,
+          "values": [
+            2.4074234162944133,
+            2,
+            3,
+            0,
+            0,
+            205.66326044597838,
+            145.98341833576845
+          ]
+        },
+        {
+          "day": 3,
+          "values": [
+            2.410703953559087,
+            2,
+            3,
+            0,
+            0,
+            205.66326044597838,
+            145.98341833576845
+          ]
+        },
+        {
+          "day": 7,
+          "values": [
+            2.4166954536874665,
+            2,
+            3,
+            0,
+            0,
+            205.66326044597838,
+            145.98341833576845
+          ]
+        }
+      ],
+      "fixture": {
+        "name": "companion",
+        "n": 2.3966852459,
+        "e": 0.72,
+        "i": 27,
+        "raan": 40,
+        "argp": 270,
+        "ma": 0,
+        "drag": true,
+        "bterm": 0.1,
+        "dragSigma": 1e-10,
+        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
+        "initialGcrfKm": [
+          3747.4200289737178,
+          -4530.386765886065,
+          -3007.9383543736512,
+          7.844201674088927,
+          6.502302688882032,
+          -0.02075427663461043
+        ],
+        "fitEnd": "2026-11-01T00:00:00.000",
+        "referenceIntegrator": {
+          "tolerance": 1e-12,
+          "minStep": 0.01,
+          "maxStep": 300
+        }
+      },
+      "referenceStates": [
+        {
+          "epochJD": 2461346.5008007237,
+          "position": [
+            -27593.04513782623,
+            21149.973180383247,
+            17250.50608427953
+          ],
+          "velocity": [
+            -0.57218216741824,
+            -1.7312518496499993,
+            -0.5135747969268821
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 1617,
+          "integrationRejections": 72,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461348.5008007237,
+          "position": [
+            -20798.723071480163,
+            28846.290435122733,
+            18194.145255832147
+          ],
+          "velocity": [
+            -1.5631799159162325,
+            -0.7107363971498064,
+            0.19831786097032023
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 2357,
+          "integrationRejections": 114,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461352.5008007246,
+          "position": [
+            5354.022738006955,
+            17209.875899925682,
+            5536.988111327064
+          ],
+          "velocity": [
+            -2.279951566076333,
+            3.8563708995004182,
+            2.28371720345896
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 3837,
+          "integrationRejections": 207,
+          "burnSummary": []
+        }
+      ],
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+      "epoch": "2026-10-29T00:00:00.000",
+      "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+      "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+      "n": 2.3966852459,
+      "e": 0.72,
+      "perigeeKm": 226.04960264255806,
+      "fitHours": 72,
+      "days": {
+        "1": {
+          "e": 4295.169627761794,
+          "r": 1771.9212242902292,
+          "t": -3898.6374045284315,
+          "n": 330.762292544095
+        },
+        "3": {
+          "e": 9138.614218761844,
+          "r": -894.8234479494387,
+          "t": -9091.856560758974,
+          "n": 227.38758748013305
+        },
+        "7": {
+          "e": 86885.85941155648,
+          "r": -61441.98775257147,
+          "t": -61433.03811094673,
+          "n": 128.58909978331923
+        }
+      },
+      "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+    },
+    {
+      "name": "crossing",
+      "fitted": {
+        "epoch": "2026-10-29T00:00:00.000000",
+        "n": 2.40433881,
+        "e": 0.719542,
+        "bterm": 0.2
+      },
+      "classDiagnostics": [
+        {
+          "day": 0,
+          "values": [
+            2.4152528207568853,
+            2,
+            3,
+            0,
+            0,
+            202.30223800965908,
+            143.1514869603511
+          ]
+        },
+        {
+          "day": 1,
+          "values": [
+            2.4191523978790364,
+            2,
+            3,
+            0,
+            0,
+            202.30223800965908,
+            143.1514869603511
+          ]
+        },
+        {
+          "day": 3,
+          "values": [
+            2.4268186329078403,
+            2,
+            3,
+            0,
+            0,
+            202.30223800965908,
+            143.1514869603511
+          ]
+        },
+        {
+          "day": 7,
+          "values": [
+            2.440844162473002,
+            2,
+            3,
+            0,
+            0,
+            202.30223800965908,
+            143.1514869603511
+          ]
+        }
+      ],
+      "fixture": {
+        "name": "crossing",
+        "n": 2.4,
+        "e": 0.72,
+        "i": 27,
+        "raan": 40,
+        "argp": 270,
+        "ma": 0,
+        "drag": true,
+        "bterm": 0.2,
+        "dragSigma": 1e-10,
+        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
+        "initialGcrfKm": [
+          3743.968740905301,
+          -4526.214383375025,
+          -3005.168112000841,
+          7.8478163361406095,
+          6.505298994657251,
+          -0.02076384034794649
+        ],
+        "fitEnd": "2026-11-01T00:00:00.000",
+        "referenceIntegrator": {
+          "tolerance": 1e-12,
+          "minStep": 0.01,
+          "maxStep": 300
+        }
+      },
+      "referenceStates": [
+        {
+          "epochJD": 2461346.5008007237,
+          "position": [
+            -28002.14906596156,
+            19143.393041636657,
+            16574.21859695812
+          ],
+          "velocity": [
+            -0.3640192174435423,
+            -1.8878898644338267,
+            -0.6425961677732066
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 1617,
+          "integrationRejections": 81,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461348.5008007237,
+          "position": [
+            -23622.670233809295,
+            26871.075839074627,
+            18271.485660186834
+          ],
+          "velocity": [
+            -1.2864782045567495,
+            -1.0693425418504634,
+            -0.03362399267853891
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 2357,
+          "integrationRejections": 118,
+          "burnSummary": []
+        },
+        {
+          "epochJD": 2461352.5008007246,
+          "position": [
+            -6773.386325015189,
+            27775.836750242448,
+            13557.073739170088
+          ],
+          "velocity": [
+            -2.4006342938670144,
+            1.0115613576777847,
+            1.1389999126900672
+          ],
+          "frame": "GCRF",
+          "epochTimeScale": "TDB",
+          "positionUnits": "km",
+          "velocityUnits": "km/s",
+          "integrationSteps": 3837,
+          "integrationRejections": 204,
+          "burnSummary": []
+        }
+      ],
+      "apSha256": "1be3eadcd62381c0d3be4d2cb61a4b2ac267d48500740c340736be01d5f1bcc8",
+      "epoch": "2026-10-29T00:00:00.000",
+      "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
+      "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
+      "n": 2.4,
+      "e": 0.72,
+      "perigeeKm": 219.96729979299926,
+      "fitHours": 72,
+      "days": {
+        "1": {
+          "e": 6017.845893917033,
+          "r": 2941.5100973689523,
+          "t": -5249.931994524313,
+          "n": 14.198692917561928
+        },
+        "3": {
+          "e": 12477.028239410809,
+          "r": 1407.7250589424598,
+          "t": -12397.136753240176,
+          "n": -74.4591629136796
+        },
+        "7": {
+          "e": 56443.505239499,
+          "r": -37507.90062737482,
+          "t": -42178.329102850694,
+          "n": -123.40316018641673
+        }
+      },
+      "ffmSha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2"
+    }
+  ],
+  "rounding": "unchanged"
+}
