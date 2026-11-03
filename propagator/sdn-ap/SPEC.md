@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.4.12.
+Version 0.4.13.
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1728,9 +1728,24 @@ The AP E2E asserts the shipped minimax table, reproduction of every cell mean an
 within 1e-6, and bit-exact default-FORCES SGP4XP conformance; it does not assert band acceptance.
 
 **12.8 The drag prior of a fit.** `fit` estimates BTERM under its $PCF FIT.DRAG_PRIOR (MEAN, SIGMA, FORM); a stated
-prior is fitted as given on every fit. A caller fitting one object per call states that object's prior, which is how a
-catalog that refits daily carries it: LOG_NORMAL, the previous fit's BTERM as the median and, as the sigma of the log,
-the larger of the previous $OBD's posterior sigma of the log and 0.3. Unset, the prior is LOG_NORMAL with median 0.01
+prior is fitted as given on every fit.
+
+Per object: after the call's own $PCF, the `configuration` port takes either no further $PCF or one per 'ephemeris'
+frame, in the frames' order. Each states only FIT.DRAG_PRIOR, FIT.SRP_PRIOR and their forms (CONFIGURATION_ID and
+PROFILE may stand; anything else is refused by name), and the objects of its frame are fitted under the priors it
+states, the call's for the rest: a frame whose $PCF states no drag prior takes the band default below. Each object's
+$OBD states its posterior after the prior: under LOG_NORMAL the posterior sigma of the log and the posterior median,
+under GAUSSIAN_SIGNED the posterior value and sigma. A catalog that refits daily carries them: BTERM LOG_NORMAL with the
+previous posterior median and, as the sigma of the log, the larger of the previous posterior's and 0.3; AGOM
+GAUSSIAN_SIGNED with the previous posterior value and the larger of its sigma and 0.01.
+
+Measured on the model truth of the table below, one call with the SWOT-like orbit (true B 0.044) and the
+Sentinel-3-like orbit (true B 0.001): each object's set is the bytes of its single-object fit; on the band defaults the
+day-3 errors are 82.0 and 24.1 m (B 0.0463 and 0.00115), carried 83.0 and 24.1 m, and with each object's true B
+(sigma of the log 0.3) 21.3 and 20.4 m. With SWOT-like's carried prior shared by both, as the call's one $PCF had to
+before 0.4.13, the Sentinel-3-like object is at 3,176.9 m. A carried prior returns the arc's own estimate: it does not
+supply what the arc mis-estimates (SWOT-like's 0.0463 against 0.044). `test/fit-per-object-prior-multi.e2e.mjs`
+measures these numbers. Unset, the prior is LOG_NORMAL with median 0.01
 m^2/kg and sigma of the log ln 10; under NRLMSISE-00 (or a minimum span below 24 h) the median follows the mean altitude
 (0.01 below 600 km, 0.002 at 600-800 km, 0.0005 above), and under NRLMSISE-00 at 800-1400 km the sigma of the log is
 10 ln 10.

@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.12.
+Version 0.4.13.
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -148,7 +148,17 @@ for bit (the conformance E2E reproduces XP 72dcf6005046 and the control 9ecfafcd
 or `< 24 h` minimum spans, `fit` enables finite-difference Jacobian fallback and scales an unset LOG_NORMAL BTERM prior
 median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`), with the sigma of
 the log `10 ln 10` under NRLMSISE-00 at `800-1400 km` so that the arc, not the median, sets BTERM there (SPEC 12.8); a
-stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an object's prior from its previous fit. When
+stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an object's prior from its previous fit.
+
+One fit call carries each object's priors (SPEC 12.8). The two-fit sequence of a daily refit:
+
+1. `fit` with `configuration` = the call's $PCF and one `ephemeris` $OEM per object; each object gives an $OMM and an
+   $OBD whose BALLISTIC_COEFF_MODEL and AGOM_MODEL end with its posterior (`posterior sigma of the log s; posterior
+   median B m^2/kg`, `posterior A +- sA m^2/kg`).
+2. The next day, `fit` with `configuration` = the call's $PCF followed by one $PCF per `ephemeris` frame, in their
+   order, whose FIT states only `DRAG_PRIOR` {MEAN B, SIGMA max(s, 0.3)} with `DRAG_PRIOR_FORM` LOG_NORMAL and
+   `SRP_PRIOR` {MEAN A, SIGMA max(sA, 0.01)} with `SRP_PRIOR_FORM` GAUSSIAN_SIGNED; an object whose $PCF states none
+   takes the band default. When
 `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a non-eccentric orbit, `fit` runs a two-stage
 decoupled solve: Stage 1 solves `BTERM` and `AGOM` over `48-72 h`; Stage 2 solves the 6 mean elements over the trailing
 `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2 tesseral null) with `BTERM` and `AGOM` pinned to Stage 1 and the
