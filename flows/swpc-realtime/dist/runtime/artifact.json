@@ -1,0 +1,135 @@
+{
+  "programId": "com.digitalarsenal.flows.swpc-realtime",
+  "name": "NOAA SWPC real-time",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
+  "threadModel": "wasi-sequential",
+  "nodes": 10,
+  "edges": 10,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "plan-sws",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "plan_sws",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fetch-sws",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse-sws",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "parse_sws",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest-sws",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress-sws",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "plan-swa",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "plan_swa",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fetch-swa",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse-swa",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "methodId": "parse_swa",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest-swa",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress-swa",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.swpc-realtime",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "version": "0.1.0",
+      "sha256": "cc43653c71608e3f378bc5e60fd4fcf07302231522e796e03b6c254cc3bd28a4",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_",
+      "methodSymbols": {
+        "plan_sws": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_plan_sws",
+        "plan_swa": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_plan_swa",
+        "parse_sws": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_parse_sws",
+        "parse_swa": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_parse_swa",
+        "parse_flares_pending": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e737770632d7265616c74696d65_parse_flares_pending"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "219919c46aa3c8845ebff7dea2a1a6fa407076e84c84653a624a68c1687e4028",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.6.0",
+      "sha256": "7638bef079ea7664c544b853b1a16ab18ffe88e0c54f182ad694f30c4d2d4fbd",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}

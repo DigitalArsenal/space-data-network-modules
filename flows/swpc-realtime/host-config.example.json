@@ -1,0 +1,14 @@
+{
+  "flows": {
+    "enabled": true,
+    "first_fire_when_due": true,
+    "services": [{"flow":"com.digitalarsenal.flows.swpc-realtime","memory_pages":8192,"intervals":{"minute":"1m"},"retrieval_interval":"55s","exclusive_group":"swpc-realtime","release_after_run":true}]
+  },
+  "publishing": {
+    "enabled": true,
+    "auto_publish": [
+      {"schema":"SWS.fbs","provider_id":"space-weather","source_name":"noaa-swpc-rt","min_interval":"1m","settle":"1s","max_shard_bytes":1048576},
+      {"schema":"SWA.fbs","provider_id":"space-weather","source_name":"noaa-swpc-rt","min_interval":"1m","settle":"1s","max_shard_bytes":1048576}
+    ]
+  }
+}
