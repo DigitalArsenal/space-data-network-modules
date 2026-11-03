@@ -4,6 +4,7 @@
 //                     the Sun's and Moon's masses zero, job.module; FFM: thirdBody false), BTERM at the truth 0.044 either
 //                     as the seeded mean-element set (job.mode 'seed': no fit, the FFM state is AP's own epoch state) or
 //                     as a fit pinned at 0.044 (job.mode 'pinned': GAUSSIAN_SIGNED, sigma 1e-7), on a 10 minute grid
+//   job.kind 'scan': the day-7 error with BTERM pinned at job.b, on a 10 minute grid
 //   job.kind 'fit'  : a fit of job.fitDays days (prior job.prior: 'gauss' the model-truth library's Gaussian at the
 //                     truth with sigma 0.1, 'default' the band default) on the release module with the Sun and Moon on
 //                     both sides, 60 minute grid over job.forecastDays days after the fit
@@ -27,6 +28,11 @@ if (job.kind === 'iso') {
   const onPolicy = job.mode === 'pinned' ? {fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: 0.044, sigma: 1e-7}} : {};
   result = {job, on: slim(await runModelTruth({name: job.fixture + '-on', ...common, drag: true, ...onPolicy})),
     off: slim(await runModelTruth({name: job.fixture + '-off', ...common, drag: false}))};
+} else if (job.kind === 'scan') {
+  // the day-7 error with BTERM pinned at job.b (the truth is 0.044), Sun and Moon off (job.thirdBody false) or on, 10 minute grid
+  const c = {...f, drag: true, hourly: true, gridMinutes: 10, thirdBody: job.thirdBody ?? false, modulePath: job.module,
+    fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: job.b, sigma: 1e-7}};
+  result = {job, run: slim(await runModelTruth({name: job.fixture, ...c}))};
 } else {
   const c = {...f, drag: true, hourly: true, gridMinutes: 60, fitDays: job.fitDays, forecastDays: job.forecastDays, modulePath: job.module, thirdBody: job.thirdBody ?? true};
   if (job.prior === 'default') c.fitPolicy = 'default';

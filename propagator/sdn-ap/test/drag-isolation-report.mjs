@@ -36,8 +36,10 @@ function passes(on, off) {
   for (let i = 0; i + 1 < apo.length; i++) {
     const a = apo[i], b = apo[i + 1];
     let p = a; for (let k = a; k <= b; k++) if (rad[k] < rad[p]) p = k;
+    // the osculating perigee radius of the apogee state before the pass (the 10 minute grid does not sample the perigee itself)
+    const sa = on.reference[a], ra = norm(sa), Ea = energy(sa), aa = -MU / (2 * Ea), ea = Math.sqrt(Math.max(0, 1 - hmom(sa) ** 2 / (MU * aa)));
     const e0 = E(a), e1 = E(b), h0 = H(a), h1 = H(b), d0 = D(a), d1 = D(b);
-    rows.push({ pass: i + 1, hour: on.profile[p].h, perigeeKm: rad[p] - 6378.137,
+    rows.push({ pass: i + 1, hour: on.profile[p].h, perigeeKm: aa * (1 - ea) - 6378.137,
       dE_ffm: e1.ffm - e0.ffm, dE_ap: e1.ap - e0.ap, dH_ffm: h1.ffm - h0.ffm, dH_ap: h1.ap - h0.ap,
       ddT: d1[0] - d0[0], ddR: d1[1] - d0[1], ddN: d1[2] - d0[2] });
   }
@@ -59,19 +61,28 @@ for (const fx of ['Molniya', 'GTO', 'GTO-500']) {
     out.push(`fitted BTERM ${on.fitted.bterm}; ${on.fitted.bModel ?? ''}`);
     const rows = passes(on, off);
     out.push('per perigee pass (apogee to apogee; dE, dH are AP and FFM changes of (on - off) specific energy, km^2/s^2, and angular momentum, km^2/s; dd the growth of the on-minus-off error, m)');
-    out.push('| pass | hour | perigee km | dE FFM | dE AP | AP/FFM | dH FFM | dH AP | AP/FFM | dd T | dd R | dd N |\n|---|---|---|---|---|---|---|---|---|---|---|---|');
+    out.push('| pass | hour | osculating perigee km | dE FFM | dE AP | AP/FFM | dH FFM | dH AP | AP/FFM | dd T | dd R | dd N |\n|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of rows) out.push(`| ${r.pass} | ${r.hour.toFixed(1)} | ${r.perigeeKm.toFixed(1)} | ${r.dE_ffm.toExponential(4)} | ${r.dE_ap.toExponential(4)} | ${(r.dE_ap / r.dE_ffm).toFixed(4)} | ${r.dH_ffm.toExponential(3)} | ${r.dH_ap.toExponential(3)} | ${(r.dH_ap / r.dH_ffm).toFixed(4)} | ${f1(r.ddT)} | ${f1(r.ddR)} | ${f1(r.ddN)} |`);
     const sum = (k) => rows.reduce((s, r) => s + r[k], 0);
     out.push(`all ${rows.length} passes: dE AP/FFM ${(sum('dE_ap') / sum('dE_ffm')).toFixed(4)}; dH AP/FFM ${(sum('dH_ap') / sum('dH_ffm')).toFixed(4)}`);
   }
 }
-for (const fx of ['Molniya', 'GTO', 'GTO-500']) {
-  for (const fd of [3, 7]) for (const pr of ['gauss', 'default']) {
-    const j = load(`fit-${fx}-${fd}-${pr}`);
-    if (!j) continue;
-    const w = j.run.wholeDay, last = Math.max(...Object.keys(w).map(Number));
-    const sig = /posterior sigma of the log ([0-9.eE+-]+)/.exec(j.run.fitted.bModel ?? '')?.[1] ?? /\+- ([0-9.eE+-]+) m\^2\/kg/.exec(j.run.fitted.bModel ?? '')?.[1];
-    out.push(`fit ${fx} ${fd} d ${pr}: BTERM ${j.run.fitted.bterm} (truth 0.044; ${(100 * (j.run.fitted.bterm / 0.044 - 1)).toFixed(2)} %); posterior ${sig}; day ${last} T/R/N ${f1(w[last].t)} / ${f1(w[last].r)} / ${f1(w[last].n)} | ${j.run.fitted.bModel}`);
+// BTERM scan: the day-7 whole-day RMS with BTERM pinned at b, per fixture and Sun/Moon arm
+const scans = fs.readdirSync(dir).filter((n) => /^scan-.*\.json$/.test(n)).sort();
+if (scans.length) {
+  out.push('\n## BTERM scan (pinned at b; truth 0.044), day-7 whole-day RMS along-track / radial / cross-track, m');
+  for (const file of scans) {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, file)));
+    const w = j.run.wholeDay[7];
+    out.push(`${file.replace('.json', '')}: b ${j.job.b} (${(100 * (j.job.b / 0.044 - 1)).toFixed(2)} %): ${f1(w.t)} / ${f1(w.r)} / ${f1(w.n)}`);
   }
+}
+// the fits: every fit-* (release module, Sun and Moon on both sides) and nb-fit-<build>-* (a test build with the Sun and Moon off, FFM without)
+for (const file of fs.readdirSync(dir).filter((n) => /^(nb-)?fit-.*\.json$/.test(n)).sort()) {
+  const j = JSON.parse(fs.readFileSync(path.join(dir, file)));
+  const w = j.run.wholeDay, last = Math.max(...Object.keys(w).map(Number)), fm = j.run.fitted.bModel ?? '';
+  const post = /posterior ([0-9.eE+-]+) \+- ([0-9.eE+-]+) m/.exec(fm), sig = /posterior sigma of the log ([0-9.eE+-]+)/.exec(fm)?.[1];
+  const b = j.run.fitted.bterm;
+  out.push(`${file.replace('.json', '')}: BTERM ${b.toPrecision(6)} (${(100 * (b / 0.044 - 1)).toFixed(2)} % from 0.044); posterior ${post ? `${post[1]} +- ${post[2]} (${(100 * post[2] / post[1]).toFixed(2)} %; bias ${((b - 0.044) / post[2]).toFixed(1)} sigma)` : `sigma of the log ${sig}`}; day ${last} T / R / N ${f1(w[last].t)} / ${f1(w[last].r)} / ${f1(w[last].n)} m`);
 }
 console.log(out.join('\n'));

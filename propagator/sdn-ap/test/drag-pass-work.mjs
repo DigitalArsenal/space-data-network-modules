@@ -13,7 +13,7 @@ import {SPW, SPWT} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 import {openModule} from './lib/module.mjs';
 import {rotate, jdOf, FRAME_PROBE} from './lib/frames.mjs';
-const [fixture, nobodies, out] = process.argv.slice(2);
+const [fixture, nobodies, out, mode = 'seed'] = process.argv.slice(2);  // mode 'pinned': after a 72 h fit with BTERM pinned at 0.044, the first day after it
 const FIXTURES = {
   Molniya: {n: 2, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10},
   GTO: {n: 2.40, e: 0.72, i: 27, raan: 40, argp: 270, ma: 10},
@@ -21,8 +21,10 @@ const FIXTURES = {
 };
 const f = FIXTURES[fixture];
 const MU = 398600.4418, OMEGA_E = 7.2921158553e-5, RE = 6378.1363, FLAT = 3.3528197529902951e-3, B = 0.044;
-const common = {...f, mode: 'seed', seedGridMin: 0.15, seedDays: 1, thirdBody: false, modulePath: nobodies};
-const on = await runModelTruth({name: fixture + '-on', ...common, drag: true});
+const common = mode === 'seed' ? {...f, mode: 'seed', seedGridMin: 0.15, seedDays: 1, thirdBody: false, modulePath: nobodies}
+  : {...f, hourly: true, gridMinutes: 0.15, forecastDays: 1, thirdBody: false, modulePath: nobodies};
+const T0 = mode === 'seed' ? 0 : 3 * 86400;
+const on = await runModelTruth({name: fixture + '-on', ...common, drag: true, ...(mode === 'seed' ? {} : {fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: 0.044, sigma: 1e-7}})});
 const off = await runModelTruth({name: fixture + '-off', ...common, drag: false});
 const N = on.referenceStates.length;
 const dtSec = 9;
@@ -40,7 +42,7 @@ const jd = jdOf('2026-10-29T00:00:00.000');
 const along = (states) => {
   const rho = new Float64Array(N), power = new Float64Array(N), height = new Float64Array(N);
   for (let k = 0; k < N; k++) {
-    const t = (k + 1) * dtSec;
+    const t = T0 + (k + 1) * dtSec;
     const teme = rotate(m, jd.whole, jd.frac + t / 86400, states[k], FRAME_PROBE.GCRF_TO_TEME).out;
     new Float64Array(m.harness.memory.buffer, rp, 3).set(teme.slice(0, 3));
     if (x.sdnap_atmosphere_probe(2, jd.whole, jd.frac + t / 86400, rp, rowsPtr, weather.length, 0, 0, po) !== 0) throw new Error('probe refused');
