@@ -1,0 +1,109 @@
+{
+  "exploratory": true,
+  "units": "meters; forward daily-bin 3D RMS, leads from the fit end",
+  "moduleSha256": "c2bf019f84e5fb35af052723d45ff12a41e25ee1126fea13cbb0459ac02e177f",
+  "windows": {
+    "replayed": 749,
+    "paired24": 748,
+    "paired72": 746,
+    "failures": []
+  },
+  "gn24": {
+    "n": 748,
+    "beforeMinusUMeters": 56.106669941772424,
+    "afterMinusUMeters": -4.097345619446699,
+    "testedMinusUMeters": -4.097336806047451,
+    "afterMinusTestedMeters": 0.000034150162889545754,
+    "medianDay3Meters": {
+      "XP24before": 211.81633708569754,
+      "XP24after": 152.28471250911855,
+      "XP_PRIOR24": 152.28468966599584,
+      "U24": 149.39560970520694
+    }
+  },
+  "gn24PerObject": [
+    {
+      "norad": 28874,
+      "n": 150,
+      "beforeMinusUMeters": 91.35178540487226,
+      "afterMinusUMeters": 35.33342210617794,
+      "testedMinusUMeters": 35.333403198186254,
+      "afterMinusTestedMeters": 0.00003801528276881072,
+      "medianDay3Meters": {
+        "XP24before": 219.13754181695668,
+        "XP24after": 162.25707085826468,
+        "XP_PRIOR24": 162.25703138926264,
+        "U24": 128.0804730744979
+      }
+    },
+    {
+      "norad": 37869,
+      "n": 148,
+      "beforeMinusUMeters": 75.17497759720752,
+      "afterMinusUMeters": -12.164667256688794,
+      "testedMinusUMeters": -12.164662852315217,
+      "afterMinusTestedMeters": 0.000002523425372658039,
+      "medianDay3Meters": {
+        "XP24before": 259.74226572565425,
+        "XP24after": 182.8686416345996,
+        "XP_PRIOR24": 182.86857186389693,
+        "U24": 171.43205722682956
+      }
+    },
+    {
+      "norad": 41019,
+      "n": 150,
+      "beforeMinusUMeters": -22.705507172417185,
+      "afterMinusUMeters": -47.76117382571191,
+      "testedMinusUMeters": -47.76119430947069,
+      "afterMinusTestedMeters": 0.00005403096326972445,
+      "medianDay3Meters": {
+        "XP24before": 129.9751217977293,
+        "XP24after": 114.71794292033746,
+        "XP_PRIOR24": 114.71788680612232,
+        "U24": 144.49370658525527
+      }
+    },
+    {
+      "norad": 43058,
+      "n": 150,
+      "beforeMinusUMeters": 48.88852451060511,
+      "afterMinusUMeters": -3.7105013915670924,
+      "testedMinusUMeters": -3.7105182181649212,
+      "afterMinusTestedMeters": -0.000007669685359701361,
+      "medianDay3Meters": {
+        "XP24before": 184.6787362019454,
+        "XP24after": 134.5132903224784,
+        "XP_PRIOR24": 134.51333216893192,
+        "U24": 145.61978752318112
+      }
+    },
+    {
+      "norad": 44850,
+      "n": 150,
+      "beforeMinusUMeters": 73.51885323715419,
+      "afterMinusUMeters": -9.727994060633435,
+      "testedMinusUMeters": -9.727924531018871,
+      "afterMinusTestedMeters": 0.000008133336436344507,
+      "medianDay3Meters": {
+        "XP24before": 255.3012703955996,
+        "XP24after": 179.92043685671302,
+        "XP_PRIOR24": 179.92043617355338,
+        "U24": 174.84270286470735
+      }
+    }
+  ],
+  "fidelityMaxMeters": 0,
+  "gn72": {
+    "n": 746,
+    "medianPairedChangeMeters": {
+      "1": 0,
+      "3": 0,
+      "7": 0
+    },
+    "medianDay3Meters": {
+      "before": 71.9471289247684,
+      "after": 71.9471289247684
+    }
+  }
+}
