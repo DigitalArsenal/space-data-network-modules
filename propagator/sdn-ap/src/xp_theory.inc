@@ -748,6 +748,11 @@ struct RateContext {
   int32_t sp_count;
 };
 
+inline int ap_resonance_class(const RateContext& ctx, double n) {
+  (void)ctx;
+  return res::band_of(n);
+}
+
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
 /// node's): an eccentricity above 1 (code 4), a mean motion zero or negative (9), and with drag 1 - e^2 at or below
 /// 1e-12 (10); comparisons, so a NaN passes. 0 when the state passes.
@@ -788,7 +793,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   // initialization at its time, abi.inc)
   if (ctx.res_epoch != nullptr) res::resonance_six(ctx.res_epoch, ctx.res_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
   if (ctx.ap_resonance) {
-    const int cls = res::band_of(fr.n);
+    const int cls = ap_resonance_class(ctx, fr.n);
     if (cls != 0) {
       res::ResCoef terms[29];
       const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
