@@ -46,7 +46,7 @@
   },
   "shipped": {
     "kind": "shipped",
-    "created": "2026-11-03T13:55:48.089Z",
+    "created": "2026-11-03T15:39:44.366Z",
     "forces": [
       31,
       20
@@ -58,8 +58,8 @@
         "day": 1,
         "windows": 1246,
         "samples": 116573,
-        "meanD2Over3": 0.6021220736465809,
-        "coverage95": 0.9647688572825611,
+        "meanD2Over3": 0.6009867207010242,
+        "coverage95": 0.9648460621241626,
         "required": true,
         "pass": false
       },
@@ -68,7 +68,7 @@
         "day": 2,
         "windows": 1237,
         "samples": 115824,
-        "meanD2Over3": 0.652215942390215,
+        "meanD2Over3": 0.652071607361057,
         "coverage95": 0.9813941842795967,
         "required": true,
         "pass": false
@@ -78,7 +78,7 @@
         "day": 3,
         "windows": 1219,
         "samples": 114246,
-        "meanD2Over3": 0.9624726837328618,
+        "meanD2Over3": 0.9624105086315887,
         "coverage95": 0.9927962466957267,
         "required": true,
         "pass": false
@@ -88,7 +88,7 @@
         "day": 7,
         "windows": 1208,
         "samples": 113035,
-        "meanD2Over3": 1.4774250700094964,
+        "meanD2Over3": 1.47741991939008,
         "coverage95": 0.9980713938160747,
         "required": true,
         "pass": false
@@ -98,8 +98,8 @@
         "day": 1,
         "windows": 908,
         "samples": 79392,
-        "meanD2Over3": 0.8391884047120528,
-        "coverage95": 0.942550886739218,
+        "meanD2Over3": 0.8343433952628522,
+        "coverage95": 0.9433822047561468,
         "required": true,
         "pass": true
       },
@@ -108,8 +108,8 @@
         "day": 2,
         "windows": 909,
         "samples": 79440,
-        "meanD2Over3": 1.0990085445983209,
-        "coverage95": 0.9970292044310172,
+        "meanD2Over3": 1.0968995770713927,
+        "coverage95": 0.9970669687814703,
         "required": true,
         "pass": false
       },
@@ -118,8 +118,8 @@
         "day": 3,
         "windows": 906,
         "samples": 79296,
-        "meanD2Over3": 0.5184712070103438,
-        "coverage95": 0.9975156376109766,
+        "meanD2Over3": 0.5180989624813781,
+        "coverage95": 0.9975408595641646,
         "required": true,
         "pass": false
       },
@@ -128,8 +128,8 @@
         "day": 7,
         "windows": 907,
         "samples": 79344,
-        "meanD2Over3": 1.1985417598571233,
-        "coverage95": 0.9899299253881831,
+        "meanD2Over3": 1.1980654736071903,
+        "coverage95": 0.9900181488203267,
         "required": true,
         "pass": false
       }
@@ -149,15 +149,15 @@
         "c": 0
       }
     },
-    "basisModuleSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
-    "remeasured": "2026-11-03, sdn-ap 0.4.14: the half-day class steps at most a 32nd of its resonant angle's period (SPEC 16.10); noise constants unchanged"
+    "basisModuleSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
+    "remeasured": "2026-11-03, sdn-ap 0.4.15: above e 0.3 the zonal tail carries every long-period term and the first-order tesseral set every q to |q| <= 10 (SPEC 16.11); noise constants unchanged"
   },
   "conformance": {
     "passed": true,
     "xpDigestPrefix": "72dcf6005046",
     "controlDigestPrefix": "9ecfafcd9027",
     "reproduces": "test/results/conformance.json",
-    "moduleSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646"
+    "moduleSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79"
   },
   "calibration": {
     "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
@@ -480,8 +480,8 @@
   },
   "realism": "Neither theory is inside the band at every lead; neither earns a realism label.",
   "verification": {
-    "moduleSha256": "525d57599048b7d7c178dbb9c01c7ebc1ff47936ab2e7833b6f2228eb8e44646",
-    "measured": "2026-11-03T13:55:48.089Z",
+    "moduleSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
+    "measured": "2026-11-03T15:39:44.366Z",
     "windows": 4150,
     "samples": 777150,
     "shippedTableMatches": true,
@@ -495,8 +495,8 @@
         "day": 1,
         "windows": 1246,
         "samples": 116573,
-        "meanD2Over3": 0.6021220736465809,
-        "coverage95": 0.9647688572825611,
+        "meanD2Over3": 0.6009867207010242,
+        "coverage95": 0.9648460621241626,
         "required": true,
         "pass": false
       },
@@ -505,7 +505,7 @@
         "day": 2,
         "windows": 1237,
         "samples": 115824,
-        "meanD2Over3": 0.652215942390215,
+        "meanD2Over3": 0.652071607361057,
         "coverage95": 0.9813941842795967,
         "required": true,
         "pass": false
@@ -515,7 +515,7 @@
         "day": 3,
         "windows": 1219,
         "samples": 114246,
-        "meanD2Over3": 0.9624726837328618,
+        "meanD2Over3": 0.9624105086315887,
         "coverage95": 0.9927962466957267,
         "required": true,
         "pass": false
@@ -525,7 +525,7 @@
         "day": 7,
         "windows": 1208,
         "samples": 113035,
-        "meanD2Over3": 1.4774250700094964,
+        "meanD2Over3": 1.47741991939008,
         "coverage95": 0.9980713938160747,
         "required": true,
         "pass": false
@@ -535,8 +535,8 @@
         "day": 1,
         "windows": 908,
         "samples": 79392,
-        "meanD2Over3": 0.8391884047120528,
-        "coverage95": 0.942550886739218,
+        "meanD2Over3": 0.8343433952628522,
+        "coverage95": 0.9433822047561468,
         "required": true,
         "pass": true
       },
@@ -545,8 +545,8 @@
         "day": 2,
         "windows": 909,
         "samples": 79440,
-        "meanD2Over3": 1.0990085445983209,
-        "coverage95": 0.9970292044310172,
+        "meanD2Over3": 1.0968995770713927,
+        "coverage95": 0.9970669687814703,
         "required": true,
         "pass": false
       },
@@ -555,8 +555,8 @@
         "day": 3,
         "windows": 906,
         "samples": 79296,
-        "meanD2Over3": 0.5184712070103438,
-        "coverage95": 0.9975156376109766,
+        "meanD2Over3": 0.5180989624813781,
+        "coverage95": 0.9975408595641646,
         "required": true,
         "pass": false
       },
@@ -565,8 +565,8 @@
         "day": 7,
         "windows": 907,
         "samples": 79344,
-        "meanD2Over3": 1.1985417598571233,
-        "coverage95": 0.9899299253881831,
+        "meanD2Over3": 1.1980654736071903,
+        "coverage95": 0.9900181488203267,
         "required": true,
         "pass": false
       }
