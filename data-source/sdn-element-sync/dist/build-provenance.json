@@ -1,0 +1,9 @@
+{
+  "sdk": "0.9.12",
+  "spacedatastandards": "1.276.0",
+  "threadModel": "wasi-sequential",
+  "language": "c++",
+  "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
+  "sha256": "37f0ea34ccc2bf7b90de6bdffa1f3d47b954eef7388f0b374ff6e5ca42712897",
+  "bytes": 175528
+}

@@ -1,9 +1,11 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import {inspect} from 'node:util';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
 import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
+import {buildProvenance} from './provenance.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
 // QRP, OMM, OCM and PNV with every family they include (OMM pulls PVN, CVR, RFM, ...; OCM PCF, PRW, SPW, ...), generated once and inlined.
@@ -23,4 +25,6 @@ const {format,language,threadModel,symbolPrefix,methodSymbols}=result.guestLink;
 const symbols=Object.entries(methodSymbols).map(([k,v])=>`    "${k}": "${v}"`).join(',\n');
 await fs.writeFile(path.join(guest,'metadata.json'),`{\n  "version": 1,\n  "format": "${format}",\n  "language": "${language}",\n  "threadModel": "${threadModel}",\n  "symbolPrefix": "${symbolPrefix}",\n  "methodSymbols": {\n${symbols}\n  }\n}\n`);
 await fs.copyFile(path.join(root,'plugin-manifest.json'),path.join(root,'dist/plugin-manifest.json'));
+const installed=name=>JSON.parse(fsSync.readFileSync(path.join(root,'node_modules',name,'package.json'),'utf8')).version;
+await fs.writeFile(path.join(root,'dist/build-provenance.json'),buildProvenance({sdk:installed('space-data-module-sdk'),spacedatastandards:installed('spacedatastandards.org'),compiler:result.compiler,threadModel:result.threadModel,language:result.language,bytes:result.wasmBytes}));
 console.log(`PASS SDK build ${manifest.pluginId} -> dist/isomorphic/module.wasm`);

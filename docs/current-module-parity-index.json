@@ -1,9 +1,11 @@
 {
-  "generatedAt": "2026-10-30T07:23:27.752Z",
-  "moduleCount": 150,
+  "generatedAt": "2026-11-04T18:29:58.895Z",
+  "moduleCount": 157,
   "parityScopeModuleCount": 59,
-  "isomorphicWasmCount": 145,
-  "missingIsomorphicWasm": [],
+  "isomorphicWasmCount": 151,
+  "missingIsomorphicWasm": [
+    "flows/observation-ap"
+  ],
   "buildsOnDemand": [
     "analysis/milky-way-model",
     "data-source/dust-map-3d/host-adapter",
@@ -11,7 +13,7 @@
     "data-source/gaia-octree/cones",
     "data-source/gaia-octree"
   ],
-  "browserWasmEdgeTargetCount": 135,
+  "browserWasmEdgeTargetCount": 141,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -192,7 +194,7 @@
       ],
       "cxxSourceFileCount": 8,
       "cSourceFileCount": 0,
-      "testFileCount": 22,
+      "testFileCount": 29,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -214,14 +216,21 @@
         "tests/epoch-fit.test.mjs",
         "tests/epoch-fixture.mjs",
         "tests/ffm-epoch-runner.mjs",
+        "tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm",
+        "tests/fixtures/ocm-sets.before.json",
         "tests/integrator-chain.test.mjs",
         "tests/integrator-fixtures.mjs",
         "tests/integrator.test.mjs",
         "tests/matching-fixture.mjs",
         "tests/matching.test.mjs",
+        "tests/ocm-sets-chain.mjs",
+        "tests/ocm-sets-inputs.mjs",
+        "tests/ocm-sets.e2e.mjs",
         "tests/parity.test.mjs",
         "tests/read-page.test.mjs",
         "tests/recipe.test.mjs",
+        "tests/record-ap-ocm.mjs",
+        "tests/record-ocm-sets-before.mjs",
         "tests/review.test.mjs",
         "tests/sdk_compat.test.mjs",
         "tests/unified-search-e2e.mjs",
@@ -235,7 +244,7 @@
       "pluginId": "com.orbpro.catalog-synthesis",
       "name": "Supplemental Catalog Synthesis",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "synthesize_catalog"
       ],
@@ -252,7 +261,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 4,
+      "testFileCount": 7,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -260,9 +269,12 @@
       ],
       "testFiles": [
         "test/fixtures/PROVENANCE.md",
+        "test/fixtures/pvn-labels.before.json",
+        "test/fixtures/pvn-labels.mjs",
         "test/fixtures/reference-elements.csv",
         "test/fixtures/spacetrack-gp-current-sample.json",
-        "test/module.test.mjs"
+        "test/module.test.mjs",
+        "test/pvn-labels.e2e.mjs"
       ]
     },
     {
@@ -888,7 +900,7 @@
       ],
       "cxxSourceFileCount": 10,
       "cSourceFileCount": 0,
-      "testFileCount": 15,
+      "testFileCount": 16,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -912,6 +924,7 @@
         "tests/fit-reference.py",
         "tests/fit_elements.test.mjs",
         "tests/gp_error_model.test.mjs",
+        "tests/inflate-only.e2e.mjs",
         "tests/object_covariance.test.mjs",
         "tests/parity.mjs",
         "tests/products-fixtures.mjs",
@@ -1380,12 +1393,13 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 30,
+      "cxxSourceFileCount": 31,
       "cSourceFileCount": 0,
-      "testFileCount": 66,
+      "testFileCount": 68,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
+        ".build-operator/erfa.cpp",
         "fit-pipeline/src/fit_pipeline.cpp",
         "src/cpp/src/direct_initialize.cpp",
         "src/cpp/src/frame_transform.cpp",
@@ -1474,8 +1488,10 @@
         "tests/fit_convergence.sh",
         "tests/fit_harness.mjs",
         "tests/fixtures/hosted-runtime/od.single-plugin.flow.json",
+        "tests/fixtures/ocm-typed.recorded.json",
         "tests/fixtures/request.fit.meme",
         "tests/gen_oem_fixtures.cpp",
+        "tests/ocm-typed.e2e.mjs",
         "tests/ocm_emission.test.mjs",
         "tests/parity_alpha5.mjs",
         "tests/sdk_compat.test.mjs",
@@ -1493,6 +1509,7 @@
       "pluginFamily": "analysis",
       "version": "0.1.0",
       "methodIds": [
+        "initial_orbit",
         "reduce"
       ],
       "runtimeTargets": [
@@ -1692,15 +1709,17 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 2,
+      "testFileCount": 4,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/reference_states.cpp"
       ],
       "testFiles": [
+        "tests/fetch-offline.e2e.mjs",
         "tests/parity.mjs",
-        "tests/reference_states.test.mjs"
+        "tests/reference_states.test.mjs",
+        "tests/waas-mt9.e2e.mjs"
       ]
     },
     {
@@ -1758,7 +1777,7 @@
       ],
       "cxxSourceFileCount": 10,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 7,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -1776,7 +1795,11 @@
       "testFiles": [
         "tests/cosmos2612-iceye-x36.e2e.mjs",
         "tests/figures.mjs",
-        "tests/inspect.e2e.mjs"
+        "tests/fixture-runs.mjs",
+        "tests/fixtures/free-form.json",
+        "tests/inspect.e2e.mjs",
+        "tests/record-free-form.mjs",
+        "tests/typed-records.e2e.mjs"
       ]
     },
     {
@@ -1877,15 +1900,18 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 6,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/vcm_adapter_module.cpp"
       ],
       "testFiles": [
+        "tests/fixtures/sample-vcm.rebuilt.txt",
         "tests/fixtures/sample-vcm.txt",
+        "tests/fixtures/vcm-round-trip.recorded.json",
         "tests/parity.mjs",
+        "tests/vcm-round-trip.e2e.mjs",
         "tests/vcm_adapter.test.mjs"
       ]
     },
@@ -2236,7 +2262,7 @@
       "pluginId": "com.orbpro.celestrak-supgp",
       "name": "CelesTrak SupGP (multi-provider supplemental OMM) Data Source",
       "pluginFamily": "data_source",
-      "version": "1.1.0",
+      "version": "2.0.0",
       "methodIds": [
         "parse",
         "request"
@@ -2254,7 +2280,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 11,
+      "testFileCount": 14,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2271,7 +2297,10 @@
         "test/fixtures/SES-E.trimmed.json",
         "test/fixtures/Telesat.trimmed.json",
         "test/fixtures/make-synthetic.mjs",
-        "test/module.test.mjs"
+        "test/fixtures/pvn-labels.before.json",
+        "test/fixtures/pvn-labels.mjs",
+        "test/module.test.mjs",
+        "test/pvn-labels.e2e.mjs"
       ]
     },
     {
@@ -2580,7 +2609,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 9,
+      "testFileCount": 10,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2592,6 +2621,7 @@
         "tests/fixtures/eopc04_IAU2000.62-now.excerpt.txt",
         "tests/fixtures/finals2000A.all.excerpt.txt",
         "tests/fixtures/provenance.json",
+        "tests/frames.mjs",
         "tests/full-source-smoke.mjs",
         "tests/harness.mjs",
         "tests/parity.test.mjs",
@@ -3090,6 +3120,40 @@
       ]
     },
     {
+      "modulePath": "data-source/ilrs-station-coordinates",
+      "pluginId": "com.digitalarsenal.data-source.ilrs-station-coordinates",
+      "name": "ILRS Station Coordinates",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "read_sinex"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/ilrs_station_coordinates.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/ilrsa.pos+eop.260718.v90.no-matrix.snx",
+        "tests/sinex.e2e.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/imager-observation-parser",
       "pluginId": "com.digitalarsenal.data-source.imager-observation-parser",
       "name": "Geostationary Imager Observation Parser Node",
@@ -3396,6 +3460,61 @@
         "tests/fixtures/astorb-2026-10-12-neo.dat",
         "tests/lowell-astorb.e2e.test.mjs",
         "tests/parity.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/lvdb-source",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "name": "Local Volume Database",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "parse_catalog",
+        "plan_catalog",
+        "plan_release"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 22,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/NATIVE-VERIFICATION.md",
+        "tests/VERIFICATION.md",
+        "tests/fixtures/comb_all.ecsv",
+        "tests/fixtures/data_input/antlia_2.yaml",
+        "tests/fixtures/data_input/aquarius_3.yaml",
+        "tests/fixtures/data_input/eso_383-087.yaml",
+        "tests/fixtures/data_input/fornax_1-gc6.yaml",
+        "tests/fixtures/data_input/garro_1.yaml",
+        "tests/fixtures/data_input/sagittarius_2.yaml",
+        "tests/fixtures/data_input/ugc_02716.yaml",
+        "tests/fixtures/j_factor.csv",
+        "tests/fixtures/pm_overview.csv",
+        "tests/fixtures/provenance.tsv",
+        "tests/fixtures/release_version.txt",
+        "tests/flow-replay.mjs",
+        "tests/local-node.mjs",
+        "tests/lvdb-source.e2e.mjs",
+        "tests/native-publication.mjs",
+        "tests/readback-series.mjs",
+        "tests/sdk_compat.test.mjs",
+        "tests/source-oracle.mjs",
+        "tests/sources.mjs"
       ]
     },
     {
@@ -3897,6 +4016,43 @@
       ]
     },
     {
+      "modulePath": "data-source/satnogs-optical-source",
+      "pluginId": "com.digitalarsenal.data-source.satnogs-optical-source",
+      "name": "SatNOGS Optical Source",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "read_station_night"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/satnogs_optical_source.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/cut.mjs",
+        "tests/fixtures/satnogs-optical-2026-09-21-66514.parquet",
+        "tests/fixtures/station-11.json",
+        "tests/parquet.mjs",
+        "tests/source.e2e.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/satnogs-source",
       "pluginId": "com.digitalarsenal.data-source.satnogs-source",
       "name": "SatNOGS DB RF Transmitter Source Nodes",
@@ -3937,7 +4093,7 @@
       "pluginId": "com.digitalarsenal.data-source.sdn-element-sync",
       "name": "sdn-element-sync",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "methodIds": [
         "merge"
       ],
@@ -3954,13 +4110,21 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 9,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/module.cpp"
       ],
       "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/ap.ocm",
+        "tests/fixtures/merge-before.json",
+        "tests/fixtures/notice.pnv",
+        "tests/fixtures/record.mjs",
+        "tests/fixtures/sgp4.omm",
+        "tests/fixtures/xp.ocm",
+        "tests/ocm-lane.e2e.mjs",
         "tests/sync.e2e.mjs"
       ]
     },
@@ -4081,7 +4245,7 @@
       "pluginId": "com.digitalarsenal.data-source.spacemapper-aoe-source",
       "name": "SpaceMapper AOE Source",
       "pluginFamily": "data_source",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "parse_aoe"
       ],
@@ -4098,7 +4262,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -4106,8 +4270,11 @@
       ],
       "testFiles": [
         "tests/fixtures/aoe-format.mjs",
+        "tests/fixtures/pvn-labels.before.json",
+        "tests/fixtures/pvn-labels.mjs",
         "tests/module.test.mjs",
-        "tests/parity.test.mjs"
+        "tests/parity.test.mjs",
+        "tests/pvn-labels.e2e.mjs"
       ]
     },
     {
@@ -4115,7 +4282,7 @@
       "pluginId": "com.digitalarsenal.data-source.spacetrack-source",
       "name": "Space-Track Source",
       "pluginFamily": "data_source",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "parse_gp",
         "parse_satcat"
@@ -4133,16 +4300,19 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 3,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
         "src/spacetrack_source.cpp"
       ],
       "testFiles": [
+        "tests/fixtures/pvn-labels.before.json",
+        "tests/fixtures/pvn-labels.mjs",
         "tests/fixtures/spacetrack-format.mjs",
         "tests/module.test.mjs",
-        "tests/parity.test.mjs"
+        "tests/parity.test.mjs",
+        "tests/pvn-labels.e2e.mjs"
       ]
     },
     {
@@ -4252,6 +4422,66 @@
         "tests/mixed_segment_kernel.test.mjs",
         "tests/module_abi.test.mjs",
         "tests/wasmedge_abi_host.c"
+      ]
+    },
+    {
+      "modulePath": "data-source/swpc-realtime",
+      "pluginId": "com.digitalarsenal.data-source.swpc-realtime",
+      "name": "NOAA SWPC real-time",
+      "pluginFamily": "data_source",
+      "version": "0.2.0",
+      "methodIds": [
+        "parse_sfe",
+        "parse_swa",
+        "parse_sws",
+        "plan_sfe",
+        "plan_swa",
+        "plan_sws"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 24,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/module.cpp"
+      ],
+      "testFiles": [
+        "tests/VERIFICATION.md",
+        "tests/capture.py",
+        "tests/config.test.mjs",
+        "tests/fixtures/alerts.json",
+        "tests/fixtures/integral-electrons-7-day.json",
+        "tests/fixtures/integral-protons-7-day.json",
+        "tests/fixtures/noaa-planetary-k-index-forecast.json",
+        "tests/fixtures/planetary_k_index_1m.json",
+        "tests/fixtures/propagated-solar-wind-1-hour.json",
+        "tests/fixtures/provenance.json",
+        "tests/fixtures/rtsw_ephemerides_1h.json",
+        "tests/fixtures/rtsw_mag_1m.json",
+        "tests/fixtures/rtsw_wind_1m.json",
+        "tests/fixtures/xray-flares-7-day.json",
+        "tests/fixtures/xrays-7-day.json",
+        "tests/flow.test.mjs",
+        "tests/live-source.mjs",
+        "tests/local-node.mjs",
+        "tests/native-publication.mjs",
+        "tests/preserve-wip.py",
+        "tests/refusals.test.mjs",
+        "tests/sdk_compat.test.mjs",
+        "tests/source-oracle.mjs",
+        "tests/swpc-realtime.e2e.mjs"
       ]
     },
     {
@@ -4962,6 +5192,41 @@
       ]
     },
     {
+      "modulePath": "flows/angles-only-od",
+      "pluginId": "org.sdn.flows.angles-only-od",
+      "name": "Angles-only orbit determination",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "plan",
+        "select"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/angles_od.cpp"
+      ],
+      "testFiles": [
+        "tests/angles-od.e2e.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/finals-daily-20260918-20261002.txt"
+      ]
+    },
+    {
       "modulePath": "flows/eop",
       "pluginId": "com.digitalarsenal.flows.eop.lane",
       "name": "Earth orientation lane glue",
@@ -5029,11 +5294,72 @@
       ]
     },
     {
+      "modulePath": "flows/observation-ap",
+      "pluginId": "org.sdn.flows.observation-ap",
+      "name": "Observation AP: laser normal points to an AP $OCM",
+      "pluginFamily": "analysis",
+      "version": "0.1.0",
+      "methodIds": [
+        "run"
+      ],
+      "runtimeTargets": [],
+      "hasBrowserWasmEdgeTargets": false,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": false,
+      "buildsOnDemand": false,
+      "sourceLanguages": [],
+      "cxxSourceFileCount": 0,
+      "cSourceFileCount": 0,
+      "testFileCount": 1,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [],
+      "testFiles": [
+        "tests/laser-ap.e2e.mjs"
+      ]
+    },
+    {
+      "modulePath": "flows/observation-od",
+      "pluginId": "org.sdn.flows.observation-od.laser-od",
+      "name": "Laser orbit determination",
+      "pluginFamily": "analysis",
+      "version": "0.2.0",
+      "methodIds": [
+        "step"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 5,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/laser_od.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/cut-crd.mjs",
+        "tests/fixtures/eopc04-20260710-20260720.txt",
+        "tests/fixtures/starlette-20260713T15-20260715T15.np2",
+        "tests/laser-od.e2e.mjs"
+      ]
+    },
+    {
       "modulePath": "flows/supplemental-omm/nodes/od",
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "name": "Supplemental OMM Orbit Determination",
       "pluginFamily": "orbit_determination",
-      "version": "2.0.2",
+      "version": "2.1.1",
       "methodIds": [
         "fit",
         "publish_request"
@@ -6183,13 +6509,14 @@
       "pluginId": "com.orbpro.ffm",
       "name": "FFM Full Force Model propagator",
       "pluginFamily": "propagator",
-      "version": "2.0.4",
+      "version": "2.1.0",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
         "ingest_state_gravity_only",
         "invoke",
         "prepare_trajectory_segments",
+        "propagate_oem",
         "propagate_state"
       ],
       "runtimeTargets": [
@@ -6206,7 +6533,7 @@
       ],
       "cxxSourceFileCount": 57,
       "cSourceFileCount": 1,
-      "testFileCount": 602,
+      "testFileCount": 604,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -6758,6 +7085,7 @@
         "tests/generated/sds/pcfNeutralWind.js",
         "tests/generated/sds/pcfOceanTideModel.js",
         "tests/generated/sds/pcfOutputFrame.js",
+        "tests/generated/sds/pcfPriorForm.js",
         "tests/generated/sds/pcfRadiationPressureFamily.js",
         "tests/generated/sds/pcfRelativityTerms.js",
         "tests/generated/sds/pcfSolidTideModel.js",
@@ -6828,6 +7156,7 @@
         "tests/planetary-degree-sweep.mjs",
         "tests/planetary.e2e.mjs",
         "tests/planetary_native.cpp",
+        "tests/propagate-oem.e2e.mjs",
         "tests/prw-contract-fixture.mjs",
         "tests/prw-earth-radiation-tides-parity.mjs",
         "tests/prw-gnss-parity.mjs",
@@ -7014,8 +7343,9 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.2.0",
+      "version": "0.5.1",
       "methodIds": [
+        "export_omm",
         "fit",
         "ingest_omm",
         "load_epochs",
@@ -7036,31 +7366,77 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 30,
+      "testFileCount": 113,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/sdn_ap_module.cpp"
       ],
       "testFiles": [
+        "test/ap-terms.e2e.mjs",
         "test/atmosphere.e2e.mjs",
         "test/bench.mjs",
+        "test/class-crossing.e2e.mjs",
         "test/conformance.e2e.mjs",
         "test/covariance-realism.mjs",
         "test/covariance.e2e.mjs",
+        "test/drag-cost.mjs",
+        "test/drag-high-eccentricity.e2e.mjs",
+        "test/drag-isolation-job.mjs",
+        "test/drag-isolation-report.mjs",
+        "test/drag-orbit-check.mjs",
+        "test/drag-pass-work.mjs",
+        "test/drag-prior-fallback.e2e.mjs",
         "test/epoch-store.e2e.mjs",
+        "test/etalon-resonance.e2e.mjs",
         "test/exports.e2e.mjs",
+        "test/fit-bterm-700-1400-km.e2e.mjs",
+        "test/fit-per-object-prior-multi.e2e.mjs",
+        "test/fit-short-arc-priors.e2e.mjs",
         "test/fit.e2e.mjs",
+        "test/fixtures/ap-fit-0.4.0.epochs.oem",
+        "test/fixtures/ap-fit-0.4.0.oem",
+        "test/fixtures/ap-fit-0.4.0.omm",
+        "test/fixtures/ffm-leo-550km-53deg.json.gz",
+        "test/fixtures/ffm-meo-19100km-65deg.json.gz",
+        "test/fixtures/xp-fit-0.4.0.cov",
+        "test/fixtures/xp-fit-0.4.0.omm",
+        "test/geo-step-convergence.e2e.mjs",
+        "test/gto-geopotential-perigee.e2e.mjs",
+        "test/gto-high-degree-perigee-terms.e2e.mjs",
+        "test/heo-frame.e2e.mjs",
+        "test/heo-model-truth.e2e.mjs",
+        "test/high-e-fit-arc.e2e.mjs",
+        "test/lib/ap-diagnostic.mjs",
+        "test/lib/calibration-replay.mjs",
+        "test/lib/experiments.mjs",
+        "test/lib/fixture-inputs.mjs",
         "test/lib/frames.mjs",
+        "test/lib/geo-window-confirmation.mjs",
+        "test/lib/gn-short-arc-windows.mjs",
+        "test/lib/heo-model-truth-0.4.mjs",
+        "test/lib/heo-model-truth.mjs",
         "test/lib/module.mjs",
+        "test/lib/ocm.mjs",
         "test/lib/oracle.mjs",
         "test/lib/pcf.mjs",
+        "test/lib/regime-windows.mjs",
+        "test/lib/synthetic-truth-0.4.mjs",
+        "test/lib/synthetic-truth.mjs",
+        "test/lib/tess-frame-windows.mjs",
         "test/lib/tle.mjs",
         "test/maneuver.e2e.mjs",
+        "test/pvn-carry.e2e.mjs",
         "test/results/bench.json",
+        "test/results/class-crossing.json",
         "test/results/conformance.json",
+        "test/results/covariance-ap-calibration.json",
         "test/results/covariance-calibration-sgp4xp.json",
         "test/results/covariance-realism-sgp4xp.json",
+        "test/results/fit-short-arc-priors.json",
+        "test/results/geo-step-convergence.json",
+        "test/results/heo-frame.json",
+        "test/results/heo-model-truth.json",
         "test/results/open-outliers.md",
         "test/rigor/README.md",
         "test/rigor/data/aiaa-2006-6753.json",
@@ -7072,6 +7448,43 @@
         "test/rigor/lib/rigor.mjs",
         "test/rigor/run.mjs",
         "test/rigor/vallado.mjs",
+        "test/third-body-short-period-eccentric.e2e.mjs",
+        "test/twelve-hour-class-terms.e2e.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/PROVENANCE.md",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/e2-catalog-covariance/estimation-wire.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/e2-catalog-covariance/ffm.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/e2-catalog-covariance/product.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/ffm-atmosphere-xm3/build.json",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/ffm-atmosphere-xm3/common.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/ffm-atmosphere-xm3/config.json",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/operator-theory/lib/ap.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/operator-theory/lib/fit.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/operator-theory/lib/frame.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/operator-theory/lib/host.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/operator-theory/lib/regimes.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/common.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/config.json",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/containers.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/frames.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/modules.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/sds.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/sources.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/spk-sources.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/timeconv.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/sdn-gp-starlink-ffm-match/lib/windows.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/build.json",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/common.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/config.json",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/lib/modules.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/lib/sds.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/lib/truth.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/lib/weather.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp2-fit-design/build.json",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp2-fit-design/common.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp2-fit-design/config.json",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/prw.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/records.mjs",
+        "test/vendor/orbit-accuracy-experiments-c89f2bc/harness/truth-gate.mjs",
         "test/wasmedge-parity.mjs"
       ]
     },
@@ -7080,7 +7493,7 @@
       "pluginId": "com.digitalarsenal.propagator.sgp4-xp",
       "name": "SGP4-XP propagator and fitter (US Space Force Sgp4Prop)",
       "pluginFamily": "propagator",
-      "version": "0.1.1",
+      "version": "0.2.1",
       "methodIds": [
         "fit",
         "ingest_omm",
@@ -7099,7 +7512,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 22,
+      "testFileCount": 30,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7108,6 +7521,13 @@
       "testFiles": [
         "tests/artifact.test.mjs",
         "tests/fit.test.mjs",
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/geo-real-sets.json",
+        "tests/fixtures/record.mjs",
+        "tests/fixtures/xp-fit-current.ocm",
+        "tests/fixtures/xp-fit-current.oem",
+        "tests/fixtures/xp-fit-current.omm",
+        "tests/flight-parity-real-sets.e2e.mjs",
         "tests/lib/module.mjs",
         "tests/lib/oemkvn.mjs",
         "tests/lib/sds.mjs",
@@ -7126,6 +7546,7 @@
         "tests/measure/resummarize.mjs",
         "tests/measure/run.mjs",
         "tests/measure/tables.mjs",
+        "tests/ocm-record.e2e.mjs",
         "tests/parity.mjs",
         "tests/ussf_parity.test.mjs"
       ]

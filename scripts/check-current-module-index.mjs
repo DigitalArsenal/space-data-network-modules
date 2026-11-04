@@ -28,7 +28,13 @@ assert.deepEqual(checked.parityScopeTargetGaps, current.parityScopeTargetGaps, "
 assert.ok(checked.moduleCount >= 31, "current module inventory is unexpectedly small");
 assert.ok(checked.parityScopeModuleCount >= 14, "parity-scope module inventory is unexpectedly small");
 assert.ok(checked.isomorphicWasmCount >= 29, "isomorphic module inventory is unexpectedly small");
-assert.deepEqual(checked.missingIsomorphicWasm.sort(), []);
+// A flow package that is source (package.json main) and has no wasm of its own: it is composed from modules at ingress and bakes no artifact.
+const sourceFlows = ["flows/observation-ap"];
+for (const modulePath of sourceFlows) {
+  const main = JSON.parse(fs.readFileSync(path.join(repoRoot, modulePath, "package.json"), "utf8")).main;
+  assert.ok(main && fs.existsSync(path.join(repoRoot, modulePath, main)), `${modulePath} is listed as a source flow but has no main file`);
+}
+assert.deepEqual(checked.missingIsomorphicWasm.sort(), sourceFlows);
 // A module with no committed artifact builds one: it, or the module it sits under, has a build script.
 for (const modulePath of checked.buildsOnDemand) {
   let directory = path.join(repoRoot, modulePath);
