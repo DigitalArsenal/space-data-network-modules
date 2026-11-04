@@ -36,7 +36,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   CALIBRATOR, TARGET, FIRST_FRAME, CONFIG, VIDEO_SHA256, T, iso, sds, bb, each, one, ommRecord, filRecord, stream, loadModule, outputsOf,
-  answered, reduceAll, videoRun,
+  answered, reduceAll, videoRun, TYPE,
 } from './s2a-run.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -91,9 +91,12 @@ const calChi2 = Number(field(calib, 'chi2_per_dof'));
 check('calibrator ICEYE-X36: observed-minus-computed consistent with the stated uncertainty (chi2/dof <= 2)', calChi2 > 0 && calChi2 <= 2 &&
   Number(field(calib, 'fit_rms_arcsec')) <= 5, calib);
 
-// 4. The COSMOS 2612 orbit.
-const odRms = Number(targetItem(rep, 'OD_RMS_ARCSEC')), odChi2 = Number(targetItem(rep, 'OD_CHI2_PER_DOF'));
-check('COSMOS 2612 OD: residual rms <= 5 arcsec, chi2/dof <= 2', odRms <= 5 && odChi2 <= 2, `rms ${odRms} arcsec, chi2/dof ${odChi2}; ${targetItem(rep, 'TRACK')}`);
+// 4. The COSMOS 2612 orbit (its $OCM's ORBIT_DETERMINATION).
+const orbitOd = (r) => each(outputsOf(r, 'orbit')[0], (x) => OCM.OCM.getSizePrefixedRootAsOCM(x)).find((o) => o.METADATA.OBJECT_DESIGNATOR === String(TARGET))?.ORBIT_DETERMINATION;
+const tOd = orbitOd(video.r);
+const odRms = tOd.OD_RESIDUAL_RMS, odChi2 = tOd.WEIGHTED_RMS ** 2;
+check('COSMOS 2612 OD: residual rms <= 5 arcsec, chi2/dof <= 2', odRms <= 5 && odChi2 <= 2,
+  `rms ${odRms.toFixed(2)} arcsec, chi2/dof ${odChi2.toFixed(3)}; ${tOd.OBS_AVAILABLE} observations, ${tOd.OD_OBSERVATIONS_USED} used`);
 for (const k of ['PRIOR', 'PRIOR_O_MINUS_C_MEDIAN_ARCSEC', 'OD_MINUS_PRIOR_RTN_KM', 'SIGMA_TOTAL_RTN_KM', 'IOD', 'SEPARATION_FROM_CALIBRATOR_KM']) note(`${k}: ${targetItem(rep, k)}`);
 const tLast = T(FIRST_FRAME) + 120;
 const checks = rep.ITEMS.filter((s) => s.startsWith(`target ${TARGET} CHECK `)).map((s) => {
@@ -152,9 +155,8 @@ async function rpoRange(chaserRecord) {
   await rpo.destroy();
   const rows = [];
   for (const rec of each(outputsOf(second, 'geometry')[0], (x) => OCM.OCM.getSizePrefixedRootAsOCM(x))) {
-    const udp = Object.fromEntries(rec.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
-    const cols = udp.COLUMNS.split(','), w = rec.STATE_VECTOR_SIZE, start = T(rec.METADATA.START_TIME), k = cols.indexOf('SEPARATION_KM');
-    for (let i = 0; i * w < rec.STATE_DATA.length; i++) rows.push({ t: start + i * rec.STATE_STEP_SIZE, sep: rec.STATE_DATA[i * w + k], r: rec.STATE_DATA[i * w], it: rec.STATE_DATA[i * w + 1], c: rec.STATE_DATA[i * w + 2] });
+    const g = rec.RPO_GEOMETRY, start = T(rec.METADATA.START_TIME);
+    for (let i = 0; i < g.SEPARATION_KM.length; i++) rows.push({ t: start + i * rec.STATE_STEP_SIZE, sep: g.SEPARATION_KM[i], r: g.R_KM[i], it: g.I_KM[i], c: g.C_KM[i] });
   }
   return rows;
 }
@@ -202,10 +204,10 @@ const fitsRun = await reduceAll(epochState, fitsInputs, { ...known, time_referen
 const fr = fitsRun.report;
 const fPlates = item(fr, 'plates '), fBias = item(fr, 'time_bias_s='), fCal = item(fr, 'calibrator ');
 const bias = nums(fBias.split('=')[1].split(' ')[0].replace('+-', ','));
-const fOd = Number((item(fr, `target ${TARGET} OD_RMS_ARCSEC=`).split('=')[1]));
+const fOd = orbitOd(fitsRun.r).OD_RESIDUAL_RMS;
 check('FITS path: DATE-OBS frames reduce with the site from the headers; the time bias comes back zero', item(fr, 'timing=').includes('FITS DATE-OBS') &&
   item(fr, 'site ').includes('given') && Number(field(fPlates, 'median_residual_arcsec')) <= 5 && Math.abs(bias[0]) <= 3 * bias[1] + 0.01 &&
-  Number(field(fCal, 'chi2_per_dof')) <= 2 && fOd <= 5, `${fitsInputs.length} FITS frames; ${fPlates.split(' scale')[0]}; ${fBias}; calibrator chi2/dof ${field(fCal, 'chi2_per_dof')}; COSMOS 2612 OD rms ${fOd} arcsec`);
+  Number(field(fCal, 'chi2_per_dof')) <= 2 && fOd <= 5, `${fitsInputs.length} FITS frames; ${fPlates.split(' scale')[0]}; ${fBias}; calibrator chi2/dof ${field(fCal, 'chi2_per_dof')}; COSMOS 2612 OD rms ${fOd.toFixed(2)} arcsec`);
 await epochState.destroy();
 
 fs.writeFileSync(path.join(OUT, 'evidence.json'), JSON.stringify({ results, passes: video.passes, fitsPasses: fitsRun.passes, truth: truthSummary,
