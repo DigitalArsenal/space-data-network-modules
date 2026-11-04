@@ -18,10 +18,10 @@ deprecated: the `$OCM` carries everything a VCM does.
 Typed contracts 1.0: every port is one FlatBuffer type. The settings are node
 config (`plugin.getConfig`, one ModuleConfig): table `read` (the read options
 below), table `header` (the `ocm` header: identity, model lines, parameter
-values, space weather, integrator lines, `weightedRms`, `covarianceScale`,
-`meanMotionUnit`, `parameterRows`) and table `write` (`meanMotionUnit`,
-`parameterRows`, `covarianceScale`). Values are strings, numbers or booleans;
-unknown read/write keys are refused. `read`'s report is a FlowNotice Info:
+values, space weather, integrator lines, `weightedRms`, `covarianceScale`;
+`meanMotionUnit`, `parameterRows` and `centerOfMassOffset` are refused) and table
+`write` (`meanMotionUnit`, `parameterRows`, `covarianceScale`). Values are
+strings, numbers or booleans; unknown read/write keys are refused. `read`'s report is a FlowNotice Info:
 SCHEMA `OCM.fbs`, SOURCE_NAME the satellite number, COUNT the covariance
 size, REASON the notes, ITEMS `key=value` lines (numbers `%.17g`, lists
 space-separated, one `parameterSigma=<name> <unit> <value> <sigma>` per
@@ -69,27 +69,31 @@ the builder `analysis/od` writes its fits' OCMs with.
 | VCM | OCM |
 | --- | --- |
 | message time, center | `HEADER.CREATION_DATE`, `HEADER.ORIGINATOR` |
+| Real/Test/Exercise indicator | `HEADER.MESSAGE_STATUS` (REAL, TEST, EXERCISE; UNSPECIFIED when the line is empty), `EXERCISE_NAME` |
 | satellite number, int. des., common name | `METADATA.OBJECT_DESIGNATOR` (CATALOG_NAME `SATCAT`), `INTERNATIONAL_DESIGNATOR`, `OBJECT_NAME` |
 | epoch (UTC), epoch rev | `METADATA` START_TIME, STOP_TIME, EPOCH_TZERO; `ORB_REVNUM` |
 | J2K position and velocity | `STATE_DATA` (km, km/s), `TRAJ_REF_FRAME` EME2000, `CENTER_NAME` EARTH |
-| covariance | `COVARIANCE_DATA`: Cartesian, `COV_TYPE` CARTPV, `COV_ORDERING` LTM, `COV_SIZE` 6 plus the parameter rows, `COV_PARAMETERS` naming them, `COV_UNITS`, `COV_REF_FRAME` EME2000; scaled by the weighted RMS as the message's sigmas are (`COVARIANCE_SCALE`) |
-| B, BDOT, AGOM, THRUST ACCEL | `ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS` (DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION, each with its value, units and whether the fit solved for it); thrust only when IN-TRACK THRUST is ON |
+| covariance | `COVARIANCE_DATA`: Cartesian, `COV_TYPE` CARTPV, `COV_ORDERING` LTM, `COV_SIZE` 6 plus the parameter rows, `COV_PARAMETER_KINDS` naming them (`COV_PARAMETERS` their names), `COV_UNITS`, `COV_REF_FRAME` EME2000; scaled by the weighted RMS as the message's sigmas are (`COV_REALISM[0]`: RULE ScaledFit, `SCALE_FACTOR`) |
+| B, BDOT, AGOM, THRUST ACCEL | `ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS` by `PARAMETER` (DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION, each with its value, units and whether the fit solved for it); thrust only when IN-TRACK THRUST is ON |
 | WTD RMS, EDR | `WEIGHTED_RMS`, `SEDR` |
-| geopotential, drag, lunar/solar, solar radiation pressure, solid earth tides, F10, average F10, average AP | `PERTURBATIONS`: `GEOPOTENTIAL_MODEL` (`EGM-96 70Z,70T`), `GRAVITY_MODEL`, `GRAVITY_DEGREE`, `GRAVITY_ORDER`, `ATMOSPHERIC_DRAG`, `N_BODY_PERTURBATIONS`, `SOLAR_RAD_PRESSURE`, `SOLID_TIDES_MODEL`, `FIXED_F10P7`, `FIXED_F10P7_MEAN`, `FIXED_GEOMAG_AP`, `GM` |
-| TAI-UTC, UT1-UTC, leap second time | `METADATA.TAIMUTC_AT_TZERO`, `UT1MUTC_AT_TZERO`, `NEXT_LEAP_EPOCH` |
+| geopotential, drag, lunar/solar, solar radiation pressure, solid earth tides, F10, average F10, average AP | `PERTURBATIONS`: `GRAVITY_MODEL` (`EGM-96`) with `MAXIMUM_ZONAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` (the message's `70Z,70T`), `ATMOSPHERIC_DRAG`, `N_BODY_PERTURBATIONS`, `SOLAR_RAD_PRESSURE`, `SOLID_TIDES_MODEL`, `FIXED_F10P7`, `FIXED_F10P7_MEAN`, `FIXED_GEOMAG_AP`, `GM` |
+| TAI-UTC, UT1-UTC, leap second time | `METADATA.TAIMUTC_AT_TZERO`, `UT1MUTC_AT_TZERO`; `NEXT_LEAP_EPOCH` when the leap second lies after the epoch (SP's 2049 "unknown" is none) |
 | UT1 rate, polar motion | the `$EOP` records (LOD, X and Y pole) |
-| integrator mode, coordinate system, partials, step mode, fixed step, step size selection, initial step, error control, nutation terms, C.M. offset, indicator | `USER_DEFINED_PARAMETERS` named `VCM_*` |
+| integrator mode, coordinate system, partials, step mode, fixed step, step size selection, initial step, error control | `INTEGRATOR`: `MODE`, `COORDINATE_SYSTEM`, `PARTIALS`, `STEP_MODE`, `FIXED_STEP`, `STEP_SIZE_SELECTION`, `INITIAL_STEP_SECONDS`, `ERROR_CONTROL` |
+| IAU 1980 nutation terms | `PERTURBATIONS.REDUCTION_THEORY` `IAU 1980`, `REDUCTION_THEORY_TERMS` |
+| C.M. offset | not stored: the format defines no axis for it; `write` prints 0 |
 | ECI and EFG states, U, V, W sigmas | not stored: `write` computes them from the J2K state, the epoch and the covariance |
 
-`USER_DEFINED_PARAMETERS` also records how the covariance was made from the
-printed one (`COVARIANCE_SCALE`, `MEAN_MOTION_UNIT`, `PARAMETER_ROWS`) so that
-`write` undoes it, and `options` on `write` can override them. The record is
-EME2000 only: `write` refuses another frame, a covariance that is not CARTPV,
-or a parameter row a VCM has no slot for. `ocm` builds the same record from an
-FFM result and the `header` lines (the keys `write` took before the OCM:
-identity, model lines, parameter values, weightedRms, `meanMotionUnit`,
-`parameterRows`, and now `covarianceScale`); the Earth orientation comes from
-the `$EOP` records, not the header.
+`write` undoes the scale `COV_REALISM[0].SCALE_FACTOR` states and prints the n
+row and the parameter rows as fractions unless its options say otherwise
+(`meanMotionUnit`, `parameterRows`, `covarianceScale`). The record is EME2000
+only: `write` refuses another frame, a covariance that is not CARTPV, or a
+parameter row a VCM has no slot for. `ocm` builds the same record from an FFM
+result and the `header` lines (identity, model lines, parameter values,
+weightedRms, `covarianceScale`; `INTEGRATOR` only when the header states an
+integrator line); an OCM without `INTEGRATOR` prints the placeholder integrator
+lines (`SDN FFM`). The Earth orientation comes from the `$EOP` records, not the
+header.
 
 ## The units of the covariance
 
@@ -116,8 +120,8 @@ of B or AGOM; read as printed in m^2/kg (`"absolute"`), 0.38 to 5.6 times the
 parameter itself, which fits of tens of metres would hardly leave. B and
 AGOM rows are scaled by their values when fractional; BDOT and T rows are
 taken as printed. Every read reports the parameter sigmas it carried
-(`parameterSigmas`), and `write` takes the same keys in its header so a
-message goes back out the way it came in. One measurement supports the
+(`parameterSigmas`), and `write` takes the same keys as options so a message
+read with other settings goes back out the way it came in. One measurement supports the
 fractional reading: the GPS message, propagated a day by FFM and compared
 with ESA's final orbit for the satellite, has radial and in-track errors
 with RMS 0.46 and 0.64 of their sigmas when its AGOM row is read as a
