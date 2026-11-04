@@ -12,8 +12,9 @@ const {SSY}=await import(pathToFileURL(path.join(sds,'lib/js/SSY/SSY.js')));
 const {publicationAssetKind}=await import(pathToFileURL(path.join(sds,'lib/js/DPM/publicationAssetKind.js')));
 
 // The auto-publisher's summary CID names the FIRST signed part, not a manifest
-// containing every part. Ask the typed open-manifest protocol for the batch's
-// complete segment plan, then retrieve every listed manifest and shard by CID.
+// containing every part. Walk the public typed list-published protocol for the
+// batch's complete manifest series, then retrieve every manifest/shard by CID.
+// open-manifest is a raw-table operation and requires private-read authority.
 export async function readbackSeries({root,node,peerId,batchId,firstManifestCid,expectedCount}) {
   const sdnRoot=process.env.SDN_JS??path.resolve(root,'../../../space-data-network/sdn-js');
   const sdn=await import(pathToFileURL(path.join(sdnRoot,'dist/index.mjs')));
@@ -27,23 +28,35 @@ export async function readbackSeries({root,node,peerId,batchId,firstManifestCid,
       if(!peer)await new Promise(r=>setTimeout(r,200));
     }
     assert(peer,'Scratch-node peer connection timed out');
-    const stream=await client.libp2p.dialProtocol(peer,sdn.FLATSQL_SYNC_OPEN_MANIFEST_PROTOCOL_ID,{signal:AbortSignal.timeout(30000)});
-    const chunks=[];
-    const reading=(async()=>{for await(const c of stream)chunks.push(c instanceof Uint8Array?c:c.subarray());})();
-    if(!stream.send(sdn.encodeFlatSqlManifestRequest({schema:'SSY.fbs',providerId:'lvdb',sourceName:'comb-all',batchId})))await stream.onDrain?.();
-    await stream.close();await reading;
-    const plan=sdn.decodeFlatSqlSyncManifest(Buffer.concat(chunks));
-    assert.equal(plan.totalCount,expectedCount,'Complete batch manifest count');
-    assert.equal(plan.batchId,batchId);
-    assert(plan.segments.length>1,'The 1 MiB regression fixture must exercise multiple shards');
-    assert.equal(plan.segments.reduce((n,s)=>n+s.rowCount,0),expectedCount);
-    assert(plan.segments.some(s=>s.manifestCid===firstManifestCid),'Summary manifest belongs to this series');
+    const segments=[];const cursors=new Set();let cursor='',totalParts;
+    do {
+      assert(!cursors.has(cursor),'Repeated publication-page cursor');cursors.add(cursor);
+      const stream=await client.libp2p.dialProtocol(peer,sdn.FLATSQL_SYNC_LIST_PUBLISHED_PROTOCOL_ID,{signal:AbortSignal.timeout(30000)});
+      const chunks=[];
+      const reading=(async()=>{for await(const c of stream)chunks.push(c instanceof Uint8Array?c:c.subarray());})();
+      // Two parts/page deliberately exercises pagination in the eight-shard fixture.
+      if(!stream.send(sdn.encodeFlatSqlPublishedListRequest({schema:'SSY.fbs',providerId:'lvdb',sourceName:'comb-all',batchId,cursor,limit:2})))await stream.onDrain?.();
+      await stream.close();await reading;
+      const page=sdn.decodeFlatSqlPublishedList(Buffer.concat(chunks));
+      totalParts??=page.totalCount;assert.equal(page.totalCount,totalParts);
+      assert(totalParts>1&&totalParts<10000,'Bounded multi-shard fixture');
+      for(const p of page.publications){
+        assert.equal(p.batchId,batchId);assert.equal(p.providerId,'lvdb');assert.equal(p.sourceName,'comb-all');assert.equal(p.schemaName,'SSY.fbs');
+        segments.push({...p,cid:p.shardCid,rowCount:p.recordCount});
+      }
+      cursor=page.nextCursor;
+    } while(cursor);
+    assert.equal(segments.length,totalParts,'Every publication page consumed');
+    segments.sort((a,b)=>a.offset-b.offset);
+    let offset=0;for(const s of segments){assert.equal(s.offset,offset,'No gap or overlap in batch');offset+=s.rowCount;}
+    assert.equal(offset,expectedCount,'Complete batch manifest count');
+    assert(segments.some(s=>s.manifestCid===firstManifestCid),'Summary manifest belongs to this series');
     const cat=async cid=>{
       const r=await fetch(node.rpc+'/api/v0/cat?arg='+encodeURIComponent(cid),{method:'POST',signal:AbortSignal.timeout(30000)});
       assert.equal(r.status,200,`CID ${cid}`);return Buffer.from(await r.arrayBuffer());
     };
     const ids=new Set(),seenShards=new Set(),parts=[],shards=[];
-    for(const segment of plan.segments){
+    for(const segment of segments){
       assert(segment.cid&&segment.manifestCid,'Every segment must be published');
       const bytes=await cat(segment.manifestCid);
       const dpm=(bytes.subarray(8,12).toString()==='$DPM'?DPM.getSizePrefixedRootAsDPM:DPM.getRootAsDPM)(new ByteBuffer(bytes)).unpack();
@@ -69,6 +82,6 @@ export async function readbackSeries({root,node,peerId,batchId,firstManifestCid,
       }
     }
     assert.equal(ids.size,expectedCount,'Complete unique SSY identities');
-    return {records:Buffer.concat(parts),shards,uniqueRecords:ids.size,manifestId:plan.manifestId};
+    return {records:Buffer.concat(parts),shards,uniqueRecords:ids.size,manifestCids:segments.map(s=>s.manifestCid)};
   } finally {await client.stop();}
 }

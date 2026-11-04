@@ -103,7 +103,7 @@ replay artifact with that node's temporary identity and schedules it.
 
 An auto-publication log's manifest CID names only the first signed part.
 The reader therefore requests the complete batch segment plan through the
-typed `open-manifest` protocol. It fetches every listed signed manifest and
+public typed `list-published` protocol, consuming every page. It fetches every listed signed manifest and
 shard by CID, verifies hashes, byte lengths, per-segment counts and unique
 SSY identities, then reruns the complete source oracle. The 1 MiB shard
 budget is retained and the E2E requires multiple shards. The final PASS line
