@@ -51,7 +51,8 @@ namespace fr = ::sdn::frames;
 namespace {
 
 constexpr const char* kPluginId = "org.sdn.flows.observation-od.laser-od";
-constexpr const char* kVersion = "0.1.1";
+constexpr const char* kVersion = "0.2.0";
+constexpr double kArcsec = 3.14159265358979323846 / 648000.0;
 constexpr double kC = 299792458.0;
 
 int fail(const std::string& code, const std::string& message) {
@@ -159,6 +160,8 @@ struct Config {
   double maximum_iterations = 20;
   double edit_threshold = 5.0;
   double correction_tolerance = 0.01;
+  double angle_sigma_arcsec = 0.0;               // RA/Dec sigma when no $EOO gives it
+  std::map<std::string, double> time_bias_sigma;  // per station (OBSERVER_ID), s: a consider TIME_BIAS
 };
 bool read_config(Config* c, std::string* error) {
   const auto* f = frame("config");
@@ -169,11 +172,13 @@ bool read_config(Config* c, std::string* error) {
   for (uint32_t k = 0; entries && k < entries->size(); ++k) {
     const auto* e = entries->Get(k);
     const std::string key = e->KEY() ? e->KEY()->str() : std::string();
-    double* target = key == "rangeSigmaM" ? &c->range_sigma_m : key == "minimumArcHours" ? &c->minimum_arc_hours
+    const std::string bias_prefix = "timeBiasSigmaS.";
+    const bool bias = key.compare(0, bias_prefix.size(), bias_prefix) == 0 && key.size() > bias_prefix.size();
+    double* target = bias ? &c->time_bias_sigma[key.substr(bias_prefix.size())] : key == "angleSigmaArcsec" ? &c->angle_sigma_arcsec : key == "rangeSigmaM" ? &c->range_sigma_m : key == "minimumArcHours" ? &c->minimum_arc_hours
                    : key == "maximumIterations" ? &c->maximum_iterations : key == "editThreshold" ? &c->edit_threshold
                    : key == "correctionTolerance" ? &c->correction_tolerance : nullptr;
     if (!target || e->KIND() != R::configValueKind_Number || !std::isfinite(e->NUMBER_VALUE()) || e->NUMBER_VALUE() < 0)
-      return *error = "config key '" + key + "' is not one of rangeSigmaM, minimumArcHours, maximumIterations, editThreshold, correctionTolerance as a non-negative number", false;
+      return *error = "config key '" + key + "' is not one of rangeSigmaM, angleSigmaArcsec, timeBiasSigmaS.<station>, minimumArcHours, maximumIterations, editThreshold, correctionTolerance as a non-negative number", false;
     *target = e->NUMBER_VALUE();
   }
   if (!(c->range_sigma_m > 0) || c->maximum_iterations < 1) return *error = "rangeSigmaM must be positive and maximumIterations at least 1", false;
@@ -230,6 +235,8 @@ bool pad_of(const GST* g, Pad* pad, std::string* error) {
 // ---- normal points ----------------------------------------------------------------------------------------------
 struct Point {
   Utc receive;
+  bool angles = false;          // RA/Dec (RADEC, rad) instead of a laser range
+  double ra = 0, dec = 0, angle_sigma = 0;
   double range = 0;
   std::string pad;
   double pressure = 0, temperature = 0, humidity = 0, wavelength = 0;
@@ -238,11 +245,63 @@ struct Point {
 
 std::string text(const flatbuffers::String* s) { return s ? s->str() : std::string(); }
 
-bool read_points(std::vector<Point>* out, std::string* error) {
+// RA/Dec pairs (ANGLE_TYPE RADEC, degrees, TIMETAG_REF RECEIVE, UTC) at their epochs. The station is the record's
+// OBSERVER_ID; its site, kept in `sites` for a station no $GST names, is OBSERVER_X/Y/Z (Earth-fixed, m).
+bool read_angles(const TDM* tdm, std::vector<Point>* out, std::map<std::string, fr::Vec3>* sites, std::string* error) {
+  if (!tdm->SEGMENTS()) return true;
+  const std::string observer = text(tdm->OBSERVER_ID());
+  bool any = false;
+  for (const TDMSegment* seg : *tdm->SEGMENTS()) {
+    if (!seg || !seg->OBSERVATIONS()) continue;
+    const std::string type = !text(seg->ANGLE_TYPE()).empty() ? text(seg->ANGLE_TYPE()) : text(tdm->ANGLE_TYPE());
+    const std::string system = !text(seg->TIME_SYSTEM()).empty() ? text(seg->TIME_SYSTEM()) : text(tdm->TIME_SYSTEM());
+    const std::string tag = !text(seg->TIMETAG_REF()).empty() ? text(seg->TIMETAG_REF()) : text(tdm->TIMETAG_REF());
+    std::map<std::string, std::pair<double, double>> pairs;
+    std::vector<std::string> order;
+    for (const TDMObservation* row : *seg->OBSERVATIONS()) {
+      const std::string key = text(row->KEYWORD());
+      if (key != "ANGLE_1" && key != "ANGLE_2") continue;
+      if (type != "RADEC") return *error = "angles must be ANGLE_TYPE RADEC, not '" + type + "'", false;
+      if (system != "UTC") return *error = "TIME_SYSTEM '" + system + "' is not UTC", false;
+      if (tag != "RECEIVE") return *error = "RA/Dec need TIMETAG_REF RECEIVE", false;
+      const std::string epoch = text(row->EPOCH());
+      auto it = pairs.find(epoch);
+      if (it == pairs.end()) it = pairs.emplace(epoch, std::make_pair(NAN, NAN)).first, order.push_back(epoch);
+      (key == "ANGLE_1" ? it->second.first : it->second.second) = row->VALUE();
+    }
+    for (const std::string& epoch : order) {
+      Point p;
+      const auto& v = pairs[epoch];
+      if (!parse_utc(epoch, &p.receive) || !std::isfinite(v.first) || !std::isfinite(v.second))
+        return *error = "an RA/Dec pair at " + epoch + " does not read", false;
+      p.angles = true;
+      p.ra = v.first * M_PI / 180.0;
+      p.dec = v.second * M_PI / 180.0;
+      p.pad = observer;
+      out->push_back(p);
+      any = true;
+    }
+  }
+  if (any) {
+    if (observer.empty()) return *error = "an RA/Dec $TDM without OBSERVER_ID", false;
+    (*sites)[observer] = fr::Vec3{tdm->OBSERVER_X(), tdm->OBSERVER_Y(), tdm->OBSERVER_Z()};
+  }
+  return true;
+}
+
+bool read_points(std::vector<Point>* out, std::map<std::string, fr::Vec3>* sites, std::string* error) {
   for (const auto* f : frames("observations")) {
     flatbuffers::Verifier v(f->payload, f->payload_length);
     if (!TDMBufferHasIdentifier(f->payload) || !VerifyTDMBuffer(v)) return *error = "observations must be $TDM records", false;
     const TDM* tdm = GetTDM(f->payload);
+    if (!read_angles(tdm, out, sites, error)) return false;
+    bool laser = false;
+    for (uint32_t i = 0; tdm->SEGMENTS() && i < tdm->SEGMENTS()->size(); ++i) {
+      const TDMSegment* seg = tdm->SEGMENTS()->Get(i);
+      for (uint32_t k = 0; seg && seg->OBSERVATIONS() && k < seg->OBSERVATIONS()->size(); ++k)
+        laser = laser || text(seg->OBSERVATIONS()->Get(k)->KEYWORD()) == "LASER_RANGE";
+    }
+    if (!laser) continue;
     const std::string observer = text(tdm->OBSERVER_ID());
     if (observer.size() < 4) return *error = "a $TDM without OBSERVER_ID (the station occupancy designator)", false;
     const std::string pad = observer.substr(0, 4);
@@ -395,19 +454,26 @@ int push_ocm(const wire::EstimationRequest* request, const wire::BatchFitResult*
   ocm.COV_SIZE = 6;
   ocm.COV_CALIBRATION = covarianceCalibration::Uncalibrated;
 
-  // Range residuals: whitened by the one sigma every normal point carries.
+  // Residuals, one per scalar measurement (a range: one, in m; RA/Dec: two, in arcsec), unwhitened by each lane's sigma.
+  // The RMS is over the accepted observations of the dominant kind: metres for ranges, arcseconds for angles only.
+  const bool angles_only = std::all_of(points.begin(), points.end(), [](const Point& q) { return q.angles; });
   double sum = 0;
-  size_t used = 0;
+  size_t used = 0, lanes = 0;
   std::vector<bool> rejected(points.size(), false);
   if (fit->rejected_observation_indices())
     for (uint32_t i : *fit->rejected_observation_indices()) if (i < rejected.size()) rejected[i] = true;
   std::vector<double> residuals;
-  for (size_t i = 0; fit->whitened_residuals() && i < fit->whitened_residuals()->size() && i < points.size(); ++i) {
-    const double r = fit->whitened_residuals()->Get(static_cast<flatbuffers::uoffset_t>(i)) * sigma;
-    residuals.push_back(r);
-    if (!rejected[i]) sum += r * r, ++used;
+  for (size_t i = 0, at = 0; i < points.size(); ++i) {
+    const size_t count = points[i].angles ? 2 : 1;
+    const double scale = points[i].angles ? points[i].angle_sigma / kArcsec : sigma;
+    for (size_t k = 0; k < count && fit->whitened_residuals() && at < fit->whitened_residuals()->size(); ++k, ++at) {
+      const double r = fit->whitened_residuals()->Get(static_cast<flatbuffers::uoffset_t>(at)) * scale;
+      residuals.push_back(r);
+      if (!rejected[i] && points[i].angles == angles_only) sum += r * r, ++lanes;
+    }
+    if (!rejected[i]) ++used;
   }
-  const double rms = used ? std::sqrt(sum / static_cast<double>(used)) : NAN;
+  const double rms = lanes ? std::sqrt(sum / static_cast<double>(lanes)) : NAN;
   std::map<std::string, int> pads;
   for (const auto& p : points) ++pads[p.pad];
 
@@ -417,12 +483,18 @@ int push_ocm(const wire::EstimationRequest* request, const wire::BatchFitResult*
   od->OD_METHOD = "MEASUREMENT_BASED";
   od->OD_ESTIMATOR = estimatorCategory::BatchLeastSquares;
   od->OD_EPOCH = iso(epoch);
-  od->OD_OBSERVATIONS_TYPE = {"LASER_RANGE"};
+  if (!angles_only) od->OD_OBSERVATIONS_TYPE.push_back("LASER_RANGE");
+  if (std::any_of(points.begin(), points.end(), [](const Point& q) { return q.angles; })) od->OD_OBSERVATIONS_TYPE.push_back("RADEC");
   od->OD_OBSERVATIONS_USED = static_cast<int>(used);
   od->OBS_AVAILABLE = static_cast<uint32_t>(points.size());
   od->SENSORS_N = static_cast<uint32_t>(pads.size());
   for (const auto& [pad, count] : pads) od->SENSORS += (od->SENSORS.empty() ? "" : " ") + pad;
-  od->OD_NOISE_MODELS = "Zero-mean Gaussian range noise, independent between normal points; 1-sigma " + std::to_string(sigma) + " m";
+  od->OD_NOISE_MODELS = angles_only ? "Zero-mean Gaussian RA/Dec noise, independent between observations; 1-sigma per observation ($EOO or angleSigmaArcsec)"
+                                    : "Zero-mean Gaussian range noise, independent between normal points; 1-sigma " + std::to_string(sigma) + " m";
+  if (const auto* mps = request->batch_options()->measurement_parameters(); mps && mps->size()) {
+    od->CONSIDER_N = mps->size();
+    od->CONSIDER_PARAMS = "TIME_BIAS per station";
+  }
   od->OD_DATA_WEIGHTING = "INVERSE_VARIANCE";
   od->OD_PROCESS_NOISE = "NONE";
   od->OD_APRIORI_DATA = "NONE";
@@ -447,13 +519,24 @@ int push_ocm(const wire::EstimationRequest* request, const wire::BatchFitResult*
                                 std::to_string(request->batch_options()->correction_tolerance()) + ", edit set a fixed point";
   od->FIT_STATISTICS = std::make_unique<OCMFitStatisticsT>();
   od->FIT_STATISTICS->FIT_STATES = static_cast<uint32_t>(used);
-  od->FIT_STATISTICS->FIT_RMS_KM = rms / 1000.0;
+  od->FIT_STATISTICS->FIT_RMS_KM = angles_only ? NAN : rms / 1000.0;  // angles: OD_RESIDUAL_RMS in arcsec
   od->FIT_STATISTICS->ITERATIONS = fit->iterations();
   od->FIT_STATISTICS->CONVERGED = fit->converged();
   od->FIT_STATISTICS->FIT_START = iso(points.front().receive);
   od->FIT_STATISTICS->FIT_STOP = iso(points.back().receive);
   ocm.ORBIT_DETERMINATION = std::move(od);
 
+  if (const auto* f = frame("provenance")) {
+    // The source's $PVN, carried; this node as the producer.
+    flatbuffers::Verifier v(f->payload, f->payload_length);
+    if (!PVNBufferHasIdentifier(f->payload) || !VerifyPVNBuffer(v)) return fail("bad-input", "provenance must be one $PVN");
+    ocm.PROVENANCE.reset(GetPVN(f->payload)->UnPack());
+    ocm.PROVENANCE->PRODUCER = std::string(kPluginId) + " " + kVersion;
+    flatbuffers::FlatBufferBuilder b(1 << 14);
+    FinishOCMBuffer(b, OCM::Pack(b, &ocm));
+    return push("ocm", "OCM.fbs", "$OCM", "OCM", b);
+  }
+  if (angles_only) return fail("bad-input", "an angles fit needs the source's $PVN on provenance");
   ocm.PROVENANCE = std::make_unique<PVNT>();
   ocm.PROVENANCE->SOURCE_ID = "ilrs-crd";
   ocm.PROVENANCE->SOURCE_KIND = pvnSourceKind::Observation;
@@ -488,18 +571,56 @@ extern "C" int step(void) {
   if (!parameters_of(*templ, &kinds, &error)) return fail("bad-input", error);
 
   // Stations by CDP pad.
+  // Stations by CDP pad (laser) and by STATION_ID (angles: the $TDM OBSERVER_ID), with the declared clock offset.
   std::map<std::string, Pad> pads;
+  std::map<std::string, double> clock_offset;
   for (const auto* f : frames("stations")) {
     flatbuffers::Verifier v(f->payload, f->payload_length);
     if (!GSTBufferHasIdentifier(f->payload) || !VerifyGSTBuffer(v)) return fail("bad-input", "stations must be $GST records");
     const GST* g = GetGST(f->payload);
     Pad pad;
-    if (!pad_of(g, &pad, &error)) return fail("bad-input", text(g->CDP_NUMBER()) + ": " + error);
-    pads[text(g->CDP_NUMBER())] = pad;
+    const std::string id = !text(g->CDP_NUMBER()).empty() ? text(g->CDP_NUMBER()) : text(g->STATION_ID());
+    if (!pad_of(g, &pad, &error)) return fail("bad-input", id + ": " + error);
+    if (!text(g->CDP_NUMBER()).empty()) pads[text(g->CDP_NUMBER())] = pad;
+    if (!text(g->STATION_ID()).empty()) {
+      pads[text(g->STATION_ID())] = pad;
+      if (std::isfinite(g->CLOCK_OFFSET_S())) clock_offset[text(g->STATION_ID())] = g->CLOCK_OFFSET_S();
+    }
   }
   std::vector<Point> points;
-  if (!read_points(&points, &error)) return fail("bad-input", error);
-  if (points.empty()) return fail("bad-input", "observations hold no LASER_RANGE");
+  std::map<std::string, fr::Vec3> sites;
+  if (!read_points(&points, &sites, &error)) return fail("bad-input", error);
+  if (points.empty()) return fail("bad-input", "observations hold no LASER_RANGE and no RA/Dec angles");
+  // An angles station no $GST names: the site its $TDM states.
+  for (const auto& [id, xyz] : sites) {
+    if (pads.count(id)) continue;
+    double r[3] = {xyz.x, xyz.y, xyz.z};
+    Pad pad;
+    pad.itrf = xyz;
+    if (!(fr::norm(xyz) > 6.0e6) || eraGc2gd(1, r, &pad.longitude, &pad.latitude, &pad.height) != 0)
+      return fail("no-stations", "station " + id + ": no $GST and no Earth-fixed OBSERVER_X/Y/Z");
+    pads[id] = pad;
+  }
+  // RA/Dec sigmas: the $EOO at the same epoch (RA_UNC, DECLINATION_UNC, degrees), else angleSigmaArcsec.
+  {
+    std::map<std::string, double> eoo;
+    for (const auto* f : frames("uncertainty")) {
+      flatbuffers::Verifier v(f->payload, f->payload_length);
+      if (!EOOBufferHasIdentifier(f->payload) || !VerifyEOOBuffer(v)) return fail("bad-input", "uncertainty must be $EOO records");
+      const EOO* e = GetEOO(f->payload);
+      Utc t;
+      if (!parse_utc(text(e->OB_TIME()), &t)) return fail("bad-input", "an $EOO OB_TIME does not read");
+      const double sigma = std::max(e->RA_UNC(), e->DECLINATION_UNC()) * M_PI / 180.0;
+      if (!(sigma > 0)) return fail("bad-input", "an $EOO without RA_UNC and DECLINATION_UNC");
+      eoo[iso(t)] = sigma;
+    }
+    for (auto& p : points) {
+      if (!p.angles) continue;
+      const auto it = eoo.find(iso(p.receive));
+      p.angle_sigma = it != eoo.end() ? it->second : config.angle_sigma_arcsec * kArcsec;
+      if (!(p.angle_sigma > 0)) return fail("bad-input", "an RA/Dec observation at " + iso(p.receive) + " has no sigma ($EOO or angleSigmaArcsec)");
+    }
+  }
   {
     std::string missing;
     for (const auto& p : points)
@@ -564,6 +685,19 @@ extern "C" int step(void) {
       const fr::Vec3 los = fr::sub(fr::Vec3{s->POSITION()->X(), s->POSITION()->Y(), s->POSITION()->Z()}, p.station);
       const double elevation = std::asin(std::max(-1.0, std::min(1.0, fr::dot(fr::unit(los), p.up))));
       const Pad& pad = pads[p.pad];
+      if (p.angles) {
+        // Geometric topocentric RA/Dec in GCRF with one-way light time; the station's motion carries the rotation
+        // (Sagnac off, flag 0x02), as analysis/observation-simulator predicts them.
+        const double value[4] = {p.ra, p.dec, 0, 0}, sigma[4] = {p.angle_sigma, p.angle_sigma, 0, 0};
+        const double sp[3] = {p.station.x, p.station.y, p.station.z}, sv[3] = {p.station_velocity.x, p.station_velocity.y, p.station_velocity.z};
+        const double z3[3] = {0, 0, 0};
+        rq.observations.emplace_back(label(p.receive), flatbuffers::span<const double, 4>(value, 4), flatbuffers::span<const double, 4>(sigma, 4),
+            flatbuffers::span<const double, 3>(sp, 3), flatbuffers::span<const double, 3>(sv, 3), flatbuffers::span<const double, 3>(z3, 3),
+            flatbuffers::span<const double, 3>(z3, 3), flatbuffers::span<const double, 3>(z3, 3), flatbuffers::span<const double, 3>(z3, 3),
+            flatbuffers::span<const double, 3>(z3, 3), 0.0, 0.0, 0.0, 0.0, elevation, pad.latitude, pad.height, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1u, 1u,
+            wire::MeasurementKind::RIGHT_ASCENSION_DECLINATION, static_cast<uint8_t>(2), static_cast<uint8_t>(0x02), 0u, 0u);
+        continue;
+      }
       const double value[4] = {p.range, 0, 0, 0}, sigma[4] = {config.range_sigma_m, 0, 0, 0};
       const double sp[3] = {p.station.x, p.station.y, p.station.z}, sv[3] = {p.station_velocity.x, p.station_velocity.y, p.station_velocity.z};
       const double z3[3] = {0, 0, 0};
@@ -575,8 +709,14 @@ extern "C" int step(void) {
           std::isfinite(p.humidity) ? p.humidity / 100.0 : 0.0, p.wavelength, 0.0, 0.0, 1u, 1u, wire::MeasurementKind::LASER_RANGE,
           static_cast<uint8_t>(1), static_cast<uint8_t>(0x04), 0u, 0u);
     }
-    rq.error_models.emplace_back(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0ull, wire::MeasurementKind::LASER_RANGE, wire::TroposphereKind::MARINI,
-                                 wire::IonosphereKind::NONE, static_cast<uint8_t>(0x04));
+    const bool any_laser = std::any_of(points.begin(), points.end(), [](const Point& q) { return !q.angles; });
+    const bool any_angles = std::any_of(points.begin(), points.end(), [](const Point& q) { return q.angles; });
+    if (any_laser)
+      rq.error_models.emplace_back(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0ull, wire::MeasurementKind::LASER_RANGE, wire::TroposphereKind::MARINI,
+                                   wire::IonosphereKind::NONE, static_cast<uint8_t>(0x04));
+    if (any_angles)
+      rq.error_models.emplace_back(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0ull, wire::MeasurementKind::RIGHT_ASCENSION_DECLINATION, wire::TroposphereKind::NONE,
+                                   wire::IonosphereKind::NONE, static_cast<uint8_t>(0x02));
     rq.propagator_port_id = "propagator/ffm";
     rq.propagator_capability = "plugin_propagate plugin_compute_stm";
     rq.trace_id = std::string(kPluginId) + " " + iso(target);
@@ -591,6 +731,18 @@ extern "C" int step(void) {
     bo.maximum_iterations = static_cast<uint32_t>(config.maximum_iterations);
     bo.correction_tolerance = config.correction_tolerance;
     bo.sigma_edit_threshold = config.edit_threshold;
+    // Per angles station: its time bias (the $GST declared offset, else 0) as a consider parameter with the configured sigma.
+    for (const auto& [station, bias_sigma] : config.time_bias_sigma) {
+      if (!(bias_sigma > 0)) continue;
+      auto mp = std::make_unique<wire::MeasurementParameterT>();
+      mp->kind = wire::MeasurementParameterKind::TIME_BIAS;
+      for (size_t i = 0; i < points.size(); ++i) if (points[i].angles && points[i].pad == station) mp->observations.push_back(static_cast<uint32_t>(i));
+      if (mp->observations.empty()) continue;
+      mp->value = clock_offset.count(station) ? clock_offset[station] : 0.0;
+      mp->sigma = bias_sigma;
+      mp->consider = true;
+      bo.measurement_parameters.push_back(std::move(mp));
+    }
     return push_envelope(env);
   }
 

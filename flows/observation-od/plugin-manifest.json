@@ -1,8 +1,8 @@
 {
   "pluginId": "org.sdn.flows.observation-od.laser-od",
   "name": "Laser orbit determination",
-  "version": "0.1.1",
-  "description": "Routes ILRS normal points ($TDM), station coordinates ($GST) and the Earth orientation through analysis/estimation fit_batch and propagator/ffm invoke until the estimator converges, and emits the fit as one Cartesian $OCM with FIT_STATISTICS and PVN. Stateless: each step call either asks for a propagation or an estimator round, or finishes. The estimator solves and the FFM propagates; the node rotates the stations to GCRF with foundation/frames' IAU 2006/2000A chain. Refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>.",
+  "version": "0.2.0",
+  "description": "Routes ILRS normal points or RA/Dec angles ($TDM), station coordinates ($GST) and the Earth orientation through analysis/estimation fit_batch and propagator/ffm invoke until the estimator converges, and emits the fit as one Cartesian $OCM with FIT_STATISTICS and PVN. Stateless: each step call either asks for a propagation or an estimator round, or finishes. The estimator solves and the FFM propagates; the node rotates the stations to GCRF with foundation/frames' IAU 2006/2000A chain. Refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -55,6 +55,18 @@
       "fileIdentifier": "MCFG",
       "rootTypeName": "ModuleConfig",
       "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOO.fbs",
+      "fileIdentifier": "$EOO",
+      "rootTypeName": "EOO",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PVN.fbs",
+      "fileIdentifier": "$PVN",
+      "rootTypeName": "PVN",
+      "wireFormat": "flatbuffer"
     }
   ],
   "buildArtifacts": [
@@ -90,7 +102,7 @@
           "minStreams": 1,
           "maxStreams": 4096,
           "required": true,
-          "description": "The normal points: one $TDM per pass from data-source/ilrs-crd-source read_crd (LASER_RANGE in metres, UTC, TIMETAG_REF TRANSMIT or RECEIVE, OBSERVER_ID the station occupancy designator, meteorology rows)."
+          "description": "The normal points: one $TDM per pass from data-source/ilrs-crd-source read_crd (LASER_RANGE in metres, UTC, TIMETAG_REF TRANSMIT or RECEIVE, OBSERVER_ID the station occupancy designator, meteorology rows). Or RA/Dec tracks (ANGLE_TYPE RADEC, UTC, TIMETAG_REF RECEIVE, degrees; data-source/satnogs-optical-source): the station is OBSERVER_ID, its site the $GST of that STATION_ID, else OBSERVER_X/Y/Z (Earth-fixed, m); each pair is one RIGHT_ASCENSION_DECLINATION observation (one-way light time, Sagnac off)."
         },
         {
           "portId": "stations",
@@ -174,7 +186,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "ModuleConfig, optional, numbers: rangeSigmaM (0.05), minimumArcHours (24), maximumIterations (20), editThreshold (5), correctionTolerance (0.01)."
+          "description": "ModuleConfig, optional, numbers: rangeSigmaM (0.05), minimumArcHours (24), maximumIterations (20), editThreshold (5), correctionTolerance (0.01); angleSigmaArcsec (RA/Dec sigma without an $EOO) and timeBiasSigmaS.<station> (a consider TIME_BIAS for that OBSERVER_ID's angles, the $GST CLOCK_OFFSET_S its value, else 0)."
         },
         {
           "portId": "estimation",
@@ -238,6 +250,46 @@
           "maxStreams": 1,
           "required": false,
           "description": "propagator/ffm invoke's $PRW EXECUTION_RESULT for this node's last propagation."
+        },
+        {
+          "portId": "uncertainty",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Optional: one $EOO per RA/Dec observation; the larger of RA_UNC and DECLINATION_UNC (degrees) at the same OB_TIME is that observation's sigma (else config angleSigmaArcsec)."
+        },
+        {
+          "portId": "provenance",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pvn",
+              "allowedTypes": [
+                {
+                  "schemaName": "PVN.fbs",
+                  "fileIdentifier": "$PVN",
+                  "rootTypeName": "PVN",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional: the source's $PVN, carried onto the $OCM with this node as PRODUCER (required for an angles-only fit; without it a laser fit states ILRS)."
         }
       ],
       "outputPorts": [

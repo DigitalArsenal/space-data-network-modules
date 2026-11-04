@@ -20,7 +20,7 @@ const modules = path.resolve(root, '../..');
 const framesSrc = path.join(modules, 'foundation/frames/src');
 const wireDir = path.join(modules, 'analysis/estimation/src/generated/invoke');
 
-const { header, version, families } = await generateSdsHeaders(['TDM', 'GST', 'PRW', 'EOP', 'OCM', 'PVN'], import.meta.url, createFlatc);
+const { header, version, families } = await generateSdsHeaders(['TDM', 'GST', 'PRW', 'EOP', 'OCM', 'PVN', 'EOO'], import.meta.url, createFlatc);
 const relax = (text) => text.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/g, '');
 const wire = (await Promise.all(['BaseTypes', 'Propagator', 'Estimation'].map((n) => fs.readFile(path.join(wireDir, `${n}_generated.h`), 'utf8'))))
   .map((text) => relax(text).replace(/^#include "[A-Za-z]+_generated\.h"\n/gm, ''));
