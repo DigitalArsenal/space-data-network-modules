@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Offline reproduction; one native build/process or WASM invoke at a time.
 // UV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/ffm/tests/evidence/horizons/run-horizons.mjs
+// --stored-reference reuses the CSPICE states of horizons-comparisons.json and runs no
+// Python: the authenticated Horizons rows they were evaluated at must parse identically.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -13,6 +15,7 @@ const { values: o } = parseArgs({ options: {
   naif: { type: 'string', default: process.env.XVAL_NAIF ?? '/Users/tj/software/tools/xval/naif-kernels' },
   flatbuffers: { type: 'string' },
   'jwst-source': { type: 'string', default: process.env.XVAL_JWST_SOURCE ?? '/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/examples/02_jwst_covar_monte_carlo/main.rs' },
+  'stored-reference': { type: 'boolean', default: false },
 } });
 
 const cause = (classification, statement, evidence) => ({ classification, statement, evidence });
@@ -29,7 +32,9 @@ async function main() {
     const parsed = Object.fromEntries(names.map((name) => [name, parseRaw(metrics, authenticated, name)]));
     const epochs = authenticated.index.epochsUtc;
     const lsk = path.join(o.naif, 'naif0012.tls');
-    const spice = JSON.parse(execFileSync(o.python, ['-I', '-B', path.join(here, 'spice-reference.py')], {
+    const stored = o['stored-reference'] ? read(path.join(here, 'horizons-comparisons.json')) : null;
+    if (stored && JSON.stringify(stored.parsed) !== JSON.stringify(parsed)) throw new Error('Authenticated Horizons rows differ from those of the stored CSPICE reference; run without --stored-reference');
+    const spice = stored ? stored.spice : JSON.parse(execFileSync(o.python, ['-I', '-B', path.join(here, 'spice-reference.py')], {
       input: JSON.stringify({ de440: de440Path, lsk,
         bodies: Object.fromEntries(names.filter((name) => name !== 'jwst')
           .map((name) => [name, { target: targets[name], epochs: parsed[name].rows }])) }),

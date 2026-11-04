@@ -558,32 +558,32 @@ runtime. Its theory has no independent public reference outside that library;
 <!-- BEGIN GENERATED REFERENCE SUITE -->
 | Orbit | Force class | Orekit | GMAT R2026a | GMAT R2022a | Nyx | tudatpy | Tudat WASM | Basilisk | Orekit finest |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LEO400 | point mass | 0.479 mm | 0.322 mm | 0.316 mm | 0.305 mm | 0.325 mm | 0.319 mm | 0.315 mm | 0.152 mm |
-| LEO400 | field + third bodies + SRP (no drag) | 18.923 mm | 45.131 mm | 45.110 mm | 17.681 mm | 18.119 mm | 19.919 mm | 17.674 mm | 1.324 mm |
-| LEO400 | drag | 24.873 mm | 2.337 m | 1.380 m | 12.459 m | 38.859 mm | 33.475 mm | 5418.749 m | 4.078 mm |
-| SSO700 | point mass | 0.481 mm | 0.292 mm | 0.304 mm | 0.297 mm | 0.302 mm | 0.295 mm | 0.292 mm | 0.178 mm |
-| SSO700 | field + third bodies + SRP (no drag) | 14.624 mm | 19.430 mm | 27.732 mm | 15.879 mm | 14.367 mm | 14.280 mm | 15.880 mm | 1.355 mm |
-| SSO700 | drag | 16.833 mm | 7.965 m | 164.793 mm | 45.660 mm | 13.499 mm | 65.360 mm | 58.128 m | 1.073 mm |
-| GPS | point mass | 0.143 mm | 0.024 mm | 0.017 mm | 0.017 mm | 0.021 mm | 0.021 mm | 0.023 mm | 0.159 mm |
-| GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.140 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.220 mm |
+| LEO400 | point mass | 0.162 mm | 0.005 mm | 0.002 mm | 0.012 mm | 0.008 mm | 0.002 mm | 0.002 mm | 0.162 mm |
+| LEO400 | field + third bodies + SRP (no drag) | 1.264 mm | 30.389 mm | 30.370 mm | 0.888 mm | 23.017 mm | 2.106 mm | 1.138 mm | 1.313 mm |
+| LEO400 | drag | 8.448 mm | 2.319 m | 1.362 m | 12.462 m | 41.170 mm | 34.302 mm | 5418.767 m | 4.074 mm |
+| SSO700 | point mass | 0.189 mm | 0.002 mm | 0.012 mm | 0.005 mm | 0.010 mm | 0.003 mm | 0.002 mm | 0.180 mm |
+| SSO700 | field + third bodies + SRP (no drag) | 1.803 mm | 10.531 mm | 12.699 mm | 0.675 mm | 1.700 mm | 2.180 mm | 0.293 mm | 1.355 mm |
+| SSO700 | drag | 1.482 mm | 7.950 m | 180.379 mm | 61.282 mm | 2.420 mm | 53.310 mm | 58.144 m | 1.061 mm |
+| GPS | point mass | 0.160 mm | 0.004 mm | 0.004 mm | 0.004 mm | 5.440e-04 mm | 0.001 mm | 0.002 mm | 0.158 mm |
+| GPS | field + third bodies + SRP (no drag) | 0.219 mm | 1.500 mm | 2.512 mm | 0.115 mm | 1.389 mm | 0.125 mm | 0.156 mm | 0.218 mm |
 | GPS | drag | — | — | — | — | — | — | — | — |
-| GEO | point mass | 0.035 mm | 0.001 mm | 0.001 mm | 0.002 mm | 9.906e-04 mm | 0.003 mm | 6.219e-04 mm | 0.037 mm |
-| GEO | field + third bodies + SRP (no drag) | 0.067 mm | 0.151 mm | 1.330 mm | 0.154 mm | 0.148 mm | 0.141 mm | 0.148 mm | 0.065 mm |
+| GEO | point mass | 0.035 mm | 8.819e-04 mm | 0.001 mm | 0.002 mm | 0.001 mm | 0.003 mm | 7.045e-04 mm | 0.037 mm |
+| GEO | field + third bodies + SRP (no drag) | 0.067 mm | 0.151 mm | 1.330 mm | 0.154 mm | 0.149 mm | 0.141 mm | 0.148 mm | 0.065 mm |
 | GEO | drag | — | — | — | — | — | — | — | — |
-| MOLNIYA | point mass | 0.579 mm | 0.013 mm | 0.059 mm | 0.003 mm | 0.007 mm | 0.008 mm | 0.020 mm | 0.572 mm |
-| MOLNIYA | field + third bodies + SRP (no drag) | 11.206 mm | 5.125 mm | 28.577 mm | 1.361 mm | 10.973 mm | 11.352 mm | 1.225 mm | 9.847 mm |
+| MOLNIYA | point mass | 0.576 mm | 0.008 mm | 0.056 mm | 0.007 mm | 0.010 mm | 0.011 mm | 0.017 mm | 0.575 mm |
+| MOLNIYA | field + third bodies + SRP (no drag) | 9.668 mm | 4.868 mm | 29.715 mm | 0.664 mm | 9.431 mm | 9.906 mm | 0.633 mm | 9.840 mm |
 | MOLNIYA | drag | — | — | — | — | — | — | — | — |
 
 ### Drag cases with the tool-side setting difference removed (diagnostic)
 
 | Tool | Orbit | Cases | Stock | Setting difference removed | Limit | Stock verdict | Diagnostic verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.198 mm | 1.500 m | not met | met |
-| GMAT R2026a | SSO700 | 3 | 7.965 m | 109.950 mm | 1.500 m | not met | met |
-| Nyx | LEO400 | 5 | 12.459 m | 50.157 mm | 100.000 mm | not met | met |
-| Nyx | SSO700 | 3 | 45.660 mm | 14.960 mm | 100.000 mm | met | met |
-| Basilisk | LEO400 | 4 | 5418.749 m | 26.514 mm | 100.000 mm | not met | met |
-| Basilisk | SSO700 | 3 | 58.128 m | 15.203 mm | 100.000 mm | not met | met |
+| GMAT R2026a | LEO400 | 3 | 2.319 m | 33.544 mm | 1.500 m | not met | met |
+| GMAT R2026a | SSO700 | 3 | 7.950 m | 122.934 mm | 1.500 m | not met | met |
+| Nyx | LEO400 | 5 | 12.462 m | 52.448 mm | 100.000 mm | not met | met |
+| Nyx | SSO700 | 3 | 61.282 mm | 0.850 mm | 100.000 mm | met | met |
+| Basilisk | LEO400 | 4 | 5418.767 m | 44.175 mm | 100.000 mm | not met | met |
+| Basilisk | SSO700 | 3 | 58.144 m | 0.764 mm | 100.000 mm | not met | met |
 
 *Maximum hourly 3D position differences at the suite setting; Orekit finest is separate. Drag adjustments: [GMAT R2026a: Cd scaled by 1 + eps from the anomalous-oxygen diagnostic](../tests/evidence/gmat/anomalous-oxygen.json); [Nyx: Published NRLMSISE-00 formulas + WGS84 shape](../tests/evidence/nyx/drag-settings-diagnostic.json); [Basilisk: WGS84 coordinates + native gtd7d density](../tests/evidence/basilisk/summary-basilisk-2.12.0.json#/diagnostics/wgs84-gtd7d). Limits: [shared protocol](../tests/evidence/cases/ffm-reference-cases.json), with GMAT limits applying only to GMAT.*
 

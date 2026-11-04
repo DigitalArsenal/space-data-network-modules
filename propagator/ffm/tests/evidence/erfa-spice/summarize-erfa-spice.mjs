@@ -39,7 +39,8 @@ const rows=specs.map(([id,quantity,reference,unit,note])=>{if(!D.scores[id])thro
 const row=id=>rows.find(r=>r.id===id);
 row('c2tSpice').referenceSpreadBoundMas=row('c2tSpiceErfa').max;
 row('c2tSpice').cause={classification:'reference spread',statement:row('c2tSpice').note,evidence:{spiceErfaMas:row('c2tSpiceErfa').max,ffmErfaMas:row('c2tTrue').max,source:'tools.json BPC comment; reference.py'}};
-const files=new Map();const add=p=>{const absolute=path.resolve(here,p);if(fs.existsSync(absolute))files.set(absolute,{path:path.relative(here,absolute),sha256:hash(absolute)});};
+// Files outside the repository (the provisioned NAIF kernels) keep absolute paths, so the pins hold in every checkout.
+const files=new Map();const add=p=>{const absolute=path.resolve(here,p);if(fs.existsSync(absolute))files.set(absolute,{path:absolute.startsWith(root+path.sep)?path.relative(here,absolute):absolute,sha256:hash(absolute)});};
 for(const p of ['ffm-frames.json','reference.json','tools.json','diagnosis.json','before-after.json','classical-frames-10k.json','frame-diagnostics.cpp','frame-diagnostics.mjs','diagnose-frames.mjs','summarize-erfa-spice.mjs','check-erfa-spice.mjs','ffm_frames_native.cpp','ffm-frames-native.mjs','reference.py','run-erfa-spice.mjs','check-classical-frames.mjs','classical-frames.cpp','classical-frames-reference.py'])add(p);
 for(const p of Object.keys(H.sources))add(path.join(root,p));
 for(const p of ['propagator/ffm/dist/isomorphic/module.wasm','propagator/ffm/package.json','propagator/ffm/plugin-manifest.json','propagator/ffm/index.js','propagator/ffm/tests/evidence/cases/ffm-reference-cases.json'])add(path.join(root,p));

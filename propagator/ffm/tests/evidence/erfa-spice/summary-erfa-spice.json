@@ -1,8 +1,8 @@
 {
  "about": "FFM classical frames, two-part force clock and ephemeris reads against independent offline ERFA/SPICE references.",
  "module": {
-  "version": "2.0.0",
-  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+  "version": "2.2.0",
+  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
  },
  "tools": {
   "pyerfa": "2.0.1.5",
@@ -491,11 +491,11 @@
   "sourceHashes": {
    "propagator/ffm/src/cpp/include/ffm/prw_environment.h": "070fc3c6cc1f876018363289bc1d600e2000d669c2dd4a13f80fe510caf0ca6c",
    "propagator/ffm/src/cpp/include/ffm/prw_codec.h": "4e676f7e3bbdcd2fddeea2c744986272020f27ba5b644ca04b7a8682c5fc4f34",
-   "propagator/ffm/lib/time_convert.cpp": "e34b6d6b3d1bf05505605750a8fc14ca3f4ba92dcba0fcf4c65a4a0a57a2163e",
+   "propagator/ffm/lib/time_convert.cpp": "c21895b449643f9016c822af5642d4736f2ab2b482ecc5f087217e282284a45d",
    "propagator/ffm/lib/time_types.h": "16bc1dea67549a20fff2fca377ce49d5dd50ff46b150e8f3e96247076a933d76",
    "propagator/ffm/lib/coords.cpp": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677",
    "propagator/ffm/lib/coords.h": "9e7c7c67bd735fcdc04e4f78248178cc2ac0c76dbfdbeef91193a042bf0dd4f5",
-   "propagator/ffm/lib/force_models.cpp": "3be1864f06883d99f9c098b9904a4887d91d2d8a9477ca9fbb77b68f02fc71f1",
+   "propagator/ffm/lib/force_models.cpp": "e5972241d304d5b16219e5e2fb9912cf89fa45a116fc28c5c63c5d63f00a66b5",
    "propagator/ffm/lib/ephemeris.cpp": "ecead63da40c529f633217ef38f9bd3ed976c0ce0bb5d84b30d30d432b2dfa88",
    "foundation/frames/src/axis_engine.hpp": "693f37d79c61cc90bd3acc50530e50a4708d52da8116b4ad49f589439988e74a",
    "foundation/frames/src/eop_series.hpp": "399f0b10aad4a71e2001e8e96a5647ac15e16d5533141daf88a589136a849ddb"
@@ -519,7 +519,7 @@
  "fileHashes": [
   {
    "path": "ffm-frames.json",
-   "sha256": "17f29633f909fcef14abd9c4ca2cbbb9886f55bd478c52a7da873339f709273f"
+   "sha256": "97c0719e2febd1f4b7b081e60a4acb74bda8c0e02789548528293d8ebdaa68fd"
   },
   {
    "path": "reference.json",
@@ -555,7 +555,7 @@
   },
   {
    "path": "summarize-erfa-spice.mjs",
-   "sha256": "4947215fbd15dc38041fe2153815aca49a5a741d2a819c4d43c85d3574466418"
+   "sha256": "6b3b82236957f6babf68fed9f6f3086ea3b7e7246e8516d385f4223fcc4fb458"
   },
   {
    "path": "check-erfa-spice.mjs",
@@ -575,7 +575,7 @@
   },
   {
    "path": "run-erfa-spice.mjs",
-   "sha256": "d9acf41e26c767ce87516a462c3a22a2e96401a1ca19f0ea8a841e69ca9ebf1b"
+   "sha256": "737224ff4a53d3156e8151488f596cb6a9882311adb79756daf50575ae5c79ce"
   },
   {
    "path": "check-classical-frames.mjs",
@@ -599,7 +599,7 @@
   },
   {
    "path": "../../../lib/time_convert.cpp",
-   "sha256": "e34b6d6b3d1bf05505605750a8fc14ca3f4ba92dcba0fcf4c65a4a0a57a2163e"
+   "sha256": "c21895b449643f9016c822af5642d4736f2ab2b482ecc5f087217e282284a45d"
   },
   {
    "path": "../../../lib/time_types.h",
@@ -615,7 +615,7 @@
   },
   {
    "path": "../../../lib/force_models.cpp",
-   "sha256": "3be1864f06883d99f9c098b9904a4887d91d2d8a9477ca9fbb77b68f02fc71f1"
+   "sha256": "e5972241d304d5b16219e5e2fb9912cf89fa45a116fc28c5c63c5d63f00a66b5"
   },
   {
    "path": "../../../lib/ephemeris.cpp",
@@ -631,15 +631,15 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
   },
   {
    "path": "../../../package.json",
-   "sha256": "aaa691e0d7db547e02378fc0c98cd45e371f34df9feac1feed33d3084f70d10c"
+   "sha256": "088b4fb56f78a074fe096670025fd80a482e054e6331b3e15976802cdacba941"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
+   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
   },
   {
    "path": "../../../index.js",
@@ -1658,11 +1658,11 @@
    "sha256": "f16ecf0b13e95840dafaf50295fc0451200427c94b62cdf35b83ff8521872ca1"
   },
   {
-   "path": "../../../../../../../tools/xval/naif-kernels/naif0012.tls",
+   "path": "/Users/tj/software/tools/xval/naif-kernels/naif0012.tls",
    "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"
   },
   {
-   "path": "../../../../../../../tools/xval/naif-kernels/earth_latest_high_prec.bpc",
+   "path": "/Users/tj/software/tools/xval/naif-kernels/earth_latest_high_prec.bpc",
    "sha256": "16b40c07bde82878119e7b542613b4a8f4f18b1a3181fc25027e42c6f77d1528"
   },
   {

@@ -4,7 +4,7 @@ FFM (Full Force Model) is defined in [the FFM profile](../../FFM.md).
 
 Generated from pinned summaries by `consolidate.mjs`; checked by `node propagator/ffm/tests/evidence/check-all.mjs` from the repository root. No timestamps or host details enter this report.
 
-FFM 2.0.0, SHA-256 `d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+FFM 2.2.0, SHA-256 `d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
 
 ## Protocol and coverage
 
@@ -34,7 +34,7 @@ The GMAT limits apply only to GMAT. These are agreement limits from the shared p
 | Basilisk | 2.12.0 | 50 | 22 | 43 | 7 | 0 | 0 |
 | ERFA / SPICE | 2.0.1 / CSPICE_N0067 | 13 | 0 | 12 | 1 | 13 | 0 |
 | JPL Horizons | 1.2 | 6 | 1 | 6 | 0 | 4 | 0 |
-| SGP4 against its STR#3 base | foundation/sgp4-str3; module 1.3.1 | 0 | 0 | 0 | 0 | 3 | 0 |
+| SGP4 against its STR#3 base | foundation/sgp4-str3; module 1.4.1 | 0 | 0 | 0 | 0 | 3 | 0 |
 | SGP4-XP | 9.1.1.0; module 0.1.1 | 1 | 0 | 1 | 0 | 0 | 0 |
 
 ## Maximum position difference
@@ -43,20 +43,20 @@ Maxima across each tool's supported cases, at FFM's suite setting; the Orekit fi
 
 | Orbit | Force class | Orekit | GMAT R2026a | GMAT R2022a | Nyx | tudatpy | Tudat WASM | Basilisk | Orekit finest |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LEO400 | point mass | 0.479 mm | 0.322 mm | 0.316 mm | 0.305 mm | 0.325 mm | 0.319 mm | 0.315 mm | 0.152 mm |
-| LEO400 | field + third bodies + SRP (no drag) | 18.923 mm | 45.131 mm | 45.110 mm | 17.681 mm | 18.119 mm | 19.919 mm | 17.674 mm | 1.324 mm |
-| LEO400 | drag | 24.873 mm | 2.337 m | 1.380 m | 12.459 m | 38.859 mm | 33.475 mm | 5418.749 m | 4.078 mm |
-| SSO700 | point mass | 0.481 mm | 0.292 mm | 0.304 mm | 0.297 mm | 0.302 mm | 0.295 mm | 0.292 mm | 0.178 mm |
-| SSO700 | field + third bodies + SRP (no drag) | 14.624 mm | 19.430 mm | 27.732 mm | 15.879 mm | 14.367 mm | 14.280 mm | 15.880 mm | 1.355 mm |
-| SSO700 | drag | 16.833 mm | 7.965 m | 164.793 mm | 45.660 mm | 13.499 mm | 65.360 mm | 58.128 m | 1.073 mm |
-| GPS | point mass | 0.143 mm | 0.024 mm | 0.017 mm | 0.017 mm | 0.021 mm | 0.021 mm | 0.023 mm | 0.159 mm |
-| GPS | field + third bodies + SRP (no drag) | 0.197 mm | 1.522 mm | 2.532 mm | 0.140 mm | 1.372 mm | 0.146 mm | 0.181 mm | 0.220 mm |
+| LEO400 | point mass | 0.162 mm | 0.005 mm | 0.002 mm | 0.012 mm | 0.008 mm | 0.002 mm | 0.002 mm | 0.162 mm |
+| LEO400 | field + third bodies + SRP (no drag) | 1.264 mm | 30.389 mm | 30.370 mm | 0.888 mm | 23.017 mm | 2.106 mm | 1.138 mm | 1.313 mm |
+| LEO400 | drag | 8.448 mm | 2.319 m | 1.362 m | 12.462 m | 41.170 mm | 34.302 mm | 5418.767 m | 4.074 mm |
+| SSO700 | point mass | 0.189 mm | 0.002 mm | 0.012 mm | 0.005 mm | 0.010 mm | 0.003 mm | 0.002 mm | 0.180 mm |
+| SSO700 | field + third bodies + SRP (no drag) | 1.803 mm | 10.531 mm | 12.699 mm | 0.675 mm | 1.700 mm | 2.180 mm | 0.293 mm | 1.355 mm |
+| SSO700 | drag | 1.482 mm | 7.950 m | 180.379 mm | 61.282 mm | 2.420 mm | 53.310 mm | 58.144 m | 1.061 mm |
+| GPS | point mass | 0.160 mm | 0.004 mm | 0.004 mm | 0.004 mm | 5.440e-04 mm | 0.001 mm | 0.002 mm | 0.158 mm |
+| GPS | field + third bodies + SRP (no drag) | 0.219 mm | 1.500 mm | 2.512 mm | 0.115 mm | 1.389 mm | 0.125 mm | 0.156 mm | 0.218 mm |
 | GPS | drag | — | — | — | — | — | — | — | — |
-| GEO | point mass | 0.035 mm | 0.001 mm | 0.001 mm | 0.002 mm | 9.906e-04 mm | 0.003 mm | 6.219e-04 mm | 0.037 mm |
-| GEO | field + third bodies + SRP (no drag) | 0.067 mm | 0.151 mm | 1.330 mm | 0.154 mm | 0.148 mm | 0.141 mm | 0.148 mm | 0.065 mm |
+| GEO | point mass | 0.035 mm | 8.819e-04 mm | 0.001 mm | 0.002 mm | 0.001 mm | 0.003 mm | 7.045e-04 mm | 0.037 mm |
+| GEO | field + third bodies + SRP (no drag) | 0.067 mm | 0.151 mm | 1.330 mm | 0.154 mm | 0.149 mm | 0.141 mm | 0.148 mm | 0.065 mm |
 | GEO | drag | — | — | — | — | — | — | — | — |
-| MOLNIYA | point mass | 0.579 mm | 0.013 mm | 0.059 mm | 0.003 mm | 0.007 mm | 0.008 mm | 0.020 mm | 0.572 mm |
-| MOLNIYA | field + third bodies + SRP (no drag) | 11.206 mm | 5.125 mm | 28.577 mm | 1.361 mm | 10.973 mm | 11.352 mm | 1.225 mm | 9.847 mm |
+| MOLNIYA | point mass | 0.576 mm | 0.008 mm | 0.056 mm | 0.007 mm | 0.010 mm | 0.011 mm | 0.017 mm | 0.575 mm |
+| MOLNIYA | field + third bodies + SRP (no drag) | 9.668 mm | 4.868 mm | 29.715 mm | 0.664 mm | 9.431 mm | 9.906 mm | 0.633 mm | 9.840 mm |
 | MOLNIYA | drag | — | — | — | — | — | — | — | — |
 
 For the GMAT R2026a, Nyx and Basilisk drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic).
@@ -67,12 +67,12 @@ Both columns use FFM's suite setting and the same supported drag cases per tool.
 
 | Tool | Orbit | Cases | Stock | Setting difference removed | Limit | Stock verdict | Diagnostic verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GMAT R2026a | LEO400 | 3 | 2.337 m | 42.198 mm | 1.500 m | not met | met |
-| GMAT R2026a | SSO700 | 3 | 7.965 m | 109.950 mm | 1.500 m | not met | met |
-| Nyx | LEO400 | 5 | 12.459 m | 50.157 mm | 100.000 mm | not met | met |
-| Nyx | SSO700 | 3 | 45.660 mm | 14.960 mm | 100.000 mm | met | met |
-| Basilisk | LEO400 | 4 | 5418.749 m | 26.514 mm | 100.000 mm | not met | met |
-| Basilisk | SSO700 | 3 | 58.128 m | 15.203 mm | 100.000 mm | not met | met |
+| GMAT R2026a | LEO400 | 3 | 2.319 m | 33.544 mm | 1.500 m | not met | met |
+| GMAT R2026a | SSO700 | 3 | 7.950 m | 122.934 mm | 1.500 m | not met | met |
+| Nyx | LEO400 | 5 | 12.462 m | 52.448 mm | 100.000 mm | not met | met |
+| Nyx | SSO700 | 3 | 61.282 mm | 0.850 mm | 100.000 mm | met | met |
+| Basilisk | LEO400 | 4 | 5418.767 m | 44.175 mm | 100.000 mm | not met | met |
+| Basilisk | SSO700 | 3 | 58.144 m | 0.764 mm | 100.000 mm | not met | met |
 
 - GMAT R2026a: Cd scaled by 1 + eps from the anomalous-oxygen diagnostic. [Evidence](gmat/anomalous-oxygen.json).
 - Nyx: Published NRLMSISE-00 formulas + WGS84 shape. [Evidence](nyx/drag-settings-diagnostic.json).
@@ -86,11 +86,11 @@ No STM pass threshold is defined by the export.
 
 | Tool | STM maximum relative column difference | Interpretation |
 | --- | --- | --- |
-| Orekit | 1.78105e-05 | Relative column differences; exported protocol specifies no STM pass limit. |
-| GMAT R2026a | 2.5907e-05 | 57 suite STM comparisons; largest relative column difference 0.000025907000492078618. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol. |
+| Orekit | 1.78087e-05 | Relative column differences; exported protocol specifies no STM pass limit. |
+| GMAT R2026a | 2.59085e-05 | 57 suite STM comparisons; largest relative column difference 0.00002590849674990818. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol. |
 | GMAT R2022a | not exposed | R2022a has no stored STM comparisons; no agreement claim is made. |
 | Nyx | 135.001 | The STM comparison is not usable as an FFM check: Nyx uses the step-start ctx.stm and computes stm * grad, instead of grad * stage_stm, while the RK stages retain the same context. |
-| tudatpy | 2.59073e-05 | STM and Cd*A/m, Cr*A/m, Cd*A/m-rate, and in-track-acceleration sensitivity agreement is reported as maximum relative column difference, separately for position and velocity rows. Native aerodynamic state partials use central finite differences at 10 m position and 0.01 m/s velocity perturbations, also used by the time-varying-drag adapter. The native cannonball SRP partial omits the eclipse-attenuation position gradient; its effect is conditional on encountering eclipse transitions, not every SRP case. R2 STM omissions record unavailable native non-Schwarzschild partials. Every exported sensitivity is included where its variational case is supported; the shared export defines no STM pass/fail threshold. |
+| tudatpy | 2.59087e-05 | STM and Cd*A/m, Cr*A/m, Cd*A/m-rate, and in-track-acceleration sensitivity agreement is reported as maximum relative column difference, separately for position and velocity rows. Native aerodynamic state partials use central finite differences at 10 m position and 0.01 m/s velocity perturbations, also used by the time-varying-drag adapter. The native cannonball SRP partial omits the eclipse-attenuation position gradient; its effect is conditional on encountering eclipse transitions, not every SRP case. R2 STM omissions record unavailable native non-Schwarzschild partials. Every exported sensitivity is included where its variational case is supported; the shared export defines no STM pass/fail threshold. |
 | Tudat WASM | not exposed | The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns. |
 | Basilisk | not exposed | Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped. |
 | ERFA / SPICE | not exposed | not exposed |
@@ -152,7 +152,7 @@ No STM pass threshold is defined by the export.
 | --- | --- | --- | --- | --- |
 | near-Earth (SGP4): 6 sets, 72 states | position 3D: 0.004 mm; velocity 3D: 4.45891e-09 m/s | not specified | diagnostic | Largest on set 90004 at 10080.000 min; 0 states refused by both |
 | deep space (SDP4): 5 sets, 60 states | position 3D: 0.006 mm; velocity 3D: 5.51598e-09 m/s | not specified | diagnostic | Largest on set 11801 at 4320.000 min; 0 states refused by both |
-| geosynchronous (SDP4): 2 sets, 24 states | position 3D: 8.998e-04 mm; velocity 3D: 6.5711e-11 m/s | not specified | diagnostic | Largest on set 90002 at 10080.000 min; 0 states refused by both |
+| geosynchronous (SDP4): 2 sets, 24 states | position 3D: 6.033e-04 mm; velocity 3D: 4.3751e-11 m/s | not specified | diagnostic | Largest on set 90002 at 10080.000 min; 0 states refused by both |
 
 ### SGP4-XP
 
@@ -391,10 +391,10 @@ Provenance limit:
 
 ### SGP4 against its STR#3 base
 
-Version: foundation/sgp4-str3; module 1.3.1. Evidence: [../../../sgp4/tests/evidence/str3/summary-str3.json](../../../sgp4/tests/evidence/str3/summary-str3.json).
+Version: foundation/sgp4-str3; module 1.4.1. Evidence: [../../../sgp4/tests/evidence/str3/summary-str3.json](../../../sgp4/tests/evidence/str3/summary-str3.json).
 
-- shipped WASM (propagator/sgp4 dist/browser): `18a8824b30bccf42bef8756f9821c5ef0ca53d1d62bba9394aa8411e19fd2fde`.
-- library_states.cpp: `96b4bc227dcda1543aed3ac49b83564c8c74aa27df3f0a68d7d749b4f8093d89`.
+- shipped WASM (propagator/sgp4 dist/browser): `2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643`.
+- library_states.cpp: `d029b0f44bf158cead38ca6795411d5f1412169ea587ab25153efa7d3b4f8a15`.
 - run-str3.mjs: `8bafb16a48d2b9b79010924d1325a79603d97354754d27a51e3481fb131f2a83`.
 
 Model settings:
@@ -426,8 +426,8 @@ Step setting: 640 sets × 7 times
 
 ### GMAT R2026a drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee`.
-- Anomalous-oxygen diagnostic: `3ef2c18d014841fb65ac0aef9da61f1e73db57f7d6f4816748bba916ba130581`.
+- FFM trajectories at suite / steps30 / finest: `76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a`.
+- Anomalous-oxygen diagnostic: `0972d4cb7de6c5c264544c4ea26597d21a81d71176cd8f394864bb431a4ddcfe`.
 - LEO400_F6-field-sun-moon-srp-drag.txt: `aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78`.
 - LEO400_F6-field-sun-moon-srp-drag.script: `a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813`.
 - LEO400_Z3-zonal20-sun-moon-srp-drag.txt: `a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2`.
@@ -443,8 +443,8 @@ Step setting: 640 sets × 7 times
 
 ### Nyx drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee`.
-- Published-formula / WGS84 trajectories: `069b92140af02f66561778ce4824e7a4959537820414e727e146004241c3fb7d`.
+- FFM trajectories at suite / steps30 / finest: `76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a`.
+- Published-formula / WGS84 trajectories: `dc156bb8c11198557061749148076e6639a1e80158675d48cf4005750f7f7e4b`.
 
 ### Basilisk drag diagnostic inputs
 
