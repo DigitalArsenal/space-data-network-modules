@@ -23,10 +23,12 @@ namespace sdnap {
 namespace atm {
 
 /// One daily $SPW row as NRLMSISE-00 reads it: the UTC day (MJD), the observed F10.7, its 81-day centered mean and
-/// the daily Ap.
+/// the daily Ap; with the row's DATE as written and its F107_DATA_TYPE, which an $OCM carries (SPEC 15).
 struct SpwDay {
   int32_t mjd;
   double f107_obs, f107_center81, ap_avg;
+  int8_t data_type;  ///< F107DataType: OBS observed; INT, PRD, PRM not
+  char date[32];     ///< DATE as the row wrote it
 };
 
 enum Model : int32_t { kJacchia70 = 0, kNrlmsise00 = 1 };
@@ -36,6 +38,9 @@ struct Atmosphere {
   bool measured = false;               ///< drivers from `days` (else SPEC 3.1's generic flux model; Jacchia 1970 only)
   std::vector<SpwDay> days;            ///< ascending MJD, one row per day
   std::vector<double> dca_d50, dca_s;  ///< open-DCA nodes (days from 1950 January 0.0 UTC) and s = ln(rho / rho_NRLMSISE-00)
+  std::vector<int64_t> dca_ms;         ///< the nodes as UTC Unix milliseconds
+  std::string dcl_cid;                 ///< CID of the $DCL the nodes came from
+  std::string source_id;               ///< the rows' PVN.SOURCE_ID (the first row naming one)
   mutable int32_t min_driver_mjd = std::numeric_limits<int32_t>::min();  ///< earliest required driver MJD (earliest state's MJD - 1)
   mutable bool before_rows = false;    ///< an evaluation asked for a day before the first row (the call is refused)
 };

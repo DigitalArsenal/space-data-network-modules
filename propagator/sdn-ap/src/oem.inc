@@ -464,5 +464,5 @@ extern "C" int propagate(void) {
     plugin_set_error("missing-omm", "An 'omm' input frame is required.");
     return 3;
   }
-  return sdnap::atm::coverage();
+  return 0;
 }

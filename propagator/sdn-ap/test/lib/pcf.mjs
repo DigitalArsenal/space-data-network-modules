@@ -1,7 +1,10 @@
-// $PCF 1.0.6 (SDS 1.272.0) configurations for the tests: every method with options takes one on its
-// required `configuration` port.
+// $PCF 1.0.7 (SDS 1.276.0) configurations for the tests. fit states its force model: every fit $PCF carries
+// FORCES.ATMOSPHERE_MODEL, written on the wire (NRLMSISE00 is the schema's default value, so the binding would leave
+// it off).
 import * as flatbuffers from "flatbuffers";
 import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
+import { PCFForceModel } from "spacedatastandards.org/lib/js/PCF/PCFForceModel.js";
+import { pcfAtmosphereFamily } from "spacedatastandards.org/lib/js/PCF/pcfAtmosphereFamily.js";
 import { PCFFitPolicyT } from "spacedatastandards.org/lib/js/PCF/PCFFitPolicy.js";
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { PCFForceModelT } from "spacedatastandards.org/lib/js/PCF/PCFForceModel.js";
@@ -10,7 +13,21 @@ import { PCFGaussianPriorT } from "spacedatastandards.org/lib/js/PCF/PCFGaussian
 import { pcfTheory } from "spacedatastandards.org/lib/js/PCF/pcfTheory.js";
 import { pcfPriorForm } from "spacedatastandards.org/lib/js/PCF/pcfPriorForm.js";
 
-export { pcfTheory, pcfPriorForm };
+export { pcfTheory, pcfPriorForm, pcfAtmosphereFamily };
+
+// FORCES.ATMOSPHERE_MODEL is written whenever a FORCES table is: fit reads it as stated, never as a default
+const addAtmosphereModel = PCFForceModel.addAtmosphereModel;
+PCFForceModel.addAtmosphereModel = (b, value) => {
+  const was = b.force_defaults;
+  b.forceDefaults(true);
+  addAtmosphereModel(b, value);
+  b.forceDefaults(was);
+};
+
+/// fit's FORCES of stock SGP4XP (Jacchia 1970 on the theory's flux model) and of AP (NRLMSISE-00 on the rows); `more`
+/// adds fields (the gravity caps, DENSITY_CORRECTION).
+export const XP_FORCES = Object.freeze({ EPHEMERIS_SOURCE: "", ATMOSPHERE_MODEL: pcfAtmosphereFamily.JACCHIA70 });
+export const MSIS_FORCES = Object.freeze({ EPHEMERIS_SOURCE: "", ATMOSPHERE_MODEL: pcfAtmosphereFamily.NRLMSISE00 });
 
 /// A FIT.DRAG_PRIOR or FIT.SRP_PRIOR with its sigma (HAS_SIGMA true); under LOG_NORMAL `mean` is the median and `sigma`
 /// the standard deviation of the natural log.
@@ -55,6 +72,9 @@ export function pcf({ theory = "UNSPECIFIED", ...given } = {}) {
 /// The `configuration` input of a request.
 export const configuration = (options = {}) => ({ portId: "configuration", typeRef: PCF_TYPE, payload: pcf(options) });
 
+/// fit's `configuration`: FORCES default to stock SGP4XP's (XP_FORCES) when the options name none.
+export const fitConfiguration = (options = {}) => configuration({ ...options, forces: options.forces ?? XP_FORCES });
+
 /// A command whose requests to a configured method carry `defaults` when they name no configuration.
 export function withConfiguration(command, defaults = {}) {
   return {
@@ -62,7 +82,7 @@ export function withConfiguration(command, defaults = {}) {
     invoke: (req) =>
       command.invoke(
         CONFIGURED_METHODS.has(req.methodId) && !req.inputs.some((i) => i.portId === "configuration")
-          ? { ...req, inputs: [...req.inputs, configuration(typeof defaults === "function" ? defaults(req) : defaults)] }
+          ? { ...req, inputs: [...req.inputs, (req.methodId === "fit" ? fitConfiguration : configuration)(typeof defaults === "function" ? defaults(req) : defaults)] }
           : req,
       ),
   };

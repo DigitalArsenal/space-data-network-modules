@@ -1,12 +1,13 @@
 // -----------------------------------------------------------------------------
 // The invoke surface: `fit` takes $OEM ephemerides (one fit per data block:
-// EPHEMERIS_DATA_LINES, TEME or Earth-fixed, UTC, km) and returns one $OMM
-// SGP4XP set (BTERM and AGOM fitted, at the two-line text's digits) per
-// block, its epoch the first state of the fit interval (USEABLE_START_TIME to
+// EPHEMERIS_DATA_LINES, TEME or Earth-fixed, UTC, km) and returns one $OCM
+// element set per block (ocm.inc): SGP4XP under the theory's own forces (BTERM
+// and AGOM fitted, at the two-line text's digits), AP under any other $PCF
+// FORCES, its epoch the first state of the fit interval (USEABLE_START_TIME to
 // USEABLE_STOP_TIME, the whole block when neither is stated); later states are
-// held out and scored. Statistics go in COMMENT; USER_DEFINED_EARTH_MODEL,
-// USER_DEFINED_EPOCH_TIMESTAMP and USER_DEFINED_MICROSECONDS carry the
-// theory's Earth model and the epoch.
+// held out and scored. The record carries the forces, the daily rows and the
+// density-correction nodes the set flies on, the orbit determination and its
+// FIT_STATISTICS, typed.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -61,31 +62,21 @@ inline void set_prior(const pcf::Prior& p, int32_t& log_flag, double& mean, doub
   sigma = p.sigma;
 }
 
-/// The $OBD model text of a fitted term: its prior's form and the values used; with the covariance, the posterior (SPEC
-/// 12.8: what the object's next fit takes as its prior): under LOG_NORMAL the posterior sigma of the log, the covariance
-/// marked prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands in poorly
-/// for a wide log-normal), and the posterior median; under GAUSSIAN_SIGNED the posterior value and sigma.
-inline void model_text(const char* term, const pcf::Prior& p, double log_sigma, bool have_cov, double value,
-                       double value_sigma, char* out, size_t n) {
-  int k;
-  if (p.form != pcfPriorForm_LOG_NORMAL) {
-    k = std::snprintf(out, n, "%s, Gaussian prior %.9g +- %.9g m^2/kg", term, p.mean, p.sigma);
-    if (have_cov && k > 0 && static_cast<size_t>(k) < n)
-      std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior %.9g +- %.9g m^2/kg", value, value_sigma);
-    return;
-  }
-  k = std::snprintf(out, n, "%s, log-normal prior, estimated as its natural log (never <= 0): median %.9g m^2/kg, sigma of the log %.9g",
-                    term, p.mean, p.sigma);
-  if (log_sigma > 0.0 && k > 0 && static_cast<size_t>(k) < n)
-    k += std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior sigma of the log %.17g", log_sigma);
-  if (have_cov && k > 0 && static_cast<size_t>(k) < n)
-    k += std::snprintf(out + k, n - static_cast<size_t>(k), "; posterior median %.9g m^2/kg", value);
-  if (log_sigma > 0.5 && k > 0 && static_cast<size_t>(k) < n)
-    std::snprintf(out + k, n - static_cast<size_t>(k), "; covariance prior-limited (posterior sigma of the log > 0.5)");
-}
-
 inline bool text_epoch(const flatbuffers::String* s, double& whole, double& frac) {
   return s != nullptr && omm::epoch(s->c_str(), s->size(), whole, frac);
+}
+
+/// The CID of the call's $PCF (the first 'configuration' frame, its plain record): FIT_STATISTICS.PCF_CID.
+inline std::string configuration_cid() {
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(i);
+    if (f == nullptr || f->port_id == nullptr || f->payload == nullptr || std::strcmp(f->port_id, "configuration") != 0) continue;
+    const uint8_t* p = f->payload;
+    uint32_t n = f->payload_length;
+    plain_view(p, n, "$PCF");
+    return sdn_cid::cid_v1_raw_sha256(p, n);
+  }
+  return std::string();
 }
 
 inline double minutes_between(double w0, double f0, double w1, double f1) {
@@ -539,14 +530,14 @@ static int fit_blocks() {
         // (above e 0.3 the perigee's), and under NRLMSISE-00 at 800 to 1400 km the wide sigma of the log; a stated prior
         // is fitted as given
         bool wide_band = false;
-        if (drag_override == nullptr && !po.drag_prior_given && (po.msis || po.minimum_span_h < 24.0) &&
+        if (drag_override == nullptr && !po.drag_prior_given && (po.forces.msis || po.minimum_span_h < 24.0) &&
             row.mean_motion_rev_day > 0.0) {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
           const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
           const double h_km = (row.eccentricity > xpt::tess::kWideE ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
           if (h_km >= 800.0) eff_drag.mean = 0.0005;
           else if (h_km >= 600.0) eff_drag.mean = 0.002;
-          if (po.msis && h_km >= 800.0 && h_km < 1400.0) {
+          if (po.forces.msis && h_km >= 800.0 && h_km < 1400.0) {
             eff_drag.sigma = pcf::kDragPriorWideLogSigma;
             wide_band = true;
           }
@@ -719,9 +710,9 @@ static int fit_blocks() {
         }
       }
       // SPEC 12.8: the drag prior's fall-back (fitoem::kFallback*), judged on the band default's fit; the drag path is
-      // stated (in the $OMM COMMENT and the $OBD) only where the rule is judged
-      char drag_path[480] = "";
-      if (chosen.wide_band) std::snprintf(drag_path, sizeof drag_path, "%s", "band default at 800-1400 km, no fall-back");
+      // stated (in the record's OD COMMENT) only where the rule is judged
+      const bool band_judged = chosen.wide_band;
+      bool fell_back = false;
       if (chosen.wide_band && chosen.res.rms_km <= po.implausible_rms_km &&
           (chosen.fit_end_min - chosen.fit_begin_min) / 60.0 >= fitoem::kFallbackArcHours) {
         cov::Set first_cov;
@@ -738,13 +729,7 @@ static int fit_blocks() {
           const pcf::Prior band = {fitoem::kBandMedianBterm, pcf::kDragPriorDefault.sigma, pcfPriorForm_LOG_NORMAL};
           Pass f;
           if (run_pass(span_used > 0.0 ? span_used : default_span, f, last_useable, -1, &band) == 0 && f.res.rms_km <= po.implausible_rms_km) {
-            char why[200];
-            std::snprintf(why, sizeof why, "%s%s%s%s", wide ? ", posterior sigma of the log above 0.5" : "",
-                          rough ? ", BTERM more than 3 posterior sigmas from the band median with the fit RMS more than 25 % above the band's" : "",
-                          first_arc.gap ? ", a data gap" : "", first_arc.step ? ", an along-track step" : "");
-            std::snprintf(drag_path, sizeof drag_path,
-                          "fall-back to the band median's prior (0.0005 m^2/kg, sigma of the log ln 10) on%s; the band default's fit: BTERM %.9g m^2/kg, posterior sigma of the log %.6g, %.1f sigmas from the band median, fit RMS %.6f km",
-                          why + 1, chosen.row.bterm, sl, moved, chosen.res.rms_km);
+            fell_back = true;
             used_drag = band;
             chosen = std::move(f);
           }
@@ -785,31 +770,12 @@ static int fit_blocks() {
       fit::Options& opt = chosen.opt;
       fit::Result& res = chosen.res;
       const int iterations = chosen.iterations;
-      const double first_pass_rms = chosen.first_pass_rms;
       const double fit_begin_min = chosen.fit_begin_min, fit_end_min = chosen.fit_end_min;
-      // SPEC 12.8: the final fit's arc check, reported with the drag path
-      const fitoem::ArcCheck arc = fitoem::arc_check(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()));
-      char arc_text[360];
-      {
-        char gap_at[48], step_at[48];
-        oem::iso_text(e0.whole, e0.frac, arc.gap_at, gap_at, sizeof gap_at);
-        oem::iso_text(e0.whole, e0.frac, arc.step_at, step_at, sizeof step_at);
-        int k = std::snprintf(arc_text, sizeof arc_text, "arc %.3f h; largest gap %.3f h from %s (%s); ", (fit_end_min - fit_begin_min) / 60.0,
-                              arc.gap_minutes / 60.0, gap_at, arc.gap ? "a data gap" : "no gap");
-        if (k > 0 && static_cast<size_t>(k) < sizeof arc_text) {
-          if (arc.bins == 0)
-            std::snprintf(arc_text + k, sizeof arc_text - static_cast<size_t>(k), "along-track step test: too few revolutions");
-          else
-            std::snprintf(arc_text + k, sizeof arc_text - static_cast<size_t>(k), "along-track step test over %d revolutions: %.4f m/s at %s, F %.4g (%s)",
-                          arc.bins, arc.step_ms, step_at, arc.step_f, arc.step ? "a step" : "no step");
-        }
-      }
       // SGP4XP: the set the library reads, at the two-line text's digits searched on their lattice. An AP set (SPEC 16.1,
       // marked as 16.5 states) flies on AP only and keeps the solution's full precision (16.9).
-      double best_pass_rms = std::fmin(first_pass_rms, res.rms_km);
-      if (po.tesseral_degree == 0 && po.zonal_degree == 0) {
+      const bool lattice = po.forces.tesseral == 0 && po.forces.zonal == 0;
+      if (lattice) {
         const fit::Result lat = fit::tle_lattice(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
-        best_pass_rms = std::fmin(best_pass_rms, lat.rms_km);
         res.rms_km = lat.rms_km;
         res.max_km = lat.max_km;
       }
@@ -822,7 +788,7 @@ static int fit_blocks() {
       // the arc equals the RMS floor (the formal information over the residual components), combined with the prior's;
       // BTERM's row and column of the covariance take the ratio of the widths
       const double arc_hours = (fit_end_min - fit_begin_min) / 60.0;
-      double formal_b = 0.0, floor_scale = 1.0;
+      double floor_scale = 1.0;
       if (have_cov && high_e_drag && arc_hours < fitoem::kHighEDragArcMinutes / 60.0 - 1e-6) {
         int kind[fit::kMaxParams];
         const int np = cov::kinds_of(fit_cov.o, kind);
@@ -837,7 +803,6 @@ static int fit_blocks() {
           const double info_arc = std::fmax(0.0, 1.0 / var_f - (var_p > 0.0 ? 1.0 / var_p : 0.0));
           if (!(info_arc * var_f > 1e-6)) break;  // a prior that pins BTERM (drag off, a pinned coefficient): as fitted
           const double var_h = 1.0 / (info_arc / components + (var_p > 0.0 ? 1.0 / var_p : 0.0));
-          formal_b = std::sqrt(var_b);
           floor_scale = std::sqrt(var_h / var_f);
           for (int j = 0; j < np; ++j) {
             fit_cov.C[a * np + j] *= floor_scale;
@@ -847,15 +812,24 @@ static int fit_blocks() {
           break;
         }
       }
-      // held-out score
-      double held_rms = 0.0, held_lead_days = 0.0;
-      for (double t : t_out) held_lead_days += (t - fit_end_min) / kMinutesPerDay;
-      if (!t_out.empty()) held_lead_days /= static_cast<double>(t_out.size());
+      // held-out score: RMS, largest error, and by day after the arc
+      double held_rms = 0.0, held_max = 0.0, held_stop = fit_end_min;
+      std::vector<double> day_ss;
+      std::vector<uint32_t> day_n;
       if (!t_out.empty()) {
         std::vector<double> rr(r_out.size());
         if (fit::residuals(row, t_out.data(), r_out.data(), static_cast<int>(t_out.size()), rr.data())) {
           double ss = 0.0;
-          for (size_t k = 0; k < t_out.size(); ++k) ss += rr[3 * k] * rr[3 * k] + rr[3 * k + 1] * rr[3 * k + 1] + rr[3 * k + 2] * rr[3 * k + 2];
+          for (size_t k = 0; k < t_out.size(); ++k) {
+            const double e2 = rr[3 * k] * rr[3 * k] + rr[3 * k + 1] * rr[3 * k + 1] + rr[3 * k + 2] * rr[3 * k + 2];
+            ss += e2;
+            held_max = std::fmax(held_max, std::sqrt(e2));
+            held_stop = std::fmax(held_stop, t_out[k]);
+            const size_t day = static_cast<size_t>(std::max(1.0, std::ceil((t_out[k] - fit_end_min) / kMinutesPerDay)));
+            if (day > day_ss.size()) { day_ss.resize(day, 0.0); day_n.resize(day, 0); }
+            day_ss[day - 1] += e2;
+            ++day_n[day - 1];
+          }
           held_rms = std::sqrt(ss / static_cast<double>(t_out.size()));
         }
       }
@@ -868,181 +842,137 @@ static int fit_blocks() {
         plugin_set_error("fit-implausible", why);
         return 3;
       }
-      // $OMM
-      flatbuffers::FlatBufferBuilder fbb(1024);
-      char epoch_text[48];
-      oem::iso_text(row.epoch_jd_whole, row.epoch_jd_frac, 0.0, epoch_text, sizeof epoch_text);
-      char comment[1200];
-      std::snprintf(comment, sizeof comment,
-                    "SDN-AP fit: theory SGP4XP, two-line digits; %u states fitted, %u held out; fit RMS %.6f km, max %.6f km; held-out RMS %.6f km; %d iterations; span %.3f h (%s)%s%s%s%s",
-                    static_cast<unsigned>(t_fit.size()), static_cast<unsigned>(t_out.size()), res.rms_km, res.max_km, held_rms,
-                    iterations, (fitoem::epoch_placement() == 0 && fit_begin_min >= 0.0 ? fit_end_min : fit_end_min - fit_begin_min) / 60.0, start_given ? "USEABLE_START_TIME" : long_arc && span_used > default_span ? "above e 0.3 with drag: the longest arc up to 7 days (SPEC 12.8)" : span_used > default_span ? "extended: better on the latest tail" : span_used < default_span ? "shortened: the default span held no plausible set" : eccentric ? "default for an eccentric orbit (FIT.ECCENTRIC_DEFAULT_SPAN_HOURS)" : "default (FIT.DEFAULT_SPAN_HOURS)",
-                    drag_path[0] ? "; drag prior: " : "", drag_path, drag_path[0] ? "; " : "", drag_path[0] ? arc_text : "");
-      const auto s_epoch = fbb.CreateString(epoch_text);
-      const auto s_comment = fbb.CreateString(comment);
-      const auto s_center = fbb.CreateString("EARTH");
-      const auto s_model = fbb.CreateString("EGM-96");
-      const auto s_orig = oem->ORIGINATOR() != nullptr ? fbb.CreateString(oem->ORIGINATOR()->c_str()) : fbb.CreateString("SDN");
-      const auto s_frame = CreateRFMDirect(fbb, RFMUnion_NONE, 0, 0, "TEME");
-      const CAT* object = blk->OBJECT();
-      const uint32_t norad = object != nullptr ? object->NORAD_CAT_ID() : 0;
-      const auto s_object_id = object != nullptr && object->OBJECT_ID() != nullptr ? fbb.CreateString(object->OBJECT_ID()->c_str()) : 0;
-      const auto s_object_name = object != nullptr && object->OBJECT_NAME() != nullptr ? fbb.CreateString(object->OBJECT_NAME()->c_str()) : 0;
-      const double unix_seconds = ((row.epoch_jd_whole - 2440587.5) + row.epoch_jd_frac) * 86400.0;
-      const double whole_seconds = std::floor(unix_seconds);
-      // the covariance rows (SPEC 12) as USER_DEFINED_x
-      flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OMMUserDefinedParameter>>> s_user = 0;
-      if (have_cov || po.msis) {
-        std::vector<flatbuffers::Offset<OMMUserDefinedParameter>> ps;
-        char v[64];
-        auto put = [&](const char* name, double value) {
-          std::snprintf(v, sizeof v, "%.17g", value);
-          ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, name, v));
-        };
-        if (have_cov) {
-          auto put_list = [&](const char* name, const double* values, int count) {
-            std::string text;
-            char one[32];
-            for (int k = 0; k < count; ++k) {
-              std::snprintf(one, sizeof one, k == 0 ? "%.17g" : " %.17g", values[k]);
-              text += one;
-            }
-            ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, name, text.c_str()));
-          };
-          int kind[fit::kMaxParams];
-          const int np = cov::kinds_of(fit_cov.o, kind);
-          for (int a = 6; a < np; ++a) {
-            double values[fit::kMaxParams];
-            for (int j = 0; j <= a; ++j) values[j] = fit_cov.C[a * np + j];
-            put_list(cov::consider_name(kind[a]), values, a + 1);
+      // the weather the record carries (SPEC 15): one row per UTC day from the day before the arc's first through the
+      // later of the arc's last and the epoch's plus FIT.WEATHER_HORIZON_DAYS; a missing day is refused by name
+      ocm::Weather weather;
+      const atm::Atmosphere* call_atm = atm::active();
+      if (po.forces.weather_source == pcfWeatherSource_RECORDS && call_atm != nullptr) {
+        auto mjd_at = [&](double minutes) { return static_cast<int32_t>(std::floor((e0.whole - 2400000.5) + e0.frac + minutes / kMinutesPerDay)); };
+        const int32_t first_day = mjd_at(fit_begin_min) - 1;
+        const int32_t last_day = std::max(mjd_at(fit_end_min), mjd_at(0.0) + static_cast<int32_t>(po.weather_horizon_days));
+        size_t k = 0;
+        const std::vector<atm::SpwDay>& days = call_atm->days;
+        for (int32_t d = first_day; d <= last_day; ++d) {
+          while (k < days.size() && days[k].mjd < d) ++k;
+          if (k >= days.size() || days[k].mjd != d) {
+            char day[16];
+            atm::date_of_mjd(d, day, sizeof day);
+            return atm::fail_day("weather-rows-short", day,
+                                 "The 'space_weather' rows miss a day the record carries: the day before the fit arc through the later of its last day and the epoch's plus FIT.WEATHER_HORIZON_DAYS.");
           }
-          put_list("SDNAP_COV_FLOOR_UVW", fit_cov.floor, 6);
-          put_list("SDNAP_COV_NOISE", fit_cov.noise, 5);
-          put("SDNAP_COV_NG_RATE", ng_rate);
-          ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_COV_REGIME", fit_cov.regime == 0 ? "DRAG" : "ABOVE"));
+          weather.rows.push_back(days[k]);
         }
-        if (po.msis) {
-          ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_ATMOSPHERE_MODEL", po.dca ? "NRLMSISE00_DCA" : "NRLMSISE00"));
+        weather.source_id = call_atm->source_id;
+        if (po.forces.dca) {
+          // the nodes from the last at or before the start of the first row's day through the last published
+          const int64_t start_ms = static_cast<int64_t>(first_day - 40587) * 86400000LL;
+          size_t i0 = 0;
+          for (size_t i = 0; i < call_atm->dca_ms.size(); ++i)
+            if (call_atm->dca_ms[i] <= start_ms) i0 = i;
+          weather.node_ms.assign(call_atm->dca_ms.begin() + static_cast<std::ptrdiff_t>(i0), call_atm->dca_ms.end());
+          weather.node_s.assign(call_atm->dca_s.begin() + static_cast<std::ptrdiff_t>(i0), call_atm->dca_s.end());
+          weather.dcl_cid = call_atm->dcl_cid;
         }
-        if (po.tesseral_degree != 0 || po.zonal_degree != 0) {
-          char terms[32];
-          std::snprintf(terms, sizeof terms, "%d,%d", po.tesseral_degree, po.zonal_degree);
-          ps.push_back(CreateOMMUserDefinedParameterDirect(fbb, "SDNAP_GRAVITY_TERMS", terms));
-        }
-        s_user = fbb.CreateVector(ps);
       }
-      flatbuffers::Offset<flatbuffers::Vector<double>> s_cov = 0;
-      flatbuffers::Offset<RFM> s_cov_frame = 0;
-      if (have_cov) {
-        double c21[21];
-        int k21 = 0;
-        for (int i = 0; i < 6; ++i)
-          for (int j = 0; j <= i; ++j) c21[k21++] = fit_cov.C[i * fit_cov.np + j];
-        s_cov = fbb.CreateVector(c21, 21);
-        s_cov_frame = CreateRFMDirect(fbb, RFMUnion_NONE, 0, 0, "TEME");
-      }
-      OMMBuilder b(fbb);
-      b.add_ORIGINATOR(s_orig);
-      b.add_CENTER_NAME(s_center);
-      b.add_REFERENCE_FRAME(s_frame);
-      b.add_TIME_SYSTEM(timingStandard_UTC);
-      b.add_MEAN_ELEMENT_THEORY(meanElementSource_SGP4XP);
-      if (norad != 0) b.add_NORAD_CAT_ID(norad);
-      if (!s_object_id.IsNull()) b.add_OBJECT_ID(s_object_id);
-      if (!s_object_name.IsNull()) b.add_OBJECT_NAME(s_object_name);
-      b.add_COMMENT(s_comment);
-      b.add_EPOCH(s_epoch);
-      b.add_MEAN_MOTION(row.mean_motion_rev_day);
-      b.add_ECCENTRICITY(row.eccentricity);
-      b.add_INCLINATION(row.inclination_deg);
-      b.add_RA_OF_ASC_NODE(row.raan_deg);
-      b.add_ARG_OF_PERICENTER(row.arg_pericenter_deg);
-      b.add_MEAN_ANOMALY(row.mean_anomaly_deg);
-      b.add_BSTAR(row.bterm);
-      b.add_MEAN_MOTION_DDOT(row.agom);
-      b.add_USER_DEFINED_EARTH_MODEL(s_model);
-      b.add_USER_DEFINED_EPOCH_TIMESTAMP(whole_seconds);
-      b.add_USER_DEFINED_MICROSECONDS(std::round((unix_seconds - whole_seconds) * 1e6));
-      if (!s_user.IsNull()) b.add_USER_DEFINED_PARAMETERS(s_user);
-      if (have_cov) {
-        b.add_COV_REFERENCE_FRAME(s_cov_frame);
-        b.add_COVARIANCE(s_cov);
-      }
-      FinishOMMBuffer(fbb, b.Finish());
-      if (plugin_push_output("elements", "OMM.fbs", "$OMM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
-        plugin_set_error("output-failed", "The $OMM could not be emitted.");
-        return 3;
-      }
-      // $OBD: the determination behind the set
+      // the fit's position errors in the model's radial, in-track and cross-track axes
+      double uvw_ss[3] = {};
       {
-        flatbuffers::FlatBufferBuilder ob(512);
-        char start_text[48], end_text[48];
-        const fitoem::Sample& fs = all[first < n ? first : 0];  // the fit interval's first state
-        oem::iso_text(fs.whole, fs.frac, 0.0, start_text, sizeof start_text);
-        oem::iso_text(e0.whole, e0.frac, fit_end_min, end_text, sizeof end_text);
-        const auto o_start = ob.CreateString(start_text);
-        const auto o_end = ob.CreateString(end_text);
-        const auto o_from = ob.CreateString(epoch_text);
-        const auto o_source = ob.CreateString("sdn-ap-propagator fit: Levenberg-Marquardt on TEME position residuals, unit weights, km; theory SGP4XP at the two-line text's digits");
-        char bmodel[1600], amodel[400];
-        // the posterior sigma of BTERM and AGOM themselves: their rows of the epoch covariance
-        double sigma_b = 0.0, sigma_a = 0.0;
-        if (have_cov) {
-          int kind[fit::kMaxParams];
-          const int np = cov::kinds_of(fit_cov.o, kind);
-          for (int a = 6; a < np; ++a) {
-            const double var = fit_cov.C[a * np + a];
-            if (kind[a] == 6) sigma_b = var > 0.0 ? std::sqrt(var) : 0.0;
-            if (kind[a] == 7) sigma_a = var > 0.0 ? std::sqrt(var) : 0.0;
+        xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+        if (xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk) {
+          for (size_t k = 0; k < t_fit.size(); ++k) {
+            double rm[3], vm[3], u[3];
+            if (xpt::xp_propagate(*xs, t_fit[k], rm, vm) != kPropOk) break;
+            const double e[3] = {rm[0] - r_fit[3 * k], rm[1] - r_fit[3 * k + 1], rm[2] - r_fit[3 * k + 2]};
+            cov::to_uvw(rm, vm, e, u);
+            for (int j = 0; j < 3; ++j) uvw_ss[j] += u[j] * u[j];
           }
+          xpt::xp_release(*xs);
         }
-        fitoem::model_text("BTERM (SGP4XP)", used_drag, have_cov ? fit_cov.log_sigma[0] : 0.0, have_cov, row.bterm, sigma_b,
-                           bmodel, sizeof bmodel);
-        if (formal_b > 0.0) {
-          // SPEC 12.8: an arc shorter than 7 days above e 0.3
-          const size_t used = std::strlen(bmodel);
-          std::snprintf(bmodel + used, sizeof bmodel - used,
-                        "; drag coefficient not separable on this arc (e above 0.3, %.1f h of 168 h): posterior width from the RMS floor, formal sigma %.9g m^2/kg",
-                        arc_hours, formal_b);
-        }
-        {
-          const size_t used = std::strlen(bmodel);
-          std::snprintf(bmodel + used, sizeof bmodel - used, "%s%s; %s", drag_path[0] ? "; drag prior: " : "", drag_path, arc_text);
-        }
-        fitoem::model_text("AGOM (SGP4XP)", chosen.srp, have_cov ? fit_cov.log_sigma[1] : 0.0, have_cov, row.agom, sigma_a,
-                           amodel, sizeof amodel);
-        const auto o_bmodel = ob.CreateString(bmodel);
-        const auto o_amodel = ob.CreateString(amodel);
-        const auto o_object = object != nullptr && object->OBJECT_ID() != nullptr ? ob.CreateString(object->OBJECT_ID()->c_str()) : 0;
-        const auto o_types = ob.CreateVectorOfStrings(std::vector<std::string>{"POSITION"});
-        OBDBuilder d(ob);
-        if (norad != 0) d.add_SAT_NO(norad);
-        if (!o_object.IsNull()) d.add_ORIG_OBJECT_ID(o_object);
-        d.add_START_TIME(o_start);
-        d.add_END_TIME(o_end);
-        d.add_METHOD(odMethod_BATCH_LEAST_SQUARES);
-        d.add_METHOD_SOURCE(o_source);
-        d.add_TIME_SPAN(fitoem::minutes_between(all[0].whole, all[0].frac, all[n - 1].whole, all[n - 1].frac) / kMinutesPerDay);
-        d.add_FIT_SPAN((fit_end_min - fit_begin_min) / kMinutesPerDay);
-        d.add_EFFECTIVE_FROM(o_from);
-        d.add_WRMS(res.rms_km);
-        d.add_FIRST_PASS_WRMS(first_pass_rms);
-        d.add_BEST_PASS_WRMS(best_pass_rms);
-        if (!t_out.empty() && held_lead_days > 0.0) d.add_ERROR_GROWTH_RATE(std::fmax(0.0, held_rms - res.rms_km) / held_lead_days);
-        d.add_BALLISTIC_COEFF_EST(true);
-        d.add_BALLISTIC_COEFF_MODEL(o_bmodel);
-        d.add_AGOM_EST(true);
-        d.add_AGOM_MODEL(o_amodel);
-        d.add_RMS_CONVERGENCE_CRITERIA(1e-10);
-        d.add_NUM_ITERATIONS(static_cast<uint16_t>(iterations > 65535 ? 65535 : iterations));
-        d.add_NUM_ACCEPTED_OBS(static_cast<uint32_t>(t_fit.size()));
-        d.add_NUM_REJECTED_OBS(0);
-        d.add_ACCEPTED_OB_TYPS(o_types);
-        FinishOBDBuffer(ob, d.Finish());
-        if (plugin_push_output("determination", "OBD.fbs", "$OBD", ob.GetBufferPointer(), ob.GetSize()) < 0) {
-          plugin_set_error("output-failed", "The $OBD could not be emitted.");
-          return 3;
-        }
+        std::free(xs);
+      }
+      // $OCM
+      flatbuffers::FlatBufferBuilder fbb(4096);
+      char epoch_text[48], start_text[48], stop_text[48], held_text[48];
+      oem::iso_text(row.epoch_jd_whole, row.epoch_jd_frac, 0.0, epoch_text, sizeof epoch_text);
+      oem::iso_text(e0.whole, e0.frac, fit_begin_min, start_text, sizeof start_text);
+      oem::iso_text(e0.whole, e0.frac, fit_end_min, stop_text, sizeof stop_text);
+      oem::iso_text(e0.whole, e0.frac, held_stop, held_text, sizeof held_text);
+      const double fitted = static_cast<double>(t_fit.size());
+      std::vector<flatbuffers::Offset<OCMHeldOutDay>> held_days;
+      for (size_t d = 0; d < day_n.size(); ++d)
+        if (day_n[d] > 0) held_days.push_back(CreateOCMHeldOutDay(fbb, static_cast<uint16_t>(d + 1), day_n[d], std::sqrt(day_ss[d] / day_n[d])));
+      const auto s_held_days = held_days.empty() ? 0 : fbb.CreateVector(held_days);
+      const auto s_pcf_cid = fbb.CreateString(fitoem::configuration_cid());
+      const auto s_fit_start = fbb.CreateString(start_text);
+      const auto s_fit_stop = fbb.CreateString(stop_text);
+      const auto s_held_stop = t_out.empty() ? 0 : fbb.CreateString(held_text);
+      OCMFitStatisticsBuilder fs(fbb);
+      fs.add_FIT_STATES(static_cast<uint32_t>(t_fit.size()));
+      fs.add_FIT_RMS_KM(res.rms_km);
+      fs.add_FIT_MAX_KM(res.max_km);
+      fs.add_FIT_RADIAL_RMS_KM(std::sqrt(uvw_ss[0] / fitted));
+      fs.add_FIT_IN_TRACK_RMS_KM(std::sqrt(uvw_ss[1] / fitted));
+      fs.add_FIT_CROSS_TRACK_RMS_KM(std::sqrt(uvw_ss[2] / fitted));
+      fs.add_ITERATIONS(static_cast<uint32_t>(iterations));
+      fs.add_CONVERGED(res.status == 0);
+      if (!t_out.empty()) {
+        fs.add_HELD_OUT_STOP(s_held_stop);
+        fs.add_HELD_OUT_STATES(static_cast<uint32_t>(t_out.size()));
+        fs.add_HELD_OUT_RMS_KM(held_rms);
+        fs.add_HELD_OUT_MAX_KM(held_max);
+        if (!s_held_days.IsNull()) fs.add_HELD_OUT_DAYS(s_held_days);
+      }
+      fs.add_PCF_CID(s_pcf_cid);
+      fs.add_FIT_START(s_fit_start);
+      fs.add_FIT_STOP(s_fit_stop);
+      const auto statistics = fs.Finish();
+      // the dynamical parameters: BTERM and AGOM, by their prwDynamicParameter
+      std::vector<flatbuffers::Offset<OCMDynamicParameter>> dyn = {
+          CreateOCMDynamicParameterDirect(fbb, "DRAG_AREA_OVER_MASS", row.bterm, "m**2/kg", opt.fit_drag != 0, prwDynamicParameter_DRAG_AREA_OVER_MASS),
+          CreateOCMDynamicParameterDirect(fbb, "SRP_AREA_OVER_MASS", row.agom, "m**2/kg", opt.fit_agom != 0, prwDynamicParameter_SRP_AREA_OVER_MASS)};
+      const auto s_dyn = fbb.CreateVector(dyn);
+      std::vector<std::string> estimated = {"MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY"};
+      if (opt.fit_drag) estimated.push_back("DRAG_AREA_OVER_MASS");
+      if (opt.fit_agom) estimated.push_back("SRP_AREA_OVER_MASS");
+      const auto s_estimated = fbb.CreateVectorOfStrings(estimated);
+      std::vector<std::string> comment;
+      comment.push_back(start_given ? "fit arc: the ephemeris block's useable interval"
+                        : long_arc && span_used > default_span ? "fit arc: the longest arc the ephemeris holds, an eccentric orbit with its perigee in the drag"
+                        : span_used > default_span ? "fit arc: extended, better on the latest tail"
+                        : span_used < default_span ? "fit arc: shortened, the default span held no plausible set"
+                        : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
+      if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
+      if (lattice) comment.push_back("elements at the two-line text's digits");
+      const auto s_comment = fbb.CreateVectorOfStrings(comment);
+      const auto s_od_method = fbb.CreateString("BATCH LEAST SQUARES");
+      const auto s_od_algorithm = fbb.CreateString("LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS");
+      const auto s_od_epoch = fbb.CreateString(epoch_text);
+      OrbitDeterminationBuilder od(fbb);
+      od.add_OD_ALGORITHM(s_od_algorithm);
+      od.add_OD_METHOD(s_od_method);
+      od.add_OD_EPOCH(s_od_epoch);
+      od.add_OD_OBSERVATIONS_USED(static_cast<int32_t>(t_fit.size()));
+      od.add_OD_EST_PARAMETERS(s_estimated);
+      od.add_OD_ESTIMATOR(estimatorCategory_BatchLeastSquares);
+      od.add_OD_DYNAMIC_PARAMETERS(s_dyn);
+      // CCSDS elapsed counts from the epoch back to the first and last observation, written when not negative
+      if (-fit_begin_min >= 0.0) od.add_DAYS_SINCE_FIRST_OBS(-fit_begin_min / kMinutesPerDay);
+      if (-fit_end_min >= 0.0) od.add_DAYS_SINCE_LAST_OBS(-fit_end_min / kMinutesPerDay);
+      od.add_ACTUAL_OD_SPAN((fit_end_min - fit_begin_min) / kMinutesPerDay);
+      od.add_COMMENT(s_comment);
+      od.add_FIT_STATISTICS(statistics);
+      ocm::Extras extras;
+      extras.od = od.Finish();
+      const CAT* object = blk->OBJECT();
+      ocm::Identity id;
+      id.norad = object != nullptr ? object->NORAD_CAT_ID() : 0;
+      if (object != nullptr && object->OBJECT_ID() != nullptr) id.object_id = object->OBJECT_ID()->str();
+      if (object != nullptr && object->OBJECT_NAME() != nullptr) id.object_name = object->OBJECT_NAME()->str();
+      id.originator = oem->ORIGINATOR() != nullptr ? oem->ORIGINATOR()->str() : "SDN";
+      ocm::build(fbb, row, po.forces, &weather, id, extras);
+      if (plugin_push_output("elements", "OCM.fbs", "$OCM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
+        plugin_set_error("output-failed", "The $OCM could not be emitted.");
+        return 3;
       }
       ++blocks_done;
     }
@@ -1054,14 +984,14 @@ static int fit_blocks() {
   return 0;
 }
 
-/// The fit: $PCF THEORY UNSPECIFIED or SGP4XP fits SGP4XP sets (the two-line digits).
+/// The fit: $PCF THEORY UNSPECIFIED, SGP4XP or AP; the FORCES decide the theory written (stock: SGP4XP at the two-line
+/// digits; otherwise AP).
 extern "C" int fit(void) {
   plugin_reset_output_state();
   if (const int rc = sdnap::pcf::read(sdnap::pcf::kFit)) return rc;
   if (const int rc = sdnap::atm::prepare()) return rc;  // SPEC 15: the drag atmosphere the call selects
   sdnap::atm::Scope scope;
-  if (const int rc = fit_blocks()) return rc;
-  return sdnap::atm::coverage();
+  return fit_blocks();
 }
 
 // Diagnostic (the fit-design study): where the fitted set's epoch sits in the fit interval, 0 its first state (the

@@ -30,13 +30,13 @@ const standards = await import("space-data-module-sdk/standards");
 const { FlatcRunner } = await import("flatc-wasm");
 const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.json"));
 
-// C++ bindings of $OEM (propagate's output, fit's input), $OMM (fit's output),
+// C++ bindings of $OEM (propagate's output, fit's input), $OCM (fit's output), $OMM (ingest_omm's input),
 // $SPW and $DCL (the drag atmosphere's inputs, SPEC 15) and the schemas they
 // include, generated from the pinned SDS package in dependency order.
 async function oemBindings() {
   const files = {};
   const deps = new Map();
-  const pending = ["OEM", "OMM", "PCF", "OBD", "MNV", "SPW", "DCL"];
+  const pending = ["OEM", "OMM", "OCM", "PCF", "MNV", "SPW", "DCL"];
   while (pending.length) {
     const code = pending.pop();
     if (deps.has(code)) continue;
@@ -52,7 +52,7 @@ async function oemBindings() {
     for (const dep of deps.get(code)) visit(dep);
     order.push(code);
   };
-  for (const code of ["OEM", "OMM", "PCF", "OBD", "MNV", "SPW", "DCL"]) visit(code);
+  for (const code of ["OEM", "OMM", "OCM", "PCF", "MNV", "SPW", "DCL"]) visit(code);
   const flatc = await FlatcRunner.init();
   return order
     .map((code) => {
@@ -312,7 +312,9 @@ const sourceCode = inlined
   .replace('#include "oem_generated.h"', await oemBindings())
   .replace('#include "nrlmsise00.h"', await nrlmsise())
   .replace('#include "gravity_egm.h"', await gravity())
-  .replace('#include "erfa_pinned.h"', await erfa());
+  .replace('#include "erfa_pinned.h"', await erfa())
+  // the content id of an SDS record (the $PCF and $DCL an $OCM names): the modules repository's one definition
+  .replace('#include "sds_cid.hpp"', await fs.readFile(path.join(modulesRoot, "common", "sds_cid.hpp"), "utf8"));
 
 const buildRoot = path.join(packageRoot, ".build");
 // SDNAP_DIST_DIR builds elsewhere (experiments), leaving dist/ as the last pushed build
@@ -323,6 +325,8 @@ await fs.mkdir(path.dirname(outputPath), { recursive: true });
 await fs.writeFile(path.join(buildRoot, "module.cpp"), sourceCode);
 
 const manifest = JSON.parse(await fs.readFile(path.join(packageRoot, "plugin-manifest.json"), "utf8"));
+// the PRODUCER an $OCM names (src/ocm.inc) is this manifest's version
+if (!parts.get("ocm.inc")?.includes(`kModuleVersion = "${manifest.version}"`)) throw new Error(`src/ocm.inc kModuleVersion is not the manifest's ${manifest.version}`);
 const compilation = await compileModuleFromSource({
   manifest,
   sourceCode,

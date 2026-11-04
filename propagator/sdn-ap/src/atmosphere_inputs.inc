@@ -30,37 +30,77 @@ inline int fail(const char* code, const char* why) {
 /// or a non-negative Ap.
 inline bool spw_day(const SPW* row, SpwDay& d) {
   double whole, frac;
-  if (row == nullptr || row->DATE() == nullptr || !omm::epoch(row->DATE()->c_str(), row->DATE()->size(), whole, frac) ||
-      !(row->F107_OBS() > 0.0f) || !(row->F107_OBS_CENTER81() > 0.0f) || row->AP_AVG() < 0)
+  if (row == nullptr || row->DATE() == nullptr || row->DATE()->size() >= sizeof d.date ||
+      !omm::epoch(row->DATE()->c_str(), row->DATE()->size(), whole, frac) || !(row->F107_OBS() > 0.0f) ||
+      !(row->F107_OBS_CENTER81() > 0.0f) || row->AP_AVG() < 0)
     return false;
   d.mjd = static_cast<int32_t>(std::floor((whole - 2400000.5) + frac));
   d.f107_obs = row->F107_OBS();
   d.f107_center81 = row->F107_OBS_CENTER81();
   d.ap_avg = row->AP_AVG();
+  d.data_type = row->F107_DATA_TYPE();
+  std::memset(d.date, 0, sizeof d.date);
+  std::memcpy(d.date, row->DATE()->c_str(), row->DATE()->size());
   return true;
 }
 
+/// The ISO date YYYY-MM-DD of an MJD.
+inline void date_of_mjd(int32_t mjd, char* out, size_t n) {
+  const int64_t z = static_cast<int64_t>(mjd) - 40587 + 719468;  // days from 1970-01-01, shifted to 0000-03-01
+  const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+  const int64_t doe = z - era * 146097;
+  const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const int64_t mp = (5 * doy + 2) / 153;
+  const int64_t d = doy - (153 * mp + 2) / 5 + 1;
+  const int64_t m = mp + (mp < 10 ? 3 : -9);
+  std::snprintf(out, n, "%04d-%02d-%02d", static_cast<int>(yoe + era * 400 + (m <= 2)), static_cast<int>(m), static_cast<int>(d));
+}
+
+/// `code:<day>`, the refusal that names a day.
+inline int fail_day(const char* code, const char* day, const char* why) {
+  char name[96];
+  std::snprintf(name, sizeof name, "%s:%s", code, day);
+  plugin_set_error(name, why);
+  return 3;
+}
+
+/// A row that does not read as a day: weather-rows-invalid:<its DATE, or "undated">.
+inline int fail_row(const SPW* row) {
+  char day[40] = "undated";
+  if (row != nullptr && row->DATE() != nullptr && row->DATE()->size() > 0) std::snprintf(day, sizeof day, "%.32s", row->DATE()->c_str());
+  return fail_day("weather-rows-invalid", day, "An $SPW row needs an ISO DATE, positive F107_OBS and F107_OBS_CENTER81, and AP_AVG >= 0.");
+}
+
 /// The rows of one 'space_weather' frame appended to `days`: 0, or 3 refused by name.
-inline int read_spw_frame(const uint8_t* p, uint32_t n, std::vector<SpwDay>& days) {
+inline int read_spw_frame(const uint8_t* p, uint32_t n, std::vector<SpwDay>& days, std::string* source_id = nullptr) {
+  // 0 read, 1 not an $SPW record, 2 a record whose row is not a day (refused by its DATE)
+  const SPW* bad = nullptr;
   auto one = [&](const uint8_t* q, uint32_t m) {
     flatbuffers::Verifier::Options vopt;
     vopt.check_alignment = false;  // a record cut from a size-prefixed stream is aligned to its prefix, not to its own start
     flatbuffers::Verifier v(q, m, vopt);
-    if (m < 8 || std::memcmp(q + 4, "$SPW", 4) != 0 || !VerifySPWBuffer(v)) return false;
+    if (m < 8 || std::memcmp(q + 4, "$SPW", 4) != 0 || !VerifySPWBuffer(v)) return 1;
     SpwDay d{};
-    if (!spw_day(GetSPW(q), d)) return false;
+    if (!spw_day(GetSPW(q), d)) { bad = GetSPW(q); return 2; }
+    if (source_id != nullptr && source_id->empty() && GetSPW(q)->PROVENANCE() != nullptr && GetSPW(q)->PROVENANCE()->SOURCE_ID() != nullptr)
+      *source_id = GetSPW(q)->PROVENANCE()->SOURCE_ID()->str();
     days.push_back(d);
-    return true;
+    return 0;
   };
   if (n >= 8 && std::memcmp(p + 4, "$SPW", 4) == 0) {
-    if (!one(p, n)) return fail("invalid-space-weather", "An $SPW row needs an ISO DATE, positive F107_OBS and F107_OBS_CENTER81, and AP_AVG >= 0.");
+    const int rc = one(p, n);
+    if (rc == 2) return fail_row(bad);
+    if (rc == 1) return fail_day("weather-rows-invalid", "undated", "A 'space_weather' payload is not a verifiable $SPW row.");
     return 0;
   }
   for (uint32_t off = 0; off < n;) {
     uint32_t len = 0;
     if (n - off >= 12) std::memcpy(&len, p + off, 4);
-    if (n - off < 12 || len > n - off - 4 || !one(p + off + 4, len))
-      return fail("invalid-space-weather", "A 'space_weather' frame is an $SPW row or size-prefixed $SPW rows end to end, each with an ISO DATE, positive F107_OBS and F107_OBS_CENTER81, and AP_AVG >= 0.");
+    const int rc = n - off < 12 || len > n - off - 4 ? 1 : one(p + off + 4, len);
+    if (rc == 2) return fail_row(bad);
+    if (rc == 1)
+      return fail_day("weather-rows-invalid", "undated", "A 'space_weather' frame is an $SPW row or size-prefixed $SPW rows end to end.");
     off += 4 + len;
   }
   return 0;
@@ -89,6 +129,7 @@ inline const char* read_dcl(const uint8_t* p, uint32_t n, Atmosphere& a) {
     if (ms < 63072000000LL || ms > 253402300799999LL || (k > 0 && ms <= previous) || !std::isfinite(v) || !std::isfinite(std::exp(v)))
       return "UTC nodes must increase strictly within 1972..9999, with finite values";
     previous = ms;
+    a.dca_ms.push_back(ms);
     a.dca_d50.push_back(static_cast<double>(ms) / 86400000.0 + 7306.0);  // days from 1950 January 0.0 UTC (JD 2440587.5 - 2433281.5)
     a.dca_s.push_back(v);
   }
@@ -105,35 +146,38 @@ inline void set_rows(Atmosphere& a, std::vector<SpwDay>& days) {
   }
 }
 
-/// The call's atmosphere from pcf::options() and the frames: 0 with active() set (nullptr when the call keeps the
-/// theory's own drag), or 3 refused by name.
+/// The fit's atmosphere from its $PCF FORCES (pcf::options().forces) and its 'space_weather' and 'density_correction'
+/// frames: 0 with active() set (nullptr on the theory's own flux model), or 3 refused by name.
 inline int prepare() {
-  const pcf::Options& o = pcf::options();
+  const Forces& o = pcf::options().forces;
   Atmosphere& a = call_atmosphere();
   a = Atmosphere{};
   active() = nullptr;
-  xpt::tess::active() = xpt::tess::Terms{o.tesseral_degree, o.zonal_degree};  // AP's gravity terms (SPEC 16)
+  xpt::tess::active() = xpt::tess::Terms{o.tesseral, o.zonal};  // AP's gravity terms (SPEC 16)
   std::vector<SpwDay> days;
   bool have_rows = false, have_dcl = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (f == nullptr || f->port_id == nullptr || f->payload == nullptr) continue;
     if (std::strcmp(f->port_id, "space_weather") == 0) {
-      if (const int rc = read_spw_frame(f->payload, f->payload_length, days)) return rc;
+      if (const int rc = read_spw_frame(f->payload, f->payload_length, days, &a.source_id)) return rc;
       have_rows = true;
     } else if (std::strcmp(f->port_id, "density_correction") == 0) {
       if (have_dcl) return fail("invalid-density-correction", "One 'density_correction' $DCL per call.");
       if (const char* why = read_dcl(f->payload, f->payload_length, a)) return fail("invalid-density-correction", why);
+      const uint8_t* q = f->payload;
+      uint32_t m = f->payload_length;
+      plain_view(q, m, "$DCL");
+      a.dcl_cid = sdn_cid::cid_v1_raw_sha256(q, m);
       have_dcl = true;
     }
   }
   if (have_dcl && !o.dca) return fail("density-correction-unselected", "A 'density_correction' $DCL is given, but FORCES.DENSITY_CORRECTION is NONE.");
   if (o.dca && !have_dcl) return fail("density-correction-missing", "FORCES.DENSITY_CORRECTION DCA_COMMON_MODE needs a 'density_correction' $DCL.");
-  if (o.weather_source == pcfWeatherSource_RECORDS && !have_rows)
-    return fail("space-weather-missing", "FORCES.WEATHER_SOURCE RECORDS needs 'space_weather' $SPW rows.");
-  if (o.msis && !have_rows) return fail("space-weather-missing", "NRLMSISE-00 (FORCES.ENABLE_DRAG) needs 'space_weather' $SPW rows.");
-  if (have_rows && days.empty()) return fail("space-weather-missing", "The 'space_weather' frames hold no rows.");
-  if (!have_rows && !o.msis) return 0;  // the theory's own drag
+  const bool records = o.weather_source == pcfWeatherSource_RECORDS;
+  if (have_rows && !records) return fail("weather-rows-unselected", "'space_weather' rows are given, but the forces read the theory's own flux model.");
+  if (records && (!have_rows || days.empty())) return fail("weather-rows-missing", "WEATHER_SOURCE RECORDS needs 'space_weather' $SPW rows.");
+  if (!records) return 0;  // the theory's own drag
   set_rows(a, days);
   a.model = o.msis ? kNrlmsise00 : kJacchia70;
   a.measured = true;
@@ -141,13 +185,6 @@ inline int prepare() {
   return 0;
 }
 
-/// 0, or 3 when an evaluation of the call asked for a day before the rows (atmosphere.inc row_at).
-inline int coverage() {
-  const Atmosphere* a = active();
-  if (a == nullptr || !a->before_rows) return 0;
-  return fail("space-weather-out-of-range",
-              "The 'space_weather' rows start after a day the call evaluates: they must begin by the day before its earliest state's day.");
-}
 
 /// The call's atmosphere ends with the call.
 struct Scope {

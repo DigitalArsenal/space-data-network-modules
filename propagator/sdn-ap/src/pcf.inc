@@ -1,12 +1,14 @@
 // -----------------------------------------------------------------------------
-// $PCF 1.0.6 (SDS 1.272.0): the required `configuration` input of every method
-// with options. A method reads THEORY and its own tables:
+// $PCF 1.0.7 (SDS 1.276.0): the `configuration` input of the methods with
+// options. A method reads THEORY and its own tables:
 //   propagate, maneuver   OUTPUT, FORCES, INTEGRATOR, EVENTS
 //   fit                   FIT, FORCES, INTEGRATOR
-// FORCES on fit and propagate selects SGP4XP's drag atmosphere (SPEC 15,
-// atmosphere.inc): ENABLE_DRAG, ATMOSPHERE_MODEL, WEATHER_SOURCE,
-// WEATHER_EXTENSION, DENSITY_CORRECTION and its relaxation; every other FORCES
-// field, and these on the other methods, is refused by name.
+// FORCES on fit is the force model the fit runs under and writes into its
+// $OCM (SPEC 15, 16; Forces): ATMOSPHERE_MODEL, required, JACCHIA70 or
+// NRLMSISE00; WEATHER_SOURCE (UNSPECIFIED: THEORY_FLUX_MODEL under JACCHIA70,
+// RECORDS under NRLMSISE00); DENSITY_CORRECTION; MAXIMUM_TESSERAL_DEGREE and
+// MAXIMUM_DEGREE (the zonal tail). Every other FORCES field away from its
+// default, ENABLE_DRAG included, is refused by name.
 //   load_epochs, propagate_epochs  EPOCH_STORE and propagate's tables
 // and leaves the other tables to the methods that read them. Fields left unset
 // take the defaults schema/PCF/main.fbs documents (each equal to this module's
@@ -23,6 +25,21 @@ namespace sdnap {
 namespace fitoem {
 inline double& tail_minutes();
 }  // namespace fitoem
+
+/// The force model of an SGP4XP or AP element set (SPEC 15, 16): what `fit` runs under (its $PCF FORCES) and what the
+/// $OCM it writes states in PERTURBATIONS. Stock SGP4-XP is Jacchia 1970 on the theory's own flux model, no density
+/// correction, no gravity terms beyond the theory's; anything else is AP.
+struct Forces {
+  bool msis = false;                                          ///< NRLMSISE-00 ({NRLMSIS00E,2000}); else Jacchia 1970 ({JXX,1970})
+  int weather_source = pcfWeatherSource_THEORY_FLUX_MODEL;    ///< THEORY_FLUX_MODEL or RECORDS
+  bool dca = false;                                           ///< DENSITY_CORRECTION DCA_COMMON_MODE
+  int tesseral = 0;                                           ///< MAXIMUM_TESSERAL_DEGREE
+  int zonal = 0;                                              ///< MAXIMUM_ZONAL_DEGREE (the $PCF's MAXIMUM_DEGREE): the zonal tail, J6 up
+  bool stock() const { return !msis && weather_source == pcfWeatherSource_THEORY_FLUX_MODEL && !dca && tesseral == 0 && zonal == 0; }
+  bool same(const Forces& o) const {
+    return msis == o.msis && weather_source == o.weather_source && dca == o.dca && tesseral == o.tesseral && zonal == o.zonal;
+  }
+};
 
 namespace pcf {
 
@@ -71,15 +88,9 @@ struct Options {
   Prior drag_prior = kDragPriorDefault, srp_prior = kSrpPriorDefault;
   bool drag_prior_given = false;  ///< FIT.DRAG_PRIOR stated with its sigma: fitted as given, no altitude band (SPEC 12.8)
   bool srp_prior_given = false;   ///< FIT.SRP_PRIOR stated with its sigma: no short-arc prior (kSrpPriorShortArc)
-  // FORCES (fit, propagate): SGP4XP's drag atmosphere (SPEC 15). ENABLE_DRAG false keeps the theory's own Jacchia
-  // 1970; true selects ATMOSPHERE_MODEL (NRLMSISE00 only). The drivers: WEATHER_SOURCE UNSPECIFIED infers them ('space_weather'
-  // rows when given, else the theory's generic flux model), RECORDS needs the rows.
-  bool msis = false;
-  int weather_source = pcfWeatherSource_UNSPECIFIED;
-  bool dca = false;  ///< DENSITY_CORRECTION DCA_COMMON_MODE ('density_correction' $DCL)
-  // FORCES (fit, propagate): AP's gravity terms (SPEC 16). 0: none of them.
-  int tesseral_degree = 0;  ///< MAXIMUM_TESSERAL_DEGREE
-  int zonal_degree = 0;     ///< MAXIMUM_DEGREE: the zonal tail, J6 up
+  uint32_t weather_horizon_days = 30;  ///< FIT.WEATHER_HORIZON_DAYS: the rows the $OCM carries past its epoch's day
+  // FORCES (fit): the force model (SPEC 15, 16)
+  Forces forces{};
   // OUTPUT
   int output_frame = pcfOutputFrame_UNSPECIFIED;
   double output_step_s = 60.0;
@@ -261,6 +272,7 @@ inline int read_fit(const PCFFitPolicy* f, Options& o) {
   if (const int rc = read_prior(f->DRAG_PRIOR(), f->DRAG_PRIOR_FORM(), "DRAG_PRIOR", o.drag_prior)) return rc;
   o.drag_prior_given = f->DRAG_PRIOR() != nullptr && f->DRAG_PRIOR()->HAS_SIGMA();
   o.srp_prior_given = f->SRP_PRIOR() != nullptr && f->SRP_PRIOR()->HAS_SIGMA();
+  o.weather_horizon_days = f->WEATHER_HORIZON_DAYS();
   return read_prior(f->SRP_PRIOR(), f->SRP_PRIOR_FORM(), "SRP_PRIOR", o.srp_prior);
 }
 
@@ -280,49 +292,59 @@ inline int read_output(const PCFOutput* p, Options& o) {
   return 0;
 }
 
-/// The FORCES fields that select SGP4XP's drag atmosphere (SPEC 15) and AP's gravity terms (SPEC 16) on fit and propagate.
+/// The FORCES fields of the force model (SPEC 15, 16) on fit.
 inline bool atmosphere_field(uint16_t vt) {
-  return vt == PCFForceModel::VT_ENABLE_DRAG || vt == PCFForceModel::VT_ATMOSPHERE_MODEL || vt == PCFForceModel::VT_WEATHER_SOURCE ||
+  return vt == PCFForceModel::VT_ATMOSPHERE_MODEL || vt == PCFForceModel::VT_WEATHER_SOURCE ||
          vt == PCFForceModel::VT_WEATHER_EXTENSION || vt == PCFForceModel::VT_DENSITY_CORRECTION ||
          vt == PCFForceModel::VT_DENSITY_CORRECTION_RELAXATION_HOURS || vt == PCFForceModel::VT_HAS_DENSITY_CORRECTION_RELAXATION_HOURS ||
          vt == PCFForceModel::VT_MAXIMUM_TESSERAL_DEGREE || vt == PCFForceModel::VT_HAS_MAXIMUM_TESSERAL_DEGREE ||
          vt == PCFForceModel::VT_MAXIMUM_DEGREE || vt == PCFForceModel::VT_HAS_MAXIMUM_DEGREE;
 }
 
-/// SPEC 16: AP's gravity terms of a fit or propagate.
-inline int read_gravity_terms(const PCFForceModel* f, Options& o) {
+/// SPEC 16: AP's gravity terms of a fit.
+inline int read_gravity_terms(const PCFForceModel* f, Forces& o) {
   if (f->HAS_MAXIMUM_TESSERAL_DEGREE()) {
     if (f->MAXIMUM_TESSERAL_DEGREE() > 70) return refuse("FORCES.MAXIMUM_TESSERAL_DEGREE", "0 to 70");
-    o.tesseral_degree = f->MAXIMUM_TESSERAL_DEGREE();
+    o.tesseral = f->MAXIMUM_TESSERAL_DEGREE();
   } else if (f->MAXIMUM_TESSERAL_DEGREE() != 0) {
     return refuse("FORCES.MAXIMUM_TESSERAL_DEGREE", "set with HAS_MAXIMUM_TESSERAL_DEGREE true");
   }
   if (f->HAS_MAXIMUM_DEGREE()) {
     if (f->MAXIMUM_DEGREE() > 70) return refuse("FORCES.MAXIMUM_DEGREE", "0 to 70");
-    o.zonal_degree = f->MAXIMUM_DEGREE();
+    o.zonal = f->MAXIMUM_DEGREE();
   } else if (f->MAXIMUM_DEGREE() != 0) {
     return refuse("FORCES.MAXIMUM_DEGREE", "set with HAS_MAXIMUM_DEGREE true");
   }
   return 0;
 }
 
-/// SPEC 15: the drag atmosphere of a fit or propagate.
-inline int read_atmosphere(const PCFForceModel* f, Options& o) {
-  if (f->ATMOSPHERE_MODEL() != pcfAtmosphereFamily_NRLMSISE00)
-    return refuse("FORCES.ATMOSPHERE_MODEL", "SGP4XP's FORCES atmosphere is NRLMSISE00 with ENABLE_DRAG true; ENABLE_DRAG false keeps the theory's own Jacchia 1970");
-  o.msis = f->ENABLE_DRAG();
+/// SPEC 15: the drag atmosphere of a fit: ATMOSPHERE_MODEL on the wire, JACCHIA70 or NRLMSISE00 (the record's
+/// ATMOSPHERIC_MODEL {JXX,1970} or {NRLMSIS00E,2000}); WEATHER_SOURCE THEORY_FLUX_MODEL (Jacchia 1970 only) or RECORDS
+/// (UNSPECIFIED: THEORY_FLUX_MODEL under JACCHIA70, RECORDS under NRLMSISE00); past the last row nothing is held.
+inline int read_atmosphere(const PCFForceModel* f, Forces& o) {
+  if (!has(f, PCFForceModel::VT_ATMOSPHERE_MODEL))
+    return refuse("FORCES.ATMOSPHERE_MODEL", "fit states the atmosphere it fits under: JACCHIA70 or NRLMSISE00");
+  switch (f->ATMOSPHERE_MODEL()) {
+    case pcfAtmosphereFamily_JACCHIA70: o.msis = false; break;
+    case pcfAtmosphereFamily_NRLMSISE00: o.msis = true; break;
+    default: return refuse("FORCES.ATMOSPHERE_MODEL", "JACCHIA70 or NRLMSISE00");
+  }
   switch (f->WEATHER_SOURCE()) {
-    case pcfWeatherSource_UNSPECIFIED:
-    case pcfWeatherSource_RECORDS: o.weather_source = f->WEATHER_SOURCE(); break;
-    default: return refuse("FORCES.WEATHER_SOURCE", "this module reads daily $SPW rows ('space_weather': RECORDS, or UNSPECIFIED with the rows)");
+    case pcfWeatherSource_UNSPECIFIED: o.weather_source = o.msis ? pcfWeatherSource_RECORDS : pcfWeatherSource_THEORY_FLUX_MODEL; break;
+    case pcfWeatherSource_RECORDS: o.weather_source = pcfWeatherSource_RECORDS; break;
+    case pcfWeatherSource_THEORY_FLUX_MODEL:
+      if (o.msis) return refuse("FORCES.WEATHER_SOURCE", "NRLMSISE-00 reads daily $SPW rows (RECORDS)");
+      o.weather_source = pcfWeatherSource_THEORY_FLUX_MODEL;
+      break;
+    default: return refuse("FORCES.WEATHER_SOURCE", "THEORY_FLUX_MODEL or RECORDS ('space_weather' $SPW rows)");
   }
   switch (f->WEATHER_EXTENSION()) {
     case pcfWeatherExtension_UNSPECIFIED:
-    case pcfWeatherExtension_HOLD_LAST: break;
-    default: return refuse("FORCES.WEATHER_EXTENSION", "past the last row this module holds it (HOLD_LAST)");
+    case pcfWeatherExtension_REFUSE: break;
+    default: return refuse("FORCES.WEATHER_EXTENSION", "the rows must reach the record's horizon (FIT.WEATHER_HORIZON_DAYS); nothing is held past them");
   }
   if (f->DENSITY_CORRECTION() == pcfDensityCorrection_DCA_COMMON_MODE) {
-    if (!o.msis) return refuse("FORCES.DENSITY_CORRECTION", "the open-DCA $DCL corrects NRLMSISE-00: select it with ENABLE_DRAG true");
+    if (!o.msis) return refuse("FORCES.DENSITY_CORRECTION", "the open-DCA $DCL corrects NRLMSISE-00: ATMOSPHERE_MODEL NRLMSISE00");
     o.dca = true;
   } else if (f->DENSITY_CORRECTION() != pcfDensityCorrection_NONE) {
     return refuse("FORCES.DENSITY_CORRECTION", "NONE or DCA_COMMON_MODE");
@@ -339,20 +361,20 @@ inline int read_atmosphere(const PCFForceModel* f, Options& o) {
 /// EPHEMERIS_SOURCE, empty (the theory's own analytic Sun and Moon series), and on fit and propagate (`atmosphere`)
 /// the drag atmosphere's fields (SPEC 15). Any other field away from its default is refused by name.
 inline int read_forces(const PCFForceModel* f, bool atmosphere, Options& o) {
-  if (f == nullptr) return 0;
+  if (f == nullptr) return atmosphere ? refuse("FORCES.ATMOSPHERE_MODEL", "fit states the atmosphere it fits under: JACCHIA70 or NRLMSISE00") : 0;
   for (size_t k = 0; k < sizeof kForceFields / sizeof kForceFields[0]; ++k) {
     const uint16_t vt = static_cast<uint16_t>(4 + 2 * k);
     if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE || (atmosphere && atmosphere_field(vt)) || !off_default(raw(f), vt, kForceFields[k])) continue;
     char name[96];
     std::snprintf(name, sizeof name, "FORCES.%s", kForceFields[k].name);
-    return refuse(name, atmosphere ? "SGP4XP applies its own forces; FORCES selects only its drag atmosphere (ENABLE_DRAG, ATMOSPHERE_MODEL, WEATHER_SOURCE, WEATHER_EXTENSION, DENSITY_CORRECTION)"
+    return refuse(name, atmosphere ? "fit states its force model by ATMOSPHERE_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, MAXIMUM_TESSERAL_DEGREE and MAXIMUM_DEGREE only"
                                    : "the averaged theories (SGP4XP) apply their own forces here; fit and propagate select the drag atmosphere");
   }
   if (f->EPHEMERIS_SOURCE() != nullptr && f->EPHEMERIS_SOURCE()->size() != 0)
     return refuse("FORCES.EPHEMERIS_SOURCE", "the averaged theories read their own analytic Sun and Moon series (leave it empty)");
   if (!atmosphere) return 0;
-  if (const int rc = read_gravity_terms(f, o)) return rc;
-  return read_atmosphere(f, o);
+  if (const int rc = read_gravity_terms(f, o.forces)) return rc;
+  return read_atmosphere(f, o.forces);
 }
 
 /// Reads the method's `configuration` ($PCF): 0 and the options() set, or 3 with the error set.
@@ -387,7 +409,8 @@ inline int read_object_priors(const PCF* c, ObjectPriors& out) {
                             PCFFitPolicy::VT_TAIL_HOURS, PCFFitPolicy::VT_EXTENSION_MARGIN, PCFFitPolicy::VT_HOLDOUT_HOURS,
                             PCFFitPolicy::VT_HAS_HOLDOUT_HOURS, PCFFitPolicy::VT_ECCENTRICITY_THRESHOLD,
                             PCFFitPolicy::VT_ECCENTRIC_DEFAULT_SPAN_HOURS, PCFFitPolicy::VT_ECCENTRIC_EXTENSION_MARGIN,
-                            PCFFitPolicy::VT_ECCENTRIC_MAXIMUM_PERIOD_HOURS, PCFFitPolicy::VT_IMPLAUSIBLE_RMS_KM})
+                            PCFFitPolicy::VT_ECCENTRIC_MAXIMUM_PERIOD_HOURS, PCFFitPolicy::VT_IMPLAUSIBLE_RMS_KM,
+                            PCFFitPolicy::VT_WEATHER_HORIZON_DAYS})
     if (has(f, vt)) return refuse("configuration", kWhat);
   if (const int rc = read_prior(f->DRAG_PRIOR(), f->DRAG_PRIOR_FORM(), "DRAG_PRIOR", out.drag)) return rc;
   out.drag_given = f->DRAG_PRIOR() != nullptr && f->DRAG_PRIOR()->HAS_SIGMA();
@@ -435,7 +458,8 @@ inline int read(Method method) {
         return refuse("THEORY", "this module propagates SGP4 and SGP4XP sets (UNSPECIFIED: each set's own)");
       break;
     case kFit:
-      if (o.theory != pcfTheory_UNSPECIFIED && o.theory != pcfTheory_SGP4XP) return refuse("THEORY", "fit produces SGP4XP sets (UNSPECIFIED: SGP4XP)");
+      if (o.theory != pcfTheory_UNSPECIFIED && o.theory != pcfTheory_SGP4XP && o.theory != pcfTheory_AP)
+        return refuse("THEORY", "fit produces SGP4XP and AP sets (UNSPECIFIED: the forces decide)");
       break;
   }
   if ((tables & kTIntegrator) && c->INTEGRATOR() != nullptr)
@@ -447,7 +471,10 @@ inline int read(Method method) {
   if (tables & kTOutput)
     if (const int rc = read_output(c->OUTPUT(), o)) return rc;
   if (tables & kTForces)
-    if (const int rc = read_forces(c->FORCES(), method == kPropagate || method == kFit || method == kEpochs, o)) return rc;
+    if (const int rc = read_forces(c->FORCES(), method == kFit, o)) return rc;
+  if (method == kFit && o.theory == pcfTheory_SGP4XP && !o.forces.stock())
+    return refuse("THEORY", "SGP4XP sets fly on the theory's own forces (FORCES JACCHIA70 on its flux model, no terms, no correction)");
+  if (method == kFit && o.theory == pcfTheory_AP && o.forces.stock()) return refuse("THEORY", "AP sets replace a part of SGP4XP's forces");
   return 0;
 }
 
@@ -468,9 +495,7 @@ inline int check_set_atmosphere(int mark) {
     plugin_set_error("atmosphere-mismatch", "An 'omm' record carries an unknown SDNAP_ATMOSPHERE_MODEL mark.");
     return 3;
   }
-  const Options& o = options();
-  const int call_mark = !o.msis ? 1 : (o.dca ? 3 : 2);
-  if (mark != call_mark) {
+  if (mark != 1) {
     plugin_set_error("atmosphere-mismatch",
                      "An 'omm' set's SDNAP_ATMOSPHERE_MODEL mark disagrees with the call's FORCES drag atmosphere (Jacchia 1970 vs NRLMSISE-00 vs NRLMSISE-00 + DCA).");
     return 3;
@@ -484,8 +509,7 @@ inline int check_set_gravity_terms(const omm::GravityTerms& mark) {
     plugin_set_error("gravity-terms-mismatch", "An 'omm' record carries an unknown SDNAP_GRAVITY_TERMS mark.");
     return 3;
   }
-  const Options& o = options();
-  if (mark.tesseral != o.tesseral_degree || mark.zonal != o.zonal_degree) {
+  if (mark.tesseral != 0 || mark.zonal != 0) {
     plugin_set_error("gravity-terms-mismatch", "An 'omm' set's SDNAP_GRAVITY_TERMS mark disagrees with the call's FORCES MAXIMUM_TESSERAL_DEGREE and MAXIMUM_DEGREE.");
     return 3;
   }

@@ -24,14 +24,16 @@
 //   abi.inc        the propagator ABI and the sdnap_* batch entries
 //   omm.inc        the ingest_omm invoke method ($OMM FlatBuffers)
 //   pcf.inc        the $PCF configuration of the invoke methods
-//   atmosphere_inputs.inc  a call's drag atmosphere from FORCES, $SPW, $DCL
+//   atmosphere_inputs.inc  a fit's drag atmosphere from FORCES, $SPW, $DCL
 //   oem.inc        the propagate invoke method ($OMM in, $OEM out)
-//   fit_oem.inc    the fit invoke method ($OEM in, $OMM out)
+//   ocm.inc        the $OCM element-set record: elements, forces, identity
+//   fit_oem.inc    the fit invoke method ($OEM in, $OCM out)
 // =============================================================================
 
 #include "space_data_module_invoke.h"
 #include "orbpro/orbpro_propagator_abi.h"
 #include "omm_slots.h"
+#include "sds_cid.hpp"
 
 #include <pthread.h>
 
@@ -65,6 +67,7 @@
 #include "pcf.inc"
 #include "atmosphere_inputs.inc"
 #include "oem.inc"
+#include "ocm.inc"
 #include "epoch_store.inc"
 #include "fit_oem.inc"
 #include "events_method.inc"
