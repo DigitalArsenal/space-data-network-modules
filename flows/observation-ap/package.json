@@ -1,0 +1,20 @@
+{
+  "name": "@digitalarsenal/sdn-flow-observation-ap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./flow.mjs",
+  "scripts": {
+    "test": "node tests/laser-ap.e2e.mjs"
+  },
+  "dependencies": {
+    "flatbuffers": "25.9.23",
+    "spacedatastandards.org": "1.276.0"
+  },
+  "devDependencies": {
+    "space-data-module-sdk": "0.9.12"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.2"
+  }
+}
