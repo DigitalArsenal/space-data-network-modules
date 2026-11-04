@@ -631,7 +631,9 @@ int reduce_method() {
 // gap. Of their kept epochs: the first, the last, and the middle the one
 // farthest in time from both, each sight the fitted direction there. Sights
 // over more than one pass (a gap of kPassGapS or more): the
-// multi-revolution branches. Out: the state at the
+// multi-revolution branches. The solution is refined by least squares on
+// kRefineSights fitted directions per crossing used (two-body + J2), kept
+// when that converges under kRefineRmsArcsec. Out: the state at the
 // middle sight as a Cartesian $OCM (GCRF, km, km/s; no covariance;
 // START_TIME and STOP_TIME the sights' span) and a report. Refused by name:
 // too-few-observations (no counting crossing), single-crossing (one),
@@ -639,6 +641,8 @@ int reduce_method() {
 constexpr double kCrossingGapS = 120.0;
 constexpr int kCrossingSights = 3;
 constexpr double kEditFloorArcsec = 3.0;
+constexpr int kRefineSights = 9;
+constexpr double kRefineRmsArcsec = 60.0;
 constexpr double kNightGapS = 6 * 3600.0;
 constexpr double kPassGapS = 1800.0;
 
@@ -846,8 +850,31 @@ int initial_orbit_method() {
     s3[q].los = c.at(pick[q].first);
     s3[q].site_km = sr * 1e-3;
   }
-  const IodResult iod = gooding_iod(s3, multi_pass);
+  IodResult iod = gooding_iod(s3, multi_pass);
   if (!iod.ok) return initial_orbit_fail("no-initial-orbit", "Gooding's iteration over " + std::to_string(c1 - c0 + 1) + " crossings: " + iod.error);
+  // Refined on kRefineSights fitted directions per crossing used (two-body + J2 least squares); kept when it converges.
+  std::vector<SightObs> fitted;
+  for (size_t c = c0; c <= c1; ++c) {
+    const std::vector<size_t>& kept = crossings[c].kept;
+    const size_t m = std::min<size_t>(kRefineSights, kept.size());
+    for (size_t q = 0; q < m; ++q) {
+      const double t = sights[kept[m > 1 ? q * (kept.size() - 1) / (m - 1) : 0]].t;
+      const Sight& o = sights[kept.front()];
+      ax::Epoch e;
+      ax::EarthOrientation eo;
+      if (!clock.at(t, &e, &eo, &err)) return initial_orbit_fail("invalid-angles", err);
+      double xyz[3] = {o.itrs.x, o.itrs.y, o.itrs.z};
+      Site site;
+      if (eraGc2gd(1, xyz, &site.lon, &site.lat, &site.h) != 0) return initial_orbit_fail("invalid-angles", "the site does not convert to geodetic");
+      V3 sr, sv;
+      site_gcrs(site, e, eo, &sr, &sv);
+      fitted.push_back({t, crossings[c].at(t), sr * 1e-3});
+    }
+  }
+  double refined_rms = kNaN;
+  V3 rr = iod.r, rv = iod.v;
+  const bool refined = refine_orbit(fitted, iod.t, &rr, &rv, &refined_rms) && refined_rms < kRefineRmsArcsec;
+  if (refined) iod.r = rr, iod.v = rv;
 
   flatbuffers::FlatBufferBuilder fb(2048);
   const auto vers = fb.CreateString("3.0"), org = fb.CreateString("SDN");
@@ -881,9 +908,9 @@ int initial_orbit_method() {
   ob.add_OD_METHOD(meth);
   ob.add_OD_EPOCH(t0s);
   ob.add_OD_OBSERVATIONS_TYPE(otype);
-  ob.add_OD_OBSERVATIONS_USED(3);
+  ob.add_OD_OBSERVATIONS_USED(refined ? static_cast<int>(fitted.size()) : 3);
   ob.add_OD_APRIORI_DATA(apr);
-  ob.add_OD_RESIDUAL_RMS(iod.miss_arcsec);
+  ob.add_OD_RESIDUAL_RMS(refined ? refined_rms : iod.miss_arcsec);
   ob.add_SOLVE_N(2);
   const auto odb = ob.Finish();
   OCMBuilder b(fb);
@@ -904,6 +931,7 @@ int initial_orbit_method() {
       "middle-sight miss arcsec " + rec::fmt(iod.miss_arcsec, "%.6g"), "distinct solutions " + std::to_string(iod.solutions),
       "revolutions " + std::to_string(iod.revolutions) + (iod.revolutions ? (iod.branch ? " short-period" : " long-period") : ""),
       "eccentricity " + rec::fmt(iod.eccentricity, "%.6f"),
+      refined ? "refined on " + std::to_string(fitted.size()) + " fitted directions: rms arcsec " + rec::fmt(refined_rms, "%.3g") : "not refined (the least squares did not converge)",
       "sights " + iso_utc(t1, 3) + " " + iso_utc(used[middle].first, 3) + " " + iso_utc(t3, 3),
       "crossings " + std::to_string(c1 - c0 + 1) + " of " + std::to_string(crossings.size()),
       "observations kept " + std::to_string(used.size()) + " of " + std::to_string(sights.size())};

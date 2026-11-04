@@ -43,14 +43,22 @@ holds the diagnostics: iterations, OD minus prior, the IOD, the separation from 
 Gooding's angles-only method alone, with no element set and no frames: RA/Dec `$TDM` records on `angles` (`ANGLE_TYPE`
 RADEC, UTC, degrees, geometric topocentric GCRF at the time tag; the site as `OBSERVER_X/Y/Z`, Earth-fixed WGS-84 m, as
 data-source/satnogs-optical-source writes it) and `$EOP` on `earth_orientation` (required) -> one Cartesian `$OCM` on
-`orbit`: the GCRF state (km, km/s) at the middle sight, `OD_METHOD` INITIAL_ORBIT, the middle-sight miss (arcsec) as
-`OD_RESIDUAL_RMS`, no covariance; and a `report`. The three sights are the first, middle and last observation by epoch;
-they must lie within one revolution (one pass): the Lambert arc is the short way. With config (`ModuleConfig`)
-`revolutions` N > 0 and `branch` (0 long-period, 1 short-period), the sights are the first observation, the first pass's
-last (the last before a 30 min gap) and the last observation, the Lambert arc between the first and last makes N full
-revolutions, and its first velocity is shot onto the last sight under two-body + J2 (RK4, Newton): the initial orbit of
-one candidate revolution count across nights. Refused by name:
-`too-few-observations`, `no-initial-orbit`, `invalid-angles`.
+`orbit`: the GCRF state (km, km/s) at the middle sight, `START_TIME` and `STOP_TIME` the first and last sight used,
+`OD_METHOD` INITIAL_ORBIT, no covariance; and a `report`. The sights split into crossings (one site, gaps over 120 s) and
+nights (gaps over 6 h). Each crossing's directions are fitted in its tangent plane by a cubic in time, rows beyond five
+robust sigmas (floor 3 arcsec) dropped until none is; a crossing counts with 3 kept rows or more. The first night with
+two counting crossings or more gives the sights; without one, the first two counting crossings across the nightly gap.
+Of their kept epochs the first, the last and the one farthest in time from both are the three sights, each the fitted
+direction there. Starts: both ends on one circular radius, scanned at 10 km from 150 to 4000 km altitude; over more than
+one pass (a gap of 30 min or more) the Lambert arc makes floor(t13 / P) full revolutions (P the start radius's circular
+period) on both multi-revolution branches, its first velocity shot onto the last sight under two-body + J2 (RK4,
+Newton). The six starts with the least middle-sight miss are iterated; converged: the miss under 1e-10 rad, or a step
+under 1 m once the steps stop shrinking. Of the converged solutions the bound one whose perigee clears the surface and
+whose eccentricity is least wins; it is refined by least squares on 9 fitted directions per crossing (two-body + J2),
+kept when that converges under 60 arcsec RMS (`OD_RESIDUAL_RMS` that RMS, `OD_OBSERVATIONS_USED` the directions;
+unrefined, the middle-sight miss and 3). Refused by name: `too-few-observations` (no counting crossing),
+`single-crossing` (one), `no-initial-orbit` (no bound orbit above the surface converged; the message gives the least
+miss attained), `invalid-angles`.
 
 ## Video versus FITS
 

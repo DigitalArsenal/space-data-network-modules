@@ -316,6 +316,68 @@ inline IodResult gooding_iod(const SightObs s[3], bool multi_pass) {
   return best;
 }
 
+// Least-squares refinement of an initial orbit on directions: Gauss-Newton on the state at t0 under two-body + J2
+// (finite-difference partials), equal weights. Converged: a position step under 1 m within kRefineIterations; the RMS of
+// the direction residuals (arcsec) in *rms_arcsec.
+inline bool refine_orbit(const std::vector<SightObs>& sights, double t0, V3* r0, V3* v0, double* rms_arcsec) {
+  constexpr int kRefineIterations = 12;
+  if (sights.size() < 4) return false;
+  std::vector<size_t> after, before;
+  for (size_t i = 0; i < sights.size(); ++i) (sights[i].t >= t0 ? after : before).push_back(i);
+  std::sort(after.begin(), after.end(), [&](size_t a, size_t b) { return sights[a].t < sights[b].t; });
+  std::sort(before.begin(), before.end(), [&](size_t a, size_t b) { return sights[a].t > sights[b].t; });
+  // Residuals (observed minus computed, tangent plane at each sight, rad) of the state x at t0.
+  auto residuals = [&](const double x[6], std::vector<double>* res) {
+    res->assign(2 * sights.size(), 0.0);
+    for (const auto* run : {&after, &before}) {
+      V3 r{x[0], x[1], x[2]}, v{x[3], x[4], x[5]};
+      double t = t0;
+      for (size_t i : *run) {
+        j2_rk4(&r, &v, sights[i].t - t);
+        t = sights[i].t;
+        const V3 d = unit(r - sights[i].site_km);
+        V3 e, n;
+        tangent_basis(sights[i].los, &e, &n);
+        (*res)[2 * i] = dot(sights[i].los - d, e);
+        (*res)[2 * i + 1] = dot(sights[i].los - d, n);
+      }
+    }
+  };
+  double x[6] = {r0->x, r0->y, r0->z, v0->x, v0->y, v0->z};
+  const double steps[6] = {1e-3, 1e-3, 1e-3, 1e-6, 1e-6, 1e-6};
+  std::vector<double> res, rp;
+  for (int it = 0; it < kRefineIterations; ++it) {
+    residuals(x, &res);
+    std::vector<double> H(res.size() * 6);
+    for (int j = 0; j < 6; ++j) {
+      double xp[6];
+      std::copy(x, x + 6, xp);
+      xp[j] += steps[j];
+      residuals(xp, &rp);
+      for (size_t k = 0; k < res.size(); ++k) H[k * 6 + j] = (res[k] - rp[k]) / steps[j];  // d(computed)/dx
+    }
+    std::vector<double> N(36, 0.0), b(6, 0.0);
+    for (size_t k = 0; k < res.size(); ++k)
+      for (int a = 0; a < 6; ++a) {
+        b[a] += H[k * 6 + a] * res[k];
+        for (int c = 0; c < 6; ++c) N[a * 6 + c] += H[k * 6 + a] * H[k * 6 + c];
+      }
+    if (!cholesky_solve(N, 6, &b, nullptr)) return false;
+    for (int a = 0; a < 6; ++a) x[a] += b[a];
+    if (!std::isfinite(x[0])) return false;
+    if (std::fabs(b[0]) + std::fabs(b[1]) + std::fabs(b[2]) < 1e-3) {
+      residuals(x, &res);
+      double ss = 0;
+      for (double q : res) ss += q * q;
+      *rms_arcsec = std::sqrt(ss / sights.size()) / kArcsec;
+      *r0 = {x[0], x[1], x[2]};
+      *v0 = {x[3], x[4], x[5]};
+      return true;
+    }
+  }
+  return false;
+}
+
 struct OdObservation {
   double t = 0;           // tag, UTC Unix s
   V3 u;                   // observed direction (with the site's aberration)
