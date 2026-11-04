@@ -16,3 +16,11 @@ stage s-1's estimate. Across the first nightly gap the revolution count is a can
 
 The estimator-FFM loop is flows/observation-od's node, which reads laser ranges only; the angles entry point it needs
 is listed in the record's report.
+
+## Composition (planned)
+
+The node here plans and selects; it holds no estimator loop. `plan`: the tracks, the initial orbit `$OCM` and the
+completed stages' `$OCM`s -> per candidate, the `$PRW` EXECUTION_REQUEST (the seed in INITIAL, the estimate's epoch in
+TARGET_EPOCH) and the stage's tracks, each run to its end by flows/observation-od `step`. `select`: the candidates'
+`$OCM`s (FIT_STATISTICS, WEIGHTED_RMS, the fitted state) -> the next stage, the final `$OCM` with the source's `$PVN`,
+or `no-converged-revolution-count`.
