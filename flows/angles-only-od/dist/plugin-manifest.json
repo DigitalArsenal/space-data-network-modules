@@ -1,0 +1,385 @@
+{
+  "pluginId": "org.sdn.flows.angles-only-od",
+  "name": "Angles-only orbit determination",
+  "version": "0.1.0",
+  "description": "Plans and selects the stages of an angles-only orbit determination with no element set on any port: from analysis/optical-astrometry initial_orbit's Gooding state, stage s fits nights 1..s through flows/observation-od step (analysis/estimation fit_batch with propagator/ffm); across the first nightly gap the revolution count is a candidate set, each fitted, the converged one with the lowest WEIGHTED_RMS and a consistent revolution offset kept. Refusals by name: no-converged-revolution-count, arc-too-short:<hours>.",
+  "pluginFamily": "analysis",
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each call is one bounded planning or selection step over its inputs; the fits are other modules the host runs."
+  },
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TDM.fbs",
+      "fileIdentifier": "$TDM",
+      "rootTypeName": "TDM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "angles-only-od-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "methods": [
+    {
+      "methodId": "plan",
+      "displayName": "The next stage's candidates",
+      "inputPorts": [
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "observations-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The arc's RA/Dec $TDM tracks (data-source/satnogs-optical-source), every night."
+        },
+        {
+          "portId": "initial",
+          "acceptedTypeSets": [
+            {
+              "setId": "initial-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The initial orbit: analysis/optical-astrometry initial_orbit's $OCM on the first track (no element set)."
+        },
+        {
+          "portId": "stage",
+          "acceptedTypeSets": [
+            {
+              "setId": "stage-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The $OCM select chose for the last completed stage; absent for the first."
+        },
+        {
+          "portId": "execution",
+          "acceptedTypeSets": [
+            {
+              "setId": "execution-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "$PRW EXECUTION_REQUEST: the dynamics for flows/observation-od; INITIAL carries the object and its coordinate system (its state is replaced)."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig numbers: revolutionOffsetMin (-1), revolutionOffsetMax (1), weightedRmsLimit (2), minimumArcHours (24)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "execution",
+          "acceptedTypeSets": [
+            {
+              "setId": "execution-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "One size-prefixed $PRW EXECUTION_REQUEST per candidate: the seed (GCRF, m, m/s) in INITIAL, the initial orbit's epoch in TARGET_EPOCH."
+        },
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "observations-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The stage's tracks (nights 1..s), as given."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "FlowNotice Info: REASON stage-planned, stage-selected or complete; ITEMS the stage, the candidates and the selection."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "select",
+      "displayName": "The stage's fit",
+      "inputPorts": [
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "observations-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "The arc's RA/Dec $TDM tracks (data-source/satnogs-optical-source), every night."
+        },
+        {
+          "portId": "initial",
+          "acceptedTypeSets": [
+            {
+              "setId": "initial-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The initial orbit: analysis/optical-astrometry initial_orbit's $OCM on the first track (no element set)."
+        },
+        {
+          "portId": "stage",
+          "acceptedTypeSets": [
+            {
+              "setId": "stage-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The $OCM select chose for the last completed stage; absent for the first."
+        },
+        {
+          "portId": "candidates",
+          "acceptedTypeSets": [
+            {
+              "setId": "candidates-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The flows/observation-od step $OCMs of the stage's candidates."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig numbers: revolutionOffsetMin (-1), revolutionOffsetMax (1), weightedRmsLimit (2), minimumArcHours (24)."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "selected",
+          "acceptedTypeSets": [
+            {
+              "setId": "selected-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The stage's $OCM: converged, WEIGHTED_RMS at most weightedRmsLimit, revolution offset in the stage's set, the lowest WEIGHTED_RMS."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "report-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "FlowNotice Info: REASON stage-planned, stage-selected or complete; ITEMS the stage, the candidates and the selection."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
