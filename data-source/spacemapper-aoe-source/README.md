@@ -28,9 +28,9 @@ INGQ) and `unchanged` (FlowNotice, FNTC). A 304 gives one FlowNotice Unchanged a
   other than 0), or a line that is not 69 columns, is dropped. AOE writes a zero checksum on most lines (99 % of the 2026-10-11
   records), so a checksum that does not match is counted, never a reason to drop a set.
 - **Identity.** The NORAD number AOE gives (`noradId`) is the set's `NORAD_CAT_ID`. Where AOE gives none the object is named
-  `aoe:<catId>` (`USER_DEFINED_OBJECT_DESIGNATOR`) and no NORAD number is invented. AOE's own ids ride in
-  `USER_DEFINED_PARAMETERS`: `AOE_CHANNEL` (KY), `AOE_RECORD_ID`, `AOE_CAT_ID`, `AOE_SAT_ID`, `AOE_LAST_UPDATE_ID`,
-  `AOE_OBJECT_TYPE`. `OBJECT_ID` is the international designator AOE gives when it is one. Names and bare numbers never join.
+  `aoe:<catId>` (`USER_DEFINED_OBJECT_DESIGNATOR`) and no NORAD number is invented. AOE's record id is the set's `MESSAGE_ID`;
+  its catalog and satellite ids, channel and update id are the `$OIL` crosswalk's (below), its class text the `$CAT` `OBJECT_TYPE`.
+  `OBJECT_ID` is the international designator AOE gives when it is one. Names and bare numbers never join.
   AOE's ids above 99999 are not AOE's own: in the 2026-10-11 KY snapshot 271 of the 273 objects with `catId` above 99999 are in
   Space-Track under the same number with the same designator.
 - **Time.** `CREATION_DATE` is the record's `ctime` (AOE's write time, hh:04 UTC every three hours) in UTC: the moment the set was
@@ -38,8 +38,11 @@ INGQ) and `unchanged` (FlowNotice, FNTC). A 304 gives one FlowNotice Unchanged a
 - **Crosswalk.** What AOE states about each object, from its newest set, as candidates: one size-prefixed `$CAT` per AOE object, in
   AOE id order, `CATALOG_URI` `urn:sdn:spacemapper-aoe` and `CATALOG_OBJECT_ID` `aoe:<id>` (AOE's own namespace), `NORAD_CAT_ID` the
   number it gives (0 when none), `OBJECT_ID` the designator, `OBJECT_NAME`, `OBJECT_TYPE` (PAYLOAD, ROCKET BODY, DEBRIS, else
-  UNKNOWN). The channel, satellite id and AOE's class text ride on the `$OMM` `USER_DEFINED_PARAMETERS`. AOE ids whose sets state
-  different numbers are listed as `conflict aoe:<id>` warnings in the meta. The `$CAT` integrator binds an identity only through a
+  UNKNOWN). The same per-object statements as one `$OIL` on `links`: candidate links from the AOE catalog id (`aoe-cat`; `aoe-sat`
+  when AOE gives only a satellite id; `TRAJECTORY_ID` the newest set's `MESSAGE_ID`) to the NORAD number (`NORAD`, with the
+  designator) and to the satellite id (`aoe-sat`), evidence `SOURCE` `aoe/<channel>`, `RECORD_ID` AOE's update id of the record (the
+  body's SHA-256 when none), `LINE` and `DECLARATIONS`. AOE ids whose sets state different numbers are `AMBIGUOUS`, listed in
+  `CONFLICTS` and as `conflict aoe:<id>` warnings in the meta. The `$CAT` integrator binds an identity only through a
   link tested on normalized ephemerides.
 - **Meta.** One IngestRequest: `SCHEMA` OMM.fbs, `TAGS` (SOURCE_NAME spacemapper-aoe, SOURCE_URL the response URL, BATCH_ID the
   SHA-256 of the body), `PROVENANCE` with the report's counts as `ATTRIBUTES` (records, emitted, duplicateRecordIds, rejected,

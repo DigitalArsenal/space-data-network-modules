@@ -59,7 +59,6 @@ const counts = (result) => {
   assert.deepEqual(attrs.map((h) => h.name), attrs.map((h) => h.name).sort(), 'ATTRIBUTES sorted by their key');
   return Object.fromEntries(attrs.map((h) => [h.name, Number(h.value)]));
 };
-const params = (omm) => Object.fromEntries(omm.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
 
 // whole-second epochs, as AOE's are
 const base = (over = {}) => synthetic({ epoch: '2026-10-10T10:00:00.000000', recordId: 5001, ...over });
@@ -102,15 +101,15 @@ test('parse_aoe: the two-line set becomes the OMM, the NORAD number AOE gives is
   assert.equal(a.ELEMENT_SET_NO, 0);
   assert.equal(a.MEAN_ELEMENT_THEORY, 0);
   assert.equal(a.REFERENCE_FRAME.REFERENCE_FRAME.frame, 5); // TEME of date
-  assert.deepEqual(params(a), { AOE_CHANNEL: 'KY', AOE_RECORD_ID: '5001', AOE_CAT_ID: '99001', AOE_SAT_ID: '99001', AOE_LAST_UPDATE_ID: '2026test5001', AOE_OBJECT_TYPE: 'PAYLOAD' });
+  assert.equal(a.MESSAGE_ID, '5001');
+  assert.deepEqual(a.USER_DEFINED_PARAMETERS, []);
   assert.equal(a.USER_DEFINED_OBJECT_DESIGNATOR, null, 'a number AOE gives is the key; no native name is needed');
   assert.equal(b.NORAD_CAT_ID, 100123);
   assert.equal(b.EPOCH, '2026-10-10T11:30:00.000288'); // 0.47916667 d = 41400.000288 s
   // No NORAD number given: none is invented, and the native name is the key.
   assert.equal(c.NORAD_CAT_ID, 0);
   assert.equal(c.USER_DEFINED_OBJECT_DESIGNATOR, 'aoe:777001');
-  assert.equal(params(c).AOE_CAT_ID, '777001');
-  assert.equal(params(c).AOE_SAT_ID, undefined);
+  assert.equal(c.MESSAGE_ID, '5003');
   assert.deepEqual(counts(result), { records: 4, emitted: 3, duplicateRecordIds: 1, rejected: 0, alpha5CatalogNumbers: 1, checksumMismatches: 3, withoutNoradNumber: 1, objects: 3 });
   const m = meta(result);
   assert.equal(m.schema, 'OMM.fbs');

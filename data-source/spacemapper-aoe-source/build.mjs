@@ -1,5 +1,5 @@
 // Typed contracts 1.0 build: the SDK compiler stages the runtime headers (HttpResponse, IngestRequest, FlowNotice);
-// the SDS standards ($OMM and $CAT with the families they include) are generated with the object API from the
+// the SDS standards ($OMM, $CAT and $OIL with the families they include) are generated with the object API from the
 // spacedatastandards checkout's schemas (SPACE_DATA_STANDARDS_ROOT) by scripts/lib/sds-cpp-headers.mjs, as before.
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -12,7 +12,7 @@ import { generateSdsHeaders } from "../../scripts/lib/sds-cpp-headers.mjs";
 const root = fileURLToPath(new URL(".", import.meta.url));
 const repo = path.resolve(root, "../..");
 process.env.SPACE_DATA_STANDARDS_ROOT ??= fileURLToPath(new URL("../../../spacedatastandards.org/", import.meta.url));
-const { header, version, families } = await generateSdsHeaders(["OMM", "CAT"], import.meta.url, createFlatc);
+const { header, version, families } = await generateSdsHeaders(["OMM", "CAT", "OIL"], import.meta.url, createFlatc);
 // Pieces are one translation unit: drop `#pragma once` and sibling includes (already in the unit, in order).
 const read = async (file) => (await fs.readFile(file, "utf8")).replace(/^#pragma once\s*$/gm, "").replace(/^#include "[^"]+"\s*$/gm, "");
 

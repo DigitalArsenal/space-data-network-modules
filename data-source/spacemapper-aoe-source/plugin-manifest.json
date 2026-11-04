@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.spacemapper-aoe-source",
   "name": "SpaceMapper AOE Source",
-  "version": "0.2.0",
-  "description": "Read SpaceMapper's AOE catalog records (its SGP4 two-line sets, the NORAD number it gives or aoe:<id>, the channel) into canonical SDS $OMM records, an id crosswalk of candidate identities as $CAT records and the batch's IngestRequest (typed contracts 1.0: FlatBuffers only). Input: one HttpResponse (HRSP) whose BODY is the records the host extracted from SpaceMapper's pages, verbatim (JSON lines or one JSON array, at most 128 MiB); 304 -> one FlowNotice Unchanged; any other non-200 fails. Retrieval and page decoding belong to the SDN host flow. No hostcalls, no capabilities.",
+  "version": "0.3.0",
+  "description": "Read SpaceMapper's AOE catalog records (its SGP4 two-line sets, the NORAD number it gives or aoe:<id>, the channel) into canonical SDS $OMM records, an id crosswalk of candidate identities as $CAT records and as one $OIL, and the batch's IngestRequest (typed contracts 1.0: FlatBuffers only). Input: one HttpResponse (HRSP) whose BODY is the records the host extracted from SpaceMapper's pages, verbatim (JSON lines or one JSON array, at most 128 MiB); 304 -> one FlowNotice Unchanged; any other non-200 fails. Retrieval and page decoding belong to the SDN host flow. No hostcalls, no capabilities.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -55,13 +55,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
+              "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them; MESSAGE_ID the AOE record id."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them."
+          "description": "Canonical size-prefixed OMM records in input order, one per element set that could be read, without padding between them; MESSAGE_ID the AOE record id."
         },
         {
           "portId": "crosswalk",
@@ -76,13 +76,34 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $CAT records, one per AOE object (in AOE id order), what AOE states about it from its newest set, as candidates: CATALOG_URI urn:sdn:spacemapper-aoe and CATALOG_OBJECT_ID aoe:<id> (AOE's own namespace), NORAD_CAT_ID the number AOE gives (0 for none), OBJECT_ID the designator it gives, OBJECT_NAME, OBJECT_TYPE (PAYLOAD, ROCKET BODY, DEBRIS, else UNKNOWN). Identity evidence for the $CAT integrator, never an assertion; channel, satellite id and AOE's object type text ride on the $OMM USER_DEFINED_PARAMETERS."
+              "description": "Size-prefixed $CAT records, one per AOE object (in AOE id order), what AOE states about it from its newest set, as candidates: CATALOG_URI urn:sdn:spacemapper-aoe and CATALOG_OBJECT_ID aoe:<id> (AOE's own namespace), NORAD_CAT_ID the number AOE gives (0 for none), OBJECT_ID the designator it gives, OBJECT_NAME, OBJECT_TYPE (PAYLOAD, ROCKET BODY, DEBRIS, else UNKNOWN). Identity evidence for the $CAT integrator, never an assertion; the AOE ids, channel and update id are the $OIL on links."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "Size-prefixed $CAT records, one per AOE object (in AOE id order), what AOE states about it from its newest set, as candidates: CATALOG_URI urn:sdn:spacemapper-aoe and CATALOG_OBJECT_ID aoe:<id> (AOE's own namespace), NORAD_CAT_ID the number AOE gives (0 for none), OBJECT_ID the designator it gives, OBJECT_NAME, OBJECT_TYPE (PAYLOAD, ROCKET BODY, DEBRIS, else UNKNOWN). Identity evidence for the $CAT integrator, never an assertion; channel, satellite id and AOE's object type text ride on the $OMM USER_DEFINED_PARAMETERS."
+          "description": "Size-prefixed $CAT records, one per AOE object (in AOE id order), what AOE states about it from its newest set, as candidates: CATALOG_URI urn:sdn:spacemapper-aoe and CATALOG_OBJECT_ID aoe:<id> (AOE's own namespace), NORAD_CAT_ID the number AOE gives (0 for none), OBJECT_ID the designator it gives, OBJECT_NAME, OBJECT_TYPE (PAYLOAD, ROCKET BODY, DEBRIS, else UNKNOWN). Identity evidence for the $CAT integrator, never an assertion; the AOE ids, channel and update id are the $OIL on links."
+        },
+        {
+          "portId": "links",
+          "acceptedTypeSets": [
+            {
+              "setId": "links",
+              "allowedTypes": [
+                {
+                  "schemaName": "OIL.fbs",
+                  "fileIdentifier": "$OIL",
+                  "rootTypeName": "OIL",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $OIL (PROVIDER spacemapper-aoe, KIND aoe-records, SHA256 and BYTES of the body): per AOE object, from its newest set, candidate links (STATUS Candidate) from its AOE catalog id (LEFT, namespace aoe-cat; aoe-sat when AOE gives only a satellite id; TRAJECTORY_ID the set's MESSAGE_ID) to the NORAD number AOE gives (RIGHT, namespace NORAD, with the designator) and, when AOE gives both ids, to the satellite id (namespace aoe-sat); EVIDENCE SOURCE aoe/<channel>, RECORD_ID AOE's update id of the record (the body's SHA-256 when it gives none), LINE the record's position, DECLARATIONS the object's sets; an AOE id whose sets disagree is AMBIGUOUS and listed in CONFLICTS. Identity evidence, never an assertion."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "One $OIL (PROVIDER spacemapper-aoe, KIND aoe-records, SHA256 and BYTES of the body): per AOE object, from its newest set, candidate links (STATUS Candidate) from its AOE catalog id (LEFT, namespace aoe-cat; aoe-sat when AOE gives only a satellite id; TRAJECTORY_ID the set's MESSAGE_ID) to the NORAD number AOE gives (RIGHT, namespace NORAD, with the designator) and, when AOE gives both ids, to the satellite id (namespace aoe-sat); EVIDENCE SOURCE aoe/<channel>, RECORD_ID AOE's update id of the record (the body's SHA-256 when it gives none), LINE the record's position, DECLARATIONS the object's sets; an AOE id whose sets disagree is AMBIGUOUS and listed in CONFLICTS. Identity evidence, never an assertion."
         },
         {
           "portId": "meta",
@@ -142,6 +163,12 @@
       "schemaName": "CAT.fbs",
       "fileIdentifier": "$CAT",
       "rootTypeName": "CAT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OIL.fbs",
+      "fileIdentifier": "$OIL",
+      "rootTypeName": "OIL",
       "wireFormat": "flatbuffer"
     },
     {
