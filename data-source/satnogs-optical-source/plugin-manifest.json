@@ -1,0 +1,275 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.satnogs-optical-source",
+  "name": "SatNOGS Optical Source",
+  "version": "0.1.0",
+  "description": "Read one station-night of SatNOGS Optical astrometric measurements (the network's measurements.parquet rows, decoded by the SDN host flow into one $TDM of the night's tracks and one $EOO per row: the module has no Parquet reader) into one RA/Dec $TDM per object-track with TIMETAG_REF RECEIVE, every epoch moved to mid-exposure by the declared convention and OBSERVER_X/Y/Z the station's site, one $EOO per observation carrying its sigma, one $GST with the site and the declared timing bias, one $PVN (Observation, ShareAlike, CC-BY-SA-4.0) and one IngestRequest whose tags carry the CC BY-SA 4.0 licence and the network's credit line (typed contracts 1.0: FlatBuffers only, no JSON between modules). Quarantined rows, and rows whose epoch has no declared offset to mid-exposure, are refused by name. No hostcalls.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "read_station_night",
+      "displayName": "Read a SatNOGS Optical station-night",
+      "inputPorts": [
+        {
+          "portId": "angles",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $TDM of the station-night as the network states it: one segment per track (TRACK_ID the track id, PARTICIPANT_1 the station SATNOGS-OPTICAL-<id>, PARTICIPANT_2 the NORAD number or the UNK designation, ANGLE_TYPE RADEC, TIME_SYSTEM UTC, REFERENCE_FRAME the row frame), ANGLE_1 and ANGLE_2 the row RA and Dec in degrees at the row epoch (t_utc); INTEGRATION_REF MIDDLE for exposure-mid, START (with INTEGRATION_INTERVAL the exposure in seconds) for exposure-start, none for frame-arrival; DATA_QUALITY DEGRADED for quarantined rows; CREATION_DATE the dump's generation stamp."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One $TDM of the station-night as the network states it: one segment per track (TRACK_ID the track id, PARTICIPANT_1 the station SATNOGS-OPTICAL-<id>, PARTICIPANT_2 the NORAD number or the UNK designation, ANGLE_TYPE RADEC, TIME_SYSTEM UTC, REFERENCE_FRAME the row frame), ANGLE_1 and ANGLE_2 the row RA and Dec in degrees at the row epoch (t_utc); INTEGRATION_REF MIDDLE for exposure-mid, START (with INTEGRATION_INTERVAL the exposure in seconds) for exposure-start, none for frame-arrival; DATA_QUALITY DEGRADED for quarantined rows; CREATION_DATE the dump's generation stamp."
+        },
+        {
+          "portId": "measurements",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $EOO per measurement row, in the order of the $TDM angle pairs: ID the measurement id (the name a refusal gives), OB_TIME the row epoch as in the $TDM, IMAGE_SET_ID the track id, SENSOR_ID the station id, ORIG_SENSOR_ID its name, NORAD_CAT_ID and UCT (no identity), RA_UNC and DECLINATION_UNC the row sigma in degrees, SENLAT and SENLON (WGS-84 degrees) and SENALT (km) the station site, TIMING_BIAS the declared timing bias in seconds."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 200000,
+          "required": true,
+          "description": "One $EOO per measurement row, in the order of the $TDM angle pairs: ID the measurement id (the name a refusal gives), OB_TIME the row epoch as in the $TDM, IMAGE_SET_ID the track id, SENSOR_ID the station id, ORIG_SENSOR_ID its name, NORAD_CAT_ID and UCT (no identity), RA_UNC and DECLINATION_UNC the row sigma in degrees, SENLAT and SENLON (WGS-84 degrees) and SENALT (km) the station site, TIMING_BIAS the declared timing bias in seconds."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "ModuleConfig (MCFG), optional: minimumMeasurements (number, default 1: a track with fewer is not emitted), quarantine (refuse, the default: quarantined rows are not emitted and are named in the report; fail: the night is refused naming the row), objects (number list: only these NORAD numbers; unidentified tracks are then left out). Any other key is refused."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig (MCFG), optional: minimumMeasurements (number, default 1: a track with fewer is not emitted), quarantine (refuse, the default: quarantined rows are not emitted and are named in the report; fail: the night is refused naming the row), objects (number list: only these NORAD numbers; unidentified tracks are then left out). Any other key is refused."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $TDM per object-track: OBSERVER_ID the station, OBSERVER_X/Y/Z its WGS-84 site in Earth-fixed metres, one segment with TIME_SYSTEM UTC, TIMETAG_REF RECEIVE, ANGLE_TYPE RADEC, MODE SEQUENTIAL, PATH 2,1, TRACK_ID, PARTICIPANT_2 the object, ANGLE_1 and ANGLE_2 in degrees at mid-exposure epochs; the credit line and licence in COMMENT. analysis/estimation reads it on tracking_data."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 4096,
+          "required": false,
+          "description": "One $TDM per object-track: OBSERVER_ID the station, OBSERVER_X/Y/Z its WGS-84 site in Earth-fixed metres, one segment with TIME_SYSTEM UTC, TIMETAG_REF RECEIVE, ANGLE_TYPE RADEC, MODE SEQUENTIAL, PATH 2,1, TRACK_ID, PARTICIPANT_2 the object, ANGLE_1 and ANGLE_2 in degrees at mid-exposure epochs; the credit line and licence in COMMENT. analysis/estimation reads it on tracking_data."
+        },
+        {
+          "portId": "uncertainty",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eoo",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOO.fbs",
+                  "fileIdentifier": "$EOO",
+                  "rootTypeName": "EOO",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $EOO per emitted observation, in $TDM order: the input record with OB_TIME moved to mid-exposure, RA_UNC and DECLINATION_UNC the row sigma (degrees), RA_MEASURED and DECLINATION_MEASURED true, SENX/SENY/SENZ the site (km), SOURCE satnogs-optical."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 200000,
+          "required": false,
+          "description": "One $EOO per emitted observation, in $TDM order: the input record with OB_TIME moved to mid-exposure, RA_UNC and DECLINATION_UNC the row sigma (degrees), RA_MEASURED and DECLINATION_MEASURED true, SENX/SENY/SENZ the site (km), SOURCE satnogs-optical."
+        },
+        {
+          "portId": "stations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-gst",
+              "allowedTypes": [
+                {
+                  "schemaName": "GST.fbs",
+                  "fileIdentifier": "$GST",
+                  "rootTypeName": "GST",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $GST, the station timing record for the estimator: STATION_ID, NAME, POSITION_* the site (m; sigma NaN: the network declares none), CLOCK_OFFSET_S the declared timing bias, CLOCK_TIME_SCALE UTC, VALID_FROM and VALID_TO the emitted epochs, SOURCE satnogs-optical."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One $GST, the station timing record for the estimator: STATION_ID, NAME, POSITION_* the site (m; sigma NaN: the network declares none), CLOCK_OFFSET_S the declared timing bias, CLOCK_TIME_SCALE UTC, VALID_FROM and VALID_TO the emitted epochs, SOURCE satnogs-optical."
+        },
+        {
+          "portId": "provenance",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pvn",
+              "allowedTypes": [
+                {
+                  "schemaName": "PVN.fbs",
+                  "fileIdentifier": "$PVN",
+                  "rootTypeName": "PVN",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $PVN: SOURCE_ID satnogs-optical, SOURCE_KIND Observation, ORIGINATOR the station, PROVIDER_ID optical.satnogs.org, PRODUCER this module and version, LICENSE_CLASS ShareAlike, LICENSE_ID CC-BY-SA-4.0, LINEAGE satnogs-optical, SOURCE_URL https://optical.satnogs.org/data, SOURCE_VERSION the dump stamp."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One $PVN: SOURCE_ID satnogs-optical, SOURCE_KIND Observation, ORIGINATOR the station, PROVIDER_ID optical.satnogs.org, PRODUCER this module and version, LICENSE_CLASS ShareAlike, LICENSE_ID CC-BY-SA-4.0, LINEAGE satnogs-optical, SOURCE_URL https://optical.satnogs.org/data, SOURCE_VERSION the dump stamp."
+        },
+        {
+          "portId": "ingest",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-ingest-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One IngestRequest (INGQ) for the $TDM batch: TAGS SOURCE_NAME satnogs-optical, LICENSE CC-BY-SA-4.0, LICENSE_URL https://creativecommons.org/licenses/by-sa/4.0/, CITATION the credit line, SHARE_ALIKE true; PROVENANCE ATTRIBUTES class publish-with-credit, credit, source."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One IngestRequest (INGQ) for the $TDM batch: TAGS SOURCE_NAME satnogs-optical, LICENSE CC-BY-SA-4.0, LICENSE_URL https://creativecommons.org/licenses/by-sa/4.0/, CITATION the credit line, SHARE_ALIKE true; PROVENANCE ATTRIBUTES class publish-with-credit, credit, source."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One FlowNotice (FNTC): KIND Info, SCHEMA TDM, SOURCE_NAME satnogs-optical, COUNT the $TDM emitted, ITEMS as name=value: station, tracks, measurements, tracksEmitted, observationsEmitted, refused, belowMinimum, filteredOut, the site, timingBiasSeconds, license, credit, refusedFor.<reason>, per track track.<k>.id/object/observations/epochReference/epochShiftNanoseconds, and refused.<measurement id> with the reason."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One FlowNotice (FNTC): KIND Info, SCHEMA TDM, SOURCE_NAME satnogs-optical, COUNT the $TDM emitted, ITEMS as name=value: station, tracks, measurements, tracksEmitted, observationsEmitted, refused, belowMinimum, filteredOut, the site, timingBiasSeconds, license, credit, refusedFor.<reason>, per track track.<k>.id/object/observations/epochReference/epochShiftNanoseconds, and refused.<measurement id> with the reason."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TDM.fbs",
+      "fileIdentifier": "$TDM",
+      "rootTypeName": "TDM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "EOO.fbs",
+      "fileIdentifier": "$EOO",
+      "rootTypeName": "EOO",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GST.fbs",
+      "fileIdentifier": "$GST",
+      "rootTypeName": "GST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PVN.fbs",
+      "fileIdentifier": "$PVN",
+      "rootTypeName": "PVN",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "satnogs-optical-source-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One bounded station-night is read in order into one record per track and per observation, one station record, one provenance record, one ingest request and one FlowNotice; the host parallelizes independent nights and this parser creates no threads."
+  }
+}
