@@ -12,7 +12,6 @@ host-cron TimerTick (hourly)
  └─ iss-source request ─ http ─ emit ──────────────────────────────────┘
                                       od fit ─ omm_meta + omm ─ storage-ingest ─ IngestResult ─ od publish_request ─ http
                                              ─ ocm_meta + ocm ─ storage-ingest ─ ...
-                                             ─ obd_meta + obd ─ storage-ingest ─ ...
                                              ─ status (FlowNotice)
  status record_event: the $OEM, the FlowNotices and the IngestResults -> one $DSS per route (provider-*.dss, od.dss, store.dss)
 ```
@@ -20,8 +19,9 @@ host-cron TimerTick (hourly)
 - **Sources** are the typed modules in `data-source/` (`spacex-starlink-source`, `glonass-source`, `intelsat-source`,
   `cpf-source`, `iss-source`); `hostcap/http-request` makes every fetch (HttpRequest / HttpResponse, the job in
   CONTEXT where a source needs one). Nothing here parses a provider's format.
-- **`nodes/od`** fits each `$OEM` with the frozen complete-arc OD core (its epoch-specific `$OMM`, `$OCM`, `$OBD`) and
-  SGP4-XP (an `$OMM` and `$OBD` per full-day window, `propagator/sgp4-xp` with the US Space Force Sgp4Prop joined in).
+- **`nodes/od`** fits each `$OEM` with the frozen complete-arc OD core (its epoch-specific SGP4 `$OMM`, and as `$OCM`
+  its state and covariance and its SGP4 set with FIT_STATISTICS) and SGP4-XP (an `$OCM` with FIT_STATISTICS per
+  full-day window, `propagator/sgp4-xp` with the US Space Force Sgp4Prop joined in); no `$OBD`.
   Position-only sources (GLONASS SP3, Intelsat ECF, CPF) are fitted from positions alone in their own axes,
   Earth-fixed included, which `analysis/od` refuses. Each standard's record stream goes out with the IngestRequest
   (`PROVIDER_ID supplemental-omm`, `SOURCE_NAME` the provider, `BATCH_ID` the stream's SHA-256) that

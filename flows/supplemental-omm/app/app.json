@@ -2,7 +2,7 @@
   "id": "supplemental-omm",
   "name": "Supplemental OMM",
   "version": "2.0.0",
-  "description": "Five source modules' ephemerides fitted into supplemental OMM, OCM and OBD records by one composed isomorphic module (typed contracts 1.0).",
+  "description": "Five source modules' ephemerides fitted into supplemental OMM and OCM records by one composed isomorphic module (typed contracts 1.0).",
   "modules": [
     {
       "id": "supplemental-omm",
@@ -31,12 +31,6 @@
     {
       "id": "fitted-ocm",
       "sdsType": "OCM",
-      "direction": "produces",
-      "moduleId": "supplemental-omm"
-    },
-    {
-      "id": "fit-diagnostics",
-      "sdsType": "OBD",
       "direction": "produces",
       "moduleId": "supplemental-omm"
     }
@@ -71,7 +65,7 @@
   "pages": [
     {
       "id": "provider-status-board",
-      "title": "Supplemental OMM \u2014 Provider Status Board",
+      "title": "Supplemental OMM — Provider Status Board",
       "description": "Live progress for five provider lanes plus the orbit-determination lane.",
       "mediaType": "text/html",
       "entry": true,

@@ -1,8 +1,8 @@
 {
   "programId": "org.sdn.flows.od-supplemental-omm",
   "name": "Supplemental OMM Orbit Determination",
-  "version": "2.0.0",
-  "description": "Hourly supplemental orbit determination on typed contracts 1.0 (FlatBuffers only, no JSON and no FSB/FSO transport). A host-cron TimerTick starts five source modules - data-source/spacex-starlink-source (plan -> select_objects -> emit), glonass-source, intelsat-source and cpf-source (request -> select_file -> emit), iss-source (request -> emit) - whose fetches are hostcap/http-request nodes (HttpRequest / HttpResponse, the job in CONTEXT where a source needs one); each source's ephemerides reach the flow's OD node as SDS $OEM, one object per frame, on the port of its provider. The OD node fits each with the frozen complete-arc OD core (its epoch-specific $OMM, $OCM and $OBD) and SGP4-XP (an $OMM and $OBD per full-day window), Earth-fixed position-only sources included, one object an invocation; each standard's record stream goes with its IngestRequest to its own hostcap/storage-ingest node, and each stored batch's IngestResult to the OD node's publish_request, which POSTs it to omm_publish_url through hostcap/http-request (only when set). The status node turns the $OEM frames, the Starlink source's and the OD node's FlowNotices and the IngestResults into the $DSS snapshots of the APP status board's routes. Egress: result (IngestResult), notice (FlowNotice: Starlink objects unavailable, OD fitted / unfittable / fit-failed), publication (HttpResponse). Every node is an independently signed isomorphic child of the release bundle (scripts/release.mjs).",
+  "version": "2.1.0",
+  "description": "Hourly supplemental orbit determination on typed contracts 1.0 (FlatBuffers only, no JSON and no FSB/FSO transport). A host-cron TimerTick starts five source modules - data-source/spacex-starlink-source (plan -> select_objects -> emit), glonass-source, intelsat-source and cpf-source (request -> select_file -> emit), iss-source (request -> emit) - whose fetches are hostcap/http-request nodes (HttpRequest / HttpResponse, the job in CONTEXT where a source needs one); each source's ephemerides reach the flow's OD node as SDS $OEM, one object per frame, on the port of its provider. The OD node fits each with the frozen complete-arc OD core (its epoch-specific SGP4 $OMM, and as $OCM its state and covariance and its SGP4 set with FIT_STATISTICS) and SGP4-XP (an $OCM with FIT_STATISTICS per full-day window), Earth-fixed position-only sources included, one object an invocation; each standard's record stream goes with its IngestRequest to its own hostcap/storage-ingest node, and each stored batch's IngestResult to the OD node's publish_request, which POSTs it to omm_publish_url through hostcap/http-request (only when set). The status node turns the $OEM frames, the Starlink source's and the OD node's FlowNotices and the IngestResults into the $DSS snapshots of the APP status board's routes. Egress: result (IngestResult), notice (FlowNotice: Starlink objects unavailable, OD fitted / unfittable / fit-failed), publication (HttpResponse). Every node is an independently signed isomorphic child of the release bundle (scripts/release.mjs).",
   "nodes": [
     {
       "nodeId": "starlink_plan",
@@ -195,27 +195,6 @@
     },
     {
       "nodeId": "http_publish_ocm",
-      "pluginId": "com.digitalarsenal.hostcap.http-request",
-      "methodId": "request",
-      "kind": "transform",
-      "drainPolicy": "drain-until-yield"
-    },
-    {
-      "nodeId": "ingest_obd",
-      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
-      "methodId": "ingest",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
-      "nodeId": "publish_obd",
-      "pluginId": "org.sdn.flows.supplemental-omm.od",
-      "methodId": "publish_request",
-      "kind": "transform",
-      "drainPolicy": "single-shot"
-    },
-    {
-      "nodeId": "http_publish_obd",
       "pluginId": "com.digitalarsenal.hostcap.http-request",
       "methodId": "request",
       "kind": "transform",
@@ -663,78 +642,6 @@
     {
       "edgeId": "http_publish_ocm.response->egress.publication",
       "fromNodeId": "http_publish_ocm",
-      "fromPortId": "response",
-      "toNodeId": "egress",
-      "toPortId": "publication",
-      "backpressurePolicy": "queue",
-      "queueDepth": 64
-    },
-    {
-      "edgeId": "od.obd_meta->ingest_obd.meta",
-      "fromNodeId": "od",
-      "fromPortId": "obd_meta",
-      "toNodeId": "ingest_obd",
-      "toPortId": "meta",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
-      "edgeId": "od.obd->ingest_obd.obd_records",
-      "fromNodeId": "od",
-      "fromPortId": "obd",
-      "toNodeId": "ingest_obd",
-      "toPortId": "obd_records",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
-      "edgeId": "od.obd_meta->publish_obd.meta",
-      "fromNodeId": "od",
-      "fromPortId": "obd_meta",
-      "toNodeId": "publish_obd",
-      "toPortId": "meta",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
-      "edgeId": "ingest_obd.result->publish_obd.result",
-      "fromNodeId": "ingest_obd",
-      "fromPortId": "result",
-      "toNodeId": "publish_obd",
-      "toPortId": "result",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
-      "edgeId": "ingest_obd.result->status.store",
-      "fromNodeId": "ingest_obd",
-      "fromPortId": "result",
-      "toNodeId": "status",
-      "toPortId": "store",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
-      "edgeId": "ingest_obd.result->egress.result",
-      "fromNodeId": "ingest_obd",
-      "fromPortId": "result",
-      "toNodeId": "egress",
-      "toPortId": "result",
-      "backpressurePolicy": "queue",
-      "queueDepth": 65536
-    },
-    {
-      "edgeId": "publish_obd.request->http_publish_obd.request",
-      "fromNodeId": "publish_obd",
-      "fromPortId": "request",
-      "toNodeId": "http_publish_obd",
-      "toPortId": "request",
-      "backpressurePolicy": "queue",
-      "queueDepth": 64
-    },
-    {
-      "edgeId": "http_publish_obd.response->egress.publication",
-      "fromNodeId": "http_publish_obd",
       "fromPortId": "response",
       "toNodeId": "egress",
       "toPortId": "publication",

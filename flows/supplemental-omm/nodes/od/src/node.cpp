@@ -2,9 +2,11 @@
 //
 //   fit             in   starlink | glonass | intelsat | cpf | iss   SDS $OEM, one object per frame, from the flow's
 //                                                                    source modules (data-source/*-source emit)
-//                   out  omm_meta + omm   IngestRequest (INGQ) + the object's size-prefixed $OMM record stream
-//                        ocm_meta + ocm   INGQ + size-prefixed $OCM stream (the OD core's state and covariance)
-//                        obd_meta + obd   INGQ + size-prefixed $OBD stream (the fit diagnostics)
+//                   out  omm_meta + omm   IngestRequest (INGQ) + the object's size-prefixed $OMM record stream: the OD
+//                                         core's SGP4 sets, as the SGP4 catalog lane takes them
+//                        ocm_meta + ocm   INGQ + size-prefixed $OCM stream: per OD core epoch its state and covariance
+//                                         and its SGP4 set with FIT_STATISTICS; then one SGP4-XP set with
+//                                         FIT_STATISTICS per window
 //                        status           FlowNotice (FNTC): Info "fitted", Skipped "unfittable" / "fit-failed"
 //   publish_request in   result (IngestResult, INGR, from hostcap/storage-ingest) + meta (the INGQ it stored)
 //                   out  request (HttpRequest, HREQ): the dataset-publication POST, its BODY the IngestResult; nothing
@@ -56,7 +58,9 @@
 #include "sds_cid.hpp"
 
 // SGP4-XP element sets of every ephemeris, beside the SGP4 sets of the OD core: the fit engine of
-// propagator/sgp4-xp (the US Space Force Sgp4Prop joined to this node by build.mjs) and its SDS records.
+// propagator/sgp4-xp (the US Space Force Sgp4Prop joined to this node by build.mjs) and its SDS records. The core's
+// diagnostics come back as an $OBD, read for its iteration count and span and never emitted.
+#include "OBD_generated.h"
 #include "OCM_generated.h"
 #include "OMM_generated.h"
 #include "engine.hpp"
@@ -95,7 +99,7 @@ constexpr size_t kMaxOutputStreamBytes = 128u * 1024u * 1024u;
 constexpr std::string_view kFitOptions = R"json({"maxIterations":40})json";
 constexpr const char* kProviderId = "supplemental-omm";
 constexpr const char* kParser = "org.sdn.flows.supplemental-omm.od";
-constexpr const char* kParserVersion = "2.0.0";
+constexpr const char* kParserVersion = "2.1.0";
 
 enum class Provider : uint8_t { Starlink, Glonass, Intelsat, Cpf, Iss };
 
@@ -103,8 +107,8 @@ struct ProviderInfo {
   const char* port_id;
   Provider provider;
   const char* source_name;   // the stored SOURCE_NAME of the fits (analysis/catalog-synthesis reads it)
-  const char* originator;    // the XP $OMM's ORIGINATOR: who produced the ephemeris
-  const char* source_plugin; // the module that read it (the XP $OMM COMMENT, the $OBD sensor)
+  const char* originator;    // the $OCM's PROVENANCE.ORIGINATOR (and the XP set's HEADER.ORIGINATOR): who produced the ephemeris
+  const char* source_plugin; // the module that read it: the $OCM's PROVENANCE.SOURCE_ID
   bool position_only;        // the source gives positions only
 };
 
@@ -534,7 +538,7 @@ bool preflight_fit_epochs(const std::vector<od::PluginFitFBResult>& epochs, std:
     return false;
   }
   for (const od::PluginFitFBResult& epoch : epochs) {
-    if (!epoch.ok || epoch.omm.empty() || epoch.ocm.empty() || epoch.obd.empty()) {
+    if (!epoch.ok || epoch.omm.empty() || epoch.ocm.empty()) {
       if (!epoch.ok) {
         *error_code = epoch.error_code.empty() ? "fit-epoch-failed" : epoch.error_code;
         *error_message = epoch.error_message.empty() ? "complete-arc fitter returned a failed epoch" : epoch.error_message;
@@ -562,15 +566,98 @@ struct RecordStream {
 };
 
 // ---------------------------------------------------------------------------
+// The OD core's SGP4 set as an element-set $OCM.
+//
+// The core's $OMM (an SGP4 set: Kozai MEAN_MOTION, BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT; no COMMENT, no free-form
+// list) goes out unchanged on the omm stream for the SGP4 catalog lane. The same set goes out on the ocm stream as an
+// $OCM: MEAN_ELEMENTS of theory SGP4, its forces stated (GRAVITY_MODEL WGS-72, WEATHER_SOURCE NONE, no atmosphere),
+// ORB_AVERAGING KOZAI, TEMEOFDATE, NORAD_CAT_ID, and the core's fit statistics typed: FIT_RMS_KM and CONVERGED from
+// its result, ITERATIONS and ACTUAL_OD_SPAN from the diagnostics it hands back (read here, never emitted). The core
+// states no fit arc and no state count, so FIT_START, FIT_STOP and FIT_STATES are not written.
+// ---------------------------------------------------------------------------
+constexpr const char* kSgp4Product = "SDN supplemental-omm OD node 2.1.0 over the frozen complete-arc SGP4 OD core";
+
+bool sgp4_set_ocm(const od::PluginFitFBResult& epoch, const ProviderInfo& provider, std::vector<uint8_t>* out) {
+  flatbuffers::Verifier omm_verifier(epoch.omm.data(), epoch.omm.size());
+  if (!VerifySizePrefixedOMMBuffer(omm_verifier)) return false;
+  std::unique_ptr<OMMT> omm(GetSizePrefixedOMM(epoch.omm.data())->UnPack());
+  if (omm->MEAN_ELEMENT_THEORY != meanElementSource::SGP4) return false;
+  std::unique_ptr<OBDT> diagnostics;
+  if (!epoch.obd.empty()) {
+    flatbuffers::Verifier obd_verifier(epoch.obd.data(), epoch.obd.size());
+    if (VerifySizePrefixedOBDBuffer(obd_verifier)) diagnostics.reset(GetSizePrefixedOBD(epoch.obd.data())->UnPack());
+  }
+  OCMT ocm;
+  ocm.HEADER = std::make_unique<HeaderT>();
+  ocm.HEADER->CCSDS_OCM_VERS = "3.0";
+  ocm.HEADER->CREATION_DATE = omm->CREATION_DATE;
+  ocm.HEADER->ORIGINATOR = omm->ORIGINATOR;
+  ocm.METADATA = std::make_unique<MetadataT>();
+  ocm.METADATA->OBJECT_NAME = omm->OBJECT_NAME;
+  ocm.METADATA->INTERNATIONAL_DESIGNATOR = omm->OBJECT_ID;
+  if (omm->NORAD_CAT_ID != 0) {
+    ocm.METADATA->CATALOG_NAME = "NORAD";
+    ocm.METADATA->OBJECT_DESIGNATOR = std::to_string(omm->NORAD_CAT_ID);
+    ocm.METADATA->NORAD_CAT_ID = omm->NORAD_CAT_ID;
+  }
+  ocm.METADATA->TIME_SYSTEM = "UTC";
+  ocm.CENTER_NAME = "EARTH";
+  ocm.TRAJ_REF_FRAME = sgp4xp::temeReferenceFrame();
+  ocm.ORB_AVERAGING = "KOZAI";
+  ocm.ORB_REVNUM = static_cast<uint32_t>(omm->REV_AT_EPOCH);
+  ocm.MEAN_ELEMENTS = std::make_unique<OCMMeanElementsT>();
+  OCMMeanElementsT& me = *ocm.MEAN_ELEMENTS;
+  me.MEAN_ELEMENT_THEORY = meanElementSource::SGP4;
+  me.EPOCH = omm->EPOCH;
+  me.MEAN_MOTION = omm->MEAN_MOTION;
+  me.ECCENTRICITY = omm->ECCENTRICITY;
+  me.INCLINATION = omm->INCLINATION;
+  me.RA_OF_ASC_NODE = omm->RA_OF_ASC_NODE;
+  me.ARG_OF_PERICENTER = omm->ARG_OF_PERICENTER;
+  me.MEAN_ANOMALY = omm->MEAN_ANOMALY;
+  me.BSTAR = omm->BSTAR;
+  me.MEAN_MOTION_DOT = omm->MEAN_MOTION_DOT;
+  me.MEAN_MOTION_DDOT = omm->MEAN_MOTION_DDOT;
+  ocm.PERTURBATIONS = std::make_unique<PerturbationsT>();
+  ocm.PERTURBATIONS->GRAVITY_MODEL = "WGS-72";
+  ocm.PERTURBATIONS->WEATHER_SOURCE = pcfWeatherSource::NONE;
+  ocm.PERTURBATIONS->DENSITY_CORRECTION = pcfDensityCorrection::NONE;
+  auto fs = std::make_unique<OCMFitStatisticsT>();
+  fs->FIT_RMS_KM = epoch.rms_km;
+  fs->CONVERGED = epoch.converged;
+  auto od = std::make_unique<OrbitDeterminationT>();
+  od->OD_METHOD = "DIFFERENTIAL CORRECTION";
+  od->OD_ALGORITHM = "SGP4 LEVENBERG-MARQUARDT IN EQUINOCTIAL ELEMENTS";
+  od->OD_ESTIMATOR = estimatorCategory::BatchLeastSquares;
+  od->OD_EPOCH = omm->EPOCH;
+  if (diagnostics) {
+    fs->ITERATIONS = diagnostics->NUM_ITERATIONS;
+    if (diagnostics->FIT_SPAN > 0) od->ACTUAL_OD_SPAN = diagnostics->FIT_SPAN;
+  }
+  od->FIT_STATISTICS = std::move(fs);
+  ocm.ORBIT_DETERMINATION = std::move(od);
+  ocm.PROVENANCE = std::make_unique<PVNT>();
+  ocm.PROVENANCE->SOURCE_ID = provider.source_plugin;
+  ocm.PROVENANCE->ORIGINATOR = provider.originator;
+  ocm.PROVENANCE->PROVIDER_ID = kParser;
+  ocm.PROVENANCE->PRODUCER = kSgp4Product;
+  flatbuffers::FlatBufferBuilder builder(4096);
+  builder.FinishSizePrefixed(OCM::Pack(builder, &ocm), OCMIdentifier());
+  out->assign(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // SGP4-XP element sets beside the SGP4 sets of the OD core.
 //
 // Every ephemeris is also fitted with SGP4-XP, the US Space Force's perturbation model with a fitted ballistic term
 // (BTERM) and solar-radiation term (AGOM): a day to fit (two thirds of an ephemeris shorter than a day and a half) and
 // up to a day to score it, window after window while the ephemeris lasts, at most 16 (propagator/sgp4-xp,
-// engine.hpp). Each fitted window is one $OMM (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT)
-// and one $OBD in the same record streams as the OD core's records, and names its source: the OMM's ORIGINATOR is the
-// organisation that produced the ephemeris and the OBD's sensor is the source module's plugin ID. An ephemeris too
-// short to hold a fit and three hours to score it gets no XP set; the OD core's sets are unaffected either way.
+// engine.hpp). Each fitted window is one $OCM (propagator/sgp4-xp records.hpp: MEAN_ELEMENTS SGP4XP with BTERM and
+// AGOM, the theory's own forces, FIT_STATISTICS) in the ocm record stream after the OD core's records, and names its
+// source: HEADER.ORIGINATOR and PROVENANCE.ORIGINATOR the organization that produced the ephemeris, PROVENANCE.SOURCE_ID
+// the source module's plugin ID. An ephemeris too short to hold a fit and three hours to score it gets no XP set; the
+// OD core's sets are unaffected either way.
 // ---------------------------------------------------------------------------
 constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 16, 0};
 constexpr const char* kXpProduct =
@@ -746,9 +833,13 @@ extern "C" int fit(void) {
     return finish(0);
   }
 
-  RecordStream omm, ocm, obd;
+  RecordStream omm, ocm;
   for (const od::PluginFitFBResult& epoch : epochs) {
-    if (!omm.add(epoch.omm) || !ocm.add(epoch.ocm) || !obd.add(epoch.obd)) {
+    std::vector<uint8_t> set;
+    if (!sgp4_set_ocm(epoch, *pending.provider, &set)) {
+      return fail("od-core-record-invalid", "the OD core's $OMM is not a verifiable SGP4 set", 500);
+    }
+    if (!omm.add(epoch.omm) || !ocm.add(epoch.ocm) || !ocm.add(set)) {
       return fail("od-output-too-large", "one fitted record stream exceeds 128 MiB", 413);
     }
   }
@@ -756,10 +847,9 @@ extern "C" int fit(void) {
   const std::string xp_account = append_xp_records(&ocm, pending, &xp_ok);
   if (!xp_ok) return fail("od-output-too-large", "one fitted record stream exceeds 128 MiB", 413);
 
-  std::string omm_batch, ocm_batch, obd_batch;
+  std::string omm_batch, ocm_batch;
   if (!push_batch("omm", "OMM.fbs", "$OMM", "OMM", omm, *pending.provider, &omm_batch) ||
-      !push_batch("ocm", "OCM.fbs", "$OCM", "OCM", ocm, *pending.provider, &ocm_batch) ||
-      !push_batch("obd", "OBD.fbs", "$OBD", "OBD", obd, *pending.provider, &obd_batch)) {
+      !push_batch("ocm", "OCM.fbs", "$OCM", "OCM", ocm, *pending.provider, &ocm_batch)) {
     return fail("od-output", "unable to emit a fitted batch", 500);
   }
   std::string message = "OD fit complete";

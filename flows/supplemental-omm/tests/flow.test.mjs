@@ -1,7 +1,7 @@
 // The Supplemental OMM flow end to end on typed contracts 1.0: the release bundle scripts/release.mjs builds (signed
 // with a key generated for the test and thrown away), every node an isomorphic child of it, run in the SDK's
 // isomorphic flow host. One TimerTick starts the five sources; their fetches are hostcap/http-request children answered
-// here from the source modules' provider fixtures; their $OEM reach the OD node; each fit's $OMM, $OCM and $OBD go to
+// here from the source modules' provider fixtures; their $OEM reach the OD node; each fit's $OMM and $OCM go to
 // hostcap/storage-ingest children (storage.ingest_with_source answered here) and each stored batch is published.
 //
 // Equivalence: the records the flow stores are the OD node's release records for the same provider fixtures
@@ -41,10 +41,10 @@ test("one tick: every source fetched through hostcap/http-request, every object 
   assert.ok(gets.filter((c) => /MEME_/.test(c.params.url)).every((c) => c.params.headers.range === "bytes=0-131071"), "Starlink files by their leading range");
 
   // Every object: one batch per standard, filed under its provider's source name.
-  // The OD node's three standards for each of the 30 objects.
-  assert.equal(ingests.length, 3 * 30);
+  // The OD node's two standards for each of the 30 objects.
+  assert.equal(ingests.length, 2 * 30);
   for (const [source, objects] of Object.entries(SOURCES)) {
-    for (const schema of ["OMM.fbs", "OCM.fbs", "OBD.fbs"]) {
+    for (const schema of ["OMM.fbs", "OCM.fbs"]) {
       assert.equal(ingests.filter((i) => i.source_name === source && i.schema === schema).length, objects, `${source} ${schema}`);
     }
   }
@@ -77,7 +77,7 @@ test("one tick: every source fetched through hostcap/http-request, every object 
 test("the stored records are the OD node's release records for the same provider input", async () => {
   const { ingests } = await flowRun();
   const release = (standard) => splitRecords(fs.readFileSync(path.join(packageRoot, `nodes/od/release-records/sources-${standard.toLowerCase()}-records.bin`)));
-  for (const standard of ["OMM", "OCM", "OBD"]) {
+  for (const standard of ["OMM", "OCM"]) {
     const stored = ingests.filter((i) => i.schema === `${standard}.fbs`).flatMap((i) => i.records);
     assert.deepEqual(stored.map(sha256).sort(), release(standard).map(sha256).sort(), standard);
   }

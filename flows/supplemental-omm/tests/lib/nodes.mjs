@@ -79,13 +79,13 @@ export async function issOem(t, kvn) {
 // the IngestRequests, the notices and the number of invocations.
 export async function fit(node, frames) {
   const inputs = Object.entries(frames).flatMap(([portId, list]) => list.map((payload) => ({ portId, typeRef: TYPE.OEM, payload })));
-  const out = { omm: [], ocm: [], obd: [], meta: [], notices: [], invocations: 0, backlogs: [] };
+  const out = { omm: [], ocm: [], meta: [], notices: [], invocations: 0, backlogs: [] };
   let response = ok(await node.invoke({ methodId: "fit", inputs }));
   for (;;) {
     out.invocations += 1;
     out.backlogs.push(response.backlogRemaining ?? 0);
     for (const frame of response.outputs) {
-      if (["omm", "ocm", "obd"].includes(frame.portId)) out[frame.portId].push(...splitRecords(frame.payload));
+      if (["omm", "ocm"].includes(frame.portId)) out[frame.portId].push(...splitRecords(frame.payload));
       else if (frame.portId.endsWith("_meta")) out.meta.push({ port: frame.portId, payload: new Uint8Array(frame.payload) });
       else if (frame.portId === "status") out.notices.push(decodeFlowNotice(frame.payload));
       else assert.fail(`an output on ${frame.portId}`);

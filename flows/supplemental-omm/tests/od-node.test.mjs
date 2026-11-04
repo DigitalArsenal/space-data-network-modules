@@ -9,15 +9,14 @@ import test from "node:test";
 
 import { modulesRoot, packageRoot, sha256, splitRecords } from "./lib/flow.mjs";
 import { fit, harnessFor, issOem, odNode, sourceOems } from "./lib/nodes.mjs";
-import { TYPE, decodeHttpRequest, decodeIngestRequest, decodeIngestResult, decodeObdRecord, decodeOem, decodeOmmRecord, encodeIngestRequest, encodeHttpResponse, encodeIngestResult, encodeOem, encodeOemSizePrefixed } from "./lib/sds.mjs";
+import { TYPE, decodeHttpRequest, decodeIngestRequest, decodeIngestResult, decodeOcmRecord, decodeOem, decodeOmmRecord, encodeIngestRequest, encodeHttpResponse, encodeIngestResult, encodeOem, encodeOemSizePrefixed } from "./lib/sds.mjs";
 
 const SGP4 = 0;
 const SGP4XP = 1;
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
 const release = (name, standard) => splitRecords(fs.readFileSync(path.join(packageRoot, `nodes/od/release-records/${name}-${standard}-records.bin`)));
 const hex = (records) => records.map((r) => Buffer.from(r).toString("hex"));
-const isXpObd = (record) => (decodeObdRecord(record).ID ?? "").endsWith("-SGP4XP");
-const isXpOmm = (record) => decodeOmmRecord(record).MEAN_ELEMENT_THEORY === SGP4XP;
+const isXpOcm = (record) => decodeOcmRecord(record).MEAN_ELEMENTS?.MEAN_ELEMENT_THEORY === SGP4XP;
 
 // propagator/sgp4-xp's fit of an $OEM's states over its first `hours` (the node's window over a short ephemeris).
 async function moduleFit(t, oemBytes, hours) {
@@ -29,10 +28,10 @@ async function moduleFit(t, oemBytes, hours) {
   const xp = await harnessFor(t, path.join(modulesRoot, "propagator/sgp4-xp"));
   const response = await xp.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: TYPE.OEM, payload: encodeOemSizePrefixed(oem) }] });
   assert.equal(response.statusCode, 0, response.errorMessage);
-  return decodeOmmRecord(response.outputs.find((frame) => frame.portId === "elements").payload);
+  return decodeOcmRecord(response.outputs.find((frame) => frame.portId === "elements").payload);
 }
-const ELEMENTS = ["EPOCH", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "BSTAR", "MEAN_MOTION_DDOT"];
-const elementsOf = (omm) => Object.fromEntries(ELEMENTS.map((key) => [key, omm[key]]));
+const ELEMENTS = ["EPOCH", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "BTERM", "AGOM"];
+const elementsOf = (ocm) => Object.fromEntries(ELEMENTS.map((key) => [key, ocm.MEAN_ELEMENTS[key]]));
 
 test("every source's $OEM fits to the release's records, byte for byte", async (t) => {
   const oems = await sourceOems(t);
@@ -42,7 +41,7 @@ test("every source's $OEM fits to the release's records, byte for byte", async (
   const node = await odNode(t);
   const out = await fit(node, oems);
   assert.equal(out.invocations, 30, "one object an invocation");
-  for (const standard of ["omm", "ocm", "obd"]) {
+  for (const standard of ["omm", "ocm"]) {
     assert.deepEqual(hex(out[standard]), hex(release("sources", standard)), standard);
   }
 });
@@ -51,15 +50,13 @@ test("each fit: one batch per standard, its IngestRequest naming the provider an
   const oems = await sourceOems(t);
   const node = await odNode(t);
   const out = await fit(node, { iss: oems.iss, glonass: oems.glonass.slice(0, 1) });
-  assert.deepEqual(out.meta.map((m) => m.port), ["omm_meta", "ocm_meta", "obd_meta", "omm_meta", "ocm_meta", "obd_meta"]);
+  assert.deepEqual(out.meta.map((m) => m.port), ["omm_meta", "ocm_meta", "omm_meta", "ocm_meta"]);
   const requests = out.meta.map((m) => decodeIngestRequest(m.payload));
   assert.deepEqual(requests.map((r) => [r.schema, r.tags.providerId, r.tags.sourceName, r.tags.contentKeyId, r.reconcile]), [
     ["OMM.fbs", "supplemental-omm", "glonass", "public", "duplicates"],
     ["OCM.fbs", "supplemental-omm", "glonass", "public", "duplicates"],
-    ["OBD.fbs", "supplemental-omm", "glonass", "public", "duplicates"],
     ["OMM.fbs", "supplemental-omm", "iss", "public", "duplicates"],
     ["OCM.fbs", "supplemental-omm", "iss", "public", "duplicates"],
-    ["OBD.fbs", "supplemental-omm", "iss", "public", "duplicates"],
   ].sort((a, b) => (a[2] === b[2] ? 0 : a[2] === "iss" ? -1 : 1)));
   const issOmm = out.omm.filter((r) => decodeOmmRecord(r).OBJECT_NAME === "ISS");
   assert.equal(requests[0].tags.batchId, sha256(Buffer.concat(issOmm)));
@@ -73,19 +70,17 @@ test("each fit: one batch per standard, its IngestRequest naming the provider an
 test("NASA's ISS ephemeris: the core's records are the release's, and one SGP4-XP set, propagator/sgp4-xp's, naming NASA and the source module", async (t) => {
   const oem = await issOem(t, fs.readFileSync(path.join(modulesRoot, "files/ccsds-messages/fixtures/real/nasa-iss.oem")));
   const out = await fit(await odNode(t), { iss: [oem] });
-  for (const standard of ["omm", "ocm", "obd"]) {
-    const core = out[standard].filter((r) => !(standard === "omm" && isXpOmm(r)) && !(standard === "obd" && isXpObd(r)));
+  for (const standard of ["omm", "ocm"]) {
+    const core = out[standard].filter((r) => !(standard === "ocm" && isXpOcm(r)));
     assert.deepEqual(hex(core), hex(release("iss-12h", standard)), `${standard}: the OD core's records`);
   }
-  const xp = out.omm.filter(isXpOmm).map(decodeOmmRecord);
+  const xp = out.ocm.filter(isXpOcm).map(decodeOcmRecord);
   assert.equal(xp.length, 1, "twelve hours: eight to fit and four to score the fit");
   const [set] = xp;
-  assert.deepEqual([set.ORIGINATOR, set.OBJECT_NAME, set.OBJECT_ID, set.NORAD_CAT_ID], ["NASA/JSC/FOD/TOPO", "ISS", "1998-067-A", 25544]);
-  assert.match(set.COMMENT, /^SOURCE com\.orbpro\.iss-source$/m, "the source module is named");
+  assert.deepEqual([set.HEADER.ORIGINATOR, set.METADATA.OBJECT_NAME, set.METADATA.INTERNATIONAL_DESIGNATOR, set.METADATA.NORAD_CAT_ID], ["NASA/JSC/FOD/TOPO", "ISS", "1998-067-A", 25544]);
+  assert.equal(set.PROVENANCE.SOURCE_ID, "com.orbpro.iss-source", "the source module is named");
   // Eight of the twelve hours: two thirds of an ephemeris shorter than a day and a half.
   assert.deepEqual(elementsOf(set), elementsOf(await moduleFit(t, oem, 8)));
-  const [obd] = out.obd.filter(isXpObd).map(decodeObdRecord);
-  assert.equal(obd.SENSORS[0].SENSOR_ID, "com.orbpro.iss-source");
   assert.deepEqual(out.notices.map((n) => n.items[0]), ["OD fit complete: ISS (NORAD 25544); SGP4-XP: 1 set"]);
 });
 
@@ -93,13 +88,13 @@ test("a three-day ephemeris: two full-day SGP4-XP windows, the first recovering 
   // The ephemeris of a known SGP4-XP set (15.5 rev/day, BTERM 0.005, AGOM 0.01), made by propagator/sgp4-xp
   // (tests/fixtures/PROVENANCE.md).
   const out = await fit(await odNode(t), { iss: [await issOem(t, fixture("iss-sgp4xp-3day.oem"))] });
-  const xp = out.omm.filter(isXpOmm).map(decodeOmmRecord);
+  const xp = out.ocm.filter(isXpOcm).map((r) => decodeOcmRecord(r).MEAN_ELEMENTS);
   assert.deepEqual(xp.map((s) => s.EPOCH), ["2024-04-09T12:00:00.000000Z", "2024-04-10T12:00:00.000000Z"], "windows of a day; the third would have nothing to score it");
   assert.equal(xp[0].MEAN_MOTION, 15.5);
-  assert.ok(Math.abs(xp[0].BSTAR - 0.005) <= 2e-4 * 0.005 + 1e-6, `BTERM ${xp[0].BSTAR}`);
-  assert.ok(Math.abs(xp[0].MEAN_MOTION_DDOT - 0.01) <= 1e-3 * 0.01 + 1e-6, `AGOM ${xp[0].MEAN_MOTION_DDOT}`);
-  for (const standard of ["omm", "ocm", "obd"]) {
-    const core = (records) => records.filter((r) => !(standard === "omm" && isXpOmm(r)) && !(standard === "obd" && isXpObd(r)));
+  assert.ok(Math.abs(xp[0].BTERM - 0.005) <= 2e-4 * 0.005 + 1e-6, `BTERM ${xp[0].BTERM}`);
+  assert.ok(Math.abs(xp[0].AGOM - 0.01) <= 1e-3 * 0.01 + 1e-6, `AGOM ${xp[0].AGOM}`);
+  for (const standard of ["omm", "ocm"]) {
+    const core = (records) => records.filter((r) => !(standard === "ocm" && isXpOcm(r)));
     assert.deepEqual(hex(core(out[standard])), hex(release("iss-3day", standard)), `${standard}: the OD core's records`);
   }
   assert.deepEqual(out.notices.map((n) => n.items[0]), ["OD fit complete: ISS (NORAD 25544); SGP4-XP: 2 sets"]);
@@ -115,7 +110,7 @@ test("an arc the fit core cannot fit is refused before it, with a notice; the ne
   const out = await fit(await odNode(t), { cpf: [encodeOem(broken)], iss: oems.iss });
   assert.deepEqual(out.notices.map((n) => [n.kind, n.reason, n.sourceName]), [["skipped", "unfittable", "cpf"], ["info", "fitted", "iss"]]);
   assert.match(out.notices[0].items[0], /lageos1 \(NORAD 8820\)/);
-  assert.equal(out.meta.length, 3, "only the ISS batches");
+  assert.equal(out.meta.length, 2, "only the ISS batches");
 });
 
 test("a frame that is not an $OEM the node can read refuses the invocation", async (t) => {

@@ -1,10 +1,10 @@
 # Supplemental OMM OD node
 
-`org.sdn.flows.supplemental-omm.od` 2.0.2, typed contracts 1.0 (FlatBuffers only).
+`org.sdn.flows.supplemental-omm.od` 2.1.0, typed contracts 1.0 (FlatBuffers only).
 
 | method | in | out |
 | --- | --- | --- |
-| `fit` | `starlink`, `glonass`, `intelsat`, `cpf`, `iss`: SDS `$OEM`, one object a frame, from the flow's source modules | `omm_meta` + `omm`, `ocm_meta` + `ocm`, `obd_meta` + `obd`: each an IngestRequest (INGQ) and the size-prefixed record stream it files; `status`: FlowNotice (FNTC) |
+| `fit` | `starlink`, `glonass`, `intelsat`, `cpf`, `iss`: SDS `$OEM`, one object a frame, from the flow's source modules | `omm_meta` + `omm`, `ocm_meta` + `ocm`: each an IngestRequest (INGQ) and the size-prefixed record stream it files; `status`: FlowNotice (FNTC) |
 | `publish_request` | `result` IngestResult (INGR) + `meta` the IngestRequest it stored | `request` HttpRequest (HREQ): POST `omm_publish_url`, BODY the IngestResult |
 
 Each `$OEM` is read into the object's states in the source's own axes and time scale (EME2000 or Earth-fixed
@@ -12,7 +12,12 @@ CustomFrame ECEF; UTC or GPS) and handed to the frozen complete-arc OD core as b
 (Starlink MEME, ISS OEM) as a verbose `$OEM`, the position-only ones (GLONASS SP3, Intelsat ECF, CPF) as the compact
 position-only `$OEM` (STATE_VECTOR_SIZE 3) the fitter seeds its velocities from, an arc the core cannot fit (fewer than
 three states, a repeated epoch, an unbound velocity seed) refused before it. One object is fitted an invocation, the
-rest wait as backlog. The object's records go out as one stream per standard with an IngestRequest: SCHEMA, TAGS
+rest wait as backlog. The object's records go out as one stream per standard with an IngestRequest. `omm`: the core's
+SGP4 `$OMM` for each local epoch, as received from the core (no figures in COMMENT, no free-form list), for the SGP4
+catalog lane. `ocm`: for each local epoch the core's state and covariance `$OCM`, then its SGP4 set as an `$OCM`
+(MEAN_ELEMENTS SGP4, GRAVITY_MODEL WGS-72, WEATHER_SOURCE NONE, ORB_AVERAGING KOZAI; FIT_STATISTICS FIT_RMS_KM, CONVERGED
+and ITERATIONS and ACTUAL_OD_SPAN from the core; the core states no arc, so FIT_START and FIT_STOP are not written);
+then the SGP4-XP sets. No `$OBD` goes out. Each IngestRequest: SCHEMA, TAGS
 (PROVIDER_ID `supplemental-omm`, SOURCE_NAME `spacex-starlink` / `glonass` / `intelsat` / `cpf` / `iss`, BATCH_ID the
 stream's SHA-256, CONTENT_KEY_ID `public`), RECONCILE Duplicates, PROVENANCE (PARSER, NORMALIZED_SHA256 and COUNT).
 Notices: Info `fitted` (ITEMS the completion message, COUNT the `$OMM` records, BATCH_ID the `$OMM` batch), Skipped
@@ -27,11 +32,11 @@ half) and up to a day after it to score the fit; the next window starts where th
 lasts, at most 16 windows. An ephemeris too short to hold a fit and three hours to score it gets no XP set. The optimisation sees at most 240 states of a window, evenly
 spaced, as in `propagator/sgp4-xp`; the statistics are over all of them. The OD core's sets are unchanged either way.
 
-Each window is one `$OMM` (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT; epoch the first state of
-the fit) and one `$OBD`, appended to the `omm` and `obd` record streams the OD core's records go in, and each names its
-source:
+Each window is one `$OCM` (MEAN_ELEMENTS SGP4XP with BTERM and AGOM, epoch the first state of the fit; the theory's own
+forces: ATMOSPHERIC_MODEL {JXX,1970}, WEATHER_SOURCE THEORY_FLUX_MODEL, GRAVITY_MODEL EGM-96; ORBIT_DETERMINATION with
+FIT_STATISTICS), appended to the `ocm` record stream after the OD core's records, and each names its source:
 
-| Port | ORIGINATOR | Axes, time |
+| Port | HEADER.ORIGINATOR, PROVENANCE.ORIGINATOR | Axes, time |
 | --- | --- | --- |
 | `starlink` | SpaceX | EME2000, UTC |
 | `glonass` | CODE (Astronomical Institute, University of Bern) | Earth-fixed, GPS time, positions |
@@ -39,9 +44,9 @@ source:
 | `cpf` | ILRS (EDC, DGFI-TUM) | Earth-fixed or EME2000, UTC, positions |
 | `iss` | NASA/JSC/FOD/TOPO | EME2000, UTC |
 
-The OMM's COMMENT holds `SOURCE <source module plugin ID>` (`com.orbpro.spacex-starlink-source`, ...), the fit interval
-and the fit and held-out statistics (N, RMS, maximum and radial, along-track and cross-track RMS, km, in TEME); the
-OBD's sensor is the source module. A set
+PROVENANCE.SOURCE_ID is the source module's plugin ID (`com.orbpro.spacex-starlink-source`, ...) and PRODUCER this node
+over `propagator/sgp4-xp` and the library; FIT_STATISTICS holds the fit interval (FIT_START, FIT_STOP) and the fit and
+held-out statistics (states, RMS, maximum and radial, in-track and cross-track RMS, km, in TEME, by day). A set
 whose NORAD number the source does not give has 99999, as the core's. When XP sets were made the object's completion
 status says how many (`OD fit complete: ISS (NORAD 25544); SGP4-XP: 14 sets`).
 
