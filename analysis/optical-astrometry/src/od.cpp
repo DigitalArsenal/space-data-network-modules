@@ -7,7 +7,11 @@
 // first and last sight are the unknowns; their positions fix a Lambert arc
 // (here Izzo's solver, analysis/lambert-izzo), propagated to the middle time,
 // whose miss perpendicular to the middle sight is driven to zero by Newton
-// iteration. Two-body dynamics; started from circular-orbit range guesses.
+// iteration, started from circular-orbit range guesses. One pass: two-body
+// dynamics. Sights over more than one pass: each start's circular period
+// sets the arc's full revolutions and both multi-revolution branches are
+// tried, under two-body + J2 shooting. Of the converged solutions the bound
+// one whose perigee clears the Earth and whose eccentricity is least wins.
 //
 // Differential correction: weighted batch least squares with a priori
 // information (Tapley, Schutz & Born 2004, ch. 4) for the Cartesian GCRS
@@ -137,41 +141,45 @@ struct IodResult {
   double t = 0;
   V3 r, v;                      // km, km/s at t (the middle sight)
   double rho[3] = {0, 0, 0};    // ranges, km
-  double miss_arcsec = 0;
+  double miss_arcsec = 0;       // the middle-sight miss attained
   int iterations = 0;
   int solutions = 0;            // distinct converged solutions from the starts
+  int revolutions = 0, branch = 0;
+  double eccentricity = 0;
 };
 
 // Gooding's method on three sights (light time neglected: < 30 m over a
-// LEO arc, below an angles-only IOD's own range uncertainty).
-// revolutions > 0: the Lambert arc between the first and last sight makes that many full revolutions (Izzo's
-// multi-revolution branches; branch 0 the long-period, 1 the short-period solution).
-inline IodResult gooding_iod(const SightObs s[3], int revolutions = 0, int branch = 0) {
+// LEO arc, below an angles-only IOD's own range uncertainty). Starts: both
+// ends on one circular radius, scanned at kIodScanKm from kIodRadiusMin to
+// kIodRadiusMax; multi_pass (the sights span more than one pass): the
+// Lambert arc between the first and last sight makes floor(t13 / P) full
+// revolutions, P the start radius's circular period, on both of Izzo's
+// multi-revolution branches (0 long-period, 1 short-period). The
+// kIodStarts starts with the least middle-sight miss are iterated.
+// Converged: the miss under kIodMissRad, or a step under 1 m once the steps
+// stop shrinking (the finite-difference Jacobian's floor).
+inline IodResult gooding_iod(const SightObs s[3], bool multi_pass) {
+  constexpr double kIodMissRad = 1e-10;   // 2e-5 arcsec
+  constexpr double kIodStepKm = 1e-3;
   IodResult best;
-  best.error = "no start converged";
   std::vector<double> found;
+  int converged = 0, unbound = 0, subsurface = 0;
+  double attained = INFINITY;  // the smallest miss of any start, rad
   const double t12 = s[1].t - s[0].t, t13 = s[2].t - s[0].t;
-  auto miss = [&](double r1, double r3, double out[2], V3* p2, V3* v2) {
+  auto miss = [&](double r1, double r3, int revolutions, int branch, double out[2], V3* p2, V3* v2) {
     const V3 p1 = s[0].site_km + s[0].los * r1, p3 = s[2].site_km + s[2].los * r3;
     lambert_izzo::Request rq;
     rq.r1 = {p1.x, p1.y, p1.z};
     rq.r2 = {p3.x, p3.y, p3.z};
     rq.tof = t13;
     rq.mu = kMuEarth;
-    rq.max_revolutions = static_cast<uint16_t>(revolutions);
-    const lambert_izzo::Result lr = lambert_izzo::solve(rq);
-    if (lr.status != lambert_izzo::Status::Ok) return false;
-    const lambert_izzo::Solution* sol = &lr.single;
-    if (revolutions > 0) {
-      sol = nullptr;
-      for (const auto& m : lr.multi)
-        if (m.revolutions == revolutions) sol = branch == 0 ? &m.long_period : &m.short_period;
-      if (!sol) return false;
-    }
+    const lambert_izzo::Result lr = revolutions > 0 ? lambert_izzo::solve_revolutions(rq, static_cast<uint32_t>(revolutions)) : lambert_izzo::solve(rq);
+    if (lr.status != lambert_izzo::Status::Ok || (revolutions > 0 && lr.multi.empty())) return false;
+    const lambert_izzo::Solution* sol = revolutions > 0 ? (branch == 0 ? &lr.multi[0].long_period : &lr.multi[0].short_period) : &lr.single;
     V3 r = p1, v{sol->v1.x, sol->v1.y, sol->v1.z};
-    // Over revolutions the two-body arc misses the last sight by the J2 drift (hundreds of km a day in LEO): shoot
-    // the first velocity onto p3 under two-body + J2 (Newton, finite-difference sensitivity).
-    if (revolutions > 0) {
+    // Over passes the two-body arc misses the last sight by the J2 drift (hundreds of km a day in LEO): shoot the
+    // first velocity onto p3 under two-body + J2 (Newton, finite-difference sensitivity).
+    if (multi_pass) {
       auto land = [&](V3 v0) { V3 rr = p1, vv = v0; j2_rk4(&rr, &vv, t13); return rr; };
       for (int it = 0; it < 8; ++it) {
         const V3 miss3 = land(v) - p3;
@@ -198,8 +206,10 @@ inline IodResult gooding_iod(const SightObs s[3], int revolutions = 0, int branc
         }
         v = v - V3{x[0], x[1], x[2]};
       }
+      j2_rk4(&r, &v, t12);
+    } else {
+      kepler_rk4(&r, &v, t12);
     }
-    if (revolutions > 0) j2_rk4(&r, &v, t12); else kepler_rk4(&r, &v, t12);
     *p2 = r;
     *v2 = v;
     const V3 d = unit(r - s[1].site_km);
@@ -209,63 +219,100 @@ inline IodResult gooding_iod(const SightObs s[3], int revolutions = 0, int branc
     out[1] = dot(d - s[1].los, n);
     return true;
   };
-  for (double alt : {300.0, 500.0, 700.0, 1000.0, 1500.0, 2500.0}) {
-    // Range to a circular orbit of this altitude along the first sight.
-    auto range_to = [&](const SightObs& o) {
-      const double b = 2 * dot(o.site_km, o.los), c = dot(o.site_km, o.site_km) - std::pow(kReEarth + alt, 2);
-      const double disc = b * b - 4 * c;
-      return disc > 0 ? (-b + std::sqrt(disc)) / 2 : kNaN;
-    };
-    double r1 = range_to(s[0]), r3 = range_to(s[2]);
+  constexpr double kIodRadiusMin = kReEarth + 150, kIodRadiusMax = kReEarth + 4000, kIodScanKm = 10;
+  constexpr int kIodStarts = 6;
+  // Range to a circular orbit of this radius along a sight.
+  auto range_to = [&](const SightObs& o, double radius) {
+    const double b = 2 * dot(o.site_km, o.los), c = dot(o.site_km, o.site_km) - radius * radius;
+    const double disc = b * b - 4 * c;
+    return disc > 0 ? (-b + std::sqrt(disc)) / 2 : kNaN;
+  };
+  struct Start { double miss, r1, r3; int revolutions, branch; };
+  std::vector<Start> starts;
+  for (double radius = kIodRadiusMin; radius <= kIodRadiusMax; radius += kIodScanKm) {
+    const double period = 2 * kPi * std::sqrt(radius * radius * radius / kMuEarth);
+    const int revolutions = multi_pass ? static_cast<int>(std::floor(t13 / period)) : 0;
+    const double r1 = range_to(s[0], radius), r3 = range_to(s[2], radius);
     if (!std::isfinite(r1) || !std::isfinite(r3)) continue;
-    bool ok = false;
-    int it = 0;
-    V3 p2, v2;
-    double f[2];
-    for (; it < 40; ++it) {
-      if (!miss(r1, r3, f, &p2, &v2)) break;
-      if (std::hypot(f[0], f[1]) < 1e-12) { ok = true; break; }
-      double J[2][2];
-      const double h1 = 1e-3 * r1, h3 = 1e-3 * r3;
-      double f1[2], f3[2];
-      V3 tp, tv;
-      if (!miss(r1 + h1, r3, f1, &tp, &tv) || !miss(r1, r3 + h3, f3, &tp, &tv)) break;
-      for (int k = 0; k < 2; ++k) { J[k][0] = (f1[k] - f[k]) / h1; J[k][1] = (f3[k] - f[k]) / h3; }
-      // Least-squares Newton step (two residuals, two unknowns).
-      const double det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
-      if (std::fabs(det) < 1e-30) break;
-      double d1 = (J[1][1] * f[0] - J[0][1] * f[1]) / det, d3 = (-J[1][0] * f[0] + J[0][0] * f[1]) / det;
-      // Damp steps beyond a fifth of the range.
-      const double lim = 0.2 * std::min(r1, r3);
-      const double scale = std::max(1.0, std::max(std::fabs(d1), std::fabs(d3)) / lim);
-      r1 -= d1 / scale;
-      r3 -= d3 / scale;
-      if (r1 <= 0 || r3 <= 0) break;
-      if (std::fabs(d1) + std::fabs(d3) < 1e-7) { ok = miss(r1, r3, f, &p2, &v2); break; }
+    for (int branch = 0; branch < (revolutions > 0 ? 2 : 1); ++branch) {
+      double f[2];
+      V3 p2, v2;
+      if (miss(r1, r3, revolutions, branch, f, &p2, &v2)) starts.push_back({std::hypot(f[0], f[1]), r1, r3, revolutions, branch});
     }
-    if (!ok) continue;
-    const double r2n = norm(p2 - s[1].site_km);
-    bool dup = false;
-    for (double x : found) dup = dup || std::fabs(x - r2n) < 1.0;
-    if (!dup) found.push_back(r2n);
-    const double m = std::hypot(f[0], f[1]) / kArcsec;
-    // Keep the solution whose orbit is bound and nearest-circular.
-    const double energy = 0.5 * dot(v2, v2) - kMuEarth / norm(p2);
-    if (energy >= 0) continue;
-    if (!best.ok || m < best.miss_arcsec) {
-      best.ok = true;
-      best.error.clear();
-      best.t = s[1].t;
-      best.r = p2;
-      best.v = v2;
-      best.rho[0] = r1;
-      best.rho[1] = r2n;
-      best.rho[2] = r3;
-      best.miss_arcsec = m;
-      best.iterations = it;
+  }
+  std::sort(starts.begin(), starts.end(), [](const Start& a, const Start& b) { return a.miss < b.miss; });
+  if (starts.size() > static_cast<size_t>(kIodStarts)) starts.resize(kIodStarts);
+  for (const Start& start : starts) {
+    const int revolutions = start.revolutions, branch = start.branch;
+    {
+      double r1 = start.r1, r3 = start.r3;
+      bool ok = false;
+      int it = 0;
+      V3 p2, v2;
+      double f[2], last_step = INFINITY;
+      for (; it < 40; ++it) {
+        if (!miss(r1, r3, revolutions, branch, f, &p2, &v2)) break;
+        attained = std::min(attained, std::hypot(f[0], f[1]));
+        if (std::hypot(f[0], f[1]) < kIodMissRad) { ok = true; break; }
+        double J[2][2];
+        const double h1 = 1e-3 * r1, h3 = 1e-3 * r3;
+        double f1[2], f3[2];
+        V3 tp, tv;
+        if (!miss(r1 + h1, r3, revolutions, branch, f1, &tp, &tv) || !miss(r1, r3 + h3, revolutions, branch, f3, &tp, &tv)) break;
+        for (int k = 0; k < 2; ++k) { J[k][0] = (f1[k] - f[k]) / h1; J[k][1] = (f3[k] - f[k]) / h3; }
+        // Newton step (two residuals, two unknowns).
+        const double det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+        if (std::fabs(det) < 1e-30) break;
+        double d1 = (J[1][1] * f[0] - J[0][1] * f[1]) / det, d3 = (-J[1][0] * f[0] + J[0][0] * f[1]) / det;
+        // Damp steps beyond a fifth of the range.
+        const double lim = 0.2 * std::min(r1, r3);
+        const double scale = std::max(1.0, std::max(std::fabs(d1), std::fabs(d3)) / lim);
+        r1 -= d1 / scale;
+        r3 -= d3 / scale;
+        if (r1 <= 0 || r3 <= 0) break;
+        const double step = std::fabs(d1) + std::fabs(d3);
+        if (step < kIodStepKm && step > 0.5 * last_step) {
+          ok = miss(r1, r3, revolutions, branch, f, &p2, &v2);
+          if (ok) attained = std::min(attained, std::hypot(f[0], f[1]));
+          break;
+        }
+        last_step = step;
+      }
+      if (!ok) continue;
+      ++converged;
+      const double r2n = norm(p2 - s[1].site_km);
+      bool dup = false;
+      for (double x : found) dup = dup || std::fabs(x - r2n) < 1.0;
+      if (!dup) found.push_back(r2n);
+      // Bound, perigee above the surface, least eccentricity.
+      const double rn = norm(p2), energy = 0.5 * dot(v2, v2) - kMuEarth / rn;
+      if (energy >= 0) { ++unbound; continue; }
+      const V3 ev = (p2 * (dot(v2, v2) - kMuEarth / rn) - v2 * dot(p2, v2)) * (1.0 / kMuEarth);
+      const double ecc = norm(ev), sma = -kMuEarth / (2 * energy);
+      if (sma * (1 - ecc) <= kReEarth) { ++subsurface; continue; }
+      if (!best.ok || ecc < best.eccentricity) {
+        best.ok = true;
+        best.t = s[1].t;
+        best.r = p2;
+        best.v = v2;
+        best.rho[0] = r1;
+        best.rho[1] = r2n;
+        best.rho[2] = r3;
+        best.miss_arcsec = std::hypot(f[0], f[1]) / kArcsec;
+        best.iterations = it;
+        best.revolutions = revolutions;
+        best.branch = branch;
+        best.eccentricity = ecc;
+      }
     }
   }
   best.solutions = static_cast<int>(found.size());
+  if (!best.ok) {
+    char m[200];
+    std::snprintf(m, sizeof m, "%s: %d starts converged (%d unbound, %d with perigee below the surface); least middle-sight miss %.3g arcsec",
+                  converged ? "no bound orbit above the surface" : "no start converged", converged, unbound, subsurface, attained / kArcsec);
+    best.error = m;
+  }
   return best;
 }
 
@@ -485,7 +532,7 @@ inline OdResult determine_orbit_once(const Trajectory& ref, const std::vector<Od
       s3[q].los = deaberrate(o.u, sv);
       s3[q].site_km = sr * 1e-3;
     }
-    res.iod = gooding_iod(s3);
+    res.iod = gooding_iod(s3, false);
   }
   res.ok = true;
   return res;

@@ -1,6 +1,6 @@
 // flows/angles-only-od: the angles-only orbit determination's planning node. No element set enters on any port: the
-// first guess is analysis/optical-astrometry initial_orbit's Gooding state; every fit is flows/observation-od `step`
-// (analysis/estimation fit_batch with propagator/ffm), run by the host to its end per candidate.
+// first guess is analysis/optical-astrometry initial_orbit's Gooding state on the arc's tracks; every fit is
+// flows/observation-od `step` (analysis/estimation fit_batch with propagator/ffm), run by the host to its end per candidate.
 //
 //   plan    observations ($TDM RA/Dec tracks), initial (the initial-orbit $OCM), execution ($PRW EXECUTION_REQUEST: the
 //           dynamics; INITIAL carries the object and its coordinate system), stage (the $OCM selected for the last
@@ -8,19 +8,18 @@
 //           -> execution (one $PRW per candidate: the seed in INITIAL, the estimate's epoch, the initial orbit's, in
 //           TARGET_EPOCH), observations (the stage's tracks), report (FlowNotice: the stage, its candidates)
 //   select  observations, initial, stage (as for plan), candidates (the step $OCMs of the stage's candidates, any
-//           number; a refused candidate sends none), config
+//           number; a refused candidate sends none), executions (each candidate's $PRW from plan, the same order), config
 //           -> selected (the stage's $OCM), report (FlowNotice: REASON stage-selected or complete)
 //
-// Nights are the tracks between gaps over 6 h; stage s fits nights 1..s. Stage 1 starts from the initial orbit (one
-// pass). Across the first nightly gap (stage 2) the revolution count is a candidate set: N0 = floor(n1 dt / 2 pi), n1
-// stage 1's two-body mean motion and dt the span from the first observation to night 2's last, and the counts
-// N0 + k for k in [revolutionOffsetMin, revolutionOffsetMax] (default -1..1). plan asks for each count's Gooding
-// initial orbit through the nights (optical-astrometry initial_orbit config: revolutions, branch 0 and 1; port
-// initial_orbit_config), then, given those orbits on `seeds`, one execution per seed; select takes the candidates' fits
-// with their seeds (the same order). Later stages carry the last stage's state (one candidate). A candidate counts when
-// its fit converged, its WEIGHTED_RMS is at most weightedRmsLimit (default 2) and it kept its revolution count
-// (|n - n_seed| dt / 2 pi < 0.5). The lowest WEIGHTED_RMS wins; none: no-converged-revolution-count. An arc under
-// minimumArcHours (24): arc-too-short:<hours>.
+// Nights are the tracks between gaps over 6 h. Stage 1 fits the nights the initial orbit's sights span (its START_TIME
+// to STOP_TIME); each later stage adds the unfitted night nearest the fitted ones (FIT_START to FIT_STOP). The first
+// stage that spans a nightly gap before any fit has spanned one sets the revolution count over it from a candidate set:
+// its base state (the initial orbit, or the last stage's state) moved by k revolutions, its two-body mean motion
+// n_k = n + 2 pi k / dt (dt from the base epoch to the stage's farthest observation; the speed set by vis-viva, the
+// position and the velocity's direction kept), k in [revolutionOffsetMin, revolutionOffsetMax] (default -1..1). Other
+// stages carry the last stage's state (one candidate). A candidate counts when its fit converged, its WEIGHTED_RMS is at
+// most weightedRmsLimit (default 2) and it kept its revolution count (|n - n_seed| dt / 2 pi < 0.5). The lowest
+// WEIGHTED_RMS wins; none: no-converged-revolution-count. An arc under minimumArcHours (24): arc-too-short:<hours>.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -95,19 +94,22 @@ bool read_tracks(std::vector<Track>* out, std::string* error) {
   std::stable_sort(out->begin(), out->end(), [](const Track& a, const Track& b) { return a.first < b.first; });
   return true;
 }
-// Night index of each track (0-based) and each night's first epoch.
-std::vector<int> nights_of(const std::vector<Track>& tracks, std::vector<double>* starts) {
+// Night index of each track (0-based) and each night's span.
+struct Night { double first = INFINITY, last = -INFINITY; };
+std::vector<int> nights_of(const std::vector<Track>& tracks, std::vector<Night>* nights) {
   std::vector<int> night;
   double last = -INFINITY;
   for (const auto& t : tracks) {
-    if (t.first - last > kNightGapHours * 3600.0) starts->push_back(t.first);
-    night.push_back(static_cast<int>(starts->size()) - 1);
+    if (t.first - last > kNightGapHours * 3600.0) nights->push_back({});
+    night.push_back(static_cast<int>(nights->size()) - 1);
+    nights->back().first = std::min(nights->back().first, t.first);
+    nights->back().last = std::max(nights->back().last, t.last);
     last = std::max(last, t.last);
   }
   return night;
 }
 
-struct Orbit { double t = 0; double x[6] = {0}; bool converged = false; double wrms = NAN, stop = NAN; };
+struct Orbit { double t = 0; double x[6] = {0}; bool converged = false; double wrms = NAN, start = NAN, stop = NAN; };
 bool read_ocm(const plugin_input_frame_t* f, Orbit* o, std::string* error) {
   flatbuffers::Verifier v(f->payload, f->payload_length);
   if (!OCMBufferHasIdentifier(f->payload) || !VerifyOCMBuffer(v)) return *error = "an orbit is not a $OCM", false;
@@ -116,13 +118,32 @@ bool read_ocm(const plugin_input_frame_t* f, Orbit* o, std::string* error) {
       !parse_utc(ocm->STATE_EPOCHS()->Get(0)->str(), &o->t))
     return *error = "an orbit $OCM without a Cartesian state and its epoch", false;
   for (int i = 0; i < 6; ++i) o->x[i] = ocm->STATE_DATA()->Get(i);
+  // The span of the observations behind it: a fit's FIT_START to FIT_STOP, an initial orbit's START_TIME to STOP_TIME.
+  if (const auto* m = ocm->METADATA()) {
+    if (!parse_utc(text(m->START_TIME()), &o->start)) o->start = NAN;
+    if (!parse_utc(text(m->STOP_TIME()), &o->stop)) o->stop = NAN;
+  }
   if (const auto* od = ocm->ORBIT_DETERMINATION()) {
     o->wrms = od->WEIGHTED_RMS();
     if (const auto* fs = od->FIT_STATISTICS()) {
       o->converged = fs->CONVERGED();
+      if (!parse_utc(text(fs->FIT_START()), &o->start)) o->start = NAN;
       if (!parse_utc(text(fs->FIT_STOP()), &o->stop)) o->stop = NAN;
     }
   }
+  return true;
+}
+// A seed state from a $PRW EXECUTION_REQUEST's INITIAL (m, m/s -> km, km/s).
+bool read_seed(const plugin_input_frame_t* f, Orbit* o, std::string* error) {
+  const bool prefixed = f->payload_length >= 12 && flatbuffers::BufferHasIdentifier(f->payload, PRWIdentifier(), true);
+  flatbuffers::Verifier v(f->payload, f->payload_length);
+  if (!(prefixed ? VerifySizePrefixedPRWBuffer(v) : (PRWBufferHasIdentifier(f->payload) && VerifyPRWBuffer(v)))) return *error = "an execution is not a $PRW", false;
+  const PRW* prw = prefixed ? GetSizePrefixedPRW(f->payload) : GetPRW(f->payload);
+  const auto* ex = prw->EXECUTION_REQUEST();
+  const auto* st = ex && ex->INITIAL() ? ex->INITIAL()->STATE() : nullptr;
+  if (!st || !st->POSITION() || !st->VELOCITY() || !parse_utc(text(st->EPOCH()), &o->t)) return *error = "an execution without its INITIAL state and epoch", false;
+  const double x[6] = {st->POSITION()->X(), st->POSITION()->Y(), st->POSITION()->Z(), st->VELOCITY()->X(), st->VELOCITY()->Y(), st->VELOCITY()->Z()};
+  for (int i = 0; i < 6; ++i) o->x[i] = x[i] / 1000.0;
   return true;
 }
 // Two-body mean motion of a GCRF state, rad/s.
@@ -155,22 +176,31 @@ bool read_config(Config* c, std::string* error) {
   return true;
 }
 
-// The common reading of plan and select: the tracks, the nights, the initial orbit, the last stage.
+// The common reading of plan and select: the tracks, the nights, the initial orbit, the last stage, and the stage to
+// fit next (its nights, its base state, whether it sets a revolution count).
 struct State {
   Config config;
   std::vector<Track> tracks;
   std::vector<int> night;
-  std::vector<double> night_start;
+  std::vector<Night> nights;
   Orbit initial, stage;
   bool have_stage = false;
-  int completed = 0;  // nights the last stage covers
+  std::vector<char> covered, target;  // per night: fitted by the last stage; fitted by the next
+  int fitted = 0, planned = 0;        // nights in covered and in target
+  bool counting = false;              // the next stage sets the revolution count over a nightly gap
+  double dt = 0;                      // base epoch to the next stage's farthest observation, s
 };
+std::vector<char> nights_over(const State& s, double from, double to) {
+  std::vector<char> in(s.nights.size(), 0);
+  for (size_t k = 0; k < s.nights.size(); ++k) in[k] = s.nights[k].last >= from && s.nights[k].first <= to;
+  return in;
+}
 int read_state(State* s) {
   std::string error;
   if (!read_config(&s->config, &error)) return fail("bad-input", error);
   if (!read_tracks(&s->tracks, &error)) return fail("bad-input", error);
   if (s->tracks.empty()) return fail("bad-input", "observations hold no RA/Dec angles");
-  s->night = nights_of(s->tracks, &s->night_start);
+  s->night = nights_of(s->tracks, &s->nights);
   double last = -INFINITY;
   for (const auto& t : s->tracks) last = std::max(last, t.last);
   const double arc = (last - s->tracks.front().first) / 3600.0;
@@ -182,20 +212,35 @@ int read_state(State* s) {
   const auto initial = frames("initial");
   if (initial.size() != 1) return fail("bad-input", "initial must be the one initial-orbit $OCM");
   if (!read_ocm(initial[0], &s->initial, &error)) return fail("bad-input", error);
+  if (!std::isfinite(s->initial.start) || !std::isfinite(s->initial.stop)) return fail("bad-input", "the initial orbit $OCM without START_TIME and STOP_TIME");
   const auto stage = frames("stage");
   if (stage.size() > 1) return fail("bad-input", "stage holds at most one $OCM");
   if (!stage.empty()) {
-    if (!read_ocm(stage[0], &s->stage, &error) || !std::isfinite(s->stage.stop)) return fail("bad-input", error.empty() ? "stage $OCM without FIT_STOP" : error);
+    if (!read_ocm(stage[0], &s->stage, &error)) return fail("bad-input", error);
+    if (!std::isfinite(s->stage.start) || !std::isfinite(s->stage.stop)) return fail("bad-input", "stage $OCM without FIT_START and FIT_STOP");
     s->have_stage = true;
-    for (double start : s->night_start) s->completed += start <= s->stage.stop ? 1 : 0;
   }
+  // The next stage: the initial orbit's nights; after a stage, its nights and the unfitted night nearest them.
+  const Orbit& base = s->have_stage ? s->stage : s->initial;
+  s->covered = s->have_stage ? nights_over(*s, base.start, base.stop) : std::vector<char>(s->nights.size(), 0);
+  s->target = s->have_stage ? s->covered : nights_over(*s, base.start, base.stop);
+  for (char c : s->covered) s->fitted += c;
+  if (s->have_stage) {
+    int nearest = -1;
+    double gap = INFINITY;
+    for (size_t k = 0; k < s->nights.size(); ++k) {
+      if (s->covered[k]) continue;
+      const double g = std::max({0.0, s->nights[k].first - base.stop, base.start - s->nights[k].last});
+      if (g < gap) gap = g, nearest = static_cast<int>(k);
+    }
+    if (nearest >= 0) s->target[nearest] = 1;
+  }
+  for (char c : s->target) s->planned += c;
+  s->counting = s->planned >= 2 && s->fitted < 2;
+  for (size_t i = 0; i < s->tracks.size(); ++i)
+    if (s->target[s->night[i]])
+      for (double t : {s->tracks[i].first, s->tracks[i].last}) if (std::fabs(t - base.t) > std::fabs(s->dt)) s->dt = t - base.t;
   return 0;
-}
-// The span of stage 2's revolution count: the first observation to night 2's last.
-double count_span(const State& s) {
-  double last = -INFINITY;
-  for (size_t i = 0; i < s.tracks.size(); ++i) if (s.night[i] <= 1) last = std::max(last, s.tracks[i].last);
-  return last - s.tracks.front().first;
 }
 
 int push(const char* port, const char* schema, const char* id, const char* root, const uint8_t* data, size_t size) {
@@ -233,12 +278,18 @@ std::string iso(double t) {
 
 }  // namespace
 
+// The night numbers (1-based) of a set, for the report.
+std::string night_list(const std::vector<char>& in) {
+  std::string out;
+  for (size_t k = 0; k < in.size(); ++k) if (in[k]) out += (out.empty() ? "" : ",") + std::to_string(k + 1);
+  return out;
+}
+
 extern "C" int plan(void) {
   State s;
   if (int rc = read_state(&s)) return rc;
-  const int nights = static_cast<int>(s.night_start.size());
-  const int target = s.have_stage ? s.completed + 1 : 1;
-  if (target > nights) return report("complete", 0, {"every night fitted"});
+  const int nights = static_cast<int>(s.nights.size());
+  if (s.have_stage && s.fitted == nights) return report("complete", 0, {"every night fitted"});
   const auto exec_frames = frames("execution");
   if (exec_frames.size() != 1) return fail("bad-input", "execution must be one $PRW EXECUTION_REQUEST");
   const auto* f = exec_frames[0];
@@ -250,49 +301,36 @@ extern "C" int plan(void) {
   if (!prw->EXECUTION_REQUEST() || !prw->EXECUTION_REQUEST()->INITIAL() || !prw->EXECUTION_REQUEST()->INITIAL()->STATE())
     return fail("bad-input", "execution must be a $PRW EXECUTION_REQUEST with INITIAL (the object and its coordinate system)");
 
-  std::vector<std::string> items{"stage " + std::to_string(target) + " of " + std::to_string(nights) + " nights", "epoch " + iso(s.initial.t)};
+  const Orbit& base = s.have_stage ? s.stage : s.initial;
+  std::vector<std::string> items{"stage nights " + night_list(s.target) + " of " + std::to_string(nights), "epoch " + iso(s.initial.t)};
   std::vector<Orbit> seeds;
-  const auto seed_frames = frames("seeds");
-  if (target == 2 && seed_frames.empty()) {
-    // Ask for the candidate counts' initial orbits.
-    const double dt = count_span(s);
-    const int n0 = static_cast<int>(std::floor(mean_motion(s.stage.x) * dt / (2.0 * M_PI)));
+  const double n = mean_motion(base.x);
+  if (s.counting && std::isfinite(n)) {
+    char line[160];
+    std::snprintf(line, sizeof line, "revolutions over %.1f h from the base: %.3f", s.dt / 3600.0, n * s.dt / (2.0 * M_PI));
+    items.push_back(line);
+    const double r = std::sqrt(base.x[0] * base.x[0] + base.x[1] * base.x[1] + base.x[2] * base.x[2]);
+    const double v = std::sqrt(base.x[3] * base.x[3] + base.x[4] * base.x[4] + base.x[5] * base.x[5]);
     for (int k = static_cast<int>(s.config.offset_min); k <= static_cast<int>(s.config.offset_max); ++k) {
-      if (n0 + k < 1) continue;
-      for (int branch = 0; branch < 2; ++branch) {
-        R::ModuleConfigT config;
-        for (const auto& [key, value] : {std::pair<const char*, double>{"revolutions", n0 + k}, {"branch", branch}}) {
-          auto e = std::make_unique<R::ConfigEntryT>();
-          e->KEY = key;
-          e->KIND = R::configValueKind_Number;
-          e->NUMBER_VALUE = value;
-          config.ENTRIES.push_back(std::move(e));
-        }
-        flatbuffers::FlatBufferBuilder b(256);
-        R::FinishModuleConfigBuffer(b, R::ModuleConfig::Pack(b, &config));
-        if (push("initial_orbit_config", "ModuleConfig.fbs", "MCFG", "ModuleConfig", b.GetBufferPointer(), b.GetSize())) return 1;
-        items.push_back("revolutions " + std::to_string(n0 + k) + (branch ? " short-period" : " long-period"));
-      }
-    }
-  } else if (target == 2) {
-    for (const auto* f : seed_frames) {
-      Orbit o;
-      std::string error;
-      if (!read_ocm(f, &o, &error)) return fail("bad-input", error);
+      const double nk = n + 2.0 * M_PI * k / s.dt, ak = std::cbrt(kMu / (nk * nk)), vis = 2.0 / r - 1.0 / ak;
+      if (!(nk > 0) || !(vis > 0)) continue;
+      Orbit o = base;
+      for (int i = 3; i < 6; ++i) o.x[i] = base.x[i] * std::sqrt(kMu * vis) / v;
       seeds.push_back(o);
+      items.push_back("candidate revolution offset " + std::to_string(k));
     }
   } else {
-    seeds.push_back(s.have_stage ? s.stage : s.initial);
+    seeds.push_back(base);
   }
-  for (const Orbit& base : seeds) {
+  for (const Orbit& seed : seeds) {
     std::unique_ptr<PRWT> root(prw->UnPack());
     auto& exec = *root->EXECUTION_REQUEST;
     auto& st = *exec.INITIAL->STATE;
     st.POSITION = std::make_unique<FRMVector3T>();
     st.VELOCITY = std::make_unique<FRMVector3T>();
-    st.POSITION->X = base.x[0] * 1000, st.POSITION->Y = base.x[1] * 1000, st.POSITION->Z = base.x[2] * 1000;
-    st.VELOCITY->X = base.x[3] * 1000, st.VELOCITY->Y = base.x[4] * 1000, st.VELOCITY->Z = base.x[5] * 1000;
-    st.EPOCH = iso(base.t);
+    st.POSITION->X = seed.x[0] * 1000, st.POSITION->Y = seed.x[1] * 1000, st.POSITION->Z = seed.x[2] * 1000;
+    st.VELOCITY->X = seed.x[3] * 1000, st.VELOCITY->Y = seed.x[4] * 1000, st.VELOCITY->Z = seed.x[5] * 1000;
+    st.EPOCH = iso(seed.t);
     st.EPOCH_TIME_SYSTEM = "UTC";
     exec.TARGET_EPOCH = std::make_unique<TIMInstantT>();
     exec.TARGET_EPOCH->TIME_SYSTEM = timingStandard::UTC;
@@ -303,31 +341,25 @@ extern "C" int plan(void) {
     if (push("execution", "PRW.fbs", "$PRW", "PRW", b.GetBufferPointer(), b.GetSize())) return 1;
   }
   for (size_t i = 0; i < s.tracks.size(); ++i)
-    if (s.night[i] < target && push("observations", "TDM.fbs", "$TDM", "TDM", s.tracks[i].frame->payload, s.tracks[i].frame->payload_length)) return 1;
+    if (s.target[s.night[i]] && push("observations", "TDM.fbs", "$TDM", "TDM", s.tracks[i].frame->payload, s.tracks[i].frame->payload_length)) return 1;
   return report("stage-planned", static_cast<uint64_t>(seeds.size()), items);
 }
 
 extern "C" int select(void) {
   State s;
   if (int rc = read_state(&s)) return rc;
-  const int nights = static_cast<int>(s.night_start.size());
-  const int target = s.have_stage ? s.completed + 1 : 1;
-  if (target > nights) return fail("bad-input", "every night is already fitted");
-  const auto candidates = frames("candidates"), seed_frames = frames("seeds");
-  if (target == 2 && seed_frames.size() != candidates.size()) return fail("bad-input", "stage 2 needs each candidate's seed on seeds, in the same order");
-  const double dt = target == 2 ? count_span(s) : 0.0;
+  const int nights = static_cast<int>(s.nights.size());
+  if (s.have_stage && s.fitted == nights) return fail("bad-input", "every night is already fitted");
+  const auto candidates = frames("candidates"), executions = frames("executions");
+  if (executions.size() != candidates.size()) return fail("bad-input", "each candidate needs its $PRW execution on executions, in the same order");
   const plugin_input_frame_t* best = nullptr;
   double best_wrms = INFINITY;
-  std::vector<std::string> items{"stage " + std::to_string(target) + " of " + std::to_string(nights) + " nights"};
+  std::vector<std::string> items{"stage nights " + night_list(s.target) + " of " + std::to_string(nights)};
   for (size_t c = 0; c < candidates.size(); ++c) {
     Orbit o, seed;
     std::string error;
-    if (!read_ocm(candidates[c], &o, &error)) return fail("bad-input", error);
-    double drift = 0;  // revolutions the fit moved from its seed's count
-    if (target == 2) {
-      if (!read_ocm(seed_frames[c], &seed, &error)) return fail("bad-input", error);
-      drift = (mean_motion(o.x) - mean_motion(seed.x)) * dt / (2.0 * M_PI);
-    }
+    if (!read_ocm(candidates[c], &o, &error) || !read_seed(executions[c], &seed, &error)) return fail("bad-input", error);
+    const double drift = (mean_motion(o.x) - mean_motion(seed.x)) * s.dt / (2.0 * M_PI);  // revolutions the fit moved from its seed's count
     char line[160];
     std::snprintf(line, sizeof line, "candidate %zu: converged %d, WEIGHTED_RMS %.4f, revolution drift %.3f", c + 1, o.converged ? 1 : 0, o.wrms, drift);
     items.push_back(line);
@@ -336,10 +368,10 @@ extern "C" int select(void) {
   }
   if (!best) {
     char message[200];
-    std::snprintf(message, sizeof message, "stage %d: no candidate kept its revolution count and converged with WEIGHTED_RMS at most %g (%zu candidates)",
-                  target, s.config.wrms_limit, candidates.size());
+    std::snprintf(message, sizeof message, "stage nights %s: no candidate kept its revolution count and converged with WEIGHTED_RMS at most %g (%zu candidates)",
+                  night_list(s.target).c_str(), s.config.wrms_limit, candidates.size());
     return fail("no-converged-revolution-count", message);
   }
   if (push("selected", "OCM.fbs", "$OCM", "OCM", best->payload, best->payload_length)) return 1;
-  return report(target == nights ? "complete" : "stage-selected", static_cast<uint64_t>(target), items);
+  return report(s.planned == nights ? "complete" : "stage-selected", static_cast<uint64_t>(s.planned), items);
 }

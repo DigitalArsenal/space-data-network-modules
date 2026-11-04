@@ -2,7 +2,7 @@
   "pluginId": "org.sdn.flows.angles-only-od",
   "name": "Angles-only orbit determination",
   "version": "0.1.0",
-  "description": "Plans and selects the stages of an angles-only orbit determination with no element set on any port: from analysis/optical-astrometry initial_orbit's Gooding state, stage s fits nights 1..s through flows/observation-od step (analysis/estimation fit_batch with propagator/ffm); across the first nightly gap the revolution count is a candidate set (Gooding multi-revolution initial orbits through the nights), each fitted, the converged one that kept its count with the lowest WEIGHTED_RMS selected. Refusals by name: no-converged-revolution-count, arc-too-short:<hours>.",
+  "description": "Plans and selects the stages of an angles-only orbit determination with no element set on any port: from analysis/optical-astrometry initial_orbit's Gooding state, stage 1 fits the nights the initial orbit spans and each later stage adds the unfitted night nearest the fitted ones, through flows/observation-od step (analysis/estimation fit_batch with propagator/ffm); across the first nightly gap the revolution count is a candidate set (the base state moved by k revolutions), each fitted, the converged one that kept its count with the lowest WEIGHTED_RMS selected. Refusals by name: no-converged-revolution-count, arc-too-short:<hours>.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -103,7 +103,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The initial orbit: analysis/optical-astrometry initial_orbit's $OCM on the first track (no element set)."
+          "description": "The initial orbit: analysis/optical-astrometry initial_orbit's $OCM on the arc's tracks (no element set); START_TIME to STOP_TIME span the nights stage 1 fits."
         },
         {
           "portId": "stage",
@@ -123,27 +123,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The $OCM select chose for the last completed stage; absent for the first."
-        },
-        {
-          "portId": "seeds",
-          "acceptedTypeSets": [
-            {
-              "setId": "seeds-set",
-              "allowedTypes": [
-                {
-                  "schemaName": "OCM.fbs",
-                  "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM",
-                  "wireFormat": "flatbuffer"
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 65535,
-          "required": false,
-          "description": "Stage 2: the candidate revolution counts' initial orbits (optical-astrometry initial_orbit with each initial_orbit_config); for select, each candidate's seed in the candidates' order."
+          "description": "The $OCM select chose for the last completed stage (FIT_START to FIT_STOP span its nights); absent for the first."
         },
         {
           "portId": "execution",
@@ -188,26 +168,6 @@
       ],
       "outputPorts": [
         {
-          "portId": "initial_orbit_config",
-          "acceptedTypeSets": [
-            {
-              "setId": "initial_orbit_config-set",
-              "allowedTypes": [
-                {
-                  "schemaName": "ModuleConfig.fbs",
-                  "fileIdentifier": "MCFG",
-                  "rootTypeName": "ModuleConfig",
-                  "wireFormat": "flatbuffer"
-                }
-              ]
-            }
-          ],
-          "minStreams": 0,
-          "maxStreams": 65535,
-          "required": false,
-          "description": "Stage 2 without seeds: one ModuleConfig (revolutions, branch) per candidate count and Lambert branch, for optical-astrometry initial_orbit over the stage's tracks."
-        },
-        {
           "portId": "execution",
           "acceptedTypeSets": [
             {
@@ -225,7 +185,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "One size-prefixed $PRW EXECUTION_REQUEST per candidate: the seed (GCRF, m, m/s) in INITIAL, the initial orbit's epoch in TARGET_EPOCH."
+          "description": "One size-prefixed $PRW EXECUTION_REQUEST per candidate: the seed (GCRF, m, m/s) in INITIAL, the initial orbit's epoch in TARGET_EPOCH. A stage that first spans a nightly gap: one per revolution offset k, the base state moved by k revolutions over the stage; otherwise the last stage's state."
         },
         {
           "portId": "observations",
@@ -245,7 +205,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "The stage's tracks (nights 1..s), as given."
+          "description": "The stage's tracks (its nights), as given."
         },
         {
           "portId": "report",
@@ -313,7 +273,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "The initial orbit: analysis/optical-astrometry initial_orbit's $OCM on the first track (no element set)."
+          "description": "The initial orbit: analysis/optical-astrometry initial_orbit's $OCM on the arc's tracks (no element set); START_TIME to STOP_TIME span the nights stage 1 fits."
         },
         {
           "portId": "stage",
@@ -333,18 +293,18 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The $OCM select chose for the last completed stage; absent for the first."
+          "description": "The $OCM select chose for the last completed stage (FIT_START to FIT_STOP span its nights); absent for the first."
         },
         {
-          "portId": "seeds",
+          "portId": "executions",
           "acceptedTypeSets": [
             {
-              "setId": "seeds-set",
+              "setId": "execution-set",
               "allowedTypes": [
                 {
-                  "schemaName": "OCM.fbs",
-                  "fileIdentifier": "$OCM",
-                  "rootTypeName": "OCM",
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
                   "wireFormat": "flatbuffer"
                 }
               ]
@@ -353,7 +313,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "Stage 2: the candidate revolution counts' initial orbits (optical-astrometry initial_orbit with each initial_orbit_config); for select, each candidate's seed in the candidates' order."
+          "description": "Each candidate's $PRW EXECUTION_REQUEST from plan, in the candidates' order: the seed whose revolution count the fit must keep."
         },
         {
           "portId": "candidates",
