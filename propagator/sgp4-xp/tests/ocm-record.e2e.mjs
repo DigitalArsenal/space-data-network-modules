@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 // E2E (task modules-sgp4-xp-ocm-fit-20261103): the Space Force module writes and flies $OCM element sets.
 // - fit of tests/fixtures/xp-fit-current.oem (a synthetic 48 h SGP4-XP ephemeris and NASA's ISS ephemeris) emits one
-//   $OCM per block; its MEAN_ELEMENTS equal the elements of the 0.1.1 dist's $OMM of the same input
-//   (tests/fixtures/xp-fit-current.omm, BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT) bit for bit; FIT_STATISTICS
-//   equal that $OMM's FIT_* and HELD_OUT_* values to the printed digit and the 0.1.1 $OBD's doubles
-//   (xp-fit-current.obd) bit for bit; the forces are stock XP (THEORY_FLUX_MODEL, {JXX,1970}, EGM-96, caps 0, no rows);
-//   PVN.PRODUCER names the library; assertNoUserDefined on every record.
+//   $OCM per block, equal bit for bit to the $OCM recorded from the 0.2.1 dist (tests/fixtures/xp-fit-current.ocm,
+//   tests/fixtures/record.mjs): MEAN_ELEMENTS, FIT_STATISTICS and HELD_OUT_DAYS, OD_DYNAMIC_PARAMETERS, identity;
+//   the forces are stock XP (THEORY_FLUX_MODEL, {JXX,1970}, EGM-96, caps 0, no rows); PVN.PRODUCER names the library;
+//   assertNoUserDefined on every record.
 // - propagate flies the fitted $OCM: over the 721 fitted epochs of block 1 its states differ from the fitted
 //   ephemeris by FIT_RMS_KM; an $OCM of theory AP is theory-not-flown:AP, UNSPECIFIED mean-element-theory-unspecified,
 //   an unnamed theory theory-not-flown:UNKNOWN, an $OMM on 'ocm' omm-not-flown, a frame on the removed port 'omm'
 //   unknown-input-port, rows or WEATHER_SOURCE RECORDS weather-source-not-stock, NRLMSISE-00 atmosphere-not-stock,
 //   a gravity cap gravity-terms-not-stock.
-// - ingest_omm: the 0.1.1 $OMM (19 free-form parameters) is user-defined-parameters:19, one parameter
+// - ingest_omm: the foreign $OMM (tests/fixtures/xp-fit-current.omm, 19 free-form parameters) is user-defined-parameters:19, one parameter
 //   user-defined-parameters:1, theory AP theory-not-ingestable:AP; the same $OMM without its list gives an $OCM with
 //   the same elements, stock forces and no list, which flies to the fitted $OCM's states bit for bit.
 // - The sources: no addParameter, no OBD; the free-form list is named only by the boundary's refusal by count.
@@ -22,7 +21,6 @@ import { fileURLToPath } from 'node:url';
 import * as flatbuffers from 'flatbuffers';
 import * as O from 'spacedatastandards.org/lib/js/OCM/main.js';
 import * as M from 'spacedatastandards.org/lib/js/OMM/main.js';
-import * as B from 'spacedatastandards.org/lib/js/OBD/main.js';
 import { assertNoUserDefined } from '../../../common/tests/no-user-defined.mjs';
 import { loadModule } from './lib/module.mjs';
 import { readOem } from './lib/sds.mjs';
@@ -38,64 +36,48 @@ const records = (bytes) => {
 const bb = (bytes) => new flatbuffers.ByteBuffer(new Uint8Array(bytes));
 const ocmOf = (bytes) => O.OCM.getSizePrefixedRootAsOCM(bb(bytes)).unpack();
 const ommOf = (bytes) => M.OMM.getSizePrefixedRootAsOMM(bb(bytes)).unpack();
-const obdOf = (bytes) => B.OBD.getSizePrefixedRootAsOBD(bb(bytes)).unpack();
 const packOcm = (t) => { const b = new flatbuffers.Builder(4096); O.OCM.finishSizePrefixedOCMBuffer(b, t.pack(b)); return b.asUint8Array().slice(); };
 const packOmm = (t) => { const b = new flatbuffers.Builder(4096); M.OMM.finishSizePrefixedOMMBuffer(b, t.pack(b)); return b.asUint8Array().slice(); };
 const TYPE = (code) => ({ schemaName: `${code}.fbs`, fileIdentifier: `$${code}`, rootTypeName: code, wireFormat: 'flatbuffer' });
 const frame = (portId, code, payload) => ({ portId, typeRef: TYPE(code), payload: Buffer.from(payload) });
-// C's %.9g, the way the 0.1.1 module printed its statistics.
-const g9 = (v) => {
-  const [m, x] = v.toExponential(8).split('e');
-  const e = Number(x);
-  const strip = (s) => (s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s);
-  return e < -4 || e >= 9 ? `${strip(m)}e${e < 0 ? '-' : '+'}${String(Math.abs(e)).padStart(2, '0')}` : strip(v.toFixed(8 - e));
-};
-
 const module = await loadModule();
 const invoke = (methodId, inputs) => module.refused(methodId, inputs);
 const refused = (label, r, code) => check(r.statusCode !== 0 && r.errorCode === code, `${label}: expected ${code}, got ${r.statusCode === 0 ? 'success' : `${r.errorCode} ${r.errorMessage}`}`);
 try {
   // ---- fit
-  const before = records(fixture('xp-fit-current.omm')).map(ommOf), obds = records(fixture('xp-fit-current.obd')).map(obdOf);
+  const recorded = records(fixture('xp-fit-current.ocm')).map(ocmOf);
   const fitted = await invoke('fit', [frame('ephemeris', 'OEM', fixture('xp-fit-current.oem'))]);
   check(fitted.statusCode === 0, `fit: ${fitted.errorCode} ${fitted.errorMessage}`);
   const out = fitted.statusCode === 0 ? fitted.outputs : [];
   check(out.length === 2 && out.every((o) => o.portId === 'elements'), `fit outputs: ${out.map((o) => o.portId).join(', ')}`);
   const sets = out.map((o) => new Uint8Array(o.payload));
-  let digits = 0, bits = 0;
+  let bits = 0;
   sets.forEach((bytes, k) => {
     try { assertNoUserDefined(bytes); } catch (e) { check(false, `fit block ${k + 1}: ${e.message}`); }
-    const o = ocmOf(bytes), me = o.MEAN_ELEMENTS, old = before[k], d = obds[k];
-    const p = Object.fromEntries(old.USER_DEFINED_PARAMETERS.map((q) => [q.PARAM_NAME, q.PARAM_VALUE]));
+    const o = ocmOf(bytes), me = o.MEAN_ELEMENTS, want = recorded[k];
+    if (!want) { check(false, `block ${k + 1}: no recorded $OCM`); return; }
     const same = (a, b, what) => { bits += 1; check(Object.is(a, b), `block ${k + 1} ${what}: ${a} against ${b}`); };
-    check(me.MEAN_ELEMENT_THEORY === O.meanElementSource.SGP4XP && me.EPOCH === old.EPOCH, `block ${k + 1}: theory ${me.MEAN_ELEMENT_THEORY}, epoch ${me.EPOCH} against ${old.EPOCH}`);
-    for (const key of ['MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY']) same(me[key], old[key], key);
-    same(me.BTERM, old.BSTAR, 'BTERM (the 0.1.1 BSTAR)');
-    same(me.AGOM, old.MEAN_MOTION_DDOT, 'AGOM (the 0.1.1 MEAN_MOTION_DDOT)');
+    check(me.MEAN_ELEMENT_THEORY === O.meanElementSource.SGP4XP, `block ${k + 1}: theory ${me.MEAN_ELEMENT_THEORY}`);
+    for (const key of ['EPOCH', 'MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY', 'BTERM', 'AGOM']) same(me[key], want.MEAN_ELEMENTS[key], key);
     check(me.BSTAR === 0 && me.MEAN_MOTION_DOT === 0 && me.MEAN_MOTION_DDOT === 0, `block ${k + 1}: SGP4 terms written`);
     const pt = o.PERTURBATIONS;
     check(pt.WEATHER_SOURCE === O.pcfWeatherSource.THEORY_FLUX_MODEL && pt.ATMOSPHERIC_MODEL?.MODEL === O.AtmosphericModelFamily.JXX && pt.ATMOSPHERIC_MODEL?.YEAR === 1970 &&
       pt.GRAVITY_MODEL === 'EGM-96' && pt.DENSITY_CORRECTION === O.pcfDensityCorrection.NONE && pt.MAXIMUM_TESSERAL_DEGREE === 0 && pt.MAXIMUM_ZONAL_DEGREE === 0 &&
       pt.SPACE_WEATHER.length === 0 && pt.DENSITY_CORRECTION_NODE_TIMES_MS.length === 0, `block ${k + 1}: forces ${JSON.stringify({ ws: pt.WEATHER_SOURCE, g: pt.GRAVITY_MODEL, atm: pt.ATMOSPHERIC_MODEL })}`);
     check(o.ORB_AVERAGING === 'BROUWER' && o.TRAJ_REF_FRAME?.NAME === 'TEMEOFDATE' && o.CENTER_NAME === 'EARTH' && o.STATE_DATA.length === 0, `block ${k + 1}: averaging, frame, center, states`);
-    check(o.METADATA.NORAD_CAT_ID === old.NORAD_CAT_ID && o.HEADER.ORIGINATOR === old.ORIGINATOR && o.HEADER.CREATION_DATE === old.CREATION_DATE, `block ${k + 1}: identity`);
-    check(/US Space Force Sgp4Prop 9\.1\.1\.0/.test(o.PROVENANCE?.PRODUCER ?? '') && o.PROVENANCE.ORIGINATOR === old.ORIGINATOR, `block ${k + 1}: PRODUCER ${o.PROVENANCE?.PRODUCER}`);
-    const od = o.ORBIT_DETERMINATION, fs_ = od.FIT_STATISTICS;
-    check(od.OD_EPOCH === me.EPOCH && od.OD_ESTIMATOR === 1 && od.OD_OBSERVATIONS_USED === fs_.FIT_STATES, `block ${k + 1}: OD block`);
+    check(o.METADATA.NORAD_CAT_ID === want.METADATA.NORAD_CAT_ID && o.HEADER.ORIGINATOR === want.HEADER.ORIGINATOR && o.HEADER.CREATION_DATE === want.HEADER.CREATION_DATE, `block ${k + 1}: identity`);
+    check(/US Space Force Sgp4Prop 9\.1\.1\.0/.test(o.PROVENANCE?.PRODUCER ?? '') && o.PROVENANCE.PRODUCER === want.PROVENANCE.PRODUCER && o.PROVENANCE.ORIGINATOR === want.PROVENANCE.ORIGINATOR, `block ${k + 1}: PRODUCER ${o.PROVENANCE?.PRODUCER}`);
+    const od = o.ORBIT_DETERMINATION, fs_ = od.FIT_STATISTICS, wf = want.ORBIT_DETERMINATION.FIT_STATISTICS;
+    check(od.OD_EPOCH === me.EPOCH && od.OD_ESTIMATOR === 1 && od.OD_OBSERVATIONS_USED === fs_.FIT_STATES && od.ACTUAL_OD_SPAN === want.ORBIT_DETERMINATION.ACTUAL_OD_SPAN, `block ${k + 1}: OD block`);
     const dyn = Object.fromEntries(od.OD_DYNAMIC_PARAMETERS.map((x) => [x.NAME, x]));
     same(dyn.DRAG_AREA_OVER_MASS?.VALUE, me.BTERM, 'OD_DYNAMIC_PARAMETERS BTERM');
     same(dyn.SRP_AREA_OVER_MASS?.VALUE, me.AGOM, 'OD_DYNAMIC_PARAMETERS AGOM');
-    const printed = { FIT_RMS_KM: fs_.FIT_RMS_KM, FIT_MAX_KM: fs_.FIT_MAX_KM, FIT_RADIAL_RMS_KM: fs_.FIT_RADIAL_RMS_KM, FIT_ALONG_TRACK_RMS_KM: fs_.FIT_IN_TRACK_RMS_KM,
-      FIT_CROSS_TRACK_RMS_KM: fs_.FIT_CROSS_TRACK_RMS_KM, HELD_OUT_RMS_KM: fs_.HELD_OUT_RMS_KM, HELD_OUT_MAX_KM: fs_.HELD_OUT_MAX_KM,
-      FIT_STATES: fs_.FIT_STATES, FIT_ITERATIONS: fs_.ITERATIONS, HELD_OUT_STATES: fs_.HELD_OUT_STATES };
-    for (const [key, v] of Object.entries(printed)) { digits += 1; check((Number.isInteger(v) ? String(v) : g9(v)) === p[key], `block ${k + 1} ${key}: ${v} against ${p[key]}`); }
-    for (const [key, v] of [['FIT_START', fs_.FIT_START], ['FIT_STOP', fs_.FIT_STOP], ['HELD_OUT_STOP', fs_.HELD_OUT_STOP], ['FIT_CONVERGED', String(fs_.CONVERGED)]]) { digits += 1; check(v === p[key], `block ${k + 1} ${key}: ${v} against ${p[key]}`); }
-    check(fs_.HELD_OUT_DAYS.length === 1 && fs_.HELD_OUT_DAYS[0].DAY === 1 && String(fs_.HELD_OUT_DAYS[0].STATES) === p.HELD_OUT_DAY1_STATES && g9(fs_.HELD_OUT_DAYS[0].RMS_KM) === p.HELD_OUT_DAY1_RMS_KM, `block ${k + 1}: held-out days`);
-    same(fs_.FIT_RMS_KM, d.WRMS, 'FIT_RMS_KM (the 0.1.1 $OBD WRMS)');
-    check(fs_.FIT_STATES === d.NUM_ACCEPTED_OBS && fs_.ITERATIONS === d.NUM_ITERATIONS && od.ACTUAL_OD_SPAN === d.FIT_SPAN, `block ${k + 1}: counts and span against the $OBD`);
+    for (const key of ['FIT_START', 'FIT_STOP', 'FIT_STATES', 'FIT_RMS_KM', 'FIT_MAX_KM', 'FIT_RADIAL_RMS_KM', 'FIT_IN_TRACK_RMS_KM', 'FIT_CROSS_TRACK_RMS_KM', 'ITERATIONS', 'CONVERGED',
+      'HELD_OUT_STOP', 'HELD_OUT_STATES', 'HELD_OUT_RMS_KM', 'HELD_OUT_MAX_KM']) same(fs_[key], wf[key], key);
+    check(fs_.HELD_OUT_DAYS.length === wf.HELD_OUT_DAYS.length && fs_.HELD_OUT_DAYS.every((d, i) => d.DAY === wf.HELD_OUT_DAYS[i].DAY && d.STATES === wf.HELD_OUT_DAYS[i].STATES && Object.is(d.RMS_KM, wf.HELD_OUT_DAYS[i].RMS_KM)), `block ${k + 1}: held-out days`);
     console.log(`block ${k + 1}: ${me.EPOCH} n ${me.MEAN_MOTION} BTERM ${me.BTERM} AGOM ${me.AGOM}; fit ${fs_.FIT_STATES} states ${fs_.FIT_RMS_KM} km, held out ${fs_.HELD_OUT_STATES} ${fs_.HELD_OUT_RMS_KM} km`);
   });
-  console.log(`fit: ${sets.length} $OCM; ${bits} values bit for bit against the 0.1.1 $OMM and $OBD, ${digits} statistics to the printed digit`);
+  console.log(`fit: ${sets.length} $OCM; ${bits} values bit for bit against the recorded $OCM`);
 
   // ---- propagate the fitted set over block 1's fitted epochs
   const inputBlock = readOem(fixture('xp-fit-current.oem')).EPHEMERIS_DATA_BLOCK[0];
@@ -137,7 +119,7 @@ try {
   // ---- ingest_omm, the $OMM boundary
   const omm1 = records(fixture('xp-fit-current.omm'))[0];
   const ingest = (bytes) => invoke('ingest_omm', [frame('omm', 'OMM', bytes)]);
-  refused('the 0.1.1 $OMM', await ingest(omm1), 'user-defined-parameters:19');
+  refused('the foreign $OMM', await ingest(omm1), 'user-defined-parameters:19');
   const bare = ommOf(omm1); bare.USER_DEFINED_PARAMETERS = [];
   const one = ommOf(omm1); one.USER_DEFINED_PARAMETERS = [new M.OMMUserDefinedParameterT('NAME', 'VALUE')];
   refused('one parameter', await ingest(packOmm(one)), 'user-defined-parameters:1');

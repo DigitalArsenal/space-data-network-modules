@@ -157,7 +157,7 @@ this repository carries the row.
 | `src/sds.hpp`, `src/records.hpp`, `src/module.cpp` | the SDS records; the `$OCM` of a set and of a fit; the methods and the ABI |
 | `build.mjs`, `engine-source.mjs`, `join-ussf.mjs` | the build, the engine as one translation unit, the join |
 | `third_party/ussf-sgp4/` | the library as released, its JavaScript runtime (a test oracle only), Agreement, release notes, notice |
-| `tests/` | `flight-parity-real-sets.e2e.mjs` (190 real GE and IG sets against the oracle's 9.1.1.0, every lead to day 7; `fixtures/geo-real-sets.json`), `ocm-record.e2e.mjs` (the `$OCM` against the 0.1.1 fixtures, refusals), `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
+| `tests/` | `flight-parity-real-sets.e2e.mjs` (190 real GE and IG sets against the oracle's 9.1.1.0, every lead to day 7; `fixtures/geo-real-sets.json`), `ocm-record.e2e.mjs` (the `$OCM` against the fixtures `fixtures/record.mjs` records, refusals), `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
 | `tests/measure/` | the measurement of SGP4-XP against SDN's SGP4 on ISS, Starlink, GNSS and laser-ranged satellites: [README](tests/measure/README.md), `run.mjs`, `tables.mjs`, `resummarize.mjs`, `results/` |
 
 ## Commands
