@@ -10,6 +10,7 @@
  *
  *   tick (TICK) -> storage.query(SCHEMA, LIMIT): records_meta (StoredRecordMeta) + records
  *     -> classify (tag first) -> per-NORAD precedence -> omm_records (size-prefixed $OMM stream) + omm_meta (INGQ)
+ *        + catalog (size-prefixed $CAT stream, the decision per object)
  *     -> status (FlowNotice: summary, per provider, quarantine, unreadable, storage.query failure)
  *
  * PRECEDENCE (deterministic, data-driven gate status): a provider's fitted OMM OUTRANKS the Space-Track GP record for
@@ -21,9 +22,10 @@
  * other SOURCE_NAME is our fit of that provider; an untagged record is an authoritative catalog input (Space-Track
  * kind). A record that is not an $OMM FlatBuffer is skipped with its reason.
  *
- * Each catalog record is the winning stored $OMM, every field kept, with the synthesis provenance appended as
- * USER_DEFINED_PARAMETERS (SDN_CATALOG_SOURCE_KIND / _SOURCE_NAME / _SOURCE_CID / _PRECEDENCE / _GATE_STATUS /
- * _BATCH / _COMMENT). DETERMINISM: no wall clock; batch_id = sha256 of the sorted input CIDs; NORADs ascend.
+ * Each catalog record is the winning stored $OMM, byte for byte (its CID is the winner's). The decision is one $CAT per
+ * object: PRODUCTS[0] KIND (Sgp4Elements or Sgp4XpElements by the set's theory), RECORD_CID the winner's CID, SOURCE_ID
+ * the winning source name, EPOCH the set's, SELECTION_REASON the precedence rule. DETERMINISM: no wall clock; batch_id =
+ * sha256 of the sorted input CIDs; NORADs ascend.
  * Storing and publishing the catalog is the flow's (hostcap/storage-ingest takes omm_meta + omm_records).
  *
  * Config (plugin.getConfig, one ModuleConfig): querySchema ("OMM"), queryLimit (20000), sourceName
@@ -262,7 +264,7 @@ size_t pick_newest(const std::vector<Candidate>& recs, const std::vector<size_t>
 struct Decision {
     size_t winner = 0;
     Kind kind = Kind::SpacetrackGp;
-    std::string provider, rule, gate_status;
+    std::string provider, rule;
 };
 
 Decision decide(const SynthConfig& cfg, const std::vector<Candidate>& recs, bool has_ours, size_t ours, bool has_st,
@@ -272,16 +274,16 @@ Decision decide(const SynthConfig& cfg, const std::vector<Candidate>& recs, bool
     if (has_ours && has_st) {
         const bool fresher = recs[ours].epoch_key > recs[st].epoch_key;  // STRICTLY fresher
         if (ours_gate == "hard-pass" && fresher) {
-            d = {ours, Kind::OursFit, "", "ours-hardpass-fresher", ours_gate};
+            d = {ours, Kind::OursFit, "", "ours-hardpass-fresher"};
         } else if (ours_gate != "hard-pass") {
-            d = {st, Kind::SpacetrackGp, "", "spacetrack-ours-gate-" + ours_gate, "n/a"};
+            d = {st, Kind::SpacetrackGp, "", "spacetrack-ours-gate-" + ours_gate};
         } else {
-            d = {st, Kind::SpacetrackGp, "", "spacetrack-ours-not-fresher", "n/a"};
+            d = {st, Kind::SpacetrackGp, "", "spacetrack-ours-not-fresher"};
         }
     } else if (has_ours) {
-        d = {ours, Kind::OursFit, "", "ours-sole-source-gate-" + ours_gate, ours_gate};
+        d = {ours, Kind::OursFit, "", "ours-sole-source-gate-" + ours_gate};
     } else {
-        d = {st, Kind::SpacetrackGp, "", "spacetrack-sole-source", "n/a"};
+        d = {st, Kind::SpacetrackGp, "", "spacetrack-sole-source"};
     }
     d.provider = recs[d.winner].provider;
     return d;
@@ -289,29 +291,37 @@ Decision decide(const SynthConfig& cfg, const std::vector<Candidate>& recs, bool
 
 const char* kind_name(Kind k) { return k == Kind::OursFit ? "ours-fit" : "spacetrack-gp"; }
 
-// The winning $OMM, every field kept, with the synthesis provenance appended; size-prefixed onto `stream`.
-void append_catalog_record(const Candidate& w, const Decision& d, const std::string& batch_id,
-                           std::vector<uint8_t>* stream) {
-    OMMT omm;
-    GetOMM(w.record->data.data())->UnPackTo(&omm);
-    auto add = [&](const char* name, const std::string& value) {
-        auto p = std::make_unique<OMMUserDefinedParameterT>();
-        p->PARAM_NAME = name;
-        p->PARAM_VALUE = value;
-        omm.USER_DEFINED_PARAMETERS.push_back(std::move(p));
-    };
-    const std::string kind = kind_name(d.kind);
-    add("SDN_CATALOG_SOURCE_KIND", kind);
-    add("SDN_CATALOG_SOURCE_NAME", d.provider);
-    add("SDN_CATALOG_SOURCE_CID", w.cid);
-    add("SDN_CATALOG_PRECEDENCE", d.rule);
-    add("SDN_CATALOG_GATE_STATUS", d.gate_status);
-    add("SDN_CATALOG_BATCH", batch_id);
-    add("SDN_CATALOG_COMMENT", "SDN CelesTrak-replacement catalog (App 2 A2.7): winning source " + d.provider + " (" +
-                                   kind + "); precedence " + d.rule);
-    flatbuffers::FlatBufferBuilder b(1024);
-    FinishSizePrefixedOMMBuffer(b, OMM::Pack(b, &omm));
-    stream->insert(stream->end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+void append_size_prefixed(const uint8_t* data, size_t size, std::vector<uint8_t>* stream) {
+    const uint32_t n = static_cast<uint32_t>(size);
+    const uint8_t prefix[4] = {static_cast<uint8_t>(n), static_cast<uint8_t>(n >> 8), static_cast<uint8_t>(n >> 16),
+                               static_cast<uint8_t>(n >> 24)};
+    stream->insert(stream->end(), prefix, prefix + 4);
+    stream->insert(stream->end(), data, data + size);
+}
+
+// The winning stored $OMM, byte for byte, onto `records`; the decision as one $CAT onto `catalog`.
+void append_catalog_record(const Candidate& w, const Decision& d, std::vector<uint8_t>* records,
+                           std::vector<uint8_t>* catalog) {
+    append_size_prefixed(w.record->data.data(), w.record->data.size(), records);
+    const OMM* o = GetOMM(w.record->data.data());
+    CATT cat;
+    cat.OBJECT_NAME = w.object_name;
+    cat.OBJECT_ID = o->OBJECT_ID() ? o->OBJECT_ID()->str() : std::string();
+    cat.NORAD_CAT_ID = static_cast<uint32_t>(w.norad);
+    cat.OWNER = legacyCountryCode::UNK;  // not stated here; an unset OWNER reads back as its first value, a real owner
+    auto product = std::make_unique<CATProductT>();
+    const auto theory = o->MEAN_ELEMENT_THEORY();
+    product->KIND = theory == meanElementSource::SGP4     ? catalogProductKind::Sgp4Elements
+                    : theory == meanElementSource::SGP4XP ? catalogProductKind::Sgp4XpElements
+                                                          : catalogProductKind::Unspecified;
+    product->RECORD_CID = w.cid;
+    product->SOURCE_ID = d.provider;
+    product->EPOCH = o->EPOCH() ? o->EPOCH()->str() : std::string();
+    product->SELECTION_REASON = d.rule;
+    cat.PRODUCTS.push_back(std::move(product));
+    flatbuffers::FlatBufferBuilder b(512);
+    FinishSizePrefixedCATBuffer(b, CAT::Pack(b, &cat));
+    catalog->insert(catalog->end(), b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
 
 // -- outputs -------------------------------------------------------------------------------------------------------
@@ -409,7 +419,7 @@ int run_synthesis() {
         by_norad[recs[i].norad].push_back(i);
     }
 
-    std::vector<uint8_t> stream;
+    std::vector<uint8_t> stream, decisions;
     uint64_t catalog = 0, ours_won = 0, st_won = 0;
     for (const auto& [norad, idxs] : by_norad) {
         std::vector<size_t> ours, st;
@@ -417,7 +427,7 @@ int run_synthesis() {
         const bool has_ours = !ours.empty(), has_st = !st.empty();
         const Decision d = decide(cfg, recs, has_ours, has_ours ? pick_newest(recs, ours) : 0, has_st,
                                   has_st ? pick_newest(recs, st) : 0);
-        append_catalog_record(recs[d.winner], d, batch_id, &stream);
+        append_catalog_record(recs[d.winner], d, &stream, &decisions);
         catalog++;
         stats[d.provider].won++;
         (d.kind == Kind::OursFit ? ours_won : st_won)++;
@@ -436,7 +446,7 @@ int run_synthesis() {
         R::ProvenanceT& p = *meta.PROVENANCE;
         p.SOURCE_URL = "sdn://catalog-synthesis";
         p.PARSER = "catalog-synthesis";
-        p.PARSER_VERSION = "0.2.0";
+        p.PARSER_VERSION = "0.3.0";
         p.NORMALIZED_SHA256 = ephem::sha256_hex(stream.data(), stream.size());
         p.NORMALIZED_COUNT = catalog;
         p.SCHEMAS = {"OMM.fbs"};
@@ -460,7 +470,8 @@ int run_synthesis() {
         R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
         if (push("omm_meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest",
                  mb.GetBufferPointer(), mb.GetSize()) < 0 ||
-            push("omm_records", "OMM.fbs", "$OMM", "OMM", stream.data(), stream.size()) < 0) {
+            push("omm_records", "OMM.fbs", "$OMM", "OMM", stream.data(), stream.size()) < 0 ||
+            push("catalog", "CAT.fbs", "$CAT", "CAT", decisions.data(), decisions.size()) < 0) {
             plugin_set_error("emit-failed", "Failed to emit the catalog batch.");
             return 500;
         }
