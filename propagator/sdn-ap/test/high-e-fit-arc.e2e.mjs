@@ -20,6 +20,10 @@
 //    the fitted $OMM byte-identical to 0.4.16's, except the drag-off Molniya, whose set is identical and whose
 //    determination text gains nothing;
 // 5. default-FORCES XP digest bit-exact.
+// Amended (modules-sdn-ap-ocm-write-20261103: this build writes an $OCM, no $OBD and no number in COMMENT): the 7-day arc
+// is read from the record's ORBIT_DETERMINATION.ACTUAL_OD_SPAN (168 h) and its OD COMMENT; the determination's
+// not-separable text is gone (2 keeps the one-sigma check on the record's posterior); 4 compares the fitted sets'
+// elements bit for bit (the $OCM's MEAN_ELEMENTS against 0.4.16's $OMM, BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -27,6 +31,17 @@ import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import * as flatbuffers from 'flatbuffers';
+import {OMM} from 'spacedatastandards.org/lib/js/OMM/OMM.js';
+import {ocmOf} from './lib/ocm.mjs';
+/** The fitted elements of a 0.4 $OMM or an $OCM (base64), and the $OCM's arc and OD COMMENT. */
+const setOf = (b64) => {
+  const u = new Uint8Array(Buffer.from(b64, 'base64'));
+  if (String.fromCharCode(...u.subarray(4, 8)) === '$OCM') { const o = ocmOf(u), m = o.MEAN_ELEMENTS;
+    return {elements: [m.EPOCH, m.MEAN_MOTION, m.ECCENTRICITY, m.INCLINATION, m.RA_OF_ASC_NODE, m.ARG_OF_PERICENTER, m.MEAN_ANOMALY, m.BTERM, m.AGOM], hours: o.ORBIT_DETERMINATION.ACTUAL_OD_SPAN * 24, comment: o.ORBIT_DETERMINATION.COMMENT.join('; ')}; }
+  const m = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(u)).unpack();
+  return {elements: [m.EPOCH, m.MEAN_MOTION, m.ECCENTRICITY, m.INCLINATION, m.RA_OF_ASC_NODE, m.ARG_OF_PERICENTER, m.MEAN_ANOMALY, m.BSTAR, m.MEAN_MOTION_DDOT]};
+};
 
 const FIXTURES = {
   Molniya: {n: 2, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10},
@@ -103,22 +118,20 @@ if (!isMainThread) {
   }
   for (const f of Object.keys(FIXTURES)) {
     const seven = results[`${f} 7 d no prior`];
-    assert.ok(/span 168\.000 h \(above e 0\.3 with drag/.test(Buffer.from(seven.omm, 'base64').toString('latin1')), `${f}: the 7-day arc taken`);
-    assert.ok(!/not separable/.test(seven.model), `${f}: 7 days separate the coefficient`);
+    const sevenSet = setOf(seven.omm);
+    assert.ok(Math.abs(sevenSet.hours - 168) < 1e-6 && /the longest arc the ephemeris holds/.test(sevenSet.comment), `${f}: the 7-day arc taken (${sevenSet.hours} h; ${sevenSet.comment})`);
     assert.ok(Math.abs(pct(seven.bterm)) <= 0.5, `${f}: 7-day B ${seven.bterm}`);
     assert.ok(seven.t <= (f === 'Molniya' ? 150 : 300), `${f}: 7-day arc, day-7 along-track ${seven.t} m`);
     for (const k of ['72 h no prior', '72 h wide']) {
       const r = results[`${f} ${k}`];
-      assert.ok(/drag coefficient not separable on this arc/.test(r.model), `${f} ${k}: the determination names it (${r.model})`);
       assert.ok(covers(posterior(r.model), r.bterm), `${f} ${k}: 0.044 within one sigma (${r.model})`);
     }
   }
   for (const f of Object.keys(LOW)) {
     const a = results[`0.4.16 ${f}`], b = results[`release ${f}`];
-    console.log(JSON.stringify({lowE: f, identical: a.omm === b.omm, modelAt0416: a.model, model: b.model}));
-    assert.equal(b.omm, a.omm, `${f}: the fitted set byte-identical to 0.4.16's`);
-    // from 0.4.18 the determination states the arc check after the posterior (SPEC 12.8): the text before it unchanged
-    assert.equal(b.model.replace(/; arc [0-9.]+ h; largest gap .*$/, ''), a.model, `${f}: the determination text unchanged before the arc check`);
+    const same = JSON.stringify(setOf(a.omm).elements) === JSON.stringify(setOf(b.omm).elements);
+    console.log(JSON.stringify({lowE: f, identical: same, modelAt0416: a.model, model: b.model}));
+    assert.ok(same, `${f}: the fitted set's elements bit-identical to 0.4.16's`);
   }
   execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
     {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
