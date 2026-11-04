@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGE = 'spacedatastandards.org';
-const ROOTS = ['analysis', 'data-source', 'propagator', 'files', 'flows'];
+const ROOTS = ['analysis', 'data-source', 'propagator', 'files', 'flows', 'delivery', 'foundation', 'hostcap', 'licensing', 'maneuver'];
 const DEPENDENCY_KINDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
 
 const args = process.argv.slice(2);
