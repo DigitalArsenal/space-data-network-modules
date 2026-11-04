@@ -14,7 +14,7 @@
   "devDependencies": {
     "flatbuffers": "25.9.23",
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.261.0"
+    "spacedatastandards.org": "1.276.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"

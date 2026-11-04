@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "dependencies": {
-    "spacedatastandards.org": "1.261.0"
+    "spacedatastandards.org": "1.276.0"
   },
   "devDependencies": {
     "space-data-module-sdk": "0.8.25"

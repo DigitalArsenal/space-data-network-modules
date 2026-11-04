@@ -15,7 +15,7 @@
     "flatc-wasm": "26.1.38",
     "flatsql": "3.12.1",
     "space-data-module-sdk": "0.10.1",
-    "spacedatastandards.org": "1.271.0"
+    "spacedatastandards.org": "1.276.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"
