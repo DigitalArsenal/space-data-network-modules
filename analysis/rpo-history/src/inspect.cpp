@@ -2,15 +2,16 @@
 //
 // inspect  the chaser's, the target's and the Sun's trajectories ($OEM, one
 //          Earth-centered frame, UTC, km and km/s) -> inspection ($OCM,
-//          extended trajectory type RPO_INSPECTION): on a fixed UTC grid, per
-//          sample, what an inspection of the target from the chaser sees and
-//          where the chaser sits in the target's side-looking radar geometry.
+//          RPO_INSPECTION, TRAJ_REF_FRAME the trajectories' frame): on a fixed
+//          UTC grid, per sample, what an inspection of the target from the
+//          chaser sees and where the chaser sits in the target's side-looking
+//          radar geometry.
 //
-// Columns (USER_DEFINED_PARAMETERS COLUMNS):
+// Vectors of OCMInspectionGeometry:
 //   PHASE_ANGLE_DEG          the angle at the target between the Sun and the chaser
 //   TARGET_SUNLIT            the target's Earth-shadow function: 1 sunlit, 0 umbra
 //   CHASER_SUNLIT            the chaser's
-//   LINE_OF_SIGHT            1 when the chaser-target segment clears the Earth
+//   LINE_OF_SIGHT            true when the chaser-target segment clears the Earth
 //   TARGET_LIT_FROM_CHASER   TARGET_SUNLIT * LINE_OF_SIGHT
 //   SUN_FROM_LINE_OF_SIGHT_DEG  the angle at the chaser between the target and the Sun
 //   RANGE_KM                 the chaser-target distance
@@ -18,15 +19,15 @@
 //   CHASER_CLOCK_DEG         the chaser's clock angle about the target's nadir, from
 //                            its Earth-relative along-track direction toward its
 //                            right (90 right of the track, 270 left)
-//   IN_SAR_RIGHT, IN_SAR_LEFT  1 when the chaser is inside the target's radar
+//   IN_SAR_RIGHT, IN_SAR_LEFT  true when the chaser is inside the target's radar
 //                            field of regard on that side: off-nadir between the
 //                            look angles of the incidence band, within half the
 //                            azimuth beamwidth of the broadside plane
 //
 // The shadow is the conical model of a spherical Earth (6378.137 km) and a
-// spherical Sun (695700 km), the analysis/access TARGET_LIGHTING constants.
-// The radar's derived geometry is recorded with the inputs it came from:
-// wavelength c / f; -3 dB beamwidths 0.886 lambda / D of a uniformly
+// spherical Sun (695700 km), the analysis/access TARGET_LIGHTING constants
+// (PERTURBATIONS SHADOW_MODEL). The radar's inputs are RADAR; its geometry
+// follows from them: wavelength c / f; -3 dB beamwidths 0.886 lambda / D of a uniformly
 // illuminated aperture of length D; look angle from incidence on a spherical
 // Earth, sin(look) = (R_E / r) sin(incidence), at each sample's r. The
 // along-track direction is the Earth-relative velocity v - w x r (w the
@@ -40,17 +41,14 @@
 //   sar_antenna_length_m         aperture length along track
 //   sar_antenna_height_m         aperture height across track
 //   sar_incidence_min_deg, sar_incidence_max_deg   the incidence band
-//   sar_source                   citation text recorded with the parameters
+//   sar_source                   citation of the radar's characteristics (RADAR SOURCE)
 //   creation_date                the record's CREATION_DATE (default: stop)
 namespace {
 
 constexpr double kEarthRadiusShadow = 6378.137;  // km, WGS 84 equatorial (analysis/access TARGET_LIGHTING)
 constexpr double kSunRadius = 695700.0;          // km, IAU 2015 nominal solar radius
 constexpr double kLightSpeed = 299792458.0;      // m/s
-const char* const kInspectionColumns =
-  "PHASE_ANGLE_DEG,TARGET_SUNLIT,CHASER_SUNLIT,LINE_OF_SIGHT,TARGET_LIT_FROM_CHASER,SUN_FROM_LINE_OF_SIGHT_DEG,RANGE_KM,"
-  "CHASER_OFF_NADIR_DEG,CHASER_CLOCK_DEG,IN_SAR_RIGHT,IN_SAR_LEFT";
-constexpr uint8_t kInspectionWidth = 11;
+const char* const kShadowModel = "conical: spherical Earth 6378.137 km, spherical Sun 695700 km (Montenbruck & Gill 2000, 3.4.2)";
 
 struct InspectOptions {
   std::string chaser, target, creation, sarSource;
@@ -170,7 +168,7 @@ bool clears(const Vec3& p, const Vec3& q, double radius) {
 }
 
 struct Radar {
-  double wavelengthM = kNaN, azimuthBeamDeg = kNaN, elevationBeamDeg = kNaN;
+  double wavelengthM = kNaN, azimuthBeamDeg = kNaN;
   double sinIncMin = kNaN, sinIncMax = kNaN;
 };
 
@@ -179,7 +177,6 @@ Radar radarOf(const InspectOptions& o) {
   if (!o.sar()) return r;
   r.wavelengthM = kLightSpeed / (o.frequencyGhz * 1e9);
   r.azimuthBeamDeg = 0.886 * r.wavelengthM / o.lengthM * kDeg;
-  r.elevationBeamDeg = 0.886 * r.wavelengthM / o.heightM * kDeg;
   r.sinIncMin = std::sin(o.incidenceMin / kDeg);
   r.sinIncMax = std::sin(o.incidenceMax / kDeg);
   return r;
@@ -190,12 +187,29 @@ double lookAngleDeg(double sinInc, double r) { return std::asin(clampUnit(kEarth
 
 struct Row {
   double t = 0;
-  std::array<double, kInspectionWidth> v{};
+  double phase = 0, targetLit = 0, chaserLit = 0, targetLitFromChaser = 0, sunFromLos = 0, range = 0, offNadir = 0, clock = 0;
+  bool los = false, inRight = false, inLeft = false;
 };
 
+// TRAJ_REF_FRAME of a frame name loadBlock gives (a CelestialFrame name, or TOD, MOD, TOE).
+flatbuffers::Offset<RFM> celestialFrame(flatbuffers::FlatBufferBuilder& fb, const std::string& frame) {
+  const std::string name = frame == "TOD" ? "TOD_EARTH" : frame == "MOD" ? "MOD_EARTH" : frame == "TOE" ? "TOE_EARTH" : frame;
+  const auto nameOff = fb.CreateString(frame);
+  flatbuffers::Offset<CelestialFrameWrapper> wrapper;
+  for (const CelestialFrame f : EnumValuesCelestialFrame())
+    if (name == EnumNameCelestialFrame(f)) wrapper = CreateCelestialFrameWrapper(fb, f);
+  RFMBuilder b(fb);
+  if (!wrapper.IsNull()) {
+    b.add_REFERENCE_FRAME_type(RFMUnion::CelestialFrameWrapper);
+    b.add_REFERENCE_FRAME(wrapper.Union());
+  }
+  b.add_NAME(nameOff);
+  return b.Finish();
+}
+
 std::vector<uint8_t> inspectionRecord(const InspectOptions& o, const Arcs& chaser, const Arcs& target, const std::vector<Row>& rows,
-                                      size_t index, const std::vector<std::pair<std::string, std::string>>& params, double stop) {
-  flatbuffers::FlatBufferBuilder fb(2048 + rows.size() * kInspectionWidth * 8 + 4096);
+                                      size_t index, double stop) {
+  flatbuffers::FlatBufferBuilder fb(2048 + rows.size() * 11 * 8 + 4096);
   const auto vers = fb.CreateString("3.0");
   const auto creation = fb.CreateString(o.creation.empty() ? isoMs(stop) : o.creation);
   const auto originator = fb.CreateString("SDN");
@@ -225,24 +239,67 @@ std::vector<uint8_t> inspectionRecord(const InspectOptions& o, const Arcs& chase
   mb.add_STOP_TIME(end);
   mb.add_TIME_SPAN((rows.back().t - rows.front().t) / 86400.0);
   const auto meta = mb.Finish();
-  const auto description = fb.CreateString("RPO_INSPECTION");
-  std::vector<double> data;
-  data.reserve(rows.size() * kInspectionWidth);
-  for (const Row& r : rows) data.insert(data.end(), r.v.begin(), r.v.end());
-  const auto dataVec = fb.CreateVector(data);
+  const auto column = [&](double Row::*m) {
+    std::vector<double> v;
+    v.reserve(rows.size());
+    for (const Row& r : rows) v.push_back(r.*m);
+    return fb.CreateVector(v);
+  };
+  const auto flags = [&](bool Row::*m) {
+    std::vector<uint8_t> v;
+    v.reserve(rows.size());
+    for (const Row& r : rows) v.push_back(r.*m ? 1 : 0);
+    return fb.CreateVector(v);
+  };
+  const auto phase = column(&Row::phase), targetLit = column(&Row::targetLit), chaserLit = column(&Row::chaserLit);
+  const auto los = flags(&Row::los);
+  const auto litFromChaser = column(&Row::targetLitFromChaser), sunFromLos = column(&Row::sunFromLos);
+  const auto range = column(&Row::range), offNadir = column(&Row::offNadir), clock = column(&Row::clock);
+  flatbuffers::Offset<flatbuffers::Vector<uint8_t>> inRight, inLeft;
+  flatbuffers::Offset<OCMRadarInputs> radar;
+  if (o.sar()) {
+    inRight = flags(&Row::inRight);
+    inLeft = flags(&Row::inLeft);
+    const auto source = fb.CreateString(o.sarSource);
+    OCMRadarInputsBuilder rb(fb);
+    rb.add_SOURCE(source);
+    rb.add_FREQUENCY_GHZ(o.frequencyGhz);
+    rb.add_ANTENNA_LENGTH_M(o.lengthM);
+    rb.add_ANTENNA_HEIGHT_M(o.heightM);
+    rb.add_INCIDENCE_MIN_DEG(o.incidenceMin);
+    rb.add_INCIDENCE_MAX_DEG(o.incidenceMax);
+    radar = rb.Finish();
+  }
+  OCMInspectionGeometryBuilder g(fb);
+  g.add_PHASE_ANGLE_DEG(phase);
+  g.add_TARGET_SUNLIT(targetLit);
+  g.add_CHASER_SUNLIT(chaserLit);
+  g.add_LINE_OF_SIGHT(los);
+  g.add_TARGET_LIT_FROM_CHASER(litFromChaser);
+  g.add_SUN_FROM_LINE_OF_SIGHT_DEG(sunFromLos);
+  g.add_RANGE_KM(range);
+  g.add_CHASER_OFF_NADIR_DEG(offNadir);
+  g.add_CHASER_CLOCK_DEG(clock);
+  if (o.sar()) {
+    g.add_IN_SAR_RIGHT(inRight);
+    g.add_IN_SAR_LEFT(inLeft);
+    g.add_RADAR(radar);
+  }
+  const auto geometry = g.Finish();
+  const auto shadow = fb.CreateString(kShadowModel);
+  PerturbationsBuilder pb(fb);
+  pb.add_SHADOW_MODEL(shadow);
+  const auto perturbations = pb.Finish();
   const auto center = fb.CreateString(!target.objectId.empty() ? target.objectId : o.target);
-  std::vector<Udp> udps;
-  for (const auto& [k, v] : params) udps.push_back(udp(fb, k, v));
-  const auto paramVec = fb.CreateVector(udps);
+  const auto frame = celestialFrame(fb, chaser.frame);
   OCMBuilder b(fb);
   b.add_HEADER(head);
   b.add_METADATA(meta);
-  b.add_TRAJ_TYPE_DESCRIPTION(description);
   b.add_STATE_STEP_SIZE(o.step);
-  b.add_STATE_VECTOR_SIZE(kInspectionWidth);
-  b.add_STATE_DATA(dataVec);
-  b.add_USER_DEFINED_PARAMETERS(paramVec);
+  b.add_PERTURBATIONS(perturbations);
   b.add_CENTER_NAME(center);
+  b.add_TRAJ_REF_FRAME(frame);
+  b.add_RPO_INSPECTION(geometry);
   return finishOcm(fb, b.Finish());
 }
 
@@ -275,8 +332,6 @@ int inspectRpo() {
   const double azimuthHalf = radar.azimuthBeamDeg / 2.0;
 
   std::vector<std::vector<Row>> runs(1);
-  double lookMin = INFINITY, lookMax = -INFINITY, rangeTarget = 0;
-  size_t samples = 0, rightSamples = 0, leftSamples = 0;
   for (double t = start; t <= stop + 1e-6; t += o.step) {
     State c, g, s;
     if (!chaser.at(t, c) || !target.at(t, g) || !sun.at(t, s)) {
@@ -298,55 +353,28 @@ int inspectRpo() {
     const double offNadir = angleDeg(nadir, toChaser);
     double clock = std::atan2(dot(toChaser, right), dot(toChaser, along)) * kDeg;
     if (clock < 0) clock += 360.0;
-    double inRight = kNaN, inLeft = kNaN;
     if (o.sar()) {
       const double r = norm(rt);
-      const double lo = lookAngleDeg(radar.sinIncMin, r), hi = lookAngleDeg(radar.sinIncMax, r);
-      lookMin = std::min(lookMin, lo);
-      lookMax = std::max(lookMax, hi);
-      rangeTarget += r;
-      const bool band = offNadir >= lo && offNadir <= hi;
-      inRight = band && std::fabs(clock - 90.0) <= azimuthHalf ? 1.0 : 0.0;
-      inLeft = band && std::fabs(clock - 270.0) <= azimuthHalf ? 1.0 : 0.0;
-      rightSamples += inRight > 0 ? 1 : 0;
-      leftSamples += inLeft > 0 ? 1 : 0;
+      const bool band = offNadir >= lookAngleDeg(radar.sinIncMin, r) && offNadir <= lookAngleDeg(radar.sinIncMax, r);
+      row.inRight = band && std::fabs(clock - 90.0) <= azimuthHalf;
+      row.inLeft = band && std::fabs(clock - 270.0) <= azimuthHalf;
     }
-    row.v = {angleDeg(toSun, toChaser), targetLit, chaserLit, los ? 1.0 : 0.0, targetLit * (los ? 1.0 : 0.0),
-             angleDeg(scale(toChaser, -1.0), sub(rs, rc)), range, offNadir, clock, inRight, inLeft};
+    row.phase = angleDeg(toSun, toChaser);
+    row.targetLit = targetLit;
+    row.chaserLit = chaserLit;
+    row.los = los;
+    row.targetLitFromChaser = targetLit * (los ? 1.0 : 0.0);
+    row.sunFromLos = angleDeg(scale(toChaser, -1.0), sub(rs, rc));
+    row.range = range;
+    row.offNadir = offNadir;
+    row.clock = clock;
     runs.back().push_back(row);
-    ++samples;
   }
   if (runs.back().empty()) runs.pop_back();
   if (runs.empty()) return fail("No grid sample has all three trajectories.");
 
-  std::vector<std::pair<std::string, std::string>> params = {
-    {"COLUMNS", kInspectionColumns},
-    {"UNITS", "deg, km; TARGET_SUNLIT and CHASER_SUNLIT the fraction of the Sun's disk visible (0 umbra, 1 sunlit); LINE_OF_SIGHT, IN_SAR_* 0 or 1"},
-    {"FRAME", chaser.frame},
-    {"SHADOW", "conical: spherical Earth 6378.137 km, spherical Sun 695700 km (Montenbruck & Gill 2000, 3.4.2)"},
-    {"LINE_OF_SIGHT_MODEL", "the chaser-target segment clears a sphere of 6378.137 km"},
-    {"TARGET_FRAME", "nadir = -r/|r|; along-track = Earth-relative velocity v - w x r (w = 7.292115146706979e-5 rad/s about the frame's z) "
-                     "perpendicular to r; right = nadir x along-track; clock from along-track toward right"},
-    {"SAMPLES", std::to_string(samples)},
-  };
-  if (o.sar()) {
-    params.push_back({"SAR_SOURCE", o.sarSource});
-    params.push_back({"SAR_FREQUENCY_GHZ", fmt(o.frequencyGhz, "%.6g")});
-    params.push_back({"SAR_ANTENNA_M", fmt(o.lengthM, "%.6g") + " x " + fmt(o.heightM, "%.6g")});
-    params.push_back({"SAR_INCIDENCE_DEG", fmt(o.incidenceMin, "%.6g") + " to " + fmt(o.incidenceMax, "%.6g")});
-    params.push_back({"SAR_WAVELENGTH_M", fmt(radar.wavelengthM, "%.15g")});
-    params.push_back({"SAR_AZIMUTH_BEAMWIDTH_DEG", fmt(radar.azimuthBeamDeg, "%.15g")});
-    params.push_back({"SAR_ELEVATION_BEAMWIDTH_DEG", fmt(radar.elevationBeamDeg, "%.15g")});
-    params.push_back({"SAR_LOOK_ANGLE_DEG", fmt(lookMin, "%.9g") + " to " + fmt(lookMax, "%.9g")});
-    params.push_back({"SAR_LOOK_ANGLE_AT_MEAN_RADIUS_DEG", fmt(lookAngleDeg(radar.sinIncMin, rangeTarget / double(samples)), "%.9g") + " to " +
-                                                            fmt(lookAngleDeg(radar.sinIncMax, rangeTarget / double(samples)), "%.9g")});
-    params.push_back({"SAR_TARGET_MEAN_RADIUS_KM", fmt(rangeTarget / double(samples), "%.9g")});
-    params.push_back({"SAR_BEAM_MODEL", "beamwidth 0.886 lambda / D (-3 dB, uniform aperture); look from incidence on a spherical Earth "
-                                        "of 6378.137 km, sin(look) = (R_E / r) sin(incidence), at each sample's r"});
-    params.push_back({"IN_SAR_SAMPLES", "right " + std::to_string(rightSamples) + ", left " + std::to_string(leftSamples)});
-  }
   std::vector<std::vector<uint8_t>> records;
-  for (size_t i = 0; i < runs.size(); ++i) records.push_back(inspectionRecord(o, chaser, target, runs[i], i, params, stop));
+  for (size_t i = 0; i < runs.size(); ++i) records.push_back(inspectionRecord(o, chaser, target, runs[i], i, stop));
   return pushRecords("inspection", "OCM.fbs", "$OCM", "OCM", records) ? 0 : 1;
 }
 }  // namespace
