@@ -6,7 +6,8 @@
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node build.mjs",
-    "test:e2e": "node tests/s2a-video-od.e2e.mjs"
+    "test:e2e": "node tests/s2a-video-od.e2e.mjs",
+    "test:typed-od": "node tests/typed-od.e2e.mjs"
   },
   "devDependencies": {
     "esbuild": "0.25.12",

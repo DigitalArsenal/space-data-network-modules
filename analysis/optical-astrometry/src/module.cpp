@@ -521,24 +521,24 @@ int reduce_method() {
     published.push_back(track);
     const OdResult& od = fit->second;
     const Trajectory& prior = used[ti + 1];
-    std::vector<std::pair<std::string, std::string>> params;
-    auto both = [&](const std::string& k, const std::string& v) { params.push_back({k, v}); items.push_back("target " + std::to_string(id) + " " + k + "=" + v); };
+    // The fit's diagnostics, in the report; the $OCM carries the typed OD fields.
+    auto report_item = [&](const std::string& k, const std::string& v) { items.push_back("target " + std::to_string(id) + " " + k + "=" + v); };
     const std::vector<double> cn = to_rtn(od.cov, od.x), ct = to_rtn(od.cov_total, od.x);
     const double sn[3] = {std::sqrt(cn[0]), std::sqrt(cn[7]), std::sqrt(cn[14])}, st[3] = {std::sqrt(ct[0]), std::sqrt(ct[7]), std::sqrt(ct[14])};
     const double svt[3] = {std::sqrt(ct[21]), std::sqrt(ct[28]), std::sqrt(ct[35])};
     double d_prior[3];
     in_rtn(od.x, V3{od.x[0] - od.prior_x[0], od.x[1] - od.prior_x[1], od.x[2] - od.prior_x[2]}, d_prior);
-    both("EPOCH", iso_utc(od.t0, 6));
-    both("TRACK", std::to_string(track->points.size()) + " points, " + std::to_string(od.used) + " used, " + std::to_string(r.edited[id]) + " edited");
-    both("PRIOR", prior_label[id]);
-    both("PRIOR_O_MINUS_C_MEDIAN_ARCSEC", rec::fmt(track->prior_oc_arcsec, "%.1f"));
-    both("OD_RMS_ARCSEC", rec::fmt(od.rms_arcsec, "%.2f"));
-    both("OD_CHI2_PER_DOF", rec::fmt(od.chi2 / std::max(1, od.dof), "%.3f"));
-    both("OD_ITERATIONS", std::to_string(od.iterations));
-    both("OD_MINUS_PRIOR_RTN_KM", rtn_text(d_prior));
-    both("SIGMA_NOISE_RTN_KM", rtn_text(sn));
-    both("SIGMA_TOTAL_RTN_KM", rtn_text(st));
-    both("SIGMA_TOTAL_VELOCITY_RTN_KM_S", rtn_text(svt, "%.6f"));
+    report_item("EPOCH", iso_utc(od.t0, 6));
+    report_item("TRACK", std::to_string(track->points.size()) + " points, " + std::to_string(od.used) + " used, " + std::to_string(r.edited[id]) + " edited");
+    report_item("PRIOR", prior_label[id]);
+    report_item("PRIOR_O_MINUS_C_MEDIAN_ARCSEC", rec::fmt(track->prior_oc_arcsec, "%.1f"));
+    report_item("OD_RMS_ARCSEC", rec::fmt(od.rms_arcsec, "%.2f"));
+    report_item("OD_CHI2_PER_DOF", rec::fmt(od.chi2 / std::max(1, od.dof), "%.3f"));
+    report_item("OD_ITERATIONS", std::to_string(od.iterations));
+    report_item("OD_MINUS_PRIOR_RTN_KM", rtn_text(d_prior));
+    report_item("SIGMA_NOISE_RTN_KM", rtn_text(sn));
+    report_item("SIGMA_TOTAL_RTN_KM", rtn_text(st));
+    report_item("SIGMA_TOTAL_VELOCITY_RTN_KM_S", rtn_text(svt, "%.6f"));
     if (od.iod.ok) {
       V3 pr, pv;
       std::vector<std::array<double, 6>> at;
@@ -546,9 +546,9 @@ int reduce_method() {
                         " km, " + std::to_string(od.iod.solutions) + " solution(s)";
       if (prior.at(od.iod.t, &pr, &pv)) iod += ", |IOD - prior| " + rec::fmt(norm(od.iod.r - pr), "%.2f") + " km";
       if (fitted_states(prior, od, {od.iod.t}, &at)) iod += ", |IOD - OD| " + rec::fmt(norm(od.iod.r - V3{at[0][0], at[0][1], at[0][2]}), "%.2f") + " km";
-      both("IOD", iod);
+      report_item("IOD", iod);
     } else {
-      both("IOD", "not converged: " + od.iod.error);
+      report_item("IOD", "not converged: " + od.iod.error);
     }
     // Against the later element sets: the OD and the prior, each with its
     // covariance plus the later set's (the error model at its age).
@@ -573,7 +573,7 @@ int reduce_method() {
         check += "; set 1-sigma RTN km " + f3(std::sqrt(pl[0])) + "," + f3(std::sqrt(pl[4])) + "," + f3(std::sqrt(pl[8])) + " (" + label + ")";
         check += "; d2 (3 dof) OD " + rec::fmt(mahalanobis2(d_od, a), "%.3f") + ", prior " + rec::fmt(mahalanobis2(d_pr, b), "%.3f");
       }
-      both("CHECK " + s.label() + (std::isfinite(s.created) ? " CREATED " + iso_utc(s.created, 0) : ""), check);
+      report_item("CHECK " + s.label() + (std::isfinite(s.created) ? " CREATED " + iso_utc(s.created, 0) : ""), check);
     }
     // From the calibrator at the arc's middle.
     V3 rc, vc;
@@ -588,9 +588,9 @@ int reduce_method() {
       for (int a = 0; a < 3; ++a)
         for (int b = 0; b < 3; ++b) var += ud[a] * od.cov_total[a * 6 + b] * ud[b];
       const V3 dp = V3{od.prior_x[0], od.prior_x[1], od.prior_x[2]} - rc;
-      both("SEPARATION_FROM_CALIBRATOR_KM", f3(norm(d)) + "+-" + f3(std::sqrt(var)) + " (OD; the calibrator's element set " + sets[size_t(calib_set)].label() +
+      report_item("SEPARATION_FROM_CALIBRATOR_KM", f3(norm(d)) + "+-" + f3(std::sqrt(var)) + " (OD; the calibrator's element set " + sets[size_t(calib_set)].label() +
                                                 "); prior " + f3(norm(dp)));
-      both("RELATIVE_TO_CALIBRATOR_RTN_KM", rtn_text(rel) + " (the calibrator's RTN axes)");
+      report_item("RELATIVE_TO_CALIBRATOR_RTN_KM", rtn_text(rel) + " (the calibrator's RTN axes)");
     }
     // The orbit and its trajectory.
     std::vector<double> times;
@@ -602,7 +602,7 @@ int reduce_method() {
       oems.push_back(rec::oem(c, *track, times, states,
                               "Orbit of " + rec::object_label(*track) + " from optical angles: the prior element set's trajectory (the propagator's answer) "
                               "plus the batch fit's deviation at " + iso_utc(od.t0, 3) + " through the two-body + J2 transition matrix; GCRF, UTC, km, km/s."));
-    ocms.push_back(rec::ocm(c, *track, od, params, prior_label[id]));
+    ocms.push_back(rec::ocm(c, *track, od, prior_label[id]));
   }
   for (const ObjectTrack* t : published) for (const TrackPoint& p : t->points) observations += p.valid;
 

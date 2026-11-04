@@ -596,9 +596,10 @@ inline std::vector<double> lower21(const std::vector<double>& m) {
 
 // The orbit of one target: its GCRF state at the arc's middle and the total
 // covariance (noise, prior and the calibration as consider parameters),
-// with the fit's statistics and the checks as user-defined parameters.
-inline std::vector<uint8_t> ocm(const Context& c, const ObjectTrack& t, const OdResult& od, const std::vector<std::pair<std::string, std::string>>& params,
-                                const std::string& prior_label) {
+// with the fit in ORBIT_DETERMINATION: OBS_AVAILABLE the track's points on a
+// solved plate, OD_OBSERVATIONS_USED those the fit kept, OD_RESIDUAL_RMS in
+// arcsec, WEIGHTED_RMS the square root of chi-square per degree of freedom.
+inline std::vector<uint8_t> ocm(const Context& c, const ObjectTrack& t, const OdResult& od, const std::string& prior_label) {
   flatbuffers::FlatBufferBuilder fb(4096);
   const auto vers = fb.CreateString("3.0"), cre = fb.CreateString(c.creation), org = fb.CreateString(c.originator);
   const auto msg = fb.CreateString("OD:" + c.image_set + ":" + std::to_string(t.norad));
@@ -632,12 +633,6 @@ inline std::vector<uint8_t> ocm(const Context& c, const ObjectTrack& t, const Od
   const auto cframe = celestial(fb, CelestialFrame::GCRF, "GCRF");
   const auto ctype = fb.CreateString("CARTPV");
   const auto cunits = fb.CreateVector(std::vector<StrOff>{fb.CreateString("km**2"), fb.CreateString("km**2/s"), fb.CreateString("km**2/s**2")});
-  std::vector<flatbuffers::Offset<UserDefinedParameters>> up;
-  for (const auto& kv : params) {
-    const auto k = fb.CreateString(kv.first), v = fb.CreateString(kv.second);
-    up.push_back(CreateUserDefinedParameters(fb, k, v));
-  }
-  const auto upv = fb.CreateVector(up);
   const auto odid = fb.CreateString("OD:" + std::to_string(t.norad) + ":" + iso_utc(od.t0, 3));
   const auto alg = fb.CreateString("Gooding angles-only initial orbit; weighted batch least squares with a priori information");
   const auto meth = fb.CreateString("BWLS");
@@ -648,6 +643,8 @@ inline std::vector<uint8_t> ocm(const Context& c, const ObjectTrack& t, const Od
   const auto apr = fb.CreateString(prior_label);
   const auto cons = fb.CreateString("site latitude, longitude, height; time bias");
   const auto sens = fb.CreateString(c.sensor_id);
+  uint32_t available = 0;
+  for (const TrackPoint& p : t.points) available += p.valid;
   OrbitDeterminationBuilder ob(fb);
   ob.add_OD_ID(odid);
   ob.add_OD_ALGORITHM(alg);
@@ -656,6 +653,7 @@ inline std::vector<uint8_t> ocm(const Context& c, const ObjectTrack& t, const Od
   ob.add_OD_OBSERVATIONS_TYPE(otype);
   ob.add_OD_OBSERVATIONS_USED(od.used);
   ob.add_OD_TRACKS_USED(1);
+  ob.add_OBS_AVAILABLE(available);
   ob.add_OD_EST_PARAMETERS(est);
   ob.add_OD_APRIORI_DATA(apr);
   ob.add_OD_ESTIMATOR(estimatorCategory::BatchLeastSquares);
@@ -681,7 +679,6 @@ inline std::vector<uint8_t> ocm(const Context& c, const ObjectTrack& t, const Od
   b.add_COV_UNITS(cunits);
   b.add_COV_REF_FRAME(cframe);
   b.add_ORBIT_DETERMINATION(odb);
-  b.add_USER_DEFINED_PARAMETERS(upv);
   b.add_CENTER_NAME(center);
   b.add_TRAJ_REF_FRAME(frame);
   FinishSizePrefixedOCMBuffer(fb, b.Finish());

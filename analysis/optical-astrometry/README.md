@@ -34,6 +34,10 @@ The manifest describes every port. Options are the `optical` config table: `cali
 `trajectory_minutes`, `trajectory_step_seconds`, `sensor_id`, `originator`, `image_set_id`, `creation_date`,
 `propagator_port_id`, `min_elevation_deg`, `max_site_candidates`.
 
+The `$OCM` on `orbit` holds the fit in typed `ORBIT_DETERMINATION` fields (`OBS_AVAILABLE`, `OD_OBSERVATIONS_USED`,
+`OD_APRIORI_DATA`, `OD_RESIDUAL_RMS` in arcsec, `WEIGHTED_RMS`); RTN sigmas follow from `COVARIANCE_DATA`. The report
+holds the diagnostics: iterations, OD minus prior, the IOD, the separation from the calibrator, the later-set checks.
+
 ## initial_orbit
 
 Gooding's angles-only method alone, with no element set and no frames: RA/Dec `$TDM` records on `angles` (`ANGLE_TYPE`
@@ -75,3 +79,6 @@ analysis/epoch-state, data-source/eop-parser, this module, analysis/od and analy
 COSMOS 2612 orbit against the next Space-Track element set. Space-Track data are read from the SDN archive at run time
 and never stored here; Gaia DR3 cones come from the ESA archive (credit: ESA/Gaia/DPAC) and are cached outside the
 repository.
+
+`tests/typed-od.e2e.mjs` runs the same video offline on the archive through 2026-11-03 and reads each value of the
+recorded OD summary (`tests/fixtures/od-summary.json`, from `tests/record-od-summary.mjs`) from its typed `$OCM` field.
