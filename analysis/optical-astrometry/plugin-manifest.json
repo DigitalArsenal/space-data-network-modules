@@ -444,6 +444,26 @@
           "maxStreams": 1,
           "required": true,
           "description": "Earth orientation ($EOP, one row or a size-prefixed stream) for UT1 and polar motion: the sites' GCRS positions. Required."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional ModuleConfig numbers, the crossings' definition: crossingGapSeconds (120; a gap over it starts a new crossing) and crossingObservations (3; the kept rows a crossing needs to count, a whole number of 3 or more)."
         }
       ],
       "outputPorts": [

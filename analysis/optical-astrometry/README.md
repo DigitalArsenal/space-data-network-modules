@@ -58,7 +58,8 @@ whose eccentricity is least wins; it is refined by least squares on 9 fitted dir
 kept when that converges under 60 arcsec RMS (`OD_RESIDUAL_RMS` that RMS, `OD_OBSERVATIONS_USED` the directions;
 unrefined, the middle-sight miss and 3). Refused by name: `too-few-observations` (no counting crossing),
 `single-crossing` (one), `no-initial-orbit` (no bound orbit above the surface converged; the message gives the least
-miss attained), `invalid-angles`.
+miss attained), `invalid-angles`. Config (`ModuleConfig` on `config`): `crossingGapSeconds` (120) and
+`crossingObservations` (3), the crossings' definition.
 
 ## Video versus FITS
 

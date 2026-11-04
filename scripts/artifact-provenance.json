@@ -900,8 +900,8 @@
       }
     },
     "analysis/optical-astrometry/dist/isomorphic/module.wasm": {
-      "sha256": "08fd3d5b3787d991d42ce0b190245b6dba862781276f3e8b5988f877dcae249a",
-      "bytes": 1104333,
+      "sha256": "8c82e0caaf22f471a4829d7b7d6fbcf796217c2e244575eab91a293ed0b11d5b",
+      "bytes": 1107005,
       "module": "analysis/optical-astrometry",
       "lastCommit": "ba6394109f4be269d0e118ab085f08464b4eb842",
       "lastCommitDate": "2026-11-04T14:55:37-05:00",

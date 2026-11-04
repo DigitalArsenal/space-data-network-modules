@@ -637,9 +637,11 @@ int reduce_method() {
 // middle sight as a Cartesian $OCM (GCRF, km, km/s; no covariance;
 // START_TIME and STOP_TIME the sights' span) and a report. Refused by name:
 // too-few-observations (no counting crossing), single-crossing (one),
-// no-initial-orbit, invalid-angles.
-constexpr double kCrossingGapS = 120.0;
-constexpr int kCrossingSights = 3;
+// no-initial-orbit, invalid-angles. Config (ModuleConfig numbers):
+// crossingGapSeconds (kCrossingGapS) and crossingObservations
+// (kCrossingSights, a whole number of 3 or more), the crossings' definition.
+constexpr double kCrossingGapS = 120.0;  // config crossingGapSeconds
+constexpr int kCrossingSights = 3;       // config crossingObservations
 constexpr double kEditFloorArcsec = 3.0;
 constexpr int kRefineSights = 9;
 constexpr double kRefineRmsArcsec = 60.0;
@@ -656,6 +658,8 @@ int initial_orbit_method() {
   std::vector<const TDM*> tdms;
   Clock clock;
   std::string err;
+  double crossing_gap = kCrossingGapS;
+  int crossing_sights = kCrossingSights;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const auto* f = plugin_get_input_frame(i);
     const std::string port = port_of(f);
@@ -667,6 +671,19 @@ int initial_orbit_method() {
     } else if (port == "earth_orientation") {
       const std::string m = ax::eop::addPayload(f->payload, f->payload_length, clock.rows);
       if (!m.empty()) return initial_orbit_fail("invalid-angles", "earth_orientation: " + m);
+    } else if (port == "config") {
+      flatbuffers::Verifier v(f->payload, f->payload_length);
+      if (!sdn::runtime::VerifyModuleConfigBuffer(v)) return initial_orbit_fail("invalid-angles", "config is not a ModuleConfig (MCFG)");
+      const auto* entries = sdn::runtime::GetModuleConfig(f->payload)->ENTRIES();
+      for (uint32_t k = 0; entries && k < entries->size(); ++k) {
+        const auto* e = entries->Get(k);
+        const std::string key = rec::text(e->KEY());
+        const double value = e->NUMBER_VALUE();
+        const bool number = e->KIND() == sdn::runtime::configValueKind_Number && std::isfinite(value);
+        if (key == "crossingGapSeconds" && number && value > 0) crossing_gap = value;
+        else if (key == "crossingObservations" && number && value >= 3 && value == std::floor(value)) crossing_sights = static_cast<int>(value);
+        else return initial_orbit_fail("invalid-angles", "config key '" + key + "' is not crossingGapSeconds (s, > 0) or crossingObservations (a whole number, 3 or more)");
+      }
     } else {
       return initial_orbit_fail("invalid-angles", "unknown input port " + port);
     }
@@ -734,7 +751,7 @@ int initial_orbit_method() {
     });
     std::vector<size_t> run;
     auto close = [&]() {
-      if (run.size() < static_cast<size_t>(kCrossingSights)) { run.clear(); return; }
+      if (run.size() < static_cast<size_t>(crossing_sights)) { run.clear(); return; }
       Crossing c;
       V3 sum{0, 0, 0};
       for (size_t i : run) sum = sum + radec_to_unit(sights[i].ra, sights[i].dec);
@@ -781,10 +798,10 @@ int initial_orbit_method() {
         }
         size_t left = 0;
         for (char k : keep) left += k;
-        if (!changed || left < static_cast<size_t>(kCrossingSights)) break;
+        if (!changed || left < static_cast<size_t>(crossing_sights)) break;
       }
       for (size_t k = 0; k < run.size(); ++k) if (keep[k]) c.kept.push_back(run[k]);
-      if (c.kept.size() >= static_cast<size_t>(kCrossingSights)) crossings.push_back(c);
+      if (c.kept.size() >= static_cast<size_t>(crossing_sights)) crossings.push_back(c);
       run.clear();
     };
     for (size_t k = 0; k < order.size(); ++k) {
@@ -792,7 +809,7 @@ int initial_orbit_method() {
       if (!run.empty()) {
         const Sight& last = sights[run.back()];
         const bool same_site = last.itrs.x == o.itrs.x && last.itrs.y == o.itrs.y && last.itrs.z == o.itrs.z;
-        if (!same_site || o.t - last.t > kCrossingGapS) close();
+        if (!same_site || o.t - last.t > crossing_gap) close();
       }
       run.push_back(order[k]);
     }
@@ -805,7 +822,7 @@ int initial_orbit_method() {
     crossings[k].night = crossings[k - 1].night + (sights[crossings[k].kept.front()].t - end > kNightGapS ? 1 : 0);
   }
   if (crossings.empty())
-    return initial_orbit_fail("too-few-observations", "no crossing keeps " + std::to_string(kCrossingSights) + " or more RA/Dec observations at distinct epochs; got " +
+    return initial_orbit_fail("too-few-observations", "no crossing keeps " + std::to_string(crossing_sights) + " or more RA/Dec observations at distinct epochs; got " +
                                                           std::to_string(sights.size()) + " observations");
   if (crossings.size() == 1)
     return initial_orbit_fail("single-crossing", "one crossing (" + std::to_string(crossings[0].kept.size()) + " observations over " +
