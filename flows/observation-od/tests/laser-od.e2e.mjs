@@ -17,7 +17,9 @@
 //
 //   1. the node converges and emits one $OCM: FIT_STATISTICS FIT_RMS_KM below 5 m, OD_OBSERVATIONS_USED (and FIT_STATES)
 //      equal to the fixture's normal points (every LASER_RANGE row of the $TDM records the source reads from it);
-//   2. its state at 2026-07-15T15:00 is within 20 m of NSGF's;
+//   2. its state at 2026-07-15T15:00 is within 20 m of NSGF's; FIT_RMS, OD_OBSERVATIONS_USED and the end state's distance
+//      from NSGF equal (within 0.5 mm) the answers recorded from the dists before the low-sphere convergence change
+//      (tests/fixtures/laser-od-recorded.json);
 //   3. PROVENANCE SOURCE_KIND Observation, ORIGINATOR ILRS; no USER_DEFINED_PARAMETERS;
 //   4. refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>.
 // JS reads files, routes records between the modules by port and compares numbers: no orbit, frame or measurement is
@@ -38,6 +40,7 @@ const here = (p) => new URL(p, import.meta.url);
 const modules = (p) => new URL(`../../../${p}`, import.meta.url);
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}`); if (!ok) failures.push(label); };
+const RECORDED = JSON.parse(fs.readFileSync(here('fixtures/laser-od-recorded.json'), 'utf8'));
 
 const T = (schemaName, fileIdentifier, rootTypeName) => ({ schemaName, fileIdentifier, rootTypeName, wireFormat: 'flatbuffer' });
 const HRSP = T('HttpResponse.fbs', 'HRSP', 'HttpResponse'), MCFG = T('ModuleConfig.fbs', 'MCFG', 'ModuleConfig');
@@ -160,6 +163,12 @@ if (fit.ocm) {
   const dv = Math.hypot(...[3, 4, 5].map((i) => (ocm.STATE_DATA[i] - TRUTH.state[i]) * 1000));
   console.log(`  epoch ${ocm.STATE_EPOCHS[0]}: |dr| ${dr.toFixed(3)} m, |dv| ${(dv * 1000).toFixed(3)} mm/s`);
   check(ocm.STATE_EPOCHS[0].startsWith('2026-07-15T15:00:00') && dr < 20, `end state ${dr.toFixed(3)} m from NSGF (below 20 m)`);
+  const answers = { fitRmsM: rms, weightedRms: od.WEIGHTED_RMS, iterations: stats.ITERATIONS, used: od.OD_OBSERVATIONS_USED, endStateM: dr, endSpeedMmS: dv * 1000 };
+  console.log(`  answers ${JSON.stringify(answers)}`);
+  const before = RECORDED.starlette20260715;
+  const same = (a, b) => Math.abs(a - b) < 5e-4;
+  check(same(rms, before.fitRmsM) && answers.used === before.used && same(dr, before.endStateM),
+    `unchanged against the record of the dists before the convergence change: RMS ${rms.toFixed(3)} m (${before.fitRmsM.toFixed(3)}), ${answers.used} normal points (${before.used}), end state ${dr.toFixed(3)} m (${before.endStateM.toFixed(3)})`);
   console.log('3. provenance');
   check(ocm.PROVENANCE?.SOURCE_KIND === pvnSourceKind.Observation && ocm.PROVENANCE?.ORIGINATOR === 'ILRS', `PVN ${pvnSourceKind[ocm.PROVENANCE?.SOURCE_KIND]} ${ocm.PROVENANCE?.ORIGINATOR}`);
   check(record.userDefinedParametersLength() === 0, 'no USER_DEFINED_PARAMETERS');

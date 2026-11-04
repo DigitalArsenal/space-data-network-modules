@@ -1,0 +1,16 @@
+{
+ "recorded": "tests/laser-od.e2e.mjs case 1 on the dists of modules 52eee84ea, before the low-sphere convergence change",
+ "dists": {
+  "flows/observation-od 0.2.0": "08ae8e305fd0ea45beaaf7f0055cc3af6117ba381fe7abd0b26fa7c74c61b81c",
+  "analysis/estimation 0.7.0": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
+  "propagator/ffm 2.1.0": "318db198d611da632a461de0c5aa6e280ffaa913cc2a1324034d1844e06c4fd6"
+ },
+ "starlette20260715": {
+  "fitRmsM": 0.30392310992215965,
+  "weightedRms": 6.078462198443192,
+  "iterations": 4,
+  "used": 335,
+  "endStateM": 0.43889532890889854,
+  "endSpeedMmS": 0.5470235369217381
+ }
+}
