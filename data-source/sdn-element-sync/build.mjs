@@ -6,8 +6,8 @@ import {compileModuleFromSource} from 'space-data-module-sdk/compiler';
 import {generateSdsHeaders} from '../../scripts/lib/sds-cpp-headers.mjs';
 const root=fileURLToPath(new URL('.',import.meta.url));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'plugin-manifest.json'),'utf8'));
-// QRP, OMM and PNV with every family they include (OMM pulls PVN, CVR, RFM, ...), generated once and inlined.
-const {header}=await generateSdsHeaders(['QRP','OMM','PNV'],import.meta.url);
+// QRP, OMM, OCM and PNV with every family they include (OMM pulls PVN, CVR, RFM, ...; OCM PCF, PRW, SPW, ...), generated once and inlined.
+const {header}=await generateSdsHeaders(['QRP','OMM','OCM','PNV'],import.meta.url);
 const sourceCode=(await fs.readFile(path.join(root,'src/module.cpp'),'utf8'))
  .replace(/^#include "sds_generated\.h".*$/m,()=>header.replace(/static_assert\(FLATBUFFERS_VERSION_MAJOR[\s\S]*?\);\n/g,''));
 const outputPath=path.join(root,'dist/isomorphic/module.wasm');

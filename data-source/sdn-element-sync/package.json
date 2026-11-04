@@ -1,12 +1,12 @@
 {
   "name": "@digitalarsenal/sdn-module-sdn-element-sync",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node tests/sync.e2e.mjs"
+    "test": "node tests/sync.e2e.mjs && node tests/ocm-lane.e2e.mjs"
   },
   "devDependencies": {
     "flatbuffers": "25.9.23",
