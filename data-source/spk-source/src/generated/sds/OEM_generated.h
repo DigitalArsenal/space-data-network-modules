@@ -402,6 +402,12 @@ struct covarianceMatrixLineT : public ::flatbuffers::NativeTable {
   double CZ_DOT_X_DOT = 0.0;
   double CZ_DOT_Y_DOT = 0.0;
   double CZ_DOT_Z_DOT = 0.0;
+  std::string COMMENT{};
+  std::unique_ptr<RFMT> COV_REFERENCE_FRAME{};
+  covarianceMatrixLineT() = default;
+  covarianceMatrixLineT(const covarianceMatrixLineT &o);
+  covarianceMatrixLineT(covarianceMatrixLineT&&) FLATBUFFERS_NOEXCEPT = default;
+  covarianceMatrixLineT &operator=(covarianceMatrixLineT o) FLATBUFFERS_NOEXCEPT;
 };
 
 /// Position/Velocity Covariance Matrix Line
@@ -431,7 +437,9 @@ struct covarianceMatrixLine FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
     VT_CZ_DOT_Z = 40,
     VT_CZ_DOT_X_DOT = 42,
     VT_CZ_DOT_Y_DOT = 44,
-    VT_CZ_DOT_Z_DOT = 46
+    VT_CZ_DOT_Z_DOT = 46,
+    VT_COMMENT = 48,
+    VT_COV_REFERENCE_FRAME = 50
   };
   /// Epoch
   const ::flatbuffers::String *EPOCH() const {
@@ -521,6 +529,15 @@ struct covarianceMatrixLine FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   double CZ_DOT_Z_DOT() const {
     return GetField<double>(VT_CZ_DOT_Z_DOT, 0.0);
   }
+  /// COMMENT lines of this covariance matrix (CCSDS 502.0-B-3), joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// COV_REF_FRAME of this matrix (CCSDS 502.0-B-3): the frame the matrix
+  /// is expressed in, when it differs from the block's COV_REFERENCE_FRAME.
+  const RFM *COV_REFERENCE_FRAME() const {
+    return GetPointer<const RFM *>(VT_COV_REFERENCE_FRAME);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -547,6 +564,10 @@ struct covarianceMatrixLine FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
            VerifyField<double>(verifier, VT_CZ_DOT_X_DOT, 8) &&
            VerifyField<double>(verifier, VT_CZ_DOT_Y_DOT, 8) &&
            VerifyField<double>(verifier, VT_CZ_DOT_Z_DOT, 8) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_COV_REFERENCE_FRAME) &&
+           verifier.VerifyTable(COV_REFERENCE_FRAME()) &&
            verifier.EndTable();
   }
   covarianceMatrixLineT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -624,6 +645,12 @@ struct covarianceMatrixLineBuilder {
   void add_CZ_DOT_Z_DOT(double CZ_DOT_Z_DOT) {
     fbb_.AddElement<double>(covarianceMatrixLine::VT_CZ_DOT_Z_DOT, CZ_DOT_Z_DOT, 0.0);
   }
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(covarianceMatrixLine::VT_COMMENT, COMMENT);
+  }
+  void add_COV_REFERENCE_FRAME(::flatbuffers::Offset<RFM> COV_REFERENCE_FRAME) {
+    fbb_.AddOffset(covarianceMatrixLine::VT_COV_REFERENCE_FRAME, COV_REFERENCE_FRAME);
+  }
   explicit covarianceMatrixLineBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -658,7 +685,9 @@ inline ::flatbuffers::Offset<covarianceMatrixLine> CreatecovarianceMatrixLine(
     double CZ_DOT_Z = 0.0,
     double CZ_DOT_X_DOT = 0.0,
     double CZ_DOT_Y_DOT = 0.0,
-    double CZ_DOT_Z_DOT = 0.0) {
+    double CZ_DOT_Z_DOT = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<RFM> COV_REFERENCE_FRAME = 0) {
   covarianceMatrixLineBuilder builder_(_fbb);
   builder_.add_CZ_DOT_Z_DOT(CZ_DOT_Z_DOT);
   builder_.add_CZ_DOT_Y_DOT(CZ_DOT_Y_DOT);
@@ -681,6 +710,8 @@ inline ::flatbuffers::Offset<covarianceMatrixLine> CreatecovarianceMatrixLine(
   builder_.add_CY_Y(CY_Y);
   builder_.add_CY_X(CY_X);
   builder_.add_CX_X(CX_X);
+  builder_.add_COV_REFERENCE_FRAME(COV_REFERENCE_FRAME);
+  builder_.add_COMMENT(COMMENT);
   builder_.add_EPOCH(EPOCH);
   return builder_.Finish();
 }
@@ -713,8 +744,11 @@ inline ::flatbuffers::Offset<covarianceMatrixLine> CreatecovarianceMatrixLineDir
     double CZ_DOT_Z = 0.0,
     double CZ_DOT_X_DOT = 0.0,
     double CZ_DOT_Y_DOT = 0.0,
-    double CZ_DOT_Z_DOT = 0.0) {
+    double CZ_DOT_Z_DOT = 0.0,
+    const char *COMMENT = nullptr,
+    ::flatbuffers::Offset<RFM> COV_REFERENCE_FRAME = 0) {
   auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
   return CreatecovarianceMatrixLine(
       _fbb,
       EPOCH__,
@@ -738,7 +772,9 @@ inline ::flatbuffers::Offset<covarianceMatrixLine> CreatecovarianceMatrixLineDir
       CZ_DOT_Z,
       CZ_DOT_X_DOT,
       CZ_DOT_Y_DOT,
-      CZ_DOT_Z_DOT);
+      CZ_DOT_Z_DOT,
+      COMMENT__,
+      COV_REFERENCE_FRAME);
 }
 
 ::flatbuffers::Offset<covarianceMatrixLine> CreatecovarianceMatrixLine(::flatbuffers::FlatBufferBuilder &_fbb, const covarianceMatrixLineT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1153,6 +1189,8 @@ struct OEMT : public ::flatbuffers::NativeTable {
   std::string CREATION_DATE{};
   std::string ORIGINATOR{};
   std::vector<std::unique_ptr<ephemerisDataBlockT>> EPHEMERIS_DATA_BLOCK{};
+  std::string COMMENT{};
+  std::string MESSAGE_ID{};
   OEMT() = default;
   OEMT(const OEMT &o);
   OEMT(OEMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1169,7 +1207,9 @@ struct OEM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CCSDS_OEM_VERS = 6,
     VT_CREATION_DATE = 8,
     VT_ORIGINATOR = 10,
-    VT_EPHEMERIS_DATA_BLOCK = 12
+    VT_EPHEMERIS_DATA_BLOCK = 12,
+    VT_COMMENT = 14,
+    VT_MESSAGE_ID = 16
   };
   /// OEM Header
   /// Classification marking of the data in IC/CAPCO Portion-marked format.
@@ -1192,6 +1232,15 @@ struct OEM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>> *EPHEMERIS_DATA_BLOCK() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>> *>(VT_EPHEMERIS_DATA_BLOCK);
   }
+  /// COMMENT lines of the OEM header (CCSDS 502.0-B-3), joined by a line feed.
+  const ::flatbuffers::String *COMMENT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_COMMENT);
+  }
+  /// MESSAGE_ID of the OEM header (CCSDS 502.0-B-3): an identifier the originator
+  /// makes unique for this message.
+  const ::flatbuffers::String *MESSAGE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MESSAGE_ID);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1205,6 +1254,10 @@ struct OEM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_EPHEMERIS_DATA_BLOCK) &&
            verifier.VerifyVector(EPHEMERIS_DATA_BLOCK()) &&
            verifier.VerifyVectorOfTables(EPHEMERIS_DATA_BLOCK()) &&
+           VerifyOffset(verifier, VT_COMMENT) &&
+           verifier.VerifyString(COMMENT()) &&
+           VerifyOffset(verifier, VT_MESSAGE_ID) &&
+           verifier.VerifyString(MESSAGE_ID()) &&
            verifier.EndTable();
   }
   OEMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1231,6 +1284,12 @@ struct OEMBuilder {
   void add_EPHEMERIS_DATA_BLOCK(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>>> EPHEMERIS_DATA_BLOCK) {
     fbb_.AddOffset(OEM::VT_EPHEMERIS_DATA_BLOCK, EPHEMERIS_DATA_BLOCK);
   }
+  void add_COMMENT(::flatbuffers::Offset<::flatbuffers::String> COMMENT) {
+    fbb_.AddOffset(OEM::VT_COMMENT, COMMENT);
+  }
+  void add_MESSAGE_ID(::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID) {
+    fbb_.AddOffset(OEM::VT_MESSAGE_ID, MESSAGE_ID);
+  }
   explicit OEMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1248,9 +1307,13 @@ inline ::flatbuffers::Offset<OEM> CreateOEM(
     double CCSDS_OEM_VERS = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> CREATION_DATE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ORIGINATOR = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>>> EPHEMERIS_DATA_BLOCK = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<ephemerisDataBlock>>> EPHEMERIS_DATA_BLOCK = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> COMMENT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID = 0) {
   OEMBuilder builder_(_fbb);
   builder_.add_CCSDS_OEM_VERS(CCSDS_OEM_VERS);
+  builder_.add_MESSAGE_ID(MESSAGE_ID);
+  builder_.add_COMMENT(COMMENT);
   builder_.add_EPHEMERIS_DATA_BLOCK(EPHEMERIS_DATA_BLOCK);
   builder_.add_ORIGINATOR(ORIGINATOR);
   builder_.add_CREATION_DATE(CREATION_DATE);
@@ -1269,18 +1332,24 @@ inline ::flatbuffers::Offset<OEM> CreateOEMDirect(
     double CCSDS_OEM_VERS = 0.0,
     const char *CREATION_DATE = nullptr,
     const char *ORIGINATOR = nullptr,
-    const std::vector<::flatbuffers::Offset<ephemerisDataBlock>> *EPHEMERIS_DATA_BLOCK = nullptr) {
+    const std::vector<::flatbuffers::Offset<ephemerisDataBlock>> *EPHEMERIS_DATA_BLOCK = nullptr,
+    const char *COMMENT = nullptr,
+    const char *MESSAGE_ID = nullptr) {
   auto CLASSIFICATION__ = CLASSIFICATION ? _fbb.CreateString(CLASSIFICATION) : 0;
   auto CREATION_DATE__ = CREATION_DATE ? _fbb.CreateString(CREATION_DATE) : 0;
   auto ORIGINATOR__ = ORIGINATOR ? _fbb.CreateString(ORIGINATOR) : 0;
   auto EPHEMERIS_DATA_BLOCK__ = EPHEMERIS_DATA_BLOCK ? _fbb.CreateVector<::flatbuffers::Offset<ephemerisDataBlock>>(*EPHEMERIS_DATA_BLOCK) : 0;
+  auto COMMENT__ = COMMENT ? _fbb.CreateString(COMMENT) : 0;
+  auto MESSAGE_ID__ = MESSAGE_ID ? _fbb.CreateString(MESSAGE_ID) : 0;
   return CreateOEM(
       _fbb,
       CLASSIFICATION__,
       CCSDS_OEM_VERS,
       CREATION_DATE__,
       ORIGINATOR__,
-      EPHEMERIS_DATA_BLOCK__);
+      EPHEMERIS_DATA_BLOCK__,
+      COMMENT__,
+      MESSAGE_ID__);
 }
 
 ::flatbuffers::Offset<OEM> CreateOEM(::flatbuffers::FlatBufferBuilder &_fbb, const OEMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1368,6 +1437,61 @@ inline ::flatbuffers::Offset<ephemerisDataLine> ephemerisDataLine::Pack(::flatbu
       _Z_DOT_SIGMA_EXPONENT);
 }
 
+inline covarianceMatrixLineT::covarianceMatrixLineT(const covarianceMatrixLineT &o)
+      : EPOCH(o.EPOCH),
+        CX_X(o.CX_X),
+        CY_X(o.CY_X),
+        CY_Y(o.CY_Y),
+        CZ_X(o.CZ_X),
+        CZ_Y(o.CZ_Y),
+        CZ_Z(o.CZ_Z),
+        CX_DOT_X(o.CX_DOT_X),
+        CX_DOT_Y(o.CX_DOT_Y),
+        CX_DOT_Z(o.CX_DOT_Z),
+        CX_DOT_X_DOT(o.CX_DOT_X_DOT),
+        CY_DOT_X(o.CY_DOT_X),
+        CY_DOT_Y(o.CY_DOT_Y),
+        CY_DOT_Z(o.CY_DOT_Z),
+        CY_DOT_X_DOT(o.CY_DOT_X_DOT),
+        CY_DOT_Y_DOT(o.CY_DOT_Y_DOT),
+        CZ_DOT_X(o.CZ_DOT_X),
+        CZ_DOT_Y(o.CZ_DOT_Y),
+        CZ_DOT_Z(o.CZ_DOT_Z),
+        CZ_DOT_X_DOT(o.CZ_DOT_X_DOT),
+        CZ_DOT_Y_DOT(o.CZ_DOT_Y_DOT),
+        CZ_DOT_Z_DOT(o.CZ_DOT_Z_DOT),
+        COMMENT(o.COMMENT),
+        COV_REFERENCE_FRAME((o.COV_REFERENCE_FRAME) ? new RFMT(*o.COV_REFERENCE_FRAME) : nullptr) {
+}
+
+inline covarianceMatrixLineT &covarianceMatrixLineT::operator=(covarianceMatrixLineT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(EPOCH, o.EPOCH);
+  std::swap(CX_X, o.CX_X);
+  std::swap(CY_X, o.CY_X);
+  std::swap(CY_Y, o.CY_Y);
+  std::swap(CZ_X, o.CZ_X);
+  std::swap(CZ_Y, o.CZ_Y);
+  std::swap(CZ_Z, o.CZ_Z);
+  std::swap(CX_DOT_X, o.CX_DOT_X);
+  std::swap(CX_DOT_Y, o.CX_DOT_Y);
+  std::swap(CX_DOT_Z, o.CX_DOT_Z);
+  std::swap(CX_DOT_X_DOT, o.CX_DOT_X_DOT);
+  std::swap(CY_DOT_X, o.CY_DOT_X);
+  std::swap(CY_DOT_Y, o.CY_DOT_Y);
+  std::swap(CY_DOT_Z, o.CY_DOT_Z);
+  std::swap(CY_DOT_X_DOT, o.CY_DOT_X_DOT);
+  std::swap(CY_DOT_Y_DOT, o.CY_DOT_Y_DOT);
+  std::swap(CZ_DOT_X, o.CZ_DOT_X);
+  std::swap(CZ_DOT_Y, o.CZ_DOT_Y);
+  std::swap(CZ_DOT_Z, o.CZ_DOT_Z);
+  std::swap(CZ_DOT_X_DOT, o.CZ_DOT_X_DOT);
+  std::swap(CZ_DOT_Y_DOT, o.CZ_DOT_Y_DOT);
+  std::swap(CZ_DOT_Z_DOT, o.CZ_DOT_Z_DOT);
+  std::swap(COMMENT, o.COMMENT);
+  std::swap(COV_REFERENCE_FRAME, o.COV_REFERENCE_FRAME);
+  return *this;
+}
+
 inline covarianceMatrixLineT *covarianceMatrixLine::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<covarianceMatrixLineT>();
   UnPackTo(_o.get(), _resolver);
@@ -1399,6 +1523,8 @@ inline void covarianceMatrixLine::UnPackTo(covarianceMatrixLineT *_o, const ::fl
   { auto _e = CZ_DOT_X_DOT(); _o->CZ_DOT_X_DOT = _e; }
   { auto _e = CZ_DOT_Y_DOT(); _o->CZ_DOT_Y_DOT = _e; }
   { auto _e = CZ_DOT_Z_DOT(); _o->CZ_DOT_Z_DOT = _e; }
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = COV_REFERENCE_FRAME(); if (_e) { if(_o->COV_REFERENCE_FRAME) { _e->UnPackTo(_o->COV_REFERENCE_FRAME.get(), _resolver); } else { _o->COV_REFERENCE_FRAME = std::unique_ptr<RFMT>(_e->UnPack(_resolver)); } } else if (_o->COV_REFERENCE_FRAME) { _o->COV_REFERENCE_FRAME.reset(); } }
 }
 
 inline ::flatbuffers::Offset<covarianceMatrixLine> CreatecovarianceMatrixLine(::flatbuffers::FlatBufferBuilder &_fbb, const covarianceMatrixLineT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1431,6 +1557,8 @@ inline ::flatbuffers::Offset<covarianceMatrixLine> covarianceMatrixLine::Pack(::
   auto _CZ_DOT_X_DOT = _o->CZ_DOT_X_DOT;
   auto _CZ_DOT_Y_DOT = _o->CZ_DOT_Y_DOT;
   auto _CZ_DOT_Z_DOT = _o->CZ_DOT_Z_DOT;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _COV_REFERENCE_FRAME = _o->COV_REFERENCE_FRAME ? CreateRFM(_fbb, _o->COV_REFERENCE_FRAME.get(), _rehasher) : 0;
   return CreatecovarianceMatrixLine(
       _fbb,
       _EPOCH,
@@ -1454,7 +1582,9 @@ inline ::flatbuffers::Offset<covarianceMatrixLine> covarianceMatrixLine::Pack(::
       _CZ_DOT_Z,
       _CZ_DOT_X_DOT,
       _CZ_DOT_Y_DOT,
-      _CZ_DOT_Z_DOT);
+      _CZ_DOT_Z_DOT,
+      _COMMENT,
+      _COV_REFERENCE_FRAME);
 }
 
 inline ephemerisDataBlockT::ephemerisDataBlockT(const ephemerisDataBlockT &o)
@@ -1599,7 +1729,9 @@ inline OEMT::OEMT(const OEMT &o)
       : CLASSIFICATION(o.CLASSIFICATION),
         CCSDS_OEM_VERS(o.CCSDS_OEM_VERS),
         CREATION_DATE(o.CREATION_DATE),
-        ORIGINATOR(o.ORIGINATOR) {
+        ORIGINATOR(o.ORIGINATOR),
+        COMMENT(o.COMMENT),
+        MESSAGE_ID(o.MESSAGE_ID) {
   EPHEMERIS_DATA_BLOCK.reserve(o.EPHEMERIS_DATA_BLOCK.size());
   for (const auto &EPHEMERIS_DATA_BLOCK_ : o.EPHEMERIS_DATA_BLOCK) { EPHEMERIS_DATA_BLOCK.emplace_back((EPHEMERIS_DATA_BLOCK_) ? new ephemerisDataBlockT(*EPHEMERIS_DATA_BLOCK_) : nullptr); }
 }
@@ -1610,6 +1742,8 @@ inline OEMT &OEMT::operator=(OEMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(CREATION_DATE, o.CREATION_DATE);
   std::swap(ORIGINATOR, o.ORIGINATOR);
   std::swap(EPHEMERIS_DATA_BLOCK, o.EPHEMERIS_DATA_BLOCK);
+  std::swap(COMMENT, o.COMMENT);
+  std::swap(MESSAGE_ID, o.MESSAGE_ID);
   return *this;
 }
 
@@ -1627,6 +1761,8 @@ inline void OEM::UnPackTo(OEMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = CREATION_DATE(); if (_e) _o->CREATION_DATE = _e->str(); }
   { auto _e = ORIGINATOR(); if (_e) _o->ORIGINATOR = _e->str(); }
   { auto _e = EPHEMERIS_DATA_BLOCK(); if (_e) { _o->EPHEMERIS_DATA_BLOCK.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EPHEMERIS_DATA_BLOCK[_i]) { _e->Get(_i)->UnPackTo(_o->EPHEMERIS_DATA_BLOCK[_i].get(), _resolver); } else { _o->EPHEMERIS_DATA_BLOCK[_i] = std::unique_ptr<ephemerisDataBlockT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EPHEMERIS_DATA_BLOCK.resize(0); } }
+  { auto _e = COMMENT(); if (_e) _o->COMMENT = _e->str(); }
+  { auto _e = MESSAGE_ID(); if (_e) _o->MESSAGE_ID = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<OEM> CreateOEM(::flatbuffers::FlatBufferBuilder &_fbb, const OEMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1642,13 +1778,17 @@ inline ::flatbuffers::Offset<OEM> OEM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _CREATION_DATE = _o->CREATION_DATE.empty() ? 0 : _fbb.CreateString(_o->CREATION_DATE);
   auto _ORIGINATOR = _o->ORIGINATOR.empty() ? 0 : _fbb.CreateString(_o->ORIGINATOR);
   auto _EPHEMERIS_DATA_BLOCK = _o->EPHEMERIS_DATA_BLOCK.size() ? _fbb.CreateVector<::flatbuffers::Offset<ephemerisDataBlock>> (_o->EPHEMERIS_DATA_BLOCK.size(), [](size_t i, _VectorArgs *__va) { return CreateephemerisDataBlock(*__va->__fbb, __va->__o->EPHEMERIS_DATA_BLOCK[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _COMMENT = _o->COMMENT.empty() ? 0 : _fbb.CreateString(_o->COMMENT);
+  auto _MESSAGE_ID = _o->MESSAGE_ID.empty() ? 0 : _fbb.CreateString(_o->MESSAGE_ID);
   return CreateOEM(
       _fbb,
       _CLASSIFICATION,
       _CCSDS_OEM_VERS,
       _CREATION_DATE,
       _ORIGINATOR,
-      _EPHEMERIS_DATA_BLOCK);
+      _EPHEMERIS_DATA_BLOCK,
+      _COMMENT,
+      _MESSAGE_ID);
 }
 
 inline const OEM *GetOEM(const void *buf) {

@@ -13,6 +13,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+#include "PVN_generated.h"
 #include "RFM_generated.h"
 #include "TIM_generated.h"
 #include "CAT_generated.h"
@@ -729,6 +730,7 @@ struct PPET : public ::flatbuffers::NativeTable {
   std::string EPHEMERIS_SOURCE{};
   double NOMINAL_SEGMENT_SPAN = 0.0;
   uint16_t NOMINAL_NUM_COEFFICIENTS = 0;
+  std::unique_ptr<PVNT> PROVENANCE{};
   PPET() = default;
   PPET(const PPET &o);
   PPET(PPET&&) FLATBUFFERS_NOEXCEPT = default;
@@ -758,7 +760,8 @@ struct PPE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_ORBITAL_ELEMENT_RECORDS = 22,
     VT_EPHEMERIS_SOURCE = 24,
     VT_NOMINAL_SEGMENT_SPAN = 26,
-    VT_NOMINAL_NUM_COEFFICIENTS = 28
+    VT_NOMINAL_NUM_COEFFICIENTS = 28,
+    VT_PROVENANCE = 30
   };
   /// Plain-text comments.
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *COMMENT() const {
@@ -819,6 +822,10 @@ struct PPE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint16_t NOMINAL_NUM_COEFFICIENTS() const {
     return GetField<uint16_t>(VT_NOMINAL_NUM_COEFFICIENTS, 0);
   }
+  /// Where this polynomial ephemeris comes from and the terms it travels under.
+  const PVN *PROVENANCE() const {
+    return GetPointer<const PVN *>(VT_PROVENANCE);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -847,6 +854,8 @@ struct PPE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(EPHEMERIS_SOURCE()) &&
            VerifyField<double>(verifier, VT_NOMINAL_SEGMENT_SPAN, 8) &&
            VerifyField<uint16_t>(verifier, VT_NOMINAL_NUM_COEFFICIENTS, 2) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
            verifier.EndTable();
   }
   PPET *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -897,6 +906,9 @@ struct PPEBuilder {
   void add_NOMINAL_NUM_COEFFICIENTS(uint16_t NOMINAL_NUM_COEFFICIENTS) {
     fbb_.AddElement<uint16_t>(PPE::VT_NOMINAL_NUM_COEFFICIENTS, NOMINAL_NUM_COEFFICIENTS, 0);
   }
+  void add_PROVENANCE(::flatbuffers::Offset<PVN> PROVENANCE) {
+    fbb_.AddOffset(PPE::VT_PROVENANCE, PROVENANCE);
+  }
   explicit PPEBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -922,9 +934,11 @@ inline ::flatbuffers::Offset<PPE> CreatePPE(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<PPEOrbitalElementRecord>>> ORBITAL_ELEMENT_RECORDS = 0,
     ::flatbuffers::Offset<::flatbuffers::String> EPHEMERIS_SOURCE = 0,
     double NOMINAL_SEGMENT_SPAN = 0.0,
-    uint16_t NOMINAL_NUM_COEFFICIENTS = 0) {
+    uint16_t NOMINAL_NUM_COEFFICIENTS = 0,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0) {
   PPEBuilder builder_(_fbb);
   builder_.add_NOMINAL_SEGMENT_SPAN(NOMINAL_SEGMENT_SPAN);
+  builder_.add_PROVENANCE(PROVENANCE);
   builder_.add_EPHEMERIS_SOURCE(EPHEMERIS_SOURCE);
   builder_.add_ORBITAL_ELEMENT_RECORDS(ORBITAL_ELEMENT_RECORDS);
   builder_.add_POSITION_RECORDS(POSITION_RECORDS);
@@ -959,7 +973,8 @@ inline ::flatbuffers::Offset<PPE> CreatePPEDirect(
     const std::vector<::flatbuffers::Offset<PPEOrbitalElementRecord>> *ORBITAL_ELEMENT_RECORDS = nullptr,
     const char *EPHEMERIS_SOURCE = nullptr,
     double NOMINAL_SEGMENT_SPAN = 0.0,
-    uint16_t NOMINAL_NUM_COEFFICIENTS = 0) {
+    uint16_t NOMINAL_NUM_COEFFICIENTS = 0,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0) {
   auto COMMENT__ = COMMENT ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*COMMENT) : 0;
   auto CENTER_NAME__ = CENTER_NAME ? _fbb.CreateString(CENTER_NAME) : 0;
   auto START_TIME__ = START_TIME ? _fbb.CreateString(START_TIME) : 0;
@@ -981,7 +996,8 @@ inline ::flatbuffers::Offset<PPE> CreatePPEDirect(
       ORBITAL_ELEMENT_RECORDS__,
       EPHEMERIS_SOURCE__,
       NOMINAL_SEGMENT_SPAN,
-      NOMINAL_NUM_COEFFICIENTS);
+      NOMINAL_NUM_COEFFICIENTS,
+      PROVENANCE);
 }
 
 ::flatbuffers::Offset<PPE> CreatePPE(::flatbuffers::FlatBufferBuilder &_fbb, const PPET *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1124,7 +1140,8 @@ inline PPET::PPET(const PPET &o)
         DEFAULT_BASIS_TYPE(o.DEFAULT_BASIS_TYPE),
         EPHEMERIS_SOURCE(o.EPHEMERIS_SOURCE),
         NOMINAL_SEGMENT_SPAN(o.NOMINAL_SEGMENT_SPAN),
-        NOMINAL_NUM_COEFFICIENTS(o.NOMINAL_NUM_COEFFICIENTS) {
+        NOMINAL_NUM_COEFFICIENTS(o.NOMINAL_NUM_COEFFICIENTS),
+        PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr) {
   POSITION_RECORDS.reserve(o.POSITION_RECORDS.size());
   for (const auto &POSITION_RECORDS_ : o.POSITION_RECORDS) { POSITION_RECORDS.emplace_back((POSITION_RECORDS_) ? new PPEPositionRecordT(*POSITION_RECORDS_) : nullptr); }
   ORBITAL_ELEMENT_RECORDS.reserve(o.ORBITAL_ELEMENT_RECORDS.size());
@@ -1145,6 +1162,7 @@ inline PPET &PPET::operator=(PPET o) FLATBUFFERS_NOEXCEPT {
   std::swap(EPHEMERIS_SOURCE, o.EPHEMERIS_SOURCE);
   std::swap(NOMINAL_SEGMENT_SPAN, o.NOMINAL_SEGMENT_SPAN);
   std::swap(NOMINAL_NUM_COEFFICIENTS, o.NOMINAL_NUM_COEFFICIENTS);
+  std::swap(PROVENANCE, o.PROVENANCE);
   return *this;
 }
 
@@ -1170,6 +1188,7 @@ inline void PPE::UnPackTo(PPET *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = EPHEMERIS_SOURCE(); if (_e) _o->EPHEMERIS_SOURCE = _e->str(); }
   { auto _e = NOMINAL_SEGMENT_SPAN(); _o->NOMINAL_SEGMENT_SPAN = _e; }
   { auto _e = NOMINAL_NUM_COEFFICIENTS(); _o->NOMINAL_NUM_COEFFICIENTS = _e; }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
 }
 
 inline ::flatbuffers::Offset<PPE> CreatePPE(::flatbuffers::FlatBufferBuilder &_fbb, const PPET *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1193,6 +1212,7 @@ inline ::flatbuffers::Offset<PPE> PPE::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _EPHEMERIS_SOURCE = _o->EPHEMERIS_SOURCE.empty() ? 0 : _fbb.CreateString(_o->EPHEMERIS_SOURCE);
   auto _NOMINAL_SEGMENT_SPAN = _o->NOMINAL_SEGMENT_SPAN;
   auto _NOMINAL_NUM_COEFFICIENTS = _o->NOMINAL_NUM_COEFFICIENTS;
+  auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
   return CreatePPE(
       _fbb,
       _COMMENT,
@@ -1207,7 +1227,8 @@ inline ::flatbuffers::Offset<PPE> PPE::Pack(::flatbuffers::FlatBufferBuilder &_f
       _ORBITAL_ELEMENT_RECORDS,
       _EPHEMERIS_SOURCE,
       _NOMINAL_SEGMENT_SPAN,
-      _NOMINAL_NUM_COEFFICIENTS);
+      _NOMINAL_NUM_COEFFICIENTS,
+      _PROVENANCE);
 }
 
 inline const PPE *GetPPE(const void *buf) {

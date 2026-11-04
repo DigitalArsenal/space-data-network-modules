@@ -24,10 +24,12 @@ const { version: sdsVersion, headers } = await generateSdsHeaders();
 
 // $FRM includes ../RFM/main.fbs. In a single translation unit the generated
 // FRM header's `#include "RFM_generated.h"` cannot resolve, so RFM is placed
-// ahead of it and the include line removed.
+// ahead of it and the include line removed. $EOP includes ../PVN/main.fbs: PVN
+// goes ahead of it the same way.
 const rfmHeader = headers.RFM;
 const frmHeader = headers.FRM.replace(/^#include "RFM_generated\.h"\n/m, "");
-const eopHeader = headers.EOP;
+const pvnHeader = headers.PVN;
+const eopHeader = headers.EOP.replace(/^#include "PVN_generated\.h"\n/m, "");
 
 // ONE state-representation implementation, not two. `foundation/orbits` owns
 // the 14 element sets and measures them; $FRM operation 7
@@ -67,6 +69,7 @@ process.env.SPACE_DATA_STANDARDS_ROOT ??= path.join(packageRoot, "node_modules/s
 const sourceCode = [
   rfmHeader,
   frmHeader,
+  pvnHeader,
   eopHeader,
   erfa.source,
   bodyModels,

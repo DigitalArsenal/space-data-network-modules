@@ -1,5 +1,6 @@
 import * as flatbuffers from 'flatbuffers';
 import { PCFGaussianPrior, PCFGaussianPriorT } from './PCFGaussianPrior.js';
+import { pcfPriorForm } from './pcfPriorForm.js';
 export class PCFFitPolicy {
     bb = null;
     bb_pos = 0;
@@ -83,8 +84,20 @@ export class PCFFitPolicy {
         const offset = this.bb.__offset(this.bb_pos, 32);
         return offset ? (obj || new PCFGaussianPrior()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
     }
+    DRAG_PRIOR_FORM() {
+        const offset = this.bb.__offset(this.bb_pos, 34);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfPriorForm.GAUSSIAN_SIGNED;
+    }
+    SRP_PRIOR_FORM() {
+        const offset = this.bb.__offset(this.bb_pos, 36);
+        return offset ? this.bb.readUint8(this.bb_pos + offset) : pcfPriorForm.GAUSSIAN_SIGNED;
+    }
+    WEATHER_HORIZON_DAYS() {
+        const offset = this.bb.__offset(this.bb_pos, 38);
+        return offset ? this.bb.readUint16(this.bb_pos + offset) : 30;
+    }
     static startPCFFitPolicy(builder) {
-        builder.startObject(15);
+        builder.startObject(18);
     }
     static addDefaultSpanHours(builder, DEFAULT_SPAN_HOURS) {
         builder.addFieldFloat64(0, DEFAULT_SPAN_HOURS, 48.0);
@@ -141,12 +154,21 @@ export class PCFFitPolicy {
     static addSrpPrior(builder, SRP_PRIOROffset) {
         builder.addFieldOffset(14, SRP_PRIOROffset, 0);
     }
+    static addDragPriorForm(builder, DRAG_PRIOR_FORM) {
+        builder.addFieldInt8(15, DRAG_PRIOR_FORM, pcfPriorForm.GAUSSIAN_SIGNED);
+    }
+    static addSrpPriorForm(builder, SRP_PRIOR_FORM) {
+        builder.addFieldInt8(16, SRP_PRIOR_FORM, pcfPriorForm.GAUSSIAN_SIGNED);
+    }
+    static addWeatherHorizonDays(builder, WEATHER_HORIZON_DAYS) {
+        builder.addFieldInt16(17, WEATHER_HORIZON_DAYS, 30);
+    }
     static endPCFFitPolicy(builder) {
         const offset = builder.endObject();
         return offset;
     }
     unpack() {
-        return new PCFFitPolicyT(this.DEFAULT_SPAN_HOURS(), this.MINIMUM_SPAN_HOURS(), this.MAXIMUM_SPAN_HOURS(), this.bb.createScalarList(this.CANDIDATE_SPANS_HOURS.bind(this), this.candidateSpansHoursLength()), this.TAIL_HOURS(), this.EXTENSION_MARGIN(), this.HOLDOUT_HOURS(), this.HAS_HOLDOUT_HOURS(), this.ECCENTRICITY_THRESHOLD(), this.ECCENTRIC_DEFAULT_SPAN_HOURS(), this.ECCENTRIC_EXTENSION_MARGIN(), this.ECCENTRIC_MAXIMUM_PERIOD_HOURS(), this.IMPLAUSIBLE_RMS_KM(), this.DRAG_PRIOR() !== null ? this.DRAG_PRIOR().unpack() : null, this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null);
+        return new PCFFitPolicyT(this.DEFAULT_SPAN_HOURS(), this.MINIMUM_SPAN_HOURS(), this.MAXIMUM_SPAN_HOURS(), this.bb.createScalarList(this.CANDIDATE_SPANS_HOURS.bind(this), this.candidateSpansHoursLength()), this.TAIL_HOURS(), this.EXTENSION_MARGIN(), this.HOLDOUT_HOURS(), this.HAS_HOLDOUT_HOURS(), this.ECCENTRICITY_THRESHOLD(), this.ECCENTRIC_DEFAULT_SPAN_HOURS(), this.ECCENTRIC_EXTENSION_MARGIN(), this.ECCENTRIC_MAXIMUM_PERIOD_HOURS(), this.IMPLAUSIBLE_RMS_KM(), this.DRAG_PRIOR() !== null ? this.DRAG_PRIOR().unpack() : null, this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null, this.DRAG_PRIOR_FORM(), this.SRP_PRIOR_FORM(), this.WEATHER_HORIZON_DAYS());
     }
     unpackTo(_o) {
         _o.DEFAULT_SPAN_HOURS = this.DEFAULT_SPAN_HOURS();
@@ -164,6 +186,9 @@ export class PCFFitPolicy {
         _o.IMPLAUSIBLE_RMS_KM = this.IMPLAUSIBLE_RMS_KM();
         _o.DRAG_PRIOR = this.DRAG_PRIOR() !== null ? this.DRAG_PRIOR().unpack() : null;
         _o.SRP_PRIOR = this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null;
+        _o.DRAG_PRIOR_FORM = this.DRAG_PRIOR_FORM();
+        _o.SRP_PRIOR_FORM = this.SRP_PRIOR_FORM();
+        _o.WEATHER_HORIZON_DAYS = this.WEATHER_HORIZON_DAYS();
     }
 }
 export class PCFFitPolicyT {
@@ -182,7 +207,10 @@ export class PCFFitPolicyT {
     IMPLAUSIBLE_RMS_KM;
     DRAG_PRIOR;
     SRP_PRIOR;
-    constructor(DEFAULT_SPAN_HOURS = 48.0, MINIMUM_SPAN_HOURS = 24.0, MAXIMUM_SPAN_HOURS = 120.0, CANDIDATE_SPANS_HOURS = [], TAIL_HOURS = 24.0, EXTENSION_MARGIN = 0.9, HOLDOUT_HOURS = 0.0, HAS_HOLDOUT_HOURS = false, ECCENTRICITY_THRESHOLD = 0.5, ECCENTRIC_DEFAULT_SPAN_HOURS = 24.0, ECCENTRIC_EXTENSION_MARGIN = 0.7, ECCENTRIC_MAXIMUM_PERIOD_HOURS = 36.0, IMPLAUSIBLE_RMS_KM = 100.0, DRAG_PRIOR = null, SRP_PRIOR = null){
+    DRAG_PRIOR_FORM;
+    SRP_PRIOR_FORM;
+    WEATHER_HORIZON_DAYS;
+    constructor(DEFAULT_SPAN_HOURS = 48.0, MINIMUM_SPAN_HOURS = 24.0, MAXIMUM_SPAN_HOURS = 120.0, CANDIDATE_SPANS_HOURS = [], TAIL_HOURS = 24.0, EXTENSION_MARGIN = 0.9, HOLDOUT_HOURS = 0.0, HAS_HOLDOUT_HOURS = false, ECCENTRICITY_THRESHOLD = 0.5, ECCENTRIC_DEFAULT_SPAN_HOURS = 24.0, ECCENTRIC_EXTENSION_MARGIN = 0.7, ECCENTRIC_MAXIMUM_PERIOD_HOURS = 36.0, IMPLAUSIBLE_RMS_KM = 100.0, DRAG_PRIOR = null, SRP_PRIOR = null, DRAG_PRIOR_FORM = pcfPriorForm.GAUSSIAN_SIGNED, SRP_PRIOR_FORM = pcfPriorForm.GAUSSIAN_SIGNED, WEATHER_HORIZON_DAYS = 30){
         this.DEFAULT_SPAN_HOURS = DEFAULT_SPAN_HOURS;
         this.MINIMUM_SPAN_HOURS = MINIMUM_SPAN_HOURS;
         this.MAXIMUM_SPAN_HOURS = MAXIMUM_SPAN_HOURS;
@@ -198,6 +226,9 @@ export class PCFFitPolicyT {
         this.IMPLAUSIBLE_RMS_KM = IMPLAUSIBLE_RMS_KM;
         this.DRAG_PRIOR = DRAG_PRIOR;
         this.SRP_PRIOR = SRP_PRIOR;
+        this.DRAG_PRIOR_FORM = DRAG_PRIOR_FORM;
+        this.SRP_PRIOR_FORM = SRP_PRIOR_FORM;
+        this.WEATHER_HORIZON_DAYS = WEATHER_HORIZON_DAYS;
     }
     pack(builder) {
         const CANDIDATE_SPANS_HOURS = PCFFitPolicy.createCandidateSpansHoursVector(builder, this.CANDIDATE_SPANS_HOURS);
@@ -219,6 +250,9 @@ export class PCFFitPolicyT {
         PCFFitPolicy.addImplausibleRmsKm(builder, this.IMPLAUSIBLE_RMS_KM);
         PCFFitPolicy.addDragPrior(builder, DRAG_PRIOR);
         PCFFitPolicy.addSrpPrior(builder, SRP_PRIOR);
+        PCFFitPolicy.addDragPriorForm(builder, this.DRAG_PRIOR_FORM);
+        PCFFitPolicy.addSrpPriorForm(builder, this.SRP_PRIOR_FORM);
+        PCFFitPolicy.addWeatherHorizonDays(builder, this.WEATHER_HORIZON_DAYS);
         return PCFFitPolicy.endPCFFitPolicy(builder);
     }
 }

@@ -12,12 +12,31 @@ const require = createRequire(import.meta.url);
 const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.json"));
 const read = (name) => fs.readFile(path.join(root, name), "utf8");
 const manifest = JSON.parse(await read("plugin-manifest.json"));
+// $ACW and every family it includes, each generated on its own and concatenated in dependency order (every family
+// after the families it includes), their cross-family includes removed: one header for one translation unit.
 const flatc = await createFlatc();
+const schemaOf = (family) => fs.readFile(path.join(sdsRoot, "schema", family, "main.fbs"), "utf8");
+const families = [];
+const visit = async (family) => {
+  if (families.includes(family)) return;
+  const schema = await schemaOf(family);
+  for (const [, included] of schema.matchAll(/^\s*include\s+"\.\.\/([A-Z0-9_]+)\/main\.fbs";/gm)) await visit(included);
+  if (!families.includes(family)) families.push(family);
+};
+await visit("ACW");
+flatc.FS.mkdir("/schemas");
+for (const family of families) {
+  flatc.FS.mkdir(`/schemas/${family}`);
+  flatc.FS.writeFile(`/schemas/${family}/main.fbs`, await schemaOf(family));
+}
 flatc.FS.mkdir("/access");
-flatc.FS.writeFile("/access/ACW.fbs", await fs.readFile(path.join(sdsRoot, "schema/ACW/main.fbs"), "utf8"));
-const status = flatc.callMain(["--cpp", "--gen-object-api", "--preserve-case", "--no-warnings", "-o", "/access", "/access/ACW.fbs"]);
-if (status !== 0) throw new Error(`ACW header generation failed: ${status}`);
-const header = flatc.FS.readFile("/access/ACW_generated.h", { encoding: "utf8" });
+const header = families.map((family) => {
+  const status = flatc.callMain(["--cpp", "--gen-object-api", "--preserve-case", "--no-warnings", "-I", "/schemas", "-o", "/access", `/schemas/${family}/main.fbs`]);
+  if (status !== 0) throw new Error(`${family} header generation failed: ${status}`);
+  return flatc.FS.readFile("/access/main_generated.h", { encoding: "utf8" })
+    .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_${family}_MAIN_H_`)
+    .replace(/^#include "main_generated\.h"\n/gm, "");
+}).join("\n");
 await fs.mkdir(path.join(root, "src/generated"), { recursive: true });
 await fs.writeFile(path.join(root, "src/generated/ACW_generated.h"), header);
 

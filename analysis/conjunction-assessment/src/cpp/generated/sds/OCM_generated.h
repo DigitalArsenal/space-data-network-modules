@@ -15,7 +15,10 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 
 #include "ATM_generated.h"
 #include "CVR_generated.h"
+#include "MET_generated.h"
+#include "PCF_generated.h"
 #include "PPE_generated.h"
+#include "PRW_generated.h"
 #include "PVN_generated.h"
 #include "RFM_generated.h"
 
@@ -46,6 +49,42 @@ struct ManeuverT;
 struct OCMDynamicParameter;
 struct OCMDynamicParameterBuilder;
 struct OCMDynamicParameterT;
+
+struct OCMHeldOutDay;
+struct OCMHeldOutDayBuilder;
+struct OCMHeldOutDayT;
+
+struct OCMFitStatistics;
+struct OCMFitStatisticsBuilder;
+struct OCMFitStatisticsT;
+
+struct OCMMeanElements;
+struct OCMMeanElementsBuilder;
+struct OCMMeanElementsT;
+
+struct OCMCovariancePropagation;
+struct OCMCovariancePropagationBuilder;
+struct OCMCovariancePropagationT;
+
+struct OCMSeedSet;
+struct OCMSeedSetBuilder;
+struct OCMSeedSetT;
+
+struct OCMIntegrator;
+struct OCMIntegratorBuilder;
+struct OCMIntegratorT;
+
+struct OCMRelativeGeometry;
+struct OCMRelativeGeometryBuilder;
+struct OCMRelativeGeometryT;
+
+struct OCMRadarInputs;
+struct OCMRadarInputsBuilder;
+struct OCMRadarInputsT;
+
+struct OCMInspectionGeometry;
+struct OCMInspectionGeometryBuilder;
+struct OCMInspectionGeometryT;
 
 struct OrbitDetermination;
 struct OrbitDeterminationBuilder;
@@ -145,6 +184,298 @@ inline const char *EnumNametrajectoryType(trajectoryType e) {
   if (::flatbuffers::IsOutRange(e, trajectoryType::CARTESIAN_PV, trajectoryType::EQUINOCTIAL_MOD)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamestrajectoryType()[index];
+}
+
+/// Whether a message is real, test or exercise data (the Real/Test/Exercise
+/// indicator of the legacy SP Vector/Covariance Message). Append new values
+/// only.
+enum class ocmMessageStatus : uint8_t {
+  /// Not stated.
+  UNSPECIFIED = 0,
+  /// Real data.
+  REAL = 1,
+  /// Test data.
+  TEST = 2,
+  /// Exercise data; the exercise is named in EXERCISE_NAME.
+  EXERCISE = 3,
+  MIN = UNSPECIFIED,
+  MAX = EXERCISE
+};
+
+inline const ocmMessageStatus (&EnumValuesocmMessageStatus())[4] {
+  static const ocmMessageStatus values[] = {
+    ocmMessageStatus::UNSPECIFIED,
+    ocmMessageStatus::REAL,
+    ocmMessageStatus::TEST,
+    ocmMessageStatus::EXERCISE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesocmMessageStatus() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "REAL",
+    "TEST",
+    "EXERCISE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameocmMessageStatus(ocmMessageStatus e) {
+  if (::flatbuffers::IsOutRange(e, ocmMessageStatus::UNSPECIFIED, ocmMessageStatus::EXERCISE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesocmMessageStatus()[index];
+}
+
+/// Basis of a trajectory (CCSDS 502.0-B-3 TRAJ_BASIS, a closed set). Append new
+/// values only.
+enum class ocmTrajectoryBasis : uint8_t {
+  /// Not stated.
+  UNSPECIFIED = 0,
+  /// Computed forward from a determination or a plan.
+  PREDICTED = 1,
+  /// Determined from observations or from element sets in force at each time.
+  DETERMINED = 2,
+  /// Reported by the object.
+  TELEMETRY = 3,
+  /// Produced by a simulation.
+  SIMULATED = 4,
+  /// None of the above.
+  OTHER = 5,
+  MIN = UNSPECIFIED,
+  MAX = OTHER
+};
+
+inline const ocmTrajectoryBasis (&EnumValuesocmTrajectoryBasis())[6] {
+  static const ocmTrajectoryBasis values[] = {
+    ocmTrajectoryBasis::UNSPECIFIED,
+    ocmTrajectoryBasis::PREDICTED,
+    ocmTrajectoryBasis::DETERMINED,
+    ocmTrajectoryBasis::TELEMETRY,
+    ocmTrajectoryBasis::SIMULATED,
+    ocmTrajectoryBasis::OTHER
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesocmTrajectoryBasis() {
+  static const char * const names[7] = {
+    "UNSPECIFIED",
+    "PREDICTED",
+    "DETERMINED",
+    "TELEMETRY",
+    "SIMULATED",
+    "OTHER",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameocmTrajectoryBasis(ocmTrajectoryBasis e) {
+  if (::flatbuffers::IsOutRange(e, ocmTrajectoryBasis::UNSPECIFIED, ocmTrajectoryBasis::OTHER)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesocmTrajectoryBasis()[index];
+}
+
+/// Integrator mode of the legacy SP system that made a solution (INTEGRATOR
+/// MODE of the SP Vector/Covariance Message). Append new values only.
+enum class ocmIntegratorMode : uint8_t {
+  /// Not stated: the solution did not come from an SP integrator.
+  UNSPECIFIED = 0,
+  /// SPADOC.
+  SPADOC = 1,
+  /// ASW.
+  ASW = 2,
+  MIN = UNSPECIFIED,
+  MAX = ASW
+};
+
+inline const ocmIntegratorMode (&EnumValuesocmIntegratorMode())[3] {
+  static const ocmIntegratorMode values[] = {
+    ocmIntegratorMode::UNSPECIFIED,
+    ocmIntegratorMode::SPADOC,
+    ocmIntegratorMode::ASW
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesocmIntegratorMode() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "SPADOC",
+    "ASW",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameocmIntegratorMode(ocmIntegratorMode e) {
+  if (::flatbuffers::IsOutRange(e, ocmIntegratorMode::UNSPECIFIED, ocmIntegratorMode::ASW)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesocmIntegratorMode()[index];
+}
+
+/// Coordinate system a numerical integrator integrates in (COORD SYS of the SP
+/// Vector/Covariance Message). Append new values only.
+enum class ocmIntegrationFrame : uint8_t {
+  /// Not stated.
+  UNSPECIFIED = 0,
+  /// Mean equator and mean equinox of J2000.0.
+  J2000 = 1,
+  /// True equator and mean equinox of the epoch of the solution.
+  EPOCH = 2,
+  MIN = UNSPECIFIED,
+  MAX = EPOCH
+};
+
+inline const ocmIntegrationFrame (&EnumValuesocmIntegrationFrame())[3] {
+  static const ocmIntegrationFrame values[] = {
+    ocmIntegrationFrame::UNSPECIFIED,
+    ocmIntegrationFrame::J2000,
+    ocmIntegrationFrame::EPOCH
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesocmIntegrationFrame() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "J2000",
+    "EPOCH",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameocmIntegrationFrame(ocmIntegrationFrame e) {
+  if (::flatbuffers::IsOutRange(e, ocmIntegrationFrame::UNSPECIFIED, ocmIntegrationFrame::EPOCH)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesocmIntegrationFrame()[index];
+}
+
+/// How the partial derivatives of the dynamics are computed (PARTIALS of the SP
+/// Vector/Covariance Message). Append new values only.
+enum class ocmPartialsMethod : uint8_t {
+  /// Not stated.
+  UNSPECIFIED = 0,
+  /// Analytic partials.
+  ANALYTIC = 1,
+  /// Full numerical partials.
+  FULL_NUMERICAL = 2,
+  /// Fast numerical partials.
+  FAST_NUMERICAL = 3,
+  MIN = UNSPECIFIED,
+  MAX = FAST_NUMERICAL
+};
+
+inline const ocmPartialsMethod (&EnumValuesocmPartialsMethod())[4] {
+  static const ocmPartialsMethod values[] = {
+    ocmPartialsMethod::UNSPECIFIED,
+    ocmPartialsMethod::ANALYTIC,
+    ocmPartialsMethod::FULL_NUMERICAL,
+    ocmPartialsMethod::FAST_NUMERICAL
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesocmPartialsMethod() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "ANALYTIC",
+    "FULL_NUMERICAL",
+    "FAST_NUMERICAL",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameocmPartialsMethod(ocmPartialsMethod e) {
+  if (::flatbuffers::IsOutRange(e, ocmPartialsMethod::UNSPECIFIED, ocmPartialsMethod::FAST_NUMERICAL)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesocmPartialsMethod()[index];
+}
+
+/// Integrator step mode (STEP MODE of the SP Vector/Covariance Message). Append
+/// new values only.
+enum class ocmStepMode : uint8_t {
+  /// Not stated.
+  UNSPECIFIED = 0,
+  /// The integrator chooses.
+  AUTO = 1,
+  /// Steps in time.
+  TIME = 2,
+  /// Steps in the integrator's variable S, which the format does not define
+  /// further.
+  S = 3,
+  MIN = UNSPECIFIED,
+  MAX = S
+};
+
+inline const ocmStepMode (&EnumValuesocmStepMode())[4] {
+  static const ocmStepMode values[] = {
+    ocmStepMode::UNSPECIFIED,
+    ocmStepMode::AUTO,
+    ocmStepMode::TIME,
+    ocmStepMode::S
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesocmStepMode() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "AUTO",
+    "TIME",
+    "S",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameocmStepMode(ocmStepMode e) {
+  if (::flatbuffers::IsOutRange(e, ocmStepMode::UNSPECIFIED, ocmStepMode::S)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesocmStepMode()[index];
+}
+
+/// How the initial integration step is selected (STEP SIZE SELECTION of the SP
+/// Vector/Covariance Message). Append new values only.
+enum class ocmStepSelection : uint8_t {
+  /// Not stated.
+  UNSPECIFIED = 0,
+  /// The integrator selects it.
+  AUTO = 1,
+  /// INITIAL_STEP_SECONDS states it.
+  MANUAL = 2,
+  MIN = UNSPECIFIED,
+  MAX = MANUAL
+};
+
+inline const ocmStepSelection (&EnumValuesocmStepSelection())[3] {
+  static const ocmStepSelection values[] = {
+    ocmStepSelection::UNSPECIFIED,
+    ocmStepSelection::AUTO,
+    ocmStepSelection::MANUAL
+  };
+  return values;
+}
+
+inline const char * const *EnumNamesocmStepSelection() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "AUTO",
+    "MANUAL",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNameocmStepSelection(ocmStepSelection e) {
+  if (::flatbuffers::IsOutRange(e, ocmStepSelection::UNSPECIFIED, ocmStepSelection::MANUAL)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamesocmStepSelection()[index];
 }
 
 /// Estimator class that produced an orbit-determination solution
@@ -248,6 +579,8 @@ struct HeaderT : public ::flatbuffers::NativeTable {
   std::string CREATION_DATE{};
   std::string ORIGINATOR{};
   std::string MESSAGE_ID{};
+  ocmMessageStatus MESSAGE_STATUS = ocmMessageStatus::UNSPECIFIED;
+  std::string EXERCISE_NAME{};
 };
 
 struct Header FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -260,7 +593,9 @@ struct Header FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CLASSIFICATION = 8,
     VT_CREATION_DATE = 10,
     VT_ORIGINATOR = 12,
-    VT_MESSAGE_ID = 14
+    VT_MESSAGE_ID = 14,
+    VT_MESSAGE_STATUS = 16,
+    VT_EXERCISE_NAME = 18
   };
   /// Format version in the form of 'x.y', where 'y' is incremented for minor changes, and 'x' for major changes.
   const ::flatbuffers::String *CCSDS_OCM_VERS() const {
@@ -286,6 +621,14 @@ struct Header FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *MESSAGE_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_MESSAGE_ID);
   }
+  /// Whether the message is real, test or exercise data.
+  ocmMessageStatus MESSAGE_STATUS() const {
+    return static_cast<ocmMessageStatus>(GetField<uint8_t>(VT_MESSAGE_STATUS, 0));
+  }
+  /// Name of the exercise when MESSAGE_STATUS is EXERCISE; empty otherwise.
+  const ::flatbuffers::String *EXERCISE_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EXERCISE_NAME);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -302,6 +645,9 @@ struct Header FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(ORIGINATOR()) &&
            VerifyOffset(verifier, VT_MESSAGE_ID) &&
            verifier.VerifyString(MESSAGE_ID()) &&
+           VerifyField<uint8_t>(verifier, VT_MESSAGE_STATUS, 1) &&
+           VerifyOffset(verifier, VT_EXERCISE_NAME) &&
+           verifier.VerifyString(EXERCISE_NAME()) &&
            verifier.EndTable();
   }
   HeaderT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -331,6 +677,12 @@ struct HeaderBuilder {
   void add_MESSAGE_ID(::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID) {
     fbb_.AddOffset(Header::VT_MESSAGE_ID, MESSAGE_ID);
   }
+  void add_MESSAGE_STATUS(ocmMessageStatus MESSAGE_STATUS) {
+    fbb_.AddElement<uint8_t>(Header::VT_MESSAGE_STATUS, static_cast<uint8_t>(MESSAGE_STATUS), 0);
+  }
+  void add_EXERCISE_NAME(::flatbuffers::Offset<::flatbuffers::String> EXERCISE_NAME) {
+    fbb_.AddOffset(Header::VT_EXERCISE_NAME, EXERCISE_NAME);
+  }
   explicit HeaderBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -349,14 +701,18 @@ inline ::flatbuffers::Offset<Header> CreateHeader(
     ::flatbuffers::Offset<::flatbuffers::String> CLASSIFICATION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> CREATION_DATE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ORIGINATOR = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID = 0,
+    ocmMessageStatus MESSAGE_STATUS = ocmMessageStatus::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> EXERCISE_NAME = 0) {
   HeaderBuilder builder_(_fbb);
+  builder_.add_EXERCISE_NAME(EXERCISE_NAME);
   builder_.add_MESSAGE_ID(MESSAGE_ID);
   builder_.add_ORIGINATOR(ORIGINATOR);
   builder_.add_CREATION_DATE(CREATION_DATE);
   builder_.add_CLASSIFICATION(CLASSIFICATION);
   builder_.add_COMMENT(COMMENT);
   builder_.add_CCSDS_OCM_VERS(CCSDS_OCM_VERS);
+  builder_.add_MESSAGE_STATUS(MESSAGE_STATUS);
   return builder_.Finish();
 }
 
@@ -372,13 +728,16 @@ inline ::flatbuffers::Offset<Header> CreateHeaderDirect(
     const char *CLASSIFICATION = nullptr,
     const char *CREATION_DATE = nullptr,
     const char *ORIGINATOR = nullptr,
-    const char *MESSAGE_ID = nullptr) {
+    const char *MESSAGE_ID = nullptr,
+    ocmMessageStatus MESSAGE_STATUS = ocmMessageStatus::UNSPECIFIED,
+    const char *EXERCISE_NAME = nullptr) {
   auto CCSDS_OCM_VERS__ = CCSDS_OCM_VERS ? _fbb.CreateString(CCSDS_OCM_VERS) : 0;
   auto COMMENT__ = COMMENT ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*COMMENT) : 0;
   auto CLASSIFICATION__ = CLASSIFICATION ? _fbb.CreateString(CLASSIFICATION) : 0;
   auto CREATION_DATE__ = CREATION_DATE ? _fbb.CreateString(CREATION_DATE) : 0;
   auto ORIGINATOR__ = ORIGINATOR ? _fbb.CreateString(ORIGINATOR) : 0;
   auto MESSAGE_ID__ = MESSAGE_ID ? _fbb.CreateString(MESSAGE_ID) : 0;
+  auto EXERCISE_NAME__ = EXERCISE_NAME ? _fbb.CreateString(EXERCISE_NAME) : 0;
   return CreateHeader(
       _fbb,
       CCSDS_OCM_VERS__,
@@ -386,7 +745,9 @@ inline ::flatbuffers::Offset<Header> CreateHeaderDirect(
       CLASSIFICATION__,
       CREATION_DATE__,
       ORIGINATOR__,
-      MESSAGE_ID__);
+      MESSAGE_ID__,
+      MESSAGE_STATUS,
+      EXERCISE_NAME__);
 }
 
 ::flatbuffers::Offset<Header> CreateHeader(::flatbuffers::FlatBufferBuilder &_fbb, const HeaderT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -441,6 +802,7 @@ struct MetadataT : public ::flatbuffers::NativeTable {
   std::string EOP_SOURCE{};
   std::string INTERP_METHOD_EOP{};
   std::string CELESTIAL_SOURCE{};
+  uint32_t NORAD_CAT_ID = 0;
 };
 
 struct Metadata FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -495,7 +857,8 @@ struct Metadata FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_UT1MUTC_AT_TZERO = 92,
     VT_EOP_SOURCE = 94,
     VT_INTERP_METHOD_EOP = 96,
-    VT_CELESTIAL_SOURCE = 98
+    VT_CELESTIAL_SOURCE = 98,
+    VT_NORAD_CAT_ID = 100
   };
   /// Comments in the Metadata section.
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *COMMENT() const {
@@ -689,6 +1052,13 @@ struct Metadata FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *CELESTIAL_SOURCE() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CELESTIAL_SOURCE);
   }
+  /// NORAD_CAT_ID: the object's NORAD catalog number, the typed join key to $CAT and $OMM
+  /// NORAD_CAT_ID. SDS addition: CCSDS 502.0-B-3 names the catalog designator only as the
+  /// strings CATALOG_NAME and OBJECT_DESIGNATOR, which stay as CCSDS defines them. 0 when
+  /// the object has no NORAD number.
+  uint32_t NORAD_CAT_ID() const {
+    return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -786,6 +1156,7 @@ struct Metadata FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(INTERP_METHOD_EOP()) &&
            VerifyOffset(verifier, VT_CELESTIAL_SOURCE) &&
            verifier.VerifyString(CELESTIAL_SOURCE()) &&
+           VerifyField<uint32_t>(verifier, VT_NORAD_CAT_ID, 4) &&
            verifier.EndTable();
   }
   MetadataT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -941,6 +1312,9 @@ struct MetadataBuilder {
   void add_CELESTIAL_SOURCE(::flatbuffers::Offset<::flatbuffers::String> CELESTIAL_SOURCE) {
     fbb_.AddOffset(Metadata::VT_CELESTIAL_SOURCE, CELESTIAL_SOURCE);
   }
+  void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
+    fbb_.AddElement<uint32_t>(Metadata::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
+  }
   explicit MetadataBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1001,7 +1375,8 @@ inline ::flatbuffers::Offset<Metadata> CreateMetadata(
     double UT1MUTC_AT_TZERO = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> EOP_SOURCE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> INTERP_METHOD_EOP = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> CELESTIAL_SOURCE = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> CELESTIAL_SOURCE = 0,
+    uint32_t NORAD_CAT_ID = 0) {
   MetadataBuilder builder_(_fbb);
   builder_.add_UT1MUTC_AT_TZERO(UT1MUTC_AT_TZERO);
   builder_.add_NEXT_LEAP_TAIMUTC(NEXT_LEAP_TAIMUTC);
@@ -1009,6 +1384,7 @@ inline ::flatbuffers::Offset<Metadata> CreateMetadata(
   builder_.add_TIME_SPAN(TIME_SPAN);
   builder_.add_SCLK_SEC_PER_SI_SEC(SCLK_SEC_PER_SI_SEC);
   builder_.add_SCLK_OFFSET_AT_EPOCH(SCLK_OFFSET_AT_EPOCH);
+  builder_.add_NORAD_CAT_ID(NORAD_CAT_ID);
   builder_.add_CELESTIAL_SOURCE(CELESTIAL_SOURCE);
   builder_.add_INTERP_METHOD_EOP(INTERP_METHOD_EOP);
   builder_.add_EOP_SOURCE(EOP_SOURCE);
@@ -1108,7 +1484,8 @@ inline ::flatbuffers::Offset<Metadata> CreateMetadataDirect(
     double UT1MUTC_AT_TZERO = 0.0,
     const char *EOP_SOURCE = nullptr,
     const char *INTERP_METHOD_EOP = nullptr,
-    const char *CELESTIAL_SOURCE = nullptr) {
+    const char *CELESTIAL_SOURCE = nullptr,
+    uint32_t NORAD_CAT_ID = 0) {
   auto COMMENT__ = COMMENT ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*COMMENT) : 0;
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
   auto INTERNATIONAL_DESIGNATOR__ = INTERNATIONAL_DESIGNATOR ? _fbb.CreateString(INTERNATIONAL_DESIGNATOR) : 0;
@@ -1200,7 +1577,8 @@ inline ::flatbuffers::Offset<Metadata> CreateMetadataDirect(
       UT1MUTC_AT_TZERO,
       EOP_SOURCE__,
       INTERP_METHOD_EOP__,
-      CELESTIAL_SOURCE__);
+      CELESTIAL_SOURCE__,
+      NORAD_CAT_ID);
 }
 
 ::flatbuffers::Offset<Metadata> CreateMetadata(::flatbuffers::FlatBufferBuilder &_fbb, const MetadataT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2258,6 +2636,15 @@ struct PerturbationsT : public ::flatbuffers::NativeTable {
   double FIXED_S10P7_MEAN = std::numeric_limits<double>::quiet_NaN();
   double FIXED_Y10P7 = std::numeric_limits<double>::quiet_NaN();
   double FIXED_Y10P7_MEAN = std::numeric_limits<double>::quiet_NaN();
+  uint16_t MAXIMUM_TESSERAL_DEGREE = 0;
+  uint16_t MAXIMUM_ZONAL_DEGREE = 0;
+  pcfWeatherSource WEATHER_SOURCE = pcfWeatherSource::UNSPECIFIED;
+  pcfDensityCorrection DENSITY_CORRECTION = pcfDensityCorrection::NONE;
+  std::string DENSITY_CORRECTION_CID{};
+  std::vector<std::unique_ptr<SPWT>> SPACE_WEATHER{};
+  std::vector<int64_t> DENSITY_CORRECTION_NODE_TIMES_MS{};
+  std::vector<double> DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS{};
+  uint16_t REDUCTION_THEORY_TERMS = 0;
   PerturbationsT() = default;
   PerturbationsT(const PerturbationsT &o);
   PerturbationsT(PerturbationsT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2306,7 +2693,16 @@ struct Perturbations FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_FIXED_S10P7 = 72,
     VT_FIXED_S10P7_MEAN = 74,
     VT_FIXED_Y10P7 = 76,
-    VT_FIXED_Y10P7_MEAN = 78
+    VT_FIXED_Y10P7_MEAN = 78,
+    VT_MAXIMUM_TESSERAL_DEGREE = 80,
+    VT_MAXIMUM_ZONAL_DEGREE = 82,
+    VT_WEATHER_SOURCE = 84,
+    VT_DENSITY_CORRECTION = 86,
+    VT_DENSITY_CORRECTION_CID = 88,
+    VT_SPACE_WEATHER = 90,
+    VT_DENSITY_CORRECTION_NODE_TIMES_MS = 92,
+    VT_DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS = 94,
+    VT_REDUCTION_THEORY_TERMS = 96
   };
   /// Comments in the Perturbations section.
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *COMMENT() const {
@@ -2462,6 +2858,73 @@ struct Perturbations FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double FIXED_Y10P7_MEAN() const {
     return GetField<double>(VT_FIXED_Y10P7_MEAN, std::numeric_limits<double>::quiet_NaN());
   }
+  /// Highest degree of the tesseral and sectorial terms (order 1 and above) of
+  /// the gravity field the record was computed with (SDS addition; the $PCF
+  /// FORCES name). For a mean-element set (MEAN_ELEMENTS) the cap beyond its
+  /// theory: 0 is the theory's own terms. For a numerical solution the nn of a
+  /// legacy VCM's "mmZ,nnT". 0 is otherwise not stated. A record that writes
+  /// either cap leaves GRAVITY_DEGREE and GRAVITY_ORDER unwritten: a degree and
+  /// order pair cannot state a tesseral cap below a zonal one.
+  uint16_t MAXIMUM_TESSERAL_DEGREE() const {
+    return GetField<uint16_t>(VT_MAXIMUM_TESSERAL_DEGREE, 0);
+  }
+  /// Highest degree of the zonal terms (order 0) of the gravity field the
+  /// record was computed with (SDS addition). For a mean-element set the tail
+  /// J6..Jz beyond its theory: 0 is the theory's own zonals, below 6 is none.
+  /// For a numerical solution the mm of a legacy VCM's "mmZ,nnT". 0 is
+  /// otherwise not stated.
+  uint16_t MAXIMUM_ZONAL_DEGREE() const {
+    return GetField<uint16_t>(VT_MAXIMUM_ZONAL_DEGREE, 0);
+  }
+  /// Where the space weather behind the drag density comes from. RECORDS: the
+  /// daily rows in SPACE_WEATHER; THEORY_FLUX_MODEL: the theory's own generic
+  /// flux model; NONE: no drag weather (SGP4's BSTAR). UNSPECIFIED is refused
+  /// in an element-set record.
+  pcfWeatherSource WEATHER_SOURCE() const {
+    return static_cast<pcfWeatherSource>(GetField<uint8_t>(VT_WEATHER_SOURCE, 0));
+  }
+  /// Correction applied to the atmosphere model's density.
+  pcfDensityCorrection DENSITY_CORRECTION() const {
+    return static_cast<pcfDensityCorrection>(GetField<uint8_t>(VT_DENSITY_CORRECTION, 0));
+  }
+  /// CID of the $DCL whose nodes DENSITY_CORRECTION_NODE_TIMES_MS and
+  /// DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS copy; required when
+  /// DENSITY_CORRECTION is not NONE. Provenance: not compared at flight.
+  const ::flatbuffers::String *DENSITY_CORRECTION_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DENSITY_CORRECTION_CID);
+  }
+  /// The daily space weather the drag density reads (SDS addition; CCSDS
+  /// 502.0-B-3 names only the source, epoch and interpolation as text and
+  /// fixed values). Present iff WEATHER_SOURCE is RECORDS: one $SPW row per
+  /// UTC day, DATE ascending, no gap, from the day before the first day the
+  /// record is flown or was fitted through its last day. The record is flown
+  /// to the end of the last row's day and no further. Each row carries DATE,
+  /// F107_OBS, F107_OBS_CENTER81, AP_AVG and F107_DATA_TYPE (OBS observed;
+  /// PRD, PRM predicted); other SPW fields unwritten.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SPW>> *SPACE_WEATHER() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SPW>> *>(VT_SPACE_WEATHER);
+  }
+  /// DENSITY_CORRECTION DCA_COMMON_MODE: the $DCL LogDensityNodes layer the
+  /// set flies under, as that $DCL's CORRECTION.NODE_TIMES_MS (UTC Unix
+  /// milliseconds, strictly increasing) over the span of SPACE_WEATHER.
+  /// Empty when DENSITY_CORRECTION is NONE.
+  const ::flatbuffers::Vector<int64_t> *DENSITY_CORRECTION_NODE_TIMES_MS() const {
+    return GetPointer<const ::flatbuffers::Vector<int64_t> *>(VT_DENSITY_CORRECTION_NODE_TIMES_MS);
+  }
+  /// One finite s = ln(rho / rho_NRLMSISE00) per DENSITY_CORRECTION_NODE_TIMES_MS
+  /// entry, dimensionless, as that $DCL's
+  /// CORRECTION.NODE_LOG_DENSITY_SCALE_DIMENSIONLESS: linear between nodes,
+  /// held at the end values outside them.
+  const ::flatbuffers::Vector<double> *DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS);
+  }
+  /// Number of terms of the nutation series REDUCTION_THEORY names that the
+  /// force model sums (the series of a legacy VCM's "IAU 1980 NUTAT: ttt TERMS":
+  /// 4, 50 or 106). 0 when the series is not truncated or the count is not
+  /// stated.
+  uint16_t REDUCTION_THEORY_TERMS() const {
+    return GetField<uint16_t>(VT_REDUCTION_THEORY_TERMS, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2525,6 +2988,20 @@ struct Perturbations FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<double>(verifier, VT_FIXED_S10P7_MEAN, 8) &&
            VerifyField<double>(verifier, VT_FIXED_Y10P7, 8) &&
            VerifyField<double>(verifier, VT_FIXED_Y10P7_MEAN, 8) &&
+           VerifyField<uint16_t>(verifier, VT_MAXIMUM_TESSERAL_DEGREE, 2) &&
+           VerifyField<uint16_t>(verifier, VT_MAXIMUM_ZONAL_DEGREE, 2) &&
+           VerifyField<uint8_t>(verifier, VT_WEATHER_SOURCE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_DENSITY_CORRECTION, 1) &&
+           VerifyOffset(verifier, VT_DENSITY_CORRECTION_CID) &&
+           verifier.VerifyString(DENSITY_CORRECTION_CID()) &&
+           VerifyOffset(verifier, VT_SPACE_WEATHER) &&
+           verifier.VerifyVector(SPACE_WEATHER()) &&
+           verifier.VerifyVectorOfTables(SPACE_WEATHER()) &&
+           VerifyOffset(verifier, VT_DENSITY_CORRECTION_NODE_TIMES_MS) &&
+           verifier.VerifyVector(DENSITY_CORRECTION_NODE_TIMES_MS()) &&
+           VerifyOffset(verifier, VT_DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS) &&
+           verifier.VerifyVector(DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS()) &&
+           VerifyField<uint16_t>(verifier, VT_REDUCTION_THEORY_TERMS, 2) &&
            verifier.EndTable();
   }
   PerturbationsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2650,6 +3127,33 @@ struct PerturbationsBuilder {
   void add_FIXED_Y10P7_MEAN(double FIXED_Y10P7_MEAN) {
     fbb_.AddElement<double>(Perturbations::VT_FIXED_Y10P7_MEAN, FIXED_Y10P7_MEAN, std::numeric_limits<double>::quiet_NaN());
   }
+  void add_MAXIMUM_TESSERAL_DEGREE(uint16_t MAXIMUM_TESSERAL_DEGREE) {
+    fbb_.AddElement<uint16_t>(Perturbations::VT_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE, 0);
+  }
+  void add_MAXIMUM_ZONAL_DEGREE(uint16_t MAXIMUM_ZONAL_DEGREE) {
+    fbb_.AddElement<uint16_t>(Perturbations::VT_MAXIMUM_ZONAL_DEGREE, MAXIMUM_ZONAL_DEGREE, 0);
+  }
+  void add_WEATHER_SOURCE(pcfWeatherSource WEATHER_SOURCE) {
+    fbb_.AddElement<uint8_t>(Perturbations::VT_WEATHER_SOURCE, static_cast<uint8_t>(WEATHER_SOURCE), 0);
+  }
+  void add_DENSITY_CORRECTION(pcfDensityCorrection DENSITY_CORRECTION) {
+    fbb_.AddElement<uint8_t>(Perturbations::VT_DENSITY_CORRECTION, static_cast<uint8_t>(DENSITY_CORRECTION), 0);
+  }
+  void add_DENSITY_CORRECTION_CID(::flatbuffers::Offset<::flatbuffers::String> DENSITY_CORRECTION_CID) {
+    fbb_.AddOffset(Perturbations::VT_DENSITY_CORRECTION_CID, DENSITY_CORRECTION_CID);
+  }
+  void add_SPACE_WEATHER(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SPW>>> SPACE_WEATHER) {
+    fbb_.AddOffset(Perturbations::VT_SPACE_WEATHER, SPACE_WEATHER);
+  }
+  void add_DENSITY_CORRECTION_NODE_TIMES_MS(::flatbuffers::Offset<::flatbuffers::Vector<int64_t>> DENSITY_CORRECTION_NODE_TIMES_MS) {
+    fbb_.AddOffset(Perturbations::VT_DENSITY_CORRECTION_NODE_TIMES_MS, DENSITY_CORRECTION_NODE_TIMES_MS);
+  }
+  void add_DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS(::flatbuffers::Offset<::flatbuffers::Vector<double>> DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS) {
+    fbb_.AddOffset(Perturbations::VT_DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS, DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS);
+  }
+  void add_REDUCTION_THEORY_TERMS(uint16_t REDUCTION_THEORY_TERMS) {
+    fbb_.AddElement<uint16_t>(Perturbations::VT_REDUCTION_THEORY_TERMS, REDUCTION_THEORY_TERMS, 0);
+  }
   explicit PerturbationsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2700,7 +3204,16 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbations(
     double FIXED_S10P7 = std::numeric_limits<double>::quiet_NaN(),
     double FIXED_S10P7_MEAN = std::numeric_limits<double>::quiet_NaN(),
     double FIXED_Y10P7 = std::numeric_limits<double>::quiet_NaN(),
-    double FIXED_Y10P7_MEAN = std::numeric_limits<double>::quiet_NaN()) {
+    double FIXED_Y10P7_MEAN = std::numeric_limits<double>::quiet_NaN(),
+    uint16_t MAXIMUM_TESSERAL_DEGREE = 0,
+    uint16_t MAXIMUM_ZONAL_DEGREE = 0,
+    pcfWeatherSource WEATHER_SOURCE = pcfWeatherSource::UNSPECIFIED,
+    pcfDensityCorrection DENSITY_CORRECTION = pcfDensityCorrection::NONE,
+    ::flatbuffers::Offset<::flatbuffers::String> DENSITY_CORRECTION_CID = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SPW>>> SPACE_WEATHER = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<int64_t>> DENSITY_CORRECTION_NODE_TIMES_MS = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS = 0,
+    uint16_t REDUCTION_THEORY_TERMS = 0) {
   PerturbationsBuilder builder_(_fbb);
   builder_.add_FIXED_Y10P7_MEAN(FIXED_Y10P7_MEAN);
   builder_.add_FIXED_Y10P7(FIXED_Y10P7);
@@ -2717,6 +3230,10 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbations(
   builder_.add_FIXED_F10P7(FIXED_F10P7);
   builder_.add_FIXED_GEOMAG_KP(FIXED_GEOMAG_KP);
   builder_.add_GM(GM);
+  builder_.add_DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS(DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS);
+  builder_.add_DENSITY_CORRECTION_NODE_TIMES_MS(DENSITY_CORRECTION_NODE_TIMES_MS);
+  builder_.add_SPACE_WEATHER(SPACE_WEATHER);
+  builder_.add_DENSITY_CORRECTION_CID(DENSITY_CORRECTION_CID);
   builder_.add_SW_INTERP_METHOD(SW_INTERP_METHOD);
   builder_.add_SW_DATA_EPOCH(SW_DATA_EPOCH);
   builder_.add_SW_DATA_SOURCE(SW_DATA_SOURCE);
@@ -2740,6 +3257,11 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbations(
   builder_.add_GRAVITY_MODEL(GRAVITY_MODEL);
   builder_.add_ATMOSPHERIC_MODEL(ATMOSPHERIC_MODEL);
   builder_.add_COMMENT(COMMENT);
+  builder_.add_REDUCTION_THEORY_TERMS(REDUCTION_THEORY_TERMS);
+  builder_.add_MAXIMUM_ZONAL_DEGREE(MAXIMUM_ZONAL_DEGREE);
+  builder_.add_MAXIMUM_TESSERAL_DEGREE(MAXIMUM_TESSERAL_DEGREE);
+  builder_.add_DENSITY_CORRECTION(DENSITY_CORRECTION);
+  builder_.add_WEATHER_SOURCE(WEATHER_SOURCE);
   return builder_.Finish();
 }
 
@@ -2787,7 +3309,16 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbationsDirect(
     double FIXED_S10P7 = std::numeric_limits<double>::quiet_NaN(),
     double FIXED_S10P7_MEAN = std::numeric_limits<double>::quiet_NaN(),
     double FIXED_Y10P7 = std::numeric_limits<double>::quiet_NaN(),
-    double FIXED_Y10P7_MEAN = std::numeric_limits<double>::quiet_NaN()) {
+    double FIXED_Y10P7_MEAN = std::numeric_limits<double>::quiet_NaN(),
+    uint16_t MAXIMUM_TESSERAL_DEGREE = 0,
+    uint16_t MAXIMUM_ZONAL_DEGREE = 0,
+    pcfWeatherSource WEATHER_SOURCE = pcfWeatherSource::UNSPECIFIED,
+    pcfDensityCorrection DENSITY_CORRECTION = pcfDensityCorrection::NONE,
+    const char *DENSITY_CORRECTION_CID = nullptr,
+    const std::vector<::flatbuffers::Offset<SPW>> *SPACE_WEATHER = nullptr,
+    const std::vector<int64_t> *DENSITY_CORRECTION_NODE_TIMES_MS = nullptr,
+    const std::vector<double> *DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS = nullptr,
+    uint16_t REDUCTION_THEORY_TERMS = 0) {
   auto COMMENT__ = COMMENT ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*COMMENT) : 0;
   auto GRAVITY_MODEL__ = GRAVITY_MODEL ? _fbb.CreateString(GRAVITY_MODEL) : 0;
   auto N_BODY_PERTURBATIONS__ = N_BODY_PERTURBATIONS ? _fbb.CreateVector<::flatbuffers::Offset<::flatbuffers::String>>(*N_BODY_PERTURBATIONS) : 0;
@@ -2807,6 +3338,10 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbationsDirect(
   auto SW_DATA_SOURCE__ = SW_DATA_SOURCE ? _fbb.CreateString(SW_DATA_SOURCE) : 0;
   auto SW_DATA_EPOCH__ = SW_DATA_EPOCH ? _fbb.CreateString(SW_DATA_EPOCH) : 0;
   auto SW_INTERP_METHOD__ = SW_INTERP_METHOD ? _fbb.CreateString(SW_INTERP_METHOD) : 0;
+  auto DENSITY_CORRECTION_CID__ = DENSITY_CORRECTION_CID ? _fbb.CreateString(DENSITY_CORRECTION_CID) : 0;
+  auto SPACE_WEATHER__ = SPACE_WEATHER ? _fbb.CreateVector<::flatbuffers::Offset<SPW>>(*SPACE_WEATHER) : 0;
+  auto DENSITY_CORRECTION_NODE_TIMES_MS__ = DENSITY_CORRECTION_NODE_TIMES_MS ? _fbb.CreateVector<int64_t>(*DENSITY_CORRECTION_NODE_TIMES_MS) : 0;
+  auto DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS__ = DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS ? _fbb.CreateVector<double>(*DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS) : 0;
   return CreatePerturbations(
       _fbb,
       COMMENT__,
@@ -2846,7 +3381,16 @@ inline ::flatbuffers::Offset<Perturbations> CreatePerturbationsDirect(
       FIXED_S10P7,
       FIXED_S10P7_MEAN,
       FIXED_Y10P7,
-      FIXED_Y10P7_MEAN);
+      FIXED_Y10P7_MEAN,
+      MAXIMUM_TESSERAL_DEGREE,
+      MAXIMUM_ZONAL_DEGREE,
+      WEATHER_SOURCE,
+      DENSITY_CORRECTION,
+      DENSITY_CORRECTION_CID__,
+      SPACE_WEATHER__,
+      DENSITY_CORRECTION_NODE_TIMES_MS__,
+      DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS__,
+      REDUCTION_THEORY_TERMS);
 }
 
 ::flatbuffers::Offset<Perturbations> CreatePerturbations(::flatbuffers::FlatBufferBuilder &_fbb, const PerturbationsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2890,6 +3434,7 @@ struct ManeuverT : public ::flatbuffers::NativeTable {
   std::vector<double> DC_BODY_TRIGGER{};
   double DC_PA_START_ANGLE = std::numeric_limits<double>::quiet_NaN();
   double DC_PA_STOP_ANGLE = std::numeric_limits<double>::quiet_NaN();
+  uint32_t NORAD_CAT_ID = 0;
 };
 
 struct Maneuver FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -2933,7 +3478,8 @@ struct Maneuver FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_DC_BODY_FRAME = 70,
     VT_DC_BODY_TRIGGER = 72,
     VT_DC_PA_START_ANGLE = 74,
-    VT_DC_PA_STOP_ANGLE = 76
+    VT_DC_PA_STOP_ANGLE = 76,
+    VT_NORAD_CAT_ID = 78
   };
   /// Unique identifier for the maneuver.
   const ::flatbuffers::String *MAN_ID() const {
@@ -3086,6 +3632,12 @@ struct Maneuver FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double DC_PA_STOP_ANGLE() const {
     return GetField<double>(VT_DC_PA_STOP_ANGLE, std::numeric_limits<double>::quiet_NaN());
   }
+  /// NORAD_CAT_ID of the object that maneuvered, for a message whose
+  /// maneuvers belong to more than one object (a relative-motion message's
+  /// chaser and target). 0 when the message's own object maneuvered.
+  uint32_t NORAD_CAT_ID() const {
+    return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3158,6 +3710,7 @@ struct Maneuver FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyVector(DC_BODY_TRIGGER()) &&
            VerifyField<double>(verifier, VT_DC_PA_START_ANGLE, 8) &&
            VerifyField<double>(verifier, VT_DC_PA_STOP_ANGLE, 8) &&
+           VerifyField<uint32_t>(verifier, VT_NORAD_CAT_ID, 4) &&
            verifier.EndTable();
   }
   ManeuverT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3280,6 +3833,9 @@ struct ManeuverBuilder {
   void add_DC_PA_STOP_ANGLE(double DC_PA_STOP_ANGLE) {
     fbb_.AddElement<double>(Maneuver::VT_DC_PA_STOP_ANGLE, DC_PA_STOP_ANGLE, std::numeric_limits<double>::quiet_NaN());
   }
+  void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
+    fbb_.AddElement<uint32_t>(Maneuver::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
+  }
   explicit ManeuverBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3329,13 +3885,15 @@ inline ::flatbuffers::Offset<Maneuver> CreateManeuver(
     ::flatbuffers::Offset<::flatbuffers::String> DC_BODY_FRAME = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<double>> DC_BODY_TRIGGER = 0,
     double DC_PA_START_ANGLE = std::numeric_limits<double>::quiet_NaN(),
-    double DC_PA_STOP_ANGLE = std::numeric_limits<double>::quiet_NaN()) {
+    double DC_PA_STOP_ANGLE = std::numeric_limits<double>::quiet_NaN(),
+    uint32_t NORAD_CAT_ID = 0) {
   ManeuverBuilder builder_(_fbb);
   builder_.add_DC_PA_STOP_ANGLE(DC_PA_STOP_ANGLE);
   builder_.add_DC_PA_START_ANGLE(DC_PA_START_ANGLE);
   builder_.add_DC_TIME_PULSE_PERIOD(DC_TIME_PULSE_PERIOD);
   builder_.add_DC_TIME_PULSE_DURATION(DC_TIME_PULSE_DURATION);
   builder_.add_MAN_DURATION(MAN_DURATION);
+  builder_.add_NORAD_CAT_ID(NORAD_CAT_ID);
   builder_.add_DC_BODY_TRIGGER(DC_BODY_TRIGGER);
   builder_.add_DC_BODY_FRAME(DC_BODY_FRAME);
   builder_.add_DC_REF_DIR(DC_REF_DIR);
@@ -3414,7 +3972,8 @@ inline ::flatbuffers::Offset<Maneuver> CreateManeuverDirect(
     const char *DC_BODY_FRAME = nullptr,
     const std::vector<double> *DC_BODY_TRIGGER = nullptr,
     double DC_PA_START_ANGLE = std::numeric_limits<double>::quiet_NaN(),
-    double DC_PA_STOP_ANGLE = std::numeric_limits<double>::quiet_NaN()) {
+    double DC_PA_STOP_ANGLE = std::numeric_limits<double>::quiet_NaN(),
+    uint32_t NORAD_CAT_ID = 0) {
   auto MAN_ID__ = MAN_ID ? _fbb.CreateString(MAN_ID) : 0;
   auto MAN_BASIS__ = MAN_BASIS ? _fbb.CreateString(MAN_BASIS) : 0;
   auto MAN_DEVICE_ID__ = MAN_DEVICE_ID ? _fbb.CreateString(MAN_DEVICE_ID) : 0;
@@ -3481,7 +4040,8 @@ inline ::flatbuffers::Offset<Maneuver> CreateManeuverDirect(
       DC_BODY_FRAME__,
       DC_BODY_TRIGGER__,
       DC_PA_START_ANGLE,
-      DC_PA_STOP_ANGLE);
+      DC_PA_STOP_ANGLE,
+      NORAD_CAT_ID);
 }
 
 ::flatbuffers::Offset<Maneuver> CreateManeuver(::flatbuffers::FlatBufferBuilder &_fbb, const ManeuverT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3492,6 +4052,7 @@ struct OCMDynamicParameterT : public ::flatbuffers::NativeTable {
   double VALUE = 0.0;
   std::string UNITS{};
   bool SOLVED_FOR = false;
+  prwDynamicParameter PARAMETER = prwDynamicParameter::UNSPECIFIED;
 };
 
 /// A parameter of the dynamical model that an orbit solution carries with the state: its value at the solution
@@ -3504,11 +4065,12 @@ struct OCMDynamicParameter FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
     VT_NAME = 4,
     VT_VALUE = 6,
     VT_UNITS = 8,
-    VT_SOLVED_FOR = 10
+    VT_SOLVED_FOR = 10,
+    VT_PARAMETER = 12
   };
   /// Parameter name. A VCM's B, BDOT, AGOM and T are DRAG_AREA_OVER_MASS (Cd*A/m), DRAG_AREA_OVER_MASS_RATE,
-  /// SRP_AREA_OVER_MASS (Cr*A/m) and IN_TRACK_ACCELERATION, the names of PRW's prwDynamicParameter. Other names
-  /// are the producer's, as in USER_DEFINED_PARAMETERS.
+  /// SRP_AREA_OVER_MASS (Cr*A/m) and IN_TRACK_ACCELERATION, the names of PRW's prwDynamicParameter. NAME is the
+  /// label; PARAMETER is the typed key. A producer-specific parameter is not carried here.
   const ::flatbuffers::String *NAME() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NAME);
   }
@@ -3525,6 +4087,10 @@ struct OCMDynamicParameter FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   bool SOLVED_FOR() const {
     return GetField<uint8_t>(VT_SOLVED_FOR, 0) != 0;
   }
+  /// The parameter, typed: every reader keys on this, never on NAME.
+  prwDynamicParameter PARAMETER() const {
+    return static_cast<prwDynamicParameter>(GetField<uint8_t>(VT_PARAMETER, 0));
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3534,6 +4100,7 @@ struct OCMDynamicParameter FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
            VerifyOffset(verifier, VT_UNITS) &&
            verifier.VerifyString(UNITS()) &&
            VerifyField<uint8_t>(verifier, VT_SOLVED_FOR, 1) &&
+           VerifyField<uint8_t>(verifier, VT_PARAMETER, 1) &&
            verifier.EndTable();
   }
   OCMDynamicParameterT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3557,6 +4124,9 @@ struct OCMDynamicParameterBuilder {
   void add_SOLVED_FOR(bool SOLVED_FOR) {
     fbb_.AddElement<uint8_t>(OCMDynamicParameter::VT_SOLVED_FOR, static_cast<uint8_t>(SOLVED_FOR), 0);
   }
+  void add_PARAMETER(prwDynamicParameter PARAMETER) {
+    fbb_.AddElement<uint8_t>(OCMDynamicParameter::VT_PARAMETER, static_cast<uint8_t>(PARAMETER), 0);
+  }
   explicit OCMDynamicParameterBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3573,11 +4143,13 @@ inline ::flatbuffers::Offset<OCMDynamicParameter> CreateOCMDynamicParameter(
     ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
     double VALUE = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> UNITS = 0,
-    bool SOLVED_FOR = false) {
+    bool SOLVED_FOR = false,
+    prwDynamicParameter PARAMETER = prwDynamicParameter::UNSPECIFIED) {
   OCMDynamicParameterBuilder builder_(_fbb);
   builder_.add_VALUE(VALUE);
   builder_.add_UNITS(UNITS);
   builder_.add_NAME(NAME);
+  builder_.add_PARAMETER(PARAMETER);
   builder_.add_SOLVED_FOR(SOLVED_FOR);
   return builder_.Finish();
 }
@@ -3592,7 +4164,8 @@ inline ::flatbuffers::Offset<OCMDynamicParameter> CreateOCMDynamicParameterDirec
     const char *NAME = nullptr,
     double VALUE = 0.0,
     const char *UNITS = nullptr,
-    bool SOLVED_FOR = false) {
+    bool SOLVED_FOR = false,
+    prwDynamicParameter PARAMETER = prwDynamicParameter::UNSPECIFIED) {
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto UNITS__ = UNITS ? _fbb.CreateString(UNITS) : 0;
   return CreateOCMDynamicParameter(
@@ -3600,10 +4173,1910 @@ inline ::flatbuffers::Offset<OCMDynamicParameter> CreateOCMDynamicParameterDirec
       NAME__,
       VALUE,
       UNITS__,
-      SOLVED_FOR);
+      SOLVED_FOR,
+      PARAMETER);
 }
 
 ::flatbuffers::Offset<OCMDynamicParameter> CreateOCMDynamicParameter(::flatbuffers::FlatBufferBuilder &_fbb, const OCMDynamicParameterT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMHeldOutDayT : public ::flatbuffers::NativeTable {
+  typedef OCMHeldOutDay TableType;
+  uint16_t DAY = 0;
+  uint32_t STATES = 0;
+  double RMS_KM = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// One day of held-out prediction error after the end of a fit arc.
+struct OCMHeldOutDay FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMHeldOutDayT NativeTableType;
+  typedef OCMHeldOutDayBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_DAY = 4,
+    VT_STATES = 6,
+    VT_RMS_KM = 8
+  };
+  /// The day after the end of the fit arc, from 1.
+  uint16_t DAY() const {
+    return GetField<uint16_t>(VT_DAY, 0);
+  }
+  /// Reference states in the day.
+  uint32_t STATES() const {
+    return GetField<uint32_t>(VT_STATES, 0);
+  }
+  /// Position RMS over the day, km.
+  double RMS_KM() const {
+    return GetField<double>(VT_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint16_t>(verifier, VT_DAY, 2) &&
+           VerifyField<uint32_t>(verifier, VT_STATES, 4) &&
+           VerifyField<double>(verifier, VT_RMS_KM, 8) &&
+           verifier.EndTable();
+  }
+  OCMHeldOutDayT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMHeldOutDayT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMHeldOutDay> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMHeldOutDayT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMHeldOutDayBuilder {
+  typedef OCMHeldOutDay Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_DAY(uint16_t DAY) {
+    fbb_.AddElement<uint16_t>(OCMHeldOutDay::VT_DAY, DAY, 0);
+  }
+  void add_STATES(uint32_t STATES) {
+    fbb_.AddElement<uint32_t>(OCMHeldOutDay::VT_STATES, STATES, 0);
+  }
+  void add_RMS_KM(double RMS_KM) {
+    fbb_.AddElement<double>(OCMHeldOutDay::VT_RMS_KM, RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  explicit OCMHeldOutDayBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMHeldOutDay> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMHeldOutDay>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMHeldOutDay> CreateOCMHeldOutDay(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint16_t DAY = 0,
+    uint32_t STATES = 0,
+    double RMS_KM = std::numeric_limits<double>::quiet_NaN()) {
+  OCMHeldOutDayBuilder builder_(_fbb);
+  builder_.add_RMS_KM(RMS_KM);
+  builder_.add_STATES(STATES);
+  builder_.add_DAY(DAY);
+  return builder_.Finish();
+}
+
+struct OCMHeldOutDay::Traits {
+  using type = OCMHeldOutDay;
+  static auto constexpr Create = CreateOCMHeldOutDay;
+};
+
+::flatbuffers::Offset<OCMHeldOutDay> CreateOCMHeldOutDay(::flatbuffers::FlatBufferBuilder &_fbb, const OCMHeldOutDayT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMFitStatisticsT : public ::flatbuffers::NativeTable {
+  typedef OCMFitStatistics TableType;
+  uint32_t FIT_STATES = 0;
+  double FIT_RMS_KM = std::numeric_limits<double>::quiet_NaN();
+  double FIT_MAX_KM = std::numeric_limits<double>::quiet_NaN();
+  double FIT_RADIAL_RMS_KM = std::numeric_limits<double>::quiet_NaN();
+  double FIT_IN_TRACK_RMS_KM = std::numeric_limits<double>::quiet_NaN();
+  double FIT_CROSS_TRACK_RMS_KM = std::numeric_limits<double>::quiet_NaN();
+  uint32_t ITERATIONS = 0;
+  bool CONVERGED = false;
+  std::string HELD_OUT_STOP{};
+  uint32_t HELD_OUT_STATES = 0;
+  double HELD_OUT_RMS_KM = std::numeric_limits<double>::quiet_NaN();
+  double HELD_OUT_MAX_KM = std::numeric_limits<double>::quiet_NaN();
+  std::vector<std::unique_ptr<OCMHeldOutDayT>> HELD_OUT_DAYS{};
+  std::string PCF_CID{};
+  std::string FIT_START{};
+  std::string FIT_STOP{};
+  OCMFitStatisticsT() = default;
+  OCMFitStatisticsT(const OCMFitStatisticsT &o);
+  OCMFitStatisticsT(OCMFitStatisticsT&&) FLATBUFFERS_NOEXCEPT = default;
+  OCMFitStatisticsT &operator=(OCMFitStatisticsT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Position statistics of an element set fitted to a reference ephemeris, km. SDS addition:
+/// CCSDS 502.0-B-3 WEIGHTED_RMS and OD_RESIDUAL_RMS state no position unit.
+struct OCMFitStatistics FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMFitStatisticsT NativeTableType;
+  typedef OCMFitStatisticsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_FIT_STATES = 4,
+    VT_FIT_RMS_KM = 6,
+    VT_FIT_MAX_KM = 8,
+    VT_FIT_RADIAL_RMS_KM = 10,
+    VT_FIT_IN_TRACK_RMS_KM = 12,
+    VT_FIT_CROSS_TRACK_RMS_KM = 14,
+    VT_ITERATIONS = 16,
+    VT_CONVERGED = 18,
+    VT_HELD_OUT_STOP = 20,
+    VT_HELD_OUT_STATES = 22,
+    VT_HELD_OUT_RMS_KM = 24,
+    VT_HELD_OUT_MAX_KM = 26,
+    VT_HELD_OUT_DAYS = 28,
+    VT_PCF_CID = 30,
+    VT_FIT_START = 32,
+    VT_FIT_STOP = 34
+  };
+  /// Reference states fitted.
+  uint32_t FIT_STATES() const {
+    return GetField<uint32_t>(VT_FIT_STATES, 0);
+  }
+  /// Position RMS over the fit arc, km.
+  double FIT_RMS_KM() const {
+    return GetField<double>(VT_FIT_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Largest position error over the fit arc, km.
+  double FIT_MAX_KM() const {
+    return GetField<double>(VT_FIT_MAX_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// RMS of each position error component in the model's radial, in-track and cross-track
+  /// axes, km.
+  double FIT_RADIAL_RMS_KM() const {
+    return GetField<double>(VT_FIT_RADIAL_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  double FIT_IN_TRACK_RMS_KM() const {
+    return GetField<double>(VT_FIT_IN_TRACK_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  double FIT_CROSS_TRACK_RMS_KM() const {
+    return GetField<double>(VT_FIT_CROSS_TRACK_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Iterations the fit took.
+  uint32_t ITERATIONS() const {
+    return GetField<uint32_t>(VT_ITERATIONS, 0);
+  }
+  /// True when the fit converged.
+  bool CONVERGED() const {
+    return GetField<uint8_t>(VT_CONVERGED, 0) != 0;
+  }
+  /// End of the held-out window (ISO 8601 UTC); empty without one.
+  const ::flatbuffers::String *HELD_OUT_STOP() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_HELD_OUT_STOP);
+  }
+  /// Held-out reference states, their position RMS and largest error, km.
+  uint32_t HELD_OUT_STATES() const {
+    return GetField<uint32_t>(VT_HELD_OUT_STATES, 0);
+  }
+  double HELD_OUT_RMS_KM() const {
+    return GetField<double>(VT_HELD_OUT_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  double HELD_OUT_MAX_KM() const {
+    return GetField<double>(VT_HELD_OUT_MAX_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// The held-out error by day after the fit arc.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<OCMHeldOutDay>> *HELD_OUT_DAYS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<OCMHeldOutDay>> *>(VT_HELD_OUT_DAYS);
+  }
+  /// CID of the $PCF the fit ran under: its span rule, priors and holdout.
+  const ::flatbuffers::String *PCF_CID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PCF_CID);
+  }
+  /// First epoch of the fit arc (ISO 8601 UTC).
+  const ::flatbuffers::String *FIT_START() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_FIT_START);
+  }
+  /// Last epoch of the fit arc (ISO 8601 UTC).
+  const ::flatbuffers::String *FIT_STOP() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_FIT_STOP);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_FIT_STATES, 4) &&
+           VerifyField<double>(verifier, VT_FIT_RMS_KM, 8) &&
+           VerifyField<double>(verifier, VT_FIT_MAX_KM, 8) &&
+           VerifyField<double>(verifier, VT_FIT_RADIAL_RMS_KM, 8) &&
+           VerifyField<double>(verifier, VT_FIT_IN_TRACK_RMS_KM, 8) &&
+           VerifyField<double>(verifier, VT_FIT_CROSS_TRACK_RMS_KM, 8) &&
+           VerifyField<uint32_t>(verifier, VT_ITERATIONS, 4) &&
+           VerifyField<uint8_t>(verifier, VT_CONVERGED, 1) &&
+           VerifyOffset(verifier, VT_HELD_OUT_STOP) &&
+           verifier.VerifyString(HELD_OUT_STOP()) &&
+           VerifyField<uint32_t>(verifier, VT_HELD_OUT_STATES, 4) &&
+           VerifyField<double>(verifier, VT_HELD_OUT_RMS_KM, 8) &&
+           VerifyField<double>(verifier, VT_HELD_OUT_MAX_KM, 8) &&
+           VerifyOffset(verifier, VT_HELD_OUT_DAYS) &&
+           verifier.VerifyVector(HELD_OUT_DAYS()) &&
+           verifier.VerifyVectorOfTables(HELD_OUT_DAYS()) &&
+           VerifyOffset(verifier, VT_PCF_CID) &&
+           verifier.VerifyString(PCF_CID()) &&
+           VerifyOffset(verifier, VT_FIT_START) &&
+           verifier.VerifyString(FIT_START()) &&
+           VerifyOffset(verifier, VT_FIT_STOP) &&
+           verifier.VerifyString(FIT_STOP()) &&
+           verifier.EndTable();
+  }
+  OCMFitStatisticsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMFitStatisticsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMFitStatistics> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMFitStatisticsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMFitStatisticsBuilder {
+  typedef OCMFitStatistics Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_FIT_STATES(uint32_t FIT_STATES) {
+    fbb_.AddElement<uint32_t>(OCMFitStatistics::VT_FIT_STATES, FIT_STATES, 0);
+  }
+  void add_FIT_RMS_KM(double FIT_RMS_KM) {
+    fbb_.AddElement<double>(OCMFitStatistics::VT_FIT_RMS_KM, FIT_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_FIT_MAX_KM(double FIT_MAX_KM) {
+    fbb_.AddElement<double>(OCMFitStatistics::VT_FIT_MAX_KM, FIT_MAX_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_FIT_RADIAL_RMS_KM(double FIT_RADIAL_RMS_KM) {
+    fbb_.AddElement<double>(OCMFitStatistics::VT_FIT_RADIAL_RMS_KM, FIT_RADIAL_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_FIT_IN_TRACK_RMS_KM(double FIT_IN_TRACK_RMS_KM) {
+    fbb_.AddElement<double>(OCMFitStatistics::VT_FIT_IN_TRACK_RMS_KM, FIT_IN_TRACK_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_FIT_CROSS_TRACK_RMS_KM(double FIT_CROSS_TRACK_RMS_KM) {
+    fbb_.AddElement<double>(OCMFitStatistics::VT_FIT_CROSS_TRACK_RMS_KM, FIT_CROSS_TRACK_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ITERATIONS(uint32_t ITERATIONS) {
+    fbb_.AddElement<uint32_t>(OCMFitStatistics::VT_ITERATIONS, ITERATIONS, 0);
+  }
+  void add_CONVERGED(bool CONVERGED) {
+    fbb_.AddElement<uint8_t>(OCMFitStatistics::VT_CONVERGED, static_cast<uint8_t>(CONVERGED), 0);
+  }
+  void add_HELD_OUT_STOP(::flatbuffers::Offset<::flatbuffers::String> HELD_OUT_STOP) {
+    fbb_.AddOffset(OCMFitStatistics::VT_HELD_OUT_STOP, HELD_OUT_STOP);
+  }
+  void add_HELD_OUT_STATES(uint32_t HELD_OUT_STATES) {
+    fbb_.AddElement<uint32_t>(OCMFitStatistics::VT_HELD_OUT_STATES, HELD_OUT_STATES, 0);
+  }
+  void add_HELD_OUT_RMS_KM(double HELD_OUT_RMS_KM) {
+    fbb_.AddElement<double>(OCMFitStatistics::VT_HELD_OUT_RMS_KM, HELD_OUT_RMS_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_HELD_OUT_MAX_KM(double HELD_OUT_MAX_KM) {
+    fbb_.AddElement<double>(OCMFitStatistics::VT_HELD_OUT_MAX_KM, HELD_OUT_MAX_KM, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_HELD_OUT_DAYS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OCMHeldOutDay>>> HELD_OUT_DAYS) {
+    fbb_.AddOffset(OCMFitStatistics::VT_HELD_OUT_DAYS, HELD_OUT_DAYS);
+  }
+  void add_PCF_CID(::flatbuffers::Offset<::flatbuffers::String> PCF_CID) {
+    fbb_.AddOffset(OCMFitStatistics::VT_PCF_CID, PCF_CID);
+  }
+  void add_FIT_START(::flatbuffers::Offset<::flatbuffers::String> FIT_START) {
+    fbb_.AddOffset(OCMFitStatistics::VT_FIT_START, FIT_START);
+  }
+  void add_FIT_STOP(::flatbuffers::Offset<::flatbuffers::String> FIT_STOP) {
+    fbb_.AddOffset(OCMFitStatistics::VT_FIT_STOP, FIT_STOP);
+  }
+  explicit OCMFitStatisticsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMFitStatistics> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMFitStatistics>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMFitStatistics> CreateOCMFitStatistics(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t FIT_STATES = 0,
+    double FIT_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_MAX_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_RADIAL_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_IN_TRACK_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_CROSS_TRACK_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    uint32_t ITERATIONS = 0,
+    bool CONVERGED = false,
+    ::flatbuffers::Offset<::flatbuffers::String> HELD_OUT_STOP = 0,
+    uint32_t HELD_OUT_STATES = 0,
+    double HELD_OUT_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double HELD_OUT_MAX_KM = std::numeric_limits<double>::quiet_NaN(),
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OCMHeldOutDay>>> HELD_OUT_DAYS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PCF_CID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> FIT_START = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> FIT_STOP = 0) {
+  OCMFitStatisticsBuilder builder_(_fbb);
+  builder_.add_HELD_OUT_MAX_KM(HELD_OUT_MAX_KM);
+  builder_.add_HELD_OUT_RMS_KM(HELD_OUT_RMS_KM);
+  builder_.add_FIT_CROSS_TRACK_RMS_KM(FIT_CROSS_TRACK_RMS_KM);
+  builder_.add_FIT_IN_TRACK_RMS_KM(FIT_IN_TRACK_RMS_KM);
+  builder_.add_FIT_RADIAL_RMS_KM(FIT_RADIAL_RMS_KM);
+  builder_.add_FIT_MAX_KM(FIT_MAX_KM);
+  builder_.add_FIT_RMS_KM(FIT_RMS_KM);
+  builder_.add_FIT_STOP(FIT_STOP);
+  builder_.add_FIT_START(FIT_START);
+  builder_.add_PCF_CID(PCF_CID);
+  builder_.add_HELD_OUT_DAYS(HELD_OUT_DAYS);
+  builder_.add_HELD_OUT_STATES(HELD_OUT_STATES);
+  builder_.add_HELD_OUT_STOP(HELD_OUT_STOP);
+  builder_.add_ITERATIONS(ITERATIONS);
+  builder_.add_FIT_STATES(FIT_STATES);
+  builder_.add_CONVERGED(CONVERGED);
+  return builder_.Finish();
+}
+
+struct OCMFitStatistics::Traits {
+  using type = OCMFitStatistics;
+  static auto constexpr Create = CreateOCMFitStatistics;
+};
+
+inline ::flatbuffers::Offset<OCMFitStatistics> CreateOCMFitStatisticsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t FIT_STATES = 0,
+    double FIT_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_MAX_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_RADIAL_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_IN_TRACK_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double FIT_CROSS_TRACK_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    uint32_t ITERATIONS = 0,
+    bool CONVERGED = false,
+    const char *HELD_OUT_STOP = nullptr,
+    uint32_t HELD_OUT_STATES = 0,
+    double HELD_OUT_RMS_KM = std::numeric_limits<double>::quiet_NaN(),
+    double HELD_OUT_MAX_KM = std::numeric_limits<double>::quiet_NaN(),
+    const std::vector<::flatbuffers::Offset<OCMHeldOutDay>> *HELD_OUT_DAYS = nullptr,
+    const char *PCF_CID = nullptr,
+    const char *FIT_START = nullptr,
+    const char *FIT_STOP = nullptr) {
+  auto HELD_OUT_STOP__ = HELD_OUT_STOP ? _fbb.CreateString(HELD_OUT_STOP) : 0;
+  auto HELD_OUT_DAYS__ = HELD_OUT_DAYS ? _fbb.CreateVector<::flatbuffers::Offset<OCMHeldOutDay>>(*HELD_OUT_DAYS) : 0;
+  auto PCF_CID__ = PCF_CID ? _fbb.CreateString(PCF_CID) : 0;
+  auto FIT_START__ = FIT_START ? _fbb.CreateString(FIT_START) : 0;
+  auto FIT_STOP__ = FIT_STOP ? _fbb.CreateString(FIT_STOP) : 0;
+  return CreateOCMFitStatistics(
+      _fbb,
+      FIT_STATES,
+      FIT_RMS_KM,
+      FIT_MAX_KM,
+      FIT_RADIAL_RMS_KM,
+      FIT_IN_TRACK_RMS_KM,
+      FIT_CROSS_TRACK_RMS_KM,
+      ITERATIONS,
+      CONVERGED,
+      HELD_OUT_STOP__,
+      HELD_OUT_STATES,
+      HELD_OUT_RMS_KM,
+      HELD_OUT_MAX_KM,
+      HELD_OUT_DAYS__,
+      PCF_CID__,
+      FIT_START__,
+      FIT_STOP__);
+}
+
+::flatbuffers::Offset<OCMFitStatistics> CreateOCMFitStatistics(::flatbuffers::FlatBufferBuilder &_fbb, const OCMFitStatisticsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMMeanElementsT : public ::flatbuffers::NativeTable {
+  typedef OCMMeanElements TableType;
+  meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::UNSPECIFIED;
+  std::string EPOCH{};
+  double MEAN_MOTION = 0.0;
+  double ECCENTRICITY = 0.0;
+  double INCLINATION = 0.0;
+  double RA_OF_ASC_NODE = 0.0;
+  double ARG_OF_PERICENTER = 0.0;
+  double MEAN_ANOMALY = 0.0;
+  double BSTAR = 0.0;
+  double MEAN_MOTION_DOT = 0.0;
+  double MEAN_MOTION_DDOT = 0.0;
+  double BTERM = 0.0;
+  double AGOM = 0.0;
+};
+
+/// A mean element set under a named theory, with the elements exactly as the theory defines
+/// them. SDS addition: CCSDS 502.0-B-3 OCM carries no mean-motion element set. Epoch in
+/// METADATA.TIME_SYSTEM; frame is TRAJ_REF_FRAME about CENTER_NAME (EARTH).
+struct OCMMeanElements FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMMeanElementsT NativeTableType;
+  typedef OCMMeanElementsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MEAN_ELEMENT_THEORY = 4,
+    VT_EPOCH = 6,
+    VT_MEAN_MOTION = 8,
+    VT_ECCENTRICITY = 10,
+    VT_INCLINATION = 12,
+    VT_RA_OF_ASC_NODE = 14,
+    VT_ARG_OF_PERICENTER = 16,
+    VT_MEAN_ANOMALY = 18,
+    VT_BSTAR = 20,
+    VT_MEAN_MOTION_DOT = 22,
+    VT_MEAN_MOTION_DDOT = 24,
+    VT_BTERM = 26,
+    VT_AGOM = 28
+  };
+  /// The theory the set is defined under and flies on, written explicitly, SGP4 (0)
+  /// included. A reader refuses UNSPECIFIED.
+  meanElementSource MEAN_ELEMENT_THEORY() const {
+    return static_cast<meanElementSource>(GetField<int8_t>(VT_MEAN_ELEMENT_THEORY, 6));
+  }
+  /// EPOCH of the elements (ISO 8601 UTC).
+  const ::flatbuffers::String *EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPOCH);
+  }
+  /// MEAN_MOTION in rev/day as the theory defines it: Kozai for SGP4, Brouwer for SGP4-XP
+  /// and AP. Never derived from a semi-major axis.
+  double MEAN_MOTION() const {
+    return GetField<double>(VT_MEAN_MOTION, 0.0);
+  }
+  /// ECCENTRICITY (unitless).
+  double ECCENTRICITY() const {
+    return GetField<double>(VT_ECCENTRICITY, 0.0);
+  }
+  /// INCLINATION, deg.
+  double INCLINATION() const {
+    return GetField<double>(VT_INCLINATION, 0.0);
+  }
+  /// RA_OF_ASC_NODE, deg.
+  double RA_OF_ASC_NODE() const {
+    return GetField<double>(VT_RA_OF_ASC_NODE, 0.0);
+  }
+  /// ARG_OF_PERICENTER, deg.
+  double ARG_OF_PERICENTER() const {
+    return GetField<double>(VT_ARG_OF_PERICENTER, 0.0);
+  }
+  /// MEAN_ANOMALY, deg.
+  double MEAN_ANOMALY() const {
+    return GetField<double>(VT_MEAN_ANOMALY, 0.0);
+  }
+  /// BSTAR in 1/Earth radii. SGP4 only; 0 for SGP4-XP and AP.
+  double BSTAR() const {
+    return GetField<double>(VT_BSTAR, 0.0);
+  }
+  /// MEAN_MOTION_DOT in rev/day**2. SGP4 only.
+  double MEAN_MOTION_DOT() const {
+    return GetField<double>(VT_MEAN_MOTION_DOT, 0.0);
+  }
+  /// MEAN_MOTION_DDOT in rev/day**3. SGP4 only.
+  double MEAN_MOTION_DDOT() const {
+    return GetField<double>(VT_MEAN_MOTION_DDOT, 0.0);
+  }
+  /// BTERM, the SGP4-XP drag term Cd*A/m in m**2/kg. SGP4-XP and AP only; 0 for SGP4.
+  double BTERM() const {
+    return GetField<double>(VT_BTERM, 0.0);
+  }
+  /// AGOM, the SGP4-XP radiation term Cr*A/m in m**2/kg. SGP4-XP and AP only; 0 for SGP4.
+  double AGOM() const {
+    return GetField<double>(VT_AGOM, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_MEAN_ELEMENT_THEORY, 1) &&
+           VerifyOffsetRequired(verifier, VT_EPOCH) &&
+           verifier.VerifyString(EPOCH()) &&
+           VerifyField<double>(verifier, VT_MEAN_MOTION, 8) &&
+           VerifyField<double>(verifier, VT_ECCENTRICITY, 8) &&
+           VerifyField<double>(verifier, VT_INCLINATION, 8) &&
+           VerifyField<double>(verifier, VT_RA_OF_ASC_NODE, 8) &&
+           VerifyField<double>(verifier, VT_ARG_OF_PERICENTER, 8) &&
+           VerifyField<double>(verifier, VT_MEAN_ANOMALY, 8) &&
+           VerifyField<double>(verifier, VT_BSTAR, 8) &&
+           VerifyField<double>(verifier, VT_MEAN_MOTION_DOT, 8) &&
+           VerifyField<double>(verifier, VT_MEAN_MOTION_DDOT, 8) &&
+           VerifyField<double>(verifier, VT_BTERM, 8) &&
+           VerifyField<double>(verifier, VT_AGOM, 8) &&
+           verifier.EndTable();
+  }
+  OCMMeanElementsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMMeanElementsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMMeanElements> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMMeanElementsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMMeanElementsBuilder {
+  typedef OCMMeanElements Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MEAN_ELEMENT_THEORY(meanElementSource MEAN_ELEMENT_THEORY) {
+    fbb_.AddElement<int8_t>(OCMMeanElements::VT_MEAN_ELEMENT_THEORY, static_cast<int8_t>(MEAN_ELEMENT_THEORY), 6);
+  }
+  void add_EPOCH(::flatbuffers::Offset<::flatbuffers::String> EPOCH) {
+    fbb_.AddOffset(OCMMeanElements::VT_EPOCH, EPOCH);
+  }
+  void add_MEAN_MOTION(double MEAN_MOTION) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_MEAN_MOTION, MEAN_MOTION, 0.0);
+  }
+  void add_ECCENTRICITY(double ECCENTRICITY) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_ECCENTRICITY, ECCENTRICITY, 0.0);
+  }
+  void add_INCLINATION(double INCLINATION) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_INCLINATION, INCLINATION, 0.0);
+  }
+  void add_RA_OF_ASC_NODE(double RA_OF_ASC_NODE) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_RA_OF_ASC_NODE, RA_OF_ASC_NODE, 0.0);
+  }
+  void add_ARG_OF_PERICENTER(double ARG_OF_PERICENTER) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_ARG_OF_PERICENTER, ARG_OF_PERICENTER, 0.0);
+  }
+  void add_MEAN_ANOMALY(double MEAN_ANOMALY) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_MEAN_ANOMALY, MEAN_ANOMALY, 0.0);
+  }
+  void add_BSTAR(double BSTAR) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_BSTAR, BSTAR, 0.0);
+  }
+  void add_MEAN_MOTION_DOT(double MEAN_MOTION_DOT) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_MEAN_MOTION_DOT, MEAN_MOTION_DOT, 0.0);
+  }
+  void add_MEAN_MOTION_DDOT(double MEAN_MOTION_DDOT) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_MEAN_MOTION_DDOT, MEAN_MOTION_DDOT, 0.0);
+  }
+  void add_BTERM(double BTERM) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_BTERM, BTERM, 0.0);
+  }
+  void add_AGOM(double AGOM) {
+    fbb_.AddElement<double>(OCMMeanElements::VT_AGOM, AGOM, 0.0);
+  }
+  explicit OCMMeanElementsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMMeanElements> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMMeanElements>(end);
+    fbb_.Required(o, OCMMeanElements::VT_EPOCH);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMMeanElements> CreateOCMMeanElements(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> EPOCH = 0,
+    double MEAN_MOTION = 0.0,
+    double ECCENTRICITY = 0.0,
+    double INCLINATION = 0.0,
+    double RA_OF_ASC_NODE = 0.0,
+    double ARG_OF_PERICENTER = 0.0,
+    double MEAN_ANOMALY = 0.0,
+    double BSTAR = 0.0,
+    double MEAN_MOTION_DOT = 0.0,
+    double MEAN_MOTION_DDOT = 0.0,
+    double BTERM = 0.0,
+    double AGOM = 0.0) {
+  OCMMeanElementsBuilder builder_(_fbb);
+  builder_.add_AGOM(AGOM);
+  builder_.add_BTERM(BTERM);
+  builder_.add_MEAN_MOTION_DDOT(MEAN_MOTION_DDOT);
+  builder_.add_MEAN_MOTION_DOT(MEAN_MOTION_DOT);
+  builder_.add_BSTAR(BSTAR);
+  builder_.add_MEAN_ANOMALY(MEAN_ANOMALY);
+  builder_.add_ARG_OF_PERICENTER(ARG_OF_PERICENTER);
+  builder_.add_RA_OF_ASC_NODE(RA_OF_ASC_NODE);
+  builder_.add_INCLINATION(INCLINATION);
+  builder_.add_ECCENTRICITY(ECCENTRICITY);
+  builder_.add_MEAN_MOTION(MEAN_MOTION);
+  builder_.add_EPOCH(EPOCH);
+  builder_.add_MEAN_ELEMENT_THEORY(MEAN_ELEMENT_THEORY);
+  return builder_.Finish();
+}
+
+struct OCMMeanElements::Traits {
+  using type = OCMMeanElements;
+  static auto constexpr Create = CreateOCMMeanElements;
+};
+
+inline ::flatbuffers::Offset<OCMMeanElements> CreateOCMMeanElementsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    meanElementSource MEAN_ELEMENT_THEORY = meanElementSource::UNSPECIFIED,
+    const char *EPOCH = nullptr,
+    double MEAN_MOTION = 0.0,
+    double ECCENTRICITY = 0.0,
+    double INCLINATION = 0.0,
+    double RA_OF_ASC_NODE = 0.0,
+    double ARG_OF_PERICENTER = 0.0,
+    double MEAN_ANOMALY = 0.0,
+    double BSTAR = 0.0,
+    double MEAN_MOTION_DOT = 0.0,
+    double MEAN_MOTION_DDOT = 0.0,
+    double BTERM = 0.0,
+    double AGOM = 0.0) {
+  auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
+  return CreateOCMMeanElements(
+      _fbb,
+      MEAN_ELEMENT_THEORY,
+      EPOCH__,
+      MEAN_MOTION,
+      ECCENTRICITY,
+      INCLINATION,
+      RA_OF_ASC_NODE,
+      ARG_OF_PERICENTER,
+      MEAN_ANOMALY,
+      BSTAR,
+      MEAN_MOTION_DOT,
+      MEAN_MOTION_DDOT,
+      BTERM,
+      AGOM);
+}
+
+::flatbuffers::Offset<OCMMeanElements> CreateOCMMeanElements(::flatbuffers::FlatBufferBuilder &_fbb, const OCMMeanElementsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMCovariancePropagationT : public ::flatbuffers::NativeTable {
+  typedef OCMCovariancePropagation TableType;
+  double FLOOR_UU_KM2 = 0.0;
+  double FLOOR_VU_KM2 = 0.0;
+  double FLOOR_VV_KM2 = 0.0;
+  double FLOOR_WU_KM2 = 0.0;
+  double FLOOR_WV_KM2 = 0.0;
+  double FLOOR_WW_KM2 = 0.0;
+  double NOISE_ECCENTRICITY_PER_DAY = 0.0;
+  double NOISE_INCLINATION_PER_DAY = 0.0;
+  double NOISE_MEAN_MOTION_RELATIVE = 0.0;
+  double NOISE_NON_GRAVITATIONAL_RAD_DAY2 = 0.0;
+  double NOISE_START_MINUTES = 0.0;
+  double NON_GRAVITATIONAL_SHARE = 0.0;
+  double NON_GRAVITATIONAL_RATE_PER_DAY = 0.0;
+};
+
+/// What propagates the covariance of a mean element set beyond its epoch value.
+/// SDS addition (no CCSDS counterpart; OD_PROCESS_NOISE is free text).
+struct OCMCovariancePropagation FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMCovariancePropagationT NativeTableType;
+  typedef OCMCovariancePropagationBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_FLOOR_UU_KM2 = 4,
+    VT_FLOOR_VU_KM2 = 6,
+    VT_FLOOR_VV_KM2 = 8,
+    VT_FLOOR_WU_KM2 = 10,
+    VT_FLOOR_WV_KM2 = 12,
+    VT_FLOOR_WW_KM2 = 14,
+    VT_NOISE_ECCENTRICITY_PER_DAY = 16,
+    VT_NOISE_INCLINATION_PER_DAY = 18,
+    VT_NOISE_MEAN_MOTION_RELATIVE = 20,
+    VT_NOISE_NON_GRAVITATIONAL_RAD_DAY2 = 22,
+    VT_NOISE_START_MINUTES = 24,
+    VT_NON_GRAVITATIONAL_SHARE = 26,
+    VT_NON_GRAVITATIONAL_RATE_PER_DAY = 28
+  };
+  /// Theory floor, the fit's residual covariance in the UVW axes of the state at each time
+  /// (U radial, V in-track, W along r x v), km**2: the uu, vu, vv, wu, wv and ww entries.
+  /// Included in the state block of COVARIANCE_DATA at epoch; subtracted when read, added at
+  /// every time.
+  double FLOOR_UU_KM2() const {
+    return GetField<double>(VT_FLOOR_UU_KM2, 0.0);
+  }
+  double FLOOR_VU_KM2() const {
+    return GetField<double>(VT_FLOOR_VU_KM2, 0.0);
+  }
+  double FLOOR_VV_KM2() const {
+    return GetField<double>(VT_FLOOR_VV_KM2, 0.0);
+  }
+  double FLOOR_WU_KM2() const {
+    return GetField<double>(VT_FLOOR_WU_KM2, 0.0);
+  }
+  double FLOOR_WV_KM2() const {
+    return GetField<double>(VT_FLOOR_WV_KM2, 0.0);
+  }
+  double FLOOR_WW_KM2() const {
+    return GetField<double>(VT_FLOOR_WW_KM2, 0.0);
+  }
+  /// Rate errors of the mean elements from NOISE_START_MINUTES on: eccentricity vector and
+  /// inclination vector, 1/day.
+  double NOISE_ECCENTRICITY_PER_DAY() const {
+    return GetField<double>(VT_NOISE_ECCENTRICITY_PER_DAY, 0.0);
+  }
+  double NOISE_INCLINATION_PER_DAY() const {
+    return GetField<double>(VT_NOISE_INCLINATION_PER_DAY, 0.0);
+  }
+  /// Relative mean-motion error, dimensionless.
+  double NOISE_MEAN_MOTION_RELATIVE() const {
+    return GetField<double>(VT_NOISE_MEAN_MOTION_RELATIVE, 0.0);
+  }
+  /// Non-gravitational mean-motion rate error, rad/day**2: the value that flies.
+  double NOISE_NON_GRAVITATIONAL_RAD_DAY2() const {
+    return GetField<double>(VT_NOISE_NON_GRAVITATIONAL_RAD_DAY2, 0.0);
+  }
+  /// Start of the rate errors: end of the fit arc, minutes from the set's epoch (signed).
+  double NOISE_START_MINUTES() const {
+    return GetField<double>(VT_NOISE_START_MINUTES, 0.0);
+  }
+  /// Share c of the non-gravitational mean-motion rate that is error, dimensionless, and the
+  /// rate itself as n-dot_ng / n, 1/day. NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |n-dot_ng|.
+  double NON_GRAVITATIONAL_SHARE() const {
+    return GetField<double>(VT_NON_GRAVITATIONAL_SHARE, 0.0);
+  }
+  double NON_GRAVITATIONAL_RATE_PER_DAY() const {
+    return GetField<double>(VT_NON_GRAVITATIONAL_RATE_PER_DAY, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_FLOOR_UU_KM2, 8) &&
+           VerifyField<double>(verifier, VT_FLOOR_VU_KM2, 8) &&
+           VerifyField<double>(verifier, VT_FLOOR_VV_KM2, 8) &&
+           VerifyField<double>(verifier, VT_FLOOR_WU_KM2, 8) &&
+           VerifyField<double>(verifier, VT_FLOOR_WV_KM2, 8) &&
+           VerifyField<double>(verifier, VT_FLOOR_WW_KM2, 8) &&
+           VerifyField<double>(verifier, VT_NOISE_ECCENTRICITY_PER_DAY, 8) &&
+           VerifyField<double>(verifier, VT_NOISE_INCLINATION_PER_DAY, 8) &&
+           VerifyField<double>(verifier, VT_NOISE_MEAN_MOTION_RELATIVE, 8) &&
+           VerifyField<double>(verifier, VT_NOISE_NON_GRAVITATIONAL_RAD_DAY2, 8) &&
+           VerifyField<double>(verifier, VT_NOISE_START_MINUTES, 8) &&
+           VerifyField<double>(verifier, VT_NON_GRAVITATIONAL_SHARE, 8) &&
+           VerifyField<double>(verifier, VT_NON_GRAVITATIONAL_RATE_PER_DAY, 8) &&
+           verifier.EndTable();
+  }
+  OCMCovariancePropagationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMCovariancePropagationT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMCovariancePropagation> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMCovariancePropagationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMCovariancePropagationBuilder {
+  typedef OCMCovariancePropagation Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_FLOOR_UU_KM2(double FLOOR_UU_KM2) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_FLOOR_UU_KM2, FLOOR_UU_KM2, 0.0);
+  }
+  void add_FLOOR_VU_KM2(double FLOOR_VU_KM2) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_FLOOR_VU_KM2, FLOOR_VU_KM2, 0.0);
+  }
+  void add_FLOOR_VV_KM2(double FLOOR_VV_KM2) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_FLOOR_VV_KM2, FLOOR_VV_KM2, 0.0);
+  }
+  void add_FLOOR_WU_KM2(double FLOOR_WU_KM2) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_FLOOR_WU_KM2, FLOOR_WU_KM2, 0.0);
+  }
+  void add_FLOOR_WV_KM2(double FLOOR_WV_KM2) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_FLOOR_WV_KM2, FLOOR_WV_KM2, 0.0);
+  }
+  void add_FLOOR_WW_KM2(double FLOOR_WW_KM2) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_FLOOR_WW_KM2, FLOOR_WW_KM2, 0.0);
+  }
+  void add_NOISE_ECCENTRICITY_PER_DAY(double NOISE_ECCENTRICITY_PER_DAY) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_NOISE_ECCENTRICITY_PER_DAY, NOISE_ECCENTRICITY_PER_DAY, 0.0);
+  }
+  void add_NOISE_INCLINATION_PER_DAY(double NOISE_INCLINATION_PER_DAY) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_NOISE_INCLINATION_PER_DAY, NOISE_INCLINATION_PER_DAY, 0.0);
+  }
+  void add_NOISE_MEAN_MOTION_RELATIVE(double NOISE_MEAN_MOTION_RELATIVE) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_NOISE_MEAN_MOTION_RELATIVE, NOISE_MEAN_MOTION_RELATIVE, 0.0);
+  }
+  void add_NOISE_NON_GRAVITATIONAL_RAD_DAY2(double NOISE_NON_GRAVITATIONAL_RAD_DAY2) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_NOISE_NON_GRAVITATIONAL_RAD_DAY2, NOISE_NON_GRAVITATIONAL_RAD_DAY2, 0.0);
+  }
+  void add_NOISE_START_MINUTES(double NOISE_START_MINUTES) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_NOISE_START_MINUTES, NOISE_START_MINUTES, 0.0);
+  }
+  void add_NON_GRAVITATIONAL_SHARE(double NON_GRAVITATIONAL_SHARE) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_NON_GRAVITATIONAL_SHARE, NON_GRAVITATIONAL_SHARE, 0.0);
+  }
+  void add_NON_GRAVITATIONAL_RATE_PER_DAY(double NON_GRAVITATIONAL_RATE_PER_DAY) {
+    fbb_.AddElement<double>(OCMCovariancePropagation::VT_NON_GRAVITATIONAL_RATE_PER_DAY, NON_GRAVITATIONAL_RATE_PER_DAY, 0.0);
+  }
+  explicit OCMCovariancePropagationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMCovariancePropagation> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMCovariancePropagation>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMCovariancePropagation> CreateOCMCovariancePropagation(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double FLOOR_UU_KM2 = 0.0,
+    double FLOOR_VU_KM2 = 0.0,
+    double FLOOR_VV_KM2 = 0.0,
+    double FLOOR_WU_KM2 = 0.0,
+    double FLOOR_WV_KM2 = 0.0,
+    double FLOOR_WW_KM2 = 0.0,
+    double NOISE_ECCENTRICITY_PER_DAY = 0.0,
+    double NOISE_INCLINATION_PER_DAY = 0.0,
+    double NOISE_MEAN_MOTION_RELATIVE = 0.0,
+    double NOISE_NON_GRAVITATIONAL_RAD_DAY2 = 0.0,
+    double NOISE_START_MINUTES = 0.0,
+    double NON_GRAVITATIONAL_SHARE = 0.0,
+    double NON_GRAVITATIONAL_RATE_PER_DAY = 0.0) {
+  OCMCovariancePropagationBuilder builder_(_fbb);
+  builder_.add_NON_GRAVITATIONAL_RATE_PER_DAY(NON_GRAVITATIONAL_RATE_PER_DAY);
+  builder_.add_NON_GRAVITATIONAL_SHARE(NON_GRAVITATIONAL_SHARE);
+  builder_.add_NOISE_START_MINUTES(NOISE_START_MINUTES);
+  builder_.add_NOISE_NON_GRAVITATIONAL_RAD_DAY2(NOISE_NON_GRAVITATIONAL_RAD_DAY2);
+  builder_.add_NOISE_MEAN_MOTION_RELATIVE(NOISE_MEAN_MOTION_RELATIVE);
+  builder_.add_NOISE_INCLINATION_PER_DAY(NOISE_INCLINATION_PER_DAY);
+  builder_.add_NOISE_ECCENTRICITY_PER_DAY(NOISE_ECCENTRICITY_PER_DAY);
+  builder_.add_FLOOR_WW_KM2(FLOOR_WW_KM2);
+  builder_.add_FLOOR_WV_KM2(FLOOR_WV_KM2);
+  builder_.add_FLOOR_WU_KM2(FLOOR_WU_KM2);
+  builder_.add_FLOOR_VV_KM2(FLOOR_VV_KM2);
+  builder_.add_FLOOR_VU_KM2(FLOOR_VU_KM2);
+  builder_.add_FLOOR_UU_KM2(FLOOR_UU_KM2);
+  return builder_.Finish();
+}
+
+struct OCMCovariancePropagation::Traits {
+  using type = OCMCovariancePropagation;
+  static auto constexpr Create = CreateOCMCovariancePropagation;
+};
+
+::flatbuffers::Offset<OCMCovariancePropagation> CreateOCMCovariancePropagation(::flatbuffers::FlatBufferBuilder &_fbb, const OCMCovariancePropagationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMSeedSetT : public ::flatbuffers::NativeTable {
+  typedef OCMSeedSet TableType;
+  uint32_t NORAD_CAT_ID = 0;
+  std::string EPOCH{};
+  std::string CREATION_DATE{};
+  std::string MESSAGE_ID{};
+};
+
+/// An element set a trajectory was computed from (SDS addition: CCSDS 502.0-B-3
+/// TRAJ_BASIS_ID names one determination, a relative trajectory has two).
+struct OCMSeedSet FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMSeedSetT NativeTableType;
+  typedef OCMSeedSetBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_NORAD_CAT_ID = 4,
+    VT_EPOCH = 6,
+    VT_CREATION_DATE = 8,
+    VT_MESSAGE_ID = 10
+  };
+  /// NORAD_CAT_ID of the object the set describes.
+  uint32_t NORAD_CAT_ID() const {
+    return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
+  }
+  /// EPOCH of the element set, ISO 8601 UTC.
+  const ::flatbuffers::String *EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EPOCH);
+  }
+  /// CREATION_DATE of the element set: when its originator made it, ISO 8601
+  /// UTC.
+  const ::flatbuffers::String *CREATION_DATE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CREATION_DATE);
+  }
+  /// MESSAGE_ID of the element set; for a Space-Track set its GP_ID.
+  const ::flatbuffers::String *MESSAGE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MESSAGE_ID);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_NORAD_CAT_ID, 4) &&
+           VerifyOffset(verifier, VT_EPOCH) &&
+           verifier.VerifyString(EPOCH()) &&
+           VerifyOffset(verifier, VT_CREATION_DATE) &&
+           verifier.VerifyString(CREATION_DATE()) &&
+           VerifyOffset(verifier, VT_MESSAGE_ID) &&
+           verifier.VerifyString(MESSAGE_ID()) &&
+           verifier.EndTable();
+  }
+  OCMSeedSetT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMSeedSetT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMSeedSet> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMSeedSetT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMSeedSetBuilder {
+  typedef OCMSeedSet Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
+    fbb_.AddElement<uint32_t>(OCMSeedSet::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
+  }
+  void add_EPOCH(::flatbuffers::Offset<::flatbuffers::String> EPOCH) {
+    fbb_.AddOffset(OCMSeedSet::VT_EPOCH, EPOCH);
+  }
+  void add_CREATION_DATE(::flatbuffers::Offset<::flatbuffers::String> CREATION_DATE) {
+    fbb_.AddOffset(OCMSeedSet::VT_CREATION_DATE, CREATION_DATE);
+  }
+  void add_MESSAGE_ID(::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID) {
+    fbb_.AddOffset(OCMSeedSet::VT_MESSAGE_ID, MESSAGE_ID);
+  }
+  explicit OCMSeedSetBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMSeedSet> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMSeedSet>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMSeedSet> CreateOCMSeedSet(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t NORAD_CAT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EPOCH = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CREATION_DATE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID = 0) {
+  OCMSeedSetBuilder builder_(_fbb);
+  builder_.add_MESSAGE_ID(MESSAGE_ID);
+  builder_.add_CREATION_DATE(CREATION_DATE);
+  builder_.add_EPOCH(EPOCH);
+  builder_.add_NORAD_CAT_ID(NORAD_CAT_ID);
+  return builder_.Finish();
+}
+
+struct OCMSeedSet::Traits {
+  using type = OCMSeedSet;
+  static auto constexpr Create = CreateOCMSeedSet;
+};
+
+inline ::flatbuffers::Offset<OCMSeedSet> CreateOCMSeedSetDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t NORAD_CAT_ID = 0,
+    const char *EPOCH = nullptr,
+    const char *CREATION_DATE = nullptr,
+    const char *MESSAGE_ID = nullptr) {
+  auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
+  auto CREATION_DATE__ = CREATION_DATE ? _fbb.CreateString(CREATION_DATE) : 0;
+  auto MESSAGE_ID__ = MESSAGE_ID ? _fbb.CreateString(MESSAGE_ID) : 0;
+  return CreateOCMSeedSet(
+      _fbb,
+      NORAD_CAT_ID,
+      EPOCH__,
+      CREATION_DATE__,
+      MESSAGE_ID__);
+}
+
+::flatbuffers::Offset<OCMSeedSet> CreateOCMSeedSet(::flatbuffers::FlatBufferBuilder &_fbb, const OCMSeedSetT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMIntegratorT : public ::flatbuffers::NativeTable {
+  typedef OCMIntegrator TableType;
+  ocmIntegratorMode MODE = ocmIntegratorMode::UNSPECIFIED;
+  ocmIntegrationFrame COORDINATE_SYSTEM = ocmIntegrationFrame::UNSPECIFIED;
+  ocmPartialsMethod PARTIALS = ocmPartialsMethod::UNSPECIFIED;
+  ocmStepMode STEP_MODE = ocmStepMode::UNSPECIFIED;
+  bool FIXED_STEP = false;
+  ocmStepSelection STEP_SIZE_SELECTION = ocmStepSelection::UNSPECIFIED;
+  double INITIAL_STEP_SECONDS = std::numeric_limits<double>::quiet_NaN();
+  double ERROR_CONTROL = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// Settings of the numerical integrator that made a solution, as a legacy SP
+/// Vector/Covariance Message states them (SDS addition: CCSDS 502.0-B-3 has no
+/// integrator keywords). Present only on a message made from such a message;
+/// a reader of any other message treats it as absent.
+struct OCMIntegrator FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMIntegratorT NativeTableType;
+  typedef OCMIntegratorBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_MODE = 4,
+    VT_COORDINATE_SYSTEM = 6,
+    VT_PARTIALS = 8,
+    VT_STEP_MODE = 10,
+    VT_FIXED_STEP = 12,
+    VT_STEP_SIZE_SELECTION = 14,
+    VT_INITIAL_STEP_SECONDS = 16,
+    VT_ERROR_CONTROL = 18
+  };
+  /// INTEGRATOR MODE.
+  ocmIntegratorMode MODE() const {
+    return static_cast<ocmIntegratorMode>(GetField<uint8_t>(VT_MODE, 0));
+  }
+  /// COORD SYS: the coordinate system the integration ran in. Not
+  /// TRAJ_REF_FRAME, which is the frame of STATE_DATA.
+  ocmIntegrationFrame COORDINATE_SYSTEM() const {
+    return static_cast<ocmIntegrationFrame>(GetField<uint8_t>(VT_COORDINATE_SYSTEM, 0));
+  }
+  /// PARTIALS.
+  ocmPartialsMethod PARTIALS() const {
+    return static_cast<ocmPartialsMethod>(GetField<uint8_t>(VT_PARTIALS, 0));
+  }
+  /// STEP MODE.
+  ocmStepMode STEP_MODE() const {
+    return static_cast<ocmStepMode>(GetField<uint8_t>(VT_STEP_MODE, 0));
+  }
+  /// FIXED STEP: true for ON.
+  bool FIXED_STEP() const {
+    return GetField<uint8_t>(VT_FIXED_STEP, 0) != 0;
+  }
+  /// STEP SIZE SELECTION.
+  ocmStepSelection STEP_SIZE_SELECTION() const {
+    return static_cast<ocmStepSelection>(GetField<uint8_t>(VT_STEP_SIZE_SELECTION, 0));
+  }
+  /// INITIAL STEP SIZE, s. NaN when not stated.
+  double INITIAL_STEP_SECONDS() const {
+    return GetField<double>(VT_INITIAL_STEP_SECONDS, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// ERROR CONTROL, dimensionless, as the SP integrator takes it. NaN when not
+  /// stated.
+  double ERROR_CONTROL() const {
+    return GetField<double>(VT_ERROR_CONTROL, std::numeric_limits<double>::quiet_NaN());
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint8_t>(verifier, VT_MODE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_COORDINATE_SYSTEM, 1) &&
+           VerifyField<uint8_t>(verifier, VT_PARTIALS, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STEP_MODE, 1) &&
+           VerifyField<uint8_t>(verifier, VT_FIXED_STEP, 1) &&
+           VerifyField<uint8_t>(verifier, VT_STEP_SIZE_SELECTION, 1) &&
+           VerifyField<double>(verifier, VT_INITIAL_STEP_SECONDS, 8) &&
+           VerifyField<double>(verifier, VT_ERROR_CONTROL, 8) &&
+           verifier.EndTable();
+  }
+  OCMIntegratorT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMIntegratorT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMIntegrator> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMIntegratorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMIntegratorBuilder {
+  typedef OCMIntegrator Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_MODE(ocmIntegratorMode MODE) {
+    fbb_.AddElement<uint8_t>(OCMIntegrator::VT_MODE, static_cast<uint8_t>(MODE), 0);
+  }
+  void add_COORDINATE_SYSTEM(ocmIntegrationFrame COORDINATE_SYSTEM) {
+    fbb_.AddElement<uint8_t>(OCMIntegrator::VT_COORDINATE_SYSTEM, static_cast<uint8_t>(COORDINATE_SYSTEM), 0);
+  }
+  void add_PARTIALS(ocmPartialsMethod PARTIALS) {
+    fbb_.AddElement<uint8_t>(OCMIntegrator::VT_PARTIALS, static_cast<uint8_t>(PARTIALS), 0);
+  }
+  void add_STEP_MODE(ocmStepMode STEP_MODE) {
+    fbb_.AddElement<uint8_t>(OCMIntegrator::VT_STEP_MODE, static_cast<uint8_t>(STEP_MODE), 0);
+  }
+  void add_FIXED_STEP(bool FIXED_STEP) {
+    fbb_.AddElement<uint8_t>(OCMIntegrator::VT_FIXED_STEP, static_cast<uint8_t>(FIXED_STEP), 0);
+  }
+  void add_STEP_SIZE_SELECTION(ocmStepSelection STEP_SIZE_SELECTION) {
+    fbb_.AddElement<uint8_t>(OCMIntegrator::VT_STEP_SIZE_SELECTION, static_cast<uint8_t>(STEP_SIZE_SELECTION), 0);
+  }
+  void add_INITIAL_STEP_SECONDS(double INITIAL_STEP_SECONDS) {
+    fbb_.AddElement<double>(OCMIntegrator::VT_INITIAL_STEP_SECONDS, INITIAL_STEP_SECONDS, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ERROR_CONTROL(double ERROR_CONTROL) {
+    fbb_.AddElement<double>(OCMIntegrator::VT_ERROR_CONTROL, ERROR_CONTROL, std::numeric_limits<double>::quiet_NaN());
+  }
+  explicit OCMIntegratorBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMIntegrator> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMIntegrator>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMIntegrator> CreateOCMIntegrator(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ocmIntegratorMode MODE = ocmIntegratorMode::UNSPECIFIED,
+    ocmIntegrationFrame COORDINATE_SYSTEM = ocmIntegrationFrame::UNSPECIFIED,
+    ocmPartialsMethod PARTIALS = ocmPartialsMethod::UNSPECIFIED,
+    ocmStepMode STEP_MODE = ocmStepMode::UNSPECIFIED,
+    bool FIXED_STEP = false,
+    ocmStepSelection STEP_SIZE_SELECTION = ocmStepSelection::UNSPECIFIED,
+    double INITIAL_STEP_SECONDS = std::numeric_limits<double>::quiet_NaN(),
+    double ERROR_CONTROL = std::numeric_limits<double>::quiet_NaN()) {
+  OCMIntegratorBuilder builder_(_fbb);
+  builder_.add_ERROR_CONTROL(ERROR_CONTROL);
+  builder_.add_INITIAL_STEP_SECONDS(INITIAL_STEP_SECONDS);
+  builder_.add_STEP_SIZE_SELECTION(STEP_SIZE_SELECTION);
+  builder_.add_FIXED_STEP(FIXED_STEP);
+  builder_.add_STEP_MODE(STEP_MODE);
+  builder_.add_PARTIALS(PARTIALS);
+  builder_.add_COORDINATE_SYSTEM(COORDINATE_SYSTEM);
+  builder_.add_MODE(MODE);
+  return builder_.Finish();
+}
+
+struct OCMIntegrator::Traits {
+  using type = OCMIntegrator;
+  static auto constexpr Create = CreateOCMIntegrator;
+};
+
+::flatbuffers::Offset<OCMIntegrator> CreateOCMIntegrator(::flatbuffers::FlatBufferBuilder &_fbb, const OCMIntegratorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMRelativeGeometryT : public ::flatbuffers::NativeTable {
+  typedef OCMRelativeGeometry TableType;
+  std::vector<double> R_KM{};
+  std::vector<double> I_KM{};
+  std::vector<double> C_KM{};
+  std::vector<double> I_UNWRAPPED_KM{};
+  std::vector<double> SEPARATION_KM{};
+  std::vector<double> RANGE_RATE_KM_S{};
+  std::vector<double> PLANE_ANGLE_DEG{};
+  std::vector<double> A_CHIEF_KM{};
+  std::vector<double> DA{};
+  std::vector<double> DLAMBDA{};
+  std::vector<double> DEX{};
+  std::vector<double> DEY{};
+  std::vector<double> DIX{};
+  std::vector<double> DIY{};
+  std::vector<double> SIGMA_R_KM{};
+  std::vector<double> SIGMA_I_KM{};
+  std::vector<double> SIGMA_C_KM{};
+  std::vector<double> SIGMA_SEPARATION_KM{};
+  std::vector<double> BAND3_R_KM{};
+  std::vector<double> BAND3_I_KM{};
+  std::vector<double> BAND3_C_KM{};
+};
+
+/// Relative-motion geometry of a chaser about a target on the time grid of the
+/// message (SDS addition: CCSDS 502.0-B-3 has no curvilinear or
+/// relative-orbital-element trajectory type). Every vector holds one entry per
+/// time, in order: entry i is at STATE_EPOCHS[i], or at Metadata.START_TIME +
+/// i * STATE_STEP_SIZE. The target is CENTER_NAME and TRAJ_REF_FRAME its RTN
+/// axes. NaN where a quantity is not defined at a time. The first fourteen
+/// vectors are derived from the two element sets (SEED_SETS); the seven SIGMA_*
+/// and BAND3_* vectors are the projection's, NaN in a history segment.
+struct OCMRelativeGeometry FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMRelativeGeometryT NativeTableType;
+  typedef OCMRelativeGeometryBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_R_KM = 4,
+    VT_I_KM = 6,
+    VT_C_KM = 8,
+    VT_I_UNWRAPPED_KM = 10,
+    VT_SEPARATION_KM = 12,
+    VT_RANGE_RATE_KM_S = 14,
+    VT_PLANE_ANGLE_DEG = 16,
+    VT_A_CHIEF_KM = 18,
+    VT_DA = 20,
+    VT_DLAMBDA = 22,
+    VT_DEX = 24,
+    VT_DEY = 26,
+    VT_DIX = 28,
+    VT_DIY = 30,
+    VT_SIGMA_R_KM = 32,
+    VT_SIGMA_I_KM = 34,
+    VT_SIGMA_C_KM = 36,
+    VT_SIGMA_SEPARATION_KM = 38,
+    VT_BAND3_R_KM = 40,
+    VT_BAND3_I_KM = 42,
+    VT_BAND3_C_KM = 44
+  };
+  /// Curvilinear radial offset R = |p| - r0, km: p the chaser's geocentric
+  /// position, r0 = |r_target|.
+  const ::flatbuffers::Vector<double> *R_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_R_KM);
+  }
+  /// Curvilinear in-track offset I = r0 atan2(y, r0 + x), km, wrapped to
+  /// +-pi r0; (x, y, z) the chaser's rectilinear RTN offset from the target.
+  const ::flatbuffers::Vector<double> *I_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_I_KM);
+  }
+  /// Curvilinear cross-track offset C = r0 atan2(z, hypot(r0 + x, y)), km.
+  const ::flatbuffers::Vector<double> *C_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_C_KM);
+  }
+  /// I_KM continuous within the message (unwrapped), km.
+  const ::flatbuffers::Vector<double> *I_UNWRAPPED_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_I_UNWRAPPED_KM);
+  }
+  /// Chaser-target distance, km.
+  const ::flatbuffers::Vector<double> *SEPARATION_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SEPARATION_KM);
+  }
+  /// Rate of the separation, km/s.
+  const ::flatbuffers::Vector<double> *RANGE_RATE_KM_S() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_RANGE_RATE_KM_S);
+  }
+  /// Angle between the orbit normals (osculating angular momenta) of the chaser
+  /// and the target, deg.
+  const ::flatbuffers::Vector<double> *PLANE_ANGLE_DEG() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PLANE_ANGLE_DEG);
+  }
+  /// Semi-major axis of the chief (the target), from its osculating two-body
+  /// elements, km.
+  const ::flatbuffers::Vector<double> *A_CHIEF_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_A_CHIEF_KM);
+  }
+  /// Quasi-nonsingular relative orbital elements after D'Amico (2010), chief =
+  /// target, from osculating two-body elements: DA = (a_d - a_c) / a_c,
+  /// dimensionless.
+  const ::flatbuffers::Vector<double> *DA() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DA);
+  }
+  /// DLAMBDA = du + dRAAN cos i_c, rad.
+  const ::flatbuffers::Vector<double> *DLAMBDA() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DLAMBDA);
+  }
+  /// DEX: difference of e cos(w), dimensionless.
+  const ::flatbuffers::Vector<double> *DEX() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DEX);
+  }
+  /// DEY: difference of e sin(w), dimensionless.
+  const ::flatbuffers::Vector<double> *DEY() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DEY);
+  }
+  /// DIX = di, rad.
+  const ::flatbuffers::Vector<double> *DIX() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DIX);
+  }
+  /// DIY = dRAAN sin i_c, rad.
+  const ::flatbuffers::Vector<double> *DIY() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DIY);
+  }
+  /// 1-sigma of R_KM, I_KM and C_KM: the GP error model's sigma times a
+  /// per-axis factor, the 68.27 % quantile of |error| / model sigma over the
+  /// pair's own relative samples (predictions against the next element sets) in
+  /// the trailing calibration window; km.
+  const ::flatbuffers::Vector<double> *SIGMA_R_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SIGMA_R_KM);
+  }
+  const ::flatbuffers::Vector<double> *SIGMA_I_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SIGMA_I_KM);
+  }
+  const ::flatbuffers::Vector<double> *SIGMA_C_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SIGMA_C_KM);
+  }
+  /// 1-sigma of SEPARATION_KM, km.
+  const ::flatbuffers::Vector<double> *SIGMA_SEPARATION_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SIGMA_SEPARATION_KM);
+  }
+  /// 3-sigma band half-width of R_KM, I_KM and C_KM from the 99.73 % quantile of
+  /// the same ratio (not 3 SIGMA_* when the errors are not Gaussian), km.
+  const ::flatbuffers::Vector<double> *BAND3_R_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_BAND3_R_KM);
+  }
+  const ::flatbuffers::Vector<double> *BAND3_I_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_BAND3_I_KM);
+  }
+  const ::flatbuffers::Vector<double> *BAND3_C_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_BAND3_C_KM);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_R_KM) &&
+           verifier.VerifyVector(R_KM()) &&
+           VerifyOffset(verifier, VT_I_KM) &&
+           verifier.VerifyVector(I_KM()) &&
+           VerifyOffset(verifier, VT_C_KM) &&
+           verifier.VerifyVector(C_KM()) &&
+           VerifyOffset(verifier, VT_I_UNWRAPPED_KM) &&
+           verifier.VerifyVector(I_UNWRAPPED_KM()) &&
+           VerifyOffset(verifier, VT_SEPARATION_KM) &&
+           verifier.VerifyVector(SEPARATION_KM()) &&
+           VerifyOffset(verifier, VT_RANGE_RATE_KM_S) &&
+           verifier.VerifyVector(RANGE_RATE_KM_S()) &&
+           VerifyOffset(verifier, VT_PLANE_ANGLE_DEG) &&
+           verifier.VerifyVector(PLANE_ANGLE_DEG()) &&
+           VerifyOffset(verifier, VT_A_CHIEF_KM) &&
+           verifier.VerifyVector(A_CHIEF_KM()) &&
+           VerifyOffset(verifier, VT_DA) &&
+           verifier.VerifyVector(DA()) &&
+           VerifyOffset(verifier, VT_DLAMBDA) &&
+           verifier.VerifyVector(DLAMBDA()) &&
+           VerifyOffset(verifier, VT_DEX) &&
+           verifier.VerifyVector(DEX()) &&
+           VerifyOffset(verifier, VT_DEY) &&
+           verifier.VerifyVector(DEY()) &&
+           VerifyOffset(verifier, VT_DIX) &&
+           verifier.VerifyVector(DIX()) &&
+           VerifyOffset(verifier, VT_DIY) &&
+           verifier.VerifyVector(DIY()) &&
+           VerifyOffset(verifier, VT_SIGMA_R_KM) &&
+           verifier.VerifyVector(SIGMA_R_KM()) &&
+           VerifyOffset(verifier, VT_SIGMA_I_KM) &&
+           verifier.VerifyVector(SIGMA_I_KM()) &&
+           VerifyOffset(verifier, VT_SIGMA_C_KM) &&
+           verifier.VerifyVector(SIGMA_C_KM()) &&
+           VerifyOffset(verifier, VT_SIGMA_SEPARATION_KM) &&
+           verifier.VerifyVector(SIGMA_SEPARATION_KM()) &&
+           VerifyOffset(verifier, VT_BAND3_R_KM) &&
+           verifier.VerifyVector(BAND3_R_KM()) &&
+           VerifyOffset(verifier, VT_BAND3_I_KM) &&
+           verifier.VerifyVector(BAND3_I_KM()) &&
+           VerifyOffset(verifier, VT_BAND3_C_KM) &&
+           verifier.VerifyVector(BAND3_C_KM()) &&
+           verifier.EndTable();
+  }
+  OCMRelativeGeometryT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMRelativeGeometryT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMRelativeGeometry> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRelativeGeometryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMRelativeGeometryBuilder {
+  typedef OCMRelativeGeometry Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_R_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> R_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_R_KM, R_KM);
+  }
+  void add_I_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> I_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_I_KM, I_KM);
+  }
+  void add_C_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> C_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_C_KM, C_KM);
+  }
+  void add_I_UNWRAPPED_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> I_UNWRAPPED_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_I_UNWRAPPED_KM, I_UNWRAPPED_KM);
+  }
+  void add_SEPARATION_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> SEPARATION_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_SEPARATION_KM, SEPARATION_KM);
+  }
+  void add_RANGE_RATE_KM_S(::flatbuffers::Offset<::flatbuffers::Vector<double>> RANGE_RATE_KM_S) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_RANGE_RATE_KM_S, RANGE_RATE_KM_S);
+  }
+  void add_PLANE_ANGLE_DEG(::flatbuffers::Offset<::flatbuffers::Vector<double>> PLANE_ANGLE_DEG) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_PLANE_ANGLE_DEG, PLANE_ANGLE_DEG);
+  }
+  void add_A_CHIEF_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> A_CHIEF_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_A_CHIEF_KM, A_CHIEF_KM);
+  }
+  void add_DA(::flatbuffers::Offset<::flatbuffers::Vector<double>> DA) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_DA, DA);
+  }
+  void add_DLAMBDA(::flatbuffers::Offset<::flatbuffers::Vector<double>> DLAMBDA) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_DLAMBDA, DLAMBDA);
+  }
+  void add_DEX(::flatbuffers::Offset<::flatbuffers::Vector<double>> DEX) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_DEX, DEX);
+  }
+  void add_DEY(::flatbuffers::Offset<::flatbuffers::Vector<double>> DEY) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_DEY, DEY);
+  }
+  void add_DIX(::flatbuffers::Offset<::flatbuffers::Vector<double>> DIX) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_DIX, DIX);
+  }
+  void add_DIY(::flatbuffers::Offset<::flatbuffers::Vector<double>> DIY) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_DIY, DIY);
+  }
+  void add_SIGMA_R_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_R_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_SIGMA_R_KM, SIGMA_R_KM);
+  }
+  void add_SIGMA_I_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_I_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_SIGMA_I_KM, SIGMA_I_KM);
+  }
+  void add_SIGMA_C_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_C_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_SIGMA_C_KM, SIGMA_C_KM);
+  }
+  void add_SIGMA_SEPARATION_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_SEPARATION_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_SIGMA_SEPARATION_KM, SIGMA_SEPARATION_KM);
+  }
+  void add_BAND3_R_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> BAND3_R_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_BAND3_R_KM, BAND3_R_KM);
+  }
+  void add_BAND3_I_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> BAND3_I_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_BAND3_I_KM, BAND3_I_KM);
+  }
+  void add_BAND3_C_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> BAND3_C_KM) {
+    fbb_.AddOffset(OCMRelativeGeometry::VT_BAND3_C_KM, BAND3_C_KM);
+  }
+  explicit OCMRelativeGeometryBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMRelativeGeometry> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMRelativeGeometry>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMRelativeGeometry> CreateOCMRelativeGeometry(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> R_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> I_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> C_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> I_UNWRAPPED_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SEPARATION_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> RANGE_RATE_KM_S = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> PLANE_ANGLE_DEG = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> A_CHIEF_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DA = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DLAMBDA = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DEX = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DEY = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DIX = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> DIY = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_R_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_I_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_C_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SIGMA_SEPARATION_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> BAND3_R_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> BAND3_I_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> BAND3_C_KM = 0) {
+  OCMRelativeGeometryBuilder builder_(_fbb);
+  builder_.add_BAND3_C_KM(BAND3_C_KM);
+  builder_.add_BAND3_I_KM(BAND3_I_KM);
+  builder_.add_BAND3_R_KM(BAND3_R_KM);
+  builder_.add_SIGMA_SEPARATION_KM(SIGMA_SEPARATION_KM);
+  builder_.add_SIGMA_C_KM(SIGMA_C_KM);
+  builder_.add_SIGMA_I_KM(SIGMA_I_KM);
+  builder_.add_SIGMA_R_KM(SIGMA_R_KM);
+  builder_.add_DIY(DIY);
+  builder_.add_DIX(DIX);
+  builder_.add_DEY(DEY);
+  builder_.add_DEX(DEX);
+  builder_.add_DLAMBDA(DLAMBDA);
+  builder_.add_DA(DA);
+  builder_.add_A_CHIEF_KM(A_CHIEF_KM);
+  builder_.add_PLANE_ANGLE_DEG(PLANE_ANGLE_DEG);
+  builder_.add_RANGE_RATE_KM_S(RANGE_RATE_KM_S);
+  builder_.add_SEPARATION_KM(SEPARATION_KM);
+  builder_.add_I_UNWRAPPED_KM(I_UNWRAPPED_KM);
+  builder_.add_C_KM(C_KM);
+  builder_.add_I_KM(I_KM);
+  builder_.add_R_KM(R_KM);
+  return builder_.Finish();
+}
+
+struct OCMRelativeGeometry::Traits {
+  using type = OCMRelativeGeometry;
+  static auto constexpr Create = CreateOCMRelativeGeometry;
+};
+
+inline ::flatbuffers::Offset<OCMRelativeGeometry> CreateOCMRelativeGeometryDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<double> *R_KM = nullptr,
+    const std::vector<double> *I_KM = nullptr,
+    const std::vector<double> *C_KM = nullptr,
+    const std::vector<double> *I_UNWRAPPED_KM = nullptr,
+    const std::vector<double> *SEPARATION_KM = nullptr,
+    const std::vector<double> *RANGE_RATE_KM_S = nullptr,
+    const std::vector<double> *PLANE_ANGLE_DEG = nullptr,
+    const std::vector<double> *A_CHIEF_KM = nullptr,
+    const std::vector<double> *DA = nullptr,
+    const std::vector<double> *DLAMBDA = nullptr,
+    const std::vector<double> *DEX = nullptr,
+    const std::vector<double> *DEY = nullptr,
+    const std::vector<double> *DIX = nullptr,
+    const std::vector<double> *DIY = nullptr,
+    const std::vector<double> *SIGMA_R_KM = nullptr,
+    const std::vector<double> *SIGMA_I_KM = nullptr,
+    const std::vector<double> *SIGMA_C_KM = nullptr,
+    const std::vector<double> *SIGMA_SEPARATION_KM = nullptr,
+    const std::vector<double> *BAND3_R_KM = nullptr,
+    const std::vector<double> *BAND3_I_KM = nullptr,
+    const std::vector<double> *BAND3_C_KM = nullptr) {
+  auto R_KM__ = R_KM ? _fbb.CreateVector<double>(*R_KM) : 0;
+  auto I_KM__ = I_KM ? _fbb.CreateVector<double>(*I_KM) : 0;
+  auto C_KM__ = C_KM ? _fbb.CreateVector<double>(*C_KM) : 0;
+  auto I_UNWRAPPED_KM__ = I_UNWRAPPED_KM ? _fbb.CreateVector<double>(*I_UNWRAPPED_KM) : 0;
+  auto SEPARATION_KM__ = SEPARATION_KM ? _fbb.CreateVector<double>(*SEPARATION_KM) : 0;
+  auto RANGE_RATE_KM_S__ = RANGE_RATE_KM_S ? _fbb.CreateVector<double>(*RANGE_RATE_KM_S) : 0;
+  auto PLANE_ANGLE_DEG__ = PLANE_ANGLE_DEG ? _fbb.CreateVector<double>(*PLANE_ANGLE_DEG) : 0;
+  auto A_CHIEF_KM__ = A_CHIEF_KM ? _fbb.CreateVector<double>(*A_CHIEF_KM) : 0;
+  auto DA__ = DA ? _fbb.CreateVector<double>(*DA) : 0;
+  auto DLAMBDA__ = DLAMBDA ? _fbb.CreateVector<double>(*DLAMBDA) : 0;
+  auto DEX__ = DEX ? _fbb.CreateVector<double>(*DEX) : 0;
+  auto DEY__ = DEY ? _fbb.CreateVector<double>(*DEY) : 0;
+  auto DIX__ = DIX ? _fbb.CreateVector<double>(*DIX) : 0;
+  auto DIY__ = DIY ? _fbb.CreateVector<double>(*DIY) : 0;
+  auto SIGMA_R_KM__ = SIGMA_R_KM ? _fbb.CreateVector<double>(*SIGMA_R_KM) : 0;
+  auto SIGMA_I_KM__ = SIGMA_I_KM ? _fbb.CreateVector<double>(*SIGMA_I_KM) : 0;
+  auto SIGMA_C_KM__ = SIGMA_C_KM ? _fbb.CreateVector<double>(*SIGMA_C_KM) : 0;
+  auto SIGMA_SEPARATION_KM__ = SIGMA_SEPARATION_KM ? _fbb.CreateVector<double>(*SIGMA_SEPARATION_KM) : 0;
+  auto BAND3_R_KM__ = BAND3_R_KM ? _fbb.CreateVector<double>(*BAND3_R_KM) : 0;
+  auto BAND3_I_KM__ = BAND3_I_KM ? _fbb.CreateVector<double>(*BAND3_I_KM) : 0;
+  auto BAND3_C_KM__ = BAND3_C_KM ? _fbb.CreateVector<double>(*BAND3_C_KM) : 0;
+  return CreateOCMRelativeGeometry(
+      _fbb,
+      R_KM__,
+      I_KM__,
+      C_KM__,
+      I_UNWRAPPED_KM__,
+      SEPARATION_KM__,
+      RANGE_RATE_KM_S__,
+      PLANE_ANGLE_DEG__,
+      A_CHIEF_KM__,
+      DA__,
+      DLAMBDA__,
+      DEX__,
+      DEY__,
+      DIX__,
+      DIY__,
+      SIGMA_R_KM__,
+      SIGMA_I_KM__,
+      SIGMA_C_KM__,
+      SIGMA_SEPARATION_KM__,
+      BAND3_R_KM__,
+      BAND3_I_KM__,
+      BAND3_C_KM__);
+}
+
+::flatbuffers::Offset<OCMRelativeGeometry> CreateOCMRelativeGeometry(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRelativeGeometryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMRadarInputsT : public ::flatbuffers::NativeTable {
+  typedef OCMRadarInputs TableType;
+  std::string SOURCE{};
+  double FREQUENCY_GHZ = std::numeric_limits<double>::quiet_NaN();
+  double ANTENNA_LENGTH_M = std::numeric_limits<double>::quiet_NaN();
+  double ANTENNA_HEIGHT_M = std::numeric_limits<double>::quiet_NaN();
+  double INCIDENCE_MIN_DEG = std::numeric_limits<double>::quiet_NaN();
+  double INCIDENCE_MAX_DEG = std::numeric_limits<double>::quiet_NaN();
+};
+
+/// The side-looking radar a chaser's position is tested against (the inputs
+/// only: wavelength, beamwidths and look angles follow from them).
+struct OCMRadarInputs FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMRadarInputsT NativeTableType;
+  typedef OCMRadarInputsBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_SOURCE = 4,
+    VT_FREQUENCY_GHZ = 6,
+    VT_ANTENNA_LENGTH_M = 8,
+    VT_ANTENNA_HEIGHT_M = 10,
+    VT_INCIDENCE_MIN_DEG = 12,
+    VT_INCIDENCE_MAX_DEG = 14
+  };
+  /// Citation of the radar's published characteristics.
+  const ::flatbuffers::String *SOURCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE);
+  }
+  /// Carrier frequency, GHz. NaN when not stated.
+  double FREQUENCY_GHZ() const {
+    return GetField<double>(VT_FREQUENCY_GHZ, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Antenna aperture along track, m. NaN when not stated.
+  double ANTENNA_LENGTH_M() const {
+    return GetField<double>(VT_ANTENNA_LENGTH_M, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Antenna aperture across track, m. NaN when not stated.
+  double ANTENNA_HEIGHT_M() const {
+    return GetField<double>(VT_ANTENNA_HEIGHT_M, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Incidence-angle band of the swath, deg. NaN when not stated.
+  double INCIDENCE_MIN_DEG() const {
+    return GetField<double>(VT_INCIDENCE_MIN_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  double INCIDENCE_MAX_DEG() const {
+    return GetField<double>(VT_INCIDENCE_MAX_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_SOURCE) &&
+           verifier.VerifyString(SOURCE()) &&
+           VerifyField<double>(verifier, VT_FREQUENCY_GHZ, 8) &&
+           VerifyField<double>(verifier, VT_ANTENNA_LENGTH_M, 8) &&
+           VerifyField<double>(verifier, VT_ANTENNA_HEIGHT_M, 8) &&
+           VerifyField<double>(verifier, VT_INCIDENCE_MIN_DEG, 8) &&
+           VerifyField<double>(verifier, VT_INCIDENCE_MAX_DEG, 8) &&
+           verifier.EndTable();
+  }
+  OCMRadarInputsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMRadarInputsT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMRadarInputs> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRadarInputsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMRadarInputsBuilder {
+  typedef OCMRadarInputs Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_SOURCE(::flatbuffers::Offset<::flatbuffers::String> SOURCE) {
+    fbb_.AddOffset(OCMRadarInputs::VT_SOURCE, SOURCE);
+  }
+  void add_FREQUENCY_GHZ(double FREQUENCY_GHZ) {
+    fbb_.AddElement<double>(OCMRadarInputs::VT_FREQUENCY_GHZ, FREQUENCY_GHZ, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ANTENNA_LENGTH_M(double ANTENNA_LENGTH_M) {
+    fbb_.AddElement<double>(OCMRadarInputs::VT_ANTENNA_LENGTH_M, ANTENNA_LENGTH_M, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ANTENNA_HEIGHT_M(double ANTENNA_HEIGHT_M) {
+    fbb_.AddElement<double>(OCMRadarInputs::VT_ANTENNA_HEIGHT_M, ANTENNA_HEIGHT_M, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_INCIDENCE_MIN_DEG(double INCIDENCE_MIN_DEG) {
+    fbb_.AddElement<double>(OCMRadarInputs::VT_INCIDENCE_MIN_DEG, INCIDENCE_MIN_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_INCIDENCE_MAX_DEG(double INCIDENCE_MAX_DEG) {
+    fbb_.AddElement<double>(OCMRadarInputs::VT_INCIDENCE_MAX_DEG, INCIDENCE_MAX_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  explicit OCMRadarInputsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMRadarInputs> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMRadarInputs>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMRadarInputs> CreateOCMRadarInputs(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE = 0,
+    double FREQUENCY_GHZ = std::numeric_limits<double>::quiet_NaN(),
+    double ANTENNA_LENGTH_M = std::numeric_limits<double>::quiet_NaN(),
+    double ANTENNA_HEIGHT_M = std::numeric_limits<double>::quiet_NaN(),
+    double INCIDENCE_MIN_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double INCIDENCE_MAX_DEG = std::numeric_limits<double>::quiet_NaN()) {
+  OCMRadarInputsBuilder builder_(_fbb);
+  builder_.add_INCIDENCE_MAX_DEG(INCIDENCE_MAX_DEG);
+  builder_.add_INCIDENCE_MIN_DEG(INCIDENCE_MIN_DEG);
+  builder_.add_ANTENNA_HEIGHT_M(ANTENNA_HEIGHT_M);
+  builder_.add_ANTENNA_LENGTH_M(ANTENNA_LENGTH_M);
+  builder_.add_FREQUENCY_GHZ(FREQUENCY_GHZ);
+  builder_.add_SOURCE(SOURCE);
+  return builder_.Finish();
+}
+
+struct OCMRadarInputs::Traits {
+  using type = OCMRadarInputs;
+  static auto constexpr Create = CreateOCMRadarInputs;
+};
+
+inline ::flatbuffers::Offset<OCMRadarInputs> CreateOCMRadarInputsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *SOURCE = nullptr,
+    double FREQUENCY_GHZ = std::numeric_limits<double>::quiet_NaN(),
+    double ANTENNA_LENGTH_M = std::numeric_limits<double>::quiet_NaN(),
+    double ANTENNA_HEIGHT_M = std::numeric_limits<double>::quiet_NaN(),
+    double INCIDENCE_MIN_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double INCIDENCE_MAX_DEG = std::numeric_limits<double>::quiet_NaN()) {
+  auto SOURCE__ = SOURCE ? _fbb.CreateString(SOURCE) : 0;
+  return CreateOCMRadarInputs(
+      _fbb,
+      SOURCE__,
+      FREQUENCY_GHZ,
+      ANTENNA_LENGTH_M,
+      ANTENNA_HEIGHT_M,
+      INCIDENCE_MIN_DEG,
+      INCIDENCE_MAX_DEG);
+}
+
+::flatbuffers::Offset<OCMRadarInputs> CreateOCMRadarInputs(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRadarInputsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct OCMInspectionGeometryT : public ::flatbuffers::NativeTable {
+  typedef OCMInspectionGeometry TableType;
+  std::vector<double> PHASE_ANGLE_DEG{};
+  std::vector<double> TARGET_SUNLIT{};
+  std::vector<double> CHASER_SUNLIT{};
+  std::vector<bool> LINE_OF_SIGHT{};
+  std::vector<double> TARGET_LIT_FROM_CHASER{};
+  std::vector<double> SUN_FROM_LINE_OF_SIGHT_DEG{};
+  std::vector<double> RANGE_KM{};
+  std::vector<double> CHASER_OFF_NADIR_DEG{};
+  std::vector<double> CHASER_CLOCK_DEG{};
+  std::vector<bool> IN_SAR_RIGHT{};
+  std::vector<bool> IN_SAR_LEFT{};
+  std::unique_ptr<OCMRadarInputsT> RADAR{};
+  OCMInspectionGeometryT() = default;
+  OCMInspectionGeometryT(const OCMInspectionGeometryT &o);
+  OCMInspectionGeometryT(OCMInspectionGeometryT&&) FLATBUFFERS_NOEXCEPT = default;
+  OCMInspectionGeometryT &operator=(OCMInspectionGeometryT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Inspection geometry of a chaser about a target on the time grid of the
+/// message (SDS addition; CCSDS 502.0-B-3 has none). Every vector holds one
+/// entry per time, in order: entry i is at STATE_EPOCHS[i], or at
+/// Metadata.START_TIME + i * STATE_STEP_SIZE. The target is CENTER_NAME. The
+/// Earth shadow is the conical model of a spherical Earth (6378.137 km) and a
+/// spherical Sun (695700 km); the target's nadir is -r / |r|; the along-track
+/// direction is the Earth-relative velocity perpendicular to r; right is nadir
+/// x along-track.
+struct OCMInspectionGeometry FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef OCMInspectionGeometryT NativeTableType;
+  typedef OCMInspectionGeometryBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_PHASE_ANGLE_DEG = 4,
+    VT_TARGET_SUNLIT = 6,
+    VT_CHASER_SUNLIT = 8,
+    VT_LINE_OF_SIGHT = 10,
+    VT_TARGET_LIT_FROM_CHASER = 12,
+    VT_SUN_FROM_LINE_OF_SIGHT_DEG = 14,
+    VT_RANGE_KM = 16,
+    VT_CHASER_OFF_NADIR_DEG = 18,
+    VT_CHASER_CLOCK_DEG = 20,
+    VT_IN_SAR_RIGHT = 22,
+    VT_IN_SAR_LEFT = 24,
+    VT_RADAR = 26
+  };
+  /// Angle at the target between the Sun and the chaser, deg.
+  const ::flatbuffers::Vector<double> *PHASE_ANGLE_DEG() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_PHASE_ANGLE_DEG);
+  }
+  /// Fraction of the Sun's disk the target sees: 0 umbra, 1 sunlit.
+  const ::flatbuffers::Vector<double> *TARGET_SUNLIT() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_TARGET_SUNLIT);
+  }
+  /// The same for the chaser.
+  const ::flatbuffers::Vector<double> *CHASER_SUNLIT() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_CHASER_SUNLIT);
+  }
+  /// True when the chaser-target segment clears a sphere of 6378.137 km.
+  const ::flatbuffers::Vector<uint8_t> *LINE_OF_SIGHT() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_LINE_OF_SIGHT);
+  }
+  /// TARGET_SUNLIT times LINE_OF_SIGHT.
+  const ::flatbuffers::Vector<double> *TARGET_LIT_FROM_CHASER() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_TARGET_LIT_FROM_CHASER);
+  }
+  /// Angle at the chaser between the target and the Sun, deg.
+  const ::flatbuffers::Vector<double> *SUN_FROM_LINE_OF_SIGHT_DEG() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_SUN_FROM_LINE_OF_SIGHT_DEG);
+  }
+  /// Chaser-target distance, km.
+  const ::flatbuffers::Vector<double> *RANGE_KM() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_RANGE_KM);
+  }
+  /// Angle at the target between its nadir and the chaser, deg.
+  const ::flatbuffers::Vector<double> *CHASER_OFF_NADIR_DEG() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_CHASER_OFF_NADIR_DEG);
+  }
+  /// The chaser's clock angle about the target's nadir, deg, from along-track
+  /// toward right (90 right of the track, 270 left).
+  const ::flatbuffers::Vector<double> *CHASER_CLOCK_DEG() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_CHASER_CLOCK_DEG);
+  }
+  /// True when the chaser is inside the target radar's field of regard on that
+  /// side: off-nadir between the look angles of the incidence band, within half
+  /// the azimuth beamwidth (0.886 wavelength / aperture length, -3 dB, uniform
+  /// aperture) of the broadside plane. Empty without RADAR.
+  const ::flatbuffers::Vector<uint8_t> *IN_SAR_RIGHT() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_IN_SAR_RIGHT);
+  }
+  const ::flatbuffers::Vector<uint8_t> *IN_SAR_LEFT() const {
+    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_IN_SAR_LEFT);
+  }
+  /// The radar. Absent when no radar was given.
+  const OCMRadarInputs *RADAR() const {
+    return GetPointer<const OCMRadarInputs *>(VT_RADAR);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_PHASE_ANGLE_DEG) &&
+           verifier.VerifyVector(PHASE_ANGLE_DEG()) &&
+           VerifyOffset(verifier, VT_TARGET_SUNLIT) &&
+           verifier.VerifyVector(TARGET_SUNLIT()) &&
+           VerifyOffset(verifier, VT_CHASER_SUNLIT) &&
+           verifier.VerifyVector(CHASER_SUNLIT()) &&
+           VerifyOffset(verifier, VT_LINE_OF_SIGHT) &&
+           verifier.VerifyVector(LINE_OF_SIGHT()) &&
+           VerifyOffset(verifier, VT_TARGET_LIT_FROM_CHASER) &&
+           verifier.VerifyVector(TARGET_LIT_FROM_CHASER()) &&
+           VerifyOffset(verifier, VT_SUN_FROM_LINE_OF_SIGHT_DEG) &&
+           verifier.VerifyVector(SUN_FROM_LINE_OF_SIGHT_DEG()) &&
+           VerifyOffset(verifier, VT_RANGE_KM) &&
+           verifier.VerifyVector(RANGE_KM()) &&
+           VerifyOffset(verifier, VT_CHASER_OFF_NADIR_DEG) &&
+           verifier.VerifyVector(CHASER_OFF_NADIR_DEG()) &&
+           VerifyOffset(verifier, VT_CHASER_CLOCK_DEG) &&
+           verifier.VerifyVector(CHASER_CLOCK_DEG()) &&
+           VerifyOffset(verifier, VT_IN_SAR_RIGHT) &&
+           verifier.VerifyVector(IN_SAR_RIGHT()) &&
+           VerifyOffset(verifier, VT_IN_SAR_LEFT) &&
+           verifier.VerifyVector(IN_SAR_LEFT()) &&
+           VerifyOffset(verifier, VT_RADAR) &&
+           verifier.VerifyTable(RADAR()) &&
+           verifier.EndTable();
+  }
+  OCMInspectionGeometryT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(OCMInspectionGeometryT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<OCMInspectionGeometry> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMInspectionGeometryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct OCMInspectionGeometryBuilder {
+  typedef OCMInspectionGeometry Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_PHASE_ANGLE_DEG(::flatbuffers::Offset<::flatbuffers::Vector<double>> PHASE_ANGLE_DEG) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_PHASE_ANGLE_DEG, PHASE_ANGLE_DEG);
+  }
+  void add_TARGET_SUNLIT(::flatbuffers::Offset<::flatbuffers::Vector<double>> TARGET_SUNLIT) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_TARGET_SUNLIT, TARGET_SUNLIT);
+  }
+  void add_CHASER_SUNLIT(::flatbuffers::Offset<::flatbuffers::Vector<double>> CHASER_SUNLIT) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_CHASER_SUNLIT, CHASER_SUNLIT);
+  }
+  void add_LINE_OF_SIGHT(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> LINE_OF_SIGHT) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_LINE_OF_SIGHT, LINE_OF_SIGHT);
+  }
+  void add_TARGET_LIT_FROM_CHASER(::flatbuffers::Offset<::flatbuffers::Vector<double>> TARGET_LIT_FROM_CHASER) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_TARGET_LIT_FROM_CHASER, TARGET_LIT_FROM_CHASER);
+  }
+  void add_SUN_FROM_LINE_OF_SIGHT_DEG(::flatbuffers::Offset<::flatbuffers::Vector<double>> SUN_FROM_LINE_OF_SIGHT_DEG) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_SUN_FROM_LINE_OF_SIGHT_DEG, SUN_FROM_LINE_OF_SIGHT_DEG);
+  }
+  void add_RANGE_KM(::flatbuffers::Offset<::flatbuffers::Vector<double>> RANGE_KM) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_RANGE_KM, RANGE_KM);
+  }
+  void add_CHASER_OFF_NADIR_DEG(::flatbuffers::Offset<::flatbuffers::Vector<double>> CHASER_OFF_NADIR_DEG) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_CHASER_OFF_NADIR_DEG, CHASER_OFF_NADIR_DEG);
+  }
+  void add_CHASER_CLOCK_DEG(::flatbuffers::Offset<::flatbuffers::Vector<double>> CHASER_CLOCK_DEG) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_CHASER_CLOCK_DEG, CHASER_CLOCK_DEG);
+  }
+  void add_IN_SAR_RIGHT(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> IN_SAR_RIGHT) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_IN_SAR_RIGHT, IN_SAR_RIGHT);
+  }
+  void add_IN_SAR_LEFT(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> IN_SAR_LEFT) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_IN_SAR_LEFT, IN_SAR_LEFT);
+  }
+  void add_RADAR(::flatbuffers::Offset<OCMRadarInputs> RADAR) {
+    fbb_.AddOffset(OCMInspectionGeometry::VT_RADAR, RADAR);
+  }
+  explicit OCMInspectionGeometryBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<OCMInspectionGeometry> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<OCMInspectionGeometry>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<OCMInspectionGeometry> CreateOCMInspectionGeometry(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> PHASE_ANGLE_DEG = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> TARGET_SUNLIT = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> CHASER_SUNLIT = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> LINE_OF_SIGHT = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> TARGET_LIT_FROM_CHASER = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> SUN_FROM_LINE_OF_SIGHT_DEG = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> RANGE_KM = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> CHASER_OFF_NADIR_DEG = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> CHASER_CLOCK_DEG = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> IN_SAR_RIGHT = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> IN_SAR_LEFT = 0,
+    ::flatbuffers::Offset<OCMRadarInputs> RADAR = 0) {
+  OCMInspectionGeometryBuilder builder_(_fbb);
+  builder_.add_RADAR(RADAR);
+  builder_.add_IN_SAR_LEFT(IN_SAR_LEFT);
+  builder_.add_IN_SAR_RIGHT(IN_SAR_RIGHT);
+  builder_.add_CHASER_CLOCK_DEG(CHASER_CLOCK_DEG);
+  builder_.add_CHASER_OFF_NADIR_DEG(CHASER_OFF_NADIR_DEG);
+  builder_.add_RANGE_KM(RANGE_KM);
+  builder_.add_SUN_FROM_LINE_OF_SIGHT_DEG(SUN_FROM_LINE_OF_SIGHT_DEG);
+  builder_.add_TARGET_LIT_FROM_CHASER(TARGET_LIT_FROM_CHASER);
+  builder_.add_LINE_OF_SIGHT(LINE_OF_SIGHT);
+  builder_.add_CHASER_SUNLIT(CHASER_SUNLIT);
+  builder_.add_TARGET_SUNLIT(TARGET_SUNLIT);
+  builder_.add_PHASE_ANGLE_DEG(PHASE_ANGLE_DEG);
+  return builder_.Finish();
+}
+
+struct OCMInspectionGeometry::Traits {
+  using type = OCMInspectionGeometry;
+  static auto constexpr Create = CreateOCMInspectionGeometry;
+};
+
+inline ::flatbuffers::Offset<OCMInspectionGeometry> CreateOCMInspectionGeometryDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<double> *PHASE_ANGLE_DEG = nullptr,
+    const std::vector<double> *TARGET_SUNLIT = nullptr,
+    const std::vector<double> *CHASER_SUNLIT = nullptr,
+    const std::vector<uint8_t> *LINE_OF_SIGHT = nullptr,
+    const std::vector<double> *TARGET_LIT_FROM_CHASER = nullptr,
+    const std::vector<double> *SUN_FROM_LINE_OF_SIGHT_DEG = nullptr,
+    const std::vector<double> *RANGE_KM = nullptr,
+    const std::vector<double> *CHASER_OFF_NADIR_DEG = nullptr,
+    const std::vector<double> *CHASER_CLOCK_DEG = nullptr,
+    const std::vector<uint8_t> *IN_SAR_RIGHT = nullptr,
+    const std::vector<uint8_t> *IN_SAR_LEFT = nullptr,
+    ::flatbuffers::Offset<OCMRadarInputs> RADAR = 0) {
+  auto PHASE_ANGLE_DEG__ = PHASE_ANGLE_DEG ? _fbb.CreateVector<double>(*PHASE_ANGLE_DEG) : 0;
+  auto TARGET_SUNLIT__ = TARGET_SUNLIT ? _fbb.CreateVector<double>(*TARGET_SUNLIT) : 0;
+  auto CHASER_SUNLIT__ = CHASER_SUNLIT ? _fbb.CreateVector<double>(*CHASER_SUNLIT) : 0;
+  auto LINE_OF_SIGHT__ = LINE_OF_SIGHT ? _fbb.CreateVector<uint8_t>(*LINE_OF_SIGHT) : 0;
+  auto TARGET_LIT_FROM_CHASER__ = TARGET_LIT_FROM_CHASER ? _fbb.CreateVector<double>(*TARGET_LIT_FROM_CHASER) : 0;
+  auto SUN_FROM_LINE_OF_SIGHT_DEG__ = SUN_FROM_LINE_OF_SIGHT_DEG ? _fbb.CreateVector<double>(*SUN_FROM_LINE_OF_SIGHT_DEG) : 0;
+  auto RANGE_KM__ = RANGE_KM ? _fbb.CreateVector<double>(*RANGE_KM) : 0;
+  auto CHASER_OFF_NADIR_DEG__ = CHASER_OFF_NADIR_DEG ? _fbb.CreateVector<double>(*CHASER_OFF_NADIR_DEG) : 0;
+  auto CHASER_CLOCK_DEG__ = CHASER_CLOCK_DEG ? _fbb.CreateVector<double>(*CHASER_CLOCK_DEG) : 0;
+  auto IN_SAR_RIGHT__ = IN_SAR_RIGHT ? _fbb.CreateVector<uint8_t>(*IN_SAR_RIGHT) : 0;
+  auto IN_SAR_LEFT__ = IN_SAR_LEFT ? _fbb.CreateVector<uint8_t>(*IN_SAR_LEFT) : 0;
+  return CreateOCMInspectionGeometry(
+      _fbb,
+      PHASE_ANGLE_DEG__,
+      TARGET_SUNLIT__,
+      CHASER_SUNLIT__,
+      LINE_OF_SIGHT__,
+      TARGET_LIT_FROM_CHASER__,
+      SUN_FROM_LINE_OF_SIGHT_DEG__,
+      RANGE_KM__,
+      CHASER_OFF_NADIR_DEG__,
+      CHASER_CLOCK_DEG__,
+      IN_SAR_RIGHT__,
+      IN_SAR_LEFT__,
+      RADAR);
+}
+
+::flatbuffers::Offset<OCMInspectionGeometry> CreateOCMInspectionGeometry(::flatbuffers::FlatBufferBuilder &_fbb, const OCMInspectionGeometryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct OrbitDeterminationT : public ::flatbuffers::NativeTable {
   typedef OrbitDetermination TableType;
@@ -3654,6 +6127,7 @@ struct OrbitDeterminationT : public ::flatbuffers::NativeTable {
   uint32_t SENSORS_N = 0;
   std::string SENSORS{};
   std::vector<std::string> COMMENT{};
+  std::unique_ptr<OCMFitStatisticsT> FIT_STATISTICS{};
   OrbitDeterminationT() = default;
   OrbitDeterminationT(const OrbitDeterminationT &o);
   OrbitDeterminationT(OrbitDeterminationT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -3711,7 +6185,8 @@ struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
     VT_CONSIDER_PARAMS = 90,
     VT_SENSORS_N = 92,
     VT_SENSORS = 94,
-    VT_COMMENT = 96
+    VT_COMMENT = 96,
+    VT_FIT_STATISTICS = 98
   };
   /// Unique identifier for the orbit determination.
   const ::flatbuffers::String *OD_ID() const {
@@ -3785,7 +6260,9 @@ struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   estimatorCategory OD_ESTIMATOR() const {
     return static_cast<estimatorCategory>(GetField<int8_t>(VT_OD_ESTIMATOR, 0));
   }
-  /// RMS of post-fit residuals for this solution.
+  /// RMS of post-fit residuals for this solution. In the unit of the residuals the
+  /// observation types state: arcsec for RADEC angles. A position RMS in km is
+  /// OCMFitStatistics.FIT_RMS_KM.
   double OD_RESIDUAL_RMS() const {
     return GetField<double>(VT_OD_RESIDUAL_RMS, 0.0);
   }
@@ -3907,6 +6384,10 @@ struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
   const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *COMMENT() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>> *>(VT_COMMENT);
   }
+  /// Position statistics of a fit to a reference ephemeris.
+  const OCMFitStatistics *FIT_STATISTICS() const {
+    return GetPointer<const OCMFitStatistics *>(VT_FIT_STATISTICS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -3984,6 +6465,8 @@ struct OrbitDetermination FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table
            VerifyOffset(verifier, VT_COMMENT) &&
            verifier.VerifyVector(COMMENT()) &&
            verifier.VerifyVectorOfStrings(COMMENT()) &&
+           VerifyOffset(verifier, VT_FIT_STATISTICS) &&
+           verifier.VerifyTable(FIT_STATISTICS()) &&
            verifier.EndTable();
   }
   OrbitDeterminationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -4136,6 +6619,9 @@ struct OrbitDeterminationBuilder {
   void add_COMMENT(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> COMMENT) {
     fbb_.AddOffset(OrbitDetermination::VT_COMMENT, COMMENT);
   }
+  void add_FIT_STATISTICS(::flatbuffers::Offset<OCMFitStatistics> FIT_STATISTICS) {
+    fbb_.AddOffset(OrbitDetermination::VT_FIT_STATISTICS, FIT_STATISTICS);
+  }
   explicit OrbitDeterminationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -4195,7 +6681,8 @@ inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDetermination(
     ::flatbuffers::Offset<::flatbuffers::String> CONSIDER_PARAMS = 0,
     uint32_t SENSORS_N = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SENSORS = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> COMMENT = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<::flatbuffers::String>>> COMMENT = 0,
+    ::flatbuffers::Offset<OCMFitStatistics> FIT_STATISTICS = 0) {
   OrbitDeterminationBuilder builder_(_fbb);
   builder_.add_GDOP(GDOP);
   builder_.add_OD_CONFIDENCE(OD_CONFIDENCE);
@@ -4213,6 +6700,7 @@ inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDetermination(
   builder_.add_SEDR(SEDR);
   builder_.add_OD_BATCH_BASELINE_RMS(OD_BATCH_BASELINE_RMS);
   builder_.add_OD_RESIDUAL_RMS(OD_RESIDUAL_RMS);
+  builder_.add_FIT_STATISTICS(FIT_STATISTICS);
   builder_.add_COMMENT(COMMENT);
   builder_.add_SENSORS(SENSORS);
   builder_.add_SENSORS_N(SENSORS_N);
@@ -4300,7 +6788,8 @@ inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDeterminationDirect(
     const char *CONSIDER_PARAMS = nullptr,
     uint32_t SENSORS_N = 0,
     const char *SENSORS = nullptr,
-    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *COMMENT = nullptr) {
+    const std::vector<::flatbuffers::Offset<::flatbuffers::String>> *COMMENT = nullptr,
+    ::flatbuffers::Offset<OCMFitStatistics> FIT_STATISTICS = 0) {
   auto OD_ID__ = OD_ID ? _fbb.CreateString(OD_ID) : 0;
   auto OD_PREV_ID__ = OD_PREV_ID ? _fbb.CreateString(OD_PREV_ID) : 0;
   auto OD_ALGORITHM__ = OD_ALGORITHM ? _fbb.CreateString(OD_ALGORITHM) : 0;
@@ -4372,7 +6861,8 @@ inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDeterminationDirect(
       CONSIDER_PARAMS__,
       SENSORS_N,
       SENSORS__,
-      COMMENT__);
+      COMMENT__,
+      FIT_STATISTICS);
 }
 
 ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDetermination(::flatbuffers::FlatBufferBuilder &_fbb, const OrbitDeterminationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5184,6 +7674,14 @@ struct OCMT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<OCMCovarianceBlockT>> COVARIANCE_BLOCKS{};
   std::unique_ptr<PVNT> PROVENANCE{};
   std::vector<std::unique_ptr<CVRT>> COV_REALISM{};
+  std::unique_ptr<OCMMeanElementsT> MEAN_ELEMENTS{};
+  std::unique_ptr<OCMCovariancePropagationT> COV_PROPAGATION{};
+  std::vector<prwDynamicParameter> COV_PARAMETER_KINDS{};
+  ocmTrajectoryBasis TRAJ_BASIS = ocmTrajectoryBasis::UNSPECIFIED;
+  std::vector<std::unique_ptr<OCMSeedSetT>> SEED_SETS{};
+  std::unique_ptr<OCMIntegratorT> INTEGRATOR{};
+  std::unique_ptr<OCMRelativeGeometryT> RPO_GEOMETRY{};
+  std::unique_ptr<OCMInspectionGeometryT> RPO_INSPECTION{};
   OCMT() = default;
   OCMT(const OCMT &o);
   OCMT(OCMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -5228,7 +7726,15 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_TRAJECTORY_BLOCKS = 62,
     VT_COVARIANCE_BLOCKS = 64,
     VT_PROVENANCE = 66,
-    VT_COV_REALISM = 68
+    VT_COV_REALISM = 68,
+    VT_MEAN_ELEMENTS = 70,
+    VT_COV_PROPAGATION = 72,
+    VT_COV_PARAMETER_KINDS = 74,
+    VT_TRAJ_BASIS = 76,
+    VT_SEED_SETS = 78,
+    VT_INTEGRATOR = 80,
+    VT_RPO_GEOMETRY = 82,
+    VT_RPO_INSPECTION = 84
   };
   /// Header section of the OCM.
   const Header *HEADER() const {
@@ -5266,6 +7772,7 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   /// Time reconstruction uses STATE_EPOCHS when present, otherwise START_TIME + i * STATE_STEP_SIZE.
   /// Length must be divisible by STATE_VECTOR_SIZE.
   /// Units: km, km/s and km/s**2, in TRAJ_REF_FRAME about CENTER_NAME.
+  /// Empty when MEAN_ELEMENTS, RPO_GEOMETRY or RPO_INSPECTION is present.
   const ::flatbuffers::Vector<double> *STATE_DATA() const {
     return GetPointer<const ::flatbuffers::Vector<double> *>(VT_STATE_DATA);
   }
@@ -5307,7 +7814,8 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const OrbitDetermination *ORBIT_DETERMINATION() const {
     return GetPointer<const OrbitDetermination *>(VT_ORBIT_DETERMINATION);
   }
-  /// User-defined parameters and supplemental comments.
+  /// CCSDS 502.0-B-3 USER_DEFINED_x of a foreign message. SDN producers never write it and
+  /// SDN readers never read it.
   const ::flatbuffers::Vector<::flatbuffers::Offset<UserDefinedParameters>> *USER_DEFINED_PARAMETERS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<UserDefinedParameters>> *>(VT_USER_DEFINED_PARAMETERS);
   }
@@ -5315,8 +7823,8 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *CENTER_NAME() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CENTER_NAME);
   }
-  /// Reference frame of STATE_DATA and the polynomial records
-  /// (CCSDS 502.0-B-3 TRAJ_REF_FRAME).
+  /// Reference frame of STATE_DATA and the polynomial records; for MEAN_ELEMENTS, the
+  /// frame of the elements (CCSDS 502.0-B-3 TRAJ_REF_FRAME).
   const RFM *TRAJ_REF_FRAME() const {
     return GetPointer<const RFM *>(VT_TRAJ_REF_FRAME);
   }
@@ -5401,6 +7909,42 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<CVR>> *COV_REALISM() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<CVR>> *>(VT_COV_REALISM);
   }
+  /// The mean element set this message carries, under the theory it names. STATE_DATA is
+  /// empty when this is present; no state travels beside a set.
+  const OCMMeanElements *MEAN_ELEMENTS() const {
+    return GetPointer<const OCMMeanElements *>(VT_MEAN_ELEMENTS);
+  }
+  /// What propagates COVARIANCE_DATA beyond its epoch (mean element sets).
+  const OCMCovariancePropagation *COV_PROPAGATION() const {
+    return GetPointer<const OCMCovariancePropagation *>(VT_COV_PROPAGATION);
+  }
+  /// The covariance rows after the state block, typed, in the order of COV_PARAMETERS:
+  /// every reader keys on these, never on the COV_PARAMETERS strings.
+  const ::flatbuffers::Vector<prwDynamicParameter> *COV_PARAMETER_KINDS() const {
+    return GetPointer<const ::flatbuffers::Vector<prwDynamicParameter> *>(VT_COV_PARAMETER_KINDS);
+  }
+  /// Basis of the trajectory STATE_DATA states, the first block's TRAJ_BASIS
+  /// (CCSDS 502.0-B-3 TRAJ_BASIS).
+  ocmTrajectoryBasis TRAJ_BASIS() const {
+    return static_cast<ocmTrajectoryBasis>(GetField<uint8_t>(VT_TRAJ_BASIS, 0));
+  }
+  /// The element sets the trajectory was computed from, one per object whose
+  /// elements it used.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<OCMSeedSet>> *SEED_SETS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<OCMSeedSet>> *>(VT_SEED_SETS);
+  }
+  /// Integrator settings of a solution made from a legacy VCM.
+  const OCMIntegrator *INTEGRATOR() const {
+    return GetPointer<const OCMIntegrator *>(VT_INTEGRATOR);
+  }
+  /// Relative-motion geometry; STATE_DATA is empty when this is present.
+  const OCMRelativeGeometry *RPO_GEOMETRY() const {
+    return GetPointer<const OCMRelativeGeometry *>(VT_RPO_GEOMETRY);
+  }
+  /// Inspection geometry; STATE_DATA is empty when this is present.
+  const OCMInspectionGeometry *RPO_INSPECTION() const {
+    return GetPointer<const OCMInspectionGeometry *>(VT_RPO_INSPECTION);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -5473,6 +8017,22 @@ struct OCM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_COV_REALISM) &&
            verifier.VerifyVector(COV_REALISM()) &&
            verifier.VerifyVectorOfTables(COV_REALISM()) &&
+           VerifyOffset(verifier, VT_MEAN_ELEMENTS) &&
+           verifier.VerifyTable(MEAN_ELEMENTS()) &&
+           VerifyOffset(verifier, VT_COV_PROPAGATION) &&
+           verifier.VerifyTable(COV_PROPAGATION()) &&
+           VerifyOffset(verifier, VT_COV_PARAMETER_KINDS) &&
+           verifier.VerifyVector(COV_PARAMETER_KINDS()) &&
+           VerifyField<uint8_t>(verifier, VT_TRAJ_BASIS, 1) &&
+           VerifyOffset(verifier, VT_SEED_SETS) &&
+           verifier.VerifyVector(SEED_SETS()) &&
+           verifier.VerifyVectorOfTables(SEED_SETS()) &&
+           VerifyOffset(verifier, VT_INTEGRATOR) &&
+           verifier.VerifyTable(INTEGRATOR()) &&
+           VerifyOffset(verifier, VT_RPO_GEOMETRY) &&
+           verifier.VerifyTable(RPO_GEOMETRY()) &&
+           VerifyOffset(verifier, VT_RPO_INSPECTION) &&
+           verifier.VerifyTable(RPO_INSPECTION()) &&
            verifier.EndTable();
   }
   OCMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -5583,6 +8143,30 @@ struct OCMBuilder {
   void add_COV_REALISM(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CVR>>> COV_REALISM) {
     fbb_.AddOffset(OCM::VT_COV_REALISM, COV_REALISM);
   }
+  void add_MEAN_ELEMENTS(::flatbuffers::Offset<OCMMeanElements> MEAN_ELEMENTS) {
+    fbb_.AddOffset(OCM::VT_MEAN_ELEMENTS, MEAN_ELEMENTS);
+  }
+  void add_COV_PROPAGATION(::flatbuffers::Offset<OCMCovariancePropagation> COV_PROPAGATION) {
+    fbb_.AddOffset(OCM::VT_COV_PROPAGATION, COV_PROPAGATION);
+  }
+  void add_COV_PARAMETER_KINDS(::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> COV_PARAMETER_KINDS) {
+    fbb_.AddOffset(OCM::VT_COV_PARAMETER_KINDS, COV_PARAMETER_KINDS);
+  }
+  void add_TRAJ_BASIS(ocmTrajectoryBasis TRAJ_BASIS) {
+    fbb_.AddElement<uint8_t>(OCM::VT_TRAJ_BASIS, static_cast<uint8_t>(TRAJ_BASIS), 0);
+  }
+  void add_SEED_SETS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OCMSeedSet>>> SEED_SETS) {
+    fbb_.AddOffset(OCM::VT_SEED_SETS, SEED_SETS);
+  }
+  void add_INTEGRATOR(::flatbuffers::Offset<OCMIntegrator> INTEGRATOR) {
+    fbb_.AddOffset(OCM::VT_INTEGRATOR, INTEGRATOR);
+  }
+  void add_RPO_GEOMETRY(::flatbuffers::Offset<OCMRelativeGeometry> RPO_GEOMETRY) {
+    fbb_.AddOffset(OCM::VT_RPO_GEOMETRY, RPO_GEOMETRY);
+  }
+  void add_RPO_INSPECTION(::flatbuffers::Offset<OCMInspectionGeometry> RPO_INSPECTION) {
+    fbb_.AddOffset(OCM::VT_RPO_INSPECTION, RPO_INSPECTION);
+  }
   explicit OCMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -5628,9 +8212,24 @@ inline ::flatbuffers::Offset<OCM> CreateOCM(
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OCMTrajectoryBlock>>> TRAJECTORY_BLOCKS = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OCMCovarianceBlock>>> COVARIANCE_BLOCKS = 0,
     ::flatbuffers::Offset<PVN> PROVENANCE = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CVR>>> COV_REALISM = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CVR>>> COV_REALISM = 0,
+    ::flatbuffers::Offset<OCMMeanElements> MEAN_ELEMENTS = 0,
+    ::flatbuffers::Offset<OCMCovariancePropagation> COV_PROPAGATION = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<prwDynamicParameter>> COV_PARAMETER_KINDS = 0,
+    ocmTrajectoryBasis TRAJ_BASIS = ocmTrajectoryBasis::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OCMSeedSet>>> SEED_SETS = 0,
+    ::flatbuffers::Offset<OCMIntegrator> INTEGRATOR = 0,
+    ::flatbuffers::Offset<OCMRelativeGeometry> RPO_GEOMETRY = 0,
+    ::flatbuffers::Offset<OCMInspectionGeometry> RPO_INSPECTION = 0) {
   OCMBuilder builder_(_fbb);
   builder_.add_STATE_STEP_SIZE(STATE_STEP_SIZE);
+  builder_.add_RPO_INSPECTION(RPO_INSPECTION);
+  builder_.add_RPO_GEOMETRY(RPO_GEOMETRY);
+  builder_.add_INTEGRATOR(INTEGRATOR);
+  builder_.add_SEED_SETS(SEED_SETS);
+  builder_.add_COV_PARAMETER_KINDS(COV_PARAMETER_KINDS);
+  builder_.add_COV_PROPAGATION(COV_PROPAGATION);
+  builder_.add_MEAN_ELEMENTS(MEAN_ELEMENTS);
   builder_.add_COV_REALISM(COV_REALISM);
   builder_.add_PROVENANCE(PROVENANCE);
   builder_.add_COVARIANCE_BLOCKS(COVARIANCE_BLOCKS);
@@ -5658,6 +8257,7 @@ inline ::flatbuffers::Offset<OCM> CreateOCM(
   builder_.add_TRAJ_TYPE_DESCRIPTION(TRAJ_TYPE_DESCRIPTION);
   builder_.add_METADATA(METADATA);
   builder_.add_HEADER(HEADER);
+  builder_.add_TRAJ_BASIS(TRAJ_BASIS);
   builder_.add_COV_SIZE(COV_SIZE);
   builder_.add_COV_ORDERING(COV_ORDERING);
   builder_.add_COV_CALIBRATION(COV_CALIBRATION);
@@ -5705,7 +8305,15 @@ inline ::flatbuffers::Offset<OCM> CreateOCMDirect(
     const std::vector<::flatbuffers::Offset<OCMTrajectoryBlock>> *TRAJECTORY_BLOCKS = nullptr,
     const std::vector<::flatbuffers::Offset<OCMCovarianceBlock>> *COVARIANCE_BLOCKS = nullptr,
     ::flatbuffers::Offset<PVN> PROVENANCE = 0,
-    const std::vector<::flatbuffers::Offset<CVR>> *COV_REALISM = nullptr) {
+    const std::vector<::flatbuffers::Offset<CVR>> *COV_REALISM = nullptr,
+    ::flatbuffers::Offset<OCMMeanElements> MEAN_ELEMENTS = 0,
+    ::flatbuffers::Offset<OCMCovariancePropagation> COV_PROPAGATION = 0,
+    const std::vector<prwDynamicParameter> *COV_PARAMETER_KINDS = nullptr,
+    ocmTrajectoryBasis TRAJ_BASIS = ocmTrajectoryBasis::UNSPECIFIED,
+    const std::vector<::flatbuffers::Offset<OCMSeedSet>> *SEED_SETS = nullptr,
+    ::flatbuffers::Offset<OCMIntegrator> INTEGRATOR = 0,
+    ::flatbuffers::Offset<OCMRelativeGeometry> RPO_GEOMETRY = 0,
+    ::flatbuffers::Offset<OCMInspectionGeometry> RPO_INSPECTION = 0) {
   auto TRAJ_TYPE_DESCRIPTION__ = TRAJ_TYPE_DESCRIPTION ? _fbb.CreateString(TRAJ_TYPE_DESCRIPTION) : 0;
   auto STATE_DATA__ = STATE_DATA ? _fbb.CreateVector<double>(*STATE_DATA) : 0;
   auto COVARIANCE_DATA__ = COVARIANCE_DATA ? _fbb.CreateVector<double>(*COVARIANCE_DATA) : 0;
@@ -5724,6 +8332,8 @@ inline ::flatbuffers::Offset<OCM> CreateOCMDirect(
   auto TRAJECTORY_BLOCKS__ = TRAJECTORY_BLOCKS ? _fbb.CreateVector<::flatbuffers::Offset<OCMTrajectoryBlock>>(*TRAJECTORY_BLOCKS) : 0;
   auto COVARIANCE_BLOCKS__ = COVARIANCE_BLOCKS ? _fbb.CreateVector<::flatbuffers::Offset<OCMCovarianceBlock>>(*COVARIANCE_BLOCKS) : 0;
   auto COV_REALISM__ = COV_REALISM ? _fbb.CreateVector<::flatbuffers::Offset<CVR>>(*COV_REALISM) : 0;
+  auto COV_PARAMETER_KINDS__ = COV_PARAMETER_KINDS ? _fbb.CreateVector<prwDynamicParameter>(*COV_PARAMETER_KINDS) : 0;
+  auto SEED_SETS__ = SEED_SETS ? _fbb.CreateVector<::flatbuffers::Offset<OCMSeedSet>>(*SEED_SETS) : 0;
   return CreateOCM(
       _fbb,
       HEADER,
@@ -5758,7 +8368,15 @@ inline ::flatbuffers::Offset<OCM> CreateOCMDirect(
       TRAJECTORY_BLOCKS__,
       COVARIANCE_BLOCKS__,
       PROVENANCE,
-      COV_REALISM__);
+      COV_REALISM__,
+      MEAN_ELEMENTS,
+      COV_PROPAGATION,
+      COV_PARAMETER_KINDS__,
+      TRAJ_BASIS,
+      SEED_SETS__,
+      INTEGRATOR,
+      RPO_GEOMETRY,
+      RPO_INSPECTION);
 }
 
 ::flatbuffers::Offset<OCM> CreateOCM(::flatbuffers::FlatBufferBuilder &_fbb, const OCMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5778,6 +8396,8 @@ inline void Header::UnPackTo(HeaderT *_o, const ::flatbuffers::resolver_function
   { auto _e = CREATION_DATE(); if (_e) _o->CREATION_DATE = _e->str(); }
   { auto _e = ORIGINATOR(); if (_e) _o->ORIGINATOR = _e->str(); }
   { auto _e = MESSAGE_ID(); if (_e) _o->MESSAGE_ID = _e->str(); }
+  { auto _e = MESSAGE_STATUS(); _o->MESSAGE_STATUS = _e; }
+  { auto _e = EXERCISE_NAME(); if (_e) _o->EXERCISE_NAME = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<Header> CreateHeader(::flatbuffers::FlatBufferBuilder &_fbb, const HeaderT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -5794,6 +8414,8 @@ inline ::flatbuffers::Offset<Header> Header::Pack(::flatbuffers::FlatBufferBuild
   auto _CREATION_DATE = _o->CREATION_DATE.empty() ? 0 : _fbb.CreateString(_o->CREATION_DATE);
   auto _ORIGINATOR = _o->ORIGINATOR.empty() ? 0 : _fbb.CreateString(_o->ORIGINATOR);
   auto _MESSAGE_ID = _o->MESSAGE_ID.empty() ? 0 : _fbb.CreateString(_o->MESSAGE_ID);
+  auto _MESSAGE_STATUS = _o->MESSAGE_STATUS;
+  auto _EXERCISE_NAME = _o->EXERCISE_NAME.empty() ? 0 : _fbb.CreateString(_o->EXERCISE_NAME);
   return CreateHeader(
       _fbb,
       _CCSDS_OCM_VERS,
@@ -5801,7 +8423,9 @@ inline ::flatbuffers::Offset<Header> Header::Pack(::flatbuffers::FlatBufferBuild
       _CLASSIFICATION,
       _CREATION_DATE,
       _ORIGINATOR,
-      _MESSAGE_ID);
+      _MESSAGE_ID,
+      _MESSAGE_STATUS,
+      _EXERCISE_NAME);
 }
 
 inline MetadataT *Metadata::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -5861,6 +8485,7 @@ inline void Metadata::UnPackTo(MetadataT *_o, const ::flatbuffers::resolver_func
   { auto _e = EOP_SOURCE(); if (_e) _o->EOP_SOURCE = _e->str(); }
   { auto _e = INTERP_METHOD_EOP(); if (_e) _o->INTERP_METHOD_EOP = _e->str(); }
   { auto _e = CELESTIAL_SOURCE(); if (_e) _o->CELESTIAL_SOURCE = _e->str(); }
+  { auto _e = NORAD_CAT_ID(); _o->NORAD_CAT_ID = _e; }
 }
 
 inline ::flatbuffers::Offset<Metadata> CreateMetadata(::flatbuffers::FlatBufferBuilder &_fbb, const MetadataT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -5919,6 +8544,7 @@ inline ::flatbuffers::Offset<Metadata> Metadata::Pack(::flatbuffers::FlatBufferB
   auto _EOP_SOURCE = _o->EOP_SOURCE.empty() ? 0 : _fbb.CreateString(_o->EOP_SOURCE);
   auto _INTERP_METHOD_EOP = _o->INTERP_METHOD_EOP.empty() ? 0 : _fbb.CreateString(_o->INTERP_METHOD_EOP);
   auto _CELESTIAL_SOURCE = _o->CELESTIAL_SOURCE.empty() ? 0 : _fbb.CreateString(_o->CELESTIAL_SOURCE);
+  auto _NORAD_CAT_ID = _o->NORAD_CAT_ID;
   return CreateMetadata(
       _fbb,
       _COMMENT,
@@ -5968,7 +8594,8 @@ inline ::flatbuffers::Offset<Metadata> Metadata::Pack(::flatbuffers::FlatBufferB
       _UT1MUTC_AT_TZERO,
       _EOP_SOURCE,
       _INTERP_METHOD_EOP,
-      _CELESTIAL_SOURCE);
+      _CELESTIAL_SOURCE,
+      _NORAD_CAT_ID);
 }
 
 inline StateVectorT *StateVector::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -6244,7 +8871,17 @@ inline PerturbationsT::PerturbationsT(const PerturbationsT &o)
         FIXED_S10P7(o.FIXED_S10P7),
         FIXED_S10P7_MEAN(o.FIXED_S10P7_MEAN),
         FIXED_Y10P7(o.FIXED_Y10P7),
-        FIXED_Y10P7_MEAN(o.FIXED_Y10P7_MEAN) {
+        FIXED_Y10P7_MEAN(o.FIXED_Y10P7_MEAN),
+        MAXIMUM_TESSERAL_DEGREE(o.MAXIMUM_TESSERAL_DEGREE),
+        MAXIMUM_ZONAL_DEGREE(o.MAXIMUM_ZONAL_DEGREE),
+        WEATHER_SOURCE(o.WEATHER_SOURCE),
+        DENSITY_CORRECTION(o.DENSITY_CORRECTION),
+        DENSITY_CORRECTION_CID(o.DENSITY_CORRECTION_CID),
+        DENSITY_CORRECTION_NODE_TIMES_MS(o.DENSITY_CORRECTION_NODE_TIMES_MS),
+        DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS(o.DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS),
+        REDUCTION_THEORY_TERMS(o.REDUCTION_THEORY_TERMS) {
+  SPACE_WEATHER.reserve(o.SPACE_WEATHER.size());
+  for (const auto &SPACE_WEATHER_ : o.SPACE_WEATHER) { SPACE_WEATHER.emplace_back((SPACE_WEATHER_) ? new SPWT(*SPACE_WEATHER_) : nullptr); }
 }
 
 inline PerturbationsT &PerturbationsT::operator=(PerturbationsT o) FLATBUFFERS_NOEXCEPT {
@@ -6286,6 +8923,15 @@ inline PerturbationsT &PerturbationsT::operator=(PerturbationsT o) FLATBUFFERS_N
   std::swap(FIXED_S10P7_MEAN, o.FIXED_S10P7_MEAN);
   std::swap(FIXED_Y10P7, o.FIXED_Y10P7);
   std::swap(FIXED_Y10P7_MEAN, o.FIXED_Y10P7_MEAN);
+  std::swap(MAXIMUM_TESSERAL_DEGREE, o.MAXIMUM_TESSERAL_DEGREE);
+  std::swap(MAXIMUM_ZONAL_DEGREE, o.MAXIMUM_ZONAL_DEGREE);
+  std::swap(WEATHER_SOURCE, o.WEATHER_SOURCE);
+  std::swap(DENSITY_CORRECTION, o.DENSITY_CORRECTION);
+  std::swap(DENSITY_CORRECTION_CID, o.DENSITY_CORRECTION_CID);
+  std::swap(SPACE_WEATHER, o.SPACE_WEATHER);
+  std::swap(DENSITY_CORRECTION_NODE_TIMES_MS, o.DENSITY_CORRECTION_NODE_TIMES_MS);
+  std::swap(DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS, o.DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS);
+  std::swap(REDUCTION_THEORY_TERMS, o.REDUCTION_THEORY_TERMS);
   return *this;
 }
 
@@ -6336,6 +8982,15 @@ inline void Perturbations::UnPackTo(PerturbationsT *_o, const ::flatbuffers::res
   { auto _e = FIXED_S10P7_MEAN(); _o->FIXED_S10P7_MEAN = _e; }
   { auto _e = FIXED_Y10P7(); _o->FIXED_Y10P7 = _e; }
   { auto _e = FIXED_Y10P7_MEAN(); _o->FIXED_Y10P7_MEAN = _e; }
+  { auto _e = MAXIMUM_TESSERAL_DEGREE(); _o->MAXIMUM_TESSERAL_DEGREE = _e; }
+  { auto _e = MAXIMUM_ZONAL_DEGREE(); _o->MAXIMUM_ZONAL_DEGREE = _e; }
+  { auto _e = WEATHER_SOURCE(); _o->WEATHER_SOURCE = _e; }
+  { auto _e = DENSITY_CORRECTION(); _o->DENSITY_CORRECTION = _e; }
+  { auto _e = DENSITY_CORRECTION_CID(); if (_e) _o->DENSITY_CORRECTION_CID = _e->str(); }
+  { auto _e = SPACE_WEATHER(); if (_e) { _o->SPACE_WEATHER.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SPACE_WEATHER[_i]) { _e->Get(_i)->UnPackTo(_o->SPACE_WEATHER[_i].get(), _resolver); } else { _o->SPACE_WEATHER[_i] = std::unique_ptr<SPWT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SPACE_WEATHER.resize(0); } }
+  { auto _e = DENSITY_CORRECTION_NODE_TIMES_MS(); if (_e) { _o->DENSITY_CORRECTION_NODE_TIMES_MS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DENSITY_CORRECTION_NODE_TIMES_MS[_i] = _e->Get(_i); } } else { _o->DENSITY_CORRECTION_NODE_TIMES_MS.resize(0); } }
+  { auto _e = DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS(); if (_e) { _o->DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS[_i] = _e->Get(_i); } } else { _o->DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS.resize(0); } }
+  { auto _e = REDUCTION_THEORY_TERMS(); _o->REDUCTION_THEORY_TERMS = _e; }
 }
 
 inline ::flatbuffers::Offset<Perturbations> CreatePerturbations(::flatbuffers::FlatBufferBuilder &_fbb, const PerturbationsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6384,6 +9039,15 @@ inline ::flatbuffers::Offset<Perturbations> Perturbations::Pack(::flatbuffers::F
   auto _FIXED_S10P7_MEAN = _o->FIXED_S10P7_MEAN;
   auto _FIXED_Y10P7 = _o->FIXED_Y10P7;
   auto _FIXED_Y10P7_MEAN = _o->FIXED_Y10P7_MEAN;
+  auto _MAXIMUM_TESSERAL_DEGREE = _o->MAXIMUM_TESSERAL_DEGREE;
+  auto _MAXIMUM_ZONAL_DEGREE = _o->MAXIMUM_ZONAL_DEGREE;
+  auto _WEATHER_SOURCE = _o->WEATHER_SOURCE;
+  auto _DENSITY_CORRECTION = _o->DENSITY_CORRECTION;
+  auto _DENSITY_CORRECTION_CID = _o->DENSITY_CORRECTION_CID.empty() ? 0 : _fbb.CreateString(_o->DENSITY_CORRECTION_CID);
+  auto _SPACE_WEATHER = _o->SPACE_WEATHER.size() ? _fbb.CreateVector<::flatbuffers::Offset<SPW>> (_o->SPACE_WEATHER.size(), [](size_t i, _VectorArgs *__va) { return CreateSPW(*__va->__fbb, __va->__o->SPACE_WEATHER[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _DENSITY_CORRECTION_NODE_TIMES_MS = _o->DENSITY_CORRECTION_NODE_TIMES_MS.size() ? _fbb.CreateVector(_o->DENSITY_CORRECTION_NODE_TIMES_MS) : 0;
+  auto _DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS = _o->DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS.size() ? _fbb.CreateVector(_o->DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS) : 0;
+  auto _REDUCTION_THEORY_TERMS = _o->REDUCTION_THEORY_TERMS;
   return CreatePerturbations(
       _fbb,
       _COMMENT,
@@ -6423,7 +9087,16 @@ inline ::flatbuffers::Offset<Perturbations> Perturbations::Pack(::flatbuffers::F
       _FIXED_S10P7,
       _FIXED_S10P7_MEAN,
       _FIXED_Y10P7,
-      _FIXED_Y10P7_MEAN);
+      _FIXED_Y10P7_MEAN,
+      _MAXIMUM_TESSERAL_DEGREE,
+      _MAXIMUM_ZONAL_DEGREE,
+      _WEATHER_SOURCE,
+      _DENSITY_CORRECTION,
+      _DENSITY_CORRECTION_CID,
+      _SPACE_WEATHER,
+      _DENSITY_CORRECTION_NODE_TIMES_MS,
+      _DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS,
+      _REDUCTION_THEORY_TERMS);
 }
 
 inline ManeuverT *Maneuver::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -6472,6 +9145,7 @@ inline void Maneuver::UnPackTo(ManeuverT *_o, const ::flatbuffers::resolver_func
   { auto _e = DC_BODY_TRIGGER(); if (_e) { _o->DC_BODY_TRIGGER.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DC_BODY_TRIGGER[_i] = _e->Get(_i); } } else { _o->DC_BODY_TRIGGER.resize(0); } }
   { auto _e = DC_PA_START_ANGLE(); _o->DC_PA_START_ANGLE = _e; }
   { auto _e = DC_PA_STOP_ANGLE(); _o->DC_PA_STOP_ANGLE = _e; }
+  { auto _e = NORAD_CAT_ID(); _o->NORAD_CAT_ID = _e; }
 }
 
 inline ::flatbuffers::Offset<Maneuver> CreateManeuver(::flatbuffers::FlatBufferBuilder &_fbb, const ManeuverT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6519,6 +9193,7 @@ inline ::flatbuffers::Offset<Maneuver> Maneuver::Pack(::flatbuffers::FlatBufferB
   auto _DC_BODY_TRIGGER = _o->DC_BODY_TRIGGER.size() ? _fbb.CreateVector(_o->DC_BODY_TRIGGER) : 0;
   auto _DC_PA_START_ANGLE = _o->DC_PA_START_ANGLE;
   auto _DC_PA_STOP_ANGLE = _o->DC_PA_STOP_ANGLE;
+  auto _NORAD_CAT_ID = _o->NORAD_CAT_ID;
   return CreateManeuver(
       _fbb,
       _MAN_ID,
@@ -6557,7 +9232,8 @@ inline ::flatbuffers::Offset<Maneuver> Maneuver::Pack(::flatbuffers::FlatBufferB
       _DC_BODY_FRAME,
       _DC_BODY_TRIGGER,
       _DC_PA_START_ANGLE,
-      _DC_PA_STOP_ANGLE);
+      _DC_PA_STOP_ANGLE,
+      _NORAD_CAT_ID);
 }
 
 inline OCMDynamicParameterT *OCMDynamicParameter::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -6573,6 +9249,7 @@ inline void OCMDynamicParameter::UnPackTo(OCMDynamicParameterT *_o, const ::flat
   { auto _e = VALUE(); _o->VALUE = _e; }
   { auto _e = UNITS(); if (_e) _o->UNITS = _e->str(); }
   { auto _e = SOLVED_FOR(); _o->SOLVED_FOR = _e; }
+  { auto _e = PARAMETER(); _o->PARAMETER = _e; }
 }
 
 inline ::flatbuffers::Offset<OCMDynamicParameter> CreateOCMDynamicParameter(::flatbuffers::FlatBufferBuilder &_fbb, const OCMDynamicParameterT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6587,12 +9264,580 @@ inline ::flatbuffers::Offset<OCMDynamicParameter> OCMDynamicParameter::Pack(::fl
   auto _VALUE = _o->VALUE;
   auto _UNITS = _o->UNITS.empty() ? 0 : _fbb.CreateString(_o->UNITS);
   auto _SOLVED_FOR = _o->SOLVED_FOR;
+  auto _PARAMETER = _o->PARAMETER;
   return CreateOCMDynamicParameter(
       _fbb,
       _NAME,
       _VALUE,
       _UNITS,
-      _SOLVED_FOR);
+      _SOLVED_FOR,
+      _PARAMETER);
+}
+
+inline OCMHeldOutDayT *OCMHeldOutDay::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMHeldOutDayT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMHeldOutDay::UnPackTo(OCMHeldOutDayT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = DAY(); _o->DAY = _e; }
+  { auto _e = STATES(); _o->STATES = _e; }
+  { auto _e = RMS_KM(); _o->RMS_KM = _e; }
+}
+
+inline ::flatbuffers::Offset<OCMHeldOutDay> CreateOCMHeldOutDay(::flatbuffers::FlatBufferBuilder &_fbb, const OCMHeldOutDayT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMHeldOutDay::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMHeldOutDay> OCMHeldOutDay::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMHeldOutDayT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMHeldOutDayT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _DAY = _o->DAY;
+  auto _STATES = _o->STATES;
+  auto _RMS_KM = _o->RMS_KM;
+  return CreateOCMHeldOutDay(
+      _fbb,
+      _DAY,
+      _STATES,
+      _RMS_KM);
+}
+
+inline OCMFitStatisticsT::OCMFitStatisticsT(const OCMFitStatisticsT &o)
+      : FIT_STATES(o.FIT_STATES),
+        FIT_RMS_KM(o.FIT_RMS_KM),
+        FIT_MAX_KM(o.FIT_MAX_KM),
+        FIT_RADIAL_RMS_KM(o.FIT_RADIAL_RMS_KM),
+        FIT_IN_TRACK_RMS_KM(o.FIT_IN_TRACK_RMS_KM),
+        FIT_CROSS_TRACK_RMS_KM(o.FIT_CROSS_TRACK_RMS_KM),
+        ITERATIONS(o.ITERATIONS),
+        CONVERGED(o.CONVERGED),
+        HELD_OUT_STOP(o.HELD_OUT_STOP),
+        HELD_OUT_STATES(o.HELD_OUT_STATES),
+        HELD_OUT_RMS_KM(o.HELD_OUT_RMS_KM),
+        HELD_OUT_MAX_KM(o.HELD_OUT_MAX_KM),
+        PCF_CID(o.PCF_CID),
+        FIT_START(o.FIT_START),
+        FIT_STOP(o.FIT_STOP) {
+  HELD_OUT_DAYS.reserve(o.HELD_OUT_DAYS.size());
+  for (const auto &HELD_OUT_DAYS_ : o.HELD_OUT_DAYS) { HELD_OUT_DAYS.emplace_back((HELD_OUT_DAYS_) ? new OCMHeldOutDayT(*HELD_OUT_DAYS_) : nullptr); }
+}
+
+inline OCMFitStatisticsT &OCMFitStatisticsT::operator=(OCMFitStatisticsT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(FIT_STATES, o.FIT_STATES);
+  std::swap(FIT_RMS_KM, o.FIT_RMS_KM);
+  std::swap(FIT_MAX_KM, o.FIT_MAX_KM);
+  std::swap(FIT_RADIAL_RMS_KM, o.FIT_RADIAL_RMS_KM);
+  std::swap(FIT_IN_TRACK_RMS_KM, o.FIT_IN_TRACK_RMS_KM);
+  std::swap(FIT_CROSS_TRACK_RMS_KM, o.FIT_CROSS_TRACK_RMS_KM);
+  std::swap(ITERATIONS, o.ITERATIONS);
+  std::swap(CONVERGED, o.CONVERGED);
+  std::swap(HELD_OUT_STOP, o.HELD_OUT_STOP);
+  std::swap(HELD_OUT_STATES, o.HELD_OUT_STATES);
+  std::swap(HELD_OUT_RMS_KM, o.HELD_OUT_RMS_KM);
+  std::swap(HELD_OUT_MAX_KM, o.HELD_OUT_MAX_KM);
+  std::swap(HELD_OUT_DAYS, o.HELD_OUT_DAYS);
+  std::swap(PCF_CID, o.PCF_CID);
+  std::swap(FIT_START, o.FIT_START);
+  std::swap(FIT_STOP, o.FIT_STOP);
+  return *this;
+}
+
+inline OCMFitStatisticsT *OCMFitStatistics::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMFitStatisticsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMFitStatistics::UnPackTo(OCMFitStatisticsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = FIT_STATES(); _o->FIT_STATES = _e; }
+  { auto _e = FIT_RMS_KM(); _o->FIT_RMS_KM = _e; }
+  { auto _e = FIT_MAX_KM(); _o->FIT_MAX_KM = _e; }
+  { auto _e = FIT_RADIAL_RMS_KM(); _o->FIT_RADIAL_RMS_KM = _e; }
+  { auto _e = FIT_IN_TRACK_RMS_KM(); _o->FIT_IN_TRACK_RMS_KM = _e; }
+  { auto _e = FIT_CROSS_TRACK_RMS_KM(); _o->FIT_CROSS_TRACK_RMS_KM = _e; }
+  { auto _e = ITERATIONS(); _o->ITERATIONS = _e; }
+  { auto _e = CONVERGED(); _o->CONVERGED = _e; }
+  { auto _e = HELD_OUT_STOP(); if (_e) _o->HELD_OUT_STOP = _e->str(); }
+  { auto _e = HELD_OUT_STATES(); _o->HELD_OUT_STATES = _e; }
+  { auto _e = HELD_OUT_RMS_KM(); _o->HELD_OUT_RMS_KM = _e; }
+  { auto _e = HELD_OUT_MAX_KM(); _o->HELD_OUT_MAX_KM = _e; }
+  { auto _e = HELD_OUT_DAYS(); if (_e) { _o->HELD_OUT_DAYS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->HELD_OUT_DAYS[_i]) { _e->Get(_i)->UnPackTo(_o->HELD_OUT_DAYS[_i].get(), _resolver); } else { _o->HELD_OUT_DAYS[_i] = std::unique_ptr<OCMHeldOutDayT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->HELD_OUT_DAYS.resize(0); } }
+  { auto _e = PCF_CID(); if (_e) _o->PCF_CID = _e->str(); }
+  { auto _e = FIT_START(); if (_e) _o->FIT_START = _e->str(); }
+  { auto _e = FIT_STOP(); if (_e) _o->FIT_STOP = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<OCMFitStatistics> CreateOCMFitStatistics(::flatbuffers::FlatBufferBuilder &_fbb, const OCMFitStatisticsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMFitStatistics::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMFitStatistics> OCMFitStatistics::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMFitStatisticsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMFitStatisticsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _FIT_STATES = _o->FIT_STATES;
+  auto _FIT_RMS_KM = _o->FIT_RMS_KM;
+  auto _FIT_MAX_KM = _o->FIT_MAX_KM;
+  auto _FIT_RADIAL_RMS_KM = _o->FIT_RADIAL_RMS_KM;
+  auto _FIT_IN_TRACK_RMS_KM = _o->FIT_IN_TRACK_RMS_KM;
+  auto _FIT_CROSS_TRACK_RMS_KM = _o->FIT_CROSS_TRACK_RMS_KM;
+  auto _ITERATIONS = _o->ITERATIONS;
+  auto _CONVERGED = _o->CONVERGED;
+  auto _HELD_OUT_STOP = _o->HELD_OUT_STOP.empty() ? 0 : _fbb.CreateString(_o->HELD_OUT_STOP);
+  auto _HELD_OUT_STATES = _o->HELD_OUT_STATES;
+  auto _HELD_OUT_RMS_KM = _o->HELD_OUT_RMS_KM;
+  auto _HELD_OUT_MAX_KM = _o->HELD_OUT_MAX_KM;
+  auto _HELD_OUT_DAYS = _o->HELD_OUT_DAYS.size() ? _fbb.CreateVector<::flatbuffers::Offset<OCMHeldOutDay>> (_o->HELD_OUT_DAYS.size(), [](size_t i, _VectorArgs *__va) { return CreateOCMHeldOutDay(*__va->__fbb, __va->__o->HELD_OUT_DAYS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PCF_CID = _o->PCF_CID.empty() ? 0 : _fbb.CreateString(_o->PCF_CID);
+  auto _FIT_START = _o->FIT_START.empty() ? 0 : _fbb.CreateString(_o->FIT_START);
+  auto _FIT_STOP = _o->FIT_STOP.empty() ? 0 : _fbb.CreateString(_o->FIT_STOP);
+  return CreateOCMFitStatistics(
+      _fbb,
+      _FIT_STATES,
+      _FIT_RMS_KM,
+      _FIT_MAX_KM,
+      _FIT_RADIAL_RMS_KM,
+      _FIT_IN_TRACK_RMS_KM,
+      _FIT_CROSS_TRACK_RMS_KM,
+      _ITERATIONS,
+      _CONVERGED,
+      _HELD_OUT_STOP,
+      _HELD_OUT_STATES,
+      _HELD_OUT_RMS_KM,
+      _HELD_OUT_MAX_KM,
+      _HELD_OUT_DAYS,
+      _PCF_CID,
+      _FIT_START,
+      _FIT_STOP);
+}
+
+inline OCMMeanElementsT *OCMMeanElements::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMMeanElementsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMMeanElements::UnPackTo(OCMMeanElementsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MEAN_ELEMENT_THEORY(); _o->MEAN_ELEMENT_THEORY = _e; }
+  { auto _e = EPOCH(); if (_e) _o->EPOCH = _e->str(); }
+  { auto _e = MEAN_MOTION(); _o->MEAN_MOTION = _e; }
+  { auto _e = ECCENTRICITY(); _o->ECCENTRICITY = _e; }
+  { auto _e = INCLINATION(); _o->INCLINATION = _e; }
+  { auto _e = RA_OF_ASC_NODE(); _o->RA_OF_ASC_NODE = _e; }
+  { auto _e = ARG_OF_PERICENTER(); _o->ARG_OF_PERICENTER = _e; }
+  { auto _e = MEAN_ANOMALY(); _o->MEAN_ANOMALY = _e; }
+  { auto _e = BSTAR(); _o->BSTAR = _e; }
+  { auto _e = MEAN_MOTION_DOT(); _o->MEAN_MOTION_DOT = _e; }
+  { auto _e = MEAN_MOTION_DDOT(); _o->MEAN_MOTION_DDOT = _e; }
+  { auto _e = BTERM(); _o->BTERM = _e; }
+  { auto _e = AGOM(); _o->AGOM = _e; }
+}
+
+inline ::flatbuffers::Offset<OCMMeanElements> CreateOCMMeanElements(::flatbuffers::FlatBufferBuilder &_fbb, const OCMMeanElementsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMMeanElements::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMMeanElements> OCMMeanElements::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMMeanElementsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMMeanElementsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MEAN_ELEMENT_THEORY = _o->MEAN_ELEMENT_THEORY;
+  auto _EPOCH = _fbb.CreateString(_o->EPOCH);
+  auto _MEAN_MOTION = _o->MEAN_MOTION;
+  auto _ECCENTRICITY = _o->ECCENTRICITY;
+  auto _INCLINATION = _o->INCLINATION;
+  auto _RA_OF_ASC_NODE = _o->RA_OF_ASC_NODE;
+  auto _ARG_OF_PERICENTER = _o->ARG_OF_PERICENTER;
+  auto _MEAN_ANOMALY = _o->MEAN_ANOMALY;
+  auto _BSTAR = _o->BSTAR;
+  auto _MEAN_MOTION_DOT = _o->MEAN_MOTION_DOT;
+  auto _MEAN_MOTION_DDOT = _o->MEAN_MOTION_DDOT;
+  auto _BTERM = _o->BTERM;
+  auto _AGOM = _o->AGOM;
+  return CreateOCMMeanElements(
+      _fbb,
+      _MEAN_ELEMENT_THEORY,
+      _EPOCH,
+      _MEAN_MOTION,
+      _ECCENTRICITY,
+      _INCLINATION,
+      _RA_OF_ASC_NODE,
+      _ARG_OF_PERICENTER,
+      _MEAN_ANOMALY,
+      _BSTAR,
+      _MEAN_MOTION_DOT,
+      _MEAN_MOTION_DDOT,
+      _BTERM,
+      _AGOM);
+}
+
+inline OCMCovariancePropagationT *OCMCovariancePropagation::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMCovariancePropagationT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMCovariancePropagation::UnPackTo(OCMCovariancePropagationT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = FLOOR_UU_KM2(); _o->FLOOR_UU_KM2 = _e; }
+  { auto _e = FLOOR_VU_KM2(); _o->FLOOR_VU_KM2 = _e; }
+  { auto _e = FLOOR_VV_KM2(); _o->FLOOR_VV_KM2 = _e; }
+  { auto _e = FLOOR_WU_KM2(); _o->FLOOR_WU_KM2 = _e; }
+  { auto _e = FLOOR_WV_KM2(); _o->FLOOR_WV_KM2 = _e; }
+  { auto _e = FLOOR_WW_KM2(); _o->FLOOR_WW_KM2 = _e; }
+  { auto _e = NOISE_ECCENTRICITY_PER_DAY(); _o->NOISE_ECCENTRICITY_PER_DAY = _e; }
+  { auto _e = NOISE_INCLINATION_PER_DAY(); _o->NOISE_INCLINATION_PER_DAY = _e; }
+  { auto _e = NOISE_MEAN_MOTION_RELATIVE(); _o->NOISE_MEAN_MOTION_RELATIVE = _e; }
+  { auto _e = NOISE_NON_GRAVITATIONAL_RAD_DAY2(); _o->NOISE_NON_GRAVITATIONAL_RAD_DAY2 = _e; }
+  { auto _e = NOISE_START_MINUTES(); _o->NOISE_START_MINUTES = _e; }
+  { auto _e = NON_GRAVITATIONAL_SHARE(); _o->NON_GRAVITATIONAL_SHARE = _e; }
+  { auto _e = NON_GRAVITATIONAL_RATE_PER_DAY(); _o->NON_GRAVITATIONAL_RATE_PER_DAY = _e; }
+}
+
+inline ::flatbuffers::Offset<OCMCovariancePropagation> CreateOCMCovariancePropagation(::flatbuffers::FlatBufferBuilder &_fbb, const OCMCovariancePropagationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMCovariancePropagation::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMCovariancePropagation> OCMCovariancePropagation::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMCovariancePropagationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMCovariancePropagationT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _FLOOR_UU_KM2 = _o->FLOOR_UU_KM2;
+  auto _FLOOR_VU_KM2 = _o->FLOOR_VU_KM2;
+  auto _FLOOR_VV_KM2 = _o->FLOOR_VV_KM2;
+  auto _FLOOR_WU_KM2 = _o->FLOOR_WU_KM2;
+  auto _FLOOR_WV_KM2 = _o->FLOOR_WV_KM2;
+  auto _FLOOR_WW_KM2 = _o->FLOOR_WW_KM2;
+  auto _NOISE_ECCENTRICITY_PER_DAY = _o->NOISE_ECCENTRICITY_PER_DAY;
+  auto _NOISE_INCLINATION_PER_DAY = _o->NOISE_INCLINATION_PER_DAY;
+  auto _NOISE_MEAN_MOTION_RELATIVE = _o->NOISE_MEAN_MOTION_RELATIVE;
+  auto _NOISE_NON_GRAVITATIONAL_RAD_DAY2 = _o->NOISE_NON_GRAVITATIONAL_RAD_DAY2;
+  auto _NOISE_START_MINUTES = _o->NOISE_START_MINUTES;
+  auto _NON_GRAVITATIONAL_SHARE = _o->NON_GRAVITATIONAL_SHARE;
+  auto _NON_GRAVITATIONAL_RATE_PER_DAY = _o->NON_GRAVITATIONAL_RATE_PER_DAY;
+  return CreateOCMCovariancePropagation(
+      _fbb,
+      _FLOOR_UU_KM2,
+      _FLOOR_VU_KM2,
+      _FLOOR_VV_KM2,
+      _FLOOR_WU_KM2,
+      _FLOOR_WV_KM2,
+      _FLOOR_WW_KM2,
+      _NOISE_ECCENTRICITY_PER_DAY,
+      _NOISE_INCLINATION_PER_DAY,
+      _NOISE_MEAN_MOTION_RELATIVE,
+      _NOISE_NON_GRAVITATIONAL_RAD_DAY2,
+      _NOISE_START_MINUTES,
+      _NON_GRAVITATIONAL_SHARE,
+      _NON_GRAVITATIONAL_RATE_PER_DAY);
+}
+
+inline OCMSeedSetT *OCMSeedSet::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMSeedSetT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMSeedSet::UnPackTo(OCMSeedSetT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = NORAD_CAT_ID(); _o->NORAD_CAT_ID = _e; }
+  { auto _e = EPOCH(); if (_e) _o->EPOCH = _e->str(); }
+  { auto _e = CREATION_DATE(); if (_e) _o->CREATION_DATE = _e->str(); }
+  { auto _e = MESSAGE_ID(); if (_e) _o->MESSAGE_ID = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<OCMSeedSet> CreateOCMSeedSet(::flatbuffers::FlatBufferBuilder &_fbb, const OCMSeedSetT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMSeedSet::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMSeedSet> OCMSeedSet::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMSeedSetT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMSeedSetT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _NORAD_CAT_ID = _o->NORAD_CAT_ID;
+  auto _EPOCH = _o->EPOCH.empty() ? 0 : _fbb.CreateString(_o->EPOCH);
+  auto _CREATION_DATE = _o->CREATION_DATE.empty() ? 0 : _fbb.CreateString(_o->CREATION_DATE);
+  auto _MESSAGE_ID = _o->MESSAGE_ID.empty() ? 0 : _fbb.CreateString(_o->MESSAGE_ID);
+  return CreateOCMSeedSet(
+      _fbb,
+      _NORAD_CAT_ID,
+      _EPOCH,
+      _CREATION_DATE,
+      _MESSAGE_ID);
+}
+
+inline OCMIntegratorT *OCMIntegrator::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMIntegratorT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMIntegrator::UnPackTo(OCMIntegratorT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = MODE(); _o->MODE = _e; }
+  { auto _e = COORDINATE_SYSTEM(); _o->COORDINATE_SYSTEM = _e; }
+  { auto _e = PARTIALS(); _o->PARTIALS = _e; }
+  { auto _e = STEP_MODE(); _o->STEP_MODE = _e; }
+  { auto _e = FIXED_STEP(); _o->FIXED_STEP = _e; }
+  { auto _e = STEP_SIZE_SELECTION(); _o->STEP_SIZE_SELECTION = _e; }
+  { auto _e = INITIAL_STEP_SECONDS(); _o->INITIAL_STEP_SECONDS = _e; }
+  { auto _e = ERROR_CONTROL(); _o->ERROR_CONTROL = _e; }
+}
+
+inline ::flatbuffers::Offset<OCMIntegrator> CreateOCMIntegrator(::flatbuffers::FlatBufferBuilder &_fbb, const OCMIntegratorT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMIntegrator::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMIntegrator> OCMIntegrator::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMIntegratorT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMIntegratorT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _MODE = _o->MODE;
+  auto _COORDINATE_SYSTEM = _o->COORDINATE_SYSTEM;
+  auto _PARTIALS = _o->PARTIALS;
+  auto _STEP_MODE = _o->STEP_MODE;
+  auto _FIXED_STEP = _o->FIXED_STEP;
+  auto _STEP_SIZE_SELECTION = _o->STEP_SIZE_SELECTION;
+  auto _INITIAL_STEP_SECONDS = _o->INITIAL_STEP_SECONDS;
+  auto _ERROR_CONTROL = _o->ERROR_CONTROL;
+  return CreateOCMIntegrator(
+      _fbb,
+      _MODE,
+      _COORDINATE_SYSTEM,
+      _PARTIALS,
+      _STEP_MODE,
+      _FIXED_STEP,
+      _STEP_SIZE_SELECTION,
+      _INITIAL_STEP_SECONDS,
+      _ERROR_CONTROL);
+}
+
+inline OCMRelativeGeometryT *OCMRelativeGeometry::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMRelativeGeometryT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMRelativeGeometry::UnPackTo(OCMRelativeGeometryT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = R_KM(); if (_e) { _o->R_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->R_KM[_i] = _e->Get(_i); } } else { _o->R_KM.resize(0); } }
+  { auto _e = I_KM(); if (_e) { _o->I_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->I_KM[_i] = _e->Get(_i); } } else { _o->I_KM.resize(0); } }
+  { auto _e = C_KM(); if (_e) { _o->C_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->C_KM[_i] = _e->Get(_i); } } else { _o->C_KM.resize(0); } }
+  { auto _e = I_UNWRAPPED_KM(); if (_e) { _o->I_UNWRAPPED_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->I_UNWRAPPED_KM[_i] = _e->Get(_i); } } else { _o->I_UNWRAPPED_KM.resize(0); } }
+  { auto _e = SEPARATION_KM(); if (_e) { _o->SEPARATION_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SEPARATION_KM[_i] = _e->Get(_i); } } else { _o->SEPARATION_KM.resize(0); } }
+  { auto _e = RANGE_RATE_KM_S(); if (_e) { _o->RANGE_RATE_KM_S.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->RANGE_RATE_KM_S[_i] = _e->Get(_i); } } else { _o->RANGE_RATE_KM_S.resize(0); } }
+  { auto _e = PLANE_ANGLE_DEG(); if (_e) { _o->PLANE_ANGLE_DEG.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->PLANE_ANGLE_DEG[_i] = _e->Get(_i); } } else { _o->PLANE_ANGLE_DEG.resize(0); } }
+  { auto _e = A_CHIEF_KM(); if (_e) { _o->A_CHIEF_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->A_CHIEF_KM[_i] = _e->Get(_i); } } else { _o->A_CHIEF_KM.resize(0); } }
+  { auto _e = DA(); if (_e) { _o->DA.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DA[_i] = _e->Get(_i); } } else { _o->DA.resize(0); } }
+  { auto _e = DLAMBDA(); if (_e) { _o->DLAMBDA.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DLAMBDA[_i] = _e->Get(_i); } } else { _o->DLAMBDA.resize(0); } }
+  { auto _e = DEX(); if (_e) { _o->DEX.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DEX[_i] = _e->Get(_i); } } else { _o->DEX.resize(0); } }
+  { auto _e = DEY(); if (_e) { _o->DEY.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DEY[_i] = _e->Get(_i); } } else { _o->DEY.resize(0); } }
+  { auto _e = DIX(); if (_e) { _o->DIX.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DIX[_i] = _e->Get(_i); } } else { _o->DIX.resize(0); } }
+  { auto _e = DIY(); if (_e) { _o->DIY.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->DIY[_i] = _e->Get(_i); } } else { _o->DIY.resize(0); } }
+  { auto _e = SIGMA_R_KM(); if (_e) { _o->SIGMA_R_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SIGMA_R_KM[_i] = _e->Get(_i); } } else { _o->SIGMA_R_KM.resize(0); } }
+  { auto _e = SIGMA_I_KM(); if (_e) { _o->SIGMA_I_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SIGMA_I_KM[_i] = _e->Get(_i); } } else { _o->SIGMA_I_KM.resize(0); } }
+  { auto _e = SIGMA_C_KM(); if (_e) { _o->SIGMA_C_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SIGMA_C_KM[_i] = _e->Get(_i); } } else { _o->SIGMA_C_KM.resize(0); } }
+  { auto _e = SIGMA_SEPARATION_KM(); if (_e) { _o->SIGMA_SEPARATION_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SIGMA_SEPARATION_KM[_i] = _e->Get(_i); } } else { _o->SIGMA_SEPARATION_KM.resize(0); } }
+  { auto _e = BAND3_R_KM(); if (_e) { _o->BAND3_R_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->BAND3_R_KM[_i] = _e->Get(_i); } } else { _o->BAND3_R_KM.resize(0); } }
+  { auto _e = BAND3_I_KM(); if (_e) { _o->BAND3_I_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->BAND3_I_KM[_i] = _e->Get(_i); } } else { _o->BAND3_I_KM.resize(0); } }
+  { auto _e = BAND3_C_KM(); if (_e) { _o->BAND3_C_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->BAND3_C_KM[_i] = _e->Get(_i); } } else { _o->BAND3_C_KM.resize(0); } }
+}
+
+inline ::flatbuffers::Offset<OCMRelativeGeometry> CreateOCMRelativeGeometry(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRelativeGeometryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMRelativeGeometry::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMRelativeGeometry> OCMRelativeGeometry::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRelativeGeometryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMRelativeGeometryT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _R_KM = _o->R_KM.size() ? _fbb.CreateVector(_o->R_KM) : 0;
+  auto _I_KM = _o->I_KM.size() ? _fbb.CreateVector(_o->I_KM) : 0;
+  auto _C_KM = _o->C_KM.size() ? _fbb.CreateVector(_o->C_KM) : 0;
+  auto _I_UNWRAPPED_KM = _o->I_UNWRAPPED_KM.size() ? _fbb.CreateVector(_o->I_UNWRAPPED_KM) : 0;
+  auto _SEPARATION_KM = _o->SEPARATION_KM.size() ? _fbb.CreateVector(_o->SEPARATION_KM) : 0;
+  auto _RANGE_RATE_KM_S = _o->RANGE_RATE_KM_S.size() ? _fbb.CreateVector(_o->RANGE_RATE_KM_S) : 0;
+  auto _PLANE_ANGLE_DEG = _o->PLANE_ANGLE_DEG.size() ? _fbb.CreateVector(_o->PLANE_ANGLE_DEG) : 0;
+  auto _A_CHIEF_KM = _o->A_CHIEF_KM.size() ? _fbb.CreateVector(_o->A_CHIEF_KM) : 0;
+  auto _DA = _o->DA.size() ? _fbb.CreateVector(_o->DA) : 0;
+  auto _DLAMBDA = _o->DLAMBDA.size() ? _fbb.CreateVector(_o->DLAMBDA) : 0;
+  auto _DEX = _o->DEX.size() ? _fbb.CreateVector(_o->DEX) : 0;
+  auto _DEY = _o->DEY.size() ? _fbb.CreateVector(_o->DEY) : 0;
+  auto _DIX = _o->DIX.size() ? _fbb.CreateVector(_o->DIX) : 0;
+  auto _DIY = _o->DIY.size() ? _fbb.CreateVector(_o->DIY) : 0;
+  auto _SIGMA_R_KM = _o->SIGMA_R_KM.size() ? _fbb.CreateVector(_o->SIGMA_R_KM) : 0;
+  auto _SIGMA_I_KM = _o->SIGMA_I_KM.size() ? _fbb.CreateVector(_o->SIGMA_I_KM) : 0;
+  auto _SIGMA_C_KM = _o->SIGMA_C_KM.size() ? _fbb.CreateVector(_o->SIGMA_C_KM) : 0;
+  auto _SIGMA_SEPARATION_KM = _o->SIGMA_SEPARATION_KM.size() ? _fbb.CreateVector(_o->SIGMA_SEPARATION_KM) : 0;
+  auto _BAND3_R_KM = _o->BAND3_R_KM.size() ? _fbb.CreateVector(_o->BAND3_R_KM) : 0;
+  auto _BAND3_I_KM = _o->BAND3_I_KM.size() ? _fbb.CreateVector(_o->BAND3_I_KM) : 0;
+  auto _BAND3_C_KM = _o->BAND3_C_KM.size() ? _fbb.CreateVector(_o->BAND3_C_KM) : 0;
+  return CreateOCMRelativeGeometry(
+      _fbb,
+      _R_KM,
+      _I_KM,
+      _C_KM,
+      _I_UNWRAPPED_KM,
+      _SEPARATION_KM,
+      _RANGE_RATE_KM_S,
+      _PLANE_ANGLE_DEG,
+      _A_CHIEF_KM,
+      _DA,
+      _DLAMBDA,
+      _DEX,
+      _DEY,
+      _DIX,
+      _DIY,
+      _SIGMA_R_KM,
+      _SIGMA_I_KM,
+      _SIGMA_C_KM,
+      _SIGMA_SEPARATION_KM,
+      _BAND3_R_KM,
+      _BAND3_I_KM,
+      _BAND3_C_KM);
+}
+
+inline OCMRadarInputsT *OCMRadarInputs::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMRadarInputsT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMRadarInputs::UnPackTo(OCMRadarInputsT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = SOURCE(); if (_e) _o->SOURCE = _e->str(); }
+  { auto _e = FREQUENCY_GHZ(); _o->FREQUENCY_GHZ = _e; }
+  { auto _e = ANTENNA_LENGTH_M(); _o->ANTENNA_LENGTH_M = _e; }
+  { auto _e = ANTENNA_HEIGHT_M(); _o->ANTENNA_HEIGHT_M = _e; }
+  { auto _e = INCIDENCE_MIN_DEG(); _o->INCIDENCE_MIN_DEG = _e; }
+  { auto _e = INCIDENCE_MAX_DEG(); _o->INCIDENCE_MAX_DEG = _e; }
+}
+
+inline ::flatbuffers::Offset<OCMRadarInputs> CreateOCMRadarInputs(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRadarInputsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMRadarInputs::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMRadarInputs> OCMRadarInputs::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMRadarInputsT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMRadarInputsT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SOURCE = _o->SOURCE.empty() ? 0 : _fbb.CreateString(_o->SOURCE);
+  auto _FREQUENCY_GHZ = _o->FREQUENCY_GHZ;
+  auto _ANTENNA_LENGTH_M = _o->ANTENNA_LENGTH_M;
+  auto _ANTENNA_HEIGHT_M = _o->ANTENNA_HEIGHT_M;
+  auto _INCIDENCE_MIN_DEG = _o->INCIDENCE_MIN_DEG;
+  auto _INCIDENCE_MAX_DEG = _o->INCIDENCE_MAX_DEG;
+  return CreateOCMRadarInputs(
+      _fbb,
+      _SOURCE,
+      _FREQUENCY_GHZ,
+      _ANTENNA_LENGTH_M,
+      _ANTENNA_HEIGHT_M,
+      _INCIDENCE_MIN_DEG,
+      _INCIDENCE_MAX_DEG);
+}
+
+inline OCMInspectionGeometryT::OCMInspectionGeometryT(const OCMInspectionGeometryT &o)
+      : PHASE_ANGLE_DEG(o.PHASE_ANGLE_DEG),
+        TARGET_SUNLIT(o.TARGET_SUNLIT),
+        CHASER_SUNLIT(o.CHASER_SUNLIT),
+        LINE_OF_SIGHT(o.LINE_OF_SIGHT),
+        TARGET_LIT_FROM_CHASER(o.TARGET_LIT_FROM_CHASER),
+        SUN_FROM_LINE_OF_SIGHT_DEG(o.SUN_FROM_LINE_OF_SIGHT_DEG),
+        RANGE_KM(o.RANGE_KM),
+        CHASER_OFF_NADIR_DEG(o.CHASER_OFF_NADIR_DEG),
+        CHASER_CLOCK_DEG(o.CHASER_CLOCK_DEG),
+        IN_SAR_RIGHT(o.IN_SAR_RIGHT),
+        IN_SAR_LEFT(o.IN_SAR_LEFT),
+        RADAR((o.RADAR) ? new OCMRadarInputsT(*o.RADAR) : nullptr) {
+}
+
+inline OCMInspectionGeometryT &OCMInspectionGeometryT::operator=(OCMInspectionGeometryT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(PHASE_ANGLE_DEG, o.PHASE_ANGLE_DEG);
+  std::swap(TARGET_SUNLIT, o.TARGET_SUNLIT);
+  std::swap(CHASER_SUNLIT, o.CHASER_SUNLIT);
+  std::swap(LINE_OF_SIGHT, o.LINE_OF_SIGHT);
+  std::swap(TARGET_LIT_FROM_CHASER, o.TARGET_LIT_FROM_CHASER);
+  std::swap(SUN_FROM_LINE_OF_SIGHT_DEG, o.SUN_FROM_LINE_OF_SIGHT_DEG);
+  std::swap(RANGE_KM, o.RANGE_KM);
+  std::swap(CHASER_OFF_NADIR_DEG, o.CHASER_OFF_NADIR_DEG);
+  std::swap(CHASER_CLOCK_DEG, o.CHASER_CLOCK_DEG);
+  std::swap(IN_SAR_RIGHT, o.IN_SAR_RIGHT);
+  std::swap(IN_SAR_LEFT, o.IN_SAR_LEFT);
+  std::swap(RADAR, o.RADAR);
+  return *this;
+}
+
+inline OCMInspectionGeometryT *OCMInspectionGeometry::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<OCMInspectionGeometryT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void OCMInspectionGeometry::UnPackTo(OCMInspectionGeometryT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = PHASE_ANGLE_DEG(); if (_e) { _o->PHASE_ANGLE_DEG.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->PHASE_ANGLE_DEG[_i] = _e->Get(_i); } } else { _o->PHASE_ANGLE_DEG.resize(0); } }
+  { auto _e = TARGET_SUNLIT(); if (_e) { _o->TARGET_SUNLIT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->TARGET_SUNLIT[_i] = _e->Get(_i); } } else { _o->TARGET_SUNLIT.resize(0); } }
+  { auto _e = CHASER_SUNLIT(); if (_e) { _o->CHASER_SUNLIT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->CHASER_SUNLIT[_i] = _e->Get(_i); } } else { _o->CHASER_SUNLIT.resize(0); } }
+  { auto _e = LINE_OF_SIGHT(); if (_e) { _o->LINE_OF_SIGHT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->LINE_OF_SIGHT[_i] = _e->Get(_i) != 0; } } else { _o->LINE_OF_SIGHT.resize(0); } }
+  { auto _e = TARGET_LIT_FROM_CHASER(); if (_e) { _o->TARGET_LIT_FROM_CHASER.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->TARGET_LIT_FROM_CHASER[_i] = _e->Get(_i); } } else { _o->TARGET_LIT_FROM_CHASER.resize(0); } }
+  { auto _e = SUN_FROM_LINE_OF_SIGHT_DEG(); if (_e) { _o->SUN_FROM_LINE_OF_SIGHT_DEG.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->SUN_FROM_LINE_OF_SIGHT_DEG[_i] = _e->Get(_i); } } else { _o->SUN_FROM_LINE_OF_SIGHT_DEG.resize(0); } }
+  { auto _e = RANGE_KM(); if (_e) { _o->RANGE_KM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->RANGE_KM[_i] = _e->Get(_i); } } else { _o->RANGE_KM.resize(0); } }
+  { auto _e = CHASER_OFF_NADIR_DEG(); if (_e) { _o->CHASER_OFF_NADIR_DEG.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->CHASER_OFF_NADIR_DEG[_i] = _e->Get(_i); } } else { _o->CHASER_OFF_NADIR_DEG.resize(0); } }
+  { auto _e = CHASER_CLOCK_DEG(); if (_e) { _o->CHASER_CLOCK_DEG.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->CHASER_CLOCK_DEG[_i] = _e->Get(_i); } } else { _o->CHASER_CLOCK_DEG.resize(0); } }
+  { auto _e = IN_SAR_RIGHT(); if (_e) { _o->IN_SAR_RIGHT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->IN_SAR_RIGHT[_i] = _e->Get(_i) != 0; } } else { _o->IN_SAR_RIGHT.resize(0); } }
+  { auto _e = IN_SAR_LEFT(); if (_e) { _o->IN_SAR_LEFT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->IN_SAR_LEFT[_i] = _e->Get(_i) != 0; } } else { _o->IN_SAR_LEFT.resize(0); } }
+  { auto _e = RADAR(); if (_e) { if(_o->RADAR) { _e->UnPackTo(_o->RADAR.get(), _resolver); } else { _o->RADAR = std::unique_ptr<OCMRadarInputsT>(_e->UnPack(_resolver)); } } else if (_o->RADAR) { _o->RADAR.reset(); } }
+}
+
+inline ::flatbuffers::Offset<OCMInspectionGeometry> CreateOCMInspectionGeometry(::flatbuffers::FlatBufferBuilder &_fbb, const OCMInspectionGeometryT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return OCMInspectionGeometry::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<OCMInspectionGeometry> OCMInspectionGeometry::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const OCMInspectionGeometryT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const OCMInspectionGeometryT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _PHASE_ANGLE_DEG = _o->PHASE_ANGLE_DEG.size() ? _fbb.CreateVector(_o->PHASE_ANGLE_DEG) : 0;
+  auto _TARGET_SUNLIT = _o->TARGET_SUNLIT.size() ? _fbb.CreateVector(_o->TARGET_SUNLIT) : 0;
+  auto _CHASER_SUNLIT = _o->CHASER_SUNLIT.size() ? _fbb.CreateVector(_o->CHASER_SUNLIT) : 0;
+  auto _LINE_OF_SIGHT = _o->LINE_OF_SIGHT.size() ? _fbb.CreateVector(_o->LINE_OF_SIGHT) : 0;
+  auto _TARGET_LIT_FROM_CHASER = _o->TARGET_LIT_FROM_CHASER.size() ? _fbb.CreateVector(_o->TARGET_LIT_FROM_CHASER) : 0;
+  auto _SUN_FROM_LINE_OF_SIGHT_DEG = _o->SUN_FROM_LINE_OF_SIGHT_DEG.size() ? _fbb.CreateVector(_o->SUN_FROM_LINE_OF_SIGHT_DEG) : 0;
+  auto _RANGE_KM = _o->RANGE_KM.size() ? _fbb.CreateVector(_o->RANGE_KM) : 0;
+  auto _CHASER_OFF_NADIR_DEG = _o->CHASER_OFF_NADIR_DEG.size() ? _fbb.CreateVector(_o->CHASER_OFF_NADIR_DEG) : 0;
+  auto _CHASER_CLOCK_DEG = _o->CHASER_CLOCK_DEG.size() ? _fbb.CreateVector(_o->CHASER_CLOCK_DEG) : 0;
+  auto _IN_SAR_RIGHT = _o->IN_SAR_RIGHT.size() ? _fbb.CreateVector(_o->IN_SAR_RIGHT) : 0;
+  auto _IN_SAR_LEFT = _o->IN_SAR_LEFT.size() ? _fbb.CreateVector(_o->IN_SAR_LEFT) : 0;
+  auto _RADAR = _o->RADAR ? CreateOCMRadarInputs(_fbb, _o->RADAR.get(), _rehasher) : 0;
+  return CreateOCMInspectionGeometry(
+      _fbb,
+      _PHASE_ANGLE_DEG,
+      _TARGET_SUNLIT,
+      _CHASER_SUNLIT,
+      _LINE_OF_SIGHT,
+      _TARGET_LIT_FROM_CHASER,
+      _SUN_FROM_LINE_OF_SIGHT_DEG,
+      _RANGE_KM,
+      _CHASER_OFF_NADIR_DEG,
+      _CHASER_CLOCK_DEG,
+      _IN_SAR_RIGHT,
+      _IN_SAR_LEFT,
+      _RADAR);
 }
 
 inline OrbitDeterminationT::OrbitDeterminationT(const OrbitDeterminationT &o)
@@ -6641,7 +9886,8 @@ inline OrbitDeterminationT::OrbitDeterminationT(const OrbitDeterminationT &o)
         CONSIDER_PARAMS(o.CONSIDER_PARAMS),
         SENSORS_N(o.SENSORS_N),
         SENSORS(o.SENSORS),
-        COMMENT(o.COMMENT) {
+        COMMENT(o.COMMENT),
+        FIT_STATISTICS((o.FIT_STATISTICS) ? new OCMFitStatisticsT(*o.FIT_STATISTICS) : nullptr) {
   OD_DYNAMIC_PARAMETERS.reserve(o.OD_DYNAMIC_PARAMETERS.size());
   for (const auto &OD_DYNAMIC_PARAMETERS_ : o.OD_DYNAMIC_PARAMETERS) { OD_DYNAMIC_PARAMETERS.emplace_back((OD_DYNAMIC_PARAMETERS_) ? new OCMDynamicParameterT(*OD_DYNAMIC_PARAMETERS_) : nullptr); }
 }
@@ -6694,6 +9940,7 @@ inline OrbitDeterminationT &OrbitDeterminationT::operator=(OrbitDeterminationT o
   std::swap(SENSORS_N, o.SENSORS_N);
   std::swap(SENSORS, o.SENSORS);
   std::swap(COMMENT, o.COMMENT);
+  std::swap(FIT_STATISTICS, o.FIT_STATISTICS);
   return *this;
 }
 
@@ -6753,6 +10000,7 @@ inline void OrbitDetermination::UnPackTo(OrbitDeterminationT *_o, const ::flatbu
   { auto _e = SENSORS_N(); _o->SENSORS_N = _e; }
   { auto _e = SENSORS(); if (_e) _o->SENSORS = _e->str(); }
   { auto _e = COMMENT(); if (_e) { _o->COMMENT.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->COMMENT[_i] = _e->Get(_i)->str(); } } else { _o->COMMENT.resize(0); } }
+  { auto _e = FIT_STATISTICS(); if (_e) { if(_o->FIT_STATISTICS) { _e->UnPackTo(_o->FIT_STATISTICS.get(), _resolver); } else { _o->FIT_STATISTICS = std::unique_ptr<OCMFitStatisticsT>(_e->UnPack(_resolver)); } } else if (_o->FIT_STATISTICS) { _o->FIT_STATISTICS.reset(); } }
 }
 
 inline ::flatbuffers::Offset<OrbitDetermination> CreateOrbitDetermination(::flatbuffers::FlatBufferBuilder &_fbb, const OrbitDeterminationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6810,6 +10058,7 @@ inline ::flatbuffers::Offset<OrbitDetermination> OrbitDetermination::Pack(::flat
   auto _SENSORS_N = _o->SENSORS_N;
   auto _SENSORS = _o->SENSORS.empty() ? 0 : _fbb.CreateString(_o->SENSORS);
   auto _COMMENT = _o->COMMENT.size() ? _fbb.CreateVectorOfStrings(_o->COMMENT) : 0;
+  auto _FIT_STATISTICS = _o->FIT_STATISTICS ? CreateOCMFitStatistics(_fbb, _o->FIT_STATISTICS.get(), _rehasher) : 0;
   return CreateOrbitDetermination(
       _fbb,
       _OD_ID,
@@ -6858,7 +10107,8 @@ inline ::flatbuffers::Offset<OrbitDetermination> OrbitDetermination::Pack(::flat
       _CONSIDER_PARAMS,
       _SENSORS_N,
       _SENSORS,
-      _COMMENT);
+      _COMMENT,
+      _FIT_STATISTICS);
 }
 
 inline OCMTrajectoryBlockT *OCMTrajectoryBlock::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
@@ -7110,7 +10360,14 @@ inline OCMT::OCMT(const OCMT &o)
         COV_SIZE(o.COV_SIZE),
         COV_PARAMETERS(o.COV_PARAMETERS),
         COV_UNITS(o.COV_UNITS),
-        PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr) {
+        PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr),
+        MEAN_ELEMENTS((o.MEAN_ELEMENTS) ? new OCMMeanElementsT(*o.MEAN_ELEMENTS) : nullptr),
+        COV_PROPAGATION((o.COV_PROPAGATION) ? new OCMCovariancePropagationT(*o.COV_PROPAGATION) : nullptr),
+        COV_PARAMETER_KINDS(o.COV_PARAMETER_KINDS),
+        TRAJ_BASIS(o.TRAJ_BASIS),
+        INTEGRATOR((o.INTEGRATOR) ? new OCMIntegratorT(*o.INTEGRATOR) : nullptr),
+        RPO_GEOMETRY((o.RPO_GEOMETRY) ? new OCMRelativeGeometryT(*o.RPO_GEOMETRY) : nullptr),
+        RPO_INSPECTION((o.RPO_INSPECTION) ? new OCMInspectionGeometryT(*o.RPO_INSPECTION) : nullptr) {
   POLYNOMIAL_POSITION_RECORDS.reserve(o.POLYNOMIAL_POSITION_RECORDS.size());
   for (const auto &POLYNOMIAL_POSITION_RECORDS_ : o.POLYNOMIAL_POSITION_RECORDS) { POLYNOMIAL_POSITION_RECORDS.emplace_back((POLYNOMIAL_POSITION_RECORDS_) ? new PPEPositionRecordT(*POLYNOMIAL_POSITION_RECORDS_) : nullptr); }
   POLYNOMIAL_OE_RECORDS.reserve(o.POLYNOMIAL_OE_RECORDS.size());
@@ -7125,6 +10382,8 @@ inline OCMT::OCMT(const OCMT &o)
   for (const auto &COVARIANCE_BLOCKS_ : o.COVARIANCE_BLOCKS) { COVARIANCE_BLOCKS.emplace_back((COVARIANCE_BLOCKS_) ? new OCMCovarianceBlockT(*COVARIANCE_BLOCKS_) : nullptr); }
   COV_REALISM.reserve(o.COV_REALISM.size());
   for (const auto &COV_REALISM_ : o.COV_REALISM) { COV_REALISM.emplace_back((COV_REALISM_) ? new CVRT(*COV_REALISM_) : nullptr); }
+  SEED_SETS.reserve(o.SEED_SETS.size());
+  for (const auto &SEED_SETS_ : o.SEED_SETS) { SEED_SETS.emplace_back((SEED_SETS_) ? new OCMSeedSetT(*SEED_SETS_) : nullptr); }
 }
 
 inline OCMT &OCMT::operator=(OCMT o) FLATBUFFERS_NOEXCEPT {
@@ -7161,6 +10420,14 @@ inline OCMT &OCMT::operator=(OCMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(COVARIANCE_BLOCKS, o.COVARIANCE_BLOCKS);
   std::swap(PROVENANCE, o.PROVENANCE);
   std::swap(COV_REALISM, o.COV_REALISM);
+  std::swap(MEAN_ELEMENTS, o.MEAN_ELEMENTS);
+  std::swap(COV_PROPAGATION, o.COV_PROPAGATION);
+  std::swap(COV_PARAMETER_KINDS, o.COV_PARAMETER_KINDS);
+  std::swap(TRAJ_BASIS, o.TRAJ_BASIS);
+  std::swap(SEED_SETS, o.SEED_SETS);
+  std::swap(INTEGRATOR, o.INTEGRATOR);
+  std::swap(RPO_GEOMETRY, o.RPO_GEOMETRY);
+  std::swap(RPO_INSPECTION, o.RPO_INSPECTION);
   return *this;
 }
 
@@ -7206,6 +10473,14 @@ inline void OCM::UnPackTo(OCMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = COVARIANCE_BLOCKS(); if (_e) { _o->COVARIANCE_BLOCKS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->COVARIANCE_BLOCKS[_i]) { _e->Get(_i)->UnPackTo(_o->COVARIANCE_BLOCKS[_i].get(), _resolver); } else { _o->COVARIANCE_BLOCKS[_i] = std::unique_ptr<OCMCovarianceBlockT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->COVARIANCE_BLOCKS.resize(0); } }
   { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
   { auto _e = COV_REALISM(); if (_e) { _o->COV_REALISM.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->COV_REALISM[_i]) { _e->Get(_i)->UnPackTo(_o->COV_REALISM[_i].get(), _resolver); } else { _o->COV_REALISM[_i] = std::unique_ptr<CVRT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->COV_REALISM.resize(0); } }
+  { auto _e = MEAN_ELEMENTS(); if (_e) { if(_o->MEAN_ELEMENTS) { _e->UnPackTo(_o->MEAN_ELEMENTS.get(), _resolver); } else { _o->MEAN_ELEMENTS = std::unique_ptr<OCMMeanElementsT>(_e->UnPack(_resolver)); } } else if (_o->MEAN_ELEMENTS) { _o->MEAN_ELEMENTS.reset(); } }
+  { auto _e = COV_PROPAGATION(); if (_e) { if(_o->COV_PROPAGATION) { _e->UnPackTo(_o->COV_PROPAGATION.get(), _resolver); } else { _o->COV_PROPAGATION = std::unique_ptr<OCMCovariancePropagationT>(_e->UnPack(_resolver)); } } else if (_o->COV_PROPAGATION) { _o->COV_PROPAGATION.reset(); } }
+  { auto _e = COV_PARAMETER_KINDS(); if (_e) { _o->COV_PARAMETER_KINDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->COV_PARAMETER_KINDS[_i] = static_cast<prwDynamicParameter>(_e->Get(_i)); } } else { _o->COV_PARAMETER_KINDS.resize(0); } }
+  { auto _e = TRAJ_BASIS(); _o->TRAJ_BASIS = _e; }
+  { auto _e = SEED_SETS(); if (_e) { _o->SEED_SETS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SEED_SETS[_i]) { _e->Get(_i)->UnPackTo(_o->SEED_SETS[_i].get(), _resolver); } else { _o->SEED_SETS[_i] = std::unique_ptr<OCMSeedSetT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SEED_SETS.resize(0); } }
+  { auto _e = INTEGRATOR(); if (_e) { if(_o->INTEGRATOR) { _e->UnPackTo(_o->INTEGRATOR.get(), _resolver); } else { _o->INTEGRATOR = std::unique_ptr<OCMIntegratorT>(_e->UnPack(_resolver)); } } else if (_o->INTEGRATOR) { _o->INTEGRATOR.reset(); } }
+  { auto _e = RPO_GEOMETRY(); if (_e) { if(_o->RPO_GEOMETRY) { _e->UnPackTo(_o->RPO_GEOMETRY.get(), _resolver); } else { _o->RPO_GEOMETRY = std::unique_ptr<OCMRelativeGeometryT>(_e->UnPack(_resolver)); } } else if (_o->RPO_GEOMETRY) { _o->RPO_GEOMETRY.reset(); } }
+  { auto _e = RPO_INSPECTION(); if (_e) { if(_o->RPO_INSPECTION) { _e->UnPackTo(_o->RPO_INSPECTION.get(), _resolver); } else { _o->RPO_INSPECTION = std::unique_ptr<OCMInspectionGeometryT>(_e->UnPack(_resolver)); } } else if (_o->RPO_INSPECTION) { _o->RPO_INSPECTION.reset(); } }
 }
 
 inline ::flatbuffers::Offset<OCM> CreateOCM(::flatbuffers::FlatBufferBuilder &_fbb, const OCMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -7249,6 +10524,14 @@ inline ::flatbuffers::Offset<OCM> OCM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _COVARIANCE_BLOCKS = _o->COVARIANCE_BLOCKS.size() ? _fbb.CreateVector<::flatbuffers::Offset<OCMCovarianceBlock>> (_o->COVARIANCE_BLOCKS.size(), [](size_t i, _VectorArgs *__va) { return CreateOCMCovarianceBlock(*__va->__fbb, __va->__o->COVARIANCE_BLOCKS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
   auto _COV_REALISM = _o->COV_REALISM.size() ? _fbb.CreateVector<::flatbuffers::Offset<CVR>> (_o->COV_REALISM.size(), [](size_t i, _VectorArgs *__va) { return CreateCVR(*__va->__fbb, __va->__o->COV_REALISM[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _MEAN_ELEMENTS = _o->MEAN_ELEMENTS ? CreateOCMMeanElements(_fbb, _o->MEAN_ELEMENTS.get(), _rehasher) : 0;
+  auto _COV_PROPAGATION = _o->COV_PROPAGATION ? CreateOCMCovariancePropagation(_fbb, _o->COV_PROPAGATION.get(), _rehasher) : 0;
+  auto _COV_PARAMETER_KINDS = _o->COV_PARAMETER_KINDS.size() ? _fbb.CreateVector(_o->COV_PARAMETER_KINDS) : 0;
+  auto _TRAJ_BASIS = _o->TRAJ_BASIS;
+  auto _SEED_SETS = _o->SEED_SETS.size() ? _fbb.CreateVector<::flatbuffers::Offset<OCMSeedSet>> (_o->SEED_SETS.size(), [](size_t i, _VectorArgs *__va) { return CreateOCMSeedSet(*__va->__fbb, __va->__o->SEED_SETS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _INTEGRATOR = _o->INTEGRATOR ? CreateOCMIntegrator(_fbb, _o->INTEGRATOR.get(), _rehasher) : 0;
+  auto _RPO_GEOMETRY = _o->RPO_GEOMETRY ? CreateOCMRelativeGeometry(_fbb, _o->RPO_GEOMETRY.get(), _rehasher) : 0;
+  auto _RPO_INSPECTION = _o->RPO_INSPECTION ? CreateOCMInspectionGeometry(_fbb, _o->RPO_INSPECTION.get(), _rehasher) : 0;
   return CreateOCM(
       _fbb,
       _HEADER,
@@ -7283,7 +10566,15 @@ inline ::flatbuffers::Offset<OCM> OCM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _TRAJECTORY_BLOCKS,
       _COVARIANCE_BLOCKS,
       _PROVENANCE,
-      _COV_REALISM);
+      _COV_REALISM,
+      _MEAN_ELEMENTS,
+      _COV_PROPAGATION,
+      _COV_PARAMETER_KINDS,
+      _TRAJ_BASIS,
+      _SEED_SETS,
+      _INTEGRATOR,
+      _RPO_GEOMETRY,
+      _RPO_INSPECTION);
 }
 
 inline const OCM *GetOCM(const void *buf) {

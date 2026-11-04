@@ -17,7 +17,12 @@ struct LCC;
 struct LCCBuilder;
 struct LCCT;
 
-enum class legacyCountryCode : int8_t {
+/// Owner and country codes of the public satellite catalog. An ordinal is a
+/// wire value: members are appended after ZWE, never inserted, so the ones
+/// after it are out of alphabetical order. Some owners have two codes, the
+/// catalog's older one and an ISO 3166-1 alpha-3 code the catalog also uses
+/// (CA and CAN); each code is its own member.
+enum class legacyCountryCode : uint8_t {
   /// Arab Satellite Communications Organization
   AB = 0,
   /// Asia Broadcast Satellite
@@ -270,11 +275,41 @@ enum class legacyCountryCode : int8_t {
   VTNM = 124,
   /// Republic of Zimbabwe
   ZWE = 125,
+  /// Angola (ISO 3166-1 alpha-3; also ANG)
+  AGO = 126,
+  /// Bulgaria (ISO 3166-1 alpha-3; also BUL)
+  BGR = 127,
+  /// Bahrain
+  BHR = 128,
+  /// Botswana
+  BWA = 129,
+  /// Canada (ISO 3166-1 alpha-3; also CA)
+  CAN = 130,
+  /// Czechia (ISO 3166-1 alpha-3; also CZCH)
+  CZE = 131,
+  /// Croatia
+  HRV = 132,
+  /// Jordan
+  JOR = 133,
+  /// Kuwait
+  KWT = 134,
+  /// Peru (ISO 3166-1 alpha-3; also PERU)
+  PER = 135,
+  /// Puerto Rico
+  PRI = 136,
+  /// Solomon Islands
+  SLB = 137,
+  /// Slovakia
+  SVK = 138,
+  /// Taiwan (ISO 3166-1 alpha-3; also ROC)
+  TWN = 139,
+  /// Uganda
+  UGA = 140,
   MIN = AB,
-  MAX = ZWE
+  MAX = UGA
 };
 
-inline const legacyCountryCode (&EnumValueslegacyCountryCode())[126] {
+inline const legacyCountryCode (&EnumValueslegacyCountryCode())[141] {
   static const legacyCountryCode values[] = {
     legacyCountryCode::AB,
     legacyCountryCode::ABS,
@@ -401,13 +436,28 @@ inline const legacyCountryCode (&EnumValueslegacyCountryCode())[126] {
     legacyCountryCode::VAT,
     legacyCountryCode::VENZ,
     legacyCountryCode::VTNM,
-    legacyCountryCode::ZWE
+    legacyCountryCode::ZWE,
+    legacyCountryCode::AGO,
+    legacyCountryCode::BGR,
+    legacyCountryCode::BHR,
+    legacyCountryCode::BWA,
+    legacyCountryCode::CAN,
+    legacyCountryCode::CZE,
+    legacyCountryCode::HRV,
+    legacyCountryCode::JOR,
+    legacyCountryCode::KWT,
+    legacyCountryCode::PER,
+    legacyCountryCode::PRI,
+    legacyCountryCode::SLB,
+    legacyCountryCode::SVK,
+    legacyCountryCode::TWN,
+    legacyCountryCode::UGA
   };
   return values;
 }
 
 inline const char * const *EnumNameslegacyCountryCode() {
-  static const char * const names[127] = {
+  static const char * const names[142] = {
     "AB",
     "ABS",
     "AC",
@@ -534,13 +584,28 @@ inline const char * const *EnumNameslegacyCountryCode() {
     "VENZ",
     "VTNM",
     "ZWE",
+    "AGO",
+    "BGR",
+    "BHR",
+    "BWA",
+    "CAN",
+    "CZE",
+    "HRV",
+    "JOR",
+    "KWT",
+    "PER",
+    "PRI",
+    "SLB",
+    "SVK",
+    "TWN",
+    "UGA",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamelegacyCountryCode(legacyCountryCode e) {
-  if (::flatbuffers::IsOutRange(e, legacyCountryCode::AB, legacyCountryCode::ZWE)) return "";
+  if (::flatbuffers::IsOutRange(e, legacyCountryCode::AB, legacyCountryCode::UGA)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNameslegacyCountryCode()[index];
 }
@@ -569,7 +634,7 @@ struct LCC FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_RETRIEVED_AT = 14
   };
   legacyCountryCode OWNER() const {
-    return static_cast<legacyCountryCode>(GetField<int8_t>(VT_OWNER, 0));
+    return static_cast<legacyCountryCode>(GetField<uint8_t>(VT_OWNER, 0));
   }
   /// Display name of the owner or source the code stands for.
   const ::flatbuffers::String *NAME() const {
@@ -594,7 +659,7 @@ struct LCC FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<int8_t>(verifier, VT_OWNER, 1) &&
+           VerifyField<uint8_t>(verifier, VT_OWNER, 1) &&
            VerifyOffset(verifier, VT_NAME) &&
            verifier.VerifyString(NAME()) &&
            VerifyOffset(verifier, VT_DESCRIPTION) &&
@@ -616,7 +681,7 @@ struct LCCBuilder {
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
   void add_OWNER(legacyCountryCode OWNER) {
-    fbb_.AddElement<int8_t>(LCC::VT_OWNER, static_cast<int8_t>(OWNER), 0);
+    fbb_.AddElement<uint8_t>(LCC::VT_OWNER, static_cast<uint8_t>(OWNER), 0);
   }
   void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
     fbb_.AddOffset(LCC::VT_NAME, NAME);

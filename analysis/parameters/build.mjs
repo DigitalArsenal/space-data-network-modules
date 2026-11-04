@@ -46,14 +46,15 @@ const { version: sdsVersion, headers } = await generateSdsHeaders();
 
 // One translation unit, so the cross-family includes are resolved by ORDER and
 // the `#include "<FAMILY>_generated.h"` lines are removed. RFM and FRM come
-// first because PCE includes both, and EVL includes PCE.
+// first because PCE includes both, and EVL includes PCE; PVN comes before EOP, which includes it.
 const stripIncludes = (source) =>
   source.replace(/^#include "[A-Z0-9_]+_generated\.h"\n/gm, "");
 
 const rfmHeader = headers.RFM;
 const frmHeader = stripIncludes(headers.FRM);
 const pceHeader = stripIncludes(headers.PCE);
-const eopHeader = headers.EOP;
+const pvnHeader = headers.PVN;
+const eopHeader = stripIncludes(headers.EOP);
 
 // ONE chain and ONE element-set library, not copies. The parameter catalog
 // evaluates over exactly the headers foundation/frames and foundation/orbits
@@ -97,6 +98,7 @@ const sourceCode = [
   rfmHeader,
   frmHeader,
   pceHeader,
+  pvnHeader,
   eopHeader,
   erfa.source,
   bodyModels,

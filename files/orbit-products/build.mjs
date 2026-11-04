@@ -31,7 +31,7 @@ const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
 
 // SDS comes from the PUBLISHED package this repo pins, never a sibling
 // checkout (published-deps law, owner 2026-08-21).
-const { version: sdsVersion, headers } = await generateSdsHeaders();
+const { version: sdsVersion, families, headers } = await generateSdsHeaders();
 
 /*
  * $NCD is the record this module's ports are typed on, so a build against an
@@ -136,23 +136,8 @@ const pieces = [
   stripLocalIncludes(await read(path.join(pugixmlRoot, "pugixml.cpp"))),
   // math.h may define these as macros; the SDS headers have members of the same names.
   "#undef DOMAIN\n#undef SING\n#undef OVERFLOW\n#undef UNDERFLOW\n#undef TLOSS\n#undef PLOSS\n",
-  stripSdsCrossIncludes(headers.RFM),
-  stripSdsCrossIncludes(headers.TIM),
-  stripSdsCrossIncludes(headers.IDM),
-  stripSdsCrossIncludes(headers.PLD),
-  stripSdsCrossIncludes(headers.LCC),
-  stripSdsCrossIncludes(headers.CAT),
-  stripSdsCrossIncludes(headers.PPE),
-  stripSdsCrossIncludes(headers.OEM),
-  stripSdsCrossIncludes(headers.NCD),
-  stripSdsCrossIncludes(headers.OPM),
-  stripSdsCrossIncludes(headers.ATM),
-  stripSdsCrossIncludes(headers.CVR),
-  stripSdsCrossIncludes(headers.PVN),
-  stripSdsCrossIncludes(headers.OCM),
-  stripSdsCrossIncludes(headers.MET),
-  stripSdsCrossIncludes(headers.VCM),
-  stripSdsCrossIncludes(headers.AEM),
+  // The SDS object-API headers, each family after the families it includes.
+  ...families.map((family) => stripSdsCrossIncludes(headers[family])),
   await read(path.join(packageRoot,"../../foundation/orbits/src/state_representations.hpp")),
   await read(path.join(srcRoot,"vimpel.hpp")),
   await read(path.join(srcRoot, "ses_i11.hpp")),

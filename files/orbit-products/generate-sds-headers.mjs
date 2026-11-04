@@ -13,7 +13,7 @@
  *
  * $OEM includes ../RFM, ../TIM, ../CAT and ../PPE, so those are generated
  * alongside it and each cross-family `#include "main_generated.h"` is rewritten
- * to the family name, matching foundation/frames' generator. SCHEMA_FAMILIES is
+ * to the family name, matching foundation/frames' generator. schemaFamilies() is
  * in DEPENDENCY ORDER: the single translation unit the SDK compiles concatenates
  * these headers, so an include must already be defined above the family that
  * references it.
@@ -32,8 +32,25 @@ const standardsRoot = path.join(
 );
 const outDir = path.join(packageRoot, "src", "generated", "sds");
 
-// Families this module references directly, plus their transitive includes.
-export const SCHEMA_FAMILIES = ["RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "OPM", "ATM", "CVR", "PVN", "OCM", "MET", "VCM", "AEM"];
+// The families this module references directly. Their transitive includes are generated with them, in
+// dependency order, by schemaFamilies() below.
+export const ROOT_FAMILIES = ["RFM", "TIM", "IDM", "PLD", "LCC", "CAT", "PPE", "OEM", "NCD", "OPM", "ATM", "CVR", "PVN", "OCM", "MET", "VCM", "AEM"];
+
+/** The roots and everything they include, each family after the families it includes. */
+export function schemaFamilies(roots = ROOT_FAMILIES) {
+  const ordered = [];
+  const visit = (family) => {
+    if (ordered.includes(family)) return;
+    const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
+    if (!fs.existsSync(schemaPath)) {
+      throw new Error(`${family} schema not found in the installed spacedatastandards.org`);
+    }
+    for (const included of schemaIncludeFamilies(schemaPath)) visit(included);
+    ordered.push(family);
+  };
+  roots.forEach(visit);
+  return ordered;
+}
 
 function schemaIncludeFamilies(schemaPath) {
   const includes = [];
@@ -103,7 +120,8 @@ export async function generateSdsHeaders() {
   }
 
   const emitted = {};
-  for (const family of SCHEMA_FAMILIES) {
+  const families = schemaFamilies();
+  for (const family of families) {
     const schemaPath = path.join(standardsRoot, "schema", family, "main.fbs");
     if (!fs.existsSync(schemaPath)) {
       throw new Error(`${family} schema not found in spacedatastandards.org@${version}`);
@@ -132,14 +150,14 @@ export async function generateSdsHeaders() {
     fs.writeFileSync(path.join(outDir, `${family}_generated.h`), header);
     emitted[family] = header;
   }
-  return { version, headers: emitted, outDir };
+  return { version, families, headers: emitted, outDir };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   generateSdsHeaders()
-    .then(({ version }) => {
+    .then(({ version, families }) => {
       console.log(
-        `Generated SDS headers ${SCHEMA_FAMILIES.join(", ")} from spacedatastandards.org@${version}`,
+        `Generated SDS headers ${families.join(", ")} from spacedatastandards.org@${version}`,
       );
     })
     .catch((error) => {

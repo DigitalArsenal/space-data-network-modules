@@ -7,5 +7,6 @@ export var pcfAtmosphereFamily = /*#__PURE__*/ function(pcfAtmosphereFamily) {
     pcfAtmosphereFamily[pcfAtmosphereFamily["JACCHIA_ROBERTS"] = 5] = "JACCHIA_ROBERTS";
     pcfAtmosphereFamily[pcfAtmosphereFamily["JB2008"] = 6] = "JB2008";
     pcfAtmosphereFamily[pcfAtmosphereFamily["MARS_EXPONENTIAL"] = 7] = "MARS_EXPONENTIAL";
+    pcfAtmosphereFamily[pcfAtmosphereFamily["JACCHIA70"] = 8] = "JACCHIA70";
     return pcfAtmosphereFamily;
 }({});

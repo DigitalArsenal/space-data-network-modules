@@ -98,6 +98,10 @@ struct SFET : public ::flatbuffers::NativeTable {
   std::string SOURCE_CID{};
   std::string SOURCE_DIGEST{};
   std::string RETRIEVED_AT{};
+  std::string BEGIN_XRAY_CLASS{};
+  std::string END_XRAY_CLASS{};
+  double PEAK_RATIO = std::numeric_limits<double>::quiet_NaN();
+  std::string PEAK_RATIO_TIME{};
   SFET() = default;
   SFET(const SFET &o);
   SFET(SFET&&) FLATBUFFERS_NOEXCEPT = default;
@@ -137,7 +141,11 @@ struct SFE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PROVENANCE = 52,
     VT_SOURCE_CID = 54,
     VT_SOURCE_DIGEST = 56,
-    VT_RETRIEVED_AT = 58
+    VT_RETRIEVED_AT = 58,
+    VT_BEGIN_XRAY_CLASS = 60,
+    VT_END_XRAY_CLASS = 62,
+    VT_PEAK_RATIO = 64,
+    VT_PEAK_RATIO_TIME = 66
   };
   /// The source's own event identity, verbatim.
   const ::flatbuffers::String *EVENT_ID() const {
@@ -251,6 +259,22 @@ struct SFE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *RETRIEVED_AT() const {
     return GetPointer<const ::flatbuffers::String *>(VT_RETRIEVED_AT);
   }
+  /// Soft X-ray class at event begin, verbatim (SWPC begin_class).
+  const ::flatbuffers::String *BEGIN_XRAY_CLASS() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_BEGIN_XRAY_CLASS);
+  }
+  /// Soft X-ray class at event end, verbatim (SWPC end_class).
+  const ::flatbuffers::String *END_XRAY_CLASS() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_END_XRAY_CLASS);
+  }
+  /// Peak X-ray ratio, dimensionless, as published (SWPC max_ratio); NaN when absent.
+  double PEAK_RATIO() const {
+    return GetField<double>(VT_PEAK_RATIO, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Time of the peak X-ray ratio, RFC 3339 UTC (SWPC max_ratio_time); absent when unstated.
+  const ::flatbuffers::String *PEAK_RATIO_TIME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PEAK_RATIO_TIME);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -301,6 +325,13 @@ struct SFE FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(SOURCE_DIGEST()) &&
            VerifyOffset(verifier, VT_RETRIEVED_AT) &&
            verifier.VerifyString(RETRIEVED_AT()) &&
+           VerifyOffset(verifier, VT_BEGIN_XRAY_CLASS) &&
+           verifier.VerifyString(BEGIN_XRAY_CLASS()) &&
+           VerifyOffset(verifier, VT_END_XRAY_CLASS) &&
+           verifier.VerifyString(END_XRAY_CLASS()) &&
+           VerifyField<double>(verifier, VT_PEAK_RATIO, 8) &&
+           VerifyOffset(verifier, VT_PEAK_RATIO_TIME) &&
+           verifier.VerifyString(PEAK_RATIO_TIME()) &&
            verifier.EndTable();
   }
   SFET *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -396,6 +427,18 @@ struct SFEBuilder {
   void add_RETRIEVED_AT(::flatbuffers::Offset<::flatbuffers::String> RETRIEVED_AT) {
     fbb_.AddOffset(SFE::VT_RETRIEVED_AT, RETRIEVED_AT);
   }
+  void add_BEGIN_XRAY_CLASS(::flatbuffers::Offset<::flatbuffers::String> BEGIN_XRAY_CLASS) {
+    fbb_.AddOffset(SFE::VT_BEGIN_XRAY_CLASS, BEGIN_XRAY_CLASS);
+  }
+  void add_END_XRAY_CLASS(::flatbuffers::Offset<::flatbuffers::String> END_XRAY_CLASS) {
+    fbb_.AddOffset(SFE::VT_END_XRAY_CLASS, END_XRAY_CLASS);
+  }
+  void add_PEAK_RATIO(double PEAK_RATIO) {
+    fbb_.AddElement<double>(SFE::VT_PEAK_RATIO, PEAK_RATIO, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_PEAK_RATIO_TIME(::flatbuffers::Offset<::flatbuffers::String> PEAK_RATIO_TIME) {
+    fbb_.AddOffset(SFE::VT_PEAK_RATIO_TIME, PEAK_RATIO_TIME);
+  }
   explicit SFEBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -438,14 +481,22 @@ inline ::flatbuffers::Offset<SFE> CreateSFE(
     ::flatbuffers::Offset<PVN> PROVENANCE = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SOURCE_CID = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SOURCE_DIGEST = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> RETRIEVED_AT = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> RETRIEVED_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> BEGIN_XRAY_CLASS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> END_XRAY_CLASS = 0,
+    double PEAK_RATIO = std::numeric_limits<double>::quiet_NaN(),
+    ::flatbuffers::Offset<::flatbuffers::String> PEAK_RATIO_TIME = 0) {
   SFEBuilder builder_(_fbb);
+  builder_.add_PEAK_RATIO(PEAK_RATIO);
   builder_.add_HG_LONGITUDE_DEG(HG_LONGITUDE_DEG);
   builder_.add_HG_LATITUDE_DEG(HG_LATITUDE_DEG);
   builder_.add_PASSBAND_MAX_NM(PASSBAND_MAX_NM);
   builder_.add_PASSBAND_MIN_NM(PASSBAND_MIN_NM);
   builder_.add_INTEGRATED_FLUX_J_M2(INTEGRATED_FLUX_J_M2);
   builder_.add_PEAK_FLUX_W_M2(PEAK_FLUX_W_M2);
+  builder_.add_PEAK_RATIO_TIME(PEAK_RATIO_TIME);
+  builder_.add_END_XRAY_CLASS(END_XRAY_CLASS);
+  builder_.add_BEGIN_XRAY_CLASS(BEGIN_XRAY_CLASS);
   builder_.add_RETRIEVED_AT(RETRIEVED_AT);
   builder_.add_SOURCE_DIGEST(SOURCE_DIGEST);
   builder_.add_SOURCE_CID(SOURCE_CID);
@@ -505,7 +556,11 @@ inline ::flatbuffers::Offset<SFE> CreateSFEDirect(
     ::flatbuffers::Offset<PVN> PROVENANCE = 0,
     const char *SOURCE_CID = nullptr,
     const char *SOURCE_DIGEST = nullptr,
-    const char *RETRIEVED_AT = nullptr) {
+    const char *RETRIEVED_AT = nullptr,
+    const char *BEGIN_XRAY_CLASS = nullptr,
+    const char *END_XRAY_CLASS = nullptr,
+    double PEAK_RATIO = std::numeric_limits<double>::quiet_NaN(),
+    const char *PEAK_RATIO_TIME = nullptr) {
   auto EVENT_ID__ = EVENT_ID ? _fbb.CreateString(EVENT_ID) : 0;
   auto PRODUCT__ = PRODUCT ? _fbb.CreateString(PRODUCT) : 0;
   auto OBSERVATORY__ = OBSERVATORY ? _fbb.CreateString(OBSERVATORY) : 0;
@@ -524,6 +579,9 @@ inline ::flatbuffers::Offset<SFE> CreateSFEDirect(
   auto SOURCE_CID__ = SOURCE_CID ? _fbb.CreateString(SOURCE_CID) : 0;
   auto SOURCE_DIGEST__ = SOURCE_DIGEST ? _fbb.CreateString(SOURCE_DIGEST) : 0;
   auto RETRIEVED_AT__ = RETRIEVED_AT ? _fbb.CreateString(RETRIEVED_AT) : 0;
+  auto BEGIN_XRAY_CLASS__ = BEGIN_XRAY_CLASS ? _fbb.CreateString(BEGIN_XRAY_CLASS) : 0;
+  auto END_XRAY_CLASS__ = END_XRAY_CLASS ? _fbb.CreateString(END_XRAY_CLASS) : 0;
+  auto PEAK_RATIO_TIME__ = PEAK_RATIO_TIME ? _fbb.CreateString(PEAK_RATIO_TIME) : 0;
   return CreateSFE(
       _fbb,
       EVENT_ID__,
@@ -553,7 +611,11 @@ inline ::flatbuffers::Offset<SFE> CreateSFEDirect(
       PROVENANCE,
       SOURCE_CID__,
       SOURCE_DIGEST__,
-      RETRIEVED_AT__);
+      RETRIEVED_AT__,
+      BEGIN_XRAY_CLASS__,
+      END_XRAY_CLASS__,
+      PEAK_RATIO,
+      PEAK_RATIO_TIME__);
 }
 
 ::flatbuffers::Offset<SFE> CreateSFE(::flatbuffers::FlatBufferBuilder &_fbb, const SFET *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -660,7 +722,11 @@ inline SFET::SFET(const SFET &o)
         PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr),
         SOURCE_CID(o.SOURCE_CID),
         SOURCE_DIGEST(o.SOURCE_DIGEST),
-        RETRIEVED_AT(o.RETRIEVED_AT) {
+        RETRIEVED_AT(o.RETRIEVED_AT),
+        BEGIN_XRAY_CLASS(o.BEGIN_XRAY_CLASS),
+        END_XRAY_CLASS(o.END_XRAY_CLASS),
+        PEAK_RATIO(o.PEAK_RATIO),
+        PEAK_RATIO_TIME(o.PEAK_RATIO_TIME) {
 }
 
 inline SFET &SFET::operator=(SFET o) FLATBUFFERS_NOEXCEPT {
@@ -692,6 +758,10 @@ inline SFET &SFET::operator=(SFET o) FLATBUFFERS_NOEXCEPT {
   std::swap(SOURCE_CID, o.SOURCE_CID);
   std::swap(SOURCE_DIGEST, o.SOURCE_DIGEST);
   std::swap(RETRIEVED_AT, o.RETRIEVED_AT);
+  std::swap(BEGIN_XRAY_CLASS, o.BEGIN_XRAY_CLASS);
+  std::swap(END_XRAY_CLASS, o.END_XRAY_CLASS);
+  std::swap(PEAK_RATIO, o.PEAK_RATIO);
+  std::swap(PEAK_RATIO_TIME, o.PEAK_RATIO_TIME);
   return *this;
 }
 
@@ -732,6 +802,10 @@ inline void SFE::UnPackTo(SFET *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = SOURCE_CID(); if (_e) _o->SOURCE_CID = _e->str(); }
   { auto _e = SOURCE_DIGEST(); if (_e) _o->SOURCE_DIGEST = _e->str(); }
   { auto _e = RETRIEVED_AT(); if (_e) _o->RETRIEVED_AT = _e->str(); }
+  { auto _e = BEGIN_XRAY_CLASS(); if (_e) _o->BEGIN_XRAY_CLASS = _e->str(); }
+  { auto _e = END_XRAY_CLASS(); if (_e) _o->END_XRAY_CLASS = _e->str(); }
+  { auto _e = PEAK_RATIO(); _o->PEAK_RATIO = _e; }
+  { auto _e = PEAK_RATIO_TIME(); if (_e) _o->PEAK_RATIO_TIME = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<SFE> CreateSFE(::flatbuffers::FlatBufferBuilder &_fbb, const SFET *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -770,6 +844,10 @@ inline ::flatbuffers::Offset<SFE> SFE::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _SOURCE_CID = _o->SOURCE_CID.empty() ? 0 : _fbb.CreateString(_o->SOURCE_CID);
   auto _SOURCE_DIGEST = _o->SOURCE_DIGEST.empty() ? 0 : _fbb.CreateString(_o->SOURCE_DIGEST);
   auto _RETRIEVED_AT = _o->RETRIEVED_AT.empty() ? 0 : _fbb.CreateString(_o->RETRIEVED_AT);
+  auto _BEGIN_XRAY_CLASS = _o->BEGIN_XRAY_CLASS.empty() ? 0 : _fbb.CreateString(_o->BEGIN_XRAY_CLASS);
+  auto _END_XRAY_CLASS = _o->END_XRAY_CLASS.empty() ? 0 : _fbb.CreateString(_o->END_XRAY_CLASS);
+  auto _PEAK_RATIO = _o->PEAK_RATIO;
+  auto _PEAK_RATIO_TIME = _o->PEAK_RATIO_TIME.empty() ? 0 : _fbb.CreateString(_o->PEAK_RATIO_TIME);
   return CreateSFE(
       _fbb,
       _EVENT_ID,
@@ -799,7 +877,11 @@ inline ::flatbuffers::Offset<SFE> SFE::Pack(::flatbuffers::FlatBufferBuilder &_f
       _PROVENANCE,
       _SOURCE_CID,
       _SOURCE_DIGEST,
-      _RETRIEVED_AT);
+      _RETRIEVED_AT,
+      _BEGIN_XRAY_CLASS,
+      _END_XRAY_CLASS,
+      _PEAK_RATIO,
+      _PEAK_RATIO_TIME);
 }
 
 inline SFECOLLECTIONT::SFECOLLECTIONT(const SFECOLLECTIONT &o) {

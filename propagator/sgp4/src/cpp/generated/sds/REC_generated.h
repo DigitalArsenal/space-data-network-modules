@@ -50,6 +50,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "CHN_generated.h"
 #include "CLM_generated.h"
 #include "CLT_generated.h"
+#include "CME_generated.h"
 #include "CMR_generated.h"
 #include "CMS_generated.h"
 #include "CMT_generated.h"
@@ -91,11 +92,15 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "ETS_generated.h"
 #include "EVL_generated.h"
 #include "EWR_generated.h"
+#include "EXO_generated.h"
+#include "FCK_generated.h"
 #include "FCS_generated.h"
 #include "FIL_generated.h"
+#include "FMB_generated.h"
 #include "FPC_generated.h"
 #include "FRM_generated.h"
 #include "FSB_generated.h"
+#include "FSG_generated.h"
 #include "FSM_generated.h"
 #include "FSO_generated.h"
 #include "FSP_generated.h"
@@ -104,6 +109,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "GEL_generated.h"
 #include "GEO_generated.h"
 #include "GJN_generated.h"
+#include "GLX_generated.h"
+#include "GNM_generated.h"
 #include "GNO_generated.h"
 #include "GNP_generated.h"
 #include "GPX_generated.h"
@@ -183,6 +190,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "PGM_generated.h"
 #include "PHB_generated.h"
 #include "PHY_generated.h"
+#include "PIN_generated.h"
 #include "PIV_generated.h"
 #include "PKB_generated.h"
 #include "PLD_generated.h"
@@ -231,11 +239,13 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "SCV_generated.h"
 #include "SCX_generated.h"
 #include "SDF_generated.h"
+#include "SDI_generated.h"
 #include "SDL_generated.h"
 #include "SDR_generated.h"
 #include "SEN_generated.h"
 #include "SEO_generated.h"
 #include "SEV_generated.h"
+#include "SFE_generated.h"
 #include "SHC_generated.h"
 #include "SHW_generated.h"
 #include "SIT_generated.h"
@@ -252,13 +262,18 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "SPW_generated.h"
 #include "SRG_generated.h"
 #include "SRI_generated.h"
+#include "SRO_generated.h"
+#include "SRT_generated.h"
+#include "SSY_generated.h"
 #include "STF_generated.h"
 #include "STO_generated.h"
 #include "STR_generated.h"
 #include "STV_generated.h"
 #include "STX_generated.h"
 #include "SUB_generated.h"
+#include "SWA_generated.h"
 #include "SWR_generated.h"
+#include "SWS_generated.h"
 #include "TAB_generated.h"
 #include "TBP_generated.h"
 #include "TBS_generated.h"
@@ -5267,11 +5282,26 @@ enum class RecordTypeExtended : uint16_t {
   TBP = 278,
   WHA = 279,
   XMT = 280,
+  EXO = 281,
+  GLX = 282,
+  FCK = 283,
+  FMB = 284,
+  FSG = 285,
+  PIN = 286,
+  SDI = 287,
+  SFE = 288,
+  SRO = 289,
+  SRT = 290,
+  GNM = 291,
+  CME = 292,
+  SWA = 293,
+  SWS = 294,
+  SSY = 295,
   MIN = NONE,
-  MAX = XMT
+  MAX = SSY
 };
 
-inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[26] {
+inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[41] {
   static const RecordTypeExtended values[] = {
     RecordTypeExtended::NONE,
     RecordTypeExtended::ABA,
@@ -5298,7 +5328,22 @@ inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[26] {
     RecordTypeExtended::SRG,
     RecordTypeExtended::TBP,
     RecordTypeExtended::WHA,
-    RecordTypeExtended::XMT
+    RecordTypeExtended::XMT,
+    RecordTypeExtended::EXO,
+    RecordTypeExtended::GLX,
+    RecordTypeExtended::FCK,
+    RecordTypeExtended::FMB,
+    RecordTypeExtended::FSG,
+    RecordTypeExtended::PIN,
+    RecordTypeExtended::SDI,
+    RecordTypeExtended::SFE,
+    RecordTypeExtended::SRO,
+    RecordTypeExtended::SRT,
+    RecordTypeExtended::GNM,
+    RecordTypeExtended::CME,
+    RecordTypeExtended::SWA,
+    RecordTypeExtended::SWS,
+    RecordTypeExtended::SSY
   };
   return values;
 }
@@ -5331,6 +5376,21 @@ inline const char *EnumNameRecordTypeExtended(RecordTypeExtended e) {
     case RecordTypeExtended::TBP: return "TBP";
     case RecordTypeExtended::WHA: return "WHA";
     case RecordTypeExtended::XMT: return "XMT";
+    case RecordTypeExtended::EXO: return "EXO";
+    case RecordTypeExtended::GLX: return "GLX";
+    case RecordTypeExtended::FCK: return "FCK";
+    case RecordTypeExtended::FMB: return "FMB";
+    case RecordTypeExtended::FSG: return "FSG";
+    case RecordTypeExtended::PIN: return "PIN";
+    case RecordTypeExtended::SDI: return "SDI";
+    case RecordTypeExtended::SFE: return "SFE";
+    case RecordTypeExtended::SRO: return "SRO";
+    case RecordTypeExtended::SRT: return "SRT";
+    case RecordTypeExtended::GNM: return "GNM";
+    case RecordTypeExtended::CME: return "CME";
+    case RecordTypeExtended::SWA: return "SWA";
+    case RecordTypeExtended::SWS: return "SWS";
+    case RecordTypeExtended::SSY: return "SSY";
     default: return "";
   }
 }

@@ -27,33 +27,45 @@ enum class meanElementSource : int8_t {
   DSST = 2,
   /// Universal Semianalytical Method
   USM = 3,
+  /// SDN Advanced Propagator (AP): SGP4-XP with parts of the theory replaced (the drag
+  /// atmosphere, tesseral and zonal gravity terms). Its sets fly only on AP. 4 is left
+  /// unused: it was a cut value of an earlier theory.
+  AP = 5,
+  /// Not stated. A reader of an element set refuses UNSPECIFIED by name: the theory of a
+  /// set is always written.
+  UNSPECIFIED = 6,
   MIN = SGP4,
-  MAX = USM
+  MAX = UNSPECIFIED
 };
 
-inline const meanElementSource (&EnumValuesmeanElementSource())[4] {
+inline const meanElementSource (&EnumValuesmeanElementSource())[6] {
   static const meanElementSource values[] = {
     meanElementSource::SGP4,
     meanElementSource::SGP4XP,
     meanElementSource::DSST,
-    meanElementSource::USM
+    meanElementSource::USM,
+    meanElementSource::AP,
+    meanElementSource::UNSPECIFIED
   };
   return values;
 }
 
 inline const char * const *EnumNamesmeanElementSource() {
-  static const char * const names[5] = {
+  static const char * const names[8] = {
     "SGP4",
     "SGP4XP",
     "DSST",
     "USM",
+    "",
+    "AP",
+    "UNSPECIFIED",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamemeanElementSource(meanElementSource e) {
-  if (::flatbuffers::IsOutRange(e, meanElementSource::SGP4, meanElementSource::USM)) return "";
+  if (::flatbuffers::IsOutRange(e, meanElementSource::SGP4, meanElementSource::UNSPECIFIED)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesmeanElementSource()[index];
 }

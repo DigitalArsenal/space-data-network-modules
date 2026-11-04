@@ -173,6 +173,7 @@ export { pcfIntegratorAlgorithm } from './pcfIntegratorAlgorithm.js';
 export { pcfNeutralWind } from './pcfNeutralWind.js';
 export { pcfOceanTideModel } from './pcfOceanTideModel.js';
 export { pcfOutputFrame } from './pcfOutputFrame.js';
+export { pcfPriorForm } from './pcfPriorForm.js';
 export { pcfRadiationPressureFamily } from './pcfRadiationPressureFamily.js';
 export { pcfRelativityTerms } from './pcfRelativityTerms.js';
 export { pcfSolidTideModel } from './pcfSolidTideModel.js';

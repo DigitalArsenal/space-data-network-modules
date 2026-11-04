@@ -16,6 +16,8 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "RFM_generated.h"
 #include "TIM_generated.h"
 #include "MET_generated.h"
+#include "CVR_generated.h"
+#include "PVN_generated.h"
 
 struct OMM;
 struct OMMBuilder;
@@ -114,6 +116,8 @@ struct OMMT : public ::flatbuffers::NativeTable {
   std::string CLASSIFICATION{};
   std::string MESSAGE_ID{};
   std::vector<std::unique_ptr<OMMUserDefinedParameterT>> USER_DEFINED_PARAMETERS{};
+  std::unique_ptr<PVNT> PROVENANCE{};
+  std::unique_ptr<CVRT> COV_REALISM{};
   OMMT() = default;
   OMMT(const OMMT &o);
   OMMT(OMMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -168,7 +172,9 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_USER_DEFINED_MICROSECONDS = 82,
     VT_CLASSIFICATION = 84,
     VT_MESSAGE_ID = 86,
-    VT_USER_DEFINED_PARAMETERS = 88
+    VT_USER_DEFINED_PARAMETERS = 88,
+    VT_PROVENANCE = 90,
+    VT_COV_REALISM = 92
   };
   /// CCSDS OMM Version
   double CCSDS_OMM_VERS() const {
@@ -190,12 +196,21 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *OBJECT_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
   }
-  /// Center Name (e.g. EARTH, MARS)
+  /// Center Name (e.g. EARTH, MARS). A set about another body names it: MOON,
+  /// SUN or a planet.
   const ::flatbuffers::String *CENTER_NAME() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CENTER_NAME);
   }
   /// Reference Frame
   /// Typically TEMEOFDATE
+  /// The Earth-Moon synodic (rotating) frame of a libration-point orbit is the
+  /// RFMCoordinateSystem with AXIS_TYPE OBJECT_REFERENCED: OBJECT_REFERENCED_AXES
+  /// names the Earth as PRIMARY_OBJECT_ID and the Moon as SECONDARY_OBJECT_ID
+  /// (ephemeris body codes 399 and 301, as text), X_AXIS RADIAL and Z_AXIS
+  /// ORBIT_NORMAL, Y completing the triad; ORIGIN is the Moon (CELESTIAL_BODY),
+  /// the Earth-Moon barycenter (BARYCENTRE) or the libration point
+  /// (LIBRATION_POINT with its primary and secondary). No other frame value is
+  /// needed for it.
   const RFM *REFERENCE_FRAME() const {
     return GetPointer<const RFM *>(VT_REFERENCE_FRAME);
   }
@@ -295,7 +310,7 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double REV_AT_EPOCH() const {
     return GetField<double>(VT_REV_AT_EPOCH, 0.0);
   }
-  /// BSTAR in 1/Earth radii or BTERM in m**2/kg depending on MEAN_ELEMENT_THEORY [C]
+  /// BSTAR in 1/Earth radii, or BTERM in m**2/kg for SGP4-XP [C]
   double BSTAR() const {
     return GetField<double>(VT_BSTAR, 0.0);
   }
@@ -357,6 +372,14 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   /// message that has no dedicated field above, in message order.
   const ::flatbuffers::Vector<::flatbuffers::Offset<OMMUserDefinedParameter>> *USER_DEFINED_PARAMETERS() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<OMMUserDefinedParameter>> *>(VT_USER_DEFINED_PARAMETERS);
+  }
+  /// Where the element set comes from and the terms it travels under.
+  const PVN *PROVENANCE() const {
+    return GetPointer<const PVN *>(VT_PROVENANCE);
+  }
+  /// Realism of COVARIANCE.
+  const CVR *COV_REALISM() const {
+    return GetPointer<const CVR *>(VT_COV_REALISM);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -422,6 +445,10 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_USER_DEFINED_PARAMETERS) &&
            verifier.VerifyVector(USER_DEFINED_PARAMETERS()) &&
            verifier.VerifyVectorOfTables(USER_DEFINED_PARAMETERS()) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           VerifyOffset(verifier, VT_COV_REALISM) &&
+           verifier.VerifyTable(COV_REALISM()) &&
            verifier.EndTable();
   }
   OMMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -562,6 +589,12 @@ struct OMMBuilder {
   void add_USER_DEFINED_PARAMETERS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OMMUserDefinedParameter>>> USER_DEFINED_PARAMETERS) {
     fbb_.AddOffset(OMM::VT_USER_DEFINED_PARAMETERS, USER_DEFINED_PARAMETERS);
   }
+  void add_PROVENANCE(::flatbuffers::Offset<PVN> PROVENANCE) {
+    fbb_.AddOffset(OMM::VT_PROVENANCE, PROVENANCE);
+  }
+  void add_COV_REALISM(::flatbuffers::Offset<CVR> COV_REALISM) {
+    fbb_.AddOffset(OMM::VT_COV_REALISM, COV_REALISM);
+  }
   explicit OMMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -617,7 +650,9 @@ inline ::flatbuffers::Offset<OMM> CreateOMM(
     double USER_DEFINED_MICROSECONDS = 0.0,
     ::flatbuffers::Offset<::flatbuffers::String> CLASSIFICATION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OMMUserDefinedParameter>>> USER_DEFINED_PARAMETERS = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OMMUserDefinedParameter>>> USER_DEFINED_PARAMETERS = 0,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0,
+    ::flatbuffers::Offset<CVR> COV_REALISM = 0) {
   OMMBuilder builder_(_fbb);
   builder_.add_USER_DEFINED_MICROSECONDS(USER_DEFINED_MICROSECONDS);
   builder_.add_USER_DEFINED_EPOCH_TIMESTAMP(USER_DEFINED_EPOCH_TIMESTAMP);
@@ -639,6 +674,8 @@ inline ::flatbuffers::Offset<OMM> CreateOMM(
   builder_.add_MEAN_MOTION(MEAN_MOTION);
   builder_.add_SEMI_MAJOR_AXIS(SEMI_MAJOR_AXIS);
   builder_.add_CCSDS_OMM_VERS(CCSDS_OMM_VERS);
+  builder_.add_COV_REALISM(COV_REALISM);
+  builder_.add_PROVENANCE(PROVENANCE);
   builder_.add_USER_DEFINED_PARAMETERS(USER_DEFINED_PARAMETERS);
   builder_.add_MESSAGE_ID(MESSAGE_ID);
   builder_.add_CLASSIFICATION(CLASSIFICATION);
@@ -714,7 +751,9 @@ inline ::flatbuffers::Offset<OMM> CreateOMMDirect(
     double USER_DEFINED_MICROSECONDS = 0.0,
     const char *CLASSIFICATION = nullptr,
     const char *MESSAGE_ID = nullptr,
-    const std::vector<::flatbuffers::Offset<OMMUserDefinedParameter>> *USER_DEFINED_PARAMETERS = nullptr) {
+    const std::vector<::flatbuffers::Offset<OMMUserDefinedParameter>> *USER_DEFINED_PARAMETERS = nullptr,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0,
+    ::flatbuffers::Offset<CVR> COV_REALISM = 0) {
   auto CREATION_DATE__ = CREATION_DATE ? _fbb.CreateString(CREATION_DATE) : 0;
   auto ORIGINATOR__ = ORIGINATOR ? _fbb.CreateString(ORIGINATOR) : 0;
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
@@ -774,7 +813,9 @@ inline ::flatbuffers::Offset<OMM> CreateOMMDirect(
       USER_DEFINED_MICROSECONDS,
       CLASSIFICATION__,
       MESSAGE_ID__,
-      USER_DEFINED_PARAMETERS__);
+      USER_DEFINED_PARAMETERS__,
+      PROVENANCE,
+      COV_REALISM);
 }
 
 ::flatbuffers::Offset<OMM> CreateOMM(::flatbuffers::FlatBufferBuilder &_fbb, const OMMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -909,7 +950,9 @@ inline OMMT::OMMT(const OMMT &o)
         USER_DEFINED_EPOCH_TIMESTAMP(o.USER_DEFINED_EPOCH_TIMESTAMP),
         USER_DEFINED_MICROSECONDS(o.USER_DEFINED_MICROSECONDS),
         CLASSIFICATION(o.CLASSIFICATION),
-        MESSAGE_ID(o.MESSAGE_ID) {
+        MESSAGE_ID(o.MESSAGE_ID),
+        PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr),
+        COV_REALISM((o.COV_REALISM) ? new CVRT(*o.COV_REALISM) : nullptr) {
   USER_DEFINED_PARAMETERS.reserve(o.USER_DEFINED_PARAMETERS.size());
   for (const auto &USER_DEFINED_PARAMETERS_ : o.USER_DEFINED_PARAMETERS) { USER_DEFINED_PARAMETERS.emplace_back((USER_DEFINED_PARAMETERS_) ? new OMMUserDefinedParameterT(*USER_DEFINED_PARAMETERS_) : nullptr); }
 }
@@ -958,6 +1001,8 @@ inline OMMT &OMMT::operator=(OMMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(CLASSIFICATION, o.CLASSIFICATION);
   std::swap(MESSAGE_ID, o.MESSAGE_ID);
   std::swap(USER_DEFINED_PARAMETERS, o.USER_DEFINED_PARAMETERS);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  std::swap(COV_REALISM, o.COV_REALISM);
   return *this;
 }
 
@@ -1013,6 +1058,8 @@ inline void OMM::UnPackTo(OMMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = CLASSIFICATION(); if (_e) _o->CLASSIFICATION = _e->str(); }
   { auto _e = MESSAGE_ID(); if (_e) _o->MESSAGE_ID = _e->str(); }
   { auto _e = USER_DEFINED_PARAMETERS(); if (_e) { _o->USER_DEFINED_PARAMETERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->USER_DEFINED_PARAMETERS[_i]) { _e->Get(_i)->UnPackTo(_o->USER_DEFINED_PARAMETERS[_i].get(), _resolver); } else { _o->USER_DEFINED_PARAMETERS[_i] = std::unique_ptr<OMMUserDefinedParameterT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->USER_DEFINED_PARAMETERS.resize(0); } }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+  { auto _e = COV_REALISM(); if (_e) { if(_o->COV_REALISM) { _e->UnPackTo(_o->COV_REALISM.get(), _resolver); } else { _o->COV_REALISM = std::unique_ptr<CVRT>(_e->UnPack(_resolver)); } } else if (_o->COV_REALISM) { _o->COV_REALISM.reset(); } }
 }
 
 inline ::flatbuffers::Offset<OMM> CreateOMM(::flatbuffers::FlatBufferBuilder &_fbb, const OMMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1066,6 +1113,8 @@ inline ::flatbuffers::Offset<OMM> OMM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _CLASSIFICATION = _o->CLASSIFICATION.empty() ? 0 : _fbb.CreateString(_o->CLASSIFICATION);
   auto _MESSAGE_ID = _o->MESSAGE_ID.empty() ? 0 : _fbb.CreateString(_o->MESSAGE_ID);
   auto _USER_DEFINED_PARAMETERS = _o->USER_DEFINED_PARAMETERS.size() ? _fbb.CreateVector<::flatbuffers::Offset<OMMUserDefinedParameter>> (_o->USER_DEFINED_PARAMETERS.size(), [](size_t i, _VectorArgs *__va) { return CreateOMMUserDefinedParameter(*__va->__fbb, __va->__o->USER_DEFINED_PARAMETERS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  auto _COV_REALISM = _o->COV_REALISM ? CreateCVR(_fbb, _o->COV_REALISM.get(), _rehasher) : 0;
   return CreateOMM(
       _fbb,
       _CCSDS_OMM_VERS,
@@ -1110,7 +1159,9 @@ inline ::flatbuffers::Offset<OMM> OMM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _USER_DEFINED_MICROSECONDS,
       _CLASSIFICATION,
       _MESSAGE_ID,
-      _USER_DEFINED_PARAMETERS);
+      _USER_DEFINED_PARAMETERS,
+      _PROVENANCE,
+      _COV_REALISM);
 }
 
 inline OMMUserDefinedParameterT *OMMUserDefinedParameter::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

@@ -50,6 +50,7 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "CHN_generated.h"
 #include "CLM_generated.h"
 #include "CLT_generated.h"
+#include "CME_generated.h"
 #include "CMR_generated.h"
 #include "CMS_generated.h"
 #include "CMT_generated.h"
@@ -263,13 +264,16 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
 #include "SRI_generated.h"
 #include "SRO_generated.h"
 #include "SRT_generated.h"
+#include "SSY_generated.h"
 #include "STF_generated.h"
 #include "STO_generated.h"
 #include "STR_generated.h"
 #include "STV_generated.h"
 #include "STX_generated.h"
 #include "SUB_generated.h"
+#include "SWA_generated.h"
 #include "SWR_generated.h"
+#include "SWS_generated.h"
 #include "TAB_generated.h"
 #include "TBP_generated.h"
 #include "TBS_generated.h"
@@ -5289,11 +5293,15 @@ enum class RecordTypeExtended : uint16_t {
   SRO = 289,
   SRT = 290,
   GNM = 291,
+  CME = 292,
+  SWA = 293,
+  SWS = 294,
+  SSY = 295,
   MIN = NONE,
-  MAX = GNM
+  MAX = SSY
 };
 
-inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[37] {
+inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[41] {
   static const RecordTypeExtended values[] = {
     RecordTypeExtended::NONE,
     RecordTypeExtended::ABA,
@@ -5331,7 +5339,11 @@ inline const RecordTypeExtended (&EnumValuesRecordTypeExtended())[37] {
     RecordTypeExtended::SFE,
     RecordTypeExtended::SRO,
     RecordTypeExtended::SRT,
-    RecordTypeExtended::GNM
+    RecordTypeExtended::GNM,
+    RecordTypeExtended::CME,
+    RecordTypeExtended::SWA,
+    RecordTypeExtended::SWS,
+    RecordTypeExtended::SSY
   };
   return values;
 }
@@ -5375,6 +5387,10 @@ inline const char *EnumNameRecordTypeExtended(RecordTypeExtended e) {
     case RecordTypeExtended::SRO: return "SRO";
     case RecordTypeExtended::SRT: return "SRT";
     case RecordTypeExtended::GNM: return "GNM";
+    case RecordTypeExtended::CME: return "CME";
+    case RecordTypeExtended::SWA: return "SWA";
+    case RecordTypeExtended::SWS: return "SWS";
+    case RecordTypeExtended::SSY: return "SSY";
     default: return "";
   }
 }

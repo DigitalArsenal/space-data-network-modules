@@ -14,6 +14,28 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
              "Non-compatible flatbuffers version included");
 
 #include "IDM_generated.h"
+#include "PVN_generated.h"
+#include "RFM_generated.h"
+
+struct SITCitation;
+struct SITCitationBuilder;
+struct SITCitationT;
+
+struct SITStatusEvidence;
+struct SITStatusEvidenceBuilder;
+struct SITStatusEvidenceT;
+
+struct SITReference;
+struct SITReferenceBuilder;
+struct SITReferenceT;
+
+struct SITParty;
+struct SITPartyBuilder;
+struct SITPartyT;
+
+struct SITQuantity;
+struct SITQuantityBuilder;
+struct SITQuantityT;
 
 struct Geometry;
 struct GeometryBuilder;
@@ -43,11 +65,19 @@ enum class SiteType : int8_t {
   NATIONAL_PARK = 15,
   HISTORICAL_SITE = 16,
   OTHER = 17,
+  /// A place a spacecraft touched down or is to touch down on a body surface
+  LANDING_SITE = 18,
+  /// A place a spacecraft or stage struck a body surface
+  IMPACT_SITE = 19,
+  /// A surface region under study as a landing or exploration target
+  CANDIDATE_REGION = 20,
+  /// A named natural feature of a body surface (crater, mare, rille, mons)
+  SURFACE_FEATURE = 21,
   MIN = LAUNCH_SITE,
-  MAX = OTHER
+  MAX = SURFACE_FEATURE
 };
 
-inline const SiteType (&EnumValuesSiteType())[18] {
+inline const SiteType (&EnumValuesSiteType())[22] {
   static const SiteType values[] = {
     SiteType::LAUNCH_SITE,
     SiteType::OBSERVATION_STATION,
@@ -66,13 +96,17 @@ inline const SiteType (&EnumValuesSiteType())[18] {
     SiteType::URBAN_AREA,
     SiteType::NATIONAL_PARK,
     SiteType::HISTORICAL_SITE,
-    SiteType::OTHER
+    SiteType::OTHER,
+    SiteType::LANDING_SITE,
+    SiteType::IMPACT_SITE,
+    SiteType::CANDIDATE_REGION,
+    SiteType::SURFACE_FEATURE
   };
   return values;
 }
 
 inline const char * const *EnumNamesSiteType() {
-  static const char * const names[19] = {
+  static const char * const names[23] = {
     "LAUNCH_SITE",
     "OBSERVATION_STATION",
     "HOBBYIST_OBSERVER",
@@ -91,16 +125,895 @@ inline const char * const *EnumNamesSiteType() {
     "NATIONAL_PARK",
     "HISTORICAL_SITE",
     "OTHER",
+    "LANDING_SITE",
+    "IMPACT_SITE",
+    "CANDIDATE_REGION",
+    "SURFACE_FEATURE",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameSiteType(SiteType e) {
-  if (::flatbuffers::IsOutRange(e, SiteType::LAUNCH_SITE, SiteType::OTHER)) return "";
+  if (::flatbuffers::IsOutRange(e, SiteType::LAUNCH_SITE, SiteType::SURFACE_FEATURE)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesSiteType()[index];
 }
+
+/// Where a site stands in its life. IAEA PRIS/RRDB terms; compatible with the
+/// EU INSPIRE ConditionOfFacilityValue list. Ordinals are wire values: append only.
+enum class siteLifecycleStatus : int8_t {
+  /// No source states a status
+  UNSPECIFIED = 0,
+  /// Proposed, announced or in study; construction not begun
+  PLANNED = 1,
+  /// Under construction
+  UNDER_CONSTRUCTION = 2,
+  /// Construction begun, then halted with no restart date (PRIS suspended construction)
+  CONSTRUCTION_SUSPENDED = 3,
+  /// In operation
+  OPERATING = 4,
+  /// Not operating, with a stated intent to restart (PRIS suspended operation; RRDB 1T, 7X)
+  LONG_TERM_SHUTDOWN = 5,
+  /// Permanently shut down; not yet in decommissioning
+  PERMANENT_SHUTDOWN = 6,
+  /// Decommissioning or dismantling under way
+  DECOMMISSIONING = 7,
+  /// Dismantled, remediated or released from regulatory control
+  DECOMMISSIONED = 8,
+  /// Never completed or never operated
+  CANCELLED = 9,
+  /// Every licence-OK source was read and none states a status
+  UNVERIFIED = 10,
+  MIN = UNSPECIFIED,
+  MAX = UNVERIFIED
+};
+
+inline const siteLifecycleStatus (&EnumValuessiteLifecycleStatus())[11] {
+  static const siteLifecycleStatus values[] = {
+    siteLifecycleStatus::UNSPECIFIED,
+    siteLifecycleStatus::PLANNED,
+    siteLifecycleStatus::UNDER_CONSTRUCTION,
+    siteLifecycleStatus::CONSTRUCTION_SUSPENDED,
+    siteLifecycleStatus::OPERATING,
+    siteLifecycleStatus::LONG_TERM_SHUTDOWN,
+    siteLifecycleStatus::PERMANENT_SHUTDOWN,
+    siteLifecycleStatus::DECOMMISSIONING,
+    siteLifecycleStatus::DECOMMISSIONED,
+    siteLifecycleStatus::CANCELLED,
+    siteLifecycleStatus::UNVERIFIED
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessiteLifecycleStatus() {
+  static const char * const names[12] = {
+    "UNSPECIFIED",
+    "PLANNED",
+    "UNDER_CONSTRUCTION",
+    "CONSTRUCTION_SUSPENDED",
+    "OPERATING",
+    "LONG_TERM_SHUTDOWN",
+    "PERMANENT_SHUTDOWN",
+    "DECOMMISSIONING",
+    "DECOMMISSIONED",
+    "CANCELLED",
+    "UNVERIFIED",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesiteLifecycleStatus(siteLifecycleStatus e) {
+  if (::flatbuffers::IsOutRange(e, siteLifecycleStatus::UNSPECIFIED, siteLifecycleStatus::UNVERIFIED)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessiteLifecycleStatus()[index];
+}
+
+/// What a reference to another record about the site is.
+enum class sitReferenceRole : int8_t {
+  /// Not stated
+  UNSPECIFIED = 0,
+  /// The site's own record in the register the site record was made from
+  RECORD = 1,
+  /// The site's or its operator's official website
+  OFFICIAL_WEBSITE = 2,
+  /// An encyclopedia article about the site (title and URL only)
+  ENCYCLOPEDIA_ARTICLE = 3,
+  /// The site's record in another registry (a tracker, an organisation registry)
+  REGISTRY_RECORD = 4,
+  /// A regulator's docket or licence record for the site
+  REGULATORY_DOCKET = 5,
+  MIN = UNSPECIFIED,
+  MAX = REGULATORY_DOCKET
+};
+
+inline const sitReferenceRole (&EnumValuessitReferenceRole())[6] {
+  static const sitReferenceRole values[] = {
+    sitReferenceRole::UNSPECIFIED,
+    sitReferenceRole::RECORD,
+    sitReferenceRole::OFFICIAL_WEBSITE,
+    sitReferenceRole::ENCYCLOPEDIA_ARTICLE,
+    sitReferenceRole::REGISTRY_RECORD,
+    sitReferenceRole::REGULATORY_DOCKET
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessitReferenceRole() {
+  static const char * const names[7] = {
+    "UNSPECIFIED",
+    "RECORD",
+    "OFFICIAL_WEBSITE",
+    "ENCYCLOPEDIA_ARTICLE",
+    "REGISTRY_RECORD",
+    "REGULATORY_DOCKET",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesitReferenceRole(sitReferenceRole e) {
+  if (::flatbuffers::IsOutRange(e, sitReferenceRole::UNSPECIFIED, sitReferenceRole::REGULATORY_DOCKET)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessitReferenceRole()[index];
+}
+
+/// What part a party plays at a site.
+enum class sitPartyRole : int8_t {
+  /// Not stated
+  UNSPECIFIED = 0,
+  /// Runs the site
+  OPERATOR = 1,
+  /// Owns the site
+  OWNER = 2,
+  /// Licenses and inspects the site
+  REGULATOR = 3,
+  MIN = UNSPECIFIED,
+  MAX = REGULATOR
+};
+
+inline const sitPartyRole (&EnumValuessitPartyRole())[4] {
+  static const sitPartyRole values[] = {
+    sitPartyRole::UNSPECIFIED,
+    sitPartyRole::OPERATOR,
+    sitPartyRole::OWNER,
+    sitPartyRole::REGULATOR
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessitPartyRole() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "OPERATOR",
+    "OWNER",
+    "REGULATOR",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesitPartyRole(sitPartyRole e) {
+  if (::flatbuffers::IsOutRange(e, sitPartyRole::UNSPECIFIED, sitPartyRole::REGULATOR)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessitPartyRole()[index];
+}
+
+/// What a quantity of a site measures. Ordinals are wire values: append only.
+enum class sitQuantityKind : int8_t {
+  /// Not stated
+  UNSPECIFIED = 0,
+  /// Electrical generating capacity, MW
+  ELECTRICAL_CAPACITY = 1,
+  /// Thermal power, MW
+  THERMAL_POWER = 2,
+  /// Number of reactor or generating units (UNITS empty)
+  REACTOR_UNITS = 3,
+  /// Height above mean sea level, m
+  ELEVATION = 4,
+  MIN = UNSPECIFIED,
+  MAX = ELEVATION
+};
+
+inline const sitQuantityKind (&EnumValuessitQuantityKind())[5] {
+  static const sitQuantityKind values[] = {
+    sitQuantityKind::UNSPECIFIED,
+    sitQuantityKind::ELECTRICAL_CAPACITY,
+    sitQuantityKind::THERMAL_POWER,
+    sitQuantityKind::REACTOR_UNITS,
+    sitQuantityKind::ELEVATION
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessitQuantityKind() {
+  static const char * const names[6] = {
+    "UNSPECIFIED",
+    "ELECTRICAL_CAPACITY",
+    "THERMAL_POWER",
+    "REACTOR_UNITS",
+    "ELEVATION",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesitQuantityKind(sitQuantityKind e) {
+  if (::flatbuffers::IsOutRange(e, sitQuantityKind::UNSPECIFIED, sitQuantityKind::ELEVATION)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessitQuantityKind()[index];
+}
+
+struct SITCitationT : public ::flatbuffers::NativeTable {
+  typedef SITCitation TableType;
+  std::unique_ptr<PVNT> PROVENANCE{};
+  std::string SOURCE_RECORD_ID{};
+  std::string SOURCE_URL{};
+  std::string SOURCE_VERSION{};
+  std::string SOURCE_FIELD{};
+  std::string RETRIEVED_AT{};
+  SITCitationT() = default;
+  SITCitationT(const SITCitationT &o);
+  SITCitationT(SITCitationT&&) FLATBUFFERS_NOEXCEPT = default;
+  SITCitationT &operator=(SITCitationT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Where one statement about a site was read: the source, the record, the
+/// version of the record and the field the statement came from.
+struct SITCitation FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SITCitationT NativeTableType;
+  typedef SITCitationBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_PROVENANCE = 4,
+    VT_SOURCE_RECORD_ID = 6,
+    VT_SOURCE_URL = 8,
+    VT_SOURCE_VERSION = 10,
+    VT_SOURCE_FIELD = 12,
+    VT_RETRIEVED_AT = 14
+  };
+  /// The source, its originator and the terms the statement travels under
+  const PVN *PROVENANCE() const {
+    return GetPointer<const PVN *>(VT_PROVENANCE);
+  }
+  /// The source's own identifier of the record (Wikidata QID, "de:Article
+  /// title", tracker unit ids, ROR id, docket number, register row)
+  const ::flatbuffers::String *SOURCE_RECORD_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_RECORD_ID);
+  }
+  /// Where the record can be read
+  const ::flatbuffers::String *SOURCE_URL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_URL);
+  }
+  /// The source's version of the record (revision id, release name)
+  const ::flatbuffers::String *SOURCE_VERSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_VERSION);
+  }
+  /// The field of the record the statement was read from, from a closed
+  /// vocabulary: a Wikidata property ("P5817", "P576"), "infobox:<parameter>",
+  /// "description", "class:<QID>", "status" (a registry's status column),
+  /// "units" (a tracker's unit statuses), "register:<id>" (a row of the
+  /// provider's reviewed register). Never free text.
+  const ::flatbuffers::String *SOURCE_FIELD() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SOURCE_FIELD);
+  }
+  /// When the record was read, RFC 3339 UTC
+  const ::flatbuffers::String *RETRIEVED_AT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_RETRIEVED_AT);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           VerifyOffset(verifier, VT_SOURCE_RECORD_ID) &&
+           verifier.VerifyString(SOURCE_RECORD_ID()) &&
+           VerifyOffset(verifier, VT_SOURCE_URL) &&
+           verifier.VerifyString(SOURCE_URL()) &&
+           VerifyOffset(verifier, VT_SOURCE_VERSION) &&
+           verifier.VerifyString(SOURCE_VERSION()) &&
+           VerifyOffset(verifier, VT_SOURCE_FIELD) &&
+           verifier.VerifyString(SOURCE_FIELD()) &&
+           VerifyOffset(verifier, VT_RETRIEVED_AT) &&
+           verifier.VerifyString(RETRIEVED_AT()) &&
+           verifier.EndTable();
+  }
+  SITCitationT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SITCitationT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SITCitation> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITCitationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SITCitationBuilder {
+  typedef SITCitation Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_PROVENANCE(::flatbuffers::Offset<PVN> PROVENANCE) {
+    fbb_.AddOffset(SITCitation::VT_PROVENANCE, PROVENANCE);
+  }
+  void add_SOURCE_RECORD_ID(::flatbuffers::Offset<::flatbuffers::String> SOURCE_RECORD_ID) {
+    fbb_.AddOffset(SITCitation::VT_SOURCE_RECORD_ID, SOURCE_RECORD_ID);
+  }
+  void add_SOURCE_URL(::flatbuffers::Offset<::flatbuffers::String> SOURCE_URL) {
+    fbb_.AddOffset(SITCitation::VT_SOURCE_URL, SOURCE_URL);
+  }
+  void add_SOURCE_VERSION(::flatbuffers::Offset<::flatbuffers::String> SOURCE_VERSION) {
+    fbb_.AddOffset(SITCitation::VT_SOURCE_VERSION, SOURCE_VERSION);
+  }
+  void add_SOURCE_FIELD(::flatbuffers::Offset<::flatbuffers::String> SOURCE_FIELD) {
+    fbb_.AddOffset(SITCitation::VT_SOURCE_FIELD, SOURCE_FIELD);
+  }
+  void add_RETRIEVED_AT(::flatbuffers::Offset<::flatbuffers::String> RETRIEVED_AT) {
+    fbb_.AddOffset(SITCitation::VT_RETRIEVED_AT, RETRIEVED_AT);
+  }
+  explicit SITCitationBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SITCitation> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SITCitation>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SITCitation> CreateSITCitation(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_RECORD_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_URL = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_VERSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SOURCE_FIELD = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> RETRIEVED_AT = 0) {
+  SITCitationBuilder builder_(_fbb);
+  builder_.add_RETRIEVED_AT(RETRIEVED_AT);
+  builder_.add_SOURCE_FIELD(SOURCE_FIELD);
+  builder_.add_SOURCE_VERSION(SOURCE_VERSION);
+  builder_.add_SOURCE_URL(SOURCE_URL);
+  builder_.add_SOURCE_RECORD_ID(SOURCE_RECORD_ID);
+  builder_.add_PROVENANCE(PROVENANCE);
+  return builder_.Finish();
+}
+
+struct SITCitation::Traits {
+  using type = SITCitation;
+  static auto constexpr Create = CreateSITCitation;
+};
+
+inline ::flatbuffers::Offset<SITCitation> CreateSITCitationDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0,
+    const char *SOURCE_RECORD_ID = nullptr,
+    const char *SOURCE_URL = nullptr,
+    const char *SOURCE_VERSION = nullptr,
+    const char *SOURCE_FIELD = nullptr,
+    const char *RETRIEVED_AT = nullptr) {
+  auto SOURCE_RECORD_ID__ = SOURCE_RECORD_ID ? _fbb.CreateString(SOURCE_RECORD_ID) : 0;
+  auto SOURCE_URL__ = SOURCE_URL ? _fbb.CreateString(SOURCE_URL) : 0;
+  auto SOURCE_VERSION__ = SOURCE_VERSION ? _fbb.CreateString(SOURCE_VERSION) : 0;
+  auto SOURCE_FIELD__ = SOURCE_FIELD ? _fbb.CreateString(SOURCE_FIELD) : 0;
+  auto RETRIEVED_AT__ = RETRIEVED_AT ? _fbb.CreateString(RETRIEVED_AT) : 0;
+  return CreateSITCitation(
+      _fbb,
+      PROVENANCE,
+      SOURCE_RECORD_ID__,
+      SOURCE_URL__,
+      SOURCE_VERSION__,
+      SOURCE_FIELD__,
+      RETRIEVED_AT__);
+}
+
+::flatbuffers::Offset<SITCitation> CreateSITCitation(::flatbuffers::FlatBufferBuilder &_fbb, const SITCitationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SITStatusEvidenceT : public ::flatbuffers::NativeTable {
+  typedef SITStatusEvidence TableType;
+  siteLifecycleStatus STATUS = siteLifecycleStatus::UNSPECIFIED;
+  std::string STATUS_DATE{};
+  std::unique_ptr<SITCitationT> CITATION{};
+  SITStatusEvidenceT() = default;
+  SITStatusEvidenceT(const SITStatusEvidenceT &o);
+  SITStatusEvidenceT(SITStatusEvidenceT&&) FLATBUFFERS_NOEXCEPT = default;
+  SITStatusEvidenceT &operator=(SITStatusEvidenceT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One source's assertion of one lifecycle step of a site.
+struct SITStatusEvidence FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SITStatusEvidenceT NativeTableType;
+  typedef SITStatusEvidenceBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_STATUS = 4,
+    VT_STATUS_DATE = 6,
+    VT_CITATION = 8
+  };
+  /// The status the source states
+  siteLifecycleStatus STATUS() const {
+    return static_cast<siteLifecycleStatus>(GetField<int8_t>(VT_STATUS, 0));
+  }
+  /// When that status took effect, ISO 8601 at the source's precision (YYYY, YYYY-MM or YYYY-MM-DD)
+  const ::flatbuffers::String *STATUS_DATE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_STATUS_DATE);
+  }
+  /// Where the statement was read
+  const SITCitation *CITATION() const {
+    return GetPointer<const SITCitation *>(VT_CITATION);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_STATUS, 1) &&
+           VerifyOffset(verifier, VT_STATUS_DATE) &&
+           verifier.VerifyString(STATUS_DATE()) &&
+           VerifyOffset(verifier, VT_CITATION) &&
+           verifier.VerifyTable(CITATION()) &&
+           verifier.EndTable();
+  }
+  SITStatusEvidenceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SITStatusEvidenceT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SITStatusEvidence> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITStatusEvidenceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SITStatusEvidenceBuilder {
+  typedef SITStatusEvidence Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_STATUS(siteLifecycleStatus STATUS) {
+    fbb_.AddElement<int8_t>(SITStatusEvidence::VT_STATUS, static_cast<int8_t>(STATUS), 0);
+  }
+  void add_STATUS_DATE(::flatbuffers::Offset<::flatbuffers::String> STATUS_DATE) {
+    fbb_.AddOffset(SITStatusEvidence::VT_STATUS_DATE, STATUS_DATE);
+  }
+  void add_CITATION(::flatbuffers::Offset<SITCitation> CITATION) {
+    fbb_.AddOffset(SITStatusEvidence::VT_CITATION, CITATION);
+  }
+  explicit SITStatusEvidenceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SITStatusEvidence> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SITStatusEvidence>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SITStatusEvidence> CreateSITStatusEvidence(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    siteLifecycleStatus STATUS = siteLifecycleStatus::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> STATUS_DATE = 0,
+    ::flatbuffers::Offset<SITCitation> CITATION = 0) {
+  SITStatusEvidenceBuilder builder_(_fbb);
+  builder_.add_CITATION(CITATION);
+  builder_.add_STATUS_DATE(STATUS_DATE);
+  builder_.add_STATUS(STATUS);
+  return builder_.Finish();
+}
+
+struct SITStatusEvidence::Traits {
+  using type = SITStatusEvidence;
+  static auto constexpr Create = CreateSITStatusEvidence;
+};
+
+inline ::flatbuffers::Offset<SITStatusEvidence> CreateSITStatusEvidenceDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    siteLifecycleStatus STATUS = siteLifecycleStatus::UNSPECIFIED,
+    const char *STATUS_DATE = nullptr,
+    ::flatbuffers::Offset<SITCitation> CITATION = 0) {
+  auto STATUS_DATE__ = STATUS_DATE ? _fbb.CreateString(STATUS_DATE) : 0;
+  return CreateSITStatusEvidence(
+      _fbb,
+      STATUS,
+      STATUS_DATE__,
+      CITATION);
+}
+
+::flatbuffers::Offset<SITStatusEvidence> CreateSITStatusEvidence(::flatbuffers::FlatBufferBuilder &_fbb, const SITStatusEvidenceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SITReferenceT : public ::flatbuffers::NativeTable {
+  typedef SITReference TableType;
+  sitReferenceRole ROLE = sitReferenceRole::UNSPECIFIED;
+  std::string REGISTRY{};
+  std::string RECORD_ID{};
+  std::string URL{};
+  std::string TITLE{};
+  std::string LANGUAGE{};
+};
+
+/// A reference to another record about the site or a party.
+struct SITReference FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SITReferenceT NativeTableType;
+  typedef SITReferenceBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ROLE = 4,
+    VT_REGISTRY = 6,
+    VT_RECORD_ID = 8,
+    VT_URL = 10,
+    VT_TITLE = 12,
+    VT_LANGUAGE = 14
+  };
+  /// What the referenced record is
+  sitReferenceRole ROLE() const {
+    return static_cast<sitReferenceRole>(GetField<int8_t>(VT_ROLE, 0));
+  }
+  /// Publisher-stable, lowercase identifier of the registry in the provider's
+  /// register of sources (wikidata, geonames, enwiki, gem-gnpt, ror, us-nrc)
+  const ::flatbuffers::String *REGISTRY() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_REGISTRY);
+  }
+  /// The registry's identifier of the record
+  const ::flatbuffers::String *RECORD_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_RECORD_ID);
+  }
+  /// Where the record can be read
+  const ::flatbuffers::String *URL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_URL);
+  }
+  /// The record's title as the registry states it (for an encyclopedia, the
+  /// article title only, never its text)
+  const ::flatbuffers::String *TITLE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_TITLE);
+  }
+  /// Language of the record, BCP 47
+  const ::flatbuffers::String *LANGUAGE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LANGUAGE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_ROLE, 1) &&
+           VerifyOffset(verifier, VT_REGISTRY) &&
+           verifier.VerifyString(REGISTRY()) &&
+           VerifyOffset(verifier, VT_RECORD_ID) &&
+           verifier.VerifyString(RECORD_ID()) &&
+           VerifyOffset(verifier, VT_URL) &&
+           verifier.VerifyString(URL()) &&
+           VerifyOffset(verifier, VT_TITLE) &&
+           verifier.VerifyString(TITLE()) &&
+           VerifyOffset(verifier, VT_LANGUAGE) &&
+           verifier.VerifyString(LANGUAGE()) &&
+           verifier.EndTable();
+  }
+  SITReferenceT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SITReferenceT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SITReference> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITReferenceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SITReferenceBuilder {
+  typedef SITReference Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ROLE(sitReferenceRole ROLE) {
+    fbb_.AddElement<int8_t>(SITReference::VT_ROLE, static_cast<int8_t>(ROLE), 0);
+  }
+  void add_REGISTRY(::flatbuffers::Offset<::flatbuffers::String> REGISTRY) {
+    fbb_.AddOffset(SITReference::VT_REGISTRY, REGISTRY);
+  }
+  void add_RECORD_ID(::flatbuffers::Offset<::flatbuffers::String> RECORD_ID) {
+    fbb_.AddOffset(SITReference::VT_RECORD_ID, RECORD_ID);
+  }
+  void add_URL(::flatbuffers::Offset<::flatbuffers::String> URL) {
+    fbb_.AddOffset(SITReference::VT_URL, URL);
+  }
+  void add_TITLE(::flatbuffers::Offset<::flatbuffers::String> TITLE) {
+    fbb_.AddOffset(SITReference::VT_TITLE, TITLE);
+  }
+  void add_LANGUAGE(::flatbuffers::Offset<::flatbuffers::String> LANGUAGE) {
+    fbb_.AddOffset(SITReference::VT_LANGUAGE, LANGUAGE);
+  }
+  explicit SITReferenceBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SITReference> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SITReference>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SITReference> CreateSITReference(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    sitReferenceRole ROLE = sitReferenceRole::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> REGISTRY = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> RECORD_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> URL = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> TITLE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> LANGUAGE = 0) {
+  SITReferenceBuilder builder_(_fbb);
+  builder_.add_LANGUAGE(LANGUAGE);
+  builder_.add_TITLE(TITLE);
+  builder_.add_URL(URL);
+  builder_.add_RECORD_ID(RECORD_ID);
+  builder_.add_REGISTRY(REGISTRY);
+  builder_.add_ROLE(ROLE);
+  return builder_.Finish();
+}
+
+struct SITReference::Traits {
+  using type = SITReference;
+  static auto constexpr Create = CreateSITReference;
+};
+
+inline ::flatbuffers::Offset<SITReference> CreateSITReferenceDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    sitReferenceRole ROLE = sitReferenceRole::UNSPECIFIED,
+    const char *REGISTRY = nullptr,
+    const char *RECORD_ID = nullptr,
+    const char *URL = nullptr,
+    const char *TITLE = nullptr,
+    const char *LANGUAGE = nullptr) {
+  auto REGISTRY__ = REGISTRY ? _fbb.CreateString(REGISTRY) : 0;
+  auto RECORD_ID__ = RECORD_ID ? _fbb.CreateString(RECORD_ID) : 0;
+  auto URL__ = URL ? _fbb.CreateString(URL) : 0;
+  auto TITLE__ = TITLE ? _fbb.CreateString(TITLE) : 0;
+  auto LANGUAGE__ = LANGUAGE ? _fbb.CreateString(LANGUAGE) : 0;
+  return CreateSITReference(
+      _fbb,
+      ROLE,
+      REGISTRY__,
+      RECORD_ID__,
+      URL__,
+      TITLE__,
+      LANGUAGE__);
+}
+
+::flatbuffers::Offset<SITReference> CreateSITReference(::flatbuffers::FlatBufferBuilder &_fbb, const SITReferenceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SITPartyT : public ::flatbuffers::NativeTable {
+  typedef SITParty TableType;
+  sitPartyRole ROLE = sitPartyRole::UNSPECIFIED;
+  std::string NAME{};
+  std::vector<std::unique_ptr<SITReferenceT>> EXTERNAL_REFERENCES{};
+  std::unique_ptr<SITCitationT> CITATION{};
+  SITPartyT() = default;
+  SITPartyT(const SITPartyT &o);
+  SITPartyT(SITPartyT&&) FLATBUFFERS_NOEXCEPT = default;
+  SITPartyT &operator=(SITPartyT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// An organisation with a part at the site.
+struct SITParty FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SITPartyT NativeTableType;
+  typedef SITPartyBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ROLE = 4,
+    VT_NAME = 6,
+    VT_EXTERNAL_REFERENCES = 8,
+    VT_CITATION = 10
+  };
+  /// The part it plays
+  sitPartyRole ROLE() const {
+    return static_cast<sitPartyRole>(GetField<int8_t>(VT_ROLE, 0));
+  }
+  /// Its name, as the source states it
+  const ::flatbuffers::String *NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  }
+  /// Records about the party (its registry record, its official website)
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SITReference>> *EXTERNAL_REFERENCES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SITReference>> *>(VT_EXTERNAL_REFERENCES);
+  }
+  /// Where the statement that it plays this part was read
+  const SITCitation *CITATION() const {
+    return GetPointer<const SITCitation *>(VT_CITATION);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_ROLE, 1) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(NAME()) &&
+           VerifyOffset(verifier, VT_EXTERNAL_REFERENCES) &&
+           verifier.VerifyVector(EXTERNAL_REFERENCES()) &&
+           verifier.VerifyVectorOfTables(EXTERNAL_REFERENCES()) &&
+           VerifyOffset(verifier, VT_CITATION) &&
+           verifier.VerifyTable(CITATION()) &&
+           verifier.EndTable();
+  }
+  SITPartyT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SITPartyT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SITParty> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITPartyT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SITPartyBuilder {
+  typedef SITParty Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ROLE(sitPartyRole ROLE) {
+    fbb_.AddElement<int8_t>(SITParty::VT_ROLE, static_cast<int8_t>(ROLE), 0);
+  }
+  void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
+    fbb_.AddOffset(SITParty::VT_NAME, NAME);
+  }
+  void add_EXTERNAL_REFERENCES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITReference>>> EXTERNAL_REFERENCES) {
+    fbb_.AddOffset(SITParty::VT_EXTERNAL_REFERENCES, EXTERNAL_REFERENCES);
+  }
+  void add_CITATION(::flatbuffers::Offset<SITCitation> CITATION) {
+    fbb_.AddOffset(SITParty::VT_CITATION, CITATION);
+  }
+  explicit SITPartyBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SITParty> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SITParty>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SITParty> CreateSITParty(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    sitPartyRole ROLE = sitPartyRole::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITReference>>> EXTERNAL_REFERENCES = 0,
+    ::flatbuffers::Offset<SITCitation> CITATION = 0) {
+  SITPartyBuilder builder_(_fbb);
+  builder_.add_CITATION(CITATION);
+  builder_.add_EXTERNAL_REFERENCES(EXTERNAL_REFERENCES);
+  builder_.add_NAME(NAME);
+  builder_.add_ROLE(ROLE);
+  return builder_.Finish();
+}
+
+struct SITParty::Traits {
+  using type = SITParty;
+  static auto constexpr Create = CreateSITParty;
+};
+
+inline ::flatbuffers::Offset<SITParty> CreateSITPartyDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    sitPartyRole ROLE = sitPartyRole::UNSPECIFIED,
+    const char *NAME = nullptr,
+    const std::vector<::flatbuffers::Offset<SITReference>> *EXTERNAL_REFERENCES = nullptr,
+    ::flatbuffers::Offset<SITCitation> CITATION = 0) {
+  auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
+  auto EXTERNAL_REFERENCES__ = EXTERNAL_REFERENCES ? _fbb.CreateVector<::flatbuffers::Offset<SITReference>>(*EXTERNAL_REFERENCES) : 0;
+  return CreateSITParty(
+      _fbb,
+      ROLE,
+      NAME__,
+      EXTERNAL_REFERENCES__,
+      CITATION);
+}
+
+::flatbuffers::Offset<SITParty> CreateSITParty(::flatbuffers::FlatBufferBuilder &_fbb, const SITPartyT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SITQuantityT : public ::flatbuffers::NativeTable {
+  typedef SITQuantity TableType;
+  sitQuantityKind KIND = sitQuantityKind::UNSPECIFIED;
+  double VALUE = 0.0;
+  std::string UNITS{};
+  std::string DATE{};
+  std::unique_ptr<SITCitationT> CITATION{};
+  SITQuantityT() = default;
+  SITQuantityT(const SITQuantityT &o);
+  SITQuantityT(SITQuantityT&&) FLATBUFFERS_NOEXCEPT = default;
+  SITQuantityT &operator=(SITQuantityT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One stated quantity of a site.
+struct SITQuantity FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SITQuantityT NativeTableType;
+  typedef SITQuantityBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_KIND = 4,
+    VT_VALUE = 6,
+    VT_UNITS = 8,
+    VT_DATE = 10,
+    VT_CITATION = 12
+  };
+  /// What it measures
+  sitQuantityKind KIND() const {
+    return static_cast<sitQuantityKind>(GetField<int8_t>(VT_KIND, 0));
+  }
+  /// Its value
+  double VALUE() const {
+    return GetField<double>(VT_VALUE, 0.0);
+  }
+  /// Units, CCSDS NDM spelling (MW, m); empty for a count
+  const ::flatbuffers::String *UNITS() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_UNITS);
+  }
+  /// When the value applies, ISO 8601 at the source's precision; empty when the source states none
+  const ::flatbuffers::String *DATE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DATE);
+  }
+  /// Where it was read
+  const SITCitation *CITATION() const {
+    return GetPointer<const SITCitation *>(VT_CITATION);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_KIND, 1) &&
+           VerifyField<double>(verifier, VT_VALUE, 8) &&
+           VerifyOffset(verifier, VT_UNITS) &&
+           verifier.VerifyString(UNITS()) &&
+           VerifyOffset(verifier, VT_DATE) &&
+           verifier.VerifyString(DATE()) &&
+           VerifyOffset(verifier, VT_CITATION) &&
+           verifier.VerifyTable(CITATION()) &&
+           verifier.EndTable();
+  }
+  SITQuantityT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SITQuantityT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SITQuantity> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITQuantityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SITQuantityBuilder {
+  typedef SITQuantity Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_KIND(sitQuantityKind KIND) {
+    fbb_.AddElement<int8_t>(SITQuantity::VT_KIND, static_cast<int8_t>(KIND), 0);
+  }
+  void add_VALUE(double VALUE) {
+    fbb_.AddElement<double>(SITQuantity::VT_VALUE, VALUE, 0.0);
+  }
+  void add_UNITS(::flatbuffers::Offset<::flatbuffers::String> UNITS) {
+    fbb_.AddOffset(SITQuantity::VT_UNITS, UNITS);
+  }
+  void add_DATE(::flatbuffers::Offset<::flatbuffers::String> DATE) {
+    fbb_.AddOffset(SITQuantity::VT_DATE, DATE);
+  }
+  void add_CITATION(::flatbuffers::Offset<SITCitation> CITATION) {
+    fbb_.AddOffset(SITQuantity::VT_CITATION, CITATION);
+  }
+  explicit SITQuantityBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SITQuantity> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SITQuantity>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SITQuantity> CreateSITQuantity(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    sitQuantityKind KIND = sitQuantityKind::UNSPECIFIED,
+    double VALUE = 0.0,
+    ::flatbuffers::Offset<::flatbuffers::String> UNITS = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DATE = 0,
+    ::flatbuffers::Offset<SITCitation> CITATION = 0) {
+  SITQuantityBuilder builder_(_fbb);
+  builder_.add_VALUE(VALUE);
+  builder_.add_CITATION(CITATION);
+  builder_.add_DATE(DATE);
+  builder_.add_UNITS(UNITS);
+  builder_.add_KIND(KIND);
+  return builder_.Finish();
+}
+
+struct SITQuantity::Traits {
+  using type = SITQuantity;
+  static auto constexpr Create = CreateSITQuantity;
+};
+
+inline ::flatbuffers::Offset<SITQuantity> CreateSITQuantityDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    sitQuantityKind KIND = sitQuantityKind::UNSPECIFIED,
+    double VALUE = 0.0,
+    const char *UNITS = nullptr,
+    const char *DATE = nullptr,
+    ::flatbuffers::Offset<SITCitation> CITATION = 0) {
+  auto UNITS__ = UNITS ? _fbb.CreateString(UNITS) : 0;
+  auto DATE__ = DATE ? _fbb.CreateString(DATE) : 0;
+  return CreateSITQuantity(
+      _fbb,
+      KIND,
+      VALUE,
+      UNITS__,
+      DATE__,
+      CITATION);
+}
+
+::flatbuffers::Offset<SITQuantity> CreateSITQuantity(::flatbuffers::FlatBufferBuilder &_fbb, const SITQuantityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct GeometryT : public ::flatbuffers::NativeTable {
   typedef Geometry TableType;
@@ -215,6 +1128,22 @@ struct SITT : public ::flatbuffers::NativeTable {
   std::string ENVIRONMENTAL_IMPACT{};
   std::string ACCESSIBILITY_INFRA{};
   std::vector<std::unique_ptr<IDMT>> INTEGRATED_DEVICES{};
+  siteLifecycleStatus LIFECYCLE_STATUS = siteLifecycleStatus::UNSPECIFIED;
+  std::string LIFECYCLE_STATUS_DATE{};
+  std::string STATUS_VERIFIED_AT{};
+  std::vector<std::unique_ptr<SITStatusEvidenceT>> STATUS_EVIDENCE{};
+  std::string SITE_KIND{};
+  std::string DESCRIPTION_LANGUAGE{};
+  std::unique_ptr<SITCitationT> DESCRIPTION_CITATION{};
+  std::unique_ptr<SITCitationT> POSITION_CITATION{};
+  std::vector<std::unique_ptr<SITReferenceT>> EXTERNAL_REFERENCES{};
+  std::vector<std::unique_ptr<SITPartyT>> PARTIES{};
+  std::vector<std::unique_ptr<SITQuantityT>> QUANTITIES{};
+  std::unique_ptr<PVNT> PROVENANCE{};
+  std::string CENTER_NAME{};
+  std::unique_ptr<RFMT> REFERENCE_FRAME{};
+  std::string MISSION{};
+  std::string EVENT_EPOCH{};
   SITT() = default;
   SITT(const SITT &o);
   SITT(SITT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -250,7 +1179,23 @@ struct SIT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_CONTACT_INFO = 44,
     VT_ENVIRONMENTAL_IMPACT = 46,
     VT_ACCESSIBILITY_INFRA = 48,
-    VT_INTEGRATED_DEVICES = 50
+    VT_INTEGRATED_DEVICES = 50,
+    VT_LIFECYCLE_STATUS = 52,
+    VT_LIFECYCLE_STATUS_DATE = 54,
+    VT_STATUS_VERIFIED_AT = 56,
+    VT_STATUS_EVIDENCE = 58,
+    VT_SITE_KIND = 60,
+    VT_DESCRIPTION_LANGUAGE = 62,
+    VT_DESCRIPTION_CITATION = 64,
+    VT_POSITION_CITATION = 66,
+    VT_EXTERNAL_REFERENCES = 68,
+    VT_PARTIES = 70,
+    VT_QUANTITIES = 72,
+    VT_PROVENANCE = 74,
+    VT_CENTER_NAME = 76,
+    VT_REFERENCE_FRAME = 78,
+    VT_MISSION = 80,
+    VT_EVENT_EPOCH = 82
   };
   /// Unique identifier for the site, BE_NUMBER
   const ::flatbuffers::String *ID() const {
@@ -276,15 +1221,16 @@ struct SIT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *NETWORK() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NETWORK);
   }
-  /// Latitude of the site
+  /// Latitude of the site, degrees; planetocentric on CENTER_NAME's reference
+  /// body when that is not EARTH
   float LATITUDE() const {
     return GetField<float>(VT_LATITUDE, 0.0f);
   }
-  /// Longitude of the site
+  /// Longitude of the site, degrees, east positive
   float LONGITUDE() const {
     return GetField<float>(VT_LONGITUDE, 0.0f);
   }
-  /// Altitude of the site
+  /// Altitude of the site above CENTER_NAME's reference surface
   float ALTITUDE() const {
     return GetField<float>(VT_ALTITUDE, 0.0f);
   }
@@ -348,6 +1294,82 @@ struct SIT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::Vector<::flatbuffers::Offset<IDM>> *INTEGRATED_DEVICES() const {
     return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<IDM>> *>(VT_INTEGRATED_DEVICES);
   }
+  /// Where the site stands in its life. OPERATIONAL_STATUS keeps availability
+  /// words (Online, Offline, Testing); this field is the lifecycle.
+  siteLifecycleStatus LIFECYCLE_STATUS() const {
+    return static_cast<siteLifecycleStatus>(GetField<int8_t>(VT_LIFECYCLE_STATUS, 0));
+  }
+  /// When LIFECYCLE_STATUS took effect, ISO 8601 at the source's precision
+  const ::flatbuffers::String *LIFECYCLE_STATUS_DATE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_LIFECYCLE_STATUS_DATE);
+  }
+  /// When the status was last checked against its sources, RFC 3339 UTC
+  const ::flatbuffers::String *STATUS_VERIFIED_AT() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_STATUS_VERIFIED_AT);
+  }
+  /// Each source's assertion behind LIFECYCLE_STATUS, one per source and step
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SITStatusEvidence>> *STATUS_EVIDENCE() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SITStatusEvidence>> *>(VT_STATUS_EVIDENCE);
+  }
+  /// What kind of site this is, as its source names the class ("research
+  /// reactor", "radioactive waste repository"); SITE_TYPE is the nearest
+  /// SiteType
+  const ::flatbuffers::String *SITE_KIND() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SITE_KIND);
+  }
+  /// Language of DESCRIPTION, BCP 47
+  const ::flatbuffers::String *DESCRIPTION_LANGUAGE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DESCRIPTION_LANGUAGE);
+  }
+  /// Where DESCRIPTION was read; a DESCRIPTION without one is the publisher's own
+  const SITCitation *DESCRIPTION_CITATION() const {
+    return GetPointer<const SITCitation *>(VT_DESCRIPTION_CITATION);
+  }
+  /// Where LATITUDE, LONGITUDE (and ALTITUDE) were read
+  const SITCitation *POSITION_CITATION() const {
+    return GetPointer<const SITCitation *>(VT_POSITION_CITATION);
+  }
+  /// Records about the site in other registers; the RECORD role names the
+  /// site's own record
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SITReference>> *EXTERNAL_REFERENCES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SITReference>> *>(VT_EXTERNAL_REFERENCES);
+  }
+  /// Operators, owners and regulators
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SITParty>> *PARTIES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SITParty>> *>(VT_PARTIES);
+  }
+  /// Stated quantities (capacity, power, units, elevation)
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SITQuantity>> *QUANTITIES() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SITQuantity>> *>(VT_QUANTITIES);
+  }
+  /// The record's provider and producer, and the terms of the content the
+  /// record reproduces (each citation carries its own source's terms)
+  const PVN *PROVENANCE() const {
+    return GetPointer<const PVN *>(VT_PROVENANCE);
+  }
+  /// The body the site stands on, spelled as the CCSDS ODM/OMM CENTER_NAME
+  /// keyword (SANA celestial body registry: EARTH, MOON, MARS). Absent means
+  /// EARTH, so every site published before 1.2.0 reads unchanged.
+  const ::flatbuffers::String *CENTER_NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_CENTER_NAME);
+  }
+  /// The body-fixed frame LATITUDE and LONGITUDE are expressed in, as an
+  /// RFMCoordinateSystem of AXIS_TYPE EPHEMERIS_KERNEL_DEFINED whose
+  /// KERNEL_FRAME_NAME names the kernel frame (IAU_MOON, MOON_ME). Absent
+  /// means the Earth-fixed frame of EARTH, or the body's IAU body-fixed frame.
+  const RFM *REFERENCE_FRAME() const {
+    return GetPointer<const RFM *>(VT_REFERENCE_FRAME);
+  }
+  /// The mission the site belongs to (Apollo 11, Chandrayaan-3), as its
+  /// source names it. Empty for a site of no mission.
+  const ::flatbuffers::String *MISSION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_MISSION);
+  }
+  /// When the landing or impact took place, RFC 3339 UTC; for a
+  /// LANDING_SITE or IMPACT_SITE only. Empty when the source states none.
+  const ::flatbuffers::String *EVENT_EPOCH() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_EVENT_EPOCH);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -395,6 +1417,41 @@ struct SIT FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_INTEGRATED_DEVICES) &&
            verifier.VerifyVector(INTEGRATED_DEVICES()) &&
            verifier.VerifyVectorOfTables(INTEGRATED_DEVICES()) &&
+           VerifyField<int8_t>(verifier, VT_LIFECYCLE_STATUS, 1) &&
+           VerifyOffset(verifier, VT_LIFECYCLE_STATUS_DATE) &&
+           verifier.VerifyString(LIFECYCLE_STATUS_DATE()) &&
+           VerifyOffset(verifier, VT_STATUS_VERIFIED_AT) &&
+           verifier.VerifyString(STATUS_VERIFIED_AT()) &&
+           VerifyOffset(verifier, VT_STATUS_EVIDENCE) &&
+           verifier.VerifyVector(STATUS_EVIDENCE()) &&
+           verifier.VerifyVectorOfTables(STATUS_EVIDENCE()) &&
+           VerifyOffset(verifier, VT_SITE_KIND) &&
+           verifier.VerifyString(SITE_KIND()) &&
+           VerifyOffset(verifier, VT_DESCRIPTION_LANGUAGE) &&
+           verifier.VerifyString(DESCRIPTION_LANGUAGE()) &&
+           VerifyOffset(verifier, VT_DESCRIPTION_CITATION) &&
+           verifier.VerifyTable(DESCRIPTION_CITATION()) &&
+           VerifyOffset(verifier, VT_POSITION_CITATION) &&
+           verifier.VerifyTable(POSITION_CITATION()) &&
+           VerifyOffset(verifier, VT_EXTERNAL_REFERENCES) &&
+           verifier.VerifyVector(EXTERNAL_REFERENCES()) &&
+           verifier.VerifyVectorOfTables(EXTERNAL_REFERENCES()) &&
+           VerifyOffset(verifier, VT_PARTIES) &&
+           verifier.VerifyVector(PARTIES()) &&
+           verifier.VerifyVectorOfTables(PARTIES()) &&
+           VerifyOffset(verifier, VT_QUANTITIES) &&
+           verifier.VerifyVector(QUANTITIES()) &&
+           verifier.VerifyVectorOfTables(QUANTITIES()) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           VerifyOffset(verifier, VT_CENTER_NAME) &&
+           verifier.VerifyString(CENTER_NAME()) &&
+           VerifyOffset(verifier, VT_REFERENCE_FRAME) &&
+           verifier.VerifyTable(REFERENCE_FRAME()) &&
+           VerifyOffset(verifier, VT_MISSION) &&
+           verifier.VerifyString(MISSION()) &&
+           VerifyOffset(verifier, VT_EVENT_EPOCH) &&
+           verifier.VerifyString(EVENT_EPOCH()) &&
            verifier.EndTable();
   }
   SITT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -478,6 +1535,54 @@ struct SITBuilder {
   void add_INTEGRATED_DEVICES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<IDM>>> INTEGRATED_DEVICES) {
     fbb_.AddOffset(SIT::VT_INTEGRATED_DEVICES, INTEGRATED_DEVICES);
   }
+  void add_LIFECYCLE_STATUS(siteLifecycleStatus LIFECYCLE_STATUS) {
+    fbb_.AddElement<int8_t>(SIT::VT_LIFECYCLE_STATUS, static_cast<int8_t>(LIFECYCLE_STATUS), 0);
+  }
+  void add_LIFECYCLE_STATUS_DATE(::flatbuffers::Offset<::flatbuffers::String> LIFECYCLE_STATUS_DATE) {
+    fbb_.AddOffset(SIT::VT_LIFECYCLE_STATUS_DATE, LIFECYCLE_STATUS_DATE);
+  }
+  void add_STATUS_VERIFIED_AT(::flatbuffers::Offset<::flatbuffers::String> STATUS_VERIFIED_AT) {
+    fbb_.AddOffset(SIT::VT_STATUS_VERIFIED_AT, STATUS_VERIFIED_AT);
+  }
+  void add_STATUS_EVIDENCE(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITStatusEvidence>>> STATUS_EVIDENCE) {
+    fbb_.AddOffset(SIT::VT_STATUS_EVIDENCE, STATUS_EVIDENCE);
+  }
+  void add_SITE_KIND(::flatbuffers::Offset<::flatbuffers::String> SITE_KIND) {
+    fbb_.AddOffset(SIT::VT_SITE_KIND, SITE_KIND);
+  }
+  void add_DESCRIPTION_LANGUAGE(::flatbuffers::Offset<::flatbuffers::String> DESCRIPTION_LANGUAGE) {
+    fbb_.AddOffset(SIT::VT_DESCRIPTION_LANGUAGE, DESCRIPTION_LANGUAGE);
+  }
+  void add_DESCRIPTION_CITATION(::flatbuffers::Offset<SITCitation> DESCRIPTION_CITATION) {
+    fbb_.AddOffset(SIT::VT_DESCRIPTION_CITATION, DESCRIPTION_CITATION);
+  }
+  void add_POSITION_CITATION(::flatbuffers::Offset<SITCitation> POSITION_CITATION) {
+    fbb_.AddOffset(SIT::VT_POSITION_CITATION, POSITION_CITATION);
+  }
+  void add_EXTERNAL_REFERENCES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITReference>>> EXTERNAL_REFERENCES) {
+    fbb_.AddOffset(SIT::VT_EXTERNAL_REFERENCES, EXTERNAL_REFERENCES);
+  }
+  void add_PARTIES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITParty>>> PARTIES) {
+    fbb_.AddOffset(SIT::VT_PARTIES, PARTIES);
+  }
+  void add_QUANTITIES(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITQuantity>>> QUANTITIES) {
+    fbb_.AddOffset(SIT::VT_QUANTITIES, QUANTITIES);
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<PVN> PROVENANCE) {
+    fbb_.AddOffset(SIT::VT_PROVENANCE, PROVENANCE);
+  }
+  void add_CENTER_NAME(::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME) {
+    fbb_.AddOffset(SIT::VT_CENTER_NAME, CENTER_NAME);
+  }
+  void add_REFERENCE_FRAME(::flatbuffers::Offset<RFM> REFERENCE_FRAME) {
+    fbb_.AddOffset(SIT::VT_REFERENCE_FRAME, REFERENCE_FRAME);
+  }
+  void add_MISSION(::flatbuffers::Offset<::flatbuffers::String> MISSION) {
+    fbb_.AddOffset(SIT::VT_MISSION, MISSION);
+  }
+  void add_EVENT_EPOCH(::flatbuffers::Offset<::flatbuffers::String> EVENT_EPOCH) {
+    fbb_.AddOffset(SIT::VT_EVENT_EPOCH, EVENT_EPOCH);
+  }
   explicit SITBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -514,8 +1619,39 @@ inline ::flatbuffers::Offset<SIT> CreateSIT(
     ::flatbuffers::Offset<::flatbuffers::String> CONTACT_INFO = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ENVIRONMENTAL_IMPACT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> ACCESSIBILITY_INFRA = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<IDM>>> INTEGRATED_DEVICES = 0) {
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<IDM>>> INTEGRATED_DEVICES = 0,
+    siteLifecycleStatus LIFECYCLE_STATUS = siteLifecycleStatus::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> LIFECYCLE_STATUS_DATE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> STATUS_VERIFIED_AT = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITStatusEvidence>>> STATUS_EVIDENCE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SITE_KIND = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DESCRIPTION_LANGUAGE = 0,
+    ::flatbuffers::Offset<SITCitation> DESCRIPTION_CITATION = 0,
+    ::flatbuffers::Offset<SITCitation> POSITION_CITATION = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITReference>>> EXTERNAL_REFERENCES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITParty>>> PARTIES = 0,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SITQuantity>>> QUANTITIES = 0,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> CENTER_NAME = 0,
+    ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> MISSION = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> EVENT_EPOCH = 0) {
   SITBuilder builder_(_fbb);
+  builder_.add_EVENT_EPOCH(EVENT_EPOCH);
+  builder_.add_MISSION(MISSION);
+  builder_.add_REFERENCE_FRAME(REFERENCE_FRAME);
+  builder_.add_CENTER_NAME(CENTER_NAME);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_QUANTITIES(QUANTITIES);
+  builder_.add_PARTIES(PARTIES);
+  builder_.add_EXTERNAL_REFERENCES(EXTERNAL_REFERENCES);
+  builder_.add_POSITION_CITATION(POSITION_CITATION);
+  builder_.add_DESCRIPTION_CITATION(DESCRIPTION_CITATION);
+  builder_.add_DESCRIPTION_LANGUAGE(DESCRIPTION_LANGUAGE);
+  builder_.add_SITE_KIND(SITE_KIND);
+  builder_.add_STATUS_EVIDENCE(STATUS_EVIDENCE);
+  builder_.add_STATUS_VERIFIED_AT(STATUS_VERIFIED_AT);
+  builder_.add_LIFECYCLE_STATUS_DATE(LIFECYCLE_STATUS_DATE);
   builder_.add_INTEGRATED_DEVICES(INTEGRATED_DEVICES);
   builder_.add_ACCESSIBILITY_INFRA(ACCESSIBILITY_INFRA);
   builder_.add_ENVIRONMENTAL_IMPACT(ENVIRONMENTAL_IMPACT);
@@ -538,6 +1674,7 @@ inline ::flatbuffers::Offset<SIT> CreateSIT(
   builder_.add_ABBREVIATION(ABBREVIATION);
   builder_.add_NAME(NAME);
   builder_.add_ID(ID);
+  builder_.add_LIFECYCLE_STATUS(LIFECYCLE_STATUS);
   builder_.add_TASKABLE(TASKABLE);
   builder_.add_SITE_TYPE(SITE_TYPE);
   return builder_.Finish();
@@ -573,7 +1710,23 @@ inline ::flatbuffers::Offset<SIT> CreateSITDirect(
     const char *CONTACT_INFO = nullptr,
     const char *ENVIRONMENTAL_IMPACT = nullptr,
     const char *ACCESSIBILITY_INFRA = nullptr,
-    const std::vector<::flatbuffers::Offset<IDM>> *INTEGRATED_DEVICES = nullptr) {
+    const std::vector<::flatbuffers::Offset<IDM>> *INTEGRATED_DEVICES = nullptr,
+    siteLifecycleStatus LIFECYCLE_STATUS = siteLifecycleStatus::UNSPECIFIED,
+    const char *LIFECYCLE_STATUS_DATE = nullptr,
+    const char *STATUS_VERIFIED_AT = nullptr,
+    const std::vector<::flatbuffers::Offset<SITStatusEvidence>> *STATUS_EVIDENCE = nullptr,
+    const char *SITE_KIND = nullptr,
+    const char *DESCRIPTION_LANGUAGE = nullptr,
+    ::flatbuffers::Offset<SITCitation> DESCRIPTION_CITATION = 0,
+    ::flatbuffers::Offset<SITCitation> POSITION_CITATION = 0,
+    const std::vector<::flatbuffers::Offset<SITReference>> *EXTERNAL_REFERENCES = nullptr,
+    const std::vector<::flatbuffers::Offset<SITParty>> *PARTIES = nullptr,
+    const std::vector<::flatbuffers::Offset<SITQuantity>> *QUANTITIES = nullptr,
+    ::flatbuffers::Offset<PVN> PROVENANCE = 0,
+    const char *CENTER_NAME = nullptr,
+    ::flatbuffers::Offset<RFM> REFERENCE_FRAME = 0,
+    const char *MISSION = nullptr,
+    const char *EVENT_EPOCH = nullptr) {
   auto ID__ = ID ? _fbb.CreateString(ID) : 0;
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto ABBREVIATION__ = ABBREVIATION ? _fbb.CreateString(ABBREVIATION) : 0;
@@ -592,6 +1745,17 @@ inline ::flatbuffers::Offset<SIT> CreateSITDirect(
   auto ENVIRONMENTAL_IMPACT__ = ENVIRONMENTAL_IMPACT ? _fbb.CreateString(ENVIRONMENTAL_IMPACT) : 0;
   auto ACCESSIBILITY_INFRA__ = ACCESSIBILITY_INFRA ? _fbb.CreateString(ACCESSIBILITY_INFRA) : 0;
   auto INTEGRATED_DEVICES__ = INTEGRATED_DEVICES ? _fbb.CreateVector<::flatbuffers::Offset<IDM>>(*INTEGRATED_DEVICES) : 0;
+  auto LIFECYCLE_STATUS_DATE__ = LIFECYCLE_STATUS_DATE ? _fbb.CreateString(LIFECYCLE_STATUS_DATE) : 0;
+  auto STATUS_VERIFIED_AT__ = STATUS_VERIFIED_AT ? _fbb.CreateString(STATUS_VERIFIED_AT) : 0;
+  auto STATUS_EVIDENCE__ = STATUS_EVIDENCE ? _fbb.CreateVector<::flatbuffers::Offset<SITStatusEvidence>>(*STATUS_EVIDENCE) : 0;
+  auto SITE_KIND__ = SITE_KIND ? _fbb.CreateString(SITE_KIND) : 0;
+  auto DESCRIPTION_LANGUAGE__ = DESCRIPTION_LANGUAGE ? _fbb.CreateString(DESCRIPTION_LANGUAGE) : 0;
+  auto EXTERNAL_REFERENCES__ = EXTERNAL_REFERENCES ? _fbb.CreateVector<::flatbuffers::Offset<SITReference>>(*EXTERNAL_REFERENCES) : 0;
+  auto PARTIES__ = PARTIES ? _fbb.CreateVector<::flatbuffers::Offset<SITParty>>(*PARTIES) : 0;
+  auto QUANTITIES__ = QUANTITIES ? _fbb.CreateVector<::flatbuffers::Offset<SITQuantity>>(*QUANTITIES) : 0;
+  auto CENTER_NAME__ = CENTER_NAME ? _fbb.CreateString(CENTER_NAME) : 0;
+  auto MISSION__ = MISSION ? _fbb.CreateString(MISSION) : 0;
+  auto EVENT_EPOCH__ = EVENT_EPOCH ? _fbb.CreateString(EVENT_EPOCH) : 0;
   return CreateSIT(
       _fbb,
       ID__,
@@ -617,10 +1781,278 @@ inline ::flatbuffers::Offset<SIT> CreateSITDirect(
       CONTACT_INFO__,
       ENVIRONMENTAL_IMPACT__,
       ACCESSIBILITY_INFRA__,
-      INTEGRATED_DEVICES__);
+      INTEGRATED_DEVICES__,
+      LIFECYCLE_STATUS,
+      LIFECYCLE_STATUS_DATE__,
+      STATUS_VERIFIED_AT__,
+      STATUS_EVIDENCE__,
+      SITE_KIND__,
+      DESCRIPTION_LANGUAGE__,
+      DESCRIPTION_CITATION,
+      POSITION_CITATION,
+      EXTERNAL_REFERENCES__,
+      PARTIES__,
+      QUANTITIES__,
+      PROVENANCE,
+      CENTER_NAME__,
+      REFERENCE_FRAME,
+      MISSION__,
+      EVENT_EPOCH__);
 }
 
 ::flatbuffers::Offset<SIT> CreateSIT(::flatbuffers::FlatBufferBuilder &_fbb, const SITT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline SITCitationT::SITCitationT(const SITCitationT &o)
+      : PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr),
+        SOURCE_RECORD_ID(o.SOURCE_RECORD_ID),
+        SOURCE_URL(o.SOURCE_URL),
+        SOURCE_VERSION(o.SOURCE_VERSION),
+        SOURCE_FIELD(o.SOURCE_FIELD),
+        RETRIEVED_AT(o.RETRIEVED_AT) {
+}
+
+inline SITCitationT &SITCitationT::operator=(SITCitationT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(PROVENANCE, o.PROVENANCE);
+  std::swap(SOURCE_RECORD_ID, o.SOURCE_RECORD_ID);
+  std::swap(SOURCE_URL, o.SOURCE_URL);
+  std::swap(SOURCE_VERSION, o.SOURCE_VERSION);
+  std::swap(SOURCE_FIELD, o.SOURCE_FIELD);
+  std::swap(RETRIEVED_AT, o.RETRIEVED_AT);
+  return *this;
+}
+
+inline SITCitationT *SITCitation::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SITCitationT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SITCitation::UnPackTo(SITCitationT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+  { auto _e = SOURCE_RECORD_ID(); if (_e) _o->SOURCE_RECORD_ID = _e->str(); }
+  { auto _e = SOURCE_URL(); if (_e) _o->SOURCE_URL = _e->str(); }
+  { auto _e = SOURCE_VERSION(); if (_e) _o->SOURCE_VERSION = _e->str(); }
+  { auto _e = SOURCE_FIELD(); if (_e) _o->SOURCE_FIELD = _e->str(); }
+  { auto _e = RETRIEVED_AT(); if (_e) _o->RETRIEVED_AT = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<SITCitation> CreateSITCitation(::flatbuffers::FlatBufferBuilder &_fbb, const SITCitationT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SITCitation::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SITCitation> SITCitation::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITCitationT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SITCitationT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  auto _SOURCE_RECORD_ID = _o->SOURCE_RECORD_ID.empty() ? 0 : _fbb.CreateString(_o->SOURCE_RECORD_ID);
+  auto _SOURCE_URL = _o->SOURCE_URL.empty() ? 0 : _fbb.CreateString(_o->SOURCE_URL);
+  auto _SOURCE_VERSION = _o->SOURCE_VERSION.empty() ? 0 : _fbb.CreateString(_o->SOURCE_VERSION);
+  auto _SOURCE_FIELD = _o->SOURCE_FIELD.empty() ? 0 : _fbb.CreateString(_o->SOURCE_FIELD);
+  auto _RETRIEVED_AT = _o->RETRIEVED_AT.empty() ? 0 : _fbb.CreateString(_o->RETRIEVED_AT);
+  return CreateSITCitation(
+      _fbb,
+      _PROVENANCE,
+      _SOURCE_RECORD_ID,
+      _SOURCE_URL,
+      _SOURCE_VERSION,
+      _SOURCE_FIELD,
+      _RETRIEVED_AT);
+}
+
+inline SITStatusEvidenceT::SITStatusEvidenceT(const SITStatusEvidenceT &o)
+      : STATUS(o.STATUS),
+        STATUS_DATE(o.STATUS_DATE),
+        CITATION((o.CITATION) ? new SITCitationT(*o.CITATION) : nullptr) {
+}
+
+inline SITStatusEvidenceT &SITStatusEvidenceT::operator=(SITStatusEvidenceT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(STATUS, o.STATUS);
+  std::swap(STATUS_DATE, o.STATUS_DATE);
+  std::swap(CITATION, o.CITATION);
+  return *this;
+}
+
+inline SITStatusEvidenceT *SITStatusEvidence::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SITStatusEvidenceT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SITStatusEvidence::UnPackTo(SITStatusEvidenceT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = STATUS(); _o->STATUS = _e; }
+  { auto _e = STATUS_DATE(); if (_e) _o->STATUS_DATE = _e->str(); }
+  { auto _e = CITATION(); if (_e) { if(_o->CITATION) { _e->UnPackTo(_o->CITATION.get(), _resolver); } else { _o->CITATION = std::unique_ptr<SITCitationT>(_e->UnPack(_resolver)); } } else if (_o->CITATION) { _o->CITATION.reset(); } }
+}
+
+inline ::flatbuffers::Offset<SITStatusEvidence> CreateSITStatusEvidence(::flatbuffers::FlatBufferBuilder &_fbb, const SITStatusEvidenceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SITStatusEvidence::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SITStatusEvidence> SITStatusEvidence::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITStatusEvidenceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SITStatusEvidenceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _STATUS = _o->STATUS;
+  auto _STATUS_DATE = _o->STATUS_DATE.empty() ? 0 : _fbb.CreateString(_o->STATUS_DATE);
+  auto _CITATION = _o->CITATION ? CreateSITCitation(_fbb, _o->CITATION.get(), _rehasher) : 0;
+  return CreateSITStatusEvidence(
+      _fbb,
+      _STATUS,
+      _STATUS_DATE,
+      _CITATION);
+}
+
+inline SITReferenceT *SITReference::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SITReferenceT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SITReference::UnPackTo(SITReferenceT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ROLE(); _o->ROLE = _e; }
+  { auto _e = REGISTRY(); if (_e) _o->REGISTRY = _e->str(); }
+  { auto _e = RECORD_ID(); if (_e) _o->RECORD_ID = _e->str(); }
+  { auto _e = URL(); if (_e) _o->URL = _e->str(); }
+  { auto _e = TITLE(); if (_e) _o->TITLE = _e->str(); }
+  { auto _e = LANGUAGE(); if (_e) _o->LANGUAGE = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<SITReference> CreateSITReference(::flatbuffers::FlatBufferBuilder &_fbb, const SITReferenceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SITReference::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SITReference> SITReference::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITReferenceT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SITReferenceT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ROLE = _o->ROLE;
+  auto _REGISTRY = _o->REGISTRY.empty() ? 0 : _fbb.CreateString(_o->REGISTRY);
+  auto _RECORD_ID = _o->RECORD_ID.empty() ? 0 : _fbb.CreateString(_o->RECORD_ID);
+  auto _URL = _o->URL.empty() ? 0 : _fbb.CreateString(_o->URL);
+  auto _TITLE = _o->TITLE.empty() ? 0 : _fbb.CreateString(_o->TITLE);
+  auto _LANGUAGE = _o->LANGUAGE.empty() ? 0 : _fbb.CreateString(_o->LANGUAGE);
+  return CreateSITReference(
+      _fbb,
+      _ROLE,
+      _REGISTRY,
+      _RECORD_ID,
+      _URL,
+      _TITLE,
+      _LANGUAGE);
+}
+
+inline SITPartyT::SITPartyT(const SITPartyT &o)
+      : ROLE(o.ROLE),
+        NAME(o.NAME),
+        CITATION((o.CITATION) ? new SITCitationT(*o.CITATION) : nullptr) {
+  EXTERNAL_REFERENCES.reserve(o.EXTERNAL_REFERENCES.size());
+  for (const auto &EXTERNAL_REFERENCES_ : o.EXTERNAL_REFERENCES) { EXTERNAL_REFERENCES.emplace_back((EXTERNAL_REFERENCES_) ? new SITReferenceT(*EXTERNAL_REFERENCES_) : nullptr); }
+}
+
+inline SITPartyT &SITPartyT::operator=(SITPartyT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ROLE, o.ROLE);
+  std::swap(NAME, o.NAME);
+  std::swap(EXTERNAL_REFERENCES, o.EXTERNAL_REFERENCES);
+  std::swap(CITATION, o.CITATION);
+  return *this;
+}
+
+inline SITPartyT *SITParty::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SITPartyT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SITParty::UnPackTo(SITPartyT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ROLE(); _o->ROLE = _e; }
+  { auto _e = NAME(); if (_e) _o->NAME = _e->str(); }
+  { auto _e = EXTERNAL_REFERENCES(); if (_e) { _o->EXTERNAL_REFERENCES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EXTERNAL_REFERENCES[_i]) { _e->Get(_i)->UnPackTo(_o->EXTERNAL_REFERENCES[_i].get(), _resolver); } else { _o->EXTERNAL_REFERENCES[_i] = std::unique_ptr<SITReferenceT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EXTERNAL_REFERENCES.resize(0); } }
+  { auto _e = CITATION(); if (_e) { if(_o->CITATION) { _e->UnPackTo(_o->CITATION.get(), _resolver); } else { _o->CITATION = std::unique_ptr<SITCitationT>(_e->UnPack(_resolver)); } } else if (_o->CITATION) { _o->CITATION.reset(); } }
+}
+
+inline ::flatbuffers::Offset<SITParty> CreateSITParty(::flatbuffers::FlatBufferBuilder &_fbb, const SITPartyT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SITParty::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SITParty> SITParty::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITPartyT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SITPartyT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ROLE = _o->ROLE;
+  auto _NAME = _o->NAME.empty() ? 0 : _fbb.CreateString(_o->NAME);
+  auto _EXTERNAL_REFERENCES = _o->EXTERNAL_REFERENCES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SITReference>> (_o->EXTERNAL_REFERENCES.size(), [](size_t i, _VectorArgs *__va) { return CreateSITReference(*__va->__fbb, __va->__o->EXTERNAL_REFERENCES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _CITATION = _o->CITATION ? CreateSITCitation(_fbb, _o->CITATION.get(), _rehasher) : 0;
+  return CreateSITParty(
+      _fbb,
+      _ROLE,
+      _NAME,
+      _EXTERNAL_REFERENCES,
+      _CITATION);
+}
+
+inline SITQuantityT::SITQuantityT(const SITQuantityT &o)
+      : KIND(o.KIND),
+        VALUE(o.VALUE),
+        UNITS(o.UNITS),
+        DATE(o.DATE),
+        CITATION((o.CITATION) ? new SITCitationT(*o.CITATION) : nullptr) {
+}
+
+inline SITQuantityT &SITQuantityT::operator=(SITQuantityT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(KIND, o.KIND);
+  std::swap(VALUE, o.VALUE);
+  std::swap(UNITS, o.UNITS);
+  std::swap(DATE, o.DATE);
+  std::swap(CITATION, o.CITATION);
+  return *this;
+}
+
+inline SITQuantityT *SITQuantity::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SITQuantityT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SITQuantity::UnPackTo(SITQuantityT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = KIND(); _o->KIND = _e; }
+  { auto _e = VALUE(); _o->VALUE = _e; }
+  { auto _e = UNITS(); if (_e) _o->UNITS = _e->str(); }
+  { auto _e = DATE(); if (_e) _o->DATE = _e->str(); }
+  { auto _e = CITATION(); if (_e) { if(_o->CITATION) { _e->UnPackTo(_o->CITATION.get(), _resolver); } else { _o->CITATION = std::unique_ptr<SITCitationT>(_e->UnPack(_resolver)); } } else if (_o->CITATION) { _o->CITATION.reset(); } }
+}
+
+inline ::flatbuffers::Offset<SITQuantity> CreateSITQuantity(::flatbuffers::FlatBufferBuilder &_fbb, const SITQuantityT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SITQuantity::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SITQuantity> SITQuantity::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SITQuantityT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SITQuantityT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _KIND = _o->KIND;
+  auto _VALUE = _o->VALUE;
+  auto _UNITS = _o->UNITS.empty() ? 0 : _fbb.CreateString(_o->UNITS);
+  auto _DATE = _o->DATE.empty() ? 0 : _fbb.CreateString(_o->DATE);
+  auto _CITATION = _o->CITATION ? CreateSITCitation(_fbb, _o->CITATION.get(), _rehasher) : 0;
+  return CreateSITQuantity(
+      _fbb,
+      _KIND,
+      _VALUE,
+      _UNITS,
+      _DATE,
+      _CITATION);
+}
 
 inline GeometryT *Geometry::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<GeometryT>();
@@ -674,9 +2106,29 @@ inline SITT::SITT(const SITT &o)
         ESTABLISHMENT_DATE(o.ESTABLISHMENT_DATE),
         CONTACT_INFO(o.CONTACT_INFO),
         ENVIRONMENTAL_IMPACT(o.ENVIRONMENTAL_IMPACT),
-        ACCESSIBILITY_INFRA(o.ACCESSIBILITY_INFRA) {
+        ACCESSIBILITY_INFRA(o.ACCESSIBILITY_INFRA),
+        LIFECYCLE_STATUS(o.LIFECYCLE_STATUS),
+        LIFECYCLE_STATUS_DATE(o.LIFECYCLE_STATUS_DATE),
+        STATUS_VERIFIED_AT(o.STATUS_VERIFIED_AT),
+        SITE_KIND(o.SITE_KIND),
+        DESCRIPTION_LANGUAGE(o.DESCRIPTION_LANGUAGE),
+        DESCRIPTION_CITATION((o.DESCRIPTION_CITATION) ? new SITCitationT(*o.DESCRIPTION_CITATION) : nullptr),
+        POSITION_CITATION((o.POSITION_CITATION) ? new SITCitationT(*o.POSITION_CITATION) : nullptr),
+        PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr),
+        CENTER_NAME(o.CENTER_NAME),
+        REFERENCE_FRAME((o.REFERENCE_FRAME) ? new RFMT(*o.REFERENCE_FRAME) : nullptr),
+        MISSION(o.MISSION),
+        EVENT_EPOCH(o.EVENT_EPOCH) {
   INTEGRATED_DEVICES.reserve(o.INTEGRATED_DEVICES.size());
   for (const auto &INTEGRATED_DEVICES_ : o.INTEGRATED_DEVICES) { INTEGRATED_DEVICES.emplace_back((INTEGRATED_DEVICES_) ? new IDMT(*INTEGRATED_DEVICES_) : nullptr); }
+  STATUS_EVIDENCE.reserve(o.STATUS_EVIDENCE.size());
+  for (const auto &STATUS_EVIDENCE_ : o.STATUS_EVIDENCE) { STATUS_EVIDENCE.emplace_back((STATUS_EVIDENCE_) ? new SITStatusEvidenceT(*STATUS_EVIDENCE_) : nullptr); }
+  EXTERNAL_REFERENCES.reserve(o.EXTERNAL_REFERENCES.size());
+  for (const auto &EXTERNAL_REFERENCES_ : o.EXTERNAL_REFERENCES) { EXTERNAL_REFERENCES.emplace_back((EXTERNAL_REFERENCES_) ? new SITReferenceT(*EXTERNAL_REFERENCES_) : nullptr); }
+  PARTIES.reserve(o.PARTIES.size());
+  for (const auto &PARTIES_ : o.PARTIES) { PARTIES.emplace_back((PARTIES_) ? new SITPartyT(*PARTIES_) : nullptr); }
+  QUANTITIES.reserve(o.QUANTITIES.size());
+  for (const auto &QUANTITIES_ : o.QUANTITIES) { QUANTITIES.emplace_back((QUANTITIES_) ? new SITQuantityT(*QUANTITIES_) : nullptr); }
 }
 
 inline SITT &SITT::operator=(SITT o) FLATBUFFERS_NOEXCEPT {
@@ -704,6 +2156,22 @@ inline SITT &SITT::operator=(SITT o) FLATBUFFERS_NOEXCEPT {
   std::swap(ENVIRONMENTAL_IMPACT, o.ENVIRONMENTAL_IMPACT);
   std::swap(ACCESSIBILITY_INFRA, o.ACCESSIBILITY_INFRA);
   std::swap(INTEGRATED_DEVICES, o.INTEGRATED_DEVICES);
+  std::swap(LIFECYCLE_STATUS, o.LIFECYCLE_STATUS);
+  std::swap(LIFECYCLE_STATUS_DATE, o.LIFECYCLE_STATUS_DATE);
+  std::swap(STATUS_VERIFIED_AT, o.STATUS_VERIFIED_AT);
+  std::swap(STATUS_EVIDENCE, o.STATUS_EVIDENCE);
+  std::swap(SITE_KIND, o.SITE_KIND);
+  std::swap(DESCRIPTION_LANGUAGE, o.DESCRIPTION_LANGUAGE);
+  std::swap(DESCRIPTION_CITATION, o.DESCRIPTION_CITATION);
+  std::swap(POSITION_CITATION, o.POSITION_CITATION);
+  std::swap(EXTERNAL_REFERENCES, o.EXTERNAL_REFERENCES);
+  std::swap(PARTIES, o.PARTIES);
+  std::swap(QUANTITIES, o.QUANTITIES);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  std::swap(CENTER_NAME, o.CENTER_NAME);
+  std::swap(REFERENCE_FRAME, o.REFERENCE_FRAME);
+  std::swap(MISSION, o.MISSION);
+  std::swap(EVENT_EPOCH, o.EVENT_EPOCH);
   return *this;
 }
 
@@ -740,6 +2208,22 @@ inline void SIT::UnPackTo(SITT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = ENVIRONMENTAL_IMPACT(); if (_e) _o->ENVIRONMENTAL_IMPACT = _e->str(); }
   { auto _e = ACCESSIBILITY_INFRA(); if (_e) _o->ACCESSIBILITY_INFRA = _e->str(); }
   { auto _e = INTEGRATED_DEVICES(); if (_e) { _o->INTEGRATED_DEVICES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->INTEGRATED_DEVICES[_i]) { _e->Get(_i)->UnPackTo(_o->INTEGRATED_DEVICES[_i].get(), _resolver); } else { _o->INTEGRATED_DEVICES[_i] = std::unique_ptr<IDMT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->INTEGRATED_DEVICES.resize(0); } }
+  { auto _e = LIFECYCLE_STATUS(); _o->LIFECYCLE_STATUS = _e; }
+  { auto _e = LIFECYCLE_STATUS_DATE(); if (_e) _o->LIFECYCLE_STATUS_DATE = _e->str(); }
+  { auto _e = STATUS_VERIFIED_AT(); if (_e) _o->STATUS_VERIFIED_AT = _e->str(); }
+  { auto _e = STATUS_EVIDENCE(); if (_e) { _o->STATUS_EVIDENCE.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->STATUS_EVIDENCE[_i]) { _e->Get(_i)->UnPackTo(_o->STATUS_EVIDENCE[_i].get(), _resolver); } else { _o->STATUS_EVIDENCE[_i] = std::unique_ptr<SITStatusEvidenceT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->STATUS_EVIDENCE.resize(0); } }
+  { auto _e = SITE_KIND(); if (_e) _o->SITE_KIND = _e->str(); }
+  { auto _e = DESCRIPTION_LANGUAGE(); if (_e) _o->DESCRIPTION_LANGUAGE = _e->str(); }
+  { auto _e = DESCRIPTION_CITATION(); if (_e) { if(_o->DESCRIPTION_CITATION) { _e->UnPackTo(_o->DESCRIPTION_CITATION.get(), _resolver); } else { _o->DESCRIPTION_CITATION = std::unique_ptr<SITCitationT>(_e->UnPack(_resolver)); } } else if (_o->DESCRIPTION_CITATION) { _o->DESCRIPTION_CITATION.reset(); } }
+  { auto _e = POSITION_CITATION(); if (_e) { if(_o->POSITION_CITATION) { _e->UnPackTo(_o->POSITION_CITATION.get(), _resolver); } else { _o->POSITION_CITATION = std::unique_ptr<SITCitationT>(_e->UnPack(_resolver)); } } else if (_o->POSITION_CITATION) { _o->POSITION_CITATION.reset(); } }
+  { auto _e = EXTERNAL_REFERENCES(); if (_e) { _o->EXTERNAL_REFERENCES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->EXTERNAL_REFERENCES[_i]) { _e->Get(_i)->UnPackTo(_o->EXTERNAL_REFERENCES[_i].get(), _resolver); } else { _o->EXTERNAL_REFERENCES[_i] = std::unique_ptr<SITReferenceT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->EXTERNAL_REFERENCES.resize(0); } }
+  { auto _e = PARTIES(); if (_e) { _o->PARTIES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->PARTIES[_i]) { _e->Get(_i)->UnPackTo(_o->PARTIES[_i].get(), _resolver); } else { _o->PARTIES[_i] = std::unique_ptr<SITPartyT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->PARTIES.resize(0); } }
+  { auto _e = QUANTITIES(); if (_e) { _o->QUANTITIES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->QUANTITIES[_i]) { _e->Get(_i)->UnPackTo(_o->QUANTITIES[_i].get(), _resolver); } else { _o->QUANTITIES[_i] = std::unique_ptr<SITQuantityT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->QUANTITIES.resize(0); } }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+  { auto _e = CENTER_NAME(); if (_e) _o->CENTER_NAME = _e->str(); }
+  { auto _e = REFERENCE_FRAME(); if (_e) { if(_o->REFERENCE_FRAME) { _e->UnPackTo(_o->REFERENCE_FRAME.get(), _resolver); } else { _o->REFERENCE_FRAME = std::unique_ptr<RFMT>(_e->UnPack(_resolver)); } } else if (_o->REFERENCE_FRAME) { _o->REFERENCE_FRAME.reset(); } }
+  { auto _e = MISSION(); if (_e) _o->MISSION = _e->str(); }
+  { auto _e = EVENT_EPOCH(); if (_e) _o->EVENT_EPOCH = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<SIT> CreateSIT(::flatbuffers::FlatBufferBuilder &_fbb, const SITT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -774,6 +2258,22 @@ inline ::flatbuffers::Offset<SIT> SIT::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _ENVIRONMENTAL_IMPACT = _o->ENVIRONMENTAL_IMPACT.empty() ? 0 : _fbb.CreateString(_o->ENVIRONMENTAL_IMPACT);
   auto _ACCESSIBILITY_INFRA = _o->ACCESSIBILITY_INFRA.empty() ? 0 : _fbb.CreateString(_o->ACCESSIBILITY_INFRA);
   auto _INTEGRATED_DEVICES = _o->INTEGRATED_DEVICES.size() ? _fbb.CreateVector<::flatbuffers::Offset<IDM>> (_o->INTEGRATED_DEVICES.size(), [](size_t i, _VectorArgs *__va) { return CreateIDM(*__va->__fbb, __va->__o->INTEGRATED_DEVICES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _LIFECYCLE_STATUS = _o->LIFECYCLE_STATUS;
+  auto _LIFECYCLE_STATUS_DATE = _o->LIFECYCLE_STATUS_DATE.empty() ? 0 : _fbb.CreateString(_o->LIFECYCLE_STATUS_DATE);
+  auto _STATUS_VERIFIED_AT = _o->STATUS_VERIFIED_AT.empty() ? 0 : _fbb.CreateString(_o->STATUS_VERIFIED_AT);
+  auto _STATUS_EVIDENCE = _o->STATUS_EVIDENCE.size() ? _fbb.CreateVector<::flatbuffers::Offset<SITStatusEvidence>> (_o->STATUS_EVIDENCE.size(), [](size_t i, _VectorArgs *__va) { return CreateSITStatusEvidence(*__va->__fbb, __va->__o->STATUS_EVIDENCE[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _SITE_KIND = _o->SITE_KIND.empty() ? 0 : _fbb.CreateString(_o->SITE_KIND);
+  auto _DESCRIPTION_LANGUAGE = _o->DESCRIPTION_LANGUAGE.empty() ? 0 : _fbb.CreateString(_o->DESCRIPTION_LANGUAGE);
+  auto _DESCRIPTION_CITATION = _o->DESCRIPTION_CITATION ? CreateSITCitation(_fbb, _o->DESCRIPTION_CITATION.get(), _rehasher) : 0;
+  auto _POSITION_CITATION = _o->POSITION_CITATION ? CreateSITCitation(_fbb, _o->POSITION_CITATION.get(), _rehasher) : 0;
+  auto _EXTERNAL_REFERENCES = _o->EXTERNAL_REFERENCES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SITReference>> (_o->EXTERNAL_REFERENCES.size(), [](size_t i, _VectorArgs *__va) { return CreateSITReference(*__va->__fbb, __va->__o->EXTERNAL_REFERENCES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PARTIES = _o->PARTIES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SITParty>> (_o->PARTIES.size(), [](size_t i, _VectorArgs *__va) { return CreateSITParty(*__va->__fbb, __va->__o->PARTIES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _QUANTITIES = _o->QUANTITIES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SITQuantity>> (_o->QUANTITIES.size(), [](size_t i, _VectorArgs *__va) { return CreateSITQuantity(*__va->__fbb, __va->__o->QUANTITIES[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  auto _CENTER_NAME = _o->CENTER_NAME.empty() ? 0 : _fbb.CreateString(_o->CENTER_NAME);
+  auto _REFERENCE_FRAME = _o->REFERENCE_FRAME ? CreateRFM(_fbb, _o->REFERENCE_FRAME.get(), _rehasher) : 0;
+  auto _MISSION = _o->MISSION.empty() ? 0 : _fbb.CreateString(_o->MISSION);
+  auto _EVENT_EPOCH = _o->EVENT_EPOCH.empty() ? 0 : _fbb.CreateString(_o->EVENT_EPOCH);
   return CreateSIT(
       _fbb,
       _ID,
@@ -799,7 +2299,23 @@ inline ::flatbuffers::Offset<SIT> SIT::Pack(::flatbuffers::FlatBufferBuilder &_f
       _CONTACT_INFO,
       _ENVIRONMENTAL_IMPACT,
       _ACCESSIBILITY_INFRA,
-      _INTEGRATED_DEVICES);
+      _INTEGRATED_DEVICES,
+      _LIFECYCLE_STATUS,
+      _LIFECYCLE_STATUS_DATE,
+      _STATUS_VERIFIED_AT,
+      _STATUS_EVIDENCE,
+      _SITE_KIND,
+      _DESCRIPTION_LANGUAGE,
+      _DESCRIPTION_CITATION,
+      _POSITION_CITATION,
+      _EXTERNAL_REFERENCES,
+      _PARTIES,
+      _QUANTITIES,
+      _PROVENANCE,
+      _CENTER_NAME,
+      _REFERENCE_FRAME,
+      _MISSION,
+      _EVENT_EPOCH);
 }
 
 inline const SIT *GetSIT(const void *buf) {

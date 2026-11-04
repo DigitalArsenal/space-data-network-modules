@@ -140,8 +140,8 @@ function stripLocalIncludes(source) {
 const pieces = [
   abi.header,
   // Dependency order, computed from the schemas' own include graph rather
-  // than guessed: $OEM pulls RFM, TIM, CAT, PPE, and CAT in turn pulls IDM,
-  // PLD and LCC. In one translation unit a header that references a type
+  // than guessed: $OEM pulls RFM, TIM, CAT, PPE, CAT in turn pulls IDM,
+  // PLD and LCC, and PPE pulls PVN. In one translation unit a header that references a type
   // declared below it does not compile, and the failure names a generated file
   // rather than the schema that wanted it.
   stripSdsCrossIncludes(headers.RFM),
@@ -150,6 +150,7 @@ const pieces = [
   stripSdsCrossIncludes(headers.PLD),
   stripSdsCrossIncludes(headers.LCC),
   stripSdsCrossIncludes(headers.CAT),
+  stripSdsCrossIncludes(headers.PVN),
   stripSdsCrossIncludes(headers.PPE),
   stripSdsCrossIncludes(headers.OEM),
   stripLocalIncludes(await read(path.join(productsSrc, "ephemeris_series.hpp"))),

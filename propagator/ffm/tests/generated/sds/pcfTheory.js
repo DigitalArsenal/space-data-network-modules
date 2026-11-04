@@ -4,5 +4,6 @@ export var pcfTheory = /*#__PURE__*/ function(pcfTheory) {
     pcfTheory[pcfTheory["SGP4XP"] = 2] = "SGP4XP";
     pcfTheory[pcfTheory["FFM"] = 4] = "FFM";
     pcfTheory[pcfTheory["KEPLER"] = 5] = "KEPLER";
+    pcfTheory[pcfTheory["AP"] = 6] = "AP";
     return pcfTheory;
 }({});

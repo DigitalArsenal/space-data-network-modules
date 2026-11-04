@@ -620,11 +620,21 @@ enum class rfmAxisType : uint8_t {
   /// Orbital axes from the object's state: Z toward the central body (nadir),
   /// Y opposite the orbit normal, X completing the set (LVLH).
   ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL = 32,
+  /// IAU 1958 Galactic longitude/latitude axes, Hipparcos realization:
+  /// NGP RA = 192.85948 deg, Dec = +27.12825 deg; l_Omega = 32.93192 deg.
+  /// ESA SP-1200 (1997), Vol. 1, Section 1.5.3. Cartesian X points to
+  /// l=0,b=0, Y to l=90,b=0, Z to the north Galactic pole (right-handed).
+  /// This fixes orientation only, not the origin or the direction of Sgr A*.
+  /// Explicit Galactocentric parameters select the derived orientation
+  /// documented on ROLL_DEG; choosing an origin alone never rotates the axes.
+  /// See Liu, Zhu & Zhang (2011), A&A 526, A16, on the definition and its
+  /// realization in ICRS; do not substitute a newly fitted Galactic plane.
+  GALACTIC = 33,
   MIN = UNSPECIFIED,
-  MAX = ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL
+  MAX = GALACTIC
 };
 
-inline const rfmAxisType (&EnumValuesrfmAxisType())[33] {
+inline const rfmAxisType (&EnumValuesrfmAxisType())[34] {
   static const rfmAxisType values[] = {
     rfmAxisType::UNSPECIFIED,
     rfmAxisType::MEAN_EQUATOR_EQUINOX_J2000,
@@ -658,13 +668,14 @@ inline const rfmAxisType (&EnumValuesrfmAxisType())[33] {
     rfmAxisType::TOPOCENTRIC_SOUTH_EAST_ZENITH,
     rfmAxisType::ORBITAL_VELOCITY_NORMAL_CONORMAL,
     rfmAxisType::ORBITAL_RADIAL_TRANSVERSE_NORMAL,
-    rfmAxisType::ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL
+    rfmAxisType::ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL,
+    rfmAxisType::GALACTIC
   };
   return values;
 }
 
 inline const char * const *EnumNamesrfmAxisType() {
-  static const char * const names[34] = {
+  static const char * const names[35] = {
     "UNSPECIFIED",
     "MEAN_EQUATOR_EQUINOX_J2000",
     "MEAN_ECLIPTIC_EQUINOX_J2000",
@@ -698,13 +709,14 @@ inline const char * const *EnumNamesrfmAxisType() {
     "ORBITAL_VELOCITY_NORMAL_CONORMAL",
     "ORBITAL_RADIAL_TRANSVERSE_NORMAL",
     "ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL",
+    "GALACTIC",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamerfmAxisType(rfmAxisType e) {
-  if (::flatbuffers::IsOutRange(e, rfmAxisType::UNSPECIFIED, rfmAxisType::ORBITAL_LOCAL_VERTICAL_LOCAL_HORIZONTAL)) return "";
+  if (::flatbuffers::IsOutRange(e, rfmAxisType::UNSPECIFIED, rfmAxisType::GALACTIC)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesrfmAxisType()[index];
 }
@@ -724,37 +736,43 @@ enum class rfmOriginKind : uint8_t {
   /// A fixed site on a body surface, identified by SITE_ID and the geodetic
   /// fields on RFMOrigin.
   GROUND_SITE = 5,
+  /// Galactic center at Sgr A*. Its ICRS direction, solar distance, height,
+  /// roll and velocity are explicit parameters on RFMCoordinateSystem.
+  /// No ephemeris body code is implied by this origin.
+  GALACTIC_CENTER = 6,
   MIN = UNSPECIFIED,
-  MAX = GROUND_SITE
+  MAX = GALACTIC_CENTER
 };
 
-inline const rfmOriginKind (&EnumValuesrfmOriginKind())[6] {
+inline const rfmOriginKind (&EnumValuesrfmOriginKind())[7] {
   static const rfmOriginKind values[] = {
     rfmOriginKind::UNSPECIFIED,
     rfmOriginKind::CELESTIAL_BODY,
     rfmOriginKind::BARYCENTRE,
     rfmOriginKind::LIBRATION_POINT,
     rfmOriginKind::SPACE_OBJECT,
-    rfmOriginKind::GROUND_SITE
+    rfmOriginKind::GROUND_SITE,
+    rfmOriginKind::GALACTIC_CENTER
   };
   return values;
 }
 
 inline const char * const *EnumNamesrfmOriginKind() {
-  static const char * const names[7] = {
+  static const char * const names[8] = {
     "UNSPECIFIED",
     "CELESTIAL_BODY",
     "BARYCENTRE",
     "LIBRATION_POINT",
     "SPACE_OBJECT",
     "GROUND_SITE",
+    "GALACTIC_CENTER",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNamerfmOriginKind(rfmOriginKind e) {
-  if (::flatbuffers::IsOutRange(e, rfmOriginKind::UNSPECIFIED, rfmOriginKind::GROUND_SITE)) return "";
+  if (::flatbuffers::IsOutRange(e, rfmOriginKind::UNSPECIFIED, rfmOriginKind::GALACTIC_CENTER)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesrfmOriginKind()[index];
 }
@@ -1552,6 +1570,12 @@ struct RFMCoordinateSystemT : public ::flatbuffers::NativeTable {
   std::string KERNEL_FRAME_NAME{};
   int32_t KERNEL_FRAME_ID = 0;
   std::string EOP_DATA_SET_CID{};
+  double GALCEN_RA_DEG = std::numeric_limits<double>::quiet_NaN();
+  double GALCEN_DEC_DEG = std::numeric_limits<double>::quiet_NaN();
+  double GALCEN_DISTANCE_PC = std::numeric_limits<double>::quiet_NaN();
+  double Z_SUN_PC = std::numeric_limits<double>::quiet_NaN();
+  double ROLL_DEG = std::numeric_limits<double>::quiet_NaN();
+  std::vector<double> V_SUN_KMS{};
   RFMCoordinateSystemT() = default;
   RFMCoordinateSystemT(const RFMCoordinateSystemT &o);
   RFMCoordinateSystemT(RFMCoordinateSystemT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1577,7 +1601,13 @@ struct RFMCoordinateSystem FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
     VT_LOCAL_ALIGNED_CONSTRAINED_AXES = 18,
     VT_KERNEL_FRAME_NAME = 20,
     VT_KERNEL_FRAME_ID = 22,
-    VT_EOP_DATA_SET_CID = 24
+    VT_EOP_DATA_SET_CID = 24,
+    VT_GALCEN_RA_DEG = 26,
+    VT_GALCEN_DEC_DEG = 28,
+    VT_GALCEN_DISTANCE_PC = 30,
+    VT_Z_SUN_PC = 32,
+    VT_ROLL_DEG = 34,
+    VT_V_SUN_KMS = 36
   };
   /// Stable name for this coordinate system within the producing data set.
   const ::flatbuffers::String *NAME() const {
@@ -1628,6 +1658,48 @@ struct RFMCoordinateSystem FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
   const ::flatbuffers::String *EOP_DATA_SET_CID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_EOP_DATA_SET_CID);
   }
+  /// ICRS right ascension of the Galactic center, degrees. NaN means absent.
+  /// Sgr A*: 17h45m40.0409s (Reid & Brunthaler 2004, ApJ 616, 872).
+  double GALCEN_RA_DEG() const {
+    return GetField<double>(VT_GALCEN_RA_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// ICRS declination of the Galactic center, degrees. NaN means absent.
+  /// Sgr A*: -29d00m28.118s (Reid & Brunthaler 2004, ApJ 616, 872).
+  double GALCEN_DEC_DEG() const {
+    return GetField<double>(VT_GALCEN_DEC_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Sun-to-Galactic-center distance R0, parsecs. NaN means absent.
+  /// Example: 8178 pc (GRAVITY Collaboration 2019, A&A 625, L10).
+  double GALCEN_DISTANCE_PC() const {
+    return GetField<double>(VT_GALCEN_DISTANCE_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Solar height above the Galactic midplane, parsecs, positive north.
+  /// NaN means absent; example: 20.8 pc (Bennett & Bovy 2019, MNRAS 482, 1417).
+  double Z_SUN_PC() const {
+    return GetField<double>(VT_Z_SUN_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Roll angle in degrees in the Astropy Galactocentric convention.
+  /// NaN means absent, not zero. With GALACTIC axes, the five explicit scalar
+  /// parameters define a derived Galactocentric orientation: X points from
+  /// the Sun toward the center's projection in the midplane, Y follows
+  /// Galactic rotation, and Z completes a right-handed triad toward Galactic
+  /// north. This parameterized orientation is independent of ORIGIN; with
+  /// GALACTIC_CENTER the Sun lies at X=-sqrt(R0^2-Z_SUN_PC^2), Y=0, Z=Z_SUN_PC.
+  /// All five scalars must be finite for a spatial Galactocentric transform,
+  /// with R0 > 0 and abs(Z_SUN_PC) <= R0; none has an assumed default.
+  double ROLL_DEG() const {
+    return GetField<double>(VT_ROLL_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Total solar velocity [v_X,v_Y,v_Z] in km/s in the resulting Galactocentric
+  /// axes, including circular motion (not just peculiar U,V,W). Exactly three
+  /// components when present; omit the vector when unknown, or use NaN for
+  /// an unknown component. A velocity transform requires all three finite.
+  /// Schonrich, Binney & Dehnen (2010), MNRAS 403, 1829, constrain peculiar
+  /// motion; Reid & Brunthaler (2020), ApJ 892, 39, constrain Sgr A* motion.
+  /// Publishers must state their adopted total velocity; no default is implied.
+  const ::flatbuffers::Vector<double> *V_SUN_KMS() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_V_SUN_KMS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1650,6 +1722,13 @@ struct RFMCoordinateSystem FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tabl
            VerifyField<int32_t>(verifier, VT_KERNEL_FRAME_ID, 4) &&
            VerifyOffset(verifier, VT_EOP_DATA_SET_CID) &&
            verifier.VerifyString(EOP_DATA_SET_CID()) &&
+           VerifyField<double>(verifier, VT_GALCEN_RA_DEG, 8) &&
+           VerifyField<double>(verifier, VT_GALCEN_DEC_DEG, 8) &&
+           VerifyField<double>(verifier, VT_GALCEN_DISTANCE_PC, 8) &&
+           VerifyField<double>(verifier, VT_Z_SUN_PC, 8) &&
+           VerifyField<double>(verifier, VT_ROLL_DEG, 8) &&
+           VerifyOffset(verifier, VT_V_SUN_KMS) &&
+           verifier.VerifyVector(V_SUN_KMS()) &&
            verifier.EndTable();
   }
   RFMCoordinateSystemT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1694,6 +1773,24 @@ struct RFMCoordinateSystemBuilder {
   void add_EOP_DATA_SET_CID(::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_CID) {
     fbb_.AddOffset(RFMCoordinateSystem::VT_EOP_DATA_SET_CID, EOP_DATA_SET_CID);
   }
+  void add_GALCEN_RA_DEG(double GALCEN_RA_DEG) {
+    fbb_.AddElement<double>(RFMCoordinateSystem::VT_GALCEN_RA_DEG, GALCEN_RA_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_GALCEN_DEC_DEG(double GALCEN_DEC_DEG) {
+    fbb_.AddElement<double>(RFMCoordinateSystem::VT_GALCEN_DEC_DEG, GALCEN_DEC_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_GALCEN_DISTANCE_PC(double GALCEN_DISTANCE_PC) {
+    fbb_.AddElement<double>(RFMCoordinateSystem::VT_GALCEN_DISTANCE_PC, GALCEN_DISTANCE_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_Z_SUN_PC(double Z_SUN_PC) {
+    fbb_.AddElement<double>(RFMCoordinateSystem::VT_Z_SUN_PC, Z_SUN_PC, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ROLL_DEG(double ROLL_DEG) {
+    fbb_.AddElement<double>(RFMCoordinateSystem::VT_ROLL_DEG, ROLL_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_V_SUN_KMS(::flatbuffers::Offset<::flatbuffers::Vector<double>> V_SUN_KMS) {
+    fbb_.AddOffset(RFMCoordinateSystem::VT_V_SUN_KMS, V_SUN_KMS);
+  }
   explicit RFMCoordinateSystemBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1717,8 +1814,20 @@ inline ::flatbuffers::Offset<RFMCoordinateSystem> CreateRFMCoordinateSystem(
     ::flatbuffers::Offset<RFMLocalAlignedConstrainedAxes> LOCAL_ALIGNED_CONSTRAINED_AXES = 0,
     ::flatbuffers::Offset<::flatbuffers::String> KERNEL_FRAME_NAME = 0,
     int32_t KERNEL_FRAME_ID = 0,
-    ::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_CID = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> EOP_DATA_SET_CID = 0,
+    double GALCEN_RA_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double GALCEN_DEC_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double GALCEN_DISTANCE_PC = std::numeric_limits<double>::quiet_NaN(),
+    double Z_SUN_PC = std::numeric_limits<double>::quiet_NaN(),
+    double ROLL_DEG = std::numeric_limits<double>::quiet_NaN(),
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> V_SUN_KMS = 0) {
   RFMCoordinateSystemBuilder builder_(_fbb);
+  builder_.add_ROLL_DEG(ROLL_DEG);
+  builder_.add_Z_SUN_PC(Z_SUN_PC);
+  builder_.add_GALCEN_DISTANCE_PC(GALCEN_DISTANCE_PC);
+  builder_.add_GALCEN_DEC_DEG(GALCEN_DEC_DEG);
+  builder_.add_GALCEN_RA_DEG(GALCEN_RA_DEG);
+  builder_.add_V_SUN_KMS(V_SUN_KMS);
   builder_.add_EOP_DATA_SET_CID(EOP_DATA_SET_CID);
   builder_.add_KERNEL_FRAME_ID(KERNEL_FRAME_ID);
   builder_.add_KERNEL_FRAME_NAME(KERNEL_FRAME_NAME);
@@ -1750,12 +1859,19 @@ inline ::flatbuffers::Offset<RFMCoordinateSystem> CreateRFMCoordinateSystemDirec
     ::flatbuffers::Offset<RFMLocalAlignedConstrainedAxes> LOCAL_ALIGNED_CONSTRAINED_AXES = 0,
     const char *KERNEL_FRAME_NAME = nullptr,
     int32_t KERNEL_FRAME_ID = 0,
-    const char *EOP_DATA_SET_CID = nullptr) {
+    const char *EOP_DATA_SET_CID = nullptr,
+    double GALCEN_RA_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double GALCEN_DEC_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double GALCEN_DISTANCE_PC = std::numeric_limits<double>::quiet_NaN(),
+    double Z_SUN_PC = std::numeric_limits<double>::quiet_NaN(),
+    double ROLL_DEG = std::numeric_limits<double>::quiet_NaN(),
+    const std::vector<double> *V_SUN_KMS = nullptr) {
   auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
   auto EPOCH__ = EPOCH ? _fbb.CreateString(EPOCH) : 0;
   auto EPOCH_TIME_SYSTEM__ = EPOCH_TIME_SYSTEM ? _fbb.CreateString(EPOCH_TIME_SYSTEM) : 0;
   auto KERNEL_FRAME_NAME__ = KERNEL_FRAME_NAME ? _fbb.CreateString(KERNEL_FRAME_NAME) : 0;
   auto EOP_DATA_SET_CID__ = EOP_DATA_SET_CID ? _fbb.CreateString(EOP_DATA_SET_CID) : 0;
+  auto V_SUN_KMS__ = V_SUN_KMS ? _fbb.CreateVector<double>(*V_SUN_KMS) : 0;
   return CreateRFMCoordinateSystem(
       _fbb,
       NAME__,
@@ -1768,7 +1884,13 @@ inline ::flatbuffers::Offset<RFMCoordinateSystem> CreateRFMCoordinateSystemDirec
       LOCAL_ALIGNED_CONSTRAINED_AXES,
       KERNEL_FRAME_NAME__,
       KERNEL_FRAME_ID,
-      EOP_DATA_SET_CID__);
+      EOP_DATA_SET_CID__,
+      GALCEN_RA_DEG,
+      GALCEN_DEC_DEG,
+      GALCEN_DISTANCE_PC,
+      Z_SUN_PC,
+      ROLL_DEG,
+      V_SUN_KMS__);
 }
 
 ::flatbuffers::Offset<RFMCoordinateSystem> CreateRFMCoordinateSystem(::flatbuffers::FlatBufferBuilder &_fbb, const RFMCoordinateSystemT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2370,7 +2492,13 @@ inline RFMCoordinateSystemT::RFMCoordinateSystemT(const RFMCoordinateSystemT &o)
         LOCAL_ALIGNED_CONSTRAINED_AXES((o.LOCAL_ALIGNED_CONSTRAINED_AXES) ? new RFMLocalAlignedConstrainedAxesT(*o.LOCAL_ALIGNED_CONSTRAINED_AXES) : nullptr),
         KERNEL_FRAME_NAME(o.KERNEL_FRAME_NAME),
         KERNEL_FRAME_ID(o.KERNEL_FRAME_ID),
-        EOP_DATA_SET_CID(o.EOP_DATA_SET_CID) {
+        EOP_DATA_SET_CID(o.EOP_DATA_SET_CID),
+        GALCEN_RA_DEG(o.GALCEN_RA_DEG),
+        GALCEN_DEC_DEG(o.GALCEN_DEC_DEG),
+        GALCEN_DISTANCE_PC(o.GALCEN_DISTANCE_PC),
+        Z_SUN_PC(o.Z_SUN_PC),
+        ROLL_DEG(o.ROLL_DEG),
+        V_SUN_KMS(o.V_SUN_KMS) {
 }
 
 inline RFMCoordinateSystemT &RFMCoordinateSystemT::operator=(RFMCoordinateSystemT o) FLATBUFFERS_NOEXCEPT {
@@ -2385,6 +2513,12 @@ inline RFMCoordinateSystemT &RFMCoordinateSystemT::operator=(RFMCoordinateSystem
   std::swap(KERNEL_FRAME_NAME, o.KERNEL_FRAME_NAME);
   std::swap(KERNEL_FRAME_ID, o.KERNEL_FRAME_ID);
   std::swap(EOP_DATA_SET_CID, o.EOP_DATA_SET_CID);
+  std::swap(GALCEN_RA_DEG, o.GALCEN_RA_DEG);
+  std::swap(GALCEN_DEC_DEG, o.GALCEN_DEC_DEG);
+  std::swap(GALCEN_DISTANCE_PC, o.GALCEN_DISTANCE_PC);
+  std::swap(Z_SUN_PC, o.Z_SUN_PC);
+  std::swap(ROLL_DEG, o.ROLL_DEG);
+  std::swap(V_SUN_KMS, o.V_SUN_KMS);
   return *this;
 }
 
@@ -2408,6 +2542,12 @@ inline void RFMCoordinateSystem::UnPackTo(RFMCoordinateSystemT *_o, const ::flat
   { auto _e = KERNEL_FRAME_NAME(); if (_e) _o->KERNEL_FRAME_NAME = _e->str(); }
   { auto _e = KERNEL_FRAME_ID(); _o->KERNEL_FRAME_ID = _e; }
   { auto _e = EOP_DATA_SET_CID(); if (_e) _o->EOP_DATA_SET_CID = _e->str(); }
+  { auto _e = GALCEN_RA_DEG(); _o->GALCEN_RA_DEG = _e; }
+  { auto _e = GALCEN_DEC_DEG(); _o->GALCEN_DEC_DEG = _e; }
+  { auto _e = GALCEN_DISTANCE_PC(); _o->GALCEN_DISTANCE_PC = _e; }
+  { auto _e = Z_SUN_PC(); _o->Z_SUN_PC = _e; }
+  { auto _e = ROLL_DEG(); _o->ROLL_DEG = _e; }
+  { auto _e = V_SUN_KMS(); if (_e) { _o->V_SUN_KMS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->V_SUN_KMS[_i] = _e->Get(_i); } } else { _o->V_SUN_KMS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<RFMCoordinateSystem> CreateRFMCoordinateSystem(::flatbuffers::FlatBufferBuilder &_fbb, const RFMCoordinateSystemT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -2429,6 +2569,12 @@ inline ::flatbuffers::Offset<RFMCoordinateSystem> RFMCoordinateSystem::Pack(::fl
   auto _KERNEL_FRAME_NAME = _o->KERNEL_FRAME_NAME.empty() ? 0 : _fbb.CreateString(_o->KERNEL_FRAME_NAME);
   auto _KERNEL_FRAME_ID = _o->KERNEL_FRAME_ID;
   auto _EOP_DATA_SET_CID = _o->EOP_DATA_SET_CID.empty() ? 0 : _fbb.CreateString(_o->EOP_DATA_SET_CID);
+  auto _GALCEN_RA_DEG = _o->GALCEN_RA_DEG;
+  auto _GALCEN_DEC_DEG = _o->GALCEN_DEC_DEG;
+  auto _GALCEN_DISTANCE_PC = _o->GALCEN_DISTANCE_PC;
+  auto _Z_SUN_PC = _o->Z_SUN_PC;
+  auto _ROLL_DEG = _o->ROLL_DEG;
+  auto _V_SUN_KMS = _o->V_SUN_KMS.size() ? _fbb.CreateVector(_o->V_SUN_KMS) : 0;
   return CreateRFMCoordinateSystem(
       _fbb,
       _NAME,
@@ -2441,7 +2587,13 @@ inline ::flatbuffers::Offset<RFMCoordinateSystem> RFMCoordinateSystem::Pack(::fl
       _LOCAL_ALIGNED_CONSTRAINED_AXES,
       _KERNEL_FRAME_NAME,
       _KERNEL_FRAME_ID,
-      _EOP_DATA_SET_CID);
+      _EOP_DATA_SET_CID,
+      _GALCEN_RA_DEG,
+      _GALCEN_DEC_DEG,
+      _GALCEN_DISTANCE_PC,
+      _Z_SUN_PC,
+      _ROLL_DEG,
+      _V_SUN_KMS);
 }
 
 inline CelestialFrameWrapperT *CelestialFrameWrapper::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {

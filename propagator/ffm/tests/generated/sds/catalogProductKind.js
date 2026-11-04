@@ -3,5 +3,6 @@ export var catalogProductKind = /*#__PURE__*/ function(catalogProductKind) {
     catalogProductKind[catalogProductKind["Sgp4Elements"] = 1] = "Sgp4Elements";
     catalogProductKind[catalogProductKind["Sgp4XpElements"] = 2] = "Sgp4XpElements";
     catalogProductKind[catalogProductKind["StateCovariance"] = 3] = "StateCovariance";
+    catalogProductKind[catalogProductKind["ApElements"] = 4] = "ApElements";
     return catalogProductKind;
 }({});

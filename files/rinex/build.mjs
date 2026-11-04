@@ -67,6 +67,7 @@ const pieces = [
   stripSdsCrossIncludes(headers.PLD),
   stripSdsCrossIncludes(headers.LCC),
   stripSdsCrossIncludes(headers.CAT),
+  stripSdsCrossIncludes(headers.PVN),
   stripSdsCrossIncludes(headers.PPE),
   stripSdsCrossIncludes(headers.OEM),
   stripSdsCrossIncludes(headers.NCD),
