@@ -1,0 +1,21 @@
+{
+  "name": "@digitalarsenal/sdn-module-ilrs-station-coordinates",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sdn-module": "./dist/isomorphic/module.wasm",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/sinex.e2e.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.0",
+    "flatbuffers": "25.9.23",
+    "flatc-wasm": "26.1.38",
+    "space-data-module-sdk": "0.9.12",
+    "spacedatastandards.org": "1.276.0"
+  },
+  "overrides": {
+    "hd-wallet-wasm": "2.1.2"
+  }
+}
