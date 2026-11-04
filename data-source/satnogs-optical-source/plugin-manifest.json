@@ -139,13 +139,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "One $GST, the station timing record for the estimator: STATION_ID, NAME, POSITION_* the site (m; sigma NaN: the network declares none), CLOCK_OFFSET_S the declared timing bias, CLOCK_TIME_SCALE UTC, VALID_FROM and VALID_TO the emitted epochs, SOURCE satnogs-optical."
+              "description": "One $GST, the station timing record for the estimator: STATION_ID, NAME, POSITION_* the site (m; sigma NaN: the network declares none), CLOCK_OFFSET_S the declared timing bias (NaN when it changes within the night; a night with two sites is refused), CLOCK_TIME_SCALE UTC, VALID_FROM and VALID_TO the emitted epochs, SOURCE satnogs-optical."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One $GST, the station timing record for the estimator: STATION_ID, NAME, POSITION_* the site (m; sigma NaN: the network declares none), CLOCK_OFFSET_S the declared timing bias, CLOCK_TIME_SCALE UTC, VALID_FROM and VALID_TO the emitted epochs, SOURCE satnogs-optical."
+          "description": "One $GST, the station timing record for the estimator: STATION_ID, NAME, POSITION_* the site (m; sigma NaN: the network declares none), CLOCK_OFFSET_S the declared timing bias (NaN when it changes within the night; a night with two sites is refused), CLOCK_TIME_SCALE UTC, VALID_FROM and VALID_TO the emitted epochs, SOURCE satnogs-optical."
         },
         {
           "portId": "provenance",

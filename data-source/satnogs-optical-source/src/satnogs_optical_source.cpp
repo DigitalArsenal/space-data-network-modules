@@ -260,7 +260,14 @@ extern "C" int read_station_night(void) {
 
   // The site: one per station-night, as the station declares it.
   const EOOT& first = *tracks.front().rows.front().eoo;
-  const double lat = first.SENLAT, lon = first.SENLON, alt_km = first.SENALT, bias = first.TIMING_BIAS;
+  const double lat = first.SENLAT, lon = first.SENLON, alt_km = first.SENALT;
+  double bias = first.TIMING_BIAS;
+  for (const Track& t : tracks) {
+    for (const Row& r : t.rows) {
+      if (r.eoo->SENLAT != lat || r.eoo->SENLON != lon || r.eoo->SENALT != alt_km) return fail("invalid-batch", "Measurement " + r.name + ": one station-night has one site.");
+      if (r.eoo->TIMING_BIAS != first.TIMING_BIAS) bias = kNaN;  // the declared bias changes within the night: the station record states none
+    }
+  }
   if (!std::isfinite(lat) || !std::isfinite(lon) || !std::isfinite(alt_km) || std::fabs(lat) > 90 || std::fabs(lon) > 360) return fail("invalid-batch", "The site (SENLAT, SENLON, SENALT) is required.");
   double site[3];
   wgs84(lat, lon, alt_km * 1000.0, site);

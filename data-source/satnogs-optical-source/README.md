@@ -19,7 +19,7 @@ The same artifact runs in the browser and WasmEdge. The dump download and its sh
 | `config` (in, optional) | `ModuleConfig` | `minimumMeasurements` (default 1), `quarantine` (`refuse`, the default, or `fail`), `objects` (NORAD numbers); any other key is refused |
 | `observations` | one `$TDM` per object-track | `OBSERVER_ID`, `OBSERVER_X/Y/Z` the site in Earth-fixed metres, `TIMETAG_REF` RECEIVE, RADEC at mid-exposure epochs, the credit line in `COMMENT` |
 | `uncertainty` | one `$EOO` per observation | the input record with `OB_TIME` at mid-exposure and the site as `SENX/SENY/SENZ` (km) |
-| `stations` | one `$GST` | the station: site (m; sigma NaN, none declared), `CLOCK_OFFSET_S` the declared timing bias, `CLOCK_TIME_SCALE` UTC |
+| `stations` | one `$GST` | the station: site (m; sigma NaN, none declared), `CLOCK_OFFSET_S` the declared timing bias (NaN when it changes within the night), `CLOCK_TIME_SCALE` UTC; a night with two sites is refused |
 | `provenance` | one `$PVN` | `SOURCE_ID` satnogs-optical, `SOURCE_KIND` Observation, `ORIGINATOR` the station, `LICENSE_CLASS` ShareAlike, `LICENSE_ID` CC-BY-SA-4.0 |
 | `ingest` | one `IngestRequest` | `TAGS`: `SOURCE_NAME` satnogs-optical, `LICENSE` CC-BY-SA-4.0, `LICENSE_URL`, `CITATION` the credit line, `SHARE_ALIKE`; provenance attribute `class` publish-with-credit |
 | `report` | one `FlowNotice` | counts, the site, the bias, per track id/object/observations/epochReference/epochShiftNanoseconds, and `refused.<measurement id>` with the reason |
