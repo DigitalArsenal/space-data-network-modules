@@ -445,20 +445,14 @@ constexpr int32_t kErrNullOutput = -3;
 constexpr int32_t kErrBadInput = -4;
 constexpr int32_t kErrUnphysical = -6;
 
-// An entity is its element set and, while it moves away from its epoch, the library's satellite for it.
-// The library carries integration state from one call to the next. Continuing away from the epoch reproduces the
-// fresh epoch-to-time propagation byte for byte (all five regimes of vectors/, 2026-10-12); any other request after
-// a propagation does not (a second request for an instant already reached came back 243 m off, a return towards the
-// epoch up to 18 m). So a request further from the epoch on the same side continues, the same instant returns the
-// state already computed, and anything else starts the satellite again at its epoch: every state is the
-// epoch-to-time propagation whatever the call order. The library keeps about 29 KB of every XP satellite it has
-// held and gives it back only when none is live, so when a restoration is due every entity lets its satellite go.
+// An entity is its element set. Every state is the epoch-to-time propagation (Satellite::propagate), so a request
+// takes a satellite for the call and lets it go: the library holds one satellite at a time. The same instant again
+// returns the state already computed.
 struct Entity {
   Elements elements;
   uint32_t satnum = 0;
   double epochJd = 0;
-  Satellite satellite;
-  bool reached = false;   // lastMinutes/lastState hold the satellite's last propagation
+  bool reached = false;   // lastMinutes/lastState hold the entity's last propagation
   double lastMinutes = 0;
   double lastState[8] = {0};
 };
@@ -508,22 +502,6 @@ int32_t addEntity(const OrbProOMMRecord& record) {
   return static_cast<int32_t>(entities().size() - 1);
 }
 
-// Every entity lets its satellite go and the library returns to its starting state, removing nothing.
-void restoreLibrary() {
-  if (g_entities != nullptr) {
-    for (auto& e : *g_entities) { e->satellite.abandon(); e->reached = false; }
-  }
-  Library::instance().restore();
-}
-
-// A fresh satellite number for every satellite the library is given: it keeps state of removed satellites, and a
-// number added again while other satellites are live crashed it (2026-10-12).
-uint32_t nextSatnum() {
-  if (g_nextSatnum >= 99999) { restoreLibrary(); g_nextSatnum = 0; }
-  return ++g_nextSatnum;
-}
-
-
 int32_t propagateEntity(Entity& entity, double julianDate, OrbProStateVector* out) {
   const double mjd = julianDate - 2400000.5;
   Instant t;
@@ -531,22 +509,11 @@ int32_t propagateEntity(Entity& entity, double julianDate, OrbProStateVector* ou
   t.seconds = (mjd - static_cast<double>(t.day)) * kSecondsPerDay;
   const double minutes = minutesSinceEpoch(entity.elements, t);
   double state[8] = {0};
-  const bool sameSide = entity.reached && (minutes >= 0) == (entity.lastMinutes >= 0);
-  if (sameSide && minutes == entity.lastMinutes) {
+  if (entity.reached && minutes == entity.lastMinutes) {
     std::memcpy(state, entity.lastState, sizeof state);
   } else {
-    if (!(sameSide && std::fabs(minutes) > std::fabs(entity.lastMinutes)) || !entity.satellite.valid()) {
-      // A restart, or a satellite the library has not got: the library is restored first whenever it holds this
-      // entity's satellite (removing one of several crashes it) or a restoration is due.
-      if (entity.satellite.valid() || Library::instance().recycleDue()) restoreLibrary();
-      if (!entity.satellite.create(entity.elements, nextSatnum())) {
-        entity.reached = false;
-        orbpro_state_init(out);
-        return kErrUnphysical;
-      }
-    }
-    if (!entity.satellite.propagate(&minutes, 1, state)) {
-      restoreLibrary();
+    Satellite satellite;
+    if (!satellite.create(entity.elements, entity.satnum) || !satellite.propagate(&minutes, 1, state)) {
       entity.reached = false;
       orbpro_state_init(out);
       return kErrUnphysical;
@@ -576,7 +543,6 @@ int32_t propagateEntity(Entity& entity, double julianDate, OrbProStateVector* ou
 }
 
 void clearEntities() {
-  restoreLibrary();  // the satellites leave by restoration: removing them one by one can crash the library
   delete g_entities;
   g_entities = nullptr;
   g_nextSatnum = 0;

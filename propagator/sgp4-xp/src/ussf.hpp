@@ -53,7 +53,7 @@ class Library {
   }
   bool ready() const { return scratch_ != 0; }
 
-  // The library keeps about 29 KB of every SGP4-XP satellite it has propagated, however the satellite is removed
+  // The library keeps about 29 KB of every SGP4-XP satellite it has initialised, however the satellite is removed
   // (measured with the library's own JavaScript runtime: 28.6 KB per satellite, nothing for SGP4 sets), and a fit
   // propagates thousands of sets. So when no satellite is live and enough XP satellites have come and gone since the
   // library was last in its starting state, the library's memory is put back to that state: the bytes it held when it
@@ -63,16 +63,10 @@ class Library {
     if (live_ == 0 && xpSinceRecycle_ >= kRecycleAfter) recycle();
     if (xp) ++xpSinceRecycle_;
   }
-  // True when enough XP satellites have come and gone that the next creation should start from a restored library;
-  // the caller releases every live satellite first, since the library is restored only when none is live.
-  bool recycleDue() const { return xpSinceRecycle_ >= kRecycleAfter; }
-  // Puts the library back in its starting state with satellites still live, which it then no longer knows: their
-  // owners must abandon() them. Removing one of several live XP satellites crashed the library itself (memory access
-  // out of bounds inside Sgp4RemoveSats, reproduced on the unmodified runtime, 2026-10-12); a restore removes nothing.
-  void restore() {
-    recycle();
-    live_ = 0;
-  }
+  // The library holds one satellite at a time: removing one of several live XP satellites crashed it (memory access
+  // out of bounds inside Sgp4RemoveSats, reproduced on the unmodified runtime, 2026-10-12), and every XP state is a
+  // removal and a new satellite (Satellite::propagate).
+  bool idle() const { return live_ == 0; }
   void satelliteAdded() { ++live_; }
   void satelliteRemoved() { if (live_ > 0) --live_; }
 
@@ -136,42 +130,72 @@ class Library {
 };
 
 // One element set inside the library: added to its TLE tree, initialised, and removed again when this goes out
-// of scope. The library keys its tree by satellite number, epoch and type, so two live sets must differ in
-// satellite number; a fit keeps one at a time and the entity table gives each its own.
+// of scope. The library holds one at a time (Library::idle).
+//
+// Every state is the library's propagation from the set's epoch to that time. An SGP4-XP satellite carries its
+// integrator from one request to the next, and a request less than one integrator step past the previous one comes
+// back from a partial step: on geosynchronous sets, a 15-minute grid flown on one satellite departed from the
+// epoch-to-time propagation by up to 0.59 km (the library's own runtime and Sgp4Prop 9.9 agree with the
+// epoch-to-time state to the bit; 2026-11-04); requests an hour or more apart did not depart, which is why sparse
+// times hid it. So an XP set gets a new satellite before every request after its first; an SGP4 set (type 0)
+// continues, its states the same doubles either way.
 class Satellite {
  public:
   Satellite() = default;
   Satellite(const Satellite&) = delete;
   Satellite& operator=(const Satellite&) = delete;
-  Satellite(Satellite&& other) noexcept { *this = static_cast<Satellite&&>(other); }
-  Satellite& operator=(Satellite&& other) noexcept {
-    if (this != &other) {
-      release();
-      key_ = other.key_;
-      live_ = other.live_;
-      other.live_ = false;
-    }
-    return *this;
-  }
   ~Satellite() { release(); }
 
   bool valid() const { return live_; }
-  // Forgets the satellite without telling the library: only after Library::restore(), which already dropped it.
-  void abandon() { live_ = false; }
 
-  // false: the text was refused, or the library could not initialise it (its own error code is in `error`).
+  // false: the text was refused, another satellite is live, or the library could not initialise it (its own error
+  // code is in `error`).
   bool create(const Elements& elements, uint32_t satnum, int32_t* error = nullptr) {
     release();
-    TleLines lines;
-    if (!formatTle(elements, satnum, &lines)) { if (error) *error = -100; return false; }
+    if (!formatTle(elements, satnum, &lines_)) { if (error) *error = -100; return false; }
+    xp_ = elements.xp;
+    return add(error);
+  }
+
+  // Positions and velocities (TEME, km and km/s) at `count` times given as minutes from the epoch, each the
+  // epoch-to-time propagation. states[8*i..8*i+7] = {library error, minutes, r, v}. false when any time failed (its
+  // error code is states[8*i], nonzero).
+  bool propagate(const double* minutes, size_t count, double* states) {
+    if (!live_ || count == 0) return false;
     Library& library = Library::instance();
-    library.beforeCreate(elements.xp);
-    // [0,80) line 1, [80,160) line 2, [160,168) key, [168,176) error satellite.
+    bool all = true;
+    for (size_t i = 0; i < count; ++i) {
+      double* state = states + i * 8;
+      if (propagated_ && xp_) {
+        release();
+        if (!add(nullptr)) {
+          for (size_t k = i; k < count; ++k) { std::memset(states + k * 8, 0, 64); states[k * 8] = -1.0; }
+          return false;
+        }
+      }
+      const uint32_t base = library.scratch(4096);
+      if (base == 0) return false;
+      const int64_t key = key_;
+      ussf_put(base + 160, &key, 8);
+      if (ussf_propagate(base + 160, 1, minutes[i], 1, 1.0, base + 256) != 0) all = false;
+      ussf_get(state, base + 256, 64);
+      if (state[0] != 0.0) all = false;
+      propagated_ = true;
+    }
+    return all;
+  }
+
+ private:
+  // The lines into the library, initialised: [0,80) line 1, [80,160) line 2, [160,168) key, [168,176) error satellite.
+  bool add(int32_t* error) {
+    Library& library = Library::instance();
+    if (!library.idle()) { if (error) *error = -103; return false; }
+    library.beforeCreate(xp_);
     const uint32_t base = library.scratch(4096);
     if (base == 0) { if (error) *error = -101; return false; }
     char staged[168] = {0};
-    std::memcpy(staged, lines.line1, std::strlen(lines.line1));
-    std::memcpy(staged + 80, lines.line2, std::strlen(lines.line2));
+    std::memcpy(staged, lines_.line1, std::strlen(lines_.line1));
+    std::memcpy(staged + 80, lines_.line2, std::strlen(lines_.line2));
     ussf_put(base, staged, 160);
     const int64_t key = ussf_tle_add(base, base + 80);
     if (key < 0) { if (error) *error = -102; return false; }
@@ -186,34 +210,10 @@ class Satellite {
       return false;
     }
     live_ = true;
+    propagated_ = false;
     library.satelliteAdded();
     return true;
   }
-
-  // Positions and velocities (TEME, km and km/s) at `count` times given as minutes from the epoch, in the order
-  // asked; ascending times are the library's fast path. states[8*i..8*i+7] = {library error, minutes, r, v}.
-  // false when any time failed (its error code is states[8*i], nonzero).
-  bool propagate(const double* minutes, size_t count, double* states) const {
-    if (!live_ || count == 0) return false;
-    Library& library = Library::instance();
-    const uint32_t need = 4096 + static_cast<uint32_t>(count) * 64u;
-    const uint32_t base = library.scratch(need);
-    if (base == 0) return false;
-    const uint32_t results = base + 256;
-    const int64_t key = key_;
-    ussf_put(base + 160, &key, 8);
-    bool all = true;
-    for (size_t i = 0; i < count; ++i) {
-      if (ussf_propagate(base + 160, 1, minutes[i], 1, 1.0, results + static_cast<uint32_t>(i) * 64u) != 0) all = false;
-    }
-    ussf_get(states, results, static_cast<uint32_t>(count) * 64u);
-    for (size_t i = 0; i < count; ++i) {
-      if (states[i * 8] != 0.0) all = false;
-    }
-    return all;
-  }
-
- private:
   void release() {
     if (!live_) return;
     Library& library = Library::instance();
@@ -227,8 +227,11 @@ class Satellite {
     live_ = false;
     library.satelliteRemoved();
   }
+  TleLines lines_{};
   int64_t key_ = 0;
+  bool xp_ = false;
   bool live_ = false;
+  bool propagated_ = false;
 };
 
 }  // namespace sgp4xp
