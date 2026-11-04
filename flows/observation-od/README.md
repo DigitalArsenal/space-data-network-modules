@@ -1,6 +1,6 @@
 # Observation OD: laser normal points
 
-`org.sdn.flows.observation-od.laser-od` 0.1.0, typed contracts 1.0 (FlatBuffers only). A C++ WebAssembly node that routes
+`org.sdn.flows.observation-od.laser-od` 0.1.1, typed contracts 1.0 (FlatBuffers only). A C++ WebAssembly node that routes
 ILRS normal points through `analysis/estimation` `fit_batch` and `propagator/ffm` `invoke` until the estimator converges, and
 emits the fit as one Cartesian `$OCM`. The estimator solves and the FFM propagates; the node holds no force model and no state.
 
@@ -33,7 +33,8 @@ point (the `$GST` position plus its XYZ or NEU eccentricity) in GCRF at that ins
 node passes each normal point as an observation with its own.
 
 The `$OCM`: the estimate at TARGET_EPOCH (GCRF, km, km/s), its formal covariance (COV_CALIBRATION Uncalibrated);
-ORBIT_DETERMINATION with OD_OBSERVATIONS_USED, the range residuals and their RMS, the solve-for parameters, the pads, and
+ORBIT_DETERMINATION with OD_OBSERVATIONS_USED, the range residuals and their RMS, the solve-for parameters (named in
+OD_EST_PARAMETERS; their fitted values in OD_DYNAMIC_PARAMETERS, typed by PARAMETER, SOLVED_FOR true), the pads, and
 FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES the normal points used, ITERATIONS, CONVERGED, FIT_START and
 FIT_STOP the first and last normal point); PROVENANCE SOURCE_ID ilrs-crd, SOURCE_KIND Observation, ORIGINATOR ILRS,
 LICENSE_CLASS Reproducible.
