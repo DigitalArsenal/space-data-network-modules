@@ -16,7 +16,7 @@ import * as fb from 'flatbuffers';
 import {PCF} from 'spacedatastandards.org/lib/js/PCF/PCF.js';
 import {PCFOutputT} from 'spacedatastandards.org/lib/js/PCF/PCFOutput.js';
 import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js';
-const root='/Users/tj/software/private/coordinator-d9/orbit-accuracy-experiments-ap';
+import {experiments as root} from './experiments.mjs';
 const scratch='/Users/tj/software/terrain-work/body-look/codex-apfix-d9';
 const DAY=86400000,cutoffs=['2025-10-05','2025-10-09','2025-10-13'];
 const median=a=>{const b=a.toSorted((a,b)=>a-b),n=b.length;return n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2;};

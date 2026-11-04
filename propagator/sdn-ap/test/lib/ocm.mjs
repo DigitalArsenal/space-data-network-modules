@@ -118,13 +118,17 @@ export function fittedOf(bytes) {
 /// it was ($OMM, FORCES at flight, $SPW frames), this build on $OCM.
 export const legacyBuild = (file) => !fs.readFileSync(file).includes("export_omm");
 
-/// $SPW rows of a 'space_weather' frame (size-prefixed records end to end) and the same rows with the last one held on
-/// every day through `through` (ISO date): the drivers a 0.4 build held past its rows, as rows a record carries.
+/// $SPW rows of a 'space_weather' frame (size-prefixed records end to end) and the same rows with a day the source lacks
+/// taking the row before it (the hold the experiments' XA and XM take, e2865b1) and the last one held on every day
+/// through `through` (ISO date): the drivers a 0.4 build held past its rows, as rows a record carries (one per UTC day).
 export function heldRows(bytes, through) {
   const rows = [];
   for (let at = 0; at + 4 <= bytes.length;) {
     const len = new DataView(bytes.buffer, bytes.byteOffset + at, 4).getUint32(0, true);
-    rows.push(SPW.getSizePrefixedRootAsSPW(new flatbuffers.ByteBuffer(bytes.subarray(at, at + 4 + len))).unpack());
+    const row = SPW.getSizePrefixedRootAsSPW(new flatbuffers.ByteBuffer(bytes.subarray(at, at + 4 + len))).unpack();
+    for (let d = rows.length ? Date.parse(`${rows.at(-1).DATE}T00:00:00Z`) + 86400000 : Infinity; d < Date.parse(`${row.DATE}T00:00:00Z`); d += 86400000)
+      rows.push({ ...rows.at(-1), DATE: new Date(d).toISOString().slice(0, 10) });
+    rows.push(row);
     at += 4 + len;
   }
   return spwStream(rowsThrough(rows, through));

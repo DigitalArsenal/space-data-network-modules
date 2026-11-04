@@ -36,7 +36,7 @@ if (!isMainThread) {
   const r = await runModelTruth(workerData.c);
   const sigma = /posterior sigma of the log ([0-9.eE+-]+)/.exec(r.fitted.bModel ?? '');
   parentPort.postMessage({day3: r.wholeDay[3].e, bterm: r.fitted.bterm, sigmaLog: sigma ? Number(sigma[1]) : null, wrmsKm: r.fitted.wrms,
-    path: /drag prior: (.*?); arc /.exec(r.fitted.bModel ?? '')?.[1] ?? null, step: /along-track step test.*$/.exec(r.fitted.bModel ?? '')?.[0] ?? null,
+    path: /drag prior: ([^;]*); arc/.exec(r.fitted.bModel ?? '')?.[1] ?? null, step: /along-track step test.*$/.exec(r.fitted.bModel ?? '')?.[0] ?? null,
     comment: r.fitted.comment});
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
