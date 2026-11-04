@@ -1,0 +1,15 @@
+{
+  "spacedatastandards": "1.276.0",
+  "sdsFamilies": [
+    "GST",
+    "PVN"
+  ],
+  "commonHeaders": [
+    "civil_time.hpp"
+  ],
+  "sources": [
+    "src/ilrs_station_coordinates.cpp"
+  ],
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "ff180316c6a0111074add11f129804a679b47064c24cbc29496ca0605eeee2e1"
+}

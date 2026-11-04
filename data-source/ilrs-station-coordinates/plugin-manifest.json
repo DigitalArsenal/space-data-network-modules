@@ -1,0 +1,152 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.ilrs-station-coordinates",
+  "name": "ILRS Station Coordinates",
+  "version": "0.1.0",
+  "description": "Read the ILRS station coordinate solution (SINEX pos+eop, the weekly combination of the ILRS combination centres) into one canonical SDS ground station definition per station: the position and its standard deviations at the solution's reference epoch, the velocity when the file estimates it (NaN when it does not), the eccentricity, the DOMES and CDP numbers (typed contracts 1.0: FlatBuffers only, no JSON between modules). read_sinex takes the hostcap/http-request HttpResponse, BODY the decompressed SINEX text verbatim, and writes one $GST per station, one $PVN for the file and one FlowNotice report. HTTP 304 gives one FlowNotice (Unchanged) and no record; another status or a transport error is refused. Download, gunzip and the frame realization a SINEX file does not name belong to the SDN host flow; no hostcalls.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "methods": [
+    {
+      "methodId": "read_sinex",
+      "displayName": "Read ILRS SINEX station coordinates",
+      "inputPorts": [
+        {
+          "portId": "source",
+          "acceptedTypeSets": [
+            {
+              "setId": "http-response",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The HttpResponse (HRSP) from hostcap/http-request for one ILRS pos+eop SINEX file (such as EDC's products/pos+eop/weekly ilrsa.pos+eop.YYMMDD.v90.snx), BODY the decompressed text verbatim, bounded to 64 MiB; STATUS 200, or 304 for unchanged."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The HttpResponse (HRSP) from hostcap/http-request for one ILRS pos+eop SINEX file (such as EDC's products/pos+eop/weekly ilrsa.pos+eop.YYMMDD.v90.snx), BODY the decompressed text verbatim, bounded to 64 MiB; STATUS 200, or 304 for unchanged."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "stations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-gst",
+              "allowedTypes": [
+                {
+                  "schemaName": "GST.fbs",
+                  "fileIdentifier": "$GST",
+                  "rootTypeName": "GST",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One canonical $GST per station (SITE CODE, POINT CODE and SOLUTION NUMBER with STAX, STAY and STAZ in SOLUTION/ESTIMATE): STATION_ID and CDP_NUMBER the CDP pad, DOMES_NUMBER, NAME the SITE/ID description, NETWORK ILRS, REFERENCE_EPOCH, POSITION_* (m) and POSITION_SIGMA_* as estimated, VELOCITY_* (m/y) when estimated else NaN, ECCENTRICITY_* with ECCENTRICITY_FRAME XYZ (or NEU from UNE), VALID_FROM and VALID_TO the solution's data window, SOURCE the file name; FRAME_REALIZATION UNSPECIFIED (a SINEX file does not name it). analysis/estimation takes the station's coordinates for laser ranges."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1024,
+          "required": true,
+          "description": "One canonical $GST per station (SITE CODE, POINT CODE and SOLUTION NUMBER with STAX, STAY and STAZ in SOLUTION/ESTIMATE): STATION_ID and CDP_NUMBER the CDP pad, DOMES_NUMBER, NAME the SITE/ID description, NETWORK ILRS, REFERENCE_EPOCH, POSITION_* (m) and POSITION_SIGMA_* as estimated, VELOCITY_* (m/y) when estimated else NaN, ECCENTRICITY_* with ECCENTRICITY_FRAME XYZ (or NEU from UNE), VALID_FROM and VALID_TO the solution's data window, SOURCE the file name; FRAME_REALIZATION UNSPECIFIED (a SINEX file does not name it). analysis/estimation takes the station's coordinates for laser ranges."
+        },
+        {
+          "portId": "provenance",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pvn",
+              "allowedTypes": [
+                {
+                  "schemaName": "PVN.fbs",
+                  "fileIdentifier": "$PVN",
+                  "rootTypeName": "PVN",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One $PVN for the file: SOURCE_ID the combination centre's file prefix (ilrsa), SOURCE_KIND Reference, ORIGINATOR ILRS, PROVIDER_ID the URL's host, PRODUCER this module and version, LICENSE_CLASS Reproducible, LICENSE_ID and LINEAGE ilrs, SOURCE_URL, SOURCE_VERSION the header's agency and creation time, RETRIEVED_AT from the HttpResponse."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One $PVN for the file: SOURCE_ID the combination centre's file prefix (ilrsa), SOURCE_KIND Reference, ORIGINATOR ILRS, PROVIDER_ID the URL's host, PRODUCER this module and version, LICENSE_CLASS Reproducible, LICENSE_ID and LINEAGE ilrs, SOURCE_URL, SOURCE_VERSION the header's agency and creation time, RETRIEVED_AT from the HttpResponse."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "One FlowNotice (FNTC): KIND Info, SCHEMA GST, SOURCE_NAME ilrs-sinex, COUNT the $GST emitted, ITEMS as name=value: format, agency, created, solutionStart, solutionEnd, technique, sites, estimates, stations, stationsWithVelocity, stationsWithEccentricity, frameRealization, parametersNotRead.<type> (the EOP and other estimates), blockNotRead.<block> (data lines), and per station station.<k>.code/point/solution/domes/dataStart/dataEnd/meanEpoch; or KIND Unchanged (REASON not-modified, ITEMS the URL) for a 304."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One FlowNotice (FNTC): KIND Info, SCHEMA GST, SOURCE_NAME ilrs-sinex, COUNT the $GST emitted, ITEMS as name=value: format, agency, created, solutionStart, solutionEnd, technique, sites, estimates, stations, stationsWithVelocity, stationsWithEccentricity, frameRealization, parametersNotRead.<type> (the EOP and other estimates), blockNotRead.<block> (data lines), and per station station.<k>.code/point/solution/domes/dataStart/dataEnd/meanEpoch; or KIND Unchanged (REASON not-modified, ITEMS the URL) for a 304."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "GST.fbs",
+      "fileIdentifier": "$GST",
+      "rootTypeName": "GST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PVN.fbs",
+      "fileIdentifier": "$PVN",
+      "rootTypeName": "PVN",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "ilrs-station-coordinates-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "One complete bounded SINEX file is read in order into one record per station, one provenance record and one FlowNotice; the host parallelizes independent files and this parser creates no threads."
+  }
+}
