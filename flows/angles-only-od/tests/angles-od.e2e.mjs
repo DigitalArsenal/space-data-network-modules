@@ -1,24 +1,26 @@
 #!/usr/bin/env node
-// E2E (modules-angles-only-od-flow-20261104): angles-only orbit determination with no element set on any port, on a
-// SIMULATED arc (no SatNOGS row is read): a Sentinel-6B-like orbit (a 7714 km, e 0.0008, i 66.04 deg) flown by
-// propagator/ffm, seen by SatNOGS Optical stations 11 (dwingeloo, 52.8344 N 6.3785 E 10 m) and 15 (52.0000 N 4.1980 E
-// 1.2 m) on the six nights of the 2026-09-21 to 26 sessions (18:00 to 05:00 UTC), RA/Dec 1-sigma 23 arcsec, the time
-// tags late by 10 ms (station 11) and 51 ms (station 15), the declared NTP timing of the survey.
+// E2E (modules-angles-only-od-real-tracks-20261104): angles-only orbit determination with no element set on any port,
+// on a SIMULATED arc with real SatNOGS Optical track shapes (no SatNOGS row is read): a Sentinel-6B-like orbit (a 7714
+// km, e 0.0008, i 66.04 deg) flown by propagator/ffm, seen by station 11 (dwingeloo, 52.8344 N 6.3785 E 10 m) on the
+// six nights of the 2026-09-21 to 26 sessions (18:00 to 05:00 UTC), RA/Dec 1-sigma 23 arcsec every 1 s, the time tags
+// late by 10 ms. Each pass is cut to field crossings of 40 to 90 s, 1 to 3 per pass, 1 to 3 passes per night; night 1
+// is a single crossing.
 //
 // Chain, every state from a module: propagator/ffm (truth, GCRF) -> foundation/frames STATE_TRANSFORM per truth sample
-// (Earth-fixed) -> analysis/access (windows per station and night, elevation 15 deg) -> analysis/observation-simulator
-// (RA/Dec, one-way light time) -> one $TDM per track -> analysis/optical-astrometry initial_orbit (first track) ->
+// (Earth-fixed) -> analysis/access (windows per night, elevation 10 deg) -> analysis/observation-simulator (RA/Dec,
+// one-way light time) -> one $TDM per crossing -> analysis/optical-astrometry initial_orbit (the arc's tracks) ->
 // flows/angles-only-od plan -> flows/observation-od step (analysis/estimation fit_batch, propagator/ffm) per candidate
-// -> flows/angles-only-od select, night by night -> the final $OCM, flown by propagator/ffm to the arc end.
+// -> flows/angles-only-od select, stage by stage -> the final $OCM, flown by propagator/ffm to the arc end.
 // The fit's dynamics are the truth's (EGM2008 20x20 with the EOP, no other force): the error measures the method and
 // the data, not a force-model difference.
 // Darkness is approximated: a synthetic Sun fixed in Earth-fixed axes 20 deg below station 11's northern horizon keeps
-// both stations dark and the satellite mostly lit; the access windows are cut to the real nights' hours.
+// the station dark and the satellite mostly lit; the access windows are cut to the real nights' hours.
 //
-//   1. the flow converges night by night to one $OCM; its state flown to the arc end is within BOUND_KM of the truth;
-//   2. with the revolution count forced wrong (revolutionOffsetMin = revolutionOffsetMax = 1) it returns
+//   1. initial_orbit on night 1's single crossing answers single-crossing;
+//   2. the flow converges stage by stage to one $OCM; its state flown to the arc end is within BOUND_KM of the truth;
+//   3. with the revolution count forced wrong (revolutionOffsetMin = revolutionOffsetMax = 1) it returns
 //      no-converged-revolution-count;
-//   3. no USER_DEFINED_PARAMETERS on any $OCM; PVN SOURCE_KIND Observation.
+//   4. no USER_DEFINED_PARAMETERS on any $OCM; PVN SOURCE_KIND Observation.
 // JS reads files, routes records between modules by port, cuts windows to clock hours and compares numbers.
 //   cd flows/angles-only-od && node tests/angles-od.e2e.mjs
 import fs from 'node:fs';
@@ -32,17 +34,17 @@ import { TDM, TDMT, TDMSegmentT, TDMObservationT } from 'spacedatastandards.org/
 import { OCM } from 'spacedatastandards.org/lib/js/OCM/main.js';
 import { PVN, PVNT, pvnSourceKind, pvnLicenseClass } from 'spacedatastandards.org/lib/js/PVN/main.js';
 import { createStandaloneHarness } from 'space-data-module-sdk/testing/isomorphic';
-import { encodeHttpResponse, encodeModuleConfig } from 'space-data-module-sdk/runtime-contracts';
+import { encodeHttpResponse, encodeModuleConfig, decodeFlowNotice } from 'space-data-module-sdk/runtime-contracts';
 
-const BOUND_KM = 0.5;  // the first dry run's 0.1724 km, doubled and rounded up; committed into the record's acceptance
+const BOUND_KM = 0.15;  // the first dry run's 0.0604 km, doubled and rounded up; committed into the record's acceptance
 const SIGMA_ARCSEC = 23;
-const STATIONS = [
-  { id: 'SATNOGS-OPTICAL-11', lat: 52.8344, lon: 6.3785, h: 10, tagOffsetNs: 10_000_000n, timingSigma: 0.010 },
-  { id: 'SATNOGS-OPTICAL-15', lat: 52.0000, lon: 4.1980, h: 1.2, tagOffsetNs: 51_000_000n, timingSigma: 0.051 },
-];
+const STATIONS = [{ id: 'SATNOGS-OPTICAL-11', lat: 52.8344, lon: 6.3785, h: 10, tagOffsetNs: 10_000_000n, timingSigma: 0.010 }];
+// Per night: the crossings (seconds) of each pass kept, the passes taken in order. Night 1: one crossing.
+const CROSSINGS = [[[60]], [[50, 70], [90]], [[40], [60], [80]], [[40, 50, 60]], [[90], [45]], [[55, 65], [75]]];
+const CROSSING_GAP_S = 150;  // between a pass's crossings (initial_orbit's crossings split at gaps over 120 s)
 const NIGHTS = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-26'];
 const T0 = '2026-09-21T17:00:00.000000Z';
-const TRUTH_ELEMENTS = [7714.0e3, 0.0008, 66.04 * Math.PI / 180, 1.2, 1.5, 0.3];  // a m, e, i, RAAN, argp, true anomaly rad
+const TRUTH_ELEMENTS = [7714.0e3, 0.0008, 66.04 * Math.PI / 180, 0.6, 1.5, 0.3];  // a m, e, i, RAAN, argp, true anomaly rad  // a m, e, i, RAAN, argp, true anomaly rad
 const STEP_S = 30;
 
 const modules = (p) => new URL(`../../../${p}`, import.meta.url);
@@ -151,7 +153,7 @@ const flat = epochs.flat();
 const sample = (n, x) => Object.assign(new A.ACWStateSampleT(), { JULIAN_DATE_TT: jdTt(n), POSITION_X_M: x[0], POSITION_Y_M: x[1], POSITION_Z_M: x[2],
   VELOCITY_X_MPS: x[3] ?? 0, VELOCITY_Y_MPS: x[4] ?? 0, VELOCITY_Z_MPS: x[5] ?? 0 });
 const groundStation = (s) => Object.assign(new A.ACWGroundStationT(), { STATION_ID: s.id, NAME: s.id, LATITUDE_RAD: s.lat * Math.PI / 180,
-  LONGITUDE_RAD: s.lon * Math.PI / 180, ALTITUDE_M: s.h, MIN_ELEVATION_RAD: 15 * Math.PI / 180, CHANNEL_CAPACITY: 1 });
+  LONGITUDE_RAD: s.lon * Math.PI / 180, ALTITUDE_M: s.h, MIN_ELEVATION_RAD: 10 * Math.PI / 180, CHANNEL_CAPACITY: 1 });
 const acw = (request) => { const b = new flatbuffers.Builder(1 << 22); A.ACW.finishACWBuffer(b, new A.ACWT(request, null).pack(b)); return b.asUint8Array(); };
 // Access per station and night (each night's samples alone, so no run joins two nights).
 const accessList = [];
@@ -161,7 +163,7 @@ for (const night of epochs) {
   offset += night.length;
   for (const s of STATIONS) {
     const r = must(await invoke(access, 'compute_access_windows', [{ portId: 'request', typeRef: ACW_T, payload: acw(Object.assign(new A.ACWRequestT(),
-      { OPERATION: 1, GROUND_STATIONS: [groundStation(s)], STATES: states, TARGET_STATION_ID: s.id, MIN_ELEVATION_OVERRIDE_RAD: 15 * Math.PI / 180, TRACE_ID: 'angles-od' })) }]), 'access');
+      { OPERATION: 1, GROUND_STATIONS: [groundStation(s)], STATES: states, TARGET_STATION_ID: s.id, MIN_ELEVATION_OVERRIDE_RAD: 10 * Math.PI / 180, TRACE_ID: 'angles-od' })) }]), 'access');
     const result = A.ACW.getRootAsACW(new flatbuffers.ByteBuffer(r.outputs[0].payload)).unpack().RESULT;
     for (const w of result.WINDOWS) accessList.push({ station: s.id, start: w.START_JULIAN_DATE_TT, end: w.END_JULIAN_DATE_TT });
   }
@@ -174,7 +176,7 @@ const sun = north.map((v, i) => (v * Math.cos(e) + up[i] * Math.sin(e)) * AU);
 const model = Object.assign(new A.MEMErrorModelT(), { MODEL_ID: 'RADEC', MEASUREMENT_TYPE: A.memMeasurementType.RIGHT_ASCENSION_DECLINATION,
   NOISE_SIGMA: SIGMA_ARCSEC * Math.PI / 648000, APPLY_LIGHT_TIME: true });
 const sensors = STATIONS.map((s) => Object.assign(new A.ACWSensorT(), { SENSOR_ID: s.id, HOST_ID: s.id, PHENOMENOLOGY: A.acwSensorPhenomenology.OPTICAL,
-  ERROR_MODELS: [model], OBSERVATION_INTERVAL_S: 10, TRACK_DURATION_S: 0, MAX_SIMULTANEOUS_TRACKS: 1, LIMITING_MAGNITUDE: 0,
+  ERROR_MODELS: [model], OBSERVATION_INTERVAL_S: 1, TRACK_DURATION_S: 0, MAX_SIMULTANEOUS_TRACKS: 1, LIMITING_MAGNITUDE: 0,
   MAX_HOST_SUN_ELEVATION_RAD: -12 * Math.PI / 180, FALSE_ALARM_RATE_PER_HOUR: 0 }));
 const sim = must(await invoke(simulator, 'simulate_observations', [{ portId: 'request', typeRef: ACW_T, payload: acw(Object.assign(new A.ACWRequestT(), {
   OPERATION: A.acwOperationCode.SIMULATE_OBSERVATIONS, RANDOM_SEED: 20260921n,
@@ -191,17 +193,33 @@ for (const t of A.ACW.getRootAsACW(new flatbuffers.ByteBuffer(out(sim, 'result')
   for (const [k, v] of Object.entries(t)) if (/LOSS|REASON/i.test(k) && v) losses[String(v)] = (losses[String(v)] ?? 0) + 1;
 console.log(`  ${eoos.length} RA/Dec observations; track loss notes ${JSON.stringify(losses)}`);
 
-// ---- one $TDM per track (a gap over 120 s starts a new track), tags late by the station's offset ----
+// ---- passes (a gap over 120 s starts a new one) cut to field crossings; one $TDM per crossing, tags late by 10 ms ----
+const station = STATIONS[0];
+const rows = eoos.map((o) => ({ t: ns(o.OB_TIME) + station.tagOffsetNs, ra: o.RA, dec: o.DECLINATION })).sort((a, b) => (a.t < b.t ? -1 : 1));
+const passes = [];
+for (const r of rows) {
+  const last = passes.at(-1);
+  if (last && r.t - last.at(-1).t <= 120_000_000_000n) last.push(r);
+  else passes.push([r]);
+}
+const S = 1_000_000_000n;
 const tracks = [];
-for (const s of STATIONS) {
-  const rows = eoos.filter((o) => o.SENSOR_ID === s.id).map((o) => ({ t: ns(o.OB_TIME) + s.tagOffsetNs, ra: o.RA, dec: o.DECLINATION })).sort((a, b) => (a.t < b.t ? -1 : 1));
-  for (const r of rows) {
-    const last = tracks.at(-1);
-    if (last && last.station === s && r.t - last.rows.at(-1).t <= 120_000_000_000n) last.rows.push(r);
-    else tracks.push({ station: s, rows: [r] });
+const nightOf = (t) => nightSpans.findIndex(([a, b]) => t >= a && t <= b);
+for (const [n, plan] of CROSSINGS.entries()) {
+  const nightPasses = passes.filter((p) => nightOf(p[0].t) === n);
+  if (nightPasses.length < plan.length) { console.error(`night ${n + 1}: ${nightPasses.length} passes, the plan needs ${plan.length}`); process.exit(1); }
+  for (const [k, lengths] of plan.entries()) {
+    const p = nightPasses[k], span = p.at(-1).t - p[0].t;
+    const need = lengths.reduce((a, b) => a + BigInt(b) * S, 0n) + BigInt(lengths.length - 1) * BigInt(CROSSING_GAP_S) * S;
+    if (need > span) { console.error(`night ${n + 1} pass ${k + 1}: ${Number(span / S)} s, the crossings need ${Number(need / S)} s`); process.exit(1); }
+    let start = p[0].t + (span - need) / 2n;
+    for (const len of lengths) {
+      const end = start + BigInt(len) * S;
+      tracks.push({ station, night: n, rows: p.filter((r) => r.t >= start && r.t <= end) });
+      start = end + BigInt(CROSSING_GAP_S) * S;
+    }
   }
 }
-tracks.sort((a, b) => (a.rows[0].t < b.rows[0].t ? -1 : 1));
 // The site in Earth-fixed metres (WGS-84 closed form, the simulator test suite's helper).
 const { ecef } = await import('../../../analysis/observation-simulator/tests/lib.mjs');
 const tdms = tracks.map((track, k) => {
@@ -217,16 +235,20 @@ const tdms = tracks.map((track, k) => {
   return b.asUint8Array().slice();
 });
 const arcEnd = tracks.reduce((m, t) => (t.rows.at(-1).t > m ? t.rows.at(-1).t : m), 0n);
-console.log(`  ${tracks.length} tracks (${STATIONS.map((s) => `${s.id} ${tracks.filter((t) => t.station === s).length}`).join(', ')}); arc ${iso(tracks[0].rows[0].t)} to ${iso(arcEnd)}; ${((Date.now() - started) / 1000).toFixed(1)} s`);
+console.log(`  ${passes.length} passes; ${tracks.length} crossings of ${tracks.map((t) => `${t.rows.length}`).join(',')} rows (nights ${CROSSINGS.map((p) => p.flat().length).join(',')}); arc ${iso(tracks[0].rows[0].t)} to ${iso(arcEnd)}; ${((Date.now() - started) / 1000).toFixed(1)} s`);
 const pvnBytes = (() => { const b = new flatbuffers.Builder(512); PVN.finishPVNBuffer(b, Object.assign(new PVNT(), { SOURCE_ID: 'observation-simulator',
   SOURCE_KIND: pvnSourceKind.Observation, ORIGINATOR: 'SIMULATED', LICENSE_CLASS: pvnLicenseClass.Reproducible, LINEAGE: 'analysis/observation-simulator' }).pack(b)); return b.asUint8Array().slice(); })();
 
 // ---- the flow ----
-const initial = must(await invoke(optical, 'initial_orbit', [{ portId: 'angles', typeRef: TDM_T, payload: tdms[0] },
-  { portId: 'earth_orientation', typeRef: EOP_T, payload: eopStream }]), 'initial_orbit');
+const angles = (list) => [...list.map((p) => ({ portId: 'angles', typeRef: TDM_T, payload: p })), { portId: 'earth_orientation', typeRef: EOP_T, payload: eopStream }];
+const night1 = await invoke(optical, 'initial_orbit', angles(tdms.filter((_, k) => tracks[k].night === 0)));
+const initial = must(await invoke(optical, 'initial_orbit', angles(tdms)), 'initial_orbit');
 const initialOcm = out(initial, 'orbit')[0];
 const iod = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(initialOcm)).unpack();
-console.log(`  initial orbit at ${iod.STATE_EPOCHS[0]}: middle-sight miss ${iod.ORBIT_DETERMINATION.OD_RESIDUAL_RMS.toExponential(2)} arcsec`);
+{
+  const [tr] = await fly(truth0, T0, [iod.STATE_EPOCHS[0]]);
+  console.log(`  initial orbit at ${iod.STATE_EPOCHS[0]} (${iod.METADATA.START_TIME} to ${iod.METADATA.STOP_TIME}): middle-sight miss ${iod.ORBIT_DETERMINATION.OD_RESIDUAL_RMS.toExponential(2)} arcsec, ${iod.ORBIT_DETERMINATION.OD_ID}; |dr| ${(Math.hypot(...[0, 1, 2].map((i) => iod.STATE_DATA[i] * 1000 - tr[i])) / 1000).toFixed(3)} km`);
+}
 const template = prw('EXECUTION_REQUEST', executionRequest([0, 0, 0, 0, 0, 0], T0, T0));
 const stepConfig = encodeModuleConfig({ angleSigmaArcsec: SIGMA_ARCSEC, minimumArcHours: 0, maximumIterations: 30,
   ...Object.fromEntries(STATIONS.map((s) => [`timeBiasSigmaS.${s.id}`, s.timingSigma])) });
@@ -261,22 +283,10 @@ async function solve(flowConfig) {
   let stage = null;
   for (let s = 1; s <= 10; ++s) {
     const stageIn = stage ? [{ portId: 'stage', typeRef: OCM_T, payload: stage }] : [];
-    let planned = await invoke(flow, 'plan', [...common, ...stageIn, { portId: 'execution', typeRef: PRW, payload: template }]);
+    const planned = await invoke(flow, 'plan', [...common, ...stageIn, { portId: 'execution', typeRef: PRW, payload: template }]);
     if (planned.error) return { error: planned.error };
-    // Stage 2: the candidate revolution counts' Gooding initial orbits through nights 1 and 2, then their executions.
-    let seeds = [];
-    const requests = out(planned, 'initial_orbit_config');
-    if (requests.length) {
-      for (const config of requests) {
-        const r = await invoke(optical, 'initial_orbit', [...out(planned, 'observations').map((p) => ({ portId: 'angles', typeRef: TDM_T, payload: p })),
-          { portId: 'earth_orientation', typeRef: EOP_T, payload: eopStream }, { portId: 'config', typeRef: MCFG, payload: config }]);
-        if (r.error) { console.log(`  stage ${s}: initial orbit refused: ${r.error}`); continue; }
-        seeds.push(out(r, 'orbit')[0]);
-      }
-      planned = await invoke(flow, 'plan', [...common, ...stageIn, ...seeds.map((p) => ({ portId: 'seeds', typeRef: OCM_T, payload: p })),
-        { portId: 'execution', typeRef: PRW, payload: template }]);
-      if (planned.error) return { error: planned.error };
-    }
+    const notice = decodeFlowNotice(out(planned, 'report')[0]);
+    if (notice.reason === 'complete') return { ocm: stage };
     const candidates = out(planned, 'execution'), observations = out(planned, 'observations');
     const ocms = [], kept = [];
     for (const [c, execution] of candidates.entries()) {
@@ -287,19 +297,22 @@ async function solve(flowConfig) {
         const [tr] = await fly(truth0, T0, [o.STATE_EPOCHS[0]]);
         note = `, WEIGHTED_RMS ${o.ORBIT_DETERMINATION.WEIGHTED_RMS.toFixed(3)}, |dr| at the epoch ${(Math.hypot(...[0, 1, 2].map((i) => o.STATE_DATA[i] * 1000 - tr[i])) / 1000).toFixed(3)} km, |dv| ${Math.hypot(...[3, 4, 5].map((i) => o.STATE_DATA[i] * 1000 - tr[i])).toFixed(3)} m/s`;
       }
-      console.log(`  stage ${s}: candidate ${c + 1}/${candidates.length}${seeds.length ? ` (${OCM.getRootAsOCM(new flatbuffers.ByteBuffer(seeds[c])).unpack().ORBIT_DETERMINATION.OD_ID.split(' ').slice(1).join(' ')})` : ''} over ${observations.length} tracks: ${f.error ?? 'converged'} after ${f.rounds} fit_batch calls, ${((Date.now() - t) / 1000).toFixed(1)} s${note}`);
-      if (f.ocm) { ocms.push(f.ocm); if (seeds.length) kept.push(seeds[c]); }
+      console.log(`  stage ${s} (${notice.items[0]}): candidate ${c + 1}/${candidates.length}${candidates.length > 1 ? ` (${notice.items.filter((x) => x.startsWith('candidate'))[c]})` : ''} over ${observations.length} tracks: ${f.error ?? 'converged'} after ${f.rounds} fit_batch calls, ${((Date.now() - t) / 1000).toFixed(1)} s${note}`);
+      if (f.ocm) { ocms.push(f.ocm); kept.push(execution); }
     }
     const chosen = await invoke(flow, 'select', [...common, ...stageIn, ...ocms.map((p) => ({ portId: 'candidates', typeRef: OCM_T, payload: p })),
-      ...kept.map((p) => ({ portId: 'seeds', typeRef: OCM_T, payload: p }))]);
+      ...kept.map((p) => ({ portId: 'executions', typeRef: PRW, payload: p }))]);
     if (chosen.error) return { error: chosen.error };
     stage = out(chosen, 'selected')[0];
-    if (observations.length === tdms.length) return { ocm: stage };
+    if (decodeFlowNotice(out(chosen, 'report')[0]).reason === 'complete') return { ocm: stage };
   }
   return { error: 'the stages did not end' };
 }
 
-console.log('1. the flow');
+console.log('1. a single-crossing night');
+console.log(`  ${night1.error ?? 'ACCEPTED'}`);
+check(night1.error?.startsWith('single-crossing'), "initial_orbit on night 1's one crossing: single-crossing");
+console.log('2. the flow');
 const t1 = Date.now();
 const run = await solve(null);
 check(!!run.ocm, `one $OCM (${run.error ?? 'emitted'}), ${((Date.now() - t1) / 1000).toFixed(1)} s`);
@@ -319,7 +332,7 @@ if (run.ocm) {
   check(record.userDefinedParametersLength() === 0 && OCM.getRootAsOCM(new flatbuffers.ByteBuffer(initialOcm)).userDefinedParametersLength() === 0, 'no USER_DEFINED_PARAMETERS');
   line = `arc-end error ${dr.toFixed(4)} km${BOUND_KM === null ? ' (dry run)' : ` below ${BOUND_KM} km`}`;
 }
-console.log('2. a wrong revolution count');
+console.log('3. a wrong revolution count');
 const wrong = await solve({ revolutionOffsetMin: 1, revolutionOffsetMax: 1 });
 console.log(`  ${wrong.error ?? 'ACCEPTED'}`);
 check(wrong.error?.startsWith('no-converged-revolution-count'), 'revolution offset forced to +1: no-converged-revolution-count');
@@ -327,4 +340,4 @@ check(wrong.error?.startsWith('no-converged-revolution-count'), 'revolution offs
 await Promise.all([eopParser, frames, access, simulator, optical, estimation, ffm, step, flow].map((h) => h.destroy?.()));
 console.log(`run time ${((Date.now() - started) / 1000).toFixed(1)} s`);
 if (failures.length) { console.log(`\nFAIL ${failures.length}: ${failures.join('; ')}`); process.exit(1); }
-console.log(`\nPASS angles-only-od: ${line}; wrong revolution count refused`);
+console.log(`\nPASS angles-only-od: ${line}; single-crossing named; wrong revolution count refused`);

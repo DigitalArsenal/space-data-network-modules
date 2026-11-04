@@ -465,7 +465,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "One Cartesian $OCM (plain): the Gooding solution's GCRF state (km, km/s) at the middle sight's epoch, START_TIME and STOP_TIME the first and last sight used, ORBIT_DETERMINATION OD_METHOD INITIAL_ORBIT with the middle-sight miss (arcsec) as OD_RESIDUAL_RMS; no covariance, no element set. Refused by name: too-few-observations (no counting crossing), single-crossing (one), no-initial-orbit (no bound orbit with its perigee above the surface converged; the message gives the least miss attained), invalid-angles."
+          "description": "One Cartesian $OCM (plain): the Gooding solution's GCRF state (km, km/s) at the middle sight's epoch, START_TIME and STOP_TIME the first and last sight used, ORBIT_DETERMINATION OD_METHOD INITIAL_ORBIT: refined by least squares on 9 fitted directions per crossing used (two-body + J2), OD_RESIDUAL_RMS their RMS (arcsec) and OD_OBSERVATIONS_USED their count; unrefined, the middle-sight miss and 3; no covariance, no element set. Refused by name: too-few-observations (no counting crossing), single-crossing (one), no-initial-orbit (no bound orbit with its perigee above the surface converged; the message gives the least miss attained), invalid-angles."
         },
         {
           "portId": "report",
@@ -485,7 +485,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "FlowNotice (FNTC) Info: SCHEMA $OCM, SOURCE_NAME \"optical-astrometry initial_orbit\", REASON initial-orbit; ITEMS the epoch, the three ranges (km), the miss, the distinct solutions, the revolutions and branch, the eccentricity, the three sights' epochs, the crossings used and the observations used."
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OCM, SOURCE_NAME \"optical-astrometry initial_orbit\", REASON initial-orbit; ITEMS the epoch, the three ranges (km), the miss, the distinct solutions, the revolutions and branch, the eccentricity, the refinement, the three sights' epochs, the crossings used and the observations used."
         }
       ],
       "maxBatch": 1,
