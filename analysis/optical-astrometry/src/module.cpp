@@ -32,6 +32,8 @@
 //   trajectory_minutes     the orbit trajectory's half span (45), trajectory_step_seconds (10)
 //   sensor_id, originator, image_set_id, creation_date, propagator_port_id
 //   min_elevation_deg (3), max_site_candidates (24)
+#include <ModuleConfig_generated.h>  // staged by the SDK compiler (initial_orbit config)
+
 namespace oa {
 namespace mod {
 
@@ -635,6 +637,7 @@ int initial_orbit_method() {
   std::vector<const TDM*> tdms;
   Clock clock;
   std::string err;
+  int revolutions = 0, branch = 0;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const auto* f = plugin_get_input_frame(i);
     const std::string port = port_of(f);
@@ -646,6 +649,19 @@ int initial_orbit_method() {
     } else if (port == "earth_orientation") {
       const std::string m = ax::eop::addPayload(f->payload, f->payload_length, clock.rows);
       if (!m.empty()) return initial_orbit_fail("invalid-angles", "earth_orientation: " + m);
+    } else if (port == "config") {
+      flatbuffers::Verifier v(f->payload, f->payload_length);
+      if (!sdn::runtime::VerifyModuleConfigBuffer(v)) return initial_orbit_fail("invalid-angles", "config is not a ModuleConfig (MCFG)");
+      const auto* entries = sdn::runtime::GetModuleConfig(f->payload)->ENTRIES();
+      for (uint32_t k = 0; entries && k < entries->size(); ++k) {
+        const auto* e = entries->Get(k);
+        const std::string key = rec::text(e->KEY());
+        const double value = e->NUMBER_VALUE();
+        if ((key != "revolutions" && key != "branch") || e->KIND() != sdn::runtime::configValueKind_Number || value < 0 || value != std::floor(value) ||
+            (key == "branch" && value > 1))
+          return initial_orbit_fail("invalid-angles", "config key '" + key + "' is not revolutions (a whole number) or branch (0 long-period, 1 short-period)");
+        (key == "revolutions" ? revolutions : branch) = static_cast<int>(value);
+      }
     } else {
       return initial_orbit_fail("invalid-angles", "unknown input port " + port);
     }
@@ -689,7 +705,16 @@ int initial_orbit_method() {
   std::stable_sort(sights.begin(), sights.end(), [](const Sight& a, const Sight& b) { return a.t < b.t; });
   if (sights.size() < 3 || !(sights.back().t - sights.front().t > 0))
     return initial_orbit_fail("too-few-observations", "Gooding's method needs three or more RA/Dec observations at distinct epochs; got " + std::to_string(sights.size()));
-  const size_t idx[3] = {0, sights.size() / 2, sights.size() - 1};
+  // One pass: the middle observation is the middle sight. Over revolutions: the first pass's last observation (the
+  // last before a gap of 30 min or more).
+  size_t middle = sights.size() / 2;
+  if (revolutions > 0) {
+    middle = 0;
+    while (middle + 1 < sights.size() - 1 && sights[middle + 1].t - sights[middle].t < 1800.0) ++middle;
+    if (middle == 0 || middle + 1 >= sights.size() || sights.back().t - sights[middle].t < 1800.0)
+      return initial_orbit_fail("too-few-observations", "a multi-revolution initial orbit needs a first pass of two or more observations and a later pass");
+  }
+  const size_t idx[3] = {0, middle, sights.size() - 1};
   SightObs s3[3];
   for (int q = 0; q < 3; ++q) {
     const Sight& o = sights[idx[q]];
@@ -705,7 +730,7 @@ int initial_orbit_method() {
     s3[q].los = radec_to_unit(o.ra, o.dec);
     s3[q].site_km = sr * 1e-3;
   }
-  const IodResult iod = gooding_iod(s3);
+  const IodResult iod = gooding_iod(s3, revolutions, branch);
   if (!iod.ok) return initial_orbit_fail("no-initial-orbit", "Gooding's iteration found no bound orbit: " + iod.error);
 
   flatbuffers::FlatBufferBuilder fb(2048);
@@ -729,7 +754,7 @@ int initial_orbit_method() {
   const auto epochs = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString(t0)});
   const auto center = fb.CreateString("EARTH");
   const auto frame = rec::celestial(fb, CelestialFrame::GCRF, "GCRF");
-  const auto odid = fb.CreateString("IOD:" + t0);
+  const auto odid = fb.CreateString("IOD:" + t0 + (revolutions ? " revolutions " + std::to_string(revolutions) + (branch ? " short-period" : " long-period") : ""));
   const auto alg = fb.CreateString("Gooding angles-only initial orbit (Gooding 1997) on Izzo's Lambert solver");
   const auto meth = fb.CreateString("INITIAL_ORBIT");
   const auto otype = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString("RADEC")});

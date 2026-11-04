@@ -83,6 +83,11 @@
       "schemaName": "OCM.fbs",
       "fileIdentifier": "$OCM",
       "rootTypeName": "OCM"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig"
     }
   ],
   "methods": [
@@ -439,6 +444,26 @@
           "maxStreams": 1,
           "required": true,
           "description": "Earth orientation ($EOP, one row or a size-prefixed stream) for UT1 and polar motion: the sites' GCRS positions. Required."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional ModuleConfig: revolutions (whole number, default 0) and branch (0 the long-period, 1 the short-period Lambert solution). With revolutions > 0 the sights are the first observation, the first pass's last observation (the last before a gap of 30 min) and the last observation; the Lambert arc between the first and last makes that many full revolutions."
         }
       ],
       "outputPorts": [

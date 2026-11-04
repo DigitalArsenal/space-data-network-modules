@@ -27,5 +27,5 @@
     "src/angles_od.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "b927dbc03e4021c19f97417f85fa62f2b513913598ab4a651d99bc65530720ee"
+  "wasmSha256": "73455891f62f8f76598856b03c7d60421500bca31b746545bd455ce904f85f3d"
 }

@@ -34,7 +34,7 @@ import { PVN, PVNT, pvnSourceKind, pvnLicenseClass } from 'spacedatastandards.or
 import { createStandaloneHarness } from 'space-data-module-sdk/testing/isomorphic';
 import { encodeHttpResponse, encodeModuleConfig } from 'space-data-module-sdk/runtime-contracts';
 
-const BOUND_KM = null;  // fixed by the first dry run (twice its error, rounded up) and committed into the record
+const BOUND_KM = 0.5;  // the first dry run's 0.1724 km, doubled and rounded up; committed into the record's acceptance
 const SIGMA_ARCSEC = 23;
 const STATIONS = [
   { id: 'SATNOGS-OPTICAL-11', lat: 52.8344, lon: 6.3785, h: 10, tagOffsetNs: 10_000_000n, timingSigma: 0.010 },
@@ -125,7 +125,7 @@ const executionRequest = (state, epoch, target, samples = []) => table('PRWExecu
   INTEGRATOR: table('PCFIntegratorSettings', { ALGORITHM: P.pcfIntegratorAlgorithm.RK78, INITIAL_STEP_SECONDS: 30, MINIMUM_STEP_SECONDS: 0.001,
     MAXIMUM_STEP_SECONDS: 120, ABSOLUTE_TOLERANCES: Array(6).fill(1e-10), RELATIVE_TOLERANCE: 1e-13, MAXIMUM_STEPS: 1000000 }),
   FORCES: table('PCFForceModel', { GRAVITY_CHOICE: P.pcfGravitySelection.EGM2008, ENABLE_POINT_MASS: true, GRAVITATIONAL_PARAMETER: 3.986004415e14,
-    MAXIMUM_DEGREE: 20, HAS_MAXIMUM_DEGREE: true, MAXIMUM_ORDER: 20, HAS_MAXIMUM_ORDER: true, ENABLE_THIRD_BODY: false, ENABLE_SRP: false, ENABLE_DRAG: false,
+    MAXIMUM_DEGREE: 20, HAS_MAXIMUM_DEGREE: true, MAXIMUM_ORDER: 20, HAS_MAXIMUM_ORDER: true, ENABLE_THIRD_BODY: false, EPHEMERIS_SOURCE: 'Analytical', ENABLE_SRP: false, ENABLE_DRAG: false,
     INITIAL_MASS_KG: 1, AREA_M2: 1 }),
   STM_TECHNIQUE: P.prwDerivativeTechnique.ANALYTIC, DYNAMIC_PARAMETERS: [],
 });
@@ -261,16 +261,37 @@ async function solve(flowConfig) {
   let stage = null;
   for (let s = 1; s <= 10; ++s) {
     const stageIn = stage ? [{ portId: 'stage', typeRef: OCM_T, payload: stage }] : [];
-    const planned = await invoke(flow, 'plan', [...common, ...stageIn, { portId: 'execution', typeRef: PRW, payload: template }]);
+    let planned = await invoke(flow, 'plan', [...common, ...stageIn, { portId: 'execution', typeRef: PRW, payload: template }]);
     if (planned.error) return { error: planned.error };
-    const candidates = out(planned, 'execution'), observations = out(planned, 'observations');
-    const ocms = [];
-    for (const execution of candidates) {
-      const t = Date.now(), f = await fit(observations, execution);
-      console.log(`  stage ${s}: candidate ${ocms.length + 1}/${candidates.length} over ${observations.length} tracks: ${f.error ?? 'converged'} after ${f.rounds} fit_batch calls, ${((Date.now() - t) / 1000).toFixed(1)} s`);
-      if (f.ocm) ocms.push(f.ocm);
+    // Stage 2: the candidate revolution counts' Gooding initial orbits through nights 1 and 2, then their executions.
+    let seeds = [];
+    const requests = out(planned, 'initial_orbit_config');
+    if (requests.length) {
+      for (const config of requests) {
+        const r = await invoke(optical, 'initial_orbit', [...out(planned, 'observations').map((p) => ({ portId: 'angles', typeRef: TDM_T, payload: p })),
+          { portId: 'earth_orientation', typeRef: EOP_T, payload: eopStream }, { portId: 'config', typeRef: MCFG, payload: config }]);
+        if (r.error) { console.log(`  stage ${s}: initial orbit refused: ${r.error}`); continue; }
+        seeds.push(out(r, 'orbit')[0]);
+      }
+      planned = await invoke(flow, 'plan', [...common, ...stageIn, ...seeds.map((p) => ({ portId: 'seeds', typeRef: OCM_T, payload: p })),
+        { portId: 'execution', typeRef: PRW, payload: template }]);
+      if (planned.error) return { error: planned.error };
     }
-    const chosen = await invoke(flow, 'select', [...common, ...stageIn, ...ocms.map((p) => ({ portId: 'candidates', typeRef: OCM_T, payload: p }))]);
+    const candidates = out(planned, 'execution'), observations = out(planned, 'observations');
+    const ocms = [], kept = [];
+    for (const [c, execution] of candidates.entries()) {
+      const t = Date.now(), f = await fit(observations, execution);
+      let note = '';
+      if (f.ocm) {
+        const o = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(f.ocm)).unpack();
+        const [tr] = await fly(truth0, T0, [o.STATE_EPOCHS[0]]);
+        note = `, WEIGHTED_RMS ${o.ORBIT_DETERMINATION.WEIGHTED_RMS.toFixed(3)}, |dr| at the epoch ${(Math.hypot(...[0, 1, 2].map((i) => o.STATE_DATA[i] * 1000 - tr[i])) / 1000).toFixed(3)} km, |dv| ${Math.hypot(...[3, 4, 5].map((i) => o.STATE_DATA[i] * 1000 - tr[i])).toFixed(3)} m/s`;
+      }
+      console.log(`  stage ${s}: candidate ${c + 1}/${candidates.length}${seeds.length ? ` (${OCM.getRootAsOCM(new flatbuffers.ByteBuffer(seeds[c])).unpack().ORBIT_DETERMINATION.OD_ID.split(' ').slice(1).join(' ')})` : ''} over ${observations.length} tracks: ${f.error ?? 'converged'} after ${f.rounds} fit_batch calls, ${((Date.now() - t) / 1000).toFixed(1)} s${note}`);
+      if (f.ocm) { ocms.push(f.ocm); if (seeds.length) kept.push(seeds[c]); }
+    }
+    const chosen = await invoke(flow, 'select', [...common, ...stageIn, ...ocms.map((p) => ({ portId: 'candidates', typeRef: OCM_T, payload: p })),
+      ...kept.map((p) => ({ portId: 'seeds', typeRef: OCM_T, payload: p }))]);
     if (chosen.error) return { error: chosen.error };
     stage = out(chosen, 'selected')[0];
     if (observations.length === tdms.length) return { ocm: stage };

@@ -111,6 +111,20 @@ inline void kepler_rk4(V3* r, V3* v, double dt) {
   }
 }
 
+// Two-body + J2 propagation by RK4 at <= 10 s steps (the multi-revolution initial orbit's dynamics).
+inline void j2_rk4(V3* r, V3* v, double dt) {
+  const int steps = std::max(1, static_cast<int>(std::ceil(std::fabs(dt) / 10.0)));
+  const double h = dt / steps;
+  for (int s = 0; s < steps; ++s) {
+    const V3 k1v = gravity(*r), k1r = *v;
+    const V3 k2v = gravity(*r + k1r * (0.5 * h)), k2r = *v + k1v * (0.5 * h);
+    const V3 k3v = gravity(*r + k2r * (0.5 * h)), k3r = *v + k2v * (0.5 * h);
+    const V3 k4v = gravity(*r + k3r * h), k4r = *v + k3v * h;
+    *r = *r + (k1r + k2r * 2 + k3r * 2 + k4r) * (h / 6);
+    *v = *v + (k1v + k2v * 2 + k3v * 2 + k4v) * (h / 6);
+  }
+}
+
 struct SightObs {
   double t = 0;   // receive time, UTC Unix s (tag + bias)
   V3 los;         // geometric line of sight (aberration removed), GCRS
@@ -130,7 +144,9 @@ struct IodResult {
 
 // Gooding's method on three sights (light time neglected: < 30 m over a
 // LEO arc, below an angles-only IOD's own range uncertainty).
-inline IodResult gooding_iod(const SightObs s[3]) {
+// revolutions > 0: the Lambert arc between the first and last sight makes that many full revolutions (Izzo's
+// multi-revolution branches; branch 0 the long-period, 1 the short-period solution).
+inline IodResult gooding_iod(const SightObs s[3], int revolutions = 0, int branch = 0) {
   IodResult best;
   best.error = "no start converged";
   std::vector<double> found;
@@ -142,10 +158,48 @@ inline IodResult gooding_iod(const SightObs s[3]) {
     rq.r2 = {p3.x, p3.y, p3.z};
     rq.tof = t13;
     rq.mu = kMuEarth;
+    rq.max_revolutions = static_cast<uint16_t>(revolutions);
     const lambert_izzo::Result lr = lambert_izzo::solve(rq);
     if (lr.status != lambert_izzo::Status::Ok) return false;
-    V3 r = p1, v{lr.single.v1.x, lr.single.v1.y, lr.single.v1.z};
-    kepler_rk4(&r, &v, t12);
+    const lambert_izzo::Solution* sol = &lr.single;
+    if (revolutions > 0) {
+      sol = nullptr;
+      for (const auto& m : lr.multi)
+        if (m.revolutions == revolutions) sol = branch == 0 ? &m.long_period : &m.short_period;
+      if (!sol) return false;
+    }
+    V3 r = p1, v{sol->v1.x, sol->v1.y, sol->v1.z};
+    // Over revolutions the two-body arc misses the last sight by the J2 drift (hundreds of km a day in LEO): shoot
+    // the first velocity onto p3 under two-body + J2 (Newton, finite-difference sensitivity).
+    if (revolutions > 0) {
+      auto land = [&](V3 v0) { V3 rr = p1, vv = v0; j2_rk4(&rr, &vv, t13); return rr; };
+      for (int it = 0; it < 8; ++it) {
+        const V3 miss3 = land(v) - p3;
+        if (norm(miss3) < 1e-6) break;
+        double J[3][3];
+        const double h = 1e-6;
+        for (int j = 0; j < 3; ++j) {
+          V3 dv = v;
+          (j == 0 ? dv.x : j == 1 ? dv.y : dv.z) += h;
+          const V3 d = (land(dv) - p3 - miss3) * (1.0 / h);
+          J[0][j] = d.x, J[1][j] = d.y, J[2][j] = d.z;
+        }
+        const double det = J[0][0] * (J[1][1] * J[2][2] - J[1][2] * J[2][1]) - J[0][1] * (J[1][0] * J[2][2] - J[1][2] * J[2][0]) +
+                           J[0][2] * (J[1][0] * J[2][1] - J[1][1] * J[2][0]);
+        if (!(std::fabs(det) > 0)) return false;
+        const double b[3] = {miss3.x, miss3.y, miss3.z};
+        double x[3];
+        for (int c = 0; c < 3; ++c) {
+          double M[3][3];
+          for (int a = 0; a < 3; ++a)
+            for (int d = 0; d < 3; ++d) M[a][d] = d == c ? b[a] : J[a][d];
+          x[c] = (M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+                  M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0])) / det;
+        }
+        v = v - V3{x[0], x[1], x[2]};
+      }
+    }
+    if (revolutions > 0) j2_rk4(&r, &v, t12); else kepler_rk4(&r, &v, t12);
     *p2 = r;
     *v2 = v;
     const V3 d = unit(r - s[1].site_km);

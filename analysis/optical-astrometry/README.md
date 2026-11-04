@@ -41,7 +41,11 @@ RADEC, UTC, degrees, geometric topocentric GCRF at the time tag; the site as `OB
 data-source/satnogs-optical-source writes it) and `$EOP` on `earth_orientation` (required) -> one Cartesian `$OCM` on
 `orbit`: the GCRF state (km, km/s) at the middle sight, `OD_METHOD` INITIAL_ORBIT, the middle-sight miss (arcsec) as
 `OD_RESIDUAL_RMS`, no covariance; and a `report`. The three sights are the first, middle and last observation by epoch;
-they must lie within one revolution (one pass): the Lambert arc is the short way. Refused by name:
+they must lie within one revolution (one pass): the Lambert arc is the short way. With config (`ModuleConfig`)
+`revolutions` N > 0 and `branch` (0 long-period, 1 short-period), the sights are the first observation, the first pass's
+last (the last before a 30 min gap) and the last observation, the Lambert arc between the first and last makes N full
+revolutions, and its first velocity is shot onto the last sight under two-body + J2 (RK4, Newton): the initial orbit of
+one candidate revolution count across nights. Refused by name:
 `too-few-observations`, `no-initial-orbit`, `invalid-angles`.
 
 ## Video versus FITS
