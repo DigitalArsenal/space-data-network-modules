@@ -6,6 +6,10 @@
 // SDK conformance runner's own gmstRadians) with the -omega x r velocity term. The module wraps the same library, so
 // these anchors catch defects of the adapter, the shim, the ABI record mapping (BSTAR = BTERM, MEAN_MOTION_DDOT =
 // AGOM), units and frames; they are not an independent check of the SGP4-XP theory.
+// Real sets: four geosynchronous and inclined geosynchronous Space Force fits of the eclipse season
+// (tests/fixtures/geo-real-sets.json) at day 1 and day 7 after their window's cutoff, each the library's propagation
+// from the epoch to that time (one satellite per time); source.temeKm carries the TEME state, which
+// tests/flight-parity-real-sets.e2e.mjs flies on the oracle's 9.1.1.0 and 9.9 legs.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +23,8 @@ const { gmstRadians } = await import(pathToFileURL(path.join(sdkRoot, 'src/confo
 const OMEGA = 7.292115146706979e-5;
 const KIND = ['leo', 'sun-synchronous', 'meo', 'geo', 'heo'];
 const MINUTES = [0, 90, 1440];
+const REAL = ['GE|C018 BDS-2G|2025-10-04', 'GE|C231 BDS-3G|2025-10-10', 'IG|C005 BDS-2I|2025-10-06', 'IG|J002 QZS-2I|2025-10-08'];
+const LEAD_DAYS = [1, 7];
 
 // The epoch exactly as the two-line text states it: Julian date of 0 January of the year plus the day field.
 const julianOfLine = (l1) => { const yy = Number(l1.slice(18, 20)); const y = yy < 57 ? 2000 + yy : 1900 + yy; return Date.UTC(y, 0, 1) / 86400000 + 2440587.5 - 1 + Number(l1.slice(20, 32)); };
@@ -54,6 +60,36 @@ for (const set of battery(10, 20261012).filter((s) => s.type === 4)) {
       source: { kind: 'reference-library', derivation: 'US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.', generator: 'vectors/tools/build-vectors.mjs', twoLine: set.lines },
     });
   });
+}
+
+const { sets: realSets } = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/geo-real-sets.json'), 'utf8'));
+for (const key of REAL) {
+  const set = realSets.find((s) => s.key === key && s.fitter === 'space-force');
+  if (!set) throw new Error(`no Space Force set for ${key}`);
+  const f = omm(set.lines);
+  const epochJd = julianOfLine(set.lines[0]);
+  const elements = {
+    epochJd, meanMotionRevPerDay: f.meanMotion, eccentricity: f.eccentricity, inclinationDeg: f.inclination,
+    raOfAscNodeDeg: f.raan, argOfPericenterDeg: f.argPerigee, meanAnomalyDeg: f.meanAnomaly,
+    bstar: f.bterm, meanMotionDdot: f.agom, noradCatId: f.norad,
+  };
+  const cutoffJd = Date.parse(set.cutoff) / 86400000 + 2440587.5;
+  for (const k of LEAD_DAYS) {
+    const minutes = (cutoffJd + k - epochJd) * 1440;
+    const [st] = lib.propagate(set.lines, [minutes]) ?? [];
+    if (!st || st.error !== 0) throw new Error(`the library refused ${set.lines[0]} at +${minutes} min`);
+    const jd = epochJd + minutes / 1440;
+    const { r, v } = ecef(st.r, st.v, jd);
+    const group = set.group === 'GE' ? 'geo' : 'igso';
+    cases.push({
+      id: `${group}-real-${set.key.split('|')[1].split(' ')[0].toLowerCase()}-${set.cutoff.slice(0, 10)}@day${k}`, tier: 'B', operation: 'plugin_propagate',
+      note: `Real SGP4-XP ${set.group === 'GE' ? 'geosynchronous' : 'inclined geosynchronous'} set (${set.key}, the Space Force fit to 72 h ending at ${set.cutoff}${set.eclipsed ? ', eclipse season, shadow in the window' : ''}), day ${k} after the cutoff: ${set.lines[0]}`,
+      params: { elements, julianDate: jd },
+      expect: { 'position.0': r[0], 'position.1': r[1], 'position.2': r[2], 'velocity.0': v[0], 'velocity.1': v[1], 'velocity.2': v[2], epoch: jd, reference_frame: 3, flags: 1 },
+      band: { position: { abs: 0.5, rel: 0 }, velocity: { abs: 5e-4, rel: 0 }, time: { abs: 1e-9, rel: 0 } },
+      source: { kind: 'reference-library', derivation: 'US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.', generator: 'vectors/tools/build-vectors.mjs', twoLine: set.lines, temeKm: { minutes, r: st.r, v: st.v } },
+    });
+  }
 }
 
 const corpus = {

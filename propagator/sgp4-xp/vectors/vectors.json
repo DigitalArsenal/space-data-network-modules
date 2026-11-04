@@ -833,6 +833,550 @@
      "2 10009  61.5296 275.1227 6250029 190.7107 176.2948  2.00872577179996"
     ]
    }
+  },
+  {
+   "id": "geo-real-c018-2025-10-04@day1",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP geosynchronous set (GE|C018 BDS-2G|2025-10-04, the Space Force fit to 72 h ending at 2025-10-04T00:00:00.000Z, eclipse season, shadow in the window), day 1 after the cutoff: 1 41586U 00001A   25274.00326389  .00000000  25099-1  19307-3 4  9999",
+   "params": {
+    "elements": {
+     "epochJd": 2460949.50326389,
+     "meanMotionRevPerDay": 1.00265357,
+     "eccentricity": 0.0005595,
+     "inclinationDeg": 1.5634,
+     "raOfAscNodeDeg": 67.3456,
+     "argOfPericenterDeg": 346.7098,
+     "meanAnomalyDeg": 67.6663,
+     "bstar": 0.00019307000000000002,
+     "meanMotionDdot": 0.025099000000000007,
+     "noradCatId": 41586
+    },
+    "julianDate": 2460953.5
+   },
+   "expect": {
+    "position.0": -14808780.08325762,
+    "position.1": 39460980.684905484,
+    "position.2": 966546.2136231516,
+    "velocity.0": -1.309682905128284,
+    "velocity.1": -0.12610573590586682,
+    "velocity.2": 45.932587544021374,
+    "epoch": 2460953.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 41586U 00001A   25274.00326389  .00000000  25099-1  19307-3 4  9999",
+     "2 41586   1.5634  67.3456 0005595 346.7098  67.6663  1.00265357    00"
+    ],
+    "temeKm": {
+     "minutes": 5755.299998670816,
+     "r": [
+      -23869.24733209984,
+      34737.99067257368,
+      966.5462136231516
+     ],
+     "v": [
+      -2.5343751338115204,
+      -1.7410105530055402,
+      0.045932587544021374
+     ]
+    }
+   }
+  },
+  {
+   "id": "geo-real-c018-2025-10-04@day7",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP geosynchronous set (GE|C018 BDS-2G|2025-10-04, the Space Force fit to 72 h ending at 2025-10-04T00:00:00.000Z, eclipse season, shadow in the window), day 7 after the cutoff: 1 41586U 00001A   25274.00326389  .00000000  25099-1  19307-3 4  9999",
+   "params": {
+    "elements": {
+     "epochJd": 2460949.50326389,
+     "meanMotionRevPerDay": 1.00265357,
+     "eccentricity": 0.0005595,
+     "inclinationDeg": 1.5634,
+     "raOfAscNodeDeg": 67.3456,
+     "argOfPericenterDeg": 346.7098,
+     "meanAnomalyDeg": 67.6663,
+     "bstar": 0.00019307000000000002,
+     "meanMotionDdot": 0.025099000000000007,
+     "noradCatId": 41586
+    },
+    "julianDate": 2460959.5
+   },
+   "expect": {
+    "position.0": -14729151.072907252,
+    "position.1": 39495439.23655506,
+    "position.2": 1037784.4630940653,
+    "velocity.0": -0.7801620640743749,
+    "velocity.1": 0.33074936428511137,
+    "velocity.2": 38.45353297136657,
+    "epoch": 2460959.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 41586U 00001A   25274.00326389  .00000000  25099-1  19307-3 4  9999",
+     "2 41586   1.5634  67.3456 0005595 346.7098  67.6663  1.00265357    00"
+    ],
+    "temeKm": {
+     "minutes": 14395.299998670816,
+     "r": [
+      -27258.181877078896,
+      32153.213409751534,
+      1037.7844630940654
+     ],
+     "v": [
+      -2.3454954527931164,
+      -1.9876516419472676,
+      0.03845353297136657
+     ]
+    }
+   }
+  },
+  {
+   "id": "geo-real-c231-2025-10-10@day1",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP geosynchronous set (GE|C231 BDS-3G|2025-10-10, the Space Force fit to 72 h ending at 2025-10-10T00:00:00.000Z, eclipse season, shadow in the window), day 1 after the cutoff: 1 56564U 00001A   25280.00326389  .00000000  19707-1  13808-4 4  9998",
+   "params": {
+    "elements": {
+     "epochJd": 2460955.50326389,
+     "meanMotionRevPerDay": 1.00260077,
+     "eccentricity": 0.0005798,
+     "inclinationDeg": 0.9654,
+     "raOfAscNodeDeg": 295.6278,
+     "argOfPericenterDeg": 226.6759,
+     "meanAnomalyDeg": 14.7777,
+     "bstar": 0.000013808000000000002,
+     "meanMotionDdot": 0.019707000000000002,
+     "noradCatId": 56564
+    },
+    "julianDate": 2460959.5
+   },
+   "expect": {
+    "position.0": -39591688.76408265,
+    "position.1": 14432687.844622564,
+    "position.2": -633201.2989948777,
+    "velocity.0": -1.1178187941354736,
+    "velocity.1": -2.923170617793403,
+    "velocity.2": -23.052782873845153,
+    "epoch": 2460959.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 56564U 00001A   25280.00326389  .00000000  19707-1  13808-4 4  9998",
+     "2 56564   0.9654 295.6278 0005798 226.6759  14.7777  1.00260077    03"
+    ],
+    "temeKm": {
+     "minutes": 5755.299998670816,
+     "r": [
+      -42140.05898680377,
+      140.44999467006716,
+      -633.2012989948777
+     ],
+     "v": [
+      -0.0103012578988759,
+      -3.0760306667359414,
+      -0.023052782873845153
+     ]
+    }
+   }
+  },
+  {
+   "id": "geo-real-c231-2025-10-10@day7",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP geosynchronous set (GE|C231 BDS-3G|2025-10-10, the Space Force fit to 72 h ending at 2025-10-10T00:00:00.000Z, eclipse season, shadow in the window), day 7 after the cutoff: 1 56564U 00001A   25280.00326389  .00000000  19707-1  13808-4 4  9998",
+   "params": {
+    "elements": {
+     "epochJd": 2460955.50326389,
+     "meanMotionRevPerDay": 1.00260077,
+     "eccentricity": 0.0005798,
+     "inclinationDeg": 0.9654,
+     "raOfAscNodeDeg": 295.6278,
+     "argOfPericenterDeg": 226.6759,
+     "meanAnomalyDeg": 14.7777,
+     "bstar": 0.000013808000000000002,
+     "meanMotionDdot": 0.019707000000000002,
+     "noradCatId": 56564
+    },
+    "julianDate": 2460965.5
+   },
+   "expect": {
+    "position.0": -39577152.518872775,
+    "position.1": 14473563.429132544,
+    "position.2": -648506.8176559446,
+    "velocity.0": -1.444821120677716,
+    "velocity.1": -2.812035503960942,
+    "velocity.2": -18.0816914615718,
+    "epoch": 2460965.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 56564U 00001A   25280.00326389  .00000000  19707-1  13808-4 4  9998",
+     "2 56564   0.9654 295.6278 0005798 226.6759  14.7777  1.00260077    03"
+    ],
+    "temeKm": {
+     "minutes": 14395.299998670816,
+     "r": [
+      -41934.922226336384,
+      -4159.006817782266,
+      -648.5068176559446
+     ],
+     "v": [
+      0.3031999852333293,
+      -3.0611033088420645,
+      -0.018081691461571802
+     ]
+    }
+   }
+  },
+  {
+   "id": "igso-real-c005-2025-10-06@day1",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP inclined geosynchronous set (IG|C005 BDS-2I|2025-10-06, the Space Force fit to 72 h ending at 2025-10-06T00:00:00.000Z), day 1 after the cutoff: 1 36828U 00001A   25276.00326389  .00000000  28076-1  10456-5 4  9990",
+   "params": {
+    "elements": {
+     "epochJd": 2460951.50326389,
+     "meanMotionRevPerDay": 1.00297257,
+     "eccentricity": 0.005015,
+     "inclinationDeg": 54.3229,
+     "raOfAscNodeDeg": 165.3053,
+     "argOfPericenterDeg": 215.7667,
+     "meanAnomalyDeg": 96.6319,
+     "bstar": 0.0000010456000000000002,
+     "meanMotionDdot": 0.028076000000000004,
+     "noradCatId": 36828
+    },
+    "julianDate": 2460955.5
+   },
+   "expect": {
+    "position.0": -17435400.722845953,
+    "position.1": 30173792.1538238,
+    "position.2": -23792308.27404194,
+    "velocity.0": -298.00962761228993,
+    "velocity.1": 1258.5720221551067,
+    "velocity.2": 1787.723426622398,
+    "epoch": 2460955.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 36828U 00001A   25276.00326389  .00000000  28076-1  10456-5 4  9990",
+     "2 36828  54.3229 165.3053 0050150 215.7667  96.6319  1.00297257    09"
+    ],
+    "temeKm": {
+     "minutes": 5755.299998670816,
+     "r": [
+      -25032.696068204747,
+      24244.897584136386,
+      -23792.308274041938
+     ],
+     "v": [
+      -2.399276555786668,
+      -0.696581738988858,
+      1.787723426622398
+     ]
+    }
+   }
+  },
+  {
+   "id": "igso-real-c005-2025-10-06@day7",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP inclined geosynchronous set (IG|C005 BDS-2I|2025-10-06, the Space Force fit to 72 h ending at 2025-10-06T00:00:00.000Z), day 7 after the cutoff: 1 36828U 00001A   25276.00326389  .00000000  28076-1  10456-5 4  9990",
+   "params": {
+    "elements": {
+     "epochJd": 2460951.50326389,
+     "meanMotionRevPerDay": 1.00297257,
+     "eccentricity": 0.005015,
+     "inclinationDeg": 54.3229,
+     "raOfAscNodeDeg": 165.3053,
+     "argOfPericenterDeg": 215.7667,
+     "meanAnomalyDeg": 96.6319,
+     "bstar": 0.0000010456000000000002,
+     "meanMotionDdot": 0.028076000000000004,
+     "noradCatId": 36828
+    },
+    "julianDate": 2460961.5
+   },
+   "expect": {
+    "position.0": -17930740.696390018,
+    "position.1": 32009818.83110226,
+    "position.2": -20885141.92010082,
+    "velocity.0": -21.074893035120112,
+    "velocity.1": 1293.0335021217495,
+    "velocity.2": 1969.9957106960294,
+    "epoch": 2460961.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 36828U 00001A   25276.00326389  .00000000  28076-1  10456-5 4  9990",
+     "2 36828  54.3229 165.3053 0050150 215.7667  96.6319  1.00297257    09"
+    ],
+    "temeKm": {
+     "minutes": 14395.299998670816,
+     "r": [
+      -28539.505603710077,
+      23057.245789923985,
+      -20885.141920100818
+     ],
+     "v": [
+      -2.181308485628974,
+      -0.8884759848594301,
+      1.9699957106960293
+     ]
+    }
+   }
+  },
+  {
+   "id": "igso-real-j002-2025-10-08@day1",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP inclined geosynchronous set (IG|J002 QZS-2I|2025-10-08, the Space Force fit to 72 h ending at 2025-10-08T00:00:00.000Z), day 1 after the cutoff: 1 42738U 00001A   25278.00326389  .00000000  23407-1  64824-4 4  9999",
+   "params": {
+    "elements": {
+     "epochJd": 2460953.50326389,
+     "meanMotionRevPerDay": 1.00252234,
+     "eccentricity": 0.0748453,
+     "inclinationDeg": 39.8203,
+     "raOfAscNodeDeg": 246.8427,
+     "argOfPericenterDeg": 270.763,
+     "meanAnomalyDeg": 357.7105,
+     "bstar": 0.000064824,
+     "meanMotionDdot": 0.023407000000000004,
+     "noradCatId": 42738
+    },
+    "julianDate": 2460957.5
+   },
+   "expect": {
+    "position.0": -23049868.719010416,
+    "position.1": 19153451.93013042,
+    "position.2": -24990571.98596245,
+    "velocity.0": -745.8634283862957,
+    "velocity.1": -846.0854138005475,
+    "velocity.2": 38.54951611396388,
+    "epoch": 2460957.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 42738U 00001A   25278.00326389  .00000000  23407-1  64824-4 4  9999",
+     "2 42738  39.8203 246.8427 0748453 270.7630 357.7105  1.00252234    07"
+    ],
+    "temeKm": {
+     "minutes": 5755.299998670816,
+     "r": [
+      -27814.54306325868,
+      11158.06268962314,
+      -24990.57198596245
+     ],
+     "v": [
+      -1.2639733739465118,
+      -3.062381435410258,
+      0.038549516113963886
+     ]
+    }
+   }
+  },
+  {
+   "id": "igso-real-j002-2025-10-08@day7",
+   "tier": "B",
+   "operation": "plugin_propagate",
+   "note": "Real SGP4-XP inclined geosynchronous set (IG|J002 QZS-2I|2025-10-08, the Space Force fit to 72 h ending at 2025-10-08T00:00:00.000Z), day 7 after the cutoff: 1 42738U 00001A   25278.00326389  .00000000  23407-1  64824-4 4  9999",
+   "params": {
+    "elements": {
+     "epochJd": 2460953.50326389,
+     "meanMotionRevPerDay": 1.00252234,
+     "eccentricity": 0.0748453,
+     "inclinationDeg": 39.8203,
+     "raOfAscNodeDeg": 246.8427,
+     "argOfPericenterDeg": 270.763,
+     "meanAnomalyDeg": 357.7105,
+     "bstar": 0.000064824,
+     "meanMotionDdot": 0.023407000000000004,
+     "noradCatId": 42738
+    },
+    "julianDate": 2460963.5
+   },
+   "expect": {
+    "position.0": -23984553.90939699,
+    "position.1": 18296801.73879274,
+    "position.2": -24786812.33263135,
+    "velocity.0": -859.7364509798967,
+    "velocity.1": -717.6940431079724,
+    "velocity.2": 260.5364010717848,
+    "epoch": 2460963.5,
+    "reference_frame": 3,
+    "flags": 1
+   },
+   "band": {
+    "position": {
+     "abs": 0.5,
+     "rel": 0
+    },
+    "velocity": {
+     "abs": 0.0005,
+     "rel": 0
+    },
+    "time": {
+     "abs": 1e-9,
+     "rel": 0
+    }
+   },
+   "source": {
+    "kind": "reference-library",
+    "derivation": "US Space Force Sgp4Prop 9.1.1.0 (XP build) through its own Emscripten runtime, one satellite propagated from the epoch to this time, TEME; TEME -> ECEF by GMST (IAU 1982) with -omega x r.",
+    "generator": "vectors/tools/build-vectors.mjs",
+    "twoLine": [
+     "1 42738U 00001A   25278.00326389  .00000000  23407-1  64824-4 4  9999",
+     "2 42738  39.8203 246.8427 0748453 270.7630 357.7105  1.00252234    07"
+    ],
+    "temeKm": {
+     "minutes": 14395.299998670816,
+     "r": [
+      -29326.065747228404,
+      7072.0327976259105,
+      -24786.81233263135
+     ],
+     "v": [
+      -1.0130468239114954,
+      -3.1419237945229557,
+      0.2605364010717848
+     ]
+    }
+   }
   }
  ]
 }

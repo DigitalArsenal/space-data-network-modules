@@ -22,7 +22,7 @@ namespace sgp4xp {
 constexpr const char* kModuleName = "propagator/sgp4-xp";
 constexpr const char* kProviderId = "com.digitalarsenal.propagator.sgp4-xp";
 constexpr const char* kProduct =
-    "SDN propagator/sgp4-xp 0.2.0 over the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
+    "SDN propagator/sgp4-xp 0.2.1 over the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
 // States one request may write or read, over all its blocks.
 constexpr size_t kMaxStates = 500000;
 

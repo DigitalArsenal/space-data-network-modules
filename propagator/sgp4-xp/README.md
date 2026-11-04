@@ -11,7 +11,7 @@ ephemeris, and says which source it was.
 
 | | |
 |---|---|
-| Plugin id | `com.digitalarsenal.propagator.sgp4-xp` 0.1.1 |
+| Plugin id | `com.digitalarsenal.propagator.sgp4-xp` 0.2.1 |
 | Family, thread model | `propagator`, `wasi-sequential` |
 | Library | US Space Force Sgp4Prop WebAssembly 9.1.1.0 (Astro Standards v9.1), XP build, SHA-256 `9f061110...cbeb7` |
 | Artifact | `dist/isomorphic/module.wasm`, the one file the three runtimes load; imports WASI only |
@@ -61,16 +61,17 @@ anchors from the unmodified US Space Force runtime across LEO, sun-synchronous, 
 the vis-viva and period invariants, two-body statements, are declared not applicable. `space-data-module
 parity-gate` finds the module satisfied in the browser, Docker WasmEdge and native WasmEdge lanes.
 
-**Call order (0.1.1).** The library carries integration state from one call to the next. Continuing away from the
-epoch reproduces the fresh epoch-to-time propagation byte for byte; any other request does not (a repeated instant
-came back 243 m off, a return towards the epoch up to 18 m). Each entity keeps its satellite while calls move away
-from its epoch, returns the stored state for a repeated instant, and otherwise starts again at its epoch. Removing
-one of several live XP satellites crashes the library itself (out-of-bounds access inside `Sgp4RemoveSats`,
-reproduced on its own runtime), so satellites leave only by restoring the library to its starting state, which also
-returns the memory it keeps of each XP satellite. Sequential calls cost about 4 µs; 100,000 calls do not grow
-memory. One residual remains: the deep-space integrator's state is shared between satellites, so interleaving MEO or
-highly eccentric sets can move a result from the fresh evaluation (in 300 random-order calls, 4 differed: three by
-under 1 µm, one by 6.3 m).
+**Every state from the epoch.** An SGP4-XP satellite in the library carries its integrator from one request to the
+next, and a request less than one integrator step (up to about 90 minutes on geosynchronous sets) past the previous
+one comes back off: flown on one satellite, a 5-minute grid of real geosynchronous sets departed from the
+epoch-to-time propagation by up to 0.81 km, while Sgp4Prop 9.9 and 9.1.1.0 run one time per satellite agreed with it
+to the bit (`tests/flight-parity-real-sets.e2e.mjs`; times an hour or more apart, as in the battery, did not depart).
+So every SGP4-XP state is the library's propagation from the epoch: a new satellite before every time after the
+first. SGP4 sets (type 0) continue, their states the same doubles either way. The library holds one satellite at a
+time (removing one of several live XP satellites crashes it, out-of-bounds access inside `Sgp4RemoveSats`), so the
+propagator ABI takes a satellite for each call and returns the stored state for a repeated instant. The cost grows
+with the distance from the epoch: a 7-day grid of 2,016 states takes 1.4 s for a geosynchronous or a low set (10 to
+23 ms when the satellite continued).
 
 ## The digits of two-line text
 
@@ -111,13 +112,12 @@ this module and through the library with its own JavaScript runtime, and require
 the same double. `tests/parity.mjs` runs 24 requests through the SDK's parity gate in the browser, native WasmEdge and
 Docker WasmEdge and requires byte-identical outputs (`conformance/parity.json`).
 
-The library keeps about 29 KB of every SGP4-XP satellite it has propagated, however the satellite is removed (28.6 KB
+The library keeps about 29 KB of every SGP4-XP satellite it has initialised, however the satellite is removed (28.6 KB
 each with the library's own runtime; none for SGP4 sets). A fit propagates thousands, so when no satellite is live
 the module restores the library's memory to its state at start every 256 of them (`Library::recycle`,
 `src/ussf.hpp`): the library keeps everything in that memory, its one global is the stack pointer. The parity test
-covers it (it also passes with a restoration before every satellite). A set that stays in the propagator ABI's element
-table keeps its memory until `plugin_destroy`, and the library's memory is limited to 2 GiB: 40,000 SGP4-XP sets ingest
-(about 15 KB each), 100,000 are refused with `element-set-refused`.
+covers it (it also passes with a restoration before every satellite). The propagator ABI's element table holds no
+satellite: up to 99,999 sets ingest (the library's satellite numbers), more are refused with `element-set-refused`.
 
 ## Accuracy against SDN's SGP4
 
@@ -157,7 +157,7 @@ this repository carries the row.
 | `src/sds.hpp`, `src/records.hpp`, `src/module.cpp` | the SDS records; the `$OCM` of a set and of a fit; the methods and the ABI |
 | `build.mjs`, `engine-source.mjs`, `join-ussf.mjs` | the build, the engine as one translation unit, the join |
 | `third_party/ussf-sgp4/` | the library as released, its JavaScript runtime (a test oracle only), Agreement, release notes, notice |
-| `tests/` | `ocm-record.e2e.mjs` (the `$OCM` against the 0.1.1 fixtures, refusals), `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
+| `tests/` | `flight-parity-real-sets.e2e.mjs` (190 real GE and IG sets against the oracle's 9.1.1.0, every lead to day 7; `fixtures/geo-real-sets.json`), `ocm-record.e2e.mjs` (the `$OCM` against the 0.1.1 fixtures, refusals), `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
 | `tests/measure/` | the measurement of SGP4-XP against SDN's SGP4 on ISS, Starlink, GNSS and laser-ranged satellites: [README](tests/measure/README.md), `run.mjs`, `tables.mjs`, `resummarize.mjs`, `results/` |
 
 ## Commands

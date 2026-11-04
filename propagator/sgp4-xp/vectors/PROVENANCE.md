@@ -8,6 +8,7 @@ anchors `space-data-module conformance propagator` adjudicates for the propagato
 | | |
 | --- | --- |
 | Element sets | The SGP4-XP (ephemeris type 4) sets of the test battery (`tests/lib/tle.mjs`, seed 20261012): LEO, sun-synchronous, MEO, GEO and a highly eccentric orbit |
+| Real sets | Four Space Force SGP4-XP fits of the eclipse season (`tests/fixtures/geo-real-sets.json`): two geosynchronous (BeiDou C018, C231) and two inclined geosynchronous (BeiDou C005, QZSS J002), at day 1 and day 7 after their window's cutoff; each state the library's propagation from the epoch (one satellite per time), its TEME state in `source.temeKm`, which `tests/flight-parity-real-sets.e2e.mjs` flies on the oracle's 9.1.1.0 and 9.9 legs |
 | Expected states | The US Space Force library (`third_party/ussf-sgp4`, Sgp4Prop 9.1.1.0 XP build) through its own, unmodified Emscripten runtime, at 0, 90 and 1,440 minutes from each epoch, TEME km and km/s |
 | Frame | TEME turned to Earth-fixed by GMST (IAU 1982), the conformance runner's own function, with the −ω × r velocity term; no polar motion, as the module |
 | Record mapping | `bstar` carries BTERM and `meanMotionDdot` carries AGOM (m²/kg), as in the SDS `$OMM` for SGP4-XP |
