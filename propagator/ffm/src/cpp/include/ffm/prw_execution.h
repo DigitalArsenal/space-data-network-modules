@@ -25,4 +25,10 @@ struct PrwEnvironment {
 bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size_t kernelSize,
                       const PrwEnvironment& environment,
                       std::vector<uint8_t>& output,std::string& error);
+// propagate_oem: the EXECUTION_REQUEST executed as invoke executes it, its
+// samples the $PCF OUTPUT epochs (UTC) and its arc ending at the last of them,
+// written as one plain $OEM (km, km/s, UTC, the request's axes).
+bool processPrwOem(const uint8_t* data,size_t size,const uint8_t* configuration,size_t configurationSize,
+                   const uint8_t* kernel,size_t kernelSize,const PrwEnvironment& environment,
+                   std::vector<uint8_t>& output,std::string& error);
 }

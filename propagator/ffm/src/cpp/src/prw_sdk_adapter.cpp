@@ -40,40 +40,55 @@ int resident(const char* method, const char* port) {
     plugin_set_yielded(yielded);return 0;
   }
 }
+// The execution inputs beside the request, at most one record a port: the
+// kernel and the environment. second_trajectory is read when the method has it.
+const char* executionInputs(bool secondTrajectory,ffm::PrwEnvironment& environment,const plugin_input_frame_t*& kernel) {
+  static const char* const once[][2]={{"gravity_field","invalid-gravity-field: Supply one gravity_field record."},
+    {"second_trajectory","invalid-second-trajectory: Supply one second_trajectory record."},
+    {"density_correction","invalid-density-correction: Supply one density_correction record."},
+    {"earth_orientation","invalid-earth-orientation: Supply one earth_orientation record."},
+    {"space_weather","invalid-space-weather: Supply one space_weather record."},
+    {"jb2008_indices","invalid-jb2008-indices: Supply one jb2008_indices record."}};
+  for(const auto& port:once)if(plugin_find_input_index(port[0],1)>=0)return port[1];
+  const auto frame=[](const char* port){const int i=plugin_find_input_index(port,0);return i<0?nullptr:plugin_get_input_frame(i);};
+  const auto bind=[&](const char* port,const uint8_t*& data,size_t& size){if(const auto* f=frame(port)){data=f->payload;size=f->payload_length;}};
+  if(secondTrajectory)bind("second_trajectory",environment.secondTrajectory,environment.secondTrajectorySize);
+  bind("gravity_field",environment.gravityField,environment.gravityFieldSize);
+  bind("density_correction",environment.densityCorrection,environment.densityCorrectionSize);
+  bind("earth_orientation",environment.earthOrientation,environment.earthOrientationSize);
+  bind("space_weather",environment.spaceWeather,environment.spaceWeatherSize);
+  bind("jb2008_indices",environment.jb2008Indices,environment.jb2008IndicesSize);
+  kernel=frame("kernel");
+  return nullptr;
+}
 }
 extern "C" int invoke(void) {
-  const int index=plugin_find_input_index("request",0);const int kernelIndex=plugin_find_input_index("kernel",0);
-  const int eopIndex=plugin_find_input_index("earth_orientation",0);const int weatherIndex=plugin_find_input_index("space_weather",0);
-  const int correctionIndex=plugin_find_input_index("density_correction",0);
-  const int jb2008Index=plugin_find_input_index("jb2008_indices",0);
-  const int secondIndex=plugin_find_input_index("second_trajectory",0);
-  const int fieldIndex=plugin_find_input_index("gravity_field",0);
-  if(plugin_find_input_index("gravity_field",1)>=0)return fail("invalid-gravity-field: Supply one gravity_field record.");
-  if(plugin_find_input_index("second_trajectory",1)>=0)return fail("invalid-second-trajectory: Supply one second_trajectory record.");
-  if(plugin_find_input_index("density_correction",1)>=0)return fail("invalid-density-correction: Supply one density_correction record.");
+  const int index=plugin_find_input_index("request",0);
+  ffm::PrwEnvironment environment;const plugin_input_frame_t* kernel=nullptr;
+  if(const char* refusal=executionInputs(true,environment,kernel))return fail(refusal);
   if(index<0)return fail("invalid-request: missing request");
-  if(plugin_find_input_index("earth_orientation",1)>=0)return fail("invalid-earth-orientation: Supply one earth_orientation record.");
-  if(plugin_find_input_index("space_weather",1)>=0)return fail("invalid-space-weather: Supply one space_weather record.");
-  if(plugin_find_input_index("jb2008_indices",1)>=0)return fail("invalid-jb2008-indices: Supply one jb2008_indices record.");
-  const auto* request=plugin_get_input_frame(index);const auto* kernel=kernelIndex<0?nullptr:plugin_get_input_frame(kernelIndex);
-  const auto* eop=eopIndex<0?nullptr:plugin_get_input_frame(eopIndex);const auto* weather=weatherIndex<0?nullptr:plugin_get_input_frame(weatherIndex);
-  const auto* jb2008=jb2008Index<0?nullptr:plugin_get_input_frame(jb2008Index);
-  const auto* correction=correctionIndex<0?nullptr:plugin_get_input_frame(correctionIndex);
-  const auto* second=secondIndex<0?nullptr:plugin_get_input_frame(secondIndex);
-  const auto* field=fieldIndex<0?nullptr:plugin_get_input_frame(fieldIndex);
-  ffm::PrwEnvironment environment;
-  if(second){environment.secondTrajectory=second->payload;environment.secondTrajectorySize=second->payload_length;}
-  if(field){environment.gravityField=field->payload;environment.gravityFieldSize=field->payload_length;}
-  if(correction){environment.densityCorrection=correction->payload;environment.densityCorrectionSize=correction->payload_length;}
-  if(eop){environment.earthOrientation=eop->payload;environment.earthOrientationSize=eop->payload_length;}
-  if(weather){environment.spaceWeather=weather->payload;environment.spaceWeatherSize=weather->payload_length;}
-  if(jb2008){environment.jb2008Indices=jb2008->payload;environment.jb2008IndicesSize=jb2008->payload_length;}
+  const auto* request=plugin_get_input_frame(index);
   std::vector<uint8_t> output;std::string error;
-  {
-    if(!ffm::processPrwInvoke(request->payload,request->payload_length,kernel?kernel->payload:nullptr,kernel?kernel->payload_length:0,
-                               environment,output,error))return fail(error);
-    return emit("response",output,request->sequence,true);
-  }
+  if(!ffm::processPrwInvoke(request->payload,request->payload_length,kernel?kernel->payload:nullptr,kernel?kernel->payload_length:0,
+                             environment,output,error))return fail(error);
+  return emit("response",output,request->sequence,true);
+}
+// The request's execution at the $PCF OUTPUT epochs, written as one $OEM.
+extern "C" int propagate_oem(void) {
+  const int index=plugin_find_input_index("request",0),configurationIndex=plugin_find_input_index("configuration",0);
+  ffm::PrwEnvironment environment;const plugin_input_frame_t* kernel=nullptr;
+  if(const char* refusal=executionInputs(false,environment,kernel))return fail(refusal);
+  if(index<0||plugin_find_input_index("request",1)>=0)return fail("invalid-request: Supply one request record.");
+  if(configurationIndex<0)return fail("output-unspecified: propagate_oem writes the $PCF OUTPUT epochs; the configuration port carries none.");
+  if(plugin_find_input_index("configuration",1)>=0)return fail("invalid-configuration: Supply one configuration record.");
+  const auto* request=plugin_get_input_frame(index);const auto* configuration=plugin_get_input_frame(configurationIndex);
+  std::vector<uint8_t> output;std::string error;
+  if(!ffm::processPrwOem(request->payload,request->payload_length,configuration->payload,configuration->payload_length,
+                         kernel?kernel->payload:nullptr,kernel?kernel->payload_length:0,environment,output,error))return fail(error);
+  const int out=plugin_push_output_typed("ephemeris","OEM.fbs","$OEM",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"OEM",0,0,0,output.data(),output.size());
+  if(out<0)return fail("output-capacity: SDK refused the $OEM");
+  plugin_set_output_stream_frame(out,request->sequence,true);
+  return 0;
 }
 extern "C" int ingest_state(void){return resident("ingest_state","state");}
 extern "C" int ingest_state_gravity_only(void){return resident("ingest_state_gravity_only","state");}

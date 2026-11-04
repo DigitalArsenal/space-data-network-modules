@@ -19,6 +19,7 @@
 #endif
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <limits>
 extern "C" {
 #include "nrlmsise-00.h"
@@ -319,5 +320,122 @@ bool processPrwInvoke(const uint8_t* data,size_t size,const uint8_t* kernel,size
     else if(request->VERSION_QUERY()){response.VERSION_RESULT=std::make_unique<PRWVersionResultT>();response.VERSION_RESULT->VERSION=FFM_MODULE_VERSION;response.VERSION_RESULT->MODULE_ID=FFM_MODULE_ID;ok=true;}
     else return prwError(error,"invalid-prw-arm: invoke requires execution, ephemeris, atmosphere or version query.");
     if(ok)encodePrw(response,output);return ok;
+}
+namespace {
+// The most states one propagate_oem call writes: the execution's sample limit.
+constexpr size_t kMaximumOemStates=10000;
+// One OUTPUT epoch, ISO 8601 UTC ("Z" or no designator), as seconds of the
+// UTC label since 2000-01-01T12:00:00. A UTC offset or a time scale written
+// after the time is not UTC.
+bool outputEpoch(const flatbuffers::String* text,TTEpoch& out,std::string& error) {
+    const std::string iso=text?text->str():std::string();
+    size_t at=19;
+    if(at<iso.size()&&iso[at]=='.')for(++at;at<iso.size()&&iso[at]>='0'&&iso[at]<='9';++at){}
+    const std::string zone=at<iso.size()?iso.substr(at):std::string();
+    if(!zone.empty()&&zone!="Z"&&(zone[0]=='+'||zone[0]=='-'||zone[0]==' '||std::isalpha(static_cast<unsigned char>(zone[0]))))
+        return prwError(error,("time-system-not-utc: OUTPUT epoch "+iso+" is not ISO 8601 UTC.").c_str());
+    double whole=0,fraction=0,jd=0;
+    if(!parseIsoSeconds(iso,whole,fraction,jd,error))return false;
+    out=normalizeTT(whole,fraction);return true;
+}
+// The OUTPUT epochs: EPOCHS, or START_TIME to STOP_TIME at STEP_SECONDS
+// (the last at or before STOP_TIME, as sdn-ap propagate_epochs counts them).
+bool outputGrid(const PCFOutput* output,std::vector<TTEpoch>& grid,std::string& error) {
+    if(!output)return prwError(error,"output-unspecified: The $PCF carries no OUTPUT.");
+    if(output->EPOCHS()&&output->EPOCHS()->size()) {
+        for(const auto* text:*output->EPOCHS()) {
+            TTEpoch t;if(!outputEpoch(text,t,error))return false;
+            if(!grid.empty()&&!(elapsedSeconds(grid.back(),t)>0))return prwError(error,"invalid-configuration: OUTPUT.EPOCHS must ascend.");
+            grid.push_back(t);
+            if(grid.size()>kMaximumOemStates||grid.size()>output->MAXIMUM_STATES())break;
+        }
+    } else {
+        if(!output->START_TIME()||!output->START_TIME()->size()||!output->STOP_TIME()||!output->STOP_TIME()->size())
+            return prwError(error,"output-unspecified: OUTPUT names EPOCHS, or START_TIME and STOP_TIME.");
+        TTEpoch start,stop;if(!outputEpoch(output->START_TIME(),start,error)||!outputEpoch(output->STOP_TIME(),stop,error))return false;
+        const double step=output->STEP_SECONDS();
+        const double span=elapsedSeconds(start,stop);
+        if(!std::isfinite(step)||!(step>0)||!(span>=0))return prwError(error,"invalid-configuration: OUTPUT.STEP_SECONDS must be positive and STOP_TIME at or after START_TIME.");
+        const double count=std::floor(span/step+1e-9)+1;
+        if(count>double(kMaximumOemStates)||count>double(output->MAXIMUM_STATES()))
+            return prwError(error,("too-many-states: OUTPUT asks for more than "+std::to_string(std::min<size_t>(kMaximumOemStates,output->MAXIMUM_STATES()))+" states.").c_str());
+        for(size_t k=0;k<size_t(count);++k)grid.push_back(normalizeTT(start.whole,start.fraction+double(k)*step));
+    }
+    if(grid.size()>kMaximumOemStates||grid.size()>output->MAXIMUM_STATES())
+        return prwError(error,("too-many-states: OUTPUT asks for more than "+std::to_string(std::min<size_t>(kMaximumOemStates,output->MAXIMUM_STATES()))+" states.").c_str());
+    return true;
+}
+// The $PCF: OUTPUT only; the dynamics are the request's.
+bool readOutputConfiguration(const uint8_t* data,size_t size,const PCF*& pcf,std::string& error) {
+    if(data&&size>=12&&flatbuffers::ReadScalar<uint32_t>(data)==size-4&&SizePrefixedPCFBufferHasIdentifier(data)){data+=4;size-=4;}
+    flatbuffers::Verifier verifier(data,size);
+    if(!data||size<8||!PCFBufferHasIdentifier(data)||!VerifyPCFBuffer(verifier))
+        return prwError(error,"invalid-configuration: The configuration is not an SDS $PCF (plain or size-prefixed).");
+    pcf=GetPCF(data);
+    if(pcf->THEORY()!=pcfTheory::UNSPECIFIED&&pcf->THEORY()!=pcfTheory::FFM)
+        return prwError(error,(std::string("configuration-refused:THEORY: propagate_oem flies FFM, not ")+EnumNamepcfTheory(pcf->THEORY())+".").c_str());
+    const std::pair<bool,const char*> others[]={{pcf->INTEGRATOR()!=nullptr,"INTEGRATOR"},{pcf->FORCES()!=nullptr,"FORCES"},
+        {pcf->FIT()!=nullptr,"FIT"},{pcf->EVENTS()!=nullptr,"EVENTS"},{pcf->EPOCH_STORE()!=nullptr,"EPOCH_STORE"}};
+    for(const auto& table:others)if(table.first)
+        return prwError(error,(std::string("configuration-refused:")+table.second+": The request's EXECUTION_REQUEST carries the dynamics; the $PCF names OUTPUT only.").c_str());
+    return true;
+}
+} // namespace
+bool processPrwOem(const uint8_t* data,size_t size,const uint8_t* configuration,size_t configurationSize,
+                   const uint8_t* kernel,size_t kernelSize,const PrwEnvironment& environment,
+                   std::vector<uint8_t>& output,std::string& error) {
+    const PRW* root=nullptr;if(!verifyPrw(data,size,root,error))return false;
+    const auto* request=root->EXECUTION_REQUEST();
+    if(!request)return prwError(error,"invalid-prw-arm: propagate_oem requires EXECUTION_REQUEST.");
+    if(request->SAMPLE_EPOCHS()&&request->SAMPLE_EPOCHS()->size())
+        return prwError(error,"invalid-request: The $PCF OUTPUT names the epochs; the request carries no SAMPLE_EPOCHS.");
+    if(request->EVENTS()&&request->EVENTS()->size())return prwError(error,"invalid-request: propagate_oem locates no EVENTS.");
+    const PCF* pcf=nullptr;if(!readOutputConfiguration(configuration,configurationSize,pcf,error))return false;
+    // The states leave in the request's axes: OUTPUT.FRAME names them.
+    const auto frame=pcf->OUTPUT()?pcf->OUTPUT()->FRAME():pcfOutputFrame::UNSPECIFIED;
+    const auto* axes=request->INITIAL()&&request->INITIAL()->COORDINATE_SYSTEM()?request->INITIAL()->COORDINATE_SYSTEM():nullptr;
+    const bool gcrf=frame==pcfOutputFrame::GCRF&&axes&&axes->AXIS_TYPE()==rfmAxisType::ICRF;
+    const bool eme2000=frame==pcfOutputFrame::EME2000&&axes&&axes->AXIS_TYPE()==rfmAxisType::MEAN_EQUATOR_EQUINOX_J2000;
+    if(pcf->OUTPUT()&&!gcrf&&!eme2000)
+        return prwError(error,(std::string("frame-unsupported:")+EnumNamepcfOutputFrame(frame)+": OUTPUT.FRAME is GCRF for a request in ICRF axes or EME2000 for one in mean J2000 axes.").c_str());
+    if(request->FORCES()&&request->FORCES()->CENTRAL_BODY_NAIF_ID()!=399)
+        return prwError(error,"unsupported-center: propagate_oem writes Earth-centered ephemerides.");
+    std::vector<TTEpoch> grid;
+    if(!outputGrid(pcf->OUTPUT(),grid,error))return false;
+    // The request with the grid as its samples, its arc ending at the last.
+    std::vector<std::string> epochs;epochs.reserve(grid.size());
+    const auto utc=[](const std::string& iso){auto t=std::make_unique<TIMInstantT>();t->TIME_SYSTEM=timingStandard::UTC;t->EPOCH_FORMAT=timEpochRepresentation::ISO8601;t->ISO8601=iso;return t;};
+    PRWT carried;carried.EXECUTION_REQUEST.reset(request->UnPack());
+    for(const auto& t:grid){epochs.push_back(formatIsoSeconds(t));carried.EXECUTION_REQUEST->SAMPLE_EPOCHS.push_back(utc(epochs.back()));}
+    carried.EXECUTION_REQUEST->TARGET_EPOCH=utc(epochs.back());
+    std::vector<uint8_t> bytes,response;encodePrw(carried,bytes);
+    if(!processPrwInvoke(bytes.data(),bytes.size(),kernel,kernelSize,environment,response,error))return false;
+    const auto* result=GetSizePrefixedPRW(response.data())->EXECUTION_RESULT();
+    if(!result||!result->SAMPLES()||result->SAMPLES()->size()!=grid.size())
+        return prwError(error,"propagation-failed: The execution returned no state at every OUTPUT epoch.");
+    // The $OEM: the samples' states (meters) in km and km/s at their UTC epochs.
+    auto block=std::make_unique<ephemerisDataBlockT>();
+    const auto* initial=request->INITIAL();
+    if(initial->CATALOG_NUMBER()||initial->OBJECT_ID()) {
+        block->OBJECT=std::make_unique<CATT>();block->OBJECT->NORAD_CAT_ID=initial->CATALOG_NUMBER();
+        if(initial->OBJECT_ID())block->OBJECT->OBJECT_ID=initial->OBJECT_ID()->str();
+    }
+    block->CENTER_NAME="EARTH";block->CENTER_NAIF_ID=399;
+    block->REFERENCE_FRAME=std::make_unique<RFMT>();block->REFERENCE_FRAME->NAME=gcrf?"GCRF":"EME2000";
+    CelestialFrameWrapperT celestial;celestial.frame=gcrf?CelestialFrame::GCRF:CelestialFrame::EME2000;
+    block->REFERENCE_FRAME->REFERENCE_FRAME.Set(std::move(celestial));
+    block->TIME_SYSTEM=timingStandard::UTC;block->START_TIME=epochs.front();block->STOP_TIME=epochs.back();
+    block->STATE_VECTOR_SIZE=6;
+    for(size_t k=0;k<grid.size();++k) {
+        const auto& s=*result->SAMPLES()->Get(k)->STATE()->STATE();
+        auto line=std::make_unique<ephemerisDataLineT>();line->EPOCH=epochs[k];
+        line->X=s.POSITION()->X()/1000;line->Y=s.POSITION()->Y()/1000;line->Z=s.POSITION()->Z()/1000;
+        line->X_DOT=s.VELOCITY()->X()/1000;line->Y_DOT=s.VELOCITY()->Y()/1000;line->Z_DOT=s.VELOCITY()->Z()/1000;
+        block->EPHEMERIS_DATA_LINES.push_back(std::move(line));
+    }
+    OEMT oem;oem.CCSDS_OEM_VERS=3.0;oem.ORIGINATOR="SDN";oem.EPHEMERIS_DATA_BLOCK.push_back(std::move(block));
+    flatbuffers::FlatBufferBuilder builder;FinishOEMBuffer(builder,OEM::Pack(builder,&oem));
+    output.assign(builder.GetBufferPointer(),builder.GetBufferPointer()+builder.GetSize());
+    return true;
 }
 } // namespace ffm
