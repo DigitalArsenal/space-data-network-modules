@@ -1,0 +1,312 @@
+{
+  "pluginId": "org.sdn.flows.observation-od.laser-od",
+  "name": "Laser orbit determination",
+  "version": "0.1.0",
+  "description": "Routes ILRS normal points ($TDM), station coordinates ($GST) and the Earth orientation through analysis/estimation fit_batch and propagator/ffm invoke until the estimator converges, and emits the fit as one Cartesian $OCM with FIT_STATISTICS and PVN. Stateless: each step call either asks for a propagation or an estimator round, or finishes. The estimator solves and the FFM propagates; the node rotates the stations to GCRF with foundation/frames' IAU 2006/2000A chain. Refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>.",
+  "pluginFamily": "analysis",
+  "threadModel": "wasi-sequential",
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Each call is one bounded routing step over its inputs; the estimator and the propagator are separate modules the host runs."
+  },
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "schemasUsed": [
+    {
+      "schemaName": "TDM.fbs",
+      "fileIdentifier": "$TDM",
+      "rootTypeName": "TDM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GST.fbs",
+      "fileIdentifier": "$GST",
+      "rootTypeName": "GST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "Estimation.fbs",
+      "fileIdentifier": "$EST",
+      "rootTypeName": "EstimationEnvelope",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "buildArtifacts": [
+    {
+      "artifactId": "laser-od-isomorphic",
+      "kind": "wasm",
+      "path": "dist/isomorphic/module.wasm",
+      "target": "browser,wasmedge"
+    }
+  ],
+  "abiVersion": 1,
+  "methods": [
+    {
+      "methodId": "step",
+      "displayName": "One routing step of the laser orbit determination",
+      "inputPorts": [
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The normal points: one $TDM per pass from data-source/ilrs-crd-source read_crd (LASER_RANGE in metres, UTC, TIMETAG_REF TRANSMIT or RECEIVE, OBSERVER_ID the station occupancy designator, meteorology rows)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The normal points: one $TDM per pass from data-source/ilrs-crd-source read_crd (LASER_RANGE in metres, UTC, TIMETAG_REF TRANSMIT or RECEIVE, OBSERVER_ID the station occupancy designator, meteorology rows)."
+        },
+        {
+          "portId": "stations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-gst",
+              "allowedTypes": [
+                {
+                  "schemaName": "GST.fbs",
+                  "fileIdentifier": "$GST",
+                  "rootTypeName": "GST",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The station coordinates: one $GST per pad from data-source/ilrs-station-coordinates read_sinex (ITRF position and eccentricity, CDP_NUMBER the pad). Every pad of the normal points needs one."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": false,
+          "description": "The station coordinates: one $GST per pad from data-source/ilrs-station-coordinates read_sinex (ITRF position and eccentricity, CDP_NUMBER the pad). Every pad of the normal points needs one."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "prw-earth-orientation",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The $PRW EARTH_ORIENTATION record propagator/ffm takes ($EOP rows covering the arc): the station rotation uses the same rows."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $PRW EARTH_ORIENTATION record propagator/ffm takes ($EOP rows covering the arc): the station rotation uses the same rows."
+        },
+        {
+          "portId": "execution",
+          "acceptedTypeSets": [
+            {
+              "setId": "prw-execution-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A $PRW EXECUTION_REQUEST: INITIAL the first guess (GCRF, UTC), TARGET_EPOCH the estimate's epoch (ISO 8601 UTC), INTEGRATOR and FORCES the dynamics propagator/ffm runs, DYNAMIC_PARAMETERS the solve-for parameters (DRAG_AREA_OVER_MASS, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION) with their first values in FORCES."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "A $PRW EXECUTION_REQUEST: INITIAL the first guess (GCRF, UTC), TARGET_EPOCH the estimate's epoch (ISO 8601 UTC), INTEGRATOR and FORCES the dynamics propagator/ffm runs, DYNAMIC_PARAMETERS the solve-for parameters (DRAG_AREA_OVER_MASS, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION) with their first values in FORCES."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "ModuleConfig, optional, numbers: rangeSigmaM (0.05), minimumArcHours (24), maximumIterations (20), editThreshold (5), correctionTolerance (0.01)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig, optional, numbers: rangeSigmaM (0.05), minimumArcHours (24), maximumIterations (20), editThreshold (5), correctionTolerance (0.01)."
+        },
+        {
+          "portId": "estimation",
+          "acceptedTypeSets": [
+            {
+              "setId": "estimation-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "Estimation.fbs",
+                  "fileIdentifier": "$EST",
+                  "rootTypeName": "EstimationEnvelope",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The $EST envelope this node emitted last; absent on the first two calls."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The $EST envelope this node emitted last; absent on the first two calls."
+        },
+        {
+          "portId": "result",
+          "acceptedTypeSets": [
+            {
+              "setId": "estimation-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "Estimation.fbs",
+                  "fileIdentifier": "$EST",
+                  "rootTypeName": "EstimationEnvelope",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "analysis/estimation fit_batch's $EST answer to estimation."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "analysis/estimation fit_batch's $EST answer to estimation."
+        },
+        {
+          "portId": "samples",
+          "acceptedTypeSets": [
+            {
+              "setId": "prw-execution-result",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "propagator/ffm invoke's $PRW EXECUTION_RESULT for this node's last propagation."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "propagator/ffm invoke's $PRW EXECUTION_RESULT for this node's last propagation."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "propagation",
+          "acceptedTypeSets": [
+            {
+              "setId": "prw-execution-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "A $PRW EXECUTION_REQUEST for propagator/ffm invoke (with its kernel and earth_orientation): the first guess to every receive epoch, or a fit round's seed and parameters to every query epoch with the state transition matrix."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "A $PRW EXECUTION_REQUEST for propagator/ffm invoke (with its kernel and earth_orientation): the first guess to every receive epoch, or a fit round's seed and parameters to every query epoch with the state transition matrix."
+        },
+        {
+          "portId": "estimation",
+          "acceptedTypeSets": [
+            {
+              "setId": "estimation-envelope",
+              "allowedTypes": [
+                {
+                  "schemaName": "Estimation.fbs",
+                  "fileIdentifier": "$EST",
+                  "rootTypeName": "EstimationEnvelope",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The $EST envelope for analysis/estimation fit_batch: the request (one LASER_RANGE observation per normal point with the station's GCRF state at its receive instant, two-way light time, Marini-Murray troposphere) and every propagation answer so far."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The $EST envelope for analysis/estimation fit_batch: the request (one LASER_RANGE observation per normal point with the station's GCRF state at its receive instant, two-way light time, Marini-Murray troposphere) and every propagation answer so far."
+        },
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The converged fit as one Cartesian $OCM at TARGET_EPOCH: GCRF state (km, km/s), formal covariance, ORBIT_DETERMINATION with FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES and OD_OBSERVATIONS_USED the normal points used, ITERATIONS, CONVERGED, FIT_START, FIT_STOP) and PROVENANCE (SOURCE_KIND Observation, ORIGINATOR ILRS, LICENSE_CLASS Reproducible)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The converged fit as one Cartesian $OCM at TARGET_EPOCH: GCRF state (km, km/s), formal covariance, ORBIT_DETERMINATION with FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES and OD_OBSERVATIONS_USED the normal points used, ITERATIONS, CONVERGED, FIT_START, FIT_STOP) and PROVENANCE (SOURCE_KIND Observation, ORIGINATOR ILRS, LICENSE_CLASS Reproducible)."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
