@@ -74,6 +74,30 @@ inline flatbuffers::Offset<PVN> producer_pvn(flatbuffers::FlatBufferBuilder& fbb
   return b.Finish();
 }
 
+/// A copy of a PVN into `fbb` (every field), or 0 for none.
+inline flatbuffers::Offset<PVN> copy_pvn(flatbuffers::FlatBufferBuilder& fbb, const PVN* v) {
+  if (v == nullptr) return 0;
+  auto str = [&](const flatbuffers::String* t) { return t == nullptr ? flatbuffers::Offset<flatbuffers::String>(0) : fbb.CreateString(t); };
+  const auto source_id = str(v->SOURCE_ID()), originator = str(v->ORIGINATOR()), provider = str(v->PROVIDER_ID()), producer = str(v->PRODUCER());
+  const auto license = str(v->LICENSE_ID()), lineage = str(v->LINEAGE()), url = str(v->SOURCE_URL()), version = str(v->SOURCE_VERSION());
+  const auto retrieved = str(v->RETRIEVED_AT()), sha = str(v->SOURCE_SHA256());
+  PVNBuilder b(fbb);
+  if (!source_id.IsNull()) b.add_SOURCE_ID(source_id);
+  b.add_SOURCE_KIND(v->SOURCE_KIND());
+  if (!originator.IsNull()) b.add_ORIGINATOR(originator);
+  if (!provider.IsNull()) b.add_PROVIDER_ID(provider);
+  if (!producer.IsNull()) b.add_PRODUCER(producer);
+  b.add_LICENSE_CLASS(v->LICENSE_CLASS());
+  if (!license.IsNull()) b.add_LICENSE_ID(license);
+  if (!lineage.IsNull()) b.add_LINEAGE(lineage);
+  if (!url.IsNull()) b.add_SOURCE_URL(url);
+  if (!version.IsNull()) b.add_SOURCE_VERSION(version);
+  if (!retrieved.IsNull()) b.add_RETRIEVED_AT(retrieved);
+  if (!sha.IsNull()) b.add_SOURCE_SHA256(sha);
+  b.add_SOURCE_BYTES(v->SOURCE_BYTES());
+  return b.Finish();
+}
+
 /// The $SPW rows of a record: DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG and F107_DATA_TYPE (OBS written too).
 inline flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SPW>>> rows_of(flatbuffers::FlatBufferBuilder& fbb, const std::vector<atm::SpwDay>& rows) {
   std::vector<flatbuffers::Offset<SPW>> out;
@@ -223,6 +247,240 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
   b.add_MEAN_ELEMENTS(mean);
   FinishOCMBuffer(fbb, b.Finish());
 }
+
+/// A verified plain view of an $OCM given plain or size-prefixed (a record cut from a size-prefixed stream is aligned to
+/// its prefix, not to its own start), or nullptr.
+inline const OCM* view(const uint8_t* p, uint32_t n) {
+  if (!plain_view(p, n, "$OCM")) return nullptr;
+  flatbuffers::Verifier::Options vopt;
+  vopt.check_alignment = false;
+  flatbuffers::Verifier v(p, n, vopt);
+  return VerifyOCMBuffer(v) ? GetOCM(p) : nullptr;
+}
+
+/// The identity of a record.
+inline Identity identity_of(const OCM* o) {
+  Identity id;
+  if (const Metadata* m = o->METADATA()) {
+    id.norad = m->NORAD_CAT_ID();
+    if (m->INTERNATIONAL_DESIGNATOR() != nullptr) id.object_id = m->INTERNATIONAL_DESIGNATOR()->str();
+    if (m->OBJECT_NAME() != nullptr) id.object_name = m->OBJECT_NAME()->str();
+  }
+  if (o->HEADER() != nullptr && o->HEADER()->ORIGINATOR() != nullptr) id.originator = o->HEADER()->ORIGINATOR()->str();
+  return id;
+}
+
+/// The refusal of a record, by name (a flight's frames are refused before anything flies).
+inline int refuse(const char* code, const char* why) {
+  plugin_set_error(code, why);
+  return 3;
+}
+
+/// The frame of an RFM: 1 TEMEOFDATE (the celestial enumeration, or NAME TEMEOFDATE / TEME), 2 TEMEOFEPOCH (the custom
+/// enumeration or NAME), 0 anything else or a disagreement.
+inline int frame_kind(const RFM* f) {
+  if (f == nullptr) return 0;
+  int by_union = -1, by_name = -1;
+  if (f->REFERENCE_FRAME_type() == RFMUnion_CelestialFrameWrapper && f->REFERENCE_FRAME_as_CelestialFrameWrapper() != nullptr)
+    by_union = f->REFERENCE_FRAME_as_CelestialFrameWrapper()->frame() == CelestialFrame_TEMEOFDATE ? 1 : 0;
+  else if (f->REFERENCE_FRAME_type() == RFMUnion_CustomFrameWrapper && f->REFERENCE_FRAME_as_CustomFrameWrapper() != nullptr)
+    by_union = f->REFERENCE_FRAME_as_CustomFrameWrapper()->frame() == CustomFrame_TEMEOFEPOCH ? 2 : f->REFERENCE_FRAME_as_CustomFrameWrapper()->frame() == CustomFrame_TEME ? 1 : 0;
+  else if (f->REFERENCE_FRAME_type() != RFMUnion_NONE)
+    by_union = 0;
+  if (f->NAME() != nullptr && f->NAME()->size() > 0) {
+    const char* nm = f->NAME()->c_str();
+    by_name = oem::same_text(nm, "TEMEOFDATE") || oem::same_text(nm, "TEME") ? 1 : oem::same_text(nm, "TEMEOFEPOCH") ? 2 : 0;
+  }
+  if (by_union >= 0 && by_name >= 0 && by_union != by_name) return 0;
+  return by_union >= 0 ? by_union : by_name >= 0 ? by_name : 0;
+}
+
+/// One element set of an $OCM, decoded for flight: the row, its forces and the weather it flies on.
+struct Set {
+  ElementRow row{};
+  Forces forces{};
+  Weather weather;
+  Identity id;
+  int theory = 0;  ///< meanElementSource as written
+  const OCM* record = nullptr;
+};
+
+/// The record's daily rows (Perturbations.SPACE_WEATHER), ascending one per day: 0, or 3 refused by name.
+inline int rows_of(const Perturbations* pt, std::vector<atm::SpwDay>& rows) {
+  rows.clear();
+  if (pt->SPACE_WEATHER() == nullptr) return 0;
+  for (const SPW* r : *pt->SPACE_WEATHER()) {
+    atm::SpwDay d{};
+    if (!atm::spw_day(r, d)) return atm::fail_row(r);
+    if (!rows.empty() && d.mjd <= rows.back().mjd)
+      return atm::fail_day("weather-rows-invalid", d.date, "The record's SPACE_WEATHER rows repeat or go back a day: one row per UTC day, ascending.");
+    rows.push_back(d);
+  }
+  return 0;
+}
+
+/// Decodes one $OCM element set (plain or size-prefixed): 0 with `s` filled, or 3 with the named refusal set.
+inline int decode(const uint8_t* p, uint32_t n, Set& s) {
+  s = Set{};
+  const OCM* o = view(p, n);
+  if (o == nullptr) return refuse("invalid-ocm", "An 'ocm' payload is not a verifiable SDS $OCM.");
+  s.record = o;
+  if (o->CENTER_NAME() != nullptr && o->CENTER_NAME()->size() > 0 && !oem::same_text(o->CENTER_NAME()->c_str(), "EARTH"))
+    return refuse("unsupported-center", "An 'ocm' record is not centered on the Earth (CENTER_NAME); the theories here are geocentric.");
+  const OCMMeanElements* me = o->MEAN_ELEMENTS();
+  if (me == nullptr) return refuse("mean-elements-missing", "An 'ocm' record carries no MEAN_ELEMENTS: flight takes an element set.");
+  s.theory = me->MEAN_ELEMENT_THEORY();
+  if (s.theory == meanElementSource_UNSPECIFIED)
+    return refuse("mean-element-theory-unspecified", "MEAN_ELEMENT_THEORY is UNSPECIFIED: a set states its theory.");
+  if (s.theory != meanElementSource_SGP4 && s.theory != meanElementSource_SGP4XP && s.theory != meanElementSource_AP) {
+    char code[64];
+    const char* name = EnumNamemeanElementSource(static_cast<meanElementSource>(s.theory));
+    std::snprintf(code, sizeof code, "theory-not-flown:%s", name != nullptr && *name ? name : "UNKNOWN");
+    return refuse(code, "This module flies SGP4, SGP4XP and AP sets.");
+  }
+  ElementRow& row = s.row;
+  if (me->EPOCH() == nullptr || !omm::epoch(me->EPOCH()->c_str(), me->EPOCH()->size(), row.epoch_jd_whole, row.epoch_jd_frac))
+    return refuse("invalid-ocm", "MEAN_ELEMENTS.EPOCH is not an ISO 8601 UTC time.");
+  const bool sgp4 = s.theory == meanElementSource_SGP4;
+  row.theory = sgp4 ? kTheorySgp4 : kTheorySgp4Xp;
+  row.mean_motion_rev_day = me->MEAN_MOTION();
+  row.eccentricity = me->ECCENTRICITY();
+  row.inclination_deg = me->INCLINATION();
+  row.raan_deg = me->RA_OF_ASC_NODE();
+  row.arg_pericenter_deg = me->ARG_OF_PERICENTER();
+  row.mean_anomaly_deg = me->MEAN_ANOMALY();
+  if (sgp4) {
+    row.bstar = me->BSTAR();
+    row.mean_motion_dot = me->MEAN_MOTION_DOT();
+    row.mean_motion_ddot = me->MEAN_MOTION_DDOT();
+    if (me->BTERM() != 0.0 || me->AGOM() != 0.0) return refuse("elements-other-theory", "An SGP4 set carries BTERM or AGOM (SGP4XP's terms).");
+  } else {
+    row.bterm = me->BTERM();
+    row.agom = me->AGOM();
+    if (me->BSTAR() != 0.0 || me->MEAN_MOTION_DOT() != 0.0 || me->MEAN_MOTION_DDOT() != 0.0)
+      return refuse("elements-other-theory", "An SGP4XP or AP set carries BSTAR, MEAN_MOTION_DOT or MEAN_MOTION_DDOT (SGP4's terms).");
+  }
+  if (!(row.mean_motion_rev_day > 0.0)) return refuse("invalid-ocm", "MEAN_ELEMENTS.MEAN_MOTION is not positive.");
+  s.id = identity_of(o);
+  row.norad_cat_id = s.id.norad;
+  const char* averaging = sgp4 ? "KOZAI" : "BROUWER";
+  if (o->ORB_AVERAGING() == nullptr || !oem::same_text(o->ORB_AVERAGING()->c_str(), averaging))
+    return refuse("orb-averaging-mismatch", sgp4 ? "An SGP4 set's ORB_AVERAGING is KOZAI." : "An SGP4XP or AP set's ORB_AVERAGING is BROUWER.");
+  // the forces: PERTURBATIONS, the one authority
+  const Perturbations* pt = o->PERTURBATIONS();
+  const int ws = pt == nullptr ? pcfWeatherSource_UNSPECIFIED : pt->WEATHER_SOURCE();
+  if (ws == pcfWeatherSource_UNSPECIFIED) return refuse("weather-source-unspecified", "PERTURBATIONS.WEATHER_SOURCE is UNSPECIFIED: a set states it (SGP4: NONE).");
+  const ATM* am = pt->ATMOSPHERIC_MODEL();
+  if ((am != nullptr) != (ws != pcfWeatherSource_NONE))
+    return refuse("atmosphere-weather-mismatch", "ATMOSPHERIC_MODEL is present exactly when WEATHER_SOURCE is not NONE.");
+  if (sgp4 != (ws == pcfWeatherSource_NONE))
+    return refuse("atmosphere-weather-mismatch", "An SGP4 set's WEATHER_SOURCE is NONE (its drag is BSTAR); an SGP4XP or AP set's is THEORY_FLUX_MODEL or RECORDS.");
+  Forces& f = s.forces;
+  if (!sgp4) {
+    if (am->MODEL() == AtmosphericModelFamily_JXX && am->YEAR() == 1970) f.msis = false;
+    else if (am->MODEL() == AtmosphericModelFamily_NRLMSIS00E && am->YEAR() == 2000) f.msis = true;
+    else return refuse("atmosphere-unsupported", "ATMOSPHERIC_MODEL is {JXX,1970} or {NRLMSIS00E,2000}.");
+    if (ws != pcfWeatherSource_THEORY_FLUX_MODEL && ws != pcfWeatherSource_RECORDS)
+      return refuse("atmosphere-weather-mismatch", "WEATHER_SOURCE is THEORY_FLUX_MODEL or RECORDS for an SGP4XP or AP set.");
+    if (f.msis && ws != pcfWeatherSource_RECORDS)
+      return refuse("atmosphere-weather-mismatch", "NRLMSISE-00 reads the record's daily rows (WEATHER_SOURCE RECORDS).");
+    f.weather_source = ws;
+    f.tesseral = pt->MAXIMUM_TESSERAL_DEGREE();
+    f.zonal = pt->MAXIMUM_ZONAL_DEGREE();
+    if (f.tesseral > 70 || f.zonal > 70) return refuse("atmosphere-unsupported", "MAXIMUM_TESSERAL_DEGREE and MAXIMUM_ZONAL_DEGREE are 0 to 70.");
+  } else if (pt->MAXIMUM_TESSERAL_DEGREE() != 0 || pt->MAXIMUM_ZONAL_DEGREE() != 0) {
+    return refuse("elements-other-theory", "An SGP4 set carries no gravity caps.");
+  }
+  if (const int rc = rows_of(pt, s.weather.rows)) return rc;
+  const bool records = ws == pcfWeatherSource_RECORDS;
+  if (records && s.weather.rows.empty()) return refuse("weather-rows-missing", "WEATHER_SOURCE RECORDS with no SPACE_WEATHER rows.");
+  if (!records && !s.weather.rows.empty()) return refuse("weather-rows-unselected", "SPACE_WEATHER rows with WEATHER_SOURCE other than RECORDS.");
+  // the density correction: the open-DCA nodes over NRLMSISE-00
+  const auto* nt = pt->DENSITY_CORRECTION_NODE_TIMES_MS();
+  const auto* nv = pt->DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS();
+  const bool has_nodes = (nt != nullptr && nt->size() > 0) || (nv != nullptr && nv->size() > 0);
+  if (pt->DENSITY_CORRECTION() == pcfDensityCorrection_DCA_COMMON_MODE) {
+    if (sgp4) return refuse("elements-other-theory", "An SGP4 set carries no density correction.");
+    if (!has_nodes) return refuse("density-correction-missing", "DENSITY_CORRECTION DCA_COMMON_MODE with no nodes.");
+    if (nt == nullptr || nv == nullptr || nt->size() != nv->size()) return refuse("invalid-density-correction", "One value per node.");
+    for (uint32_t k = 0; k < nt->size(); ++k) {
+      const int64_t ms = nt->Get(k);
+      const double v = nv->Get(k);
+      if (ms < 63072000000LL || ms > 253402300799999LL || (k > 0 && ms <= nt->Get(k - 1)) || !std::isfinite(v) || !std::isfinite(std::exp(v)))
+        return refuse("invalid-density-correction", "UTC nodes increase strictly within 1972..9999, with finite values.");
+      s.weather.node_ms.push_back(ms);
+      s.weather.node_s.push_back(v);
+    }
+    if (!f.msis) return refuse("density-correction-atmosphere-mismatch", "The open-DCA nodes correct NRLMSISE-00: ATMOSPHERIC_MODEL {NRLMSIS00E,2000}.");
+    if (pt->DENSITY_CORRECTION_CID() == nullptr || pt->DENSITY_CORRECTION_CID()->size() == 0)
+      return refuse("density-correction-cid-missing", "DENSITY_CORRECTION DCA_COMMON_MODE names the $DCL its nodes copy (DENSITY_CORRECTION_CID).");
+    s.weather.dcl_cid = pt->DENSITY_CORRECTION_CID()->str();
+    f.dca = true;
+  } else if (pt->DENSITY_CORRECTION() != pcfDensityCorrection_NONE) {
+    return refuse("atmosphere-unsupported", "DENSITY_CORRECTION is NONE or DCA_COMMON_MODE.");
+  } else if (has_nodes) {
+    return refuse("density-correction-unselected", "Density-correction nodes with DENSITY_CORRECTION NONE.");
+  }
+  // the theory by MEAN_ELEMENT_THEORY alone: SGP4XP flies the theory's own forces, AP any other
+  if (s.theory == meanElementSource_SGP4XP && !f.stock()) return refuse("elements-other-theory", "An SGP4XP set states AP's forces (MEAN_ELEMENT_THEORY AP).");
+  if (s.theory == meanElementSource_AP && f.stock()) return refuse("elements-other-theory", "An AP set states SGP4XP's own forces (MEAN_ELEMENT_THEORY SGP4XP).");
+  // the frame pairing: TEMEOFDATE, or TEMEOFEPOCH at the set's epoch for AP with gravity terms
+  const int frame = frame_kind(o->TRAJ_REF_FRAME());
+  const bool want_epoch = !sgp4 && epoch_frame(f);
+  if (frame != (want_epoch ? 2 : 1) ||
+      (want_epoch && (o->TRAJ_FRAME_EPOCH() == nullptr || std::strcmp(o->TRAJ_FRAME_EPOCH()->c_str(), me->EPOCH()->c_str()) != 0)) ||
+      (!want_epoch && o->TRAJ_FRAME_EPOCH() != nullptr && o->TRAJ_FRAME_EPOCH()->size() > 0))
+    return refuse("frame-pairing-invalid", want_epoch ? "AP with gravity terms is TEMEOFEPOCH, TRAJ_FRAME_EPOCH the set's EPOCH."
+                                                      : "SGP4, SGP4XP and AP without gravity terms are TEMEOFDATE.");
+  return 0;
+}
+
+/// The drag atmosphere of a decoded set (nullptr fills nothing: the theory's own flux model).
+inline void atmosphere_of(const Set& s, atm::Atmosphere& a) {
+  a = atm::Atmosphere{};
+  a.model = s.forces.msis ? atm::kNrlmsise00 : atm::kJacchia70;
+  a.measured = true;
+  a.days = s.weather.rows;
+  for (size_t k = 0; k < s.weather.node_ms.size(); ++k) {
+    a.dca_ms.push_back(s.weather.node_ms[k]);
+    a.dca_d50.push_back(static_cast<double>(s.weather.node_ms[k]) / 86400000.0 + 7306.0);
+    a.dca_s.push_back(s.weather.node_s[k]);
+  }
+}
+
+/// A set's forces bound while its theory records are initialized (they keep the atmosphere's address: it outlives them).
+struct Bind {
+  const atm::Atmosphere* prev;
+  xpt::tess::Terms prev_terms;
+  Bind(const Forces& f, const atm::Atmosphere* a) : prev(atm::active()), prev_terms(xpt::tess::active()) {
+    atm::active() = f.weather_source == pcfWeatherSource_RECORDS ? a : nullptr;
+    xpt::tess::active() = xpt::tess::Terms{f.tesseral, f.zonal};
+  }
+  ~Bind() {
+    atm::active() = prev;
+    xpt::tess::active() = prev_terms;
+  }
+};
+
+/// weather-rows-short:<day> unless the rows hold every UTC day of [first_mjd - 1, last_mjd] (a set flown from its
+/// epoch to the call's times reads the rows of every day between).
+inline int rows_cover(const Set& s, int32_t first_mjd, int32_t last_mjd) {
+  if (s.forces.weather_source != pcfWeatherSource_RECORDS) return 0;
+  const std::vector<atm::SpwDay>& d = s.weather.rows;
+  size_t k = 0;
+  for (int32_t day = first_mjd - 1; day <= last_mjd; ++day) {
+    while (k < d.size() && d[k].mjd < day) ++k;
+    if (k >= d.size() || d[k].mjd != day) {
+      char text[16];
+      atm::date_of_mjd(day, text, sizeof text);
+      return atm::fail_day("weather-rows-short", text, "The record's SPACE_WEATHER rows do not reach a day the call flies the set through: it flies from the day after its first row to the end of its last.");
+    }
+  }
+  return 0;
+}
+
+/// The MJD of a split Julian date.
+inline int32_t mjd_of(double whole, double frac) { return static_cast<int32_t>(std::floor((whole - 2400000.5) + frac)); }
 
 }  // namespace ocm
 }  // namespace sdnap

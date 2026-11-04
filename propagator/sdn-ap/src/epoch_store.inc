@@ -158,12 +158,6 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   if (o->OBJECT_ID() != nullptr) r.object_id = o->OBJECT_ID()->str();
   if (o->ORIGINATOR() != nullptr) r.originator = o->ORIGINATOR()->str();
   if (o->OBJECT_NAME() != nullptr) r.name = o->OBJECT_NAME()->str();
-  if (r.row.theory != kTheorySgp4) {
-    cov::Set s;
-    const int cr = cov::read(p, n, r.row, s);
-    if (cr < 0) return -1;
-    if (cr == 1) r.cov = new cov::Set(s);
-  }
   return 1;
 }
 

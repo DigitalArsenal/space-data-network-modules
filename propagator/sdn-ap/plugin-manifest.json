@@ -514,6 +514,57 @@
       "drainPolicy": "drain-to-empty"
     },
     {
+      "methodId": "export_omm",
+      "displayName": "Export OMM",
+      "description": "The one $OMM this module writes: each 'ocm' element set, SGP4 or stock SGP4XP (ATMOSPHERIC_MODEL {JXX,1970}, WEATHER_SOURCE THEORY_FLUX_MODEL, DENSITY_CORRECTION NONE, both gravity caps 0), to one $OMM: MEAN_ELEMENT_THEORY, EPOCH as the record states it, the six mean elements; SGP4: BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT; SGP4XP: BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT, both m^2/kg (OMM 1.276.0 has no BTERM or AGOM field); USER_DEFINED_EARTH_MODEL WGS-72 or EGM-96; the state block of COVARIANCE_DATA as COVARIANCE in TEME; NORAD_CAT_ID, OBJECT_ID (INTERNATIONAL_DESIGNATOR), OBJECT_NAME, ORIGINATOR and PROVENANCE carried; no COMMENT, no USER_DEFINED_PARAMETERS. Refused by name: missing-ocm, invalid-ocm, theory-not-exportable:AP, forces-not-exportable, and the record refusals of propagate (mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance).",
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn.sds.ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "$OCM element sets (SGP4 or stock SGP4XP), plain or size-prefixed."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "omm",
+          "displayName": "omm",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OMM per 'ocm' frame, in frame order.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-omm-export",
+              "allowedTypes": [
+                {
+                  "schemaName": "OMM.fbs",
+                  "fileIdentifier": "$OMM",
+                  "rootTypeName": "OMM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
       "methodId": "maneuver",
       "displayName": "Maneuver an SGP4XP set",
       "description": "DESIGN 5.1: an Earth SGP4XP $OMM across the burns of its $MNV records, in time order. Each record gives EVENT_START_TIME, the duration (EVENT_END_TIME, or TOTAL_BURN_TIME in s; none: an impulse) and DELTA_VEL_U/V/W (km/s, UVW of the pre-maneuver state: U radial, W along r x v, V = W x U). The post-maneuver set is the inverse of the output map at the burn's centroid, h^-1(x(t_b) + (0, dv), t_b), by fixed-point iteration in equinoctial elements (14); a finite burn scales the eccentricity-vector and plane changes by sinc(dL/2), dL = n D (15). Outputs: the post-maneuver $OMM of every burn (epoch the centroid; drag and SRP parameters carried), its $MNV with PRE_EVENT and POST_EVENT states (TEME, osculating elements, BALLISTIC_COEFF = 1/B_eff kg/m^2) and the CHARACTERIZATION from the dv direction, and with a 'grid' the TEME states across the burns.",

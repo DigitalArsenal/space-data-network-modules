@@ -292,22 +292,8 @@ extern "C" int propagate(void) {
       plugin_set_error("element-set-refused", "The element set describes no orbit this module propagates.");
       return 3;
     }
-    // SPEC 12: an SGP4XP set carrying COVARIANCE gets its propagated covariance beside every state
     sdnap::cov::Propagator cprop;
-    bool with_cov = false;
-    if (xs != nullptr) {
-      sdnap::cov::Set cs;
-      const int cr = sdnap::cov::read(f->payload, f->payload_length, row, cs);
-      const int pr = cr == 1 ? sdnap::cov::prepare(cs, cprop) : 0;
-      if (cr < 0 || pr != 0) {
-        sdnap::xpt::xp_release(*xs);
-        std::free(xs);
-        plugin_set_error("invalid-covariance", cr < 0 ? "The set's COVARIANCE or its USER_DEFINED_SDNAP_COV rows are malformed."
-                                                      : "The set's covariance does not map onto its parameters (the theory refuses a moved set or the epoch columns are singular).");
-        return 3;
-      }
-      with_cov = cr == 1;
-    }
+    const bool with_cov = false;
     flatbuffers::FlatBufferBuilder fbb(1 << 16);
     std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
     char text[48], start[48], stop[48], why[160];

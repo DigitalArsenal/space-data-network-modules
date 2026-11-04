@@ -3,9 +3,9 @@
 //
 // - The fit (fit_oem.inc, SGP4XP theory) forms the normal matrix of its parameters at the solution, every column a
 //   central difference of the theory itself, with its priors; the inverse, the measurement variance being the post-fit
-//   residual variance, is the parameter covariance. Its image at epoch (TEME position and velocity) is the $OMM's
-//   COVARIANCE; the non-element parameters (BTERM, AGOM) travel as USER_DEFINED_SDNAP_COV_x rows: their covariance
-//   with the epoch state and with each other.
+//   residual variance, is the parameter covariance. Its image at epoch (TEME position and velocity, then BTERM and
+//   AGOM) is the $OCM's COVARIANCE_DATA (LTM, CARTPV, COV_SIZE 6 to 8), the parameter rows named by
+//   COV_PARAMETER_KINDS (DRAG_AREA_OVER_MASS, SRP_AREA_OVER_MASS).
 // - The state transition matrix at t is the central difference of the propagated state in the parameters (the same
 //   columns); the epoch covariance is mapped back to the parameters through the epoch columns (their inverse), then
 //   forward: P(t) = J(t) P_p J(t)^T.
@@ -14,8 +14,9 @@
 //   a relative mean-motion error) and, in the drag regime, the non-gravitational n-dot (s_d = c |n-dot_ng|). The
 //   sizes are fitted per regime (test/covariance-realism.mjs) on laser-ranged arcs apart
 //   from the held-out ones.
-// - Theory floor: the fit's residual covariance in UVW (USER_DEFINED_SDNAP_COV_FLOOR_UVW), added at every time in the
-//   state's own UVW axes (velocity: the same scaled by the orbit's angular rate squared).
+// - Theory floor: the fit's residual covariance in UVW (COV_PROPAGATION FLOOR_UU_KM2 .. FLOOR_WW_KM2), added at every
+//   time in the state's own UVW axes (velocity: the same scaled by the orbit's angular rate squared). The process noise
+//   is COV_PROPAGATION's NOISE_* fields, with the share c and the rate it is a share of.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -37,11 +38,11 @@ constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee
 constexpr int kMaxConsider = 2;
 constexpr int kMaxAug = 6 + kMaxConsider;
 static_assert(kMaxAug == fit::kMaxParams, "the augmented state is the fit's parameter vector");
-/// The consider rows, in params_of order (kind 6 + index).
-inline const char* consider_name(int kind) {
-  static const char* const names[kMaxConsider] = {"SDNAP_COV_DRAG", "SDNAP_COV_AGOM"};
-  return kind >= 6 && kind < 6 + kMaxConsider ? names[kind - 6] : "";
+/// The consider rows, in params_of order (kind 6 + index): their prwDynamicParameter and name.
+inline prwDynamicParameter consider_kind(int kind) {
+  return kind == 6 ? prwDynamicParameter_DRAG_AREA_OVER_MASS : prwDynamicParameter_SRP_AREA_OVER_MASS;
 }
+inline const char* consider_name(int kind) { return kind == 6 ? "DRAG_AREA_OVER_MASS" : "SRP_AREA_OVER_MASS"; }
 
 /// Kinds of the parameter vector of options `o` (params_of order): 0-5 af, ag, chi, psi, lambda, n; 6 BTERM; 7 AGOM.
 inline int kinds_of(const fit::Options& o, int* kind) {
@@ -224,13 +225,15 @@ struct Set {
   double log_sigma[kMaxConsider] = {};  ///< of_fit: the posterior sigma of ln B, ln AGOM where the fit estimated the log (else 0)
   double floor[6] = {};
   double noise[5] = {};              ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2), the noise start t_a (min)
+  double share = 0.0;                ///< c, the share of the non-gravitational n-dot that is error
+  double ng_rate = 0.0;              ///< n-dot_ng / n at epoch, 1/day: s_d = c |ng_rate| n
   int regime = 0;                    ///< 0 drag, 1 above (of_fit)
 };
 
 /// The process noise of a set (SPEC 12.5): its regime (0 perigee below kDragRegimeKm, 1 above), the non-gravitational
 /// n-dot / n at epoch (1/day; the theory's epoch rates with and without BTERM) and the sizes s_e, s_i, s_l, s_d
 /// with the noise start t_a (minutes). False when the theory refuses the set.
-inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& regime, double* noise) {
+inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& regime, double* noise, double& share) {
   ng_rate = 0.0;
   ElementRow none = row;
   none.bterm = 0.0;
@@ -255,6 +258,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   noise[2] = k.s_l;
   noise[3] = k.c * std::fabs(ng_rate) * n_min * kMinutesPerDay;
   noise[4] = t_a;
+  share = k.c;
   return true;
 }
 
@@ -345,65 +349,83 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   s.o.drag_log = 0;
   s.o.agom_log = 0;
   for (int k = 0; k < 6; ++k) s.floor[k] = floor[k];
-  return noise_of(row, arc_end_min, ng_rate, s.regime, s.noise);
+  if (!noise_of(row, arc_end_min, ng_rate, s.regime, s.noise, s.share)) return false;
+  s.ng_rate = ng_rate;
+  return true;
 }
 
-/// Reads the covariance of an $OMM (COVARIANCE and the USER_DEFINED_SDNAP_COV_x rows) on top of its decoded row.
-/// 1 read, 0 no COVARIANCE, -1 malformed (a consider row of the wrong length, a COVARIANCE of other than 21 values).
-inline int read(const uint8_t* buf, uint32_t len, const ElementRow& row, Set& s) {
+/// The model the process noise of a set comes from (COV_REALISM[0].MODEL_ID) and its regime's name (REGIME).
+inline const char* noise_model_id() { return xpt::tess::active().tesseral || xpt::tess::active().zonal ? "sdn-ap AP process noise" : "sdn-ap SGP4XP process noise"; }
+inline const char* regime_name(int regime) { return regime == 0 ? "DRAG" : "ABOVE"; }
+
+/// s_d against c |ng_rate| n (n in rad/day), relative: the invariant of COV_PROPAGATION.
+inline bool noise_invariant(const ElementRow& row, const Set& s) {
+  const double n_day = row.mean_motion_rev_day * kTwoPi;
+  const double want = s.share * std::fabs(s.ng_rate) * n_day;
+  return std::fabs(s.noise[3] - want) <= 1e-12 * std::fmax(std::fabs(s.noise[3]), std::fabs(want));
+}
+
+/// The covariance of an $OCM set (COVARIANCE_DATA, COV_PARAMETER_KINDS with OD_DYNAMIC_PARAMETERS' SOLVED_FOR, and
+/// COV_PROPAGATION) on top of its decoded row. 1 read, 0 no COVARIANCE_DATA, -1 malformed (COV_TYPE other than
+/// CARTPV, COV_ORDERING other than LTM, COV_SIZE not 6 plus the kinds, a kind other than BTERM's or AGOM's or one not
+/// solved for, values other than N(N+1)/2, no COV_PROPAGATION), -2 a kind UNSPECIFIED, -3 NOISE_NON_GRAVITATIONAL_RAD_DAY2
+/// not NON_GRAVITATIONAL_SHARE x |NON_GRAVITATIONAL_RATE_PER_DAY| x n within 1e-12 relative.
+inline int read(const OCM* o, const ElementRow& row, Set& s) {
   s = Set{};
   s.row = row;
-  const uint8_t* p = buf;
-  uint32_t n = len;
-  if (!plain_view(p, n, "$OMM")) return -1;
-  flatbuffers::Verifier::Options vopt;
-  vopt.check_alignment = false;  // a record cut from a size-prefixed stream is aligned to its prefix, not to its own start
-  flatbuffers::Verifier verifier(p, n, vopt);
-  if (!VerifyOMMBuffer(verifier)) return -1;
-  const OMM* omm = GetOMM(p);
-  const auto* cv = omm->COVARIANCE();
+  const auto* cv = o->COVARIANCE_DATA();
   if (cv == nullptr || cv->size() == 0) return 0;
-  if (cv->size() != 21) return -1;
-  // consider rows present
-  const flatbuffers::String* rows[kMaxConsider] = {};
-  if (const auto* ud = omm->USER_DEFINED_PARAMETERS()) {
-    for (const OMMUserDefinedParameter* q : *ud) {
-      if (q == nullptr || q->PARAM_NAME() == nullptr || q->PARAM_VALUE() == nullptr) continue;
-      const char* name = q->PARAM_NAME()->c_str();
-      for (int k = 0; k < kMaxConsider; ++k)
-        if (std::strcmp(name, consider_name(6 + k)) == 0) rows[k] = q->PARAM_VALUE();
-      const bool floor = std::strcmp(name, "SDNAP_COV_FLOOR_UVW") == 0, noise = std::strcmp(name, "SDNAP_COV_NOISE") == 0;
-      if (floor || noise) {
-        const char* c = q->PARAM_VALUE()->c_str();
-        char* end = nullptr;
-        for (int k = 0; k < (floor ? 6 : 5); ++k) {
-          (floor ? s.floor : s.noise)[k] = std::strtod(c, &end);
-          if (end == c) return -1;
-          c = end;
-        }
-      }
-    }
+  if ((o->COV_TYPE() != nullptr && std::strcmp(o->COV_TYPE()->c_str(), "CARTPV") != 0) || o->COV_ORDERING() != covarianceOrdering_LTM) return -1;
+  const auto* kinds = o->COV_PARAMETER_KINDS();
+  const uint32_t nk = kinds == nullptr ? 0 : kinds->size();
+  if (nk > static_cast<uint32_t>(kMaxConsider) || o->COV_SIZE() != 6 + nk) return -1;
+  int at_of[kMaxConsider] = {-1, -1};  // the matrix row of BTERM and AGOM
+  for (uint32_t k = 0; k < nk; ++k) {
+    const int kind = kinds->Get(k);
+    if (kind == prwDynamicParameter_UNSPECIFIED) return -2;
+    const int c = kind == prwDynamicParameter_DRAG_AREA_OVER_MASS ? 0 : kind == prwDynamicParameter_SRP_AREA_OVER_MASS ? 1 : -1;
+    if (c < 0 || at_of[c] >= 0) return -1;
+    at_of[c] = static_cast<int>(6 + k);
   }
-  s.o.fit_drag = rows[0] != nullptr;
-  s.o.fit_agom = rows[1] != nullptr;
+  // a row is a parameter the determination solved for (OD_DYNAMIC_PARAMETERS by PARAMETER, SOLVED_FOR)
+  for (int c = 0; c < kMaxConsider; ++c) {
+    if (at_of[c] < 0) continue;
+    bool solved = false;
+    if (o->ORBIT_DETERMINATION() != nullptr && o->ORBIT_DETERMINATION()->OD_DYNAMIC_PARAMETERS() != nullptr)
+      for (const OCMDynamicParameter* p : *o->ORBIT_DETERMINATION()->OD_DYNAMIC_PARAMETERS())
+        if (p != nullptr && p->PARAMETER() == consider_kind(6 + c)) solved = p->SOLVED_FOR();
+    if (!solved) return -1;
+  }
+  const uint32_t N = 6 + nk;
+  if (cv->size() != N * (N + 1) / 2) return -1;
+  const OCMCovariancePropagation* cp = o->COV_PROPAGATION();
+  if (cp == nullptr) return -1;
+  s.o.fit_drag = at_of[0] >= 0;
+  s.o.fit_agom = at_of[1] >= 0;
   int kind[fit::kMaxParams];
   s.np = kinds_of(s.o, kind);
   const int np = s.np;
-  int k21 = 0;
-  for (int i = 0; i < 6; ++i)
-    for (int j = 0; j <= i; ++j) s.C[i * np + j] = s.C[j * np + i] = cv->Get(k21++);
-  for (int a = 6; a < np; ++a) {
-    const char* c = rows[kind[a] - 6]->c_str();
-    char* end = nullptr;
-    for (int j = 0; j <= a; ++j) {
-      const double v = std::strtod(c, &end);
-      if (end == c) return -1;
-      c = end;
-      s.C[a * np + j] = s.C[j * np + a] = v;
+  // the record's row r (0..N-1) as the parameter vector's index (params_of order: elements, BTERM, AGOM)
+  int index_of[kMaxAug];
+  for (int r = 0; r < 6; ++r) index_of[r] = r;
+  for (int c = 6; c < np; ++c) index_of[at_of[kind[c] - 6]] = c;
+  uint32_t q = 0;
+  for (uint32_t i = 0; i < N; ++i)
+    for (uint32_t j = 0; j <= i; ++j) {
+      const double v = cv->Get(q++);
+      if (!std::isfinite(v)) return -1;
+      s.C[index_of[i] * np + index_of[j]] = s.C[index_of[j] * np + index_of[i]] = v;
     }
-    while (*c == ' ') ++c;
-    if (*c != '\0') return -1;
-  }
+  const double floor[6] = {cp->FLOOR_UU_KM2(), cp->FLOOR_VU_KM2(), cp->FLOOR_VV_KM2(), cp->FLOOR_WU_KM2(), cp->FLOOR_WV_KM2(), cp->FLOOR_WW_KM2()};
+  for (int k = 0; k < 6; ++k) s.floor[k] = floor[k];
+  s.noise[0] = cp->NOISE_ECCENTRICITY_PER_DAY();
+  s.noise[1] = cp->NOISE_INCLINATION_PER_DAY();
+  s.noise[2] = cp->NOISE_MEAN_MOTION_RELATIVE();
+  s.noise[3] = cp->NOISE_NON_GRAVITATIONAL_RAD_DAY2();
+  s.noise[4] = cp->NOISE_START_MINUTES();
+  s.share = cp->NON_GRAVITATIONAL_SHARE();
+  s.ng_rate = cp->NON_GRAVITATIONAL_RATE_PER_DAY();
+  if (!noise_invariant(row, s)) return -3;
   return 1;
 }
 

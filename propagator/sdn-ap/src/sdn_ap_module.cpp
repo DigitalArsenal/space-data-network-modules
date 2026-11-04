@@ -28,6 +28,7 @@
 //   oem.inc        the propagate invoke method ($OMM in, $OEM out)
 //   ocm.inc        the $OCM element-set record: elements, forces, identity
 //   fit_oem.inc    the fit invoke method ($OEM in, $OCM out)
+//   export_omm.inc the export_omm invoke method ($OCM in, $OMM out: SGP4, stock SGP4XP)
 // =============================================================================
 
 #include "space_data_module_invoke.h"
@@ -70,6 +71,7 @@
 #include "ocm.inc"
 #include "epoch_store.inc"
 #include "fit_oem.inc"
+#include "export_omm.inc"
 #include "events_method.inc"
 
 // ---- Display quantities (the module's own conversions, so a tool does no physics of its own) ----------------------
@@ -173,26 +175,37 @@ void sdnap_frame_to_uvw(const double* r, const double* v, const double* vec, dou
   for (int a = 0; a < 3; ++a) out[a] = q[0] * basis[a][0] + q[1] * basis[a][1] + q[2] * basis[a][2];
 }
 
-/// The propagated covariance of an $OMM set (SPEC 12): `omm` (`length` bytes, plain or size-prefixed) an SGP4XP
-/// set carrying COVARIANCE (as `fit` writes it: the epoch TEME covariance and USER_DEFINED_SDNAP_COV_x); at
-/// each of `count` times (`minutes` from its epoch) `out` gets 42 doubles: the TEME state (km, km/s), then the 6 x 6
-/// covariance row-major (km^2, km^2/s, km^2/s^2). 0, or -1 not a decodable Earth set, -2 no COVARIANCE, -3 the theory
-/// refuses the set or does not reach a time, -4 an SGP4 set, -5 singular epoch columns, -6 a malformed covariance.
+/// The propagated covariance of an $OCM set (SPEC 12): `ocm` (`length` bytes, plain or size-prefixed) an SGP4XP or AP
+/// set carrying COVARIANCE_DATA and COV_PROPAGATION (as `fit` writes them), flown under its own forces; at each of
+/// `count` times (`minutes` from its epoch) `out` gets 42 doubles: the TEME state (km, km/s), then the 6 x 6 covariance
+/// row-major (km^2, km^2/s, km^2/s^2). 0, or -1 not a flyable Earth set, -2 no COVARIANCE_DATA, -3 the theory refuses
+/// the set or does not reach a time (its rows included), -4 an SGP4 set, -5 singular epoch columns, -6 a malformed
+/// covariance.
 SDNAP_EXPORT("sdnap_covariance_at")
-int32_t sdnap_covariance_at(const uint8_t* omm, uint32_t length, const double* minutes, uint32_t count, double* out) {
-  if (omm == nullptr || (count > 0 && (minutes == nullptr || out == nullptr))) return -1;
-  sdnap::ElementRow row{};
-  if (!sdnap::omm::decode(omm, length, row)) return -1;
-  if (row.theory != sdnap::kTheorySgp4Xp) return -4;
-  sdnap::cov::Set set;
-  const int rc = sdnap::cov::read(omm, length, row, set);
+int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* minutes, uint32_t count, double* out) {
+  using namespace sdnap;
+  if (ocm == nullptr || (count > 0 && (minutes == nullptr || out == nullptr))) return -1;
+  ocm::Set set;
+  if (ocm::decode(ocm, length, set) != 0) return -1;
+  if (set.row.theory != kTheorySgp4Xp) return -4;
+  cov::Set cs;
+  const int rc = cov::read(set.record, set.row, cs);
   if (rc == 0) return -2;
   if (rc < 0) return -6;
-  sdnap::cov::Propagator p;
-  if (const int pr = sdnap::cov::prepare(set, p)) return pr;
+  if (count > 0) {
+    double lo = 0.0, hi = 0.0;
+    for (uint32_t k = 0; k < count; ++k) { lo = std::fmin(lo, minutes[k]); hi = std::fmax(hi, minutes[k]); }
+    const double w = set.row.epoch_jd_whole, f = set.row.epoch_jd_frac;
+    if (ocm::rows_cover(set, ocm::mjd_of(w, f + lo / kMinutesPerDay), ocm::mjd_of(w, f + hi / kMinutesPerDay)) != 0) return -3;
+  }
+  atm::Atmosphere a;
+  ocm::atmosphere_of(set, a);
+  ocm::Bind bind(set.forces, &a);
+  cov::Propagator p;
+  if (const int pr = cov::prepare(cs, p)) return pr;
   for (uint32_t k = 0; k < count; ++k) {
     double* o = out + 42u * k;
-    if (!sdnap::cov::eval(p, minutes[k], o, o + 3, o + 6)) return -3;
+    if (!cov::eval(p, minutes[k], o, o + 3, o + 6)) return -3;
   }
   return 0;
 }

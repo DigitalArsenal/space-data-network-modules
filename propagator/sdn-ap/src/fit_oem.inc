@@ -963,6 +963,41 @@ static int fit_blocks() {
       od.add_FIT_STATISTICS(statistics);
       ocm::Extras extras;
       extras.od = od.Finish();
+      if (have_cov) {
+        // SPEC 12: the epoch covariance, LTM of the state block (the floor included) and the parameter rows as fitted
+        int kind[fit::kMaxParams];
+        const int np = cov::kinds_of(fit_cov.o, kind);
+        std::vector<double> ltm;
+        for (int i = 0; i < np; ++i)
+          for (int j = 0; j <= i; ++j) ltm.push_back(fit_cov.C[i * np + j]);
+        std::vector<std::string> names, units = {"km", "km", "km", "km/s", "km/s", "km/s"};
+        std::vector<uint8_t> kinds;
+        for (int a = 6; a < np; ++a) {
+          names.push_back(cov::consider_name(kind[a]));
+          kinds.push_back(static_cast<uint8_t>(cov::consider_kind(kind[a])));
+          units.push_back("m**2/kg");
+        }
+        extras.covariance = fbb.CreateVector(ltm);
+        extras.cov_frame = ocm::frame_of(fbb, ocm::epoch_frame(po.forces));
+        extras.cov_size = static_cast<uint8_t>(np);
+        if (!names.empty()) {
+          extras.cov_parameters = fbb.CreateVectorOfStrings(names);
+          extras.cov_kinds = fbb.CreateVector(kinds);
+        }
+        extras.cov_units = fbb.CreateVectorOfStrings(units);
+        extras.cov_propagation = CreateOCMCovariancePropagation(fbb, fit_cov.floor[0], fit_cov.floor[1], fit_cov.floor[2], fit_cov.floor[3], fit_cov.floor[4],
+                                                                fit_cov.floor[5], fit_cov.noise[0], fit_cov.noise[1], fit_cov.noise[2], fit_cov.noise[3],
+                                                                fit_cov.noise[4], fit_cov.share, fit_cov.ng_rate);
+        const auto s_model = fbb.CreateString(cov::noise_model_id());
+        const auto s_regime = fbb.CreateString(cov::regime_name(fit_cov.regime));
+        CVRBuilder cr(fbb);
+        cr.add_RULE(covarianceRule_SourceModel);
+        cr.add_MODEL_ID(s_model);
+        cr.add_REGIME(s_regime);
+        cr.add_CALIBRATION(covarianceCalibration_Uncalibrated);
+        const std::vector<flatbuffers::Offset<CVR>> realism = {cr.Finish()};
+        extras.cov_realism = fbb.CreateVector(realism);
+      }
       const CAT* object = blk->OBJECT();
       ocm::Identity id;
       id.norad = object != nullptr ? object->NORAD_CAT_ID() : 0;
