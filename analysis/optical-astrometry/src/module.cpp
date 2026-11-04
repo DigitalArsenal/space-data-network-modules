@@ -880,7 +880,8 @@ int initial_orbit_method() {
     s3[q].site_km = sr * 1e-3;
   }
   IodResult iod = far ? far_sight_iod(s3[0], s3[1], s3[2]) : gooding_iod(s3, multi_pass);
-  if (!iod.ok) return initial_orbit_fail("no-initial-orbit", "Gooding's iteration over " + std::to_string(c1 - c0 + 1) + " crossings: " + iod.error);
+  if (!iod.ok)
+    return initial_orbit_fail("no-initial-orbit", std::string(far ? "The far-sight iteration" : "Gooding's iteration") + " over " + std::to_string(c1 - c0 + 1) + " crossings: " + iod.error);
   // Refined on kRefineSights fitted directions per crossing used (two-body + J2 least squares); kept when it converges.
   std::vector<SightObs> fitted;
   for (size_t c = c0; c <= c1; ++c) {
@@ -928,7 +929,8 @@ int initial_orbit_method() {
   const auto frame = rec::celestial(fb, CelestialFrame::GCRF, "GCRF");
   const std::string kind = iod.revolutions ? (iod.far ? " across the nights" : iod.branch ? " short-period" : " long-period") : "";
   const auto odid = fb.CreateString("IOD:" + t0 + (iod.revolutions ? " revolutions " + std::to_string(iod.revolutions) + kind : ""));
-  const auto alg = fb.CreateString("Gooding angles-only initial orbit (Gooding 1997) on Izzo's Lambert solver");
+  const auto alg = fb.CreateString(far ? "Angles-only initial orbit: one crossing's short arc (Izzo's Lambert solver, two-body + J2) to the other night's sight"
+                                       : "Gooding angles-only initial orbit (Gooding 1997) on Izzo's Lambert solver");
   const auto meth = fb.CreateString("INITIAL_ORBIT");
   const auto otype = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString("RADEC")});
   const auto apr = fb.CreateString("NONE");
