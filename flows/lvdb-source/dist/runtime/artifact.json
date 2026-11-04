@@ -1,0 +1,112 @@
+{
+  "programId": "com.digitalarsenal.flows.lvdb-source",
+  "name": "Local Volume Database",
+  "version": "0.1.0",
+  "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
+  "threadModel": "wasi-sequential",
+  "nodes": 7,
+  "edges": 7,
+  "triggers": 1,
+  "capabilities": [
+    "http",
+    "storage_ingest"
+  ],
+  "engineLinkage": "bridge",
+  "dispatch": [
+    {
+      "nodeId": "release",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "methodId": "plan_release",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "marker",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "methodId": "plan_catalog",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "methodId": "parse_catalog",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "dispatchModel": "linked-direct",
+      "resolvedFromPluginFamily": null
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "dispatchModel": "host",
+      "resolvedFromPluginFamily": null
+    }
+  ],
+  "dependencies": [
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.data-source.lvdb-source",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "version": "0.1.0",
+      "sha256": "328400d54182ebe9fa9c62fba2dec1ded3c05a354a009e05749d9a4cc4f7237c",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6c7664622d736f75726365_",
+      "methodSymbols": {
+        "plan_release": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6c7664622d736f75726365_plan_release",
+        "plan_catalog": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6c7664622d736f75726365_plan_catalog",
+        "parse_catalog": "sdm_guest_636f6d2e6469676974616c617273656e616c2e646174612d736f757263652e6c7664622d736f75726365_parse_catalog"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.http-request",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "version": "0.2.0",
+      "sha256": "219919c46aa3c8845ebff7dea2a1a6fa407076e84c84653a624a68c1687e4028",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_",
+      "methodSymbols": {
+        "request": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e687474702d72657175657374_request"
+      }
+    },
+    {
+      "kind": "node",
+      "dependencyId": "com.digitalarsenal.hostcap.storage-ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "version": "0.6.0",
+      "sha256": "8de9d48c7271611a1f357f39148fb8c1d445acb66dd34aee4e76ca0b664ea420",
+      "dispatchModel": "linked-direct",
+      "artifactPath": null,
+      "publisher": null,
+      "symbolPrefix": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_",
+      "methodSymbols": {
+        "ingest": "sdm_guest_636f6d2e6469676974616c617273656e616c2e686f73746361702e73746f726167652d696e67657374_ingest"
+      }
+    }
+  ]
+}

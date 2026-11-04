@@ -1,0 +1,3 @@
+spacedatastandards.org=1.275.0
+unsigned=true
+threadModel=wasi-sequential

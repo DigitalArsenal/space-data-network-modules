@@ -1,0 +1,145 @@
+{
+  "programId": "com.digitalarsenal.flows.lvdb-source",
+  "name": "Local Volume Database",
+  "version": "0.1.0",
+  "engineLinkage": "bridge",
+  "description": "CC0 Local Volume Database SSY release retrieval.",
+  "nodes": [
+    {
+      "nodeId": "release",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "methodId": "plan_release",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "marker",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "plan",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "methodId": "plan_catalog",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "fetch",
+      "pluginId": "com.digitalarsenal.hostcap.http-request",
+      "methodId": "request",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "parse",
+      "pluginId": "com.digitalarsenal.data-source.lvdb-source",
+      "methodId": "parse_catalog",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "ingest",
+      "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
+      "methodId": "ingest",
+      "kind": "transform",
+      "drainPolicy": "single-shot"
+    },
+    {
+      "nodeId": "egress",
+      "pluginId": "sdn.flow.egress",
+      "methodId": "emit",
+      "kind": "sink",
+      "drainPolicy": "single-shot"
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "release-request-marker-request",
+      "fromNodeId": "release",
+      "fromPortId": "request",
+      "toNodeId": "marker",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "marker-response-plan-response",
+      "fromNodeId": "marker",
+      "fromPortId": "response",
+      "toNodeId": "plan",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "plan-request-fetch-request",
+      "fromNodeId": "plan",
+      "fromPortId": "request",
+      "toNodeId": "fetch",
+      "toPortId": "request",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "fetch-response-parse-response",
+      "fromNodeId": "fetch",
+      "fromPortId": "response",
+      "toNodeId": "parse",
+      "toPortId": "response",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-records-ingest-ssy_records",
+      "fromNodeId": "parse",
+      "fromPortId": "records",
+      "toNodeId": "ingest",
+      "toPortId": "ssy_records",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "parse-meta-ingest-meta",
+      "fromNodeId": "parse",
+      "fromPortId": "meta",
+      "toNodeId": "ingest",
+      "toPortId": "meta",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    },
+    {
+      "edgeId": "ingest-result-egress-result",
+      "fromNodeId": "ingest",
+      "fromPortId": "result",
+      "toNodeId": "egress",
+      "toPortId": "result",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "minute",
+      "kind": "timer",
+      "source": "host-cron",
+      "defaultIntervalMs": 60000
+    }
+  ],
+  "triggerBindings": [
+    {
+      "triggerId": "minute",
+      "targetNodeId": "release",
+      "targetPortId": "tick",
+      "backpressurePolicy": "queue",
+      "queueDepth": 1
+    }
+  ],
+  "requiredPlugins": [
+    "com.digitalarsenal.data-source.lvdb-source",
+    "com.digitalarsenal.hostcap.http-request",
+    "com.digitalarsenal.hostcap.storage-ingest"
+  ]
+}

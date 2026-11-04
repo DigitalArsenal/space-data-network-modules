@@ -13,7 +13,9 @@ const pinned=(await read('vendor/SHA256')).trim();
 if(createHash('sha256').update(yaml).digest('hex')!==pinned)throw Error('RapidYAML digest mismatch');
 const {header,version}=await generateSdsHeaders(['SSY'],import.meta.url);
 if(version!=='1.275.0')throw Error('SDS 1.275.0 required');
-const sourceCode=['#define RYML_SINGLE_HDR_DEFINE_NOW',yaml,...await minizSourceFragments(),header,await read('../../files/orbit-products/src/sha256.hpp'),await read('src/module.cpp')].join('\n');
+// WASI has the same 32-bit little-endian ABI as the upstream Emscripten branch.
+const wasiYaml=yaml.replace('defined(__unix__) || defined(__unix)', 'defined(__unix__) || defined(__unix) || defined(__wasi__)').replace('defined(__EMSCRIPTEN__)', 'defined(__EMSCRIPTEN__) || defined(__wasm__)');
+const sourceCode=['#include <cmath>\n#define C4CORE_NO_FAST_FLOAT\n#define DEBUG_BREAK_H\n#define C4_NO_DEBUG_BREAK\n#define RYML_SINGLE_HDR_DEFINE_NOW',wasiYaml,...await minizSourceFragments(),header,await read('../../files/orbit-products/src/sha256.hpp'),await read('src/module.cpp')].join('\n');
 const manifest=JSON.parse(await read('plugin-manifest.json'));
 await fs.mkdir(path.join(root,'dist/isomorphic'),{recursive:true});
 export const compilation=await compileModuleFromSource({manifest,sourceCode,language:'c++',outputPath:path.join(root,'dist/isomorphic/module.wasm'),threadModel:'wasi-sequential'});

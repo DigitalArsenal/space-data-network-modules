@@ -20,7 +20,7 @@ std::string get(const Row&r,const std::string&k){auto i=r.find(k);return i==r.en
 std::string trim(std::string s){auto a=s.find_first_not_of(" \r\n\t");return a==s.npos?"":s.substr(a,s.find_last_not_of(" \r\n\t")-a+1);}
 std::string digest(const std::string&s){return ephem::sha256_hex((const uint8_t*)s.data(),s.size());}
 std::string iso(uint64_t ms){time_t sec=ms/1000;auto t=*std::gmtime(&sec);char b[32];std::strftime(b,sizeof b,"%Y-%m-%dT%H:%M:%SZ",&t);return b;}
-double num(std::string s){if(s.empty()||s=="nan"||s==".nan")return NAN;char* e;double v=strtod(s.c_str(),&e);check(e==s.c_str()+s.size()&&std::isfinite(v),"Invalid numeric cell: "+s);return v;}
+double num(std::string s){if(s.empty()||s=="nan"||s==".nan")return NAN;if(s=="-inf")return -INFINITY;if(s=="inf"||s=="+inf")return INFINITY;char* e;double v=strtod(s.c_str(),&e);check(e==s.c_str()+s.size()&&std::isfinite(v),"Invalid numeric cell: "+s);return v;}
 // RFC4180 quoting, also used by ECSV with its declared space delimiter.
 std::vector<Row> table(const std::string&s,char delim){
  std::vector<std::vector<std::string>> lines;std::vector<std::string> row;std::string cell;bool quoted=false,start=true,comment=false;
@@ -78,7 +78,7 @@ bool enrich(SSYT&v,const Row&csv,const std::string&yaml,const std::vector<Row>&p
  if(tab=="candidate"){if(v.CONFIRMED_GALAXY==ssyVerdict::YES)v.SYSTEM_CLASS=ssySystemKind::DWARF_GALAXY;else if(v.CONFIRMED_STAR_CLUSTER==ssyVerdict::YES)v.SYSTEM_CLASS=ssySystemKind::GLOBULAR_CLUSTER;}
  v.STRUCTURE_MODEL=get(r,"spatial_model");v.DISTANCE_METHOD_TEXT=get(csv,"distance_measurement_method");std::map<std::string,int> dm={{"host",1},{"trgb",2},{"sbf",3},{"tf",4},{"btf",5},{"cmd",6},{"rrl",7},{"hb",8},{"nam",9},{"bs",10},{"sn",11},{"cepheid",12},{"parallax",13},{"kinematic",14}};v.DISTANCE_METHOD=ssyDistanceTechnique(v.DISTANCE_METHOD_TEXT.empty()?0:dm.count(v.DISTANCE_METHOD_TEXT)?dm[v.DISTANCE_METHOD_TEXT]:15);
  v.METALLICITY_BASIS=get(csv,"metallicity_type")=="spectroscopic"?ssyMetallicityTechnique::SPECTROSCOPIC:get(csv,"metallicity_type")=="photometric"?ssyMetallicityTechnique::PHOTOMETRIC:get(csv,"metallicity_type")=="isochrone"?ssyMetallicityTechnique::ISOCHRONE:ssyMetallicityTechnique::UNSPECIFIED;
- v.GAS_PHASE_METALLICITY_METHOD=get(r,"gas_phase_metallicity_method");v.PLACEMENT=std::make_unique<SSYPlacementT>();auto&p=*v.PLACEMENT;
+ v.GAS_PHASE_METALLICITY_METHOD=get(mapping(child(root,"gas_phase_metallicity")),"method");v.PLACEMENT=std::make_unique<SSYPlacementT>();auto&p=*v.PLACEMENT;
 #define PLACE(k,f,u) p.f=parameter(csv,k,u,"LVDB value-added",v.RETRIEVED_AT)
  PLACE("ll",GALACTIC_L_DEG,"deg");PLACE("bb",GALACTIC_B_DEG,"deg");PLACE("sg_xx",SUPERGALACTIC_X_KPC,"kpc");PLACE("sg_yy",SUPERGALACTIC_Y_KPC,"kpc");PLACE("sg_zz",SUPERGALACTIC_Z_KPC,"kpc");PLACE("distance_gc",DISTANCE_GALACTIC_CENTER_KPC,"kpc");PLACE("distance_m31",DISTANCE_M31_KPC,"kpc");PLACE("distance_lg",DISTANCE_LOCAL_GROUP_KPC,"kpc");PLACE("distance_host",DISTANCE_HOST_KPC,"kpc");
 #undef PLACE
