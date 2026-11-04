@@ -8,15 +8,16 @@
 // gravity caps, the daily SPACE_WEATHER rows and the density-correction nodes
 // the set flies on); METADATA.NORAD_CAT_ID the join key; TRAJ_REF_FRAME
 // TEMEOFDATE, or TEMEOFEPOCH at the set's epoch for AP with gravity terms;
-// ORB_AVERAGING BROUWER (KOZAI for SGP4); STATE_DATA empty. Nothing goes in
-// USER_DEFINED_PARAMETERS.
+// ORB_AVERAGING BROUWER (KOZAI for SGP4); STATE_DATA empty; PROVENANCE this
+// module's, or the source's carried with this module as PRODUCER. Nothing goes
+// in USER_DEFINED_PARAMETERS.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.5.0";
+constexpr const char* kModuleVersion = "0.5.1";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -63,23 +64,25 @@ inline flatbuffers::Offset<RFM> frame_of(flatbuffers::FlatBufferBuilder& fbb, bo
   return CreateRFMDirect(fbb, RFMUnion_CelestialFrameWrapper, CreateCelestialFrameWrapper(fbb, CelestialFrame_TEMEOFDATE).Union(), 0, "TEMEOFDATE");
 }
 
+/// This module and its version, as a PVN's PRODUCER names it.
+inline std::string producer_name() { return std::string(kModuleId) + " " + kModuleVersion; }
+
 /// The PROVENANCE a module-made record carries: this module as provider and producer.
 inline flatbuffers::Offset<PVN> producer_pvn(flatbuffers::FlatBufferBuilder& fbb) {
-  char producer[96];
-  std::snprintf(producer, sizeof producer, "%s %s", kModuleId, kModuleVersion);
   const auto s_provider = fbb.CreateString(kModuleId);
-  const auto s_producer = fbb.CreateString(producer);
+  const auto s_producer = fbb.CreateString(producer_name());
   PVNBuilder b(fbb);
   b.add_PROVIDER_ID(s_provider);
   b.add_PRODUCER(s_producer);
   return b.Finish();
 }
 
-/// A copy of a PVN into `fbb` (every field), or 0 for none.
-inline flatbuffers::Offset<PVN> copy_pvn(flatbuffers::FlatBufferBuilder& fbb, const PVN* v) {
+/// A copy of a PVN into `fbb` (every field; with `as_producer`, PRODUCER this module), or 0 for none.
+inline flatbuffers::Offset<PVN> copy_pvn(flatbuffers::FlatBufferBuilder& fbb, const PVN* v, bool as_producer = false) {
   if (v == nullptr) return 0;
   auto str = [&](const flatbuffers::String* t) { return t == nullptr ? flatbuffers::Offset<flatbuffers::String>(0) : fbb.CreateString(t); };
-  const auto source_id = str(v->SOURCE_ID()), originator = str(v->ORIGINATOR()), provider = str(v->PROVIDER_ID()), producer = str(v->PRODUCER());
+  const auto source_id = str(v->SOURCE_ID()), originator = str(v->ORIGINATOR()), provider = str(v->PROVIDER_ID());
+  const auto producer = as_producer ? fbb.CreateString(producer_name()) : str(v->PRODUCER());
   const auto license = str(v->LICENSE_ID()), lineage = str(v->LINEAGE()), url = str(v->SOURCE_URL()), version = str(v->SOURCE_VERSION());
   const auto retrieved = str(v->RETRIEVED_AT()), sha = str(v->SOURCE_SHA256());
   PVNBuilder b(fbb);
