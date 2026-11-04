@@ -900,11 +900,11 @@
       }
     },
     "analysis/optical-astrometry/dist/isomorphic/module.wasm": {
-      "sha256": "37afb918cbb3b817043990fc8fe75327b11983d268dd0731432fe86750584b8d",
-      "bytes": 1050174,
+      "sha256": "08fd3d5b3787d991d42ce0b190245b6dba862781276f3e8b5988f877dcae249a",
+      "bytes": 1104333,
       "module": "analysis/optical-astrometry",
-      "lastCommit": "05ede5990d7fb7a6d2b26c8cd171e43ab0df08a3",
-      "lastCommitDate": "2026-11-04T13:41:18-05:00",
+      "lastCommit": "ba6394109f4be269d0e118ab085f08464b4eb842",
+      "lastCommitDate": "2026-11-04T14:55:37-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -3264,11 +3264,11 @@
       }
     },
     "flows/angles-only-od/dist/isomorphic/module.wasm": {
-      "sha256": "73455891f62f8f76598856b03c7d60421500bca31b746545bd455ce904f85f3d",
-      "bytes": 504370,
+      "sha256": "f29c4f7bb1eb490de2e136e33dc2dbdf7fe87f1c0244753690ff4eb321ecd9da",
+      "bytes": 503973,
       "module": "flows/angles-only-od",
-      "lastCommit": "b288a39ad0ffbe657c6b971c3ab6662cf894b4ca",
-      "lastCommitDate": "2026-11-04T13:09:50-05:00",
+      "lastCommit": "ba6394109f4be269d0e118ab085f08464b4eb842",
+      "lastCommitDate": "2026-11-04T14:55:37-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -3956,11 +3956,11 @@
       }
     },
     "flows/observation-od/dist/isomorphic/module.wasm": {
-      "sha256": "08ae8e305fd0ea45beaaf7f0055cc3af6117ba381fe7abd0b26fa7c74c61b81c",
-      "bytes": 774325,
+      "sha256": "d5cc1246c597b92d94cc58814c580f75bb27f2107675bf43ff157483f05f9c70",
+      "bytes": 776860,
       "module": "flows/observation-od",
-      "lastCommit": "22213952aa2a04179111315c5fd3fee7598ef276",
-      "lastCommitDate": "2026-11-04T12:42:58-05:00",
+      "lastCommit": "5da8d709375ba410aa75cfcb0c89fa006f7ff82c",
+      "lastCommitDate": "2026-11-04T14:36:53-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
