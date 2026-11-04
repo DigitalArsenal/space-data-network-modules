@@ -261,7 +261,7 @@ test('read: the $OCM carries the state, the covariance with its parameter row, t
   assert.equal(ocm.METADATA.TIME_SYSTEM, 'UTC');
   assert.equal(ocm.METADATA.TAIMUTC_AT_TZERO, 37);
   assert.equal(ocm.METADATA.UT1MUTC_AT_TZERO, -0.01719);
-  assert.equal(ocm.TRAJ_REF_FRAME.NAME, 'EME2000');
+  assert.equal(ocm.TRAJ_REF_FRAME.REFERENCE_FRAME.frame, sdsOcm.CelestialFrame.EME2000);
   assert.equal(ocm.CENTER_NAME, 'EARTH');
   assert.equal(ocm.ORB_REVNUM, 37693);
   assert.deepEqual(ocm.STATE_DATA, [...report.j2kPositionKm, ...report.j2kVelocityKmS]);
@@ -269,13 +269,13 @@ test('read: the $OCM carries the state, the covariance with its parameter row, t
   assert.equal(ocm.COV_TYPE, 'CARTPV');
   assert.equal(ocm.COV_ORDERING, sdsOcm.covarianceOrdering.LTM);
   assert.equal(ocm.COV_SIZE, 7);
-  assert.deepEqual(ocm.COV_PARAMETERS, ['DRAG_AREA_OVER_MASS']);
+  assert.deepEqual(ocm.COV_PARAMETER_KINDS, [sdsOcm.prwDynamicParameter.DRAG_AREA_OVER_MASS]);
   assert.deepEqual(ocm.COV_UNITS, ['km', 'km', 'km', 'km/s', 'km/s', 'km/s', 'm**2/kg']);
-  assert.equal(ocm.COV_REF_FRAME.NAME, 'EME2000');
+  assert.equal(ocm.COV_REF_FRAME.REFERENCE_FRAME.frame, sdsOcm.CelestialFrame.EME2000);
   assert.equal(ocm.COVARIANCE_DATA.length, 28);
   for (let i = 0; i < 7; ++i) for (let j = 0; j <= i; ++j) assert.equal(ocm.COVARIANCE_DATA[(i * (i + 1)) / 2 + j], report.cartesianCovarianceKm[i * 7 + j]);
   // the parameters' values and the weighted RMS
-  const byName = Object.fromEntries(ocm.ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS.map((p) => [p.NAME, p]));
+  const byName = Object.fromEntries(ocm.ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS.map((p) => [sdsOcm.prwDynamicParameter[p.PARAMETER], p]));
   assert.deepEqual(Object.keys(byName), ['DRAG_AREA_OVER_MASS', 'DRAG_AREA_OVER_MASS_RATE', 'SRP_AREA_OVER_MASS']);  // no thrust: IN-TRACK THRUST is OFF
   assert.equal(byName.DRAG_AREA_OVER_MASS.VALUE, 0.826455e-2);
   assert.equal(byName.DRAG_AREA_OVER_MASS.UNITS, 'm**2/kg');
@@ -284,19 +284,19 @@ test('read: the $OCM carries the state, the covariance with its parameter row, t
   assert.equal(ocm.ORBIT_DETERMINATION.WEIGHTED_RMS, 0.11498e1);
   assert.equal(ocm.ORBIT_DETERMINATION.SEDR, 0.39e-2);
   // the force model
-  assert.equal(ocm.PERTURBATIONS.GEOPOTENTIAL_MODEL, 'EGM-96 70Z,70T');
+  assert.deepEqual([ocm.PERTURBATIONS.GRAVITY_MODEL, ocm.PERTURBATIONS.MAXIMUM_ZONAL_DEGREE, ocm.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE], ['EGM-96', 70, 70]);
   assert.equal(ocm.PERTURBATIONS.ATMOSPHERIC_DRAG, 'JAC70/MSIS90');
   assert.deepEqual(ocm.PERTURBATIONS.N_BODY_PERTURBATIONS, ['MOON', 'SUN']);
   assert.equal(ocm.PERTURBATIONS.SOLAR_RAD_PRESSURE, 'OFF');
   assert.equal(ocm.PERTURBATIONS.SOLID_TIDES_MODEL, 'ON');
   assert.equal(ocm.PERTURBATIONS.FIXED_F10P7, 153);
   assert.equal(ocm.PERTURBATIONS.FIXED_GEOMAG_AP, 10);
-  // the integrator settings ride as user-defined parameters
-  const user = Object.fromEntries(ocm.USER_DEFINED_PARAMETERS.map((u) => [u.PARAM_NAME, u.PARAM_VALUE]));
-  assert.equal(user.VCM_INTEGRATOR_MODE, 'ASW');
-  assert.equal(user.VCM_PARTIALS, 'FAST NUM');
-  assert.equal(user.VCM_STEP_SIZE_SELECTION, 'MANUAL');
-  assert.equal(user.VCM_NUTATION_TERMS, '4');
+  // the integrator settings and the nutation terms, typed
+  assert.equal(ocm.INTEGRATOR.MODE, sdsOcm.ocmIntegratorMode.ASW);
+  assert.equal(ocm.INTEGRATOR.PARTIALS, sdsOcm.ocmPartialsMethod.FAST_NUMERICAL);
+  assert.equal(ocm.INTEGRATOR.STEP_SIZE_SELECTION, sdsOcm.ocmStepSelection.MANUAL);
+  assert.equal(ocm.PERTURBATIONS.REDUCTION_THEORY_TERMS, 4);
+  assert.deepEqual(ocm.USER_DEFINED_PARAMETERS, []);
 });
 
 test('read -> FFM -> ocm -> write -> read round trip', async (t) => {
@@ -325,8 +325,8 @@ test('read -> FFM -> ocm -> write -> read round trip', async (t) => {
   const ocm = await toOcm({});
   const record = decodeOcm(ocm);
   assert.equal(record.COV_SIZE, 7);
-  assert.deepEqual(record.COV_PARAMETERS, ['DRAG_AREA_OVER_MASS']);
-  assert.equal(record.TRAJ_REF_FRAME.NAME, 'EME2000');
+  assert.deepEqual(record.COV_PARAMETER_KINDS, [sds.prwDynamicParameter.DRAG_AREA_OVER_MASS]);
+  assert.equal(record.TRAJ_REF_FRAME.REFERENCE_FRAME.frame, sdsOcm.CelestialFrame.EME2000);
   assert.equal(record.METADATA.OBJECT_NAME, 'ROUND TRIP');
   const writeText = async (bytes) => textOf(out(ok(await call({}, 'write', [{ portId: 'ocm', typeRef: OCM_REF, payload: bytes }, { portId: 'eop', typeRef: EOP_REF, payload: out(read, 'eop') }])), 'message'));
   const text = await writeText(ocm);
@@ -382,9 +382,9 @@ test('parameterRows: B row as printed or as a fraction of B', async (t) => {
   // round trip through FFM at zero arc length's worth of drift (1 h here).
   const r = await read('fractional');
   const run = ok(await ffm.invoke({ methodId: 'invoke', inputs: [{ portId: 'request', typeRef: PRW, payload: out(r, 'request') }, { portId: 'earth_orientation', typeRef: PRW, payload: out(r, 'earth_orientation') }] }));
-  const header = { geopotential: fractional.geopotential, zonals: fractional.zonals, tesserals: fractional.tesserals, drag: fractional.drag, ballisticCoefficient: b, weightedRms: 1, parameterRows: 'fractional' };
+  const header = { geopotential: fractional.geopotential, zonals: fractional.zonals, tesserals: fractional.tesserals, drag: fractional.drag, ballisticCoefficient: b, weightedRms: 1 };
   const ocm = out(ok(await call({ header }, 'ocm', [{ portId: 'result', typeRef: PRW, payload: out(run, 'response') }])), 'ocm');
-  const text = textOf(out(ok(await call({}, 'write', [{ portId: 'ocm', typeRef: OCM_REF, payload: ocm }])), 'message'));
+  const text = textOf(out(ok(await call({ write: { parameterRows: 'fractional' } }, 'write', [{ portId: 'ocm', typeRef: OCM_REF, payload: ocm }])), 'message'));
   const { n, p } = lowerTriangle(text);
   assert.equal(n, 7);
   // B is a constant of the motion: its variance is unchanged by propagation.

@@ -62,8 +62,8 @@
 // ESA's final orbit) the fractional reading's radial and in-track sigmas
 // are about twice the errors; the absolute reading's, 7 to 20 times. B and AGOM rows are scaled by their values when
 // fractional, BDOT and T rows are taken as printed, and every read reports
-// the parameter sigmas it carried. The $OCM records the choice
-// (PARAMETER_ROWS) and write prints the rows back the same way.
+// the parameter sigmas it carried. write prints the rows back as fractions
+// unless its options say otherwise.
 //
 // Pure compute: output bytes depend only on input bytes.
 
@@ -75,6 +75,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -663,22 +664,22 @@ Parameters solvedParameters(const Vcm& m, std::vector<std::string>& notes) {
 // A solution as the legacy message states it: the state, the force model, the dynamical-model parameters and the
 // covariance. read makes one from a VCM and ocm from a propagation result; the $OCM carries it; write prints it.
 struct Solution {
-    std::string indicator, center, satellite, intDes, name;
-    Utc messageTime, epoch, leap;            // UTC
-    std::string leapText;                    // the VCM's own text for the leap second time, else ""
+    ocmMessageStatus status = ocmMessageStatus::UNSPECIFIED;
+    std::string exerciseName;                // when status is EXERCISE
+    std::string center, satellite, intDes, name;
+    Utc messageTime, epoch, leap;            // UTC; leap: the next leap second, when one lies after the epoch
     double epochRev = 0;
     double rv[6] = {};                       // km and km/s in EME2000 at `epoch`
     std::string geopotential;                // the model, "EGM-96"
     int zonals = 0, tesserals = 0;
     std::string drag;
     bool lunarSolar = false, srp = false, solidTides = false, inTrackThrust = false;
-    double b = 0, bdot = 0, agom = 0, edr = 0, thrust = 0, cmOffset = 0;
+    double b = 0, bdot = 0, agom = 0, edr = 0, thrust = 0;
     bool solved[4] = {false, false, false, false};  // B, BDOT, AGOM, T: the orbit determination solved for it
     double f10 = 0, avgF10 = 0, avgAp = 0;
     double taiUtc = 37, ut1Utc = 0;
     int nutationTerms = 106;
-    std::string integratorMode = "SDN FFM", coordSys = "J2000", partials = "ANALYTIC", stepMode = "AUTO", fixedStep = "OFF", stepSelection = "AUTO";
-    double initialStep = 30, errorControl = 1e-13;
+    std::optional<OCMIntegratorT> integrator;  // the SP integrator's settings, when the solution came from a VCM
     double weightedRms = 0;                  // 0: none stated
     std::string eopSource;
     // The covariance, n x n and full, Cartesian: the state in km and km/s, then the parameter rows named by
@@ -688,28 +689,84 @@ struct Solution {
     std::vector<unsigned> rows;
     // How the printed covariance became this one, so write can undo it.
     double covarianceScale = 1.0;            // multiplied in: max(1, WTD RMS)^2, or 1
-    std::string meanMotionUnit = "fraction";
-    bool fractionalParameterRows = true;
 };
 
-const char* const kParameterName[4] = {"DRAG_AREA_OVER_MASS", "DRAG_AREA_OVER_MASS_RATE", "SRP_AREA_OVER_MASS", "IN_TRACK_ACCELERATION"};
+const prwDynamicParameter kParameterKind[4] = {prwDynamicParameter::DRAG_AREA_OVER_MASS, prwDynamicParameter::DRAG_AREA_OVER_MASS_RATE,
+                                               prwDynamicParameter::SRP_AREA_OVER_MASS, prwDynamicParameter::IN_TRACK_ACCELERATION};
 const char* const kParameterUnit[4] = {"m**2/kg", "m**2/kg/s", "m**2/kg", "m/s**2"};
-int parameterSlot(const std::string& name) {
-    for (int k = 0; k < 4; ++k) if (name == kParameterName[k]) return k;
+int parameterSlot(prwDynamicParameter kind) {
+    for (int k = 0; k < 4; ++k) if (kind == kParameterKind[k]) return k;
     return -1;
-}
-std::string exact(double x) {
-    char b[40];
-    std::snprintf(b, sizeof b, "%.17g", x);
-    return b;
 }
 std::string onOffText(bool on) { return on ? "ON" : "OFF"; }
 
-// The $OCM of a solution (size-prefixed).
-std::vector<uint8_t> ocmOf(const Solution& s) {
+// The legacy message's words for the typed settings. A word maps to its enum member; UNSPECIFIED prints as the
+// placeholder the writer has always printed for a solution that did not come from SP.
+template <class E> struct Word { const char* text; E value; };
+const Word<ocmIntegratorMode> kModes[] = {{"SPADOC", ocmIntegratorMode::SPADOC}, {"ASW", ocmIntegratorMode::ASW}, {"SDN FFM", ocmIntegratorMode::UNSPECIFIED}};
+const Word<ocmIntegrationFrame> kFrames[] = {{"J2000", ocmIntegrationFrame::J2000}, {"EPOCH", ocmIntegrationFrame::EPOCH}};
+const Word<ocmPartialsMethod> kPartials[] = {{"ANALYTIC", ocmPartialsMethod::ANALYTIC}, {"FULL NUM", ocmPartialsMethod::FULL_NUMERICAL}, {"FAST NUM", ocmPartialsMethod::FAST_NUMERICAL}};
+const Word<ocmStepMode> kStepModes[] = {{"AUTO", ocmStepMode::AUTO}, {"TIME", ocmStepMode::TIME}, {"S", ocmStepMode::S}};
+const Word<ocmStepSelection> kSelections[] = {{"AUTO", ocmStepSelection::AUTO}, {"MANUAL", ocmStepSelection::MANUAL}};
+// `text` read into `out`; empty text is UNSPECIFIED. False for a word the format does not define.
+template <class E, size_t N> bool wordOf(const Word<E> (&table)[N], const std::string& text, E& out) {
+    const std::string t = upper(trim(text));
+    if (t.empty()) { out = E::UNSPECIFIED; return true; }
+    for (const auto& w : table) if (t == w.text) { out = w.value; return true; }
+    return false;
+}
+// The word of `value`, or `placeholder` for UNSPECIFIED.
+template <class E, size_t N> const char* textOf(const Word<E> (&table)[N], E value, const char* placeholder) {
+    if (value == E::UNSPECIFIED) return placeholder;
+    for (const auto& w : table) if (w.value == value) return w.text;
+    return placeholder;
+}
+// The integrator settings a VCM states, typed; empty on success, else the setting that is not one of the format's.
+std::string integratorOf(const std::string& mode, const std::string& coordSys, const std::string& partials, const std::string& stepMode,
+                         const std::string& fixedStep, const std::string& stepSelection, double initialStep, double errorControl, OCMIntegratorT& out) {
+    if (!wordOf(kModes, mode, out.MODE)) return "INTEGRATOR MODE \"" + mode + "\" (SPADOC or ASW)";
+    if (!wordOf(kFrames, coordSys, out.COORDINATE_SYSTEM)) return "COORD SYS \"" + coordSys + "\" (J2000 or EPOCH)";
+    if (!wordOf(kPartials, partials, out.PARTIALS)) return "PARTIALS \"" + partials + "\" (ANALYTIC, FULL NUM or FAST NUM)";
+    if (!wordOf(kStepModes, stepMode, out.STEP_MODE)) return "STEP MODE \"" + stepMode + "\" (AUTO, TIME or S)";
+    const std::string fixed = upper(trim(fixedStep));
+    if (fixed != "" && fixed != "ON" && fixed != "OFF") return "FIXED STEP \"" + fixedStep + "\" (ON or OFF)";
+    out.FIXED_STEP = fixed == "ON";
+    if (!wordOf(kSelections, stepSelection, out.STEP_SIZE_SELECTION)) return "STEP SIZE SELECTION \"" + stepSelection + "\" (AUTO or MANUAL)";
+    out.INITIAL_STEP_SECONDS = initialStep;
+    out.ERROR_CONTROL = errorControl;
+    return "";
+}
+// The Real/Test/Exercise indicator: REAL, TEST, EXERCISE//<name>//EXERCISE, or nothing. False for any other text.
+bool statusOf(const std::string& text, ocmMessageStatus& status, std::string& exercise) {
+    const std::string t = trim(text);
+    exercise.clear();
+    if (t.empty()) status = ocmMessageStatus::UNSPECIFIED;
+    else if (t == "REAL") status = ocmMessageStatus::REAL;
+    else if (t == "TEST") status = ocmMessageStatus::TEST;
+    else if (t.size() >= 20 && t.rfind("EXERCISE//", 0) == 0 && t.compare(t.size() - 10, 10, "//EXERCISE") == 0) {
+        status = ocmMessageStatus::EXERCISE;
+        exercise = t.substr(10, t.size() - 20);
+    } else return false;
+    return true;
+}
+std::string statusText(ocmMessageStatus status, const std::string& exercise) {
+    switch (status) {
+        case ocmMessageStatus::REAL: return "REAL";
+        case ocmMessageStatus::TEST: return "TEST";
+        case ocmMessageStatus::EXERCISE: return "EXERCISE//" + exercise + "//EXERCISE";
+        default: return "";
+    }
+}
+// The reduction theory the nutation terms belong to (CCSDS text).
+const char* const kNutationTheory = "IAU 1980";
+
+// The $OCM of a solution (size-prefixed); empty with `refusal` set when it cannot be written.
+std::vector<uint8_t> ocmOf(const Solution& s, std::string& refusal) {
     ocm_fb::Record r;
     if (s.messageTime.ok) r.creationDate = iso(s.messageTime);
     r.originator = s.center;
+    r.messageStatus = s.status;
+    r.exerciseName = s.exerciseName;
     r.objectName = s.name;
     r.internationalDesignator = s.intDes;
     r.catalogName = "SATCAT";
@@ -735,13 +792,13 @@ std::vector<uint8_t> ocmOf(const Solution& s) {
         r.ordering = "LTM";
         r.covSize = int(s.n);
         for (const char* unit : {"km", "km", "km", "km/s", "km/s", "km/s"}) r.covUnits.push_back(unit);
-        for (const unsigned slot : s.rows) { r.covParameters.push_back(kParameterName[slot]); r.covUnits.push_back(kParameterUnit[slot]); }
+        for (const unsigned slot : s.rows) { r.covParameterKinds.push_back(kParameterKind[slot]); r.covUnits.push_back(kParameterUnit[slot]); }
+        r.covarianceScaleFactor = s.covarianceScale;
     }
     r.force.present = true;
     r.force.gravityModel = s.geopotential;
-    r.force.geopotentialModel = s.geopotential + " " + std::to_string(s.zonals) + "Z," + std::to_string(s.tesserals) + "T";
-    r.force.gravityDegree = std::max(s.zonals, s.tesserals);
-    r.force.gravityOrder = s.tesserals;
+    r.force.maximumZonalDegree = s.zonals;
+    r.force.maximumTesseralDegree = s.tesserals;
     r.force.gm = gmFor(s.geopotential);
     r.force.atmosphericDrag = s.drag;
     r.force.solarRadPressure = onOffText(s.srp);
@@ -750,6 +807,8 @@ std::vector<uint8_t> ocmOf(const Solution& s) {
     r.force.f10p7 = s.f10;
     r.force.f10p7Mean = s.avgF10;
     r.force.geomagAp = s.avgAp;
+    r.force.reductionTheory = kNutationTheory;
+    r.force.reductionTheoryTerms = s.nutationTerms;
     r.od.present = true;
     r.od.method = "DIFFERENTIAL_CORRECTION";
     r.od.epoch = r.epoch;
@@ -759,32 +818,37 @@ std::vector<uint8_t> ocmOf(const Solution& s) {
     for (int k = 0; k < 4; ++k) {
         if (k == 3 && !s.inTrackThrust) continue;  // the force is part of the model only when it is on
         ocm_fb::DynamicParameter p;
-        p.name = kParameterName[k];
+        p.kind = kParameterKind[k];
         p.value = values[k];
         p.units = kParameterUnit[k];
         p.solvedFor = s.solved[k];
         r.od.dynamicParameters.push_back(p);
     }
-    r.user = {{"VCM_INDICATOR", s.indicator}, {"VCM_INTEGRATOR_MODE", s.integratorMode}, {"VCM_COORD_SYS", s.coordSys},
-              {"VCM_PARTIALS", s.partials}, {"VCM_STEP_MODE", s.stepMode}, {"VCM_FIXED_STEP", s.fixedStep},
-              {"VCM_STEP_SIZE_SELECTION", s.stepSelection}, {"VCM_INITIAL_STEP_SIZE_S", exact(s.initialStep)},
-              {"VCM_ERROR_CONTROL", exact(s.errorControl)}, {"VCM_NUTATION_TERMS", std::to_string(s.nutationTerms)},
-              {"VCM_CM_OFFSET_M", exact(s.cmOffset)}, {"VCM_LEAP_SECOND_TIME", s.leapText},
-              {"COVARIANCE_SCALE", exact(s.covarianceScale)}, {"MEAN_MOTION_UNIT", s.meanMotionUnit},
-              {"PARAMETER_ROWS", s.fractionalParameterRows ? "fractional" : "absolute"}};
-    return ocm_fb::build(r);
+    r.integrator = s.integrator;
+    return ocm_fb::build(r, &refusal);
+}
+
+// The CelestialFrame member of a reference frame; false when it is none.
+bool celestialFrameOf(const std::unique_ptr<RFMT>& f, CelestialFrame& out) {
+    if (!f) return false;
+    const CelestialFrameWrapperT* c = f->REFERENCE_FRAME.AsCelestialFrameWrapper();
+    if (!c) return false;
+    out = c->frame;
+    return true;
 }
 
 // A solution from an $OCM: EME2000 position and velocity, a position-velocity covariance with the parameter rows
-// COV_PARAMETERS names, the force model, the dynamical-model parameters and, in USER_DEFINED_PARAMETERS, the
-// settings a VCM states that an OCM has no field for. Empty on success, else the reason.
+// COV_PARAMETER_KINDS names, the force model, the dynamical-model parameters, the message status and the integrator
+// settings. Empty on success, else the reason.
 std::string solutionOf(const OCMT& o, Solution& s) {
     if (!o.METADATA) return "invalid-ocm: no METADATA";
     const MetadataT& m = *o.METADATA;
     if (o.STATE_DATA.size() < 6) return "invalid-ocm: STATE_DATA holds no position and velocity";
     {
-        const std::string frame = o.TRAJ_REF_FRAME ? o.TRAJ_REF_FRAME->NAME : "";
-        if (frame != "EME2000" && frame != "J2000") return "unsupported-frame: the legacy message states J2K position and velocity; the OCM's TRAJ_REF_FRAME is \"" + frame + "\" (EME2000 or J2000 required)";
+        CelestialFrame frame{};
+        if (!celestialFrameOf(o.TRAJ_REF_FRAME, frame) || (frame != CelestialFrame::EME2000 && frame != CelestialFrame::J2000))
+            return std::string("unsupported-frame: the legacy message states J2K position and velocity; the OCM's TRAJ_REF_FRAME is ") +
+                   (o.TRAJ_REF_FRAME ? "\"" + o.TRAJ_REF_FRAME->NAME + "\"" : "absent") + " (EME2000 or J2000 required)";
     }
     if (o.TRAJ_TYPE != trajectoryType::CARTESIAN_PV) return "unsupported-trajectory: TRAJ_TYPE is CARTESIAN_PV for a legacy message";
     for (int i = 0; i < 6; ++i) s.rv[i] = o.STATE_DATA[i];
@@ -798,6 +862,8 @@ std::string solutionOf(const OCMT& o, Solution& s) {
     }
     if (o.HEADER) {
         s.center = o.HEADER->ORIGINATOR;
+        s.status = o.HEADER->MESSAGE_STATUS;
+        s.exerciseName = o.HEADER->EXERCISE_NAME;
         int y = 0, mo = 0, d = 0, hh = 0, mi = 0;
         double ss = 0;
         if (std::sscanf(o.HEADER->CREATION_DATE.c_str(), "%d-%d-%dT%d:%d:%lf", &y, &mo, &d, &hh, &mi, &ss) == 6) {
@@ -820,19 +886,10 @@ std::string solutionOf(const OCMT& o, Solution& s) {
     }
     if (o.PERTURBATIONS) {
         const PerturbationsT& p = *o.PERTURBATIONS;
-        const std::string& g = p.GEOPOTENTIAL_MODEL;   // "EGM-96 70Z,70T"
-        const size_t z = g.find('Z');
-        bool parsed = false;
-        if (z != std::string::npos) {
-            size_t d = z;
-            while (d > 0 && g[d - 1] == ' ') --d;
-            const size_t digitsEnd = d;
-            while (d > 0 && std::isdigit(static_cast<unsigned char>(g[d - 1]))) --d;
-            std::string tail;
-            for (const char c : g.substr(d)) if (c != ' ') tail += c;
-            if (d < digitsEnd && std::sscanf(tail.c_str(), "%dZ,%dT", &s.zonals, &s.tesserals) == 2) { s.geopotential = trim(g.substr(0, d)); parsed = true; }
-        }
-        if (!parsed) { s.geopotential = p.GRAVITY_MODEL; s.zonals = p.GRAVITY_DEGREE; s.tesserals = p.GRAVITY_ORDER; }
+        s.geopotential = p.GRAVITY_MODEL;               // "EGM-96", truncated to the two caps
+        s.zonals = p.MAXIMUM_ZONAL_DEGREE;
+        s.tesserals = p.MAXIMUM_TESSERAL_DEGREE;
+        if (p.REDUCTION_THEORY_TERMS > 0) s.nutationTerms = p.REDUCTION_THEORY_TERMS;
         s.drag = p.ATMOSPHERIC_DRAG;
         s.srp = onOff(p.SOLAR_RAD_PRESSURE);
         s.solidTides = onOff(p.SOLID_TIDES_MODEL);
@@ -846,7 +903,7 @@ std::string solutionOf(const OCMT& o, Solution& s) {
         s.weightedRms = d.WEIGHTED_RMS;
         s.edr = d.SEDR;
         for (const auto& p : d.OD_DYNAMIC_PARAMETERS) {
-            const int slot = p ? parameterSlot(p->NAME) : -1;
+            const int slot = p ? parameterSlot(p->PARAMETER) : -1;
             if (slot < 0) continue;   // a parameter this message has no slot for
             double* value[4] = {&s.b, &s.bdot, &s.agom, &s.thrust};
             *value[slot] = p->VALUE;
@@ -854,38 +911,21 @@ std::string solutionOf(const OCMT& o, Solution& s) {
             if (slot == 3) s.inTrackThrust = true;
         }
     }
-    for (const auto& u : o.USER_DEFINED_PARAMETERS) {
-        if (!u) continue;
-        const std::string& k = u->PARAM_NAME;
-        const std::string& v = u->PARAM_VALUE;
-        double x = 0;
-        if (k == "VCM_INDICATOR") s.indicator = v;
-        else if (k == "VCM_INTEGRATOR_MODE") s.integratorMode = v;
-        else if (k == "VCM_COORD_SYS") s.coordSys = v;
-        else if (k == "VCM_PARTIALS") s.partials = v;
-        else if (k == "VCM_STEP_MODE") s.stepMode = v;
-        else if (k == "VCM_FIXED_STEP") s.fixedStep = v;
-        else if (k == "VCM_STEP_SIZE_SELECTION") s.stepSelection = v;
-        else if (k == "VCM_INITIAL_STEP_SIZE_S") { if (number(v, &x)) s.initialStep = x; }
-        else if (k == "VCM_ERROR_CONTROL") { if (number(v, &x)) s.errorControl = x; }
-        else if (k == "VCM_NUTATION_TERMS") { if (number(v, &x)) s.nutationTerms = int(x); }
-        else if (k == "VCM_CM_OFFSET_M") { if (number(v, &x)) s.cmOffset = x; }
-        else if (k == "VCM_LEAP_SECOND_TIME") s.leapText = v;
-        else if (k == "COVARIANCE_SCALE") { if (number(v, &x) && x > 0) s.covarianceScale = x; }
-        else if (k == "MEAN_MOTION_UNIT") s.meanMotionUnit = v;
-        else if (k == "PARAMETER_ROWS") s.fractionalParameterRows = v != "absolute";
-    }
+    if (o.INTEGRATOR) s.integrator = *o.INTEGRATOR;
+    if (!o.COV_REALISM.empty() && o.COV_REALISM[0] && o.COV_REALISM[0]->SCALE_FACTOR > 0) s.covarianceScale = o.COV_REALISM[0]->SCALE_FACTOR;
     // The covariance: any ordering, full in memory.
     if (!o.COVARIANCE_DATA.empty()) {
         const std::string type = o.COV_TYPE.empty() ? "CARTPV" : o.COV_TYPE;
         if (type != "CARTPV") return "unsupported-covariance: COV_TYPE is " + type + " (CARTPV required)";
         const unsigned n = o.COV_SIZE;
         if (n < 6 || n > 20) return "invalid-ocm: COV_SIZE must be 6 to 20";
-        if (o.COV_PARAMETERS.size() != n - 6) return "invalid-ocm: COV_SIZE minus six does not match COV_PARAMETERS";
+        if (o.COV_PARAMETER_KINDS.size() != n - 6) return "invalid-ocm: COV_SIZE minus six does not match COV_PARAMETER_KINDS";
         const covarianceOrdering ordering = o.COV_ORDERING;
         const size_t needed = (ordering == covarianceOrdering::LTM || ordering == covarianceOrdering::UTM) ? size_t(n) * (n + 1) / 2 : size_t(n) * n;
         if (o.COVARIANCE_DATA.size() < needed) return "invalid-ocm: COVARIANCE_DATA holds fewer values than COV_SIZE and COV_ORDERING state";
-        if (o.COV_REF_FRAME && o.COV_REF_FRAME->NAME != "EME2000" && o.COV_REF_FRAME->NAME != "J2000") return "unsupported-frame: COV_REF_FRAME is " + o.COV_REF_FRAME->NAME + " (EME2000 required)";
+        CelestialFrame covFrame{};
+        if (o.COV_REF_FRAME && (!celestialFrameOf(o.COV_REF_FRAME, covFrame) || (covFrame != CelestialFrame::EME2000 && covFrame != CelestialFrame::J2000)))
+            return "unsupported-frame: COV_REF_FRAME is " + o.COV_REF_FRAME->NAME + " (EME2000 required)";
         s.n = n;
         s.cartesian.assign(size_t(n) * n, 0.0);
         const std::vector<double>& v = o.COVARIANCE_DATA;
@@ -907,9 +947,9 @@ std::string solutionOf(const OCMT& o, Solution& s) {
                 for (unsigned i = 0; i < n; ++i) for (unsigned j = 0; j < n; ++j, ++k) if (i <= j) s.cartesian[i * n + j] = s.cartesian[j * n + i] = v[k];
                 break;
         }
-        for (const auto& name : o.COV_PARAMETERS) {
-            const int slot = parameterSlot(name);
-            if (slot < 0) return "unsupported-covariance: the parameter row " + name + " has no slot in a VCM (B, BDOT, AGOM, T)";
+        for (const prwDynamicParameter kind : o.COV_PARAMETER_KINDS) {
+            const int slot = parameterSlot(kind);
+            if (slot < 0) return std::string("unsupported-covariance: the parameter row ") + EnumNameprwDynamicParameter(kind) + " has no slot in a VCM (B, BDOT, AGOM, T)";
             s.rows.push_back(unsigned(slot));
         }
         for (const unsigned slot : s.rows) s.solved[slot] = true;
@@ -1040,7 +1080,7 @@ std::string vcmTextOf(const Solution& s, const EopPoint& eop, const std::string&
     if (numeric && satellite.size() < 5) satellite = std::string(5 - satellite.size(), '0') + satellite;
     if (satellite.empty()) satellite = "00000";
     put("SP VECTOR/COVARIANCE MESSAGE - V2.0");
-    put(s.indicator);
+    put(statusText(s.status, s.exerciseName));
     std::snprintf(line, sizeof line, "MESSAGE TIME (UTC): %s  CENTER: %s", vcmTime(messageTime).c_str(), s.center.empty() ? "SDN" : s.center.c_str()); put(line);
     std::snprintf(line, sizeof line, "SATELLITE NUMBER: %s                    INT. DES.: %s", satellite.c_str(), s.intDes.c_str()); put(line);
     put("COMMON NAME: " + s.name);
@@ -1054,14 +1094,19 @@ std::string vcmTextOf(const Solution& s, const EopPoint& eop, const std::string&
     std::snprintf(line, sizeof line, "SOLAR RAD PRESS: %3s  SOLID EARTH TIDES: %3s  IN-TRACK THRUST: %3s", onOffText(s.srp).c_str(), onOffText(s.solidTides).c_str(), onOffText(s.inTrackThrust).c_str()); put(line);
     std::snprintf(line, sizeof line, "BALLISTIC COEF (M2/KG): %13s BDOT (M2/KG-S): %12s", fortranE(s.b, 6).c_str(), fortranE(s.bdot, 6).c_str()); put(line);
     std::snprintf(line, sizeof line, "SOLAR RAD PRESS COEFF (M2/KG): %13s  EDR(W/KG): %9s", fortranE(s.agom, 6).c_str(), fortranE(s.edr, 2).c_str()); put(line);
-    std::snprintf(line, sizeof line, "THRUST ACCEL (M/S2): %13s  C.M. OFFSET (M): %13s", fortranE(s.thrust, 6).c_str(), fortranE(s.cmOffset, 6).c_str()); put(line);
+    std::snprintf(line, sizeof line, "THRUST ACCEL (M/S2): %13s  C.M. OFFSET (M): %13s", fortranE(s.thrust, 6).c_str(), fortranE(0.0, 6).c_str()); put(line);
     std::snprintf(line, sizeof line, "SOLAR FLUX: F10: %3ld  AVERAGE F10: %3ld  AVERAGE AP: %5.1f", std::lround(s.f10), std::lround(s.avgF10), s.avgAp); put(line);
     std::snprintf(line, sizeof line, "TAI-UTC (S): %2ld  UT1-UTC (S): %8.5f  UT1 RATE (MS/DAY): %6.3f", std::lround(s.taiUtc), s.ut1Utc, eop.ut1RateMsPerDay); put(line);
     std::snprintf(line, sizeof line, "POLAR MOT X,Y (ARCSEC): %7.4f %7.4f IAU 1980 NUTAT: %3d TERMS", eop.polarX, eop.polarY, s.nutationTerms); put(line);
-    put("TIME CONST LEAP SECOND TIME (UTC): " + (!s.leapText.empty() ? s.leapText : s.leap.ok ? vcmTime(s.leap) : std::string("2049 365 (31 DEC) 23:59:59.999")));
-    std::snprintf(line, sizeof line, "INTEGRATOR MODE: %-12s COORD SYS: %-5s  PARTIALS: %s", s.integratorMode.c_str(), s.coordSys.c_str(), s.partials.c_str()); put(line);
-    std::snprintf(line, sizeof line, "STEP MODE: %s  FIXED STEP: %s  STEP SIZE SELECTION: %s", s.stepMode.c_str(), s.fixedStep.c_str(), s.stepSelection.c_str()); put(line);
-    std::snprintf(line, sizeof line, "INITIAL STEP SIZE (S): %8.3f  ERROR CONTROL: %9s", s.initialStep, fortranE(s.errorControl, 3).c_str()); put(line);
+    put("TIME CONST LEAP SECOND TIME (UTC): " + (s.leap.ok ? vcmTime(s.leap) : std::string("2049 365 (31 DEC) 23:59:59.999")));
+    {   // the integrator a solution states, else the settings printed for one that did not come from SP
+        const OCMIntegratorT in = s.integrator.value_or(OCMIntegratorT{});
+        const double initialStep = std::isnan(in.INITIAL_STEP_SECONDS) ? 30.0 : in.INITIAL_STEP_SECONDS;
+        const double errorControl = std::isnan(in.ERROR_CONTROL) ? 1e-13 : in.ERROR_CONTROL;
+        std::snprintf(line, sizeof line, "INTEGRATOR MODE: %-12s COORD SYS: %-5s  PARTIALS: %s", textOf(kModes, in.MODE, "SDN FFM"), textOf(kFrames, in.COORDINATE_SYSTEM, "J2000"), textOf(kPartials, in.PARTIALS, "ANALYTIC")); put(line);
+        std::snprintf(line, sizeof line, "STEP MODE: %s  FIXED STEP: %s  STEP SIZE SELECTION: %s", textOf(kStepModes, in.STEP_MODE, "AUTO"), onOffText(in.FIXED_STEP).c_str(), textOf(kSelections, in.STEP_SIZE_SELECTION, "AUTO")); put(line);
+        std::snprintf(line, sizeof line, "INITIAL STEP SIZE (S): %8.3f  ERROR CONTROL: %9s", initialStep, fortranE(errorControl, 3).c_str()); put(line);
+    }
     std::snprintf(line, sizeof line, "VECTOR U,V,W SIGMAS (KM):        %10.4f %10.4f %10.4f", sig[0], sig[1], sig[2]); put(line);
     std::snprintf(line, sizeof line, "VECTOR UD,VD,WD SIGMAS (KM/S):    %10.4f %10.4f %10.4f", sig[3], sig[4], sig[5]); put(line);
     std::snprintf(line, sizeof line, "COVARIANCE MATRIX (EQUINOCTIAL ELS): (%2ux%2u) WTD RMS: %12s", size, size, fortranE(s.weightedRms > 0 ? s.weightedRms : 1.0, 5).c_str()); put(line);
@@ -1306,21 +1351,30 @@ int read(void) {
     std::vector<uint8_t> ocmBytes;
     {
         Solution s;
-        s.indicator = m.indicator; s.center = m.center; s.satellite = m.satellite; s.intDes = m.intDes; s.name = m.name;
-        s.messageTime = parseVcmTime(m.messageTime); s.epoch = m.epoch; s.leap = m.leap; s.leapText = m.leapText;
+        if (!statusOf(m.indicator, s.status, s.exerciseName)) {
+            plugin_set_error("unsupported-message", ("the Real/Test/Exercise indicator \"" + m.indicator + "\" is not REAL, TEST or EXERCISE//<name>//EXERCISE").c_str());
+            return 400;
+        }
+        s.center = m.center; s.satellite = m.satellite; s.intDes = m.intDes; s.name = m.name;
+        s.messageTime = parseVcmTime(m.messageTime); s.epoch = m.epoch; s.leap = m.leap;
         s.epochRev = m.epochRev;
         for (int i = 0; i < 3; ++i) { s.rv[i] = m.j2kPos[i]; s.rv[3 + i] = m.j2kVel[i]; }
         s.geopotential = m.geopotential; s.zonals = m.zonals; s.tesserals = m.tesserals; s.drag = m.drag;
         s.lunarSolar = m.lunarSolar; s.srp = m.srp; s.solidTides = m.solidTides; s.inTrackThrust = m.inTrackThrust;
-        s.b = m.b; s.bdot = m.bdot; s.agom = m.agom; s.edr = m.edr; s.thrust = m.thrust; s.cmOffset = m.cmOffset;
+        s.b = m.b; s.bdot = m.bdot; s.agom = m.agom; s.edr = m.edr; s.thrust = m.thrust;
         s.f10 = m.f10; s.avgF10 = m.avgF10; s.avgAp = m.avgAp;
         s.taiUtc = m.taiUtc; s.ut1Utc = m.ut1Utc; s.nutationTerms = m.nutationTerms;
-        s.integratorMode = m.integratorMode; s.coordSys = m.coordSys; s.partials = m.partials;
-        s.stepMode = m.stepMode; s.fixedStep = m.fixedStep; s.stepSelection = m.stepSelection;
-        s.initialStep = m.initialStep; s.errorControl = m.errorControl;
+        {
+            OCMIntegratorT integrator;
+            if (std::string bad = integratorOf(m.integratorMode, m.coordSys, m.partials, m.stepMode, m.fixedStep, m.stepSelection, m.initialStep, m.errorControl, integrator); !bad.empty()) {
+                plugin_set_error("unsupported-message", ("the integrator setting " + bad + " is not one the format defines").c_str());
+                return 400;
+            }
+            s.integrator = integrator;
+        }
         s.weightedRms = m.weightedRms;
         s.eopSource = "VCM";
-        s.covarianceScale = variance; s.meanMotionUnit = o.meanMotionUnit; s.fractionalParameterRows = o.fractionalParameterRows;
+        s.covarianceScale = variance;
         if (!cartesian.empty()) {
             std::vector<unsigned> idx{0, 1, 2, 3, 4, 5};
             idx.insert(idx.end(), keptIndex.begin(), keptIndex.end());
@@ -1333,7 +1387,9 @@ int read(void) {
                 s.solved[slot] = true;
             }
         }
-        ocmBytes = ocmOf(s);
+        std::string refusal;
+        ocmBytes = ocmOf(s, refusal);
+        if (ocmBytes.empty()) { plugin_set_error("invalid-ocm", refusal.c_str()); return 400; }
     }
 
     // ---- report: a FlowNotice Info. ITEMS are "key=value" lines: text as read, numbers as %.17g, lists of numbers
@@ -1470,8 +1526,11 @@ int ocm(void) {
     auto text = [&](const char* key, const char* fallback) { const std::string* v = lookup(h, key); return v ? (v->size() && (*v)[0] == '"' ? v->substr(1) : *v) : std::string(fallback); };
     auto num = [&](const char* key, double fallback) { const std::string* v = lookup(h, key); double x = fallback; if (v) number(*v, &x); return x; };
 
+    // How the printed covariance is made is write's to say (its options), not the record's.
+    for (const char* key : {"meanMotionUnit", "parameterRows", "centerOfMassOffset"})
+        if (lookup(h, key)) { plugin_set_error("invalid-header", (std::string(key) + " is not a header key: the $OCM has no field for it").c_str()); return 400; }
     Solution s;
-    s.indicator = text("indicator", "");
+    if (!statusOf(text("indicator", ""), s.status, s.exerciseName)) { plugin_set_error("invalid-header", "indicator is REAL, TEST or EXERCISE//<name>//EXERCISE"); return 400; }
     s.center = text("center", "SDN");
     s.satellite = text("satelliteNumber", "");
     s.intDes = text("internationalDesignator", "");
@@ -1491,35 +1550,26 @@ int ocm(void) {
     s.agom = num("agom", 0.0);
     s.edr = num("edr", 0.0);
     s.thrust = num("thrustAcceleration", 0.0);
-    s.cmOffset = num("centerOfMassOffset", 0.0);
     s.f10 = num("f10", 0.0);
     s.avgF10 = num("averageF10", 0.0);
     s.avgAp = num("averageAp", 0.0);
     s.taiUtc = num("taiMinusUtcS", 37.0);
     s.ut1Utc = num("ut1MinusUtcS", 0.0);
     s.nutationTerms = int(std::lround(num("nutationTerms", 106)));
-    s.leapText = text("leapSecondTime", "");
-    if (!s.leapText.empty()) s.leap = parseVcmTime(s.leapText);
-    s.integratorMode = text("integratorMode", "SDN FFM");
-    s.partials = text("partials", "ANALYTIC");
-    s.stepMode = text("stepMode", "AUTO");
-    s.fixedStep = text("fixedStep", "OFF");
-    s.stepSelection = text("stepSizeSelection", "AUTO");
-    s.initialStep = num("initialStepSize", 30);
-    s.errorControl = num("errorControl", 1e-13);
+    if (const std::string leap = text("leapSecondTime", ""); !leap.empty()) s.leap = parseVcmTime(leap);
+    // The integrator, when the header states one of its settings (a result made from a VCM's request).
+    if (lookup(h, "integratorMode") || lookup(h, "partials") || lookup(h, "stepMode") || lookup(h, "fixedStep") ||
+        lookup(h, "stepSizeSelection") || lookup(h, "initialStepSize") || lookup(h, "errorControl")) {
+        OCMIntegratorT integrator;
+        if (std::string bad = integratorOf(text("integratorMode", ""), "", text("partials", ""), text("stepMode", ""), text("fixedStep", ""),
+                                           text("stepSizeSelection", ""), num("initialStepSize", std::nan("")), num("errorControl", std::nan("")), integrator); !bad.empty()) {
+            plugin_set_error("invalid-header", ("the integrator setting " + bad + " is not one the format defines").c_str());
+            return 400;
+        }
+        s.integrator = integrator;
+    }
     s.weightedRms = num("weightedRms", 0.0);
     s.eopSource = text("eopSource", "");
-    s.meanMotionUnit = text("meanMotionUnit", "fraction");
-    {
-        double scale = 0;
-        bool fraction = false;
-        if (!meanMotionRow(s.meanMotionUnit, scale, fraction)) { plugin_set_error("invalid-header", "meanMotionUnit is fraction, rad/ks, rad/s, rad/min or rev/day"); return 400; }
-    }
-    {
-        const std::string rows = text("parameterRows", "fractional");
-        if (rows != "absolute" && rows != "fractional") { plugin_set_error("invalid-header", "parameterRows is absolute or fractional"); return 400; }
-        s.fractionalParameterRows = rows == "fractional";
-    }
     // The covariance of a result is the one the sigmas are printed from; a message carries it divided by
     // max(1, WTD RMS)^2 (read's inverse), unless the header states another scale.
     s.covarianceScale = num("covarianceScale", std::max(1.0, s.weightedRms) * std::max(1.0, s.weightedRms));
@@ -1572,15 +1622,17 @@ int ocm(void) {
             s.solved[slot] = true;
         }
     }
-    const std::vector<uint8_t> bytes = ocmOf(s);
+    std::string refusal;
+    const std::vector<uint8_t> bytes = ocmOf(s, refusal);
+    if (bytes.empty()) { plugin_set_error("invalid-ocm", refusal.c_str()); return 400; }
     if (plugin_push_output_ex("ocm", "OCM.fbs", "$OCM", PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "OCM", 0, 0, bytes.data(), uint32_t(bytes.size())) < 0) return 500;
     return 0;
 }
 
 // write: the $OCM (EME2000 position and velocity, a position-velocity covariance with the parameter rows
 // COV_PARAMETERS names) and, if given, the $EOP records of its day -> the SP VECTOR/COVARIANCE MESSAGE V2.0 text,
-// for the systems that still read it. options: meanMotionUnit, parameterRows and covarianceScale override what
-// the OCM records of how its covariance was made.
+// for the systems that still read it. options: meanMotionUnit (default fraction), parameterRows (default fractional)
+// and covarianceScale (default the OCM's COV_REALISM SCALE_FACTOR) state how the printed covariance is made.
 int write(void) {
     const int32_t ocmIndex = plugin_find_input_index("ocm", 0);
     const plugin_input_frame_t* frame = ocmIndex >= 0 ? plugin_get_input_frame(uint32_t(ocmIndex)) : nullptr;
@@ -1596,8 +1648,8 @@ int write(void) {
         plugin_set_error("invalid-ocm", error.c_str());
         return 400;
     }
-    std::string meanMotionUnit = s.meanMotionUnit;
-    bool fractionalParameterRows = s.fractionalParameterRows;
+    std::string meanMotionUnit = "fraction";
+    bool fractionalParameterRows = true;
     double covarianceScale = s.covarianceScale;
     {
         {

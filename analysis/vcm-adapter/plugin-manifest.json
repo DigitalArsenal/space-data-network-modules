@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
   "name": "SDN VCM Adapter",
   "version": "0.3.0",
-  "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/ffm PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the integrator settings as user-defined parameters). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Typed contracts 1.0: every port one FlatBuffer type. The VCM text travels as a $FIL (CONTENT the text, MEDIA_TYPE text/plain); the read options, the ocm header and the write options are node config (plugin.getConfig, one ModuleConfig) under the tables \"read\", \"header\" and \"write\"; read reports as a FlowNotice Info. Pure compute apart from plugin.getConfig; output bytes depend only on input bytes and config.",
+  "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/ffm PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the message status and the integrator settings, every one in a typed field). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Typed contracts 1.0: every port one FlatBuffer type. The VCM text travels as a $FIL (CONTENT the text, MEDIA_TYPE text/plain); the read options, the ocm header and the write options are node config (plugin.getConfig, one ModuleConfig) under the tables \"read\", \"header\" and \"write\"; read reports as a FlowNotice Info. Pure compute apart from plugin.getConfig; output bytes depend only on input bytes and config.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -122,7 +122,7 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $OCM: identity, the J2K state as EME2000 (km, km/s), the Cartesian covariance (COV_TYPE CARTPV, LTM, COV_SIZE 6 plus the parameter rows COV_PARAMETERS names, units in COV_UNITS, scaled by the weighted RMS as SP prints its sigmas), the force model, the values of B, BDOT, AGOM and the thrust acceleration (OD_DYNAMIC_PARAMETERS), the weighted RMS and energy dissipation rate, and the integrator settings, the covariance's derivation and the message's other settings as USER_DEFINED_PARAMETERS."
+              "description": "Size-prefixed $OCM: identity and HEADER.MESSAGE_STATUS (EXERCISE_NAME), the J2K state with TRAJ_REF_FRAME EME2000 (km, km/s), the Cartesian covariance (COV_TYPE CARTPV, LTM, COV_REF_FRAME EME2000, COV_SIZE 6 plus the parameter rows COV_PARAMETER_KINDS names, units in COV_UNITS, scaled by the weighted RMS as SP prints its sigmas: COV_REALISM[0] ScaledFit SCALE_FACTOR), the force model (GRAVITY_MODEL with MAXIMUM_ZONAL_DEGREE and MAXIMUM_TESSERAL_DEGREE, REDUCTION_THEORY IAU 1980 with REDUCTION_THEORY_TERMS), the values of B, BDOT, AGOM and the thrust acceleration (OD_DYNAMIC_PARAMETERS by PARAMETER), the weighted RMS and energy dissipation rate, METADATA.NEXT_LEAP_EPOCH when the leap second time lies after the epoch, and the integrator settings (INTEGRATOR)."
             }
           ],
           "minStreams": 1,
@@ -207,7 +207,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Writes one propagation result as an $OCM: the final state in EME2000 (km, km/s), its covariance over the state and DYNAMIC_PARAMETERS with the parameter rows named, and the header's model lines. The header is node config table \"header\": identity (satelliteNumber, internationalDesignator, commonName, center, messageTime, epochRev, indicator), model lines (geopotential, zonals, tesserals, drag, lunarSolar, solarRadiationPressure, solidEarthTides, inTrackThrust), the parameters values (ballisticCoefficient, bdot, agom, thrustAcceleration, centerOfMassOffset, edr), space weather (f10, averageF10, averageAp), taiMinusUtcS, ut1MinusUtcS, leapSecondTime, nutationTerms, integrator lines (integratorMode, partials, stepMode, fixedStep, stepSizeSelection, initialStepSize, errorControl), weightedRms and covarianceScale, meanMotionUnit and parameterRows."
+      "description": "Writes one propagation result as an $OCM: the final state in EME2000 (km, km/s), its covariance over the state and DYNAMIC_PARAMETERS with the parameter rows named, and the header's model lines. The header is node config table \"header\": identity (satelliteNumber, internationalDesignator, commonName, center, messageTime, epochRev, indicator), model lines (geopotential, zonals, tesserals, drag, lunarSolar, solarRadiationPressure, solidEarthTides, inTrackThrust), the parameters values (ballisticCoefficient, bdot, agom, thrustAcceleration, edr), space weather (f10, averageF10, averageAp), taiMinusUtcS, ut1MinusUtcS, leapSecondTime, nutationTerms, integrator lines (integratorMode, partials, stepMode, fixedStep, stepSizeSelection, initialStepSize, errorControl; INTEGRATOR only when one is given), weightedRms and covarianceScale. meanMotionUnit, parameterRows and centerOfMassOffset are refused: they are write options or have no OCM field."
     },
     {
       "methodId": "write",
@@ -281,7 +281,7 @@
       ],
       "maxBatch": 1,
       "drainPolicy": "single-shot",
-      "description": "Writes one VCM from an $OCM: J2K (EME2000), ECI (TEME of date) and EFG (GMST 1982 of UT1, no polar motion) states, the force model, parameter values and integrator lines the OCM records, the UVW sigmas and the equinoctial covariance with B, BDOT, AGOM and T in their slots. Options are node config table \"write\": meanMotionUnit, parameterRows, covarianceScale, each overriding what the OCM records of how its covariance was made."
+      "description": "Writes one VCM from an $OCM: J2K (EME2000), ECI (TEME of date) and EFG (GMST 1982 of UT1, no polar motion) states, the force model, parameter values and integrator lines the OCM records, the UVW sigmas and the equinoctial covariance with B, BDOT, AGOM and T in their slots. Options are node config table \"write\": meanMotionUnit (\"fraction\" default), parameterRows (\"fractional\" default), covarianceScale (default the OCM's COV_REALISM[0] SCALE_FACTOR). An OCM without INTEGRATOR prints the placeholder integrator lines (SDN FFM); without NEXT_LEAP_EPOCH, SP's 2049 leap second time."
     }
   ],
   "schemasUsed": [
