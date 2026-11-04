@@ -9,6 +9,8 @@
 // (WGS-72, EGM-96), the covariance's state block as COVARIANCE (TEME), the
 // identity, ORIGINATOR and PROVENANCE carried. No COMMENT and no
 // USER_DEFINED_PARAMETERS. An AP set is not an $OMM: theory-not-exportable:AP.
+// The $PCF is optional: its THEORY (SGP4 or SGP4XP) admits only the sets of
+// that theory; FORCES is refused, as on a flight.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -33,6 +35,7 @@ inline bool stock_forces(const OCM* o, int theory) {
 extern "C" int export_omm(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  if (const int rc = pcf::read(pcf::kExport, true)) return rc;
   uint32_t count = 0;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
@@ -47,6 +50,7 @@ extern "C" int export_omm(void) {
       return ocm::refuse("forces-not-exportable", "An $OMM states the theory's own forces only: the record's PERTURBATIONS are not its theory's.");
     ocm::Set set;
     if (const int rc = ocm::decode(f->payload, f->payload_length, set)) return rc;
+    if (const int rc = pcf::check_set_theory(set.theory)) return rc;
     const ElementRow& row = set.row;
     const bool sgp4 = row.theory == kTheorySgp4;
     // the order of the fields is the 0.4 fit's, so the bytes of an exported set are the 0.4 set's less what is gone

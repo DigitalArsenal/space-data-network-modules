@@ -12,7 +12,8 @@
 // - export_omm of the XP $OCM equals xp-fit-0.4.0.omm with USER_DEFINED_PARAMETERS, COMMENT and
 //   USER_DEFINED_EPOCH_TIMESTAMP / MICROSECONDS removed and PROVENANCE carried, BTERM in BSTAR and AGOM in
 //   MEAN_MOTION_DDOT (OMM 1.276.0 has no BTERM or AGOM field): the two records packed by one builder are byte-equal;
-//   assertNoUserDefined on it; export_omm of the AP $OCM is theory-not-exportable:AP; garbage is invalid-ocm.
+//   assertNoUserDefined on it; export_omm of the AP $OCM is theory-not-exportable:AP; garbage is invalid-ocm; under an
+//   optional $PCF THEORY SGP4 the XP set is configuration-refused (THEORY admits only its own sets).
 // JS only moves bytes and compares numbers the module produced.
 //   node test/covariance.e2e.mjs
 import fs from "node:fs";
@@ -119,6 +120,9 @@ const apBytes = await fit(configuration({ theory: "AP", forces: { ...MSIS_FORCES
 const refused = (label, r, code) => check(r.statusCode !== 0 && r.errorCode === code, `${label}: expected ${code}, got ${r.statusCode === 0 ? "success" : `${r.errorCode} ${r.errorMessage}`}`);
 if (apBytes) refused("export_omm of the AP set", await exportOmm(apBytes), "theory-not-exportable:AP");
 refused("export_omm of garbage", await exportOmm(new Uint8Array(64)), "invalid-ocm");
+const exportUnder = (theory) => h.invoke({ methodId: "export_omm", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: xpBytes }, configuration({ theory })] });
+check((await exportUnder("SGP4XP")).statusCode === 0, "export_omm under THEORY SGP4XP");
+refused("export_omm of the XP set under THEORY SGP4", await exportUnder("SGP4"), "configuration-refused");
 
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);

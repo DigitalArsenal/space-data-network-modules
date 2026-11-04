@@ -380,7 +380,7 @@
     {
       "methodId": "export_omm",
       "displayName": "Export OMM",
-      "description": "The one $OMM this module writes: each 'ocm' element set, SGP4 or stock SGP4XP (ATMOSPHERIC_MODEL {JXX,1970}, WEATHER_SOURCE THEORY_FLUX_MODEL, DENSITY_CORRECTION NONE, both gravity caps 0), to one $OMM: MEAN_ELEMENT_THEORY, EPOCH as the record states it, the six mean elements; SGP4: BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT; SGP4XP: BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT, both m^2/kg (OMM 1.276.0 has no BTERM or AGOM field); USER_DEFINED_EARTH_MODEL WGS-72 or EGM-96; the state block of COVARIANCE_DATA as COVARIANCE in TEME; NORAD_CAT_ID, OBJECT_ID (INTERNATIONAL_DESIGNATOR), OBJECT_NAME, ORIGINATOR and PROVENANCE carried; no COMMENT, no USER_DEFINED_PARAMETERS. Refused by name: missing-ocm, invalid-ocm, theory-not-exportable:AP, forces-not-exportable, and the record refusals of propagate (mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance).",
+      "description": "The one $OMM this module writes: each 'ocm' element set, SGP4 or stock SGP4XP (ATMOSPHERIC_MODEL {JXX,1970}, WEATHER_SOURCE THEORY_FLUX_MODEL, DENSITY_CORRECTION NONE, both gravity caps 0), to one $OMM: MEAN_ELEMENT_THEORY, EPOCH as the record states it, the six mean elements; SGP4: BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT; SGP4XP: BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT, both m^2/kg (OMM 1.276.0 has no BTERM or AGOM field); USER_DEFINED_EARTH_MODEL WGS-72 or EGM-96; the state block of COVARIANCE_DATA as COVARIANCE in TEME; NORAD_CAT_ID, OBJECT_ID (INTERNATIONAL_DESIGNATOR), OBJECT_NAME, ORIGINATOR and PROVENANCE carried; no COMMENT, no USER_DEFINED_PARAMETERS. The $PCF on 'configuration' is optional: THEORY (UNSPECIFIED, SGP4 or SGP4XP) admits only the sets of that theory (configuration-refused THEORY); a FORCES table is refused (configuration-refused FORCES). Refused by name: configuration-refused, invalid-configuration, missing-ocm, invalid-ocm, theory-not-exportable:AP, forces-not-exportable, and the record refusals of propagate (mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance).",
       "inputPorts": [
         {
           "portId": "ocm",
@@ -401,6 +401,27 @@
           "maxStreams": 65535,
           "required": true,
           "description": "$OCM element sets (SGP4 or stock SGP4XP), plain or size-prefixed. A payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type before anything is decoded (omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown); a frame on a port this method does not declare is refused by the host (unknown-input-port)."
+        },
+        {
+          "portId": "configuration",
+          "displayName": "configuration",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "$PCF 1.0.7 (SDS 1.276.0), optional: THEORY, the theory every exported set must state; a FORCES table is refused.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF"
+                }
+              ],
+              "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
+            }
+          ]
         }
       ],
       "outputPorts": [

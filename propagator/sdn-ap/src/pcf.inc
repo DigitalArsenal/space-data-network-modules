@@ -49,7 +49,7 @@ struct Forces {
 
 namespace pcf {
 
-enum Method : uint32_t { kPropagate, kManeuver, kFit, kEpochs };  ///< kEpochs: load_epochs, propagate_epochs (propagate's tables)
+enum Method : uint32_t { kPropagate, kManeuver, kFit, kEpochs, kExport };  ///< kEpochs: load_epochs, propagate_epochs (propagate's tables); kExport: export_omm (THEORY only)
 
 /// A fitted parameter's prior, $PCF FIT.DRAG_PRIOR (B_eff) or FIT.SRP_PRIOR (AGOM), m^2/kg, with its form
 /// (FIT.DRAG_PRIOR_FORM, FIT.SRP_PRIOR_FORM). GAUSSIAN_SIGNED: on the parameter itself, `mean` and `sigma` in its unit.
@@ -189,6 +189,7 @@ inline uint32_t tables_of(Method m) {
     case kManeuver:
     case kEpochs: return kTOutput | kTIntegrator | kTEvents;
     case kFit: return kTFit | kTForces | kTIntegrator;
+    case kExport: return 0;
   }
   return 0;
 }
@@ -484,6 +485,7 @@ inline int read(Method method, bool optional = false) {
     case kPropagate:
     case kManeuver:
     case kEpochs:
+    case kExport:
       if (o.theory != pcfTheory_UNSPECIFIED && o.theory != pcfTheory_SGP4 && o.theory != pcfTheory_SGP4XP && o.theory != pcfTheory_AP)
         return refuse("THEORY", "this module flies SGP4, SGP4XP and AP sets (UNSPECIFIED: each set's own)");
       if (c->FORCES() != nullptr) return refuse("FORCES", "the record is the one authority for its forces: a flight's $PCF carries no FORCES");

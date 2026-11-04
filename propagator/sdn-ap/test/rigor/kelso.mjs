@@ -82,7 +82,7 @@ export const checks = [
   }),
   defineCheck({
     id: "kelso-identity-carried", reviewer: REVIEWERS.KELSO, tier: "fast",
-    question: "Does an output ephemeris carry its element set's identity: the catalog number (including an alpha-5 range number above 99999), the international designator and the name, unchanged?",
+    question: "Does an output ephemeris carry its element set's identity (an $OMM through ingest_omm, its $OCM flown): the catalog number (including an alpha-5 range number above 99999), the international designator and the name, unchanged?",
     source: "CCSDS 502.0-B-3 (OMM and OEM metadata); Space-Track alpha-5 numbering (catalog numbers 100000 to 339999 written as a letter and four digits)",
     async run() {
       const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
@@ -96,7 +96,10 @@ export const checks = [
         OMM.addMeanMotion(b, 15.5); OMM.addEccentricity(b, 0.001); OMM.addInclination(b, 51.6); OMM.addRaOfAscNode(b, 10);
         OMM.addArgOfPericenter(b, 20); OMM.addMeanAnomaly(b, 30); OMM.addBstar(b, 1e-4);
         OMM.finishOMMBuffer(b, OMM.endOMM(b));
-        const r = await command.invoke({ methodId: "propagate", inputs: [configuration({}), { portId: "omm", typeRef: OMM_TYPE, payload: b.asUint8Array() }] });
+        // the $OMM through the one boundary (ingest_omm), its $OCM alone in flight
+        const ing = await command.invoke({ methodId: "ingest_omm", inputs: [{ portId: "omm", typeRef: OMM_TYPE, payload: b.asUint8Array() }] });
+        if (ing.statusCode !== 0) { ok = false; evidence.push(`${norad}: ingest_omm refused (${ing.errorCode} ${ing.errorMessage})`); continue; }
+        const r = await command.invoke({ methodId: "propagate", inputs: [configuration({}), { portId: "ocm", typeRef: { schemaName: "OCM.fbs", fileIdentifier: "$OCM", rootTypeName: "OCM" }, payload: new Uint8Array(ing.outputs[0].payload) }] });
         if (r.statusCode !== 0) { ok = false; evidence.push(`${norad}: propagate refused (${r.errorCode} ${r.errorMessage})`); continue; }
         const oem = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(r.outputs[0].payload)).unpack();
         const obj = oem.EPHEMERIS_DATA_BLOCK[0]?.OBJECT;
