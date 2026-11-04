@@ -1,0 +1,19 @@
+{
+  "spacedatastandards": "1.276.0",
+  "sdsFamilies": [
+    "RFM",
+    "TDM",
+    "IDM",
+    "EOO",
+    "GST",
+    "PVN"
+  ],
+  "commonHeaders": [
+    "civil_time.hpp"
+  ],
+  "sources": [
+    "src/satnogs_optical_source.cpp"
+  ],
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "48d8aade8a7279d2a6ebfe66e2e9e178a9971c7b8b308fdeee893be2d7a29de4"
+}
