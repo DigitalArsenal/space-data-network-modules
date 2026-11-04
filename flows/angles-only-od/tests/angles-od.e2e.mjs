@@ -24,6 +24,7 @@
 // JS reads files, routes records between modules by port, cuts windows to clock hours and compares numbers.
 //   cd flows/angles-only-od && node tests/angles-od.e2e.mjs
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import * as flatbuffers from 'flatbuffers';
 import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
 import * as F from 'spacedatastandards.org/lib/js/FRM/main.js';
@@ -37,6 +38,10 @@ import { createStandaloneHarness } from 'space-data-module-sdk/testing/isomorphi
 import { encodeHttpResponse, encodeModuleConfig, decodeFlowNotice } from 'space-data-module-sdk/runtime-contracts';
 
 const BOUND_KM = 0.15;  // the first dry run's 0.0604 km, doubled and rounded up; committed into the record's acceptance
+// The answers of case 2 recorded from the dists before modules-angles-only-od-real-tracks-2-20261104 (RECORD_ANSWERS=1
+// writes them); the run's own must equal them: the state at the epoch within RECORDED_M, WEIGHTED_RMS within 1e-4.
+const RECORDED = new URL('fixtures/angles-od-recorded.json', import.meta.url);
+const RECORDED_M = 1;
 const SIGMA_ARCSEC = 23;
 const STATIONS = [{ id: 'SATNOGS-OPTICAL-11', lat: 52.8344, lon: 6.3785, h: 10, tagOffsetNs: 10_000_000n, timingSigma: 0.010 }];
 // Per night: the crossings (seconds) of each pass kept, the passes taken in order. Night 1: one crossing.
@@ -277,7 +282,7 @@ async function fit(observations, execution) {
   }
   return { error: 'the loop did not end', rounds };
 }
-async function solve(flowConfig) {
+async function solve(flowConfig, answers = null) {
   const common = [...tdms.map((p) => ({ portId: 'observations', typeRef: TDM_T, payload: p })), { portId: 'initial', typeRef: OCM_T, payload: initialOcm },
     ...(flowConfig ? [{ portId: 'config', typeRef: MCFG, payload: encodeModuleConfig(flowConfig) }] : [])];
   let stage = null;
@@ -298,6 +303,11 @@ async function solve(flowConfig) {
         note = `, WEIGHTED_RMS ${o.ORBIT_DETERMINATION.WEIGHTED_RMS.toFixed(3)}, |dr| at the epoch ${(Math.hypot(...[0, 1, 2].map((i) => o.STATE_DATA[i] * 1000 - tr[i])) / 1000).toFixed(3)} km, |dv| ${Math.hypot(...[3, 4, 5].map((i) => o.STATE_DATA[i] * 1000 - tr[i])).toFixed(3)} m/s`;
       }
       console.log(`  stage ${s} (${notice.items[0]}): candidate ${c + 1}/${candidates.length}${candidates.length > 1 ? ` (${notice.items.filter((x) => x.startsWith('candidate'))[c]})` : ''} over ${observations.length} tracks: ${f.error ?? 'converged'} after ${f.rounds} fit_batch calls, ${((Date.now() - t) / 1000).toFixed(1)} s${note}`);
+      if (answers) {
+        const o = f.ocm ? OCM.getRootAsOCM(new flatbuffers.ByteBuffer(f.ocm)).unpack() : null;
+        answers.candidates.push({ stage: s, candidate: c + 1, tracks: observations.length, rounds: f.rounds, outcome: f.error ? f.error.split(':')[0] : 'converged',
+          ...(o ? { epoch: o.STATE_EPOCHS[0], stateKm: o.STATE_DATA.slice(0, 6), weightedRms: o.ORBIT_DETERMINATION.WEIGHTED_RMS } : {}) });
+      }
       if (f.ocm) { ocms.push(f.ocm); kept.push(execution); }
     }
     const chosen = await invoke(flow, 'select', [...common, ...stageIn, ...ocms.map((p) => ({ portId: 'candidates', typeRef: OCM_T, payload: p })),
@@ -314,7 +324,8 @@ console.log(`  ${night1.error ?? 'ACCEPTED'}`);
 check(night1.error?.startsWith('single-crossing'), "initial_orbit on night 1's one crossing: single-crossing");
 console.log('2. the flow');
 const t1 = Date.now();
-const run = await solve(null);
+const answers = { candidates: [] };
+const run = await solve(null, answers);
 check(!!run.ocm, `one $OCM (${run.error ?? 'emitted'}), ${((Date.now() - t1) / 1000).toFixed(1)} s`);
 let line = '';
 if (run.ocm) {
@@ -331,6 +342,20 @@ if (run.ocm) {
   check(ocm.PROVENANCE?.SOURCE_KIND === pvnSourceKind.Observation, `PVN ${pvnSourceKind[ocm.PROVENANCE?.SOURCE_KIND]}`);
   check(record.userDefinedParametersLength() === 0 && OCM.getRootAsOCM(new flatbuffers.ByteBuffer(initialOcm)).userDefinedParametersLength() === 0, 'no USER_DEFINED_PARAMETERS');
   line = `arc-end error ${dr.toFixed(4)} km${BOUND_KM === null ? ' (dry run)' : ` below ${BOUND_KM} km`}`;
+  Object.assign(answers, { epoch: ocm.STATE_EPOCHS[0], stateKm: ocm.STATE_DATA.slice(0, 6), used: od.OD_OBSERVATIONS_USED, residualRmsArcsec: od.OD_RESIDUAL_RMS,
+    weightedRms: od.WEIGHTED_RMS, arcEndKm: dr });
+  if (process.env.RECORD_ANSWERS) {
+    const wasm = Object.fromEntries(['analysis/optical-astrometry', 'flows/angles-only-od', 'flows/observation-od', 'analysis/estimation', 'propagator/ffm']
+      .map((p) => [p, createHash('sha256').update(fs.readFileSync(modules(`${p}/dist/isomorphic/module.wasm`))).digest('hex')]));
+    fs.writeFileSync(RECORDED, `${JSON.stringify({ recorded: 'tests/angles-od.e2e.mjs case 2 on the dists before modules-angles-only-od-real-tracks-2-20261104', wasmSha256: wasm, ...answers }, null, 1)}\n`);
+    console.log(`  RECORDED ${RECORDED.pathname}`);
+  } else {
+    const was = JSON.parse(fs.readFileSync(RECORDED, 'utf8'));
+    const moved = Math.hypot(...[0, 1, 2].map((i) => (answers.stateKm[i] - was.stateKm[i]) * 1000));
+    console.log(`  recorded: ${was.used} observations, WEIGHTED_RMS ${was.weightedRms.toFixed(6)}, arc-end ${was.arcEndKm.toFixed(4)} km; this run's state ${moved.toFixed(4)} m from the recorded at ${was.epoch}`);
+    check(answers.epoch === was.epoch && moved < RECORDED_M && Math.abs(answers.weightedRms - was.weightedRms) < 1e-4 && answers.used === was.used,
+      `case 2 as recorded: state within ${RECORDED_M} m (${moved.toFixed(4)} m), WEIGHTED_RMS within 1e-4, ${was.used} observations`);
+  }
 }
 console.log('3. a wrong revolution count');
 const wrong = await solve({ revolutionOffsetMin: 1, revolutionOffsetMax: 1 });

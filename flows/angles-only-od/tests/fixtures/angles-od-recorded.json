@@ -1,0 +1,141 @@
+{
+ "recorded": "tests/angles-od.e2e.mjs case 2 on the dists before modules-angles-only-od-real-tracks-2-20261104",
+ "wasmSha256": {
+  "analysis/optical-astrometry": "8c82e0caaf22f471a4829d7b7d6fbcf796217c2e244575eab91a293ed0b11d5b",
+  "flows/angles-only-od": "f29c4f7bb1eb490de2e136e33dc2dbdf7fe87f1c0244753690ff4eb321ecd9da",
+  "flows/observation-od": "d5cc1246c597b92d94cc58814c580f75bb27f2107675bf43ff157483f05f9c70",
+  "analysis/estimation": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
+  "propagator/ffm": "318db198d611da632a461de0c5aa6e280ffaa913cc2a1324034d1844e06c4fd6"
+ },
+ "candidates": [
+  {
+   "stage": 1,
+   "candidate": 1,
+   "tracks": 3,
+   "rounds": 3,
+   "outcome": "converged",
+   "epoch": "2026-09-23T02:34:50.096800089Z",
+   "stateKm": [
+    1063.2485401652273,
+    4031.655407181401,
+    6485.551008517846,
+    -6.243050979366669,
+    -2.4895667973212063,
+    2.561157747451967
+   ],
+   "weightedRms": 0.9867369306106835
+  },
+  {
+   "stage": 2,
+   "candidate": 1,
+   "tracks": 6,
+   "rounds": 2,
+   "outcome": "propagator/ffm reentry"
+  },
+  {
+   "stage": 2,
+   "candidate": 2,
+   "tracks": 6,
+   "rounds": 4,
+   "outcome": "converged",
+   "epoch": "2026-09-23T02:34:50.096800089Z",
+   "stateKm": [
+    1063.2222021175678,
+    4031.6779865739895,
+    6485.566405886125,
+    -6.2431957238757345,
+    -2.489061014224631,
+    2.56124557274162
+   ],
+   "weightedRms": 0.9936035753087428
+  },
+  {
+   "stage": 2,
+   "candidate": 3,
+   "tracks": 6,
+   "rounds": 2,
+   "outcome": "propagator/ffm reentry"
+  },
+  {
+   "stage": 3,
+   "candidate": 1,
+   "tracks": 9,
+   "rounds": 4,
+   "outcome": "converged",
+   "epoch": "2026-09-23T02:34:50.096800089Z",
+   "stateKm": [
+    1063.2267245238904,
+    4031.683741587835,
+    6485.563556243164,
+    -6.24324530230718,
+    -2.4890998130655495,
+    2.561083650827028
+   ],
+   "weightedRms": 0.9783067063368458
+  },
+  {
+   "stage": 4,
+   "candidate": 1,
+   "tracks": 11,
+   "rounds": 3,
+   "outcome": "converged",
+   "epoch": "2026-09-23T02:34:50.096800089Z",
+   "stateKm": [
+    1063.2277605194176,
+    4031.68551800862,
+    6485.554772837859,
+    -6.243264574634859,
+    -2.4890738736895184,
+    2.561078322584948
+   ],
+   "weightedRms": 0.9883477312439496
+  },
+  {
+   "stage": 5,
+   "candidate": 1,
+   "tracks": 14,
+   "rounds": 3,
+   "outcome": "converged",
+   "epoch": "2026-09-23T02:34:50.096800089Z",
+   "stateKm": [
+    1063.2271082260215,
+    4031.6848481886655,
+    6485.55383850831,
+    -6.243261415740653,
+    -2.4890734033708566,
+    2.5610896902691924
+   ],
+   "weightedRms": 0.9886339036535224
+  },
+  {
+   "stage": 6,
+   "candidate": 1,
+   "tracks": 15,
+   "rounds": 3,
+   "outcome": "converged",
+   "epoch": "2026-09-23T02:34:50.096800089Z",
+   "stateKm": [
+    1063.228992783528,
+    4031.685660107262,
+    6485.555116124902,
+    -6.243261548981862,
+    -2.4890868715134253,
+    2.5610716682361465
+   ],
+   "weightedRms": 0.9923479131264454
+  }
+ ],
+ "epoch": "2026-09-23T02:34:50.096800089Z",
+ "stateKm": [
+  1063.228992783528,
+  4031.685660107262,
+  6485.555116124902,
+  -6.243261548981862,
+  -2.4890868715134253,
+  2.5610716682361465
+ ],
+ "used": 939,
+ "residualRmsArcsec": 22.824002001908234,
+ "weightedRms": 0.9923479131264454,
+ "arcEndKm": 0.0604250027311867
+}
