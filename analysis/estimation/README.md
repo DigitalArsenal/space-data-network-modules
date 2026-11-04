@@ -286,7 +286,7 @@ raises the cost, is a rejected trial and the step shrinks.
   plus its first-order change over the step, by a scale of the velocity):
   the energy is quadratic in the velocity, and over many revolutions a step
   of tens of m/s otherwise moves the in-track phase a day on by kilometers
-  the linear model does not see. The undamped Gauss-Newton step is taken as
+  the linear model does not see. The undamped Gauss–Newton step is taken as
   it is (version 1's path).
 - **Results are evaluated points.** `CONVERGED` reports the evaluated point
   plus its final Gauss–Newton step (below the tolerance, or below the

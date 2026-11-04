@@ -598,15 +598,15 @@
       }
     },
     "analysis/estimation/dist/isomorphic/module.wasm": {
-      "sha256": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
-      "bytes": 769257,
+      "sha256": "b4319ba0cf63e80c23e803dafe9ea8803d966ec7ec80c3fac0031c1b01df4f86",
+      "bytes": 795118,
       "module": "analysis/estimation",
-      "lastCommit": "af6f94398ceb7d05556c27263ca4cee350219e2b",
-      "lastCommitDate": "2026-10-30T20:54:54-04:00",
+      "lastCommit": "adc31264fc5bc1eba71d97795d0b97f73a40589f",
+      "lastCommitDate": "2026-11-04T16:11:37-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "2c928e789b09ba507d6383545f5d925191061539",
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
         "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
       },
       "declaration": {
@@ -900,11 +900,11 @@
       }
     },
     "analysis/optical-astrometry/dist/isomorphic/module.wasm": {
-      "sha256": "8c82e0caaf22f471a4829d7b7d6fbcf796217c2e244575eab91a293ed0b11d5b",
-      "bytes": 1107005,
+      "sha256": "8ad1e10bd3d06b653f9c4f3220cfa9215fd0e32e7618bcb29230027e4c07dfbb",
+      "bytes": 1122882,
       "module": "analysis/optical-astrometry",
-      "lastCommit": "ba6394109f4be269d0e118ab085f08464b4eb842",
-      "lastCommitDate": "2026-11-04T14:55:37-05:00",
+      "lastCommit": "adc31264fc5bc1eba71d97795d0b97f73a40589f",
+      "lastCommitDate": "2026-11-04T16:11:37-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -3264,11 +3264,11 @@
       }
     },
     "flows/angles-only-od/dist/isomorphic/module.wasm": {
-      "sha256": "f29c4f7bb1eb490de2e136e33dc2dbdf7fe87f1c0244753690ff4eb321ecd9da",
-      "bytes": 503973,
+      "sha256": "8dceb574b30f97d7770e42c03b5db4e577143ebf35b9d027c08569914b515d36",
+      "bytes": 504908,
       "module": "flows/angles-only-od",
-      "lastCommit": "ba6394109f4be269d0e118ab085f08464b4eb842",
-      "lastCommitDate": "2026-11-04T14:55:37-05:00",
+      "lastCommit": "adc31264fc5bc1eba71d97795d0b97f73a40589f",
+      "lastCommitDate": "2026-11-04T16:11:37-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -3956,11 +3956,11 @@
       }
     },
     "flows/observation-od/dist/isomorphic/module.wasm": {
-      "sha256": "d5cc1246c597b92d94cc58814c580f75bb27f2107675bf43ff157483f05f9c70",
-      "bytes": 776860,
+      "sha256": "86681788202dbe4b2786e328274e2c7055a21b21cafbb83bf1a44241a34f0e67",
+      "bytes": 776838,
       "module": "flows/observation-od",
-      "lastCommit": "5da8d709375ba410aa75cfcb0c89fa006f7ff82c",
-      "lastCommitDate": "2026-11-04T14:36:53-05:00",
+      "lastCommit": "adc31264fc5bc1eba71d97795d0b97f73a40589f",
+      "lastCommitDate": "2026-11-04T16:11:37-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {

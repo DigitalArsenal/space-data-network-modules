@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T20:06:21.463Z",
+  "generatedAt": "2026-11-04T21:13:42.909Z",
   "moduleCount": 157,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 151,
@@ -760,7 +760,7 @@
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "methodIds": [
         "evaluate_teag",
         "fit_batch",
@@ -1507,7 +1507,7 @@
       "pluginId": "com.digitalarsenal.analysis.optical-astrometry",
       "name": "Optical astrometry",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "initial_orbit",
         "reduce"
@@ -5201,7 +5201,7 @@
       "pluginId": "org.sdn.flows.angles-only-od",
       "name": "Angles-only orbit determination",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "plan",
         "select"
@@ -5219,7 +5219,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 5,
+      "testFileCount": 6,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -5228,6 +5228,7 @@
       "testFiles": [
         "tests/angles-od.e2e.mjs",
         "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/angles-od-recorded.json",
         "tests/fixtures/finals-daily-20260918-20261002.txt",
         "tests/fixtures/whole-passes.json",
         "tests/record-whole-passes.mjs"
@@ -5330,7 +5331,7 @@
       "pluginId": "org.sdn.flows.observation-od.laser-od",
       "name": "Laser orbit determination",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "step"
       ],
