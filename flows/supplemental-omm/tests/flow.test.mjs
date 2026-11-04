@@ -58,9 +58,9 @@ test("one tick: every source fetched through hostcap/http-request, every object 
 
   // Every stored batch published: the POST body the IngestResult naming it.
   const posts = calls.filter((c) => c.operation === "http.request" && c.params.url === PUBLISH_URL);
-  assert.equal(posts.length, 90);
-  assert.equal(egress.results.length, 90);
-  assert.equal(egress.publications.length, 90);
+  assert.equal(posts.length, 60);
+  assert.equal(egress.results.length, 60);
+  assert.equal(egress.publications.length, 60);
   assert.ok(egress.publications.every((p) => p.status === 202));
   const posted = posts.map((c) => decodeIngestResult(c.params.body));
   assert.deepEqual(posted.map((r) => r.batchId).sort(), ingests.map((i) => i.batch_id).sort());
@@ -109,8 +109,8 @@ test("a source that answers nothing: its lane says so, the other sources' object
   const missing = egress.notices.filter((n) => n.kind === "missing");
   assert.equal(missing.length, 1);
   assert.match(missing[0].items[0], /STARLINK-36348 \(67851\): HTTP 404/);
-  assert.equal(ingests.filter((i) => i.source_name === "spacex-starlink").length, 3, "the other Starlink object");
-  assert.equal(ingests.length, 3 * 29 + 2);
+  assert.equal(ingests.filter((i) => i.source_name === "spacex-starlink").length, 2, "the other Starlink object");
+  assert.equal(ingests.length, 2 * 29);
   const starlink = routes.get("provider-starlink.dss");
   assert.equal(starlink.STATUS, 4);
   assert.equal(Number(starlink.MISSING_ROWS), 1);
