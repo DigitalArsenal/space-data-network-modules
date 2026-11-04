@@ -24,11 +24,7 @@ const result = await compileModuleFromSource({
   outputPath,
   threadModel: manifest.threadModel,
 });
-if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues ?? result.report, null, 2));
+if (!result.report?.ok) throw new Error((result.report?.issues ?? []).map((i) => i.message ?? String(i)).join('; ') || 'compile failed');
 await fs.copyFile(path.join(root, 'plugin-manifest.json'), path.join(root, 'dist/plugin-manifest.json'));
 const wasm = await fs.readFile(outputPath);
-await fs.writeFile(path.join(root, 'dist/build-provenance.json'), `${JSON.stringify({
-  spacedatastandards: version, sdsFamilies: families, sources: ['src/angles_od.cpp'], threadModel: manifest.threadModel,
-  wasmSha256: createHash('sha256').update(wasm).digest('hex'),
-}, null, 2)}\n`);
-console.log(`Built ${path.relative(root, outputPath)} (${wasm.length} bytes) against spacedatastandards.org@${version}`);
+console.log(`Built ${path.relative(root, outputPath)} (${wasm.length} bytes, SHA-256 ${createHash('sha256').update(wasm).digest('hex')}) against spacedatastandards.org@${version} (${families.join(', ')})`);
