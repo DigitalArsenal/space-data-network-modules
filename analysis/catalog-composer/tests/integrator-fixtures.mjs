@@ -70,6 +70,16 @@ export function ocmRecord({ source, norad = 0, cospar = '', native = '', epoch, 
   return finish((b, o) => OCM.OCM.finishSizePrefixedOCMBuffer(b, o), (b) => t.pack(b));
 }
 
+// An AP element set as propagator/sdn-ap 0.5.1 `fit` writes it (tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm, recorded by
+// tests/record-ap-ocm.mjs), published by `source`: the writer's record with PROVENANCE.SOURCE_ID set, size-prefixed as
+// the product ports carry records. The elements, forces, fit statistics and identity are the writer's.
+export const apFitOcm = fs.readFileSync(here('fixtures/ap-fit-sdn-ap-0.5.1.ocm'));
+export function apOcmRecord({ source }) {
+  const t = OCM.OCM.getRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(apFitOcm))).unpack();
+  t.PROVENANCE.SOURCE_ID = source;
+  return finish((b, o) => OCM.OCM.finishSizePrefixedOCMBuffer(b, o), (b) => t.pack(b), 8192);
+}
+
 export function mnvRecord({ source, id, norad = 0, cospar = '', native = '', at, status = MNV.maneuverStatus.DETECTED, dv = 0, tags = [] }) {
   const t = Object.assign(new MNV.MNVT(), {
     ID: id, SAT_NO: norad, ORIG_OBJECT_ID: cospar, ON_ORBIT: native, STATUS: status, EVENT_START_TIME: at, DELTA_VEL: dv,

@@ -1,0 +1,48 @@
+{
+  "recorded": "modules c2f476f6 dists, before the $OCM set change",
+  "versions": {
+    "catalog-composer": "0.5.1",
+    "epoch-state": "0.4.0",
+    "source-products": "0.2.0"
+  },
+  "integrator": {
+    "statusCode": 0,
+    "catalog": "11bd7f130b6b2c9f18af61715e9cf20bd10e35e722b947c9f09a7eb3a1572b0a",
+    "omm": "e69ce56787b5ee9edf0a5752e45de1bf600a87c54e7d576bc0ff1001f9926494",
+    "ocm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ocmRecords": 2,
+    "products": [
+      "sgp4"
+    ]
+  },
+  "epochState": {
+    "sgp4": {
+      "statusCode": 0,
+      "ports": {
+        "states": "a7e6746ab682790c59f5577e86906120bee530786a5388b88952a7be0dcd210d",
+        "report": "6737b4c8b9dad6270d1ce96546cb001c6a1a4a4ef9b7bb862148ae7e34be3015"
+      }
+    },
+    "apOcmOnOmmPort": {
+      "statusCode": 400,
+      "errorCode": "malformed-stream"
+    }
+  },
+  "sourceProducts": {
+    "sgp4": {
+      "derive_report": "6f7dd8422ed8321959a30fa9becaeb5fcefc3ea48eba308f4596c503b9b4084b",
+      "ocm": "40a9e4193750a3d8af1b5a47d8ac83f65078c8211c1dee755c8890633db742b4",
+      "omm": "a5458ef9b2cf4a975354e491a3e1e6591b53377e8e69a2bb624f40b509e364a0",
+      "covariance_report": "0937f4758e7e5d6c91eeb454752592249daa0f50ae3b1981558074c48a84f1b8",
+      "propagation_report": "2874fd44c7bc69f8cf48f973c67d9924afd89bec9eca808d0ab48f3c2b35209e",
+      "detect_report": "b40bdb90b3d86cd6ce0dc2229aeebdefcc4af01c8b18dddc36d5c41b5011b82f"
+    },
+    "xp": {
+      "derive_report": "e3d4ca4316e31cc77d1444a7907e8ac9e51dc3d10748690355ce41a49bfeb383",
+      "omm": "00706f78774c3b0d7b340b2f468f0357e6ff7ea2f7f8c4563dd1e49544186bb0",
+      "covariance_report": "b8182c37fad5a2a5e202b6d9ea01b4eb4ca4f973205d796ff7cde1187b07b170",
+      "propagation_report": "959a3861e4a7913e509d7f45c4fac0132274516d599c761789754627147b4d22",
+      "detect_report": "600a5eb099027da4e539c628e553fb998e0bcf17089858d084089fe079dd2b9a"
+    }
+  }
+}
