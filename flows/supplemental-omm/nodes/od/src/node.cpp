@@ -99,7 +99,7 @@ constexpr size_t kMaxOutputStreamBytes = 128u * 1024u * 1024u;
 constexpr std::string_view kFitOptions = R"json({"maxIterations":40})json";
 constexpr const char* kProviderId = "supplemental-omm";
 constexpr const char* kParser = "org.sdn.flows.supplemental-omm.od";
-constexpr const char* kParserVersion = "2.1.0";
+constexpr const char* kParserVersion = "2.1.1";
 
 enum class Provider : uint8_t { Starlink, Glonass, Intelsat, Cpf, Iss };
 
@@ -575,7 +575,7 @@ struct RecordStream {
 // its result, ITERATIONS and ACTUAL_OD_SPAN from the diagnostics it hands back (read here, never emitted). The core
 // states no fit arc and no state count, so FIT_START, FIT_STOP and FIT_STATES are not written.
 // ---------------------------------------------------------------------------
-constexpr const char* kSgp4Product = "SDN supplemental-omm OD node 2.1.0 over the frozen complete-arc SGP4 OD core";
+constexpr const char* kSgp4Product = "SDN supplemental-omm OD node 2.1.1 over the frozen complete-arc SGP4 OD core";
 
 bool sgp4_set_ocm(const od::PluginFitFBResult& epoch, const ProviderInfo& provider, std::vector<uint8_t>* out) {
   flatbuffers::Verifier omm_verifier(epoch.omm.data(), epoch.omm.size());
@@ -661,7 +661,7 @@ bool sgp4_set_ocm(const od::PluginFitFBResult& epoch, const ProviderInfo& provid
 // ---------------------------------------------------------------------------
 constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 16, 0};
 constexpr const char* kXpProduct =
-    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.2.0 and the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
+    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.2.1 and the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
 constexpr uint32_t kUnknownNorad = 99999;  // the OD core's placeholder
 
 template <typename T>
