@@ -1,12 +1,15 @@
 // -----------------------------------------------------------------------------
 // The epoch store (SPEC 14): many element sets per object over a window of days, the set that answers a request time
 // chosen by index, and a blend across each handover so the state stays continuous.
-// - `load_epochs` replaces the store with a snapshot: 'omm' frames of size-prefixed $OMM records end to end (the
-//   element-sync module's output; a frame of one plain or size-prefixed record also reads), with the $PCF
-//   EPOCH_STORE table (SDS 1.270.0). A series is one (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR); its sets are kept by
-//   epoch: CACHE_DAYS back from the newest epoch of the load (not the wall clock: the store depends on its input
-//   alone), at most MAX_SETS_PER_OBJECT (the newest), THEORIES (empty: SGP4 and SGP4XP). Sets not centered on the Earth
-//   are counted and not stored.
+// - `load_epochs` replaces the store with a snapshot: 'ocm' frames of size-prefixed $OCM records end to end (the
+//   element-sync module's $OCM lane; a frame of one plain or size-prefixed record also reads), with the optional $PCF
+//   EPOCH_STORE table. A series is one (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, HEADER.ORIGINATOR);
+//   its sets are kept by MEAN_ELEMENTS.EPOCH: CACHE_DAYS back from the newest epoch of the load (not the wall clock: the
+//   store depends on its input alone), at most MAX_SETS_PER_OBJECT (the newest), THEORIES (empty: SGP4, SGP4XP and AP).
+//   Sets not centered on the Earth are counted and not stored. Each set flies its own record's forces, rows and nodes;
+//   a set whose forces (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, the two caps) differ from its series'
+//   first is refused (series-forces-differ); rows and nodes are data, not forces, and identical row series and node
+//   vectors are held once (interned by content).
 // - Selection (SELECTION): NEAREST, the set whose epoch is nearest the request (the switch between consecutive sets at
 //   their midpoint), or LATEST_BEFORE, the latest set at or before it (the switch at the later set's epoch; before the
 //   first set, the first). O(log n) per series.
@@ -29,14 +32,18 @@ struct Config {
   int selection = 0;          ///< 0 NEAREST, 1 LATEST_BEFORE
   double blend_seconds = 3600.0;
   int shape = 0;              ///< 0 SMOOTHSTEP, 1 HERMITE
-  uint32_t theories = 0;      ///< bit per pcfTheory (SGP4 1, SGP4XP 2); 0: both
+  uint32_t theories = 0;      ///< bit per theory (SGP4 1, SGP4XP 2, AP 4); 0: all
 };
 
-/// One kept set: the row and its covariance when the record carries one.
+/// One kept set: the row, its forces and the atmosphere they read (interned; nullptr: the theory's own flux model), and
+/// its covariance when the record carries one.
 struct Entry {
   ElementRow row;
   double epoch;               ///< minutes from J2000 (JD 2451545.0), UTC
   cov::Set* cov = nullptr;
+  Forces forces{};
+  const atm::Atmosphere* atmosphere = nullptr;
+  int32_t first_day = 0, last_day = 0;  ///< RECORDS: the MJDs it flies through (its first row's day + 1, its last row's day)
 };
 
 /// An initialized record of one set (the lazy cache: two per series).
@@ -52,7 +59,8 @@ struct Slot {
 struct Series {
   uint32_t norad = 0;
   std::string object_id, originator, name;
-  int32_t theory = 0;
+  int32_t theory = 0;         ///< sdnap::Theory (the record family)
+  int32_t met = 0;            ///< MEAN_ELEMENT_THEORY
   uint32_t first = 0, count = 0;  ///< into Store::entries, by epoch
   Slot slots[2];
   uint32_t next = 0;              ///< the slot replaced next
@@ -67,9 +75,8 @@ struct Store {
   std::vector<Entry> entries;
   std::vector<Series> series;
   Stats stats;
-  atm::Atmosphere atm;
-  xpt::tess::Terms terms;  ///< AP's gravity terms of the load (SPEC 16)
-  bool has_atm = false;
+  std::vector<std::unique_ptr<atm::Atmosphere>> atmospheres;  ///< the distinct row series and node vectors of the load
+  int32_t short_day = 0;                                      ///< the day a request found no row for (weather-rows-short)
 };
 
 inline void release(Slot& s) {
@@ -88,8 +95,7 @@ inline void clear(Store& st) {
   st.entries.clear();
   st.series.clear();
   st.stats = Stats{};
-  st.atm = atm::Atmosphere{};
-  st.has_atm = false;
+  st.atmospheres.clear();
 }
 
 inline Store& resident() {
@@ -126,7 +132,8 @@ inline int read_config(Config& c) {
         const int v8 = th->Get(k);
         if (v8 == pcfTheory_SGP4) c.theories |= 1;
         else if (v8 == pcfTheory_SGP4XP) c.theories |= 2;
-        else return pcf::refuse("EPOCH_STORE.THEORIES", "SGP4 and SGP4XP sets are stored");
+        else if (v8 == pcfTheory_AP) c.theories |= 4;
+        else return pcf::refuse("EPOCH_STORE.THEORIES", "SGP4, SGP4XP and AP sets are stored");
       }
     }
     return 0;
@@ -134,25 +141,65 @@ inline int read_config(Config& c) {
   return 0;
 }
 
-inline uint32_t theory_bit(int32_t theory) { return theory == kTheorySgp4 ? 1u : 2u; }
+inline uint32_t theory_bit(int32_t met) { return met == meanElementSource_SGP4 ? 1u : met == meanElementSource_SGP4XP ? 2u : 4u; }
 
-/// One record of a snapshot, decoded. 1 kept, 0 skipped (not centered on the Earth), -1 not a decodable $OMM.
+/// One record of a snapshot, decoded. 1 kept, 0 skipped (not centered on the Earth), -1 refused by name (the error set).
 struct Record {
   ElementRow row{};
+  int32_t met = 0;
   uint32_t norad = 0;
   std::string object_id, originator, name;
   cov::Set* cov = nullptr;
+  Forces forces{};
+  ocm::Weather weather;
 };
 inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r = Record{};
+  if (const OCM* o = ocm::view(p, n); o != nullptr && o->CENTER_NAME() != nullptr && o->CENTER_NAME()->size() > 0 &&
+                                      !oem::same_text(o->CENTER_NAME()->c_str(), "EARTH"))
+    return 0;
   ocm::Set s;
   if (ocm::decode(p, n, s) != 0) return -1;
   r.row = s.row;
+  r.met = s.theory;
   r.norad = s.id.norad;
   r.object_id = s.id.object_id;
   r.originator = s.id.originator;
   r.name = s.id.object_name;
+  r.forces = s.forces;
+  r.weather = std::move(s.weather);
+  if (r.row.theory != kTheorySgp4) {
+    cov::Set c;
+    const int cr = cov::read(s.record, r.row, c);
+    if (cr < 0)
+      return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
+                         "A set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."), -1;
+    if (cr == 1) r.cov = new cov::Set(c);
+  }
   return 1;
+}
+
+/// The store's one copy of a record's atmosphere (its rows and nodes, by content), or nullptr on the theory's own flux
+/// model.
+inline const atm::Atmosphere* intern(Store& st, const Record& r) {
+  if (r.forces.weather_source != pcfWeatherSource_RECORDS) return nullptr;
+  ocm::Set probe;
+  probe.forces = r.forces;
+  probe.weather = r.weather;
+  atm::Atmosphere a;
+  ocm::atmosphere_of(probe, a);
+  auto same_rows = [](const atm::SpwDay& x, const atm::SpwDay& y) {
+    return x.mjd == y.mjd && x.f107_obs == y.f107_obs && x.f107_center81 == y.f107_center81 && x.ap_avg == y.ap_avg && x.data_type == y.data_type &&
+           std::strcmp(x.date, y.date) == 0;
+  };
+  for (const auto& held : st.atmospheres) {
+    if (held->model != a.model || held->days.size() != a.days.size() || held->dca_ms != a.dca_ms || held->dca_s != a.dca_s) continue;
+    bool same = true;
+    for (size_t k = 0; same && k < a.days.size(); ++k) same = same_rows(held->days[k], a.days[k]);
+    if (same) return held.get();
+  }
+  st.atmospheres.push_back(std::make_unique<atm::Atmosphere>(std::move(a)));
+  return st.atmospheres.back().get();
 }
 
 /// Calls `fn(p, n)` for each record of a frame: size-prefixed records end to end, or one plain record. False when the
@@ -160,6 +207,11 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
 template <class Fn>
 inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
   if (n >= 8 && std::memcmp(p + 4, "$OCM", 4) == 0) return fn(p, n);
+  if (n >= 12 && std::memcmp(p + 8, "$OCM", 4) == 0) {
+    uint32_t len;
+    std::memcpy(&len, p, 4);
+    if (len + 4 == n) return fn(p, n);
+  }
   for (uint32_t off = 0; off < n;) {
     if (n - off < 12) return false;
     uint32_t len;
@@ -171,17 +223,12 @@ inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
   return true;
 }
 
-/// Builds `st` from the call's 'omm' frames under `cfg`. 0, or 3 with a named error.
+/// Builds `st` from the call's 'ocm' frames under `cfg`. 0, or 3 with a named error.
 inline int build(Store& st, const Config& cfg) {
   clear(st);
   st.cfg = cfg;
-  if (atm::active() != nullptr) {
-    st.atm = *atm::active();
-    st.has_atm = true;
-  }
-  st.terms = xpt::tess::active();
   std::vector<Record> recs;
-  bool bad = false, atm_err = false;
+  bool refused = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "ocm") != 0) continue;
@@ -189,23 +236,21 @@ inline int build(Store& st, const Config& cfg) {
       Record r;
       const int d = decode_record(p, n, r);
       ++st.stats.records;
-      if (d < 0) { bad = true; return false; }
+      if (d < 0) { refused = true; return false; }
       if (d == 0) { ++st.stats.other_center; return true; }
-      if (cfg.theories != 0 && (cfg.theories & theory_bit(r.row.theory)) == 0) { ++st.stats.theory; delete r.cov; return true; }
+      if (cfg.theories != 0 && (cfg.theories & theory_bit(r.met)) == 0) { ++st.stats.theory; delete r.cov; return true; }
       recs.push_back(std::move(r));
       return true;
     });
-    if (atm_err) {
+    if (!ok || refused) {
       for (Record& r : recs) delete r.cov;
-      return 3;
-    }
-    if (!ok || bad) {
-      for (Record& r : recs) delete r.cov;
-      plugin_set_error("invalid-omm", "An 'omm' frame is neither size-prefixed $OMM records end to end nor one $OMM record of an SGP4 or SGP4XP set.");
+      if (refused) return 3;
+      plugin_set_error("invalid-ocm", "An 'ocm' frame is neither size-prefixed $OCM records end to end nor one $OCM record.");
       return 3;
     }
   }
-  // the series: (NORAD, OBJECT_ID, theory, ORIGINATOR), each by epoch (a later record of the same epoch replaces)
+  // the series: (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR), each by epoch (a later record
+  // of the same epoch replaces)
   std::vector<uint32_t> order(recs.size());
   for (uint32_t k = 0; k < order.size(); ++k) order[k] = k;
   auto epoch_of = [&](const Record& r) { return minutes_of(r.row.epoch_jd_whole, r.row.epoch_jd_frac); };
@@ -213,10 +258,21 @@ inline int build(Store& st, const Config& cfg) {
     const Record &x = recs[a], &y = recs[b];
     if (x.norad != y.norad) return x.norad < y.norad;
     if (x.object_id != y.object_id) return x.object_id < y.object_id;
-    if (x.row.theory != y.row.theory) return x.row.theory < y.row.theory;
+    if (x.met != y.met) return x.met < y.met;
     if (x.originator != y.originator) return x.originator < y.originator;
     return epoch_of(x) < epoch_of(y);
   });
+  // a series flies one force model: its sets' forces equal its first's
+  for (uint32_t k = 1; k < order.size(); ++k) {
+    const Record &x = recs[order[k - 1]], &y = recs[order[k]];
+    if (x.norad == y.norad && x.object_id == y.object_id && x.met == y.met && x.originator == y.originator && !x.forces.same(y.forces)) {
+      for (Record& r : recs) delete r.cov;
+      char why[200];
+      std::snprintf(why, sizeof why, "NORAD %u: two sets of one series state different forces (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION or a gravity cap).", x.norad);
+      plugin_set_error("series-forces-differ", why);
+      return 3;
+    }
+  }
   double newest = -HUGE_VAL;
   for (const Record& r : recs) newest = std::fmax(newest, epoch_of(r));
   const double oldest_kept = newest - cfg.cache_days * kMinutesPerDay;
@@ -224,7 +280,7 @@ inline int build(Store& st, const Config& cfg) {
     uint32_t e = k;
     const Record& head = recs[order[k]];
     while (e < order.size() && recs[order[e]].norad == head.norad && recs[order[e]].object_id == head.object_id &&
-           recs[order[e]].row.theory == head.row.theory && recs[order[e]].originator == head.originator)
+           recs[order[e]].met == head.met && recs[order[e]].originator == head.originator)
       ++e;
     std::vector<uint32_t> keep;
     for (uint32_t q = k; q < e; ++q) {
@@ -251,6 +307,7 @@ inline int build(Store& st, const Config& cfg) {
       s.object_id = head.object_id;
       s.originator = head.originator;
       s.theory = head.row.theory;
+      s.met = head.met;
       s.name = recs[keep.back()].name;
       s.first = static_cast<uint32_t>(st.entries.size());
       s.count = static_cast<uint32_t>(keep.size());
@@ -259,6 +316,12 @@ inline int build(Store& st, const Config& cfg) {
         en.row = recs[q].row;
         en.epoch = epoch_of(recs[q]);
         en.cov = recs[q].cov;
+        en.forces = recs[q].forces;
+        en.atmosphere = intern(st, recs[q]);
+        if (en.atmosphere != nullptr && !en.atmosphere->days.empty()) {
+          en.first_day = en.atmosphere->days.front().mjd + 1;
+          en.last_day = en.atmosphere->days.back().mjd;
+        }
         recs[q].cov = nullptr;
         st.entries.push_back(en);
       }
@@ -270,20 +333,31 @@ inline int build(Store& st, const Config& cfg) {
   return 0;
 }
 
+/// The code a set's state takes when its rows do not hold a day the request flies it through (Store::short_day).
+constexpr int32_t kRowsShort = 90;
+
+/// 0, or kRowsShort with st.short_day the first missing day: set k of series s flown from its epoch to t (minutes from
+/// J2000) reads the rows of every UTC day between, and the day before the first.
+inline int32_t rows_cover(Store& st, const Entry& en, double t) {
+  if (en.atmosphere == nullptr) return 0;
+  const double w = 2451545.0, f0 = en.epoch / kMinutesPerDay, f1 = t / kMinutesPerDay;
+  const int32_t a = ocm::mjd_of(w, std::fmin(f0, f1)), b = ocm::mjd_of(w, std::fmax(f0, f1));
+  const std::vector<atm::SpwDay>& d = en.atmosphere->days;
+  size_t k = 0;
+  for (int32_t day = a - 1; day <= b; ++day) {
+    while (k < d.size() && d[k].mjd < day) ++k;
+    if (k >= d.size() || d[k].mjd != day) {
+      st.short_day = day;
+      return kRowsShort;
+    }
+  }
+  return 0;
+}
+
 /// The slot holding set `k` of series `s`, initialized on first use (the older of the two slots replaced).
 inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
-  struct BindAtm {
-    const atm::Atmosphere* prev;
-    const xpt::tess::Terms prev_terms;
-    explicit BindAtm(const Store& st) : prev(atm::active()), prev_terms(xpt::tess::active()) {
-      atm::active() = st.has_atm ? &st.atm : nullptr;
-      xpt::tess::active() = st.terms;
-    }
-    ~BindAtm() {
-      atm::active() = prev;
-      xpt::tess::active() = prev_terms;
-    }
-  } bind_atm{st};
+  const Entry& bound = st.entries[s.first + k];
+  ocm::Bind bind(bound.forces, bound.atmosphere);  // the set's own forces, rows and nodes
   for (Slot& q : s.slots)
     if (q.index == static_cast<int32_t>(k)) {
       if (with_cov && q.cp == nullptr && st.entries[s.first + k].cov != nullptr && q.error == 0) {
@@ -322,8 +396,9 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
 
 /// Set k of series s at t (minutes from J2000): TEME state, and the covariance when `P` is given (false: none).
 inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, double* v, double* P, bool& have_p) {
-  Slot& q = slot_of(st, s, k, P != nullptr);
   have_p = false;
+  if (const int32_t rc = rows_cover(st, st.entries[s.first + k], t)) return rc;
+  Slot& q = slot_of(st, s, k, P != nullptr);
   if (q.error != 0) return q.error;
   const double dt = t - st.entries[s.first + k].epoch;
   const int32_t e = q.xp != nullptr ? xpt::xp_propagate(*q.xp, dt, r, v) : sat_propagate(*q.sat, q.nodes, dt, r, v);
@@ -434,6 +509,8 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
 inline uint64_t bytes_of(const Store& st) {
   uint64_t b = st.entries.size() * sizeof(Entry) + st.series.size() * sizeof(Series);
   for (const Entry& e : st.entries) b += e.cov != nullptr ? sizeof(cov::Set) : 0;
+  // the interned rows and nodes, one copy each
+  for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   for (const Series& s : st.series) {
     b += s.object_id.capacity() + s.originator.capacity() + s.name.capacity();
     for (const Slot& q : s.slots) b += (q.xp ? sizeof(xpt::XpSat) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) : 0);
@@ -448,25 +525,31 @@ inline uint64_t bytes_of(const Store& st) {
 extern "C" int load_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  uint32_t frames = 0;
+  if (const int rc = ocm::admit(frames)) return rc;
   if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   return epochs::build(epochs::resident(), cfg);
 }
 
-/// `propagate_epochs`: the store of the call's own snapshot on the call's grid ('grid' $OEM, as propagate reads it):
+/// `propagate_epochs`: the store of the call's own snapshot at the $PCF OUTPUT times (EPOCHS, or START_TIME to STOP_TIME):
 /// one $OEM per series, the blended TEME / GCRF / EME2000 states and, for series whose sets carry COVARIANCE, a
 /// covariance line per state.
 extern "C" int propagate_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
+  uint32_t frames = 0;
+  if (const int rc = ocm::admit(frames)) return rc;
   if (const int rc = pcf::read(pcf::kEpochs)) return rc;
+  if (pcf::options().epochs_w.empty() && !(pcf::options().has_start && pcf::options().has_stop))
+    return pcf::refuse("OUTPUT.START_TIME", "propagate_epochs names its times: OUTPUT.START_TIME and STOP_TIME, or EPOCHS");
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   epochs::Store st;
   struct Scope { epochs::Store& s; ~Scope() { epochs::clear(s); } } scope{st};
   if (const int rc = epochs::build(st, cfg)) return rc;
-  if (st.series.empty()) { plugin_set_error("missing-omm", "propagate_epochs keeps no set of the 'omm' snapshot."); return 3; }
+  if (st.series.empty()) { plugin_set_error("missing-ocm", "propagate_epochs keeps no set of the 'ocm' snapshot."); return 3; }
   const std::vector<oem::Grid> grids = {oem::output_grid()};
   size_t budget = pcf::options().maximum_states;
   char text[48], start[48], stop[48], why[200];
@@ -497,6 +580,11 @@ extern "C" int propagate_epochs(void) {
         bool have_p = false;
         const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p);
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
+        if (e == epochs::kRowsShort) {
+          char day[16];
+          atm::date_of_mjd(st.short_day, day, sizeof day);
+          return atm::fail_day("weather-rows-short", day, "A set's SPACE_WEATHER rows do not reach a day the request flies it through.");
+        }
         if (e != kPropOk) {
           std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", s.norad, text, static_cast<int>(e));
           plugin_set_error("propagation-failed", why);
@@ -556,10 +644,6 @@ extern "C" int propagate_epochs(void) {
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
     FinishOEMBuffer(fbb, root);
-    if (st.has_atm && st.atm.before_rows) {
-      return atm::fail("space-weather-out-of-range",
-                       "The 'space_weather' rows start after a day the call evaluates: they must begin by the day before its earliest state's day.");
-    }
     if (plugin_push_output("ephemeris", "OEM.fbs", "$OEM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
       plugin_set_error("output-failed", "The $OEM could not be emitted.");
       return 3;

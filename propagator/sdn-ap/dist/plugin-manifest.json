@@ -143,15 +143,15 @@
     {
       "methodId": "load_epochs",
       "displayName": "Load the epoch store",
-      "description": "SPEC 14: replaces the resident epoch store with the snapshot on 'omm' under the $PCF EPOCH_STORE table: per series (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR) the sets of the last CACHE_DAYS before the newest epoch of the load, at most MAX_SETS_PER_OBJECT (the newest), of THEORIES; sets not centered on the Earth are counted and not stored. Read through the exports sdnap_epochs_count, _stats, _series, _select and _at (selection by SELECTION, the handover blend by BLEND_WINDOW_SECONDS and BLEND_SHAPE). Refused by name: configuration-missing, configuration-refused, invalid-omm.",
+      "description": "Replaces the resident epoch store with the snapshot on 'ocm' under the optional $PCF EPOCH_STORE table. SPEC 14, on $OCM: per series (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, HEADER.ORIGINATOR) the sets of the last CACHE_DAYS before the newest MEAN_ELEMENTS.EPOCH of the load, at most MAX_SETS_PER_OBJECT (the newest), of THEORIES (SGP4, SGP4XP, AP); sets not centered on the Earth are counted and not stored. Each set flies its own record's forces, SPACE_WEATHER rows and density-correction nodes (identical row series and node vectors held once, by content); two sets of one series whose forces differ (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, the two gravity caps; rows and nodes are data) are refused (series-forces-differ). Read through the exports sdnap_epochs_count, _stats, _series, _select, _at and _set_at (selection by SELECTION, the handover blend by BLEND_WINDOW_SECONDS and BLEND_SHAPE; a set asked for past its rows gives the status 90). Refused by name: missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, unsupported-center, mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, weather-rows-missing, weather-rows-unselected, weather-rows-invalid:<day>, weather-rows-short:<day>, density-correction-missing, density-correction-unselected, invalid-density-correction, density-correction-atmosphere-mismatch, density-correction-cid-missing, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance, series-forces-differ, configuration-refused, invalid-configuration.",
       "inputPorts": [
         {
           "portId": "configuration",
           "displayName": "configuration",
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "$PCF 1.0.5 (SDS 1.271.0): THEORY and the propagate tables (OUTPUT, FORCES), and EPOCH_STORE (CACHE_DAYS 7, MAX_SETS_PER_OBJECT 0, SELECTION NEAREST, BLEND_WINDOW_SECONDS 3600, BLEND_SHAPE SMOOTHSTEP, THEORIES all); a set field this module cannot apply is refused by name (configuration-refused).",
+          "required": false,
+          "description": "$PCF 1.0.7 (SDS 1.276.0), optional (absent: every default): THEORY and EPOCH_STORE (CACHE_DAYS 7, MAX_SETS_PER_OBJECT 0, SELECTION NEAREST, BLEND_WINDOW_SECONDS 3600, BLEND_SHAPE SMOOTHSTEP, THEORIES all); a FORCES table is refused (configuration-refused FORCES); a set field this module cannot apply is refused by name (configuration-refused).",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -167,62 +167,23 @@
           ]
         },
         {
-          "portId": "omm",
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The snapshot: size-prefixed $OCM records end to end (the element-sync module's $OCM lane, at most 4 MiB a frame), or one $OCM record a frame; SGP4, SGP4XP and AP Earth sets. A payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type before anything is decoded (omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown); a frame on a port this method does not declare is refused by the host (unknown-input-port).",
           "acceptedTypeSets": [
             {
-              "setId": "sdn.sds.omm",
+              "setId": "sds-ocm-element-sets",
               "allowedTypes": [
                 {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 }
               ],
-              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 65535,
-          "required": true,
-          "description": "The snapshot: size-prefixed $OMM records end to end (the element-sync module's 'omm' output, at most 4 MiB a frame, sorted by NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR, EPOCH), or one $OMM record a frame; SGP4 and SGP4XP Earth sets."
-        },
-        {
-          "portId": "space_weather",
-          "displayName": "space_weather",
-          "minStreams": 0,
-          "maxStreams": 65535,
-          "required": false,
-          "description": "SPEC 15: daily $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain records or size-prefixed records end to end, for the drag atmosphere $PCF FORCES selects.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-spw-rows",
-              "allowedTypes": [
-                {
-                  "schemaName": "SPW.fbs",
-                  "fileIdentifier": "$SPW",
-                  "rootTypeName": "SPW"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "portId": "density_correction",
-          "displayName": "density_correction",
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "SPEC 15: the open-DCA $DCL (Solved, NRLMSISE-00 baseline, LogDensityNodes) when FORCES.DENSITY_CORRECTION is DCA_COMMON_MODE.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-dcl-open-dca",
-              "allowedTypes": [
-                {
-                  "schemaName": "DCL.fbs",
-                  "fileIdentifier": "$DCL",
-                  "rootTypeName": "DCL"
-                }
-              ]
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
             }
           ]
         }
@@ -234,7 +195,7 @@
     {
       "methodId": "propagate_epochs",
       "displayName": "Propagate an epoch store",
-      "description": "SPEC 14: the epoch store of the call's own snapshot (as load_epochs builds it) on a 'grid': one $OEM per series, each state from the selected set or, inside a handover window, the blend of two (SMOOTHSTEP: r = (1 - w) r_a + w r_b, v with the weight's derivative; HERMITE: the cubic Hermite of the two sets' states at the window's edges), with the covariance mixture where the sets carry COVARIANCE. Refused by name: configuration-missing, configuration-refused, invalid-omm, missing-omm, missing-grid, bad-grid, too-many-states, propagation-failed, frame-failed.",
+      "description": "The epoch store of the call's own snapshot (as load_epochs builds it) at the $PCF OUTPUT times: one $OEM per series, each state from the selected set or, inside a handover window, the blend of two (SMOOTHSTEP: r = (1 - w) r_a + w r_b, v with the weight's derivative; HERMITE: the cubic Hermite of the two sets' states at the window's edges), with the covariance mixture where the sets carry COVARIANCE_DATA. SPEC 14, on $OCM: per series (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, HEADER.ORIGINATOR) the sets of the last CACHE_DAYS before the newest MEAN_ELEMENTS.EPOCH of the load, at most MAX_SETS_PER_OBJECT (the newest), of THEORIES (SGP4, SGP4XP, AP); sets not centered on the Earth are counted and not stored. Each set flies its own record's forces, SPACE_WEATHER rows and density-correction nodes (identical row series and node vectors held once, by content); two sets of one series whose forces differ (ATMOSPHERIC_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, the two gravity caps; rows and nodes are data) are refused (series-forces-differ). Refused by name: missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, unsupported-center, mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, weather-rows-missing, weather-rows-unselected, weather-rows-invalid:<day>, weather-rows-short:<day>, density-correction-missing, density-correction-unselected, invalid-density-correction, density-correction-atmosphere-mismatch, density-correction-cid-missing, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance, series-forces-differ, configuration-missing, configuration-refused, invalid-configuration, too-many-states, propagation-failed, frame-failed.",
       "inputPorts": [
         {
           "portId": "configuration",
@@ -242,7 +203,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.5 (SDS 1.271.0): THEORY and the propagate tables (OUTPUT, FORCES), and EPOCH_STORE (CACHE_DAYS 7, MAX_SETS_PER_OBJECT 0, SELECTION NEAREST, BLEND_WINDOW_SECONDS 3600, BLEND_SHAPE SMOOTHSTEP, THEORIES all); a set field this module cannot apply is refused by name (configuration-refused).",
+          "description": "$PCF 1.0.7 (SDS 1.276.0), required: THEORY, EPOCH_STORE (as load_epochs) and OUTPUT: FRAME (TEME, GCRF or EME2000), MAXIMUM_STATES, and the times, EPOCHS or START_TIME and STOP_TIME at STEP_SECONDS (configuration-refused OUTPUT.START_TIME without them); a FORCES table is refused (configuration-refused FORCES).",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -258,82 +219,23 @@
           ]
         },
         {
-          "portId": "omm",
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "The snapshot: size-prefixed $OCM records end to end (the element-sync module's $OCM lane, at most 4 MiB a frame), or one $OCM record a frame; SGP4, SGP4XP and AP Earth sets. A payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type before anything is decoded (omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown); a frame on a port this method does not declare is refused by the host (unknown-input-port).",
           "acceptedTypeSets": [
             {
-              "setId": "sdn.sds.omm",
+              "setId": "sds-ocm-element-sets",
               "allowedTypes": [
                 {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 }
               ],
-              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 65535,
-          "required": true,
-          "description": "The snapshot: size-prefixed $OMM records end to end (the element-sync module's 'omm' output, at most 4 MiB a frame, sorted by NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR, EPOCH), or one $OMM record a frame; SGP4 and SGP4XP Earth sets."
-        },
-        {
-          "portId": "grid",
-          "displayName": "grid",
-          "minStreams": 1,
-          "maxStreams": 16,
-          "required": true,
-          "description": "The epochs: explicit EPOCHs, or START_TIME / STOP_TIME / STEP_SIZE (both times required), in the block's axes (TEME, GCRF or EME2000).",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-oem-grid",
-              "allowedTypes": [
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "portId": "space_weather",
-          "displayName": "space_weather",
-          "minStreams": 0,
-          "maxStreams": 65535,
-          "required": false,
-          "description": "SPEC 15: daily $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain records or size-prefixed records end to end, for the drag atmosphere $PCF FORCES selects.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-spw-rows",
-              "allowedTypes": [
-                {
-                  "schemaName": "SPW.fbs",
-                  "fileIdentifier": "$SPW",
-                  "rootTypeName": "SPW"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "portId": "density_correction",
-          "displayName": "density_correction",
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "SPEC 15: the open-DCA $DCL (Solved, NRLMSISE-00 baseline, LogDensityNodes) when FORCES.DENSITY_CORRECTION is DCA_COMMON_MODE.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-dcl-open-dca",
-              "allowedTypes": [
-                {
-                  "schemaName": "DCL.fbs",
-                  "fileIdentifier": "$DCL",
-                  "rootTypeName": "DCL"
-                }
-              ]
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
             }
           ]
         }
@@ -345,7 +247,7 @@
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "One $OEM per series kept (NORAD_CAT_ID, OBJECT_ID, theory, ORIGINATOR): the selected and blended states, km and km/s, UTC, and a covariance line per state where the series' sets carry COVARIANCE.",
+          "description": "One $OEM per series kept (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR): the selected and blended states, km and km/s, UTC, and a covariance line per state where the series' sets carry COVARIANCE_DATA.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-trajectory",

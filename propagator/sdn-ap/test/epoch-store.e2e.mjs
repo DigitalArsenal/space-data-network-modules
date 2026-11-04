@@ -1,9 +1,26 @@
 #!/usr/bin/env node
-// E2E (task modules-sdn-ap-epoch-store-blend-20261025): the epoch store (SPEC 14).
+// E2E (tasks modules-sdn-ap-epoch-store-blend-20261025, modules-sdn-ap-ocm-epochs-20261103): the epoch store (SPEC 14)
+// on $OCM streams.
+// The $OCM part (modules-sdn-ap-ocm-epochs-20261103):
+// - Series keyed on (NORAD_CAT_ID, INTERNATIONAL_DESIGNATOR, MEAN_ELEMENT_THEORY, ORIGINATOR): the AP fixture set
+//   and the same set under another designator, theory or originator are four series.
+// - Two sets of one series with different forces (a gravity cap): series-forces-differ; with different forecast rows
+//   (the second set's rows moved): they load and blend.
+// - propagate_epochs on the AP fixture $OCM alone gives test/fixtures/ap-fit-0.4.0.epochs.oem byte for byte (the
+//   0.4.18 dist's propagate_epochs of the 0.4.0 $OMM under FORCES and rows; its propagate output,
+//   ap-fit-0.4.0.oem, differs in the store's time arithmetic, which this record leaves as it was).
+// - A store $PCF with a FORCES table: configuration-refused FORCES; propagate_epochs without OUTPUT times:
+//   configuration-refused OUTPUT.START_TIME; a request past a set's last row: weather-rows-short:2026-11-01.
+// - The covariance from COVARIANCE_DATA and COV_PROPAGATION: the fixture $OEM above carries the store's covariance line
+//   at every grid time, so it equals the 0.4.0 store's to the last bit; the resident store's covariance of the XP
+//   fixture $OCM against the 0.4.0 sdnap_covariance_at numbers (test/fixtures/xp-fit-0.4.0.cov) within 1e-6 of the
+//   matrix's largest entry (the store counts minutes from J2000, about 1e-7 s of rounding at a time).
+// - The store's bytes: 100 series sharing one row series hold it once (100 sets with distinct rows hold 99 more,
+//   exactly 99 times one series' copy).
 // Synthetic history: an SGP4XP series (a truth set's own mean elements, from sdnap_mean_elements_at, every 6 h over 3
 // days, the mean anomaly of every other set moved by 0.0115 deg so that each handover is a jump the blend must
-// remove, each set with a COVARIANCE), an SGP4 series (sets every 12 h), an aged set and a same-epoch duplicate,
-// loaded by load_epochs.
+// remove, each set with the XP fixture's covariance), an SGP4 series (sets every 12 h, entering through ingest_omm),
+// an aged set and a same-epoch duplicate, loaded by load_epochs.
 // - The load's counts: records, kept, aged, duplicates; MAX_SETS_PER_OBJECT and THEORIES applied.
 // - Selection against brute force over 400 times (NEAREST and LATEST_BEFORE): the dominant set (the blend weight
 //   below 1/2: a, else b) is the nearest set, or the latest at or before the time.
@@ -13,8 +30,8 @@
 // - The covariance inside a window is symmetric and positive definite.
 // - propagate_epochs (a snapshot given with the call) gives the resident store's states bit for bit.
 // Real history (local; Space-Track GP daily snapshots, licensed: nothing written but these numbers): seven days of the
-// catalog loaded, the store's bytes per series measured, selection against brute force and continuity across a
-// handover on a sample. Without the archive the real part prints NOT MEASURED.
+// catalog entered through ingest_omm and loaded, the store's bytes per series measured, selection against brute force
+// and continuity across a handover on a sample. Without the archive the real part prints NOT MEASURED.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/epoch-store.e2e.mjs
 import fs from "node:fs";
@@ -27,43 +44,56 @@ import { ephemerisDataLineT } from "spacedatastandards.org/lib/js/OEM/ephemerisD
 import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard.js";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { pcfTheory } from "spacedatastandards.org/lib/js/PCF/pcfTheory.js";
-import { jdOf, rfm } from "./lib/frames.mjs";
+import { jdOf } from "./lib/frames.mjs";
 import { openModule, THEORY, wasmPath } from "./lib/module.mjs";
-import { configuration } from "./lib/pcf.mjs";
+import { configuration, XP_FORCES } from "./lib/pcf.mjs";
+import { T, fixtureSets, repackOcm, GRID_OUTPUT } from "./lib/ocm.mjs";
+import { GRID } from "./lib/fixture-inputs.mjs";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
 const m = await openModule();
 const x = m.x, mem = () => m.harness.memory.buffer;
 const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
-const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
-const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
+const ommType = T("OMM"), ocmType = T("OCM");
 const DAY = 86400000;
 const iso = (t) => new Date(t).toISOString().replace("Z", "");
 const T0 = Date.parse("2026-10-20T00:00:00Z");
 const prefixed = (plain) => { const b = Buffer.alloc(4 + plain.length); b.writeUInt32LE(plain.length, 0); Buffer.from(plain).copy(b, 4); return b; };
 const stream = (records) => new Uint8Array(Buffer.concat(records));
-const store = (cfg) => configuration({ epochStore: cfg });
+const store = (cfg, more = {}) => configuration({ epochStore: cfg, ...more });
+const fixtures = await fixtureSets(command);
+/** The $OCM of each SGP4 $OMM, through the one $OMM boundary. */
+async function ingested(omms) {
+  const out = [];
+  for (let k = 0; k < omms.length; k += 4000) {
+    const r = await command.invoke({ methodId: "ingest_omm", inputs: omms.slice(k, k + 4000).map((payload) => ({ portId: "omm", typeRef: ommType, payload })) });
+    if (r.statusCode !== 0) throw new Error(`ingest_omm: ${r.errorCode} ${r.errorMessage}`);
+    out.push(...r.outputs.map((o) => new Uint8Array(o.payload)));
+  }
+  return out;
+}
 
 // --- the synthetic history
-function gridOem(frame, times) {
-  const block = new ephemerisDataBlockT();
-  block.CENTER_NAME = "EARTH"; block.REFERENCE_FRAME = rfm(frame); block.TIME_SYSTEM = timingStandard.UTC;
-  block.START_TIME = iso(times[0]); block.STOP_TIME = iso(times.at(-1));
-  block.EPHEMERIS_DATA_LINES = times.map((t) => new ephemerisDataLineT(iso(t)));
-  const o = new OEMT(); o.CCSDS_OEM_VERS = 3.0; o.ORIGINATOR = "SDN-AP epoch store E2E"; o.EPHEMERIS_DATA_BLOCK = [block];
-  const b = new flatbuffers.Builder(1 << 16); OEM.finishOEMBuffer(b, o.pack(b));
-  return b.asUint8Array();
-}
-const xpSet = (fields) => {
-  const b = new flatbuffers.Builder(256);
-  const e = b.createString(iso(fields.epoch)), orig = b.createString("SDN-AP E2E");
-  OMM.startOMM(b); OMM.addEpoch(b, e); OMM.addOriginator(b, orig); OMM.addMeanMotion(b, fields.mm); OMM.addEccentricity(b, fields.ecc); OMM.addInclination(b, fields.inc);
-  OMM.addRaOfAscNode(b, fields.raan); OMM.addArgOfPericenter(b, fields.argp); OMM.addMeanAnomaly(b, fields.ma); OMM.addBstar(b, 0.02); OMM.addMeanMotionDdot(b, 0.01);
-  OMM.addNoradCatId(b, 90011); OMM.addMeanElementTheory(b, 1);
-  OMM.finishOMMBuffer(b, OMM.endOMM(b));
-  return b.asUint8Array();
-};
+/** An SGP4XP $OCM: the XP fixture's record (its covariance and COV_PROPAGATION) with these elements and identity. */
+const xpSet = (fields) => repackOcm(fixtures.xp, (t) => {
+  Object.assign(t.MEAN_ELEMENTS, { EPOCH: iso(fields.epoch), MEAN_MOTION: fields.mm, ECCENTRICITY: fields.ecc, INCLINATION: fields.inc, RA_OF_ASC_NODE: fields.raan,
+    ARG_OF_PERICENTER: fields.argp, MEAN_ANOMALY: fields.ma, BTERM: 0.02, AGOM: 0.01 });
+  t.METADATA.NORAD_CAT_ID = 90011;
+  t.METADATA.OBJECT_DESIGNATOR = "90011";
+  t.METADATA.INTERNATIONAL_DESIGNATOR = null;
+  t.METADATA.OBJECT_NAME = null;
+  t.HEADER.ORIGINATOR = "SDN-AP E2E";
+  t.ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS[0].VALUE = 0.02;
+  t.ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS[1].VALUE = 0.01;
+  // a 6 x 6 epoch covariance of the state alone, no floor and no process noise
+  t.COVARIANCE_DATA = COV;
+  t.COV_SIZE = 6;
+  t.COV_PARAMETER_KINDS = [];
+  t.COV_PARAMETERS = [];
+  t.COV_UNITS = ["km", "km", "km", "km/s", "km/s", "km/s"];
+  for (const k of Object.keys(t.COV_PROPAGATION)) t.COV_PROPAGATION[k] = 0;
+});
 const COV = [1e-2, 1e-3, 2e-2, 1e-4, 2e-4, 3e-2, 1e-6, 2e-6, 3e-6, 1e-8, 2e-6, 1e-6, 4e-6, 1e-9, 2e-8, 3e-6, 2e-6, 1e-6, 1e-9, 1e-9, 3e-8];
 // the truth set (epoch a day before the first set) and, at each set's epoch, its own mean elements
 const truthEpoch = T0 - DAY;
@@ -79,27 +109,21 @@ const meanSet = (epoch, k) => {
   x.sdnap_free(q);
   return xpSet({ epoch, mm, ecc, inc, raan, argp, ma: (ma + (k % 2 ? 0.0115 : 0) + 360) % 360 });
 };
-/** The k-th set of the series at `epoch`, carrying COVARIANCE. */
-const seriesSet = (epoch, k) => {
-  const t = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(meanSet(epoch, k))).unpack();
-  t.COVARIANCE = COV;
-  t.COV_REFERENCE_FRAME = rfm("TEME");
-  const bb = new flatbuffers.Builder(1024); OMM.finishOMMBuffer(bb, t.pack(bb));
-  return bb.asUint8Array();
-};
+/** The k-th set of the series at `epoch`, carrying the covariance. */
+const seriesSet = (epoch, k) => meanSet(epoch, k);
 const xpRecords = [prefixed(seriesSet(T0 - 7 * DAY, 0))];  // an aged set, 7 days before the first epoch
 for (let k = 0; k < 13; ++k) xpRecords.push(prefixed(seriesSet(T0 + k * 6 * 3600000, k)));
 xpRecords.push(prefixed(seriesSet(T0 + 5 * 6 * 3600000, 5)));  // a same-epoch duplicate of set 5
-const sgp4Records = Array.from({ length: 7 }, (_, k) => {
+const sgp4Records = (await ingested(Array.from({ length: 7 }, (_, k) => {
   const b = new flatbuffers.Builder(256);
   const e = b.createString(iso(T0 + k * 12 * 3600000)), id = b.createString("1998-067A"), orig = b.createString("18 SPCS");
   OMM.startOMM(b); OMM.addEpoch(b, e); OMM.addObjectId(b, id); OMM.addOriginator(b, orig);
   OMM.addMeanMotion(b, 15.49 + 1e-4 * k); OMM.addEccentricity(b, 0.0005); OMM.addInclination(b, 51.64); OMM.addRaOfAscNode(b, 200 - 2.5 * k);
   OMM.addArgOfPericenter(b, 80); OMM.addMeanAnomaly(b, (40 + 268.2 * k) % 360); OMM.addBstar(b, 1e-4); OMM.addNoradCatId(b, 25544); OMM.addMeanElementTheory(b, 0);
-  OMM.finishSizePrefixedOMMBuffer(b, OMM.endOMM(b));
-  return Buffer.from(b.asUint8Array());
-});
-const snapshot = { portId: "omm", typeRef: ommType, payload: stream([...sgp4Records, ...xpRecords]) };
+  OMM.finishOMMBuffer(b, OMM.endOMM(b));
+  return b.asUint8Array().slice();
+}))).map(prefixed);
+const snapshot = { portId: "ocm", typeRef: ocmType, payload: stream([...sgp4Records, ...xpRecords]) };
 const load = async (cfg) => {
   const r = await m.harness.invoke({ methodId: "load_epochs", inputs: [store(cfg), snapshot] });
   if (r.statusCode !== 0) throw new Error(`load_epochs: ${r.errorCode} ${r.errorMessage}`);
@@ -210,7 +234,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   console.log(`covariance at a handover's midpoint: position sigma ${(Math.sqrt(P[0] + P[7] + P[14]) * 1e3).toFixed(1)} m, symmetric to ${sym.toExponential(1)}, positive definite ${pd}`);
   check(sym === 0 && pd, "blended covariance");
   const times = Array.from({ length: 49 }, (_, k) => T0 + k * 1800000 + 17000);
-  const r = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}), snapshot, { portId: "grid", typeRef: oemType, payload: gridOem("TEME", times) }] });
+  const r = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: { EPOCHS: times.map(iso) } }), snapshot] });
   check(r.statusCode === 0 && r.outputs.length === 2, `propagate_epochs: ${r.errorCode} ${r.errorMessage}`);
   let worst = 0;
   for (const out of r.outputs ?? []) {
@@ -223,6 +247,70 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   check(worst === 0, `propagate_epochs vs resident: ${worst}`);
 }
 
+// --- the $OCM store: series key, forces, rows, the fixture bytes, refusals, covariance, interning
+{
+  const ap = fixtures.ap;
+  const one = (records) => ({ portId: "ocm", typeRef: ocmType, payload: stream(records.map(prefixed)) });
+  const loadSets = (records, cfg = {}) => m.harness.invoke({ methodId: "load_epochs", inputs: [store(cfg), one(records)] });
+  const refused = (label, r, code, field = null) =>
+    check(r.statusCode !== 0 && r.errorCode === code && (field === null || String(r.errorMessage).startsWith(field)),
+      `${label}: expected ${code}${field ? ` ${field}` : ""}, got ${r.statusCode === 0 ? "success" : `${r.errorCode} ${r.errorMessage}`}`);
+  // the series key
+  const keyed = await loadSets([ap, repackOcm(ap, (t) => { t.METADATA.INTERNATIONAL_DESIGNATOR = "2026-904B"; }), repackOcm(ap, (t) => { t.HEADER.ORIGINATOR = "OTHER"; }), fixtures.xp]);
+  check(keyed.statusCode === 0 && x.sdnap_epochs_count() === 4, `the series key: ${keyed.errorCode} ${keyed.errorMessage}, ${x.sdnap_epochs_count()} series of 4`);
+  // forces differ; rows differ
+  const later = (edit) => repackOcm(ap, (t) => { t.MEAN_ELEMENTS.EPOCH = "2026-10-01T06:00:00.000000"; t.TRAJ_FRAME_EPOCH = t.MEAN_ELEMENTS.EPOCH; edit(t); });
+  refused("two sets, two force models", await loadSets([ap, later((t) => { t.PERTURBATIONS.MAXIMUM_TESSERAL_DEGREE = 12; })]), "series-forces-differ");
+  const blended = await loadSets([ap, later((t) => { for (const r of t.PERTURBATIONS.SPACE_WEATHER) r.F107_OBS += 20; })]);
+  const mid = Date.parse("2026-10-01T03:00:00Z"), sel = blended.statusCode === 0 ? select(0, mid) : [0, -1, 0];
+  console.log(`two sets of one series, rows moved: ${blended.statusCode === 0 ? `${x.sdnap_epochs_count()} series, ${seriesOf(0).epochs.length} sets; at 03:00 sets ${sel[0]} and ${sel[1]}, weight ${sel[2]}` : blended.errorCode}`);
+  check(blended.statusCode === 0 && x.sdnap_epochs_count() === 1 && seriesOf(0).epochs.length === 2 && sel[1] === 1 && sel[2] > 0 && sel[2] < 1 && at(0, mid).status === 0,
+    "two sets with different rows do not load and blend");
+  // the fixture's bytes
+  const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([ap])] });
+  check(pe.statusCode === 0, `propagate_epochs AP: ${pe.errorCode} ${pe.errorMessage}`);
+  if (pe.statusCode === 0) {
+    const got = Buffer.from(pe.outputs[0].payload);
+    const want = fs.readFileSync(new URL("fixtures/ap-fit-0.4.0.epochs.oem", import.meta.url)), plain = fs.readFileSync(new URL("fixtures/ap-fit-0.4.0.oem", import.meta.url));
+    console.log(`propagate_epochs of the AP fixture $OCM: ${got.length} B, ${got.equals(want) ? "byte-equal to" : "DIFFERENT from"} ap-fit-0.4.0.epochs.oem (against propagate's ap-fit-0.4.0.oem: ${got.equals(plain) ? "equal" : "differs"})`);
+    check(got.equals(want), "propagate_epochs differs from test/fixtures/ap-fit-0.4.0.epochs.oem");
+    const lines = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(got))).unpack().EPHEMERIS_DATA_BLOCK[0].COVARIANCE_MATRIX_LINES.length;
+    check(lines === 289, `the fixture $OEM's covariance lines: ${lines} of 289`);
+  }
+  refused("a store $PCF with FORCES", await loadSets([ap], {}).then(() => m.harness.invoke({ methodId: "load_epochs", inputs: [configuration({ forces: XP_FORCES }), one([ap])] })), "configuration-refused", "FORCES");
+  refused("propagate_epochs with FORCES", await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT, forces: XP_FORCES }), one([ap])] }), "configuration-refused", "FORCES");
+  refused("propagate_epochs without times", await command.invoke({ methodId: "propagate_epochs", inputs: [store({}), one([ap])] }), "configuration-refused", "OUTPUT.START_TIME");
+  refused("a request past the last row", await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: { START_TIME: "2026-10-31T12:00:00", STOP_TIME: "2026-11-01T12:00:00", STEP_SECONDS: 3600 } }), one([ap])] }),
+    "weather-rows-short:2026-11-01");
+  refused("an $OMM in the snapshot", await m.harness.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: ocmType, payload: fs.readFileSync(new URL("fixtures/xp-fit-0.4.0.omm", import.meta.url)) }] }), "omm-not-flown");
+  // the covariance against the 0.4.0 numbers
+  check((await loadSets([fixtures.xp])).statusCode === 0, "load the XP fixture");
+  const recorded = fs.readFileSync(new URL("fixtures/xp-fit-0.4.0.cov", import.meta.url));
+  const rec = new Float64Array(recorded.buffer, recorded.byteOffset, recorded.length / 8);
+  const t0 = Date.parse(`${GRID.start}Z`);
+  let worst = 0, n = 0;
+  for (let k = 0; k * GRID.step / 60 <= GRID.minutes; ++k, ++n) {
+    const s = at(0, t0 + k * GRID.step * 1000, true);
+    const want = rec.subarray(42 * k + 6, 42 * k + 42), top = Math.max(...want.map(Math.abs));
+    s.P.forEach((v, q) => { worst = Math.max(worst, Math.abs(v - want[q]) / top); });
+  }
+  console.log(`the store's covariance of the XP fixture at ${n} grid times against the 0.4.0 numbers: worst ${worst.toExponential(2)} of the largest entry`);
+  check(worst <= 1e-6, `the store's covariance is ${worst} of the largest entry from the 0.4.0 numbers`);
+  // one copy of a row series shared by 100 sets
+  const sharing = Array.from({ length: 100 }, (_, k) => repackOcm(ap, (t) => { t.METADATA.NORAD_CAT_ID = 91000 + k; }));
+  const distinct = Array.from({ length: 100 }, (_, k) => repackOcm(ap, (t) => { t.METADATA.NORAD_CAT_ID = 91000 + k; t.PERTURBATIONS.SPACE_WEATHER[0].AP_AVG += k; }));
+  check((await loadSets(sharing)).statusCode === 0, "load 100 sets sharing rows");
+  const shared = stats()[7];
+  check((await loadSets(distinct)).statusCode === 0, "load 100 sets with distinct rows");
+  const separate = stats()[7];
+  check((await loadSets([ap])).statusCode === 0, "load one set");
+  const single = stats()[7];
+  check((await loadSets([ap, repackOcm(ap, (t) => { t.METADATA.NORAD_CAT_ID = 91999; t.PERTURBATIONS.SPACE_WEATHER[0].AP_AVG += 1; })])).statusCode === 0, "load two sets, two row series");
+  const copy = stats()[7] - single - (shared - single) / 99;  // one more row series beyond one more set
+  console.log(`store bytes: 100 sets sharing one row series ${shared}, with 100 row series ${separate}; one series' rows ${copy} B; 99 extra copies ${separate - shared} B`);
+  check(copy > 32 * 56 && separate - shared === 99 * copy, `interning: ${separate - shared} B for 99 more row series against ${copy} B a copy`);
+}
+
 // --- real history: seven days of the catalog (local, licensed; numbers only)
 {
   const GP = process.env.SDNAP_GP_ARCHIVE ?? "/opt/data/sdn-archive/spacetrack/gp/2026";
@@ -230,7 +318,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   if (!days.every((d) => fs.existsSync(`${GP}/${d}.json.gz`))) {
     console.log("real history: NOT MEASURED (no Space-Track GP snapshots at SDNAP_GP_ARCHIVE)");
   } else {
-    const records = [];
+    const omms = [];
     for (const d of days) {
       for (const g of JSON.parse(zlib.gunzipSync(fs.readFileSync(`${GP}/${d}.json.gz`)))) {
         if (g.MEAN_ELEMENT_THEORY !== "SGP4" || !(+g.MEAN_MOTION > 0)) continue;
@@ -240,17 +328,18 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
         OMM.addMeanMotion(b, +g.MEAN_MOTION); OMM.addEccentricity(b, +g.ECCENTRICITY); OMM.addInclination(b, +g.INCLINATION); OMM.addRaOfAscNode(b, +g.RA_OF_ASC_NODE);
         OMM.addArgOfPericenter(b, +g.ARG_OF_PERICENTER); OMM.addMeanAnomaly(b, +g.MEAN_ANOMALY); OMM.addBstar(b, +g.BSTAR); OMM.addMeanMotionDot(b, +g.MEAN_MOTION_DOT);
         OMM.addMeanMotionDdot(b, +g.MEAN_MOTION_DDOT); OMM.addNoradCatId(b, +g.NORAD_CAT_ID); OMM.addMeanElementTheory(b, 0);
-        OMM.finishSizePrefixedOMMBuffer(b, OMM.endOMM(b));
-        records.push(Buffer.from(b.asUint8Array()));
+        OMM.finishOMMBuffer(b, OMM.endOMM(b));
+        omms.push(b.asUint8Array().slice());
       }
     }
+    const records = (await ingested(omms)).map(prefixed);
     // frames of at most 4 MiB, as the sync module writes them
     const frames = [];
     let cur = [], size = 0;
     for (const r of records) { if (size + r.length > 4 * 1024 * 1024) { frames.push(stream(cur)); cur = []; size = 0; } cur.push(r); size += r.length; }
     if (cur.length) frames.push(stream(cur));
     const t0 = performance.now();
-    const r = await m.harness.invoke({ methodId: "load_epochs", inputs: [store({}), ...frames.map((payload) => ({ portId: "omm", typeRef: ommType, payload }))] });
+    const r = await m.harness.invoke({ methodId: "load_epochs", inputs: [store({}), ...frames.map((payload) => ({ portId: "ocm", typeRef: ocmType, payload }))] });
     const loadMs = performance.now() - t0;
     check(r.statusCode === 0, `real load: ${r.errorCode} ${r.errorMessage}`);
     const [nrec, kept, aged, , , , duplicate, bytes] = stats();
