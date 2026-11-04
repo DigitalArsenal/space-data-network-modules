@@ -117,7 +117,7 @@ const pcf = (fields) => {
 // FORCES.ATMOSPHERE_MODEL JACCHIA70 is off the schema's default (NRLMSISE00), so the builder writes it.
 const configuration = pcf({ THEORY: PCF.pcfTheory.AP, FORCES: Object.assign(new PCF.PCFForceModelT(), { EPHEMERIS_SOURCE: '',
   ATMOSPHERE_MODEL: PCF.pcfAtmosphereFamily.JACCHIA70, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20 }) });
-const ingress = { observations: tdms, stations: gsts, earthOrientation: prw('EARTH_ORIENTATION', table('PRWEarthOrientation', { ROWS: eopRows })),
+const ingress = { observations: tdms, stations: gsts, earth_orientation: prw('EARTH_ORIENTATION', table('PRWEarthOrientation', { ROWS: eopRows })),
   kernel: prw('NATIVE_INPUT', table('PRWNativeInput', { DESCRIPTOR: table('NCD', { FORMAT: P.ncdContainerFormat.SPK_DAF,
     SOURCE_BYTE_LENGTH: BigInt(kernelBytes.length), SOURCE_SHA256: createHash('sha256').update(kernelBytes).digest('hex') }), CONTENT: kernelBytes })),
   execution, configuration };
