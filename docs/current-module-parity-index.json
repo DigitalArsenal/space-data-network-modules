@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T22:33:08.331Z",
+  "generatedAt": "2026-11-04T23:23:35.678Z",
   "moduleCount": 157,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 151,
@@ -6521,7 +6521,7 @@
       "pluginId": "com.orbpro.ffm",
       "name": "FFM Full Force Model propagator",
       "pluginFamily": "propagator",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
@@ -6545,7 +6545,7 @@
       ],
       "cxxSourceFileCount": 57,
       "cSourceFileCount": 1,
-      "testFileCount": 604,
+      "testFileCount": 607,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -6609,6 +6609,9 @@
         "tests/zonal_crossvalidation.cpp"
       ],
       "testFiles": [
+        "test/baseline-2.1.0.txt",
+        "test/fixtures/lageos1-ilrsa-20251119.mjs",
+        "test/rk78-error-control.e2e.mjs",
         "tests/atmosphere_ports.test.mjs",
         "tests/atmosphere_ports_native.cpp",
         "tests/ballistic_coefficient.test.mjs",
