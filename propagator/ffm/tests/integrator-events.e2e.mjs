@@ -55,10 +55,6 @@ const ENGINE = [
   ['RK4', 4, true], ['RKF45', 6, false], ['COWELL', 6, false], ['RKF78', 13, false], ['RK78', 13, false],
   ['RKDP87', 13, false], ['DOPRI5', 6, false], ['RK65', 8, false], ['RKV98', 16, false], ['RKN1210', 17, false], ['BS', 48, false],
 ];
-// The Fehlberg 7(8) pair's embedded estimate trails its true error by about an order of magnitude
-// (part 2 measures it against RKDP87 at the same tolerance), so it is asked for a tenth of the
-// tolerance in part 1 to meet the same bar.
-const TOLERANCE_FACTOR = { RKF78: 0.1, RK78: 0.1 };
 const FIXED_STEP_ONLY = [['ABM', 2], ['GAUSS_JACKSON_8', 1]];
 
 // ----------------------------------------------------------------------------- requests
@@ -174,7 +170,7 @@ async function part1() {
       const settings = fixed ? orbit.steps.fixed.map((h) => [h, h]) : orbit.steps.adaptive;
       const found = [];
       for (const [initial, max] of settings) {
-        const inputs = build({ orbit, span, algorithm: name, initial, max, rel: toleranceFor(orbit) * (TOLERANCE_FACTOR[name] ?? 1), events: table.map((row) => row.event) });
+        const inputs = build({ orbit, span, algorithm: name, initial, max, rel: toleranceFor(orbit), events: table.map((row) => row.event) });
         const out = await run('browser', inputs);
         if (out.error) { check(false, `${name} ${orbitName}: ${out.error}`); continue; }
         const r = out.result;
