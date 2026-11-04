@@ -20,7 +20,13 @@
 //   2. the flow converges stage by stage to one $OCM; its state flown to the arc end is within BOUND_KM of the truth;
 //   3. with the revolution count forced wrong (revolutionOffsetMin = revolutionOffsetMax = 1) it returns
 //      no-converged-revolution-count;
-//   4. no USER_DEFINED_PARAMETERS on any $OCM; PVN SOURCE_KIND Observation.
+//   4. no USER_DEFINED_PARAMETERS on any $OCM; PVN SOURCE_KIND Observation;
+//   5. case 2's state equals the answers recorded from the dists before modules-angles-only-od-real-tracks-2-20261104
+//      (tests/fixtures/angles-od-recorded.json) within RECORDED_M, its WEIGHTED_RMS within 1e-4;
+//   6. the same arc simulated at 0.2 s (4657 rows) fitted from case 2's estimate by flows/observation-od: rounds over
+//      more than propagator/ffm's 10000 sample epochs go in parts; the arc-end error below BOUND4_KM;
+//   7. nights 1 and 2 with one crossing each (60 s and 16 s): the flow converges from the cross-night first guess,
+//      the arc-end error below BOUND5_KM.
 // JS reads files, routes records between modules by port, cuts windows to clock hours and compares numbers.
 //   cd flows/angles-only-od && node tests/angles-od.e2e.mjs
 import fs from 'node:fs';
@@ -49,8 +55,8 @@ const CROSSINGS = [[[60]], [[50, 70], [90]], [[40], [60], [80]], [[40, 50, 60]],
 const CROSSING_GAP_S = 150;  // between a pass's crossings (initial_orbit's crossings split at gaps over 120 s)
 // Case 5: nights 1 and 2 with one crossing each, 60 s and 16 s (HY-2C 2026-09-23 to 24: 76 s and 16 s).
 const SINGLE_CROSSINGS = [[[60]], [[16]]];
-const BOUND4_KM = null;  // case 4's arc-end bound: its dry run, doubled and rounded up
-const BOUND5_KM = null;  // case 5's arc-end bound: its dry run, doubled and rounded up
+const BOUND4_KM = 0.13;  // case 4's dry run 0.0649 km, doubled and rounded up
+const BOUND5_KM = 0.8;   // case 5's dry run 0.3822 km, doubled and rounded up
 const NIGHTS = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-26'];
 const T0 = '2026-09-21T17:00:00.000000Z';
 const TRUTH_ELEMENTS = [7714.0e3, 0.0008, 66.04 * Math.PI / 180, 0.6, 1.5, 0.3];  // a m, e, i, RAAN, argp, true anomaly rad  // a m, e, i, RAAN, argp, true anomaly rad

@@ -12,7 +12,7 @@
 // caller's propagator, the normal matrix N = P0^-1 + sum A' A and the formal
 // covariance N^-1.
 //
-// Version 3. The solver is never what fails:
+// Version 4. The solver is never what fails:
 // - each dynamic parameter states its domain (NaN: unbounded); a step that
 //   leaves it is projected onto the bound, and a parameter held at a bound
 //   is released when its multiplier points back inside, so the propagator
@@ -35,6 +35,12 @@
 //   and at most ne max(1, chi2_nu) (one scaled standard deviation), the
 //   edit set a fixed point;
 // - a fit that ends without converging reports its best evaluated point;
+// - a point that is a bound orbit with its two-body perigee at or above
+//   minimum_perigee_radius (BatchFitConfig: Earth-centered inertial axes)
+//   keeps its trials there (a trial outside is rejected unevaluated), and
+//   its damped trials take the linear model's two-body energy;
+// - until the first convergence an edit never takes a pass whole (a run of
+//   observations without a 600 s gap);
 // - bias, drift and time-bias states of observation groups: a time bias by
 //   propagating to the shifted epoch, its partial by a central difference of
 //   the measurement model over two more samples;
@@ -942,7 +948,6 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
   // that descends into the atmosphere).
   auto in_domain = [&](const std::vector<double>& xi) {
     const double mu = config.central_gravitational_parameter;
-    if (!(mu > 0.0)) return true;
     const Vec3 r{xi[0], xi[1], xi[2]}, v{xi[3], xi[4], xi[5]};
     const double radius = norm(r), energy = 0.5 * dot(v, v) - mu / radius;
     if (!(radius > 0.0) || !(energy < 0.0)) return false;
@@ -950,15 +955,14 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     const double a = -mu / (2.0 * energy), e = std::sqrt(std::max(0.0, 1.0 - dot(h, h) / (mu * a)));
     return a * (1.0 - e) >= config.minimum_perigee_radius;
   };
-  // In the domain, a trial's velocity scaled so its two-body energy is the
-  // linear model's (the point's energy plus its first-order change over the
-  // step): the energy is quadratic in the velocity, and over many
-  // revolutions the measurements hang on the mean motion, so a step of tens
-  // of m/s otherwise moves the in-track phase a day on by kilometers the
-  // linear model does not see.
+  // A damped trial from a point in the domain has its velocity scaled so its
+  // two-body energy is the linear model's (the point's energy plus its
+  // first-order change over the step): the energy is quadratic in the
+  // velocity, and over many revolutions the measurements hang on the mean
+  // motion, so a step of tens of m/s otherwise moves the in-track phase a day
+  // on by kilometers the linear model does not see.
   auto with_model_energy = [&](const std::vector<double>& xi, std::vector<double>* trial) {
     const double mu = config.central_gravitational_parameter;
-    if (!(mu > 0.0)) return;
     const Vec3 r{xi[0], xi[1], xi[2]}, v{xi[3], xi[4], xi[5]};
     const Vec3 rt{(*trial)[0], (*trial)[1], (*trial)[2]}, vt{(*trial)[3], (*trial)[4], (*trial)[5]};
     const double radius = norm(r);
@@ -1091,8 +1095,10 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     const std::vector<double> zero(ne, 0.0);
     if (evaluations >= maximum) return finish(x, ev, normal_full, normal, zero, rejected, scalars, BatchFitTermination::MAXIMUM_ITERATIONS);
     // Trials from this point until one is answered, finite and lower in
-    // cost: the Gauss-Newton step first while the damping is 0.
+    // cost: the Gauss-Newton step first while the damping is 0. A point in
+    // the state's domain keeps its trials there.
     const double cost = chi_square + prior_cost(x);
+    const bool domain = config.central_gravitational_parameter > 0.0 && in_domain(x);
     // The cost's resolution at x, measured by rejected sub-tolerance trials.
     const double negligible = config.correction_tolerance * config.correction_tolerance * scale;
     double noise = 0.0;
@@ -1102,8 +1108,8 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
         return fail("the normal matrix is singular: the state and parameters are not observable");
       std::vector<double> trial_taken;
       std::vector<double> trial = advance(x, limited(trial_step), &trial_taken);
-      with_model_energy(x, &trial);
-      if (!in_domain(trial)) {
+      if (domain && damping > 0.0) with_model_energy(x, &trial);
+      if (domain && !in_domain(trial)) {
         // Rejected without a propagation; the damping rises as for a refusal.
         ++result.rejected_trials;
         damping = damping > 0.0 ? damping * 10.0 : kInitialDamping;

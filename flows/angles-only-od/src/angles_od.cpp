@@ -18,8 +18,10 @@
 // n_k = n + 2 pi k / dt (dt from the base epoch to the stage's farthest observation; the speed set by vis-viva, the
 // position and the velocity's direction kept), k in [revolutionOffsetMin, revolutionOffsetMax] (default -1..1). Other
 // stages carry the last stage's state (one candidate). A candidate counts when its fit converged, its WEIGHTED_RMS is at
-// most weightedRmsLimit (default 2) and it kept its revolution count (|n - n_seed| dt / 2 pi < 0.5). The lowest
-// WEIGHTED_RMS wins; none: no-converged-revolution-count. An arc under minimumArcHours (24): arc-too-short:<hours>.
+// most weightedRmsLimit (default 2) and it kept its revolution count (|n - n_seed| dt / 2 pi < 0.5). Of those within
+// kTieFraction of the lowest WEIGHTED_RMS (counts the data do not tell apart: two crossings a day apart fit a count
+// either side within a few percent) the least eccentric wins, as the initial orbit's selection does; none:
+// no-converged-revolution-count. An arc under minimumArcHours (24): arc-too-short:<hours>.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -35,7 +37,8 @@ namespace R = sdn::runtime;
 
 namespace {
 
-constexpr double kMu = 3.986004415e5;  // km^3/s^2, the two-body seed's mean motion only
+constexpr double kMu = 3.986004415e5;  // km^3/s^2, the two-body seed's mean motion and the candidates' eccentricity only
+constexpr double kTieFraction = 0.05;
 constexpr double kNightGapHours = 6.0;
 
 int fail(const std::string& code, const std::string& message) {
@@ -147,6 +150,13 @@ bool read_seed(const plugin_input_frame_t* f, Orbit* o, std::string* error) {
   return true;
 }
 // Two-body mean motion of a GCRF state, rad/s.
+double eccentricity(const double* x) {
+  const double r = std::sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]), v2 = x[3] * x[3] + x[4] * x[4] + x[5] * x[5];
+  const double rv = x[0] * x[3] + x[1] * x[4] + x[2] * x[5], c = v2 - kMu / r;
+  double e2 = 0;
+  for (int i = 0; i < 3; ++i) { const double ei = (c * x[i] - rv * x[3 + i]) / kMu; e2 += ei * ei; }
+  return std::sqrt(e2);
+}
 double mean_motion(const double* x) {
   const double r = std::sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]), v2 = x[3] * x[3] + x[4] * x[4] + x[5] * x[5];
   const double inv_a = 2.0 / r - v2 / kMu;
@@ -353,19 +363,25 @@ extern "C" int select(void) {
   const auto candidates = frames("candidates"), executions = frames("executions");
   if (executions.size() != candidates.size()) return fail("bad-input", "each candidate needs its $PRW execution on executions, in the same order");
   const plugin_input_frame_t* best = nullptr;
-  double best_wrms = INFINITY;
+  struct Counted { const plugin_input_frame_t* frame; double wrms, e; };
+  std::vector<Counted> counted;
   std::vector<std::string> items{"stage nights " + night_list(s.target) + " of " + std::to_string(nights)};
   for (size_t c = 0; c < candidates.size(); ++c) {
     Orbit o, seed;
     std::string error;
     if (!read_ocm(candidates[c], &o, &error) || !read_seed(executions[c], &seed, &error)) return fail("bad-input", error);
     const double drift = (mean_motion(o.x) - mean_motion(seed.x)) * s.dt / (2.0 * M_PI);  // revolutions the fit moved from its seed's count
-    char line[160];
-    std::snprintf(line, sizeof line, "candidate %zu: converged %d, WEIGHTED_RMS %.4f, revolution drift %.3f", c + 1, o.converged ? 1 : 0, o.wrms, drift);
+    char line[192];
+    std::snprintf(line, sizeof line, "candidate %zu: converged %d, WEIGHTED_RMS %.4f, revolution drift %.3f, eccentricity %.5f", c + 1, o.converged ? 1 : 0,
+                  o.wrms, drift, eccentricity(o.x));
     items.push_back(line);
     if (!o.converged || !(o.wrms <= s.config.wrms_limit) || !(std::fabs(drift) < 0.5)) continue;
-    if (o.wrms < best_wrms) best = candidates[c], best_wrms = o.wrms;
+    counted.push_back({candidates[c], o.wrms, eccentricity(o.x)});
   }
+  double lowest = INFINITY, least_e = INFINITY;
+  for (const Counted& c : counted) lowest = std::min(lowest, c.wrms);
+  for (const Counted& c : counted)
+    if (c.wrms <= lowest * (1.0 + kTieFraction) && c.e < least_e) best = c.frame, least_e = c.e;
   if (!best) {
     char message[200];
     std::snprintf(message, sizeof message, "stage nights %s: no candidate kept its revolution count and converged with WEIGHTED_RMS at most %g (%zu candidates)",

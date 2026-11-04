@@ -1,7 +1,7 @@
 {
   "pluginId": "org.sdn.flows.angles-only-od",
   "name": "Angles-only orbit determination",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Plans and selects the stages of an angles-only orbit determination with no element set on any port: from analysis/optical-astrometry initial_orbit's Gooding state, stage 1 fits the nights the initial orbit spans and each later stage adds the unfitted night nearest the fitted ones, through flows/observation-od step (analysis/estimation fit_batch with propagator/ffm); across the first nightly gap the revolution count is a candidate set (the base state moved by k revolutions), each fitted, the converged one that kept its count with the lowest WEIGHTED_RMS selected. Refusals by name: no-converged-revolution-count, arc-too-short:<hours>.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",

@@ -627,11 +627,12 @@ int reduce_method() {
 // a cubic in time, rows beyond five robust sigmas (or kEditFloorArcsec)
 // dropped until none is; it counts with kCrossingSights rows kept or more.
 // The first guess takes the first night with two counting crossings or
-// more; without one, the first two counting crossings across the nightly
-// gap. Of their kept epochs: the first, the last, and the middle the one
-// farthest in time from both, each sight the fitted direction there. Sights
-// over more than one pass (a gap of kPassGapS or more): the
-// multi-revolution branches. The solution is refined by least squares on
+// more (od.cpp gooding_iod): of their kept epochs the first, the last, and
+// the middle the one farthest in time from both, each sight the fitted
+// direction there; sights over more than one pass (a gap of kPassGapS or
+// more): the multi-revolution branches. Without such a night, the first two
+// counting crossings across the nightly gap (od.cpp far_sight_iod): the
+// longer one's first and last kept epochs and the other's middle one. The solution is refined by least squares on
 // kRefineSights fitted directions per crossing used (two-body + J2), kept
 // when that converges under kRefineRmsArcsec. Out: the state at the
 // middle sight as a Cartesian $OCM (GCRF, km, km/s; no covariance;
@@ -828,12 +829,14 @@ int initial_orbit_method() {
     return initial_orbit_fail("single-crossing", "one crossing (" + std::to_string(crossings[0].kept.size()) + " observations over " +
                                                      rec::fmt(sights[crossings[0].kept.back()].t - sights[crossings[0].kept.front()].t, "%.1f") +
                                                      " s) leaves the range unobservable; Gooding's method needs a second crossing");
-  // The first night with two counting crossings, else the first two crossings.
+  // The first night with two counting crossings, else the first two crossings (one on each of two nights: far).
   size_t c0 = 0, c1 = 1;
+  bool far = true;
   for (size_t k = 0; k + 1 < crossings.size(); ++k)
     if (crossings[k].night == crossings[k + 1].night) {
       c0 = k;
       c1 = k + 1;
+      far = false;
       while (c1 + 1 < crossings.size() && crossings[c1 + 1].night == crossings[k].night) ++c1;
       break;
     }
@@ -850,7 +853,16 @@ int initial_orbit_method() {
     const double t = used[k].first;
     if (k + 1 < used.size() && std::min(t - t1, t3 - t) > std::min(used[middle].first - t1, t3 - used[middle].first)) middle = k;
   }
-  const std::pair<double, size_t> pick[3] = {used.front(), used[middle], used.back()};
+  // Far: the longer crossing's first and last kept epochs, then the other's middle kept epoch (far_sight_iod).
+  std::pair<double, size_t> pick[3] = {used.front(), used[middle], used.back()};
+  if (far) {
+    const auto span = [&](size_t c) { return sights[crossings[c].kept.back()].t - sights[crossings[c].kept.front()].t; };
+    const size_t a = span(c1) > span(c0) ? c1 : c0, b = a == c0 ? c1 : c0;
+    const std::vector<size_t>& kb = crossings[b].kept;
+    pick[0] = {sights[crossings[a].kept.front()].t, a};
+    pick[1] = {sights[crossings[a].kept.back()].t, a};
+    pick[2] = {sights[kb[kb.size() / 2]].t, b};
+  }
   SightObs s3[3];
   for (int q = 0; q < 3; ++q) {
     const Crossing& c = crossings[pick[q].second];
@@ -867,7 +879,7 @@ int initial_orbit_method() {
     s3[q].los = c.at(pick[q].first);
     s3[q].site_km = sr * 1e-3;
   }
-  IodResult iod = gooding_iod(s3, multi_pass);
+  IodResult iod = far ? far_sight_iod(s3[0], s3[1], s3[2]) : gooding_iod(s3, multi_pass);
   if (!iod.ok) return initial_orbit_fail("no-initial-orbit", "Gooding's iteration over " + std::to_string(c1 - c0 + 1) + " crossings: " + iod.error);
   // Refined on kRefineSights fitted directions per crossing used (two-body + J2 least squares); kept when it converges.
   std::vector<SightObs> fitted;
@@ -914,7 +926,8 @@ int initial_orbit_method() {
   const auto epochs = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString(t0)});
   const auto center = fb.CreateString("EARTH");
   const auto frame = rec::celestial(fb, CelestialFrame::GCRF, "GCRF");
-  const auto odid = fb.CreateString("IOD:" + t0 + (iod.revolutions ? " revolutions " + std::to_string(iod.revolutions) + (iod.branch ? " short-period" : " long-period") : ""));
+  const std::string kind = iod.revolutions ? (iod.far ? " across the nights" : iod.branch ? " short-period" : " long-period") : "";
+  const auto odid = fb.CreateString("IOD:" + t0 + (iod.revolutions ? " revolutions " + std::to_string(iod.revolutions) + kind : ""));
   const auto alg = fb.CreateString("Gooding angles-only initial orbit (Gooding 1997) on Izzo's Lambert solver");
   const auto meth = fb.CreateString("INITIAL_ORBIT");
   const auto otype = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString("RADEC")});
@@ -945,11 +958,11 @@ int initial_orbit_method() {
   if (!push("orbit", "OCM.fbs", "$OCM", "OCM", bytes)) return 1;
   std::vector<std::string> items{
       "epoch " + t0, "ranges km " + f3(iod.rho[0]) + "," + f3(iod.rho[1]) + "," + f3(iod.rho[2]),
-      "middle-sight miss arcsec " + rec::fmt(iod.miss_arcsec, "%.6g"), "distinct solutions " + std::to_string(iod.solutions),
-      "revolutions " + std::to_string(iod.revolutions) + (iod.revolutions ? (iod.branch ? " short-period" : " long-period") : ""),
+      std::string(iod.far ? "far-sight" : "middle-sight") + " miss arcsec " + rec::fmt(iod.miss_arcsec, "%.6g"), "distinct solutions " + std::to_string(iod.solutions),
+      "revolutions " + std::to_string(iod.revolutions) + kind,
       "eccentricity " + rec::fmt(iod.eccentricity, "%.6f"),
       refined ? "refined on " + std::to_string(fitted.size()) + " fitted directions: rms arcsec " + rec::fmt(refined_rms, "%.3g") : "not refined (the least squares did not converge)",
-      "sights " + iso_utc(t1, 3) + " " + iso_utc(used[middle].first, 3) + " " + iso_utc(t3, 3),
+      "sights " + iso_utc(pick[0].first, 3) + " " + iso_utc(pick[1].first, 3) + " " + iso_utc(pick[2].first, 3),
       "crossings " + std::to_string(c1 - c0 + 1) + " of " + std::to_string(crossings.size()),
       "observations kept " + std::to_string(used.size()) + " of " + std::to_string(sights.size())};
   sdn::runtime::FlowNoticeT n;

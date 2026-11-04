@@ -13,7 +13,9 @@ the base state (the initial orbit, or the last stage's state) moved by k revolut
 two-body mean motion, dt from its epoch to the stage's farthest observation; the speed by vis-viva, the position and the
 velocity's direction kept), k in [`revolutionOffsetMin`, `revolutionOffsetMax`] (default -1..1). Each seed is fitted,
 and a candidate counts only when the fit converges, its `WEIGHTED_RMS` is at most `weightedRmsLimit` and it kept its
-count (|n - n_seed| dt / 2 pi < 0.5). The lowest `WEIGHTED_RMS` wins; none: `no-converged-revolution-count`. Other
+count (|n - n_seed| dt / 2 pi < 0.5). Of those within 5 % of the lowest `WEIGHTED_RMS` (counts the data do not tell
+apart: two crossings a day apart fit a count either side within a few percent) the least eccentric wins, as the initial
+orbit's selection does; none: `no-converged-revolution-count`. Other
 stages carry the last stage's state. Arcs under 24 h: `arc-too-short:<hours>`. Per-station time bias enters
 flows/observation-od as a consider `TIME_BIAS`.
 
@@ -39,5 +41,9 @@ seen from station 11 on the six nights of the 2026-09-21 to 26 sessions (18:00 t
 1 s (analysis/observation-simulator, after foundation/frames and analysis/access), the tags late by 10 ms, each pass cut
 to field crossings of 40 to 90 s (1 to 3 per pass, 1 to 3 passes per night; night 1 a single crossing). Darkness is
 approximated by a Sun fixed in Earth-fixed axes 20 deg below station 11's northern horizon. It asserts `single-crossing`
-on night 1, the arc-end position error below 0.15 km (the record's bound), `no-converged-revolution-count` with the
-offset forced to +1, and no USER_DEFINED_PARAMETERS.
+on night 1, the arc-end position error below 0.15 km (the record's bound) and the state equal to the answers recorded
+from the dists before modules-angles-only-od-real-tracks-2-20261104 (`tests/fixtures/angles-od-recorded.json`),
+`no-converged-revolution-count` with the offset forced to +1, and no USER_DEFINED_PARAMETERS. Case 4 fits the same
+arc simulated at 0.2 s (4657 rows) from case 2's estimate: rounds over more than 10,000 epochs go in parts, the arc-end
+error below 0.13 km. Case 5 runs the flow on nights 1 and 2 with one crossing each (60 s and 16 s): the cross-night
+first guess, the arc-end error below 0.8 km.

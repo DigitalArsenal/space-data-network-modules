@@ -270,19 +270,24 @@ raises the cost, is a rejected trial and the step shrinks.
   dxᵀN dx is at most the largest such misprediction at the point and at most
   nₑ max(1, χ²ᵥ) (within one scaled standard deviation), and the edit set is
   a fixed point.
-- **Editing after the first convergence.** With `sigma_edit_threshold`,
-  the edit set stays empty until the fit converges over every observation;
-  from that point on it is recomputed at each accepted point against the
-  previous accepted point's weighted RMS, and convergence needs it to be a
-  fixed point. Edited from a distant start, a whole short track (the one
-  crossing of another night, 22 of 742 RA/Dec rows on HY-2C 2026-09-23 to
-  24) leaves the fit with what fixed its range, and the steps run to re-entry.
-- **A bound orbit.** A state in Earth-centered equatorial inertial axes
-  (TEME, J2000, ICRF, MOD, TOD and their FK5 forms) keeps a bound orbit with
-  its two-body perigee at the epoch at least 100 km above the equatorial
-  radius (6478.137 km; propagator/ffm ends a trajectory below 100 km
-  geodetic altitude): a trial outside is rejected without a propagation and
-  the damping rises as for a refusal.
+- **No pass edited whole before the first convergence.** Until the fit
+  first converges, an edit never takes a pass whole (a run of observations,
+  in time order, without a gap over 600 s); from then on it may. Edited from
+  a distant start, the one short crossing of another night (22 of 742 RA/Dec
+  rows on HY-2C 2026-09-23 to 24) leaves the fit without what fixed its
+  range, and the steps run to re-entry.
+- **A bound orbit.** For a state in Earth-centered equatorial inertial axes
+  (TEME, J2000, ICRF, MOD, TOD and their FK5 forms), a point that is a bound
+  orbit with its two-body perigee at the epoch at least 100 km above the
+  equatorial radius (6478.137 km; propagator/ffm ends a trajectory below
+  100 km geodetic altitude) keeps its trials there: a trial outside is
+  rejected without a propagation and the damping rises as for a refusal.
+  Its damped trials take the linear model's two-body energy (the point's
+  plus its first-order change over the step, by a scale of the velocity):
+  the energy is quadratic in the velocity, and over many revolutions a step
+  of tens of m/s otherwise moves the in-track phase a day on by kilometers
+  the linear model does not see. The undamped Gauss-Newton step is taken as
+  it is (version 1's path).
 - **Results are evaluated points.** `CONVERGED` reports the evaluated point
   plus its final Gauss–Newton step (below the tolerance, or below the
   cost's resolution), residuals linearized; `MAXIMUM_ITERATIONS`

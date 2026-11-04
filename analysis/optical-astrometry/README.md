@@ -56,7 +56,13 @@ Newton). The six starts with the least middle-sight miss are iterated; converged
 under 1 m once the steps stop shrinking. Of the converged solutions the bound one whose perigee clears the surface and
 whose eccentricity is least wins; it is refined by least squares on 9 fitted directions per crossing (two-body + J2),
 kept when that converges under 60 arcsec RMS (`OD_RESIDUAL_RMS` that RMS, `OD_OBSERVATIONS_USED` the directions;
-unrefined, the middle-sight miss and 3). Refused by name: `too-few-observations` (no counting crossing),
+unrefined, the middle-sight miss and 3). Without a night of two crossings, one crossing on each of two nights: the
+longer crossing's first and last kept epochs fix a short arc (Lambert, shot onto the last under two-body + J2), carried
+under two-body + J2 to the other crossing's middle kept epoch, and Newton iteration on the two ranges drives the miss
+there to zero (a middle sight inside one short crossing barely sees the far range); a kilometer of range turns the far
+miss through tens of degrees a day on, so the starts are on one circular radius at 1 km, each local least miss along
+the scan (a revolution count across the gap) iterated, up to 24, with steps held to 1 km; the selection as above; the
+state at the far sight. Refused by name: `too-few-observations` (no counting crossing),
 `single-crossing` (one), `no-initial-orbit` (no bound orbit above the surface converged; the message gives the least
 miss attained), `invalid-angles`. Config (`ModuleConfig` on `config`): `crossingGapSeconds` (120) and
 `crossingObservations` (3), the crossings' definition.

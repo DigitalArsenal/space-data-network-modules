@@ -145,6 +145,7 @@ struct IodResult {
   int iterations = 0;
   int solutions = 0;            // distinct converged solutions from the starts
   int revolutions = 0, branch = 0;
+  bool far = false;             // far_sight_iod: revolutions across the nights, no branch
   double eccentricity = 0;
 };
 
@@ -316,6 +317,166 @@ inline IodResult gooding_iod(const SightObs s[3], bool multi_pass) {
   if (!best.ok) {
     char m[200];
     std::snprintf(m, sizeof m, "%s: %d starts converged (%d unbound, %d with perigee below the surface); least middle-sight miss %.3g arcsec",
+                  converged ? "no bound orbit above the surface" : "no start converged", converged, unbound, subsurface, attained / kArcsec);
+    best.error = m;
+  }
+  return best;
+}
+
+// One crossing on each of two nights: the first and last sights of one
+// crossing (a0, a1, seconds apart) fix a short arc (Izzo's Lambert arc, shot
+// onto a1 under two-body + J2), carried under two-body + J2 to the other
+// night's sight (far, hours away, before or after); Newton iteration on the
+// two ranges drives the miss there to zero. Gooding's middle sight inside one
+// short crossing barely sees the far range (a kilometer at the last sight
+// moves it by decimeters), so the far sight closes the system instead. A
+// kilometer of range turns the far miss through tens of degrees a day on:
+// starts on one circular radius at kFarScanKm, each local least miss along
+// the scan (a revolution count across the gap) iterated, up to kFarStarts,
+// with steps held to kFarStepKm. Converged: the miss under 1e-10 rad, or a
+// step under 1 m once the steps stop shrinking. Of the converged solutions
+// the bound one whose perigee clears the Earth and whose eccentricity is
+// least wins; the state at the far sight.
+inline IodResult far_sight_iod(const SightObs& a0, const SightObs& a1, const SightObs& far) {
+  constexpr double kIodMissRad = 1e-10, kStepKm = 1e-3, kShootMissKm = 1e-9, kFarStepKm = 1.0;
+  constexpr double kFarScanKm = 1, kRadiusMin = kReEarth + 150, kRadiusMax = kReEarth + 4000;
+  constexpr int kFarStarts = 24, kIterations = 80;
+  IodResult best;
+  best.far = true;
+  std::vector<double> found;
+  int converged = 0, unbound = 0, subsurface = 0;
+  double attained = INFINITY;
+  const double t01 = a1.t - a0.t, tf = far.t - a0.t;
+  // The state at a0 whose short arc lands on a1 under two-body + J2; then the miss at the far sight (rad) and the
+  // state there.
+  auto miss = [&](double r0, double r1, double out[2], V3* pf, V3* vf) {
+    const V3 p0 = a0.site_km + a0.los * r0, p1 = a1.site_km + a1.los * r1;
+    lambert_izzo::Request rq;
+    rq.r1 = {p0.x, p0.y, p0.z};
+    rq.r2 = {p1.x, p1.y, p1.z};
+    rq.tof = t01;
+    rq.mu = kMuEarth;
+    const lambert_izzo::Result lr = lambert_izzo::solve(rq);
+    if (lr.status != lambert_izzo::Status::Ok) return false;
+    V3 v{lr.single.v1.x, lr.single.v1.y, lr.single.v1.z};
+    auto land = [&](V3 v0) { V3 rr = p0, vv = v0; j2_rk4(&rr, &vv, t01); return rr; };
+    bool landed = false;
+    for (int it = 0; it < 12; ++it) {
+      const V3 m = land(v) - p1;
+      if (norm(m) < kShootMissKm) { landed = true; break; }
+      double J[3][3];
+      const double h = 1e-7;
+      for (int j = 0; j < 3; ++j) {
+        V3 dv = v;
+        (j == 0 ? dv.x : j == 1 ? dv.y : dv.z) += h;
+        const V3 d = (land(dv) - p1 - m) * (1.0 / h);
+        J[0][j] = d.x, J[1][j] = d.y, J[2][j] = d.z;
+      }
+      const double det = J[0][0] * (J[1][1] * J[2][2] - J[1][2] * J[2][1]) - J[0][1] * (J[1][0] * J[2][2] - J[1][2] * J[2][0]) +
+                         J[0][2] * (J[1][0] * J[2][1] - J[1][1] * J[2][0]);
+      if (!(std::fabs(det) > 0)) return false;
+      const double b[3] = {m.x, m.y, m.z};
+      double x[3];
+      for (int c = 0; c < 3; ++c) {
+        double M[3][3];
+        for (int a = 0; a < 3; ++a)
+          for (int d = 0; d < 3; ++d) M[a][d] = d == c ? b[a] : J[a][d];
+        x[c] = (M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
+                M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0])) / det;
+      }
+      v = v - V3{x[0], x[1], x[2]};
+    }
+    if (!landed || !(0.5 * dot(v, v) - kMuEarth / norm(p0) < 0)) return false;  // unbound: no far sight
+    V3 r = p0;
+    j2_rk4(&r, &v, tf);
+    *pf = r;
+    *vf = v;
+    const V3 d = unit(r - far.site_km);
+    V3 e, n;
+    tangent_basis(far.los, &e, &n);
+    out[0] = dot(d - far.los, e);
+    out[1] = dot(d - far.los, n);
+    return true;
+  };
+  auto range_to = [&](const SightObs& o, double radius) {
+    const double b = 2 * dot(o.site_km, o.los), c = dot(o.site_km, o.site_km) - radius * radius;
+    const double disc = b * b - 4 * c;
+    return disc > 0 ? (-b + std::sqrt(disc)) / 2 : kNaN;
+  };
+  struct Start { double miss, r0, r1; };
+  std::vector<Start> scan;
+  for (double radius = kRadiusMin; radius <= kRadiusMax; radius += kFarScanKm) {
+    const double r0 = range_to(a0, radius), r1 = range_to(a1, radius);
+    double f[2];
+    V3 pf, vf;
+    scan.push_back({std::isfinite(r0) && std::isfinite(r1) && miss(r0, r1, f, &pf, &vf) ? std::hypot(f[0], f[1]) : INFINITY, r0, r1});
+  }
+  std::vector<Start> starts;
+  for (size_t k = 0; k < scan.size(); ++k) {
+    const bool left = k == 0 || scan[k].miss < scan[k - 1].miss, right = k + 1 == scan.size() || scan[k].miss <= scan[k + 1].miss;
+    if (std::isfinite(scan[k].miss) && left && right) starts.push_back(scan[k]);
+  }
+  std::sort(starts.begin(), starts.end(), [](const Start& a, const Start& b) { return a.miss < b.miss; });
+  if (starts.size() > static_cast<size_t>(kFarStarts)) starts.resize(kFarStarts);
+  for (const Start& start : starts) {
+    double r0 = start.r0, r1 = start.r1, f[2], last_step = INFINITY;
+    bool ok = false;
+    int it = 0;
+    V3 pf, vf;
+    for (; it < kIterations; ++it) {
+      if (!miss(r0, r1, f, &pf, &vf)) break;
+      attained = std::min(attained, std::hypot(f[0], f[1]));
+      if (std::hypot(f[0], f[1]) < kIodMissRad) { ok = true; break; }
+      const double h0 = 1e-6 * r0, h1 = 1e-6 * r1;
+      double f0[2], f1[2];
+      V3 tp, tv;
+      if (!miss(r0 + h0, r1, f0, &tp, &tv) || !miss(r0, r1 + h1, f1, &tp, &tv)) break;
+      double J[2][2];
+      for (int k = 0; k < 2; ++k) { J[k][0] = (f0[k] - f[k]) / h0; J[k][1] = (f1[k] - f[k]) / h1; }
+      const double det = J[0][0] * J[1][1] - J[0][1] * J[1][0];
+      if (std::fabs(det) < 1e-30) break;
+      const double d0 = (J[1][1] * f[0] - J[0][1] * f[1]) / det, d1 = (-J[1][0] * f[0] + J[0][0] * f[1]) / det;
+      const double scale = std::max(1.0, std::max(std::fabs(d0), std::fabs(d1)) / kFarStepKm);
+      r0 -= d0 / scale;
+      r1 -= d1 / scale;
+      if (r0 <= 0 || r1 <= 0) break;
+      const double step = (std::fabs(d0) + std::fabs(d1)) / scale;
+      if (step < kStepKm && step > 0.5 * last_step) {
+        ok = miss(r0, r1, f, &pf, &vf);
+        if (ok) attained = std::min(attained, std::hypot(f[0], f[1]));
+        break;
+      }
+      last_step = step;
+    }
+    if (!ok) continue;
+    ++converged;
+    const double rf = norm(pf - far.site_km);
+    bool dup = false;
+    for (double x : found) dup = dup || std::fabs(x - rf) < 1.0;
+    if (!dup) found.push_back(rf);
+    const double rn = norm(pf), energy = 0.5 * dot(vf, vf) - kMuEarth / rn;
+    if (energy >= 0) { ++unbound; continue; }
+    const V3 ev = (pf * (dot(vf, vf) - kMuEarth / rn) - vf * dot(pf, vf)) * (1.0 / kMuEarth);
+    const double ecc = norm(ev), sma = -kMuEarth / (2 * energy);
+    if (sma * (1 - ecc) <= kReEarth) { ++subsurface; continue; }
+    if (!best.ok || ecc < best.eccentricity) {
+      best.ok = true;
+      best.t = far.t;
+      best.r = pf;
+      best.v = vf;
+      best.rho[0] = r0;
+      best.rho[1] = rf;
+      best.rho[2] = r1;
+      best.miss_arcsec = std::hypot(f[0], f[1]) / kArcsec;
+      best.iterations = it;
+      best.revolutions = static_cast<int>(std::floor(std::fabs(tf) / (2 * kPi * std::sqrt(sma * sma * sma / kMuEarth))));
+      best.eccentricity = ecc;
+    }
+  }
+  best.solutions = static_cast<int>(found.size());
+  if (!best.ok) {
+    char m[200];
+    std::snprintf(m, sizeof m, "%s: %d starts converged (%d unbound, %d with perigee below the surface); least far-sight miss %.3g arcsec",
                   converged ? "no bound orbit above the surface" : "no start converged", converged, unbound, subsurface, attained / kArcsec);
     best.error = m;
   }
