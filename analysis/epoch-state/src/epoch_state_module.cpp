@@ -525,6 +525,30 @@ bool for_each_record(const plugin_input_frame_t* frame, Verify verify, Consume c
     return true;
 }
 
+// The set ports take $OMM SGP4 element sets only: a record of any other type (an $OCM element set of any theory, a
+// state) is refused omm-expected by its file identifier before anything is decoded. Returns the identifier found, or
+// empty when every record is an $OMM.
+std::string non_omm_record(const plugin_input_frame_t* frame) {
+    const uint8_t* data = frame->payload;
+    const size_t length = data ? static_cast<size_t>(frame->payload_length) : 0u;
+    for (size_t offset = 0; offset + 4 <= length;) {
+        const uint32_t size = read_u32le(data + offset);
+        if (size == 0) { offset += 4; continue; }
+        if (size < 8 || size > length - offset - 4) return "";  // malformed: the verifier names it
+        const char* ident = reinterpret_cast<const char*>(data + offset + 8);
+        if (std::strncmp(ident, "$OMM", 4) != 0) return std::string(ident, 4);
+        offset += 4 + static_cast<size_t>(size);
+    }
+    return "";
+}
+bool refuse_non_omm(const plugin_input_frame_t* frame, const char* port) {
+    const std::string found = non_omm_record(frame);
+    if (found.empty()) return false;
+    const std::string message = std::string("Port \"") + port + "\" takes $OMM SGP4 element sets; a " + found + " record is refused.";
+    plugin_set_error("omm-expected", message.c_str());
+    return true;
+}
+
 // The shared derivation. `next` yields the next element set, or false at the end.
 struct DeriveTotals {
     uint32_t index = 0, derived = 0, dubious_time = 0, rows = 0;
@@ -820,6 +844,7 @@ int derive_omm(void) {
         plugin_set_error("missing-omm-frame", "derive_omm requires an $OMM stream frame on port \"omm\".");
         return 400;
     }
+    if (refuse_non_omm(frame, "omm")) return 400;
     DeriveTotals totals;
     std::string error;
     const bool ok = for_each_record(
@@ -996,6 +1021,7 @@ int answer_propagation_requests(void) {
         return 400;
     }
     for (const plugin_input_frame_t* frame : element_frames) {
+        if (refuse_non_omm(frame, "element_sets")) return 400;
         std::string error;
         const bool ok = for_each_record(
             frame,
