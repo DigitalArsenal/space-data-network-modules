@@ -12,7 +12,10 @@ export function buildDiagnostic(name,extra,transform=s=>s){
  const foundation=path.join(root,'foundation');if(!fs.existsSync(foundation))fs.symlinkSync(path.join(modulesRoot,'foundation'),foundation,'dir');
  for(const f of ['build.mjs','package.json','plugin-manifest.json','LICENSE','NOTICE'])fs.copyFileSync(path.join(moduleRoot,f),path.join(dir,f));
  for(const d of ['src','LICENSES'])fs.cpSync(path.join(moduleRoot,d),path.join(dir,d),{recursive:true});
- const nm=path.join(dir,'node_modules');if(!fs.existsSync(nm))fs.symlinkSync(path.join(moduleRoot,'node_modules'),nm,'dir');
+ // the checkout's own packages (a link left by a build from another checkout points at its pins)
+ const nm=path.join(dir,'node_modules'),want=path.join(moduleRoot,'node_modules');
+ if(fs.lstatSync(nm,{throwIfNoEntry:false})&&fs.readlinkSync(nm)!==want)fs.unlinkSync(nm);
+ if(!fs.existsSync(nm))fs.symlinkSync(want,nm,'dir');
  const p=path.join(dir,'src/xp_theory.inc');fs.writeFileSync(p,transform(fs.readFileSync(p,'utf8')));
  fs.appendFileSync(path.join(dir,'src/sdn_ap_module.cpp'),'\n'+extra+'\n');
  const log=fs.openSync(path.join(root,'build.log'),'w');
