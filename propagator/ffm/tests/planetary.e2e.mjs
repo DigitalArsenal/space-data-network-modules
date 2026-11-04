@@ -228,10 +228,11 @@ const FIELD = grgm660primField();
     console.log(`  degree 100, one day of LRO: the supplied field and the embedded field end ${d.toFixed(3)} m apart`);
   }
   // A low orbit (20 km over the surface, polar, two hours): the degrees past the embedded 150 move it by tens of meters and the
-  // answer converges as the degree rises (each difference to degree 660 is smaller than the one before).
+  // answer converges as the degree rises (each difference to degree 660 is smaller than the one before). Steps of at most 10 s
+  // resolve the field to degree 660 at 20 km; RK78's estimate does not see it at 60 s (FFM.md, Integration rule).
   const radius = 1737.4 + 20, speed = Math.sqrt(MOON_GM / radius);
   const low = (degree, field) => run('browser', request({ center: MOON, epoch: t0, initial: [radius, 0, 0, 0, 0, speed], target: t0 + 7200,
-    forces: { ...lroForces(degree), srp: undefined, areaM2: 10 }, integrator: { absM: 1e-8, rel: 1e-13, max: 60 } }), KERNEL_2026, field);
+    forces: { ...lroForces(degree), srp: undefined, areaM2: 10 }, integrator: { absM: 1e-8, rel: 1e-13, max: 10 } }), KERNEL_2026, field);
   const ends = {};
   for (const degree of [150, 300, 450, 660]) {
     const out = await low(degree, degree > 150 ? FIELD : undefined);

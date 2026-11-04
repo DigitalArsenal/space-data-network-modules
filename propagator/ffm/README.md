@@ -763,7 +763,7 @@ the build does not run is refused by name.
 | --- | --- | --- | --- | --- | --- |
 | RK4 | classical Runge-Kutta, fixed step | 4 | 4 | quintic Hermite | |
 | RKF45, COWELL | Cash-Karp | 5(4) | 6 | quintic Hermite | Cash and Karp 1990, ACM TOMS 16:201 |
-| RKF78, RK78 | Fehlberg, one pair under two names | 7(8) | 13 | quintic Hermite | Fehlberg 1968, NASA TR R-287 |
+| RKF78, RK78 | Fehlberg, one pair under two names; the eighth-order solution is propagated | 7(8) | 13 | quintic Hermite | Fehlberg 1968, NASA TR R-287 |
 | RKDP87 | RK8(7)13M | 8(7) | 13 | degree 6, 14 stages | Prince and Dormand 1981, J. Comput. Appl. Math. 7:67; Bogacki and Shampine 1990, Comput. Math. Appl. 20:15 |
 | DOPRI5 | Dormand-Prince | 5(4) | 6, first same as last | order 4 | Dormand and Prince 1980, J. Comput. Appl. Math. 6:19; Shampine 1986, Math. Comp. 46:135 |
 | RK65 | RK6(5)8M | 6(5) | 8 | quintic Hermite | Prince and Dormand 1981 |
@@ -780,10 +780,11 @@ the requested epoch to the integration tolerance. DOPRI853 (Dormand-Prince 8(5,3
 is the eighth-order Prince-Dormand pair FFM runs.
 
 Over ten LEO orbits (a = 6900 km, e = 0.01) at tolerance 1e-12 the position errors against the
-exact two-body state are: RKF45 16 mm in 32 178 evaluations, RKF78 54 mm in 8 697, RKDP87 0.49 mm
+exact two-body state are: RKF45 16 mm in 32 178 evaluations, RKF78 0.85 mm in 8 723, RKDP87 0.49 mm
 in 8 203, DOPRI5 2.5 mm in 36 450, RK65 0.47 mm in 15 440, RKV98 69 um in 7 616, RKN1210 2.0 um
-in 2 754, BS 2.8 um in 4 656; RK4 at 1 s is 19 um in 228 164. The Fehlberg pair's embedded
-estimate trails its true error, so RKDP87 is two orders more accurate at the same cost.
+in 2 754, BS 2.8 um in 4 656; RK4 at 1 s is 19 um in 228 164. RKF78 accepts its steps on the
+Fehlberg pair's seventh-order estimate, which does not see a force that varies faster than the step's
+end stages sample (FFM.md, Integration rule).
 `tests/integrator-events.e2e.mjs` prints these for LEO, GEO and e = 0.7.
 
 ### Events
