@@ -8,14 +8,14 @@ import * as flatbuffers from 'flatbuffers';
 const require = createRequire(import.meta.url);
 const standards = path.dirname(require.resolve('spacedatastandards.org/package.json'));
 const load = (code) => import(pathToFileURL(path.join(standards, `lib/js/${code}/main.js`)));
-export const [OMM, OEM, OBD, EOP, RFM, TIM] = await Promise.all(['OMM', 'OEM', 'OBD', 'EOP', 'RFM', 'TIM'].map(load));
+export const [OMM, OCM, OEM, EOP, RFM, TIM] = await Promise.all(['OMM', 'OCM', 'OEM', 'EOP', 'RFM', 'TIM'].map(load));
 export { flatbuffers };
 export const sdsVersion = JSON.parse((await import('node:fs')).readFileSync(path.join(standards, 'package.json'), 'utf8')).version;
 
 export const TYPES = {
   OMM: { schemaName: 'OMM.fbs', fileIdentifier: '$OMM', rootTypeName: 'OMM', wireFormat: 'flatbuffer' },
   OEM: { schemaName: 'OEM.fbs', fileIdentifier: '$OEM', rootTypeName: 'OEM', wireFormat: 'flatbuffer' },
-  OBD: { schemaName: 'OBD.fbs', fileIdentifier: '$OBD', rootTypeName: 'OBD', wireFormat: 'flatbuffer' },
+  OCM: { schemaName: 'OCM.fbs', fileIdentifier: '$OCM', rootTypeName: 'OCM', wireFormat: 'flatbuffer' },
   EOP: { schemaName: 'EOP.fbs', fileIdentifier: '$EOP', rootTypeName: 'EOP', wireFormat: 'flatbuffer' },
 };
 export const frame = (portId, type, bytes) => ({ portId, payload: Buffer.from(bytes), typeRef: TYPES[type] });
@@ -36,10 +36,33 @@ export function ommBytes(o) {
   OMM.OMM.finishSizePrefixedOMMBuffer(b, t.pack(b));
   return b.asUint8Array();
 }
+// ---- $OCM ------------------------------------------------------------------------------------------------------
+/** A size-prefixed $OCM element set under its theory's own forces: SGP4XP (BTERM, AGOM; {JXX,1970}, THEORY_FLUX_MODEL,
+ *  EGM-96, BROUWER) or SGP4 (BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT; WEATHER_SOURCE NONE, WGS-72, KOZAI), TEMEOFDATE. */
+export function ocmBytes(o) {
+  const xp = (o.theory ?? 'SGP4XP') === 'SGP4XP';
+  const me = Object.assign(new OCM.OCMMeanElementsT(), {
+    MEAN_ELEMENT_THEORY: THEORY[o.theory ?? 'SGP4XP'], EPOCH: o.epoch, MEAN_MOTION: o.meanMotion, ECCENTRICITY: o.eccentricity, INCLINATION: o.inclination,
+    RA_OF_ASC_NODE: o.raan, ARG_OF_PERICENTER: o.argPerigee, MEAN_ANOMALY: o.meanAnomaly,
+    ...(xp ? { BTERM: o.bterm ?? 0, AGOM: o.agom ?? 0 } : { BSTAR: o.bstar ?? 0, MEAN_MOTION_DOT: o.meanMotionDot ?? 0, MEAN_MOTION_DDOT: o.meanMotionDdot ?? 0 }),
+  });
+  const pt = Object.assign(new OCM.PerturbationsT(), xp
+    ? { ATMOSPHERIC_MODEL: new OCM.ATMT(OCM.AtmosphericModelFamily.JXX, 1970), GRAVITY_MODEL: 'EGM-96', WEATHER_SOURCE: OCM.pcfWeatherSource.THEORY_FLUX_MODEL }
+    : { GRAVITY_MODEL: 'WGS-72', WEATHER_SOURCE: OCM.pcfWeatherSource.NONE });
+  const t = Object.assign(new OCM.OCMT(), {
+    HEADER: Object.assign(new OCM.HeaderT(), { CCSDS_OCM_VERS: '3.0', CREATION_DATE: o.creation ?? '', ORIGINATOR: o.originator ?? 'TEST' }),
+    METADATA: Object.assign(new OCM.MetadataT(), { OBJECT_NAME: o.name ?? '', INTERNATIONAL_DESIGNATOR: o.id ?? '', TIME_SYSTEM: 'UTC', NORAD_CAT_ID: o.norad ?? 0 }),
+    CENTER_NAME: 'EARTH', TRAJ_REF_FRAME: new RFM.RFMT(RFM.RFMUnion.CelestialFrameWrapper, new RFM.CelestialFrameWrapperT(RFM.CelestialFrame.TEMEOFDATE), 0, 'TEMEOFDATE'),
+    ORB_AVERAGING: xp ? 'BROUWER' : 'KOZAI', ORB_REVNUM: o.rev ?? 0, MEAN_ELEMENTS: me, PERTURBATIONS: pt,
+  });
+  const b = new flatbuffers.Builder(1024);
+  OCM.OCM.finishSizePrefixedOCMBuffer(b, t.pack(b));
+  return b.asUint8Array();
+}
 export const readSizePrefixed = (cls, finder) => (bytes) => cls[finder](new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack();
 export const readOmm = readSizePrefixed(OMM.OMM, 'getSizePrefixedRootAsOMM');
 export const readOem = readSizePrefixed(OEM.OEM, 'getSizePrefixedRootAsOEM');
-export const readObd = readSizePrefixed(OBD.OBD, 'getSizePrefixedRootAsOBD');
+export const readOcm = readSizePrefixed(OCM.OCM, 'getSizePrefixedRootAsOCM');
 
 // ---- $EOP ------------------------------------------------------------------------------------------------------
 /** A size-prefixed $EOP row: UT1-UTC in seconds, pole and celestial pole offsets in radians. */

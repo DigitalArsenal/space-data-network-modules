@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadModule } from './lib/module.mjs';
 import { battery, omm as ommOfLines, referenceLibrary } from './lib/tle.mjs';
-import { blockLines, frame, ommBytes, oemBytes, readOem } from './lib/sds.mjs';
+import { blockLines, frame, ocmBytes, oemBytes, readOem } from './lib/sds.mjs';
 
 const MINUTES = [0, 90, 360, 1440, 4320, 10080, -720];
 const SETS = 640;
@@ -37,7 +37,7 @@ test('the module returns the Space Force library\'s states exactly, SGP4 and SGP
       const fields = ommOfLines(set.lines, { norad: 10000 + set.index });
       const want = reference.propagate(set.lines, MINUTES);
       const grid = oemBytes({ blocks: [{ frame: 'TEMEOFDATE', lines: epochs(fields).map((epoch) => ({ epoch })) }] });
-      const response = await module.refused('propagate', [frame('omm', 'OMM', ommBytes(fields)), frame('grid', 'OEM', grid)]);
+      const response = await module.refused('propagate', [frame('ocm', 'OCM', ocmBytes(fields)), frame('grid', 'OEM', grid)]);
       const libraryRefused = want === null || want.some((state) => state.error !== 0);
       if (libraryRefused) {
         assert.notEqual(response.statusCode, 0, `set ${set.index}: the library refuses it, the module must too`);

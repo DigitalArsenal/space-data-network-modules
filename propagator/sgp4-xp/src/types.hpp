@@ -165,8 +165,7 @@ struct Elements {
   double meanMotionDot = 0;     // SGP4 only; rev/day^2
   double meanMotionDdot = 0;    // SGP4 only; rev/day^3
   uint32_t norad = 0;
-  int revNumber = 0;
-  int elementSetNo = 0;
+  int revNumber = 0;           // ORB_REVNUM
 };
 
 inline Instant epochOf(const Elements& e) {
@@ -271,9 +270,9 @@ inline bool formatTle(const Elements& e, uint32_t satnum, TleLines* out) {
                 static_cast<long long>(std::floor(std::fabs(nd) * 1.0e8 + 0.5)));
   const std::string second = exponentField(e.xp ? e.agom : e.meanMotionDdot);
   const std::string drag = exponentField(e.drag);
-  std::snprintf(l1, sizeof l1, "1 %05uU 00001A   %02d%03lld.%08lld %s %s %s %d %4d", satnum, year2,
+  std::snprintf(l1, sizeof l1, "1 %05uU 00001A   %02d%03lld.%08lld %s %s %s %d    0", satnum, year2,
                 static_cast<long long>(doy), static_cast<long long>(e.epochTicks), ndot, second.c_str(), drag.c_str(),
-                e.xp ? 4 : 0, e.elementSetNo % 10000);
+                e.xp ? 4 : 0);
   // l1 is 68 characters; the checksum is the 69th.
   if (std::strlen(l1) != 68) return false;
   std::snprintf(out->line1, sizeof out->line1, "%s%d", l1, tleChecksum(l1));
@@ -321,6 +320,7 @@ struct FitResult {
   Statistics fit;
   Statistics heldOut;
   std::vector<DayStatistics> heldOutDays;
+  bool dragSolved = false;  // BTERM (and, for XP, AGOM) were fitted: the arc was long enough (fit.hpp)
   double firstPassRms = 0;  // before the first iteration, km
   double rmsBeforeLattice = 0;  // at the continuous optimum, before the lattice search, km
   int iterations = 0;

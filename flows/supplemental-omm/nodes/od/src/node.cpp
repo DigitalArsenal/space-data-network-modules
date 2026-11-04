@@ -57,7 +57,7 @@
 
 // SGP4-XP element sets of every ephemeris, beside the SGP4 sets of the OD core: the fit engine of
 // propagator/sgp4-xp (the US Space Force Sgp4Prop joined to this node by build.mjs) and its SDS records.
-#include "OBD_generated.h"
+#include "OCM_generated.h"
 #include "OMM_generated.h"
 #include "engine.hpp"
 #include "records.hpp"
@@ -574,7 +574,7 @@ struct RecordStream {
 // ---------------------------------------------------------------------------
 constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 16, 0};
 constexpr const char* kXpProduct =
-    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.1.0 and the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
+    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.2.0 and the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
 constexpr uint32_t kUnknownNorad = 99999;  // the OD core's placeholder
 
 template <typename T>
@@ -584,10 +584,10 @@ std::vector<uint8_t> size_prefixed(const T& native, const char* identifier) {
   return std::vector<uint8_t>(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 }
 
-// Appends an $OMM and an $OBD for each fitted window. Returns the account that follows the object's completion
-// message: empty when the ephemeris is too short to hold a fit and its scoring, else the number of sets and of windows
-// refused. `ok` is false only when a stream would pass its size bound.
-std::string append_xp_records(RecordStream* omm, RecordStream* obd, const PendingFitObject& pending, bool* ok) {
+// Appends one $OCM (the set, its orbit determination and FIT_STATISTICS) for each fitted window. Returns the account
+// that follows the object's completion message: empty when the ephemeris is too short to hold a fit and its scoring,
+// else the number of sets and of windows refused. `ok` is false only when a stream would pass its size bound.
+std::string append_xp_records(RecordStream* ocm, const PendingFitObject& pending, bool* ok) {
   *ok = true;
   if (pending.xp.states.empty()) return {};
   const uint32_t norad = pending.xp.norad != 0 ? pending.xp.norad : kUnknownNorad;
@@ -606,9 +606,8 @@ std::string append_xp_records(RecordStream* omm, RecordStream* obd, const Pendin
   who.norad = norad;
   size_t appended = 0;
   for (const sgp4xp::IntervalFit& window : fitted.windows) {
-    const std::unique_ptr<OMMT> o = sgp4xp::ommOf(window, who, kXpProduct);
-    const std::unique_ptr<OBDT> d = sgp4xp::obdOf(window, who, kXpProduct);
-    if (!omm->add(size_prefixed(*o, OMMIdentifier())) || !obd->add(size_prefixed(*d, OBDIdentifier()))) {
+    const std::unique_ptr<OCMT> o = sgp4xp::ocmOf(window, who, sgp4xp::Producer{kParser, kXpProduct});
+    if (!ocm->add(size_prefixed(*o, OCMIdentifier()))) {
       *ok = false;
       return {};
     }
@@ -754,7 +753,7 @@ extern "C" int fit(void) {
     }
   }
   bool xp_ok = true;
-  const std::string xp_account = append_xp_records(&omm, &obd, pending, &xp_ok);
+  const std::string xp_account = append_xp_records(&ocm, pending, &xp_ok);
   if (!xp_ok) return fail("od-output-too-large", "one fitted record stream exceeds 128 MiB", 413);
 
   std::string omm_batch, ocm_batch, obd_batch;

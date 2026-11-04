@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { formatParityReport, normalizeParityFixture, runParityHarness } from 'space-data-module-sdk/testing';
 import { loadModule, wasmPath, root } from './lib/module.mjs';
-import { frame, oemBytes, ommBytes, readOem, blockLines } from './lib/sds.mjs';
+import { frame, oemBytes, ocmBytes, ommBytes, readOem, blockLines } from './lib/sds.mjs';
 import { battery, omm as ommOfLines } from './lib/tle.mjs';
 import { parseOemKvn, sdsFrame } from './lib/oemkvn.mjs';
 
@@ -33,28 +33,28 @@ const sets = battery(10, 20261011);
 for (const t of sets) {
   const fields = ommOfLines(t.lines, { name: `SET ${t.index}`, norad: 10000 + t.index });
   const start = `${fields.epoch}Z`;
-  cases.push({ id: `propagate-${t.type === 4 ? 'xp' : 'sgp4'}-kind${t.kind}-teme`, request: request('propagate', [frame('omm', 'OMM', ommBytes(fields)), frame('grid', 'OEM', grid({ start, stop: isoPlus(fields.epoch, 7200), step: 600, data: [] }))]) });
+  cases.push({ id: `propagate-${t.type === 4 ? 'xp' : 'sgp4'}-kind${t.kind}-teme`, request: request('propagate', [frame('ocm', 'OCM', ocmBytes(fields)), frame('grid', 'OEM', grid({ start, stop: isoPlus(fields.epoch, 7200), step: 600, data: [] }))]) });
 }
 {
   const t = sets.find((s) => s.type === 4 && s.kind === 0);
   const fields = ommOfLines(t.lines, { norad: 10000 + t.index });
   const g = oemBytes({ blocks: [{ frame: 'GCRF', start: `${fields.epoch}Z`, stop: isoPlus(fields.epoch, 3600), step: 300, data: [] }] });
-  cases.push({ id: 'propagate-xp-gcrf', request: request('propagate', [frame('omm', 'OMM', ommBytes(fields)), frame('grid', 'OEM', g)]) });
+  cases.push({ id: 'propagate-xp-gcrf', request: request('propagate', [frame('ocm', 'OCM', ocmBytes(fields)), frame('grid', 'OEM', g)]) });
   const explicit = oemBytes({ blocks: [{ frame: 'TEMEOFDATE', lines: [-3600, 0, 61.5, 86400, 259200].map((s) => ({ epoch: isoPlus(fields.epoch, s) })) }] });
-  cases.push({ id: 'propagate-xp-explicit-epochs', request: request('propagate', [frame('omm', 'OMM', ommBytes(fields)), frame('omm', 'OMM', ommBytes(ommOfLines(sets[3].lines))), frame('grid', 'OEM', explicit)]) });
-  cases.push({ id: 'propagate-default-grid', request: request('propagate', [frame('omm', 'OMM', ommBytes(fields))]) });
+  cases.push({ id: 'propagate-xp-explicit-epochs', request: request('propagate', [frame('ocm', 'OCM', ocmBytes(fields)), frame('ocm', 'OCM', ocmBytes(ommOfLines(sets[3].lines))), frame('grid', 'OEM', explicit)]) });
+  cases.push({ id: 'propagate-default-grid', request: request('propagate', [frame('ocm', 'OCM', ocmBytes(fields))]) });
   cases.push({ id: 'ingest-omm', request: request('ingest_omm', [frame('omm', 'OMM', ommBytes(fields))]) });
   cases.push({ id: 'refused-ingest-omm-sgp4', request: request('ingest_omm', [frame('omm', 'OMM', ommBytes({ ...ommOfLines(sets[0].lines) }))]) });
-  cases.push({ id: 'refused-propagate-itrf-grid', request: request('propagate', [frame('omm', 'OMM', ommBytes(fields)), frame('grid', 'OEM', oemBytes({ blocks: [{ frame: 'ITRF2000', start: `${fields.epoch}Z`, stop: isoPlus(fields.epoch, 600), step: 60, data: [] }] }))]) });
+  cases.push({ id: 'refused-propagate-itrf-grid', request: request('propagate', [frame('ocm', 'OCM', ocmBytes(fields)), frame('grid', 'OEM', oemBytes({ blocks: [{ frame: 'ITRF2000', start: `${fields.epoch}Z`, stop: isoPlus(fields.epoch, 600), step: 60, data: [] }] }))]) });
   // The SDK refuses a missing required port before the method runs: the exit class is the guest's error in every lane.
-  cases.push({ id: 'refused-propagate-no-omm', expect: null, request: request('propagate', [frame('grid', 'OEM', grid({ start: `${fields.epoch}Z`, stop: isoPlus(fields.epoch, 600), step: 60, data: [] }))]) });
+  cases.push({ id: 'refused-propagate-no-ocm', expect: null, request: request('propagate', [frame('grid', 'OEM', grid({ start: `${fields.epoch}Z`, stop: isoPlus(fields.epoch, 600), step: 60, data: [] }))]) });
 }
 
 // ---- fit ----
 const truth = { epoch: '2024-04-09T12:00:00.000000', meanMotion: 15.5, eccentricity: 0.0006317, inclination: 51.64, raan: 208.9163, argPerigee: 69.9862, meanAnomaly: 25.2906, bterm: 0.005, agom: 0.01, norad: 25544, name: 'ISS', id: '1998-067A' };
 async function ephemerisOf(set, hours, stepSeconds, frameName = 'TEMEOFDATE') {
   const g = oemBytes({ blocks: [{ frame: frameName, start: `${set.epoch}Z`, stop: isoPlus(set.epoch, hours * 3600), step: stepSeconds, data: [] }] });
-  const out = await local.invoke('propagate', [frame('omm', 'OMM', ommBytes(set)), frame('grid', 'OEM', g)]);
+  const out = await local.invoke('propagate', [frame('ocm', 'OCM', ocmBytes(set)), frame('grid', 'OEM', g)]);
   return blockLines(readOem(out.ephemeris[0]).EPHEMERIS_DATA_BLOCK[0]);
 }
 const lines = await ephemerisOf(truth, 8, 300);

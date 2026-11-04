@@ -1,5 +1,5 @@
-// propagator/sgp4-xp: the SDS records it reads and writes: $OMM element sets, $OEM ephemerides, $OBD fit
-// diagnostics and $EOP Earth orientation. The generated object API of the pinned spacedatastandards.org (build.mjs
+// propagator/sgp4-xp: the SDS records it reads and writes: $OCM element sets (and the $OMM of the ingest_omm
+// boundary), $OEM ephemerides and $EOP Earth orientation. The generated object API of the pinned spacedatastandards.org (build.mjs
 // generates it from the published package) is the only reader and writer; nothing here parses bytes by hand.
 #pragma once
 
@@ -84,43 +84,111 @@ inline bool timeScaleOf(timingStandard system, TimeScale* out) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// $OMM
+// $OCM element sets (flight) and the $OMM boundary (ingest_omm).
 // ---------------------------------------------------------------------------------------------------------------
-inline bool ommToElements(const OMMT& o, Elements* e, std::string* why) {
-  if (o.MEAN_ELEMENT_THEORY != meanElementSource::SGP4XP && o.MEAN_ELEMENT_THEORY != meanElementSource::SGP4) {
-    *why = "MEAN_ELEMENT_THEORY must be SGP4XP or SGP4.";
-    return false;
+// A refusal: its name and why.
+struct Refusal {
+  std::string code, why;
+  bool fail(const std::string& c, const std::string& w) { code = c; why = w; return false; }
+};
+
+// The record type of a payload, plain or size-prefixed: its file identifier, or "" when it names none.
+inline std::string recordType(const uint8_t* p, size_t n) {
+  if (p == nullptr || n < 8) return std::string();
+  const uint8_t* id = (n >= 12 && p[8] == '$') ? p + 8 : p + 4;
+  if (id[0] != '$') return std::string();
+  return std::string(reinterpret_cast<const char*>(id), 4);
+}
+
+// A stock SGP4 or SGP4-XP element set of an $OCM: MEAN_ELEMENTS under its theory's own forces in PERTURBATIONS,
+// TEMEOFDATE, centered on the Earth. Anything else is refused by name; the mean motion is the record's, never derived.
+inline bool ocmToElements(const OCMT& o, Elements* e, Refusal* no) {
+  if (!o.CENTER_NAME.empty() && upper(o.CENTER_NAME) != "EARTH") return no->fail("unsupported-center", "The $OCM's CENTER_NAME must be EARTH.");
+  if (!o.MEAN_ELEMENTS) return no->fail("mean-elements-missing", "The $OCM carries no MEAN_ELEMENTS: flight takes an element set.");
+  const OCMMeanElementsT& me = *o.MEAN_ELEMENTS;
+  if (me.MEAN_ELEMENT_THEORY == meanElementSource::UNSPECIFIED)
+    return no->fail("mean-element-theory-unspecified", "MEAN_ELEMENT_THEORY is UNSPECIFIED: a set states its theory.");
+  if (me.MEAN_ELEMENT_THEORY != meanElementSource::SGP4XP && me.MEAN_ELEMENT_THEORY != meanElementSource::SGP4) {
+    const char* name = EnumNamemeanElementSource(me.MEAN_ELEMENT_THEORY);
+    return no->fail(std::string("theory-not-flown:") + (name != nullptr && *name ? name : "UNKNOWN"), "This module flies SGP4XP and SGP4 sets.");
   }
+  const bool xp = me.MEAN_ELEMENT_THEORY == meanElementSource::SGP4XP;
+  if (xp ? (me.BSTAR != 0.0 || me.MEAN_MOTION_DOT != 0.0 || me.MEAN_MOTION_DDOT != 0.0) : (me.BTERM != 0.0 || me.AGOM != 0.0))
+    return no->fail("elements-other-theory", xp ? "An SGP4XP set carries BSTAR, MEAN_MOTION_DOT or MEAN_MOTION_DDOT (SGP4's terms)."
+                                                : "An SGP4 set carries BTERM or AGOM (SGP4XP's terms).");
+  if (upper(o.ORB_AVERAGING) != (xp ? "BROUWER" : "KOZAI"))
+    return no->fail("orb-averaging-mismatch", xp ? "An SGP4XP set's ORB_AVERAGING is BROUWER." : "An SGP4 set's ORB_AVERAGING is KOZAI.");
+  // the forces: the theory's own, stated
+  const PerturbationsT* pt = o.PERTURBATIONS.get();
+  const pcfWeatherSource weather = pt ? pt->WEATHER_SOURCE : pcfWeatherSource::UNSPECIFIED;
+  if (weather != (xp ? pcfWeatherSource::THEORY_FLUX_MODEL : pcfWeatherSource::NONE))
+    return no->fail("weather-source-not-stock", xp ? "An SGP4XP set flies on its theory's own flux model: WEATHER_SOURCE THEORY_FLUX_MODEL."
+                                                   : "An SGP4 set's drag is its BSTAR: WEATHER_SOURCE NONE.");
+  if (!pt->SPACE_WEATHER.empty() || !pt->DENSITY_CORRECTION_NODE_TIMES_MS.empty() || !pt->DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS.empty())
+    return no->fail("weather-source-not-stock", "The record carries space-weather rows or density-correction nodes: this module flies the theory's own forces only.");
+  const bool stockAtmosphere = xp ? (pt->ATMOSPHERIC_MODEL && pt->ATMOSPHERIC_MODEL->MODEL == AtmosphericModelFamily::JXX && pt->ATMOSPHERIC_MODEL->YEAR == 1970)
+                                  : !pt->ATMOSPHERIC_MODEL;
+  if (!stockAtmosphere || pt->DENSITY_CORRECTION != pcfDensityCorrection::NONE)
+    return no->fail("atmosphere-not-stock", xp ? "An SGP4XP set states ATMOSPHERIC_MODEL {JXX,1970} and DENSITY_CORRECTION NONE."
+                                               : "An SGP4 set states no ATMOSPHERIC_MODEL and DENSITY_CORRECTION NONE.");
+  if (pt->MAXIMUM_TESSERAL_DEGREE != 0 || pt->MAXIMUM_ZONAL_DEGREE != 0)
+    return no->fail("gravity-terms-not-stock", "MAXIMUM_TESSERAL_DEGREE and MAXIMUM_ZONAL_DEGREE are 0: this module flies the theory's own gravity terms.");
+  Frame frame;
+  if (!o.TRAJ_REF_FRAME || !frameOf(o.TRAJ_REF_FRAME.get(), &frame) || frame != Frame::Teme || !o.TRAJ_FRAME_EPOCH.empty())
+    return no->fail("frame-pairing-invalid", "An SGP4 or SGP4XP set is TEMEOFDATE.");
   *e = Elements{};
-  e->xp = o.MEAN_ELEMENT_THEORY == meanElementSource::SGP4XP;
+  e->xp = xp;
   Instant epoch;
-  if (!parseInstant(o.EPOCH, &epoch)) {
-    *why = "EPOCH is not an ISO 8601 UTC time: " + o.EPOCH;
-    return false;
-  }
+  if (!parseInstant(me.EPOCH, &epoch)) return no->fail("invalid-ocm", "MEAN_ELEMENTS.EPOCH is not an ISO 8601 UTC time: " + me.EPOCH);
   setEpoch(e, epoch);
-  double n = o.MEAN_MOTION;
-  if (!(n > 0) && o.SEMI_MAJOR_AXIS > 0) n = std::sqrt(kMuKm3PerS2 / (o.SEMI_MAJOR_AXIS * o.SEMI_MAJOR_AXIS * o.SEMI_MAJOR_AXIS)) * kSecondsPerDay / (2.0 * kPi);
-  e->meanMotion = n;
+  e->meanMotion = me.MEAN_MOTION;
+  e->eccentricity = me.ECCENTRICITY;
+  e->inclination = me.INCLINATION;
+  e->raan = me.RA_OF_ASC_NODE;
+  e->argPerigee = me.ARG_OF_PERICENTER;
+  e->meanAnomaly = me.MEAN_ANOMALY;
+  if (xp) {
+    e->drag = me.BTERM;
+    e->agom = me.AGOM;
+  } else {
+    e->drag = me.BSTAR;
+    e->meanMotionDot = me.MEAN_MOTION_DOT;
+    e->meanMotionDdot = me.MEAN_MOTION_DDOT;
+  }
+  e->norad = o.METADATA ? o.METADATA->NORAD_CAT_ID : 0;
+  e->revNumber = static_cast<int>(o.ORB_REVNUM);
+  if (!(e->meanMotion > 0) || !std::isfinite(e->meanMotion) || !(e->eccentricity >= 0) || !(e->eccentricity < 1))
+    return no->fail("invalid-ocm", "MEAN_ELEMENTS.MEAN_MOTION must be positive and the eccentricity in [0, 1).");
+  return true;
+}
+
+// The boundary: a foreign SGP4-XP $OMM (BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT, m**2/kg). An $OMM with a free-form
+// parameter list is refused by its count, never read by name; an AP set is never an $OMM; the propagator
+// ABI this boundary feeds is SGP4-XP, so an SGP4 set is refused too.
+inline bool ommToElements(const OMMT& o, Elements* e, Refusal* no) {
+  if (const size_t listed = o.USER_DEFINED_PARAMETERS.size())
+    return no->fail("user-defined-parameters:" + std::to_string(listed), "An $OMM with a free-form parameter list: every field this module reads is typed.");
+  if (o.MEAN_ELEMENT_THEORY == meanElementSource::AP) return no->fail("theory-not-ingestable:AP", "An AP set is an $OCM, never an $OMM.");
+  if (o.MEAN_ELEMENT_THEORY != meanElementSource::SGP4XP)
+    return no->fail("unsupported-theory", "ingest_omm takes SGP4XP element sets: the propagator ABI is this module's SGP4-XP.");
+  if (!o.CENTER_NAME.empty() && upper(o.CENTER_NAME) != "EARTH") return no->fail("unsupported-center", "The $OMM's CENTER_NAME must be EARTH.");
+  *e = Elements{};
+  e->xp = true;
+  Instant epoch;
+  if (!parseInstant(o.EPOCH, &epoch)) return no->fail("invalid-omm", "EPOCH is not an ISO 8601 UTC time: " + o.EPOCH);
+  setEpoch(e, epoch);
+  e->meanMotion = o.MEAN_MOTION;
   e->eccentricity = o.ECCENTRICITY;
   e->inclination = o.INCLINATION;
   e->raan = o.RA_OF_ASC_NODE;
   e->argPerigee = o.ARG_OF_PERICENTER;
   e->meanAnomaly = o.MEAN_ANOMALY;
-  e->drag = o.BSTAR;
-  if (e->xp) {
-    e->agom = o.MEAN_MOTION_DDOT;
-  } else {
-    e->meanMotionDot = o.MEAN_MOTION_DOT;
-    e->meanMotionDdot = o.MEAN_MOTION_DDOT;
-  }
+  e->drag = o.BSTAR;             // BTERM, m^2/kg
+  e->agom = o.MEAN_MOTION_DDOT;  // AGOM, m^2/kg
   e->norad = o.NORAD_CAT_ID;
   e->revNumber = static_cast<int>(o.REV_AT_EPOCH);
-  e->elementSetNo = static_cast<int>(o.ELEMENT_SET_NO);
-  if (!(e->meanMotion > 0) || !std::isfinite(e->meanMotion) || !(e->eccentricity >= 0) || !(e->eccentricity < 1)) {
-    *why = "The mean motion must be positive and the eccentricity in [0, 1).";
-    return false;
-  }
+  if (!(e->meanMotion > 0) || !std::isfinite(e->meanMotion) || !(e->eccentricity >= 0) || !(e->eccentricity < 1))
+    return no->fail("invalid-omm", "MEAN_MOTION must be positive and the eccentricity in [0, 1).");
   return true;
 }
 
@@ -145,13 +213,6 @@ inline bool forEachRecord(const uint8_t* data, size_t length, const char* id,
     at += 4 + static_cast<size_t>(size);
   }
   return any && at == length;
-}
-
-// ---------------------------------------------------------------------------------------------------------------
-// $OBD and the $OMM written by the fit.
-// ---------------------------------------------------------------------------------------------------------------
-inline std::vector<uint8_t> finish(flatbuffers::FlatBufferBuilder& fbb) {
-  return std::vector<uint8_t>(fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
 }
 
 }  // namespace sgp4xp

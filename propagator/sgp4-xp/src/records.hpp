@@ -1,174 +1,163 @@
-// propagator/sgp4-xp: a fitted element set as SDS records: the $OMM (MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR, AGOM
-// in MEAN_MOTION_DDOT) and the $OBD that describes the fit.
+// propagator/sgp4-xp: an SGP4-XP element set as one SDS $OCM (SDS 1.276.0): MEAN_ELEMENTS (MEAN_ELEMENT_THEORY
+// SGP4XP, Brouwer MEAN_MOTION, BTERM and AGOM in m**2/kg), PERTURBATIONS the theory's own forces (ATMOSPHERIC_MODEL
+// {JXX,1970}, WEATHER_SOURCE THEORY_FLUX_MODEL, DENSITY_CORRECTION NONE, both caps 0, GRAVITY_MODEL EGM-96: the
+// library's XP uses EGM-96 whatever Earth model is selected, Release Notes 8.1), METADATA.NORAD_CAT_ID, TRAJ_REF_FRAME
+// TEMEOFDATE, ORB_AVERAGING BROUWER, STATE_DATA empty; from a fit also ORBIT_DETERMINATION with FIT_STATISTICS and
+// PROVENANCE (the library in PRODUCER). Every field typed; the free-form parameter list stays empty.
 //
-// Written against whatever SDS pin the including translation unit holds: this module's own, and the signed OD node's
-// of flows/supplemental-omm, whose OMM has no USER_DEFINED_PARAMETERS. The statistics are in the OMM's COMMENT in
-// every pin and also parameters where the pin has them.
+// Written with the object API of the SDS pin the including translation unit holds: this module's, and the OD node's
+// of flows/supplemental-omm.
 #pragma once
 
 #include <memory>
 #include <string>
-#include <type_traits>
 #include <utility>
 
 #include "engine.hpp"
 
 namespace sgp4xp {
 
-// Where an element set came from: the source of the ephemeris it was fitted to.
+// Who an element set describes and where it came from: the source of the ephemeris it was fitted to.
 struct Provenance {
-  std::string originator;  // the OMM's ORIGINATOR: who produced the ephemeris
-  std::string creation;    // the OMM's CREATION_DATE; the end of the fit when empty
-  std::string name, id;
-  std::string source;      // free text naming the feed, kept in the COMMENT and the $OBD (a provider's identity)
+  std::string originator;  // HEADER.ORIGINATOR and PROVENANCE.ORIGINATOR: who produced the ephemeris
+  std::string creation;    // HEADER.CREATION_DATE; the end of the fit when empty
+  std::string name, id;    // METADATA.OBJECT_NAME, INTERNATIONAL_DESIGNATOR
+  std::string source;      // PROVENANCE.SOURCE_ID: the feed (the module that read it), when known
   uint32_t norad = 0;
 };
 
-inline std::string number(double v, int significant = 9) {
-  char b[48];
-  std::snprintf(b, sizeof b, "%.*g", significant, v);
-  return b;
-}
-
-inline double semiMajorAxisKm(double meanMotionRevPerDay) {
-  const double n = meanMotionRevPerDay * 2.0 * kPi / kSecondsPerDay;
-  return std::cbrt(kMuKm3PerS2 / (n * n));
-}
-
-inline std::string statLine(const char* label, const Statistics& s) {
-  char b[256];
-  std::snprintf(b, sizeof b, "%s N=%zu RMS_KM=%s MAX_KM=%s RADIAL_RMS_KM=%s ALONG_TRACK_RMS_KM=%s CROSS_TRACK_RMS_KM=%s", label, s.count,
-                number(s.rms).c_str(), number(s.max).c_str(), number(s.radial).c_str(), number(s.along).c_str(), number(s.cross).c_str());
-  return b;
-}
-
-// Pins whose $OMM has USER_DEFINED_PARAMETERS record the statistics there too.
-template <typename T>
-auto addParameter(T* omm, const std::string& name, const std::string& value, int)
-    -> decltype(omm->USER_DEFINED_PARAMETERS.push_back(std::make_unique<typename decltype(omm->USER_DEFINED_PARAMETERS)::value_type::element_type>()), void()) {
-  auto p = std::make_unique<typename decltype(omm->USER_DEFINED_PARAMETERS)::value_type::element_type>();
-  p->PARAM_NAME = name;
-  p->PARAM_VALUE = value;
-  omm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
-}
-template <typename T>
-void addParameter(T*, const std::string&, const std::string&, long) {}
+// Who made a record: PROVENANCE.PROVIDER_ID and PRODUCER (the program and the library under it).
+struct Producer {
+  std::string provider, product;
+};
 
 inline std::unique_ptr<RFMT> temeReferenceFrame() {
   auto rfm = std::make_unique<RFMT>();
   CelestialFrameWrapperT wrapper;
   wrapper.frame = CelestialFrame::TEMEOFDATE;
   rfm->REFERENCE_FRAME.Set(std::move(wrapper));
+  rfm->NAME = "TEMEOFDATE";
   return rfm;
 }
 
-// `product` names the program that fitted the set, as the COMMENT and the $OBD's METHOD_SOURCE say it.
-inline std::unique_ptr<OMMT> ommOf(const IntervalFit& f, const Provenance& who, const std::string& product) {
-  const FitResult& fit = f.result;
-  auto omm = std::make_unique<OMMT>();
-  const Elements& e = fit.elements;
-  omm->CCSDS_OMM_VERS = 3.0;
-  omm->CREATION_DATE = who.creation.empty() ? formatInstant(f.fitStop, 3) : who.creation;
-  omm->ORIGINATOR = who.originator.empty() ? "UNKNOWN" : who.originator;
-  omm->OBJECT_NAME = who.name;
-  omm->OBJECT_ID = who.id;
-  omm->CENTER_NAME = "EARTH";
-  omm->REFERENCE_FRAME = temeReferenceFrame();
-  omm->TIME_SYSTEM = timingStandard::UTC;
-  omm->MEAN_ELEMENT_THEORY = meanElementSource::SGP4XP;
-  omm->EPOCH = formatInstant(epochOf(e));
-  omm->SEMI_MAJOR_AXIS = semiMajorAxisKm(e.meanMotion);
-  omm->MEAN_MOTION = e.meanMotion;
-  omm->ECCENTRICITY = e.eccentricity;
-  omm->INCLINATION = e.inclination;
-  omm->RA_OF_ASC_NODE = e.raan;
-  omm->ARG_OF_PERICENTER = e.argPerigee;
-  omm->MEAN_ANOMALY = e.meanAnomaly;
-  omm->GM = kMuKm3PerS2;
-  omm->CLASSIFICATION_TYPE = "U";
-  omm->NORAD_CAT_ID = who.norad;
-  omm->ELEMENT_SET_NO = 999;
-  omm->BSTAR = e.drag;              // BTERM, m^2/kg
-  omm->MEAN_MOTION_DOT = 0.0;
-  omm->MEAN_MOTION_DDOT = e.agom;   // AGOM, m^2/kg
-  omm->USER_DEFINED_EARTH_MODEL = "WGS-72";
-  std::string comment = std::string("SGP4-XP fit by ") + product + " to the ephemeris of " + (who.originator.empty() ? "an unnamed source" : who.originator) +
-                        ". BTERM is BSTAR and AGOM is MEAN_MOTION_DDOT, in m**2/kg.\n";
-  if (!who.source.empty()) comment += "SOURCE " + who.source + "\n";
-  comment += "FIT_INTERVAL " + formatInstant(f.fitStart, 3) + " " + formatInstant(f.fitStop, 3) + "\n";
-  comment += statLine("FIT", fit.fit) + " ITERATIONS=" + std::to_string(fit.iterations) + " CONVERGED=" + (fit.converged ? "true" : "false");
-  if (f.haveHeld && fit.heldOut.count > 0) comment += "\n" + statLine("HELD_OUT", fit.heldOut);
-  omm->COMMENT = comment;
-  addParameter(omm.get(), "FIT_START", formatInstant(f.fitStart, 3), 0);
-  addParameter(omm.get(), "FIT_STOP", formatInstant(f.fitStop, 3), 0);
-  addParameter(omm.get(), "FIT_STATES", std::to_string(fit.fit.count), 0);
-  addParameter(omm.get(), "FIT_RMS_KM", number(fit.fit.rms), 0);
-  addParameter(omm.get(), "FIT_MAX_KM", number(fit.fit.max), 0);
-  addParameter(omm.get(), "FIT_RADIAL_RMS_KM", number(fit.fit.radial), 0);
-  addParameter(omm.get(), "FIT_ALONG_TRACK_RMS_KM", number(fit.fit.along), 0);
-  addParameter(omm.get(), "FIT_CROSS_TRACK_RMS_KM", number(fit.fit.cross), 0);
-  addParameter(omm.get(), "FIT_ITERATIONS", std::to_string(fit.iterations), 0);
-  addParameter(omm.get(), "FIT_CONVERGED", fit.converged ? "true" : "false", 0);
-  addParameter(omm.get(), "FIT_FIRST_PASS_RMS_KM", number(fit.firstPassRms), 0);
-  addParameter(omm.get(), "FIT_RMS_BEFORE_LATTICE_KM", number(fit.rmsBeforeLattice), 0);
-  if (f.haveHeld && fit.heldOut.count > 0) {
-    addParameter(omm.get(), "HELD_OUT_STOP", formatInstant(f.heldStop, 3), 0);
-    addParameter(omm.get(), "HELD_OUT_STATES", std::to_string(fit.heldOut.count), 0);
-    addParameter(omm.get(), "HELD_OUT_RMS_KM", number(fit.heldOut.rms), 0);
-    addParameter(omm.get(), "HELD_OUT_MAX_KM", number(fit.heldOut.max), 0);
-    for (const DayStatistics& d : fit.heldOutDays) {
-      addParameter(omm.get(), "HELD_OUT_DAY" + std::to_string(d.day) + "_RMS_KM", number(d.statistics.rms), 0);
-      addParameter(omm.get(), "HELD_OUT_DAY" + std::to_string(d.day) + "_STATES", std::to_string(d.statistics.count), 0);
-    }
+// The $OCM of a stock SGP4-XP element set, without orbit determination or provenance.
+inline std::unique_ptr<OCMT> elementSetOf(const Elements& e, const Provenance& who) {
+  auto ocm = std::make_unique<OCMT>();
+  ocm->HEADER = std::make_unique<HeaderT>();
+  ocm->HEADER->CCSDS_OCM_VERS = "3.0";
+  ocm->HEADER->CREATION_DATE = who.creation;
+  ocm->HEADER->ORIGINATOR = who.originator.empty() ? "UNKNOWN" : who.originator;
+  ocm->METADATA = std::make_unique<MetadataT>();
+  ocm->METADATA->OBJECT_NAME = who.name;
+  ocm->METADATA->INTERNATIONAL_DESIGNATOR = who.id;
+  if (who.norad != 0) {
+    ocm->METADATA->CATALOG_NAME = "NORAD";
+    ocm->METADATA->OBJECT_DESIGNATOR = std::to_string(who.norad);
+    ocm->METADATA->NORAD_CAT_ID = who.norad;
   }
-  addParameter(omm.get(), "LIBRARY", "US Space Force Sgp4Prop 9.1.1.0 XP", 0);
-  return omm;
+  ocm->METADATA->TIME_SYSTEM = "UTC";
+  ocm->CENTER_NAME = "EARTH";
+  ocm->TRAJ_REF_FRAME = temeReferenceFrame();
+  ocm->ORB_AVERAGING = "BROUWER";
+  if (e.revNumber > 0) ocm->ORB_REVNUM = static_cast<uint32_t>(e.revNumber);
+  auto me = std::make_unique<OCMMeanElementsT>();
+  me->MEAN_ELEMENT_THEORY = meanElementSource::SGP4XP;
+  me->EPOCH = formatInstant(epochOf(e));
+  me->MEAN_MOTION = e.meanMotion;
+  me->ECCENTRICITY = e.eccentricity;
+  me->INCLINATION = e.inclination;
+  me->RA_OF_ASC_NODE = e.raan;
+  me->ARG_OF_PERICENTER = e.argPerigee;
+  me->MEAN_ANOMALY = e.meanAnomaly;
+  me->BTERM = e.drag;  // m^2/kg
+  me->AGOM = e.agom;   // m^2/kg
+  ocm->MEAN_ELEMENTS = std::move(me);
+  auto pt = std::make_unique<PerturbationsT>();
+  pt->ATMOSPHERIC_MODEL = std::make_unique<ATMT>();
+  pt->ATMOSPHERIC_MODEL->MODEL = AtmosphericModelFamily::JXX;
+  pt->ATMOSPHERIC_MODEL->YEAR = 1970;
+  pt->GRAVITY_MODEL = "EGM-96";
+  pt->MAXIMUM_TESSERAL_DEGREE = 0;
+  pt->MAXIMUM_ZONAL_DEGREE = 0;
+  pt->WEATHER_SOURCE = pcfWeatherSource::THEORY_FLUX_MODEL;
+  pt->DENSITY_CORRECTION = pcfDensityCorrection::NONE;
+  ocm->PERTURBATIONS = std::move(pt);
+  return ocm;
 }
 
-inline std::unique_ptr<OBDT> obdOf(const IntervalFit& f, const Provenance& who, const std::string& product) {
+inline std::unique_ptr<OCMDynamicParameterT> dynamicParameter(const char* name, double value, bool solved, prwDynamicParameter kind) {
+  auto p = std::make_unique<OCMDynamicParameterT>();
+  p->NAME = name;
+  p->VALUE = value;
+  p->UNITS = "m**2/kg";
+  p->SOLVED_FOR = solved;
+  p->PARAMETER = kind;
+  return p;
+}
+
+// The $OCM of a fitted window: the set, the orbit determination with its FIT_STATISTICS, and PROVENANCE.
+inline std::unique_ptr<OCMT> ocmOf(const IntervalFit& f, const Provenance& who, const Producer& by) {
   const FitResult& fit = f.result;
-  auto obd = std::make_unique<OBDT>();
-  // The object's NORAD number names it; a source with none (the OD node gives it 99999) is named by what it calls it.
-  const std::string subject = (who.norad != 0 && who.norad != 99999) || who.name.empty() ? std::to_string(who.norad) : who.name;
-  obd->ID = subject + "-" + formatInstant(epochOf(fit.elements), 3) + "-SGP4XP";
-  obd->SAT_NO = who.norad;
-  obd->ORIG_OBJECT_ID = who.id;
-  obd->START_TIME = formatInstant(f.fitStart, 3);
-  obd->END_TIME = formatInstant(f.fitStop, 3);
-  obd->METHOD = odMethod::BATCH_LEAST_SQUARES;
-  obd->METHOD_SOURCE = product + ": Levenberg-Marquardt on TEME position residuals; fitted to " +
-                       (who.originator.empty() ? "an unnamed source" : who.originator) + (who.source.empty() ? "" : " (" + who.source + ")");
-  obd->INITIAL_OD = false;
-  obd->LAST_OB_START = obd->START_TIME;
-  obd->LAST_OB_END = obd->END_TIME;
-  obd->TIME_SPAN = secondsBetween(f.fitStop, f.fitStart) / kSecondsPerDay;
-  obd->FIT_SPAN = obd->TIME_SPAN;
-  obd->EFFECTIVE_FROM = formatInstant(epochOf(fit.elements), 3);
-  obd->EFFECTIVE_UNTIL = formatInstant(f.haveHeld && fit.heldOut.count > 0 ? f.heldStop : f.fitStop, 3);
-  obd->WRMS = fit.fit.rms;                // km, 3D, every state weighted alike
-  obd->FIRST_PASS_WRMS = fit.firstPassRms;
-  obd->BEST_PASS_WRMS = fit.fit.rms;
-  if (f.haveHeld && fit.heldOut.count > 0 && !fit.heldOutDays.empty()) {
-    // km/day: the held-out error at its last day, per day after the end of the fit interval.
-    const DayStatistics& last = fit.heldOutDays.back();
-    obd->ERROR_GROWTH_RATE = last.statistics.rms / static_cast<double>(last.day);
+  Provenance named = who;
+  if (named.creation.empty()) named.creation = formatInstant(f.fitStop, 3);
+  auto ocm = elementSetOf(fit.elements, named);
+  const bool held = f.haveHeld && fit.heldOut.count > 0;
+
+  auto fs = std::make_unique<OCMFitStatisticsT>();
+  fs->FIT_STATES = static_cast<uint32_t>(fit.fit.count);
+  fs->FIT_RMS_KM = fit.fit.rms;
+  fs->FIT_MAX_KM = fit.fit.max;
+  fs->FIT_RADIAL_RMS_KM = fit.fit.radial;
+  fs->FIT_IN_TRACK_RMS_KM = fit.fit.along;
+  fs->FIT_CROSS_TRACK_RMS_KM = fit.fit.cross;
+  fs->ITERATIONS = static_cast<uint32_t>(fit.iterations);
+  fs->CONVERGED = fit.converged;
+  fs->FIT_START = formatInstant(f.fitStart, 3);
+  fs->FIT_STOP = formatInstant(f.fitStop, 3);
+  if (held) {
+    fs->HELD_OUT_STOP = formatInstant(f.heldStop, 3);
+    fs->HELD_OUT_STATES = static_cast<uint32_t>(fit.heldOut.count);
+    fs->HELD_OUT_RMS_KM = fit.heldOut.rms;
+    fs->HELD_OUT_MAX_KM = fit.heldOut.max;
+    for (const DayStatistics& d : fit.heldOutDays) {
+      auto day = std::make_unique<OCMHeldOutDayT>();
+      day->DAY = static_cast<uint16_t>(d.day);
+      day->STATES = static_cast<uint32_t>(d.statistics.count);
+      day->RMS_KM = d.statistics.rms;
+      fs->HELD_OUT_DAYS.push_back(std::move(day));
+    }
   }
-  obd->BALLISTIC_COEFF_EST = true;
-  obd->BALLISTIC_COEFF_MODEL = "SGP4-XP BTERM, m**2/kg";
-  obd->AGOM_EST = true;
-  obd->AGOM_MODEL = "SGP4-XP AGOM, m**2/kg";
-  obd->RMS_CONVERGENCE_CRITERIA = 1.0e-9;
-  obd->NUM_ITERATIONS = static_cast<uint16_t>(std::min(fit.iterations, 65535));
-  obd->NUM_ACCEPTED_OBS = static_cast<uint32_t>(fit.fit.count);
-  obd->NUM_REJECTED_OBS = 0;
-  auto contribution = std::make_unique<odSensorContributionT>();
-  contribution->SENSOR_ID = !who.source.empty() ? who.source : (who.originator.empty() ? "ephemeris" : who.originator);
-  contribution->NUM_ACCEPTED = static_cast<uint32_t>(fit.fit.count);
-  contribution->WRMS = fit.fit.rms;
-  contribution->OB_TYPES.push_back("EPHEMERIS_POSITION");
-  obd->SENSORS.push_back(std::move(contribution));
-  obd->ACCEPTED_OB_TYPS.push_back("EPHEMERIS_POSITION");
-  return obd;
+
+  // BTERM and AGOM are solved for on an arc of about a day or more (fit.hpp); a shorter arc leaves them at zero.
+  const bool solved = fit.dragSolved;
+  auto od = std::make_unique<OrbitDeterminationT>();
+  od->OD_METHOD = "BATCH LEAST SQUARES";
+  od->OD_ALGORITHM = "LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS, THEN THE LATTICE OF THE TWO-LINE TEXT'S DIGITS";
+  od->OD_ESTIMATOR = estimatorCategory::BatchLeastSquares;
+  od->OD_EPOCH = ocm->MEAN_ELEMENTS->EPOCH;
+  od->OD_OBSERVATIONS_USED = static_cast<int32_t>(fit.fit.count);
+  od->OD_EST_PARAMETERS = {"MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY"};
+  if (solved) {
+    od->OD_EST_PARAMETERS.push_back("DRAG_AREA_OVER_MASS");
+    od->OD_EST_PARAMETERS.push_back("SRP_AREA_OVER_MASS");
+  }
+  od->OD_DYNAMIC_PARAMETERS.push_back(dynamicParameter("DRAG_AREA_OVER_MASS", fit.elements.drag, solved, prwDynamicParameter::DRAG_AREA_OVER_MASS));
+  od->OD_DYNAMIC_PARAMETERS.push_back(dynamicParameter("SRP_AREA_OVER_MASS", fit.elements.agom, solved, prwDynamicParameter::SRP_AREA_OVER_MASS));
+  // CCSDS elapsed counts from the epoch back to the first and last state fitted, written when not negative.
+  const double sinceFirst = secondsBetween(epochOf(fit.elements), f.fitStart) / kSecondsPerDay;
+  const double sinceLast = secondsBetween(epochOf(fit.elements), f.fitStop) / kSecondsPerDay;
+  if (sinceFirst >= 0) od->DAYS_SINCE_FIRST_OBS = sinceFirst;
+  if (sinceLast >= 0) od->DAYS_SINCE_LAST_OBS = sinceLast;
+  od->ACTUAL_OD_SPAN = secondsBetween(f.fitStop, f.fitStart) / kSecondsPerDay;
+  od->FIT_STATISTICS = std::move(fs);
+  ocm->ORBIT_DETERMINATION = std::move(od);
+
+  ocm->PROVENANCE = std::make_unique<PVNT>();
+  if (!who.source.empty()) ocm->PROVENANCE->SOURCE_ID = who.source;
+  if (!who.originator.empty()) ocm->PROVENANCE->ORIGINATOR = who.originator;
+  ocm->PROVENANCE->PROVIDER_ID = by.provider;
+  ocm->PROVENANCE->PRODUCER = by.product;
+  return ocm;
 }
 
 }  // namespace sgp4xp

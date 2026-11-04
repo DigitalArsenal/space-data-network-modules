@@ -224,7 +224,7 @@ class Fitter {
       // The six elements through every stage; BTERM and AGOM join at the last, and only when the arc is long enough
       // (one day) for the drag to show: a shorter arc leaves them at zero.
       std::vector<size_t> active = {0, 1, 2, 3, 4, 5};
-      if (last && span >= SGP4XP_DRAG_MIN_SPAN_SECONDS) { active.push_back(6); if (xp_) active.push_back(7); }
+      if (last && span >= SGP4XP_DRAG_MIN_SPAN_SECONDS) { active.push_back(6); if (xp_) active.push_back(7); result.dragSolved = true; }
       const bool ok = levenbergMarquardt(&p, active, last ? 60 : 20, &it, &converged);
       iterationsTotal += it;
       if (!ok && last) return fail(result, "fit-failed", "The fit did not find a bound orbit the library can propagate.");

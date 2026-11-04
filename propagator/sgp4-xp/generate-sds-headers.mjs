@@ -29,11 +29,12 @@ const standardsRoot = path.join(
 );
 export const outDir = path.join(packageRoot, ".build", "sds");
 
-// The records this module reads and writes: element sets in, ephemerides in and out,
-// fit diagnostics out, and the Earth orientation parameters a fit may be given.
-// Their transitive includes (RFM, TIM, CAT, MET, ...) are generated with them, in
-// dependency order, by schemaFamilies() below.
-export const ROOT_FAMILIES = ["OMM", "OEM", "OBD", "EOP"];
+// The records this module reads and writes: $OCM element sets in and out (the fit's,
+// with its orbit determination), the $OMM of the ingest_omm boundary, ephemerides in
+// and out, and the Earth orientation parameters a fit may be given. Their transitive
+// includes (RFM, TIM, CAT, MET, PCF, PRW, ...) are generated with them, in dependency
+// order, by schemaFamilies() below.
+export const ROOT_FAMILIES = ["OMM", "OCM", "OEM", "EOP"];
 
 /** The roots and everything they include, each family after the families it includes. */
 export function schemaFamilies(roots = ROOT_FAMILIES) {

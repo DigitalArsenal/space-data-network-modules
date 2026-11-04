@@ -1,11 +1,12 @@
 // propagator/sgp4-xp: the US Space Force SGP4 and SGP4-XP as an SDN propagator module, and SDN's own fits of XP
 // element sets to ephemerides.
 //
-//   propagate   $OMM element sets (MEAN_ELEMENT_THEORY SGP4XP; SGP4 sets too) to $OEM trajectories, on the grid an
-//               optional $OEM template names, in TEME or GCRF axes.
-//   fit         an $OEM ephemeris to an $OMM SGP4XP element set (BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT) with its
-//               fit statistics, and an $OBD.
-//   ingest_omm  element sets into the module, for the propagator ABI below.
+//   propagate   $OCM element sets (MEAN_ELEMENT_THEORY SGP4XP; SGP4 sets too, each under its theory's own forces) to
+//               $OEM trajectories, on the grid an optional $OEM template names, in TEME or GCRF axes.
+//   fit         an $OEM ephemeris to one $OCM SGP4XP element set (BTERM and AGOM typed) with its orbit determination
+//               and FIT_STATISTICS.
+//   ingest_omm  the $OMM boundary: SGP4XP sets (BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT) to $OCM, and into the
+//               module's element table for the propagator ABI below.
 //   plugin_*    the OrbPro propagator ABI (docs/propagator-abi.md in space-data-module-sdk), Earth-fixed metres:
 //               the same exports as propagator/keplerian-reference, so any ABI consumer (OrbPro's pluggable
 //               propagation, the maneuver detector's propagator query port) routes to this module.
@@ -19,8 +20,9 @@
 namespace sgp4xp {
 
 constexpr const char* kModuleName = "propagator/sgp4-xp";
+constexpr const char* kProviderId = "com.digitalarsenal.propagator.sgp4-xp";
 constexpr const char* kProduct =
-    "SDN propagator/sgp4-xp 0.1.1 over the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
+    "SDN propagator/sgp4-xp 0.2.0 over the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
 // States one request may write or read, over all its blocks.
 constexpr size_t kMaxStates = 500000;
 
@@ -53,34 +55,72 @@ int push(const char* port, const char* schema, const char* identifier, const cha
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// $OMM in.
+// $OCM in (flight) and $OMM in (the ingest_omm boundary).
 // ---------------------------------------------------------------------------------------------------------------
 struct ElementSet {
   Elements elements;
   std::string name, id, originator, creation;
+  std::unique_ptr<PVNT> provenance;  // the $OMM's, carried into its $OCM by ingest_omm
 };
 
-// Every $OMM on the 'omm' port (plain, or size-prefixed one after another). Returns 0, or the refusal's status.
+// Every $OCM on the 'ocm' port (plain, or size-prefixed one after another). An $OMM there is refused by its type
+// before anything is decoded. Returns 0, or the refusal's status.
 int readSets(std::vector<ElementSet>* sets) {
+  const auto frames = framesOn("ocm");
+  if (frames.empty()) return refuse("missing-ocm", "An 'ocm' input frame is required.");
+  for (const plugin_input_frame_t* f : frames) {
+    const std::string type = recordType(f->payload, f->payload_length);
+    if (type == "$OMM") return refuse("omm-not-flown", "Flight takes $OCM element sets: an $OMM enters through ingest_omm.");
+    if (type != "$OCM") return refuse("invalid-ocm", "An 'ocm' payload is not an SDS $OCM.");
+  }
+  for (const plugin_input_frame_t* f : frames) {
+    Refusal no;
+    const bool ok = forEachRecord(f->payload, f->payload_length, "$OCM", [&](const uint8_t* data, size_t length, bool prefixed) {
+      flatbuffers::Verifier verifier(data, length);
+      if (!(prefixed ? VerifySizePrefixedOCMBuffer(verifier) : VerifyOCMBuffer(verifier))) return no.fail("invalid-ocm", "The $OCM does not verify.");
+      const OCM* root = prefixed ? GetSizePrefixedOCM(data) : GetOCM(data);
+      std::unique_ptr<OCMT> record(root->UnPack());
+      ElementSet set;
+      if (!ocmToElements(*record, &set.elements, &no)) return false;
+      if (record->METADATA) {
+        set.name = record->METADATA->OBJECT_NAME;
+        set.id = record->METADATA->INTERNATIONAL_DESIGNATOR;
+      }
+      if (record->HEADER) {
+        set.originator = record->HEADER->ORIGINATOR;
+        set.creation = record->HEADER->CREATION_DATE;
+      }
+      sets->push_back(std::move(set));
+      return true;
+    });
+    if (!ok) return no.code.empty() ? refuse("invalid-ocm", "The 'ocm' payload is not $OCM records.") : refuse(no.code.c_str(), no.why);
+  }
+  if (sets->size() > kMaxStates) return refuse("too-many-sets", "Too many element sets.");
+  return 0;
+}
+
+// Every $OMM on the 'omm' port of ingest_omm. Returns 0, or the refusal's status.
+int readOmms(std::vector<ElementSet>* sets) {
   const auto frames = framesOn("omm");
   if (frames.empty()) return refuse("missing-omm", "An 'omm' input frame is required.");
   for (const plugin_input_frame_t* f : frames) {
-    std::string why;
+    Refusal no;
     const bool ok = forEachRecord(f->payload, f->payload_length, "$OMM", [&](const uint8_t* data, size_t length, bool prefixed) {
       flatbuffers::Verifier verifier(data, length);
-      if (!(prefixed ? VerifySizePrefixedOMMBuffer(verifier) : VerifyOMMBuffer(verifier))) { why = "The $OMM does not verify."; return false; }
+      if (!(prefixed ? VerifySizePrefixedOMMBuffer(verifier) : VerifyOMMBuffer(verifier))) return no.fail("invalid-omm", "The $OMM does not verify.");
       const OMM* root = prefixed ? GetSizePrefixedOMM(data) : GetOMM(data);
       std::unique_ptr<OMMT> record(root->UnPack());
       ElementSet set;
-      if (!ommToElements(*record, &set.elements, &why)) return false;
+      if (!ommToElements(*record, &set.elements, &no)) return false;
       set.name = record->OBJECT_NAME;
       set.id = record->OBJECT_ID;
       set.originator = record->ORIGINATOR;
       set.creation = record->CREATION_DATE;
+      set.provenance = std::move(record->PROVENANCE);
       sets->push_back(std::move(set));
       return true;
     });
-    if (!ok) return refuse("invalid-omm", why.empty() ? "The 'omm' payload is not $OMM records." : why);
+    if (!ok) return no.code.empty() ? refuse("invalid-omm", "The 'omm' payload is not $OMM records.") : refuse(no.code.c_str(), no.why);
   }
   if (sets->size() > kMaxStates) return refuse("too-many-sets", "Too many element sets.");
   return 0;
@@ -374,14 +414,10 @@ extern "C" int fit(void) {
           return false;
         }
 
-        const auto omm = ommOf(interval, who, kProduct);
+        const auto ocm = ocmOf(interval, who, Producer{kProviderId, kProduct});
         flatbuffers::FlatBufferBuilder a(4096);
-        a.FinishSizePrefixed(CreateOMM(a, omm.get()), OMMIdentifier());
-        if ((status = push("elements", "OMM.fbs", "$OMM", "OMM", a)) != 0) return false;
-        const auto obd = obdOf(interval, who, kProduct);
-        flatbuffers::FlatBufferBuilder b(4096);
-        b.FinishSizePrefixed(CreateOBD(b, obd.get()), OBDIdentifier());
-        if ((status = push("determination", "OBD.fbs", "$OBD", "OBD", b)) != 0) return false;
+        a.FinishSizePrefixed(CreateOCM(a, ocm.get()), OCMIdentifier());
+        if ((status = push("elements", "OCM.fbs", "$OCM", "OCM", a)) != 0) return false;
       }
       return true;
     });
@@ -393,9 +429,10 @@ extern "C" int fit(void) {
 
 // =================================================================================================================
 // The propagator ABI (space-data-module-sdk docs/propagator-abi.md): the exports of propagator/keplerian-reference
-// on this module's physics. Records are OrbProOMMRecord; BSTAR holds BTERM and MEAN_MOTION_DDOT holds AGOM, as in
-// the SDS $OMM for SGP4-XP. States are Earth-fixed, metres and metres/second: TEME turned by GMST (IAU 1982,
-// UT1 = UTC), the velocity relative to the rotating axes.
+// on this module's physics. Records are OrbProOMMRecord, which names no theory and no forces: every record flies as a
+// stock SGP4-XP set, BTERM in the struct's bstar slot and AGOM in its mean_motion_ddot slot (the ABI's own convention,
+// not an SDS record's). States are Earth-fixed, metres and metres/second: TEME turned by GMST (IAU 1982, UT1 = UTC),
+// the velocity relative to the rotating axes.
 // =================================================================================================================
 #define ORBPRO_ABI_EXPORT(name) __attribute__((export_name(name))) extern "C"
 
@@ -608,15 +645,15 @@ int32_t plugin_entity_count(void) {
 ORBPRO_ABI_EXPORT("plugin_destroy")
 void plugin_destroy(void) { sgp4xp::clearEntities(); }
 
-// The invoke surface's way in: $OMM frames into the same entity table the ABI propagates from. Replaces the table.
+// The invoke surface's $OMM boundary: each SGP4XP $OMM becomes one $OCM on 'ocm' with the theory's own forces written
+// (records.hpp) and the $OMM's PROVENANCE carried, and the sets replace the entity table the ABI propagates from.
 extern "C" int ingest_omm(void) {
   using namespace sgp4xp;
   plugin_reset_output_state();
   std::vector<ElementSet> sets;
-  if (const int rc = readSets(&sets)) return rc;
+  if (const int rc = readOmms(&sets)) return rc;
   clearEntities();
-  for (const ElementSet& set : sets) {
-    if (!set.elements.xp) return refuse("unsupported-theory", "ingest_omm takes SGP4XP element sets: the propagator ABI is this module's SGP4-XP.", 422);
+  for (ElementSet& set : sets) {
     OrbProOMMRecord record;
     std::memset(&record, 0, sizeof record);
     record.epoch_jd = static_cast<double>(set.elements.epochDay) + 2400000.5 +
@@ -631,6 +668,17 @@ extern "C" int ingest_omm(void) {
     record.mean_motion_ddot = set.elements.agom;
     record.norad_cat_id = set.elements.norad;
     if (addEntity(record) < 0) return refuse("element-set-refused", "The Space Force library refused an element set.", 422);
+    Provenance who;
+    who.originator = set.originator;
+    who.creation = set.creation;
+    who.name = set.name;
+    who.id = set.id;
+    who.norad = set.elements.norad;
+    const auto ocm = elementSetOf(set.elements, who);
+    ocm->PROVENANCE = std::move(set.provenance);
+    flatbuffers::FlatBufferBuilder fbb(1024);
+    fbb.FinishSizePrefixed(CreateOCM(fbb, ocm.get()), OCMIdentifier());
+    if (const int rc = push("ocm", "OCM.fbs", "$OCM", "OCM", fbb)) return rc;
   }
   return 0;
 }

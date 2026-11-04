@@ -3,8 +3,9 @@
 SGP4 and SGP4-XP from the US Space Force's own library, as one space data module that runs unchanged in the browser,
 WasmEdge and Docker WasmEdge, and SDN's own SGP4-XP element sets fitted to any ephemeris.
 
-SGP4-XP is the Space Force's perturbation model with two more fitted terms than SGP4: BTERM (ballistic, m^2/kg) in
-BSTAR and AGOM (solar radiation pressure, m^2/kg) in MEAN_MOTION_DDOT of the `$OMM`. The Space Force publishes
+SGP4-XP is the Space Force's perturbation model with two more fitted terms than SGP4: BTERM (ballistic, m^2/kg) and
+AGOM (solar radiation pressure, m^2/kg), typed in the `$OCM`'s MEAN_ELEMENTS (a foreign `$OMM` carries them in BSTAR
+and MEAN_MOTION_DDOT, and enters through `ingest_omm`). The Space Force publishes
 the model's code, not the sets; sets are fitted by whoever has the ephemeris. This module fits them, to any source's
 ephemeris, and says which source it was.
 
@@ -20,9 +21,9 @@ ephemeris, and says which source it was.
 
 | Method | In | Out |
 | --- | --- | --- |
-| `propagate` | `omm` (one or more `$OMM`, MEAN_ELEMENT_THEORY SGP4XP or SGP4); optional `grid` (`$OEM` template) | `ephemeris`: one `$OEM` per set |
-| `fit` | `ephemeris` (`$OEM`); optional `eop` (`$EOP`) | `elements` (`$OMM` SGP4XP), `determination` (`$OBD`) |
-| `ingest_omm` | `omm` (SGP4XP sets) | the element table the propagator ABI propagates |
+| `propagate` | `ocm` (one or more `$OCM`, MEAN_ELEMENTS of theory SGP4XP or SGP4 under that theory's own forces); optional `grid` (`$OEM` template) | `ephemeris`: one `$OEM` per set |
+| `fit` | `ephemeris` (`$OEM`); optional `eop` (`$EOP`) | `elements`: one `$OCM` SGP4XP per block, with FIT_STATISTICS |
+| `ingest_omm` | `omm` (SGP4XP `$OMM`, BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT) | `ocm`: one `$OCM` per set; the element table the propagator ABI propagates |
 
 **propagate.** Each set to a trajectory in TEME (`TEMEOFDATE`), GCRF or EME2000, km and km/s, UTC. The grid names
 START_TIME, STOP_TIME and STEP_SIZE (default: the epoch, a day later, 60 s) or lists epochs in
@@ -35,16 +36,21 @@ anyone uses it. Frames: TEME, GCRF (ICRF), J2000 (EME2000), Earth-fixed (ITRF, E
 center EARTH; compact (`STATE_VECTOR_SIZE` 3, 6, 9) or verbose states; positions alone are enough. The set has the
 epoch of the first state of the interval. Its ORIGINATOR is the ORIGINATOR of the ephemeris: the source is named.
 
-The `$OMM` carries the statistics in COMMENT and in USER_DEFINED_PARAMETERS: FIT_START, FIT_STOP, FIT_STATES,
-FIT_RMS_KM (3D, TEME, over the interval), FIT_RADIAL/ALONG_TRACK/CROSS_TRACK_RMS_KM, HELD_OUT_STATES,
-HELD_OUT_RMS_KM, HELD_OUT_DAYk_RMS_KM (the RMS over the k-th day after the interval) and the fitter's iterations. The
-`$OBD` has WRMS, the span, EFFECTIVE_FROM/UNTIL and ERROR_GROWTH_RATE (held-out km per day).
+The `$OCM` carries the set in MEAN_ELEMENTS (BTERM and AGOM typed), the theory's own forces in PERTURBATIONS
+(ATMOSPHERIC_MODEL {JXX,1970}, WEATHER_SOURCE THEORY_FLUX_MODEL, both caps 0, GRAVITY_MODEL EGM-96), and
+ORBIT_DETERMINATION.FIT_STATISTICS: FIT_START, FIT_STOP, FIT_STATES, FIT_RMS_KM (3D, TEME, over the interval),
+FIT_MAX_KM, FIT_RADIAL/IN_TRACK/CROSS_TRACK_RMS_KM, ITERATIONS, CONVERGED, HELD_OUT_STOP, HELD_OUT_STATES,
+HELD_OUT_RMS_KM, HELD_OUT_MAX_KM and HELD_OUT_DAYS (the RMS over the k-th day after the interval). PROVENANCE.PRODUCER
+names this module and the library.
 
 Refusals are named, never thrown: `missing-ephemeris`, `invalid-oem`, `unsupported-frame`,
 `unsupported-time-system`, `unsupported-center`, `bad-epoch`, `bad-state-size`, `bad-ephemeris-data`, `no-states`,
 `too-many-states`, `frame-failed`, `too-few-states`, `epochs-not-increasing`, `arc-too-short`, `leap-second-in-arc`,
-`no-start`, `fit-failed`, `invalid-eop`; for `propagate` `invalid-omm`, `invalid-grid`, `element-set-refused`,
-`propagation-failed`, `bad-grid`. An arc across a leap second is refused: minutes since epoch are counted in
+`no-start`, `fit-failed`, `invalid-eop`; for `propagate` `missing-ocm`, `invalid-ocm`, `omm-not-flown`,
+`mean-elements-missing`, `mean-element-theory-unspecified`, `theory-not-flown:<THEORY>` (AP among them),
+`elements-other-theory`, `orb-averaging-mismatch`, `weather-source-not-stock`, `atmosphere-not-stock`,
+`gravity-terms-not-stock`, `frame-pairing-invalid`, `invalid-grid`, `element-set-refused`, `propagation-failed`,
+`bad-grid`; for `ingest_omm` `user-defined-parameters:<count>`, `theory-not-ingestable:AP`, `unsupported-theory`. An arc across a leap second is refused: minutes since epoch are counted in
 86400-second days.
 
 **Propagator ABI.** `plugin_init_omm`, `plugin_propagate`, `plugin_propagate_batch`, `plugin_destroy` and the
@@ -148,10 +154,10 @@ this repository carries the row.
 | `src/ussf.hpp`, `src/shim.wat` | the library's exports, the satellite RAII, the restoration; the shim |
 | `src/frames.hpp` | TEME, GCRF, EME2000, ITRF over `foundation/frames` (IAU 2006/2000A, ERFA) |
 | `src/fit.hpp`, `src/window.hpp`, `src/engine.hpp` | the fitter; intervals and windows; what the OD node calls |
-| `src/sds.hpp`, `src/records.hpp`, `src/module.cpp` | the SDS records; the `$OMM` and `$OBD` of a fit; the methods and the ABI |
+| `src/sds.hpp`, `src/records.hpp`, `src/module.cpp` | the SDS records; the `$OCM` of a set and of a fit; the methods and the ABI |
 | `build.mjs`, `engine-source.mjs`, `join-ussf.mjs` | the build, the engine as one translation unit, the join |
 | `third_party/ussf-sgp4/` | the library as released, its JavaScript runtime (a test oracle only), Agreement, release notes, notice |
-| `tests/` | `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
+| `tests/` | `ocm-record.e2e.mjs` (the `$OCM` against the 0.1.1 fixtures, refusals), `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
 | `tests/measure/` | the measurement of SGP4-XP against SDN's SGP4 on ISS, Starlink, GNSS and laser-ranged satellites: [README](tests/measure/README.md), `run.mjs`, `tables.mjs`, `resummarize.mjs`, `results/` |
 
 ## Commands
