@@ -1,0 +1,47 @@
+# propagator/ffm 2.1.0 (dist/isomorphic/module.wasm SHA-256 318db198d611da632a461de0c5aa6e280ffaa913cc2a1324034d1844e06c4fd6): answers before the RK78 change, 2026-11-04 (wall times omitted)
+
+## node propagator/ffm/test/rk78-error-control.e2e.mjs (exit 1)
+(a) LAGEOS-like Kepler orbit, period 3.76 h, 10 days, RK78 at max step 300 s
+  tolerance 1e-8: position error m d1 4.025e-1 d3 3.640e+0 d7 1.982e+1 d10 4.058e+1; largest 4.058e+1; 2884 steps, 0 rejected
+  tolerance 1e-10: position error m d1 4.007e-1 d3 3.613e+0 d7 1.966e+1 d10 4.026e+1; largest 4.026e+1; 2892 steps, 20 rejected
+  tolerance 1e-12: position error m d1 3.936e-2 d3 3.568e-1 d7 1.938e+0 d10 3.969e+0; largest 3.969e+0; 4094 steps, 258 rejected
+FAIL (a) the error at 1e-10 is 40.261647295490135 m, not below 1 m
+  max step 30 s at 1e-10 (the converged flight): largest 5.107e-5 m; 28796 steps
+  lane parity (tolerance 1e-10, browser and native WasmEdge): identical states
+(b) LAGEOS 1 at 2025-11-19T00:00:00.000000Z (ILRS combination), two-body to 2025-11-29T00:00:00Z at 1e-10
+  30 s minus 300 s at day 7: along-track -39.7337 m, |dr| 39.7339 m; 300 s: 2891 steps, 30 s: 28799 steps
+FAIL (b) along-track difference -39.733686528060446 m, not below 1 m
+(c) the orbit of (a) asking for GAUSS_JACKSON_8 at INITIAL_STEP_SECONDS 60
+  tolerance 1e-8: 14400 steps; position error m d1 1.373e+1 d3 8.270e+1 d7 3.880e+2 d10 7.635e+2
+  tolerance 1e-12: 14400 steps; position error m d1 1.373e+1 d3 8.270e+1 d7 3.880e+2 d10 7.635e+2
+
+FAIL 2
+
+## cd propagator/ffm && node tests/integrator-events.e2e.mjs (exit 0): the RK78 and RKF78 lines
+  RKF78     276 events  worst error 4.14e-7 s  step spread 3.79e-7 s
+  RK78      276 events  worst error 4.14e-7 s  step spread 3.79e-7 s
+    RKF78            tol 1e-9: 1.02e+1 m, 5044 evaluations   |   tol 1e-12: 5.43e-2 m, 8697 evaluations
+    RKF78            tol 1e-9: 1.80e+1 m, 5239 evaluations   |   tol 1e-12: 8.23e-2 m, 10777 evaluations
+    RKF78            tol 1e-9: 6.53e+0 m, 11895 evaluations   |   tol 1e-12: 2.43e-2 m, 17368 evaluations
+  RK78     largest 3D difference over the 24 h arc 4.79e-4 m (bar 0.001 m)
+PASS integrator-events
+
+## cd propagator/ffm && node tests/propagate-oem.e2e.mjs (exit 0)
+  1441 samples: largest |dr| 0.00e+0 m, |dv| 0.00e+0 m/s (the carried state moved 7502.4 km)
+  1441 samples: largest |dr| 0.00e+0 m, |dv| 0.00e+0 m/s (the carried state moved 7502.4 km)
+PASS propagate_oem: 1441 states over 24 h at 60 s equal invoke's $PRW to 1 mm; refusals by name; lanes identical; sdn-ap fit returns an $OCM
+
+## cd propagator/ffm && node tests/sample-epoch-impulse.e2e.mjs (exit 0)
+PASS sample-epoch impulse
+
+## cd propagator/ffm && node tests/start-epoch-impulse.e2e.mjs (exit 0)
+PASS start-epoch impulse
+
+## cd propagator/ffm && node tests/planetary.e2e.mjs (exit 0)
+PASS planetary E2E {"lro":{"lro-2026-03-20":[21.7,24.4,94.4,230.1],"lro-2026-03-27":[7.4,13,19.3,49.2]},"sweep":[{"degree":2,"day2":15248.9},{"degree":20,"day2":1445.7},{"degree":60,"day2":60.7},{"degree":150,"day2":24.4}],"mro":[1.1,2.3,4.1,6.5],"maven":[4.4,23.7,161.7,316.6]}
+
+## cd flows/observation-od && node tests/laser-od.e2e.mjs (exit 0)
+PASS laser-od: RMS 0.304 m, OD_OBSERVATIONS_USED 335 of 335, end state 0.439 m from NSGF; refusals no-stations, arc-too-short, no-convergence; Starlette 2026-07-20 WEIGHTED_RMS 3.078, 2 iterations, end state 1.414 m from NSGF
+
+## cd flows/angles-only-od && node tests/angles-od.e2e.mjs (exit 0)
+PASS angles-only-od: arc-end error 0.0604 km below 0.15 km; single-crossing named; wrong revolution count refused; 4657 rows in parts, arc-end 0.0649 km; one crossing a night, arc-end 0.3822 km
