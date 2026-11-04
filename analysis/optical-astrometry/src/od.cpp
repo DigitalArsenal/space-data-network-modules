@@ -178,12 +178,15 @@ inline IodResult gooding_iod(const SightObs s[3], bool multi_pass) {
     const lambert_izzo::Solution* sol = revolutions > 0 ? (branch == 0 ? &lr.multi[0].long_period : &lr.multi[0].short_period) : &lr.single;
     V3 r = p1, v{sol->v1.x, sol->v1.y, sol->v1.z};
     // Over passes the two-body arc misses the last sight by the J2 drift (hundreds of km a day in LEO): shoot the
-    // first velocity onto p3 under two-body + J2 (Newton, finite-difference sensitivity).
+    // first velocity onto p3 under two-body + J2 (Newton, finite-difference sensitivity, steps held to kShootStepKms);
+    // an arc that does not land within kShootMissKm has no miss.
     if (multi_pass) {
+      constexpr double kShootStepKms = 0.05, kShootMissKm = 1e-4;
       auto land = [&](V3 v0) { V3 rr = p1, vv = v0; j2_rk4(&rr, &vv, t13); return rr; };
-      for (int it = 0; it < 8; ++it) {
+      bool landed = false;
+      for (int it = 0; it < 20; ++it) {
         const V3 miss3 = land(v) - p3;
-        if (norm(miss3) < 1e-6) break;
+        if (norm(miss3) < kShootMissKm) { landed = true; break; }
         double J[3][3];
         const double h = 1e-6;
         for (int j = 0; j < 3; ++j) {
@@ -204,8 +207,11 @@ inline IodResult gooding_iod(const SightObs s[3], bool multi_pass) {
           x[c] = (M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
                   M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0])) / det;
         }
-        v = v - V3{x[0], x[1], x[2]};
+        const V3 step{x[0], x[1], x[2]};
+        v = v - step * std::min(1.0, kShootStepKms / std::max(norm(step), 1e-300));
       }
+      if (!landed) return false;
+      r = p1;
       j2_rk4(&r, &v, t12);
     } else {
       kepler_rk4(&r, &v, t12);
