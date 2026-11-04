@@ -1,17 +1,20 @@
 #pragma once
 // common/ocm_fb_builder.hpp - the shared SDS $OCM (Orbit Comprehensive Message) FlatBuffer builder. One place
 // that assembles an OCM from a plain description, for every module that writes one: analysis/od (an SGP4 fit's
-// epoch state and covariance) and analysis/vcm-adapter (a VCM, or a propagation result, with its covariance of
-// any size, its dynamical-model parameters and its force model).
+// epoch state, covariance layout and fit statistics) and analysis/vcm-adapter (a VCM, or a propagation result, with
+// its covariance of any size, its dynamical-model parameters, its force model and its integrator settings).
 //
 // Plain C++ in, a size-prefixed `$OCM` out ([u32le length][OCM], the payload plugin_push_output_ex takes). A
 // field the description leaves empty (an empty string or vector, an absent optional) is absent in the record.
+// Every field is typed: the record carries no USER_DEFINED_PARAMETERS. The trajectory frame is required: build
+// refuses a description without one ("frame-missing") or with a name it does not map ("frame-unknown").
 //
 // REQUIRES the generated SDS $OCM object-API types in scope BEFORE this header (flatc --cpp --gen-object-api
-// --preserve-case): OCMT, HeaderT, MetadataT, PerturbationsT, OrbitDeterminationT, OCMDynamicParameterT,
-// UserDefinedParametersT, RFMT, CelestialFrameWrapperT, CelestialFrame, trajectoryType, covarianceOrdering,
-// OCM::Pack, FinishSizePrefixedOCMBuffer and flatbuffers::FlatBufferBuilder. The covariance layout fields
-// (COV_TYPE, COV_ORDERING, COV_SIZE, COV_PARAMETERS, COV_UNITS, OD_DYNAMIC_PARAMETERS) are SDS 1.244.0.
+// --preserve-case, SDS 1.276.0 or later): OCMT, HeaderT, MetadataT, PerturbationsT, OrbitDeterminationT,
+// OCMDynamicParameterT, OCMFitStatisticsT, OCMIntegratorT, CVRT, RFMT, CelestialFrameWrapperT, CelestialFrame,
+// trajectoryType, covarianceOrdering, covarianceCalibration, covarianceRule, prwDynamicParameter,
+// EnumNameprwDynamicParameter, ocmMessageStatus, OCM::Pack, FinishSizePrefixedOCMBuffer and
+// flatbuffers::FlatBufferBuilder.
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -21,8 +24,9 @@
 
 namespace ocm_fb {
 
+// One dynamical-model parameter: PARAMETER is the typed key, NAME its enum name.
 struct DynamicParameter {
-    std::string name;   // DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION ...
+    prwDynamicParameter kind = prwDynamicParameter::UNSPECIFIED;
     double value = 0.0;
     std::string units;  // m**2/kg, m**2/kg/s, m/s**2
     bool solvedFor = false;
@@ -32,6 +36,8 @@ struct Record {
     // HEADER
     std::string version = "3.0";
     std::string classification, creationDate, originator;
+    ocmMessageStatus messageStatus = ocmMessageStatus::UNSPECIFIED;
+    std::string exerciseName;                // when messageStatus is EXERCISE
 
     // METADATA
     std::string objectName, internationalDesignator, catalogName, objectDesignator;
@@ -42,9 +48,10 @@ struct Record {
     std::optional<double> nextLeapTaiMinusUtc;
     std::string eopSource;
 
-    // TRAJECTORY: one epoch, position (km) and velocity (km/s) in `frame`
+    // TRAJECTORY: one epoch, position (km) and velocity (km/s) in `frame` (required: EME2000, J2000, GCRF, ICRF,
+    // TEMEOFDATE or ITRF)
     std::vector<double> state;               // 6 values, or empty
-    std::string frame;                       // EME2000, GCRF, J2000 ... or empty (then say it in `user`)
+    std::string frame;
     std::string centerName;
     std::optional<uint32_t> revolution;      // ORB_REVNUM
 
@@ -54,47 +61,55 @@ struct Record {
     std::string covType;                     // CARTPV when empty
     int covSize = 6;
     std::string ordering = "LTM";            // LTM, UTM, FULL, LTMWCC, UTMWCC
-    std::vector<std::string> covParameters, covUnits;
+    std::vector<prwDynamicParameter> covParameterKinds;  // the rows after the six state rows: COV_PARAMETER_KINDS and COV_PARAMETERS
+    std::vector<std::string> covUnits;
+    covarianceCalibration calibration = covarianceCalibration::Unspecified;
+    std::optional<double> covarianceScaleFactor;  // COV_REALISM[0]: RULE ScaledFit, SCALE_FACTOR
 
     // PERTURBATIONS (the force model)
     struct ForceModel {
         bool present = false;
-        std::string gravityModel, geopotentialModel, atmosphericDrag, solarRadPressure, solidTidesModel;
-        std::optional<int> gravityDegree, gravityOrder;
+        std::string gravityModel, geopotentialModel, atmosphericDrag, solarRadPressure, solidTidesModel, reductionTheory;
+        std::optional<int> gravityDegree, gravityOrder, maximumZonalDegree, maximumTesseralDegree, reductionTheoryTerms;
         std::optional<double> gm, f10p7, f10p7Mean, geomagAp;
         std::vector<std::string> nBody;
     } force;
 
     // ORBIT_DETERMINATION
+    struct FitStatistics {
+        uint32_t states = 0;
+        double rmsKm = 0.0;
+        std::optional<double> maximumKm;
+        uint32_t iterations = 0;
+        bool converged = false;
+        std::string start, stop;             // ISO 8601 UTC: the fit arc
+    };
     struct Solution {
         bool present = false;
-        std::string method, algorithm, epoch, covReduction, convergenceCriteria, residuals;
+        std::string method, algorithm, epoch, covReduction;
         std::optional<int> observationsUsed;
-        std::optional<double> weightedRms, sedr;
+        std::optional<double> weightedRms, sedr, actualSpanDays;
         std::vector<DynamicParameter> dynamicParameters;
+        std::optional<FitStatistics> fit;
     } od;
 
-    // USER_DEFINED_PARAMETERS, in order
-    std::vector<std::pair<std::string, std::string>> user;
+    // INTEGRATOR: the settings of a solution made from a legacy VCM; absent otherwise
+    std::optional<OCMIntegratorT> integrator;
 };
 
 namespace detail {
-inline CelestialFrame celestialFrame(const std::string& name, bool* known) {
-    *known = true;
-    if (name == "EME2000") return CelestialFrame::EME2000;
-    if (name == "J2000") return CelestialFrame::J2000;
-    if (name == "GCRF") return CelestialFrame::GCRF;
-    if (name == "ICRF") return CelestialFrame::ICRF;
-    if (name == "TEME" || name == "TEMEOFDATE") return CelestialFrame::TEMEOFDATE;
-    if (name == "ITRF") return CelestialFrame::FIXED_EARTH;
-    *known = false;
-    return CelestialFrame::EME2000;
+inline bool celestialFrame(const std::string& name, CelestialFrame* frame) {
+    if (name == "EME2000") *frame = CelestialFrame::EME2000;
+    else if (name == "J2000") *frame = CelestialFrame::J2000;
+    else if (name == "GCRF") *frame = CelestialFrame::GCRF;
+    else if (name == "ICRF") *frame = CelestialFrame::ICRF;
+    else if (name == "TEMEOFDATE") *frame = CelestialFrame::TEMEOFDATE;
+    else if (name == "ITRF") *frame = CelestialFrame::FIXED_EARTH;
+    else return false;
+    return true;
 }
 
-inline std::unique_ptr<RFMT> frameOf(const std::string& name) {
-    bool known = false;
-    const CelestialFrame frame = celestialFrame(name, &known);
-    if (!known) return nullptr;
+inline std::unique_ptr<RFMT> frameOf(const std::string& name, CelestialFrame frame) {
     auto rfm = std::make_unique<RFMT>();
     rfm->NAME = name;
     CelestialFrameWrapperT wrapper;
@@ -112,7 +127,16 @@ inline covarianceOrdering orderingOf(const std::string& name) {
 }
 }  // namespace detail
 
-inline std::vector<uint8_t> build(const Record& r) {
+// The size-prefixed $OCM of `r`; empty, with `*refusal` set to the reason, when `r` cannot be written.
+inline std::vector<uint8_t> build(const Record& r, std::string* refusal) {
+    CelestialFrame trajectoryFrame{}, covarianceFrame{};
+    if (r.frame.empty()) { *refusal = "frame-missing"; return {}; }
+    if (!detail::celestialFrame(r.frame, &trajectoryFrame)) { *refusal = "frame-unknown: " + r.frame; return {}; }
+    if (!r.covarianceFrame.empty() && !detail::celestialFrame(r.covarianceFrame, &covarianceFrame)) {
+        *refusal = "frame-unknown: " + r.covarianceFrame;
+        return {};
+    }
+
     OCMT ocm;
 
     ocm.HEADER = std::make_unique<HeaderT>();
@@ -120,6 +144,8 @@ inline std::vector<uint8_t> build(const Record& r) {
     ocm.HEADER->CLASSIFICATION = r.classification;
     ocm.HEADER->CREATION_DATE = r.creationDate;
     ocm.HEADER->ORIGINATOR = r.originator;
+    ocm.HEADER->MESSAGE_STATUS = r.messageStatus;
+    ocm.HEADER->EXERCISE_NAME = r.exerciseName;
 
     ocm.METADATA = std::make_unique<MetadataT>();
     auto& m = *ocm.METADATA;
@@ -141,16 +167,24 @@ inline std::vector<uint8_t> build(const Record& r) {
     ocm.STATE_VECTOR_SIZE = 6;
     ocm.STATE_DATA = r.state;
     ocm.CENTER_NAME = r.centerName;
-    if (!r.frame.empty()) ocm.TRAJ_REF_FRAME = detail::frameOf(r.frame);
+    ocm.TRAJ_REF_FRAME = detail::frameOf(r.frame, trajectoryFrame);
     if (r.revolution) ocm.ORB_REVNUM = *r.revolution;
 
     ocm.COVARIANCE_DATA = r.covariance;
-    if (!r.covarianceFrame.empty()) ocm.COV_REF_FRAME = detail::frameOf(r.covarianceFrame);
+    if (!r.covarianceFrame.empty()) ocm.COV_REF_FRAME = detail::frameOf(r.covarianceFrame, covarianceFrame);
     ocm.COV_TYPE = r.covType;
     ocm.COV_ORDERING = detail::orderingOf(r.ordering);
     ocm.COV_SIZE = static_cast<uint8_t>(r.covSize);
-    ocm.COV_PARAMETERS = r.covParameters;
+    ocm.COV_PARAMETER_KINDS = r.covParameterKinds;
+    for (const prwDynamicParameter kind : r.covParameterKinds) ocm.COV_PARAMETERS.push_back(EnumNameprwDynamicParameter(kind));
     ocm.COV_UNITS = r.covUnits;
+    ocm.COV_CALIBRATION = r.calibration;
+    if (r.covarianceScaleFactor) {
+        auto realism = std::make_unique<CVRT>();
+        realism->RULE = covarianceRule::ScaledFit;
+        realism->SCALE_FACTOR = *r.covarianceScaleFactor;
+        ocm.COV_REALISM.push_back(std::move(realism));
+    }
 
     if (r.force.present) {
         const auto& p = r.force;
@@ -161,8 +195,12 @@ inline std::vector<uint8_t> build(const Record& r) {
         out.ATMOSPHERIC_DRAG = p.atmosphericDrag;
         out.SOLAR_RAD_PRESSURE = p.solarRadPressure;
         out.SOLID_TIDES_MODEL = p.solidTidesModel;
+        out.REDUCTION_THEORY = p.reductionTheory;
         if (p.gravityDegree) out.GRAVITY_DEGREE = *p.gravityDegree;
         if (p.gravityOrder) out.GRAVITY_ORDER = *p.gravityOrder;
+        if (p.maximumZonalDegree) out.MAXIMUM_ZONAL_DEGREE = static_cast<uint16_t>(*p.maximumZonalDegree);
+        if (p.maximumTesseralDegree) out.MAXIMUM_TESSERAL_DEGREE = static_cast<uint16_t>(*p.maximumTesseralDegree);
+        if (p.reductionTheoryTerms) out.REDUCTION_THEORY_TERMS = static_cast<uint16_t>(*p.reductionTheoryTerms);
         if (p.gm) out.GM = *p.gm;
         if (p.f10p7) out.FIXED_F10P7 = *p.f10p7;
         if (p.f10p7Mean) out.FIXED_F10P7_MEAN = *p.f10p7Mean;
@@ -178,27 +216,33 @@ inline std::vector<uint8_t> build(const Record& r) {
         out.OD_ALGORITHM = d.algorithm;
         out.OD_EPOCH = d.epoch;
         out.OD_COV_REDUCTION = d.covReduction;
-        out.OD_CONVERGENCE_CRITERIA = d.convergenceCriteria;
-        out.OD_RESIDUALS = d.residuals;
         if (d.observationsUsed) out.OD_OBSERVATIONS_USED = *d.observationsUsed;
         if (d.weightedRms) out.WEIGHTED_RMS = *d.weightedRms;
         if (d.sedr) out.SEDR = *d.sedr;
+        if (d.actualSpanDays) out.ACTUAL_OD_SPAN = *d.actualSpanDays;
         for (const auto& p : d.dynamicParameters) {
             auto parameter = std::make_unique<OCMDynamicParameterT>();
-            parameter->NAME = p.name;
+            parameter->NAME = EnumNameprwDynamicParameter(p.kind);
+            parameter->PARAMETER = p.kind;
             parameter->VALUE = p.value;
             parameter->UNITS = p.units;
             parameter->SOLVED_FOR = p.solvedFor;
             out.OD_DYNAMIC_PARAMETERS.push_back(std::move(parameter));
         }
+        if (d.fit) {
+            auto fit = std::make_unique<OCMFitStatisticsT>();
+            fit->FIT_STATES = d.fit->states;
+            fit->FIT_RMS_KM = d.fit->rmsKm;
+            if (d.fit->maximumKm) fit->FIT_MAX_KM = *d.fit->maximumKm;
+            fit->ITERATIONS = d.fit->iterations;
+            fit->CONVERGED = d.fit->converged;
+            fit->FIT_START = d.fit->start;
+            fit->FIT_STOP = d.fit->stop;
+            out.FIT_STATISTICS = std::move(fit);
+        }
     }
 
-    for (const auto& [name, value] : r.user) {
-        auto parameter = std::make_unique<UserDefinedParametersT>();
-        parameter->PARAM_NAME = name;
-        parameter->PARAM_VALUE = value;
-        ocm.USER_DEFINED_PARAMETERS.push_back(std::move(parameter));
-    }
+    if (r.integrator) ocm.INTEGRATOR = std::make_unique<OCMIntegratorT>(*r.integrator);
 
     flatbuffers::FlatBufferBuilder fbb(4096);
     FinishSizePrefixedOCMBuffer(fbb, OCM::Pack(fbb, &ocm));

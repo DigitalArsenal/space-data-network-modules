@@ -17,7 +17,6 @@ import {
   SGP4_GM_KM3_S2,
   VCM_REFERENCE_SPEC,
   sgp4PerturbationContext,
-  perturbationTaxonomyPairs,
   loadOcmBindings,
   buildOcmFrame,
 } from "../scripts/lib/ocm-record.mjs";
@@ -85,20 +84,6 @@ test("sgp4PerturbationContext: absent/invalid BSTAR yields honest null, never fa
   assert.equal(sgp4PerturbationContext({ BSTAR: "n/a" }).ballisticCoeffBstar, null);
 });
 
-test("perturbationTaxonomyPairs: N/A dashes for undefined, real values where SGP4 defines them", () => {
-  const pairs = new Map(perturbationTaxonomyPairs(sgp4PerturbationContext(FIT)));
-  assert.equal(pairs.get("PERT_GEOPOTENTIAL_MODEL"), "WGS-72");
-  assert.equal(pairs.get("PERT_GEOPOTENTIAL_DEGREE"), "4");
-  assert.equal(pairs.get("PERT_GEOPOTENTIAL_ORDER"), "0");
-  assert.equal(pairs.get("PERT_GM_KM3_S2"), String(SGP4_GM_KM3_S2));
-  assert.match(pairs.get("PERT_BALLISTIC_COEFF_BSTAR"), /0\.000123456.*earth-radii/);
-  assert.match(pairs.get("PERT_ATMOSPHERIC_DENSITY_MODEL"), /N\/A/);
-  assert.match(pairs.get("PERT_SOLAR_FLUX_F10P7"), /N\/A/);
-  assert.match(pairs.get("PERT_GEOMAG_KP"), /N\/A/);
-  assert.match(pairs.get("PERT_SRP_MODEL"), /N\/A/);
-  assert.match(pairs.get("PERT_THIRD_BODY"), /NONE/);
-});
-
 test("buildOcmFrame: builds a valid size-prefixed $OCM that decodes with the SDS reader", async () => {
   const bindings = await loadOcmBindings(anchors);
   const frame = buildOcmFrame({
@@ -122,7 +107,6 @@ test("buildOcmFrame: builds a valid size-prefixed $OCM that decodes with the SDS
   assert.equal(o.HEADER.CCSDS_OCM_VERS, "3.0");
   assert.equal(o.HEADER.ORIGINATOR, "SpaceX-E");
   assert.ok(o.HEADER.COMMENT.some((c) => c.includes(VCM_REFERENCE_SPEC)), "cites VCM reference spec");
-  assert.ok(o.HEADER.COMMENT.some((c) => /vcm-unavailable/.test(c)), "declares vcm-unavailable");
 
   // identity — from provider, never fabricated
   assert.equal(o.METADATA.OBJECT_NAME, "STARLINK-36348");
@@ -143,17 +127,18 @@ test("buildOcmFrame: builds a valid size-prefixed $OCM that decodes with the SDS
   assert.match(o.ORBIT_DETERMINATION.OD_METHOD, /Levenberg-Marquardt/);
   assert.match(o.ORBIT_DETERMINATION.OD_METHOD, /multi-start/);
   assert.equal(o.ORBIT_DETERMINATION.OD_EPOCH, FIT.EPOCH);
-  assert.match(o.ORBIT_DETERMINATION.OD_RESIDUALS, /RMS_KM=0\.123/);
-  assert.match(o.ORBIT_DETERMINATION.OD_APRIORI_DATA, new RegExp(`FIT_WINDOW_SEC=${SGP4_FIT_WINDOW_SEC}`));
-
-  // fitted mean-element state mirrors the companion $OMM (carried as UDP pairs)
-  const udp = new Map(o.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
-  assert.equal(udp.get("NORAD_CAT_ID"), "67851");
-  assert.equal(udp.get("MEAN_MOTION"), "15.12345678");
-  assert.equal(udp.get("INCLINATION"), "53.2164");
-  assert.equal(udp.get("BSTAR"), "0.000123456");
-  assert.match(udp.get("PERT_BALLISTIC_COEFF_BSTAR"), /0\.000123456/);
-  assert.match(udp.get("PERT_SOLAR_FLUX_F10P7"), /N\/A/);
-  assert.equal(udp.get("SDN_VCM_AVAILABILITY"), "vcm-unavailable");
-  assert.equal(udp.get("SDN_BATCH_ID"), BATCH_ID);
+  // the fit, typed: statistics, window and provenance; no free-form list
+  const f = o.ORBIT_DETERMINATION.FIT_STATISTICS;
+  assert.equal(f.FIT_RMS_KM, 0.123);
+  assert.equal(f.ITERATIONS, 7);
+  assert.equal(f.CONVERGED, true);
+  assert.equal(f.FIT_START, FIT.EPOCH);
+  assert.equal(Date.parse(f.FIT_STOP) - Date.parse(f.FIT_START), SGP4_FIT_WINDOW_SEC * 1000);
+  assert.equal(o.ORBIT_DETERMINATION.ACTUAL_OD_SPAN, SGP4_FIT_WINDOW_SEC / 86400);
+  assert.equal(o.METADATA.NORAD_CAT_ID, 67851);
+  assert.equal(o.ORB_REVNUM, 12345);
+  assert.equal(o.PROVENANCE.SOURCE_ID, "SpaceX-E");
+  assert.equal(o.PROVENANCE.ORIGINATOR, "SpaceX-E");
+  assert.equal(o.PROVENANCE.SOURCE_URL, "https://api.starlink.com/public-files/ephemerides/MANIFEST.txt");
+  assert.deepEqual(o.USER_DEFINED_PARAMETERS, []);
 });

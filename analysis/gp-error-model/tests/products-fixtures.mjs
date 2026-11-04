@@ -106,8 +106,9 @@ export function operatorOem({ objectId, norad = 0, name = '', frame = 'GCRF', co
   return Buffer.from(b.asUint8Array());
 }
 
-// What analysis/od emits for a fit: one state in TEME with its formal covariance, the object named by CATALOG_NAME.
-export function fitOcm({ norad, name, epoch, x, lower }) {
+// What analysis/od emits for a fit: one state in TEME of date (TRAJ_REF_FRAME) with its formal covariance, the object
+// named by CATALOG_NAME; `frame: false` leaves the frame out.
+export function fitOcm({ norad, name, epoch, x, lower, frame = true }) {
   const t = new OCM.OCMT();
   t.HEADER = Object.assign(new OCM.HeaderT(), { CCSDS_OCM_VERS: '3.0', ORIGINATOR: 'SDN-OD' });
   t.METADATA = Object.assign(new OCM.MetadataT(), { OBJECT_NAME: name, CATALOG_NAME: String(norad), TIME_SYSTEM: 'UTC', START_TIME: epoch, STOP_TIME: epoch });
@@ -115,7 +116,8 @@ export function fitOcm({ norad, name, epoch, x, lower }) {
   t.STATE_VECTOR_SIZE = 6;
   t.STATE_DATA = x;
   t.COVARIANCE_DATA = lower;
-  t.USER_DEFINED_PARAMETERS = [Object.assign(new OCM.UserDefinedParametersT(), { PARAM_NAME: 'STATE_REFERENCE_FRAME', PARAM_VALUE: 'TEME' })];
+  if (frame) t.TRAJ_REF_FRAME = Object.assign(new OCM.RFMT(), { NAME: 'TEMEOFDATE', REFERENCE_FRAME_type: OCM.RFMUnion.CelestialFrameWrapper,
+    REFERENCE_FRAME: Object.assign(new OCM.CelestialFrameWrapperT(), { frame: OCM.CelestialFrame.TEMEOFDATE }) });
   const b = new flatbuffers.Builder(1024);
   OCM.OCM.finishSizePrefixedOCMBuffer(b, t.pack(b));
   return Buffer.from(b.asUint8Array());
@@ -158,14 +160,19 @@ export const expectedProvenance = (recipe, producer = recipe.producer) => ({
 });
 const PVN_FIELDS = ['SOURCE_ID', 'SOURCE_KIND', 'ORIGINATOR', 'PROVIDER_ID', 'PRODUCER', 'LICENSE_CLASS', 'LICENSE_ID', 'LINEAGE'];
 export const provenanceOf = (record) => (record.PROVENANCE ? Object.fromEntries(PVN_FIELDS.map((f) => [f, record.PROVENANCE[f]])) : null);
-// The labels a product once carried as user-defined parameters. A source's own parameters (Space-Track's GP_ID, AOE's
-// channel and record ids) stay; these must not.
+// The keys a product once carried as user-defined parameters, each now typed or dropped: the source labels, the
+// covariance labels, the retired SDN-AP, fit, held-out, SDN, AOE, Space-Track, VCM and perturbation copies, and the
+// frame, units and covariance layout analysis/od wrote before TRAJ_REF_FRAME and COV_ORDERING carried them.
 const LABEL_PARAMS = new Set(['SOURCE_ID', 'SOURCE_KIND', 'SOURCE_ORIGINATOR', 'SOURCE_PROVIDER', 'SOURCE_LINEAGE', 'LICENCE_CLASS', 'LICENCE_ID',
-  'PRODUCER', 'PRODUCT', 'COV_RULE', 'COV_METHOD', 'COV_LABEL', 'COV_LABELS', 'COV_UNAVAILABLE']);
-// A record names its source in PROVENANCE and carries no label of it in USER_DEFINED_PARAMETERS or TAGS.
+  'PRODUCER', 'PRODUCT', 'COV_RULE', 'COV_METHOD', 'COV_LABEL', 'COV_LABELS', 'COV_UNAVAILABLE', 'GP_ID', 'COVARIANCE_SCALE',
+  'STATE_REFERENCE_FRAME', 'STATE_UNITS', 'COVARIANCE_LAYOUT', 'COVARIANCE_INTERPRETATION']);
+export const RETIRED_PREFIXES = ['SDNAP_', 'FIT_', 'HELD_OUT_', 'SDN_', 'AOE_', 'VCM_', 'PERT_'];
+export const retiredParameter = (name) => LABEL_PARAMS.has(name) || RETIRED_PREFIXES.some((prefix) => name.startsWith(prefix));
+// A record names its source in PROVENANCE and carries no label of it, and no retired key, in USER_DEFINED_PARAMETERS
+// or TAGS.
 export function assertSourceNamed(record, recipe, producer) {
   assert.deepEqual(provenanceOf(record), expectedProvenance(recipe, producer));
-  assert.deepEqual((record.USER_DEFINED_PARAMETERS ?? []).filter((p) => LABEL_PARAMS.has(p.PARAM_NAME)), []);
+  assert.deepEqual((record.USER_DEFINED_PARAMETERS ?? []).filter((p) => retiredParameter(p.PARAM_NAME)), []);
   assert.deepEqual((record.TAGS ?? []).filter((t) => /^(originator|source|provider|licence|licence-id|lineage|producer):/.test(t)), []);
 }
 

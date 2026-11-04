@@ -1,5 +1,5 @@
 // SDS $OCM (Orbit Comprehensive Message) FlatBuffer builder — the aligned-binary
-// flow-node output path for the OD fit's STATE + COVARIANCE + OD_RESIDUALS. It describes the fit
+// flow-node output path for the OD fit's STATE + COVARIANCE + FIT_STATISTICS. It describes the fit
 // and hands the description to the shared builder (common/ocm_fb_builder.hpp), which analysis/vcm-adapter
 // also writes its OCMs with.
 //
@@ -14,7 +14,6 @@
 #include "od/ocm_fb_builder.h"
 #include "od/covariance_validation.h"
 
-#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -54,7 +53,8 @@ namespace od {
 
 std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
                                           const std::string& originator,
-                                          const std::string& creation_date) {
+                                          const std::string& creation_date,
+                                          std::string* refusal) {
     const SGP4Elements* el = in.el;
 
     // Never turn fit residual RMS into observational uncertainty or invent a
@@ -67,7 +67,7 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
 
     ocm_fb::Record r;
     r.creationDate = creation_date;
-    r.originator = originator.empty() ? std::string("SDN-OD") : originator;
+    r.originator = originator;
     if (el) {
         r.objectName = el->object_name;
         r.internationalDesignator = el->object_id;
@@ -77,6 +77,14 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
         r.epoch = el->epoch_iso;
     }
     r.timeSystem = "UTC";
+    // The SGP4 state and its formal covariance: TEME of date, km and km/s, the 6x6 lower triangle (CCSDS units),
+    // a fit covariance, not calibrated prediction uncertainty.
+    r.frame = r.covarianceFrame = "TEMEOFDATE";
+    r.covType = "CARTPV";
+    r.ordering = "LTM";
+    r.covSize = 6;
+    r.covUnits = {"km", "km", "km", "km/s", "km/s", "km/s"};
+    r.calibration = covarianceCalibration::Uncalibrated;
     if (state_available) r.state.assign(in.state_teme, in.state_teme + 6);
     if (covariance_available) r.covariance.assign(in.covariance, in.covariance + 21);
 
@@ -86,18 +94,16 @@ std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
     r.od.epoch = r.epoch;
     r.od.observationsUsed = in.num_observations;
     r.od.covReduction = covariance_available ? "FORMAL_UNWEIGHTED_NORMAL_EQUATIONS" : "UNAVAILABLE";
-    char convbuf[64];
-    std::snprintf(convbuf, sizeof(convbuf), "sigma_rel<%.3g;converged=%d", in.convergence_tol, in.converged ? 1 : 0);
-    r.od.convergenceCriteria = convbuf;
-    char resbuf[80];
-    std::snprintf(resbuf, sizeof(resbuf), "WRMS=%.9g km", in.rms_km);
-    r.od.residuals = resbuf;
-
-    r.user = {{"STATE_REFERENCE_FRAME", "TEME"},
-              {"STATE_UNITS", "km,km,km,km/s,km/s,km/s"},
-              {"COVARIANCE_LAYOUT", "6x6 lower triangular, row-major; products of state units"},
-              {"COVARIANCE_INTERPRETATION", "Formal fit uncertainty only; not calibrated prediction uncertainty"}};
-    return ocm_fb::build(r);
+    r.od.actualSpanDays = in.fit_span_days;
+    ocm_fb::Record::FitStatistics fit;
+    fit.states = in.fit_states;
+    fit.rmsKm = in.rms_km;
+    fit.iterations = in.iterations > 0 ? static_cast<uint32_t>(in.iterations) : 0u;
+    fit.converged = in.converged;
+    fit.start = in.fit_start;
+    fit.stop = in.fit_stop;
+    r.od.fit = fit;
+    return ocm_fb::build(r, refusal);
 }
 
 }  // namespace od

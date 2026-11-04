@@ -87,43 +87,6 @@ export function sgp4PerturbationContext(fit = {}) {
   };
 }
 
-// Render the full VCM-taxonomy field set as machine-readable name/value pairs so
-// EVERY field the VCM enumerates is visibly present on the OCM (honest "N/A"
-// where SGP4 leaves it undefined). Complements the native Perturbations table
-// (which has no numeric slot for flux/Kp/coefficients).
-export function perturbationTaxonomyPairs(ctx) {
-  const dash = (v, unit) =>
-    v === null || v === undefined ? NA : unit ? `${v} ${unit}` : String(v);
-  return [
-    ["PERT_FIELD_SELECTION_REFERENCE", ctx.referenceSpec],
-    ["PERT_THEORY", ctx.theory],
-    ["PERT_PROPAGATOR", ctx.propagator],
-    ["PERT_GEOPOTENTIAL_MODEL", ctx.gravityModel],
-    ["PERT_GEOPOTENTIAL_DEGREE", String(ctx.gravityDegree)],
-    ["PERT_GEOPOTENTIAL_ORDER", String(ctx.gravityOrder)],
-    ["PERT_ZONAL_HARMONICS", ctx.zonalHarmonics.join(",")],
-    ["PERT_GM_KM3_S2", String(ctx.gm)],
-    ["PERT_ATMOSPHERIC_DENSITY_MODEL", ctx.atmosphericDensityModel ?? NA],
-    ["PERT_ATMOSPHERIC_DRAG", ctx.atmosphericDrag],
-    ["PERT_BALLISTIC_COEFF_BSTAR", dash(ctx.ballisticCoeffBstar, "[1/earth-radii]")],
-    ["PERT_DRAG_COEFF_CD", dash(ctx.dragCoeffCd)],
-    ["PERT_SOLAR_FLUX_F10P7", dash(ctx.solarFluxF10p7)],
-    ["PERT_SOLAR_FLUX_F10P7_MEAN", dash(ctx.solarFluxF10p7Mean)],
-    ["PERT_GEOMAG_KP", dash(ctx.geomagKp)],
-    ["PERT_GEOMAG_AP", dash(ctx.geomagAp)],
-    ["PERT_THIRD_BODY", ctx.thirdBody.length ? ctx.thirdBody.join(",") : "NONE (SGP4 near-Earth)"],
-    ["PERT_SRP_MODEL", ctx.srpModel ?? NA],
-    ["PERT_SRP_COEFF", dash(ctx.srpCoeff)],
-    ["PERT_SRP_AREA", dash(ctx.srpArea)],
-    ["PERT_OCEAN_TIDES", ctx.oceanTides ?? NA],
-    ["PERT_SOLID_TIDES", ctx.solidTides ?? NA],
-    ["PERT_ATMOSPHERIC_TIDES", ctx.atmosphericTides ?? NA],
-    ["PERT_ALBEDO", ctx.albedo ?? NA],
-    ["PERT_THERMAL", ctx.thermal ?? NA],
-    ["PERT_RELATIVITY", ctx.relativity ?? NA],
-  ];
-}
-
 // ── SDS OCM FlatBuffer bindings loader (createRequire-anchored) ──────────────
 // Resolves flatbuffers + the generated OCM JS bindings from a list of require
 // anchors (package.json paths). Mirrors the anchoring the pipeline already uses
@@ -147,13 +110,14 @@ export async function loadOcmBindings(anchors) {
   const dir = path.dirname(ocmPath);
   const imp = (name) => import(pathToFileURL(path.join(dir, name)));
   const flatbuffers = await import(pathToFileURL(fbPath));
-  const [ocmMod, headerMod, metaMod, pertMod, odMod, udpMod, trajMod] = await Promise.all([
+  const [ocmMod, headerMod, metaMod, pertMod, odMod, fitMod, pvnMod, trajMod] = await Promise.all([
     imp("OCM.js"),
     imp("Header.js"),
     imp("Metadata.js"),
     imp("Perturbations.js"),
     imp("OrbitDetermination.js"),
-    imp("UserDefinedParameters.js"),
+    imp("OCMFitStatistics.js"),
+    imp("PVN.js"),
     imp("trajectoryType.js"),
   ]);
   return {
@@ -164,7 +128,8 @@ export async function loadOcmBindings(anchors) {
     MetadataT: metaMod.MetadataT,
     PerturbationsT: pertMod.PerturbationsT,
     OrbitDeterminationT: odMod.OrbitDeterminationT,
-    UserDefinedParametersT: udpMod.UserDefinedParametersT,
+    OCMFitStatisticsT: fitMod.OCMFitStatisticsT,
+    PVNT: pvnMod.PVNT,
     trajectoryType: trajMod.trajectoryType,
   };
 }
@@ -174,7 +139,8 @@ export async function loadOcmBindings(anchors) {
 // module's JSON (elements_to_json: EPOCH, MEAN_MOTION, ... , RMS, ITERATIONS,
 // CONVERGED, DATA_SOURCE). `meta` is provider identity {norad, objectName,
 // objectId, source}. Identity (NORAD/name/COSPAR) comes from the provider, never
-// fabricated; the mean-element state mirrors the companion $OMM.
+// fabricated; the mean elements are the companion $OMM's. Every field is typed:
+// the fit in FIT_STATISTICS, the source in PROVENANCE.
 export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bindings }) {
   const {
     flatbuffers,
@@ -184,20 +150,16 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
     MetadataT,
     PerturbationsT,
     OrbitDeterminationT,
-    UserDefinedParametersT,
+    OCMFitStatisticsT,
+    PVNT,
   } = bindings;
 
   const norad = meta.norad >>> 0;
   const rms = toNum(fit.RMS);
-  const refRms = toNum(fit.REFERENCE_RMS);
   const dataSource = fit.DATA_SOURCE ?? meta.source ?? "";
   const epoch = fit.EPOCH ?? "";
   const ctx = sgp4PerturbationContext(fit);
-
-  const udp = (name, value) =>
-    value === null || value === undefined || value === ""
-      ? null
-      : Object.assign(new UserDefinedParametersT(), { PARAM_NAME: name, PARAM_VALUE: String(value) });
+  const fitStop = epoch ? new Date(Date.parse(epoch) + SGP4_FIT_WINDOW_SEC * 1000).toISOString() : "";
 
   // ── HEADER ──
   const header = Object.assign(new HeaderT(), {
@@ -205,9 +167,6 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
     COMMENT: [
       "SDN OD-fitted Orbit Comprehensive Message (App 2) — companion to the fitted supplemental $OMM.",
       `PERTURBATIONS + OD field selection follows the ${VCM_REFERENCE_SPEC}. No VCM record was read or produced; values are our own SGP4 fit-theory context.`,
-      `SOURCE_NAME=${meta.source ?? ""} DATA_SOURCE=${dataSource} BATCH_ID=${batchId}`,
-      `FIT: SGP4 differential correction (Levenberg-Marquardt, multi-start); window=${SGP4_FIT_WINDOW_SEC}s (2 orbital periods, ~3.2 h); RMS_KM=${rms ?? "NA"}; ITERATIONS=${fit.ITERATIONS ?? ""}; CONVERGED=${fit.CONVERGED ?? ""}.`,
-      "vcm-availability: vcm-unavailable (account has no VCM feed; fit-theory defaults applied).",
     ],
     CLASSIFICATION: String(fit.CLASSIFICATION_TYPE ?? "U"),
     CREATION_DATE: creationDate,
@@ -221,10 +180,11 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
     OBJECT_NAME: meta.objectName ?? "",
     INTERNATIONAL_DESIGNATOR: meta.objectId || null,
     OBJECT_DESIGNATOR: norad ? String(norad) : null,
+    NORAD_CAT_ID: norad,
     OBJECT_TYPE: "PAYLOAD",
     TIME_SYSTEM: "UTC",
     EPOCH_TZERO: epoch,
-    OCM_DATA_ELEMENTS: ["PERT", "OD", "USER"],
+    OCM_DATA_ELEMENTS: ["PERT", "OD"],
   });
 
   // ── PERTURBATIONS (VCM-taxonomy field selection; SGP4 honest values) ──
@@ -232,7 +192,7 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
     COMMENT: [
       `Field selection per ${VCM_REFERENCE_SPEC}.`,
       "SGP4 is an analytic near-Earth mean-element theory: drag via B* power-law (no atmospheric density table), zonal geopotential J2/J3/J4 only, no third-body, no SRP, no tides.",
-      "Fields the SGP4 theory does not define are marked N/A (honest-absent), never fabricated. Ballistic coefficient is the fitted B* (see USER_DEFINED_PARAMETERS PERT_BALLISTIC_COEFF_BSTAR); solar-flux F10.7 / geomagnetic Kp/Ap are not used by SGP4.",
+      "Fields the SGP4 theory does not define are marked N/A (honest-absent), never fabricated. The drag term is the companion $OMM's fitted B*; solar-flux F10.7 / geomagnetic Kp/Ap are not used by SGP4.",
     ],
     GRAVITY_MODEL: ctx.gravityModel,
     GRAVITY_DEGREE: ctx.gravityDegree,
@@ -248,14 +208,12 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
     THERMAL: NA,
     RELATIVITY: NA,
     // ATMOSPHERIC_MODEL (ATM enum) omitted: no CIRA/Jacchia/MSIS family applies to
-    // SGP4 (documented in COMMENT + PERT_ATMOSPHERIC_DENSITY_MODEL=N/A below).
+    // SGP4 (documented in COMMENT).
     // N_BODY_PERTURBATIONS left empty: honest zero third-body.
     // FIXED_F10P7 / FIXED_F10P7_MEAN / FIXED_GEOMAG_KP omitted: unused by SGP4.
   });
 
-  // ── ORBIT_DETERMINATION ──
-  const residuals =
-    refRms !== null ? `RMS_KM=${rms}; REFERENCE_RMS_KM=${refRms}` : `RMS_KM=${rms}`;
+  // ── ORBIT_DETERMINATION: the fit window and statistics, typed ──
   const orbitDetermination = Object.assign(new OrbitDeterminationT(), {
     OD_ID: `${String(batchId).slice(0, 16)}-${norad}`,
     OD_ALGORITHM: "SGP4 differential correction",
@@ -265,7 +223,6 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
     OD_OBSERVATIONS_TYPE: ["EPHEMERIS_STATE"],
     OD_TRACKS_USED: 1, // one provider ephemeris file = one continuous track
     OD_DATA_WEIGHTING: "UNIFORM",
-    OD_CONVERGENCE_CRITERIA: `CONVERGED=${fit.CONVERGED ?? ""}; ITERATIONS=${fit.ITERATIONS ?? ""}/${fit.MAX_ITERATIONS ?? ""}`,
     OD_EST_PARAMETERS: [
       "MEAN_MOTION",
       "ECCENTRICITY",
@@ -275,46 +232,23 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
       "MEAN_ANOMALY",
       "BSTAR",
     ],
-    OD_RESIDUALS: residuals,
-    OD_APRIORI_DATA: `SOURCE_EPHEMERIS=${dataSource}; FIT_WINDOW_SEC=${SGP4_FIT_WINDOW_SEC} (2 orbital periods, ~3.2 h); OD_POINT_COUNT=not-reported-by-fit-method`,
+    ACTUAL_OD_SPAN: SGP4_FIT_WINDOW_SEC / 86400,
+    FIT_STATISTICS: Object.assign(new OCMFitStatisticsT(), {
+      FIT_RMS_KM: rms ?? Number.NaN,
+      ITERATIONS: Number(fit.ITERATIONS ?? 0),
+      CONVERGED: fit.CONVERGED === true || fit.CONVERGED === "true",
+      FIT_START: epoch,
+      FIT_STOP: fitStop,
+    }),
     // OD_OBSERVATIONS_USED omitted: the fit method does not report a point count.
   });
 
-  // ── USER_DEFINED_PARAMETERS: fitted mean-element state (mirrors $OMM) +
-  //     full VCM-taxonomy enumeration + provenance lineage ──
-  const params = [
-    // fitted GP mean-element state (schema-exact GP keys)
-    udp("NORAD_CAT_ID", norad),
-    udp("EPOCH", epoch),
-    udp("MEAN_MOTION", fit.MEAN_MOTION),
-    udp("ECCENTRICITY", fit.ECCENTRICITY),
-    udp("INCLINATION", fit.INCLINATION),
-    udp("RA_OF_ASC_NODE", fit.RA_OF_ASC_NODE),
-    udp("ARG_OF_PERICENTER", fit.ARG_OF_PERICENTER),
-    udp("MEAN_ANOMALY", fit.MEAN_ANOMALY),
-    udp("BSTAR", fit.BSTAR),
-    udp("MEAN_MOTION_DOT", fit.MEAN_MOTION_DOT),
-    udp("MEAN_MOTION_DDOT", fit.MEAN_MOTION_DDOT),
-    udp("EPHEMERIS_TYPE", fit.EPHEMERIS_TYPE),
-    udp("ELEMENT_SET_NO", fit.ELEMENT_SET_NO),
-    udp("REV_AT_EPOCH", fit.REV_AT_EPOCH),
-    udp("CLASSIFICATION_TYPE", fit.CLASSIFICATION_TYPE),
-    // full VCM-taxonomy perturbation field set (honest values / N/A dashes)
-    ...perturbationTaxonomyPairs(ctx).map(([n, v]) => udp(n, v)),
-    // provenance lineage
-    udp("SDN_SOURCE_NAME", meta.source),
-    udp("SDN_DATA_SOURCE", dataSource),
-    udp("SDN_BATCH_ID", batchId),
-    udp("SDN_SOURCE_URL", sourceUrl),
-    udp("SDN_FIT_RMS_KM", rms),
-    udp("SDN_FIT_REFERENCE_RMS_KM", refRms),
-    udp("SDN_FIT_ITERATIONS", fit.ITERATIONS),
-    udp("SDN_FIT_CONVERGED", fit.CONVERGED),
-    udp("SDN_FIT_WINDOW_SEC", SGP4_FIT_WINDOW_SEC),
-    udp("SDN_VCM_AVAILABILITY", "vcm-unavailable"),
-    udp("SDN_PERTURBATION_REFERENCE_SPEC", VCM_REFERENCE_SPEC),
-    udp("SDN_OMM_COMPANION", "true"),
-  ].filter(Boolean);
+  // ── PROVENANCE: the source and where it was retrieved ──
+  const provenance = Object.assign(new PVNT(), {
+    SOURCE_ID: meta.source ?? "",
+    ORIGINATOR: dataSource,
+    SOURCE_URL: sourceUrl ?? "",
+  });
 
   const ocm = Object.assign(new OCMT(), {
     HEADER: header,
@@ -322,7 +256,8 @@ export function buildOcmFrame({ fit, meta, batchId, creationDate, sourceUrl, bin
     TRAJ_TYPE_DESCRIPTION: "ESTIMATED",
     PERTURBATIONS: perturbations,
     ORBIT_DETERMINATION: orbitDetermination,
-    USER_DEFINED_PARAMETERS: params,
+    PROVENANCE: provenance,
+    ORB_REVNUM: Number(fit.REV_AT_EPOCH ?? 0),
   });
 
   const b = new flatbuffers.Builder(1024);

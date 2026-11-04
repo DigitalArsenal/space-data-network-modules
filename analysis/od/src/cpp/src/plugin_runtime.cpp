@@ -89,7 +89,7 @@ PluginFitFBResult fit_series(StateSeries series, const FitOptions& options) {
         result.reference_obd = build_reference_obd_flatbuffer(fit.elements, config.reference_elements, fit_span_days);
     }
 
-    // $OCM (epoch STATE + 6x6 COVARIANCE + OD residual summary) - the SAME fit. Covariance is the real
+    // $OCM (epoch STATE + 6x6 COVARIANCE + FIT_STATISTICS) - the SAME fit. Covariance is the real
     // normal-equations fit covariance when the solve was well-conditioned; otherwise the builder leaves it absent
     // and labels it UNAVAILABLE. $OEM is never persisted here.
     {
@@ -105,8 +105,19 @@ PluginFitFBResult fit_series(StateSeries series, const FitOptions& options) {
         oc.num_observations = fit.cov_num_observations;
         oc.iterations = fit.elements.iterations;
         oc.converged = fit.elements.converged;
-        oc.convergence_tol = config.convergence_tol;
-        result.ocm = build_ocm_flatbuffer(oc, "SDN-OD", fit.elements.epoch_iso);
+        oc.fit_states = static_cast<unsigned>(series.samples.size());
+        if (!series.samples.empty()) {
+            oc.fit_start = jd_to_iso_supgp(series.samples.front().epoch_jd);
+            oc.fit_stop = jd_to_iso_supgp(series.samples.back().epoch_jd);
+        }
+        oc.fit_span_days = fit_span_days;
+        std::string refusal;
+        result.ocm = build_ocm_flatbuffer(oc, "SDN-OD", fit.elements.epoch_iso, &refusal);
+        if (!refusal.empty()) {
+            result.error_code = refusal.substr(0, refusal.find(':'));
+            result.error_message = refusal;
+            return result;
+        }
     }
     result.rms_km = fit.elements.rms_km;
     result.converged = fit.elements.converged;

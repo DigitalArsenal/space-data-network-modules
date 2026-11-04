@@ -530,10 +530,9 @@ bool read_ocm_block(const RawRecord& raw, std::vector<Block>* blocks, std::strin
   blk.key = key_of(blk.norad, blk.object_id, blk.name);
   blk.frame = unpack_frame(ocm->TRAJ_REF_FRAME());
   blk.frame_name = frame_name_of(ocm->TRAJ_REF_FRAME());
-  if (blk.frame_name.empty() && ocm->USER_DEFINED_PARAMETERS()) {
-    for (const UserDefinedParameters* p : *ocm->USER_DEFINED_PARAMETERS()) {
-      if (p->PARAM_NAME() && p->PARAM_NAME()->str() == "STATE_REFERENCE_FRAME" && p->PARAM_VALUE()) blk.frame_name = p->PARAM_VALUE()->str();
-    }
+  if (blk.frame_name.empty()) {
+    *error = "frame-missing: a fit's $OCM states its frame in TRAJ_REF_FRAME";
+    return false;
   }
   blk.cov_frame = unpack_frame(ocm->COV_REF_FRAME());
   blk.cov_frame_name = frame_name_of(ocm->COV_REF_FRAME());
@@ -1057,7 +1056,7 @@ extern "C" int attach_covariance() {
   // A fit is considered after an operator ephemeris of the same object: rule 1 comes before rule 2.
   for (const RawRecord& rec : raw_fits) {
     if (rec.ident != "$OCM") return fail("invalid-fit", "fit carries $OCM records.");
-    if (!read_ocm_block(rec, &operators, &error)) return fail("invalid-fit", error);
+    if (!read_ocm_block(rec, &operators, &error)) return fail(error.rfind("frame-missing", 0) == 0 ? "frame-missing" : "invalid-fit", error);
   }
 
   // Which sets give outputs: the newest of each object, or all.

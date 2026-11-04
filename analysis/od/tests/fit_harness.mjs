@@ -87,7 +87,7 @@ export function fitRecordFromResponse(response) {
     MEAN_MOTION_DDOT: Number(omm.MEAN_MOTION_DDOT().toExponential(5)),
     RMS: fit.WRMS().toFixed(3),
     ITERATIONS: fit.NUM_ITERATIONS(),
-    CONVERGED: /converged=1/.test(ocm.ORBIT_DETERMINATION()?.OD_CONVERGENCE_CRITERIA() ?? ""),
+    CONVERGED: ocm.ORBIT_DETERMINATION()?.FIT_STATISTICS()?.CONVERGED() ?? false,
     DATA_SOURCE: fit.SENSORS(0)?.SENSOR_ID() ?? "",
   };
   // The decoded records themselves, kept off the enumerable (structured-clone / JSON) fields.

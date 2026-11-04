@@ -3,7 +3,7 @@
 
 /**
  * SDS $OCM (Orbit Comprehensive Message) FlatBuffer builder — the aligned-binary
- * flow-node output path for the OD fit's STATE + COVARIANCE + OD_RESIDUALS
+ * flow-node output path for the OD fit's STATE + COVARIANCE + FIT_STATISTICS
  * (SDN OD-Flow Phase 1, additive to omm_fb_builder).
  *
  * Isolated TU (mirrors omm_fb_builder.cpp): the ONLY OD source that includes the
@@ -43,21 +43,25 @@ struct OCMInputs {
     double covariance[21] = {0};
     bool has_covariance = false;
 
-    // Fit quality (real outputs from the SGP4 differential-correction fit).
+    // Fit quality (real outputs from the SGP4 differential-correction fit): FIT_STATISTICS. The arc is the
+    // ephemeris the fit was given, first to last state (ISO 8601 UTC), as its $OBD FIT_SPAN states it.
     double rms_km = 0.0;
     int num_observations = 0;
     int iterations = 0;
     bool converged = false;
-    double convergence_tol = 0.0;
+    unsigned fit_states = 0;
+    std::string fit_start, fit_stop;
+    double fit_span_days = 0.0;
 };
 
 /// Build a size-prefixed SDS `$OCM` FlatBuffer from a fit's state + covariance +
-/// residual summary. `originator` marks provenance (default "SDN-OD");
-/// `creation_date` is the ISO-8601 UTC creation stamp (empty to omit). Returns
-/// the size-prefixed FlatBuffer payload bytes.
+/// fit statistics. `originator` marks provenance ("SDN-OD"); `creation_date` is
+/// the ISO-8601 UTC creation stamp (empty to omit). Returns the size-prefixed
+/// FlatBuffer payload bytes, or empty bytes with `*refusal` set to the reason.
 std::vector<uint8_t> build_ocm_flatbuffer(const OCMInputs& in,
-                                          const std::string& originator = "SDN-OD",
-                                          const std::string& creation_date = std::string());
+                                          const std::string& originator,
+                                          const std::string& creation_date,
+                                          std::string* refusal);
 
 }  // namespace od
 

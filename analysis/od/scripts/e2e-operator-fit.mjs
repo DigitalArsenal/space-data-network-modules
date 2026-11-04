@@ -30,7 +30,8 @@ const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'operator-fit-e2e-'));
 let server,native;
 const browsers=[];
 const save=()=>{fs.mkdirSync(path.dirname(reportPath),{recursive:true});fs.writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');};
-function decoded(response){assert.equal(response.statusCode,0,response.errorMessage);return response.outputs.filter(o=>o.portId==='ocm').map(o=>{const c=OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(o.payload)).unpack();return {record:c,user:Object.fromEntries(c.USER_DEFINED_PARAMETERS.map(p=>[p.PARAM_NAME,p.PARAM_VALUE]))};});}
+// One fitted segment's typed fields: FIT_STATISTICS, the fitted DRAG_AREA_OVER_MASS (B_eff) and the covariance's origin.
+function decoded(response){assert.equal(response.statusCode,0,response.errorMessage);return response.outputs.filter(o=>o.portId==='ocm').map(o=>{const c=OCM.getSizePrefixedRootAsOCM(new fb.ByteBuffer(o.payload)).unpack(),od=c.ORBIT_DETERMINATION;return {record:c,fit:od.FIT_STATISTICS,ballistic:od.OD_DYNAMIC_PARAMETERS.find(p=>p.PARAMETER===1).VALUE,covariance:od.OD_COV_REDUCTION};});}
 try{
  const env=await environment();report.weather=env.provenance;console.log('Environment parsed through EOP and space-weather WASM');
  const bundle=await build({stdin:{contents:'export {createBrowserModuleHarness} from "space-data-module-sdk/host/browser-module";',resolveDir:root},bundle:true,format:'esm',platform:'browser',write:false});
@@ -79,7 +80,7 @@ try{
   for(const correction of [false,true]){
    const request=correction?{...base,inputs:[...base.inputs,dcl(epoch,0.6931471805599453)]}:base;
    const cpuStart=await host.cpu(),start=performance.now(),result=await host.run(request,config),elapsed=(performance.now()-start)/1000,cpuSeconds=(await host.cpu())-cpuStart;
-   const segments=decoded(result);const row={file:name,dca:correction?'constant ln(2) mechanics':'absent',wallSeconds:elapsed,cpuSeconds,concurrent,maxIterations:config.maxIterations,segments:segments.map(s=>({rmsKm:Number(s.user.FIT_RMS_KM),ballistic:Number(s.user.B_EFF_M2_KG),kappa:Number(s.user.KAPPA_GIVEN_B_PRIOR),samples:s.record.ORBIT_DETERMINATION.OD_OBSERVATIONS_USED,iterations:Number(s.user.FIT_ITERATIONS),convergence:s.record.ORBIT_DETERMINATION.OD_CONVERGENCE_CRITERIA,operatorCovariance:s.user.COVARIANCE_RULE,formalCovariance:!!s.user.FORMAL_COVARIANCE_LTM}))};
+   const segments=decoded(result);const row={file:name,dca:correction?'constant ln(2) mechanics':'absent',wallSeconds:elapsed,cpuSeconds,concurrent,maxIterations:config.maxIterations,segments:segments.map(s=>({rmsKm:s.fit.FIT_RMS_KM,ballistic:s.ballistic,kappa:1-s.ballistic/config.ballisticPrior,samples:s.fit.FIT_STATES,iterations:s.fit.ITERATIONS,converged:s.fit.CONVERGED,covariance:s.covariance}))};
    row.rmsKm=Math.sqrt(row.segments.reduce((sum,s)=>sum+s.samples*s.rmsKm*s.rmsKm,0)/row.segments.reduce((sum,s)=>sum+s.samples,0));
    report.rows.push(row);console.log(JSON.stringify(row));save();
    if(!correction)first={base,epoch,result,segments,row};
@@ -98,25 +99,25 @@ try{
   const {base,epoch,segments,row}=first;
 
     const warmKeys=['warmX','warmY','warmZ','warmVx','warmVy','warmVz'];
-    const warm={...config,warmStart:true,ballisticSeed:Number(segments[0].user.B_EFF_M2_KG),...Object.fromEntries(warmKeys.map((k,i)=>[k,segments[0].record.STATE_DATA[i]]))};
+    const warm={...config,warmStart:true,ballisticSeed:segments[0].ballistic,...Object.fromEntries(warmKeys.map((k,i)=>[k,segments[0].record.STATE_DATA[i]]))};
     const warmCpu=await cpu(),warmStart=performance.now(),warmResult=await run(base,warm);
-    report.warmReplay={cpuSeconds:(await cpu())-warmCpu,wallSeconds:(performance.now()-warmStart)/1000,rmsKm:Number(decoded(warmResult)[0].user.FIT_RMS_KM),kind:'same-epoch replay; previous-cycle state must first be propagated to the new source epoch by FFM'};
+    report.warmReplay={cpuSeconds:(await cpu())-warmCpu,wallSeconds:(performance.now()-warmStart)/1000,rmsKm:decoded(warmResult)[0].fit.FIT_RMS_KM,kind:'same-epoch replay; previous-cycle state must first be propagated to the new source epoch by FFM'};
     assert(report.warmReplay.rmsKm<=row.rmsKm+1e-4);
     const refused=await run(base,{...config,fitWindowSeconds:172801});assert.notEqual(refused.statusCode,0);assert.match(refused.errorMessage,/blend-join/);report.joinRefusal='PASS';console.log('Join refusal passed');
     const planted=await plantedManeuver(epoch,env);const event=await run({methodId:'fit_ffm',inputs:[planted.kvn,configuration(epoch),...env.inputs]},config);
     assert.equal(decoded(event).length,2,'Maneuver must split the fit into two segments');assert.equal(event.outputs.filter(o=>o.portId==='mnv').length,1);report.maneuverSegmentation='PASS';console.log('Planted maneuver split into two segments');save();
     const eventSegments=decoded(event);
-    assert.equal(eventSegments[0].user.COVARIANCE_RULE,'1: operator supplied');
-    report.maneuverFits=eventSegments.map(s=>({rmsKm:Number(s.user.FIT_RMS_KM),ballistic:Number(s.user.B_EFF_M2_KG)}));
+    assert.equal(eventSegments[0].covariance,'OPERATOR_RULE_1');
+    report.maneuverFits=eventSegments.map(s=>({rmsKm:s.fit.FIT_RMS_KM,ballistic:s.ballistic}));
     const typed=await run({methodId:'fit_ffm',inputs:[planted.typed,configuration(epoch),...env.inputs]},config);
     assert.deepEqual(decoded(typed).map(s=>s.record),eventSegments.map(s=>s.record),'OEM KVN/FlatBuffer fit and covariance parity');
     report.oemCovariance='PASS GCRF covariance retained identically from KVN and typed OEM';
     const corrected=await run({methodId:'fit_ffm',inputs:[planted.kvn,configuration(epoch),...env.inputs,dcl(epoch,0.6931471805599453)]},{...config,ballisticSeed:.0015});
     const adjusted=decoded(corrected);
     for(let i=0;i<adjusted.length;++i){
-     const b=Number(eventSegments[i].user.B_EFF_M2_KG),twice=2*Number(adjusted[i].user.B_EFF_M2_KG);
+     const b=eventSegments[i].ballistic,twice=2*adjusted[i].ballistic;
      assert(b>.0001,'Planted physical B must remain observable');assert(Math.abs(b-twice)<1e-5,'Constant doubled density must halve B_eff');
-     assert(Math.abs(Number(eventSegments[i].user.FIT_RMS_KM)-Number(adjusted[i].user.FIT_RMS_KM))<1e-4);
+     assert(Math.abs(eventSegments[i].fit.FIT_RMS_KM-adjusted[i].fit.FIT_RMS_KM)<1e-4);
     }
     report.dcaMechanics='PASS constant exp(s)=2 halves nonzero B_eff, same fitted trajectory';save();
     const parityConfig={...config,fitWindowSeconds:7200,maxIterations:3};
