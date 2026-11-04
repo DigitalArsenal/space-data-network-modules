@@ -1,0 +1,568 @@
+{
+ "recorded": "the dists before the real-track change",
+ "wasmSha256": {
+  "analysis/optical-astrometry": "37afb918cbb3b817043990fc8fe75327b11983d268dd0731432fe86750584b8d",
+  "flows/angles-only-od": "73455891f62f8f76598856b03c7d60421500bca31b746545bd455ce904f85f3d",
+  "flows/observation-od": "08ae8e305fd0ea45beaaf7f0055cc3af6117ba381fe7abd0b26fa7c74c61b81c",
+  "analysis/estimation": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
+  "propagator/ffm": "318db198d611da632a461de0c5aa6e280ffaa913cc2a1324034d1844e06c4fd6"
+ },
+ "runs": {
+  "flow": {
+   "stages": [
+    {
+     "stage": 1,
+     "plan": [
+      "stage 1 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z"
+     ],
+     "seeds": [],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 3,
+       "epoch": "2026-09-22T03:59:03.394900084Z",
+       "state": [
+        -411.50263651161697,
+        5430.515299105642,
+        5465.130931491072,
+        -3.816710752494227,
+        -4.480378616353138,
+        4.148752954381124
+       ],
+       "weightedRms": 0.8898681113144814,
+       "converged": true
+      }
+     ],
+     "select": {
+      "items": [
+       "stage 1 of 6 nights",
+       "candidate 1: converged 1, WEIGHTED_RMS 0.8899, revolution drift 0.000"
+      ],
+      "epoch": "2026-09-22T03:59:03.394900084Z",
+      "state": [
+       -411.50263651161697,
+       5430.515299105642,
+       5465.130931491072,
+       -3.816710752494227,
+       -4.480378616353138,
+       4.148752954381124
+      ],
+      "weightedRms": 0.8898681113144814
+     }
+    },
+    {
+     "stage": 2,
+     "plan": [
+      "stage 2 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z",
+      "revolutions 12 long-period",
+      "revolutions 12 short-period",
+      "revolutions 13 long-period",
+      "revolutions 13 short-period",
+      "revolutions 14 long-period",
+      "revolutions 14 short-period"
+     ],
+     "seeds": [
+      {
+       "config": {
+        "revolutions": 12,
+        "branch": 0
+       },
+       "refusal": {
+        "code": "no-initial-orbit",
+        "message": "no-initial-orbit: Gooding's iteration found no bound orbit: no start converged"
+       }
+      },
+      {
+       "config": {
+        "revolutions": 12,
+        "branch": 1
+       },
+       "epoch": "2026-09-22T04:02:23.394900Z",
+       "state": [
+        -1175.226462943924,
+        4449.523737034121,
+        6200.478352912149,
+        -3.591979442542844,
+        -5.577397041709211,
+        3.2032754295828827
+       ],
+       "odId": "IOD:2026-09-22T04:02:23.394900Z revolutions 12 short-period"
+      },
+      {
+       "config": {
+        "revolutions": 13,
+        "branch": 0
+       },
+       "refusal": {
+        "code": "no-initial-orbit",
+        "message": "no-initial-orbit: Gooding's iteration found no bound orbit: no start converged"
+       }
+      },
+      {
+       "config": {
+        "revolutions": 13,
+        "branch": 1
+       },
+       "epoch": "2026-09-22T04:02:23.394900Z",
+       "state": [
+        -1161.3943542167863,
+        4444.952881290623,
+        6194.514107026761,
+        -3.681546990288422,
+        -5.326734233175173,
+        3.128086968843648
+       ],
+       "odId": "IOD:2026-09-22T04:02:23.394900Z revolutions 13 short-period"
+      },
+      {
+       "config": {
+        "revolutions": 14,
+        "branch": 0
+       },
+       "refusal": {
+        "code": "no-initial-orbit",
+        "message": "no-initial-orbit: Gooding's iteration found no bound orbit: no start converged"
+       }
+      },
+      {
+       "config": {
+        "revolutions": 14,
+        "branch": 1
+       },
+       "epoch": "2026-09-22T04:02:23.394900Z",
+       "state": [
+        -1147.8018193515306,
+        4440.461193343277,
+        6188.653162629911,
+        -3.77709726191539,
+        -5.064371678690329,
+        3.0505539763042204
+       ],
+       "odId": "IOD:2026-09-22T04:02:23.394900Z revolutions 14 short-period"
+      }
+     ],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 31,
+       "refusal": {
+        "code": "no-convergence",
+        "message": "no-convergence:30: fit_batch ended MAXIMUM_ITERATIONS after 30 propagation rounds"
+       }
+      },
+      {
+       "candidate": 2,
+       "rounds": 4,
+       "epoch": "2026-09-22T03:59:03.394900084Z",
+       "state": [
+        -408.93120729448725,
+        5428.178101936158,
+        5464.6508143563,
+        -3.8121688342176796,
+        -4.474024291061979,
+        4.143168205777125
+       ],
+       "weightedRms": 0.9674197740333214,
+       "converged": true
+      },
+      {
+       "candidate": 3,
+       "rounds": 31,
+       "refusal": {
+        "code": "no-convergence",
+        "message": "no-convergence:30: fit_batch ended MAXIMUM_ITERATIONS after 30 propagation rounds"
+       }
+      }
+     ],
+     "select": {
+      "items": [
+       "stage 2 of 6 nights",
+       "candidate 1: converged 1, WEIGHTED_RMS 0.9674, revolution drift -0.006"
+      ],
+      "epoch": "2026-09-22T03:59:03.394900084Z",
+      "state": [
+       -408.93120729448725,
+       5428.178101936158,
+       5464.6508143563,
+       -3.8121688342176796,
+       -4.474024291061979,
+       4.143168205777125
+      ],
+      "weightedRms": 0.9674197740333214
+     }
+    },
+    {
+     "stage": 3,
+     "plan": [
+      "stage 3 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z"
+     ],
+     "seeds": [],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 4,
+       "epoch": "2026-09-22T03:59:03.394900084Z",
+       "state": [
+        -408.93202699502785,
+        5428.230772177234,
+        5464.653849700994,
+        -3.8116197389849797,
+        -4.474425818204636,
+        4.1431759466941935
+       ],
+       "weightedRms": 0.9885976189473958,
+       "converged": true
+      }
+     ],
+     "select": {
+      "items": [
+       "stage 3 of 6 nights",
+       "candidate 1: converged 1, WEIGHTED_RMS 0.9886, revolution drift 0.000"
+      ],
+      "epoch": "2026-09-22T03:59:03.394900084Z",
+      "state": [
+       -408.93202699502785,
+       5428.230772177234,
+       5464.653849700994,
+       -3.8116197389849797,
+       -4.474425818204636,
+       4.1431759466941935
+      ],
+      "weightedRms": 0.9885976189473958
+     }
+    },
+    {
+     "stage": 4,
+     "plan": [
+      "stage 4 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z"
+     ],
+     "seeds": [],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 4,
+       "epoch": "2026-09-22T03:59:03.394900084Z",
+       "state": [
+        -408.91811678444043,
+        5428.249960327986,
+        5464.636865789844,
+        -3.8116613953030885,
+        -4.474323057892713,
+        4.143247240324789
+       ],
+       "weightedRms": 0.9962679063208967,
+       "converged": true
+      }
+     ],
+     "select": {
+      "items": [
+       "stage 4 of 6 nights",
+       "candidate 1: converged 1, WEIGHTED_RMS 0.9963, revolution drift 0.000"
+      ],
+      "epoch": "2026-09-22T03:59:03.394900084Z",
+      "state": [
+       -408.91811678444043,
+       5428.249960327986,
+       5464.636865789844,
+       -3.8116613953030885,
+       -4.474323057892713,
+       4.143247240324789
+      ],
+      "weightedRms": 0.9962679063208967
+     }
+    },
+    {
+     "stage": 5,
+     "plan": [
+      "stage 5 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z"
+     ],
+     "seeds": [],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 3,
+       "epoch": "2026-09-22T03:59:03.394900084Z",
+       "state": [
+        -408.9108677871632,
+        5428.251250680571,
+        5464.624147225289,
+        -3.8116116728621168,
+        -4.474338072331024,
+        4.143290418187322
+       ],
+       "weightedRms": 0.9937629347668815,
+       "converged": true
+      }
+     ],
+     "select": {
+      "items": [
+       "stage 5 of 6 nights",
+       "candidate 1: converged 1, WEIGHTED_RMS 0.9938, revolution drift 0.000"
+      ],
+      "epoch": "2026-09-22T03:59:03.394900084Z",
+      "state": [
+       -408.9108677871632,
+       5428.251250680571,
+       5464.624147225289,
+       -3.8116116728621168,
+       -4.474338072331024,
+       4.143290418187322
+      ],
+      "weightedRms": 0.9937629347668815
+     }
+    },
+    {
+     "stage": 6,
+     "plan": [
+      "stage 6 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z"
+     ],
+     "seeds": [],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 4,
+       "epoch": "2026-09-22T03:59:03.394900084Z",
+       "state": [
+        -408.8727460505205,
+        5428.24438537205,
+        5464.612922610683,
+        -3.8116952319795776,
+        -4.474301591122586,
+        4.143276818270614
+       ],
+       "weightedRms": 1.0264637276951942,
+       "converged": true
+      }
+     ],
+     "select": {
+      "items": [
+       "stage 6 of 6 nights",
+       "candidate 1: converged 1, WEIGHTED_RMS 1.0265, revolution drift 0.000"
+      ],
+      "epoch": "2026-09-22T03:59:03.394900084Z",
+      "state": [
+       -408.8727460505205,
+       5428.24438537205,
+       5464.612922610683,
+       -3.8116952319795776,
+       -4.474301591122586,
+       4.143276818270614
+      ],
+      "weightedRms": 1.0264637276951942
+     }
+    }
+   ],
+   "epoch": "2026-09-22T03:59:03.394900084Z",
+   "state": [
+    -408.8727460505205,
+    5428.24438537205,
+    5464.612922610683,
+    -3.8116952319795776,
+    -4.474301591122586,
+    4.143276818270614
+   ],
+   "observationsUsed": 558,
+   "residualRmsArcsec": 23.608665736989476,
+   "weightedRms": 1.0264637276951942,
+   "arcEnd": "2026-09-27T04:10:05.247300000Z",
+   "arcEndErrorKm": 0.1723739938273881
+  },
+  "wrongCount": {
+   "config": {
+    "revolutionOffsetMin": 1,
+    "revolutionOffsetMax": 1
+   },
+   "stages": [
+    {
+     "stage": 1,
+     "plan": [
+      "stage 1 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z"
+     ],
+     "seeds": [],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 3,
+       "epoch": "2026-09-22T03:59:03.394900084Z",
+       "state": [
+        -411.50263651161697,
+        5430.515299105642,
+        5465.130931491072,
+        -3.816710752494227,
+        -4.480378616353138,
+        4.148752954381124
+       ],
+       "weightedRms": 0.8898681113144814,
+       "converged": true
+      }
+     ],
+     "select": {
+      "items": [
+       "stage 1 of 6 nights",
+       "candidate 1: converged 1, WEIGHTED_RMS 0.8899, revolution drift 0.000"
+      ],
+      "epoch": "2026-09-22T03:59:03.394900084Z",
+      "state": [
+       -411.50263651161697,
+       5430.515299105642,
+       5465.130931491072,
+       -3.816710752494227,
+       -4.480378616353138,
+       4.148752954381124
+      ],
+      "weightedRms": 0.8898681113144814
+     }
+    },
+    {
+     "stage": 2,
+     "plan": [
+      "stage 2 of 6 nights",
+      "epoch 2026-09-22T03:59:03.394900084Z",
+      "revolutions 14 long-period",
+      "revolutions 14 short-period"
+     ],
+     "seeds": [
+      {
+       "config": {
+        "revolutions": 14,
+        "branch": 0
+       },
+       "refusal": {
+        "code": "no-initial-orbit",
+        "message": "no-initial-orbit: Gooding's iteration found no bound orbit: no start converged"
+       }
+      },
+      {
+       "config": {
+        "revolutions": 14,
+        "branch": 1
+       },
+       "epoch": "2026-09-22T04:02:23.394900Z",
+       "state": [
+        -1147.8018193515306,
+        4440.461193343277,
+        6188.653162629911,
+        -3.77709726191539,
+        -5.064371678690329,
+        3.0505539763042204
+       ],
+       "odId": "IOD:2026-09-22T04:02:23.394900Z revolutions 14 short-period"
+      }
+     ],
+     "candidates": [
+      {
+       "candidate": 1,
+       "rounds": 31,
+       "refusal": {
+        "code": "no-convergence",
+        "message": "no-convergence:30: fit_batch ended MAXIMUM_ITERATIONS after 30 propagation rounds"
+       }
+      }
+     ],
+     "select": {
+      "code": "no-converged-revolution-count",
+      "message": "no-converged-revolution-count: stage 2: no candidate kept its revolution count and converged with WEIGHTED_RMS at most 2 (0 candidates)"
+     }
+    }
+   ],
+   "answer": {
+    "code": "no-converged-revolution-count",
+    "message": "no-converged-revolution-count: stage 2: no candidate kept its revolution count and converged with WEIGHTED_RMS at most 2 (0 candidates)"
+   }
+  }
+ },
+ "tracks": [
+  {
+   "station": "SATNOGS-OPTICAL-11",
+   "rows": 41,
+   "first": "2026-09-22T03:55:43.394900000Z",
+   "last": "2026-09-22T04:02:23.394900000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-15",
+   "rows": 31,
+   "first": "2026-09-22T03:56:11.165000000Z",
+   "last": "2026-09-22T04:01:11.165000000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-11",
+   "rows": 54,
+   "first": "2026-09-23T04:19:23.458300000Z",
+   "last": "2026-09-23T04:28:13.458300000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-15",
+   "rows": 49,
+   "first": "2026-09-23T04:19:27.676100000Z",
+   "last": "2026-09-23T04:27:27.676100000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-11",
+   "rows": 61,
+   "first": "2026-09-24T04:43:07.950200000Z",
+   "last": "2026-09-24T04:53:07.950200000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-15",
+   "rows": 57,
+   "first": "2026-09-24T04:43:11.017800000Z",
+   "last": "2026-09-24T04:52:31.017800000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-11",
+   "rows": 33,
+   "first": "2026-09-25T03:13:34.624100000Z",
+   "last": "2026-09-25T03:18:54.624100000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-15",
+   "rows": 19,
+   "first": "2026-09-25T03:14:26.774200000Z",
+   "last": "2026-09-25T03:17:26.774200000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-15",
+   "rows": 47,
+   "first": "2026-09-26T03:36:37.272800000Z",
+   "last": "2026-09-26T03:44:17.272800000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-11",
+   "rows": 51,
+   "first": "2026-09-26T03:36:40.038800000Z",
+   "last": "2026-09-26T03:45:00.038800000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-15",
+   "rows": 56,
+   "first": "2026-09-27T04:00:19.634200000Z",
+   "last": "2026-09-27T04:09:29.634200000Z"
+  },
+  {
+   "station": "SATNOGS-OPTICAL-11",
+   "rows": 59,
+   "first": "2026-09-27T04:00:25.247300000Z",
+   "last": "2026-09-27T04:10:05.247300000Z"
+  }
+ ],
+ "initialOrbit": {
+  "epoch": "2026-09-22T03:59:03.394900Z",
+  "state": [
+   -413.1748030229538,
+   5432.069459937791,
+   5465.120568261047,
+   -3.8192135332721513,
+   -4.484790493562057,
+   4.15254902901364
+  ],
+  "middleSightMissArcsec": 1.5346898007663882e-10,
+  "odId": "IOD:2026-09-22T03:59:03.394900Z"
+ }
+}
