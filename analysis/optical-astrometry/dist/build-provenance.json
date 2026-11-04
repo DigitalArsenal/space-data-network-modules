@@ -55,5 +55,5 @@
   ],
   "moduleSdk": "0.9.12",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "ad354eb11ff4948d59e99f514fda31ea612013023668dfd28b337e4d380f31a0"
+  "wasmSha256": "304544a4bbfbd44ef9416c9d4d1c3bda1f1a94f4ab75500a6afde35493b4a80a"
 }

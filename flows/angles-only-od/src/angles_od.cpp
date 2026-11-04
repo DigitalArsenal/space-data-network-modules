@@ -11,13 +11,16 @@
 //           number; a refused candidate sends none), config
 //           -> selected (the stage's $OCM), report (FlowNotice: REASON stage-selected or complete)
 //
-// Nights are the tracks between gaps over 6 h; stage s fits nights 1..s. Stage 1 starts from the initial orbit.
-// Across the first nightly gap (stage 2) the candidates are the revolution offsets k in [revolutionOffsetMin,
-// revolutionOffsetMax] (default -1..1): the seed is stage 1's state with its velocity scaled so the two-body mean
-// motion changes by 2 pi k / dt (dt from the epoch to the night's first track); later stages take k = 0. A candidate
-// counts when its fit converged, its WEIGHTED_RMS is at most weightedRmsLimit (default 2) and its mean motion against
-// stage 1's gives a revolution offset round((n - n1) dt / 2 pi) inside the stage's set. The lowest WEIGHTED_RMS wins;
-// none: no-converged-revolution-count. An arc under minimumArcHours (24): arc-too-short:<hours>.
+// Nights are the tracks between gaps over 6 h; stage s fits nights 1..s. Stage 1 starts from the initial orbit (one
+// pass). Across the first nightly gap (stage 2) the revolution count is a candidate set: N0 = floor(n1 dt / 2 pi), n1
+// stage 1's two-body mean motion and dt the span from the first observation to night 2's last, and the counts
+// N0 + k for k in [revolutionOffsetMin, revolutionOffsetMax] (default -1..1). plan asks for each count's Gooding
+// initial orbit through the nights (optical-astrometry initial_orbit config: revolutions, branch 0 and 1; port
+// initial_orbit_config), then, given those orbits on `seeds`, one execution per seed; select takes the candidates' fits
+// with their seeds (the same order). Later stages carry the last stage's state (one candidate). A candidate counts when
+// its fit converged, its WEIGHTED_RMS is at most weightedRmsLimit (default 2) and it kept its revolution count
+// (|n - n_seed| dt / 2 pi < 0.5). The lowest WEIGHTED_RMS wins; none: no-converged-revolution-count. An arc under
+// minimumArcHours (24): arc-too-short:<hours>.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -188,10 +191,11 @@ int read_state(State* s) {
   }
   return 0;
 }
-// Revolution offsets of stage `night` (1-based night count of the stage).
-void offsets_of(const State& s, int nights, int* lo, int* hi) {
-  if (nights == 2) *lo = static_cast<int>(s.config.offset_min), *hi = static_cast<int>(s.config.offset_max);
-  else *lo = *hi = 0;
+// The span of stage 2's revolution count: the first observation to night 2's last.
+double count_span(const State& s) {
+  double last = -INFINITY;
+  for (size_t i = 0; i < s.tracks.size(); ++i) if (s.night[i] <= 1) last = std::max(last, s.tracks[i].last);
+  return last - s.tracks.front().first;
 }
 
 int push(const char* port, const char* schema, const char* id, const char* root, const uint8_t* data, size_t size) {
@@ -246,28 +250,48 @@ extern "C" int plan(void) {
   if (!prw->EXECUTION_REQUEST() || !prw->EXECUTION_REQUEST()->INITIAL() || !prw->EXECUTION_REQUEST()->INITIAL()->STATE())
     return fail("bad-input", "execution must be a $PRW EXECUTION_REQUEST with INITIAL (the object and its coordinate system)");
 
-  const Orbit& base = s.have_stage ? s.stage : s.initial;
-  int lo = 0, hi = 0;
-  offsets_of(s, target, &lo, &hi);
-  const double dt = s.night_start[target - 1] - base.t;
   std::vector<std::string> items{"stage " + std::to_string(target) + " of " + std::to_string(nights) + " nights", "epoch " + iso(s.initial.t)};
-  for (int k = lo; k <= hi; ++k) {
-    double x[6];
-    std::copy(base.x, base.x + 6, x);
-    if (k != 0) {
-      const double n = mean_motion(base.x), n2 = n + 2.0 * M_PI * k / dt;
-      if (!(n2 > 0)) return fail("bad-input", "a revolution offset gives no bound orbit");
-      const double a2 = std::cbrt(kMu / (n2 * n2)), r = std::sqrt(x[0] * x[0] + x[1] * x[1] + x[2] * x[2]);
-      const double v = std::sqrt(x[3] * x[3] + x[4] * x[4] + x[5] * x[5]), v2 = std::sqrt(kMu * (2.0 / r - 1.0 / a2));
-      for (int i = 3; i < 6; ++i) x[i] *= v2 / v;
+  std::vector<Orbit> seeds;
+  const auto seed_frames = frames("seeds");
+  if (target == 2 && seed_frames.empty()) {
+    // Ask for the candidate counts' initial orbits.
+    const double dt = count_span(s);
+    const int n0 = static_cast<int>(std::floor(mean_motion(s.stage.x) * dt / (2.0 * M_PI)));
+    for (int k = static_cast<int>(s.config.offset_min); k <= static_cast<int>(s.config.offset_max); ++k) {
+      if (n0 + k < 1) continue;
+      for (int branch = 0; branch < 2; ++branch) {
+        R::ModuleConfigT config;
+        for (const auto& [key, value] : {std::pair<const char*, double>{"revolutions", n0 + k}, {"branch", branch}}) {
+          auto e = std::make_unique<R::ConfigEntryT>();
+          e->KEY = key;
+          e->KIND = R::configValueKind_Number;
+          e->NUMBER_VALUE = value;
+          config.ENTRIES.push_back(std::move(e));
+        }
+        flatbuffers::FlatBufferBuilder b(256);
+        R::FinishModuleConfigBuffer(b, R::ModuleConfig::Pack(b, &config));
+        if (push("initial_orbit_config", "ModuleConfig.fbs", "MCFG", "ModuleConfig", b.GetBufferPointer(), b.GetSize())) return 1;
+        items.push_back("revolutions " + std::to_string(n0 + k) + (branch ? " short-period" : " long-period"));
+      }
     }
+  } else if (target == 2) {
+    for (const auto* f : seed_frames) {
+      Orbit o;
+      std::string error;
+      if (!read_ocm(f, &o, &error)) return fail("bad-input", error);
+      seeds.push_back(o);
+    }
+  } else {
+    seeds.push_back(s.have_stage ? s.stage : s.initial);
+  }
+  for (const Orbit& base : seeds) {
     std::unique_ptr<PRWT> root(prw->UnPack());
     auto& exec = *root->EXECUTION_REQUEST;
     auto& st = *exec.INITIAL->STATE;
     st.POSITION = std::make_unique<FRMVector3T>();
     st.VELOCITY = std::make_unique<FRMVector3T>();
-    st.POSITION->X = x[0] * 1000, st.POSITION->Y = x[1] * 1000, st.POSITION->Z = x[2] * 1000;
-    st.VELOCITY->X = x[3] * 1000, st.VELOCITY->Y = x[4] * 1000, st.VELOCITY->Z = x[5] * 1000;
+    st.POSITION->X = base.x[0] * 1000, st.POSITION->Y = base.x[1] * 1000, st.POSITION->Z = base.x[2] * 1000;
+    st.VELOCITY->X = base.x[3] * 1000, st.VELOCITY->Y = base.x[4] * 1000, st.VELOCITY->Z = base.x[5] * 1000;
     st.EPOCH = iso(base.t);
     st.EPOCH_TIME_SYSTEM = "UTC";
     exec.TARGET_EPOCH = std::make_unique<TIMInstantT>();
@@ -277,11 +301,10 @@ extern "C" int plan(void) {
     flatbuffers::FlatBufferBuilder b(1 << 14);
     FinishSizePrefixedPRWBuffer(b, PRW::Pack(b, root.get()));
     if (push("execution", "PRW.fbs", "$PRW", "PRW", b.GetBufferPointer(), b.GetSize())) return 1;
-    items.push_back("candidate revolution offset " + std::to_string(k));
   }
   for (size_t i = 0; i < s.tracks.size(); ++i)
     if (s.night[i] < target && push("observations", "TDM.fbs", "$TDM", "TDM", s.tracks[i].frame->payload, s.tracks[i].frame->payload_length)) return 1;
-  return report("stage-planned", static_cast<uint64_t>(hi - lo + 1), items);
+  return report("stage-planned", static_cast<uint64_t>(seeds.size()), items);
 }
 
 extern "C" int select(void) {
@@ -290,32 +313,33 @@ extern "C" int select(void) {
   const int nights = static_cast<int>(s.night_start.size());
   const int target = s.have_stage ? s.completed + 1 : 1;
   if (target > nights) return fail("bad-input", "every night is already fitted");
-  int lo = 0, hi = 0;
-  offsets_of(s, target, &lo, &hi);
-  const Orbit& base = s.have_stage ? s.stage : s.initial;
-  const double dt = s.night_start[target - 1] - base.t, n1 = mean_motion(base.x);
+  const auto candidates = frames("candidates"), seed_frames = frames("seeds");
+  if (target == 2 && seed_frames.size() != candidates.size()) return fail("bad-input", "stage 2 needs each candidate's seed on seeds, in the same order");
+  const double dt = target == 2 ? count_span(s) : 0.0;
   const plugin_input_frame_t* best = nullptr;
   double best_wrms = INFINITY;
-  int best_k = 0;
   std::vector<std::string> items{"stage " + std::to_string(target) + " of " + std::to_string(nights) + " nights"};
-  for (const auto* f : frames("candidates")) {
-    Orbit o;
+  for (size_t c = 0; c < candidates.size(); ++c) {
+    Orbit o, seed;
     std::string error;
-    if (!read_ocm(f, &o, &error)) return fail("bad-input", error);
-    const int k = target == 1 ? 0 : static_cast<int>(std::lround((mean_motion(o.x) - n1) * dt / (2.0 * M_PI)));
+    if (!read_ocm(candidates[c], &o, &error)) return fail("bad-input", error);
+    double drift = 0;  // revolutions the fit moved from its seed's count
+    if (target == 2) {
+      if (!read_ocm(seed_frames[c], &seed, &error)) return fail("bad-input", error);
+      drift = (mean_motion(o.x) - mean_motion(seed.x)) * dt / (2.0 * M_PI);
+    }
     char line[160];
-    std::snprintf(line, sizeof line, "candidate: converged %d, WEIGHTED_RMS %.4f, revolution offset %d", o.converged ? 1 : 0, o.wrms, k);
+    std::snprintf(line, sizeof line, "candidate %zu: converged %d, WEIGHTED_RMS %.4f, revolution drift %.3f", c + 1, o.converged ? 1 : 0, o.wrms, drift);
     items.push_back(line);
-    if (!o.converged || !(o.wrms <= s.config.wrms_limit) || k < lo || k > hi) continue;
-    if (o.wrms < best_wrms) best = f, best_wrms = o.wrms, best_k = k;
+    if (!o.converged || !(o.wrms <= s.config.wrms_limit) || !(std::fabs(drift) < 0.5)) continue;
+    if (o.wrms < best_wrms) best = candidates[c], best_wrms = o.wrms;
   }
   if (!best) {
     char message[200];
-    std::snprintf(message, sizeof message, "stage %d: no candidate with revolution offset in [%d, %d] converged with WEIGHTED_RMS at most %g",
-                  target, lo, hi, s.config.wrms_limit);
+    std::snprintf(message, sizeof message, "stage %d: no candidate kept its revolution count and converged with WEIGHTED_RMS at most %g (%zu candidates)",
+                  target, s.config.wrms_limit, candidates.size());
     return fail("no-converged-revolution-count", message);
   }
   if (push("selected", "OCM.fbs", "$OCM", "OCM", best->payload, best->payload_length)) return 1;
-  items.push_back("selected revolution offset " + std::to_string(best_k));
   return report(target == nights ? "complete" : "stage-selected", static_cast<uint64_t>(target), items);
 }

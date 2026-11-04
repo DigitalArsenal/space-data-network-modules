@@ -2,7 +2,7 @@
   "pluginId": "org.sdn.flows.angles-only-od",
   "name": "Angles-only orbit determination",
   "version": "0.1.0",
-  "description": "Plans and selects the stages of an angles-only orbit determination with no element set on any port: from analysis/optical-astrometry initial_orbit's Gooding state, stage s fits nights 1..s through flows/observation-od step (analysis/estimation fit_batch with propagator/ffm); across the first nightly gap the revolution count is a candidate set, each fitted, the converged one with the lowest WEIGHTED_RMS and a consistent revolution offset kept. Refusals by name: no-converged-revolution-count, arc-too-short:<hours>.",
+  "description": "Plans and selects the stages of an angles-only orbit determination with no element set on any port: from analysis/optical-astrometry initial_orbit's Gooding state, stage s fits nights 1..s through flows/observation-od step (analysis/estimation fit_batch with propagator/ffm); across the first nightly gap the revolution count is a candidate set (Gooding multi-revolution initial orbits through the nights), each fitted, the converged one that kept its count with the lowest WEIGHTED_RMS selected. Refusals by name: no-converged-revolution-count, arc-too-short:<hours>.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
   "sequentialJustification": {
@@ -126,6 +126,26 @@
           "description": "The $OCM select chose for the last completed stage; absent for the first."
         },
         {
+          "portId": "seeds",
+          "acceptedTypeSets": [
+            {
+              "setId": "seeds-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Stage 2: the candidate revolution counts' initial orbits (optical-astrometry initial_orbit with each initial_orbit_config); for select, each candidate's seed in the candidates' order."
+        },
+        {
           "portId": "execution",
           "acceptedTypeSets": [
             {
@@ -167,6 +187,26 @@
         }
       ],
       "outputPorts": [
+        {
+          "portId": "initial_orbit_config",
+          "acceptedTypeSets": [
+            {
+              "setId": "initial_orbit_config-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Stage 2 without seeds: one ModuleConfig (revolutions, branch) per candidate count and Lambert branch, for optical-astrometry initial_orbit over the stage's tracks."
+        },
         {
           "portId": "execution",
           "acceptedTypeSets": [
@@ -294,6 +334,26 @@
           "maxStreams": 1,
           "required": false,
           "description": "The $OCM select chose for the last completed stage; absent for the first."
+        },
+        {
+          "portId": "seeds",
+          "acceptedTypeSets": [
+            {
+              "setId": "seeds-set",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Stage 2: the candidate revolution counts' initial orbits (optical-astrometry initial_orbit with each initial_orbit_config); for select, each candidate's seed in the candidates' order."
         },
         {
           "portId": "candidates",
