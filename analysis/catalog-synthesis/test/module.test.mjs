@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { Builder, ByteBuffer } from "flatbuffers";
 import { OMM, OMMT } from "spacedatastandards.org/lib/js/OMM/OMM.js";
+import { CAT } from "spacedatastandards.org/lib/js/CAT/CAT.js";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { inspectModule } from "space-data-module-sdk/host/isomorphic";
 import { decodeFlowNotice, decodeHostCall, decodeIngestRequest, encodeTimerTick } from "space-data-module-sdk/runtime-contracts";
@@ -160,23 +161,29 @@ async function run(t, stub, inputs = [tickFrame()]) {
 }
 const tickFrame = () => ({ portId: "tick", typeRef: TICK, payload: encodeTimerTick({ triggerId: "catalog-synthesis-pull", scheduledMs: FIRED_MS, firedMs: FIRED_MS, sequence: 1 }) });
 
-// The size-prefixed $OMM stream -> [{ bytes, omm, params }] in stream order.
-function records(stream) {
+// A size-prefixed record stream -> the records' bytes in stream order.
+function split_stream(stream) {
   const out = [];
   const view = new DataView(stream.buffer, stream.byteOffset, stream.byteLength);
   for (let at = 0; at < stream.length;) {
     const len = view.getUint32(at, true);
-    const bytes = stream.slice(at, at + 4 + len);
-    const omm = OMM.getSizePrefixedRootAsOMM(new ByteBuffer(bytes));
-    const params = {};
-    for (let i = 0; i < omm.userDefinedParametersLength(); i++) {
-      const p = omm.USER_DEFINED_PARAMETERS(i);
-      params[p.PARAM_NAME()] = p.PARAM_VALUE();
-    }
-    out.push({ bytes, omm, params });
+    out.push(stream.slice(at, at + 4 + len));
     at += 4 + len;
   }
   return out;
+}
+const SPACETRACK_NAMES = ["spacetrack-gp", "celestrak-gp"];
+// The $OMM stream and the $CAT decisions -> [{ bytes, omm, decision }]: decision.cid / source / rule from the $CAT's
+// PRODUCTS[0], decision.kind the lane its winning source name is in.
+function records(stream, decisions) {
+  const cats = split_stream(decisions).map((b) => CAT.getSizePrefixedRootAsCAT(new ByteBuffer(b)).unpack());
+  return split_stream(stream).map((bytes, i) => {
+    const omm = OMM.getSizePrefixedRootAsOMM(new ByteBuffer(bytes));
+    assert.equal(cats[i].NORAD_CAT_ID, omm.NORAD_CAT_ID());
+    const [p] = cats[i].PRODUCTS;
+    const decision = { cid: p.RECORD_CID, source: p.SOURCE_ID, rule: p.SELECTION_REASON, kind: SPACETRACK_NAMES.includes(p.SOURCE_ID) ? "spacetrack-gp" : "ours-fit" };
+    return { bytes, omm, decision };
+  });
 }
 
 function split(response) {
@@ -184,9 +191,11 @@ function split(response) {
   const of = (port) => response.outputs.filter((o) => o.portId === port);
   const meta = of("omm_meta");
   const stream = of("omm_records");
+  const decisions = of("catalog");
   assert.equal(meta.length, stream.length, "omm_meta and omm_records go out together");
+  assert.equal(decisions.length, stream.length, "omm_records and catalog go out together");
   assert.ok(meta.length <= 1 && stream.length <= 1);
-  const catalog = stream.length ? records(stream[0].payload) : [];
+  const catalog = stream.length ? records(stream[0].payload, decisions[0].payload) : [];
   return {
     meta: meta.length ? decodeIngestRequest(meta[0].payload) : null,
     stream: stream.length ? Buffer.from(stream[0].payload) : null,
@@ -212,7 +221,7 @@ test("the shipped artifact passes SDK compliance: one concrete FlatBuffer type p
     assert.equal(types[0].acceptsAnyFlatbuffer, undefined);
     return [port.portId, types[0].fileIdentifier];
   });
-  assert.deepEqual(ports, [["tick", "TICK"], ["omm_meta", "INGQ"], ["omm_records", "$OMM"], ["status", "FNTC"]]);
+  assert.deepEqual(ports, [["tick", "TICK"], ["omm_meta", "INGQ"], ["omm_records", "$OMM"], ["catalog", "$CAT"], ["status", "FNTC"]]);
   assert.deepEqual(manifest.capabilities, ["storage_query", "timers"]);
   assert.deepEqual(manifest.timers.map((x) => [x.timerId, x.methodId, x.defaultIntervalMs]), [["catalog-synthesis-pull", "synthesize_catalog", 21_600_000]]);
   const inspection = await inspectModule(fs.readFileSync(WASM_PATH));
@@ -245,15 +254,12 @@ test("(c) precedence: hard-pass fresher wins; staler never wins; interim sole so
   for (const [norad, [kind, rule]] of Object.entries(buildConstellation().expectedWinners)) {
     const r = out.byNorad.get(Number(norad));
     assert.ok(r, `NORAD ${norad} not in the catalog`);
-    assert.equal(r.params.SDN_CATALOG_SOURCE_KIND, kind, `NORAD ${norad} winner kind`);
-    assert.equal(r.params.SDN_CATALOG_PRECEDENCE, rule, `NORAD ${norad} precedence`);
+    assert.equal(r.decision.kind, kind, `NORAD ${norad} winner kind`);
+    assert.equal(r.decision.rule, rule, `NORAD ${norad} precedence`);
   }
-  assert.equal(out.byNorad.get(25544).params.SDN_CATALOG_GATE_STATUS, "hard-pass");
-  assert.equal(out.byNorad.get(25544).params.SDN_CATALOG_SOURCE_CID, "cid-fit-25544");
-  assert.equal(out.byNorad.get(67850).params.SDN_CATALOG_SOURCE_NAME, "spacex-starlink");
-  assert.equal(out.byNorad.get(32393).params.SDN_CATALOG_GATE_STATUS, "interim");
-  assert.equal(out.byNorad.get(67851).params.SDN_CATALOG_GATE_STATUS, "n/a");
-  assert.equal(out.byNorad.get(67851).params.SDN_CATALOG_SOURCE_CID, "cid-st-67851");
+  assert.equal(out.byNorad.get(25544).decision.cid, "cid-fit-25544");
+  assert.equal(out.byNorad.get(67850).decision.source, "spacex-starlink");
+  assert.equal(out.byNorad.get(67851).decision.cid, "cid-st-67851");
   // One Info per provider: candidates, won, quarantined.
   const per = Object.fromEntries(out.notices.filter((n) => n.kind === "info" && n.sourceName !== "catalog-synthesis").map((n) => [n.sourceName, [n.count, n.reason]]));
   assert.deepEqual(per, {
@@ -280,16 +286,10 @@ test("(e) element-space diff vs the reference rows within A2.4 tolerances on the
       assert.ok(Math.abs(got[key]() - refs[norad][key]) <= tol, `NORAD ${norad} ${key}`);
     }
   }
-  // The catalog record is the winning stored $OMM plus the seven SDN_CATALOG_* parameters, nothing else changed.
+  // The catalog record is the winning stored $OMM, byte for byte.
   for (const r of out.catalog) {
-    const winner = input.find((x) => x.CID === r.params.SDN_CATALOG_SOURCE_CID);
-    const stored = OMM.getRootAsOMM(new ByteBuffer(winner.Data)).unpack();
-    const emitted = r.omm.unpack();
-    assert.deepEqual(emitted.USER_DEFINED_PARAMETERS.map((p) => p.PARAM_NAME), [
-      "SDN_CATALOG_SOURCE_KIND", "SDN_CATALOG_SOURCE_NAME", "SDN_CATALOG_SOURCE_CID", "SDN_CATALOG_PRECEDENCE",
-      "SDN_CATALOG_GATE_STATUS", "SDN_CATALOG_BATCH", "SDN_CATALOG_COMMENT"]);
-    emitted.USER_DEFINED_PARAMETERS = [];
-    assert.deepEqual(emitted, stored);
+    const winner = input.find((x) => x.CID === r.decision.cid);
+    assert.deepEqual(Buffer.from(r.bytes.subarray(4)), Buffer.from(winner.Data));
   }
 });
 
@@ -305,7 +305,6 @@ test("the batch: one IngestRequest for storage-ingest, batch_id = sha256 of the 
   assert.equal(out.meta.provenance.normalizedCount, 7);
   assert.equal(out.meta.provenance.normalizedSha256, crypto.createHash("sha256").update(out.stream).digest("hex"));
   assert.deepEqual(out.meta.provenance.schemaCounts, { "OMM.fbs": 7 });
-  for (const r of out.catalog) assert.equal(r.params.SDN_CATALOG_BATCH, batchId);
   assert.ok(out.notices.every((n) => n.batchId === batchId));
 });
 
@@ -318,10 +317,10 @@ test("classification: tag first; an untagged $OMM is a catalog input; a legacy J
     record("cid-json", "spacex-starlink", new TextEncoder().encode(JSON.stringify({ NORAD_CAT_ID: 90004, EPOCH: "2026-05-14T10:00:00" }))),
   ];
   const out = await run(t, createHostStub({ records: input }));
-  assert.equal(out.byNorad.get(90001).params.SDN_CATALOG_SOURCE_KIND, "ours-fit");
-  assert.equal(out.byNorad.get(90002).params.SDN_CATALOG_SOURCE_KIND, "spacetrack-gp");
-  assert.equal(out.byNorad.get(90002).params.SDN_CATALOG_SOURCE_NAME, "spacetrack-gp");
-  assert.equal(out.byNorad.get(90003).params.SDN_CATALOG_SOURCE_KIND, "spacetrack-gp");
+  assert.equal(out.byNorad.get(90001).decision.kind, "ours-fit");
+  assert.equal(out.byNorad.get(90002).decision.kind, "spacetrack-gp");
+  assert.equal(out.byNorad.get(90002).decision.source, "spacetrack-gp");
+  assert.equal(out.byNorad.get(90003).decision.kind, "spacetrack-gp");
   assert.ok(!out.byNorad.has(90004));
   assert.deepEqual(out.notices.filter((n) => n.kind === "skipped").map((n) => [n.reason, n.items]), [["unreadable", ["unknown-encoding:cid-json"]]]);
   assert.match(summaryOf(out).reason, /ours-won=1 spacetrack-won=2 quarantined=0 unreadable=1/);
@@ -330,9 +329,9 @@ test("classification: tag first; an untagged $OMM is a catalog input; a legacy J
 test("node config: gateStatus demotes a provider; spacetrackSourceNames, sourceName, querySchema and queryLimit apply", async (t) => {
   const demoted = await run(t, createHostStub({ records: buildConstellation().records,
     config: { gateStatus: { providers: { "spacex-starlink": "interim", iss: "interim" } } } }));
-  assert.equal(demoted.byNorad.get(67850).params.SDN_CATALOG_SOURCE_KIND, "spacetrack-gp");
-  assert.equal(demoted.byNorad.get(67850).params.SDN_CATALOG_PRECEDENCE, "spacetrack-ours-gate-interim");
-  assert.equal(demoted.byNorad.get(25544).params.SDN_CATALOG_SOURCE_KIND, "spacetrack-gp", "an interim fresher fit never outranks Space-Track");
+  assert.equal(demoted.byNorad.get(67850).decision.kind, "spacetrack-gp");
+  assert.equal(demoted.byNorad.get(67850).decision.rule, "spacetrack-ours-gate-interim");
+  assert.equal(demoted.byNorad.get(25544).decision.kind, "spacetrack-gp", "an interim fresher fit never outranks Space-Track");
   assert.match(summaryOf(demoted).reason, /ours-won=1 /);
 
   const el = csvRow(67850);
@@ -342,7 +341,7 @@ test("node config: gateStatus demotes a provider; spacetrackSourceNames, sourceN
   });
   const out = await run(t, stub);
   assert.deepEqual(stub.calls.find((c) => c.operation === "storage.query").params, { schema: "OMM.fbs", limit: 5 });
-  assert.equal(out.byNorad.get(7).params.SDN_CATALOG_PRECEDENCE, "ours-hardpass-fresher");
+  assert.equal(out.byNorad.get(7).decision.rule, "ours-hardpass-fresher");
   assert.equal(out.meta.tags.sourceName, "sdn-catalog");
 });
 

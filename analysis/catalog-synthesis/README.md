@@ -31,7 +31,7 @@ without `EPOCH` (`missing-epoch`) is reported as unreadable and not used.
 > `hard-pass` AND the fit is STRICTLY fresher (epoch). Every other case falls back to Space-Track GP. An object present
 > in EITHER lane is never dropped. An object with no NORAD is quarantined, never keyed as NORAD 0.
 
-| inputs for the NORAD | winner | `SDN_CATALOG_PRECEDENCE` |
+| inputs for the NORAD | winner | `$CAT` `SELECTION_REASON` |
 |---|---|---|
 | ours (hard-pass) strictly fresher than ST | ours | `ours-hardpass-fresher` |
 | ours (hard-pass) not strictly fresher than ST | ST | `spacetrack-ours-not-fresher` |
@@ -51,14 +51,15 @@ Gate status is [`config/provider-gate-status.json`](config/provider-gate-status.
 
 ## The catalog record
 
-Each record is the winning stored `$OMM` with every field kept and the synthesis provenance appended as
-`USER_DEFINED_PARAMETERS` (CCSDS `USER_DEFINED_x` keywords): `SDN_CATALOG_SOURCE_KIND` (`ours-fit` | `spacetrack-gp`),
-`SDN_CATALOG_SOURCE_NAME`, `SDN_CATALOG_SOURCE_CID`, `SDN_CATALOG_PRECEDENCE`, `SDN_CATALOG_GATE_STATUS` (the fit's
-gate level, `n/a` for a Space-Track winner), `SDN_CATALOG_BATCH`, `SDN_CATALOG_COMMENT`.
+Each record on `omm_records` is the winning stored `$OMM`, byte for byte, so its CID is the winner's. The decision is
+one `$CAT` per record on `catalog`, ascending NORAD: `OBJECT_NAME`, `OBJECT_ID`, `NORAD_CAT_ID`, and `PRODUCTS[0]` with
+`KIND` (`Sgp4Elements` or `Sgp4XpElements` by the set's `MEAN_ELEMENT_THEORY`), `RECORD_CID` the winner's stored CID,
+`SOURCE_ID` the winning source name, `EPOCH` the set's and `SELECTION_REASON` the precedence rule. The rule names carry
+the gate level; the batch id is on the notices and the `IngestRequest`.
 
 The batch's `IngestRequest`: `SCHEMA` `OMM.fbs`; `TAGS` `PROVIDER_ID` = `SOURCE_NAME` = `sourceName`, `BATCH_ID`,
 `SOURCE_URL` `sdn://catalog-synthesis`; `RECONCILE` `None`; `PROVENANCE` with the record count, the stream's SHA-256
-and the counts as attributes. Nothing is emitted on `omm_meta` / `omm_records` when the catalog is empty.
+and the counts as attributes. Nothing is emitted on `omm_meta` / `omm_records` / `catalog` when the catalog is empty.
 
 ## FlowNotices (`status`)
 
