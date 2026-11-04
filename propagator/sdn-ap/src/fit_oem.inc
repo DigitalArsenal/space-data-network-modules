@@ -7,7 +7,9 @@
 // USEABLE_STOP_TIME, the whole block when neither is stated); later states are
 // held out and scored. The record carries the forces, the daily rows and the
 // density-correction nodes the set flies on, the orbit determination and its
-// FIT_STATISTICS, typed.
+// FIT_STATISTICS, typed. PROVENANCE is this module's, or, where the call gives
+// the ephemeris's $PVN on 'provenance' (none, or one per 'ephemeris' frame in
+// their order), that PVN field for field with this module as PRODUCER.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -267,6 +269,38 @@ constexpr double kBandMedianRmsKm = 0.01516;
 constexpr double kFallbackRmsRatio = 1.25;
 constexpr double kBandMedianBterm = 0.0005;
 
+/// The 'provenance' frames: none, or one verified $PVN (plain or size-prefixed) per 'ephemeris' frame in their order;
+/// 0 with `out` filled, or 3 refused by name.
+inline int provenance_frames(std::vector<const PVN*>& out) {
+  out.clear();
+  size_t ephemeris_frames = 0;
+  for (uint32_t fi = 0; fi < plugin_get_input_count(); ++fi) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(fi);
+    if (f == nullptr || f->port_id == nullptr) continue;
+    if (std::strcmp(f->port_id, "ephemeris") == 0) ++ephemeris_frames;
+    if (std::strcmp(f->port_id, "provenance") != 0) continue;
+    const uint8_t* p = f->payload;
+    uint32_t n = f->payload_length;
+    if (!plain_view(p, n, "$PVN")) {
+      plugin_set_error("invalid-pvn", "A 'provenance' payload is not an SDS $PVN (plain or size-prefixed).");
+      return 3;
+    }
+    flatbuffers::Verifier::Options vopt;
+    vopt.check_alignment = false;
+    flatbuffers::Verifier v(p, n, vopt);
+    if (!VerifyPVNBuffer(v)) {
+      plugin_set_error("invalid-pvn", "A 'provenance' $PVN does not verify.");
+      return 3;
+    }
+    out.push_back(GetPVN(p));
+  }
+  if (!out.empty() && out.size() != ephemeris_frames) {
+    plugin_set_error("provenance-count", "Either no 'provenance' $PVN or one per 'ephemeris' frame, in their order.");
+    return 3;
+  }
+  return 0;
+}
+
 }  // namespace fitoem
 }  // namespace sdnap
 
@@ -286,6 +320,8 @@ static int fit_blocks() {
     if (objects.size() != ephemeris_frames)
       return pcf::refuse("configuration", "after the call's $PCF, either none or one $PCF per 'ephemeris' frame (its object's priors)");
   }
+  std::vector<const PVN*> sources;
+  if (const int rc = fitoem::provenance_frames(sources)) return rc;
   uint32_t blocks_done = 0;
   size_t ephemeris_index = 0;
   for (uint32_t fi = 0; fi < frames; ++fi) {
@@ -304,6 +340,7 @@ static int fit_blocks() {
         frame_options.srp_prior_given = true;
       }
     }
+    const PVN* source = sources.empty() ? nullptr : sources[ephemeris_index];
     ++ephemeris_index;
     const pcf::Options& po = frame_options;
     const uint8_t* payload = f->payload;
@@ -963,6 +1000,10 @@ static int fit_blocks() {
       od.add_FIT_STATISTICS(statistics);
       ocm::Extras extras;
       extras.od = od.Finish();
+      if (source != nullptr) {
+        extras.provenance = ocm::copy_pvn(fbb, source, true);
+        extras.carried = true;
+      }
       if (have_cov) {
         // SPEC 12: the epoch covariance, LTM of the state block (the floor included) and the parameter rows as fitted
         int kind[fit::kMaxParams];
