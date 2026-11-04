@@ -34,7 +34,7 @@ try{
  console.log('PASS typed MCFG on all three methods; malformed and unsupported settings refused');
 
  const provenance=(await fs.readFile(path.join(root,'tests/fixtures/provenance.tsv'),'utf8')).trim().split('\n').slice(1).map(l=>l.split('\t'));for(const p of provenance)assert.equal(hash(await fs.readFile(path.join(root,'tests/fixtures',p[0]))),p[4]);console.log('PASS committed trimmed fixture hashes: 11 files');
- if(process.env.LVDB_NODE_READBACK==='1'){assert(process.env.SDN_NODE_BINARY,'SDN_NODE_BINARY required');const back=await nativePublication(root,process.env.SDN_NODE_BINARY);verify(decode(back.records.SSY),ss);console.log('PASS SSY signed native publication and CID readback '+back.cids.SSY);}else console.log('DEFERRED native SSY CID readback: sdn-vendor-ssy-20261103; rerun with LVDB_NODE_READBACK=1 and SDN_NODE_BINARY');
+ if(process.env.SDN_NODE_BINARY||process.env.LVDB_NODE_READBACK==='1'){assert(process.env.SDN_NODE_BINARY,'SDN_NODE_BINARY required');const back=await nativePublication(root,process.env.SDN_NODE_BINARY);verify(decode(back.records.SSY),ss);console.log(`PASS SSY native CID readback manifest=${back.cids.SSY} shards=${back.shards.length} uniqueRecords=${back.uniqueRecords}`);}else console.log('SKIP native SSY CID readback: set SDN_NODE_BINARY to require native verification');
  console.log('PASS lvdb-source E2E: 1727 decoded FlatBuffers');
 }finally{if(h)await h.destroy();}
 process.exit(0);

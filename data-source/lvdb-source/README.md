@@ -85,23 +85,31 @@ all seven nodes and asserts byte-for-byte equality at typed storage ingress.
 Invalid batches are refused. Committed trimmed fixture hashes are verified.
 These are catalog equality tests: no astronomical model or tolerance is used.
 
-## Deferred node readback
+## Native publication and complete-series readback
 
-The coordinator explicitly deferred native-node publication/readback until
-`sdn-vendor-ssy-20261103` refreshes the node's embedded SDS. The E2E reports
-that deferral, never a node PASS. After the refresh:
+Whenever `SDN_NODE_BINARY` is set, native verification is required; a failure
+fails the E2E. Without a binary the runner explicitly reports a skip. From the
+modules root:
 
 ```sh
-LVDB_NODE_READBACK=1 SDN_NODE_BINARY=/absolute/path/to/spacedatanetwork \
+SDN_NODE_BINARY=/absolute/path/to/spacedatanetwork \
   node data-source/lvdb-source/tests/lvdb-source.e2e.mjs
 ```
 
-Run that command from the modules root. The retained native path boots an
-isolated scratch node, signs the replay artifact with that node's temporary
-identity, schedules it, waits for the signed SSY publication, reads its
-manifest and shards by CID, verifies hashes/signature presence and reruns
-the source oracle. It does not install a provider node or use the revoked
-development key.
+The node must embed SDS 1.275.0 / SSY. The test uses the built sdn-js client at
+`../space-data-network/sdn-js` relative to the modules root; `SDN_JS` can name
+another built sdn-js checkout. It boots an isolated scratch node, signs the
+replay artifact with that node's temporary identity and schedules it.
+
+An auto-publication log's manifest CID names only the first signed part.
+The reader therefore requests the complete batch segment plan through the
+typed `open-manifest` protocol. It fetches every listed signed manifest and
+shard by CID, verifies hashes, byte lengths, per-segment counts and unique
+SSY identities, then reruns the complete source oracle. The 1 MiB shard
+budget is retained and the E2E requires multiple shards. The final PASS line
+includes the summary manifest CID, shard count and unique-record count;
+each shard's CID and count is also printed. No provider installation or
+revoked development signing key is used.
 
 ## Fixture provenance
 
