@@ -32,7 +32,7 @@
 //   trajectory_minutes     the orbit trajectory's half span (45), trajectory_step_seconds (10)
 //   sensor_id, originator, image_set_id, creation_date, propagator_port_id
 //   min_elevation_deg (3), max_site_candidates (24)
-#include <ModuleConfig_generated.h>  // staged by the SDK compiler (initial_orbit config)
+#include <ModuleConfig_generated.h>  // staged by the SDK compiler (the config value kinds)
 
 namespace oa {
 namespace mod {
@@ -618,15 +618,30 @@ int reduce_method() {
 }
 
 // initial_orbit: Gooding's angles-only initial orbit (od.cpp gooding_iod) on
-// RA/Dec $TDM records alone, no element set: the first, middle and last
-// observation of the supplied angles (one pass: the Lambert arc between the
-// first and last sight is the short way, no full revolution), each from its
-// record's OBSERVER_X/Y/Z (Earth-fixed WGS-84 metres, rotated to GCRS by the
-// IAU 2006/2000A CIO chain with the $EOP rows). The directions are read as
-// geometric topocentric GCRF RA/Dec at the time tag. Out: the state at the
-// middle sight as a Cartesian $OCM (GCRF, km, km/s; no covariance) and a
-// report. Refused by name: too-few-observations, no-initial-orbit,
-// invalid-angles.
+// RA/Dec $TDM records alone, no element set, each sight from its record's
+// OBSERVER_X/Y/Z (Earth-fixed WGS-84 metres, rotated to GCRS by the IAU
+// 2006/2000A CIO chain with the $EOP rows). The directions are read as
+// geometric topocentric GCRF RA/Dec at the time tag. The sights split into
+// crossings (one site, gaps over kCrossingGapS) and nights (gaps over
+// kNightGapS). Each crossing's directions are fitted in its tangent plane by
+// a cubic in time, rows beyond five robust sigmas (or kEditFloorArcsec)
+// dropped until none is; it counts with kCrossingSights rows kept or more.
+// The first guess takes the first night with two counting crossings or
+// more; without one, the first two counting crossings across the nightly
+// gap. Of their kept epochs: the first, the last, and the middle the one
+// farthest in time from both, each sight the fitted direction there. Sights
+// over more than one pass (a gap of kPassGapS or more): the
+// multi-revolution branches. Out: the state at the
+// middle sight as a Cartesian $OCM (GCRF, km, km/s; no covariance;
+// START_TIME and STOP_TIME the sights' span) and a report. Refused by name:
+// too-few-observations (no counting crossing), single-crossing (one),
+// no-initial-orbit, invalid-angles.
+constexpr double kCrossingGapS = 120.0;
+constexpr int kCrossingSights = 3;
+constexpr double kEditFloorArcsec = 3.0;
+constexpr double kNightGapS = 6 * 3600.0;
+constexpr double kPassGapS = 1800.0;
+
 int initial_orbit_fail(const char* code, const std::string& message) {
   g_error = message;
   plugin_set_error(code, g_error.c_str());
@@ -637,7 +652,6 @@ int initial_orbit_method() {
   std::vector<const TDM*> tdms;
   Clock clock;
   std::string err;
-  int revolutions = 0, branch = 0;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const auto* f = plugin_get_input_frame(i);
     const std::string port = port_of(f);
@@ -649,19 +663,6 @@ int initial_orbit_method() {
     } else if (port == "earth_orientation") {
       const std::string m = ax::eop::addPayload(f->payload, f->payload_length, clock.rows);
       if (!m.empty()) return initial_orbit_fail("invalid-angles", "earth_orientation: " + m);
-    } else if (port == "config") {
-      flatbuffers::Verifier v(f->payload, f->payload_length);
-      if (!sdn::runtime::VerifyModuleConfigBuffer(v)) return initial_orbit_fail("invalid-angles", "config is not a ModuleConfig (MCFG)");
-      const auto* entries = sdn::runtime::GetModuleConfig(f->payload)->ENTRIES();
-      for (uint32_t k = 0; entries && k < entries->size(); ++k) {
-        const auto* e = entries->Get(k);
-        const std::string key = rec::text(e->KEY());
-        const double value = e->NUMBER_VALUE();
-        if ((key != "revolutions" && key != "branch") || e->KIND() != sdn::runtime::configValueKind_Number || value < 0 || value != std::floor(value) ||
-            (key == "branch" && value > 1))
-          return initial_orbit_fail("invalid-angles", "config key '" + key + "' is not revolutions (a whole number) or branch (0 long-period, 1 short-period)");
-        (key == "revolutions" ? revolutions : branch) = static_cast<int>(value);
-      }
     } else {
       return initial_orbit_fail("invalid-angles", "unknown input port " + port);
     }
@@ -703,35 +704,150 @@ int initial_orbit_method() {
     }
   }
   std::stable_sort(sights.begin(), sights.end(), [](const Sight& a, const Sight& b) { return a.t < b.t; });
-  if (sights.size() < 3 || !(sights.back().t - sights.front().t > 0))
-    return initial_orbit_fail("too-few-observations", "Gooding's method needs three or more RA/Dec observations at distinct epochs; got " + std::to_string(sights.size()));
-  // One pass: the middle observation is the middle sight. Over revolutions: the first pass's last observation (the
-  // last before a gap of 30 min or more).
-  size_t middle = sights.size() / 2;
-  if (revolutions > 0) {
-    middle = 0;
-    while (middle + 1 < sights.size() - 1 && sights[middle + 1].t - sights[middle].t < 1800.0) ++middle;
-    if (middle == 0 || middle + 1 >= sights.size() || sights.back().t - sights[middle].t < 1800.0)
-      return initial_orbit_fail("too-few-observations", "a multi-revolution initial orbit needs a first pass of two or more observations and a later pass");
+  // One sight per epoch (a track split by the source repeats its last row).
+  sights.erase(std::unique(sights.begin(), sights.end(), [](const Sight& a, const Sight& b) { return a.t == b.t; }), sights.end());
+  // Crossings: one site's sights without a gap over kCrossingGapS, fitted (x, y in the tangent plane at their mean
+  // direction, a cubic in time; fewer rows, a lower degree).
+  struct Crossing {
+    std::vector<size_t> kept;  // indices into sights, by epoch
+    V3 u0, e, n;
+    double tm = 0, half = 1, cx[4] = {0}, cy[4] = {0};
+    int degree = 0, night = 0;
+    V3 at(double t) const {
+      const double tau = (t - tm) / half;
+      double x = 0, y = 0;
+      for (int k = degree; k >= 0; --k) { x = x * tau + cx[k]; y = y * tau + cy[k]; }
+      return unit(u0 + e * x + n * y);
+    }
+  };
+  std::vector<Crossing> crossings;
+  {
+    std::vector<size_t> order(sights.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+      const V3& p = sights[a].itrs; const V3& q = sights[b].itrs;
+      return p.x != q.x ? p.x < q.x : p.y != q.y ? p.y < q.y : p.z != q.z ? p.z < q.z : sights[a].t < sights[b].t;
+    });
+    std::vector<size_t> run;
+    auto close = [&]() {
+      if (run.size() < static_cast<size_t>(kCrossingSights)) { run.clear(); return; }
+      Crossing c;
+      V3 sum{0, 0, 0};
+      for (size_t i : run) sum = sum + radec_to_unit(sights[i].ra, sights[i].dec);
+      c.u0 = unit(sum);
+      tangent_basis(c.u0, &c.e, &c.n);
+      c.tm = 0.5 * (sights[run.front()].t + sights[run.back()].t);
+      c.half = std::max(0.5 * (sights[run.back()].t - sights[run.front()].t), 1e-3);
+      std::vector<double> x(run.size()), y(run.size()), tau(run.size());
+      for (size_t k = 0; k < run.size(); ++k) {
+        const V3 u = radec_to_unit(sights[run[k]].ra, sights[run[k]].dec);
+        const double w = dot(u, c.u0);
+        x[k] = dot(u, c.e) / w, y[k] = dot(u, c.n) / w, tau[k] = (sights[run[k]].t - c.tm) / c.half;
+      }
+      std::vector<char> keep(run.size(), 1);
+      for (int pass = 0; pass < 8; ++pass) {
+        size_t kept = 0;
+        for (char k : keep) kept += k;
+        c.degree = static_cast<int>(std::min<size_t>(3, kept - 1));
+        const int m = c.degree + 1;
+        std::vector<double> N(m * m, 0.0), bx(m, 0.0), by(m, 0.0);
+        for (size_t k = 0; k < run.size(); ++k) {
+          if (!keep[k]) continue;
+          double pw[4] = {1, tau[k], tau[k] * tau[k], tau[k] * tau[k] * tau[k]};
+          for (int i = 0; i < m; ++i) {
+            bx[i] += pw[i] * x[k], by[i] += pw[i] * y[k];
+            for (int j = 0; j < m; ++j) N[i * m + j] += pw[i] * pw[j];
+          }
+        }
+        if (!cholesky_solve(N, m, &bx, nullptr) || !cholesky_solve(N, m, &by, nullptr)) break;
+        for (int i = 0; i < 4; ++i) c.cx[i] = i < m ? bx[i] : 0, c.cy[i] = i < m ? by[i] : 0;
+        std::vector<double> res(run.size()), kept_res;
+        for (size_t k = 0; k < run.size(); ++k) {
+          double fx = 0, fy = 0;
+          for (int i = c.degree; i >= 0; --i) { fx = fx * tau[k] + c.cx[i]; fy = fy * tau[k] + c.cy[i]; }
+          res[k] = std::hypot(x[k] - fx, y[k] - fy);
+          if (keep[k]) kept_res.push_back(res[k]);
+        }
+        const double cut = std::max(5.0 * median(kept_res) / 1.1774, kEditFloorArcsec * kArcsec);
+        bool changed = false;
+        for (size_t k = 0; k < run.size(); ++k) {
+          const char now = res[k] <= cut;
+          changed = changed || now != keep[k];
+          keep[k] = now;
+        }
+        size_t left = 0;
+        for (char k : keep) left += k;
+        if (!changed || left < static_cast<size_t>(kCrossingSights)) break;
+      }
+      for (size_t k = 0; k < run.size(); ++k) if (keep[k]) c.kept.push_back(run[k]);
+      if (c.kept.size() >= static_cast<size_t>(kCrossingSights)) crossings.push_back(c);
+      run.clear();
+    };
+    for (size_t k = 0; k < order.size(); ++k) {
+      const Sight& o = sights[order[k]];
+      if (!run.empty()) {
+        const Sight& last = sights[run.back()];
+        const bool same_site = last.itrs.x == o.itrs.x && last.itrs.y == o.itrs.y && last.itrs.z == o.itrs.z;
+        if (!same_site || o.t - last.t > kCrossingGapS) close();
+      }
+      run.push_back(order[k]);
+    }
+    close();
   }
-  const size_t idx[3] = {0, middle, sights.size() - 1};
+  std::stable_sort(crossings.begin(), crossings.end(), [&](const Crossing& a, const Crossing& b) { return sights[a.kept.front()].t < sights[b.kept.front()].t; });
+  for (size_t k = 1; k < crossings.size(); ++k) {
+    double end = -INFINITY;
+    for (size_t j = 0; j < k; ++j) end = std::max(end, sights[crossings[j].kept.back()].t);
+    crossings[k].night = crossings[k - 1].night + (sights[crossings[k].kept.front()].t - end > kNightGapS ? 1 : 0);
+  }
+  if (crossings.empty())
+    return initial_orbit_fail("too-few-observations", "no crossing keeps " + std::to_string(kCrossingSights) + " or more RA/Dec observations at distinct epochs; got " +
+                                                          std::to_string(sights.size()) + " observations");
+  if (crossings.size() == 1)
+    return initial_orbit_fail("single-crossing", "one crossing (" + std::to_string(crossings[0].kept.size()) + " observations over " +
+                                                     rec::fmt(sights[crossings[0].kept.back()].t - sights[crossings[0].kept.front()].t, "%.1f") +
+                                                     " s) leaves the range unobservable; Gooding's method needs a second crossing");
+  // The first night with two counting crossings, else the first two crossings.
+  size_t c0 = 0, c1 = 1;
+  for (size_t k = 0; k + 1 < crossings.size(); ++k)
+    if (crossings[k].night == crossings[k + 1].night) {
+      c0 = k;
+      c1 = k + 1;
+      while (c1 + 1 < crossings.size() && crossings[c1 + 1].night == crossings[k].night) ++c1;
+      break;
+    }
+  // Kept epochs of the crossings used, with their crossing.
+  std::vector<std::pair<double, size_t>> used;  // (epoch, crossing)
+  for (size_t c = c0; c <= c1; ++c)
+    for (size_t i : crossings[c].kept) used.push_back({sights[i].t, c});
+  std::sort(used.begin(), used.end());
+  const double t1 = used.front().first, t3 = used.back().first;
+  size_t middle = 1;
+  bool multi_pass = false;
+  for (size_t k = 1; k < used.size(); ++k) {
+    multi_pass = multi_pass || used[k].first - used[k - 1].first >= kPassGapS;
+    const double t = used[k].first;
+    if (k + 1 < used.size() && std::min(t - t1, t3 - t) > std::min(used[middle].first - t1, t3 - used[middle].first)) middle = k;
+  }
+  const std::pair<double, size_t> pick[3] = {used.front(), used[middle], used.back()};
   SightObs s3[3];
   for (int q = 0; q < 3; ++q) {
-    const Sight& o = sights[idx[q]];
+    const Crossing& c = crossings[pick[q].second];
+    const Sight& o = sights[c.kept.front()];
     ax::Epoch e;
     ax::EarthOrientation eo;
-    if (!clock.at(o.t, &e, &eo, &err)) return initial_orbit_fail("invalid-angles", err);
+    if (!clock.at(pick[q].first, &e, &eo, &err)) return initial_orbit_fail("invalid-angles", err);
     double xyz[3] = {o.itrs.x, o.itrs.y, o.itrs.z};
     Site site;
     if (eraGc2gd(1, xyz, &site.lon, &site.lat, &site.h) != 0) return initial_orbit_fail("invalid-angles", "the site does not convert to geodetic");
     V3 sr, sv;
     site_gcrs(site, e, eo, &sr, &sv);
-    s3[q].t = o.t;
-    s3[q].los = radec_to_unit(o.ra, o.dec);
+    s3[q].t = pick[q].first;
+    s3[q].los = c.at(pick[q].first);
     s3[q].site_km = sr * 1e-3;
   }
-  const IodResult iod = gooding_iod(s3, revolutions, branch);
-  if (!iod.ok) return initial_orbit_fail("no-initial-orbit", "Gooding's iteration found no bound orbit: " + iod.error);
+  const IodResult iod = gooding_iod(s3, multi_pass);
+  if (!iod.ok) return initial_orbit_fail("no-initial-orbit", "Gooding's iteration over " + std::to_string(c1 - c0 + 1) + " crossings: " + iod.error);
 
   flatbuffers::FlatBufferBuilder fb(2048);
   const auto vers = fb.CreateString("3.0"), org = fb.CreateString("SDN");
@@ -740,8 +856,8 @@ int initial_orbit_method() {
   hb.add_ORIGINATOR(org);
   const auto head = hb.Finish();
   const std::string t0 = iso_utc(iod.t, 6);
-  const auto des = fb.CreateString(sights[idx[1]].object), ts = fb.CreateString("UTC"), t0s = fb.CreateString(t0);
-  const auto start = fb.CreateString(iso_utc(sights.front().t, 6)), stop = fb.CreateString(iso_utc(sights.back().t, 6));
+  const auto des = fb.CreateString(sights[crossings[pick[1].second].kept.front()].object), ts = fb.CreateString("UTC"), t0s = fb.CreateString(t0);
+  const auto start = fb.CreateString(iso_utc(t1, 6)), stop = fb.CreateString(iso_utc(t3, 6));
   MetadataBuilder mb(fb);
   mb.add_OBJECT_DESIGNATOR(des);
   mb.add_TIME_SYSTEM(ts);
@@ -754,7 +870,7 @@ int initial_orbit_method() {
   const auto epochs = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString(t0)});
   const auto center = fb.CreateString("EARTH");
   const auto frame = rec::celestial(fb, CelestialFrame::GCRF, "GCRF");
-  const auto odid = fb.CreateString("IOD:" + t0 + (revolutions ? " revolutions " + std::to_string(revolutions) + (branch ? " short-period" : " long-period") : ""));
+  const auto odid = fb.CreateString("IOD:" + t0 + (iod.revolutions ? " revolutions " + std::to_string(iod.revolutions) + (iod.branch ? " short-period" : " long-period") : ""));
   const auto alg = fb.CreateString("Gooding angles-only initial orbit (Gooding 1997) on Izzo's Lambert solver");
   const auto meth = fb.CreateString("INITIAL_ORBIT");
   const auto otype = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString("RADEC")});
@@ -786,7 +902,11 @@ int initial_orbit_method() {
   std::vector<std::string> items{
       "epoch " + t0, "ranges km " + f3(iod.rho[0]) + "," + f3(iod.rho[1]) + "," + f3(iod.rho[2]),
       "middle-sight miss arcsec " + rec::fmt(iod.miss_arcsec, "%.6g"), "distinct solutions " + std::to_string(iod.solutions),
-      "observations " + std::to_string(sights.size())};
+      "revolutions " + std::to_string(iod.revolutions) + (iod.revolutions ? (iod.branch ? " short-period" : " long-period") : ""),
+      "eccentricity " + rec::fmt(iod.eccentricity, "%.6f"),
+      "sights " + iso_utc(t1, 3) + " " + iso_utc(used[middle].first, 3) + " " + iso_utc(t3, 3),
+      "crossings " + std::to_string(c1 - c0 + 1) + " of " + std::to_string(crossings.size()),
+      "observations kept " + std::to_string(used.size()) + " of " + std::to_string(sights.size())};
   sdn::runtime::FlowNoticeT n;
   n.KIND = sdn::runtime::flowNoticeKind_Info;
   n.SCHEMA = "$OCM";
