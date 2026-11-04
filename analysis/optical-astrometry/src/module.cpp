@@ -615,7 +615,168 @@ int reduce_method() {
   return notice("done", static_cast<uint64_t>(observations), items) ? 0 : 1;
 }
 
+// initial_orbit: Gooding's angles-only initial orbit (od.cpp gooding_iod) on
+// RA/Dec $TDM records alone, no element set: the first, middle and last
+// observation of the supplied angles (one pass: the Lambert arc between the
+// first and last sight is the short way, no full revolution), each from its
+// record's OBSERVER_X/Y/Z (Earth-fixed WGS-84 metres, rotated to GCRS by the
+// IAU 2006/2000A CIO chain with the $EOP rows). The directions are read as
+// geometric topocentric GCRF RA/Dec at the time tag. Out: the state at the
+// middle sight as a Cartesian $OCM (GCRF, km, km/s; no covariance) and a
+// report. Refused by name: too-few-observations, no-initial-orbit,
+// invalid-angles.
+int initial_orbit_fail(const char* code, const std::string& message) {
+  g_error = message;
+  plugin_set_error(code, g_error.c_str());
+  return 1;
+}
+
+int initial_orbit_method() {
+  std::vector<const TDM*> tdms;
+  Clock clock;
+  std::string err;
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    const auto* f = plugin_get_input_frame(i);
+    const std::string port = port_of(f);
+    if (!f || !f->payload || f->payload_length == 0) continue;
+    if (port == "angles") {
+      if (!rec::records<TDM>(f->payload, f->payload_length, TDMIdentifier(), VerifyTDMBuffer, VerifySizePrefixedTDMBuffer, GetTDM, GetSizePrefixedTDM,
+                             &tdms, "angles", &err))
+        return initial_orbit_fail("invalid-angles", err);
+    } else if (port == "earth_orientation") {
+      const std::string m = ax::eop::addPayload(f->payload, f->payload_length, clock.rows);
+      if (!m.empty()) return initial_orbit_fail("invalid-angles", "earth_orientation: " + m);
+    } else {
+      return initial_orbit_fail("invalid-angles", "unknown input port " + port);
+    }
+  }
+  clock.have_eop = !clock.rows.empty();
+  if (!clock.have_eop) return initial_orbit_fail("invalid-angles", "earth orientation ($EOP) on earth_orientation is required");
+  struct Sight { double t; double ra, dec; V3 itrs; std::string object; };
+  std::vector<Sight> sights;
+  for (const TDM* d : tdms) {
+    const V3 itrs{d->OBSERVER_X(), d->OBSERVER_Y(), d->OBSERVER_Z()};
+    if (!(norm(itrs) > 6.0e6 && norm(itrs) < 6.5e6)) return initial_orbit_fail("invalid-angles", "a $TDM without an Earth-fixed OBSERVER_X/Y/Z site (m)");
+    if (!d->SEGMENTS()) continue;
+    for (const TDMSegment* seg : *d->SEGMENTS()) {
+      if (!seg || !seg->OBSERVATIONS()) continue;
+      const std::string type = !rec::text(seg->ANGLE_TYPE()).empty() ? rec::text(seg->ANGLE_TYPE()) : rec::text(d->ANGLE_TYPE());
+      const std::string system = !rec::text(seg->TIME_SYSTEM()).empty() ? rec::text(seg->TIME_SYSTEM()) : rec::text(d->TIME_SYSTEM());
+      if (type != "RADEC" || system != "UTC") return initial_orbit_fail("invalid-angles", "angles must be ANGLE_TYPE RADEC in TIME_SYSTEM UTC");
+      const std::string object = rec::text(seg->PARTICIPANT_2());
+      std::map<std::string, std::pair<double, double>> pairs;  // epoch -> (ra, dec), NaN until read
+      std::vector<std::string> order;
+      for (const TDMObservation* row : *seg->OBSERVATIONS()) {
+        const std::string key = rec::text(row->KEYWORD()), epoch = rec::text(row->EPOCH());
+        if (key != "ANGLE_1" && key != "ANGLE_2") continue;
+        auto it = pairs.find(epoch);
+        if (it == pairs.end()) { it = pairs.emplace(epoch, std::make_pair(kNaN, kNaN)).first; order.push_back(epoch); }
+        (key == "ANGLE_1" ? it->second.first : it->second.second) = row->VALUE();
+      }
+      for (const std::string& epoch : order) {
+        const auto& v = pairs[epoch];
+        Sight s;
+        if (!parse_iso_utc_seconds(epoch, &s.t) || !std::isfinite(v.first) || !std::isfinite(v.second))
+          return initial_orbit_fail("invalid-angles", "an angle pair at " + epoch + " does not read");
+        s.ra = v.first * kPi / 180.0;
+        s.dec = v.second * kPi / 180.0;
+        s.itrs = itrs;
+        s.object = object;
+        sights.push_back(s);
+      }
+    }
+  }
+  std::stable_sort(sights.begin(), sights.end(), [](const Sight& a, const Sight& b) { return a.t < b.t; });
+  if (sights.size() < 3 || !(sights.back().t - sights.front().t > 0))
+    return initial_orbit_fail("too-few-observations", "Gooding's method needs three or more RA/Dec observations at distinct epochs; got " + std::to_string(sights.size()));
+  const size_t idx[3] = {0, sights.size() / 2, sights.size() - 1};
+  SightObs s3[3];
+  for (int q = 0; q < 3; ++q) {
+    const Sight& o = sights[idx[q]];
+    ax::Epoch e;
+    ax::EarthOrientation eo;
+    if (!clock.at(o.t, &e, &eo, &err)) return initial_orbit_fail("invalid-angles", err);
+    double xyz[3] = {o.itrs.x, o.itrs.y, o.itrs.z};
+    Site site;
+    if (eraGc2gd(1, xyz, &site.lon, &site.lat, &site.h) != 0) return initial_orbit_fail("invalid-angles", "the site does not convert to geodetic");
+    V3 sr, sv;
+    site_gcrs(site, e, eo, &sr, &sv);
+    s3[q].t = o.t;
+    s3[q].los = radec_to_unit(o.ra, o.dec);
+    s3[q].site_km = sr * 1e-3;
+  }
+  const IodResult iod = gooding_iod(s3);
+  if (!iod.ok) return initial_orbit_fail("no-initial-orbit", "Gooding's iteration found no bound orbit: " + iod.error);
+
+  flatbuffers::FlatBufferBuilder fb(2048);
+  const auto vers = fb.CreateString("3.0"), org = fb.CreateString("SDN");
+  HeaderBuilder hb(fb);
+  hb.add_CCSDS_OCM_VERS(vers);
+  hb.add_ORIGINATOR(org);
+  const auto head = hb.Finish();
+  const std::string t0 = iso_utc(iod.t, 6);
+  const auto des = fb.CreateString(sights[idx[1]].object), ts = fb.CreateString("UTC"), t0s = fb.CreateString(t0);
+  const auto start = fb.CreateString(iso_utc(sights.front().t, 6)), stop = fb.CreateString(iso_utc(sights.back().t, 6));
+  MetadataBuilder mb(fb);
+  mb.add_OBJECT_DESIGNATOR(des);
+  mb.add_TIME_SYSTEM(ts);
+  mb.add_EPOCH_TZERO(t0s);
+  mb.add_START_TIME(start);
+  mb.add_STOP_TIME(stop);
+  const auto meta = mb.Finish();
+  const std::vector<double> state{iod.r.x, iod.r.y, iod.r.z, iod.v.x, iod.v.y, iod.v.z};
+  const auto sd = fb.CreateVector(state);
+  const auto epochs = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString(t0)});
+  const auto center = fb.CreateString("EARTH");
+  const auto frame = rec::celestial(fb, CelestialFrame::GCRF, "GCRF");
+  const auto odid = fb.CreateString("IOD:" + t0);
+  const auto alg = fb.CreateString("Gooding angles-only initial orbit (Gooding 1997) on Izzo's Lambert solver");
+  const auto meth = fb.CreateString("INITIAL_ORBIT");
+  const auto otype = fb.CreateVector(std::vector<flatbuffers::Offset<flatbuffers::String>>{fb.CreateString("RADEC")});
+  const auto apr = fb.CreateString("NONE");
+  OrbitDeterminationBuilder ob(fb);
+  ob.add_OD_ID(odid);
+  ob.add_OD_ALGORITHM(alg);
+  ob.add_OD_METHOD(meth);
+  ob.add_OD_EPOCH(t0s);
+  ob.add_OD_OBSERVATIONS_TYPE(otype);
+  ob.add_OD_OBSERVATIONS_USED(3);
+  ob.add_OD_APRIORI_DATA(apr);
+  ob.add_OD_RESIDUAL_RMS(iod.miss_arcsec);
+  ob.add_SOLVE_N(2);
+  const auto odb = ob.Finish();
+  OCMBuilder b(fb);
+  b.add_HEADER(head);
+  b.add_METADATA(meta);
+  b.add_TRAJ_TYPE(trajectoryType::CARTESIAN_PV);
+  b.add_STATE_VECTOR_SIZE(6);
+  b.add_STATE_DATA(sd);
+  b.add_STATE_EPOCHS(epochs);
+  b.add_ORBIT_DETERMINATION(odb);
+  b.add_CENTER_NAME(center);
+  b.add_TRAJ_REF_FRAME(frame);
+  FinishOCMBuffer(fb, b.Finish());
+  const std::vector<uint8_t> bytes(fb.GetBufferPointer(), fb.GetBufferPointer() + fb.GetSize());
+  if (!push("orbit", "OCM.fbs", "$OCM", "OCM", bytes)) return 1;
+  std::vector<std::string> items{
+      "epoch " + t0, "ranges km " + f3(iod.rho[0]) + "," + f3(iod.rho[1]) + "," + f3(iod.rho[2]),
+      "middle-sight miss arcsec " + rec::fmt(iod.miss_arcsec, "%.6g"), "distinct solutions " + std::to_string(iod.solutions),
+      "observations " + std::to_string(sights.size())};
+  sdn::runtime::FlowNoticeT n;
+  n.KIND = sdn::runtime::flowNoticeKind_Info;
+  n.SCHEMA = "$OCM";
+  n.SOURCE_NAME = "optical-astrometry initial_orbit";
+  n.COUNT = 1;
+  n.REASON = "initial-orbit";
+  n.ITEMS = std::move(items);
+  flatbuffers::FlatBufferBuilder nb(1024);
+  sdn::runtime::FinishFlowNoticeBuffer(nb, sdn::runtime::FlowNotice::Pack(nb, &n));
+  return plugin_push_output_ex("report", "FlowNotice.fbs", sdn::runtime::FlowNoticeIdentifier(), PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, "FlowNotice", 0, 0,
+                               nb.GetBufferPointer(), static_cast<uint32_t>(nb.GetSize())) >= 0 ? 0 : 1;
+}
+
 }  // namespace mod
 }  // namespace oa
 
 extern "C" int reduce() { return oa::mod::reduce_method(); }
+extern "C" int initial_orbit() { return oa::mod::initial_orbit_method(); }
