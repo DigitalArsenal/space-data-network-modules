@@ -2,7 +2,7 @@
   "pluginId": "com.orbpro.ffm",
   "name": "FFM Full Force Model propagator",
   "version": "2.2.0",
-  "description": "Full Force Model profile FFM-1. An execution is integrated with the algorithm it names, a requested RK78 or RKF78 bounding every step's error by the request's tolerances; resident propagation flies forward arcs on automatic GJ8 PEC and eccentric-orbit Sundman grids, named in each trajectory's PPE COMMENT. Selected-object batching and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
+  "description": "Full Force Model profile FFM-1. An execution is integrated with the algorithm it names, a requested RK78 or RKF78 propagating its eighth-order solution under the request's tolerances; resident propagation flies forward arcs on automatic GJ8 PEC and eccentric-orbit Sundman grids, named in each trajectory's PPE COMMENT. Selected-object batching and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -21,7 +21,7 @@
       "inputPorts": [
         {
           "portId": "request",
-          "description": "PRW request. An EXECUTION_REQUEST is integrated with the INTEGRATOR.ALGORITHM it names. RK78 and RKF78 (Fehlberg 7(8)) propagate the eighth-order solution and accept a step only when the seventh-order error estimate, which bounds the step's error, is within ABSOLUTE_TOLERANCES plus RELATIVE_TOLERANCE times the state in every component; no step is longer than MAXIMUM_STEP_SECONDS and no fixed grid is substituted. GAUSS_JACKSON_8 flies the fixed INITIAL_STEP_SECONDS grid it names and takes no tolerance.",
+          "description": "PRW request. An EXECUTION_REQUEST is integrated with the INTEGRATOR.ALGORITHM it names. No fixed grid is substituted. RK78 and RKF78 (Fehlberg 7(8)) propagate the eighth-order solution and accept a step only when the seventh-order error estimate, which exceeds the step's error where the step resolves the force, is within ABSOLUTE_TOLERANCES plus RELATIVE_TOLERANCE times the state in every component, no step longer than MAXIMUM_STEP_SECONDS; the estimate does not see a force that varies faster than the step's end stages sample, so MAXIMUM_STEP_SECONDS must resolve the force's shortest period. GAUSS_JACKSON_8 flies the fixed INITIAL_STEP_SECONDS grid it names and takes no tolerance.",
           "acceptedTypeSets": [
             {
               "setId": "sds-prw",
