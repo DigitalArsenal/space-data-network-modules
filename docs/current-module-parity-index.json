@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T21:17:00.095Z",
+  "generatedAt": "2026-11-04T22:16:06.249Z",
   "moduleCount": 157,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 151,
@@ -1393,13 +1393,12 @@
       "sourceLanguages": [
         "c++"
       ],
-      "cxxSourceFileCount": 31,
+      "cxxSourceFileCount": 30,
       "cSourceFileCount": 0,
       "testFileCount": 68,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
-        ".build-operator/erfa.cpp",
         "fit-pipeline/src/fit_pipeline.cpp",
         "src/cpp/src/direct_initialize.cpp",
         "src/cpp/src/frame_transform.cpp",
@@ -4896,7 +4895,7 @@
       "pluginId": "com.digitalarsenal.files.ccsds-messages",
       "name": "CCSDS Message Reader",
       "pluginFamily": "parser",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "read_acm",
         "read_aem",
@@ -4932,7 +4931,7 @@
       ],
       "cxxSourceFileCount": 6,
       "cSourceFileCount": 0,
-      "testFileCount": 17,
+      "testFileCount": 19,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -4944,6 +4943,7 @@
         "third_party/pugixml/pugixml.cpp"
       ],
       "testFiles": [
+        "tests/answers.mjs",
         "tests/ccsds_kvn.test.mjs",
         "tests/ccsds_module.test.mjs",
         "tests/ccsds_native.cpp",
@@ -4960,6 +4960,7 @@
         "tests/ndm_native.cpp",
         "tests/ndm_real_data.test.mjs",
         "tests/ndm_xsd.test.mjs",
+        "tests/oem-to-sdn-ap.e2e.mjs",
         "tests/parity.mjs"
       ]
     },
