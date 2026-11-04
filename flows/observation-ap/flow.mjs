@@ -8,9 +8,10 @@
 //
 // hosts: { laserOd, estimation, ffm, sdnAp }, each an SDK module host with invoke({ methodId, inputs }) on the shipped
 // artifacts of flows/observation-od, analysis/estimation, propagator/ffm and propagator/sdn-ap.
-// ingress (bytes): observations [$TDM], stations [$GST], earthOrientation ($PRW EARTH_ORIENTATION), kernel ($PRW
-// NATIVE_INPUT), execution ($PRW EXECUTION_REQUEST: the first guess, TARGET_EPOCH, the dynamics, the solve-for
-// parameters), configuration (sdn-ap fit's $PCF), optional spaceWeather [$SPW] and odConfig (ModuleConfig).
+// ingress (bytes, keyed by plugin-manifest.json's input ports): observations [$TDM], stations [$GST], earth_orientation
+// ($PRW EARTH_ORIENTATION), kernel ($PRW NATIVE_INPUT), execution ($PRW EXECUTION_REQUEST: the first guess,
+// TARGET_EPOCH, the dynamics, the solve-for parameters), configuration (sdn-ap fit's $PCF), optional space_weather
+// [$SPW] and config (flows/observation-od's ModuleConfig).
 import * as flatbuffers from 'flatbuffers';
 import * as P from 'spacedatastandards.org/lib/js/PRW/main.js';
 import * as PCF from 'spacedatastandards.org/lib/js/PCF/main.js';
@@ -38,8 +39,8 @@ async function call(host, methodId, inputs) {
 async function estimate(hosts, ingress) {
   const fixed = [...ingress.observations.map((p) => frame('observations', TYPES.TDM, p)),
     ...ingress.stations.map((p) => frame('stations', TYPES.GST, p)),
-    frame('earth_orientation', TYPES.PRW, ingress.earthOrientation), frame('execution', TYPES.PRW, ingress.execution),
-    ...(ingress.odConfig ? [frame('config', TYPES.MCFG, ingress.odConfig)] : [])];
+    frame('earth_orientation', TYPES.PRW, ingress.earth_orientation), frame('execution', TYPES.PRW, ingress.execution),
+    ...(ingress.config ? [frame('config', TYPES.MCFG, ingress.config)] : [])];
   let sent = null, result = null, samples = null;
   for (;;) {
     const r = await call(hosts.laserOd, 'step', [...fixed, ...(sent ? [frame('estimation', TYPES.EST, sent)] : []),
@@ -48,7 +49,7 @@ async function estimate(hosts, ingress) {
     if (ocm) return ocm;
     if (propagation) {
       [samples] = outputs(await call(hosts.ffm, 'invoke', [frame('request', TYPES.PRW, propagation),
-        frame('kernel', TYPES.PRW, ingress.kernel), frame('earth_orientation', TYPES.PRW, ingress.earthOrientation)]), 'response');
+        frame('kernel', TYPES.PRW, ingress.kernel), frame('earth_orientation', TYPES.PRW, ingress.earth_orientation)]), 'response');
       continue;
     }
     if (!next) throw new Refused('bad-input: flows/observation-od step emitted nothing');
@@ -101,9 +102,9 @@ export async function observationAp(hosts, ingress) {
     const ocm = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(estimateBytes)).unpack();
     const [ephemeris] = outputs(await call(hosts.ffm, 'propagate_oem', [frame('request', TYPES.PRW, carryRequest(ingress.execution, ocm)),
       frame('configuration', TYPES.PCF, carryOutput(ocm.STATE_EPOCHS[0])), frame('kernel', TYPES.PRW, ingress.kernel),
-      frame('earth_orientation', TYPES.PRW, ingress.earthOrientation)]), 'ephemeris');
+      frame('earth_orientation', TYPES.PRW, ingress.earth_orientation)]), 'ephemeris');
     const fit = await call(hosts.sdnAp, 'fit', [frame('ephemeris', TYPES.OEM, ephemeris), frame('configuration', TYPES.PCF, ingress.configuration),
-      frame('provenance', TYPES.PVN, pvnOf(ocm)), ...(ingress.spaceWeather ?? []).map((p) => frame('space_weather', TYPES.SPW, p))]);
+      frame('provenance', TYPES.PVN, pvnOf(ocm)), ...(ingress.space_weather ?? []).map((p) => frame('space_weather', TYPES.SPW, p))]);
     return { egress: { ap_ocm: outputs(fit, 'elements'), estimate: [estimateBytes], ephemeris: [ephemeris] } };
   } catch (e) {
     if (e instanceof Refused) return { refused: e.message };

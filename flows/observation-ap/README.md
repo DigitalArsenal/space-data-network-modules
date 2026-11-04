@@ -14,19 +14,20 @@ observations ($TDM) + stations ($GST) + earth_orientation + execution
   -> ap_ocm
 ```
 
-## Ingress
+## Ingress (the keys of `ingress`, `plugin-manifest.json`'s input ports)
 
 | | |
 | --- | --- |
 | `observations` | one `$TDM` per pass, `data-source/ilrs-crd-source` `read_crd` |
 | `stations` | one `$GST` per pad, `data-source/ilrs-station-coordinates` `read_sinex` |
-| `earthOrientation`, `kernel` | the `$PRW` EARTH_ORIENTATION and NATIVE_INPUT (SPK) records `propagator/ffm` takes |
+| `earth_orientation`, `kernel` | the `$PRW` EARTH_ORIENTATION and NATIVE_INPUT (SPK) records `propagator/ffm` takes |
 | `execution` | the `$PRW` EXECUTION_REQUEST of `flows/observation-od`: first guess, TARGET_EPOCH, INTEGRATOR, FORCES, STM_TECHNIQUE, DYNAMIC_PARAMETERS |
 | `configuration` | `propagator/sdn-ap` `fit`'s `$PCF`: THEORY and FORCES stated (ATMOSPHERE_MODEL required) |
-| `spaceWeather`, `odConfig` | optional: `$SPW` rows for `fit` under WEATHER_SOURCE RECORDS; the node's ModuleConfig |
+| `space_weather`, `config` | optional: `$SPW` rows for `fit` under WEATHER_SOURCE RECORDS; the node's ModuleConfig |
 
-`hosts` are SDK module hosts (`invoke({ methodId, inputs })`) of `flows/observation-od`, `analysis/estimation`,
-`propagator/ffm` and `propagator/sdn-ap`.
+`plugin-manifest.json` states the flow's typed ports (method `run`; no artifact of its own). `hosts` are SDK module
+hosts (`invoke({ methodId, inputs })`) of `flows/observation-od`, `analysis/estimation`, `propagator/ffm` and
+`propagator/sdn-ap`.
 
 ## Egress
 
@@ -52,7 +53,7 @@ zonal to 20): MEAN_ELEMENT_THEORY AP with no `$SPW` rows. Why: Starlette (A/m ab
 has a drag signal below the fit's resolution over a day (fitted BTERM 0.0099 m^2/kg, the prior's median), and no module
 here writes `$SPW` rows for July 2026 from the archive (`data-source/space-weather` builds from 40 days before its
 retrieval; the archive's NOAA files begin 2026-10-08). A caller with rows states NRLMSISE00 and WEATHER_SOURCE RECORDS
-and passes them on `spaceWeather`.
+and passes them on `space_weather`.
 
 ## Source products
 

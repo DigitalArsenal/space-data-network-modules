@@ -1,0 +1,306 @@
+{
+  "pluginId": "org.sdn.flows.observation-ap",
+  "name": "Observation AP: laser normal points to an AP $OCM",
+  "version": "0.1.0",
+  "description": "A host flow (flow.mjs observationAp; no WebAssembly artifact of its own) that routes typed records between shipped modules: flows/observation-od step with propagator/ffm invoke and analysis/estimation fit_batch to the laser estimate ($OCM), propagator/ffm propagate_oem carrying it 24 h back at 60 s under the same dynamics and fitted parameters ($OEM), and propagator/sdn-ap fit with the estimate's PVN on provenance (the AP $OCM). A module's refusal returns by name, unchanged.",
+  "pluginFamily": "analysis",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct"
+  ],
+  "runtimeTargets": [],
+  "schemasUsed": [
+    {
+      "schemaName": "TDM.fbs",
+      "fileIdentifier": "$TDM",
+      "rootTypeName": "TDM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "GST.fbs",
+      "fileIdentifier": "$GST",
+      "rootTypeName": "GST",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PRW.fbs",
+      "fileIdentifier": "$PRW",
+      "rootTypeName": "PRW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PCF.fbs",
+      "fileIdentifier": "$PCF",
+      "rootTypeName": "PCF",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SPW.fbs",
+      "fileIdentifier": "$SPW",
+      "rootTypeName": "SPW",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OCM.fbs",
+      "fileIdentifier": "$OCM",
+      "rootTypeName": "OCM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "OEM.fbs",
+      "fileIdentifier": "$OEM",
+      "rootTypeName": "OEM",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "run",
+      "displayName": "Laser normal points to an AP $OCM",
+      "inputPorts": [
+        {
+          "portId": "observations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The normal points: one $TDM per pass from data-source/ilrs-crd-source read_crd."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 4096,
+          "required": true,
+          "description": "The normal points: one $TDM per pass from data-source/ilrs-crd-source read_crd."
+        },
+        {
+          "portId": "stations",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-gst",
+              "allowedTypes": [
+                {
+                  "schemaName": "GST.fbs",
+                  "fileIdentifier": "$GST",
+                  "rootTypeName": "GST",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The station coordinates: one $GST per pad from data-source/ilrs-station-coordinates read_sinex."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1024,
+          "required": true,
+          "description": "The station coordinates: one $GST per pad from data-source/ilrs-station-coordinates read_sinex."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "prw-earth-orientation",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The $PRW EARTH_ORIENTATION record ($EOP rows covering the arc and the carry)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $PRW EARTH_ORIENTATION record ($EOP rows covering the arc and the carry)."
+        },
+        {
+          "portId": "kernel",
+          "acceptedTypeSets": [
+            {
+              "setId": "prw-native-input",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The $PRW NATIVE_INPUT planetary ephemeris (SPK) propagator/ffm reads."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "The $PRW NATIVE_INPUT planetary ephemeris (SPK) propagator/ffm reads."
+        },
+        {
+          "portId": "execution",
+          "acceptedTypeSets": [
+            {
+              "setId": "prw-execution-request",
+              "allowedTypes": [
+                {
+                  "schemaName": "PRW.fbs",
+                  "fileIdentifier": "$PRW",
+                  "rootTypeName": "PRW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "flows/observation-od's $PRW EXECUTION_REQUEST: the first guess, TARGET_EPOCH, INTEGRATOR, FORCES, STM_TECHNIQUE and DYNAMIC_PARAMETERS; the carry flies the same dynamics."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "flows/observation-od's $PRW EXECUTION_REQUEST: the first guess, TARGET_EPOCH, INTEGRATOR, FORCES, STM_TECHNIQUE and DYNAMIC_PARAMETERS; the carry flies the same dynamics."
+        },
+        {
+          "portId": "configuration",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-pcf",
+              "allowedTypes": [
+                {
+                  "schemaName": "PCF.fbs",
+                  "fileIdentifier": "$PCF",
+                  "rootTypeName": "PCF",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "propagator/sdn-ap fit's $PCF: THEORY and FORCES stated (ATMOSPHERE_MODEL required)."
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "propagator/sdn-ap fit's $PCF: THEORY and FORCES stated (ATMOSPHERE_MODEL required)."
+        },
+        {
+          "portId": "space_weather",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-spw",
+              "allowedTypes": [
+                {
+                  "schemaName": "SPW.fbs",
+                  "fileIdentifier": "$SPW",
+                  "rootTypeName": "SPW",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Optional daily $SPW rows for fit under WEATHER_SOURCE RECORDS."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "Optional daily $SPW rows for fit under WEATHER_SOURCE RECORDS."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-module-config",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "Optional ModuleConfig for flows/observation-od."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Optional ModuleConfig for flows/observation-od."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ap_ocm",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The AP $OCM (MEAN_ELEMENT_THEORY AP; PROVENANCE the estimate's with PRODUCER sdn-ap; OD_OBSERVATIONS_USED sdn-ap's fitted-state count)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The AP $OCM (MEAN_ELEMENT_THEORY AP; PROVENANCE the estimate's with PRODUCER sdn-ap; OD_OBSERVATIONS_USED sdn-ap's fitted-state count)."
+        },
+        {
+          "portId": "estimate",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The laser estimate: flows/observation-od's Cartesian $OCM (OD_OBSERVATIONS_USED the normal points used, OD_DYNAMIC_PARAMETERS the fitted parameters)."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The laser estimate: flows/observation-od's Cartesian $OCM (OD_OBSERVATIONS_USED the normal points used, OD_DYNAMIC_PARAMETERS the fitted parameters)."
+        },
+        {
+          "portId": "ephemeris",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-oem",
+              "allowedTypes": [
+                {
+                  "schemaName": "OEM.fbs",
+                  "fileIdentifier": "$OEM",
+                  "rootTypeName": "OEM",
+                  "wireFormat": "flatbuffer"
+                }
+              ],
+              "description": "The carried $OEM: GCRF, UTC, the 24 h before the estimate's epoch at 60 s."
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The carried $OEM: GCRF, UTC, the 24 h before the estimate's epoch at 60 s."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
