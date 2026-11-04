@@ -1,6 +1,6 @@
 {
-  "spacedatastandards": "1.261.0+1792716949507",
-  "standardsRoot": "/Users/tj/software/process-fix/wasi/spacedatastandards.org",
+  "spacedatastandards": "1.276.0",
+  "standardsRoot": "/Users/tj/software/private/coordinator-d9/space-data-network-modules-b/data-source/spacemapper-aoe-source/node_modules/spacedatastandards.org",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -11,8 +11,9 @@
     "IDM",
     "PLD",
     "LCC",
-    "CAT"
+    "CAT",
+    "OIL"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "dbfcd2953bc15fc721e313884947fc15ba145b94719b33ae6c811eac1f67b41f"
+  "wasmSha256": "ec36a314da42a59a6bfc9accbba8fa2e8ffd20c236595582ef6be5a76e7942c7"
 }

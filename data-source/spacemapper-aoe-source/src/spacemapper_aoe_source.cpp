@@ -1,7 +1,8 @@
 // data-source/spacemapper-aoe-source: SpaceMapper's AOE element sets as SDS records.
 //
 //   parse_aoe   HttpResponse (HRSP) whose BODY is AOE catalog records (JSON lines or a JSON array of the objects the site's
-//               pages embed) -> $OMM, the id crosswalk as $CAT candidates, the batch's IngestRequest (INGQ); 304 -> FlowNotice
+//               pages embed) -> $OMM, the id crosswalk as $CAT candidates and as $OIL links, the batch's IngestRequest (INGQ);
+//               304 -> FlowNotice
 //
 // Typed contracts 1.0: every port is one FlatBuffers type. JSON is only AOE's own foreign format inside the response body.
 //
@@ -18,8 +19,9 @@
 // counted, not a reason to drop a set.
 //
 // Identity: the NORAD number AOE gives is the set's NORAD_CAT_ID; where it gives none the object is named
-// `aoe:<catId>` (USER_DEFINED_OBJECT_DESIGNATOR) and no NORAD number is invented. AOE's own ids ride in
-// USER_DEFINED_PARAMETERS. Names and bare numbers never join: the crosswalk lists what AOE states, as candidates.
+// `aoe:<catId>` (USER_DEFINED_OBJECT_DESIGNATOR) and no NORAD number is invented. AOE's record id is the set's MESSAGE_ID;
+// its catalog and satellite ids, channel and update id are the $OIL crosswalk's identifiers and evidence. Names and bare
+// numbers never join: the crosswalk lists what AOE states, as candidates.
 
 #include <algorithm>
 #include <cctype>
@@ -197,13 +199,6 @@ std::string upper(std::string s) {
   return s;
 }
 
-void add_param(OMMT* omm, const std::string& name, const std::string& value) {
-  auto p = std::make_unique<OMMUserDefinedParameterT>();
-  p->PARAM_NAME = name;
-  p->PARAM_VALUE = value;
-  omm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
-}
-
 // A positive integer the record states as a JSON number or as text; 0 for missing, null or unreadable.
 uint64_t positive(const flatjson::Record& r, const char* key) {
   const flatjson::Value* v = r.find(key);
@@ -229,7 +224,87 @@ struct Object {
   std::string cospar, name, type, channel;
   int64_t epoch_micro = 0;
   uint64_t record_id = 0;
+  std::string last_update_id;
+  uint32_t line = 0;  // 1-based position of the record in the body
 };
+
+std::unique_ptr<OILIdentifierT> identifier(const char* ns, const std::string& id) {
+  auto i = std::make_unique<OILIdentifierT>();
+  i->NAMESPACE = ns;
+  i->ID = id;
+  return i;
+}
+
+// The crosswalk as one $OIL: per AOE object (its newest set) a candidate link from its AOE catalog id (namespace aoe-cat,
+// else its satellite id, aoe-sat) to the NORAD number AOE gives and, when both AOE ids are given, to the satellite id.
+// LEFT.TRAJECTORY_ID is the newest set's MESSAGE_ID (the AOE record id); EVIDENCE.SOURCE aoe/<channel>, RECORD_ID AOE's
+// update id of that record (the body's SHA-256 when AOE gives none), LINE its position, DECLARATIONS the object's sets.
+std::vector<uint8_t> build_links(const std::map<uint64_t, Object>& objects, const std::map<uint64_t, size_t>& sets,
+                                 const std::map<uint64_t, std::set<std::string>>& declared, const std::set<uint64_t>& conflicting,
+                                 const std::string& hash, size_t bytes, size_t rows, size_t duplicates, uint64_t at_ms) {
+  OILT oil;
+  oil.PROVIDER = "spacemapper-aoe";
+  oil.KIND = "aoe-records";
+  oil.SHA256 = hash;
+  oil.BYTES = bytes;
+  oil.ROWS = static_cast<uint32_t>(rows);
+  oil.DUPLICATE_LINES = static_cast<uint32_t>(duplicates);
+  oil.GENERATED_AT_MS = static_cast<int64_t>(at_ms);
+  std::set<std::string> left_ns, right_ns, left_ids, right_ids;
+  size_t clean = 0, ambiguous = 0;
+  for (const auto& entry : objects) {
+    const Object& o = entry.second;
+    if (!o.cat_id && !o.sat_id) continue;  // a NORAD number alone: no AOE identifier to link
+    const char* left_ns_name = o.cat_id ? "aoe-cat" : "aoe-sat";
+    const std::string left_id = std::to_string(o.cat_id ? o.cat_id : o.sat_id);
+    const bool conflict = conflicting.count(entry.first) > 0;
+    auto add = [&](std::unique_ptr<OILIdentifierT> right) {
+      auto link = std::make_unique<OILLinkT>();
+      link->LEFT = identifier(left_ns_name, left_id);
+      if (o.record_id) link->LEFT->TRAJECTORY_ID = std::to_string(o.record_id);
+      right_ns.insert(right->NAMESPACE);
+      right_ids.insert(right->NAMESPACE + ":" + right->ID);
+      link->RIGHT = std::move(right);
+      link->STATUS = oilLinkStatus::Candidate;
+      link->AMBIGUOUS = conflict;
+      link->EVIDENCE = std::make_unique<OILEvidenceT>();
+      link->EVIDENCE->SOURCE = o.channel.empty() ? "aoe" : "aoe/" + o.channel;
+      link->EVIDENCE->RECORD_ID = o.last_update_id.empty() ? hash : o.last_update_id;
+      link->EVIDENCE->LINE = o.line;
+      link->EVIDENCE->DECLARATIONS = static_cast<uint32_t>(sets.at(entry.first));
+      if (conflict) link->REASON = "its sets state different NORAD numbers, designators or satellite ids";
+      (conflict ? ambiguous : clean) += 1;
+      left_ns.insert(left_ns_name);
+      left_ids.insert(std::string(left_ns_name) + ":" + left_id);
+      oil.LINKS.push_back(std::move(link));
+    };
+    if (o.norad) {
+      auto right = identifier("NORAD", std::to_string(o.norad));
+      right->NORAD_CAT_ID = static_cast<uint32_t>(o.norad);
+      right->INTERNATIONAL_DESIGNATOR = o.cospar;
+      add(std::move(right));
+    }
+    if (o.cat_id && o.sat_id) add(identifier("aoe-sat", std::to_string(o.sat_id)));
+    if (conflict) {
+      auto c = std::make_unique<OILConflictT>();
+      c->LEFT_IDS.push_back(std::string(left_ns_name) + ":" + left_id);
+      for (const std::string& id : declared.at(entry.first)) c->RIGHT_IDS.push_back(id);
+      c->SHAPE = oilConflictShape::OneLeftManyRight;
+      c->REASON = "one AOE id is stated with different NORAD numbers, designators or satellite ids";
+      oil.CONFLICTS.push_back(std::move(c));
+    }
+  }
+  if (left_ns.size() == 1) oil.LEFT_NAMESPACE = *left_ns.begin();
+  if (right_ns.size() == 1) oil.RIGHT_NAMESPACE = *right_ns.begin();
+  oil.LINK_COUNT = static_cast<uint32_t>(oil.LINKS.size());
+  oil.CLEAN_COUNT = static_cast<uint32_t>(clean);
+  oil.AMBIGUOUS_COUNT = static_cast<uint32_t>(ambiguous);
+  oil.LEFT_ID_COUNT = static_cast<uint32_t>(left_ids.size());
+  oil.RIGHT_ID_COUNT = static_cast<uint32_t>(right_ids.size());
+  flatbuffers::FlatBufferBuilder b(4096);
+  FinishOILBuffer(b, OIL::Pack(b, &oil));
+  return std::vector<uint8_t>(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
+}
 
 int push(const char* port, const char* schema, const char* id, const char* root, const uint8_t* data, size_t size) {
   return plugin_push_output_ex(port, schema, id, PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER, root, 0, 0, data, static_cast<uint32_t>(size));
@@ -274,6 +349,8 @@ extern "C" int parse_aoe(void) {
   Counters counters;
   std::set<uint64_t> record_ids;
   std::map<uint64_t, Object> objects;  // by AOE catalog id, the newest set of each
+  std::map<uint64_t, size_t> sets;     // by AOE catalog id, the sets read
+  std::map<uint64_t, std::set<std::string>> declared;  // by AOE catalog id, the NORAD numbers, designators and satellite ids stated
   std::set<uint64_t> conflicting;
   std::vector<uint8_t> output;
   std::string error;
@@ -349,12 +426,7 @@ extern "C" int parse_aoe(void) {
       ++counters.without_norad;
     }
     const std::string channel = upper(trim(r.text("channel")));
-    if (!channel.empty()) add_param(&omm, "AOE_CHANNEL", channel);
-    if (record_id) add_param(&omm, "AOE_RECORD_ID", std::to_string(record_id));
-    if (cat_id) add_param(&omm, "AOE_CAT_ID", std::to_string(cat_id));
-    if (sat_id) add_param(&omm, "AOE_SAT_ID", std::to_string(sat_id));
-    if (!trim(r.text("lastUpdateId")).empty()) add_param(&omm, "AOE_LAST_UPDATE_ID", trim(r.text("lastUpdateId")));
-    if (!trim(r.text("objectType")).empty()) add_param(&omm, "AOE_OBJECT_TYPE", trim(r.text("objectType")));
+    if (record_id) omm.MESSAGE_ID = std::to_string(record_id);
     flatbuffers::FlatBufferBuilder fbb(1024);
     FinishSizePrefixedOMMBuffer(fbb, CreateOMM(fbb, &omm));
     if (output.size() + fbb.GetSize() > kMaxBytes) {
@@ -368,7 +440,12 @@ extern "C" int parse_aoe(void) {
     // The crosswalk keeps what AOE states about each object, from its newest set; two sets that state different
     // numbers or designators for one AOE id are a conflict, listed and not resolved.
     const uint64_t key = cat_id ? cat_id : sat_id ? sat_id : norad;
-    Object o{cat_id, norad, sat_id, cospar(designator) ? designator : std::string(), omm.OBJECT_NAME, trim(r.text("objectType")), channel, t.epoch_micro, record_id};
+    Object o{cat_id, norad, sat_id, cospar(designator) ? designator : std::string(), omm.OBJECT_NAME, trim(r.text("objectType")), channel, t.epoch_micro, record_id,
+             trim(r.text("lastUpdateId")), static_cast<uint32_t>(at + 1)};
+    ++sets[key];
+    if (norad) declared[key].insert("NORAD:" + std::to_string(norad));
+    if (!o.cospar.empty()) declared[key].insert("COSPAR:" + o.cospar);
+    if (sat_id) declared[key].insert("aoe-sat:" + std::to_string(sat_id));
     auto found = objects.find(key);
     if (found == objects.end()) objects.emplace(key, o);
     else {
@@ -434,8 +511,10 @@ extern "C" int parse_aoe(void) {
   }
   flatbuffers::FlatBufferBuilder mb(1024);
   R::FinishIngestRequestBuffer(mb, R::IngestRequest::Pack(mb, &meta));
+  const std::vector<uint8_t> links = build_links(objects, sets, declared, conflicting, hash, body->size(), counters.read, counters.duplicates, http.RETRIEVED_MS());
   if (push("meta", "IngestRequest.fbs", R::IngestRequestIdentifier(), "IngestRequest", mb.GetBufferPointer(), mb.GetSize()) < 0 ||
-      push("crosswalk", "CAT.fbs", "$CAT", "CAT", crosswalk.data(), crosswalk.size()) < 0) {
+      push("crosswalk", "CAT.fbs", "$CAT", "CAT", crosswalk.data(), crosswalk.size()) < 0 ||
+      push("links", "OIL.fbs", "$OIL", "OIL", links.data(), links.size()) < 0) {
     return 1;
   }
   return push("omm", "OMM.fbs", "$OMM", "OMM", output.data(), output.size()) < 0 ? 1 : 0;
