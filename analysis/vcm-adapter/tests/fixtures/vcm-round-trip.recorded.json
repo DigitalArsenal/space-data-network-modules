@@ -1,0 +1,71 @@
+{
+  "recordedFrom": {
+    "wasm": "analysis/vcm-adapter/dist/isomorphic/module.wasm",
+    "sha256": "c493b485c41b96efc6bdd4f1a4dbdb3d13f801a0f2a7c30b0d19a04a4b5fe2ce",
+    "modulesCommit": "ea824356",
+    "input": "tests/fixtures/sample-vcm.txt",
+    "readConfig": {},
+    "rebuilt": "tests/fixtures/sample-vcm.rebuilt.txt",
+    "rebuiltSha256": "3187e66fa1bc3c1d9e694c72e69bc46d123b076942488ba1617370fa1c6f3d21"
+  },
+  "USER_DEFINED_PARAMETERS": {
+    "VCM_INDICATOR": null,
+    "VCM_INTEGRATOR_MODE": "ASW",
+    "VCM_COORD_SYS": "J2000",
+    "VCM_PARTIALS": "FAST NUM",
+    "VCM_STEP_MODE": "AUTO",
+    "VCM_FIXED_STEP": "OFF",
+    "VCM_STEP_SIZE_SELECTION": "MANUAL",
+    "VCM_INITIAL_STEP_SIZE_S": "20",
+    "VCM_ERROR_CONTROL": "1e-14",
+    "VCM_NUTATION_TERMS": "4",
+    "VCM_CM_OFFSET_M": "0",
+    "VCM_LEAP_SECOND_TIME": "2049 365 (31 DEC) 23:59:59.999",
+    "COVARIANCE_SCALE": "1.3220400399999999",
+    "MEAN_MOTION_UNIT": "fraction",
+    "PARAMETER_ROWS": "fractional"
+  },
+  "TRAJ_REF_FRAME": "EME2000",
+  "COV_REF_FRAME": "EME2000",
+  "COV_SIZE": 7,
+  "COV_PARAMETERS": [
+    "DRAG_AREA_OVER_MASS"
+  ],
+  "COV_UNITS": [
+    "km",
+    "km",
+    "km",
+    "km/s",
+    "km/s",
+    "km/s",
+    "m**2/kg"
+  ],
+  "NEXT_LEAP_EPOCH": null,
+  "PERTURBATIONS": {
+    "GRAVITY_MODEL": "EGM-96",
+    "GEOPOTENTIAL_MODEL": "EGM-96 70Z,70T",
+    "GRAVITY_DEGREE": 70,
+    "GRAVITY_ORDER": 70,
+    "REDUCTION_THEORY": null
+  },
+  "OD_DYNAMIC_PARAMETERS": [
+    {
+      "NAME": "DRAG_AREA_OVER_MASS",
+      "PARAMETER": 0,
+      "VALUE": 0.00826455,
+      "SOLVED_FOR": true
+    },
+    {
+      "NAME": "DRAG_AREA_OVER_MASS_RATE",
+      "PARAMETER": 0,
+      "VALUE": 0,
+      "SOLVED_FOR": false
+    },
+    {
+      "NAME": "SRP_AREA_OVER_MASS",
+      "PARAMETER": 0,
+      "VALUE": 0,
+      "SOLVED_FOR": false
+    }
+  ]
+}
