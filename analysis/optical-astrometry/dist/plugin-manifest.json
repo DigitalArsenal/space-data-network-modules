@@ -355,7 +355,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "One size-prefixed $OCM per fitted target: the GCRF state at the arc's middle (STATE_EPOCHS), COVARIANCE_DATA the 6x6 total covariance (noise, prior and the calibration as consider parameters; LTM, km and km/s), ORBIT_DETERMINATION the fit, USER_DEFINED_PARAMETERS the residuals, sigmas in RTN, the IOD, the separation from the calibrator and the checks against each later element set (RTN differences and d2 with both covariances)."
+          "description": "One size-prefixed $OCM per fitted target: the GCRF state at the arc's middle (STATE_EPOCHS), COVARIANCE_DATA the 6x6 total covariance (noise, prior and the calibration as consider parameters; LTM, km and km/s), ORBIT_DETERMINATION the fit (OD_EPOCH, OBS_AVAILABLE the track's points on a solved plate, OD_OBSERVATIONS_USED those fitted, OD_TRACKS_USED, OD_APRIORI_DATA the prior element set, OD_RESIDUAL_RMS in arcsec, WEIGHTED_RMS the square root of chi-square per degree of freedom). The report carries the diagnostics: iterations, the prior's observed-minus-computed, OD minus prior, sigmas in RTN, the IOD, the separation from the calibrator and the checks against each later element set (RTN differences and d2 with both covariances)."
         },
         {
           "portId": "orbit_trajectory",
