@@ -1,0 +1,134 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: key, datatype: string}
+# - {name: ra, unit: deg, datatype: float64}
+# - {name: dec, unit: deg, datatype: float64}
+# - {name: name, datatype: string}
+# - {name: host, datatype: string}
+# - {name: confirmed_real, datatype: int8}
+# - {name: confirmed_galaxy, datatype: int8}
+# - {name: rhalf, unit: arcmin, datatype: float64}
+# - {name: rhalf_em, unit: arcmin, datatype: float64}
+# - {name: rhalf_ep, unit: arcmin, datatype: float64}
+# - {name: position_angle, unit: deg, datatype: float64}
+# - {name: position_angle_em, unit: deg, datatype: float64}
+# - {name: position_angle_ep, unit: deg, datatype: float64}
+# - {name: ellipticity, datatype: float64}
+# - {name: ellipticity_em, datatype: float64}
+# - {name: ellipticity_ep, datatype: float64}
+# - {name: ellipticity_ul, datatype: float64}
+# - {name: ref_structure, datatype: string}
+# - {name: distance_modulus, unit: mag, datatype: float64}
+# - {name: distance_modulus_em, unit: mag, datatype: float64}
+# - {name: distance_modulus_ep, unit: mag, datatype: float64}
+# - {name: ref_distance, datatype: string}
+# - {name: apparent_magnitude_v, unit: mag, datatype: float64}
+# - {name: apparent_magnitude_v_em, unit: mag, datatype: float64}
+# - {name: apparent_magnitude_v_ep, unit: mag, datatype: float64}
+# - {name: ref_m_v, datatype: string}
+# - {name: vlos_systemic, unit: km / s, datatype: float64}
+# - {name: vlos_systemic_em, unit: km / s, datatype: float64}
+# - {name: vlos_systemic_ep, unit: km / s, datatype: float64}
+# - {name: vlos_sigma, unit: km / s, datatype: float64}
+# - {name: vlos_sigma_em, unit: km / s, datatype: float64}
+# - {name: vlos_sigma_ep, unit: km / s, datatype: float64}
+# - {name: vlos_sigma_ul, unit: km / s, datatype: float64}
+# - {name: ref_vlos, datatype: string}
+# - {name: pmra, unit: mas / yr, datatype: float64}
+# - {name: pmra_em, unit: mas / yr, datatype: float64}
+# - {name: pmra_ep, unit: mas / yr, datatype: float64}
+# - {name: pmdec, unit: mas / yr, datatype: float64}
+# - {name: pmdec_em, unit: mas / yr, datatype: float64}
+# - {name: pmdec_ep, unit: mas / yr, datatype: float64}
+# - {name: ref_proper_motion, datatype: string}
+# - {name: metallicity_spectroscopic, datatype: float64}
+# - {name: metallicity_spectroscopic_em, datatype: float64}
+# - {name: metallicity_spectroscopic_ep, datatype: float64}
+# - {name: metallicity_spectroscopic_sigma, datatype: float64}
+# - {name: metallicity_spectroscopic_sigma_em, datatype: float64}
+# - {name: metallicity_spectroscopic_sigma_ep, datatype: float64}
+# - {name: metallicity_spectroscopic_sigma_ul, datatype: float64}
+# - {name: ref_metallicity_spectroscopic, datatype: string}
+# - {name: rcore, unit: arcmin, datatype: float64}
+# - {name: rcore_em, unit: arcmin, datatype: float64}
+# - {name: rcore_ep, unit: arcmin, datatype: float64}
+# - {name: rking, unit: arcmin, datatype: float64}
+# - {name: rking_em, unit: arcmin, datatype: float64}
+# - {name: rking_ep, unit: arcmin, datatype: float64}
+# - {name: ref_structure_king, datatype: string}
+# - {name: rad_sersic, unit: arcmin, datatype: float64}
+# - {name: rad_sersic_em, unit: arcmin, datatype: float64}
+# - {name: rad_sersic_ep, unit: arcmin, datatype: float64}
+# - {name: n_sersic, datatype: float64}
+# - {name: n_sersic_em, datatype: float64}
+# - {name: n_sersic_ep, datatype: float64}
+# - {name: ref_structure_sersic, datatype: string}
+# - {name: age, unit: Gyr, datatype: float64}
+# - {name: age_em, unit: Gyr, datatype: float64}
+# - {name: age_ep, unit: Gyr, datatype: float64}
+# - {name: ref_age, datatype: string}
+# - {name: metallicity_isochrone, datatype: float64}
+# - {name: metallicity_isochrone_em, datatype: float64}
+# - {name: metallicity_isochrone_ep, datatype: float64}
+# - {name: ref_metallicity_isochrone, datatype: string}
+# - {name: flux_HI, unit: Jy km / s, datatype: float64}
+# - {name: flux_HI_em, unit: Jy km / s, datatype: float64}
+# - {name: flux_HI_ep, unit: Jy km / s, datatype: float64}
+# - {name: flux_HI_ul, unit: Jy km / s, datatype: float64}
+# - {name: ref_flux_HI, datatype: string}
+# - {name: metallicity_photometric, datatype: float64}
+# - {name: metallicity_photometric_em, datatype: float64}
+# - {name: metallicity_photometric_ep, datatype: float64}
+# - {name: metallicity_photometric_sigma, datatype: float64}
+# - {name: metallicity_photometric_sigma_em, datatype: float64}
+# - {name: metallicity_photometric_sigma_ep, datatype: float64}
+# - {name: metallicity_photometric_sigma_ul, datatype: float64}
+# - {name: ref_metallicity_photometric, datatype: string}
+# - {name: M_V, unit: mag, datatype: float64}
+# - {name: M_V_em, unit: mag, datatype: float64}
+# - {name: M_V_ep, unit: mag, datatype: float64}
+# - {name: mass_stellar, unit: dex(solMass), datatype: float64}
+# - {name: distance, unit: kpc, datatype: float64}
+# - {name: distance_em, unit: kpc, datatype: float64}
+# - {name: distance_ep, unit: kpc, datatype: float64}
+# - {name: ll, unit: deg, datatype: float64}
+# - {name: bb, unit: deg, datatype: float64}
+# - {name: sg_xx, unit: kpc, datatype: float64}
+# - {name: sg_yy, unit: kpc, datatype: float64}
+# - {name: sg_zz, unit: kpc, datatype: float64}
+# - {name: distance_gc, unit: kpc, datatype: float64}
+# - {name: distance_m31, unit: kpc, datatype: float64}
+# - {name: distance_lg, unit: kpc, datatype: float64}
+# - {name: distance_host, unit: kpc, datatype: float64}
+# - {name: mass_HI, unit: dex(solMass), datatype: float64}
+# - {name: mass_HI_ul, unit: dex(solMass), datatype: float64}
+# - {name: metallicity, datatype: float64}
+# - {name: metallicity_em, datatype: float64}
+# - {name: metallicity_ep, datatype: float64}
+# - {name: metallicity_type, datatype: string}
+# - {name: velocity_gsr, unit: km / s, datatype: float64}
+# - {name: velocity_lg, unit: km / s, datatype: float64}
+# - {name: mass_dynamical_wolf, unit: dex(solMass), datatype: float64}
+# - {name: mass_dynamical_wolf_em, unit: dex(solMass), datatype: float64}
+# - {name: mass_dynamical_wolf_ep, unit: dex(solMass), datatype: float64}
+# - {name: mass_dynamical_wolf_ul, unit: dex(solMass), datatype: float64}
+# - {name: rhalf_physical, unit: pc, datatype: float64}
+# - {name: rhalf_physical_em, unit: pc, datatype: float64}
+# - {name: rhalf_physical_ep, unit: pc, datatype: float64}
+# - {name: rhalf_sph_physical, unit: pc, datatype: float64}
+# - {name: rhalf_sph_physical_em, unit: pc, datatype: float64}
+# - {name: rhalf_sph_physical_ep, unit: pc, datatype: float64}
+# - {name: surface_brightness_rhalf, unit: mag / arcsec2, datatype: float64}
+# - {name: distance_measurement_method, datatype: string}
+# - {name: table, datatype: string}
+# - {name: confirmed_star_cluster, datatype: int64}
+# schema: astropy-2.0
+key ra dec name host confirmed_real confirmed_galaxy rhalf rhalf_em rhalf_ep position_angle position_angle_em position_angle_ep ellipticity ellipticity_em ellipticity_ep ellipticity_ul ref_structure distance_modulus distance_modulus_em distance_modulus_ep ref_distance apparent_magnitude_v apparent_magnitude_v_em apparent_magnitude_v_ep ref_m_v vlos_systemic vlos_systemic_em vlos_systemic_ep vlos_sigma vlos_sigma_em vlos_sigma_ep vlos_sigma_ul ref_vlos pmra pmra_em pmra_ep pmdec pmdec_em pmdec_ep ref_proper_motion metallicity_spectroscopic metallicity_spectroscopic_em metallicity_spectroscopic_ep metallicity_spectroscopic_sigma metallicity_spectroscopic_sigma_em metallicity_spectroscopic_sigma_ep metallicity_spectroscopic_sigma_ul ref_metallicity_spectroscopic rcore rcore_em rcore_ep rking rking_em rking_ep ref_structure_king rad_sersic rad_sersic_em rad_sersic_ep n_sersic n_sersic_em n_sersic_ep ref_structure_sersic age age_em age_ep ref_age metallicity_isochrone metallicity_isochrone_em metallicity_isochrone_ep ref_metallicity_isochrone flux_HI flux_HI_em flux_HI_ep flux_HI_ul ref_flux_HI metallicity_photometric metallicity_photometric_em metallicity_photometric_ep metallicity_photometric_sigma metallicity_photometric_sigma_em metallicity_photometric_sigma_ep metallicity_photometric_sigma_ul ref_metallicity_photometric M_V M_V_em M_V_ep mass_stellar distance distance_em distance_ep ll bb sg_xx sg_yy sg_zz distance_gc distance_m31 distance_lg distance_host mass_HI mass_HI_ul metallicity metallicity_em metallicity_ep metallicity_type velocity_gsr velocity_lg mass_dynamical_wolf mass_dynamical_wolf_em mass_dynamical_wolf_ep mass_dynamical_wolf_ul rhalf_physical rhalf_physical_em rhalf_physical_ep rhalf_sph_physical rhalf_sph_physical_em rhalf_sph_physical_ep surface_brightness_rhalf distance_measurement_method table confirmed_star_cluster
+antlia_2 143.8079 -36.6991 "Antlia II" mw 1 1 104.6 8.6 8.6 156.0 2.4 2.4 0.6 0.04 0.04  Ji2021ApJ...921...32J 20.47 0.09 0.09 Vivas2022ApJ...926...78V 10.74 0.08 0.08 Ji2021ApJ...921...32J 288.8 0.4 0.4 5.98 0.36 0.37  Ji2021ApJ...921...32J -0.093 0.008 0.008 0.1 0.009 0.009 Pace2022ApJ...940..136P -1.9 0.04 0.04 0.34 0.03 0.03  Ji2021ApJ...921...32J                          0.027 Putman2021ApJ...913...53P         -9.73 0.08 0.08 6.13 124.17 5.04 5.25 264.8009334 11.2542678 -74.02 34.73 -93.45 125.15 879.41 493.69 125.15  1.99 -1.9 0.04 0.04 spectroscopic 49.29 -21.51 7.9 0.07 0.07  3761.92 337.74 352.06 2379.32 247.72 248.01 30.72  dwarf_mw 
+aquarius_3 357.218 -3.489 "Aquarius III" mw 1 1 2.1 0.5 0.7 119.0 11.0 17.0 0.47 0.28 0.14  Cerny2025ApJ...979..164C 19.66 0.11 0.11 Cerny2025ApJ...979..164C 17.16 0.5 0.3 Cerny2025ApJ...979..164C -13.1 0.9 1.0    3.5 Cerny2025ApJ...979..164C 1.01 0.25 0.25 -0.1 0.2 0.2 Cerny2025ApJ...979..164C -2.51 0.18 0.18 0.45 0.12 0.18  Geha2026arXiv260210202G                                    -2.5 0.5 0.3 3.23 85.51 4.22 4.44 87.9166898 -62.0297168 26.07 -78.41 21.98 85.75 719.96 334.92 85.75   -2.51 0.18 0.18 spectroscopic 95.36 153.63    5.64 51.65 14.77 15.2 36.28 12.68 13.78 28.87  dwarf_mw 
+eso_383-087 207.3208333333333 -36.06333333333333 "ESO 383-087" ngc_5128 1 1 1.39          Muller2017A&A...597A...7M 27.52 0.02 0.02 Tully2009AJ....138..323T 10.45   Muller2017A&A...597A...7M 326.0 2.0 2.0     Koribalski2004AJ....128...16K                                      27.7 4.2 4.2 0.0 Koribalski2004AJ....128...16K         -17.07   9.06 3191.54 0.0 0.0 315.8400507 25.3542817 -2883.09 1366.83 73.91 3186.28 3949.29 3569.4 698.22 7.82      183.07 107.68     1290.45   1290.45   22.05  dwarf_local_field_distant 
+ugc_02716 51.03 17.754167 "UGC 2716"  1 1 0.7067 0.0583 0.0583 90.0   0.29    Li2026ApJS..282...16L 29.12   Anand2021AJ....162...80A 13.57   Karachentsev2013AJ....145..101K 381.0 0.5 0.5     Huchtmeier2003A&A...401..483H                                      4.92 0.0 0.0 0.0 Huchtmeier2003A&A...401..483H         -15.55   8.45 6668.07 0.0 0.0 166.7766768 -31.8244236 4935.66 -3188.59 -3152.02 6674.79 6110.29 6383.49 nan 7.71      413.96 467.45     1368.35 111.48 112.51 1152.99 93.94 94.8 23.33 trgb dwarf_local_field_distant 
+garro_1 212.25 -65.62 "Garro 1" mw 1  2.4 0.4 0.6        Pace2023MNRAS.526.1075P 15.93 0.03 0.03 Garro2020A&A...642L..19G 10.67 1.0 1.0 Garro2020A&A...642L..19G 31.0 0.1 0.1 0.4 0.3 0.3 0.8 Pace2023MNRAS.526.1075P -4.431 0.015 0.015 -1.127 0.015 0.015 Libralato2026A&A...709A.140L -0.3 0.03 0.03    0.1 Pace2023MNRAS.526.1075P 1.8 0.5 0.7    Pace2023MNRAS.526.1075P        11.0 1.0 1.0 Garro2020A&A...642L..19G -0.7 0.2 0.2 Garro2020A&A...642L..19G              -5.26 1.0 1.0 4.34 15.35 0.0 0.0 310.8277638 -3.9442656 -15.21 -0.86 -1.85 11.78 789.93 401.81 11.78   -0.3 0.03 0.03 spectroscopic -146.52 -215.88 3.2 0.91 0.49 3.8 10.67 2.2 2.22 10.67 2.2 2.22 23.45  gc_mw_new 1
+sagittarius_2 298.16875 -22.06806 "Sagittarius II" mw 1  1.85 0.07 0.08 96.0 32.0 50.0 0.03   0.08 Richstein2024ApJ...967...72R 19.03 0.1 0.1 Joo2019ApJ...875..120J 13.82 0.04 0.06 Richstein2024ApJ...967...72R -176.4 0.6 0.6 2.32 0.43 0.53  Geha2026ApJ...999..140G -0.769 0.035 0.035 -0.903 0.023 0.022 Pace2022ApJ...940..136P -2.31 0.04 0.04    0.17 Geha2026arXiv260210202G                                    -5.21 0.04 0.06 4.32 63.97 0.0 0.0 18.9355417 -22.897525 -28.06 -30.44 48.77 57.04 781.33 395.76 57.04   -2.31 0.04 0.04 spectroscopic -94.77 -88.09 5.23 0.2 0.17  34.4 1.38 1.39 33.88 1.35 1.37 26.01  gc_mw_new 1
+fornax_1-gc6 40.02875 -34.422 Fornax-GC6 fornax_1 1  0.28 0.033 0.033 13.1 7.3 10.4 0.41 0.1 0.1  Wang2019ApJ...875L..13W 20.77    16.037 0.4 0.4 Wang2019ApJ...875L..13W 50.5 1.7 1.7 5.6 1.8 2.0  Pace2021ApJ...923...77P 0.392 0.026 0.026 -0.448 0.042 0.042 Pace2021ApJ...923...77P -0.7 0.05 0.05 0.03 0.02 0.06 0.17 Pace2021ApJ...923...77P               2.0   Pace2021ApJ...923...77P                  -4.73 0.4 0.4 4.13 142.56   237.0279572 -65.6304984 -9.87 -122.69 -71.93 144.6 765.36 390.38 0.24   -0.7 0.05 0.05 spectroscopic -44.5 -34.69 5.4 0.36 0.27  11.58 1.35 1.36 8.84 1.27 1.31 23.57 host gc_dwarf_hosted 1

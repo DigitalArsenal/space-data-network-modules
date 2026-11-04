@@ -1,0 +1,70 @@
+key: garro_1
+table: gc_mw_new
+location:
+  ra: 212.25
+  dec: -65.62
+name_discovery:
+  confirmed_real: 1
+  confirmed_star_cluster: 1
+  discovery_year: 2020
+  host: mw
+  name: Garro 1
+  other_name:
+  - Garro 01
+  - VVVX-GC-140900-653712
+  ref_discovery:
+  - Garro2020A&A...642L..19G
+  type: OC/GC
+age:
+  age: 11.0
+  age_em: 1.0
+  age_ep: 1.0
+  ref_age: Garro2020A&A...642L..19G
+distance:
+  distance_modulus: 15.93
+  distance_modulus_em: 0.03
+  distance_modulus_ep: 0.03
+  ref_distance: Garro2020A&A...642L..19G
+m_v:
+  apparent_magnitude_v: 10.67
+  apparent_magnitude_v_em: 1.0
+  apparent_magnitude_v_ep: 1.0
+  ref_m_v: Garro2020A&A...642L..19G
+metallicity_spectroscopic:
+  metallicity_spectroscopic: -0.3
+  metallicity_spectroscopic_em: 0.03
+  metallicity_spectroscopic_ep: 0.03
+  metallicity_spectroscopic_sigma_ul: 0.1
+  ref_metallicity_spectroscopic: Pace2023MNRAS.526.1075P
+proper_motion:
+  pmra: -4.431
+  pmra_em: 0.015
+  pmra_ep: 0.015
+  pmdec: -1.127
+  pmdec_em: 0.015
+  pmdec_ep: 0.015
+  ref_proper_motion: Libralato2026A&A...709A.140L
+structure:
+  ref_structure: Pace2023MNRAS.526.1075P
+  rhalf: 2.4
+  rhalf_em: 0.4
+  rhalf_ep: 0.6
+structure_king:
+  rcore: 1.8
+  rcore_em: 0.5
+  rcore_ep: 0.7
+  ref_structure_king: Pace2023MNRAS.526.1075P
+velocity:
+  ref_vlos: Pace2023MNRAS.526.1075P
+  vlos_sigma: 0.4
+  vlos_sigma_em: 0.3
+  vlos_sigma_ep: 0.3
+  vlos_sigma_ul: 0.8
+  vlos_systemic: 31.0
+  vlos_systemic_em: 0.1
+  vlos_systemic_ep: 0.1
+metallicity_isochrone:
+  metallicity_isochrone: -0.7
+  metallicity_isochrone_em: 0.2
+  metallicity_isochrone_ep: 0.2
+  ref_metallicity_isochrone: Garro2020A&A...642L..19G
