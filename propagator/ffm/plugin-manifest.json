@@ -1,8 +1,8 @@
 {
   "pluginId": "com.orbpro.ffm",
   "name": "FFM Full Force Model propagator",
-  "version": "2.1.0",
-  "description": "Full Force Model profile FFM-1 with automatic GJ8 PEC and eccentric-orbit Sundman integration, selected-object batching, and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
+  "version": "2.2.0",
+  "description": "Full Force Model profile FFM-1. An execution is integrated with the algorithm it names, a requested RK78 or RKF78 bounding every step's error by the request's tolerances; resident propagation flies forward arcs on automatic GJ8 PEC and eccentric-orbit Sundman grids, named in each trajectory's PPE COMMENT. Selected-object batching and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -21,6 +21,7 @@
       "inputPorts": [
         {
           "portId": "request",
+          "description": "PRW request. An EXECUTION_REQUEST is integrated with the INTEGRATOR.ALGORITHM it names. RK78 and RKF78 (Fehlberg 7(8)) propagate the eighth-order solution and accept a step only when the seventh-order error estimate, which bounds the step's error, is within ABSOLUTE_TOLERANCES plus RELATIVE_TOLERANCE times the state in every component; no step is longer than MAXIMUM_STEP_SECONDS and no fixed grid is substituted. GAUSS_JACKSON_8 flies the fixed INITIAL_STEP_SECONDS grid it names and takes no tolerance.",
           "acceptedTypeSets": [
             {
               "setId": "sds-prw",
@@ -229,7 +230,7 @@
         },
         {
           "portId": "configuration",
-          "description": "Required PRW.EXECUTION_REQUEST: the dynamics every resident object is propagated with (FORCES, INTEGRATOR with RK78 or RKF78, STM_TECHNIQUE and DENSITY_TREATMENT for covariance), validated as an execution request. Its INITIAL and TARGET_EPOCH are placeholders that each object's state and each query replace; it carries no STM, covariance, samples, impulses, burns, mass dynamics, dynamic parameters or process noise.",
+          "description": "Required PRW.EXECUTION_REQUEST: the dynamics every resident object is propagated with (FORCES, INTEGRATOR with RK78 or RKF78, STM_TECHNIQUE and DENSITY_TREATMENT for covariance), validated as an execution request. Its INITIAL and TARGET_EPOCH are placeholders that each object's state and each query replace; it carries no STM, covariance, samples, impulses, burns, mass dynamics, dynamic parameters or process noise. Forward arcs of elliptic orbits fly a fixed grid instead, which the tolerance does not reach, named in each trajectory's PPE COMMENT: from eccentricity 0.25 Sundman RK78 at 200 steps a revolution (300 for perigee below 1000 km and apogee 30000 to 45000 km); below it, under the force families GJ8 PEC supports (no drag, or NRLMSISE-00 without winds; no radiation pressure, or cannonball with the conical shadow and no ECOM2), GJ8 PEC on a TT grid of at most 1/100 of the orbit's period. Fixed-step settings, backward arcs, nonelliptic states, other force families, inputs that do not cover the GJ8 startup and the reentry approach run RK78.",
           "acceptedTypeSets": [
             {
               "setId": "sds-prw",

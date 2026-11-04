@@ -4,19 +4,23 @@
 
 // One tableau for Cartesian state and augmented state/STM.
 namespace astro { namespace rk_detail {
-// Fehlberg 7(8) coefficients
+// Fehlberg 7(8) coefficients (Fehlberg 1968, NASA TR R-287). A step propagates
+// the eighth-order solution; its difference from the seventh-order solution,
+// (41/840)(k0 + k10 - k11 - k12) h, is the seventh-order solution's local
+// error, an order above the propagated solution's, so it bounds the error of
+// the step the controller accepts.
 namespace rkf78 {
     // Nodes (c values)
     constexpr double c[] = {0, 2.0/27.0, 1.0/9.0, 1.0/6.0, 5.0/12.0, 1.0/2.0,
                             5.0/6.0, 1.0/6.0, 2.0/3.0, 1.0/3.0, 1.0, 0, 1.0};
 
-    // 8th order weights
-    constexpr double b8[] = {41.0/840.0, 0, 0, 0, 0, 34.0/105.0, 9.0/35.0, 9.0/35.0,
-                             9.0/280.0, 9.0/280.0, 41.0/840.0, 0, 0};
-
-    // 7th order weights (for error estimation)
-    constexpr double b7[] = {0, 0, 0, 0, 0, 34.0/105.0, 9.0/35.0, 9.0/35.0,
+    // 8th order weights: stages 5-9, 11 and 12 (the propagated solution)
+    constexpr double b8[] = {0, 0, 0, 0, 0, 34.0/105.0, 9.0/35.0, 9.0/35.0,
                              9.0/280.0, 9.0/280.0, 0, 41.0/840.0, 41.0/840.0};
+
+    // 7th order weights: stages 0-10 (the embedded solution, for error estimation)
+    constexpr double b7[] = {41.0/840.0, 0, 0, 0, 0, 34.0/105.0, 9.0/35.0, 9.0/35.0,
+                             9.0/280.0, 9.0/280.0, 41.0/840.0, 0, 0};
 }
 
 // One step from (t, y) whose first stage, the derivative f(t, y), the caller
@@ -111,18 +115,18 @@ void rkf78StepFrom(double t, double h, const double* y, const double* k0,
 
     // 8th order solution
     for (int i = 0; i < N; i++) {
-        yout[i] = y[i] + h * (rkf78::b8[0]*k[0][i] + rkf78::b8[5]*k[5][i] +
-                              rkf78::b8[6]*k[6][i] + rkf78::b8[7]*k[7][i] +
-                              rkf78::b8[8]*k[8][i] + rkf78::b8[9]*k[9][i] +
-                              rkf78::b8[10]*k[10][i]);
+        yout[i] = y[i] + h * (rkf78::b8[5]*k[5][i] + rkf78::b8[6]*k[6][i] +
+                              rkf78::b8[7]*k[7][i] + rkf78::b8[8]*k[8][i] +
+                              rkf78::b8[9]*k[9][i] + rkf78::b8[11]*k[11][i] +
+                              rkf78::b8[12]*k[12][i]);
     }
 
     // Error estimate (difference between 8th and 7th order)
     for (int i = 0; i < N; i++) {
-        double y7 = y[i] + h * (rkf78::b7[5]*k[5][i] + rkf78::b7[6]*k[6][i] +
-                                rkf78::b7[7]*k[7][i] + rkf78::b7[8]*k[8][i] +
-                                rkf78::b7[9]*k[9][i] + rkf78::b7[11]*k[11][i] +
-                                rkf78::b7[12]*k[12][i]);
+        double y7 = y[i] + h * (rkf78::b7[0]*k[0][i] + rkf78::b7[5]*k[5][i] +
+                                rkf78::b7[6]*k[6][i] + rkf78::b7[7]*k[7][i] +
+                                rkf78::b7[8]*k[8][i] + rkf78::b7[9]*k[9][i] +
+                                rkf78::b7[10]*k[10][i]);
         yerr[i] = yout[i] - y7;
     }
 }
