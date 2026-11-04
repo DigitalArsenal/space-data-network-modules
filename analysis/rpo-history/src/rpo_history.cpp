@@ -172,43 +172,6 @@ int characterizeRpo() {
   if (projection.made) all.push_back(&projection.segment);
   if (all.empty()) return fail("No supported sample in the window (every sample lies in a maneuver bracket or outside the answers).");
 
-  std::vector<std::pair<std::string, std::string>> summary = {
-    {"FRAME", frame},
-    {"GRID_SAMPLES", std::to_string(counts.gridSamples)},
-    {"SAMPLES_IN_BRACKETS", std::to_string(counts.inBracket)},
-    {"SAMPLES_WITHOUT_SET", std::to_string(counts.noSet)},
-    {"SAMPLES_UNSUPPORTED", std::to_string(counts.unsupported)},
-    {"ELEMENT_SETS", "chaser " + std::to_string(chaser.sets.size()) + ", target " + std::to_string(target.sets.size()) +
-                     ", other objects ignored " + std::to_string(others) + ", refused by the propagator " + std::to_string(refusedCount)},
-    {"MANEUVER_BRACKETS", "used " + std::to_string(bracketsUsed) + ", ignored " + std::to_string(bracketsIgnored)},
-    {"PROJECTION", projection.made ? "made, " + fmt(w.horizon / 3600.0) + " h, samples without covariance " +
-                                         std::to_string(projection.withoutCovariance) +
-                                         (projection.settling ? "; a newest element set is SETTLING (issued within " + fmt(options.settleDays) +
-                                                                " d after a maneuver bracket): the bands are the model's, not calibrated for it" : "")
-                                   : "not made: " + projection.reason},
-  };
-  if (model.present) {
-    summary.push_back({"ERROR_MODEL", model.id + (model.basisText.empty() ? "" : " (" + model.basisText + ")")});
-    if (w.calibration > 0) {
-      const Factors& f = projection.factors;
-      summary.push_back({"CALIBRATION_AT_STOP",
-        std::string(f.fitted ? "fitted" : "NOT FITTED (too few samples: the model's bands as they are)") + " from " + std::to_string(f.samples) +
-        " relative samples in the trailing " + fmt(options.calibrationDays) + " d; 1-sigma factors R,I,C " + fmt(f.one[0], "%.4f") + "," +
-        fmt(f.one[1], "%.4f") + "," + fmt(f.one[2], "%.4f") + "; 3-sigma factors " + fmt(f.three[0], "%.4f") + "," + fmt(f.three[1], "%.4f") + "," +
-        fmt(f.three[2], "%.4f")});
-    }
-    summary.push_back({"RELATIVE_SAMPLES", std::to_string(rel.list.size()) + " (left out: " + std::to_string(rel.skippedBracket) +
-                                           " across brackets, " + std::to_string(rel.skippedSettling) + " settling sets, " +
-                                           std::to_string(rel.outsideModel) + " outside the model)"});
-    summary.push_back({"HINDCAST_SAMPLES", std::to_string(hc.samples)});
-    summary.push_back({"HINDCAST_TRUTH_EPOCHS", std::to_string(hc.truthEpochs)});
-    summary.push_back({"HINDCAST_INSIDE_1SIGMA_RIC", fmt(hc.fraction1(0), "%.4f") + "," + fmt(hc.fraction1(1), "%.4f") + "," + fmt(hc.fraction1(2), "%.4f")});
-    summary.push_back({"HINDCAST_INSIDE_3SIGMA_RIC", fmt(hc.fraction3(0), "%.4f") + "," + fmt(hc.fraction3(1), "%.4f") + "," + fmt(hc.fraction3(2), "%.4f")});
-    summary.push_back({"HINDCAST_MEAN_D2_OVER_3", fmt(hc.meanD2Over3(), "%.4f")});
-    summary.push_back({"HINDCAST_COVERAGE_95", fmt(hc.coverage95(), "%.4f")});
-    summary.push_back({"HINDCAST_FACTORS_NOT_FITTED", std::to_string(hc.unfitted)});
-  }
-
   std::vector<std::vector<uint8_t>> relative, geometryRecords;
   for (size_t i = 0; i < all.size(); ++i) {
     const Segment& s = *all[i];
@@ -217,7 +180,7 @@ int characterizeRpo() {
     const double from = i == 0 ? -INFINITY : all[i - 1]->samples.back().t;
     const double to = i + 1 == all.size() ? INFINITY : s.samples.front().t;
     relative.push_back(relativeRecord(c, s, i, from, to, model, hc, projection));
-    geometryRecords.push_back(geometryRecord(c, s, i, i + 1 == all.size() ? summary : std::vector<std::pair<std::string, std::string>>{}));
+    geometryRecords.push_back(geometryRecord(c, s, i, s.projection && projection.settling));
   }
   if (!pushRecords("relative", "OCM.fbs", "$OCM", "OCM", relative)) return 1;
   if (!pushRecords("geometry", "OCM.fbs", "$OCM", "OCM", geometryRecords)) return 1;
