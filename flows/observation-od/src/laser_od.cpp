@@ -51,7 +51,7 @@ namespace fr = ::sdn::frames;
 namespace {
 
 constexpr const char* kPluginId = "org.sdn.flows.observation-od.laser-od";
-constexpr const char* kVersion = "0.1.0";
+constexpr const char* kVersion = "0.1.1";
 constexpr double kC = 299792458.0;
 
 int fail(const std::string& code, const std::string& message) {
@@ -428,6 +428,16 @@ int push_ocm(const wire::EstimationRequest* request, const wire::BatchFitResult*
   od->OD_APRIORI_DATA = "NONE";
   od->OD_EST_PARAMETERS = {"CARTESIAN_X", "CARTESIAN_Y", "CARTESIAN_Z", "CARTESIAN_VX", "CARTESIAN_VY", "CARTESIAN_VZ"};
   for (const auto& k : kinds) od->OD_EST_PARAMETERS.push_back(EnumNameprwDynamicParameter(k.kind));
+  // The solved-for parameters' values at the epoch, typed: a carry under the same dynamics reads them here.
+  for (size_t i = 0; i < kinds.size() && 6 + i < x->size(); ++i) {
+    auto p = std::make_unique<OCMDynamicParameterT>();
+    p->PARAMETER = kinds[i].kind;
+    p->NAME = EnumNameprwDynamicParameter(kinds[i].kind);
+    p->VALUE = x->Get(static_cast<flatbuffers::uoffset_t>(6 + i));
+    p->UNITS = kinds[i].kind == prwDynamicParameter::IN_TRACK_ACCELERATION ? "m/s**2" : "m**2/kg";
+    p->SOLVED_FOR = true;
+    od->OD_DYNAMIC_PARAMETERS.push_back(std::move(p));
+  }
   od->OD_RESIDUAL_RMS = rms;
   od->WEIGHTED_RMS = fit->weighted_rms();
   od->OD_RESIDUALS_SERIES = residuals;

@@ -1,7 +1,7 @@
 {
   "pluginId": "org.sdn.flows.observation-od.laser-od",
   "name": "Laser orbit determination",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Routes ILRS normal points ($TDM), station coordinates ($GST) and the Earth orientation through analysis/estimation fit_batch and propagator/ffm invoke until the estimator converges, and emits the fit as one Cartesian $OCM with FIT_STATISTICS and PVN. Stateless: each step call either asks for a propagation or an estimator round, or finishes. The estimator solves and the FFM propagates; the node rotates the stations to GCRF with foundation/frames' IAU 2006/2000A chain. Refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",
@@ -296,13 +296,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "The converged fit as one Cartesian $OCM at TARGET_EPOCH: GCRF state (km, km/s), formal covariance, ORBIT_DETERMINATION with FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES and OD_OBSERVATIONS_USED the normal points used, ITERATIONS, CONVERGED, FIT_START, FIT_STOP) and PROVENANCE (SOURCE_KIND Observation, ORIGINATOR ILRS, LICENSE_CLASS Reproducible)."
+              "description": "The converged fit as one Cartesian $OCM at TARGET_EPOCH: GCRF state (km, km/s), formal covariance, ORBIT_DETERMINATION with the solve-for parameters' fitted values in OD_DYNAMIC_PARAMETERS and FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES and OD_OBSERVATIONS_USED the normal points used, ITERATIONS, CONVERGED, FIT_START, FIT_STOP) and PROVENANCE (SOURCE_KIND Observation, ORIGINATOR ILRS, LICENSE_CLASS Reproducible)."
             }
           ],
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "The converged fit as one Cartesian $OCM at TARGET_EPOCH: GCRF state (km, km/s), formal covariance, ORBIT_DETERMINATION with FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES and OD_OBSERVATIONS_USED the normal points used, ITERATIONS, CONVERGED, FIT_START, FIT_STOP) and PROVENANCE (SOURCE_KIND Observation, ORIGINATOR ILRS, LICENSE_CLASS Reproducible)."
+          "description": "The converged fit as one Cartesian $OCM at TARGET_EPOCH: GCRF state (km, km/s), formal covariance, ORBIT_DETERMINATION with the solve-for parameters' fitted values in OD_DYNAMIC_PARAMETERS and FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES and OD_OBSERVATIONS_USED the normal points used, ITERATIONS, CONVERGED, FIT_START, FIT_STOP) and PROVENANCE (SOURCE_KIND Observation, ORIGINATOR ILRS, LICENSE_CLASS Reproducible)."
         }
       ],
       "maxBatch": 1,
