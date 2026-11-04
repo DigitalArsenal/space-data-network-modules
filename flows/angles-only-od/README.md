@@ -17,10 +17,11 @@ stage s-1's estimate. Across the first nightly gap the revolution count is a can
 The estimator-FFM loop is flows/observation-od's node, which reads laser ranges only; the angles entry point it needs
 is listed in the record's report.
 
-## Composition (planned)
+## Composition
 
-The node here plans and selects; it holds no estimator loop. `plan`: the tracks, the initial orbit `$OCM` and the
-completed stages' `$OCM`s -> per candidate, the `$PRW` EXECUTION_REQUEST (the seed in INITIAL, the estimate's epoch in
-TARGET_EPOCH) and the stage's tracks, each run to its end by flows/observation-od `step`. `select`: the candidates'
-`$OCM`s (FIT_STATISTICS, WEIGHTED_RMS, the fitted state) -> the next stage, the final `$OCM` with the source's `$PVN`,
-or `no-converged-revolution-count`.
+`plan` (observations, initial, stage, execution, config) -> one `$PRW` EXECUTION_REQUEST per candidate on `execution`
+(the seed in INITIAL, the initial orbit's epoch in TARGET_EPOCH) and the stage's tracks on `observations`; the host runs
+each candidate to its end through flows/observation-od `step` (RA/Dec, `angleSigmaArcsec`, `timeBiasSigmaS.<station>`,
+the source's `$PVN`). `select` (observations, initial, stage, candidates, config) -> the stage's `$OCM` on `selected`, or
+`no-converged-revolution-count`; it becomes `stage` for the next `plan`; `report` REASON `complete` ends the arc. Config:
+`revolutionOffsetMin` (-1), `revolutionOffsetMax` (1), `weightedRmsLimit` (2), `minimumArcHours` (24).
