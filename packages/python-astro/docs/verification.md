@@ -19,9 +19,9 @@ build regression. No alternate artifact or Python physics masks these failures.
 
 - Modules baseline: `e4612363998bd1c732aaab2b242de0015104f096`.
 - Artifact set SHA256: `f1dde329812d7404eba8f1969b6aae38c00b4a30088f40d01e2ffaebb0de7160`.
-- SDS immutable generated source: `acbce14c8044fa2484e5f50fb51815d4488f05b8`,1.271.0.
-- Full7413-file `lib/py` manifest SHA256:
-  `abe67014ee43a291ad785fb9a229b0ebf3747e96d0afa17fa54ca821dff1ed14`.
+- SDS immutable generated source: `a39d51f52ddeb8dc7ba7730610c6b91a117418ca`,1.276.0.
+- Full 8358-file `lib/py` manifest SHA256:
+  `4f441c290df81a68f926382baa26e42a74f95887f24ba9238242ceaae5fa7540`.
 - Python:3.14, macOS arm64; native WasmEdge library:0.16.4.
 
 `artifacts.lock.json` hashes each complete artifact including any publication

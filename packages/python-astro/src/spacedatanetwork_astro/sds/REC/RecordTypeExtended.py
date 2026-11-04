@@ -47,3 +47,7 @@ class RecordTypeExtended(object):
     SRO = 289
     SRT = 290
     GNM = 291
+    CME = 292
+    SWA = 293
+    SWS = 294
+    SSY = 295
