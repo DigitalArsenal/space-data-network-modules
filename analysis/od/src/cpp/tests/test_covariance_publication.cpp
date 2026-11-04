@@ -32,8 +32,14 @@ static const OCM* decode(const std::vector<uint8_t>& bytes) {
     check(VerifySizePrefixedOCMBuffer(verifier), "invalid OCM wire data");
     return GetSizePrefixedOCM(bytes.data());
 }
+static std::vector<uint8_t> built(const od::OCMInputs& input) {
+    std::string refusal;
+    auto bytes = od::build_ocm_flatbuffer(input, "SDN-OD", "", &refusal);
+    check(refusal.empty(), "the record was refused");
+    return bytes;
+}
 static void unavailable(const od::OCMInputs& input, bool expect_state) {
-    auto bytes = od::build_ocm_flatbuffer(input);
+    auto bytes = built(input);
     const auto* o = decode(bytes);
     check(!o->COVARIANCE_DATA(), "unavailable covariance was fabricated");
     check(bool(o->STATE_DATA()) == expect_state, "state availability lost");
@@ -55,18 +61,16 @@ int main() {
     // Wire round-trip is exact, so tolerance is zero (no numerical transform).
     const double covariance[21] = {4,0,9,0,0,16,1,0,0,1,0,-2,0,0,4,0,0,3,0,0,9};
     std::copy(covariance,covariance+21,in.covariance); in.has_covariance = true;
-    auto bytes = od::build_ocm_flatbuffer(in); const auto* o = decode(bytes);
+    auto bytes = built(in); const auto* o = decode(bytes);
     check(o->COVARIANCE_DATA() && o->COVARIANCE_DATA()->size()==21, "valid full covariance omitted");
     for (int i=0;i<21;i++) check(o->COVARIANCE_DATA()->Get(i)==covariance[i], "cross term changed");
     check(o->STATE_DATA()->Get(0)==7000, "state changed");
     check(o->METADATA()->START_TIME()->str()==el.epoch_iso, "state epoch missing");
     check(o->METADATA()->TIME_SYSTEM()->str()=="UTC", "time scale missing");
-    bool frame=false,units=false;
-    for(const auto* p:*o->USER_DEFINED_PARAMETERS()) {
-        if(p->PARAM_NAME()->str()=="STATE_REFERENCE_FRAME") frame=p->PARAM_VALUE()->str()=="TEME";
-        if(p->PARAM_NAME()->str()=="STATE_UNITS") units=p->PARAM_VALUE()->str()=="km,km,km,km/s,km/s,km/s";
-    }
-    check(frame&&units,"frame or units missing");
+    check(o->TRAJ_REF_FRAME()->REFERENCE_FRAME_as_CelestialFrameWrapper()->frame()==CelestialFrame::TEMEOFDATE,"state frame missing");
+    check(o->COV_REF_FRAME()->REFERENCE_FRAME_as_CelestialFrameWrapper()->frame()==CelestialFrame::TEMEOFDATE,"covariance frame missing");
+    check(o->COV_ORDERING()==covarianceOrdering::LTM&&o->COV_UNITS()&&o->COV_UNITS()->size()==6&&o->COV_UNITS()->Get(3)->str()=="km/s","covariance layout or units missing");
+    check(!o->USER_DEFINED_PARAMETERS(),"free-form parameters written");
     in.covariance[1]=20; unavailable(in,true); // positive diagonals, indefinite full matrix
     std::copy(covariance,covariance+21,in.covariance);
     in.covariance[6]=2; unavailable(in,true); // singular x/vx block

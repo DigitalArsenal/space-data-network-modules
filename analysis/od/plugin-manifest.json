@@ -2,7 +2,7 @@
   "pluginId": "orbit-determination",
   "name": "Orbit Determination Plugin",
   "version": "0.3.0",
-  "description": "Fits near-term SGP4 supplemental-GP mean elements ($OMM) to an operator ephemeris: an SDS $OEM FlatBuffer, or a text ephemeris file (SpaceX MEME or CCSDS OEM KVN) carried as an SDS $FIL. Both fit the same core and emit the same records: $OMM elements, $OCM epoch state with explicit covariance availability, epoch, frame and units, and $OBD OD results (the fit, plus the scored reference element set when one is configured). Labels, iteration limit, text format, the reference element set and the opt-in two-line set ($FIL) come from node CONFIG (plugin.getConfig).",
+  "description": "Fits near-term SGP4 supplemental-GP mean elements ($OMM) to an operator ephemeris: an SDS $OEM FlatBuffer, or a text ephemeris file (SpaceX MEME or CCSDS OEM KVN) carried as an SDS $FIL. Both fit the same core and emit the same records: $OMM elements, $OCM epoch state with explicit covariance availability, epoch, TRAJ_REF_FRAME, covariance layout and FIT_STATISTICS, and $OBD OD results (the fit, plus the scored reference element set when one is configured). Labels, iteration limit, text format, the reference element set and the opt-in two-line set ($FIL) come from node CONFIG (plugin.getConfig).",
   "pluginFamily": "orbit_determination",
   "capabilities": [],
   "externalInterfaces": [],
@@ -119,7 +119,7 @@
                   "requiredAlignment": 8
                 }
               ],
-              "description": "Epoch state and optional formal fit covariance, with explicit availability and interpretation."
+              "description": "Epoch state and optional formal fit covariance (TEMEOFDATE for fit, GCRF for fit_ffm; LTM, COV_UNITS, COV_CALIBRATION Uncalibrated for a formal covariance) with OD_COV_REDUCTION stating availability, and FIT_STATISTICS (RMS km, iterations, convergence, states, FIT_START and FIT_STOP)."
             }
           ],
           "minStreams": 0,
@@ -377,7 +377,7 @@
                   "requiredAlignment": 8
                 }
               ],
-              "description": "Epoch state and optional formal fit covariance, with explicit availability and interpretation."
+              "description": "Epoch state and optional formal fit covariance (TEMEOFDATE for fit, GCRF for fit_ffm; LTM, COV_UNITS, COV_CALIBRATION Uncalibrated for a formal covariance) with OD_COV_REDUCTION stating availability, and FIT_STATISTICS (RMS km, iterations, convergence, states, FIT_START and FIT_STOP)."
             }
           ],
           "minStreams": 0,
