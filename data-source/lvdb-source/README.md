@@ -1,67 +1,120 @@
-# LVDB source — evidence checkpoint
+# Local Volume Database source
 
-Task: `modules-lvdb-source-20261103`. This directory currently contains source
-fixtures only. No importer, WASM artifact, retrieval flow or passing E2E exists.
-Implementation stopped under the owner's instruction to report ambiguities.
+Task `modules-lvdb-source-20261103`. This unsigned SDK module retrieves the
+CC0 Local Volume Database and produces size-prefixed SDS 1.275.0 `$SSY`
+FlatBuffers on `SSY.fbs / lvdb / comb-all`.
 
-The v1.1.1 release fetched on 2026-11-04 UTC has 1,727 combined records and all
-Q1 table counts match:
+The composed flow is in `../../flows/lvdb-source`. Its seven nodes fetch the
+upstream `code/release_version.txt`, plan the named release, fetch
+`comb_all.ecsv`, `pm_overview.csv`, `j_factor.csv` and the tagged source archive,
+parse them, and pass records plus typed ingest metadata to generic storage.
+The archive's own release marker must agree with the requested release.
 
-| Table | Records |
-| --- | ---: |
-| dwarf_mw | 68 |
-| dwarf_m31 | 43 |
-| dwarf_local_field | 64 |
-| dwarf_local_field_distant | 736 |
-| gc_harris | 155 |
-| gc_mw_new | 58 |
-| gc_ambiguous | 22 |
-| gc_dwarf_hosted | 313 |
-| gc_other | 7 |
-| candidate | 214 |
-| misc | 47 |
+All table, gzip/tar and YAML parsing runs in C++ WASM. Configuration is an
+optional **empty MCFG** on every method; unknown settings are refused. There
+is no JSON record output. HTTP and durable storage remain host capabilities.
+The module pins SDS 1.275.0 and SDK 0.9.12 locally; the flow also pins the SDK.
+Every measured/derived quantity uses EXOParameter, including correlations,
+placement and J-factor percentiles. No coordinates or physical quantities are
+computed in JavaScript.
 
-## Acceptance ambiguity
+## Mapping and source fidelity
 
-The brief requires “the 6 rows that have both a value and a limit”. The actual
-release contains six quantity pairs across five distinct source rows:
+The published combined table takes precedence for its columns. Tagged YAML
+supplies location errors, other names, morphology, discovery information,
+proper-motion correlations, SFH, HI kinematics and extra profile fits. YAML
+is joined by its declared key, because `ngc_0185_gc_PA-N185` has a lowercase
+filename. Duplicate YAML keys follow the upstream Python loader's last-value
+behavior, including duplicate sections. Empty YAML references remain absent.
+Missing numbers remain absent/NaN; source infinities are retained.
 
-| Source key | Quantity | Value | Upper limit |
-| --- | --- | ---: | ---: |
-| eso_383-087 | flux_HI | 27.7 | 0.0 |
-| ugc_02716 | flux_HI | 4.92 | 0.0 |
-| garro_1 | vlos_sigma | 0.4 | 0.8 |
-| garro_1 | mass_dynamical_wolf | 3.2 | 3.8 |
-| sagittarius_2 | ellipticity | 0.03 | 0.08 |
-| fornax_1-gc6 | metallicity_spectroscopic_sigma | 0.03 | 0.17 |
+Errors preserve magnitude and asymmetry: `_ep` becomes positive ERR1 and
+`_em` becomes negative ERR2. An upper/lower bound has LIMIT +1/−1. When a
+combined quantity has both a measurement and a bound, the measurement stays
+in its field and the bound is an ALTERNATE. The coordinator ruled that the
+six pairs span five systems, with two on `garro_1`; the two literal zero
+bounds are retained unchanged. The E2E names all six pairs.
 
-Clarification needed: should the E2E require six ALTERNATES distributed across
-these five records, preserving the two literal zero limits? Nothing has been
-silently dropped or interpreted as a missing value.
+The fetched companion files contain 790 PM rows and 622 J-factor rows (the
+study reported 789/621). All are retained. Nine historical key spellings are
+joined to canonical keys verified in the tagged YAML; record NOTES retain
+the original companion keys. Unknown companion keys refuse the batch.
 
-## Fixtures and provenance
+PM and J-factor measurements preserve their individual citations, methods,
+selection/use and comments. LVDB J-factor interval widths are converted in
+WASM to the percentile coordinates named by SSY's P05/P95 fields. Profile
+radii retain the source unit; King/Sersic columns from the combined table use
+its normalized arcmin unit.
 
-`tests/fixtures` contains those five systems plus `antlia_2` and `aquarius_3`,
-trimmed from the fetched ECSV and companion PM/J-factor CSVs. ECSV metadata is
-retained. YAML files are byte-identical excerpts of the tagged source archive.
-`provenance.tsv` records the upstream file URL, fetch completion time, full
-source file SHA-256 and committed fixture SHA-256. CSV/ECSV trimming changes
-serialization; source and fixture hashes are intentionally separate.
+SOURCE_SHA256 contains, in order, SHA-256 of the complete ECSV, PM CSV,
+J-factor CSV, tagged gzip archive, and that record's exact YAML bytes. Every
+record includes its release, YAML URL, source key/table, CC0-1.0 license,
+retrieval time and Pace 2025 citation. Gzip CRC/length and tar checksums are
+validated. The module emits nothing until the complete batch validates.
 
-The YAML files and `code/release_version.txt` were retrieved through
+## Build and acceptance
+
+From this directory:
+
+```sh
+npm ci --ignore-scripts
+node build.mjs --unsigned
+node --test tests/sdk_compat.test.mjs
+node tests/lvdb-source.e2e.mjs
+```
+
+From the modules root, build the production flow:
+
+```sh
+npm ci --ignore-scripts --prefix flows/lvdb-source
+node flows/lvdb-source/build.mjs --unsigned
+```
+
+Builds use the SDK compiler's WASI sequential toolchain and the shared
+`dist/isomorphic/module.wasm` contract. No signing key is embedded or used.
+The vendor directory pins RapidYAML's MIT-licensed source and verifies its
+SHA-256. The build adapts only WASI platform detection; miniz and SHA-256 are
+reused from existing modules.
+
+The E2E fetches and hash-verifies v1.1.1 inputs (ignored `tests/cache`), checks
+1,727 decoded records and all eleven Q1 table counts, verifies all 122 combined
+columns including the named rows, checks YAML additions and the companion
+tables, and asserts the six exact value/limit pairs. It compiles a replay flow
+that substitutes captured HTTP response bytes at the HTTP boundary, drives
+all seven nodes and asserts byte-for-byte equality at typed storage ingress.
+Invalid batches are refused. Committed trimmed fixture hashes are verified.
+These are catalog equality tests: no astronomical model or tolerance is used.
+
+## Deferred node readback
+
+The coordinator explicitly deferred native-node publication/readback until
+`sdn-vendor-ssy-20261103` refreshes the node's embedded SDS. The E2E reports
+that deferral, never a node PASS. After the refresh:
+
+```sh
+LVDB_NODE_READBACK=1 SDN_NODE_BINARY=/absolute/path/to/spacedatanetwork \
+  node data-source/lvdb-source/tests/lvdb-source.e2e.mjs
+```
+
+Run that command from the modules root. The retained native path boots an
+isolated scratch node, signs the replay artifact with that node's temporary
+identity, schedules it, waits for the signed SSY publication, reads its
+manifest and shards by CID, verifies hashes/signature presence and reruns
+the source oracle. It does not install a provider node or use the revoked
+development key.
+
+## Fixture provenance
+
+`tests/fixtures` contains the five alternate-bearing systems plus
+`antlia_2` and `aquarius_3`, trimmed from the real v1.1.1 ECSV/PM/J-factor
+fetch. ECSV metadata is retained. YAML files are byte-identical excerpts.
+`provenance.tsv` records each upstream file URL, fetch completion time,
+full-source SHA-256 and fixture SHA-256. Trimming reserializes CSV/ECSV, so
+source and fixture hashes are separate.
+
+YAML and the release marker were retrieved through
 https://api.github.com/repos/apace7/local_volume_database/tarball/v1.1.1
 (commit prefix `72dabf7`). Archive SHA-256:
 `1daa9ffb5f2705b9819e13dbc5557f78546ede33892dbd371f2067a02fbbf628`.
-The raw file URLs identify the corresponding tagged files. The release marker
-reads `v1.1.1`. Dataset license: CC0-1.0; citation: Pace 2025, OJAp 8, 142.
-
-The released SDS 1.275.0 SSY schema was inspected: all quantities, including
-placement, correlations and J-factor percentiles, use EXOParameter. ERR2 must
-be negative. The module-local package pin pattern in swpc-realtime permits
-consuming this release without changing the modules root dependency.
-
-The local SDN checkout has no `sdn-server/internal/sds/schemas/SSY.fbs`.
-Node publication/readback therefore needs the separately assigned SSY vendor
-task. No node was launched and no CID readback was attempted.
-
-No gauntlet or E2E PASS is claimed for this evidence checkpoint.
+The raw file URLs identify the corresponding tagged files. License CC0-1.0;
+citation Pace 2025, OJAp 8, 142.
