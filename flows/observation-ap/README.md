@@ -56,8 +56,7 @@ and passes them on `spaceWeather`.
 
 ## Source products
 
-Not registered in `flows/source-products/sources.json` (another task writes that file); its observation lane takes
-`ap_ocm` on `fit_omm`'s lane once registered.
+Not registered in `flows/source-products/sources.json`: that file has one writer per wave, and this task is not it.
 
 ## Test
 
