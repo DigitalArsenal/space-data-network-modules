@@ -332,6 +332,7 @@ artifact uses shared memory; browser hosts need cross-origin isolation.
 | `ingest_state` | `RESIDENT_STATE` (1–1024 input records), `EXECUTION_REQUEST` on `configuration`, and the kernel and environment records | No scientific output |
 | `ingest_state_gravity_only` | `RESIDENT_STATE` (1–1024 input records) | No scientific output |
 | `propagate_state` | `RESIDENT_REQUEST` | `RESIDENT_STATE` |
+| `propagate_oem` | `EXECUTION_REQUEST`, `$PCF` OUTPUT on `configuration`, and the kernel and environment records | One `$OEM` on `ephemeris` |
 | `prepare_trajectory_segments` | `PREPARE_REQUEST` | `PREPARE_RESULT` |
 | `describe_trajectory_segments` | `DESCRIBE_REQUEST` | `DESCRIBE_RESULT` containing PPE |
 
@@ -344,6 +345,32 @@ ordered daily rows covering the arc; see
 `space_weather` the `SPACE_WEATHER` arm (daily `$SPW` rows) and
 `jb2008_indices` the `JB2008_INDICES` arm. Public ports do not accept the
 historical JSON or private pointer envelopes.
+
+### Ephemeris output (`propagate_oem`)
+
+`propagate_oem` carries a state as an ephemeris, for consumers that read
+`$OEM` (sdn-ap `fit`). It executes the `EXECUTION_REQUEST` as `invoke` does,
+with its samples the `$PCF` 1.0.7 OUTPUT epochs and its arc ending at the last
+of them (`TARGET_EPOCH` is not read), and writes one plain `$OEM`: one block of
+`EPHEMERIS_DATA_LINES` at those epochs, the same states `invoke` returns there,
+in km and km/s; `TIME_SYSTEM` UTC, `CENTER_NAME` EARTH, `REFERENCE_FRAME` GCRF
+or EME2000 (enumeration and `NAME`), `OBJECT` from `INITIAL`'s
+`CATALOG_NUMBER` and `OBJECT_ID`. States only, no covariance lines.
+
+OUTPUT names `EPOCHS` (ISO 8601 UTC, ascending) or `START_TIME` and
+`STOP_TIME` at `STEP_SECONDS`, the last state at or before `STOP_TIME`, as
+sdn-ap `propagate_epochs` counts them; at most `MAXIMUM_STATES` and 10000.
+`FRAME` is the request's axes: GCRF for `INITIAL` in ICRF axes, EME2000 for
+mean J2000 axes. The `$PCF` carries OUTPUT only (`THEORY` UNSPECIFIED or FFM);
+the request carries the dynamics, no `SAMPLE_EPOCHS` and no `EVENTS`.
+
+Refused by name: `output-unspecified`, `frame-unsupported:<name>`,
+`time-system-not-utc` (an OUTPUT epoch with a UTC offset or another time
+scale), `too-many-states`, `configuration-refused:<table>`,
+`invalid-configuration`, `invalid-request`, `unsupported-center`, and every
+refusal of `invoke`. `node tests/propagate-oem.e2e.mjs` checks a 24 h carry of
+Starlette at 60 s against `invoke` at the same epochs (equal to 1 mm) and its
+acceptance by sdn-ap `fit`.
 
 ### The end of a trajectory: reentry
 
