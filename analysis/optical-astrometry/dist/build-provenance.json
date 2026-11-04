@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.261.0+1792716949507",
+  "spacedatastandards": "1.276.0",
   "sdsFamilies": [
     "FIL",
     "PHB",
@@ -23,6 +23,8 @@
     "PCE",
     "NCD",
     "SPW",
+    "EVL",
+    "PCF",
     "PRW",
     "SKQ",
     "TDM",
@@ -53,5 +55,5 @@
   ],
   "moduleSdk": "0.9.12",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "8cfa77e8b3a9ddd9b88d43d468d32f685a2eab0465286ad21bdcbf5816686873"
+  "wasmSha256": "ad354eb11ff4948d59e99f514fda31ea612013023668dfd28b337e4d380f31a0"
 }

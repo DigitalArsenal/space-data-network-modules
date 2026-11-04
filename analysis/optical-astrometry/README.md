@@ -34,6 +34,16 @@ The manifest describes every port. Options are the `optical` config table: `cali
 `trajectory_minutes`, `trajectory_step_seconds`, `sensor_id`, `originator`, `image_set_id`, `creation_date`,
 `propagator_port_id`, `min_elevation_deg`, `max_site_candidates`.
 
+## initial_orbit
+
+Gooding's angles-only method alone, with no element set and no frames: RA/Dec `$TDM` records on `angles` (`ANGLE_TYPE`
+RADEC, UTC, degrees, geometric topocentric GCRF at the time tag; the site as `OBSERVER_X/Y/Z`, Earth-fixed WGS-84 m, as
+data-source/satnogs-optical-source writes it) and `$EOP` on `earth_orientation` (required) -> one Cartesian `$OCM` on
+`orbit`: the GCRF state (km, km/s) at the middle sight, `OD_METHOD` INITIAL_ORBIT, the middle-sight miss (arcsec) as
+`OD_RESIDUAL_RMS`, no covariance; and a `report`. The three sights are the first, middle and last observation by epoch;
+they must lie within one revolution (one pass): the Lambert arc is the short way. Refused by name:
+`too-few-observations`, `no-initial-orbit`, `invalid-angles`.
+
 ## Video versus FITS
 
 A video is the weakest input this module reads: H.264 at 8 bits, rescaled, with times only as burnt-in text and no
