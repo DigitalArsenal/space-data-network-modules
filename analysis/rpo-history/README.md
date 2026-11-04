@@ -14,8 +14,12 @@ inside (the propagator is a pluggable port); SDS records at every boundary.
 | `error_model` | in | One `$ERM` model from `analysis/gp-error-model` (optional): the bands |
 | `propagation_requests` | out | First pass: one `$PRW` `WINDOW_REQUEST`, one query per element set |
 | `relative` | out | `$OCM` per segment: the chaser about the target, CCSDS RTN |
-| `geometry` | out | `$OCM` per segment, extended type `RPO_GEOMETRY`: the derived series |
+| `geometry` | out | `$OCM` per segment, `RPO_GEOMETRY`: the derived series, one vector each |
 | `realism` | out | `$CVR`: the hindcast of the projection bands |
+
+Each segment's records state `TRAJ_BASIS` (`DETERMINED` for the history,
+`PREDICTED` for the projection) and `SEED_SETS`, the chaser's and the target's
+element sets (NORAD number and epoch).
 
 The first call, without answers, asks for each set's trajectory on a grid of
 `step_seconds` (whole multiples since 1970-01-01 UTC). The host routes the
@@ -51,7 +55,8 @@ The geometry is the RIC box's (OrbPro `OrbitalState.cpp`, through the shared
 A detected maneuver brackets its object's element sets around it, as the
 `$MNV`'s `SOURCED_DATA` names them. Samples inside a bracket are left out:
 shown, not propagated through. In `relative`, each bracket is an OCM
-`MANEUVER_DATA` entry (`DETERMINED`) on the record after it.
+`MANEUVER_DATA` entry (`DETERMINED`, `NORAD_CAT_ID` its object) on the record
+after it.
 
 A set issued within `settle_days` after a bracket is **settling**: its orbit
 fit still spans observations from before the burn.
@@ -70,9 +75,11 @@ It assumes no maneuvers after `stop`.
   - 1 σ: the 68.27 % quantile of |error| / model σ;
   - 3 σ: a third of the 99.73 % quantile.
 - **Hindcast.** It replays that over [start, stop) and counts the shares
-  inside the bands, and d² against χ²(3). Predictions that span a bracket or
-  involve a settling set are left out. A projection that starts from a
-  settling set is flagged.
+  inside the bands, and d² against χ²(3): `$CVR` `SAMPLES`, `TRUTH_EPOCHS`,
+  `COVERAGE_1_SIGMA_AXIS1..3`, `COVERAGE_3_SIGMA_AXIS1..3`, `MEAN_D2_OVER_3`,
+  `COVERAGE_95`. Predictions that span a bracket or involve a settling set are
+  left out. A projection that starts from a settling set says so in its
+  `COMMENT`.
 - **`$CVR` verdict.** It follows the CVR rule, which needs three objects. A
   single pair stays `Uncalibrated` whatever its shares.
 
@@ -89,26 +96,25 @@ It assumes no maneuvers after `stop`.
 | `chaser` | in | `$OEM` blocks of the chaser's trajectory (UTC, km, km/s, one Earth-centered frame); several blocks are arcs |
 | `target` | in | `$OEM` blocks of the target's trajectory, same frame |
 | `sun` | in | `$OEM` of the Sun's Earth-centered position, same frame |
-| `inspection` | out | `$OCM` per run of samples, extended type `RPO_INSPECTION` |
+| `inspection` | out | `$OCM` per run of samples, `RPO_INSPECTION`; `TRAJ_REF_FRAME` the trajectories' frame, `PERTURBATIONS.SHADOW_MODEL` the shadow model |
 
 On a fixed UTC grid (`inspect.start`, `inspect.stop`, `inspect.step_seconds`), each
 sample takes each object's block that starts latest and covers it; arcs are never
-blended. The columns:
+blended. The vectors:
 
 - `PHASE_ANGLE_DEG`: the angle at the target between the Sun and the chaser.
 - `TARGET_SUNLIT`, `CHASER_SUNLIT`: the conical Earth-shadow function (Montenbruck
   & Gill 2000, 3.4.2; spherical Earth 6378.137 km, Sun 695700 km): 1 sunlit, 0 umbra.
-- `LINE_OF_SIGHT`: 1 when the chaser-target segment clears the Earth;
+- `LINE_OF_SIGHT`: true when the chaser-target segment clears the Earth;
   `TARGET_LIT_FROM_CHASER` = `TARGET_SUNLIT` × `LINE_OF_SIGHT`.
 - `SUN_FROM_LINE_OF_SIGHT_DEG`, `RANGE_KM`.
 - `CHASER_OFF_NADIR_DEG`, `CHASER_CLOCK_DEG`: the chaser in the target's orbit frame
   (nadir, Earth-relative along-track, right of the track; clock 90 right, 270 left).
 - `IN_SAR_RIGHT`, `IN_SAR_LEFT`: with `inspect.sar_*` (carrier frequency, aperture,
-  incidence band, a citation), 1 when the chaser is inside the side-looking radar's
+  incidence band, a citation), true when the chaser is inside the side-looking radar's
   field of regard on that side: off nadir between the band's look angles (spherical
   Earth, at each sample's radius) and within half the azimuth beamwidth (0.886 λ / L)
-  of the broadside plane. The derived wavelength, beamwidths and look angles are
-  recorded as parameters.
+  of the broadside plane. `RADAR` holds the six inputs.
 
 `node tests/inspect.e2e.mjs` checks every column against closed-form geometry.
 
@@ -116,8 +122,14 @@ blended. The columns:
 
 ```sh
 npm ci && npm run build
+node tests/typed-records.e2e.mjs
 node tests/cosmos2612-iceye-x36.e2e.mjs
 ```
+
+`tests/typed-records.e2e.mjs` reads every record field against
+`tests/fixtures/free-form.json` (`tests/record-free-form.mjs`, the values of the
+earlier build on the runs of `tests/fixture-runs.mjs`; the archive through the
+2026-10-17 13:02 file).
 
 The E2E reads the SDN GP archive (`SDN_GP_ARCHIVE`, the Space-Track
 `gp_history` by-creation files) at run time. It runs maneuver detection and

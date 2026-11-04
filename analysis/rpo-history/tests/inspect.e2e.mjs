@@ -17,7 +17,7 @@
 //      9.65 GHz, 3.2 x 0.4 m, Strip incidence 15-35 deg);
 //   5. arcs: two chaser blocks overlapping in time: every sample takes the
 //      block that starts latest, never a blend;
-//   6. the record: $OCM RPO_INSPECTION, the COLUMNS it names, the grid.
+//   6. the record: $OCM RPO_INSPECTION, its vectors on the grid.
 // The oracles here are test code only (conformance tooling).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -101,14 +101,14 @@ async function inspect(options, chaser, target, sun) {
     await harness.destroy();
   }
 }
-const params = (rec) => Object.fromEntries(rec.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
+// The RPO_INSPECTION vectors as rows {t, PHASE_ANGLE_DEG, ...}; the bool vectors as 0 and 1.
 function rowsOf(records) {
   const out = [];
   for (const rec of records) {
-    const cols = params(rec).COLUMNS.split(','), w = rec.STATE_VECTOR_SIZE, t0 = T(rec.METADATA.START_TIME);
-    for (let i = 0; i * w < rec.STATE_DATA.length; i++) {
+    const g = rec.RPO_INSPECTION, t0 = T(rec.METADATA.START_TIME);
+    for (let i = 0; i < g.RANGE_KM.length; i++) {
       const row = { t: t0 + i * rec.STATE_STEP_SIZE };
-      cols.forEach((c, k) => { row[c] = rec.STATE_DATA[i * w + k]; });
+      for (const [c, v] of Object.entries(g)) if (Array.isArray(v) && v.length) row[c] = typeof v[i] === 'boolean' ? Number(v[i]) : v[i];
       out.push(row);
     }
   }
@@ -215,26 +215,20 @@ const base = { chaser: 'CHASER', target: 'TARGET', step_seconds: 60 };
     { name: 'outside the azimuth beam', off: 25, clock: 90 + azHalf * 1.02, right: 0, left: 0 },
     { name: 'along track (an inspector ahead)', off: 89, clock: 0, right: 0, left: 0 },
   ];
-  let parameters = null;
+  let radar = null;
   for (const c of cases) {
     const records = await inspect({ ...base, ...radarOptions, start: iso(times[0]), stop: iso(times.at(-1)) },
       [{ states: fixed(times, at(c.off, c.clock)) }], [{ states: fixed(times, target, vel) }], [{ states: fixed(times, SUN) }]);
-    parameters ??= params(records[0]);
+    radar ??= records[0].RPO_INSPECTION.RADAR;
     const row = rowsOf(records)[0];
     const clockWant = ((c.clock % 360) + 360) % 360;
     check(`radar: ${c.name}`, Math.abs(row.CHASER_OFF_NADIR_DEG - c.off) < 1e-6 && Math.abs(row.CHASER_CLOCK_DEG - clockWant) < 1e-6 &&
       row.IN_SAR_RIGHT === c.right && row.IN_SAR_LEFT === c.left,
       { off: row.CHASER_OFF_NADIR_DEG, clock: row.CHASER_CLOCK_DEG, right: row.IN_SAR_RIGHT, left: row.IN_SAR_LEFT });
   }
-  const look = parameters.SAR_LOOK_ANGLE_DEG.split(' to ').map(Number);
-  check('radar: the wavelength is c / f', Math.abs(Number(parameters.SAR_WAVELENGTH_M) / lambda - 1) < 1e-10, parameters.SAR_WAVELENGTH_M);
-  check('radar: beamwidths are 0.886 lambda / D (azimuth 3.2 m, elevation 0.4 m)', Math.abs(Number(parameters.SAR_AZIMUTH_BEAMWIDTH_DEG) / (2 * azHalf) - 1) < 1e-10 &&
-    Math.abs(Number(parameters.SAR_ELEVATION_BEAMWIDTH_DEG) / deg(0.886 * lambda / 0.4) - 1) < 1e-10,
-    { azimuth: parameters.SAR_AZIMUTH_BEAMWIDTH_DEG, elevation: parameters.SAR_ELEVATION_BEAMWIDTH_DEG });
-  check('radar: look angles from the 15-35 deg incidence band on a spherical Earth', Math.abs(look[0] - lookLo) < 1e-6 && Math.abs(look[1] - lookHi) < 1e-6,
-    { look, want: [lookLo, lookHi] });
-  check('radar: the inputs and their source are recorded', parameters.SAR_FREQUENCY_GHZ === '9.65' && parameters.SAR_ANTENNA_M === '3.2 x 0.4' &&
-    parameters.SAR_INCIDENCE_DEG === '15 to 35' && /ICEYE/.test(parameters.SAR_SOURCE), parameters);
+  // The wavelength, beamwidths and look angles follow from RADAR; the band cases above test the azimuth beam and look band edges.
+  check('radar: the inputs and their source are RADAR', radar.FREQUENCY_GHZ === 9.65 && radar.ANTENNA_LENGTH_M === 3.2 && radar.ANTENNA_HEIGHT_M === 0.4 &&
+    radar.INCIDENCE_MIN_DEG === 15 && radar.INCIDENCE_MAX_DEG === 35 && /ICEYE/.test(radar.SOURCE), radar);
 }
 
 // ── 5 + 6: arcs and the record ─────────────────────────────────────────────
@@ -249,10 +243,11 @@ const base = { chaser: 'CHASER', target: 'TARGET', step_seconds: 60 };
   check('arcs: samples before the newer arc use the first, from it on the newer one, never a blend',
     rows.slice(0, 5).every((r) => Math.abs(r.RANGE_KM - 10) < 1e-9) && rows.slice(5).every((r) => Math.abs(r.RANGE_KM - 20) < 1e-9),
     rows.map((r) => +r.RANGE_KM.toFixed(6)));
-  const rec = records[0], p = params(rec);
-  check('record: one $OCM RPO_INSPECTION on the grid, its COLUMNS the row width', records.length === 1 && rec.TRAJ_TYPE_DESCRIPTION === 'RPO_INSPECTION' &&
-    rec.STATE_STEP_SIZE === 60 && p.COLUMNS.split(',').length === rec.STATE_VECTOR_SIZE && rec.STATE_DATA.length === 11 * rec.STATE_VECTOR_SIZE &&
-    rec.METADATA.START_TIME === iso(times[0]).replace('.000Z', '.000Z'), { columns: p.COLUMNS, width: rec.STATE_VECTOR_SIZE, start: rec.METADATA.START_TIME });
+  const rec = records[0], g = rec.RPO_INSPECTION;
+  const lengths = Object.fromEntries(Object.entries(g).filter(([, v]) => Array.isArray(v)).map(([c, v]) => [c, v.length]));
+  check('record: one $OCM RPO_INSPECTION on the grid, nine vectors of 11, no radar, STATE_DATA empty', records.length === 1 && rec.STATE_DATA.length === 0 &&
+    rec.STATE_STEP_SIZE === 60 && Object.values(lengths).filter((n) => n === 11).length === 9 && lengths.IN_SAR_RIGHT === 0 && !g.RADAR &&
+    rec.TRAJ_REF_FRAME?.NAME === 'GCRF' && rec.METADATA.START_TIME === iso(times[0]), { lengths, frame: rec.TRAJ_REF_FRAME?.NAME, start: rec.METADATA.START_TIME });
   const gap = await inspect({ ...base, start: iso(times[0]), stop: iso(times.at(-1)) },
     [{ states: early.slice(0, 4) }, { states: early.slice(6) }], [{ states: fixed(times, target) }], [{ states: fixed(times, SUN) }]);
   check('record: a gap in a trajectory splits the records', gap.length === 2 && rowsOf(gap).length === 9, { records: gap.length, rows: rowsOf(gap).length });
