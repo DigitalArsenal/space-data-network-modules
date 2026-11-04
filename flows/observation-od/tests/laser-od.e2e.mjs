@@ -21,7 +21,14 @@
 //      from NSGF equal (within 0.5 mm) the answers recorded from the dists before the low-sphere convergence change
 //      (tests/fixtures/laser-od-recorded.json);
 //   3. PROVENANCE SOURCE_KIND Observation, ORIGINATOR ILRS; no USER_DEFINED_PARAMETERS;
-//   4. refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>.
+//   4. refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>;
+//   5. a window 0.2.0 did not fit (no-convergence:20 at the registered cutoff 2026-07-20 of
+//      experiments-ap-observations-laser-20261104): Starlette's normal points of 2026-07-18T00:00 to 2026-07-20T00:00, the
+//      same station solution, C04 rows of 2026-07-16 to 2026-07-25, NSGF's 2026-07-18T00:00 state of
+//      nsgf.orb.starlette.260720.v000 (SHA-256 6b7f833ab31f4466ce068f12d14c9b79bd72942675a5c0e85d91ce84c4385e2e) rounded
+//      to 100 m and 0.1 m/s, Cr*A/m 0.00108 m^2/kg (the run's); the node converges, WEIGHTED_RMS below WRMS_BOUND and its
+//      2026-07-20T00:00 state within END_BOUND_M of NSGF's (nsgf.orb.starlette.260724.v000, SHA-256
+//      d019852e6bc9e6f380824cc14bb61be1112c58eceedf00fa3c1bd6a2ad7c25e4), ITERATIONS reported.
 // JS reads files, routes records between the modules by port and compares numbers: no orbit, frame or measurement is
 // computed here.
 //   cd flows/observation-od && node tests/laser-od.e2e.mjs
@@ -41,6 +48,8 @@ const modules = (p) => new URL(`../../../${p}`, import.meta.url);
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}`); if (!ok) failures.push(label); };
 const RECORDED = JSON.parse(fs.readFileSync(here('fixtures/laser-od-recorded.json'), 'utf8'));
+// Case 5 measured WEIGHTED_RMS 3.078 and its end state 1.414 m from NSGF (0.3.0); the bounds add 0.4 and double the 1.4 m.
+const WRMS_BOUND = 3.5, END_BOUND_M = 3;
 
 const T = (schemaName, fileIdentifier, rootTypeName) => ({ schemaName, fileIdentifier, rootTypeName, wireFormat: 'flatbuffer' });
 const HRSP = T('HttpResponse.fbs', 'HRSP', 'HttpResponse'), MCFG = T('ModuleConfig.fbs', 'MCFG', 'ModuleConfig');
@@ -66,11 +75,18 @@ const passes = await invoke(crd, 'read_crd', [http('https://edc.dgfi.tum.de/pub/
   here('fixtures/starlette-20260713T15-20260715T15.np2'), '2026-10-09T22:48:51.721Z')]);
 const sites = await invoke(sinex, 'read_sinex', [http('https://edc.dgfi.tum.de/pub/slr/products/pos+eop/weekly/2026/260718/ilrsa.pos+eop.260718.v90.snx.gz',
   modules('data-source/ilrs-station-coordinates/tests/fixtures/ilrsa.pos+eop.260718.v90.no-matrix.snx'), '2026-10-09T22:37:17.611Z')]);
-const eop = await invoke(eopParser, 'parse_c04', [{ ...http('https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now', here('fixtures/eopc04-20260710-20260720.txt'), '2026-10-01T22:15:20.000Z'), portId: 'response' }]);
-for (const [name, r] of [['read_crd', passes], ['read_sinex', sites], ['parse_c04', eop]]) if (r.error) { console.error(`${name}: ${r.error}`); process.exit(1); }
+const c04 = (file) => invoke(eopParser, 'parse_c04', [{ ...http('https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now', here(file), '2026-10-01T22:15:20.000Z'), portId: 'response' }]);
+const eop = await c04('fixtures/eopc04-20260710-20260720.txt');
+// Case 5's window.
+const passes5 = await invoke(crd, 'read_crd', [http('https://edc.dgfi.tum.de/pub/slr/data/npt_crd_v2/starlette/2026/starlette_202607.np2',
+  here('fixtures/starlette-20260718T00-20260720T00.np2'), '2026-10-09T22:48:51.721Z')]);
+const eop5 = await c04('fixtures/eopc04-20260716-20260725.txt');
+for (const [name, r] of [['read_crd', passes], ['read_sinex', sites], ['parse_c04', eop], ['read_crd (case 5)', passes5], ['parse_c04 (case 5)', eop5]])
+  if (r.error) { console.error(`${name}: ${r.error}`); process.exit(1); }
 const tdms = out(passes, 'observations'), gsts = out(sites, 'stations');
-const normalPoints = tdms.reduce((n, b) => n + TDM.getRootAsTDM(new flatbuffers.ByteBuffer(b)).unpack().SEGMENTS
+const laserRanges = (records) => records.reduce((n, b) => n + TDM.getRootAsTDM(new flatbuffers.ByteBuffer(b)).unpack().SEGMENTS
   .reduce((m, s) => m + s.OBSERVATIONS.filter((o) => o.KEYWORD === 'LASER_RANGE').length, 0), 0);
+const normalPoints = laserRanges(tdms);
 console.log(`fixture: ${tdms.length} passes, ${normalPoints} normal points; ${gsts.length} stations`);
 
 const table = (name, fields = {}) => Object.assign(new P[`${name}T`](), fields);
@@ -79,13 +95,17 @@ const prw = (arm, value) => {
   P.PRW.finishSizePrefixedPRWBuffer(b, table('PRW', { [arm]: value }).pack(b));
   return b.asUint8Array().slice();
 };
-const eopRows = [];
-for (const buf = Buffer.from(out(eop, 'records')[0]), at = { i: 0 }; at.i < buf.length;) {
-  const n = buf.readUInt32LE(at.i);
-  eopRows.push(EOP.getRootAsEOP(new flatbuffers.ByteBuffer(Uint8Array.from(buf.subarray(at.i + 4, at.i + 4 + n)))).unpack());
-  at.i += 4 + n;
-}
-const earthOrientation = prw('EARTH_ORIENTATION', table('PRWEarthOrientation', { ROWS: eopRows }));
+// parse_c04's size-prefixed $EOP rows as propagator/ffm's EARTH_ORIENTATION record.
+const orientationOf = (parsed) => {
+  const rows = [];
+  for (const buf = Buffer.from(out(parsed, 'records')[0]), at = { i: 0 }; at.i < buf.length;) {
+    const n = buf.readUInt32LE(at.i);
+    rows.push(EOP.getRootAsEOP(new flatbuffers.ByteBuffer(Uint8Array.from(buf.subarray(at.i + 4, at.i + 4 + n)))).unpack());
+    at.i += 4 + n;
+  }
+  return prw('EARTH_ORIENTATION', table('PRWEarthOrientation', { ROWS: rows }));
+};
+const earthOrientation = orientationOf(eop);
 const kernelBytes = fs.readFileSync(modules('files/orbit-products/tests/fixtures/de440/de440-2026.bsp'));
 const kernel = prw('NATIVE_INPUT', table('PRWNativeInput', {
   DESCRIPTOR: table('NCD', { FORMAT: P.ncdContainerFormat.SPK_DAF, SOURCE_BYTE_LENGTH: BigInt(kernelBytes.length), SOURCE_SHA256: createHash('sha256').update(kernelBytes).digest('hex') }),
@@ -95,10 +115,10 @@ const GUESS = { epoch: '2026-07-13T15:00:00.000000Z', state: [7307.9, 922.3, 108
 const TRUTH = { epoch: '2026-07-15T15:00:00.000000Z', state: [-2564.467504998497, -4266.722374653467, -5414.627287901913, 6.790643111584254, -2.3068038476204733, -1.60360144034126] };
 const instant = (iso) => table('TIMInstant', { TIME_SYSTEM: P.timingStandard.UTC, EPOCH_FORMAT: P.timEpochRepresentation.ISO8601, ISO8601: iso });
 const vector = (v) => table('FRMVector3', { X: v[0], Y: v[1], Z: v[2] });
-const execution = (target = TRUTH.epoch) => prw('EXECUTION_REQUEST', table('PRWExecutionRequest', {
+const execution = (target = TRUTH.epoch, guess = GUESS, crAm = 0.00115) => prw('EXECUTION_REQUEST', table('PRWExecutionRequest', {
   INITIAL: table('PRWResidentState', {
-    STATE: table('FRMStateVector', { REPRESENTATION: P.frmStateRepresentation.CARTESIAN, POSITION: vector(GUESS.state.slice(0, 3).map((x) => x * 1000)),
-      VELOCITY: vector(GUESS.state.slice(3).map((x) => x * 1000)), COORDINATE_SYSTEM_NAME: 'GCRF', EPOCH: GUESS.epoch, EPOCH_TIME_SYSTEM: 'UTC' }),
+    STATE: table('FRMStateVector', { REPRESENTATION: P.frmStateRepresentation.CARTESIAN, POSITION: vector(guess.state.slice(0, 3).map((x) => x * 1000)),
+      VELOCITY: vector(guess.state.slice(3).map((x) => x * 1000)), COORDINATE_SYSTEM_NAME: 'GCRF', EPOCH: guess.epoch, EPOCH_TIME_SYSTEM: 'UTC' }),
     COORDINATE_SYSTEM: table('RFMCoordinateSystem', { NAME: 'GCRF', AXIS_TYPE: P.rfmAxisType.ICRF, AXIS_REFERENCE_BODY_ID: 399,
       ORIGIN: table('RFMOrigin', { KIND: P.rfmOriginKind.CELESTIAL_BODY, CELESTIAL_BODY_ID: 399 }) }),
     CATALOG_NUMBER: 7646, OBJECT_ID: '1975-010A', VALID: true }),
@@ -109,7 +129,7 @@ const execution = (target = TRUTH.epoch) => prw('EXECUTION_REQUEST', table('PRWE
     GRAVITY_CHOICE: P.pcfGravitySelection.EGM2008, ENABLE_POINT_MASS: true, GRAVITATIONAL_PARAMETER: 3.986004415e14,
     MAXIMUM_DEGREE: 70, HAS_MAXIMUM_DEGREE: true, MAXIMUM_ORDER: 70, HAS_MAXIMUM_ORDER: true,
     ENABLE_THIRD_BODY: true, THIRD_BODY_IDS: [10, 301], EPHEMERIS_SOURCE: 'JPL_SPK',
-    ENABLE_SRP: true, RADIATION_PRESSURE_MODEL: P.pcfRadiationPressureFamily.CANNONBALL, REFLECTIVITY_COEFFICIENT: 0.00115,
+    ENABLE_SRP: true, RADIATION_PRESSURE_MODEL: P.pcfRadiationPressureFamily.CANNONBALL, REFLECTIVITY_COEFFICIENT: crAm,
     ENABLE_DRAG: false, INITIAL_MASS_KG: 1, AREA_M2: 1, HAS_IN_TRACK_ACCELERATION_M_S2: true, IN_TRACK_ACCELERATION_M_S2: 0,
     SOLID_TIDES: P.pcfSolidTideModel.IERS_2010, RELATIVITY: P.pcfRelativityTerms.IERS_2010,
     OCEAN_TIDES: P.pcfOceanTideModel.FES2004, OCEAN_TIDE_MAXIMUM_DEGREE: 30, OCEAN_TIDE_MAXIMUM_ORDER: 30 }),
@@ -118,10 +138,10 @@ const execution = (target = TRUTH.epoch) => prw('EXECUTION_REQUEST', table('PRWE
 }));
 
 // The host loop: route the node's one output to the module its port names, and the answer back.
-async function run({ observations = tdms, stations = gsts, config = null, target } = {}) {
+async function run({ observations = tdms, stations = gsts, config = null, target, guess, crAm, earth = earthOrientation } = {}) {
   const fixed = [...observations.map((p) => ({ portId: 'observations', typeRef: TDM_T, payload: p })),
     ...stations.map((p) => ({ portId: 'stations', typeRef: GST_T, payload: p })),
-    { portId: 'earth_orientation', typeRef: PRW, payload: earthOrientation }, { portId: 'execution', typeRef: PRW, payload: execution(target) },
+    { portId: 'earth_orientation', typeRef: PRW, payload: earth }, { portId: 'execution', typeRef: PRW, payload: execution(target, guess, crAm) },
     ...(config ? [{ portId: 'config', typeRef: MCFG, payload: encodeModuleConfig(config) }] : [])];
   let sent = null, result = null, samples = null, rounds = 0;
   for (let calls = 0; calls < 200; ++calls) {
@@ -132,7 +152,7 @@ async function run({ observations = tdms, stations = gsts, config = null, target
     if (ocm) return { ocm, rounds };
     if (propagation) {
       const p = await invoke(ffm, 'invoke', [{ portId: 'request', typeRef: PRW, payload: propagation }, { portId: 'kernel', typeRef: PRW, payload: kernel },
-        { portId: 'earth_orientation', typeRef: PRW, payload: earthOrientation }]);
+        { portId: 'earth_orientation', typeRef: PRW, payload: earth }]);
       if (p.error) return { error: `propagator/ffm ${p.error}`, rounds };
       samples = out(p, 'response')[0];
       continue;
@@ -186,6 +206,22 @@ const firstHours = tdms.filter((b) => TDM.getRootAsTDM(new flatbuffers.ByteBuffe
 await refused('the passes of the first six hours', 'arc-too-short:', { observations: firstHours });
 await refused('one propagation round', 'no-convergence:1', { config: { maximumIterations: 1 } });
 
+console.log('5. a window 0.2.0 did not fit: Starlette 2026-07-18T00:00 to 2026-07-20T00:00');
+const GUESS5 = { epoch: '2026-07-18T00:00:00.000000Z', state: [-6933.9, 436.4, -1937.9, 1.0868, -5.1028, -5.3843] };
+const TRUTH5 = { epoch: '2026-07-20T00:00:00.000000Z', state: [3528.2967886536676, 3432.799684892874, 5440.318926643558, -6.073854267039571, 3.9879808472128584, 1.2162786700043338] };
+const tdms5 = out(passes5, 'observations'), points5 = laserRanges(tdms5);
+const fit5 = await run({ observations: tdms5, target: TRUTH5.epoch, guess: GUESS5, crAm: 0.00108, earth: orientationOf(eop5) });
+console.log(`  ${tdms5.length} passes, ${points5} normal points: ${fit5.error ?? 'converged'} after ${fit5.rounds} fit_batch calls`);
+check(!!fit5.ocm, `one $OCM (${fit5.error ?? 'emitted'})`);
+if (fit5.ocm) {
+  const ocm = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fit5.ocm)).unpack(), od = ocm.ORBIT_DETERMINATION, stats = od.FIT_STATISTICS;
+  const dr = Math.hypot(...[0, 1, 2].map((i) => (ocm.STATE_DATA[i] - TRUTH5.state[i]) * 1000));
+  console.log(`  WEIGHTED_RMS ${od.WEIGHTED_RMS.toFixed(3)}, FIT_RMS ${(stats.FIT_RMS_KM * 1000).toFixed(3)} m over ${stats.FIT_STATES} of ${points5} normal points, ITERATIONS ${stats.ITERATIONS}; epoch ${ocm.STATE_EPOCHS[0]}, end state ${dr.toFixed(3)} m from NSGF`);
+  check(stats.CONVERGED && ocm.STATE_EPOCHS[0].startsWith('2026-07-20T00:00:00') && od.WEIGHTED_RMS < WRMS_BOUND && dr < END_BOUND_M,
+    `converged in ${stats.ITERATIONS} iterations: WEIGHTED_RMS ${od.WEIGHTED_RMS.toFixed(3)} below ${WRMS_BOUND}, end state ${dr.toFixed(3)} m below ${END_BOUND_M} m`);
+  var line5 = `Starlette 2026-07-20 WEIGHTED_RMS ${od.WEIGHTED_RMS.toFixed(3)}, ${stats.ITERATIONS} iterations, end state ${dr.toFixed(3)} m from NSGF`;
+}
+
 await Promise.all([crd, sinex, eopParser, estimation, ffm, node].map((h) => h.destroy?.()));
 if (failures.length) { console.log(`\nFAIL ${failures.length}: ${failures.join('; ')}`); process.exit(1); }
-console.log(`\nPASS laser-od: ${line}; refusals no-stations, arc-too-short, no-convergence`);
+console.log(`\nPASS laser-od: ${line}; refusals no-stations, arc-too-short, no-convergence; ${line5}`);

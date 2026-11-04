@@ -18,6 +18,20 @@ Data Center's monthly file:
 - credit: ILRS data (Pearlman et al. 2019, J Geod 93:2161-2180, doi:10.1007/s00190-019-01241-1), from the EUROLAS Data Center,
   DGFI-TUM (Noll et al. 2019, doi:10.1007/s00190-018-1207-2).
 
+## `starlette-20260718T00-20260720T00.np2` (real, cut)
+
+Starlette normal points of 2026-07-18T00:00 to 2026-07-20T00:00 UTC, CRD v2, from the same monthly file and archive copy as
+above (SHA-256 `6ae609e395ebcc8d2ae9451c8fe1f431fc4d1a6bc4e62a30eb9cd8d67b3dc5bd`): the 48 h before the registered cutoff
+2026-07-20 of experiments-ap-observations-laser-20261104, where laser-od 0.2.0 ended `no-convergence:20`.
+
+- cut: `node tests/fixtures/cut-crd.mjs <file> 2026-07-18T00:00Z 2026-07-20T00:00Z` (the same rules; 7403 left out): 16 passes,
+  99 normal-point records; 30,053 bytes, SHA-256 `53cd401d7033b6cfb57fab9b0ffd11f220e1748324074e56ea24d2175b311815`.
+  data-source/ilrs-crd-source reads 16 passes, 99 normal points.
+- stations: Grasse (7845, GRSM, DOMES 10002S002), Izaña (7701, IZ1L, 31336S001), Matera (7941, MATM, 12734S008), Wettzell
+  (8834, WETL, 14201S018) and Yebes (7817, YEBL, 13420S021) of the ILRS network.
+- terms and credit as above: ILRS data (Pearlman et al. 2019), from the EUROLAS Data Center, DGFI-TUM (Noll et al. 2019),
+  and the stations that tracked it.
+
 ## `eopc04-20260710-20260720.txt` (real, cut)
 
 IERS EOP 20 C04 (consistent with ITRF 2020), the header and the rows of 2026-07-10 to 2026-07-20:
@@ -28,6 +42,13 @@ IERS EOP 20 C04 (consistent with ITRF 2020), the header and the rows of 2026-07-
 - cut: lines 1 to 6 and the 11 rows of 2026-07-10 to 2026-07-20, unedited; 17 lines, SHA-256
   `ef53363cbe7d456828fa42337c972176c552a649197ec9f99845404da3cb3bd5`
 - credit: IERS Earth Orientation Centre, Paris Observatory.
+
+## `eopc04-20260716-20260725.txt` (real, cut)
+
+The same C04 series and archive copy (SHA-256 `a14854ff3fa974a6783b31ed0d6642c9d477647547949e2794308cb46dfeb2b3`): lines 1 to 6 and
+the 10 rows of 2026-07-16 to 2026-07-25 (the registered run's 4 days before to 5 days after the cutoff), unedited; 16 lines,
+SHA-256 `ff562f1206d9aeb2b3260d8df3e9f2d2ffea9d0f6546e67b7988efd5ce20672e`. Credit: IERS Earth Orientation Centre, Paris
+Observatory.
 
 ## Shared and read in place
 
@@ -45,3 +66,11 @@ NSGF rapid orbits of Starlette from EDC, converted ITRF to GCRF (IAU 2006/2000A,
 - the truth: the 2026-07-15T15:00 state of `nsgf.orb.starlette.260716.v000/7646.oem` (SHA-256
   `8f50e071ddb14a1f3c799d5905f36632713454700f052ffdefe64014c97a88c9`), the next product, as recorded there. Its stated accuracy
   is 0.26 m per axis (the RMS of its overlap with the next day's arc).
+
+Case 5 (the window 2026-07-18 to 20), as the registered run took them (the newest product holding each epoch):
+
+- the first guess: the 2026-07-18T00:00 state of `nsgf.orb.starlette.260720.v000/7646.oem` (SHA-256
+  `6b7f833ab31f4466ce068f12d14c9b79bd72942675a5c0e85d91ce84c4385e2e`; covers 2026-07-16T00:00 to 2026-07-19T12:12), rounded to
+  100 m and 0.1 m/s;
+- the truth: the 2026-07-20T00:00 state of `nsgf.orb.starlette.260724.v000/7646.oem` (SHA-256
+  `d019852e6bc9e6f380824cc14bb61be1112c58eceedf00fa3c1bd6a2ad7c25e4`; covers 2026-07-20T00:00 to 2026-07-23T18:54), as recorded.

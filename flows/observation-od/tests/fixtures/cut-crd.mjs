@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Cuts the two-day fixture from EDC's monthly Starlette CRD v2 file: every pass (h1 to h8, verbatim) whose h4 session
+// Cuts a two-day fixture from EDC's monthly Starlette CRD v2 file: every pass (h1 to h8, verbatim) whose h4 session
 // starts at or after FROM and ends at or before TO, at a pad the SINEX fixture holds (7403, Arequipa, is not in
 // ilrsa.pos+eop.260718.v90), then the file's closing H9. Text selection only.
 //   node tests/fixtures/cut-crd.mjs <starlette_202607.np2> > tests/fixtures/starlette-20260713T15-20260715T15.np2
+//   node tests/fixtures/cut-crd.mjs <starlette_202607.np2> 2026-07-18T00:00Z 2026-07-20T00:00Z > tests/fixtures/starlette-20260718T00-20260720T00.np2
 import fs from 'node:fs';
-const FROM = Date.UTC(2026, 6, 13, 15), TO = Date.UTC(2026, 6, 15, 15);
-const lines = fs.readFileSync(process.argv[2], 'latin1').split('\n');
+const [, , file, from = '2026-07-13T15:00Z', to = '2026-07-15T15:00Z'] = process.argv;
+const FROM = Date.parse(from), TO = Date.parse(to);
+const lines = fs.readFileSync(file, 'latin1').split('\n');
 const out = [];
 const NO_COORDINATES = new Set(['7403']);
 let pass = null, keep = false, pad = '';

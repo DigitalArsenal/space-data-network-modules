@@ -14,11 +14,14 @@
 // The node keeps no state: every call recomputes the observations from its inputs and either asks for what is missing
 // or finishes. The rounds:
 //   1. no estimation, no samples: the first guess to every receive epoch and to TARGET_EPOCH (propagation);
-//   2. no estimation, samples: the fit_batch request (estimation) at TARGET_EPOCH, seeded with the guess carried there,
-//      each normal point's elevation taken from the guess (the troposphere model reads it);
+//   2. no estimation, samples: the fit_batch request (estimation) at the first guess's own epoch, seeded with INITIAL as
+//      given, each normal point's elevation taken from the guess (the troposphere model reads it);
 //   3. estimation and result NEEDS_PROPAGATION: the queries' seed and parameters to every query epoch with the state
 //      transition matrix and the parameter columns (propagation); with samples, the answers appended (estimation);
-//   4. estimation and result OK: the $OCM; NOT_CONVERGED is refused.
+//   4. estimation and result OK at TARGET_EPOCH: the $OCM; NOT_CONVERGED is refused;
+//   5. estimation and result OK at another epoch: its estimate and fitted parameters to TARGET_EPOCH (propagation);
+//      with samples, round 2's request (the same observations and elevations) at TARGET_EPOCH, seeded with the estimate
+//      carried there (estimation); then 3 and 4.
 //
 // A normal point is a two-way laser range at its receive instant: a TRANSMIT-tagged epoch moves forward by the round
 // trip, 2 x range / c, as analysis/estimation's $TDM reading does. Each is one estimator observation with the station's
@@ -51,7 +54,7 @@ namespace fr = ::sdn::frames;
 namespace {
 
 constexpr const char* kPluginId = "org.sdn.flows.observation-od.laser-od";
-constexpr const char* kVersion = "0.2.0";
+constexpr const char* kVersion = "0.3.0";
 constexpr double kArcsec = 3.14159265358979323846 / 648000.0;
 constexpr double kC = 299792458.0;
 
@@ -372,6 +375,13 @@ int push_execution(std::unique_ptr<PRWExecutionRequestT> exec) {
   FinishSizePrefixedPRWBuffer(b, PRW::Pack(b, &root));
   return push("propagation", "PRW.fbs", "$PRW", "PRW", b);
 }
+// The batch configuration at `epoch`, seeded with `seed` (GCRF, m and m/s).
+std::unique_ptr<wire::EstimationConfig> config_at(Utc epoch, const double* seed) {
+  const double zero36[36] = {}, zero6[6] = {};
+  return std::make_unique<wire::EstimationConfig>(label(epoch), flatbuffers::span<const double, 6>(seed, 6),
+      flatbuffers::span<const double, 36>(zero36, 36), flatbuffers::span<const double, 6>(zero6, 6), 0.0, 0.0, 0.0, 0.0, 0u,
+      ::orbpro::propagator::ReferenceFrame::ICRF, wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES, wire::ProcessNoiseKind::NONE, 0);
+}
 int push_envelope(const wire::EstimationEnvelopeT& env) {
   flatbuffers::FlatBufferBuilder b(1 << 16);
   wire::FinishEstimationEnvelopeBuffer(b, wire::EstimationEnvelope::Pack(b, &env));
@@ -391,10 +401,10 @@ bool parameters_of(const PRWExecutionRequestT& exec, std::vector<Parameter>* out
   }
   return true;
 }
-void set_parameters(PRWExecutionRequestT* exec, const std::vector<Parameter>& kinds, const flatbuffers::Vector<double>* values) {
+void set_parameters(PRWExecutionRequestT* exec, const std::vector<Parameter>& kinds, const std::vector<double>& values) {
   auto& f = *exec->FORCES;
-  for (size_t i = 0; i < kinds.size() && values && i < values->size(); ++i) {
-    const double v = values->Get(static_cast<flatbuffers::uoffset_t>(i));
+  for (size_t i = 0; i < kinds.size() && i < values.size(); ++i) {
+    const double v = values[i];
     if (kinds[i].kind == prwDynamicParameter::DRAG_AREA_OVER_MASS) f.DRAG_COEFFICIENT = v * f.INITIAL_MASS_KG / f.AREA_M2;
     else if (kinds[i].kind == prwDynamicParameter::SRP_AREA_OVER_MASS) f.REFLECTIVITY_COEFFICIENT = v * f.INITIAL_MASS_KG / f.AREA_M2;
     else f.HAS_IN_TRACK_ACCELERATION_M_S2 = true, f.IN_TRACK_ACCELERATION_M_S2 = v;
@@ -655,31 +665,39 @@ extern "C" int step(void) {
   if (samples && !samples->EXECUTION_RESULT()) return fail("bad-input", "samples must be a $PRW EXECUTION_RESULT");
   const auto* result = samples ? samples->EXECUTION_RESULT() : nullptr;
 
-  // 1. The first guess to every receive epoch and to the estimate's epoch.
-  if (!sent && !result) {
+  // A propagation of the template's dynamics, nothing solved, to TARGET_EPOCH (sampled: and to every receive epoch):
+  // from INITIAL as given, or from `state` (m, m/s) at `epoch` with the solve-for parameters at `values`.
+  const auto carry = [&](bool sampled, const Utc* epoch, const double* state, const std::vector<double>* values) {
     auto exec = std::make_unique<PRWExecutionRequestT>(*templ);
+    if (epoch) set_state(exec.get(), *epoch, state);
+    if (values) set_parameters(exec.get(), kinds, *values);
     exec->INCLUDE_STM = false;
     exec->DYNAMIC_PARAMETERS.clear();
     exec->SAMPLE_EPOCHS.clear();
-    for (const Utc& t : epochs) exec->SAMPLE_EPOCHS.push_back(instant(t));
+    if (sampled)
+      for (const Utc& t : epochs) exec->SAMPLE_EPOCHS.push_back(instant(t));
     return push_execution(std::move(exec));
-  }
+  };
 
-  // 2. The fit_batch request, seeded with the guess at the estimate's epoch.
+  // 1. The first guess to every receive epoch and to the estimate's epoch.
+  if (!sent && !result) return carry(true, nullptr, nullptr, nullptr);
+
+  // 2. The first fit, at the first guess's own epoch and seeded with INITIAL as given: a guess carried elsewhere drifts
+  //    (100 m and 0.1 m/s are tens of kilometers in-track two days on), too far for a Gauss-Newton step on the Cartesian
+  //    state.
   if (!sent) {
     if (!result->SAMPLES() || result->SAMPLES()->size() != epochs.size()) return fail("bad-input", "samples must hold one state per receive epoch");
+    const auto* initial = templ->INITIAL ? templ->INITIAL->STATE.get() : nullptr;
+    Utc start;
+    if (!initial || !initial->POSITION || !initial->VELOCITY || initial->EPOCH_TIME_SYSTEM != "UTC" || !parse_utc(initial->EPOCH, &start))
+      return fail("bad-input", "execution INITIAL must be a GCRF position and velocity (m, m/s) at a UTC EPOCH");
+    const double seed[6] = {initial->POSITION->X, initial->POSITION->Y, initial->POSITION->Z, initial->VELOCITY->X, initial->VELOCITY->Y, initial->VELOCITY->Z};
     std::map<std::string, size_t> at;
     for (size_t i = 0; i < epochs.size(); ++i) at[iso(epochs[i])] = i;
     wire::EstimationEnvelopeT env;
     env.request = std::make_unique<wire::EstimationRequestT>();
     auto& rq = *env.request;
-    const auto* final_state = result->FINAL_SAMPLE()->STATE()->STATE();
-    const double seed[6] = {final_state->POSITION()->X(), final_state->POSITION()->Y(), final_state->POSITION()->Z(),
-                            final_state->VELOCITY()->X(), final_state->VELOCITY()->Y(), final_state->VELOCITY()->Z()};
-    const double zero36[36] = {}, zero6[6] = {};
-    rq.config = std::make_unique<wire::EstimationConfig>(label(target), flatbuffers::span<const double, 6>(seed, 6),
-        flatbuffers::span<const double, 36>(zero36, 36), flatbuffers::span<const double, 6>(zero6, 6), 0.0, 0.0, 0.0, 0.0, 0u,
-        ::orbpro::propagator::ReferenceFrame::ICRF, wire::EstimatorKind::BATCH_WEIGHTED_LEAST_SQUARES, wire::ProcessNoiseKind::NONE, 0);
+    rq.config = config_at(start, seed);
     for (const auto& p : points) {
       const auto* s = result->SAMPLES()->Get(static_cast<flatbuffers::uoffset_t>(at[iso(p.receive)]))->STATE()->STATE();
       const fr::Vec3 los = fr::sub(fr::Vec3{s->POSITION()->X(), s->POSITION()->Y(), s->POSITION()->Z()}, p.station);
@@ -719,7 +737,7 @@ extern "C" int step(void) {
                                    wire::IonosphereKind::NONE, static_cast<uint8_t>(0x02));
     rq.propagator_port_id = "propagator/ffm";
     rq.propagator_capability = "plugin_propagate plugin_compute_stm";
-    rq.trace_id = std::string(kPluginId) + " " + iso(target);
+    rq.trace_id = std::string(kPluginId) + " " + iso(start);
     rq.batch_options = std::make_unique<wire::BatchFitOptionsT>();
     auto& bo = *rq.batch_options;
     for (const auto& k : kinds) {
@@ -752,11 +770,31 @@ extern "C" int step(void) {
     return fail("bad-input", "estimation is not this node's request for these observations");
   const auto status = answer->result()->status();
 
-  // 4. The fit ended.
+  // 4. The fit ended. Converged at TARGET_EPOCH: the $OCM. Converged at the first guess's epoch: 5. the estimate, with
+  //    its fitted parameters and the same dynamics, to TARGET_EPOCH (propagation); with samples, the first fit's request
+  //    (the same observations and elevations) at TARGET_EPOCH, seeded with the estimate carried there.
   if (status != wire::EstimationStatus::NEEDS_PROPAGATION) {
     const auto* fit = answer->result()->batch_fit();
-    if (status == wire::EstimationStatus::OK && fit && fit->converged() && fit->estimate() && fit->estimate()->size() >= 6)
-      return push_ocm(request, fit, *templ, points, kinds, config.range_sigma_m);
+    if (status == wire::EstimationStatus::OK && fit && fit->converged() && fit->estimate() && fit->estimate()->size() >= 6 + kinds.size()) {
+      const Utc epoch = from_label(request->config()->initial_epoch());
+      if (iso(epoch) == iso(target)) return push_ocm(request, fit, *templ, points, kinds, config.range_sigma_m);
+      double x[6];
+      for (int i = 0; i < 6; ++i) x[i] = fit->estimate()->Get(i);
+      std::vector<double> values;
+      for (size_t i = 0; i < kinds.size(); ++i) values.push_back(fit->estimate()->Get(static_cast<flatbuffers::uoffset_t>(6 + i)));
+      if (!result) return carry(false, &epoch, x, &values);
+      const auto* f = result->FINAL_SAMPLE();
+      const auto* st = f && f->STATE() ? f->STATE()->STATE() : nullptr;
+      if (!st || !st->POSITION() || !st->VELOCITY()) return fail("bad-input", "samples must hold FINAL_SAMPLE, the estimate at TARGET_EPOCH");
+      const double seed[6] = {st->POSITION()->X(), st->POSITION()->Y(), st->POSITION()->Z(), st->VELOCITY()->X(), st->VELOCITY()->Y(), st->VELOCITY()->Z()};
+      std::unique_ptr<wire::EstimationEnvelopeT> env(sent->UnPack());
+      env->request->config = config_at(target, seed);
+      env->request->batch_options->parameter_values = values;
+      env->request->trace_id = std::string(kPluginId) + " " + iso(target);
+      env->propagation_answers.clear();
+      env->result.reset();
+      return push_envelope(*env);
+    }
     const unsigned iterations = fit ? fit->iterations() : 0;
     char code[48];
     std::snprintf(code, sizeof code, "no-convergence:%u", iterations);
@@ -779,7 +817,7 @@ extern "C" int step(void) {
     double s[6];
     for (int i = 0; i < 6; ++i) s[i] = q0->seed()->state()->Get(i);
     set_state(exec.get(), seed_epoch, s);
-    set_parameters(exec.get(), kinds, q0->parameter_values());
+    set_parameters(exec.get(), kinds, q0->parameter_values() ? std::vector<double>(q0->parameter_values()->begin(), q0->parameter_values()->end()) : std::vector<double>());
     exec->INCLUDE_STM = true;
     exec->SAMPLE_EPOCHS.clear();
     for (const Utc& t : query_epochs) exec->SAMPLE_EPOCHS.push_back(instant(t));

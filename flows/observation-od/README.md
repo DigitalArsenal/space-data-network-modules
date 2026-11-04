@@ -1,6 +1,6 @@
 # Observation OD: laser normal points and RA/Dec angles
 
-`org.sdn.flows.observation-od.laser-od` 0.1.1, typed contracts 1.0 (FlatBuffers only). A C++ WebAssembly node that routes
+`org.sdn.flows.observation-od.laser-od` 0.3.0, typed contracts 1.0 (FlatBuffers only). A C++ WebAssembly node that routes
 ILRS normal points through `analysis/estimation` `fit_batch` and `propagator/ffm` `invoke` until the estimator converges, and
 emits the fit as one Cartesian `$OCM`. The estimator solves and the FFM propagates; the node holds no force model and no state.
 
@@ -20,10 +20,16 @@ Each call emits one of `propagation` (a `$PRW` EXECUTION_REQUEST for `propagator
 with the answer:
 
 1. the first guess to every receive epoch and to TARGET_EPOCH;
-2. the `fit_batch` request at TARGET_EPOCH, seeded with the guess carried there;
+2. the `fit_batch` request at the first guess's own epoch, seeded with INITIAL as given;
 3. each fit round: the round's seed and parameters to every query epoch with the state transition matrix and the parameter
    columns, then the answers appended to the request;
-4. the converged fit as the `$OCM`.
+4. that fit's estimate and fitted parameters to TARGET_EPOCH under the same dynamics, then the same request (observations,
+   elevations) at TARGET_EPOCH seeded with the estimate carried there, and its rounds (3);
+5. the converged fit at TARGET_EPOCH as the `$OCM`.
+
+The first fit is at INITIAL's epoch because a guess carried elsewhere drifts: rounding of 100 m and 0.1 m/s grows to 13 to
+47 km in-track over two days at 690 to 1450 km, where a Gauss-Newton step on the Cartesian state does not reach the fit.
+With INITIAL at TARGET_EPOCH there is one fit.
 
 A normal point is a two-way laser range at its receive instant (a TRANSMIT-tagged epoch moves forward by 2 x range / c, as
 `analysis/estimation` reads a `$TDM`), with the estimator's two-way light time and Marini-Murray troposphere (the pass's
@@ -35,12 +41,13 @@ node passes each normal point as an observation with its own.
 The `$OCM`: the estimate at TARGET_EPOCH (GCRF, km, km/s), its formal covariance (COV_CALIBRATION Uncalibrated);
 ORBIT_DETERMINATION with OD_OBSERVATIONS_USED, the range residuals and their RMS, the solve-for parameters (named in
 OD_EST_PARAMETERS; their fitted values in OD_DYNAMIC_PARAMETERS, typed by PARAMETER, SOLVED_FOR true), the pads, and
-FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES the normal points used, ITERATIONS, CONVERGED, FIT_START and
+FIT_STATISTICS (FIT_RMS_KM the range residual RMS, FIT_STATES the normal points used, ITERATIONS of the fit at TARGET_EPOCH,
+CONVERGED, FIT_START and
 FIT_STOP the first and last normal point); PROVENANCE SOURCE_ID ilrs-crd, SOURCE_KIND Observation, ORIGINATOR ILRS,
 LICENSE_CLASS Reproducible.
 
 Refused by name: `no-stations` (a pad without a `$GST`, or none), `arc-too-short:<hours>` (the normal points span less than
-`minimumArcHours`), `no-convergence:<iterations>` (`fit_batch` ended MAXIMUM_ITERATIONS or STALLED); `bad-input` otherwise.
+`minimumArcHours`), `no-convergence:<iterations>` (either fit ended MAXIMUM_ITERATIONS or STALLED); `bad-input` otherwise.
 
 ## RA/Dec angles (0.2.0)
 
@@ -64,4 +71,5 @@ node tests/laser-od.e2e.mjs
 
 The E2E fits two days of Starlette normal points (`tests/fixtures/PROVENANCE.md`) with EGM2008 70x70, the Sun and the Moon,
 cannonball radiation pressure, solid and ocean tides and relativity, solving for the in-track acceleration, and compares
-the estimate with NSGF's orbit at the arc's end.
+the estimate with NSGF's orbit at the arc's end, against the answers recorded from 0.2.0
+(`tests/fixtures/laser-od-recorded.json`); then a window 0.2.0 ended `no-convergence:20` on (Starlette 2026-07-18 to 20).
