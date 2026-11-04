@@ -1,8 +1,8 @@
 {
  "note": "FFM against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite's integrator settings, with steps of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s.",
  "module": {
-  "version": "2.0.0",
-  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+  "version": "2.2.0",
+  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
  },
  "reference": "tests/fixtures/orekit/orekit-reference.json",
  "orekit": {
@@ -107,24 +107,24 @@
    "forces": "F0-point-mass",
    "toleranceM": 0.001,
    "suite": {
-    "worstM": 0.0004788669757680982,
+    "worstM": 0.00016199433498505773,
     "met": true,
     "atHour": 24,
-    "steps": 2346
+    "steps": 2356
    },
    "steps30": {
-    "worstM": 0.00022939777505017814,
+    "worstM": 0.00015763741807279215,
     "met": true,
     "atHour": 24,
-    "steps": 2903
+    "steps": 2899
    },
    "finest": {
-    "worstM": 0.00015190685720620708,
+    "worstM": 0.00016214449140117008,
     "met": true,
     "atHour": 24,
-    "steps": 8608
+    "steps": 8609
    },
-   "integrationErrorM": 0.0003269618453151545
+   "integrationErrorM": 9.707863286685062e-7
   },
   {
    "id": "LEO400 F1-J2",
@@ -132,24 +132,24 @@
    "forces": "F1-J2",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018065421171767047,
+    "worstM": 0.0010273646328391877,
     "met": true,
-    "atHour": 24,
-    "steps": 1343
+    "atHour": 7,
+    "steps": 1341
    },
    "steps30": {
-    "worstM": 0.0010529109406896217,
+    "worstM": 0.0010471079586052037,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010484183103001547,
+    "worstM": 0.0010478557583268643,
     "met": true,
     "atHour": 7,
-    "steps": 8611
+    "steps": 8607
    },
-   "integrationErrorM": 0.01761469726563347
+   "integrationErrorM": 0.00015521982871509013
   },
   {
    "id": "LEO400 F2-zonal20",
@@ -157,24 +157,24 @@
    "forces": "F2-zonal20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018054791835982204,
+    "worstM": 0.0010265585535218678,
     "met": true,
-    "atHour": 24,
-    "steps": 1343
+    "atHour": 7,
+    "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0010520712244648312,
+    "worstM": 0.0010470861307817,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010461524288798959,
+    "worstM": 0.0010456503480998863,
     "met": true,
     "atHour": 7,
-    "steps": 8612
+    "steps": 8610
    },
-   "integrationErrorM": 0.01761193873837784
+   "integrationErrorM": 0.00014214477171173637
   },
   {
    "id": "LEO400 Z1-zonal20-sun-moon",
@@ -182,24 +182,24 @@
    "forces": "Z1-zonal20-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01808509913639609,
+    "worstM": 0.0010252602187180828,
     "met": true,
-    "atHour": 24,
-    "steps": 1342
+    "atHour": 7,
+    "steps": 1344
    },
    "steps30": {
-    "worstM": 0.0010514680651463322,
+    "worstM": 0.001046490095865075,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010456186498764748,
+    "worstM": 0.0010457150001410324,
     "met": true,
     "atHour": 7,
-    "steps": 8612
+    "steps": 8607
    },
-   "integrationErrorM": 0.01764188202428456
+   "integrationErrorM": 0.00015297899436526145
   },
   {
    "id": "LEO400 Z2-zonal20-sun-moon-srp",
@@ -207,24 +207,24 @@
    "forces": "Z2-zonal20-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.018848598499297358,
+    "worstM": 0.0012217244481335788,
     "met": true,
     "atHour": 24,
-    "steps": 1415
+    "steps": 1413
    },
    "steps30": {
-    "worstM": 0.0014101068402748895,
+    "worstM": 0.0013400219109298123,
     "met": true,
     "atHour": 24,
     "steps": 2959
    },
    "finest": {
-    "worstM": 0.0013236414417088192,
+    "worstM": 0.0013128380820289299,
     "met": true,
     "atHour": 24,
     "steps": 8637
    },
-   "integrationErrorM": 0.017525697008799843
+   "integrationErrorM": 0.00009118750364303798
   },
   {
    "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
@@ -232,24 +232,24 @@
    "forces": "Z3-zonal20-sun-moon-srp-drag",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.021650655011083444,
+    "worstM": 0.003878635375242255,
     "met": true,
     "atHour": 24,
-    "steps": 1414
+    "steps": 1417
    },
    "steps30": {
-    "worstM": 0.004062344864815861,
+    "worstM": 0.003998025454948516,
     "met": true,
     "atHour": 24,
     "steps": 2958
    },
    "finest": {
-    "worstM": 0.0039700769934789566,
+    "worstM": 0.003972138223715656,
     "met": true,
     "atHour": 24,
     "steps": 8634
    },
-   "integrationErrorM": 0.017680612164094864
+   "integrationErrorM": 0.00009350572046234733
   },
   {
    "id": "LEO400 F3-field20x20",
@@ -257,24 +257,24 @@
    "forces": "F3-field20x20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018138090955428746,
+    "worstM": 0.001040534244019165,
     "met": true,
-    "atHour": 24,
-    "steps": 1344
+    "atHour": 7,
+    "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0010688613205635255,
+    "worstM": 0.0010631264012411505,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010629037042078084,
+    "worstM": 0.0010633553634399526,
     "met": true,
     "atHour": 7,
-    "steps": 8607
+    "steps": 8613
    },
-   "integrationErrorM": 0.017630035307970294
+   "integrationErrorM": 0.00015682645233552545
   },
   {
    "id": "LEO400 F4-field-sun-moon",
@@ -282,24 +282,24 @@
    "forces": "F4-field-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018190984271017705,
+    "worstM": 0.0010391004396490538,
     "met": true,
-    "atHour": 24,
+    "atHour": 7,
     "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0010654325049240885,
+    "worstM": 0.0010610803176198157,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010599686638075106,
+    "worstM": 0.0010606447697940357,
     "met": true,
     "atHour": 7,
     "steps": 8608
    },
-   "integrationErrorM": 0.017703744066041454
+   "integrationErrorM": 0.00015363936636865415
   },
   {
    "id": "LEO400 F5-field-sun-moon-srp",
@@ -307,24 +307,24 @@
    "forces": "F5-field-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.0186993461722488,
+    "worstM": 0.001115078108703088,
     "met": true,
-    "atHour": 24,
-    "steps": 1414
+    "atHour": 7,
+    "steps": 1413
    },
    "steps30": {
-    "worstM": 0.00130421441084764,
+    "worstM": 0.0012298415838539888,
     "met": true,
     "atHour": 24,
     "steps": 2958
    },
    "finest": {
-    "worstM": 0.0012151462548291169,
+    "worstM": 0.0012133531286358233,
     "met": true,
     "atHour": 24,
-    "steps": 8636
+    "steps": 8640
    },
-   "integrationErrorM": 0.017485011914711638
+   "integrationErrorM": 0.00010476502276807454
   },
   {
    "id": "LEO400 F6-field-sun-moon-srp-drag",
@@ -332,24 +332,24 @@
    "forces": "F6-field-sun-moon-srp-drag",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.021644844640502876,
+    "worstM": 0.003961496355412143,
     "met": true,
     "atHour": 24,
-    "steps": 1414
+    "steps": 1416
    },
    "steps30": {
-    "worstM": 0.004157173381846838,
+    "worstM": 0.004091744870288983,
     "met": true,
     "atHour": 24,
     "steps": 2959
    },
    "finest": {
-    "worstM": 0.004077848588497504,
+    "worstM": 0.004074027322263633,
     "met": true,
     "atHour": 24,
-    "steps": 8636
+    "steps": 8635
    },
-   "integrationErrorM": 0.017567023670386036
+   "integrationErrorM": 0.00011253449195437508
   },
   {
    "id": "LEO400 R1-field-sun-moon-schwarzschild",
@@ -357,24 +357,24 @@
    "forces": "R1-field-sun-moon-schwarzschild",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018164392062329095,
+    "worstM": 0.0010400016607233645,
     "met": true,
-    "atHour": 24,
-    "steps": 1343
+    "atHour": 7,
+    "steps": 1344
    },
    "steps30": {
-    "worstM": 0.0010670724596074596,
+    "worstM": 0.0010613360894451836,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010612653641667567,
+    "worstM": 0.0010608309448438566,
     "met": true,
     "atHour": 7,
-    "steps": 8610
+    "steps": 8611
    },
-   "integrationErrorM": 0.01766555430590977
+   "integrationErrorM": 0.00014812895619460294
   },
   {
    "id": "LEO400 R2-field-sun-moon-relativity-iers2010",
@@ -382,24 +382,24 @@
    "forces": "R2-field-sun-moon-relativity-iers2010",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018091009782603692,
+    "worstM": 0.0010403342356970948,
     "met": true,
-    "atHour": 24,
-    "steps": 1343
+    "atHour": 7,
+    "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0010670077214159249,
+    "worstM": 0.001061558874620176,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010610058724652757,
+    "worstM": 0.0010610744972819116,
     "met": true,
     "atHour": 7,
-    "steps": 8611
+    "steps": 8609
    },
-   "integrationErrorM": 0.017595454427570153
+   "integrationErrorM": 0.00014897012346623206
   },
   {
    "id": "LEO400 T1-field-sun-moon-solid-tides",
@@ -407,24 +407,24 @@
    "forces": "T1-field-sun-moon-solid-tides",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018081679009335563,
+    "worstM": 0.0010402974223651766,
     "met": true,
-    "atHour": 24,
-    "steps": 1343
+    "atHour": 7,
+    "steps": 1341
    },
    "steps30": {
-    "worstM": 0.0010664635120109344,
+    "worstM": 0.0010611426986893823,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010618238655459653,
+    "worstM": 0.0010624969897657984,
     "met": true,
     "atHour": 7,
-    "steps": 8605
+    "steps": 8606
    },
-   "integrationErrorM": 0.017576809203547233
+   "integrationErrorM": 0.00015874600403499497
   },
   {
    "id": "LEO400 I1-field-sun-moon-in-track",
@@ -432,24 +432,24 @@
    "forces": "I1-field-sun-moon-in-track",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01812781183745239,
+    "worstM": 0.0010391829410991177,
     "met": true,
-    "atHour": 24,
+    "atHour": 7,
     "steps": 1343
    },
    "steps30": {
-    "worstM": 0.0010653809152931261,
+    "worstM": 0.0010599235827791777,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.001059249012373721,
+    "worstM": 0.0010584355850913854,
     "met": true,
     "atHour": 7,
-    "steps": 8606
+    "steps": 8609
    },
-   "integrationErrorM": 0.017636265607613992
+   "integrationErrorM": 0.00013872016096192342
   },
   {
    "id": "LEO400 B1-field-sun-moon-srp-drag-bdot",
@@ -457,24 +457,24 @@
    "forces": "B1-field-sun-moon-srp-drag-bdot",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.0211722885045981,
+    "worstM": 0.0035109524023910696,
     "met": true,
     "atHour": 24,
-    "steps": 1413
+    "steps": 1414
    },
    "steps30": {
-    "worstM": 0.003706552682434959,
+    "worstM": 0.003635794044338073,
     "met": true,
     "atHour": 24,
     "steps": 2959
    },
    "finest": {
-    "worstM": 0.0036176999383796685,
+    "worstM": 0.0036085329404411067,
     "met": true,
     "atHour": 24,
     "steps": 8636
    },
-   "integrationErrorM": 0.017554626854247034
+   "integrationErrorM": 0.00009758419546627268
   },
   {
    "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
@@ -482,24 +482,24 @@
    "forces": "W1-field-sun-moon-srp-drag-cssi",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.021424498973429674,
+    "worstM": 0.0037828018826717748,
     "met": true,
     "atHour": 24,
-    "steps": 1415
+    "steps": 1416
    },
    "steps30": {
-    "worstM": 0.003973348437073216,
+    "worstM": 0.003905746317941542,
     "met": true,
     "atHour": 24,
     "steps": 2959
    },
    "finest": {
-    "worstM": 0.0038817632953726637,
+    "worstM": 0.0038880432585790855,
     "met": true,
     "atHour": 24,
-    "steps": 8631
+    "steps": 8635
    },
-   "integrationErrorM": 0.01754279519495366
+   "integrationErrorM": 0.00010524674250207845
   },
   {
    "id": "LEO400 E1-field-sun-moon-eme2000",
@@ -507,24 +507,24 @@
    "forces": "E1-field-sun-moon-eme2000",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018133409518871876,
+    "worstM": 0.0010399390353300823,
     "met": true,
-    "atHour": 24,
-    "steps": 1343
+    "atHour": 7,
+    "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0010658970695768722,
+    "worstM": 0.0010612248969521375,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010605558685721009,
+    "worstM": 0.0010593611296921082,
     "met": true,
     "atHour": 7,
-    "steps": 8611
+    "steps": 8609
    },
-   "integrationErrorM": 0.01763007660498056
+   "integrationErrorM": 0.00015212615377789026
   },
   {
    "id": "LEO400 G1-egm96-36x36-sun-moon",
@@ -532,24 +532,24 @@
    "forces": "G1-egm96-36x36-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.017159824471750684,
+    "worstM": 0.0009664845150567696,
     "met": true,
-    "atHour": 24,
-    "steps": 1345
+    "atHour": 7,
+    "steps": 1343
    },
    "steps30": {
-    "worstM": 0.0010646353931813414,
+    "worstM": 0.0010590516845852686,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010580021699017666,
+    "worstM": 0.0010583601554600233,
     "met": true,
     "atHour": 7,
     "steps": 8607
    },
-   "integrationErrorM": 0.016659284595475558
+   "integrationErrorM": 0.0009014202824409952
   },
   {
    "id": "LEO400 G2-egm2008-36z24t-sun-moon",
@@ -557,24 +557,24 @@
    "forces": "G2-egm2008-36z24t-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018170655295507376,
+    "worstM": 0.0010417317466650017,
     "met": true,
-    "atHour": 24,
-    "steps": 1344
+    "atHour": 7,
+    "steps": 1343
    },
    "steps30": {
-    "worstM": 0.0010675809640810082,
+    "worstM": 0.0010612693769588143,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010613439619978958,
+    "worstM": 0.001061473295180532,
     "met": true,
     "atHour": 7,
-    "steps": 8609
+    "steps": 8610
    },
-   "integrationErrorM": 0.017669750299177608
+   "integrationErrorM": 0.00013251687681821756
   },
   {
    "id": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
@@ -582,33 +582,33 @@
    "forces": "C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.005927736602672185,
+    "worstM": 0.0037017226730320383,
     "met": true,
     "atHour": 24,
-    "steps": 1893,
+    "steps": 1894,
     "jacobians": {
      "parameters": {
-      "DRAG_AREA_OVER_MASS": 0.000005010265434642017,
-      "DRAG_AREA_OVER_MASS_RATE": 0.000003707591144262142,
-      "IN_TRACK_ACCELERATION": 0.000005067877561201793,
-      "SRP_AREA_OVER_MASS": 0.00014074762551686128
+      "DRAG_AREA_OVER_MASS": 0.00000501369345728215,
+      "DRAG_AREA_OVER_MASS_RATE": 0.000003710401037638546,
+      "IN_TRACK_ACCELERATION": 0.0000050710889895653956,
+      "SRP_AREA_OVER_MASS": 0.00014068154331634962
      },
-     "stm": 0.00001164278337391471
+     "stm": 0.000011648127933000418
     }
    },
    "steps30": {
-    "worstM": 0.003780292798789153,
+    "worstM": 0.00371163499022032,
     "met": true,
     "atHour": 24,
     "steps": 2970
    },
    "finest": {
-    "worstM": 0.003977065754287566,
+    "worstM": 0.003997265427209052,
     "met": true,
     "atHour": 24,
-    "steps": 8730
+    "steps": 8719
    },
-   "integrationErrorM": 0.001950682728559892
+   "integrationErrorM": 0.0002955509537737741
   },
   {
    "id": "LEO400 J1-field-sun-moon-srp-drag-jb2008",
@@ -616,24 +616,24 @@
    "forces": "J1-field-sun-moon-srp-drag-jb2008",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.024873095474002793,
+    "worstM": 0.008447905214230243,
     "met": true,
     "atHour": 24,
     "steps": 1407
    },
    "steps30": {
-    "worstM": 0.0034461146417417605,
+    "worstM": 0.0035138568045003584,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0014888838405712722,
+    "worstM": 0.001355908555364279,
     "met": true,
     "atHour": 24,
-    "steps": 8631
+    "steps": 8636
    },
-   "integrationErrorM": 0.026360237500885654
+   "integrationErrorM": 0.009801198430449774
   },
   {
    "id": "SSO700 F0-point-mass",
@@ -641,24 +641,24 @@
    "forces": "F0-point-mass",
    "toleranceM": 0.001,
    "suite": {
-    "worstM": 0.0004813512985516343,
+    "worstM": 0.0001893680742300758,
     "met": true,
     "atHour": 24,
-    "steps": 2196
+    "steps": 2199
    },
    "steps30": {
-    "worstM": 0.0002254930543389604,
+    "worstM": 0.00018613473421863645,
     "met": true,
     "atHour": 24,
-    "steps": 2902
+    "steps": 2900
    },
    "finest": {
-    "worstM": 0.00017842100191026042,
+    "worstM": 0.00018046608686977353,
     "met": true,
     "atHour": 24,
-    "steps": 8609
+    "steps": 8605
    },
-   "integrationErrorM": 0.00030293134064644453
+   "integrationErrorM": 0.000008902275044291042
   },
   {
    "id": "SSO700 F1-J2",
@@ -666,24 +666,24 @@
    "forces": "F1-J2",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.014515238719285818,
+    "worstM": 0.001414217508387836,
     "met": true,
     "atHour": 24,
-    "steps": 1258
+    "steps": 1257
    },
    "steps30": {
-    "worstM": 0.0012396371382267693,
+    "worstM": 0.0012800061010212714,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0012736599054169028,
+    "worstM": 0.0012789625715490852,
     "met": true,
     "atHour": 24,
-    "steps": 8606
+    "steps": 8603
    },
-   "integrationErrorM": 0.015788669664672274
+   "integrationErrorM": 0.00013527515066898336
   },
   {
    "id": "SSO700 F2-zonal20",
@@ -691,24 +691,24 @@
    "forces": "F2-zonal20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0144690887574691,
+    "worstM": 0.0013926756643145815,
     "met": true,
     "atHour": 24,
-    "steps": 1258
+    "steps": 1256
    },
    "steps30": {
-    "worstM": 0.0012245200970937497,
+    "worstM": 0.0012584091963397954,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0012631561692894406,
+    "worstM": 0.0012680682087662213,
     "met": true,
     "atHour": 24,
-    "steps": 8609
+    "steps": 8612
    },
-   "integrationErrorM": 0.01573201719204894
+   "integrationErrorM": 0.00012462558452993225
   },
   {
    "id": "SSO700 Z1-zonal20-sun-moon",
@@ -716,24 +716,24 @@
    "forces": "Z1-zonal20-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.014595130077823898,
+    "worstM": 0.0014114690611604047,
     "met": true,
     "atHour": 24,
-    "steps": 1258
+    "steps": 1257
    },
    "steps30": {
-    "worstM": 0.0012375805388068057,
+    "worstM": 0.0012811820907430123,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0012851470063434736,
+    "worstM": 0.0012813047641112043,
     "met": true,
     "atHour": 24,
-    "steps": 8610
+    "steps": 8611
    },
-   "integrationErrorM": 0.01588004134469779
+   "integrationErrorM": 0.0001301844615841684
   },
   {
    "id": "SSO700 Z2-zonal20-sun-moon-srp",
@@ -741,24 +741,24 @@
    "forces": "Z2-zonal20-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.013830342793764938,
+    "worstM": 0.001802980120159436,
     "met": true,
     "atHour": 24,
     "steps": 1344
    },
    "steps30": {
-    "worstM": 0.0016674377968314003,
+    "worstM": 0.0017107385042126595,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0013553662201617274,
+    "worstM": 0.001354978662771582,
     "met": true,
     "atHour": 24,
-    "steps": 8676
+    "steps": 8675
    },
-   "integrationErrorM": 0.0151854559229194
+   "integrationErrorM": 0.0004480632772924906
   },
   {
    "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -766,24 +766,24 @@
    "forces": "Z3-zonal20-sun-moon-srp-drag",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.01414293518941409,
+    "worstM": 0.001481647378451542,
     "met": true,
     "atHour": 24,
     "steps": 1342
    },
    "steps30": {
-    "worstM": 0.0013411550920793438,
+    "worstM": 0.0013872714482321585,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0010357361181962932,
+    "worstM": 0.001030050641694076,
     "met": true,
     "atHour": 24,
-    "steps": 8673
+    "steps": 8676
    },
-   "integrationErrorM": 0.015178346883302848
+   "integrationErrorM": 0.00045169486291856385
   },
   {
    "id": "SSO700 F3-field20x20",
@@ -791,24 +791,24 @@
    "forces": "F3-field20x20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01442318013954344,
+    "worstM": 0.0014617229750127066,
     "met": true,
     "atHour": 24,
-    "steps": 1256
+    "steps": 1257
    },
    "steps30": {
-    "worstM": 0.0012828701852696503,
+    "worstM": 0.0013272959004250711,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0013299988078510308,
+    "worstM": 0.0013281452249390144,
     "met": true,
     "atHour": 24,
-    "steps": 8609
+    "steps": 8606
    },
-   "integrationErrorM": 0.01575282973783141
+   "integrationErrorM": 0.00013360655145542577
   },
   {
    "id": "SSO700 F4-field-sun-moon",
@@ -816,24 +816,24 @@
    "forces": "F4-field-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01445059545666907,
+    "worstM": 0.0014674603976312886,
     "met": true,
     "atHour": 24,
-    "steps": 1259
+    "steps": 1258
    },
    "steps30": {
-    "worstM": 0.0012942783001173598,
+    "worstM": 0.0013338878250392595,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0013348358712366776,
+    "worstM": 0.0013373531526597333,
     "met": true,
     "atHour": 24,
-    "steps": 8607
+    "steps": 8609
    },
-   "integrationErrorM": 0.015785086549420176
+   "integrationErrorM": 0.00013013471092431335
   },
   {
    "id": "SSO700 F5-field-sun-moon-srp",
@@ -841,24 +841,24 @@
    "forces": "F5-field-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.014092664100601292,
+    "worstM": 0.0015742530451944025,
     "met": true,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1346
    },
    "steps30": {
-    "worstM": 0.0014353919042945319,
+    "worstM": 0.0014741928300699473,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0011175637009915999,
+    "worstM": 0.0011242560769681238,
     "met": true,
     "atHour": 24,
-    "steps": 8675
+    "steps": 8676
    },
-   "integrationErrorM": 0.01520975304719686
+   "integrationErrorM": 0.00045012878227930806
   },
   {
    "id": "SSO700 F6-field-sun-moon-srp-drag",
@@ -866,24 +866,24 @@
    "forces": "F6-field-sun-moon-srp-drag",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.014312170554162942,
+    "worstM": 0.0013792509834158573,
     "met": true,
     "atHour": 24,
-    "steps": 1345
+    "steps": 1346
    },
    "steps30": {
-    "worstM": 0.0012371611630075435,
+    "worstM": 0.0012759953037766976,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0009406799092037674,
+    "worstM": 0.0009358051397030488,
     "met": true,
     "atHour": 24,
     "steps": 8674
    },
-   "integrationErrorM": 0.0152522506276195
+   "integrationErrorM": 0.0004436343481115173
   },
   {
    "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
@@ -891,24 +891,24 @@
    "forces": "W1-field-sun-moon-srp-drag-cssi",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.014408549632482441,
+    "worstM": 0.0012137127671631909,
     "met": true,
     "atHour": 24,
-    "steps": 1343
+    "steps": 1341
    },
    "steps30": {
-    "worstM": 0.0010752689232144436,
+    "worstM": 0.0011110528471958692,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0007580381251748836,
+    "worstM": 0.0007593850691272705,
     "met": true,
     "atHour": 24,
-    "steps": 8676
+    "steps": 8674
    },
-   "integrationErrorM": 0.015165891828968709
+   "integrationErrorM": 0.00045458114321171394
   },
   {
    "id": "SSO700 J1-field-sun-moon-srp-drag-jb2008",
@@ -916,24 +916,24 @@
    "forces": "J1-field-sun-moon-srp-drag-jb2008",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.01683285706287251,
+    "worstM": 0.0009546283868113782,
     "met": true,
     "atHour": 24,
     "steps": 1328
    },
    "steps30": {
-    "worstM": 0.0011228345654814287,
+    "worstM": 0.0010872945219651108,
     "met": true,
     "atHour": 24,
     "steps": 2954
    },
    "finest": {
-    "worstM": 0.001073292662717567,
+    "worstM": 0.0010611110371752692,
     "met": true,
     "atHour": 24,
-    "steps": 8624
+    "steps": 8623
    },
-   "integrationErrorM": 0.015759837984131577
+   "integrationErrorM": 0.00010652144135864163
   },
   {
    "id": "GPS F0-point-mass",
@@ -941,24 +941,24 @@
    "forces": "F0-point-mass",
    "toleranceM": 0.001,
    "suite": {
-    "worstM": 0.0001428106770986739,
+    "worstM": 0.00016047274712577872,
     "met": true,
     "atHour": 22,
-    "steps": 342
+    "steps": 344
    },
    "steps30": {
-    "worstM": 0.0001605514327706575,
+    "worstM": 0.00016034773013495215,
     "met": true,
     "atHour": 22,
-    "steps": 2883
+    "steps": 2882
    },
    "finest": {
-    "worstM": 0.0001586082055957436,
+    "worstM": 0.00015844610197101984,
     "met": true,
     "atHour": 22,
     "steps": 8594
    },
-   "integrationErrorM": 0.000019254004556944505
+   "integrationErrorM": 0.0000020468585670004447
   },
   {
    "id": "GPS F1-J2",
@@ -966,24 +966,24 @@
    "forces": "F1-J2",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0001966910453150265,
+    "worstM": 0.00021854952530100613,
     "met": true,
     "atHour": 22,
-    "steps": 336
+    "steps": 337
    },
    "steps30": {
-    "worstM": 0.0002173497437463017,
+    "worstM": 0.00021734167052818172,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00021712676722670927,
+    "worstM": 0.00021774619089328374,
     "met": true,
     "atHour": 22,
-    "steps": 8596
+    "steps": 8593
    },
-   "integrationErrorM": 0.00002482291521555409
+   "integrationErrorM": 0.000001241484585755211
   },
   {
    "id": "GPS F2-zonal20",
@@ -991,24 +991,24 @@
    "forces": "F2-zonal20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00019735583930695266,
+    "worstM": 0.00021739159196013013,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00021839042036176135,
+    "worstM": 0.00021833729610101427,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00021977982217513125,
+    "worstM": 0.00021833226864355237,
     "met": true,
     "atHour": 22,
-    "steps": 8594
+    "steps": 8595
    },
-   "integrationErrorM": 0.000027214534298901
+   "integrationErrorM": 0.000001339578032088224
   },
   {
    "id": "GPS Z1-zonal20-sun-moon",
@@ -1016,24 +1016,24 @@
    "forces": "Z1-zonal20-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0001508361658914456,
+    "worstM": 0.00017281769874397815,
     "met": true,
     "atHour": 22,
-    "steps": 337
+    "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017145562323128447,
+    "worstM": 0.00016985318473468184,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017258105112211736,
+    "worstM": 0.00017333704144032575,
     "met": true,
     "atHour": 22,
-    "steps": 8595
+    "steps": 8592
    },
-   "integrationErrorM": 0.000026097912708755312
+   "integrationErrorM": 0.0000010128657272480764
   },
   {
    "id": "GPS Z2-zonal20-sun-moon-srp",
@@ -1041,24 +1041,24 @@
    "forces": "Z2-zonal20-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00015275178905489183,
+    "worstM": 0.00017428025746875676,
     "met": true,
     "atHour": 22,
-    "steps": 336
+    "steps": 337
    },
    "steps30": {
-    "worstM": 0.0001732871520333238,
+    "worstM": 0.00017357581118460346,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017405063102268297,
+    "worstM": 0.00017376810828110048,
     "met": true,
     "atHour": 22,
-    "steps": 8595
+    "steps": 8596
    },
-   "integrationErrorM": 0.00002566978580930501
+   "integrationErrorM": 9.149031351948894e-7
   },
   {
    "id": "GPS F3-field20x20",
@@ -1066,24 +1066,24 @@
    "forces": "F3-field20x20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0001937124724434225,
+    "worstM": 0.00021329937953101986,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00021517778290635746,
+    "worstM": 0.00021500412355458356,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0002155535632638947,
+    "worstM": 0.00021459476748538292,
     "met": true,
     "atHour": 22,
-    "steps": 8594
+    "steps": 8595
    },
-   "integrationErrorM": 0.00002648205263065233
+   "integrationErrorM": 0.0000018100023780943734
   },
   {
    "id": "GPS F4-field-sun-moon",
@@ -1091,24 +1091,24 @@
    "forces": "F4-field-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0001517641871523478,
+    "worstM": 0.00017290678159101314,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017511698903262683,
+    "worstM": 0.0001733413116609837,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017434435172294032,
+    "worstM": 0.00017457593234561868,
     "met": true,
     "atHour": 22,
-    "steps": 8592
+    "steps": 8593
    },
-   "integrationErrorM": 0.000026641247241916147
+   "integrationErrorM": 0.0000019320622950051824
   },
   {
    "id": "GPS F5-field-sun-moon-srp",
@@ -1116,24 +1116,24 @@
    "forces": "F5-field-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00015416703909421607,
+    "worstM": 0.00017417873242079774,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017327409276995812,
+    "worstM": 0.00017362914731408466,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0001704807430106151,
+    "worstM": 0.00017124985177491395,
     "met": true,
     "atHour": 22,
     "steps": 8596
    },
-   "integrationErrorM": 0.000020229375352874432
+   "integrationErrorM": 0.0000030424763061822886
   },
   {
    "id": "GPS R1-field-sun-moon-schwarzschild",
@@ -1141,24 +1141,24 @@
    "forces": "R1-field-sun-moon-schwarzschild",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00015259858911644878,
+    "worstM": 0.00017490798228544436,
     "met": true,
     "atHour": 22,
-    "steps": 337
+    "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017256176825300587,
+    "worstM": 0.00017392779840938593,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017263104191040166,
+    "worstM": 0.0001728546121300607,
     "met": true,
     "atHour": 22,
-    "steps": 8596
+    "steps": 8592
    },
-   "integrationErrorM": 0.000023680619470785164
+   "integrationErrorM": 0.0000026457395300553773
   },
   {
    "id": "GPS R2-field-sun-moon-relativity-iers2010",
@@ -1166,24 +1166,24 @@
    "forces": "R2-field-sun-moon-relativity-iers2010",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00015858567828678062,
+    "worstM": 0.0001797546704170296,
     "met": true,
     "atHour": 22,
-    "steps": 336
+    "steps": 337
    },
    "steps30": {
-    "worstM": 0.00018016640871790988,
+    "worstM": 0.00018055108690612367,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00018045066119421043,
+    "worstM": 0.00018034214764501918,
     "met": true,
     "atHour": 22,
-    "steps": 8597
+    "steps": 8596
    },
-   "integrationErrorM": 0.000026630542852985543
+   "integrationErrorM": 8.233170740933163e-7
   },
   {
    "id": "GPS T1-field-sun-moon-solid-tides",
@@ -1191,24 +1191,24 @@
    "forces": "T1-field-sun-moon-solid-tides",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0001508758730530708,
+    "worstM": 0.0001718272390156103,
     "met": true,
     "atHour": 22,
-    "steps": 337
+    "steps": 336
    },
    "steps30": {
-    "worstM": 0.0001718108334593209,
+    "worstM": 0.00017187708579869228,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017186548664440855,
+    "worstM": 0.00017149606601707336,
     "met": true,
     "atHour": 22,
-    "steps": 8593
+    "steps": 8594
    },
-   "integrationErrorM": 0.000025269458429801246
+   "integrationErrorM": 0.0000012993268388113086
   },
   {
    "id": "GPS E1-field-sun-moon-eme2000",
@@ -1216,24 +1216,24 @@
    "forces": "E1-field-sun-moon-eme2000",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00015180866003476528,
+    "worstM": 0.00017252727959908437,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017232031105179042,
+    "worstM": 0.0001728887171580915,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017264059310632474,
+    "worstM": 0.0001727228814602843,
     "met": true,
     "atHour": 22,
-    "steps": 8594
+    "steps": 8596
    },
-   "integrationErrorM": 0.0000253967634945
+   "integrationErrorM": 5.27665365362055e-7
   },
   {
    "id": "GPS G1-egm96-70x70-sun-moon",
@@ -1241,24 +1241,24 @@
    "forces": "G1-egm96-70x70-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00015246713914605198,
+    "worstM": 0.0001738538894822482,
     "met": true,
     "atHour": 22,
-    "steps": 337
+    "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017342542361491054,
+    "worstM": 0.0001723963991565178,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017268818524220571,
+    "worstM": 0.000172927531841308,
     "met": true,
     "atHour": 22,
-    "steps": 8594
+    "steps": 8595
    },
-   "integrationErrorM": 0.000024300706291096776
+   "integrationErrorM": 0.0000012142403576513011
   },
   {
    "id": "GPS C1-field-sun-moon-srp-intrack-jacobians",
@@ -1266,31 +1266,31 @@
    "forces": "C1-field-sun-moon-srp-intrack-jacobians",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.0001531179134997093,
+    "worstM": 0.00017341654896482382,
     "met": true,
     "atHour": 22,
-    "steps": 338,
+    "steps": 337,
     "jacobians": {
      "parameters": {
-      "IN_TRACK_ACCELERATION": 6.087616974784343e-12,
-      "SRP_AREA_OVER_MASS": 5.382957585437122e-10
+      "IN_TRACK_ACCELERATION": 6.808957296278409e-12,
+      "SRP_AREA_OVER_MASS": 5.36192605207472e-10
      },
-     "stm": 1.8010040755838745e-11
+     "stm": 1.8447103745144048e-11
     }
    },
    "steps30": {
-    "worstM": 0.00017321782473776601,
+    "worstM": 0.00017315953874971768,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0001706997995774024,
+    "worstM": 0.0001705997324781299,
     "met": true,
     "atHour": 22,
-    "steps": 8645
+    "steps": 8641
    },
-   "integrationErrorM": 0.000021141710852581496
+   "integrationErrorM": 0.000003025709708609201
   },
   {
    "id": "GEO F0-point-mass",
@@ -1298,24 +1298,24 @@
    "forces": "F0-point-mass",
    "toleranceM": 0.001,
    "suite": {
-    "worstM": 0.00003511852276853351,
+    "worstM": 0.0000350341818656931,
     "met": true,
     "atHour": 17,
     "steps": 337
    },
    "steps30": {
-    "worstM": 0.00003385764525412299,
+    "worstM": 0.00003387552735080275,
     "met": true,
     "atHour": 16,
     "steps": 2882
    },
    "finest": {
-    "worstM": 0.000036862749035983704,
+    "worstM": 0.00003684501293564787,
     "met": true,
     "atHour": 17,
-    "steps": 8594
+    "steps": 8593
    },
-   "integrationErrorM": 0.0000020108978764012916
+   "integrationErrorM": 0.000002115338553194152
   },
   {
    "id": "GEO F1-J2",
@@ -1323,24 +1323,24 @@
    "forces": "F1-J2",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0000355118928051411,
+    "worstM": 0.0000355659232686749,
     "met": true,
     "atHour": 16,
-    "steps": 336
+    "steps": 337
    },
    "steps30": {
-    "worstM": 0.000035775994740479124,
+    "worstM": 0.000035761284976206585,
     "met": true,
     "atHour": 16,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.000035393512217247815,
+    "worstM": 0.00003549978725840846,
     "met": true,
     "atHour": 16,
-    "steps": 8593
+    "steps": 8594
    },
-   "integrationErrorM": 0.0000012427127923263233
+   "integrationErrorM": 0.0000010084467943138578
   },
   {
    "id": "GEO F2-zonal20",
@@ -1348,24 +1348,24 @@
    "forces": "F2-zonal20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00003355828779398618,
+    "worstM": 0.00003354267083050478,
     "met": true,
     "atHour": 17,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00003338316208727604,
+    "worstM": 0.000033384955558089365,
     "met": true,
     "atHour": 17,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.000032998462758973954,
+    "worstM": 0.00003299924289898571,
     "met": true,
     "atHour": 15,
     "steps": 8592
    },
-   "integrationErrorM": 7.355067144883756e-7
+   "integrationErrorM": 7.191354648940034e-7
   },
   {
    "id": "GEO Z1-zonal20-sun-moon",
@@ -1373,24 +1373,24 @@
    "forces": "Z1-zonal20-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00006359479338203946,
+    "worstM": 0.00006334736188338768,
     "met": true,
     "atHour": 21,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00006240143518285216,
+    "worstM": 0.00006235466940390205,
     "met": true,
     "atHour": 21,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0000642893311103246,
+    "worstM": 0.0000635005946483625,
     "met": true,
     "atHour": 22,
-    "steps": 8594
+    "steps": 8596
    },
-   "integrationErrorM": 0.0000016313245328550728
+   "integrationErrorM": 0.000001456264856328549
   },
   {
    "id": "GEO Z2-zonal20-sun-moon-srp",
@@ -1398,24 +1398,24 @@
    "forces": "Z2-zonal20-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00006033464756120216,
+    "worstM": 0.000060412802878613924,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.000059882344002321834,
+    "worstM": 0.00006010525086840205,
     "met": true,
     "atHour": 21,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00005906234859256045,
+    "worstM": 0.00005941246524596646,
     "met": true,
     "atHour": 21,
-    "steps": 8593
+    "steps": 8592
    },
-   "integrationErrorM": 0.0000017385898007240133
+   "integrationErrorM": 0.000001190532220386425
   },
   {
    "id": "GEO F3-field20x20",
@@ -1423,24 +1423,24 @@
    "forces": "F3-field20x20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.0000387886007454242,
+    "worstM": 0.0000388613466201011,
     "met": true,
     "atHour": 16,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00003941213662834177,
+    "worstM": 0.00003943360849079902,
     "met": true,
     "atHour": 16,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.000040436352155219757,
+    "worstM": 0.00004035561112126047,
     "met": true,
     "atHour": 17,
-    "steps": 8593
+    "steps": 8594
    },
-   "integrationErrorM": 0.0000037374973237899945
+   "integrationErrorM": 0.0000034738732315520443
   },
   {
    "id": "GEO F4-field-sun-moon",
@@ -1448,24 +1448,24 @@
    "forces": "F4-field-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.000066675859598257,
+    "worstM": 0.00006721188301682869,
     "met": true,
     "atHour": 21,
-    "steps": 336
+    "steps": 337
    },
    "steps30": {
-    "worstM": 0.00006638935062417058,
+    "worstM": 0.00006665095033025887,
     "met": true,
     "atHour": 21,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00006500828938914403,
+    "worstM": 0.0000650568395824084,
     "met": true,
     "atHour": 21,
-    "steps": 8593
+    "steps": 8592
    },
-   "integrationErrorM": 0.0000020550542590951847
+   "integrationErrorM": 0.000002573766276281403
   },
   {
    "id": "GEO F5-field-sun-moon-srp",
@@ -1473,24 +1473,24 @@
    "forces": "F5-field-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00006077088139015165,
+    "worstM": 0.00006113709649913093,
     "met": true,
     "atHour": 21,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00005747782316276085,
+    "worstM": 0.000058064725838955006,
     "met": true,
     "atHour": 21,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00006081484322718321,
+    "worstM": 0.00006106732645087147,
     "met": true,
     "atHour": 21,
     "steps": 8592
    },
-   "integrationErrorM": 5.917940241305687e-7
+   "integrationErrorM": 6.24472649076665e-7
   },
   {
    "id": "MOLNIYA F0-point-mass",
@@ -1498,24 +1498,24 @@
    "forces": "F0-point-mass",
    "toleranceM": 0.001,
    "suite": {
-    "worstM": 0.0005787586695803605,
+    "worstM": 0.0005756719447062054,
     "met": true,
     "atHour": 24,
-    "steps": 553
+    "steps": 551
    },
    "steps30": {
-    "worstM": 0.0005934374271969561,
+    "worstM": 0.0005731247944098858,
     "met": true,
     "atHour": 24,
-    "steps": 2886
+    "steps": 2884
    },
    "finest": {
-    "worstM": 0.0005715696677065258,
+    "worstM": 0.0005749768991817589,
     "met": true,
     "atHour": 24,
-    "steps": 8594
+    "steps": 8595
    },
-   "integrationErrorM": 0.000007217651446458825
+   "integrationErrorM": 0.0000010665064325197404
   },
   {
    "id": "MOLNIYA F1-J2",
@@ -1523,24 +1523,24 @@
    "forces": "F1-J2",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01099317388007818,
+    "worstM": 0.009667949243077728,
     "met": true,
     "atHour": 24,
     "steps": 416
    },
    "steps30": {
-    "worstM": 0.00985720388447424,
+    "worstM": 0.009840066623481804,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00984316275890036,
+    "worstM": 0.00983790938667333,
     "met": true,
     "atHour": 24,
-    "steps": 8597
+    "steps": 8595
    },
-   "integrationErrorM": 0.0011501681991211352
+   "integrationErrorM": 0.00016996028350663977
   },
   {
    "id": "MOLNIYA F2-zonal20",
@@ -1548,24 +1548,24 @@
    "forces": "F2-zonal20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.011206074017490315,
+    "worstM": 0.009664329207087194,
     "met": true,
     "atHour": 24,
-    "steps": 417
+    "steps": 416
    },
    "steps30": {
-    "worstM": 0.009864027339226639,
+    "worstM": 0.009850117253096587,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.009826343001097084,
+    "worstM": 0.009838111840331681,
     "met": true,
     "atHour": 24,
-    "steps": 8596
+    "steps": 8595
    },
-   "integrationErrorM": 0.0013798561731631909
+   "integrationErrorM": 0.00017378264362534273
   },
   {
    "id": "MOLNIYA Z1-zonal20-sun-moon",
@@ -1573,24 +1573,24 @@
    "forces": "Z1-zonal20-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.010676514468598715,
+    "worstM": 0.009545522676118363,
     "met": true,
     "atHour": 24,
-    "steps": 417
+    "steps": 416
    },
    "steps30": {
-    "worstM": 0.009755081910172094,
+    "worstM": 0.009728157929972154,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.009710073672233128,
+    "worstM": 0.009710377196944954,
     "met": true,
     "atHour": 24,
-    "steps": 8598
+    "steps": 8595
    },
-   "integrationErrorM": 0.0009666647455994627
+   "integrationErrorM": 0.00016485455200077783
   },
   {
    "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
@@ -1598,24 +1598,24 @@
    "forces": "Z2-zonal20-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.009933519385792296,
+    "worstM": 0.008812798561689312,
     "met": true,
     "atHour": 24,
     "steps": 429
    },
    "steps30": {
-    "worstM": 0.008987486368643058,
+    "worstM": 0.008969273049029735,
     "met": true,
     "atHour": 24,
     "steps": 2896
    },
    "finest": {
-    "worstM": 0.008923891550846412,
+    "worstM": 0.008921967412408844,
     "met": true,
     "atHour": 24,
-    "steps": 8606
+    "steps": 8604
    },
-   "integrationErrorM": 0.001009826688826151
+   "integrationErrorM": 0.0001091688916854081
   },
   {
    "id": "MOLNIYA F3-field20x20",
@@ -1623,24 +1623,24 @@
    "forces": "F3-field20x20",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.011091789565621558,
+    "worstM": 0.009645899697984503,
     "met": true,
     "atHour": 24,
     "steps": 416
    },
    "steps30": {
-    "worstM": 0.009855308609374143,
+    "worstM": 0.009832956844038846,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00984726404446955,
+    "worstM": 0.00984029471917539,
     "met": true,
     "atHour": 24,
-    "steps": 8594
+    "steps": 8597
    },
-   "integrationErrorM": 0.0012446709122064064
+   "integrationErrorM": 0.00019439519451990624
   },
   {
    "id": "MOLNIYA F4-field-sun-moon",
@@ -1648,24 +1648,24 @@
    "forces": "F4-field-sun-moon",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.010773769218707636,
+    "worstM": 0.009508749482142089,
     "met": true,
     "atHour": 24,
-    "steps": 417
+    "steps": 416
    },
    "steps30": {
-    "worstM": 0.00971600958591637,
+    "worstM": 0.009695858815042367,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.009703218107992228,
+    "worstM": 0.009702154428485044,
     "met": true,
     "atHour": 24,
-    "steps": 8595
+    "steps": 8596
    },
-   "integrationErrorM": 0.0010707418182802919
+   "integrationErrorM": 0.0001934049744695126
   },
   {
    "id": "MOLNIYA F5-field-sun-moon-srp",
@@ -1673,24 +1673,24 @@
    "forces": "F5-field-sun-moon-srp",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.010263264843793385,
+    "worstM": 0.00912516790207013,
     "met": true,
     "atHour": 24,
     "steps": 429
    },
    "steps30": {
-    "worstM": 0.009295335426404214,
+    "worstM": 0.00928135091085645,
     "met": true,
     "atHour": 24,
     "steps": 2896
    },
    "finest": {
-    "worstM": 0.009223323942813071,
+    "worstM": 0.009227400996040615,
     "met": true,
     "atHour": 24,
-    "steps": 8602
+    "steps": 8604
    },
-   "integrationErrorM": 0.0010401356940998457
+   "integrationErrorM": 0.00010223317982665084
   },
   {
    "id": "LEO400 A1-field-sun-moon-srp-knocke",
@@ -1698,24 +1698,24 @@
    "forces": "A1-field-sun-moon-srp-knocke",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.01892255416517892,
+    "worstM": 0.001263597937113798,
     "met": true,
     "atHour": 24,
     "steps": 1414
    },
    "steps30": {
-    "worstM": 0.0012638657231233133,
+    "worstM": 0.00119356169380593,
     "met": true,
     "atHour": 24,
     "steps": 2958
    },
    "finest": {
-    "worstM": 0.0011581995481026231,
+    "worstM": 0.001154974168499146,
     "met": true,
     "atHour": 24,
     "steps": 8639
    },
-   "integrationErrorM": 0.017765320220711044
+   "integrationErrorM": 0.0001404147178229418
   },
   {
    "id": "SSO700 A1-field-sun-moon-srp-knocke",
@@ -1723,24 +1723,24 @@
    "forces": "A1-field-sun-moon-srp-knocke",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.014624210234554333,
+    "worstM": 0.0012354936118996564,
     "met": true,
-    "atHour": 24,
+    "atHour": 23,
     "steps": 1341
    },
    "steps30": {
-    "worstM": 0.0012901871667849794,
+    "worstM": 0.0013303174407103444,
     "met": true,
     "atHour": 24,
     "steps": 2957
    },
    "finest": {
-    "worstM": 0.0009698003964581955,
+    "worstM": 0.0009558825743486146,
     "met": true,
     "atHour": 24,
-    "steps": 8677
+    "steps": 8676
    },
-   "integrationErrorM": 0.015593433100764718
+   "integrationErrorM": 0.0003776396839114068
   },
   {
    "id": "GPS A1-field-sun-moon-srp-knocke",
@@ -1748,24 +1748,24 @@
    "forces": "A1-field-sun-moon-srp-knocke",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00015174365163470242,
+    "worstM": 0.00017238009287420878,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.0001733021284954067,
+    "worstM": 0.00017287872086855426,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0001720719739475404,
+    "worstM": 0.00017226817383156484,
     "met": true,
     "atHour": 22,
-    "steps": 8597
+    "steps": 8596
    },
-   "integrationErrorM": 0.00002419356554403624
+   "integrationErrorM": 0.0000014499768312561449
   },
   {
    "id": "LEO400 O1-field-sun-moon-ocean-tides30",
@@ -1773,24 +1773,24 @@
    "forces": "O1-field-sun-moon-ocean-tides30",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.018176055903973993,
+    "worstM": 0.001041446520990367,
     "met": true,
-    "atHour": 24,
-    "steps": 1342
+    "atHour": 7,
+    "steps": 1343
    },
    "steps30": {
-    "worstM": 0.0010679596830500267,
+    "worstM": 0.0010622229587620394,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010620356794447587,
+    "worstM": 0.0010612164632049258,
     "met": true,
     "atHour": 7,
     "steps": 8609
    },
-   "integrationErrorM": 0.01767652126110211
+   "integrationErrorM": 0.000144144697950055
   },
   {
    "id": "SSO700 O1-field-sun-moon-ocean-tides30",
@@ -1798,24 +1798,24 @@
    "forces": "O1-field-sun-moon-ocean-tides30",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01449377705566176,
+    "worstM": 0.001456430648862342,
     "met": true,
     "atHour": 24,
-    "steps": 1255
+    "steps": 1256
    },
    "steps30": {
-    "worstM": 0.0012749025395093468,
+    "worstM": 0.0013189435800877532,
     "met": true,
     "atHour": 24,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0013193217137432527,
+    "worstM": 0.0013080421337454866,
     "met": true,
     "atHour": 24,
-    "steps": 8613
+    "steps": 8606
    },
-   "integrationErrorM": 0.015812749053643427
+   "integrationErrorM": 0.00014842093587795545
   },
   {
    "id": "GPS O1-field-sun-moon-ocean-tides30",
@@ -1823,24 +1823,24 @@
    "forces": "O1-field-sun-moon-ocean-tides30",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.00015268054575926431,
+    "worstM": 0.0001730083188133757,
     "met": true,
     "atHour": 22,
     "steps": 336
    },
    "steps30": {
-    "worstM": 0.00017266623910644003,
+    "worstM": 0.00017246095656877302,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017184904648394653,
+    "worstM": 0.000172301160331534,
     "met": true,
     "atHour": 22,
-    "steps": 8598
+    "steps": 8596
    },
-   "integrationErrorM": 0.0000236227313024102
+   "integrationErrorM": 8.691341830073853e-7
   },
   {
    "id": "LEO400 O2-field-sun-moon-ocean-tides50",
@@ -1848,24 +1848,24 @@
    "forces": "O2-field-sun-moon-ocean-tides50",
    "toleranceM": 0.05,
    "suite": {
-    "worstM": 0.01813168036461251,
+    "worstM": 0.0010391388490235047,
     "met": true,
-    "atHour": 24,
+    "atHour": 7,
     "steps": 1344
    },
    "steps30": {
-    "worstM": 0.001066272331567946,
+    "worstM": 0.0010602747410210314,
     "met": true,
     "atHour": 7,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.0010609938747389363,
+    "worstM": 0.0010598459237087228,
     "met": true,
     "atHour": 7,
-    "steps": 8612
+    "steps": 8604
    },
-   "integrationErrorM": 0.01763044536785359
+   "integrationErrorM": 0.00014915038940834568
   },
   {
    "id": "LEO400 C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
@@ -1873,32 +1873,32 @@
    "forces": "C2-field-sun-moon-srp-drag-tides-knocke-ocean-jacobians",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00591558219286435,
+    "worstM": 0.0036453790934085797,
     "met": true,
     "atHour": 24,
     "steps": 1892,
     "jacobians": {
      "parameters": {
-      "DRAG_AREA_OVER_MASS": 0.000007544394945339203,
-      "DRAG_AREA_OVER_MASS_RATE": 0.000005514298209660545,
-      "SRP_AREA_OVER_MASS": 0.000027170724622898583
+      "DRAG_AREA_OVER_MASS": 0.000007542771794522916,
+      "DRAG_AREA_OVER_MASS_RATE": 0.000005513742943025344,
+      "SRP_AREA_OVER_MASS": 0.000026628682844531126
      },
-     "stm": 0.00001781049771563471
+     "stm": 0.000017808745055957176
     }
    },
    "steps30": {
-    "worstM": 0.003653302336183195,
+    "worstM": 0.003578987334946386,
     "met": true,
     "atHour": 24,
     "steps": 2969
    },
    "finest": {
-    "worstM": 0.003885441296692167,
+    "worstM": 0.0038687879495407215,
     "met": true,
     "atHour": 24,
-    "steps": 8725
+    "steps": 8724
    },
-   "integrationErrorM": 0.002030168438631929
+   "integrationErrorM": 0.0002234404077390373
   },
   {
    "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
@@ -1906,30 +1906,30 @@
    "forces": "C2-field-sun-moon-srp-knocke-ocean-jacobians",
    "toleranceM": 0.1,
    "suite": {
-    "worstM": 0.00015273104674066407,
+    "worstM": 0.00017409579959927867,
     "met": true,
     "atHour": 22,
     "steps": 337,
     "jacobians": {
      "parameters": {
-      "SRP_AREA_OVER_MASS": 7.902511490301345e-9
+      "SRP_AREA_OVER_MASS": 7.895139515940844e-9
      },
-     "stm": 1.5016102206669963e-11
+     "stm": 1.554629349713492e-11
     }
    },
    "steps30": {
-    "worstM": 0.00017254357162209757,
+    "worstM": 0.00017232860730665594,
     "met": true,
     "atHour": 22,
     "steps": 2880
    },
    "finest": {
-    "worstM": 0.00017220231545578797,
+    "worstM": 0.00017332158717781076,
     "met": true,
     "atHour": 22,
     "steps": 8642
    },
-   "integrationErrorM": 0.000023597429178674426
+   "integrationErrorM": 0.0000011543555468439517
   }
  ],
  "differentials": [
@@ -1937,33 +1937,33 @@
    "added": "A1",
    "base": "F5",
    "orbit": "LEO400",
-   "suiteM": 0.00022365962274088611,
-   "steps30M": 0.00004036047993992274,
-   "finestM": 0.00005710655232309737
+   "suiteM": 0.00016740361659757128,
+   "steps30M": 0.000036910524149717645,
+   "finestM": 0.000058583132842365896
   },
   {
    "added": "A1",
    "base": "F5",
    "orbit": "GPS",
-   "suiteM": 0.0000032466866715756663,
-   "steps30M": 0.0000017145737127204254,
-   "finestM": 0.0000021467928768065815
+   "suiteM": 0.000002869962638124086,
+   "steps30M": 0.0000021877874533361155,
+   "finestM": 0.000002011821676115519
   },
   {
    "added": "O1",
    "base": "F4",
    "orbit": "LEO400",
-   "suiteM": 0.000017861234287627805,
-   "steps30M": 0.000003030241952898629,
-   "finestM": 0.000012297308832791283
+   "suiteM": 0.000004281226292314022,
+   "steps30M": 0.0000022246782808007736,
+   "finestM": 0.000013228680455276766
   },
   {
    "added": "O1",
    "base": "F4",
    "orbit": "GPS",
-   "suiteM": 0.0000015012920624980913,
-   "steps30M": 0.0000036082960249655386,
-   "finestM": 0.0000036818803529927948
+   "suiteM": 0.0000013724054906344298,
+   "steps30M": 0.0000016274288398510233,
+   "finestM": 0.000003375354698464199
   }
  ]
 }

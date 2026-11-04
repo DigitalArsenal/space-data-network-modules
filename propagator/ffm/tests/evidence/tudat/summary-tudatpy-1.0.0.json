@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Tudat: largest 3D position difference over 24 h at hourly samples in each exported case frame; suite/steps30/finest FFM settings and Orekit-minus-Tudat; 6x6 STM and Cd/Cr, Cd*A/m-rate, and in-track-acceleration sensitivity comparisons where available. Numerical reductions are C++.",
  "module": {
-  "version": "2.0.0",
-  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+  "version": "2.2.0",
+  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
  },
  "tudat": {
   "file": "tudatpy-1.0.0.json",
@@ -269,22 +269,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0003251844092147808,
-    "steps": 2346,
+    "worstM": 0.000008310721082469322,
+    "steps": 2356,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00007571470941329214,
-    "steps": 2903,
+    "worstM": 0.000003953750887883731,
+    "steps": 2899,
     "met": true
    },
    "finest": {
-    "atHour": 21,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000022809538541628746,
-    "steps": 8608,
+    "worstM": 0.000008460600954171915,
+    "steps": 8609,
     "met": true
    },
    "met": true,
@@ -300,7 +300,7 @@
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
-    "worst": 7.3652102082072e-12,
+    "worst": 1.0479355173443264e-12,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -319,24 +319,24 @@
     "worstM": 0.00007283803911274948
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.017992849887177368,
-    "steps": 1343,
+    "worstM": 0.0009948565699082995,
+    "steps": 1341,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010203541716085447,
+    "worstM": 0.001014561747872929,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010158700544348183,
-    "steps": 8611,
+    "worstM": 0.0010153084139241603,
+    "steps": 8607,
     "met": true
    },
    "met": true,
@@ -350,9 +350,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 3.9961017593096596e-10,
+    "worst": 1.5759819299079099e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -371,24 +371,24 @@
     "worstM": 0.00007270224943748623
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0179823801768756,
-    "steps": 1343,
+    "worstM": 0.0009943436403315829,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.001019807388081994,
+    "worstM": 0.001014831669165762,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010138998192374014,
-    "steps": 8612,
+    "worstM": 0.0010133990312092905,
+    "steps": 8610,
     "met": true
    },
    "met": true,
@@ -402,9 +402,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 4.007880112503188e-10,
+    "worst": 1.5751765156807824e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -423,24 +423,24 @@
     "worstM": 0.00007284762966589569
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.018012476225156417,
-    "steps": 1342,
+    "worstM": 0.0009922113221156814,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010183748765221707,
+    "worstM": 0.0010134054321431739,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010125349435215379,
-    "steps": 8612,
+    "worstM": 0.0010126315056883468,
+    "steps": 8607,
     "met": true
    },
    "met": true,
@@ -454,9 +454,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 3.997753111024138e-10,
+    "worst": 1.5730280224242453e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -475,23 +475,23 @@
     "worstM": 0.0009349749145511728
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.01791365072784106,
-    "steps": 1415,
+    "worstM": 0.0009991173516302665,
+    "steps": 1413,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010225674936855487,
+    "worstM": 0.001016621899429846,
     "steps": 2959,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010157548735176955,
+    "worstM": 0.001014625431299442,
     "steps": 8637,
     "met": true
    },
@@ -508,10 +508,10 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 0.00006721905511991327
+     "SRP_AREA_OVER_MASS": 0.0000672141847303183
     },
     "sampleCount": 24,
-    "worst": 0.000019629960825232722,
+    "worst": 0.000019629406928623933,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -524,10 +524,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000019629960825232722,
+      "worstRelativeColumnDifference": 0.000019629406928623933,
       "atHour": 24,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 0.00006721905511991327
+       "SRP_AREA_OVER_MASS": 0.0000672141847303183
       },
       "sources": [
        {
@@ -560,21 +560,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.02289418855372147,
-    "steps": 1414,
+    "worstM": 0.04066588689635433,
+    "steps": 1417,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04048217677148565,
+    "worstM": 0.040546496016053715,
     "steps": 2958,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04057444271809283,
+    "worstM": 0.04057238163209502,
     "steps": 8634,
     "met": true
    },
@@ -591,11 +591,11 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.000006691160441943187,
-     "SRP_AREA_OVER_MASS": 0.00007610458679350206
+     "DRAG_AREA_OVER_MASS": 0.000006691197677779589,
+     "SRP_AREA_OVER_MASS": 0.00007598833700888388
     },
     "sampleCount": 24,
-    "worst": 0.000019581567562841574,
+    "worst": 0.00001958146896734432,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -612,11 +612,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000019581567562841574,
+      "worstRelativeColumnDifference": 0.00001958146896734432,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.000006691160441943187,
-       "SRP_AREA_OVER_MASS": 0.00007610458679350206
+       "DRAG_AREA_OVER_MASS": 0.000006691197677779589,
+       "SRP_AREA_OVER_MASS": 0.00007598833700888388
       },
       "sources": [
        {
@@ -647,24 +647,24 @@
     "worstM": 0.0000821492262675427
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.018056173545059253,
-    "steps": 1344,
+    "worstM": 0.001006889550992124,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010351648150076426,
+    "worstM": 0.0010294395674336093,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010292178531352285,
-    "steps": 8607,
+    "worstM": 0.0010296685055693644,
+    "steps": 8613,
     "met": true
    },
    "met": true,
@@ -678,9 +678,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 4.088714799445799e-10,
+    "worst": 1.598178123565942e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -699,23 +699,23 @@
     "worstM": 0.00007264936403661357
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.018118567419490524,
+    "worstM": 0.001007422001970641,
     "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010337065908169972,
+    "worstM": 0.0010293619498488375,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010282520258980351,
+    "worstM": 0.001028927117579763,
     "steps": 8608,
     "met": true
    },
@@ -730,9 +730,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 4.0874581137987624e-10,
+    "worst": 1.5994977275648024e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -751,24 +751,24 @@
     "worstM": 0.0007991089180378934
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.01790025619060993,
-    "steps": 1414,
+    "worstM": 0.001013814371867607,
+    "steps": 1413,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010380134414830465,
+    "worstM": 0.0010317210182091041,
     "steps": 2958,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010316869666233107,
-    "steps": 8636,
+    "worstM": 0.0010305740417926007,
+    "steps": 8640,
     "met": true
    },
    "met": true,
@@ -784,10 +784,10 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 0.00007129584156080057
+     "SRP_AREA_OVER_MASS": 0.00007111029728165124
     },
     "sampleCount": 24,
-    "worst": 0.000019629343588818758,
+    "worst": 0.000019629150518084156,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -800,10 +800,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000019629343588818758,
+      "worstRelativeColumnDifference": 0.000019629150518084156,
       "atHour": 24,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 0.00007129584156080057
+       "SRP_AREA_OVER_MASS": 0.00007111029728165124
       },
       "sources": [
        {
@@ -836,22 +836,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.022920796815261497,
-    "steps": 1414,
+    "worstM": 0.04060381741544345,
+    "steps": 1416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04040813906773188,
+    "worstM": 0.040473567479586164,
     "steps": 2959,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04048746220605004,
-    "steps": 8636,
+    "worstM": 0.040491283310200146,
+    "steps": 8635,
     "met": true
    },
    "met": true,
@@ -867,11 +867,11 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.000006690614097004554,
-     "SRP_AREA_OVER_MASS": 0.0000736388036645056
+     "DRAG_AREA_OVER_MASS": 0.000006692296332938148,
+     "SRP_AREA_OVER_MASS": 0.00007366306044637677
     },
     "sampleCount": 24,
-    "worst": 0.000019579196471485274,
+    "worst": 0.000019580169247691202,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -888,11 +888,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000019579196471485274,
+      "worstRelativeColumnDifference": 0.000019580169247691202,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.000006690614097004554,
-       "SRP_AREA_OVER_MASS": 0.0000736388036645056
+       "DRAG_AREA_OVER_MASS": 0.000006692296332938148,
+       "SRP_AREA_OVER_MASS": 0.00007366306044637677
       },
       "sources": [
        {
@@ -923,24 +923,24 @@
     "worstM": 0.00006580034999563867
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.018098788239718968,
-    "steps": 1343,
+    "worstM": 0.0010074915732043018,
+    "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010345122173823626,
+    "worstM": 0.0010287861006793315,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010287153880337702,
-    "steps": 8610,
+    "worstM": 0.0010282816346159748,
+    "steps": 8611,
     "met": true
    },
    "met": true,
@@ -954,9 +954,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 4.0878125178719976e-10,
+    "worst": 1.5990935284661058e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -978,22 +978,22 @@
    "suite": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.012476890631945034,
-    "steps": 1343,
+    "worstM": 0.023016739941299557,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.022838123437738073,
+    "worstM": 0.02289484598313041,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.022894945055327385,
-    "steps": 8611,
+    "worstM": 0.022898033677190118,
+    "steps": 8609,
     "met": true
    },
    "met": true,
@@ -1020,24 +1020,24 @@
     "worstM": 0.00007117547323559941
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0180568775434731,
+    "worstM": 0.0010083451310723124,
     "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010344966784353762,
+    "worstM": 0.0010290490442965876,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.001028375544088942,
-    "steps": 8606,
+    "worstM": 0.0010275632263235484,
+    "steps": 8609,
     "met": true
    },
    "met": true,
@@ -1051,9 +1051,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 4.075705691976141e-10,
+    "worst": 1.5987755300124602e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1074,21 +1074,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.023508609177749513,
-    "steps": 1413,
+    "worstM": 0.04116969544267285,
+    "steps": 1414,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.040974093335429375,
+    "worstM": 0.04104485215532575,
     "steps": 2959,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04106294427944724,
+    "worstM": 0.04107211194407612,
     "steps": 8636,
     "met": true
    },
@@ -1105,11 +1105,11 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.0000066905032220433585,
-     "SRP_AREA_OVER_MASS": 0.00007723511805071413
+     "DRAG_AREA_OVER_MASS": 0.000006691232069923094,
+     "SRP_AREA_OVER_MASS": 0.0000772722255584308
     },
     "sampleCount": 24,
-    "worst": 0.000019578951587677997,
+    "worst": 0.00001958009593648495,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -1126,11 +1126,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000019578951587677997,
+      "worstRelativeColumnDifference": 0.00001958009593648495,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.0000066905032220433585,
-       "SRP_AREA_OVER_MASS": 0.00007723511805071413
+       "DRAG_AREA_OVER_MASS": 0.000006691232069923094,
+       "SRP_AREA_OVER_MASS": 0.0000772722255584308
       },
       "sources": [
        {
@@ -1161,24 +1161,24 @@
     "worstM": 0.03627838918438638
    },
    "suite": {
-    "atHour": 23,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014960358306004349,
-    "steps": 1415,
+    "worstM": 0.03249584223723374,
+    "steps": 1416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.03230529352239328,
+    "worstM": 0.03237289586225523,
     "steps": 2959,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.032396877264085376,
-    "steps": 8631,
+    "worstM": 0.03239059600091133,
+    "steps": 8635,
     "met": true
    },
    "met": true,
@@ -1194,11 +1194,11 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.000006606448143488543,
-     "SRP_AREA_OVER_MASS": 0.00007054303756193087
+     "DRAG_AREA_OVER_MASS": 0.000006606473028291923,
+     "SRP_AREA_OVER_MASS": 0.00007045009198507821
     },
     "sampleCount": 24,
-    "worst": 0.000019585329199071177,
+    "worst": 0.000019587484599743397,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -1215,11 +1215,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000019585329199071177,
+      "worstRelativeColumnDifference": 0.000019587484599743397,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.000006606448143488543,
-       "SRP_AREA_OVER_MASS": 0.00007054303756193087
+       "DRAG_AREA_OVER_MASS": 0.000006606473028291923,
+       "SRP_AREA_OVER_MASS": 0.00007045009198507821
       },
       "sources": [
        {
@@ -1250,24 +1250,24 @@
     "worstM": 0.00008399376742237662
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.018049586051882647,
-    "steps": 1343,
+    "worstM": 0.0010063878598300493,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010322991709613288,
+    "worstM": 0.0010276350019571322,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010269669608638802,
-    "steps": 8611,
+    "worstM": 0.001025774521068547,
+    "steps": 8609,
     "met": true
    },
    "met": true,
@@ -1281,9 +1281,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 4.06310371330341e-10,
+    "worst": 1.5968997550269406e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1302,23 +1302,23 @@
     "worstM": 0.00006239801548049332
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 19,
     "sampleCount": 24,
-    "worstM": 0.017097668151749436,
-    "steps": 1345,
+    "worstM": 0.0009896148736557376,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010359098095379829,
+    "worstM": 0.0010303340028410717,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010292859071657494,
+    "worstM": 0.0010296433626675728,
     "steps": 8607,
     "met": true
    },
@@ -1333,9 +1333,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 23,
     "sampleCount": 24,
-    "worst": 4.2933577685754474e-10,
+    "worst": 1.8580992189158603e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1354,24 +1354,24 @@
     "worstM": 0.00007468634354317154
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.01809613881601795,
-    "steps": 1344,
+    "worstM": 0.0010096701316216594,
+    "steps": 1343,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.001035474642407841,
+    "worstM": 0.0010291739984888066,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010292484945522643,
-    "steps": 8609,
+    "worstM": 0.001029377296225805,
+    "steps": 8610,
     "met": true
    },
    "met": true,
@@ -1385,9 +1385,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worst": 4.0953212396927106e-10,
+    "worst": 1.5991577972827344e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1408,22 +1408,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.03885850913971417,
-    "steps": 1893,
+    "worstM": 0.04108451296045607,
+    "steps": 1894,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.04100594211487752,
+    "worstM": 0.04107460019868645,
     "steps": 2970,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.040809162991320584,
-    "steps": 8730,
+    "worstM": 0.04078896390778104,
+    "steps": 8719,
     "met": true
    },
    "met": true,
@@ -1439,13 +1439,13 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.0000066926003264953785,
-     "DRAG_AREA_OVER_MASS_RATE": 0.000004116495101192126,
-     "IN_TRACK_ACCELERATION": 0.00000766241593295941,
-     "SRP_AREA_OVER_MASS": 0.00007548090475537231
+     "DRAG_AREA_OVER_MASS": 0.000006689180393489379,
+     "DRAG_AREA_OVER_MASS_RATE": 0.000004113695728400965,
+     "IN_TRACK_ACCELERATION": 0.000007659213099361513,
+     "SRP_AREA_OVER_MASS": 0.0000754036337722756
     },
     "sampleCount": 24,
-    "worst": 0.00001958213089593535,
+    "worst": 0.00001957677622445381,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -1470,13 +1470,13 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.00001958213089593535,
+      "worstRelativeColumnDifference": 0.00001957677622445381,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.0000066926003264953785,
-       "DRAG_AREA_OVER_MASS_RATE": 0.000004116495101192126,
-       "IN_TRACK_ACCELERATION": 0.00000766241593295941,
-       "SRP_AREA_OVER_MASS": 0.00007548090475537231
+       "DRAG_AREA_OVER_MASS": 0.000006689180393489379,
+       "DRAG_AREA_OVER_MASS_RATE": 0.000004113695728400965,
+       "IN_TRACK_ACCELERATION": 0.000007659213099361513,
+       "SRP_AREA_OVER_MASS": 0.0000754036337722756
       },
       "sources": [
        {
@@ -1509,22 +1509,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000302469490231603,
-    "steps": 2196,
+    "worstM": 0.000010485077560048384,
+    "steps": 2199,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000046610960812704364,
-    "steps": 2902,
+    "worstM": 0.000007252217120240985,
+    "steps": 2900,
     "met": true
    },
    "finest": {
-    "atHour": 14,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000017116205376554611,
-    "steps": 8609,
+    "worstM": 0.0000015873228712468598,
+    "steps": 8605,
     "met": true
    },
    "met": true,
@@ -1540,7 +1540,7 @@
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
-    "worst": 5.423586734761707e-12,
+    "worst": 1.3049500346469032e-12,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1561,22 +1561,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014272979760825763,
-    "steps": 1258,
+    "worstM": 0.001656403590087539,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0014818108872633846,
+    "worstM": 0.0015221831554467493,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0015158361678287205,
-    "steps": 8606,
+    "worstM": 0.00152113925819679,
+    "steps": 8603,
     "met": true
    },
    "met": true,
@@ -1590,9 +1590,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 14,
+    "atHour": 24,
     "sampleCount": 24,
-    "worst": 8.640251459554181e-11,
+    "worst": 2.1788644512692564e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1613,22 +1613,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014218967248128989,
-    "steps": 1258,
+    "worstM": 0.0016427252483079498,
+    "steps": 1256,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001474557628742297,
+    "worstM": 0.0015084489714039789,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001513196295989975,
-    "steps": 8609,
+    "worstM": 0.0015181093032735648,
+    "steps": 8612,
     "met": true
    },
    "met": true,
@@ -1642,9 +1642,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 14,
+    "atHour": 24,
     "sampleCount": 24,
-    "worst": 8.631564956880715e-11,
+    "worst": 2.1660551454970582e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1665,22 +1665,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0143672186417839,
-    "steps": 1258,
+    "worstM": 0.0016393066489219725,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001465405810828057,
+    "worstM": 0.0015090110008562133,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001512976069169892,
-    "steps": 8610,
+    "worstM": 0.0015091335174371083,
+    "steps": 8611,
     "met": true
    },
    "met": true,
@@ -1694,9 +1694,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 14,
+    "atHour": 24,
     "sampleCount": 24,
-    "worst": 8.666347581953833e-11,
+    "worst": 2.152478004166992e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1717,22 +1717,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014037397854622217,
+    "worstM": 0.0015958721712161562,
     "steps": 1344,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0014603269692644299,
+    "worstM": 0.0015036286554338568,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0011482498122759137,
-    "steps": 8676,
+    "worstM": 0.0011478619220220362,
+    "steps": 8675,
     "met": true
    },
    "met": true,
@@ -1748,10 +1748,10 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 0.00009266911321376223
+     "SRP_AREA_OVER_MASS": 0.0000930763892439791
     },
     "sampleCount": 24,
-    "worst": 0.000013812731146029236,
+    "worst": 0.000013813909073716635,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -1764,10 +1764,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000013812731146029236,
+      "worstRelativeColumnDifference": 0.000013813909073716635,
       "atHour": 24,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 0.00009266911321376223
+       "SRP_AREA_OVER_MASS": 0.0000930763892439791
       },
       "sources": [
        {
@@ -1800,22 +1800,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013273112949617315,
+    "worstM": 0.0023513384016041554,
     "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0022108274253315073,
+    "worstM": 0.0022569499511541137,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0019053526925188143,
-    "steps": 8673,
+    "worstM": 0.0018996651425041455,
+    "steps": 8676,
     "met": true
    },
    "met": true,
@@ -1831,11 +1831,11 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.000009446611234041861,
-     "SRP_AREA_OVER_MASS": 0.00009271492777960142
+     "DRAG_AREA_OVER_MASS": 0.00000944667641166088,
+     "SRP_AREA_OVER_MASS": 0.00009290383889389291
     },
     "sampleCount": 24,
-    "worst": 0.00001381294207002587,
+    "worst": 0.000013812897798283033,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -1852,11 +1852,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.00001381294207002587,
+      "worstRelativeColumnDifference": 0.000013812897798283033,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.000009446611234041861,
-       "SRP_AREA_OVER_MASS": 0.00009271492777960142
+       "DRAG_AREA_OVER_MASS": 0.00000944667641166088,
+       "SRP_AREA_OVER_MASS": 0.00009290383889389291
       },
       "sources": [
        {
@@ -1889,22 +1889,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014184715344576954,
-    "steps": 1256,
+    "worstM": 0.0017000813459780338,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0015212104576483485,
+    "worstM": 0.0015656412335311254,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001568344716310412,
-    "steps": 8609,
+    "worstM": 0.001566490576187581,
+    "steps": 8606,
     "met": true
    },
    "met": true,
@@ -1918,9 +1918,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 14,
+    "atHour": 24,
     "sampleCount": 24,
-    "worst": 8.477441032014496e-11,
+    "worst": 2.2345886268458522e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1941,22 +1941,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014233553818792377,
-    "steps": 1259,
+    "worstM": 0.001684409456167536,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001511211981796205,
+    "worstM": 0.0015508258492433272,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0015517739232968686,
-    "steps": 8607,
+    "worstM": 0.0015542911783424165,
+    "steps": 8609,
     "met": true
    },
    "met": true,
@@ -1970,9 +1970,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 14,
+    "atHour": 24,
     "sampleCount": 24,
-    "worst": 8.479631257825742e-11,
+    "worst": 2.2247160434006926e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -1993,22 +1993,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014021308062740656,
-    "steps": 1343,
+    "worstM": 0.0016454957850126932,
+    "steps": 1346,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0015066225580816373,
+    "worstM": 0.0015454269683954768,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0011887559768279435,
-    "steps": 8675,
+    "worstM": 0.0011954492306587917,
+    "steps": 8676,
     "met": true
    },
    "met": true,
@@ -2024,10 +2024,10 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 0.00009041035583065731
+     "SRP_AREA_OVER_MASS": 0.00009048447856854449
     },
     "sampleCount": 24,
-    "worst": 0.000013813745876718128,
+    "worst": 0.000013814177426305177,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -2040,10 +2040,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000013813745876718128,
+      "worstRelativeColumnDifference": 0.000013814177426305177,
       "atHour": 24,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 0.00009041035583065731
+       "SRP_AREA_OVER_MASS": 0.00009048447856854449
       },
       "sources": [
        {
@@ -2076,21 +2076,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013271429067268513,
-    "steps": 1345,
+    "worstM": 0.002419738404255876,
+    "steps": 1346,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.002277610922928746,
+    "worstM": 0.002316455483525572,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0019810129444381057,
+    "worstM": 0.001976136309558129,
     "steps": 8674,
     "met": true
    },
@@ -2107,11 +2107,11 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.000009447031468362483,
-     "SRP_AREA_OVER_MASS": 0.00008852637637205071
+     "DRAG_AREA_OVER_MASS": 0.000009447031590375755,
+     "SRP_AREA_OVER_MASS": 0.00008860920061037857
     },
     "sampleCount": 24,
-    "worst": 0.0000138157875009474,
+    "worst": 0.000013815404218205529,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -2128,11 +2128,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.0000138157875009474,
+      "worstRelativeColumnDifference": 0.000013815404218205529,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.000009447031468362483,
-       "SRP_AREA_OVER_MASS": 0.00008852637637205071
+       "DRAG_AREA_OVER_MASS": 0.000009447031590375755,
+       "SRP_AREA_OVER_MASS": 0.00008860920061037857
       },
       "sources": [
        {
@@ -2165,22 +2165,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013499226632942967,
-    "steps": 1343,
+    "worstM": 0.0021227742485282614,
+    "steps": 1341,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.001984286607294823,
+    "worstM": 0.0020200821244065626,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0016668906000096417,
-    "steps": 8676,
+    "worstM": 0.0016682385331801405,
+    "steps": 8674,
     "met": true
    },
    "met": true,
@@ -2196,11 +2196,11 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "DRAG_AREA_OVER_MASS": 0.00000991243205027924,
-     "SRP_AREA_OVER_MASS": 0.00008939939152027134
+     "DRAG_AREA_OVER_MASS": 0.000009912397360897444,
+     "SRP_AREA_OVER_MASS": 0.00008923072563451486
     },
     "sampleCount": 24,
-    "worst": 0.000013813967073196205,
+    "worst": 0.000013813986974310417,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -2217,11 +2217,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000013813967073196205,
+      "worstRelativeColumnDifference": 0.000013813986974310417,
       "atHour": 24,
       "parameters": {
-       "DRAG_AREA_OVER_MASS": 0.00000991243205027924,
-       "SRP_AREA_OVER_MASS": 0.00008939939152027134
+       "DRAG_AREA_OVER_MASS": 0.000009912397360897444,
+       "SRP_AREA_OVER_MASS": 0.00008923072563451486
       },
       "sources": [
        {
@@ -2252,23 +2252,23 @@
     "worstM": 0.00016060169632171284
    },
    "suite": {
-    "atHour": 24,
+    "atHour": 13,
     "sampleCount": 24,
-    "worstM": 0.000021174209173737285,
-    "steps": 342,
+    "worstM": 5.439540154804263e-7,
+    "steps": 344,
     "met": true
    },
    "steps30": {
-    "atHour": 14,
+    "atHour": 13,
     "sampleCount": 24,
-    "worstM": 0.000001184861370110262,
-    "steps": 2883,
+    "worstM": 0.0000010370597755326208,
+    "steps": 2882,
     "met": true
    },
    "finest": {
-    "atHour": 21,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000020085128209200665,
+    "worstM": 0.0000021575094411346998,
     "steps": 8594,
     "met": true
    },
@@ -2285,7 +2285,7 @@
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
-    "worst": 2.6468895884130585e-13,
+    "worst": 2.6705169335916395e-13,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2304,24 +2304,24 @@
     "worstM": 0.00015230691564447488
    },
    "suite": {
-    "atHour": 8,
+    "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00005810278907841848,
-    "steps": 336,
+    "worstM": 0.00006627464011281191,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00006507769302561265,
+    "worstM": 0.00006507138630946341,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00006484933086633519,
-    "steps": 8596,
+    "worstM": 0.00006547341833310445,
+    "steps": 8593,
     "met": true
    },
    "met": true,
@@ -2337,7 +2337,7 @@
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
-    "worst": 1.4734967343542486e-11,
+    "worst": 1.4848867391789377e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2356,24 +2356,24 @@
     "worstM": 0.00015286805529684868
    },
    "suite": {
-    "atHour": 8,
+    "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00005790404019141581,
+    "worstM": 0.00006485216068642363,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00006585076747495517,
+    "worstM": 0.00006579819125177835,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00006722935326959456,
-    "steps": 8594,
+    "worstM": 0.00006578795803303581,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -2389,7 +2389,7 @@
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
-    "worst": 1.4457505012243563e-11,
+    "worst": 1.460191440853007e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2410,22 +2410,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010686003667016533,
-    "steps": 337,
+    "worstM": 0.00009535252440117036,
+    "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009637913230200802,
+    "worstM": 0.00009678475560171293,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009532164386403578,
-    "steps": 8595,
+    "worstM": 0.00009534787847566148,
+    "steps": 8592,
     "met": true
    },
    "met": true,
@@ -2441,7 +2441,7 @@
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
-    "worst": 2.6108287198516275e-11,
+    "worst": 2.5847317859734237e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2462,22 +2462,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010765459523954047,
-    "steps": 336,
+    "worstM": 0.00009636378327631803,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.0000974467340625223,
+    "worstM": 0.00009731496251012771,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009564692225559333,
-    "steps": 8595,
+    "worstM": 0.00009685171358523693,
+    "steps": 8596,
     "met": true
    },
    "met": true,
@@ -2493,10 +2493,10 @@
    "stm": {
     "atHour": 19,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 2.4080844464793483e-11
+     "SRP_AREA_OVER_MASS": 2.181981106783895e-11
     },
     "sampleCount": 24,
-    "worst": 2.5221605927764538e-11,
+    "worst": 2.4897398613014417e-11,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -2509,10 +2509,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 2.5221605927764538e-11,
+      "worstRelativeColumnDifference": 2.4897398613014417e-11,
       "atHour": 19,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 2.4080844464793483e-11
+       "SRP_AREA_OVER_MASS": 2.181981106783895e-11
       },
       "sources": [
        {
@@ -2543,24 +2543,24 @@
     "worstM": 0.0001495274114603451
    },
    "suite": {
-    "atHour": 8,
+    "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00005752763759663202,
+    "worstM": 0.00006435774737881638,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0000662313032510322,
+    "worstM": 0.00006605843200989298,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.00006660640019767173,
-    "steps": 8594,
+    "worstM": 0.0000656515546372768,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -2576,7 +2576,7 @@
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
-    "worst": 1.4559322733363896e-11,
+    "worst": 1.4702886097715402e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2597,22 +2597,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010621979028045072,
+    "worstM": 0.00009534020491821184,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009369077229943421,
+    "worstM": 0.00009479160981603921,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009388252652216607,
-    "steps": 8592,
+    "worstM": 0.00009390278481065251,
+    "steps": 8593,
     "met": true
    },
    "met": true,
@@ -2628,7 +2628,7 @@
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
-    "worst": 2.5914660640414038e-11,
+    "worst": 2.5641924971693658e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2649,21 +2649,21 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.0001089548931100488,
+    "worstM": 0.00009855459827774231,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009929083124768019,
+    "worstM": 0.00009879213586955597,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010011954135601798,
+    "worstM": 0.00009975749295729507,
     "steps": 8596,
     "met": true
    },
@@ -2680,10 +2680,10 @@
    "stm": {
     "atHour": 19,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 2.4752265048277357e-11
+     "SRP_AREA_OVER_MASS": 2.2538484931116442e-11
     },
     "sampleCount": 24,
-    "worst": 2.7012673318734104e-11,
+    "worst": 2.6654641564794076e-11,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -2696,10 +2696,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 2.7012673318734104e-11,
+      "worstRelativeColumnDifference": 2.6654641564794076e-11,
       "atHour": 19,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 2.4752265048277357e-11
+       "SRP_AREA_OVER_MASS": 2.2538484931116442e-11
       },
       "sources": [
        {
@@ -2732,22 +2732,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010449927933301676,
-    "steps": 337,
+    "worstM": 0.00009290252348804549,
+    "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009409503818390833,
+    "worstM": 0.00009352377652550331,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009440118956511707,
-    "steps": 8596,
+    "worstM": 0.00009480061720252231,
+    "steps": 8592,
     "met": true
    },
    "met": true,
@@ -2763,7 +2763,7 @@
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
-    "worst": 2.5892975089130397e-11,
+    "worst": 2.5605887866973212e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2785,22 +2785,22 @@
    "suite": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0013720733831729612,
-    "steps": 336,
+    "worstM": 0.0013894649225945199,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0013898080115603423,
+    "worstM": 0.0013901017470097008,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0013900061036776674,
-    "steps": 8597,
+    "worstM": 0.0013899221505239033,
+    "steps": 8596,
     "met": true
    },
    "met": true,
@@ -2829,22 +2829,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010485360735744568,
+    "worstM": 0.00009407382929744161,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009414083924332977,
+    "worstM": 0.00009400331835500302,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009408390842588134,
-    "steps": 8594,
+    "worstM": 0.00009406173742176874,
+    "steps": 8596,
     "met": true
    },
    "met": true,
@@ -2860,7 +2860,7 @@
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
-    "worst": 2.626360433953728e-11,
+    "worst": 2.59531255703747e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2881,22 +2881,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010351151489517598,
-    "steps": 337,
+    "worstM": 0.00009232388496561452,
+    "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009286190144727553,
+    "worstM": 0.00009304725460995866,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009374501338703655,
-    "steps": 8594,
+    "worstM": 0.0000934749835292687,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -2912,7 +2912,7 @@
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
-    "worst": 2.587227363207086e-11,
+    "worst": 2.578658391872228e-11,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -2933,22 +2933,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00010244900617499948,
-    "steps": 338,
+    "worstM": 0.00009189438841499259,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009187676735140702,
+    "worstM": 0.00009193601698256918,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00009390953310922613,
-    "steps": 8645,
+    "worstM": 0.00009396699687745603,
+    "steps": 8641,
     "met": true
    },
    "met": true,
@@ -2964,11 +2964,11 @@
    "stm": {
     "atHour": 19,
     "parameters": {
-     "IN_TRACK_ACCELERATION": 3.975364277669712e-12,
-     "SRP_AREA_OVER_MASS": 2.3240645440748332e-11
+     "IN_TRACK_ACCELERATION": 3.519162930191214e-12,
+     "SRP_AREA_OVER_MASS": 2.1048370845800636e-11
     },
     "sampleCount": 24,
-    "worst": 2.5816527496885158e-11,
+    "worst": 2.5535569177125866e-11,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -2985,11 +2985,11 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 2.5816527496885158e-11,
+      "worstRelativeColumnDifference": 2.5535569177125866e-11,
       "atHour": 19,
       "parameters": {
-       "IN_TRACK_ACCELERATION": 3.975364277669712e-12,
-       "SRP_AREA_OVER_MASS": 2.3240645440748332e-11
+       "IN_TRACK_ACCELERATION": 3.519162930191214e-12,
+       "SRP_AREA_OVER_MASS": 2.1048370845800636e-11
       },
       "sources": [
        {
@@ -3022,22 +3022,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 9.905622494276553e-7,
+    "worstM": 0.0000011967492904002766,
     "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000027595746150645496,
+    "worstM": 0.0000029502792968417176,
     "steps": 2882,
     "met": true
    },
    "finest": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000001882523204321328,
-    "steps": 8594,
+    "worstM": 0.000001863198624424112,
+    "steps": 8593,
     "met": true
    },
    "met": true,
@@ -3053,7 +3053,7 @@
    "stm": {
     "atHour": 12,
     "sampleCount": 24,
-    "worst": 1.09487120286924e-12,
+    "worst": 1.2316958725169707e-12,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3074,22 +3074,22 @@
    "suite": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000006930574163193669,
-    "steps": 336,
+    "worstM": 0.000006941370164771573,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.00000697830778981145,
+    "worstM": 0.000006973526723884685,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000006928792174233299,
-    "steps": 8593,
+    "worstM": 0.000006947990149404375,
+    "steps": 8594,
     "met": true
    },
    "met": true,
@@ -3105,7 +3105,7 @@
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
-    "worst": 1.80306494459211e-10,
+    "worst": 1.8030652162741934e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3126,21 +3126,21 @@
    "suite": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000007971743039845288,
+    "worstM": 0.000007973645868725165,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000007949402242229484,
+    "worstM": 0.000007949411468792423,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000007655849243785001,
+    "worstM": 0.000007668332740927176,
     "steps": 8592,
     "met": true
    },
@@ -3157,7 +3157,7 @@
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
-    "worst": 1.8039463577840392e-10,
+    "worst": 1.8037946313512244e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3178,22 +3178,22 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0001472290030297565,
+    "worstM": 0.0001469806837922537,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0001460243647774388,
+    "worstM": 0.00014597938042455947,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014790447181431933,
-    "steps": 8594,
+    "worstM": 0.0001471100107854135,
+    "steps": 8596,
     "met": true
    },
    "met": true,
@@ -3209,7 +3209,7 @@
    "stm": {
     "atHour": 12,
     "sampleCount": 24,
-    "worst": 4.803712501949093e-10,
+    "worst": 4.80921312085089e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3230,22 +3230,22 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014473495888915247,
+    "worstM": 0.00014480213717841877,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014427627385809263,
+    "worstM": 0.00014450171845509173,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014346339418939286,
-    "steps": 8593,
+    "worstM": 0.00014381591716350843,
+    "steps": 8592,
     "met": true
    },
    "met": true,
@@ -3261,10 +3261,10 @@
    "stm": {
     "atHour": 12,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 1.0129944656136882e-11
+     "SRP_AREA_OVER_MASS": 1.0131721354826295e-11
     },
     "sampleCount": 24,
-    "worst": 4.821374819974038e-10,
+    "worst": 4.821701437665061e-10,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -3277,10 +3277,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 4.821374819974038e-10,
+      "worstRelativeColumnDifference": 4.821701437665061e-10,
       "atHour": 12,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 1.0129944656136882e-11
+       "SRP_AREA_OVER_MASS": 1.0131721354826295e-11
       },
       "sources": [
        {
@@ -3313,22 +3313,22 @@
    "suite": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000006866808900637351,
+    "worstM": 0.000006871192548066523,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.000006923708206357876,
+    "worstM": 0.000006932941042470186,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 18,
     "sampleCount": 24,
-    "worstM": 0.0000072876675813535504,
-    "steps": 8593,
+    "worstM": 0.000007262099439940438,
+    "steps": 8594,
     "met": true
    },
    "met": true,
@@ -3344,7 +3344,7 @@
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
-    "worst": 1.7989316254522105e-10,
+    "worst": 1.798911768424628e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3365,22 +3365,22 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014798319664733405,
-    "steps": 336,
+    "worstM": 0.00014851948254019173,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0001476957794449336,
+    "worstM": 0.0001479592451348735,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014631514610278918,
-    "steps": 8593,
+    "worstM": 0.00014636484762923412,
+    "steps": 8592,
     "met": true
    },
    "met": true,
@@ -3396,7 +3396,7 @@
    "stm": {
     "atHour": 12,
     "sampleCount": 24,
-    "worst": 4.815418993077283e-10,
+    "worst": 4.813573397815992e-10,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3417,21 +3417,21 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0001404555190241835,
+    "worstM": 0.00014082007427452378,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00013716493410964107,
+    "worstM": 0.00013775133773857574,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00014050075701044278,
+    "worstM": 0.00014075245144485406,
     "steps": 8592,
     "met": true
    },
@@ -3448,10 +3448,10 @@
    "stm": {
     "atHour": 12,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 9.960596805289683e-12
+     "SRP_AREA_OVER_MASS": 9.942853061712904e-12
     },
     "sampleCount": 24,
-    "worst": 4.831465848454447e-10,
+    "worst": 4.835266748687837e-10,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -3464,10 +3464,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 4.831465848454447e-10,
+      "worstRelativeColumnDifference": 4.835266748687837e-10,
       "atHour": 12,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 9.960596805289683e-12
+       "SRP_AREA_OVER_MASS": 9.942853061712904e-12
       },
       "sources": [
        {
@@ -3500,22 +3500,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000007103252056325135,
-    "steps": 553,
+    "worstM": 0.000010148450775974185,
+    "steps": 551,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000076179306653890246,
-    "steps": 2886,
+    "worstM": 0.000012695455674284177,
+    "steps": 2884,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000014250571231215969,
-    "steps": 8594,
+    "worstM": 0.000010843394146930162,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -3529,9 +3529,9 @@
     "sampleCount": 24
    },
    "stm": {
-    "atHour": 24,
+    "atHour": 12,
     "sampleCount": 24,
-    "worst": 3.11655926533021e-11,
+    "worst": 6.223319948712483e-12,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3552,22 +3552,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010745657906757359,
+    "worstM": 0.009420431312880296,
     "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009609685833301903,
+    "worstM": 0.009592548483376368,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009595644348828555,
-    "steps": 8597,
+    "worstM": 0.009590391013762396,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -3583,7 +3583,7 @@
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
-    "worst": 4.270056687061207e-9,
+    "worst": 4.272917603469512e-9,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3604,22 +3604,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010972812685392904,
-    "steps": 417,
+    "worstM": 0.00943106575842841,
+    "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009630763843919473,
+    "worstM": 0.009616853578070125,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009593079423468149,
-    "steps": 8596,
+    "worstM": 0.009604848204022241,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -3635,7 +3635,7 @@
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
-    "worst": 4.269536595670158e-9,
+    "worst": 4.2746971059656725e-9,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3656,22 +3656,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0103095385565271,
-    "steps": 417,
+    "worstM": 0.009178591241836686,
+    "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009388149459538052,
+    "worstM": 0.009361225506988967,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009343141349726317,
-    "steps": 8598,
+    "worstM": 0.009343445198026662,
+    "steps": 8595,
     "met": true
    },
    "met": true,
@@ -3687,7 +3687,7 @@
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
-    "worst": 4.315005411281745e-9,
+    "worst": 4.130137593329037e-9,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3708,22 +3708,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010487590447981589,
+    "worstM": 0.009366910510845003,
     "steps": 429,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009541597523647643,
+    "worstM": 0.009523384352472183,
     "steps": 2896,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009478003124946467,
-    "steps": 8606,
+    "worstM": 0.009476079055380601,
+    "steps": 8604,
     "met": true
    },
    "met": true,
@@ -3739,10 +3739,10 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 0.000011972411267707097
+     "SRP_AREA_OVER_MASS": 0.000011972712938527924
     },
     "sampleCount": 24,
-    "worst": 0.00002562134418564232,
+    "worst": 0.000025622615803153756,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -3755,10 +3755,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.00002562134418564232,
+      "worstRelativeColumnDifference": 0.000025622615803153756,
       "atHour": 24,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 0.000011972411267707097
+       "SRP_AREA_OVER_MASS": 0.000011972712938527924
       },
       "sources": [
        {
@@ -3791,22 +3791,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010874291545154886,
+    "worstM": 0.00942839914668271,
     "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009637808004513986,
+    "worstM": 0.009615456242206201,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009629763816863583,
-    "steps": 8594,
+    "worstM": 0.009622794225249538,
+    "steps": 8597,
     "met": true
    },
    "met": true,
@@ -3822,7 +3822,7 @@
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
-    "worst": 4.319662319816106e-9,
+    "worst": 4.319086980880028e-9,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3843,22 +3843,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010399049141307343,
-    "steps": 417,
+    "worstM": 0.00913407185039606,
+    "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00934133087209971,
+    "worstM": 0.009321180292881554,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009328539549543581,
-    "steps": 8595,
+    "worstM": 0.009327476043748558,
+    "steps": 8596,
     "met": true
    },
    "met": true,
@@ -3874,7 +3874,7 @@
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
-    "worst": 4.349309695894071e-9,
+    "worst": 4.15633516114244e-9,
     "parameterColumns": [],
     "agreement": "relative-column-difference",
     "note": "Quantitative agreement; the shared protocol defines no STM tolerance."
@@ -3895,22 +3895,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010409263069038176,
+    "worstM": 0.00927120653348652,
     "steps": 429,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009441373331593221,
+    "worstM": 0.009427389142789377,
     "steps": 2896,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009369362349265083,
-    "steps": 8602,
+    "worstM": 0.009373439416812913,
+    "steps": 8604,
     "met": true
    },
    "met": true,
@@ -3926,10 +3926,10 @@
    "stm": {
     "atHour": 24,
     "parameters": {
-     "SRP_AREA_OVER_MASS": 0.000011675797906992793
+     "SRP_AREA_OVER_MASS": 0.000011676747516524962
     },
     "sampleCount": 24,
-    "worst": 0.000025907250812835047,
+    "worst": 0.000025908747074490032,
     "parameterColumns": [
      [
       "SRP_AREA_OVER_MASS",
@@ -3942,10 +3942,10 @@
      "classification": "Tudat defect",
      "statement": "The native cannonball SRP position partial omits the position derivative of eclipse attenuation. The modern radiation_pressure factory dispatches this partial for the isotropic point source and cannonball target used here. The omission affects paths that encounter an eclipse transition; this record does not establish that this case encounters one. These measured whole-arc column differences do not isolate the eclipse-gradient contribution.",
      "evidence": {
-      "worstRelativeColumnDifference": 0.000025907250812835047,
+      "worstRelativeColumnDifference": 0.000025908747074490032,
       "atHour": 24,
       "parameters": {
-       "SRP_AREA_OVER_MASS": 0.000011675797906992793
+       "SRP_AREA_OVER_MASS": 0.000011676747516524962
       },
       "sources": [
        {
@@ -4095,11 +4095,11 @@
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+    "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
+    "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -4144,7 +4144,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-tudatpy-1.0.0.json",
-   "sha256": "0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee"
+   "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
   },
   "tudat": {
    "identifierRename": {
@@ -4170,7 +4170,7 @@
   },
   {
    "path": "ffm-tudatpy-1.0.0.json",
-   "sha256": "0f350e7219e3edbcc6cc98544fb658d3b9b872656a73833fcd232e9a51e2fbee"
+   "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
   },
   {
    "path": "scoring.mjs",
@@ -4218,11 +4218,11 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
+   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
   },
   {
    "path": "../cases/ffm-reference-cases.json",

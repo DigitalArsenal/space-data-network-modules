@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Tudat: largest 3D position difference over 24 h at hourly samples in each exported case frame; suite/steps30/finest FFM settings and Orekit-minus-Tudat; 6x6 STM and Cd/Cr, Cd*A/m-rate, and in-track-acceleration sensitivity comparisons where available. Numerical reductions are C++.",
  "module": {
-  "version": "2.0.0",
-  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+  "version": "2.2.0",
+  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
  },
  "tudat": {
   "file": "../../fixtures/tudat/tudat-wasm-reference.json",
@@ -145,22 +145,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00031855914896645305,
-    "steps": 2346,
+    "worstM": 0.0000017772976534215856,
+    "steps": 2356,
     "met": true
    },
    "steps30": {
-    "atHour": 24,
+    "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00006909128557965792,
-    "steps": 2903,
+    "worstM": 0.0000032617156211333334,
+    "steps": 2899,
     "met": true
    },
    "finest": {
-    "atHour": 23,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000008618104286043271,
-    "steps": 8608,
+    "worstM": 0.000001922292828510195,
+    "steps": 8609,
     "met": true
    },
    "met": true
@@ -179,24 +179,24 @@
    },
    "stmSkipped": "The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns.",
    "suite": {
-    "atHour": 24,
+    "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.017985336943025607,
-    "steps": 1343,
+    "worstM": 0.0009936601419395482,
+    "steps": 1341,
     "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010191560959799755,
+    "worstM": 0.0010133640225357618,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 7,
     "sampleCount": 24,
-    "worstM": 0.0010146722377018923,
-    "steps": 8611,
+    "worstM": 0.0010141106309726636,
+    "steps": 8607,
     "met": true
    },
    "met": true
@@ -217,22 +217,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.019849838152759206,
-    "steps": 1344,
+    "worstM": 0.002068434398569704,
+    "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.002293379286868139,
+    "worstM": 0.0022265290994175043,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.002220224314412244,
-    "steps": 8607,
+    "worstM": 0.0022252217864235637,
+    "steps": 8613,
     "met": true
    },
    "met": true
@@ -253,21 +253,21 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01991864971715346,
+    "worstM": 0.0020749012357428338,
     "steps": 1342,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0022951044999000515,
+    "worstM": 0.002224192388514225,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0022153122875610783,
+    "worstM": 0.0022285072416721808,
     "steps": 8608,
     "met": true
    },
@@ -289,22 +289,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01969699346701158,
-    "steps": 1414,
+    "worstM": 0.002105870065165906,
+    "steps": 1413,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00230150096352539,
+    "worstM": 0.0022270934046864366,
     "steps": 2958,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0022123937765910883,
-    "steps": 8636,
+    "worstM": 0.0022106019511152326,
+    "steps": 8640,
     "met": true
    },
    "met": true
@@ -323,24 +323,24 @@
    },
    "stmSkipped": "The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns.",
    "suite": {
-    "atHour": 22,
+    "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.03347475911520099,
-    "steps": 1414,
+    "worstM": 0.03430186594072596,
+    "steps": 1416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.034115577286201314,
+    "worstM": 0.034177873724803944,
     "steps": 2959,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0341911549292332,
-    "steps": 8636,
+    "worstM": 0.03419479839778143,
+    "steps": 8635,
     "met": true
    },
    "met": true
@@ -361,22 +361,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0002954431124212601,
-    "steps": 2196,
+    "worstM": 0.0000034886246327568306,
+    "steps": 2199,
     "met": true
    },
    "steps30": {
-    "atHour": 24,
+    "atHour": 14,
     "sampleCount": 24,
-    "worstM": 0.00003958579126557315,
-    "steps": 2902,
+    "worstM": 0.0000010976233436647955,
+    "steps": 2900,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000007496529184844677,
-    "steps": 8609,
+    "worstM": 0.000005454739104555882,
+    "steps": 8605,
     "met": true
    },
    "met": true
@@ -397,22 +397,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.014280261682339158,
-    "steps": 1258,
+    "worstM": 0.001649126995146994,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0014745349343985685,
+    "worstM": 0.001514907038002165,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0015085600796814736,
-    "steps": 8606,
+    "worstM": 0.001513863152323825,
+    "steps": 8603,
     "met": true
    },
    "met": true
@@ -433,22 +433,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013715967471866642,
-    "steps": 1256,
+    "worstM": 0.0021686427904710447,
+    "steps": 1257,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00198975150438248,
+    "worstM": 0.002034187863431715,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0020368916982498888,
-    "steps": 8609,
+    "worstM": 0.0020350374035604094,
+    "steps": 8606,
     "met": true
    },
    "met": true
@@ -469,22 +469,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013738037819466552,
-    "steps": 1259,
+    "worstM": 0.002179729319382617,
+    "steps": 1258,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.002006511021081495,
+    "worstM": 0.002046130077945294,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0020470781121612372,
-    "steps": 8607,
+    "worstM": 0.002049595884709164,
+    "steps": 8609,
     "met": true
    },
    "met": true
@@ -505,22 +505,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.013529303220081668,
-    "steps": 1343,
+    "worstM": 0.0021373027178352554,
+    "steps": 1346,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0019984106081553437,
+    "worstM": 0.0020372200173824355,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0016804915313918755,
-    "steps": 8675,
+    "worstM": 0.0016871864066443645,
+    "steps": 8676,
     "met": true
    },
    "met": true
@@ -541,21 +541,21 @@
    "suite": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.06535965437475881,
-    "steps": 1345,
+    "worstM": 0.05330967739524767,
+    "steps": 1346,
     "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.053423730599096636,
+    "worstM": 0.05339346225970927,
     "steps": 2957,
     "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.05365398675726875,
+    "worstM": 0.053657378797686235,
     "steps": 8674,
     "met": true
    },
@@ -575,23 +575,23 @@
    },
    "stmSkipped": "The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns.",
    "suite": {
-    "atHour": 24,
+    "atHour": 13,
     "sampleCount": 24,
-    "worstM": 0.000021247025118940827,
-    "steps": 342,
+    "worstM": 0.0000012685714060690563,
+    "steps": 344,
     "met": true
    },
    "steps30": {
     "atHour": 13,
     "sampleCount": 24,
-    "worstM": 0.0000018480033393078385,
-    "steps": 2883,
+    "worstM": 0.0000017083616795335012,
+    "steps": 2882,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000001996244941341365,
+    "worstM": 0.0000022221676202410642,
     "steps": 8594,
     "met": true
    },
@@ -611,24 +611,24 @@
    },
    "stmSkipped": "The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns.",
    "suite": {
-    "atHour": 8,
+    "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.000058000761152741496,
-    "steps": 336,
+    "worstM": 0.00006671221352555757,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0000655152652163864,
+    "worstM": 0.000065508728164394,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
-    "worstM": 0.0000652873546358936,
-    "steps": 8596,
+    "worstM": 0.00006591083284833806,
+    "steps": 8593,
     "met": true
    },
    "met": true
@@ -649,22 +649,22 @@
    "suite": {
     "atHour": 15,
     "sampleCount": 24,
-    "worstM": 0.00008209669717513786,
+    "worstM": 0.0000740469337825838,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 15,
     "sampleCount": 24,
-    "worstM": 0.00007330859851022857,
+    "worstM": 0.00007323543634576914,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 15,
     "sampleCount": 24,
-    "worstM": 0.0000726120352325596,
-    "steps": 8594,
+    "worstM": 0.00007262006553059383,
+    "steps": 8595,
     "met": true
    },
    "met": true
@@ -683,24 +683,24 @@
    },
    "stmSkipped": "The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns.",
    "suite": {
-    "atHour": 24,
+    "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.0001457195153612689,
+    "worstM": 0.00012443209791617439,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.00012292051250663153,
+    "worstM": 0.00012396054508346247,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.00012322981587167595,
-    "steps": 8592,
+    "worstM": 0.00012326224700662835,
+    "steps": 8593,
     "met": true
    },
    "met": true
@@ -719,23 +719,23 @@
    },
    "stmSkipped": "The committed Tudat WASM fixture contains state trajectories only; its C++ driver did not save variational equations or sensitivity columns.",
    "suite": {
-    "atHour": 24,
+    "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.00014261696918278172,
+    "worstM": 0.00012534680866594552,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.00012612110573667666,
+    "worstM": 0.000125636115863546,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 16,
     "sampleCount": 24,
-    "worstM": 0.00012663974899726967,
+    "worstM": 0.0001263717379815935,
     "steps": 8596,
     "met": true
    },
@@ -757,22 +757,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000002786309104606073,
+    "worstM": 0.000002992751015131983,
     "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000004467459545188824,
+    "worstM": 0.000004656079632554855,
     "steps": 2882,
     "met": true
    },
    "finest": {
-    "atHour": 24,
+    "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.0000022413995210048002,
-    "steps": 8594,
+    "worstM": 0.0000022161369840062983,
+    "steps": 8593,
     "met": true
    },
    "met": true
@@ -793,22 +793,22 @@
    "suite": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.00000731233671447928,
-    "steps": 336,
+    "worstM": 0.000007325279893660355,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.000007365264264716618,
+    "worstM": 0.000007361374953847548,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
-    "worstM": 0.000007305325804311252,
-    "steps": 8593,
+    "worstM": 0.000007324848617638462,
+    "steps": 8594,
     "met": true
    },
    "met": true
@@ -829,22 +829,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000052230246996334647,
+    "worstM": 0.000052016832399107905,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00005146917877124857,
+    "worstM": 0.000051294334196892545,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00004854460972035725,
-    "steps": 8593,
+    "worstM": 0.00004860897580205413,
+    "steps": 8594,
     "met": true
    },
    "met": true
@@ -865,22 +865,22 @@
    "suite": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00013907968566975124,
-    "steps": 336,
+    "worstM": 0.00013903753423042978,
+    "steps": 337,
     "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00013894856093818697,
+    "worstM": 0.0001388602085891096,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00013947768009632438,
-    "steps": 8593,
+    "worstM": 0.0001395042212258276,
+    "steps": 8592,
     "met": true
    },
    "met": true
@@ -901,21 +901,21 @@
    "suite": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014096392303858705,
+    "worstM": 0.00014088202927519877,
     "steps": 336,
     "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.0001418012579685772,
+    "worstM": 0.00014175565044659703,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 12,
     "sampleCount": 24,
-    "worstM": 0.00014078750869581582,
+    "worstM": 0.00014068118284555324,
     "steps": 8592,
     "met": true
    },
@@ -937,22 +937,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000007742029343135548,
-    "steps": 553,
+    "worstM": 0.00001076327796058272,
+    "steps": 551,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0000070283339716225495,
-    "steps": 2886,
+    "worstM": 0.00001330738781451748,
+    "steps": 2884,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.000014861970252629105,
-    "steps": 8594,
+    "worstM": 0.000011456920457412549,
+    "steps": 8595,
     "met": true
    },
    "met": true
@@ -973,22 +973,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010753949697269768,
+    "worstM": 0.009428723605236812,
     "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009617978128127905,
+    "worstM": 0.009600840780540567,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009603936648025509,
-    "steps": 8597,
+    "worstM": 0.009598683312466523,
+    "steps": 8595,
     "met": true
    },
    "met": true
@@ -1009,22 +1009,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.011352085578835209,
+    "worstM": 0.009906185789392062,
     "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010115594535228388,
+    "worstM": 0.0100932427903245,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010107550374727459,
-    "steps": 8594,
+    "worstM": 0.010100580691776596,
+    "steps": 8597,
     "met": true
    },
    "met": true
@@ -1045,22 +1045,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.010896329362401437,
-    "steps": 417,
+    "worstM": 0.009631340016413362,
+    "steps": 416,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00983859933679294,
+    "worstM": 0.009818448737851183,
     "steps": 2880,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00982580796827057,
-    "steps": 8595,
+    "worstM": 0.009824744417442176,
+    "steps": 8596,
     "met": true
    },
    "met": true
@@ -1081,22 +1081,22 @@
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.01083501298281531,
+    "worstM": 0.00969694502135016,
     "steps": 429,
     "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009867112026265142,
+    "worstM": 0.009853127744351068,
     "steps": 2896,
     "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.009795100847817713,
-    "steps": 8602,
+    "worstM": 0.009799177921604764,
+    "steps": 8604,
     "met": true
    },
    "met": true
@@ -1353,11 +1353,11 @@
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+    "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
+    "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -1402,7 +1402,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-tudat-wasm.json",
-   "sha256": "ea5f089710f36abe6e3cc1ac35ce8d0f4ad54dbcf36f073ada5a5bb01866640c"
+   "sha256": "6981532d5384e9d40c97207c5eb36682581c607143717b8e8f480f6e471e5128"
   },
   "historicalFixture": {
    "path": "../../fixtures/tudat/tudat-wasm-reference.json",
@@ -1428,7 +1428,7 @@
   },
   {
    "path": "ffm-tudat-wasm.json",
-   "sha256": "ea5f089710f36abe6e3cc1ac35ce8d0f4ad54dbcf36f073ada5a5bb01866640c"
+   "sha256": "6981532d5384e9d40c97207c5eb36682581c607143717b8e8f480f6e471e5128"
   },
   {
    "path": "scoring.mjs",
@@ -1468,11 +1468,11 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
+   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
   },
   {
    "path": "../cases/ffm-reference-cases.json",

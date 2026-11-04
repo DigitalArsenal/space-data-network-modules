@@ -15,8 +15,8 @@
    "eps": 0.00005249850506094944,
    "dragEffectM": 43791.86632299737,
    "epsTimesDragEffectM": 2.2990075157862986,
-   "ffmMinusGmatM": 2.319552013582224,
-   "ffmMinusGmatCdScaledM": 0.026501703961632338
+   "ffmMinusGmatM": 2.319486585637847,
+   "ffmMinusGmatCdScaledM": 0.026443501257376503
   },
   {
    "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
@@ -31,8 +31,8 @@
    "eps": 0.000052453945181385464,
    "dragEffectM": 43812.1082855002,
    "epsTimesDragEffectM": 2.2981179262885516,
-   "ffmMinusGmatM": 2.3147619436994282,
-   "ffmMinusGmatCdScaledM": 0.03338749930318057
+   "ffmMinusGmatM": 2.3146976246939386,
+   "ffmMinusGmatCdScaledM": 0.0334413133340647
   },
   {
    "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
@@ -47,8 +47,8 @@
    "eps": 0.00004735515595832851,
    "dragEffectM": 32655.217725603314,
    "epsTimesDragEffectM": 1.5463929282491184,
-   "ffmMinusGmatM": 1.5277578241510927,
-   "ffmMinusGmatCdScaledM": 0.01653512014456305
+   "ffmMinusGmatM": 1.5276902222675302,
+   "ffmMinusGmatCdScaledM": 0.016577206879770316
   },
   {
    "id": "SSO700 F6-field-sun-moon-srp-drag",
@@ -63,8 +63,8 @@
    "eps": 0.019634957851031087,
    "dragEffectM": 412.9995072518732,
    "epsTimesDragEffectM": 8.109227917387138,
-   "ffmMinusGmatM": 7.934490860625266,
-   "ffmMinusGmatCdScaledM": 0.10584668186383847
+   "ffmMinusGmatM": 7.934452015178726,
+   "ffmMinusGmatCdScaledM": 0.10587911614630166
   },
   {
    "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -79,8 +79,8 @@
    "eps": 0.01963280889061214,
    "dragEffectM": 413.1350852945854,
    "epsTimesDragEffectM": 8.111002175595342,
-   "ffmMinusGmatM": 7.94993598997055,
-   "ffmMinusGmatCdScaledM": 0.12281562009139584
+   "ffmMinusGmatM": 7.949889867227415,
+   "ffmMinusGmatCdScaledM": 0.1228545128357298
   },
   {
    "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
@@ -95,15 +95,15 @@
    "eps": 0.025278904723321505,
    "dragEffectM": 255.82940181861494,
    "epsTimesDragEffectM": 6.4670870739971,
-   "ffmMinusGmatM": 6.296096629271772,
-   "ffmMinusGmatCdScaledM": 0.12276417078366048
+   "ffmMinusGmatM": 6.296060832157792,
+   "ffmMinusGmatCdScaledM": 0.12279412500475317
   }
  ],
  "ffmRefresh": {
   "module": {
-   "version": "2.0.0",
+   "version": "2.2.0",
    "file": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
   },
   "source": {
    "path": "../refresh-derived-comparisons.mjs",
