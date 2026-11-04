@@ -4,12 +4,16 @@
 //   recipe        $XMT   INTEGRATE_RECIPE: asOf, the identity links, the selection policy with its measured table, the maneuver policy
 //   catalog       $CAT   the composed catalog (compose's output, or one snapshot): each object once
 //   ephemerides   $OEM   the normalized trajectories of the identity candidates, in candidate order
-//   omm_products  $OMM   every source's element sets, each naming its source in PROVENANCE as analysis/gp-error-model writes it
-//   ocm_products  $OCM   every source's states and covariance, with the covariance's realism (COV_REALISM)
+//   omm_products  $OMM   every source's $OMM element sets, each naming its source in PROVENANCE as analysis/gp-error-model writes it
+//   ocm_products  $OCM   every source's states and covariance, with the covariance's realism (COV_REALISM), and its $OCM
+//                        element sets (MEAN_ELEMENTS: SGP4XP, AP), each a product of its theory
 //   mnv_products  $MNV   every source's maneuvers, each naming its source in PROVENANCE
-//   -> catalog    $CAT   the input objects, in order; MANEUVERABLE is true where the history shows a maneuver
-//      omm        $OMM   per object and product kind (SGP4, SGP4-XP) the element set of the selected source, byte for byte
-//      ocm        $OCM   the selected product's state and covariance with its realism, byte for byte
+//   -> catalog    $CAT   the input objects, in order; MANEUVERABLE is true where the history shows a maneuver; PRODUCTS
+//                        the selected products (KIND Sgp4Elements, Sgp4XpElements or ApElements by the set's theory,
+//                        StateCovariance for an $OMM's paired state), PRODUCTS_AS_OF asOf
+//      omm        $OMM   per object and product kind the selected $OMM element set, byte for byte
+//      ocm        $OCM   per object and product kind the selected $OCM element set, and an $OMM's paired state and
+//                        covariance with its realism, byte for byte
 //      mnv        $MNV   the maneuvers of every source, merged within the policy's tolerances
 //      report     $XMT   INTEGRATE_REPORT: per object every candidate, why one was chosen or none, the covariance's realism, record CIDs
 //
@@ -43,7 +47,7 @@ Link link_of(const Identity& who, const std::string& source, const Index& index,
   return Link::Found;
 }
 struct PerObject {
-  std::vector<const Omm*> omms;
+  std::vector<const ElementSet*> sets;
   std::vector<const Ocm*> ocms;
   std::vector<const Mnv*> mnvs;
 };
@@ -51,16 +55,38 @@ struct PerObject {
 // Microseconds to Unix milliseconds, rounded down (the report's instants are milliseconds).
 int64_t ms_of(int64_t micros) { return micros >= 0 ? micros / 1000 : -((-micros + 999) / 1000); }
 
-// The label a product carries for its covariance: from its $OCM when it has one, else from its $OMM.
-void covariance_of(const Omm& omm, const Ocm* ocm, XMTProductSelectionT* out) {
-  if (ocm) {
+// The label a product carries for its covariance: from its paired $OCM state when it has one, from an $OCM set's own,
+// else from its $OMM.
+void covariance_of(const ElementSet& set, const Ocm* ocm, XMTProductSelectionT* out) {
+  const CVR* label = ocm ? ocm->label : set.label;
+  if (ocm || set.kind == xmtRecordKind::Ocm) {
     out->COVARIANCE_ORIGIN = xmtCovarianceOrigin::FromOcm;
-    if (ocm->label) out->COVARIANCE.reset(ocm->label->UnPack());
-    else { out->COVARIANCE = std::make_unique<CVRT>(); out->COVARIANCE->CALIBRATION = ocm->calibration; }
-  } else if (omm.label) {
+    if (label) out->COVARIANCE.reset(label->UnPack());
+    else { out->COVARIANCE = std::make_unique<CVRT>(); out->COVARIANCE->CALIBRATION = ocm ? ocm->calibration : set.calibration; }
+  } else if (set.label) {
     out->COVARIANCE_ORIGIN = xmtCovarianceOrigin::FromOmm;
-    out->COVARIANCE.reset(omm.label->UnPack());
+    out->COVARIANCE.reset(set.label->UnPack());
   }
+}
+
+// What the $CAT calls a selected product.
+catalogProductKind product_kind(meanElementSource theory) {
+  switch (theory) {
+    case meanElementSource::SGP4: return catalogProductKind::Sgp4Elements;
+    case meanElementSource::SGP4XP: return catalogProductKind::Sgp4XpElements;
+    case meanElementSource::AP: return catalogProductKind::ApElements;
+    default: return catalogProductKind::Unspecified;
+  }
+}
+std::unique_ptr<CATProductT> cat_product(catalogProductKind kind, const uint8_t* bytes, uint32_t length, const std::string& source, const std::string& epoch,
+                                         xmtSelectionReason reason) {
+  auto out = std::make_unique<CATProductT>();
+  out->KIND = kind;
+  out->RECORD_CID = sdn_cid::cid_v1_raw_sha256(bytes, length);
+  out->SOURCE_ID = source;
+  out->EPOCH = epoch;
+  out->SELECTION_REASON = EnumNamexmtSelectionReason(reason);
+  return out;
 }
 
 }  // namespace integrate
@@ -101,12 +127,19 @@ extern "C" int integrate_catalog(void) {
   size_t bytes = catalog_frame->payload_length;
   if (bytes > kMaxInputBytes) return refuse("invalid-integration-input", "Integration input exceeds the 128 MiB limit.");
   if (!read_catalog(catalog_frame, &catalog, &error)) return refuse("invalid-integration-input", error);
-  std::vector<Omm> omms;
+  std::vector<ElementSet> sets;
   std::vector<Ocm> ocms;
   std::vector<Mnv> mnvs;
   std::vector<Refusal> refused;
-  if (!read_port<Omm>(omm_frames, [](const uint8_t* r, uint32_t n) { flatbuffers::Verifier v(r, n); return VerifySizePrefixedOMMBuffer(v); }, read_omm, &omms, &refused, &bytes, &error) ||
-      !read_port<Ocm>(ocm_frames, [](const uint8_t* r, uint32_t n) { flatbuffers::Verifier v(r, n); return VerifySizePrefixedOCMBuffer(v); }, read_ocm, &ocms, &refused, &bytes, &error) ||
+  size_t omm_records = 0;
+  const auto read_ocm_record = [&sets](const uint8_t* r, uint32_t n, size_t o, std::vector<Ocm>* states, std::vector<Refusal>* refusals) {
+    return read_ocm(r, n, o, states, &sets, refusals);
+  };
+  if (!read_port<ElementSet>(omm_frames, [](const uint8_t* r, uint32_t n) { flatbuffers::Verifier v(r, n); return VerifySizePrefixedOMMBuffer(v); }, read_omm, &sets, &refused, &bytes, &error)) {
+    return refuse("invalid-integration-input", error);
+  }
+  omm_records = sets.size();
+  if (!read_port<Ocm>(ocm_frames, [](const uint8_t* r, uint32_t n) { flatbuffers::Verifier v(r, n); return VerifySizePrefixedOCMBuffer(v); }, read_ocm_record, &ocms, &refused, &bytes, &error) ||
       !read_port<Mnv>(mnv_frames, [](const uint8_t* r, uint32_t n) { flatbuffers::Verifier v(r, n); return VerifySizePrefixedMNVBuffer(v); }, read_mnv, &mnvs, &refused, &bytes, &error)) {
     return refuse("invalid-integration-input", error);
   }
@@ -152,7 +185,7 @@ extern "C" int integrate_catalog(void) {
       report.UNLINKED.push_back(std::move(row));
     }
   };
-  for (const auto& p : omms) place(xmtRecordKind::Omm, p.ordinal, p.who, p.source, [&](PerObject& o) { o.omms.push_back(&p); });
+  for (const auto& p : sets) place(p.kind, p.ordinal, p.who, p.source, [&](PerObject& o) { o.sets.push_back(&p); });
   for (const auto& p : ocms) place(xmtRecordKind::Ocm, p.ordinal, p.who, p.source, [&](PerObject& o) { o.ocms.push_back(&p); });
   for (const auto& p : mnvs) place(xmtRecordKind::Mnv, p.ordinal, p.who, p.source, [&](PerObject& o) { o.mnvs.push_back(&p); });
 
@@ -166,17 +199,8 @@ extern "C" int integrate_catalog(void) {
     const Event* retiring = latest_retiring(events, maneuvers, as_of);
     counts_events += events.size();
 
-    // The catalog record: its own bytes unless the history says it maneuvers and it does not.
-    if (maneuverable && !object.maneuverable) {
-      std::unique_ptr<CATT> record(GetSizePrefixedCAT(object.bytes)->UnPack());
-      record->MANEUVERABLE = true;
-      flatbuffers::FlatBufferBuilder fbb(1024);
-      FinishSizePrefixedCATBuffer(fbb, CreateCAT(fbb, record.get()));
-      catalog_out.insert(catalog_out.end(), fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
-    } else {
-      catalog_out.insert(catalog_out.end(), object.bytes, object.bytes + object.length);
-    }
     if (maneuverable) ++counts_maneuverable;
+    std::vector<std::unique_ptr<CATProductT>> products;
 
     auto row = std::make_unique<XMTIntegratedObjectT>();
     row->KEY = object.norad ? "norad:" + std::to_string(object.norad) : !object.cospar.empty() ? "cospar:" + object.cospar : "unkeyed:" + std::to_string(object.ordinal);
@@ -204,48 +228,58 @@ extern "C" int integrate_catalog(void) {
     }
 
     // The object's regime: the first the covariance labels of its products name, in source order.
-    std::vector<const Omm*> ordered = mine.omms;
-    std::stable_sort(ordered.begin(), ordered.end(), [&](const Omm* a, const Omm* b) {
+    std::vector<const ElementSet*> ordered = mine.sets;
+    std::stable_sort(ordered.begin(), ordered.end(), [&](const ElementSet* a, const ElementSet* b) {
       const size_t oa = selection.order_of(a->source), ob = selection.order_of(b->source);
       if (oa != ob) return oa < ob;
       if (a->epoch != b->epoch) return a->epoch > b->epoch;
       return a->source < b->source;
     });
     std::string regime;
-    for (const Omm* omm : ordered) if (regime.empty()) regime = omm->regime;
+    for (const ElementSet* set : ordered) if (regime.empty()) regime = set->regime;
     row->REGIME = regime;
 
     std::set<std::string> kinds;
-    for (const Omm* omm : mine.omms) kinds.insert(omm->product);
+    for (const ElementSet* set : mine.sets) kinds.insert(set->product);
     bool any_selected = false;
     for (const std::string& kind : kinds) {
-      std::vector<const Omm*> of_kind;
-      for (const Omm* omm : mine.omms) if (omm->product == kind) of_kind.push_back(omm);
+      std::vector<const ElementSet*> of_kind;
+      for (const ElementSet* set : mine.sets) if (set->product == kind) of_kind.push_back(set);
       const std::vector<Candidate> candidates = candidates_of(of_kind, regime, as_of, retiring, selection);
       const Choice choice = choose(candidates, selection);
       auto kind_row = std::make_unique<XMTProductChoiceT>();
       kind_row->PRODUCT = kind;
       for (const Candidate& c : candidates) {
         auto r = std::make_unique<XMTProductCandidateT>();
-        r->SOURCE_ID = c.omm->source;
-        r->EPOCH_MS = ms_of(c.omm->epoch);
+        r->SOURCE_ID = c.set->source;
+        r->EPOCH_MS = ms_of(c.set->epoch);
         r->AGE_DAYS = c.age_days;
         r->STANDING = &c == choice.winner ? xmtCandidateStanding::Selected : c.status;
         r->MEASURED = c.measured;
         if (std::isfinite(c.median)) { r->MEDIAN_3D_KM = c.median; r->SAMPLES = static_cast<uint32_t>(c.samples); }
         if (c.status == xmtCandidateStanding::Retired && retiring) r->RETIRED_BY_MS = ms_of(began(*retiring));
-        r->RECORD = record_ref(xmtRecordKind::Omm, c.omm->bytes, c.omm->length, false);
+        r->RECORD = record_ref(c.set->kind, c.set->bytes, c.set->length, false);
         kind_row->CANDIDATES.push_back(std::move(r));
       }
       if (choice.winner) {
-        const Omm& win = *choice.winner->omm;
+        const ElementSet& win = *choice.winner->set;
+        const bool omm_set = win.kind == xmtRecordKind::Omm;
+        // An $OMM set's state and covariance: the $OCM state of its source at its epoch. An $OCM set carries its own.
         const Ocm* paired = nullptr;
-        for (const Ocm* ocm : mine.ocms) {
-          if (ocm->source == win.source && ocm->has_epoch && std::llabs(ocm->first_epoch - win.epoch) <= 1000 && (!paired || ocm->ordinal < paired->ordinal)) paired = ocm;
+        if (omm_set) {
+          for (const Ocm* ocm : mine.ocms) {
+            if (ocm->source == win.source && ocm->has_epoch && std::llabs(ocm->first_epoch - win.epoch) <= 1000 && (!paired || ocm->ordinal < paired->ordinal)) paired = ocm;
+          }
         }
-        omm_out.insert(omm_out.end(), win.bytes, win.bytes + win.length);
-        if (paired) ocm_out.insert(ocm_out.end(), paired->bytes, paired->bytes + paired->length);
-        else ++counts_without_ocm;
+        auto& set_out = omm_set ? omm_out : ocm_out;
+        set_out.insert(set_out.end(), win.bytes, win.bytes + win.length);
+        products.push_back(cat_product(product_kind(win.theory), win.bytes, win.length, win.source, win.epoch_text, choice.reason));
+        if (paired) {
+          ocm_out.insert(ocm_out.end(), paired->bytes, paired->bytes + paired->length);
+          products.push_back(cat_product(catalogProductKind::StateCovariance, paired->bytes, paired->length, paired->source, paired->first_epoch_text, choice.reason));
+        } else if (omm_set) {
+          ++counts_without_ocm;
+        }
         ++counts_selected;
         any_selected = true;
         if (choice.reason == xmtSelectionReason::UnmeasuredFallbackOrder) ++counts_unmeasured;
@@ -254,7 +288,8 @@ extern "C" int integrate_catalog(void) {
         selected->EPOCH_MS = ms_of(win.epoch);
         selected->REASON = choice.reason;
         selected->TIE = choice.tie;
-        selected->OMM_REF = record_ref(xmtRecordKind::Omm, win.bytes, win.length);
+        if (omm_set) selected->OMM_REF = record_ref(xmtRecordKind::Omm, win.bytes, win.length);
+        else selected->OCM_REF = record_ref(xmtRecordKind::Ocm, win.bytes, win.length);
         if (paired) selected->OCM_REF = record_ref(xmtRecordKind::Ocm, paired->bytes, paired->length);
         covariance_of(win, paired, selected.get());
         if (choice.winner->measured) {
@@ -270,10 +305,23 @@ extern "C" int integrate_catalog(void) {
       }
       row->PRODUCTS.push_back(std::move(kind_row));
     }
-    row->OUTCOME = any_selected ? xmtObjectOutcome::Selected : mine.omms.empty() ? xmtObjectOutcome::NoProduct : xmtObjectOutcome::Stale;
+    row->OUTCOME = any_selected ? xmtObjectOutcome::Selected : mine.sets.empty() ? xmtObjectOutcome::NoProduct : xmtObjectOutcome::Stale;
     if (!any_selected) {
-      if (mine.omms.empty()) ++counts_no_product;
+      if (mine.sets.empty()) ++counts_no_product;
       else ++counts_stale;
+    }
+
+    // The catalog record: its own bytes unless the history says it maneuvers and it does not, or products were selected.
+    if ((maneuverable && !object.maneuverable) || !products.empty()) {
+      std::unique_ptr<CATT> record(GetSizePrefixedCAT(object.bytes)->UnPack());
+      if (maneuverable) record->MANEUVERABLE = true;
+      record->PRODUCTS = std::move(products);
+      if (!record->PRODUCTS.empty()) record->PRODUCTS_AS_OF = iso_of(as_of);
+      flatbuffers::FlatBufferBuilder fbb(1024);
+      FinishSizePrefixedCATBuffer(fbb, CreateCAT(fbb, record.get()));
+      catalog_out.insert(catalog_out.end(), fbb.GetBufferPointer(), fbb.GetBufferPointer() + fbb.GetSize());
+    } else {
+      catalog_out.insert(catalog_out.end(), object.bytes, object.bytes + object.length);
     }
     report.OBJECTS.push_back(std::move(row));
   }
@@ -287,8 +335,8 @@ extern "C" int integrate_catalog(void) {
   report.SELECTION = selection_policy_table(selection);
   report.MANEUVERS = maneuver_policy_table(maneuvers);
   report.CATALOG_RECORDS = static_cast<uint32_t>(catalog.size());
-  report.OMM_RECORDS = static_cast<uint32_t>(omms.size());
-  report.OCM_RECORDS = static_cast<uint32_t>(ocms.size());
+  report.OMM_RECORDS = static_cast<uint32_t>(omm_records);
+  report.OCM_RECORDS = static_cast<uint32_t>(ocms.size() + sets.size() - omm_records);
   report.MNV_RECORDS = static_cast<uint32_t>(mnvs.size());
   report.SELECTED_COUNT = static_cast<uint32_t>(counts_selected);
   report.STALE_COUNT = static_cast<uint32_t>(counts_stale);

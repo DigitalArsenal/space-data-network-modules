@@ -5,6 +5,9 @@
 // its object by NORAD number or international designator; a source with neither names it natively (an $OMM's
 // USER_DEFINED_OBJECT_DESIGNATOR, an $OCM's OBJECT_DESIGNATOR under the source's own CATALOG_NAME, a $MNV's ON_ORBIT)
 // and that name joins an object only through an identity link the trajectories supported. Names never join.
+//
+// An element set is an $OMM or an $OCM with MEAN_ELEMENTS (SGP4 sets are $OMM; SGP4XP and AP sets are $OCM): its product
+// is its mean-element theory, its epoch the set's EPOCH. An $OCM without MEAN_ELEMENTS is a state and its covariance.
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -62,6 +65,25 @@ bool parse_instant(const std::string& s, int64_t* micros) {
   return true;
 }
 
+// Microseconds since the Unix epoch as ISO 8601 UTC (YYYY-MM-DDThh:mm:ss.ffffffZ).
+std::string iso_of(int64_t micros) {
+  int64_t days = micros >= 0 ? micros / 86400000000LL : -((-micros + 86400000000LL - 1) / 86400000000LL);
+  const int64_t rest = micros - days * 86400000000LL;
+  days += 719468;
+  const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
+  const unsigned doe = static_cast<unsigned>(days - era * 146097);
+  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const unsigned mp = (5 * doy + 2) / 153;
+  const unsigned d = doy - (153 * mp + 2) / 5 + 1, m = mp < 10 ? mp + 3 : mp - 9;
+  const int64_t y = static_cast<int64_t>(yoe) + era * 400 + (m <= 2);
+  const int64_t seconds = rest / 1000000;
+  char out[40];
+  std::snprintf(out, sizeof(out), "%04lld-%02u-%02uT%02lld:%02lld:%02lld.%06lldZ", static_cast<long long>(y), m, d, static_cast<long long>(seconds / 3600),
+                static_cast<long long>(seconds / 60 % 60), static_cast<long long>(seconds % 60), static_cast<long long>(rest % 1000000));
+  return out;
+}
+
 std::string lower(std::string value) {
   for (char& c : value) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   return value;
@@ -111,14 +133,18 @@ struct Identity {
   bool any() const { return norad || !cospar.empty() || !native.empty(); }
 };
 
-struct Omm {
+struct ElementSet {
   size_t ordinal;
   const uint8_t* bytes;
   uint32_t length;
+  xmtRecordKind kind;  // Omm, or Ocm for an $OCM with MEAN_ELEMENTS
   std::string source, product, regime, name;
   Identity who;
   int64_t epoch;
-  const CVR* label;  // the set's own COV_REALISM, or null
+  const CVR* label;                   // the set's own COV_REALISM (an $OCM's first), or null
+  covarianceCalibration calibration;  // an $OCM's COV_CALIBRATION
+  meanElementSource theory;
+  std::string epoch_text;  // the EPOCH as the record writes it
 };
 struct Ocm {
   size_t ordinal;
@@ -130,6 +156,7 @@ struct Ocm {
   bool has_epoch;
   covarianceCalibration calibration;  // the message's COV_CALIBRATION
   const CVR* label;                   // the realism of its first state (COV_REALISM[0]), or null
+  std::string first_epoch_text;       // its first state epoch as the record writes it
 };
 struct Mnv {
   size_t ordinal;
@@ -150,14 +177,15 @@ struct Refusal {
 
 std::string str_of(const flatbuffers::String* s) { return s ? s->str() : ""; }
 
-// The product of an $OMM is its mean-element theory: sgp4, sgp4xp, ...
+// The product of an element set is its mean-element theory: sgp4, sgp4xp, ap.
 std::string product_of(meanElementSource theory) { return lower(EnumNamemeanElementSource(theory)); }
 
 std::string source_of(const PVN* provenance) { return provenance ? str_of(provenance->SOURCE_ID()) : ""; }
 
-bool read_omm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Omm>* out, std::vector<Refusal>* refused) {
+bool read_omm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<ElementSet>* out, std::vector<Refusal>* refused) {
   const auto* omm = GetSizePrefixedOMM(bytes);
-  Omm p{ordinal, bytes, length, source_of(omm->PROVENANCE()), lower(EnumNamemeanElementSource(omm->MEAN_ELEMENT_THEORY())), "", str_of(omm->OBJECT_NAME()), {}, 0, omm->COV_REALISM()};
+  ElementSet p{ordinal, bytes, length, xmtRecordKind::Omm, source_of(omm->PROVENANCE()), product_of(omm->MEAN_ELEMENT_THEORY()), "", str_of(omm->OBJECT_NAME()), {}, 0,
+               omm->COV_REALISM(), covarianceCalibration::Uncalibrated, omm->MEAN_ELEMENT_THEORY(), str_of(omm->EPOCH())};
   if (p.source.empty()) { refused->push_back({xmtRecordKind::Omm, ordinal, "unattributed-product"}); return false; }
   if (!omm->EPOCH() || !parse_instant(omm->EPOCH()->str(), &p.epoch)) { refused->push_back({xmtRecordKind::Omm, ordinal, "invalid-epoch"}); return false; }
   p.who.norad = omm->NORAD_CAT_ID();
@@ -170,7 +198,8 @@ bool read_omm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector
   return true;
 }
 
-bool read_ocm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Ocm>* out, std::vector<Refusal>* refused) {
+// An $OCM: an element set when it carries MEAN_ELEMENTS (to `sets`), else a state and its covariance (to `states`).
+bool read_ocm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector<Ocm>* states, std::vector<ElementSet>* sets, std::vector<Refusal>* refused) {
   const auto* ocm = GetSizePrefixedOCM(bytes);
   Ocm p{ordinal, bytes, length, source_of(ocm->PROVENANCE()), {}, 0, false, ocm->COV_CALIBRATION(), nullptr};
   if (ocm->COV_REALISM() && ocm->COV_REALISM()->size() > 0) p.label = ocm->COV_REALISM()->Get(0);
@@ -186,11 +215,27 @@ bool read_ocm(const uint8_t* bytes, uint32_t length, size_t ordinal, std::vector
     } else if (!designator.empty()) {
       p.who.native = designator;
     }
+    if (meta->NORAD_CAT_ID()) {
+      if (p.who.norad && p.who.norad != meta->NORAD_CAT_ID()) { refused->push_back({xmtRecordKind::Ocm, ordinal, "identity-conflict"}); return false; }
+      p.who.norad = meta->NORAD_CAT_ID();
+    }
     if (cospar(international)) p.who.cospar = international;
   }
   if (!p.who.any()) { refused->push_back({xmtRecordKind::Ocm, ordinal, "no-object-identity"}); return false; }
-  if (ocm->STATE_EPOCHS() && ocm->STATE_EPOCHS()->size() > 0) p.has_epoch = parse_instant(ocm->STATE_EPOCHS()->Get(0)->str(), &p.first_epoch);
-  out->push_back(std::move(p));
+  if (const auto* elements = ocm->MEAN_ELEMENTS()) {
+    if (elements->MEAN_ELEMENT_THEORY() == meanElementSource::UNSPECIFIED) { refused->push_back({xmtRecordKind::Ocm, ordinal, "mean-element-theory-unspecified"}); return false; }
+    ElementSet set{ordinal, bytes, length, xmtRecordKind::Ocm, p.source, product_of(elements->MEAN_ELEMENT_THEORY()), "", str_of(meta ? meta->OBJECT_NAME() : nullptr), p.who, 0,
+                   p.label, p.calibration, elements->MEAN_ELEMENT_THEORY(), str_of(elements->EPOCH())};
+    if (!elements->EPOCH() || !parse_instant(elements->EPOCH()->str(), &set.epoch)) { refused->push_back({xmtRecordKind::Ocm, ordinal, "invalid-epoch"}); return false; }
+    set.regime = set.label ? str_of(set.label->REGIME()) : "";
+    sets->push_back(std::move(set));
+    return true;
+  }
+  if (ocm->STATE_EPOCHS() && ocm->STATE_EPOCHS()->size() > 0) {
+    p.first_epoch_text = ocm->STATE_EPOCHS()->Get(0)->str();
+    p.has_epoch = parse_instant(p.first_epoch_text, &p.first_epoch);
+  }
+  states->push_back(std::move(p));
   return true;
 }
 

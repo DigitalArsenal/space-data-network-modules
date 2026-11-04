@@ -1,7 +1,7 @@
 // Selection of one source's product per object, regime and horizon by measured error.
 //
 // The measured table is a recipe input, refreshed by the experiments: for a source, a product (the mean-element theory
-// of its $OMM), an orbit regime and a horizon, the median 3-D position error on a training window and its sample count.
+// of its element set, an $OMM or an $OCM with MEAN_ELEMENTS: sgp4, sgp4xp, ap), an orbit regime and a horizon, the median 3-D position error on a training window and its sample count.
 // A source's newest product at or before asOf is its candidate. A candidate whose epoch precedes a retiring maneuver is
 // retired; one older than maxAgeDays is too old. Of the rest, those the table measures (at least minSamples) are
 // ordered by their median error; the lowest wins, ties going to the source earlier in sourceOrder and then to the
@@ -69,7 +69,7 @@ std::unique_ptr<XMTSelectionPolicyT> selection_policy_table(const SelectionPolic
 }
 
 struct Candidate {
-  const Omm* omm;
+  const ElementSet* set;
   xmtCandidateStanding status;  // NotSelected (eligible), Future, Retired or TooOld
   double age_days;
   bool measured;
@@ -77,23 +77,23 @@ struct Candidate {
 };
 
 // One candidate per source from that source's products of one kind for one object.
-std::vector<Candidate> candidates_of(const std::vector<const Omm*>& products, const std::string& regime, int64_t as_of, const Event* retiring, const SelectionPolicy& p) {
-  std::map<std::string, const Omm*> newest, future;
-  for (const Omm* omm : products) {
-    auto& slot = omm->epoch <= as_of ? newest : future;
-    auto it = slot.find(omm->source);
+std::vector<Candidate> candidates_of(const std::vector<const ElementSet*>& products, const std::string& regime, int64_t as_of, const Event* retiring, const SelectionPolicy& p) {
+  std::map<std::string, const ElementSet*> newest, future;
+  for (const ElementSet* set : products) {
+    auto& slot = set->epoch <= as_of ? newest : future;
+    auto it = slot.find(set->source);
     // Of equal epochs the first record read stands; a source's later epoch (or, for the future, earlier) replaces it.
-    const bool better = it == slot.end() || (omm->epoch <= as_of ? omm->epoch > it->second->epoch : omm->epoch < it->second->epoch);
-    if (better) slot[omm->source] = omm;
+    const bool better = it == slot.end() || (set->epoch <= as_of ? set->epoch > it->second->epoch : set->epoch < it->second->epoch);
+    if (better) slot[set->source] = set;
   }
-  for (const auto& [source, omm] : future) if (!newest.count(source)) newest[source] = omm;
+  for (const auto& [source, set] : future) if (!newest.count(source)) newest[source] = set;
   std::vector<Candidate> out;
-  for (const auto& [source, omm] : newest) {
-    Candidate c{omm, xmtCandidateStanding::NotSelected, static_cast<double>(as_of - omm->epoch) / 86400e6, false, NAN, 0};
-    if (omm->epoch > as_of) c.status = xmtCandidateStanding::Future;
-    else if (retiring && omm->epoch < began(*retiring)) c.status = xmtCandidateStanding::Retired;
+  for (const auto& [source, set] : newest) {
+    Candidate c{set, xmtCandidateStanding::NotSelected, static_cast<double>(as_of - set->epoch) / 86400e6, false, NAN, 0};
+    if (set->epoch > as_of) c.status = xmtCandidateStanding::Future;
+    else if (retiring && set->epoch < began(*retiring)) c.status = xmtCandidateStanding::Retired;
     else if (c.age_days > p.max_age_days) c.status = xmtCandidateStanding::TooOld;
-    const auto cell = p.table.find(Cell{source, omm->product, regime, p.horizon});
+    const auto cell = p.table.find(Cell{source, set->product, regime, p.horizon});
     if (!regime.empty() && std::isfinite(p.horizon) && cell != p.table.end()) {
       c.median = cell->second.median;
       c.samples = cell->second.samples;
@@ -103,8 +103,8 @@ std::vector<Candidate> candidates_of(const std::vector<const Omm*>& products, co
   }
   // The report reads in the recipe's order of preference.
   std::stable_sort(out.begin(), out.end(), [&](const Candidate& a, const Candidate& b) {
-    const size_t oa = p.order_of(a.omm->source), ob = p.order_of(b.omm->source);
-    return oa != ob ? oa < ob : a.omm->source < b.omm->source;
+    const size_t oa = p.order_of(a.set->source), ob = p.order_of(b.set->source);
+    return oa != ob ? oa < ob : a.set->source < b.set->source;
   });
   return out;
 }
@@ -120,12 +120,12 @@ Choice choose(const std::vector<Candidate>& candidates, const SelectionPolicy& p
   for (const Candidate* c : eligible) if (c->measured) measured.push_back(c);
   Choice choice;
   if (eligible.empty()) return choice;
-  auto later_epoch = [&](const Candidate* a, const Candidate* b) { return a->omm->epoch > b->omm->epoch; };
+  auto later_epoch = [&](const Candidate* a, const Candidate* b) { return a->set->epoch > b->set->epoch; };
   auto by_order = [&](const Candidate* a, const Candidate* b) {
-    const size_t oa = p.order_of(a->omm->source), ob = p.order_of(b->omm->source);
+    const size_t oa = p.order_of(a->set->source), ob = p.order_of(b->set->source);
     if (oa != ob) return oa < ob;
-    if (a->omm->epoch != b->omm->epoch) return later_epoch(a, b);
-    return a->omm->source < b->omm->source;
+    if (a->set->epoch != b->set->epoch) return later_epoch(a, b);
+    return a->set->source < b->set->source;
   };
   if (eligible.size() == 1) {
     choice.winner = eligible.front();
