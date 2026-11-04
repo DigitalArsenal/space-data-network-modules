@@ -20,7 +20,9 @@ export async function tessWindows(modulePath){
  process.env.SDN_MODULES_ROOT=modules;fs.mkdirSync(scratch,{recursive:true});
  const {XM}=await import(experiments+'/experiments/xp2-fit-design/common.mjs');
  const S=await import(experiments+'/experiments/xp-atmosphere-merit/lib/sds.mjs');
- const {openAp,apForces}=await import(experiments+'/experiments/operator-theory/lib/ap.mjs');
+ const {openAp:openAp04,apForces}=await import(experiments+'/experiments/operator-theory/lib/ap.mjs');
+ // this build on $OCM (ocm.mjs openApOcm), a 0.4 baseline as the vendored openAp drives it
+ const O=await import(new URL('./ocm.mjs',import.meta.url).href),openAp=(p)=>O.legacyBuild(p)?openAp04(p):O.openApOcm(p);
  const {TESS}=await import(experiments+'/experiments/operator-theory/lib/regimes.mjs');
  const {spkObjectSeries}=await import(experiments+'/experiments/sdn-gp-starlink-ffm-match/lib/spk-sources.mjs');
  const {openAxes}=await import(experiments+'/experiments/operator-theory/lib/host.mjs');

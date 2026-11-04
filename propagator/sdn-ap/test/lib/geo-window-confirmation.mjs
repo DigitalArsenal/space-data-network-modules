@@ -33,7 +33,9 @@ if(process.argv[2]==='--worker'){
  const S=await import(root+'/experiments/xp-atmosphere-merit/lib/sds.mjs');
  const W=await import(root+'/experiments/xp-atmosphere-merit/lib/weather.mjs');
  const {chain}=await import(root+'/experiments/sdn-gp-starlink-ffm-match/lib/sources.mjs');
- const {openAp,apForces}=await import(root+'/experiments/operator-theory/lib/ap.mjs');
+ const {openAp:openAp04,apForces}=await import(root+'/experiments/operator-theory/lib/ap.mjs');
+ // this build on $OCM (ocm.mjs openApOcm), a 0.4 baseline as the vendored openAp drives it
+ const O=await import(new URL('./ocm.mjs',import.meta.url).href),openAp=(p)=>O.legacyBuild(p)?openAp04(p):O.openApOcm(p);
  const store='/opt/data/sdn-archive/operator-theory/ap/b040/regimes',objects=new Map(),spent=new Set();
  for(const f of fs.readdirSync(store).filter(f=>/^rows-.*\.jsonl$/.test(f)))for(const line of fs.readFileSync(path.join(store,f),'utf8').trim().split('\n').filter(Boolean)){const r=JSON.parse(line);if(!['GE','IG'].includes(r.group))continue;objects.set(r.norad,{norad:r.norad,name:r.name,group:r.group});spent.add(`${r.norad}|${r.cutoff.slice(0,10)}`);}
  const arms={baseline:await openAp(baseline),candidate:await openAp(candidate)},rows=[];

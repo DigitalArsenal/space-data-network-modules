@@ -8,8 +8,6 @@ import {createHash} from 'node:crypto';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {OEM,OEMT} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
-import {OMM,OMMT} from 'spacedatastandards.org/lib/js/OMM/OMM.js';
-import {OMMUserDefinedParameterT} from 'spacedatastandards.org/lib/js/OMM/OMMUserDefinedParameter.js';
 import {CATT} from 'spacedatastandards.org/lib/js/OEM/CAT.js';
 import {ephemerisDataBlockT as Block} from 'spacedatastandards.org/lib/js/OEM/ephemerisDataBlock.js';
 import {ephemerisDataLineT as Line} from 'spacedatastandards.org/lib/js/OEM/ephemerisDataLine.js';
@@ -21,6 +19,7 @@ import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.j
 import {openModule,wasmPath,THEORY} from './module.mjs';
 import {packOem,rfm,jdOf,rotate,FRAME_PROBE} from './frames.mjs';
 import {configuration,prior,pcfPriorForm} from './pcf.mjs';
+import {seedOcm,rowsThrough,spwStream,fittedOf,flight,legacyBuild,T as OCM_TYPE} from './ocm.mjs';
 import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tests/lib/prwCodec.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000,FIT=3;
 const ffmPath=new URL('../../../ffm/dist/isomorphic/module.wasm',import.meta.url).pathname;
@@ -33,13 +32,18 @@ function oem(lines,fit=false){
  return packOem(Object.assign(new OEMT(),{EPHEMERIS_DATA_BLOCK:[b]}));
 }
 export async function runSyntheticTruth(c){
+ // a 0.4 build is driven as it was (synthetic-truth-0.4.mjs)
+ if(c.modulePath&&legacyBuild(c.modulePath))return(await import('./synthetic-truth-0.4.mjs')).runSyntheticTruth(c);
  fs.mkdirSync(scratch,{recursive:true});
  const m=await openModule(),x=m.x,p=x.sdnap_alloc(256),a=(off,n)=>new Float64Array(m.harness.memory.buffer,p+off,n),jd=jdOf(epoch);
  const rows=JSON.parse(fs.readFileSync(process.env.FFM_SPW_FIXTURE??'/Users/tj/software/terrain-work/ffm-spw-fixture/spw-constant-20261029.json'));
- const weather=Buffer.concat((Array.isArray(rows)?rows:rows.rows).map(row=>{const b=new fb.Builder(256);SPW.finishSizePrefixedSPWBuffer(b,Object.assign(new SPWT(),row).pack(b));return b.asUint8Array();}));
- const cfg=configuration({theory:'SGP4XP',forces:{EPHEMERIS_SOURCE:'',HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:c.tesseral??31,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:c.zonal??20,ENABLE_DRAG:c.drag,ATMOSPHERE_MODEL:pcfAtmosphereFamily.NRLMSISE00,WEATHER_SOURCE:pcfWeatherSource.RECORDS},fit:{DRAG_PRIOR:prior(c.drag?(c.bterm??.044):0,c.drag?(c.dragSigma??.1):1e-10),DRAG_PRIOR_FORM:pcfPriorForm.GAUSSIAN_SIGNED,SRP_PRIOR:prior(0,1e-10)},output:{OUTPUT_FRAME:pcfOutputFrame.GCRF}});
+ const rowList=rowsThrough(Array.isArray(rows)?rows:rows.rows),weather=spwStream(rowList);
+ // fit runs under the forces the record then states: the caps, NRLMSISE-00 (c.drag) or Jacchia 1970, both on the rows
+ const tess=c.tesseral??31,zon=c.zonal??20;
+ const cfg=configuration({forces:{EPHEMERIS_SOURCE:'',HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:tess,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:zon,ATMOSPHERE_MODEL:c.drag?pcfAtmosphereFamily.NRLMSISE00:pcfAtmosphereFamily.JACCHIA70,WEATHER_SOURCE:pcfWeatherSource.RECORDS},fit:{DRAG_PRIOR:prior(c.drag?(c.bterm??.044):0,c.drag?(c.dragSigma??.1):1e-10),DRAG_PRIOR_FORM:pcfPriorForm.GAUSSIAN_SIGNED,SRP_PRIOR:prior(0,1e-10)}});
  const h=await createStandaloneHarness('browser',c.modulePath??wasmPath,{surface:'command'});
- const call=async(methodId,inputs)=>{const r=await h.invoke({methodId,inputs:[cfg,{portId:'space_weather',typeRef:type('SPW'),payload:weather},...inputs]});assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);return r.outputs;};
+ const call=async(methodId,inputs)=>{const r=await h.invoke({methodId,inputs:methodId==='fit'?[cfg,{portId:'space_weather',typeRef:type('SPW'),payload:weather},...inputs]:inputs});assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);return r.outputs;};
+ const fly=(set,lines)=>call('propagate',flight([set],{output:{EPOCHS:lines.map(L=>L.EPOCH),FRAME:pcfOutputFrame.GCRF}}));
  m.init([{epochWhole:jd.whole,epochFrac:jd.frac,meanMotion:c.n,ecc:c.e,inc:c.i,raan:c.raan,argp:c.argp,ma:c.ma,norad:99001,theory:THEORY.SGP4XP}]);
  assert.equal(x.sdnap_mean_elements_at(0,0,p),0);
  const semimajor=a(0,1)[0];
@@ -49,9 +53,8 @@ export async function runSyntheticTruth(c){
  let initial=rotate(m,jd.whole,jd.frac,Array.from(a(48,6)),FRAME_PROBE.TEME_TO_GCRF);assert.equal(initial.status,0);
  let seed;
  if(c.mode==='seed'){
-  const obj=Object.assign(new OMMT(),{EPOCH:epoch,MEAN_ELEMENT_THEORY:1,MEAN_MOTION:c.n,ECCENTRICITY:c.e,INCLINATION:c.i,RA_OF_ASC_NODE:c.raan,ARG_OF_PERICENTER:c.argp,MEAN_ANOMALY:c.ma,BSTAR:c.drag?(c.bterm??.044):0,MEAN_MOTION_DDOT:0,NORAD_CAT_ID:99001,USER_DEFINED_PARAMETERS:[Object.assign(new OMMUserDefinedParameterT(),{PARAM_NAME:'SDNAP_GRAVITY_TERMS',PARAM_VALUE:'31,20'}),...(c.drag?[Object.assign(new OMMUserDefinedParameterT(),{PARAM_NAME:'SDNAP_ATMOSPHERE_MODEL',PARAM_VALUE:'NRLMSISE00'})]:[])]});
-  const b=new fb.Builder(1024);OMM.finishOMMBuffer(b,obj.pack(b));seed=b.asUint8Array().slice();
-  const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:seed},{portId:'grid',typeRef:type('OEM'),payload:oem([Object.assign(new Line(),{EPOCH:epoch})])}]);
+  seed=seedOcm({epoch,n:c.n,e:c.e,i:c.i,raan:c.raan,argp:c.argp,ma:c.ma,bterm:c.drag?(c.bterm??.044):0,norad:99001,msis:c.drag,records:true,tesseral:tess,zonal:zon,rows:rowList});
+  const out=await fly(seed,[{EPOCH:epoch}]);
   const v=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
   initial={status:0,out:[v.X,v.Y,v.Z,v.X_DOT,v.Y_DOT,v.Z_DOT]};
  }
@@ -73,19 +76,19 @@ export async function runSyntheticTruth(c){
  const lines=truth.map((s,k)=>Object.assign(new Line(),{EPOCH:iso(t0+times[k]*DAY),X:s.position[0],Y:s.position[1],Z:s.position[2],X_DOT:s.velocity[0],Y_DOT:s.velocity[1],Z_DOT:s.velocity[2]}));
  const fit=seed?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(0,145),true)}]);
  const omm=seed??fit.find(v=>v.portId==='elements').payload;
- const out=await call('propagate',[{portId:'omm',typeRef:type('OMM'),payload:omm},{portId:'grid',typeRef:type('OEM'),payload:oem(lines.slice(first))}]);
+ const out=await fly(omm,lines.slice(first));
  const flown=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
- const parsed=OMM.getRootAsOMM(new fb.ByteBuffer(omm)).unpack();
+ const parsed=fittedOf(omm);
  const classDiagnostics=[];
  if(c.probePath){
   const ph=await createStandaloneHarness('browser',c.probePath,{surface:'direct'});
-  const loaded=await ph.invoke({methodId:'load_epochs',inputs:[cfg,{portId:'space_weather',typeRef:type('SPW'),payload:weather},{portId:'omm',typeRef:type('OMM'),payload:omm}]});
+  const loaded=await ph.invoke({methodId:'load_epochs',inputs:[{portId:'ocm',typeRef:OCM_TYPE('OCM'),payload:omm}]});
   assert.equal(loaded.statusCode,0,loaded.errorMessage);
-  const px=ph.instance.exports,pp=px.sdnap_alloc(72),fitEpoch=Date.parse(parsed.EPOCH+'Z');
+  const px=ph.instance.exports,pp=px.sdnap_alloc(72),fitEpoch=Date.parse(parsed.epoch+'Z');
   for(const day of [0,1,3,7]){const minutes=(t0+((c.mode==='seed'?0:FIT)+day)*DAY-fitEpoch)/60000;assert.equal(px.sdnap_test_class_probe(minutes,pp),0);classDiagnostics.push({day,values:Array.from(new Float64Array(ph.memory.buffer,pp,9))});}
   px.sdnap_free(pp);await ph.close?.();
  }
- const result={name:c.name,fitted:{epoch:parsed.EPOCH,n:parsed.MEAN_MOTION,e:parsed.ECCENTRICITY,bterm:parsed.BSTAR},classDiagnostics,classProbeSha256:c.probePath?createHash('sha256').update(fs.readFileSync(c.probePath)).digest('hex'):undefined,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(c.modulePath??wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
+ const result={name:c.name,fitted:{epoch:parsed.epoch,n:parsed.n,e:parsed.e,bterm:parsed.bterm},classDiagnostics,classProbeSha256:c.probePath?createHash('sha256').update(fs.readFileSync(c.probePath)).digest('hex'):undefined,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(c.modulePath??wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
  result.profile=[];
  for(let k=0;k<flown.length;k++){
   const ref=truth[first+k],f=flown[k],err=[f.X-ref.position[0],f.Y-ref.position[1],f.Z-ref.position[2]];

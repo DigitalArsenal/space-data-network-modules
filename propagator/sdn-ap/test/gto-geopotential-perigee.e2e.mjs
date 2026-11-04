@@ -29,6 +29,7 @@ import {ephemerisDataLineT as Line} from 'spacedatastandards.org/lib/js/OEM/ephe
 import {timingStandard} from 'spacedatastandards.org/lib/js/OEM/timingStandard.js';
 import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
+import {seedOcm, flight} from './lib/ocm.mjs';
 import {wasmPath} from './lib/module.mjs';
 import {packOem, rfm} from './lib/frames.mjs';
 import {configuration} from './lib/pcf.mjs';
@@ -83,20 +84,17 @@ for (const [name, c] of Object.entries(FIXTURES)) {
 const epoch = '2026-10-29T00:00:00.000', t0 = Date.parse(epoch + 'Z');
 const type = (n) => ({schemaName: n + '.fbs', fileIdentifier: '$' + n, rootTypeName: n});
 const iso = (ms) => new Date(ms).toISOString().replace('Z', '');
-const cfg = configuration({theory: 'SGP4XP', forces: {EPHEMERIS_SOURCE: '', HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20}, output: {OUTPUT_FRAME: pcfOutputFrame.GCRF}});
 const hosts = [await createStandaloneHarness('browser', wasmPath, {surface: 'command'}), await createStandaloneHarness('browser', reference, {surface: 'command'})];
 const ORBITS = {'GTO': [2.40, 0.72, 27, 'orbit'], 'GTO-500': [2.40, 0.7081, 27, 'orbit'], 'Galileo-like': [1.7047, 0.0002, 56, 'week'], 'BeiDou-like': [1.8613, 0.0005, 55, 'week'], 'Etalon-like': [2.1318, 0.0007, 64.9, 'week']};
 const integration = {};
 for (const [name, [n, e, i, span]] of Object.entries(ORBITS)) {
   const minutes = span === 'orbit' ? 1440 / n : 7 * 1440, lines = [];
   for (let t = 0; t <= minutes; t += 2) lines.push(Object.assign(new Line(), {EPOCH: iso(t0 + t * 60000)}));
-  const grid = packOem(Object.assign(new OEMT(), {EPHEMERIS_DATA_BLOCK: [Object.assign(new Block(), {OBJECT: Object.assign(new CATT(), {NORAD_CAT_ID: 99001, OBJECT_NAME: 'STEP'}), CENTER_NAME: 'EARTH', REFERENCE_FRAME: rfm('GCRF'), TIME_SYSTEM: timingStandard.UTC, START_TIME: lines[0].EPOCH, STOP_TIME: lines.at(-1).EPOCH, EPHEMERIS_DATA_LINES: lines})]}));
-  const obj = Object.assign(new OMMT(), {EPOCH: epoch, MEAN_ELEMENT_THEORY: 1, MEAN_MOTION: n, ECCENTRICITY: e, INCLINATION: i, RA_OF_ASC_NODE: 40, ARG_OF_PERICENTER: 270, MEAN_ANOMALY: 10, BSTAR: 0, MEAN_MOTION_DDOT: 0, NORAD_CAT_ID: 99001,
-    USER_DEFINED_PARAMETERS: [Object.assign(new OMMUserDefinedParameterT(), {PARAM_NAME: 'SDNAP_GRAVITY_TERMS', PARAM_VALUE: '31,20'})]});
-  const b = new fb.Builder(1024); OMM.finishOMMBuffer(b, obj.pack(b)); const omm = b.asUint8Array().slice();
+  // the seeded AP set (caps 31 and 20 on the theory's flux model), alone, at the lines' epochs in GCRF
+  const omm = seedOcm({epoch, n, e, i, raan: 40, argp: 270, ma: 10, norad: 99001, name: 'STEP', tesseral: 31, zonal: 20});
   const eph = [];
   for (const h of hosts) {
-    const r = await h.invoke({methodId: 'propagate', inputs: [cfg, {portId: 'omm', typeRef: type('OMM'), payload: omm}, {portId: 'grid', typeRef: type('OEM'), payload: grid}]});
+    const r = await h.invoke({methodId: 'propagate', inputs: flight([omm], {output: {EPOCHS: lines.map((l) => l.EPOCH), FRAME: pcfOutputFrame.GCRF}})});
     assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
     eph.push(OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find((v) => v.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES);
   }

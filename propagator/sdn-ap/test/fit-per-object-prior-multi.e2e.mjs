@@ -6,8 +6,9 @@
 // day-3 3D RMS over 2-minute samples) on the SWOT-like orbit (true BTERM 0.044 m^2/kg) and the Sentinel-3-like orbit
 // (true BTERM 0.001).
 // Acceptance:
-// 1. fit 1, one call on the band defaults: each object's $OMM the bytes of its single-object fit, and its $OBD stating
-//    its posterior; fit 2, one call, each object's own posterior as its prior (BTERM LOG_NORMAL with the posterior
+// 1. fit 1, one call on the band defaults: each object's $OCM the bytes of its single-object fit, and its posterior in
+//    the record (BTERM and its sigma of the log, sigma_B / B, and AGOM and its sigma from COVARIANCE_DATA: the $OBD and
+//    its model text are gone, modules-sdn-ap-ocm-write-20261103); fit 2, one call, each object's own posterior as its prior (BTERM LOG_NORMAL with the posterior
 //    median and, as the sigma of the log, the larger of the posterior's and 0.3; AGOM GAUSSIAN_SIGNED with the posterior
 //    value and the larger of its sigma and 0.01): each object's $OMM the bytes of its single-object fit with that prior;
 //    the day-3 errors printed;
@@ -20,10 +21,10 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
-import {OBD} from 'spacedatastandards.org/lib/js/OBD/OBD.js';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 import {wasmPath} from './lib/module.mjs';
 import {configuration, pcfPriorForm, prior} from './lib/pcf.mjs';
+import {fittedOf} from './lib/ocm.mjs';
 
 const FIXTURES = {
   'SWOT-like': {name: 'SWOT-like', n: 13.905, e: 0.0001, i: 77.6, raan: 200, argp: 90, ma: 0, drag: true, bterm: 0.044},
@@ -41,20 +42,13 @@ const fit = async (config, objectPcfs, names) => {
   const r = await h.invoke({methodId: 'fit', inputs: [config, ...objectPcfs, weather, ...names.map((n) => input[n].ephemeris)]});
   assert.equal(r.statusCode, 0, `${r.errorCode}: ${r.errorMessage}`);
   const omms = r.outputs.filter((o) => o.portId === 'elements').map((o) => Buffer.from(o.payload));
-  const obds = r.outputs.filter((o) => o.portId === 'determination').map((o) => OBD.getRootAsOBD(new fb.ByteBuffer(o.payload)).unpack());
   assert.equal(omms.length, names.length);
-  assert.equal(obds.length, names.length);
-  return names.map((name, k) => ({name, omm: omms[k], obd: obds[k]}));
+  return names.map((name, k) => ({name, omm: omms[k], obd: fittedOf(omms[k])}));
 };
 const day3 = async (name, omm) => (await runModelTruth({...FIXTURES[name], ...COMMON, omm})).wholeDay[3].e;
 const number = (re, text) => { const m = re.exec(text ?? ''); return m ? Number(m[1]) : null; };
-/** The posterior the $OBD states (SPEC 12.8): BTERM's median and sigma of the log, AGOM's value and sigma. */
-const posterior = (obd) => ({
-  bterm: number(/posterior median ([-+0-9.eE]+) m\^2\/kg/, obd.BALLISTIC_COEFF_MODEL),
-  sigmaLog: number(/posterior sigma of the log ([-+0-9.eE]+)/, obd.BALLISTIC_COEFF_MODEL),
-  agom: number(/; posterior ([-+0-9.eE]+) \+- /, obd.AGOM_MODEL),
-  agomSigma: number(/; posterior [-+0-9.eE]+ \+- ([-+0-9.eE]+) m\^2\/kg/, obd.AGOM_MODEL),
-});
+/** The posterior the record states (SPEC 12.8): BTERM (the median under LOG_NORMAL) and its sigma of the log, AGOM and its sigma. */
+const posterior = (f) => ({bterm: f.bterm, sigmaLog: f.sigmaLog, agom: f.agom, agomSigma: f.agomSigma});
 /** An object's $PCF: only FIT.DRAG_PRIOR (LOG_NORMAL) and, when given, FIT.SRP_PRIOR (GAUSSIAN_SIGNED). */
 const objectPcf = (drag, srp) => configuration({fit: {
   DRAG_PRIOR: prior(drag.median, drag.sigmaLog), DRAG_PRIOR_FORM: pcfPriorForm.LOG_NORMAL,
@@ -88,8 +82,8 @@ for (const name of NAMES) console.log(JSON.stringify({object: name, trueBterm: F
 for (const name of NAMES) {
   const r = report[name];
   assert.ok(r.sameAsSingleObject, `${name}: the two-object call gives the bytes of the single-object fit`);
-  assert.ok(r.posterior.bterm > 0 && r.posterior.sigmaLog > 0 && r.posterior.agom !== null && r.posterior.agomSigma > 0, `${name}: fit 1's $OBD states the posterior`);
-  assert.ok(r.fit2Posterior.bterm > 0 && r.fit2Posterior.sigmaLog > 0, `${name}: fit 2's $OBD states the posterior`);
+  assert.ok(r.posterior.bterm > 0 && r.posterior.sigmaLog > 0 && r.posterior.agom !== null && r.posterior.agomSigma > 0, `${name}: fit 1's record states the posterior`);
+  assert.ok(r.fit2Posterior.bterm > 0 && r.fit2Posterior.sigmaLog > 0, `${name}: fit 2's record states the posterior`);
 }
 assert.ok(Math.abs(report['SWOT-like'].trueBtermDay3 - 21.33) <= 2, `SWOT-like per-object path: ${report['SWOT-like'].trueBtermDay3} m, 0.4.12 21.33 m`);
 assert.ok(report['Sentinel-3-like'].sharedDay3 > report['Sentinel-3-like'].fit2Day3,

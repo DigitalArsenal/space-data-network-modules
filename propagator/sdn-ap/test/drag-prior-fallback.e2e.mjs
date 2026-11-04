@@ -15,7 +15,8 @@
 //    axis, BTERM, AGOM);
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
-//    step 36 h into the arc raises the step flag and takes the fall-back, on SWOT-like and Sentinel-3-like;
+//    step 36 h into the arc takes the fall-back, on SWOT-like and Sentinel-3-like (the step flag's figures were $OBD text,
+//    gone with it: modules-sdn-ap-ocm-write-20261103);
 // 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 within 2 m of 0.4.17 at
 //    day 3 (82.0 and 63.6 m);
 // 6. default-FORCES XP digest bit-exact.
@@ -104,7 +105,7 @@ if (!isMainThread) {
     console.log(JSON.stringify({object: o, ...out}));
   }
   for (const r of rows.filter((r) => /drag prior: fall-back/.test(r.arms[2]?.comment ?? '')).sort((a, b) => a.key.localeCompare(b.key)))
-    console.log(JSON.stringify({fallBack: r.key, why: /drag prior: (.*?); arc /.exec(r.arms[2].comment)[1], day3: [0, 1, 2].map((a) => day(r.arms[a], '3'))}));
+    console.log(JSON.stringify({fallBack: r.key, why: /drag prior: ([^;]*)/.exec(r.arms[2].comment)[1], day3: [0, 1, 2].map((a) => day(r.arms[a], '3'))}));
   const fitMs = [0, 1, 2].map((a) => { const t = rows.filter((r) => r.arms[a]?.ok).map((r) => r.arms[a].fitMs); return t.reduce((s, x) => s + x, 0) / t.length; });
   console.log(JSON.stringify({meanFitMsPer72hArc: {'0.4.11': fitMs[0], '0.4.17': fitMs[1], release: fitMs[2]}, windows: rows.filter((r) => r.arms[2]?.ok).length}));
   if (process.env.SDN_AP_DRAG_FALLBACK_REPORT) fs.writeFileSync(process.env.SDN_AP_DRAG_FALLBACK_REPORT, JSON.stringify({results, objects, rows}, null, 1) + '\n');
@@ -132,7 +133,8 @@ if (!isMainThread) {
   assert.equal(results['release SWOT-like 0.044 tail stepped'].bterm, results['release SWOT-like 0.044 tail'].bterm, 'a step after the arc leaves BTERM');
   for (const o of ['SWOT-like', 'Sentinel-3-like']) {
     const r = results[`release ${o} 0.044 step in the arc`];
-    assert.ok(/\(a step\)$/.test(r.step) && /^fall-back/.test(r.path), `${o}: a step in the arc is flagged and falls back (${r.path}; ${r.step})`);
+    // the record states the path (OD COMMENT) and no arc-check figures (modules-sdn-ap-ocm-write-20261103: no number in COMMENT)
+    assert.ok(/^fall-back/.test(r.path), `${o}: a step in the arc falls back (${r.path})`);
   }
   // 5
   for (const o of ['SWOT-like', 'Sentinel-3-like'])

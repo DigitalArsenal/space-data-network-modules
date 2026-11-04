@@ -281,7 +281,7 @@ const sourceCode = inlined
   .replace('#include "gravity_egm.h"', await gravity())
   .replace('#include "erfa_pinned.h"', await erfa())
   // the content id of an SDS record (the $PCF and $DCL an $OCM names): the modules repository's one definition
-  .replace('#include "sds_cid.hpp"', await fs.readFile(path.join(modulesRoot, "common", "sds_cid.hpp"), "utf8"));
+  .replace('#include "sds_cid.hpp"', await fs.readFile(path.join(process.env.SPACE_DATA_NETWORK_MODULES_ROOT ?? modulesRoot, "common", "sds_cid.hpp"), "utf8"));
 
 const buildRoot = path.join(packageRoot, ".build");
 // SDNAP_DIST_DIR builds elsewhere (experiments), leaving dist/ as the last pushed build

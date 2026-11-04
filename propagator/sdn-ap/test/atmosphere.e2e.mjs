@@ -1,22 +1,29 @@
 #!/usr/bin/env node
-// E2E (task modules-sgp4xp-atmosphere-variant-20261026): SGP4XP's selectable drag atmosphere (SPEC 15), through the
-// module's invoke surface and its atmosphere probe.
-// - The default is inert: propagate and fit with no FORCES, with a FORCES table written at every default, and with
-//   FORCES at its defaults beside no frames, give the same bytes (the conformance E2E holds the default to the
-//   oracle bit for bit).
+// E2E (tasks modules-sgp4xp-atmosphere-variant-20261026, modules-sdn-ap-ocm-fly-20261103): SGP4XP's selectable drag
+// atmosphere (SPEC 15), through the module's invoke surface and its atmosphere probe. The force model is the record's:
+// fit runs under its $PCF FORCES and writes it, with the rows and the density-correction nodes, into its $OCM; a flight
+// takes the $OCM alone (arms here: A0 stock SGP4XP; A1 Jacchia 1970 on the rows; A2 NRLMSISE-00 on the rows; A3 A2
+// times exp(s(t)) of the open-DCA nodes).
+// - The default is inert: a stock set flown with no $PCF and with an empty one gives the same bytes; fit under stock
+//   FORCES and under FORCES written at every other default gives the same bytes (the conformance E2E holds the default
+//   to the oracle bit for bit); A1 and A2 move a 400 km set; a fit under each of them writes its forces.
 // - NRLMSISE-00 at the drag nodes (sdnap_atmosphere_probe, model 2) against analysis/density-calibration, an
 //   independent wrapper of the same model: `evaluate` at the node's own geodetic point and time on the same $SPW rows
 //   must give the same density within 1e-8 relative (the two wrappers' time arithmetic) and the same drivers (F10.7 of the previous day, the 81-day mean
 //   and Ap of the day: the rows move every day, so a wrong day shows); `drag_work` at the point carried to GCRF by the
 //   module's own rotation (density-calibration then reaches the Earth-fixed axes through ERFA) within 2e-4 (the
 //   two geometries: SPEC 3.4's geodetic height and GMST82 against ERFA's).
-// - The open DCA: a $DCL of s = 0 at every node gives the NRLMSISE-00 arm's bytes; s = ln 2 gives the states of the
-//   NRLMSISE-00 arm with the set's BTERM doubled within 1 um (the drag rates are linear in B rho).
+// - The open DCA: nodes of s = 0 give the A2 bytes; s = ln 2 gives the states of A2 with the set's BTERM doubled
+//   within 1 um (the drag rates are linear in B rho).
 // - Above 2,500 km every atmosphere is the theory's 1e-20 kg/m^3: a GPS-like set propagates to the same bytes.
 // - Jacchia 1970 on measured drivers (model 1) reads the same rows as NRLMSISE-00.
 // - Probe model 3 (task modules-sgp4xp-fit-lognormal-drag-20261026): NRLMSISE-00 times exp(s(t)) of a $DCL; a constant
 //   ln 2 doubles model 2 within 1e-15 and a varying s scales it by exp of its linear interpolation within 1e-12.
-// - Every refusal is by name, FORCES.THIRD_BODY_MAXIMUM_DEGREE and _ORDER included.
+// - The two-stage decoupled fit (FIT.MINIMUM_SPAN_HOURS 17.1) under A2 and A3: epoch at the cutoff, a 17 h arc, the
+//   record's forces and its nodes (from the last at or before its first row's day); the epoch store flies the A3
+//   record as propagate does.
+// - Every refusal is by name, FORCES.THIRD_BODY_MAXIMUM_DEGREE and _ORDER included; a flight's $PCF with FORCES is
+//   configuration-refused FORCES.
 // JS only moves bytes and compares numbers the modules produced.
 //   node test/atmosphere.e2e.mjs
 import fs from "node:fs";
@@ -24,8 +31,6 @@ import { createHash } from "node:crypto";
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
-import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
-import { OBD } from "spacedatastandards.org/lib/js/OBD/OBD.js";
 import { OEM, OEMT } from "spacedatastandards.org/lib/js/OEM/OEM.js";
 import { ephemerisDataBlockT as OemBlockT } from "spacedatastandards.org/lib/js/OEM/ephemerisDataBlock.js";
 import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard.js";
@@ -47,10 +52,10 @@ import { pcfDensityCorrection } from "spacedatastandards.org/lib/js/PCF/pcfDensi
 import { PCFForceModel, PCFForceModelT } from "spacedatastandards.org/lib/js/PCF/PCFForceModel.js";
 import { PCF } from "spacedatastandards.org/lib/js/PCF/PCF.js";
 import { MNV, MNVT } from "spacedatastandards.org/lib/js/MNV/MNV.js";
-import { pcfTheory } from "spacedatastandards.org/lib/js/PCF/pcfTheory.js";
 import { FRAME_PROBE, packOem, rfm, rotate } from "./lib/frames.mjs";
 import { ensureBuilt, wasmPath } from "./lib/module.mjs";
-import { configuration, PCF_TYPE } from "./lib/pcf.mjs";
+import { configuration, PCF_TYPE, XP_FORCES, MSIS_FORCES } from "./lib/pcf.mjs";
+import { seedOcm, ocmOf, flight } from "./lib/ocm.mjs";
 
 ensureBuilt();
 const failures = [];
@@ -63,27 +68,9 @@ const sha = (b) => createHash("sha256").update(b).digest("hex").slice(0, 16);
 const DAY = 86400000;
 const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
 const dateOf = (ms) => new Date(ms).toISOString().slice(0, 10);
+const invoke = async (methodId, inputs) => h.invoke({ methodId, inputs });
 
 // --- records -------------------------------------------------------------------------------------------------------
-/** An SGP4XP $OMM (BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT). */
-function ommOf({ epoch, n, e = 0.001, i = 51.6, raan = 30, argp = 60, ma = 10, bterm = 0.01, agom = 0.005, norad = 90100 }) {
-  const b = new flatbuffers.Builder(256);
-  const s = b.createString(epoch);
-  OMM.startOMM(b);
-  OMM.addEpoch(b, s);
-  OMM.addMeanMotion(b, n);
-  OMM.addEccentricity(b, e);
-  OMM.addInclination(b, i);
-  OMM.addRaOfAscNode(b, raan);
-  OMM.addArgOfPericenter(b, argp);
-  OMM.addMeanAnomaly(b, ma);
-  OMM.addBstar(b, bterm);
-  OMM.addMeanMotionDdot(b, agom);
-  OMM.addNoradCatId(b, norad);
-  OMM.addMeanElementTheory(b, 1);
-  OMM.finishOMMBuffer(b, OMM.endOMM(b));
-  return b.asUint8Array().slice();
-}
 /** $SPW rows of the days from `firstMs` (UTC midnight), each day's values moving (so that a day read wrongly shows), as
  *  size-prefixed records end to end. */
 function rowsOf(firstMs, days, { f0 = 140, ap0 = 7 } = {}) {
@@ -109,43 +96,45 @@ function dclOf(nodesMs, s, { status = dclStatus.Solved } = {}) {
   DCL.finishDCLBuffer(b, d.pack(b));
   return b.asUint8Array().slice();
 }
-const forces = (fields) => ({ forces: { EPHEMERIS_SOURCE: "", ...fields } });
-const A1 = forces({ WEATHER_SOURCE: pcfWeatherSource.RECORDS, WEATHER_EXTENSION: pcfWeatherExtension.HOLD_LAST });
-const A2 = forces({ ENABLE_DRAG: true, ATMOSPHERE_MODEL: pcfAtmosphereFamily.NRLMSISE00, WEATHER_SOURCE: pcfWeatherSource.RECORDS, WEATHER_EXTENSION: pcfWeatherExtension.HOLD_LAST });
-const A3 = forces({ ...A2.forces, DENSITY_CORRECTION: pcfDensityCorrection.DCA_COMMON_MODE });
-
-const invoke = async (methodId, inputs) => h.invoke({ methodId, inputs });
-const frames = ({ omm, ephemeris, config, forces: f, fit: fitOpts, rows, dcl, grid }) => [
-  ...(omm ? [{ portId: "omm", typeRef: T("OMM"), payload: omm }] : []),
-  ...(ephemeris ? [{ portId: "ephemeris", typeRef: T("OEM"), payload: ephemeris }] : []),
-  config instanceof Uint8Array ? { portId: "configuration", typeRef: PCF_TYPE, payload: config } : configuration({ theory: "SGP4XP", ...(f ? { forces: f } : {}), ...(fitOpts ? { fit: fitOpts } : {}) }),
-  ...(rows ? [{ portId: "space_weather", typeRef: T("SPW"), payload: rows }] : []),
-  ...(dcl ? [{ portId: "density_correction", typeRef: T("DCL"), payload: dcl }] : []),
-  ...(grid ? [{ portId: "grid", typeRef: T("OEM"), payload: grid }] : []),
-];
-/** A grid $OEM template: START_TIME / STOP_TIME / STEP_SIZE in TEME. */
-function gridOf(startMs, stopMs, stepS) {
-  const blk = Object.assign(new OemBlockT(), { CENTER_NAME: "EARTH", REFERENCE_FRAME: rfm("TEME"), TIME_SYSTEM: timingStandard.UTC, START_TIME: iso(startMs), STOP_TIME: iso(stopMs), STEP_SIZE: stepS });
-  return packOem(Object.assign(new OEMT(), { EPHEMERIS_DATA_BLOCK: [blk] })).slice();
+/** An SGP4XP or AP $OCM of arm `arm` (A0, A1, A2, A3) on `rows` (A3: with `nodes`, `s`). */
+function setOf({ epoch, n, e = 0.001, i = 51.6, raan = 30, argp = 60, ma = 10, bterm = 0.01, agom = 0.005, norad = 90100, arm = "A0", rows: r = null, nodes = null, s = null }) {
+  const spw = (r ?? []).map((v) => Object.assign(new SPWT(), { DATE: v.date, F107_OBS: v.f107, F107_OBS_CENTER81: v.c81, AP_AVG: v.ap, F107_DATA_TYPE: 0 }));
+  return seedOcm({ epoch, n, e, i, raan, argp, ma, bterm, agom, norad, records: arm !== "A0", msis: arm === "A2" || arm === "A3", rows: spw,
+    dca: arm === "A3" ? { ms: nodes, s } : null });
 }
+const forces = (fields) => ({ ...XP_FORCES, ...fields });
+const A1 = forces({ WEATHER_SOURCE: pcfWeatherSource.RECORDS });
+const A2 = { ...MSIS_FORCES, WEATHER_SOURCE: pcfWeatherSource.RECORDS };
+const A3 = { ...A2, DENSITY_CORRECTION: pcfDensityCorrection.DCA_COMMON_MODE };
+/** fit's frames: the track, the call's $PCF (FORCES, FIT), the rows and the $DCL. */
+const fitFrames = ({ ephemeris, config, forces: f = XP_FORCES, fit: fitOpts, rows: r, dcl }) => [
+  { portId: "ephemeris", typeRef: T("OEM"), payload: ephemeris },
+  config instanceof Uint8Array ? { portId: "configuration", typeRef: PCF_TYPE, payload: config } : configuration({ forces: f, ...(fitOpts ? { fit: fitOpts } : {}) }),
+  ...(r ? [{ portId: "space_weather", typeRef: T("SPW"), payload: r }] : []),
+  ...(dcl ? [{ portId: "density_correction", typeRef: T("DCL"), payload: dcl }] : []),
+];
+/** A flight's output times: START_TIME to STOP_TIME every `stepS`, TEME. */
+const gridOf = (startMs, stopMs, stepS) => ({ START_TIME: iso(startMs), STOP_TIME: iso(stopMs), STEP_SECONDS: stepS });
 const linesOf = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-async function propagated(label, req) {
-  const r = await invoke("propagate", frames(req));
+async function propagated(label, set, grid) {
+  const r = await invoke("propagate", flight([set], grid ? { output: grid } : null));
   if (r.statusCode !== 0) { failures.push(`${label}: propagate ${r.errorCode} ${r.errorMessage}`); return null; }
   return new Uint8Array(r.outputs[0].payload);
 }
-async function refused(label, method, req, code, field) {
-  const r = await invoke(method, frames(req));
+async function refused(label, method, inputs, code, field) {
+  const r = await invoke(method, inputs);
   const ok = r.statusCode !== 0 && r.errorCode === code && (field === undefined || String(r.errorMessage).startsWith(field));
   check(ok, `${label}: expected ${code}${field ? ` (${field})` : ""}, got ${r.statusCode === 0 ? "success" : `${r.errorCode} ${r.errorMessage}`}`);
   return ok;
 }
 
-/** A $PCF whose FORCES table writes every scalar field at its documented default (the builder forcing defaults for the
- *  scalars only), with the required EPHEMERIS_SOURCE empty and an empty THIRD_BODY_IDS. */
+/** A fit $PCF whose FORCES table writes every scalar field at its documented default but ATMOSPHERE_MODEL JACCHIA70
+ *  (the builder forcing defaults for the scalars only), with the required EPHEMERIS_SOURCE empty and an empty
+ *  THIRD_BODY_IDS. */
 function forcesAtEveryDefault() {
   const b = new flatbuffers.Builder(1024);
   const t = new PCFForceModelT();
+  t.ATMOSPHERE_MODEL = pcfAtmosphereFamily.JACCHIA70;
   const source = b.createString("");
   const ids = PCFForceModel.createThirdBodyIdsVector(b, []);
   PCFForceModel.startPCFForceModel(b);
@@ -163,7 +152,6 @@ function forcesAtEveryDefault() {
   PCFForceModel.addThirdBodyIds(b, ids);
   const forcesTable = PCFForceModel.endPCFForceModel(b);
   PCF.startPCF(b);
-  PCF.addTheory(b, pcfTheory.SGP4XP);
   PCF.addForces(b, forcesTable);
   b.finish(PCF.endPCF(b), "$PCF");
   check(written >= 45, `FORCES at every default wrote ${written} scalar fields`);
@@ -173,44 +161,46 @@ function forcesAtEveryDefault() {
 // --- the scenario: a 400 km set across days whose rows move ---------------------------------------------------------
 const day0 = Date.UTC(2026, 2, 10);  // 2026-03-10
 const epochMs = day0 + 2 * DAY + 0.37 * DAY;
-const leo = ommOf({ epoch: iso(epochMs), n: 15.5 });
-const leo2 = ommOf({ epoch: iso(epochMs), n: 15.5, bterm: 0.02 });
-const gps = ommOf({ epoch: iso(epochMs), n: 2.00563, e: 0.01, i: 55, bterm: 0.02, agom: 0.02, norad: 90200 });
 const rows = rowsOf(day0, 12);
+const leo = (arm, more = {}) => setOf({ epoch: iso(epochMs), n: 15.5, arm, rows: rows.values, ...more });
 const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
+const HORIZON = { WEATHER_HORIZON_DAYS: 3 };  // the rows end 2026-03-21: the record carries them through the epoch's day + 3
 
 // 1. the default is inert
 {
-  const none = await propagated("A0", { omm: leo, grid });
-  const explicitForces = forcesAtEveryDefault();
-  const atDefaults = await propagated("A0, FORCES at every default", { omm: leo, grid, config: explicitForces });
-  const fieldsAtDefaults = await propagated("A0, FORCES with its atmosphere fields at their defaults", { omm: leo, grid, ...forces({ ENABLE_DRAG: false, ATMOSPHERE_MODEL: pcfAtmosphereFamily.NRLMSISE00, WEATHER_SOURCE: pcfWeatherSource.UNSPECIFIED, DENSITY_CORRECTION: pcfDensityCorrection.NONE }) });
-  console.log(`default: none ${none && sha(none)}, FORCES at defaults ${atDefaults && sha(atDefaults)}, atmosphere fields at defaults ${fieldsAtDefaults && sha(fieldsAtDefaults)}`);
-  check(none && atDefaults && Buffer.from(none).equals(Buffer.from(atDefaults)), "propagate: FORCES at every default changes the bytes");
-  check(none && fieldsAtDefaults && Buffer.from(none).equals(Buffer.from(fieldsAtDefaults)), "propagate: the atmosphere fields at their defaults change the bytes");
-  // fit: the A0 track fitted with and without FORCES at its defaults
-  const track = none;
+  const none = await propagated("A0 alone", leo("A0"), null);
+  const empty = await invoke("propagate", [...flight([leo("A0")]), configuration({})]);
+  check(none && empty.statusCode === 0 && Buffer.from(none).equals(Buffer.from(empty.outputs[0].payload)), "propagate: an empty $PCF changes the bytes");
+  const track = await propagated("A0", leo("A0"), grid);
   const fitOf = async (config) => {
-    const r = await invoke("fit", frames({ ephemeris: track, ...(config ? { config } : {}) }));
+    const r = await invoke("fit", fitFrames({ ephemeris: track, config }));
     return r.statusCode === 0 ? Buffer.concat(r.outputs.map((o) => Buffer.from(o.payload))) : `${r.errorCode} ${r.errorMessage}`;
   };
-  const f0 = await fitOf(), f1 = await fitOf(explicitForces);
-  check(Buffer.isBuffer(f0) && Buffer.isBuffer(f1) && f0.equals(f1), `fit: FORCES at every default changes the bytes (${typeof f0 === "string" ? f0 : sha(f0)} / ${typeof f1 === "string" ? f1 : sha(f1)})`);
-  console.log(`default fit: ${typeof f0 === "string" ? f0 : sha(f0)} and ${typeof f1 === "string" ? f1 : sha(f1)}`);
+  const f0 = await fitOf(configuration({ forces: XP_FORCES }).payload), f1 = await fitOf(forcesAtEveryDefault());
+  const stripCid = (b) => (typeof b === "string" ? b : b.length);  // the records differ in FIT_STATISTICS.PCF_CID only
+  const e0 = typeof f0 === "string" ? null : ocmOf(f0), e1 = typeof f1 === "string" ? null : ocmOf(f1);
+  const sameSet = e0 && e1 && JSON.stringify(e0.MEAN_ELEMENTS) === JSON.stringify(e1.MEAN_ELEMENTS) &&
+    JSON.stringify(e0.COVARIANCE_DATA) === JSON.stringify(e1.COVARIANCE_DATA) && e0.ORBIT_DETERMINATION.FIT_STATISTICS.PCF_CID !== e1.ORBIT_DETERMINATION.FIT_STATISTICS.PCF_CID;
+  console.log(`default fit: ${stripCid(f0)} B and ${stripCid(f1)} B, the same set and covariance: ${!!sameSet} (the records name their own $PCF)`);
+  check(sameSet, `fit: FORCES at every default changes the set (${typeof f0 === "string" ? f0 : sha(f0)} / ${typeof f1 === "string" ? f1 : sha(f1)})`);
   // the arms move the LEO set, and every arm propagates it
-  const a1 = await propagated("A1", { omm: leo, grid, ...A1, rows: rows.bytes });
-  const a2 = await propagated("A2", { omm: leo, grid, ...A2, rows: rows.bytes });
+  const a1 = await propagated("A1", leo("A1"), grid);
+  const a2 = await propagated("A2", leo("A2"), grid);
   for (const [name, b] of [["A1", a1], ["A2", a2]]) {
-    if (!none || !b) continue;
-    const p = linesOf(none).at(-1), q = linesOf(b).at(-1);
+    if (!track || !b) continue;
+    const p = linesOf(track).at(-1), q = linesOf(b).at(-1);
     const d = Math.hypot(p.X - q.X, p.Y - q.Y, p.Z - q.Z);
     console.log(`${name} against A0 after 3 days at 400 km: ${(d * 1000).toFixed(1)} m`);
     check(d > 1e-3, `${name}: the atmosphere does not move a 400 km set (${d} km)`);
   }
-  // a fit under each arm
-  for (const [name, cfg, extra] of [["A1", A1, { rows: rows.bytes }], ["A2", A2, { rows: rows.bytes }]]) {
-    const r = await invoke("fit", frames({ ephemeris: track, ...cfg, ...extra }));
+  // a fit under each arm writes its forces
+  for (const [name, f, theory, year] of [["A1", A1, 5, 1970], ["A2", A2, 5, 2000]]) {
+    const r = await invoke("fit", fitFrames({ ephemeris: track, forces: f, fit: HORIZON, rows: rows.bytes }));
     check(r.statusCode === 0, `${name} fit: ${r.errorCode} ${r.errorMessage}`);
+    if (r.statusCode !== 0) continue;
+    const o = ocmOf(r.outputs[0].payload);
+    check(o.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY === theory && o.PERTURBATIONS.ATMOSPHERIC_MODEL.YEAR === year && o.PERTURBATIONS.WEATHER_SOURCE === pcfWeatherSource.RECORDS &&
+      o.PERTURBATIONS.SPACE_WEATHER.length > 0, `${name} fit's record forces`);
   }
 }
 
@@ -325,29 +315,28 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
 // 3. the open DCA
 {
   const nodes = [day0, day0 + 4 * DAY, day0 + 8 * DAY, day0 + 11 * DAY];
-  const a2 = await propagated("A2", { omm: leo, grid, ...A2, rows: rows.bytes });
-  const zero = await propagated("A3, s = 0", { omm: leo, grid, ...A3, rows: rows.bytes, dcl: dclOf(nodes, [0, 0, 0, 0]) });
+  const a2 = await propagated("A2", leo("A2"), grid);
+  const zero = await propagated("A3, s = 0", leo("A3", { nodes, s: [0, 0, 0, 0] }), grid);
   check(a2 && zero && Buffer.from(a2).equals(Buffer.from(zero)), "A3 with s = 0 differs from A2");
   const ln2 = Math.log(2);
-  const doubled = await propagated("A3, s = ln 2", { omm: leo, grid, ...A3, rows: rows.bytes, dcl: dclOf(nodes, [ln2, ln2, ln2, ln2]) });
-  const a2b = await propagated("A2, 2 BTERM", { omm: leo2, grid, ...A2, rows: rows.bytes });
+  const doubled = await propagated("A3, s = ln 2", leo("A3", { nodes, s: [ln2, ln2, ln2, ln2] }), grid);
+  const a2b = await propagated("A2, 2 BTERM", leo("A2", { bterm: 0.02 }), grid);
   if (doubled && a2b) {
     const p = linesOf(doubled), q = linesOf(a2b);
     const worst = Math.max(...p.map((l, k) => Math.hypot(l.X - q[k].X, l.Y - q[k].Y, l.Z - q[k].Z)));
-    const same = Buffer.from(doubled.slice(0, 0)).length === 0 && p.every((l, k) => l.X === q[k].X && l.Y === q[k].Y && l.Z === q[k].Z);
-    console.log(`A3 with s = ln 2 against A2 with BTERM doubled: ${(worst * 1e6).toFixed(3)} mm over 3 days${same ? " (the same numbers)" : ""}`);
+    console.log(`A3 with s = ln 2 against A2 with BTERM doubled: ${(worst * 1e6).toFixed(3)} mm over 3 days`);
     check(worst <= 1e-9, `A3 s = ln 2 against A2 2 BTERM: ${worst} km`);
   }
-  // varying s moves the states between the A2 and the doubled ones
-  const varying = await propagated("A3, s varying", { omm: leo, grid, ...A3, rows: rows.bytes, dcl: dclOf(nodes, [0.1, -0.2, 0.3, 0]) });
+  const varying = await propagated("A3, s varying", leo("A3", { nodes, s: [0.1, -0.2, 0.3, 0] }), grid);
   check(varying && a2 && !Buffer.from(varying).equals(Buffer.from(a2)), "A3 with a varying s equals A2");
 }
 
 // 4. above 2,500 km every atmosphere is the theory's
 {
-  const g0 = await propagated("GPS A0", { omm: gps, grid });
-  const g2 = await propagated("GPS A2", { omm: gps, grid, ...A2, rows: rows.bytes });
-  const g3 = await propagated("GPS A3", { omm: gps, grid, ...A3, rows: rows.bytes, dcl: dclOf([day0, day0 + 11 * DAY], [0.4, -0.3]) });
+  const gps = (arm, more = {}) => setOf({ epoch: iso(epochMs), n: 2.00563, e: 0.01, i: 55, bterm: 0.02, agom: 0.02, norad: 90200, arm, rows: rows.values, ...more });
+  const g0 = await propagated("GPS A0", gps("A0"), grid);
+  const g2 = await propagated("GPS A2", gps("A2"), grid);
+  const g3 = await propagated("GPS A3", gps("A3", { nodes: [day0, day0 + 11 * DAY], s: [0.4, -0.3] }), grid);
   check(g0 && g2 && Buffer.from(g0).equals(Buffer.from(g2)), "GPS: A2 differs from A0");
   check(g0 && g3 && Buffer.from(g0).equals(Buffer.from(g3)), "GPS: A3 differs from A0");
   console.log(`GPS-like set: A0 ${g0 && sha(g0)}, A2 ${g2 && sha(g2)}, A3 ${g3 && sha(g3)}`);
@@ -355,106 +344,83 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
 
 // 5. refusals by name
 {
-  const base = { omm: leo, grid };
-  await refused("ATMOSPHERE_MODEL JACCHIA_ROBERTS", "propagate", { ...base, ...forces({ ENABLE_DRAG: true, ATMOSPHERE_MODEL: pcfAtmosphereFamily.JACCHIA_ROBERTS }), rows: rows.bytes }, "configuration-refused", "FORCES.ATMOSPHERE_MODEL");
-  await refused("WEATHER_SOURCE CONSTANT", "propagate", { ...base, ...forces({ WEATHER_SOURCE: pcfWeatherSource.CONSTANT }) }, "configuration-refused", "FORCES.WEATHER_SOURCE");
-  await refused("WEATHER_EXTENSION REFUSE", "propagate", { ...base, ...forces({ WEATHER_EXTENSION: pcfWeatherExtension.REFUSE }), rows: rows.bytes }, "configuration-refused", "FORCES.WEATHER_EXTENSION");
-  await refused("WEATHER_EXTENSION FORECAST_CHAIN", "fit", { ephemeris: await propagated("track", base), ...forces({ WEATHER_EXTENSION: pcfWeatherExtension.FORECAST_CHAIN }), rows: rows.bytes }, "configuration-refused", "FORCES.WEATHER_EXTENSION");
-  await refused("DCA on Jacchia 1970", "propagate", { ...base, ...forces({ DENSITY_CORRECTION: pcfDensityCorrection.DCA_COMMON_MODE }), rows: rows.bytes }, "configuration-refused", "FORCES.DENSITY_CORRECTION");
-  await refused("relaxation 12 h", "propagate", { ...base, ...forces({ ...A3.forces, DENSITY_CORRECTION_RELAXATION_HOURS: 12, HAS_DENSITY_CORRECTION_RELAXATION_HOURS: true }), rows: rows.bytes, dcl: dclOf([day0], [0]) }, "configuration-refused", "FORCES.DENSITY_CORRECTION_RELAXATION_HOURS");
-  await refused("another FORCES field", "propagate", { ...base, ...forces({ AREA_M2: 3 }) }, "configuration-refused", "FORCES.AREA_M2");
+  const track = await propagated("track", leo("A0"), grid);
+  const fitRefused = (label, req, code, field) => refused(label, "fit", fitFrames({ ephemeris: track, fit: HORIZON, ...req }), code, field);
+  await fitRefused("ATMOSPHERE_MODEL JACCHIA_ROBERTS", { forces: forces({ ATMOSPHERE_MODEL: pcfAtmosphereFamily.JACCHIA_ROBERTS }), rows: rows.bytes }, "configuration-refused", "FORCES.ATMOSPHERE_MODEL");
+  await fitRefused("WEATHER_SOURCE CONSTANT", { forces: forces({ WEATHER_SOURCE: pcfWeatherSource.CONSTANT }) }, "configuration-refused", "FORCES.WEATHER_SOURCE");
+  await fitRefused("THEORY_FLUX_MODEL under NRLMSISE-00", { forces: { ...MSIS_FORCES, WEATHER_SOURCE: pcfWeatherSource.THEORY_FLUX_MODEL } }, "configuration-refused", "FORCES.WEATHER_SOURCE");
+  await fitRefused("WEATHER_EXTENSION HOLD_LAST", { forces: { ...A2, WEATHER_EXTENSION: pcfWeatherExtension.HOLD_LAST }, rows: rows.bytes }, "configuration-refused", "FORCES.WEATHER_EXTENSION");
+  await fitRefused("WEATHER_EXTENSION FORECAST_CHAIN", { forces: { ...A2, WEATHER_EXTENSION: pcfWeatherExtension.FORECAST_CHAIN }, rows: rows.bytes }, "configuration-refused", "FORCES.WEATHER_EXTENSION");
+  await fitRefused("DCA on Jacchia 1970", { forces: forces({ DENSITY_CORRECTION: pcfDensityCorrection.DCA_COMMON_MODE }), rows: rows.bytes }, "configuration-refused", "FORCES.DENSITY_CORRECTION");
+  await fitRefused("relaxation 12 h", { forces: { ...A3, DENSITY_CORRECTION_RELAXATION_HOURS: 12, HAS_DENSITY_CORRECTION_RELAXATION_HOURS: true }, rows: rows.bytes, dcl: dclOf([day0], [0]) }, "configuration-refused", "FORCES.DENSITY_CORRECTION_RELAXATION_HOURS");
+  await fitRefused("ENABLE_DRAG", { forces: { ...A2, ENABLE_DRAG: true }, rows: rows.bytes }, "configuration-refused", "FORCES.ENABLE_DRAG");
+  await fitRefused("another FORCES field", { forces: forces({ AREA_M2: 3 }) }, "configuration-refused", "FORCES.AREA_M2");
   // the last two PCFForceModel fields (task modules-sgp4xp-fit-lognormal-drag-20261026): refused by name, not ignored
-  await refused("THIRD_BODY_MAXIMUM_DEGREE 2", "propagate", { ...base, ...forces({ THIRD_BODY_MAXIMUM_DEGREE: 2 }) }, "configuration-refused", "FORCES.THIRD_BODY_MAXIMUM_DEGREE");
-  await refused("THIRD_BODY_MAXIMUM_ORDER 2", "fit", { ephemeris: await propagated("track", base), ...forces({ THIRD_BODY_MAXIMUM_ORDER: 2 }) }, "configuration-refused", "FORCES.THIRD_BODY_MAXIMUM_ORDER");
-  await refused("NRLMSISE-00 without rows", "propagate", { ...base, ...forces({ ENABLE_DRAG: true }) }, "space-weather-missing");
-  await refused("RECORDS without rows", "fit", { ephemeris: await propagated("track", base), ...forces({ WEATHER_SOURCE: pcfWeatherSource.RECORDS }) }, "space-weather-missing");
-  await refused("DCA without a $DCL", "propagate", { ...base, ...A3, rows: rows.bytes }, "density-correction-missing");
-  await refused("a $DCL with DENSITY_CORRECTION NONE", "propagate", { ...base, ...A2, rows: rows.bytes, dcl: dclOf([day0], [0]) }, "density-correction-unselected");
-  await refused("a $DCL not Solved", "propagate", { ...base, ...A3, rows: rows.bytes, dcl: dclOf([day0], [0], { status: dclStatus.Pending }) }, "invalid-density-correction");
-  await refused("a row without F10.7", "propagate", { ...base, ...A2, rows: (() => {
+  await fitRefused("THIRD_BODY_MAXIMUM_DEGREE 2", { forces: forces({ THIRD_BODY_MAXIMUM_DEGREE: 2 }) }, "configuration-refused", "FORCES.THIRD_BODY_MAXIMUM_DEGREE");
+  await fitRefused("THIRD_BODY_MAXIMUM_ORDER 2", { forces: forces({ THIRD_BODY_MAXIMUM_ORDER: 2 }) }, "configuration-refused", "FORCES.THIRD_BODY_MAXIMUM_ORDER");
+  await fitRefused("no ATMOSPHERE_MODEL", { config: configuration({}).payload }, "configuration-refused", "FORCES.ATMOSPHERE_MODEL");
+  await fitRefused("NRLMSISE-00 without rows", { forces: A2 }, "weather-rows-missing");
+  await fitRefused("RECORDS without rows", { forces: A1 }, "weather-rows-missing");
+  await fitRefused("rows under the theory's flux model", { rows: rows.bytes }, "weather-rows-unselected");
+  await fitRefused("DCA without a $DCL", { forces: A3, rows: rows.bytes }, "density-correction-missing");
+  await fitRefused("a $DCL with DENSITY_CORRECTION NONE", { forces: A2, rows: rows.bytes, dcl: dclOf([day0], [0]) }, "density-correction-unselected");
+  await fitRefused("a $DCL not Solved", { forces: A3, rows: rows.bytes, dcl: dclOf([day0], [0], { status: dclStatus.Pending }) }, "invalid-density-correction");
+  await fitRefused("a row without F10.7", { forces: A2, rows: (() => {
     const b = new flatbuffers.Builder(128);
     SPW.finishSizePrefixedSPWBuffer(b, Object.assign(new SPWT(), { DATE: dateOf(day0), F107_OBS: 0, F107_OBS_CENTER81: 150, AP_AVG: 5 }).pack(b));
     return b.asUint8Array().slice();
-  })() }, "invalid-space-weather");
-  await refused("rows that start on the epoch's day", "propagate", { ...base, ...A2, rows: rowsOf(day0 + 2 * DAY, 6).bytes }, "space-weather-out-of-range");
-  {
-    const mb = new flatbuffers.Builder(64);
-    MNV.finishMNVBuffer(mb, new MNVT().pack(mb));
-    const r = await invoke("maneuver", [...frames({ omm: leo, ...forces({ ENABLE_DRAG: true }) }), { portId: "maneuvers", typeRef: T("MNV"), payload: mb.asUint8Array().slice() }]);
-    check(r.statusCode !== 0 && r.errorCode === "configuration-refused" && String(r.errorMessage).startsWith("FORCES.ENABLE_DRAG"),
-      `maneuver with ENABLE_DRAG: ${r.statusCode === 0 ? "success" : `${r.errorCode} ${r.errorMessage}`}`);
+  })() }, "weather-rows-invalid:2026-03-10");
+  // rows from the day before the arc's first day are enough; rows from that day itself miss the day before it
+  const enough = await invoke("fit", fitFrames({ ephemeris: track, forces: A2, fit: HORIZON, rows: rowsOf(day0 + DAY, 8).bytes }));
+  check(enough.statusCode === 0, `rows from the day before the arc's first day: ${enough.errorCode} ${enough.errorMessage}`);
+  if (enough.statusCode === 0) {
+    const first = Date.parse(`${ocmOf(enough.outputs[0].payload).ORBIT_DETERMINATION.FIT_STATISTICS.FIT_START.slice(0, 10)}T00:00:00Z`);
+    await fitRefused("rows that start on the arc's first day", { forces: A2, rows: rowsOf(first, 8).bytes }, `weather-rows-short:${dateOf(first - DAY)}`);
   }
-  // rows with no FORCES table: WEATHER_SOURCE UNSPECIFIED infers them, so the theory's own Jacchia 1970 reads them (A1)
-  const inferred = await propagated("rows, no FORCES", { ...base, rows: rows.bytes });
-  const a1 = await propagated("A1", { ...base, ...A1, rows: rows.bytes });
-  check(inferred && a1 && Buffer.from(inferred).equals(Buffer.from(a1)), "rows without FORCES do not read as A1");
-  // rows that begin the day before the epoch's day are enough
-  const enough = await propagated("rows from the day before the epoch", { ...base, ...A2, rows: rowsOf(day0 + DAY, 6).bytes });
-  check(enough !== null, "rows from the day before the epoch's day are refused");
+  // a flight's $PCF carries no FORCES
+  await refused("propagate with FORCES", "propagate", flight([leo("A2")], { output: grid, forces: A2 }), "configuration-refused", "FORCES");
+  const mb = new flatbuffers.Builder(64);
+  MNV.finishMNVBuffer(mb, new MNVT().pack(mb));
+  await refused("maneuver with FORCES", "maneuver", [...flight([leo("A0")], { forces: XP_FORCES }), { portId: "maneuvers", typeRef: T("MNV"), payload: mb.asUint8Array().slice() }], "configuration-refused", "FORCES");
 }
 
-// 6. NRLMSISE-00 + open DCA, two-stage decoupled 17.1h tesseral-null fit, altitude-adaptive prior, atmosphere marking & epoch store
+// 6. NRLMSISE-00 + open DCA, two-stage decoupled 17.1h tesseral-null fit, the record's forces and nodes, the epoch store
 {
-  // A 5-day ephemeris starting at 00:00:00 UTC on day0 + 1*DAY .. day0 + 6*DAY (cutoff D0 = day0 + 6*DAY).
-  // The 48h Stage 1 fit span starts at day0 + 4*DAY (00:00:00 UTC).
-  // Providing $SPW rows starting at day0 + 3*DAY (1 day before the 48h fit start, but after the 5-day OEM start)
-  // verifies both:
-  //   (a) speculative 72h/120h candidate spans do not poison before_rows when choose_span keeps 48h, and
-  //   (b) backward RK3 bracketing at 00:00:00 UTC on day0 + 4*DAY does not trigger a false space-weather-out-of-range.
+  // A 5-day track from 00:00:00 UTC on day0 + 1*DAY to day0 + 6*DAY (cutoff D0 = day0 + 6*DAY) under A3; the 48 h Stage 1
+  // span starts at day0 + 4*DAY. Rows from day0 + 3*DAY (1 day before the 48 h fit start, after the track's start):
+  //   (a) the speculative 72 h/120 h candidate spans do not poison the span rule when it keeps 48 h, and
+  //   (b) backward RK3 bracketing at 00:00:00 UTC on day0 + 4*DAY reads no day before the rows.
   const d0Ms = day0 + 6 * DAY;
-  const ommMid = ommOf({ epoch: iso(day0 + 4 * DAY), n: 15.5, bterm: 0.012, agom: 0.004, norad: 90300 });
   const dclNodes = [day0, day0 + 3 * DAY, day0 + 6 * DAY, day0 + 9 * DAY];
-  const dclBytes = dclOf(dclNodes, [0.05, -0.08, 0.04, 0.0]);
-  const longGrid = gridOf(day0 + DAY, d0Ms, 600);
-  const trackA3 = await propagated("trackA3 5d", { omm: ommMid, grid: longGrid, ...A3, rows: rows.bytes, dcl: dclBytes });
+  const dclS = [0.05, -0.08, 0.04, 0.0];
+  const dclBytes = dclOf(dclNodes, dclS);
+  const mid = setOf({ epoch: iso(day0 + 4 * DAY), n: 15.5, bterm: 0.012, agom: 0.004, norad: 90300, arm: "A3", rows: rows.values, nodes: dclNodes, s: dclS });
+  const trackA3 = await propagated("trackA3 5d", mid, gridOf(day0 + DAY, d0Ms, 600));
   check(trackA3 !== null, "trackA3 5d failed to propagate");
-
-  const tightRows = rowsOf(day0 + 3 * DAY, 6);
-  const fitR17 = { MINIMUM_SPAN_HOURS: 17.1, DEFAULT_SPAN_HOURS: 48.0 };
-  const rFitA2 = await invoke("fit", frames({ ephemeris: trackA3, ...A2, fit: fitR17, rows: tightRows.bytes }));
-  const rFitA3 = await invoke("fit", frames({ ephemeris: trackA3, ...A3, fit: fitR17, rows: tightRows.bytes, dcl: dclBytes }));
+  const tightRows = rowsOf(day0 + 3 * DAY, 6);  // 2026-03-13 .. 2026-03-18
+  const fitR17 = { MINIMUM_SPAN_HOURS: 17.1, DEFAULT_SPAN_HOURS: 48.0, WEATHER_HORIZON_DAYS: 2 };
+  const rFitA2 = await invoke("fit", fitFrames({ ephemeris: trackA3, forces: A2, fit: fitR17, rows: tightRows.bytes }));
+  const rFitA3 = await invoke("fit", fitFrames({ ephemeris: trackA3, forces: A3, fit: fitR17, rows: tightRows.bytes, dcl: dclBytes }));
   check(rFitA2.statusCode === 0, `two-stage R17 fit under A2: ${rFitA2.errorCode} ${rFitA2.errorMessage}`);
   check(rFitA3.statusCode === 0, `two-stage R17 fit under A3: ${rFitA3.errorCode} ${rFitA3.errorMessage}`);
-
   if (rFitA2.statusCode === 0 && rFitA3.statusCode === 0) {
-    const ommA2Bytes = new Uint8Array(rFitA2.outputs[0].payload);
-    const ommA3Bytes = new Uint8Array(rFitA3.outputs[0].payload);
-    const ommA2 = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(ommA2Bytes)).unpack();
-    const ommA3 = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(ommA3Bytes)).unpack();
-    const obdA3 = OBD.getRootAsOBD(new flatbuffers.ByteBuffer(new Uint8Array(rFitA3.outputs[1].payload))).unpack();
-    const markA2 = ommA2.USER_DEFINED_PARAMETERS?.find((p) => p.PARAM_NAME === "SDNAP_ATMOSPHERE_MODEL")?.PARAM_VALUE;
-    const markA3 = ommA3.USER_DEFINED_PARAMETERS?.find((p) => p.PARAM_NAME === "SDNAP_ATMOSPHERE_MODEL")?.PARAM_VALUE;
-    console.log(`two-stage R17 fit: A2 mark=${markA2} epoch=${ommA2.EPOCH}, A3 mark=${markA3} epoch=${ommA3.EPOCH} BTERM=${ommA3.BSTAR.toExponential(4)} comment="${ommA3.COMMENT}"`);
-    check(markA2 === "NRLMSISE00", `A2 $OMM SDNAP_ATMOSPHERE_MODEL expected NRLMSISE00, got ${markA2}`);
-    check(markA3 === "NRLMSISE00_DCA", `A3 $OMM SDNAP_ATMOSPHERE_MODEL expected NRLMSISE00_DCA, got ${markA3}`);
-    check(ommA3.EPOCH.startsWith(iso(d0Ms).slice(0, 19)), `two-stage R17 epoch expected cutoff ${iso(d0Ms)}, got ${ommA3.EPOCH}`);
-    check(ommA3.COMMENT.includes("span 17.000 h"), `two-stage R17 comment expected span 17.000 h (103 10-min states), got ${ommA3.COMMENT}`);
-    check(obdA3.START_TIME.startsWith(iso(d0Ms - 17.0 * 3600000).slice(0, 16)), `two-stage R17 $OBD start: ${obdA3.START_TIME}`);
-
-    // Atmosphere mismatch enforcement across propagate, ingest_omm, load_epochs, and propagate_epochs
+    const setA2 = new Uint8Array(rFitA2.outputs[0].payload), setA3 = new Uint8Array(rFitA3.outputs[0].payload);
+    const o2 = ocmOf(setA2), o3 = ocmOf(setA3), st = o3.ORBIT_DETERMINATION.FIT_STATISTICS;
+    console.log(`two-stage R17 fit: A2 ${o2.PERTURBATIONS.ATMOSPHERIC_MODEL.YEAR} correction ${o2.PERTURBATIONS.DENSITY_CORRECTION} epoch=${o2.MEAN_ELEMENTS.EPOCH}; A3 correction ${o3.PERTURBATIONS.DENSITY_CORRECTION}, ${o3.PERTURBATIONS.DENSITY_CORRECTION_NODE_TIMES_MS.length} nodes, epoch=${o3.MEAN_ELEMENTS.EPOCH} BTERM=${o3.MEAN_ELEMENTS.BTERM.toExponential(4)} arc ${st.FIT_START} to ${st.FIT_STOP} (${(o3.ORBIT_DETERMINATION.ACTUAL_OD_SPAN * 24).toFixed(3)} h); rows ${o3.PERTURBATIONS.SPACE_WEATHER[0].DATE} to ${o3.PERTURBATIONS.SPACE_WEATHER.at(-1).DATE}`);
+    check(o2.PERTURBATIONS.ATMOSPHERIC_MODEL.YEAR === 2000 && o2.PERTURBATIONS.DENSITY_CORRECTION === pcfDensityCorrection.NONE, "the A2 record's forces");
+    check(o3.PERTURBATIONS.DENSITY_CORRECTION === pcfDensityCorrection.DCA_COMMON_MODE && o3.PERTURBATIONS.DENSITY_CORRECTION_CID?.startsWith("b"), "the A3 record's forces");
+    // the nodes from the last at or before the first row's day (2026-03-14) through the last published
+    check(JSON.stringify(o3.PERTURBATIONS.DENSITY_CORRECTION_NODE_TIMES_MS.map(Number)) === JSON.stringify(dclNodes.slice(1)) &&
+      JSON.stringify(o3.PERTURBATIONS.DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS) === JSON.stringify(dclS.slice(1)), "the A3 record's nodes");
+    check(o3.MEAN_ELEMENTS.EPOCH.startsWith(iso(d0Ms).slice(0, 19)), `two-stage R17 epoch expected cutoff ${iso(d0Ms)}, got ${o3.MEAN_ELEMENTS.EPOCH}`);
+    check(Math.abs(o3.ORBIT_DETERMINATION.ACTUAL_OD_SPAN * 24 - 17.0) < 1e-6, `two-stage R17 arc: ${o3.ORBIT_DETERMINATION.ACTUAL_OD_SPAN * 24} h, expected 17.000 h (103 10-min states)`);
+    check(st.FIT_START.startsWith(iso(d0Ms - 17.0 * 3600000).slice(0, 16)), `two-stage R17 FIT_START: ${st.FIT_START}`);
+    // the records fly alone; the epoch store flies the A3 record as propagate does
     const predGrid = gridOf(d0Ms, d0Ms + DAY, 600);
-    await refused("A2 OMM propagated under A0", "propagate", { omm: ommA2Bytes, grid: predGrid }, "atmosphere-mismatch");
-    await refused("A2 OMM propagated under A3", "propagate", { omm: ommA2Bytes, grid: predGrid, ...A3, rows: rows.bytes, dcl: dclBytes }, "atmosphere-mismatch");
-    await refused("A3 OMM propagated under A2", "propagate", { omm: ommA3Bytes, grid: predGrid, ...A2, rows: rows.bytes }, "atmosphere-mismatch");
-    const rIngest = await invoke("ingest_omm", [{ portId: "omm", typeRef: T("OMM"), payload: ommA2Bytes }]);
-    check(rIngest.statusCode !== 0 && rIngest.errorCode === "atmosphere-mismatch", `ingest_omm on A2 OMM: ${rIngest.statusCode} ${rIngest.errorCode}`);
-
-    // Epoch store (load_epochs & propagate_epochs) under A2 and A3 matches propagate bit-for-bit
-    const propA2 = await propagated("A2 OMM forward", { omm: ommA2Bytes, grid: predGrid, ...A2, rows: rows.bytes });
-    const propA3 = await propagated("A3 OMM forward", { omm: ommA3Bytes, grid: predGrid, ...A3, rows: rows.bytes, dcl: dclBytes });
-    const rLoadA2 = await invoke("load_epochs", [
-      { portId: "omm", typeRef: T("OMM"), payload: ommA2Bytes },
-      configuration({ theory: "SGP4XP", forces: A2.forces }),
-      { portId: "space_weather", typeRef: T("SPW"), payload: rows.bytes },
-    ]);
-    const rPropEpA3 = await invoke("propagate_epochs", [
-      { portId: "omm", typeRef: T("OMM"), payload: ommA3Bytes },
-      { portId: "grid", typeRef: T("OEM"), payload: predGrid },
-      configuration({ theory: "SGP4XP", forces: A3.forces }),
-      { portId: "space_weather", typeRef: T("SPW"), payload: rows.bytes },
-      { portId: "density_correction", typeRef: T("DCL"), payload: dclBytes },
-    ]);
-    check(rLoadA2.statusCode === 0, `load_epochs A2: ${rLoadA2.errorCode} ${rLoadA2.errorMessage}`);
+    const propA2 = await propagated("A2 record forward", setA2, predGrid);
+    const propA3 = await propagated("A3 record forward", setA3, predGrid);
+    check(propA2 && propA3, "the fitted records fly");
+    const rPropEpA3 = await invoke("propagate_epochs", [{ portId: "ocm", typeRef: T("OCM"), payload: setA3 }, configuration({ output: predGrid })]);
     check(rPropEpA3.statusCode === 0, `propagate_epochs A3: ${rPropEpA3.errorCode} ${rPropEpA3.errorMessage}`);
     if (propA3 && rPropEpA3.statusCode === 0) {
       const p1 = linesOf(propA3), p2 = linesOf(new Uint8Array(rPropEpA3.outputs[0].payload));
@@ -462,21 +428,17 @@ const grid = gridOf(epochMs, epochMs + 3 * DAY, 600);
       console.log(`propagate_epochs A3 vs propagate A3 over 24h: max |dr| ${(maxDiff * 1e6).toFixed(3)} mm`);
       check(maxDiff <= 1e-5, `propagate_epochs A3 vs propagate A3: ${maxDiff} km`);
     }
-    await refused("load_epochs A3 OMM under A2", "load_epochs", { omm: ommA3Bytes, ...A2, rows: rows.bytes }, "atmosphere-mismatch");
+    const rLoad = await invoke("load_epochs", [{ portId: "ocm", typeRef: T("OCM"), payload: setA2 }]);
+    check(rLoad.statusCode === 0, `load_epochs A2 alone: ${rLoad.errorCode} ${rLoad.errorMessage}`);
   }
-
-  // Altitude-adaptive log-normal BTERM prior median under NRLMSISE-00: 0.002 at 600-800 km, 0.0005 at >= 800 km
-  for (const [label, nRevDay, expectedMedian] of [["700 km", 14.58, "median 0.002 m^2/kg"], ["900 km", 13.97, "median 0.0005 m^2/kg"]]) {
-    const hiOmm = ommOf({ epoch: iso(epochMs), n: nRevDay, bterm: 0.001, agom: 0.002, norad: 90400 });
-    const hiTrack = await propagated(`track ${label}`, { omm: hiOmm, grid: gridOf(epochMs, epochMs + DAY, 600), ...A2, rows: rows.bytes });
-    const rHi = await invoke("fit", frames({ ephemeris: hiTrack, ...A2, rows: rows.bytes }));
+  // the altitude-adaptive log-normal BTERM prior under NRLMSISE-00 (0.002 m^2/kg at 600-800 km, 0.0005 at >= 800 km) is
+  // not written in the record (its OD COMMENT carries no number); the fits at 700 and 900 km are made and fly
+  for (const [label, nRevDay] of [["700 km", 14.58], ["900 km", 13.97]]) {
+    const hi = setOf({ epoch: iso(epochMs), n: nRevDay, bterm: 0.001, agom: 0.002, norad: 90400, arm: "A2", rows: rows.values });
+    const hiTrack = await propagated(`track ${label}`, hi, gridOf(epochMs, epochMs + DAY, 600));
+    const rHi = await invoke("fit", fitFrames({ ephemeris: hiTrack, forces: A2, fit: HORIZON, rows: rows.bytes }));
     check(rHi.statusCode === 0, `altitude-adaptive fit ${label}: ${rHi.errorCode} ${rHi.errorMessage}`);
-    if (rHi.statusCode === 0) {
-      const obd = OBD.getRootAsOBD(new flatbuffers.ByteBuffer(new Uint8Array(rHi.outputs[1].payload))).unpack();
-      const hasExpected = String(obd.BALLISTIC_COEFF_MODEL ?? "").includes(expectedMedian);
-      console.log(`altitude-adaptive prior (${label}): ${obd.BALLISTIC_COEFF_MODEL}`);
-      check(hasExpected, `altitude-adaptive prior (${label}): expected "${expectedMedian}" in ${obd.BALLISTIC_COEFF_MODEL}`);
-    }
+    if (rHi.statusCode === 0) console.log(`fit at ${label} under NRLMSISE-00: BTERM ${ocmOf(rHi.outputs[0].payload).MEAN_ELEMENTS.BTERM.toExponential(4)} m^2/kg`);
   }
 }
 

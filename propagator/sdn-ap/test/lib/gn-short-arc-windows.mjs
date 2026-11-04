@@ -25,7 +25,9 @@ async function replay({modulePath, norad, shard, shards, keys}) {
   const S = await import(path.join(root, config.xm.dir, 'lib/sds.mjs'));
   const T = await import(path.join(root, config.xm.dir, 'lib/truth.mjs'));
   const {openModules} = await import(path.join(root, config.xm.dir, 'lib/modules.mjs'));
-  const {openAp} = await import(experiments + '/experiments/operator-theory/lib/ap.mjs');
+  const {openAp: openAp04} = await import(experiments + '/experiments/operator-theory/lib/ap.mjs');
+  // this build on $OCM (ocm.mjs openApOcm), a 0.4 baseline as the vendored openAp drives it
+  const O = await import(new URL('./ocm.mjs', import.meta.url).href), openAp = (p) => (O.legacyBuild(p) ? openAp04(p) : O.openApOcm(p));
   const {windowKey} = await import(experiments + '/experiments/operator-theory/lib/regimes.mjs');
   const m = await openModules(), A = await openAp(modulePath);
   const LEADS = XM.config.scoring.leadDays, GRID = XM.config.scoring.gridSeconds * 1000;
@@ -62,7 +64,7 @@ async function replay({modulePath, norad, shard, shards, keys}) {
         const f = await A.fit(oem, pcf, undefined);
         if (!f.ok) throw new Error(f.error);
         const st = await A.propagate(f.omm, gridB, pcf, undefined, epochs.length);
-        row.arms[name] = {ok: true, agom: S.readFitOmm(f.omm).agom, days: score(await m.rtn(await m.toAxes(st, epochs, 'GCRF'), truth))};
+        row.arms[name] = {ok: true, agom: (O.legacyBuild(modulePath) ? S.readFitOmm(f.omm) : O.readFitOcm(f.omm)).agom, days: score(await m.rtn(await m.toAxes(st, epochs, 'GCRF'), truth))};
       } catch (error) {
         row.arms[name] = {ok: false, error: String(error?.message ?? error).slice(0, 180)};
       }

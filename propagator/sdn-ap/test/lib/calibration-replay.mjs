@@ -15,6 +15,7 @@ import * as fb from 'flatbuffers';
 import { OMM } from 'spacedatastandards.org/lib/js/OMM/OMM.js';
 import { OEM } from 'spacedatastandards.org/lib/js/OEM/OEM.js';
 import { wasmPath } from './module.mjs';
+import { openApOcm, noiseOf, withNoise, flight } from './ocm.mjs';
 const DAY=86400000, HOUR=3600000, UNIT=1e-6;
 const ms=s=>Date.parse(s.endsWith('Z')?s:s+'Z');
 const archive=process.env.SDN_ARCHIVE??'/opt/data/sdn-archive';
@@ -45,7 +46,7 @@ async function replay(list){
  const XM=await imp('xp-atmosphere-merit/common.mjs');
  const SRC=await imp('sdn-gp-starlink-ffm-match/lib/sources.mjs');
  const {STATIC,TESS,HX}=await imp('operator-theory/lib/regimes.mjs');
- const h=await createStandaloneHarness('browser',wasmPath,{surface:'direct'});
+ const h=await createStandaloneHarness('browser',wasmPath,{surface:'direct'}),A=await openApOcm(wasmPath);
  const {openAxes}=await imp('operator-theory/lib/host.mjs');
  const referenceAxes=await openAxes();
  const objects=new Map();
@@ -109,32 +110,29 @@ async function replay(list){
    const weather=vacuum?null:(['P','S1','GN'].includes(w.group)?W:weather6).rowsO(cutoff-6*DAY,cutoff);
    if(weather?.excluded)throw Error(weather.excluded);
    const config=S.pcfBytes({forces:{...(vacuum?{}:XM.config.arms.X2.forces),HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:31,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:20},fit:null});
-   const common=[{portId:'configuration',typeRef:S.TYPE('PCF'),payload:config},...(weather?[{portId:'space_weather',typeRef:S.TYPE('SPW'),payload:S.spwBytes(weather.rows)}]:[])];
-   const call=async(methodId,inputs)=>{const r=await h.invoke({methodId,inputs:[...common,...inputs]});if(r.statusCode!==0)throw Error(r.errorCode+': '+r.errorMessage);return r.outputs;};
-   const fit=await call('fit',[{portId:'ephemeris',typeRef:S.TYPE('OEM'),payload:S.oemBytes({frame:'GCRF',object:{name:w.name,norad:w.norad},lines:thin,useableStart:thin[0].epoch,useableStop:w.cutoff})}]);
-   const omm=OMM.getRootAsOMM(new fb.ByteBuffer(fit.find(o=>o.portId==='elements').payload)).unpack();
-   const ud=Object.fromEntries(omm.USER_DEFINED_PARAMETERS.map(p=>[p.PARAM_NAME,p.PARAM_VALUE]));
-   if(!ud.SDNAP_COV_NOISE)throw Error('fit returned no covariance');
+   // the fit on $OCM under the arm's FORCES (openApOcm writes 0.4's ENABLE_DRAG as ATMOSPHERE_MODEL and holds the rows as 0.4 did)
+   const fitted=await A.fit(S.oemBytes({frame:'GCRF',object:{name:w.name,norad:w.norad},lines:thin,useableStart:thin[0].epoch,useableStop:w.cutoff}),config,weather?{rows:S.spwBytes(weather.rows)}:undefined);
+   if(!fitted.ok)throw Error(fitted.error);
+   const ocm=fitted.omm,model=noiseOf(ocm);
+   if(!model)throw Error('fit returned no covariance');
    if(cached){
-    if(cached.ngRate!==Number(ud.SDNAP_COV_NG_RATE))throw Error('cached replay fit changed');
-    cached.noise=ud.SDNAP_COV_NOISE.split(' ').map(Number);
+    if(cached.ngRate!==model.ngRate)throw Error('cached replay fit changed');
+    cached.noise=model.noise;
     fs.writeFileSync(file,zlib.gzipSync(JSON.stringify(cached)));
     await new Promise(resolve=>setImmediate(resolve));
     continue;
    }
-   const ta=Number(ud.SDNAP_COV_NOISE.split(' ')[4]);
+   const ta=model.noise[4];
    const reference=await referenceAxes.convert(scored,'GCRF','TEME');
-   const grid=S.oemBytes({frame:'TEME',lines:scored});
    const runs=[];
    for(let k=-1;k<4;k++){
-    omm.USER_DEFINED_PARAMETERS.find(p=>p.PARAM_NAME==='SDNAP_COV_NOISE').PARAM_VALUE=[...[0,1,2,3].map(j=>j===k?UNIT:0),ta].join(' ');
-    const b=new fb.Builder(8192); OMM.finishOMMBuffer(b,omm.pack(b));
-    const out=await call('propagate',[{portId:'omm',typeRef:S.TYPE('OMM'),payload:b.asUint8Array()},{portId:'grid',typeRef:S.TYPE('OEM'),payload:grid}]);
-    runs.push(OEM.getRootAsOEM(new fb.ByteBuffer(out.find(o=>o.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0]);
+    const r=await h.invoke({methodId:'propagate',inputs:flight([withNoise(ocm,[...[0,1,2,3].map(j=>j===k?UNIT:0),ta])],{output:{EPOCHS:scored.map(l=>l.epoch)}})});
+    if(r.statusCode!==0)throw Error(r.errorCode+': '+r.errorMessage);
+    runs.push(OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find(o=>o.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0]);
    }
    const pos=c=>[c.CX_X,c.CY_X,c.CY_Y,c.CZ_X,c.CZ_Y,c.CZ_Z];
    const samples=scored.map((l,i)=>{const state=runs[0].EPHEMERIS_DATA_LINES[i],P0=pos(runs[0].COVARIANCE_MATRIX_LINES[i]);return{day:Math.ceil((ms(l.epoch)-cutoff)/DAY),e:[state.X-reference[i].r[0],state.Y-reference[i].r[1],state.Z-reference[i].r[2]],P0,B:runs.slice(1).map(r=>pos(r.COVARIANCE_MATRIX_LINES[i]).map((v,j)=>(v-P0[j])/UNIT**2))};});
-   const result={noise:ud.SDNAP_COV_NOISE.split(' ').map(Number),key:w.key,arm:w.arm,group:w.group,regime:ud.SDNAP_COV_REGIME,ngRate:Number(ud.SDNAP_COV_NG_RATE),nDay:omm.MEAN_MOTION*2*Math.PI,samples,stored:w.stored.days};
+   const result={noise:model.noise,key:w.key,arm:w.arm,group:w.group,regime:model.regime,ngRate:model.ngRate,nDay:model.nDay,samples,stored:w.stored.days};
    fs.writeFileSync(file,zlib.gzipSync(JSON.stringify(result)));
    console.log(`${w.key} ${w.arm}: ${samples.length} covariance samples`);
    await new Promise(resolve=>setImmediate(resolve));

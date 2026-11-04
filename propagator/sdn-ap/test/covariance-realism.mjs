@@ -15,8 +15,9 @@
 // Covariance realism of the SGP4XP fit (SPEC 12) on laser-ranged precise orbits, and the fit of its process noise.
 //
 // Each window: the module's `fit` (THEORY SGP4XP) on 24 h of a GCRF reference ephemeris (USEABLE_START_TIME to
-// USEABLE_STOP_TIME), then its `propagate` of the fitted $OMM onto the reference epochs of the next 3 days every
-// 30 min in GCRF, states and covariance lines both from the module. The script compares the module's numbers with the
+// USEABLE_STOP_TIME), then its `propagate` of the fitted $OCM alone at the reference epochs of the next 3 days every
+// 30 min in GCRF ($PCF OUTPUT), states and covariance lines both from the module; the process noise read from and set in
+// the record's COV_PROPAGATION. The script compares the module's numbers with the
 // reference: e = model - reference, d^2 = e^T P^-1 e on the 3 x 3 position block, against chi-square(3): mean d^2 / 3
 // (1), the share inside the 95 % ellipsoid (d^2 <= 7.815) and the median d^2 (2.366), per day of lead.
 //
@@ -50,7 +51,8 @@ import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { rfm } from "./lib/frames.mjs";
 import { wasmPath } from "./lib/module.mjs";
-import { configuration } from "./lib/pcf.mjs";
+import { configuration, fitConfiguration } from "./lib/pcf.mjs";
+import { flight, noiseOf, withNoise } from "./lib/ocm.mjs";
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : fallback; };
 const THEORY = arg("theory", "SGP4XP");
@@ -104,7 +106,7 @@ if (THEORY === "SDNAP") {
 }
 
 const command = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
-const CONFIG = configuration({ theory: THEORY });
+const CONFIG = fitConfiguration({ theory: THEORY });
 const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
 const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
 const ms = (text) => Date.parse(text.endsWith("Z") ? text : `${text}Z`);
@@ -186,22 +188,12 @@ function oemBytes(head, lines, useStart, useStop, frame = "GCRF") {
   return b.asUint8Array();
 }
 async function call(methodId, inputs) {
-  const r = await command.invoke({ methodId, inputs: [CONFIG, ...inputs] });
+  const r = await command.invoke({ methodId, inputs: methodId === "fit" ? [CONFIG, ...inputs] : inputs });
   if (r.statusCode !== 0) throw new Error(`${methodId}: ${r.errorCode} ${r.errorMessage}`);
   return r.outputs;
 }
-/** The $OMM with USER_DEFINED_SDNAP_COV_NOISE replaced (bytes in, bytes out; the module reads it). */
-function withNoise(ommBytes, noise) {
-  const t = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(ommBytes)).unpack();
-  const p = t.USER_DEFINED_PARAMETERS.find((u) => u.PARAM_NAME === "SDNAP_COV_NOISE");
-  p.PARAM_VALUE = noise.map((v) => v.toPrecision(17)).join(" ");
-  const b = new flatbuffers.Builder(4096);
-  OMM.finishOMMBuffer(b, t.pack(b));
-  return b.asUint8Array();
-}
-const userDefined = (bytes) => Object.fromEntries(OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack().USER_DEFINED_PARAMETERS.map((u) => [u.PARAM_NAME, u.PARAM_VALUE]));
-async function propagated(ommBytes, gridBytes) {
-  const [out] = await call("propagate", [{ portId: "omm", typeRef: ommType, payload: ommBytes }, { portId: "grid", typeRef: oemType, payload: gridBytes }]);
+async function propagated(set, lines) {
+  const [out] = await call("propagate", flight([set], { output: { EPOCHS: lines.map((L) => L.EPOCH), FRAME: 2 } }));  // GCRF
   const blk = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(out.payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
   if (blk.COVARIANCE_MATRIX_LINES.length !== blk.EPHEMERIS_DATA_LINES.length) throw new Error("propagate: no covariance lines");
   return blk;
@@ -234,11 +226,11 @@ async function runWindow(w, calibrate) {
   }
   if (fitLines.length < 48 || heldLines.length < 10) return { skipped: "too few reference states" };
   const fitted = await call("fit", [{ portId: "ephemeris", typeRef: oemType, payload: oemBytes(s.head, fitLines, fitLines[0].EPOCH, fitLines.at(-1).EPOCH) }]);
-  const omm = fitted.find((o) => o.portId === "elements").payload;
-  const ud = userDefined(omm);
-  if (ud.SDNAP_COV_NOISE === undefined) return { skipped: "no covariance" };
-  const tA = Number(ud.SDNAP_COV_NOISE.split(" ")[4]);
-  const grid = oemBytes(s.head, heldLines, null, null);
+  const omm = new Uint8Array(fitted.find((o) => o.portId === "elements").payload);
+  const model = noiseOf(omm);
+  if (!model) return { skipped: "no covariance" };
+  const tA = model.noise[4];
+  const grid = heldLines;
   const fitEnd = ms(fitLines.at(-1).EPOCH);
   // calibration: P is P0 + sum_k s_k^2 B_k (s_e, s_i, s_l, s_d); each B_k from a propagation at s_k = UNIT alone
   const P = await propagated(calibrate ? withNoise(omm, [0, 0, 0, 0, tA]) : omm, grid);
@@ -250,9 +242,8 @@ async function runWindow(w, calibrate) {
     const B = units.map((u) => pos3(u.COVARIANCE_MATRIX_LINES[k]).map((v, j) => (v - P0[j]) / (UNIT * UNIT)));
     return { lead: (ms(L.EPOCH) - fitEnd) / DAY, e, P0, B };
   });
-  const drag = ud.SDNAP_COV_REGIME === "DRAG";
-  const nDay = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(omm)).MEAN_MOTION() * 2 * Math.PI;
-  return { samples, regime: drag ? "drag" : "above", ngRate: Number(ud.SDNAP_COV_NG_RATE), nDay, noise: ud.SDNAP_COV_NOISE };
+  const drag = model.regime === "DRAG";
+  return { samples, regime: drag ? "drag" : "above", ngRate: model.ngRate, nDay: model.nDay, noise: model.noise.map(String).join(" ") };
 }
 
 // --- statistics

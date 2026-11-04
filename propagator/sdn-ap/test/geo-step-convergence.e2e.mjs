@@ -23,14 +23,15 @@ import {timingStandard} from 'spacedatastandards.org/lib/js/OEM/timingStandard.j
 import {configuration} from './lib/pcf.mjs';
 import {packOem,rfm} from './lib/frames.mjs';
 import {wasmPath} from './lib/module.mjs';
+import {seedOcm,flight} from './lib/ocm.mjs';
 import {confirmWindows} from './lib/geo-window-confirmation.mjs';
 import {buildDiagnostic} from './lib/ap-diagnostic.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z');
 const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
-function seed(i){const b=new fb.Builder(1024);OMM.finishOMMBuffer(b,Object.assign(new OMMT(),{EPOCH:epoch,MEAN_ELEMENT_THEORY:1,MEAN_MOTION:1.0027,ECCENTRICITY:.0002,INCLINATION:i,RA_OF_ASC_NODE:40,ARG_OF_PERICENTER:30,MEAN_ANOMALY:20,NORAD_CAT_ID:99004,BSTAR:0,MEAN_MOTION_DDOT:0,USER_DEFINED_PARAMETERS:[Object.assign(new U(),{PARAM_NAME:'SDNAP_GRAVITY_TERMS',PARAM_VALUE:'31,20'})]}).pack(b));return b.asUint8Array().slice();}
-function grid(days){const lines=days.map(d=>Object.assign(new Line(),{EPOCH:new Date(t0+d*86400000).toISOString().replace('Z','')}));return packOem(Object.assign(new OEMT(),{EPHEMERIS_DATA_BLOCK:[Object.assign(new Block(),{CENTER_NAME:'EARTH',REFERENCE_FRAME:rfm('GCRF'),TIME_SYSTEM:timingStandard.UTC,START_TIME:lines[0].EPOCH,STOP_TIME:lines.at(-1).EPOCH,EPHEMERIS_DATA_LINES:lines})]}));}
-const cfg=configuration({theory:'SGP4XP',forces:{EPHEMERIS_SOURCE:'',HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:31,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:20,ENABLE_DRAG:false}});
-async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'command'});return{h,async fly(i,days){const req={methodId:'propagate',inputs:[cfg,{portId:'omm',typeRef:type('OMM'),payload:seed(i)},{portId:'grid',typeRef:type('OEM'),payload:grid(days)}]};const start=performance.now(),r=await h.invoke(req),ms=performance.now()-start;assert.equal(r.statusCode,0,r.errorMessage);const states=OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map(v=>[v.X,v.Y,v.Z]);return{ms,states};}};}
+// the seeded AP set (caps 31 and 20 on the theory's flux model), alone, at the days' epochs in GCRF
+function seed(i){return seedOcm({epoch,n:1.0027,e:.0002,i,raan:40,argp:30,ma:20,norad:99004,tesseral:31,zonal:20});}
+const output=(days)=>({output:{EPOCHS:days.map(d=>new Date(t0+d*86400000).toISOString().replace('Z','')),FRAME:2}});
+async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'command'});return{h,async fly(i,days){const req={methodId:'propagate',inputs:flight([seed(i)],output(days))};const start=performance.now(),r=await h.invoke(req),ms=performance.now()-start;assert.equal(r.statusCode,0,r.errorMessage);const states=OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map(v=>[v.X,v.Y,v.Z]);return{ms,states};}};}
 function variant(step){return buildDiagnostic('geo-step-'+String(step).replace('.','_'),' ',s=>{let v=s.replace(/constexpr double kLongPeriodStep = 95\.0;/,`constexpr double kLongPeriodStep = ${step};`);v=v.replace(/return ctx\.ap_frame && ctx\.resonance == 1 \? [^;]+ : kLongPeriodStep;/,'return kLongPeriodStep;');return v;});}
 const baselinePath=variant(95),baseline=await open(baselinePath),reference=await open(variant(95/16));
 const pilot=process.argv.includes('--pilot'),steps=pilot?[47.5,38,95/3]:['production'];

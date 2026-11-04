@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // E2E (task modules-sdn-ap-remove-sdnap-theory-20261025): maneuvers as boundaries between SGP4XP sets (DESIGN 5.1).
-// The 'maneuver' method carries an SGP4XP set across the burns of $MNV records. Every number compared here is the
+// The 'maneuver' method carries an SGP4XP set (one $OCM) across the burns of $MNV records. Every number compared here is the
 // module's: the pre-burn state from `propagate` of the set, the post-burn state from `propagate` of the post-burn
 // set (or the grid the maneuver method writes), and the UVW to TEME rotation from sdnap_uvw_to_frame.
 // - An impulse of 1 mm/s, 10 cm/s or 1 m/s along V, and 1 m/s along U and W, at 24 h: at the burn epoch the post set's
@@ -11,10 +11,11 @@
 //   the pre-burn set's mean elements is sinc(dL/2) of the impulse set's, within 1e-3 relative (sinc 0.981 for 10
 //   minutes, 0.442 for 60).
 // - The $MNV record: PRE_EVENT and POST_EVENT states, DELTA_VEL, the CHARACTERIZATION from the Delta v direction.
-// - The fit of an arc across a burn (the grid the maneuver method writes): FIT.DEFAULT_SPAN_HOURS 24 fits the latest
+// - The fit of an arc across a burn (the states the maneuver method writes): FIT.DEFAULT_SPAN_HOURS 24 fits the latest
 //   24 h; a 100 m/s burn 12 h into a 48 h arc: the default span is shortened to the 24 h that holds one set; a 100 m/s
 //   burn 36 h in: no set holds the arc (fit-implausible).
-// - $PCF refusals by name; refusals of the maneuver method: a burn before the epoch, no $MNV.
+// - $PCF refusals by name; refusals of the maneuver method: a burn before the epoch, no $MNV, a set of the removed
+//   theory's number (theory-not-flown:UNKNOWN), an AP set (theory-not-flown:AP).
 // JS orchestrates and compares; the dynamics, the fit and the maps are the module's.
 //   node test/maneuver.e2e.mjs
 import * as flatbuffers from "flatbuffers";
@@ -23,20 +24,20 @@ import { OEM, OEMT } from "spacedatastandards.org/lib/js/OEM/OEM.js";
 import { ephemerisDataBlockT } from "spacedatastandards.org/lib/js/OEM/ephemerisDataBlock.js";
 import { ephemerisDataLineT } from "spacedatastandards.org/lib/js/OEM/ephemerisDataLine.js";
 import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard.js";
-import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { MNV, MNVT } from "spacedatastandards.org/lib/js/MNV/MNV.js";
 import { maneuverStatus } from "spacedatastandards.org/lib/js/MNV/maneuverStatus.js";
 import { maneuverCharacterization } from "spacedatastandards.org/lib/js/MNV/maneuverCharacterization.js";
 import { packOem, rfm } from "./lib/frames.mjs";
 import { openModule, wasmPath } from "./lib/module.mjs";
-import { configuration, withConfiguration } from "./lib/pcf.mjs";
+import { configuration, fitConfiguration, withConfiguration } from "./lib/pcf.mjs";
+import { seedOcm, ocmOf, repackOcm } from "./lib/ocm.mjs";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
 const m = await openModule();
 const x = m.x, mem = () => m.harness.memory.buffer;
 const command = withConfiguration(await createStandaloneHarness("browser", wasmPath, { surface: "command" }));
-const ommType = { schemaName: "OMM.fbs", fileIdentifier: "$OMM", rootTypeName: "OMM" };
+const ocmType = { schemaName: "OCM.fbs", fileIdentifier: "$OCM", rootTypeName: "OCM" };
 const oemType = { schemaName: "OEM.fbs", fileIdentifier: "$OEM", rootTypeName: "OEM" };
 const mnvType = { schemaName: "MNV.fbs", fileIdentifier: "$MNV", rootTypeName: "MNV" };
 const EPOCH = "2026-10-20T12:00:00.000000";
@@ -45,29 +46,13 @@ const iso = (s) => new Date(epochMs + s * 1000).toISOString().replace("Z", "000"
 const norm = (a) => Math.hypot(...a);
 
 // the seed: an SGP4XP set (ISS-like, 420 km)
-const seed = (() => {
-  const b = new flatbuffers.Builder(256);
-  const epoch = b.createString(EPOCH);
-  OMM.startOMM(b); OMM.addEpoch(b, epoch); OMM.addMeanMotion(b, 15.5); OMM.addEccentricity(b, 0.0005); OMM.addInclination(b, 51.6);
-  OMM.addRaOfAscNode(b, 120); OMM.addArgOfPericenter(b, 90); OMM.addMeanAnomaly(b, 30); OMM.addNoradCatId(b, 90030);
-  OMM.addMeanElementTheory(b, 1); OMM.addBstar(b, 0.012); OMM.addMeanMotionDdot(b, 0.01);
-  OMM.finishOMMBuffer(b, OMM.endOMM(b));
-  return b.asUint8Array();
-})();
-/** A TEME grid $OEM of explicit epochs (s from the epoch). */
-const grid = (seconds) => {
-  const block = new ephemerisDataBlockT();
-  block.CENTER_NAME = "EARTH"; block.REFERENCE_FRAME = rfm("TEME", "both"); block.TIME_SYSTEM = timingStandard.UTC;
-  block.START_TIME = iso(seconds[0]); block.STOP_TIME = iso(seconds.at(-1));
-  block.EPHEMERIS_DATA_LINES = seconds.map((s) => new ephemerisDataLineT(iso(s)));
-  const o = new OEMT(); o.CCSDS_OEM_VERS = 3.0; o.ORIGINATOR = "maneuver E2E"; o.EPHEMERIS_DATA_BLOCK = [block];
-  const b = new flatbuffers.Builder(1 << 16); OEM.finishOEMBuffer(b, o.pack(b));
-  return { portId: "grid", typeRef: oemType, payload: b.asUint8Array() };
-};
+const seed = seedOcm({ epoch: EPOCH, n: 15.5, e: 0.0005, i: 51.6, raan: 120, argp: 90, ma: 30, bterm: 0.012, agom: 0.01, norad: 90030 });
+/** The $PCF of explicit output epochs (s from the epoch), TEME. */
+const grid = (seconds) => configuration({ output: { EPOCHS: seconds.map(iso) } });
 const linesOf = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(bytes)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
 const stateOf = (L) => [L.X, L.Y, L.Z, L.X_DOT, L.Y_DOT, L.Z_DOT];
 const propagate = async (omm, seconds) => {
-  const r = await command.invoke({ methodId: "propagate", inputs: [{ portId: "omm", typeRef: ommType, payload: omm }, grid(seconds)] });
+  const r = await command.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: ocmType, payload: omm }, grid(seconds)] });
   if (r.statusCode !== 0) throw new Error(`propagate: ${r.errorCode} ${r.errorMessage}`);
   return linesOf(r.outputs[0].payload).map(stateOf);
 };
@@ -82,7 +67,7 @@ const mnv = (startS, endS, dv) => {
   return { portId: "maneuvers", typeRef: mnvType, payload: b.asUint8Array() };
 };
 const across = async (omm, startS, endS, dv, seconds) =>
-  command.invoke({ methodId: "maneuver", inputs: [{ portId: "omm", typeRef: ommType, payload: omm }, mnv(startS, endS, dv), ...(seconds ? [grid(seconds)] : [])] });
+  command.invoke({ methodId: "maneuver", inputs: [{ portId: "ocm", typeRef: ocmType, payload: omm }, mnv(startS, endS, dv), ...(seconds ? [grid(seconds)] : [])] });
 /** A UVW vector of the state (r, v) in TEME, from the module. */
 const uvwToTeme = (s6, uvw) => {
   const p = x.sdnap_alloc(96);
@@ -129,8 +114,8 @@ for (const [label, dv] of [["V 1 mm/s", [0, 1e-6, 0]], ["V 10 cm/s", [0, 1e-4, 0
   const evec = (e, raan, argp) => [e * Math.cos((raan + argp) * rad), e * Math.sin((raan + argp) * rad)];
   const e00 = evec(e0, raan0, argp0);
   const increment = (setBytes) => {
-    const o = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(setBytes));
-    const v = evec(o.ECCENTRICITY(), o.RA_OF_ASC_NODE(), o.ARG_OF_PERICENTER());
+    const o = ocmOf(setBytes).MEAN_ELEMENTS;
+    const v = evec(o.ECCENTRICITY, o.RA_OF_ASC_NODE, o.ARG_OF_PERICENTER);
     return norm([v[0] - e00[0], v[1] - e00[1]]);
   };
   const dv = [0, 1e-3, 0];
@@ -157,22 +142,24 @@ const arcAcross = async (burnS, dv) => {
   blk.REFERENCE_FRAME = rfm("TEME", "both");
   return packOem(data);
 };
-const fitCall = (options, payload) => command.invoke({ methodId: "fit", inputs: [configuration(options), { portId: "ephemeris", typeRef: oemType, payload }] });
-const spanOf = (c) => Number(/span ([\d.]+) h/.exec(c ?? "")?.[1]);
-const commentOf = (r) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.find((o) => o.portId === "elements").payload)).COMMENT();
+const fitCall = (options, payload) => command.invoke({ methodId: "fit", inputs: [fitConfiguration(options), { portId: "ephemeris", typeRef: oemType, payload }] });
+const recordOf = (r) => ocmOf(r.outputs.find((o) => o.portId === "elements").payload).ORBIT_DETERMINATION;
+const spanOf = (od) => od.ACTUAL_OD_SPAN * 24;
+const commentOf = (r) => recordOf(r).COMMENT.join("; ");
 {
   const calm = await arcAcross(30 * 24 * 3600, [0, 0, 0]);  // a burn far beyond the arc: none inside it
   const full = await fitCall({}, calm);
   const day = await fitCall({ theory: "SGP4XP", fit: { DEFAULT_SPAN_HOURS: 24 } }, calm);
   check(full.statusCode === 0 && day.statusCode === 0, `fit of a calm arc: ${full.errorCode} ${day.errorCode}`);
   if (day.statusCode === 0) {
-    console.log(`$PCF FIT.DEFAULT_SPAN_HOURS 24 on the 48 h arc: span ${spanOf(commentOf(day))} h (default: ${spanOf(commentOf(full))} h)`);
-    check(Math.abs(spanOf(commentOf(day)) - 24) < 0.01, `FIT.DEFAULT_SPAN_HOURS 24: ${commentOf(day)}`);
+    console.log(`$PCF FIT.DEFAULT_SPAN_HOURS 24 on the 48 h arc: span ${spanOf(recordOf(day))} h (default: ${spanOf(recordOf(full))} h)`);
+    check(Math.abs(spanOf(recordOf(day)) - 24) < 0.01, `FIT.DEFAULT_SPAN_HOURS 24: ${commentOf(day)}`);
   }
   const soft = await fitCall({}, await arcAcross(12 * 3600, [0, 0.1, 0]));
   const softComment = soft.statusCode === 0 ? commentOf(soft) : "";
-  console.log(`a 100 m/s burn 12 h into the 48 h arc: ${soft.errorCode ?? "fitted"}; ${softComment.replace(/^.*?; (\d+ states fitted)/, "$1")}`);
-  check(soft.statusCode === 0 && /span 24\.000 h \(shortened/.test(softComment), `a burn inside the default span only: ${soft.errorCode} ${softComment}`);
+  const softSpan = soft.statusCode === 0 ? spanOf(recordOf(soft)) : NaN;
+  console.log(`a 100 m/s burn 12 h into the 48 h arc: ${soft.errorCode ?? "fitted"}; span ${softSpan} h; ${softComment}`);
+  check(soft.statusCode === 0 && Math.abs(softSpan - 24) < 0.01 && /fit arc: shortened/.test(softComment), `a burn inside the default span only: ${soft.errorCode} ${softComment}`);
   const torn = await fitCall({}, await arcAcross(36 * 3600, [0, 0.1, 0]));
   console.log(`a 100 m/s burn 36 h into the 48 h arc: ${torn.errorCode} ${torn.errorMessage}`);
   check(torn.statusCode !== 0 && torn.errorCode === "fit-implausible", `a torn arc: ${torn.errorCode} ${torn.errorMessage}`);
@@ -198,14 +185,13 @@ const commentOf = (r) => OMM.getRootAsOMM(new flatbuffers.ByteBuffer(r.outputs.f
   const early = await across(seed, -7 * 86400, -7 * 86400, [0, 1e-3, 0]);
   check(early.statusCode !== 0 && early.errorCode === "maneuver-before-epoch", `a burn before the epoch: ${early.errorCode}`);
   // a missing required port is refused by the SDK's command surface before the module runs
-  const none = await command.invoke({ methodId: "maneuver", inputs: [{ portId: "omm", typeRef: ommType, payload: seed }] }).catch((e) => ({ statusCode: 400, errorCode: e?.response?.errorCode ?? String(e) }));
+  const none = await command.invoke({ methodId: "maneuver", inputs: [{ portId: "ocm", typeRef: ocmType, payload: seed }] }).catch((e) => ({ statusCode: 400, errorCode: e?.response?.errorCode ?? String(e) }));
   check(none.statusCode !== 0 && (none.errorCode === "missing-required-input" || none.errorCode === "missing-input"), `no $MNV: ${none.errorCode}`);
-  const removed = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(seed)).unpack();
-  removed.MEAN_ELEMENT_THEORY = 4;  // the number of the removed theory
-  const sb = new flatbuffers.Builder(256); OMM.finishOMMBuffer(sb, removed.pack(sb));
-  const gone = await across(sb.asUint8Array(), tb, tb, [0, 1e-3, 0]);
-  check(gone.statusCode !== 0 && gone.errorCode === "invalid-omm", `a set of the removed theory: ${gone.errorCode}`);
-  console.log(`refusals: ${early.errorCode}, ${none.errorCode}, ${gone.errorCode}`);
+  const gone = await across(repackOcm(seed, (t) => { t.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY = 4; }), tb, tb, [0, 1e-3, 0]);  // the number of the removed theory
+  check(gone.statusCode !== 0 && gone.errorCode === "theory-not-flown:UNKNOWN", `a set of the removed theory: ${gone.errorCode}`);
+  const ap = await across(seedOcm({ epoch: EPOCH, n: 15.5, e: 0.0005, i: 51.6, raan: 120, argp: 90, ma: 30, bterm: 0.012, agom: 0.01, norad: 90030, tesseral: 12 }), tb, tb, [0, 1e-3, 0]);
+  check(ap.statusCode !== 0 && ap.errorCode === "theory-not-flown:AP", `an AP set: ${ap.errorCode}`);
+  console.log(`refusals: ${early.errorCode}, ${none.errorCode}, ${gone.errorCode}, ${ap.errorCode}`);
 }
 
 console.log(failures.length === 0 ? "\nmaneuver E2E: PASS" : `\nmaneuver E2E: FAIL\n  ${failures.join("\n  ")}`);

@@ -54,7 +54,10 @@ async function replay({group, index, modulePaths, fit = null, moduleFrames = fal
   const toGcrf = async (st, epochs) => probe ? st.map((s, k) => { const {whole, frac} = probe.F.jdOf(epochs[k]); const o = probe.F.rotate(probe.mod, whole, frac, [...s.r, ...s.v], probe.F.FRAME_PROBE.TEME_TO_GCRF).out; return {r: o.slice(0, 3), v: o.slice(3, 6)}; }) : m.toAxes(st, epochs, 'GCRF');
   // each module through the SDK's isomorphic harness as ap.mjs's openAp does, the fit's $OBD kept (SPEC 12.8's diagnostics)
   const SDK = pathToFileURL(createRequire(modules + 'propagator/sdn-ap/package.json').resolve('space-data-module-sdk/testing/isomorphic')).href;
+  const O = await import(TL + 'ocm.mjs');
   for (const p of modulePaths) {
+    // this build on $OCM (test/lib/ocm.mjs openApOcm); a 0.4 baseline as the vendored openAp drives it, its $OBD kept
+    if (!O.legacyBuild(p)) { const A = await O.openApOcm(p); A.ocm = true; hosts.push(A); continue; }
     const A = await L.AP.openAp(p), h = await (await import(SDK)).createStandaloneHarness('browser', p, {surface: 'direct'});
     const weather = (extra) => (extra?.rows ? [{portId: 'space_weather', typeRef: S.TYPE('SPW'), payload: extra.rows}] : []);
     A.fit = async (oem, pcf, extra) => {
@@ -102,7 +105,7 @@ async function replay({group, index, modulePaths, fit = null, moduleFrames = fal
           const t0 = performance.now(), f = await A.fit(oem, pcf, ex), fitMs = performance.now() - t0;
           if (!f.ok) throw new Error(f.error);
           const st = await A.propagate(f.omm, gridB, pcf, ex, epochs.length);
-          const fo = S.readFitOmm(f.omm), ob = f.obd ? S.readObd(f.obd) : {};
+          const fo = A.ocm ? O.readFitOcm(f.omm) : S.readFitOmm(f.omm), ob = A.ocm ? {sigmaLnB: fo.sigmaLnB} : f.obd ? S.readObd(f.obd) : {};
           row.arms.push({ok: true, bterm: fo.bterm, agom: fo.agom, rmsKm: fo.fitRmsKm, comment: fo.u.COMMENT, sigmaLnB: ob.sigmaLnB ?? null,
             bModel: ob.bModel ?? null, fitMs, arcStates: thin.length, days: score(await m.rtn(await toGcrf(st, epochs), truth))});
         } catch (error) {
