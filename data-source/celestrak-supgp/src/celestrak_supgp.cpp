@@ -26,10 +26,13 @@
  * lane and they NEVER count as "our OD":
  *   - SourceTags.SOURCE_NAME = the provider registry token's source name (ses / planet / iridium / telesat /
  *     kuiper / ast-spacemobile / css) — distinct per provider, and distinct from every Tier-1 adapter's.
- *   - USER_DEFINED SDN_DATA_SOURCE = "CelesTrak SupGP", SDN_INDEPENDENT = "false" (the NON-INDEPENDENT flag).
- *   - the COMMENT states the same in prose.
- *   - CelesTrak's own fit residual (RMS) and DATA_SOURCE token are kept as USER_DEFINED SDN_CELESTRAK_RMS /
- *     SDN_CELESTRAK_DATA_SOURCE (they are not OMM keywords, so they are USER_DEFINED parameters).
+ *   - each $OMM's PROVENANCE ($PVN): SOURCE_ID the source name, ORIGINATOR "CelesTrak SupGP", PROVIDER_ID this
+ *     module, PRODUCER this module and its version, LINEAGE CelesTrak's DATA_SOURCE token (records of one token share
+ *     a lineage, so they are not independent of each other).
+ *   - the COMMENT states it in prose. CelesTrak's fit residual (RMS) has no reader and an $OMM no statistic: it is
+ *     not carried.
+ * EPHEMERIS_TYPE 4 rows are SGP4-XP sets: MEAN_ELEMENT_THEORY SGP4XP, BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT
+ * (m**2/kg), as the feed's columns carry them.
  * SYNTHESIS CONFIG (data, not code — owned by analysis/catalog-synthesis): each source name must be listed in its
  * config/provider-gate-status.json at a NON-hard-pass level so it is published but NEVER outranks Space-Track GP.
  *
@@ -68,7 +71,9 @@ namespace R = sdn::runtime;
 constexpr const char* kDefaultBaseUrl = "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php";
 constexpr const char* kDefaultFormat = "JSON";
 constexpr long kDefaultObjectCap = 2000;
-constexpr const char* kDataSource = "CelesTrak SupGP";  // the NON-INDEPENDENT lane label
+constexpr const char* kModuleId = "com.orbpro.celestrak-supgp";
+constexpr const char* kModuleVersion = "2.0.0";
+constexpr const char* kDataSource = "CelesTrak SupGP";  // the NON-INDEPENDENT lane label (PVN.ORIGINATOR)
 constexpr const char* kDatasetPrefix = "supgp-";        // DATASET_ID = supgp-<token>
 
 // Upstream origin and its usage terms, as data-source/celestrak-request names them (quoted verbatim from
@@ -200,7 +205,6 @@ std::vector<std::string> split_json_objects(const std::string& s) {
 
 struct Omm {
     std::string object_name, object_id, epoch, classification_type;
-    std::string rms;          // CelesTrak fit residual (a string in the feed)
     std::string data_source;  // CelesTrak DATA_SOURCE token (e.g. SES-E, AST-E)
     double mean_motion = 0, eccentricity = 0, inclination = 0;
     double raan = 0, argp = 0, mean_anomaly = 0;
@@ -215,7 +219,6 @@ Omm parse_json_object(const std::string& obj) {
     json_string_field(obj, "OBJECT_ID", &o.object_id);
     json_string_field(obj, "EPOCH", &o.epoch);
     json_string_field(obj, "CLASSIFICATION_TYPE", &o.classification_type);
-    json_string_field(obj, "RMS", &o.rms);
     json_string_field(obj, "DATA_SOURCE", &o.data_source);
     o.mean_motion = json_double_field(obj, "MEAN_MOTION", 0);
     o.eccentricity = json_double_field(obj, "ECCENTRICITY", 0);
@@ -251,7 +254,7 @@ std::vector<Omm> parse_csv(const std::string& body) {
     const int c_et = col("EPHEMERIS_TYPE"), c_ct = col("CLASSIFICATION_TYPE"), c_norad = col("NORAD_CAT_ID");
     const int c_esn = col("ELEMENT_SET_NO"), c_rev = col("REV_AT_EPOCH"), c_bstar = col("BSTAR");
     const int c_mmd = col("MEAN_MOTION_DOT"), c_mmdd = col("MEAN_MOTION_DDOT");
-    const int c_rms = col("RMS"), c_ds = col("DATA_SOURCE");
+    const int c_ds = col("DATA_SOURCE");
     for (size_t li = hdr + 1; li < lines.size(); ++li) {
         const std::string line = trim(lines[li]);
         if (line.empty()) continue;
@@ -264,7 +267,6 @@ std::vector<Omm> parse_csv(const std::string& body) {
         o.object_id = sv(c_id);
         o.epoch = sv(c_epoch);
         o.classification_type = sv(c_ct);
-        o.rms = sv(c_rms);
         o.data_source = sv(c_ds);
         o.mean_motion = dv(c_mm);
         o.eccentricity = dv(c_ecc);
@@ -548,14 +550,16 @@ const char* const kComment[] = {
     "CelesTrak Supplemental GP (SupGP) OMM re-published by SDN — App 2 A2.9.",
     "NON-INDEPENDENT: these are CelesTrak-FITTED SGP4 mean elements, NOT an SDN OD solution and NOT the operator's raw "
     "ephemeris.",
-    "data_source=CelesTrak SupGP; must never count as our OD; never outranks Space-Track GP in synthesis.",
+    "Must never count as SDN OD; never outranks Space-Track GP in synthesis.",
 };
 
-// One $OMM (not size-prefixed): the legacy record's keywords, typed; the SDN lane keywords as USER_DEFINED parameters.
+// One $OMM (not size-prefixed): the feed's keywords, typed; the lane labels in PROVENANCE.
 Bytes build_omm(const Omm& o, const std::string& source_name) {
     std::string comment;
-    for (const char* line : kComment) { comment += line; comment += '\n'; }
-    comment += "SOURCE_NAME=" + source_name + " CELESTRAK_DATA_SOURCE=" + o.data_source + " CELESTRAK_RMS=" + o.rms;
+    for (const char* line : kComment) {
+        if (!comment.empty()) comment += '\n';
+        comment += line;
+    }
 
     flatbuffers::FlatBufferBuilder b(2048);
     const auto comment_off = b.CreateString(comment);
@@ -566,17 +570,11 @@ Bytes build_omm(const Omm& o, const std::string& source_name) {
         CreateRFM(b, RFMUnion_CelestialFrameWrapper, CreateCelestialFrameWrapper(b, CelestialFrame_TEMEOFDATE).Union());
     const auto epoch_off = b.CreateString(o.epoch);
     const auto class_off = b.CreateString(o.classification_type);
-    const std::pair<const char*, std::string> params[] = {
-        {"SDN_SOURCE_NAME", source_name},
-        {"SDN_DATA_SOURCE", kDataSource},
-        {"SDN_INDEPENDENT", "false"},
-        {"SDN_CELESTRAK_DATA_SOURCE", o.data_source},
-        {"SDN_CELESTRAK_RMS", o.rms},
-    };
-    std::vector<flatbuffers::Offset<OMMUserDefinedParameter>> param_offsets;
-    for (const auto& [name, value] : params)
-        param_offsets.push_back(CreateOMMUserDefinedParameterDirect(b, name, value.c_str()));
-    const auto params_off = b.CreateVector(param_offsets);
+    const std::string producer = std::string(kModuleId) + " " + kModuleVersion;
+    const auto provenance = CreatePVNDirect(b, source_name.c_str(), pvnSourceKind_Unspecified, kDataSource, kModuleId,
+                                            producer.c_str(), pvnLicenseClass_Unspecified, nullptr,
+                                            o.data_source.empty() ? nullptr : o.data_source.c_str());
+    const bool xp = o.ephemeris_type == 4;  // SGP4-XP: BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT
 
     OMMBuilder r(b);
     r.add_CCSDS_OMM_VERS(2.0);
@@ -586,7 +584,7 @@ Bytes build_omm(const Omm& o, const std::string& source_name) {
     r.add_CENTER_NAME(center_off);
     r.add_REFERENCE_FRAME(frame_off);
     r.add_TIME_SYSTEM(timingStandard_UTC);
-    r.add_MEAN_ELEMENT_THEORY(meanElementSource_SGP4);
+    r.add_MEAN_ELEMENT_THEORY(xp ? meanElementSource_SGP4XP : meanElementSource_SGP4);
     r.add_EPOCH(epoch_off);
     r.add_MEAN_MOTION(o.mean_motion);
     r.add_ECCENTRICITY(o.eccentricity);
@@ -602,7 +600,7 @@ Bytes build_omm(const Omm& o, const std::string& source_name) {
     r.add_BSTAR(o.bstar);
     r.add_MEAN_MOTION_DOT(o.mm_dot);
     r.add_MEAN_MOTION_DDOT(o.mm_ddot);
-    r.add_USER_DEFINED_PARAMETERS(params_off);
+    r.add_PROVENANCE(provenance);
     FinishOMMBuffer(b, r.Finish());
     return Bytes(b.GetBufferPointer(), b.GetBufferPointer() + b.GetSize());
 }
@@ -626,7 +624,7 @@ Bytes build_ingest_request(const Job& job, const std::string& batch_id, const ch
     };
     const auto provenance = R::CreateProvenanceDirect(
         b, job.url.c_str(), r.STATUS(), opt(etag), opt(last_modified), opt(content_type), r.RETRIEVED_MS(),
-        "celestrak-supgp", "1.1.0", batch_id.c_str(), normalized_sha256.c_str(), static_cast<uint64_t>(records),
+        "celestrak-supgp", kModuleVersion, batch_id.c_str(), normalized_sha256.c_str(), static_cast<uint64_t>(records),
         &schemas, &counts, &warnings, false, &attributes);
     const std::string license = license_identifier(job.license);
     const auto tags = R::CreateSourceTagsDirect(b, job.provider_id.c_str(), job.source_name.c_str(), batch_id.c_str(),

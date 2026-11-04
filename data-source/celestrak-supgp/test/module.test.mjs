@@ -82,7 +82,6 @@ const omms = (r) => {
     return OMM.getRootAsOMM(new ByteBuffer(new Uint8Array(b))).unpack();
   });
 };
-const params = (o) => Object.fromEntries(o.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
 
 test("the artifact validates, and every port names one concrete FlatBuffer type", async () => {
   const result = await validateArtifactWithStandards({ wasmPath, manifest, standardsRoot });
@@ -171,9 +170,10 @@ test("parse: every registry fixture becomes its token's OMM batch with the feed'
       assert.equal(o.CLASSIFICATION_TYPE, f.CLASSIFICATION_TYPE);
       assert.match(o.COMMENT, /^CelesTrak Supplemental GP \(SupGP\) OMM re-published by SDN/);
       assert.match(o.COMMENT, /\nNON-INDEPENDENT: these are CelesTrak-FITTED SGP4 mean elements/);
-      assert.ok(o.COMMENT.endsWith(`SOURCE_NAME=${sourceName} CELESTRAK_DATA_SOURCE=${f.DATA_SOURCE} CELESTRAK_RMS=${f.RMS}`));
-      assert.deepEqual(o.USER_DEFINED_PARAMETERS.map((p) => p.PARAM_NAME), ["SDN_SOURCE_NAME", "SDN_DATA_SOURCE", "SDN_INDEPENDENT", "SDN_CELESTRAK_DATA_SOURCE", "SDN_CELESTRAK_RMS"]);
-      assert.deepEqual(params(o), { SDN_SOURCE_NAME: sourceName, SDN_DATA_SOURCE: "CelesTrak SupGP", SDN_INDEPENDENT: "false", SDN_CELESTRAK_DATA_SOURCE: f.DATA_SOURCE, SDN_CELESTRAK_RMS: f.RMS });
+      assert.deepEqual(o.USER_DEFINED_PARAMETERS, []);
+      assert.deepEqual(
+        [o.PROVENANCE.SOURCE_ID, o.PROVENANCE.ORIGINATOR, o.PROVENANCE.PROVIDER_ID, o.PROVENANCE.PRODUCER, o.PROVENANCE.LINEAGE],
+        [sourceName, "CelesTrak SupGP", manifest.pluginId, `${manifest.pluginId} ${manifest.version}`, f.DATA_SOURCE]);
     });
   }
 });

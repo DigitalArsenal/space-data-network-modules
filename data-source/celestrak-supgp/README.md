@@ -78,17 +78,17 @@ the status board keep them in their own lane and they **never count as "our OD":
 - **SourceTags.SOURCE_NAME** (the IngestRequest's tags) = the provider's source
   name (distinct per provider, and distinct from every Tier-1 adapter's). This is
   the classifier / grouping key.
-- Each `$OMM` carries CCSDS USER_DEFINED parameters (`USER_DEFINED_PARAMETERS`):
-  `SDN_SOURCE_NAME = <sourceName>`, `SDN_DATA_SOURCE = "CelesTrak SupGP"`,
-  `SDN_INDEPENDENT = "false"` (the NON-INDEPENDENT flag),
-  `SDN_CELESTRAK_DATA_SOURCE` (CelesTrak's own token, e.g. `AST-E`) and
-  `SDN_CELESTRAK_RMS` (CelesTrak's fit residual).
-- The `COMMENT` states the same in prose (its lines joined by a line feed).
-- `RMS` and `DATA_SOURCE` are **not** part of the canonical SDS OMM schema, so
-  they live only under `USER_DEFINED`, never as bare record fields.
+- Each `$OMM` carries its `PROVENANCE` (`$PVN`): `SOURCE_ID` the source name,
+  `ORIGINATOR` `CelesTrak SupGP`, `PROVIDER_ID` `com.orbpro.celestrak-supgp`,
+  `PRODUCER` the module and its version, `LINEAGE` CelesTrak's `DATA_SOURCE`
+  token (e.g. `AST-E`): records of one lineage are not independent of each other.
+- The `COMMENT` states the non-independence in prose (its lines joined by a line
+  feed). CelesTrak's `RMS` has no reader and an `$OMM` no statistic: it is not
+  carried.
 - Frame/time are declared honestly: SupGP OMMs are SGP4 GP records by
   construction → `REFERENCE_FRAME = TEME`, `TIME_SYSTEM = UTC`,
-  `MEAN_ELEMENT_THEORY = SGP4`, `CENTER_NAME = EARTH`. Element values are copied
+  `MEAN_ELEMENT_THEORY = SGP4` (`SGP4XP` for an `EPHEMERIS_TYPE` 4 row: `BTERM` in
+  `BSTAR`, `AGOM` in `MEAN_MOTION_DDOT`), `CENTER_NAME = EARTH`. Element values are copied
   faithfully to full double precision (both JSON and CSV paths agree); EPOCH is
   kept as the feed writes it.
 
