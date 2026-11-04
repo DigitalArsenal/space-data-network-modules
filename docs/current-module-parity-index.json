@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T18:29:58.895Z",
+  "generatedAt": "2026-11-04T18:58:09.901Z",
   "moduleCount": 157,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 151,
@@ -1525,7 +1525,7 @@
       ],
       "cxxSourceFileCount": 14,
       "cSourceFileCount": 0,
-      "testFileCount": 1,
+      "testFileCount": 6,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -1545,7 +1545,12 @@
         "src/wcs.cpp"
       ],
       "testFiles": [
-        "tests/s2a-video-od.e2e.mjs"
+        "tests/fixtures/od-summary.json",
+        "tests/od-summary-run.mjs",
+        "tests/record-od-summary.mjs",
+        "tests/s2a-run.mjs",
+        "tests/s2a-video-od.e2e.mjs",
+        "tests/typed-od.e2e.mjs"
       ]
     },
     {
