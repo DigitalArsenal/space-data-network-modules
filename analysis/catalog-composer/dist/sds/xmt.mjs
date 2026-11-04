@@ -154,6 +154,7 @@ var catalogProductKind = /* @__PURE__ */ ((catalogProductKind2) => {
   catalogProductKind2[catalogProductKind2["Sgp4Elements"] = 1] = "Sgp4Elements";
   catalogProductKind2[catalogProductKind2["Sgp4XpElements"] = 2] = "Sgp4XpElements";
   catalogProductKind2[catalogProductKind2["StateCovariance"] = 3] = "StateCovariance";
+  catalogProductKind2[catalogProductKind2["ApElements"] = 4] = "ApElements";
   return catalogProductKind2;
 })(catalogProductKind || {});
 
@@ -2109,8 +2110,49 @@ var CVR = class _CVR {
     const offset = this.bb.__offset(this.bb_pos, 38);
     return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
   }
+  /**
+   * Distinct truth epochs among the SAMPLES: predictions that share one truth
+   * state count once here. 0 when not stated.
+   */
+  TRUTH_EPOCHS() {
+    const offset = this.bb.__offset(this.bb_pos, 40);
+    return offset ? this.bb.readUint32(this.bb_pos + offset) : 0;
+  }
+  /**
+   * Share of the held-out samples whose error lies inside the 1-sigma band of
+   * the first, second and third axis of the covariance's frame (radial,
+   * in-track and cross-track for an RTN or curvilinear covariance), 0 to 1;
+   * nominal 0.6827 for Gaussian errors. NaN when not measured.
+   */
+  COVERAGE_1_SIGMA_AXIS1() {
+    const offset = this.bb.__offset(this.bb_pos, 42);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  COVERAGE_1_SIGMA_AXIS2() {
+    const offset = this.bb.__offset(this.bb_pos, 44);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  COVERAGE_1_SIGMA_AXIS3() {
+    const offset = this.bb.__offset(this.bb_pos, 46);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  /**
+   * As COVERAGE_1_SIGMA_AXISn for the 3-sigma band; nominal 0.9973.
+   */
+  COVERAGE_3_SIGMA_AXIS1() {
+    const offset = this.bb.__offset(this.bb_pos, 48);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  COVERAGE_3_SIGMA_AXIS2() {
+    const offset = this.bb.__offset(this.bb_pos, 50);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
+  COVERAGE_3_SIGMA_AXIS3() {
+    const offset = this.bb.__offset(this.bb_pos, 52);
+    return offset ? this.bb.readFloat64(this.bb_pos + offset) : NaN;
+  }
   static startCVR(builder) {
-    builder.startObject(18);
+    builder.startObject(25);
   }
   static addRule(builder, RULE) {
     builder.addFieldInt8(0, RULE, 0 /* Unspecified */);
@@ -2166,6 +2208,27 @@ var CVR = class _CVR {
   static addShrinkageWeight(builder, SHRINKAGE_WEIGHT) {
     builder.addFieldFloat64(17, SHRINKAGE_WEIGHT, NaN);
   }
+  static addTruthEpochs(builder, TRUTH_EPOCHS) {
+    builder.addFieldInt32(18, TRUTH_EPOCHS, 0);
+  }
+  static addCoverage1SigmaAxis1(builder, COVERAGE_1_SIGMA_AXIS1) {
+    builder.addFieldFloat64(19, COVERAGE_1_SIGMA_AXIS1, NaN);
+  }
+  static addCoverage1SigmaAxis2(builder, COVERAGE_1_SIGMA_AXIS2) {
+    builder.addFieldFloat64(20, COVERAGE_1_SIGMA_AXIS2, NaN);
+  }
+  static addCoverage1SigmaAxis3(builder, COVERAGE_1_SIGMA_AXIS3) {
+    builder.addFieldFloat64(21, COVERAGE_1_SIGMA_AXIS3, NaN);
+  }
+  static addCoverage3SigmaAxis1(builder, COVERAGE_3_SIGMA_AXIS1) {
+    builder.addFieldFloat64(22, COVERAGE_3_SIGMA_AXIS1, NaN);
+  }
+  static addCoverage3SigmaAxis2(builder, COVERAGE_3_SIGMA_AXIS2) {
+    builder.addFieldFloat64(23, COVERAGE_3_SIGMA_AXIS2, NaN);
+  }
+  static addCoverage3SigmaAxis3(builder, COVERAGE_3_SIGMA_AXIS3) {
+    builder.addFieldFloat64(24, COVERAGE_3_SIGMA_AXIS3, NaN);
+  }
   static endCVR(builder) {
     const offset = builder.endObject();
     return offset;
@@ -2176,7 +2239,7 @@ var CVR = class _CVR {
   static finishSizePrefixedCVRBuffer(builder, offset) {
     builder.finish(offset, "$CVR", true);
   }
-  static createCVR(builder, RULE, MODEL_IDOffset, REGIMEOffset, AGE_DAYS, HORIZON_DAYS, MEASURED_LINEAGEOffset, TEST_WINDOWOffset, MEAN_D2_OVER_3, COVERAGE_95, SAMPLES, OBJECTS, SCALE_FACTOR, CALIBRATION, EVIDENCEOffset, HISTORY_SAMPLES, HISTORY_SETS, HISTORY_WINDOWOffset, SHRINKAGE_WEIGHT) {
+  static createCVR(builder, RULE, MODEL_IDOffset, REGIMEOffset, AGE_DAYS, HORIZON_DAYS, MEASURED_LINEAGEOffset, TEST_WINDOWOffset, MEAN_D2_OVER_3, COVERAGE_95, SAMPLES, OBJECTS, SCALE_FACTOR, CALIBRATION, EVIDENCEOffset, HISTORY_SAMPLES, HISTORY_SETS, HISTORY_WINDOWOffset, SHRINKAGE_WEIGHT, TRUTH_EPOCHS, COVERAGE_1_SIGMA_AXIS1, COVERAGE_1_SIGMA_AXIS2, COVERAGE_1_SIGMA_AXIS3, COVERAGE_3_SIGMA_AXIS1, COVERAGE_3_SIGMA_AXIS2, COVERAGE_3_SIGMA_AXIS3) {
     _CVR.startCVR(builder);
     _CVR.addRule(builder, RULE);
     _CVR.addModelId(builder, MODEL_IDOffset);
@@ -2196,6 +2259,13 @@ var CVR = class _CVR {
     _CVR.addHistorySets(builder, HISTORY_SETS);
     _CVR.addHistoryWindow(builder, HISTORY_WINDOWOffset);
     _CVR.addShrinkageWeight(builder, SHRINKAGE_WEIGHT);
+    _CVR.addTruthEpochs(builder, TRUTH_EPOCHS);
+    _CVR.addCoverage1SigmaAxis1(builder, COVERAGE_1_SIGMA_AXIS1);
+    _CVR.addCoverage1SigmaAxis2(builder, COVERAGE_1_SIGMA_AXIS2);
+    _CVR.addCoverage1SigmaAxis3(builder, COVERAGE_1_SIGMA_AXIS3);
+    _CVR.addCoverage3SigmaAxis1(builder, COVERAGE_3_SIGMA_AXIS1);
+    _CVR.addCoverage3SigmaAxis2(builder, COVERAGE_3_SIGMA_AXIS2);
+    _CVR.addCoverage3SigmaAxis3(builder, COVERAGE_3_SIGMA_AXIS3);
     return _CVR.endCVR(builder);
   }
   unpack() {
@@ -2217,7 +2287,14 @@ var CVR = class _CVR {
       this.HISTORY_SAMPLES(),
       this.HISTORY_SETS(),
       this.HISTORY_WINDOW(),
-      this.SHRINKAGE_WEIGHT()
+      this.SHRINKAGE_WEIGHT(),
+      this.TRUTH_EPOCHS(),
+      this.COVERAGE_1_SIGMA_AXIS1(),
+      this.COVERAGE_1_SIGMA_AXIS2(),
+      this.COVERAGE_1_SIGMA_AXIS3(),
+      this.COVERAGE_3_SIGMA_AXIS1(),
+      this.COVERAGE_3_SIGMA_AXIS2(),
+      this.COVERAGE_3_SIGMA_AXIS3()
     );
   }
   unpackTo(_o) {
@@ -2239,10 +2316,17 @@ var CVR = class _CVR {
     _o.HISTORY_SETS = this.HISTORY_SETS();
     _o.HISTORY_WINDOW = this.HISTORY_WINDOW();
     _o.SHRINKAGE_WEIGHT = this.SHRINKAGE_WEIGHT();
+    _o.TRUTH_EPOCHS = this.TRUTH_EPOCHS();
+    _o.COVERAGE_1_SIGMA_AXIS1 = this.COVERAGE_1_SIGMA_AXIS1();
+    _o.COVERAGE_1_SIGMA_AXIS2 = this.COVERAGE_1_SIGMA_AXIS2();
+    _o.COVERAGE_1_SIGMA_AXIS3 = this.COVERAGE_1_SIGMA_AXIS3();
+    _o.COVERAGE_3_SIGMA_AXIS1 = this.COVERAGE_3_SIGMA_AXIS1();
+    _o.COVERAGE_3_SIGMA_AXIS2 = this.COVERAGE_3_SIGMA_AXIS2();
+    _o.COVERAGE_3_SIGMA_AXIS3 = this.COVERAGE_3_SIGMA_AXIS3();
   }
 };
 var CVRT = class {
-  constructor(RULE = 0 /* Unspecified */, MODEL_ID = null, REGIME = null, AGE_DAYS = NaN, HORIZON_DAYS = NaN, MEASURED_LINEAGE = null, TEST_WINDOW = null, MEAN_D2_OVER_3 = NaN, COVERAGE_95 = NaN, SAMPLES = 0, OBJECTS = 0, SCALE_FACTOR = NaN, CALIBRATION = 0 /* Unspecified */, EVIDENCE = null, HISTORY_SAMPLES = 0, HISTORY_SETS = 0, HISTORY_WINDOW = null, SHRINKAGE_WEIGHT = NaN) {
+  constructor(RULE = 0 /* Unspecified */, MODEL_ID = null, REGIME = null, AGE_DAYS = NaN, HORIZON_DAYS = NaN, MEASURED_LINEAGE = null, TEST_WINDOW = null, MEAN_D2_OVER_3 = NaN, COVERAGE_95 = NaN, SAMPLES = 0, OBJECTS = 0, SCALE_FACTOR = NaN, CALIBRATION = 0 /* Unspecified */, EVIDENCE = null, HISTORY_SAMPLES = 0, HISTORY_SETS = 0, HISTORY_WINDOW = null, SHRINKAGE_WEIGHT = NaN, TRUTH_EPOCHS = 0, COVERAGE_1_SIGMA_AXIS1 = NaN, COVERAGE_1_SIGMA_AXIS2 = NaN, COVERAGE_1_SIGMA_AXIS3 = NaN, COVERAGE_3_SIGMA_AXIS1 = NaN, COVERAGE_3_SIGMA_AXIS2 = NaN, COVERAGE_3_SIGMA_AXIS3 = NaN) {
     this.RULE = RULE;
     this.MODEL_ID = MODEL_ID;
     this.REGIME = REGIME;
@@ -2261,6 +2345,13 @@ var CVRT = class {
     this.HISTORY_SETS = HISTORY_SETS;
     this.HISTORY_WINDOW = HISTORY_WINDOW;
     this.SHRINKAGE_WEIGHT = SHRINKAGE_WEIGHT;
+    this.TRUTH_EPOCHS = TRUTH_EPOCHS;
+    this.COVERAGE_1_SIGMA_AXIS1 = COVERAGE_1_SIGMA_AXIS1;
+    this.COVERAGE_1_SIGMA_AXIS2 = COVERAGE_1_SIGMA_AXIS2;
+    this.COVERAGE_1_SIGMA_AXIS3 = COVERAGE_1_SIGMA_AXIS3;
+    this.COVERAGE_3_SIGMA_AXIS1 = COVERAGE_3_SIGMA_AXIS1;
+    this.COVERAGE_3_SIGMA_AXIS2 = COVERAGE_3_SIGMA_AXIS2;
+    this.COVERAGE_3_SIGMA_AXIS3 = COVERAGE_3_SIGMA_AXIS3;
   }
   pack(builder) {
     const MODEL_ID = this.MODEL_ID !== null ? builder.createString(this.MODEL_ID) : 0;
@@ -2288,7 +2379,14 @@ var CVRT = class {
       this.HISTORY_SAMPLES,
       this.HISTORY_SETS,
       HISTORY_WINDOW,
-      this.SHRINKAGE_WEIGHT
+      this.SHRINKAGE_WEIGHT,
+      this.TRUTH_EPOCHS,
+      this.COVERAGE_1_SIGMA_AXIS1,
+      this.COVERAGE_1_SIGMA_AXIS2,
+      this.COVERAGE_1_SIGMA_AXIS3,
+      this.COVERAGE_3_SIGMA_AXIS1,
+      this.COVERAGE_3_SIGMA_AXIS2,
+      this.COVERAGE_3_SIGMA_AXIS3
     );
   }
 };
@@ -2383,8 +2481,32 @@ var PVN = class _PVN {
     const offset = this.bb.__offset(this.bb_pos, 18);
     return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
   }
+  SOURCE_URL(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 20);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SOURCE_VERSION(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 22);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  RETRIEVED_AT(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 24);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  SOURCE_SHA256(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 26);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  /**
+   * Number of source bytes SOURCE_SHA256 covers: the length of the prefix when
+   * the source was fetched by range. 0 when not stated.
+   */
+  SOURCE_BYTES() {
+    const offset = this.bb.__offset(this.bb_pos, 28);
+    return offset ? this.bb.readUint64(this.bb_pos + offset) : BigInt("0");
+  }
   static startPVN(builder) {
-    builder.startObject(8);
+    builder.startObject(13);
   }
   static addSourceId(builder, SOURCE_IDOffset) {
     builder.addFieldOffset(0, SOURCE_IDOffset, 0);
@@ -2410,6 +2532,21 @@ var PVN = class _PVN {
   static addLineage(builder, LINEAGEOffset) {
     builder.addFieldOffset(7, LINEAGEOffset, 0);
   }
+  static addSourceUrl(builder, SOURCE_URLOffset) {
+    builder.addFieldOffset(8, SOURCE_URLOffset, 0);
+  }
+  static addSourceVersion(builder, SOURCE_VERSIONOffset) {
+    builder.addFieldOffset(9, SOURCE_VERSIONOffset, 0);
+  }
+  static addRetrievedAt(builder, RETRIEVED_ATOffset) {
+    builder.addFieldOffset(10, RETRIEVED_ATOffset, 0);
+  }
+  static addSourceSha256(builder, SOURCE_SHA256Offset) {
+    builder.addFieldOffset(11, SOURCE_SHA256Offset, 0);
+  }
+  static addSourceBytes(builder, SOURCE_BYTES) {
+    builder.addFieldInt64(12, SOURCE_BYTES, BigInt("0"));
+  }
   static endPVN(builder) {
     const offset = builder.endObject();
     return offset;
@@ -2420,7 +2557,7 @@ var PVN = class _PVN {
   static finishSizePrefixedPVNBuffer(builder, offset) {
     builder.finish(offset, "$PVN", true);
   }
-  static createPVN(builder, SOURCE_IDOffset, SOURCE_KIND, ORIGINATOROffset, PROVIDER_IDOffset, PRODUCEROffset, LICENSE_CLASS, LICENSE_IDOffset, LINEAGEOffset) {
+  static createPVN(builder, SOURCE_IDOffset, SOURCE_KIND, ORIGINATOROffset, PROVIDER_IDOffset, PRODUCEROffset, LICENSE_CLASS, LICENSE_IDOffset, LINEAGEOffset, SOURCE_URLOffset, SOURCE_VERSIONOffset, RETRIEVED_ATOffset, SOURCE_SHA256Offset, SOURCE_BYTES) {
     _PVN.startPVN(builder);
     _PVN.addSourceId(builder, SOURCE_IDOffset);
     _PVN.addSourceKind(builder, SOURCE_KIND);
@@ -2430,6 +2567,11 @@ var PVN = class _PVN {
     _PVN.addLicenseClass(builder, LICENSE_CLASS);
     _PVN.addLicenseId(builder, LICENSE_IDOffset);
     _PVN.addLineage(builder, LINEAGEOffset);
+    _PVN.addSourceUrl(builder, SOURCE_URLOffset);
+    _PVN.addSourceVersion(builder, SOURCE_VERSIONOffset);
+    _PVN.addRetrievedAt(builder, RETRIEVED_ATOffset);
+    _PVN.addSourceSha256(builder, SOURCE_SHA256Offset);
+    _PVN.addSourceBytes(builder, SOURCE_BYTES);
     return _PVN.endPVN(builder);
   }
   unpack() {
@@ -2441,7 +2583,12 @@ var PVN = class _PVN {
       this.PRODUCER(),
       this.LICENSE_CLASS(),
       this.LICENSE_ID(),
-      this.LINEAGE()
+      this.LINEAGE(),
+      this.SOURCE_URL(),
+      this.SOURCE_VERSION(),
+      this.RETRIEVED_AT(),
+      this.SOURCE_SHA256(),
+      this.SOURCE_BYTES()
     );
   }
   unpackTo(_o) {
@@ -2453,10 +2600,15 @@ var PVN = class _PVN {
     _o.LICENSE_CLASS = this.LICENSE_CLASS();
     _o.LICENSE_ID = this.LICENSE_ID();
     _o.LINEAGE = this.LINEAGE();
+    _o.SOURCE_URL = this.SOURCE_URL();
+    _o.SOURCE_VERSION = this.SOURCE_VERSION();
+    _o.RETRIEVED_AT = this.RETRIEVED_AT();
+    _o.SOURCE_SHA256 = this.SOURCE_SHA256();
+    _o.SOURCE_BYTES = this.SOURCE_BYTES();
   }
 };
 var PVNT = class {
-  constructor(SOURCE_ID = null, SOURCE_KIND = 0 /* Unspecified */, ORIGINATOR = null, PROVIDER_ID = null, PRODUCER = null, LICENSE_CLASS = 0 /* Unspecified */, LICENSE_ID = null, LINEAGE = null) {
+  constructor(SOURCE_ID = null, SOURCE_KIND = 0 /* Unspecified */, ORIGINATOR = null, PROVIDER_ID = null, PRODUCER = null, LICENSE_CLASS = 0 /* Unspecified */, LICENSE_ID = null, LINEAGE = null, SOURCE_URL = null, SOURCE_VERSION = null, RETRIEVED_AT = null, SOURCE_SHA256 = null, SOURCE_BYTES = BigInt("0")) {
     this.SOURCE_ID = SOURCE_ID;
     this.SOURCE_KIND = SOURCE_KIND;
     this.ORIGINATOR = ORIGINATOR;
@@ -2465,6 +2617,11 @@ var PVNT = class {
     this.LICENSE_CLASS = LICENSE_CLASS;
     this.LICENSE_ID = LICENSE_ID;
     this.LINEAGE = LINEAGE;
+    this.SOURCE_URL = SOURCE_URL;
+    this.SOURCE_VERSION = SOURCE_VERSION;
+    this.RETRIEVED_AT = RETRIEVED_AT;
+    this.SOURCE_SHA256 = SOURCE_SHA256;
+    this.SOURCE_BYTES = SOURCE_BYTES;
   }
   pack(builder) {
     const SOURCE_ID = this.SOURCE_ID !== null ? builder.createString(this.SOURCE_ID) : 0;
@@ -2473,6 +2630,10 @@ var PVNT = class {
     const PRODUCER = this.PRODUCER !== null ? builder.createString(this.PRODUCER) : 0;
     const LICENSE_ID = this.LICENSE_ID !== null ? builder.createString(this.LICENSE_ID) : 0;
     const LINEAGE = this.LINEAGE !== null ? builder.createString(this.LINEAGE) : 0;
+    const SOURCE_URL = this.SOURCE_URL !== null ? builder.createString(this.SOURCE_URL) : 0;
+    const SOURCE_VERSION = this.SOURCE_VERSION !== null ? builder.createString(this.SOURCE_VERSION) : 0;
+    const RETRIEVED_AT = this.RETRIEVED_AT !== null ? builder.createString(this.RETRIEVED_AT) : 0;
+    const SOURCE_SHA256 = this.SOURCE_SHA256 !== null ? builder.createString(this.SOURCE_SHA256) : 0;
     return PVN.createPVN(
       builder,
       SOURCE_ID,
@@ -2482,7 +2643,12 @@ var PVNT = class {
       PRODUCER,
       this.LICENSE_CLASS,
       LICENSE_ID,
-      LINEAGE
+      LINEAGE,
+      SOURCE_URL,
+      SOURCE_VERSION,
+      RETRIEVED_AT,
+      SOURCE_SHA256,
+      this.SOURCE_BYTES
     );
   }
 };
@@ -13721,6 +13887,13 @@ var PCFGaussianPriorT = class {
   }
 };
 
+// node_modules/spacedatastandards.org/lib/ts/XMT/pcfPriorForm.ts
+var pcfPriorForm = /* @__PURE__ */ ((pcfPriorForm2) => {
+  pcfPriorForm2[pcfPriorForm2["GAUSSIAN_SIGNED"] = 0] = "GAUSSIAN_SIGNED";
+  pcfPriorForm2[pcfPriorForm2["LOG_NORMAL"] = 1] = "LOG_NORMAL";
+  return pcfPriorForm2;
+})(pcfPriorForm || {});
+
 // node_modules/spacedatastandards.org/lib/ts/XMT/PCFFitPolicy.ts
 var PCFFitPolicy = class _PCFFitPolicy {
   bb = null;
@@ -13860,8 +14033,40 @@ var PCFFitPolicy = class _PCFFitPolicy {
     const offset = this.bb.__offset(this.bb_pos, 32);
     return offset ? (obj || new PCFGaussianPrior()).__init(this.bb.__indirect(this.bb_pos + offset), this.bb) : null;
   }
+  /**
+   * The form of DRAG_PRIOR. Default GAUSSIAN_SIGNED. LOG_NORMAL: the fit
+   * estimates ln B_eff, so B_eff is never <= 0; DRAG_PRIOR is required, its
+   * MEAN the median of B_eff (> 0, m2/kg) and its SIGMA the standard deviation
+   * of ln B_eff.
+   */
+  DRAG_PRIOR_FORM() {
+    const offset = this.bb.__offset(this.bb_pos, 34);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* GAUSSIAN_SIGNED */;
+  }
+  /**
+   * The form of SRP_PRIOR. Default GAUSSIAN_SIGNED. LOG_NORMAL: the fit
+   * estimates ln AGOM, so AGOM is never <= 0; SRP_PRIOR is required, its MEAN
+   * the median of AGOM (> 0, m2/kg) and its SIGMA the standard deviation of
+   * ln AGOM.
+   */
+  SRP_PRIOR_FORM() {
+    const offset = this.bb.__offset(this.bb_pos, 36);
+    return offset ? this.bb.readUint8(this.bb_pos + offset) : 0 /* GAUSSIAN_SIGNED */;
+  }
+  /**
+   * Days past the element set's epoch day through which the fit writes the
+   * daily space weather into the record it emits (OCM
+   * PERTURBATIONS.SPACE_WEATHER), when the forces it fits under read rows
+   * (WEATHER_SOURCE RECORDS). The last day written is the later of the fit
+   * arc's last day and the epoch's day plus this count; rows supplied with
+   * the request must reach it, or the fit is refused by name. Default 30.
+   */
+  WEATHER_HORIZON_DAYS() {
+    const offset = this.bb.__offset(this.bb_pos, 38);
+    return offset ? this.bb.readUint16(this.bb_pos + offset) : 30;
+  }
   static startPCFFitPolicy(builder) {
-    builder.startObject(15);
+    builder.startObject(18);
   }
   static addDefaultSpanHours(builder, DEFAULT_SPAN_HOURS) {
     builder.addFieldFloat64(0, DEFAULT_SPAN_HOURS, 48);
@@ -13918,6 +14123,15 @@ var PCFFitPolicy = class _PCFFitPolicy {
   static addSrpPrior(builder, SRP_PRIOROffset) {
     builder.addFieldOffset(14, SRP_PRIOROffset, 0);
   }
+  static addDragPriorForm(builder, DRAG_PRIOR_FORM) {
+    builder.addFieldInt8(15, DRAG_PRIOR_FORM, 0 /* GAUSSIAN_SIGNED */);
+  }
+  static addSrpPriorForm(builder, SRP_PRIOR_FORM) {
+    builder.addFieldInt8(16, SRP_PRIOR_FORM, 0 /* GAUSSIAN_SIGNED */);
+  }
+  static addWeatherHorizonDays(builder, WEATHER_HORIZON_DAYS) {
+    builder.addFieldInt16(17, WEATHER_HORIZON_DAYS, 30);
+  }
   static endPCFFitPolicy(builder) {
     const offset = builder.endObject();
     return offset;
@@ -13938,7 +14152,10 @@ var PCFFitPolicy = class _PCFFitPolicy {
       this.ECCENTRIC_MAXIMUM_PERIOD_HOURS(),
       this.IMPLAUSIBLE_RMS_KM(),
       this.DRAG_PRIOR() !== null ? this.DRAG_PRIOR().unpack() : null,
-      this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null
+      this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null,
+      this.DRAG_PRIOR_FORM(),
+      this.SRP_PRIOR_FORM(),
+      this.WEATHER_HORIZON_DAYS()
     );
   }
   unpackTo(_o) {
@@ -13957,10 +14174,13 @@ var PCFFitPolicy = class _PCFFitPolicy {
     _o.IMPLAUSIBLE_RMS_KM = this.IMPLAUSIBLE_RMS_KM();
     _o.DRAG_PRIOR = this.DRAG_PRIOR() !== null ? this.DRAG_PRIOR().unpack() : null;
     _o.SRP_PRIOR = this.SRP_PRIOR() !== null ? this.SRP_PRIOR().unpack() : null;
+    _o.DRAG_PRIOR_FORM = this.DRAG_PRIOR_FORM();
+    _o.SRP_PRIOR_FORM = this.SRP_PRIOR_FORM();
+    _o.WEATHER_HORIZON_DAYS = this.WEATHER_HORIZON_DAYS();
   }
 };
 var PCFFitPolicyT = class {
-  constructor(DEFAULT_SPAN_HOURS = 48, MINIMUM_SPAN_HOURS = 24, MAXIMUM_SPAN_HOURS = 120, CANDIDATE_SPANS_HOURS = [], TAIL_HOURS = 24, EXTENSION_MARGIN = 0.9, HOLDOUT_HOURS = 0, HAS_HOLDOUT_HOURS = false, ECCENTRICITY_THRESHOLD = 0.5, ECCENTRIC_DEFAULT_SPAN_HOURS = 24, ECCENTRIC_EXTENSION_MARGIN = 0.7, ECCENTRIC_MAXIMUM_PERIOD_HOURS = 36, IMPLAUSIBLE_RMS_KM = 100, DRAG_PRIOR = null, SRP_PRIOR = null) {
+  constructor(DEFAULT_SPAN_HOURS = 48, MINIMUM_SPAN_HOURS = 24, MAXIMUM_SPAN_HOURS = 120, CANDIDATE_SPANS_HOURS = [], TAIL_HOURS = 24, EXTENSION_MARGIN = 0.9, HOLDOUT_HOURS = 0, HAS_HOLDOUT_HOURS = false, ECCENTRICITY_THRESHOLD = 0.5, ECCENTRIC_DEFAULT_SPAN_HOURS = 24, ECCENTRIC_EXTENSION_MARGIN = 0.7, ECCENTRIC_MAXIMUM_PERIOD_HOURS = 36, IMPLAUSIBLE_RMS_KM = 100, DRAG_PRIOR = null, SRP_PRIOR = null, DRAG_PRIOR_FORM = 0 /* GAUSSIAN_SIGNED */, SRP_PRIOR_FORM = 0 /* GAUSSIAN_SIGNED */, WEATHER_HORIZON_DAYS = 30) {
     this.DEFAULT_SPAN_HOURS = DEFAULT_SPAN_HOURS;
     this.MINIMUM_SPAN_HOURS = MINIMUM_SPAN_HOURS;
     this.MAXIMUM_SPAN_HOURS = MAXIMUM_SPAN_HOURS;
@@ -13976,6 +14196,9 @@ var PCFFitPolicyT = class {
     this.IMPLAUSIBLE_RMS_KM = IMPLAUSIBLE_RMS_KM;
     this.DRAG_PRIOR = DRAG_PRIOR;
     this.SRP_PRIOR = SRP_PRIOR;
+    this.DRAG_PRIOR_FORM = DRAG_PRIOR_FORM;
+    this.SRP_PRIOR_FORM = SRP_PRIOR_FORM;
+    this.WEATHER_HORIZON_DAYS = WEATHER_HORIZON_DAYS;
   }
   pack(builder) {
     const CANDIDATE_SPANS_HOURS = PCFFitPolicy.createCandidateSpansHoursVector(builder, this.CANDIDATE_SPANS_HOURS);
@@ -13997,6 +14220,9 @@ var PCFFitPolicyT = class {
     PCFFitPolicy.addImplausibleRmsKm(builder, this.IMPLAUSIBLE_RMS_KM);
     PCFFitPolicy.addDragPrior(builder, DRAG_PRIOR);
     PCFFitPolicy.addSrpPrior(builder, SRP_PRIOR);
+    PCFFitPolicy.addDragPriorForm(builder, this.DRAG_PRIOR_FORM);
+    PCFFitPolicy.addSrpPriorForm(builder, this.SRP_PRIOR_FORM);
+    PCFFitPolicy.addWeatherHorizonDays(builder, this.WEATHER_HORIZON_DAYS);
     return PCFFitPolicy.endPCFFitPolicy(builder);
   }
 };
@@ -14706,6 +14932,7 @@ var pcfAtmosphereFamily = /* @__PURE__ */ ((pcfAtmosphereFamily2) => {
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["JACCHIA_ROBERTS"] = 5] = "JACCHIA_ROBERTS";
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["JB2008"] = 6] = "JB2008";
   pcfAtmosphereFamily2[pcfAtmosphereFamily2["MARS_EXPONENTIAL"] = 7] = "MARS_EXPONENTIAL";
+  pcfAtmosphereFamily2[pcfAtmosphereFamily2["JACCHIA70"] = 8] = "JACCHIA70";
   return pcfAtmosphereFamily2;
 })(pcfAtmosphereFamily || {});
 
@@ -14805,6 +15032,8 @@ var pcfWeatherSource = /* @__PURE__ */ ((pcfWeatherSource2) => {
   pcfWeatherSource2[pcfWeatherSource2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   pcfWeatherSource2[pcfWeatherSource2["CONSTANT"] = 1] = "CONSTANT";
   pcfWeatherSource2[pcfWeatherSource2["RECORDS"] = 2] = "RECORDS";
+  pcfWeatherSource2[pcfWeatherSource2["THEORY_FLUX_MODEL"] = 3] = "THEORY_FLUX_MODEL";
+  pcfWeatherSource2[pcfWeatherSource2["NONE"] = 4] = "NONE";
   return pcfWeatherSource2;
 })(pcfWeatherSource || {});
 
@@ -15865,8 +16094,24 @@ var PCFOutput = class _PCFOutput {
     const offset = this.bb.__offset(this.bb_pos, 8);
     return offset ? this.bb.readUint32(this.bb_pos + offset) : 5e5;
   }
+  EPOCHS(index, optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__string(this.bb.__vector(this.bb_pos + offset) + index * 4, optionalEncoding) : null;
+  }
+  epochsLength() {
+    const offset = this.bb.__offset(this.bb_pos, 10);
+    return offset ? this.bb.__vector_len(this.bb_pos + offset) : 0;
+  }
+  START_TIME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 12);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
+  STOP_TIME(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 14);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
   static startPCFOutput(builder) {
-    builder.startObject(3);
+    builder.startObject(6);
   }
   static addFrame(builder, FRAME) {
     builder.addFieldInt8(0, FRAME, 0 /* UNSPECIFIED */);
@@ -15877,42 +16122,79 @@ var PCFOutput = class _PCFOutput {
   static addMaximumStates(builder, MAXIMUM_STATES) {
     builder.addFieldInt32(2, MAXIMUM_STATES, 5e5);
   }
+  static addEpochs(builder, EPOCHSOffset) {
+    builder.addFieldOffset(3, EPOCHSOffset, 0);
+  }
+  static createEpochsVector(builder, data) {
+    builder.startVector(4, data.length, 4);
+    for (let i = data.length - 1; i >= 0; i--) {
+      builder.addOffset(data[i]);
+    }
+    return builder.endVector();
+  }
+  static startEpochsVector(builder, numElems) {
+    builder.startVector(4, numElems, 4);
+  }
+  static addStartTime(builder, START_TIMEOffset) {
+    builder.addFieldOffset(4, START_TIMEOffset, 0);
+  }
+  static addStopTime(builder, STOP_TIMEOffset) {
+    builder.addFieldOffset(5, STOP_TIMEOffset, 0);
+  }
   static endPCFOutput(builder) {
     const offset = builder.endObject();
     return offset;
   }
-  static createPCFOutput(builder, FRAME, STEP_SECONDS, MAXIMUM_STATES) {
+  static createPCFOutput(builder, FRAME, STEP_SECONDS, MAXIMUM_STATES, EPOCHSOffset, START_TIMEOffset, STOP_TIMEOffset) {
     _PCFOutput.startPCFOutput(builder);
     _PCFOutput.addFrame(builder, FRAME);
     _PCFOutput.addStepSeconds(builder, STEP_SECONDS);
     _PCFOutput.addMaximumStates(builder, MAXIMUM_STATES);
+    _PCFOutput.addEpochs(builder, EPOCHSOffset);
+    _PCFOutput.addStartTime(builder, START_TIMEOffset);
+    _PCFOutput.addStopTime(builder, STOP_TIMEOffset);
     return _PCFOutput.endPCFOutput(builder);
   }
   unpack() {
     return new PCFOutputT(
       this.FRAME(),
       this.STEP_SECONDS(),
-      this.MAXIMUM_STATES()
+      this.MAXIMUM_STATES(),
+      this.bb.createScalarList(this.EPOCHS.bind(this), this.epochsLength()),
+      this.START_TIME(),
+      this.STOP_TIME()
     );
   }
   unpackTo(_o) {
     _o.FRAME = this.FRAME();
     _o.STEP_SECONDS = this.STEP_SECONDS();
     _o.MAXIMUM_STATES = this.MAXIMUM_STATES();
+    _o.EPOCHS = this.bb.createScalarList(this.EPOCHS.bind(this), this.epochsLength());
+    _o.START_TIME = this.START_TIME();
+    _o.STOP_TIME = this.STOP_TIME();
   }
 };
 var PCFOutputT = class {
-  constructor(FRAME = 0 /* UNSPECIFIED */, STEP_SECONDS = 60, MAXIMUM_STATES = 5e5) {
+  constructor(FRAME = 0 /* UNSPECIFIED */, STEP_SECONDS = 60, MAXIMUM_STATES = 5e5, EPOCHS = [], START_TIME = null, STOP_TIME = null) {
     this.FRAME = FRAME;
     this.STEP_SECONDS = STEP_SECONDS;
     this.MAXIMUM_STATES = MAXIMUM_STATES;
+    this.EPOCHS = EPOCHS;
+    this.START_TIME = START_TIME;
+    this.STOP_TIME = STOP_TIME;
   }
   pack(builder) {
+    const EPOCHS = PCFOutput.createEpochsVector(builder, builder.createObjectOffsetList(this.EPOCHS));
+    const START_TIME = this.START_TIME !== null ? builder.createString(this.START_TIME) : 0;
+    const STOP_TIME = this.STOP_TIME !== null ? builder.createString(this.STOP_TIME) : 0;
     return PCFOutput.createPCFOutput(
       builder,
       this.FRAME,
       this.STEP_SECONDS,
-      this.MAXIMUM_STATES
+      this.MAXIMUM_STATES,
+      EPOCHS,
+      START_TIME,
+      STOP_TIME
     );
   }
 };
@@ -15924,6 +16206,7 @@ var pcfTheory = /* @__PURE__ */ ((pcfTheory2) => {
   pcfTheory2[pcfTheory2["SGP4XP"] = 2] = "SGP4XP";
   pcfTheory2[pcfTheory2["FFM"] = 4] = "FFM";
   pcfTheory2[pcfTheory2["KEPLER"] = 5] = "KEPLER";
+  pcfTheory2[pcfTheory2["AP"] = 6] = "AP";
   return pcfTheory2;
 })(pcfTheory || {});
 
@@ -29460,6 +29743,7 @@ export {
   pcfNeutralWind,
   pcfOceanTideModel,
   pcfOutputFrame,
+  pcfPriorForm,
   pcfRadiationPressureFamily,
   pcfRelativityTerms,
   pcfSolidTideModel,
