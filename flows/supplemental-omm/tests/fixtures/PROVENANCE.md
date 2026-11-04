@@ -14,3 +14,14 @@
   port, recorded 2026-11-04 before the `$OCM` change: the SGP4-XP `$OMM` (one window), the OD core's four SGP4
   `$OMM` and four `$OCM`, and the five `$OBD` (four the core's, one the SGP4-XP window's), each size-prefixed, in
   stream order.
+- `starlink-xp.ocm`: the SGP4-XP window's `$OCM` the OD node 2.1.1 (over propagator/sgp4-xp 0.2.1) writes for
+  `starlink-synthetic-12h.oem` on the 'starlink' port, recorded 2026-11-04 by `tests/fixtures/record-xp.mjs`.
+  Amendment (task modules-sgp4-xp-flight-departs-library-20261104): the XP window's statistics anchors moved
+  because the 0.1.1 flight returned partial integrator steps. The previous node scored the window's held-out states
+  on one library satellite, which answers an SGP4-XP request less than one integrator step past the previous one from
+  a partial step; 2.1.1 propagates every state from the set's epoch. The window's elements and fit figures are
+  unchanged; its HELD_OUT_RMS_KM moved from 0.268003346 to 0.268003429 km and HELD_OUT_MAX_KM from 0.463066506 to
+  0.463066523 km, so the E2E compares FIT_STATISTICS with this record bit for bit. The ephemeris inputs
+  (`iss-sgp4xp-3day.oem`, `starlink-synthetic-12h.oem`) were propagated with the 0.1.1 flight and are kept as they
+  are: re-propagating them would also move the OD core's records, whose anchors are the previous node's.
+

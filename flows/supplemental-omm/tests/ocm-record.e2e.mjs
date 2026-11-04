@@ -4,8 +4,9 @@
 // port, against what the OD node of modules main 1f806e4bf6 wrote for it (tests/fixtures/starlink-previous-*):
 // - the SGP4-XP window arrives on 'ocm' as an $OCM: MEAN_ELEMENTS SGP4XP equal to the previous XP $OMM's elements bit
 //   for bit (BTERM its BSTAR, AGOM its MEAN_MOTION_DDOT), stock forces (WEATHER_SOURCE THEORY_FLUX_MODEL, {JXX,1970},
-//   EGM-96), FIT_STATISTICS equal to the previous $OMM's figures to the printed digit, PROVENANCE naming the source
-//   module and the library;
+//   EGM-96), FIT_STATISTICS equal bit for bit to the window's $OCM recorded from the 2.1.1 node
+//   (tests/fixtures/starlink-xp.ocm, tests/fixtures/record-xp.mjs: the previous figures were scored with the 0.1.1
+//   flight, which returned partial integrator steps), PROVENANCE naming the source module and the library;
 // - each OD core epoch arrives as its state $OCM (the previous bytes) and an SGP4 $OCM (MEAN_ELEMENTS SGP4 equal to the
 //   core's $OMM, WEATHER_SOURCE NONE, FIT_STATISTICS: FIT_RMS_KM and ITERATIONS equal to the previous $OBD's), and as
 //   the core's SGP4 $OMM (the previous bytes) whose COMMENT holds no number;
@@ -23,12 +24,6 @@ const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
 const fixture = (name) => fs.readFileSync(path.join(packageRoot, "tests/fixtures", name));
 const hex = (r) => Buffer.from(r).toString("hex");
-const g9 = (v) => {
-  const [m, x] = v.toExponential(8).split("e");
-  const e = Number(x);
-  const strip = (s) => (s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s);
-  return e < -4 || e >= 9 ? `${strip(m)}e${e < 0 ? "-" : "+"}${String(Math.abs(e)).padStart(2, "0")}` : strip(v.toFixed(8 - e));
-};
 const t = { after: () => {} };
 const node = await odNode(t);
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, "nodes/od/plugin-manifest.json"), "utf8"));
@@ -64,7 +59,7 @@ const xpSets = ocms.filter((o) => o.MEAN_ELEMENTS?.MEAN_ELEMENT_THEORY === 1);
 const states = out.ocm.filter((r, i) => !ocms[i].MEAN_ELEMENTS);
 check(states.length === prevState.length && states.every((r, i) => hex(r) === hex(prevState[i])), `the core's state $OCM: ${states.length} against ${prevState.length}, not the previous bytes`);
 check(sgp4Sets.length === prevSgp4.length && xpSets.length === 1 && ocms.length === states.length + sgp4Sets.length + xpSets.length, `ocm stream: ${states.length} state, ${sgp4Sets.length} SGP4, ${xpSets.length} SGP4XP`);
-let bits = 0, digits = 0;
+let bits = 0;
 const same = (a, b, what) => { bits += 1; check(Object.is(a, b), `${what}: ${a} against ${b}`); };
 sgp4Sets.forEach((o, k) => {
   const omm = decodeOmmRecord(prevSgp4[k]), obd = prevObd[k], me = o.MEAN_ELEMENTS, pt = o.PERTURBATIONS, fs_ = o.ORBIT_DETERMINATION?.FIT_STATISTICS;
@@ -74,21 +69,24 @@ sgp4Sets.forEach((o, k) => {
   if (fs_) { same(fs_.FIT_RMS_KM, obd.WRMS, `SGP4 set ${k + 1} FIT_RMS_KM (the previous $OBD WRMS)`); check(fs_.ITERATIONS === obd.NUM_ITERATIONS && fs_.CONVERGED === true && o.ORBIT_DETERMINATION.ACTUAL_OD_SPAN === obd.FIT_SPAN, `SGP4 set ${k + 1}: iterations, convergence, span`); }
 });
 const prevXp = splitRecords(fixture("starlink-previous-xp.omm")).map(decodeOmmRecord);
+const recordedXp = splitRecords(fixture("starlink-xp.ocm")).map(decodeOcmRecord);
 xpSets.forEach((o, k) => {
   const old = prevXp[k], me = o.MEAN_ELEMENTS, pt = o.PERTURBATIONS, fs_ = o.ORBIT_DETERMINATION.FIT_STATISTICS;
-  const p = Object.fromEntries(old.USER_DEFINED_PARAMETERS.map((q) => [q.PARAM_NAME, q.PARAM_VALUE]));
   for (const key of ["MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "EPOCH"]) same(me[key], old[key], `XP set ${k + 1} ${key}`);
   same(me.BTERM, old.BSTAR, `XP set ${k + 1} BTERM (the previous BSTAR)`);
   same(me.AGOM, old.MEAN_MOTION_DDOT, `XP set ${k + 1} AGOM (the previous MEAN_MOTION_DDOT)`);
   check(pt.WEATHER_SOURCE === 3 && pt.ATMOSPHERIC_MODEL?.YEAR === 1970 && pt.GRAVITY_MODEL === "EGM-96" && pt.SPACE_WEATHER.length === 0 && o.ORB_AVERAGING === "BROUWER", `XP set ${k + 1}: forces`);
   check(o.HEADER.ORIGINATOR === "SpaceX" && o.PROVENANCE.SOURCE_ID === "com.orbpro.spacex-starlink-source" && /US Space Force Sgp4Prop 9\.1\.1\.0/.test(o.PROVENANCE.PRODUCER), `XP set ${k + 1}: provenance ${o.HEADER.ORIGINATOR} ${o.PROVENANCE.SOURCE_ID} ${o.PROVENANCE.PRODUCER}`);
-  const figures = { FIT_RMS_KM: fs_.FIT_RMS_KM, FIT_MAX_KM: fs_.FIT_MAX_KM, FIT_RADIAL_RMS_KM: fs_.FIT_RADIAL_RMS_KM, FIT_ALONG_TRACK_RMS_KM: fs_.FIT_IN_TRACK_RMS_KM, FIT_CROSS_TRACK_RMS_KM: fs_.FIT_CROSS_TRACK_RMS_KM,
-    HELD_OUT_RMS_KM: fs_.HELD_OUT_RMS_KM, HELD_OUT_MAX_KM: fs_.HELD_OUT_MAX_KM, FIT_STATES: fs_.FIT_STATES, HELD_OUT_STATES: fs_.HELD_OUT_STATES, FIT_ITERATIONS: fs_.ITERATIONS };
-  for (const [key, v] of Object.entries(figures)) { digits += 1; check((Number.isInteger(v) ? String(v) : g9(v)) === p[key], `XP set ${k + 1} ${key}: ${v} against ${p[key]}`); }
-  for (const [key, v] of [["FIT_START", fs_.FIT_START], ["FIT_STOP", fs_.FIT_STOP], ["HELD_OUT_STOP", fs_.HELD_OUT_STOP]]) { digits += 1; check(v === p[key], `XP set ${k + 1} ${key}: ${v} against ${p[key]}`); }
+  const want = recordedXp[k]?.ORBIT_DETERMINATION?.FIT_STATISTICS;
+  check(want != null, `XP set ${k + 1}: no recorded $OCM`);
+  if (want) {
+    for (const key of ["FIT_START", "FIT_STOP", "FIT_STATES", "FIT_RMS_KM", "FIT_MAX_KM", "FIT_RADIAL_RMS_KM", "FIT_IN_TRACK_RMS_KM", "FIT_CROSS_TRACK_RMS_KM", "ITERATIONS", "CONVERGED",
+      "HELD_OUT_STOP", "HELD_OUT_STATES", "HELD_OUT_RMS_KM", "HELD_OUT_MAX_KM"]) same(fs_[key], want[key], `XP set ${k + 1} ${key}`);
+    check(fs_.HELD_OUT_DAYS.length === want.HELD_OUT_DAYS.length && fs_.HELD_OUT_DAYS.every((d, i) => d.DAY === want.HELD_OUT_DAYS[i].DAY && d.STATES === want.HELD_OUT_DAYS[i].STATES && Object.is(d.RMS_KM, want.HELD_OUT_DAYS[i].RMS_KM)), `XP set ${k + 1}: held-out days`);
+  }
   console.log(`XP window ${k + 1}: ${me.EPOCH} n ${me.MEAN_MOTION}; fit ${fs_.FIT_STATES} states ${fs_.FIT_RMS_KM} km, held out ${fs_.HELD_OUT_STATES} ${fs_.HELD_OUT_RMS_KM} km`);
 });
-console.log(`starlink: ${out.omm.length} SGP4 $OMM (previous bytes), ${states.length} state $OCM (previous bytes), ${sgp4Sets.length} SGP4 $OCM, ${xpSets.length} SGP4-XP $OCM; ${bits} values bit for bit, ${digits} figures to the printed digit; outputs ${[...new Set(ports)].join(", ")}`);
+console.log(`starlink: ${out.omm.length} SGP4 $OMM (previous bytes), ${states.length} state $OCM (previous bytes), ${sgp4Sets.length} SGP4 $OCM, ${xpSets.length} SGP4-XP $OCM; ${bits} values bit for bit; outputs ${[...new Set(ports)].join(", ")}`);
 await node.destroy();
 
 if (failures.length) {
