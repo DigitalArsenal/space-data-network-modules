@@ -15,5 +15,5 @@
     "src/satnogs_optical_source.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "7b47f724a44b1fa8ab56fe6f409d3d85fa81afa30a9cf19f0c40979fd3a98657"
+  "wasmSha256": "a23705bbdf052fa9a04b0dfd417a4478c78b076177a9ec95733992d715cf30df"
 }
