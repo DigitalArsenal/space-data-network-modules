@@ -17,7 +17,9 @@
 //   2. no estimation, samples: the fit_batch request (estimation) at the first guess's own epoch, seeded with INITIAL as
 //      given, each normal point's elevation taken from the guess (the troposphere model reads it);
 //   3. estimation and result NEEDS_PROPAGATION: the queries' seed and parameters to every query epoch with the state
-//      transition matrix and the parameter columns (propagation); with samples, the answers appended (estimation);
+//      transition matrix and the parameter columns (propagation); with samples, the answers appended (estimation). A
+//      round over more than kMaximumSamples epochs goes in parts: the queries over the first kMaximumSamples epochs,
+//      then analysis/estimation asks for the rest;
 //   4. estimation and result OK at TARGET_EPOCH: the $OCM; NOT_CONVERGED is refused;
 //   5. estimation and result OK at another epoch: its estimate and fitted parameters to TARGET_EPOCH (propagation);
 //      with samples, round 2's request (the same observations and elevations) at TARGET_EPOCH, seeded with the estimate
@@ -54,9 +56,10 @@ namespace fr = ::sdn::frames;
 namespace {
 
 constexpr const char* kPluginId = "org.sdn.flows.observation-od.laser-od";
-constexpr const char* kVersion = "0.3.0";
+constexpr const char* kVersion = "0.4.0";
 constexpr double kArcsec = 3.14159265358979323846 / 648000.0;
 constexpr double kC = 299792458.0;
+constexpr size_t kMaximumSamples = 10000;  // propagator/ffm invoke: at most 10000 SAMPLE_EPOCHS a request
 
 int fail(const std::string& code, const std::string& message) {
   plugin_set_error(code.c_str(), message.c_str());
@@ -802,14 +805,18 @@ extern "C" int step(void) {
                           " after " + std::to_string(iterations) + " propagation rounds");
   }
 
-  // 3. A propagation round.
+  // 3. A propagation round, or the part of it over the first kMaximumSamples epochs of its queries not answered yet.
   const auto* queries = answer->result()->propagation_requests();
   if (!queries || queries->size() == 0) return fail("bad-input", "NEEDS_PROPAGATION without queries");
   const auto* q0 = queries->Get(0);
   std::vector<Utc> query_epochs;
-  for (const auto* q : *queries) {
-    const Utc t = from_label(*q->target_epoch());
-    if (query_epochs.empty() || iso(query_epochs.back()) != iso(t)) query_epochs.push_back(t);
+  flatbuffers::uoffset_t part = 0;  // the queries this propagation answers
+  for (; part < queries->size(); ++part) {
+    const Utc t = from_label(*queries->Get(part)->target_epoch());
+    if (query_epochs.empty() || iso(query_epochs.back()) != iso(t)) {
+      if (query_epochs.size() == kMaximumSamples) break;
+      query_epochs.push_back(t);
+    }
   }
   if (!result) {
     auto exec = std::make_unique<PRWExecutionRequestT>(*templ);
@@ -829,7 +836,8 @@ extern "C" int step(void) {
   for (size_t i = 0; i < query_epochs.size(); ++i) at[iso(query_epochs[i])] = i;
   std::unique_ptr<wire::EstimationEnvelopeT> env(sent->UnPack());
   const size_t p = kinds.size(), n = 6 + p;
-  for (const auto* q : *queries) {
+  for (flatbuffers::uoffset_t k = 0; k < part; ++k) {
+    const auto* q = queries->Get(k);
     const auto* sample = result->SAMPLES()->Get(static_cast<flatbuffers::uoffset_t>(at[iso(from_label(*q->target_epoch()))]));
     const auto* s = sample->STATE()->STATE();
     if (!sample->STM() || sample->STM()->DIMENSION() != n || sample->STM()->VALUES()->size() != n * n)

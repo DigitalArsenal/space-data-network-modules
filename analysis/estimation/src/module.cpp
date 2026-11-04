@@ -1110,6 +1110,18 @@ extern "C" int fit_batch(void) {
   config.maximum_iterations = static_cast<int>(options->maximum_iterations());
   config.correction_tolerance = options->correction_tolerance();
   config.sigma_edit_threshold = options->sigma_edit_threshold();
+  // A state in Earth-centered equatorial inertial axes keeps a bound orbit with its two-body perigee at least 100 km
+  // above the equatorial radius (propagator/ffm ends a trajectory below 100 km geodetic altitude).
+  switch (request->config()->reference_frame()) {
+    case ::orbpro::propagator::ReferenceFrame::TEME: case ::orbpro::propagator::ReferenceFrame::J2000:
+    case ::orbpro::propagator::ReferenceFrame::ICRF: case ::orbpro::propagator::ReferenceFrame::MOD:
+    case ::orbpro::propagator::ReferenceFrame::TOD: case ::orbpro::propagator::ReferenceFrame::MOD_FK5:
+    case ::orbpro::propagator::ReferenceFrame::TOD_FK5:
+      config.central_gravitational_parameter = core::kEarthGravitationalParameter;
+      config.minimum_perigee_radius = 6378137.0 + 100.0e3;
+      break;
+    default: break;
+  }
 
   const std::size_t count = observations.size();
   const std::size_t p = config.initial_parameters.size();
@@ -1135,8 +1147,10 @@ extern "C" int fit_batch(void) {
       ::flatbuffers::span<const double, 36>(empty.data(), 36), 0, 0, 0, 0, 0,
       request->config()->reference_frame(), 0, 0, request->config()->estimator());
     const std::size_t have = answers ? answers->size() : 0;
-    if (have <= first) {
-      for (std::size_t j = 0; j < requests.size(); ++j) {
+    // Unanswered, or answered in part (a host may answer a round in parts, in sequence order): the round's queries
+    // not answered yet.
+    if (have < first + requests.size()) {
+      for (std::size_t j = have > first ? have - first : 0; j < requests.size(); ++j) {
         auto query = std::make_unique<wire::PropagationQueryT>();
         query->sequence = static_cast<std::uint32_t>(first + j);
         query->seed = std::make_unique<wire::EstimationState>(seed_wire);
@@ -1146,7 +1160,6 @@ extern "C" int fit_batch(void) {
       }
       return core::PortAnswer::PENDING;
     }
-    if (have < first + requests.size()) { protocol_error = true; return core::PortAnswer::PENDING; }
     // A round is answered (every answer has its sample) or refused (every
     // answer refused, without sample or sensitivity); each echoes its query.
     const bool refused = answers->Get(static_cast<::flatbuffers::uoffset_t>(first)) &&

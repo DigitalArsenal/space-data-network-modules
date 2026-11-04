@@ -935,6 +935,19 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     return result;
   };
 
+  // The state's domain: bound, with the two-body perigee at the epoch at or
+  // above config.minimum_perigee_radius (the propagator ends a trajectory
+  // that descends into the atmosphere).
+  auto in_domain = [&](const std::vector<double>& xi) {
+    const double mu = config.central_gravitational_parameter;
+    if (!(mu > 0.0)) return true;
+    const Vec3 r{xi[0], xi[1], xi[2]}, v{xi[3], xi[4], xi[5]};
+    const double radius = norm(r), energy = 0.5 * dot(v, v) - mu / radius;
+    if (!(radius > 0.0) || !(energy < 0.0)) return false;
+    const Vec3 h = cross(r, v);
+    const double a = -mu / (2.0 * energy), e = std::sqrt(std::max(0.0, 1.0 - dot(h, h) / (mu * a)));
+    return a * (1.0 - e) >= config.minimum_perigee_radius;
+  };
   // The edit set at a point: the units whose whitened residual RMS exceeds
   // sigma_edit_threshold times max(1, rms).
   auto edits = [&](const Evaluation& at, double rms) {
@@ -964,10 +977,14 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
   if (status == 3) return fail("the initial state and parameters give a non-finite sample or residual");
   int evaluations = 1;
   bool fresh = true;  // ev is a newly accepted point
+  // Editing starts at the first point converged over every observation: an
+  // edit while the fit is far from it can take a whole short track (the one
+  // crossing of another night) and with it what fixed the solution.
+  bool editing = false;
   for (;;) {
     // Editing against the previous accepted point's weighted RMS.
     const std::vector<bool> before = rejected;
-    if (fresh && config.sigma_edit_threshold > 0.0 && evaluations > 1) rejected = edits(ev, previous_rms);
+    if (fresh && editing) rejected = edits(ev, previous_rms);
     fresh = false;
     Matrix normal_full;
     std::vector<double> rhs_full;
@@ -1013,6 +1030,7 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
       // The edit set must be a fixed point: edited against this point's own
       // weighted RMS, it must not change.
       if (config.sigma_edit_threshold > 0.0) {
+        editing = true;
         const std::vector<bool> now = edits(ev, previous_rms);
         if (now != rejected) {
           rejected = now;
@@ -1035,6 +1053,13 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
         return fail("the normal matrix is singular: the state and parameters are not observable");
       std::vector<double> trial_taken;
       const std::vector<double> trial = advance(x, limited(trial_step), &trial_taken);
+      if (!in_domain(trial)) {
+        // Rejected without a propagation; the damping rises as for a refusal.
+        ++result.rejected_trials;
+        damping = damping > 0.0 ? damping * 10.0 : kInitialDamping;
+        if (damping > kMaximumDamping) return finish(x, ev, normal_full, normal, zero, rejected, scalars, BatchFitTermination::STALLED);
+        continue;
+      }
       Evaluation trial_ev;
       std::string trial_refusal;
       status = evaluate(trial, &trial_ev, &trial_refusal);
@@ -1065,9 +1090,16 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
         }
         if (model < negligible) {
           noise = std::max(noise, model - (cost - trial_cost));
-          if (predicted <= noise && predicted <= scale && rejected == before &&
-              (config.sigma_edit_threshold <= 0.0 || edits(ev, previous_rms) == rejected))
-            return finish(next, ev, normal_full, normal, taken, rejected, scalars, BatchFitTermination::CONVERGED);
+          if (predicted <= noise && predicted <= scale && rejected == before) {
+            const std::vector<bool> now = config.sigma_edit_threshold > 0.0 ? edits(ev, previous_rms) : rejected;
+            if (now == rejected) return finish(next, ev, normal_full, normal, taken, rejected, scalars, BatchFitTermination::CONVERGED);
+            if (!editing) {
+              // Converged over every observation: editing starts here.
+              editing = true;
+              rejected = now;
+              break;
+            }
+          }
         }
       }
       damping = damping > 0.0 ? damping * 10.0 : kInitialDamping;

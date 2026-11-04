@@ -1,6 +1,6 @@
 # Observation OD: laser normal points and RA/Dec angles
 
-`org.sdn.flows.observation-od.laser-od` 0.3.0, typed contracts 1.0 (FlatBuffers only). A C++ WebAssembly node that routes
+`org.sdn.flows.observation-od.laser-od` 0.4.0, typed contracts 1.0 (FlatBuffers only). A C++ WebAssembly node that routes
 ILRS normal points through `analysis/estimation` `fit_batch` and `propagator/ffm` `invoke` until the estimator converges, and
 emits the fit as one Cartesian `$OCM`. The estimator solves and the FFM propagates; the node holds no force model and no state.
 
@@ -22,7 +22,8 @@ with the answer:
 1. the first guess to every receive epoch and to TARGET_EPOCH;
 2. the `fit_batch` request at the first guess's own epoch, seeded with INITIAL as given;
 3. each fit round: the round's seed and parameters to every query epoch with the state transition matrix and the parameter
-   columns, then the answers appended to the request;
+   columns, then the answers appended to the request; a round over more than 10,000 epochs (`propagator/ffm` `invoke`'s
+   limit) in parts, the queries over its first 10,000 epochs first, then the rest as `fit_batch` asks for them;
 4. that fit's estimate and fitted parameters to TARGET_EPOCH under the same dynamics, then the same request (observations,
    elevations) at TARGET_EPOCH seeded with the estimate carried there, and its rounds (3);
 5. the converged fit at TARGET_EPOCH as the `$OCM`.

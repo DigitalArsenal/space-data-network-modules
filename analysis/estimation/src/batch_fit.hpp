@@ -92,6 +92,12 @@ struct BatchFitConfig {
   bool regularize{false};
   double correlation_floor{1.0e-3};
   bool rtn_output{false};
+  // The state's domain, for a state about a central body in inertial axes:
+  // its gravitational parameter (m^3/s^2; 0: no domain) and the least
+  // two-body perigee radius at the epoch (m). A trial outside (unbound, or
+  // perigee below) is rejected without a propagation.
+  double central_gravitational_parameter{0.0};
+  double minimum_perigee_radius{0.0};
 };
 
 enum class BatchFitTermination : std::uint8_t { CONVERGED = 0, MAXIMUM_ITERATIONS = 1, STALLED = 2 };

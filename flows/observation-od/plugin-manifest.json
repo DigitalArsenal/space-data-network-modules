@@ -1,7 +1,7 @@
 {
   "pluginId": "org.sdn.flows.observation-od.laser-od",
   "name": "Laser orbit determination",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Routes ILRS normal points or RA/Dec angles ($TDM), station coordinates ($GST) and the Earth orientation through analysis/estimation fit_batch and propagator/ffm invoke until the estimator converges, and emits the fit as one Cartesian $OCM with FIT_STATISTICS and PVN. Stateless: each step call either asks for a propagation or an estimator round, or finishes. The estimator solves and the FFM propagates; the node rotates the stations to GCRF with foundation/frames' IAU 2006/2000A chain. Refusals by name: no-stations, arc-too-short:<hours>, no-convergence:<iterations>.",
   "pluginFamily": "analysis",
   "threadModel": "wasi-sequential",

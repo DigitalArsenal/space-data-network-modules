@@ -158,8 +158,8 @@ Weighted batch least squares of the state at the configuration epoch plus
 dynamic parameters (for propagator/ffm: B = Cd·A/m, BDOT, AGOM = Cr·A/m, the
 in-track acceleration), Gauss–Newton on whitened residuals (Tapley, Schutz &
 Born 2004, §4.3–4.6) globalized by Levenberg–Marquardt. The module holds no
-force model. This is version 3 (0.7.0, schema extension v6), which replaces
-versions 1 and 2.
+force model. This is version 4 (0.8.0, schema extension v6), which replaces
+versions 1 to 3.
 
 - **Request:** a `BATCH_WEIGHTED_LEAST_SQUARES` configuration (epoch, initial
   state), legacy observations or extended observations (1–6 lanes, e.g.
@@ -185,7 +185,10 @@ versions 1 and 2.
   `parameter_values`). The caller propagates once with the parameters as
   `DYNAMIC_PARAMETERS`, answers each query with the sample state, its 6×6
   STM and the 6×p `sensitivity` (the S block of [[Φ, S], [0, I]]), and
-  replays the unchanged request with every answer so far.
+  replays the unchanged request with every answer so far. A round may be
+  answered in parts, in sequence order (a propagator with a sample limit):
+  the replay of a part returns `NEEDS_PROPAGATION` with the round's queries
+  not answered yet.
 - **Host rule for refusals:** when the propagator returns an error for a
   round (propagator/ffm refuses, for example, a negative Cd·A/m), answer
   every query of that round with `refused` true and the error code and
@@ -216,7 +219,7 @@ within 2.2e-6 of √(PᵢᵢPⱼⱼ) and χ² within 1.2e-6. Orekit's batch esti
 weights components by their sigmas alone, so a covariance correlated in the
 request axes has no Orekit reference.
 
-### The solver (version 3)
+### The solver (version 4)
 
 The solver is never what fails: a step the propagator refuses, or one that
 raises the cost, is a rejected trial and the step shrinks.
@@ -267,6 +270,19 @@ raises the cost, is a rejected trial and the step shrinks.
   dxᵀN dx is at most the largest such misprediction at the point and at most
   nₑ max(1, χ²ᵥ) (within one scaled standard deviation), and the edit set is
   a fixed point.
+- **Editing after the first convergence.** With `sigma_edit_threshold`,
+  the edit set stays empty until the fit converges over every observation;
+  from that point on it is recomputed at each accepted point against the
+  previous accepted point's weighted RMS, and convergence needs it to be a
+  fixed point. Edited from a distant start, a whole short track (the one
+  crossing of another night, 22 of 742 RA/Dec rows on HY-2C 2026-09-23 to
+  24) leaves the fit with what fixed its range, and the steps run to re-entry.
+- **A bound orbit.** A state in Earth-centered equatorial inertial axes
+  (TEME, J2000, ICRF, MOD, TOD and their FK5 forms) keeps a bound orbit with
+  its two-body perigee at the epoch at least 100 km above the equatorial
+  radius (6478.137 km; propagator/ffm ends a trajectory below 100 km
+  geodetic altitude): a trial outside is rejected without a propagation and
+  the damping rises as for a refusal.
 - **Results are evaluated points.** `CONVERGED` reports the evaluated point
   plus its final Gauss–Newton step (below the tolerance, or below the
   cost's resolution), residuals linearized; `MAXIMUM_ITERATIONS`
