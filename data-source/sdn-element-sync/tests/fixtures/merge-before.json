@@ -1,0 +1,42 @@
+{
+  "module": "com.digitalarsenal.data-source.sdn-element-sync 0.1.0",
+  "wasmSha256": "bf2047b6be822754dc04fa7404082498b94995a9230edd455a09dff4a4d912f2",
+  "inputs": {
+    "xp.ocm": "89806fccac7b9bbb862ab9469c4306509698cc97271907fbc81a571148c1640c",
+    "ap.ocm": "82b4e416a15745643803157ae1e2f99ba65da3393c24fed4bea424cb50139317",
+    "sgp4.omm": "6a39e67b7879404fabc5641ecbc768026d4ec8bcb1445d725a27320098078444",
+    "notice.pnv": "a977c332cca6818bf7449d5f7b35a80cf252af5415441fe84f5d613b928eb580"
+  },
+  "outputs": [
+    {
+      "portId": "omm",
+      "bytes": 1560,
+      "sha256": "6a39e67b7879404fabc5641ecbc768026d4ec8bcb1445d725a27320098078444"
+    },
+    {
+      "portId": "store",
+      "bytes": 780,
+      "sha256": "206d3ddfb29ad052f28c1c23dd905253a19ff61cd13ed902b563372c04e4bae1"
+    },
+    {
+      "portId": "notice",
+      "bytes": 280,
+      "sha256": "a977c332cca6818bf7449d5f7b35a80cf252af5415441fe84f5d613b928eb580"
+    },
+    {
+      "portId": "expire",
+      "bytes": 112,
+      "sha256": "947e3c17cf718b8e684488deab7c5466496c0e22394857ea84d6366955498bb6"
+    },
+    {
+      "portId": "summary",
+      "bytes": 200,
+      "sha256": "301665736aefaf0eae494f7b17c8034accd3751e74220ed7061b026f24ec1f89"
+    }
+  ],
+  "summary": "kept=2 new=1 expired=0 unsigned-refused=0 malformed=0",
+  "ocmOnCached": {
+    "statusCode": 400,
+    "errorCode": "invalid-omm-frame"
+  }
+}
