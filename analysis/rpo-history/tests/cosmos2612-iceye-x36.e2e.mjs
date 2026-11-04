@@ -196,22 +196,20 @@ async function characterize(epochState, config, rows, extra = []) {
   };
 }
 
-// The geometry records as rows {t, R, I, ...} with each record's segment kind.
+// The geometry records (RPO_GEOMETRY) as rows {t, R_KM, I_KM, ...} with each record's segment kind (TRAJ_BASIS).
+const PREDICTED = OCM.ocmTrajectoryBasis.PREDICTED;
 function geometryRows(records) {
   const out = [];
   records.forEach((rec, segment) => {
-    const udp = Object.fromEntries(rec.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
-    const cols = udp.COLUMNS.split(',');
-    const w = rec.STATE_VECTOR_SIZE, t0 = T(rec.METADATA.START_TIME), step = rec.STATE_STEP_SIZE;
-    for (let i = 0; i * w < rec.STATE_DATA.length; i++) {
-      const row = { t: t0 + i * step, segment, projection: udp.SEGMENT === 'PROJECTION' };
-      cols.forEach((c, k) => { row[c] = rec.STATE_DATA[i * w + k]; });
+    const g = rec.RPO_GEOMETRY, t0 = T(rec.METADATA.START_TIME), step = rec.STATE_STEP_SIZE;
+    for (let i = 0; i < g.R_KM.length; i++) {
+      const row = { t: t0 + i * step, segment, projection: rec.TRAJ_BASIS === PREDICTED };
+      for (const [c, v] of Object.entries(g)) row[c] = v[i];
       out.push(row);
     }
   });
   return out;
 }
-const udpOf = (rec) => Object.fromEntries(rec.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
 
 // ── synthetic two-body pairs (oracle: this file's own Kepler solver) ────────
 const MU = 398600.4418;
@@ -350,7 +348,10 @@ await epochState.destroy();
 
 const rows = geometryRows(run.geometry);
 const hist = rows.filter((r) => !r.projection), coast = rows.filter((r) => r.projection);
-const summary = udpOf(run.geometry.at(-1));
+const realism = run.realism[0] ?? {};
+const summary = { samples: realism.SAMPLES, truthEpochs: realism.TRUTH_EPOCHS, meanD2Over3: realism.MEAN_D2_OVER_3, coverage95: realism.COVERAGE_95,
+  inside1: [realism.COVERAGE_1_SIGMA_AXIS1, realism.COVERAGE_1_SIGMA_AXIS2, realism.COVERAGE_1_SIGMA_AXIS3],
+  inside3: [realism.COVERAGE_3_SIGMA_AXIS1, realism.COVERAGE_3_SIGMA_AXIS2, realism.COVERAGE_3_SIGMA_AXIS3] };
 console.log('summary', JSON.stringify(summary));
 const inside = (a, b) => hist.filter((r) => r.t >= T(a) && r.t < T(b));
 const ext = (xs, k) => xs.length ? [Math.min(...xs.map((r) => r[k])), Math.max(...xs.map((r) => r[k]))] : [NaN, NaN];
@@ -359,11 +360,11 @@ const mean = (xs, k) => xs.reduce((s, r) => s + r[k], 0) / xs.length;
 
 check('typed output: relative $OCM per segment in the target RTN, geometry $OCM on the same epochs', run.relative.length === run.geometry.length &&
   run.relative.every((r) => r.TRAJ_REF_FRAME?.NAME === 'RTN' && r.CENTER_NAME === '2024-043F' && r.STATE_VECTOR_SIZE === 6) &&
-  run.relative.every((r, i) => r.STATE_DATA.length / 6 === run.geometry[i].STATE_DATA.length / run.geometry[i].STATE_VECTOR_SIZE),
+  run.relative.every((r, i) => r.STATE_DATA.length / 6 === run.geometry[i].RPO_GEOMETRY.R_KM.length),
   { records: run.relative.length, samples: rows.length });
-check('segments: a new segment at every element update, never across one', run.geometry.every((r, i) => i === 0 || udpOf(r).SEGMENT === 'PROJECTION' ||
-  udpOf(r).CHASER_ELEMENT_SET_EPOCH !== udpOf(run.geometry[i - 1]).CHASER_ELEMENT_SET_EPOCH ||
-  udpOf(r).TARGET_ELEMENT_SET_EPOCH !== udpOf(run.geometry[i - 1]).TARGET_ELEMENT_SET_EPOCH ||
+check('segments: a new segment at every element update, never across one', run.geometry.every((r, i) => i === 0 || r.TRAJ_BASIS === PREDICTED ||
+  r.SEED_SETS[0].EPOCH !== run.geometry[i - 1].SEED_SETS[0].EPOCH ||
+  r.SEED_SETS[1].EPOCH !== run.geometry[i - 1].SEED_SETS[1].EPOCH ||
   T(r.METADATA.START_TIME) - T(run.geometry[i - 1].METADATA.STOP_TIME) > STEP), `${run.geometry.length} records`);
 
 // Sep 28 - Sep 30 04:00: before the first orbit change (OEL: R -20..15, C +-28.5,
@@ -405,9 +406,9 @@ check('segments: a new segment at every element update, never across one', run.g
   check('plane angle ~0 after the Oct 12 orbit change (< 0.01 deg)', P[1] < 0.01, P);
 }
 // The Oct 12 orbit change.
-const cosmosBrackets = run.relative.flatMap((r) => r.MANEUVER_DATA ?? []).filter((m) => m.MAN_COMMENT.join(' ').startsWith(`chaser NORAD:${CHASER}`))
+const cosmosBrackets = run.relative.flatMap((r) => r.MANEUVER_DATA ?? []).filter((m) => m.NORAD_CAT_ID === CHASER)
   .map((m) => [T(m.MAN_EPOCH_START), T(m.MAN_EPOCH_START) + m.MAN_DURATION]);
-const targetBrackets = run.relative.flatMap((r) => r.MANEUVER_DATA ?? []).filter((m) => m.MAN_COMMENT.join(' ').startsWith(`target NORAD:${TARGET}`))
+const targetBrackets = run.relative.flatMap((r) => r.MANEUVER_DATA ?? []).filter((m) => m.NORAD_CAT_ID === TARGET)
   .map((m) => [T(m.MAN_EPOCH_START), T(m.MAN_EPOCH_START) + m.MAN_DURATION]);
 console.log('brackets', JSON.stringify({ cosmos: cosmosBrackets.map((b) => b.map(iso)), iceye: targetBrackets.map((b) => b.map(iso)) }));
 {
@@ -467,9 +468,10 @@ console.log('brackets', JSON.stringify({ cosmos: cosmosBrackets.map((b) => b.map
   check('coast: 1-sigma bands on every projected sample', bands.length === coast.length,
     { samples: coast.length, sigmaI_first_last_km: [bands[0]?.SIGMA_I_KM, bands.at(-1)?.SIGMA_I_KM], sigmaR_last_km: bands.at(-1)?.SIGMA_R_KM });
   const rel = run.relative.at(-1);
-  check('coast: the projection record says CONDITIONAL and carries the RTN covariance with its realism',
-    udpOf(rel).CONDITIONAL?.startsWith('no maneuvers after') && rel.COVARIANCE_DATA.length === 6 * coast.length && rel.COV_REALISM.length === 1,
-    { conditional: udpOf(rel).CONDITIONAL, calibration: rel.COV_CALIBRATION });
+  const conditional = rel.TRAJ_BASIS === PREDICTED && !(rel.MANEUVER_DATA ?? []).some((m) => T(m.MAN_EPOCH_START) > T(rel.METADATA.START_TIME));
+  check('coast: the projection record is conditional (PREDICTED, no maneuver after its start) and carries the RTN covariance with its realism',
+    conditional && rel.COVARIANCE_DATA.length === 6 * coast.length && rel.COV_REALISM.length === 1,
+    { basis: rel.TRAJ_BASIS, calibration: rel.COV_CALIBRATION });
 }
 // 4: the hindcast. Predictions that compare with the same later element sets
 // are not independent, so the effective sample size is the number of distinct
@@ -480,10 +482,9 @@ console.log('brackets', JSON.stringify({ cosmos: cosmosBrackets.map((b) => b.map
 // binomial p >= 0.05 at n_eff). The stricter gate of analysis/gp-error-model
 // (1-sigma within 5 points, at most 1 % outside 3 sigma) is reported beside it.
 {
-  const f1 = summary.HINDCAST_INSIDE_1SIGMA_RIC?.split(',').map(Number) ?? [], f3 = summary.HINDCAST_INSIDE_3SIGMA_RIC?.split(',').map(Number) ?? [];
-  const n = Number(summary.HINDCAST_SAMPLES), nEff = Number(summary.HINDCAST_TRUTH_EPOCHS);
-  console.log('hindcast', JSON.stringify({ n, nEff, f1, f3, meanD2Over3: summary.HINDCAST_MEAN_D2_OVER_3, coverage95: summary.HINDCAST_COVERAGE_95,
-    calibration: summary.CALIBRATION_AT_STOP, samples: summary.RELATIVE_SAMPLES, realism: run.realism[0]?.EVIDENCE }));
+  const f1 = run.realism.length ? summary.inside1 : [], f3 = run.realism.length ? summary.inside3 : [];
+  const n = summary.samples, nEff = summary.truthEpochs;
+  console.log('hindcast', JSON.stringify({ n, nEff, f1, f3, meanD2Over3: summary.meanD2Over3, coverage95: summary.coverage95, realism: realism.EVIDENCE }));
   const wilson = (p, m, z = 1.959963984540054) => {
     const d = 1 + z * z / m, c = (p + z * z / (2 * m)) / d, h = z * Math.sqrt(p * (1 - p) / m + z * z / (4 * m * m)) / d;
     return [c - h, c + h];
