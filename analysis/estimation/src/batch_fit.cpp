@@ -106,6 +106,8 @@ constexpr double kMaximumDamping = 1.0e12;
 // region in ln p): an undamped Gauss-Newton step in ln p that the
 // unconstrained problem would take past zero is many orders of magnitude.
 const double kMaximumLogStep = std::log(10.0);
+// A pass: a run of observations, in time order, without a gap over this (s).
+constexpr double kPassGapSeconds = 600.0;
 
 bool is_angle(MeasurementKind kind) {
   return kind == MeasurementKind::AZIMUTH_ELEVATION || kind == MeasurementKind::RIGHT_ASCENSION_DECLINATION;
@@ -948,15 +950,61 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
     const double a = -mu / (2.0 * energy), e = std::sqrt(std::max(0.0, 1.0 - dot(h, h) / (mu * a)));
     return a * (1.0 - e) >= config.minimum_perigee_radius;
   };
+  // In the domain, a trial's velocity scaled so its two-body energy is the
+  // linear model's (the point's energy plus its first-order change over the
+  // step): the energy is quadratic in the velocity, and over many
+  // revolutions the measurements hang on the mean motion, so a step of tens
+  // of m/s otherwise moves the in-track phase a day on by kilometers the
+  // linear model does not see.
+  auto with_model_energy = [&](const std::vector<double>& xi, std::vector<double>* trial) {
+    const double mu = config.central_gravitational_parameter;
+    if (!(mu > 0.0)) return;
+    const Vec3 r{xi[0], xi[1], xi[2]}, v{xi[3], xi[4], xi[5]};
+    const Vec3 rt{(*trial)[0], (*trial)[1], (*trial)[2]}, vt{(*trial)[3], (*trial)[4], (*trial)[5]};
+    const double radius = norm(r);
+    const double energy = 0.5 * dot(v, v) - mu / radius +
+                          dot(v, subtract(vt, v)) + mu * dot(r, subtract(rt, r)) / (radius * radius * radius);
+    const double kinetic = energy + mu / norm(rt), speed = norm(vt);
+    if (!(energy < 0.0) || !(kinetic > 0.0) || !(speed > 0.0)) return;  // outside the domain: rejected there
+    const double s = std::sqrt(2.0 * kinetic) / speed;
+    for (int i = 3; i < 6; ++i) (*trial)[i] *= s;
+  };
+  // Each unit's pass (kPassGapSeconds).
+  std::vector<int> pass_of(unit_count, 0);
+  int passes = 0;
+  {
+    std::vector<std::size_t> order(unit_count);
+    std::vector<double> begin(unit_count, kInfinity), end(unit_count, -kInfinity);
+    for (std::size_t u = 0; u < unit_count; ++u) {
+      order[u] = u;
+      for (std::size_t j : units[u].members) {
+        begin[u] = std::min(begin[u], observations[j].epoch_seconds);
+        end[u] = std::max(end[u], observations[j].epoch_seconds);
+      }
+    }
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) { return begin[a] < begin[b]; });
+    double last = -kInfinity;
+    for (std::size_t u : order) {
+      if (passes == 0 || begin[u] - last > kPassGapSeconds) ++passes;
+      pass_of[u] = passes - 1;
+      last = std::max(last, end[u]);
+    }
+  }
   // The edit set at a point: the units whose whitened residual RMS exceeds
-  // sigma_edit_threshold times max(1, rms).
-  auto edits = [&](const Evaluation& at, double rms) {
+  // sigma_edit_threshold times max(1, rms); without `whole`, a pass every
+  // unit of which would go stays whole.
+  auto edits = [&](const Evaluation& at, double rms, bool whole) {
     std::vector<bool> out(unit_count, false);
     const double limit = config.sigma_edit_threshold * std::max(1.0, rms);
     for (std::size_t u = 0; u < unit_count; ++u) {
       double sum = 0.0;
       for (double w : at.residual[u]) sum += w * w;
       out[u] = std::sqrt(sum / units[u].dimension) > limit;
+    }
+    if (!whole) {
+      std::vector<int> kept(passes, 0);
+      for (std::size_t u = 0; u < unit_count; ++u) kept[pass_of[u]] += out[u] ? 0 : 1;
+      for (std::size_t u = 0; u < unit_count; ++u) if (kept[pass_of[u]] == 0) out[u] = false;
     }
     return out;
   };
@@ -977,14 +1025,15 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
   if (status == 3) return fail("the initial state and parameters give a non-finite sample or residual");
   int evaluations = 1;
   bool fresh = true;  // ev is a newly accepted point
-  // Editing starts at the first point converged over every observation: an
-  // edit while the fit is far from it can take a whole short track (the one
-  // crossing of another night) and with it what fixed the solution.
-  bool editing = false;
+  // Until the first point converged over the edit set, an edit never takes a
+  // pass whole: far from the solution, a short pass a day from the rest (the
+  // one crossing of another night) can lie outside the limit, and with it
+  // would go what fixed the solution. From then on a pass may go whole.
+  bool converged_once = false;
   for (;;) {
     // Editing against the previous accepted point's weighted RMS.
     const std::vector<bool> before = rejected;
-    if (fresh && editing) rejected = edits(ev, previous_rms);
+    if (fresh && config.sigma_edit_threshold > 0.0 && evaluations > 1) rejected = edits(ev, previous_rms, converged_once);
     fresh = false;
     Matrix normal_full;
     std::vector<double> rhs_full;
@@ -1030,8 +1079,8 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
       // The edit set must be a fixed point: edited against this point's own
       // weighted RMS, it must not change.
       if (config.sigma_edit_threshold > 0.0) {
-        editing = true;
-        const std::vector<bool> now = edits(ev, previous_rms);
+        converged_once = true;
+        const std::vector<bool> now = edits(ev, previous_rms, true);
         if (now != rejected) {
           rejected = now;
           continue;
@@ -1052,7 +1101,8 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
       if (damping > 0.0 && !solve(normal, rhs, damping, held, &trial_step))
         return fail("the normal matrix is singular: the state and parameters are not observable");
       std::vector<double> trial_taken;
-      const std::vector<double> trial = advance(x, limited(trial_step), &trial_taken);
+      std::vector<double> trial = advance(x, limited(trial_step), &trial_taken);
+      with_model_energy(x, &trial);
       if (!in_domain(trial)) {
         // Rejected without a propagation; the damping rises as for a refusal.
         ++result.rejected_trials;
@@ -1091,11 +1141,11 @@ BatchFitResult batch_fit(const BatchFitConfig& config, const std::vector<Observa
         if (model < negligible) {
           noise = std::max(noise, model - (cost - trial_cost));
           if (predicted <= noise && predicted <= scale && rejected == before) {
-            const std::vector<bool> now = config.sigma_edit_threshold > 0.0 ? edits(ev, previous_rms) : rejected;
+            const std::vector<bool> now = config.sigma_edit_threshold > 0.0 ? edits(ev, previous_rms, true) : rejected;
             if (now == rejected) return finish(next, ev, normal_full, normal, taken, rejected, scalars, BatchFitTermination::CONVERGED);
-            if (!editing) {
-              // Converged over every observation: editing starts here.
-              editing = true;
+            if (!converged_once) {
+              // Converged at the cost's resolution over the edit set: a pass may go whole from here.
+              converged_once = true;
               rejected = now;
               break;
             }
