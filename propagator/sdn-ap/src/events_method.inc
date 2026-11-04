@@ -162,9 +162,7 @@ extern "C" int maneuver(void) {
     } else if (std::strcmp(f->port_id, "maneuvers") == 0) {
       const uint8_t* p = f->payload;
       uint32_t n = f->payload_length;
-      if (n >= 12 && std::memcmp(p + 4, "$MNV", 4) != 0 && std::memcmp(p + 8, "$MNV", 4) == 0) { p += 4; n -= 4; }
-      flatbuffers::Verifier verifier(p, n);
-      if (!VerifyMNVBuffer(verifier)) {
+      if (!plain_view(p, n, "$MNV") || !verify_as_given<MNV>(f->payload, f->payload_length, p, "$MNV")) {
         plugin_set_error("invalid-mnv", "A 'maneuvers' payload is not a verifiable SDS $MNV.");
         return 3;
       }

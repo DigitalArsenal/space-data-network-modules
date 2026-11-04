@@ -24,6 +24,16 @@ inline bool plain_view(const uint8_t*& p, uint32_t& n, const char* ident) {
   return false;
 }
 
+/// Verifies the SDS FlatBuffer (p, n) in which plain_view found the view `view`, from where its builder aligned it: a
+/// plain buffer from its start, a size-prefixed one from its prefix (VerifySizePrefixedBuffer on the unstripped bytes).
+/// A size-prefixed buffer is aligned to its prefix, so a verifier of the view after it finds every 8-byte field 4 bytes
+/// off and refuses it.
+template <typename T>
+inline bool verify_as_given(const uint8_t* p, uint32_t n, const uint8_t* view, const char* ident) {
+  flatbuffers::Verifier verifier(p, n);
+  return view == p ? verifier.VerifyBuffer<T>(ident) : verifier.VerifySizePrefixedBuffer<T>(ident);
+}
+
 namespace omm {
 
 /// Days from 1970-01-01 of a civil date (proleptic Gregorian).

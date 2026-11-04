@@ -349,8 +349,7 @@ static int fit_blocks() {
       plugin_set_error("invalid-oem", "An 'ephemeris' payload is not an SDS $OEM (plain or size-prefixed).");
       return 3;
     }
-    flatbuffers::Verifier verifier(payload, payload_length);
-    if (!VerifyOEMBuffer(verifier)) {
+    if (!verify_as_given<OEM>(f->payload, f->payload_length, payload, "$OEM")) {
       plugin_set_error("invalid-oem", "An 'ephemeris' $OEM does not verify.");
       return 3;
     }

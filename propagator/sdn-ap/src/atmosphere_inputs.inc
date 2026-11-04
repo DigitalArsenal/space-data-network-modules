@@ -107,10 +107,11 @@ inline int read_spw_frame(const uint8_t* p, uint32_t n, std::vector<SpwDay>& day
 }
 
 /// The open-DCA $DCL into a's nodes: nullptr, or the reason it is refused.
-inline const char* read_dcl(const uint8_t* p, uint32_t n, Atmosphere& a) {
+inline const char* read_dcl(const uint8_t* payload, uint32_t length, Atmosphere& a) {
+  const uint8_t* p = payload;
+  uint32_t n = length;
   if (!plain_view(p, n, "$DCL")) return "not an SDS $DCL";
-  flatbuffers::Verifier verifier(p, n);
-  if (!VerifyDCLBuffer(verifier)) return "the $DCL does not verify";
+  if (!verify_as_given<DCL>(payload, length, p, "$DCL")) return "the $DCL does not verify";
   const DCL* rec = GetDCL(p);
   const auto* c = rec->CORRECTION();
   if (rec->STATUS() != dclStatus_Solved) return "the calibration must be Solved";
