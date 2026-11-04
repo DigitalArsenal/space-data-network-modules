@@ -138,8 +138,15 @@ Read user_defined(const List* list, const char* code) {
                  std::string("a $") + code + " carries USER_DEFINED_PARAMETERS; SDN records never do.");
 }
 
+// A record cut from a size-prefixed stream is aligned to its prefix, not to its own start.
+flatbuffers::Verifier::Options unaligned() {
+  flatbuffers::Verifier::Options o;
+  o.check_alignment = false;
+  return o;
+}
+
 Read read_omm(const Span& sp, Set* s) {
-  flatbuffers::Verifier v(sp.bytes, sp.size);
+  flatbuffers::Verifier v(sp.bytes, sp.size, unaligned());
   if (!OMMBufferHasIdentifier(sp.bytes) || !VerifyOMMBuffer(v)) return Read::malformed;
   const OMM* omm = GetOMM(sp.bytes);
   if (user_defined(omm->USER_DEFINED_PARAMETERS(), "OMM") == Read::refused) return Read::refused;
@@ -149,7 +156,7 @@ Read read_omm(const Span& sp, Set* s) {
 }
 
 Read read_ocm(const Span& sp, Set* s) {
-  flatbuffers::Verifier v(sp.bytes, sp.size);
+  flatbuffers::Verifier v(sp.bytes, sp.size, unaligned());
   if (!OCMBufferHasIdentifier(sp.bytes) || !VerifyOCMBuffer(v)) return Read::malformed;
   const OCM* ocm = GetOCM(sp.bytes);
   if (user_defined(ocm->USER_DEFINED_PARAMETERS(), "OCM") == Read::refused) return Read::refused;
