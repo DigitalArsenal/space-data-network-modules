@@ -266,17 +266,24 @@ extern "C" int read_station_night(void) {
   wgs84(lat, lon, alt_km * 1000.0, site);
 
   std::vector<std::string> refused, items;
-  std::map<std::string, size_t> refused_by_reason, shifted_by_reference;
+  std::map<std::string, size_t> refused_by_reason;
   std::vector<flatbuffers::FlatBufferBuilder> tdms, eoos;
   size_t emitted = 0, below_minimum = 0, filtered_out = 0;
   std::string night_start, night_stop;
+  Instant first_at, last_at;
+  bool have_span = false;
   std::vector<std::string> per_track;
+  // Each segment's rows are refused by name, or moved to mid-exposure by the declared offset (nanoseconds) and gathered
+  // into their object-track: a track the caller split (a refused row, a change of convention) is one $TDM.
+  struct Emitted { Row* row; int64_t shift_ns; };
+  struct Output { Track* track; std::vector<Emitted> rows; std::set<std::string> references; std::set<int64_t> shifts; };
+  std::vector<Output> outputs;
+  std::map<std::string, size_t> output_of;
   for (Track& t : tracks) {
     if (config.filtered && !config.objects.count(t.norad)) {
       filtered_out += t.rows.size();
       continue;
     }
-    // The declared offset of the epoch from mid-exposure, in nanoseconds; empty reason means the rows can be moved.
     int64_t shift_ns = 0;
     std::string why;
     if (t.quality == "DEGRADED") why = "quarantined";
@@ -290,10 +297,25 @@ extern "C" int read_station_night(void) {
       refused_by_reason[why] += t.rows.size();
       continue;
     }
-    if (t.rows.size() < config.minimum) {
-      below_minimum += t.rows.size();
+    const std::string key = t.id + "\n" + t.object;
+    if (!output_of.count(key)) {
+      output_of[key] = outputs.size();
+      outputs.push_back(Output{&t, {}, {}, {}});
+    }
+    Output& o = outputs[output_of[key]];
+    o.references.insert(t.reference);
+    o.shifts.insert(shift_ns);
+    for (Row& r : t.rows) o.rows.push_back(Emitted{&r, shift_ns});
+  }
+  for (Output& o : outputs) {
+    const Track& t = *o.track;
+    if (o.rows.size() < config.minimum) {
+      below_minimum += o.rows.size();
       continue;
     }
+    std::string references, shifts;
+    for (const auto& s : o.references) references += (references.empty() ? "" : ",") + s;
+    for (int64_t s : o.shifts) shifts += (shifts.empty() ? "" : ",") + std::to_string(s);
     TDMT tdm;
     tdm.OBSERVER_ID = t.station;
     tdm.OBSERVER_X = site[0];
@@ -315,19 +337,20 @@ extern "C" int read_station_night(void) {
     seg->TRACK_ID = t.id;
     seg->DATA_TYPES = "ANGLE_1,ANGLE_2";
     seg->DATA_QUALITY = t.quality.empty() ? "RAW" : t.quality;
-    seg->COMMENT = {"epochs at mid-exposure: the stated epochs (INTEGRATION_REF " + t.reference + ") moved by " + std::to_string(shift_ns) + " ns",
+    seg->COMMENT = {"epochs at mid-exposure: the stated epochs (INTEGRATION_REF " + references + ") moved by " + shifts + " ns",
                     "OBSERVER_X/Y/Z: the station's WGS-84 geodetic site on the ellipsoid, m (Earth-fixed)",
                     "per-observation sigma: the $EOO of each observation (RA_UNC, DECLINATION_UNC)"};
-    for (Row& r : t.rows) {
+    for (const Emitted& next : o.rows) {
+      Row& r = *next.row;
       Instant at;
       if (!parse_epoch(r.epoch, &at)) return fail("invalid-batch", "Measurement " + r.name + ": the epoch " + r.epoch + " does not read.");
-      const std::string moved = shift_ns ? format_epoch({at.day, at.ns + shift_ns}) : r.epoch;
+      const std::string moved = next.shift_ns ? format_epoch({at.day, at.ns + next.shift_ns}) : r.epoch;
       for (auto [key, value] : {std::pair<const char*, double>{"ANGLE_1", r.ra}, {"ANGLE_2", r.dec}}) {
-        auto o = std::make_unique<TDMObservationT>();
-        o->KEYWORD = key;
-        o->EPOCH = moved;
-        o->VALUE = value;
-        seg->OBSERVATIONS.push_back(std::move(o));
+        auto obs = std::make_unique<TDMObservationT>();
+        obs->KEYWORD = key;
+        obs->EPOCH = moved;
+        obs->VALUE = value;
+        seg->OBSERVATIONS.push_back(std::move(obs));
       }
       EOOT& e = *r.eoo;
       e.OB_TIME = moved;
@@ -341,18 +364,20 @@ extern "C" int read_station_night(void) {
       e.SOURCE = kSource;
       eoos.emplace_back(512);
       FinishEOOBuffer(eoos.back(), CreateEOO(eoos.back(), &e));
-      if (night_start.empty() || moved < night_start) night_start = moved;
-      if (night_stop.empty() || moved > night_stop) night_stop = moved;
+      Instant m;
+      parse_epoch(moved, &m);
+      if (!have_span || m.day < first_at.day || (m.day == first_at.day && m.ns < first_at.ns)) first_at = m, night_start = moved;
+      if (!have_span || m.day > last_at.day || (m.day == last_at.day && m.ns > last_at.ns)) last_at = m, night_stop = moved;
+      have_span = true;
     }
     seg->START_TIME = seg->OBSERVATIONS.front()->EPOCH;
     seg->STOP_TIME = seg->OBSERVATIONS.back()->EPOCH;
-    ++shifted_by_reference[t.reference];
     const std::string at = "track." + std::to_string(tdms.size()) + ".";
-    for (std::string entry : {item(at + "id", t.id), item(at + "object", t.object), item(at + "observations", t.rows.size()), item(at + "epochReference", t.reference),
-                              item(at + "epochShiftNanoseconds", std::to_string(shift_ns))}) {
+    for (std::string entry : {item(at + "id", t.id), item(at + "object", t.object), item(at + "observations", o.rows.size()), item(at + "epochReference", references),
+                              item(at + "epochShiftNanoseconds", shifts)}) {
       per_track.push_back(std::move(entry));
     }
-    emitted += t.rows.size();
+    emitted += o.rows.size();
     tdm.SEGMENTS.push_back(std::move(seg));
     tdms.emplace_back(4096);
     FinishTDMBuffer(tdms.back(), CreateTDM(tdms.back(), &tdm));
