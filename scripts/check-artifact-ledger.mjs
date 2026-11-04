@@ -41,7 +41,7 @@ for (const rel of committed.filter((f) => f.endsWith("/dist/isomorphic/module.wa
 }
 
 const landed = [
-  ["propagator/sdn-ap", "0.5.1", "d29acd2b5d921446f7da8dbf51f45ba53d59dc7685e677616dcd81944981efdb"],
+  ["propagator/sdn-ap", "0.5.2", "74388314396a8f8c4bc962b63566b01ee8a99e1d8a295e8233fac36d5683500d"],
   ["data-source/sdn-element-sync", "0.2.0", "37f0ea34ccc2bf7b90de6bdffa1f3d47b954eef7388f0b374ff6e5ca42712897"],
   ["propagator/ffm", "2.1.0", "318db198d611da632a461de0c5aa6e280ffaa913cc2a1324034d1844e06c4fd6"],
 ];
