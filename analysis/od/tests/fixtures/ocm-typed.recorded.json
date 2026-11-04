@@ -1,0 +1,41 @@
+{
+  "recordedFrom": {
+    "wasm": "analysis/od/dist/isomorphic/module.wasm",
+    "sha256": "4357cc0e55143979e542e1d7f75d9f3cf646c709b8a797e33291e1265c6784fa",
+    "modulesCommit": "ea824356",
+    "runtime": "browser",
+    "method": "fit",
+    "input": "tests/data/supgp-reference/starlink-synthetic/meme/MEME_67850_STARLINK-36840_1340142_Operational_1463017380_UNCLASSIFIED.txt",
+    "config": {
+      "dataSource": "SpaceX-E"
+    }
+  },
+  "obd": {
+    "WRMS": 0.0001266859788922391,
+    "NUM_ITERATIONS": 8,
+    "FIT_SPAN": 0.16666666697710752,
+    "EPOCH": null
+  },
+  "ocm": {
+    "OD_RESIDUALS": "WRMS=0.000126685979 km",
+    "OD_CONVERGENCE_CRITERIA": "sigma_rel<0.0002;converged=1",
+    "OD_OBSERVATIONS_USED": 0,
+    "OD_COV_REDUCTION": "UNAVAILABLE",
+    "OD_EPOCH": "2026-05-14T01:42:42.000011Z",
+    "START_TIME": "2026-05-14T01:42:42.000011Z",
+    "CATALOG_NAME": "99999",
+    "TRAJ_REF_FRAME": null,
+    "COV_REF_FRAME": null,
+    "COV_ORDERING": 0,
+    "COV_SIZE": 6,
+    "COV_UNITS": [],
+    "STATE_DATA": [],
+    "COVARIANCE_DATA": [],
+    "USER_DEFINED_PARAMETERS": {
+      "STATE_REFERENCE_FRAME": "TEME",
+      "STATE_UNITS": "km,km,km,km/s,km/s,km/s",
+      "COVARIANCE_LAYOUT": "6x6 lower triangular, row-major; products of state units",
+      "COVARIANCE_INTERPRETATION": "Formal fit uncertainty only; not calibrated prediction uncertainty"
+    }
+  }
+}
