@@ -6,11 +6,20 @@ Vendored from DigitalArsenal/orbit-accuracy-experiments at commit
 are the files those replays import, directly or through each other, at their repository paths. `PLAN.md` of
 xp2-fit-design is not included: only its `frozen()` reads it, and the replays never call that.
 
-Two files differ from the commit. In each, a git check that compares an experiments directory with its registered
-commit runs at import and cannot run outside that repository; the SHA-256 values below pin the files instead:
+Three files differ from the commit. In the first two, a git check that compares an experiments directory with its
+registered commit runs at import and cannot run outside that repository; the SHA-256 values below pin the files instead:
 
 - `experiments/xp2-fit-design/common.mjs`: the top-level loop that runs `git diff --quiet <commit> -- <dir>` on the xm and xm3 directories is replaced by a comment.
 - `experiments/ffm-atmosphere-xm3/common.mjs`: the top-level `xmUnchanged()` call (the same git check on XM's directory) is replaced by a comment.
+
+The third differs for another reason. `experiments/xp-atmosphere-merit/build.json` has the `packages` object of commit
+`a7f926fbc781351932d7da77d9aa8ce2ea1cba8a` (origin/main, 2026-11-04; the file there has SHA-256
+`dee374ad6032f9a887bdf6fc972f31de3bad157e43751f9a7e698c62e0c899f0`), which registers spacedatastandards.org 1.276.0 as
+installed by propagator/sdn-ap; `modulesRoot()` in the same directory's `common.mjs` compares that object with the
+installs of the modules checkout. Its other keys stay the vendored commit's: `xp2-fit-design/common.mjs` points XM's
+`modulesCommit` at its own (`9a05d899b9`), and `pinned()` then needs XM's wasm SHA-256 values to equal that commit's,
+which the wasm values of a7f926f (modules `33ae3750`) do not. The rest of a7f926f is not vendored: its `lib` files no
+longer read the $OMM and $OBD of the 0.4 baselines these replays fly.
 
 | File | SHA-256 (vendored) | SHA-256 at the commit |
 |---|---|---|
@@ -35,7 +44,7 @@ commit runs at import and cannot run outside that repository; the SHA-256 values
 | `experiments/sdn-gp-starlink-ffm-match/lib/spk-sources.mjs` | `88d364dade829a5081e5ce7b1e11bbd49dd389dc24f8519b1b1e97e126e53313` | same |
 | `experiments/sdn-gp-starlink-ffm-match/lib/timeconv.mjs` | `3160e50be761ad55a0f7383c0902db2538b699527168ee226b7a0c560c4d9bc4` | same |
 | `experiments/sdn-gp-starlink-ffm-match/lib/windows.mjs` | `91c8a90e643fcff89a7be8ab2712fe7aaeff01c022bbdb098a2e91c5aeff0e55` | same |
-| `experiments/xp-atmosphere-merit/build.json` | `2af0630e62898c867f8116f70edd9d51b206f37e9a9445d9e531d26715e3f3b5` | same |
+| `experiments/xp-atmosphere-merit/build.json` | `8461146039c193bc1430cb925bd542102738166f3de144ba105517769c17642d` | `2af0630e62898c867f8116f70edd9d51b206f37e9a9445d9e531d26715e3f3b5` |
 | `experiments/xp-atmosphere-merit/common.mjs` | `25a64b944b8ce5109b1564752fcd9f51027a04c4f4e309942bb1e4980bee152e` | same |
 | `experiments/xp-atmosphere-merit/config.json` | `bb7931a25739152f8b7a81a215ec4823aef49bb2b8660b9824d32e091bc99127` | same |
 | `experiments/xp-atmosphere-merit/lib/modules.mjs` | `e279629b6bcdbf3ba6a449dce12695baee7baef0f8353842b1338cb6181f55e1` | same |
