@@ -1,0 +1,328 @@
+{
+  "as_of_correlation_run_id": 889,
+  "astrometry": {
+    "basis": "median of the declared per-measurement values, quarantined rows excluded",
+    "distortion": [
+      "linear",
+      "sip2"
+    ],
+    "measured": {
+      "basis": "residuals of correlated tracks against the run's element set",
+      "correlation_run_id": 889,
+      "median_arcsec": 152.59188795837517,
+      "n": 6669,
+      "off_track_median_deg": 0.006487226556235197,
+      "rms_arcsec": 1791.9081121527565,
+      "session": "2026-09-21"
+    },
+    "nStars": 97.0,
+    "rmsDec": 23.11721473602247,
+    "rmsFit": 21.803323270161464,
+    "rmsRA": 23.16049892107886,
+    "solver": [
+      "cedar-solve+sip2@0s",
+      "cedar-solve+sip2@1s",
+      "cedar-solve+sip2@2s",
+      "cedar-solve+sip2@3s",
+      "cedar-solve+sip2@4s",
+      "cedar-solve+sip2@5s",
+      "cedar-solve+sip2@6s",
+      "cedar-solve@0s",
+      "cedar-solve@1s",
+      "cedar-solve@2s",
+      "cedar-solve@3s",
+      "cedar-solve@4s",
+      "cedar-solve@5s"
+    ]
+  },
+  "counts": {
+    "correlated": 5773,
+    "measurements": 903287,
+    "per_config_version": [
+      {
+        "config_version": 2,
+        "correlated": 6,
+        "measurements": 101,
+        "quarantined": 0,
+        "tracks": 9,
+        "unk": 3,
+        "withheld": {
+          "astrometry": 0,
+          "operator": 0,
+          "timing": 0
+        }
+      },
+      {
+        "config_version": 4,
+        "correlated": 86,
+        "measurements": 12688,
+        "quarantined": 0,
+        "tracks": 117,
+        "unk": 31,
+        "withheld": {
+          "astrometry": 0,
+          "operator": 0,
+          "timing": 0
+        }
+      },
+      {
+        "config_version": 6,
+        "correlated": 1753,
+        "measurements": 269753,
+        "quarantined": 16,
+        "tracks": 2541,
+        "unk": 684,
+        "withheld": {
+          "astrometry": 16,
+          "operator": 0,
+          "timing": 0
+        }
+      },
+      {
+        "config_version": 7,
+        "correlated": 1395,
+        "measurements": 226547,
+        "quarantined": 0,
+        "tracks": 1968,
+        "unk": 457,
+        "withheld": {
+          "astrometry": 0,
+          "operator": 0,
+          "timing": 0
+        }
+      },
+      {
+        "config_version": 8,
+        "correlated": 2533,
+        "measurements": 394198,
+        "quarantined": 0,
+        "tracks": 3267,
+        "unk": 629,
+        "withheld": {
+          "astrometry": 0,
+          "operator": 0,
+          "timing": 0
+        }
+      }
+    ],
+    "quarantined": 16,
+    "tracks": 7902,
+    "unk": 1804,
+    "withheld": {
+      "astrometry": 16,
+      "operator": 0,
+      "timing": 0
+    }
+  },
+  "format": {
+    "name": "satnogs-optical-station-characterisation",
+    "version": 1,
+    "vocabulary": "ADES field names where one exists: rmsRA, rmsDec, rmsFit, nStars, rmsTime. Every number is null until measured."
+  },
+  "generated_utc": "2026-09-24T06:43:09.883796Z",
+  "licence": {
+    "attribution": "SatNOGS Optical contributors",
+    "covers": "network",
+    "credit": "SatNOGS Optical contributors - https://optical.satnogs.org - CC BY-SA 4.0",
+    "produced_works": "Outputs computed from this data (orbit fits, screenings, plots, papers) owe the credit line and carry no share-alike obligation. Share-alike attaches to a database built from a substantial portion of this one.",
+    "spdx": "CC-BY-SA-4.0",
+    "url": "https://creativecommons.org/licenses/by-sa/4.0/"
+  },
+  "station": {
+    "config_versions": [
+      2,
+      4,
+      6,
+      7,
+      8
+    ],
+    "id": 11,
+    "instrument": {
+      "lens": null,
+      "pixel_scale_arcsec": null,
+      "sensor": "ASI174MM"
+    },
+    "name": "dwingeloo",
+    "period": {
+      "first_utc": "2026-08-26T19:31:55.090665000Z",
+      "last_utc": "2026-09-24T04:25:33.623631000Z"
+    },
+    "self_description": "run",
+    "site": {
+      "height_m": 10.0,
+      "lat": 52.8344,
+      "lon": 6.3785,
+      "site_method": null,
+      "site_sigma_arcsec_at_500km": null,
+      "site_sigma_declared_by": null,
+      "site_sigma_m": null,
+      "site_source": "owner-declared"
+    },
+    "software": [
+      {
+        "built": "2026-08-26T18:37:03Z",
+        "client": "satnogs-optical-client/0.2.5",
+        "client_sha": "f07d3b60e1efe99bcdd8cd21d2eff54ee6aa15ee",
+        "image": "devel-e2cf3bed-f07d3b60-ab"
+      },
+      {
+        "built": "2026-08-26T19:27:20Z",
+        "client": "satnogs-optical-client/0.2.5",
+        "client_sha": "8b5e35c8503b0507a2b7935ebeff998610e9ae3b",
+        "image": "devel-e2cf3bed-8b5e35c8-ab"
+      },
+      {
+        "built": "2026-08-26T21:12:25Z",
+        "client": "satnogs-optical-client/0.2.5",
+        "client_sha": "cd0c88df442ceb0f833792a091fc37ab60fe6b32",
+        "image": "devel-e2cf3bed-cd0c88df-ab"
+      },
+      {
+        "built": "2026-08-27T19:25:09Z",
+        "client": "satnogs-optical-client/0.2.5",
+        "client_sha": "02333372da58a661c169502e8028d4b42b046b68",
+        "image": "devel-3a1bd09d-02333372-ab"
+      },
+      {
+        "built": "2026-08-28T08:49:21Z",
+        "client": "satnogs-optical-client/0.2.5",
+        "client_sha": "4592d9d2f07768392c63f8d0706caaedd5709522",
+        "image": "v0.2.10-ab"
+      },
+      {
+        "built": "2026-08-30T18:23:20Z",
+        "client": "satnogs-optical-client/0.4.1",
+        "client_sha": "8a336a99c7e3859da472bf1b86b44dbc1fda27a0",
+        "image": "devel-b8402fc3-8a336a99-ab"
+      },
+      {
+        "built": "2026-08-30T22:39:49Z",
+        "client": "satnogs-optical-client/0.4.1",
+        "client_sha": "bf8f4f8999fba79f331cb339124ffc3f1c7a2e37",
+        "image": "devel-b8402fc3-bf8f4f89-ab"
+      },
+      {
+        "built": "2026-08-31T18:46:38Z",
+        "client": "satnogs-optical-client/0.4.1",
+        "client_sha": "dedbeb7838551ba5e92285349a95e69d6a1adace",
+        "image": "devel-c933ab3b-dedbeb78-ab"
+      },
+      {
+        "built": "2026-09-01T00:09:12Z",
+        "client": "satnogs-optical-client/0.4.1",
+        "client_sha": "f06f96677e78dbe9ad1de886ca85cbf887cc52dc",
+        "image": "devel-adcc2ad4-f06f9667-ab"
+      },
+      {
+        "built": "2026-09-03T20:04:05Z",
+        "client": "satnogs-optical-client/0.4.1",
+        "client_sha": "f851299d49235a1eedcd75d6e28f75b00e4eefe4",
+        "image": "devel-1541f0a0-f851299d-ab"
+      },
+      {
+        "built": "2026-09-03T21:30:23Z",
+        "client": "satnogs-optical-client/0.4.1",
+        "client_sha": "ec9dab4bdcc112efbf2a46e06571b3c585ed6bc5",
+        "image": "devel-9c912c15-ec9dab4b-ab"
+      },
+      {
+        "built": "2026-09-04T16:19:14Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "e85f2e01a6a3e3a12980c33276febeac28c3a2ff",
+        "image": "devel-e62fbf34-e85f2e01-ab"
+      },
+      {
+        "built": "2026-09-05T18:17:36Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "d59d8eb2a71c9cf195df8b9589bfdca94ceb5741",
+        "image": "devel-b144bdcb-d59d8eb2-ab"
+      },
+      {
+        "built": "2026-09-06T16:18:44Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "bcaa84b36de496e38f3b2c5399cc0ff374a173b5",
+        "image": "devel-bf13decb-bcaa84b3-ab"
+      },
+      {
+        "built": "2026-09-07T16:59:39Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "d628a50a2368f1481f5e54959bfaaaa0a66b4fc3",
+        "image": "devel-bf13decb-d628a50a-ab"
+      },
+      {
+        "built": "2026-09-07T21:06:37Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "5c08cced3a28c758d2e6fdeab6eacf47c335f28f",
+        "image": "devel-bf13decb-5c08cced-ab"
+      },
+      {
+        "built": "2026-09-09T09:31:11Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "2d978ef53f6dc419559d6160dc688af66a01e861",
+        "image": "devel-bf13decb-2d978ef5-ab"
+      },
+      {
+        "built": "2026-09-11T16:09:55Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "4d1622c48021f802fad22cd6ec5cb1611623847d",
+        "image": "devel-deef72a5-4d1622c4-ab"
+      },
+      {
+        "built": "2026-09-13T15:10:27Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "40efa620c602395be328644ad32fd7872a84c52f",
+        "image": "devel-dbcd9364"
+      },
+      {
+        "built": "2026-09-14T07:15:04Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "2ba98197859c6d355120e05110be6289dfe8fd2b",
+        "image": "devel-b6a90c17"
+      },
+      {
+        "built": "2026-09-14T21:25:19Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "c8cf50a742d814eb2c36101cf1dde40c4d9f421a",
+        "image": "devel-9b105af7"
+      },
+      {
+        "built": "2026-09-17T09:23:58Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "fd1e808a804e1191b7c3c26ca0e34d1b6257d656",
+        "image": "devel-29b047b3"
+      },
+      {
+        "built": "2026-09-23T15:23:04Z",
+        "client": "satnogs-optical-client/0.5.0",
+        "client_sha": "d057e8047f5ddd7f602ee26f8c78f7cd4aef2a29",
+        "image": "devel-9c4cb561"
+      }
+    ]
+  },
+  "timing": {
+    "epoch_refers_to": [
+      "exposure-mid",
+      "frame-arrival"
+    ],
+    "measured": {
+      "bias_ms": -181.36273460178387,
+      "contradicted": true,
+      "correlation_run_id": 889,
+      "declared_sigma_ms": 10.0,
+      "effective_sigma_ms": 43.61067985512615,
+      "elements_age_hours": -46.07532036027778,
+      "measured_bias_ms": -43.60877947392794,
+      "measured_sigma_ms": 43.61067985512615,
+      "session": "2026-09-21",
+      "sigma_ms": 1.5121504546821851,
+      "trustworthy": false
+    },
+    "rmsTime_declared_ms": 10.0,
+    "sources": [
+      "ntp"
+    ],
+    "sync_states": [
+      "locked"
+    ]
+  }
+}
