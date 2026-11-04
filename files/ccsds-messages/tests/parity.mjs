@@ -1,4 +1,4 @@
-// Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of files/ccsds-messages 0.2.0: every one of
+// Tri-runtime parity (browser, WasmEdge, Docker WasmEdge) of files/ccsds-messages 0.3.0: every one of
 // its twenty methods on every message it reads and writes, in both syntaxes, plus the requests it must
 // refuse. Identical request bytes must give byte-identical outputs, and the same exit class, in every lane.
 //   PATH=$HOME/.wasmedge/bin:$PATH node tests/parity.mjs
@@ -121,7 +121,7 @@ for (const [type, kvnFile, xmlFile] of FIXTURE_MESSAGES) {
 await local.destroy();
 
 const plan = await normalizeParityFixture({
-  name: 'files/ccsds-messages 0.2.0 methods',
+  name: 'files/ccsds-messages 0.3.0 methods',
   cases: cases.map((c) => ({ ...c, expect: 'ok', request: { ...c.request,
     inputs: c.request.inputs.map(({ payload, ...p }) => ({ ...p, payloadHex: Buffer.from(payload).toString('hex') })) } })),
 });
