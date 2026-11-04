@@ -216,13 +216,6 @@ bool ephemeris_type(const std::string& text, ephemerisFormat* out) {
   return true;
 }
 
-void add_param(OMMT* omm, const std::string& name, const std::string& value) {
-  auto p = std::make_unique<OMMUserDefinedParameterT>();
-  p->PARAM_NAME = name;
-  p->PARAM_VALUE = value;
-  omm->USER_DEFINED_PARAMETERS.push_back(std::move(p));
-}
-
 bool build_omm(const flatjson::Record& r, OMMT* omm, bool* alpha5, std::string* why) {
   uint32_t norad = 0;
   if (!catalog_number(r, "NORAD_CAT_ID", &norad, alpha5, why)) return false;
@@ -262,6 +255,8 @@ bool build_omm(const flatjson::Record& r, OMMT* omm, bool* alpha5, std::string* 
     *why = "EPHEMERIS_TYPE " + eph + " is not 0 to 4";
     return false;
   }
+  // EPHEMERIS_TYPE 4 is an SGP4-XP set: BTERM in the BSTAR column, AGOM in MEAN_MOTION_DDOT (m**2/kg), read as they stand.
+  if (omm->EPHEMERIS_TYPE == ephemerisFormat::SDP8) omm->MEAN_ELEMENT_THEORY = meanElementSource::SGP4XP;
   // The frame and time system are the SGP4 contract's; a record that names another is not read as one.
   const std::string frame = trim(r.text("REF_FRAME"));
   if (!frame.empty() && frame != "TEME" && frame != "TEMEOFDATE") {
@@ -297,7 +292,7 @@ bool build_omm(const flatjson::Record& r, OMMT* omm, bool* alpha5, std::string* 
   if (unsigned_number(trim(r.text("ELEMENT_SET_NO")), &u)) omm->ELEMENT_SET_NO = u;
   if (number(trim(r.text("REV_AT_EPOCH")), &v)) omm->REV_AT_EPOCH = v;
   const std::string gp_id = trim(r.text("GP_ID"));
-  if (!gp_id.empty()) add_param(omm, "GP_ID", gp_id);
+  if (!gp_id.empty()) omm->MESSAGE_ID = gp_id;
   return true;
 }
 

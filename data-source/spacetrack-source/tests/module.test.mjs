@@ -70,7 +70,6 @@ const report = (result) => {
   assert.equal(n.count, out.emitted);
   return out;
 };
-const params = (omm) => Object.fromEntries(omm.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
 
 test('the SDK artifact validates against the canonical standards', async () => {
   const result = await validateArtifactWithStandards({ wasmPath, manifest, standardsRoot });
@@ -88,7 +87,7 @@ test('parse_gp: the fields of a Space-Track set, a catalog number above 99999 re
     gpRecord(b),
     // No NORAD_CAT_ID in the JSON: the number is the one in the first line, written in Alpha-5.
     gpRecord(c, { NORAD_CAT_ID: undefined }),
-    // The same GP_ID again (a window boundary read twice): dropped, counted.
+    // The same GP_ID (MESSAGE_ID) again (a window boundary read twice): dropped, counted.
     gpRecord(a),
     // The number in the JSON and the one in the two-line set disagree.
     gpRecord(synthetic({ gpId: 900000004 }), { NORAD_CAT_ID: '99002' }),
@@ -123,7 +122,8 @@ test('parse_gp: the fields of a Space-Track set, a catalog number above 99999 re
   assert.equal(first.CENTER_NAME, 'EARTH');
   assert.equal(first.MEAN_ELEMENT_THEORY, 0); // SGP4
   assert.equal(first.REFERENCE_FRAME.REFERENCE_FRAME.frame, 5); // TEMEOFDATE
-  assert.equal(params(first).GP_ID, '900000001');
+  assert.equal(first.MESSAGE_ID, '900000001');
+  assert.deepEqual(first.USER_DEFINED_PARAMETERS, []);
   assert.equal(second.NORAD_CAT_ID, 100123);
   assert.equal(second.EPOCH, '2026-10-10T12:00:00.000001');
   assert.equal(second.MEAN_MOTION, 14.2);

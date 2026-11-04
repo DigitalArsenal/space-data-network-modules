@@ -29,12 +29,12 @@ Space-Track writes every value as text. A number is parsed from its whole text.
 | `NORAD_CAT_ID` | `NORAD_CAT_ID`, else `TLE_LINE1` | Decimal text or Alpha-5 (below). When both are present they must agree, or the set is dropped. |
 | `EPOCH`, `CREATION_DATE` | same | As served (UTC, no zone suffix); a time that is not ISO 8601 drops the set. |
 | `MEAN_MOTION` (rev/day), `ECCENTRICITY`, `INCLINATION`, `RA_OF_ASC_NODE`, `ARG_OF_PERICENTER`, `MEAN_ANOMALY` (degrees) | same | Required, range checked. |
-| `BSTAR` (1/Earth radii), `MEAN_MOTION_DOT` (rev/day²), `MEAN_MOTION_DDOT` (rev/day³) | same | Required: a set without the terms SGP4 propagates with is not one SGP4 can use, and none is invented. |
-| `MEAN_ELEMENT_THEORY` | same | `SGP4`, or `SGP4-XP` as `SGP4XP`; any other theory drops the set. |
+| `BSTAR` (1/Earth radii), `MEAN_MOTION_DOT` (rev/day²), `MEAN_MOTION_DDOT` (rev/day³) | same | Required: a set without the terms SGP4 propagates with is not one SGP4 can use, and none is invented. An SGP4-XP set carries BTERM in `BSTAR` and AGOM in `MEAN_MOTION_DDOT` (m²/kg). |
+| `MEAN_ELEMENT_THEORY` | same | `SGP4`, or `SGP4-XP` as `SGP4XP`; an `EPHEMERIS_TYPE` 4 set is `SGP4XP`; any other theory drops the set. |
 | `EPHEMERIS_TYPE` | same | Mapped as `data-source/celestrak-parser` maps it, so one set from either source carries one value. |
 | `REFERENCE_FRAME` | `REF_FRAME` | TEME of date, the SGP4 contract; another frame drops the set. `TIME_SYSTEM` must be UTC. |
 | `OBJECT_NAME`, `OBJECT_ID`, `ORIGINATOR`, `COMMENT`, `CLASSIFICATION_TYPE`, `ELEMENT_SET_NO`, `REV_AT_EPOCH`, `CCSDS_OMM_VERS` | same | `ORIGINATOR` stays Space-Track's (`18 SPCS`); the flow names the source. |
-| `USER_DEFINED_PARAMETERS` `GP_ID` | `GP_ID` | The set's own id. A `GP_ID` seen twice in one input (the archive's windows overlap by a boundary second) is dropped and counted. |
+| `MESSAGE_ID` | `GP_ID` | The set's own id. A `MESSAGE_ID` seen twice in one input (the archive's windows overlap by a boundary second) is dropped and counted. |
 
 Not carried: `SEMIMAJOR_AXIS`, `PERIOD`, `APOAPSIS`, `PERIAPSIS` (computed from the elements, not measured), the object attributes
 (`OBJECT_TYPE`, `RCS_SIZE`, `COUNTRY_CODE`, `LAUNCH_DATE`, `SITE`, `DECAY_DATE`: they belong to the SATCAT), and the two-line text

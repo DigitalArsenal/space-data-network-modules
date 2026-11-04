@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.spacetrack-source",
   "name": "Space-Track Source",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Parse Space-Track GP and GP-history JSON (omm-gp-json, Alpha-5 catalog numbers read) into canonical SDS OMM records and SATCAT JSON into CAT records (typed contracts 1.0: FlatBuffers only, no JSON between modules). Each method takes the hostcap/http-request HttpResponse, whose BODY is the Space-Track JSON verbatim, and writes one size-prefixed record stream plus one FlowNotice report (Info: COUNT the records emitted, ITEMS the read/emitted/dropped counters and the first rejection examples as name=value). HTTP 304 gives one FlowNotice (Unchanged) on 'report' and no records; another status or a transport error is refused. No capabilities and no hostcalls: retrieval, credentials, the request rate and storage belong to the SDN host flow.",
   "pluginFamily": "data_source",
   "capabilities": [],
