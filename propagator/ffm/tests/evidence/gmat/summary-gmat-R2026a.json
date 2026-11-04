@@ -324,14 +324,14 @@
      "eps": 0.000052453945181385464,
      "dragEffectM": 43812.1082855002,
      "epsTimesDragEffectM": 2.2981179262885516,
-     "ffmMinusGmatM": 2.3147619436994282,
-     "ffmMinusGmatCdScaledM": 0.03338749930318057,
+     "ffmMinusGmatM": 2.3146976246939386,
+     "ffmMinusGmatCdScaledM": 0.0334413133340647,
      "correctedDefaultMet": true,
-     "correctedDifferenceM": 0.03338749930318057,
+     "correctedDifferenceM": 0.0334413133340647,
      "correctedMet": true,
      "epsFromMeanDensities": 0.00005245394518116342,
-     "predictionMinusObservedM": -0.01664401741087662,
-     "predictionRelativeDifference": -0.00719037975208644,
+     "predictionMinusObservedM": -0.016579698405386978,
+     "predictionRelativeDifference": -0.007162792335599011,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -344,7 +344,7 @@
      ],
      "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.03338749930318057,
+    "correctedDifferenceM": 0.0334413133340647,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": true,
@@ -535,14 +535,14 @@
      "eps": 0.00005249850506094944,
      "dragEffectM": 43791.86632299737,
      "epsTimesDragEffectM": 2.2990075157862986,
-     "ffmMinusGmatM": 2.319552013582224,
-     "ffmMinusGmatCdScaledM": 0.026501703961632338,
+     "ffmMinusGmatM": 2.319486585637847,
+     "ffmMinusGmatCdScaledM": 0.026443501257376503,
      "correctedDefaultMet": true,
-     "correctedDifferenceM": 0.026501703961632338,
+     "correctedDifferenceM": 0.026443501257376503,
      "correctedMet": true,
      "epsFromMeanDensities": 0.00005249850506094944,
-     "predictionMinusObservedM": -0.020544497795925487,
-     "predictionRelativeDifference": -0.008857097265172933,
+     "predictionMinusObservedM": -0.02047906985154846,
+     "predictionRelativeDifference": -0.008829139163103553,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -555,7 +555,7 @@
      ],
      "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.026501703961632338,
+    "correctedDifferenceM": 0.026443501257376503,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": true,
@@ -746,14 +746,14 @@
      "eps": 0.00004735515595832851,
      "dragEffectM": 32655.217725603314,
      "epsTimesDragEffectM": 1.5463929282491184,
-     "ffmMinusGmatM": 1.5277578241510927,
-     "ffmMinusGmatCdScaledM": 0.01653512014456305,
+     "ffmMinusGmatM": 1.5276902222675302,
+     "ffmMinusGmatCdScaledM": 0.016577206879770316,
      "correctedDefaultMet": true,
-     "correctedDifferenceM": 0.01653512014456305,
+     "correctedDifferenceM": 0.016577206879770316,
      "correctedMet": true,
      "epsFromMeanDensities": 0.00004735515595832851,
-     "predictionMinusObservedM": 0.018635104098025712,
-     "predictionRelativeDifference": 0.012197681990848525,
+     "predictionMinusObservedM": 0.018702705981588297,
+     "predictionRelativeDifference": 0.012242472792571861,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -766,7 +766,7 @@
      ],
      "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.01653512014456305,
+    "correctedDifferenceM": 0.016577206879770316,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": true,
@@ -1162,14 +1162,14 @@
      "eps": 0.01963280889061214,
      "dragEffectM": 413.1350852945854,
      "epsTimesDragEffectM": 8.111002175595342,
-     "ffmMinusGmatM": 7.94993598997055,
-     "ffmMinusGmatCdScaledM": 0.12281562009139584,
+     "ffmMinusGmatM": 7.949889867227415,
+     "ffmMinusGmatCdScaledM": 0.1228545128357298,
      "correctedDefaultMet": false,
-     "correctedDifferenceM": 0.12281562009139584,
+     "correctedDifferenceM": 0.1228545128357298,
      "correctedMet": true,
      "epsFromMeanDensities": 0.01963280889061214,
-     "predictionMinusObservedM": 0.1610661856247919,
-     "predictionRelativeDifference": 0.020260060688285942,
+     "predictionMinusObservedM": 0.1611123083679269,
+     "predictionRelativeDifference": 0.020265979914023142,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -1182,7 +1182,7 @@
      ],
      "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.12281562009139584,
+    "correctedDifferenceM": 0.1228545128357298,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": false,
@@ -1373,14 +1373,14 @@
      "eps": 0.019634957851031087,
      "dragEffectM": 412.9995072518732,
      "epsTimesDragEffectM": 8.109227917387138,
-     "ffmMinusGmatM": 7.934490860625266,
-     "ffmMinusGmatCdScaledM": 0.10584668186383847,
+     "ffmMinusGmatM": 7.934452015178726,
+     "ffmMinusGmatCdScaledM": 0.10587911614630166,
      "correctedDefaultMet": false,
-     "correctedDifferenceM": 0.10584668186383847,
+     "correctedDifferenceM": 0.10587911614630166,
      "correctedMet": true,
      "epsFromMeanDensities": 0.019634957851031087,
-     "predictionMinusObservedM": 0.17473705676187112,
-     "predictionRelativeDifference": 0.022022466196161352,
+     "predictionMinusObservedM": 0.17477590220841144,
+     "predictionRelativeDifference": 0.022027469808130733,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -1393,7 +1393,7 @@
      ],
      "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.10584668186383847,
+    "correctedDifferenceM": 0.10587911614630166,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": false,
@@ -1461,14 +1461,14 @@
      "eps": 0.025278904723321505,
      "dragEffectM": 255.82940181861494,
      "epsTimesDragEffectM": 6.4670870739971,
-     "ffmMinusGmatM": 6.296096629271772,
-     "ffmMinusGmatCdScaledM": 0.12276417078366048,
+     "ffmMinusGmatM": 6.296060832157792,
+     "ffmMinusGmatCdScaledM": 0.12279412500475317,
      "correctedDefaultMet": false,
-     "correctedDifferenceM": 0.12276417078366048,
+     "correctedDifferenceM": 0.12279412500475317,
      "correctedMet": true,
      "epsFromMeanDensities": 0.025278904723321727,
-     "predictionMinusObservedM": 0.17099044472532832,
-     "predictionRelativeDifference": 0.027158167161914357,
+     "predictionMinusObservedM": 0.17102624183930804,
+     "predictionRelativeDifference": 0.027164007209996056,
      "sources": [
       {
        "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
@@ -1481,7 +1481,7 @@
      ],
      "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
     },
-    "correctedDifferenceM": 0.12276417078366048,
+    "correctedDifferenceM": 0.12279412500475317,
     "correctedMet": true,
     "correctedLimitM": 1.5,
     "correctedDefaultMet": false,
@@ -2767,7 +2767,7 @@
     "worstM": 2.3145782352793978,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.03338749930318057,
+    "correctedDifferenceM": 0.0334413133340647,
     "correctedMet": true,
     "correctedDefaultMet": true
    },
@@ -2776,7 +2776,7 @@
     "worstM": 2.3193563384164464,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.026501703961632338,
+    "correctedDifferenceM": 0.026443501257376503,
     "correctedMet": true,
     "correctedDefaultMet": true
    },
@@ -2785,7 +2785,7 @@
     "worstM": 1.5275672779829002,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.01653512014456305,
+    "correctedDifferenceM": 0.016577206879770316,
     "correctedMet": true,
     "correctedDefaultMet": true
    },
@@ -2794,7 +2794,7 @@
     "worstM": 7.949795475845874,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.12281562009139584,
+    "correctedDifferenceM": 0.1228545128357298,
     "correctedMet": true,
     "correctedDefaultMet": false
    },
@@ -2803,7 +2803,7 @@
     "worstM": 7.934348726780825,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.10584668186383847,
+    "correctedDifferenceM": 0.10587911614630166,
     "correctedMet": true,
     "correctedDefaultMet": false
    },
@@ -2812,7 +2812,7 @@
     "worstM": 6.2959581330941194,
     "toleranceM": 1.5,
     "classification": "model-setting difference (GMAT density without anomalous oxygen)",
-    "correctedDifferenceM": 0.12276417078366048,
+    "correctedDifferenceM": 0.12279412500475317,
     "correctedMet": true,
     "correctedDefaultMet": false
    }
@@ -2836,7 +2836,7 @@
   },
   {
    "path": "anomalous-oxygen.json",
-   "sha256": "3ef2c18d014841fb65ac0aef9da61f1e73db57f7d6f4816748bba916ba130581"
+   "sha256": "0972d4cb7de6c5c264544c4ea26597d21a81d71176cd8f394864bb431a4ddcfe"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -2966,7 +2966,7 @@
   },
   "anomalousOxygen": {
    "path": "anomalous-oxygen.json",
-   "sha256": "3ef2c18d014841fb65ac0aef9da61f1e73db57f7d6f4816748bba916ba130581",
+   "sha256": "0972d4cb7de6c5c264544c4ea26597d21a81d71176cd8f394864bb431a4ddcfe",
    "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
   },
   "inputFiles": {

@@ -1,9 +1,9 @@
 {
  "about": "Offline Horizons sanity references. All dynamics and numerical arithmetic are C++/WASM/native CSPICE; JavaScript and Python only orchestrate transport.",
  "module": {
-  "version": "2.0.0",
+  "version": "2.2.0",
   "file": "../../../dist/isomorphic/module.wasm",
-  "sha256": "d0b0493575245f29d9465aa76c861f62c384e426669da2345832ccb18d5bb42f"
+  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
  },
  "horizons": {
   "version": "1.2",
@@ -917,7 +917,7 @@
  "fileHashes": [
   {
    "file": "run-horizons.mjs",
-   "sha256": "7fca8627e99392a8503055208e0d7c4a08394984d9733b2c90e1c3f45e0b1654"
+   "sha256": "bd35074b57f187813fec3b64a34042954ba8bf9830034c2d4e692938e5598478"
   },
   {
    "file": "horizons-common.mjs",
@@ -945,11 +945,11 @@
   },
   {
    "file": "../../../plugin-manifest.json",
-   "sha256": "b9f7a57271b0c6245dc37872e6ad54ca611bfda2f9d9428cd1cbf2cff26f91ba"
+   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
   },
   {
    "file": "../../../package.json",
-   "sha256": "aaa691e0d7db547e02378fc0c98cd45e371f34df9feac1feed33d3084f70d10c"
+   "sha256": "088b4fb56f78a074fe096670025fd80a482e054e6331b3e15976802cdacba941"
   },
   {
    "file": "../../../src/cpp/include/ffm/prw_codec.h",
@@ -957,7 +957,7 @@
   },
   {
    "file": "../../../lib/time_convert.cpp",
-   "sha256": "e34b6d6b3d1bf05505605750a8fc14ca3f4ba92dcba0fcf4c65a4a0a57a2163e"
+   "sha256": "c21895b449643f9016c822af5642d4736f2ab2b482ecc5f087217e282284a45d"
   },
   {
    "file": "../../../lib/time_convert.h",
