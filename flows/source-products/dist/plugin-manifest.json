@@ -12,8 +12,8 @@
   "dependencies": [
     {
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
-      "minVersion": "0.4.0",
-      "maxVersion": "0.4.0"
+      "minVersion": "0.5.0",
+      "maxVersion": "0.5.0"
     },
     {
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
@@ -46,13 +46,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+              "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME; the states' OBJECT carries the set's NORAD_CAT_ID. A record of any other type (an $OCM element set of any theory included) is refused omm-expected by its file identifier."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+          "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME; the states' OBJECT carries the set's NORAD_CAT_ID. A record of any other type (an $OCM element set of any theory included) is refused omm-expected by its file identifier."
         },
         {
           "portId": "elements",
@@ -800,13 +800,13 @@
                   "wireFormat": "flatbuffer"
                 }
               ],
-              "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+              "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME; the states' OBJECT carries the set's NORAD_CAT_ID. A record of any other type (an $OCM element set of any theory included) is refused omm-expected by its file identifier."
             }
           ],
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME."
+          "description": "Size-prefixed $OMM element sets, concatenated; zero-length prefixes are padding. MEAN_ELEMENT_THEORY must be SGP4; EPOCH is ISO 8601 UTC. The object is NORAD_CAT_ID, else OBJECT_ID, else OBJECT_NAME; the states' OBJECT carries the set's NORAD_CAT_ID. A record of any other type (an $OCM element set of any theory included) is refused omm-expected by its file identifier."
         },
         {
           "portId": "elements",
