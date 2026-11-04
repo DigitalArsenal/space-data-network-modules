@@ -55,3 +55,11 @@ export function flowConfig(recipe) {
 }
 // The recipe's models as size-prefixed $ERM MODEL records, concatenated: the bytes of the `models` trigger.
 export const modelsBytes = (recipe) => Buffer.concat((recipe.models ?? []).map((m) => encode('model', m)));
+
+// The SGP4-XP product of a source (sources.json `xpProduct`): the module and method that make the flow's SGP4XP `$OMM`
+// the `$OCM` product, with the module's plugin id and version.
+export function xpProduct() {
+  const stage = registry.xpProduct;
+  const manifest = readJson(here(`../../${stage.module}/plugin-manifest.json`));
+  return { module: stage.module, method: stage.method, input: stage.input, output: stage.output, pluginId: manifest.pluginId, version: manifest.version };
+}

@@ -4,7 +4,7 @@
 //   node analysis/catalog-composer/tests/record-ocm-sets-before.mjs
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { apOcms, integrateSets, sgp4Omm, xpOmm } from './ocm-sets-inputs.mjs';
+import { apOcms, integrateSets, sgp4Omm, xpOmmAsWritten } from './ocm-sets-inputs.mjs';
 import { sha256 } from './integrator-fixtures.mjs';
 import { moduleRun, runXpFlow, version } from './ocm-sets-chain.mjs';
 
@@ -14,7 +14,7 @@ const integrator = await integrateSets([0.3, 0.6]);
 const epochSgp4 = await moduleRun('analysis/epoch-state', 'derive_omm', [{ port: 'omm', type: 'OMM', bytes: sgp4Omm }]);
 const epochAp = await moduleRun('analysis/epoch-state', 'derive_omm', [{ port: 'omm', type: 'OMM', bytes: apOcms[0] }]);
 const flow = await runXpFlow([sgp4Omm]);
-const flowXp = await runXpFlow([sgp4Omm, xpOmm]);
+const flowXp = await runXpFlow([sgp4Omm, xpOmmAsWritten]);
 const before = {
   recorded: 'modules c2f476f6 dists, before the $OCM set change',
   versions: { 'catalog-composer': version('analysis/catalog-composer'), 'epoch-state': version('analysis/epoch-state'), 'source-products': version('flows/source-products') },

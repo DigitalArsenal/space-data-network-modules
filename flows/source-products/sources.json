@@ -15,13 +15,20 @@
     "file": "../../analysis/gp-error-model/data/e14-s3-kc.json",
     "about": "The model of rule 3 for the sources marked `ownModel` (E14 measured it on their element sets); every other source gets it pooled (rule 4). Rule 3 and 4 rows are Uncalibrated: E14 tested its cells by time only, on payload truth."
   },
+  "xpProduct": {
+    "module": "propagator/sgp4-xp",
+    "method": "ingest_omm",
+    "input": "omm",
+    "output": "ocm",
+    "about": "The SGP4-XP product of an element-set source is an `$OCM` (MEAN_ELEMENTS theory SGP4XP): the flow's `omm` egress SGP4XP set, the source named in PROVENANCE, through propagator/sgp4-xp ingest_omm, which keeps the identity, NORAD_CAT_ID, ORIGINATOR and PROVENANCE. It is not a node of this flow: sgp4-xp is joined with the USSF binary and has no guest-link object."
+  },
   "lanes": {
     "element-set": {
       "ingress": [
         "element_sets or element_sets_mpe",
         "models"
       ],
-      "products": "The newest set of each object: its epoch states and a covariance by rule (3, else 4). The history: maneuvers by the detector's two passes with SGP4 answering the propagator query port."
+      "products": "The newest set of each object: its epoch states and a covariance by rule (3, else 4). The history: maneuvers by the detector's two passes with SGP4 answering the propagator query port. An SGP4-XP set (Space-Track's EPHEMERIS_TYPE 4) leaves the flow on `omm` with the source named, and `xpProduct` makes it the `$OCM` product."
     },
     "ephemeris": {
       "ingress": [
@@ -31,7 +38,7 @@
         "planned_maneuvers",
         "models"
       ],
-      "products": "The newest fitted set and its states with a covariance by rule (1 when the operator's ephemeris carries covariance lines, else 3 or 4). Maneuvers from the history of fitted sets, and from the versions against the planned maneuvers."
+      "products": "The newest fitted set and its states with a covariance by rule (1 when the operator's ephemeris carries covariance lines, else 3 or 4). Maneuvers from the history of fitted sets, and from the versions against the planned maneuvers. The SGP4-XP product is the OD node's XP fit, an `$OCM` (flows/supplemental-omm, `ocm` stream)."
     },
     "observation": {
       "ingress": [

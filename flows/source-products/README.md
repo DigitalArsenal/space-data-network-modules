@@ -8,7 +8,7 @@ compared like for like and any one can be shown on its own:
 | Product | SDS | Element-set source | Ephemeris source | Observation source |
 | --- | --- | --- | --- | --- |
 | SGP4 elements | `$OMM` | the source's own newest set per object | the set the OD fitted to the ephemeris | the set fitted to the estimated arc |
-| SGP4-XP elements | `$OMM`, theory SGP4XP | passed through with the source named; no covariance until the XP propagator and error model land (`modules-sgp4-xp-fits-20261011`) | same | same |
+| SGP4-XP elements | `$OCM`, `MEAN_ELEMENTS` theory SGP4XP | the source's SGP4XP set, named by the flow on `omm`, through `propagator/sgp4-xp` `ingest_omm` (`recipe.mjs` `xpProduct`) | the OD node's XP fit (`flows/supplemental-omm`, `ocm` stream) | same |
 | State and covariance | `$OCM` | SGP4 epoch states (`analysis/epoch-state`) with the modeled covariance | the operator's covariance as supplied, else the same modeled covariance | the estimate's formal covariance times the measured realism factor |
 | Maneuvers | `$MNV` | `detect_maneuvers` over the set history, SGP4 answering the propagator query port | `compare_ephemerides` (the versions against the planned maneuvers) and the same detector over the history of fitted sets | the detector over the history of fitted sets, when the host supplies several |
 
@@ -54,7 +54,7 @@ trigger goes to every node port bound to it.
 | `fit` | The estimate's state and formal covariance (`$OCM`) | observation source |
 
 Egress, one sink `sdn.flow.egress` with ports `ocm`, `omm`, `mnv` (the
-products) and the typed reports: `covariance_report` and `attribute_report` (`$ERM`
+products; an SGP4XP set on `omm` is the input of the XP product, not a product) and the typed reports: `covariance_report` and `attribute_report` (`$ERM`
 ATTACH_REPORT: the rule per object, why earlier rules did not apply, every row's
 verdict, the SHA-256 of each record, the licence), `derive_report` and `mpe_report`
 (FlowNotice), `propagation_report` (`$PRW` WINDOW_REPORT), `detect_report` and
@@ -99,7 +99,9 @@ makes the recipe of a registered source: its originator, lineage and licence,
 the provider (the plugin id of the module that gave the records), the E14 model
 (rule 3 for the sources E14 measured, rule 4 pooled for the others) and the ages
 of E14's horizons; `flowConfig(recipe)` and `modelsBytes(recipe)` give it as the
-flow's node configuration and its `models` frame.
+flow's node configuration and its `models` frame. `xpProduct()` names the stage
+that makes the SGP4-XP product (`sources.json` `xpProduct`): sgp4-xp is joined
+with the USSF binary and has no guest-link object, so it is not a node of this flow.
 
 | | Modules |
 | --- | --- |

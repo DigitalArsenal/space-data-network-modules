@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { oem } from './matching-fixture.mjs';
 import {
-  ASOF, MNV, OCM, OMM, catRecord, cidOf, frames, integrate, labelOf, mnvRecord, ocmEpoch, ocmRecord, ommEpoch, ommRecord, records, reportEpoch, sha256, stream, unpackCat, unpackMnv,
+  ASOF, CAT, MNV, OCM, OMM, catRecord, cidOf, frames, integrate, labelOf, mnvRecord, ocmEpoch, ocmRecord, ommEpoch, ommRecord, records, reportEpoch, sha256, stream, unpackCat, unpackMnv,
   unpackOmm,
 } from './integrator-fixtures.mjs';
 import { x } from './xmt-recipes.mjs';
@@ -110,7 +110,9 @@ test('a maneuver after a set\'s epoch retires it, however well its source measur
   assert.equal(charlie.PRODUCTS[0].CANDIDATES.find((c) => c.SOURCE_ID === S2).RETIRED_BY_MS, reportEpoch(1.5));
   assert.deepEqual(records(r.omm).map((b) => sources([b])[0]), [S1, S1]);
   const [alphaCat, charlieCat] = records(r.catalog);
-  assert.deepEqual(alphaCat, catRecord(A), 'an object with no maneuver keeps its record byte for byte');
+  const alphaOut = unpackCat(alphaCat);
+  assert.deepEqual([alphaOut.MANEUVERABLE, alphaOut.NORAD_CAT_ID, alphaOut.PRODUCTS.map((p) => [p.KIND, p.SOURCE_ID, p.RECORD_CID])],
+    [false, 90001, [[CAT.catalogProductKind.Sgp4Elements, S1, cidOf(records(r.omm)[0])]]], 'an object with no maneuver stays unmaneuverable; its record names its product');
   assert.equal(unpackCat(charlieCat).MANEUVERABLE, true);
   assert.equal(unpackCat(charlieCat).OBJECT_NAME, 'CHARLIE');
   assert.equal(unpackCat(charlieCat).OBJECT_ID, '2026-903A');

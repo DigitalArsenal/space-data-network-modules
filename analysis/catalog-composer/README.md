@@ -169,7 +169,12 @@ confirmed provider format, differentiation limits and crosswalk policy.
 the catalog, the product chosen for each object, and the report that says how (catalog
 pipeline, `graph/programs/catalog-pipeline.md` section 3). Feed it `compose`'s output;
 composition of snapshots stays `compose`'s. Nothing is estimated and no record is edited
-except the catalog's `MANEUVERABLE` and a merged maneuver's status and tags.
+except the catalog's `MANEUVERABLE`, `PRODUCTS` and `PRODUCTS_AS_OF` and a merged maneuver's status and tags.
+
+An element set is an `$OMM` or an `$OCM` with `MEAN_ELEMENTS` (SGP4 sets are `$OMM`; SGP4XP and AP
+sets are `$OCM`, as `propagator/sgp4-xp` and `propagator/sdn-ap` write them). Its product kind is its
+mean-element theory, lowercased (`sgp4`, `sgp4xp`, `ap`), its epoch the `$OMM`'s `EPOCH` or the
+`$OCM`'s `MEAN_ELEMENTS.EPOCH`; theory `UNSPECIFIED` is refused `mean-element-theory-unspecified`.
 
 | Port | | Content |
 | --- | --- | --- |
@@ -177,9 +182,9 @@ except the catalog's `MANEUVERABLE` and a merged maneuver's status and tags.
 | `catalog` | in | The composed `$CAT`: canonical size-prefixed records, each object once |
 | `ephemerides` | in | Up to 64 normalized `$OEM` trajectories, one per identity candidate in the recipe's order |
 | `omm_products`, `ocm_products`, `mnv_products` | in | Every source's `$OMM`, `$OCM` and `$MNV`, as `flows/source-products` writes them: each names its source in `PROVENANCE` (`$PVN` `SOURCE_ID`), and an `$OMM`'s or `$OCM`'s covariance states its realism in `COV_REALISM` (`$CVR`). A record that names no source or no object is refused and counted |
-| `catalog` | out | The input objects in order, original bytes; `MANEUVERABLE` true where the history shows a maneuver |
-| `omm` | out | Per object and product kind (`sgp4`, `sgp4xp`) the element set of the selected source, byte for byte |
-| `ocm` | out | The selected set's state and covariance with its realism, byte for byte |
+| `catalog` | out | The input objects in order; `MANEUVERABLE` true where the history shows a maneuver; `PRODUCTS` one `CATProduct` per selected product (`KIND` `Sgp4Elements`, `Sgp4XpElements` or `ApElements` by the set's theory, `StateCovariance` for an `$OMM` set's paired state; `RECORD_CID`, `SOURCE_ID`, `EPOCH` as the record writes it, `SELECTION_REASON` the selection reason's name) and `PRODUCTS_AS_OF` (`asOf`). An object with neither keeps its bytes |
+| `omm` | out | Per object and product kind the selected `$OMM` set, byte for byte |
+| `ocm` | out | Per object and product kind the selected `$OCM` set, and a selected `$OMM` set's state and covariance with its realism, byte for byte |
 | `mnv` | out | The maneuvers of every source, merged |
 | `report` | out | `$XMT` `INTEGRATE_REPORT`: the policy, the counts, every identity link with its verdict, per object every candidate and why one was chosen or none, the chosen covariance's `$CVR`, the SHA-256 and CID (CIDv1, raw, sha2-256) of every record written, the records refused or unlinked |
 
@@ -216,9 +221,10 @@ The steps, in order:
    `unmeasured-fallback-order`. When every candidate is retired or too old the object is **stale** and has
    no product. The regime is the one the product's covariance realism names (`COV_REALISM` `REGIME` of the `$OMM`), so the
    covariance model and the selection speak of the same strata; the horizon is the recipe's.
-4. **Covariance.** The selected set's own `$OCM` (the same source, first state at the set's epoch) goes out
+4. **Covariance.** A selected `$OMM` set's own `$OCM` state (the same source, first state at the set's epoch) goes out
    with it, and the report carries its realism: rule, model, regime, the held-out test's numbers and verdict. A set
-   with no `$OCM` goes out alone and the report reads its realism from the set.
+   with no `$OCM` goes out alone and the report reads its realism from the set. An `$OCM` set carries its own
+   covariance and realism.
 
 The recipe's fields: `IDENTITY` is a `MATCH_REQUEST` whose `$OIL` links name the native trajectory
 (`LEFT.TRAJECTORY_ID`), the reference trajectory (`RIGHT.TRAJECTORY_ID`) and the catalog object
@@ -239,7 +245,9 @@ about 1.5 KB per object, so a flow shards a large catalog.
 `minSamples` measuring nothing, the newest set per source, `maxAgeDays`, SGP4 and SGP4-XP chosen separately, a burn retiring
 the better-measured source, stale, merged and unmerged reports, the covariance and label coming out byte for byte,
 links that bind and links that do not, refused records and recipes. `tests/integrator-chain.test.mjs` integrates what the
-compiled `flows/source-products` writes for two sources. `npm run test:parity` runs the method in Chromium, native WasmEdge and
+compiled `flows/source-products` writes for two sources. `tests/ocm-sets.e2e.mjs` selects the AP `$OCM` of
+`propagator/sdn-ap` `fit` by measured error and names it `ApElements` in the `$CAT`, and the source-products XP
+product (`propagator/sgp4-xp` `ingest_omm`) as `Sgp4XpElements`. `npm run test:parity` runs the method in Chromium, native WasmEdge and
 container WasmEdge: byte-identical.
 
 ## Epoch validation and refinement (0.1.8)

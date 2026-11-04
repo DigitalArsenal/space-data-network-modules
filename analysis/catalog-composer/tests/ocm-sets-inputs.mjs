@@ -13,6 +13,8 @@ export const AS_OF = Date.UTC(2026, 9, 2) / 1000;  // the day after the AP set's
 export const catalog = catRecord(OBJECT);
 export const sgp4Omm = ommRecord({ source: SGP4_SOURCE, ...OBJECT, epoch: '2026-10-01T00:00:00.000000', label: labelOf('LEO-L') });
 export const apOcms = AP_SOURCES.map((source) => apOcmRecord({ source }));
+// The AP set's MEAN_ELEMENTS.EPOCH as the writer wrote it.
+export const apFitEpoch = OCM.OCM.getSizePrefixedRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(apOcms[0]))).unpack().MEAN_ELEMENTS.EPOCH;
 // The integrator's recipe: the AP products measured on LEO-L at one day, `apMedians` km in source order.
 export const recipe = (apMedians) => ({
   asOf: AS_OF, maneuvers: { timeToleranceSeconds: 3600, deltaVToleranceKmS: 0.0005 },
@@ -22,12 +24,16 @@ export const recipe = (apMedians) => ({
 });
 export const integrateSets = (apMedians) => integrate([frames.recipe(recipe(apMedians)), frames.catalog(catalog), frames.omm(stream([sgp4Omm])), frames.ocm(stream(apOcms))]);
 
-// The SGP4-XP $OMM (plain buffer) as sdn-ap 0.4.18 wrote it, size-prefixed for a record stream.
+// The SGP4-XP set of sdn-ap 0.4.18's $OMM (plain buffer) as an element-set source publishes one (Space-Track's XP sets:
+// BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT, no free-form list), size-prefixed for a record stream. `xpOmmAsWritten` keeps
+// 0.4.18's six SDNAP_COV_* USER_DEFINED_PARAMETERS (the before-record's input).
 const xpPlain = fs.readFileSync(here('../../../propagator/sdn-ap/test/fixtures/xp-fit-0.4.0.omm'));
-export const xpOmm = (() => {
+const prefixed = (strip) => {
   const t = OMM.OMM.getRootAsOMM(new flatbuffers.ByteBuffer(new Uint8Array(xpPlain))).unpack();
+  if (strip) t.USER_DEFINED_PARAMETERS = [];
   const b = new flatbuffers.Builder(2048);
   OMM.OMM.finishSizePrefixedOMMBuffer(b, t.pack(b));
   return Buffer.from(b.asUint8Array());
-})();
+};
+export const xpOmm = prefixed(true), xpOmmAsWritten = prefixed(false);
 export { OMM, OCM };
