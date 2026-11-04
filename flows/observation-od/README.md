@@ -1,4 +1,4 @@
-# Observation OD: laser normal points
+# Observation OD: laser normal points and RA/Dec angles
 
 `org.sdn.flows.observation-od.laser-od` 0.1.1, typed contracts 1.0 (FlatBuffers only). A C++ WebAssembly node that routes
 ILRS normal points through `analysis/estimation` `fit_batch` and `propagator/ffm` `invoke` until the estimator converges, and
@@ -41,6 +41,18 @@ LICENSE_CLASS Reproducible.
 
 Refused by name: `no-stations` (a pad without a `$GST`, or none), `arc-too-short:<hours>` (the normal points span less than
 `minimumArcHours`), `no-convergence:<iterations>` (`fit_batch` ended MAXIMUM_ITERATIONS or STALLED); `bad-input` otherwise.
+
+## RA/Dec angles (0.2.0)
+
+`step` also reads RA/Dec tracks (`ANGLE_TYPE` RADEC, UTC, `TIMETAG_REF` RECEIVE, degrees; data-source/satnogs-optical-source):
+each `ANGLE_1`/`ANGLE_2` pair is one `RIGHT_ASCENSION_DECLINATION` observation (geometric topocentric GCRF, one-way light
+time, Sagnac off: the station's GCRF motion carries the rotation, as analysis/observation-simulator predicts). The station
+is the record's `OBSERVER_ID`: its site is the `$GST` with that `STATION_ID`, else the record's `OBSERVER_X/Y/Z`
+(Earth-fixed, m). The sigma is the larger of `RA_UNC` and `DECLINATION_UNC` of the `$EOO` at the same `OB_TIME`
+(`uncertainty`), else config `angleSigmaArcsec`. Config `timeBiasSigmaS.<OBSERVER_ID>` adds that station's time bias as a
+consider `TIME_BIAS` (value the `$GST` `CLOCK_OFFSET_S`, else 0). The `$OCM` states `OD_OBSERVATIONS_TYPE` RADEC,
+`OD_RESIDUAL_RMS` in arcseconds (FIT_RMS_KM NaN), the consider parameters, and the source's `$PVN` from `provenance`
+(required for an angles-only fit) with this node as `PRODUCER`.
 
 ## Build and test
 

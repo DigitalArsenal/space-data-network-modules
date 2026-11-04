@@ -1,4 +1,4 @@
-// flows/observation-od: the laser orbit-determination node. It routes typed messages between the normal points, the
+// flows/observation-od: the observation orbit-determination node (laser ranges and, since 0.2.0, RA/Dec angles; README). It routes typed messages between the normal points, the
 // station coordinates, analysis/estimation `fit_batch` and propagator/ffm `invoke`; the estimator solves and the FFM
 // propagates.
 //
