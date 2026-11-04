@@ -5,7 +5,7 @@
 // emcc -pthread), -fno-exceptions (WasmEdge 0.16.4 AOT rejects WebAssembly
 // exception handling). One translation unit: src/*.inc parts are inlined where
 // they are included, the propagator ABI header comes from the pinned SDK, and
-// the $OMM vtable slots are derived from the pinned SDS catalog.
+// the SDS bindings are generated from the pinned SDS package.
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -26,7 +26,6 @@ const shownPath = (p) => {
 const require = createRequire(path.join(packageRoot, "package.json"));
 const { compileModuleFromSource, ModuleThreadModel, protectModuleArtifact } =
   await import("space-data-module-sdk/compiler");
-const standards = await import("space-data-module-sdk/standards");
 const { FlatcRunner } = await import("flatc-wasm");
 const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.json"));
 
@@ -69,37 +68,6 @@ const abiHeader = await fs.readFile(
   require.resolve("space-data-module-sdk/include/orbpro/orbpro_propagator_abi.h"),
   "utf8",
 );
-
-// $OMM vtable slots (4 + 2 * declaration index) from the pinned catalog: a
-// field missing from the schema fails the build instead of reading garbage.
-const OMM_FIELDS = [
-  "MEAN_ELEMENT_THEORY", "EPOCH", "MEAN_MOTION", "ECCENTRICITY", "INCLINATION",
-  "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY", "NORAD_CAT_ID",
-  "BSTAR", "MEAN_MOTION_DOT", "MEAN_MOTION_DDOT",
-];
-async function ommSlots() {
-  const loader = standards.loadStandardsCatalog ?? standards.resolveStandardsCatalog ?? standards.getStandardsCatalog;
-  const loaded = await loader();
-  const catalog = Array.isArray(loaded) ? loaded : loaded.catalog;
-  const entry = catalog.find((candidate) => candidate.fileIdentifier === "$OMM");
-  if (!entry) throw new Error("the pinned SDS catalog has no $OMM entry");
-  const text = entry.idl.replace(/\/\/.*$/gm, "");
-  const unions = new Set([...text.matchAll(/union\s+(\w+)/g)].map((m) => m[1]));
-  const body = /table\s+OMM\s*\{([\s\S]*?)\}/.exec(text);
-  if (!body) throw new Error("table OMM is not in the pinned $OMM IDL");
-  const declared = [];
-  for (const match of body[1].matchAll(/([A-Za-z_]\w*)\s*:\s*\[?\s*([A-Za-z_][\w.]*)/g)) {
-    if (unions.has(match[2])) declared.push(`${match[1]}_type`);
-    declared.push(match[1]);
-  }
-  const lines = [`// GENERATED from the pinned SDS $OMM ${entry.version}`];
-  for (const name of OMM_FIELDS) {
-    const index = declared.indexOf(name);
-    if (index < 0) throw new Error(`$OMM ${entry.version} declares no ${name}; refusing to build`);
-    lines.push(`#define SDNAP_OMM_VT_${name} ${4 + 2 * index}`);
-  }
-  return lines.join("\n");
-}
 
 const provenance = { nrlmsise00: null, erfa: null, table6: null };
 // NRLMSISE-00 (the drag atmosphere's NRLMSISE00 option, SPEC 15): the public-domain Brodowski C port the modules
@@ -308,7 +276,6 @@ async function gravity() {
 
 const sourceCode = inlined
   .replace('#include "orbpro/orbpro_propagator_abi.h"', abiHeader)
-  .replace('#include "omm_slots.h"', await ommSlots())
   .replace('#include "oem_generated.h"', await oemBindings())
   .replace('#include "nrlmsise00.h"', await nrlmsise())
   .replace('#include "gravity_egm.h"', await gravity())

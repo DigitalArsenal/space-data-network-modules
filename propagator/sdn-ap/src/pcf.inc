@@ -1,8 +1,14 @@
 // -----------------------------------------------------------------------------
 // $PCF 1.0.7 (SDS 1.276.0): the `configuration` input of the methods with
-// options. A method reads THEORY and its own tables:
-//   propagate, maneuver   OUTPUT, FORCES, INTEGRATOR, EVENTS
+// options, optional on the flights that have a default for every value it
+// carries (propagate, maneuver, load_epochs: a lone $OCM flies). A method reads
+// THEORY and its own tables:
+//   propagate, maneuver   OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES, and the
+//                         output times: EPOCHS, or START_TIME and STOP_TIME),
+//                         INTEGRATOR, EVENTS
 //   fit                   FIT, FORCES, INTEGRATOR
+// A flight's record is the one authority for its forces: a FORCES table on a
+// flight call is refused (configuration-refused FORCES).
 // FORCES on fit is the force model the fit runs under and writes into its
 // $OCM (SPEC 15, 16; Forces): ATMOSPHERE_MODEL, required, JACCHIA70 or
 // NRLMSISE00; WEATHER_SOURCE (UNSPECIFIED: THEORY_FLUX_MODEL under JACCHIA70,
@@ -95,6 +101,9 @@ struct Options {
   int output_frame = pcfOutputFrame_UNSPECIFIED;
   double output_step_s = 60.0;
   uint32_t maximum_states = 500000;
+  std::vector<double> epochs_w, epochs_f;  ///< OUTPUT.EPOCHS (UTC split Julian dates), ascending
+  bool has_start = false, has_stop = false;
+  double start_w = 0.0, start_f = 0.0, stop_w = 0.0, stop_f = 0.0;  ///< OUTPUT.START_TIME, STOP_TIME
 };
 inline Options& options() {
   static Options o;
@@ -178,7 +187,7 @@ inline uint32_t tables_of(Method m) {
   switch (m) {
     case kPropagate:
     case kManeuver:
-    case kEpochs: return kTOutput | kTForces | kTIntegrator | kTEvents;
+    case kEpochs: return kTOutput | kTIntegrator | kTEvents;
     case kFit: return kTFit | kTForces | kTIntegrator;
   }
   return 0;
@@ -289,6 +298,26 @@ inline int read_output(const PCFOutput* p, Options& o) {
   if (!(o.output_step_s > 0.0)) return refuse("OUTPUT.STEP_SECONDS", "a positive spacing");
   o.maximum_states = p->MAXIMUM_STATES();
   if (o.maximum_states < 1 || o.maximum_states > 500000) return refuse("OUTPUT.MAXIMUM_STATES", "from 1 to this module's 500000");
+  if (const auto* e = p->EPOCHS()) {
+    for (uint32_t k = 0; k < e->size(); ++k) {
+      double w, f;
+      const flatbuffers::String* t = e->Get(k);
+      if (t == nullptr || !omm::epoch(t->c_str(), t->size(), w, f)) return refuse("OUTPUT.EPOCHS", "ISO 8601 UTC times");
+      if (!o.epochs_w.empty() && (w - o.epochs_w.back()) + (f - o.epochs_f.back()) < 0.0) return refuse("OUTPUT.EPOCHS", "ascending");
+      o.epochs_w.push_back(w);
+      o.epochs_f.push_back(f);
+    }
+  }
+  if (p->START_TIME() != nullptr && p->START_TIME()->size() > 0) {
+    if (!omm::epoch(p->START_TIME()->c_str(), p->START_TIME()->size(), o.start_w, o.start_f)) return refuse("OUTPUT.START_TIME", "an ISO 8601 UTC time");
+    o.has_start = true;
+  }
+  if (p->STOP_TIME() != nullptr && p->STOP_TIME()->size() > 0) {
+    if (!omm::epoch(p->STOP_TIME()->c_str(), p->STOP_TIME()->size(), o.stop_w, o.stop_f)) return refuse("OUTPUT.STOP_TIME", "an ISO 8601 UTC time");
+    o.has_stop = true;
+  }
+  if (!o.epochs_w.empty() && (o.has_start || o.has_stop)) return refuse("OUTPUT.EPOCHS", "with EPOCHS, START_TIME and STOP_TIME are not read: state one or the other");
+  if (o.has_start && o.has_stop && (o.stop_w - o.start_w) + (o.stop_f - o.start_f) < 0.0) return refuse("OUTPUT.STOP_TIME", "at or after START_TIME");
   return 0;
 }
 
@@ -419,7 +448,7 @@ inline int read_object_priors(const PCF* c, ObjectPriors& out) {
   return 0;
 }
 
-inline int read(Method method) {
+inline int read(Method method, bool optional = false) {
   Options& o = options();
   o = Options{};
   object_priors().clear();
@@ -443,7 +472,8 @@ inline int read(Method method) {
     }
   }
   if (cf == nullptr || cf->payload == nullptr) {
-    plugin_set_error("configuration-missing", "The 'configuration' input ($PCF 1.0) is required.");
+    if (optional) return 0;  // every default: a lone $OCM flies
+    plugin_set_error("configuration-missing", "The 'configuration' input ($PCF) is required.");
     return 3;
   }
   const PCF* c = pcf_of(cf);
@@ -454,8 +484,9 @@ inline int read(Method method) {
     case kPropagate:
     case kManeuver:
     case kEpochs:
-      if (o.theory != pcfTheory_UNSPECIFIED && o.theory != pcfTheory_SGP4 && o.theory != pcfTheory_SGP4XP)
-        return refuse("THEORY", "this module propagates SGP4 and SGP4XP sets (UNSPECIFIED: each set's own)");
+      if (o.theory != pcfTheory_UNSPECIFIED && o.theory != pcfTheory_SGP4 && o.theory != pcfTheory_SGP4XP && o.theory != pcfTheory_AP)
+        return refuse("THEORY", "this module flies SGP4, SGP4XP and AP sets (UNSPECIFIED: each set's own)");
+      if (c->FORCES() != nullptr) return refuse("FORCES", "the record is the one authority for its forces: a flight's $PCF carries no FORCES");
       break;
     case kFit:
       if (o.theory != pcfTheory_UNSPECIFIED && o.theory != pcfTheory_SGP4XP && o.theory != pcfTheory_AP)
@@ -478,42 +509,12 @@ inline int read(Method method) {
   return 0;
 }
 
-/// propagate, maneuver: THEORY against a set's own theory (kTheory*).
-inline int check_set_theory(int set_theory) {
-  const Options& o = options();
-  if (o.theory != pcfTheory_UNSPECIFIED) {
-    const int want = o.theory == pcfTheory_SGP4 ? kTheorySgp4 : kTheorySgp4Xp;
-    if (set_theory != want) return refuse("THEORY", "an input set's own theory differs (UNSPECIFIED reads each set's)");
-  }
-  return 0;
-}
-
-/// propagate, load_epochs, propagate_epochs: FORCES drag atmosphere against a set's SDNAP_ATMOSPHERE_MODEL mark.
-inline int check_set_atmosphere(int mark) {
-  if (mark == 0) return 0;
-  if (mark < 0) {
-    plugin_set_error("atmosphere-mismatch", "An 'omm' record carries an unknown SDNAP_ATMOSPHERE_MODEL mark.");
-    return 3;
-  }
-  if (mark != 1) {
-    plugin_set_error("atmosphere-mismatch",
-                     "An 'omm' set's SDNAP_ATMOSPHERE_MODEL mark disagrees with the call's FORCES drag atmosphere (Jacchia 1970 vs NRLMSISE-00 vs NRLMSISE-00 + DCA).");
-    return 3;
-  }
-  return 0;
-}
-
-/// propagate, load_epochs, propagate_epochs: FORCES gravity terms against a set's SDNAP_GRAVITY_TERMS mark (SPEC 16).
-inline int check_set_gravity_terms(const omm::GravityTerms& mark) {
-  if (mark.unknown) {
-    plugin_set_error("gravity-terms-mismatch", "An 'omm' record carries an unknown SDNAP_GRAVITY_TERMS mark.");
-    return 3;
-  }
-  if (mark.tesseral != 0 || mark.zonal != 0) {
-    plugin_set_error("gravity-terms-mismatch", "An 'omm' set's SDNAP_GRAVITY_TERMS mark disagrees with the call's FORCES MAXIMUM_TESSERAL_DEGREE and MAXIMUM_DEGREE.");
-    return 3;
-  }
-  return 0;
+/// The flights: THEORY against a set's own MEAN_ELEMENT_THEORY (meanElementSource).
+inline int check_set_theory(int met) {
+  const int t = options().theory;
+  if (t == pcfTheory_UNSPECIFIED) return 0;
+  const int want = t == pcfTheory_SGP4 ? meanElementSource_SGP4 : t == pcfTheory_SGP4XP ? meanElementSource_SGP4XP : meanElementSource_AP;
+  return met == want ? 0 : refuse("THEORY", "an input set's own theory differs (UNSPECIFIED reads each set's)");
 }
 
 }  // namespace pcf

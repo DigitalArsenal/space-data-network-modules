@@ -22,18 +22,19 @@
 //   pool.inc       the batch thread pool
 //   fit.inc        fit: ephemeris to element set (Levenberg-Marquardt)
 //   abi.inc        the propagator ABI and the sdnap_* batch entries
-//   omm.inc        the ingest_omm invoke method ($OMM FlatBuffers)
+//   omm.inc        SDS FlatBuffers views, ISO 8601 UTC times
 //   pcf.inc        the $PCF configuration of the invoke methods
 //   atmosphere_inputs.inc  a fit's drag atmosphere from FORCES, $SPW, $DCL
-//   oem.inc        the propagate invoke method ($OMM in, $OEM out)
+//   oem.inc        $OEM output: axes, times, the PCF OUTPUT times
 //   ocm.inc        the $OCM element-set record: elements, forces, identity
+//   ingest_omm.inc the ingest_omm invoke method: the one $OMM boundary ($OMM in, $OCM out)
+//   propagate.inc  the propagate invoke method ($OCM in, $OEM out)
 //   fit_oem.inc    the fit invoke method ($OEM in, $OCM out)
 //   export_omm.inc the export_omm invoke method ($OCM in, $OMM out: SGP4, stock SGP4XP)
 // =============================================================================
 
 #include "space_data_module_invoke.h"
 #include "orbpro/orbpro_propagator_abi.h"
-#include "omm_slots.h"
 #include "sds_cid.hpp"
 
 #include <pthread.h>
@@ -69,6 +70,8 @@
 #include "atmosphere_inputs.inc"
 #include "oem.inc"
 #include "ocm.inc"
+#include "ingest_omm.inc"
+#include "propagate.inc"
 #include "epoch_store.inc"
 #include "fit_oem.inc"
 #include "export_omm.inc"

@@ -145,19 +145,13 @@ struct Record {
 };
 inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r = Record{};
-  if (!omm::decode(p, n, r.row)) return omm::center_refused() ? 0 : -1;
-  const uint8_t* q = p;
-  uint32_t m = n;
-  if (!plain_view(q, m, "$OMM")) return -1;
-  flatbuffers::Verifier::Options vopt;
-  vopt.check_alignment = false;  // a record cut from a size-prefixed stream is aligned to its prefix, not to its own start
-  flatbuffers::Verifier ver(q, m, vopt);
-  if (!VerifyOMMBuffer(ver)) return -1;
-  const OMM* o = GetOMM(q);
-  r.norad = o->NORAD_CAT_ID();
-  if (o->OBJECT_ID() != nullptr) r.object_id = o->OBJECT_ID()->str();
-  if (o->ORIGINATOR() != nullptr) r.originator = o->ORIGINATOR()->str();
-  if (o->OBJECT_NAME() != nullptr) r.name = o->OBJECT_NAME()->str();
+  ocm::Set s;
+  if (ocm::decode(p, n, s) != 0) return -1;
+  r.row = s.row;
+  r.norad = s.id.norad;
+  r.object_id = s.id.object_id;
+  r.originator = s.id.originator;
+  r.name = s.id.object_name;
   return 1;
 }
 
@@ -165,12 +159,12 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
 /// frame is neither.
 template <class Fn>
 inline bool each_record(const uint8_t* p, uint32_t n, Fn fn) {
-  if (n >= 8 && std::memcmp(p + 4, "$OMM", 4) == 0) return fn(p, n);
+  if (n >= 8 && std::memcmp(p + 4, "$OCM", 4) == 0) return fn(p, n);
   for (uint32_t off = 0; off < n;) {
     if (n - off < 12) return false;
     uint32_t len;
     std::memcpy(&len, p + off, 4);
-    if (len > n - off - 4 || std::memcmp(p + off + 8, "$OMM", 4) != 0) return false;
+    if (len > n - off - 4 || std::memcmp(p + off + 8, "$OCM", 4) != 0) return false;
     if (!fn(p + off, len + 4)) return false;
     off += 4 + len;
   }
@@ -190,7 +184,7 @@ inline int build(Store& st, const Config& cfg) {
   bool bad = false, atm_err = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
-    if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "omm") != 0) continue;
+    if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "ocm") != 0) continue;
     const bool ok = each_record(f->payload, f->payload_length, [&](const uint8_t* p, uint32_t n) {
       Record r;
       const int d = decode_record(p, n, r);
@@ -198,11 +192,6 @@ inline int build(Store& st, const Config& cfg) {
       if (d < 0) { bad = true; return false; }
       if (d == 0) { ++st.stats.other_center; return true; }
       if (cfg.theories != 0 && (cfg.theories & theory_bit(r.row.theory)) == 0) { ++st.stats.theory; delete r.cov; return true; }
-      if (r.row.theory == kTheorySgp4Xp && (pcf::check_set_atmosphere(omm::atmosphere_mark(p, n)) != 0 || pcf::check_set_gravity_terms(omm::gravity_terms_mark(p, n)) != 0)) {
-        delete r.cov;
-        atm_err = true;
-        return false;
-      }
       recs.push_back(std::move(r));
       return true;
     });
@@ -459,9 +448,7 @@ inline uint64_t bytes_of(const Store& st) {
 extern "C" int load_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
-  if (const int rc = pcf::read(pcf::kEpochs)) return rc;
-  if (const int rc = atm::prepare()) return rc;
-  atm::Scope atm_scope;
+  if (const int rc = pcf::read(pcf::kEpochs, true)) return rc;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   return epochs::build(epochs::resident(), cfg);
@@ -474,20 +461,13 @@ extern "C" int propagate_epochs(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   if (const int rc = pcf::read(pcf::kEpochs)) return rc;
-  if (const int rc = atm::prepare()) return rc;
-  atm::Scope atm_scope;
   epochs::Config cfg;
   if (const int rc = epochs::read_config(cfg)) return rc;
   epochs::Store st;
   struct Scope { epochs::Store& s; ~Scope() { epochs::clear(s); } } scope{st};
   if (const int rc = epochs::build(st, cfg)) return rc;
   if (st.series.empty()) { plugin_set_error("missing-omm", "propagate_epochs keeps no set of the 'omm' snapshot."); return 3; }
-  std::vector<oem::Grid> grids;
-  if (const int rc = oem::read_grids(grids)) return rc;
-  if (grids.empty()) {
-    plugin_set_error("missing-grid", "propagate_epochs takes a 'grid' $OEM (explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE).");
-    return 3;
-  }
+  const std::vector<oem::Grid> grids = {oem::output_grid()};
   size_t budget = pcf::options().maximum_states;
   char text[48], start[48], stop[48], why[200];
   for (epochs::Series& s : st.series) {

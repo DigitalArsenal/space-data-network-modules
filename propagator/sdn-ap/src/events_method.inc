@@ -1,12 +1,13 @@
 // -----------------------------------------------------------------------------
-// The `maneuver` method (DESIGN 5.1.1 - 5.1.3): an Earth SGP4XP set
-// across the burns of its $MNV records, in time order. Each record gives the
-// burn's EVENT_START_TIME, its duration (EVENT_END_TIME, or TOTAL_BURN_TIME in
-// seconds; none: an impulse) and DELTA_VEL_U/V/W (km/s, UVW of the
-// pre-maneuver state). Outputs: the post-maneuver $OMM of every burn on
-// 'elements' (epoch the burn's centroid), the $MNV of every burn on
-// 'maneuvers' with PRE_EVENT and POST_EVENT states (TEME), and, with a 'grid',
-// the TEME states across the burns on 'ephemeris'.
+// The `maneuver` method (DESIGN 5.1.1 - 5.1.3): an Earth SGP4XP set (one
+// $OCM on 'ocm', the theory's own forces: an AP set is refused, D21) across the
+// burns of its $MNV records, in time order. Each record gives the burn's
+// EVENT_START_TIME, its duration (EVENT_END_TIME, or TOTAL_BURN_TIME in seconds;
+// none: an impulse) and DELTA_VEL_U/V/W (km/s, UVW of the pre-maneuver state).
+// Outputs: the post-maneuver $OCM of every burn on 'elements' (epoch the burn's
+// centroid), the $MNV of every burn on 'maneuvers' with PRE_EVENT and
+// POST_EVENT states (TEME), and, when the $PCF OUTPUT names times (EPOCHS, or
+// START_TIME and STOP_TIME), the TEME states across the burns on 'ephemeris'.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -22,43 +23,25 @@ struct Burn {
 /// Minutes from the set's epoch to the split JD (w, f).
 inline double minutes_from(const Elements& e, double w, double f) { return ((w - e.epoch_jd_whole) + (f - e.epoch_jd_frac)) * kMinutesPerDay; }
 
-/// The $OMM of an Earth set (identity from the input record `tmpl`).
-inline int push_set(const Elements& e, const OMM* tmpl, const char* comment) {
+/// The $OCM of a post-maneuver SGP4XP set (the identity of the input record).
+inline int push_set(const Elements& e, const ocm::Identity& id) {
+  ElementRow row{};
+  row.epoch_jd_whole = e.epoch_jd_whole;
+  row.epoch_jd_frac = e.epoch_jd_frac;
+  row.mean_motion_rev_day = e.xno * kMinutesPerDay / kTwoPi;
+  row.eccentricity = e.eo;
+  row.inclination_deg = e.xincl / kDeg;
+  row.raan_deg = e.xnodeo / kDeg;
+  row.arg_pericenter_deg = e.omegao / kDeg;
+  row.mean_anomaly_deg = e.xmo / kDeg;
+  row.bterm = e.bterm;
+  row.agom = e.agom;
+  row.norad_cat_id = e.norad;
+  row.theory = kTheorySgp4Xp;
   flatbuffers::FlatBufferBuilder fbb(1024);
-  char epoch_text[48];
-  oem::iso_text(e.epoch_jd_whole, e.epoch_jd_frac, 0.0, epoch_text, sizeof epoch_text);
-  const auto s_epoch = fbb.CreateString(epoch_text);
-  const auto s_comment = fbb.CreateString(comment);
-  const auto s_center = fbb.CreateString("EARTH");
-  const auto s_orig = tmpl->ORIGINATOR() != nullptr ? fbb.CreateString(tmpl->ORIGINATOR()->c_str()) : fbb.CreateString("SDN");
-  const auto s_frame = CreateRFMDirect(fbb, RFMUnion_NONE, 0, 0, "TEME");
-  const auto s_id = tmpl->OBJECT_ID() != nullptr ? fbb.CreateString(tmpl->OBJECT_ID()->c_str()) : 0;
-  const auto s_name = tmpl->OBJECT_NAME() != nullptr ? fbb.CreateString(tmpl->OBJECT_NAME()->c_str()) : 0;
-  const double unix_seconds = ((e.epoch_jd_whole - 2440587.5) + e.epoch_jd_frac) * 86400.0, whole_seconds = std::floor(unix_seconds);
-  OMMBuilder b(fbb);
-  b.add_ORIGINATOR(s_orig);
-  b.add_CENTER_NAME(s_center);
-  b.add_REFERENCE_FRAME(s_frame);
-  b.add_TIME_SYSTEM(timingStandard_UTC);
-  b.add_MEAN_ELEMENT_THEORY(meanElementSource_SGP4XP);
-  if (e.norad != 0) b.add_NORAD_CAT_ID(e.norad);
-  if (!s_id.IsNull()) b.add_OBJECT_ID(s_id);
-  if (!s_name.IsNull()) b.add_OBJECT_NAME(s_name);
-  b.add_COMMENT(s_comment);
-  b.add_EPOCH(s_epoch);
-  b.add_MEAN_MOTION(e.xno * kMinutesPerDay / kTwoPi);
-  b.add_ECCENTRICITY(e.eo);
-  b.add_INCLINATION(e.xincl / kDeg);
-  b.add_RA_OF_ASC_NODE(e.xnodeo / kDeg);
-  b.add_ARG_OF_PERICENTER(e.omegao / kDeg);
-  b.add_MEAN_ANOMALY(e.xmo / kDeg);
-  b.add_BSTAR(e.bterm);
-  b.add_MEAN_MOTION_DDOT(e.agom);
-  b.add_USER_DEFINED_EPOCH_TIMESTAMP(whole_seconds);
-  b.add_USER_DEFINED_MICROSECONDS(std::round((unix_seconds - whole_seconds) * 1e6));
-  FinishOMMBuffer(fbb, b.Finish());
-  if (plugin_push_output("elements", "OMM.fbs", "$OMM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
-    plugin_set_error("output-failed", "The $OMM could not be emitted.");
+  ocm::build(fbb, row, Forces{}, nullptr, id);
+  if (plugin_push_output("elements", "OCM.fbs", "$OCM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
+    plugin_set_error("output-failed", "The $OCM could not be emitted.");
     return 3;
   }
   return 0;
@@ -152,40 +135,30 @@ inline int push_mnv(const Burn& burn, const Elements& pre, const Elements& post,
 extern "C" int maneuver(void) {
   using namespace sdnap;
   plugin_reset_output_state();
-  if (const int rc = pcf::read(pcf::kManeuver)) return rc;
-  std::vector<oem::Grid> grids;
-  bool want_grid = false;
-  {
-    const uint32_t frames = plugin_get_input_count();
-    for (uint32_t i = 0; i < frames; ++i) {
-      const plugin_input_frame_t* f = plugin_get_input_frame(i);
-      if (f != nullptr && f->port_id != nullptr && std::strcmp(f->port_id, "grid") == 0) want_grid = true;
-    }
-  }
-  if (want_grid) {
-    if (const int rc = oem::read_grids(grids)) return rc;
-  }
-  const OMM* tmpl = nullptr;
+  uint32_t sets = 0;
+  if (const int rc = ocm::admit(sets)) return rc;
+  if (sets > 1) return ocm::refuse("too-many-sets", "The 'maneuver' method takes one $OCM.");
+  if (const int rc = pcf::read(pcf::kManeuver, true)) return rc;
+  const pcf::Options& po = pcf::options();
+  const bool want_grid = !po.epochs_w.empty() || po.has_start;
+  ocm::Set set;
+  bool have_set = false;
   ElementRow row{};
   std::vector<evm::Burn> burns;
   const uint32_t frames = plugin_get_input_count();
   for (uint32_t i = 0; i < frames; ++i) {
     const plugin_input_frame_t* f = plugin_get_input_frame(i);
     if (f == nullptr || f->port_id == nullptr) continue;
-    if (std::strcmp(f->port_id, "omm") == 0) {
-      if (tmpl != nullptr) {
-        plugin_set_error("too-many-sets", "The 'maneuver' method takes one $OMM.");
-        return 3;
+    if (std::strcmp(f->port_id, "ocm") == 0) {
+      if (const int rc = ocm::decode(f->payload, f->payload_length, set)) return rc;
+      if (set.theory != meanElementSource_SGP4XP) {
+        const char* name = EnumNamemeanElementSource(static_cast<meanElementSource>(set.theory));
+        char code[64];
+        std::snprintf(code, sizeof code, "theory-not-flown:%s", name);
+        return ocm::refuse(code, "Maneuvers are applied to SGP4XP sets on the theory's own forces (MEAN_ELEMENT_THEORY SGP4XP).");
       }
-      if (!omm::decode(f->payload, f->payload_length, row)) {
-        plugin_set_error(omm::center_refused() ? "unsupported-center" : "invalid-omm",
-                         omm::center_refused() ? "Maneuvers are applied to Earth sets (CENTER_NAME EARTH)." : "The 'omm' payload is not a decodable SGP4XP $OMM.");
-        return 3;
-      }
-      const uint8_t* p = f->payload;
-      uint32_t n = f->payload_length;
-      if (n >= 8 && std::memcmp(p + 4, "$OMM", 4) != 0 && std::memcmp(p + 8, "$OMM", 4) == 0) { p += 4; n -= 4; }
-      tmpl = GetOMM(p);
+      row = set.row;
+      have_set = true;
     } else if (std::strcmp(f->port_id, "maneuvers") == 0) {
       const uint8_t* p = f->payload;
       uint32_t n = f->payload_length;
@@ -217,16 +190,12 @@ extern "C" int maneuver(void) {
       burns.push_back(b);
     }
   }
-  if (tmpl == nullptr || burns.empty()) {
-    plugin_set_error("missing-input", "The 'maneuver' method takes one 'omm' and at least one 'maneuvers' $MNV.");
+  if (!have_set || burns.empty()) {
+    plugin_set_error("missing-input", "The 'maneuver' method takes one 'ocm' and at least one 'maneuvers' $MNV.");
     return 3;
   }
   Elements cur = elements_of(row);
-  if (cur.theory != kTheorySgp4Xp) {
-    plugin_set_error("unsupported-theory", "Maneuvers are applied to SGP4XP sets (MEAN_ELEMENT_THEORY SGP4XP).");
-    return 3;
-  }
-  if (const int tc = pcf::check_set_theory(cur.theory)) return tc;
+  if (const int tc = pcf::check_set_theory(set.theory)) return tc;
   std::stable_sort(burns.begin(), burns.end(), [](const evm::Burn& a, const evm::Burn& b) {
     return (a.start_w - b.start_w) + (a.start_f - b.start_f) < 0.0;
   });
@@ -247,11 +216,7 @@ extern "C" int maneuver(void) {
       plugin_set_error("maneuver-failed", "The inverse map did not converge at a burn (or the set does not reach it).");
       return 3;
     }
-    char comment[200];
-    std::snprintf(comment, sizeof comment, "%s set after a %s of %.6f m/s (U %.6f, V %.6f, W %.6f) at its epoch; DESIGN 5.1", model,
-                  b.duration_s > 0.0 ? "finite burn" : "impulse", 1000.0 * std::sqrt(b.dv[0] * b.dv[0] + b.dv[1] * b.dv[1] + b.dv[2] * b.dv[2]),
-                  1000.0 * b.dv[0], 1000.0 * b.dv[1], 1000.0 * b.dv[2]);
-    if (const int rc = evm::push_set(post, tmpl, comment)) return rc;
+    if (const int rc = evm::push_set(post, set.id)) return rc;
     if (const int rc = evm::push_mnv(b, cur, post, bd, model)) return rc;
     starts.push_back(evm::minutes_from(first, post.epoch_jd_whole, post.epoch_jd_frac));
     chain.push_back(post);
@@ -276,8 +241,8 @@ extern "C" int maneuver(void) {
   flatbuffers::FlatBufferBuilder fbb(1 << 16);
   std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
   int rc = 0;
-  for (const oem::Grid& g : grids) {
-    if (g.axes != oem::Axes::Teme && g.axes != oem::Axes::Undeclared) { rc = oem::refuse("invalid-grid", "The 'maneuver' method writes TEME states."); break; }
+  for (const oem::Grid& g : {oem::output_grid()}) {
+    if (g.axes != oem::Axes::Teme) { rc = pcf::refuse("OUTPUT.FRAME", "the 'maneuver' method writes TEME states"); break; }
     std::vector<double> tw, tf;
     if ((rc = oem::grid_epochs(g, first.epoch_jd_whole, first.epoch_jd_frac, budget, tw, tf))) break;
     std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;

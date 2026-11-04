@@ -7,13 +7,11 @@
 
 namespace sdnap {
 
-/// Theory an OrbProOMMRecord is read under (the record carries none). For
-/// SGP4XP, BTERM is in `bstar` and AGOM in `mean_motion_ddot` (m^2/kg), the
-/// convention of modules propagator/sgp4-xp.
-inline int32_t& omm_theory() {
-  static int32_t theory = kTheorySgp4Xp;
-  return theory;
-}
+/// Theory an OrbProOMMRecord is read under: the struct path (plugin_init_omm, plugin_init) flies stock SGP4-XP only
+/// (Jacchia 1970 on the theory's flux model, no gravity terms); the record carries no theory and no forces, so an SGP4
+/// or AP set never enters here (OrbPro's host refuses to pack one). BTERM is in `bstar` and AGOM in
+/// `mean_motion_ddot` (m^2/kg), the convention of modules propagator/sgp4-xp.
+constexpr int32_t omm_theory() { return kTheorySgp4Xp; }
 
 inline ElementRow row_of_omm(const OrbProOMMRecord& r, int32_t theory) {
   ElementRow row{};
@@ -185,14 +183,6 @@ void* sdnap_alloc(uint32_t bytes) { return std::malloc(bytes ? bytes : 1); }
 
 SDNAP_EXPORT("sdnap_free")
 void sdnap_free(void* pointer) { std::free(pointer); }
-
-/// Theory OrbProOMMRecords are read under by plugin_init_omm (default SGP4XP).
-SDNAP_EXPORT("sdnap_set_omm_theory")
-int32_t sdnap_set_omm_theory(int32_t theory) {
-  if (theory != sdnap::kTheorySgp4 && theory != sdnap::kTheorySgp4Xp) return ORBPRO_PROP_BAD_INPUT;
-  sdnap::omm_theory() = theory;
-  return ORBPRO_PROP_OK;
-}
 
 /// Replaces the element set with `count` ElementRow records (112 bytes each).
 /// Returns the count held (refused sets are held and report an error).

@@ -47,6 +47,7 @@ struct Weather {
 struct Extras {
   flatbuffers::Offset<OrbitDetermination> od = 0;
   flatbuffers::Offset<PVN> provenance = 0;
+  bool carried = false;  ///< PROVENANCE is `provenance` as given (another's, or none); else this module's
   flatbuffers::Offset<flatbuffers::Vector<double>> covariance = 0;
   flatbuffers::Offset<RFM> cov_frame = 0;
   uint8_t cov_size = 6;
@@ -220,7 +221,7 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
   const auto frame = frame_of(fbb, of_epoch);
   const auto s_frame_epoch = of_epoch ? fbb.CreateString(epoch) : flatbuffers::Offset<flatbuffers::String>(0);
   const auto s_averaging = fbb.CreateString(sgp4 ? "KOZAI" : "BROUWER");
-  const auto provenance = x.provenance.IsNull() ? producer_pvn(fbb) : x.provenance;
+  const auto provenance = x.carried || !x.provenance.IsNull() ? x.provenance : producer_pvn(fbb);
   const auto s_cov_type = x.covariance.IsNull() ? flatbuffers::Offset<flatbuffers::String>(0) : fbb.CreateString("CARTPV");
   OCMBuilder b(fbb);
   b.add_HEADER(header);
@@ -243,7 +244,7 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
     if (!x.cov_propagation.IsNull()) b.add_COV_PROPAGATION(x.cov_propagation);
     if (!x.cov_realism.IsNull()) b.add_COV_REALISM(x.cov_realism);
   }
-  b.add_PROVENANCE(provenance);
+  if (!provenance.IsNull()) b.add_PROVENANCE(provenance);
   b.add_MEAN_ELEMENTS(mean);
   FinishOCMBuffer(fbb, b.Finish());
 }
@@ -476,6 +477,34 @@ inline int rows_cover(const Set& s, int32_t first_mjd, int32_t last_mjd) {
       return atm::fail_day("weather-rows-short", text, "The record's SPACE_WEATHER rows do not reach a day the call flies the set through: it flies from the day after its first row to the end of its last.");
     }
   }
+  return 0;
+}
+
+/// The record type of a payload (plain or size-prefixed): its file identifier, or "" when it names none.
+inline std::string type_of(const uint8_t* p, uint32_t n) {
+  if (p == nullptr || n < 8) return std::string();
+  const uint8_t* id = (n >= 12 && p[8] == '$') ? p + 8 : p + 4;
+  if (id[0] != '$') return std::string();
+  return std::string(reinterpret_cast<const char*>(id), 4);
+}
+
+/// A flight's frames ('ocm'): every frame's record type checked before anything is decoded. Flight takes $OCM records
+/// (and the $PCF on 'configuration') and nothing else: an $OMM, $SPW, $DCL or $OEM is refused by its type. 0 with
+/// `count` the 'ocm' frames, or 3 refused by name.
+inline int admit(uint32_t& count) {
+  count = 0;
+  for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {
+    const plugin_input_frame_t* f = plugin_get_input_frame(i);
+    if (f == nullptr || f->port_id == nullptr || std::strcmp(f->port_id, "ocm") != 0) continue;
+    const std::string t = type_of(f->payload, f->payload_length);
+    if (t == "$OMM") return refuse("omm-not-flown", "Flight takes $OCM element sets: an $OMM enters through ingest_omm.");
+    if (t == "$SPW") return refuse("spw-not-flown", "The record carries the space weather it flies on (PERTURBATIONS.SPACE_WEATHER): no $SPW beside it.");
+    if (t == "$DCL") return refuse("dcl-not-flown", "The record carries its density-correction nodes: no $DCL beside it.");
+    if (t == "$OEM") return refuse("grid-not-flown", "The output times are the $PCF's OUTPUT.EPOCHS, or START_TIME and STOP_TIME: no grid $OEM.");
+    if (t != "$OCM") return refuse("invalid-ocm", "An 'ocm' payload is not an SDS $OCM.");
+    ++count;
+  }
+  if (count == 0) return refuse("missing-ocm", "An 'ocm' input frame is required.");
   return 0;
 }
 

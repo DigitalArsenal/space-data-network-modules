@@ -2,7 +2,7 @@
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
   "version": "0.5.0",
-  "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, SGP4XP with its atmosphere and gravity replaced ($PCF FORCES). Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded checkpoint storage per object; cached brackets interpolate, first queries build nodes, and beyond-span queries integrate from the nearest preceding retained node. Work grows with the uncached time gap; results do not depend on request order.",
+  "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, SGP4XP with its atmosphere and gravity replaced. Element sets are $OCM records, each the whole input of its flight: theory, forces, daily space weather, density-correction nodes and covariance typed; the propagator ABI struct path (plugin_init_omm) flies stock SGP4XP only. Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded checkpoint storage per object; cached brackets interpolate, first queries build nodes, and beyond-span queries integrate from the nearest preceding retained node. Work grows with the uncached time gap; results do not depend on request order.",
   "pluginFamily": "propagator",
   "capabilities": [],
   "externalInterfaces": [],
@@ -19,37 +19,7 @@
     {
       "methodId": "ingest_omm",
       "displayName": "Ingest OMM",
-      "description": "Adopts mean elements from SDS $OMM records (MEAN_ELEMENT_THEORY SGP4 or SGP4XP; for SGP4XP, BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT, both m^2/kg) and replaces the module's element set. Propagation is reached through the propagator ABI exports and the sdnap_* batch entry, not through this invoke surface.",
-      "inputPorts": [
-        {
-          "portId": "omm",
-          "acceptedTypeSets": [
-            {
-              "setId": "sdn.sds.omm",
-              "allowedTypes": [
-                {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
-                }
-              ],
-              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
-            }
-          ],
-          "minStreams": 1,
-          "maxStreams": 65535,
-          "required": true,
-          "description": "OMM mean-element records."
-        }
-      ],
-      "outputPorts": [],
-      "maxBatch": 65535,
-      "drainPolicy": "drain-to-empty"
-    },
-    {
-      "methodId": "propagate",
-      "displayName": "Propagate OMM to OEM",
-      "description": "Each $OMM (MEAN_ELEMENT_THEORY SGP4XP or SGP4), plain or size-prefixed, to one $OEM, km and km/s, UTC, on the grid of an optional 'grid' $OEM: per grid block either explicit EPOCHs or START_TIME / STOP_TIME / STEP_SIZE (defaults: the set's epoch, one day later, 60 s), in the block's axes (TEME by default; GCRF or EME2000), one $OEM block per grid block; the grid's span decides how far a set runs, at most 500,000 states per request. Refused by name: missing-omm, unsupported-center, invalid-omm, invalid-grid, bad-grid, too-many-states, element-set-refused, propagation-failed (naming the time), frame-failed. FORCES selects SGP4XP's drag atmosphere (SPEC 15): ENABLE_DRAG false (the default) keeps the theory's own Jacchia 1970, its drivers the generic flux model or, from 'space_weather' $SPW rows (WEATHER_SOURCE RECORDS, or UNSPECIFIED with rows), measured F10.7, F10.7a and Ap; ENABLE_DRAG true with ATMOSPHERE_MODEL NRLMSISE00 takes NRLMSISE-00 on the rows; DENSITY_CORRECTION DCA_COMMON_MODE multiplies it by exp(s(t)) of a 'density_correction' $DCL; WEATHER_EXTENSION UNSPECIFIED or HOLD_LAST; any other FORCES field is refused by name. Refused by name too: space-weather-missing, invalid-space-weather, space-weather-out-of-range, density-correction-missing, density-correction-unselected, invalid-density-correction.",
+      "description": "The one $OMM boundary: each Space-Track or CelesTrak $OMM (MEAN_ELEMENT_THEORY SGP4 or SGP4XP; for SGP4XP, BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT, both m^2/kg) becomes one $OCM on 'ocm' with its theory's own forces written explicitly (SGP4: GRAVITY_MODEL WGS-72, WEATHER_SOURCE NONE, no ATMOSPHERIC_MODEL, both caps 0, ORB_AVERAGING KOZAI; SGP4XP: ATMOSPHERIC_MODEL {JXX,1970}, WEATHER_SOURCE THEORY_FLUX_MODEL, DENSITY_CORRECTION NONE, both caps 0, GRAVITY_MODEL EGM-96, ORB_AVERAGING BROUWER), NORAD_CAT_ID, the identity, ORIGINATOR and the $OMM's PROVENANCE; the sets also replace the module's element set for the propagator ABI exports and the sdnap_* batch entry. Refused by name: missing-omm, invalid-omm, unsupported-center, user-defined-parameters:<count> (an $OMM with USER_DEFINED_PARAMETERS, by their count, never read by name), theory-not-ingestable:AP.",
       "inputPorts": [
         {
           "portId": "omm",
@@ -69,15 +39,67 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "OMM mean-element records (with or without 'opm' records; at least one of the two)."
+          "description": "OMM mean-element records."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "One $OCM per 'omm' record, in order.",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-ingest",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "maxBatch": 65535,
+      "drainPolicy": "drain-to-empty"
+    },
+    {
+      "methodId": "propagate",
+      "displayName": "Propagate OMM to OEM",
+      "description": "Each $OCM element set (SGP4, SGP4XP or AP), plain or size-prefixed, flown under the forces its record states to one $OEM, km and km/s, UTC, at the $PCF OUTPUT times (EPOCHS, or START_TIME to STOP_TIME at STEP_SECONDS; defaults: the set's epoch, one day later, 60 s) in OUTPUT.FRAME (TEME by default; GCRF or EME2000), with one covariance line per state when the set carries COVARIANCE_DATA; at most OUTPUT.MAXIMUM_STATES states per request. Flight takes $OCM records and an optional $PCF and nothing else: a lone $OCM flies. The record is the whole input of the set: MEAN_ELEMENT_THEORY alone names the theory (SGP4: BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT, BTERM = AGOM = 0; SGP4XP and AP: BTERM, AGOM, BSTAR = MEAN_MOTION_DOT = MEAN_MOTION_DDOT = 0), ORB_AVERAGING KOZAI or BROUWER to match, TRAJ_REF_FRAME TEMEOFDATE, or TEMEOFEPOCH with TRAJ_FRAME_EPOCH the set's EPOCH for AP with a gravity cap above 0; PERTURBATIONS states the forces: WEATHER_SOURCE always (SGP4: NONE), ATMOSPHERIC_MODEL exactly when it is not NONE, {JXX,1970} or {NRLMSIS00E,2000}; SGP4XP is Jacchia 1970 on the theory's flux model with no correction and both caps 0, AP any other; RECORDS flies on the record's SPACE_WEATHER (one row a UTC day, ascending: on day d F10.7 of day d - 1, F10.7a and Ap of day d), from the day after its first row to the end of its last and no further; DCA_COMMON_MODE on its DENSITY_CORRECTION_NODE_TIMES_MS and _LOG_DENSITY_SCALE_DIMENSIONLESS over {NRLMSIS00E,2000}, with DENSITY_CORRECTION_CID; COVARIANCE_DATA with COV_PARAMETER_KINDS and COV_PROPAGATION carries the covariance (SPEC 12). Refused by name: missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, unsupported-center, mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, weather-rows-missing, weather-rows-unselected, weather-rows-invalid:<day>, weather-rows-short:<day>, density-correction-missing, density-correction-unselected, invalid-density-correction, density-correction-atmosphere-mismatch, density-correction-cid-missing, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance, configuration-refused, invalid-configuration, too-many-states, element-set-refused, propagation-failed (naming the time), frame-failed.",
+      "inputPorts": [
+        {
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 0,
+          "maxStreams": 65535,
+          "required": false,
+          "description": "$OCM element sets, one a frame, plain or size-prefixed. A payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type before anything is decoded (omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown); a frame on a port this method does not declare is refused by the host (unknown-input-port).",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm-element-sets",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
+                }
+              ],
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
+            }
+          ]
         },
         {
           "portId": "configuration",
           "displayName": "configuration",
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "$PCF 1.0.5 (SDS 1.271.0): THEORY and OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES), FORCES (refused when off its defaults), INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads each set's own, another value must match it; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "required": false,
+          "description": "$PCF 1.0.7 (SDS 1.276.0), optional (absent: every default): THEORY (UNSPECIFIED reads each set's own; SGP4, SGP4XP or AP must match it), OUTPUT (FRAME TEME, GCRF or EME2000; STEP_SECONDS 60; MAXIMUM_STATES 500000; EPOCHS, or START_TIME and STOP_TIME: default the set's epoch to one day later), INTEGRATOR (refused) and EVENTS (refused when not empty); a FORCES table is refused (configuration-refused FORCES): the record is the one authority for its forces; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -91,66 +113,6 @@
               "description": "Ratified SDS $PCF propagation configuration; the module decodes the FlatBuffer itself."
             }
           ]
-        },
-        {
-          "portId": "grid",
-          "displayName": "grid",
-          "minStreams": 0,
-          "maxStreams": 16,
-          "required": false,
-          "description": "Optional $OEM grid template (as modules propagator/sgp4-xp): EPHEMERIS_DATA_LINES epochs, or START_TIME / STOP_TIME / STEP_SIZE; REFERENCE_FRAME TEME, GCRF or EME2000; UTC; CENTER_NAME EARTH.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-oem-grid",
-              "allowedTypes": [
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "portId": "space_weather",
-          "displayName": "space_weather",
-          "minStreams": 0,
-          "maxStreams": 65535,
-          "required": false,
-          "description": "SPEC 15: daily $SPW rows (DATE, F107_OBS, F107_OBS_CENTER81, AP_AVG), plain records or size-prefixed records end to end, for the drag atmosphere $PCF FORCES selects (WEATHER_SOURCE RECORDS, or UNSPECIFIED with rows; NRLMSISE-00 needs them): on UTC day d F10.7 is the observed flux of day d - 1, F10.7a the 81-day centered mean and Ap the daily Ap of day d; past the last row it holds (HOLD_LAST); the rows begin by the day before the call's earliest day.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-spw-rows",
-              "allowedTypes": [
-                {
-                  "schemaName": "SPW.fbs",
-                  "fileIdentifier": "$SPW",
-                  "rootTypeName": "SPW"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "portId": "density_correction",
-          "displayName": "density_correction",
-          "minStreams": 0,
-          "maxStreams": 1,
-          "required": false,
-          "description": "SPEC 15: the open-DCA $DCL (Solved, NRLMSISE-00 baseline, LogDensityNodes) when FORCES.DENSITY_CORRECTION is DCA_COMMON_MODE: NRLMSISE-00 density times exp(s(t)), s linear in UTC between the nodes and held at the end values outside them.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-dcl-open-dca",
-              "allowedTypes": [
-                {
-                  "schemaName": "DCL.fbs",
-                  "fileIdentifier": "$DCL",
-                  "rootTypeName": "DCL"
-                }
-              ]
-            }
-          ]
         }
       ],
       "outputPorts": [
@@ -160,7 +122,7 @@
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "One $OEM per element set: EPHEMERIS_DATA_LINES in km and km/s, UTC, centered on the Earth.",
+          "description": "One $OEM per element set: EPHEMERIS_DATA_LINES in km and km/s, UTC, centered on the Earth, and a covariance line per state where the set carries COVARIANCE_DATA.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-trajectory",
@@ -536,7 +498,7 @@
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "$OCM element sets (SGP4 or stock SGP4XP), plain or size-prefixed."
+          "description": "$OCM element sets (SGP4 or stock SGP4XP), plain or size-prefixed. A payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type before anything is decoded (omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown); a frame on a port this method does not declare is refused by the host (unknown-input-port)."
         }
       ],
       "outputPorts": [
@@ -567,35 +529,36 @@
     {
       "methodId": "maneuver",
       "displayName": "Maneuver an SGP4XP set",
-      "description": "DESIGN 5.1: an Earth SGP4XP $OMM across the burns of its $MNV records, in time order. Each record gives EVENT_START_TIME, the duration (EVENT_END_TIME, or TOTAL_BURN_TIME in s; none: an impulse) and DELTA_VEL_U/V/W (km/s, UVW of the pre-maneuver state: U radial, W along r x v, V = W x U). The post-maneuver set is the inverse of the output map at the burn's centroid, h^-1(x(t_b) + (0, dv), t_b), by fixed-point iteration in equinoctial elements (14); a finite burn scales the eccentricity-vector and plane changes by sinc(dL/2), dL = n D (15). Outputs: the post-maneuver $OMM of every burn (epoch the centroid; drag and SRP parameters carried), its $MNV with PRE_EVENT and POST_EVENT states (TEME, osculating elements, BALLISTIC_COEFF = 1/B_eff kg/m^2) and the CHARACTERIZATION from the dv direction, and with a 'grid' the TEME states across the burns.",
+      "description": "DESIGN 5.1: one Earth SGP4XP $OCM (the theory's own forces; an AP set is refused theory-not-flown:AP, D21) across the burns of its $MNV records, in time order. Each record gives EVENT_START_TIME, the duration (EVENT_END_TIME, or TOTAL_BURN_TIME in s; none: an impulse) and DELTA_VEL_U/V/W (km/s, UVW of the pre-maneuver state: U radial, W along r x v, V = W x U). The post-maneuver set is the inverse of the output map at the burn's centroid, h^-1(x(t_b) + (0, dv), t_b), by fixed-point iteration in equinoctial elements (14); a finite burn scales the eccentricity-vector and plane changes by sinc(dL/2), dL = n D (15). Outputs: the post-maneuver $OCM of every burn (SGP4XP, the input's identity) (epoch the centroid; drag and SRP parameters carried), its $MNV with PRE_EVENT and POST_EVENT states (TEME, osculating elements, BALLISTIC_COEFF = 1/B_eff kg/m^2) and the CHARACTERIZATION from the dv direction, and, when the $PCF OUTPUT names times (EPOCHS, or START_TIME and STOP_TIME), the TEME states across the burns. Refused by name: missing-ocm, invalid-ocm, omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown, unsupported-center, mean-elements-missing, mean-element-theory-unspecified, theory-not-flown:<name>, elements-other-theory, orb-averaging-mismatch, frame-pairing-invalid, weather-source-unspecified, atmosphere-weather-mismatch, atmosphere-unsupported, weather-rows-missing, weather-rows-unselected, weather-rows-invalid:<day>, weather-rows-short:<day>, density-correction-missing, density-correction-unselected, invalid-density-correction, density-correction-atmosphere-mismatch, density-correction-cid-missing, cov-parameter-kind-unspecified, cov-propagation-invariant, invalid-covariance, too-many-sets, missing-input, invalid-mnv, maneuver-before-epoch, maneuver-failed, element-set-refused, propagation-failed, configuration-refused.",
       "inputPorts": [
         {
-          "portId": "omm",
+          "portId": "ocm",
+          "displayName": "ocm",
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "The pre-maneuver Earth set: one SGP4XP $OCM. A payload whose own file identifier is $OMM, $SPW, $DCL or $OEM is refused by its type before anything is decoded (omm-not-flown, spw-not-flown, dcl-not-flown, grid-not-flown); a frame on a port this method does not declare is refused by the host (unknown-input-port).",
           "acceptedTypeSets": [
             {
-              "setId": "sdn.sds.omm",
+              "setId": "sds-ocm-element-sets",
               "allowedTypes": [
                 {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 }
               ],
-              "description": "Ratified SDS $OMM mean elements; the module decodes the FlatBuffer itself."
+              "description": "Ratified SDS $OCM element sets; the module decodes the FlatBuffer itself."
             }
-          ],
-          "minStreams": 1,
-          "maxStreams": 1,
-          "required": true,
-          "description": "The pre-maneuver Earth set (SGP4XP)."
+          ]
         },
         {
           "portId": "configuration",
           "displayName": "configuration",
-          "minStreams": 1,
+          "minStreams": 0,
           "maxStreams": 1,
-          "required": true,
-          "description": "$PCF 1.0.5 (SDS 1.271.0): THEORY and FORCES (refused when off its defaults), OUTPUT, INTEGRATOR (refused) and EVENTS (refused when not empty); THEORY UNSPECIFIED reads the set's own; fields left unset take the documented defaults, a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "required": false,
+          "description": "$PCF 1.0.7 (SDS 1.276.0), optional (absent: every default): THEORY (UNSPECIFIED reads each set's own; SGP4, SGP4XP or AP must match it), OUTPUT (FRAME TEME; STEP_SECONDS 60; MAXIMUM_STATES 500000; EPOCHS, or START_TIME and STOP_TIME: default the set's epoch to one day later), INTEGRATOR (refused) and EVENTS (refused when not empty); a FORCES table is refused (configuration-refused FORCES): the record is the one authority for its forces; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -630,26 +593,6 @@
               "description": "Ratified SDS $MNV maneuver records (0.0.4)."
             }
           ]
-        },
-        {
-          "portId": "grid",
-          "displayName": "grid",
-          "minStreams": 0,
-          "maxStreams": 16,
-          "required": false,
-          "description": "Optional $OEM grid template (as propagate's): the TEME states across the burns.",
-          "acceptedTypeSets": [
-            {
-              "setId": "sds-oem-grid",
-              "allowedTypes": [
-                {
-                  "schemaName": "OEM.fbs",
-                  "fileIdentifier": "$OEM",
-                  "rootTypeName": "OEM"
-                }
-              ]
-            }
-          ]
         }
       ],
       "outputPorts": [
@@ -659,15 +602,15 @@
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "One post-maneuver $OMM per burn, in time order.",
+          "description": "One post-maneuver $OCM per burn, in time order.",
           "acceptedTypeSets": [
             {
-              "setId": "sds-omm-fit",
+              "setId": "sds-ocm-maneuver",
               "allowedTypes": [
                 {
-                  "schemaName": "OMM.fbs",
-                  "fileIdentifier": "$OMM",
-                  "rootTypeName": "OMM"
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM"
                 }
               ]
             }
@@ -700,7 +643,7 @@
           "minStreams": 0,
           "maxStreams": 65535,
           "required": false,
-          "description": "With a 'grid': one $OEM of TEME states across the burns.",
+          "description": "With $PCF OUTPUT times: one $OEM of TEME states across the burns.",
           "acceptedTypeSets": [
             {
               "setId": "sds-oem-trajectory",
