@@ -2,7 +2,7 @@
   "pluginId": "com.digitalarsenal.analysis.optical-astrometry",
   "name": "Optical astrometry",
   "version": "0.1.0",
-  "description": "Optical frames to angles and an orbit. reduce reads a sequence of frames (FITS with DATE-OBS, EXPTIME and site headers, or 8/16-bit PGM from a video), times them (FITS DATE-OBS, or a burnt-in UTC overlay read by a self-calibrating fixed-font digit matcher checked against the frame cadence), detects and centroids the stars (trails at mid-exposure) and the satellites, plate-solves every frame (blind quad-hash solving after Lang et al. 2010, then each frame from its neighbor, TAN projection with a linear or quadratic plate, weighted against apparent star places from the catalog: proper motion and parallax to the epoch, light deflection and aberration by the site's velocity), estimates the site and the time-tag bias from a calibrator whose orbit is known when the site is not given, identifies the targets among the tracks by orbit fit, and determines each target's orbit: Gooding angles-only initial orbit, then weighted batch least squares with the a priori element set (its covariance from the GP error model at the set's age) and the site and timing as consider parameters. It holds no propagator and no catalog: element-set trajectories come through the propagator query port ($PRW window requests, answered by analysis/epoch-state or any provider) and reference stars through catalog cones ($SKQ, answered from any star service, e.g. Gaia DR3). Out: CCSDS TDM angles (RADEC, GCRF, per object), $EOO observations with their uncertainties, $SKI plate solutions, the orbit ($OCM state and covariance, with checks against later element sets) and its trajectory ($OEM, for analysis/od to fit mean elements), and a FlowNotice report of every number with its uncertainty.",
+  "description": "Optical frames to angles and an orbit. reduce reads a sequence of frames (FITS with DATE-OBS, EXPTIME and site headers, or 8/16-bit PGM from a video), times them (FITS DATE-OBS, or a burnt-in UTC overlay read by a self-calibrating fixed-font digit matcher checked against the frame cadence), detects and centroids the stars (trails at mid-exposure) and the satellites, plate-solves every frame (blind quad-hash solving after Lang et al. 2010, then each frame from its neighbor, TAN projection with a linear or quadratic plate, weighted against apparent star places from the catalog: proper motion and parallax to the epoch, light deflection and aberration by the site's velocity), estimates the site and the time-tag bias from a calibrator whose orbit is known when the site is not given, identifies the targets among the tracks by orbit fit, and determines each target's orbit: Gooding angles-only initial orbit, then weighted batch least squares with the a priori element set (its covariance from the GP error model at the set's age) and the site and timing as consider parameters. It holds no propagator and no catalog: element-set trajectories come through the propagator query port ($PRW window requests, answered by analysis/epoch-state or any provider) and reference stars through catalog cones ($SKQ, answered from any star service, e.g. Gaia DR3). Out: CCSDS TDM angles (RADEC, GCRF, per object), $EOO observations with their uncertainties, $SKI plate solutions, the orbit ($OCM state and covariance, with checks against later element sets) and its trajectory ($OEM, for analysis/od to fit mean elements), and a FlowNotice report of every number with its uncertainty. initial_orbit runs the same Gooding angles-only method alone on RA/Dec $TDM records (no element set, no frames): the first, middle and last sight of one pass to a Cartesian $OCM at the middle sight; refusals by name: too-few-observations, no-initial-orbit, invalid-angles.",
   "pluginFamily": "analysis",
   "capabilities": [],
   "externalInterfaces": [],
@@ -391,6 +391,96 @@
           "maxStreams": 1,
           "required": true,
           "description": "FlowNotice (FNTC) Info: SCHEMA $TDM, SOURCE_NAME \"optical-astrometry reduce\", REASON need-propagation, need-catalog or done, COUNT the queries, the cones or the observations; ITEMS every number with its uncertainty: timing (decoded frames, cadence, jitter), exposure, plates (solved, median residual, unsolved frames), site and time bias, the calibrator's fit and observed-minus-computed, and per target the track, prior, fit, sigmas, IOD, checks and separation."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "initial_orbit",
+      "displayName": "Gooding angles-only initial orbit from RA/Dec tracking data",
+      "inputPorts": [
+        {
+          "portId": "angles",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-tdm",
+              "allowedTypes": [
+                {
+                  "schemaName": "TDM.fbs",
+                  "fileIdentifier": "$TDM",
+                  "rootTypeName": "TDM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 65535,
+          "required": true,
+          "description": "RA/Dec $TDM records (plain or size-prefixed, any number): ANGLE_TYPE RADEC, TIME_SYSTEM UTC, ANGLE_1/ANGLE_2 in degrees (geometric topocentric GCRF at the time tag), the site as OBSERVER_X/Y/Z (Earth-fixed WGS-84, m). The first, middle and last observation by epoch are the three sights; they must lie within one revolution (one pass)."
+        },
+        {
+          "portId": "earth_orientation",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-eop",
+              "allowedTypes": [
+                {
+                  "schemaName": "EOP.fbs",
+                  "fileIdentifier": "$EOP",
+                  "rootTypeName": "EOP",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Earth orientation ($EOP, one row or a size-prefixed stream) for UT1 and polar motion: the sites' GCRS positions. Required."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "orbit",
+          "acceptedTypeSets": [
+            {
+              "setId": "sds-ocm",
+              "allowedTypes": [
+                {
+                  "schemaName": "OCM.fbs",
+                  "fileIdentifier": "$OCM",
+                  "rootTypeName": "OCM",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "One Cartesian $OCM (plain): the Gooding solution's GCRF state (km, km/s) at the middle sight's epoch, ORBIT_DETERMINATION OD_METHOD INITIAL_ORBIT with the middle-sight miss (arcsec) as OD_RESIDUAL_RMS; no covariance, no element set."
+        },
+        {
+          "portId": "report",
+          "acceptedTypeSets": [
+            {
+              "setId": "sdn-runtime-flow-notice",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "FlowNotice (FNTC) Info: SCHEMA $OCM, SOURCE_NAME \"optical-astrometry initial_orbit\", REASON initial-orbit; ITEMS the epoch, the three ranges (km), the miss, the distinct solutions and the observation count."
         }
       ],
       "maxBatch": 1,
