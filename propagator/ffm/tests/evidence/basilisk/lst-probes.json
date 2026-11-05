@@ -1872,7 +1872,10 @@
   },
   {
    "path": "../../../../../third_party/nrlmsise00/nrlmsise-00.c",
-   "sha256": "606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a"
+   "sha256": "606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   }
  ],
  "summary": {

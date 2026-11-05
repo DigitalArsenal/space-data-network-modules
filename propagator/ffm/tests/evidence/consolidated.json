@@ -4,6 +4,56 @@
     "version": "2.2.0",
     "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
   },
+  "rescore": {
+    "date": "2026-11-04",
+    "notRescored": [
+      {
+        "evidence": "orekit/summary-simple-eop.json",
+        "build": "FFM 1.3.0 (9c24bf0e)",
+        "reason": "Its reference, the Orekit run with -Dorekit.simpleEOP=true (full-simple-eop.json), is not stored in the suite; regenerating it runs Orekit."
+      },
+      {
+        "evidence": "README.md, Radiation pressure: the final-epoch-only figure (3.1 cm)",
+        "build": "FFM 1.3.0 (9c24bf0e)",
+        "reason": "Measured by tests/orekit_reference.test.mjs, which flies the final-epoch-only request; the suite stores no score for that request."
+      },
+      {
+        "evidence": "README.md, Ocean tides and VCM parity: the Orekit totals, differentials and Jacobian figures",
+        "build": "FFM 1.3.0 (9c24bf0e)",
+        "reason": "Quoted from the header of tests/orekit_reference.test.mjs; consolidated.json does not carry per-orbit force differentials or Jacobian columns."
+      },
+      {
+        "evidence": "xval/summary.json and docs/cross-validation.md, Results and Findings (the original 27-case subset)",
+        "build": "FFM 1.4.0 (eb05fc52)",
+        "reason": "Written by tests/xval-summary.mjs; consolidate.mjs does not read it, so check-all.mjs cannot hold its figures to consolidated.json."
+      },
+      {
+        "evidence": "erfa-spice/before-after.json, orekit-trajectory-before-after.json, orekit-frames-summary.json and the docs/cross-validation.md classical-frame tables",
+        "build": "FFM 1.3.1 baseline against 1.4.0",
+        "reason": "Recorded before/after measurements of the 1.4.0 ERFA frame change; Orekit frames are not rerun."
+      },
+      {
+        "evidence": "basilisk/lst-probes.json and basilisk/model-probes.json",
+        "build": "Basilisk 2.12.0 probes as recorded",
+        "reason": "Regenerating them runs Basilisk. The NRLMSISE-00 source they pinned changed after them (globe7, 2026-10-25/26); its digest is kept as a historical source."
+      },
+      {
+        "evidence": "Runtime parity receipts: lane13/*.json, gnss-srp/prw-gnss-parity.json, earth-radiation-tides/prw-earth-radiation-tides-parity.json (README.md Verification; docs/cross-validation.md runtime receipts)",
+        "build": "FFM 2.0.0 (c5c81101) in README.md; FFM 1.4.0 (eb05fc52) in docs/cross-validation.md",
+        "reason": "Browser against native WasmEdge byte-agreement receipts written by tests/*-parity.mjs; they compare runtimes, not stored references, and were not rerun."
+      },
+      {
+        "evidence": "gps-srp-accuracy/score-test-window.json (README.md, GPS prediction accuracy)",
+        "build": "as recorded",
+        "reason": "An accuracy study on E3's window against ESA final orbits; its inputs live in orbit-accuracy-experiments, not in the suite."
+      },
+      {
+        "evidence": "earth-equivalence.json, engines/results-2026-10-26.json, catalog-resident.json, catalog-coverage.json, memory-sizing.json",
+        "build": "as recorded",
+        "reason": "Equivalence, engine, catalog and memory receipts, not comparisons with stored references."
+      }
+    ]
+  },
   "protocol": {
     "arcS": 86400,
     "sampleStepS": 3600,
@@ -495,6 +545,10 @@
             "display": "3.712 mm",
             "met": true,
             "worstM": 0.00371163499022032
+          },
+          "stm": {
+            "display": "1.16481e-05",
+            "worst": 0.000011648127933000418
           },
           "suite": {
             "display": "3.702 mm",
@@ -1009,6 +1063,10 @@
             "met": true,
             "worstM": 0.00017315953874971768
           },
+          "stm": {
+            "display": "1.84471e-11",
+            "worst": 1.8447103745144048e-11
+          },
           "suite": {
             "display": "0.173 mm",
             "met": true,
@@ -1465,6 +1523,10 @@
             "met": true,
             "worstM": 0.003578987334946386
           },
+          "stm": {
+            "display": "1.78087e-05",
+            "worst": 0.000017808745055957176
+          },
           "suite": {
             "display": "3.645 mm",
             "met": true,
@@ -1483,6 +1545,10 @@
             "display": "0.172 mm",
             "met": true,
             "worstM": 0.00017232860730665594
+          },
+          "stm": {
+            "display": "1.55463e-11",
+            "worst": 1.554629349713492e-11
           },
           "suite": {
             "display": "0.174 mm",
@@ -1615,6 +1681,10 @@
             "met": true,
             "worstM": 0.0000010221663288286008
           },
+          "stm": {
+            "display": "6.72488e-13",
+            "worst": 6.724883289393081e-13
+          },
           "suite": {
             "display": "0.005 mm",
             "met": true,
@@ -1633,6 +1703,10 @@
             "display": "0.672 mm",
             "met": true,
             "worstM": 0.0006724028332699136
+          },
+          "stm": {
+            "display": "1.0051e-10",
+            "worst": 1.0050973276572806e-10
           },
           "suite": {
             "display": "0.541 mm",
@@ -1653,6 +1727,10 @@
             "met": true,
             "worstM": 0.0006753633100653463
           },
+          "stm": {
+            "display": "1.00312e-10",
+            "worst": 1.0031232996236041e-10
+          },
           "suite": {
             "display": "0.539 mm",
             "met": true,
@@ -1672,6 +1750,10 @@
             "met": true,
             "worstM": 0.0006794265179825007
           },
+          "stm": {
+            "display": "1.0106e-10",
+            "worst": 1.0106010018547758e-10
+          },
           "suite": {
             "display": "0.545 mm",
             "met": true,
@@ -1690,6 +1772,10 @@
             "display": "22.117 mm",
             "met": true,
             "worstM": 0.022116917885174243
+          },
+          "stm": {
+            "display": "1.96294e-05",
+            "worst": 0.000019629391143603642
           },
           "suite": {
             "display": "22.055 mm",
@@ -1756,6 +1842,10 @@
             "met": false,
             "worstM": 2.3146976246939386
           },
+          "stm": {
+            "display": "1.9949e-05",
+            "worst": 0.00001994899223493906
+          },
           "suite": {
             "display": "2.315 m",
             "met": false,
@@ -1774,6 +1864,10 @@
             "display": "0.720 mm",
             "met": true,
             "worstM": 0.0007200337070576292
+          },
+          "stm": {
+            "display": "1.06763e-10",
+            "worst": 1.0676341001488789e-10
           },
           "suite": {
             "display": "0.577 mm",
@@ -1794,6 +1888,10 @@
             "met": true,
             "worstM": 0.0007064489930696178
           },
+          "stm": {
+            "display": "1.06336e-10",
+            "worst": 1.0633586315553127e-10
+          },
           "suite": {
             "display": "0.572 mm",
             "met": true,
@@ -1812,6 +1910,10 @@
             "display": "5.089 mm",
             "met": true,
             "worstM": 0.005088606404435741
+          },
+          "stm": {
+            "display": "1.96291e-05",
+            "worst": 0.00001962913784914297
           },
           "suite": {
             "display": "5.092 mm",
@@ -1878,6 +1980,10 @@
             "met": false,
             "worstM": 2.319486585637847
           },
+          "stm": {
+            "display": "2.12402e-05",
+            "worst": 0.000021240229168564154
+          },
           "suite": {
             "display": "2.319 m",
             "met": false,
@@ -1896,6 +2002,10 @@
             "display": "5.403 mm",
             "met": true,
             "worstM": 0.005403322528275052
+          },
+          "stm": {
+            "display": "1.01565e-05",
+            "worst": 0.000010156482264925788
           },
           "suite": {
             "display": "5.278 mm",
@@ -1916,6 +2026,10 @@
             "met": true,
             "worstM": 0.030502109911140985
           },
+          "stm": {
+            "display": "4.63286e-09",
+            "worst": 4.632860159992003e-9
+          },
           "suite": {
             "display": "30.389 mm",
             "met": true,
@@ -1934,6 +2048,10 @@
             "display": "0.713 mm",
             "met": true,
             "worstM": 0.00071283872895486
+          },
+          "stm": {
+            "display": "6.14074e-07",
+            "worst": 6.140743115806466e-7
           },
           "suite": {
             "display": "0.579 mm",
@@ -2000,6 +2118,10 @@
             "met": false,
             "worstM": 1.5276902222675302
           },
+          "stm": {
+            "display": "1.47386e-05",
+            "worst": 0.000014738625872230487
+          },
           "suite": {
             "display": "1.528 m",
             "met": false,
@@ -2018,6 +2140,10 @@
             "display": "0.692 mm",
             "met": true,
             "worstM": 0.0006922751162804354
+          },
+          "stm": {
+            "display": "1.03401e-10",
+            "worst": 1.0340124091675612e-10
           },
           "suite": {
             "display": "0.552 mm",
@@ -2038,6 +2164,10 @@
             "met": true,
             "worstM": 0.0007153568625301755
           },
+          "stm": {
+            "display": "2.04782e-10",
+            "worst": 2.0478168056559736e-10
+          },
           "suite": {
             "display": "0.370 mm",
             "met": true,
@@ -2056,6 +2186,10 @@
             "display": "0.708 mm",
             "met": true,
             "worstM": 0.0007084424194909841
+          },
+          "stm": {
+            "display": "1.06542e-10",
+            "worst": 1.0654230804748527e-10
           },
           "suite": {
             "display": "0.584 mm",
@@ -2076,6 +2210,10 @@
             "met": true,
             "worstM": 0.000004853372967819911
           },
+          "stm": {
+            "display": "7.97354e-13",
+            "worst": 7.973535287527407e-13
+          },
           "suite": {
             "display": "0.002 mm",
             "met": true,
@@ -2094,6 +2232,10 @@
             "display": "0.464 mm",
             "met": true,
             "worstM": 0.000463752559586326
+          },
+          "stm": {
+            "display": "7.7477e-11",
+            "worst": 7.747698491842206e-11
           },
           "suite": {
             "display": "0.387 mm",
@@ -2114,6 +2256,10 @@
             "met": true,
             "worstM": 0.0004609228058624083
           },
+          "stm": {
+            "display": "7.65844e-11",
+            "worst": 7.658435484712045e-11
+          },
           "suite": {
             "display": "0.385 mm",
             "met": true,
@@ -2133,6 +2279,10 @@
             "met": true,
             "worstM": 0.00045845589991079354
           },
+          "stm": {
+            "display": "7.717e-11",
+            "worst": 7.716997831070898e-11
+          },
           "suite": {
             "display": "0.385 mm",
             "met": true,
@@ -2151,6 +2301,10 @@
             "display": "10.584 mm",
             "met": true,
             "worstM": 0.010584036500549362
+          },
+          "stm": {
+            "display": "1.38139e-05",
+            "worst": 0.000013813892166349151
           },
           "suite": {
             "display": "10.531 mm",
@@ -2217,6 +2371,10 @@
             "met": false,
             "worstM": 7.949889867227415
           },
+          "stm": {
+            "display": "1.41269e-05",
+            "worst": 0.000014126901758282378
+          },
           "suite": {
             "display": "7.950 m",
             "met": false,
@@ -2235,6 +2393,10 @@
             "display": "0.440 mm",
             "met": true,
             "worstM": 0.00043991834427619574
+          },
+          "stm": {
+            "display": "7.37644e-11",
+            "worst": 7.376441259618842e-11
           },
           "suite": {
             "display": "0.368 mm",
@@ -2255,6 +2417,10 @@
             "met": true,
             "worstM": 0.0004484741148732014
           },
+          "stm": {
+            "display": "7.43435e-11",
+            "worst": 7.434351046327043e-11
+          },
           "suite": {
             "display": "0.375 mm",
             "met": true,
@@ -2273,6 +2439,10 @@
             "display": "6.827 mm",
             "met": true,
             "worstM": 0.006826843414687471
+          },
+          "stm": {
+            "display": "1.38142e-05",
+            "worst": 0.000013814162227974244
           },
           "suite": {
             "display": "6.895 mm",
@@ -2339,6 +2509,10 @@
             "met": false,
             "worstM": 7.934452015178726
           },
+          "stm": {
+            "display": "1.40465e-05",
+            "worst": 0.000014046512769209735
+          },
           "suite": {
             "display": "7.934 m",
             "met": false,
@@ -2404,6 +2578,10 @@
             "met": false,
             "worstM": 6.296060832157792
           },
+          "stm": {
+            "display": "1.38435e-05",
+            "worst": 0.000013843527466709695
+          },
           "suite": {
             "display": "6.296 m",
             "met": false,
@@ -2422,6 +2600,10 @@
             "display": "0.004 mm",
             "met": true,
             "worstM": 0.000004166982512049601
+          },
+          "stm": {
+            "display": "5.45027e-13",
+            "worst": 5.450271507277139e-13
           },
           "suite": {
             "display": "0.004 mm",
@@ -2442,6 +2624,10 @@
             "met": true,
             "worstM": 0.000012818571970096597
           },
+          "stm": {
+            "display": "2.04823e-12",
+            "worst": 2.0482271622499382e-12
+          },
           "suite": {
             "display": "0.014 mm",
             "met": true,
@@ -2460,6 +2646,10 @@
             "display": "0.016 mm",
             "met": true,
             "worstM": 0.000015506891477913015
+          },
+          "stm": {
+            "display": "1.87303e-12",
+            "worst": 1.8730263763887034e-12
           },
           "suite": {
             "display": "0.015 mm",
@@ -2480,6 +2670,10 @@
             "met": true,
             "worstM": 0.00009492582378302631
           },
+          "stm": {
+            "display": "1.65534e-11",
+            "worst": 1.655341778113049e-11
+          },
           "suite": {
             "display": "0.092 mm",
             "met": true,
@@ -2498,6 +2692,10 @@
             "display": "0.097 mm",
             "met": true,
             "worstM": 0.00009680095782481203
+          },
+          "stm": {
+            "display": "1.72207e-11",
+            "worst": 1.7220692962600743e-11
           },
           "suite": {
             "display": "0.096 mm",
@@ -2518,6 +2716,10 @@
             "met": true,
             "worstM": 0.00001631489678822726
           },
+          "stm": {
+            "display": "2.44258e-12",
+            "worst": 2.4425826332511547e-12
+          },
           "suite": {
             "display": "0.015 mm",
             "met": true,
@@ -2536,6 +2738,10 @@
             "display": "0.098 mm",
             "met": true,
             "worstM": 0.0000983084110034788
+          },
+          "stm": {
+            "display": "1.71882e-11",
+            "worst": 1.7188206985294538e-11
           },
           "suite": {
             "display": "0.099 mm",
@@ -2556,6 +2762,10 @@
             "met": true,
             "worstM": 0.00009667956412573689
           },
+          "stm": {
+            "display": "1.71968e-11",
+            "worst": 1.719677249193684e-11
+          },
           "suite": {
             "display": "0.096 mm",
             "met": true,
@@ -2574,6 +2784,10 @@
             "display": "0.383 mm",
             "met": true,
             "worstM": 0.00038320124662150735
+          },
+          "stm": {
+            "display": "5.93798e-08",
+            "worst": 5.9379762698595145e-8
           },
           "suite": {
             "display": "0.384 mm",
@@ -2594,6 +2808,10 @@
             "met": true,
             "worstM": 0.0015002354719441753
           },
+          "stm": {
+            "display": "2.81647e-10",
+            "worst": 2.8164682610872226e-10
+          },
           "suite": {
             "display": "1.500 mm",
             "met": true,
@@ -2612,6 +2830,10 @@
             "display": "0.104 mm",
             "met": true,
             "worstM": 0.00010373674887111434
+          },
+          "stm": {
+            "display": "1.74416e-11",
+            "worst": 1.744155570852559e-11
           },
           "suite": {
             "display": "0.104 mm",
@@ -2632,6 +2854,10 @@
             "met": true,
             "worstM": 0.00010962905636039768
           },
+          "stm": {
+            "display": "1.80463e-11",
+            "worst": 1.80463474446083e-11
+          },
           "suite": {
             "display": "0.108 mm",
             "met": true,
@@ -2650,6 +2876,10 @@
             "display": "0.100 mm",
             "met": true,
             "worstM": 0.00009996582202776363
+          },
+          "stm": {
+            "display": "1.78431e-06",
+            "worst": 0.0000017843108072932955
           },
           "suite": {
             "display": "0.100 mm",
@@ -2670,6 +2900,10 @@
             "met": true,
             "worstM": 0.000002118811036829835
           },
+          "stm": {
+            "display": "1.78362e-12",
+            "worst": 1.7836208292343227e-12
+          },
           "suite": {
             "display": "8.819e-04 mm",
             "met": true,
@@ -2688,6 +2922,10 @@
             "display": "0.007 mm",
             "met": true,
             "worstM": 0.000006761331642273331
+          },
+          "stm": {
+            "display": "4.37721e-11",
+            "worst": 4.377206803388013e-11
           },
           "suite": {
             "display": "0.006 mm",
@@ -2708,6 +2946,10 @@
             "met": true,
             "worstM": 0.000008401566257508863
           },
+          "stm": {
+            "display": "4.42379e-11",
+            "worst": 4.423790609247407e-11
+          },
           "suite": {
             "display": "0.008 mm",
             "met": true,
@@ -2726,6 +2968,10 @@
             "display": "0.137 mm",
             "met": true,
             "worstM": 0.00013719097215357252
+          },
+          "stm": {
+            "display": "4.85159e-10",
+            "worst": 4.851590436254227e-10
           },
           "suite": {
             "display": "0.138 mm",
@@ -2746,6 +2992,10 @@
             "met": true,
             "worstM": 0.00015060088574270585
           },
+          "stm": {
+            "display": "4.77478e-10",
+            "worst": 4.774778491441157e-10
+          },
           "suite": {
             "display": "0.151 mm",
             "met": true,
@@ -2764,6 +3014,10 @@
             "display": "0.008 mm",
             "met": true,
             "worstM": 0.000007532944005008879
+          },
+          "stm": {
+            "display": "4.40916e-11",
+            "worst": 4.4091586192171916e-11
           },
           "suite": {
             "display": "0.008 mm",
@@ -2784,6 +3038,10 @@
             "met": true,
             "worstM": 0.00014235522885787654
           },
+          "stm": {
+            "display": "4.80892e-10",
+            "worst": 4.808916814832363e-10
+          },
           "suite": {
             "display": "0.143 mm",
             "met": true,
@@ -2802,6 +3060,10 @@
             "display": "0.144 mm",
             "met": true,
             "worstM": 0.00014394137539677513
+          },
+          "stm": {
+            "display": "4.80153e-10",
+            "worst": 4.801534176031134e-10
           },
           "suite": {
             "display": "0.147 mm",
@@ -2822,6 +3084,10 @@
             "met": true,
             "worstM": 0.000007614235112119703
           },
+          "stm": {
+            "display": "2.14051e-11",
+            "worst": 2.140510146378461e-11
+          },
           "suite": {
             "display": "0.008 mm",
             "met": true,
@@ -2840,6 +3106,10 @@
             "display": "1.705 mm",
             "met": true,
             "worstM": 0.0017052788032814099
+          },
+          "stm": {
+            "display": "8.2934e-10",
+            "worst": 8.29339773684681e-10
           },
           "suite": {
             "display": "1.877 mm",
@@ -2860,6 +3130,10 @@
             "met": true,
             "worstM": 0.0016551951028440737
           },
+          "stm": {
+            "display": "8.04705e-10",
+            "worst": 8.047048745413381e-10
+          },
           "suite": {
             "display": "1.841 mm",
             "met": true,
@@ -2878,6 +3152,10 @@
             "display": "1.944 mm",
             "met": true,
             "worstM": 0.001944372045605046
+          },
+          "stm": {
+            "display": "9.44957e-10",
+            "worst": 9.449567609435563e-10
           },
           "suite": {
             "display": "2.127 mm",
@@ -2898,6 +3176,10 @@
             "met": true,
             "worstM": 0.0049825013530918295
           },
+          "stm": {
+            "display": "2.56223e-05",
+            "worst": 0.000025622262996196133
+          },
           "suite": {
             "display": "4.868 mm",
             "met": true,
@@ -2916,6 +3198,10 @@
             "display": "1.693 mm",
             "met": true,
             "worstM": 0.0016928397528879744
+          },
+          "stm": {
+            "display": "8.43377e-10",
+            "worst": 8.433768862947497e-10
           },
           "suite": {
             "display": "1.880 mm",
@@ -2936,6 +3222,10 @@
             "met": true,
             "worstM": 0.00196163701168246
           },
+          "stm": {
+            "display": "9.66132e-10",
+            "worst": 9.661319997119313e-10
+          },
           "suite": {
             "display": "2.149 mm",
             "met": true,
@@ -2954,6 +3244,10 @@
             "display": "2.476 mm",
             "met": true,
             "worstM": 0.002475980822948892
+          },
+          "stm": {
+            "display": "2.59085e-05",
+            "worst": 0.00002590849674990818
           },
           "suite": {
             "display": "2.536 mm",
@@ -4370,6 +4664,10 @@
             "met": true,
             "worstM": 0.000016005300040924387
           },
+          "stm": {
+            "display": "25.4339",
+            "worst": 25.43390506732989
+          },
           "suite": {
             "display": "0.012 mm",
             "met": true,
@@ -4388,6 +4686,10 @@
             "display": "0.004 mm",
             "met": true,
             "worstM": 0.000003984344447424443
+          },
+          "stm": {
+            "display": "25.293",
+            "worst": 25.29295328439158
           },
           "suite": {
             "display": "0.144 mm",
@@ -4408,6 +4710,10 @@
             "met": true,
             "worstM": 0.000003109938587132122
           },
+          "stm": {
+            "display": "25.2955",
+            "worst": 25.295525453200984
+          },
           "suite": {
             "display": "0.153 mm",
             "met": true,
@@ -4427,6 +4733,10 @@
             "met": true,
             "worstM": 0.000007552536808355842
           },
+          "stm": {
+            "display": "25.2951",
+            "worst": 25.295075675534424
+          },
           "suite": {
             "display": "0.143 mm",
             "met": true,
@@ -4445,6 +4755,10 @@
             "display": "0.762 mm",
             "met": true,
             "worstM": 0.0007615224565345855
+          },
+          "stm": {
+            "display": "24.6525",
+            "worst": 24.65254112896627
           },
           "suite": {
             "display": "0.880 mm",
@@ -4485,6 +4799,10 @@
             "met": false,
             "worstM": 12.073104929968611
           },
+          "stm": {
+            "display": "24.6795",
+            "worst": 24.679488328833344
+          },
           "suite": {
             "display": "12.073 m",
             "met": false,
@@ -4503,6 +4821,10 @@
             "display": "0.018 mm",
             "met": true,
             "worstM": 0.000018227192688131984
+          },
+          "stm": {
+            "display": "25.311",
+            "worst": 25.311029442558894
           },
           "suite": {
             "display": "0.140 mm",
@@ -4523,6 +4845,10 @@
             "met": true,
             "worstM": 0.000013942035491154552
           },
+          "stm": {
+            "display": "25.3106",
+            "worst": 25.31057951945632
+          },
           "suite": {
             "display": "0.163 mm",
             "met": true,
@@ -4541,6 +4867,10 @@
             "display": "0.412 mm",
             "met": true,
             "worstM": 0.00041225893757002935
+          },
+          "stm": {
+            "display": "24.7006",
+            "worst": 24.70062278081973
           },
           "suite": {
             "display": "0.533 mm",
@@ -4581,6 +4911,10 @@
             "met": false,
             "worstM": 12.068810974817076
           },
+          "stm": {
+            "display": "24.657",
+            "worst": 24.65704820829527
+          },
           "suite": {
             "display": "12.069 m",
             "met": false,
@@ -4599,6 +4933,10 @@
             "display": "0.003 mm",
             "met": true,
             "worstM": 0.0000034785968917636297
+          },
+          "stm": {
+            "display": "25.3106",
+            "worst": 25.310563300575865
           },
           "suite": {
             "display": "0.152 mm",
@@ -4619,6 +4957,10 @@
             "met": true,
             "worstM": 0.000009706987461440742
           },
+          "stm": {
+            "display": "25.3106",
+            "worst": 25.310563410352685
+          },
           "suite": {
             "display": "0.143 mm",
             "met": true,
@@ -4637,6 +4979,10 @@
             "display": "0.002 mm",
             "met": true,
             "worstM": 0.0000022603582709859485
+          },
+          "stm": {
+            "display": "25.3106",
+            "worst": 25.310613344084334
           },
           "suite": {
             "display": "0.149 mm",
@@ -4677,6 +5023,10 @@
             "met": false,
             "worstM": 12.461503314471727
           },
+          "stm": {
+            "display": "24.7594",
+            "worst": 24.759423660691795
+          },
           "suite": {
             "display": "12.462 m",
             "met": false,
@@ -4716,6 +5066,10 @@
             "met": false,
             "worstM": 8.624005737224117
           },
+          "stm": {
+            "display": "24.692",
+            "worst": 24.69197864349703
+          },
           "suite": {
             "display": "8.624 m",
             "met": false,
@@ -4734,6 +5088,10 @@
             "display": "0.005 mm",
             "met": true,
             "worstM": 0.000004948908434386245
+          },
+          "stm": {
+            "display": "25.3106",
+            "worst": 25.31057953393661
           },
           "suite": {
             "display": "0.152 mm",
@@ -4754,6 +5112,10 @@
             "met": true,
             "worstM": 0.00001725888946930656
           },
+          "stm": {
+            "display": "25.3108",
+            "worst": 25.310839691175655
+          },
           "suite": {
             "display": "0.888 mm",
             "met": true,
@@ -4772,6 +5134,10 @@
             "display": "0.010 mm",
             "met": true,
             "worstM": 0.000010126258820961434
+          },
+          "stm": {
+            "display": "25.3106",
+            "worst": 25.31058169494609
           },
           "suite": {
             "display": "0.128 mm",
@@ -4812,6 +5178,10 @@
             "met": false,
             "worstM": 12.461016201428802
           },
+          "stm": {
+            "display": "24.7536",
+            "worst": 24.75359663906543
+          },
           "suite": {
             "display": "12.461 m",
             "met": false,
@@ -4830,6 +5200,10 @@
             "display": "0.002 mm",
             "met": true,
             "worstM": 0.000002109261207772887
+          },
+          "stm": {
+            "display": "28.2976",
+            "worst": 28.297562062161834
           },
           "suite": {
             "display": "0.005 mm",
@@ -4850,6 +5224,10 @@
             "met": true,
             "worstM": 0.000003338910949402377
           },
+          "stm": {
+            "display": "21.7312",
+            "worst": 21.73122976418605
+          },
           "suite": {
             "display": "0.131 mm",
             "met": true,
@@ -4868,6 +5246,10 @@
             "display": "0.007 mm",
             "met": true,
             "worstM": 0.00000676676922164548
+          },
+          "stm": {
+            "display": "21.711",
+            "worst": 21.710989244503573
           },
           "suite": {
             "display": "0.128 mm",
@@ -4888,6 +5270,10 @@
             "met": true,
             "worstM": 0.0000028978666537342533
           },
+          "stm": {
+            "display": "21.7127",
+            "worst": 21.712703069540037
+          },
           "suite": {
             "display": "0.128 mm",
             "met": true,
@@ -4906,6 +5292,10 @@
             "display": "0.368 mm",
             "met": true,
             "worstM": 0.00036813208335916437
+          },
+          "stm": {
+            "display": "26.3037",
+            "worst": 26.303710893476644
           },
           "suite": {
             "display": "0.460 mm",
@@ -4926,6 +5316,10 @@
             "met": true,
             "worstM": 0.0457628696065447
           },
+          "stm": {
+            "display": "27.0897",
+            "worst": 27.089701655952965
+          },
           "suite": {
             "display": "45.857 mm",
             "met": true,
@@ -4944,6 +5338,10 @@
             "display": "0.007 mm",
             "met": true,
             "worstM": 0.000006689925597431777
+          },
+          "stm": {
+            "display": "21.7021",
+            "worst": 21.702120159081417
           },
           "suite": {
             "display": "0.141 mm",
@@ -4964,6 +5362,10 @@
             "met": true,
             "worstM": 0.000004780314960184109
           },
+          "stm": {
+            "display": "21.7038",
+            "worst": 21.703832294072402
+          },
           "suite": {
             "display": "0.129 mm",
             "met": true,
@@ -4982,6 +5384,10 @@
             "display": "0.575 mm",
             "met": true,
             "worstM": 0.0005747300386865301
+          },
+          "stm": {
+            "display": "26.6917",
+            "worst": 26.691667632805995
           },
           "suite": {
             "display": "0.675 mm",
@@ -5002,6 +5408,10 @@
             "met": true,
             "worstM": 0.045767933475609736
           },
+          "stm": {
+            "display": "26.8915",
+            "worst": 26.89148900265441
+          },
           "suite": {
             "display": "45.871 mm",
             "met": true,
@@ -5020,6 +5430,10 @@
             "display": "61.179 mm",
             "met": true,
             "worstM": 0.06117889915307298
+          },
+          "stm": {
+            "display": "27.5324",
+            "worst": 27.532357400163765
           },
           "suite": {
             "display": "61.282 mm",
@@ -5040,6 +5454,10 @@
             "met": true,
             "worstM": 0.0000040731387485977185
           },
+          "stm": {
+            "display": "32.6867",
+            "worst": 32.68665654230042
+          },
           "suite": {
             "display": "0.004 mm",
             "met": true,
@@ -5058,6 +5476,10 @@
             "display": "0.007 mm",
             "met": true,
             "worstM": 0.0000065500145509704884
+          },
+          "stm": {
+            "display": "45.5959",
+            "worst": 45.59589362720638
           },
           "suite": {
             "display": "0.008 mm",
@@ -5078,6 +5500,10 @@
             "met": true,
             "worstM": 0.000004042561251004496
           },
+          "stm": {
+            "display": "45.5956",
+            "worst": 45.59563625699453
+          },
           "suite": {
             "display": "0.005 mm",
             "met": true,
@@ -5096,6 +5522,10 @@
             "display": "0.118 mm",
             "met": true,
             "worstM": 0.0001178588831987668
+          },
+          "stm": {
+            "display": "46.137",
+            "worst": 46.136977159799486
           },
           "suite": {
             "display": "0.115 mm",
@@ -5116,6 +5546,10 @@
             "met": true,
             "worstM": 0.00011074355100114427
           },
+          "stm": {
+            "display": "46.138",
+            "worst": 46.138046112270885
+          },
           "suite": {
             "display": "0.110 mm",
             "met": true,
@@ -5134,6 +5568,10 @@
             "display": "0.001 mm",
             "met": true,
             "worstM": 0.0000012354465308709117
+          },
+          "stm": {
+            "display": "45.5438",
+            "worst": 45.54378042188707
           },
           "suite": {
             "display": "0.003 mm",
@@ -5154,6 +5592,10 @@
             "met": true,
             "worstM": 0.00010189862996886133
           },
+          "stm": {
+            "display": "46.1367",
+            "worst": 46.13669966850665
+          },
           "suite": {
             "display": "0.102 mm",
             "met": true,
@@ -5172,6 +5614,10 @@
             "display": "0.116 mm",
             "met": true,
             "worstM": 0.00011567757061546975
+          },
+          "stm": {
+            "display": "46.1365",
+            "worst": 46.136504985410966
           },
           "suite": {
             "display": "0.115 mm",
@@ -5192,6 +5638,10 @@
             "met": true,
             "worstM": 0.000115075690122326
           },
+          "stm": {
+            "display": "46.1367",
+            "worst": 46.13673507081543
+          },
           "suite": {
             "display": "0.114 mm",
             "met": true,
@@ -5210,6 +5660,10 @@
             "display": "0.114 mm",
             "met": true,
             "worstM": 0.00011445277844198137
+          },
+          "stm": {
+            "display": "46.1367",
+            "worst": 46.13673520545738
           },
           "suite": {
             "display": "0.115 mm",
@@ -5230,6 +5684,10 @@
             "met": true,
             "worstM": 0.00010889721676535955
           },
+          "stm": {
+            "display": "46.1367",
+            "worst": 46.136699621383215
+          },
           "suite": {
             "display": "0.109 mm",
             "met": true,
@@ -5248,6 +5706,10 @@
             "display": "0.109 mm",
             "met": true,
             "worstM": 0.00010899696651333475
+          },
+          "stm": {
+            "display": "46.1367",
+            "worst": 46.13670036643836
           },
           "suite": {
             "display": "0.108 mm",
@@ -5268,6 +5730,10 @@
             "met": true,
             "worstM": 0.00011291602047550622
           },
+          "stm": {
+            "display": "46.1399",
+            "worst": 46.139857915933504
+          },
           "suite": {
             "display": "0.113 mm",
             "met": true,
@@ -5286,6 +5752,10 @@
             "display": "0.001 mm",
             "met": true,
             "worstM": 0.0000011335759252853356
+          },
+          "stm": {
+            "display": "15.8986",
+            "worst": 15.898569752128104
           },
           "suite": {
             "display": "0.002 mm",
@@ -5306,6 +5776,10 @@
             "met": true,
             "worstM": 0.00001025298518169093
           },
+          "stm": {
+            "display": "15.7811",
+            "worst": 15.781065656558956
+          },
           "suite": {
             "display": "0.010 mm",
             "met": true,
@@ -5324,6 +5798,10 @@
             "display": "0.007 mm",
             "met": true,
             "worstM": 0.000007082216095361656
+          },
+          "stm": {
+            "display": "15.7811",
+            "worst": 15.78106044450779
           },
           "suite": {
             "display": "0.007 mm",
@@ -5344,6 +5822,10 @@
             "met": true,
             "worstM": 0.00015212052467498537
           },
+          "stm": {
+            "display": "15.8149",
+            "worst": 15.81486333503471
+          },
           "suite": {
             "display": "0.153 mm",
             "met": true,
@@ -5362,6 +5844,10 @@
             "display": "0.151 mm",
             "met": true,
             "worstM": 0.0001506934516092535
+          },
+          "stm": {
+            "display": "15.8168",
+            "worst": 15.816832797807386
           },
           "suite": {
             "display": "0.151 mm",
@@ -5382,6 +5868,10 @@
             "met": true,
             "worstM": 0.0000024316811708173263
           },
+          "stm": {
+            "display": "15.782",
+            "worst": 15.782012168377396
+          },
           "suite": {
             "display": "0.003 mm",
             "met": true,
@@ -5400,6 +5890,10 @@
             "display": "0.144 mm",
             "met": true,
             "worstM": 0.00014442797953662876
+          },
+          "stm": {
+            "display": "15.8158",
+            "worst": 15.815811306072076
           },
           "suite": {
             "display": "0.145 mm",
@@ -5420,6 +5914,10 @@
             "met": true,
             "worstM": 0.00015097437500851
           },
+          "stm": {
+            "display": "15.8178",
+            "worst": 15.81778053365575
+          },
           "suite": {
             "display": "0.154 mm",
             "met": true,
@@ -5438,6 +5936,10 @@
             "display": "0.007 mm",
             "met": true,
             "worstM": 0.000007188205936265245
+          },
+          "stm": {
+            "display": "130.105",
+            "worst": 130.1047977977311
           },
           "suite": {
             "display": "0.007 mm",
@@ -5458,6 +5960,10 @@
             "met": true,
             "worstM": 0.000004371308974964798
           },
+          "stm": {
+            "display": "134.956",
+            "worst": 134.95586600209768
+          },
           "suite": {
             "display": "0.174 mm",
             "met": true,
@@ -5476,6 +5982,10 @@
             "display": "0.005 mm",
             "met": true,
             "worstM": 0.000004986968905967601
+          },
+          "stm": {
+            "display": "134.959",
+            "worst": 134.95907288812666
           },
           "suite": {
             "display": "0.181 mm",
@@ -5496,6 +6006,10 @@
             "met": true,
             "worstM": 0.0002681803681759486
           },
+          "stm": {
+            "display": "134.949",
+            "worst": 134.9489404612249
+          },
           "suite": {
             "display": "0.450 mm",
             "met": true,
@@ -5514,6 +6028,10 @@
             "display": "0.184 mm",
             "met": true,
             "worstM": 0.00018413839544005888
+          },
+          "stm": {
+            "display": "135.001",
+            "worst": 135.00100241820962
           },
           "suite": {
             "display": "0.339 mm",
@@ -5534,6 +6052,10 @@
             "met": true,
             "worstM": 0.0000037327326984071942
           },
+          "stm": {
+            "display": "134.932",
+            "worst": 134.93220617534502
+          },
           "suite": {
             "display": "0.184 mm",
             "met": true,
@@ -5553,6 +6075,10 @@
             "met": true,
             "worstM": 0.00030538282217104493
           },
+          "stm": {
+            "display": "134.922",
+            "worst": 134.9220567469606
+          },
           "suite": {
             "display": "0.492 mm",
             "met": true,
@@ -5571,6 +6097,10 @@
             "display": "0.508 mm",
             "met": true,
             "worstM": 0.000507872101182859
+          },
+          "stm": {
+            "display": "134.97",
+            "worst": 134.97002521048836
           },
           "suite": {
             "display": "0.664 mm",
@@ -5754,6 +6284,10 @@
             "met": true,
             "worstM": 0.000003953750887883731
           },
+          "stm": {
+            "display": "1.04794e-12",
+            "worst": 1.0479355173443264e-12
+          },
           "suite": {
             "display": "0.008 mm",
             "met": true,
@@ -5772,6 +6306,10 @@
             "display": "1.015 mm",
             "met": true,
             "worstM": 0.001014561747872929
+          },
+          "stm": {
+            "display": "1.57598e-10",
+            "worst": 1.5759819299079099e-10
           },
           "suite": {
             "display": "0.995 mm",
@@ -5792,6 +6330,10 @@
             "met": true,
             "worstM": 0.001014831669165762
           },
+          "stm": {
+            "display": "1.57518e-10",
+            "worst": 1.5751765156807824e-10
+          },
           "suite": {
             "display": "0.994 mm",
             "met": true,
@@ -5810,6 +6352,10 @@
             "display": "1.013 mm",
             "met": true,
             "worstM": 0.0010134054321431739
+          },
+          "stm": {
+            "display": "1.57303e-10",
+            "worst": 1.5730280224242453e-10
           },
           "suite": {
             "display": "0.992 mm",
@@ -5830,6 +6376,10 @@
             "met": true,
             "worstM": 0.001016621899429846
           },
+          "stm": {
+            "display": "1.96294e-05",
+            "worst": 0.000019629406928623933
+          },
           "suite": {
             "display": "0.999 mm",
             "met": true,
@@ -5848,6 +6398,10 @@
             "display": "40.546 mm",
             "met": true,
             "worstM": 0.040546496016053715
+          },
+          "stm": {
+            "display": "1.95815e-05",
+            "worst": 0.00001958146896734432
           },
           "suite": {
             "display": "40.666 mm",
@@ -5868,6 +6422,10 @@
             "met": true,
             "worstM": 0.0010294395674336093
           },
+          "stm": {
+            "display": "1.59818e-10",
+            "worst": 1.598178123565942e-10
+          },
           "suite": {
             "display": "1.007 mm",
             "met": true,
@@ -5886,6 +6444,10 @@
             "display": "1.029 mm",
             "met": true,
             "worstM": 0.0010293619498488375
+          },
+          "stm": {
+            "display": "1.5995e-10",
+            "worst": 1.5994977275648024e-10
           },
           "suite": {
             "display": "1.007 mm",
@@ -5906,6 +6468,10 @@
             "met": true,
             "worstM": 0.0010317210182091041
           },
+          "stm": {
+            "display": "1.96292e-05",
+            "worst": 0.000019629150518084156
+          },
           "suite": {
             "display": "1.014 mm",
             "met": true,
@@ -5925,6 +6491,10 @@
             "met": true,
             "worstM": 0.040473567479586164
           },
+          "stm": {
+            "display": "1.95802e-05",
+            "worst": 0.000019580169247691202
+          },
           "suite": {
             "display": "40.604 mm",
             "met": true,
@@ -5943,6 +6513,10 @@
             "display": "1.029 mm",
             "met": true,
             "worstM": 0.0010287861006793315
+          },
+          "stm": {
+            "display": "1.59909e-10",
+            "worst": 1.5990935284661058e-10
           },
           "suite": {
             "display": "1.007 mm",
@@ -5982,6 +6556,10 @@
             "met": true,
             "worstM": 0.0010290490442965876
           },
+          "stm": {
+            "display": "1.59878e-10",
+            "worst": 1.5987755300124602e-10
+          },
           "suite": {
             "display": "1.008 mm",
             "met": true,
@@ -6000,6 +6578,10 @@
             "display": "41.045 mm",
             "met": true,
             "worstM": 0.04104485215532575
+          },
+          "stm": {
+            "display": "1.95801e-05",
+            "worst": 0.00001958009593648495
           },
           "suite": {
             "display": "41.170 mm",
@@ -6020,6 +6602,10 @@
             "met": true,
             "worstM": 0.03237289586225523
           },
+          "stm": {
+            "display": "1.95875e-05",
+            "worst": 0.000019587484599743397
+          },
           "suite": {
             "display": "32.496 mm",
             "met": true,
@@ -6038,6 +6624,10 @@
             "display": "1.028 mm",
             "met": true,
             "worstM": 0.0010276350019571322
+          },
+          "stm": {
+            "display": "1.5969e-10",
+            "worst": 1.5968997550269406e-10
           },
           "suite": {
             "display": "1.006 mm",
@@ -6058,6 +6648,10 @@
             "met": true,
             "worstM": 0.0010303340028410717
           },
+          "stm": {
+            "display": "1.8581e-10",
+            "worst": 1.8580992189158603e-10
+          },
           "suite": {
             "display": "0.990 mm",
             "met": true,
@@ -6076,6 +6670,10 @@
             "display": "1.029 mm",
             "met": true,
             "worstM": 0.0010291739984888066
+          },
+          "stm": {
+            "display": "1.59916e-10",
+            "worst": 1.5991577972827344e-10
           },
           "suite": {
             "display": "1.010 mm",
@@ -6096,6 +6694,10 @@
             "met": true,
             "worstM": 0.04107460019868645
           },
+          "stm": {
+            "display": "1.95768e-05",
+            "worst": 0.00001957677622445381
+          },
           "suite": {
             "display": "41.085 mm",
             "met": true,
@@ -6114,6 +6716,10 @@
             "display": "0.007 mm",
             "met": true,
             "worstM": 0.000007252217120240985
+          },
+          "stm": {
+            "display": "1.30495e-12",
+            "worst": 1.3049500346469032e-12
           },
           "suite": {
             "display": "0.010 mm",
@@ -6134,6 +6740,10 @@
             "met": true,
             "worstM": 0.0015221831554467493
           },
+          "stm": {
+            "display": "2.17886e-10",
+            "worst": 2.1788644512692564e-10
+          },
           "suite": {
             "display": "1.656 mm",
             "met": true,
@@ -6152,6 +6762,10 @@
             "display": "1.508 mm",
             "met": true,
             "worstM": 0.0015084489714039789
+          },
+          "stm": {
+            "display": "2.16606e-10",
+            "worst": 2.1660551454970582e-10
           },
           "suite": {
             "display": "1.643 mm",
@@ -6172,6 +6786,10 @@
             "met": true,
             "worstM": 0.0015090110008562133
           },
+          "stm": {
+            "display": "2.15248e-10",
+            "worst": 2.152478004166992e-10
+          },
           "suite": {
             "display": "1.639 mm",
             "met": true,
@@ -6190,6 +6808,10 @@
             "display": "1.504 mm",
             "met": true,
             "worstM": 0.0015036286554338568
+          },
+          "stm": {
+            "display": "1.38139e-05",
+            "worst": 0.000013813909073716635
           },
           "suite": {
             "display": "1.596 mm",
@@ -6210,6 +6832,10 @@
             "met": true,
             "worstM": 0.0022569499511541137
           },
+          "stm": {
+            "display": "1.38129e-05",
+            "worst": 0.000013812897798283033
+          },
           "suite": {
             "display": "2.351 mm",
             "met": true,
@@ -6228,6 +6854,10 @@
             "display": "1.566 mm",
             "met": true,
             "worstM": 0.0015656412335311254
+          },
+          "stm": {
+            "display": "2.23459e-10",
+            "worst": 2.2345886268458522e-10
           },
           "suite": {
             "display": "1.700 mm",
@@ -6248,6 +6878,10 @@
             "met": true,
             "worstM": 0.0015508258492433272
           },
+          "stm": {
+            "display": "2.22472e-10",
+            "worst": 2.2247160434006926e-10
+          },
           "suite": {
             "display": "1.684 mm",
             "met": true,
@@ -6266,6 +6900,10 @@
             "display": "1.545 mm",
             "met": true,
             "worstM": 0.0015454269683954768
+          },
+          "stm": {
+            "display": "1.38142e-05",
+            "worst": 0.000013814177426305177
           },
           "suite": {
             "display": "1.645 mm",
@@ -6286,6 +6924,10 @@
             "met": true,
             "worstM": 0.002316455483525572
           },
+          "stm": {
+            "display": "1.38154e-05",
+            "worst": 0.000013815404218205529
+          },
           "suite": {
             "display": "2.420 mm",
             "met": true,
@@ -6304,6 +6946,10 @@
             "display": "2.020 mm",
             "met": true,
             "worstM": 0.0020200821244065626
+          },
+          "stm": {
+            "display": "1.3814e-05",
+            "worst": 0.000013813986974310417
           },
           "suite": {
             "display": "2.123 mm",
@@ -6324,6 +6970,10 @@
             "met": true,
             "worstM": 0.0000010370597755326208
           },
+          "stm": {
+            "display": "2.67052e-13",
+            "worst": 2.6705169335916395e-13
+          },
           "suite": {
             "display": "5.440e-04 mm",
             "met": true,
@@ -6342,6 +6992,10 @@
             "display": "0.065 mm",
             "met": true,
             "worstM": 0.00006507138630946341
+          },
+          "stm": {
+            "display": "1.48489e-11",
+            "worst": 1.4848867391789377e-11
           },
           "suite": {
             "display": "0.066 mm",
@@ -6362,6 +7016,10 @@
             "met": true,
             "worstM": 0.00006579819125177835
           },
+          "stm": {
+            "display": "1.46019e-11",
+            "worst": 1.460191440853007e-11
+          },
           "suite": {
             "display": "0.065 mm",
             "met": true,
@@ -6380,6 +7038,10 @@
             "display": "0.097 mm",
             "met": true,
             "worstM": 0.00009678475560171293
+          },
+          "stm": {
+            "display": "2.58473e-11",
+            "worst": 2.5847317859734237e-11
           },
           "suite": {
             "display": "0.095 mm",
@@ -6400,6 +7062,10 @@
             "met": true,
             "worstM": 0.00009731496251012771
           },
+          "stm": {
+            "display": "2.48974e-11",
+            "worst": 2.4897398613014417e-11
+          },
           "suite": {
             "display": "0.096 mm",
             "met": true,
@@ -6418,6 +7084,10 @@
             "display": "0.066 mm",
             "met": true,
             "worstM": 0.00006605843200989298
+          },
+          "stm": {
+            "display": "1.47029e-11",
+            "worst": 1.4702886097715402e-11
           },
           "suite": {
             "display": "0.064 mm",
@@ -6438,6 +7108,10 @@
             "met": true,
             "worstM": 0.00009479160981603921
           },
+          "stm": {
+            "display": "2.56419e-11",
+            "worst": 2.5641924971693658e-11
+          },
           "suite": {
             "display": "0.095 mm",
             "met": true,
@@ -6457,6 +7131,10 @@
             "met": true,
             "worstM": 0.00009879213586955597
           },
+          "stm": {
+            "display": "2.66546e-11",
+            "worst": 2.6654641564794076e-11
+          },
           "suite": {
             "display": "0.099 mm",
             "met": true,
@@ -6475,6 +7153,10 @@
             "display": "0.094 mm",
             "met": true,
             "worstM": 0.00009352377652550331
+          },
+          "stm": {
+            "display": "2.56059e-11",
+            "worst": 2.5605887866973212e-11
           },
           "suite": {
             "display": "0.093 mm",
@@ -6514,6 +7196,10 @@
             "met": true,
             "worstM": 0.00009400331835500302
           },
+          "stm": {
+            "display": "2.59531e-11",
+            "worst": 2.59531255703747e-11
+          },
           "suite": {
             "display": "0.094 mm",
             "met": true,
@@ -6532,6 +7218,10 @@
             "display": "0.093 mm",
             "met": true,
             "worstM": 0.00009304725460995866
+          },
+          "stm": {
+            "display": "2.57866e-11",
+            "worst": 2.578658391872228e-11
           },
           "suite": {
             "display": "0.092 mm",
@@ -6552,6 +7242,10 @@
             "met": true,
             "worstM": 0.00009193601698256918
           },
+          "stm": {
+            "display": "2.55356e-11",
+            "worst": 2.5535569177125866e-11
+          },
           "suite": {
             "display": "0.092 mm",
             "met": true,
@@ -6570,6 +7264,10 @@
             "display": "0.003 mm",
             "met": true,
             "worstM": 0.0000029502792968417176
+          },
+          "stm": {
+            "display": "1.2317e-12",
+            "worst": 1.2316958725169707e-12
           },
           "suite": {
             "display": "0.001 mm",
@@ -6590,6 +7288,10 @@
             "met": true,
             "worstM": 0.000006973526723884685
           },
+          "stm": {
+            "display": "1.80307e-10",
+            "worst": 1.8030652162741934e-10
+          },
           "suite": {
             "display": "0.007 mm",
             "met": true,
@@ -6608,6 +7310,10 @@
             "display": "0.008 mm",
             "met": true,
             "worstM": 0.000007949411468792423
+          },
+          "stm": {
+            "display": "1.80379e-10",
+            "worst": 1.8037946313512244e-10
           },
           "suite": {
             "display": "0.008 mm",
@@ -6628,6 +7334,10 @@
             "met": true,
             "worstM": 0.00014597938042455947
           },
+          "stm": {
+            "display": "4.80921e-10",
+            "worst": 4.80921312085089e-10
+          },
           "suite": {
             "display": "0.147 mm",
             "met": true,
@@ -6646,6 +7356,10 @@
             "display": "0.145 mm",
             "met": true,
             "worstM": 0.00014450171845509173
+          },
+          "stm": {
+            "display": "4.8217e-10",
+            "worst": 4.821701437665061e-10
           },
           "suite": {
             "display": "0.145 mm",
@@ -6666,6 +7380,10 @@
             "met": true,
             "worstM": 0.000006932941042470186
           },
+          "stm": {
+            "display": "1.79891e-10",
+            "worst": 1.798911768424628e-10
+          },
           "suite": {
             "display": "0.007 mm",
             "met": true,
@@ -6684,6 +7402,10 @@
             "display": "0.148 mm",
             "met": true,
             "worstM": 0.0001479592451348735
+          },
+          "stm": {
+            "display": "4.81357e-10",
+            "worst": 4.813573397815992e-10
           },
           "suite": {
             "display": "0.149 mm",
@@ -6704,6 +7426,10 @@
             "met": true,
             "worstM": 0.00013775133773857574
           },
+          "stm": {
+            "display": "4.83527e-10",
+            "worst": 4.835266748687837e-10
+          },
           "suite": {
             "display": "0.141 mm",
             "met": true,
@@ -6722,6 +7448,10 @@
             "display": "0.013 mm",
             "met": true,
             "worstM": 0.000012695455674284177
+          },
+          "stm": {
+            "display": "6.22332e-12",
+            "worst": 6.223319948712483e-12
           },
           "suite": {
             "display": "0.010 mm",
@@ -6742,6 +7472,10 @@
             "met": true,
             "worstM": 0.009592548483376368
           },
+          "stm": {
+            "display": "4.27292e-09",
+            "worst": 4.272917603469512e-9
+          },
           "suite": {
             "display": "9.420 mm",
             "met": true,
@@ -6760,6 +7494,10 @@
             "display": "9.617 mm",
             "met": true,
             "worstM": 0.009616853578070125
+          },
+          "stm": {
+            "display": "4.2747e-09",
+            "worst": 4.2746971059656725e-9
           },
           "suite": {
             "display": "9.431 mm",
@@ -6780,6 +7518,10 @@
             "met": true,
             "worstM": 0.009361225506988967
           },
+          "stm": {
+            "display": "4.13014e-09",
+            "worst": 4.130137593329037e-9
+          },
           "suite": {
             "display": "9.179 mm",
             "met": true,
@@ -6798,6 +7540,10 @@
             "display": "9.523 mm",
             "met": true,
             "worstM": 0.009523384352472183
+          },
+          "stm": {
+            "display": "2.56226e-05",
+            "worst": 0.000025622615803153756
           },
           "suite": {
             "display": "9.367 mm",
@@ -6818,6 +7564,10 @@
             "met": true,
             "worstM": 0.009615456242206201
           },
+          "stm": {
+            "display": "4.31909e-09",
+            "worst": 4.319086980880028e-9
+          },
           "suite": {
             "display": "9.428 mm",
             "met": true,
@@ -6837,6 +7587,10 @@
             "met": true,
             "worstM": 0.009321180292881554
           },
+          "stm": {
+            "display": "4.15634e-09",
+            "worst": 4.15633516114244e-9
+          },
           "suite": {
             "display": "9.134 mm",
             "met": true,
@@ -6855,6 +7609,10 @@
             "display": "9.427 mm",
             "met": true,
             "worstM": 0.009427389142789377
+          },
+          "stm": {
+            "display": "2.59087e-05",
+            "worst": 0.000025908747074490032
           },
           "suite": {
             "display": "9.271 mm",
@@ -7930,7 +8688,7 @@
           }
         }
       },
-      "summarySha256": "73f60e68986fb237adecb043c0da6a05d21dd073db80d779609f0550cc74eb1c",
+      "summarySha256": "4f575b1e35d158d79be86fadbaa55bfc73f8c7697376926c7bf9d78440bf908d",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -10975,6 +11733,11 @@
           "maxM": 0.00016214449140117008,
           "scored": 1
         },
+        "orekit-steps30": {
+          "display": "0.158 mm",
+          "maxM": 0.00015763741807279215,
+          "scored": 1
+        },
         "tudat-wasm": {
           "display": "0.002 mm",
           "maxM": 0.0000017772976534215856,
@@ -11019,6 +11782,11 @@
         "orekit-finest": {
           "display": "1.313 mm",
           "maxM": 0.0013128380820289299,
+          "scored": 17
+        },
+        "orekit-steps30": {
+          "display": "1.340 mm",
+          "maxM": 0.0013400219109298123,
           "scored": 17
         },
         "tudat-wasm": {
@@ -11067,6 +11835,11 @@
           "maxM": 0.004074027322263633,
           "scored": 7
         },
+        "orekit-steps30": {
+          "display": "4.092 mm",
+          "maxM": 0.004091744870288983,
+          "scored": 7
+        },
         "tudat-wasm": {
           "display": "34.302 mm",
           "maxM": 0.03430186594072596,
@@ -11111,6 +11884,11 @@
         "orekit-finest": {
           "display": "0.180 mm",
           "maxM": 0.00018046608686977353,
+          "scored": 1
+        },
+        "orekit-steps30": {
+          "display": "0.186 mm",
+          "maxM": 0.00018613473421863645,
           "scored": 1
         },
         "tudat-wasm": {
@@ -11159,6 +11937,11 @@
           "maxM": 0.001354978662771582,
           "scored": 9
         },
+        "orekit-steps30": {
+          "display": "1.711 mm",
+          "maxM": 0.0017107385042126595,
+          "scored": 9
+        },
         "tudat-wasm": {
           "display": "2.180 mm",
           "maxM": 0.002179729319382617,
@@ -11203,6 +11986,11 @@
         "orekit-finest": {
           "display": "1.061 mm",
           "maxM": 0.0010611110371752692,
+          "scored": 4
+        },
+        "orekit-steps30": {
+          "display": "1.387 mm",
+          "maxM": 0.0013872714482321585,
           "scored": 4
         },
         "tudat-wasm": {
@@ -11251,6 +12039,11 @@
           "maxM": 0.00015844610197101984,
           "scored": 1
         },
+        "orekit-steps30": {
+          "display": "0.160 mm",
+          "maxM": 0.00016034773013495215,
+          "scored": 1
+        },
         "tudat-wasm": {
           "display": "0.001 mm",
           "maxM": 0.0000012685714060690563,
@@ -11297,6 +12090,11 @@
           "maxM": 0.00021833226864355237,
           "scored": 16
         },
+        "orekit-steps30": {
+          "display": "0.218 mm",
+          "maxM": 0.00021833729610101427,
+          "scored": 16
+        },
         "tudat-wasm": {
           "display": "0.125 mm",
           "maxM": 0.00012534680866594552,
@@ -11319,6 +12117,7 @@
         "nyx": null,
         "orekit": null,
         "orekit-finest": null,
+        "orekit-steps30": null,
         "tudat-wasm": null,
         "tudatpy": null
       },
@@ -11355,6 +12154,11 @@
         "orekit-finest": {
           "display": "0.037 mm",
           "maxM": 0.00003684501293564787,
+          "scored": 1
+        },
+        "orekit-steps30": {
+          "display": "0.034 mm",
+          "maxM": 0.00003387552735080275,
           "scored": 1
         },
         "tudat-wasm": {
@@ -11403,6 +12207,11 @@
           "maxM": 0.0000650568395824084,
           "scored": 7
         },
+        "orekit-steps30": {
+          "display": "0.067 mm",
+          "maxM": 0.00006665095033025887,
+          "scored": 7
+        },
         "tudat-wasm": {
           "display": "0.141 mm",
           "maxM": 0.00014088202927519877,
@@ -11425,6 +12234,7 @@
         "nyx": null,
         "orekit": null,
         "orekit-finest": null,
+        "orekit-steps30": null,
         "tudat-wasm": null,
         "tudatpy": null
       },
@@ -11461,6 +12271,11 @@
         "orekit-finest": {
           "display": "0.575 mm",
           "maxM": 0.0005749768991817589,
+          "scored": 1
+        },
+        "orekit-steps30": {
+          "display": "0.573 mm",
+          "maxM": 0.0005731247944098858,
           "scored": 1
         },
         "tudat-wasm": {
@@ -11509,6 +12324,11 @@
           "maxM": 0.00984029471917539,
           "scored": 7
         },
+        "orekit-steps30": {
+          "display": "9.850 mm",
+          "maxM": 0.009850117253096587,
+          "scored": 7
+        },
         "tudat-wasm": {
           "display": "9.906 mm",
           "maxM": 0.009906185789392062,
@@ -11531,6 +12351,7 @@
         "nyx": null,
         "orekit": null,
         "orekit-finest": null,
+        "orekit-steps30": null,
         "tudat-wasm": null,
         "tudatpy": null
       },
@@ -11538,6 +12359,360 @@
       "orbit": "MOLNIYA"
     }
   ],
+  "classTable": [
+    {
+      "cells": {
+        "basilisk": {
+          "display": "0.017 mm",
+          "maxM": 0.00001722519299421857,
+          "scored": 5
+        },
+        "basilisk-finest": {
+          "display": "0.017 mm",
+          "maxM": 0.000016529990095781898,
+          "scored": 5
+        },
+        "basilisk-steps30": {
+          "display": "0.015 mm",
+          "maxM": 0.000014677867248689163,
+          "scored": 5
+        },
+        "gmat-2022": {
+          "display": "0.056 mm",
+          "maxM": 0.00005612688225228267,
+          "scored": 5
+        },
+        "gmat-2022-finest": {
+          "display": "0.055 mm",
+          "maxM": 0.000055431833775667843,
+          "scored": 5
+        },
+        "gmat-2022-steps30": {
+          "display": "0.054 mm",
+          "maxM": 0.00005357979702008853,
+          "scored": 5
+        },
+        "gmat-2026": {
+          "display": "0.008 mm",
+          "maxM": 0.000008254105760554454,
+          "scored": 5
+        },
+        "gmat-2026-finest": {
+          "display": "0.009 mm",
+          "maxM": 0.000009030767476144609,
+          "scored": 5
+        },
+        "gmat-2026-steps30": {
+          "display": "0.008 mm",
+          "maxM": 0.000007614235112119703,
+          "scored": 5
+        },
+        "nyx": {
+          "display": "0.012 mm",
+          "maxM": 0.000011650380916254221,
+          "scored": 5
+        },
+        "nyx-finest": {
+          "display": "0.012 mm",
+          "maxM": 0.000011502039162474647,
+          "scored": 5
+        },
+        "nyx-steps30": {
+          "display": "0.016 mm",
+          "maxM": 0.000016005300040924387,
+          "scored": 5
+        },
+        "orekit": {
+          "display": "0.576 mm",
+          "maxM": 0.0005756719447062054,
+          "scored": 5
+        },
+        "orekit-finest": {
+          "display": "0.575 mm",
+          "maxM": 0.0005749768991817589,
+          "scored": 5
+        },
+        "orekit-steps30": {
+          "display": "0.573 mm",
+          "maxM": 0.0005731247944098858,
+          "scored": 5
+        },
+        "tudat-wasm": {
+          "display": "0.011 mm",
+          "maxM": 0.00001076327796058272,
+          "scored": 5
+        },
+        "tudat-wasm-finest": {
+          "display": "0.011 mm",
+          "maxM": 0.000011456920457412549,
+          "scored": 5
+        },
+        "tudat-wasm-steps30": {
+          "display": "0.013 mm",
+          "maxM": 0.00001330738781451748,
+          "scored": 5
+        },
+        "tudatpy": {
+          "display": "0.010 mm",
+          "maxM": 0.000010485077560048384,
+          "scored": 5
+        },
+        "tudatpy-finest": {
+          "display": "0.011 mm",
+          "maxM": 0.000010843394146930162,
+          "scored": 5
+        },
+        "tudatpy-steps30": {
+          "display": "0.013 mm",
+          "maxM": 0.000012695455674284177,
+          "scored": 5
+        }
+      },
+      "forceClass": "pointMass"
+    },
+    {
+      "cells": {
+        "basilisk": {
+          "display": "1.138 mm",
+          "maxM": 0.0011378228302444519,
+          "scored": 38
+        },
+        "basilisk-finest": {
+          "display": "0.549 mm",
+          "maxM": 0.0005488294004827165,
+          "scored": 38
+        },
+        "basilisk-steps30": {
+          "display": "0.450 mm",
+          "maxM": 0.0004504191454545154,
+          "scored": 38
+        },
+        "gmat-2022": {
+          "display": "30.370 mm",
+          "maxM": 0.03037044402871388,
+          "scored": 46
+        },
+        "gmat-2022-finest": {
+          "display": "30.492 mm",
+          "maxM": 0.03049183208645522,
+          "scored": 46
+        },
+        "gmat-2022-steps30": {
+          "display": "30.484 mm",
+          "maxM": 0.030483819194203187,
+          "scored": 46
+        },
+        "gmat-2026": {
+          "display": "30.389 mm",
+          "maxM": 0.030388698533536252,
+          "scored": 46
+        },
+        "gmat-2026-finest": {
+          "display": "30.510 mm",
+          "maxM": 0.030510125342121223,
+          "scored": 46
+        },
+        "gmat-2026-steps30": {
+          "display": "30.502 mm",
+          "maxM": 0.030502109911140985,
+          "scored": 46
+        },
+        "nyx": {
+          "display": "0.888 mm",
+          "maxM": 0.0008879446133515952,
+          "scored": 46
+        },
+        "nyx-finest": {
+          "display": "0.789 mm",
+          "maxM": 0.0007887134156662515,
+          "scored": 46
+        },
+        "nyx-steps30": {
+          "display": "0.762 mm",
+          "maxM": 0.0007615224565345855,
+          "scored": 46
+        },
+        "orekit": {
+          "display": "9.668 mm",
+          "maxM": 0.009667949243077728,
+          "scored": 56
+        },
+        "orekit-finest": {
+          "display": "9.840 mm",
+          "maxM": 0.00984029471917539,
+          "scored": 56
+        },
+        "orekit-steps30": {
+          "display": "9.850 mm",
+          "maxM": 0.009850117253096587,
+          "scored": 56
+        },
+        "tudat-wasm": {
+          "display": "9.906 mm",
+          "maxM": 0.009906185789392062,
+          "scored": 20
+        },
+        "tudat-wasm-finest": {
+          "display": "10.101 mm",
+          "maxM": 0.010100580691776596,
+          "scored": 20
+        },
+        "tudat-wasm-steps30": {
+          "display": "10.093 mm",
+          "maxM": 0.0100932427903245,
+          "scored": 20
+        },
+        "tudatpy": {
+          "display": "23.017 mm",
+          "maxM": 0.023016739941299557,
+          "scored": 46
+        },
+        "tudatpy-finest": {
+          "display": "22.898 mm",
+          "maxM": 0.022898033677190118,
+          "scored": 46
+        },
+        "tudatpy-steps30": {
+          "display": "22.895 mm",
+          "maxM": 0.02289484598313041,
+          "scored": 46
+        }
+      },
+      "forceClass": "fullNoDrag"
+    },
+    {
+      "cells": {
+        "basilisk": {
+          "display": "5418.767 m",
+          "maxM": 5418.767111222807,
+          "scored": 7
+        },
+        "basilisk-finest": {
+          "display": "5418.767 m",
+          "maxM": 5418.767013640304,
+          "scored": 7
+        },
+        "basilisk-steps30": {
+          "display": "5418.767 m",
+          "maxM": 5418.766986379542,
+          "scored": 7
+        },
+        "gmat-2022": {
+          "display": "1.362 m",
+          "maxM": 1.3624045787920884,
+          "scored": 4
+        },
+        "gmat-2022-finest": {
+          "display": "1.363 m",
+          "maxM": 1.3625070541964455,
+          "scored": 4
+        },
+        "gmat-2022-steps30": {
+          "display": "1.363 m",
+          "maxM": 1.3625339709286415,
+          "scored": 4
+        },
+        "gmat-2026": {
+          "display": "7.950 m",
+          "maxM": 7.949795475845874,
+          "scored": 6
+        },
+        "gmat-2026-finest": {
+          "display": "7.950 m",
+          "maxM": 7.950247161158119,
+          "scored": 6
+        },
+        "gmat-2026-steps30": {
+          "display": "7.950 m",
+          "maxM": 7.949889867227415,
+          "scored": 6
+        },
+        "nyx": {
+          "display": "12.462 m",
+          "maxM": 12.461628153332649,
+          "scored": 8
+        },
+        "nyx-finest": {
+          "display": "12.462 m",
+          "maxM": 12.461530575077985,
+          "scored": 8
+        },
+        "nyx-steps30": {
+          "display": "12.462 m",
+          "maxM": 12.461503314471727,
+          "scored": 8
+        },
+        "orekit": {
+          "display": "8.448 mm",
+          "maxM": 0.008447905214230243,
+          "scored": 11
+        },
+        "orekit-finest": {
+          "display": "4.074 mm",
+          "maxM": 0.004074027322263633,
+          "scored": 11
+        },
+        "orekit-steps30": {
+          "display": "4.092 mm",
+          "maxM": 0.004091744870288983,
+          "scored": 11
+        },
+        "tudat-wasm": {
+          "display": "53.310 mm",
+          "maxM": 0.05330967739524767,
+          "scored": 2
+        },
+        "tudat-wasm-finest": {
+          "display": "53.657 mm",
+          "maxM": 0.053657378797686235,
+          "scored": 2
+        },
+        "tudat-wasm-steps30": {
+          "display": "53.393 mm",
+          "maxM": 0.05339346225970927,
+          "scored": 2
+        },
+        "tudatpy": {
+          "display": "41.170 mm",
+          "maxM": 0.04116969544267285,
+          "scored": 8
+        },
+        "tudatpy-finest": {
+          "display": "41.072 mm",
+          "maxM": 0.04107211194407612,
+          "scored": 8
+        },
+        "tudatpy-steps30": {
+          "display": "41.075 mm",
+          "maxM": 0.04107460019868645,
+          "scored": 8
+        }
+      },
+      "forceClass": "drag"
+    }
+  ],
+  "integrationError": {
+    "GEO": {
+      "display": "0.003 mm",
+      "maxM": 0.0000034738732315520443
+    },
+    "GPS": {
+      "display": "0.003 mm",
+      "maxM": 0.0000030424763061822886
+    },
+    "LEO400": {
+      "display": "9.801 mm",
+      "maxM": 0.009801198430449774
+    },
+    "MOLNIYA": {
+      "display": "0.194 mm",
+      "maxM": 0.00019439519451990624
+    },
+    "SSO700": {
+      "display": "0.455 mm",
+      "maxM": 0.00045458114321171394
+    }
+  },
   "dragDiagnostics": [
     {
       "adjustment": "Cd scaled by 1 + eps from the anomalous-oxygen diagnostic",

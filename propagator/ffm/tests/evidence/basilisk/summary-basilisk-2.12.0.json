@@ -13740,7 +13740,7 @@
    },
    {
     "path": "lst-probes.json",
-    "sha256": "ccdd6875f61babcbb783c2e3400e3dbc5033c666cf6e3cfeaecce47235cc4d34"
+    "sha256": "7301ac149c9cec181fa745a6353ff8ba88ae2636ff92d3bdf295cf3049982673"
    },
    {
     "path": "diagnoses.json",
@@ -13807,7 +13807,7 @@
   },
   "lstProbes": {
    "path": "lst-probes.json",
-   "sha256": "ccdd6875f61babcbb783c2e3400e3dbc5033c666cf6e3cfeaecce47235cc4d34"
+   "sha256": "7301ac149c9cec181fa745a6353ff8ba88ae2636ff92d3bdf295cf3049982673"
   },
   "diagnostics": {
    "wgs84": {
@@ -17802,7 +17802,7 @@
   },
   {
    "path": "lst-probes.json",
-   "sha256": "ccdd6875f61babcbb783c2e3400e3dbc5033c666cf6e3cfeaecce47235cc4d34"
+   "sha256": "7301ac149c9cec181fa745a6353ff8ba88ae2636ff92d3bdf295cf3049982673"
   },
   {
    "path": "diagnoses.json",
@@ -21601,7 +21601,10 @@
   },
   {
    "path": "../../../../../third_party/nrlmsise00/nrlmsise-00.c",
-   "sha256": "606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a"
+   "sha256": "606dcbd1f31a712c31fdbfaa25d992b03a560eda296b1f5b18ba0479f6ca3b1a",
+   "role": "historical-source",
+   "availability": "unavailable",
+   "reason": "The source version used to generate this stored reference is not retained. Its original digest is informational; current source identity is authenticated separately."
   },
   {
    "path": "basilisk-wgs84-diagnostic.json",

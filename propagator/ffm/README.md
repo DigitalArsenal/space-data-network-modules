@@ -168,12 +168,20 @@ end a step on each boundary they would cross: the umbra and penumbra edges
 are switching functions of the state, a step across one is shortened by the
 secant until it ends within 1 ms past it, and the next step resumes at the
 size proposed before (`lib/shadow_events.h`), as Orekit's eclipse detectors
-do. Radiation pressure therefore needs no special step limit or tolerance:
-against Orekit, LEO with radiation pressure and drag at RK78 1e-13 and 300 s
-steps is within 2.5 cm after a day with samples and 3.1 cm for the final
-epoch alone, which is FFM's own integration error at those steps; with
-steps of 30 s it is within 4.2 mm (Agreement with Orekit 13.1, below).
-RK4 steps at its fixed size.
+do. Radiation pressure therefore needs no special step limit or tolerance
+(Agreement with Orekit 13.1, below). RK4 steps at its fixed size.
+
+<!-- BEGIN GENERATED OREKIT RADIATION PRESSURE -->
+Against the stored Orekit 13.1 trajectories, the LEO 400 km cases with radiation
+pressure and drag are within 8.448 mm after a day, sampled hourly, at RK78 1e-13 and
+steps of at most 300 s, 4.092 mm with steps of at most 30 s and 4.074 mm at 1e-15 with
+steps of at most 10 s (FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04). The first figure includes FFM's own
+integration error at 300 s steps, which (FFM there against FFM at 1e-15 and steps of at most 10 s, the largest over the day) is 9.801 mm in LEO 400 km and 0.455 mm at 700 km.
+<!-- END GENERATED OREKIT RADIATION PRESSURE -->
+
+For the final epoch alone (the plain RK78 path) the last measurement is 3.1 cm,
+on FFM 1.3.0 (`tests/orekit_reference.test.mjs`); the suite does not score that
+request.
 
 #### GNSS box-wing and ECOM2 (`lib/gnss_srp.h`)
 
@@ -281,7 +289,7 @@ with `OCEAN_TIDE_MAXIMUM_DEGREE` and `OCEAN_TIDE_MAXIMUM_ORDER` (default 30,
 at most 50); like the solid tides it needs `earth_orientation`.
 
 Against Orekit 13.1 (`tests/orekit_reference.test.mjs`, cases A1, O1, O2 and
-C2): after a day, Earth radiation on top of F5 agrees to 18.9 mm in LEO and
+C2; measured values in its header, on FFM 1.3.0, not re-scored with the suite): after a day, Earth radiation on top of F5 agrees to 18.9 mm in LEO and
 0.15 mm at GPS, the effect being 104 m and 0.22 m; FES2004 30x30 on top of F4
 to 18.1 mm and 0.15 mm, on effects of 1.9 m and 0.18 m. Those totals are the
 common integration difference (1.3 mm and 0.17 mm with steps of 30 s); taken
@@ -408,7 +416,8 @@ Current receipt availability is recorded under [Verification](#verification).
 
 Everything a Vector Covariance Message carries for propagation has a PRW
 field and an implementation checked against Orekit 13.1 or GMAT
-(`tests/orekit_reference.test.mjs`, measured values in its header):
+(`tests/orekit_reference.test.mjs`, measured values in its header, on FFM 1.3.0,
+not re-scored with the suite):
 
 - **States in EME2000** (`MEAN_EQUATOR_EQUINOX_J2000` axes, a VCM's "J2K"):
   rotated by the IAU 2000 frame bias (`eraBp00`) on the way in and out,
@@ -945,11 +954,13 @@ module against the 72 cases at three integrator settings and writes
 tolerance of 1e-13 (the point-mass cases at 1e-15) and the steps the table
 names; Orekit with Dormand-Prince 8(5,3) at a relative tolerance of 1e-14 and
 steps of at most 10 s.
-The [current summary](tests/evidence/orekit/summary.json) pins FFM 1.4.0,
-module SHA-256 `eb05fc526683d6592a8207319e6b8b3eda582d00d4da273198e6126467732629`,
-and records every case at all three settings. All 72 published suite limits
-are met. The [generated comparison table](docs/cross-validation.md#reference-suite-on-72-cases)
+
+<!-- BEGIN GENERATED OREKIT SUMMARY -->
+The [current summary](tests/evidence/orekit/summary.json) pins FFM 2.2.0,
+module SHA-256 `d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153` (scored 2026-11-04),
+and records every case at all three settings. All 72 published suite limits are met. The [generated comparison table](docs/cross-validation.md#reference-suite-on-72-cases)
 reports current maxima by orbit and force class.
+<!-- END GENERATED OREKIT SUMMARY -->
 
 The sampled path controls its adaptive steps on the six-state error.
 Integration settings account for much of the suite-setting difference in
@@ -968,19 +979,23 @@ export, and scores FFM at the same three settings
 (`tests/evidence/gmat/summary-gmat-R2026a.json`; method, settings and checksums
 in `docs/cross-validation.md`):
 
+<!-- BEGIN GENERATED GMAT R2026A -->
 | Force set | Cases | Steps of at most 300 s | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s |
 | --- | ---: | ---: | ---: | ---: |
-| Point mass | 5 | 0.32 mm | 0.07 mm | 0.01 mm |
-| Field, third bodies, radiation pressure, tides, relativity, thrust | 46 | 4.5 cm | 3.1 cm | 3.0 cm |
-| With drag (NRLMSISE-00) | 6 | 7.97 m | 7.95 m | 7.95 m |
+| Point mass | 5 | 0.008 mm | 0.008 mm | 0.009 mm |
+| Field, third bodies, radiation pressure, tides, relativity, thrust | 46 | 30.389 mm | 30.502 mm | 30.510 mm |
+| With drag (NRLMSISE-00) | 6 | 7.950 m | 7.950 m | 7.950 m |
+
+*FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04.*
 
 The drag rows are the anomalous oxygen GMAT's NRLMSISE-00 leaves out of its
 total density (`gtd7`; FFM and Orekit use `gtd7d`): 0.005 % of the density at
-400 km and 2.0-2.5 % at 700 km, 2.3 m and 7.9 m over the day; GMAT with its
-Cd scaled by that share is within 42.207 mm and 109.950 mm at the suite setting
+400 km and 2.0-2.5 % at 700 km, 2.319 m and 7.950 m over the day; GMAT with its
+Cd scaled by that share is within 33.544 mm and 122.934 mm at the suite setting
 (`tests/evidence/gmat/anomalous-oxygen.json`). GMAT's 6x6 STM agrees with
-FFM's to 4.6e-10 (field, Sun, Moon in LEO) and 2.6e-5 where GMAT leaves terms
+FFM's to 1.06336e-10 on LEO400 F4 (field, Sun, Moon) and to 2.59085e-05 where GMAT leaves terms
 out of its variational equations (shadow function, relativity, thrust).
+<!-- END GENERATED GMAT R2026A -->
 
 ### Classical frame contract and independent evidence
 
