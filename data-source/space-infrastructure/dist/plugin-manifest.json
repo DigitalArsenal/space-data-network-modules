@@ -1,0 +1,319 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.space-infrastructure",
+  "name": "Space infrastructure: sensor sites",
+  "version": "0.1.0",
+  "description": "Publishes every known space-surveillance and missile-warning sensor site worldwide as SDS $SIT, and each sensor at it as $SNR. A site's position is read from Wikidata (P625), a Wikipedia page coordinate or an OpenStreetMap element, and checked against the other sources the roster names for the same place; every other value is a verbatim quote that must occur in the fetched document, with its source, retrieval time and license. A value with no source is absent, never guessed. plan_sources turns a timer tick into the HTTP requests; build_infrastructure reads the responses in C++/WASM. The host executes HTTP requests.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded deterministic planning of public GETs, parsing of the responses, cross-checking of positions and construction of site and sensor records; no threads, no network imports, no hostcalls."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PVN.fbs",
+      "fileIdentifier": "$PVN",
+      "rootTypeName": "PVN",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SIT.fbs",
+      "fileIdentifier": "$SIT",
+      "rootTypeName": "SIT",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SNR.fbs",
+      "fileIdentifier": "$SNR",
+      "rootTypeName": "SNR",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "plan_sources",
+      "displayName": "Plan the source requests",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Timer trigger; the roster is compiled into the module, there is no other input."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig (MCFG): the node configuration buffer this module reads through plugin.getConfig; build_infrastructure requires producer_peer_id (String), plan_sources reads none."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 200,
+          "required": true,
+          "description": "Plain GETs: the Wikidata entities of the roster (40 per request), the MediaWiki extracts and page coordinates of its Wikipedia articles, and one Overpass request for its OpenStreetMap elements, each once."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "build_infrastructure",
+      "displayName": "Build $SIT sites and $SNR sensors",
+      "inputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 200,
+          "required": true,
+          "description": "The HttpResponse (HRSP) of every planned request, in any order; each is matched to the roster by its URL. A failed or non-200 response removes only the values that need it, and is reported."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig (MCFG): the node configuration buffer this module reads through plugin.getConfig; build_infrastructure requires producer_peer_id (String), plan_sources reads none."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "site_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "site_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "SIT.fbs",
+                  "fileIdentifier": "$SIT",
+                  "rootTypeName": "SIT",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed $SIT sensor sites, in roster order."
+        },
+        {
+          "portId": "site_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "site_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with site_records; its attributes list every site id with the sha256 of its record, so two weeks are diffable."
+        },
+        {
+          "portId": "sensor_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "sensor_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "SNR.fbs",
+                  "fileIdentifier": "$SNR",
+                  "rootTypeName": "SNR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed $SNR sensors at the sites, in roster order."
+        },
+        {
+          "portId": "sensor_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "sensor_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with sensor_records; its attributes list every sensor id with the sha256 of its record."
+        },
+        {
+          "portId": "provenance",
+          "acceptedTypeSets": [
+            {
+              "setId": "provenance-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PVN.fbs",
+                  "fileIdentifier": "$PVN",
+                  "rootTypeName": "PVN",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "One $PVN per source system read (Wikidata, Wikipedia, OpenStreetMap)."
+        },
+        {
+          "portId": "notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "notice-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 8,
+          "required": true,
+          "description": "One Info FlowNotice with the counts per country, type and position source, and one Missing notice with every refused site, sensor and claim."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}

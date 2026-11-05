@@ -1,0 +1,25 @@
+{
+  "spacedatastandards": "1.278.0",
+  "sdsFamilies": [
+    "IDM",
+    "PVN",
+    "RFM",
+    "SIT",
+    "OPP",
+    "LKS",
+    "RFB",
+    "SCV",
+    "SNR"
+  ],
+  "commonHeaders": [
+    "civil_time.hpp"
+  ],
+  "sources": [
+    "../../files/orbit-products/src/sha256.hpp",
+    "src/roster_data.hpp",
+    "src/text.hpp",
+    "src/space_infrastructure.cpp"
+  ],
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "c36333a128e9273326a3cc7f209c1a1766ddefde49217baaf02641ef219dfa7b"
+}
