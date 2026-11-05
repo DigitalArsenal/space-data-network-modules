@@ -1,7 +1,7 @@
 {
   "pluginId": "conjunction-assessment",
   "name": "Conjunction Assessment Plugin",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "Conjunction assessment and collision probability analysis through the SDS PIV/TAB invoke surface. SGP4 $OMM sets fly on the built-in SGP4; SGP4XP and AP $OCM element sets are screened by the package host flow screenOcmSets (src/js/ocmSetScreen.mjs), each set flown on its own theory by propagator/sdn-ap propagate and screened here as its $OEM, covariance lines included.",
   "pluginFamily": "analysis",
   "capabilities": [],

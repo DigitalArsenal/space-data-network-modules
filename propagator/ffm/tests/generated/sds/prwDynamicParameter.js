@@ -15,5 +15,6 @@ export var prwDynamicParameter = /*#__PURE__*/ function(prwDynamicParameter) {
     prwDynamicParameter[prwDynamicParameter["ECOM2_B1_SIN"] = 13] = "ECOM2_B1_SIN";
     prwDynamicParameter[prwDynamicParameter["ECOM2_B3_COS"] = 14] = "ECOM2_B3_COS";
     prwDynamicParameter[prwDynamicParameter["ECOM2_B3_SIN"] = 15] = "ECOM2_B3_SIN";
+    prwDynamicParameter[prwDynamicParameter["OUTGASSING_ACCELERATION"] = 16] = "OUTGASSING_ACCELERATION";
     return prwDynamicParameter;
 }({});

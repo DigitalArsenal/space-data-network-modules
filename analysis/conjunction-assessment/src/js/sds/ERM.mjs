@@ -6215,8 +6215,12 @@ var PVN = class _PVN {
     const offset = this.bb.__offset(this.bb_pos, 28);
     return offset ? this.bb.readUint64(this.bb_pos + offset) : BigInt("0");
   }
+  PRODUCER_SHA256(optionalEncoding) {
+    const offset = this.bb.__offset(this.bb_pos, 30);
+    return offset ? this.bb.__string(this.bb_pos + offset, optionalEncoding) : null;
+  }
   static startPVN(builder) {
-    builder.startObject(13);
+    builder.startObject(14);
   }
   static addSourceId(builder, SOURCE_IDOffset) {
     builder.addFieldOffset(0, SOURCE_IDOffset, 0);
@@ -6257,6 +6261,9 @@ var PVN = class _PVN {
   static addSourceBytes(builder, SOURCE_BYTES) {
     builder.addFieldInt64(12, SOURCE_BYTES, BigInt("0"));
   }
+  static addProducerSha256(builder, PRODUCER_SHA256Offset) {
+    builder.addFieldOffset(13, PRODUCER_SHA256Offset, 0);
+  }
   static endPVN(builder) {
     const offset = builder.endObject();
     return offset;
@@ -6267,7 +6274,7 @@ var PVN = class _PVN {
   static finishSizePrefixedPVNBuffer(builder, offset) {
     builder.finish(offset, "$PVN", true);
   }
-  static createPVN(builder, SOURCE_IDOffset, SOURCE_KIND, ORIGINATOROffset, PROVIDER_IDOffset, PRODUCEROffset, LICENSE_CLASS, LICENSE_IDOffset, LINEAGEOffset, SOURCE_URLOffset, SOURCE_VERSIONOffset, RETRIEVED_ATOffset, SOURCE_SHA256Offset, SOURCE_BYTES) {
+  static createPVN(builder, SOURCE_IDOffset, SOURCE_KIND, ORIGINATOROffset, PROVIDER_IDOffset, PRODUCEROffset, LICENSE_CLASS, LICENSE_IDOffset, LINEAGEOffset, SOURCE_URLOffset, SOURCE_VERSIONOffset, RETRIEVED_ATOffset, SOURCE_SHA256Offset, SOURCE_BYTES, PRODUCER_SHA256Offset) {
     _PVN.startPVN(builder);
     _PVN.addSourceId(builder, SOURCE_IDOffset);
     _PVN.addSourceKind(builder, SOURCE_KIND);
@@ -6282,6 +6289,7 @@ var PVN = class _PVN {
     _PVN.addRetrievedAt(builder, RETRIEVED_ATOffset);
     _PVN.addSourceSha256(builder, SOURCE_SHA256Offset);
     _PVN.addSourceBytes(builder, SOURCE_BYTES);
+    _PVN.addProducerSha256(builder, PRODUCER_SHA256Offset);
     return _PVN.endPVN(builder);
   }
   unpack() {
@@ -6298,7 +6306,8 @@ var PVN = class _PVN {
       this.SOURCE_VERSION(),
       this.RETRIEVED_AT(),
       this.SOURCE_SHA256(),
-      this.SOURCE_BYTES()
+      this.SOURCE_BYTES(),
+      this.PRODUCER_SHA256()
     );
   }
   unpackTo(_o) {
@@ -6315,10 +6324,11 @@ var PVN = class _PVN {
     _o.RETRIEVED_AT = this.RETRIEVED_AT();
     _o.SOURCE_SHA256 = this.SOURCE_SHA256();
     _o.SOURCE_BYTES = this.SOURCE_BYTES();
+    _o.PRODUCER_SHA256 = this.PRODUCER_SHA256();
   }
 };
 var PVNT = class {
-  constructor(SOURCE_ID = null, SOURCE_KIND = 0 /* Unspecified */, ORIGINATOR = null, PROVIDER_ID = null, PRODUCER = null, LICENSE_CLASS = 0 /* Unspecified */, LICENSE_ID = null, LINEAGE = null, SOURCE_URL = null, SOURCE_VERSION = null, RETRIEVED_AT = null, SOURCE_SHA256 = null, SOURCE_BYTES = BigInt("0")) {
+  constructor(SOURCE_ID = null, SOURCE_KIND = 0 /* Unspecified */, ORIGINATOR = null, PROVIDER_ID = null, PRODUCER = null, LICENSE_CLASS = 0 /* Unspecified */, LICENSE_ID = null, LINEAGE = null, SOURCE_URL = null, SOURCE_VERSION = null, RETRIEVED_AT = null, SOURCE_SHA256 = null, SOURCE_BYTES = BigInt("0"), PRODUCER_SHA256 = null) {
     this.SOURCE_ID = SOURCE_ID;
     this.SOURCE_KIND = SOURCE_KIND;
     this.ORIGINATOR = ORIGINATOR;
@@ -6332,6 +6342,7 @@ var PVNT = class {
     this.RETRIEVED_AT = RETRIEVED_AT;
     this.SOURCE_SHA256 = SOURCE_SHA256;
     this.SOURCE_BYTES = SOURCE_BYTES;
+    this.PRODUCER_SHA256 = PRODUCER_SHA256;
   }
   SOURCE_ID;
   SOURCE_KIND;
@@ -6346,6 +6357,7 @@ var PVNT = class {
   RETRIEVED_AT;
   SOURCE_SHA256;
   SOURCE_BYTES;
+  PRODUCER_SHA256;
   pack(builder) {
     const SOURCE_ID = this.SOURCE_ID !== null ? builder.createString(this.SOURCE_ID) : 0;
     const ORIGINATOR = this.ORIGINATOR !== null ? builder.createString(this.ORIGINATOR) : 0;
@@ -6357,6 +6369,7 @@ var PVNT = class {
     const SOURCE_VERSION = this.SOURCE_VERSION !== null ? builder.createString(this.SOURCE_VERSION) : 0;
     const RETRIEVED_AT = this.RETRIEVED_AT !== null ? builder.createString(this.RETRIEVED_AT) : 0;
     const SOURCE_SHA256 = this.SOURCE_SHA256 !== null ? builder.createString(this.SOURCE_SHA256) : 0;
+    const PRODUCER_SHA256 = this.PRODUCER_SHA256 !== null ? builder.createString(this.PRODUCER_SHA256) : 0;
     return PVN.createPVN(
       builder,
       SOURCE_ID,
@@ -6371,7 +6384,8 @@ var PVNT = class {
       SOURCE_VERSION,
       RETRIEVED_AT,
       SOURCE_SHA256,
-      this.SOURCE_BYTES
+      this.SOURCE_BYTES,
+      PRODUCER_SHA256
     );
   }
 };
