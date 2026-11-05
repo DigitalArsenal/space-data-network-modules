@@ -1,6 +1,6 @@
 {
   "sdk": "0.9.12",
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "threadModel": "wasi-sequential",
   "target": "wasm32-wasip1-threads",
   "sharedMemory": true,
@@ -8,8 +8,8 @@
     "-msimd128",
     "-fno-exceptions"
   ],
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
-  "bytes": 2752551,
+  "sha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+  "bytes": 2754046,
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
   "memory": {

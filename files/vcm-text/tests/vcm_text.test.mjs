@@ -12,6 +12,11 @@
 //    hold those states to the message's digits (8 decimals of km, 12 of km/s),
 //    the epoch line the set's epoch, the coefficients its BTERM and AGOM, and the
 //    lines the set has no value for are left out.
+// 3. That set at epochs finer than the millisecond: the message's epoch is the
+//    set's rounded to the millisecond (.000600 s to .001, .000400 s to .000,
+//    and 2026-12-31T23:59:59.999500 carried to 2027 001 00:00:00.000); the J2K
+//    and ECI lines hold AP's propagate at the rounded epoch to the message's
+//    digits, and a state at any other time is refused (state-epoch-mismatch).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -154,4 +159,39 @@ test("an AP set: J2K and ECI from AP's propagate at the epoch, coefficients from
   assert.equal(NCD.getRootAsNCD(new flatbuffers.ByteBuffer(named.subarray(4, 4 + size))).INTERNAL_FILE_NAME(), "iss.vcm");
   await assert.rejects(call(writer, "ocm_to_vcm", [["ocm", "OCM", ocmBytes], ["descriptor", "NCD", config(ncdContainerFormat.CCSDS_OEM_KVN, "x")]]), /configuration-refused/);
   console.log(`VCM TEXT AP SET PASS: ${lines.length} lines; J2K and ECI within ${worstKm.toExponential(2)} km and ${worstKmS.toExponential(2)} km/s of AP's propagate at ${epoch}; BTERM and AGOM exact; ${absent.length} lines left out`);
+});
+
+test("a set with an epoch finer than the millisecond: the rounded epoch is the message's, its states AP's there", { skip }, async (t) => {
+  const [writer, ap] = [await harness(t, WRITER), await harness(t, AP)];
+  const base = ocmOf(new Uint8Array(fs.readFileSync(path.join(here, "fixtures", "iss-ap.ocm"))));
+  const withEpoch = (epoch) => { const o = ocmOf(pack(base)); o.MEAN_ELEMENTS.EPOCH = epoch; o.TRAJ_FRAME_EPOCH = epoch; return pack(o); };
+  const at = (frame, epoch) => {
+    const c = new PCFT();
+    c.OUTPUT = Object.assign(new PCFOutputT(), { FRAME: pcfOutputFrame[frame], EPOCHS: [epoch] });
+    const b = new flatbuffers.Builder(256); PCF.finishPCFBuffer(b, c.pack(b)); return b.asUint8Array().slice();
+  };
+  const fly = async (ocmBytes, frame, epoch) => out(await call(ap, "propagate", [["ocm", "OCM", ocmBytes], ["configuration", "PCF", at(frame, epoch)]]), "ephemeris")[0];
+  const linesOf = (text) => text.split("\r\n").filter(Boolean).map((l) => l.replace(/^<> /, ""));
+  const value = (lines, label) => { const l = lines.find((x) => x.startsWith(label)); assert.ok(l, `${label} line`); return l.slice(label.length); };
+  let worstKm = 0, worstKmS = 0;
+  for (const [epoch, rounded, line] of [["2026-07-13T12:00:00.000600", "2026-07-13T12:00:00.001", "2026 194 (13 JUL) 12:00:00.001"],
+    ["2026-07-13T12:00:00.000400", "2026-07-13T12:00:00.000", "2026 194 (13 JUL) 12:00:00.000"]]) {
+    const ocmBytes = withEpoch(epoch);
+    const [j2k, teme] = [await fly(ocmBytes, "EME2000", rounded), await fly(ocmBytes, "TEME", rounded)];
+    const lines = linesOf(await write(writer, ocmBytes, [j2k, teme]));
+    assert.match(value(lines, "EPOCH TIME (UTC): "), new RegExp(`^${line.replace(/[()]/g, "\\$&")} `), `${epoch}: EPOCH TIME`);
+    for (const [label, record] of [["J2K", j2k], ["ECI", teme]]) {
+      const s = oemOf(record).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
+      const pos = numbersOf(value(lines, `${label} POS (KM): `)), vel = numbersOf(value(lines, `${label} VEL (KM/S): `));
+      [s.X, s.Y, s.Z].forEach((x, i) => { worstKm = Math.max(worstKm, Math.abs(pos[i] - x)); });
+      [s.X_DOT, s.Y_DOT, s.Z_DOT].forEach((x, i) => { worstKmS = Math.max(worstKmS, Math.abs(vel[i] - x)); });
+    }
+    const other = rounded.endsWith(".001") ? "2026-07-13T12:00:00.000" : "2026-07-13T12:00:00.001";
+    await assert.rejects(write(writer, ocmBytes, [await fly(ocmBytes, "EME2000", other)]), /state-epoch-mismatch/, `${epoch}: a state at ${other}`);
+  }
+  assert.ok(worstKm <= 5.0000001e-9, `position ${worstKm} km`);
+  assert.ok(worstKmS <= 5.0000001e-13, `velocity ${worstKmS} km/s`);
+  const carried = linesOf(await write(writer, withEpoch("2026-12-31T23:59:59.999500")));
+  assert.match(value(carried, "EPOCH TIME (UTC): "), /^2027 001 \(01 JAN\) 00:00:00\.000 /);
+  console.log(`VCM TEXT SUB-MILLISECOND EPOCH PASS: .000600 to .001, .000400 to .000, 2026-12-31T23:59:59.999500 to 2027 001 00:00:00.000; J2K and ECI within ${worstKm.toExponential(2)} km and ${worstKmS.toExponential(2)} km/s of AP's propagate at the rounded epoch`);
 });

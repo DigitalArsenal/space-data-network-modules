@@ -8,7 +8,7 @@ for value. The layout is spacedatastandards.org
 
 | method | in | out |
 | --- | --- | --- |
-| `ocm_to_vcm` | `ocm`: one `$OCM`; `state` (optional, up to two): one `$OEM` each, one state at the record's epoch, EME2000 (J2K lines) or TEME of date (ECI lines); `descriptor` (optional configuration): an `$NCD`, FORMAT UNSPECIFIED or PROVIDER_DEFINED `vcm-v2-text`, whose INTERNAL_FILE_NAME and SOURCE_CID ride onto the output descriptor | `message`: size-prefixed `$NCD` (PROVIDER_DEFINED `vcm-v2-text`, SHA-256 and length of the text) followed by the text, CR LF line ends; the frame `normalize_vcm` reads |
+| `ocm_to_vcm` | `ocm`: one `$OCM`; `state` (optional, up to two): one `$OEM` each, one state at the record's epoch rounded to the millisecond, EME2000 (J2K lines) or TEME of date (ECI lines); `descriptor` (optional configuration): an `$NCD`, FORMAT UNSPECIFIED or PROVIDER_DEFINED `vcm-v2-text`, whose INTERNAL_FILE_NAME and SOURCE_CID ride onto the output descriptor | `message`: size-prefixed `$NCD` (PROVIDER_DEFINED `vcm-v2-text`, SHA-256 and length of the text) followed by the text, CR LF line ends; the frame `normalize_vcm` reads |
 
 - **Nothing invented.** Each value comes from a field that states it, or from
   the caller's states. A field with no value is left blank; a line with no
@@ -20,6 +20,10 @@ for value. The layout is spacedatastandards.org
   its epoch or the caller's; for a mean-element set (AP, SGP4-XP) the caller
   flies the set to its epoch with its own propagator (`propagator/sdn-ap`
   `propagate`, `OUTPUT.FRAME` EME2000 and TEME) and passes both states.
+- **Epoch.** The message states time to the millisecond. The record's epoch
+  rounded to the millisecond (half a millisecond rounds up) is the message's
+  epoch; the states are stated there, so a set whose epoch is finer is flown
+  by the caller to the rounded epoch.
 - **Field map.** `src/vcm_draft.hpp` lists the field behind every line. The
   EFG state, U,V,W sigmas, equinoctial covariance, integrator, polar motion,
   nutation, thrust and center-of-mass lines and the ON/OFF switches come only
@@ -49,10 +53,11 @@ for value. The layout is spacedatastandards.org
 
 Refused by name: `configuration-refused`, `invalid-configuration`, `missing-ocm`, `invalid-ocm`, `invalid-state`,
 `state-epoch-mismatch`, `state-frame-unsupported`, `state-duplicate`,
-`epoch-missing`, `epoch-not-millisecond`, `time-system-not-utc`,
+`epoch-missing`, `time-system-not-utc`,
 `invalid-parameter`.
 
 Build: `npm ci && node build.mjs` (reads `files/orbit-products/src/vcm.hpp` and
 `sha256.hpp`). Test: `node --test tests/vcm_text.test.mjs`: the round trip
 through `normalize_vcm` on its synthetic sample, and an AP set fitted to NASA's
-public ISS ephemeris with its J2K and ECI states from `propagator/sdn-ap`.
+public ISS ephemeris with its J2K and ECI states from `propagator/sdn-ap`, and that
+set at epochs finer than the millisecond, flown to the rounded epoch.
