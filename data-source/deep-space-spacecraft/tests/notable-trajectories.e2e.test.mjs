@@ -50,7 +50,8 @@ function planOptions(config = {}, at = firedMs) {
   // the host delivers ModuleConfig TableList/NumberList, never a JSON input port.
   const { now_tdb, limits, ...options } = config;
   if (now_tdb) at = Date.parse(now_tdb + "Z");
-  const hostConfig = { deep_space_enabled: true, producer_peer_id: producer, ...options,
+  // These synthetic runs exercise the 60-request stage budget without discovery.
+  const hostConfig = { deep_space_enabled: true, producer_peer_id: producer, stage_requests: 60, discover: false, ...options,
     ...(limits ? { limits: Object.entries(limits).map(([id, bounds]) => ({ id: Number(id), ...bounds })) } : {}) };
   return { config: hostConfig, request: { methodId: "plan_horizons", inputs: [tick(at)] } };
 }
@@ -228,7 +229,7 @@ function checkMetas(result, expectedMs = firedMs, expectedProducer = producer) {
       license: "LicenseRef-NASA-JPL-Horizons-PD", citation: credit })) assert.equal(meta.tags[key], value, `${id}.${key}`);
     const p = meta.provenance;
     for (const [key, value] of Object.entries({ sourceUrl, httpStatus: 200, retrievedMs: expectedMs,
-      parser: "deep-space-spacecraft", parserVersion: "0.2.0", normalizedSha256: sha, normalizedCount: count }))
+      parser: "deep-space-spacecraft", parserVersion: "0.3.0", normalizedSha256: sha, normalizedCount: count }))
       assert.equal(p[key], value, `${id}.provenance.${key}`);
     // The convenience decoder combines these parallel vectors into a map; verify the wire vectors too.
     const wire = IngestRequest.getRootAsIngestRequest(new ByteBuffer(metas[0])).PROVENANCE();
@@ -1276,7 +1277,7 @@ test("typed flow has twelve ingests, seven HTTP stages and only state edges opaq
     edge: (from, fromPort, to, toPort) => ({ from, fromPort, to, toPort, opaque: true }),
     http, storage, packageDir: root,
   });
-  assert.equal(flow.version, "0.2.0"); assert.equal(flow.programId, "com.digitalarsenal.flows.deep-space-catalogs-ingest");
+  assert.equal(flow.version, "0.3.0"); assert.equal(flow.programId, "com.digitalarsenal.flows.deep-space-catalogs-ingest");
   assert.deepEqual(flow.requiredPlugins, [source, http, storage]); assert.deepEqual(deps, { [source]: root });
   assert.equal(flow.nodes.filter((n) => n.plugin === storage).length, 12);
   assert.equal(flow.nodes.filter((n) => n.plugin === http).length, 7);

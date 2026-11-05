@@ -1,8 +1,8 @@
 {
   "pluginId": "com.digitalarsenal.data-source.deep-space-spacecraft",
   "name": "Notable deep-space spacecraft (Horizons)",
-  "version": "0.2.0",
-  "description": "Retrieves 42 spacecraft as per-regime OEM catalogs from NASA/JPL Horizons: Sun-centered archives and rolling body-centered windows, classified in C++/WASM. Six bounded advance stages, segment membership, lifecycle attributes and EGP query groups. The host executes HTTP requests.",
+  "version": "0.3.0",
+  "description": "Retrieves deep-space and current cislunar spacecraft as per-regime OEM catalogs from NASA/JPL Horizons and NASA NAIF SPICE mission kernels: a 42-craft notables roster, Horizons-listing discovery admitted by a geocentric probe, and the newest kernels of configured NAIF directories, classified in C++/WASM. Six bounded advance stages, segment membership, lifecycle attributes and EGP query groups. The host executes HTTP requests.",
   "pluginFamily": "data_source",
   "capabilities": [],
   "externalInterfaces": [],
@@ -96,7 +96,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 60,
+          "maxStreams": 300,
           "required": false,
           "description": "Plain GETs in pending-request order."
         },
@@ -186,9 +186,9 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 60,
+          "maxStreams": 300,
           "required": false,
-          "description": "Responses in pending-request order; HTTP 200 and a non-empty BODY required."
+          "description": "Responses in pending-request order; Horizons responses need HTTP 200 and a non-empty BODY; a failed discovery or NAIF response is counted, not fatal."
         }
       ],
       "outputPorts": [
@@ -207,7 +207,7 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 60,
+          "maxStreams": 300,
           "required": false,
           "description": "Plain GETs in pending-request order."
         },
@@ -297,9 +297,9 @@
             }
           ],
           "minStreams": 0,
-          "maxStreams": 60,
+          "maxStreams": 300,
           "required": false,
-          "description": "Responses in pending-request order; HTTP 200 and a non-empty BODY required."
+          "description": "Responses in pending-request order; Horizons responses need HTTP 200 and a non-empty BODY; a failed discovery or NAIF response is counted, not fatal."
         }
       ],
       "outputPorts": [

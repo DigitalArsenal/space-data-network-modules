@@ -15,7 +15,8 @@ await buildSourceModule({
   sources: [
     "src/notables.hpp", "src/trajectory_plan.hpp", "src/packed_rows.hpp",
     "../../files/orbit-products/src/ephemeris_series.hpp",
-    "src/trajectory_rows.hpp", "src/regime.hpp", "src/oem_blocks.hpp",
+    "../../files/orbit-products/src/daf.hpp", "../../files/orbit-products/src/spk_read.hpp",
+    "src/trajectory_rows.hpp", "src/regime.hpp", "src/discovery.hpp", "src/spice.hpp", "src/oem_blocks.hpp",
     "../../files/orbit-products/src/sha256.hpp",
     "src/runtime_contracts.hpp", "src/deep_space_spacecraft.cpp",
   ],

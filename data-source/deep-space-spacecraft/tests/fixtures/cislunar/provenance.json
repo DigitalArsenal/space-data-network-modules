@@ -1,0 +1,241 @@
+{
+ "recordedAt": "2026-11-05T05:05:09.036Z",
+ "firedMs": 1793855109036,
+ "reference": {
+  "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND='-85'&OBJ_DATA='NO'&MAKE_EPHEM='YES'&EPHEM_TYPE='VECTORS'&CENTER='500%40301'&TLIST='2461204.544055956%202461204.817865480%202461205.091675004%202461205.365484527%202461205.639294051%202461205.913103575%202461206.186913099%202461206.460722622'&TLIST_TYPE='JD'&TIME_TYPE='TDB'&VEC_TABLE='2'&REF_SYSTEM='ICRF'&REF_PLANE='FRAME'&OUT_UNITS='KM-S'&VEC_LABELS='NO'&CSV_FORMAT='YES'",
+  "fetchedAt": "2026-11-05T05:05:17.107Z",
+  "sha256": "897f3a97446379d102f81a2fb644e48bfbca7374622cca0b3dec6e7145c655cc"
+ },
+ "responses": [
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27MB%27",
+   "fetchedAt": "2026-11-05T05:05:09.098Z",
+   "status": 200,
+   "sha256": "bb18ebb67ebc7fcaad736547370bf4b250250f062b0d6153dc7953e6791caca2",
+   "bytes": 67716,
+   "trimmed": "whole listing rows kept: tests/cislunar-fixtures.mjs LISTING_IDS",
+   "bodySha256": "74bda8da8a8ec60904e71cfd6cfd82969fc4d22e38625ddb443ddf51be9b0330"
+  },
+  {
+   "url": "https://naif.jpl.nasa.gov/pub/naif/pds/data/lro-l-spice-6-v1.0/lrosp_1000/data/spk/",
+   "fetchedAt": "2026-11-05T05:05:09.598Z",
+   "status": 200,
+   "sha256": "38b04c6f53b5634280cc52d3efb6e63051a1f76030095d26bcf625430e8b2a25",
+   "bytes": 34826,
+   "trimmed": null,
+   "bodySha256": "38b04c6f53b5634280cc52d3efb6e63051a1f76030095d26bcf625430e8b2a25"
+  },
+  {
+   "url": "https://naif.jpl.nasa.gov/pub/naif/pds/pds4/ladee/ladee_spice/spice_kernels/spk/",
+   "fetchedAt": "2026-11-05T05:05:09.988Z",
+   "status": 200,
+   "sha256": "fb089697156f41aa8b704feed96f653b449adb829b97acfa26eae8bbd30592ff",
+   "bytes": 13599,
+   "trimmed": null,
+   "bodySha256": "fb089697156f41aa8b704feed96f653b449adb829b97acfa26eae8bbd30592ff"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-85%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%4010%27&START_TIME=%271900-01-01%2000%3A00%3A00%27&STOP_TIME=%271900-01-02%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:10.251Z",
+   "status": 200,
+   "sha256": "b40a4ac6d3614856c7089135e6cf69a9ac375a3b197d7e60d85dd6a3c015faf0",
+   "bytes": 140,
+   "trimmed": null,
+   "bodySha256": "b40a4ac6d3614856c7089135e6cf69a9ac375a3b197d7e60d85dd6a3c015faf0"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-85%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%4010%27&START_TIME=%272300-01-01%2000%3A00%3A00%27&STOP_TIME=%272300-01-02%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:10.509Z",
+   "status": 200,
+   "sha256": "2705a9bc1df8469608a5881a4e17025ad9a303f07d81aee170e5211c1d9e276b",
+   "bytes": 137,
+   "trimmed": null,
+   "bodySha256": "2705a9bc1df8469608a5881a4e17025ad9a303f07d81aee170e5211c1d9e276b"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-2%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:10.886Z",
+   "status": 200,
+   "sha256": "cc15d4f911ac4c22a1c8d91dec29748676ab695b8ea7ac4f069a23749114a42c",
+   "bytes": 143,
+   "trimmed": null,
+   "bodySha256": "cc15d4f911ac4c22a1c8d91dec29748676ab695b8ea7ac4f069a23749114a42c"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-152%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:11.129Z",
+   "status": 200,
+   "sha256": "141d18faddba4c6c0eda891e9bfca6f5a257d3634de3797957407f309825d2a8",
+   "bytes": 5274,
+   "trimmed": null,
+   "bodySha256": "141d18faddba4c6c0eda891e9bfca6f5a257d3634de3797957407f309825d2a8"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-169%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:11.454Z",
+   "status": 200,
+   "sha256": "388a4d044946bf501ce6f40fb4a65023518fa8ebf2f598bc26cca93b4d8ae377",
+   "bytes": 158,
+   "trimmed": null,
+   "bodySha256": "388a4d044946bf501ce6f40fb4a65023518fa8ebf2f598bc26cca93b4d8ae377"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-231%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:11.693Z",
+   "status": 200,
+   "sha256": "d6081d859737cddf40b7bd8f1a8b1dc165d09e176253a5430ad870a65f922929",
+   "bytes": 5242,
+   "trimmed": null,
+   "bodySha256": "d6081d859737cddf40b7bd8f1a8b1dc165d09e176253a5430ad870a65f922929"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-240%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:12.040Z",
+   "status": 200,
+   "sha256": "2d6a5cc4e0c8a68e028e4894d391d1d7793ec47c8cac72597c9f159fa212a1bc",
+   "bytes": 138,
+   "trimmed": null,
+   "bodySha256": "2d6a5cc4e0c8a68e028e4894d391d1d7793ec47c8cac72597c9f159fa212a1bc"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-78000%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:12.279Z",
+   "status": 200,
+   "sha256": "f191e5658838c9fcc66fd74d07e23e1ca6e1544ac0f47a1b262c00bea42632a9",
+   "bytes": 154,
+   "trimmed": null,
+   "bodySha256": "f191e5658838c9fcc66fd74d07e23e1ca6e1544ac0f47a1b262c00bea42632a9"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-125544%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:12.544Z",
+   "status": 200,
+   "sha256": "45e931870372cc35333db55f36b4127219dc578a2d0f943113a09fa8b9ae83bd",
+   "bytes": 5241,
+   "trimmed": null,
+   "bodySha256": "45e931870372cc35333db55f36b4127219dc578a2d0f943113a09fa8b9ae83bd"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-9901492%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40399%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:12.813Z",
+   "status": 200,
+   "sha256": "d2ecf1a34ea3f0c316c57dcd10bd795e0d550e4cdb7e15f7501bc0e7aae6212c",
+   "bytes": 147,
+   "trimmed": null,
+   "bodySha256": "d2ecf1a34ea3f0c316c57dcd10bd795e0d550e4cdb7e15f7501bc0e7aae6212c"
+  },
+  {
+   "url": "https://naif.jpl.nasa.gov/pub/naif/pds/data/lro-l-spice-6-v1.0/lrosp_1000/data/spk/lrorg_2026074_2026166_v01.bsp",
+   "fetchedAt": "2026-11-05T05:05:13.067Z",
+   "status": 200,
+   "sha256": "5e17414e03c794e9dc29e4f4fde64d1d2d9fd106d87f26404188888495de28b1",
+   "bytes": 7557120,
+   "trimmed": {
+    "rule": "lrorg_",
+    "segmentsInOriginal": 92,
+    "kept": [
+     {
+      "target": -85,
+      "center": 301,
+      "type": 13,
+      "start_et": 834580869.1846129,
+      "stop_et": 834667269.1845868
+     },
+     {
+      "target": -85,
+      "center": 301,
+      "type": 13,
+      "start_et": 834667269.1845868,
+      "stop_et": 834753669.1845604
+     }
+    ]
+   },
+   "bodySha256": "98a2bdf59f91407e60349cc96f4b98a32c143d8291c78dbc2021545952aa53c6"
+  },
+  {
+   "url": "https://naif.jpl.nasa.gov/pub/naif/pds/pds4/ladee/ladee_spice/spice_kernels/spk/ladee_r_13278_13325_loa_v01.bsp",
+   "fetchedAt": "2026-11-05T05:05:13.831Z",
+   "status": 200,
+   "sha256": "1a325c624902098d1d8dedfe67b05891c2da75dfe7e18768c1c973a5ba82fc83",
+   "bytes": 18928640,
+   "trimmed": {
+    "rule": "ladee_r_13278_13325_loa",
+    "segmentsInOriginal": 53,
+    "kept": [
+     {
+      "target": -12,
+      "center": 301,
+      "type": 13,
+      "start_et": 434587405.0823472,
+      "stop_et": 434669997.1823494
+     },
+     {
+      "target": -12,
+      "center": 301,
+      "type": 13,
+      "start_et": 434669997.1823494,
+      "stop_et": 434726483.1823512
+     }
+    ]
+   },
+   "bodySha256": "83d765a6c6c6d7bdf771cbd31c3a3252e344330c64869dda1fc6240dc73f2777"
+  },
+  {
+   "url": "https://naif.jpl.nasa.gov/pub/naif/pds/pds4/ladee/ladee_spice/spice_kernels/spk/ladee_r_13250_13279_pha_v01.bsp",
+   "fetchedAt": "2026-11-05T05:05:14.924Z",
+   "status": 200,
+   "sha256": "9c58793873f140cdd69592ee735184bb2c23b59e1b1834e4b514239356937f8c",
+   "bytes": 19614720,
+   "trimmed": {
+    "rule": "ladee_r_13250_13279_pha",
+    "segmentsInOriginal": 42,
+    "kept": [
+     {
+      "target": -12,
+      "center": 399,
+      "type": 13,
+      "start_et": 434245833.182343,
+      "stop_et": 434289667.1823431
+     }
+    ]
+   },
+   "bodySha256": "4a2334cc51873e87e665b9129143d92a728fd9d4134c8fff54bb43119ac93421"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-152%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%4010%27&START_TIME=%271900-01-01%2000%3A00%3A00%27&STOP_TIME=%271900-01-02%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:15.658Z",
+   "status": 200,
+   "sha256": "5939548a36e87fb084eee5e032b6ce7a5a6f68ff1ac856c1d4dc05b2e4888b90",
+   "bytes": 160,
+   "trimmed": null,
+   "bodySha256": "5939548a36e87fb084eee5e032b6ce7a5a6f68ff1ac856c1d4dc05b2e4888b90"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-152%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%4010%27&START_TIME=%272300-01-01%2000%3A00%3A00%27&STOP_TIME=%272300-01-02%2000%3A00%3A00%27&STEP_SIZE=%271%20d%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:15.905Z",
+   "status": 200,
+   "sha256": "09fe8bca4bdf3037942888dc28e0c2517be9d36b58f1591345404574a5935f5c",
+   "bytes": 157,
+   "trimmed": null,
+   "bodySha256": "09fe8bca4bdf3037942888dc28e0c2517be9d36b58f1591345404574a5935f5c"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-85%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40301%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%275%20m%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:16.180Z",
+   "status": 200,
+   "sha256": "a909fbf90d698059e11fbb59e23bf38f095bc1800193388ffc2f58061d49dd39",
+   "bytes": 61074,
+   "trimmed": null,
+   "bodySha256": "a909fbf90d698059e11fbb59e23bf38f095bc1800193388ffc2f58061d49dd39"
+  },
+  {
+   "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27-152%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%40301%27&START_TIME=%272026-11-05%2000%3A00%3A00%27&STOP_TIME=%272026-11-06%2000%3A00%3A00%27&STEP_SIZE=%275%20m%27&VEC_TABLE=%272%27&REF_SYSTEM=%27ICRF%27&REF_PLANE=%27FRAME%27&OUT_UNITS=%27KM-S%27&VEC_LABELS=%27NO%27&CSV_FORMAT=%27YES%27",
+   "fetchedAt": "2026-11-05T05:05:16.628Z",
+   "status": 200,
+   "sha256": "305d01b8209b4ddc698acb6fafcc0f9f5d03f6b93bef31a88f696300f81ee63d",
+   "bytes": 61119,
+   "trimmed": null,
+   "bodySha256": "305d01b8209b4ddc698acb6fafcc0f9f5d03f6b93bef31a88f696300f81ee63d"
+  }
+ ]
+}

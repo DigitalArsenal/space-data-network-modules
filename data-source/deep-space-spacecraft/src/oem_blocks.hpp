@@ -11,6 +11,8 @@
 
 namespace spacecraft_oem {
 using Group = trajectory::Block;
+constexpr const char* kSpiceLicence = "NASA/JPL NAIF SPICE mission kernel, released for public distribution through the NAIF server and the PDS NAIF node";
+constexpr const char* kSpiceCredit = "SPICE kernels: NASA/JPL NAIF and the PDS NAIF node";
 
 inline bool segments(const std::vector<Group>& groups, bool terminal,
                      std::vector<Group>& blocks, std::string& error) {
@@ -69,7 +71,8 @@ inline std::vector<uint8_t> build(const notables::Notable& craft,
     const auto start = fbb.CreateString(horizons::formatCalendar(b.start));
     const auto stop = fbb.CreateString(horizons::formatCalendar(b.stop));
     const auto comment = fbb.CreateString(std::string("CATALOG: ") + catalog + "\nLIFECYCLE: " + lifecycle + "\nALIASES: " + craft.aliases + "\n" +
-        craft.licence + "\n" + craft.credit + "\n" + b.label);
+        (b.spice ? std::string(kSpiceLicence) : std::string(craft.licence)) + "\n" +
+        (b.spice ? std::string(kSpiceCredit) : std::string(craft.credit)) + "\n" + b.label);
     const auto data = fbb.CreateVector(b.data);
     ephemerisDataBlockBuilder block(fbb);
     block.add_OBJECT(object); block.add_CENTER_NAME(center);
@@ -81,7 +84,9 @@ inline std::vector<uint8_t> build(const notables::Notable& craft,
     block.add_COMMENT(comment); offsets.push_back(block.Finish());
   }
   const auto data = fbb.CreateVector(offsets);
-  const auto origin = fbb.CreateString("NASA/JPL Horizons via SDN data-source/deep-space-spacecraft");
+  const bool spice = std::any_of(blocks.begin(), blocks.end(), [](const Group& b) { return b.spice; });
+  const auto origin = fbb.CreateString(spice ? "NASA/JPL Horizons and NASA/JPL NAIF SPICE via SDN data-source/deep-space-spacecraft"
+                                             : "NASA/JPL Horizons via SDN data-source/deep-space-spacecraft");
   const auto created = creation.empty() ? flatbuffers::Offset<flatbuffers::String>() : fbb.CreateString(creation);
   OEMBuilder root(fbb);
   root.add_CCSDS_OEM_VERS(3.0); root.add_ORIGINATOR(origin); root.add_EPHEMERIS_DATA_BLOCK(data);
@@ -91,7 +96,8 @@ inline std::vector<uint8_t> build(const notables::Notable& craft,
 }
 
 inline std::vector<uint8_t> groupRecords(const std::array<size_t, regime::kCatalogCount>& counts,
-                                         const std::string& retrieved) {
+                                         const std::string& retrieved,
+                                         const std::array<bool, regime::kCatalogCount>& spice = {}) {
   std::vector<uint8_t> stream;
   for (size_t i = 0; i < counts.size(); ++i) {
     if (!counts[i]) continue;
@@ -112,6 +118,8 @@ inline std::vector<uint8_t> groupRecords(const std::array<size_t, regime::kCatal
     const auto query = CreateEGPQueryDirect(b, "sdn-data-query", queryText.c_str(),
         retrieved.empty() ? nullptr : retrieved.c_str(), uint32_t(counts[i]), nullptr);
     std::vector<flatbuffers::Offset<EGPProvenance>> provenances = {provenance};
+    if (spice[i]) provenances.push_back(CreateEGPProvenanceDirect(b, "NASA/JPL NAIF", "SPICE SPK", nullptr,
+        "https://naif.jpl.nasa.gov/pub/naif/", nullptr, retrieved.c_str(), nullptr, kSpiceLicence, kSpiceCredit, nullptr));
     const std::string description = std::string(regime::kRules[i]) + "; " + std::to_string(counts[i]) +
         " objects. Sun-centered runs shorter than 3 days merge with a neighbor.";
     const auto group = CreateEGPDirect(b, id.c_str(), regime::kNames[i], description.c_str(), &tags,

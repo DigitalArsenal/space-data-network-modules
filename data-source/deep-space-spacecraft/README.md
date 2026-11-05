@@ -1,6 +1,8 @@
-# Deep-space spacecraft 0.2.0
+# Deep-space spacecraft 0.3.0
 
-42 spacecraft from NASA/JPL Horizons VECTORS, published by trajectory segment.
+A 42-craft notables roster from NASA/JPL Horizons VECTORS, plus current cislunar
+objects found by discovery (the Horizons spacecraft listing and NASA NAIF SPICE
+mission kernels), published by trajectory segment.
 Each `(NAIF id, catalog)` gets one size-prefixed SDS `$OEM`, containing only that
 regime's blocks. Lane: `OEM.fbs`, provider `deep-space-spacecraft`, source name
 from the table below. A spacecraft can occupy several lanes; Juno has both its
@@ -71,6 +73,74 @@ have no encounter events and use the same public JPL Horizons license and credit
 | Jupiter (599) | 600 s | Juno (also archive) |
 | Saturn (699) | 300 s | Cassini |
 
+## Discovery and SPICE (0.3.0)
+
+Membership of the cislunar lanes comes from listings plus the classifier, so a
+new lunar mission appears without a code change. `src/notables.hpp` keeps
+names, COSPAR/NORAD ids, events and lifecycle facts for its 42 craft.
+
+- `discover` (Bool; default true when `objects` is omitted, else false) adds the
+  Horizons listing (`COMMAND='MB'`) to the plan stage. Every negative id that is
+  not a notable, a `(simulation)` or a NEOCP entry gets one geocentric two-row
+  probe (`CENTER='500@399'`, the run's TDB day, 1 d step). No rows: not current.
+  The first row admits it when its Earth distance is >= 60,000 km and either
+  <= 500,000 km or within 120,000 km of the Moon (regime.hpp's analytic Moon).
+  Admitted craft get the usual 1900/2300 coverage probes and one rolling window:
+  Moon-centered (300 s) inside the Moon neighborhood, else Earth-centered (900 s).
+  Their name, designation and aliases come from the listing.
+- `spk_sources` (TableList of `{url, mission?, prefix?, files?, max_bytes?}`;
+  default with `discover`: the LRO PDS SPK directory (`lrorg_`, newest 1) and
+  NAIF `ARTEMIS/kernels/spk/` (`art`, newest 2, mission `artemis-ii`)). Each
+  directory index is read in C++; the newest `files` (1–8) `.bsp` entries with
+  the prefix and at most `max_bytes` (<= 32 MiB) are fetched whole.
+- Kernels are read with `files/orbit-products` `daf.hpp`/`spk_read.hpp` (types
+  2, 3, 8, 9, 13; other types are counted as `unsupported`). Kept segments:
+  negative targets, center Moon (301) or Earth (399), frame J2000. The target id
+  passes `reconcile_id` (`artemis-ii` -24 -> -1024). Each center run is
+  evaluated on the window grid of its center (multiples of 300/900 s from J2000
+  TDB) over the newest 30 days of that kernel; the later file segment wins an
+  overlap; a gap or a center change starts a new run. Runs are classified by the
+  same `classifyPhase` rules and labeled `spice <file>; <url>`.
+- A craft's SPICE rows join its Horizons rows under the same NAIF id; a Horizons
+  segment overlapping SPICE rows is dropped. An id no other source knows becomes
+  a SPICE-only craft (listing name, else `NAIF <id>`); its lifecycle is ended
+  when its rows end before the run's day.
+- A failed listing probe, index or kernel response is counted
+  (`source_errors`), never fatal. `build_oem` emits one Info `discovery` notice
+  before `catalog-counts`: `listed`, `probed`, `admitted`, `not_current`,
+  `near_earth`, `beyond_cislunar`, `kernels`, `segments`, `unsupported`,
+  `source_errors`.
+- `stage_requests` (Number, 1–300, default 300) caps requests per stage.
+- Lanes holding SPICE rows carry license
+  `LicenseRef-NASA-JPL-Horizons-PD AND LicenseRef-NASA-NAIF-PDS-Public`, the
+  NAIF credit, a NAIF `EGPProvenance` entry and per-block NAIF license/credit
+  lines in the OEM COMMENT.
+
+`tests/cislunar-sources.e2e.mjs` replays `tests/fixtures/cislunar/cassette.json.gz`
+(20 real responses recorded 2026-11-05 by a live drive of the module; URL, fetch
+time, original sha256 and trimmed-body sha256 in `provenance.json`). Trims keep
+whole listing rows or whole SPK segments (`tests/cislunar-fixtures.mjs`). It
+proves: LRO's SPICE rows in `lunar-orbit` within 5 m / 0.5 m/s of an independent
+Horizons TLIST (observed 0.54 m, 0.21 m/s); Chandrayaan-2's orbiter (-152), absent
+from the 0.2.0 roster, admitted by discovery into `lunar-orbit`; LADEE's
+Earth-centered phasing kernel in `cislunar` and its Moon-centered kernel in
+`lunar-orbit`, split at the center change. `CISLUNAR_RECORD=1` re-records live.
+
+## Sources
+
+| Source | Cislunar objects | Format, cadence | License | Used |
+| --- | --- | --- | --- | --- |
+| JPL Horizons API and `MB` listing (`ssd.jpl.nasa.gov/api/horizons.api`) | ~276 spacecraft ids: LRO, Danuri, Chandrayaan-2/3, CAPSTONE, Artemis I/II, ARTEMIS P1/P2, SLIM, EQUULEUS, Chang'e boosters | Text API; per object | NASA/JPL, no data license stated on the SSD pages; carried here as U.S. Government work (as 0.2.0) | Yes: roster, discovery |
+| NAIF LRO PDS SPK (`naif.jpl.nasa.gov/pub/naif/pds/data/lro-l-spice-6-v1.0/lrosp_1000/data/spk/`) | LRO | SPK type 13, Moon; quarterly (newest `lrorg_2026074_2026166`, posted 2026-09-03) | NAIF/PDS public release (NAIF rules: clearance CL#05-2438); credit NAIF | Yes: default |
+| NAIF `ARTEMIS/kernels/spk/` | Artemis II reconstructed trajectory (2026-04-02..10); also an OEM | SPK type 13, Earth; per mission | Cleared for public release (aareadme, 2026-07-01); credit NAIF/JSC | Yes: default |
+| NAIF PDS4 LADEE, GRAIL, CLPS (`pub/naif/pds/pds4/...`) | LADEE, GRAIL A/B; CLPS IM-1/IM-2, Blue Ghost M1, Peregrine | SPK (CLPS cruise: type 1); static | As NAIF/PDS | LADEE in E2E only; CLPS type 1 unsupported (see below) |
+| NAIF `THEMIS/kernels/spk/` | ARTEMIS P1/P2 definitive 2009–2012 | SPK, 72 MB; static | As NAIF/PDS | No: above 32 MiB, ended |
+| ESA SPICE (`spiftp.esac.esa.int/data/SPICE/`) | SMART-1, Chandrayaan-1 (ISRO SPKs) | SPK; historical | No license stated | No |
+| MPC artificial satellites (DASO) | — | Service ended ("no longer available") | No license stated | No |
+| Project Pluto / `github.com/Bill-Gray/tles` | Artemis II, Artemis I objects, THEMIS/ARTEMIS, IM-1, SLIM, Chang'e 4, Queqiao-2 | TLE for high orbits; active | No license stated | No: cite only |
+| Space-Track (`space-track.org`) | Few cislunar objects (TLE/OMM, SATCAT) | Account; continuous | Basic SSA redistributable with citation (USSPACECOM blanket approval) | No: survey only in this module |
+| JAXA DARTS, ISRO PRADAN, KARI KPDS, CNSA CLPDS | Kaguya, SLIM, EQUULEUS; Chandrayaan-2/3; Danuri; Chang'e, Queqiao | Archives; PRADAN needs login; KPDS/CLPDS unreachable | No license stated | No |
+
 `src/notables.hpp` is the identity/event/lifecycle source. Missing COSPAR/NORAD
 values stay empty/zero. Pioneer 10/11, LADEE, GRAIL-A/B, Artemis I, Venus Express,
 MESSENGER, Cassini, Gaia (**2025-03-27T00:00:00**) and LCROSS Shepherd
@@ -84,7 +154,8 @@ Configuration and retrieval:
    `sdm_piv::get_config()`. `deep_space_enabled` is a Bool; false or absent emits
    one `FlowNotice` Skipped (`disabled`) and nothing else. Enabled runs require
    a non-empty String `producer_peer_id` (`missing-producer-peer-id` otherwise).
-2. `objects` is an optional NumberList of known NAIF ids; omitted means all 42.
+2. `objects` is an optional NumberList of known NAIF ids; omitted means all 42
+   (and discovery on).
    `plan_horizons` requires one `TimerTick`. Its UTC `FIRED_MS` is floored to the
    UTC day for the internal `now_tdb` day label; the window plan uses only that
    day, not a sub-day UTC/TDB conversion. The exact milliseconds remain in state
@@ -103,9 +174,9 @@ Configuration and retrieval:
    Coverage is `[ceil_day(lo + 1 day), floor_day(hi - 1 day)]`. A window entirely
    after/before coverage uses its last/first 30 days, then clamps to coverage
    and limits. Each phase is a separate group, labeled `window <body>-centered`.
-7. `plan_horizons` queues two probes per craft (1900/2300) and emits at most 60.
-   Each of six `advance` calls absorbs its pending responses, then emits at
-   most 60 more requests. Vectors are planned only after all probes are absorbed.
+7. `plan_horizons` queues the discovery requests, then two probes per craft
+   (1900/2300), and emits at most `stage_requests`. Each of six `advance` calls
+   absorbs its pending responses, then emits at most `stage_requests` more. Vectors are planned only after all probes are absorbed.
 8. Exhausted advances increment `stage` and emit zero requests. `build_oem`
    accepts stage six or any earlier exhausted vector queue, consuming the last
    pending response batch itself. Response counts must exactly match pending.
@@ -146,7 +217,7 @@ Each vector page's `Target body name:` line must contain its id and a case-insen
   and `ITEMS` `<catalog>:<count>` for all eleven catalogs, including empty ones.
 
 Both ingest requests carry the Horizons URL, HTTP status 200, exact retrieval
-milliseconds, parser `deep-space-spacecraft` version `0.2.0`, normalized SHA-256,
+milliseconds, parser `deep-space-spacecraft` version `0.3.0`, normalized SHA-256,
 record count, schema/count vectors and one provenance attribute per object:
 `naif:<id>` = `<name>; lifecycle active|ended`. Tags carry
 `LicenseRef-NASA-JPL-Horizons-PD` and `Ephemeris: NASA/JPL-Caltech Horizons`.

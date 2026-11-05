@@ -10,10 +10,11 @@ struct Block {
   std::string label;
   std::vector<double> data;
   int center = 10;
+  bool spice = false; // rows evaluated from a NAIF mission kernel, not Horizons
 };
 inline Block slice(const Block& block, size_t first, size_t last) {
   return {block.start + int64_t(first) * block.step, block.start + int64_t(last) * block.step,
-          block.step, block.label, {block.data.begin() + first * 6, block.data.begin() + (last + 1) * 6}, block.center};
+          block.step, block.label, {block.data.begin() + first * 6, block.data.begin() + (last + 1) * 6}, block.center, block.spice};
 }
 inline const char* centerName(int id) {
   switch (id) {

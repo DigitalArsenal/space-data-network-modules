@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.261.0+1792716949507",
+  "spacedatastandards": "1.276.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -7,6 +7,7 @@
     "PLD",
     "LCC",
     "CAT",
+    "PVN",
     "PPE",
     "OEM",
     "EGP"
@@ -20,13 +21,17 @@
     "src/trajectory_plan.hpp",
     "src/packed_rows.hpp",
     "../../files/orbit-products/src/ephemeris_series.hpp",
+    "../../files/orbit-products/src/daf.hpp",
+    "../../files/orbit-products/src/spk_read.hpp",
     "src/trajectory_rows.hpp",
     "src/regime.hpp",
+    "src/discovery.hpp",
+    "src/spice.hpp",
     "src/oem_blocks.hpp",
     "../../files/orbit-products/src/sha256.hpp",
     "src/runtime_contracts.hpp",
     "src/deep_space_spacecraft.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "6ead93bac487e9f3e280d81895fe1001c3fdd89c344fdf21ce2aefe3c61da581"
+  "wasmSha256": "2d90a1236bc1687c5d15b8a1be80429e8fd2398dc70f493f1097cfb007927c38"
 }

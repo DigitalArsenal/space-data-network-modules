@@ -14,6 +14,18 @@ namespace R = sdn::runtime;
 using Json = nlohmann::json;
 constexpr const char* kProvider = "deep-space-spacecraft";
 constexpr const char* kUrl = "https://ssd.jpl.nasa.gov/api/horizons.api";
+constexpr const char* kVersion = "0.3.0";
+constexpr const char* kHorizonsLicense = "LicenseRef-NASA-JPL-Horizons-PD";
+constexpr const char* kSpiceLicense = "LicenseRef-NASA-NAIF-PDS-Public";
+constexpr const char* kSpiceCredit = "SPICE kernels: NASA/JPL NAIF and the PDS NAIF node";
+constexpr size_t kMaxSpkSources = 16, kMaxKernelFiles = 8;
+constexpr int64_t kMaxKernelBytes = 32LL * 1024 * 1024; // one HttpResponse body
+// Public NAIF directories that hold current cislunar mission kernels (README "Sources").
+struct SpkSource { const char* url; const char* mission; const char* prefix; int files; };
+inline constexpr SpkSource kDefaultSpkSources[] = {
+  {"https://naif.jpl.nasa.gov/pub/naif/pds/data/lro-l-spice-6-v1.0/lrosp_1000/data/spk/", "lro", "lrorg_", 1},
+  {"https://naif.jpl.nasa.gov/pub/naif/ARTEMIS/kernels/spk/", "artemis-ii", "art", 2},
+};
 
 inline int push(const char* port, const char* schema, const char* identifier,
                 const char* root, const uint8_t* data, size_t size) {
@@ -73,6 +85,45 @@ inline bool config(const sdm_piv::Config& in, uint64_t fired, Json& out, std::st
         rows != std::floor(rows) || rows <= 0 || rows > horizons::kMaxPageRows) return refuse("invalid-page-rows");
     out["page_rows"] = int64_t(rows);
   }
+  // Discovery and SPICE: on by default for the full run, off for an explicit `objects` selection.
+  if (in.has("discover") && in.kind("discover") != R::configValueKind_Bool) return refuse("invalid-discover");
+  out["discover"] = in.has("discover") ? in.boolean("discover") : !in.has("objects");
+  out["spk_sources"] = Json::array();
+  if (in.has("spk_sources")) {
+    if (in.kind("spk_sources") != R::configValueKind_TableList || in.tables("spk_sources") > kMaxSpkSources)
+      return refuse("invalid-spk-sources");
+    for (size_t i = 0; i < in.tables("spk_sources"); ++i) {
+      const auto table = in.table("spk_sources", i);
+      Json source = {{"files", 1}, {"max_bytes", kMaxKernelBytes}, {"prefix", ""}, {"mission", ""}};
+      if (!table.has("url") || table.kind("url") != R::configValueKind_String) return refuse("invalid-spk-sources");
+      const std::string url(table.string("url"));
+      if (url.rfind("https://", 0) != 0 || url.back() != '/' || url.find_first_of("?#\"' ") != std::string::npos)
+        return refuse("invalid-spk-sources");
+      source["url"] = url;
+      for (const char* field : {"prefix", "mission"}) if (table.has(field)) {
+        if (table.kind(field) != R::configValueKind_String) return refuse("invalid-spk-sources");
+        source[field] = std::string(table.string(field));
+      }
+      for (const char* field : {"files", "max_bytes"}) if (table.has(field)) {
+        const double value = table.number(field);
+        const double cap = std::string(field) == "files" ? double(kMaxKernelFiles) : double(kMaxKernelBytes);
+        if (table.kind(field) != R::configValueKind_Number || !std::isfinite(value) || value != std::floor(value) ||
+            value < 1 || value > cap) return refuse("invalid-spk-sources");
+        source[field] = int64_t(value);
+      }
+      out["spk_sources"].push_back(source);
+    }
+  } else if (out["discover"].get<bool>()) {
+    for (const auto& d : kDefaultSpkSources)
+      out["spk_sources"].push_back({{"url", d.url}, {"mission", d.mission}, {"prefix", d.prefix},
+          {"files", d.files}, {"max_bytes", kMaxKernelBytes}});
+  }
+  if (in.has("stage_requests")) {
+    const double cap = in.number("stage_requests");
+    if (in.kind("stage_requests") != R::configValueKind_Number || !std::isfinite(cap) || cap != std::floor(cap) ||
+        cap < 1 || cap > 300) return refuse("invalid-stage-requests");
+    out["stage_requests"] = int64_t(cap);
+  }
   if (in.has("limits")) {
     if (in.kind("limits") != R::configValueKind_TableList) return refuse("invalid-limits");
     out["limits"] = Json::object();
@@ -99,7 +150,7 @@ inline std::string port_id(std::string id) {
 using Attributes = std::vector<std::pair<std::string, std::string>>;
 inline int meta(const std::string& port, const char* schema, const char* source,
                 const std::vector<uint8_t>& stream, uint64_t count, const Json& config,
-                const Attributes& attributes, bool catalogs = false) {
+                const Attributes& attributes, bool catalogs = false, bool spice = false) {
   const auto sha = ephem::sha256_hex(stream.data(), stream.size());
   const uint64_t retrieved = config["retrieved_ms"];
   R::IngestRequestT m;
@@ -109,11 +160,12 @@ inline int meta(const std::string& port, const char* schema, const char* source,
   tags.PROVIDER_ID = kProvider; tags.SOURCE_NAME = source;
   tags.BATCH_ID = sha + (catalogs ? "@" + std::to_string(retrieved) : "");
   tags.SOURCE_URL = kUrl; tags.SOURCE_PEER = config["producer_peer_id"].get<std::string>();
-  tags.LICENSE = "LicenseRef-NASA-JPL-Horizons-PD"; tags.CITATION = "Ephemeris: NASA/JPL-Caltech Horizons";
+  tags.LICENSE = spice ? std::string(kHorizonsLicense) + " AND " + kSpiceLicense : kHorizonsLicense;
+  tags.CITATION = spice ? std::string("Ephemeris: NASA/JPL-Caltech Horizons; ") + kSpiceCredit : "Ephemeris: NASA/JPL-Caltech Horizons";
   m.PROVENANCE = std::make_unique<R::ProvenanceT>();
   auto& p = *m.PROVENANCE;
   p.SOURCE_URL = kUrl; p.HTTP_STATUS = 200; p.RETRIEVED_MS = retrieved;
-  p.PARSER = kProvider; p.PARSER_VERSION = "0.2.0"; p.NORMALIZED_SHA256 = sha;
+  p.PARSER = kProvider; p.PARSER_VERSION = kVersion; p.NORMALIZED_SHA256 = sha;
   p.NORMALIZED_COUNT = count; p.SCHEMAS = {schema}; p.SCHEMA_COUNTS = {count};
   for (const auto& entry : attributes) {
     auto a = std::make_unique<R::HeaderT>(); a->NAME = entry.first; a->VALUE = entry.second;

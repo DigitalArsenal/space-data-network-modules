@@ -9,7 +9,8 @@
 
 using Json = nlohmann::json;
 namespace {
-constexpr size_t maxFrames = 60, maxControlBytes = 64u * 1024u * 1024u;
+constexpr size_t kMaxStageRequests = 300, maxControlBytes = 64u * 1024u * 1024u, kMaxCraft = 400;
+size_t maxFrames = kMaxStageRequests; // per-stage request cap: config `stage_requests`, from the state's config
 constexpr int kMaxStages = 6;
 std::string error;
 int fail(const std::string& code) { plugin_set_error(code.c_str(), code.c_str()); return 1; }
@@ -36,12 +37,48 @@ int output(const char* port, const Json& value) {
 }
 bool integer(const Json& j, const char* key) { return j.contains(key) && j[key].is_number_integer(); }
 bool array(const Json& j, const char* key) { return j.contains(key) && j[key].is_array(); }
+// Identity: the notables row when known, else the listing's name and designation.
+// Discovered and SPICE-only craft carry Horizons' credit for identity and their
+// own blocks' credit per block.
+struct Identity {
+  const notables::Notable* known = nullptr;
+  int id = 0;
+  std::string name, aliases, cospar, horizons;
+  notables::Notable n{};
+  // Pointers into this object's own strings: build after the object stops moving.
+  const notables::Notable& notable() {
+    if (known) return *known;
+    n = {id, name.c_str(), horizons.c_str(), aliases.c_str(), cospar.c_str(), 0,
+         notables::kLicence, notables::kCredit, nullptr, 0};
+    return n;
+  }
+};
+void identity(const Json& craft, Identity& out) {
+  out.id = craft["id"].get<int>();
+  out.known = notables::find(out.id);
+  if (out.known) return;
+  out.name = craft.value("name", "NAIF " + std::to_string(out.id));
+  out.cospar = craft.value("cospar", std::string());
+  out.aliases = craft.value("aliases", std::string());
+  out.horizons = discovery::targetName(out.name);
+}
+std::string horizonsName(const Json& craft) {
+  Identity who;
+  identity(craft, who);
+  return who.notable().horizons_name;
+}
+// The latest covered time: Horizons' bound, else the end of the SPICE rows.
+double coverageEnd(const Json& craft) {
+  double hi = craft.contains("hi") ? craft["hi"].get<double>() : -1e300;
+  if (craft.contains("spice")) for (const auto& g : craft["spice"]) hi = std::max(hi, g["stop"].get<double>());
+  return hi;
+}
 std::string lifecycle(const Json& craft, const Json& config) {
-  const auto& n = *notables::find(craft["id"].get<int>());
-  if (n.lifecycle_end) return "ended";
+  const auto* n = notables::find(craft["id"].get<int>());
+  if (n && n->lifecycle_end) return "ended";
   double now;
-  if (craft.contains("hi") && config.contains("now_tdb") && config["now_tdb"].is_string() &&
-      horizons::parseCalendar(config["now_tdb"].get<std::string>(), now) && craft["hi"].get<double>() < now) return "ended";
+  if (config.contains("now_tdb") && config["now_tdb"].is_string() &&
+      horizons::parseCalendar(config["now_tdb"].get<std::string>(), now) && coverageEnd(craft) < now) return "ended";
   return "active";
 }
 bool emit(const std::vector<std::string>& requests, const Json& state) {
@@ -74,6 +111,7 @@ bool configure(const Json& config, Json& state) {
   NEED(config.is_object(), "invalid-config");
   NEED(!config.contains("access") || (config["access"].is_string() && config["access"] == "anonymous"), "unsupported-access");
   size_t pageRows = horizons::kDefaultPageRows;
+  maxFrames = config.value("stage_requests", kMaxStageRequests);
   if (config.contains("page_rows")) {
     NEED(integer(config, "page_rows") && config["page_rows"].get<int64_t>() > 0 &&
         config["page_rows"].get<int64_t>() <= int64_t(horizons::kMaxPageRows), "invalid-page-rows");
@@ -91,7 +129,9 @@ bool configure(const Json& config, Json& state) {
   }
   std::set<int> seen;
   state = {{"planned", false}, {"stage", 0}, {"config", config}, {"page_rows", pageRows}, {"craft", Json::array()},
-           {"pending", Json::array()}, {"queue", Json::array()}, {"next", 0}};
+           {"pending", Json::array()}, {"queue", Json::array()}, {"next", 0}, {"names", Json::object()},
+           {"discovery", {{"listed", 0}, {"probed", 0}, {"admitted", 0}, {"not_current", 0}, {"near_earth", 0},
+                          {"beyond_cislunar", 0}, {"kernels", 0}, {"segments", 0}, {"unsupported", 0}, {"source_errors", 0}}}};
   for (const auto& value : ids) {
     NEED(value.is_number_integer() && value.get<int64_t>() >= INT32_MIN && value.get<int64_t>() <= INT32_MAX, "unknown-object");
     const int id = value.get<int>();
@@ -119,20 +159,36 @@ bool dailyRuns(const Json& craft, std::vector<trajectory::RowRun>& runs) {
   return true;
 }
 bool validateState(const Json& s) {
+  NEED(s.is_object() && s.contains("config") && s["config"].is_object(), "invalid-state");
+  maxFrames = s["config"].value("stage_requests", kMaxStageRequests);
+  NEED(maxFrames >= 1 && maxFrames <= kMaxStageRequests, "invalid-state");
   NEED(s.is_object() && integer(s, "stage") && s["stage"].get<int64_t>() >= 0 && s["stage"].get<int64_t>() <= kMaxStages &&
       s.contains("planned") && s["planned"].is_boolean() &&
       s.contains("config") && s["config"].is_object() && integer(s, "page_rows") &&
       s["page_rows"].get<int64_t>() > 0 && s["page_rows"].get<int64_t>() <= int64_t(horizons::kMaxPageRows) &&
-      array(s, "craft") && !s["craft"].empty() && s["craft"].size() <= notables::kCraftCount && array(s, "pending") &&
+      array(s, "craft") && !s["craft"].empty() && s["craft"].size() <= kMaxCraft && array(s, "pending") &&
       s["pending"].size() <= maxFrames && array(s, "queue") && s["queue"].size() <= (kMaxStages + 1) * maxFrames &&
       integer(s, "next") && s["next"].get<int64_t>() >= int64_t(s["pending"].size()) &&
       s["next"].get<size_t>() <= s["queue"].size(), "invalid-state");
   std::set<int> ids;
   for (const auto& c : s["craft"]) {
     NEED(integer(c, "id") && c["id"].get<int64_t>() >= INT32_MIN && c["id"].get<int64_t>() <= INT32_MAX &&
-        notables::find(c["id"].get<int>()) && ids.insert(c["id"].get<int>()).second, "invalid-state");
+        (notables::find(c["id"].get<int>()) || (c.contains("name") && c["name"].is_string())) &&
+        ids.insert(c["id"].get<int>()).second, "invalid-state");
     if (c.contains("skipped")) { NEED(c["skipped"].is_string() && !c["skipped"].get<std::string>().empty(), "invalid-state"); continue; }
-    if (!s["planned"].get<bool>()) continue;
+    if (c.contains("spice")) {
+      NEED(c["spice"].is_array(), "invalid-state");
+      for (const auto& g : c["spice"]) {
+        NEED(integer(g, "start") && integer(g, "stop") && integer(g, "step") && integer(g, "center") &&
+            g.contains("data") && g["data"].is_string() && g.contains("label") && g["label"].is_string(), "invalid-state");
+        const int64_t a = g["start"], b = g["stop"], step = g["step"];
+        size_t stored = 0;
+        NEED(step > 0 && b > a && (b - a) % step == 0 && (g["center"] == 301 || g["center"] == 399) &&
+            packed_rows::validate(g["data"].get_ref<const std::string&>(), size_t((b - a) / step + 1), stored) &&
+            stored == size_t((b - a) / step + 1), "invalid-state");
+      }
+    }
+    if (!s["planned"].get<bool>() || c.value("origin", "") == "spice") continue;
     NEED(c.contains("lo") && c["lo"].is_number() && c.contains("hi") && c["hi"].is_number() &&
         std::isfinite(c["lo"].get<double>()) && std::isfinite(c["hi"].get<double>()) &&
         c["lo"].get<double>() < c["hi"].get<double>() &&
@@ -170,7 +226,7 @@ void skipCraft(Json& craft, const std::string& code) {
   craft.erase("terminal");
   error.clear();
 }
-bool readVectorPage(const Json& pending, const Json& group, int id, size_t pageRows,
+bool readVectorPage(const Json& pending, const Json& group, int id, const std::string& horizonsName, size_t pageRows,
                     const std::string& body, std::vector<horizons::State>& rows) {
   const int64_t step = pending["step"], start = pending["start"];
   const size_t count = pending["rows"], offset = pending["offset"];
@@ -179,16 +235,134 @@ bool readVectorPage(const Json& pending, const Json& group, int id, size_t pageR
       start == group["start"].get<int64_t>() + int64_t(offset) * step &&
       start + int64_t(count - 1) * step <= group["stop"].get<int64_t>(), "out-of-order-vector-page");
   NEED(horizons::parseVectors(body, start, step, count, rows, error, group["center"].get<int>()), error);
-  NEED(horizons::validateTarget(body, id, notables::find(id)->horizons_name, error, group["center"].get<int>()), error);
+  NEED(horizons::validateTarget(body, id, horizonsName, error, group["center"].get<int>()), error);
   return true;
+}
+void count(Json& state, const char* key, size_t n = 1) {
+  state["discovery"][key] = state["discovery"][key].get<size_t>() + n;
+}
+Json probe(size_t craft, bool lower) {
+  double bound;
+  horizons::parseCalendar(lower ? "1900-01-01T00:00:00" : "2300-01-01T00:00:00", bound);
+  const int64_t start = int64_t(bound);
+  return {{"craft", craft}, {"lower", lower}, {"start", start}, {"stop", start + horizons::kDay},
+          {"step", horizons::kDay}, {"center", 10}};
+}
+int findCraft(const Json& state, int id) {
+  for (size_t i = 0; i < state["craft"].size(); ++i) if (state["craft"][i]["id"] == id) return int(i);
+  return -1;
+}
+// The Horizons listing names candidates; each unknown spacecraft gets one
+// geocentric two-row probe on the run's day.
+bool absorbListing(Json& state, const std::string& body) {
+  std::vector<discovery::Listed> listed;
+  NEED(discovery::parseListing(body, listed, error), error);
+  double now;
+  NEED(horizons::parseCalendar(state["config"]["now_tdb"].get<std::string>(), now), "invalid-now");
+  count(state, "listed", listed.size());
+  for (const auto& l : listed) {
+    state["names"][std::to_string(l.id)] = {{"name", l.name}, {"cospar", l.designation}, {"aliases", l.aliases}};
+    if (notables::find(l.id) || findCraft(state, l.id) >= 0) continue;
+    count(state, "probed");
+    state["queue"].push_back({{"kind", "discover"}, {"id", l.id}, {"name", l.name}, {"cospar", l.designation},
+        {"aliases", l.aliases}, {"url", horizons::requestUrl(l.id, int64_t(now), int64_t(now) + horizons::kDay, horizons::kDay, 399)}});
+  }
+  return true;
+}
+// Admission from the probe: current (rows exist) and inside the cislunar bounds.
+bool absorbProbe(Json& state, const Json& pending, const std::string& body) {
+  std::vector<double> epochs;
+  std::vector<horizons::State> rows;
+  if (body.find("$$SOE") == std::string::npos) { count(state, "not_current"); return true; }
+  const int id = pending["id"];
+  NEED(horizons::parseVectorRows(body, epochs, rows, error, 399) &&
+      horizons::validateTarget(body, id, discovery::targetName(pending["name"]), error, 399), error);
+  const int64_t t = std::llround((epochs[0] - 2451545.0) * double(horizons::kDay));
+  const auto admission = discovery::admit(t, {rows[0][0], rows[0][1], rows[0][2]});
+  if (admission == discovery::Admission::NearEarth) { count(state, "near_earth"); return true; }
+  if (admission == discovery::Admission::Beyond) { count(state, "beyond_cislunar"); return true; }
+  NEED(state["craft"].size() < kMaxCraft, "too-many-objects");
+  const bool moon = admission == discovery::Admission::Moon;
+  count(state, "admitted");
+  const size_t index = state["craft"].size();
+  state["craft"].push_back({{"id", id}, {"origin", "horizons"}, {"name", pending["name"]}, {"cospar", pending["cospar"]},
+      {"aliases", pending["aliases"]}, {"center", moon ? 301 : 399}, {"step", moon ? discovery::kMoonStep : discovery::kEarthStep}});
+  for (bool lower : {true, false}) state["queue"].push_back(probe(index, lower));
+  return true;
+}
+bool absorbIndex(Json& state, const Json& pending, const std::string& body) {
+  std::vector<discovery::IndexEntry> entries;
+  NEED(discovery::parseIndex(body, entries, error), error);
+  const auto& source = state["config"]["spk_sources"][pending["source"].get<size_t>()];
+  for (const auto& e : discovery::newest(entries, source["prefix"], source["files"], source["max_bytes"].get<double>()))
+    state["queue"].push_back({{"kind", "kernel"}, {"source", pending["source"]}, {"file", e.name},
+        {"url", source["url"].get<std::string>() + e.name}});
+  return true;
+}
+// A kernel's rows join the craft of the same (reconciled) NAIF id; a new id
+// becomes a SPICE-only craft named from the listing when Horizons lists it.
+bool absorbKernel(Json& state, const Json& pending, const uint8_t* bytes, size_t size) {
+  const auto& source = state["config"]["spk_sources"][pending["source"].get<size_t>()];
+  std::map<int, std::vector<spice::Run>> runs;
+  spice::Stats stats;
+  NEED(spice::read(bytes, size, source["mission"], runs, stats, error), error);
+  count(state, "kernels"); count(state, "segments", stats.segments); count(state, "unsupported", stats.unsupported);
+  for (auto& [id, list] : runs) {
+    if (list.empty()) continue;
+    int index = findCraft(state, id);
+    if (index < 0) {
+      NEED(state["craft"].size() < kMaxCraft, "too-many-objects");
+      const std::string key = std::to_string(id);
+      Json craft = {{"id", id}, {"origin", "spice"}};
+      if (!notables::find(id)) {
+        const Json names = state["names"].contains(key) ? state["names"][key] : Json::object();
+        craft["name"] = names.value("name", "NAIF " + key);
+        craft["cospar"] = names.value("cospar", std::string());
+        craft["aliases"] = names.value("aliases", std::string());
+      }
+      index = int(state["craft"].size());
+      state["craft"].push_back(craft);
+    }
+    auto& craft = state["craft"][size_t(index)];
+    if (!craft.contains("spice")) craft["spice"] = Json::array();
+    for (const auto& run : list) {
+      std::string data;
+      for (const auto& row : run.rows) packed_rows::append(data, row);
+      craft["spice"].push_back({{"center", run.center}, {"start", run.start}, {"stop", run.stop}, {"step", run.step},
+          {"label", "spice " + pending["file"].get<std::string>()}, {"url", pending["url"]}, {"data", data}});
+    }
+  }
+  return true;
+}
+// Discovery responses: a source that fails is counted, never fatal to the Horizons catalogs.
+bool absorbDiscovery(Json& state, const Json& pending, const plugin_input_frame_t* frame) {
+  NEED(frame && frame->payload && frame->payload_length >= 8 && frame->payload_length <= 33u * 1024u * 1024u, "invalid-http-response");
+  flatbuffers::Verifier v(frame->payload, frame->payload_length, 64, 1000000, false);
+  NEED(sdn::runtime::VerifyHttpResponseBuffer(v), "invalid-http-response");
+  const auto* r = sdn::runtime::GetHttpResponse(frame->payload);
+  const std::string kind = pending["kind"];
+  if ((r->ERROR() && r->ERROR()->size()) || r->STATUS() != 200 || !r->BODY() || !r->BODY()->size()) {
+    count(state, "source_errors"); return true;
+  }
+  const auto* data = r->BODY()->data();
+  const std::string body = kind == "kernel" ? std::string() : std::string(reinterpret_cast<const char*>(data), r->BODY()->size());
+  bool ok = kind == "listing" ? absorbListing(state, body) : kind == "discover" ? absorbProbe(state, pending, body) :
+      kind == "index" ? absorbIndex(state, pending, body) : kind == "kernel" ? absorbKernel(state, pending, data, r->BODY()->size()) :
+      (error = "invalid-state", false);
+  if (!ok && kind != "listing") { count(state, "source_errors"); error.clear(); ok = true; }
+  return ok;
 }
 bool consume(Json& state) {
   const auto rs = frames("response");
   NEED(rs.size() == state["pending"].size(), "response-count-mismatch");
   for (size_t i = 0; i < rs.size(); ++i) {
+    const auto& pending = state["pending"][i];
+    if (pending.contains("kind")) {
+      NEED(pending["kind"].is_string() && absorbDiscovery(state, pending, rs[i]), error.empty() ? "invalid-state" : error);
+      continue;
+    }
     const auto* response = spacecraft_wire::response_on(rs[i], error);
     NEED(response, error);
-    const auto& pending = state["pending"][i];
     NEED(integer(pending, "craft") && pending["craft"].get<size_t>() < state["craft"].size(), "invalid-state");
     auto& craft = state["craft"][pending["craft"].get<size_t>()];
     if (pending.contains("lower")) NEED(pending["lower"].is_boolean(), "invalid-state");
@@ -210,7 +384,7 @@ bool consume(Json& state) {
       auto& group = craft["groups"][groupIndex];
       const size_t count = pending["rows"], offset = pending["offset"];
       std::vector<horizons::State> rows;
-      if (!readVectorPage(pending, group, craft["id"], state["page_rows"], body, rows)) {
+      if (!readVectorPage(pending, group, craft["id"], horizonsName(craft), state["page_rows"], body, rows)) {
         skipCraft(craft, error);
         continue;
       }
@@ -240,9 +414,21 @@ bool planVectors(Json& state) {
   for (size_t i = 0; i < state["craft"].size(); ++i) {
     auto& craft = state["craft"][i];
     if (craft.contains("skipped")) continue;
-    NEED(craft.contains("lo") && craft["lo"].is_number() && craft.contains("hi") && craft["hi"].is_number(), "missing-coverage-bound");
+    NEED(craft.value("origin", "") == "spice" ||
+        (craft.contains("lo") && craft["lo"].is_number() && craft.contains("hi") && craft["hi"].is_number()), "missing-coverage-bound");
     const int id = craft["id"];
-    const auto& n = *notables::find(id);
+    craft["terminal"] = false;
+    craft["groups"] = Json::array();
+    craft["archive_groups"] = 0;
+    if (craft.value("origin", "") == "spice") continue; // rows from SPICE only
+    // A discovered craft is one rolling window centered where its probe found it.
+    const std::string origin = craft.value("origin", "");
+    const notables::Phase discovered[] = {{craft.value("center", 399) == 301 ? "window Moon-centered" : "window Earth-centered",
+        craft.value("center", 399), craft.value("step", int64_t(900)), 2, 28}};
+    notables::Notable n{};
+    if (origin == "horizons") {
+      n.id = id; n.phases = discovered; n.phase_count = 1; n.kind = notables::Kind::Window;
+    } else n = *notables::find(id);
     bool hasStart, hasStop; int64_t start = 0, stop = 0;
     NEED(limit(state["config"], id, "start", hasStart, start) && limit(state["config"], id, "stop", hasStop, stop), error);
     Json pages = Json::array();
@@ -250,8 +436,6 @@ bool planVectors(Json& state) {
       for (const auto& p : plan.pages) pages.push_back({{"craft", i}, {"group", p.group + offset},
           {"center", center}, {"start", p.start}, {"stop", p.stop}, {"step", p.step}, {"rows", p.rows}, {"offset", p.offset}});
     };
-    craft["terminal"] = false;
-    craft["groups"] = Json::array();
     if (n.kind == notables::Kind::Archive) {
       trajectory::Plan plan;
       if (!trajectory::build(n, craft["lo"].get<double>(), craft["hi"].get<double>(),
@@ -296,6 +480,14 @@ bool nextRequests(Json& state, std::vector<std::string>& requests) {
   requests.clear();
   while (next < state["queue"].size()) {
     const auto& p = state["queue"][next];
+    if (p.contains("kind")) {
+      if (requests.size() == maxFrames) break;
+      NEED(p.contains("url") && p["url"].is_string(), "invalid-state");
+      requests.push_back(p["url"]);
+      state["pending"].push_back(p);
+      ++next;
+      continue;
+    }
     NEED(integer(p, "craft") && p["craft"].get<size_t>() < state["craft"].size() && integer(p, "start") &&
         integer(p, "stop") && integer(p, "step") && integer(p, "center") &&
         p["center"].get<int64_t>() >= 0 && p["center"].get<int64_t>() <= 699, "invalid-state");
@@ -326,16 +518,13 @@ extern "C" int plan_horizons() {
   Json config, state;
   CHECK(spacecraft_wire::config(hostConfig, fired, config, error) && configure(config, state), error);
   std::vector<std::string> requests;
-  double lo, hi;
-  CHECK(horizons::parseCalendar("1900-01-01T00:00:00", lo) &&
-        horizons::parseCalendar("2300-01-01T00:00:00", hi), "invalid-probe-time");
-  for (size_t i = 0; i < state["craft"].size(); ++i) {
-    for (bool lower : {true, false}) {
-      const int64_t start = int64_t(lower ? lo : hi);
-      state["queue"].push_back({{"craft", i}, {"lower", lower}, {"start", start},
-          {"stop", start + horizons::kDay}, {"step", horizons::kDay}, {"center", 10}});
-    }
-  }
+  // Discovery first: the Horizons listing, then each NAIF kernel directory.
+  if (state["config"].value("discover", false))
+    state["queue"].push_back({{"kind", "listing"}, {"url", discovery::kListingUrl}});
+  for (size_t i = 0; i < state["config"]["spk_sources"].size(); ++i)
+    state["queue"].push_back({{"kind", "index"}, {"source", i}, {"url", state["config"]["spk_sources"][i]["url"]}});
+  for (size_t i = 0; i < state["craft"].size(); ++i)
+    for (bool lower : {true, false}) state["queue"].push_back(probe(i, lower));
   CHECK(nextRequests(state, requests) && emit(requests, state), error);
   return 0;
 }
@@ -369,10 +558,11 @@ extern "C" int build_oem() {
   if (creation.substr(creation.size() - 7) == ".000000") creation.resize(creation.size() - 7);
   creation += "Z";
   // Validate and construct every craft before emitting any records.
-  struct Record { regime::Catalog catalog; int id; std::string life; std::vector<uint8_t> bytes; };
+  struct Record { regime::Catalog catalog; int id; std::string name, life; bool spice; std::vector<uint8_t> bytes; };
   std::vector<Record> records;
   Json skipped = Json::array();
   std::array<size_t, regime::kCatalogCount> counts{};
+  std::array<bool, regime::kCatalogCount> spiceCatalogs{};
   for (const auto& c : state["craft"]) {
     if (c.contains("skipped")) {
       skipped.push_back({{"naif_id", c["id"]}, {"skipped", c["skipped"]}});
@@ -410,23 +600,47 @@ extern "C" int build_oem() {
       auto phase = regime::classifyPhase(groups[i]);
       classified.insert(classified.end(), std::make_move_iterator(phase.begin()), std::make_move_iterator(phase.end()));
     }
-    const auto& n = *notables::find(c["id"].get<int>());
+    // SPICE rows: the same classifier per run; definitive kernel rows replace
+    // any Horizons segment they overlap.
+    if (c.contains("spice")) {
+      std::vector<regime::Segment> spiceSegments;
+      for (const auto& g : c["spice"]) {
+        std::vector<double> data;
+        CHECK(packed_rows::decode(g["data"].get_ref<const std::string&>(), data), "invalid-state");
+        trajectory::Block block{g["start"], g["stop"], g["step"],
+            g["label"].get<std::string>() + "; " + g["url"].get<std::string>(), std::move(data), g["center"], true};
+        auto phase = regime::classifyPhase(block);
+        spiceSegments.insert(spiceSegments.end(), std::make_move_iterator(phase.begin()), std::make_move_iterator(phase.end()));
+      }
+      classified.erase(std::remove_if(classified.begin(), classified.end(), [&](const regime::Segment& h) {
+        return std::any_of(spiceSegments.begin(), spiceSegments.end(), [&](const regime::Segment& k) {
+          return h.block.start <= k.block.stop && k.block.start <= h.block.stop;
+        });
+      }), classified.end());
+      classified.insert(classified.end(), std::make_move_iterator(spiceSegments.begin()), std::make_move_iterator(spiceSegments.end()));
+    }
+    Identity who;
+    identity(c, who);
+    const auto& n = who.notable();
     const std::string life = lifecycle(c, state["config"]);
-    const std::string lifeComment = life + " " + (n.lifecycle_end ? n.lifecycle_end : horizons::formatCalendar(c["hi"].get<double>()));
+    const std::string lifeComment = life + " " + (n.lifecycle_end ? n.lifecycle_end : horizons::formatCalendar(coverageEnd(c)));
     for (size_t i = 0; i < regime::kCatalogCount; ++i) {
       std::vector<spacecraft_oem::Group> selected;
       for (auto& segment : classified) if (size_t(segment.catalog) == i) selected.push_back(std::move(segment.block));
       if (selected.empty()) continue;
+      std::stable_sort(selected.begin(), selected.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
+      const bool spice = std::any_of(selected.begin(), selected.end(), [](const auto& b) { return b.spice; });
       auto bytes = spacecraft_oem::build(n, selected, creation, regime::kIds[i], lifeComment);
-      records.push_back({regime::Catalog(i), n.id, life, std::move(bytes)});
+      records.push_back({regime::Catalog(i), n.id, n.name, life, spice, std::move(bytes)});
       ++counts[i];
+      spiceCatalogs[i] = spiceCatalogs[i] || spice;
     }
   }
   // Catalog enum order, then descending NAIF id; independent of selection order.
   std::sort(records.begin(), records.end(), [](const Record& a, const Record& b) {
     return a.catalog != b.catalog ? a.catalog < b.catalog : a.id > b.id;
   });
-  const auto groups = spacecraft_oem::groupRecords(counts, retrieved);
+  const auto groups = spacecraft_oem::groupRecords(counts, retrieved, spiceCatalogs);
   spacecraft_wire::Attributes allAttributes;
   std::set<int> attributed;
   std::vector<std::string> catalogCounts;
@@ -439,17 +653,27 @@ extern "C" int build_oem() {
     spacecraft_wire::Attributes attributes;
     for (const auto& r : records) if (size_t(r.catalog) == i) {
       stream.insert(stream.end(), r.bytes.begin(), r.bytes.end());
-      const auto& n = *notables::find(r.id);
-      const auto attribute = std::make_pair("naif:" + std::to_string(r.id), std::string(n.name) + "; lifecycle " + r.life);
+      const auto attribute = std::make_pair("naif:" + std::to_string(r.id), r.name + "; lifecycle " + r.life +
+          (r.spice ? "; source SPICE and Horizons" : ""));
       attributes.push_back(attribute);
       if (attributed.insert(r.id).second) allAttributes.push_back(attribute);
     }
     const std::string port = spacecraft_wire::port_id(regime::kIds[i]);
     CHECK(spacecraft_wire::push((port + "_records").c_str(), "OEM.fbs", "$OEM", "OEM", stream.data(), stream.size()) >= 0 &&
-        spacecraft_wire::meta(port + "_meta", "OEM.fbs", regime::kIds[i], stream, counts[i], config, attributes) >= 0, "output-failed");
+        spacecraft_wire::meta(port + "_meta", "OEM.fbs", regime::kIds[i], stream, counts[i], config, attributes,
+            false, spiceCatalogs[i]) >= 0, "output-failed");
   }
   CHECK(spacecraft_wire::push("catalogs_records", "EGP.fbs", "$EGP", "EGP", groups.data(), groups.size()) >= 0 &&
-      spacecraft_wire::meta("catalogs_meta", "EGP.fbs", "catalogs", groups, catalogCount, config, allAttributes, true) >= 0, "output-failed");
+      spacecraft_wire::meta("catalogs_meta", "EGP.fbs", "catalogs", groups, catalogCount, config, allAttributes, true,
+          std::any_of(spiceCatalogs.begin(), spiceCatalogs.end(), [](bool b) { return b; })) >= 0, "output-failed");
+  // Discovery and SPICE counts, when either ran.
+  if (state.contains("discovery") && (config.value("discover", false) ||
+      (config.contains("spk_sources") && !config["spk_sources"].empty()))) {
+    std::vector<std::string> items;
+    for (const auto& [key, value] : state["discovery"].items()) items.push_back(key + ":" + std::to_string(value.get<size_t>()));
+    CHECK(spacecraft_wire::notice("notice", sdn::runtime::flowNoticeKind_Info, "discovery",
+        state["discovery"]["admitted"].get<size_t>(), items, config["retrieved_ms"]) >= 0, "output-failed");
+  }
   for (const auto& c : skipped) CHECK(spacecraft_wire::notice("notice", sdn::runtime::flowNoticeKind_Missing,
       c["skipped"], 1, {std::to_string(c["naif_id"].get<int>())}, config["retrieved_ms"]) >= 0, "output-failed");
   CHECK(spacecraft_wire::notice("notice", sdn::runtime::flowNoticeKind_Info, "catalog-counts", records.size(),

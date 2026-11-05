@@ -32,8 +32,8 @@ export function deepSpaceFlow({ node, edge: composeEdge, http, storage, packageD
   return {
     flow: {
       programId: "com.digitalarsenal.flows.deep-space-catalogs-ingest",
-      name: "Beyond-Earth spacecraft catalogs (Horizons)", version: "0.2.0", engineLinkage: "bridge",
-      description: "Typed TimerTick, HTTP and ingest contracts retrieve NASA/JPL Horizons ephemerides into eleven per-regime OEM catalogs and their EGP query groups. Source-owned provenance and current-batch metadata; disabled cycles emit a Skipped notice.",
+      name: "Beyond-Earth spacecraft catalogs (Horizons and SPICE)", version: "0.3.0", engineLinkage: "bridge",
+      description: "Typed TimerTick, HTTP and ingest contracts retrieve NASA/JPL Horizons ephemerides, Horizons-listing discoveries and NASA NAIF SPICE mission kernels into eleven per-regime OEM catalogs and their EGP query groups. Source-owned provenance and current-batch metadata; disabled cycles emit a Skipped notice.",
       nodes, edges,
       triggers: [{ triggerId: "daily", kind: "timer", source: "host-cron", defaultIntervalMs: 604800000,
         description: "Refresh Horizons predictions weekly, including catalog windows and the heliocentric archive." }],
