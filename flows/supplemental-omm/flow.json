@@ -1,7 +1,7 @@
 {
   "programId": "org.sdn.flows.od-supplemental-omm",
   "name": "Supplemental OMM Orbit Determination",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Hourly supplemental orbit determination on typed contracts 1.0 (FlatBuffers only, no JSON and no FSB/FSO transport). A host-cron TimerTick starts five source modules - data-source/spacex-starlink-source (plan -> select_objects -> emit), glonass-source, intelsat-source and cpf-source (request -> select_file -> emit), iss-source (request -> emit) - whose fetches are hostcap/http-request nodes (HttpRequest / HttpResponse, the job in CONTEXT where a source needs one); each source's ephemerides reach the flow's OD node as SDS $OEM, one object per frame, on the port of its provider. The OD node fits each with the frozen complete-arc OD core (its epoch-specific SGP4 $OMM, and as $OCM its state and covariance and its SGP4 set with FIT_STATISTICS) and SGP4-XP (an $OCM with FIT_STATISTICS per full-day window), Earth-fixed position-only sources included, one object an invocation; each standard's record stream goes with its IngestRequest to its own hostcap/storage-ingest node, and each stored batch's IngestResult to the OD node's publish_request, which POSTs it to omm_publish_url through hostcap/http-request (only when set). The status node turns the $OEM frames, the Starlink source's and the OD node's FlowNotices and the IngestResults into the $DSS snapshots of the APP status board's routes. Egress: result (IngestResult), notice (FlowNotice: Starlink objects unavailable, OD fitted / unfittable / fit-failed), publication (HttpResponse). Every node is an independently signed isomorphic child of the release bundle (scripts/release.mjs).",
   "nodes": [
     {

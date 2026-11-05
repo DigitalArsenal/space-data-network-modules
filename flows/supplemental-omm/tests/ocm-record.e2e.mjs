@@ -11,12 +11,18 @@
 //   core's $OMM, WEATHER_SOURCE NONE, FIT_STATISTICS: FIT_RMS_KM and ITERATIONS equal to the previous $OBD's), and as
 //   the core's SGP4 $OMM (the previous bytes) whose COMMENT holds no number;
 // - no 'obd' or 'obd_meta' output, no OBD port in the manifest; assertNoUserDefined on every $OMM and $OCM.
+// E2E (task modules-supplemental-omm-od-node-sgp4-xp-0-2-2-20261105): the node rebuilt on propagator/sgp4-xp 0.2.2,
+// which flies an SGP4-XP set's times in chains of new library satellites, answers what the 2.1.1 node over 0.2.1 (a
+// new satellite per time) answered: on every input of the node's tests (tests/lib/answers.mjs) every record bit for
+// bit but the version in PROVENANCE.PRODUCER, which names this node's version and propagator/sgp4-xp's, and the same
+// notices (tests/fixtures/answers-2-1-1.json); each input's fit timed, median of three, against the record's.
 // JS only moves bytes and compares numbers the node produced.
 //   cd flows/supplemental-omm && node tests/ocm-record.e2e.mjs
 import fs from "node:fs";
 import path from "node:path";
 import { assertNoUserDefined } from "../../../common/tests/no-user-defined.mjs";
-import { packageRoot, splitRecords } from "./lib/flow.mjs";
+import { answerInputs, answersOf, median } from "./lib/answers.mjs";
+import { modulesRoot, packageRoot, splitRecords } from "./lib/flow.mjs";
 import { fit, odNode } from "./lib/nodes.mjs";
 import { decodeIngestRequest, decodeObdRecord, decodeOcmRecord, decodeOmmRecord } from "./lib/sds.mjs";
 
@@ -89,8 +95,35 @@ xpSets.forEach((o, k) => {
 console.log(`starlink: ${out.omm.length} SGP4 $OMM (previous bytes), ${states.length} state $OCM (previous bytes), ${sgp4Sets.length} SGP4 $OCM, ${xpSets.length} SGP4-XP $OCM; ${bits} values bit for bit; outputs ${[...new Set(ports)].join(", ")}`);
 await node.destroy();
 
+// every record of every input of the node's tests against the 2.1.1 node's
+const recorded = JSON.parse(fs.readFileSync(path.join(packageRoot, "tests/fixtures/answers-2-1-1.json"), "utf8"));
+const engineVersion = JSON.parse(fs.readFileSync(path.join(modulesRoot, "propagator/sgp4-xp/package.json"), "utf8")).version;
+const inputs = await answerInputs();
+check(JSON.stringify(Object.keys(inputs)) === JSON.stringify(recorded.inputs.map((i) => i.name)), `inputs ${Object.keys(inputs).join(", ")}`);
+let records = 0, sameRecords = 0, xpRecords = 0, sameXp = 0;
+const times = [];
+for (const before of recorded.inputs) {
+  const now = await answersOf(inputs[before.name]);
+  check(now.records.length === before.records.length && now.invocations === before.invocations, `${before.name}: ${now.records.length} records in ${now.invocations} invocations against ${before.records.length} in ${before.invocations}`);
+  before.records.forEach((r, i) => {
+    const same = now.records[i]?.kind === r.kind && now.records[i]?.standard === r.standard && now.records[i]?.sha256 === r.sha256;
+    records += 1;
+    sameRecords += same ? 1 : 0;
+    if (r.kind === "ocm-sgp4xp") { xpRecords += 1; sameXp += same ? 1 : 0; }
+    check(same, `${before.name} record ${i + 1} (${r.kind}): not the 2.1.1 node's`);
+  });
+  check(JSON.stringify(now.notices) === JSON.stringify(before.notices), `${before.name}: notices ${now.notices.join("; ")}`);
+  check(now.versions.node.every((v) => v === manifest.version) && now.versions.engine.every((v) => v === engineVersion) && (before.versions.engine.length === 0) === (now.versions.engine.length === 0),
+    `${before.name}: PRODUCER names node ${now.versions.node} and propagator/sgp4-xp ${now.versions.engine}, not ${manifest.version} and ${engineVersion}`);
+  times.push(`${before.name} ${median(before.ms)} -> ${median(now.ms)}`);
+}
+check(manifest.version !== recorded.node.version, `the node under test is ${manifest.version}, the recorded one's version`);
+console.log(`answers: ${sameRecords} of ${records} records of ${recorded.inputs.length} inputs bit for bit with the ${recorded.node.version} node's (${sameXp} of ${xpRecords} SGP4-XP sets), PRODUCER naming node ${manifest.version} over propagator/sgp4-xp ${engineVersion}`);
+console.log(`fit ms, median of 3, ${recorded.node.version} -> ${manifest.version}: ${times.join("; ")}`);
+
 if (failures.length) {
   console.error(`OD NODE OCM RECORD: FAIL (${failures.length})\n  ${failures.join("\n  ")}`);
   process.exit(1);
 }
 console.log("OD NODE OCM RECORD: PASS");
+process.exit(0);
