@@ -1,0 +1,22 @@
+{
+  "spacedatastandards": "1.278.0",
+  "sdsFamilies": [
+    "OPP",
+    "LKS",
+    "RFB",
+    "SCV",
+    "SNR",
+    "PVN"
+  ],
+  "commonHeaders": [
+    "civil_time.hpp"
+  ],
+  "sources": [
+    "../../files/orbit-products/src/sha256.hpp",
+    "src/roster.hpp",
+    "src/text.hpp",
+    "src/sensor_definitions.cpp"
+  ],
+  "threadModel": "wasi-sequential",
+  "wasmSha256": "b480d913e590d810f59e1acce02f750e236e673fd45db7e52ba2d0a414b4e8f7"
+}

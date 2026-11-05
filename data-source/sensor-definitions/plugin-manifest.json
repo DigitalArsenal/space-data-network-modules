@@ -1,0 +1,267 @@
+{
+  "pluginId": "com.digitalarsenal.data-source.sensor-definitions",
+  "name": "Real-world sensor definitions",
+  "version": "0.1.0",
+  "description": "Publishes real-world sensors as SDS $SNR sensor definitions, one record per sensor on a platform, each value read from a named public source and carrying its own provenance: the WMO OSCAR/Space instrument channel tables and satellite listings (Earth-observation and weather imagers, radiometers, sounders and SARs of satellites in the CelesTrak SATCAT, joined by NORAD_CAT_ID), and quoted facts about ground space-surveillance sensors. A value with no source is absent, never guessed. plan_sources turns a timer tick into the HTTP requests; build_sensors reads the responses in C++/WASM. The host executes HTTP requests.",
+  "pluginFamily": "data_source",
+  "capabilities": [],
+  "externalInterfaces": [],
+  "invokeSurfaces": [
+    "direct",
+    "command"
+  ],
+  "runtimeTargets": [
+    "browser",
+    "wasmedge"
+  ],
+  "sequentialJustification": {
+    "kind": "pure-transform",
+    "detail": "Bounded deterministic planning of public GETs, parsing of the responses and construction of sensor records; no threads, no network imports, no hostcalls."
+  },
+  "schemasUsed": [
+    {
+      "schemaName": "TimerTick.fbs",
+      "fileIdentifier": "TICK",
+      "rootTypeName": "TimerTick",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpRequest.fbs",
+      "fileIdentifier": "HREQ",
+      "rootTypeName": "HttpRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "HttpResponse.fbs",
+      "fileIdentifier": "HRSP",
+      "rootTypeName": "HttpResponse",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "FlowNotice.fbs",
+      "fileIdentifier": "FNTC",
+      "rootTypeName": "FlowNotice",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "IngestRequest.fbs",
+      "fileIdentifier": "INGQ",
+      "rootTypeName": "IngestRequest",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "SNR.fbs",
+      "fileIdentifier": "$SNR",
+      "rootTypeName": "SNR",
+      "wireFormat": "flatbuffer"
+    },
+    {
+      "schemaName": "PVN.fbs",
+      "fileIdentifier": "$PVN",
+      "rootTypeName": "PVN",
+      "wireFormat": "flatbuffer"
+    }
+  ],
+  "methods": [
+    {
+      "methodId": "plan_sources",
+      "displayName": "Plan the source requests",
+      "inputPorts": [
+        {
+          "portId": "tick",
+          "acceptedTypeSets": [
+            {
+              "setId": "tick-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "TimerTick.fbs",
+                  "fileIdentifier": "TICK",
+                  "rootTypeName": "TimerTick",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 1,
+          "required": true,
+          "description": "Timer trigger; the roster is compiled into the module, there is no other input."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "request",
+          "acceptedTypeSets": [
+            {
+              "setId": "request-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpRequest.fbs",
+                  "fileIdentifier": "HREQ",
+                  "rootTypeName": "HttpRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 300,
+          "required": true,
+          "description": "Plain GETs: the OSCAR satellite and instrument documents of the roster, the CelesTrak SATCAT, and the MediaWiki extracts of the ground-sensor pages, each once, in roster order."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    },
+    {
+      "methodId": "build_sensors",
+      "displayName": "Build $SNR sensor definitions",
+      "inputPorts": [
+        {
+          "portId": "response",
+          "acceptedTypeSets": [
+            {
+              "setId": "response-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "HttpResponse.fbs",
+                  "fileIdentifier": "HRSP",
+                  "rootTypeName": "HttpResponse",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 300,
+          "required": true,
+          "description": "The HttpResponse (HRSP) of every planned request, in any order; each is matched to the roster by its URL. A failed or non-200 response removes only the sensors that need it, and is counted."
+        }
+      ],
+      "outputPorts": [
+        {
+          "portId": "space_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "space_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "SNR.fbs",
+                  "fileIdentifier": "$SNR",
+                  "rootTypeName": "SNR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed $SNR records of satellite payloads (lane space), in platform order."
+        },
+        {
+          "portId": "space_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "space_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with space_records."
+        },
+        {
+          "portId": "ground_records",
+          "acceptedTypeSets": [
+            {
+              "setId": "ground_records-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "SNR.fbs",
+                  "fileIdentifier": "$SNR",
+                  "rootTypeName": "SNR",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "All size-prefixed $SNR records of ground sensors (lane ground)."
+        },
+        {
+          "portId": "ground_meta",
+          "acceptedTypeSets": [
+            {
+              "setId": "ground_meta-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "IngestRequest.fbs",
+                  "fileIdentifier": "INGQ",
+                  "rootTypeName": "IngestRequest",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "Current-batch metadata paired with ground_records."
+        },
+        {
+          "portId": "provenance",
+          "acceptedTypeSets": [
+            {
+              "setId": "provenance-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "PVN.fbs",
+                  "fileIdentifier": "$PVN",
+                  "rootTypeName": "PVN",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 64,
+          "required": false,
+          "description": "One $PVN per source document read."
+        },
+        {
+          "portId": "notice",
+          "acceptedTypeSets": [
+            {
+              "setId": "notice-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "FlowNotice.fbs",
+                  "fileIdentifier": "FNTC",
+                  "rootTypeName": "FlowNotice",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 1,
+          "maxStreams": 8,
+          "required": true,
+          "description": "One Info FlowNotice with the counts per type and source, and a Missing notice per refused platform, instrument or claim."
+        }
+      ],
+      "maxBatch": 1,
+      "drainPolicy": "single-shot"
+    }
+  ]
+}
