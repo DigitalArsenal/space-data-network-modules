@@ -50,6 +50,7 @@ const PINNED = {
 /** Third-party paths whose license basis prints on every run. A NOTICE row with no license text must be listed. */
 const NOTES = {
   'third_party/hwm14/': 'public domain: U.S. Government work (17 U.S.C. § 105), released by NRL; see README.md',
+  'analysis/conjunction-assessment/src/cpp/third_party/lebedev/': 'terms not stated in the vendored files; no license is asserted (LicenseRef-Unresolved) until the owner decides; see the NOTICE row',
 };
 
 /** What each license's text must say, on text with comment marks and line breaks removed. */
@@ -57,11 +58,15 @@ const TERMS = {
   'Apache-2.0': /Apache License Version 2\.0, January 2004/,
   'MIT': /Permission is hereby granted, free of charge, to any person obtaining a copy/,
   'BSD-3-Clause': /Redistribution and use in source and binary forms.*Neither the name of/,
+  // Clause 2 then the disclaimer: a three-clause text, whose no-endorsement clause sits between them, does not carry these terms.
+  'BSD-2-Clause': /Redistribution and use in source and binary forms.*Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and\/or other materials provided with the distribution\. THIS SOFTWARE IS PROVIDED BY/,
   'ISC': /Permission to use, copy, modify, and\/or distribute this software for any purpose with or without fee is hereby granted/,
   'Unlicense': /This is free and unencumbered software released into the public domain/,
   'LicenseRef-USSF-SGP4': /OPEN SOURCE AGREEMENT for SGP4/,
   'LicenseRef-Public-Domain': /disclaims copyright|public domain/i,
   'LicenseRef-US-Government-Work': /17 U\.S\.C\. (?:§ )?105/,
+  // No license is asserted: no text carries it, so a row with it has none in tree and is listed in NOTES.
+  'LicenseRef-Unresolved': /(?!)/,
 };
 
 const failures = [];

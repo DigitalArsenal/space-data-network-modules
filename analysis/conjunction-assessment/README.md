@@ -570,4 +570,4 @@ pair evaluation is incomplete, and lists the objects the propagator refuses on
 
 ## License
 
-MIT.
+Apache-2.0.
