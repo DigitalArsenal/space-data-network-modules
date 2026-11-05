@@ -104,7 +104,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   units (sigma of the log times the term under LOG_NORMAL), is at most one unit of its last digit is not stepped. The
   `$OBD` BALLISTIC_COEFF_MODEL and AGOM_MODEL state each prior's form and values as used; under LOG_NORMAL with a
   covariance, the posterior sigma of the log, and "covariance prior-limited" when it passes 0.5 (the term effectively
-  unobserved). The raw export `sdnap_fit` takes the 56-byte fit options with drag_log and agom_log.
+  unobserved). The raw export `sdnap_fit` takes the 56-byte fit options with drag_log and agom_log, and fit_bdot,
+  fit_thrust and fit_outgassing, refused `parameter-not-modeled:<NAME>` (SPEC 17.2; `sdnap_fit_refusal`).
 - Known limit of BTERM's default start (study 2026-10-31): the fit starts at the prior's median, 0.01 m^2/kg, and an
   object whose B lies far below it can stop in a local minimum. On noise-free synthetic tracks (a day of an SGP4XP set's
   own states at 60 s, e 0.0003, i 51.6 deg, AGOM 0.01 m^2/kg, n 15.5, 15.2 and 14.9 rev/day for 400, 500 and 600 km,
@@ -119,6 +120,16 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   `dist/LICENSES/ERFA.txt`); NRLMSISE-00, the public-domain C port in `third_party/nrlmsise00` (the files at modules
   fe5e4ca0; propagator/ffm, analysis/density-calibration and analysis/od compile the same files, and a change there
   is taken here by updating the pin).
+
+## Products (SPEC 17; `test/products-parameters.e2e.mjs`)
+
+- Covariance rows: the state, then DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS,
+  IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION when solved, in that order; COV_UNITS one per row. A record's rows the
+  theories have no sensitivity to fly as constant parameters.
+- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the 1 km a priori sigma) and SEDR, and one `$ODR` per fit on
+  `residuals`: a row per input state (geocentric distance observed and computed, weight, accepted).
+- `sdnap_covariance_full_at` gives the covariance of the state and the parameter rows per time; no sensitivities are
+  exposed, so P8 is refused.
 
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 

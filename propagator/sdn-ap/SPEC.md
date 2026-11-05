@@ -2450,6 +2450,80 @@ uniform forecast-accuracy improvement. All windows and coverage exclusions are p
 stored in `test/results/geo-step-convergence.json`.
 
 
+## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
+
+What `fit` and the covariance exports hand to the product writers P1 to P9 (`spacedatastandards.org` `lib/js/PROD`):
+one `$OCM` per fit, its `$ODR` of residuals, and the covariance per epoch. `test/products-parameters.e2e.mjs`.
+
+### 17.1 Parameter order and units
+
+The covariance rows are the state (TEME position, km; velocity, km/s; `COV_TYPE` CARTPV) and then, when present and
+solved, in this fixed order:
+
+| Row kind | prwDynamicParameter | Unit | The theories' sensitivity |
+| --- | --- | --- | --- |
+| 6 | DRAG_AREA_OVER_MASS (BTERM) | m\*\*2/kg | yes (central difference of the theory) |
+| 7 | DRAG_AREA_OVER_MASS_RATE | m\*\*2/kg/s | none |
+| 8 | SRP_AREA_OVER_MASS (AGOM) | m\*\*2/kg | yes |
+| 9 | IN_TRACK_ACCELERATION | m/s\*\*2 | none |
+| 10 | OUTGASSING_ACCELERATION | km/s\*\*2 | none |
+
+`COV_SIZE` is 6 plus the solved count; `COV_PARAMETERS` and `COV_PARAMETER_KINDS` have `COV_SIZE - 6` entries in that
+order; `COV_UNITS` has `COV_SIZE` entries (km x3, km/s x3, then the parameters' units); `COV_ORDERING` LTM;
+`COV_REF_FRAME` the record's `TRAJ_REF_FRAME`. `OD_DYNAMIC_PARAMETERS` names every row, `SOLVED_FOR` true for each;
+`fit` lists DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS and nothing it does not know.
+
+### 17.2 Parameters the theories have no sensitivity to
+
+SGP4XP and AP have no term in DRAG_AREA_OVER_MASS_RATE, IN_TRACK_ACCELERATION or OUTGASSING_ACCELERATION, and the force
+model does not change for them. The fit options `fit_bdot`, `fit_thrust` and `fit_outgassing` (one byte each after
+`fit_agom` in the 56-byte `sdnap_fit` options) default off; set, the fit is refused before it runs (`sdnap_fit` status
+-4; `sdnap_fit_refusal` gives `parameter-not-modeled:<NAME>`). The `$PCF` has no field for them, so `fit` never sets
+them. A record that carries their rows (solved by another determination) is read and flown as constant parameters:
+their state transition columns are zero, their variances and mutual terms constant, their cross terms with the state
+carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `P_p` the record's).
+
+### 17.3 Statistics
+
+- Weighting: the fit weights each TEME position component with the a priori sigma 1 km (unit weights;
+  `OD_DATA_WEIGHTING` states it).
+- `WEIGHTED_RMS` = sqrt(sum (r_i / sigma)^2 / (3 N)) over the N fitted states' components = `FIT_RMS_KM` / sqrt(3) / 1 km.
+- `SEDR` (W/kg) = -(mu / (3 a)) (n-dot_ng / n), with mu / a = (n a)^2 from the set's mean motion and the theory's
+  semi-major axis, and n-dot_ng / n the theory's epoch rate with BTERM less the rate without it
+  (`COV_PROPAGATION.NON_GRAVITATIONAL_RATE_PER_DAY`, per day, here per second). Written with the covariance.
+- Emission refusals, never a partial record: a parameter row without a name (`cov-parameter-unnamed`), a name or kind
+  outside the five (`cov-parameter-unknown`), rows out of the fixed order (`cov-parameter-order`), `COV_UNITS` other than
+  above (`cov-units`), `COV_SIZE` not 6 plus the solved count (`cov-size`).
+- Reading (`cov::read`): rows out of the fixed order, a kind outside the five or not solved for are malformed
+  (`invalid-covariance`; `sdnap_covariance_at` -6).
+
+### 17.4 Residual record
+
+`fit` writes one `$ODR` per fit on `residuals`, after its `$OCM`: `RUN_ID` and `OCM_CONTENT_ID` the `$OCM`'s CID,
+`CONVERGENCE_REASON`, and `EDITED_OBSERVATIONS`, one per state of the input block in order (the input count):
+
+| Column | Value |
+| --- | --- |
+| OBSERVATION_ID | `<ephemeris frame>.<block>.<state>`, from 1 |
+| EPOCH | the state's UTC time |
+| OBSERVATION_TYPE | POSITION_VECTOR |
+| OBSERVED_VALUE, COMPUTED_VALUE | the state's and the fitted set's geocentric distance, km (frame independent) |
+| WEIGHT | 1 / sigma^2 = 1 per km^2 inside the fit arc; 0 outside |
+| ACCEPTED, REASON | inside the fit arc; REASON BEFORE FIT ARC or HELD OUT otherwise |
+| NORMALIZED_RESIDUAL | (observed - computed) / sigma |
+| PERTURBATION_MODEL_CODE | SGP4XP or AP, the set's theory |
+
+The residual is OBSERVED_VALUE minus COMPUTED_VALUE. A fit whose inputs have no per-observation form writes no rows,
+and P9 is then refused downstream.
+
+### 17.5 Covariance per epoch
+
+The covariance the module propagates stays in the `$OCM`'s `COVARIANCE_DATA` layout: `sdnap_covariance_full_at(ocm,
+length, minutes, count, out)` gives per time the TEME state and the LTM of the `COV_SIZE` x `COV_SIZE` covariance of the
+state and the record's parameter rows (6 + N(N+1)/2 doubles); `sdnap_covariance_at` gives the 6 x 6 state block. The
+state transition sensitivities are not exposed in any typed field (no output carries a PRW state matrix), so P8 is
+refused.
+
 ## References
 
 - Payne, T., Hoots, F., Butkus, A., Slatton, Z., and Nguyen, D. (2022).
