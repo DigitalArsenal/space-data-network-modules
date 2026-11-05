@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T01:06:57.027Z",
+  "generatedAt": "2026-11-05T01:27:19.078Z",
   "moduleCount": 157,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 151,
@@ -5371,7 +5371,7 @@
       "pluginId": "org.sdn.flows.supplemental-omm.od",
       "name": "Supplemental OMM Orbit Determination",
       "pluginFamily": "orbit_determination",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "methodIds": [
         "fit",
         "publish_request"

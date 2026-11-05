@@ -4388,11 +4388,11 @@
       "declaration": null
     },
     "flows/supplemental-omm/nodes/od/dist/isomorphic/module.wasm": {
-      "sha256": "6ecdbb24945549978ca4b9997b272bfc3e149ec6f0559e673e8adcbd41e4bab0",
-      "bytes": 1190570,
+      "sha256": "61ea6f17325ebc9923b5b780bc7b784bc374fb786ae42ebcae4d11ddcddcacf2",
+      "bytes": 1199626,
       "module": "flows/supplemental-omm/nodes/od",
-      "lastCommit": "bc617e39a7711d7c38a020df2471dbb41902c8ea",
-      "lastCommitDate": "2026-11-04T10:33:24-05:00",
+      "lastCommit": "7eebf8f847271d8467bcef85084cbabb7f80ad34",
+      "lastCommitDate": "2026-11-04T20:26:08-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
