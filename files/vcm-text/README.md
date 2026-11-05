@@ -26,6 +26,21 @@ for value. The layout is spacedatastandards.org
   from the layout `normalize_vcm` writes (its `VCM_*` user-defined parameters
   and perturbation comments): no typed `$OCM` field states them in the
   message's basis and units.
+- **Covariance block.** Written only from the layout `normalize_vcm` writes,
+  never for a fitted element set (AP, SGP4-XP), whose covariance stays in the
+  `$OCM`. The documents held for this module fix the block's frame (TEME of
+  date), its order (Af, Ag, L, N, Chi, Psi, then B, BDOT, AGOM, T and consider
+  parameters), its lower-triangle row order, its size rule (as large as the
+  last parameter solved; 0x0 when absent), the mean motion term normalized by
+  n, and WTD RMS as the weighted RMS of the last fit. They do not fix the
+  element definitions in terms of the classical elements, the retrograde
+  factor, the unit of L, the units of the B and AGOM terms, or whether the
+  matrix is osculating. A block built from AP's covariance would guess those,
+  so it is left out. Sources: Astrodynamics Standards Shared Library, "Vector
+  Covariance Message (VCM)", Version 9.10, October 2026, section 7.2;
+  Astrodynamics Standards AstroFunc API, `CovMtxEqnxToUVW` and
+  `CovMtxUVWToEqnx`, and its element-array arrangement; Astrodynamics
+  Standards release notes, version 9.2 (the VCM covariance frame).
 - **CENTER.** The record's ORIGINATOR; for a fitted element set (MEAN_ELEMENTS), the
   fit's producer (PROVENANCE.PRODUCER), never the source ephemeris' originator.
 - **Digits.** The message's columns: 8 decimals of km and 12 of km/s for
