@@ -1,28 +1,35 @@
 #!/usr/bin/env node
-// E2E, task modules-artifact-ledger-refresh-20261104: scripts/artifact-provenance.json describes the committed dists exactly.
+// E2E, task modules-artifact-ledger-check-landed-list-20261104 (after modules-artifact-ledger-refresh-20261104):
+// the ledger files describe the committed dists exactly, and this script names no module, version or hash.
 //   1. every ledger entry names a committed dist whose sha256 and byte count equal the entry's;
 //   2. every committed dist wasm has an entry (so every module with a dist has one);
 //   3. a dist that carries a build-provenance file agrees with it (sha256 of the wasm it describes);
-//   4. the landed hashes and versions below are present.
+//   4. a dist plugin manifest at <module>/dist, where docs/current-module-parity-index.json lists the module, has the version
+//      the index records (a landing regenerates the index with the ledger, so a bumped manifest the index does not follow disagrees).
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { trackedFiles } from "./lib/current-module-index.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const readJson = (base, ...parts) => JSON.parse(fs.readFileSync(path.join(base, ...parts), "utf8"));
 
-const landed = [
-  ["propagator/sdn-ap", "0.5.2", "74388314396a8f8c4bc962b63566b01ee8a99e1d8a295e8233fac36d5683500d"],
-  ["data-source/sdn-element-sync", "0.2.0", "37f0ea34ccc2bf7b90de6bdffa1f3d47b954eef7388f0b374ff6e5ca42712897"],
-  ["propagator/ffm", "2.2.0", "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"],
-];
+// The plugin manifest of a committed dist wasm: the nearest plugin-manifest.json from the wasm's directory up to its dist directory (null when the dist commits none).
+function manifestBeside(rel, tracked) {
+  for (let dir = path.posix.dirname(rel); ; dir = path.posix.dirname(dir)) {
+    const manifest = path.posix.join(dir, "plugin-manifest.json");
+    if (tracked.has(manifest)) return manifest;
+    if (path.posix.basename(dir) === "dist") return null;
+  }
+}
 
 // What the tree at `base` says about its dists: the disagreements and the counts the report prints.
 function measure(base) {
-  const ledger = JSON.parse(fs.readFileSync(path.join(base, "scripts", "artifact-provenance.json"), "utf8")).artifacts;
-  const committed = execFileSync("git", ["-C", base, "ls-files", "*.wasm"], { encoding: "utf8" }).split("\n").filter((f) => f.includes("/dist/"));
+  const ledger = readJson(base, "scripts", "artifact-provenance.json").artifacts;
+  const tracked = new Set(trackedFiles(base));
+  const committed = [...tracked].filter((f) => f.endsWith(".wasm") && f.includes("/dist/"));
 
   const problems = [];
   let matched = 0;
@@ -49,18 +56,22 @@ function measure(base) {
     if (claimed !== sha256(bytes)) problems.push(`${rel}: build-provenance says ${claimed}, dist is ${sha256(bytes)}`);
   }
 
-  for (const [dir, version, hash] of landed) {
-    const entry = ledger[`${dir}/dist/isomorphic/module.wasm`];
-    if (entry?.sha256 !== hash) problems.push(`${dir}: ledger has ${entry?.sha256}, expected ${hash}`);
-    const manifest = JSON.parse(fs.readFileSync(path.join(base, dir, "dist", "plugin-manifest.json"), "utf8"));
-    if (manifest.version !== version) problems.push(`${dir}: dist manifest is ${manifest.version}, expected ${version}`);
+  // a dist manifest's version is the one the module index records for its module; only a manifest directly at <module>/dist, for a module the index lists, has a recorded version (a flow's baked node or a nested build directory has none)
+  const indexed = new Map(readJson(base, "docs", "current-module-parity-index.json").modules.map((row) => [row.modulePath, row.version]));
+  const versions = [];
+  let unrecorded = 0;
+  for (const manifest of [...new Set(committed.map((rel) => manifestBeside(rel, tracked)))].filter(Boolean).sort()) {
+    const distDir = path.posix.dirname(manifest);
+    const moduleDir = path.posix.dirname(distDir);
+    if (path.posix.basename(distDir) !== "dist" || !indexed.has(moduleDir)) { unrecorded++; continue; }
+    const version = readJson(base, manifest).version;
+    if (version !== indexed.get(moduleDir)) problems.push(`${moduleDir}: dist manifest is ${version}, the module index records ${indexed.get(moduleDir)}`);
+    else versions.push({ moduleDir, manifest, version });
   }
-  const sync = JSON.parse(fs.readFileSync(path.join(base, "data-source/sdn-element-sync/dist/build-provenance.json"), "utf8"));
-  if (sync.sha256 !== landed[1][2]) problems.push(`sdn-element-sync build-provenance.json says ${sync.sha256}`);
 
-  return { problems, entries: Object.keys(ledger).length, matched, committed: committed.length, provenanceFiles };
+  return { problems, ledgerKeys: Object.keys(ledger), matched, committed: committed.length, provenanceFiles, versions, unrecorded };
 }
 
 const result = measure(root);
 if (result.problems.length) { console.error(`FAIL artifact ledger: ${result.problems.length} disagreements\n${result.problems.map((p) => `  - ${p}`).join("\n")}`); process.exit(1); }
-console.log(`PASS artifact ledger: ${result.matched}/${result.entries} entries equal their dist sha256, ${result.committed} committed dists all ledgered, ${result.provenanceFiles} build-provenance files agree, ${landed.length} landed hashes present`);
+console.log(`PASS artifact ledger: ${result.matched}/${result.ledgerKeys.length} entries equal their dist sha256, ${result.committed} committed dists all ledgered, ${result.provenanceFiles} build-provenance files agree, ${result.versions.length} dist manifest versions equal the module index (${result.unrecorded} dist manifests have no module row)`);
