@@ -48,6 +48,9 @@ the files that carry the terms.
 | propagator/ffm/tests/fixtures/gmat/, propagator/ffm/tests/evidence/gmat/, propagator/ffm/lib/jacchia_roberts.h | NASA GMAT R2026a: reference outputs and propagator/ffm/lib/jacchia_roberts.h, a C++ port of JacchiaRobertsAtmosphere.cpp; Copyright 2002-2026 United States Government as represented by the Administrator of NASA | Apache-2.0 | LICENSES/Apache-2.0-Orekit.txt |
 | propagator/ffm/tests/fixtures/tudat/, analysis/maneuver/vectors/tudat-extract.json, propagator/ffm/lib/force_models.h, propagator/ffm/lib/force_models.cpp, propagator/ffm/lib/integrators.h, propagator/ffm/lib/integrators.cpp | Tudat and tudatpy, Delft University of Technology: reference outputs, and the four propagator/ffm/lib files whose headers call them a TudatPy port | BSD-3-Clause | LICENSES/BSD-3-Clause-Tudat.txt |
 | analysis/maneuver/vectors/hapsira-extract.json | hapsira (poliastro) reference values | MIT | LICENSES/MIT-hapsira.txt |
+| data-source/lvdb-source/vendor/ | rapidyaml 0.16.0, Copyright (c) 2018 Joao Paulo Magalhaes: ryml.hpp, the unmodified upstream single header (rapidyaml.v0.16.0.singlehdr.nofastfloat.hpp, which amalgamates c4core 0.6.0; SHA-256 in vendor/SHA256, checked by the build). The MIT text is the header's own LICENSE.txt section, ryml.hpp lines 43 to 65. The header also embeds c4core's debugbreak.h, Copyright (c) 2011-2021 Scott Tsai, with the BSD 2-Clause notice at lines 1817 to 1841; the build defines DEBUG_BREAK_H, so that code is not compiled | MIT | data-source/lvdb-source/vendor/ryml.hpp |
+| propagator/sdn-ap/test/vendor/orbit-accuracy-experiments-c89f2bc/ | orbit-accuracy-experiments at commit c89f2bc21a3b0fa1b5e95c46c9cf717a80e90401, the orbit-accuracy-experiments repository of Edgesource Corporation: first-party code, vendored as test input (the files the archive replays of propagator/sdn-ap/test import; PROVENANCE.md lists them and the three that differ from the commit) | Apache-2.0 | LICENSE |
+| analysis/conjunction-assessment/src/cpp/third_party/lebedev/ | Lebedev-Laikov quadrature coefficients for the 590, 974, 2030, 3890 and 5810 point rules (numerical data in coefficients.inc, extracted by generate.py): from NASA CARA's copy of Rob Parrish's getLebedevSphere.m dated 2010-03-24 (nasa/CARA_Analysis_Tools at commit ce0f00722c56808755ee0adbe47a4e3d56439484, DistributedMatlab/ProbabilityOfCollision/Utils/getLebedevSphere.m, SHA-256 56c39635f8e6d7f6ddb121710b77a174d21314e9fb2c1ebc00e8794e270be221), whose acknowledgments trace the tables through Christoph van Wüllen to Dmitri Laikov's original C routines; reference V. I. Lebedev and D. N. Laikov, Doklady Mathematics 59(3), 477-481 (1999); the directory holds no MATLAB source | not stated in the vendored files; the owner's decision pending (record modules-root-notice-three-rows-20261105) (LicenseRef-Unresolved) | none in tree |
 
 LicenseRef identifiers
 
@@ -62,6 +65,9 @@ LicenseRef identifiers
   (17 U.S.C. § 105); the README named in License text states the basis.
 - LicenseRef-Public-Domain: the author's dedication, in the file or README named
   in License text.
+- LicenseRef-Unresolved: the terms are not stated in any file of this
+  repository; no license is asserted for the row until the record it names
+  decides.
 
 NOTICES REPRODUCED HERE
 
