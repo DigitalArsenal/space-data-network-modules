@@ -1,7 +1,7 @@
 {
  "pluginId": "com.digitalarsenal.files.vcm-text",
  "name": "SP Vector/Covariance Message Writer",
- "version": "0.1.1",
+ "version": "0.1.2",
  "description": "Writes the legacy SP Vector/Covariance Message V2.0 text (classic VCM) from one SDS $OCM, in the documented line order and columns: the inverse of files/orbit-products normalize_vcm, which reads that text into an $OCM, so a record that reader wrote is written back value for value. Every value comes from a field of the record that states it, or from the caller's $OEM states at the record's epoch (EME2000 for the J2K lines, TEME of date for the ECI lines); a field the record has no value for is left blank, and a line with no value at all is left out. Nothing is derived: no propagation, frame rotation or covariance conversion happens here. The leap-second line and the covariance size use the message's own documented forms for a value that is not known. Pure compute: no capabilities, no host calls, no filesystem.",
  "tagline": "One $OCM in; the classic SP Vector/Covariance Message V2.0 text out, framed with an $NCD.",
  "pluginFamily": "parser",

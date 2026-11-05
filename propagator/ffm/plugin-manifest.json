@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.ffm",
   "name": "FFM Full Force Model propagator",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Full Force Model profile FFM-1. An execution is integrated with the algorithm it names, a requested RK78 or RKF78 propagating its eighth-order solution under the request's tolerances; resident propagation flies forward arcs on automatic GJ8 PEC and eccentric-orbit Sundman grids, named in each trajectory's PPE COMMENT. Selected-object batching and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],
@@ -457,7 +457,7 @@
         },
         {
           "portId": "configuration",
-          "description": "$PCF 1.0.7 (SDS 1.276.0) OUTPUT: FRAME (GCRF or EME2000, the request's axes), MAXIMUM_STATES, and EPOCHS (ISO 8601 UTC, ascending) or START_TIME and STOP_TIME (ISO 8601 UTC) at STEP_SECONDS, the last state at or before STOP_TIME; THEORY UNSPECIFIED or FFM; no other table.",
+          "description": "$PCF 1.0.8 (SDS 1.279.0) OUTPUT: FRAME (GCRF or EME2000, the request's axes), MAXIMUM_STATES, and EPOCHS (ISO 8601 UTC, ascending) or START_TIME and STOP_TIME (ISO 8601 UTC) at STEP_SECONDS, the last state at or before STOP_TIME; THEORY UNSPECIFIED or FFM; no other table.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",

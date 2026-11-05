@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/sdn-ap-propagator",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -26,7 +26,7 @@
   "devDependencies": {
     "flatc-wasm": "26.1.38",
     "space-data-module-sdk": "0.9.14",
-    "spacedatastandards.org": "1.278.0"
+    "spacedatastandards.org": "1.279.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"
