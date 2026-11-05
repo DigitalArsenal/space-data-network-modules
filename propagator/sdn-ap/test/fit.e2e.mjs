@@ -2,7 +2,8 @@
 // E2E (task modules-sdn-ap-ocm-write-20261103): fit writes one typed $OCM per block, and nothing else.
 // - On the inputs of the 0.4.0 fixtures (test/lib/fixture-inputs.mjs): 24 h of propagator/ffm's 550 km trajectory,
 //   fitted under AP's forces (gravity caps 31 and 20, NRLMSISE-00 on daily $SPW rows) and under stock SGP4XP (Jacchia
-//   1970 on the theory's flux model), fit returns exactly one output, 'elements', an $OCM.
+//   1970 on the theory's flux model), fit returns exactly two outputs, 'elements', an $OCM, then 'residuals', its $ODR
+//   (SPEC 17.4).
 // - MEAN_ELEMENTS equal, bit for bit, the elements of test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18
 //   dist's $OMM: BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
@@ -53,7 +54,8 @@ for (const c of cases) {
   const r = await fit(c.config, c.spw);
   check(r.statusCode === 0, `${c.name} fit: ${r.errorCode} ${r.errorMessage}`);
   if (r.statusCode !== 0) continue;
-  check(r.outputs.length === 1 && r.outputs[0].portId === "elements" && r.outputs[0].typeRef?.fileIdentifier === "$OCM",
+  check(r.outputs.length === 2 && r.outputs[0].portId === "elements" && r.outputs[0].typeRef?.fileIdentifier === "$OCM" &&
+    r.outputs[1].portId === "residuals" && r.outputs[1].typeRef?.fileIdentifier === "$ODR",
     `${c.name}: outputs ${r.outputs.map((o) => `${o.portId}:${o.typeRef?.fileIdentifier}`).join(", ")}`);
   const bytes = new Uint8Array(r.outputs[0].payload);
   check(String.fromCharCode(...bytes.subarray(4, 8)) === "$OCM", `${c.name}: not an $OCM`);
@@ -85,7 +87,7 @@ for (const c of cases) {
   check(ocm.METADATA?.NORAD_CAT_ID === 90400 && ocm.METADATA?.OBJECT_DESIGNATOR === "90400" && ocm.METADATA?.INTERNATIONAL_DESIGNATOR === "2026-904A",
     `${c.name}: METADATA ${ocm.METADATA?.NORAD_CAT_ID} ${ocm.METADATA?.OBJECT_DESIGNATOR} ${ocm.METADATA?.INTERNATIONAL_DESIGNATOR}`);
   check(ocm.ORB_AVERAGING === "BROUWER" && (ocm.STATE_DATA ?? []).length === 0, `${c.name}: ORB_AVERAGING ${ocm.ORB_AVERAGING}, ${ocm.STATE_DATA?.length} state values`);
-  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.5.2"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
+  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.0"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
 }
 const ap = records.AP, xp = records.XP;
 if (ap && xp) {
