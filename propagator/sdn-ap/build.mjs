@@ -30,12 +30,12 @@ const { FlatcRunner } = await import("flatc-wasm");
 const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.json"));
 
 // C++ bindings of $OEM (propagate's output, fit's input), $OCM (fit's output), $OMM (ingest_omm's input),
-// $SPW and $DCL (the drag atmosphere's inputs, SPEC 15) and the schemas they
-// include, generated from the pinned SDS package in dependency order.
+// $SPW and $DCL (the drag atmosphere's inputs, SPEC 15), $ODR (fit's residual record, SPEC 17.4) and the schemas
+// they include, generated from the pinned SDS package in dependency order.
 async function oemBindings() {
   const files = {};
   const deps = new Map();
-  const pending = ["OEM", "OMM", "OCM", "PCF", "MNV", "SPW", "DCL"];
+  const pending = ["OEM", "OMM", "OCM", "PCF", "MNV", "SPW", "DCL", "ODR"];
   while (pending.length) {
     const code = pending.pop();
     if (deps.has(code)) continue;
@@ -51,7 +51,7 @@ async function oemBindings() {
     for (const dep of deps.get(code)) visit(dep);
     order.push(code);
   };
-  for (const code of ["OEM", "OMM", "OCM", "PCF", "MNV", "SPW", "DCL"]) visit(code);
+  for (const code of ["OEM", "OMM", "OCM", "PCF", "MNV", "SPW", "DCL", "ODR"]) visit(code);
   const flatc = await FlatcRunner.init();
   return order
     .map((code) => {

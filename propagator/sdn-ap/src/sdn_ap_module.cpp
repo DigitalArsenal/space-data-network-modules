@@ -29,7 +29,7 @@
 //   ocm.inc        the $OCM element-set record: elements, forces, identity
 //   ingest_omm.inc the ingest_omm invoke method: the one $OMM boundary ($OMM in, $OCM out)
 //   propagate.inc  the propagate invoke method ($OCM in, $OEM out)
-//   fit_oem.inc    the fit invoke method ($OEM in, $OCM out)
+//   fit_oem.inc    the fit invoke method ($OEM in, $OCM and $ODR out)
 //   export_omm.inc the export_omm invoke method ($OCM in, $OMM out: SGP4, stock SGP4XP)
 // =============================================================================
 
@@ -213,3 +213,50 @@ int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* m
   }
   return 0;
 }
+
+/// The augmented covariance of an $OCM set (SPEC 17.5), as sdnap_covariance_at reads and flies it: at each of `count`
+/// times (`minutes` from its epoch) `out` gets 6 + N(N+1)/2 doubles, N the record's COV_SIZE: the TEME state (km,
+/// km/s), then the lower triangle row by row (COV_ORDERING LTM, the $OCM's COVARIANCE_DATA layout) of the covariance of
+/// the state and the record's parameter rows in their fixed order. A parameter the theories have no sensitivity to
+/// keeps its variance; its cross terms with the state are carried by the state columns. 0, or the codes of
+/// sdnap_covariance_at.
+SDNAP_EXPORT("sdnap_covariance_full_at")
+int32_t sdnap_covariance_full_at(const uint8_t* ocm, uint32_t length, const double* minutes, uint32_t count, double* out) {
+  using namespace sdnap;
+  if (ocm == nullptr || (count > 0 && (minutes == nullptr || out == nullptr))) return -1;
+  ocm::Set set;
+  if (ocm::decode(ocm, length, set) != 0) return -1;
+  if (set.row.theory != kTheorySgp4Xp) return -4;
+  cov::Set cs;
+  const int rc = cov::read(set.record, set.row, cs);
+  if (rc == 0) return -2;
+  if (rc < 0) return -6;
+  if (count > 0) {
+    double lo = 0.0, hi = 0.0;
+    for (uint32_t k = 0; k < count; ++k) { lo = std::fmin(lo, minutes[k]); hi = std::fmax(hi, minutes[k]); }
+    const double w = set.row.epoch_jd_whole, f = set.row.epoch_jd_frac;
+    if (ocm::rows_cover(set, ocm::mjd_of(w, f + lo / kMinutesPerDay), ocm::mjd_of(w, f + hi / kMinutesPerDay)) != 0) return -3;
+  }
+  atm::Atmosphere a;
+  ocm::atmosphere_of(set, a);
+  ocm::Bind bind(set.forces, &a);
+  cov::Propagator p;
+  if (const int pr = cov::prepare(cs, p)) return pr;
+  const int np = cs.np;
+  const uint32_t stride = 6u + static_cast<uint32_t>(np * (np + 1) / 2);
+  double P[cov::kMaxAug * cov::kMaxAug];
+  for (uint32_t k = 0; k < count; ++k) {
+    double* o = out + stride * k;
+    if (!cov::eval_full(p, minutes[k], o, o + 3, P)) return -3;
+    uint32_t q = 6;
+    for (int i = 0; i < np; ++i)
+      for (int j = 0; j <= i; ++j) o[q++] = P[i * np + j];
+  }
+  return 0;
+}
+
+/// The refusal of fit options (fit::Options, 56 bytes, as sdnap_fit takes them): a NUL-terminated code in the module's
+/// memory, parameter-not-modeled:<NAME> when fit_bdot, fit_thrust or fit_outgassing is set (SPEC 17.2; sdnap_fit then
+/// reports status -4), or 0 when the fit runs.
+SDNAP_EXPORT("sdnap_fit_refusal")
+const char* sdnap_fit_refusal(const sdnap::fit::Options* options) { return options == nullptr ? nullptr : sdnap::fit::refusal(*options); }

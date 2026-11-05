@@ -85,6 +85,23 @@ inline double minutes_between(double w0, double f0, double w1, double f1) {
   return ((w1 - w0) + (f1 - f0)) * kMinutesPerDay;
 }
 
+/// SPEC 17.3: the a priori sigma of each TEME position component the fit weights with (unit weights: 1 km), the
+/// weighting it states (OD_DATA_WEIGHTING), and WEIGHTED_RMS: the post-fit RMS of the position components over that
+/// sigma, sqrt(sum (r_i / sigma)^2 / (3 states)) = FIT_RMS_KM / sqrt(3) / sigma.
+constexpr double kMeasurementSigmaKm = 1.0;
+constexpr const char* kWeighting = "UNIT WEIGHTS: A PRIORI SIGMA 1 KM PER TEME POSITION COMPONENT";
+inline double weighted_rms(double fit_rms_km) { return fit_rms_km / std::sqrt(3.0) / kMeasurementSigmaKm; }
+
+/// SPEC 17.3: SEDR (W/kg) of a fitted set from its non-gravitational n-dot (`ng_rate`, n-dot_ng / n in 1/day, the
+/// theory's epoch rates with and without BTERM): -(mu / (3 a)) (n-dot_ng / n), mu / a = (n a)^2 with the theory's
+/// mean motion and semi-major axis, in m and s.
+inline double sedr(const ElementRow& row, double ng_rate) {
+  const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+  const double a_m = std::pow(xpt::kKe / n_min, kX2o3) * xpt::kRe * 1000.0;
+  const double na = n_min / 60.0 * a_m;  // m/s
+  return -(na * na / 3.0) * (ng_rate / 86400.0);
+}
+
 /// The default fit span (DESIGN 2e.3; the experiment's fit-length study: 48 / 72 h fits cut the 72-96 h
 /// error from 2.96 to 0.50 / 0.37 km against 24 h).
 constexpr double kDefaultSpanMinutes = 48.0 * 60.0;
@@ -356,7 +373,9 @@ static int fit_blocks() {
     const OEM* oem = GetOEM(payload);
     const auto* blocks = oem->EPHEMERIS_DATA_BLOCK();
     if (blocks == nullptr) continue;
+    uint32_t block_index = 0;
     for (const ephemerisDataBlock* blk : *blocks) {
+      ++block_index;
       // the block's center: Earth (the theories here are geocentric; a Moon-centered or heliocentric block is
       // refused by name, never read as geocentric)
       if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0 && !oem::same_text(blk->CENTER_NAME()->c_str(), "EARTH")) {
@@ -829,7 +848,7 @@ static int fit_blocks() {
         int kind[fit::kMaxParams];
         const int np = cov::kinds_of(fit_cov.o, kind);
         for (int a = 6; a < np; ++a) {
-          if (kind[a] != 6) continue;
+          if (kind[a] != cov::kKindDrag) continue;
           const double var_b = fit_cov.C[a * np + a];
           if (!(var_b > 0.0) || !(row.mean_motion_rev_day > 0.0)) break;
           const bool lg = used_drag.form == pcfPriorForm_LOG_NORMAL;
@@ -982,6 +1001,7 @@ static int fit_blocks() {
       const auto s_comment = fbb.CreateVectorOfStrings(comment);
       const auto s_od_method = fbb.CreateString("BATCH LEAST SQUARES");
       const auto s_od_algorithm = fbb.CreateString("LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS");
+      const auto s_od_weighting = fbb.CreateString(fitoem::kWeighting);
       const auto s_od_epoch = fbb.CreateString(epoch_text);
       OrbitDeterminationBuilder od(fbb);
       od.add_OD_ALGORITHM(s_od_algorithm);
@@ -990,7 +1010,12 @@ static int fit_blocks() {
       od.add_OD_OBSERVATIONS_USED(static_cast<int32_t>(t_fit.size()));
       od.add_OD_EST_PARAMETERS(s_estimated);
       od.add_OD_ESTIMATOR(estimatorCategory_BatchLeastSquares);
+      od.add_OD_DATA_WEIGHTING(s_od_weighting);
       od.add_OD_DYNAMIC_PARAMETERS(s_dyn);
+      // SPEC 17.3: WEIGHTED_RMS, the post-fit RMS of the position components over the a priori sigma the fit weighted
+      // them with; SEDR from the fitted non-gravitational n-dot (written with the covariance that states it)
+      od.add_WEIGHTED_RMS(fitoem::weighted_rms(res.rms_km));
+      if (have_cov) od.add_SEDR(fitoem::sedr(row, ng_rate));
       // CCSDS elapsed counts from the epoch back to the first and last observation, written when not negative
       if (-fit_begin_min >= 0.0) od.add_DAYS_SINCE_FIRST_OBS(-fit_begin_min / kMinutesPerDay);
       if (-fit_end_min >= 0.0) od.add_DAYS_SINCE_LAST_OBS(-fit_end_min / kMinutesPerDay);
@@ -1015,7 +1040,11 @@ static int fit_blocks() {
         for (int a = 6; a < np; ++a) {
           names.push_back(cov::consider_name(kind[a]));
           kinds.push_back(static_cast<uint8_t>(cov::consider_kind(kind[a])));
-          units.push_back("m**2/kg");
+          units.push_back(cov::consider_units(kind[a]));
+        }
+        if (const char* code = ocm::covariance_refusal(np, names, kinds, units)) {
+          plugin_set_error(code, "The fit's covariance rows are not the solved parameters in the fixed order (SPEC 17.3): never emitted.");
+          return 3;
         }
         extras.covariance = fbb.CreateVector(ltm);
         extras.cov_frame = ocm::frame_of(fbb, ocm::epoch_frame(po.forces));
@@ -1048,6 +1077,66 @@ static int fit_blocks() {
       if (plugin_push_output("elements", "OCM.fbs", "$OCM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
         plugin_set_error("output-failed", "The $OCM could not be emitted.");
         return 3;
+      }
+      // SPEC 17.4: the fit's residual record, one $ODR per fit on 'residuals': a row per state of the block, in order
+      // (the input identifier <ephemeris frame>.<block>.<state>, from 1), its UTC epoch, POSITION_VECTOR, the observed
+      // and computed geocentric distance (km; the fitted set at the state's time), the weight 1 / sigma^2 the fit gave
+      // its components (0 outside the fit arc), ACCEPTED within the fit arc (REASON BEFORE FIT ARC, HELD OUT), the
+      // normalized residual (observed minus computed over sigma) and the set's theory as the model code
+      {
+        const std::string ocm_cid = sdn_cid::cid_v1_raw_sha256(fbb.GetBufferPointer(), fbb.GetSize());
+        const char* model_code = ocm::theory_of(row.theory, po.forces) == meanElementSource_SGP4XP ? "SGP4XP" : "AP";
+        flatbuffers::FlatBufferBuilder rb(1024 + 160u * n);
+        std::vector<flatbuffers::Offset<ODREditedObservation>> edited;
+        edited.reserve(n);
+        xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+        bool ok = xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk;
+        for (uint32_t k = 0; ok && k < n; ++k) {
+          const double t = fitoem::minutes_between(e0.whole, e0.frac, all[k].whole, all[k].frac);
+          double rm[3], vm[3];
+          if (xpt::xp_propagate(*xs, t, rm, vm) != kPropOk) { ok = false; break; }
+          const double observed = std::sqrt(all[k].r[0] * all[k].r[0] + all[k].r[1] * all[k].r[1] + all[k].r[2] * all[k].r[2]);
+          const double computed = std::sqrt(rm[0] * rm[0] + rm[1] * rm[1] + rm[2] * rm[2]);
+          const bool accepted = t >= fit_begin_min && t <= fit_end_min;
+          char id[48], epoch_k[48];
+          std::snprintf(id, sizeof id, "%u.%u.%u", static_cast<unsigned>(ephemeris_index), static_cast<unsigned>(block_index), static_cast<unsigned>(k + 1));
+          oem::iso_text(all[k].whole, all[k].frac, 0.0, epoch_k, sizeof epoch_k);
+          const auto s_id = rb.CreateString(id);
+          const auto s_reason = accepted ? flatbuffers::Offset<flatbuffers::String>(0) : rb.CreateString(t < fit_begin_min ? "BEFORE FIT ARC" : "HELD OUT");
+          const auto s_epoch_k = rb.CreateString(epoch_k);
+          const auto s_code = rb.CreateString(model_code);
+          ODREditedObservationBuilder eb(rb);
+          eb.add_OBSERVATION_ID(s_id);
+          eb.add_NORMALIZED_RESIDUAL((observed - computed) / fitoem::kMeasurementSigmaKm);
+          if (!s_reason.IsNull()) eb.add_REASON(s_reason);
+          eb.add_EPOCH(s_epoch_k);
+          eb.add_OBSERVATION_TYPE(memMeasurementType_POSITION_VECTOR);
+          eb.add_OBSERVED_VALUE(observed);
+          eb.add_COMPUTED_VALUE(computed);
+          eb.add_WEIGHT(accepted ? 1.0 / (fitoem::kMeasurementSigmaKm * fitoem::kMeasurementSigmaKm) : 0.0);
+          eb.add_ACCEPTED(accepted);
+          eb.add_PERTURBATION_MODEL_CODE(s_code);
+          edited.push_back(eb.Finish());
+        }
+        if (xs != nullptr) xpt::xp_release(*xs);
+        std::free(xs);
+        if (!ok) {
+          plugin_set_error("fit-failed", "The fitted set does not reach a state of the block: no residual record.");
+          return 3;
+        }
+        const auto s_edited = rb.CreateVector(edited);
+        const auto s_run = rb.CreateString(ocm_cid);
+        const auto s_content = rb.CreateString(ocm_cid);
+        ODRBuilder ob(rb);
+        ob.add_RUN_ID(s_run);
+        ob.add_CONVERGENCE_REASON(res.status == 0 ? odrConvergenceReason_CONVERGED : odrConvergenceReason_MAXIMUM_ITERATIONS);
+        ob.add_EDITED_OBSERVATIONS(s_edited);
+        ob.add_OCM_CONTENT_ID(s_content);
+        FinishODRBuffer(rb, ob.Finish());
+        if (plugin_push_output("residuals", "ODR.fbs", "$ODR", rb.GetBufferPointer(), rb.GetSize()) < 0) {
+          plugin_set_error("output-failed", "The $ODR could not be emitted.");
+          return 3;
+        }
       }
       ++blocks_done;
     }
