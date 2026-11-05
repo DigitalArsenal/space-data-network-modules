@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-c90cc204912a34b7",
+  "generatedBy": "tc-07322c2265a5a23c",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -2762,7 +2762,10 @@
       "lastCommitDate": "2026-11-05T12:23:38-05:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
+      },
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -5498,11 +5501,11 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "66bd001be27b7578b7b4ad9054f2d8fb4935d876491b4f0f817762c6b85878d7",
-      "bytes": 937084,
+      "sha256": "22e29b05759743441e6b83f6aec2904a9a4915c565616b1c6745f4718ca35a97",
+      "bytes": 949843,
       "module": "propagator/sdn-ap",
-      "lastCommit": "11c702d922271a9877425b44e7628212921d54a3",
-      "lastCommitDate": "2026-11-05T12:07:51-05:00",
+      "lastCommit": "5255c63233f89754b5c3661bb2e3592eff738ab9",
+      "lastCommitDate": "2026-11-05T12:27:05-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {

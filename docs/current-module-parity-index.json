@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T17:23:51.428Z",
+  "generatedAt": "2026-11-05T17:27:25.239Z",
   "moduleCount": 159,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 153,
@@ -7446,7 +7446,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.5.2",
+      "version": "0.6.0",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7469,7 +7469,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 113,
+      "testFileCount": 114,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7529,6 +7529,7 @@
         "test/lib/tess-frame-windows.mjs",
         "test/lib/tle.mjs",
         "test/maneuver.e2e.mjs",
+        "test/products-parameters.e2e.mjs",
         "test/pvn-carry.e2e.mjs",
         "test/results/bench.json",
         "test/results/class-crossing.json",
