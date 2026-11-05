@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-07322c2265a5a23c",
+  "generatedBy": "tc-ec72a8683ed5c96a",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -244,6 +244,27 @@
         "commit": "843c2d8777391ff77bd3263efc38539ef69a2e5f"
       },
       "id": "tc-45e5367fc1d7650b"
+    },
+    "tc-ec72a8683ed5c96a": {
+      "sdk": {
+        "resolved": true,
+        "version": "0.8.25",
+        "commit": null,
+        "integrity": "sha512-hwZFUcFZJ3qDMWRjrX68hrvi64AVvFvv1dkSETYQZNwsyUb4NzEOyA8bW0Sc2bSxgOdN9Ns+wAmBtgYOH6WO5A==",
+        "dirty": null
+      },
+      "sdkDependencies": {
+        "spacedatastandards.org": "1.206.0",
+        "flatc-wasm": "26.1.38",
+        "flatbuffers": "25.9.23",
+        "sdn-emception": "1.0.0"
+      },
+      "externalStandardsRoot": {
+        "resolved": true,
+        "version": "1.276.0+1793767506254",
+        "commit": "a39d51f52ddeb8dc7ba7730610c6b91a117418ca"
+      },
+      "id": "tc-ec72a8683ed5c96a"
     }
   },
   "inferenceHazardBaseline": 7,
@@ -483,8 +504,8 @@
       "sha256": "398e070ee9e142c2f6062f1743266fcd58d00c933b065c9c9fa68fe094329b1c",
       "bytes": 1748884,
       "module": "analysis/conjunction-assessment",
-      "lastCommit": "b635415c66ab806e5005038d17810bd971d41285",
-      "lastCommitDate": "2026-11-04T07:12:38-05:00",
+      "lastCommit": "b299096878e2db30cc9d5f319b3f2609745ecef3",
+      "lastCommitDate": "2026-11-05T00:20:55-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -1535,16 +1556,16 @@
       }
     },
     "data-source/deep-space-spacecraft/dist/isomorphic/module.wasm": {
-      "sha256": "6ead93bac487e9f3e280d81895fe1001c3fdd89c344fdf21ce2aefe3c61da581",
-      "bytes": 413004,
+      "sha256": "8f06e4d3afa2703acdc9fc677137ad38cfb21bec399ee4c13f83f8ee88ee678c",
+      "bytes": 513660,
       "module": "data-source/deep-space-spacecraft",
-      "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
-      "lastCommitDate": "2026-10-23T15:12:10-04:00",
+      "lastCommit": "569b1f5ea8b78d174a6d2e30136065acd07152ad",
+      "lastCommitDate": "2026-11-05T00:17:33-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
       },
       "declaration": {
         "declares": true,
