@@ -46,7 +46,7 @@
   },
   "shipped": {
     "kind": "shipped",
-    "created": "2026-11-03T15:39:44.366Z",
+    "created": "2026-11-05T00:55:48.762Z",
     "forces": [
       31,
       20
@@ -58,7 +58,7 @@
         "day": 1,
         "windows": 1246,
         "samples": 116573,
-        "meanD2Over3": 0.6009867207010242,
+        "meanD2Over3": 0.6009994626605328,
         "coverage95": 0.9648460621241626,
         "required": true,
         "pass": false
@@ -68,7 +68,7 @@
         "day": 2,
         "windows": 1237,
         "samples": 115824,
-        "meanD2Over3": 0.652071607361057,
+        "meanD2Over3": 0.6520788595623566,
         "coverage95": 0.9813941842795967,
         "required": true,
         "pass": false
@@ -78,7 +78,7 @@
         "day": 3,
         "windows": 1219,
         "samples": 114246,
-        "meanD2Over3": 0.9624105086315887,
+        "meanD2Over3": 0.9624289316129065,
         "coverage95": 0.9927962466957267,
         "required": true,
         "pass": false
@@ -88,7 +88,7 @@
         "day": 7,
         "windows": 1208,
         "samples": 113035,
-        "meanD2Over3": 1.47741991939008,
+        "meanD2Over3": 1.4774378713090695,
         "coverage95": 0.9980713938160747,
         "required": true,
         "pass": false
@@ -98,7 +98,7 @@
         "day": 1,
         "windows": 908,
         "samples": 79392,
-        "meanD2Over3": 0.8343433952628522,
+        "meanD2Over3": 0.8343433760996964,
         "coverage95": 0.9433822047561468,
         "required": true,
         "pass": true
@@ -108,7 +108,7 @@
         "day": 2,
         "windows": 909,
         "samples": 79440,
-        "meanD2Over3": 1.0968995770713927,
+        "meanD2Over3": 1.0968995607959369,
         "coverage95": 0.9970669687814703,
         "required": true,
         "pass": false
@@ -118,7 +118,7 @@
         "day": 3,
         "windows": 906,
         "samples": 79296,
-        "meanD2Over3": 0.5180989624813781,
+        "meanD2Over3": 0.5180989548767985,
         "coverage95": 0.9975408595641646,
         "required": true,
         "pass": false
@@ -128,7 +128,7 @@
         "day": 7,
         "windows": 907,
         "samples": 79344,
-        "meanD2Over3": 1.1980654736071903,
+        "meanD2Over3": 1.1980654522916947,
         "coverage95": 0.9900181488203267,
         "required": true,
         "pass": false
@@ -149,15 +149,15 @@
         "c": 0
       }
     },
-    "basisModuleSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
-    "remeasured": "2026-11-03, sdn-ap 0.4.15: above e 0.3 the zonal tail carries every long-period term and the first-order tesseral set every q to |q| <= 10 (SPEC 16.11); noise constants unchanged"
+    "basisModuleSha256": "74388314396a8f8c4bc962b63566b01ee8a99e1d8a295e8233fac36d5683500d",
+    "remeasured": "2026-11-05, sdn-ap 0.5.2: the fits of 0.4.16 to 0.4.18 (drag per perigee passage above e 0.3; BTERM not separable on a 72 h arc above e 0.3 with the perigee in the drag; the 72 h 800-1400 km band-median fall-back) move 71 windows (provenance); noise constants unchanged"
   },
   "conformance": {
     "passed": true,
     "xpDigestPrefix": "72dcf6005046",
     "controlDigestPrefix": "9ecfafcd9027",
     "reproduces": "test/results/conformance.json",
-    "moduleSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79"
+    "moduleSha256": "74388314396a8f8c4bc962b63566b01ee8a99e1d8a295e8233fac36d5683500d"
   },
   "calibration": {
     "moduleSha256": "715ef2fee512e9c91aacf1c977151dbb1eb83c6b1fa0e1a160cba3304a876ec0",
@@ -480,8 +480,8 @@
   },
   "realism": "Neither theory is inside the band at every lead; neither earns a realism label.",
   "verification": {
-    "moduleSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
-    "measured": "2026-11-03T15:39:44.366Z",
+    "moduleSha256": "74388314396a8f8c4bc962b63566b01ee8a99e1d8a295e8233fac36d5683500d",
+    "measured": "2026-11-05T00:55:48.762Z",
     "windows": 4150,
     "samples": 777150,
     "shippedTableMatches": true,
@@ -495,7 +495,7 @@
         "day": 1,
         "windows": 1246,
         "samples": 116573,
-        "meanD2Over3": 0.6009867207010242,
+        "meanD2Over3": 0.6009994626605328,
         "coverage95": 0.9648460621241626,
         "required": true,
         "pass": false
@@ -505,7 +505,7 @@
         "day": 2,
         "windows": 1237,
         "samples": 115824,
-        "meanD2Over3": 0.652071607361057,
+        "meanD2Over3": 0.6520788595623566,
         "coverage95": 0.9813941842795967,
         "required": true,
         "pass": false
@@ -515,7 +515,7 @@
         "day": 3,
         "windows": 1219,
         "samples": 114246,
-        "meanD2Over3": 0.9624105086315887,
+        "meanD2Over3": 0.9624289316129065,
         "coverage95": 0.9927962466957267,
         "required": true,
         "pass": false
@@ -525,7 +525,7 @@
         "day": 7,
         "windows": 1208,
         "samples": 113035,
-        "meanD2Over3": 1.47741991939008,
+        "meanD2Over3": 1.4774378713090695,
         "coverage95": 0.9980713938160747,
         "required": true,
         "pass": false
@@ -535,7 +535,7 @@
         "day": 1,
         "windows": 908,
         "samples": 79392,
-        "meanD2Over3": 0.8343433952628522,
+        "meanD2Over3": 0.8343433760996964,
         "coverage95": 0.9433822047561468,
         "required": true,
         "pass": true
@@ -545,7 +545,7 @@
         "day": 2,
         "windows": 909,
         "samples": 79440,
-        "meanD2Over3": 1.0968995770713927,
+        "meanD2Over3": 1.0968995607959369,
         "coverage95": 0.9970669687814703,
         "required": true,
         "pass": false
@@ -555,7 +555,7 @@
         "day": 3,
         "windows": 906,
         "samples": 79296,
-        "meanD2Over3": 0.5180989624813781,
+        "meanD2Over3": 0.5180989548767985,
         "coverage95": 0.9975408595641646,
         "required": true,
         "pass": false
@@ -565,7 +565,7 @@
         "day": 7,
         "windows": 907,
         "samples": 79344,
-        "meanD2Over3": 1.1980654736071903,
+        "meanD2Over3": 1.1980654522916947,
         "coverage95": 0.9900181488203267,
         "required": true,
         "pass": false
@@ -573,5 +573,640 @@
     ],
     "endToEndPassed": true,
     "defaultForcesConformanceBitExact": true
+  },
+  "provenance": {
+    "refrozen": "2026-11-05",
+    "task": "modules-sdn-ap-covariance-calibration-refreeze-20261105",
+    "build": {
+      "version": "0.5.2",
+      "distSha256": "74388314396a8f8c4bc962b63566b01ee8a99e1d8a295e8233fac36d5683500d",
+      "distCommit": "42b343833cf73c18a72e489603fb0a68b88ff2b9",
+      "modulesCommit": "baba863b777ffb1da432350f43fd7880d8b3dbf3"
+    },
+    "previous": {
+      "version": "0.4.15",
+      "distSha256": "2cdec7f54d7b7fa985ea8070b777b36ef71fae200c0106b17a3e5bc8ba6ade79",
+      "distCommit": "d50689f1e6ac5f272a63a31fdbd15d3ca9d92a5d",
+      "recordCommit": "4a02a6d90c3d82b6cfb1d36e11cfb17a8569e351",
+      "measured": "2026-11-03T15:39:44.366Z",
+      "reproduced": "bit for bit on the 87 bisect windows by the replay as committed at 4a02a6d9 ($OMM) on the vendored experiments c89f2bc"
+    },
+    "cells": [
+      {
+        "regime": "DRAG",
+        "day": 1,
+        "samples": 116573,
+        "meanD2Over3": {
+          "previous": 0.6009867207010242,
+          "refrozen": 0.6009994626605328
+        },
+        "coverage95": {
+          "previous": 0.9648460621241626,
+          "refrozen": 0.9648460621241626
+        }
+      },
+      {
+        "regime": "DRAG",
+        "day": 2,
+        "samples": 115824,
+        "meanD2Over3": {
+          "previous": 0.652071607361057,
+          "refrozen": 0.6520788595623566
+        },
+        "coverage95": {
+          "previous": 0.9813941842795967,
+          "refrozen": 0.9813941842795967
+        }
+      },
+      {
+        "regime": "DRAG",
+        "day": 3,
+        "samples": 114246,
+        "meanD2Over3": {
+          "previous": 0.9624105086315887,
+          "refrozen": 0.9624289316129065
+        },
+        "coverage95": {
+          "previous": 0.9927962466957267,
+          "refrozen": 0.9927962466957267
+        }
+      },
+      {
+        "regime": "DRAG",
+        "day": 7,
+        "samples": 113035,
+        "meanD2Over3": {
+          "previous": 1.47741991939008,
+          "refrozen": 1.4774378713090695
+        },
+        "coverage95": {
+          "previous": 0.9980713938160747,
+          "refrozen": 0.9980713938160747
+        }
+      },
+      {
+        "regime": "ABOVE",
+        "day": 1,
+        "samples": 79392,
+        "meanD2Over3": {
+          "previous": 0.8343433952628522,
+          "refrozen": 0.8343433760996964
+        },
+        "coverage95": {
+          "previous": 0.9433822047561468,
+          "refrozen": 0.9433822047561468
+        }
+      },
+      {
+        "regime": "ABOVE",
+        "day": 2,
+        "samples": 79440,
+        "meanD2Over3": {
+          "previous": 1.0968995770713927,
+          "refrozen": 1.0968995607959369
+        },
+        "coverage95": {
+          "previous": 0.9970669687814703,
+          "refrozen": 0.9970669687814703
+        }
+      },
+      {
+        "regime": "ABOVE",
+        "day": 3,
+        "samples": 79296,
+        "meanD2Over3": {
+          "previous": 0.5180989624813781,
+          "refrozen": 0.5180989548767985
+        },
+        "coverage95": {
+          "previous": 0.9975408595641646,
+          "refrozen": 0.9975408595641646
+        }
+      },
+      {
+        "regime": "ABOVE",
+        "day": 7,
+        "samples": 79344,
+        "meanD2Over3": {
+          "previous": 1.1980654736071903,
+          "refrozen": 1.1980654522916947
+        },
+        "coverage95": {
+          "previous": 0.9900181488203267,
+          "refrozen": 0.9900181488203267
+        }
+      }
+    ],
+    "coverage95Identical": true,
+    "windows": {
+      "compared": 4150,
+      "bitIdentical": 4073,
+      "moved": 71,
+      "movedUnder1e-6Km": 6,
+      "movedByGroup": {
+        "DO": 37,
+        "LS": 14,
+        "HX": 14,
+        "HE": 6
+      },
+      "largest": {
+        "key": "DO|SENTINEL 3A|2025-11-24",
+        "arm": "AP72",
+        "km": 7.146
+      }
+    },
+    "bisect": {
+      "windows": "71 moved, 6 moved under 1e-6 km, 10 unchanged controls; each build against the previous and the refrozen samples (e, P0, the four bases, noise, rate)",
+      "builds": [
+        {
+          "version": "0.4.15",
+          "dist": "2cdec7f5",
+          "replay": "4a02a6d9 ($OMM)",
+          "movedAtPrevious": 71,
+          "movedAtRefrozen": 0
+        },
+        {
+          "version": "0.4.16",
+          "dist": "544cb58c",
+          "replay": "4a02a6d9 ($OMM)",
+          "movedAtPrevious": 51,
+          "movedAtRefrozen": 8,
+          "movedStatesOnly": 12
+        },
+        {
+          "version": "0.4.17",
+          "dist": "7d4920ee",
+          "replay": "4a02a6d9 ($OMM)",
+          "movedAtPrevious": 51,
+          "movedAtRefrozen": 20
+        },
+        {
+          "version": "0.4.18",
+          "dist": "225bf936",
+          "replay": "4a02a6d9 ($OMM)",
+          "movedAtPrevious": 0,
+          "movedAtRefrozen": 71
+        },
+        {
+          "version": "0.5.0",
+          "dist": "fa1e4466",
+          "replay": "this checkout ($OCM)",
+          "movedAtPrevious": 0,
+          "movedAtRefrozen": 71
+        },
+        {
+          "version": "0.5.1",
+          "dist": "d29acd2b",
+          "replay": "this checkout ($OCM)",
+          "movedAtPrevious": 0,
+          "movedAtRefrozen": 71
+        },
+        {
+          "version": "0.5.2",
+          "dist": "74388314",
+          "replay": "this checkout ($OCM)",
+          "movedAtPrevious": 0,
+          "movedAtRefrozen": 71
+        }
+      ],
+      "controls": "unchanged at every build; the 6 windows under 1e-6 km move at 0.4.16"
+    },
+    "cause": "Intended model changes, each within its release's stated scope, the fit inputs (thinned states, $SPW rows) byte-identical across builds: 0.4.16 (1ec77920) refits all 26 HE and HX windows (e > 0.3) with drag per perigee passage (BTERM and the non-gravitational rate move; states 4e-6 to 2.3e-3 km); 0.4.17 (3ae1eb28) widens the 12 THEMIS fits' BTERM to the RMS floor (fit covariance only); 0.4.18 (4f1a55b4, 6fcce5b3) takes the band-median fall-back on 51 DO and LS 72 h fits at 800-1400 km, each record stating it, and no other; 0.5.0 to 0.5.2 move none. Not refrozen then: those releases' lanes ran their own E2Es, none re-recorded this file as every release through 0.4.15 had, and their gauntlets skipped sdn-ap-rigor-full.",
+    "movedWindows": [
+      {
+        "key": "DO|SENTINEL 3A|2025-11-24",
+        "arm": "AP72",
+        "km": 7.146,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-12-19",
+        "arm": "AP72",
+        "km": 4.22,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "LS|WESTPAC|2025-11-09",
+        "arm": "AP72",
+        "km": 2.157,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-10-30",
+        "arm": "AP72",
+        "km": 1.648,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3B|2025-10-30",
+        "arm": "AP72",
+        "km": 1.608,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3B|2025-10-25",
+        "arm": "AP72",
+        "km": 1.558,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "LS|WESTPAC|2025-10-15",
+        "arm": "AP72",
+        "km": 1.557,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-12-04",
+        "arm": "AP72",
+        "km": 1.389,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3B|2025-12-04",
+        "arm": "AP72",
+        "km": 1.377,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "LS|WESTPAC|2025-12-09",
+        "arm": "AP72",
+        "km": 1.342,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "LS|WESTPAC|2025-11-04",
+        "arm": "AP72",
+        "km": 1.232,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-10-15",
+        "arm": "AP72",
+        "km": 1.088,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-12-09",
+        "arm": "AP72",
+        "km": 0.9866,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3B|2025-11-19",
+        "arm": "AP72",
+        "km": 0.9776,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-11-09",
+        "arm": "AP72",
+        "km": 0.9319,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-10-20",
+        "arm": "AP72",
+        "km": 0.7629,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3B|2025-10-15",
+        "arm": "AP72",
+        "km": 0.6862,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m, step"
+      },
+      {
+        "key": "LS|STARLETTE|2025-11-04",
+        "arm": "AP72",
+        "km": 0.2971,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|SENTINEL 3B|2025-11-09",
+        "arm": "AP72",
+        "km": 0.1951,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "DO|SENTINEL 3A|2025-11-14",
+        "arm": "AP72",
+        "km": 0.1661,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "LS|WESTPAC|2025-10-30",
+        "arm": "AP72",
+        "km": 0.1443,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "LS|STELLA|2025-11-09",
+        "arm": "AP72",
+        "km": 0.1182,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m"
+      },
+      {
+        "key": "DO|SENTINEL 3B|2025-12-14",
+        "arm": "AP72",
+        "km": 0.08021,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "LS|STARLETTE|2025-11-24",
+        "arm": "AP72",
+        "km": 0.0454,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|SWOT|2025-12-14",
+        "arm": "AP72",
+        "km": 0.02315,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "LS|STARLETTE|2025-10-15",
+        "arm": "AP72",
+        "km": 0.01946,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|JASON 3|2025-12-04",
+        "arm": "AP72",
+        "km": 0.01614,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "LS|STARLETTE|2025-10-10",
+        "arm": "AP72",
+        "km": 0.0147,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "LS|STELLA|2025-10-10",
+        "arm": "AP72",
+        "km": 0.01444,
+        "by": "0.4.18 fall-back: BTERM > 3 sigma and fit RMS > 18.95 m, gap"
+      },
+      {
+        "key": "LS|STARLETTE|2025-11-19",
+        "arm": "AP72",
+        "km": 0.01117,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-10-10",
+        "arm": "AP72",
+        "km": 0.01083,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-10-20",
+        "arm": "AP72",
+        "km": 0.009569,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|JASON 3|2025-10-15",
+        "arm": "AP72",
+        "km": 0.009255,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-11-29",
+        "arm": "AP72",
+        "km": 0.00819,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|JASON 3|2025-11-29",
+        "arm": "AP72",
+        "km": 0.008134,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "LS|STELLA|2025-11-24",
+        "arm": "AP72",
+        "km": 0.007284,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|JASON 3|2025-12-19",
+        "arm": "AP72",
+        "km": 0.007228,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|SENTINEL-6B|2025-12-14",
+        "arm": "AP72",
+        "km": 0.004828,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-11-19",
+        "arm": "AP72",
+        "km": 0.004001,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-11-09",
+        "arm": "AP72",
+        "km": 0.002632,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|HAIYANG 2C|2025-11-09",
+        "arm": "AP72",
+        "km": 0.002352,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "HX|THEMIS A|2013-02-13",
+        "arm": "AP72",
+        "km": 0.002281,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HX|THEMIS A|2013-02-17",
+        "arm": "AP72",
+        "km": 0.002268,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "DO|SENTINEL-6B|2025-12-19",
+        "arm": "AP72",
+        "km": 0.001492,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-11-04",
+        "arm": "AP72",
+        "km": 0.001429,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-10-15",
+        "arm": "AP72",
+        "km": 0.001301,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5, step"
+      },
+      {
+        "key": "LS|STELLA|2025-12-09",
+        "arm": "AP72",
+        "km": 0.001198,
+        "by": "0.4.18 fall-back: gap"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-12-14",
+        "arm": "AP72",
+        "km": 0.001149,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-10-30",
+        "arm": "AP72",
+        "km": 0.000928,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-10-25",
+        "arm": "AP72",
+        "km": 0.0006406,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-12-04",
+        "arm": "AP72",
+        "km": 0.0005598,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "HX|THEMIS A|2013-02-11",
+        "arm": "AP72",
+        "km": 0.0003883,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-12-19",
+        "arm": "AP72",
+        "km": 0.0003703,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "DO|S6 MICHAEL FREILICH|2025-11-24",
+        "arm": "AP72",
+        "km": 0.0001838,
+        "by": "0.4.18 fall-back: sigma ln B > 0.5"
+      },
+      {
+        "key": "HX|THEMIS E|2013-02-13",
+        "arm": "AP72",
+        "km": 9.185e-05,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HX|THEMIS D|2013-02-13",
+        "arm": "AP72",
+        "km": 5.393e-05,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HE|TESS|2026-08-10",
+        "arm": "AP72",
+        "km": 5.287e-05,
+        "by": "0.4.16"
+      },
+      {
+        "key": "HX|THEMIS E|2013-02-15",
+        "arm": "AP72",
+        "km": 4.137e-05,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HX|THEMIS A|2013-02-15",
+        "arm": "AP72",
+        "km": 3.656e-05,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HE|TESS|2026-07-27",
+        "arm": "AP72",
+        "km": 3.419e-05,
+        "by": "0.4.16"
+      },
+      {
+        "key": "HX|THEMIS D|2013-02-15",
+        "arm": "AP72",
+        "km": 3.281e-05,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HX|CHANDRA|2018-04-12",
+        "arm": "AP72",
+        "km": 3.152e-05,
+        "by": "0.4.16"
+      },
+      {
+        "key": "HX|THEMIS D|2013-02-11",
+        "arm": "AP72",
+        "km": 2.9e-05,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HX|THEMIS E|2013-02-11",
+        "arm": "AP72",
+        "km": 1.792e-05,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HE|TESS|2026-08-24",
+        "arm": "AP72",
+        "km": 1.387e-05,
+        "by": "0.4.16"
+      },
+      {
+        "key": "HE|TESS|2026-08-03",
+        "arm": "AP72",
+        "km": 1.045e-05,
+        "by": "0.4.16"
+      },
+      {
+        "key": "HE|TESS|2026-09-07",
+        "arm": "AP72",
+        "km": 6.446e-06,
+        "by": "0.4.16"
+      },
+      {
+        "key": "HX|THEMIS E|2013-02-17",
+        "arm": "AP72",
+        "km": 5.895e-06,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HX|THEMIS D|2013-02-17",
+        "arm": "AP72",
+        "km": 4.669e-06,
+        "by": "0.4.16 states, 0.4.17 fit covariance"
+      },
+      {
+        "key": "HE|TESS|2026-08-17",
+        "arm": "AP72",
+        "km": 4.393e-06,
+        "by": "0.4.16"
+      },
+      {
+        "key": "HX|CHANDRA|2018-03-22",
+        "arm": "AP72",
+        "km": 2.424e-06,
+        "by": "0.4.16"
+      }
+    ],
+    "movedUnder1e-6Km": [
+      "HE|TESS|2026-08-31 AP72",
+      "HX|CHANDRA|2018-03-08 AP72",
+      "HX|CHANDRA|2018-03-29 AP72",
+      "HX|CHANDRA|2018-04-19 AP72",
+      "HX|CHANDRA|2018-03-15 AP72",
+      "HX|CHANDRA|2018-04-05 AP72"
+    ]
   }
 }
