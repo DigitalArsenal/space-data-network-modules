@@ -149,7 +149,9 @@ These differences are part of the measured spread:
 The tables below score the shipped FFM 1.4.0 artifact on the original
 subset. The [72-case reference suite](#reference-suite-on-72-cases) supplies
 the wider coverage and diagnoses. The exact artifact digest is pinned in
-[the current subset summary](../tests/evidence/xval/summary.json).
+[the current subset summary](../tests/evidence/xval/summary.json). The subset
+is not re-scored with the suite: the consolidated evidence does not read its
+summary ([not re-scored](../tests/evidence/CONSOLIDATED.md#not-re-scored)).
 
 Largest 3D position difference over 24 h, at hourly samples, through the
 SDK's browser harness (`node tests/xval-summary.mjs`), at the Orekit suite's
@@ -227,17 +229,15 @@ was also run with Jacchia-Roberts.
 
 - **Agreement:** FFM agrees with every tool to within that tool's own
   distance from the others, plus its own integration error. Measured over 24 h
-  at the suite's request, GMAT's Jacchia-Roberts drag cases aside:
+  at the suite's request on the original subset (FFM 1.4.0, not re-scored),
+  GMAT's Jacchia-Roberts drag cases aside:
   - Orekit: at most 2.2 cm.
   - GMAT: at most 2.9 cm.
   - Tudat, native and WebAssembly: at most 6.5 cm. Excluding drag, at most
     2.0 cm.
   - Nyx: at most 9.3 cm, consistent with the Earth-orientation difference above.
     With drag on LEO400, 12.1 m, which is Nyx's own gap from all the others.
-  FFM's own integration error at 1e-13 and steps of at most 300 s is 1.8 cm
-  per day in LEO 400 km and 1.6 cm at 700 km; with steps of 30 s FFM is
-  within 4.2 mm of Orekit outside Molniya, and a tolerance of 1e-15 with steps
-  of 10 s moves that by under 0.2 mm (README.md, Agreement with Orekit 13.1).
+- **Integration error:** <!-- BEGIN GENERATED INTEGRATION ERROR -->FFM's own integration error at RK78 1e-13 and steps of at most 300 s (FFM there against FFM at 1e-15 and steps of at most 10 s, the largest over the day) is 9.801 mm in LEO 400 km and 0.455 mm at 700 km; the LEO 400 km cases with radiation pressure and drag are within 8.448 mm of Orekit at those settings, 4.092 mm with steps of at most 30 s and 4.074 mm at 1e-15 with steps of at most 10 s (FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04; README.md, Agreement with Orekit 13.1).<!-- END GENERATED INTEGRATION ERROR -->
 - **Spread among the tools:**
   - **Orekit and Tudat** agree best: at most 1.7 mm with gravity, Sun and
     Moon; 1.0 mm with radiation pressure; 5.4 cm with NRLMSISE-00 drag.
@@ -474,7 +474,9 @@ comparison changes from 7.027113 to 0.013181 mm. Raw scores retain the
 independently measured cubic-versus-linear interpolation spread.
 
 
-The Orekit trajectory suite retains 72/72 published limits. The additional
+On FFM 1.4.0 against the 1.3.1 baseline (the recorded before/after of the
+frame change, not re-scored), the Orekit trajectory suite retains 72/72
+published limits. The additional
 before/after constraint (increase no greater than 0.0001 m) is met by 113 of
 117 LEO/SSO setting rows. Its four misses remain explicit:
 
@@ -513,7 +515,7 @@ The headless-shell browser, native WasmEdge and Docker WasmEdge lanes have
 byte-identical responses and exit classes: PRW 72, GNSS 20, Earth
 radiation/tides 24, variational 40, finite burn 180 and kernel 24 runs per
 lane. The resident receipt has 33 requests across each of the three runtimes,
-with exact agreement.
+with exact agreement. These receipts are not re-scored with the suite.
 
 `tests/evidence/refresh-derived-comparisons.mjs` refreshes the FFM side of
 stored GMAT, Nyx and Basilisk diagnostic comparisons. It uses the current
@@ -533,6 +535,19 @@ tool-specific scoring/annotation commands before
 The GMAT diagnostic inputs are the provisioned local reports under
 `/Users/tj/software/tools/xval/gmat-work/{anomalous-oxygen,variants}`;
 this refresh step does not run or fetch an external reference engine.
+
+ERFA/SPICE and Horizons re-score the FFM side against their stored
+pyerfa/SPICE references without running Python; each refuses if FFM's
+instants or the authenticated Horizons rows differ from those the stored
+reference was evaluated at:
+
+```sh
+node tests/evidence/erfa-spice/run-erfa-spice.mjs --stored-reference
+node tests/evidence/horizons/run-horizons.mjs --stored-reference
+```
+
+[rescore.json](../tests/evidence/rescore.json) records the re-score date and
+the evidence not re-scored, with its build and the reason.
 
 ## SGP4 against its STR#3 base
 

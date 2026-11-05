@@ -216,9 +216,10 @@ J reduce(const J& input) {
  const auto& exported=input.at("export"); std::map<std::string,J> cases;
  for(const auto& c:exported.at("cases")) require(cases.emplace(c.at("id"),c).second,"duplicate export ID");
  require(cases.size()==72,"export must contain 72 cases");
- J out={{"tools",J::array()},{"positionTable",J::array()},{"formatted",J::object()}};
+ J out={{"tools",J::array()},{"positionTable",J::array()},{"classTable",J::array()},{"formatted",J::object()}};
  std::map<std::string,std::map<std::string,double>> grouped;
  std::map<std::string,std::map<std::string,int>> groupedCount;
+ J integration=J::object();
  for(const auto& t:input.at("tools")) {
   const std::string id=t.at("id"), kind=t.at("kind"); J result={{"id",id},{"counts",counts()},{"rows",J::array()}}; auto& ct=result["counts"];
   ct["skipped"]=t.at("skipped").size();
@@ -240,13 +241,17 @@ J reduce(const J& input) {
      auto& settingCounts=result["settings"][key];inc(settingCounts,"scored");inc(settingCounts,met?"met":"missed");
      scored[key]={{"worstM",n},{"display",distance(n)},{"met",met}};
      if(key=="suite") {inc(ct,"scored");inc(ct,met?"met":"missed");if(row.contains("met"))require(row.at("met")==met,id+" "+cid+": case verdict differs");}
-     if(key=="suite"||(id=="orekit"&&key=="finest")) {
-      const std::string col=id+(key=="finest"?"-finest":""),group=orbit+"/"+family;
-      grouped[group][col]=std::max(grouped[group][col],n);groupedCount[group][col]++;
-     }
+     // Maxima per orbit and force class, and per force class over all orbits ("all/"), for every setting.
+     const std::string col=id+(key=="suite"?"":"-"+key);
+     for(const std::string& group:{orbit+"/"+family,"all/"+family}){grouped[group][col]=std::max(grouped[group][col],n);groupedCount[group][col]++;}
+    }
+    // FFM against itself: its suite trajectory against its finest one, the largest per orbit (Orekit summary only).
+    if(row.contains("integrationErrorM")) {
+     const double e=number(row.at("integrationErrorM"));
+     if(!integration.contains(orbit)||e>number(integration.at(orbit).at("maxM")))integration[orbit]={{"maxM",e},{"display",distance(e)}};
     }
     if(row.contains("stm")&&!row.at("stm").is_null()) {
-     const auto& s=row.at("stm"); double n=number(s.at("worst"));inc(stm,"compared");
+     const auto& s=row.at("stm"); double n=number(s.at("worst"));inc(stm,"compared");scored["stm"]={{"worst",n},{"display",scalar(n)}};
      if(stm["maxRelativeColumnDifference"].is_null()||n>stm["maxRelativeColumnDifference"].get<double>())stm["maxRelativeColumnDifference"]=n;
      J params=s.value("parameters",J::object());
      for(auto it=params.begin();it!=params.end();++it) {double p=number(it.value());if(!stm["parameters"].contains(it.key())||p>stm["parameters"][it.key()].get<double>())stm["parameters"][it.key()]=p;}
@@ -268,6 +273,13 @@ J reduce(const J& input) {
   for(const auto& col:input.at("columns")){std::string name=col;if(groupedCount[group][name])row["cells"][name]={{"maxM",grouped[group][name]},{"scored",groupedCount[group][name]},{"display",distance(grouped[group][name])}};else row["cells"][name]=nullptr;}
   out["positionTable"].push_back(row);
  }
+ for(const auto& family:input.at("families")) {
+  const std::string group="all/"+family.get<std::string>();
+  J row={{"forceClass",family},{"cells",J::object()}};
+  for(const auto& [name,value]:grouped[group])row["cells"][name]={{"maxM",value},{"scored",groupedCount[group][name]},{"display",distance(value)}};
+  out["classTable"].push_back(row);
+ }
+ out["integrationError"]=integration;
  for(auto it=input.at("format").begin();it!=input.at("format").end();++it)out["formatted"][it.key()]=quantity(number(it.value().at("value")),it.value().at("unit"),it.value().value("precision",-1));
  out["dragDiagnostics"]=reduceDragDiagnostics(input,cases);
  return out;

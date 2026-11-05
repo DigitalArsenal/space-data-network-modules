@@ -1,0 +1,51 @@
+{
+ "about": "The last re-score of this suite: FFM flown against the stored references, which are not rerun. consolidate.mjs carries the date and the evidence it did not re-score into consolidated.json and CONSOLIDATED.md; check-all.mjs prints the list.",
+ "date": "2026-11-04",
+ "notRescored": [
+  {
+   "evidence": "orekit/summary-simple-eop.json",
+   "build": "FFM 1.3.0 (9c24bf0e)",
+   "reason": "Its reference, the Orekit run with -Dorekit.simpleEOP=true (full-simple-eop.json), is not stored in the suite; regenerating it runs Orekit."
+  },
+  {
+   "evidence": "README.md, Radiation pressure: the final-epoch-only figure (3.1 cm)",
+   "build": "FFM 1.3.0 (9c24bf0e)",
+   "reason": "Measured by tests/orekit_reference.test.mjs, which flies the final-epoch-only request; the suite stores no score for that request."
+  },
+  {
+   "evidence": "README.md, Ocean tides and VCM parity: the Orekit totals, differentials and Jacobian figures",
+   "build": "FFM 1.3.0 (9c24bf0e)",
+   "reason": "Quoted from the header of tests/orekit_reference.test.mjs; consolidated.json does not carry per-orbit force differentials or Jacobian columns."
+  },
+  {
+   "evidence": "xval/summary.json and docs/cross-validation.md, Results and Findings (the original 27-case subset)",
+   "build": "FFM 1.4.0 (eb05fc52)",
+   "reason": "Written by tests/xval-summary.mjs; consolidate.mjs does not read it, so check-all.mjs cannot hold its figures to consolidated.json."
+  },
+  {
+   "evidence": "erfa-spice/before-after.json, orekit-trajectory-before-after.json, orekit-frames-summary.json and the docs/cross-validation.md classical-frame tables",
+   "build": "FFM 1.3.1 baseline against 1.4.0",
+   "reason": "Recorded before/after measurements of the 1.4.0 ERFA frame change; Orekit frames are not rerun."
+  },
+  {
+   "evidence": "basilisk/lst-probes.json and basilisk/model-probes.json",
+   "build": "Basilisk 2.12.0 probes as recorded",
+   "reason": "Regenerating them runs Basilisk. The NRLMSISE-00 source they pinned changed after them (globe7, 2026-10-25/26); its digest is kept as a historical source."
+  },
+  {
+   "evidence": "Runtime parity receipts: lane13/*.json, gnss-srp/prw-gnss-parity.json, earth-radiation-tides/prw-earth-radiation-tides-parity.json (README.md Verification; docs/cross-validation.md runtime receipts)",
+   "build": "FFM 2.0.0 (c5c81101) in README.md; FFM 1.4.0 (eb05fc52) in docs/cross-validation.md",
+   "reason": "Browser against native WasmEdge byte-agreement receipts written by tests/*-parity.mjs; they compare runtimes, not stored references, and were not rerun."
+  },
+  {
+   "evidence": "gps-srp-accuracy/score-test-window.json (README.md, GPS prediction accuracy)",
+   "build": "as recorded",
+   "reason": "An accuracy study on E3's window against ESA final orbits; its inputs live in orbit-accuracy-experiments, not in the suite."
+  },
+  {
+   "evidence": "earth-equivalence.json, engines/results-2026-10-26.json, catalog-resident.json, catalog-coverage.json, memory-sizing.json",
+   "build": "as recorded",
+   "reason": "Equivalence, engine, catalog and memory receipts, not comparisons with stored references."
+  }
+ ]
+}

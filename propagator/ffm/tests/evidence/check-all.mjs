@@ -60,6 +60,10 @@ try {
     console.log(`Drag diagnostic, suite: ${d.label} ${r.orbit}, ${r.cases} cases; stock ${r.stockDisplay}, adjusted ${r.correctedDisplay}, limit ${r.limitDisplay}: ${r.met ? 'met' : 'not met'}.`);
   for (const row of result.data.tools.find((t) => t.id === 'str3').rows)
     console.log(`SGP4 against its STR#3 base, ${row.regime}: ${row.samples} states; maximum ${row.metrics[0].display}, ${row.metrics[1].display}.`);
+  console.log(`Module pin: every summary pins FFM ${result.data.module.version}, SHA-256 ${result.data.module.sha256}, the committed dist (build-provenance.json).`);
+  console.log(`Documents: ${result.blocks.length} generated blocks (${[...new Set(result.blocks.map((b) => b.file))].join(', ')}) equal their regeneration from consolidated.json.`);
+  console.log(`Not re-scored (${result.data.rescore.notRescored.length}; re-score ${result.data.rescore.date}, rescore.json):`);
+  for (const r of result.data.rescore.notRescored) console.log(`- ${r.evidence}: ${r.build}. ${r.reason}`);
   console.log('Coverage: every propagation tool accounts for all 72 exported case IDs.');
   console.log('Verdicts: independently recomputed from numeric scores; only limited primary rows enter met/missed counts; every exceeded bound has a recorded cause.');
   console.log('SGP4 against its STR#3 base: per-regime maxima recomputed from the summary; the rows state no limit and count as diagnostic.');

@@ -2,9 +2,25 @@
 
 FFM (Full Force Model) is defined in [the FFM profile](../../FFM.md).
 
-Generated from pinned summaries by `consolidate.mjs`; checked by `node propagator/ffm/tests/evidence/check-all.mjs` from the repository root. No timestamps or host details enter this report.
+Generated from pinned summaries by `consolidate.mjs`; checked by `node propagator/ffm/tests/evidence/check-all.mjs` from the repository root. No timestamps or host details enter this report; the re-score date is authored in [rescore.json](rescore.json).
 
-FFM 2.2.0, SHA-256 `d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153`. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+FFM 2.2.0, SHA-256 `d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153`, re-scored 2026-11-04. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+
+## Not re-scored
+
+The stored references are never rerun. This evidence keeps the build it was recorded on:
+
+| Evidence | Build | Reason |
+| --- | --- | --- |
+| orekit/summary-simple-eop.json | FFM 1.3.0 (9c24bf0e) | Its reference, the Orekit run with -Dorekit.simpleEOP=true (full-simple-eop.json), is not stored in the suite; regenerating it runs Orekit. |
+| README.md, Radiation pressure: the final-epoch-only figure (3.1 cm) | FFM 1.3.0 (9c24bf0e) | Measured by tests/orekit_reference.test.mjs, which flies the final-epoch-only request; the suite stores no score for that request. |
+| README.md, Ocean tides and VCM parity: the Orekit totals, differentials and Jacobian figures | FFM 1.3.0 (9c24bf0e) | Quoted from the header of tests/orekit_reference.test.mjs; consolidated.json does not carry per-orbit force differentials or Jacobian columns. |
+| xval/summary.json and docs/cross-validation.md, Results and Findings (the original 27-case subset) | FFM 1.4.0 (eb05fc52) | Written by tests/xval-summary.mjs; consolidate.mjs does not read it, so check-all.mjs cannot hold its figures to consolidated.json. |
+| erfa-spice/before-after.json, orekit-trajectory-before-after.json, orekit-frames-summary.json and the docs/cross-validation.md classical-frame tables | FFM 1.3.1 baseline against 1.4.0 | Recorded before/after measurements of the 1.4.0 ERFA frame change; Orekit frames are not rerun. |
+| basilisk/lst-probes.json and basilisk/model-probes.json | Basilisk 2.12.0 probes as recorded | Regenerating them runs Basilisk. The NRLMSISE-00 source they pinned changed after them (globe7, 2026-10-25/26); its digest is kept as a historical source. |
+| Runtime parity receipts: lane13/*.json, gnss-srp/prw-gnss-parity.json, earth-radiation-tides/prw-earth-radiation-tides-parity.json (README.md Verification; docs/cross-validation.md runtime receipts) | FFM 2.0.0 (c5c81101) in README.md; FFM 1.4.0 (eb05fc52) in docs/cross-validation.md | Browser against native WasmEdge byte-agreement receipts written by tests/*-parity.mjs; they compare runtimes, not stored references, and were not rerun. |
+| gps-srp-accuracy/score-test-window.json (README.md, GPS prediction accuracy) | as recorded | An accuracy study on E3's window against ESA final orbits; its inputs live in orbit-accuracy-experiments, not in the suite. |
+| earth-equivalence.json, engines/results-2026-10-26.json, catalog-resident.json, catalog-coverage.json, memory-sizing.json | as recorded | Equivalence, engine, catalog and memory receipts, not comparisons with stored references. |
 
 ## Protocol and coverage
 
