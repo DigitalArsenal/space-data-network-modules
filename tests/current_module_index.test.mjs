@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -7,6 +7,17 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { createCurrentModuleIndex } from "../scripts/lib/current-module-index.mjs";
+
+// The scan reads git's tracked list, so a temporary tree is a committed repository.
+function commitTree(root) {
+  const git = (...args) =>
+    execFileSync("git", ["-C", root, "-c", "user.name=test", "-c", "user.email=test@example.invalid", ...args], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  git("init", "-q");
+  git("add", "-A");
+  git("commit", "-q", "--no-verify", "--no-gpg-sign", "-m", "tree");
+}
 
 test("current module parity index records SDK and implementation readiness", () => {
   const result = spawnSync(process.execPath, ["scripts/check-current-module-index.mjs"], {
@@ -70,6 +81,7 @@ test("current module parity index does not count browser-only shared direct modu
     fs.writeFileSync(path.join(moduleRoot, "tests", "behavior.test.mjs"), "import 'node:test';\n");
     fs.writeFileSync(path.join(moduleRoot, "dist", "isomorphic", "module.wasm"), "");
 
+    commitTree(repoRoot);
     const index = createCurrentModuleIndex(repoRoot);
     const module = index.modules.find((entry) => entry.modulePath === "analysis/sensor-coverage");
     assert.ok(module, "temporary module should be inventoried");
@@ -114,6 +126,7 @@ test("current module parity index ignores generated build output directories", (
     fs.writeFileSync(path.join(moduleRoot, "tests", "behavior.test.mjs"), "import 'node:test';\n");
     fs.writeFileSync(path.join(moduleRoot, "dist", "isomorphic", "module.wasm"), "");
 
+    commitTree(repoRoot);
     const index = createCurrentModuleIndex(repoRoot);
     const module = index.modules.find((entry) => entry.modulePath === "analysis/example");
     assert.ok(module, "temporary module should be inventoried");
