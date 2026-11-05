@@ -3,6 +3,19 @@
 // (Cody-Waite in three parts of pi/2) and the minimax kernels of FDLIBM
 // (k_sin.c, k_cos.c; error below one unit in the last place). Arguments
 // beyond 2^20 pi/2 fall back to the library functions.
+//
+// The kernel coefficients (k_sin.c, k_cos.c) and the pi/2 constants
+// (e_rem_pio2.c) are FDLIBM's, as FreeBSD msun and musl carry them, under the
+// notice those files carry (this package's LICENSES/Sun-FDLIBM.txt):
+//
+// ====================================================
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+//
+// Developed at SunSoft, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this
+// software is freely granted, provided that this notice
+// is preserved.
+// ====================================================
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
