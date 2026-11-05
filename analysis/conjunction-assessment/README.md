@@ -210,17 +210,22 @@ An SGP4XP or AP element set is an `$OCM` with `MEAN_ELEMENTS` (as `propagator/sd
 host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) screens a catalog of both.
 
 - **Input.** `sets`: `$OCM` records, plain or size-prefixed, one object each, `MEAN_ELEMENTS.MEAN_ELEMENT_THEORY`
-  typed. `catalog`: `$OMM` SGP4 sets, as `screen_catalog`'s `catalog` port takes them. The WASM module's ports do
-  not change: an `$OCM` on a source arm (`COMPREHENSIVE_ORBIT`) is still a Cartesian OCM, and the module never flies
-  an element set of another theory itself.
+  typed. `catalog`: `$OMM` SGP4 sets, plain or size-prefixed. The WASM module's ports do not change: an `$OCM` on a
+  source arm (`COMPREHENSIVE_ORBIT`) is still a Cartesian OCM, and the module never flies an element set of another
+  theory itself.
 - **Dispatch by theory.** SGP4XP and AP sets are flown by `propagator/sdn-ap` `propagate`, one `$OCM` a call (the
   record is the whole input of its flight: theory, forces, weather, density correction and covariance come from it),
-  with a `$PCF` whose OUTPUT is the window, widened by one step at each end, at `OCM_SET_FLIGHT.stepSeconds` (30 s)
-  in TEME, the theory's own frame and the frame of every SGP4 screen. SGP4 `$OMM` sets stay on the built-in SGP4
-  (`foundation/sgp4-str3`), on `catalog`: an SGP4 set flies only on SGP4 and never seeds another theory. Any other
-  theory, SGP4 or UNSPECIFIED in an `$OCM` included, is refused by name before any flight:
-  `theory-not-screened:<THEORY>`. A set `propagate` refuses (`theory-not-flown:<name>`, `weather-rows-missing`,
-  ...) is refused by the flow with sdn-ap's code and message unchanged.
+  with a `$PCF` whose OUTPUT.EPOCHS are the window's instants from its start, every `OCM_SET_FLIGHT.stepSeconds`
+  (30 s), to the first at or after its end, in TEME, the theory's own frame and the frame of every SGP4 screen (a
+  RECORDS set flies from the day after its first weather row, so a flight never starts before the window; the module
+  takes a coverage edge as a sample). Explicit epochs, because for them sdn-ap writes the block the OEM schema names
+  for explicit lines (STEP_SIZE 0, a line per epoch); its START_TIME/STOP_TIME form writes STEP_SIZE with the lines,
+  the schema's compact form, which this module refuses as an invalid compact grid. SGP4 `$OMM` sets stay on the built-in SGP4 (`foundation/sgp4-str3`) as the request's
+  `MEAN_ELEMENTS` sources, as `gpu/catalogScreen.mjs` gives them (`screen_catalog` takes inline sources or `catalog`
+  frames, not both): an SGP4 set flies only on SGP4 and never seeds another theory. Any other theory, SGP4 or
+  UNSPECIFIED in an `$OCM` included, is refused by name before any flight: `theory-not-screened:<THEORY>`. A set
+  `propagate` refuses (`theory-not-flown:<name>`, `weather-rows-missing`, ...) is refused by the flow with sdn-ap's
+  code and message unchanged. Refused sets are returned in `refused`, one entry each, and the other sets screen.
 - **The call.** The repository's host-flow pattern (`flows/observation-ap/flow.mjs`; this package's
   `scripts/lib/ffmFarm.mjs`): `hosts = { conjunction, sdnAp }`, each an SDK module host with
   `invoke({ methodId, inputs })`; the flow routes typed records and computes nothing. The SDK offers no call from one
@@ -237,12 +242,18 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   the `UNCERTAINTY_SOURCE`. Where a set carries none, the event keeps the Alfano maximum (`MAXIMUM_PROBABILITY_ONLY`,
   basis `NONE`); the empirical model (`uncertainty_model`) applies to element sets the module flies itself, not to
   a flown `$OEM`. Which one was used is on every event.
-- **Parity.** `node tests/ocm-sets-screening.e2e.mjs`: the registered AP and SGP4XP sets of
-  `tests/fixtures/ocm-sets/` (sdn-ap `fit` on its own 0.4.0 fixture inputs, `tests/record-ocm-sets.mjs`), their
-  derived sets, and one SGP4 `$OMM`, flown by sdn-ap at 10 s and screened the existing way as uploaded `$OEM`
-  sources, against the same records through `screenOcmSets`: the same encounters (pair and TCA), miss distances
-  within `CA_PARITY_TOLERANCES.missDistance.aerospaceHardFailM` (0.10 m, independent-parity) and NLRV TCAs within
-  `tca.NLRV.hardFailSec` (10 ms), the covariance labels equal, and the refusals above by name.
+- **Parity.** `node tests/ocm-sets-screening.e2e.mjs`: the registered sets of `tests/fixtures/ocm-sets/`
+  (`tests/record-ocm-sets.mjs`: sdn-ap `fit` on its own 0.4.0 fixture inputs, AP and SGP4XP, and two sets turned
+  across the first one's plane and refitted by sdn-ap from the other theory's flight, so each carries a fit
+  covariance), one more turned set without covariance, and one SGP4 `$OMM`, flown by sdn-ap at the flow's 30 s and
+  screened the existing way as uploaded `$OEM` sources, against the same records through `screenOcmSets`: the same
+  encounters (pair and TCA), miss distances within `CA_PARITY_TOLERANCES.missDistance.aerospaceHardFailM` (0.10 m,
+  independent-parity) and NLRV TCAs within `tca.NLRV.hardFailSec` (10 ms), the covariance labels equal and as the
+  sets say, every covariance-pair event's probability present in both arms, and the refusals above by name.
+  Measured: 104 events over four crossings, 0.010 mm and 0.000 ms apart; the probabilities within 1.8e-4 relative
+  (the existing way's records pass through flatc JSON text). Against the existing way at 10 s the same events are
+  0.26 m and 0.08 ms apart: the JD double's 40 us resolution at a sample epoch (0.3 m at 7.6 km/s), which cancels
+  between two sources on one grid, not the Hermite truncation (recorded, not gated).
 
 ## Build and runtime contract
 

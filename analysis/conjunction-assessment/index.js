@@ -139,6 +139,10 @@ export function verifySignedCdmOutput(cdmPayload, signedCdmOutput, publicKey) {
   );
 }
 
+// The $OCM element-set screen: SGP4XP and AP sets flown on their own theory by propagator/sdn-ap, SGP4 $OMM sets on the
+// built-in SGP4 (README, "$OCM element sets").
+export { screenOcmSets, OCM_SET_FLIGHT, FLOWN_THEORIES } from "./src/js/ocmSetScreen.mjs";
+
 export const CA_SOURCE_KINDS = Object.freeze([
   "OMM",
   "OCM",
