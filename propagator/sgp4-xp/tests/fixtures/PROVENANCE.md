@@ -2,7 +2,7 @@
 
 ## xp-fit-current.*
 
-Recorded 2026-11-04 by `tests/fixtures/record.mjs` from the propagator/sgp4-xp 0.2.1 dist; the inputs are the ones
+Recorded 2026-11-04 by `tests/fixtures/record.mjs` from the propagator/sgp4-xp 0.2.2 dist; the inputs are the ones
 recorded from the 0.1.1 dist (modules 1f806e4bf6) before the `$OCM` change.
 
 Amendment (0.2.1, task modules-sgp4-xp-flight-departs-library-20261104): the anchors moved because the 0.1.1 flight
@@ -12,6 +12,10 @@ fits were made with that flight. Re-recorded from 0.2.1, whose every state is th
 block 1's states moved by up to 0.538 m, its fit RMS from 2.45e-7 km to 8.17e-8 km and AGOM from 0.0099994 to
 0.0099998 m**2/kg; block 2 (NASA ISS) kept its elements and fit statistics, its held-out RMS moved by 0.1 mm (0.802918196 to
 0.802918300 km).
+
+Amendment (0.2.2, task modules-sgp4-xp-flight-cost-20261104): re-recorded from 0.2.2, whose SGP4-XP flight flies
+dense times in chains of new satellites and returns 0.2.1's states bit for bit. The `.oem` and `.omm` are
+byte-identical; the `.ocm` differs in two bytes, the version in each `$OCM`'s PROVENANCE.PRODUCER.
 
 - `xp-fit-current.oem`: the `fit` input, one size-prefixed `$OEM` of two blocks, ORIGINATOR NASA/JSC/FOD/TOPO.
   Block 1: 48 h at 120 s propagated by the dist from the SGP4-XP set n 15.5 rev/day, e 0.0006317, i 51.64,
@@ -25,7 +29,7 @@ block 1's states moved by up to 0.538 m, its fit RMS from 2.45e-7 km to 8.17e-8 
   kept for the refusal by count.
 
 sha256: oem 5c7ff4e36c16ca536b82908b40c469c8ab1ea2ab7c70272ddefd06984c08ba77, ocm
-05b1f54438231f1f36e64272df175c1556e0257de0c6a62a26a43b66db5b11b4, omm
+90ea86b69e7e4f2c955d7309869e430400a66e12256370adeb6314920eb1dc14, omm
 e85d5fc78c2cf9cfdd5efbceb509d2607bfaa880f667a9ce8646272feee82df4.
 
 ## geo-real-sets.json

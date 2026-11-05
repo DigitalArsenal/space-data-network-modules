@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // E2E (task modules-sgp4-xp-ocm-fit-20261103): the Space Force module writes and flies $OCM element sets.
 // - fit of tests/fixtures/xp-fit-current.oem (a synthetic 48 h SGP4-XP ephemeris and NASA's ISS ephemeris) emits one
-//   $OCM per block, equal bit for bit to the $OCM recorded from the 0.2.1 dist (tests/fixtures/xp-fit-current.ocm,
+//   $OCM per block, equal bit for bit to the $OCM recorded from the 0.2.2 dist (tests/fixtures/xp-fit-current.ocm,
 //   tests/fixtures/record.mjs): MEAN_ELEMENTS, FIT_STATISTICS and HELD_OUT_DAYS, OD_DYNAMIC_PARAMETERS, identity;
 //   the forces are stock XP (THEORY_FLUX_MODEL, {JXX,1970}, EGM-96, caps 0, no rows); PVN.PRODUCER names the library;
 //   assertNoUserDefined on every record.
