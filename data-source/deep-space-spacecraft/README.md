@@ -111,6 +111,8 @@ names, COSPAR/NORAD ids, events and lifecycle facts for its 42 craft.
   `near_earth`, `beyond_cislunar`, `kernels`, `segments`, `unsupported`,
   `source_errors`.
 - `stage_requests` (Number, 1–300, default 300) caps requests per stage.
+- `run_day` (String `YYYY-MM-DD`, optional) plans as of that TDB day instead of
+  the tick's day (replay, backfill); creation and provenance keep the tick's time.
 - Lanes holding SPICE rows carry license
   `LicenseRef-NASA-JPL-Horizons-PD AND LicenseRef-NASA-NAIF-PDS-Public`, the
   NAIF credit, a NAIF `EGPProvenance` entry and per-block NAIF license/credit
@@ -124,7 +126,14 @@ proves: LRO's SPICE rows in `lunar-orbit` within 5 m / 0.5 m/s of an independent
 Horizons TLIST (observed 0.54 m, 0.21 m/s); Chandrayaan-2's orbiter (-152), absent
 from the 0.2.0 roster, admitted by discovery into `lunar-orbit`; LADEE's
 Earth-centered phasing kernel in `cislunar` and its Moon-centered kernel in
-`lunar-orbit`, split at the center change. `CISLUNAR_RECORD=1` re-records live.
+`lunar-orbit`, split at the center change. Its native leg compiles `flow.mjs`
+with a fixture HTTP transport that answers only from the cassette
+(`tests/native-publication.mjs`), runs it in an isolated native node
+(`SDN_NODE_BINARY`, default `../space-data-network/sdn-server/bin/spacedatanetwork`;
+`SDN_JS` for the reader) with `run_day` set to the cassette's day, and walks every
+auto-published lane (`lunar-orbit`, `cislunar`, `catalogs`; 64 KiB shards) through
+list-published, reading every manifest and shard back by CID: identities, counts,
+sha256 and DPM license must match the replay. `CISLUNAR_RECORD=1` re-records live.
 
 ## Sources
 

@@ -71,6 +71,15 @@ inline bool config(const sdm_piv::Config& in, uint64_t fired, Json& out, std::st
   if (fired > 60000000000000ULL) return refuse("invalid-tick-time");
   out = {{"now_tdb", sdn_time::format_iso_micro(int64_t(fired / 86400000ULL) * 86400000000LL).substr(0, 19)},
          {"retrieved_ms", fired}, {"producer_peer_id", std::string(in.string("producer_peer_id"))}};
+  // `run_day` (String YYYY-MM-DD) plans as of that day instead of the tick's
+  // (a replay or backfill); creation and provenance keep the tick's time.
+  if (in.has("run_day")) {
+    const std::string day(in.string("run_day"));
+    double seconds;
+    if (in.kind("run_day") != R::configValueKind_String || day.size() != 10 ||
+        !horizons::parseCalendar(day + "T00:00:00", seconds)) return refuse("invalid-run-day");
+    out["now_tdb"] = day + "T00:00:00";
+  }
   if (in.has("objects")) {
     if (in.kind("objects") != R::configValueKind_NumberList) return refuse("invalid-objects");
     out["objects"] = Json::array();

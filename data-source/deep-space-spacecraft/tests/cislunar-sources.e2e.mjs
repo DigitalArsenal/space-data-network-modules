@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
 import { decodeHttpRequest, encodeHttpResponse, encodeTimerTick, decodeIngestRequest, decodeFlowNotice } from "space-data-module-sdk/runtime-contracts";
@@ -16,6 +16,7 @@ import { sha256, LRO_DIR, LADEE_DIR, LISTING_URL, KERNEL_TRIM, trimListing, trim
 const root = new URL("../", import.meta.url);
 const fixtureUrl = new URL("tests/fixtures/cislunar/cassette.json.gz", root);
 const record = process.env.CISLUNAR_RECORD === "1";
+const sds = path.dirname(createRequire(import.meta.url).resolve("spacedatastandards.org/package.json"));
 const manifest = JSON.parse(fs.readFileSync(new URL("plugin-manifest.json", root)));
 const wasm = fs.readFileSync(new URL("dist/isomorphic/module.wasm", root));
 // The 0.2.0 roster: membership before discovery.
@@ -24,6 +25,7 @@ const OLD_ROSTER = new Set([-143205, -31, -32, -23, -24, -98, -96, -170, -61, -1
   -41, -143, -5, -248, -236, -82]);
 assert.equal(OLD_ROSTER.size, 42);
 const CISLUNAR = ["lunar-orbit", "cislunar", "earth-moon-lagrange"];
+const PROVIDER_LANE = (source) => `deep-space-spacecraft/${source}`;
 // SPICE kernel -> 300 s grid -> OEM Hermite-7 (evaluate_oem) vs Horizons' own LRO states.
 // Observed 2026-11-05: 0.54 m and 0.21 m/s (the OEM evaluator's velocity is the weaker term).
 const TOLERANCE_KM = 0.005, TOLERANCE_KMS = 5e-4;
@@ -115,7 +117,6 @@ try {
   console.log(`PASS staged run: ${requests} HTTP responses, ${Object.keys(cassette.responses).length} fixture URLs, recorded ${cassette.recordedAt}`);
 
   // Records per lane, with the OEM block comments and NAIF ids.
-  const sds = path.dirname(createRequire(import.meta.url).resolve("spacedatastandards.org/package.json"));
   const { OEM } = await import(pathToFileURL(path.join(sds, "lib/js/OEM/OEM.js")));
   const { ByteBuffer } = await import("flatbuffers");
   const lanes = {};
@@ -187,7 +188,32 @@ try {
   assert.equal(meta.provenance.parserVersion, "0.3.0");
   const counts = Object.fromEntries(CISLUNAR.map((lane) => [lane, lanes[lane].length]));
   console.log(`PASS cislunar lanes: lunar-orbit ${counts["lunar-orbit"]}, cislunar ${counts.cislunar}, earth-moon-lagrange ${counts["earth-moon-lagrange"]} (fixture selection)`);
+
+  // Native leg: the same cassette through the compiled flow in an isolated native node.
+  const modulesRoot = path.resolve(fileURLToPath(root), "../..");
+  const binary = process.env.SDN_NODE_BINARY ?? path.resolve(modulesRoot, "../space-data-network/sdn-server/bin/spacedatanetwork");
+  const sdnJs = process.env.SDN_JS ?? path.resolve(modulesRoot, "../space-data-network/sdn-js");
+  assert.ok(fs.existsSync(binary), `native node binary required (SDN_NODE_BINARY): ${binary}`);
+  assert.ok(fs.existsSync(path.join(sdnJs, "dist/index.mjs")), `sdn-js dist required (SDN_JS): ${sdnJs}`);
+  const { EGP } = await import(pathToFileURL(path.join(sds, "lib/js/EGP/EGP.js")));
+  const egpIds = [];
+  const [egpStream] = framesOn(result, "catalogs_records");
+  for (let at = 0; at < egpStream.length;) {
+    const size = egpStream.readUInt32LE(at) + 4;
+    egpIds.push(EGP.getSizePrefixedRootAsEGP(new ByteBuffer(egpStream.subarray(at, at + size))).GROUP_ID()); at += size;
+  }
+  const expected = [
+    ...["lunar-orbit", "cislunar", "earth-moon-lagrange"].filter((l) => lanes[l].length).map((l) => ({ schema: "OEM.fbs", source: l,
+      ids: lanes[l].map((r) => r.id), license: decodeIngestRequest(framesOn(result, l.replaceAll("-", "_") + "_meta")[0]).tags.license })),
+    { schema: "EGP.fbs", source: "catalogs", ids: egpIds, license: decodeIngestRequest(framesOn(result, "catalogs_meta")[0]).tags.license },
+  ];
+  const { nativePublication } = await import("./native-publication.mjs");
+  for (const lane of await nativePublication({ packageDir: fileURLToPath(root), binary, sdnJs, cassette, lanes: expected }))
+    console.log(`PASS native CID readback ${lane.schema} ${PROVIDER_LANE(lane.source)}: ${lane.ids.length} records in ${lane.shards.length} shards, ` +
+      `every shard by CID (manifest ${lane.manifest}; ids ${lane.ids.join(",")})`);
   console.log("PASS deep-space-spacecraft cislunar sources E2E");
 } finally {
   await h.destroy();
 }
+// libp2p and the harness keep handles open after a passing run.
+process.exit(0);
