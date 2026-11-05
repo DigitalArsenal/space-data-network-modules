@@ -16,8 +16,8 @@
 // - Process noise: errors of the mean-element rates, constant from the end of the fit arc and mapped by the same
 //   columns: the eccentricity vector (s_e per day), the inclination vector (s_i per day), the mean longitude (s_l n,
 //   a relative mean-motion error) and, in the drag regime, the non-gravitational n-dot (s_d = c |n-dot_ng|). The
-//   sizes are fitted per regime (test/covariance-realism.mjs) on laser-ranged arcs apart
-//   from the held-out ones.
+//   sizes are fitted per regime (SGP4XP: test/covariance-realism.mjs on laser-ranged arcs apart from the held-out ones;
+//   AP DRAG: SPEC 12.5's per-axis re-fit, with a scale of the floor).
 // - Theory floor: the fit's residual covariance in UVW (COV_PROPAGATION FLOOR_UU_KM2 .. FLOOR_WW_KM2), added at every
 //   time in the state's own UVW axes (velocity: the same scaled by the orbit's angular rate squared). The process noise
 //   is COV_PROPAGATION's NOISE_* fields, with the share c and the rate it is a share of.
@@ -26,17 +26,17 @@
 namespace sdnap {
 namespace cov {
 
-/// Process noise per regime (SPEC 12.5): s_e, s_i (1/day), s_l (dn/n) and c (the share of the non-gravitational n-dot),
-/// fitted by `test/covariance-realism.mjs --set calibration` (test/results/covariance-calibration.json).
+/// Process noise per regime (SPEC 12.5): s_e, s_i (1/day), s_l (dn/n), c (the share of the non-gravitational n-dot) and
+/// k_F, the scale of the fit's residual covariance taken as the floor (SPEC 12.4).
 struct Noise {
-  double s_e, s_i, s_l, c;
+  double s_e, s_i, s_l, c, k_F;
 };
 /// SGP4XP's, [regime: 0 perigee below kDragRegimeKm, 1 above]
-constexpr Noise kNoiseXP[2] = {{2.813e-06, 7.432e-06, 8.505e-07, 1.275e-06}, {2.308e-07, 3.752e-07, 2.666e-07, 0}};
-// SDNAP minimax calibration, 2026-11-03; neither table earns a realism label.
+constexpr Noise kNoiseXP[2] = {{2.813e-06, 7.432e-06, 8.505e-07, 1.275e-06, 1.0}, {2.308e-07, 3.752e-07, 2.666e-07, 0, 1.0}};
+/// AP's: DRAG re-fitted per axis 2026-11-05 (SPEC 12.5; realism not met), ABOVE the 2026-11-03 minimax row.
 constexpr Noise kNoiseAP[2] = {
-    {0.0030020720101006817, 1.3729304605949328e-06, 0.00022005794330391744, 0.5245440617486178},
-    {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0}};
+    {1.8579913326733934e-07, 1.12761105007012e-06, 7.647194501793458e-07, 0.112126311682426, 1.5127596877626373},
+    {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0, 1.0}};
 constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
 
 constexpr int kMaxConsider = 5;
@@ -276,8 +276,8 @@ struct Set {
 
 /// The process noise of a set (SPEC 12.5): its regime (0 perigee below kDragRegimeKm, 1 above), the non-gravitational
 /// n-dot / n at epoch (1/day; the theory's epoch rates with and without BTERM) and the sizes s_e, s_i, s_l, s_d
-/// with the noise start t_a (minutes). False when the theory refuses the set.
-inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& regime, double* noise, double& share) {
+/// with the noise start t_a (minutes), and the floor's scale k_F. False when the theory refuses the set.
+inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& regime, double* noise, double& share, double& floor_scale) {
   ng_rate = 0.0;
   ElementRow none = row;
   none.bterm = 0.0;
@@ -303,6 +303,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   noise[3] = k.c * std::fabs(ng_rate) * n_min * kMinutesPerDay;
   noise[4] = t_a;
   share = k.c;
+  floor_scale = k.k_F;
   return true;
 }
 
@@ -351,11 +352,15 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   }
   double Pp[kMaxAug * kMaxAug];
   if (!spd_inverse(A, np, Pp)) return false;
-  for (double& f : floor) f /= static_cast<double>(count);
+  // the process noise and the floor's scale of the set's regime (SPEC 12.4, 12.5)
+  s = Set{};
+  double floor_scale = 1.0;
+  if (!noise_of(row, arc_end_min, ng_rate, s.regime, s.noise, s.share, floor_scale)) return false;
+  s.ng_rate = ng_rate;
+  for (double& f : floor) f = f / static_cast<double>(count) * floor_scale;
   // epoch image: state block J0 Pp J0^T + floor, cross J0 Pp, consider Pp
   double r0[3], v0[3];
   if (!at(b, 0.0, r0, v0, J)) return false;
-  s = Set{};
   s.row = row;
   s.o = o;
   s.np = np;
@@ -393,8 +398,6 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   s.o.drag_log = 0;
   s.o.agom_log = 0;
   for (int k = 0; k < 6; ++k) s.floor[k] = floor[k];
-  if (!noise_of(row, arc_end_min, ng_rate, s.regime, s.noise, s.share)) return false;
-  s.ng_rate = ng_rate;
   return true;
 }
 

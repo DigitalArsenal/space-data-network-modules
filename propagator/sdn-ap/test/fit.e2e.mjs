@@ -87,7 +87,7 @@ for (const c of cases) {
   check(ocm.METADATA?.NORAD_CAT_ID === 90400 && ocm.METADATA?.OBJECT_DESIGNATOR === "90400" && ocm.METADATA?.INTERNATIONAL_DESIGNATOR === "2026-904A",
     `${c.name}: METADATA ${ocm.METADATA?.NORAD_CAT_ID} ${ocm.METADATA?.OBJECT_DESIGNATOR} ${ocm.METADATA?.INTERNATIONAL_DESIGNATOR}`);
   check(ocm.ORB_AVERAGING === "BROUWER" && (ocm.STATE_DATA ?? []).length === 0, `${c.name}: ORB_AVERAGING ${ocm.ORB_AVERAGING}, ${ocm.STATE_DATA?.length} state values`);
-  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.0"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
+  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.1"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
 }
 const ap = records.AP, xp = records.XP;
 if (ap && xp) {
