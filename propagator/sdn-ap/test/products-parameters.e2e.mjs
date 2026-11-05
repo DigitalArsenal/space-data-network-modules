@@ -15,7 +15,10 @@
 //   sdnap_covariance_at (0 of 7803 differ); the X / IN_TRACK_ACCELERATION term at epoch equals the record's; propagate flies it
 //   to the 8-row record's bytes. Rows out of the fixed order, or not solved for, are refused (-6).
 // - ORBIT_DETERMINATION.WEIGHTED_RMS = FIT_RMS_KM / sqrt(3) (sigma 1 km a component); SEDR, the energy removed
-//   (the $OCM's definition), finite and positive under drag: the sign of NON_GRAVITATIONAL_RATE_PER_DAY.
+//   (the $OCM's definition), finite and positive under drag: the sign of NON_GRAVITATIONAL_RATE_PER_DAY. Stored rows:
+//   the first 0.6.0 build (modules a54ff2245) wrote SEDR as the signed dE/dt, negative under drag; an $OCM it wrote
+//   reads here with the opposite sign, its magnitude unchanged. On 2026-11-05 no tracked $OCM in this repository (259
+//   records parsed), the experiments repository or the sdn-ap package carries SEDR, and no site figure reads it.
 // - One $ODR per fit on 'residuals': EDITED_OBSERVATIONS one per state of the input $OEM (the input count), the
 //   accepted ones FIT_STATES, OCM_CONTENT_ID the $OCM's CID (sha256, CIDv1 raw), PERTURBATION_MODEL_CODE SGP4XP / AP.
 // - assertNoUserDefined on every $OCM emitted and flown; the $ODR schema has no user-defined list.
