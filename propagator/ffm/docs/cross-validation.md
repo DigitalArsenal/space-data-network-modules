@@ -89,9 +89,9 @@ These differences are part of the measured spread:
   - **Jacchia-Roberts axes:** GMAT gives the model the spacecraft and the Sun
     in its MJ2000Eq axes, so the Sun's hour angle and declination are on the
     J2000 equator; FFM uses Earth-fixed axes, the true equator of date. By
-    2026 the two poles are 0.15 deg apart. That leaves LEO400 1.38 m and
-    SSO700 0.17 m from GMAT after a day; FFM built with GMAT's axes is 2.4 cm
-    and 1.0 cm from it (measured). GMAT's drag limit is therefore 1.5 m.
+    2026 the two poles are 0.15 deg apart. That leaves LEO400 and
+    SSO700 <!-- BEGIN GENERATED XVAL JR AXES -->1.360 m and 182.236 mm<!-- END GENERATED XVAL JR AXES --> from GMAT after a day (the subset under Results); FFM built with GMAT's axes is 2.4 cm
+    and 1.0 cm from it (measured once, not re-scored). GMAT's drag limit is therefore 1.5 m.
 - **Tudat**
   - **Clock:** Tudat's independent variable is TDB, while the other codes
     integrate geocentric motion on TT. In August 2026 the two rates differ by
@@ -146,52 +146,51 @@ These differences are part of the measured spread:
 
 ## Results
 
-The tables below score the shipped FFM 1.4.0 artifact on the original
+The tables below score the shipped <!-- BEGIN GENERATED XVAL BUILD -->FFM 2.2.0 artifact (module SHA-256 `d635a3d5`, scored 2026-11-04)<!-- END GENERATED XVAL BUILD --> on the original
 subset. The [72-case reference suite](#reference-suite-on-72-cases) supplies
 the wider coverage and diagnoses. The exact artifact digest is pinned in
-[the current subset summary](../tests/evidence/xval/summary.json). The subset
-is not re-scored with the suite: the consolidated evidence does not read its
-summary ([not re-scored](../tests/evidence/CONSOLIDATED.md#not-re-scored)).
+[the current subset summary](../tests/evidence/xval/summary.json).
 
 Largest 3D position difference over 24 h, at hourly samples, through the
 SDK's browser harness (`node tests/xval-summary.mjs`), at the Orekit suite's
 request: RK78 at
 1e-13 and steps of at most 300 s. FFM's own integration error at those steps
-is most of its difference from Orekit and Tudat in LEO (README.md, Agreement
-with Orekit 13.1). (JR) marks GMAT's Jacchia-Roberts drag cases, where FFM
+is under [Findings](#findings). (JR) marks GMAT's Jacchia-Roberts drag cases, where FFM
 was also run with Jacchia-Roberts.
 
 ### FFM against each tool
 
+<!-- BEGIN GENERATED XVAL TABLE -->
 | Case | FFM - Orekit 13.1 | FFM - GMAT R2022a | FFM - Tudat (tudatpy 1.0.0) | FFM - Tudat WASM | FFM - Nyx 2.6.0 |
 |---|---:|---:|---:|---:|---:|
-| LEO400 F0-point-mass | 0.48 mm | 1.17 mm | 0.32 mm | 0.32 mm | 0.30 mm |
-| LEO400 F1-J2 | 18.1 mm | 17.2 mm | 18.0 mm | 18.0 mm | 27.2 mm |
-| LEO400 F3-field20x20 | 18.2 mm | 20.0 mm | 19.9 mm | 19.9 mm | 27.5 mm |
-| LEO400 F4-field-sun-moon | 18.2 mm | 14.3 mm | 19.9 mm | 19.9 mm | 27.5 mm |
-| LEO400 F5-field-sun-moon-srp | 18.8 mm | 24.3 mm | 19.8 mm | 19.8 mm | 27.8 mm |
-| LEO400 F6-field-sun-moon-srp-drag | 21.7 mm | 1.38 m (JR) | 33.5 mm | 33.5 mm | 12.08 m |
-| SSO700 F0-point-mass | 0.48 mm | 0.85 mm | 0.30 mm | 0.30 mm | 0.36 mm |
-| SSO700 F1-J2 | 14.5 mm | 26.1 mm | 14.2 mm | 14.2 mm | 38.3 mm |
-| SSO700 F3-field20x20 | 14.5 mm | 19.5 mm | 13.8 mm | 13.8 mm | 39.1 mm |
-| SSO700 F4-field-sun-moon | 14.5 mm | 29.3 mm | 13.8 mm | 13.8 mm | 39.0 mm |
-| SSO700 F5-field-sun-moon-srp | 14.1 mm | 6.33 mm | 13.5 mm | 13.5 mm | 38.3 mm |
-| SSO700 F6-field-sun-moon-srp-drag | 14.3 mm | 166.7 mm (JR) | 65.3 mm | 65.3 mm | 13.5 mm |
-| GPS F0-point-mass | 0.14 mm | 0.63 mm | 0.02 mm | 0.02 mm | 0.01 mm |
-| GPS F1-J2 | 0.20 mm | 0.74 mm | 0.06 mm | 0.06 mm | 1.78 mm |
-| GPS F3-field20x20 | 0.19 mm | 0.01 mm | 0.08 mm | 0.08 mm | 1.76 mm |
-| GPS F4-field-sun-moon | 0.15 mm | 3.42 mm | 0.14 mm | 0.15 mm | 1.76 mm |
-| GPS F5-field-sun-moon-srp | 0.15 mm | 0.67 mm | 0.14 mm | 0.14 mm | 1.76 mm |
-| GEO F0-point-mass | 0.04 mm | 0.09 mm | 0.00 mm | 0.00 mm | 0.00 mm |
-| GEO F1-J2 | 0.04 mm | 0.00 mm | 0.01 mm | 0.01 mm | 0.11 mm |
-| GEO F3-field20x20 | 0.04 mm | 0.82 mm | 0.05 mm | 0.05 mm | 0.11 mm |
-| GEO F4-field-sun-moon | 0.07 mm | 1.35 mm | 0.14 mm | 0.14 mm | 0.11 mm |
-| GEO F5-field-sun-moon-srp | 0.06 mm | 1.39 mm | 0.14 mm | 0.14 mm | 0.11 mm |
-| MOLNIYA F0-point-mass | 0.58 mm | 4.18 mm | 0.01 mm | 0.01 mm | 0.02 mm |
-| MOLNIYA F1-J2 | 11.0 mm | 10.6 mm | 10.7 mm | 10.8 mm | 93.0 mm |
-| MOLNIYA F3-field20x20 | 11.1 mm | 4.69 mm | 11.4 mm | 11.4 mm | 92.7 mm |
-| MOLNIYA F4-field-sun-moon | 10.8 mm | 3.49 mm | 10.9 mm | 10.9 mm | 92.9 mm |
-| MOLNIYA F5-field-sun-moon-srp | 10.3 mm | 7.95 mm | 10.8 mm | 10.8 mm | 93.0 mm |
+| LEO400 F0-point-mass | 0.162 mm | 1.187 mm | 0.008 mm | 0.002 mm | 0.027 mm |
+| LEO400 F1-J2 | 1.027 mm | 0.974 mm | 0.995 mm | 0.994 mm | 29.740 mm |
+| LEO400 F3-field20x20 | 1.041 mm | 13.579 mm | 2.064 mm | 2.068 mm | 29.986 mm |
+| LEO400 F4-field-sun-moon | 1.039 mm | 7.317 mm | 2.065 mm | 2.075 mm | 29.991 mm |
+| LEO400 F5-field-sun-moon-srp | 1.115 mm | 12.435 mm | 2.107 mm | 2.106 mm | 30.253 mm |
+| LEO400 F6-field-sun-moon-srp-drag | 3.961 mm | 1.360 m (JR) | 34.301 mm | 34.302 mm | 12.097 m |
+| SSO700 F0-point-mass | 0.189 mm | 0.857 mm | 0.010 mm | 0.003 mm | 0.065 mm |
+| SSO700 F1-J2 | 1.414 mm | 10.262 mm | 1.655 mm | 1.649 mm | 22.407 mm |
+| SSO700 F3-field20x20 | 1.462 mm | 5.847 mm | 2.183 mm | 2.169 mm | 23.097 mm |
+| SSO700 F4-field-sun-moon | 1.467 mm | 13.342 mm | 2.178 mm | 2.180 mm | 23.098 mm |
+| SSO700 F5-field-sun-moon-srp | 1.574 mm | 15.962 mm | 2.149 mm | 2.137 mm | 22.682 mm |
+| SSO700 F6-field-sun-moon-srp-drag | 1.379 mm | 182.236 mm (JR) | 53.314 mm | 53.310 mm | 22.760 mm |
+| GPS F0-point-mass | 0.160 mm | 0.630 mm | 0.001 mm | 0.001 mm | 0.007 mm |
+| GPS F1-J2 | 0.219 mm | 0.739 mm | 0.067 mm | 0.067 mm | 1.761 mm |
+| GPS F3-field20x20 | 0.213 mm | 0.020 mm | 0.075 mm | 0.074 mm | 1.754 mm |
+| GPS F4-field-sun-moon | 0.173 mm | 3.400 mm | 0.124 mm | 0.124 mm | 1.753 mm |
+| GPS F5-field-sun-moon-srp | 0.174 mm | 0.661 mm | 0.125 mm | 0.125 mm | 1.753 mm |
+| GEO F0-point-mass | 0.035 mm | 0.095 mm | 0.001 mm | 0.003 mm | 0.002 mm |
+| GEO F1-J2 | 0.036 mm | 0.004 mm | 0.007 mm | 0.007 mm | 0.111 mm |
+| GEO F3-field20x20 | 0.039 mm | 0.815 mm | 0.052 mm | 0.052 mm | 0.111 mm |
+| GEO F4-field-sun-moon | 0.067 mm | 1.346 mm | 0.139 mm | 0.139 mm | 0.111 mm |
+| GEO F5-field-sun-moon-srp | 0.061 mm | 1.391 mm | 0.141 mm | 0.141 mm | 0.111 mm |
+| MOLNIYA F0-point-mass | 0.576 mm | 4.188 mm | 0.010 mm | 0.011 mm | 0.019 mm |
+| MOLNIYA F1-J2 | 9.668 mm | 11.928 mm | 9.416 mm | 9.429 mm | 94.370 mm |
+| MOLNIYA F3-field20x20 | 9.646 mm | 3.242 mm | 9.913 mm | 9.906 mm | 94.149 mm |
+| MOLNIYA F4-field-sun-moon | 9.509 mm | 4.749 mm | 9.625 mm | 9.631 mm | 94.135 mm |
+| MOLNIYA F5-field-sun-moon-srp | 9.125 mm | 9.083 mm | 9.679 mm | 9.697 mm | 94.178 mm |
+<!-- END GENERATED XVAL TABLE -->
 
 ### Tool against tool (the spread among established codes)
 
@@ -227,16 +226,19 @@ was also run with Jacchia-Roberts.
 
 ## Findings
 
+<!-- BEGIN GENERATED XVAL FINDINGS -->
 - **Agreement:** FFM agrees with every tool to within that tool's own
   distance from the others, plus its own integration error. Measured over 24 h
-  at the suite's request on the original subset (FFM 1.4.0, not re-scored),
-  GMAT's Jacchia-Roberts drag cases aside:
-  - Orekit: at most 2.2 cm.
-  - GMAT: at most 2.9 cm.
-  - Tudat, native and WebAssembly: at most 6.5 cm. Excluding drag, at most
-    2.0 cm.
-  - Nyx: at most 9.3 cm, consistent with the Earth-orientation difference above.
-    With drag on LEO400, 12.1 m, which is Nyx's own gap from all the others.
+  at the suite's request on the original subset (FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04), GMAT's
+  Jacchia-Roberts drag cases aside:
+  - Orekit: at most 9.668 mm.
+  - GMAT: at most 15.962 mm.
+  - Tudat: native at most 53.314 mm, WebAssembly at most 53.310 mm. Excluding drag,
+    at most 9.913 mm and 9.906 mm.
+  - Nyx: at most 94.370 mm without drag, consistent with the Earth-orientation difference
+    above. With drag, 12.097 m on LEO400, which is Nyx's own gap from all the others, and
+    22.760 mm on SSO700.
+<!-- END GENERATED XVAL FINDINGS -->
 - **Integration error:** <!-- BEGIN GENERATED INTEGRATION ERROR -->FFM's own integration error at RK78 1e-13 and steps of at most 300 s (FFM there against FFM at 1e-15 and steps of at most 10 s, the largest over the day) is 9.801 mm in LEO 400 km and 0.455 mm at 700 km; the LEO 400 km cases with radiation pressure and drag are within 8.448 mm of Orekit at those settings, 4.092 mm with steps of at most 30 s and 4.074 mm at 1e-15 with steps of at most 10 s (FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04; README.md, Agreement with Orekit 13.1).<!-- END GENERATED INTEGRATION ERROR -->
 - **Spread among the tools:**
   - **Orekit and Tudat** agree best: at most 1.7 mm with gravity, Sun and
@@ -254,7 +256,7 @@ was also run with Jacchia-Roberts.
   `JD - 2430000`, equivalent to `MJD - 29999.5`. The independent fixture
   contains GmatConsole densities at 2000 epochs and points
   (`tests/fixtures/atmosphere/make-jacchia-roberts-gmat.mjs`); the port agrees
-  to 1.8e-6. The GMAT drag cases are 1.38 m and 0.17 m from GMAT, consistent
+  to 1.8e-6. The GMAT drag cases are <!-- BEGIN GENERATED XVAL JR DATE -->1.360 m and 182.236 mm<!-- END GENERATED XVAL JR DATE --> from GMAT, consistent
   with the axes difference above.
 
 ## GMAT R2026a on the 72 reference cases

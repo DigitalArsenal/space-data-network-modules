@@ -18,9 +18,9 @@
    "reason": "Quoted from the header of tests/orekit_reference.test.mjs; consolidated.json does not carry per-orbit force differentials or Jacobian columns."
   },
   {
-   "evidence": "xval/summary.json and docs/cross-validation.md, Results and Findings (the original 27-case subset)",
-   "build": "FFM 1.4.0 (eb05fc52)",
-   "reason": "Written by tests/xval-summary.mjs; consolidate.mjs does not read it, so check-all.mjs cannot hold its figures to consolidated.json."
+   "evidence": "docs/cross-validation.md, Jacchia-Roberts axes: FFM built with GMAT's axes (2.4 cm, 1.0 cm)",
+   "build": "a one-off FFM build with GMAT's axes, as recorded",
+   "reason": "That build is not part of the suite and no score of it is stored."
   },
   {
    "evidence": "erfa-spice/before-after.json, orekit-trajectory-before-after.json, orekit-frames-summary.json and the docs/cross-validation.md classical-frame tables",

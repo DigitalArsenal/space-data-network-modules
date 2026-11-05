@@ -23,9 +23,9 @@
         "reason": "Quoted from the header of tests/orekit_reference.test.mjs; consolidated.json does not carry per-orbit force differentials or Jacobian columns."
       },
       {
-        "evidence": "xval/summary.json and docs/cross-validation.md, Results and Findings (the original 27-case subset)",
-        "build": "FFM 1.4.0 (eb05fc52)",
-        "reason": "Written by tests/xval-summary.mjs; consolidate.mjs does not read it, so check-all.mjs cannot hold its figures to consolidated.json."
+        "evidence": "docs/cross-validation.md, Jacchia-Roberts axes: FFM built with GMAT's axes (2.4 cm, 1.0 cm)",
+        "build": "a one-off FFM build with GMAT's axes, as recorded",
+        "reason": "That build is not part of the suite and no score of it is stored."
       },
       {
         "evidence": "erfa-spice/before-after.json, orekit-trajectory-before-after.json, orekit-frames-summary.json and the docs/cross-validation.md classical-frame tables",
@@ -13219,6 +13219,1026 @@
     "force-clock": "1.34706e-05 s",
     "force-clock-leo": "0.016 mm",
     "force-clock-rotation": "0.000483481 mas"
+  },
+  "xval": {
+    "file": "xval/summary.json",
+    "sha256": "77e09653a70ef02af3f74a42ee5264ef06a788f0197e77796326c4cd61cefed3",
+    "maxima": {
+      "gmat": {
+        "all": {
+          "display": "15.962 mm",
+          "maxM": 0.01596221052035883
+        },
+        "drag": null,
+        "noDrag": {
+          "display": "15.962 mm",
+          "maxM": 0.01596221052035883
+        }
+      },
+      "nyx": {
+        "all": {
+          "display": "12.097 m",
+          "maxM": 12.096986901507119
+        },
+        "drag": {
+          "display": "12.097 m",
+          "maxM": 12.096986901507119
+        },
+        "noDrag": {
+          "display": "94.370 mm",
+          "maxM": 0.09437025745415101
+        }
+      },
+      "orekit": {
+        "all": {
+          "display": "9.668 mm",
+          "maxM": 0.009667949243077728
+        },
+        "drag": {
+          "display": "3.961 mm",
+          "maxM": 0.003961496355412143
+        },
+        "noDrag": {
+          "display": "9.668 mm",
+          "maxM": 0.009667949243077728
+        }
+      },
+      "tudat-wasm": {
+        "all": {
+          "display": "53.310 mm",
+          "maxM": 0.053309677398557034
+        },
+        "drag": {
+          "display": "53.310 mm",
+          "maxM": 0.053309677398557034
+        },
+        "noDrag": {
+          "display": "9.906 mm",
+          "maxM": 0.00990618591045536
+        }
+      },
+      "tudatpy": {
+        "all": {
+          "display": "53.314 mm",
+          "maxM": 0.053313643643283504
+        },
+        "drag": {
+          "display": "53.314 mm",
+          "maxM": 0.053313643643283504
+        },
+        "noDrag": {
+          "display": "9.913 mm",
+          "maxM": 0.009912900714127728
+        }
+      }
+    },
+    "rows": [
+      {
+        "case": "LEO400 F0-point-mass",
+        "cells": {
+          "gmat": {
+            "display": "1.187 mm",
+            "distance": "1.187 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0011866107539360504
+          },
+          "nyx": {
+            "display": "0.027 mm",
+            "distance": "0.027 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000027121209717521672
+          },
+          "orekit": {
+            "display": "0.162 mm",
+            "distance": "0.162 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00016199433498505773
+          },
+          "tudat-wasm": {
+            "display": "0.002 mm",
+            "distance": "0.002 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000017770658552585577
+          },
+          "tudatpy": {
+            "display": "0.008 mm",
+            "distance": "0.008 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000008074392816264369
+          }
+        }
+      },
+      {
+        "case": "LEO400 F1-J2",
+        "cells": {
+          "gmat": {
+            "display": "0.974 mm",
+            "distance": "0.974 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0009739846725047569
+          },
+          "nyx": {
+            "display": "29.740 mm",
+            "distance": "29.740 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.029740380965576237
+          },
+          "orekit": {
+            "display": "1.027 mm",
+            "distance": "1.027 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0010273646328391877
+          },
+          "tudat-wasm": {
+            "display": "0.994 mm",
+            "distance": "0.994 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0009936602985242146
+          },
+          "tudatpy": {
+            "display": "0.995 mm",
+            "distance": "0.995 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0009950081553399698
+          }
+        }
+      },
+      {
+        "case": "LEO400 F3-field20x20",
+        "cells": {
+          "gmat": {
+            "display": "13.579 mm",
+            "distance": "13.579 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.01357883741965089
+          },
+          "nyx": {
+            "display": "29.986 mm",
+            "distance": "29.986 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.029985795181928072
+          },
+          "orekit": {
+            "display": "1.041 mm",
+            "distance": "1.041 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.001040534244019165
+          },
+          "tudat-wasm": {
+            "display": "2.068 mm",
+            "distance": "2.068 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.002068434340547145
+          },
+          "tudatpy": {
+            "display": "2.064 mm",
+            "distance": "2.064 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.002064207400652483
+          }
+        }
+      },
+      {
+        "case": "LEO400 F4-field-sun-moon",
+        "cells": {
+          "gmat": {
+            "display": "7.317 mm",
+            "distance": "7.317 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.007317168623788891
+          },
+          "nyx": {
+            "display": "29.991 mm",
+            "distance": "29.991 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.029990842171293178
+          },
+          "orekit": {
+            "display": "1.039 mm",
+            "distance": "1.039 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0010391004396490538
+          },
+          "tudat-wasm": {
+            "display": "2.075 mm",
+            "distance": "2.075 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0020749011882545383
+          },
+          "tudatpy": {
+            "display": "2.065 mm",
+            "distance": "2.065 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.002065207070594718
+          }
+        }
+      },
+      {
+        "case": "LEO400 F5-field-sun-moon-srp",
+        "cells": {
+          "gmat": {
+            "display": "12.435 mm",
+            "distance": "12.435 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.012434737675073493
+          },
+          "nyx": {
+            "display": "30.253 mm",
+            "distance": "30.253 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.030252891711238867
+          },
+          "orekit": {
+            "display": "1.115 mm",
+            "distance": "1.115 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.001115078108703088
+          },
+          "tudat-wasm": {
+            "display": "2.106 mm",
+            "distance": "2.106 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0021058699564977016
+          },
+          "tudatpy": {
+            "display": "2.107 mm",
+            "distance": "2.107 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0021068021928275205
+          }
+        }
+      },
+      {
+        "case": "LEO400 F6-field-sun-moon-srp-drag",
+        "cells": {
+          "gmat": {
+            "display": "1.360 m (JR)",
+            "distance": "1.360 m",
+            "jacchiaRoberts": true,
+            "worstM": 1.3597155404578372
+          },
+          "nyx": {
+            "display": "12.097 m",
+            "distance": "12.097 m",
+            "jacchiaRoberts": false,
+            "worstM": 12.096986901507119
+          },
+          "orekit": {
+            "display": "3.961 mm",
+            "distance": "3.961 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.003961496355412143
+          },
+          "tudat-wasm": {
+            "display": "34.302 mm",
+            "distance": "34.302 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.03430186599154388
+          },
+          "tudatpy": {
+            "display": "34.301 mm",
+            "distance": "34.301 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.03430086145627177
+          }
+        }
+      },
+      {
+        "case": "SSO700 F0-point-mass",
+        "cells": {
+          "gmat": {
+            "display": "0.857 mm",
+            "distance": "0.857 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0008568237286224276
+          },
+          "nyx": {
+            "display": "0.065 mm",
+            "distance": "0.065 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00006459999312108856
+          },
+          "orekit": {
+            "display": "0.189 mm",
+            "distance": "0.189 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0001893680742300758
+          },
+          "tudat-wasm": {
+            "display": "0.003 mm",
+            "distance": "0.003 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000003488507780801452
+          },
+          "tudatpy": {
+            "display": "0.010 mm",
+            "distance": "0.010 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000010492004513942
+          }
+        }
+      },
+      {
+        "case": "SSO700 F1-J2",
+        "cells": {
+          "gmat": {
+            "display": "10.262 mm",
+            "distance": "10.262 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.010261931148898997
+          },
+          "nyx": {
+            "display": "22.407 mm",
+            "distance": "22.407 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.022407105022095867
+          },
+          "orekit": {
+            "display": "1.414 mm",
+            "distance": "1.414 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.001414217508387836
+          },
+          "tudat-wasm": {
+            "display": "1.649 mm",
+            "distance": "1.649 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0016491269469368454
+          },
+          "tudatpy": {
+            "display": "1.655 mm",
+            "distance": "1.655 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0016545880606748191
+          }
+        }
+      },
+      {
+        "case": "SSO700 F3-field20x20",
+        "cells": {
+          "gmat": {
+            "display": "5.847 mm",
+            "distance": "5.847 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0058468370099648646
+          },
+          "nyx": {
+            "display": "23.097 mm",
+            "distance": "23.097 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.023096696935634087
+          },
+          "orekit": {
+            "display": "1.462 mm",
+            "distance": "1.462 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0014617229750127066
+          },
+          "tudat-wasm": {
+            "display": "2.169 mm",
+            "distance": "2.169 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0021686427069137933
+          },
+          "tudatpy": {
+            "display": "2.183 mm",
+            "distance": "2.183 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.002182702756940691
+          }
+        }
+      },
+      {
+        "case": "SSO700 F4-field-sun-moon",
+        "cells": {
+          "gmat": {
+            "display": "13.342 mm",
+            "distance": "13.342 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.013342140661616752
+          },
+          "nyx": {
+            "display": "23.098 mm",
+            "distance": "23.098 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0230975661047331
+          },
+          "orekit": {
+            "display": "1.467 mm",
+            "distance": "1.467 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0014674603976312886
+          },
+          "tudat-wasm": {
+            "display": "2.180 mm",
+            "distance": "2.180 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0021797295482205593
+          },
+          "tudatpy": {
+            "display": "2.178 mm",
+            "distance": "2.178 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0021775138245993535
+          }
+        }
+      },
+      {
+        "case": "SSO700 F5-field-sun-moon-srp",
+        "cells": {
+          "gmat": {
+            "display": "15.962 mm",
+            "distance": "15.962 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.01596221052035883
+          },
+          "nyx": {
+            "display": "22.682 mm",
+            "distance": "22.682 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.022682102536974575
+          },
+          "orekit": {
+            "display": "1.574 mm",
+            "distance": "1.574 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0015742530451944025
+          },
+          "tudat-wasm": {
+            "display": "2.137 mm",
+            "distance": "2.137 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0021373027898235943
+          },
+          "tudatpy": {
+            "display": "2.149 mm",
+            "distance": "2.149 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0021486197462669402
+          }
+        }
+      },
+      {
+        "case": "SSO700 F6-field-sun-moon-srp-drag",
+        "cells": {
+          "gmat": {
+            "display": "182.236 mm (JR)",
+            "distance": "182.236 mm",
+            "jacchiaRoberts": true,
+            "worstM": 0.18223586602478406
+          },
+          "nyx": {
+            "display": "22.760 mm",
+            "distance": "22.760 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.022759717004303504
+          },
+          "orekit": {
+            "display": "1.379 mm",
+            "distance": "1.379 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0013792509834158573
+          },
+          "tudat-wasm": {
+            "display": "53.310 mm",
+            "distance": "53.310 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.053309677398557034
+          },
+          "tudatpy": {
+            "display": "53.314 mm",
+            "distance": "53.314 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.053313643643283504
+          }
+        }
+      },
+      {
+        "case": "GPS F0-point-mass",
+        "cells": {
+          "gmat": {
+            "display": "0.630 mm",
+            "distance": "0.630 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0006297830950635126
+          },
+          "nyx": {
+            "display": "0.007 mm",
+            "distance": "0.007 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000007179577598205375
+          },
+          "orekit": {
+            "display": "0.160 mm",
+            "distance": "0.160 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00016047274712577872
+          },
+          "tudat-wasm": {
+            "display": "0.001 mm",
+            "distance": "0.001 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000012696164265475462
+          },
+          "tudatpy": {
+            "display": "0.001 mm",
+            "distance": "0.001 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000010092310071180295
+          }
+        }
+      },
+      {
+        "case": "GPS F1-J2",
+        "cells": {
+          "gmat": {
+            "display": "0.739 mm",
+            "distance": "0.739 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000738801152281484
+          },
+          "nyx": {
+            "display": "1.761 mm",
+            "distance": "1.761 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0017606649077274007
+          },
+          "orekit": {
+            "display": "0.219 mm",
+            "distance": "0.219 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00021854952530100613
+          },
+          "tudat-wasm": {
+            "display": "0.067 mm",
+            "distance": "0.067 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00006671247706288047
+          },
+          "tudatpy": {
+            "display": "0.067 mm",
+            "distance": "0.067 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00006671247706288047
+          }
+        }
+      },
+      {
+        "case": "GPS F3-field20x20",
+        "cells": {
+          "gmat": {
+            "display": "0.020 mm",
+            "distance": "0.020 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000020304894040402218
+          },
+          "nyx": {
+            "display": "1.754 mm",
+            "distance": "1.754 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.001753877854603125
+          },
+          "orekit": {
+            "display": "0.213 mm",
+            "distance": "0.213 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00021329937953101986
+          },
+          "tudat-wasm": {
+            "display": "0.074 mm",
+            "distance": "0.074 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00007404629818991966
+          },
+          "tudatpy": {
+            "display": "0.075 mm",
+            "distance": "0.075 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00007488828573390437
+          }
+        }
+      },
+      {
+        "case": "GPS F4-field-sun-moon",
+        "cells": {
+          "gmat": {
+            "display": "3.400 mm",
+            "distance": "3.400 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0033998662160183452
+          },
+          "nyx": {
+            "display": "1.753 mm",
+            "distance": "1.753 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.001753070479290345
+          },
+          "orekit": {
+            "display": "0.173 mm",
+            "distance": "0.173 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00017290678159101314
+          },
+          "tudat-wasm": {
+            "display": "0.124 mm",
+            "distance": "0.124 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00012443155701969061
+          },
+          "tudatpy": {
+            "display": "0.124 mm",
+            "distance": "0.124 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00012443155701969061
+          }
+        }
+      },
+      {
+        "case": "GPS F5-field-sun-moon-srp",
+        "cells": {
+          "gmat": {
+            "display": "0.661 mm",
+            "distance": "0.661 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0006607912735289674
+          },
+          "nyx": {
+            "display": "1.753 mm",
+            "distance": "1.753 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0017530402501618678
+          },
+          "orekit": {
+            "display": "0.174 mm",
+            "distance": "0.174 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00017417873242079774
+          },
+          "tudat-wasm": {
+            "display": "0.125 mm",
+            "distance": "0.125 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0001253468172955107
+          },
+          "tudatpy": {
+            "display": "0.125 mm",
+            "distance": "0.125 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0001253468172955107
+          }
+        }
+      },
+      {
+        "case": "GEO F0-point-mass",
+        "cells": {
+          "gmat": {
+            "display": "0.095 mm",
+            "distance": "0.095 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00009452124334754453
+          },
+          "nyx": {
+            "display": "0.002 mm",
+            "distance": "0.002 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000022856158167633867
+          },
+          "orekit": {
+            "display": "0.035 mm",
+            "distance": "0.035 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000350341818656931
+          },
+          "tudat-wasm": {
+            "display": "0.003 mm",
+            "distance": "0.003 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000029950488787778115
+          },
+          "tudatpy": {
+            "display": "0.001 mm",
+            "distance": "0.001 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000013832293292813667
+          }
+        }
+      },
+      {
+        "case": "GEO F1-J2",
+        "cells": {
+          "gmat": {
+            "display": "0.004 mm",
+            "distance": "0.004 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000036136063543139006
+          },
+          "nyx": {
+            "display": "0.111 mm",
+            "distance": "0.111 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00011095921840663935
+          },
+          "orekit": {
+            "display": "0.036 mm",
+            "distance": "0.036 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000355659232686749
+          },
+          "tudat-wasm": {
+            "display": "0.007 mm",
+            "distance": "0.007 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000007325223938549253
+          },
+          "tudatpy": {
+            "display": "0.007 mm",
+            "distance": "0.007 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000007325223938549253
+          }
+        }
+      },
+      {
+        "case": "GEO F3-field20x20",
+        "cells": {
+          "gmat": {
+            "display": "0.815 mm",
+            "distance": "0.815 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0008150471933389754
+          },
+          "nyx": {
+            "display": "0.111 mm",
+            "distance": "0.111 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00011052394954300381
+          },
+          "orekit": {
+            "display": "0.039 mm",
+            "distance": "0.039 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0000388613466201011
+          },
+          "tudat-wasm": {
+            "display": "0.052 mm",
+            "distance": "0.052 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00005201771592917653
+          },
+          "tudatpy": {
+            "display": "0.052 mm",
+            "distance": "0.052 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00005201771592917653
+          }
+        }
+      },
+      {
+        "case": "GEO F4-field-sun-moon",
+        "cells": {
+          "gmat": {
+            "display": "1.346 mm",
+            "distance": "1.346 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0013458252015507656
+          },
+          "nyx": {
+            "display": "0.111 mm",
+            "distance": "0.111 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00011095769455899342
+          },
+          "orekit": {
+            "display": "0.067 mm",
+            "distance": "0.067 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00006721188301682869
+          },
+          "tudat-wasm": {
+            "display": "0.139 mm",
+            "distance": "0.139 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0001390372406822366
+          },
+          "tudatpy": {
+            "display": "0.139 mm",
+            "distance": "0.139 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0001390372406822366
+          }
+        }
+      },
+      {
+        "case": "GEO F5-field-sun-moon-srp",
+        "cells": {
+          "gmat": {
+            "display": "1.391 mm",
+            "distance": "1.391 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.001390838142117193
+          },
+          "nyx": {
+            "display": "0.111 mm",
+            "distance": "0.111 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00011114866724969397
+          },
+          "orekit": {
+            "display": "0.061 mm",
+            "distance": "0.061 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00006113709649913093
+          },
+          "tudat-wasm": {
+            "display": "0.141 mm",
+            "distance": "0.141 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00014088485186244178
+          },
+          "tudatpy": {
+            "display": "0.141 mm",
+            "distance": "0.141 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00014088485186244178
+          }
+        }
+      },
+      {
+        "case": "MOLNIYA F0-point-mass",
+        "cells": {
+          "gmat": {
+            "display": "4.188 mm",
+            "distance": "4.188 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.004187990715514068
+          },
+          "nyx": {
+            "display": "0.019 mm",
+            "distance": "0.019 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000019393265841300503
+          },
+          "orekit": {
+            "display": "0.576 mm",
+            "distance": "0.576 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0005756719447062054
+          },
+          "tudat-wasm": {
+            "display": "0.011 mm",
+            "distance": "0.011 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000010763345612259194
+          },
+          "tudatpy": {
+            "display": "0.010 mm",
+            "distance": "0.010 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.000009865354979751104
+          }
+        }
+      },
+      {
+        "case": "MOLNIYA F1-J2",
+        "cells": {
+          "gmat": {
+            "display": "11.928 mm",
+            "distance": "11.928 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.011927957668277898
+          },
+          "nyx": {
+            "display": "94.370 mm",
+            "distance": "94.370 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.09437025745415101
+          },
+          "orekit": {
+            "display": "9.668 mm",
+            "distance": "9.668 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009667949243077728
+          },
+          "tudat-wasm": {
+            "display": "9.429 mm",
+            "distance": "9.429 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009428723340860888
+          },
+          "tudatpy": {
+            "display": "9.416 mm",
+            "distance": "9.416 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009416354315731373
+          }
+        }
+      },
+      {
+        "case": "MOLNIYA F3-field20x20",
+        "cells": {
+          "gmat": {
+            "display": "3.242 mm",
+            "distance": "3.242 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.003241938356085783
+          },
+          "nyx": {
+            "display": "94.149 mm",
+            "distance": "94.149 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.09414876430143643
+          },
+          "orekit": {
+            "display": "9.646 mm",
+            "distance": "9.646 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009645899697984503
+          },
+          "tudat-wasm": {
+            "display": "9.906 mm",
+            "distance": "9.906 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00990618591045536
+          },
+          "tudatpy": {
+            "display": "9.913 mm",
+            "distance": "9.913 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009912900714127728
+          }
+        }
+      },
+      {
+        "case": "MOLNIYA F4-field-sun-moon",
+        "cells": {
+          "gmat": {
+            "display": "4.749 mm",
+            "distance": "4.749 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.004749416570773989
+          },
+          "nyx": {
+            "display": "94.135 mm",
+            "distance": "94.135 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.09413525947090653
+          },
+          "orekit": {
+            "display": "9.509 mm",
+            "distance": "9.509 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009508749482142089
+          },
+          "tudat-wasm": {
+            "display": "9.631 mm",
+            "distance": "9.631 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.0096313400823306
+          },
+          "tudatpy": {
+            "display": "9.625 mm",
+            "distance": "9.625 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009625436879040373
+          }
+        }
+      },
+      {
+        "case": "MOLNIYA F5-field-sun-moon-srp",
+        "cells": {
+          "gmat": {
+            "display": "9.083 mm",
+            "distance": "9.083 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009083229772004138
+          },
+          "nyx": {
+            "display": "94.178 mm",
+            "distance": "94.178 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.09417778516091722
+          },
+          "orekit": {
+            "display": "9.125 mm",
+            "distance": "9.125 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.00912516790207013
+          },
+          "tudat-wasm": {
+            "display": "9.697 mm",
+            "distance": "9.697 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009696945074006263
+          },
+          "tudatpy": {
+            "display": "9.679 mm",
+            "distance": "9.679 mm",
+            "jacchiaRoberts": false,
+            "worstM": 0.009678672923402907
+          }
+        }
+      }
+    ]
   },
   "findings": {
     "defects": [],

@@ -212,6 +212,27 @@ J reduceDragDiagnostics(const J& input,const std::map<std::string,J>& exportedCa
  require(toolsSeen==std::set<std::string>({"gmat-2026","nyx","basilisk"}),"missing required drag diagnostic tool");
  return output;
 }
+// The original subset (xval/summary.json): FFM against each tool by case, and each tool's
+// largest difference outside GMAT's Jacchia-Roberts cases, over all cases and apart by drag.
+J reduceXval(const J& xval,const std::map<std::string,J>& exportedCases) {
+ J rows=J::array(),maxima=J::object();
+ for(const auto& tool:xval.at("tools"))maxima[tool.get<std::string>()]={{"all",nullptr},{"noDrag",nullptr},{"drag",nullptr}};
+ auto raise=[](J& slot,double n){if(slot.is_null()||n>number(slot.at("maxM")))slot={{"maxM",n},{"display",distance(n)}};};
+ for(const auto& row:xval.at("rows")) {
+  const std::string id=row.at("case");require(exportedCases.count(id),"xval: unknown case "+id);
+  const bool drag=exportedCases.at(id).at("row")=="drag";
+  J scored={{"case",id},{"cells",J::object()}};
+  for(const auto& tool:xval.at("tools")) {
+   const std::string t=tool;if(!row.at("ffm").contains(t))continue;
+   const auto& c=row.at("ffm").at(t);const double n=number(c.at("worst"));const bool jr=c.at("jacchiaRoberts").get<bool>();
+   scored["cells"][t]={{"worstM",n},{"distance",distance(n)},{"display",distance(n)+(jr?" (JR)":"")},{"jacchiaRoberts",jr}};
+   if(jr)continue;
+   raise(maxima[t]["all"],n);raise(maxima[t][drag?"drag":"noDrag"],n);
+  }
+  rows.push_back(scored);
+ }
+ return {{"rows",rows},{"maxima",maxima}};
+}
 J reduce(const J& input) {
  const auto& exported=input.at("export"); std::map<std::string,J> cases;
  for(const auto& c:exported.at("cases")) require(cases.emplace(c.at("id"),c).second,"duplicate export ID");
@@ -280,6 +301,7 @@ J reduce(const J& input) {
   out["classTable"].push_back(row);
  }
  out["integrationError"]=integration;
+ out["xval"]=reduceXval(input.at("xval"),cases);
  for(auto it=input.at("format").begin();it!=input.at("format").end();++it)out["formatted"][it.key()]=quantity(number(it.value().at("value")),it.value().at("unit"),it.value().value("precision",-1));
  out["dragDiagnostics"]=reduceDragDiagnostics(input,cases);
  return out;
