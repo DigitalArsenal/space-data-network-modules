@@ -1619,7 +1619,7 @@ floor (12.4) at the epoch state, the $OMM carries
 - USER_DEFINED_SDNAP_COV_DRAG, _AGOM (those fitted, in that order): for the k-th of them the
   space-separated row of its covariance with X, Y, Z, X_DOT, Y_DOT, Z_DOT at epoch (J_0 P_p), with the earlier ones,
   then its variance (6 + k + 1 numbers);
-- USER_DEFINED_SDNAP_COV_FLOOR_UVW (6 numbers, km^2: uu, vu, vv, wu, wv, ww), _COV_NOISE (12.5), _COV_NG_RATE (1/day)
+- USER_DEFINED_SDNAP_COV_FLOOR_UVW (6 numbers, km^2: uu, vu, vv, wu, wv, ww; the floor F of 12.4, k_F of 12.5 applied), _COV_NOISE (12.5), _COV_NG_RATE (1/day)
   and _COV_REGIME (DRAG or ABOVE).
 
 **12.3 Propagation.** A set is read back as the augmented epoch covariance C (state block COVARIANCE - F(x(0)),
@@ -1633,8 +1633,9 @@ The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) is COVARIAN
 
 **12.4 Theory floor.** F is the fit's residual covariance in the UVW axes of the state (U radial, V in-track, W along
 r x v), R = (1/N) sum u_k u_k^T, u_k the residual e_k in the UVW axes of the model state at t_k; position block
-R in TEME axes, velocity block w^2 R (w = |r x v| / |r|^2), no position-velocity block. It is the part of the error a
-mean-element theory leaves at every time (short-period terms it does not carry) and does not shrink with N.
+R in TEME axes, velocity block w^2 R (w = |r x v| / |r|^2), no position-velocity block, times the regime's k_F (12.5).
+It is the part of the error a mean-element theory leaves at every time (short-period terms it does not carry) and does
+not shrink with N.
 
 **12.5 Process noise.** What a mean-element theory gets wrong over days are its element rates. From the end of the
 fit arc t_a (minutes from the epoch; from the epoch backward for t < 0) the rates carry errors constant over
@@ -1665,19 +1666,48 @@ These sizes, and the cells of 12.7, were measured on 2026-10-25 (module SHA-256 
 `fit`'s former default prior on BTERM, GAUSSIAN_SIGNED 0 +- 0.05, and were not re-measured under the LOG_NORMAL default
 of 0.2.0.
 
-SDNAP uses its own table when FORCES requests AP gravity terms. At FORCES 31,20, the minimax
-fit below minimizes the worst violation of the mean band across days 1,2,3,7. It retains all
-4,150 AP24/AP72 calibration fits (777,150 samples), under the LOG_NORMAL default, from
-`operator-theory/ap/b040/compare-truth2` (AP arms joined from `truth2`) and `regimes`.
-The registered cutoff and satellite exclusions are unchanged. Original reference arcs are
-re-fitted; signed forecast errors and covariance share TEME epochs on a 30-minute grid,
-with lead bins counted from each fit's end. Stored daily RTN RMS values are not signed errors.
-Measured 2026-11-03; full provenance and results: `test/results/covariance-ap-calibration.json`.
+SDNAP uses its own table when FORCES requests AP gravity terms; each row also scales the floor of 12.4 by k_F (the
+floor the set carries in COV_PROPAGATION and adds at every time, epoch included; 1 for SGP4XP and for ABOVE).
 
-| Theory | Regime | s_e (1/day) | s_i (1/day) | s_l | c |
-| --- | --- | --: | --: | --: | --: |
-| SDNAP | DRAG | 0.0030020720101006817 | 1.3729304605949328e-06 | 0.00022005794330391744 | 0.52454406174861778 |
-| SDNAP | ABOVE | 9.6961538661171821e-07 | 8.1531127919544734e-07 | 4.753573962018311e-06 | 0 |
+| Theory | Regime | s_e (1/day) | s_i (1/day) | s_l | c | k_F |
+| --- | --- | --: | --: | --: | --: | --: |
+| SDNAP | DRAG | 1.8579913326733934e-07 | 1.12761105007012e-06 | 7.647194501793458e-07 | 0.112126311682426 | 1.5127596877626373 |
+| SDNAP | ABOVE | 9.6961538661171821e-07 | 8.1531127919544734e-07 | 4.753573962018311e-06 | 0 | 1 |
+
+The DRAG row (0.6.1, 2026-11-05) is fitted per axis. Per radial, in-track and cross-track axis (RIC, the truth's
+axes) z = e / sigma, the forward error component over the propagated 1-sigma; calibrated, median |z| = 0.674, and the
+band [0.603, 0.754] is the one-axis image of 12.7's (0.674 x sqrt of [0.8, 1.25]). The loss is, per regime, the mean
+over R, I, C and lead hours 1 to 167 of (ln(median |z| / 0.674))^2, the regimes averaged; s_e, s_i, s_l, c and k_F
+are solved jointly by Nelder-Mead on their logs from four starts. The windows are 0.6.0's flights of the coverage
+study (experiments COVARIANCE-COVERAGE.md and COVARIANCE-REFIT.md): strong drag (Swarm A, B, C, GRACE-FO 1, 2; 24 h
+and 17 h held-B arcs) and near 700 km (Sentinel-1A, 1C; 72 h and 24 h arcs), split by cutoff with a 10-day guard:
+training 2025-04-01 to 08-10 and 2026-01-01 to 03-15, held out 2025-08-21 to 12-21 and 2026-03-26 to 05-31. P(t) is
+linear in each squared size and the floor adds, so the fit re-weights the module's own per-term variances; no orbit is
+re-fitted. The ABOVE row is the 2026-11-03 minimax row (the worst violation of 12.7's mean band across days 1, 2, 3
+and 7 on `operator-theory/ap/b040`), unchanged.
+
+Realism is not met. On the held-out windows 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7) are inside
+the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
+0.00022005794330391744, c 0.52454406174861778) gave a 1-sigma 274 to 530 times too wide in-track and about 1,000 to
+7,600 times radially at day 1. The worst held-out |ln(median |z| / 0.674)| goes from 8.77 to 0.74. Median |z|, 0.6.0
+to 0.6.1:
+
+| Regime | Day | R | I | C |
+| --- | --: | --- | --- | --- |
+| Strong drag | 1 | 5.77e-4 to 0.635 | 2.03e-3 to 0.468 | 0.678 to 0.781 |
+| Strong drag | 3 | 3.29e-4 to 0.745 | 5.94e-3 to 0.679 | 0.579 to 0.874 |
+| Strong drag | 7 | 3.24e-4 to 0.754 | 0.016 to 0.910 | 0.491 to 0.794 |
+| Near 700 km | 1 | 4.38e-4 to 0.638 | 1.07e-3 to 0.322 | 0.385 to 0.660 |
+| Near 700 km | 3 | 1.50e-4 to 0.638 | 1.63e-3 to 0.487 | 0.207 to 0.560 |
+| Near 700 km | 7 | 1.05e-4 to 0.852 | 2.28e-3 to 0.674 | 0.116 to 0.380 |
+
+Strong-drag cross-track is now overconfident at days 1 and 3 (0.78 to 0.87; 0.6.0 was inside or wide there), and near
+700 km in-track at day 1 and cross-track at day 7 remain too wide (0.32, 0.38). The limit is the form of the noise,
+not its sizes: wherever the strong-drag cross-track median at day 7 is inside the band, the near-700 km one is 0.17 to
+0.32, for every s_i and k_F; a row per regime, or a cross-track size growing with the non-gravitational rate, still
+leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km
+(0.6.0: 37.78 km) against the error 0.308 km. `test/covariance-realism.e2e.mjs` reports every held-out cell of both
+rows, the shares within 1 and 2 sigma, and the ISS figure on the built module.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
@@ -1709,23 +1739,7 @@ too large from day 2 (coverage 0.98 to 1.0). These are a measured limit of the p
 band; the band is not widened.
 
 
-SDNAP calibration cells measured 2026-11-03 on the rows named in 12.5 with the 0.4.15 release (16.11's wide
-terms; noise constants unchanged), from `test/results/covariance-ap-calibration.json` (1 of 8 inside):
-
-| Theory | Regime | Day | Mean d^2/3 | Inside 95 % | Band |
-| --- | --- | --: | --: | --: | --- |
-| SDNAP | DRAG | 1 | 0.600986721 | 0.964846062 | outside |
-| SDNAP | DRAG | 2 | 0.652071607 | 0.981394184 | outside |
-| SDNAP | DRAG | 3 | 0.962410509 | 0.992796247 | outside |
-| SDNAP | DRAG | 7 | 1.477419919 | 0.998071394 | outside |
-| SDNAP | ABOVE | 1 | 0.834343395 | 0.943382205 | inside |
-| SDNAP | ABOVE | 2 | 1.096899577 | 0.997066969 | outside |
-| SDNAP | ABOVE | 3 | 0.518098962 | 0.997540860 | outside |
-| SDNAP | ABOVE | 7 | 1.198065474 | 0.990018149 | outside |
-
-Neither theory's table is inside the band at every lead, so neither earns a realism label.
-The AP E2E asserts the shipped minimax table, reproduction of every cell mean and coverage
-within 1e-6, and bit-exact default-FORCES SGP4XP conformance; it does not assert band acceptance.
+SDNAP: the held-out cells of 12.5 (per axis); neither theory's table earns a realism label.
 
 **12.8 The drag prior of a fit.** `fit` estimates BTERM under its $PCF FIT.DRAG_PRIOR (MEAN, SIGMA, FORM); a stated
 prior is fitted as given on every fit.

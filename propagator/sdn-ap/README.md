@@ -230,7 +230,10 @@ rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
 
 ## Covariance realism
 
-Neither SDNAP's 2026-11-03 minimax table nor SGP4XP's table is inside SPEC 12.7's band at every lead; neither earns a realism label (AP: `test/results/covariance-ap-calibration.json`).
+Neither table earns a realism label. SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track and
+cross-track axis; on held-out windows 8 of 18 cells (two regimes, three axes, days 1, 3 and 7) have median |z| inside
+0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times too wide
+in-track and radially). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
