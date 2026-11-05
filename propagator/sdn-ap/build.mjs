@@ -24,7 +24,7 @@ const shownPath = (p) => {
   return r && !r.startsWith("..") && !path.isAbsolute(r) ? r : p;
 };
 const require = createRequire(path.join(packageRoot, "package.json"));
-const { compileModuleFromSource, ModuleThreadModel, protectModuleArtifact } =
+const { compileModuleFromSource, ModuleThreadModel, protectModuleArtifact, resolveWasiThreadsToolchain } =
   await import("space-data-module-sdk/compiler");
 const { FlatcRunner } = await import("flatc-wasm");
 const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.json"));
@@ -64,10 +64,48 @@ async function oemBindings() {
     .join("\n");
 }
 
-const abiHeader = await fs.readFile(
-  require.resolve("space-data-module-sdk/include/orbpro/orbpro_propagator_abi.h"),
-  "utf8",
-);
+const abiHeaderPath = require.resolve("space-data-module-sdk/include/orbpro/orbpro_propagator_abi.h");
+const abiHeader = await fs.readFile(abiHeaderPath, "utf8");
+
+// The tools the build runs, with their versions, for dist/build-provenance.txt: the SDK compile lane, flatc-wasm, the SDS
+// package, and the libraries the SDK links from the wasi-threads sysroot and resource directory. A package.json is not an
+// exported subpath of every package, so a package's version is read above a file the package exports. A sysroot
+// library's version is that of the Homebrew keg it resolves into (Cellar/<package>/<version>), the packages whose license
+// files LICENSES/ carries; a library from any other layout fails the build.
+async function packageVersion(name, exportedFile) {
+  for (let dir = path.dirname(exportedFile); dir !== path.dirname(dir); dir = path.dirname(dir)) {
+    let pkg = null;
+    try {
+      pkg = JSON.parse(await fs.readFile(path.join(dir, "package.json"), "utf8"));
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    if (pkg?.name === name) return `${name} ${pkg.version}`;
+  }
+  throw new Error(`no package.json of ${name} above ${exportedFile}`);
+}
+async function kegVersion(file) {
+  const real = await fs.realpath(file);
+  const keg = /\/Cellar\/([^/]+)\/([^/]+)\//.exec(real);
+  if (!keg) throw new Error(`${file} resolves to ${real}, outside a Homebrew keg: the wasi sysroot version is not readable`);
+  return `${keg[1]} ${keg[2]}`;
+}
+async function toolchainVersions() {
+  const wasi = resolveWasiThreadsToolchain();
+  if (!wasi.resourceDir) throw new Error("the SDK found no wasi resource directory (SDN_WASI_RESOURCE_DIR): the compiler-rt builtins version is not readable");
+  const sysrootLib = (name) => path.join(wasi.sysroot, "lib", "wasm32-wasip1-threads", name);
+  return {
+    sdk: await packageVersion("space-data-module-sdk", abiHeaderPath),
+    flatcWasm: await packageVersion("flatc-wasm", require.resolve("flatc-wasm")),
+    sds: await packageVersion("spacedatastandards.org", path.join(sdsRoot, "package.json")),
+    wasi: {
+      libc: await kegVersion(sysrootLib("libc.a")),
+      libcxx: await kegVersion(sysrootLib("libc++.a")),
+      libcxxabi: await kegVersion(sysrootLib("libc++abi.a")),
+      builtins: await kegVersion(path.join(wasi.resourceDir, "lib", "wasm32-unknown-wasip1-threads", "libclang_rt.builtins.a")),
+    },
+  };
+}
 
 const provenance = { nrlmsise00: null, erfa: null, table6: null };
 // NRLMSISE-00 (the drag atmosphere's NRLMSISE00 option, SPEC 15): the public-domain Brodowski C port the modules
@@ -193,10 +231,8 @@ async function erfa() {
     license: { spdx: ERFA_PIN.license.spdx, carried: "LICENSES/ERFA.txt", sha256: ERFA_PIN.license.sha256 },
     sha256: { ...ERFA_PIN.headers, ...ERFA_PIN.sources },
   };
-  erfaLicense = license;
   return `extern "C" {\n${headers.join("\n")}\n${bodies.join("\n")}\n}\n`;
 }
-let erfaLicense = null;
 
 // SR 313 Table 6 (SPEC 3.3), transcribed in src/j70_table6.inc: the canonical text rebuilt from the array must have
 // this SHA-256 (one line per height, "h,v600,...,v2000\n", values as printed), or the build fails.
@@ -294,6 +330,7 @@ await fs.writeFile(path.join(buildRoot, "module.cpp"), sourceCode);
 const manifest = JSON.parse(await fs.readFile(path.join(packageRoot, "plugin-manifest.json"), "utf8"));
 // the PRODUCER an $OCM names (src/ocm.inc) is this manifest's version
 if (!parts.get("ocm.inc")?.includes(`kModuleVersion = "${manifest.version}"`)) throw new Error(`src/ocm.inc kModuleVersion is not the manifest's ${manifest.version}`);
+provenance.toolchain = await toolchainVersions();
 const compilation = await compileModuleFromSource({
   manifest,
   sourceCode,
@@ -306,8 +343,11 @@ if (!compilation.report?.ok) {
   throw new Error(`sdn-ap-propagator validation failed: ${issues.join("; ")}`);
 }
 await fs.copyFile(path.join(packageRoot, "plugin-manifest.json"), path.join(distRoot, "plugin-manifest.json"));
+// every license text the package carries (LICENSES/), beside the module
 await fs.mkdir(path.join(distRoot, "LICENSES"), { recursive: true });
-await fs.writeFile(path.join(distRoot, "LICENSES", "ERFA.txt"), erfaLicense);
+for (const name of await fs.readdir(path.join(packageRoot, "LICENSES"))) {
+  await fs.copyFile(path.join(packageRoot, "LICENSES", name), path.join(distRoot, "LICENSES", name));
+}
 // the provenance as "key value" lines (nested keys joined by dots, lists by spaces): no JSON in the module's tooling
 const provenanceLines = [];
 const flatten = (prefix, value) => {
