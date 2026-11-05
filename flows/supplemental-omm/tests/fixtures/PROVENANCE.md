@@ -24,4 +24,14 @@
   0.463066523 km, so the E2E compares FIT_STATISTICS with this record bit for bit. The ephemeris inputs
   (`iss-sgp4xp-3day.oem`, `starlink-synthetic-12h.oem`) were propagated with the 0.1.1 flight and are kept as they
   are: re-propagating them would also move the OD core's records, whose anchors are the previous node's.
+- `answers-2-1-1.json`: what the OD node 2.1.1 (dist sha256 6ecdbb24945549978ca4b9997b272bfc3e149ec6f0559e673e8adcbd41e4bab0,
+  over propagator/sgp4-xp 0.2.1, which flies every SGP4-XP state on a new library satellite) answers on the inputs of
+  its tests (`tests/lib/answers.mjs`: `starlink-synthetic-12h.oem` on 'starlink', the source modules' `$OEM` of the
+  provider fixtures, NASA's ISS ephemeris, `iss-sgp4xp-3day.oem` and the 4-hour LAGEOS-1 CPF arc), recorded
+  2026-11-04 by `tests/fixtures/record-answers.mjs` before the node's rebuild on propagator/sgp4-xp 0.2.2: per input
+  every record of the omm and ocm streams in output order (196 records, 4 of them SGP4-XP sets), as the SHA-256 of
+  its bytes with the version in PROVENANCE.PRODUCER masked (the node's in each SGP4 set `$OCM`, propagator/sgp4-xp's
+  in each SGP4-XP `$OCM`); the notices; the wall time of each of three fits by a new node (1-minute load 4.8 on 28
+  cores; the three-day ephemeris, two SGP4-XP windows, 14.25 s median). The node's own records, hashed. sha256
+  1298889b2a6585a7f4cc7bf903ca563526aebabd1c5b7fd66fbe56ef3b337f77.
 

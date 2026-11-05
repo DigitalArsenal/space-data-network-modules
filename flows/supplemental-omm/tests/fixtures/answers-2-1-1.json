@@ -1,0 +1,1129 @@
+{
+ "//": "The OD node 2.1.1 (over propagator/sgp4-xp 0.2.1) on the inputs of its tests (tests/lib/answers.mjs): per input every record of the omm and ocm streams in output order, SHA-256 of its bytes with the version in PROVENANCE.PRODUCER masked; the notices; the wall time of each of three fits, ms (tests/fixtures/record-answers.mjs; PROVENANCE.md).",
+ "node": {
+  "version": "2.1.1",
+  "sha256": "6ecdbb24945549978ca4b9997b272bfc3e149ec6f0559e673e8adcbd41e4bab0",
+  "bytes": 1190570
+ },
+ "load1": [
+  4.8,
+  4.9
+ ],
+ "inputs": [
+  {
+   "name": "starlink-synthetic-12h",
+   "invocations": 1,
+   "versions": {
+    "node": [
+     "2.1.1"
+    ],
+    "engine": [
+     "0.2.1"
+    ]
+   },
+   "notices": [
+    "info | fitted | spacex-starlink | OD fit complete: STARLINK-SYNTHETIC (NORAD 90001); SGP4-XP: 1 set"
+   ],
+   "records": [
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "57481f43c7a4be35cd6bf931e8a6e4a4ed1ba71f3f1653ea7b95b00fcb5897e3"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "f5faddd415437b6cec0a3956bbf7bd785cf9a176c9551ffa856080569872a03c"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "b3a7d6002e6655b77c84115116fbf83835443d24f7cbeb947d19886f14479534"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "9fdefab85211c09beccd105ce04104cb6e227f6f27146b4b3b0c516671da7800"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "d056d5e9869e3559e67f0523f20f5de7e9859938b68e8de46408f3c5ed70b683"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "ad6ca74a26b95b8ca5476066c30a8a295bba5a17958e32af8af0412f58a2710b"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "0d877be8f3d5e4947b4060e33c6a1cd18dd99fe7b34fee6111cf698689506850"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "6d527d90d082397ab1d97fe9562efd0c563da3172fdacd559861cc3ad0c62d81"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "b4debc08c3de8ecbf2f7df65efd63b0b98e12930c90c610ce8440e31ba2b0c59"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "b152d62f184949057034b12d4c24eb053380ae9338f6db08d65524ea4262c996"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "cfa170269810e737696e40564f181aa186a29d8f66c88982d34ebcd8fd2b8658"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "dd1f47c955d47a362b2d5df6fd222deca1807ec5026f7cf8abbb82b9d32d3cc0"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4xp",
+     "sha256": "3b8426e2e1e0882974d421b67e5028c818d61497b2a4250322c7a2c3a9bad1c7"
+    }
+   ],
+   "ms": [
+    808.6,
+    774.9,
+    761.5
+   ]
+  },
+  {
+   "name": "sources",
+   "invocations": 30,
+   "versions": {
+    "node": [
+     "2.1.1"
+    ],
+    "engine": []
+   },
+   "notices": [
+    "info | fitted | spacex-starlink | OD fit complete: STARLINK-36840 (NORAD 67850)",
+    "info | fitted | spacex-starlink | OD fit complete: STARLINK-36348 (NORAD 67851)",
+    "info | fitted | glonass | OD fit complete: GLONASS R01",
+    "info | fitted | glonass | OD fit complete: GLONASS R02",
+    "info | fitted | glonass | OD fit complete: GLONASS R03",
+    "info | fitted | glonass | OD fit complete: GLONASS R04",
+    "info | fitted | glonass | OD fit complete: GLONASS R05",
+    "info | fitted | glonass | OD fit complete: GLONASS R06",
+    "info | fitted | glonass | OD fit complete: GLONASS R07",
+    "info | fitted | glonass | OD fit complete: GLONASS R08",
+    "info | fitted | glonass | OD fit complete: GLONASS R09",
+    "info | fitted | glonass | OD fit complete: GLONASS R10",
+    "info | fitted | glonass | OD fit complete: GLONASS R11",
+    "info | fitted | glonass | OD fit complete: GLONASS R12",
+    "info | fitted | glonass | OD fit complete: GLONASS R13",
+    "info | fitted | glonass | OD fit complete: GLONASS R14",
+    "info | fitted | glonass | OD fit complete: GLONASS R15",
+    "info | fitted | glonass | OD fit complete: GLONASS R16",
+    "info | fitted | glonass | OD fit complete: GLONASS R17",
+    "info | fitted | glonass | OD fit complete: GLONASS R18",
+    "info | fitted | glonass | OD fit complete: GLONASS R19",
+    "info | fitted | glonass | OD fit complete: GLONASS R20",
+    "info | fitted | glonass | OD fit complete: GLONASS R21",
+    "info | fitted | glonass | OD fit complete: GLONASS R22",
+    "info | fitted | glonass | OD fit complete: GLONASS R23",
+    "info | fitted | glonass | OD fit complete: GLONASS R24",
+    "info | fitted | glonass | OD fit complete: GLONASS R26",
+    "info | fitted | intelsat | OD fit complete: SYN-GEO-1",
+    "info | fitted | cpf | OD fit complete: lageos1 (NORAD 8820)",
+    "info | fitted | iss | OD fit complete: ISS (NORAD 25544)"
+   ],
+   "records": [
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "d24822be753c791d4c21a72a7de5dea4557e7a7dd08a2e9387b771a3ea44fffd"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "5ff37002197d411ab733bec364fc88164d48e7921847ec628705fe3fa8df9089"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "b08dac9294d81bc6dfec7d4bace63dc609d501ff58159fa751be59b5d6a7cf43"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "15a57371fb83f7ab0980b620587989e843069e2878eb57009b58d41988cbd07e"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "e01afdee747ef0d46c32ba9dd3c57df8d504823c60c0248bc12c8d1dcfe29270"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "09b14a8cb69a4ee7574d21d7a33f4fa8087934a5440d4db9f7bdadbd3509ed19"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "10a380058215f8d0848764a37568565f8463bed4f914b3e3eff56e10ba16a677"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "672c5bbddb9fe279791e7fe913d2a11949082ee7cd07910e43bed0ff2def739d"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "ba1ca64b2fa61ef4c06af71a6e490ea32aebff73cce6c4554463359a1f5aeeb4"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "e42c28f7f37a332d86df4932ff537ae4bbe9439e6c9385fe8182511057d8e6a4"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "cca6ac6a48106c29ace26bb21a6d422c205459b4244783d534c48de425ec152e"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "f8d950b9d7d10a48d6499105bef2acef214d0eefc6af63873ea7f82183a5d255"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "7be385fe02f94d552f24e54294b932b11590de49e099e280326950862e900fb8"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "c97a912ca8857deb896d185e36db924cdfcea7cd5bfe522eef0408419e67c7dd"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "82e92695837a97d11e7f25d70f027493f7a3595b484987c95e2b036d26282b42"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "2da81ddbd58873b5942c24b7997984c0dbcfd0f482cf4bed6e83c04fd936084e"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "c24c4802319b2c7145a08532a47bccb69698bb7633fee47252f5f96b17c18498"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "067bd7919833e37836439d774832f992860aeb75b5f8bc6096a952d1ab759309"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "216197d63d3d908f714614ce7e34526be71ace22be89873da1566de0d410fe02"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "c98bc07d3c9c5670da22ccef98d8053343f62916710e703dc625eccb7191ba31"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "a88a19ae407cee0bece7cba645527be2e4111c29d978537d514255e152d347b6"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "b78fa5b81e6502c38e6748381f5558ffc3dd365d12ba589d4a5bc96defb3ed99"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "fa4d090b4407a1f76f1a88885be98a21bcd3a32a18558dca0ae8f73b539cbaf5"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "2679f1a1f34911d15b7c3c59dc692676cd9561c7b4663baaef63be29db2f55f2"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "296bb5572b9b92b8853b4d962d5590981db59a8d7d2a5acd90d2f92b88dd4e8b"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "87cba877f6c6ba3a9927f0f692929eeb2b3ea42808363cfd591b49ff7586918d"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "e0db3f1d0019b185a922f5b1535c105dd59fa91e13e4812f84de921bacb0bf0e"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "4090fdd3379126096a95b6e4b3c6556e40d4e559b2cf70370714603effa27f4f"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "7975a00a837590288ef7bcf011f3ab4f29c98dcecc681a9bbcfc36c4ba1d065f"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "401659b44b431766bcab48b125f0e54ed2a3cae0a970550ff81c53b4b4e88692"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "e47a2c60f0f26bf4cdcafb9902ec6fdd3a10f5bce9912699da8cd1f16d7870e0"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "e452beb0579e1cf6522ceed66bf85d182336cf207668cede832e8f81c31894cd"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "9480db96af767d3cbb5e629ecaa2947e2b530a6fc8f857772d233e58d624328e"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "5019d373d583d37011eaac7daa2333aaa4b8d17ea3d79235b05c7118cb16666b"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e69b4bea04d29f7a1ad8f3081cf7eb9209a0e14435a6bd041bb2e5bfe08cc8b5"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "fdbb4deffeb50d71aba9d95dbbae7fafc8ab0e05c82b16d8dc16c3cf44918fee"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "22f3d7d1135fd22f71120e5dd9c01e30aba480925771a2f0a1e61009e8281e73"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "333433fd8ae1e9ac61bdac38d1339c2e7fa1307b547f0b60cab60500c683b018"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "68753c6b2987a68c304978fd36321f9037c6f518cd7966f4e5f998434627dbec"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "3ad467f00ba4a0a77447ef905d09ad463f5a979e20fe75ec0118976836950046"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "d7bb084ce0951dae7c80edada06239b8fc5edbfdff360db88d6e948e47be761a"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "90fe4a7bbe4d5c3130d366504632d02bf69c9d5af96bd94fa734dfbd2b0b7ec9"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "45b400af10846c9b3d31612931bd1985b666d3ce24677f841fdba576c858ed07"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "90a40e7918a3bc905c68f0896708bd1a3209c83cda5c8a31e092b60a48f1f3aa"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "f99d5ce8b044676f62d35c6ce42474af54ca48aa24a9873a60c9cbd6162100e7"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "2e2db6585e1f322de313e8192fd357d171ea7992b51a7012884631a9cbf1cf1d"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "2cbfd600336d3b1d9f8a569b93984cd36c45fc1b6ae4afc9e615851fc7765554"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "d51133052c9fc7eb74d1e41a474c0520ae6aa3788894b2c845acc5b9e6132713"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "f8b04592cd73fefc0c6986f8f7669aec451baabd30c0f94969102ae150491140"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "8d1e3d4886acb839801eab9fad19f46d1c4454e31bbef7fe8af90af3fe82b585"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "95bfe58de04670fa6628b55702b76bb040171dcb3403943d2a7c73bf6cde6f41"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "c478f918cd9b4fe091f284520233ae6d53cd2570dced5396d0c6992b1bca21ce"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "aa408564c1f1af2c097ac65928e1d813e85375669b0035aaec0f427ebb884094"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "918e35677b47d2ce0bbf881cb35c197b03fc3d0369c0c4198c87e01bc7e08c5e"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "6b6858ae2af35106df57c79cdf4ea218a5fc25d1003e54ed84887ef193b03a81"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "bb93071026ef7e8ee63618c651124052cbcd01aebaaf222a5a5d3da79edcd4d8"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "f080bb13b918015fa6f4c63b6f92b80e4619c0d22b821b82507b33179ffb9f10"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "878de37f1bfe5b1dca0790e064fe87a8e314abadac365a9d33cd3802ecdddbc7"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "22f2de4850b50e483bbffdd8583c84880b6ab2ef31cdc2e5d1924442fbaacb2c"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "24a6220d189f7c4fde4f2f3917faf7cf3f4e918f052eb52ae1f666f82aafda27"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "0f905f3ff56912af8b286ab2b5128809978ddc312998b97e19f3e1ac3bd6ae5e"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "0a1c937bd7d29297b68574b3c812b3e44c9c6a68f80b2027da6400c4add8dd40"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "7187308e3c36f1c26ec25a1db657fcd9e5db66294aceca2ca0d9e72a94e3b5e2"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "e87788247095414fcad50512d34b9357f988537351d091dda4f8dd8adfcb7df4"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "1850198abd8845d49cdb19e39843afc339d98b12f44a9568871dc7816581a5d1"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "f99a38cc04fecf4f82e0023475fe2ca3a1107eca4c0d355f8105dab0ce26dd3a"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e972a8055ce932dbc334514e3a870f595c737e5b9c7eff54d1505a74ecf75bfc"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "40f20eb4cbf1478e7be814d312463b3fcdd661eaecc18becbd1ae625b8391d09"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e8535406ef3f48911a76f473896aa9846597940d5fa3e6fe7efe3df55f511ce4"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "f6205916ee5ec829382e4da2555a07a463a9582b6f3411cb2a15e5f593c47782"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "a74a14dfa3ba40e309cf1102615f527a90e9bb19bdf20848c99c3c164bb4bd23"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "2c697c85b3318406de1f34ed83f5580284a605647c68c63a227e4f47b2670639"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e5c251fa2f8c7af30c7eaabfbed5572f38c9b699e9dbde4bb63666d86a872bd0"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "5936f03c015f6fd2d8479150f10471c9dff07b62f39c1c5605719fb0d2caea6d"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "3cbcff47e1b0043cfc4c8ab390f71e45201f5403aa91373f90ad3357a04ed5e8"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "b0a5da37dd1f33f98bedd2696a25c50a8755cd634b91c07231e309b6ebdbc7ae"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "83c89681a806b594b6378e2587937f99a48324163ae2b433326cf9bab1553a28"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "c3085eaff56663a7e9e0d167041125c81cd8ffac1d791266d04521f4b0a2a836"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "3cc93da6d4fe25058cea856ec3ca630f5e3e78032e140d67d4d81787c0c7acad"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "91406d132b1b005baea92ff674bba76c2c46105cc5edfdb04ea3022cc64837b5"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e197cba0c526a62c4a641044d4a46d6f7b2b045b890a6ff44164510e5c277ac7"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "123c4a22e15d7c893ff131bc97b18d874abf6a24df918a8fe9b11b01b58dc08d"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "569b57e56d52c1004e8b51cf04daa46c1ff8b2f539660e9fb66f539d6e681bb9"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "b1f77c9859137e2372a18fee99f89a0a792baef8d493b9eb4fc9bdfbe76933ea"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "0093f7a10e03942e8183aca7f294bac35671a8ebd93be9e8863df544041f524f"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "6b2ec56022060c12e98881281a5e9da6df8b9f17fe9aeaa21ffddf0449c7cad5"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "1da8e065c971fe2f47fd099ead6a572c1b5ecbf2ef7d3cf25ffbaf3e34135948"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "57534a090123563d521c12b368d17af5ad55e5f84da7c579705b7b3d350188bc"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "cd8c4043817e1fd2a98b0f08401fd2822bc29ea715fd690b644fa23a4bdc7a78"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "8f205bce435ea2d39b51e576a5da4ec9dd8f5a8941571fb9da4cd561c72f107f"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "1052e8c73d78b177a8919f7cab3e424f12a4817d6023b00ec3ae9eba1f7bdb64"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "874f0ccae80b6cb3bd6022fe954f1c9d9cef02831c813e71bbcbf0b184016952"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "692ccdc3491fd7332fb5c04004e2f71d32d82e362032a34f10e200eda6954ca8"
+    }
+   ],
+   "ms": [
+    26.8,
+    23.3,
+    25.7
+   ]
+  },
+  {
+   "name": "iss-12h",
+   "invocations": 1,
+   "versions": {
+    "node": [
+     "2.1.1"
+    ],
+    "engine": [
+     "0.2.1"
+    ]
+   },
+   "notices": [
+    "info | fitted | iss | OD fit complete: ISS (NORAD 25544); SGP4-XP: 1 set"
+   ],
+   "records": [
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "fe0d3def9ab37baa523254bcbaff8eb42a76a31a3edfbb2e443d1972ec710356"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "e695ec93f5fe8e4db23dc3a9200453f4ffbcfc73df70b12cc1a83b2e101cdd6c"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "1f2fd909824434e58fc74b9a1c62c187f41b954f64d640fb92c430fb7a36482c"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "552752db0c9a2941604e281094c8c67c681e641b128232cc9bac2f24e355b2bf"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "e8eb000f3eed2100614957d26247c063961f8a57587a2597fb4c167c935432da"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "9185f203c51f71fad6a39914fdbab64ee8989f8ca77d367beb4bdd0b5ea7c9ad"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "7b2a6ae494e292564fee5cdf7b6024909d246f2c08ed8d9741c7e0717f627bc8"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e5d842ab52a42d0e18e1ea9426b72d87306a864993c587a19f31c988c51b5a9e"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "fea7023e3899d30fc3e813429b7afa7309b00d4e19303df868b73838431ec671"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "2297c810272be074668506d1817d7f8096ec0fe3c109cb9d5bd1d4800ba2f55d"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "9901289929ac10e34bfa0ee6241a99c33ca11d67ea18dd4c369f2c78d5ab8d81"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "0183af287e62be3e1274f0b6f006595f9c2692ce9236b27d558bbbc68edcc598"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4xp",
+     "sha256": "76c8088d7579ac2b62dda1461f3e3efcddea9a4199e2c5f91212d845c047b232"
+    }
+   ],
+   "ms": [
+    438.7,
+    454.7,
+    440.3
+   ]
+  },
+  {
+   "name": "iss-3day",
+   "invocations": 1,
+   "versions": {
+    "node": [
+     "2.1.1"
+    ],
+    "engine": [
+     "0.2.1"
+    ]
+   },
+   "notices": [
+    "info | fitted | iss | OD fit complete: ISS (NORAD 25544); SGP4-XP: 2 sets"
+   ],
+   "records": [
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "1f2fcb9dbbb2b348efef6e2fb3053f2de3f7e4af14543b60585ca6948b8af740"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "6f66f05fe397e0ea67e95eca0daaec8fb06611ea733476741edb1224b6fe09d4"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "1df2dc57cca1edeb3d00865b45f797d340ab1f0c4f96d5220099b7bf0636a8a9"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "2c06cb8da2eb20594286bfb471631be784ad0a160976cea62624c4a8c8cd76c1"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "6b0b80d9a9bf018931d54c763bb585187c73ba49dbd5abbcd1ddd1c80fb797fc"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "2afdf3a698e678e63c58a1d9b2fee29b04506c24a287a8c1befb54cb20e8bdc7"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "f327ea56bfeb8756483e2e79a130465058e7c8eb517c4de53ead2769e742297c"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "54445b837dd401784c03659fa44ec04e34cc6806ea64a722f7852824903b12c0"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "d8407841ac7ba1faab0e1849ad27029b34151d316c4702db63452a4804a47153"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "a030bfd0ac9cc8f5c63a17442481f2cdb71c81cf7fadef620beaef7332739169"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "dddaf82c4e8fb9aabc6dd299ae69b70d111a0aa26ac87494e08d7e4f9a9bdad5"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "2e97c106aaefc8d4746a186395514cc1aba7b441ae45666ff73ce2f214a45741"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "58d6128a06a2a5724c7cb871b5ea9f1b9570d0ca3a31f7bb65d70b693b2f1497"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "fa05b43e516ecb40c7a9abf845660673685910f7a3155c63c7cf5da8dfae682c"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "9c3deda48c2d5dde3f215ab62cfe49761bd36d7923f7ed3b0360e522016a04c3"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "412c39fd7d957f6545090ce8fa665c0acc3bad12c35b3a06cb8033d436816bcf"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "bb0034d5a08c9392418c60f37ef7a8abdb75835b71061444ec3f437ab3c73102"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "4e0c1e11cf727b06cd98584369dd26b1c844dad0bf93ccfef2f81ada268574db"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "894de009bc1ec3700944b992838b9cd5eb0b764b6782e9bb3a17bdbaafbdfa15"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "8074db876395a6fb1de8c05d36be7c26bf3f343bed650856b4eb0986b29aed44"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "bd47f77244a84e1217bd5e223d2d54bef080fc11e3142e2097e9128382539655"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "a37d890cc02513ba4deee567ff508c2f51c6c2bdd42a1a20504d91aa7ef8443e"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "25f64572858c938d129fb281f7c1e6afbb6d01a9a14f3a1208489f8ceb00b648"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "a06f766a7587aadf7e8520faa489224627d4f8a569d4f0c543f27535e29ba015"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "1656addbea23c221c3428552aead292f9af04fdea271e64c9693910d645cc035"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "17ce28d1a067e5e569d5f8fba120e1fd8987debba67c6c38c55e42fc1d390431"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "5908aaf6aa0044845e379b07a76e0ca7b277eff77d2509b084e9b1490170d9b0"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "6c1a1cad1e3244ba5585bc524228bc0e7149e1bc77cd12c0f4d39b6b8931783a"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "a83ab4798f0b34e8bcbb26929d9f881c2f96930abf26264dd5ca8a4211c5dfed"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "46a86a444eb954c34b2d373ad7c4cb9d749e813b7b09bd30dfd6a896a6dc5974"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "bc1f825867d4aae80c18ef9211f10b03032d440991ea3a9348cae998a9bd822c"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "b6455a4804bf6b2b7724ddbc060aaf7a74b1f8b7b0a0ae0489f0b7e7798dd428"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "783b43f22c896cd65fa36d5d304524cde8779e06f6326871f57e27fba87481f3"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "d42fff45bada3c57a35c4e101e0c6a731ff26cccc77a058c613dce825276fd6b"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "3788e7c8282c60dff4e058bf2eb0f425e938e2503b34b3c703095357faca7159"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "73c85db70270670db8a5a53f42c7a72d65eedf2767d6ae61ef6305d5f6688bb1"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "97458e4759bb9e72388a180069d8379091745ea556a7a1eb75c7fdf34d6236ea"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "c9d3e6e2e8d6358314909b489d938b74a968c26073f32acaf6d92404194cb9b9"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "76e739d180f8e46cc54dab42b2f4c6a70cd718422c60922e4875414dace3d229"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "071f6b86aa1eb601c99bfc8940ac9f48fac81df3afff153d2ccc4656d5aa502a"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "9adab6bb2ae6055b0c333fa92047f321b4f79f228af9650d4611058ca2620b82"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "95d802dce3117da624acc3622e7b773615a4aada8ed1b23fe2ab034c51957630"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "b833a375f0d4e5a4ba1203349502458ba8fb2aef6cb80bd0100b33374a53ac0e"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "10d27779b49e2cb9f3bd434c5a764bacba752311d7a643081524631fe1b531ff"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e1b68d3d77c703dbc60ffee0722ad9c0dff9dd9a9c12a707f464b14ca9b53c07"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "9f35760bb61ff8c88e4460f407b87c6de399cfe34e5461c405b1fc92fc7b2d83"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "68638ac161cdd337c4c012527f6e51a8817e372458b515a5286e2f7b9aeaea67"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "741d6a26e789d221b0845728d384fa9541edfbb3656643ded322ac373f5f1202"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "0aa87ae524e1376e1d7847c39efaa52fa5f07cede3a6375bc3ca711b22daa4ac"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "d5a9220dceb3037103a69f439bf54f2822a477870cadb81948c7e09fa710907f"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e0d1a6999bb47cbc2beee41f551cf950b3d2c6078829eb96e89679a21192655d"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "f1bf7358d14844551da70677c06f2ff2fff69ad6077f37db81f2e6148fab8b8c"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "1e636d30b0efb16c8b74223c39e18155c19d73a6a472d3043f60a25387c7bbbf"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "81c0f1b057e31cfd3d5fcf132a73b17694055b38c704640b117c40de5f3efc9c"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "d1c023f42108eb0088cc6c945661c1e712d2074a1fb9d74b245f90e2daeb0449"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "b4389cec549101c9c86b4532c344e64efc62486d8644d728ff4c4ef38ace525e"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "5f8659e91eaa8c5e4be9717496014402a8e4b3e27a0a55e2a8bd2f85f8bc8881"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "c76f052de00700c5cfcd54904383513648973b4b0e4263c67dd855bec6051997"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "7badd2d5da8a921853c9a01a0a7af8b499b05f287b611c70dece4a91ba8c2ce0"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "7cbf79e57e7e2ed9a07bf30a561c577bb8d1677cdfebc7cc003aeb5f5cf3fdff"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "4f7f990f6473128dc3ce2cbcc0aea1e3111c70b558f243897924815e42426d59"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "24c26c848f61c2e6bc9d5c7cd4fbc54bb9d81d9781f2d0e811a1ac3df42ac361"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "0e59a3fee7a4447fecd6a4231df82937a7ff6abacb9481bc94f3ecb2b0df2196"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "c14a3efd1e0616fecc7f209a33319d5cb6072c3678ea503898b2292e6cc0e8d4"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "c93e1f738d242be3d15a32956755f9c6a6d9bd4e01ba351e00f23136a8551039"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "9458835b439cc45d8a13f47562eddd46021aa18b7d975ce2ef12437af464c33e"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "0bb970d43ab59c8f4585db3770d202620e551245ba15cb308916d138472bf96a"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "77a0a301887aed6b3ee28f94dfb769fe8dcc5557bc5546e650e0884c2c53feb5"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "eb16f2172a53eb8b8b581a23ec431e7eb671b6865a848824ca33154618e4a8fe"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4xp",
+     "sha256": "7ff2de0f920bc60e0dca96e7a34be4e1eb45ab2e0ab07b19bb3162127fd1dc84"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4xp",
+     "sha256": "3047fe8759d4bd0af5c6ad9ab7ad502958572030d87012be687be9cf8e5af164"
+    }
+   ],
+   "ms": [
+    14253.2,
+    14249.6,
+    14333.8
+   ]
+  },
+  {
+   "name": "cpf-4h",
+   "invocations": 1,
+   "versions": {
+    "node": [
+     "2.1.1"
+    ],
+    "engine": []
+   },
+   "notices": [
+    "info | fitted | cpf | OD fit complete: lageos1 (NORAD 8820)"
+   ],
+   "records": [
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "0071fd99150aebc531f04d10dad145126279489be6cf92160b9115de4289d03c"
+    },
+    {
+     "standard": "omm",
+     "kind": "omm-sgp4",
+     "sha256": "29c0277536b8ffd5324523dd159a5cf9c75de238cfcbba787f023ba3c31791ce"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "0c66c62a6a8df6a16602cb3acfbf1868254e38f8dfbe212ba409bcbdd727335c"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "e481b633909f814590771d006a2c798648021cf48bcd17ec340f351b119d5e9f"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-state",
+     "sha256": "ab68c7cc07936233883ceb13f3a887f2b356ef691571fb6108edd4e48a015380"
+    },
+    {
+     "standard": "ocm",
+     "kind": "ocm-sgp4",
+     "sha256": "8657eab05c01f22a162988c4e313fdd7c852045d7dcd143aa2ce8d297c1a6496"
+    }
+   ],
+   "ms": [
+    39.9,
+    39.5,
+    38.3
+   ]
+  }
+ ]
+}

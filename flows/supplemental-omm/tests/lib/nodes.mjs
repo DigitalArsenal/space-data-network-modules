@@ -75,6 +75,20 @@ export async function issOem(t, kvn) {
   return new Uint8Array(oems[0].payload);
 }
 
+// A CPF prediction (text) through data-source/cpf-source emit: the $OEM frames the flow fits, none when the source
+// refuses the text.
+export async function cpfOem(t, text) {
+  const harness = await harnessFor(t, path.join(modulesRoot, "data-source/cpf-source"));
+  const url = "https://edc.dgfi.tum.de/pub/slr/cpf_predicts_v2/2026/lageos1/lageos1_cpf_260713_19402.dgf";
+  const response = await harness.invoke({
+    methodId: "emit",
+    inputs: [{ portId: "response", typeRef: TYPE.HRSP, payload: encodeHttpResponse({ url, status: 200, headers: {}, body: new TextEncoder().encode(text), retrievedMs: 0 }) }],
+  });
+  return response.statusCode === 0 ? response.outputs.filter((frame) => frame.portId === "oem").map((frame) => new Uint8Array(frame.payload)) : [];
+}
+// LAGEOS-1 from a 4-hour ILRS CPF arc: 241 Earth-fixed positions, 60 s, no velocities.
+export const cpfArc = fs.readFileSync(path.join(modulesRoot, "data-source/cpf-source/test/fixtures/lageos1_cpf_260713_19402.4h.dgf"), "utf8");
+
 // The OD node's fit of `frames` (port -> [$OEM]), invoked until its backlog is drained: the record streams by standard,
 // the IngestRequests, the notices and the number of invocations.
 export async function fit(node, frames) {

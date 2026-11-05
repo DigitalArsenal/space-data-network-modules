@@ -8,8 +8,8 @@ import path from "node:path";
 import test from "node:test";
 
 import { modulesRoot, packageRoot, sha256, splitRecords } from "./lib/flow.mjs";
-import { fit, harnessFor, issOem, odNode, sourceOems } from "./lib/nodes.mjs";
-import { TYPE, decodeHttpRequest, decodeIngestRequest, decodeIngestResult, decodeOcmRecord, decodeOem, decodeOmmRecord, encodeIngestRequest, encodeHttpResponse, encodeIngestResult, encodeOem, encodeOemSizePrefixed } from "./lib/sds.mjs";
+import { cpfArc, cpfOem, fit, harnessFor, issOem, odNode, sourceOems } from "./lib/nodes.mjs";
+import { TYPE, decodeHttpRequest, decodeIngestRequest, decodeIngestResult, decodeOcmRecord, decodeOem, decodeOmmRecord, encodeIngestRequest, encodeIngestResult, encodeOem, encodeOemSizePrefixed } from "./lib/sds.mjs";
 
 const SGP4 = 0;
 const SGP4XP = 1;
@@ -148,20 +148,11 @@ test("publish_request: a stored batch becomes the publication POST; nothing with
 });
 
 // LAGEOS-1 from a 4-hour ILRS CPF arc (data-source/cpf-source/test/fixtures/lageos1_cpf_260713_19402.4h.dgf: 241
-// Earth-fixed positions, 60 s, no velocities), through data-source/cpf-source emit. The node hands the positions to the
-// fit core as positions (compact $OEM, STATE_VECTOR_SIZE 3), so the fitter seeds its velocities from them; handed over
-// as states at rest in the Earth-fixed frame, OD 1.0.0 fitted this arc to e 0.98. The legacy test also scored these
-// fits against CelesTrak's SupGP for the same prediction (private fixtures); the records here are that node's.
-async function cpfOem(t, text) {
-  const harness = await harnessFor(t, path.join(modulesRoot, "data-source/cpf-source"));
-  const url = "https://edc.dgfi.tum.de/pub/slr/cpf_predicts_v2/2026/lageos1/lageos1_cpf_260713_19402.dgf";
-  const response = await harness.invoke({
-    methodId: "emit",
-    inputs: [{ portId: "response", typeRef: TYPE.HRSP, payload: encodeHttpResponse({ url, status: 200, headers: {}, body: new TextEncoder().encode(text), retrievedMs: 0 }) }],
-  });
-  return response.statusCode === 0 ? response.outputs.filter((frame) => frame.portId === "oem").map((frame) => new Uint8Array(frame.payload)) : [];
-}
-const cpfArc = fs.readFileSync(path.join(modulesRoot, "data-source/cpf-source/test/fixtures/lageos1_cpf_260713_19402.4h.dgf"), "utf8");
+// Earth-fixed positions, 60 s, no velocities), through data-source/cpf-source emit (cpfOem, cpfArc). The node hands the
+// positions to the fit core as positions (compact $OEM, STATE_VECTOR_SIZE 3), so the fitter seeds its velocities from
+// them; handed over as states at rest in the Earth-fixed frame, OD 1.0.0 fitted this arc to e 0.98. The legacy test
+// also scored these fits against CelesTrak's SupGP for the same prediction (private fixtures); the records here are
+// that node's.
 
 test("LAGEOS-1 from a 4-hour Earth-fixed CPF arc: positions alone, a bound near-circular orbit at both local epochs", async (t) => {
   const out = await fit(await odNode(t), { cpf: await cpfOem(t, cpfArc) });
