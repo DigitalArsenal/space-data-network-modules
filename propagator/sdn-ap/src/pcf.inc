@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// $PCF 1.0.7 (SDS 1.276.0): the `configuration` input of the methods with
+// $PCF 1.0.7 (SDS 1.278.0): the `configuration` input of the methods with
 // options, optional on the flights that have a default for every value it
 // carries (propagate, maneuver, load_epochs: a lone $OCM flies). A method reads
 // THEORY and its own tables:

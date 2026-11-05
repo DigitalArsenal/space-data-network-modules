@@ -1,4 +1,4 @@
-// $PCF 1.0.7 (SDS 1.276.0) configurations for the tests. fit states its force model: every fit $PCF carries
+// $PCF 1.0.7 (SDS 1.278.0) configurations for the tests. fit states its force model: every fit $PCF carries
 // FORCES.ATMOSPHERE_MODEL, written on the wire (NRLMSISE00 is the schema's default value, so the binding would leave
 // it off).
 import * as flatbuffers from "flatbuffers";

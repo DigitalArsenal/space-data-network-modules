@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // E2E (task modules-sdn-ap-fit-carries-input-pvn-20261104): fit carries the ephemeris source's PVN onto the $OCM.
-// An SDS 1.276.0 $OEM has no PROVENANCE; its source module writes the source's $PVN beside it, and fit takes that
+// An SDS 1.278.0 $OEM has no PROVENANCE; its source module writes the source's $PVN beside it, and fit takes that
 // $PVN on 'provenance' (none, or one per 'ephemeris' frame in their order). On the 24 h arc of test/lib/fixture-inputs.mjs
 // fitted as stock SGP4XP:
 // - with an ILRS $PVN (SOURCE_KIND Observation, ORIGINATOR ILRS, LICENSE_CLASS Reproducible, all 13 fields set): the
