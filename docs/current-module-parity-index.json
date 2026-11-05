@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-05T11:32:24.334Z",
-  "moduleCount": 157,
+  "generatedAt": "2026-11-05T16:02:22.192Z",
+  "moduleCount": 158,
   "parityScopeModuleCount": 59,
-  "isomorphicWasmCount": 151,
+  "isomorphicWasmCount": 152,
   "missingIsomorphicWasm": [
     "flows/observation-ap"
   ],
@@ -13,7 +13,7 @@
     "data-source/gaia-octree/cones",
     "data-source/gaia-octree"
   ],
-  "browserWasmEdgeTargetCount": 141,
+  "browserWasmEdgeTargetCount": 142,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -4144,6 +4144,44 @@
       ]
     },
     {
+      "modulePath": "data-source/sensor-definitions",
+      "pluginId": "com.digitalarsenal.data-source.sensor-definitions",
+      "name": "Real-world sensor definitions",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "build_sensors",
+        "plan_sources"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/sensor_definitions.cpp"
+      ],
+      "testFiles": [
+        "tests/composed-flow.e2e.test.mjs",
+        "tests/fixtures/cassette.json.gz",
+        "tests/fixtures/provenance.json",
+        "tests/record-cassette.mjs",
+        "tests/run-module.mjs",
+        "tests/sensor-definitions.e2e.mjs"
+      ]
+    },
+    {
       "modulePath": "data-source/sigmf-captures",
       "pluginId": "com.digitalarsenal.data-source.sigmf-captures",
       "name": "SigMF Raw-IQ Capture Source Nodes",
@@ -6111,7 +6149,7 @@
       "pluginId": "com.digitalarsenal.hostcap.storage-ingest",
       "name": "SDN Host Storage Ingest Node",
       "pluginFamily": "infrastructure",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "methodIds": [
         "ingest"
       ],

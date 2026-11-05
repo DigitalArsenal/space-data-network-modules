@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-ec72a8683ed5c96a",
+  "generatedBy": "tc-c90cc204912a34b7",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -265,6 +265,27 @@
         "commit": "a39d51f52ddeb8dc7ba7730610c6b91a117418ca"
       },
       "id": "tc-ec72a8683ed5c96a"
+    },
+    "tc-c90cc204912a34b7": {
+      "sdk": {
+        "resolved": true,
+        "version": "0.8.25",
+        "commit": null,
+        "integrity": "sha512-hwZFUcFZJ3qDMWRjrX68hrvi64AVvFvv1dkSETYQZNwsyUb4NzEOyA8bW0Sc2bSxgOdN9Ns+wAmBtgYOH6WO5A==",
+        "dirty": null
+      },
+      "sdkDependencies": {
+        "spacedatastandards.org": "1.206.0",
+        "flatc-wasm": "26.1.38",
+        "flatbuffers": "25.9.23",
+        "sdn-emception": "1.0.0"
+      },
+      "externalStandardsRoot": {
+        "resolved": true,
+        "version": "1.278.0+1793889410335",
+        "commit": "1a7c352eccf0900104ed3a2c4cc177d25ad30a65"
+      },
+      "id": "tc-c90cc204912a34b7"
     }
   },
   "inferenceHazardBaseline": 7,
@@ -2635,6 +2656,32 @@
       "module": "data-source/sdn-element-sync",
       "lastCommit": "d04cee8c355c456ff805d94c029347057f44b83b",
       "lastCommitDate": "2026-11-04T12:27:17-05:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
+      },
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/sensor-definitions/dist/isomorphic/module.wasm": {
+      "sha256": "b480d913e590d810f59e1acce02f750e236e673fd45db7e52ba2d0a414b4e8f7",
+      "bytes": 278002,
+      "module": "data-source/sensor-definitions",
+      "lastCommit": "2f502022cb91f8024e5a9783596d230331c38284",
+      "lastCommitDate": "2026-11-05T10:59:51-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -5059,16 +5106,16 @@
       }
     },
     "hostcap/storage-ingest/dist/isomorphic/module.wasm": {
-      "sha256": "8be7af7d2047c764371f546e621a8a6d40727620edad8e6cc96bb44d2e7e858b",
-      "bytes": 136477,
+      "sha256": "4153b3437e27d1d4c9c3d4a70a241c32a1b1a0caf62ca21ce6b0eb2c2015bb82",
+      "bytes": 137488,
       "module": "hostcap/storage-ingest",
-      "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
-      "lastCommitDate": "2026-10-23T15:11:57-04:00",
+      "lastCommit": "2f502022cb91f8024e5a9783596d230331c38284",
+      "lastCommitDate": "2026-11-05T10:59:51-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
       },
       "declaration": {
         "declares": true,
