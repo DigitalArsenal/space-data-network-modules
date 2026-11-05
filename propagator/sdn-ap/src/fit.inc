@@ -13,8 +13,8 @@
 namespace sdnap {
 namespace fit {
 
-/// Forward-mode dual number with up to 8 partials.
-constexpr int kMaxParams = 8;
+/// Forward-mode dual number with up to 11 partials: the six elements and the five dynamical parameters (SPEC 17.1).
+constexpr int kMaxParams = 11;
 struct Dual {
   double v;
   double d[kMaxParams];
@@ -89,13 +89,20 @@ inline void model_position(const Dual* y, double t, Dual ndot, Dual out[3]) {
 
 /// Fit options (56 bytes, sdnap_fit). A parameter with its `_log` flag set is estimated as its natural log ($PCF
 /// FIT.DRAG_PRIOR_FORM / SRP_PRIOR_FORM LOG_NORMAL): the iteration steps in the log, so the parameter is never <= 0,
-/// and its prior mean and sigma are those of the log (the mean the log of the median).
+/// and its prior mean and sigma are those of the log (the mean the log of the median). fit_bdot, fit_thrust and
+/// fit_outgassing (one byte each after fit_agom) ask for DRAG_AREA_OVER_MASS_RATE, IN_TRACK_ACCELERATION and
+/// OUTGASSING_ACCELERATION: the theories have no sensitivity to them and the force model does not change (SPEC 17.2),
+/// so a fit with one set is refused parameter-not-modeled:<NAME>. In a covariance set (covariance.inc) the same flags
+/// mark the record's constant-parameter rows.
 struct Options {
   int32_t fit_drag;        ///< fit B (SGP4XP BTERM)
   int32_t max_iterations;  ///< 0: 30
   double drag_prior;       ///< prior mean of the drag term (DESIGN 2e.3); of ln B under drag_log
   double drag_sigma;       ///< its sigma; <= 0: no prior
   int32_t fit_agom;        ///< fit AGOM (its column by a finite difference of the theory)
+  int8_t fit_bdot;         ///< DRAG_AREA_OVER_MASS_RATE (m^2/kg/s): refused, not modeled
+  int8_t fit_thrust;       ///< IN_TRACK_ACCELERATION (m/s^2): refused, not modeled
+  int8_t fit_outgassing;   ///< OUTGASSING_ACCELERATION (km/s^2): refused, not modeled
   double agom_prior;       ///< prior mean of AGOM; of ln AGOM under agom_log
   double agom_sigma;       ///< its sigma; <= 0: no prior
   int32_t drag_log;        ///< 1: the drag parameter is ln B (B > 0 at the start)
@@ -103,8 +110,25 @@ struct Options {
 };
 static_assert(sizeof(Options) == 56, "fit Options are 56 bytes");
 
+/// The first parameter a fit asks for that the theories have no sensitivity to (DRAG_AREA_OVER_MASS_RATE,
+/// IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION, in the fixed order), or nullptr.
+inline const char* not_modeled(const Options& o) {
+  if (o.fit_bdot) return "DRAG_AREA_OVER_MASS_RATE";
+  if (o.fit_thrust) return "IN_TRACK_ACCELERATION";
+  if (o.fit_outgassing) return "OUTGASSING_ACCELERATION";
+  return nullptr;
+}
+
+/// The refusal code of options `o` (parameter-not-modeled:<NAME>), or nullptr when the fit runs.
+inline const char* refusal(const Options& o) {
+  if (o.fit_bdot) return "parameter-not-modeled:DRAG_AREA_OVER_MASS_RATE";
+  if (o.fit_thrust) return "parameter-not-modeled:IN_TRACK_ACCELERATION";
+  if (o.fit_outgassing) return "parameter-not-modeled:OUTGASSING_ACCELERATION";
+  return nullptr;
+}
+
 struct Result {
-  int32_t status;       ///< 0 converged, 1 stopped at the iteration limit, < 0 refused
+  int32_t status;       ///< 0 converged, 1 stopped at the iteration limit, < 0 refused (-4 a parameter not modeled)
   int32_t iterations;
   double rms_km;        ///< position rms over the samples
   double max_km;
@@ -153,8 +177,9 @@ inline bool solve(double* A, double* b, int n) {
   return true;
 }
 
-/// The parameter vector of a row: af, ag, chi, psi, lambda0, n, [drag], [agom]; the drag and AGOM terms as their
-/// natural logs under drag_log / agom_log.
+/// The parameter vector of a row: af, ag, chi, psi, lambda0, n, then in the fixed order [drag], [drag rate], [agom],
+/// [thrust], [outgassing]; the drag and AGOM terms as their natural logs under drag_log / agom_log. A parameter the
+/// theories have no sensitivity to holds 0 (a row carries no value for it; a covariance set's constant row).
 inline int params_of(const ElementRow& row, const Options& o, double* x) {
   const double n = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   double y[6];
@@ -163,7 +188,10 @@ inline int params_of(const ElementRow& row, const Options& o, double* x) {
   x[0] = y[xpt::kAf]; x[1] = y[xpt::kAg]; x[2] = y[xpt::kChi]; x[3] = y[xpt::kPsi]; x[4] = y[xpt::kLam]; x[5] = y[xpt::kN];
   int np = 6;
   if (o.fit_drag) x[np++] = o.drag_log ? std::log(row.bterm) : row.bterm;
+  if (o.fit_bdot) x[np++] = 0.0;
   if (o.fit_agom) x[np++] = o.agom_log ? std::log(row.agom) : row.agom;
+  if (o.fit_thrust) x[np++] = 0.0;
+  if (o.fit_outgassing) x[np++] = 0.0;
   return np;
 }
 
@@ -181,6 +209,7 @@ inline void row_of(const double* x, const Options& o, ElementRow& row) {
     const double v = x[np++];
     row.bterm = o.drag_log ? std::exp(v) : v;
   }
+  if (o.fit_bdot) ++np;
   if (o.fit_agom) {
     const double v = x[np++];
     row.agom = o.agom_log ? std::exp(v) : v;
@@ -200,6 +229,11 @@ inline bool& jacobian_fallback() {
 /// fixed terms) and receives the fitted one.
 inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
   Result out{};
+  // SPEC 17.2: a parameter the theories have no sensitivity to is refused, never fitted
+  if (not_modeled(o) != nullptr) {
+    out.status = -4;
+    return out;
+  }
   // a parameter estimated as its log starts positive (its prior's median)
   if ((o.fit_drag && o.drag_log && !(row.bterm > 0.0)) || (o.fit_agom && o.agom_log && !(row.agom > 0.0))) {
     out.status = -3;
