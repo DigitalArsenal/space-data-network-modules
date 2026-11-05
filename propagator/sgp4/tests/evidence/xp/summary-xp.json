@@ -2,14 +2,14 @@
  "about": "SGP4-XP (US Space Force Sgp4Prop 9.1.1.0) against the module propagator/sgp4-xp: exact agreement with the library run by its own runtime, plus the Tier B anchors. No independent public reference exists for the XP theory.",
  "module": {
   "name": "@digitalarsenal/sdn-module-propagator-sgp4-xp",
-  "version": "0.1.1"
+  "version": "0.2.1"
  },
  "hashes": {
-  "dist/isomorphic/module.wasm": "f61b15c4fd658817e3e43c7818da18c4d08d453ad28e9d704b0cd11b616b7deb",
+  "dist/isomorphic/module.wasm": "816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef",
   "third_party/ussf-sgp4/Sgp4Prop.xp.wasm": "9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7",
   "third_party/ussf-sgp4/Sgp4Prop.xp.js": "0d9848bb0ed7ce6eadd85e22f5325e81492ef03355bab85a580eb421c7f22707",
-  "vectors/vectors.json": "2093adf2ec8d56179f33f0b3429bcd02d34c865bb69d3b1df4967431a0afc907",
-  "tests/ussf_parity.test.mjs": "d9bcf30e5f9427e7cf3fb5eee853ca802e4a2cec3b50ff31e43829e9c4a16890"
+  "vectors/vectors.json": "9194d2f2c2b3c367aaababa52e90de46d38cc456fbd4514f858d6c1df24fdc07",
+  "tests/ussf_parity.test.mjs": "5820416e16449e299135e0324596918b7078c1d380f73f13467ea8ab5b0bcceb"
  },
  "parity": {
   "test": "tests/ussf_parity.test.mjs",
@@ -22,7 +22,7 @@
   "met": true
  },
  "anchors": {
-  "cases": 15,
+  "cases": 23,
   "tolerancePolicy": "fail <=> |observed - expected| > abs + rel * |expected|",
   "bandPositionM": 0.5,
   "bandVelocityMS": 0.0005,

@@ -51,7 +51,7 @@ The GMAT limits apply only to GMAT. These are agreement limits from the shared p
 | ERFA / SPICE | 2.0.1 / CSPICE_N0067 | 13 | 0 | 12 | 1 | 13 | 0 |
 | JPL Horizons | 1.2 | 6 | 1 | 6 | 0 | 4 | 0 |
 | SGP4 against its STR#3 base | foundation/sgp4-str3; module 1.4.1 | 0 | 0 | 0 | 0 | 3 | 0 |
-| SGP4-XP | 9.1.1.0; module 0.1.1 | 1 | 0 | 1 | 0 | 0 | 0 |
+| SGP4-XP | 9.1.1.0; module 0.2.1 | 1 | 0 | 1 | 0 | 0 | 0 |
 
 ## Maximum position difference
 
@@ -423,16 +423,16 @@ Step setting: 12 times per set, from -1440 to 10080 minutes from epoch
 
 ### SGP4-XP
 
-Version: 9.1.1.0; module 0.1.1. Evidence: [../../../sgp4/tests/evidence/xp/summary-xp.json](../../../sgp4/tests/evidence/xp/summary-xp.json).
+Version: 9.1.1.0; module 0.2.1. Evidence: [../../../sgp4/tests/evidence/xp/summary-xp.json](../../../sgp4/tests/evidence/xp/summary-xp.json).
 
-- dist/isomorphic/module.wasm: `f61b15c4fd658817e3e43c7818da18c4d08d453ad28e9d704b0cd11b616b7deb`.
+- dist/isomorphic/module.wasm: `816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef`.
 - third_party/ussf-sgp4/Sgp4Prop.xp.wasm: `9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7`.
 
 Model settings:
 
 - comparison: exact (same doubles).
 - statement: The module returns the Space Force library's states exactly on 640 SGP4 and SGP4-XP sets at seven times each. The XP theory itself has no public reference outside the library; agreement with the library is the available check.
-- anchors · cases: 15.
+- anchors · cases: 23.
 - anchors · tolerance Policy: fail <=> |observed - expected| > abs + rel * |expected|.
 - anchors · band Position M: 0.5.
 - anchors · band Velocity MS: 0.0005.
