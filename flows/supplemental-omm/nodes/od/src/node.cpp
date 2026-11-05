@@ -65,6 +65,8 @@
 #include "OMM_generated.h"
 #include "engine.hpp"
 #include "records.hpp"
+// SDN_SGP4_XP_VERSION: propagator/sgp4-xp's package.json version, written by build.mjs at every build.
+#include "sgp4_xp_version.h"
 
 namespace od {
 
@@ -660,8 +662,8 @@ bool sgp4_set_ocm(const od::PluginFitFBResult& epoch, const ProviderInfo& provid
 // OD core's sets are unaffected either way.
 // ---------------------------------------------------------------------------
 constexpr sgp4xp::WindowPolicy kXpWindowPolicy{86400.0, 86400.0, 10800.0, 16, 0};
-constexpr const char* kXpProduct =
-    "SDN supplemental-omm OD node over propagator/sgp4-xp 0.2.2 and the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
+constexpr const char* kXpProduct = "SDN supplemental-omm OD node over propagator/sgp4-xp " SDN_SGP4_XP_VERSION
+                                   " and the US Space Force Sgp4Prop 9.1.1.0 (XP build)";
 constexpr uint32_t kUnknownNorad = 99999;  // the OD core's placeholder
 
 template <typename T>
