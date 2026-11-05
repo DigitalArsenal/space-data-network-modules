@@ -10,8 +10,8 @@
 //   SDNAP_COV_NOISE and SDNAP_COV_NG_RATE; |NOISE_NON_GRAVITATIONAL_RAD_DAY2 - NON_GRAVITATIONAL_SHARE x
 //   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day).
 // - export_omm of the XP $OCM equals xp-fit-0.4.0.omm with USER_DEFINED_PARAMETERS, COMMENT and
-//   USER_DEFINED_EPOCH_TIMESTAMP / MICROSECONDS removed and PROVENANCE carried, BTERM in BSTAR and AGOM in
-//   MEAN_MOTION_DDOT (OMM 1.276.0 has no BTERM or AGOM field): the two records packed by one builder are byte-equal;
+//   USER_DEFINED_EPOCH_TIMESTAMP / MICROSECONDS removed and PROVENANCE carried, BTERM and AGOM in their own fields
+//   (the 0.4.0 set's BSTAR and MEAN_MOTION_DDOT moved there): the two records packed by one builder are byte-equal;
 //   assertNoUserDefined on it; export_omm of the AP $OCM is theory-not-exportable:AP; garbage is invalid-ocm; under an
 //   optional $PCF THEORY SGP4 the XP set is configuration-refused (THEORY admits only its own sets).
 // JS only moves bytes and compares numbers the module produced.
@@ -108,6 +108,10 @@ if (exported.statusCode === 0) {
   expected.USER_DEFINED_EPOCH_TIMESTAMP = 0;
   expected.USER_DEFINED_MICROSECONDS = 0;
   expected.PROVENANCE = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(xpBytes)).PROVENANCE().unpack();
+  expected.BTERM = expected.BSTAR;
+  expected.AGOM = expected.MEAN_MOTION_DDOT;
+  expected.BSTAR = 0;
+  expected.MEAN_MOTION_DDOT = 0;
   const pack = (t) => { const b = new flatbuffers.Builder(2048); OMM.finishOMMBuffer(b, t.pack(b)); return Buffer.from(b.asUint8Array()); };
   const mine = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack();
   const same = pack(mine).equals(pack(expected));
