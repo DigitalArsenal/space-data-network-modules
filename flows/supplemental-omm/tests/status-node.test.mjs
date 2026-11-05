@@ -30,7 +30,9 @@ test("provider lanes count the states and bytes of the ephemerides; Starlink's a
     { portId: "provider-starlink", typeRef: TYPE.OEM, payload: oems.starlink[0] },
     notice("provider-starlink-notice", { kind: "missing", reason: "objects-unavailable", count: 1, items: ["STARLINK-36348 (67851): HTTP 404"] }),
   ]);
-  const states = decodeOem(oems.starlink[0]).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA.length / 6;
+  // The fixture's 12 MEME records, which the source writes as explicit state rows (EPHEMERIS_DATA_LINES).
+  const states = decodeOem(oems.starlink[0]).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.length;
+  assert.equal(states, 12);
   assert.deepEqual(starlink, { "provider-starlink.dss": [4, states, states + 1, 1, oems.starlink[0].byteLength, "objects-unavailable: STARLINK-36348 (67851): HTTP 404"] });
 });
 

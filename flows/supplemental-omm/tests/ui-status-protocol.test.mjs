@@ -180,7 +180,9 @@ test("the UI parses each route's canonical $DSS, the status node's own snapshot"
     expectedStatusNodes,
   );
   assert.ok(result.requests.every(({ options }) => options.headers.Accept === "application/x-flatbuffers"));
-  const states = decodeOem(oems.starlink[0]).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA.length / 6;
+  // The fixture's 12 MEME records, which the source writes as explicit state rows (EPHEMERIS_DATA_LINES).
+  const states = decodeOem(oems.starlink[0]).EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.length;
+  assert.equal(states, 12);
   assert.equal(result.rows[0].state.textContent, "syncing");
   assert.equal(result.rows[0].cells[2].textContent, String(states));
   assert.equal(result.rows[0].cells[3].textContent, String(states));
