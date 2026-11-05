@@ -203,6 +203,47 @@ of `analysis/estimation/src/teag.hpp`. Authority:
 `tests/possibilityScreening.test.mjs` (definitions on a constructed support,
 the encounter-plane closed forms, a brute-force disk search, monotonicity).
 
+## $OCM element sets: each set flies on its own theory
+
+An SGP4XP or AP element set is an `$OCM` with `MEAN_ELEMENTS` (as `propagator/sdn-ap` `fit` and
+`ingest_omm` and `propagator/sgp4-xp` `ingest_omm` write it); an SGP4 set is an `$OMM`. The package's
+host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) screens a catalog of both.
+
+- **Input.** `sets`: `$OCM` records, plain or size-prefixed, one object each, `MEAN_ELEMENTS.MEAN_ELEMENT_THEORY`
+  typed. `catalog`: `$OMM` SGP4 sets, as `screen_catalog`'s `catalog` port takes them. The WASM module's ports do
+  not change: an `$OCM` on a source arm (`COMPREHENSIVE_ORBIT`) is still a Cartesian OCM, and the module never flies
+  an element set of another theory itself.
+- **Dispatch by theory.** SGP4XP and AP sets are flown by `propagator/sdn-ap` `propagate`, one `$OCM` a call (the
+  record is the whole input of its flight: theory, forces, weather, density correction and covariance come from it),
+  with a `$PCF` whose OUTPUT is the window, widened by one step at each end, at `OCM_SET_FLIGHT.stepSeconds` (30 s)
+  in TEME, the theory's own frame and the frame of every SGP4 screen. SGP4 `$OMM` sets stay on the built-in SGP4
+  (`foundation/sgp4-str3`), on `catalog`: an SGP4 set flies only on SGP4 and never seeds another theory. Any other
+  theory, SGP4 or UNSPECIFIED in an `$OCM` included, is refused by name before any flight:
+  `theory-not-screened:<THEORY>`. A set `propagate` refuses (`theory-not-flown:<name>`, `weather-rows-missing`,
+  ...) is refused by the flow with sdn-ap's code and message unchanged.
+- **The call.** The repository's host-flow pattern (`flows/observation-ap/flow.mjs`; this package's
+  `scripts/lib/ffmFarm.mjs`): `hosts = { conjunction, sdnAp }`, each an SDK module host with
+  `invoke({ methodId, inputs })`; the flow routes typed records and computes nothing. The SDK offers no call from one
+  guest into another, so the dispatch lives in the host, not in the module.
+- **The screen.** Each `$OEM` the flight returns is one `EPHEMERIS` source of a `screen_catalog` `CATALOG_REQUEST`
+  (`OBJECT_ID`, `OBJECT_NAME` and `NORAD_CATALOG_ID` from the set's `METADATA`), evaluated in TEME with the caller's
+  controls; the module interpolates the states (cubic Hermite; at 30 s the bound `h^4/384 |r''''|` is 2 cm on a
+  550 km orbit and 8 cm at a GTO perigee, against 35 cm at 60 s) and screens as it screens every sampled source.
+  Chunks are drained to `FINAL_CHUNK`; `excluded` records pass through.
+- **Covariance.** Where the set carries `COVARIANCE_DATA`, `propagate` writes a covariance line per state (sdn-ap
+  SPEC 12: the propagated covariance, with the state's axes), the module reads them as the source's covariance,
+  interpolates to the TCA and, under a covariance `ALGORITHM` (FOSTER by default here), gives the covariance method's
+  probability: the event states `SOURCE_EPHEMERIS` as that object's `COVARIANCE_BASIS` and `SUPPLIED_COVARIANCE` as
+  the `UNCERTAINTY_SOURCE`. Where a set carries none, the event keeps the Alfano maximum (`MAXIMUM_PROBABILITY_ONLY`,
+  basis `NONE`); the empirical model (`uncertainty_model`) applies to element sets the module flies itself, not to
+  a flown `$OEM`. Which one was used is on every event.
+- **Parity.** `node tests/ocm-sets-screening.e2e.mjs`: the registered AP and SGP4XP sets of
+  `tests/fixtures/ocm-sets/` (sdn-ap `fit` on its own 0.4.0 fixture inputs, `tests/record-ocm-sets.mjs`), their
+  derived sets, and one SGP4 `$OMM`, flown by sdn-ap at 10 s and screened the existing way as uploaded `$OEM`
+  sources, against the same records through `screenOcmSets`: the same encounters (pair and TCA), miss distances
+  within `CA_PARITY_TOLERANCES.missDistance.aerospaceHardFailM` (0.10 m, independent-parity) and NLRV TCAs within
+  `tca.NLRV.hardFailSec` (10 ms), the covariance labels equal, and the refusals above by name.
+
 ## Build and runtime contract
 
 ```bash
