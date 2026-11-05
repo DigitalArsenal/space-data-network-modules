@@ -62,7 +62,22 @@ extern "C" int ocm_to_vcm(void) {
   if (!sdn::vcm::write::draft(ocm, states, draft, refusal)) return refuse(refusal.code.c_str(), refusal.message);
   const std::string text = sdn::vcm::write::format(draft);
 
+  // The optional configuration: the output descriptor's file name and content id.
   NCDT descriptor;
+  const int32_t configured = plugin_find_input_index("descriptor", 0);
+  if (configured >= 0) {
+    NCDT incoming;
+    if (!unpackFrame(plugin_get_input_frame(static_cast<uint32_t>(configured)), incoming,
+                     [](flatbuffers::Verifier& v) { return VerifyNCDBuffer(v); }, [](flatbuffers::Verifier& v) { return VerifySizePrefixedNCDBuffer(v); },
+                     [](const uint8_t* b) { return NCDBufferHasIdentifier(b); }, [](const uint8_t* b) { return SizePrefixedNCDBufferHasIdentifier(b); },
+                     [](const uint8_t* b) { return GetNCD(b); }, [](const uint8_t* b) { return GetSizePrefixedNCD(b); }))
+      return refuse("invalid-configuration", "the \"descriptor\" frame is not a verifiable $NCD buffer");
+    const bool ours = incoming.FORMAT == ncdContainerFormat::PROVIDER_DEFINED && incoming.PROVIDER_DEFINED_FORMAT_NAME == "vcm-v2-text";
+    if (incoming.FORMAT != ncdContainerFormat::UNSPECIFIED && !ours)
+      return refuse("configuration-refused", "the \"descriptor\" FORMAT must be UNSPECIFIED or PROVIDER_DEFINED vcm-v2-text");
+    descriptor.INTERNAL_FILE_NAME = incoming.INTERNAL_FILE_NAME;
+    descriptor.SOURCE_CID = incoming.SOURCE_CID;
+  }
   descriptor.FORMAT = ncdContainerFormat::PROVIDER_DEFINED;
   descriptor.PROVIDER_DEFINED_FORMAT_NAME = "vcm-v2-text";
   descriptor.PRODUCER = "com.digitalarsenal.files.vcm-text";

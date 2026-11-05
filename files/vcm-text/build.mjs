@@ -35,9 +35,8 @@ await fs.rm(path.join(root, "dist"), { recursive: true, force: true });
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const result = await compileModuleFromSource({ manifest, sourceCode, language: "c++", outputPath, threadModel: "wasi-sequential" });
 if (result.threadModel !== "wasi-sequential") throw new Error(`Compiler resolved threadModel "${result.threadModel}", not wasi-sequential.`);
-if (!result.report?.ok) throw new Error(JSON.stringify(result.report?.issues));
+if (!result.report?.ok) throw new Error(`Compiled artifact failed SDK validation: ${(result.report?.issues ?? []).map((i) => i.message ?? i.code ?? String(i)).join("; ")}`);
 await fs.copyFile(path.join(root, "plugin-manifest.json"), path.join(root, "dist/plugin-manifest.json"));
-await fs.writeFile(path.join(root, "dist/build-provenance.json"), `${JSON.stringify({ spacedatastandards: version, threadModel: "wasi-sequential", records: { in: ["$OCM", "$OEM"], out: ["$NCD"] }, formats: ["vcm-v2-text"] }, null, 2)}\n`);
 // Signed in the build, as every module here is: loaders verify before they instantiate.
 if (process.argv.includes("--unsigned")) console.log("Unsigned local validation build (--unsigned); no signing key read.");
 else execFileSync(process.execPath, [path.join(root, "..", "..", "scripts", "sign-module-artifact.mjs"), outputPath], { stdio: "inherit" });

@@ -146,5 +146,11 @@ test("an AP set: J2K and ECI from AP's propagate at the epoch, coefficients from
   for (const label of absent) assert.ok(!lines.some((l) => l.startsWith(label)), `${label} is left out`);
   assert.equal(value("TIME CONST LEAP SECOND TIME (UTC): "), "2049 365 (31 DEC) 23:59:59.999");
   await assert.rejects(write(writer, ocmBytes, [j2k, j2k]), /state-duplicate/);
+  // The optional $NCD configuration: its file name rides onto the written descriptor; another FORMAT is refused.
+  const config = (format, name) => { const b = new flatbuffers.Builder(128); const n = b.createString(name); NCD.startNCD(b); NCD.addFormat(b, format); NCD.addInternalFileName(b, n); NCD.finishSizePrefixedNCDBuffer(b, NCD.endNCD(b)); return b.asUint8Array().slice(); };
+  const named = out(await call(writer, "ocm_to_vcm", [["ocm", "OCM", ocmBytes], ["descriptor", "NCD", config(ncdContainerFormat.UNSPECIFIED, "iss.vcm")]]), "message")[0];
+  const size = new DataView(named.buffer, named.byteOffset).getUint32(0, true);
+  assert.equal(NCD.getRootAsNCD(new flatbuffers.ByteBuffer(named.subarray(4, 4 + size))).INTERNAL_FILE_NAME(), "iss.vcm");
+  await assert.rejects(call(writer, "ocm_to_vcm", [["ocm", "OCM", ocmBytes], ["descriptor", "NCD", config(ncdContainerFormat.CCSDS_OEM_KVN, "x")]]), /configuration-refused/);
   console.log(`VCM TEXT AP SET PASS: ${lines.length} lines; J2K and ECI within ${worstKm.toExponential(2)} km and ${worstKmS.toExponential(2)} km/s of AP's propagate at ${epoch}; BTERM and AGOM exact; ${absent.length} lines left out`);
 });

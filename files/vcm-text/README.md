@@ -8,7 +8,7 @@ for value. The layout is spacedatastandards.org
 
 | method | in | out |
 | --- | --- | --- |
-| `ocm_to_vcm` | `ocm`: one `$OCM`; `state` (optional, up to two): one `$OEM` each, one state at the record's epoch, EME2000 (J2K lines) or TEME of date (ECI lines) | `message`: size-prefixed `$NCD` (PROVIDER_DEFINED `vcm-v2-text`, SHA-256 and length of the text) followed by the text, CR LF line ends; the frame `normalize_vcm` reads |
+| `ocm_to_vcm` | `ocm`: one `$OCM`; `state` (optional, up to two): one `$OEM` each, one state at the record's epoch, EME2000 (J2K lines) or TEME of date (ECI lines); `descriptor` (optional configuration): an `$NCD`, FORMAT UNSPECIFIED or PROVIDER_DEFINED `vcm-v2-text`, whose INTERNAL_FILE_NAME and SOURCE_CID ride onto the output descriptor | `message`: size-prefixed `$NCD` (PROVIDER_DEFINED `vcm-v2-text`, SHA-256 and length of the text) followed by the text, CR LF line ends; the frame `normalize_vcm` reads |
 
 - **Nothing invented.** Each value comes from a field that states it, or from
   the caller's states. A field with no value is left blank; a line with no
@@ -30,7 +30,7 @@ for value. The layout is spacedatastandards.org
   states; an E field keeps its documented digits when they hold the value
   exactly and prints the digits it needs otherwise.
 
-Refused by name: `missing-ocm`, `invalid-ocm`, `invalid-state`,
+Refused by name: `configuration-refused`, `invalid-configuration`, `missing-ocm`, `invalid-ocm`, `invalid-state`,
 `state-epoch-mismatch`, `state-frame-unsupported`, `state-duplicate`,
 `epoch-missing`, `epoch-not-millisecond`, `time-system-not-utc`,
 `invalid-parameter`.
