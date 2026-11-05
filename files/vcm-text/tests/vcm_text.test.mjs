@@ -145,6 +145,7 @@ test("an AP set: J2K and ECI from AP's propagate at the epoch, coefficients from
   const absent = ["EFG POS", "SOLAR RAD PRESS:", "THRUST ACCEL", "SOLAR FLUX", "TAI-UTC", "POLAR MOT", "INTEGRATOR MODE", "STEP MODE", "INITIAL STEP", "VECTOR U,V,W", "VECTOR UD", "COVARIANCE MATRIX"];
   for (const label of absent) assert.ok(!lines.some((l) => l.startsWith(label)), `${label} is left out`);
   assert.equal(value("TIME CONST LEAP SECOND TIME (UTC): "), "2049 365 (31 DEC) 23:59:59.999");
+  assert.equal(value("MESSAGE TIME (UTC): ").split("CENTER: ")[1], set.PROVENANCE.PRODUCER, "CENTER is the fit's producer");
   await assert.rejects(write(writer, ocmBytes, [j2k, j2k]), /state-duplicate/);
   // The optional $NCD configuration: its file name rides onto the written descriptor; another FORMAT is refused.
   const config = (format, name) => { const b = new flatbuffers.Builder(128); const n = b.createString(name); NCD.startNCD(b); NCD.addFormat(b, format); NCD.addInternalFileName(b, n); NCD.finishSizePrefixedNCDBuffer(b, NCD.endNCD(b)); return b.asUint8Array().slice(); };

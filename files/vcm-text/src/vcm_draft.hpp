@@ -6,7 +6,8 @@
 // layout files/orbit-products' reader writes, read back here by their exact
 // names):
 //   indicator          HEADER.COMMENT "Message indicator: <text>"
-//   MESSAGE TIME       HEADER.CREATION_DATE          CENTER  HEADER.ORIGINATOR
+//   MESSAGE TIME       HEADER.CREATION_DATE          CENTER  HEADER.ORIGINATOR; for a fitted element set
+//                      (MEAN_ELEMENTS) PROVENANCE.PRODUCER, the fit's producer
 //   SATELLITE NUMBER   METADATA.OBJECT_DESIGNATOR (CATALOG_NAME SATCAT or NORAD), else NORAD_CAT_ID
 //   INT. DES.          METADATA.INTERNATIONAL_DESIGNATOR   COMMON NAME  METADATA.OBJECT_NAME
 //   EPOCH TIME         MEAN_ELEMENTS.EPOCH, else METADATA.EPOCH_TZERO   EPOCH REV  ORB_REVNUM (when not 0)
@@ -142,8 +143,10 @@ inline bool draft(const OCMT& ocm,const std::vector<Supplied>& states,Draft& m,R
    if(!isoDate(header->CREATION_DATE,d,s)){refusal={"invalid-ocm","HEADER.CREATION_DATE is not an ISO 8601 UTC time"};return false;}
    m.messageTime=d;
   }
-  if(!header->ORIGINATOR.empty())m.center=header->ORIGINATOR;
+  if(!me && !header->ORIGINATOR.empty())m.center=header->ORIGINATOR;
  }
+ // A fitted element set: the center performing the run is the fit's producer, never the source ephemeris' originator.
+ if(me && ocm.PROVENANCE && !ocm.PROVENANCE->PRODUCER.empty())m.center=ocm.PROVENANCE->PRODUCER;
  if(md) {
   if(!md->OBJECT_DESIGNATOR.empty() && (md->CATALOG_NAME=="SATCAT" || md->CATALOG_NAME=="NORAD"))m.satelliteNumber=md->OBJECT_DESIGNATOR;
   else if(md->NORAD_CAT_ID)m.satelliteNumber=std::to_string(md->NORAD_CAT_ID);

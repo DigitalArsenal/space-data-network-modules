@@ -26,6 +26,8 @@ for value. The layout is spacedatastandards.org
   from the layout `normalize_vcm` writes (its `VCM_*` user-defined parameters
   and perturbation comments): no typed `$OCM` field states them in the
   message's basis and units.
+- **CENTER.** The record's ORIGINATOR; for a fitted element set (MEAN_ELEMENTS), the
+  fit's producer (PROVENANCE.PRODUCER), never the source ephemeris' originator.
 - **Digits.** The message's columns: 8 decimals of km and 12 of km/s for
   states; an E field keeps its documented digits when they hold the value
   exactly and prints the digits it needs otherwise.
