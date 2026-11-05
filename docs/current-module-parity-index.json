@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-05T19:02:58.500Z",
-  "moduleCount": 159,
-  "parityScopeModuleCount": 59,
-  "isomorphicWasmCount": 153,
+  "generatedAt": "2026-11-05T19:44:15.860Z",
+  "moduleCount": 160,
+  "parityScopeModuleCount": 60,
+  "isomorphicWasmCount": 154,
   "missingIsomorphicWasm": [
     "flows/observation-ap"
   ],
@@ -13,7 +13,7 @@
     "data-source/gaia-octree/cones",
     "data-source/gaia-octree"
   ],
-  "browserWasmEdgeTargetCount": 143,
+  "browserWasmEdgeTargetCount": 144,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -56,6 +56,7 @@
     "files/misb-klv",
     "files/orbit-products",
     "files/rinex",
+    "files/vcm-text",
     "foundation/attitude-math",
     "foundation/cosmology",
     "foundation/frames",
@@ -5282,6 +5283,40 @@
         "tests/rinex_fuzz.test.mjs",
         "tests/rinex_nav.test.mjs",
         "tests/rinex_obs.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "files/vcm-text",
+      "pluginId": "com.digitalarsenal.files.vcm-text",
+      "name": "SP Vector/Covariance Message Writer",
+      "pluginFamily": "parser",
+      "version": "0.1.0",
+      "methodIds": [
+        "ocm_to_vcm"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 3,
+      "parityScope": true,
+      "action": "review-before-parity-use",
+      "sourceFiles": [
+        "src/vcm_text_module.cpp"
+      ],
+      "testFiles": [
+        "tests/fixtures/PROVENANCE.md",
+        "tests/fixtures/iss-ap.ocm",
+        "tests/vcm_text.test.mjs"
       ]
     },
     {

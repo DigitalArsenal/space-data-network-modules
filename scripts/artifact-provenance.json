@@ -3357,6 +3357,32 @@
         "inferenceHazard": false
       }
     },
+    "files/vcm-text/dist/isomorphic/module.wasm": {
+      "sha256": "fcc0de907179081c69a4af1be3aa256299712599ff8307cc45b0cb03192e21f6",
+      "bytes": 363270,
+      "module": "files/vcm-text",
+      "lastCommit": "7611040d2cfa7f471495e8a63d792a69e4b34707",
+      "lastCommitDate": "2026-11-05T14:44:02-05:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": {
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
+      },
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
     "flows/angles-only-od/dist/isomorphic/module.wasm": {
       "sha256": "8dceb574b30f97d7770e42c03b5db4e577143ebf35b9d027c08569914b515d36",
       "bytes": 504908,
