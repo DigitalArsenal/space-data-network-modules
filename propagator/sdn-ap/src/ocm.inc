@@ -17,7 +17,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.5.2";
+constexpr const char* kModuleVersion = "0.6.0";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -57,6 +57,30 @@ struct Extras {
   flatbuffers::Offset<OCMCovariancePropagation> cov_propagation = 0;
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CVR>>> cov_realism = 0;
 };
+
+/// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
+/// parameters in the fixed order (cov::kParameters), each named, each a prwDynamicParameter of the five, COV_UNITS
+/// COV_SIZE entries (km, km/s, then the parameters' units) and COV_SIZE 6 plus the solved count; anything else is
+/// refused by name, never emitted: cov-parameter-unnamed, cov-parameter-unknown, cov-parameter-order, cov-units,
+/// cov-size.
+inline const char* covariance_refusal(int size, const std::vector<std::string>& names, const std::vector<uint8_t>& kinds,
+                                      const std::vector<std::string>& units) {
+  if (size != 6 + static_cast<int>(names.size()) || kinds.size() != names.size()) return "cov-size";
+  if (units.size() != static_cast<size_t>(size)) return "cov-units";
+  static const char* const state_units[6] = {"km", "km", "km", "km/s", "km/s", "km/s"};
+  for (int i = 0; i < 6; ++i)
+    if (units[static_cast<size_t>(i)] != state_units[i]) return "cov-units";
+  int last = 5;
+  for (size_t k = 0; k < names.size(); ++k) {
+    if (names[k].empty()) return "cov-parameter-unnamed";
+    const int kind = cov::kind_named(names[k].c_str());
+    if (kind < 0 || cov::kind_of(kinds[k]) != kind) return "cov-parameter-unknown";
+    if (kind <= last) return "cov-parameter-order";
+    last = kind;
+    if (units[6 + k] != cov::consider_units(kind)) return "cov-units";
+  }
+  return nullptr;
+}
 
 /// The RFM of a set's frame: TEMEOFDATE (the celestial enumeration) or TEMEOFEPOCH (the custom one), with the NAME.
 inline flatbuffers::Offset<RFM> frame_of(flatbuffers::FlatBufferBuilder& fbb, bool of_epoch) {

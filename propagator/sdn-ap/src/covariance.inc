@@ -3,9 +3,13 @@
 //
 // - The fit (fit_oem.inc, SGP4XP theory) forms the normal matrix of its parameters at the solution, every column a
 //   central difference of the theory itself, with its priors; the inverse, the measurement variance being the post-fit
-//   residual variance, is the parameter covariance. Its image at epoch (TEME position and velocity, then BTERM and
-//   AGOM) is the $OCM's COVARIANCE_DATA (LTM, CARTPV, COV_SIZE 6 to 8), the parameter rows named by
-//   COV_PARAMETER_KINDS (DRAG_AREA_OVER_MASS, SRP_AREA_OVER_MASS).
+//   residual variance, is the parameter covariance. Its image at epoch (TEME position and velocity, then the solved
+//   parameters) is the $OCM's COVARIANCE_DATA (LTM, CARTPV, COV_SIZE 6 plus the parameter rows), the parameter rows
+//   named by COV_PARAMETER_KINDS in the fixed order of SPEC 17.1: DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE,
+//   SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION. The fit solves BTERM and AGOM; the theories
+//   have no sensitivity to the other three, so a record that carries them flies them as constant parameters: their
+//   state transition columns are zero, their variances constant, their cross terms with the state carried through
+//   the state columns.
 // - The state transition matrix at t is the central difference of the propagated state in the parameters (the same
 //   columns); the epoch covariance is mapped back to the parameters through the epoch columns (their inverse), then
 //   forward: P(t) = J(t) P_p J(t)^T.
@@ -35,21 +39,51 @@ constexpr Noise kNoiseAP[2] = {
     {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0}};
 constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
 
-constexpr int kMaxConsider = 2;
+constexpr int kMaxConsider = 5;
 constexpr int kMaxAug = 6 + kMaxConsider;
 static_assert(kMaxAug == fit::kMaxParams, "the augmented state is the fit's parameter vector");
-/// The consider rows, in params_of order (kind 6 + index): their prwDynamicParameter and name.
-inline prwDynamicParameter consider_kind(int kind) {
-  return kind == 6 ? prwDynamicParameter_DRAG_AREA_OVER_MASS : prwDynamicParameter_SRP_AREA_OVER_MASS;
+/// The parameter rows (SPEC 17.1), in params_of order, kind 6 + index: the prwDynamicParameter, the name, the unit and
+/// whether the theories are sensitive to it (a modeled parameter has a state transition column).
+constexpr int kKindDrag = 6, kKindDragRate = 7, kKindSrp = 8, kKindThrust = 9, kKindOutgassing = 10;
+struct Parameter {
+  prwDynamicParameter kind;
+  const char* name;
+  const char* units;
+  bool modeled;
+};
+constexpr Parameter kParameters[kMaxConsider] = {
+    {prwDynamicParameter_DRAG_AREA_OVER_MASS, "DRAG_AREA_OVER_MASS", "m**2/kg", true},
+    {prwDynamicParameter_DRAG_AREA_OVER_MASS_RATE, "DRAG_AREA_OVER_MASS_RATE", "m**2/kg/s", false},
+    {prwDynamicParameter_SRP_AREA_OVER_MASS, "SRP_AREA_OVER_MASS", "m**2/kg", true},
+    {prwDynamicParameter_IN_TRACK_ACCELERATION, "IN_TRACK_ACCELERATION", "m/s**2", false},
+    {prwDynamicParameter_OUTGASSING_ACCELERATION, "OUTGASSING_ACCELERATION", "km/s**2", false}};
+inline prwDynamicParameter consider_kind(int kind) { return kParameters[kind - 6].kind; }
+inline const char* consider_name(int kind) { return kParameters[kind - 6].name; }
+inline const char* consider_units(int kind) { return kParameters[kind - 6].units; }
+inline bool modeled(int kind) { return kind < 6 || kParameters[kind - 6].modeled; }
+/// The kind (6 + index) of a prwDynamicParameter, or -1 for one outside the five.
+inline int kind_of(int parameter) {
+  for (int c = 0; c < kMaxConsider; ++c)
+    if (kParameters[c].kind == parameter) return 6 + c;
+  return -1;
 }
-inline const char* consider_name(int kind) { return kind == 6 ? "DRAG_AREA_OVER_MASS" : "SRP_AREA_OVER_MASS"; }
+/// The kind (6 + index) of a parameter name, or -1 for one outside the five.
+inline int kind_named(const char* name) {
+  for (int c = 0; name != nullptr && c < kMaxConsider; ++c)
+    if (std::strcmp(kParameters[c].name, name) == 0) return 6 + c;
+  return -1;
+}
 
-/// Kinds of the parameter vector of options `o` (params_of order): 0-5 af, ag, chi, psi, lambda, n; 6 BTERM; 7 AGOM.
+/// Kinds of the parameter vector of options `o` (params_of order): 0-5 af, ag, chi, psi, lambda, n; then 6 BTERM,
+/// 7 BDOT, 8 AGOM, 9 in-track thrust, 10 outgassing, those the options carry.
 inline int kinds_of(const fit::Options& o, int* kind) {
   int np = 0;
   for (; np < 6; ++np) kind[np] = np;
-  if (o.fit_drag) kind[np++] = 6;
-  if (o.fit_agom) kind[np++] = 7;
+  if (o.fit_drag) kind[np++] = kKindDrag;
+  if (o.fit_bdot) kind[np++] = kKindDragRate;
+  if (o.fit_agom) kind[np++] = kKindSrp;
+  if (o.fit_thrust) kind[np++] = kKindThrust;
+  if (o.fit_outgassing) kind[np++] = kKindOutgassing;
   return np;
 }
 
@@ -59,16 +93,18 @@ inline double step_of(int kind, double v) {
   return std::fmax(1e-3 * std::fabs(v), 1e-5);  // m^2/kg
 }
 
-/// The theory at the set and at the set moved by +-h in each parameter (AGOM forward only where -h would switch SRP
-/// off: the theory reads AGOM <= 0 as none).
+/// The theory at the set and at the set moved by +-h in each modeled parameter (AGOM forward only where -h would
+/// switch SRP off: the theory reads AGOM <= 0 as none); a parameter the theories have no sensitivity to has no moved
+/// sets and a zero column.
 struct Bank {
   int np = 0;
   int kind[fit::kMaxParams] = {};
+  int slot[fit::kMaxParams] = {};  ///< the moved sets of parameter j: [1 + 2 slot] +h_j, [2 + 2 slot] -h_j; -1 none
   double h[fit::kMaxParams] = {};
   bool central[fit::kMaxParams] = {};
   double x[fit::kMaxParams] = {};
   fit::Options o{};
-  xpt::XpSat* sats = nullptr;  ///< [0] the set, [1 + 2j] +h_j, [2 + 2j] -h_j
+  xpt::XpSat* sats = nullptr;  ///< [0] the set, then the moved sets
   int count = 0;
 };
 
@@ -84,7 +120,9 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b) {
   b.o = o;
   b.np = kinds_of(o, b.kind);
   fit::params_of(row, o, b.x);
-  const int total = 1 + 2 * b.np;
+  int moved = 0;
+  for (int j = 0; j < b.np; ++j) b.slot[j] = modeled(b.kind[j]) ? moved++ : -1;
+  const int total = 1 + 2 * moved;
   b.sats = static_cast<xpt::XpSat*>(std::calloc(static_cast<size_t>(total), sizeof(xpt::XpSat)));
   if (b.sats == nullptr) return false;
   drag::table();
@@ -97,24 +135,30 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b) {
   };
   if (!start(b.x, 0)) return false;
   for (int j = 0; j < b.np; ++j) {
+    if (b.slot[j] < 0) continue;
     b.h[j] = step_of(b.kind[j], b.x[j]);
-    b.central[j] = !(b.kind[j] == 7 && !o.agom_log && b.x[j] - b.h[j] <= 0.0);  // ln AGOM moves both ways
+    b.central[j] = !(b.kind[j] == kKindSrp && !o.agom_log && b.x[j] - b.h[j] <= 0.0);  // ln AGOM moves both ways
     double xp[fit::kMaxParams], xm[fit::kMaxParams];
     for (int q = 0; q < b.np; ++q) xp[q] = xm[q] = b.x[q];
     xp[j] += b.h[j];
     xm[j] -= b.central[j] ? b.h[j] : 0.0;
-    if (!start(xp, 1 + 2 * j) || !start(xm, 2 + 2 * j)) return false;
+    if (!start(xp, 1 + 2 * b.slot[j]) || !start(xm, 2 + 2 * b.slot[j])) return false;
   }
   return true;
 }
 
-/// The set's state at t (TEME km, km/s) and J = d state / d parameters (6 x np, row-major).
+/// The set's state at t (TEME km, km/s) and J = d state / d parameters (6 x np, row-major; a parameter the theories
+/// have no sensitivity to: a zero column).
 inline bool at(Bank& b, double t, double r[3], double v[3], double* J) {
   if (xpt::xp_propagate(b.sats[0], t, r, v) != kPropOk) return false;
   for (int j = 0; j < b.np; ++j) {
+    if (b.slot[j] < 0) {
+      for (int c = 0; c < 6; ++c) J[c * b.np + j] = 0.0;
+      continue;
+    }
     double rp[3], vp[3], rm[3], vm[3];
-    if (xpt::xp_propagate(b.sats[1 + 2 * j], t, rp, vp) != kPropOk) return false;
-    if (xpt::xp_propagate(b.sats[2 + 2 * j], t, rm, vm) != kPropOk) return false;
+    if (xpt::xp_propagate(b.sats[1 + 2 * b.slot[j]], t, rp, vp) != kPropOk) return false;
+    if (xpt::xp_propagate(b.sats[2 + 2 * b.slot[j]], t, rm, vm) != kPropOk) return false;
     const double d = b.central[j] ? 2.0 * b.h[j] : b.h[j];
     for (int c = 0; c < 3; ++c) {
       J[c * b.np + j] = (rp[c] - rm[c]) / d;
@@ -221,8 +265,8 @@ struct Set {
   ElementRow row{};
   fit::Options o{};
   int np = 0;
-  double C[kMaxAug * kMaxAug] = {};  ///< augmented epoch covariance (np x np): state block total, then consider
-  double log_sigma[kMaxConsider] = {};  ///< of_fit: the posterior sigma of ln B, ln AGOM where the fit estimated the log (else 0)
+  double C[kMaxAug * kMaxAug] = {};  ///< augmented epoch covariance (np x np): state block total, then the parameters
+  double log_sigma[kMaxConsider] = {};  ///< of_fit: the posterior sigma of ln B ([0]), ln AGOM ([2]) where the fit estimated the log (else 0)
   double floor[6] = {};
   double noise[5] = {};              ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2), the noise start t_a (min)
   double share = 0.0;                ///< c, the share of the non-gravitational n-dot that is error
@@ -302,8 +346,8 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
     for (int c = 0; c <= a; ++c) A[c * np + a] = A[a * np + c] = A[a * np + c] / s2;
   // the fit's priors (fit::run's cost): B_eff and AGOM, each one pseudo-observation of its own sigma
   for (int a = 0; a < np; ++a) {
-    if (b.kind[a] == 6 && o.drag_sigma > 0.0) A[a * np + a] += 1.0 / (o.drag_sigma * o.drag_sigma);
-    if (b.kind[a] == 7 && o.agom_sigma > 0.0) A[a * np + a] += 1.0 / (o.agom_sigma * o.agom_sigma);
+    if (b.kind[a] == kKindDrag && o.drag_sigma > 0.0) A[a * np + a] += 1.0 / (o.drag_sigma * o.drag_sigma);
+    if (b.kind[a] == kKindSrp && o.agom_sigma > 0.0) A[a * np + a] += 1.0 / (o.agom_sigma * o.agom_sigma);
   }
   double Pp[kMaxAug * kMaxAug];
   if (!spd_inverse(A, np, Pp)) return false;
@@ -337,10 +381,10 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   // a term the fit estimated as its log: the posterior of ln B (ln AGOM) carried to B (AGOM) by the Jacobian (the delta
   // method, sigma_B = B sigma_lnB), its rows and columns times the term; the set's consider rows are in m^2/kg
   for (int c = 6; c < np; ++c) {
-    const bool log_term = (b.kind[c] == 6 && o.drag_log) || (b.kind[c] == 7 && o.agom_log);
+    const bool log_term = (b.kind[c] == kKindDrag && o.drag_log) || (b.kind[c] == kKindSrp && o.agom_log);
     if (!log_term) continue;
     s.log_sigma[b.kind[c] - 6] = std::sqrt(Pp[c * np + c]);
-    const double scale = b.kind[c] == 6 ? row.bterm : row.agom;
+    const double scale = b.kind[c] == kKindDrag ? row.bterm : row.agom;
     for (int i = 0; i < np; ++i) {
       s.C[i * np + c] *= scale;
       s.C[c * np + i] *= scale;  // the diagonal term twice: scale squared
@@ -367,9 +411,11 @@ inline bool noise_invariant(const ElementRow& row, const Set& s) {
 
 /// The covariance of an $OCM set (COVARIANCE_DATA, COV_PARAMETER_KINDS with OD_DYNAMIC_PARAMETERS' SOLVED_FOR, and
 /// COV_PROPAGATION) on top of its decoded row. 1 read, 0 no COVARIANCE_DATA, -1 malformed (COV_TYPE other than
-/// CARTPV, COV_ORDERING other than LTM, COV_SIZE not 6 plus the kinds, a kind other than BTERM's or AGOM's or one not
-/// solved for, values other than N(N+1)/2, no COV_PROPAGATION), -2 a kind UNSPECIFIED, -3 NOISE_NON_GRAVITATIONAL_RAD_DAY2
-/// not NON_GRAVITATIONAL_SHARE x |NON_GRAVITATIONAL_RATE_PER_DAY| x n within 1e-12 relative.
+/// CARTPV, COV_ORDERING other than LTM, COV_SIZE not 6 plus the kinds, a kind outside the five of SPEC 17.1, out of
+/// their fixed order or not solved for, values other than N(N+1)/2, no COV_PROPAGATION), -2 a kind UNSPECIFIED, -3
+/// NOISE_NON_GRAVITATIONAL_RAD_DAY2 not NON_GRAVITATIONAL_SHARE x |NON_GRAVITATIONAL_RATE_PER_DAY| x n within 1e-12
+/// relative. A row the theories have no sensitivity to (DRAG_AREA_OVER_MASS_RATE, IN_TRACK_ACCELERATION,
+/// OUTGASSING_ACCELERATION) is read as a constant parameter.
 inline int read(const OCM* o, const ElementRow& row, Set& s) {
   s = Set{};
   s.row = row;
@@ -379,42 +425,40 @@ inline int read(const OCM* o, const ElementRow& row, Set& s) {
   const auto* kinds = o->COV_PARAMETER_KINDS();
   const uint32_t nk = kinds == nullptr ? 0 : kinds->size();
   if (nk > static_cast<uint32_t>(kMaxConsider) || o->COV_SIZE() != 6 + nk) return -1;
-  int at_of[kMaxConsider] = {-1, -1};  // the matrix row of BTERM and AGOM
+  // the rows in the fixed order, each a parameter the determination solved for (OD_DYNAMIC_PARAMETERS by PARAMETER,
+  // SOLVED_FOR)
+  int last = 5;
   for (uint32_t k = 0; k < nk; ++k) {
-    const int kind = kinds->Get(k);
-    if (kind == prwDynamicParameter_UNSPECIFIED) return -2;
-    const int c = kind == prwDynamicParameter_DRAG_AREA_OVER_MASS ? 0 : kind == prwDynamicParameter_SRP_AREA_OVER_MASS ? 1 : -1;
-    if (c < 0 || at_of[c] >= 0) return -1;
-    at_of[c] = static_cast<int>(6 + k);
-  }
-  // a row is a parameter the determination solved for (OD_DYNAMIC_PARAMETERS by PARAMETER, SOLVED_FOR)
-  for (int c = 0; c < kMaxConsider; ++c) {
-    if (at_of[c] < 0) continue;
+    const int parameter = kinds->Get(k);
+    if (parameter == prwDynamicParameter_UNSPECIFIED) return -2;
+    const int kind = kind_of(parameter);
+    if (kind <= last) return -1;
+    last = kind;
     bool solved = false;
     if (o->ORBIT_DETERMINATION() != nullptr && o->ORBIT_DETERMINATION()->OD_DYNAMIC_PARAMETERS() != nullptr)
       for (const OCMDynamicParameter* p : *o->ORBIT_DETERMINATION()->OD_DYNAMIC_PARAMETERS())
-        if (p != nullptr && p->PARAMETER() == consider_kind(6 + c)) solved = p->SOLVED_FOR();
+        if (p != nullptr && p->PARAMETER() == parameter) solved = p->SOLVED_FOR();
     if (!solved) return -1;
+    if (kind == kKindDrag) s.o.fit_drag = 1;
+    if (kind == kKindDragRate) s.o.fit_bdot = 1;
+    if (kind == kKindSrp) s.o.fit_agom = 1;
+    if (kind == kKindThrust) s.o.fit_thrust = 1;
+    if (kind == kKindOutgassing) s.o.fit_outgassing = 1;
   }
   const uint32_t N = 6 + nk;
   if (cv->size() != N * (N + 1) / 2) return -1;
   const OCMCovariancePropagation* cp = o->COV_PROPAGATION();
   if (cp == nullptr) return -1;
-  s.o.fit_drag = at_of[0] >= 0;
-  s.o.fit_agom = at_of[1] >= 0;
   int kind[fit::kMaxParams];
   s.np = kinds_of(s.o, kind);
   const int np = s.np;
-  // the record's row r (0..N-1) as the parameter vector's index (params_of order: elements, BTERM, AGOM)
-  int index_of[kMaxAug];
-  for (int r = 0; r < 6; ++r) index_of[r] = r;
-  for (int c = 6; c < np; ++c) index_of[at_of[kind[c] - 6]] = c;
+  // the record's rows are the parameter vector's (params_of order: elements, then the fixed order)
   uint32_t q = 0;
-  for (uint32_t i = 0; i < N; ++i)
-    for (uint32_t j = 0; j <= i; ++j) {
+  for (int i = 0; i < np; ++i)
+    for (int j = 0; j <= i; ++j) {
       const double v = cv->Get(q++);
       if (!std::isfinite(v)) return -1;
-      s.C[index_of[i] * np + index_of[j]] = s.C[index_of[j] * np + index_of[i]] = v;
+      s.C[i * np + j] = s.C[j * np + i] = v;
     }
   const double floor[6] = {cp->FLOOR_UU_KM2(), cp->FLOOR_VU_KM2(), cp->FLOOR_VV_KM2(), cp->FLOOR_WU_KM2(), cp->FLOOR_WV_KM2(), cp->FLOOR_WW_KM2()};
   for (int k = 0; k < 6; ++k) s.floor[k] = floor[k];
@@ -533,6 +577,29 @@ inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P) {
   add_floor(p.s.floor, r, v, P);
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < i; ++j) P[i * 6 + j] = P[j * 6 + i] = 0.5 * (P[i * 6 + j] + P[j * 6 + i]);
+  return true;
+}
+
+/// The augmented covariance at `t` (SPEC 17.5): the state (TEME km, km/s) and the np x np covariance (row-major) of
+/// the state and the record's parameter rows, np = COV_SIZE: the state block as eval gives it (the process noise and
+/// the floor included), the state-parameter block J(t) P_p[:, c] and the parameter block P_p, constant in time (a
+/// parameter the theories have no sensitivity to keeps its variance, its cross terms carried by the state columns).
+inline bool eval_full(Propagator& p, double t, double r[3], double v[3], double* P) {
+  const int np = p.b.np;
+  double S6[36];
+  if (!eval(p, t, r, v, S6)) return false;
+  double J[6 * kMaxAug], rr[3], vv[3];
+  if (!at(p.b, t, rr, vv, J)) return false;
+  for (int i = 0; i < 6; ++i)
+    for (int j = 0; j < 6; ++j) P[i * np + j] = S6[i * 6 + j];
+  for (int i = 0; i < 6; ++i)
+    for (int c = 6; c < np; ++c) {
+      double x = 0.0;
+      for (int a = 0; a < np; ++a) x += J[i * np + a] * p.Pp[a * np + c];
+      P[i * np + c] = P[c * np + i] = x;
+    }
+  for (int a = 6; a < np; ++a)
+    for (int c = 6; c < np; ++c) P[a * np + c] = p.Pp[a * np + c];
   return true;
 }
 
