@@ -3,9 +3,8 @@
 // 'ocm' frame's element set, SGP4 or stock SGP4XP ({JXX,1970} on the theory's
 // flux model, no density correction, both gravity caps 0), to one $OMM on
 // 'omm': MEAN_ELEMENT_THEORY, EPOCH as the record states it, the six elements;
-// SGP4: BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT; SGP4XP: BTERM in BSTAR and
-// AGOM in MEAN_MOTION_DDOT (OMM 1.276.0 has no BTERM or AGOM field: the SGP4-XP
-// convention of the OMM's own comment), USER_DEFINED_EARTH_MODEL the theory's
+// SGP4: BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT; SGP4XP: BTERM and AGOM in their
+// own fields (m^2/kg), BSTAR and MEAN_MOTION_DDOT unwritten; USER_DEFINED_EARTH_MODEL the theory's
 // (WGS-72, EGM-96), the covariance's state block as COVARIANCE (TEME), the
 // identity, ORIGINATOR and PROVENANCE carried. No COMMENT and no
 // USER_DEFINED_PARAMETERS. An AP set is not an $OMM: theory-not-exportable:AP.
@@ -100,8 +99,8 @@ extern "C" int export_omm(void) {
       b.add_MEAN_MOTION_DOT(row.mean_motion_dot);
       b.add_MEAN_MOTION_DDOT(row.mean_motion_ddot);
     } else {
-      b.add_BSTAR(row.bterm);
-      b.add_MEAN_MOTION_DDOT(row.agom);
+      b.add_BTERM(row.bterm);
+      b.add_AGOM(row.agom);
     }
     b.add_USER_DEFINED_EARTH_MODEL(s_model);
     if (!s_cov.IsNull()) {

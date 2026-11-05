@@ -56,6 +56,7 @@ struct Extras {
   flatbuffers::Offset<flatbuffers::Vector<uint8_t>> cov_kinds = 0;
   flatbuffers::Offset<OCMCovariancePropagation> cov_propagation = 0;
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CVR>>> cov_realism = 0;
+  flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> header_comment = 0;  ///< HEADER.COMMENT
 };
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
@@ -223,6 +224,7 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
   HeaderBuilder hb(fbb);
   hb.add_CCSDS_OCM_VERS(s_version);
   hb.add_ORIGINATOR(s_originator);
+  if (!x.header_comment.IsNull()) hb.add_COMMENT(x.header_comment);
   const auto header = hb.Finish();
   const auto s_name = id.object_name.empty() ? flatbuffers::Offset<flatbuffers::String>(0) : fbb.CreateString(id.object_name);
   const auto s_intl = id.object_id.empty() ? flatbuffers::Offset<flatbuffers::String>(0) : fbb.CreateString(id.object_id);

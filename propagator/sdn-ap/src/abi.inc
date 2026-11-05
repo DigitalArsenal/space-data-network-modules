@@ -321,7 +321,8 @@ int32_t sdnap_init_error(uint32_t index) {
 /// from the epoch of `row` (an ElementRow: epoch, theory, starting elements and
 /// fixed terms), fitted in place. `options` (fit::Options, 56 bytes): int32
 /// fit_drag, int32 max iterations (0: 30), double drag prior mean and sigma,
-/// int32 fit_agom (4 bytes of padding follow), double AGOM prior mean and
+/// int32 fit_agom, int8 fit_bdot, int8 fit_thrust, int8 fit_outgassing (refused
+/// parameter-not-modeled:<NAME>, SPEC 17.2; 1 byte of padding follows), double AGOM prior mean and
 /// sigma, int32 drag_log, int32 agom_log (1: the term is estimated as its
 /// natural log, its prior mean and sigma those of the log; the row's term must
 /// then start > 0). `stats` (4 doubles): status, iterations, rms km, max km.

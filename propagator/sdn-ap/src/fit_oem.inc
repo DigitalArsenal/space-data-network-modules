@@ -92,14 +92,14 @@ constexpr double kMeasurementSigmaKm = 1.0;
 constexpr const char* kWeighting = "UNIT WEIGHTS: A PRIORI SIGMA 1 KM PER TEME POSITION COMPONENT";
 inline double weighted_rms(double fit_rms_km) { return fit_rms_km / std::sqrt(3.0) / kMeasurementSigmaKm; }
 
-/// SPEC 17.3: SEDR (W/kg) of a fitted set from its non-gravitational n-dot (`ng_rate`, n-dot_ng / n in 1/day, the
-/// theory's epoch rates with and without BTERM): -(mu / (3 a)) (n-dot_ng / n), mu / a = (n a)^2 with the theory's
-/// mean motion and semi-major axis, in m and s.
+/// SPEC 17.3: SEDR (W/kg) of a fitted set, the energy its non-gravitational forces remove (the $OCM's definition):
+/// -dE/dt = (mu / (3 a)) (n-dot_ng / n), positive under drag, from `ng_rate` (n-dot_ng / n in 1/day, the theory's
+/// epoch rates with and without BTERM), mu / a = (n a)^2 with the theory's mean motion and semi-major axis, in m and s.
 inline double sedr(const ElementRow& row, double ng_rate) {
   const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   const double a_m = std::pow(xpt::kKe / n_min, kX2o3) * xpt::kRe * 1000.0;
   const double na = n_min / 60.0 * a_m;  // m/s
-  return -(na * na / 3.0) * (ng_rate / 86400.0);
+  return (na * na / 3.0) * (ng_rate / 86400.0);
 }
 
 /// The default fit span (DESIGN 2e.3; the experiment's fit-length study: 48 / 72 h fits cut the 72-96 h

@@ -12,7 +12,11 @@
 //   undeclared port before the module runs); a flight one day past the last row: weather-rows-short:2026-11-01.
 // - ingest_omm: one user-defined parameter, user-defined-parameters:1; theory AP, theory-not-ingestable:AP; the $OCM of
 //   an SGP4 and of a stock SGP4XP $OMM written with their theory's own forces, assertNoUserDefined on each, and the XP
-//   one flies to the bytes of the record it was exported from.
+//   one flies to the bytes of the record it was exported from (SPEC 17.6: the export writes BTERM and AGOM in their own
+//   fields, BSTAR and MEAN_MOTION_DDOT 0, and the ingested $OCM's HEADER.COMMENT is "BTERM_SOURCE=BTERM
+//   AGOM_SOURCE=AGOM"); the same set with BTERM in BSTAR and AGOM in MEAN_MOTION_DDOT and neither field set (the SGP4-XP
+//   element-set definition) ingests to the same BTERM, AGOM and flight, HEADER.COMMENT "BTERM_SOURCE=BSTAR
+//   AGOM_SOURCE=MEAN_MOTION_DDOT"; the SGP4 $OCM states no source.
 // - On propagator/ffm's 550 km trajectory (24 h fit arcs, no drag), AP's terms (caps 31 and 20 on the theory's flux
 //   model) take the fit error below a tenth of XP's and the error two to three days past the arc below a third.
 // - The sources: no SDNAP_ mark (SDNAP_EXPORT, the export macro, is not one), no USER_DEFINED_SDNAP, no
@@ -138,6 +142,29 @@ const userOmm = (() => {
   return b.asUint8Array().slice();
 })();
 refused("ingest_omm, one user-defined parameter", await ingest(userOmm), "user-defined-parameters:1");
+// SPEC 17.6: the dedicated fields on the way out; the element-set slots on the way in, with the source stated
+if (xpOmm && xpIn?.statusCode === 0) {
+  const out = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(xpOmm)).unpack(), x = ocmOf(xp), back = ocmOf(new Uint8Array(xpIn.outputs[0].payload));
+  check(Object.is(out.BTERM, x.MEAN_ELEMENTS.BTERM) && Object.is(out.AGOM, x.MEAN_ELEMENTS.AGOM) && out.BSTAR === 0 && out.MEAN_MOTION_DDOT === 0 &&
+    JSON.stringify(back.HEADER?.COMMENT) === JSON.stringify(["BTERM_SOURCE=BTERM AGOM_SOURCE=AGOM"]) &&
+    (sgp4 ? (ocmOf(sgp4).HEADER?.COMMENT ?? []).length === 0 : true), `the exported XP $OMM: BTERM ${out.BTERM}, AGOM ${out.AGOM}, BSTAR ${out.BSTAR}, MEAN_MOTION_DDOT ${out.MEAN_MOTION_DDOT}, comment ${back.HEADER?.COMMENT}`);
+  const slots = Object.assign(OMM.getRootAsOMM(new flatbuffers.ByteBuffer(xpOmm)).unpack(), { BSTAR: out.BTERM, MEAN_MOTION_DDOT: out.AGOM, BTERM: 0, AGOM: 0 });
+  const b = new flatbuffers.Builder(1024);
+  OMM.finishOMMBuffer(b, slots.pack(b));
+  const r = await ingest(b.asUint8Array().slice());
+  check(r.statusCode === 0, `ingest_omm of the XP set in the element-set slots: ${r.errorCode} ${r.errorMessage}`);
+  if (r.statusCode === 0) {
+    const bytes = new Uint8Array(r.outputs[0].payload), o = ocmOf(bytes), comment = (o.HEADER?.COMMENT ?? []).join(" ");
+    try { assertNoUserDefined(bytes); } catch (e) { check(false, `ingest_omm slots: ${e.message}`); }
+    check(Object.is(o.MEAN_ELEMENTS.BTERM, x.MEAN_ELEMENTS.BTERM) && Object.is(o.MEAN_ELEMENTS.AGOM, x.MEAN_ELEMENTS.AGOM) && comment === "BTERM_SOURCE=BSTAR AGOM_SOURCE=MEAN_MOTION_DDOT",
+      `the XP set from the slots: BTERM ${o.MEAN_ELEMENTS.BTERM}, AGOM ${o.MEAN_ELEMENTS.AGOM}, HEADER.COMMENT ${comment}`);
+    const a = await invoke("propagate", flight([new Uint8Array(xpIn.outputs[0].payload)], { output: GRID_OUTPUT }));
+    const c = await invoke("propagate", flight([bytes], { output: GRID_OUTPUT }));
+    check(a.statusCode === 0 && c.statusCode === 0 && same(a.outputs[0].payload, c.outputs[0].payload), "the XP set from the slots flies to other bytes");
+    console.log(`$OMM boundary: exported BTERM ${out.BTERM} and AGOM ${out.AGOM} in their fields (BSTAR ${out.BSTAR}, MEAN_MOTION_DDOT ${out.MEAN_MOTION_DDOT}); ` +
+      `from the slots: BTERM ${o.MEAN_ELEMENTS.BTERM}, AGOM ${o.MEAN_ELEMENTS.AGOM}, source "${comment}"`);
+  }
+}
 refused("ingest_omm, theory AP", await ingest((() => {
   const t = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(sgp4Omm)).unpack();
   t.MEAN_ELEMENT_THEORY = 5;

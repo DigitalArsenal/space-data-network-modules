@@ -14,8 +14,8 @@
 //   variances and their mutual terms constant (0 of 3179 differ from the record's) and the 6 x 6 state block equal to the 8-row record's
 //   sdnap_covariance_at (0 of 7803 differ); the X / IN_TRACK_ACCELERATION term at epoch equals the record's; propagate flies it
 //   to the 8-row record's bytes. Rows out of the fixed order, or not solved for, are refused (-6).
-// - ORBIT_DETERMINATION.WEIGHTED_RMS = FIT_RMS_KM / sqrt(3) (sigma 1 km a component), SEDR finite and of the opposite
-//   sign to NON_GRAVITATIONAL_RATE_PER_DAY.
+// - ORBIT_DETERMINATION.WEIGHTED_RMS = FIT_RMS_KM / sqrt(3) (sigma 1 km a component); SEDR, the energy removed
+//   (the $OCM's definition), finite and positive under drag: the sign of NON_GRAVITATIONAL_RATE_PER_DAY.
 // - One $ODR per fit on 'residuals': EDITED_OBSERVATIONS one per state of the input $OEM (the input count), the
 //   accepted ones FIT_STATES, OCM_CONTENT_ID the $OCM's CID (sha256, CIDv1 raw), PERTURBATION_MODEL_CODE SGP4XP / AP.
 // - assertNoUserDefined on every $OCM emitted and flown; the $ODR schema has no user-defined list.
@@ -84,7 +84,7 @@ for (const [name, config, spw, code] of [["XP", configuration({ theory: "SGP4XP"
   const wantRms = st.FIT_RMS_KM / Math.sqrt(3) / 1;
   check(Number.isFinite(od.WEIGHTED_RMS) && Object.is(od.WEIGHTED_RMS, wantRms), `${name}: WEIGHTED_RMS ${od.WEIGHTED_RMS} against FIT_RMS_KM / sqrt(3) ${wantRms}`);
   const rate = o.COV_PROPAGATION.NON_GRAVITATIONAL_RATE_PER_DAY;
-  check(Number.isFinite(od.SEDR) && od.SEDR !== 0 && Math.sign(od.SEDR) === -Math.sign(rate), `${name}: SEDR ${od.SEDR} with the non-gravitational rate ${rate}`);
+  check(Number.isFinite(od.SEDR) && od.SEDR > 0 && Math.sign(od.SEDR) === Math.sign(rate), `${name}: SEDR ${od.SEDR} with the non-gravitational rate ${rate}`);
   const odr = ODR.getRootAsODR(new flatbuffers.ByteBuffer(odrBytes)).unpack();
   const edited = odr.EDITED_OBSERVATIONS, accepted = edited.filter((e) => e.ACCEPTED).length;
   const codes = new Set(edited.map((e) => e.PERTURBATION_MODEL_CODE));

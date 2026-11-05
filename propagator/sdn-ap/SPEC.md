@@ -2488,7 +2488,8 @@ carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `
 - Weighting: the fit weights each TEME position component with the a priori sigma 1 km (unit weights;
   `OD_DATA_WEIGHTING` states it).
 - `WEIGHTED_RMS` = sqrt(sum (r_i / sigma)^2 / (3 N)) over the N fitted states' components = `FIT_RMS_KM` / sqrt(3) / 1 km.
-- `SEDR` (W/kg) = -(mu / (3 a)) (n-dot_ng / n), with mu / a = (n a)^2 from the set's mean motion and the theory's
+- `SEDR` (W/kg), the energy the non-gravitational forces remove (the `$OCM` definition): -dE/dt =
+  (mu / (3 a)) (n-dot_ng / n), positive under drag, with mu / a = (n a)^2 from the set's mean motion and the theory's
   semi-major axis, and n-dot_ng / n the theory's epoch rate with BTERM less the rate without it
   (`COV_PROPAGATION.NON_GRAVITATIONAL_RATE_PER_DAY`, per day, here per second). Written with the covariance.
 - Emission refusals, never a partial record: a parameter row without a name (`cov-parameter-unnamed`), a name or kind
@@ -2523,6 +2524,15 @@ length, minutes, count, out)` gives per time the TEME state and the LTM of the `
 state and the record's parameter rows (6 + N(N+1)/2 doubles); `sdnap_covariance_at` gives the 6 x 6 state block. The
 state transition sensitivities are not exposed in any typed field (no output carries a PRW state matrix), so P8 is
 refused.
+
+### 17.6 The $OMM boundary
+
+`export_omm` writes an SGP4XP set's BTERM and AGOM in the `$OMM`'s BTERM and AGOM fields (m\*\*2/kg) and leaves BSTAR and
+MEAN_MOTION_DDOT unwritten. `ingest_omm` reads an SGP4XP set's BTERM and AGOM from those fields when either is present;
+an SGP4XP `$OMM` with neither carries them, by the SGP4-XP element-set definition, in BSTAR and MEAN_MOTION_DDOT, and is
+read from there (program decision D13; the owner may rule to refuse instead). The ingested `$OCM`'s HEADER.COMMENT states
+the source in one fixed line: `BTERM_SOURCE=BTERM AGOM_SOURCE=AGOM` or `BTERM_SOURCE=BSTAR AGOM_SOURCE=MEAN_MOTION_DDOT`
+(an SGP4 set: no line).
 
 ## References
 
