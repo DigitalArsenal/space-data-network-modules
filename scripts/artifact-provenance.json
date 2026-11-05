@@ -2677,8 +2677,8 @@
       }
     },
     "data-source/sensor-definitions/dist/isomorphic/module.wasm": {
-      "sha256": "b480d913e590d810f59e1acce02f750e236e673fd45db7e52ba2d0a414b4e8f7",
-      "bytes": 278002,
+      "sha256": "fa908a3d9263b88c1bb6f2ea8b0ae8b17408e4d95851af6b4842dd1775c48797",
+      "bytes": 279864,
       "module": "data-source/sensor-definitions",
       "lastCommit": "2f502022cb91f8024e5a9783596d230331c38284",
       "lastCommitDate": "2026-11-05T10:59:51-05:00",

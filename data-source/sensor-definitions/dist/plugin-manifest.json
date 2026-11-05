@@ -38,6 +38,12 @@
       "wireFormat": "flatbuffer"
     },
     {
+      "schemaName": "ModuleConfig.fbs",
+      "fileIdentifier": "MCFG",
+      "rootTypeName": "ModuleConfig",
+      "wireFormat": "flatbuffer"
+    },
+    {
       "schemaName": "FlowNotice.fbs",
       "fileIdentifier": "FNTC",
       "rootTypeName": "FlowNotice",
@@ -86,6 +92,26 @@
           "maxStreams": 1,
           "required": true,
           "description": "Timer trigger; the roster is compiled into the module, there is no other input."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig (MCFG): the node configuration buffer this module reads through plugin.getConfig; build_sensors requires producer_peer_id (String), plan_sources reads none."
         }
       ],
       "outputPorts": [
@@ -136,6 +162,26 @@
           "maxStreams": 300,
           "required": true,
           "description": "The HttpResponse (HRSP) of every planned request, in any order; each is matched to the roster by its URL. A failed or non-200 response removes only the sensors that need it, and is counted."
+        },
+        {
+          "portId": "config",
+          "acceptedTypeSets": [
+            {
+              "setId": "config-typed",
+              "allowedTypes": [
+                {
+                  "schemaName": "ModuleConfig.fbs",
+                  "fileIdentifier": "MCFG",
+                  "rootTypeName": "ModuleConfig",
+                  "wireFormat": "flatbuffer"
+                }
+              ]
+            }
+          ],
+          "minStreams": 0,
+          "maxStreams": 1,
+          "required": false,
+          "description": "ModuleConfig (MCFG): the node configuration buffer this module reads through plugin.getConfig; build_sensors requires producer_peer_id (String), plan_sources reads none."
         }
       ],
       "outputPorts": [
