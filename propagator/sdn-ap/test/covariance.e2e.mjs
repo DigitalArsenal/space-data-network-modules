@@ -9,6 +9,10 @@
 // - Each floor field equals, by name, the 0.4.0 SDNAP_COV_FLOOR_UVW of xp-fit-0.4.0.omm; the noise fields its
 //   SDNAP_COV_NOISE and SDNAP_COV_NG_RATE; |NOISE_NON_GRAVITATIONAL_RAD_DAY2 - NON_GRAVITATIONAL_SHARE x
 //   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day).
+// - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
+//   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n) and its covariance is pinned:
+//   the SHA-256 of COVARIANCE_DATA, the six floor doubles and sdnap_covariance_at of the AP set at the fixture grid
+//   (AP_COVARIANCE_SHA256, recorded on the 0.6.1 build; the SGP4XP table and numbers are unchanged).
 // - export_omm of the XP $OCM equals xp-fit-0.4.0.omm with USER_DEFINED_PARAMETERS, COMMENT and
 //   USER_DEFINED_EPOCH_TIMESTAMP / MICROSECONDS removed and PROVENANCE carried, BTERM and AGOM in their own fields
 //   (the 0.4.0 set's BSTAR and MEAN_MOTION_DDOT moved there): the two records packed by one builder are byte-equal;
@@ -30,6 +34,11 @@ import { assertNoUserDefined } from "../../../common/tests/no-user-defined.mjs";
 import { ensureBuilt, wasmPath } from "./lib/module.mjs";
 import { configuration, MSIS_FORCES, XP_FORCES } from "./lib/pcf.mjs";
 import { inputs, GRID } from "./lib/fixture-inputs.mjs";
+import { createHash } from "node:crypto";
+
+/// SPEC 12.5's AP DRAG row (0.6.1) and the pinned AP covariance numbers.
+const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.647194501793458e-7, c: 0.112126311682426 };
+const AP_COVARIANCE_SHA256 = "f65830a2c65770bd3c94dc0208127a40861f42829da6384c8427c961307907e9";
 
 ensureBuilt();
 const failures = [];
@@ -122,7 +131,26 @@ if (exported.statusCode === 0) {
 const apBytes = await fit(configuration({ theory: "AP", forces: { ...MSIS_FORCES, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31,
   HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20, WEATHER_SOURCE: pcfWeatherSource.RECORDS } }), rows.bytes);
 const refused = (label, r, code) => check(r.statusCode !== 0 && r.errorCode === code, `${label}: expected ${code}, got ${r.statusCode === 0 ? "success" : `${r.errorCode} ${r.errorMessage}`}`);
-if (apBytes) refused("export_omm of the AP set", await exportOmm(apBytes), "theory-not-exportable:AP");
+if (apBytes) {
+  refused("export_omm of the AP set", await exportOmm(apBytes), "theory-not-exportable:AP");
+  const ap = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(apBytes)).unpack(), acp = ap.COV_PROPAGATION;
+  check(Object.is(acp.NOISE_ECCENTRICITY_PER_DAY, AP_DRAG.s_e) && Object.is(acp.NOISE_INCLINATION_PER_DAY, AP_DRAG.s_i) &&
+    Object.is(acp.NOISE_MEAN_MOTION_RELATIVE, AP_DRAG.s_l) && Object.is(acp.NON_GRAVITATIONAL_SHARE, AP_DRAG.c) && ap.COV_REALISM?.[0]?.REGIME === "DRAG",
+    `the AP set's noise ${JSON.stringify(acp)} (regime ${ap.COV_REALISM?.[0]?.REGIME}) is not SPEC 12.5's DRAG row`);
+  const an = ap.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI, awant = acp.NON_GRAVITATIONAL_SHARE * Math.abs(acp.NON_GRAVITATIONAL_RATE_PER_DAY) * an;
+  check(Math.abs(acp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 - awant) <= 1e-12 * Math.max(Math.abs(awant), Number.MIN_VALUE), "the AP set's noise invariant");
+  const qo = x.sdnap_alloc(apBytes.length), qm = x.sdnap_alloc(8 * minutes.length), qout = x.sdnap_alloc(8 * 42 * minutes.length);
+  new Uint8Array(mem(), qo, apBytes.length).set(apBytes);
+  new Float64Array(mem(), qm, minutes.length).set(minutes);
+  const aStatus = x.sdnap_covariance_at(qo, apBytes.length, qm, minutes.length, qout);
+  check(aStatus === 0, `sdnap_covariance_at of the AP set: ${aStatus}`);
+  const floorAp = ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"].map((f) => acp[f]);
+  const digest = createHash("sha256").update(Buffer.from(Float64Array.from(ap.COVARIANCE_DATA).buffer)).update(Buffer.from(Float64Array.from(floorAp).buffer))
+    .update(Buffer.from(mem().slice(qout, qout + 8 * 42 * minutes.length))).digest("hex");
+  console.log(`AP set: DRAG row s_e ${acp.NOISE_ECCENTRICITY_PER_DAY}, s_i ${acp.NOISE_INCLINATION_PER_DAY}, s_l ${acp.NOISE_MEAN_MOTION_RELATIVE}, c ${acp.NON_GRAVITATIONAL_SHARE}; covariance SHA-256 ${digest} (pinned ${AP_COVARIANCE_SHA256})`);
+  check(digest === AP_COVARIANCE_SHA256, `the AP covariance numbers ${digest} differ from the pinned ${AP_COVARIANCE_SHA256}`);
+  x.sdnap_free(qo); x.sdnap_free(qm); x.sdnap_free(qout);
+}
 refused("export_omm of garbage", await exportOmm(new Uint8Array(64)), "invalid-ocm");
 const exportUnder = (theory) => h.invoke({ methodId: "export_omm", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: xpBytes }, configuration({ theory })] });
 check((await exportUnder("SGP4XP")).statusCode === 0, "export_omm under THEORY SGP4XP");

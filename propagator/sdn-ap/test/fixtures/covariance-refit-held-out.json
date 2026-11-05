@@ -1,0 +1,161 @@
+{
+ "source": "orbit-accuracy-experiments results/ap-truth/covariance-refit/table.json (experiments/operator-theory/COVARIANCE-REFIT.md), the held-out cells of the fitted DRAG row",
+ "rows": "/opt/data/sdn-archive/operator-theory/covariance-coverage",
+ "blocks": {
+  "T": {
+   "training": [
+    "2025-04-01",
+    "2025-08-10"
+   ],
+   "heldOut": [
+    "2025-08-21",
+    "2025-12-21"
+   ]
+  },
+  "S1": {
+   "training": [
+    "2026-01-01",
+    "2026-03-15"
+   ],
+   "heldOut": [
+    "2026-03-26",
+    "2026-05-31"
+   ]
+  }
+ },
+ "fitted": {
+  "s_e": 1.8579913326733934e-7,
+  "s_i": 0.00000112761105007012,
+  "s_l": 7.647194501793458e-7,
+  "c": 0.112126311682426,
+  "k_F": 1.5127596877626373
+ },
+ "heldOut": [
+  {
+   "regime": "T",
+   "h": 24,
+   "axis": "R",
+   "n": 1036,
+   "medianAbsZ": 0.634645
+  },
+  {
+   "regime": "T",
+   "h": 24,
+   "axis": "I",
+   "n": 1036,
+   "medianAbsZ": 0.468271
+  },
+  {
+   "regime": "T",
+   "h": 24,
+   "axis": "C",
+   "n": 1036,
+   "medianAbsZ": 0.780949
+  },
+  {
+   "regime": "T",
+   "h": 72,
+   "axis": "R",
+   "n": 1036,
+   "medianAbsZ": 0.745189
+  },
+  {
+   "regime": "T",
+   "h": 72,
+   "axis": "I",
+   "n": 1036,
+   "medianAbsZ": 0.679299
+  },
+  {
+   "regime": "T",
+   "h": 72,
+   "axis": "C",
+   "n": 1036,
+   "medianAbsZ": 0.874348
+  },
+  {
+   "regime": "T",
+   "h": 167,
+   "axis": "R",
+   "n": 1036,
+   "medianAbsZ": 0.753956
+  },
+  {
+   "regime": "T",
+   "h": 167,
+   "axis": "I",
+   "n": 1036,
+   "medianAbsZ": 0.909678
+  },
+  {
+   "regime": "T",
+   "h": 167,
+   "axis": "C",
+   "n": 1036,
+   "medianAbsZ": 0.794391
+  },
+  {
+   "regime": "S1",
+   "h": 24,
+   "axis": "R",
+   "n": 247,
+   "medianAbsZ": 0.637877
+  },
+  {
+   "regime": "S1",
+   "h": 24,
+   "axis": "I",
+   "n": 247,
+   "medianAbsZ": 0.321557
+  },
+  {
+   "regime": "S1",
+   "h": 24,
+   "axis": "C",
+   "n": 247,
+   "medianAbsZ": 0.660396
+  },
+  {
+   "regime": "S1",
+   "h": 72,
+   "axis": "R",
+   "n": 247,
+   "medianAbsZ": 0.638249
+  },
+  {
+   "regime": "S1",
+   "h": 72,
+   "axis": "I",
+   "n": 247,
+   "medianAbsZ": 0.487321
+  },
+  {
+   "regime": "S1",
+   "h": 72,
+   "axis": "C",
+   "n": 247,
+   "medianAbsZ": 0.560126
+  },
+  {
+   "regime": "S1",
+   "h": 167,
+   "axis": "R",
+   "n": 249,
+   "medianAbsZ": 0.852192
+  },
+  {
+   "regime": "S1",
+   "h": 167,
+   "axis": "I",
+   "n": 249,
+   "medianAbsZ": 0.674476
+  },
+  {
+   "regime": "S1",
+   "h": 167,
+   "axis": "C",
+   "n": 249,
+   "medianAbsZ": 0.380079
+  }
+ ]
+}
