@@ -44,7 +44,7 @@
     "wasmedge"
   ],
   "sourceSha256": "3bfac7259a6f1999e02a024284755c3ab8141a056877fa6203d7fec16125504d",
-  "wasmSha256": "17af87dcbe6223653f9ef129545d8837b59fbbfcedc2156faba9f2b825f84ac4",
+  "wasmSha256": "b43018011ef250e14ca5828fce76427e79a6bd537c747c3e2a444d6c4a20e226",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {

@@ -480,8 +480,8 @@
       }
     },
     "analysis/conjunction-assessment/dist/isomorphic/module.wasm": {
-      "sha256": "a077c6929cd1eb979eb3c39dbe158198f6c94f90a5ad7494345e51596699148f",
-      "bytes": 1748340,
+      "sha256": "398e070ee9e142c2f6062f1743266fcd58d00c933b065c9c9fa68fe094329b1c",
+      "bytes": 1748884,
       "module": "analysis/conjunction-assessment",
       "lastCommit": "b635415c66ab806e5005038d17810bd971d41285",
       "lastCommitDate": "2026-11-04T07:12:38-05:00",
