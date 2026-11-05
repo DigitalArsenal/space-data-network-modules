@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T17:36:14.043Z",
+  "generatedAt": "2026-11-05T19:02:58.500Z",
   "moduleCount": 159,
   "parityScopeModuleCount": 59,
   "isomorphicWasmCount": 153,
@@ -7446,7 +7446,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7469,7 +7469,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 114,
+      "testFileCount": 116,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7481,6 +7481,7 @@
         "test/bench.mjs",
         "test/class-crossing.e2e.mjs",
         "test/conformance.e2e.mjs",
+        "test/covariance-realism.e2e.mjs",
         "test/covariance-realism.mjs",
         "test/covariance.e2e.mjs",
         "test/drag-cost.mjs",
@@ -7500,6 +7501,7 @@
         "test/fixtures/ap-fit-0.4.0.epochs.oem",
         "test/fixtures/ap-fit-0.4.0.oem",
         "test/fixtures/ap-fit-0.4.0.omm",
+        "test/fixtures/covariance-refit-held-out.json",
         "test/fixtures/ffm-leo-550km-53deg.json.gz",
         "test/fixtures/ffm-meo-19100km-65deg.json.gz",
         "test/fixtures/xp-fit-0.4.0.cov",
