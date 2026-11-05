@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-c90cc204912a34b7",
+  "generatedBy": "tc-07322c2265a5a23c",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -522,11 +522,11 @@
       }
     },
     "analysis/conjunction-assessment/dist/isomorphic/module.wasm": {
-      "sha256": "398e070ee9e142c2f6062f1743266fcd58d00c933b065c9c9fa68fe094329b1c",
-      "bytes": 1748884,
+      "sha256": "b3f5035b830ccff25e923897e971021174902dfaff07d26303aed47affe2567d",
+      "bytes": 1749522,
       "module": "analysis/conjunction-assessment",
-      "lastCommit": "b299096878e2db30cc9d5f319b3f2609745ecef3",
-      "lastCommitDate": "2026-11-05T00:20:55-05:00",
+      "lastCommit": "11c702d922271a9877425b44e7628212921d54a3",
+      "lastCommitDate": "2026-11-05T12:07:51-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -640,11 +640,11 @@
       }
     },
     "analysis/estimation/dist/isomorphic/module.wasm": {
-      "sha256": "b4319ba0cf63e80c23e803dafe9ea8803d966ec7ec80c3fac0031c1b01df4f86",
-      "bytes": 795118,
+      "sha256": "981eb8296348200487413638f72c1927385f6c4dada9ae2ccaecb9924fe8c16b",
+      "bytes": 795398,
       "module": "analysis/estimation",
-      "lastCommit": "adc31264fc5bc1eba71d97795d0b97f73a40589f",
-      "lastCommitDate": "2026-11-04T16:11:37-05:00",
+      "lastCommit": "11c702d922271a9877425b44e7628212921d54a3",
+      "lastCommitDate": "2026-11-05T12:07:51-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2680,8 +2680,8 @@
       "sha256": "fa908a3d9263b88c1bb6f2ea8b0ae8b17408e4d95851af6b4842dd1775c48797",
       "bytes": 279864,
       "module": "data-source/sensor-definitions",
-      "lastCommit": "2f502022cb91f8024e5a9783596d230331c38284",
-      "lastCommitDate": "2026-11-05T10:59:51-05:00",
+      "lastCommit": "4d830a3660f6b951fa8eadd04fb9b36c89a9516e",
+      "lastCommitDate": "2026-11-05T11:25:18-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -5475,11 +5475,11 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "74388314396a8f8c4bc962b63566b01ee8a99e1d8a295e8233fac36d5683500d",
-      "bytes": 936984,
+      "sha256": "66bd001be27b7578b7b4ad9054f2d8fb4935d876491b4f0f817762c6b85878d7",
+      "bytes": 937084,
       "module": "propagator/sdn-ap",
-      "lastCommit": "42b343833cf73c18a72e489603fb0a68b88ff2b9",
-      "lastCommitDate": "2026-11-04T17:32:33-05:00",
+      "lastCommit": "11c702d922271a9877425b44e7628212921d54a3",
+      "lastCommitDate": "2026-11-05T12:07:51-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
