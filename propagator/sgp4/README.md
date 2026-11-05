@@ -225,9 +225,9 @@ Apache-2.0.
 | --- | --- | --- | --- | --- | --- |
 | near-Earth (SGP4) | 6 | 72 | 0.004 mm | 4.45891e-09 m/s | 90004 at 10080.000 min |
 | deep space (SDP4) | 5 | 60 | 0.006 mm | 5.51598e-09 m/s | 11801 at 4320.000 min |
-| geosynchronous (SDP4) | 2 | 24 | 8.998e-04 mm | 6.5711e-11 m/s | 90002 at 10080.000 min |
+| geosynchronous (SDP4) | 2 | 24 | 6.033e-04 mm | 4.3751e-11 m/s | 90002 at 10080.000 min |
 
-[SGP4-XP](tests/evidence/xp/) checks 640 SGP4/XP sets at 7 times for exact library parity and records 15 Tier B anchors. The XP theory itself has no public reference outside the library; agreement with the library is the available check.
+[SGP4-XP](tests/evidence/xp/) checks 640 SGP4/XP sets at 7 times for exact library parity and records 23 Tier B anchors. The XP theory itself has no public reference outside the library; agreement with the library is the available check.
 
 From the repository root:
 
