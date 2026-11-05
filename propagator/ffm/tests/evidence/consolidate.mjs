@@ -25,6 +25,8 @@ const definitions = [
   ['tudat-wasm', 'Tudat WASM', 'tudat/summary-tudat-wasm.json', 'tudat'],
   ['basilisk', 'Basilisk', 'basilisk/summary-basilisk-2.12.0.json', 'basilisk'],
 ];
+// The original subset (xval/summary.json, tests/xval-summary.mjs): its tools and their labels.
+const xvalTools = [['orekit', 'Orekit 13.1'], ['gmat', 'GMAT R2022a'], ['tudatpy', 'Tudat (tudatpy 1.0.0)'], ['tudat-wasm', 'Tudat WASM'], ['nyx', 'Nyx 2.6.0']];
 const pin = (label, sha256, extra = {}) => ({ label, sha256, ...extra });
 function filePin(s, pattern, label) {
   const entry = s.fileHashes?.find((p) => pattern.test(p.path ?? p.file));
@@ -185,7 +187,12 @@ function collect() {
   const clock = erfa.rows.find((r) => r.id === 'forceClock'), rotation = erfa.rows.find((r) => r.id === 'c2tTrue');
   formatValue('force-clock', clock.max, clock.unit); formatValue('force-clock-rotation', rotation.max, rotation.unit);
   formatValue('force-clock-leo', rotation.leoM);
-  return { exported, summaries, metadata, input: { export: exported, tools, format,
+  const xval = read('xval/summary.json');
+  require(xval.ffmWasmSha256 === moduleHash, 'xval: FFM version/hash mismatch');
+  require(JSON.stringify(Object.keys(xval.tools)) === JSON.stringify(xvalTools.map(([id]) => id)), 'xval: tool set differs');
+  const xvalInput = { tools: xvalTools.map(([id]) => id), rows: xval.rows.map((r) => ({ case: r.case,
+    ffm: Object.fromEntries(Object.entries(r.ffm).map(([tool, v]) => [tool, { worst: v.worst, jacchiaRoberts: v.atmosphere === 'JACCHIA_ROBERTS' }])) })) };
+  return { exported, summaries, metadata, input: { export: exported, tools, format, xval: xvalInput,
     dragDiagnostics: collectDragDiagnostics(summaries, exported),
     orbits: [...new Set(exported.cases.map((c) => c.orbit))], families: Object.keys(exported.protocol.rows),
     columns: [...definitions.map(([id]) => id), 'orekit-steps30', 'orekit-finest'] },
@@ -270,10 +277,21 @@ function render(data) {
   const gmatRow = (label, forceClass) => `| ${label} | ${classCell(forceClass, 'gmat-2026').scored} | ${['gmat-2026', 'gmat-2026-steps30', 'gmat-2026-finest'].map((c) => classCell(forceClass, c).display).join(' | ')} |`;
   const ox = (orbit) => oxygen.rows.find((r) => r.orbit === orbit);
   const gmatBlock = `<!-- BEGIN GENERATED GMAT R2026A -->\n| Force set | Cases | Steps of at most 300 s | Steps of at most 30 s | Tolerance 1e-15, steps of at most 10 s |\n| --- | ---: | ---: | ---: | ---: |\n${gmatRow('Point mass', 'pointMass')}\n${gmatRow('Field, third bodies, radiation pressure, tides, relativity, thrust', 'fullNoDrag')}\n${gmatRow('With drag (NRLMSISE-00)', 'drag')}\n\n*${build}.*\n\nThe drag rows are the anomalous oxygen GMAT's NRLMSISE-00 leaves out of its\ntotal density (\`gtd7\`; FFM and Orekit use \`gtd7d\`): 0.005 % of the density at\n400 km and 2.0-2.5 % at 700 km, ${ox('LEO400').stockDisplay} and ${ox('SSO700').stockDisplay} over the day; GMAT with its\nCd scaled by that share is within ${ox('LEO400').correctedDisplay} and ${ox('SSO700').correctedDisplay} at the suite setting\n(\`tests/evidence/gmat/anomalous-oxygen.json\`). GMAT's 6x6 STM agrees with\nFFM's to ${gmat.rows.find((r) => r.id === 'LEO400 F4-field-sun-moon').stm.display} on LEO400 F4 (field, Sun, Moon) and to ${gmat.stm.display} where GMAT leaves terms\nout of its variational equations (shadow function, relativity, thrust).\n<!-- END GENERATED GMAT R2026A -->`;
+  const xv = data.xval, mx = xv.maxima, xcell = (id, tool) => xv.rows.find((r) => r.case === id).cells[tool];
+  const [leoF6, ssoF6] = ['LEO400 F6-field-sun-moon-srp-drag', 'SSO700 F6-field-sun-moon-srp-drag'];
+  const xvalBuild = `<!-- BEGIN GENERATED XVAL BUILD -->FFM ${data.module.version} artifact (module SHA-256 \`${data.module.sha256.slice(0, 8)}\`, scored ${data.rescore.date})<!-- END GENERATED XVAL BUILD -->`;
+  const xvalTable = `<!-- BEGIN GENERATED XVAL TABLE -->\n| Case | ${xvalTools.map(([, label]) => `FFM - ${label}`).join(' | ')} |\n|---|${xvalTools.map(() => '---:').join('|')}|\n${xv.rows.map((r) => `| ${r.case} | ${xvalTools.map(([id]) => r.cells[id]?.display ?? 'n/a').join(' | ')} |`).join('\n')}\n<!-- END GENERATED XVAL TABLE -->`;
+  const xvalFindings = `<!-- BEGIN GENERATED XVAL FINDINGS -->\n- **Agreement:** FFM agrees with every tool to within that tool's own\n  distance from the others, plus its own integration error. Measured over 24 h\n  at the suite's request on the original subset (${build}), GMAT's\n  Jacchia-Roberts drag cases aside:\n  - Orekit: at most ${mx.orekit.all.display}.\n  - GMAT: at most ${mx.gmat.all.display}.\n  - Tudat: native at most ${mx.tudatpy.all.display}, WebAssembly at most ${mx['tudat-wasm'].all.display}. Excluding drag,\n    at most ${mx.tudatpy.noDrag.display} and ${mx['tudat-wasm'].noDrag.display}.\n  - Nyx: at most ${mx.nyx.noDrag.display} without drag, consistent with the Earth-orientation difference\n    above. With drag, ${xcell(leoF6, 'nyx').distance} on LEO400, which is Nyx's own gap from all the others, and\n    ${xcell(ssoF6, 'nyx').distance} on SSO700.\n<!-- END GENERATED XVAL FINDINGS -->`;
+  const xvalJr = (name) => `<!-- BEGIN GENERATED ${name} -->${xcell(leoF6, 'gmat').distance} and ${xcell(ssoF6, 'gmat').distance}<!-- END GENERATED ${name} -->`;
   const block = (file, name, text) => ({ file, start: `<!-- BEGIN GENERATED ${name} -->`, end: `<!-- END GENERATED ${name} -->`, text });
   return { markdown: md, blocks: [
     block('propagator/ffm/docs/cross-validation.md', 'REFERENCE SUITE', cross),
     block('propagator/ffm/docs/cross-validation.md', 'INTEGRATION ERROR', integrationFinding),
+    block('propagator/ffm/docs/cross-validation.md', 'XVAL BUILD', xvalBuild),
+    block('propagator/ffm/docs/cross-validation.md', 'XVAL TABLE', xvalTable),
+    block('propagator/ffm/docs/cross-validation.md', 'XVAL FINDINGS', xvalFindings),
+    block('propagator/ffm/docs/cross-validation.md', 'XVAL JR AXES', xvalJr('XVAL JR AXES')),
+    block('propagator/ffm/docs/cross-validation.md', 'XVAL JR DATE', xvalJr('XVAL JR DATE')),
     block('propagator/ffm/README.md', 'OREKIT RADIATION PRESSURE', radiation),
     block('propagator/ffm/README.md', 'OREKIT SUMMARY', orekitSummary),
     block('propagator/ffm/README.md', 'GMAT R2026A', gmatBlock),
@@ -293,6 +311,7 @@ export function generate(work) {
     caseExport:{file:'cases/ffm-reference-cases.json',sha256:sha(path.join(here,'cases/ffm-reference-cases.json'))},
     tools:numeric.tools.map((t)=>({...collected.metadata.find((m)=>m.id===t.id),...t, skipped:collected.input.tools.find((x)=>x.id===t.id).skipped})),
     positionTable:numeric.positionTable,classTable:numeric.classTable,integrationError:numeric.integrationError,dragDiagnostics:numeric.dragDiagnostics,formatted:numeric.formatted,
+    xval:{file:'xval/summary.json',sha256:sha(path.join(here,'xval/summary.json')),...numeric.xval},
     findings:{defects:s.frames.verdict.defects,coordsEcefCio:s.frames.rows.find((r)=>r.id==='coordsEcefCio'),forceClock:s.frames.rows.find((r)=>r.id==='forceClock'),toolCauses:[
       {label:'Nyx NRLMSISE-00 port',statement:s.nyx.verdict.drag.statement,evidence:'nyx/summary-nyx-2.6.0.json'},
       {label:'Nyx variational equation',statement:s.nyx.verdict.stm.statement,evidence:'nyx/summary-nyx-2.6.0.json'},
