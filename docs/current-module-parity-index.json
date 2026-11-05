@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T19:52:50.229Z",
+  "generatedAt": "2026-11-05T20:03:21.438Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -5290,7 +5290,7 @@
       "pluginId": "com.digitalarsenal.files.vcm-text",
       "name": "SP Vector/Covariance Message Writer",
       "pluginFamily": "parser",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "ocm_to_vcm"
       ],

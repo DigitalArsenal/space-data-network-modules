@@ -3358,11 +3358,11 @@
       }
     },
     "files/vcm-text/dist/isomorphic/module.wasm": {
-      "sha256": "81e4b49008963af17489d46219470e8b076dd4f0dd2bdc756b79a1695adc6468",
-      "bytes": 386258,
+      "sha256": "ec38458feb2eb97751f0256fc25d95ded6bb5f5db9984d1e7a5682f222f1987d",
+      "bytes": 386516,
       "module": "files/vcm-text",
-      "lastCommit": "e957bb2c5b5f80826cf1fb21aaf8600664aaa5cc",
-      "lastCommitDate": "2026-11-05T14:52:35-05:00",
+      "lastCommit": "9ee542e284f3e1644b6d12c71739c634f65184e6",
+      "lastCommitDate": "2026-11-05T15:03:05-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
