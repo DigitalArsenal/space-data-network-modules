@@ -11,7 +11,7 @@ ephemeris, and says which source it was.
 
 | | |
 |---|---|
-| Plugin id | `com.digitalarsenal.propagator.sgp4-xp` 0.2.1 |
+| Plugin id | `com.digitalarsenal.propagator.sgp4-xp` 0.2.2 |
 | Family, thread model | `propagator`, `wasi-sequential` |
 | Library | US Space Force Sgp4Prop WebAssembly 9.1.1.0 (Astro Standards v9.1), XP build, SHA-256 `9f061110...cbeb7` |
 | Artifact | `dist/isomorphic/module.wasm`, the one file the three runtimes load; imports WASI only |
@@ -61,17 +61,24 @@ anchors from the unmodified US Space Force runtime across LEO, sun-synchronous, 
 the vis-viva and period invariants, two-body statements, are declared not applicable. `space-data-module
 parity-gate` finds the module satisfied in the browser, Docker WasmEdge and native WasmEdge lanes.
 
-**Every state from the epoch.** An SGP4-XP satellite in the library carries its integrator from one request to the
-next, and a request less than one integrator step (up to about 90 minutes on geosynchronous sets) past the previous
-one comes back off: flown on one satellite, a 5-minute grid of real geosynchronous sets departed from the
-epoch-to-time propagation by up to 0.81 km, while Sgp4Prop 9.9 and 9.1.1.0 run one time per satellite agreed with it
-to the bit (`tests/flight-parity-real-sets.e2e.mjs`; times an hour or more apart, as in the battery, did not depart).
-So every SGP4-XP state is the library's propagation from the epoch: a new satellite before every time after the
-first. SGP4 sets (type 0) continue, their states the same doubles either way. The library holds one satellite at a
-time (removing one of several live XP satellites crashes it, out-of-bounds access inside `Sgp4RemoveSats`), so the
-propagator ABI takes a satellite for each call and returns the stored state for a repeated instant. The cost grows
-with the distance from the epoch: a 7-day grid of 2,016 states takes 1.4 s for a geosynchronous or a low set (10 to
-23 ms when the satellite continued).
+**Dense grids.** Every SGP4-XP state is the library's propagation from the set's epoch to that time. An SGP4-XP
+satellite in the library integrates from the epoch in fixed steps and carries its integrator from one request to the
+next: a request whose previous request on the same satellite lies in the same step comes back from a partial step
+(flown on one satellite, a 5-minute grid of real geosynchronous sets departed by up to 0.81 km); any other request is
+the epoch-to-time propagation, bit for bit. The step, measured black box (the oracle's 9.1.1.0 flying the same text on
+one satellite and on a new satellite per time; 190 real GE and IG sets and 325 synthetic ones, 0.02 to 16.2 rev/day,
+eccentricity up to 0.85): 95 minutes up to 1.305 rev/day (a period of about 1,100 minutes or more), two periods from
+1.31 rev/day, whatever the eccentricity, inclination, BTERM or AGOM. So `propagate` and the fit fly an SGP4-XP set's
+times in chains, each on a new satellite: after the epoch in ascending order, before it in descending order, a
+chain's consecutive times at least one step bound apart (100 minutes; from 1.31 rev/day, two periods plus 2% and a
+minute). A grid costs about one epoch-to-time propagation to its last time per chain (the bound over the spacing)
+plus a short step per state: a 7-day grid of 2,016 states takes 35 ms (median of the 190 real sets, at most 42 ms;
+1-minute load 5 on 28 cores) where one satellite per time took 1.56 s, with 0.2.1's states bit for bit
+(`tests/flight-parity-real-sets.e2e.mjs`); the fit tests take 6.0 s instead of 18.4 s. Outside the measured range
+every time has a satellite of its own. SGP4 sets (type 0) continue on one satellite, their states the same doubles
+either way. The library holds one satellite at a time (removing one of several live XP satellites crashes it,
+out-of-bounds access inside `Sgp4RemoveSats`), so the propagator ABI takes a satellite for each call and returns the
+stored state for a repeated instant.
 
 ## The digits of two-line text
 
@@ -151,13 +158,13 @@ this repository carries the row.
 | --- | --- |
 | `plugin-manifest.json` | the manifest; concrete SDS ports, no wildcards; `space-data-module check` passes |
 | `src/types.hpp` | dates, mean elements in the units of the text, the text itself, the records of a fit |
-| `src/ussf.hpp`, `src/shim.wat` | the library's exports, the satellite RAII, the restoration; the shim |
+| `src/ussf.hpp`, `src/shim.wat` | the library's exports, the satellite RAII and its flight in chains, the restoration; the shim |
 | `src/frames.hpp` | TEME, GCRF, EME2000, ITRF over `foundation/frames` (IAU 2006/2000A, ERFA) |
 | `src/fit.hpp`, `src/window.hpp`, `src/engine.hpp` | the fitter; intervals and windows; what the OD node calls |
 | `src/sds.hpp`, `src/records.hpp`, `src/module.cpp` | the SDS records; the `$OCM` of a set and of a fit; the methods and the ABI |
 | `build.mjs`, `engine-source.mjs`, `join-ussf.mjs` | the build, the engine as one translation unit, the join |
 | `third_party/ussf-sgp4/` | the library as released, its JavaScript runtime (a test oracle only), Agreement, release notes, notice |
-| `tests/` | `flight-parity-real-sets.e2e.mjs` (190 real GE and IG sets against the oracle's 9.1.1.0, every lead to day 7; `fixtures/geo-real-sets.json`), `ocm-record.e2e.mjs` (the `$OCM` against the fixtures `fixtures/record.mjs` records, refusals), `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
+| `tests/` | `flight-parity-real-sets.e2e.mjs` (190 real GE and IG sets against the oracle's 9.1.1.0, every lead to day 7, and each set's 7-day grid of 2,016 states, timed; both grids 0.2.1's states bit for bit, `fixtures/flight-0-2-1.json`; `fixtures/geo-real-sets.json`), `ocm-record.e2e.mjs` (the `$OCM` against the fixtures `fixtures/record.mjs` records, refusals), `ussf_parity` (exact against the library), `fit` (known answer, real NASA ISS, refusals), `artifact` (imports, notice, manifest), `parity.mjs` (three runtimes) |
 | `tests/measure/` | the measurement of SGP4-XP against SDN's SGP4 on ISS, Starlink, GNSS and laser-ranged satellites: [README](tests/measure/README.md), `run.mjs`, `tables.mjs`, `resummarize.mjs`, `results/` |
 
 ## Commands
