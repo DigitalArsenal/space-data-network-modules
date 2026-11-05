@@ -5431,11 +5431,11 @@
       }
     },
     "propagator/sgp4-xp/dist/isomorphic/module.wasm": {
-      "sha256": "816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef",
-      "bytes": 1019962,
+      "sha256": "1f8aa4c7e3c01a9eb6c499a6730be827afee2b969f535410af32c74237f17877",
+      "bytes": 1030209,
       "module": "propagator/sgp4-xp",
-      "lastCommit": "bb57bf45c4a7b48863b6e837428bf80d0b38cede",
-      "lastCommitDate": "2026-11-04T10:22:51-05:00",
+      "lastCommit": "1ece97fcc6e5c89a4ace7bb97450c8f9def95c9b",
+      "lastCommitDate": "2026-11-04T20:03:38-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
