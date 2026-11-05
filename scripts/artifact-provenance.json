@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-07322c2265a5a23c",
+  "generatedBy": "tc-c90cc204912a34b7",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -2740,6 +2740,29 @@
         "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
         "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
       },
+      "declaration": {
+        "declares": true,
+        "threadModels": [
+          "wasi-sequential"
+        ],
+        "unknownThreadModels": [],
+        "emitsWasm": true,
+        "runtimeTargets": [
+          "browser",
+          "wasmedge"
+        ],
+        "inferenceHazard": false
+      }
+    },
+    "data-source/space-infrastructure/dist/isomorphic/module.wasm": {
+      "sha256": "c36333a128e9273326a3cc7f209c1a1766ddefde49217baaf02641ef219dfa7b",
+      "bytes": 464064,
+      "module": "data-source/space-infrastructure",
+      "lastCommit": "a6c38d5a375604020d9e40db2c51a5a6fadfc3f1",
+      "lastCommitDate": "2026-11-05T12:23:38-05:00",
+      "provenance": "inferred",
+      "toolchain": null,
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [

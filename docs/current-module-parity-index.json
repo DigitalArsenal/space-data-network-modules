@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-11-05T17:08:35.219Z",
-  "moduleCount": 158,
+  "generatedAt": "2026-11-05T17:23:51.428Z",
+  "moduleCount": 159,
   "parityScopeModuleCount": 59,
-  "isomorphicWasmCount": 152,
+  "isomorphicWasmCount": 153,
   "missingIsomorphicWasm": [
     "flows/observation-ap"
   ],
@@ -13,7 +13,7 @@
     "data-source/gaia-octree/cones",
     "data-source/gaia-octree"
   ],
-  "browserWasmEdgeTargetCount": 142,
+  "browserWasmEdgeTargetCount": 143,
   "parityScopeMissingCxx": [],
   "parityScopeTargetGaps": [],
   "parityScopeUpdateModules": [
@@ -4253,6 +4253,44 @@
         "tests/fixtures/sp3-format.mjs",
         "tests/module.test.mjs",
         "tests/parity.test.mjs"
+      ]
+    },
+    {
+      "modulePath": "data-source/space-infrastructure",
+      "pluginId": "com.digitalarsenal.data-source.space-infrastructure",
+      "name": "Space infrastructure: sensor sites",
+      "pluginFamily": "data_source",
+      "version": "0.1.0",
+      "methodIds": [
+        "build_infrastructure",
+        "plan_sources"
+      ],
+      "runtimeTargets": [
+        "browser",
+        "wasmedge"
+      ],
+      "hasBrowserWasmEdgeTargets": true,
+      "isSharedBrowserDirectModule": false,
+      "hasIsomorphicWasm": true,
+      "buildsOnDemand": false,
+      "sourceLanguages": [
+        "c++"
+      ],
+      "cxxSourceFileCount": 1,
+      "cSourceFileCount": 0,
+      "testFileCount": 6,
+      "parityScope": false,
+      "action": "outside-orekit-basilisk-parity",
+      "sourceFiles": [
+        "src/space_infrastructure.cpp"
+      ],
+      "testFiles": [
+        "tests/composed-flow.e2e.test.mjs",
+        "tests/fixtures/cassette.json.gz",
+        "tests/fixtures/provenance.json",
+        "tests/record-cassette.mjs",
+        "tests/run-module.mjs",
+        "tests/space-infrastructure.e2e.mjs"
       ]
     },
     {
