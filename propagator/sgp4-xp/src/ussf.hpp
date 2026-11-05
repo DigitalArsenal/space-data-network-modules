@@ -13,6 +13,8 @@
 // Errors are return values, never exceptions: WasmEdge's interpreter loops in free() on a thrown C++ exception.
 #pragma once
 
+#include <algorithm>
+
 #include "types.hpp"
 
 // XP satellites between two restorations of the library's memory (build.mjs may override it for experiments).
@@ -129,16 +131,30 @@ class Library {
   uint32_t snapshotScratchBytes_ = 0;
 };
 
+// The step of the library's SGP4-XP integrator, measured black box against the oracle's 9.1.1.0 (README, "Dense
+// grids"): from the epoch, 95 minutes for a set of mean motion 0.02 to 1.305 rev/day (a period of about 1,100 minutes
+// or more) and two periods for one of 1.31 to 16.2 rev/day, eccentricity up to 0.85. A request on a satellite whose
+// previous request lies in the same step comes back from a partial step (up to 0.81 km off on geosynchronous sets);
+// any other request is the epoch-to-time propagation, bit for bit, after the epoch and, flown away from it, before.
+// The bound is that step with a margin, in minutes; 0 outside the measured range.
+inline double xpStepBound(const Elements& e) {
+  const double n = e.meanMotion;
+  if (!(e.eccentricity <= 0.85)) return 0;
+  if (n >= 0.02 && n <= 1.305) return 100.0;
+  if (n >= 1.31 && n <= 16.2) return 2.02 * 1440.0 / n + 1.0;  // two periods, minutes
+  return 0;
+}
+
 // One element set inside the library: added to its TLE tree, initialised, and removed again when this goes out
 // of scope. The library holds one at a time (Library::idle).
 //
-// Every state is the library's propagation from the set's epoch to that time. An SGP4-XP satellite carries its
-// integrator from one request to the next, and a request less than one integrator step past the previous one comes
-// back from a partial step: on geosynchronous sets, a 15-minute grid flown on one satellite departed from the
-// epoch-to-time propagation by up to 0.59 km (the library's own runtime and Sgp4Prop 9.9 agree with the
-// epoch-to-time state to the bit; 2026-11-04); requests an hour or more apart did not depart, which is why sparse
-// times hid it. So an XP set gets a new satellite before every request after its first; an SGP4 set (type 0)
-// continues, its states the same doubles either way.
+// Every state is the library's propagation from the set's epoch to that time. An SGP4 set (type 0) is flown on one
+// satellite in the order given: its states are the same doubles either way. An SGP4-XP set is flown in chains: the
+// times at or after the epoch in ascending order and those before it in descending order, each joining the chain
+// whose last time is at least one step bound (xpStepBound) away, the earliest such, or starting a new one; every
+// chain is flown on a new satellite, so no request lies in the step of the one before it. A time equal to an earlier
+// one takes its state. Outside the measured range every time is a chain of its own, and after a refusal inside a chain
+// the rest of that chain is flown one time per satellite.
 class Satellite {
  public:
   Satellite() = default;
@@ -154,6 +170,7 @@ class Satellite {
     release();
     if (!formatTle(elements, satnum, &lines_)) { if (error) *error = -100; return false; }
     xp_ = elements.xp;
+    bound_ = xp_ ? xpStepBound(elements) : 0;
     return add(error);
   }
 
@@ -162,30 +179,98 @@ class Satellite {
   // error code is states[8*i], nonzero).
   bool propagate(const double* minutes, size_t count, double* states) {
     if (!live_ || count == 0) return false;
-    Library& library = Library::instance();
     bool all = true;
+    if (!xp_) {
+      for (size_t i = 0; i < count; ++i)
+        if (!request(minutes[i], states + i * 8)) all = false;
+      return all;
+    }
+    for (size_t i = 0; i < count; ++i) { std::memset(states + i * 8, 0, 64); states[i * 8] = -1.0; }
+    std::vector<size_t> after, before, alone;
     for (size_t i = 0; i < count; ++i) {
-      double* state = states + i * 8;
-      if (propagated_ && xp_) {
-        release();
-        if (!add(nullptr)) {
-          for (size_t k = i; k < count; ++k) { std::memset(states + k * 8, 0, 64); states[k * 8] = -1.0; }
-          return false;
-        }
-      }
-      const uint32_t base = library.scratch(4096);
-      if (base == 0) return false;
-      const int64_t key = key_;
-      ussf_put(base + 160, &key, 8);
-      if (ussf_propagate(base + 160, 1, minutes[i], 1, 1.0, base + 256) != 0) all = false;
-      ussf_get(state, base + 256, 64);
-      if (state[0] != 0.0) all = false;
-      propagated_ = true;
+      if (!std::isfinite(minutes[i])) alone.push_back(i);
+      else if (minutes[i] >= 0) after.push_back(i);
+      else before.push_back(i);
+    }
+    std::stable_sort(after.begin(), after.end(), [&](size_t a, size_t b) { return minutes[a] < minutes[b]; });
+    std::stable_sort(before.begin(), before.end(), [&](size_t a, size_t b) { return minutes[a] > minutes[b]; });
+    std::vector<std::vector<size_t>> chains;
+    std::vector<std::pair<size_t, size_t>> same;  // (time, the equal earlier time whose state it takes)
+    deal(after, minutes, &chains, &same);
+    deal(before, minutes, &chains, &same);
+    for (size_t i : alone) chains.push_back({i});
+    for (const auto& chain : chains) {
+      const int flown = fly(chain, minutes, states);
+      if (flown < 0) return false;  // no satellite: the times not flown keep error -1
+      if (flown == 0) all = false;
+    }
+    for (const auto& [i, j] : same) {
+      std::memcpy(states + i * 8, states + j * 8, 64);
+      if (states[i * 8] != 0.0) all = false;
     }
     return all;
   }
 
  private:
+  // Times in flight order into chains: a time joins the chain whose last time is at least one bound away (the earliest
+  // such: the queue holds the chains by their last time) or starts one; a time equal to the one before takes its state.
+  void deal(const std::vector<size_t>& order, const double* minutes, std::vector<std::vector<size_t>>* chains,
+            std::vector<std::pair<size_t, size_t>>* same) const {
+    std::vector<size_t> queue;
+    size_t head = 0, previous = 0;
+    for (size_t k = 0; k < order.size(); ++k) {
+      const size_t i = order[k];
+      if (k > 0 && minutes[i] == minutes[previous]) { same->push_back({i, previous}); continue; }
+      previous = i;
+      if (bound_ > 0 && head < queue.size() && std::fabs(minutes[i] - minutes[(*chains)[queue[head]].back()]) >= bound_) {
+        const size_t c = queue[head++];
+        (*chains)[c].push_back(i);
+        queue.push_back(c);
+      } else {
+        chains->push_back({i});
+        queue.push_back(chains->size() - 1);
+      }
+    }
+  }
+
+  // One chain on a new satellite (this one, when nothing has been asked of it yet): 1 when every time was flown, 0 when
+  // the library refused some (their codes are in their states), -1 when no satellite could be had.
+  int fly(const std::vector<size_t>& chain, const double* minutes, double* states) {
+    bool alone = false;  // each remaining time on a satellite of its own
+    int status = 1;
+    for (size_t k = 0; k < chain.size(); ++k) {
+      double* state = states + chain[k] * 8;
+      if ((k == 0 || alone) && propagated_ && !renew()) return -1;
+      if (request(minutes[chain[k]], state)) continue;
+      if (k > 0 && !alone) {  // refused inside the chain: this time again, and every later one, from a new satellite
+        alone = true;
+        if (!renew()) return -1;
+        if (request(minutes[chain[k]], state)) continue;
+      }
+      alone = true;
+      status = 0;
+    }
+    return status;
+  }
+
+  // One request on this satellite: false when the library refused it (its code is state[0]).
+  bool request(double minutes, double* state) {
+    Library& library = Library::instance();
+    const uint32_t base = library.scratch(4096);
+    if (base == 0) { std::memset(state, 0, 64); state[0] = -1.0; return false; }
+    const int64_t key = key_;
+    ussf_put(base + 160, &key, 8);
+    const int32_t rc = ussf_propagate(base + 160, 1, minutes, 1, 1.0, base + 256);
+    ussf_get(state, base + 256, 64);
+    propagated_ = true;
+    return rc == 0 && state[0] == 0.0;
+  }
+
+  bool renew() {
+    release();
+    return add(nullptr);
+  }
+
   // The lines into the library, initialised: [0,80) line 1, [80,160) line 2, [160,168) key, [168,176) error satellite.
   bool add(int32_t* error) {
     Library& library = Library::instance();
@@ -232,6 +317,7 @@ class Satellite {
   bool xp_ = false;
   bool live_ = false;
   bool propagated_ = false;
+  double bound_ = 0;  // xpStepBound of an SGP4-XP set, minutes; 0: every time on a satellite of its own
 };
 
 }  // namespace sgp4xp
