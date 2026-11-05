@@ -1,0 +1,1149 @@
+{
+ "//": "The states propagator/sgp4-xp 0.2.1 returns on the lead grid (91 epochs) and the week grid (2,016 states) of tests/lib/flight-grids.mjs for every set of geo-real-sets.json, as SHA-256 of their doubles (tests/fixtures/record-flight.mjs; PROVENANCE.md).",
+ "module": {
+  "version": "0.2.1",
+  "sha256": "816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef"
+ },
+ "sets": [
+  {
+   "key": "GE|C006 BDS-2G|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "d639a1ba5eb3c4e71d89c8fad6d2f0d2fb403f18f7528c8c4c3dbab13d12b980",
+   "week": "f54d0800288f7f1e490a91c6d88053397bf5252a7b0be303914b16f06c4cbe4c"
+  },
+  {
+   "key": "GE|C006 BDS-2G|2025-10-08",
+   "fitter": "space-force",
+   "lead": "19c0ad5bcf87afd9d5837f73d72ffd52b1eb580ea354d4bc473106aa03a7eccd",
+   "week": "9656b32f9543ad4474bf01751ecc5ef8c4e5b2603bc3a0cee36175eaea31d594"
+  },
+  {
+   "key": "GE|C006 BDS-2G|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "1b566a2e9a037409510e3ae2e7ea2c04781505aba67c07476f5abcab3eff0621",
+   "week": "e73bab01bbb5a0aa9c5d7663d813b40ac273aada63d274b89fd519117d02983a"
+  },
+  {
+   "key": "GE|C006 BDS-2G|2025-10-10",
+   "fitter": "space-force",
+   "lead": "d575db5f5ad9b06fd15ed7130b0b0fdd3b184f38fa270b0ebde4d84e37d4d5f5",
+   "week": "20473f211d76f0eab55daff6dde32f9fad446b230ba8c99a76f35deae920fd84"
+  },
+  {
+   "key": "GE|C006 BDS-2G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "ec88708a6f49ab7b91771b0d17183970cf660672cb26a035954990cc29d5ee2f",
+   "week": "98c0fda56565e660b66a445829cc8fdbbc4b1851eb255680ec7660fb70c95ffc"
+  },
+  {
+   "key": "GE|C006 BDS-2G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "a836e2cc9ec5223102c4794d21c0b3e0074bf77bf293e523b74d8858780e2e7d",
+   "week": "3e8a65dbd644a993c9414c24ecb2b216424b7d6e6028d510ef8fc0639ea05e6a"
+  },
+  {
+   "key": "GE|C011 BDS-2G|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "21cffe08d632670c4dd852651df7ca9c245ba125c29894c1dc0c93654bac80ee",
+   "week": "de0c6a677e29406fe22972bb3e049e551b57567cb7428d7ab26d59d5f6fa6534"
+  },
+  {
+   "key": "GE|C011 BDS-2G|2025-10-04",
+   "fitter": "space-force",
+   "lead": "2e9068b73ee04a6752aacebf6f49fbfda0a7e7ac148ff49eb02326501eb41eb1",
+   "week": "1dd63e052cbab8c049a51420637537f93b0cba7e19c3ce1adcc4283ddcdc6fdd"
+  },
+  {
+   "key": "GE|C011 BDS-2G|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "86362a4a78f68a7aa3b01c74647ca522114b49275eb3ec5784771cac9a7ced0c",
+   "week": "744168dda2d1bfcc4f8bc71679ea89e221422b9afa562a5eba721121eb473b27"
+  },
+  {
+   "key": "GE|C011 BDS-2G|2025-10-06",
+   "fitter": "space-force",
+   "lead": "44a30a8c990d6869abb1c8084f9fa0f7335ac8c905e1697c1eb51461e8c684cf",
+   "week": "5b6bce0ddc2aa74e3bfe62f7993e797538a84c420a23ce76ba6552fe0bac03b1"
+  },
+  {
+   "key": "GE|C011 BDS-2G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "7cb654f11adfcef5ab060876e497e9603d7bfc86472efd3c4198a68fa6e94394",
+   "week": "42b793cf19264d2525df58e9df09226cab0c324e74be9398511e073d85849036"
+  },
+  {
+   "key": "GE|C011 BDS-2G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "97be5a9675af65ecdce0a1f34e2e241e52aaaa372aa2b346f95e92c04253a741",
+   "week": "9475bad3f32bfc57ea0f79df535000480408c0308c5228af29d1de96d11c6985"
+  },
+  {
+   "key": "GE|C016 BDS-2G|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "97d13fb78f6082906ebe513b5b5709231ea503fdb20d4add90d112293d46e5c4",
+   "week": "dc64428c87aa0301774cfca19e805487da0d01efd6f6d71ba51a6af0dd02212f"
+  },
+  {
+   "key": "GE|C016 BDS-2G|2025-10-04",
+   "fitter": "space-force",
+   "lead": "9b68f9805ed064b8ad7485685089d1589f9131b6a3b717e41a989ff6c82f312d",
+   "week": "94e720ef87249a3682a2fd2bab581e91c74c84df2cffe06beedd01b023f6e1cb"
+  },
+  {
+   "key": "GE|C016 BDS-2G|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "023cbac81f2d4d4894b10237b52ae1c7d25eea2c5d1b39d7588b47de79105075",
+   "week": "b18763d77ca12f4aa08278ab3cafcf92714fd9b07ea53bae7731a6ee2395fca2"
+  },
+  {
+   "key": "GE|C016 BDS-2G|2025-10-10",
+   "fitter": "space-force",
+   "lead": "d53fd9fd46c666fdc100b206439eb067d8dd3bba94a8f761b6794c09c0a5552f",
+   "week": "e54dfccfa6726352d00359fc0c3d12380e654d3ebde5aca0f3e77380cf253382"
+  },
+  {
+   "key": "GE|C016 BDS-2G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "f14aea058f90e7450403c2b57a640cc4b969fa93e8b2b0572d2a98f3fb119b80",
+   "week": "3382b0320505c77938a4458fa683b2252ad195541421ed6aea606f029889a46a"
+  },
+  {
+   "key": "GE|C016 BDS-2G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "a4c7b2ff6498880135b832de5cbf095d83592f382c68bf3260a689402b940bc8",
+   "week": "fdbd5545928d1dfffd92dabf96dd42f1adfce4e0163de25c01c750ae963e107d"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "3228886f5108fee639652944c792302d3016b5d56e10fea5d516ac0b917c72b7",
+   "week": "d3501d5f19c60dbcb09065079dc0f10e7a01b9bbb9cb2fa155a753b74c8b2210"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-04",
+   "fitter": "space-force",
+   "lead": "27e7e7f2d7c48d36641eadea6dadbb8f0479526996d8187b5c2c928f5df4cf40",
+   "week": "fbf273e2feb1c5da611e3cae93fd0b13a17e6eecba33d8389665b47e827a8b4b"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "54e3e2c8072ef7e537ebc786b21c29deacd0529aa035e2f7a855970969b59733",
+   "week": "c8ef60a0801f9fc0e28de286039f80b150e35e3ff3c84fa965abd480c33fb282"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-06",
+   "fitter": "space-force",
+   "lead": "8736502770814c18cf5af82f3179422d6b868e5824415ba1f3ed694851865a8a",
+   "week": "3c2e3be71a93c4649539dbda60a4bb54de221c1116b4b93e2669dd97a34f862d"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "240461f9ff55677dd6782d9d8437a9b0c95d2b732f7314ff43b54289417c985f",
+   "week": "36386065e9becac12480dd856f558c46dd6b9f7c31449d904a8ab03fce9534ba"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-08",
+   "fitter": "space-force",
+   "lead": "bf81fc63fdb38f7509e13acaec7cfee55ee1763f7e678947eab0f37545070b12",
+   "week": "fc19e57233f2d2a948a760b7d3d5202904512d9b52ecffbd70952e92ba0dcf23"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "579063a5176c2401a1d7b180b77326e5b68d81f4c9ad4d044e6468fcfd3da040",
+   "week": "9369bb420d28e4a684f12c6156e3f88a4221678f8280bdbc8a0cae8c8c230459"
+  },
+  {
+   "key": "GE|C018 BDS-2G|2025-10-10",
+   "fitter": "space-force",
+   "lead": "9e2d283c713ed455fbea1da55a40d8060453b7492275a3fa843c4a9d2d40b769",
+   "week": "be037050c4414e2f905d6b1349689f8cfcbfb3902a902eb13a867c84d4e69e09"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "5422be0e556c2fb9cde158c961d30e44e705f6c64304473056905000b5532da0",
+   "week": "ee767cb5cd9d6411526e2a11935345b7d8cb6499eb1287439d67e6559eec1801"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-04",
+   "fitter": "space-force",
+   "lead": "20427f95c0951e4f4f701684cb3e803e7fe800e48e27c52a4e2f77cb0b221815",
+   "week": "9246a15c3fab3e11aa621ab8059b4509e8f69db782140c2927c796ed0b745a3a"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "65b650676228a9ab8cdbac64cb4b981f693b03e121e9ec481254f78dcb0efa41",
+   "week": "ed01bbc500675766c8c239003b67a935c70aecafea475c534918846cff79a4f1"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-06",
+   "fitter": "space-force",
+   "lead": "b83e78242fcaa49d35dc658d53548324a1c4554be3545a34b2a558127313004b",
+   "week": "3b492e89b0a66150f3a462fd9453aadf8650512d98c4d3556cf3c1c121c425cc"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "8d29b7e7c51bac744ac61ed3b0439b0f424d7b0b8efc88c70aab80bd48186d2c",
+   "week": "c7fec0df9ae7a7dca0448802b773034559e6992b45579beb78903f9655c57d31"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-08",
+   "fitter": "space-force",
+   "lead": "9367d9ef90900996c633cda8e7a63cb1065a32e5bb7ba1d8a63fd14fd926f3e4",
+   "week": "ddaac5981934aae834e08ef23bbb971673f04780c5db09ba662d377a54529ee8"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "bcf6e5e954b05fd23be0e25d1ebf5a46649dcda5d6479633c62b81b51a6b6c85",
+   "week": "e8de25bc1fe05ac02c6c515e37df0f0ca9ed17db7885172fcbc279ae14842ebe"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-10",
+   "fitter": "space-force",
+   "lead": "d4e75110be3780a3dc79dc78172cb8e640edf110aa143b6575e14db6af84b116",
+   "week": "b24da3598acef89cbdaab81434ddb999779c4730a1870292e2d79575372d847c"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "b1212888115d32f307bad6e1af768b582b0b2ee235b9b100f465debaf84be4c6",
+   "week": "3c7684f1fa2de552fdce92e41f0bc9efa7c62af9a2d387d257e296ec48821584"
+  },
+  {
+   "key": "GE|C020 BDS-2G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "6add363a541c213b4f0f8e77b434ce206aa7287c58c1cc61a023708bc016a2cc",
+   "week": "7f4526bf2540d5a272f70d542706060a3c45ef601a2a5e98bc9b1ecd01c1fa0b"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "c7d672ca71cf0f45047ebd92b239e2da3b63a2b5ddb1fd225c4c6651f2c7ac72",
+   "week": "6acd2edfbcbf08fe565fdce09f091222ba4d8a2624d928d3ddc5a19ad7bf5d62"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-04",
+   "fitter": "space-force",
+   "lead": "0acfb66c8618c4425d37c7301c80d09bfe3ed2e99527741cdaa50ef0c99b207e",
+   "week": "a14cf39a7a76be0cb26bccd50731d2b73507cab34f09e6bb0109dc3d80551593"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "30e86c06b5d94057dbb11ed3320ba4d5913405c5f640aaec3f679594bd7696a0",
+   "week": "75f6ff2a95d28c0d577e41c28bbb40f189dfa862a2f97892d73d86959ff18953"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-06",
+   "fitter": "space-force",
+   "lead": "e9938c09e023cb22cc49011218775317844c96222edd7df016944a6225d4bf82",
+   "week": "5046412e98cbfde766e4622ca37d35112b0819d6ff40cf9b9a7413eb42a48786"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "aaebb4c495953e9fac63b0bc30808730f78fb4ce8e95c90c0235727d724d6d74",
+   "week": "22fd710e53bda26f813e29e00574d8ed1dde958c5492b6e0d39f481f7bbf778f"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-08",
+   "fitter": "space-force",
+   "lead": "e22edce86b62a39673f4e678eaaf75c4b07151b410948ac063ebdbf033c02fb5",
+   "week": "301ec20e988694f3ca7e14c593074ae568784af332781536fee1b93a1743f104"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "1d2e63a0cb181523a936e02c85faf0c64364ebfe76e8d4527219013608aa0b91",
+   "week": "26d3d56843efe7551799652c81aa7cf7329b518f9106991e71cf8d4042becca0"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-10",
+   "fitter": "space-force",
+   "lead": "cb32651e15a59147adf4800468c8887afd75a7c85bd195b8b28fcd013482e3dc",
+   "week": "5315cf5b8dbd54f3685317dc1932af6d5887a0f2cb87bdbd961fdefbd0a338fc"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "9871e2b761218a9dec5fcd64b2969dae96a0c07bb06063b75268ffdc07106714",
+   "week": "513bc44d4ce48c487260781d89e70c0dea3248a74afbf404e06586b574b4528b"
+  },
+  {
+   "key": "GE|C217 BDS-3G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "df57c74e0e1e3e963ee37e1a449551f9a0032cd6e056075a939d5458d4256e8f",
+   "week": "6a207a455b8badad32a22c2ca69f1e8bf589b5573e1473d63baf6054f61b1056"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "7b00cc201035278e1db652598ae3e3f800cc19c8712cce837cda53c1a98724a8",
+   "week": "aa9a0e4bb58cf14e08e0fe4509761be313bde2518f6dc2247aa6a90a7a037c81"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-04",
+   "fitter": "space-force",
+   "lead": "0c5f339cd0c2edec8899c79825b1d2cf41f8ed5d6143da6a500f3ff0b3126e75",
+   "week": "9c97fdc69444595276cd813d410d4d64f492a8e409d656abae94c707c213627a"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "ec8ed5bc48cf1ba1aef139450e9456a651ed643d044dec1a8fd917aa1cf976ce",
+   "week": "742706e934ffee3258b9c35e9f9aac33394bbc1c2fc9c81f593ab9e66f32689a"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-06",
+   "fitter": "space-force",
+   "lead": "ef4fe1ccaa39a6dc992f14abdbf13904810ae6d27e554fcd02a31e42a4cb5384",
+   "week": "fa9bb7adc14f7286fcaa17a355d53f19d2726da96cfc1c1b38d55be99390e57c"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "caa8e74b4930339bc8da72a0af142775ac237b526a6a94fff3d1c6c1e907d8cc",
+   "week": "2ac217b01cea5099c930cb452206642380e6ca42e43cb1cc005e41e7b90f8df8"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-08",
+   "fitter": "space-force",
+   "lead": "958fa60b9dd40315634462aae2085f1dd706cebac1b65dc0fc65e5d710a75cf8",
+   "week": "f638f7519f0fba2a8fe993a02bd90419ddb4ebf287dfa847a87a660dae831d40"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "cd186bf3e80ba835912f41e309276abc0366a1e78f9f9f2a6ad0a1a5acee29bf",
+   "week": "cfbdc45aa8584bec8c12af3527e9cdf44a7f7daa71e1f60176a3953b17f65489"
+  },
+  {
+   "key": "GE|C229 BDS-3G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "b27101f62a474b81711465dc913b53e4fc2add6a838ec16996c68b1e25aee069",
+   "week": "5cacf5feb3becbc0cc0a7dbb5ea03e3a68c82029166fa73ed6e8349ee1df610d"
+  },
+  {
+   "key": "GE|C231 BDS-3G|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "4bbba438e66b4200e4cf557f8b3b66b04c25aa72951d95e18f2fcec9668abb5c",
+   "week": "118f28c8b7fa1975515e631360d68842c6a60bea3db34ed2eab91dbd00b8410f"
+  },
+  {
+   "key": "GE|C231 BDS-3G|2025-10-08",
+   "fitter": "space-force",
+   "lead": "03544c0770b8e3ec8937a390a3785953efb0ea8665ee7fe407216dfc3be8e76d",
+   "week": "186b5dbd939dc36adfa27e00beb6ed7b58b5cb269cfdd03a41bfed6f72178d48"
+  },
+  {
+   "key": "GE|C231 BDS-3G|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "57be30c19f822d4a1e0c37e6d319407287b18b7bee27b5fd8a33dcbd4b0d86c5",
+   "week": "8be4c3cb76f7502bb3e0b42bb633f1be5933a42e020775661b167ac3a28bc2b9"
+  },
+  {
+   "key": "GE|C231 BDS-3G|2025-10-10",
+   "fitter": "space-force",
+   "lead": "3fba8af0f0898940a1b559da688dc6d43ed8c1db09133ef4240ffa8f41298fd4",
+   "week": "9531fc4674665ed26fd452806a00d7b91eb5c5fe1b4d54c27ca72a819f9e7ad9"
+  },
+  {
+   "key": "GE|C231 BDS-3G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "928061739464909f70145143cb9b08a4a436674f9313b6a92bcd3c7a476a1aba",
+   "week": "e53805f8dcc4cc264023fdd37c961aaaf5d379f8b13d5e09c8264ec50337ae46"
+  },
+  {
+   "key": "GE|C231 BDS-3G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "599dd0d13c32904cfffd75630674898c6842a96cadd4dc2d570d7e05f8ee1f02",
+   "week": "939a098236b0dc2cbdeb46fcacac6b10fb6e847ca480b1f1fc4bec28495b5805"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "3e7ff8d6f47be7d910cd0feb9950200e801a648fdf4c977f049d64734b3ee442",
+   "week": "b8323715b5279d66dcb353c921a72ba1921c89331948da344705ba2261f06e5e"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-04",
+   "fitter": "space-force",
+   "lead": "c626d4ffca9c699075912801e7b9dd3321f4d9d78d5dcfcc54b6959b523368bd",
+   "week": "a21d25c2f1c1d6c36f21a0262bbfe6154b5efcccf77288b1642d09079780cc3b"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "4476376d4d99e8675313af54c565122cae6d1fdf32ae09fd4b81b9f8d2825c4c",
+   "week": "85147bacc38982dd7409c2057db22812de99089edf60c18f63e1f871a5dc2bb4"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-06",
+   "fitter": "space-force",
+   "lead": "216bd499a054577bec9b6819324cd5de2f2f8a14565a90f471921ce58cbe0366",
+   "week": "ba707197108ab4af47ad0b9f42e08b9521c14173612b6f5c7c88b45a39dd1754"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "af8481ef9ff7cf752fd5b765194a0b59cb486cdd606bfd10913bd0029b703514",
+   "week": "3a40e2d603c131d0f077f035df35ae9da77f1bd704a6d9878b0e7b1dc6f11d94"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-08",
+   "fitter": "space-force",
+   "lead": "255921c55eaf91fbfed59c377f76257f432ad1b9639d8a30dcb9252a5067b22c",
+   "week": "6e273c7ea32d9456a4b72f4c961cb7ad821c74fe3c1a1ce2055b74a026f9062d"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "270373d4267c72858ed74fc99e5eeba3abce35ab61156fbc96da5ee253a56060",
+   "week": "a3786d9e967f1a9d10c2ca1aeb53b12350e95abc1157689f4c7437e37e8144ec"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-10",
+   "fitter": "space-force",
+   "lead": "c666c6db6c353db3f6e40e867b2489e2c195aba63c2a2b9e7da290154f7314fa",
+   "week": "853ec95912a9ea37b5c2df15f85b247a1dfa52a6132a0231d8fd8607b46ea38a"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "3ec4a92ce4415e001f22b6ba51fa2d2e4b52bd5817c47257eafc70e8670c0b9a",
+   "week": "fef9afb74ee2b7499109f4c66484c438986297809fe426f67900ae855d8ae9e6"
+  },
+  {
+   "key": "GE|J003 QZS-2G|2025-10-12",
+   "fitter": "space-force",
+   "lead": "cdb7e74c4cf087466241babe5d5906cd92415bec6ae059a1892c89bc16830a83",
+   "week": "be21eb263589257ce6640cb986eb0550136c0c891f698408e21f5b45a44ffeb6"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "f4d4746311741931f005d12cbc1e35058d16b896be07099270b462f95fa7bb34",
+   "week": "237338480cfe21b06086fdce9b4f10f3521bdeb439892737b8e95469af4c2631"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "60c50b321b3c40517a265a329b82183310d0fe1a85edcf2b5300855411cfd8ef",
+   "week": "d2ce75d19d71fb2ea28d66f824eacc8b9f8813a78fb9114c9d01d282d867d739"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "cd1634ba450c83a5436fcd2264f676e2f57d515782de34746fa6248beb303251",
+   "week": "082982a0fa9faf877a4d71395b9c4bca30ff146a8e0bec8e2281d45b6c1a49cd"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "b4c8df6a2e1deaf767845ff9cad43017305e3fcee70f7f96e9e85e02977b1f43",
+   "week": "9843b538fc10ef5ca7dd2bd2a44681af1b9e5a4352facee5885ea8ec2c093ac4"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "9827ad61478415d9c5d705840474f16a6f0c13c936c053a995e3a7bc98133243",
+   "week": "8bd580e965bf9a2d14c5a58082195472603364fec7b1b2f71fc129749bc98f7b"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "e41dfdb592d2fb54e03be662f6f4d5ba7183186991ca4f64dce63a10295384e2",
+   "week": "323f6e92bd15979138b5e590889bbdabd2d94ed8af473d169b0a11967503b6c0"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "d2de69b27f00242ebe3afda073bbeb078bee45c5aaa2313d5910e1d4118db286",
+   "week": "b51401f0e5e4c3d3e44b380fbd5d1a925a03c6fdc315022122d4aee9a34798ba"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "f821bc977097334baeabbf1f9a250ead201bc84c643adeab97dfd2a33c0af434",
+   "week": "5e1e30b6a8e4abdc429864cb38685d3d45616c41ed8a54f5016f0624e9d0d797"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "8f6f520dac1c451618a08c3e0cf8f14ba2f3496056e44cf48538c99ec99e137b",
+   "week": "c86eee7920e787956f1319b0d56c859c69cb8542fd3c24c8e4d0baa4f2a63309"
+  },
+  {
+   "key": "IG|C005 BDS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "0fd3c5113abaede737810f5ca4cdfc2f651df07fd60b2f23d12af57b0ddff6b9",
+   "week": "fa5d59d6ffec029d7955b1ca30a3a6aac7fa2f4e45bf056afd36f8b8a91179db"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "3aeee54bba55e1d88de33519bfdb6a5a77579c53b730b8f2959b05a3b07fc351",
+   "week": "fc83a3b07f7b14f3ac877c8d94ac20b2248162b6694495ea959d6972979bbc7e"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "44abe98d81125fe384ac58f0a976300c2c76588c5bf663ae399f4a05848a27ed",
+   "week": "b49aadb09d2e450b4532d7f77daa812e63e43ebce29d59e98a77588867fc3d7d"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "e4c7df1f6531f7a8b28f1ef2d0993a3b5a07e09d2fc4a2ebdf2866cb1517b700",
+   "week": "9f8be500d71f2d7dd4e8f483b0f7ad9e1e930d14c9f439f6674d5c763ce0f1d4"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "1f884eeea7859e6ff0ce0115d28e22a3286ca53ca89640c2b965f40eb33263db",
+   "week": "cba3ca8503874d5927192d5dca5364b0e02b56016626fea89a06209e52b083f6"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "0eb0112431ee3863304bc0a2704f42557f0489f7e885f92d07e73df9fbc23e03",
+   "week": "5c0c4f2d49ae26e59884c3b99da2b01616e298bb5de6a36076d35cd6881dd908"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "14031c45c1bde88a357e81edbe5303c6a39fadab61d9ab14edc5b4636d43ec15",
+   "week": "acaf6f5c4b51733644fbec01f22b0d72e7d64f25f7eaeb25ce189ed1e37d3066"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "1971eec4110fa216ac0ef61c1dea3cd3ca0c9e0038db71dfaa9dee84471cf58e",
+   "week": "3b43aebb3080026a6ef37b64bfff3142a39cf4bc36e8330599573833662f8b84"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "c66f6d326b77828838bd1575716697727c34b69821318961ab611bb625985cdb",
+   "week": "dfc847a4cbd99d627606b2a8be98289288c0e0387cb26451915111ca86a5e054"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "703d3eb89da313da68f3e8e921e620abe4e8df8f7bfe40517ed4f35590cb1a09",
+   "week": "e945e9a4a56b2b37beb17c0df23574b3d82e043a134e9939e07c19ff11d072ea"
+  },
+  {
+   "key": "IG|C007 BDS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "8c4d99ab58925d50d04b03c5d113ad5fa7ba5393830b28b3c8d773d769709b82",
+   "week": "cb503bb89c82a49ad0afb675700e7a5989a1a0b11fb363382312e7a0a1b3a0a8"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "43b835462f374341ce3a72cd7b52c4b217d6fc60f07ca4e17aa701e840d780a9",
+   "week": "d41d0307db1f89bb0e75516f8f8bad398fdbc87dc8f2888d4e20ab2b6b8b1521"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "e0912e9b121daabb5b88638b1243c6e0e102c0318cc2ffb106380ceff026ac0c",
+   "week": "d77694ea5c01eabcd6e53b077b034fd807f6ca4907e8ac799e65fe0348d9eab0"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "af734ca1c46a7ed0611463615072ec487b37cefeb6a9d200e116ba20def1481f",
+   "week": "58f88b40f4086439f542422951e8d0e3a0f0fcab7a91890dd3dbbf207670d77f"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "986226936a2bd83a975c91cd7cb1e23b966db2dafa2fd5eb5a5a9c77c1581ddb",
+   "week": "845f131c0bc877a681dfec7960a2dc91fdf2db2bfda705946d0b6d0ab8f25a7f"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "6b16849464b1b0f0b7069b104da5ec1218c2bb4d6d48d03a2dc59fef2ae43a75",
+   "week": "235e9633a7867626ff692bb53bc0d00f837060bc8ed0b4c406c49fdbbfd4f66e"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "e03b654b52538ad40c798e59f148496e8b17baf3e6576594b08fd7129227ff62",
+   "week": "c8dc2823eb7b33360ebd85a2ce8579b9186717c1d8a2669ae95ee697b473d615"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "82e6200ca3212d6078689f10af3f37753cc073adfa0f69e315ceed2b0fe98d92",
+   "week": "c42d0bf8725115398d16328336e0216808a17219d32a3aa0cce6b00b03a64941"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "a38734e9061b11acdbdc77abb63fc236f5821a99f8602721c4cb007f341a58a7",
+   "week": "05c8e1ca645f9c6f1346cf7632763e2b8373186a4d37941b19ae7cfbdad8ebce"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "7791e54f1dd0405eb82434f709bcbcbf44da471a74c841416ae09af96d911e7b",
+   "week": "2b14f2661f04838e92b8855d1e68ebba770e68711a325f1c4ecdc3a6bbe6e164"
+  },
+  {
+   "key": "IG|C008 BDS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "2679238bb4cc295b3c8b5b8c973865e233b04f5ff515fe80b9226fdd3a8e57d1",
+   "week": "5c7871f831ceac0b430f5677bb31aa4f567eca7a57a1a29651c1f687ceedeed2"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "579c639bda92a5cea1f1735264ac37f28181043342e987d58b6834cfe24c1728",
+   "week": "acd49b9b21c8a3436f579afd2062b3cc227519c759fa9fef564885c7700e214f"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "b4b228445e73c632a57a56b0413b05dd95a9719a3352d3f45f8ed8b6a25f04a2",
+   "week": "b58aeab5a45e844de61886c06fef265e8946e9eb038d2b0597fef4030f1edadc"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "9a5c18241cc60b0314b3b5d65d754b73ab5f03856e7e0d2ea0ca9ef8499ff2f0",
+   "week": "6eed24983935f347bc860417a2dbe86b61770c48dd8b1e63497ab8f770edf0b1"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "a5851d21a3e2d4adcb6eb20d09df0991ffdb5641e0c52e3950322af9dca7b519",
+   "week": "93c37afb98cf3b1f4c78ce3028678e5e32ee254ace954bdd2d611ca3b8e81928"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "c86defb8f3781fea8cf1838787de51998f4fc1ab1c21d6ee167237e58ef5b04a",
+   "week": "2b3a8b3f59d2e8bb87063b6e2290a1a1b09d7a8fda406729dda7ba5bf58508b7"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "e2d54d3ede88e89ac74ede3766127a06dd6a83adc6befc5d129205b1e6eb4470",
+   "week": "3b44ca70a6b764a4af8c680d204afd13ff62aefebd0bcdff3d785e363226a3ba"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "1673d4ed66b6070c124e7f22e0d4fdb390a8da024b654e7476fc3b0cc9e5c3cf",
+   "week": "5eb673f9010615ffa59ff2779f39ed34c88a5f91d4d5cd280eb38b724b145d1e"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "951706a9fb8830f5428db7fef82d68c48c86355b9ce03f510cc4d809ca9dcbb5",
+   "week": "dadcfb27f976ca44e545275ddc4cc280bb8d847b06bc70994ee3124f8a03c73e"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "747e5b865cab9061b8e94ad700bcf4384c658f666988435d409fac8d00a19ff5",
+   "week": "c9640345c6e2ed1be5364ad2c5a98baccb1381f22b65afe811c7267e0ad8e87e"
+  },
+  {
+   "key": "IG|C009 BDS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "229f6faf44df4bb98ed26de77f67e6e192853fcc31dd288375b27d1518c3d9bd",
+   "week": "e66283c78df2822dccdb8d059ecc0279935137f7c389d6076daa88d01aa18736"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "0a513a1b3520611386c69a4b77941388ed0ba9c6fd22916c01cdcc32ea72a51b",
+   "week": "1ea9854d935a7e4a19be8b1b076dcc45f68fb0ad9845d13ae4f9d47c394fafc6"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "a8e9230f671e7343cb39ee21264518317e8dc873d9a83e2662eb6344f946d981",
+   "week": "fd6380e25c92da89c00c6174d56fcb6b19d6bf3281ab0e0ac2046df03423c183"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "6f5e9178dd8cb40f7ae5e26edc78502b8d2ea6148d567e2ee285b1f99273fe76",
+   "week": "85692c64ab861c861d863bab3379561c27c9e97913453bc2f62e955c4c3573d5"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "9b1474691abda0d62cf2176cc44d6bf118d245b1df40459b9b100eac46b8a246",
+   "week": "bbb15079f94f45ae7b24457b16f35fa634a251b367f99e6466b237a046359c03"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "ff9d8f0284ba76c683253c42acc03a189ce76e77158af6178bb371fc9a9d9a0f",
+   "week": "93d7aba2d15c70c5e0134838fbfee342f222823c1d392d5fb4dc7f2bd5d26917"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "a5eca80734b3d7b68574c04b38cf3b6998261e4891b8525ae3c164da66fb0f73",
+   "week": "a46612e0b6f5ef7971b2b58ffa74b08e9069b04d2f96caedbd3c8b107718657d"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "1817247cb90ac8cd3dba42c9a7f8d7c60780da1545c37de8579bd915cd7f13c7",
+   "week": "7dbbd09cbe1f2f4cd21ccd79e0765bd8d0c43c51647263f2e0f61020a461fd32"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "3919494bf7d5aafa4728752e362918c7380eb80c1c92c7dea7dacb89a069bd1c",
+   "week": "672a2de8578afaad4c15f1fe4e7934e8971ff2b9fde824070ecb61bbd30e34f6"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "7febef8bdaefc64e99c1e72f28a0b8e7d7c698d7e374a732edb75137abfb42fb",
+   "week": "8112940f4072d54465a5d6d695751821961c878341728c92fb9fdf06d4fda0c4"
+  },
+  {
+   "key": "IG|C010 BDS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "791dac3b949a856fc792e4c85e86434880cd16c3d74da9584b83f8e09873734a",
+   "week": "761537c3237b72048ce09a364ce937d3837d4a2c79fcf9210284b7abd0035142"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "93481b24cab205683ee535e434d6414bbef75847e37af3cb8b86474ef20c4a68",
+   "week": "3c9ac22cf5453b6fb3057770c2e46a9e9a257d4bfa9242953283ecd6399ab017"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "0bc9d2c9a1ce6adb64d85364211ee6d276c93f48ec88ef7185cce26814b853ca",
+   "week": "3a0cca4b554532fa816365f3001781bd8ae91399a48d91dd6b13f23a902e5478"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "b9f2ee811e3acc7d1c9514adf7705a21f6d0a1c034d1e6d323122f45b90413b6",
+   "week": "030039a0fc1d589b6ba190d1d108dbb1a637cc2af36205c1a1706a714447b206"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "284ee5a6fdd8fe5f6876f97a76d864f30f97f69118a48f78630cfb67ac410998",
+   "week": "591354cb48f32e622cbb32d6f713b984bae1c78eb70e9f46afa2128505e3104a"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "089d427f285a8f325ae960352b0d545c5191ce786e38350afcda0e0f20fab128",
+   "week": "eab5d4320011b27008004f9920acb469f5fc93788de6c8e9dbc4438fa6179913"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "277a19ca74270739a1a10a15fbdae79ed2006bb65fd8c66475fcf6daaef36907",
+   "week": "65cf51933b03b942492c12d5f533ba7a1c01c9b399f418e596ee3b6948bc040c"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "28bfec5e21389240f8874b0bd4587d77e1af002511c55d105e6a1db45d483e1c",
+   "week": "4920bd876e5f94ad1eb7604391eaa20b9c36a79d174f5ead991a10001fa771a2"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "f6fc9a23ae0d6e95ee0f981c5a4f9ee3f377ad6bfaff77c509f9e4cf72425d7d",
+   "week": "841fbdff1dc192549b34dd6df219787959852f2de1bfc65934460cc7bc30d9af"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "5676d1012080e6c4e36ab8015547b95b8dc3037b7bff195cc90ef8b9f257cd0c",
+   "week": "e1e23618fc8e608e65aeeaa863dcc0eb26e26e624af260c8cca1ba82208c2223"
+  },
+  {
+   "key": "IG|C017 BDS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "97ac63e8f049e7ee144139c9ce1b7506834e28ffc968372baeeb311a383f2b9b",
+   "week": "5f152f9dc0ad77c5bb5738e96cd748935e2f7024f4cb1de2559bc31096f9be3b"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "b288d81b64e553806caf3f56117b2b128b79d8deb9e83822ce56a9d4cafe3449",
+   "week": "a2397fdc6556671b0d11f0cf73b4371b688f1ad1000a85846c2bfc11bc25c836"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "54a01dff13ef78e78d8986b8e78d5b3e865f560e356961a5cb4f2ffd427fa808",
+   "week": "528c05b5d03756515985b6257ff15832a77247197fbcd89f501f397915e63e6c"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "f917c19ac6dfab22f7deedc7ad03517a965a1ad69e61f4fce24c40202301be0d",
+   "week": "972ded1d53619c01119e2ae18334c26d50d5dfc6c73ea046b56b6a0394225f99"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "304c86dc2661928e9f54d18146eaf465a86355e72d375f336fbad84b18c246f2",
+   "week": "909aa7a26a13cbcb7862f1f9dd1019ba7cbbe10c877db59a16ddee0b42cd9ba2"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "e873563f5ba10c60be1b21d30d341d4a96c9faf819df3774d8df217be1bff7df",
+   "week": "f8809e527a9b6309d2c6ead83eaadfc0449daacf8c574fd67a89a272bd3a1f58"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "2b337a99b7ba263022b674a06ee54826789253557eccd5947edfd14186e39bc2",
+   "week": "fa6ad8c0f8d0476f88b29a78f07ff0669f4c1d4db57238731416d3afadd10fbf"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "c26ba56cf77fcd305df680602ef116e9948da17d2d5baf734eca7d0ea151426f",
+   "week": "16dba2b4db00411cf86b04251b277c33a6bd2a826b0da9fc23f095750f786299"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "ba552f8c0068f4a9022042d858b18471e0b265cecddeb8cfe035b48fff3091a5",
+   "week": "473df112f2d896c89f0abfc7fa4968a078634e29df413ddb44e363b9bb3e3813"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "b55a29836da5f81816759f5d4cce09d109a0c1b582626631d9755f8a8572588d",
+   "week": "afcebd31280bfc548d585a42ffdf12ed59bf4e6c5044dd007688d7535bf3e64a"
+  },
+  {
+   "key": "IG|C019 BDS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "dcd5ebb232dc3fe99ce84f61cb6a1e481a06a8cb0df499b9dbb6dd10571f7767",
+   "week": "f44771a9699c7fbd02fe4dcee9c63af0b3b1d8a93abd6383dfbab9882fb7d3eb"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "e2c29e163d02d3193bff54f48d35bba4983c939bd78370514ce22a879935383d",
+   "week": "5ebb8d9d680efa6a199a4f8091e3dcd4e97e7be3f03047adc453fa32bbd8ca86"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "ea4adb35b8a0860a6234e55047ced88a3b1643b1ade95f859b2a772c6013124f",
+   "week": "c33d3a3e3838f66a1e39f00422f98d7ba70f9bddf7ebddff3b53a1ba90fa624e"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "07dab5dd5ee1e9630475c2403b463e1e78880b42dcfc2f87719354b3d96f528e",
+   "week": "de0b43710e1e83c21b2f88f6c40981216a6431ec968bc10392464dc8b39d0d8d"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "8268d5660832eb1820be31bad390f0b4d19b3832479bb3a1f54c8572c131b350",
+   "week": "9c57c198dff6b043c90d68ae94ede24852c85e451e801884e34b15f870436961"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "c6a3bcd0fd4036e4d5e046a6b4329234a95c474b3d580cf27de0edd359d60ad3",
+   "week": "756e3ee6e97f6f00b0931935fd983c3637291532aee74c60cbce0b814df10fb0"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "b2d06abb9962af4ba4a4c1361086e91c6b88500308edbbb207f3da00ffa5a29f",
+   "week": "a9c24df0c8776730af32b6132a110f7003164785a819f3bce6d7efb655ba86c1"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "56dda78f574b05cad75cfe66c3fe6f96e33f8054096f4dcadffe17e62a9b2f22",
+   "week": "a156dc6430caab5d6cece4646ca0b4f5f985d5d1b4962a04f8f6c4779a64e7fc"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "1bb791c216f803769e83a4c7bd281451e561fe5bf778e7fa744496019b59ede1",
+   "week": "61187b1e001d15b00bb18d8a602e284c24f780c018075e00385d37dc59f3da0d"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "9829bce7bb5de5c52a7d73b2c98678a21537d43a9772bbe024d7aba350dd181f",
+   "week": "fea15ba302a99f5c7aa15e1b4940a0504d5618a0403fa6aee949858703c589ae"
+  },
+  {
+   "key": "IG|C220 BDS-3I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "0bbdbb08e2f38cba2ff0398dd984cab06ece8bc389087c58d6c302dbcd3abe75",
+   "week": "1612ea66ece3395e0295f69773f87cdaa66963c387b15b3288a3ae4779117071"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "45c9dc76cffd08cfa28e0e4a8bd858f136e3f9190cf0ac4a3ba4c8af9fa3bd7b",
+   "week": "f0bb3518ab9c7e3a2658887bb8b7422948edb342882e622ce4fc3ae30e8f6b69"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "94df95848637c4a403b2c9ffa670b035d28fddae801cf35fbb270acaa6c723d4",
+   "week": "7c7d62211627e9d7be17a4d8ae8884ea1fa1f6d4952bd764382c8da3d4145c07"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "9e7facf720880aaf18e6616142d2afb40c0b25b1cc810876c7f96716700e7a29",
+   "week": "36c635fab2cab2855bb5355df6d747662c62739fb04edd541c22e5bb20983226"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "daee2f7688c24e2f90ed042acb1e809bc82a300b40084a81fed014e62fbf7f04",
+   "week": "6c3f6a8c00e0ba149710dec9446de3a749865135c51b3479e1a1472e6b973b4b"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "df72fb5a2cf50b492e4c63c55ac42b9a9ff2b864ac28038f56f81167cef40931",
+   "week": "63335ca328395594e613b0b3b062fc04fffd110258e14c735d835340c3a6c219"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "46c72725ea7ff6bb4fb8def46f808bac45037b0835c834a6488dd4d452cca79c",
+   "week": "ab2a95fa2f17f7b31fd5a0050901ab481095b63c6abbbe74a3bb41806223dc78"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "b6f9530193fb06ffeb22e2c357e55bde8f7b1a7f51e3c55b445a8deb5ae6586d",
+   "week": "c91510ba849ffce981a57cf129048cdb9512441e7c31505713cd28ee860f91e2"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "1a4e76f45df6b8abc9f2b9b5836b4ebb65f71c12a0e76e463dc74ca07541cf0a",
+   "week": "3cd4399662766f2a1c7031bc15093d07fad9a06666a33df81830a71be38b43fd"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "0f37439a33dcb03b36ec07cd9bf29688f91682ce21c2c7d3f6bc9ef44973e46f",
+   "week": "bfd1849ab50e97231ca6afd02029173eebda81f81ab6cc136a9fa3939d50f8bd"
+  },
+  {
+   "key": "IG|C221 BDS-3I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "be23ff33472e2e0e84a1e5e1e4da052ab6c5da806ffff2cb45e0eeb652039813",
+   "week": "62f5819167bbe8684c9414f2cd6cb3c5180dc95e094631417a177db4caee2567"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "fd7eeb261c7ceac8182a8065464898f0b59d592738c07d26ccc67b529382bb0f",
+   "week": "387b2cdeb23cbee3d47610e00c18b8a41495166a62a8252ae4adaebbfe1b6f3e"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "feefb66682af58a61c3bd4d1ba64bcda60964b02cb84c978f63d2d823c34143a",
+   "week": "6a4f821f24642b5277c91b56802b8289466d58f09829d56569f88dc77af55a90"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "d61cdc34becc41d8d2e3d889e02e01dd8304daf5eb784515b17e59ae24c41deb",
+   "week": "1c7f7aac74e2275b29dbfdec1d14ecae56e23aa62244ea8bf051404ac7cf57da"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "6bd7ebf7239696e089263f0673fba243078e6c6cc6957aa4ce253e9d00806a8d",
+   "week": "be902c0a1db75516b8369d14916d8ee660e59f9ebb605e8ca64e9a9232dc4213"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "f7f6b582dc9f080b87044ddbc6392649354d227e75bc0836ef0ecbeff9651a55",
+   "week": "a225555dca3add12df98128673228b911ae8a9ae7d2ebee7c3c49665b2138d22"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "1f6d07a428316f23b69c7644753a9827bae0c63eb2da1da26f663e02325f5cce",
+   "week": "aae76bcab1a6c8a910db09ec6505b25e45fd88bb2d844476f9a4d5fddcbc38ca"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "b9fc6bd5317f5d09b57335ee431ed64d152872ce6371f5d4db1932723c5395e6",
+   "week": "dbc6b8fe389b1ce6ce283ee70b8205e3b63544a2c41ad685681ebfc3fcb26d2b"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "9b8f381e9f3626cfe5439ca4b78e469dbf011e9a766e5b260a8739614b08d836",
+   "week": "e24231c82687a01e02ea9e5c88f32b87db10552e5a7cca1b048eeae985aa0620"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "eea0753b1d75d98b87a148e0d2354aa0a1a0f8ae340273b9850b4aa1e19f05c1",
+   "week": "a62821c4acf222d1ee7d4e6b2cc730abf261b40e85da62d274ecf5bbf38a7b47"
+  },
+  {
+   "key": "IG|C224 BDS-3I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "4ef1e29ca4c64e273006a35f1929b1f5b7f8578e15f09eaeb21b3f22c3bf9d96",
+   "week": "7e7bd3e3d6e37bd6896a13fc0e8038a7b4412621c0a007d97e70670c5668ded3"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "9dfe65233c5abbb612ec8ed232c08697cd8e2b0f9b86d0b7d7389ea13e02994c",
+   "week": "01518807d9b43d2c1809d88cc31cf632797ffe7856bbea25047f041a3317a84d"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "4852904001daada34e2f5d8cb3a0b897382019aece8766b2a3e391586e287790",
+   "week": "d8f2cbd39a279bb0684584c43faaaaf26ce8404b705be6345a0ecd9da2525db9"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "bd8ac6e2f93c1c7907b56a2edf77fc1b6dccad303fa006bb5da508cd52fa73f8",
+   "week": "ed43cdde24ad5bb97e7f922dcffb701d7a3932e7915f5667dbe3f9b2cdcb81e0"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "c2bfcee545bca4e774a12c0fba9104df564e15613e3277f73c9a4015a8647e87",
+   "week": "af46a8a06878ba37791a0ac197141f476f3594deb58cd7c107a0f349311a44ef"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "1cce37e7f9f94b695ff5ec4c6eba82106f49ddaec59ea4a10c23a204d7adb353",
+   "week": "a4bbf4556db60cc8ae831c8c6e14c1fdcd71c290aed205221449811ae496d0ed"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "045d8f53c9d583863fc4d25ee4300efc3c7c834b30990ce0ae1c1130143c4b06",
+   "week": "cfbae901ef559c00b4a877e8d66b18f305a9ec110509cd8c770434ee35a5c86b"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "5b5f833a52f38bfd622d35c6cee10bdf28bc74d626645aa613951b066a956033",
+   "week": "44310cb6d6589ce71f447dfcca43d36c2ef31cf25f2b5a4320222fd366735b1b"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "493edbfb756e22e6e0d3f28ca25cdbe3a548a01390e28ecbed2500da9b051698",
+   "week": "ddf189ccc0474a703a35d612960e1b96f75c3d0e4ea417f0a75240ae892ffb43"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "8e56980a9a49bd16e619e9c2f0120142f1a20d46e6b5c8c8b9d573a5a4dfbe91",
+   "week": "23e801dff2859a46ccfaac27b953308a2f914057c8ff86272cb7055e42da92a2"
+  },
+  {
+   "key": "IG|J002 QZS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "582f49ada5c6851e826a7355197ff84da2c31463d5783650a31abde7d524ccb9",
+   "week": "b929c5ea795bbbf44e26924db7d211b7016265a387f2222aaabf9244ec78cc05"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-04",
+   "fitter": "whiteroom",
+   "lead": "b0106a3cfc629d3abf1dc7f707e3d799fbad4ce249f67ed4923a3d5b5f9c3486",
+   "week": "c9ddb527040cd983057d30fd61b218a847c5f2587ce92c9138a906f4001662e6"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-04",
+   "fitter": "space-force",
+   "lead": "3c4d4e3fb1a64fb842d1957ef8eabef2a712ed0016389be47d31a20aaad18b7e",
+   "week": "10b2503de17b2dafea526bacb62bb09be01f0065ff47fabc4cd051881f499f29"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-06",
+   "fitter": "whiteroom",
+   "lead": "08027bbcae8c7ab54ab0a79ac174a9f17ac274d42aeeeb362ff7be85f8599e9b",
+   "week": "ded0166663b209cd7fc03e5098daf4c70771a8fe788c2f22d02f295f960e5a35"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-06",
+   "fitter": "space-force",
+   "lead": "c65f827f069ad3d485f98a61fbf94e1f76474934001f51a51b6e3579b4bb68a2",
+   "week": "1b155e1e49e6e34ba5729a990651240d704366b7d0bcc9377655d71f4b2914bb"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-08",
+   "fitter": "whiteroom",
+   "lead": "a7b490d44b51b2a110e6ea3438c158105d051512572249432470115a41cf4f87",
+   "week": "f7db610fe0744fa006968a9e17d2f6eb6cb2d07e9ff02c68ae11e108ea892342"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-08",
+   "fitter": "space-force",
+   "lead": "4a0ce32f82da55fc89061c54081549b463fb9ad64953e4335b804d50b6388897",
+   "week": "d1e543f0465ebededc5d61769826a3e329f4322f0d8746d39f287addb6228f2b"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-10",
+   "fitter": "whiteroom",
+   "lead": "cc4204e1cfc423649ee869c872ed8e12f2bee67fc79e79a57dd9ba09e4d27594",
+   "week": "7902ece85b09ad57213040a9b7e1efd8ee13e25869a9e83dcc86fbd9cf356401"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-10",
+   "fitter": "space-force",
+   "lead": "903ddf69deeef78f18c61e0adddaf244bf05e5369876293610ab834d20078aed",
+   "week": "e88b5d747983f940815f3764f6f91afa004a54bd0324dc42be768669c93dbe5c"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-12",
+   "fitter": "whiteroom",
+   "lead": "38a9df44d4e8bdbbe959733fe01a025164aaf3b84dfe2af11ce7387aa844bcd2",
+   "week": "cc2a2e2812f6cc6e3be42fc7235c39a3b21837e4a639e413728131b4c181a091"
+  },
+  {
+   "key": "IG|J004 QZS-2I|2025-10-12",
+   "fitter": "space-force",
+   "lead": "f74b938cf809a38ba5eeffadc24d1bf1829a149e7a5cb7fc207acd0d0b1429b3",
+   "week": "44b3cacaad45ebc7dd0bbdd99f9e77f2a9ce5949989f2fba852b63335204c8cf"
+  }
+ ]
+}

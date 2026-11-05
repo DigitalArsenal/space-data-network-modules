@@ -35,3 +35,16 @@ The two-line SGP4-XP sets of the GE and IG 2x2 of orbit-accuracy-experiments 554
 geosynchronous BeiDou and QZSS satellites) and 60 IG windows (12 inclined geosynchronous ones), October 2025, the
 whiteroom fit (propagator/sdn-ap) and the Space Force fit (propagator/sgp4-xp 0.1.1) to 72 h of truth ending at the
 window's cutoff; `eclipsed` when the window's truth enters Earth's shadow. Element sets only; no truth.
+
+## flight-0-2-1.json
+
+Recorded 2026-11-04 by `tests/fixtures/record-flight.mjs` from the propagator/sgp4-xp 0.2.1 dist (module.wasm sha256
+816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef), before the change of its SGP4-XP flight: for every
+set of `geo-real-sets.json`, the SHA-256 of the states `propagate` returns (x, y, z, x_dot, y_dot, z_dot of every line,
+in order, as little-endian doubles) on the lead grid (the 91 epochs `tests/flight-parity-real-sets.e2e.mjs` compares
+with the oracle) and on the week grid (2,016 states, every 5 minutes from 5 minutes after the set's epoch to 7 days
+after it), both built by `tests/lib/flight-grids.mjs`. 0.2.1 flies every SGP4-XP state from the epoch on a new library
+satellite; the week grid took 1.56 s per set (median, at most 1.76 s; 1-minute load 20 to 30 on 28 cores). The module's
+own states only, hashed; nothing of the oracle is stored.
+
+sha256: e9a89e0389cd7335fac9f8e29f70e4b03d5d676f73cd2cbcdb138d8dfcb68382.
