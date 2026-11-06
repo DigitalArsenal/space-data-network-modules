@@ -1,6 +1,6 @@
 {
   "name": "space-data-network-plugin-conjunction-assessment",
-  "version": "0.18.2",
+  "version": "0.18.3",
   "private": true,
   "type": "module",
   "main": "index.js",

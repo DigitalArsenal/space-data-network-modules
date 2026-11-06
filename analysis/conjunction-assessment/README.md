@@ -268,12 +268,14 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   (the existing way's records pass through flatc JSON text). Against the existing way at 10 s the same events are
   0.26 m and 0.08 ms apart: the JD double's 40 us resolution at a sample epoch (0.3 m at 7.6 km/s), which cancels
   between two sources on one grid, not the Hermite truncation (recorded, not gated). The flow lists the sets'
-  producer build for that comparison. On an empty list, a list without it and no list, the AP sets A and B lose
-  their covariance: all 104 events state the refusal, none carries a probability from covariance (A x B: 30 events
-  with a Pc listed, 0 refused), and miss distance and TCA are exactly the listed screen's. Where both sides state a
-  hash, the hash decides: A passes on it under another producer string, B is refused on it under its own. The
-  SGP4XP sets screened alone give the events 0.18.1 gave, byte for byte (30 events, 80,640 bytes, the embedded
-  message's wall-clock creation time and identifier aside; `tests/record-xp-screen.mjs`).
+  producer build for that comparison. On an empty list, a list without it and no list, the sets fitted by sdn-ap
+  (AP A and B, SGP4XP D) lose their covariance: all 104 events state the refusal, none carries a probability from
+  covariance (A x B and A x D: 30 events each with a Pc listed, 0 refused), and miss distance and TCA are exactly
+  the listed screen's. Where both sides state a hash, the hash decides: A passes on it under another producer
+  string, B is refused on it under its own. The SGP4XP sets screened alone (`tests/record-xp-screen.mjs`), on no
+  list: 30 of 30 events refused, miss distance and TCA exactly 0.18.1's; with their producer listed: 0.18.1's events
+  byte for byte (80,640 bytes, the embedded message's wall-clock creation time and identifier aside); without
+  covariance: 0.18.2's events byte for byte (36,240 bytes).
 
 ## Build and runtime contract
 
