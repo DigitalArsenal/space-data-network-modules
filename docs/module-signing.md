@@ -7,7 +7,7 @@ Every rebuilt `dist/isomorphic/module.wasm` ships signed with the module owner k
 - Signed: `dist/isomorphic/module.wasm` (the catalog artifact) and any artifact the SDK harness loads (the harness strips the trailer before compiling).
 - Unsigned, with the hash pinned in the ledger: any wasm a JavaScript loader fetches and compiles directly. Today these are `propagator/sgp4` `dist/browser/module.wasm` and `dist/browser-shared/module.wasm`, `propagator/atmosphere` `dist/browser/module.wasm`, and `analysis/od` `dist/browser/module.wasm`. A signed copy would fail in `WebAssembly.compile` (unknown section code 0x10).
 - `analysis/od` `dist/isomorphic/module.command.wasm` is signed by its own build, as before.
-- `analysis/access`: the adapter strips the publication record, so its signed `dist/browser/module.wasm`, `dist/access.wasm` and the base64 in `dist/access-binary.js` carry the same signed bytes as `dist/isomorphic/module.wasm`.
+- `analysis/access`: `dist/isomorphic/module.wasm` and `dist/browser/module.wasm` are signed (the browser adapter loads through the SDK harness, which strips the trailer). `dist/access.wasm` and the base64 copy in `dist/access-binary.js` are the unsigned build bytes: the OrbPro `build:access` step validates `dist/access.wasm` with `WebAssembly.validate`, and `index.js` decodes the base64 for its bundled loader. The module's build signs only the first two.
 
 ## Why browser copies stay unsigned
 

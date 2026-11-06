@@ -3,12 +3,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { validateArtifactWithStandards } from "space-data-module-sdk";
-import { toLoadableWasmBytes } from "space-data-module-sdk/bundle";
+import { computeCanonicalModuleHash, toLoadableWasmBytes } from "space-data-module-sdk/bundle";
 
 test("canonical SDK artifact and browser adapter use identical standalone bytes", async () => {
   const wasm = fs.readFileSync(new URL("../dist/isomorphic/module.wasm", import.meta.url));
   assert.deepEqual(wasm, fs.readFileSync(new URL("../dist/browser/module.wasm", import.meta.url)));
-  assert.deepEqual(wasm, fs.readFileSync(new URL("../dist/access.wasm", import.meta.url)));
+  // dist/access.wasm is the unsigned build, compiled directly by consumers: it is the signed artifact's loadable bytes
+  // with the same canonical module hash (the sds.* sections stripped).
+  const unsigned = fs.readFileSync(new URL("../dist/access.wasm", import.meta.url));
+  assert.equal((await computeCanonicalModuleHash(unsigned)).hashHex, (await computeCanonicalModuleHash(toLoadableWasmBytes(wasm))).hashHex);
+  assert.ok(WebAssembly.validate(unsigned));
   // The artifact is signed: a runtime compiles the bytes without the publication trailer and the sds.manifest section.
   const loadable = toLoadableWasmBytes(wasm);
   const module = new WebAssembly.Module(loadable);

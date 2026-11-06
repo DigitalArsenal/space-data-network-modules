@@ -366,11 +366,11 @@
   },
   "artifacts": {
     "analysis/access/dist/access.wasm": {
-      "sha256": "3ba1083f8cfd2c12bae6b6f0f26e36f135020f1d4d016bbd9bf4722bab20fd08",
-      "bytes": 252797,
-      "wasmSha256": "64a4b4f7ac4faf1cab8d944c5126adfeb1a9e2d1668d8af28d52ee66250cd527",
+      "sha256": "76352c85c9f94f75db96c94261ca14ee511b3a5e3b9f61d255754f4126cd7823",
+      "bytes": 251581,
+      "wasmSha256": "76352c85c9f94f75db96c94261ca14ee511b3a5e3b9f61d255754f4126cd7823",
       "canonicalModuleSha256": "64a4b4f7ac4faf1cab8d944c5126adfeb1a9e2d1668d8af28d52ee66250cd527",
-      "form": "bundled",
+      "form": "raw",
       "module": "analysis/access",
       "lastCommit": "c5514a67f7990b4ce722594dc1300e15ea9e9a1b",
       "lastCommitDate": "2026-11-06T09:26:56-05:00",
@@ -6019,8 +6019,8 @@
       "canonicalModuleSha256": "a633e5dbdd92fc7b3966d247d5bce6cc4436dcc21f8973ae015c5e8d71b50c1f",
       "form": "raw",
       "module": null,
-      "lastCommit": "21abfa406b61d8b1a7788682b71595a7d1d9b81b",
-      "lastCommitDate": "2026-11-06T08:53:08-05:00",
+      "lastCommit": "ebc0b5fd4143772ad3b58da5b42d8c794a23e0e7",
+      "lastCommitDate": "2026-11-06T10:12:33-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -6294,8 +6294,8 @@
       "canonicalModuleSha256": "90a7b7307d0d263a7e16e028a81eaeb09c1a98ac039436032877f1c344937a8c",
       "form": "raw",
       "module": null,
-      "lastCommit": "21abfa406b61d8b1a7788682b71595a7d1d9b81b",
-      "lastCommitDate": "2026-11-06T08:53:08-05:00",
+      "lastCommit": "ebc0b5fd4143772ad3b58da5b42d8c794a23e0e7",
+      "lastCommitDate": "2026-11-06T10:12:33-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -6311,8 +6311,8 @@
       "canonicalModuleSha256": "25628a15d17d79b18cd55ac64039733ba12b18fa86f0ab7909b3867d7ca67c3d",
       "form": "raw",
       "module": null,
-      "lastCommit": "21abfa406b61d8b1a7788682b71595a7d1d9b81b",
-      "lastCommitDate": "2026-11-06T08:53:08-05:00",
+      "lastCommit": "ebc0b5fd4143772ad3b58da5b42d8c794a23e0e7",
+      "lastCommitDate": "2026-11-06T10:12:33-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
