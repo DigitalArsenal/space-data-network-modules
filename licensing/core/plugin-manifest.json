@@ -1,7 +1,7 @@
 {
   "pluginId": "licensing",
   "name": "Licensing",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Unified SDN licensing module with server and client role entrypoints for protected module delivery (typed contracts 1.0: every port one SDS FlatBuffer type, every hostcall an SDS $PIV invocation through sdm_piv, no JSON). No key material travels in a record or on a port: content keys, the requester signing seed and the DEK are read as raw secret frames through secrets.get, by the IDs this module's config (plugin.getConfig, ModuleConfig) names - content_keys: [{key_id (the $PLG KEY_ID, default PLUGIN_ID:VERSION), secret_id, algorithm \"aes-256-gcm\" | \"x25519\"}], requester_signing_secret_id (32-byte Ed25519 seed), dek_secret_id (32-byte AES-256-GCM key). The provider's signing and wrapping keys stay host-side behind keyslot.sign (slots named by the $LCF config).",
   "pluginFamily": "infrastructure",
   "capabilities": [
