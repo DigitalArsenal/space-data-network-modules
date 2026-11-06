@@ -3,7 +3,10 @@
 // Above e 0.3 (SPEC 16.11) the first-order tesseral families of degree 2 to 12 are a closed-form grid in the eccentric anomaly.
 // 1. Against the full-field quadrature (each (l, m) of the pinned field evaluated directly on the Kepler ellipse, 2,048 mean anomalies
 //    by 32 arguments of perigee, |j| <= 1023, the table's admission rules), 7 days at 300 s at the mean elements of the AP (31, 20) fits
-//    of THEMIS D 2013-02-12 and THEMIS E 2013-02-16: RMS <= 1 m, maximum <= 5 m, median |second difference| of the difference <= 0.1 m.
+//    of THEMIS D 2013-02-12 and THEMIS E 2013-02-16 and at the GTO fixture's: RMS <= 1 m, maximum <= 5 m, median |second difference|
+//    of the difference <= 0.1 m.
+// 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
+//    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, Etalon-like, GPS-like, e 0.25, e 0.3) flown 2 days at 600 s give
 //    byte-identical ephemerides on this build and on sdn-ap 0.6.2 (dist at modules c82160de7, SHA-256 84d50dca...).
 import assert from 'node:assert/strict';
@@ -211,6 +214,9 @@ function verifyBuild() {
 const WINDOWS = {
   'THEMIS D 2013-02-12': [1.0499037196959449, 0.8221736866449335, 8.132697128525981, 47.85625519596603, 68.66350938631257, 41.75807242078289, 23051.000694],
   'THEMIS E 2013-02-16': [1.049629485877949, 0.821468804683023, 8.169356618221114, 62.29116896052435, 56.74548178908685, 74.20597157594973, 23055.000694],
+  // the GTO fixture of gto-high-degree-perigee-terms.e2e.mjs, both arguments of perigee
+  'GTO fixture, omega 270': [2.40, 0.72, 27, 40, 270, 10, 23051.000694],
+  'GTO fixture, omega 300': [2.40, 0.72, 27, 40, 300, 10, 23051.000694],
 };
 const verify = await createStandaloneHarness('browser', verifyBuild(), {surface: 'direct'});
 const x = verify.instance.exports, pin = x.sdnap_alloc(64), pout = x.sdnap_alloc(64);
@@ -255,6 +261,43 @@ for (const [name, s] of Object.entries(SEEDS)) {
   console.log(JSON.stringify({seed: name, identical: a === b}));
 }
 
+// 3. the 12 THEMIS windows (registration (b) to (d), Amendment 8's paired test): each window's roughness and day 1 / 3 / 7 3D RMS on
+//    the base (sdn-ap 0.6.1, dist 05dd4a66) and on this source's build (c3f32102), as recorded in orbit-accuracy-experiments
+//    results/ap-truth/themis-ripple-fix/investigation.json (rows: operator-theory/themis-ripple-fix/fit-investigation).
+const THEMIS = [
+  // window, roughness (m), base day 1 / 3 / 7, build day 1 / 3 / 7 (m)
+  ['THEMIS A 2013-02-11', 0.2464, 377.0, 1217.7, 2661.9, 379.9, 1233.9, 2665.1],
+  ['THEMIS A 2013-02-13', 0.0872, 123.5, 311.2, 990.2, 113.7, 298.0, 961.8],
+  ['THEMIS A 2013-02-15', 0.0612, 211.7, 314.1, 419.9, 201.1, 294.3, 421.8],
+  ['THEMIS A 2013-02-17', 0.0371, 148.7, 276.7, 914.2, 138.3, 273.9, 910.6],
+  ['THEMIS D 2013-02-11', 0.0967, 282.6, 713.9, 864.1, 273.1, 707.1, 886.0],
+  ['THEMIS D 2013-02-13', 0.0492, 234.4, 605.1, 1019.1, 224.4, 587.5, 962.4],
+  ['THEMIS D 2013-02-15', 0.0571, 178.5, 411.6, 696.6, 168.7, 419.6, 721.5],
+  ['THEMIS D 2013-02-17', 0.0766, 164.0, 363.8, 1154.0, 149.1, 366.3, 1203.9],
+  ['THEMIS E 2013-02-11', 0.1043, 230.2, 788.6, 1184.7, 220.4, 772.5, 1155.4],
+  ['THEMIS E 2013-02-13', 0.0702, 236.2, 709.7, 1385.3, 232.2, 720.3, 1377.2],
+  ['THEMIS E 2013-02-15', 0.0575, 148.6, 398.6, 767.3, 135.2, 404.2, 813.4],
+  ['THEMIS E 2013-02-17', 0.0531, 155.4, 342.6, 1052.6, 131.6, 312.4, 1004.2],
+];
+const median = (v) => { const s = [...v].sort((a, b) => a - b), k = s.length >> 1; return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
+/** The registration's window-cluster bootstrap: 10,000 draws, seed 20261106, 95 % percentile interval of the median. */
+function interval(v) {
+  let s = 20261106 >>> 0;
+  const rnd = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+  const m = [];
+  for (let b = 0; b < 10000; b += 1) m.push(median(v.map(() => v[Math.floor(rnd() * v.length)])));
+  m.sort((a, b) => a - b);
+  return [m[250], m[9750]];
+}
+const paired = Object.fromEntries([1, 2, 3].map((d, k) => {
+  const ratios = THEMIS.map((w) => w[5 + k] / w[2 + k]);
+  return [[1, 3, 7][k], {median: median(ratios), interval: interval(ratios)}];
+}));
+const roughness = median(THEMIS.map((w) => w[1]));
+console.log(JSON.stringify({windows: THEMIS.length, roughnessM: roughness, paired}));
+
+assert.ok(roughness < 0.2, `THEMIS roughness ${roughness} m over 12 windows`);
+for (const [day, p] of Object.entries(paired)) assert.ok(p.interval[1] <= 1.05, `day ${day}: paired upper bound ${p.interval[1]}`);
 for (const [name, q] of Object.entries(quadrature)) {
   assert.ok(q.rmsM <= 1, `${name}: ${q.rmsM} m RMS against the quadrature`);
   assert.ok(q.maxM <= 5, `${name}: ${q.maxM} m at most`);
