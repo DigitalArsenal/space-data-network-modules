@@ -10,9 +10,13 @@
 //                      (MEAN_ELEMENTS) PROVENANCE.PRODUCER, the fit's producer
 //   SATELLITE NUMBER   METADATA.OBJECT_DESIGNATOR (CATALOG_NAME SATCAT or NORAD), else NORAD_CAT_ID
 //   INT. DES.          METADATA.INTERNATIONAL_DESIGNATOR   COMMON NAME  METADATA.OBJECT_NAME
-//   EPOCH TIME         MEAN_ELEMENTS.EPOCH, else METADATA.EPOCH_TZERO   EPOCH REV  ORB_REVNUM (when not 0)
+//   EPOCH TIME         MEAN_ELEMENTS.EPOCH, else METADATA.EPOCH_TZERO, rounded to the millisecond
+//                      (isoDate): the message's epoch, at which every state below is stated
+//                      EPOCH REV  ORB_REVNUM (when not 0)
 //   J2K POS/VEL        STATE_DATA (CARTESIAN_PV, TRAJ_REF_FRAME EME2000, one state at the epoch),
-//                      else the 'state' $OEM in EME2000 at the epoch
+//                      else the 'state' $OEM in EME2000 at the epoch (for a set whose epoch is
+//                      finer than the millisecond, the caller's propagator flies it to the
+//                      rounded epoch)
 //   ECI POS/VEL        VCM_ECI_TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE_STATE_KM_KM_PER_S, else the 'state'
 //                      $OEM in TEME of date (true equator, mean equinox of date) at the epoch
 //   EFG POS/VEL        VCM_EFG_EARTH_FIXED_STATE_KM_KM_PER_S
@@ -126,12 +130,11 @@ inline bool draft(const OCMT& ocm,const std::vector<Supplied>& states,Draft& m,R
  static const std::vector<std::string> kNone;
  const auto& pc=p?p->COMMENT:kNone;
 
- // Epoch: the element set's, else the trajectory's zero time.
+ // Epoch: the element set's, else the trajectory's zero time, rounded to the millisecond.
  const std::string epochText=me && !me->EPOCH.empty()?me->EPOCH:(md?md->EPOCH_TZERO:std::string());
  if(epochText.empty()){refusal={"epoch-missing","the record states no MEAN_ELEMENTS.EPOCH or METADATA.EPOCH_TZERO"};return false;}
  Date epoch;bool sub=false;
- if(!isoDate(epochText,epoch,sub)){refusal={"epoch-missing","the record's epoch is not an ISO 8601 UTC time: "+epochText};return false;}
- if(sub){refusal={"epoch-not-millisecond","the message states its epoch to the millisecond; the record's is finer: "+epochText};return false;}
+ if(!isoDate(epochText,epoch,sub,true)){refusal={"epoch-missing","the record's epoch is not an ISO 8601 UTC time: "+epochText};return false;}
  if(md && !md->TIME_SYSTEM.empty() && md->TIME_SYSTEM!="UTC"){refusal={"time-system-not-utc","the message is UTC; the record states "+md->TIME_SYSTEM};return false;}
  m.epoch=epoch;
  if(ocm.ORB_REVNUM)m.epochRev=static_cast<long>(ocm.ORB_REVNUM);
@@ -172,7 +175,7 @@ inline bool draft(const OCMT& ocm,const std::vector<Supplied>& states,Draft& m,R
   }
  }
  for(const auto& s:states) {
-  if(!sameTime(s.epoch,epoch)){refusal={"state-epoch-mismatch","a 'state' is at "+s.epoch.iso+", the record's epoch is "+epoch.iso};return false;}
+  if(!sameTime(s.epoch,epoch)){refusal={"state-epoch-mismatch","a 'state' is at "+s.epoch.iso+", the message's epoch (the record's, rounded to the millisecond) is "+epoch.iso};return false;}
   if(s.frame=="EME2000" || s.frame=="J2000") {
    if(m.j2k){refusal={"state-duplicate","the J2K state is stated twice"};return false;}
    m.j2k=s.state;

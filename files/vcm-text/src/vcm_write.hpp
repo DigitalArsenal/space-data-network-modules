@@ -102,9 +102,14 @@ inline std::string fixed(double value,int width,int decimals) {
 
 // ---- dates -------------------------------------------------------------------
 
-// "YYYY-MM-DDThh:mm:ss[.f...][Z]" to a Date; false when the text is not that or
-// carries time below the message's millisecond.
-inline bool isoDate(const std::string& text,Date& d,bool& subMillisecond) {
+// "YYYY-MM-DDThh:mm:ss[.f...][Z]" to a Date; false when the text is not that.
+// subMillisecond: the text carries time below the message's millisecond. With
+// roundToMillisecond the Date is that time rounded to the nearest millisecond
+// (a remainder of half a millisecond or more rounds up, carried through the
+// second, minute, hour, day, month and year; a carry past second 59, or past a
+// stated second 60, goes to the next minute); without it the digits below the
+// millisecond are dropped.
+inline bool isoDate(const std::string& text,Date& d,bool& subMillisecond,bool roundToMillisecond=false) {
  static const int kDays[12]={31,28,31,30,31,30,31,31,30,31,30,31};
  subMillisecond=false;
  std::string t=text;
@@ -114,6 +119,7 @@ inline bool isoDate(const std::string& text,Date& d,bool& subMillisecond) {
  int y,mo,dd,h,mi,s;
  if(!digits(0,4,y)||!digits(5,2,mo)||!digits(8,2,dd)||!digits(11,2,h)||!digits(14,2,mi)||!digits(17,2,s))return false;
  long millis=0;
+ bool roundUp=false;
  if(t.size()>19) {
   if(t[19]!='.' || t.size()==20)return false;
   for(size_t i=20;i<t.size();++i) {
@@ -121,12 +127,21 @@ inline bool isoDate(const std::string& text,Date& d,bool& subMillisecond) {
    const int k=static_cast<int>(i-20);
    if(k<3)millis=millis*10+(t[i]-'0');
    else if(t[i]!='0')subMillisecond=true;
+   if(k==3)roundUp=t[i]>='5';
   }
   for(size_t k=t.size()-20;k<3;++k)millis*=10;
  }
  if(mo<1||mo>12||y<1957||y>2200)return false;
- const int days=kDays[mo-1]+(mo==2 && leap(y)?1:0);
- if(dd<1||dd>days||h>23||mi>59||s>60)return false;
+ const auto daysIn=[&](int year,int month){return kDays[month-1]+(month==2 && leap(year)?1:0);};
+ if(dd<1||dd>daysIn(y,mo)||h>23||mi>59||s>60)return false;
+ if(roundToMillisecond && roundUp && ++millis==1000) {
+  millis=0;
+  const int lastSecond=s==60?60:59;
+  if(++s>lastSecond) {
+   s=0;
+   if(++mi>59){mi=0;if(++h>23){h=0;if(++dd>daysIn(y,mo)){dd=1;if(++mo>12){mo=1;++y;}}}}
+  }
+ }
  int doy=dd;
  for(int m=1;m<mo;++m)doy+=kDays[m-1]+(m==2 && leap(y)?1:0);
  d=Date{};d.year=y;d.dayOfYear=doy;d.month=mo;d.day=dd;d.hour=h;d.minute=mi;d.second=s+millis/1000.0;

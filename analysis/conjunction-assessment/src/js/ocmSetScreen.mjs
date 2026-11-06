@@ -4,11 +4,14 @@
 // (MEAN_ELEMENTS sources, the built-in SGP4), drains the chunks and returns the events. The pattern of
 // flows/observation-ap/flow.mjs: the hosts are SDK module hosts with invoke({ methodId, inputs }); this file routes
 // typed records and computes nothing. Any theory but SGP4XP and AP is refused by name before any flight, and a set
-// sdn-ap refuses is refused with its code and message unchanged; the other sets screen.
+// sdn-ap refuses is refused with its code and message unchanged; the other sets screen. The covariance of a set that
+// states a producer (PVN.PRODUCER) reaches the screen only when that producer build is on the request's
+// CONTROLS.VERIFIED_COVARIANCE_PRODUCERS, whatever the set's theory.
 import * as flatbuffers from 'flatbuffers';
 import {
-  CQR, CQRT, CQRCatalogRequest, CQRObjectSourceT, CQRScreeningControlsT, OCM, OEM, OMM, RFMCoordinateSystemT, RFMOriginT,
-  TIMInstantT, cqrProbabilityAlgorithm, meanElementSource, rfmAxisType, rfmOriginKind, timingStandard, timEpochRepresentation,
+  CQR, CQRT, CQRCatalogRequest, CQRObjectSourceT, CQRScreeningControlsT, CQRVerifiedCovarianceProducerT, OCM, OEM, OMM,
+  RFMCoordinateSystemT, RFMOriginT, TIMInstantT, cqrProbabilityAlgorithm, meanElementSource, rfmAxisType, rfmOriginKind,
+  timingStandard, timEpochRepresentation,
 } from 'spacedatastandards.org/lib/js/CQR/main.js';
 import { PCFT, PCFOutputT, pcfOutputFrame } from 'spacedatastandards.org/lib/js/PCF/main.js';
 
@@ -17,6 +20,9 @@ export const OCM_SET_FLIGHT = Object.freeze({ stepSeconds: 30, frame: 'TEME' });
 
 /** The theories the flow flies through propagator/sdn-ap; every other one is refused by name. */
 export const FLOWN_THEORIES = Object.freeze([meanElementSource.SGP4XP, meanElementSource.AP]);
+
+/** An event's PROBABILITY_REFUSAL for a set whose covariance producer build is not verified: this, then the PVN.PRODUCER seen. */
+export const COVARIANCE_REFUSAL = 'pc-covariance-unverified:';
 
 const T = (name) => ({ schemaName: `${name}.fbs`, fileIdentifier: `$${name}`, rootTypeName: name, wireFormat: 'flatbuffer' });
 const ident = (u, at) => String.fromCharCode(...u.subarray(at, at + 4));
@@ -35,11 +41,23 @@ function readSet(payload) {
   const u = bytesOf(payload);
   const ocm = root(u, '$OCM', OCM.getRootAsOCM, OCM.getSizePrefixedRootAsOCM);
   if (!ocm) return { payload: u, code: `not-ocm:${u.length >= 8 ? ident(u, 4).replace(/[^\x20-\x7e]/g, '?') : ''}` };
-  const meta = ocm.METADATA(), elements = ocm.MEAN_ELEMENTS();
+  const meta = ocm.METADATA(), elements = ocm.MEAN_ELEMENTS(), provenance = ocm.PROVENANCE();
   const norad = meta?.NORAD_CAT_ID() ?? 0;
   const objectId = meta?.INTERNATIONAL_DESIGNATOR() || meta?.OBJECT_DESIGNATOR() || String(norad);
   const theory = elements ? elements.MEAN_ELEMENT_THEORY() : null;
-  return { payload: u, objectId, name: meta?.OBJECT_NAME() ?? null, norad, theory, theoryName: theory == null ? 'NONE' : (meanElementSource[theory] ?? String(theory)) };
+  return { payload: u, objectId, name: meta?.OBJECT_NAME() ?? null, norad, theory, theoryName: theory == null ? 'NONE' : (meanElementSource[theory] ?? String(theory)),
+    producer: provenance?.PRODUCER() ?? '', producerSha256: (provenance?.PRODUCER_SHA256() ?? '').toLowerCase() };
+}
+
+/** The request's CONTROLS.VERIFIED_COVARIANCE_PRODUCERS, read back from its bytes: [{ producer, sha256 }]. */
+function verifiedProducers(request) {
+  const list = CQR.getRootAsCQR(new flatbuffers.ByteBuffer(request)).unpack().CATALOG_REQUEST?.CONTROLS?.VERIFIED_COVARIANCE_PRODUCERS ?? [];
+  return list.map((p) => ({ producer: p.PRODUCER ?? '', sha256: (p.PRODUCER_SHA256 ?? '').toLowerCase() }));
+}
+
+/** Whether a set's producer build is listed: on the hash where both state one, else on the PVN.PRODUCER string. */
+function isVerified(list, set) {
+  return list.some((p) => (p.sha256 && set.producerSha256 ? p.sha256 === set.producerSha256 : set.producer !== '' && p.producer === set.producer));
 }
 
 /** The instants of a flight: the window start, every step, to the first instant at or after the window end (UTC ISO 8601). */
@@ -76,6 +94,8 @@ export function catalogRequest(sources, { startJd, durationDays }, controls) {
     controls.fineTolSec ?? 0.001, controls.combinedRadiusM ?? 10);
   c.ALGORITHM = cqrProbabilityAlgorithm[controls.algorithm ?? 'FOSTER'];
   if (c.ALGORITHM === undefined) throw new Error(`unknown probability algorithm ${controls.algorithm}`);
+  c.VERIFIED_COVARIANCE_PRODUCERS = (controls.verifiedCovarianceProducers ?? [])
+    .map((p) => new CQRVerifiedCovarianceProducerT(p.PRODUCER ?? '', p.PRODUCER_SHA256 ?? '', p.VERIFICATION_REFERENCE ?? null));
   const teme = new RFMCoordinateSystemT('TEME', rfmAxisType.TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE, new RFMOriginT(rfmOriginKind.CELESTIAL_BODY, 399));
   const record = new CQRT();
   record.CATALOG_REQUEST = { pack(b) {
@@ -129,14 +149,19 @@ export async function drainCatalogScreen(conjunction, request, extra = []) {
  * @param {Uint8Array[]} o.sets  $OCM element sets (SGP4XP, AP), plain or size-prefixed, one object each.
  * @param {Uint8Array[]} [o.catalog]  $OMM SGP4 sets, plain or size-prefixed: the built-in SGP4.
  * @param {{startJd: number, durationDays: number}} o.window  UTC Julian date and days.
- * @param {{thresholdKm: number, coarseStepSec?: number, workers?: number, algorithm?: string, fineTolSec?: number, combinedRadiusM?: number}} o.controls
+ * @param {{thresholdKm: number, coarseStepSec?: number, workers?: number, algorithm?: string, fineTolSec?: number, combinedRadiusM?: number,
+ *   verifiedCovarianceProducers?: {PRODUCER: string, PRODUCER_SHA256: string, VERIFICATION_REFERENCE?: string}[]}} o.controls
+ *   verifiedCovarianceProducers: the request's CONTROLS.VERIFIED_COVARIANCE_PRODUCERS (CQRVerifiedCovarianceProducerT);
+ *   absent or empty, no covariance whose set states a producer reaches the screen.
  * @param {Uint8Array} [o.uncertaintyModel]  $ERM for the element sets the module flies itself (screen_catalog's uncertainty_model).
- * @returns {Promise<{events: object[], excluded: Uint8Array[], refused: object[], statistics: object, flights: number}>}
+ * @returns {Promise<{events: object[], excluded: Uint8Array[], refused: object[], covarianceRefused: object[], statistics: object, flights: number}>}
  *   refused: one entry per set left out, by name: { objectId, name, norad, theory, code, message }.
+ *   covarianceRefused: one entry per set screened without its covariance: { objectId, name, norad, producer, producerSha256, code }.
  */
 export async function screenOcmSets(hosts, o) {
-  const sources = [], refused = [];
+  const sources = [], refused = [], covarianceRefused = [];
   const configuration = flightConfiguration(o.window);
+  const verified = verifiedProducers(catalogRequest([], o.window, o.controls));
   let flights = 0;
   for (const payload of o.sets ?? []) {
     const set = readSet(payload);
@@ -150,10 +175,22 @@ export async function screenOcmSets(hosts, o) {
     const r = await hosts.sdnAp.invoke({ methodId: 'propagate', inputs: [{ portId: 'ocm', typeRef: T('OCM'), payload: set.payload },
       { portId: 'configuration', typeRef: T('PCF'), payload: configuration }] });
     if (r.statusCode !== 0) { refused.push({ objectId: set.objectId, name: set.name, norad: set.norad, theory: set.theoryName, code: r.errorCode ?? 'propagate-failed', message: r.errorMessage ?? '' }); continue; }
-    sources.push(ephemerisSource(set, r.outputs.find((x) => x.portId === 'ephemeris')?.payload ?? new Uint8Array()));
+    const source = ephemerisSource(set, r.outputs.find((x) => x.portId === 'ephemeris')?.payload ?? new Uint8Array());
+    const blocks = source.EPHEMERIS.EPHEMERIS_DATA_BLOCK ?? [];
+    if (set.producer !== '' && blocks.some((b) => b.COVARIANCE_MATRIX_LINES?.length) && !isVerified(verified, set)) {
+      for (const b of blocks) Object.assign(b, { COVARIANCE_MATRIX_LINES: [], COV_REFERENCE_FRAME: null });
+      covarianceRefused.push({ objectId: set.objectId, name: set.name, norad: set.norad, producer: set.producer, producerSha256: set.producerSha256,
+        code: `${COVARIANCE_REFUSAL}${set.producer}` });
+    }
+    sources.push(source);
   }
   for (const payload of o.catalog ?? []) sources.push(sgp4Source(payload));
   const extra = o.uncertaintyModel ? [{ portId: 'uncertainty_model', typeRef: T('ERM'), payload: o.uncertaintyModel }] : [];
   const screen = await drainCatalogScreen(hosts.conjunction, catalogRequest(sources, o.window, o.controls), extra);
-  return { ...screen, refused, flights };
+  const refusal = new Map(covarianceRefused.map((x) => [x.objectId, x.code]));
+  for (const e of screen.events) {
+    const codes = [...new Set([e.PRIMARY_ID, e.SECONDARY_ID].map((id) => refusal.get(id)).filter(Boolean))];
+    if (codes.length) e.PROBABILITY_REFUSAL = codes.join('; ');
+  }
+  return { ...screen, refused, covarianceRefused, flights };
 }

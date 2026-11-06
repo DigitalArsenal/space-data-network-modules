@@ -242,6 +242,20 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   the `UNCERTAINTY_SOURCE`. Where a set carries none, the event keeps the Alfano maximum (`MAXIMUM_PROBABILITY_ONLY`,
   basis `NONE`); the empirical model (`uncertainty_model`) applies to element sets the module flies itself, not to
   a flown `$OEM`. Which one was used is on every event.
+- **Covariance needs a verified producer build.** The gate is the covariance's producer, not the set's theory.
+  A set keeps its miss distance, and the collision probability from its covariance is refused until the build that
+  produced it is verified. The verified builds are the request's `CONTROLS.VERIFIED_COVARIANCE_PRODUCERS`
+  (`controls.verifiedCovarianceProducers`, each a `CQRVerifiedCovarianceProducer`: `PRODUCER`, `PRODUCER_SHA256`,
+  `VERIFICATION_REFERENCE`); nothing is compiled in. A build matches on `PRODUCER_SHA256` where both the list entry
+  and the set's `PROVENANCE.PRODUCER_SHA256` state one, else on `PVN.PRODUCER` verbatim. A set, AP or SGP4XP, whose
+  flight carries covariance and that states a `PVN.PRODUCER` not listed (an empty or absent list lists none) is
+  screened without that covariance: its `COVARIANCE_BASIS` is `NONE`, its events carry the covariance-free maximum
+  and no probability from covariance, and every event with it states `PROBABILITY_REFUSAL`
+  `pc-covariance-unverified:<PVN.PRODUCER>` (an SGP4XP or AP set fitted by sdn-ap names
+  `com.spacedatanetwork.sdn-ap-propagator <version>`); the set is named in the result's `covarianceRefused`. Miss
+  distance and TCA are unchanged. Covariance from a set that states no producer (an operator's file) is its
+  operator's and screens as supplied; sets without covariance, SGP4 sets and every other source are unaffected. The
+  module itself never sees a source's producer: the flow applies the list.
 - **Parity.** `node tests/ocm-sets-screening.e2e.mjs`: the registered sets of `tests/fixtures/ocm-sets/`
   (`tests/record-ocm-sets.mjs`: sdn-ap `fit` on its own 0.4.0 fixture inputs, AP and SGP4XP, and two sets turned
   across the first one's plane and refitted by sdn-ap from the other theory's flight, so each carries a fit
@@ -253,7 +267,15 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   Measured: 104 events over four crossings, 0.010 mm and 0.000 ms apart; the probabilities within 1.8e-4 relative
   (the existing way's records pass through flatc JSON text). Against the existing way at 10 s the same events are
   0.26 m and 0.08 ms apart: the JD double's 40 us resolution at a sample epoch (0.3 m at 7.6 km/s), which cancels
-  between two sources on one grid, not the Hermite truncation (recorded, not gated).
+  between two sources on one grid, not the Hermite truncation (recorded, not gated). The flow lists the sets'
+  producer build for that comparison. On an empty list, a list without it and no list, the sets fitted by sdn-ap
+  (AP A and B, SGP4XP D) lose their covariance: all 104 events state the refusal, none carries a probability from
+  covariance (A x B and A x D: 30 events each with a Pc listed, 0 refused), and miss distance and TCA are exactly
+  the listed screen's. Where both sides state a hash, the hash decides: A passes on it under another producer
+  string, B is refused on it under its own. The SGP4XP sets screened alone (`tests/record-xp-screen.mjs`), on no
+  list: 30 of 30 events refused, miss distance and TCA exactly 0.18.1's; with their producer listed: 0.18.1's events
+  byte for byte (80,640 bytes, the embedded message's wall-clock creation time and identifier aside); without
+  covariance: 0.18.2's events byte for byte (36,240 bytes).
 
 ## Build and runtime contract
 

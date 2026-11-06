@@ -1,6 +1,6 @@
 {
   "name": "space-data-network-plugin-conjunction-assessment",
-  "version": "0.18.0",
+  "version": "0.18.3",
   "private": true,
   "type": "module",
   "main": "index.js",
@@ -33,7 +33,7 @@
     "flatbuffers": "25.9.23",
     "flatc-wasm": "^26.1.32",
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.278.0",
+    "spacedatastandards.org": "1.279.0",
     "tar": "^7.5.13"
   },
   "overrides": {

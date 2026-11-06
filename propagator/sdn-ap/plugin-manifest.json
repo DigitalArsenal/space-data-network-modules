@@ -1,7 +1,7 @@
 {
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, SGP4XP with its atmosphere and gravity replaced. Element sets are $OCM records, each the whole input of its flight: theory, forces, daily space weather, density-correction nodes and covariance typed; the propagator ABI struct path (plugin_init_omm) flies stock SGP4XP only. Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded checkpoint storage per object; cached brackets interpolate, first queries build nodes, and beyond-span queries integrate from the nearest preceding retained node. Work grows with the uncached time gap; results do not depend on request order.",
   "pluginFamily": "propagator",
   "capabilities": [],
@@ -99,7 +99,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "$PCF 1.0.7 (SDS 1.278.0), optional (absent: every default): THEORY (UNSPECIFIED reads each set's own; SGP4, SGP4XP or AP must match it), OUTPUT (FRAME TEME, GCRF or EME2000; STEP_SECONDS 60; MAXIMUM_STATES 500000; EPOCHS, or START_TIME and STOP_TIME: default the set's epoch to one day later), INTEGRATOR (refused) and EVENTS (refused when not empty); a FORCES table is refused (configuration-refused FORCES): the record is the one authority for its forces; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.8 (SDS 1.279.0), optional (absent: every default): THEORY (UNSPECIFIED reads each set's own; SGP4, SGP4XP or AP must match it), OUTPUT (FRAME TEME, GCRF or EME2000; STEP_SECONDS 60; MAXIMUM_STATES 500000; EPOCHS, or START_TIME and STOP_TIME: default the set's epoch to one day later), INTEGRATOR (refused) and EVENTS (refused when not empty); a FORCES table is refused (configuration-refused FORCES): the record is the one authority for its forces; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -151,7 +151,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "$PCF 1.0.7 (SDS 1.278.0), optional (absent: every default): THEORY and EPOCH_STORE (CACHE_DAYS 7, MAX_SETS_PER_OBJECT 0, SELECTION NEAREST, BLEND_WINDOW_SECONDS 3600, BLEND_SHAPE SMOOTHSTEP, THEORIES all); a FORCES table is refused (configuration-refused FORCES); a set field this module cannot apply is refused by name (configuration-refused).",
+          "description": "$PCF 1.0.8 (SDS 1.279.0), optional (absent: every default): THEORY and EPOCH_STORE (CACHE_DAYS 7, MAX_SETS_PER_OBJECT 0, SELECTION NEAREST, BLEND_WINDOW_SECONDS 3600, BLEND_SHAPE SMOOTHSTEP, THEORIES all); a FORCES table is refused (configuration-refused FORCES); a set field this module cannot apply is refused by name (configuration-refused).",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -203,7 +203,7 @@
           "minStreams": 1,
           "maxStreams": 1,
           "required": true,
-          "description": "$PCF 1.0.7 (SDS 1.278.0), required: THEORY, EPOCH_STORE (as load_epochs) and OUTPUT: FRAME (TEME, GCRF or EME2000), MAXIMUM_STATES, and the times, EPOCHS or START_TIME and STOP_TIME at STEP_SECONDS (configuration-refused OUTPUT.START_TIME without them); a FORCES table is refused (configuration-refused FORCES).",
+          "description": "$PCF 1.0.8 (SDS 1.279.0), required: THEORY, EPOCH_STORE (as load_epochs) and OUTPUT: FRAME (TEME, GCRF or EME2000), MAXIMUM_STATES, and the times, EPOCHS or START_TIME and STOP_TIME at STEP_SECONDS (configuration-refused OUTPUT.START_TIME without them); a FORCES table is refused (configuration-refused FORCES).",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -296,7 +296,7 @@
           "minStreams": 1,
           "maxStreams": 65535,
           "required": true,
-          "description": "$PCF 1.0.7 (SDS 1.278.0): THEORY (UNSPECIFIED, SGP4XP or AP), FIT (the span rule, hold-out, implausibility bound, BTERM and AGOM priors, WEATHER_HORIZON_DAYS), FORCES (the force model, ATMOSPHERE_MODEL required) and INTEGRATOR (refused); after it, either no further $PCF or one per 'ephemeris' frame in their order, each stating only FIT.DRAG_PRIOR, FIT.SRP_PRIOR and their forms: that object's priors (SPEC 12.8); fields left unset take the documented defaults, but a BTERM prior left unset (FIT.DRAG_PRIOR absent or without a sigma, its form unset) is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, where a prior with a sigma and the form GAUSSIAN_SIGNED stays Gaussian on BTERM itself; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.8 (SDS 1.279.0): THEORY (UNSPECIFIED, SGP4XP or AP), FIT (the span rule, hold-out, implausibility bound, BTERM and AGOM priors, WEATHER_HORIZON_DAYS), FORCES (the force model, ATMOSPHERE_MODEL required) and INTEGRATOR (refused); after it, either no further $PCF or one per 'ephemeris' frame in their order, each stating only FIT.DRAG_PRIOR, FIT.SRP_PRIOR and their forms: that object's priors (SPEC 12.8); fields left unset take the documented defaults, but a BTERM prior left unset (FIT.DRAG_PRIOR absent or without a sigma, its form unset) is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, where a prior with a sigma and the form GAUSSIAN_SIGNED stays Gaussian on BTERM itself; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -448,7 +448,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "$PCF 1.0.7 (SDS 1.278.0), optional: THEORY, the theory every exported set must state; a FORCES table is refused.",
+          "description": "$PCF 1.0.8 (SDS 1.279.0), optional: THEORY, the theory every exported set must state; a FORCES table is refused.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",
@@ -521,7 +521,7 @@
           "minStreams": 0,
           "maxStreams": 1,
           "required": false,
-          "description": "$PCF 1.0.7 (SDS 1.278.0), optional (absent: every default): THEORY (UNSPECIFIED reads each set's own; SGP4, SGP4XP or AP must match it), OUTPUT (FRAME TEME; STEP_SECONDS 60; MAXIMUM_STATES 500000; EPOCHS, or START_TIME and STOP_TIME: default the set's epoch to one day later), INTEGRATOR (refused) and EVENTS (refused when not empty); a FORCES table is refused (configuration-refused FORCES): the record is the one authority for its forces; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
+          "description": "$PCF 1.0.8 (SDS 1.279.0), optional (absent: every default): THEORY (UNSPECIFIED reads each set's own; SGP4, SGP4XP or AP must match it), OUTPUT (FRAME TEME; STEP_SECONDS 60; MAXIMUM_STATES 500000; EPOCHS, or START_TIME and STOP_TIME: default the set's epoch to one day later), INTEGRATOR (refused) and EVENTS (refused when not empty); a FORCES table is refused (configuration-refused FORCES): the record is the one authority for its forces; a set field this module cannot apply is refused by name (configuration-refused), the other tables are other methods'.",
           "acceptedTypeSets": [
             {
               "setId": "sds-pcf",

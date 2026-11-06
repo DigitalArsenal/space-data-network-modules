@@ -15,20 +15,34 @@
 // - assertNoUserDefined on both records; a fit $PCF with ENABLE_DRAG is configuration-refused FORCES.ENABLE_DRAG; one
 //   without ATMOSPHERE_MODEL is configuration-refused FORCES.ATMOSPHERE_MODEL.
 // - No addParameter, USER_DEFINED_PARAMETERS or $OBD writer remains in src/fit_oem.inc.
+// - 0.6.2 is 0.6.1 rebuilt on SDS 1.279.0: against the 0.6.1 dist (git, modules 34b1b2c58, its SHA-256 checked), each fit's
+//   $OCM is byte-identical once PRODUCER's version is read as 0.6.1; each fit's $ODR names its own $OCM (RUN_ID and
+//   OCM_CONTENT_ID are the CID of that version's $OCM bytes, so they differ by PRODUCER alone) and, those two fields
+//   excluded, every decoded value of the two $ODR is identical (Object.is); each set's sdnap_covariance_at at every
+//   fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in EME2000 and TEME every 6 h for
+//   7 days are byte-identical (the $OEM with PRODUCER's version read likewise). With SDNAP_EXAMPLES set to the published
+//   examples (each <id>.ocm and <id>.json), every set flies byte-identical on both builds at every epoch of its window and
+//   its sdnap_covariance_at at every 12th epoch is bit-identical.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OCM } from "spacedatastandards.org/lib/js/OCM/OCM.js";
+import { ODR } from "spacedatastandards.org/lib/js/ODR/ODR.js";
 import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
+import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { prwDynamicParameter } from "spacedatastandards.org/lib/js/PRW/prwDynamicParameter.js";
 import { assertNoUserDefined } from "../../../common/tests/no-user-defined.mjs";
 import { ensureBuilt, wasmPath, packageRoot } from "./lib/module.mjs";
 import { configuration, MSIS_FORCES, XP_FORCES } from "./lib/pcf.mjs";
-import { inputs, spwRows } from "./lib/fixture-inputs.mjs";
+import { inputs, spwRows, GRID } from "./lib/fixture-inputs.mjs";
 
 ensureBuilt();
 const failures = [];
@@ -87,7 +101,7 @@ for (const c of cases) {
   check(ocm.METADATA?.NORAD_CAT_ID === 90400 && ocm.METADATA?.OBJECT_DESIGNATOR === "90400" && ocm.METADATA?.INTERNATIONAL_DESIGNATOR === "2026-904A",
     `${c.name}: METADATA ${ocm.METADATA?.NORAD_CAT_ID} ${ocm.METADATA?.OBJECT_DESIGNATOR} ${ocm.METADATA?.INTERNATIONAL_DESIGNATOR}`);
   check(ocm.ORB_AVERAGING === "BROUWER" && (ocm.STATE_DATA ?? []).length === 0, `${c.name}: ORB_AVERAGING ${ocm.ORB_AVERAGING}, ${ocm.STATE_DATA?.length} state values`);
-  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.1"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
+  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.2"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
 }
 const ap = records.AP, xp = records.XP;
 if (ap && xp) {
@@ -104,6 +118,131 @@ if (ap && xp) {
   console.log(`AP: n ${ap.MEAN_ELEMENTS.MEAN_MOTION}, BTERM ${ap.MEAN_ELEMENTS.BTERM}, fit RMS ${ap.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM} km, ${ap.PERTURBATIONS.SPACE_WEATHER.length} rows; ` +
     `XP: n ${xp.MEAN_ELEMENTS.MEAN_MOTION}, BTERM ${xp.MEAN_ELEMENTS.BTERM}, fit RMS ${xp.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM} km`);
 }
+
+// 0.6.2 against 0.6.1: the same bytes, PRODUCER's version aside
+const BEFORE = { version: "0.6.1", commit: "34b1b2c588360dc95a3b82829010081ffe0828db", sha256: "05dd4a6600fb4c65d5841e1f49dc26df64fca7c14f1084644cafcfa875fe0a87" };
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const beforeBytes = execFileSync("git", ["-C", packageRoot, "show", `${BEFORE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
+check(sha256(beforeBytes) === BEFORE.sha256, `sdn-ap ${BEFORE.version} at ${BEFORE.commit.slice(0, 9)} is ${sha256(beforeBytes)}`);
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-fit-e2e-"));
+const beforePath = path.join(scratch, `module-${BEFORE.version}.wasm`);
+fs.writeFileSync(beforePath, beforeBytes);
+const before = await createStandaloneHarness("browser", beforePath, { surface: "direct" });
+const now = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8")).version;
+const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
+const asBefore = (bytes) => { const b = Buffer.from(bytes); for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BEFORE.version).copy(b, at); return b; };
+// CIDv1, raw codec, sha2-256, base32 lower case with the 'b' prefix
+const cidOf = (bytes) => {
+  const raw = Buffer.concat([Buffer.from([0x01, 0x55, 0x12, 0x20]), createHash("sha256").update(bytes).digest()]);
+  const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
+  let bits = 0, value = 0, out = "b";
+  for (const byte of raw) {
+    value = (value << 8) | byte; bits += 8;
+    while (bits >= 5) { out += alphabet[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += alphabet[(value << (5 - bits)) & 31];
+  return out;
+};
+// $ODR fields that name the producing version's own $OCM (its CID), excluded from the value comparison
+const ODR_NAMES_OCM = ["RUN_ID", "OCM_CONTENT_ID"];
+const odrOf = (bytes) => ODR.getRootAsODR(new flatbuffers.ByteBuffer(bytes)).unpack();
+// every leaf value of a against b (Object.is for numbers); returns [compared, first difference or null]
+const sameValues = (a, b, at = "ODR") => {
+  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) { a = Array.from(a ?? []); b = Array.from(b ?? []); }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return [0, `${at}.length ${a?.length} | ${b?.length}`];
+    let n = 0;
+    for (let i = 0; i < a.length; i += 1) { const [m, d] = sameValues(a[i], b[i], `${at}[${i}]`); n += m; if (d) return [n, d]; }
+    return [n, null];
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    let n = 0;
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { const [m, d] = sameValues(a[k], b[k], `${at}.${k}`); n += m; if (d) return [n, d]; }
+    return [n, null];
+  }
+  return Object.is(a, b) ? [1, null] : [0, `${at} ${a} | ${b}`];
+};
+let odrValues = 0;
+const minutes = [];
+for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) minutes.push(t);
+const covarianceAt = (harness, ocmBytes, times = minutes) => {
+  const x = harness.instance.exports, mem = () => harness.memory.buffer;
+  const po = x.sdnap_alloc(ocmBytes.length), pm = x.sdnap_alloc(8 * times.length), pout = x.sdnap_alloc(8 * 42 * times.length);
+  new Uint8Array(mem(), po, ocmBytes.length).set(ocmBytes);
+  new Float64Array(mem(), pm, times.length).set(times);
+  const status = x.sdnap_covariance_at(po, ocmBytes.length, pm, times.length, pout);
+  const out = Buffer.from(mem().slice(pout, pout + 8 * 42 * times.length));
+  x.sdnap_free(po); x.sdnap_free(pm); x.sdnap_free(pout);
+  return { status, out };
+};
+const EPOCHS = Array.from({ length: 29 }, (_, k) => new Date(Date.parse("2026-10-02T00:00:00Z") + k * 6 * 3600e3).toISOString().replace("Z", ""));
+const flight = (harness, ocmBytes, frame) => harness.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: ocmBytes },
+  configuration({ output: { FRAME: frame, EPOCHS } })] });
+let identical = 0, flown = 0;
+for (const c of cases) {
+  const [r2, r1] = [await fit(c.config, c.spw), await before.invoke({ methodId: "fit", inputs: [
+    { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, c.config, ...(c.spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: c.spw }] : [])] })];
+  if (r2.statusCode !== 0 || r1.statusCode !== 0) { check(false, `${c.name}: fit on ${now} ${r2.errorCode}, on ${BEFORE.version} ${r1.errorCode}`); continue; }
+  check(r2.outputs.length === r1.outputs.length, `${c.name}: ${r2.outputs.length} outputs on ${now}, ${r1.outputs.length} on ${BEFORE.version}`);
+  const [ocm2, ocm1] = [new Uint8Array(r2.outputs[0].payload), new Uint8Array(r1.outputs[0].payload)];
+  const ocmSame = asBefore(ocm2).equals(Buffer.from(ocm1));
+  check(ocmSame, `${c.name} fit ${r2.outputs[0].portId}: ${now} differs from ${BEFORE.version}`);
+  if (ocmSame) identical += 1;
+  const [d2, d1] = [odrOf(new Uint8Array(r2.outputs[1].payload)), odrOf(new Uint8Array(r1.outputs[1].payload))];
+  const named = [[now, d2, ocm2], [BEFORE.version, d1, ocm1]].every(([v, d, o]) => ODR_NAMES_OCM.every((f) => {
+    const ok = d[f] === cidOf(o);
+    check(ok, `${c.name} $ODR ${f} on ${v}: ${d[f]}, its $OCM is ${cidOf(o)}`);
+    return ok;
+  }));
+  for (const f of ODR_NAMES_OCM) { delete d2[f]; delete d1[f]; }
+  const [compared, first] = sameValues(d2, d1);
+  check(first === null, `${c.name} fit ${r2.outputs[1].portId}: ${now} differs from ${BEFORE.version} at ${first}`);
+  if (named && first === null) { identical += 1; odrValues += compared; }
+  const set = new Uint8Array(r1.outputs[0].payload);
+  const [a2, a1] = [covarianceAt(h, set), covarianceAt(before, set)];
+  check(a2.status === 0 && a1.status === 0 && a2.out.equals(a1.out), `${c.name} sdnap_covariance_at: ${now} (${a2.status}) differs from ${BEFORE.version} (${a1.status})`);
+  if (a2.status === 0 && a2.out.equals(a1.out)) identical += 1;
+  for (const frame of [pcfOutputFrame.EME2000, pcfOutputFrame.TEME]) {
+    const [p2, p1] = [await flight(h, set, frame), await flight(before, set, frame)];
+    const same = p2.statusCode === 0 && p1.statusCode === 0 && asBefore(new Uint8Array(p2.outputs[0].payload)).equals(Buffer.from(new Uint8Array(p1.outputs[0].payload)));
+    check(same, `${c.name} propagate (${pcfOutputFrame[frame]}): ${now} ${p2.statusCode ? p2.errorCode : "ok"} differs from ${BEFORE.version} ${p1.statusCode ? p1.errorCode : "ok"}`);
+    if (same) { identical += 1; flown += EPOCHS.length; }
+  }
+}
+console.log(`${now} against ${BEFORE.version} (${BEFORE.sha256.slice(0, 8)}): ${identical} of 10 products identical (fit $OCM, ` +
+  `sdnap_covariance_at at ${minutes.length} times, propagate $OEM at ${flown} epochs byte-identical, PRODUCER's version aside; ` +
+  `fit $ODR ${odrValues} decoded values identical, ${ODR_NAMES_OCM.join(" and ")} excluded: each is the CID of its own version's $OCM)`);
+check(identical === 10, `${identical} of 10 products identical to ${BEFORE.version}`);
+
+// the published examples' sets (SDNAP_EXAMPLES: the experiments' results/ap-truth/compare/examples, each <id>.ocm the $OCM
+// AP flew and <id>.json its window): each flown on both builds in TEME at every epoch of its window (propagate $OEM
+// byte-identical, PRODUCER's version aside) and sdnap_covariance_at at every 12th epoch (42 doubles a time, bit-identical)
+const EXAMPLES = process.env.SDNAP_EXAMPLES;
+if (!EXAMPLES) console.log("examples: SDNAP_EXAMPLES not given, the published examples not flown");
+else {
+  const ids = fs.readdirSync(EXAMPLES).filter((f) => f.endsWith(".ocm")).map((f) => f.slice(0, -4)).sort();
+  let same = 0, epochsFlown = 0, timesCovered = 0;
+  for (const id of ids) {
+    const d = JSON.parse(fs.readFileSync(path.join(EXAMPLES, `${id}.json`), "utf8")), set = new Uint8Array(fs.readFileSync(path.join(EXAMPLES, `${id}.ocm`)));
+    const t0 = Date.parse(d.start), setMs = Date.parse(`${ocmOf(set).MEAN_ELEMENTS.EPOCH.slice(0, 23)}Z`);
+    const epochs = d.epochsSeconds.map((s) => new Date(t0 + 1000 * s).toISOString().replace("Z", ""));
+    const times = d.epochsSeconds.filter((_, k) => k % 12 === 0).map((s) => (t0 + 1000 * s - setMs) / 60000);
+    const fly = (harness) => harness.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: set },
+      configuration({ output: { FRAME: pcfOutputFrame.TEME, EPOCHS: epochs } })] });
+    const [p2, p1] = [await fly(h), await fly(before)];
+    const flownSame = p2.statusCode === 0 && p1.statusCode === 0 && asBefore(new Uint8Array(p2.outputs[0].payload)).equals(Buffer.from(new Uint8Array(p1.outputs[0].payload)));
+    check(flownSame, `example ${id} propagate: ${now} ${p2.statusCode ? p2.errorCode : "ok"} differs from ${BEFORE.version} ${p1.statusCode ? p1.errorCode : "ok"}`);
+    const [a2, a1] = [covarianceAt(h, set, times), covarianceAt(before, set, times)];
+    const covSame = a2.status === 0 && a1.status === 0 && a2.out.equals(a1.out);
+    check(covSame, `example ${id} sdnap_covariance_at: ${now} (${a2.status}) differs from ${BEFORE.version} (${a1.status})`);
+    if (flownSame && covSame) { same += 1; epochsFlown += epochs.length; timesCovered += times.length; }
+  }
+  console.log(`examples: ${same} of ${ids.length} sets identical on ${now} and ${BEFORE.version} (propagate $OEM at ${epochsFlown} epochs ` +
+    `byte-identical, PRODUCER's version aside; sdnap_covariance_at at ${timesCovered} times bit-identical)` +
+    (same === ids.length ? ": 0 difference" : `; ${ids.length - same} differ`));
+  check(ids.length > 0 && same === ids.length, `examples: ${same} of ${ids.length} sets identical to ${BEFORE.version}`);
+}
+fs.rmSync(scratch, { recursive: true, force: true });
 
 // refusals by name
 const refused = (label, r, code, field = null) =>

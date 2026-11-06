@@ -33,5 +33,5 @@
     "src/deep_space_spacecraft.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "8f06e4d3afa2703acdc9fc677137ad38cfb21bec399ee4c13f83f8ee88ee678c"
+  "wasmSha256": "5c43ae89b2a05acc5bfc2c79e07602f22f2f3ffbfb5043f75277ce61d655c05d"
 }

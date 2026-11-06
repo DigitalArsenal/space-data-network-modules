@@ -1,4 +1,4 @@
-# Deep-space spacecraft 0.3.0
+# Deep-space spacecraft 0.3.1
 
 A 42-craft notables roster from NASA/JPL Horizons VECTORS, plus current cislunar
 objects found by discovery (the Horizons spacecraft listing and NASA NAIF SPICE
@@ -110,7 +110,9 @@ names, COSPAR/NORAD ids, events and lifecycle facts for its 42 craft.
   before `catalog-counts`: `listed`, `probed`, `admitted`, `not_current`,
   `near_earth`, `beyond_cislunar`, `kernels`, `segments`, `unsupported`,
   `source_errors`.
-- `stage_requests` (Number, 1–300, default 300) caps requests per stage.
+- `stage_requests` (Number, 1–63, default 63) caps requests per stage. The composed
+  flow runtime hands a node at most 64 frames per invocation, and an `advance`
+  needs its state frame and every response of its stage in one invocation.
 - `run_day` (String `YYYY-MM-DD`, optional) plans as of that TDB day instead of
   the tick's day (replay, backfill); creation and provenance keep the tick's time.
 - Lanes holding SPICE rows carry license
@@ -173,7 +175,7 @@ Configuration and retrieval:
    tables; start/stop may be omitted. TDB calendar bounds clamp archive and
    window coverage; window limits round inward to whole days.
 4. `page_rows` defaults to 80,000; allowed range 1–89,000. The Horizons line cap
-   is 90,024. Smaller pages can exceed the fixed six-stage request budget and
+   is 90,024. Smaller pages can exceed the fixed twelve-stage request budget and
    fail with `too-many-requests`.
 5. Archives retain the existing daily grid: `floor(lo) + 2` seconds through
    `floor(hi) - 1`, clamped by limits and terminal encounters. Departure covers
@@ -184,16 +186,16 @@ Configuration and retrieval:
    after/before coverage uses its last/first 30 days, then clamps to coverage
    and limits. Each phase is a separate group, labeled `window <body>-centered`.
 7. `plan_horizons` queues the discovery requests, then two probes per craft
-   (1900/2300), and emits at most `stage_requests`. Each of six `advance` calls
+   (1900/2300), and emits at most `stage_requests`. Each of twelve `advance` calls
    absorbs its pending responses, then emits at most `stage_requests` more. Vectors are planned only after all probes are absorbed.
 8. Exhausted advances increment `stage` and emit zero requests. `build_oem`
-   accepts stage six or any earlier exhausted vector queue, consuming the last
+   accepts stage twelve or any earlier exhausted vector queue, consuming the last
    pending response batch itself. Response counts must exactly match pending.
 9. State retains six float64 components per row as base64; daily rows strictly
    inside dense archive windows are omitted. State frames must be below 64 MiB.
 
-Coverage, trajectory-plan and HTTP-200 vector parse/validation failures skip only
-that craft with the named code, release its stored groups and suppress its future
+Coverage, trajectory-plan and vector parse/validation failures, and one request's
+transport failure, skip only that craft with the named code, release its stored groups and suppress its future
 requests; already-emitted responses are consumed and ignored. Other craft keep
 identical OEM bytes. Skipped craft emit no records. Plan/advance emit one Info `FlowNotice` on
 `status`, with the active craft count and skipped `ITEMS` as `<naif_id>:<code>`.
@@ -201,9 +203,9 @@ Build emits a Missing notice per skipped craft and one Info summary of all eleve
 catalog counts on `notice`. An all-skipped build fails with `no-trajectories`.
 Requests are plain GET `HttpRequest` frames (HREQ), with no headers; URLs retain
 the cassette's exact encoding. Responses are `HttpResponse` (HRSP), paired by
-request order. A transport ERROR fails with `fetch-failed`; non-200 status or an
-empty BODY fails with `horizons-http-error`. Invalid response envelopes, response
-counts, state and configuration remain fatal.
+request order. A transport ERROR skips that craft with `fetch-failed`; non-200
+status or an empty BODY skips it with `horizons-http-error`. Invalid response
+envelopes, response counts, state and configuration remain fatal.
 
 Each vector page's `Target body name:` line must contain its id and a case-insensitive `horizons_name` substring (`|` separates alternatives), or that craft is skipped with `vector-target-mismatch`.
 
@@ -226,7 +228,7 @@ Each vector page's `Target body name:` line must contain its id and a case-insen
   and `ITEMS` `<catalog>:<count>` for all eleven catalogs, including empty ones.
 
 Both ingest requests carry the Horizons URL, HTTP status 200, exact retrieval
-milliseconds, parser `deep-space-spacecraft` version `0.3.0`, normalized SHA-256,
+milliseconds, parser `deep-space-spacecraft` version `0.3.1`, normalized SHA-256,
 record count, schema/count vectors and one provenance attribute per object:
 `naif:<id>` = `<name>; lifecycle active|ended`. Tags carry
 `LicenseRef-NASA-JPL-Horizons-PD` and `Ephemeris: NASA/JPL-Caltech Horizons`.
@@ -237,7 +239,7 @@ input or host adapter. Each OEM COMMENT retains `CATALOG`, `LIFECYCLE`, aliases,
 license, credit and segment labels. `retrieved_ms` supplies OEM `CREATION_DATE`
 and EGP UTC timestamps; output bytes are deterministic for identical inputs.
 
-`flow.mjs` composes the timer-bound plan, seven HTTP stages, six advances and
+`flow.mjs` composes the timer-bound plan, thirteen HTTP stages, twelve advances (`stages`) and
 build with eleven OEM storage-ingest nodes plus one EGP storage-ingest node.
 Only internal state edges are opaque. Storage-ingest 0.5.0 supplies `oem_records`.
 The Horizons predictions refresh defaults to **604800000 ms (7 days)**.
@@ -307,6 +309,24 @@ one EGP per non-empty catalog, the recorded reference centers (including
 CAPSTONE MOON/301 and Artemis I EARTH/399), and `evaluate_oem` at an interior
 TDB epoch in every block. It has a 60-second timeout.
 
+`tests/production-volume.e2e.mjs` replays the production host config (discovery
+and the default NAIF sources on) at production request volume through `flow.mjs`
+compiled by the SDK and run in `createFlowRuntimeHost`. Its cassette
+(`tests/fixtures/production-volume/`, 393 real responses recorded 2026-11-06 for
+the tick of host-01's first run, 2026-11-06T00:35:33Z) adds only three-day
+`limits` per craft and whole-segment kernel trims. Plan queues the same 87
+requests as that run (listing, two NAIF indexes, 84 coverage probes), which the
+0.3.0 stage budget sent to `advance1` as its state and 63 of 87 responses. Every
+fetch stage must carry at most 63 requests, every advance must run once with its
+state and all of its stage's responses, nothing may stay queued, and the stored
+OEM/EGP bytes must equal the standalone staged replay. A real Horizons 503
+(`transportFailure`, answered to concurrent requests from one address) on Voyager
+1's probe must skip Voyager 1 alone. `PRODUCTION_RECORD=1` re-records live:
+
+```sh
+node tests/production-volume.e2e.mjs
+```
+
 `tests/composed-flow.e2e.test.mjs` checks the deployment wiring offline. It calls
 `deepSpaceFlow` with the deployment builder's node/typed-edge helpers and dependency
 map, runs SDK CLI `flow check` and `flow compile` into a temporary directory, and
@@ -336,7 +356,7 @@ HORIZONS_RECORD=0 node --test tests/composed-flow.e2e.test.mjs
 the 20-object synthetic plan's first two advances on both direct harnesses.
 It compares every frame's port, type reference and SHA-256, exact final
 records/metas/groups/notices and request URLs, and the `invalid-state` error/status
-pair. Both lanes receive the same config and TimerTick. Diagnostics report 12
+pair. Both lanes receive the same config and TimerTick. Diagnostics report 18
 invocations per lane and their durations; missing WasmEdge explicitly skips this
 named test. The parity replay always uses local responses, including in record mode.
 
@@ -349,7 +369,7 @@ shared edges, exact row preservation, Juno's two centers, EGP tags/queries,
 lifecycle, tick timestamps, coverage clamps, skipped probes and early builds.
 It also verifies typed ports, disabled/missing-producer behavior, every ingest
 metadata/record pairing and digest, notices and typed flow topology.
-The 20-object paged run and 42-object 1970–2050 stress run finish within six
-advances. The latter issues 147 vector requests and retains at most 57,680,723
+The 20-object paged run and 42-object 1970–2050 stress run finish within the twelve
+advances. The latter issues 147 vector requests and retains at most 57,680,948
 bytes of state, below 64 MiB. Identity/lifecycle tests check the three
 new archive craft and Gaia's explicit end date, and flow tests check the weekly default.

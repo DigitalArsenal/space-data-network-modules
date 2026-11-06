@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-space-infrastructure",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -13,7 +13,7 @@
     "flatbuffers": "25.9.23",
     "flatc-wasm": "26.1.38",
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.278.0"
+    "spacedatastandards.org": "1.279.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"

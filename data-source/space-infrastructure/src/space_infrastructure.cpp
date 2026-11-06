@@ -43,7 +43,7 @@ namespace {
 
 constexpr const char* kProvider = "space-infrastructure";
 constexpr const char* kPluginId = "com.digitalarsenal.data-source.space-infrastructure";
-constexpr const char* kVersion = "0.1.0";
+constexpr const char* kVersion = "0.1.1";
 constexpr size_t kMaxResponses = 200, kMaxBody = 16u * 1024u * 1024u, kMaxRecordBytes = 8191;
 constexpr double kPi = 3.14159265358979323846, kEarthKm = 6371.0088;
 constexpr double kNan = std::numeric_limits<double>::quiet_NaN();

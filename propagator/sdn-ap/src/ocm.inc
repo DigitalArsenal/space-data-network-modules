@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// The $OCM element-set record (SDS 1.278.0 OCM 2.1.10): one mean element set
+// The $OCM element-set record (SDS 1.279.0 OCM 2.1.10): one mean element set
 // with its theory, its force model, its identity and, from `fit`, its orbit
 // determination and covariance, every field typed. MEAN_ELEMENTS carries the
 // set (MEAN_ELEMENT_THEORY SGP4, SGP4XP or AP, written; Brouwer MEAN_MOTION,
@@ -17,7 +17,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.1";
+constexpr const char* kModuleVersion = "0.6.2";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 

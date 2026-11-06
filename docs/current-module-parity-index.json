@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T20:03:21.438Z",
+  "generatedAt": "2026-11-06T04:14:10.279Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -283,7 +283,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.18.0",
+      "version": "0.18.3",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -325,7 +325,7 @@
       ],
       "cxxSourceFileCount": 58,
       "cSourceFileCount": 1,
-      "testFileCount": 214,
+      "testFileCount": 217,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -550,6 +550,8 @@
         "tests/fixtures/ocm-sets/b-fit-sdn-ap-0.5.2.ocm",
         "tests/fixtures/ocm-sets/d-fit-sdn-ap-0.5.2.ocm",
         "tests/fixtures/ocm-sets/xp-fit-sdn-ap-0.5.2.ocm",
+        "tests/fixtures/ocm-sets/xp-no-covariance-screen-ca-0.18.2.events",
+        "tests/fixtures/ocm-sets/xp-screen-ca-0.18.1.events",
         "tests/fixtures/request.assess.json",
         "tests/fixtures/spacetrack-gp/README.md",
         "tests/fixtures/spacetrack-gp/gp-2026-10-29.json",
@@ -589,6 +591,7 @@
         "tests/radialGateBound.e2e.mjs",
         "tests/realCatalogExclusion.test.mjs",
         "tests/record-ocm-sets.mjs",
+        "tests/record-xp-screen.mjs",
         "tests/sampledCoverage.e2e.mjs",
         "tests/screenMemoryLimit.e2e.mjs",
         "tests/screeningWindowUnion.test.mjs",
@@ -767,7 +770,7 @@
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "methodIds": [
         "evaluate_teag",
         "fit_batch",
@@ -2491,7 +2494,7 @@
       "pluginId": "com.digitalarsenal.data-source.deep-space-spacecraft",
       "name": "Notable deep-space spacecraft (Horizons)",
       "pluginFamily": "data_source",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "methodIds": [
         "advance",
         "build_oem",
@@ -2512,7 +2515,7 @@
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 13,
+      "testFileCount": 16,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2530,9 +2533,12 @@
         "tests/fixtures/horizons/events-table.json",
         "tests/fixtures/horizons/reference.json",
         "tests/fixtures/horizons/regime-cassette.json.gz",
+        "tests/fixtures/production-volume/cassette.json.gz",
+        "tests/fixtures/production-volume/provenance.json",
         "tests/horizons-stages.mjs",
         "tests/native-publication.mjs",
-        "tests/notable-trajectories.e2e.test.mjs"
+        "tests/notable-trajectories.e2e.test.mjs",
+        "tests/production-volume.e2e.mjs"
       ]
     },
     {
@@ -4149,7 +4155,7 @@
       "pluginId": "com.digitalarsenal.data-source.sensor-definitions",
       "name": "Real-world sensor definitions",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "build_sensors",
         "plan_sources"
@@ -4261,7 +4267,7 @@
       "pluginId": "com.digitalarsenal.data-source.space-infrastructure",
       "name": "Space infrastructure: sensor sites",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "build_infrastructure",
         "plan_sources"
@@ -5290,7 +5296,7 @@
       "pluginId": "com.digitalarsenal.files.vcm-text",
       "name": "SP Vector/Covariance Message Writer",
       "pluginFamily": "parser",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "methodIds": [
         "ocm_to_vcm"
       ],
@@ -6643,7 +6649,7 @@
       "pluginId": "com.orbpro.ffm",
       "name": "FFM Full Force Model propagator",
       "pluginFamily": "propagator",
-      "version": "2.2.0",
+      "version": "2.2.1",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
@@ -7481,7 +7487,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "methodIds": [
         "export_omm",
         "fit",

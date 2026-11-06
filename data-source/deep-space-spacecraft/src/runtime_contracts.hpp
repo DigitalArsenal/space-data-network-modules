@@ -14,7 +14,12 @@ namespace R = sdn::runtime;
 using Json = nlohmann::json;
 constexpr const char* kProvider = "deep-space-spacecraft";
 constexpr const char* kUrl = "https://ssd.jpl.nasa.gov/api/horizons.api";
-constexpr const char* kVersion = "0.3.0";
+constexpr const char* kVersion = "0.3.1";
+// The composed flow runtime hands a node at most 64 frames per invocation
+// (space-data-module-sdk flow_runtime.cpp kMaxInvocationFrames). An advance
+// needs its state frame and every response of its stage in one invocation, so
+// a stage carries at most 63 requests. flow.mjs `stages` advances carry a run.
+constexpr size_t kStageRequests = 63;
 constexpr const char* kHorizonsLicense = "LicenseRef-NASA-JPL-Horizons-PD";
 constexpr const char* kSpiceLicense = "LicenseRef-NASA-NAIF-PDS-Public";
 constexpr const char* kSpiceCredit = "SPICE kernels: NASA/JPL NAIF and the PDS NAIF node";
@@ -37,18 +42,22 @@ inline int push_get(const std::string& url) {
   R::FinishHttpRequestBuffer(b, R::CreateHttpRequestDirect(b, "GET", url.c_str()));
   return push("request", "HttpRequest.fbs", "HREQ", "HttpRequest", b.GetBufferPointer(), b.GetSize());
 }
+// The verified HttpResponse envelope (a body up to kMaxKernelBytes), or nullptr
+// with invalid-http-response.
 inline const R::HttpResponse* response_on(const plugin_input_frame_t* f, std::string& error) {
-  if (!f || !f->payload || f->payload_length < 8 || f->payload_length > 32u * 1024u * 1024u) {
+  if (!f || !f->payload || f->payload_length < 8 || f->payload_length > uint64_t(kMaxKernelBytes) + 1024u * 1024u) {
     error = "invalid-http-response"; return nullptr;
   }
   flatbuffers::Verifier v(f->payload, f->payload_length, 64, 1000000, false);
   if (!R::VerifyHttpResponseBuffer(v)) { error = "invalid-http-response"; return nullptr; }
-  const auto* r = R::GetHttpResponse(f->payload);
-  if (r->ERROR() && r->ERROR()->size()) { error = "fetch-failed"; return nullptr; }
-  if (r->STATUS() != 200 || !r->BODY() || !r->BODY()->size()) {
-    error = "horizons-http-error"; return nullptr;
-  }
-  return r;
+  return R::GetHttpResponse(f->payload);
+}
+// One request's transport failure: fetch-failed (ERROR), horizons-http-error
+// (non-200 or empty BODY); nullptr when the body is usable.
+inline const char* transport_error(const R::HttpResponse& r) {
+  if (r.ERROR() && r.ERROR()->size()) return "fetch-failed";
+  if (r.STATUS() != 200 || !r.BODY() || !r.BODY()->size()) return "horizons-http-error";
+  return nullptr;
 }
 inline int notice(const char* port, R::flowNoticeKind kind, const std::string& reason,
                   uint64_t count, const std::vector<std::string>& items, uint64_t at) {
@@ -130,7 +139,7 @@ inline bool config(const sdm_piv::Config& in, uint64_t fired, Json& out, std::st
   if (in.has("stage_requests")) {
     const double cap = in.number("stage_requests");
     if (in.kind("stage_requests") != R::configValueKind_Number || !std::isfinite(cap) || cap != std::floor(cap) ||
-        cap < 1 || cap > 300) return refuse("invalid-stage-requests");
+        cap < 1 || cap > double(kStageRequests)) return refuse("invalid-stage-requests");
     out["stage_requests"] = int64_t(cap);
   }
   if (in.has("limits")) {

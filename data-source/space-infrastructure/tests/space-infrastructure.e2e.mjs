@@ -2,7 +2,7 @@
 // E2E (task feature-space-infrastructure-catalog-20261104): the roster's real source documents, recorded in tests/fixtures/cassette.json.gz
 // (Wikidata wbgetentities, the MediaWiki extracts and page coordinates of the Wikipedia articles, one Overpass query; provenance.json), through
 // plan_sources and build_infrastructure in the SDK's browser harness, then every $SIT and $SNR read back from the lane streams with the
-// published bindings (spacedatastandards.org 1.278.0).
+// published bindings (spacedatastandards.org 1.279.0).
 //   a. plan_sources plans each source document once and the cassette holds exactly the planned requests; the embedded roster is roster.json;
 //   b. every site position is re-derived here from the fixture documents (its own JSON and coordinate readers) and equals the record; every
 //      cross-check distance is recomputed here and is within the roster's tolerance;

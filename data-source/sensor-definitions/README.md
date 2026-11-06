@@ -1,6 +1,6 @@
-# Sensor definitions 0.1.0
+# Sensor definitions 0.1.1
 
-Real-world sensors as SDS `$SNR` sensor definitions (spacedatastandards.org 1.278.0), one record per sensor on a platform,
+Real-world sensors as SDS `$SNR` sensor definitions (spacedatastandards.org 1.279.0), one record per sensor on a platform,
 each value read from a named public source and carrying that source, its retrieval time, method and license. Seeded with the
 Earth-observation and weather payloads of satellites in the CelesTrak SATCAT and with the ground space-surveillance sensors
 listed in the curated space sites. Published weekly over SDN in two lanes: `space` (joined to a satellite by `NORAD_CAT_ID`
@@ -37,7 +37,7 @@ client on 2026-11-05.
 | **Wikipedia** (MediaWiki API, `prop=extracts|revisions`) | Plain text of the pages of the AN/FPS-85, PARCS, Millstone Hill (MISA), ALTAIR, GLOBUS and the Maui complex, with revision id and timestamp; they cite the fact sheets below | JSON API, no key, one request per page | CC BY-SA 4.0 | **Published** (`PVN` ShareAlike, lane `ground` flagged share-alike), the revision named in `ATTRIBUTION` and `SOURCE_URL`. Only quoted facts (see "Facts"). |
 | Government fact sheets: `spaceforce.mil`, `af.mil`, `smdc.army.mil` (Eglin, Cavalier, Kwajalein), Space Force Delta fact sheets | The authoritative ground-radar facts | Fetched: HTTP 403 or no answer for automated clients; no machine-readable export | US Government works (17 U.S.C. 105), unrestricted | **Not reachable.** The same facts reach us through Wikipedia, which cites them. When a fact sheet is reachable it replaces the Wikipedia quote. |
 | MIT Haystack / Lincoln Laboratory (Millstone Hill, ALTAIR) | Radar parameters | Fetched `haystack.mit.edu`: pages name the radar and give no frequency or power | MIT copyright | **Not used**: no number to read. Millstone and ALTAIR therefore carry the band designation only. |
-| **CEOS MIM database / EO Handbook** (`database.eohandbook.com`) | Missions, instruments, measurements; instrument "technical characteristics" as a one-line waveband summary | HTML (ASP.NET tables), sitemap, no export or API | "Data licence: CC BY 4.0" (page footer) | **Surveyed, not used in 0.1.0.** Summary text only ("VIS-SWIR: 12 channels between 0.41 um to 2.2 um"), no per-channel table: OSCAR is more detailed. Eligible as a cross-check. |
+| **CEOS MIM database / EO Handbook** (`database.eohandbook.com`) | Missions, instruments, measurements; instrument "technical characteristics" as a one-line waveband summary | HTML (ASP.NET tables), sitemap, no export or API | "Data licence: CC BY 4.0" (page footer) | **Surveyed, not used in 0.1.1.** Summary text only ("VIS-SWIR: 12 channels between 0.41 um to 2.2 um"), no per-channel table: OSCAR is more detailed. Eligible as a cross-check. |
 | **ESA eoPortal** (`eoportal.org`) | Mission articles with instrument parameters | HTML rendered by script; `api.eoportal.org` refuses; terms page empty without a browser | Not verifiable by an automated client | **Refused**: terms unverifiable, no export. |
 | Copernicus Sentinel technical guides (`sentinels.copernicus.eu`, ESA) | Sentinel-1/2/3 instrument guides | Terms page not retrievable (404); documents are PDFs/HTML | ESA copyright; Copernicus open data policy applies to the data, not the guides | **Not used.** Sentinel-1/2/3 instruments come through OSCAR (which carries ESA's values); the CC BY-SA rule would allow ESA text after its terms are read. |
 | NASA / USGS mission pages (Landsat OLI/TIRS bands) | Band tables | Not fetched (USGS copyrights page only) | US Government works; non-USGS images on those sites are copyrighted | **Not used**: OSCAR carries the OLI/TIRS tables. Eligible as a cross-check. |
@@ -112,4 +112,4 @@ streams. `node tests/record-cassette.mjs` re-records (OSCAR and Wikipedia live; 
 
 The node needs the module and the flow (`flow.mjs`, program `com.digitalarsenal.flows.sensor-definitions-ingest`), `hostcap/storage-ingest` 0.6.1
 (port `snr_records`), the capability approvals of the module and storage-ingest, node `producer_peer_id` configuration, and an SDN
-node that stores `$SNR` at SDS 1.278.0 (the node's embedded catalog still carries the earlier `$SNR`).
+node that stores `$SNR` at SDS 1.279.0 (the node's embedded catalog still carries the earlier `$SNR`).

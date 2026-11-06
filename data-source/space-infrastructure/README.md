@@ -1,6 +1,6 @@
-# Space infrastructure 0.1.0 (phase 1: sensor sites)
+# Space infrastructure 0.1.1 (phase 1: sensor sites)
 
-Worldwide space-surveillance and missile-warning sensor sites as SDS `$SIT` (spacedatastandards.org 1.278.0) and the sensors at them as
+Worldwide space-surveillance and missile-warning sensor sites as SDS `$SIT` (spacedatastandards.org 1.279.0) and the sensors at them as
 `$SNR`, read weekly from Wikidata, Wikipedia and OpenStreetMap. Every value carries its source, the retrieval time and the license; a
 position is checked against a second source wherever the roster names one; every other value is a verbatim quote that must occur in the
 document fetched in the run. Later phases (airfields, launch sites, factories, companies, the supply, operations and remote-sensing chain,
@@ -99,7 +99,7 @@ article 1.
   "first radar station with LPAR in China"; network from the Wikipedia statement of "four large ground-based phased array early warning radars in
   Xinjiang, Shandong, Heilongjiang, and Zhejiang"). Licenses CC0 AND CC-BY-SA-4.0 AND ODbL-1.0, share-alike.
 
-## Not sourced in 0.1.0
+## Not sourced in 0.1.1
 
 Named, with what is missing; a site enters the roster when a position source (Wikidata item with P625, an article coordinate, an OSM element
 or an article's coordinate text) and a quote for its sensor exist.
@@ -143,4 +143,4 @@ and runs it through the real HTTP and ingest guests with only the host boundary 
 
 The node needs the module and the flow (`flow.mjs`, program `com.digitalarsenal.flows.space-infrastructure-ingest`), `hostcap/storage-ingest`
 0.6.1 (ports `sit_records`, `snr_records`), the capability approvals of the module and storage-ingest, node `producer_peer_id` configuration, and
-an SDN node that stores `$SIT` and `$SNR` at SDS 1.278.0 (the node's embedded catalog still carries the earlier `$SNR`).
+an SDN node that stores `$SIT` and `$SNR` at SDS 1.279.0 (the node's embedded catalog still carries the earlier `$SNR`).
