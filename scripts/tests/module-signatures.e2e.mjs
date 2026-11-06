@@ -48,8 +48,9 @@ try {
   const otherKey = keypairFile("other-keypair.json", "other-e2e");
 
   // the scratch tree: one bundled (owner-signed) current module; a build-provenance.json is given to it when it ships none
-  const subject = currentDists().find((d) => fs.existsSync(path.join(REPO_ROOT, d.rel)) && artifactForm(fs.readFileSync(path.join(REPO_ROOT, d.rel))) === "bundled");
-  assert.ok(subject, "no current module ships a bundled dist");
+  const ownerSigned = new Set(real.rows.filter((r) => r.kind === "owner-key").map((r) => r.modulePath));
+  const subject = currentDists().find((d) => ownerSigned.has(d.modulePath) && fs.existsSync(path.join(REPO_ROOT, d.rel)) && artifactForm(fs.readFileSync(path.join(REPO_ROOT, d.rel))) === "bundled");
+  assert.ok(subject, "no current module ships an owner-signed bundled dist");
   const tree = path.join(scratch, "tree");
   const put = (rel, content) => { fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true }); fs.writeFileSync(path.join(tree, rel), content); };
   const dist = path.join(tree, subject.rel);
