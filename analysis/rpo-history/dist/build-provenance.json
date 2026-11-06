@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -39,5 +39,11 @@
     "src/rpo_history.cpp",
     "src/inspect.cpp"
   ],
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "6d645a423801421a283c51717430b2e8d1daead9a3711b6418a68f7987b7d31f"
 }

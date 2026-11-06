@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.science-http",
   "name": "Science HTTP envelope adapter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Typed HTTP transport for CQR screening. Numerical work is performed by the connected science module.",
   "pluginFamily": "analysis",
   "capabilities": [],

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.analysis.targeting",
   "name": "Differential Correction Targeter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vary and Achieve differential correction over consumer-supplied propagator and parameter-evaluator ports.",
   "pluginFamily": "maneuver",
   "capabilities": [],

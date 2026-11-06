@@ -1,7 +1,8 @@
 {
-  "spacedatastandards": "1.261.0+1792716949507",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "MEM",
+    "PVN",
     "EOP",
     "ACW",
     "RDO",
@@ -13,5 +14,11 @@
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "measurementModel": "analysis/estimation/src/estimation.cpp",
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "eaade1ac813725a462c40e6190c8e3854d27905facd2b95c7075a62766d82196"
 }

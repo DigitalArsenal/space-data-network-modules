@@ -1,10 +1,16 @@
 {
-  "spacedatastandards": "1.206.0",
+  "spacedatastandards": "1.279.0",
   "rosterParameters": 335,
   "rosterReference": 311,
   "rosterLocalAdditions": 24,
   "referenceRosterCommit": "08c2a2aae0b5fed077b2e7b4fda992ff54386c60",
   "referenceRosterSha256": "05fe18f4cbb50a38228fdc48a1bcc38f3812067bd7b49e48272a0ca58acd1898",
   "erfaSourceFiles": 248,
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "282d60529db17eca47e76bb80c875b77d6cc6a49b08ddfe5f500d9bb7ed1e1b1"
 }

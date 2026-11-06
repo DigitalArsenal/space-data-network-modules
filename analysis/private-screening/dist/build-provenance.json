@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.261.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -16,5 +16,11 @@
     "OEM"
   ],
   "sgp4": "foundation/sgp4-str3",
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "917c1bbc914b6d5744217155344489c26e261fc48e234553ded3ef9ddf2037a2"
 }

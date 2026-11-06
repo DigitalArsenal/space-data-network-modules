@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.parameters",
   "name": "Named Parameter Catalog",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Evaluates named calculation parameters on orbital states: the classical and equinoctial element sets, the derived orbit scalars, the angular-momentum triple, the B-plane and asymptote sets, the planet-relative angles, the atomic and dynamical time scales and the state-transition sub-matrices, over the shared IAU-2006/2000A chain. Publishes its own roster as an SDS PCE catalog, including the parameters it declares and refuses.",
   "pluginFamily": "analysis",
   "capabilities": [],

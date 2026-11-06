@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.reference-states",
   "name": "Reference states",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Independent reference states for calibrating orbit uncertainty: precise orbits read from SP3 (files/orbit-products) become GCRF/UTC states per catalogued object, with the product's stated accuracy as covariance and its provenance; compare_to_reference scores an ephemeris and its covariance against them ($OEM residuals, $CVR realism). Typed contracts 1.0: FlatBuffers only. The SP3 satellite identities (product, source, satellites.<SP3 id>.{norad, objectId, name}, optional statedSigmaM with statedSigmaBasis) are node CONFIG through plugin.getConfig (SDS $PIV, one ModuleConfig). No credentials: capabilities none; sbas_reference_states turns an archived WAAS (SBAS message type 9) navigation file into GCRF reference states for the geostationary PRNs 131, 133 and 135, the user range accuracy as a protection bound.",
   "pluginFamily": "analysis",
   "capabilities": [],

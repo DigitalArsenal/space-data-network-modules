@@ -1,6 +1,6 @@
 {
   "pluginId": "com.orbpro.analysis.targeting",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "moduleSdk": "0.8.25",
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
   "clangCommand": "$SDN_TOOL_CACHE/emsdk-6.0.1/upstream/bin/clang++",
@@ -9,6 +9,6 @@
   "erfaSourceFiles": 248,
   "coordinateSource": "propagator/ffm/lib/coords.cpp",
   "sourceSha256": "7ddcf103190e626600c44280595a6de4a28ccb46751e533260cd702591364330",
-  "sha256": "83f81e20d8c7f0aae08eb5db05c58b4be5d88a70dac9ed0bfa36b3ed4e36fa0e",
+  "sha256": "20f6fdafac8e456252ec6caed65ccc11fb670fd2967c940b71ea56a4acde205a",
   "bytes": 127064
 }

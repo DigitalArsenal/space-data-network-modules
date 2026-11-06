@@ -20,7 +20,9 @@ const bodyModels = await fs.readFile(path.join(framesSrc, 'iau_body_models.hpp')
 const axisEngine = (await fs.readFile(path.join(framesSrc, 'axis_engine.hpp'), 'utf8'))
   .replace('#include "iau_body_models.hpp"', '')
   .replace(/extern "C" \{\n#include "erfa\.h"\n#include "erfam\.h"\n\}\n/, '// ERFA is amalgamated ahead of this header by build.mjs.\n');
-const estimationHeader = await fs.readFile(path.join(estimationSrc, 'estimation.hpp'), 'utf8');
+// estimation.hpp includes recovery.hpp: one translation unit, so the header is inlined where it is included.
+const recoveryHeader = await fs.readFile(path.join(estimationSrc, 'recovery.hpp'), 'utf8');
+const estimationHeader = (await fs.readFile(path.join(estimationSrc, 'estimation.hpp'), 'utf8')).replace('#include "recovery.hpp"', () => recoveryHeader);
 const estimationSource = (await fs.readFile(path.join(estimationSrc, 'estimation.cpp'), 'utf8')).replace('#include "estimation.hpp"', '');
 const source = await fs.readFile(path.join(root, 'src/observation_simulator.cpp'), 'utf8');
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'plugin-manifest.json'), 'utf8'));

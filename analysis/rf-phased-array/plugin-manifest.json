@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.rf-phased-array",
   "name": "RF Phased Array Beamforming",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Deterministic array-factor synthesis, electronic steering, scan-loss and grating-lobe analysis, white-covariance MVDR/LCMV nulling, and beam-hop footprint products. All RF mathematics executes in the isomorphic WASM guest.",
   "pluginFamily": "comms",
   "capabilities": [],

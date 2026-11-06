@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "FIL",
     "PHB",
@@ -55,5 +55,11 @@
   ],
   "moduleSdk": "0.9.12",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "5d7c19752340c7aa2682218727b4a4eaab9b22c098e669680b7ca0d403a26a9f"
+  "wasmSha256": "d67d39f1c79d1b36d6d987566946e8c7934310912ee51105b7379c147307427d",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "8a90c4ab01a2626f4eef42be8365a321858f4c69612f908b90e2f6738b411446"
 }
