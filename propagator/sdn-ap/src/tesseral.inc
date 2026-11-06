@@ -536,6 +536,26 @@ inline int zonal_count(int degree, bool wide) {
   return c;
 }
 
+/// G_lpq and dG/de at fixed M by the trapezoid on 256 uniform eccentric anomalies (dM = (1 - e cos E) dE; spectral for
+/// these periodic integrands): the wide set's Hansen coefficients (SPEC 16.11).
+inline void node_G(int l, int p, int q, double e, double& G, double& dG) {
+  constexpr int N = 256;
+  const int w = l - 2 * p, j = w + q;
+  const double eta = std::sqrt(1.0 - e * e);
+  G = 0.0;
+  dG = 0.0;
+  for (int k = 0; k < N; ++k) {
+    const double E = kTwoPi * k / N, sE = std::sin(E), cE = std::cos(E), ar = 1.0 / (1.0 - e * cE);
+    const double cf = (cE - e) * ar, sf = eta * sE * ar, M = E - e * sE;
+    const double ph = w * std::atan2(sf, cf) - j * M, cp = std::cos(ph), sp = std::sin(ph);
+    const double ak = std::pow(ar, l);  // (a/r)^(l+1) (1 - e cos E)
+    G += ak * cp;
+    dG += ak * ((l + 1) * ar * cf * cp - w * sf * (2.0 + e * cf) / (eta * eta) * sp);
+  }
+  G /= N;
+  dG /= N;
+}
+
 inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float* F) {
   double f[72], fp[72], fm[72];
   const double h = 1e-5;
@@ -548,7 +568,12 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
       normalized_Fk(0, w, l, i0 + h, fp);
       normalized_Fk(0, w, l, i0 - h, fm);
       double g0, g1;
-      if (q == 0) {
+      if (wide) {
+        double G, dG;
+        node_G(l, p, q, e0, G, dG);
+        g1 = dG;
+        g0 = G - dG * e0;
+      } else if (q == 0) {
         const double c2 = 0.25 * l * (l + 1);
         double G, dG;
         if (e0 < 0.005) { G = 1.0 + c2 * e0 * e0; dG = 2.0 * c2 * e0; }
