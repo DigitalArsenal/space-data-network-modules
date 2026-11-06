@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.3 (dist aa3ed22a).
+Version 0.6.4 (dist fd1ef468, bundle e98b6355).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2307,10 +2307,25 @@ milliseconds per object-day from 0.4.13 to 0.4.14): on a 1 h grid GTO 12.0 to 16
 Etalon-like 5.1 to 6.1; on a 1 min grid 121.3 to 124.3, 86.6 to 89.7 and 74.9 to 76.4; LEO, GPS-like, half-day,
 Molniya and GEO-like unchanged (2.1, 5.2, 11.7, 11.6 and 1.4 ms on the 1 h grid).
 
-**16.11 Wide terms above e 0.3.** A perigee pass spreads each term of the field over the harmonics of M. From 0.4.15,
+**16.11 Wide terms above e 0.3; the tesseral switch by class.** A perigee pass spreads each term of the field over the harmonics of M. From 0.4.15,
 above an epoch eccentricity of 0.3, AP's zonal tail (16.3) carries every long-period term, w = l - 2p for p = 0..l with
 q = -w (G = O(e^|w|)), not only w = 0 and +-1. From 0.6.3 the first-order tesseral terms of degree 2 to 12 (16.2) are not a
-series in M there. For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, so each (m, w) family's
+series in M there. From 0.6.4 the tesseral families' switch is by the set's resonance class (6, the band of the epoch mean
+motion, `src/tesseral.inc` `wide_set`): a set in no resonance band (class 0: low orbit above 3.61 rev/day, the LAGEOS band at
+6.4 to 6.5 rev/day, orbits below 0.80 rev/day) flies the grid above an epoch eccentricity of 0.05; a set in the one-day,
+half-day, eight-hour or sixteen-hour class keeps the 0.3 switch. The zonal tail's wide set, the perigee drag passage (16.12)
+and the fit's wide blocks (12.8) keep 0.3 in every class. Measured against the independent full-force reference of 16.11's
+last paragraph (orbit-accuracy-experiments results/ap-truth/tesseral-diagnosis, the kWideE 0.01 probe build, byte-identical
+to 0.6.3 above the switch on 12 of 12 sets): in the non-resonant regimes the first-order set fails the one-day line where the
+grid passes it (Ajisai at e 0.05 and 0.1; LAGEOS-1 at 0.05, 0.1 and 0.2; LAGEOS-2 at 0.05 and 0.1: forward tesseral shares
+of 3.0 to 18.4 m on the set against 0.4 to 3.2 m on the grid) and the grid's one-epoch flight is cheaper by 88 to 408 ms
+(the set's first-order table is the larger build there); in the half-day class (GPS, GLONASS, Etalon, Molniya at e 0.05 to
+0.29) the resonant mixed share is untouched by either and the grid costs 70 to 167 ms more, so the resonant classes keep the
+set. The eight-hour and sixteen-hour classes were not measured and keep the shipped switch. A set whose class changes in
+flight re-initializes under its new class's switch (6). 0.6.4 therefore changes a flight only for a class 0 set with
+0.05 < e <= 0.3; every other set is byte-identical to 0.6.3 (PRODUCER's version aside), and the 0.6.4 validation
+(orbit-accuracy-experiments experiments/operator-theory/TESSERAL-SWITCH-BY-CLASS.md) states its cells, the catalog budget on
+persistent instances and the identity set. For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, so each (m, w) family's
 first-order displacement (Lagrange's equations, each harmonic divided by its psi-dot, lambda also through n) is a periodic
 function of the anomaly, complete in j. At init it is built on 128 uniform eccentric anomalies from the family's forcing:
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
@@ -2331,9 +2346,9 @@ sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their byte
 instance began (out[2]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; a
 first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in
-the table (`src/tesseral.inc:315`); the table builds none of the general set above kWideE (`src/tesseral.inc:316`). At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded
-sets are byte-identical. The method is fixed once per flight from the fitted epoch elements: `src/tesseral.inc:42` sets
-kWideE = 0.3, `src/tesseral.inc:256` reads `const bool wide = e0 > kWideE;` when the set's terms are built at initialization
+the table (`src/tesseral.inc:323`); the table builds none of the general set above the switch (`src/tesseral.inc:324`). Below the switch both sets are 0.4.14's: propagations at e 0.25 and 0.3 of Etalon- and GPS-like seeded
+sets and of LEO sets at e 0.05 and below are byte-identical. The method is fixed once per flight from the fitted epoch elements: `src/tesseral.inc:43` sets
+kWideE = 0.3 and `:49` kWideENonResonant = 0.05, `src/tesseral.inc:264` reads `const bool wide = wide_set(cls, e0);` when the set's terms are built at initialization
 (`src/xp_theory.inc:1473` builds the grid on the same test of the epoch eccentricity), the output tests only whether the set
 holds a grid (`src/xp_theory.inc:1279` and `1290`), and the 48-hour schedule (`src/xp_theory.inc:1719` to `1777`) rebuilds the
 grid at the node elements without re-evaluating the test, so no flight switches method in flight. Against an independent
@@ -2402,7 +2417,7 @@ object-day from 0.4.14 to 0.4.15):
 | half-day | 16.3 to 30.3 | 123.6 to 152.6 |
 | Molniya | 18.2 to 30.5 | 118.1 to 159.1 |
 
-Orbits at e 0.3 and below run 0.4.14's path.
+Orbits at e 0.3 and below run 0.4.14's path, except the tesseral families of a class 0 set above e 0.05, the grid from 0.6.4.
 
 **16.12 Drag above e 0.3.** A drag pass at perigee is narrow against the orbit: the energy goes in a step, at the
 Earth angle of the passage. From 0.4.16, above an epoch eccentricity of 0.3 (the set of 16.11), AP evaluates 3.4's drag

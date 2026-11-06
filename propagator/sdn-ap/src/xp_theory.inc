@@ -1463,15 +1463,15 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
-    tess::SpCoef* table = static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd, e.eo > tess::kWideE) * sizeof(tess::SpCoef)));
+    tess::SpCoef* table = static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd, tess::wide_set(res, e.eo)) * sizeof(tess::SpCoef)));
     if (table == nullptr) return false;
     const int count = tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, n0, e.xincl, e.eo, table);
     tess::SpCoef* kept = static_cast<tess::SpCoef*>(std::realloc(table, (count > 0 ? count : 1) * sizeof(tess::SpCoef)));
     if (kept == nullptr) { std::free(table); return false; }
     s.ctx.sp = kept;
     s.ctx.sp_count = count;
-    if (e.eo > tess::kWideE && s.ctx.wide == nullptr) {
-      // SPEC 16.11: the families of degree 2 to spd as a grid in E, by exact key; a copy inside its nominal's GridShareScope reads
+    if (tess::wide_set(res, e.eo) && s.ctx.wide == nullptr) {
+      // SPEC 16.11: the families of degree 2 to spd as a grid in E, by exact key (the switch by class: tess::wide_set); a copy inside its nominal's GridShareScope reads
       // the nominal's grid when within the share range; a class change's temporary keeps its parent's
       XpSat* anchor = grid_share_anchor();
       const tess::WideGrid* ag = anchor != nullptr ? anchor->ctx.wide : nullptr;
