@@ -98,18 +98,22 @@ The intended output is the set of steps at which B is within R′.
 
 **Circuit privacy.** A holds the secret key and can read the noise of B's
 response: one budget integer per returned block through the fork API, and the
-noise polynomial (8192 integers per lane) with its own key. Measured over 2088
-S2 responses (the 8 pairs for a day, 400 breadth geometries, 1600 more): the
-budget is 32 bits (mean 32.004, sd 0.066) and the log2 max-norm of the noise
-is 140.10 (sd 0.11, against 0.10 to 0.12 for repeated encryptions of
-identical operands), also for slot-constant operands from a difference of 0 to
-2^23. A regression of seven targets on the 19 noise readings plus A's own
-operand adds nothing (change in cross-validated R2 at most -0.0065; gate
-+0.01), and a
-nearest-neighbour read against 64 candidate orbits picks the true one 3 times
-in 200 (chance 3.1). No usable leak by those estimators, so no flooding is
-built; the coefficient-wise noise polynomial itself is not decoded
-(`../private-screening/PROTOCOL-NOISE.md`).
+full noise polynomial (8192 integers per lane) with its own key. Measured
+over 2088 S2 responses (the 8 pairs for a day, 400 breadth geometries, 1600
+more) and a 64-candidate dictionary: the budget is 32 bits (mean 32.005, sd
+0.072) and the log2 max-norm of the noise is 140.1 (sd 0.11, as for repeated
+encryptions of identical operands). A regression of seven targets on 19
+summaries of the noise plus A's own operand adds nothing (change in
+cross-validated R2 at most -0.0082; gate +0.01). At the coefficient level
+(the whole vector, in the coefficient domain and in the slot image): the
+correlation between two responses to the same operand is no higher than
+between responses to different operands (bound 1.4e-3 of the noise variance),
+a full-vector nearest neighbour picks the true candidate 4 and 3 times in 200
+(chance 3.1), a matched filter built from A's own encryption noise 2 times in
+200, and 200 repeated queries per block do not separate the true candidate
+(gap -1.0 sigma; a share of 1e-4 to 2e-4 of the noise variance would). No
+usable leak by those estimators; the flooding arm was not triggered and is
+not built (`../private-screening/PROTOCOL-NOISE.md`).
 
 **Real conjunctions.** These reveal what any safe protocol must reveal. Each
 alert places the other object within R′ of a known object at a known time.
@@ -263,5 +267,5 @@ fleet's tubes.
 | The protocol's arithmetic | Measured here (benchmark) and run on the primitive with known answers (`../private-screening/PROTOCOL-19.md`): alert steps identical to plaintext screening on the registered pairs, 0 sign mismatches; B squares the differences itself (no |a|^2 submitted); screening against an encrypted orbit on each side; additive masks; requester-held per-window keys. Responder cost 1012 ms and 17.3 MB per pair-day at 1 s (bench 169 ms, 8.7 MB). |
 | Pre-answer tube check; anchor-free physics check (two-body identities at n 16384, depth 3, J2 band); Laplace noise with a safety offset | Run with known answers in the same record: two-body tracks and the Swarm A and GPS G01 precise orbits pass the band at every step; fabricated tracks fail. A Sentinel-1 class track passing it stays a gate beside the comparison step. |
 | Decoys | Removed from the design (owner 2026-10-07). |
-| Response-noise channel | Verdict (`../private-screening/PROTOCOL-NOISE.md`, three-way form): no usable leak by the registered estimators. 2,088 responses; E1 change in cross-validated R2 negative for all seven targets, best -0.0065 against the +0.01 gate; E2 nearest neighbour 3 of 200 against 3.1 by chance; noise budget 32.004 +/- 0.066 bits. The flooding arm was not triggered and is not built. The gate stays conditional on those estimators only; the coefficient-wise noise polynomial is not decoded. |
+| Response-noise channel | Verdict (`../private-screening/PROTOCOL-NOISE.md`, three-way form): no usable leak by the registered estimators. 2,088 responses; E1 change in cross-validated R2 negative for all seven targets, best -0.0082 against the +0.01 gate (E1 alone detects an injected dependence only from a 2 to 5 % share of a summary's variance); E2 nearest neighbour 4 of 200 against 3.1 by chance; noise budget 32.005 +/- 0.072 bits; at the coefficient level (full noise polynomial, coefficient domain and slot image) replicate correlation, full-vector nearest neighbour (4 and 3 of 200), matched filter (2 of 200) and 200 repeated queries per block all null, able to see an operand-dependent noise share of about 1e-4 to 2e-4 (repeated queries), 1e-3 (one response) and 1.4e-3 (replicate correlation). The flooding arm was not triggered and is not built; it stays an option (n 16384). The gate is conditional on those estimators and limits only, not a proof of circuit privacy. |
 | Bit-only comparison (DGK or garbled circuit); completeness audit; the exchange; staking; budgets | Not built. Until the comparison exists the output is decided by a test oracle and the feature is offered nowhere. Gates beside the comparison: a Sentinel-1 class precise orbit passing the physics check, and production key handling for the keyed noise and mask generators (the driver uses test keys). |

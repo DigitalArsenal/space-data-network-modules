@@ -503,17 +503,30 @@ void coefAnalysis(HEContext& A, const std::vector<std::vector<Bytes>>& aBlocks, 
   {
     const size_t Ns[6] = {1, 5, 25, 50, 100, 200};
     bool firstN = true;
-    for (size_t N : Ns) {
+    // s = 0 is the measurement; s > 0 injects a synthetic operand-dependent component of
+    // variance share s (the shape of candidate 0's signal, scaled to one response's noise)
+    // into the same averaged vectors: the detection calibration of E5.
+    const double shares[5] = {0.0, 1e-6, 1e-5, 1e-4, 1e-3};
+    double sigma[3];
+    for (int l = 0; l < 3; ++l) {
+      double mu = 0, ss = 0;
+      for (size_t j = 0; j < kN; ++j) mu += rep[0].w[l][j] - aKnown[l][j];
+      mu /= (double)kN;
+      for (size_t j = 0; j < kN; ++j) { const double x = rep[0].w[l][j] - aKnown[l][j] - mu; ss += x * x; }
+      sigma[l] = std::sqrt(ss / (double)kN);
+    }
+    for (double sh : shares) for (size_t N : Ns) {
       if (N > rep.size()) continue;
       double zs[64] = {0};
       for (int l = 0; l < 3; ++l) {
         Vec avg(kN, 0.0);
         for (size_t i = 0; i < N; ++i) for (size_t j = 0; j < kN; ++j) avg[j] += rep[i].w[l][j] / (double)N;
         for (size_t j = 0; j < kN; ++j) avg[j] -= aKnown[l][j];
+        if (sh > 0) for (size_t j = 0; j < kN; ++j) avg[j] += std::sqrt(sh) * sigma[l] * sq * Su[0][l][j];
         const Vec au = unitVec(avg);
         for (int c = 0; c < K; ++c) zs[c] += sq * dot(au, Su[c][l]);
       }
-      std::printf("%s{\"N\":%zu,\"z\":[", firstN ? "" : ",", N);
+      std::printf("%s{\"N\":%zu,\"share\":%g,\"z\":[", firstN ? "" : ",", N, sh);
       for (int c = 0; c < K; ++c) std::printf("%s%.3f", c ? "," : "", zs[c]);
       std::printf("]}");
       firstN = false;

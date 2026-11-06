@@ -204,7 +204,7 @@ const e2SignP = binomUpper(better, usedPairs, 0.5);
 const e2Fires = e2TopP <= E2_ALPHA && rate >= 1 / K + E2_MIN_RATE_OVER_CHANCE && e2SignP <= E2_ALPHA;
 
 // ---- controls ----
-const rep = rows.filter((r) => r.set === 'repeat');
+const rep = rows.filter((r) => r.set === 'repeat').slice(0, 30);
 const readingNames = ['api budget', 'lane0 budget', 'lane1 budget', 'lane2 budget', 'lane0 log2 Linf', 'lane0 log2 rms', 'lane1 log2 Linf', 'lane2 log2 Linf'];
 const readingIdx = [0, 1, 2, 3, 4, 5, 9, 14];
 const p2 = readingIdx.map((j, k) => ({ reading: readingNames[k], sdFreshJitter: sd(rep.map((r) => r.reading[j])), sdPopulation: sd(pop.map((r) => r.reading[j])), meanPopulation: mean(pop.map((r) => r.reading[j])) }));
@@ -213,8 +213,52 @@ const p1Spread = Math.max(...p1.map((c) => c.log2LinfLane0)) - Math.min(...p1.ma
 const p1Falls = p1[0].apiBudget - p1[p1.length - 1].apiBudget >= 8;
 check('P1 slot-constant control decrypts exactly', p1.every((c) => c.valueMismatches === 0), 'ok');
 
+// ---- coefficient level (PROTOCOL-NOISE.md section 7, 7b) ----
+const coef = out.coef;
+function pickStats(M) {
+  let top = 0, rankSum = 0;
+  M.forEach((r, i) => { const tr = i % K; if (r.indexOf(Math.max(...r)) === tr) top++; rankSum += 1 + r.filter((v) => v > r[tr]).length; });
+  return { top1: top, targets: M.length, rate: top / M.length, binomialP: binomUpper(top, M.length, 1 / K), meanRank: rankSum / M.length };
+}
+const NN_ALPHA = 0.001 / 3;
+const firesNN = (s) => s.binomialP <= NN_ALPHA && s.rate >= 1 / K + E2_MIN_RATE_OVER_CHANCE;
+const e3 = { coef: coef.e3.coef, slot: coef.e3.slot };
+const e3Fires = [e3.coef, e3.slot].some((e) => e.p <= 0.05 / 2);
+const e3nn = { coef: pickStats(coef.nn.coef), slot: pickStats(coef.nn.slot) };
+const e4 = pickStats(coef.e4);
+const e3nnFires = firesNN(e3nn.coef) || firesNN(e3nn.slot);
+const e4Fires = firesNN(e4);
+const gapOf = (z) => { const o = z.slice(1); const m = mean(o); return { gap: (z[0] - m) / sd(o), rank: 1 + o.filter((v) => v > z[0]).length }; };
+const e5 = coef.e5.map((e) => ({ N: e.N, share: e.share, ...gapOf(e.z) }));
+const e5Measured = e5.filter((e) => e.share === 0);
+const E5_GAP = 4;
+const e5Fires = e5Measured.some((e) => e.gap >= E5_GAP);
+const e5Calibration = [1e-6, 1e-5, 1e-4, 1e-3].map((s) => {
+  const rowsS = e5.filter((e) => e.share === s);
+  const hit = rowsS.find((e) => e.gap >= E5_GAP);
+  return { share: s, smallestNDetected: hit ? hit.N : null, gapAtN200: rowsS.find((e) => e.N === 200)?.gap, gapAtN1: rowsS.find((e) => e.N === 1)?.gap };
+});
+// Power of E1 by injection (7, c): column 4 replaced by sqrt(1-s) eps + sqrt(s) z(T2 residual to A's features).
+const T2 = 1, resid = Y.map((y, i) => y[T2] - predA[i][T2]);
+const rm = mean(resid), rs = sd(resid), zres = resid.map((v) => (v - rm) / rs);
+const gauss = (r) => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
+const nullQ = [...nullD[T2]].sort((a, b) => a - b)[Math.floor((1 - E1_ALPHA) * PERMUTATIONS)];
+const REPS = 200, rndP = mulberry32(PERM_SEED + 7);
+const e1Power = [0.005, 0.01, 0.02, 0.05].map((s) => {
+  let hits = 0;
+  for (let rep = 0; rep < REPS; rep++) {
+    const Xi = X.map((row, i) => { const r2row = row.slice(); r2row[4] = Math.sqrt(1 - s) * gauss(rndP) + Math.sqrt(s) * zres[i]; return r2row; });
+    const pr = cvPredict(Xi, Y, folds);
+    const d = r2(pr, Y, T2) - r2A[T2];
+    if (d >= E1_MIN_DELTA_R2 && d >= nullQ) hits++;
+  }
+  return { injectedShare: s, detectionRate: hits / REPS, replicates: REPS };
+});
+const e1Smallest = e1Power.find((p) => p.detectionRate >= 0.9)?.injectedShare ?? null;
+
 // ---- verdict ----
-const leak = e1Fires || e2Fires;
+const coefFires = e3Fires || e3nnFires || e4Fires || e5Fires;
+const leak = e1Fires || e2Fires || coefFires;
 const verdict = leak ? 'leak (flooding arm not run in this build: gate stays)' : 'no usable leak';
 const summary = {
   registered: 'private-screening/PROTOCOL-NOISE.md',
@@ -224,9 +268,17 @@ const summary = {
   e2: { top1: top1, targets: T, rate, chance: 1 / K, binomialP: e2TopP, meanRankOfTruth: rankSum / T, expectedRankUnderNull: (K + 1) / 2, meanC1Pick: c1Pick / T, meanC1RandomPick: c1Random / T, signTestBetter: better, signTestPairs: usedPairs, signP: e2SignP, fires: e2Fires },
   c1: { criterion: 'within a factor of 2 at more than 0.1 % of steps', e1Observed: c1Obs, e1KnownOnly: c1A, e1NullMean: mean(c1Null), e1Null95: quantile(c1NullSorted, 0.95), nullPassChance: c1Null.filter((v) => v > C1_THRESHOLD).length / c1Null.length, e2Pick: c1Pick / T, e2RandomPick: c1Random / T, note: 'passed at the null level by any in-neighbourhood estimate; success counts only when a gate fires' },
   controls: { p1: { rows: p1, log2LinfSpread: p1Spread, registeredExpectationBudgetFalls: p1Falls }, p2 },
+  coefficientLevel: {
+    sizesLog2: { responseNoiseLinfLane0: coef.wLinfLog2Lane0, knownAPartLinf: coef.aKnownLinfLog2, candidateSignalLinf: coef.signalLinfLog2, freshNoiseLinf: coef.eALinfLog2 },
+    e3ReplicateCorrelation: { ...e3, fires: e3Fires },
+    e3NN: { coef: e3nn.coef, slot: e3nn.slot, fires: e3nnFires },
+    e4MatchedFilter: { ...e4, fires: e4Fires },
+    e5RepeatedQueries: { measured: e5Measured, calibration: e5Calibration, gate: `standardized gap >= ${E5_GAP} at some N <= 200`, fires: e5Fires },
+    e1Power: { detail: e1Power, smallestInjectedShareDetectedAt90: e1Smallest, nullQuantile: nullQ },
+  },
   verdict,
 };
-check('no gate fires on the unflooded response (E1, E2)', !leak, `E1 fires ${e1Fires}, E2 fires ${e2Fires}`);
+check('no gate fires on the unflooded response (E1, E2, E3, E3-NN, E4, E5)', !leak, `E1 ${e1Fires}, E2 ${e2Fires}, E3 ${e3Fires}, E3-NN ${e3nnFires}, E4 ${e4Fires}, E5 ${e5Fires}`);
 
 const f = (v, d = 4) => (typeof v === 'number' ? v.toFixed(d) : String(v));
 console.log('Noise channel of the S2 response');
@@ -236,6 +288,13 @@ console.log(`E2 top-1 ${top1}/${T} = ${f(rate)} (chance ${f(1 / K)}), p ${f(e2To
 console.log(`C1 (record 19 criterion): E1 estimate ${f(c1Obs)}, known-A-only ${f(c1A)}, null mean ${f(mean(c1Null))}; null pass chance ${f(summary.c1.nullPassChance, 3)}`);
 console.log(`P1 slot-constant operands |ca-cb| 0..2^23: API budget ${p1.map((c) => c.apiBudget).join(',')}; log2 Linf spread ${f(p1Spread, 3)} bits; registered expectation (budget falls by >= 8): ${p1Falls}`);
 for (const p of p2) console.log(`P2 ${p.reading.padEnd(16)} sd fresh jitter ${f(p.sdFreshJitter)}; sd across population ${f(p.sdPopulation)}; mean ${f(p.meanPopulation, 3)}`);
+console.log(`coefficient level: response noise Linf 2^${f(coef.wLinfLog2Lane0, 1)}, known A part 2^${f(coef.aKnownLinfLog2, 1)}, candidate signal 2^${f(coef.signalLinfLog2, 1)}, fresh noise 2^${f(coef.eALinfLog2, 1)}`);
+console.log(`E3 replicate correlation: coef same ${f(e3.coef.obsSame, 5)} vs null ${f(e3.coef.nullMean, 5)} +/- ${f(e3.coef.nullSd, 5)}, p ${f(e3.coef.p)}; slot same ${f(e3.slot.obsSame, 5)} vs null ${f(e3.slot.nullMean, 5)} +/- ${f(e3.slot.nullSd, 5)}, p ${f(e3.slot.p)}; fires ${e3Fires}`);
+console.log(`E3-NN full vector: coef top-1 ${e3nn.coef.top1}/${e3nn.coef.targets} p ${f(e3nn.coef.binomialP)} mean rank ${f(e3nn.coef.meanRank, 1)}; slot top-1 ${e3nn.slot.top1}/${e3nn.slot.targets} p ${f(e3nn.slot.binomialP)} mean rank ${f(e3nn.slot.meanRank, 1)}; fires ${e3nnFires}`);
+console.log(`E4 matched filter: top-1 ${e4.top1}/${e4.targets} p ${f(e4.binomialP)} mean rank ${f(e4.meanRank, 1)}; fires ${e4Fires}`);
+console.log(`E5 repeated queries (measured gap by N): ${e5Measured.map((e) => `${e.N}:${f(e.gap, 2)}`).join(' ')}; fires ${e5Fires}`);
+for (const c of e5Calibration) console.log(`E5 calibration share ${c.share}: gap at N=1 ${f(c.gapAtN1, 2)}, at N=200 ${f(c.gapAtN200, 2)}, smallest N with gap >= ${E5_GAP}: ${c.smallestNDetected ?? 'none'}`);
+for (const p of e1Power) console.log(`E1 power: injected share ${p.injectedShare} detected at rate ${f(p.detectionRate, 3)} (${p.replicates} replicates)`);
 for (const l of lines) console.log(`${l.ok ? 'ok  ' : 'FAIL'} ${l.name}: ${l.detail}`);
 console.log(`verdict: ${verdict}`);
 

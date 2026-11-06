@@ -15,8 +15,8 @@
     "api": "NoiseBudget: one integer per returned block (min over the 3 lanes)",
     "finest": "per lane noise polynomial d (8192 integers), summarized in 19 numbers",
     "exactCheck": {
-      "exactLog2Linf": 139.9496650514406,
-      "driverLog2Linf": 139.949656
+      "exactLog2Linf": 140.2320558966598,
+      "driverLog2Linf": 140.232055
     }
   },
   "e1": {
@@ -26,65 +26,65 @@
     "targets": [
       {
         "target": "log2 min distance",
-        "r2Full": -0.015652649725644174,
+        "r2Full": -0.01132144588156625,
         "r2KnownOnly": -0.002766482450087926,
-        "deltaR2": -0.012886167275556248,
-        "p": 0.6051974012993503,
-        "nullDelta99": -0.0010185409582927907,
+        "deltaR2": -0.008554963431478324,
+        "p": 0.27136431784107945,
+        "nullDelta99": 0.0003563768665331146,
         "fires": false
       },
       {
         "target": "mean log2 distance",
-        "r2Full": -0.01888734357733335,
+        "r2Full": -0.023184873691968422,
         "r2KnownOnly": -0.0068447826977919846,
-        "deltaR2": -0.012042560879541364,
-        "p": 0.5442278860569715,
-        "nullDelta99": -0.000037285785617680034,
+        "deltaR2": -0.016340090994176437,
+        "p": 0.863568215892054,
+        "nullDelta99": 0.0003349887051133926,
         "fires": false
       },
       {
         "target": "close flag",
-        "r2Full": -0.010609501014718248,
+        "r2Full": -0.013236099165836901,
         "r2KnownOnly": -0.0016491830273421826,
-        "deltaR2": -0.008960317987376065,
-        "p": 0.2863568215892054,
-        "nullDelta99": -0.0006469257591488198,
+        "deltaR2": -0.011586916138494718,
+        "p": 0.5132433783108445,
+        "nullDelta99": -0.0001306589098402089,
         "fires": false
       },
       {
         "target": "mean b_x",
-        "r2Full": 0.4202033091531385,
+        "r2Full": 0.4165393884857044,
         "r2KnownOnly": 0.42876216206393414,
-        "deltaR2": -0.008558852910795611,
-        "p": 0.7821089455272364,
-        "nullDelta99": -0.00037280052183730206,
+        "deltaR2": -0.012222773578229762,
+        "p": 0.9830084957521239,
+        "nullDelta99": -0.0004351193962535138,
         "fires": false
       },
       {
         "target": "mean b_y",
-        "r2Full": 0.014000339659419492,
+        "r2Full": 0.008058432569385321,
         "r2KnownOnly": 0.021685610107300413,
-        "deltaR2": -0.007685270447880921,
-        "p": 0.19490254872563717,
-        "nullDelta99": 0.00020884225743511564,
+        "deltaR2": -0.013627177537915092,
+        "p": 0.6941529235382309,
+        "nullDelta99": -0.0006246770368418808,
         "fires": false
       },
       {
         "target": "mean b_z",
-        "r2Full": 0.3573753741950839,
+        "r2Full": 0.35576365923915654,
         "r2KnownOnly": 0.36391591592754335,
-        "deltaR2": -0.006540541732459437,
-        "p": 0.408295852073963,
-        "nullDelta99": -0.0003423038408728596,
+        "deltaR2": -0.008152256688386816,
+        "p": 0.6281859070464768,
+        "nullDelta99": -0.0002764527029316399,
         "fires": false
       },
       {
         "target": "mean |b|",
-        "r2Full": -0.016599165612481537,
+        "r2Full": -0.019512680873920996,
         "r2KnownOnly": -0.005039108204623277,
-        "deltaR2": -0.01156005740785826,
-        "p": 0.5237381309345327,
-        "nullDelta99": -0.0007751344046886821,
+        "deltaR2": -0.014473572669297718,
+        "p": 0.7526236881559221,
+        "nullDelta99": -0.0011802079447746916,
         "fires": false
       }
     ],
@@ -92,28 +92,28 @@
     "nullFamilyPassChance": 0.05
   },
   "e2": {
-    "top1": 3,
+    "top1": 4,
     "targets": 200,
-    "rate": 0.015,
+    "rate": 0.02,
     "chance": 0.015625,
-    "binomialP": 0.6061255135646022,
-    "meanRankOfTruth": 32.21,
+    "binomialP": 0.38096591922968875,
+    "meanRankOfTruth": 31.44,
     "expectedRankUnderNull": 32.5,
-    "meanC1Pick": 0.45626647499999995,
+    "meanC1Pick": 0.43642761499999994,
     "meanC1RandomPick": 0.4327688671093749,
-    "signTestBetter": 90,
+    "signTestBetter": 77,
     "signTestPairs": 200,
-    "signP": 0.9313166745020109,
+    "signP": 0.9995774649594036,
     "fires": false
   },
   "c1": {
     "criterion": "within a factor of 2 at more than 0.1 % of steps",
-    "e1Observed": 0.5320976621064468,
+    "e1Observed": 0.5305382660232384,
     "e1KnownOnly": 0.5317224395614693,
-    "e1NullMean": 0.5316226237467196,
-    "e1Null95": 0.5332529047976012,
+    "e1NullMean": 0.531638992046946,
+    "e1Null95": 0.533195628748126,
     "nullPassChance": 1,
-    "e2Pick": 0.45626647499999995,
+    "e2Pick": 0.43642761499999994,
     "e2RandomPick": 0.4327688671093749,
     "note": "passed at the null level by any in-neighbourhood estimate; success counts only when a gate fires"
   },
@@ -124,104 +124,250 @@
           "delta": 0,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 140.0809
+          "log2LinfLane0": 139.9609
         },
         {
           "delta": 1,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 140.2674
+          "log2LinfLane0": 140.3924
         },
         {
           "delta": 16,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 140.1533
+          "log2LinfLane0": 140.4396
         },
         {
           "delta": 256,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 140.0527
+          "log2LinfLane0": 140.2004
         },
         {
           "delta": 4096,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 140.3094
+          "log2LinfLane0": 140.0688
         },
         {
           "delta": 65536,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 140.1195
+          "log2LinfLane0": 140.0965
         },
         {
           "delta": 1048576,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 139.8329
+          "log2LinfLane0": 140.1329
         },
         {
           "delta": 8388608,
           "valueMismatches": 0,
           "apiBudget": 32,
-          "log2LinfLane0": 140.161
+          "log2LinfLane0": 140.0509
         }
       ],
-      "log2LinfSpread": 0.4765000000000157,
+      "log2LinfSpread": 0.47870000000000346,
       "registeredExpectationBudgetFalls": false
     },
     "p2": [
       {
         "reading": "api budget",
-        "sdFreshJitter": 0,
-        "sdPopulation": 0.06552726290104222,
-        "meanPopulation": 32.00431034482759
+        "sdFreshJitter": 0.2537081317024625,
+        "sdPopulation": 0.0724082613031792,
+        "meanPopulation": 32.00526819923372
       },
       {
         "reading": "lane0 budget",
-        "sdFreshJitter": 0.4901325178535611,
-        "sdPopulation": 0.37319518584339334,
-        "meanPopulation": 32.16714559386973
+        "sdFreshJitter": 0.4301830671520764,
+        "sdPopulation": 0.38671829933145696,
+        "meanPopulation": 32.18295019157088
       },
       {
         "reading": "lane1 budget",
-        "sdFreshJitter": 0.40683810217248617,
-        "sdPopulation": 0.38233638598411757,
-        "meanPopulation": 32.17768199233716
+        "sdFreshJitter": 0.4068381021724861,
+        "sdPopulation": 0.39136171834751704,
+        "meanPopulation": 32.18869731800766
       },
       {
         "reading": "lane2 budget",
-        "sdFreshJitter": 0.4901325178535611,
-        "sdPopulation": 0.39475351335895753,
-        "meanPopulation": 32.19300766283525
+        "sdFreshJitter": 0.4301830671520764,
+        "sdPopulation": 0.39660505995713574,
+        "meanPopulation": 32.195402298850574
       },
       {
         "reading": "lane0 log2 Linf",
-        "sdFreshJitter": 0.12104930920788523,
-        "sdPopulation": 0.11122196179322612,
-        "meanPopulation": 140.10560817576638
+        "sdFreshJitter": 0.09437271691402438,
+        "sdPopulation": 0.11093209976369843,
+        "meanPopulation": 140.10186494157114
       },
       {
         "reading": "lane0 log2 rms",
-        "sdFreshJitter": 0.04320110829092611,
-        "sdPopulation": 0.035306231583161735,
-        "meanPopulation": 138.12197288888896
+        "sdFreshJitter": 0.034894337994359544,
+        "sdPopulation": 0.035557372527803145,
+        "meanPopulation": 138.12304449904218
       },
       {
         "reading": "lane1 log2 Linf",
-        "sdFreshJitter": 0.12440810526060449,
-        "sdPopulation": 0.10790412729489703,
-        "meanPopulation": 140.0976586393679
+        "sdFreshJitter": 0.11860840567768495,
+        "sdPopulation": 0.1071510955239548,
+        "meanPopulation": 140.09495021455942
       },
       {
         "reading": "lane2 log2 Linf",
-        "sdFreshJitter": 0.09756593755291418,
-        "sdPopulation": 0.11030391144809953,
-        "meanPopulation": 140.09375181130247
+        "sdFreshJitter": 0.12711126748439674,
+        "sdPopulation": 0.11084164622415248,
+        "meanPopulation": 140.09469635249047
       }
     ]
+  },
+  "coefficientLevel": {
+    "sizesLog2": {
+      "responseNoiseLinfLane0": 140.016,
+      "knownAPartLinf": 134.382,
+      "candidateSignalLinf": 134.416,
+      "freshNoiseLinf": 66.246
+    },
+    "e3ReplicateCorrelation": {
+      "coef": {
+        "obsSame": -0.003725,
+        "allPairsMean": -0.003133,
+        "nullMean": -0.003138,
+        "nullSd": 0.000697,
+        "p": 0.8021,
+        "pairs": 51040
+      },
+      "slot": {
+        "obsSame": -0.002727,
+        "allPairsMean": -0.003135,
+        "nullMean": -0.003129,
+        "nullSd": 0.000256,
+        "p": 0.06247,
+        "pairs": 51040
+      },
+      "fires": false
+    },
+    "e3NN": {
+      "coef": {
+        "top1": 4,
+        "targets": 200,
+        "rate": 0.02,
+        "binomialP": 0.38096591922968875,
+        "meanRank": 32.375
+      },
+      "slot": {
+        "top1": 3,
+        "targets": 200,
+        "rate": 0.015,
+        "binomialP": 0.6061255135646022,
+        "meanRank": 33.71
+      },
+      "fires": false
+    },
+    "e4MatchedFilter": {
+      "top1": 2,
+      "targets": 200,
+      "rate": 0.01,
+      "binomialP": 0.821050580884275,
+      "meanRank": 31.89,
+      "fires": false
+    },
+    "e5RepeatedQueries": {
+      "measured": [
+        {
+          "N": 1,
+          "share": 0,
+          "gap": -0.8380873860288397,
+          "rank": 52
+        },
+        {
+          "N": 5,
+          "share": 0,
+          "gap": -0.2741997810943239,
+          "rank": 41
+        },
+        {
+          "N": 25,
+          "share": 0,
+          "gap": -0.8263413008968851,
+          "rank": 52
+        },
+        {
+          "N": 50,
+          "share": 0,
+          "gap": -0.0316690319847062,
+          "rank": 34
+        },
+        {
+          "N": 100,
+          "share": 0,
+          "gap": -0.3500641507520849,
+          "rank": 43
+        },
+        {
+          "N": 200,
+          "share": 0,
+          "gap": -1.0056816506610426,
+          "rank": 54
+        }
+      ],
+      "calibration": [
+        {
+          "share": 0.000001,
+          "smallestNDetected": null,
+          "gapAtN200": -0.572426744786349,
+          "gapAtN1": -0.8040089428841555
+        },
+        {
+          "share": 0.00001,
+          "smallestNDetected": null,
+          "gapAtN200": 0.36639451480486623,
+          "gapAtN1": -0.7313577530197767
+        },
+        {
+          "share": 0.0001,
+          "smallestNDetected": null,
+          "gapAtN200": 3.3424870371975737,
+          "gapAtN1": -0.49980801419888665
+        },
+        {
+          "share": 0.001,
+          "smallestNDetected": 25,
+          "gapAtN200": 12.520410095936848,
+          "gapAtN1": 0.23340275246831568
+        }
+      ],
+      "gate": "standardized gap >= 4 at some N <= 200",
+      "fires": false
+    },
+    "e1Power": {
+      "detail": [
+        {
+          "injectedShare": 0.005,
+          "detectionRate": 0,
+          "replicates": 200
+        },
+        {
+          "injectedShare": 0.01,
+          "detectionRate": 0.005,
+          "replicates": 200
+        },
+        {
+          "injectedShare": 0.02,
+          "detectionRate": 0.275,
+          "replicates": 200
+        },
+        {
+          "injectedShare": 0.05,
+          "detectionRate": 1,
+          "replicates": 200
+        }
+      ],
+      "smallestInjectedShareDetectedAt90": 0.05,
+      "nullQuantile": 0.0008557391555099603
+    }
   },
   "verdict": "no usable leak",
   "checks": [
@@ -243,12 +389,12 @@
     {
       "name": "long double reading equals the big-integer reading (log2 Linf, lane 0, within 0.001)",
       "ok": true,
-      "detail": "exact 139.9497, driver 139.9497"
+      "detail": "exact 140.2321, driver 140.2321"
     },
     {
       "name": "the budget from the noise polynomial equals the API budget lane 0 (A-B1 block 3)",
       "ok": true,
-      "detail": "polynomial 33, SEAL 33"
+      "detail": "polynomial 32, SEAL 32"
     },
     {
       "name": "P1 slot-constant control decrypts exactly",
@@ -256,9 +402,9 @@
       "detail": "ok"
     },
     {
-      "name": "no gate fires on the unflooded response (E1, E2)",
+      "name": "no gate fires on the unflooded response (E1, E2, E3, E3-NN, E4, E5)",
       "ok": true,
-      "detail": "E1 fires false, E2 fires false"
+      "detail": "E1 false, E2 false, E3 false, E3-NN false, E4 false, E5 false"
     }
   ]
 }

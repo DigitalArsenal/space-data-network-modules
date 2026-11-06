@@ -262,65 +262,110 @@ Verdict rule of 7 extends: E5 firing triggers the flooding arm as the others.
 
 ## Results (run of 2026-11-06, `results/noise-channel.json`)
 
-Verdict: no usable leak by the registered estimators. Neither gate fires on
-the unflooded response; the flooding arm (section 5) is therefore not run and
-its cost is not measured. All figures are from one run of the driver; B's
-encryption randomness is the library's, so a rerun changes the rows, not the
-gates' outcome (the gates are statistical with fixed permutation seeds).
+Verdict: no usable leak by the registered estimators, scalar and coefficient
+level, with the detection limits below. No gate fires on the unflooded
+response; the flooding arm (section 5) is therefore not run and its cost is
+not measured. Flooding stays a stated option. All figures are from the run
+stored in the results file; B's encryption randomness is the library's, so a
+rerun changes the rows and not the outcome (the gates are statistical with
+fixed permutation seeds). Two earlier runs of the same procedure (the
+single-threaded driver; and a run of the coefficient-level arm before the
+calibration shares were added) gave the same verdict.
 
-An earlier run of the same procedure (single-threaded driver) gave the same
-verdict; the figures below are the run stored in the results file.
+### Scalar and norm readings (sections 1 to 6; 2088 responses)
 
-Readings (2088 responses): the API budget is 32 bits at all but about 0.4 %
-of responses (mean 32.004, sd 0.066). The lane budgets average 32.17 to 32.19
-(sd 0.37 to 0.39, against 0.41 to 0.49 for the same operands encrypted again).
-Log2 L-infinity of the noise polynomial: mean 140.09 to 140.11 per lane, sd
-0.111, 0.108, 0.110 across the population against 0.121, 0.124, 0.098 for the
-repeated encryptions of identical operands (30 repeats). The long double
-reading agrees with the big-integer reading (139.9497 against 139.9497), and
-the budget computed from the polynomial equals SEAL's (33). The spread across
-operands is the spread of B's fresh encryption randomness. Cause: one multiply costs 73 bits whatever the operands (measured:
-fresh 106 bits; the square of a zero difference 33; a zero operand times a
-fresh ciphertext 34; two fresh ciphertexts 34). The rounding term of the
-multiply, of the size of t n, sets the floor, and the operand-dependent term
-is of the same size without stepping over it by a bit.
+Readings: 19 numbers per response, all computed from the full noise
+polynomial of each lane: the API budget (one integer per returned block), the
+three lane budgets, and per lane the log2 L-infinity, the log2 root mean
+square, the mean of log2 |d_i|, and the 50th and 90th percentiles. The API
+budget is 32 bits at all but about 0.4 % of responses (mean 32.005, sd
+0.072). Log2 L-infinity: mean 140.09 to 140.10 per lane, sd 0.111, 0.107,
+0.111 across the population against 0.094, 0.119, 0.127 for 30 repeated
+encryptions of identical operands. The long double reading agrees with the
+big-integer reading (140.2321 against 140.2321), and the budget from the
+polynomial equals SEAL's (32). Cause of the flat norm: one multiply costs 73
+bits whatever the operands (a scratch probe: fresh 106 bits; the square of a
+zero difference 33; a zero operand times a fresh ciphertext 34; two fresh
+ciphertexts 34); the rounding term of the multiply sets the floor.
 
 E1 (regression, 2000 permutations within block index). Change in
 cross-validated R2 from adding the 19 readings to A's own operand features,
-and its permutation p, per target: log2 minimum distance -0.0129 (p 0.605);
-mean log2 distance -0.0120 (0.544); close flag -0.0090 (0.286); mean b_x
--0.0086 (0.782); mean b_y -0.0077 (0.195); mean b_z -0.0065 (0.408); mean |b|
--0.0116 (0.524). No change is positive; the gate (change >= 0.01 and p <=
-0.05/7) fires for none. The minimum detectable change (the 99th percentile of
-the null) is -0.0010 to +0.0002, so a gain of 0.01 would stand well above the
-null. (In the earlier run four p-values were between 0.013 and 0.049 with
-every change negative; they did not repeat here.)
-Per-step estimate (record 19 criterion C1): the share of steps within a
-factor of 2 of the regression's distance is 0.532 with the readings, 0.532
-with A's features only, 0.532 for the null (mean); the criterion (more than
-0.1 %) is passed by the null in 2000 of 2000 permutations, so as registered
-it carries no information on its own.
+and its permutation p, per target: log2 minimum distance -0.0086 (p 0.271);
+mean log2 distance -0.0163 (0.864); close flag -0.0116 (0.513); mean b_x
+-0.0122 (0.983); mean b_y -0.0136 (0.694); mean b_z -0.0082 (0.628); mean
+|b| -0.0145 (0.753). No change is positive (best -0.0082); the gate (change
+>= 0.01 and p <= 0.05/7) fires for none. Per-step estimate (record 19
+criterion C1): 0.531 with the readings, 0.532 with A's features only, 0.532
+for the null; the criterion is passed by the null in 2000 of 2000
+permutations, so as registered it carries no information on its own.
 
-E2 (nearest neighbour, 64 candidates, 5 simulations each, 200 targets): top-1
-3 of 200 (0.015) against chance 0.0156, binomial p 0.61; mean rank of the
-truth 32.2 against 32.5 under the null; C1 of the picked candidate 0.456
-against 0.433 for a random pick, better than the random pick for 90 of 200
-targets, sign test p 0.93. Fires: no.
+E2 (nearest neighbour on the 19 readings, 64 candidates, 5 simulations each,
+200 targets): top-1 4 of 200 (0.020) against chance 0.0156, binomial p 0.38;
+mean rank of the truth 31.4 against 32.5; C1 of the pick 0.436 against 0.433
+for a random pick, sign test p 1.0. Fires: no.
+
+Power of E1 (7, c; injected share s of one reading's variance carried by T2,
+200 replicates each, detection = change >= 0.01 and above the null quantile):
+s = 0.005 detected 0.0 %; 0.01 0.5 %; 0.02 27.5 %; 0.05 100 %. The smallest
+injected share detected at a rate of 0.9 or more is 0.05. E1 at the +0.01
+gate is a coarse detector: it would miss a dependence below about a 2 to 5 %
+share of one summary's variance. The coefficient-level tests below are the
+sensitive ones.
+
+### Coefficient level (7 and 7b)
+
+Sizes (log2 of the L-infinity norm, lane 0): the response noise polynomial
+d 2^140.0; A's known part 2 sum m_a eA 2^134.4; a candidate's signal -2 sum
+m_b' eA 2^134.4; A's fresh noise eA 2^66.2.
+
+E3, replicate correlation (320 simulations, 64 candidates x 5, grand mean
+removed; 2000 regroupings): coefficient domain mean same-candidate
+correlation -0.00373 against a null of -0.00314 +/- 0.00070 (p 0.80); slot
+image of w -0.00273 against -0.00313 +/- 0.00026 (p 0.0625); gate p <= 0.025.
+Fires: no. A replicate correlation equals the share of the noise variance
+that is a deterministic function of the operand; the observed values bound it
+at 2 sd of the null: about 1.4e-3 (coefficient) and 5e-4 (slot).
+
+E3-NN, full-vector nearest neighbour on the fingerprint (mean of 5 simulation
+vectors): coefficient domain top-1 4 of 200 (p 0.38, mean rank 32.4); slot
+image 3 of 200 (p 0.61, mean rank 33.7); chance 3.1. Fires: no.
+
+E4, matched filter (target minus A's known part against each candidate's
+-2 sum m_b' eA): top-1 2 of 200 (p 0.82), mean rank 31.9 of 64. Fires: no.
+
+E5, repeated queries to one operand with fresh B randomness (N = 1, 5, 25,
+50, 100, 200 averaged; standardized gap of the true candidate's summed z to
+the other 63): -0.84, -0.27, -0.83, -0.03, -0.35, -1.01. Gate (gap >= 4):
+no. Calibration by injection of a known operand-dependent share s into the
+same averaged vectors (smallest N with gap >= 4; gap at N = 200): s = 1e-6:
+none (-0.6); 1e-5: none (0.4); 1e-4: none at N <= 200 (3.3; 4.4 in a repeat
+run); 1e-3: N = 25 (12.5). So E5 at 200 queries per block detects a
+deterministic operand-dependent share of the noise variance of about 1e-4 to
+2e-4 and above, and the measured gap corresponds to a share below that. A
+single response (N = 1) does not detect even 1e-3 (gap 0.2 to 1.3).
+
+Mechanism, as found: the cross term t I1 dB + t I2 dA of a ct x ct product
+(I the q-wraparound polynomial of <ct, s>, about 2^6 per coefficient)
+dominates the operand-dependent term m_b dA by about 100 in amplitude, so the
+share of the noise variance that depends on B's operand is expected near
+1e-4 (7b); the measurement puts it below the detection limits above.
 
 Controls. P1 (registered expectation: the budget falls as |c_a - c_b| rises)
 is NOT met and is reported as a failed expectation: the API budget is 32 at
 all eight differences from 0 to 2^23, and the log2 L-infinity spreads over
-0.48 bits across them (jitter alone gives 0.12 bit sd). The cause is the floor
-above: even a zero difference squared costs the full 73 bits, so a
-slot-constant operand does not lower the noise. This is a stronger absence
-for the norm readings (no operand structure, however extreme, moves them by
-more than the jitter) and not a sensitivity proof of the detector; its
-sensitivity is the stated minimum detectable change of E1. P2 as above.
+0.48 bits across them (jitter sd 0.1). The cause is the floor above: even a
+zero difference squared costs the full 73 bits, so a slot-constant operand
+does not lower the noise. This is an absence for the norm readings and not a
+sensitivity proof; the sensitivity statements are the injected calibrations
+above.
 
-What is not measured: the coefficient-wise noise polynomial is read only
-through its summaries (norms and quantiles). Its dependence on B's operands
-is bilinear in unknowns B alone holds (B's plaintext polynomial and B's
-encryption noise); a decoder for it was not built, and nothing here bounds
-what one would recover. The statement is "no usable leak by the registered
-estimators", not a proof of circuit privacy. A flood on S2 would be a
-protocol change and its own record (it needs n 16384, section 5).
+What the verdict does and does not say. "No usable leak" holds for the
+registered estimators at the stated detection limits: operand-dependent
+noise share below about 1e-4 to 2e-4 against a 200-query adversary, below
+about 1e-3 against a single response, and no coefficient-wise replicate
+structure above 1.4e-3. It is not a proof of circuit privacy: a share under
+those limits, an adversary with more than 200 queries per block (the keyed
+eta and mask are fixed per object and step, so extra queries only add fresh
+B encryption randomness), or an estimator outside the registered list is not
+covered. A flood on S2 would be a protocol change and its own record (it
+needs n 16384, section 5).
