@@ -17,7 +17,10 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <functional>
+#include <thread>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -263,11 +266,11 @@ void printRow(const Row& r, bool first) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  int seed4 = 1600, dictReps = 5, targets = 200, repeat = 30, exactDumps = 2, small = 0;
+  int threads = 12, seed4 = 1600, dictReps = 5, targets = 200, repeat = 30, exactDumps = 2, small = 0;
   for (int i = 1; i + 1 < argc; i += 2) {
     const std::string k = argv[i]; const int v = std::atoi(argv[i + 1]);
     if (k == "--seed4") seed4 = v; else if (k == "--dict-reps") dictReps = v; else if (k == "--targets") targets = v;
-    else if (k == "--repeat") repeat = v; else if (k == "--exact-dumps") exactDumps = v; else if (k == "--small") small = v;
+    else if (k == "--repeat") repeat = v; else if (k == "--exact-dumps") exactDumps = v; else if (k == "--small") small = v; else if (k == "--threads") threads = v;
     else { std::fprintf(stderr, "unknown option %s\n", k.c_str()); return 2; }
   }
   const size_t steps = 86400, blocks = (steps + kN - 1) / kN;  // 11
@@ -308,7 +311,10 @@ int main(int argc, char** argv) {
   bool first = true;
   size_t total = 0, vmTotal = 0;
   Raw raws[2]; int rawCount = 0;
-  auto emit = [&](Row r) { printRow(r, first); first = false; ++total; vmTotal += r.valueMismatches; };
+  // Jobs run on worker threads, each with its own contexts holding the same keys
+  // (the seeded key), and print in job order.
+  using Job = std::function<Row(HEContext&, const HEContext&)>;
+  std::vector<Job> jobs;
   auto geometry = [&](std::mt19937_64& g, double loM, double hiM, bool inBlock3, size_t* blockOut, double* missOut) {
     std::uniform_real_distribution<double> uni(0, 1);
     const double span = (double)steps;
@@ -337,7 +343,7 @@ int main(int argc, char** argv) {
       for (size_t w = 0; w < blocks; ++w) {
         const size_t e = std::min(steps, (w + 1) * kN);
         Raw* raw = (rawCount < exactDumps && q == 0 && w == 3) ? &raws[rawCount++] : nullptr;
-        emit(measure(A, B, aBlocks, nullptr, aTrack, sampleRange(bo, w * kN, e), w, q + 1, P, steps, "pair", q + 1, (int)w, rprime, raw));
+        jobs.push_back([=, &aBlocks, &aTrack](HEContext& A_, const HEContext& B_) { return measure(A_, B_, aBlocks, nullptr, aTrack, sampleRange(bo, w * kN, e), w, q + 1, P, steps, "pair", q + 1, (int)w, rprime, raw); });
       }
     }
     // Breadth sets (seeds 2, 3) and the third set (seed 4).
@@ -349,7 +355,7 @@ int main(int argc, char** argv) {
         size_t w; double miss;
         const Orbit bo = geometry(g, st.lo, st.hi, false, &w, &miss);
         const size_t e = std::min(steps, (w + 1) * kN);
-        emit(measure(A, B, aBlocks, nullptr, aTrack, sampleRange(bo, w * kN, e), w, st.base + k, P, steps, st.name, k, 0, rprime, nullptr));
+        { const std::string nm = st.name; const uint64_t id = st.base + k; jobs.push_back([=, &aBlocks, &aTrack](HEContext& A_, const HEContext& B_) { return measure(A_, B_, aBlocks, nullptr, aTrack, sampleRange(bo, w * kN, e), w, id, P, steps, nm, k, 0, rprime, nullptr); }); }
       }
     }
   }
@@ -365,14 +371,29 @@ int main(int argc, char** argv) {
     }
   }
   for (int c = 0; c < K; ++c) for (int r = 0; r < dictReps; ++r)
-    emit(measure(A, B, aBlocks, nullptr, aTrack, cand[c], 3, 5000 + c, P, steps, "dictSim", c, r, rprime, nullptr));
+    jobs.push_back([=, &aBlocks, &aTrack, &cand](HEContext& A_, const HEContext& B_) { return measure(A_, B_, aBlocks, nullptr, aTrack, cand[c], 3, 5000 + c, P, steps, "dictSim", c, r, rprime, nullptr); });
   for (int t = 0; t < targets; ++t) {
     const int c = t % K;
-    emit(measure(A, B, aBlocks, nullptr, aTrack, cand[c], 3, 5000 + c, P, steps, "dictTgt", c, t, rprime, nullptr));
+    jobs.push_back([=, &aBlocks, &aTrack, &cand](HEContext& A_, const HEContext& B_) { return measure(A_, B_, aBlocks, nullptr, aTrack, cand[c], 3, 5000 + c, P, steps, "dictTgt", c, t, rprime, nullptr); });
   }
   // The same operands repeated: the fresh-encryption jitter alone (P2).
   for (int r = 0; r < repeat; ++r)
-    emit(measure(A, B, aBlocks, nullptr, aTrack, cand[0], 3, 5000, P, steps, "repeat", 0, r, rprime, nullptr));
+    jobs.push_back([=, &aBlocks, &aTrack, &cand](HEContext& A_, const HEContext& B_) { return measure(A_, B_, aBlocks, nullptr, aTrack, cand[0], 3, 5000, P, steps, "repeat", 0, r, rprime, nullptr); });
+  {
+    std::vector<Row> rowsOut(jobs.size());
+    std::atomic<size_t> next{0};
+    auto worker = [&]() {
+      HEContext Aw = HEContext::CreateClientSeeded(seed, sizeof seed, kN);
+      HEContext Bw = HEContext::CreateServer(pk.data(), pk.size());
+      Bw.SetRelinKeys(rk.data(), rk.size());
+      if (Bw.HasSecretKey()) { std::fprintf(stderr, "worker responder holds a secret key\n"); std::exit(3); }
+      for (size_t i = next++; i < jobs.size(); i = next++) rowsOut[i] = jobs[i](Aw, Bw);
+    };
+    std::vector<std::thread> pool;
+    for (int i = 0; i < threads; ++i) pool.emplace_back(worker);
+    for (auto& th : pool) th.join();
+    for (const Row& r : rowsOut) { printRow(r, first); first = false; ++total; vmTotal += r.valueMismatches; }
+  }
   std::printf("\n],\n");
 
   // C1 matrix: share of steps of block 3 where candidate c is within a factor of 2 of target t's distance.

@@ -1,0 +1,264 @@
+{
+  "registered": "private-screening/PROTOCOL-NOISE.md",
+  "population": {
+    "responses": 2088,
+    "pairs": 88,
+    "breadth": 400,
+    "third": 1600,
+    "dictionary": {
+      "candidates": 64,
+      "simsPerCandidate": 5,
+      "targets": 200
+    }
+  },
+  "reading": {
+    "api": "NoiseBudget: one integer per returned block (min over the 3 lanes)",
+    "finest": "per lane noise polynomial d (8192 integers), summarized in 19 numbers",
+    "exactCheck": {
+      "exactLog2Linf": 139.9496650514406,
+      "driverLog2Linf": 139.949656
+    }
+  },
+  "e1": {
+    "permutations": 2000,
+    "alphaPerTarget": 0.0071428571428571435,
+    "minDeltaR2": 0.01,
+    "targets": [
+      {
+        "target": "log2 min distance",
+        "r2Full": -0.015652649725644174,
+        "r2KnownOnly": -0.002766482450087926,
+        "deltaR2": -0.012886167275556248,
+        "p": 0.6051974012993503,
+        "nullDelta99": -0.0010185409582927907,
+        "fires": false
+      },
+      {
+        "target": "mean log2 distance",
+        "r2Full": -0.01888734357733335,
+        "r2KnownOnly": -0.0068447826977919846,
+        "deltaR2": -0.012042560879541364,
+        "p": 0.5442278860569715,
+        "nullDelta99": -0.000037285785617680034,
+        "fires": false
+      },
+      {
+        "target": "close flag",
+        "r2Full": -0.010609501014718248,
+        "r2KnownOnly": -0.0016491830273421826,
+        "deltaR2": -0.008960317987376065,
+        "p": 0.2863568215892054,
+        "nullDelta99": -0.0006469257591488198,
+        "fires": false
+      },
+      {
+        "target": "mean b_x",
+        "r2Full": 0.4202033091531385,
+        "r2KnownOnly": 0.42876216206393414,
+        "deltaR2": -0.008558852910795611,
+        "p": 0.7821089455272364,
+        "nullDelta99": -0.00037280052183730206,
+        "fires": false
+      },
+      {
+        "target": "mean b_y",
+        "r2Full": 0.014000339659419492,
+        "r2KnownOnly": 0.021685610107300413,
+        "deltaR2": -0.007685270447880921,
+        "p": 0.19490254872563717,
+        "nullDelta99": 0.00020884225743511564,
+        "fires": false
+      },
+      {
+        "target": "mean b_z",
+        "r2Full": 0.3573753741950839,
+        "r2KnownOnly": 0.36391591592754335,
+        "deltaR2": -0.006540541732459437,
+        "p": 0.408295852073963,
+        "nullDelta99": -0.0003423038408728596,
+        "fires": false
+      },
+      {
+        "target": "mean |b|",
+        "r2Full": -0.016599165612481537,
+        "r2KnownOnly": -0.005039108204623277,
+        "deltaR2": -0.01156005740785826,
+        "p": 0.5237381309345327,
+        "nullDelta99": -0.0007751344046886821,
+        "fires": false
+      }
+    ],
+    "fires": false,
+    "nullFamilyPassChance": 0.05
+  },
+  "e2": {
+    "top1": 3,
+    "targets": 200,
+    "rate": 0.015,
+    "chance": 0.015625,
+    "binomialP": 0.6061255135646022,
+    "meanRankOfTruth": 32.21,
+    "expectedRankUnderNull": 32.5,
+    "meanC1Pick": 0.45626647499999995,
+    "meanC1RandomPick": 0.4327688671093749,
+    "signTestBetter": 90,
+    "signTestPairs": 200,
+    "signP": 0.9313166745020109,
+    "fires": false
+  },
+  "c1": {
+    "criterion": "within a factor of 2 at more than 0.1 % of steps",
+    "e1Observed": 0.5320976621064468,
+    "e1KnownOnly": 0.5317224395614693,
+    "e1NullMean": 0.5316226237467196,
+    "e1Null95": 0.5332529047976012,
+    "nullPassChance": 1,
+    "e2Pick": 0.45626647499999995,
+    "e2RandomPick": 0.4327688671093749,
+    "note": "passed at the null level by any in-neighbourhood estimate; success counts only when a gate fires"
+  },
+  "controls": {
+    "p1": {
+      "rows": [
+        {
+          "delta": 0,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 140.0809
+        },
+        {
+          "delta": 1,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 140.2674
+        },
+        {
+          "delta": 16,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 140.1533
+        },
+        {
+          "delta": 256,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 140.0527
+        },
+        {
+          "delta": 4096,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 140.3094
+        },
+        {
+          "delta": 65536,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 140.1195
+        },
+        {
+          "delta": 1048576,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 139.8329
+        },
+        {
+          "delta": 8388608,
+          "valueMismatches": 0,
+          "apiBudget": 32,
+          "log2LinfLane0": 140.161
+        }
+      ],
+      "log2LinfSpread": 0.4765000000000157,
+      "registeredExpectationBudgetFalls": false
+    },
+    "p2": [
+      {
+        "reading": "api budget",
+        "sdFreshJitter": 0,
+        "sdPopulation": 0.06552726290104222,
+        "meanPopulation": 32.00431034482759
+      },
+      {
+        "reading": "lane0 budget",
+        "sdFreshJitter": 0.4901325178535611,
+        "sdPopulation": 0.37319518584339334,
+        "meanPopulation": 32.16714559386973
+      },
+      {
+        "reading": "lane1 budget",
+        "sdFreshJitter": 0.40683810217248617,
+        "sdPopulation": 0.38233638598411757,
+        "meanPopulation": 32.17768199233716
+      },
+      {
+        "reading": "lane2 budget",
+        "sdFreshJitter": 0.4901325178535611,
+        "sdPopulation": 0.39475351335895753,
+        "meanPopulation": 32.19300766283525
+      },
+      {
+        "reading": "lane0 log2 Linf",
+        "sdFreshJitter": 0.12104930920788523,
+        "sdPopulation": 0.11122196179322612,
+        "meanPopulation": 140.10560817576638
+      },
+      {
+        "reading": "lane0 log2 rms",
+        "sdFreshJitter": 0.04320110829092611,
+        "sdPopulation": 0.035306231583161735,
+        "meanPopulation": 138.12197288888896
+      },
+      {
+        "reading": "lane1 log2 Linf",
+        "sdFreshJitter": 0.12440810526060449,
+        "sdPopulation": 0.10790412729489703,
+        "meanPopulation": 140.0976586393679
+      },
+      {
+        "reading": "lane2 log2 Linf",
+        "sdFreshJitter": 0.09756593755291418,
+        "sdPopulation": 0.11030391144809953,
+        "meanPopulation": 140.09375181130247
+      }
+    ]
+  },
+  "verdict": "no usable leak",
+  "checks": [
+    {
+      "name": "population is 88 + 400 + 1600 responses",
+      "ok": true,
+      "detail": "2088"
+    },
+    {
+      "name": "every decrypted response equals its plaintext value (valueMismatches)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "the responder holds no secret key",
+      "ok": true,
+      "detail": "false"
+    },
+    {
+      "name": "long double reading equals the big-integer reading (log2 Linf, lane 0, within 0.001)",
+      "ok": true,
+      "detail": "exact 139.9497, driver 139.9497"
+    },
+    {
+      "name": "the budget from the noise polynomial equals the API budget lane 0 (A-B1 block 3)",
+      "ok": true,
+      "detail": "polynomial 33, SEAL 33"
+    },
+    {
+      "name": "P1 slot-constant control decrypts exactly",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "name": "no gate fires on the unflooded response (E1, E2)",
+      "ok": true,
+      "detail": "E1 fires false, E2 fires false"
+    }
+  ]
+}

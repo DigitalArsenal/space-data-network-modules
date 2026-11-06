@@ -96,9 +96,20 @@ The intended output is the set of steps at which B is within R′.
   homomorphic comparison, for example DGK) that reveals only the sign. This
   step is not built, and its cost is not measured here.
 
-**Circuit privacy.** The noise in B's response ciphertext can carry
-information about b. B must flood it with fresh noise before replying. That
-needs larger parameters (n = 16384) and is not measured here.
+**Circuit privacy.** A holds the secret key and can read the noise of B's
+response: one budget integer per returned block through the fork API, and the
+noise polynomial (8192 integers per lane) with its own key. Measured over 2088
+S2 responses (the 8 pairs for a day, 400 breadth geometries, 1600 more): the
+budget is 32 bits (mean 32.004, sd 0.066) and the log2 max-norm of the noise
+is 140.10 (sd 0.11, against 0.10 to 0.12 for repeated encryptions of
+identical operands), also for slot-constant operands from a difference of 0 to
+2^23. A regression of seven targets on the 19 noise readings plus A's own
+operand adds nothing (change in cross-validated R2 at most -0.0065; gate
++0.01), and a
+nearest-neighbour read against 64 candidate orbits picks the true one 3 times
+in 200 (chance 3.1). No usable leak by those estimators, so no flooding is
+built; the coefficient-wise noise polynomial itself is not decoded
+(`../private-screening/PROTOCOL-NOISE.md`).
 
 **Real conjunctions.** These reveal what any safe protocol must reveal. Each
 alert places the other object within R′ of a known object at a known time.
@@ -252,4 +263,5 @@ fleet's tubes.
 | The protocol's arithmetic | Measured here (benchmark) and run on the primitive with known answers (`../private-screening/PROTOCOL-19.md`): alert steps identical to plaintext screening on the registered pairs, 0 sign mismatches; B squares the differences itself (no |a|^2 submitted); screening against an encrypted orbit on each side; additive masks; requester-held per-window keys. Responder cost 1012 ms and 17.3 MB per pair-day at 1 s (bench 169 ms, 8.7 MB). |
 | Pre-answer tube check; anchor-free physics check (two-body identities at n 16384, depth 3, J2 band); Laplace noise with a safety offset | Run with known answers in the same record: two-body tracks and the Swarm A and GPS G01 precise orbits pass the band at every step; fabricated tracks fail. A Sentinel-1 class track passing it stays a gate beside the comparison step. |
 | Decoys | Removed from the design (owner 2026-10-07). |
-| Bit-only comparison (DGK or garbled circuit); noise flooding; completeness audit; the exchange; staking; budgets | Not built. Until the comparison exists the output is decided by a test oracle and the feature is offered nowhere. Gates beside the comparison: a Sentinel-1 class precise orbit passing the physics check, the response-noise channel measured or flooded, and production key handling for the keyed noise and mask generators (the driver uses test keys). |
+| Response-noise channel | Measured (`../private-screening/PROTOCOL-NOISE.md`): no usable leak by the registered estimators over 2088 responses; the gate is closed as measured, and no flooding is built. |
+| Bit-only comparison (DGK or garbled circuit); completeness audit; the exchange; staking; budgets | Not built. Until the comparison exists the output is decided by a test oracle and the feature is offered nowhere. Gates beside the comparison: a Sentinel-1 class precise orbit passing the physics check, and production key handling for the keyed noise and mask generators (the driver uses test keys). |

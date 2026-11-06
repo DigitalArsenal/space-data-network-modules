@@ -160,3 +160,68 @@ The E2E `tests/privateScreeningNoiseChannel.e2e.mjs` runs the driver, applies
 the gates above and prints PASS when the verdict is "no usable leak" or
 "leak mitigated" with the numbers; it prints FAIL for "leak unmitigated".
 `results/noise-channel.json` is written only with `PRIVATE_SCREENING_WRITE=1`.
+
+## Results (run of 2026-11-06, `results/noise-channel.json`)
+
+Verdict: no usable leak by the registered estimators. Neither gate fires on
+the unflooded response; the flooding arm (section 5) is therefore not run and
+its cost is not measured. All figures are from one run of the driver; B's
+encryption randomness is the library's, so a rerun changes the rows, not the
+gates' outcome (the gates are statistical with fixed permutation seeds).
+
+An earlier run of the same procedure (single-threaded driver) gave the same
+verdict; the figures below are the run stored in the results file.
+
+Readings (2088 responses): the API budget is 32 bits at all but about 0.4 %
+of responses (mean 32.004, sd 0.066). The lane budgets average 32.17 to 32.19
+(sd 0.37 to 0.39, against 0.41 to 0.49 for the same operands encrypted again).
+Log2 L-infinity of the noise polynomial: mean 140.09 to 140.11 per lane, sd
+0.111, 0.108, 0.110 across the population against 0.121, 0.124, 0.098 for the
+repeated encryptions of identical operands (30 repeats). The long double
+reading agrees with the big-integer reading (139.9497 against 139.9497), and
+the budget computed from the polynomial equals SEAL's (33). The spread across
+operands is the spread of B's fresh encryption randomness. Cause: one multiply costs 73 bits whatever the operands (measured:
+fresh 106 bits; the square of a zero difference 33; a zero operand times a
+fresh ciphertext 34; two fresh ciphertexts 34). The rounding term of the
+multiply, of the size of t n, sets the floor, and the operand-dependent term
+is of the same size without stepping over it by a bit.
+
+E1 (regression, 2000 permutations within block index). Change in
+cross-validated R2 from adding the 19 readings to A's own operand features,
+and its permutation p, per target: log2 minimum distance -0.0129 (p 0.605);
+mean log2 distance -0.0120 (0.544); close flag -0.0090 (0.286); mean b_x
+-0.0086 (0.782); mean b_y -0.0077 (0.195); mean b_z -0.0065 (0.408); mean |b|
+-0.0116 (0.524). No change is positive; the gate (change >= 0.01 and p <=
+0.05/7) fires for none. The minimum detectable change (the 99th percentile of
+the null) is -0.0010 to +0.0002, so a gain of 0.01 would stand well above the
+null. (In the earlier run four p-values were between 0.013 and 0.049 with
+every change negative; they did not repeat here.)
+Per-step estimate (record 19 criterion C1): the share of steps within a
+factor of 2 of the regression's distance is 0.532 with the readings, 0.532
+with A's features only, 0.532 for the null (mean); the criterion (more than
+0.1 %) is passed by the null in 2000 of 2000 permutations, so as registered
+it carries no information on its own.
+
+E2 (nearest neighbour, 64 candidates, 5 simulations each, 200 targets): top-1
+3 of 200 (0.015) against chance 0.0156, binomial p 0.61; mean rank of the
+truth 32.2 against 32.5 under the null; C1 of the picked candidate 0.456
+against 0.433 for a random pick, better than the random pick for 90 of 200
+targets, sign test p 0.93. Fires: no.
+
+Controls. P1 (registered expectation: the budget falls as |c_a - c_b| rises)
+is NOT met and is reported as a failed expectation: the API budget is 32 at
+all eight differences from 0 to 2^23, and the log2 L-infinity spreads over
+0.48 bits across them (jitter alone gives 0.12 bit sd). The cause is the floor
+above: even a zero difference squared costs the full 73 bits, so a
+slot-constant operand does not lower the noise. This is a stronger absence
+for the norm readings (no operand structure, however extreme, moves them by
+more than the jitter) and not a sensitivity proof of the detector; its
+sensitivity is the stated minimum detectable change of E1. P2 as above.
+
+What is not measured: the coefficient-wise noise polynomial is read only
+through its summaries (norms and quantiles). Its dependence on B's operands
+is bilinear in unknowns B alone holds (B's plaintext polynomial and B's
+encryption noise); a decoder for it was not built, and nothing here bounds
+what one would recover. The statement is "no usable leak by the registered
+estimators", not a proof of circuit privacy. A flood on S2 would be a
+protocol change and its own record (it needs n 16384, section 5).
