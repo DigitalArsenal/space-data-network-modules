@@ -118,6 +118,8 @@ struct OMMT : public ::flatbuffers::NativeTable {
   std::vector<std::unique_ptr<OMMUserDefinedParameterT>> USER_DEFINED_PARAMETERS{};
   std::unique_ptr<PVNT> PROVENANCE{};
   std::unique_ptr<CVRT> COV_REALISM{};
+  double BTERM = 0.0;
+  double AGOM = 0.0;
   OMMT() = default;
   OMMT(const OMMT &o);
   OMMT(OMMT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -174,7 +176,9 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_MESSAGE_ID = 86,
     VT_USER_DEFINED_PARAMETERS = 88,
     VT_PROVENANCE = 90,
-    VT_COV_REALISM = 92
+    VT_COV_REALISM = 92,
+    VT_BTERM = 94,
+    VT_AGOM = 96
   };
   /// CCSDS OMM Version
   double CCSDS_OMM_VERS() const {
@@ -310,7 +314,7 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double REV_AT_EPOCH() const {
     return GetField<double>(VT_REV_AT_EPOCH, 0.0);
   }
-  /// BSTAR in 1/Earth radii, or BTERM in m**2/kg for SGP4-XP [C]
+  /// BSTAR in 1/Earth radii [C: MEAN_ELEMENT_THEORY SGP4]. An SGP4-XP set carries BTERM instead, never both.
   double BSTAR() const {
     return GetField<double>(VT_BSTAR, 0.0);
   }
@@ -318,7 +322,7 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   double MEAN_MOTION_DOT() const {
     return GetField<double>(VT_MEAN_MOTION_DOT, 0.0);
   }
-  /// MEAN_MOTION_DDOT in rev/day**3 if SGP/PPT3 or AGOM in m**2/kg if SGP4-XP [C]
+  /// MEAN_MOTION_DDOT in rev/day**3 [C: SGP or PPT3]. An SGP4-XP set carries AGOM instead, never both.
   double MEAN_MOTION_DDOT() const {
     return GetField<double>(VT_MEAN_MOTION_DDOT, 0.0);
   }
@@ -380,6 +384,18 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   /// Realism of COVARIANCE.
   const CVR *COV_REALISM() const {
     return GetPointer<const CVR *>(VT_COV_REALISM);
+  }
+  /// BTERM (CCSDS 502.0-B-3 Table 4-3, "BSTAR or BTERM"): the drag-like ballistic coefficient of an
+  /// SGP4-XP set, Cd*A/m in m**2/kg [C: MEAN_ELEMENT_THEORY SGP4-XP]. A writer sets BSTAR and
+  /// MEAN_MOTION_DDOT for SGP4 and BTERM and AGOM for SGP4-XP, never both pairs; the KVN and XML
+  /// renderers write the keyword MEAN_ELEMENT_THEORY selects. 0 for SGP4.
+  double BTERM() const {
+    return GetField<double>(VT_BTERM, 0.0);
+  }
+  /// AGOM (CCSDS 502.0-B-3 Table 4-3, "MEAN_MOTION_DDOT or AGOM"): the solar radiation pressure
+  /// coefficient of an SGP4-XP set, gamma*A/m in m**2/kg [C: MEAN_ELEMENT_THEORY SGP4-XP]. 0 for SGP4.
+  double AGOM() const {
+    return GetField<double>(VT_AGOM, 0.0);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
@@ -449,6 +465,8 @@ struct OMM FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyTable(PROVENANCE()) &&
            VerifyOffset(verifier, VT_COV_REALISM) &&
            verifier.VerifyTable(COV_REALISM()) &&
+           VerifyField<double>(verifier, VT_BTERM, 8) &&
+           VerifyField<double>(verifier, VT_AGOM, 8) &&
            verifier.EndTable();
   }
   OMMT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -595,6 +613,12 @@ struct OMMBuilder {
   void add_COV_REALISM(::flatbuffers::Offset<CVR> COV_REALISM) {
     fbb_.AddOffset(OMM::VT_COV_REALISM, COV_REALISM);
   }
+  void add_BTERM(double BTERM) {
+    fbb_.AddElement<double>(OMM::VT_BTERM, BTERM, 0.0);
+  }
+  void add_AGOM(double AGOM) {
+    fbb_.AddElement<double>(OMM::VT_AGOM, AGOM, 0.0);
+  }
   explicit OMMBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -652,8 +676,12 @@ inline ::flatbuffers::Offset<OMM> CreateOMM(
     ::flatbuffers::Offset<::flatbuffers::String> MESSAGE_ID = 0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<OMMUserDefinedParameter>>> USER_DEFINED_PARAMETERS = 0,
     ::flatbuffers::Offset<PVN> PROVENANCE = 0,
-    ::flatbuffers::Offset<CVR> COV_REALISM = 0) {
+    ::flatbuffers::Offset<CVR> COV_REALISM = 0,
+    double BTERM = 0.0,
+    double AGOM = 0.0) {
   OMMBuilder builder_(_fbb);
+  builder_.add_AGOM(AGOM);
+  builder_.add_BTERM(BTERM);
   builder_.add_USER_DEFINED_MICROSECONDS(USER_DEFINED_MICROSECONDS);
   builder_.add_USER_DEFINED_EPOCH_TIMESTAMP(USER_DEFINED_EPOCH_TIMESTAMP);
   builder_.add_MEAN_MOTION_DDOT(MEAN_MOTION_DDOT);
@@ -753,7 +781,9 @@ inline ::flatbuffers::Offset<OMM> CreateOMMDirect(
     const char *MESSAGE_ID = nullptr,
     const std::vector<::flatbuffers::Offset<OMMUserDefinedParameter>> *USER_DEFINED_PARAMETERS = nullptr,
     ::flatbuffers::Offset<PVN> PROVENANCE = 0,
-    ::flatbuffers::Offset<CVR> COV_REALISM = 0) {
+    ::flatbuffers::Offset<CVR> COV_REALISM = 0,
+    double BTERM = 0.0,
+    double AGOM = 0.0) {
   auto CREATION_DATE__ = CREATION_DATE ? _fbb.CreateString(CREATION_DATE) : 0;
   auto ORIGINATOR__ = ORIGINATOR ? _fbb.CreateString(ORIGINATOR) : 0;
   auto OBJECT_NAME__ = OBJECT_NAME ? _fbb.CreateString(OBJECT_NAME) : 0;
@@ -815,7 +845,9 @@ inline ::flatbuffers::Offset<OMM> CreateOMMDirect(
       MESSAGE_ID__,
       USER_DEFINED_PARAMETERS__,
       PROVENANCE,
-      COV_REALISM);
+      COV_REALISM,
+      BTERM,
+      AGOM);
 }
 
 ::flatbuffers::Offset<OMM> CreateOMM(::flatbuffers::FlatBufferBuilder &_fbb, const OMMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -952,7 +984,9 @@ inline OMMT::OMMT(const OMMT &o)
         CLASSIFICATION(o.CLASSIFICATION),
         MESSAGE_ID(o.MESSAGE_ID),
         PROVENANCE((o.PROVENANCE) ? new PVNT(*o.PROVENANCE) : nullptr),
-        COV_REALISM((o.COV_REALISM) ? new CVRT(*o.COV_REALISM) : nullptr) {
+        COV_REALISM((o.COV_REALISM) ? new CVRT(*o.COV_REALISM) : nullptr),
+        BTERM(o.BTERM),
+        AGOM(o.AGOM) {
   USER_DEFINED_PARAMETERS.reserve(o.USER_DEFINED_PARAMETERS.size());
   for (const auto &USER_DEFINED_PARAMETERS_ : o.USER_DEFINED_PARAMETERS) { USER_DEFINED_PARAMETERS.emplace_back((USER_DEFINED_PARAMETERS_) ? new OMMUserDefinedParameterT(*USER_DEFINED_PARAMETERS_) : nullptr); }
 }
@@ -1003,6 +1037,8 @@ inline OMMT &OMMT::operator=(OMMT o) FLATBUFFERS_NOEXCEPT {
   std::swap(USER_DEFINED_PARAMETERS, o.USER_DEFINED_PARAMETERS);
   std::swap(PROVENANCE, o.PROVENANCE);
   std::swap(COV_REALISM, o.COV_REALISM);
+  std::swap(BTERM, o.BTERM);
+  std::swap(AGOM, o.AGOM);
   return *this;
 }
 
@@ -1060,6 +1096,8 @@ inline void OMM::UnPackTo(OMMT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = USER_DEFINED_PARAMETERS(); if (_e) { _o->USER_DEFINED_PARAMETERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->USER_DEFINED_PARAMETERS[_i]) { _e->Get(_i)->UnPackTo(_o->USER_DEFINED_PARAMETERS[_i].get(), _resolver); } else { _o->USER_DEFINED_PARAMETERS[_i] = std::unique_ptr<OMMUserDefinedParameterT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->USER_DEFINED_PARAMETERS.resize(0); } }
   { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<PVNT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
   { auto _e = COV_REALISM(); if (_e) { if(_o->COV_REALISM) { _e->UnPackTo(_o->COV_REALISM.get(), _resolver); } else { _o->COV_REALISM = std::unique_ptr<CVRT>(_e->UnPack(_resolver)); } } else if (_o->COV_REALISM) { _o->COV_REALISM.reset(); } }
+  { auto _e = BTERM(); _o->BTERM = _e; }
+  { auto _e = AGOM(); _o->AGOM = _e; }
 }
 
 inline ::flatbuffers::Offset<OMM> CreateOMM(::flatbuffers::FlatBufferBuilder &_fbb, const OMMT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1115,6 +1153,8 @@ inline ::flatbuffers::Offset<OMM> OMM::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _USER_DEFINED_PARAMETERS = _o->USER_DEFINED_PARAMETERS.size() ? _fbb.CreateVector<::flatbuffers::Offset<OMMUserDefinedParameter>> (_o->USER_DEFINED_PARAMETERS.size(), [](size_t i, _VectorArgs *__va) { return CreateOMMUserDefinedParameter(*__va->__fbb, __va->__o->USER_DEFINED_PARAMETERS[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _PROVENANCE = _o->PROVENANCE ? CreatePVN(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
   auto _COV_REALISM = _o->COV_REALISM ? CreateCVR(_fbb, _o->COV_REALISM.get(), _rehasher) : 0;
+  auto _BTERM = _o->BTERM;
+  auto _AGOM = _o->AGOM;
   return CreateOMM(
       _fbb,
       _CCSDS_OMM_VERS,
@@ -1161,7 +1201,9 @@ inline ::flatbuffers::Offset<OMM> OMM::Pack(::flatbuffers::FlatBufferBuilder &_f
       _MESSAGE_ID,
       _USER_DEFINED_PARAMETERS,
       _PROVENANCE,
-      _COV_REALISM);
+      _COV_REALISM,
+      _BTERM,
+      _AGOM);
 }
 
 inline OMMUserDefinedParameterT *OMMUserDefinedParameter::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
