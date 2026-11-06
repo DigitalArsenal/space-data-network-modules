@@ -2,7 +2,7 @@
 // E2E (task feature-entity-sensors-defaults-20261105): the roster's real source documents, recorded in
 // tests/fixtures/cassette.json.gz (WMO OSCAR pages and satellite documents, the MediaWiki extracts of the ground-sensor pages, the
 // CelesTrak SATCAT rows of the roster; provenance.json), through plan_sources and build_sensors in the SDK's browser harness, then
-// every $SNR read back from the lane streams with the published bindings (spacedatastandards.org 1.278.0).
+// every $SNR read back from the lane streams with the published bindings (spacedatastandards.org 1.279.0).
 //   a. plan_sources plans each source document once;
 //   b. every OSCAR channel table is read independently here (its own regexes) and the module's bands must equal it, for every
 //      instrument on every platform; the record count equals platforms x instruments OSCAR lists;

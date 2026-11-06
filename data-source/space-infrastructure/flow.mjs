@@ -17,7 +17,7 @@ export function spaceInfrastructureFlow({ node, edge, http, storage, packageDir 
   return {
     flow: {
       programId: "com.digitalarsenal.flows.space-infrastructure-ingest",
-      name: "Space-surveillance and missile-warning sensor sites ($SIT, $SNR)", version: "0.1.0", engineLinkage: "bridge",
+      name: "Space-surveillance and missile-warning sensor sites ($SIT, $SNR)", version: "0.1.1", engineLinkage: "bridge",
       description: "Typed TimerTick, HTTP and ingest contracts read the Wikidata entities, Wikipedia articles and OpenStreetMap elements of the roster into $SIT sites and the $SNR sensors at them, each position cross-checked between sources and each value quoted from its source with its retrieval time and license. Two lanes: sites and sensors.",
       nodes, edges,
       triggers: [{ triggerId: "weekly", kind: "timer", source: "host-cron", defaultIntervalMs: 604800000,

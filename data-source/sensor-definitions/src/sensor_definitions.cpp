@@ -40,7 +40,7 @@ namespace {
 
 constexpr const char* kProvider = "sensor-definitions";
 constexpr const char* kPluginId = "com.digitalarsenal.data-source.sensor-definitions";
-constexpr const char* kVersion = "0.1.0";
+constexpr const char* kVersion = "0.1.1";
 constexpr double kC = 299792458.0;  // m/s, exact
 constexpr size_t kMaxResponses = 300, kMaxBody = 32u * 1024u * 1024u, kMaxRecordBytes = 8191;
 
