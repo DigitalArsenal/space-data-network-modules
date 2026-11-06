@@ -2,7 +2,7 @@
   "ok": true,
   "fixture": "files/rinex 0.1.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "b778d0b7264529fc7e71b3c09e4516b2452941160a99a1dd0cf90673d6d66630",
+  "artifactSha256": "c4acf50555df5120de350c81ef92b88602941717db4a10ee81b751bdefd5d917",
   "moduleSha256": "0cfeac0560f4b42cbd9859afbafc88c240871a632b941578abedd9be3f6c6fc1",
   "pin": "0.16.4",
   "lanes": [

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "note": "The module publishers whose Ed25519 signature a current-version dist must carry. Only PUBLIC keys live here; the owner keypair stays in place at the path SDM_MODULE_SIGNING_KEYPAIR_PATH names and is read only by scripts/sign-module-artifact.mjs and scripts/extract-public-key.mjs, in-process. A key enters this file through `SDM_MODULE_SIGNING_KEYPAIR_PATH=<keypair.json> node scripts/extract-public-key.mjs`, which prints publicKeyHex and keyId and nothing else. The module SDK's development keypair (keyId sdm-dev-test-2026, shipped in the SDK's test/support) is public and is never trusted: scripts/check-module-signatures.mjs classifies a dist it signed as dev-key, a failure.",
+  "publishers": [
+    {
+      "keyId": "module-owner-2026-10-15",
+      "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34",
+      "role": "owner",
+      "since": "2026-11-06"
+    }
+  ]
+}

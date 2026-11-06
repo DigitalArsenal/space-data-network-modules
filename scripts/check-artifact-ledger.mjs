@@ -3,10 +3,15 @@
 // the ledger files describe the committed dists exactly, and this script names no module, version or hash.
 //   1. every ledger entry names a committed dist whose sha256 and byte count equal the entry's;
 //   2. every committed dist wasm has an entry (so every module with a dist has one);
-//   3. a dist that carries a build-provenance file agrees with it (sha256 of the wasm it describes);
+//   3. a dist that carries a build-provenance file agrees with it: its wasmSha256 (or sha256) is the sha256 of the module section,
+//      the bytes before the publication trailer that scripts/sign-module-artifact.mjs appends (the build emits the module, the
+//      signature is a trailer; modules-build-provenance-wasm-sha-check-20261106);
 //   4. a dist plugin manifest at <module>/dist, where docs/current-module-parity-index.json lists the module, has the version
-//      the index records (a landing regenerates the index with the ledger, so a bumped manifest the index does not follow disagrees).
-//   node scripts/check-artifact-ledger.mjs               the four checks on this checkout (the gauntlet runs this on a dist diff)
+//      the index records (a landing regenerates the index with the ledger, so a bumped manifest the index does not follow disagrees);
+//   5. every ledger entry's wasmSha256 is the sha256 of its dist's module section and its canonicalModuleSha256 the sha256 of that
+//      section with the sds.* custom sections stripped (both identities of a dist: the whole file its citations name, and the
+//      canonical module a signature covers; a re-signing of a bundled dist changes the trailer and nothing else).
+//   node scripts/check-artifact-ledger.mjs               the five checks on this checkout (the gauntlet runs this on a dist diff)
 //   node scripts/check-artifact-ledger.mjs --self-test   this script, run on a temporary copy of the tracked tree (never in this checkout):
 //                                                        it passes on the clean copy, and fails naming the module when one byte is
 //                                                        appended to a committed dist, and when a dist manifest's version is bumped
@@ -19,9 +24,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { trackedFiles } from "./lib/current-module-index.mjs";
+import { canonicalModuleBytes, claimedBuildHash, moduleSectionBytes } from "./check-module-signatures.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const sectionSha256 = (bytes) => sha256(moduleSectionBytes(bytes));
 const readJson = (base, ...parts) => JSON.parse(fs.readFileSync(path.join(base, ...parts), "utf8"));
 
 // The plugin manifest of a committed dist wasm: the nearest plugin-manifest.json from the wasm's directory up to its dist directory (null when the dist commits none).
@@ -41,27 +48,34 @@ function measure(base) {
 
   const problems = [];
   let matched = 0;
+  let sections = 0;
   for (const [rel, entry] of Object.entries(ledger)) {
     if (!committed.includes(rel)) { problems.push(`${rel}: ledger entry names no committed dist`); continue; }
     const bytes = fs.readFileSync(path.join(base, rel));
     if (sha256(bytes) !== entry.sha256 || bytes.length !== entry.bytes) problems.push(`${rel}: dist is ${sha256(bytes)} (${bytes.length} B), ledger ${entry.sha256} (${entry.bytes} B)`);
     else matched++;
+    const section = sectionSha256(bytes);
+    const canonical = sha256(canonicalModuleBytes(bytes));
+    if (entry.wasmSha256 !== section) problems.push(`${rel}: module section is ${section}, ledger wasmSha256 ${entry.wasmSha256 ?? "absent"}`);
+    else if (entry.canonicalModuleSha256 !== canonical) problems.push(`${rel}: canonical module is ${canonical}, ledger canonicalModuleSha256 ${entry.canonicalModuleSha256 ?? "absent"}`);
+    else sections++;
   }
   const missing = committed.filter((rel) => !(rel in ledger));
   for (const rel of missing) problems.push(`${rel}: committed dist with no ledger entry`);
 
-  // a dist's own build-provenance file describes its isomorphic module.wasm
+  // a dist's own build-provenance file describes the module section of its isomorphic module.wasm: the bytes the build emitted,
+  // before the publication trailer (the file's whole-file sha256 moves when it is signed; the module section does not)
   let provenanceFiles = 0;
   for (const rel of committed.filter((f) => f.endsWith("/dist/isomorphic/module.wasm"))) {
     const dist = path.dirname(path.dirname(path.join(base, rel)));
     const json = path.join(dist, "build-provenance.json");
     const txt = path.join(dist, "build-provenance.txt");
-    const bytes = fs.readFileSync(path.join(base, rel));
-    const claimed = fs.existsSync(json) ? JSON.parse(fs.readFileSync(json, "utf8")).sha256
-      : fs.existsSync(txt) ? fs.readFileSync(txt, "utf8").match(/^sha256 (\S+)$/m)?.[1] : null;
+    const claimed = fs.existsSync(json) ? claimedBuildHash(base, path.posix.dirname(path.posix.dirname(path.posix.dirname(rel))))
+      : fs.existsSync(txt) ? claimedBuildHash(base, path.posix.dirname(path.posix.dirname(path.posix.dirname(rel)))) : null;
     if (claimed == null) continue;
     provenanceFiles++;
-    if (claimed !== sha256(bytes)) problems.push(`${rel}: build-provenance says ${claimed}, dist is ${sha256(bytes)}`);
+    const section = sectionSha256(fs.readFileSync(path.join(base, rel)));
+    if (claimed !== section) problems.push(`${rel}: build-provenance says ${claimed}, the module section is ${section}`);
   }
 
   // a dist manifest's version is the one the module index records for its module; only a manifest directly at <module>/dist,
@@ -78,7 +92,7 @@ function measure(base) {
     else versions.push({ moduleDir, manifest, version });
   }
 
-  return { problems, ledgerKeys: Object.keys(ledger), matched, committed: committed.length, provenanceFiles, versions, unrecorded };
+  return { problems, ledgerKeys: Object.keys(ledger), matched, sections, committed: committed.length, provenanceFiles, versions, unrecorded };
 }
 
 // The self-test runs this script itself, as the gauntlet runs it, in a copy of the tracked tree registered as a git repository (the way
@@ -141,7 +155,9 @@ function selfTest() {
 if (process.argv.includes("--self-test")) {
   console.log(selfTest());
 } else {
-  const result = measure(root);
+  // --root <checkout>: measure another tree (scripts/tests/build-provenance-sha.e2e.mjs plants disagreements in a scratch repository)
+  const rootFlag = process.argv.indexOf("--root");
+  const result = measure(rootFlag >= 0 ? path.resolve(process.argv[rootFlag + 1]) : root);
   if (result.problems.length) { console.error(`FAIL artifact ledger: ${result.problems.length} disagreements\n${result.problems.map((p) => `  - ${p}`).join("\n")}`); process.exit(1); }
-  console.log(`PASS artifact ledger: ${result.matched}/${result.ledgerKeys.length} entries equal their dist sha256, ${result.committed} committed dists all ledgered, ${result.provenanceFiles} build-provenance files agree, ${result.versions.length} dist manifest versions equal the module index (${result.unrecorded} dist manifests have no module row)`);
+  console.log(`PASS artifact ledger: ${result.matched}/${result.ledgerKeys.length} entries equal their dist sha256, ${result.sections}/${result.ledgerKeys.length} entries equal their module section wasmSha256, ${result.committed} committed dists all ledgered, ${result.provenanceFiles} build-provenance files agree with the module section, ${result.versions.length} dist manifest versions equal the module index (${result.unrecorded} dist manifests have no module row)`);
 }

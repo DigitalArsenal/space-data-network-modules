@@ -2,7 +2,7 @@
  "module": "files/ccsds-messages",
  "version": "0.3.0",
  "spacedatastandards": "1.276.0",
- "artifactSha256": "24af74551c0c8ae25af380a5e0586a4411d83366a9b09727c07afdfad277b5eb",
+ "artifactSha256": "74d68ebbdf8d1b84c32bd6d8cfb537e66d261bb1fc59397ce3ac1065ba12a727",
  "cases": [
   {
    "id": "read-ndm-omm-sgp4-covariance-kvn",
