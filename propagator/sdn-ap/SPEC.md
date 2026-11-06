@@ -2320,8 +2320,9 @@ differences), single precision (7.1 MB), and read at output time by the four-poi
 elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's mean elements at every 48 hours from its epoch
 (the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval; a set
 within 3e-4 in e, 1e-4 rad in i and 1e-4 in a / a of a held grid's elements shares it (a set's covariance copies), each set
-keeping its last two nodes; a set initialized while the scoped switch tess::ExactGridScope lives (the fit holds it around its solve:
-its nominal, trial steps and perturbed copies), or with xp_init's exact_grid, builds its own grids at its own elements and shares
+keeping its last two nodes; a set initialized on a thread while the scoped switch tess::ExactGridScope lives there (thread-local;
+the fit holds it around its solve on its calling thread: its nominal, trial steps and perturbed copies), or with xp_init's
+exact_grid, builds its own grids at its own elements and shares
 none, so a fit's finite-difference partials see the exact grid; flights and covariance outside a fit share. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; the
 0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the

@@ -1121,19 +1121,21 @@ inline void free_grid(WideGrid* g) {
   std::free(g);
 }
 
-/// The scoped switch "sets initialized now take exact grids" (SPEC 16.11): while an ExactGridScope lives, xp_init gives every new
-/// set exact_grid (a fit's nominal, trial steps and perturbed copies); outside it sets share. Nesting counts.
+/// The scoped switch "sets initialized now take exact grids" (SPEC 16.11): while an ExactGridScope lives on a thread, xp_init on
+/// that thread gives every new set exact_grid (a fit's nominal, trial steps and perturbed copies, all made on the fit's calling
+/// thread; the pool's threads serve batch flights only); other threads, and the thread outside the scope, share. Nesting counts;
+/// the guard clears on every exit from its scope.
 inline int32_t& exact_grid_depth() {
-  static int32_t depth = 0;
+  static thread_local int32_t depth = 0;
   return depth;
 }
 struct ExactGridScope {
-  ExactGridScope() { __atomic_add_fetch(&exact_grid_depth(), 1, __ATOMIC_ACQ_REL); }
-  ~ExactGridScope() { __atomic_sub_fetch(&exact_grid_depth(), 1, __ATOMIC_ACQ_REL); }
+  ExactGridScope() { ++exact_grid_depth(); }
+  ~ExactGridScope() { --exact_grid_depth(); }
   ExactGridScope(const ExactGridScope&) = delete;
   ExactGridScope& operator=(const ExactGridScope&) = delete;
 };
-inline bool exact_grids_now() { return __atomic_load_n(&exact_grid_depth(), __ATOMIC_ACQUIRE) > 0; }
+inline bool exact_grids_now() { return exact_grid_depth() > 0; }
 
 /// A grid for (n, e, i): a live or idle one whose sharing range holds the elements (`exact`: one built at these very elements),
 /// else a new one; nullptr out of memory.
