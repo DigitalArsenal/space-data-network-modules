@@ -37,9 +37,17 @@ constexpr double kShallowBand = 0.045;
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
-/// The switch (SPEC 16.11), read here only: above this epoch eccentricity a perigee pass spreads a term over the harmonics of
-/// M; the zonal tail carries every long-period term and the first-order tesseral families are the grid of wide_grid_build.
+/// The switch (SPEC 16.11): above this epoch eccentricity a perigee pass spreads a term over the harmonics of M; the zonal
+/// tail carries every long-period term (xp_theory.inc, this constant), the perigee drag passage runs (SPEC 16.12, this
+/// constant) and, in the resonance classes, the first-order tesseral families are the grid of wide_grid_build.
 constexpr double kWideE = 0.3;
+/// From 0.6.4 the tesseral families' switch is by the set's resonance class (res::band_of of the epoch mean motion, SPEC 6):
+/// a set in no resonance band (class 0: low orbit, the LAGEOS band, orbits below 0.8 rev/day) flies the grid above this
+/// eccentricity, where the first-order set fails against the full field and the grid is cheaper (SPEC 16.11); a set in a
+/// resonance class (1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour) keeps kWideE: the grid does not reach the
+/// resonant share there and costs more. Read by sp_terms, sp_bound's caller and the grid acquisition at init, nowhere else.
+constexpr double kWideENonResonant = 0.05;
+inline bool wide_set(int cls, double e0) { return e0 > (cls == 0 ? kWideENonResonant : kWideE); }
 
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {
@@ -253,7 +261,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
   const double h = 1e-5;
   const double na2 = n0 * a0 * a0, keep = kSpKeepM * 1e-3 / kRe;
   int count = 0;
-  const bool wide = e0 > kWideE;
+  const bool wide = wide_set(cls, e0);
   // The term's weight (0: not kept here) and its angle rate.
   const auto weight_of = [&](int l, int m, int p, int q, double& psidot) -> double {
     const int w = l - 2 * p, j = w + q;

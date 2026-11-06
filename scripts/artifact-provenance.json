@@ -5527,11 +5527,11 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "aa3ed22aa61a3a514e06619b9bff4aa1b1051d704dc32cd360b5c572b2c57f4e",
-      "bytes": 966222,
+      "sha256": "e245de29ea050b08244dc9d69fd892ad2473699843b92988fd34a47a466b15f8",
+      "bytes": 966241,
       "module": "propagator/sdn-ap",
-      "lastCommit": "e746c4a0d319c4d7b84a67e0af615236de3a06a8",
-      "lastCommitDate": "2026-11-05T16:13:54-05:00",
+      "lastCommit": "7154b48dfd2c3e6512370c4a91c3f855b0b8a21f",
+      "lastCommitDate": "2026-11-06T00:19:39-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
