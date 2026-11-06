@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T20:03:21.438Z",
+  "generatedAt": "2026-11-06T02:00:53.752Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -283,7 +283,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.18.0",
+      "version": "0.18.1",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -767,7 +767,7 @@
       "pluginId": "com.digitalarsenal.analysis.estimation",
       "name": "Measurement-based Orbit Estimation",
       "pluginFamily": "analysis",
-      "version": "0.8.0",
+      "version": "0.8.1",
       "methodIds": [
         "evaluate_teag",
         "fit_batch",
@@ -5290,7 +5290,7 @@
       "pluginId": "com.digitalarsenal.files.vcm-text",
       "name": "SP Vector/Covariance Message Writer",
       "pluginFamily": "parser",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "methodIds": [
         "ocm_to_vcm"
       ],
@@ -6643,7 +6643,7 @@
       "pluginId": "com.orbpro.ffm",
       "name": "FFM Full Force Model propagator",
       "pluginFamily": "propagator",
-      "version": "2.2.0",
+      "version": "2.2.1",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
@@ -7481,7 +7481,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "methodIds": [
         "export_omm",
         "fit",
