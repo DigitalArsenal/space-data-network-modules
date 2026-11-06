@@ -233,7 +233,7 @@
       },
       "declared_sds_dependency": "1.276.0",
       "id": "foundation/frames",
-      "wasm_sha256": "486acaa334705b97d3a975b8a3d90f4bfd2428af77c6b5086c970ed1f24e27a4"
+      "wasm_sha256": "7ac3240368b1156ce2eac4811e62655013b43128485c95338f6517dbbbbd3db2"
     }
   ],
   "format_version": 1,

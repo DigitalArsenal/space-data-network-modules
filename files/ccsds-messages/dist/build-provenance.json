@@ -50,5 +50,11 @@
     "CCSDS_RDM_XML",
     "CCSDS_OCM_KVN",
     "CCSDS_OCM_XML"
-  ]
+  ],
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "6ccd5a5c8a2b6d996db981cadf7a2115650c6c16a0ec83d573ffb7e69e0d411b"
 }

@@ -1,6 +1,24 @@
 {
   "spacedatastandards": "1.261.0",
   "threadModel": "wasi-sequential",
-  "records": { "in": ["$NCD"], "out": ["$GNO", "$OEM", "$NCD"] },
-  "formats": ["rinex-obs", "rinex-nav"]
+  "records": {
+    "in": [
+      "$NCD"
+    ],
+    "out": [
+      "$GNO",
+      "$OEM",
+      "$NCD"
+    ]
+  },
+  "formats": [
+    "rinex-obs",
+    "rinex-nav"
+  ],
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "0cfeac0560f4b42cbd9859afbafc88c240871a632b941578abedd9be3f6c6fc1"
 }

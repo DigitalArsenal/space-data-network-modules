@@ -74,6 +74,7 @@ import {
 import { THREAD_MODELS, assertArtifactThreadModel } from "./lib/thread-model.mjs";
 import { loadEmsdkPin } from "./lib/emsdk-toolchain.mjs";
 import { inspectEmbeddedManifest } from "./lib/manifest-readability.mjs";
+import { artifactForm, canonicalModuleBytes, moduleSectionBytes } from "./check-module-signatures.mjs";
 
 const LEDGER_PATH = path.join(REPO_ROOT, "scripts", "artifact-provenance.json");
 
@@ -270,9 +271,19 @@ function buildCensus({ superRepo } = {}) {
     const moduleDir = owningModule(rel);
     const prior = previous?.artifacts?.[rel];
     const laneRecord = laneRecordFor(moduleDir);
+    // The toolchain produced the module section; the publication trailer (the signature) is appended afterwards by
+    // scripts/sign-module-artifact.mjs. A signing therefore keeps the prior entry's toolchain record: the module section is
+    // what is compared (a prior entry without wasmSha256 predates the field and is compared by its whole-file sha256).
+    const wasmSha256 = sha256(moduleSectionBytes(bytes));
+    const sameModule = prior ? (prior.wasmSha256 ?? prior.sha256) === wasmSha256 : false;
     artifacts[rel] = {
       sha256: sha256(bytes),
       bytes: bytes.length,
+      wasmSha256,
+      // both identities: a raw build is cited by its whole-file sha256 today and will ship as the canonical module (sds.*
+      // stripped, manifest in the trailer) once signed; a bundled dist's module section is already the canonical module
+      canonicalModuleSha256: sha256(canonicalModuleBytes(bytes)),
+      form: artifactForm(bytes),
       module: moduleDir,
       lastCommit: commit || null,
       lastCommitDate: isoDate || null,
@@ -281,12 +292,12 @@ function buildCensus({ superRepo } = {}) {
       // from the super-repo pin on the day the bytes landed.
       provenance: laneRecord?.emsdkToolchain
         ? "recorded"
-        : prior?.provenance === "recorded" && prior?.sha256 === sha256(bytes)
+        : prior?.provenance === "recorded" && sameModule
           ? "recorded"
           : "inferred",
-      toolchain: prior?.sha256 === sha256(bytes) ? (prior.toolchain ?? null) : null,
+      toolchain: sameModule ? (prior.toolchain ?? null) : null,
       sdkPinAtCommit:
-        prior?.sha256 === sha256(bytes) && prior?.sdkPinAtCommit
+        sameModule && prior?.sdkPinAtCommit
           ? prior.sdkPinAtCommit
           : inferSdkPin(superRepo, isoDate),
       ...(moduleDir ? { declaration: declarationAudit(moduleDir) } : { declaration: null }),
@@ -726,8 +737,9 @@ async function rebuildAndCompare(checkout, moduleDir) {
       stdio: ["ignore", "ignore", "pipe"],
       env: { ...process.env, SPACE_DATA_STANDARDS_ROOT: checkout.standardsRoot },
     });
-    const rebuilt = sha256(await fsp.readFile(path.join(pkgDir, "dist/isomorphic/module.wasm")));
-    const expected = sha256(await fsp.readFile(committed));
+    // module sections: a rebuild emits the unsigned module, the committed dist may carry a signature trailer
+    const rebuilt = sha256(moduleSectionBytes(await fsp.readFile(path.join(pkgDir, "dist/isomorphic/module.wasm"))));
+    const expected = sha256(moduleSectionBytes(await fsp.readFile(committed)));
     return {
       module: moduleDir,
       status: rebuilt === expected ? "reproduced" : "drifted",
@@ -810,8 +822,8 @@ async function rebuildAndCompareAll(checkout, moduleDir) {
       artifacts[rel] = buildOk ? "not-emitted" : "unbuildable-at-current-pin";
       continue;
     }
-    const rebuilt = sha256(await fsp.readFile(rebuiltPath));
-    const committed = sha256(await fsp.readFile(path.join(REPO_ROOT, rel)));
+    const rebuilt = sha256(moduleSectionBytes(await fsp.readFile(rebuiltPath)));
+    const committed = sha256(moduleSectionBytes(await fsp.readFile(path.join(REPO_ROOT, rel))));
     artifacts[rel] = rebuilt === committed ? "reproduces-at-current-pin" : "drifts-at-current-pin";
   }
   return { buildOk, artifacts };

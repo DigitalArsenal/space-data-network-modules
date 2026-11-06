@@ -2,7 +2,7 @@
   "ok": true,
   "fixture": "files/orbit-products 0.2.0 interchange methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "688f22ee2dba278d19e4029e8aedf1aa46fffd9910428f7d7ed40c9eeb583ad3",
+  "artifactSha256": "df42851260ee54dc18f904a8bd3fbd354235d0b31d653ad995912320f7331b74",
   "moduleSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875",
   "pin": "0.16.4",
   "lanes": [

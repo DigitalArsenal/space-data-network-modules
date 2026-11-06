@@ -28,5 +28,11 @@
     "sentinel-eof",
     "naif-ck",
     "naif-sclk"
-  ]
+  ],
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875"
 }

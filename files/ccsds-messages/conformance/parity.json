@@ -2,7 +2,7 @@
   "ok": true,
   "fixture": "files/ccsds-messages 0.3.0 methods",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "24af74551c0c8ae25af380a5e0586a4411d83366a9b09727c07afdfad277b5eb",
+  "artifactSha256": "74d68ebbdf8d1b84c32bd6d8cfb537e66d261bb1fc59397ce3ac1065ba12a727",
   "moduleSha256": "6ccd5a5c8a2b6d996db981cadf7a2115650c6c16a0ec83d573ffb7e69e0d411b",
   "pin": "0.16.4",
   "lanes": [

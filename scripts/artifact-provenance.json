@@ -368,6 +368,9 @@
     "analysis/access/dist/access.wasm": {
       "sha256": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
       "bytes": 240305,
+      "wasmSha256": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
+      "canonicalModuleSha256": "bb517a8a347495355bf57100e22495c1893200629a8af69a82246471469fc97f",
+      "form": "raw",
       "module": "analysis/access",
       "lastCommit": "e9ff0c68e390ffe65cc78b7076f52b629d5d5819",
       "lastCommitDate": "2026-09-15T13:15:52-04:00",
@@ -394,6 +397,9 @@
     "analysis/access/dist/browser/module.wasm": {
       "sha256": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
       "bytes": 240305,
+      "wasmSha256": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
+      "canonicalModuleSha256": "bb517a8a347495355bf57100e22495c1893200629a8af69a82246471469fc97f",
+      "form": "raw",
       "module": "analysis/access",
       "lastCommit": "e9ff0c68e390ffe65cc78b7076f52b629d5d5819",
       "lastCommitDate": "2026-09-15T13:15:52-04:00",
@@ -420,6 +426,9 @@
     "analysis/access/dist/isomorphic/module.wasm": {
       "sha256": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
       "bytes": 240305,
+      "wasmSha256": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
+      "canonicalModuleSha256": "bb517a8a347495355bf57100e22495c1893200629a8af69a82246471469fc97f",
+      "form": "raw",
       "module": "analysis/access",
       "lastCommit": "e9ff0c68e390ffe65cc78b7076f52b629d5d5819",
       "lastCommitDate": "2026-09-15T13:15:52-04:00",
@@ -446,6 +455,9 @@
     "analysis/association/dist/isomorphic/module.wasm": {
       "sha256": "5eaa6ae43506fb1f1b06b2c868545924aeebc0741bef64e5355ac64f8aff2fc2",
       "bytes": 554971,
+      "wasmSha256": "5eaa6ae43506fb1f1b06b2c868545924aeebc0741bef64e5355ac64f8aff2fc2",
+      "canonicalModuleSha256": "e934f14a61e2c2eff7e7e0b24027735e1871e17df467e6f9a84633286536dde5",
+      "form": "raw",
       "module": "analysis/association",
       "lastCommit": "38ddecf0796952ab73012cde7673f1d5c84dc047",
       "lastCommitDate": "2026-10-14T18:50:52-04:00",
@@ -472,6 +484,9 @@
     "analysis/catalog-composer/dist/isomorphic/module.wasm": {
       "sha256": "ecc80af2cd3daec42b99e727dcb339d4bbf7d2ed1c4f629463b67ebf0670dcc9",
       "bytes": 6350620,
+      "wasmSha256": "c336aeb3cdb5609bf19f1e3c9d5ca58b715dfbaedc61594b31ed879321385e4d",
+      "canonicalModuleSha256": "c336aeb3cdb5609bf19f1e3c9d5ca58b715dfbaedc61594b31ed879321385e4d",
+      "form": "bundled",
       "module": "analysis/catalog-composer",
       "lastCommit": "17620373bf53b9d1fce0091a33b99c8fbfa7d758",
       "lastCommitDate": "2026-11-04T12:51:38-05:00",
@@ -498,6 +513,9 @@
     "analysis/catalog-synthesis/dist/isomorphic/module.wasm": {
       "sha256": "bf9b7374d2d198beeb05ed9daf012468fe20dc7e034d3049cd32d1d4b8f2482f",
       "bytes": 200335,
+      "wasmSha256": "bf9b7374d2d198beeb05ed9daf012468fe20dc7e034d3049cd32d1d4b8f2482f",
+      "canonicalModuleSha256": "34a0e6a849aec811392435c411765e4c44735d30921e29e03a81151cb2f0d94d",
+      "form": "raw",
       "module": "analysis/catalog-synthesis",
       "lastCommit": "a20e98fe9924fa7b6027268e481ff19c9f7c156d",
       "lastCommitDate": "2026-11-04T12:06:44-05:00",
@@ -524,6 +542,9 @@
     "analysis/conjunction-assessment/dist/isomorphic/module.wasm": {
       "sha256": "fe7533e9168c65f31b5d98ea90bafb76024a5e035df5c7f34d252da44718bfec",
       "bytes": 1751724,
+      "wasmSha256": "fe7533e9168c65f31b5d98ea90bafb76024a5e035df5c7f34d252da44718bfec",
+      "canonicalModuleSha256": "e7b3df40faf5f4c5a0050b6aa11fdb22169beeb7cba1faeb5bc8dfb93ec20f12",
+      "form": "raw",
       "module": "analysis/conjunction-assessment",
       "lastCommit": "875864fbca237c5c59105c32696a6a9a44b1f8f7",
       "lastCommitDate": "2026-11-05T23:43:16-05:00",
@@ -550,6 +571,9 @@
     "analysis/covariance/dist/isomorphic/module.wasm": {
       "sha256": "ab438a4e8ed2c5eef8261bf0c889d6e1bcdd1e18670bb0a9b2b332e84ca1865b",
       "bytes": 251956,
+      "wasmSha256": "ff626e0a629fd8ade09fde3be8d8ea51c9b4f75e0a65317048bf72115753312b",
+      "canonicalModuleSha256": "ff626e0a629fd8ade09fde3be8d8ea51c9b4f75e0a65317048bf72115753312b",
+      "form": "bundled",
       "module": "analysis/covariance",
       "lastCommit": "f2cf179afdf6310efc28ed1940d68f423dc79803",
       "lastCommitDate": "2026-10-14T22:28:56-04:00",
@@ -576,6 +600,9 @@
     "analysis/density-calibration/dist/isomorphic/module.wasm": {
       "sha256": "cc8dcc72cea9a92c3fb6f4b872316f976d36ad7981783cd0e08ba5b5b5f136ad",
       "bytes": 2814297,
+      "wasmSha256": "cc8dcc72cea9a92c3fb6f4b872316f976d36ad7981783cd0e08ba5b5b5f136ad",
+      "canonicalModuleSha256": "c9a11d4e0a90d7670eade761c829c8cc227b7bca37d373eb0a304858513cc6e3",
+      "form": "raw",
       "module": "analysis/density-calibration",
       "lastCommit": "f34c12c0e9d61981a6149c818271b34a5d6e6ff6",
       "lastCommitDate": "2026-11-04T07:34:20-05:00",
@@ -602,6 +629,9 @@
     "analysis/dop/dist/isomorphic/module.wasm": {
       "sha256": "bb80e36a6a4098505747052c2312ae56d629236c1cdad82dc8f1d3f4a6416067",
       "bytes": 87346,
+      "wasmSha256": "bb80e36a6a4098505747052c2312ae56d629236c1cdad82dc8f1d3f4a6416067",
+      "canonicalModuleSha256": "b59aa4bdf939bf2319dee810eed6b9ab321606be642d51962b0a62e9b00f0d1a",
+      "form": "raw",
       "module": null,
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
@@ -616,6 +646,9 @@
     "analysis/epoch-state/dist/isomorphic/module.wasm": {
       "sha256": "681820b30e2cf134112284b5158d5cabf95c872c8d4b8e1a2abeb033904ef461",
       "bytes": 420001,
+      "wasmSha256": "681820b30e2cf134112284b5158d5cabf95c872c8d4b8e1a2abeb033904ef461",
+      "canonicalModuleSha256": "5b29827cf8dd73f55bf18b269f8f2913a81f633c3391fe91b3e8799423cda648",
+      "form": "raw",
       "module": "analysis/epoch-state",
       "lastCommit": "dc44bd9776a270d35d186c8cd20617e57ad71458",
       "lastCommitDate": "2026-11-04T12:54:25-05:00",
@@ -642,6 +675,9 @@
     "analysis/estimation/dist/isomorphic/module.wasm": {
       "sha256": "acaf8ca33d22d9c685ad664c706a509329e778a371057ec200d06dd59e9ab314",
       "bytes": 795642,
+      "wasmSha256": "acaf8ca33d22d9c685ad664c706a509329e778a371057ec200d06dd59e9ab314",
+      "canonicalModuleSha256": "7b400e68955bb6afd7065fa72ca0ea6ace7a3a39cff103392dcaa5600941e32c",
+      "form": "raw",
       "module": "analysis/estimation",
       "lastCommit": "9cb02c8e22f5a738a9984992e8af2246cd11e090",
       "lastCommitDate": "2026-11-05T16:17:29-05:00",
@@ -666,6 +702,9 @@
     "analysis/gp-error-model/dist/isomorphic/module.wasm": {
       "sha256": "f946bafb1c8106bc4d88f0c38c8f2d7487d44225d3e9b744c00afb0fce6355b0",
       "bytes": 2279594,
+      "wasmSha256": "f946bafb1c8106bc4d88f0c38c8f2d7487d44225d3e9b744c00afb0fce6355b0",
+      "canonicalModuleSha256": "41d4911ea25b7bc40c8139b622ba3e239005923bd795375abe09254c11a1b74b",
+      "form": "raw",
       "module": "analysis/gp-error-model",
       "lastCommit": "117732acbb5abf4ce094fcd9f7102b4975b488b0",
       "lastCommitDate": "2026-11-04T12:20:07-05:00",
@@ -692,6 +731,9 @@
     "analysis/lambert-izzo/dist/isomorphic/module.wasm": {
       "sha256": "6ab466391b30858b4f5719546fb89681ac3a47a3eb6758ffbb1163e72e576b25",
       "bytes": 154635,
+      "wasmSha256": "6ab466391b30858b4f5719546fb89681ac3a47a3eb6758ffbb1163e72e576b25",
+      "canonicalModuleSha256": "85a3247d5a1069e25a9e3645fb6cdc8ecb8d6f663ef4d253946932fb5900a8df",
+      "form": "raw",
       "module": "analysis/lambert-izzo",
       "lastCommit": "3df1afc792cce4d2f67807da90298cc8590b6dc2",
       "lastCommitDate": "2026-10-09T20:55:46-04:00",
@@ -716,22 +758,28 @@
       }
     },
     "analysis/launch-ascent/dist/isomorphic/module.wasm": {
-      "sha256": "df0414e1fcdbeb963f6a64c8247985b7b47f1cb7f4adb1df368447e89edc907b",
-      "bytes": 203541,
+      "sha256": "c50cdeaaac30786ba6cc25ed2649c90acbec7de57b02edbf65478b4f50c0023e",
+      "bytes": 203549,
+      "wasmSha256": "83445e1cc40958f850f50ef59268e030e6525a14092197400e8f795f098fed47",
+      "canonicalModuleSha256": "83445e1cc40958f850f50ef59268e030e6525a14092197400e8f795f098fed47",
+      "form": "bundled",
       "module": null,
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "1ea6697a6d190436f0332d7d0a8c0a9edc093e89",
+        "sdkCommit": "e4f2db38822fc58b18ae0737abffd39753633325"
       },
       "declaration": null
     },
     "analysis/launch-cola/dist/isomorphic/module.wasm": {
       "sha256": "3e30ec48520cfa2e8e50c99f12a0897bff52da05de89cfd9b0779c1dae7af071",
       "bytes": 285632,
+      "wasmSha256": "3e30ec48520cfa2e8e50c99f12a0897bff52da05de89cfd9b0779c1dae7af071",
+      "canonicalModuleSha256": "6f1f13d6ce94585969a04d6e4c9b90ac734128c3c411cf2a181ea5a955d5ca61",
+      "form": "raw",
       "module": "analysis/launch-cola",
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
@@ -758,6 +806,9 @@
     "analysis/launch-trajectory/dist/isomorphic/module.wasm": {
       "sha256": "b5e13893dd5836a9cf7277b58692aa7d44fe781df88ce5d1dc46ddb98b0fa59c",
       "bytes": 259338,
+      "wasmSha256": "b5e13893dd5836a9cf7277b58692aa7d44fe781df88ce5d1dc46ddb98b0fa59c",
+      "canonicalModuleSha256": "7b3fbffcb839d778fec3b786f7b8e6624cbbf98fb3d4ea1375a6e6d2584701a0",
+      "form": "raw",
       "module": "analysis/launch-trajectory",
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
@@ -784,6 +835,9 @@
     "analysis/maneuver-detection/dist/isomorphic/module.wasm": {
       "sha256": "ecddd8e3ab1fa798740b7e1ca4687bffeab13c715a117741fcf7c5ff5084c96f",
       "bytes": 825368,
+      "wasmSha256": "ecddd8e3ab1fa798740b7e1ca4687bffeab13c715a117741fcf7c5ff5084c96f",
+      "canonicalModuleSha256": "79cd950a69b0fa5b04c0546019222466171ae40cfb16912f12616bbc1cefe245",
+      "form": "raw",
       "module": "analysis/maneuver-detection",
       "lastCommit": "16f1ef67821ff7bc033e93150b16158f70131d4b",
       "lastCommitDate": "2026-10-31T13:52:09-04:00",
@@ -810,6 +864,9 @@
     "analysis/maneuver/dist/isomorphic/module.wasm": {
       "sha256": "9502b10c683cc851c404118a9209558994eb33ff5ade15602fa69dbd4e100134",
       "bytes": 531120,
+      "wasmSha256": "9502b10c683cc851c404118a9209558994eb33ff5ade15602fa69dbd4e100134",
+      "canonicalModuleSha256": "05b28f4b9e6880f2e79e36ab6bb20b4b7ee1cd3a94c4d841f6470455fa293d30",
+      "form": "raw",
       "module": null,
       "lastCommit": "12899537c845260e6376cd5213b6726a13f07f6f",
       "lastCommitDate": "2026-10-14T08:47:47-04:00",
@@ -824,6 +881,9 @@
     "analysis/mission-screening/dist/isomorphic/module.wasm": {
       "sha256": "ea2f9ce16bb130cb9edd055c5fe5aee6238a7802f47926081dccaf411941a821",
       "bytes": 113958,
+      "wasmSha256": "ea2f9ce16bb130cb9edd055c5fe5aee6238a7802f47926081dccaf411941a821",
+      "canonicalModuleSha256": "9d635a86a10702ccae1d9cb0c3833940ca347b819ba8a8d7c1dd908b78afed42",
+      "form": "raw",
       "module": "analysis/mission-screening",
       "lastCommit": "46a21b854d24f8ffa915536410efb34fedc0ca7d",
       "lastCommitDate": "2026-10-17T08:37:50-04:00",
@@ -850,6 +910,9 @@
     "analysis/observation-simulator/dist/isomorphic/module.wasm": {
       "sha256": "95b637300af2b2a6f3640461101fe54853de44bf15652660b5de4c53fc679386",
       "bytes": 293819,
+      "wasmSha256": "95b637300af2b2a6f3640461101fe54853de44bf15652660b5de4c53fc679386",
+      "canonicalModuleSha256": "08b45760b3799e59ce157f245e7e5ee379d2f13d2131d64f970a873058d286a7",
+      "form": "raw",
       "module": "analysis/observation-simulator",
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
@@ -876,6 +939,9 @@
     "analysis/od/dist/browser/module.wasm": {
       "sha256": "e5aec728e90a281992c53d664ccc24e143d9a5707d7b71d6509c78b1a8bca73e",
       "bytes": 2383670,
+      "wasmSha256": "e5aec728e90a281992c53d664ccc24e143d9a5707d7b71d6509c78b1a8bca73e",
+      "canonicalModuleSha256": "e5aec728e90a281992c53d664ccc24e143d9a5707d7b71d6509c78b1a8bca73e",
+      "form": "raw",
       "module": null,
       "lastCommit": "117732acbb5abf4ce094fcd9f7102b4975b488b0",
       "lastCommitDate": "2026-11-04T12:20:07-05:00",
@@ -890,6 +956,9 @@
     "analysis/od/dist/isomorphic/module.command.wasm": {
       "sha256": "0f2dae5f5eb8ab9140a1b3cb9849d39558a9893c7b6f593ea739542d2d26d20a",
       "bytes": 2372027,
+      "wasmSha256": "af37203e7c83aeaba80b299b061f88edc9713097ae79285fdf6ec0d75190152a",
+      "canonicalModuleSha256": "af37203e7c83aeaba80b299b061f88edc9713097ae79285fdf6ec0d75190152a",
+      "form": "bundled",
       "module": null,
       "lastCommit": "fe5e4ca0eb543da0250c87fb48b689824d66b5cb",
       "lastCommitDate": "2026-10-26T06:51:01-04:00",
@@ -904,6 +973,9 @@
     "analysis/od/dist/isomorphic/module.wasm": {
       "sha256": "1cb9b8d55c5cced67021e4436351704758fd3f83fec7203638f53e1604a796f3",
       "bytes": 2620108,
+      "wasmSha256": "1cb9b8d55c5cced67021e4436351704758fd3f83fec7203638f53e1604a796f3",
+      "canonicalModuleSha256": "ab8c94bca90c3712854e15984c9fffd3365c2e3fe45aed345b3c3e68516285c5",
+      "form": "raw",
       "module": null,
       "lastCommit": "117732acbb5abf4ce094fcd9f7102b4975b488b0",
       "lastCommitDate": "2026-11-04T12:20:07-05:00",
@@ -918,6 +990,9 @@
     "analysis/od/fit-pipeline/dist/isomorphic/module.wasm": {
       "sha256": "fd63112d38e92edc80629f793afe92589cd748395bed6009f2f988a52f3db42c",
       "bytes": 459667,
+      "wasmSha256": "fd63112d38e92edc80629f793afe92589cd748395bed6009f2f988a52f3db42c",
+      "canonicalModuleSha256": "82e314c100fe18cb9c328ea71612edf22bd77637f3f415a15fafc62edc42045b",
+      "form": "raw",
       "module": "analysis/od/fit-pipeline",
       "lastCommit": "60063ba9e7b7a71e65d1a3c56826d240b506e5d9",
       "lastCommitDate": "2026-10-25T21:48:23-04:00",
@@ -944,6 +1019,9 @@
     "analysis/optical-astrometry/dist/isomorphic/module.wasm": {
       "sha256": "5d7c19752340c7aa2682218727b4a4eaab9b22c098e669680b7ca0d403a26a9f",
       "bytes": 1123367,
+      "wasmSha256": "5d7c19752340c7aa2682218727b4a4eaab9b22c098e669680b7ca0d403a26a9f",
+      "canonicalModuleSha256": "10fbdde6015ea618924aafe71465b7d4fe15ae4d986deb25c1713ceb6a6fc734",
+      "form": "raw",
       "module": "analysis/optical-astrometry",
       "lastCommit": "05e665cc1cca53695913a790ecaf36c39118425f",
       "lastCommitDate": "2026-11-04T16:16:53-05:00",
@@ -970,6 +1048,9 @@
     "analysis/parameters/dist/isomorphic/module.wasm": {
       "sha256": "fb0a588ba2f08f9bebb41dd43e6b23e233a09151dbf28631ed069cf7bf6e1288",
       "bytes": 352305,
+      "wasmSha256": "fb0a588ba2f08f9bebb41dd43e6b23e233a09151dbf28631ed069cf7bf6e1288",
+      "canonicalModuleSha256": "957529a5259fd7e6c67da27ead37091f5572eaccd104988608fcf4143000592c",
+      "form": "raw",
       "module": "analysis/parameters",
       "lastCommit": "77b1578a8acdab00bdfbe8502a78f7abd938143c",
       "lastCommitDate": "2026-10-17T18:39:40-04:00",
@@ -996,6 +1077,9 @@
     "analysis/private-screening/dist/isomorphic/module.wasm": {
       "sha256": "1782365525d0e3bfa0fdac4356d91a17263d8db4068883302b8a714133efad6f",
       "bytes": 387620,
+      "wasmSha256": "1782365525d0e3bfa0fdac4356d91a17263d8db4068883302b8a714133efad6f",
+      "canonicalModuleSha256": "bb04771503d582ab9659d5a987788fc6b71ff279dc06efe54aa704d782f16a97",
+      "form": "raw",
       "module": "analysis/private-screening",
       "lastCommit": "16f1ef67821ff7bc033e93150b16158f70131d4b",
       "lastCommitDate": "2026-10-31T13:52:09-04:00",
@@ -1020,22 +1104,28 @@
       }
     },
     "analysis/reentry/dist/isomorphic/module.wasm": {
-      "sha256": "64f41685a35ded69cb7f3ec7a5ced4c2f781051a049c58283211589cecf7e7bb",
-      "bytes": 147675,
+      "sha256": "f2f91b700367027257f3f927bf20f2bcbde75d4a0f483fc8269b01134fa4d83e",
+      "bytes": 147683,
+      "wasmSha256": "0df51c0b1c621440355064348d446f57bacdefd5961dc811d86ab5cbf2f97e91",
+      "canonicalModuleSha256": "0df51c0b1c621440355064348d446f57bacdefd5961dc811d86ab5cbf2f97e91",
+      "form": "bundled",
       "module": null,
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "1ea6697a6d190436f0332d7d0a8c0a9edc093e89",
+        "sdkCommit": "e4f2db38822fc58b18ae0737abffd39753633325"
       },
       "declaration": null
     },
     "analysis/reference-points/dist/isomorphic/module.wasm": {
       "sha256": "5d31f8b0796934a1d7ecb4b3bee4b0b9f131be13302fc382f1b9956418de9b5b",
       "bytes": 105386,
+      "wasmSha256": "5d31f8b0796934a1d7ecb4b3bee4b0b9f131be13302fc382f1b9956418de9b5b",
+      "canonicalModuleSha256": "66cd576cbe34384e9f0a847c03aba44b5c4cc63ac716d5f3a7130e413d358ebe",
+      "form": "raw",
       "module": "analysis/reference-points",
       "lastCommit": "2d897ec2ba7cd0720ff279507049fd20a9ee9155",
       "lastCommitDate": "2026-11-02T16:55:00-05:00",
@@ -1060,6 +1150,9 @@
     "analysis/reference-states/dist/isomorphic/module.wasm": {
       "sha256": "51477903cb13d877d30342ac5a10a12c5e6fec8a8622ddfe203a73e7dc790c65",
       "bytes": 485025,
+      "wasmSha256": "51477903cb13d877d30342ac5a10a12c5e6fec8a8622ddfe203a73e7dc790c65",
+      "canonicalModuleSha256": "9ec910985b5237eba74ee8187ae743151b10d2066aa0c34d0407c31ce3480797",
+      "form": "raw",
       "module": "analysis/reference-states",
       "lastCommit": "b8682c5fe821fc6adeebdacdcb8f2f768b58e58d",
       "lastCommitDate": "2026-11-03T14:55:36-05:00",
@@ -1086,6 +1179,9 @@
     "analysis/rf-phased-array/dist/isomorphic/module.wasm": {
       "sha256": "0d2fede222f5abf87187e32709f2ed8b30a8e7288cb49b8b0b5e525d7d6b756e",
       "bytes": 174704,
+      "wasmSha256": "0d2fede222f5abf87187e32709f2ed8b30a8e7288cb49b8b0b5e525d7d6b756e",
+      "canonicalModuleSha256": "9e59e69d82ccd8440f8f228214e760ae0f17fdd09502bdc0b1e98a944dfb6cd4",
+      "form": "raw",
       "module": "analysis/rf-phased-array",
       "lastCommit": "e92c8a841554a4e5c1064148154fc505c26970da",
       "lastCommitDate": "2026-10-05T13:25:22-04:00",
@@ -1112,6 +1208,9 @@
     "analysis/rpo-history/dist/isomorphic/module.wasm": {
       "sha256": "0aefc5c7afe2855f643351ce5f2b945bbd84d84d78c4977106e492b598bd6f12",
       "bytes": 422693,
+      "wasmSha256": "0aefc5c7afe2855f643351ce5f2b945bbd84d84d78c4977106e492b598bd6f12",
+      "canonicalModuleSha256": "12aac1aa58456831af809065ca2ab13fbed182b3549df81441e9b06ddae6fd73",
+      "form": "raw",
       "module": "analysis/rpo-history",
       "lastCommit": "dc2ec0b05b3fed13ffae6d50ff33d47ebee00a91",
       "lastCommitDate": "2026-11-04T13:18:41-05:00",
@@ -1138,6 +1237,9 @@
     "analysis/science-http/dist/isomorphic/module.wasm": {
       "sha256": "97f0f6af13a6b2a3ae9790b0933fe6f351b242f3d29d52da3cb88089886158bc",
       "bytes": 83724,
+      "wasmSha256": "97f0f6af13a6b2a3ae9790b0933fe6f351b242f3d29d52da3cb88089886158bc",
+      "canonicalModuleSha256": "1ad18ef11ccf23eca5d137e97b11094dd0ad574757f727ea128f6359ae746be2",
+      "form": "raw",
       "module": "analysis/science-http",
       "lastCommit": "7eb0f08ec9cfc17eda5500bac908eeada26d112b",
       "lastCommitDate": "2026-09-20T22:06:12-04:00",
@@ -1164,6 +1266,9 @@
     "analysis/targeting/dist/isomorphic/module.wasm": {
       "sha256": "83f81e20d8c7f0aae08eb5db05c58b4be5d88a70dac9ed0bfa36b3ed4e36fa0e",
       "bytes": 127064,
+      "wasmSha256": "83f81e20d8c7f0aae08eb5db05c58b4be5d88a70dac9ed0bfa36b3ed4e36fa0e",
+      "canonicalModuleSha256": "f979c4993876aa249a4c08206da5945e9cd5b5b67cd536507d1b00a134dcb024",
+      "form": "raw",
       "module": "analysis/targeting",
       "lastCommit": "75fd4d9d29c8332e43c5daa443fd6cd77f9ecd17",
       "lastCommitDate": "2026-10-17T01:05:21-04:00",
@@ -1188,8 +1293,11 @@
       }
     },
     "analysis/vcm-adapter/dist/isomorphic/module.wasm": {
-      "sha256": "4597d416482206158fc8e9da4b99e39150d1cd75fb9a41799fdc2848ef30c48d",
-      "bytes": 761875,
+      "sha256": "3e4d13ea07047740091787ccbeb1f82de1668a238614e65c74da46da16658e83",
+      "bytes": 761883,
+      "wasmSha256": "dfa14ff98b3bfadf15ea73c3ddc58134f937aa19d658a81e9ca5f20ea439e241",
+      "canonicalModuleSha256": "dfa14ff98b3bfadf15ea73c3ddc58134f937aa19d658a81e9ca5f20ea439e241",
+      "form": "bundled",
       "module": "analysis/vcm-adapter",
       "lastCommit": "c2f476f6193c2355cef778a0abe081ff6e06f29d",
       "lastCommitDate": "2026-11-04T12:27:47-05:00",
@@ -1214,16 +1322,19 @@
       }
     },
     "basilisk/runtime/dist/isomorphic/module.wasm": {
-      "sha256": "3ff8a57dd757b9326254ec00ff706f35ad8a79499f943fc5c68801177edb34c6",
-      "bytes": 128566,
+      "sha256": "cff031b65662e1d4c07949bfa760ec034fb4e1321dd69a10c2ac28df47532bd2",
+      "bytes": 128574,
+      "wasmSha256": "49947426b5bfdbaa99bd33fd458593f16a25355dc239e12dd40b023ce6ca702b",
+      "canonicalModuleSha256": "49947426b5bfdbaa99bd33fd458593f16a25355dc239e12dd40b023ce6ca702b",
+      "form": "bundled",
       "module": "basilisk/runtime",
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "1ea6697a6d190436f0332d7d0a8c0a9edc093e89",
+        "sdkCommit": "e4f2db38822fc58b18ae0737abffd39753633325"
       },
       "declaration": {
         "declares": true,
@@ -1243,6 +1354,9 @@
     "data-source/body-imagery-tiles/dist/isomorphic/module.wasm": {
       "sha256": "06e2770f2f050aa6827b02ba3013c8c12d62600a0dd1299d6616aec8e2c0dd41",
       "bytes": 212689,
+      "wasmSha256": "06e2770f2f050aa6827b02ba3013c8c12d62600a0dd1299d6616aec8e2c0dd41",
+      "canonicalModuleSha256": "780f23d43062da5b95341499f988ed484173b89a2ad9a28fa95e69aad5652a15",
+      "form": "raw",
       "module": "data-source/body-imagery-tiles",
       "lastCommit": "e10c799cb8962295dd90d3b67d9b95efc303a6af",
       "lastCommitDate": "2026-10-22T13:25:47-04:00",
@@ -1269,6 +1383,9 @@
     "data-source/body-imagery/dist/isomorphic/module.wasm": {
       "sha256": "5ddd216115246be825fc9be7868439eb698aa49f2b707249f31b0d355e6fe58f",
       "bytes": 283594,
+      "wasmSha256": "5ddd216115246be825fc9be7868439eb698aa49f2b707249f31b0d355e6fe58f",
+      "canonicalModuleSha256": "5becba49b37184458d9e753df74227cd9a5e2c0f752dfda9e61a0f62db4122ef",
+      "form": "raw",
       "module": "data-source/body-imagery",
       "lastCommit": "abb84ed9a6ee8bc29a6fdf21b9ec21c1d63512c1",
       "lastCommitDate": "2026-10-15T11:33:26-04:00",
@@ -1295,6 +1412,9 @@
     "data-source/body-imagery/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "f37ab64658124c27d7623c0359992756f11729cb9652650a9453461639086497",
       "bytes": 157730,
+      "wasmSha256": "f37ab64658124c27d7623c0359992756f11729cb9652650a9453461639086497",
+      "canonicalModuleSha256": "3f12d973fc066cd34140115e04f32439244e6b9d0ddacbe283af39a5d7b387d0",
+      "form": "raw",
       "module": "data-source/body-imagery/host-adapter",
       "lastCommit": "abb84ed9a6ee8bc29a6fdf21b9ec21c1d63512c1",
       "lastCommitDate": "2026-10-15T11:33:26-04:00",
@@ -1320,6 +1440,9 @@
     "data-source/bond-attestation-source/dist/isomorphic/module.wasm": {
       "sha256": "4f126760c48de4fc0888cebf9148db49b1d4d96dc0dd18e1ff3d05097c23f7e9",
       "bytes": 208078,
+      "wasmSha256": "4f126760c48de4fc0888cebf9148db49b1d4d96dc0dd18e1ff3d05097c23f7e9",
+      "canonicalModuleSha256": "629d03aa97db9a5a23ca97826d87ceb928e2791671a1669c148355e6e061d4b1",
+      "form": "raw",
       "module": "data-source/bond-attestation-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1346,6 +1469,9 @@
     "data-source/catalog-source/dist/isomorphic/module.wasm": {
       "sha256": "d964ecea8b5c3727bac7819c6aea91a8b7340adc0286be0df6b3031f1df4da7a",
       "bytes": 125585,
+      "wasmSha256": "d964ecea8b5c3727bac7819c6aea91a8b7340adc0286be0df6b3031f1df4da7a",
+      "canonicalModuleSha256": "7720edc7043e5bfab7943f640e40216650d400ee827756adc5c31f42c9a28f3d",
+      "form": "raw",
       "module": "data-source/catalog-source",
       "lastCommit": "87944e816a879fba59c5343df157e6c80ea2ea3a",
       "lastCommitDate": "2026-10-14T08:47:40-04:00",
@@ -1372,6 +1498,9 @@
     "data-source/celestrak-parser/dist/isomorphic/module.wasm": {
       "sha256": "7db965f3933cafa20943534ce3cecaf8e79cb423662a12bb044793b3c8f28b46",
       "bytes": 226642,
+      "wasmSha256": "7db965f3933cafa20943534ce3cecaf8e79cb423662a12bb044793b3c8f28b46",
+      "canonicalModuleSha256": "e513b5c08ce1e0238ad1e1950041991d9597c3cc2c9280dfc4a7b59e47fd84fb",
+      "form": "raw",
       "module": "data-source/celestrak-parser",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1398,6 +1527,9 @@
     "data-source/celestrak-reference/dist/isomorphic/module.wasm": {
       "sha256": "5392abb0e3770540d5c1c7e806205fc0a725e2b0cefbd173f4cc8c652c53b36e",
       "bytes": 241141,
+      "wasmSha256": "5392abb0e3770540d5c1c7e806205fc0a725e2b0cefbd173f4cc8c652c53b36e",
+      "canonicalModuleSha256": "098adaaa73881dea13fc6453393fe140d396f92194f249d81f96c77fc90e172f",
+      "form": "raw",
       "module": "data-source/celestrak-reference",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1424,6 +1556,9 @@
     "data-source/celestrak-request/dist/isomorphic/module.wasm": {
       "sha256": "727880a48e16d6ab597c540bd16fbae6129d373f34f43aa2eaec7e49f7e8bf94",
       "bytes": 171806,
+      "wasmSha256": "727880a48e16d6ab597c540bd16fbae6129d373f34f43aa2eaec7e49f7e8bf94",
+      "canonicalModuleSha256": "8640508cf4300a11f64497ecb3474c66daf415c52d50242ec775ee0da5389c9c",
+      "form": "raw",
       "module": "data-source/celestrak-request",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1450,6 +1585,9 @@
     "data-source/celestrak-supgp/dist/isomorphic/module.wasm": {
       "sha256": "2b4d2b44f1d7d7dc349d20977d0e6dd486363cc892a88170b009fc7ab0ab482a",
       "bytes": 172367,
+      "wasmSha256": "2b4d2b44f1d7d7dc349d20977d0e6dd486363cc892a88170b009fc7ab0ab482a",
+      "canonicalModuleSha256": "06a868bbad6fdd7a7acd3696e9f7de08a6d754e3851d05b0dec38b40a1c070be",
+      "form": "raw",
       "module": "data-source/celestrak-supgp",
       "lastCommit": "fb630cc370e7068ce138830471bada9689b53e32",
       "lastCommitDate": "2026-11-04T11:56:03-05:00",
@@ -1476,6 +1614,9 @@
     "data-source/cell-tower-credentials/dist/isomorphic/module.wasm": {
       "sha256": "54b8b30c6636d872c954e0d53fa228542d73667738d4ec1e13184d4a490ce38a",
       "bytes": 175114,
+      "wasmSha256": "54b8b30c6636d872c954e0d53fa228542d73667738d4ec1e13184d4a490ce38a",
+      "canonicalModuleSha256": "e8dc0b2621357f22ca967a762e51d43ab8c9cb226a42f625f7c3e4bf4b1f2082",
+      "form": "raw",
       "module": "data-source/cell-tower-credentials",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1501,6 +1642,9 @@
     "data-source/cell-tower-ingest/dist/isomorphic/module.wasm": {
       "sha256": "9cde36ec9ac1b0b4fece528934a78d6c369d2d26b8a93f6c42f0c003947db3dd",
       "bytes": 361809,
+      "wasmSha256": "9cde36ec9ac1b0b4fece528934a78d6c369d2d26b8a93f6c42f0c003947db3dd",
+      "canonicalModuleSha256": "c146244e605ef787d5abd8c47af9f61a0e259ba51724a484536cce3039b4433b",
+      "form": "raw",
       "module": "data-source/cell-tower-ingest",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1527,6 +1671,9 @@
     "data-source/cell-tower-source/dist/isomorphic/module.wasm": {
       "sha256": "77c69ffaf7d96d25e49e237dec07651f1ab7472977f3dadfe856b16784c431c7",
       "bytes": 337797,
+      "wasmSha256": "77c69ffaf7d96d25e49e237dec07651f1ab7472977f3dadfe856b16784c431c7",
+      "canonicalModuleSha256": "003738f89a059406ad0b9f04a21a970694a8c43b41acd8dc624b24b49f44535f",
+      "form": "raw",
       "module": "data-source/cell-tower-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1553,6 +1700,9 @@
     "data-source/cpf-source/dist/isomorphic/module.wasm": {
       "sha256": "4edab160c53d71af0b830cffa424f7193d51d9460080f4f8a60b87fa1338f06f",
       "bytes": 128514,
+      "wasmSha256": "4edab160c53d71af0b830cffa424f7193d51d9460080f4f8a60b87fa1338f06f",
+      "canonicalModuleSha256": "11d69988d2839dd7104b225bf8637e6a921891afff78b33c7419d9a399ddec75",
+      "form": "raw",
       "module": "data-source/cpf-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1579,6 +1729,9 @@
     "data-source/deep-space-spacecraft/dist/isomorphic/module.wasm": {
       "sha256": "5c43ae89b2a05acc5bfc2c79e07602f22f2f3ffbfb5043f75277ce61d655c05d",
       "bytes": 513795,
+      "wasmSha256": "5c43ae89b2a05acc5bfc2c79e07602f22f2f3ffbfb5043f75277ce61d655c05d",
+      "canonicalModuleSha256": "2799db2b2cfb47f6a52b0627fd227cad46d61db191999be174c98568a24f8db8",
+      "form": "raw",
       "module": "data-source/deep-space-spacecraft",
       "lastCommit": "deccb1cc7ad6fd7835426c47f651f813409ebfd5",
       "lastCommitDate": "2026-11-05T23:11:33-05:00",
@@ -1605,6 +1758,9 @@
     "data-source/eop-parser/dist/isomorphic/module.wasm": {
       "sha256": "03afedc590707a1d592edd0841f367b835498c97e5508526553e01b0d89997c1",
       "bytes": 136142,
+      "wasmSha256": "03afedc590707a1d592edd0841f367b835498c97e5508526553e01b0d89997c1",
+      "canonicalModuleSha256": "1df03b8481a7121feb34bea89d3cb619e0d86b3af03949df496e6cd2f92eaa98",
+      "form": "raw",
       "module": "data-source/eop-parser",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1629,6 +1785,9 @@
     "data-source/eop-request/dist/isomorphic/module.wasm": {
       "sha256": "6d2716ec13113991fce1a414c46b67e25d98e860d64d9107d71e372fa286eb08",
       "bytes": 87168,
+      "wasmSha256": "6d2716ec13113991fce1a414c46b67e25d98e860d64d9107d71e372fa286eb08",
+      "canonicalModuleSha256": "e78b25337889b4cfbea8c4490c1fa90e71e4957b8d6d2cdca1c29491ef35be13",
+      "form": "raw",
       "module": "data-source/eop-request",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1655,6 +1814,9 @@
     "data-source/ephemeris-source/dist/isomorphic/module.wasm": {
       "sha256": "5c789c4758679a03f6890e79a6333d4338a00eae21d816eb0b37c4055d9eb959",
       "bytes": 410809,
+      "wasmSha256": "5c789c4758679a03f6890e79a6333d4338a00eae21d816eb0b37c4055d9eb959",
+      "canonicalModuleSha256": "a6f02a016530fa713c56a0af2024e743fa96d9cc30cae5af48d2468fe4fe1790",
+      "form": "raw",
       "module": "data-source/ephemeris-source",
       "lastCommit": "87944e816a879fba59c5343df157e6c80ea2ea3a",
       "lastCommitDate": "2026-10-14T08:47:40-04:00",
@@ -1681,6 +1843,9 @@
     "data-source/ephemeris-source/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "b741d39338042322f63d54bae3212932fd4efdec925003ee4f847eee83b24534",
       "bytes": 468622,
+      "wasmSha256": "b741d39338042322f63d54bae3212932fd4efdec925003ee4f847eee83b24534",
+      "canonicalModuleSha256": "c60bf822dde960b871c56cffa29437872a0c1cb3be657c424c8bcaa32df55c3f",
+      "form": "raw",
       "module": null,
       "lastCommit": "87944e816a879fba59c5343df157e6c80ea2ea3a",
       "lastCommitDate": "2026-10-14T08:47:40-04:00",
@@ -1695,6 +1860,9 @@
     "data-source/geonames-ingest/dist/isomorphic/module.wasm": {
       "sha256": "62b2c3bb57dd94891190f22297d9f58ddcf7c04649ef04332277bfe76024bdb6",
       "bytes": 228608,
+      "wasmSha256": "62b2c3bb57dd94891190f22297d9f58ddcf7c04649ef04332277bfe76024bdb6",
+      "canonicalModuleSha256": "72ac4ccf74fca7fdc32baa3d986a99a49a8994b433dc4637d64cd6851c018c70",
+      "form": "raw",
       "module": "data-source/geonames-ingest",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1721,6 +1889,9 @@
     "data-source/geonames-source/dist/isomorphic/module.wasm": {
       "sha256": "686766bf670ecb1e8003a4c113645b46210f9a26534d7615f0b206cb05610ff4",
       "bytes": 192396,
+      "wasmSha256": "686766bf670ecb1e8003a4c113645b46210f9a26534d7615f0b206cb05610ff4",
+      "canonicalModuleSha256": "0fd8471a93ba235a4848d6ebcd442355c40582170666ceb0eace5ae283608a60",
+      "form": "raw",
       "module": "data-source/geonames-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1747,6 +1918,9 @@
     "data-source/gibs/dist/isomorphic/module.wasm": {
       "sha256": "4ab43d3e7034f8a5e563a51a6d29df2c3ac95bc1b7a18082716597b0c0eac36f",
       "bytes": 325483,
+      "wasmSha256": "4ab43d3e7034f8a5e563a51a6d29df2c3ac95bc1b7a18082716597b0c0eac36f",
+      "canonicalModuleSha256": "4175420cb4279f6ca275321862a9f16ffa046b0514b4190000bc8f62b7ba575e",
+      "form": "raw",
       "module": "data-source/gibs",
       "lastCommit": "e3a7eed57ada1b115a85f23ecf14a3913be05d95",
       "lastCommitDate": "2026-10-13T13:25:51-04:00",
@@ -1773,6 +1947,9 @@
     "data-source/gibs/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "c0d684c5549157d70f4365fedb5b03d0da1637b82fa2121d9b568e2403240335",
       "bytes": 157622,
+      "wasmSha256": "c0d684c5549157d70f4365fedb5b03d0da1637b82fa2121d9b568e2403240335",
+      "canonicalModuleSha256": "80dcf5564dbfe54e329314238d6688c2d05a124cd32b68a676f7a5467247560b",
+      "form": "raw",
       "module": "data-source/gibs/host-adapter",
       "lastCommit": "dc4ed470314146fb997d3fb948435074d1c9715c",
       "lastCommitDate": "2026-10-13T12:12:31-04:00",
@@ -1798,6 +1975,9 @@
     "data-source/glonass-source/dist/isomorphic/module.wasm": {
       "sha256": "db7e375ca038074fb54d21b951aab1c37876ea81339bb28995d70078c31ab6fa",
       "bytes": 130449,
+      "wasmSha256": "db7e375ca038074fb54d21b951aab1c37876ea81339bb28995d70078c31ab6fa",
+      "canonicalModuleSha256": "d897f5c73134cfc78aed503c659dc9de724fc1f298087a1ca26a80e044f248bb",
+      "form": "raw",
       "module": "data-source/glonass-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1822,16 +2002,19 @@
       }
     },
     "data-source/gp-archive-records/dist/isomorphic/module.wasm": {
-      "sha256": "2ed0572767d3983d61eef9e3fe54cf668def682a03159259018c6de856cc1dd7",
-      "bytes": 99612,
+      "sha256": "28b0968a9dd8c8d67b289606b18d977e5e5e836ea921d457e84ca7f19406444d",
+      "bytes": 99620,
+      "wasmSha256": "06f55fc3cd037efb743ad65c4454d6280367126b68fcf6942b38fe7ff79d708f",
+      "canonicalModuleSha256": "06f55fc3cd037efb743ad65c4454d6280367126b68fcf6942b38fe7ff79d708f",
+      "form": "bundled",
       "module": "data-source/gp-archive-records",
       "lastCommit": "87944e816a879fba59c5343df157e6c80ea2ea3a",
       "lastCommitDate": "2026-10-14T08:47:40-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "ba526492a868685217211196a45c90023bf0dd96",
-        "sdkCommit": "79eda3cec943a8b5b2a1f1ddaccd306f9c55003f"
+        "superRepoCommit": "da4e1650ce7d79918858bee09183c0c04bb72678",
+        "sdkCommit": "4e466631acc2bb7e2cc5a56fd70c2392b939e1a5"
       },
       "declaration": {
         "declares": true,
@@ -1850,14 +2033,17 @@
     "data-source/gps-source/dist/gps-source.wasm": {
       "sha256": "58d63288f2bf3a6b82f139e9d6821533bc04e8ce45773df462b28ad0c8bd786a",
       "bytes": 88266,
+      "wasmSha256": "9c554bbabeccda555246bd85b2700c38399fe10fbf6456e82a96b63c695f07d5",
+      "canonicalModuleSha256": "9c554bbabeccda555246bd85b2700c38399fe10fbf6456e82a96b63c695f07d5",
+      "form": "bundled",
       "module": "data-source/gps-source",
       "lastCommit": "223d05686c8c399e85cb462ec04f1b0b4d944838",
       "lastCommitDate": "2026-10-23T15:13:34-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "1ea6697a6d190436f0332d7d0a8c0a9edc093e89",
+        "sdkCommit": "e4f2db38822fc58b18ae0737abffd39753633325"
       },
       "declaration": {
         "declares": true,
@@ -1876,6 +2062,9 @@
     "data-source/gps-source/dist/isomorphic/module.wasm": {
       "sha256": "9c554bbabeccda555246bd85b2700c38399fe10fbf6456e82a96b63c695f07d5",
       "bytes": 87302,
+      "wasmSha256": "9c554bbabeccda555246bd85b2700c38399fe10fbf6456e82a96b63c695f07d5",
+      "canonicalModuleSha256": "9c554bbabeccda555246bd85b2700c38399fe10fbf6456e82a96b63c695f07d5",
+      "form": "raw",
       "module": "data-source/gps-source",
       "lastCommit": "223d05686c8c399e85cb462ec04f1b0b4d944838",
       "lastCommitDate": "2026-10-23T15:13:34-04:00",
@@ -1902,6 +2091,9 @@
     "data-source/ilrs-crd-source/dist/isomorphic/module.wasm": {
       "sha256": "1671b59287d5e3dc6d732bb43c57e8cf2f48cf350d9cd590a0eb5cbeb009f7da",
       "bytes": 308891,
+      "wasmSha256": "1671b59287d5e3dc6d732bb43c57e8cf2f48cf350d9cd590a0eb5cbeb009f7da",
+      "canonicalModuleSha256": "2ce59c3d18b9ef976c6d0c8749657b8c0144e12fb358f94df6e0b59496b18879",
+      "form": "raw",
       "module": "data-source/ilrs-crd-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1928,6 +2120,9 @@
     "data-source/ilrs-station-coordinates/dist/isomorphic/module.wasm": {
       "sha256": "d775a12572114dc33d69a528ca23a3561e089444a0f562bb7542d4f2c36f69a3",
       "bytes": 266250,
+      "wasmSha256": "d775a12572114dc33d69a528ca23a3561e089444a0f562bb7542d4f2c36f69a3",
+      "canonicalModuleSha256": "9b6b592120e238f8ac6b5bac0e4ae74e56e1ab34da1a4f9301a2186cff266fdc",
+      "form": "raw",
       "module": "data-source/ilrs-station-coordinates",
       "lastCommit": "80033bff9543e602710ae0a28b9b0708b8b8c028",
       "lastCommitDate": "2026-11-04T11:06:12-05:00",
@@ -1954,6 +2149,9 @@
     "data-source/imager-observation-parser/dist/isomorphic/module.wasm": {
       "sha256": "747bff97e8d417868921f2b56fb5ba33d258ba48cda0cac5f1c9d1ec6ff331cf",
       "bytes": 270560,
+      "wasmSha256": "747bff97e8d417868921f2b56fb5ba33d258ba48cda0cac5f1c9d1ec6ff331cf",
+      "canonicalModuleSha256": "4d8caaa6310cb8ed147617407dbb218fe472cb616d966f455594b58412fdd6ba",
+      "form": "raw",
       "module": "data-source/imager-observation-parser",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -1980,6 +2178,9 @@
     "data-source/imager-observation-source/dist/isomorphic/module.wasm": {
       "sha256": "d3bd0a8972b13417db8123a6d58f5e89e178d214e2c481afc8805bbd13c5edf8",
       "bytes": 163054,
+      "wasmSha256": "d3bd0a8972b13417db8123a6d58f5e89e178d214e2c481afc8805bbd13c5edf8",
+      "canonicalModuleSha256": "30c95fa1b978f99d6a97be438d8254250c2915db67ddd5c8de4360af9033c86b",
+      "form": "raw",
       "module": "data-source/imager-observation-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2006,6 +2207,9 @@
     "data-source/intelsat-source/dist/isomorphic/module.wasm": {
       "sha256": "be8547f2a6e3da12466466a328d09603d29cc2d620bc75668857f1da36c6cb65",
       "bytes": 125175,
+      "wasmSha256": "be8547f2a6e3da12466466a328d09603d29cc2d620bc75668857f1da36c6cb65",
+      "canonicalModuleSha256": "bae098933d065dd7ffa8af2b73195ebea6ab63c5efef12d65912923265863023",
+      "form": "raw",
       "module": "data-source/intelsat-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2032,6 +2236,9 @@
     "data-source/iss-source/dist/isomorphic/module.wasm": {
       "sha256": "ddf6be062dca5145861718a3d2afb69661f027cb3f15012d2c3f0387b44f3507",
       "bytes": 117412,
+      "wasmSha256": "ddf6be062dca5145861718a3d2afb69661f027cb3f15012d2c3f0387b44f3507",
+      "canonicalModuleSha256": "4d9af713244795b5c46643d430cafb82b97d16c9492dfed4cc50edf59e96b903",
+      "form": "raw",
       "module": "data-source/iss-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2058,6 +2265,9 @@
     "data-source/launch-schedule/dist/isomorphic/module.wasm": {
       "sha256": "901a56b57b176423304eec3efc876cd6ce77ad3afcd999f7e1d49fe777f8f24e",
       "bytes": 212175,
+      "wasmSha256": "901a56b57b176423304eec3efc876cd6ce77ad3afcd999f7e1d49fe777f8f24e",
+      "canonicalModuleSha256": "d3c338067a001e3cfd5d28f8aa15c556ca7ea73a9f5c31507270b4f81752f043",
+      "form": "raw",
       "module": "data-source/launch-schedule",
       "lastCommit": "38ddecf0796952ab73012cde7673f1d5c84dc047",
       "lastCommitDate": "2026-10-14T18:50:52-04:00",
@@ -2084,6 +2294,9 @@
     "data-source/launch-schedule/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "b53a6deb7fbf142e2f3d26d1c06f223b2a7064405b74ae7ee042824d0800b069",
       "bytes": 97279,
+      "wasmSha256": "b53a6deb7fbf142e2f3d26d1c06f223b2a7064405b74ae7ee042824d0800b069",
+      "canonicalModuleSha256": "39941b70300007e026296a115de8f38c0caaf690e5576e2425d863f3f910211d",
+      "form": "raw",
       "module": "data-source/launch-schedule/host-adapter",
       "lastCommit": "38ddecf0796952ab73012cde7673f1d5c84dc047",
       "lastCommitDate": "2026-10-14T18:50:52-04:00",
@@ -2110,6 +2323,9 @@
     "data-source/lowell-astorb/dist/isomorphic/module.wasm": {
       "sha256": "cada8076c539d040562ceb807ec21b4600a045fb27bd9bc2b2d66a165a8e0f34",
       "bytes": 248834,
+      "wasmSha256": "cada8076c539d040562ceb807ec21b4600a045fb27bd9bc2b2d66a165a8e0f34",
+      "canonicalModuleSha256": "76a25b0fcef907aa80f72bd33f2d3b154b81315ebc33a1cad867eb0616275a3a",
+      "form": "raw",
       "module": "data-source/lowell-astorb",
       "lastCommit": "abb84ed9a6ee8bc29a6fdf21b9ec21c1d63512c1",
       "lastCommitDate": "2026-10-15T11:33:26-04:00",
@@ -2136,6 +2352,9 @@
     "data-source/lowell-astorb/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "76bbaacaf481651405ff47185d4f8cb2f6716c433809d8661e94cb4c2acff8f0",
       "bytes": 260484,
+      "wasmSha256": "76bbaacaf481651405ff47185d4f8cb2f6716c433809d8661e94cb4c2acff8f0",
+      "canonicalModuleSha256": "7ff0dbf724157ccba65593956718783e63301b99f6fc2d5d63cf4c91c22aeb88",
+      "form": "raw",
       "module": "data-source/lowell-astorb/host-adapter",
       "lastCommit": "abb84ed9a6ee8bc29a6fdf21b9ec21c1d63512c1",
       "lastCommitDate": "2026-10-15T11:33:26-04:00",
@@ -2162,6 +2381,9 @@
     "data-source/lvdb-source/dist/isomorphic/module.wasm": {
       "sha256": "e35e6e2c18149ea8edb90031f7665df5992c4307168260442e958b079ac283c7",
       "bytes": 354100,
+      "wasmSha256": "e35e6e2c18149ea8edb90031f7665df5992c4307168260442e958b079ac283c7",
+      "canonicalModuleSha256": "a53b8851a433d0addd78e02e1fedfd329ac5c27e273553b3345d16962556ba1f",
+      "form": "raw",
       "module": "data-source/lvdb-source",
       "lastCommit": "8f84df56836337e1a37639dcd3668afa5d20ae30",
       "lastCommitDate": "2026-11-03T23:36:55-05:00",
@@ -2188,6 +2410,9 @@
     "data-source/mlab-starlink-connectivity/dist/isomorphic/module.wasm": {
       "sha256": "f89ad02b309455ed3ae86e999b6b466c98e193aa297716ad561f5d0f361fca68",
       "bytes": 202397,
+      "wasmSha256": "f89ad02b309455ed3ae86e999b6b466c98e193aa297716ad561f5d0f361fca68",
+      "canonicalModuleSha256": "cc3eebc71bff9b1c94b1144a92494ba4d36a9008fb2f2a449d014315d2549633",
+      "form": "raw",
       "module": "data-source/mlab-starlink-connectivity",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2214,6 +2439,9 @@
     "data-source/moon-imagery/dist/isomorphic/module.wasm": {
       "sha256": "ce166d2b44f2bb6b27826c8402cbfe015859ae3765dddfabb5a128c8c107dc37",
       "bytes": 221302,
+      "wasmSha256": "ce166d2b44f2bb6b27826c8402cbfe015859ae3765dddfabb5a128c8c107dc37",
+      "canonicalModuleSha256": "811b202c8ee1b8504bae642b1b92ef35d4b6fd5abd42c919c9ac74d3e622448b",
+      "form": "raw",
       "module": "data-source/moon-imagery",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2240,6 +2468,9 @@
     "data-source/naif-kernels/dist/isomorphic/module.wasm": {
       "sha256": "b89b8c6705f47cb585186c11db690a8165aa1dbf8930636e5c1f6ef98a2de57d",
       "bytes": 243271,
+      "wasmSha256": "b89b8c6705f47cb585186c11db690a8165aa1dbf8930636e5c1f6ef98a2de57d",
+      "canonicalModuleSha256": "779cae0cc5c443792faed2651c429706609673704e0dc1b3c037c76074adf84d",
+      "form": "raw",
       "module": "data-source/naif-kernels",
       "lastCommit": "86a9d719ea2fed4277262556717e9e5ccf81a54d",
       "lastCommitDate": "2026-10-16T18:13:24-04:00",
@@ -2266,6 +2497,9 @@
     "data-source/naif-kernels/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "5fbc9c99faca7db266a7e28152d4c1266e32dafe2fbe678e344278b07742750b",
       "bytes": 157682,
+      "wasmSha256": "5fbc9c99faca7db266a7e28152d4c1266e32dafe2fbe678e344278b07742750b",
+      "canonicalModuleSha256": "99e757423c02dcd61f97d9280c653acf43111d44c2fcfb5e7957428177501d9e",
+      "form": "raw",
       "module": "data-source/naif-kernels/host-adapter",
       "lastCommit": "abb84ed9a6ee8bc29a6fdf21b9ec21c1d63512c1",
       "lastCommitDate": "2026-10-15T11:33:26-04:00",
@@ -2291,6 +2525,9 @@
     "data-source/nwp-field-source/dist/isomorphic/module.wasm": {
       "sha256": "feb8604803dc7a983c64f99db961a3d6b1903eb36ee8a5799bc773d885384775",
       "bytes": 189659,
+      "wasmSha256": "feb8604803dc7a983c64f99db961a3d6b1903eb36ee8a5799bc773d885384775",
+      "canonicalModuleSha256": "b468a612155e71ea48d2eaaa83e9610c9d29558e1dd1acd840803f848e85faa5",
+      "form": "raw",
       "module": "data-source/nwp-field-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2317,6 +2554,9 @@
     "data-source/nwp-grib2-parser/dist/isomorphic/module.wasm": {
       "sha256": "05768ae2712678f7a41ca2df8f64e295910a690d7e7ba3bb84e84c988c3a2f45",
       "bytes": 177441,
+      "wasmSha256": "05768ae2712678f7a41ca2df8f64e295910a690d7e7ba3bb84e84c988c3a2f45",
+      "canonicalModuleSha256": "e58cee25842b7d3c73ce555e540fb1f34e010f8d9c90d99ea46b9718aa51eca9",
+      "form": "raw",
       "module": "data-source/nwp-grib2-parser",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2343,6 +2583,9 @@
     "data-source/oem-source-iss/dist/isomorphic/module.wasm": {
       "sha256": "1ee970d263d17a4840e537cfb15100b5c88a9e9f0324a7828f915bda9d0ac990",
       "bytes": 101735,
+      "wasmSha256": "1ee970d263d17a4840e537cfb15100b5c88a9e9f0324a7828f915bda9d0ac990",
+      "canonicalModuleSha256": "093c1b57997216eedefd10016d26ccb87e09279b94ee6664b73352888f1bdc00",
+      "form": "raw",
       "module": "data-source/oem-source-iss",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2369,6 +2612,9 @@
     "data-source/oneweb-source/dist/isomorphic/module.wasm": {
       "sha256": "e70bf07eed4c36bb1e5e4b871bd2ed3bca069c8815007415d66f6eee9c6ce4de",
       "bytes": 69234,
+      "wasmSha256": "e70bf07eed4c36bb1e5e4b871bd2ed3bca069c8815007415d66f6eee9c6ce4de",
+      "canonicalModuleSha256": "e70bf07eed4c36bb1e5e4b871bd2ed3bca069c8815007415d66f6eee9c6ce4de",
+      "form": "raw",
       "module": "data-source/oneweb-source",
       "lastCommit": "223d05686c8c399e85cb462ec04f1b0b4d944838",
       "lastCommitDate": "2026-10-23T15:13:34-04:00",
@@ -2395,14 +2641,17 @@
     "data-source/oneweb-source/dist/oneweb-source.wasm": {
       "sha256": "9113ff15cc8d21d04d3c5bd67da9fee55ca9c5c451e30b24c919b60ea93b2d45",
       "bytes": 70198,
+      "wasmSha256": "e70bf07eed4c36bb1e5e4b871bd2ed3bca069c8815007415d66f6eee9c6ce4de",
+      "canonicalModuleSha256": "e70bf07eed4c36bb1e5e4b871bd2ed3bca069c8815007415d66f6eee9c6ce4de",
+      "form": "bundled",
       "module": "data-source/oneweb-source",
       "lastCommit": "223d05686c8c399e85cb462ec04f1b0b4d944838",
       "lastCommitDate": "2026-10-23T15:13:34-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "1ea6697a6d190436f0332d7d0a8c0a9edc093e89",
+        "sdkCommit": "e4f2db38822fc58b18ae0737abffd39753633325"
       },
       "declaration": {
         "declares": true,
@@ -2421,6 +2670,9 @@
     "data-source/open-meteo/dist/isomorphic/module.wasm": {
       "sha256": "47208a14312d8678ebc7c02a123536e6a7ca82d2218dcd5a5e05096aa739705e",
       "bytes": 213867,
+      "wasmSha256": "47208a14312d8678ebc7c02a123536e6a7ca82d2218dcd5a5e05096aa739705e",
+      "canonicalModuleSha256": "868019031fa0bae9d61708854e35f52dc5031f5691c42002f4ac7206fcd3c33f",
+      "form": "raw",
       "module": "data-source/open-meteo",
       "lastCommit": "38ddecf0796952ab73012cde7673f1d5c84dc047",
       "lastCommitDate": "2026-10-14T18:50:52-04:00",
@@ -2447,6 +2699,9 @@
     "data-source/open-meteo/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "70bac58df517b88d1673edbef3ab3e404db2967c643300e95c8f4fbbb9200435",
       "bytes": 100412,
+      "wasmSha256": "70bac58df517b88d1673edbef3ab3e404db2967c643300e95c8f4fbbb9200435",
+      "canonicalModuleSha256": "c9c83568e6cee5558accdac7f5a32110363d761b5d07190c68e4aeba009d1fd9",
+      "form": "raw",
       "module": "data-source/open-meteo/host-adapter",
       "lastCommit": "38ddecf0796952ab73012cde7673f1d5c84dc047",
       "lastCommitDate": "2026-10-14T18:50:52-04:00",
@@ -2473,6 +2728,9 @@
     "data-source/operator-states-public/dist/isomorphic/module.wasm": {
       "sha256": "7065ca13170cd0fc2b39f3ae4a085bb90e556a4a0764f78921cc761559f97d2f",
       "bytes": 599245,
+      "wasmSha256": "7065ca13170cd0fc2b39f3ae4a085bb90e556a4a0764f78921cc761559f97d2f",
+      "canonicalModuleSha256": "f958ce506ab4d27b31cc97488cc14945d6a8d6de56e7c96ce334fa44b4331cfa",
+      "form": "raw",
       "module": "data-source/operator-states-public",
       "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
       "lastCommitDate": "2026-10-31T10:43:22-04:00",
@@ -2499,6 +2757,9 @@
     "data-source/osm-source/dist/isomorphic/module.wasm": {
       "sha256": "66d7a2f0ee2e460a01e65ed5d68a62732c7de352325123acf0786db27285bce1",
       "bytes": 135050,
+      "wasmSha256": "66d7a2f0ee2e460a01e65ed5d68a62732c7de352325123acf0786db27285bce1",
+      "canonicalModuleSha256": "8e91a272234020fc5ed37ae87782cd975af0d05e727060f753a24cb4db90d164",
+      "form": "raw",
       "module": "data-source/osm-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2525,6 +2786,9 @@
     "data-source/record-retention/dist/isomorphic/module.wasm": {
       "sha256": "fb768c185d7f3804edbd2a2776c3cd961c4c4b8ae637ae8caa726dc6b3eeddb8",
       "bytes": 114073,
+      "wasmSha256": "fb768c185d7f3804edbd2a2776c3cd961c4c4b8ae637ae8caa726dc6b3eeddb8",
+      "canonicalModuleSha256": "e1d644a797ef2f42a66aacd51906dce692bae18bffe516cb1f46d121f4fd63b3",
+      "form": "raw",
       "module": "data-source/record-retention",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2550,6 +2814,9 @@
     "data-source/record-retention/dist/test-browser/module.wasm": {
       "sha256": "666e846204ecb27a2ba6b141efac26e788ff432d984038bb007011db3b944f0b",
       "bytes": 113985,
+      "wasmSha256": "666e846204ecb27a2ba6b141efac26e788ff432d984038bb007011db3b944f0b",
+      "canonicalModuleSha256": "6b7539de9305c3200ef2e0a436d7254dbf4e2ed4563e425639546e334d3d299c",
+      "form": "raw",
       "module": "data-source/record-retention",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2575,6 +2842,9 @@
     "data-source/retrieval/dist/isomorphic/module.wasm": {
       "sha256": "ae4d46cc57e38338eddd8a08c17d76da2b82181638f13b03fe3e8f7885a0a3fd",
       "bytes": 163867,
+      "wasmSha256": "ae4d46cc57e38338eddd8a08c17d76da2b82181638f13b03fe3e8f7885a0a3fd",
+      "canonicalModuleSha256": "deaffc41f965786e9c88537707fb9e3caa2b91c486a8a6517e0cbd87e608b5a9",
+      "form": "raw",
       "module": "data-source/retrieval",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2601,6 +2871,9 @@
     "data-source/satnogs-optical-source/dist/isomorphic/module.wasm": {
       "sha256": "a23705bbdf052fa9a04b0dfd417a4478c78b076177a9ec95733992d715cf30df",
       "bytes": 249699,
+      "wasmSha256": "a23705bbdf052fa9a04b0dfd417a4478c78b076177a9ec95733992d715cf30df",
+      "canonicalModuleSha256": "7db6a11916eaa3f28d4c8423f5390c9d9387d1950f49f7e314278416ce06b6e0",
+      "form": "raw",
       "module": "data-source/satnogs-optical-source",
       "lastCommit": "ff543c329d6544fddcb02e0cd86370efb0d79c45",
       "lastCommitDate": "2026-11-04T11:56:26-05:00",
@@ -2627,6 +2900,9 @@
     "data-source/satnogs-source/dist/isomorphic/module.wasm": {
       "sha256": "09a98c96dc5c8d04ef2cd84c2327cf635386ba35884d1726bee0eb82a2eb7569",
       "bytes": 184476,
+      "wasmSha256": "09a98c96dc5c8d04ef2cd84c2327cf635386ba35884d1726bee0eb82a2eb7569",
+      "canonicalModuleSha256": "fd31e85df76729d1907264fcce5e850abddc47d63957c1a9179371486dcfa94e",
+      "form": "raw",
       "module": "data-source/satnogs-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2653,6 +2929,9 @@
     "data-source/sdn-element-sync/dist/isomorphic/module.wasm": {
       "sha256": "37f0ea34ccc2bf7b90de6bdffa1f3d47b954eef7388f0b374ff6e5ca42712897",
       "bytes": 175528,
+      "wasmSha256": "37f0ea34ccc2bf7b90de6bdffa1f3d47b954eef7388f0b374ff6e5ca42712897",
+      "canonicalModuleSha256": "10f8486d474bbea9a9c6b034a4a0d36b6e4f757836694b71e98cd1ce711d9199",
+      "form": "raw",
       "module": "data-source/sdn-element-sync",
       "lastCommit": "d04cee8c355c456ff805d94c029347057f44b83b",
       "lastCommitDate": "2026-11-04T12:27:17-05:00",
@@ -2679,6 +2958,9 @@
     "data-source/sensor-definitions/dist/isomorphic/module.wasm": {
       "sha256": "fe21d884d24b7b17cd4ae3c71749eb0acc2fa279ceece7a213a6cadf1f258a62",
       "bytes": 280145,
+      "wasmSha256": "fe21d884d24b7b17cd4ae3c71749eb0acc2fa279ceece7a213a6cadf1f258a62",
+      "canonicalModuleSha256": "96f1909509216225372103de99147e1ce589876ca7290f8636fddc8ef8b0dd68",
+      "form": "raw",
       "module": "data-source/sensor-definitions",
       "lastCommit": "a3302978afb7b3b80a2f434c166e80267222eb3e",
       "lastCommitDate": "2026-11-05T21:45:06-05:00",
@@ -2705,6 +2987,9 @@
     "data-source/sigmf-captures/dist/isomorphic/module.wasm": {
       "sha256": "4590d71e0c17de886e0d45e0b85bdee10121450fc34bcd8114cc2c60e7142710",
       "bytes": 218922,
+      "wasmSha256": "4590d71e0c17de886e0d45e0b85bdee10121450fc34bcd8114cc2c60e7142710",
+      "canonicalModuleSha256": "f28a3a26d42ff3bb95070a180491282c130557a6e0de1ba9f21a0eb3dbe39068",
+      "form": "raw",
       "module": "data-source/sigmf-captures",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2731,6 +3016,9 @@
     "data-source/sp3-precise-source/dist/isomorphic/module.wasm": {
       "sha256": "9d5dccf6e2249d137a4c1295053b0b1e680880478b0f7e176a926f9ea6ef9368",
       "bytes": 200495,
+      "wasmSha256": "9d5dccf6e2249d137a4c1295053b0b1e680880478b0f7e176a926f9ea6ef9368",
+      "canonicalModuleSha256": "10cefada5e739df2129184dbf0e4cc1c8b527d10d2df6e7b1454c2cf346224f0",
+      "form": "raw",
       "module": "data-source/sp3-precise-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -2757,6 +3045,9 @@
     "data-source/space-infrastructure/dist/isomorphic/module.wasm": {
       "sha256": "9d64c4ea7281c40e2414cfd126d0bb82dabcf4d8b0e03595c3cdb1bce753388f",
       "bytes": 464321,
+      "wasmSha256": "9d64c4ea7281c40e2414cfd126d0bb82dabcf4d8b0e03595c3cdb1bce753388f",
+      "canonicalModuleSha256": "6d080e02c22f85fdc27bedc14aebd1007e8718a98ab9009f26c34f6fa1b9291b",
+      "form": "raw",
       "module": "data-source/space-infrastructure",
       "lastCommit": "a3302978afb7b3b80a2f434c166e80267222eb3e",
       "lastCommitDate": "2026-11-05T21:45:06-05:00",
@@ -2783,6 +3074,9 @@
     "data-source/space-weather/dist/isomorphic/module.wasm": {
       "sha256": "7abd9f36f0044a9dc3a26a4d57ef7f426834d661a261e25522bfac314b16ff42",
       "bytes": 302167,
+      "wasmSha256": "7abd9f36f0044a9dc3a26a4d57ef7f426834d661a261e25522bfac314b16ff42",
+      "canonicalModuleSha256": "4d37f1c1e3fb5ce38485166d46e8107551297fe4eaa7f62c57522934540ffc8c",
+      "form": "raw",
       "module": "data-source/space-weather",
       "lastCommit": "44ce9d27a1214c8a4740b5f30d831b0e6a7248f0",
       "lastCommitDate": "2026-10-29T16:22:59-04:00",
@@ -2809,6 +3103,9 @@
     "data-source/spacemapper-aoe-source/dist/isomorphic/module.wasm": {
       "sha256": "ec36a314da42a59a6bfc9accbba8fa2e8ffd20c236595582ef6be5a76e7942c7",
       "bytes": 233964,
+      "wasmSha256": "ec36a314da42a59a6bfc9accbba8fa2e8ffd20c236595582ef6be5a76e7942c7",
+      "canonicalModuleSha256": "3573d02e5f92b50d6dea317a9e106ea47497f524323043939ce4ac65be5f0b45",
+      "form": "raw",
       "module": "data-source/spacemapper-aoe-source",
       "lastCommit": "2758030143e7e85012f4640f0bc733193d85de0f",
       "lastCommitDate": "2026-11-04T12:01:35-05:00",
@@ -2835,6 +3132,9 @@
     "data-source/spacetrack-source/dist/isomorphic/module.wasm": {
       "sha256": "1c17ca36c2cda2c51256dbc2a4fd548ef4f583f2c6fe8ee17e23e3d9ca090b06",
       "bytes": 211083,
+      "wasmSha256": "1c17ca36c2cda2c51256dbc2a4fd548ef4f583f2c6fe8ee17e23e3d9ca090b06",
+      "canonicalModuleSha256": "56ed959a98306fa9489e8a5b54a8f27653be9a116976e6a3c719c24a67d3d8ba",
+      "form": "raw",
       "module": "data-source/spacetrack-source",
       "lastCommit": "1caeacb927ad44a2b1a489d476bfaca7d2feb502",
       "lastCommitDate": "2026-11-04T11:57:37-05:00",
@@ -2861,6 +3161,9 @@
     "data-source/spacex-starlink-source/dist/isomorphic/module.wasm": {
       "sha256": "7b88f0791df66e042d2d0d1e96b5fdd5cd437986e2e62f2907c2610d598458f8",
       "bytes": 203924,
+      "wasmSha256": "7b88f0791df66e042d2d0d1e96b5fdd5cd437986e2e62f2907c2610d598458f8",
+      "canonicalModuleSha256": "df8302ab409b0c2a704a2e94a6220bc1ef4cd4ad6ce285ecaea8ba72ee6af63a",
+      "form": "raw",
       "module": "data-source/spacex-starlink-source",
       "lastCommit": "cc64880aee735ed7b3cdf36d7a3d1fabbbf463c4",
       "lastCommitDate": "2026-10-27T14:55:01-04:00",
@@ -2885,8 +3188,11 @@
       }
     },
     "data-source/spk-source/dist/isomorphic/module.wasm": {
-      "sha256": "33346016baadc474450b34fb3cd9bca00eb2470a62affd1562d0004b52a3aca1",
-      "bytes": 236023,
+      "sha256": "968a99bc7d16ad909ae6255cc602d2d4a22fa1a3b1f012d1cb53975356b7598c",
+      "bytes": 236031,
+      "wasmSha256": "e965c4ddc38714f967122f1f12a452258e8145c150aa6f8c13f284245f47f53d",
+      "canonicalModuleSha256": "e965c4ddc38714f967122f1f12a452258e8145c150aa6f8c13f284245f47f53d",
+      "form": "bundled",
       "module": "data-source/spk-source",
       "lastCommit": "7cf5c8b1dd9b6e962d31a1bdf3e7e89efa658f7a",
       "lastCommitDate": "2026-10-07T15:07:48-04:00",
@@ -2913,6 +3219,9 @@
     "data-source/swpc-realtime/dist/isomorphic/module.wasm": {
       "sha256": "75a54b76a04dd290abd07041592d48e226339f99ab125fce6ce199a53e030fa0",
       "bytes": 256937,
+      "wasmSha256": "75a54b76a04dd290abd07041592d48e226339f99ab125fce6ce199a53e030fa0",
+      "canonicalModuleSha256": "6079dc7e03d7a7f60ab3da1f5086366ce44fda58bd013be677e2af38e4ceb2ed",
+      "form": "raw",
       "module": "data-source/swpc-realtime",
       "lastCommit": "77ce2eff87ef900254832021254bf8838eb82fd6",
       "lastCommitDate": "2026-11-03T17:33:47-05:00",
@@ -2939,6 +3248,9 @@
     "data-source/terrain-ingest/dist/isomorphic/module.wasm": {
       "sha256": "802641da0f74bcfb462ba29c8d1868359e205656ec5f1589958b1c4adf5dfb4f",
       "bytes": 482769,
+      "wasmSha256": "802641da0f74bcfb462ba29c8d1868359e205656ec5f1589958b1c4adf5dfb4f",
+      "canonicalModuleSha256": "9775064ce18825f63167c25d2404c8c02ac792b1cd801caa52c566e5ec5cc982",
+      "form": "raw",
       "module": "data-source/terrain-ingest",
       "lastCommit": "599723a622add73d708da03782781588fd385dbb",
       "lastCommitDate": "2026-10-24T09:38:54-04:00",
@@ -2965,6 +3277,9 @@
     "data-source/terrain-ingest/host-adapter/dist/isomorphic/module.wasm": {
       "sha256": "089559b5a5b05d29965502b4094332d8580c8aa39db75c8005996b3c822fddeb",
       "bytes": 155337,
+      "wasmSha256": "089559b5a5b05d29965502b4094332d8580c8aa39db75c8005996b3c822fddeb",
+      "canonicalModuleSha256": "ba8e13de44db5c6aa9352522e53ec4e9e7731afae8f2ddd020dee6138ef03d17",
+      "form": "raw",
       "module": "data-source/terrain-ingest/host-adapter",
       "lastCommit": "d55f75b2385a3b5fe3dc9f3044b7d8755af71515",
       "lastCommitDate": "2026-10-16T04:48:33-04:00",
@@ -2990,6 +3305,9 @@
     "data-source/terrain-source-watch/dist/isomorphic/module.wasm": {
       "sha256": "0218e2f15821e076cdf47739c3db5cb8f5ff05b20d9f4c602ba7c8b6bbda78d1",
       "bytes": 193311,
+      "wasmSha256": "0218e2f15821e076cdf47739c3db5cb8f5ff05b20d9f4c602ba7c8b6bbda78d1",
+      "canonicalModuleSha256": "6c31fd53c96735b63eeb23b7f0f9367e9d9b7902671493e87283c42d3bbb248b",
+      "form": "raw",
       "module": "data-source/terrain-source-watch",
       "lastCommit": "6014527e6c5d760108fb0a01768117f0039b0231",
       "lastCommitDate": "2026-10-23T15:11:46-04:00",
@@ -3015,6 +3333,9 @@
     "data-source/terrain-source/dist/isomorphic/module.wasm": {
       "sha256": "448a6d4bfe2e728844495264bd7c06e9e9d122f82f215821d0e9c1ea447ec3c9",
       "bytes": 561175,
+      "wasmSha256": "448a6d4bfe2e728844495264bd7c06e9e9d122f82f215821d0e9c1ea447ec3c9",
+      "canonicalModuleSha256": "28360c06e1dfa689e145029a175d17ba3375eb84a5e933144d9c76da91513f22",
+      "form": "raw",
       "module": "data-source/terrain-source",
       "lastCommit": "599723a622add73d708da03782781588fd385dbb",
       "lastCommitDate": "2026-10-24T09:38:54-04:00",
@@ -3041,6 +3362,9 @@
     "data-source/terrain-source/dist/parity/module.wasm": {
       "sha256": "434c0123da437cbc62be924209d344a964da7951899aa9fda2a9a8ef97a8fd58",
       "bytes": 553231,
+      "wasmSha256": "434c0123da437cbc62be924209d344a964da7951899aa9fda2a9a8ef97a8fd58",
+      "canonicalModuleSha256": "b4941cc38a12c5bc8e04d7e858ac7d579e7c6adcba452b6ae6f039bef36966c6",
+      "form": "raw",
       "module": "data-source/terrain-source",
       "lastCommit": "599723a622add73d708da03782781588fd385dbb",
       "lastCommitDate": "2026-10-24T09:38:54-04:00",
@@ -3067,6 +3391,9 @@
     "data-source/vimpel-source/dist/isomorphic/module.wasm": {
       "sha256": "4132f09a46cf1f36a2373b9459b297376bd361bdb15abbfcf1f0112b4849d48a",
       "bytes": 362210,
+      "wasmSha256": "4132f09a46cf1f36a2373b9459b297376bd361bdb15abbfcf1f0112b4849d48a",
+      "canonicalModuleSha256": "2ae480f9db0cd0877eccf474ab96bf10c9df758be5e33e0d92131e45c69a3da0",
+      "form": "raw",
       "module": "data-source/vimpel-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -3093,6 +3420,9 @@
     "data-source/weathernext-parser/dist/isomorphic/module.wasm": {
       "sha256": "4ea019e9b5c9427c4263948b90abfcff552b9c543ab8c6c13492b77b61a2cacb",
       "bytes": 196905,
+      "wasmSha256": "4ea019e9b5c9427c4263948b90abfcff552b9c543ab8c6c13492b77b61a2cacb",
+      "canonicalModuleSha256": "961cf88fba9ce21a9623a7ebfadc127bf288458b8e38f9965b2597a19b9053a8",
+      "form": "raw",
       "module": "data-source/weathernext-parser",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -3119,6 +3449,9 @@
     "data-source/weathernext-source/dist/isomorphic/module.wasm": {
       "sha256": "eff7ca8f44453f0489511d8aaae70386349876c50e85c90481c2c25980571f5d",
       "bytes": 166379,
+      "wasmSha256": "eff7ca8f44453f0489511d8aaae70386349876c50e85c90481c2c25980571f5d",
+      "canonicalModuleSha256": "e2b130b1dbf11e1c8421174ec476e574dfb104b2f1463eb515124c1c317c364e",
+      "form": "raw",
       "module": "data-source/weathernext-source",
       "lastCommit": "2765f5e251f40da8abafc73f04e0e444a8dbcf82",
       "lastCommitDate": "2026-10-23T15:12:10-04:00",
@@ -3144,6 +3477,9 @@
     "delivery/plugin-delivery/dist/isomorphic/module.wasm": {
       "sha256": "2c4b6adbe449325a019213cb26a729cfc6827361a8d11a065c7299f4e6ec7789",
       "bytes": 249566,
+      "wasmSha256": "2c4b6adbe449325a019213cb26a729cfc6827361a8d11a065c7299f4e6ec7789",
+      "canonicalModuleSha256": "2c4b6adbe449325a019213cb26a729cfc6827361a8d11a065c7299f4e6ec7789",
+      "form": "raw",
       "module": "delivery/plugin-delivery",
       "lastCommit": "bc8d71d04ed41fc2f2d34c54e0fc244c433f3dac",
       "lastCommitDate": "2026-07-02T12:17:03-04:00",
@@ -3174,6 +3510,9 @@
     "delivery/plugin-delivery/dist/plugin-delivery.wasm": {
       "sha256": "2c4b6adbe449325a019213cb26a729cfc6827361a8d11a065c7299f4e6ec7789",
       "bytes": 249566,
+      "wasmSha256": "2c4b6adbe449325a019213cb26a729cfc6827361a8d11a065c7299f4e6ec7789",
+      "canonicalModuleSha256": "2c4b6adbe449325a019213cb26a729cfc6827361a8d11a065c7299f4e6ec7789",
+      "form": "raw",
       "module": "delivery/plugin-delivery",
       "lastCommit": "bc8d71d04ed41fc2f2d34c54e0fc244c433f3dac",
       "lastCommitDate": "2026-07-02T12:17:03-04:00",
@@ -3204,6 +3543,9 @@
     "exporter/vcard-projection/dist/isomorphic/module.wasm": {
       "sha256": "c89c584f1e47726d4c26094fea5d3c160c6254c71dacea8e5600b4fd0e2c02c7",
       "bytes": 252800,
+      "wasmSha256": "c89c584f1e47726d4c26094fea5d3c160c6254c71dacea8e5600b4fd0e2c02c7",
+      "canonicalModuleSha256": "b3664daa5570434105c20fd0ba99adce4fc1e42688cd0544215cfddfb2411d94",
+      "form": "raw",
       "module": "exporter/vcard-projection",
       "lastCommit": "10554f5351f5b3a987254cd7e9cf97accc70d829",
       "lastCommitDate": "2026-10-14T08:47:51-04:00",
@@ -3228,8 +3570,11 @@
       }
     },
     "files/ccsds-messages/dist/isomorphic/module.wasm": {
-      "sha256": "24af74551c0c8ae25af380a5e0586a4411d83366a9b09727c07afdfad277b5eb",
-      "bytes": 2749095,
+      "sha256": "74d68ebbdf8d1b84c32bd6d8cfb537e66d261bb1fc59397ce3ac1065ba12a727",
+      "bytes": 2749103,
+      "wasmSha256": "6ccd5a5c8a2b6d996db981cadf7a2115650c6c16a0ec83d573ffb7e69e0d411b",
+      "canonicalModuleSha256": "6ccd5a5c8a2b6d996db981cadf7a2115650c6c16a0ec83d573ffb7e69e0d411b",
+      "form": "bundled",
       "module": "files/ccsds-messages",
       "lastCommit": "0d7bd86f9b5b6c9d9254358344dd538bc1676f40",
       "lastCommitDate": "2026-11-04T17:13:05-05:00",
@@ -3256,6 +3601,9 @@
     "files/geotiff/dist/isomorphic/module.wasm": {
       "sha256": "31a776c30a340e46ce1170a2081f63251cb37092d468aafba322b53ebdc73495",
       "bytes": 222656,
+      "wasmSha256": "31a776c30a340e46ce1170a2081f63251cb37092d468aafba322b53ebdc73495",
+      "canonicalModuleSha256": "8f0f4cf5fcb7d2ad5c92bf59bc8773484758a9ff8e6b4ab96eb0a68d01c3d8a5",
+      "form": "raw",
       "module": "files/geotiff",
       "lastCommit": "93fc3190586eabbc380aa4d9a08a081d0e857c81",
       "lastCommitDate": "2026-10-14T10:15:35-04:00",
@@ -3282,6 +3630,9 @@
     "files/misb-klv/dist/isomorphic/module.wasm": {
       "sha256": "4bc5cb22b625334aca4539debc1a9be30f06c4b8e8c00d0ac385040508fb8d80",
       "bytes": 175171,
+      "wasmSha256": "4bc5cb22b625334aca4539debc1a9be30f06c4b8e8c00d0ac385040508fb8d80",
+      "canonicalModuleSha256": "d4c30e5fcf4cb125142051d77cbfb0b058a482dcbe066469b6476da554db7f32",
+      "form": "raw",
       "module": "files/misb-klv",
       "lastCommit": "d6bb2a7bbc058a0ae92783aa72149ab7b8419837",
       "lastCommitDate": "2026-10-14T08:53:52-04:00",
@@ -3306,16 +3657,19 @@
       }
     },
     "files/orbit-products/dist/isomorphic/module.wasm": {
-      "sha256": "688f22ee2dba278d19e4029e8aedf1aa46fffd9910428f7d7ed40c9eeb583ad3",
-      "bytes": 704448,
+      "sha256": "df42851260ee54dc18f904a8bd3fbd354235d0b31d653ad995912320f7331b74",
+      "bytes": 704456,
+      "wasmSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875",
+      "canonicalModuleSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875",
+      "form": "bundled",
       "module": "files/orbit-products",
       "lastCommit": "6907cd0d40744f984785e856805500e2a7bbf7ef",
       "lastCommitDate": "2026-10-24T14:43:31-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "3b0eedc58732987af792d4244658112ae3c8faef",
+        "sdkCommit": "e8d21ec2a9682c97a563d4b733cfa068781b8e5c"
       },
       "declaration": {
         "declares": true,
@@ -3332,16 +3686,19 @@
       }
     },
     "files/rinex/dist/isomorphic/module.wasm": {
-      "sha256": "b778d0b7264529fc7e71b3c09e4516b2452941160a99a1dd0cf90673d6d66630",
-      "bytes": 256337,
+      "sha256": "c4acf50555df5120de350c81ef92b88602941717db4a10ee81b751bdefd5d917",
+      "bytes": 256345,
+      "wasmSha256": "0cfeac0560f4b42cbd9859afbafc88c240871a632b941578abedd9be3f6c6fc1",
+      "canonicalModuleSha256": "0cfeac0560f4b42cbd9859afbafc88c240871a632b941578abedd9be3f6c6fc1",
+      "form": "bundled",
       "module": "files/rinex",
       "lastCommit": "41eb63f3c637232de90e74a529bd7038dc029599",
       "lastCommitDate": "2026-10-24T14:58:58-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "a9335b7fa085ba1503ba583a511c91b59adccd46",
+        "sdkCommit": "e8d21ec2a9682c97a563d4b733cfa068781b8e5c"
       },
       "declaration": {
         "declares": true,
@@ -3358,8 +3715,11 @@
       }
     },
     "files/vcm-text/dist/isomorphic/module.wasm": {
-      "sha256": "eaae0e7564e97426369c1455995be2490f341406eb2e7ae9ac212612511d2f8a",
-      "bytes": 389293,
+      "sha256": "d4ced5cb4a1ede1acb2776de3a45085bc3d35a0794b7905f16125d45199430a5",
+      "bytes": 389301,
+      "wasmSha256": "bd10229862546a7b7e24b47610918b9a4f390cedf480291e64ae0dea5920643c",
+      "canonicalModuleSha256": "bd10229862546a7b7e24b47610918b9a4f390cedf480291e64ae0dea5920643c",
+      "form": "bundled",
       "module": "files/vcm-text",
       "lastCommit": "9cb02c8e22f5a738a9984992e8af2246cd11e090",
       "lastCommitDate": "2026-11-05T16:17:29-05:00",
@@ -3386,6 +3746,9 @@
     "flows/angles-only-od/dist/isomorphic/module.wasm": {
       "sha256": "8dceb574b30f97d7770e42c03b5db4e577143ebf35b9d027c08569914b515d36",
       "bytes": 504908,
+      "wasmSha256": "8dceb574b30f97d7770e42c03b5db4e577143ebf35b9d027c08569914b515d36",
+      "canonicalModuleSha256": "75280af18219c45c904aa13487ef7d4b71e9cc80c7988907822099fb4fec13a4",
+      "form": "raw",
       "module": "flows/angles-only-od",
       "lastCommit": "adc31264fc5bc1eba71d97795d0b97f73a40589f",
       "lastCommitDate": "2026-11-04T16:11:37-05:00",
@@ -3410,6 +3773,9 @@
     "flows/celestrak-ingest/dist/eop/isomorphic/module.wasm": {
       "sha256": "12ff24fadd6aa0b9ba1ff1bc9d41439e0d1da1f349e9e44f55bbee6fc78f941f",
       "bytes": 224203,
+      "wasmSha256": "12ff24fadd6aa0b9ba1ff1bc9d41439e0d1da1f349e9e44f55bbee6fc78f941f",
+      "canonicalModuleSha256": "4635c0d7693f3bb08a053ea8b5fc65b4054a57b1b4af8bc42e6f1c5654edbe0f",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3424,6 +3790,9 @@
     "flows/celestrak-ingest/dist/eop/runtime.wasm": {
       "sha256": "12ff24fadd6aa0b9ba1ff1bc9d41439e0d1da1f349e9e44f55bbee6fc78f941f",
       "bytes": 224203,
+      "wasmSha256": "12ff24fadd6aa0b9ba1ff1bc9d41439e0d1da1f349e9e44f55bbee6fc78f941f",
+      "canonicalModuleSha256": "4635c0d7693f3bb08a053ea8b5fc65b4054a57b1b4af8bc42e6f1c5654edbe0f",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3438,6 +3807,9 @@
     "flows/celestrak-ingest/dist/gp/isomorphic/module.wasm": {
       "sha256": "375b7e4ef37dec21ed4f53d04829dbaa65df10041ca17ef655a6aed5f58f92b9",
       "bytes": 235540,
+      "wasmSha256": "375b7e4ef37dec21ed4f53d04829dbaa65df10041ca17ef655a6aed5f58f92b9",
+      "canonicalModuleSha256": "663e435f8746913ed7558d3c2cc1435103e97057ad05d28c9b44be31780ff987",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3452,6 +3824,9 @@
     "flows/celestrak-ingest/dist/gp/runtime.wasm": {
       "sha256": "375b7e4ef37dec21ed4f53d04829dbaa65df10041ca17ef655a6aed5f58f92b9",
       "bytes": 235540,
+      "wasmSha256": "375b7e4ef37dec21ed4f53d04829dbaa65df10041ca17ef655a6aed5f58f92b9",
+      "canonicalModuleSha256": "663e435f8746913ed7558d3c2cc1435103e97057ad05d28c9b44be31780ff987",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3466,6 +3841,9 @@
     "flows/celestrak-ingest/dist/satcat/isomorphic/module.wasm": {
       "sha256": "c20926e41a999fa84218d929e5d5a73c128b36aa0f0f8fea03eef86aab31941a",
       "bytes": 250010,
+      "wasmSha256": "c20926e41a999fa84218d929e5d5a73c128b36aa0f0f8fea03eef86aab31941a",
+      "canonicalModuleSha256": "c7a9fde328f8b7859e2bf6ee01c6979f2f61d75cf72464b0271e9135ce48336c",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3480,6 +3858,9 @@
     "flows/celestrak-ingest/dist/satcat/runtime.wasm": {
       "sha256": "c20926e41a999fa84218d929e5d5a73c128b36aa0f0f8fea03eef86aab31941a",
       "bytes": 250010,
+      "wasmSha256": "c20926e41a999fa84218d929e5d5a73c128b36aa0f0f8fea03eef86aab31941a",
+      "canonicalModuleSha256": "c7a9fde328f8b7859e2bf6ee01c6979f2f61d75cf72464b0271e9135ce48336c",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3494,6 +3875,9 @@
     "flows/celestrak-ingest/dist/socrates/isomorphic/module.wasm": {
       "sha256": "21f3a96f25be046ec6cde30cada3670b39665b18a8d783ebfa9a790871fe6c3d",
       "bytes": 241301,
+      "wasmSha256": "21f3a96f25be046ec6cde30cada3670b39665b18a8d783ebfa9a790871fe6c3d",
+      "canonicalModuleSha256": "af764b03477ce040ba69a9bdccbda10e482386920da27c25a174b0f86284f904",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3508,6 +3892,9 @@
     "flows/celestrak-ingest/dist/socrates/runtime.wasm": {
       "sha256": "21f3a96f25be046ec6cde30cada3670b39665b18a8d783ebfa9a790871fe6c3d",
       "bytes": 241301,
+      "wasmSha256": "21f3a96f25be046ec6cde30cada3670b39665b18a8d783ebfa9a790871fe6c3d",
+      "canonicalModuleSha256": "af764b03477ce040ba69a9bdccbda10e482386920da27c25a174b0f86284f904",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3522,6 +3909,9 @@
     "flows/celestrak-ingest/dist/spw/isomorphic/module.wasm": {
       "sha256": "ba3c559b8dcc4e03ab5267cc2f1158bac0d94b1f6383857d6d45d10af30e782b",
       "bytes": 225636,
+      "wasmSha256": "ba3c559b8dcc4e03ab5267cc2f1158bac0d94b1f6383857d6d45d10af30e782b",
+      "canonicalModuleSha256": "0caa81f5be70fd319a49e319bbb05d90fbfe133f281e8cfbdeee3d669d714ff9",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3536,6 +3926,9 @@
     "flows/celestrak-ingest/dist/spw/runtime.wasm": {
       "sha256": "ba3c559b8dcc4e03ab5267cc2f1158bac0d94b1f6383857d6d45d10af30e782b",
       "bytes": 225636,
+      "wasmSha256": "ba3c559b8dcc4e03ab5267cc2f1158bac0d94b1f6383857d6d45d10af30e782b",
+      "canonicalModuleSha256": "0caa81f5be70fd319a49e319bbb05d90fbfe133f281e8cfbdeee3d669d714ff9",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3550,6 +3943,9 @@
     "flows/celestrak-reference/dist/gp-groups/isomorphic/module.wasm": {
       "sha256": "bb26240982a0a3adddac9b231faf9a25fde28e3b9dad5ad910faf1322f8438d0",
       "bytes": 237660,
+      "wasmSha256": "bb26240982a0a3adddac9b231faf9a25fde28e3b9dad5ad910faf1322f8438d0",
+      "canonicalModuleSha256": "3ad025a58b029b8fb5e62882b25617e627a07dd1568b1b7b7cd58d26b007fea0",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3564,6 +3960,9 @@
     "flows/celestrak-reference/dist/gp-groups/runtime.wasm": {
       "sha256": "bb26240982a0a3adddac9b231faf9a25fde28e3b9dad5ad910faf1322f8438d0",
       "bytes": 237660,
+      "wasmSha256": "bb26240982a0a3adddac9b231faf9a25fde28e3b9dad5ad910faf1322f8438d0",
+      "canonicalModuleSha256": "3ad025a58b029b8fb5e62882b25617e627a07dd1568b1b7b7cd58d26b007fea0",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3578,6 +3977,9 @@
     "flows/celestrak-reference/dist/satcat-reference/isomorphic/module.wasm": {
       "sha256": "d8e35bd866a19cce3b9f09363b66f1ba7c11bddabc0e88f869e6b2c3b84d4587",
       "bytes": 208543,
+      "wasmSha256": "d8e35bd866a19cce3b9f09363b66f1ba7c11bddabc0e88f869e6b2c3b84d4587",
+      "canonicalModuleSha256": "22e9410f898b47fe42ef2e1737cd83b71510b6971d514ebf63af4eeb0a5917a3",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3592,6 +3994,9 @@
     "flows/celestrak-reference/dist/satcat-reference/runtime.wasm": {
       "sha256": "d8e35bd866a19cce3b9f09363b66f1ba7c11bddabc0e88f869e6b2c3b84d4587",
       "bytes": 208543,
+      "wasmSha256": "d8e35bd866a19cce3b9f09363b66f1ba7c11bddabc0e88f869e6b2c3b84d4587",
+      "canonicalModuleSha256": "22e9410f898b47fe42ef2e1737cd83b71510b6971d514ebf63af4eeb0a5917a3",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3606,6 +4011,9 @@
     "flows/cellular-network-aggregate/dist/isomorphic/module.wasm": {
       "sha256": "6c652b6c1c520fbe37ed7a52b41dca155d09ead9600ce0f9c3b8ff7a4611c96a",
       "bytes": 609124,
+      "wasmSha256": "6c652b6c1c520fbe37ed7a52b41dca155d09ead9600ce0f9c3b8ff7a4611c96a",
+      "canonicalModuleSha256": "399237b6a6da47c8f469ab7066241c07b3cd2c045ad1be9cc98f7d4941f910c2",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3620,6 +4028,9 @@
     "flows/cellular-network-aggregate/dist/runtime.wasm": {
       "sha256": "6c652b6c1c520fbe37ed7a52b41dca155d09ead9600ce0f9c3b8ff7a4611c96a",
       "bytes": 609124,
+      "wasmSha256": "6c652b6c1c520fbe37ed7a52b41dca155d09ead9600ce0f9c3b8ff7a4611c96a",
+      "canonicalModuleSha256": "399237b6a6da47c8f469ab7066241c07b3cd2c045ad1be9cc98f7d4941f910c2",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3634,6 +4045,9 @@
     "flows/data-retrieval/dist/flatsql-link-shim.wasm": {
       "sha256": "8d83e69b087c5b8c96b4f1377a607c77380f58f9e338073f91b1e43eee1f788b",
       "bytes": 396,
+      "wasmSha256": "8d83e69b087c5b8c96b4f1377a607c77380f58f9e338073f91b1e43eee1f788b",
+      "canonicalModuleSha256": "8d83e69b087c5b8c96b4f1377a607c77380f58f9e338073f91b1e43eee1f788b",
+      "form": "raw",
       "module": null,
       "lastCommit": "66d5d8187856d6d80a2ca3600dba26a2dfe1c352",
       "lastCommitDate": "2026-07-03T20:25:50-04:00",
@@ -3648,6 +4062,9 @@
     "flows/data-retrieval/dist/isomorphic/module.wasm": {
       "sha256": "a664b8f5ffd736a3290e666d37b5fb61194c45a49bf20c6e387aa7fa1ee15af8",
       "bytes": 247659,
+      "wasmSha256": "a664b8f5ffd736a3290e666d37b5fb61194c45a49bf20c6e387aa7fa1ee15af8",
+      "canonicalModuleSha256": "61856add1d623b1342e5f93bfe4a89b14592075d4627219d0b17305970385121",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3662,6 +4079,9 @@
     "flows/data-retrieval/dist/runtime.wasm": {
       "sha256": "a664b8f5ffd736a3290e666d37b5fb61194c45a49bf20c6e387aa7fa1ee15af8",
       "bytes": 247659,
+      "wasmSha256": "a664b8f5ffd736a3290e666d37b5fb61194c45a49bf20c6e387aa7fa1ee15af8",
+      "canonicalModuleSha256": "61856add1d623b1342e5f93bfe4a89b14592075d4627219d0b17305970385121",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3676,6 +4096,9 @@
     "flows/discovery/dist/latest/isomorphic/module.wasm": {
       "sha256": "ec42969247d70d1cfce84f19ca59db6d9477c06928b47b3e3177032d9e9c837c",
       "bytes": 213262,
+      "wasmSha256": "ec42969247d70d1cfce84f19ca59db6d9477c06928b47b3e3177032d9e9c837c",
+      "canonicalModuleSha256": "3ccae77028573a6e179726de874ee1cae0a447d67d562f2fe11a421547a6d8a6",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3690,6 +4113,9 @@
     "flows/discovery/dist/latest/runtime.wasm": {
       "sha256": "ec42969247d70d1cfce84f19ca59db6d9477c06928b47b3e3177032d9e9c837c",
       "bytes": 213262,
+      "wasmSha256": "ec42969247d70d1cfce84f19ca59db6d9477c06928b47b3e3177032d9e9c837c",
+      "canonicalModuleSha256": "3ccae77028573a6e179726de874ee1cae0a447d67d562f2fe11a421547a6d8a6",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3704,6 +4130,9 @@
     "flows/discovery/dist/peers/isomorphic/module.wasm": {
       "sha256": "75df2ba1f32bd4e2fa11dbb25ba35ce37d6abd0743acf04b33f4b70b66c554a8",
       "bytes": 215020,
+      "wasmSha256": "75df2ba1f32bd4e2fa11dbb25ba35ce37d6abd0743acf04b33f4b70b66c554a8",
+      "canonicalModuleSha256": "b17633fd8fe424ba4d0b6e33f6754fd43dce75a791686803dba2fe3125e089f7",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3718,6 +4147,9 @@
     "flows/discovery/dist/peers/runtime.wasm": {
       "sha256": "75df2ba1f32bd4e2fa11dbb25ba35ce37d6abd0743acf04b33f4b70b66c554a8",
       "bytes": 215020,
+      "wasmSha256": "75df2ba1f32bd4e2fa11dbb25ba35ce37d6abd0743acf04b33f4b70b66c554a8",
+      "canonicalModuleSha256": "b17633fd8fe424ba4d0b6e33f6754fd43dce75a791686803dba2fe3125e089f7",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3732,6 +4164,9 @@
     "flows/discovery/dist/pnm/isomorphic/module.wasm": {
       "sha256": "0c3207d53777ccdb3de3f141ab44910973c8a866c7a0ac3a27276510893727aa",
       "bytes": 208688,
+      "wasmSha256": "0c3207d53777ccdb3de3f141ab44910973c8a866c7a0ac3a27276510893727aa",
+      "canonicalModuleSha256": "61a10f49ff5cb2e3c54faf5007931f4db9afe072b1f4d642f57f67911903d4cb",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3746,6 +4181,9 @@
     "flows/discovery/dist/pnm/runtime.wasm": {
       "sha256": "0c3207d53777ccdb3de3f141ab44910973c8a866c7a0ac3a27276510893727aa",
       "bytes": 208688,
+      "wasmSha256": "0c3207d53777ccdb3de3f141ab44910973c8a866c7a0ac3a27276510893727aa",
+      "canonicalModuleSha256": "61a10f49ff5cb2e3c54faf5007931f4db9afe072b1f4d642f57f67911903d4cb",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3760,6 +4198,9 @@
     "flows/discovery/dist/standards/isomorphic/module.wasm": {
       "sha256": "4a6c661b4db8dcf68791180c0520862c5abae883c898ec01d9df92472673fd61",
       "bytes": 206634,
+      "wasmSha256": "4a6c661b4db8dcf68791180c0520862c5abae883c898ec01d9df92472673fd61",
+      "canonicalModuleSha256": "a8b328b65820b4b638ef6f6ea1ed9efc133fbb11a21da46fe3ffc35f76d7647f",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3774,6 +4215,9 @@
     "flows/discovery/dist/standards/runtime.wasm": {
       "sha256": "4a6c661b4db8dcf68791180c0520862c5abae883c898ec01d9df92472673fd61",
       "bytes": 206634,
+      "wasmSha256": "4a6c661b4db8dcf68791180c0520862c5abae883c898ec01d9df92472673fd61",
+      "canonicalModuleSha256": "a8b328b65820b4b638ef6f6ea1ed9efc133fbb11a21da46fe3ffc35f76d7647f",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3788,6 +4232,9 @@
     "flows/eop/dist/runtime/isomorphic/module.wasm": {
       "sha256": "cef6cd73cbfc9ebcd31fdee63b32a0685b85c304cc5673f6d9a5bbab90147b41",
       "bytes": 194930,
+      "wasmSha256": "cef6cd73cbfc9ebcd31fdee63b32a0685b85c304cc5673f6d9a5bbab90147b41",
+      "canonicalModuleSha256": "3c4673f7dc34af94c1453da6e46f4f65937eae4dbabd668ea567840f1ba5f9cd",
+      "form": "raw",
       "module": "flows/eop",
       "lastCommit": "500b2e9299539e3c79354379b8a231c3aa9643e9",
       "lastCommitDate": "2026-10-23T04:39:20-04:00",
@@ -3814,6 +4261,9 @@
     "flows/eop/dist/runtime/runtime.wasm": {
       "sha256": "cef6cd73cbfc9ebcd31fdee63b32a0685b85c304cc5673f6d9a5bbab90147b41",
       "bytes": 194930,
+      "wasmSha256": "cef6cd73cbfc9ebcd31fdee63b32a0685b85c304cc5673f6d9a5bbab90147b41",
+      "canonicalModuleSha256": "3c4673f7dc34af94c1453da6e46f4f65937eae4dbabd668ea567840f1ba5f9cd",
+      "form": "raw",
       "module": "flows/eop",
       "lastCommit": "500b2e9299539e3c79354379b8a231c3aa9643e9",
       "lastCommitDate": "2026-10-23T04:39:20-04:00",
@@ -3840,6 +4290,9 @@
     "flows/imager-observation-ingest/dist/isomorphic/module.wasm": {
       "sha256": "8d547ac2b716a51519a662810c2cef312b322ec40b78cb271103c705da394db9",
       "bytes": 352585,
+      "wasmSha256": "8d547ac2b716a51519a662810c2cef312b322ec40b78cb271103c705da394db9",
+      "canonicalModuleSha256": "8c2ea6c1e452a6e3bff503b8c53781f9f43fae5645016798fc9883b99ffd74cc",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3854,6 +4307,9 @@
     "flows/imager-observation-ingest/dist/runtime.wasm": {
       "sha256": "8d547ac2b716a51519a662810c2cef312b322ec40b78cb271103c705da394db9",
       "bytes": 352585,
+      "wasmSha256": "8d547ac2b716a51519a662810c2cef312b322ec40b78cb271103c705da394db9",
+      "canonicalModuleSha256": "8c2ea6c1e452a6e3bff503b8c53781f9f43fae5645016798fc9883b99ffd74cc",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3868,6 +4324,9 @@
     "flows/lvdb-source/dist/runtime/isomorphic/module.wasm": {
       "sha256": "23a7c8daeb9599674bcc2e5cdcef5ac4ea391f123ea7247e23d1d8a74038f855",
       "bytes": 397968,
+      "wasmSha256": "23a7c8daeb9599674bcc2e5cdcef5ac4ea391f123ea7247e23d1d8a74038f855",
+      "canonicalModuleSha256": "28cdb80589b516992c6d2557d90d2368d653f276aad90a269b34f1d5bee9ac14",
+      "form": "raw",
       "module": "flows/lvdb-source",
       "lastCommit": "8f84df56836337e1a37639dcd3668afa5d20ae30",
       "lastCommitDate": "2026-11-03T23:36:55-05:00",
@@ -3891,6 +4350,9 @@
     "flows/lvdb-source/dist/runtime/runtime.wasm": {
       "sha256": "23a7c8daeb9599674bcc2e5cdcef5ac4ea391f123ea7247e23d1d8a74038f855",
       "bytes": 397968,
+      "wasmSha256": "23a7c8daeb9599674bcc2e5cdcef5ac4ea391f123ea7247e23d1d8a74038f855",
+      "canonicalModuleSha256": "28cdb80589b516992c6d2557d90d2368d653f276aad90a269b34f1d5bee9ac14",
+      "form": "raw",
       "module": "flows/lvdb-source",
       "lastCommit": "8f84df56836337e1a37639dcd3668afa5d20ae30",
       "lastCommitDate": "2026-11-03T23:36:55-05:00",
@@ -3914,6 +4376,9 @@
     "flows/mlab-connectivity-ingest/dist/cnp/isomorphic/module.wasm": {
       "sha256": "e97f1def7e5aa2b1bfce9785104230754753c4e5ed4f4d1becbe763e9aed0611",
       "bytes": 224229,
+      "wasmSha256": "e97f1def7e5aa2b1bfce9785104230754753c4e5ed4f4d1becbe763e9aed0611",
+      "canonicalModuleSha256": "9294ea30e5613778d33c7be6bf989ac71fb75df61fce456a85f5e16b6a93df30",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3928,6 +4393,9 @@
     "flows/mlab-connectivity-ingest/dist/cnp/runtime.wasm": {
       "sha256": "e97f1def7e5aa2b1bfce9785104230754753c4e5ed4f4d1becbe763e9aed0611",
       "bytes": 224229,
+      "wasmSha256": "e97f1def7e5aa2b1bfce9785104230754753c4e5ed4f4d1becbe763e9aed0611",
+      "canonicalModuleSha256": "9294ea30e5613778d33c7be6bf989ac71fb75df61fce456a85f5e16b6a93df30",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3942,6 +4410,9 @@
     "flows/node-activity/dist/activity/isomorphic/module.wasm": {
       "sha256": "25ab73163524f0166de3632a7a6dc9f035a9df523ddbb80588b7451792b90a36",
       "bytes": 195149,
+      "wasmSha256": "25ab73163524f0166de3632a7a6dc9f035a9df523ddbb80588b7451792b90a36",
+      "canonicalModuleSha256": "0e9ebcd15608447869d694cebbecdbafdee8ec27e11b9e73062c5c845a2d22f0",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3956,6 +4427,9 @@
     "flows/node-activity/dist/activity/runtime.wasm": {
       "sha256": "25ab73163524f0166de3632a7a6dc9f035a9df523ddbb80588b7451792b90a36",
       "bytes": 195149,
+      "wasmSha256": "25ab73163524f0166de3632a7a6dc9f035a9df523ddbb80588b7451792b90a36",
+      "canonicalModuleSha256": "0e9ebcd15608447869d694cebbecdbafdee8ec27e11b9e73062c5c845a2d22f0",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3970,6 +4444,9 @@
     "flows/node-status/dist/status/isomorphic/module.wasm": {
       "sha256": "af5aa3088c2b180c4445d293b81ef6bfc1374dac744a78000e43c7030ff93c78",
       "bytes": 192797,
+      "wasmSha256": "af5aa3088c2b180c4445d293b81ef6bfc1374dac744a78000e43c7030ff93c78",
+      "canonicalModuleSha256": "6bfabd0d0486dc3c924367797f7260fc3e1c74174aeefb53827f2d755a89b073",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3984,6 +4461,9 @@
     "flows/node-status/dist/status/runtime.wasm": {
       "sha256": "af5aa3088c2b180c4445d293b81ef6bfc1374dac744a78000e43c7030ff93c78",
       "bytes": 192797,
+      "wasmSha256": "af5aa3088c2b180c4445d293b81ef6bfc1374dac744a78000e43c7030ff93c78",
+      "canonicalModuleSha256": "6bfabd0d0486dc3c924367797f7260fc3e1c74174aeefb53827f2d755a89b073",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -3998,6 +4478,9 @@
     "flows/nwp-field-ingest/dist/isomorphic/module.wasm": {
       "sha256": "773727653c2ab7856d53449ebf32586dce94cbde74d2c825b8c3a995eb6a4a25",
       "bytes": 298672,
+      "wasmSha256": "773727653c2ab7856d53449ebf32586dce94cbde74d2c825b8c3a995eb6a4a25",
+      "canonicalModuleSha256": "e49bc7d83494bdb4f46e62e2784f456b320acd4d3bb640aacdd2d2eec26608b2",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4012,6 +4495,9 @@
     "flows/nwp-field-ingest/dist/runtime.wasm": {
       "sha256": "773727653c2ab7856d53449ebf32586dce94cbde74d2c825b8c3a995eb6a4a25",
       "bytes": 298672,
+      "wasmSha256": "773727653c2ab7856d53449ebf32586dce94cbde74d2c825b8c3a995eb6a4a25",
+      "canonicalModuleSha256": "e49bc7d83494bdb4f46e62e2784f456b320acd4d3bb640aacdd2d2eec26608b2",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4026,6 +4512,9 @@
     "flows/object-covariance/dist/runtime/isomorphic/module.wasm": {
       "sha256": "26bfc9171b71f6ab0acc0ba1eaf6ee07f924876e51f6b9a499708c60840a0f8c",
       "bytes": 1290370,
+      "wasmSha256": "26bfc9171b71f6ab0acc0ba1eaf6ee07f924876e51f6b9a499708c60840a0f8c",
+      "canonicalModuleSha256": "7eebcf1ae965bf6732c13bbcb05862badb23483ab9551c3705495c6a80fb60f3",
+      "form": "raw",
       "module": "flows/object-covariance",
       "lastCommit": "c1f825433c67b8427cd585bb150b07dbe32c4e89",
       "lastCommitDate": "2026-11-03T14:25:51-05:00",
@@ -4052,6 +4541,9 @@
     "flows/object-covariance/dist/runtime/runtime.wasm": {
       "sha256": "26bfc9171b71f6ab0acc0ba1eaf6ee07f924876e51f6b9a499708c60840a0f8c",
       "bytes": 1290370,
+      "wasmSha256": "26bfc9171b71f6ab0acc0ba1eaf6ee07f924876e51f6b9a499708c60840a0f8c",
+      "canonicalModuleSha256": "7eebcf1ae965bf6732c13bbcb05862badb23483ab9551c3705495c6a80fb60f3",
+      "form": "raw",
       "module": "flows/object-covariance",
       "lastCommit": "c1f825433c67b8427cd585bb150b07dbe32c4e89",
       "lastCommitDate": "2026-11-03T14:25:51-05:00",
@@ -4078,6 +4570,9 @@
     "flows/observation-od/dist/isomorphic/module.wasm": {
       "sha256": "86681788202dbe4b2786e328274e2c7055a21b21cafbb83bf1a44241a34f0e67",
       "bytes": 776838,
+      "wasmSha256": "86681788202dbe4b2786e328274e2c7055a21b21cafbb83bf1a44241a34f0e67",
+      "canonicalModuleSha256": "016efb4d06d227b317f7aabc93a58a98bab1bde9d2766e8c8bbe453901bbec63",
+      "form": "raw",
       "module": "flows/observation-od",
       "lastCommit": "adc31264fc5bc1eba71d97795d0b97f73a40589f",
       "lastCommitDate": "2026-11-04T16:11:37-05:00",
@@ -4102,6 +4597,9 @@
     "flows/open-dca/dist/runtime/isomorphic/module.wasm": {
       "sha256": "b097892da6be69806421bb97f476825f95b27d3a1ab3e30fc0e638e5ee69fd69",
       "bytes": 3153417,
+      "wasmSha256": "b097892da6be69806421bb97f476825f95b27d3a1ab3e30fc0e638e5ee69fd69",
+      "canonicalModuleSha256": "5c07b87d3d9827ff6665fec4e1b7b241daf709085d3726cb86ff52350b837825",
+      "form": "raw",
       "module": "flows/open-dca",
       "lastCommit": "4b123d9f088deec48498bb4e19130a0e6f2cba4b",
       "lastCommitDate": "2026-10-31T11:37:01-04:00",
@@ -4125,6 +4623,9 @@
     "flows/open-dca/dist/runtime/runtime.wasm": {
       "sha256": "b097892da6be69806421bb97f476825f95b27d3a1ab3e30fc0e638e5ee69fd69",
       "bytes": 3153417,
+      "wasmSha256": "b097892da6be69806421bb97f476825f95b27d3a1ab3e30fc0e638e5ee69fd69",
+      "canonicalModuleSha256": "5c07b87d3d9827ff6665fec4e1b7b241daf709085d3726cb86ff52350b837825",
+      "form": "raw",
       "module": "flows/open-dca",
       "lastCommit": "4b123d9f088deec48498bb4e19130a0e6f2cba4b",
       "lastCommitDate": "2026-10-31T11:37:01-04:00",
@@ -4148,6 +4649,9 @@
     "flows/open-dca/dist/transport/eop-parser/dist/isomorphic/module.wasm": {
       "sha256": "bc9e0280f1ba67fa946c4caa931bb996c7d0b35cf666c68564ce9a5ac06ac490",
       "bytes": 136332,
+      "wasmSha256": "bc9e0280f1ba67fa946c4caa931bb996c7d0b35cf666c68564ce9a5ac06ac490",
+      "canonicalModuleSha256": "5168e6b34913027c3171a95d6ac9b01092201bc3de0cabffebc725c74a8bab15",
+      "form": "raw",
       "module": "flows/open-dca",
       "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
       "lastCommitDate": "2026-10-31T10:43:22-04:00",
@@ -4171,6 +4675,9 @@
     "flows/open-dca/dist/transport/eop-request/dist/isomorphic/module.wasm": {
       "sha256": "5c4410eb8b9b3d638fe0c9c9930a13ce3090732e509ed2dbd7db5a149d65c437",
       "bytes": 87376,
+      "wasmSha256": "5c4410eb8b9b3d638fe0c9c9930a13ce3090732e509ed2dbd7db5a149d65c437",
+      "canonicalModuleSha256": "0a425bd352558c2fa8c421a6b56f83d48d4f59157af5966c5a55668e664efb5a",
+      "form": "raw",
       "module": "flows/open-dca",
       "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
       "lastCommitDate": "2026-10-31T10:43:22-04:00",
@@ -4194,6 +4701,9 @@
     "flows/open-dca/dist/transport/http-request/dist/isomorphic/module.wasm": {
       "sha256": "fedae9f80de2177a6491ac60f03875cefe98bf6ee8e8d2533ea10d5656117ee3",
       "bytes": 102442,
+      "wasmSha256": "fedae9f80de2177a6491ac60f03875cefe98bf6ee8e8d2533ea10d5656117ee3",
+      "canonicalModuleSha256": "19a097cf494425ce77dbb47c5877baa170be81111b2fd011502d3247f302c21e",
+      "form": "raw",
       "module": "flows/open-dca",
       "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
       "lastCommitDate": "2026-10-31T10:43:22-04:00",
@@ -4217,6 +4727,9 @@
     "flows/open-dca/dist/transport/storage-ingest/dist/isomorphic/module.wasm": {
       "sha256": "b3f1679593a82dd6071cda0798e924978551558113845ecfd72cccf23fd40a26",
       "bytes": 136446,
+      "wasmSha256": "b3f1679593a82dd6071cda0798e924978551558113845ecfd72cccf23fd40a26",
+      "canonicalModuleSha256": "b00ebab07440c7a9637931a862f89241a1bbca68dae6221b4cb6ae040c265130",
+      "form": "raw",
       "module": "flows/open-dca",
       "lastCommit": "4987dc0219604e5879e7f69eb944ba47815585ce",
       "lastCommitDate": "2026-10-31T10:43:22-04:00",
@@ -4240,6 +4753,9 @@
     "flows/public-query/dist/query/isomorphic/module.wasm": {
       "sha256": "c248a6fbf6d09a5998a828b18c1acf5960fa1e28dcbfc1b177b50c982fd91af3",
       "bytes": 234927,
+      "wasmSha256": "c248a6fbf6d09a5998a828b18c1acf5960fa1e28dcbfc1b177b50c982fd91af3",
+      "canonicalModuleSha256": "73d2aed2691bc9778b44857c544901b70fa59df8f7caed01b5994a2a879a26d2",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4254,6 +4770,9 @@
     "flows/public-query/dist/query/runtime.wasm": {
       "sha256": "c248a6fbf6d09a5998a828b18c1acf5960fa1e28dcbfc1b177b50c982fd91af3",
       "bytes": 234927,
+      "wasmSha256": "c248a6fbf6d09a5998a828b18c1acf5960fa1e28dcbfc1b177b50c982fd91af3",
+      "canonicalModuleSha256": "73d2aed2691bc9778b44857c544901b70fa59df8f7caed01b5994a2a879a26d2",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4268,6 +4787,9 @@
     "flows/record-retention/dist/isomorphic/module.wasm": {
       "sha256": "ac629061236ad983527c839e311f50dd61d9e678cb6d1e63eadb12396c3dda06",
       "bytes": 106742,
+      "wasmSha256": "ac629061236ad983527c839e311f50dd61d9e678cb6d1e63eadb12396c3dda06",
+      "canonicalModuleSha256": "df2a383cfcdb2cb9644a5d708d09af9ed99f3b494456dba441f5e34dc6f3f8d8",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4282,6 +4804,9 @@
     "flows/record-retention/dist/runtime.wasm": {
       "sha256": "ac629061236ad983527c839e311f50dd61d9e678cb6d1e63eadb12396c3dda06",
       "bytes": 106742,
+      "wasmSha256": "ac629061236ad983527c839e311f50dd61d9e678cb6d1e63eadb12396c3dda06",
+      "canonicalModuleSha256": "df2a383cfcdb2cb9644a5d708d09af9ed99f3b494456dba441f5e34dc6f3f8d8",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4296,6 +4821,9 @@
     "flows/satnogs-ingest/dist/rf/isomorphic/module.wasm": {
       "sha256": "cfc94835f3e202b9d46fa9636aea39989410331521a0b231c9add31fe14c4a91",
       "bytes": 206818,
+      "wasmSha256": "cfc94835f3e202b9d46fa9636aea39989410331521a0b231c9add31fe14c4a91",
+      "canonicalModuleSha256": "4bee79c6d2b9ffbd39f8c82558b76e15ab523f2e1d683c76184ca3c87baede83",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4310,6 +4838,9 @@
     "flows/satnogs-ingest/dist/rf/runtime.wasm": {
       "sha256": "cfc94835f3e202b9d46fa9636aea39989410331521a0b231c9add31fe14c4a91",
       "bytes": 206818,
+      "wasmSha256": "cfc94835f3e202b9d46fa9636aea39989410331521a0b231c9add31fe14c4a91",
+      "canonicalModuleSha256": "4bee79c6d2b9ffbd39f8c82558b76e15ab523f2e1d683c76184ca3c87baede83",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4324,6 +4855,9 @@
     "flows/sigmf-captures-ingest/dist/iqc/isomorphic/module.wasm": {
       "sha256": "40db997a972da4837150f11cfc5f0a45c0834fa1a606da78f688f4f6438341f4",
       "bytes": 237999,
+      "wasmSha256": "40db997a972da4837150f11cfc5f0a45c0834fa1a606da78f688f4f6438341f4",
+      "canonicalModuleSha256": "a83f0ccfb5a0727955a2f2bec88492260bf2103b7635409060faaad894935747",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4338,6 +4872,9 @@
     "flows/sigmf-captures-ingest/dist/iqc/runtime.wasm": {
       "sha256": "40db997a972da4837150f11cfc5f0a45c0834fa1a606da78f688f4f6438341f4",
       "bytes": 237999,
+      "wasmSha256": "40db997a972da4837150f11cfc5f0a45c0834fa1a606da78f688f4f6438341f4",
+      "canonicalModuleSha256": "a83f0ccfb5a0727955a2f2bec88492260bf2103b7635409060faaad894935747",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4352,6 +4889,9 @@
     "flows/source-products/dist/isomorphic/module.wasm": {
       "sha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
       "bytes": 2116177,
+      "wasmSha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
+      "canonicalModuleSha256": "cc17a8e0301fefeeca1a7397357fc018b67536b6dc590a30c2c98009aef82fb5",
+      "form": "raw",
       "module": null,
       "lastCommit": "ee5548ecd492b762fc9940b5923695ad74d19198",
       "lastCommitDate": "2026-11-04T12:56:40-05:00",
@@ -4366,6 +4906,9 @@
     "flows/source-products/dist/runtime.wasm": {
       "sha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
       "bytes": 2116177,
+      "wasmSha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
+      "canonicalModuleSha256": "cc17a8e0301fefeeca1a7397357fc018b67536b6dc590a30c2c98009aef82fb5",
+      "form": "raw",
       "module": null,
       "lastCommit": "ee5548ecd492b762fc9940b5923695ad74d19198",
       "lastCommitDate": "2026-11-04T12:56:40-05:00",
@@ -4380,6 +4923,9 @@
     "flows/space-weather/dist/runtime/isomorphic/module.wasm": {
       "sha256": "abf54cd3723b6caf03a0a234c9cad7ee3de61f488d9608595995ae27d9c2fcfb",
       "bytes": 341467,
+      "wasmSha256": "abf54cd3723b6caf03a0a234c9cad7ee3de61f488d9608595995ae27d9c2fcfb",
+      "canonicalModuleSha256": "3f3977137307339b10d51b78e07d5bfdcee3fed01d76c309498533d333a965e8",
+      "form": "raw",
       "module": "flows/space-weather",
       "lastCommit": "44ce9d27a1214c8a4740b5f30d831b0e6a7248f0",
       "lastCommitDate": "2026-10-29T16:22:59-04:00",
@@ -4403,6 +4949,9 @@
     "flows/space-weather/dist/runtime/runtime.wasm": {
       "sha256": "abf54cd3723b6caf03a0a234c9cad7ee3de61f488d9608595995ae27d9c2fcfb",
       "bytes": 341467,
+      "wasmSha256": "abf54cd3723b6caf03a0a234c9cad7ee3de61f488d9608595995ae27d9c2fcfb",
+      "canonicalModuleSha256": "3f3977137307339b10d51b78e07d5bfdcee3fed01d76c309498533d333a965e8",
+      "form": "raw",
       "module": "flows/space-weather",
       "lastCommit": "44ce9d27a1214c8a4740b5f30d831b0e6a7248f0",
       "lastCommitDate": "2026-10-29T16:22:59-04:00",
@@ -4426,6 +4975,9 @@
     "flows/storage-credentials/dist/isomorphic/module.wasm": {
       "sha256": "66c96e50b723be18cd600b07ac074c8ee875c92f7c0f1f6e5154ed3526d599e1",
       "bytes": 196887,
+      "wasmSha256": "66c96e50b723be18cd600b07ac074c8ee875c92f7c0f1f6e5154ed3526d599e1",
+      "canonicalModuleSha256": "bd62403241f16128b80bc0d5eefe95afc3e7b715888d628fd5530edaa49ea815",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4440,6 +4992,9 @@
     "flows/storage-credentials/dist/runtime.wasm": {
       "sha256": "66c96e50b723be18cd600b07ac074c8ee875c92f7c0f1f6e5154ed3526d599e1",
       "bytes": 196887,
+      "wasmSha256": "66c96e50b723be18cd600b07ac074c8ee875c92f7c0f1f6e5154ed3526d599e1",
+      "canonicalModuleSha256": "bd62403241f16128b80bc0d5eefe95afc3e7b715888d628fd5530edaa49ea815",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4454,6 +5009,9 @@
     "flows/storage-object-s3-api/dist/isomorphic/module.wasm": {
       "sha256": "92915fa46ec8a9476fec782c9d020c008099c2719d7dbfe1b70f2347a46e30ad",
       "bytes": 325866,
+      "wasmSha256": "92915fa46ec8a9476fec782c9d020c008099c2719d7dbfe1b70f2347a46e30ad",
+      "canonicalModuleSha256": "aa0a1eb8502eed49c1ce7e81b84c840526979a680fe6534df524eca6d8bb284e",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4468,6 +5026,9 @@
     "flows/storage-object-s3-api/dist/runtime.wasm": {
       "sha256": "92915fa46ec8a9476fec782c9d020c008099c2719d7dbfe1b70f2347a46e30ad",
       "bytes": 325866,
+      "wasmSha256": "92915fa46ec8a9476fec782c9d020c008099c2719d7dbfe1b70f2347a46e30ad",
+      "canonicalModuleSha256": "aa0a1eb8502eed49c1ce7e81b84c840526979a680fe6534df524eca6d8bb284e",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4482,6 +5043,9 @@
     "flows/storage-object-s3/dist/isomorphic/module.wasm": {
       "sha256": "0ea1b4a675b2778a0e8ebe3a1b6797d9b10e39738756707c993f41b551cea389",
       "bytes": 229479,
+      "wasmSha256": "0ea1b4a675b2778a0e8ebe3a1b6797d9b10e39738756707c993f41b551cea389",
+      "canonicalModuleSha256": "e00bd98778658cafc68da4b8ad88a98091c8d4236a45ef7c106257434c72e089",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4496,6 +5060,9 @@
     "flows/storage-object-s3/dist/runtime.wasm": {
       "sha256": "0ea1b4a675b2778a0e8ebe3a1b6797d9b10e39738756707c993f41b551cea389",
       "bytes": 229479,
+      "wasmSha256": "0ea1b4a675b2778a0e8ebe3a1b6797d9b10e39738756707c993f41b551cea389",
+      "canonicalModuleSha256": "e00bd98778658cafc68da4b8ad88a98091c8d4236a45ef7c106257434c72e089",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4510,6 +5077,9 @@
     "flows/supplemental-omm/nodes/od/dist/isomorphic/module.wasm": {
       "sha256": "61ea6f17325ebc9923b5b780bc7b784bc374fb786ae42ebcae4d11ddcddcacf2",
       "bytes": 1199626,
+      "wasmSha256": "61ea6f17325ebc9923b5b780bc7b784bc374fb786ae42ebcae4d11ddcddcacf2",
+      "canonicalModuleSha256": "d32c772bc4a9c54ef7976f22988be55727474e953cb6822e282b27dcc1fe1965",
+      "form": "raw",
       "module": "flows/supplemental-omm/nodes/od",
       "lastCommit": "7eebf8f847271d8467bcef85084cbabb7f80ad34",
       "lastCommitDate": "2026-11-04T20:26:08-05:00",
@@ -4536,6 +5106,9 @@
     "flows/supplemental-omm/nodes/status/dist/isomorphic/module.wasm": {
       "sha256": "c90d019b6af5654c8efc2b353320552ee50e2579026e241264c0ed81e9280ba0",
       "bytes": 105756,
+      "wasmSha256": "c90d019b6af5654c8efc2b353320552ee50e2579026e241264c0ed81e9280ba0",
+      "canonicalModuleSha256": "15e84823d5cf08800c5d6066cafea3abebd43bd960c857f702b5f60e52187704",
+      "form": "raw",
       "module": "flows/supplemental-omm/nodes/status",
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4562,6 +5135,9 @@
     "flows/swpc-realtime/dist/runtime/isomorphic/module.wasm": {
       "sha256": "ec50e70d6276f7b393c2a0bacaa690b216313d4fe50967d3005ca43f5f5dc8c6",
       "bytes": 305742,
+      "wasmSha256": "ec50e70d6276f7b393c2a0bacaa690b216313d4fe50967d3005ca43f5f5dc8c6",
+      "canonicalModuleSha256": "9b1bc1f30238ec94af4d0580e8fb7600cc122de7293ef000255ad8d60b04b827",
+      "form": "raw",
       "module": "flows/swpc-realtime",
       "lastCommit": "77ce2eff87ef900254832021254bf8838eb82fd6",
       "lastCommitDate": "2026-11-03T17:33:47-05:00",
@@ -4585,6 +5161,9 @@
     "flows/swpc-realtime/dist/runtime/runtime.wasm": {
       "sha256": "ec50e70d6276f7b393c2a0bacaa690b216313d4fe50967d3005ca43f5f5dc8c6",
       "bytes": 305742,
+      "wasmSha256": "ec50e70d6276f7b393c2a0bacaa690b216313d4fe50967d3005ca43f5f5dc8c6",
+      "canonicalModuleSha256": "9b1bc1f30238ec94af4d0580e8fb7600cc122de7293ef000255ad8d60b04b827",
+      "form": "raw",
       "module": "flows/swpc-realtime",
       "lastCommit": "77ce2eff87ef900254832021254bf8838eb82fd6",
       "lastCommitDate": "2026-11-03T17:33:47-05:00",
@@ -4608,6 +5187,9 @@
     "flows/terrain-refresh/dist/isomorphic/module.wasm": {
       "sha256": "ef11d176da4317b1dc1f00bb820a859ff3f29bdc3ae21fefb8c7a5c1cf337987",
       "bytes": 298876,
+      "wasmSha256": "ef11d176da4317b1dc1f00bb820a859ff3f29bdc3ae21fefb8c7a5c1cf337987",
+      "canonicalModuleSha256": "ec723f7b5f8df5a968c625fd6097d40b47b2cfccdc9a879cd03b9993092b9d24",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4622,6 +5204,9 @@
     "flows/terrain-refresh/dist/runtime.wasm": {
       "sha256": "ef11d176da4317b1dc1f00bb820a859ff3f29bdc3ae21fefb8c7a5c1cf337987",
       "bytes": 298876,
+      "wasmSha256": "ef11d176da4317b1dc1f00bb820a859ff3f29bdc3ae21fefb8c7a5c1cf337987",
+      "canonicalModuleSha256": "ec723f7b5f8df5a968c625fd6097d40b47b2cfccdc9a879cd03b9993092b9d24",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4636,6 +5221,9 @@
     "flows/weathernext-ingest/dist/clouds/isomorphic/module.wasm": {
       "sha256": "0533bdba6e9f9c27f23028bdad4aac3eeb0813edf306eb18bc0b2b576d7851ae",
       "bytes": 233049,
+      "wasmSha256": "0533bdba6e9f9c27f23028bdad4aac3eeb0813edf306eb18bc0b2b576d7851ae",
+      "canonicalModuleSha256": "a21890508befb33eac2bc1469f89a683770f5ffbffa886124708f7f8adbdf401",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4650,6 +5238,9 @@
     "flows/weathernext-ingest/dist/clouds/runtime.wasm": {
       "sha256": "0533bdba6e9f9c27f23028bdad4aac3eeb0813edf306eb18bc0b2b576d7851ae",
       "bytes": 233049,
+      "wasmSha256": "0533bdba6e9f9c27f23028bdad4aac3eeb0813edf306eb18bc0b2b576d7851ae",
+      "canonicalModuleSha256": "a21890508befb33eac2bc1469f89a683770f5ffbffa886124708f7f8adbdf401",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4664,6 +5255,9 @@
     "flows/weathernext-ingest/dist/cyclones/isomorphic/module.wasm": {
       "sha256": "b8641c01a19df6eb57649b871635b4a73744311450c197d5b44535067e400713",
       "bytes": 223747,
+      "wasmSha256": "b8641c01a19df6eb57649b871635b4a73744311450c197d5b44535067e400713",
+      "canonicalModuleSha256": "ff1b39d0702e42f934fea2811248788a6dfc39a626918f3f512d64a4113ffbfd",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4678,6 +5272,9 @@
     "flows/weathernext-ingest/dist/cyclones/runtime.wasm": {
       "sha256": "b8641c01a19df6eb57649b871635b4a73744311450c197d5b44535067e400713",
       "bytes": 223747,
+      "wasmSha256": "b8641c01a19df6eb57649b871635b4a73744311450c197d5b44535067e400713",
+      "canonicalModuleSha256": "ff1b39d0702e42f934fea2811248788a6dfc39a626918f3f512d64a4113ffbfd",
+      "form": "raw",
       "module": null,
       "lastCommit": "08b3e5d14700e239e8aeff918060de03635ffb80",
       "lastCommitDate": "2026-10-23T15:16:45-04:00",
@@ -4692,6 +5289,9 @@
     "foundation/attitude-math/dist/isomorphic/module.wasm": {
       "sha256": "84d2bfaed714761f50ef2496bb1bde04a1513f304387c87e985923ceebf4a72e",
       "bytes": 141928,
+      "wasmSha256": "84d2bfaed714761f50ef2496bb1bde04a1513f304387c87e985923ceebf4a72e",
+      "canonicalModuleSha256": "dc4da18b300e5c55d7176dbabd665e88e677499594b71a5fefba8d3ab83661d6",
+      "form": "raw",
       "module": "foundation/attitude-math",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
@@ -4718,6 +5318,9 @@
     "foundation/cosmology/dist/isomorphic/module.wasm": {
       "sha256": "ffee33a750598537caf410258a3a67c4176e258b3236b90f6c03c154081bab10",
       "bytes": 137741,
+      "wasmSha256": "ffee33a750598537caf410258a3a67c4176e258b3236b90f6c03c154081bab10",
+      "canonicalModuleSha256": "c52aec3bf87488edc2aa9e587827b7704aa50e365606db16b708b22eceae0b8e",
+      "form": "raw",
       "module": "foundation/cosmology",
       "lastCommit": "085dfdd07257fc64c30fc472de0518763930fefb",
       "lastCommitDate": "2026-10-17T10:29:25-04:00",
@@ -4742,16 +5345,19 @@
       }
     },
     "foundation/frames/dist/isomorphic/module.wasm": {
-      "sha256": "486acaa334705b97d3a975b8a3d90f4bfd2428af77c6b5086c970ed1f24e27a4",
-      "bytes": 456873,
+      "sha256": "7ac3240368b1156ce2eac4811e62655013b43128485c95338f6517dbbbbd3db2",
+      "bytes": 456881,
+      "wasmSha256": "fc289225bb174bdb737dd47b8e48eadc988d61d889641b54923c7e6c98d0b41e",
+      "canonicalModuleSha256": "fc289225bb174bdb737dd47b8e48eadc988d61d889641b54923c7e6c98d0b41e",
+      "form": "bundled",
       "module": "foundation/frames",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "1ea6697a6d190436f0332d7d0a8c0a9edc093e89",
+        "sdkCommit": "e4f2db38822fc58b18ae0737abffd39753633325"
       },
       "declaration": {
         "declares": true,
@@ -4770,6 +5376,9 @@
     "foundation/http-respond/dist/isomorphic/module.wasm": {
       "sha256": "77f3c9263b161a4986f3828b4da99e167e2d0e16ccdc61c4a8f5329a6773d67a",
       "bytes": 248073,
+      "wasmSha256": "77f3c9263b161a4986f3828b4da99e167e2d0e16ccdc61c4a8f5329a6773d67a",
+      "canonicalModuleSha256": "5b8c333e9ecc1132491b25ebc35727f34c3b29a3eeb4643f9dfd96af4533e141",
+      "form": "raw",
       "module": "foundation/http-respond",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
@@ -4796,6 +5405,9 @@
     "foundation/http-route/dist/isomorphic/module.wasm": {
       "sha256": "bf56ef63d3a814f4daacc95deb98614eeae3fcc6ef9ac6595b0b2094206bcf4c",
       "bytes": 190287,
+      "wasmSha256": "bf56ef63d3a814f4daacc95deb98614eeae3fcc6ef9ac6595b0b2094206bcf4c",
+      "canonicalModuleSha256": "3df258686c7bc130ee21cae082a8bfe3822562e2bd997eaa32cfd32b7deb21a4",
+      "form": "raw",
       "module": "foundation/http-route",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
@@ -4822,6 +5434,9 @@
     "foundation/math-bspline/dist/isomorphic/module.wasm": {
       "sha256": "2dc637e5c6236c94b5326d78395c24a3aea03a9c1be52932aaf4e912c40c4fa0",
       "bytes": 99124,
+      "wasmSha256": "2dc637e5c6236c94b5326d78395c24a3aea03a9c1be52932aaf4e912c40c4fa0",
+      "canonicalModuleSha256": "67814bd6eb560cc3332ecc77142083fb0617e9a51f3d2f916c7631c0f52c6970",
+      "form": "raw",
       "module": "foundation/math-bspline",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
@@ -4848,6 +5463,9 @@
     "foundation/numerics/dist/isomorphic/module.wasm": {
       "sha256": "1eda96fac8323dd371609ae22df368a338af40a99d68b0f228ca486d08411247",
       "bytes": 118045,
+      "wasmSha256": "1eda96fac8323dd371609ae22df368a338af40a99d68b0f228ca486d08411247",
+      "canonicalModuleSha256": "68aee96541bd5cf5c13acb7c659d60107e80e6a91e9baed6ef3dfb4bac35d932",
+      "form": "raw",
       "module": "foundation/numerics",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
@@ -4874,6 +5492,9 @@
     "foundation/orbits/dist/isomorphic/module.wasm": {
       "sha256": "7fb367fa947c69efbc681c78270fadbdadfc4f40a4621d9797ae2e0357597ab5",
       "bytes": 479821,
+      "wasmSha256": "7fb367fa947c69efbc681c78270fadbdadfc4f40a4621d9797ae2e0357597ab5",
+      "canonicalModuleSha256": "53b0b810db0bdd899496a853f24c998ba8de033f411e4dec47b4166cd80e5dac",
+      "form": "raw",
       "module": "foundation/orbits",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
@@ -4900,6 +5521,9 @@
     "foundation/time/dist/isomorphic/module.wasm": {
       "sha256": "61abbb27a8358b05a1141bb983fcf1f6b5a89ba41793dece0bccf1678a4d02ed",
       "bytes": 119264,
+      "wasmSha256": "61abbb27a8358b05a1141bb983fcf1f6b5a89ba41793dece0bccf1678a4d02ed",
+      "canonicalModuleSha256": "babe826a03506ad71768f2153da2d39f196fc45a0060d4600048c0cb70e668fc",
+      "form": "raw",
       "module": "foundation/time",
       "lastCommit": "3bf241697b58f454c85aba218717abee56391960",
       "lastCommitDate": "2026-10-23T15:11:58-04:00",
@@ -4926,6 +5550,9 @@
     "hostcap/clock/dist/isomorphic/module.wasm": {
       "sha256": "87213b407b18c407fc6ad8e6a65f49811acb43e2a3c3761cae0a115dfa8f42f5",
       "bytes": 86359,
+      "wasmSha256": "87213b407b18c407fc6ad8e6a65f49811acb43e2a3c3761cae0a115dfa8f42f5",
+      "canonicalModuleSha256": "db8ece3ff20bfa2d32ca464647471a4a1f7ac9bd853a4ee5909aa1a86a4fcc7b",
+      "form": "raw",
       "module": "hostcap/clock",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -4952,6 +5579,9 @@
     "hostcap/file/dist/isomorphic/module.wasm": {
       "sha256": "97c4e4de65faa75ffb617e7ab9099e9de647b46769d5f4e537affb1c7e40e5a3",
       "bytes": 97085,
+      "wasmSha256": "97c4e4de65faa75ffb617e7ab9099e9de647b46769d5f4e537affb1c7e40e5a3",
+      "canonicalModuleSha256": "c6379fff656326c0c3758bb8a8dc84ba9eea9bed72cd173e9cf0fd71a2fa837b",
+      "form": "raw",
       "module": "hostcap/file",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -4978,6 +5608,9 @@
     "hostcap/flatsql-query/dist/isomorphic/module.wasm": {
       "sha256": "55b298c4e6cc7d6bcfd984c0134ecbc322e9e1c423b0fc5e4aa3ad8b18ae8a58",
       "bytes": 155133,
+      "wasmSha256": "55b298c4e6cc7d6bcfd984c0134ecbc322e9e1c423b0fc5e4aa3ad8b18ae8a58",
+      "canonicalModuleSha256": "29954dc29a242e82a36ed9f625d618c3b82768cb3b87dc028730fc356b16fd5a",
+      "form": "raw",
       "module": "hostcap/flatsql-query",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5004,6 +5637,9 @@
     "hostcap/flatsql-store/dist/isomorphic/module.wasm": {
       "sha256": "23dadfbf806a1baf60b45ad763e33386eadf6c0f19534a3e8b6e40b7c9ca5f93",
       "bytes": 117110,
+      "wasmSha256": "23dadfbf806a1baf60b45ad763e33386eadf6c0f19534a3e8b6e40b7c9ca5f93",
+      "canonicalModuleSha256": "bd109b956247a113e6f8f4bb237db2a196ffc967c6dea8873db7f3a3dbf2800b",
+      "form": "raw",
       "module": "hostcap/flatsql-store",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5030,6 +5666,9 @@
     "hostcap/http-request/dist/isomorphic/module.wasm": {
       "sha256": "219919c46aa3c8845ebff7dea2a1a6fa407076e84c84653a624a68c1687e4028",
       "bytes": 102327,
+      "wasmSha256": "219919c46aa3c8845ebff7dea2a1a6fa407076e84c84653a624a68c1687e4028",
+      "canonicalModuleSha256": "09718fb0e18e54e420d2fb457c9ebbee91cccb0cb4e4af89fd48521551b74e2a",
+      "form": "raw",
       "module": "hostcap/http-request",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5056,6 +5695,9 @@
     "hostcap/node-activity/dist/isomorphic/module.wasm": {
       "sha256": "876b4ab4aa19860025729f355c632c23405410fa07a28a4eb241f7727ea43199",
       "bytes": 107528,
+      "wasmSha256": "876b4ab4aa19860025729f355c632c23405410fa07a28a4eb241f7727ea43199",
+      "canonicalModuleSha256": "0ecaae0f874c544d1cbf40e3f8a7516dee9be7a3abc15c416d187ce3cfe42024",
+      "form": "raw",
       "module": "hostcap/node-activity",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5082,6 +5724,9 @@
     "hostcap/node-status/dist/isomorphic/module.wasm": {
       "sha256": "0de13c1391be5f98f0a33ef812db3b96620c4b65535933160db798e876ae773e",
       "bytes": 105595,
+      "wasmSha256": "0de13c1391be5f98f0a33ef812db3b96620c4b65535933160db798e876ae773e",
+      "canonicalModuleSha256": "1cea380376857f2b06d4097742bc3aadb669b1027cc1ad7bb7409b12f033f762",
+      "form": "raw",
       "module": "hostcap/node-status",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5108,6 +5753,9 @@
     "hostcap/p2p-discovery/dist/isomorphic/module.wasm": {
       "sha256": "2388e2737211a088532d3b2aaea5f5f519375101cc3e0021b3d5f4ee66de329c",
       "bytes": 196329,
+      "wasmSha256": "2388e2737211a088532d3b2aaea5f5f519375101cc3e0021b3d5f4ee66de329c",
+      "canonicalModuleSha256": "9b9a4ce9e73bc13af399ce5e0766dbec472c39efe1608a7bb73d257b35fcf381",
+      "form": "raw",
       "module": "hostcap/p2p-discovery",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5134,6 +5782,9 @@
     "hostcap/random/dist/isomorphic/module.wasm": {
       "sha256": "aa261a12824f90358c386c455990fe9770578f7e8b5deb1098ccd283b575f50f",
       "bytes": 85974,
+      "wasmSha256": "aa261a12824f90358c386c455990fe9770578f7e8b5deb1098ccd283b575f50f",
+      "canonicalModuleSha256": "b6a6bd51e54cb8268457cd492dc87b58274b595659d13598c8912b8612e0d4eb",
+      "form": "raw",
       "module": "hostcap/random",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5160,6 +5811,9 @@
     "hostcap/storage-ingest/dist/isomorphic/module.wasm": {
       "sha256": "4153b3437e27d1d4c9c3d4a70a241c32a1b1a0caf62ca21ce6b0eb2c2015bb82",
       "bytes": 137488,
+      "wasmSha256": "4153b3437e27d1d4c9c3d4a70a241c32a1b1a0caf62ca21ce6b0eb2c2015bb82",
+      "canonicalModuleSha256": "17d2e8f51c6f1540ae2a62cc0b374d2cc81030b534b90951404ecdfa1c3d8171",
+      "form": "raw",
       "module": "hostcap/storage-ingest",
       "lastCommit": "2f502022cb91f8024e5a9783596d230331c38284",
       "lastCommitDate": "2026-11-05T10:59:51-05:00",
@@ -5186,6 +5840,9 @@
     "hostcap/storage-write/dist/isomorphic/module.wasm": {
       "sha256": "2a4fc044825fbd6ff416bacddc7633c082df15cde179164aa12df299507862b2",
       "bytes": 96908,
+      "wasmSha256": "2a4fc044825fbd6ff416bacddc7633c082df15cde179164aa12df299507862b2",
+      "canonicalModuleSha256": "7711f88d7ac4fb61a342f8538fc0ebb52a6399b18b83992165868c9d053a2297",
+      "form": "raw",
       "module": "hostcap/storage-write",
       "lastCommit": "206479bab4838a4d3cf9bfd3986026038eede55d",
       "lastCommitDate": "2026-10-23T15:11:57-04:00",
@@ -5211,6 +5868,9 @@
     "licensing/client-decrypt/dist/isomorphic/module.wasm": {
       "sha256": "7f2e5177f7a8f665c01f6aba490ba48d1481f187fb76f77ba2572e7268016b7f",
       "bytes": 1488081,
+      "wasmSha256": "1dfefb2e7d7c81e1be202c40cb5b98c9349bbd7af161ac13ad2db7282bfc96d2",
+      "canonicalModuleSha256": "1dfefb2e7d7c81e1be202c40cb5b98c9349bbd7af161ac13ad2db7282bfc96d2",
+      "form": "bundled",
       "module": "licensing/client-decrypt",
       "lastCommit": "f2cf179afdf6310efc28ed1940d68f423dc79803",
       "lastCommitDate": "2026-10-14T22:28:56-04:00",
@@ -5237,6 +5897,9 @@
     "licensing/core/dist/browser/module.wasm": {
       "sha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
       "bytes": 1411764,
+      "wasmSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
+      "canonicalModuleSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
+      "form": "raw",
       "module": null,
       "lastCommit": "c24a9643cf991e29b2700fa034b215cde79e41b5",
       "lastCommitDate": "2026-10-25T20:59:29-04:00",
@@ -5251,6 +5914,9 @@
     "licensing/core/dist/isomorphic/module.wasm": {
       "sha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
       "bytes": 1411764,
+      "wasmSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
+      "canonicalModuleSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
+      "form": "raw",
       "module": null,
       "lastCommit": "c24a9643cf991e29b2700fa034b215cde79e41b5",
       "lastCommitDate": "2026-10-25T20:59:29-04:00",
@@ -5265,6 +5931,9 @@
     "licensing/publication-seal/dist/isomorphic/module.wasm": {
       "sha256": "73fd21d93c44b9c3e269024c8c6fa7a6748d26ed80c03248bc6acd1129a4c024",
       "bytes": 255758,
+      "wasmSha256": "73fd21d93c44b9c3e269024c8c6fa7a6748d26ed80c03248bc6acd1129a4c024",
+      "canonicalModuleSha256": "73fd21d93c44b9c3e269024c8c6fa7a6748d26ed80c03248bc6acd1129a4c024",
+      "form": "raw",
       "module": "licensing/publication-seal",
       "lastCommit": "0c456f2d06f636435b1895c2da6e52a3de433a72",
       "lastCommitDate": "2026-10-22T13:10:33-04:00",
@@ -5289,6 +5958,9 @@
     "maneuver/star-search/dist/isomorphic/module.wasm": {
       "sha256": "7accc66dd3321c6dcf3c6473d55d4afdd39f2af72efe2846f5c76fb08bad5bc1",
       "bytes": 415752,
+      "wasmSha256": "7accc66dd3321c6dcf3c6473d55d4afdd39f2af72efe2846f5c76fb08bad5bc1",
+      "canonicalModuleSha256": "340c0a4fe8cbecfe2de74e044efab038622d67b24a0ead6f06bb342e472cfcbd",
+      "form": "raw",
       "module": "maneuver/star-search",
       "lastCommit": "46a21b854d24f8ffa915536410efb34fedc0ca7d",
       "lastCommitDate": "2026-10-17T08:37:50-04:00",
@@ -5314,6 +5986,9 @@
     "network/cloudflare-registrar/dist/isomorphic/module.wasm": {
       "sha256": "b525a20d4242444eb29194b432b5b2299e80174ba7e29b6fcff61efe10adc653",
       "bytes": 223406,
+      "wasmSha256": "b525a20d4242444eb29194b432b5b2299e80174ba7e29b6fcff61efe10adc653",
+      "canonicalModuleSha256": "659f65dcf93ff1caecd10c5a1f6a8090de4f8ab734f9b9739cc0545283f196fa",
+      "form": "raw",
       "module": "network/cloudflare-registrar",
       "lastCommit": "10554f5351f5b3a987254cd7e9cf97accc70d829",
       "lastCommitDate": "2026-10-14T08:47:51-04:00",
@@ -5340,6 +6015,9 @@
     "propagator/atmosphere/dist/browser/module.wasm": {
       "sha256": "a8d1123b83547dd898b20557fa7a59368299a9b594b51efadb572fbdf7270795",
       "bytes": 470569,
+      "wasmSha256": "a8d1123b83547dd898b20557fa7a59368299a9b594b51efadb572fbdf7270795",
+      "canonicalModuleSha256": "a8d1123b83547dd898b20557fa7a59368299a9b594b51efadb572fbdf7270795",
+      "form": "raw",
       "module": null,
       "lastCommit": "10554f5351f5b3a987254cd7e9cf97accc70d829",
       "lastCommitDate": "2026-10-14T08:47:51-04:00",
@@ -5354,6 +6032,9 @@
     "propagator/atmosphere/dist/isomorphic/module.wasm": {
       "sha256": "a8d1123b83547dd898b20557fa7a59368299a9b594b51efadb572fbdf7270795",
       "bytes": 470569,
+      "wasmSha256": "a8d1123b83547dd898b20557fa7a59368299a9b594b51efadb572fbdf7270795",
+      "canonicalModuleSha256": "a8d1123b83547dd898b20557fa7a59368299a9b594b51efadb572fbdf7270795",
+      "form": "raw",
       "module": null,
       "lastCommit": "10554f5351f5b3a987254cd7e9cf97accc70d829",
       "lastCommitDate": "2026-10-14T08:47:51-04:00",
@@ -5368,6 +6049,9 @@
     "propagator/cislunar/dist/isomorphic/module.wasm": {
       "sha256": "af687cae6c825e28b824a1b833f815f8d57df0d050216aa6b118928eb19f54ce",
       "bytes": 152899,
+      "wasmSha256": "af687cae6c825e28b824a1b833f815f8d57df0d050216aa6b118928eb19f54ce",
+      "canonicalModuleSha256": "051e5f8b26bd123126b6c443c874a9dc8e4764e5822f2dfd9342524a8e3a8f4f",
+      "form": "raw",
       "module": "propagator/cislunar",
       "lastCommit": "4e08cd239039200ea4fb7a0143dcc78751faf02a",
       "lastCommitDate": "2026-10-23T15:12:24-04:00",
@@ -5395,6 +6079,9 @@
     "propagator/events/dist/isomorphic/module.wasm": {
       "sha256": "1a856dc5a4903919197173159c265cbfa11d982dca8f1c590a635dab25cecd32",
       "bytes": 583707,
+      "wasmSha256": "1a856dc5a4903919197173159c265cbfa11d982dca8f1c590a635dab25cecd32",
+      "canonicalModuleSha256": "fc14f0d500dedf202edaa7c26dd2bfcde17b053ad35822dfcd07ae907bce8cba",
+      "form": "raw",
       "module": "propagator/events",
       "lastCommit": "23242c81e2f375cd858a7a46d665753f40673b04",
       "lastCommitDate": "2026-10-24T15:57:47-04:00",
@@ -5421,6 +6108,9 @@
     "propagator/ffm/dist/browser/module.wasm": {
       "sha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
       "bytes": 2754046,
+      "wasmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+      "canonicalModuleSha256": "1817fa679f27bf6bb5dd92fb4b2a6b5489582de0f2867f835353bdec31594bad",
+      "form": "raw",
       "module": "propagator/ffm",
       "lastCommit": "9cb02c8e22f5a738a9984992e8af2246cd11e090",
       "lastCommitDate": "2026-11-05T16:17:29-05:00",
@@ -5447,6 +6137,9 @@
     "propagator/ffm/dist/isomorphic/module.wasm": {
       "sha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
       "bytes": 2754046,
+      "wasmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+      "canonicalModuleSha256": "1817fa679f27bf6bb5dd92fb4b2a6b5489582de0f2867f835353bdec31594bad",
+      "form": "raw",
       "module": "propagator/ffm",
       "lastCommit": "9cb02c8e22f5a738a9984992e8af2246cd11e090",
       "lastCommitDate": "2026-11-05T16:17:29-05:00",
@@ -5473,6 +6166,9 @@
     "propagator/ffm/tests/reference/dist/isomorphic/module.wasm": {
       "sha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
       "bytes": 2064618,
+      "wasmSha256": "e8c7b4f59d54a1140380105d8463cd037260d4441f29afb74f396f9834ac06c3",
+      "canonicalModuleSha256": "8c57bee39264b57f426655fb0c82443bcd432efa97747917e996bea5d4319f57",
+      "form": "raw",
       "module": null,
       "lastCommit": "2848be66fe3c4169d1bd800b13b1f61662a40e8e",
       "lastCommitDate": "2026-10-18T11:33:55-04:00",
@@ -5485,22 +6181,28 @@
       "declaration": null
     },
     "propagator/hypersonics/dist/isomorphic/module.wasm": {
-      "sha256": "479c999ebd98e78e5286c02dde4f7278d46878c4af2231e05f032a95ad51124b",
-      "bytes": 108480,
+      "sha256": "c66477102ac25b5dd2b34fe2aa291ae212bcc84383541977f632f9cafaa01fe3",
+      "bytes": 108488,
+      "wasmSha256": "b12acbfa3d3f41f8398b1df60a6d45fa55bce220296245d1b4418551eaa283a2",
+      "canonicalModuleSha256": "b12acbfa3d3f41f8398b1df60a6d45fa55bce220296245d1b4418551eaa283a2",
+      "form": "bundled",
       "module": null,
       "lastCommit": "4ce9ea4a0631592279f7f6c05e41efe660094ea8",
       "lastCommitDate": "2026-10-23T15:12:25-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "1ea6697a6d190436f0332d7d0a8c0a9edc093e89",
+        "sdkCommit": "e4f2db38822fc58b18ae0737abffd39753633325"
       },
       "declaration": null
     },
     "propagator/keplerian-reference/dist/isomorphic/module.wasm": {
       "sha256": "312cd01b88146169ba7b9fbae3e6e2e1c989d3c92e949e602830713a8d46b132",
       "bytes": 139234,
+      "wasmSha256": "312cd01b88146169ba7b9fbae3e6e2e1c989d3c92e949e602830713a8d46b132",
+      "canonicalModuleSha256": "e0831c8d6ebfb6b19908e99178bdf1e8fe20fe6565ec320c77b9140e07758f91",
+      "form": "raw",
       "module": null,
       "lastCommit": "923724118cbf3da683198e9a35e8e3d83e160429",
       "lastCommitDate": "2026-10-16T22:10:02-04:00",
@@ -5515,6 +6217,9 @@
     "propagator/keplerian-reference/dist/sequential/module.wasm": {
       "sha256": "3131ab6afa43b0fb765cf42319e8a9a9cb78cdd8699796aff87065702c2ceae7",
       "bytes": 118363,
+      "wasmSha256": "3131ab6afa43b0fb765cf42319e8a9a9cb78cdd8699796aff87065702c2ceae7",
+      "canonicalModuleSha256": "aa0bbe354124823cab3f00a0f4710d8effaee8cb742d7a4c2418498d0356118e",
+      "form": "raw",
       "module": null,
       "lastCommit": "923724118cbf3da683198e9a35e8e3d83e160429",
       "lastCommitDate": "2026-10-16T22:10:02-04:00",
@@ -5529,9 +6234,12 @@
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
       "sha256": "aa3ed22aa61a3a514e06619b9bff4aa1b1051d704dc32cd360b5c572b2c57f4e",
       "bytes": 966222,
+      "wasmSha256": "aa3ed22aa61a3a514e06619b9bff4aa1b1051d704dc32cd360b5c572b2c57f4e",
+      "canonicalModuleSha256": "613c4378c5d2993a3e5accf54a267da0cfee7c56b0fc8b26359f72dda1108f5d",
+      "form": "raw",
       "module": "propagator/sdn-ap",
-      "lastCommit": "e746c4a0d319c4d7b84a67e0af615236de3a06a8",
-      "lastCommitDate": "2026-11-05T16:13:54-05:00",
+      "lastCommit": "7154b48dfd2c3e6512370c4a91c3f855b0b8a21f",
+      "lastCommitDate": "2026-11-06T00:19:39-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -5553,6 +6261,9 @@
     "propagator/sgp4-xp/dist/isomorphic/module.wasm": {
       "sha256": "1f8aa4c7e3c01a9eb6c499a6730be827afee2b969f535410af32c74237f17877",
       "bytes": 1030209,
+      "wasmSha256": "1f8aa4c7e3c01a9eb6c499a6730be827afee2b969f535410af32c74237f17877",
+      "canonicalModuleSha256": "f3bef86de21cb1abe1374ba6069a155b082609dbd7afe4f3344d8613b36b6ef4",
+      "form": "raw",
       "module": "propagator/sgp4-xp",
       "lastCommit": "f3fa77724761cfdd71d94b58f32da93edaaaf593",
       "lastCommitDate": "2026-11-04T20:03:38-05:00",
@@ -5579,6 +6290,9 @@
     "propagator/sgp4/dist/browser-shared/module.wasm": {
       "sha256": "49e26b464c28395a95b401b8c7fded9dd17e3a8043cd3da19219b6ba00d0e136",
       "bytes": 1337239,
+      "wasmSha256": "49e26b464c28395a95b401b8c7fded9dd17e3a8043cd3da19219b6ba00d0e136",
+      "canonicalModuleSha256": "49e26b464c28395a95b401b8c7fded9dd17e3a8043cd3da19219b6ba00d0e136",
+      "form": "raw",
       "module": null,
       "lastCommit": "dd57a4298dcf27b5f3adec2686b258542edbe9a6",
       "lastCommitDate": "2026-10-30T03:24:19-04:00",
@@ -5593,6 +6307,9 @@
     "propagator/sgp4/dist/browser/module.wasm": {
       "sha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
       "bytes": 1295483,
+      "wasmSha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+      "canonicalModuleSha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+      "form": "raw",
       "module": null,
       "lastCommit": "dd57a4298dcf27b5f3adec2686b258542edbe9a6",
       "lastCommitDate": "2026-10-30T03:24:19-04:00",
@@ -5607,6 +6324,9 @@
     "propagator/sgp4/dist/isomorphic/module.wasm": {
       "sha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
       "bytes": 1295483,
+      "wasmSha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+      "canonicalModuleSha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+      "form": "raw",
       "module": null,
       "lastCommit": "dd57a4298dcf27b5f3adec2686b258542edbe9a6",
       "lastCommitDate": "2026-10-30T03:24:19-04:00",
@@ -5621,6 +6341,9 @@
     "propagator/solar-system-bodies/dist/isomorphic/module.wasm": {
       "sha256": "9d32a15d9333b8324c34bf3701d076f4aa6c27434bff7efeae067b7619002982",
       "bytes": 310311,
+      "wasmSha256": "9d32a15d9333b8324c34bf3701d076f4aa6c27434bff7efeae067b7619002982",
+      "canonicalModuleSha256": "06c15b0e7c98421273a1097ac6e8a211a6ae426c9620abcb118adcbe6db1af15",
+      "form": "raw",
       "module": "propagator/solar-system-bodies",
       "lastCommit": "1fb1f1d4c054c250e364da2c2cdc4c2cb9e494aa",
       "lastCommitDate": "2026-10-20T19:56:56-04:00",
@@ -5645,6 +6368,9 @@
     "storage/credentials/dist/isomorphic/module.wasm": {
       "sha256": "401f5d7adf231181c6b7c794d0c7553df58a1dc365cded41e537cc32ce5184d7",
       "bytes": 140535,
+      "wasmSha256": "401f5d7adf231181c6b7c794d0c7553df58a1dc365cded41e537cc32ce5184d7",
+      "canonicalModuleSha256": "e64fbc9f6b400ef9027a08dfbbb7ed4029c2eaa4852ac305a50ada7bb32327ba",
+      "form": "raw",
       "module": "storage/credentials",
       "lastCommit": "6014527e6c5d760108fb0a01768117f0039b0231",
       "lastCommitDate": "2026-10-23T15:11:46-04:00",
@@ -5670,6 +6396,9 @@
     "storage/object-s3/dist/isomorphic/module.wasm": {
       "sha256": "956671c19ee9c446293bfdfcba091bda7e19f38ed6f107587e832ce58444f6f2",
       "bytes": 236739,
+      "wasmSha256": "956671c19ee9c446293bfdfcba091bda7e19f38ed6f107587e832ce58444f6f2",
+      "canonicalModuleSha256": "f6505d62bbbf34971d830b0f698eeb8ccf73f8d82e8da98710b1f76bbc67ef2c",
+      "form": "raw",
       "module": "storage/object-s3",
       "lastCommit": "6014527e6c5d760108fb0a01768117f0039b0231",
       "lastCommitDate": "2026-10-23T15:11:46-04:00",
