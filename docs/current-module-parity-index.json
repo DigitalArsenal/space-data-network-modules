@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T02:15:52.553Z",
+  "generatedAt": "2026-11-06T02:29:49.897Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -283,7 +283,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.18.2",
+      "version": "0.18.3",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -325,7 +325,7 @@
       ],
       "cxxSourceFileCount": 58,
       "cSourceFileCount": 1,
-      "testFileCount": 216,
+      "testFileCount": 217,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -550,6 +550,7 @@
         "tests/fixtures/ocm-sets/b-fit-sdn-ap-0.5.2.ocm",
         "tests/fixtures/ocm-sets/d-fit-sdn-ap-0.5.2.ocm",
         "tests/fixtures/ocm-sets/xp-fit-sdn-ap-0.5.2.ocm",
+        "tests/fixtures/ocm-sets/xp-no-covariance-screen-ca-0.18.2.events",
         "tests/fixtures/ocm-sets/xp-screen-ca-0.18.1.events",
         "tests/fixtures/request.assess.json",
         "tests/fixtures/spacetrack-gp/README.md",
