@@ -4,15 +4,15 @@
 // finite-difference partials jump and THEMIS A 2013-02-15 stalls at 249.75 m with BTERM 4.506; the grid's sharing within a
 // set's perturbed copies converges (ripple 6b60710fe: 104.77 m, BTERM 0.012028, days 1 / 3 / 7 201.1 / 294.3 / 421.8 m;
 // 0.6.2: 109.52 m, 0.012046, 211.7 / 314.1 / 419.9 m).
-// - THEMIS A, cutoff 2013-02-15 (SDNAP_THEMIS_ARC: the 72 h fit $OEM the experiment's run.mjs --save writes, NAIF's public
-//   kernel in GCRF at 300 s), AP vacuum (FORCES caps 31 and 20, Jacchia 1970 on the theory's flux model): FIT_RMS_KM at
+// - THEMIS A, cutoff 2013-02-15 (test/fixtures/themis-a-2013-02-15-fit-72h.oem, SHA-256 pinned: the 72 h fit $OEM the
+//   experiment's run.mjs --save writes, NAIF's public kernel in GCRF at 300 s), AP vacuum (FORCES caps 31 and 20, Jacchia 1970 on the theory's flux model): FIT_RMS_KM at
 //   most 1.1 times the 0.6.2 base's 109.5 m (0.1205 km) and BTERM within 2 times the base's 0.0120 (0.0060 to 0.0240).
 // - Below e 0.3 the fit emits the 0.6.2 dist's bytes (git, modules c82160de7, its SHA-256 checked),
 //   PRODUCER's version read as 0.6.2: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of propagator/ffm's 550 km
 //   trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP, and a GEO arc (an AP set, caps 31 and 20,
 //   flown by this module 72 h at 300 s in GCRF, refitted under the same forces).
 // JS only moves bytes and compares numbers the module produced.
-//   SDNAP_THEMIS_ARC=<oem> node test/fit-second-solution.e2e.mjs
+//   node test/fit-second-solution.e2e.mjs
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -54,10 +54,10 @@ const VACUUM_AP = { EPHEMERIS_SOURCE: "", ATMOSPHERE_MODEL: pcfAtmosphereFamily.
 const stats = (bytes) => { const o = ocmOf(bytes); return { rms: o.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM, b: o.MEAN_ELEMENTS.BTERM, it: o.ORBIT_DETERMINATION.FIT_STATISTICS.ITERATIONS }; };
 
 // --- THEMIS A 2013-02-15
-const arcFile = process.env.SDNAP_THEMIS_ARC;
-check(!!arcFile && fs.existsSync(arcFile), `SDNAP_THEMIS_ARC ${arcFile}: the THEMIS A 2013-02-15 fit $OEM is required`);
-if (arcFile && fs.existsSync(arcFile)) {
-  const arc = fs.readFileSync(arcFile);
+const ARC = { file: "themis-a-2013-02-15-fit-72h.oem", sha256: "719cc63dffdd795d5a702bb83bf25dd4699ffe2363729fdb50445eb13a9ff351" };
+const arc = fs.readFileSync(new URL(`fixtures/${ARC.file}`, import.meta.url));
+check(sha256(arc) === ARC.sha256, `${ARC.file} is ${sha256(arc)}, pinned ${ARC.sha256}`);
+if (sha256(arc) === ARC.sha256) {
   const config = configuration({ theory: "AP", forces: VACUUM_AP });
   const c = stats(await fit(cand, arc, config)), b = stats(await fit(base, arc, config));
   const rmsBound = THEMIS_A.rmsRatio * THEMIS_A.baseRmsKm, bLow = THEMIS_A.baseBterm / THEMIS_A.btermRatio, bHigh = THEMIS_A.baseBterm * THEMIS_A.btermRatio;
