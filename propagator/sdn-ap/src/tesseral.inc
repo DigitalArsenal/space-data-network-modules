@@ -743,8 +743,8 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
 /// (l, m, p), sum_q G_lpq e^{i (w + q) M} = (a/r)^(l+1) e^{i w f}, so each (m, w) family's displacement is a periodic
 /// function of the anomaly, complete in j: built on kGridNE uniform eccentric anomalies from the family's forcing (Lagrange's
 /// equations), integrated by H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot with
-/// nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, the harmonics the table's rules leave out (m-daily, the class's,
-/// |psi-dot| < kShallowBand n) subtracted, and kept on kGridN of them (single precision) with its first derivatives in e, i and
+/// nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, the harmonics the table's rules leave out (m-daily, the class's, the
+/// half-day class's tail, |psi-dot| < kShallowBand n) subtracted, and kept on kGridN of them (single precision) with its first derivatives in e, i and
 /// a / a0 on kGridD (half precision).
 constexpr int kGridN = 128, kGridNE = 128, kGridD = 64;
 constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward differences of the derivative grids
@@ -919,7 +919,8 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         gr[2][0][q] = ar[q] * cf[q] * kR - ei * gI;
         gr[2][1][q] = ar[q] * cf[q] * kI + ei * gR;
       }
-      // the harmonics the table's rules leave out, from each forcing function: m-daily (w = j = 0), the class's, the slow band
+      // the harmonics the table's rules leave out, from each forcing function: m-daily (w = j = 0), the class's, the half-day
+      // tail, the slow band
       for (int l = l0; l <= degree; l += 2) {
         const int p = (l - w) / 2;
         const double F = f[l], dF = (fp[l] - fmn[l]) / (2.0 * h);
@@ -930,6 +931,8 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         for (int j = -(degree + 64); j <= degree + 64; ++j) {
           const int q = j - w;
           bool out_ = w == 0 && j == 0;
+          // the half-day tail, carried in the half-day class's rates (16.2; sp_terms leaves it out of the table the same way)
+          if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = true;
           for (int t = 0; t < carried.count && !out_; ++t)
             if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = true;
           if (!out_ && j >= jlo && j <= jhi) out_ = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)) < kShallowBand * n;

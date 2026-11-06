@@ -2313,7 +2313,8 @@ series in M there. For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a
 first-order displacement (Lagrange's equations, each harmonic divided by its psi-dot, lambda also through n) is a periodic
 function of the anomaly, complete in j. At init it is built on 256 uniform eccentric anomalies from the family's forcing:
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
-omega_E)) / M-dot, R the six rates, the harmonics 16.2 leaves out (m-daily, the class's, |psi-dot| < 0.045 n) subtracted one
+omega_E)) / M-dot, R the six rates, the harmonics 16.2 leaves out (m-daily, the class's, the half-day class's tail,
+|psi-dot| < 0.045 n) subtracted one
 by one with G and dG/de by the trapezoid on those nodes. Kept on 128 of them with its derivatives in e, i and a / a (forward
 differences), single precision (7.1 MB), and read at output time by the four-point periodic cubic in E, linear in the mean
 elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's mean elements at every 48 hours from its epoch
