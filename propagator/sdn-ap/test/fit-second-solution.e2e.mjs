@@ -1,0 +1,92 @@
+#!/usr/bin/env node
+// E2E (task modules-sdn-ap-fit-second-solution-robustness-20261106; experiments FIT-SECOND-SOLUTION.md): SPEC 12.9, the
+// second start.
+// - THEMIS A, cutoff 2013-02-15 (SDNAP_THEMIS_ARC: the 72 h fit $OEM the experiment's run.mjs --save writes, NAIF's public
+//   kernel in GCRF at 300 s), AP vacuum (FORCES caps 31 and 20, Jacchia 1970 on the theory's flux model): FIT_RMS_KM at
+//   most 1.1 times the 0.6.2 base's 109.5 m (0.1205 km) and BTERM within 2 times the base's 0.0120 (0.0060 to 0.0240).
+//   The tesseral grid without the second start reaches 249.8 m with BTERM 4.506 there (DIAGNOSIS-THEMIS-A-20130215.md).
+// - Where the rule does not fire, the fit emits the 0.6.2 dist's bytes (git, modules c82160de7, its SHA-256 checked),
+//   PRODUCER's version read as 0.6.2: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of propagator/ffm's 550 km
+//   trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP, and a GEO arc (an AP set, caps 31 and 20,
+//   flown by this module 72 h at 300 s in GCRF, refitted under the same forces).
+// JS only moves bytes and compares numbers the module produced.
+//   SDNAP_THEMIS_ARC=<oem> node test/fit-second-solution.e2e.mjs
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import * as flatbuffers from "flatbuffers";
+import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
+import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
+import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
+import { ensureBuilt, wasmPath, packageRoot } from "./lib/module.mjs";
+import { configuration, MSIS_FORCES, XP_FORCES, pcfAtmosphereFamily } from "./lib/pcf.mjs";
+import { inputs } from "./lib/fixture-inputs.mjs";
+import { T, ocmOf, seedOcm, flight } from "./lib/ocm.mjs";
+
+ensureBuilt();
+const failures = [];
+const check = (ok, what) => { if (!ok) failures.push(what); };
+const BASE = { version: "0.6.2", commit: "c82160de7", sha256: "84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41" };
+const THEMIS_A = { baseRmsKm: 0.1095, baseBterm: 0.0120, rmsRatio: 1.1, btermRatio: 2 };
+const sha256 = (b) => createHash("sha256").update(b).digest("hex");
+const baseBytes = execFileSync("git", ["-C", packageRoot, "show", `${BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
+if (sha256(baseBytes) !== BASE.sha256) throw new Error(`sdn-ap ${BASE.version} at ${BASE.commit} is ${sha256(baseBytes)}`);
+const basePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-second-start-")), "module-0.6.2.wasm");
+fs.writeFileSync(basePath, baseBytes);
+const cand = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
+const base = await createStandaloneHarness("browser", basePath, { surface: "direct" });
+const now = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8")).version;
+const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
+const asBase = (bytes) => { const b = Buffer.from(bytes); for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BASE.version).copy(b, at); return b; };
+const fit = async (h, oem, config, spw) => {
+  const r = await h.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: T("OEM"), payload: oem }, config,
+    ...(spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: spw }] : [])] });
+  if (r.statusCode !== 0) throw new Error(`fit: ${r.errorCode}: ${r.errorMessage}`);
+  return new Uint8Array(r.outputs.find((o) => o.portId === "elements").payload);
+};
+const VACUUM_AP = { EPHEMERIS_SOURCE: "", ATMOSPHERE_MODEL: pcfAtmosphereFamily.JACCHIA70, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31,
+  HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20 };
+const stats = (bytes) => { const o = ocmOf(bytes); return { rms: o.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM, b: o.MEAN_ELEMENTS.BTERM, it: o.ORBIT_DETERMINATION.FIT_STATISTICS.ITERATIONS }; };
+
+// --- THEMIS A 2013-02-15
+const arcFile = process.env.SDNAP_THEMIS_ARC;
+check(!!arcFile && fs.existsSync(arcFile), `SDNAP_THEMIS_ARC ${arcFile}: the THEMIS A 2013-02-15 fit $OEM is required`);
+if (arcFile && fs.existsSync(arcFile)) {
+  const arc = fs.readFileSync(arcFile);
+  const config = configuration({ theory: "AP", forces: VACUUM_AP });
+  const c = stats(await fit(cand, arc, config)), b = stats(await fit(base, arc, config));
+  const rmsBound = THEMIS_A.rmsRatio * THEMIS_A.baseRmsKm, bLow = THEMIS_A.baseBterm / THEMIS_A.btermRatio, bHigh = THEMIS_A.baseBterm * THEMIS_A.btermRatio;
+  check(c.rms <= rmsBound, `THEMIS A: FIT_RMS_KM ${c.rms} above ${rmsBound}`);
+  check(c.b >= bLow && c.b <= bHigh, `THEMIS A: BTERM ${c.b} outside ${bLow} to ${bHigh}`);
+  console.log(`THEMIS A 2013-02-15: FIT_RMS ${(c.rms * 1000).toFixed(1)} m (bound ${(rmsBound * 1000).toFixed(1)}), BTERM ${c.b.toPrecision(4)} (bounds ${bLow} to ${bHigh}), ITERATIONS ${c.it}; ` +
+    `0.6.2: ${(b.rms * 1000).toFixed(1)} m, BTERM ${b.b.toPrecision(4)}`);
+}
+
+// --- no harm: the LEO fixture and a GEO arc, byte-identical to 0.6.2 where the rule does not fire
+const { arc: leo, rows } = inputs();
+const AP_FORCES = { ...MSIS_FORCES, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20,
+  WEATHER_SOURCE: pcfWeatherSource.RECORDS };
+const t0 = Date.parse("2026-10-01T00:00:00Z"), iso = (ms) => new Date(ms).toISOString().replace("Z", "");
+const geoSet = seedOcm({ epoch: iso(t0), n: 1.0027, e: 0.0002, i: 0.1, raan: 40, argp: 30, ma: 20, bterm: 0.01, agom: 0.01, norad: 99002, name: "GEO", tesseral: 31, zonal: 20 });
+const flown = await cand.invoke({ methodId: "propagate", inputs: flight([geoSet], { output: { EPOCHS: Array.from({ length: 865 }, (_, k) => iso(t0 + k * 300000)), FRAME: pcfOutputFrame.GCRF } }) });
+check(flown.statusCode === 0, `GEO flight: ${flown.errorCode} ${flown.errorMessage}`);
+const geo = flown.statusCode === 0 ? new Uint8Array(flown.outputs.find((o) => o.portId === "ephemeris").payload) : null;
+const cases = [["LEO AP", leo, configuration({ theory: "AP", forces: AP_FORCES }), rows.bytes], ["LEO SGP4XP", leo, configuration({ theory: "SGP4XP", forces: XP_FORCES }), null],
+  ...(geo ? [["GEO AP", geo, configuration({ theory: "AP", forces: VACUUM_AP }), null]] : [])];
+for (const [name, oem, config, spw] of cases) {
+  const c = await fit(cand, oem, config, spw), b = await fit(base, oem, config, spw);
+  const same = Buffer.compare(asBase(c), Buffer.from(b)) === 0;
+  check(same, `${name}: the $OCM differs from 0.6.2's (${stats(c).rms} km, BTERM ${stats(c).b} against ${stats(b).rms} km, ${stats(b).b})`);
+  console.log(`${name}: ${c.length} bytes, ${same ? "byte-identical to 0.6.2" : "differs"}; FIT_RMS ${(stats(c).rms * 1000).toFixed(2)} m, BTERM ${stats(c).b}`);
+}
+if (geo) console.log(`GEO arc: ${OEM.getRootAsOEM(new flatbuffers.ByteBuffer(geo)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.length} states`);
+
+if (failures.length) {
+  for (const f of failures) console.error(`FAIL ${f}`);
+  process.exit(1);
+}
+console.log("PASS");
+process.exit(0);
