@@ -5,10 +5,12 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { randomBytes } from 'node:crypto';
 import { validateArtifactWithStandards } from 'space-data-module-sdk/compliance';
+import { toLoadableWasmBytes } from 'space-data-module-sdk/bundle';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { sealRequest, checkLayout, decodeFileContent } from './lib/wire.mjs';
 const wasmPath = fileURLToPath(new URL('../dist/isomorphic/module.wasm', import.meta.url));
-const wasmSource = fs.readFileSync(wasmPath);
+// The artifact is signed: a runtime compiles the bytes without the publication trailer and the sds.manifest section.
+const wasmSource = toLoadableWasmBytes(fs.readFileSync(wasmPath));
 const manifest = JSON.parse(fs.readFileSync(new URL('../plugin-manifest.json', import.meta.url)));
 const standardsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('spacedatastandards.org'))));
 

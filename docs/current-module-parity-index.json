@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T13:53:26.799Z",
+  "generatedAt": "2026-11-06T14:08:38.937Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -6295,7 +6295,7 @@
       "pluginId": "client-decrypt",
       "name": "Client Decrypt",
       "pluginFamily": "infrastructure",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "decrypt_artifact"
       ],
@@ -6377,7 +6377,7 @@
       "pluginId": "com.digitalarsenal.licensing.publication-seal",
       "name": "Publication Seal",
       "pluginFamily": "infrastructure",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "seal"
       ],
