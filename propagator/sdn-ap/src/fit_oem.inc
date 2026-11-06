@@ -125,6 +125,24 @@ inline int& jacobian_always() {
   static int j = 0;
   return j;
 }
+/// The fit's cost at a solution (fit::run's objective): the residuals' sum of squares (RMS^2 over `count` states) and the
+/// priors' terms on BTERM and AGOM in the space the fit estimates them in.
+inline double fit_cost(const ElementRow& row, const fit::Result& r, int count, const fit::Options& o) {
+  double c = r.rms_km * r.rms_km * static_cast<double>(count);
+  if (o.fit_drag && o.drag_sigma > 0.0) {
+    const double d = ((o.drag_log ? std::log(row.bterm) : row.bterm) - o.drag_prior) / o.drag_sigma;
+    c += d * d;
+  }
+  if (o.fit_agom && o.agom_sigma > 0.0) {
+    const double d = ((o.agom_log ? std::log(row.agom) : row.agom) - o.agom_prior) / o.agom_sigma;
+    c += d * d;
+  }
+  return c;
+}
+/// Whether the fit's options hold BTERM fixed (a prior sigma of 1e-6 or less, of the log or of the term).
+inline bool drag_held(const fit::Options& o) {
+  return !o.fit_drag || (o.drag_sigma > 0.0 && o.drag_sigma <= (o.drag_log ? 1e-6 : std::fmax(std::fabs(o.drag_prior) * 1e-6, 1e-10)));
+}
 
 }  // namespace fitoem
 }  // namespace sdnap
@@ -794,6 +812,7 @@ static int fit_blocks() {
       // resonance null) and FIT.DEFAULT_SPAN_HOURS >= 24 h on a non-eccentric orbit, Stage 1 above solved BTERM and AGOM
       // over the long drag span; Stage 2 pins BTERM and AGOM to Stage 1's solution and fits the 6 Brouwer mean elements
       // over the trailing MINIMUM_SPAN_HOURS window with the epoch placed at the cutoff (last_useable).
+      bool two_stage = false;
       if (!start_given && !eccentric && po.minimum_span_h < 24.0 && po.default_span_h >= 24.0 &&
           chosen.res.rms_km <= po.implausible_rms_km) {
         const double bterm_s1 = chosen.row.bterm;
@@ -813,6 +832,47 @@ static int fit_blocks() {
           stage2.opt.agom_sigma = chosen.opt.agom_sigma;
           stage2.srp = chosen.srp;
           chosen = std::move(stage2);
+          two_stage = true;
+        }
+      }
+      // SPEC 12.9, the second start: the policy's solution against two more starts on its arc and options, BTERM back at the
+      // start the policy used (its prior's median): (1) the solution's elements, one fit; (2) the policy's pass with BTERM held
+      // at that start through every stage, then freed for one fit on the solution's arc. The least cost is kept. Not after the
+      // two-stage pass (its BTERM is Stage 1's) or where the options hold BTERM.
+      if (!two_stage && !fitoem::drag_held(chosen.opt) && chosen.res.status >= 0) {
+        const int nfit = static_cast<int>(chosen.t_fit.size());
+        const double start_b = used_drag.mean;
+        double best_cost = fitoem::fit_cost(chosen.row, chosen.res, nfit, chosen.opt);
+        ElementRow best_row{};
+        fit::Result best_res{};
+        bool better = false;
+        int extra = 0;
+        auto consider = [&](const ElementRow& r, const fit::Result& f) {
+          extra += f.iterations;
+          if (f.status < 0) return;
+          const double c = fitoem::fit_cost(r, f, nfit, chosen.opt);
+          if (c < best_cost) { best_cost = c; best_row = r; best_res = f; better = true; }
+        };
+        if (!(used_drag.form == pcfPriorForm_LOG_NORMAL && !(start_b > 0.0))) {
+          ElementRow r1 = chosen.row;
+          r1.bterm = start_b;
+          const fit::Result a1 = fit::run(r1, chosen.t_fit.data(), chosen.r_fit.data(), nfit, chosen.opt);
+          consider(r1, a1);
+          const bool saved_before = atm::active() != nullptr && atm::active()->before_rows;
+          const pcf::Prior hold = {start_b, used_drag.form == pcfPriorForm_LOG_NORMAL ? 1e-6 : std::fmax(std::fabs(start_b) * 1e-6, 1e-10), used_drag.form};
+          Pass p2;
+          if (run_pass(span_used > 0.0 ? span_used : default_span, p2, last_useable, -1, &hold) == 0 &&
+              p2.t_fit.size() == chosen.t_fit.size() && p2.e0.whole == chosen.e0.whole && p2.e0.frac == chosen.e0.frac) {
+            ElementRow r2 = p2.row;
+            const fit::Result a2 = fit::run(r2, chosen.t_fit.data(), chosen.r_fit.data(), nfit, chosen.opt);
+            consider(r2, a2);
+          }
+          if (atm::active() != nullptr) atm::active()->before_rows = saved_before;
+        }
+        if (better) {
+          chosen.row = best_row;
+          chosen.res = best_res;
+          chosen.iterations += extra;
         }
       }
       std::vector<double>& t_fit = chosen.t_fit;
