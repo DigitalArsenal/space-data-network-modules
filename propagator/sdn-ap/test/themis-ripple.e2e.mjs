@@ -271,6 +271,30 @@ for (const [name, s] of Object.entries(SEEDS)) {
   console.log(JSON.stringify({seed: 'fitted AP set (catalog-composer fixture)', identical: a === b}));
 }
 
+// 4. the exact-grid switch (tess::ExactGridScope, thread-local, held by a fit around its solve) leaves no trace: in one instance a fit
+//    that succeeds and a fit that is refused, then a flight above e 0.3, give the flight's bytes of a fresh instance
+const {runModelTruth} = await import('./lib/heo-model-truth.mjs');
+const gto = {n: 2.40, e: 0.72, i: 27, raan: 40, argp: 270, ma: 10};
+const fitFrames = await runModelTruth({name: 'GTO', ...gto, drag: false, hourly: true, fitInput: true, modulePath: wasmPath});
+const gtoSet = seedOcm({epoch, ...gto, ...AP});
+const flightBytes = async (h) => {
+  const r = await h.invoke({methodId: 'propagate', inputs: flight([gtoSet], {output})});
+  assert.equal(r.statusCode, 0, `GTO flight: ${r.errorCode}`);
+  return crypto.createHash('sha256').update(new Uint8Array(r.outputs.find((o) => o.portId === 'ephemeris').payload)).digest('hex');
+};
+const fresh = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
+const alone = await flightBytes(fresh);
+await fresh.close?.();
+const shared = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
+const fitted = await shared.invoke({methodId: 'fit', inputs: [fitFrames.ephemeris, fitFrames.configuration, fitFrames.spaceWeather]});
+const refused = await shared.invoke({methodId: 'fit', inputs: [{...fitFrames.ephemeris, payload: new Uint8Array(32)}, fitFrames.configuration]});
+const after = await flightBytes(shared);
+await shared.close?.();
+console.log(JSON.stringify({switchTrace: {fitStatus: fitted.statusCode, refusedStatus: refused.statusCode, identical: after === alone}}));
+assert.equal(fitted.statusCode, 0, 'the fit succeeds');
+assert.notEqual(refused.statusCode, 0, 'the second fit is refused');
+assert.equal(after, alone, 'a flight after a fit and a refused fit equals a fresh instance\'s');
+
 // 3. the 12 THEMIS windows (registration (b) to (d), Amendment 8's paired test): each window's roughness and day 1 / 3 / 7 3D RMS on
 //    the base (sdn-ap 0.6.1, dist 05dd4a66) and on this source's build (a7771b14), as recorded in orbit-accuracy-experiments
 //    results/ap-truth/themis-ripple-fix/investigation.json, arm L (rows: operator-theory/themis-ripple-fix/fit-investigation).
