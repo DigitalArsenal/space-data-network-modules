@@ -2331,8 +2331,17 @@ instance began (out[2]). Against the full-field quadrature on THEMIS (e 0.82, 7 
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; the
 0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the
 table. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded
-sets are byte-identical. The narrow set is 21 m RMS (44 m at most) from the field at e 0.29 to 0.30 for a one-day orbit, so a
-set whose eccentricity crosses 0.3 steps by up to that; the step is a known limit. A fit above e 0.3 builds a grid for each
+sets are byte-identical. The method is fixed once per flight from the fitted epoch elements: `src/tesseral.inc:42` sets
+kWideE = 0.3, `src/tesseral.inc:256` reads `const bool wide = e0 > kWideE;` when the set's terms are built at initialization
+(`src/xp_theory.inc:1473` builds the grid on the same test of the epoch eccentricity), the output tests only whether the set
+holds a grid (`src/xp_theory.inc:1279` and `1290`), and the 48-hour schedule (`src/xp_theory.inc:1719` to `1777`) rebuilds the
+grid at the node elements without re-evaluating the test, so no flight switches method in flight. Against an independent
+full-force reference (propagator/ffm 2.2.1 with the same field, Sun and Moon from DE440, in vacuum; orbit-accuracy-experiments
+e53a8ef0e1261523f5d28a617b9a5177d629e4f2, results/ap-truth/tesseral-all-regimes/table.json, `primary.steps`) a set fitted at
+e 0.29 and flown one day is 22 m RMS (41 m at most) for a one-day orbit, 27 m (55 m) for a half-day Molniya-like orbit and 25 m
+(56 m) for GTO, the first-order set's own error near 0.3; a set fitted just above 0.3 (e 0.31; Molniya 0.30) is 10 m RMS
+(12 m at most), 26 m (45 m) and 15 m (29 m), the grid's. Two sets fitted on either side of 0.3 can therefore differ by about the
+first-order set's own error, the set above 0.3 the nearer to the reference. A fit above e 0.3 builds a grid for each
 set it initializes at new elements (about 13 an iteration on the GTO fixture, about 45 ms each in wasm), so fits there may take
 up to about twice 0.6.2's time; such a fit's wasm memory stays below 90 MiB on THEMIS A, the GTO and the Molniya fixtures.
 

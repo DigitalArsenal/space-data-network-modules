@@ -444,7 +444,13 @@ with the coefficient pinned at the truth it is 144/120 m (0.4.14: 159/92). The 4
 with a truth without it; with J5 zero on AP's side it is 98.9 m (0.4.14) and 89.6 m. Against independent integrations
 over one GTO orbit the new terms agree within 0.0002 m per element (`test/gto-high-degree-perigee-terms.e2e.mjs`). A
 propagation on a 1 h grid costs 37.0 ms per object-day on GTO, 30.3 on the half-day and 30.5 on Molniya (24.6, 16.3 and
-18.2 before).
+18.2 before). The method is fixed once per flight from the fitted epoch eccentricity (`src/tesseral.inc:256`,
+kWideE = 0.3), so no flight switches method in flight. Against an independent full-force reference (propagator/ffm 2.2.1,
+the same field, DE440 Sun and Moon, in vacuum; orbit-accuracy-experiments e53a8ef0e1261523f5d28a617b9a5177d629e4f2,
+results/ap-truth/tesseral-all-regimes/table.json) a set fitted at e 0.29 and flown one day is 22 m RMS (41 m at most) for a
+one-day orbit, 27 m (55 m) for a half-day Molniya-like orbit and 25 m (56 m) for GTO; fitted just above 0.3 it is 10 m RMS
+(12 m), 26 m (45 m) and 15 m (29 m). Two sets fitted on either side of 0.3 can differ by about the first-order set's own
+error, the set above 0.3 the nearer to the reference (SPEC 16.11).
 
 Above e 0.3 AP's drag is evaluated per perigee passage (SPEC 16.12): the mean of the passages before and after the
 rate's time, each node at the Earth angle and date of its own time on the pass, over the whole orbit, with the pass's
