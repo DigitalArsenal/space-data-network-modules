@@ -71,11 +71,14 @@ enum class oppDeterminationMethod : int8_t {
   /// Taken from the bus design or from a sibling object in the same family
   /// because no per-object value exists. Always an approximation.
   INFERRED_FROM_FAMILY = 6,
+  /// Entered by a user for a sensor or object they define; no source publishes
+  /// it. Appended 1.278.0.
+  USER_DEFINED = 7,
   MIN = UNSPECIFIED,
-  MAX = INFERRED_FROM_FAMILY
+  MAX = USER_DEFINED
 };
 
-inline const oppDeterminationMethod (&EnumValuesoppDeterminationMethod())[7] {
+inline const oppDeterminationMethod (&EnumValuesoppDeterminationMethod())[8] {
   static const oppDeterminationMethod values[] = {
     oppDeterminationMethod::UNSPECIFIED,
     oppDeterminationMethod::MEASURED,
@@ -83,13 +86,14 @@ inline const oppDeterminationMethod (&EnumValuesoppDeterminationMethod())[7] {
     oppDeterminationMethod::ESTIMATED,
     oppDeterminationMethod::DERIVED,
     oppDeterminationMethod::MODEL_DERIVED,
-    oppDeterminationMethod::INFERRED_FROM_FAMILY
+    oppDeterminationMethod::INFERRED_FROM_FAMILY,
+    oppDeterminationMethod::USER_DEFINED
   };
   return values;
 }
 
 inline const char * const *EnumNamesoppDeterminationMethod() {
-  static const char * const names[8] = {
+  static const char * const names[9] = {
     "UNSPECIFIED",
     "MEASURED",
     "OPERATOR_STATED",
@@ -97,13 +101,14 @@ inline const char * const *EnumNamesoppDeterminationMethod() {
     "DERIVED",
     "MODEL_DERIVED",
     "INFERRED_FROM_FAMILY",
+    "USER_DEFINED",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameoppDeterminationMethod(oppDeterminationMethod e) {
-  if (::flatbuffers::IsOutRange(e, oppDeterminationMethod::UNSPECIFIED, oppDeterminationMethod::INFERRED_FROM_FAMILY)) return "";
+  if (::flatbuffers::IsOutRange(e, oppDeterminationMethod::UNSPECIFIED, oppDeterminationMethod::USER_DEFINED)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesoppDeterminationMethod()[index];
 }

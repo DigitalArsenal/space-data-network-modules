@@ -1,7 +1,7 @@
 {
   "pluginId": "atmosphere-model",
   "name": "Atmosphere Plugin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Atmospheric model queries on SDS FlatBuffers: HFC atmosphere state batches (US76 / NRLMSISE-00 with SPW space weather, HWM14 winds), HWM14 wind fields on WXF grids, and Basilisk drag acceleration from OCM to OEM.",
   "pluginFamily": "analysis",
   "capabilities": [],
