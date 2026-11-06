@@ -4,8 +4,9 @@
 // (MEAN_ELEMENTS sources, the built-in SGP4), drains the chunks and returns the events. The pattern of
 // flows/observation-ap/flow.mjs: the hosts are SDK module hosts with invoke({ methodId, inputs }); this file routes
 // typed records and computes nothing. Any theory but SGP4XP and AP is refused by name before any flight, and a set
-// sdn-ap refuses is refused with its code and message unchanged; the other sets screen. An AP set's covariance reaches
-// the screen only when its producer build is on the request's CONTROLS.VERIFIED_COVARIANCE_PRODUCERS.
+// sdn-ap refuses is refused with its code and message unchanged; the other sets screen. The covariance of a set that
+// states a producer (PVN.PRODUCER) reaches the screen only when that producer build is on the request's
+// CONTROLS.VERIFIED_COVARIANCE_PRODUCERS, whatever the set's theory.
 import * as flatbuffers from 'flatbuffers';
 import {
   CQR, CQRT, CQRCatalogRequest, CQRObjectSourceT, CQRScreeningControlsT, CQRVerifiedCovarianceProducerT, OCM, OEM, OMM,
@@ -20,8 +21,8 @@ export const OCM_SET_FLIGHT = Object.freeze({ stepSeconds: 30, frame: 'TEME' });
 /** The theories the flow flies through propagator/sdn-ap; every other one is refused by name. */
 export const FLOWN_THEORIES = Object.freeze([meanElementSource.SGP4XP, meanElementSource.AP]);
 
-/** An event's PROBABILITY_REFUSAL for an AP set whose producer build is not verified: this, a space, the PVN.PRODUCER seen. */
-export const AP_COVARIANCE_REFUSAL = 'pc-covariance-unverified:AP';
+/** An event's PROBABILITY_REFUSAL for a set whose covariance producer build is not verified: this, then the PVN.PRODUCER seen. */
+export const COVARIANCE_REFUSAL = 'pc-covariance-unverified:';
 
 const T = (name) => ({ schemaName: `${name}.fbs`, fileIdentifier: `$${name}`, rootTypeName: name, wireFormat: 'flatbuffer' });
 const ident = (u, at) => String.fromCharCode(...u.subarray(at, at + 4));
@@ -151,11 +152,11 @@ export async function drainCatalogScreen(conjunction, request, extra = []) {
  * @param {{thresholdKm: number, coarseStepSec?: number, workers?: number, algorithm?: string, fineTolSec?: number, combinedRadiusM?: number,
  *   verifiedCovarianceProducers?: {PRODUCER: string, PRODUCER_SHA256: string, VERIFICATION_REFERENCE?: string}[]}} o.controls
  *   verifiedCovarianceProducers: the request's CONTROLS.VERIFIED_COVARIANCE_PRODUCERS (CQRVerifiedCovarianceProducerT);
- *   absent or empty, no AP set's covariance reaches the screen.
+ *   absent or empty, no covariance whose set states a producer reaches the screen.
  * @param {Uint8Array} [o.uncertaintyModel]  $ERM for the element sets the module flies itself (screen_catalog's uncertainty_model).
  * @returns {Promise<{events: object[], excluded: Uint8Array[], refused: object[], covarianceRefused: object[], statistics: object, flights: number}>}
  *   refused: one entry per set left out, by name: { objectId, name, norad, theory, code, message }.
- *   covarianceRefused: one entry per AP set screened without its covariance: { objectId, name, norad, producer, producerSha256, code }.
+ *   covarianceRefused: one entry per set screened without its covariance: { objectId, name, norad, producer, producerSha256, code }.
  */
 export async function screenOcmSets(hosts, o) {
   const sources = [], refused = [], covarianceRefused = [];
@@ -176,10 +177,10 @@ export async function screenOcmSets(hosts, o) {
     if (r.statusCode !== 0) { refused.push({ objectId: set.objectId, name: set.name, norad: set.norad, theory: set.theoryName, code: r.errorCode ?? 'propagate-failed', message: r.errorMessage ?? '' }); continue; }
     const source = ephemerisSource(set, r.outputs.find((x) => x.portId === 'ephemeris')?.payload ?? new Uint8Array());
     const blocks = source.EPHEMERIS.EPHEMERIS_DATA_BLOCK ?? [];
-    if (set.theory === meanElementSource.AP && blocks.some((b) => b.COVARIANCE_MATRIX_LINES?.length) && !isVerified(verified, set)) {
+    if (set.producer !== '' && blocks.some((b) => b.COVARIANCE_MATRIX_LINES?.length) && !isVerified(verified, set)) {
       for (const b of blocks) Object.assign(b, { COVARIANCE_MATRIX_LINES: [], COV_REFERENCE_FRAME: null });
       covarianceRefused.push({ objectId: set.objectId, name: set.name, norad: set.norad, producer: set.producer, producerSha256: set.producerSha256,
-        code: `${AP_COVARIANCE_REFUSAL} ${set.producer || '(no producer)'}` });
+        code: `${COVARIANCE_REFUSAL}${set.producer}` });
     }
     sources.push(source);
   }

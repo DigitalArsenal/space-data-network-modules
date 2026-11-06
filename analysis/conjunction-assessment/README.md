@@ -242,17 +242,20 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   the `UNCERTAINTY_SOURCE`. Where a set carries none, the event keeps the Alfano maximum (`MAXIMUM_PROBABILITY_ONLY`,
   basis `NONE`); the empirical model (`uncertainty_model`) applies to element sets the module flies itself, not to
   a flown `$OEM`. Which one was used is on every event.
-- **AP covariance needs a verified producer build.** An AP set keeps its miss distance, and the collision
-  probability from its covariance is refused until its producer build is verified. The verified builds are the
-  request's `CONTROLS.VERIFIED_COVARIANCE_PRODUCERS` (`controls.verifiedCovarianceProducers`, each a
-  `CQRVerifiedCovarianceProducer`: `PRODUCER`, `PRODUCER_SHA256`, `VERIFICATION_REFERENCE`); nothing is compiled in.
-  A build matches on `PRODUCER_SHA256` where both the list entry and the set's `PROVENANCE.PRODUCER_SHA256` state
-  one, else on `PVN.PRODUCER` verbatim. An AP set whose flight carries covariance and whose build is not listed (an
-  empty or absent list lists none) is screened without that covariance: its `COVARIANCE_BASIS` is `NONE`,
-  its events carry the covariance-free maximum and no probability from covariance, and every event with it states
-  `PROBABILITY_REFUSAL` `pc-covariance-unverified:AP <PVN.PRODUCER>` (`(no producer)` when it states none); the set
-  is named in the result's `covarianceRefused`. Miss distance and TCA are unchanged. SGP4XP sets, SGP4 sets and
-  every other source are unaffected. The module itself never sees a source's producer: the flow applies the list.
+- **Covariance needs a verified producer build.** The gate is the covariance's producer, not the set's theory.
+  A set keeps its miss distance, and the collision probability from its covariance is refused until the build that
+  produced it is verified. The verified builds are the request's `CONTROLS.VERIFIED_COVARIANCE_PRODUCERS`
+  (`controls.verifiedCovarianceProducers`, each a `CQRVerifiedCovarianceProducer`: `PRODUCER`, `PRODUCER_SHA256`,
+  `VERIFICATION_REFERENCE`); nothing is compiled in. A build matches on `PRODUCER_SHA256` where both the list entry
+  and the set's `PROVENANCE.PRODUCER_SHA256` state one, else on `PVN.PRODUCER` verbatim. A set, AP or SGP4XP, whose
+  flight carries covariance and that states a `PVN.PRODUCER` not listed (an empty or absent list lists none) is
+  screened without that covariance: its `COVARIANCE_BASIS` is `NONE`, its events carry the covariance-free maximum
+  and no probability from covariance, and every event with it states `PROBABILITY_REFUSAL`
+  `pc-covariance-unverified:<PVN.PRODUCER>` (an SGP4XP or AP set fitted by sdn-ap names
+  `com.spacedatanetwork.sdn-ap-propagator <version>`); the set is named in the result's `covarianceRefused`. Miss
+  distance and TCA are unchanged. Covariance from a set that states no producer (an operator's file) is its
+  operator's and screens as supplied; sets without covariance, SGP4 sets and every other source are unaffected. The
+  module itself never sees a source's producer: the flow applies the list.
 - **Parity.** `node tests/ocm-sets-screening.e2e.mjs`: the registered sets of `tests/fixtures/ocm-sets/`
   (`tests/record-ocm-sets.mjs`: sdn-ap `fit` on its own 0.4.0 fixture inputs, AP and SGP4XP, and two sets turned
   across the first one's plane and refitted by sdn-ap from the other theory's flight, so each carries a fit
