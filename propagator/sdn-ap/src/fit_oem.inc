@@ -610,6 +610,9 @@ static int fit_blocks() {
           explicit FallbackScope(bool on) : prev(fit::jacobian_fallback()) { fit::jacobian_fallback() = on; }
           ~FallbackScope() { fit::jacobian_fallback() = prev; }
         } fallback_scope{eccentric || placement != 0 || span_minutes < 1440.0 || fitoem::jacobian_always() != 0};
+        // SPEC 16.11: every set the solve initializes (the nominal, each trial step, each perturbed copy) takes exact grids,
+        // so the finite-difference partials see the grid's change with the elements; to the end of the pass, nothing after it
+        xpt::tess::ExactGridScope exact;
         fit::Options opt{};
         opt.max_iterations = 40;
         fit::Result res{};
