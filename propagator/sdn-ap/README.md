@@ -3,7 +3,8 @@
 Version 0.6.3 (dist aa3ed22a).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
-theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
+theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
+atmosphere and gravity terms; SPEC 15, 16).
 An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
 `ElementRow` of theory 16 are refused.
 

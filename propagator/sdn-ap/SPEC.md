@@ -2027,10 +2027,11 @@ disagrees with the call's atmosphere (`atmosphere-mismatch`).
 
 ---
 
-## 16. AP: SGP4XP with parts replaced (side B's option, outside the SGP4-XP specification)
+## 16. AP: an advanced propagator that builds on the entire history of astrodynamics (side B's option, outside the SGP4-XP specification)
 
-AP is SGP4XP with parts of the theory replaced where a part is what limits the answer: the drag atmosphere (section 15) and
-the gravity field below. Its sets are SGP4XP sets (BTERM, AGOM) that carry a mark, and it flies on the theory's own grid.
+AP is an advanced propagator that builds on the entire history of astrodynamics: $PCF FORCES selects its drag atmosphere
+(section 15) and the gravity field below. Its sets are SGP4XP sets (BTERM, AGOM) that carry a mark, and it flies on the theory's
+own grid.
 
 **16.1 Selection.** `fit`, `propagate`, `load_epochs` and `propagate_epochs` read FORCES:
 

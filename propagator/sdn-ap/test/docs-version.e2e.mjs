@@ -2,7 +2,9 @@
 // E2E (task modules-sdn-ap-docs-stale-headers-and-q-range-20261106): one version names one binary. The version headers of
 // SPEC.md and README.md (the line `Version X.Y.Z (dist hhhhhhhh).` in the first five lines) name the version plugin-manifest.json
 // and package.json carry and the first eight hex digits of the SHA-256 of the committed dist/isomorphic/module.wasm; no other
-// `Version ...` line appears in either document. Fails on any header that names another version or another binary.
+// `Version ...` line appears in either document. Fails on any header that names another version or another binary, and on
+// the phrases "parts replaced" and "parts swapped" (AP is an advanced propagator that builds on the entire history of
+// astrodynamics) in either document.
 //   node test/docs-version.e2e.mjs
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -32,6 +34,9 @@ for (const doc of ["SPEC.md", "README.md"]) {
   if (!m) { failures.push(`${doc}: header '${head}' is not 'Version X.Y.Z (dist hhhhhhhh).'`); continue; }
   check(m[1] === manifest, `${doc}: header names ${m[1]}, the manifest ${manifest}`);
   check(m[2] === dist, `${doc}: header names dist ${m[2]}, the committed module.wasm ${dist}`);
+  for (const [i, l] of lines.entries()) {
+    if (/parts (replaced|swapped)/i.test(l)) failures.push(`${doc}:${i + 1}: forbidden phrase '${l.match(/parts (replaced|swapped)/i)[0]}'`);
+  }
 }
 
 if (failures.length) {
