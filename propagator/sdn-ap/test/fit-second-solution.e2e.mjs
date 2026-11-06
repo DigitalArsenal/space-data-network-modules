@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// E2E (task modules-sdn-ap-fit-second-solution-robustness-20261106; experiments FIT-SECOND-SOLUTION.md): SPEC 12.9, the
-// second start.
+// E2E (task modules-sdn-ap-fit-second-solution-robustness-20261106; experiments FIT-SECOND-SOLUTION.md, Amendment 2): the
+// fit's second solution, a regression guard on the tesseral grid (SPEC 16.11). With each perturbed set its own grid, the fit's
+// finite-difference partials jump and THEMIS A 2013-02-15 stalls at 249.75 m with BTERM 4.506; the grid's sharing within a
+// set's perturbed copies converges to 104.78 m with BTERM 0.012027 (0.6.2: 109.52 m, 0.012046).
 // - THEMIS A, cutoff 2013-02-15 (SDNAP_THEMIS_ARC: the 72 h fit $OEM the experiment's run.mjs --save writes, NAIF's public
 //   kernel in GCRF at 300 s), AP vacuum (FORCES caps 31 and 20, Jacchia 1970 on the theory's flux model): FIT_RMS_KM at
 //   most 1.1 times the 0.6.2 base's 109.5 m (0.1205 km) and BTERM within 2 times the base's 0.0120 (0.0060 to 0.0240).
-//   The tesseral grid without the second start reaches 249.8 m with BTERM 4.506 there (DIAGNOSIS-THEMIS-A-20130215.md).
-// - Where the rule does not fire, the fit emits the 0.6.2 dist's bytes (git, modules c82160de7, its SHA-256 checked),
+// - Below e 0.3 the fit emits the 0.6.2 dist's bytes (git, modules c82160de7, its SHA-256 checked),
 //   PRODUCER's version read as 0.6.2: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of propagator/ffm's 550 km
 //   trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP, and a GEO arc (an AP set, caps 31 and 20,
 //   flown by this module 72 h at 300 s in GCRF, refitted under the same forces).
@@ -65,7 +66,7 @@ if (arcFile && fs.existsSync(arcFile)) {
     `0.6.2: ${(b.rms * 1000).toFixed(1)} m, BTERM ${b.b.toPrecision(4)}`);
 }
 
-// --- no harm: the LEO fixture and a GEO arc, byte-identical to 0.6.2 where the rule does not fire
+// --- no harm: the LEO fixture and a GEO arc, byte-identical to 0.6.2
 const { arc: leo, rows } = inputs();
 const AP_FORCES = { ...MSIS_FORCES, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20,
   WEATHER_SOURCE: pcfWeatherSource.RECORDS };

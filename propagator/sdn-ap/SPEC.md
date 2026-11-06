@@ -1928,18 +1928,6 @@ finite-difference Jacobians each propagating the arc, which costs about 0.1 s on
 table rows are not measured.
 `test/high-e-fit-arc.e2e.mjs` measures every row but the pinned one.
 
-**12.9 The second start.** A fit's stages grow the arc from two revolutions, BTERM free after the first; a
-stage can carry BTERM to a second minimum the full arc keeps, at a residual well above the attainable one. After the
-policy above (span, fall-back), `fit` takes the solution's arc and options and starts twice more with BTERM at the
-start the policy used (the drag prior's median, or a GAUSSIAN_SIGNED prior's mean): (1) the solution's elements, one
-fit on the arc; (2) the policy's pass on the same span with BTERM held at that start through every stage (prior sigma
-1e-6), then BTERM freed for one fit on the solution's arc. The solution of least cost (the residuals' sum of squares
-and the priors' terms, the fit's own objective) replaces the policy's when that cost is below 0.96 times the policy's
-(0.98 on the fit RMS): a second minimum, not a converged solution's last digits; ITERATIONS then counts the extra
-starts. Not after the
-two-stage pass (15.5: its BTERM is Stage 1's) or where the options hold BTERM (sigma 1e-6 or less). Where no start
-clears that bound the set is the policy's, byte for byte.
-
 ---
 
 ## 13. (removed)
