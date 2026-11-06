@@ -376,6 +376,10 @@ static int fit_blocks() {
     uint32_t block_index = 0;
     for (const ephemerisDataBlock* blk : *blocks) {
       ++block_index;
+      // SPEC 16.11: every set the block's fit initializes (the solve's nominal, trial steps and perturbed copies, the fit's
+      // covariance partials, its held-out and residual-record evaluations) takes exact grids, so the fit's own evaluations see
+      // the grid at their own elements; flights and covariance propagation outside the fit share
+      xpt::tess::ExactGridScope exact;
       // the block's center: Earth (the theories here are geocentric; a Moon-centered or heliocentric block is
       // refused by name, never read as geocentric)
       if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0 && !oem::same_text(blk->CENTER_NAME()->c_str(), "EARTH")) {
@@ -610,9 +614,6 @@ static int fit_blocks() {
           explicit FallbackScope(bool on) : prev(fit::jacobian_fallback()) { fit::jacobian_fallback() = on; }
           ~FallbackScope() { fit::jacobian_fallback() = prev; }
         } fallback_scope{eccentric || placement != 0 || span_minutes < 1440.0 || fitoem::jacobian_always() != 0};
-        // SPEC 16.11: every set the solve initializes (the nominal, each trial step, each perturbed copy) takes exact grids,
-        // so the finite-difference partials see the grid's change with the elements; to the end of the pass, nothing after it
-        xpt::tess::ExactGridScope exact;
         fit::Options opt{};
         opt.max_iterations = 40;
         fit::Result res{};
