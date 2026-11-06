@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.propagator.events",
   "name": "Event Locator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Locates events on a supplied trajectory as roots of a continuous event function: eclipse umbra, penumbra and antumbra, station contact with light-time correction, body intrusion into a conic field of view, apsides, node crossings and a stopping condition on any named catalog parameter. One bracketing scan and one Brent refinement serve every class, so the located epoch does not depend on the scan step. The trajectory arrives as a port; this module carries no propagator. Locates composed access-constraint windows from SDS ACW requests through the shared C++ access evaluator.",
   "pluginFamily": "propagator",
   "capabilities": [],

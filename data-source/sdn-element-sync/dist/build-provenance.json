@@ -1,9 +1,15 @@
 {
   "sdk": "0.9.12",
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "threadModel": "wasi-sequential",
   "language": "c++",
   "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
-  "sha256": "37f0ea34ccc2bf7b90de6bdffa1f3d47b954eef7388f0b374ff6e5ca42712897",
-  "bytes": 175528
+  "sha256": "cdd21d3d6ad17852b328198c79fe2bac40c507c56ad5d7b61dccc1682be64d42",
+  "bytes": 175632,
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "983ecfa34709ce770ff9ab7e8c73111d6195935341426bbeecf09455a1cdf921"
 }
