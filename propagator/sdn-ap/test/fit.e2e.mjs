@@ -15,20 +15,29 @@
 // - assertNoUserDefined on both records; a fit $PCF with ENABLE_DRAG is configuration-refused FORCES.ENABLE_DRAG; one
 //   without ATMOSPHERE_MODEL is configuration-refused FORCES.ATMOSPHERE_MODEL.
 // - No addParameter, USER_DEFINED_PARAMETERS or $OBD writer remains in src/fit_oem.inc.
+// - 0.6.2 is 0.6.1 rebuilt on SDS 1.279.0: against the 0.6.1 dist (git, modules 34b1b2c58, its SHA-256 checked), each fit's
+//   $OCM and $ODR are byte-identical once PRODUCER's version is read as 0.6.1; each set's sdnap_covariance_at at every
+//   fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in EME2000 and TEME every 6 h for
+//   7 days are byte-identical (the $OEM with PRODUCER's version read likewise).
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OCM } from "spacedatastandards.org/lib/js/OCM/OCM.js";
 import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
+import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { prwDynamicParameter } from "spacedatastandards.org/lib/js/PRW/prwDynamicParameter.js";
 import { assertNoUserDefined } from "../../../common/tests/no-user-defined.mjs";
 import { ensureBuilt, wasmPath, packageRoot } from "./lib/module.mjs";
 import { configuration, MSIS_FORCES, XP_FORCES } from "./lib/pcf.mjs";
-import { inputs, spwRows } from "./lib/fixture-inputs.mjs";
+import { inputs, spwRows, GRID } from "./lib/fixture-inputs.mjs";
 
 ensureBuilt();
 const failures = [];
@@ -87,7 +96,7 @@ for (const c of cases) {
   check(ocm.METADATA?.NORAD_CAT_ID === 90400 && ocm.METADATA?.OBJECT_DESIGNATOR === "90400" && ocm.METADATA?.INTERNATIONAL_DESIGNATOR === "2026-904A",
     `${c.name}: METADATA ${ocm.METADATA?.NORAD_CAT_ID} ${ocm.METADATA?.OBJECT_DESIGNATOR} ${ocm.METADATA?.INTERNATIONAL_DESIGNATOR}`);
   check(ocm.ORB_AVERAGING === "BROUWER" && (ocm.STATE_DATA ?? []).length === 0, `${c.name}: ORB_AVERAGING ${ocm.ORB_AVERAGING}, ${ocm.STATE_DATA?.length} state values`);
-  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.1"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
+  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.2"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
 }
 const ap = records.AP, xp = records.XP;
 if (ap && xp) {
@@ -104,6 +113,60 @@ if (ap && xp) {
   console.log(`AP: n ${ap.MEAN_ELEMENTS.MEAN_MOTION}, BTERM ${ap.MEAN_ELEMENTS.BTERM}, fit RMS ${ap.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM} km, ${ap.PERTURBATIONS.SPACE_WEATHER.length} rows; ` +
     `XP: n ${xp.MEAN_ELEMENTS.MEAN_MOTION}, BTERM ${xp.MEAN_ELEMENTS.BTERM}, fit RMS ${xp.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM} km`);
 }
+
+// 0.6.2 against 0.6.1: the same bytes, PRODUCER's version aside
+const BEFORE = { version: "0.6.1", commit: "34b1b2c588360dc95a3b82829010081ffe0828db", sha256: "05dd4a6600fb4c65d5841e1f49dc26df64fca7c14f1084644cafcfa875fe0a87" };
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const beforeBytes = execFileSync("git", ["-C", packageRoot, "show", `${BEFORE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
+check(sha256(beforeBytes) === BEFORE.sha256, `sdn-ap ${BEFORE.version} at ${BEFORE.commit.slice(0, 9)} is ${sha256(beforeBytes)}`);
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-fit-e2e-"));
+const beforePath = path.join(scratch, `module-${BEFORE.version}.wasm`);
+fs.writeFileSync(beforePath, beforeBytes);
+const before = await createStandaloneHarness("browser", beforePath, { surface: "direct" });
+const now = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8")).version;
+const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
+const asBefore = (bytes) => { const b = Buffer.from(bytes); for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BEFORE.version).copy(b, at); return b; };
+const minutes = [];
+for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) minutes.push(t);
+const covarianceAt = (harness, ocmBytes) => {
+  const x = harness.instance.exports, mem = () => harness.memory.buffer;
+  const po = x.sdnap_alloc(ocmBytes.length), pm = x.sdnap_alloc(8 * minutes.length), pout = x.sdnap_alloc(8 * 42 * minutes.length);
+  new Uint8Array(mem(), po, ocmBytes.length).set(ocmBytes);
+  new Float64Array(mem(), pm, minutes.length).set(minutes);
+  const status = x.sdnap_covariance_at(po, ocmBytes.length, pm, minutes.length, pout);
+  const out = Buffer.from(mem().slice(pout, pout + 8 * 42 * minutes.length));
+  x.sdnap_free(po); x.sdnap_free(pm); x.sdnap_free(pout);
+  return { status, out };
+};
+const EPOCHS = Array.from({ length: 29 }, (_, k) => new Date(Date.parse("2026-10-02T00:00:00Z") + k * 6 * 3600e3).toISOString().replace("Z", ""));
+const flight = (harness, ocmBytes, frame) => harness.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: ocmBytes },
+  configuration({ output: { FRAME: frame, EPOCHS } })] });
+let identical = 0, flown = 0;
+for (const c of cases) {
+  const [r2, r1] = [await fit(c.config, c.spw), await before.invoke({ methodId: "fit", inputs: [
+    { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, c.config, ...(c.spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: c.spw }] : [])] })];
+  if (r2.statusCode !== 0 || r1.statusCode !== 0) { check(false, `${c.name}: fit on ${now} ${r2.errorCode}, on ${BEFORE.version} ${r1.errorCode}`); continue; }
+  check(r2.outputs.length === r1.outputs.length, `${c.name}: ${r2.outputs.length} outputs on ${now}, ${r1.outputs.length} on ${BEFORE.version}`);
+  r2.outputs.forEach((o, k) => {
+    const same = asBefore(new Uint8Array(o.payload)).equals(Buffer.from(new Uint8Array(r1.outputs[k].payload)));
+    check(same, `${c.name} fit ${o.portId}: ${now} differs from ${BEFORE.version}`);
+    if (same) identical += 1;
+  });
+  const set = new Uint8Array(r1.outputs[0].payload);
+  const [a2, a1] = [covarianceAt(h, set), covarianceAt(before, set)];
+  check(a2.status === 0 && a1.status === 0 && a2.out.equals(a1.out), `${c.name} sdnap_covariance_at: ${now} (${a2.status}) differs from ${BEFORE.version} (${a1.status})`);
+  if (a2.status === 0 && a2.out.equals(a1.out)) identical += 1;
+  for (const frame of [pcfOutputFrame.EME2000, pcfOutputFrame.TEME]) {
+    const [p2, p1] = [await flight(h, set, frame), await flight(before, set, frame)];
+    const same = p2.statusCode === 0 && p1.statusCode === 0 && asBefore(new Uint8Array(p2.outputs[0].payload)).equals(Buffer.from(new Uint8Array(p1.outputs[0].payload)));
+    check(same, `${c.name} propagate (${pcfOutputFrame[frame]}): ${now} ${p2.statusCode ? p2.errorCode : "ok"} differs from ${BEFORE.version} ${p1.statusCode ? p1.errorCode : "ok"}`);
+    if (same) { identical += 1; flown += EPOCHS.length; }
+  }
+}
+fs.rmSync(scratch, { recursive: true, force: true });
+console.log(`${now} against ${BEFORE.version} (${BEFORE.sha256.slice(0, 8)}): ${identical} of 10 products byte-identical (fit $OCM and $ODR, ` +
+  `sdnap_covariance_at at ${minutes.length} times, propagate $OEM at ${flown} epochs); PRODUCER's version aside`);
+check(identical === 10, `${identical} of 10 products identical to ${BEFORE.version}`);
 
 // refusals by name
 const refused = (label, r, code, field = null) =>
