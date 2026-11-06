@@ -200,6 +200,57 @@ they are stated apart, and the exchanged figure is also given with the keys
 amortized over the 8 pairs of the window (keys / 8 per pair-day), beside the
 registered figure.
 
+### 2e. Defect found and fixed in the noise mechanism (amendment 2026-11-06)
+
+Section 2 registers eta as fixed per (requester, object, step) by a seeded
+generator, the defense against a requester averaging the noise away by asking
+twice. The first driver seeded eta's generator from the shared mask stream at
+the start of each noise pass, so eta depended on the pass's position in that
+stream, not on (requester, object, step): screening an unrelated track in
+between changed every later eta, and adding the real tracks to the run moved
+the breadth geometries beyond R' + s from 6 to 9. That broke the registered
+rule. Fix: eta = Laplace(PRF_K(requester, object, step)) with PRF_K =
+splitmix64 over the responder's key, the requester id, the object id and the
+step index, truncated as registered; the mask rho stays a separate draw. New
+known-answer line 14: the same pair screened twice, and again after an
+unrelated track was screened in between, gives an identical eta vector (hash
+over every step). The noise pass was re-flown; the results keep both sets of
+figures, the stream-eta set labeled as the defective run of the registered
+mechanism and the keyed-eta set as the corrected one.
+
+### 2f. Keyed generators for eta and rho (amendment 2026-11-06, SDN-AP ruling, before the re-fly)
+
+splitmix64 is an invertible mixer with no secret-key security, not a PRF, and
+the masks rho had the same weakness: the first drivers drew rho from
+std::mt19937_64 (also the physics-check masks). The additive mask is the only
+thing hiding the distance from A; A decrypts value + rho with value below
+2^58 and rho below 2^119, so A reads about 60 high bits of each rho's second
+limb and the top bits of the first, and a Mersenne Twister is GF(2)-linear
+with 19,937 bits of state: one block gives A far more visible bits than that,
+so A could plausibly solve the state, predict every rho and subtract it.
+Acceptance 11's "0 of 8192" measured only the naive slot reading. Ruling:
+eta and rho come from a cryptographic keyed generator already in the
+dependency tree (SEAL's keyed BLAKE2b), with separate domain-separated keys:
+eta = Laplace(PRF_K1(domain 1, requester, object, step)); rho =
+PRF_K2(domain 2, requester, object, block, slot) for S2 and S1, domains 3 and
+4 for the two physics-check responses; the keys in the driver are TEST keys
+fixed for repeatability, and production key handling is not built: that is a
+line in the S4 gate list. The trajectory and geometry generators stay
+mt19937_64 (test inputs, not secrets). Acceptance 11 amended: the Mersenne
+state-recovery attack is run against the OLD masks and its result reported
+either way (recovered: the reason for the change; not recovered within the
+box: "attempted, not recovered", with the attempt described); the NEW masks
+get the same attempt, which fails by construction. All figures stay labeled:
+stream eta (mt19937_64 masks), keyed eta with splitmix64 (an intermediate run,
+not landed on), keyed BLAKE2b eta and masks (the landed run). Mask bytes
+change between runs; alert decisions must not; sign and value mismatches stay
+0.
+
+Gate list beside S4 (the feature is offered on no host or console until each
+is closed): S4 itself; a Sentinel-1 class real track passing the physics check;
+the noise channel measured or flooded (2d); production key handling for the
+keyed generators (2f).
+
 ## 3. Known-answer plan
 
 Pairs (the bench's set, seed 1): A on a circular orbit at r = 7078.137 km,
@@ -255,6 +306,8 @@ Acceptance (each line measured by `tests/privateScreeningKnownAnswer.e2e.mjs`):
 13. Breadth (2c): 200 geometries, misses 0, false-alert rate at the
     truncated-noise threshold with its Wilson interval, extra alerts beyond
     R' + s = 0.
+14. Keyed noise (2e): identical eta at every step for the same pair screened
+    twice and after an unrelated track.
 
 The E2E prints PASS only when every line holds; the known-answer table is
 written to `results/known-answer.json` by the E2E from the driver's output.
@@ -317,6 +370,10 @@ R' + s = 10,473 m (inside the derived bound). Line 13's: 12 breadth misses
 below R' as registered, and 9 breadth geometries with an extra alert beyond
 R' + s.
 
+The noise-pass figures below are from the corrected keyed-eta run (2e); the
+defective stream-eta run's figures are kept in a separate paragraph after the
+breadth results.
+
 Known answers (`results/known-answer.json`, verdict PASS in the corrected
 form):
 
@@ -342,15 +399,28 @@ Physics check (86,280 steps with both neighbours per track): A and the eight B
 tracks pass every step; the constant-velocity segment fails 714 steps from
 step 3546; the 1.2 mean-motion orbit fails all 86,280; the teleport fails 120
 steps from step 43,140; the 1.01-scaled track fails all 86,280. Exact against
-the plaintext big integers at every step. Real precise orbits, with J2 and
-drag in them, from the archive (Earth-fixed SP3 rotated about z at the
-sidereal rate into a frame fixed to the stars): Swarm A's precise science
-orbit of 2025-11-24 (10 s samples, stride 60 s) passes 8628 of 8628 checked
-steps; GPS G01 from the ESA final orbit of 2025-10-17 (300 s samples, stride
-300 s, coordinate bound 25 bits) passes 287 of 287. Sentinel-1: not measured
-(no Sentinel-1 precise orbit in the archive); per 2b, a real track of that
-class passing the check stays a gate beside S4 before the feature is offered
-on any host or the console.
+the plaintext big integers at every step. Real precise orbits from the
+archive, with J2 and drag in them, each stated as flown:
+
+- Swarm A, precise science orbit of 2025-11-24 (inside the permitted dates;
+  10 s samples): passes at the registered D = 60 s, 8628 of 8628 checked
+  steps. That is one object on one day, exactly that.
+- GPS G01, ESA final orbit of 2025-10-17 (300 s samples; coordinate bound 25
+  bits): passes at D = 300 s (the smallest whole-sample stride of a 300 s
+  file), 287 of 287 checked steps; the registered D = 60 s is not measured
+  for it. Band at D = 300 s: the truncation n^2 D^2 / 12 is 1.6e-4 and J2
+  1.3e-4 at 26,560 km, about 4e-4 in E against the 7.8e-3 band.
+- Frame: an Earth-fixed SP3 rotated about z at the sidereal rate
+  (7.2921150e-5 rad/s from the file's first epoch) approximates the inertial
+  frame without precession, nutation or polar motion. A fixed rotation offset
+  is immaterial to the identities; the precession rate (7.7e-12 rad/s, 1e-7
+  of omega) enters the second difference as about 2 omega_err v = 1.2e-7
+  m/s^2, 1.4e-8 of the central acceleration; nutation's rate is smaller
+  still; polar motion (0.3 arcsec, about 10 m at the surface) is a fixed
+  rotation at this time scale.
+- Sentinel-1: not measured (no Sentinel-1 precise orbit in the archive); per
+  2b, a real track of that class passing the check stays a gate beside S4
+  before the feature is offered on any host or the console.
 
 Tube check: A inside its 1 km tube at 86,400 of 86,400 steps; the
 constant-velocity segment outside at 583 steps, first at step 3617.
