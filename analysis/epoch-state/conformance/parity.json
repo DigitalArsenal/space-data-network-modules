@@ -2,19 +2,19 @@
   "ok": true,
   "fixture": "epoch-state: derive, omm_from_mpe, derive_omm, answer_propagation_requests ($PRW window request)",
   "wasmPath": "dist/isomorphic/module.wasm",
-  "artifactSha256": "27a0b48164cf31a8ac483ff7eb6b95e3f02e214f376f6b2dc94144c137456998",
-  "moduleSha256": "27a0b48164cf31a8ac483ff7eb6b95e3f02e214f376f6b2dc94144c137456998",
+  "artifactSha256": "aed9355a79c35cd3fdaff8cd724cff67d60e8d8d1d68d2a1f8f4a2bfc40ce112",
+  "moduleSha256": "f71fc5e9863f42517ac8b656c4a4b7b0bdd44c8a4d71a36e748c09e51e8ded16",
   "pin": "0.16.4",
   "lanes": [
     {
       "lane": "browser",
       "runs": 5,
-      "durationMs": 806
+      "durationMs": 739
     },
     {
       "lane": "wasmedge",
       "runs": 5,
-      "durationMs": 67199
+      "durationMs": 1598
     }
   ],
   "cases": [

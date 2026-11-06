@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T13:02:20.510Z",
+  "generatedAt": "2026-11-06T13:37:15.396Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -323,13 +323,14 @@
         "c",
         "c++"
       ],
-      "cxxSourceFileCount": 58,
+      "cxxSourceFileCount": 59,
       "cSourceFileCount": 1,
-      "testFileCount": 218,
+      "testFileCount": 220,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "bench/private-screening/private_screening_bench.cpp",
+        "private-screening/protocol.cpp",
         "scripts/generate-ephemeris-fixtures.cpp",
         "src/cpp/src/cdm_builder.cpp",
         "src/cpp/src/cdm_output.cpp",
@@ -589,6 +590,8 @@
         "tests/pcElongatedCovariance.e2e.mjs",
         "tests/pivInvokeContract.test.mjs",
         "tests/possibilityScreening.test.mjs",
+        "tests/privateScreeningCost.e2e.mjs",
+        "tests/privateScreeningKnownAnswer.e2e.mjs",
         "tests/radialGateBound.e2e.mjs",
         "tests/realCatalogExclusion.test.mjs",
         "tests/record-ocm-sets.mjs",
@@ -651,7 +654,7 @@
       "pluginId": "com.digitalarsenal.analysis.density-calibration",
       "name": "Thermospheric density calibration",
       "pluginFamily": "analysis",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "methodIds": [
         "calibrate",
         "calibrate_decay",
@@ -731,7 +734,7 @@
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
       "name": "SDN Epoch State",
       "pluginFamily": "analysis",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "methodIds": [
         "answer_propagation_requests",
         "derive",
@@ -1896,7 +1899,7 @@
       "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
       "name": "SDN VCM Adapter",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "methodIds": [
         "ocm",
         "read",
@@ -6328,7 +6331,7 @@
       "pluginId": "licensing",
       "name": "Licensing",
       "pluginFamily": "infrastructure",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "client_fetch_and_decrypt",
         "client_request_grant",
