@@ -16,7 +16,9 @@
 //   without ATMOSPHERE_MODEL is configuration-refused FORCES.ATMOSPHERE_MODEL.
 // - No addParameter, USER_DEFINED_PARAMETERS or $OBD writer remains in src/fit_oem.inc.
 // - 0.6.2 is 0.6.1 rebuilt on SDS 1.279.0: against the 0.6.1 dist (git, modules 34b1b2c58, its SHA-256 checked), each fit's
-//   $OCM and $ODR are byte-identical once PRODUCER's version is read as 0.6.1; each set's sdnap_covariance_at at every
+//   $OCM is byte-identical once PRODUCER's version is read as 0.6.1; each fit's $ODR names its own $OCM (RUN_ID and
+//   OCM_CONTENT_ID are the CID of that version's $OCM bytes, so they differ by PRODUCER alone) and, those two fields
+//   excluded, every decoded value of the two $ODR is identical (Object.is); each set's sdnap_covariance_at at every
 //   fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in EME2000 and TEME every 6 h for
 //   7 days are byte-identical (the $OEM with PRODUCER's version read likewise).
 // JS only moves bytes and compares numbers the module produced.
@@ -31,6 +33,7 @@ import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OCM } from "spacedatastandards.org/lib/js/OCM/OCM.js";
+import { ODR } from "spacedatastandards.org/lib/js/ODR/ODR.js";
 import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { prwDynamicParameter } from "spacedatastandards.org/lib/js/PRW/prwDynamicParameter.js";
@@ -126,6 +129,38 @@ const before = await createStandaloneHarness("browser", beforePath, { surface: "
 const now = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8")).version;
 const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
 const asBefore = (bytes) => { const b = Buffer.from(bytes); for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BEFORE.version).copy(b, at); return b; };
+// CIDv1, raw codec, sha2-256, base32 lower case with the 'b' prefix
+const cidOf = (bytes) => {
+  const raw = Buffer.concat([Buffer.from([0x01, 0x55, 0x12, 0x20]), createHash("sha256").update(bytes).digest()]);
+  const alphabet = "abcdefghijklmnopqrstuvwxyz234567";
+  let bits = 0, value = 0, out = "b";
+  for (const byte of raw) {
+    value = (value << 8) | byte; bits += 8;
+    while (bits >= 5) { out += alphabet[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += alphabet[(value << (5 - bits)) & 31];
+  return out;
+};
+// $ODR fields that name the producing version's own $OCM (its CID), excluded from the value comparison
+const ODR_NAMES_OCM = ["RUN_ID", "OCM_CONTENT_ID"];
+const odrOf = (bytes) => ODR.getRootAsODR(new flatbuffers.ByteBuffer(bytes)).unpack();
+// every leaf value of a against b (Object.is for numbers); returns [compared, first difference or null]
+const sameValues = (a, b, at = "ODR") => {
+  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) { a = Array.from(a ?? []); b = Array.from(b ?? []); }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return [0, `${at}.length ${a?.length} | ${b?.length}`];
+    let n = 0;
+    for (let i = 0; i < a.length; i += 1) { const [m, d] = sameValues(a[i], b[i], `${at}[${i}]`); n += m; if (d) return [n, d]; }
+    return [n, null];
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    let n = 0;
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { const [m, d] = sameValues(a[k], b[k], `${at}.${k}`); n += m; if (d) return [n, d]; }
+    return [n, null];
+  }
+  return Object.is(a, b) ? [1, null] : [0, `${at} ${a} | ${b}`];
+};
+let odrValues = 0;
 const minutes = [];
 for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) minutes.push(t);
 const covarianceAt = (harness, ocmBytes) => {
@@ -147,11 +182,20 @@ for (const c of cases) {
     { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, c.config, ...(c.spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: c.spw }] : [])] })];
   if (r2.statusCode !== 0 || r1.statusCode !== 0) { check(false, `${c.name}: fit on ${now} ${r2.errorCode}, on ${BEFORE.version} ${r1.errorCode}`); continue; }
   check(r2.outputs.length === r1.outputs.length, `${c.name}: ${r2.outputs.length} outputs on ${now}, ${r1.outputs.length} on ${BEFORE.version}`);
-  r2.outputs.forEach((o, k) => {
-    const same = asBefore(new Uint8Array(o.payload)).equals(Buffer.from(new Uint8Array(r1.outputs[k].payload)));
-    check(same, `${c.name} fit ${o.portId}: ${now} differs from ${BEFORE.version}`);
-    if (same) identical += 1;
-  });
+  const [ocm2, ocm1] = [new Uint8Array(r2.outputs[0].payload), new Uint8Array(r1.outputs[0].payload)];
+  const ocmSame = asBefore(ocm2).equals(Buffer.from(ocm1));
+  check(ocmSame, `${c.name} fit ${r2.outputs[0].portId}: ${now} differs from ${BEFORE.version}`);
+  if (ocmSame) identical += 1;
+  const [d2, d1] = [odrOf(new Uint8Array(r2.outputs[1].payload)), odrOf(new Uint8Array(r1.outputs[1].payload))];
+  const named = [[now, d2, ocm2], [BEFORE.version, d1, ocm1]].every(([v, d, o]) => ODR_NAMES_OCM.every((f) => {
+    const ok = d[f] === cidOf(o);
+    check(ok, `${c.name} $ODR ${f} on ${v}: ${d[f]}, its $OCM is ${cidOf(o)}`);
+    return ok;
+  }));
+  for (const f of ODR_NAMES_OCM) { delete d2[f]; delete d1[f]; }
+  const [compared, first] = sameValues(d2, d1);
+  check(first === null, `${c.name} fit ${r2.outputs[1].portId}: ${now} differs from ${BEFORE.version} at ${first}`);
+  if (named && first === null) { identical += 1; odrValues += compared; }
   const set = new Uint8Array(r1.outputs[0].payload);
   const [a2, a1] = [covarianceAt(h, set), covarianceAt(before, set)];
   check(a2.status === 0 && a1.status === 0 && a2.out.equals(a1.out), `${c.name} sdnap_covariance_at: ${now} (${a2.status}) differs from ${BEFORE.version} (${a1.status})`);
@@ -164,8 +208,9 @@ for (const c of cases) {
   }
 }
 fs.rmSync(scratch, { recursive: true, force: true });
-console.log(`${now} against ${BEFORE.version} (${BEFORE.sha256.slice(0, 8)}): ${identical} of 10 products byte-identical (fit $OCM and $ODR, ` +
-  `sdnap_covariance_at at ${minutes.length} times, propagate $OEM at ${flown} epochs); PRODUCER's version aside`);
+console.log(`${now} against ${BEFORE.version} (${BEFORE.sha256.slice(0, 8)}): ${identical} of 10 products identical (fit $OCM, ` +
+  `sdnap_covariance_at at ${minutes.length} times, propagate $OEM at ${flown} epochs byte-identical, PRODUCER's version aside; ` +
+  `fit $ODR ${odrValues} decoded values identical, ${ODR_NAMES_OCM.join(" and ")} excluded: each is the CID of its own version's $OCM)`);
 check(identical === 10, `${identical} of 10 products identical to ${BEFORE.version}`);
 
 // refusals by name
