@@ -223,6 +223,43 @@ Verdict (replaces the verdict rule of section 6): no usable leak only if E1,
 E2, E3, E3-NN and E4 all stay below their gates; a gate firing at the
 coefficient level triggers the flooding arm of section 5.
 
+### 7b. Corrections and a repeated-query test (2026-11-06 14:35Z, before the rows of 7)
+
+Corrections found on a 6-second smoke run of the driver (64 candidates, 5
+simulations each; its outputs were read only for sizes and for the artifact
+named here, not for any gate): (i) SEAL scales a fresh plaintext by round(q m
+/ t), not by floor(q/t) m, so the coefficient-domain noise polynomial that is
+registered as "w" is the invariant noise d = [t (c0 + c1 s)]_q itself (about
+2^140 on a response, 2^66 on a fresh ciphertext) and the mechanism reads
+d_resp ~ 2 sum_k (m_ak - m_bk)(dA_k - dB_k) + t (I terms) + rounding, where I
+is the q-wraparound polynomial of <ct, s>; E4 uses d with eA taken as d of A's
+fresh ciphertexts (exact). The coefficient-domain vectors of E3, E3-NN and E4
+are d. (ii) The slot image of d mod t is the decrypted message (d = -(q mod
+t) m mod t), a trivially perfect replicate correlation that reads the masked
+output, not noise; the slot image is therefore taken of w = (d + (q mod t) m)
+/ t, exact in two RNS limbs, which carries the noise. (iii) Size estimate to
+be tested: the term t I1 dB + t I2 dA (I of size 2^6 from the wraparound of a
+ternary key) is about 100 times the amplitude of the operand-dependent term
+m_b dA, so the deterministic operand-dependent share s of the noise variance
+is expected near 1e-4. One response then yields a matched-filter z of about
+sqrt(n s) = 0.9 per lane (not significant), and N responses to the same
+operand with fresh B randomness, averaged, yield z of about sqrt(n N s):
+a z of about 5 near N = 30.
+
+Repeated-query test (the amplification an adversary can run; the keyed eta
+and mask are fixed per (requester, object, step), the B encryption randomness
+is fresh per query): the operand of candidate 0 is queried N_max = 200 times;
+the first N responses (N in 1, 5, 25, 50, 100, 200) are averaged after
+removing A's known part, and the matched filter of E4 is applied against all
+64 candidates' signals; reported per N: the summed z of the true candidate,
+the mean and sd of the summed z of the other 63, the standardized gap, and
+whether the true candidate ranks first. Gate (E5): a standardized gap of 4 or
+more at some N <= 200 fires E5 (a repeated-query leak); the smallest such N
+is the queries-per-block cost. The P2 jitter statistic uses the first 30 of
+the 200 repeats as before.
+
+Verdict rule of 7 extends: E5 firing triggers the flooding arm as the others.
+
 ## Results (run of 2026-11-06, `results/noise-channel.json`)
 
 Verdict: no usable leak by the registered estimators. Neither gate fires on
