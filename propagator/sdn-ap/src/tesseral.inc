@@ -39,7 +39,11 @@ constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below 
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
 /// The switch (SPEC 16.11), read here only: above this epoch eccentricity a perigee pass spreads a term over the harmonics of
 /// M; the zonal tail carries every long-period term and the first-order tesseral families are the grid of wide_grid_build.
-constexpr double kWideE = 0.3;
+/// A build-time parameter (build.mjs: SDNAP_WIDE_E, experiments-only probe builds); the shipped build leaves it at 0.3.
+#ifndef SDNAP_WIDE_E
+#define SDNAP_WIDE_E 0.3
+#endif
+constexpr double kWideE = SDNAP_WIDE_E;
 
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {

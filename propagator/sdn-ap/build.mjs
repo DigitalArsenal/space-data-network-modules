@@ -310,7 +310,12 @@ async function gravity() {
     `inline constexpr double kEgmC[71][71] = {\n${rows(C)}\n};\ninline constexpr double kEgmS[71][71] = {\n${rows(S)}\n};\n`;
 }
 
-const sourceCode = inlined
+// SDNAP_WIDE_E (experiments-only probe builds): the first-order set / grid switch of tesseral.inc as a build-time parameter; unset, the
+// shipped 0.3 (tesseral.inc's own default) and no define is emitted.
+const wideE = process.env.SDNAP_WIDE_E ? Number(process.env.SDNAP_WIDE_E) : null;
+if (process.env.SDNAP_WIDE_E && !(wideE > 0 && wideE < 1)) throw new Error(`SDNAP_WIDE_E ${process.env.SDNAP_WIDE_E}: an eccentricity in (0, 1)`);
+if (wideE !== null) provenance.wideE = wideE;
+const sourceCode = (wideE !== null ? `#define SDNAP_WIDE_E ${wideE}\n` : "") + inlined
   .replace('#include "orbpro/orbpro_propagator_abi.h"', abiHeader)
   .replace('#include "oem_generated.h"', await oemBindings())
   .replace('#include "nrlmsise00.h"', await nrlmsise())
