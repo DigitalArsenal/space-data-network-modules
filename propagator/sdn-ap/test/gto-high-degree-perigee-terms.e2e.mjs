@@ -30,6 +30,16 @@ import {wasmPath} from './lib/module.mjs';
 const BASE = '8fdf5b1af';
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 const scratch = process.env.SDNAP_TEST_SCRATCH ?? path.join(packageRoot, '.build', 'gto-terms');
+// The truth is pinned: the model truth's generator (propagator/ffm's dist, FFM 2.2.0 at modules 8786c53d2) and its $SPW rows. A
+// different generator or rows changes every figure below; the figures are re-recorded with a new pin, never silently.
+const FFM_DIST_SHA256 = 'd635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153';
+const SPW_ROWS_SHA256 = 'd7018d1d33afa58220f3f95219f3ef3bd3802129dee5aee378fd46b6c7971f42';
+{
+  const {createHash} = await import('node:crypto');
+  const digest = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  assert.equal(digest(path.join(modules, 'propagator/ffm/dist/isomorphic/module.wasm')), FFM_DIST_SHA256, 'model truth generator (FFM dist) pinned');
+  assert.equal(digest(process.env.FFM_SPW_FIXTURE ?? '/Users/tj/software/terrain-work/ffm-spw-fixture/spw-constant-20261029.json'), SPW_ROWS_SHA256, 'model truth $SPW rows pinned');
+}
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);
 fs.writeFileSync(baseline, execFileSync('git', ['-C', modules, 'show', `${BASE}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26}));

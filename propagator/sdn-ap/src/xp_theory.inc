@@ -781,6 +781,7 @@ struct RateContext {
   uint8_t wide_owned;                 ///< this context frees `wide` (a class change's temporary shares it)
   const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
   double wide_blend;
+  uint8_t wide_exact;                 ///< xp_init's exact_grid: this set's grids are built at its own elements, never shared
 };
 
 inline int ap_resonance_class(const RateContext& ctx, double n) {
@@ -1454,7 +1455,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     s.ctx.sp_count = count;
     if (e.eo > tess::kWideE && s.ctx.wide == nullptr) {
       // SPEC 16.11: the families of degree 2 to spd as a grid in E; a class change's temporary keeps its parent's
-      tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl);
+      tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl, s.ctx.wide_exact != 0);
       if (g == nullptr) return false;
       s.ctx.wide = g;
       s.ctx.wide_owned = 1;
@@ -1494,8 +1495,11 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   return true;
 }
 
-inline int32_t xp_init(const Elements& e, XpSat& s) {
+/// `exact_grid` (SPEC 16.11): above tess::kWideE this set builds its grids at its own elements and shares none (a fit's
+/// perturbed copies, so its finite-difference partials see the exact grid; flights and covariance share).
+inline int32_t xp_init(const Elements& e, XpSat& s, bool exact_grid = false) {
   s = XpSat{};
+  s.ctx.wide_exact = exact_grid ? 1 : 0;
   s.norad = e.norad;
   s.epoch_jd_whole = e.epoch_jd_whole;
   s.epoch_jd_frac = e.epoch_jd_frac;
@@ -1704,7 +1708,7 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   if (!mean_at(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
   const Kepler k = kepler_of(yj);
   if (!(k.e < 1.0)) return false;
-  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i);
+  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i, s.ctx.wide_exact != 0);
   if (out == nullptr) return false;
   held = true;
   // keep it in the slot farther from j
