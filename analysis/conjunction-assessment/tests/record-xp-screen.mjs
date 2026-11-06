@@ -10,12 +10,18 @@
 // With --no-covariance, both sets with their covariance removed: tests/fixtures/ocm-sets/xp-no-covariance-screen-ca-0.18.2.events,
 // recorded once with conjunction-assessment 0.18.2 (dist module.wasm sha256
 // 863b6372f80837fa992c71ebd1d906546069e286e0dbbfcbd223a9d82bdcb451, propagator/sdn-ap 0.6.2), before the covariance
-// producer gate: a pair without covariance stays these bytes. JS only moves bytes.
-//   node tests/record-xp-screen.mjs [--no-covariance] [out]
+// producer gate: a pair without covariance stays these bytes.
+// With --other-theory, the pair with covariance and a third set, U (xp retyped MEAN_ELEMENT_THEORY USM, its covariance
+// kept, no PVN.PRODUCER: an operator's file), on no list: tests/fixtures/ocm-sets/xp-other-theory-screen-ca-0.18.3.events,
+// recorded once with conjunction-assessment 0.18.3 (dist module.wasm sha256
+// 1d406d23b8a393169d1207507729e5b84cf91cc341ff52391b7c57822b8cde5e, propagator/sdn-ap 0.6.2), before the no-producer
+// gate: a set of another theory with no producer stays as 0.18.3 screened it. JS only moves bytes.
+//   node tests/record-xp-screen.mjs [--no-covariance | --other-theory] [out]
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as flatbuffers from 'flatbuffers';
 import { OCM } from 'spacedatastandards.org/lib/js/OCM/OCM.js';
+import { meanElementSource } from 'spacedatastandards.org/lib/js/CQR/main.js';
 import { createStandaloneHarness as sdnApHarness } from '../../../propagator/sdn-ap/node_modules/space-data-module-sdk/src/testing/isomorphicHarness.js';
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { screenOcmSets } from '../src/js/ocmSetScreen.mjs';
@@ -34,14 +40,27 @@ export function withoutCovariance(bytes) {
   return b.asUint8Array().slice();
 }
 
+/** U: xp as another theory's set (MEAN_ELEMENT_THEORY USM) with its covariance and no producer, its own identity. */
+export function otherTheorySet(bytes) {
+  const t = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(bytes)).unpack();
+  Object.assign(t.METADATA, { INTERNATIONAL_DESIGNATOR: '2026-904U', OBJECT_DESIGNATOR: '90407', NORAD_CAT_ID: 90407, OBJECT_NAME: 'USM E2E U' });
+  t.MEAN_ELEMENTS.MEAN_ELEMENT_THEORY = meanElementSource.USM;
+  Object.assign(t.PROVENANCE, { PRODUCER: null, PRODUCER_SHA256: null });
+  const b = new flatbuffers.Builder(8192);
+  OCM.finishOCMBuffer(b, t.pack(b));
+  return b.asUint8Array().slice();
+}
+
 /**
  * The SGP4XP screen: its sets, window and controls (tests/ocm-sets-screening.e2e.mjs screens the same). covariance
- * false: both sets with their covariance removed (withoutCovariance).
+ * false: both sets with their covariance removed (withoutCovariance). otherTheory: U (otherTheorySet) as a third set.
  */
-export function xpScreen({ covariance = true } = {}) {
+export function xpScreen({ covariance = true, otherTheory = false } = {}) {
   const xp = fixture('xp'), d = fixture('d');
   const epoch = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(xp)).MEAN_ELEMENTS().EPOCH();
-  return { sets: covariance ? [xp, d] : [xp, d].map(withoutCovariance), window: { startJd: Date.parse(`${epoch}Z`) / 86400000 + 2440587.5, durationDays: 1 },
+  const sets = covariance ? [xp, d] : [xp, d].map(withoutCovariance);
+  if (otherTheory) sets.push(otherTheorySet(xp));
+  return { sets, window: { startJd: Date.parse(`${epoch}Z`) / 86400000 + 2440587.5, durationDays: 1 },
     controls: { thresholdKm: 20, coarseStepSec: 60, workers: 4, algorithm: 'FOSTER', fineTolSec: 0.001, combinedRadiusM: 10 } };
 }
 
@@ -63,15 +82,17 @@ export function eventBytes(events) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const covariance = !process.argv.includes('--no-covariance');
+  const covariance = !process.argv.includes('--no-covariance'), otherTheory = process.argv.includes('--other-theory');
   const out = process.argv.slice(2).find((x) => !x.startsWith('--'))
-    ?? here(`fixtures/ocm-sets/xp-${covariance ? '' : 'no-covariance-'}screen-ca-${version}.events`);
+    ?? here(`fixtures/ocm-sets/xp-${covariance ? '' : 'no-covariance-'}${otherTheory ? 'other-theory-' : ''}screen-ca-${version}.events`);
   const sdnAp = await sdnApHarness('browser', here('../../../propagator/sdn-ap/dist/isomorphic/module.wasm'), { surface: 'direct' });
   const conjunction = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
-  const flow = await screenOcmSets({ conjunction, sdnAp }, xpScreen({ covariance }));
+  const flow = await screenOcmSets({ conjunction, sdnAp }, xpScreen({ covariance, otherTheory }));
   const bytes = eventBytes(flow.events);
   fs.writeFileSync(out, bytes);
   console.log(`${out}: ${flow.events.length} events, ${bytes.length} bytes, ${flow.refused.length} refused`);
+  for (const r of flow.refused) console.log(`  refused ${r.objectId} ${r.theory}: ${r.code}: ${r.message}`);
+  for (const r of flow.covarianceRefused) console.log(`  covariance refused ${r.objectId}: ${r.code}`);
   await conjunction.destroy?.();
   sdnAp.destroy?.();
 }

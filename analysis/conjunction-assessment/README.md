@@ -242,20 +242,22 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   the `UNCERTAINTY_SOURCE`. Where a set carries none, the event keeps the Alfano maximum (`MAXIMUM_PROBABILITY_ONLY`,
   basis `NONE`); the empirical model (`uncertainty_model`) applies to element sets the module flies itself, not to
   a flown `$OEM`. Which one was used is on every event.
-- **Covariance needs a verified producer build.** The gate is the covariance's producer, not the set's theory.
+- **Covariance needs a verified producer build.** The gate is the covariance's producer.
   A set keeps its miss distance, and the collision probability from its covariance is refused until the build that
   produced it is verified. The verified builds are the request's `CONTROLS.VERIFIED_COVARIANCE_PRODUCERS`
   (`controls.verifiedCovarianceProducers`, each a `CQRVerifiedCovarianceProducer`: `PRODUCER`, `PRODUCER_SHA256`,
   `VERIFICATION_REFERENCE`); nothing is compiled in. A build matches on `PRODUCER_SHA256` where both the list entry
-  and the set's `PROVENANCE.PRODUCER_SHA256` state one, else on `PVN.PRODUCER` verbatim. A set, AP or SGP4XP, whose
-  flight carries covariance and that states a `PVN.PRODUCER` not listed (an empty or absent list lists none) is
-  screened without that covariance: its `COVARIANCE_BASIS` is `NONE`, its events carry the covariance-free maximum
-  and no probability from covariance, and every event with it states `PROBABILITY_REFUSAL`
-  `pc-covariance-unverified:<PVN.PRODUCER>` (an SGP4XP or AP set fitted by sdn-ap names
-  `com.spacedatanetwork.sdn-ap-propagator <version>`); the set is named in the result's `covarianceRefused`. Miss
-  distance and TCA are unchanged. Covariance from a set that states no producer (an operator's file) is its
-  operator's and screens as supplied; sets without covariance, SGP4 sets and every other source are unaffected. The
-  module itself never sees a source's producer: the flow applies the list.
+  and the set's `PROVENANCE.PRODUCER_SHA256` state one, else on `PVN.PRODUCER` verbatim; a set that states only a
+  hash matches only on the hash. A set whose flight carries covariance is gated when it states a producer
+  (`PVN.PRODUCER` or `PVN.PRODUCER_SHA256`) or when its theory names one: only sdn-ap fits AP, and no public source
+  issues SGP4XP covariance, so an AP or SGP4XP set that states none is sdn-ap's with the name removed. A gated set not
+  listed (an empty or absent list lists none) is screened without that covariance: its `COVARIANCE_BASIS` is `NONE`,
+  its events carry the covariance-free maximum and no probability from covariance, and every event with it states
+  `PROBABILITY_REFUSAL` `pc-covariance-unverified:<producer>`: its `PVN.PRODUCER` (a set fitted by sdn-ap names
+  `com.spacedatanetwork.sdn-ap-propagator <version>`), else `sha256:<PVN.PRODUCER_SHA256>`, else `(no producer)`;
+  the set is named in the result's `covarianceRefused`. Miss distance and TCA are unchanged. A set of any other
+  theory that states no producer (an operator's file) is not gated; sets without covariance, SGP4 sets and every
+  other source are unaffected. The module itself never sees a source's producer: the flow applies the list.
 - **Parity.** `node tests/ocm-sets-screening.e2e.mjs`: the registered sets of `tests/fixtures/ocm-sets/`
   (`tests/record-ocm-sets.mjs`: sdn-ap `fit` on its own 0.4.0 fixture inputs, AP and SGP4XP, and two sets turned
   across the first one's plane and refitted by sdn-ap from the other theory's flight, so each carries a fit
@@ -275,7 +277,12 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   string, B is refused on it under its own. The SGP4XP sets screened alone (`tests/record-xp-screen.mjs`), on no
   list: 30 of 30 events refused, miss distance and TCA exactly 0.18.1's; with their producer listed: 0.18.1's events
   byte for byte (80,640 bytes, the embedded message's wall-clock creation time and identifier aside); without
-  covariance: 0.18.2's events byte for byte (36,240 bytes).
+  covariance: 0.18.2's events byte for byte (36,240 bytes). With no producer stated, on the producer's list: A alone
+  is refused, `(no producer)` on all 104 events; the SGP4XP pair on 30 of 30, miss distance and TCA exactly 0.18.1's.
+  A hash alone decides: A passes on its listed hash, B (AP) and D (SGP4XP) are refused naming theirs (30 of 30 events
+  each), and the SGP4XP pair on a listed hash gives 0.18.1's events byte for byte. A set of another theory with
+  covariance and no producer is refused by name (`theory-not-screened:USM`), and the screen beside it is 0.18.3's
+  byte for byte (38,880 bytes).
 
 ## Build and runtime contract
 

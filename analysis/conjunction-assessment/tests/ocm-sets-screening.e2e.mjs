@@ -45,6 +45,18 @@
 //   SGP4XP without covariance (both sets' covariance removed; no list): the events 0.18.2 wrote, byte for byte
 //   (tests/fixtures/ocm-sets/xp-no-covariance-screen-ca-0.18.2.events);
 //   dist/build-provenance.json names the shipped dist/isomorphic/module.wasm's sha256.
+// No producer stated (modules-ca-no-producer-refusal-20261106):
+//   AP: A without PVN.PRODUCER, with B, C, D and E on the producer's list: A alone refused,
+//   pc-covariance-unverified:(no producer); every event (each holds A) carries it, no Pc, A's basis NONE, miss distance
+//   and TCA of the listed screen exactly;
+//   SGP4XP: xp and d without PVN.PRODUCER on the producer's list: both refused "(no producer)", 30 of 30 events, no Pc,
+//   miss distance and TCA as 0.18.1 wrote them exactly;
+//   PRODUCER_SHA256 alone: A (AP) and D (SGP4XP) and B (AP) stating only a hash, on a list with A's hash: A passes, B
+//   and D are refused naming sha256:<hash> (A x B and A x D: 30 of 30 refused, no Pc; A x C and A x E none refused);
+//   xp and d stating only a listed hash: 0.18.1's events byte for byte;
+//   another theory: U (xp retyped USM, covariance kept, no producer) beside xp and d on no list: refused by name,
+//   theory-not-screened:USM, and the events 0.18.3 wrote byte for byte
+//   (tests/fixtures/ocm-sets/xp-other-theory-screen-ca-0.18.3.events).
 // JS builds records with the SDS object API, moves bytes and compares what the modules produced.
 //   node tests/ocm-sets-screening.e2e.mjs
 import crypto from 'node:crypto';
@@ -58,7 +70,7 @@ import { createStandaloneHarness as sdnApHarness } from '../../../propagator/sdn
 import { createConjunctionCommandHarness } from './lib/conjunctionCommandHarness.mjs';
 import { CA_PARITY_TOLERANCES, relVelStratum } from './lib/caParityTolerances.mjs';
 import { decodeCqr, earthFrame, encodeCqr, initCqrFlatc, parseFlatcJson, publishedSchema, screeningControls } from './lib/cqr.mjs';
-import { COVARIANCE_REFUSAL, OCM_SET_FLIGHT, screenOcmSets } from '../src/js/ocmSetScreen.mjs';
+import { COVARIANCE_REFUSAL, NO_PRODUCER, OCM_SET_FLIGHT, screenOcmSets } from '../src/js/ocmSetScreen.mjs';
 import { eventBytes, xpScreen } from './record-xp-screen.mjs';
 
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
@@ -105,11 +117,13 @@ const PRODUCER = a.PROVENANCE.PRODUCER;
 const OTHER_PRODUCER = `com.spacedatanetwork.sdn-ap-propagator ${SDN_AP_VERSION}`;
 const [H, H_B, H_LISTED] = ['a', 'b', 'c'].map((x) => x.repeat(64));
 const listed = (...entries) => entries.map(([producer, sha256]) => new CQRVerifiedCovarianceProducerT(producer, sha256, 'modules-ca-gate-by-covariance-producer-20261106'));
-const stamped = (bytes, sha256) => {
+const reprovenanced = (bytes, pvn) => {
   const m = ocmOf(bytes).METADATA;
-  return derived(bytes, { id: m.INTERNATIONAL_DESIGNATOR, norad: m.NORAD_CAT_ID, name: m.OBJECT_NAME, edit: (t) => { t.PROVENANCE.PRODUCER_SHA256 = sha256; } });
+  return derived(bytes, { id: m.INTERNATIONAL_DESIGNATOR, norad: m.NORAD_CAT_ID, name: m.OBJECT_NAME, edit: (t) => { Object.assign(t.PROVENANCE, pvn); } });
 };
+const stamped = (bytes, sha256) => reprovenanced(bytes, { PRODUCER_SHA256: sha256 });
 const A_H = stamped(A, H), B_H = stamped(B, H_B);
+const unnamed = (bytes, sha256 = null) => reprovenanced(bytes, { PRODUCER: null, PRODUCER_SHA256: sha256 });
 const E = (() => {
   const me = a.MEAN_ELEMENTS;
   const t = Object.assign(new OMMT(), { OBJECT_NAME: 'SGP4 E2E E', OBJECT_ID: '2026-904E', NORAD_CAT_ID: 90404, CENTER_NAME: 'EARTH', TIME_SYSTEM: timingStandard.UTC,
@@ -315,6 +329,39 @@ const listedAD = flow.events.filter((e) => pairOf(e) === '2026-904A x 2026-904D'
 check(hAD.length === 30 && hADpc === listedAD && hAB.length === 30 && hABrefused === 30 && hAD.every((e) => !e.PROBABILITY_REFUSAL),
   `hash: A x D ${hADpc} of ${hAD.length} events with a Pc (listed screen ${listedAD}; D, no hash, passes on its producer string); A x B ${hABrefused} of ${hAB.length} refused for B, no Pc`);
 
+// No producer stated: an AP or SGP4XP set's theory names its producer; a hash alone is matched on the hash.
+const NO_PRODUCER_REFUSAL = `${COVARIANCE_REFUSAL}${NO_PRODUCER}`;
+const geometry = (from, to) => {
+  const m = matchEvents(from, to);
+  let miss = 0, tca = 0;
+  for (const { e, f } of m.matches) { miss = Math.max(miss, Math.abs(f.MISS_DISTANCE_M - e.MISS_DISTANCE_M)); tca = Math.max(tca, Math.abs(f.TCA.JULIAN_DATE - e.TCA.JULIAN_DATE) * 86400); }
+  return { matched: m.matches.length, unmatched: m.unmatched, miss, tca };
+};
+const refusals = (run) => run.covarianceRefused.map((x) => `${x.objectId} ${x.code}`).sort().join(', ');
+const np = await screenOcmSets({ conjunction, sdnAp }, { sets: [unnamed(A), B, C, D], catalog: [E], window,
+  controls: { ...controls, verifiedCovarianceProducers: listed([PRODUCER, '']) } });
+check(NO_PRODUCER_REFUSAL === 'pc-covariance-unverified:(no producer)' && refusals(np) === `2026-904A ${NO_PRODUCER_REFUSAL}`,
+  `AP set with covariance and no producer, on the producer's list: covariance refused for ${refusals(np)}`);
+const npGeometry = geometry(flow.events, np.events);
+const npRefused = np.events.filter((e) => e.PROBABILITY_REFUSAL === NO_PRODUCER_REFUSAL).length, npPc = np.events.filter(SUPPLIED).length;
+const npBases = np.events.every((e) => BASIS(e, '2026-904A') === 'NONE' && [e.PRIMARY_ID, e.SECONDARY_ID].filter((id) => id === '2026-904B' || id === '2026-904D').every((id) => BASIS(e, id) === 'SOURCE_EPHEMERIS'));
+check(np.events.length === flow.events.length && npGeometry.matched === flow.events.length && npRefused === np.events.length && npPc === 0 && npBases && npGeometry.miss === 0 && npGeometry.tca === 0,
+  `AP set with no producer: ${npRefused} of ${np.events.length} events carry "${NO_PRODUCER_REFUSAL}", ${npPc} with a Pc; A's basis NONE, B's and D's SOURCE_EPHEMERIS: ${npBases}; miss distance and TCA as the listed screen: max |delta| ${npGeometry.miss} m and ${npGeometry.tca} s over ${npGeometry.matched} events`);
+
+const H_D = 'd'.repeat(64);
+const sha = await screenOcmSets({ conjunction, sdnAp }, { sets: [unnamed(A, H), unnamed(B, H_B), C, unnamed(D, H_D)], catalog: [E], window,
+  controls: { ...controls, verifiedCovarianceProducers: listed([OTHER_PRODUCER, H], [PRODUCER, H_LISTED]) } });
+const SHA_B = `${COVARIANCE_REFUSAL}sha256:${H_B}`, SHA_D = `${COVARIANCE_REFUSAL}sha256:${H_D}`;
+check(refusals(sha) === `2026-904B ${SHA_B}, 2026-904D ${SHA_D}`, `PRODUCER_SHA256 alone: covariance refused for ${refusals(sha)} (A, AP, passes on its listed hash)`);
+const shaAB = sha.events.filter((e) => pairOf(e) === '2026-904A x 2026-904B'), shaAD = sha.events.filter((e) => pairOf(e) === '2026-904A x 2026-904D');
+const shaRest = sha.events.filter((e) => !shaAB.includes(e) && !shaAD.includes(e));
+const shaABrefused = shaAB.filter((e) => e.PROBABILITY_REFUSAL === SHA_B && !SUPPLIED(e)).length, shaADrefused = shaAD.filter((e) => e.PROBABILITY_REFUSAL === SHA_D && !SUPPLIED(e)).length;
+const shaABasis = sha.events.every((e) => BASIS(e, '2026-904A') === 'SOURCE_EPHEMERIS');
+const shaGeometry = geometry(flow.events, sha.events);
+check(shaAB.length === 30 && shaABrefused === 30 && shaAD.length === 30 && shaADrefused === 30 && shaRest.every((e) => !e.PROBABILITY_REFUSAL) && shaABasis
+  && sha.events.length === flow.events.length && shaGeometry.matched === flow.events.length && shaGeometry.miss === 0 && shaGeometry.tca === 0,
+  `PRODUCER_SHA256 alone: A x B ${shaABrefused} of ${shaAB.length} and A x D (SGP4XP) ${shaADrefused} of ${shaAD.length} refused, no Pc; ${shaRest.filter((e) => e.PROBABILITY_REFUSAL).length} of the other ${shaRest.length} refused; A's basis SOURCE_EPHEMERIS: ${shaABasis}; miss distance and TCA as the listed screen: max |delta| ${shaGeometry.miss} m and ${shaGeometry.tca} s`);
+
 // SGP4XP sets fitted by sdn-ap (xp and d, both with covariance): refused by producer on no list, with 0.18.1's geometry.
 const eventsOf = (u) => {
   const out = [];
@@ -348,6 +395,27 @@ const xpBare = await screenOcmSets({ conjunction, sdnAp }, xpScreen({ covariance
 const xpBareBytes = eventBytes(xpBare.events);
 check(sameBytes(xpBareBytes, xpBare018) && xpBare.events.length === 30 && xpBare.covarianceRefused.length === 0 && xpBare.events.every((e) => !e.PROBABILITY_REFUSAL),
   `SGP4XP pair without covariance: ${xpBare.events.length} events, ${xpBare.covarianceRefused.length} refused, ${xpBareBytes.length} bytes, byte-identical to 0.18.2's ${xpBare018.length}: ${sameBytes(xpBareBytes, xpBare018)}`);
+
+// SGP4XP sets with no producer stated: refused by theory on the producer's list; stating only a listed hash: 0.18.1's bytes.
+const xpWith = (pvn, list, options) => { const s = xpScreen(options); s.sets = s.sets.map((x, i) => (i < 2 && pvn ? unnamed(x, pvn[i]) : x)); s.controls.verifiedCovarianceProducers = list; return s; };
+const xpNp = await screenOcmSets({ conjunction, sdnAp }, xpWith([null, null], listed([PRODUCER, ''])));
+const xpNpRefused = xpNp.events.filter((e) => e.PROBABILITY_REFUSAL === NO_PRODUCER_REFUSAL).length, xpNpPc = xpNp.events.filter(SUPPLIED).length;
+const xpNpGeometry = geometry(xp018Events, xpNp.events);
+check(xpNp.covarianceRefused.length === 2 && xpNp.covarianceRefused.every((x) => x.code === NO_PRODUCER_REFUSAL) && xpNp.events.length === 30 && xpNpRefused === 30 && xpNpPc === 0
+  && xpNpGeometry.matched === 30 && xpNpGeometry.unmatched === 0 && xpNpGeometry.miss === 0 && xpNpGeometry.tca === 0,
+  `SGP4XP pair with covariance and no producer, on the producer's list: covariance refused for ${refusals(xpNp)}; ${xpNpRefused} of ${xpNp.events.length} events refused, ${xpNpPc} with a Pc; miss distance and TCA as 0.18.1 wrote them: max |delta| ${xpNpGeometry.miss} m and ${xpNpGeometry.tca} s over ${xpNpGeometry.matched} events`);
+const xpSha = await screenOcmSets({ conjunction, sdnAp }, xpWith([H, H], listed([OTHER_PRODUCER, H])));
+const xpShaBytes = eventBytes(xpSha.events);
+check(xpSha.covarianceRefused.length === 0 && xpSha.events.filter(SUPPLIED).length === 30 && sameBytes(xpShaBytes, xp018),
+  `SGP4XP pair stating only a listed hash: ${xpSha.covarianceRefused.length} refused, ${xpSha.events.filter(SUPPLIED).length} events with a Pc, ${xpShaBytes.length} bytes, byte-identical to 0.18.1's ${xp018.length}: ${sameBytes(xpShaBytes, xp018)}`);
+
+// Another theory with covariance and no producer (an operator's file): as 0.18.3 screened it, byte for byte.
+const other018 = new Uint8Array(fs.readFileSync(here('fixtures/ocm-sets/xp-other-theory-screen-ca-0.18.3.events')));
+const other = await screenOcmSets({ conjunction, sdnAp }, xpScreen({ otherTheory: true }));
+const otherBytes = eventBytes(other.events), otherU = other.refused.find((r) => r.objectId === '2026-904U');
+check(other.refused.length === 1 && otherU?.code === 'theory-not-screened:USM' && other.covarianceRefused.length === 2 && other.covarianceRefused.every((x) => x.code === REFUSAL)
+  && other.events.length === 30 && sameBytes(otherBytes, other018),
+  `another theory (USM) with covariance and no producer: refused by name ${otherU?.code}; ${other.events.length} events, ${otherBytes.length} bytes, byte-identical to 0.18.3's ${other018.length}: ${sameBytes(otherBytes, other018)}`);
 
 // The shipped dist: build-provenance.json names the module.wasm sha256.
 const distSha = crypto.createHash('sha256').update(fs.readFileSync(here('../dist/isomorphic/module.wasm'))).digest('hex');
