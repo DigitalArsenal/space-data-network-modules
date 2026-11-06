@@ -719,8 +719,9 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
 /// function of the anomaly, complete in j: built on kGridNE uniform eccentric anomalies from the family's forcing (Lagrange's
 /// equations), integrated by H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot with
 /// nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, the harmonics the table's rules leave out (m-daily, the class's,
-/// |psi-dot| < kShallowBand n) subtracted, and kept on kGridN of them with its first derivatives in e, i and a / a0.
-constexpr int kGridN = 128, kGridNE = 128;
+/// |psi-dot| < kShallowBand n) subtracted, and kept on kGridN of them (single precision) with its first derivatives in e, i and
+/// a / a0 on kGridD (half precision).
+constexpr int kGridN = 128, kGridNE = 128, kGridD = 64;
 constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward differences of the derivative grids
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
@@ -734,8 +735,62 @@ struct WideGrid {
   double n, e, i, a;  // the mean elements it was built at
   int8_t* m;
   int8_t* w;
-  float* v;           // count x 4 (value, d/de, d/di, d/(da/a)) x 6 x kGridN x (re, im)
+  float* v;           // count x 6 x kGridN x (re, im): the value
+  uint16_t* dv;       // count x 3 (d/de, d/di, d/(da/a)) x 6 x kGridD x (re, im), half precision
 };
+
+/// IEEE half precision, round to nearest even; finite inputs below 65504 in magnitude.
+inline uint16_t to_half(float f) {
+  uint32_t x;
+  std::memcpy(&x, &f, 4);
+  const uint32_t sign = (x >> 16) & 0x8000u;
+  const int32_t exp = static_cast<int32_t>((x >> 23) & 0xff) - 127 + 15;
+  uint32_t mant = x & 0x7fffffu;
+  if (exp <= 0) {
+    if (exp < -10) return static_cast<uint16_t>(sign);
+    mant |= 0x800000u;
+    const int shift = 14 - exp;
+    uint32_t h = mant >> shift;
+    const uint32_t rem = mant & ((1u << shift) - 1), half = 1u << (shift - 1);
+    if (rem > half || (rem == half && (h & 1u))) ++h;
+    return static_cast<uint16_t>(sign | h);
+  }
+  if (exp >= 31) return static_cast<uint16_t>(sign | 0x7bffu);
+  uint32_t h = (static_cast<uint32_t>(exp) << 10) | (mant >> 13);
+  const uint32_t rem = mant & 0x1fffu;
+  if (rem > 0x1000u || (rem == 0x1000u && (h & 1u))) ++h;
+  return static_cast<uint16_t>(sign | h);
+}
+inline float from_half(uint16_t h) {
+  const uint32_t sign = static_cast<uint32_t>(h & 0x8000u) << 16;
+  int32_t exp = (h >> 10) & 0x1f;
+  uint32_t mant = h & 0x3ffu;
+  uint32_t x;
+  if (exp == 0) {
+    if (mant == 0) x = sign;
+    else {
+      exp = 1;
+      while ((mant & 0x400u) == 0) { mant <<= 1; --exp; }
+      mant &= 0x3ffu;
+      x = sign | (static_cast<uint32_t>(exp - 15 + 127) << 23) | (mant << 13);
+    }
+  } else {
+    x = sign | (static_cast<uint32_t>(exp - 15 + 127) << 23) | (mant << 13);
+  }
+  float f;
+  std::memcpy(&f, &x, 4);
+  return f;
+}
+/// from_half for every half, filled once (idempotent: concurrent fillers write the same values).
+inline const float* half_table() {
+  static float table[65536];
+  static int32_t ready = 0;
+  if (__atomic_load_n(&ready, __ATOMIC_ACQUIRE) == 0) {
+    for (uint32_t h = 0; h < 65536; ++h) table[h] = from_half(static_cast<uint16_t>(h));
+    __atomic_store_n(&ready, 1, __ATOMIC_RELEASE);
+  }
+  return table;
+}
 
 inline void fft_inplace(double* re, double* im, int n, bool inverse) {
   for (int i = 1, j = 0; i < n; ++i) {
@@ -937,34 +992,47 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   const size_t per = static_cast<size_t>(6) * kGridN * 2, one = static_cast<size_t>(cap) * per;
   double* sp = static_cast<double*>(std::malloc(one * sizeof(double)));
   double* sn = static_cast<double*>(std::malloc(one * sizeof(double)));
-  float* v = static_cast<float*>(std::malloc(static_cast<size_t>(cap) * 4 * per * sizeof(float)));
+  const size_t dper = static_cast<size_t>(6) * kGridD * 2;
+  float* v = static_cast<float*>(std::malloc(static_cast<size_t>(cap) * per * sizeof(float)));
+  uint16_t* dv = static_cast<uint16_t*>(std::malloc(static_cast<size_t>(cap) * 3 * dper * sizeof(uint16_t)));
   int8_t* fm = static_cast<int8_t*>(std::malloc(cap));
   int8_t* fw = static_cast<int8_t*>(std::malloc(cap));
   int8_t* sm = static_cast<int8_t*>(std::malloc(2 * cap));
-  const auto fail = [&]() { std::free(sp); std::free(sn); std::free(v); std::free(fm); std::free(fw); std::free(sm); return false; };
-  if (sp == nullptr || sn == nullptr || v == nullptr || fm == nullptr || fw == nullptr || sm == nullptr) return fail();
+  const auto fail = [&]() { std::free(sp); std::free(sn); std::free(v); std::free(dv); std::free(fm); std::free(fw); std::free(sm); return false; };
+  if (sp == nullptr || sn == nullptr || v == nullptr || dv == nullptr || fm == nullptr || fw == nullptr || sm == nullptr) return fail();
   const int count = wide_families(degree, cls, n, e, inc, fm, fw, sn);
   if (count < 0) return fail();
   for (int f = 0; f < count; ++f)
-    for (size_t k = 0; k < per; ++k) v[static_cast<size_t>(f) * 4 * per + k] = static_cast<float>(sn[f * per + k]);
-  // the derivative grids, one forward difference at a time: e, i, a / a
+    for (size_t k = 0; k < per; ++k) v[static_cast<size_t>(f) * per + k] = static_cast<float>(sn[f * per + k]);
+  // the derivative grids, one forward difference at a time: e, i, a / a; every (kGridN / kGridD)-th node
   const double hp[3][3] = {{n, e + kGridDe, inc}, {n, e, inc + kGridDi}, {n / std::pow(1.0 + kGridDa, 1.5), e, inc}};
   const double step[3] = {kGridDe, kGridDi, kGridDa};
+  constexpr int skip = kGridN / kGridD;
   for (int d = 0; d < 3; ++d) {
     if (wide_families(degree, cls, hp[d][0], hp[d][1], hp[d][2], sm, sm + cap, sp) != count) return fail();
     for (int f = 0; f < count; ++f)
-      for (size_t k = 0; k < per; ++k)
-        v[static_cast<size_t>(f) * 4 * per + (d + 1) * per + k] = static_cast<float>((sp[f * per + k] - sn[f * per + k]) / step[d]);
+      for (int z = 0; z < 6; ++z)
+        for (int k = 0; k < kGridD; ++k)
+          for (int ri = 0; ri < 2; ++ri) {
+            const size_t at = f * per + (static_cast<size_t>(z) * kGridN + k * skip) * 2 + ri;
+            dv[(static_cast<size_t>(f) * 3 + d) * dper + (static_cast<size_t>(z) * kGridD + k) * 2 + ri] =
+                to_half(static_cast<float>((sp[at] - sn[at]) / step[d]));
+          }
   }
   std::free(sp); std::free(sn); std::free(sm);
-  g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v;
+  g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v; g.dv = dv;
   g.n = n; g.e = e; g.i = inc; g.a = std::pow(kKe / n, kX2o3);
   return true;
 }
 
 inline void wide_grid_release(WideGrid& g) {
-  std::free(g.m); std::free(g.w); std::free(g.v);
-  g.m = g.w = nullptr; g.v = nullptr; g.count = 0;
+  std::free(g.m); std::free(g.w); std::free(g.v); std::free(g.dv);
+  g.m = g.w = nullptr; g.v = nullptr; g.dv = nullptr; g.count = 0;
+}
+
+/// A grid's bytes (value and derivative grids).
+inline size_t wide_grid_bytes(const WideGrid& g) {
+  return static_cast<size_t>(g.count) * (6 * kGridN * 2 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t));
 }
 
 /// Grids are shared by sets within kShareE, kShareI, kShareA of a held grid's elements: each counted, freed when its last holder
@@ -974,12 +1042,13 @@ struct GridSlot {
   int cls, refs;
   uint32_t stamp;  // when it last became idle
 };
-constexpr int kGridIdle = 4;  // idle grids kept: a flight's current and next schedule nodes, for the set and its covariance
+/// Idle grids kept (3.1 MB each): a catalog refresh finds its objects' grids; the oldest goes first. kGridSlots bounds every grid held.
+constexpr int kGridIdle = 128, kGridSlots = 256;
 struct GridCache {
   int32_t word;
   int count;
   uint32_t clock;
-  GridSlot slot[64];
+  GridSlot slot[kGridSlots];
 };
 /// Frees the oldest idle grid while more than `keep` are idle (the cache's lock held).
 inline void evict_idle(struct GridCache& c, int keep);
@@ -1019,7 +1088,7 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   if (g == nullptr) return nullptr;
   if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
   cache_lock(&c.word);
-  if (c.count < 64) {
+  if (c.count < kGridSlots) {
     c.slot[c.count++] = GridSlot{g, cls, 1, 0};
     cache_unlock(&c.word);
     return g;
@@ -1080,27 +1149,40 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
   }
   E = std::fmod(E, kTwoPi);
   if (E < 0.0) E += kTwoPi;
-  const double x = E / kTwoPi * kGridN;
-  int i1 = static_cast<int>(x);
-  const double u = x - i1;
-  const int i0 = (i1 - 1 + kGridN) % kGridN, i2 = (i1 + 1) % kGridN, i3 = (i1 + 2) % kGridN;
-  i1 %= kGridN;
-  const double w0 = -u * (u - 1.0) * (u - 2.0) / 6.0, w1 = (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0;
-  const double w2 = -(u + 1.0) * u * (u - 2.0) / 2.0, w3 = (u + 1.0) * u * (u - 1.0) / 6.0;
-  const int idx[4] = {i0, i1, i2, i3};
-  const double wt[4] = {w0, w1, w2, w3};
+  // the four-point periodic cubic on N nodes at E: node indices and weights
+  const auto cubic = [&](int N, int* idx, double* wt) {
+    const double x = E / kTwoPi * N;
+    int i1 = static_cast<int>(x);
+    const double u = x - i1;
+    idx[0] = (i1 - 1 + N) % N; idx[1] = i1 % N; idx[2] = (i1 + 1) % N; idx[3] = (i1 + 2) % N;
+    wt[0] = -u * (u - 1.0) * (u - 2.0) / 6.0; wt[1] = (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0;
+    wt[2] = -(u + 1.0) * u * (u - 2.0) / 2.0; wt[3] = (u + 1.0) * u * (u - 1.0) / 6.0;
+  };
+  int idx[4], jdx[4];
+  double wt[4], wd[4];
+  cubic(kGridN, idx, wt);
+  cubic(kGridD, jdx, wd);
+  const double off[3] = {de, di, da};
   const double beta = kp.node - (theta_g0 + kOmegaE * t);
-  const size_t per = static_cast<size_t>(6) * kGridN * 2;
+  const size_t per = static_cast<size_t>(6) * kGridN * 2, dper = static_cast<size_t>(6) * kGridD * 2;
+  const float* half = half_table();
   for (int f = 0; f < g.count; ++f) {
-    const float* v = g.v + static_cast<size_t>(f) * 4 * per;
+    const float* v = g.v + static_cast<size_t>(f) * per;
+    const uint16_t* dv = g.dv + static_cast<size_t>(f) * 3 * dper;
     const double ph = g.w[f] * kp.argp + g.m[f] * beta, cph = std::cos(ph), sph = std::sin(ph);
     for (int z = 0; z < 6; ++z) {
       double hr = 0.0, hi = 0.0;
       for (int k = 0; k < 4; ++k) {
         const size_t at = (static_cast<size_t>(z) * kGridN + idx[k]) * 2;
-        hr += wt[k] * (v[at] + de * v[per + at] + di * v[2 * per + at] + da * v[3 * per + at]);
-        hi += wt[k] * (v[at + 1] + de * v[per + at + 1] + di * v[2 * per + at + 1] + da * v[3 * per + at + 1]);
+        hr += wt[k] * v[at];
+        hi += wt[k] * v[at + 1];
       }
+      for (int d = 0; d < 3; ++d)
+        for (int k = 0; k < 4; ++k) {
+          const size_t at = d * dper + (static_cast<size_t>(z) * kGridD + jdx[k]) * 2;
+          hr += off[d] * wd[k] * half[dv[at]];
+          hi += off[d] * wd[k] * half[dv[at + 1]];
+        }
       six[z] += hr * cph - hi * sph;
     }
   }
