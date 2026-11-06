@@ -777,6 +777,10 @@ struct RateContext {
   int32_t mdaily_degree;
   const tess::SpCoef* sp;             ///< AP: the other first-order tesseral terms, at output time (owned, xp_release)
   int32_t sp_count;
+  tess::WideGrid* wide;               ///< AP above tess::kWideE: the first-order tesseral families' grid (SPEC 16.11)
+  uint8_t wide_owned;                 ///< this context frees `wide` (a class change's temporary shares it)
+  const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
+  double wide_blend;
 };
 
 inline int ap_resonance_class(const RateContext& ctx, double n) {
@@ -1268,7 +1272,7 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
     if (!(y[kN] > 0.0)) return kPropMeanMotion;
     Ewarm = Em;
   }
-  if (ctx.mdaily != nullptr || ctx.sp != nullptr) {
+  if (ctx.mdaily != nullptr || ctx.sp != nullptr || ctx.wide != nullptr) {
     // AP: the tesseral m-daily short-periodics, first order at the mean elements
     const Kepler km = kepler_of(ym);
     if (km.e < 1.0) {
@@ -1279,6 +1283,16 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
                          ctx.theta_g0, six);
       if (ctx.sp != nullptr)
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci, ctx.theta_g0, six);
+      if (ctx.wide != nullptr) {
+        if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
+          double s0[6] = {0, 0, 0, 0, 0, 0}, s1[6] = {0, 0, 0, 0, 0, 0};
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, s0);
+          tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, s1);
+          for (int j = 0; j < 6; ++j) six[j] += (1.0 - ctx.wide_blend) * s0[j] + ctx.wide_blend * s1[j];
+        } else {
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six);
+        }
+      }
       double d[6];
       six_to_equinoctial(agm, six, d);
       for (int j = 0; j < 6; ++j) y[j] += d[j];
@@ -1435,6 +1449,13 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     if (kept == nullptr) { std::free(table); return false; }
     s.ctx.sp = kept;
     s.ctx.sp_count = count;
+    if (e.eo > tess::kWideE && s.ctx.wide == nullptr) {
+      // SPEC 16.11: the families of degree 2 to spd as a grid in E; a class change's temporary keeps its parent's
+      tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl);
+      if (g == nullptr) return false;
+      s.ctx.wide = g;
+      s.ctx.wide_owned = 1;
+    }
   }
   const int zd = t.zonal > 70 ? 70 : t.zonal;
   if (zd >= 6) {
@@ -1548,6 +1569,9 @@ inline void xp_release(XpSat& s) {
   std::free(const_cast<tess::SpCoef*>(s.ctx.sp));
   s.ctx.sp = nullptr;
   s.ctx.sp_count = 0;
+  if (s.ctx.wide_owned) tess::wide_grid_drop(s.ctx.wide);
+  s.ctx.wide = nullptr;
+  s.ctx.wide_owned = 0;
 }
 
 inline void lock(int32_t* word) {
@@ -1653,11 +1677,47 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   return ok;
 }
 
+/// AP above tess::kWideE (SPEC 16.11): the grid of schedule node j, built at the set's mean elements at j kGridEvery (node 0: the
+/// set's own); `held` says whether the caller drops it. False when the mean elements there are not numbers or out of memory.
+inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
+  held = false;
+  if (j == 0) { out = s.ctx.wide; return true; }
+  double yj[6];
+  if (!mean_at(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
+  const Kepler k = kepler_of(yj);
+  if (!(k.e < 1.0)) return false;
+  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i);
+  held = out != nullptr;
+  return held;
+}
+
 inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const Bodies* shared = nullptr) {
   if (s.init_error != 0) return kPropRefused;
   double y[6];
   if (!mean_at(s, t, y)) return kPropMeanMotion;
-  const int32_t status = output(s.ctx, t, y, r, v, shared);
+  int32_t status;
+  if (s.ctx.wide != nullptr && s.ctx.wide_owned) {
+    // the nodes around t, the same for every set of a fit; the context per call, so concurrent calls on one set share nothing
+    const int j = static_cast<int>(std::floor(t / tess::kGridEvery));
+    const double u = t / tess::kGridEvery - j;
+    const double blend = u < 1.0 - tess::kGridBlend ? 0.0 : (u - (1.0 - tess::kGridBlend)) / tess::kGridBlend;
+    tess::WideGrid* g0 = nullptr;
+    tess::WideGrid* g1 = nullptr;
+    bool h0 = false, h1 = false;
+    if (!wide_node(s, j, g0, h0) || (blend > 0.0 && !wide_node(s, j + 1, g1, h1))) {
+      if (h0) tess::wide_grid_drop(g0);
+      return kPropRefused;
+    }
+    RateContext c = s.ctx;
+    c.wide = g0;
+    c.wide_next = g1;
+    c.wide_blend = blend;
+    status = output(c, t, y, r, v, shared);
+    if (h0) tess::wide_grid_drop(g0);
+    if (h1) tess::wide_grid_drop(g1);
+  } else {
+    status = output(s.ctx, t, y, r, v, shared);
+  }
   if (status == kPropOk && s.ctx.ap_frame) frames::teme_drift(s.epoch_jd_whole, s.epoch_jd_frac, t, r, v);
   return status;
 }
@@ -1674,6 +1734,7 @@ inline bool reclass_make(const RateContext& ctx, const double* y, XpSat& tmp) {
   tmp.ctx.half_day = nullptr; tmp.ctx.half_day_count = 0;
   tmp.ctx.shallow = nullptr; tmp.ctx.shallow_count = 0;
   tmp.ctx.zt = nullptr; tmp.ctx.mdaily = nullptr; tmp.ctx.sp = nullptr; tmp.ctx.sp_count = 0;
+  tmp.ctx.wide_owned = 0;  // shares the parent's grid (SPEC 16.11)
   tmp.ctx.resonance = static_cast<int8_t>(ap_resonance_class(ctx, y[kN]));
   tmp.ctx.e0 = k.e; tmp.ctx.i0 = k.i;
   Elements e{}; e.eo = k.e; e.xincl = k.i;

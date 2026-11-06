@@ -37,24 +37,9 @@ constexpr double kShallowBand = 0.045;
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
-/// Above this epoch eccentricity a perigee pass spreads a term over the harmonics of M (SPEC 16.11): the zonal tail
-/// carries every long-period term and the first-order set every q to |q| <= kWideQ.
+/// The switch (SPEC 16.11), read here only: above this epoch eccentricity a perigee pass spreads a term over the harmonics of
+/// M; the zonal tail carries every long-period term and the first-order tesseral families are the grid of wide_grid_build.
 constexpr double kWideE = 0.3;
-constexpr int kWideQ = 10;
-
-/// The mean over M of (a/r)^k, k >= 2: eta^-(2k-3) sum_j C(k-2, 2j) C(2j, j) (e/2)^(2j). It bounds |G| of every
-/// term of degree k - 1.
-inline double mean_a_over_r(int k, double e) {
-  const int m = k - 2;
-  double s = 0.0;
-  for (int j = 0; 2 * j <= m; ++j) {
-    double c1 = 1.0, c2 = 1.0;
-    for (int r = 0; r < 2 * j; ++r) c1 = c1 * (m - r) / (r + 1);
-    for (int r = 0; r < j; ++r) c2 = c2 * (2 * j - r) / (r + 1);
-    s += c1 * c2 * std::pow(0.25 * e * e, j);
-  }
-  return s / std::pow(1.0 - e * e, k - 1.5);
-}
 
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {
@@ -249,11 +234,11 @@ inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
   }
 }
 
-/// The upper bound of the table: the general set of `degree` (`wide`: |q| <= kWideQ) and kNearMax near-resonant terms.
+/// The upper bound of the table: the general set of `degree` (none when `wide`: the grid carries it) and kNearMax near-resonant terms.
 constexpr int kNearMax = 500;
 inline int sp_bound(int degree, bool wide) {
   int c = kNearMax;
-  for (int l = 2; l <= degree; ++l) c += l * (l + 1) * (wide ? 2 * kWideQ + 1 : 3);
+  for (int l = 2; l <= degree && !wide; ++l) c += l * (l + 1) * 3;
   return c;
 }
 
@@ -327,59 +312,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
     const double bound = a0 * A * Fb * (Gb * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * ll / (na2 * ap)) + ll * ll / (na2 * ap) + l * Gb / (na2 * ap));
     return bound >= keep;
   };
-  // Above kWideE every q to |q| <= kWideQ (|j| <= 33): G and dG/de exact at e0 per (l, p, q), the screen bounding |G| by
-  // the mean of (a/r)^(l+1) and |dG/de| by (l + 1) times that of (a/r)^(l+2) plus 3 l of the former over eta^2.
-  const auto can_pass_wide = [&](int l, int m, int w, int q, double Gb, double dGb) {
-    const int j = w + q;
-    const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE));
-    if (ap < 1e-3 * n0) return false;
-    const double ll = l + 1.0, Fb = std::sqrt(2.0 * (2.0 * l + 1.0));
-    const double A = kMu * std::pow(1.0 / a0, l + 1) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
-    const double bound = a0 * A * Fb * (Gb * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * ll / (na2 * ap)) + dGb / (na2 * ap) + l * Gb / (na2 * ap));
-    return bound >= keep;
-  };
-  if (wide) {
-    constexpr int kQn = 2 * kWideQ + 1;
-    for (int l = 2; l <= degree; ++l) {
-      const double Gb = mean_a_over_r(l + 1, e0);
-      const double dGb = (l + 1) * mean_a_over_r(l + 2, e0) + 3.0 * l * Gb / (eta * eta);
-      double gv0[kSpCap + 1][kQn], gv1[kSpCap + 1][kQn];
-      bool have_g[kSpCap + 1][kQn] = {};
-      for (int m = 1; m <= l; ++m)
-        for (int p = 0; p <= l; ++p) {
-          const int w = l - 2 * p;
-          bool any = false;
-          for (int q = -kWideQ; q <= kWideQ && !any; ++q) any = !(q == 0 && w == 0) && can_pass_wide(l, m, w, q, Gb, dGb);
-          if (!any) continue;
-          normalized_Fk(m, w, l, i0, f);
-          double dfv = 0.0;
-          bool have_df = false;
-          for (int q = -kWideQ; q <= kWideQ; ++q) {
-            const int j = w + q;
-            if ((q == 0 && w == 0) || j < -33 || j > 33) continue;  // the m-daily set; the table's harmonics of M
-            if (!can_pass_wide(l, m, w, q, Gb, dGb)) continue;
-            double psidot = 0.0;
-            const double weight = weight_of(l, m, p, q, psidot);
-            if (weight == 0.0) continue;
-            if (!have_df) {
-              normalized_Fk(m, w, l, i0 + h, fp);
-              normalized_Fk(m, w, l, i0 - h, fm);
-              dfv = (fp[l] - fm[l]) / (2.0 * h);
-              have_df = true;
-            }
-            const int qi = q + kWideQ;
-            if (!have_g[p][qi]) {
-              double G, dG;
-              res::exact_G(l, p, q, e0, G, dG);
-              gv1[p][qi] = dG;
-              gv0[p][qi] = G - dG * e0;
-              have_g[p][qi] = true;
-            }
-            put(l, m, p, q, f[l], dfv, gv0[p][qi], gv1[p][qi], weight, psidot);
-          }
-        }
-    }
-  }
+  // Above kWideE the general set is the grid of wide_grid_build (SPEC 16.11); the table keeps the near-resonant terms below.
   for (int l = 2; l <= degree && !wide; ++l)
     for (int m = 1; m <= l; ++m)
       for (int p = 0; p <= l; ++p) {
@@ -779,6 +712,394 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
     }
   }
   return out.count;
+}
+
+/// Above kWideE (SPEC 16.11) the first-order tesseral short-periodics of degree 2 to kSpCap are not a series in M. For each
+/// (l, m, p), sum_q G_lpq e^{i (w + q) M} = (a/r)^(l+1) e^{i w f}, so each (m, w) family's displacement is a periodic
+/// function of the anomaly, complete in j: built on kGridNE uniform eccentric anomalies from the family's forcing (Lagrange's
+/// equations), integrated by H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot with
+/// nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, the harmonics the table's rules leave out (m-daily, the class's,
+/// |psi-dot| < kShallowBand n) subtracted, and kept on kGridN of them with its first derivatives in e, i and a / a0.
+constexpr int kGridN = 128, kGridNE = 256;
+constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward differences of the derivative grids
+/// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
+/// blended linearly into the next node's over the last kGridBlend of each interval.
+constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;
+struct WideGrid {
+  int degree;         // the families' highest degree
+  int count;          // (m, w) families
+  double n, e, i, a;  // the mean elements it was built at
+  int8_t* m;
+  int8_t* w;
+  float* v;           // count x 4 (value, d/de, d/di, d/(da/a)) x 6 x kGridN x (re, im)
+};
+
+inline void fft_inplace(double* re, double* im, int n, bool inverse) {
+  for (int i = 1, j = 0; i < n; ++i) {
+    int bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { std::swap(re[i], re[j]); std::swap(im[i], im[j]); }
+  }
+  for (int len = 2; len <= n; len <<= 1) {
+    const double ang = (inverse ? 2.0 : -2.0) * kPi / len;
+    const double wr = std::cos(ang), wi = std::sin(ang);
+    for (int i = 0; i < n; i += len) {
+      double cr = 1.0, ci = 0.0;
+      for (int j = 0; j < len / 2; ++j) {
+        const int a = i + j, b = a + len / 2;
+        const double vr = re[b] * cr - im[b] * ci, vi = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - vr; im[b] = im[a] - vi;
+        re[a] += vr; im[a] += vi;
+        const double t = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = t;
+      }
+    }
+  }
+}
+
+/// One set of family grids at (n, e, i): out[f][6][kGridN] complex (re, im interleaved), families in (m, w) order with any
+/// forcing; returns the count. `cls`: the class whose terms the rates carry.
+inline int wide_families(int degree, int cls, double n, double e, double inc, int8_t* fm_out, int8_t* fw_out, double* out) {
+  const double eta = std::sqrt(1.0 - e * e), a = std::pow(kKe / n, kX2o3), p0 = a * eta * eta;
+  const double c = std::cos(inc), si = std::sin(inc), j2 = 1.5 * kJ2 / (p0 * p0);
+  const double mdot = n + 0.5 * j2 * n * eta * (3.0 * c * c - 1.0), wdot = 0.5 * j2 * n * (5.0 * c * c - 1.0);
+  const double node_rate = -j2 * n * c, na2 = n * a * a;
+  constexpr int NE = kGridNE;
+  double E[NE], M[NE], cf[NE], sf[NE], ar[NE], sE[NE], fwang[NE];
+  for (int k = 0; k < NE; ++k) {
+    E[k] = kTwoPi * k / NE;
+    sE[k] = std::sin(E[k]);
+    M[k] = E[k] - e * sE[k];
+    ar[k] = 1.0 / (1.0 - e * std::cos(E[k]));
+    cf[k] = (std::cos(E[k]) - e) * ar[k];
+    sf[k] = eta * sE[k] * ar[k];
+    fwang[k] = std::atan2(sf[k], cf[k]);
+  }
+  const res::TermSet carried = res::class_terms(cls);
+  const double h = 1e-5;
+  double f[72], fp[72], fmn[72];
+  double* ws = static_cast<double*>(std::malloc(static_cast<size_t>(20) * 2 * NE * sizeof(double)));
+  if (ws == nullptr) return -1;
+  double (*R)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws);
+  double (*gr)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 6 * 2 * NE);
+  double (*D)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 11 * 2 * NE);
+  double (*X)[NE] = reinterpret_cast<double (*)[NE]>(ws + 18 * 2 * NE);
+  int count = 0;
+  for (int m = 1; m <= degree; ++m)
+    for (int w = -degree; w <= degree; ++w) {
+      for (int z = 0; z < 5; ++z) for (int q = 0; q < NE; ++q) gr[z][0][q] = gr[z][1][q] = 0.0;  // g', g, g_e, g_i, g_a
+      int l0 = m > (w < 0 ? -w : w) ? m : (w < 0 ? -w : w);
+      if (l0 < 2) l0 = 2;
+      if (((l0 - w) & 1) != 0) ++l0;
+      if (l0 > degree) continue;
+      normalized_Fk(m, w, degree, inc, f);
+      normalized_Fk(m, w, degree, inc + h, fp);
+      normalized_Fk(m, w, degree, inc - h, fmn);
+      const double nu = -(w * wdot + m * (node_rate - kOmegaE)) / mdot;
+      // per degree: A (Cbar - i Sbar) for even l - m, A (-Sbar - i Cbar) for odd, times Fbar and dFbar/di
+      double Sr[72], Si[72], Fl[72], dFl[72];
+      for (int l = l0; l <= degree; l += 2) {
+        const bool odd = ((l - m) & 1) != 0;
+        const double A = kMu * std::pow(1.0 / a, l + 1);
+        Sr[l] = A * (odd ? -kEgmS[l][m] : kEgmC[l][m]);
+        Si[l] = A * (odd ? -kEgmC[l][m] : -kEgmS[l][m]);
+        Fl[l] = f[l];
+        dFl[l] = (fp[l] - fmn[l]) / (2.0 * h);
+      }
+      for (int q = 0; q < NE; ++q) {
+        // the sums over l of (a/r)^(l+1) times the degree's coefficients, then e^{i w f} once
+        double p = std::pow(ar[q], l0 + 1);
+        const double ar2 = ar[q] * ar[q];
+        double s0r = 0, s0i = 0, sir = 0, sii = 0, sar = 0, sai = 0, skr = 0, ski = 0;
+        for (int l = l0; l <= degree; l += 2) {
+          const double br = Sr[l] * p, bi = Si[l] * p;
+          s0r += Fl[l] * br; s0i += Fl[l] * bi;                          // g
+          skr += (l + 1) * Fl[l] * br; ski += (l + 1) * Fl[l] * bi;      // sum (l + 1) g_l
+          sir += dFl[l] * br; sii += dFl[l] * bi;                        // g_i
+          sar += -(l + 1) / a * Fl[l] * br; sai += -(l + 1) / a * Fl[l] * bi;  // g_a
+          p *= ar2;
+        }
+        const double ang = w * fwang[q], cw = std::cos(ang), sw = std::sin(ang);
+        const auto rot = [&](double xr, double xi, double& yr, double& yi) { yr = xr * cw - xi * sw; yi = xr * sw + xi * cw; };
+        double gR, gI, kR, kI;
+        rot(s0r, s0i, gR, gI);
+        rot(skr, ski, kR, kI);
+        gr[1][0][q] = gR; gr[1][1][q] = gI;
+        rot(sir, sii, gr[3][0][q], gr[3][1][q]);
+        rot(sar, sai, gr[4][0][q], gr[4][1][q]);
+        // d/dM: (a/r)^2 (-(l + 1) e sin E + i w eta) per degree
+        gr[0][0][q] = ar2 * (-e * sE[q] * kR - w * eta * gI);
+        gr[0][1][q] = ar2 * (-e * sE[q] * kI + w * eta * gR);
+        // d/de: (l + 1) (a/r) cos f + i w sin f (2 + e cos f) / eta^2 per degree
+        const double ei = w * sf[q] * (2.0 + e * cf[q]) / (eta * eta);
+        gr[2][0][q] = ar[q] * cf[q] * kR - ei * gI;
+        gr[2][1][q] = ar[q] * cf[q] * kI + ei * gR;
+      }
+      // rates (a, e, i, Omega, omega, M); i x: (re, im) -> (-im, re)
+      for (int q = 0; q < NE; ++q) {
+        const double gMr = gr[0][0][q], gMi = gr[0][1][q], gR = gr[1][0][q], gI = gr[1][1][q];
+        R[0][0][q] = 2.0 / (n * a) * gMr; R[0][1][q] = 2.0 / (n * a) * gMi;
+        R[1][0][q] = eta * eta / (na2 * e) * gMr + eta / (na2 * e) * w * gI;
+        R[1][1][q] = eta * eta / (na2 * e) * gMi - eta / (na2 * e) * w * gR;
+        R[2][0][q] = -(c * w - m) / (na2 * eta * si) * gI; R[2][1][q] = (c * w - m) / (na2 * eta * si) * gR;
+        R[3][0][q] = gr[3][0][q] / (na2 * eta * si); R[3][1][q] = gr[3][1][q] / (na2 * eta * si);
+        R[4][0][q] = eta / (na2 * e) * gr[2][0][q] - c / (na2 * eta * si) * gr[3][0][q];
+        R[4][1][q] = eta / (na2 * e) * gr[2][1][q] - c / (na2 * eta * si) * gr[3][1][q];
+        R[5][0][q] = -2.0 / (n * a) * gr[4][0][q] - eta * eta / (na2 * e) * gr[2][0][q];
+        R[5][1][q] = -2.0 / (n * a) * gr[4][1][q] - eta * eta / (na2 * e) * gr[2][1][q];
+      }
+      // the harmonics the table's rules leave out, in rate form: m-daily (w = j = 0), the class's, the slow band
+      for (int l = l0; l <= degree; l += 2) {
+        const int p = (l - w) / 2;
+        const double F = f[l], dF = (fp[l] - fmn[l]) / (2.0 * h);
+        const bool odd = ((l - m) & 1) != 0;
+        const double A = kMu * std::pow(1.0 / a, l + 1);
+        const double Sr = A * (odd ? -kEgmS[l][m] : kEgmC[l][m]), Si = A * (odd ? -kEgmC[l][m] : -kEgmS[l][m]);
+        const int jlo = static_cast<int>(std::floor(nu - kShallowBand * n / mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + kShallowBand * n / mdot)) + 1;
+        for (int j = -(degree + 64); j <= degree + 64; ++j) {
+          const int q = j - w;
+          bool out_ = w == 0 && j == 0;
+          for (int t = 0; t < carried.count && !out_; ++t)
+            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = true;
+          if (!out_ && j >= jlo && j <= jhi) out_ = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)) < kShallowBand * n;
+          if (!out_) continue;
+          // G and dG/de at fixed M by the trapezoid on the E nodes (dM = (1 - e cos E) dE; spectral for these periodic integrands)
+          double G = 0.0, dG = 0.0;
+          for (int k = 0; k < NE; ++k) {
+            const double ph = w * fwang[k] - j * M[k], cp = std::cos(ph), sp = std::sin(ph);
+            const double ak = std::pow(ar[k], l);  // (a/r)^(l+1) (1 - e cos E)
+            G += ak * cp;
+            dG += ak * ((l + 1) * ar[k] * cf[k] * cp - w * sf[k] * (2.0 + e * cf[k]) / (eta * eta) * sp);
+          }
+          G /= NE;
+          dG /= NE;
+          const double Zr = F * G * Sr, Zi = F * G * Si, Zer = F * dG * Sr, Zei = F * dG * Si, Zir = dF * G * Sr, Zii = dF * G * Si;
+          // the six rates of this harmonic: dV/dM = i j Z, dV/domega = i w Z, dV/dOmega = i m Z, dV/da = -(l + 1) / a Z
+          double rr[6][2];
+          rr[0][0] = 2.0 / (n * a) * (-j * Zi); rr[0][1] = 2.0 / (n * a) * (j * Zr);
+          rr[1][0] = eta * eta / (na2 * e) * (-j * Zi) + eta / (na2 * e) * w * Zi;
+          rr[1][1] = eta * eta / (na2 * e) * (j * Zr) - eta / (na2 * e) * w * Zr;
+          rr[2][0] = -(c * w - m) / (na2 * eta * si) * Zi; rr[2][1] = (c * w - m) / (na2 * eta * si) * Zr;
+          rr[3][0] = Zir / (na2 * eta * si); rr[3][1] = Zii / (na2 * eta * si);
+          rr[4][0] = eta / (na2 * e) * Zer - c / (na2 * eta * si) * Zir; rr[4][1] = eta / (na2 * e) * Zei - c / (na2 * eta * si) * Zii;
+          rr[5][0] = 2.0 / (n * a) * (l + 1) / a * Zr - eta * eta / (na2 * e) * Zer;
+          rr[5][1] = 2.0 / (n * a) * (l + 1) / a * Zi - eta * eta / (na2 * e) * Zei;
+          for (int k = 0; k < NE; ++k) {
+            const double cj = std::cos(j * M[k]), sj = std::sin(j * M[k]);
+            for (int z = 0; z < 6; ++z) { R[z][0][k] -= rr[z][0] * cj - rr[z][1] * sj; R[z][1][k] -= rr[z][0] * sj + rr[z][1] * cj; }
+          }
+        }
+      }
+      // H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / mdot
+      double cph_[NE], sph_[NE];
+      for (int q = 0; q < NE; ++q) { cph_[q] = std::cos(nu * e * sE[q]); sph_[q] = std::sin(nu * e * sE[q]); }
+      const auto op = [&](double (*r)[NE], double (*o)[NE]) {
+        for (int q = 0; q < NE; ++q) {
+          const double wgt = 1.0 / ar[q], cph = cph_[q], sph = sph_[q];
+          X[0][q] = wgt * (r[0][q] * cph - r[1][q] * sph);
+          X[1][q] = wgt * (r[0][q] * sph + r[1][q] * cph);
+        }
+        fft_inplace(X[0], X[1], NE, false);
+        for (int k = 0; k < NE; ++k) {
+          const double d = (k < NE / 2 ? k : k - NE) - nu;  // divide by i d NE
+          const double xr = X[0][k], xi = X[1][k];
+          X[0][k] = xi / (d * NE);
+          X[1][k] = -xr / (d * NE);
+        }
+        fft_inplace(X[0], X[1], NE, true);
+        for (int q = 0; q < NE; ++q) {
+          const double cph = cph_[q], sph = sph_[q];
+          o[0][q] = (X[0][q] * cph + X[1][q] * sph) / mdot;
+          o[1][q] = (X[1][q] * cph - X[0][q] * sph) / mdot;
+        }
+      };
+      for (int z = 0; z < 6; ++z) op(R[z], D[z]);
+      for (int q = 0; q < NE; ++q) { R[0][0][q] = -1.5 * n / a * D[0][0][q]; R[0][1][q] = -1.5 * n / a * D[0][1][q]; }
+      op(R[0], D[6]);
+      // six components (n, e, i, e varpi, sin i Omega, lambda) on every (NE / kGridN)-th node
+      double* o = out + static_cast<size_t>(count) * 6 * kGridN * 2;
+      for (int g = 0; g < kGridN; ++g) {
+        const int q = g * (NE / kGridN);
+        for (int ri = 0; ri < 2; ++ri) {
+          const double da = D[0][ri][q], de = D[1][ri][q], di = D[2][ri][q], dO = D[3][ri][q], dw = D[4][ri][q], dM = D[5][ri][q] + D[6][ri][q];
+          const double six[6] = {-1.5 * n / a * da, de, di, e * (dw + dO), si * dO, dM + dw + dO};
+          for (int z = 0; z < 6; ++z) o[(z * kGridN + g) * 2 + ri] = six[z];
+        }
+      }
+      fm_out[count] = static_cast<int8_t>(m);
+      fw_out[count] = static_cast<int8_t>(w);
+      ++count;
+    }
+  std::free(ws);
+  return count;
+}
+
+/// The grid of an object above kWideE at its mean elements (n, e, i), with its derivative grids; false out of memory.
+inline bool wide_grid_build(int degree, int cls, double n, double e, double inc, WideGrid& g) {
+  const int cap = degree * (2 * degree + 1);
+  const size_t per = static_cast<size_t>(6) * kGridN * 2, one = static_cast<size_t>(cap) * per;
+  double* sp = static_cast<double*>(std::malloc(one * sizeof(double)));
+  double* sn = static_cast<double*>(std::malloc(one * sizeof(double)));
+  float* v = static_cast<float*>(std::malloc(static_cast<size_t>(cap) * 4 * per * sizeof(float)));
+  int8_t* fm = static_cast<int8_t*>(std::malloc(cap));
+  int8_t* fw = static_cast<int8_t*>(std::malloc(cap));
+  int8_t* sm = static_cast<int8_t*>(std::malloc(2 * cap));
+  const auto fail = [&]() { std::free(sp); std::free(sn); std::free(v); std::free(fm); std::free(fw); std::free(sm); return false; };
+  if (sp == nullptr || sn == nullptr || v == nullptr || fm == nullptr || fw == nullptr || sm == nullptr) return fail();
+  const int count = wide_families(degree, cls, n, e, inc, fm, fw, sn);
+  if (count < 0) return fail();
+  for (int f = 0; f < count; ++f)
+    for (size_t k = 0; k < per; ++k) v[static_cast<size_t>(f) * 4 * per + k] = static_cast<float>(sn[f * per + k]);
+  // the derivative grids, one forward difference at a time: e, i, a / a
+  const double hp[3][3] = {{n, e + kGridDe, inc}, {n, e, inc + kGridDi}, {n / std::pow(1.0 + kGridDa, 1.5), e, inc}};
+  const double step[3] = {kGridDe, kGridDi, kGridDa};
+  for (int d = 0; d < 3; ++d) {
+    if (wide_families(degree, cls, hp[d][0], hp[d][1], hp[d][2], sm, sm + cap, sp) != count) return fail();
+    for (int f = 0; f < count; ++f)
+      for (size_t k = 0; k < per; ++k)
+        v[static_cast<size_t>(f) * 4 * per + (d + 1) * per + k] = static_cast<float>((sp[f * per + k] - sn[f * per + k]) / step[d]);
+  }
+  std::free(sp); std::free(sn); std::free(sm);
+  g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v;
+  g.n = n; g.e = e; g.i = inc; g.a = std::pow(kKe / n, kX2o3);
+  return true;
+}
+
+inline void wide_grid_release(WideGrid& g) {
+  std::free(g.m); std::free(g.w); std::free(g.v);
+  g.m = g.w = nullptr; g.v = nullptr; g.count = 0;
+}
+
+/// Grids are shared only by sets with the same mean elements (a set's own grid, exact for every perturbed set of a fit, keeps
+/// its finite-difference partials consistent): each counted, freed when its last holder drops it, except the one most recently
+/// dropped, kept until another grid is built. One idle grid at most.
+struct GridSlot {
+  WideGrid* g;
+  int cls, refs;
+  uint32_t stamp;  // when it last became idle
+};
+constexpr int kGridIdle = 4;  // idle grids kept: a flight's current and next schedule nodes, for the set and its covariance
+struct GridCache {
+  int32_t word;
+  int count;
+  uint32_t clock;
+  GridSlot slot[64];
+};
+/// Frees the oldest idle grid while more than `keep` are idle (the cache's lock held).
+inline void evict_idle(struct GridCache& c, int keep);
+inline GridCache& grid_cache() {
+  static GridCache c{};
+  return c;
+}
+inline void cache_lock(int32_t* w) {
+  int32_t expected = 0;
+  while (!__atomic_compare_exchange_n(w, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) expected = 0;
+}
+inline void cache_unlock(int32_t* w) { __atomic_store_n(w, 0, __ATOMIC_RELEASE); }
+inline void free_grid(WideGrid* g) {
+  wide_grid_release(*g);
+  std::free(g);
+}
+
+/// A grid for (n, e, i): a live or idle one built at these elements, else a new one; nullptr out of memory.
+inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc) {
+  GridCache& c = grid_cache();
+  const double a = std::pow(kKe / n, kX2o3);
+  cache_lock(&c.word);
+  for (int k = 0; k < c.count; ++k) {
+    const WideGrid& g = *c.slot[k].g;
+    if (g.degree == degree && c.slot[k].cls == cls && e == g.e && inc == g.i && a == g.a) {
+      ++c.slot[k].refs;
+      WideGrid* hit = c.slot[k].g;
+      cache_unlock(&c.word);
+      return hit;
+    }
+  }
+  // a build: the oldest idle grid goes first beyond kGridIdle - 1, so a worker holds a bounded number
+  evict_idle(c, kGridIdle - 1);
+  cache_unlock(&c.word);
+  WideGrid* g = static_cast<WideGrid*>(std::calloc(1, sizeof(WideGrid)));
+  if (g == nullptr) return nullptr;
+  if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
+  cache_lock(&c.word);
+  if (c.count < 64) {
+    c.slot[c.count++] = GridSlot{g, cls, 1, 0};
+    cache_unlock(&c.word);
+    return g;
+  }
+  cache_unlock(&c.word);
+  free_grid(g);
+  return nullptr;
+}
+
+/// Drops a holder; the last holder's grid stays idle until the next build.
+inline void wide_grid_drop(WideGrid* g) {
+  if (g == nullptr) return;
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  for (int k = 0; k < c.count; ++k)
+    if (c.slot[k].g == g) {
+      if (--c.slot[k].refs == 0) {
+        c.slot[k].stamp = ++c.clock;
+        evict_idle(c, kGridIdle);
+      }
+      break;
+    }
+  cache_unlock(&c.word);
+}
+
+inline void evict_idle(GridCache& c, int keep) {
+  for (;;) {
+    int idle = 0, oldest = -1;
+    for (int k = 0; k < c.count; ++k)
+      if (c.slot[k].refs == 0) {
+        ++idle;
+        if (oldest < 0 || c.slot[k].stamp < c.slot[oldest].stamp) oldest = k;
+      }
+    if (idle <= keep || oldest < 0) return;
+    free_grid(c.slot[oldest].g);
+    c.slot[oldest] = c.slot[--c.count];
+  }
+}
+
+
+/// The displacements in the six-component set, the grid's cubic in E at the current anomaly times e^{i (w omega + m beta)}.
+inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta_g0, double* six) {
+  const double de = kp.e - g.e, di = kp.i - g.i, da = kp.a / g.a - 1.0;
+  double E = kp.m;
+  for (int it = 0; it < 50; ++it) {
+    const double d = (E - kp.e * std::sin(E) - kp.m) / (1.0 - kp.e * std::cos(E));
+    E -= d;
+    if (std::fabs(d) < 1e-14) break;
+  }
+  E = std::fmod(E, kTwoPi);
+  if (E < 0.0) E += kTwoPi;
+  const double x = E / kTwoPi * kGridN;
+  int i1 = static_cast<int>(x);
+  const double u = x - i1;
+  const int i0 = (i1 - 1 + kGridN) % kGridN, i2 = (i1 + 1) % kGridN, i3 = (i1 + 2) % kGridN;
+  i1 %= kGridN;
+  const double w0 = -u * (u - 1.0) * (u - 2.0) / 6.0, w1 = (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0;
+  const double w2 = -(u + 1.0) * u * (u - 2.0) / 2.0, w3 = (u + 1.0) * u * (u - 1.0) / 6.0;
+  const int idx[4] = {i0, i1, i2, i3};
+  const double wt[4] = {w0, w1, w2, w3};
+  const double beta = kp.node - (theta_g0 + kOmegaE * t);
+  const size_t per = static_cast<size_t>(6) * kGridN * 2;
+  for (int f = 0; f < g.count; ++f) {
+    const float* v = g.v + static_cast<size_t>(f) * 4 * per;
+    const double ph = g.w[f] * kp.argp + g.m[f] * beta, cph = std::cos(ph), sph = std::sin(ph);
+    for (int z = 0; z < 6; ++z) {
+      double hr = 0.0, hi = 0.0;
+      for (int k = 0; k < 4; ++k) {
+        const size_t at = (static_cast<size_t>(z) * kGridN + idx[k]) * 2;
+        hr += wt[k] * (v[at] + de * v[per + at] + di * v[2 * per + at] + da * v[3 * per + at]);
+        hi += wt[k] * (v[at + 1] + de * v[per + at + 1] + di * v[2 * per + at + 1] + da * v[3 * per + at + 1]);
+      }
+      six[z] += hr * cph - hi * sph;
+    }
+  }
 }
 
 }  // namespace tess

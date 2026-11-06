@@ -2308,11 +2308,20 @@ Molniya and GEO-like unchanged (2.1, 5.2, 11.7, 11.6 and 1.4 ms on the 1 h grid)
 
 **16.11 Wide terms above e 0.3.** A perigee pass spreads each term of the field over the harmonics of M. From 0.4.15,
 above an epoch eccentricity of 0.3, AP's zonal tail (16.3) carries every long-period term, w = l - 2p for p = 0..l with
-q = -w (G = O(e^|w|)), not only w = 0 and +-1; and its first-order tesseral set (16.2) takes every q with |q| <= 10 and
-|j| <= 33, G and dG/de exact at the epoch eccentricity for each (l, p, q), a term screened by |G| <= the mean over M of
-(a/r)^(l+1) and |dG/de| <= (l + 1) times the mean of (a/r)^(l+2) plus 3 l times that of (a/r)^(l+1) over eta^2 before
-the 0.5 m position test of 16.2. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO,
-Etalon- and GPS-like seeded sets are byte-identical.
+q = -w (G = O(e^|w|)), not only w = 0 and +-1. From 0.6.3 the first-order tesseral terms of degree 2 to 12 (16.2) are not a
+series in M there. For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, so each (m, w) family's
+first-order displacement (Lagrange's equations, each harmonic divided by its psi-dot, lambda also through n) is a periodic
+function of the anomaly, complete in j. At init it is built on 256 uniform eccentric anomalies from the family's forcing:
+H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
+omega_E)) / M-dot, R the six rates, the harmonics 16.2 leaves out (m-daily, the class's, |psi-dot| < 0.045 n) subtracted one
+by one with G and dG/de exact. Kept on 128 of them with its derivatives in e, i and a / a (central differences), single
+precision, and read at output time by the four-point periodic cubic in E, linear in the mean elements' offsets, times
+e^{i(w omega + m beta)}; built once per set at init, each of a fit's perturbed sets its own, so the partials stay
+continuous (7.1 MB per set, freed with it). Against
+the full-field quadrature on THEMIS (e 0.82, 7 days at 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference; the
+0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the
+table. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded
+sets are byte-identical.
 
 The 4x4 case of 16.10 measured a mismatch: XP carries J5 (2) at every FORCES and the 4x4 truth has none. With J5 zero on
 AP's side 0.4.14 is at 98.9 m on day 7 (2-minute samples, Sun and Moon off both sides, 72 h fits, 3D RMS), flat over the
