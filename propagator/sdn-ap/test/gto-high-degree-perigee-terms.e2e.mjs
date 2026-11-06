@@ -14,9 +14,9 @@
 //    with the coefficient pinned at the truth's 0.044: along-track no worse than 0.4.14's;
 // 4. the field cut to 4x4 on both sides, the Sun, Moon and J5 off on both sides, 2-minute samples: day-7 3D RMS at most
 //    100 (0.4.14 printed first);
-// 5. at the GTO fixture's elements, against independent integrations, each element within 0.1 m over one orbit: the
-//    zonal tail's rates (J6-J20) against the potential averaged over M by quadrature; the first-order tesseral set's
-//    displacements against a numerical integration of its rates (RMS) and against Hansen coefficients by quadrature in M;
+// 5. at the GTO fixture's elements, against an independent integration, each element within 0.1 m over one orbit: the
+//    zonal tail's rates (J6-J20) against the potential averaged over M by quadrature (the first-order tesseral families,
+//    a grid from 0.6.3, are checked against the full-field quadrature in test/themis-ripple.e2e.mjs);
 // 6. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -88,130 +88,8 @@ int32_t sdnap_test_wide_verify(const double* yin, int32_t zd, int32_t td, double
     }
     out[18] = count;
   }
-  // 2. The first-order tesseral set: its displacements against a numerical integration of its rates over one orbit
-  //    (RK4, 0.1 min), the slow elements frozen and the angles at the secular J2 rates the set uses; 3. against Hansen
-  //    coefficients by quadrature in M (8192 points).
-  {
-    const int cls = res::band_of(n), nd = td > kShallowCap ? kShallowCap : td, spd = td > kSpCap ? kSpCap : td;
-    SpCoef* tab = static_cast<SpCoef*>(std::malloc(sp_bound(spd, e > kWideE) * sizeof(SpCoef)));
-    const int count = sp_terms(spd, nd, cls, false, n, inc, e, tab);
-    out[17] = count;
-    const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
-    const double node_rate = -j2 * n * ci, wdot = 0.5 * j2 * n * (5.0 * ci * ci - 1.0);
-    const double mdot = n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0);
-    const auto kp_at = [&](double t) { return Kepler{a, e, inc, node + node_rate * t, argp + wdot * t, M0 + mdot * t}; };
-    const auto analytic = [&](const SpCoef* tb, double t, double* six) {
-      for (int k = 0; k < 6; ++k) six[k] = 0.0;
-      sp_six(tb, count, t, kp_at(t), n, eta, si, ci, th0, six);
-    };
-    const auto rates = [&](double t, double* r6) {
-      const Kepler kp = kp_at(t);
-      const double beta = kp.node - (th0 + kOmegaE * t);
-      double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sA = 0;
-      for (int k = 0; k < count; ++k) {
-        const SpCoef& c = tab[k];
-        const int l = c.l, m = c.m, w = c.w, j = c.j;
-        const double psi = w * kp.argp + j * kp.m + m * beta, cp = std::cos(psi), sp = std::sin(psi);
-        const double C = kEgmC[l][m], S0 = kEgmS[l][m];
-        const bool odd = ((l - m) & 1) != 0;
-        const double Sv = odd ? -S0 * cp + C * sp : C * cp + S0 * sp;
-        const double dS = odd ? S0 * sp + C * cp : -C * sp + S0 * cp;
-        const double G = c.g0 + c.g1 * e, A = kMu * std::pow(1.0 / a, l + 1);
-        sM += j * A * c.f * G * dS;
-        sW += w * A * c.f * G * dS;
-        sO += m * A * c.f * G * dS;
-        sE += A * c.f * c.g1 * Sv;
-        sI += A * c.df * G * Sv;
-        sA += -(l + 1) * A * c.f * G * Sv / a;
-      }
-      r6[0] = -3.0 / (a * a) * sM;
-      r6[1] = (eta * eta * sM - eta * sW) / (na2 * e);
-      r6[2] = (ci * sW - sO) / (na2 * eta * si);
-      r6[3] = (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
-      r6[4] = sI / (na2 * eta);
-      r6[5] = -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
-    };
-    const double scale[6] = {(2.0 / 3.0) * a / n * toM, a * toM, a * toM, a * toM, a * toM, a * toM};
-    double six0[6], y[6] = {0, 0, 0, 0, 0, 0}, ss[6] = {0, 0, 0, 0, 0, 0}, mag[6] = {0, 0, 0, 0, 0, 0};
-    analytic(tab, 0.0, six0);
-    const auto deriv = [&](double t, const double* yy, double* d) {
-      rates(t, d);
-      d[5] += six0[0] + yy[0];
-    };
-    const double hs = 0.1;
-    const int steps = static_cast<int>(std::ceil(T / hs)), every = 20;
-    int samples = 0;
-    for (int s = 0; s < steps; ++s) {
-      const double t = s * hs;
-      double k1[6], k2[6], k3[6], k4[6], yt[6];
-      deriv(t, y, k1);
-      for (int k = 0; k < 6; ++k) yt[k] = y[k] + 0.5 * hs * k1[k];
-      deriv(t + 0.5 * hs, yt, k2);
-      for (int k = 0; k < 6; ++k) yt[k] = y[k] + 0.5 * hs * k2[k];
-      deriv(t + 0.5 * hs, yt, k3);
-      for (int k = 0; k < 6; ++k) yt[k] = y[k] + hs * k3[k];
-      deriv(t + hs, yt, k4);
-      for (int k = 0; k < 6; ++k) y[k] += hs * (k1[k] + 2.0 * k2[k] + 2.0 * k3[k] + k4[k]) / 6.0;
-      if ((s + 1) % every == 0) {
-        double six[6];
-        analytic(tab, t + hs, six);
-        for (int k = 0; k < 6; ++k) {
-          const double d = (six[k] - six0[k] - y[k]) * scale[k];
-          ss[k] += d * d;
-          mag[k] += ((six[k] - six0[k]) * scale[k]) * ((six[k] - six0[k]) * scale[k]);
-        }
-        ++samples;
-      }
-    }
-    for (int k = 0; k < 6; ++k) {
-      out[5 + k] = std::sqrt(ss[k] / samples);
-      out[26 + k] = std::sqrt(mag[k] / samples);
-    }
-    // Hansen coefficients by quadrature in M.
-    constexpr int NM = 8192;
-    double* aor = static_cast<double*>(std::malloc(NM * sizeof(double)));
-    double* fv = static_cast<double*>(std::malloc(NM * sizeof(double)));
-    for (int k = 0; k < NM; ++k) {
-      const double M = kTwoPi * (k + 0.5) / NM;
-      double E = M + e * std::sin(M);
-      for (int it = 0; it < 50; ++it) {
-        const double dE = (E - e * std::sin(E) - M) / (1.0 - e * std::cos(E));
-        E -= dE;
-        if (std::fabs(dE) < 1e-15) break;
-      }
-      aor[k] = 1.0 / (1.0 - e * std::cos(E));
-      fv[k] = std::atan2(eta * std::sin(E), std::cos(E) - e);
-    }
-    SpCoef* tab2 = static_cast<SpCoef*>(std::malloc((count > 0 ? count : 1) * sizeof(SpCoef)));
-    double worst = 0.0;
-    for (int k = 0; k < count; ++k) {
-      const SpCoef& c = tab[k];
-      double G = 0.0;
-      for (int q = 0; q < NM; ++q) {
-        const double M = kTwoPi * (q + 0.5) / NM;
-        G += std::pow(aor[q], c.l + 1) * std::cos(c.w * fv[q] - c.j * M);
-      }
-      G /= NM;
-      tab2[k] = c;
-      tab2[k].g0 = static_cast<float>(G - c.g1 * e);
-      const double Gt = c.g0 + c.g1 * e;
-      if (std::fabs(G) > 1e-9) worst = std::fmax(worst, std::fabs(Gt - G) / std::fabs(G));
-    }
-    out[19] = worst;
-    double ss2[6] = {0, 0, 0, 0, 0, 0};
-    int n2 = 0;
-    for (double t = 0.0; t <= T; t += 2.0, ++n2) {
-      double s1[6], s2[6];
-      analytic(tab, t, s1);
-      analytic(tab2, t, s2);
-      for (int k = 0; k < 6; ++k) ss2[k] += ((s1[k] - s2[k]) * scale[k]) * ((s1[k] - s2[k]) * scale[k]);
-    }
-    for (int k = 0; k < 6; ++k) out[11 + k] = std::sqrt(ss2[k] / n2);
-    std::free(aor);
-    std::free(fv);
-    std::free(tab2);
-    std::free(tab);
-  }
+  // The first-order tesseral families above e 0.3 are the grid of SPEC 16.11; test/themis-ripple.e2e.mjs checks it against the
+  // full-field quadrature, at this fixture's elements among others.
   return 0;
 }
 `;
@@ -291,9 +169,7 @@ for (const argp of [270, 300]) {
   checks.push({
     argp,
     zonalRates: Object.fromEntries(ELEMENTS.map((k, j) => [k, {differenceM: v[j], sizeM: v[20 + j]}])),
-    tesseralIntegration: Object.fromEntries(['n', ...ELEMENTS].map((k, j) => [k, {rmsM: v[5 + j], sizeM: v[26 + j]}])),
-    tesseralHansen: Object.fromEntries(['n', ...ELEMENTS].map((k, j) => [k, {rmsM: v[11 + j]}])),
-    tesseralTerms: v[17], zonalTerms: v[18], worstHansenRelative: v[19],
+    zonalTerms: v[18],
   });
   console.log(JSON.stringify(checks.at(-1)));
 }
@@ -314,8 +190,6 @@ assert.ok(fixtures['Molniya-pinned'].release.alongTrack <= fixtures['Molniya-pin
 assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {
   for (const [k, c] of Object.entries(check.zonalRates)) assert.ok(c.differenceM <= 0.1, `zonal ${k}: ${c.differenceM} m over one orbit`);
-  for (const [k, c] of Object.entries(check.tesseralIntegration)) assert.ok(c.rmsM <= 0.1, `tesseral integration ${k}: ${c.rmsM} m RMS`);
-  for (const [k, c] of Object.entries(check.tesseralHansen)) assert.ok(c.rmsM <= 0.1, `tesseral Hansen ${k}: ${c.rmsM} m RMS`);
 }
 execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
   {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
