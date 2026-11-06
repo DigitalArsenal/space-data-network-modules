@@ -56,3 +56,15 @@ add_executable(private_screening_protocol
 target_include_directories(private_screening_protocol PRIVATE "${FB_ROOT}/include")
 target_compile_definitions(private_screening_protocol PRIVATE FLATBUFFERS_HE_USE_SEAL=1)
 target_link_libraries(private_screening_protocol PRIVATE seal)
+
+# The noise-channel measurement (PROTOCOL-NOISE.md): one translation unit with
+# the fork's he_encryption.cpp, built with -fno-access-control so that the
+# requester, the key holder, reaches its own decryptor's phase routine.
+add_executable(private_screening_noise
+  noise_channel.cpp
+  "${FB_ROOT}/src/he_encryption_wasi.cpp"
+  "${FB_ROOT}/src/encryption.cpp")
+target_include_directories(private_screening_noise PRIVATE "${FB_ROOT}/include" "${FB_ROOT}/src")
+target_compile_definitions(private_screening_noise PRIVATE FLATBUFFERS_HE_USE_SEAL=1)
+target_compile_options(private_screening_noise PRIVATE -fno-access-control)
+target_link_libraries(private_screening_noise PRIVATE seal)
