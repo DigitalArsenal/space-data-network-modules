@@ -5,8 +5,8 @@
 // flows/observation-ap/flow.mjs: the hosts are SDK module hosts with invoke({ methodId, inputs }); this file routes
 // typed records and computes nothing. Any theory but SGP4XP and AP is refused by name before any flight, and a set
 // sdn-ap refuses is refused with its code and message unchanged; the other sets screen. The covariance of a set that
-// states a producer (PVN.PRODUCER) reaches the screen only when that producer build is on the request's
-// CONTROLS.VERIFIED_COVARIANCE_PRODUCERS, whatever the set's theory.
+// states a producer (PVN.PRODUCER or PVN.PRODUCER_SHA256), or whose theory names it (PRODUCER_THEORIES), reaches the
+// screen only when that producer build is on the request's CONTROLS.VERIFIED_COVARIANCE_PRODUCERS.
 import * as flatbuffers from 'flatbuffers';
 import {
   CQR, CQRT, CQRCatalogRequest, CQRObjectSourceT, CQRScreeningControlsT, CQRVerifiedCovarianceProducerT, OCM, OEM, OMM,
@@ -21,8 +21,19 @@ export const OCM_SET_FLIGHT = Object.freeze({ stepSeconds: 30, frame: 'TEME' });
 /** The theories the flow flies through propagator/sdn-ap; every other one is refused by name. */
 export const FLOWN_THEORIES = Object.freeze([meanElementSource.SGP4XP, meanElementSource.AP]);
 
-/** An event's PROBABILITY_REFUSAL for a set whose covariance producer build is not verified: this, then the PVN.PRODUCER seen. */
+/**
+ * An event's PROBABILITY_REFUSAL for a set whose covariance producer build is not verified: this, then the PVN.PRODUCER
+ * seen, else `sha256:<PVN.PRODUCER_SHA256>`, else NO_PRODUCER.
+ */
 export const COVARIANCE_REFUSAL = 'pc-covariance-unverified:';
+export const NO_PRODUCER = '(no producer)';
+
+/**
+ * The theories whose covariance is gated even with no producer stated: only sdn-ap fits AP, and no public source issues
+ * SGP4XP covariance, so an unnamed one is sdn-ap's with the name stripped. A set of any other theory stating none is
+ * its operator's.
+ */
+export const PRODUCER_THEORIES = Object.freeze([meanElementSource.SGP4XP, meanElementSource.AP]);
 
 const T = (name) => ({ schemaName: `${name}.fbs`, fileIdentifier: `$${name}`, rootTypeName: name, wireFormat: 'flatbuffer' });
 const ident = (u, at) => String.fromCharCode(...u.subarray(at, at + 4));
@@ -58,6 +69,13 @@ function verifiedProducers(request) {
 /** Whether a set's producer build is listed: on the hash where both state one, else on the PVN.PRODUCER string. */
 function isVerified(list, set) {
   return list.some((p) => (p.sha256 && set.producerSha256 ? p.sha256 === set.producerSha256 : set.producer !== '' && p.producer === set.producer));
+}
+
+/** The producer a set's covariance is gated on (its name, its hash, or NO_PRODUCER where its theory names it), else null. */
+function gatedProducer(set) {
+  if (set.producer !== '') return set.producer;
+  if (set.producerSha256 !== '') return `sha256:${set.producerSha256}`;
+  return PRODUCER_THEORIES.includes(set.theory) ? NO_PRODUCER : null;
 }
 
 /** The instants of a flight: the window start, every step, to the first instant at or after the window end (UTC ISO 8601). */
@@ -152,11 +170,12 @@ export async function drainCatalogScreen(conjunction, request, extra = []) {
  * @param {{thresholdKm: number, coarseStepSec?: number, workers?: number, algorithm?: string, fineTolSec?: number, combinedRadiusM?: number,
  *   verifiedCovarianceProducers?: {PRODUCER: string, PRODUCER_SHA256: string, VERIFICATION_REFERENCE?: string}[]}} o.controls
  *   verifiedCovarianceProducers: the request's CONTROLS.VERIFIED_COVARIANCE_PRODUCERS (CQRVerifiedCovarianceProducerT);
- *   absent or empty, no covariance whose set states a producer reaches the screen.
+ *   absent or empty, no covariance gated on a producer (gatedProducer) reaches the screen.
  * @param {Uint8Array} [o.uncertaintyModel]  $ERM for the element sets the module flies itself (screen_catalog's uncertainty_model).
  * @returns {Promise<{events: object[], excluded: Uint8Array[], refused: object[], covarianceRefused: object[], statistics: object, flights: number}>}
  *   refused: one entry per set left out, by name: { objectId, name, norad, theory, code, message }.
- *   covarianceRefused: one entry per set screened without its covariance: { objectId, name, norad, producer, producerSha256, code }.
+ *   covarianceRefused: one entry per set screened without its covariance: { objectId, name, norad, producer, producerSha256, code }
+ *   (producer and producerSha256 as the set states them, empty where it states none).
  */
 export async function screenOcmSets(hosts, o) {
   const sources = [], refused = [], covarianceRefused = [];
@@ -177,10 +196,11 @@ export async function screenOcmSets(hosts, o) {
     if (r.statusCode !== 0) { refused.push({ objectId: set.objectId, name: set.name, norad: set.norad, theory: set.theoryName, code: r.errorCode ?? 'propagate-failed', message: r.errorMessage ?? '' }); continue; }
     const source = ephemerisSource(set, r.outputs.find((x) => x.portId === 'ephemeris')?.payload ?? new Uint8Array());
     const blocks = source.EPHEMERIS.EPHEMERIS_DATA_BLOCK ?? [];
-    if (set.producer !== '' && blocks.some((b) => b.COVARIANCE_MATRIX_LINES?.length) && !isVerified(verified, set)) {
+    const producer = gatedProducer(set);
+    if (producer !== null && blocks.some((b) => b.COVARIANCE_MATRIX_LINES?.length) && !isVerified(verified, set)) {
       for (const b of blocks) Object.assign(b, { COVARIANCE_MATRIX_LINES: [], COV_REFERENCE_FRAME: null });
       covarianceRefused.push({ objectId: set.objectId, name: set.name, norad: set.norad, producer: set.producer, producerSha256: set.producerSha256,
-        code: `${COVARIANCE_REFUSAL}${set.producer}` });
+        code: `${COVARIANCE_REFUSAL}${producer}` });
     }
     sources.push(source);
   }
