@@ -150,7 +150,10 @@ Known answers both ways: real precise-orbit tracks pass (Swarm before
 2026-11-01, Sentinel-1, one GPS satellite, from the archive, with J2 and drag
 in them); the fabricated probes fail at every step they touch. If a real track
 is not read inside this record's box, its line is reported as not measured,
-never as passed.
+never as passed, and real tracks passing the physics check is then a gate
+beside S4 before the feature is offered on any host or the console: a check
+that rejects real orbits would block every real user, so it cannot ship
+unmeasured.
 
 ### 2c. Known-answer breadth (registered before any run)
 
