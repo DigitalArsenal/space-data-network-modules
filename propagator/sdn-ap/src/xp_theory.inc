@@ -777,6 +777,8 @@ struct RateContext {
   int32_t mdaily_degree;
   const tess::SpCoef* sp;             ///< AP: the other first-order tesseral terms, at output time (owned, xp_release)
   int32_t sp_count;
+  tess::WideGrid* wide;               ///< AP above tess::kWideE: the first-order tesseral families' grid (SPEC 16.11)
+  uint8_t wide_owned;                 ///< this context frees `wide` (a class change's temporary shares it)
 };
 
 inline int ap_resonance_class(const RateContext& ctx, double n) {
@@ -1268,7 +1270,7 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
     if (!(y[kN] > 0.0)) return kPropMeanMotion;
     Ewarm = Em;
   }
-  if (ctx.mdaily != nullptr || ctx.sp != nullptr) {
+  if (ctx.mdaily != nullptr || ctx.sp != nullptr || ctx.wide != nullptr) {
     // AP: the tesseral m-daily short-periodics, first order at the mean elements
     const Kepler km = kepler_of(ym);
     if (km.e < 1.0) {
@@ -1279,6 +1281,7 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
                          ctx.theta_g0, six);
       if (ctx.sp != nullptr)
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci, ctx.theta_g0, six);
+      if (ctx.wide != nullptr) tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six);
       double d[6];
       six_to_equinoctial(agm, six, d);
       for (int j = 0; j < 6; ++j) y[j] += d[j];
@@ -1435,6 +1438,14 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     if (kept == nullptr) { std::free(table); return false; }
     s.ctx.sp = kept;
     s.ctx.sp_count = count;
+    if (e.eo > tess::kWideE && s.ctx.wide == nullptr) {
+      // SPEC 16.11: the families of degree 2 to spd as a grid in E; a class change's temporary keeps its parent's
+      tess::WideGrid* g = static_cast<tess::WideGrid*>(std::calloc(1, sizeof(tess::WideGrid)));
+      if (g == nullptr) return false;
+      if (!tess::wide_grid_build(spd, res, n0, e.eo, e.xincl, *g)) { std::free(g); return false; }
+      s.ctx.wide = g;
+      s.ctx.wide_owned = 1;
+    }
   }
   const int zd = t.zonal > 70 ? 70 : t.zonal;
   if (zd >= 6) {
@@ -1548,6 +1559,12 @@ inline void xp_release(XpSat& s) {
   std::free(const_cast<tess::SpCoef*>(s.ctx.sp));
   s.ctx.sp = nullptr;
   s.ctx.sp_count = 0;
+  if (s.ctx.wide != nullptr && s.ctx.wide_owned) {
+    tess::wide_grid_release(*s.ctx.wide);
+    std::free(s.ctx.wide);
+  }
+  s.ctx.wide = nullptr;
+  s.ctx.wide_owned = 0;
 }
 
 inline void lock(int32_t* word) {
@@ -1657,6 +1674,13 @@ inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const 
   if (s.init_error != 0) return kPropRefused;
   double y[6];
   if (!mean_at(s, t, y)) return kPropMeanMotion;
+  if (s.ctx.wide != nullptr && s.ctx.wide_owned && y[kN] > 0.0) {
+    // SPEC 16.11: the grid is linear in e, i and a about the elements it was built at; beyond that range it is rebuilt
+    const Kepler km = kepler_of(y);
+    if (km.e < 1.0 && tess::wide_grid_stale(*s.ctx.wide, km) &&
+        !tess::wide_grid_build(s.ctx.wide->degree, s.ctx.resonance, y[kN], km.e, km.i, *s.ctx.wide))
+      return kPropRefused;
+  }
   const int32_t status = output(s.ctx, t, y, r, v, shared);
   if (status == kPropOk && s.ctx.ap_frame) frames::teme_drift(s.epoch_jd_whole, s.epoch_jd_frac, t, r, v);
   return status;
@@ -1674,6 +1698,7 @@ inline bool reclass_make(const RateContext& ctx, const double* y, XpSat& tmp) {
   tmp.ctx.half_day = nullptr; tmp.ctx.half_day_count = 0;
   tmp.ctx.shallow = nullptr; tmp.ctx.shallow_count = 0;
   tmp.ctx.zt = nullptr; tmp.ctx.mdaily = nullptr; tmp.ctx.sp = nullptr; tmp.ctx.sp_count = 0;
+  tmp.ctx.wide_owned = 0;  // shares the parent's grid (SPEC 16.11)
   tmp.ctx.resonance = static_cast<int8_t>(ap_resonance_class(ctx, y[kN]));
   tmp.ctx.e0 = k.e; tmp.ctx.i0 = k.i;
   Elements e{}; e.eo = k.e; e.xincl = k.i;
