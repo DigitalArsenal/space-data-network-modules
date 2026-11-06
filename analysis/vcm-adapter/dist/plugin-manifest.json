@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
   "name": "SDN VCM Adapter",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Vector Covariance Messages in and out of the stack. read: an SP VECTOR/COVARIANCE MESSAGE V2.0 becomes a propagator/ffm PRW execution request (EME2000 state, the VCM's force model, B/BDOT/AGOM/T as dynamic parameters, the equinoctial covariance transformed exactly to Cartesian SI), daily $EOP records and an SDS $OCM that carries everything the message does (state, covariance with its parameter rows, force model, the parameters' values, the message status and the integrator settings, every one in a typed field). ocm: a propagation result becomes an $OCM. write: an $OCM becomes the legacy VCM text with the equinoctial covariance, for systems that still read it. Typed contracts 1.0: every port one FlatBuffer type. The VCM text travels as a $FIL (CONTENT the text, MEDIA_TYPE text/plain); the read options, the ocm header and the write options are node config (plugin.getConfig, one ModuleConfig) under the tables \"read\", \"header\" and \"write\"; read reports as a FlowNotice Info. Pure compute apart from plugin.getConfig; output bytes depend only on input bytes and config.",
   "pluginFamily": "analysis",
   "capabilities": [],

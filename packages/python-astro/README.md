@@ -119,7 +119,7 @@ loader search path. Linux/Windows wheels and execution were **not** tested here.
 
 The artifacts are exactly the committed bytes from modules
 `7339a911a9adffa42951ef0b1b639220968ebb58`. SDS generated source is immutable
-`a39d51f52ddeb8dc7ba7730610c6b91a117418ca` (1.276.0), independent of concurrent
+`cb95255756b5d8947fa988ce1c879e886dd7d704` (1.279.0), independent of concurrent
 working-tree edits. `artifacts.lock.json` and `bindings.lock.json` record hashes,
 module-declared dependency versions, schema sources and compiler stamps.
 

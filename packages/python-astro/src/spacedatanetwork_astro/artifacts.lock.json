@@ -1,8 +1,8 @@
 {
   "format_version": 1,
   "status": "ctypes WasmEdge runtime; see docs/verification.md for validation limits",
-  "version": "0.1.0.dev0+modules.feec1a11374c.af60201059853",
-  "source_revision": "feec1a11374cf5b991611aa6098eeb4f80ac6f8e",
+  "version": "0.1.0.dev0+modules.f9b561192cb2.af60201059853",
+  "source_revision": "f9b561192cb23e3fbc04b312adb31bc4158700ab",
   "artifact_set_sha256": "f60201059853ceb0d6950164e4129e8c71a2fce9634d6e40bbc2a4ad4dccfdf6",
   "modules": [
     {

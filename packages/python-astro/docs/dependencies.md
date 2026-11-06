@@ -4,7 +4,7 @@ FFM (Full Force Model) is defined in [the FFM specification](../../../propagator
 
 The coordinator resolved the first-pass dependency blockers: this package embeds
 **WasmEdge 0.16.4 through its C API using ctypes**, and vendors immutable generated
-**SDS 1.276.0** output. It depends on neither the empty PyPI `wasmedge` package nor
+**SDS 1.279.0** output. It depends on neither the empty PyPI `wasmedge` package nor
 the stale PyPI SDS wheels. `dependency-audit.json` records that historical audit.
 
 ## Native runtime
@@ -38,10 +38,10 @@ execution remain untested. macOS arm64 with Python 3.14 is verified.
 ## Generated bindings
 
 See [sds-generation.md](sds-generation.md). The package uses immutable Git
-`a39d51f52ddeb8dc7ba7730610c6b91a117418ca:lib/py`, even if another lane is
+`cb95255756b5d8947fa988ce1c879e886dd7d704:lib/py`, even if another lane is
 regenerating files in the canonical checkout. Full source manifest:
-`4f441c290df81a68f926382baa26e42a74f95887f24ba9238242ceaae5fa7540`.
-All 8,358 source files are hashed; required families and their import closure
+`1b2e9c0aeee7e72d185196914acae41017f558375148076b80e290f25fb93314`.
+All 8,453 source files are hashed; required families and their import closure
 are vendored under a private namespace. Generated imports are rewritten only by
 `scripts/vendor_sds.py`. Module `.fbs` schemas are compiled with pinned
 `flatc-wasm@26.1.38`; schema/compiler/artifact hashes are in `bindings.lock.json`.

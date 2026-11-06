@@ -598,14 +598,14 @@
       }
     },
     "analysis/density-calibration/dist/isomorphic/module.wasm": {
-      "sha256": "cc8dcc72cea9a92c3fb6f4b872316f976d36ad7981783cd0e08ba5b5b5f136ad",
-      "bytes": 2814297,
-      "wasmSha256": "cc8dcc72cea9a92c3fb6f4b872316f976d36ad7981783cd0e08ba5b5b5f136ad",
-      "canonicalModuleSha256": "c9a11d4e0a90d7670eade761c829c8cc227b7bca37d373eb0a304858513cc6e3",
-      "form": "raw",
+      "sha256": "48f94701f2f3b044d32ecbf2ad0e8b3d4240725cf583f08d9495144b24fc49ba",
+      "bytes": 2820231,
+      "wasmSha256": "9b8e15756ee898b005ba9b76a4345e1a7648000167a11c3cecfcb63d9ac237be",
+      "canonicalModuleSha256": "9b8e15756ee898b005ba9b76a4345e1a7648000167a11c3cecfcb63d9ac237be",
+      "form": "bundled",
       "module": "analysis/density-calibration",
-      "lastCommit": "f34c12c0e9d61981a6149c818271b34a5d6e6ff6",
-      "lastCommitDate": "2026-11-04T07:34:20-05:00",
+      "lastCommit": "f9b561192cb23e3fbc04b312adb31bc4158700ab",
+      "lastCommitDate": "2026-11-06T08:25:41-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -644,14 +644,14 @@
       "declaration": null
     },
     "analysis/epoch-state/dist/isomorphic/module.wasm": {
-      "sha256": "681820b30e2cf134112284b5158d5cabf95c872c8d4b8e1a2abeb033904ef461",
-      "bytes": 420001,
-      "wasmSha256": "681820b30e2cf134112284b5158d5cabf95c872c8d4b8e1a2abeb033904ef461",
-      "canonicalModuleSha256": "5b29827cf8dd73f55bf18b269f8f2913a81f633c3391fe91b3e8799423cda648",
-      "form": "raw",
+      "sha256": "aed9355a79c35cd3fdaff8cd724cff67d60e8d8d1d68d2a1f8f4a2bfc40ce112",
+      "bytes": 421640,
+      "wasmSha256": "f71fc5e9863f42517ac8b656c4a4b7b0bdd44c8a4d71a36e748c09e51e8ded16",
+      "canonicalModuleSha256": "f71fc5e9863f42517ac8b656c4a4b7b0bdd44c8a4d71a36e748c09e51e8ded16",
+      "form": "bundled",
       "module": "analysis/epoch-state",
-      "lastCommit": "dc44bd9776a270d35d186c8cd20617e57ad71458",
-      "lastCommitDate": "2026-11-04T12:54:25-05:00",
+      "lastCommit": "f9b561192cb23e3fbc04b312adb31bc4158700ab",
+      "lastCommitDate": "2026-11-06T08:25:41-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -1293,14 +1293,14 @@
       }
     },
     "analysis/vcm-adapter/dist/isomorphic/module.wasm": {
-      "sha256": "3e4d13ea07047740091787ccbeb1f82de1668a238614e65c74da46da16658e83",
-      "bytes": 761883,
-      "wasmSha256": "dfa14ff98b3bfadf15ea73c3ddc58134f937aa19d658a81e9ca5f20ea439e241",
-      "canonicalModuleSha256": "dfa14ff98b3bfadf15ea73c3ddc58134f937aa19d658a81e9ca5f20ea439e241",
+      "sha256": "42e631bc7670a812e37390318f8c9c3216c49c962c4ef330d5292f6ba4282806",
+      "bytes": 762493,
+      "wasmSha256": "68a3f142e731a74712b9f51d2d96270b4ecdd9c2dd9e9e8bb2eed54788a93255",
+      "canonicalModuleSha256": "68a3f142e731a74712b9f51d2d96270b4ecdd9c2dd9e9e8bb2eed54788a93255",
       "form": "bundled",
       "module": "analysis/vcm-adapter",
-      "lastCommit": "feec1a11374cf5b991611aa6098eeb4f80ac6f8e",
-      "lastCommitDate": "2026-11-06T07:53:29-05:00",
+      "lastCommit": "f9b561192cb23e3fbc04b312adb31bc4158700ab",
+      "lastCommitDate": "2026-11-06T08:25:41-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -5895,36 +5895,36 @@
       }
     },
     "licensing/core/dist/browser/module.wasm": {
-      "sha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
-      "bytes": 1411764,
-      "wasmSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
-      "canonicalModuleSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
-      "form": "raw",
+      "sha256": "120111ce331705b0c3c9568b9dbeaaf87020618fbeae70718abd19ebe53adf0a",
+      "bytes": 1427795,
+      "wasmSha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
+      "canonicalModuleSha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
+      "form": "bundled",
       "module": null,
-      "lastCommit": "c24a9643cf991e29b2700fa034b215cde79e41b5",
-      "lastCommitDate": "2026-10-25T20:59:29-04:00",
+      "lastCommit": "4a544e4d8f1da3e79f319e347673e4f33c9bdc7b",
+      "lastCommitDate": "2026-11-06T08:34:18-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "cc041abc3cca6100acb363ba7bb632ed296adf28",
-        "sdkCommit": "0cf3abe24726ac252101e2831974ee43be046496"
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
       },
       "declaration": null
     },
     "licensing/core/dist/isomorphic/module.wasm": {
-      "sha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
-      "bytes": 1411764,
-      "wasmSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
-      "canonicalModuleSha256": "1e3a0938482e81d14e3c15c18dd66d64d8771b3260948d21d61f7873d6aadfbc",
-      "form": "raw",
+      "sha256": "120111ce331705b0c3c9568b9dbeaaf87020618fbeae70718abd19ebe53adf0a",
+      "bytes": 1427795,
+      "wasmSha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
+      "canonicalModuleSha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
+      "form": "bundled",
       "module": null,
-      "lastCommit": "c24a9643cf991e29b2700fa034b215cde79e41b5",
-      "lastCommitDate": "2026-10-25T20:59:29-04:00",
+      "lastCommit": "4a544e4d8f1da3e79f319e347673e4f33c9bdc7b",
+      "lastCommitDate": "2026-11-06T08:34:18-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "cc041abc3cca6100acb363ba7bb632ed296adf28",
-        "sdkCommit": "0cf3abe24726ac252101e2831974ee43be046496"
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
       },
       "declaration": null
     },
@@ -6238,8 +6238,8 @@
       "canonicalModuleSha256": "fd1ef4682edc68836d27fdb1f606a45b22bb3605354c55312287f87771a804b5",
       "form": "bundled",
       "module": "propagator/sdn-ap",
-      "lastCommit": "416a67e9a6411840f5b385f9c350018fe9922e3d",
-      "lastCommitDate": "2026-11-06T07:27:00-05:00",
+      "lastCommit": "cfd750eb8de2f5d7c339173ee674bc7a481da8c2",
+      "lastCommitDate": "2026-11-06T08:02:55-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
