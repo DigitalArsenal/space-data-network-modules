@@ -1,6 +1,6 @@
 {
   "sdk": "0.9.2",
-  "standards": "1.220.0",
+  "standards": "1.279.0",
   "sources": [
     "cosmology.hpp",
     "frames.hpp",
@@ -20,5 +20,11 @@
   },
   "compiler": "deps/emsdk/upstream/bin/clang++ --target=wasm32-wasip1-threads",
   "emsdkRelease": "releases-4857659ec65fbcf1f3e43c88499925475957b238-64bit",
-  "wasmSha256": "ffee33a750598537caf410258a3a67c4176e258b3236b90f6c03c154081bab10"
+  "wasmSha256": "46bf85ac9f4c54f0de5db22dc2ae54f9d22f7784b38fc20e572b93fb2ab87a4d",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "c22bf4a39d89c1abbc42fe81d3c5666e5bffa0472df6100eef36304e85948838"
 }

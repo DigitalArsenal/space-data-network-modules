@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.foundation.orbits",
   "name": "Foundation Orbits",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared SDS OMM/OPM/OEM/OCM/CDM/GRV/CRD orbit conversion module for Orekit-compatible elliptical and hyperbolic Keplerian mean elements, Cartesian state vectors, CCSDS orbit parameter messages, SANA Keplerian and equinoctial element sets in OCM, Basilisk first-order J2 Brouwer mean/osculating elements, Basilisk J2-J6 zonal perturbation acceleration, Basilisk solar radiation pressure acceleration, and Basilisk Hill relative states.",
   "pluginFamily": "foundation",
   "capabilities": [

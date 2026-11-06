@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-maneuver-star-search",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "flatbuffers": "25.9.23",
-    "spacedatastandards.org": "1.276.0"
+    "spacedatastandards.org": "1.279.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"

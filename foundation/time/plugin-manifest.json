@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.foundation.time",
   "name": "Foundation Time",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared SDS TIM time-scale conversion module for Orekit-compatible UTC, TAI, TT, GPS, GLONASS, GST, QZSS, BDT, NAVIC, UT1, TCG, TDB, TCB, and GMST epoch handling.",
   "pluginFamily": "foundation",
   "capabilities": [],

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.foundation.cosmology",
   "name": "Planck 2018 cosmology",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "C++ Planck18 distances, CMB redshift, supergalactic coordinates and catalog-based placement through SDS PCE typed samples.",
   "pluginFamily": "foundation",
   "capabilities": [],
