@@ -7,6 +7,9 @@
 // - THEMIS A, cutoff 2013-02-15 (test/fixtures/themis-a-2013-02-15-fit-72h.oem, SHA-256 pinned: the 72 h fit $OEM the
 //   experiment's run.mjs --save writes, NAIF's public kernel in GCRF at 300 s), AP vacuum (FORCES caps 31 and 20, Jacchia 1970 on the theory's flux model): FIT_RMS_KM at
 //   most 1.1 times the 0.6.2 base's 109.5 m (0.1205 km) and BTERM within 2 times the base's 0.0120 (0.0060 to 0.0240).
+// - Molniya start 0, fitted drag (test/fixtures/molniya-start0-fit-72h.oem, .pcf, .spw, SHA-256 pinned; the pinned FFM model
+//   truth, argp 270, 72 h arc; its fit takes the finite-difference fall-back): BTERM 0.04461633761935712 and FIT_RMS_KM
+//   0.021800715473184688 bit for bit; every grid lookup of the fit a fit set's; no fit grid held after it.
 // - Below e 0.3 the fit emits the 0.6.2 dist's bytes (git, modules c82160de7, its SHA-256 checked),
 //   PRODUCER's version read as 0.6.2: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of propagator/ffm's 550 km
 //   trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP, and a GEO arc (an AP set, caps 31 and 20,
@@ -80,6 +83,43 @@ if (sha256(arc) === ARC.sha256) {
   check(c.b >= bLow && c.b <= bHigh, `THEMIS A: BTERM ${c.b} outside ${bLow} to ${bHigh}`);
   console.log(`THEMIS A 2013-02-15: FIT_RMS ${(c.rms * 1000).toFixed(1)} m (bound ${(rmsBound * 1000).toFixed(1)}), BTERM ${c.b.toPrecision(4)} (bounds ${bLow} to ${bHigh}), ITERATIONS ${c.it}; ` +
     `0.6.2: ${(b.rms * 1000).toFixed(1)} m, BTERM ${b.b.toPrecision(4)}`);
+}
+
+// --- Molniya start 0, fitted drag (the ripple lane's fixture; it takes the finite-difference fall-back): one fit call with its
+// three frames; BTERM and FIT_RMS_KM bit-equal to the exact-grid fit's (the fall-back's copies reading the nominal's grid gave
+// 0.04571376917240479 and 0.021225197279760338); every grid lookup a fit set's, none retained after the fit
+const MOLNIYA = {
+  frames: [["ephemeris", "OEM", "molniya-start0-fit-72h.oem", "608697e99920e5a699d330a457f4ef74444a8301d186213696cb040b4b235ae2"],
+    ["configuration", "PCF", "molniya-start0-fit.pcf", "21ca6686ac0f24f2e8bd7e7bd5e86f055392099e562b62a95fabf8eb3ad176ea"],
+    ["space_weather", "SPW", "molniya-start0-fit.spw", "647760dfb43168f4b0c9e98cf9b86e91a108f725edfd918f6be2b870a5919ebb"]],
+  bterm: 0.04461633761935712, fitRmsKm: 0.021800715473184688,
+};
+{
+  const inputs = MOLNIYA.frames.map(([portId, type, file, pin]) => {
+    const payload = fs.readFileSync(new URL(`fixtures/${file}`, import.meta.url));
+    check(sha256(payload) === pin, `${file} is ${sha256(payload)}, pinned ${pin}`);
+    return { portId, typeRef: T(type), payload };
+  });
+  const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16), cachePtr = x.sdnap_alloc(16);
+  const cache = () => { x.sdnap_wide_grid_cache(cachePtr); return Array.from(new Float64Array(cand.memory.buffer, cachePtr, 2)); };
+  x.sdnap_wide_grid_stats(1, statsPtr);
+  const held0 = cache();
+  const r = await cand.invoke({ methodId: "fit", inputs });
+  const held1 = cache();
+  x.sdnap_wide_grid_stats(1, statsPtr);
+  const [outside, inside] = Array.from(new Float64Array(cand.memory.buffer, statsPtr, 2));
+  x.sdnap_free(statsPtr);
+  x.sdnap_free(cachePtr);
+  check(r.statusCode === 0, `Molniya start 0 fit: ${r.errorCode} ${r.errorMessage}`);
+  if (r.statusCode === 0) {
+    const m = stats(new Uint8Array(r.outputs.find((o) => o.portId === "elements").payload));
+    check(Object.is(m.b, MOLNIYA.bterm), `Molniya start 0: BTERM ${m.b}, expected ${MOLNIYA.bterm}`);
+    check(Object.is(m.rms, MOLNIYA.fitRmsKm), `Molniya start 0: FIT_RMS_KM ${m.rms}, expected ${MOLNIYA.fitRmsKm}`);
+    console.log(`Molniya start 0: BTERM ${m.b}, FIT_RMS_KM ${m.rms}, ITERATIONS ${m.it}`);
+  }
+  check(outside === 0 && inside > 0, `Molniya start 0 fit: ${outside} grid lookups by sets outside a fit and ${inside} by the fit's sets`);
+  check(held1[0] === held0[0] && held1[1] === held0[1], `Molniya start 0 fit: grid cache ${held0.join(" / ")} before, ${held1.join(" / ")} after (a fit grid retained)`);
+  console.log(`Molniya start 0 fit grid lookups: ${outside} outside a fit, ${inside} by the fit's sets; cache ${held0[0]} / ${held0[1]} before, ${held1[0]} / ${held1[1]} after`);
 }
 
 // --- no harm: the LEO fixture and a GEO arc, byte-identical to 0.6.2
