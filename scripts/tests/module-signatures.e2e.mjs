@@ -63,7 +63,7 @@ try {
   const row = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "docs", "current-module-parity-index.json"), "utf8")).modules.find((m) => m.modulePath === subject.modulePath);
   put("docs/current-module-parity-index.json", JSON.stringify({ modules: [row] }));
   const trust = (key) => put("scripts/trusted-publishers.json", JSON.stringify({ version: 1, publishers: [{ keyId: key.keyId, publicKeyHex: key.publicKeyHex, role: "owner", since: "2026-11-06" }] }));
-  const ledger = () => { const bytes = fs.readFileSync(dist); put("scripts/artifact-provenance.json", JSON.stringify({ version: 1, artifacts: { [subject.rel]: { sha256: sha256Hex(bytes), bytes: bytes.length, wasmSha256: sha256Hex(moduleSectionBytes(bytes)), canonicalModuleSha256: sha256Hex(canonicalModuleBytes(bytes)) } } })); };
+  const ledger = (plantedWasmSha256 = null) => { const bytes = fs.readFileSync(dist); put("scripts/artifact-provenance.json", JSON.stringify({ version: 1, artifacts: { [subject.rel]: { sha256: sha256Hex(bytes), bytes: bytes.length, wasmSha256: plantedWasmSha256 ?? sha256Hex(moduleSectionBytes(bytes)), canonicalModuleSha256: sha256Hex(canonicalModuleBytes(bytes)) } } })); };
   trust(scratchKey);
 
   // the dist as it is in this checkout is signed by the owner; the scratch tree trusts only the scratch key, so it is untrusted
@@ -110,7 +110,8 @@ try {
   assert.equal(provenanceAfter.signer.keyId, "scratch-e2e");
   assert.equal(provenanceAfter.canonicalWasmSha256, sha256Hex(afterSection));
 
-  // the stale ledger (the pre-sign section) is refused; the regenerated ledger with the scratch key trusted passes as owner-key
+  // a ledger whose wasmSha256 is not this module section is refused; the regenerated ledger with the scratch key trusted passes as owner-key
+  ledger("0".repeat(63) + "1");
   const stale = node([checkScript, "--root", tree]);
   assert.equal(stale.status, 1, `a stale ledger wasmSha256 was not refused: ${stale.stdout}`);
   assert.ok(stale.stderr.includes("ledger wasmSha256"), `no ledger line: ${stale.stderr}`);
