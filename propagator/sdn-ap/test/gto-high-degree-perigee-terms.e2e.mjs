@@ -27,8 +27,9 @@ import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic'
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 import {wasmPath} from './lib/module.mjs';
 
-const BASE = '8fdf5b1af', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/gto-terms';
+const BASE = '8fdf5b1af';
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
+const scratch = process.env.SDNAP_TEST_SCRATCH ?? path.join(packageRoot, '.build', 'gto-terms');
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);
 fs.writeFileSync(baseline, execFileSync('git', ['-C', modules, 'show', `${BASE}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26}));
