@@ -1670,16 +1670,6 @@ inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const 
   if (s.init_error != 0) return kPropRefused;
   double y[6];
   if (!mean_at(s, t, y)) return kPropMeanMotion;
-  if (s.ctx.wide != nullptr && s.ctx.wide_owned && y[kN] > 0.0) {
-    // SPEC 16.11: the grid is linear in e, i and a about the elements it was built at; beyond that range it is rebuilt
-    const Kepler km = kepler_of(y);
-    if (km.e < 1.0 && tess::wide_grid_stale(*s.ctx.wide, km)) {
-      tess::WideGrid* g = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, y[kN], km.e, km.i);
-      if (g == nullptr) return kPropRefused;
-      tess::wide_grid_drop(s.ctx.wide);
-      s.ctx.wide = g;
-    }
-  }
   const int32_t status = output(s.ctx, t, y, r, v, shared);
   if (status == kPropOk && s.ctx.ap_frame) frames::teme_drift(s.epoch_jd_whole, s.epoch_jd_frac, t, r, v);
   return status;
