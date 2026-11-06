@@ -1,9 +1,9 @@
 {
   "format_version": 1,
   "status": "ctypes WasmEdge runtime; see docs/verification.md for validation limits",
-  "version": "0.1.0.dev0+modules.af6f94398ceb.afab2bec20515",
-  "source_revision": "af6f94398ceb7d05556c27263ca4cee350219e2b",
-  "artifact_set_sha256": "fab2bec20515dc8cd4ccfea16fccf90e7e78ebe36300f2db33b7b52c712c66a6",
+  "version": "0.1.0.dev0+modules.feec1a11374c.af60201059853",
+  "source_revision": "feec1a11374cf5b991611aa6098eeb4f80ac6f8e",
+  "artifact_set_sha256": "f60201059853ceb0d6950164e4129e8c71a2fce9634d6e40bbc2a4ad4dccfdf6",
   "modules": [
     {
       "id": "propagator/sgp4",
@@ -35,15 +35,15 @@
           "name": "module.wasm",
           "source_path": "propagator/ffm/dist/isomorphic/module.wasm",
           "package_path": "artifacts/propagator-ffm/module.wasm",
-          "sha256": "c36f1b14fc233e88725d57724c3bae7ad025cfdd9d8d4520c3bcccd0f8a816b2",
-          "size": 2685349
+          "sha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+          "size": 2754046
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "propagator/ffm/plugin-manifest.json",
           "package_path": "artifacts/propagator-ffm/plugin-manifest.json",
-          "sha256": "165fd160fdd9ec2f398bea2cd0554de5c9c083698616c460ecf8a268598844b7",
-          "size": 18549
+          "sha256": "8669c7fcdbde0a8f58daec51e44cf48433843cddd517082bc1ea193e76952210",
+          "size": 29259
         }
       ]
     },
@@ -56,21 +56,21 @@
           "name": "module.wasm",
           "source_path": "analysis/estimation/dist/isomorphic/module.wasm",
           "package_path": "artifacts/analysis-estimation/module.wasm",
-          "sha256": "7a555ca5b3ed0b021dd5b7986bd73dd8f8dc5125a2aa7943e3b3e983320d6bcd",
-          "size": 769257
+          "sha256": "acaf8ca33d22d9c685ad664c706a509329e778a371057ec200d06dd59e9ab314",
+          "size": 795642
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "analysis/estimation/plugin-manifest.json",
           "package_path": "artifacts/analysis-estimation/plugin-manifest.json",
-          "sha256": "f3c63ac7c9d32aa6f85bc71ba79d11beffa26d9567a537330b24ac6e0056d05b",
+          "sha256": "0ef9e8a3f5e7b4cba1a07b328551d4272dee7d6cebbbbbdd970dfeb457206f55",
           "size": 21109
         },
         {
           "name": "build-provenance.json",
           "source_path": "analysis/estimation/dist/build-provenance.json",
           "package_path": "artifacts/analysis-estimation/build-provenance.json",
-          "sha256": "01f634e848106501bc7a928f3d0d8cdd99c914b353ffb7f1424bc01439f74996",
+          "sha256": "15d17a33adbf523f410422c89eef797ddc2b4e61d63286acf636fedfcf5f6785",
           "size": 371
         }
       ]
@@ -84,15 +84,15 @@
           "name": "module.wasm",
           "source_path": "analysis/conjunction-assessment/dist/isomorphic/module.wasm",
           "package_path": "artifacts/analysis-conjunction-assessment/module.wasm",
-          "sha256": "0cc09d7b1399b5037392004327b40c70f76d3150ddfcd303636039a77d936a6a",
-          "size": 1719474
+          "sha256": "fe7533e9168c65f31b5d98ea90bafb76024a5e035df5c7f34d252da44718bfec",
+          "size": 1751724
         },
         {
           "name": "plugin-manifest.json",
           "source_path": "analysis/conjunction-assessment/plugin-manifest.json",
           "package_path": "artifacts/analysis-conjunction-assessment/plugin-manifest.json",
-          "sha256": "2833c53f0fbe8e496c706a9d4989c609676132d710dbd270ee2d300bf18463ec",
-          "size": 59955
+          "sha256": "5285b8dcb05c619c15edf2795b31a0e4b457bfd17594b54e9e208dfbacf86c4f",
+          "size": 60470
         }
       ]
     },
@@ -196,8 +196,8 @@
           "name": "module.wasm",
           "source_path": "foundation/frames/dist/isomorphic/module.wasm",
           "package_path": "artifacts/foundation-frames/module.wasm",
-          "sha256": "486acaa334705b97d3a975b8a3d90f4bfd2428af77c6b5086c970ed1f24e27a4",
-          "size": 456873
+          "sha256": "7ac3240368b1156ce2eac4811e62655013b43128485c95338f6517dbbbbd3db2",
+          "size": 456881
         },
         {
           "name": "plugin-manifest.json",
@@ -210,8 +210,8 @@
           "name": "build-provenance.json",
           "source_path": "foundation/frames/dist/build-provenance.json",
           "package_path": "artifacts/foundation-frames/build-provenance.json",
-          "sha256": "467702d3e588db8e5f02635359291c431973a1968b32a97120eca59ad96924db",
-          "size": 150
+          "sha256": "9183338fd6bf767993520705ca93aa5c2c4d8157dab20069dac61bc780dde59c",
+          "size": 407
         }
       ]
     }
