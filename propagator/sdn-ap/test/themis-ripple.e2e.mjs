@@ -282,9 +282,9 @@ const flightBytes = async (h) => {
   assert.equal(r.statusCode, 0, `GTO flight: ${r.errorCode}`);
   return crypto.createHash('sha256').update(new Uint8Array(r.outputs.find((o) => o.portId === 'ephemeris').payload)).digest('hex');
 };
-// the cache's grids and their bytes (sdnap_wide_grid_cache)
+// the cache's grids and their bytes (sdnap_wide_grid_cache; out[2], the builds so far, is not compared)
 const cacheOf = (h) => {
-  const x = h.instance.exports, p = x.sdnap_alloc(16);
+  const x = h.instance.exports, p = x.sdnap_alloc(24);
   x.sdnap_wide_grid_cache(p);
   const v = Array.from(new Float64Array(h.memory.buffer, p, 2));
   x.sdnap_free(p);
@@ -318,7 +318,7 @@ assert.notEqual(refused.statusCode, 0, 'the second fit is refused');
 assert.equal(after, alone, 'a flight after a fit and a refused fit equals a fresh instance\'s');
 assert.ok(before2 === alone && after2 === alone, 'flight, fit, refused fit, flight: both flights equal a fresh instance\'s');
 assert.deepEqual(afterCache, freshCache, 'the cache after fit-then-flight holds what a fresh instance holds after the flight');
-assert.ok(highWater <= 160 * 1048576, `a GTO fit's linear-memory high-water ${highWater} bytes within 160 MB`);
+assert.ok(highWater <= 160 * 1048576, `a GTO fit's linear-memory high-water ${highWater} bytes within 160 MiB`);
 
 // 3. the 12 THEMIS windows (registration (b) to (d), Amendment 8's paired test): each window's roughness and day 1 / 3 / 7 3D RMS on
 //    the base (sdn-ap 0.6.1, dist 05dd4a66) and on this source's build (a7771b14), as recorded in orbit-accuracy-experiments

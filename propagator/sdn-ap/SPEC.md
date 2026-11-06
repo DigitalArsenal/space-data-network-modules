@@ -2326,7 +2326,7 @@ within 3e-4 in e, 1e-4 rad in i and 1e-4 in a / a of them; each set keeps its la
 a thread while tess::FitGridScope lives there (thread-local; the fit holds it around its solve on its calling thread) is freed when
 its last holder drops it, never kept idle, so a fit leaves no grid behind. The export sdnap_wide_grid_stats(reset, out) writes the
 grid lookups since the last reset, out[0] by sets outside a fit and out[1] by a fit's sets (reset != 0 zeroes them after reading);
-sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]) and their bytes (out[1]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
+sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their bytes (out[1]) and the grids built since the instance began (out[2]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; the
 0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the
 table. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded

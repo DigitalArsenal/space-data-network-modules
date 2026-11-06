@@ -1139,7 +1139,7 @@ inline bool fit_grids_now() { return fit_grid_depth() > 0; }
 
 /// Grid lookups since the last reset: [0] by sets outside a fit, [1] by a fit's sets (SPEC 16.11; read by sdnap_wide_grid_stats).
 inline int64_t* grid_counts() {
-  static int64_t counts[2] = {0, 0};
+  static int64_t counts[3] = {0, 0, 0};  // [2] the grids built since the instance began
   return counts;
 }
 
@@ -1147,9 +1147,10 @@ struct GridCache;
 inline GridCache& grid_cache();
 inline void cache_contents(double& slots, double& bytes);
 
-/// SPEC 16.11: out[0] the grids the cache holds and out[1] their bytes.
+/// SPEC 16.11: out[0] the grids the cache holds, out[1] their bytes and out[2] the grids built since the instance began.
 extern "C" __attribute__((export_name("sdnap_wide_grid_cache"))) int32_t sdnap_wide_grid_cache(double* out) {
   cache_contents(out[0], out[1]);
+  out[2] = static_cast<double>(__atomic_load_n(&grid_counts()[2], __ATOMIC_RELAXED));
   return 0;
 }
 
@@ -1188,6 +1189,7 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   WideGrid* g = static_cast<WideGrid*>(std::calloc(1, sizeof(WideGrid)));
   if (g == nullptr) return nullptr;
   if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
+  __atomic_add_fetch(&grid_counts()[2], 1, __ATOMIC_RELAXED);
   cache_lock(&c.word);
   if (c.count < kGridSlots) {
     c.slot[c.count++] = GridSlot{g, cls, 1, 0, transient};
