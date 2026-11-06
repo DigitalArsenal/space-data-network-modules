@@ -139,6 +139,8 @@ inline double fit_cost(const ElementRow& row, const fit::Result& r, int count, c
   }
   return c;
 }
+/// SPEC 12.9: a restart replaces the policy's solution only below this fraction of its cost (0.98 on the fit RMS).
+constexpr double kSecondStartCostRatio = 0.96;
 /// Whether the fit's options hold BTERM fixed (a prior sigma of 1e-6 or less, of the log or of the term).
 inline bool drag_held(const fit::Options& o) {
   return !o.fit_drag || (o.drag_sigma > 0.0 && o.drag_sigma <= (o.drag_log ? 1e-6 : std::fmax(std::fabs(o.drag_prior) * 1e-6, 1e-10)));
@@ -837,12 +839,13 @@ static int fit_blocks() {
       }
       // SPEC 12.9, the second start: the policy's solution against two more starts on its arc and options, BTERM back at the
       // start the policy used (its prior's median): (1) the solution's elements, one fit; (2) the policy's pass with BTERM held
-      // at that start through every stage, then freed for one fit on the solution's arc. The least cost is kept. Not after the
+      // at that start through every stage, then freed for one fit on the solution's arc. The least cost is kept when it is below
+      // kSecondStartCostRatio of the policy's (a second minimum, not a converged solution's last digits). Not after the
       // two-stage pass (its BTERM is Stage 1's) or where the options hold BTERM.
       if (!two_stage && !fitoem::drag_held(chosen.opt) && chosen.res.status >= 0) {
         const int nfit = static_cast<int>(chosen.t_fit.size());
         const double start_b = used_drag.mean;
-        double best_cost = fitoem::fit_cost(chosen.row, chosen.res, nfit, chosen.opt);
+        double best_cost = fitoem::kSecondStartCostRatio * fitoem::fit_cost(chosen.row, chosen.res, nfit, chosen.opt);
         ElementRow best_row{};
         fit::Result best_res{};
         bool better = false;

@@ -1934,9 +1934,11 @@ policy above (span, fall-back), `fit` takes the solution's arc and options and s
 start the policy used (the drag prior's median, or a GAUSSIAN_SIGNED prior's mean): (1) the solution's elements, one
 fit on the arc; (2) the policy's pass on the same span with BTERM held at that start through every stage (prior sigma
 1e-6), then BTERM freed for one fit on the solution's arc. The solution of least cost (the residuals' sum of squares
-and the priors' terms, the fit's own objective) is kept; ITERATIONS then counts the extra starts. Not after the
-two-stage pass (15.5: its BTERM is Stage 1's) or where the options hold BTERM (sigma 1e-6 or less). Where neither
-start lowers the cost the set is the policy's, byte for byte.
+and the priors' terms, the fit's own objective) replaces the policy's when that cost is below 0.96 times the policy's
+(0.98 on the fit RMS): a second minimum, not a converged solution's last digits; ITERATIONS then counts the extra
+starts. Not after the
+two-stage pass (15.5: its BTERM is Stage 1's) or where the options hold BTERM (sigma 1e-6 or less). Where no start
+clears that bound the set is the policy's, byte for byte.
 
 ---
 
