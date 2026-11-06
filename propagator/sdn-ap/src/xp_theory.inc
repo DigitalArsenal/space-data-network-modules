@@ -1727,13 +1727,16 @@ inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const 
   int32_t status;
   if (s.ctx.wide != nullptr && s.ctx.wide_owned) {
     // the nodes around t, the same for every set of a fit; the context per call, so concurrent calls on one set share nothing
-    const int j = static_cast<int>(std::floor(t / tess::kGridEvery));
-    const double u = t / tess::kGridEvery - j;
+    // node j covers |t| from |j| kGridEvery away from the epoch, on t's side; it blends into the next node outward
+    const double x = t / tess::kGridEvery;
+    const int j = t >= 0.0 ? static_cast<int>(std::floor(x)) : static_cast<int>(std::ceil(x));
+    const int next = t >= 0.0 ? j + 1 : j - 1;
+    const double u = std::fabs(x - j);
     const double blend = u < 1.0 - tess::kGridBlend ? 0.0 : (u - (1.0 - tess::kGridBlend)) / tess::kGridBlend;
     tess::WideGrid* g0 = nullptr;
     tess::WideGrid* g1 = nullptr;
     bool h0 = false, h1 = false;
-    if (!wide_node(s, j, g0, h0) || (blend > 0.0 && !wide_node(s, j + 1, g1, h1))) {
+    if (!wide_node(s, j, g0, h0) || (blend > 0.0 && !wide_node(s, next, g1, h1))) {
       if (h0) tess::wide_grid_drop(g0);
       return kPropRefused;
     }

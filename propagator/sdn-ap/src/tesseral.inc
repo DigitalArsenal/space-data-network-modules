@@ -987,19 +987,45 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
 }
 
 /// The grid of an object above kWideE at its mean elements (n, e, i), with its derivative grids; false out of memory.
+/// The build's two double-precision family sets, kept for the module's life and lent to one build at a time (no repeated large
+/// allocations, so held grids do not fragment the heap).
+struct BuildScratch {
+  int32_t word;
+  size_t size;
+  double* sp;
+  double* sn;
+};
+inline BuildScratch& build_scratch() {
+  static BuildScratch s{};
+  return s;
+}
+
 inline bool wide_grid_build(int degree, int cls, double n, double e, double inc, WideGrid& g) {
   const int cap = degree * (2 * degree + 1);
   const size_t per = static_cast<size_t>(6) * kGridN * 2, one = static_cast<size_t>(cap) * per;
-  double* sp = static_cast<double*>(std::malloc(one * sizeof(double)));
-  double* sn = static_cast<double*>(std::malloc(one * sizeof(double)));
   const size_t dper = static_cast<size_t>(6) * kGridD * 2;
-  float* v = static_cast<float*>(std::malloc(static_cast<size_t>(cap) * per * sizeof(float)));
-  uint16_t* dv = static_cast<uint16_t*>(std::malloc(static_cast<size_t>(cap) * 3 * dper * sizeof(uint16_t)));
-  int8_t* fm = static_cast<int8_t*>(std::malloc(cap));
-  int8_t* fw = static_cast<int8_t*>(std::malloc(cap));
+  // one block per grid: the value, the derivative grids and the family indices (a held grid is one allocation)
+  const size_t vb = static_cast<size_t>(cap) * per * sizeof(float), db = static_cast<size_t>(cap) * 3 * dper * sizeof(uint16_t);
+  char* block = static_cast<char*>(std::malloc(vb + db + 2 * static_cast<size_t>(cap)));
+  float* v = reinterpret_cast<float*>(block);
+  uint16_t* dv = block != nullptr ? reinterpret_cast<uint16_t*>(block + vb) : nullptr;
+  int8_t* fm = block != nullptr ? reinterpret_cast<int8_t*>(block + vb + db) : nullptr;
+  int8_t* fw = block != nullptr ? fm + cap : nullptr;
   int8_t* sm = static_cast<int8_t*>(std::malloc(2 * cap));
-  const auto fail = [&]() { std::free(sp); std::free(sn); std::free(v); std::free(dv); std::free(fm); std::free(fw); std::free(sm); return false; };
-  if (sp == nullptr || sn == nullptr || v == nullptr || dv == nullptr || fm == nullptr || fw == nullptr || sm == nullptr) return fail();
+  BuildScratch& bs = build_scratch();
+  for (int32_t expected = 0; !__atomic_compare_exchange_n(&bs.word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);) expected = 0;
+  const auto release = [&]() { __atomic_store_n(&bs.word, 0, __ATOMIC_RELEASE); };
+  if (bs.size < one) {
+    std::free(bs.sp);
+    std::free(bs.sn);
+    bs.sp = static_cast<double*>(std::malloc(one * sizeof(double)));
+    bs.sn = static_cast<double*>(std::malloc(one * sizeof(double)));
+    bs.size = bs.sp != nullptr && bs.sn != nullptr ? one : 0;
+  }
+  double* sp = bs.sp;
+  double* sn = bs.sn;
+  const auto fail = [&]() { release(); std::free(block); std::free(sm); return false; };
+  if (bs.size < one || block == nullptr || sm == nullptr) return fail();
   const int count = wide_families(degree, cls, n, e, inc, fm, fw, sn);
   if (count < 0) return fail();
   for (int f = 0; f < count; ++f)
@@ -1019,14 +1045,15 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
                 to_half(static_cast<float>((sp[at] - sn[at]) / step[d]));
           }
   }
-  std::free(sp); std::free(sn); std::free(sm);
+  release();
+  std::free(sm);
   g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v; g.dv = dv;
   g.n = n; g.e = e; g.i = inc; g.a = std::pow(kKe / n, kX2o3);
   return true;
 }
 
 inline void wide_grid_release(WideGrid& g) {
-  std::free(g.m); std::free(g.w); std::free(g.v); std::free(g.dv);
+  std::free(g.v);  // the grid's one block (value, derivative grids, family indices)
   g.m = g.w = nullptr; g.v = nullptr; g.dv = nullptr; g.count = 0;
 }
 
