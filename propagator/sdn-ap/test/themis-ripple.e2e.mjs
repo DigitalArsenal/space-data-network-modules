@@ -12,6 +12,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -22,7 +23,8 @@ import {configuration} from './lib/pcf.mjs';
 
 const BASE = 'c82160de7', BASE_SHA256 = '84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41';
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
-const scratch = process.env.SDNAP_TEST_SCRATCH ?? path.join(packageRoot, '.build', 'themis-ripple');
+// a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
+const scratch = process.env.SDNAP_TEST_SCRATCH ?? fs.mkdtempSync(path.join(os.tmpdir(), 'sdn-ap-themis-ripple-'));
 fs.mkdirSync(scratch, {recursive: true});
 
 const VERIFY = String.raw`
@@ -372,4 +374,5 @@ for (const [name, q] of Object.entries(quadrature)) {
   assert.ok(q.roughM <= 0.1, `${name}: ${q.roughM} m second difference`);
 }
 for (const [name, same] of Object.entries(noHarm)) assert.ok(same, `${name}: byte-identical to 0.6.2`);
+if (!process.env.SDNAP_TEST_SCRATCH) fs.rmSync(scratch, {recursive: true, force: true});
 console.log('THEMIS ripple E2E: PASS');

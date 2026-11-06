@@ -20,6 +20,7 @@
 // 6. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -29,7 +30,8 @@ import {wasmPath} from './lib/module.mjs';
 
 const BASE = '8fdf5b1af';
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
-const scratch = process.env.SDNAP_TEST_SCRATCH ?? path.join(packageRoot, '.build', 'gto-terms');
+// a scratch outside the package: the test builds copy the package's sources, which cannot hold their own destination
+const scratch = process.env.SDNAP_TEST_SCRATCH ?? fs.mkdtempSync(path.join(os.tmpdir(), 'sdn-ap-gto-terms-'));
 // The truth is pinned: the model truth's generator (propagator/ffm's dist, FFM 2.2.1 on SDS 1.279.0 at modules 9cb02c8e2) and its $SPW rows. A
 // different generator or rows changes every figure below; the figures are re-recorded with a new pin, never silently.
 const FFM_DIST_SHA256 = 'a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4';
@@ -204,4 +206,5 @@ for (const check of checks) {
 }
 execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
   {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+if (!process.env.SDNAP_TEST_SCRATCH) fs.rmSync(scratch, {recursive: true, force: true});
 console.log('GTO high-degree perigee terms E2E: PASS');
