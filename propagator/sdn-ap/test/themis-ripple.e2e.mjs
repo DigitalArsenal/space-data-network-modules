@@ -282,18 +282,43 @@ const flightBytes = async (h) => {
   assert.equal(r.statusCode, 0, `GTO flight: ${r.errorCode}`);
   return crypto.createHash('sha256').update(new Uint8Array(r.outputs.find((o) => o.portId === 'ephemeris').payload)).digest('hex');
 };
+// the cache's grids and their bytes (sdnap_wide_grid_cache)
+const cacheOf = (h) => {
+  const x = h.instance.exports, p = x.sdnap_alloc(16);
+  x.sdnap_wide_grid_cache(p);
+  const v = Array.from(new Float64Array(h.memory.buffer, p, 2));
+  x.sdnap_free(p);
+  return v;
+};
+const fitOf = (h) => h.invoke({methodId: 'fit', inputs: [fitFrames.ephemeris, fitFrames.configuration, fitFrames.spaceWeather]});
+const refuseOf = (h) => h.invoke({methodId: 'fit', inputs: [{...fitFrames.ephemeris, payload: new Uint8Array(32)}, fitFrames.configuration]});
 const fresh = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
 const alone = await flightBytes(fresh);
+const freshCache = cacheOf(fresh);
 await fresh.close?.();
+// order 1: fit, refused fit, flight
 const shared = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
-const fitted = await shared.invoke({methodId: 'fit', inputs: [fitFrames.ephemeris, fitFrames.configuration, fitFrames.spaceWeather]});
-const refused = await shared.invoke({methodId: 'fit', inputs: [{...fitFrames.ephemeris, payload: new Uint8Array(32)}, fitFrames.configuration]});
+const fitted = await fitOf(shared);
+const highWater = shared.memory.buffer.byteLength;
+const refused = await refuseOf(shared);
 const after = await flightBytes(shared);
+const afterCache = cacheOf(shared);
 await shared.close?.();
-console.log(JSON.stringify({switchTrace: {fitStatus: fitted.statusCode, refusedStatus: refused.statusCode, identical: after === alone}}));
+// order 2: flight, fit, refused fit, flight
+const other = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
+const before2 = await flightBytes(other);
+await fitOf(other);
+await refuseOf(other);
+const after2 = await flightBytes(other);
+await other.close?.();
+console.log(JSON.stringify({switchTrace: {fitStatus: fitted.statusCode, refusedStatus: refused.statusCode, identical: after === alone, secondOrder: before2 === alone && after2 === alone,
+  freshCache, afterCache, fitHighWaterMB: +(highWater / 1048576).toFixed(1)}}));
 assert.equal(fitted.statusCode, 0, 'the fit succeeds');
 assert.notEqual(refused.statusCode, 0, 'the second fit is refused');
 assert.equal(after, alone, 'a flight after a fit and a refused fit equals a fresh instance\'s');
+assert.ok(before2 === alone && after2 === alone, 'flight, fit, refused fit, flight: both flights equal a fresh instance\'s');
+assert.deepEqual(afterCache, freshCache, 'the cache after fit-then-flight holds what a fresh instance holds after the flight');
+assert.ok(highWater <= 160 * 1048576, `a GTO fit's linear-memory high-water ${highWater} bytes within 160 MB`);
 
 // 3. the 12 THEMIS windows (registration (b) to (d), Amendment 8's paired test): each window's roughness and day 1 / 3 / 7 3D RMS on
 //    the base (sdn-ap 0.6.1, dist 05dd4a66) and on this source's build (a7771b14), as recorded in orbit-accuracy-experiments

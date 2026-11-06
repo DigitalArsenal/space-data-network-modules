@@ -1144,6 +1144,16 @@ inline int64_t* grid_counts() {
   return counts;
 }
 
+struct GridCache;
+inline GridCache& grid_cache();
+inline void cache_contents(double& slots, double& bytes);
+
+/// SPEC 16.11: out[0] the grids the cache holds and out[1] their bytes.
+extern "C" __attribute__((export_name("sdnap_wide_grid_cache"))) int32_t sdnap_wide_grid_cache(double* out) {
+  cache_contents(out[0], out[1]);
+  return 0;
+}
+
 /// SPEC 16.11: out[0] the shared grid lookups and out[1] the exact ones since the last reset; reset != 0 zeroes them after reading.
 extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_wide_grid_stats(int32_t reset, double* out) {
   int64_t* c = grid_counts();
@@ -1216,6 +1226,15 @@ inline void wide_grid_drop(WideGrid* g) {
       }
       break;
     }
+  cache_unlock(&c.word);
+}
+
+inline void cache_contents(double& slots, double& bytes) {
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  slots = c.count;
+  bytes = 0.0;
+  for (int k = 0; k < c.count; ++k) bytes += static_cast<double>(wide_grid_bytes(*c.slot[k].g));
   cache_unlock(&c.word);
 }
 
