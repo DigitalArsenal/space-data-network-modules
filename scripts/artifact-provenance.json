@@ -868,8 +868,8 @@
       "canonicalModuleSha256": "5402f983d6c79218f9fea7e9a0aba9c12746da67e9dddf8b088ac64274f942b6",
       "form": "bundled",
       "module": null,
-      "lastCommit": "c5514a67f7990b4ce722594dc1300e15ea9e9a1b",
-      "lastCommitDate": "2026-11-06T09:26:56-05:00",
+      "lastCommit": "9862a9f0c6fddde9d38c804b902a846ff2980257",
+      "lastCommitDate": "2026-11-06T09:56:16-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -6013,11 +6013,11 @@
       }
     },
     "propagator/atmosphere/dist/browser/module.wasm": {
-      "sha256": "07d274842c6bc4937f4149f7ea3c0646c9c70028121ec24b45d757ca7b22e9b3",
-      "bytes": 486063,
+      "sha256": "a633e5dbdd92fc7b3966d247d5bce6cc4436dcc21f8973ae015c5e8d71b50c1f",
+      "bytes": 485091,
       "wasmSha256": "a633e5dbdd92fc7b3966d247d5bce6cc4436dcc21f8973ae015c5e8d71b50c1f",
       "canonicalModuleSha256": "a633e5dbdd92fc7b3966d247d5bce6cc4436dcc21f8973ae015c5e8d71b50c1f",
-      "form": "bundled",
+      "form": "raw",
       "module": null,
       "lastCommit": "21abfa406b61d8b1a7788682b71595a7d1d9b81b",
       "lastCommitDate": "2026-11-06T08:53:08-05:00",
@@ -6288,11 +6288,11 @@
       }
     },
     "propagator/sgp4/dist/browser-shared/module.wasm": {
-      "sha256": "3aa1f6c3bd48c63c331a85bd443f08be665ed1da26efea6dcc15be5cf3be5484",
-      "bytes": 1338211,
+      "sha256": "90a7b7307d0d263a7e16e028a81eaeb09c1a98ac039436032877f1c344937a8c",
+      "bytes": 1337239,
       "wasmSha256": "90a7b7307d0d263a7e16e028a81eaeb09c1a98ac039436032877f1c344937a8c",
       "canonicalModuleSha256": "90a7b7307d0d263a7e16e028a81eaeb09c1a98ac039436032877f1c344937a8c",
-      "form": "bundled",
+      "form": "raw",
       "module": null,
       "lastCommit": "21abfa406b61d8b1a7788682b71595a7d1d9b81b",
       "lastCommitDate": "2026-11-06T08:53:08-05:00",
@@ -6305,11 +6305,11 @@
       "declaration": null
     },
     "propagator/sgp4/dist/browser/module.wasm": {
-      "sha256": "231cae0d4d2f2038bb4f4118811a206cc419a1f1fe0549cc41902aebe99205b4",
-      "bytes": 1296455,
+      "sha256": "25628a15d17d79b18cd55ac64039733ba12b18fa86f0ab7909b3867d7ca67c3d",
+      "bytes": 1295483,
       "wasmSha256": "25628a15d17d79b18cd55ac64039733ba12b18fa86f0ab7909b3867d7ca67c3d",
       "canonicalModuleSha256": "25628a15d17d79b18cd55ac64039733ba12b18fa86f0ab7909b3867d7ca67c3d",
-      "form": "bundled",
+      "form": "raw",
       "module": null,
       "lastCommit": "21abfa406b61d8b1a7788682b71595a7d1d9b81b",
       "lastCommitDate": "2026-11-06T08:53:08-05:00",
