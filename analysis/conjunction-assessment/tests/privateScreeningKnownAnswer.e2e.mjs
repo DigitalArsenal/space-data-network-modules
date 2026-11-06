@@ -36,6 +36,30 @@ function run(cmd, args) {
   return r.stdout;
 }
 
+// Real precise orbits for the physics check (PROTOCOL-19.md 2b), read from the
+// archive when present: Swarm A's precise science orbit of 2025-11-24 (10 s,
+// before the 2026-10-31 hold-out) and GPS G01 from the ESA final orbit of
+// 2025-10-17 (300 s). Each archive file is unpacked into its own directory
+// under the build directory. Absent files leave their line "not measured".
+export const REAL_TRACKS = [
+  { name: 'Swarm A precise science orbit 2025-11-24 (10 s)', id: 'L47', key: 'swarm',
+    archive: '/opt/data/sdn-archive/reference-states/products/SW_OPER_SP3ACOM_2__20251123T235942_20251124T235942_0203.ZIP',
+    unpack: (zip, dir) => { run('unzip', ['-o', '-q', zip, '-d', dir]); return join(dir, 'SW_OPER_SP3ACOM_2__20251123T235942_20251124T235942_0203.sp3'); } },
+  { name: 'GPS G01 ESA final orbit 2025-10-17 (300 s)', id: 'G01', key: 'gps',
+    archive: '/opt/data/sdn-archive/reference-states/products/ESA0OPSFIN_20252900000_01D_05M_ORB.SP3.gz',
+    unpack: (gz, dir) => { const out = join(dir, 'ESA0OPSFIN_20252900000_01D_05M_ORB.SP3'); writeFileSync(out, run('gunzip', ['-c', gz])); return out; } },
+];
+export function realTrackArgs() {
+  const args = [];
+  for (const t of REAL_TRACKS) {
+    if (!existsSync(t.archive)) continue;
+    const dir = join(buildDir, `real-${t.key}`);
+    mkdirSync(dir, { recursive: true });
+    args.push('--sp3', `${t.unpack(t.archive, dir)}:${t.id}:${t.name}`);
+  }
+  return args;
+}
+
 export function runDriver() {
   if (process.env.PRIVATE_SCREENING_RUN) return JSON.parse(readFileSync(process.env.PRIVATE_SCREENING_RUN, 'utf8'));
   mkdirSync(buildDir, { recursive: true });
@@ -49,7 +73,7 @@ export function runDriver() {
   // own per-window keys); the cost table of record is the serial run
   // (results/cost.json, --threads 1).
   const threads = process.env.PRIVATE_SCREENING_THREADS || '12';
-  const r = spawnSync(join(buildDir, 'private_screening_protocol'), ['--days', '1', '--pairs', '8', '--seed', '1', '--threads', threads], { encoding: 'utf8', maxBuffer: 1 << 30 });
+  const r = spawnSync(join(buildDir, 'private_screening_protocol'), ['--days', '1', '--pairs', '8', '--seed', '1', '--threads', threads, ...realTrackArgs()], { encoding: 'utf8', maxBuffer: 1 << 30 });
   if (r.stdout.length === 0) { process.stderr.write(`driver produced no output (${r.status})\n${r.stderr}\n`); process.exit(1); }
   return JSON.parse(r.stdout);
 }
@@ -90,14 +114,20 @@ if (isMain) {
   const probes = ['constant-velocity', 'mean motion', 'teleport', 'scaled'];
   for (const t of report.physics) {
     check(t.mismatches === 0, `physics ${t.track}: ${t.mismatches} mismatches against the plaintext big integers`);
+    if (REAL_TRACKS.some((r) => t.track === r.name)) continue;  // checked below
     check(t.stepsChecked === 86400 - 120, `physics ${t.track}: ${t.stepsChecked} steps checked`);
     const probe = probes.some((p) => t.track.includes(p));
     if (probe) check(t.failSteps >= 1, `physics probe ${t.track}: ${t.failSteps} fail steps`);
     else check(t.failSteps === 0 && t.passSteps === t.stepsChecked, `physics ${t.track}: ${t.failSteps} fail steps of ${t.stepsChecked}`);
   }
-  const tracked = report.physics.filter((t) => !probes.some((p) => t.track.includes(p)));
+  const real = report.physics.filter((t) => REAL_TRACKS.some((r) => t.track === r.name));
+  const tracked = report.physics.filter((t) => !probes.some((p) => t.track.includes(p)) && !real.includes(t));
   // A and the eight B tracks (the seven encounters and the 60 km control are all two-body orbits).
   check(tracked.length === 9, `${tracked.length} two-body tracks checked (A and the eight B)`);
+  // Real precise orbits, with J2 and drag in them, pass the band at every step.
+  for (const t of real) check(t.failSteps === 0 && t.stepsChecked >= 280, `real track ${t.track}: ${t.failSteps} fail steps of ${t.stepsChecked}`);
+  const realLine = (key) => { const def = REAL_TRACKS.find((r) => r.key === key); const t = real.find((x) => x.track === def.name);
+    return t ? { track: t.track, stepSeconds: t.stepSeconds, strideSeconds: t.strideSeconds, stepsChecked: t.stepsChecked, passSteps: t.passSteps, failSteps: t.failSteps, mismatches: t.mismatches } : 'not measured'; };
   check(report.physics.filter((t) => probes.some((p) => t.track.includes(p))).length === 4, 'four fabricated probes');
   check(report.ctxCtMultipliesPerBlock.physics === 21, `ctxCtMultipliesPerBlock.physics ${report.ctxCtMultipliesPerBlock.physics}`);
   // 6. Tube check.
@@ -135,6 +165,20 @@ if (isMain) {
   check(b.geometries === 200 && b.missesBelowR === 0 && b.signMismatches === 0 && b.valueMismatches === 0,
     `breadth: ${b.geometries} geometries, misses below R ${b.missesBelowR}, signMismatches ${b.signMismatches}, valueMismatches ${b.valueMismatches}`);
   check(b.geometriesWithExtraBeyondBound === 0, `breadth: ${b.geometriesWithExtraBeyondBound} geometries with an extra alert beyond the derived bound ${b.extraAlertBoundM} m`);
+  // The added set (2c amendment): 200 geometries, seed 3, designed miss in [0, R]; misses 0 (upper bound 1.5 %).
+  const b2 = report.breadth2;
+  check(b2.geometries === 200 && b2.seed === 3 && b2.withinR === 200 && b2.missesBelowR === 0 && b2.misses === 0 && b2.signMismatches === 0 && b2.valueMismatches === 0,
+    `breadth2: ${b2.geometries} geometries, seed ${b2.seed}, ${b2.withinR} below R, misses ${b2.missesBelowR}, signMismatches ${b2.signMismatches}, valueMismatches ${b2.valueMismatches}`);
+  check(b2.geometriesWithExtraBeyondBound === 0, `breadth2: ${b2.geometriesWithExtraBeyondBound} geometries with an extra alert beyond the derived bound`);
+  // The R' margin assumes v_max = 15.5 km/s: every set's largest relative speed stays below it.
+  check(b.maxRelativeSpeedKmS <= report.vmaxKmS && b2.maxRelativeSpeedKmS <= report.vmaxKmS && report.pairsMaxRelativeSpeedKmS <= report.vmaxKmS,
+    `relative speed ${b.maxRelativeSpeedKmS}, ${b2.maxRelativeSpeedKmS}, ${report.pairsMaxRelativeSpeedKmS} km/s against v_max ${report.vmaxKmS}`);
+  // Registered-form verdict: lines 8 and 13 by the letter (extra alerts within R' + s; misses below R').
+  const registeredFormMisses = [];
+  for (const p of report.pairs) if (p.noise.extraAlerts > 0 && p.noise.maxExtraDistanceM > report.testedThresholdM + report.noise.sM)
+    registeredFormMisses.push(`line 8: ${p.pair} farthest extra alert ${p.noise.maxExtraDistanceM} m against the registered ${(report.testedThresholdM + report.noise.sM).toFixed(0)} m`);
+  if (b.geometriesWithExtraBeyondRprimePlusS > 0) registeredFormMisses.push(`line 13: ${b.geometriesWithExtraBeyondRprimePlusS} breadth geometries with an extra alert beyond R' + s`);
+  if (b.misses > 0) registeredFormMisses.push(`line 13: ${b.misses} misses below R' as registered (designed misses in (R, R'))`);
   const wilson = (k, n) => {
     const z = 1.959964, p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
     return [(c - h) / d, (c + h) / d];
@@ -143,11 +187,12 @@ if (isMain) {
 
   const table = {
     verdict: failures.length ? 'FAIL' : 'PASS',
+    registeredFormVerdict: registeredFormMisses.length ? `lines 8 and 13 not met by the letter: ${registeredFormMisses.join('; ')}` : 'every line met by the letter',
     registered: 'private-screening/PROTOCOL-19.md',
     forkCommit: report.forkCommit,
     steps: report.steps,
     testedThresholdM: report.testedThresholdM,
-    pairs: report.pairs.map((p) => ({ pair: p.pair, designedMissKm: p.designedMissKm, plaintextAlertSteps: p.plaintextAlertSteps, protocolAlertSteps: p.protocolAlertSteps,
+    pairs: report.pairs.map((p) => ({ pair: p.pair, designedMissKm: p.designedMissKm, maxRelativeSpeedKmS: p.maxRelativeSpeedKmS, plaintextAlertSteps: p.plaintextAlertSteps, protocolAlertSteps: p.protocolAlertSteps,
       alertSteps: p.plaintextAlerts, signMismatches: p.signMismatches, valueMismatches: p.valueMismatches, noise: p.noise })),
     signMismatches: report.signMismatches,
     valueMismatches: report.valueMismatches,
@@ -158,11 +203,18 @@ if (isMain) {
     submittedVectorsPerBlock: report.submittedVectorsPerBlock,
     decoys: report.decoys,
     tube: report.tube,
-    physics: report.physics.map((t) => ({ track: t.track, stepsChecked: t.stepsChecked, passSteps: t.passSteps, failSteps: t.failSteps, mismatches: t.mismatches, firstFailStep: t.firstFailStep })),
-    realTracks: { swarm: 'not measured', sentinel1: 'not measured', gps: 'not measured', gate: 'real tracks passing the physics check is a gate beside S4 before the feature is offered on any host or the console' },
+    physics: report.physics.map((t) => ({ track: t.track, stepSeconds: t.stepSeconds, strideSeconds: t.strideSeconds, stepsChecked: t.stepsChecked, passSteps: t.passSteps, failSteps: t.failSteps, mismatches: t.mismatches, firstFailStep: t.firstFailStep })),
+    realTracks: { swarm: realLine('swarm'), sentinel1: 'not measured (no Sentinel-1 precise orbit in the archive)', gps: realLine('gps'),
+      gate: 'real tracks passing the physics check is a gate beside S4 before the feature is offered on any host or the console' },
     reconstruction: report.reconstruction,
     breadth: { ...b, registeredFormMissesBelowRprime: b.misses, registeredFormExtraBeyondRprimePlusS: b.geometriesWithExtraBeyondRprimePlusS,
-      falseAlertRateAtNoiseThreshold: b.falseAlertStepsAtNoiseThreshold / b.stepsBeyondRprime, wilson95: [lo, hi] },
+      falseAlertRateAtNoiseThreshold: b.falseAlertStepsAtNoiseThreshold / b.stepsBeyondRprime, wilson95: [lo, hi],
+      missesBelowROneSidedUpper95: 1 - 0.05 ** (1 / b.withinR) },
+    breadth2: { ...b2, falseAlertRateAtNoiseThreshold: b2.falseAlertStepsAtNoiseThreshold / b2.stepsBeyondRprime,
+      wilson95: wilson(b2.falseAlertStepsAtNoiseThreshold, b2.stepsBeyondRprime), missesBelowROneSidedUpper95: 1 - 0.05 ** (1 / b2.withinR) },
+    pairsMaxRelativeSpeedKmS: report.pairsMaxRelativeSpeedKmS,
+    vmaxKmS: report.vmaxKmS,
+    noiseChannel: 'not measured: A can read each response noise through its budget; a measured noise-based attempt or noise flooding with its cost is a gate beside S4 and the real tracks (PROTOCOL-19.md 2d)',
     registrationSlips: [
       "R'^2 is 85,062,500 m^2 from the registered formula; the registration wrote 85,061,864",
       "the noise pass's extra alerts reach sqrt((R' + s)^2 + S), not R' + s; the mechanism is as registered",
@@ -172,9 +224,13 @@ if (isMain) {
     comparisonS4: 'not built; decisions through the oracle; the feature is offered on no host and no console',
     failures: failures.slice(0, 40),
   };
-  mkdirSync(results, { recursive: true });
-  writeFileSync(join(results, 'protocol-run.json'), `${JSON.stringify(report, null, 1)}\n`);
-  writeFileSync(join(results, 'known-answer.json'), `${JSON.stringify(table, null, 2)}\n`);
+  // The committed tables are written only on request (PRIVATE_SCREENING_WRITE=1):
+  // a gauntlet run must leave the tracked tree unchanged.
+  if (process.env.PRIVATE_SCREENING_WRITE === '1') {
+    mkdirSync(results, { recursive: true });
+    writeFileSync(join(results, 'protocol-run.json'), `${JSON.stringify(report, null, 1)}\n`);
+    writeFileSync(join(results, 'known-answer.json'), `${JSON.stringify(table, null, 2)}\n`);
+  }
   process.stdout.write(`${JSON.stringify(table, null, 2)}\n`);
   process.exit(failures.length ? 1 : 0);
 }

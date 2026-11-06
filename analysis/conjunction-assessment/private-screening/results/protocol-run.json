@@ -5,6 +5,7 @@
  "days": 1,
  "stepSeconds": 1,
  "steps": 86400,
+ "physicsThreads": 12,
  "parameters": {
   "screening": {
    "n": 8192,
@@ -41,7 +42,7 @@
   "tube": 3,
   "physics": 21
  },
- "ctxCtMultiplies": 2232,
+ "ctxCtMultiplies": 2274,
  "signMismatches": 0,
  "valueMismatches": 0,
  "minNoiseBudgetBits": {
@@ -52,6 +53,7 @@
   {
    "pair": "A-B1",
    "designedMissKm": 2,
+   "maxRelativeSpeedKmS": 5.028,
    "plaintextAlertSteps": 5,
    "protocolAlertSteps": 5,
    "plaintextAlerts": [
@@ -80,6 +82,7 @@
   {
    "pair": "A-B2",
    "designedMissKm": 2,
+   "maxRelativeSpeedKmS": 2.989,
    "plaintextAlertSteps": 6,
    "protocolAlertSteps": 6,
    "plaintextAlerts": [
@@ -110,6 +113,7 @@
   {
    "pair": "A-B3",
    "designedMissKm": 2,
+   "maxRelativeSpeedKmS": 14.413,
    "plaintextAlertSteps": 5,
    "protocolAlertSteps": 5,
    "plaintextAlerts": [
@@ -138,6 +142,7 @@
   {
    "pair": "A-B4",
    "designedMissKm": 2,
+   "maxRelativeSpeedKmS": 3.941,
    "plaintextAlertSteps": 4,
    "protocolAlertSteps": 4,
    "plaintextAlerts": [
@@ -164,6 +169,7 @@
   {
    "pair": "A-B5",
    "designedMissKm": 2,
+   "maxRelativeSpeedKmS": 12.215,
    "plaintextAlertSteps": 3,
    "protocolAlertSteps": 3,
    "plaintextAlerts": [
@@ -188,6 +194,7 @@
   {
    "pair": "A-B6",
    "designedMissKm": 2,
+   "maxRelativeSpeedKmS": 11.317,
    "plaintextAlertSteps": 3,
    "protocolAlertSteps": 3,
    "plaintextAlerts": [
@@ -212,6 +219,7 @@
   {
    "pair": "A-B7",
    "designedMissKm": 2,
+   "maxRelativeSpeedKmS": 6.468,
    "plaintextAlertSteps": 5,
    "protocolAlertSteps": 5,
    "plaintextAlerts": [
@@ -240,6 +248,7 @@
   {
    "pair": "A-B8",
    "designedMissKm": 60,
+   "maxRelativeSpeedKmS": 8.067,
    "plaintextAlertSteps": 0,
    "protocolAlertSteps": 0,
    "plaintextAlerts": [],
@@ -270,6 +279,8 @@
  "physics": [
   {
    "track": "A",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -284,6 +295,8 @@
   },
   {
    "track": "B1",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -298,6 +311,8 @@
   },
   {
    "track": "B2",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -312,6 +327,8 @@
   },
   {
    "track": "B3",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -326,6 +343,8 @@
   },
   {
    "track": "B4",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -340,6 +359,8 @@
   },
   {
    "track": "B5",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -354,6 +375,8 @@
   },
   {
    "track": "B6",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -368,6 +391,8 @@
   },
   {
    "track": "B7",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -382,6 +407,8 @@
   },
   {
    "track": "B8",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86280,
    "failSteps": 0,
@@ -396,6 +423,8 @@
   },
   {
    "track": "constant-velocity segment at steps 3600-4199",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 85566,
    "failSteps": 714,
@@ -410,6 +439,8 @@
   },
   {
    "track": "A at 1.2 mean motion",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 0,
    "failSteps": 86280,
@@ -424,6 +455,8 @@
   },
   {
    "track": "teleport A -> B1 at step 43200",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 86160,
    "failSteps": 120,
@@ -438,6 +471,8 @@
   },
   {
    "track": "A scaled by 1.01",
+   "stepSeconds": 1,
+   "strideSeconds": 60,
    "stepsChecked": 86280,
    "passSteps": 0,
    "failSteps": 86280,
@@ -448,6 +483,38 @@
     "EPlain": "125349769089357997488434200858352211",
     "F": "-42724006725688323755211",
     "FPlain": "-42724006725688323755211"
+   }
+  },
+  {
+   "track": "Swarm A precise science orbit 2025-11-24 (10 s)",
+   "stepSeconds": 10,
+   "strideSeconds": 60,
+   "stepsChecked": 8628,
+   "passSteps": 8628,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-13046841610166327710297530682471734",
+    "EPlain": "-13046841610166327710297530682471734",
+    "F": "-44001028846161643470996",
+    "FPlain": "-44001028846161643470996"
+   }
+  },
+  {
+   "track": "GPS G01 ESA final orbit 2025-10-17 (300 s)",
+   "stepSeconds": 300,
+   "strideSeconds": 300,
+   "stepsChecked": 287,
+   "passSteps": 287,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-286474496067543469885604154890647435",
+    "EPlain": "-286474496067543469885604154890647435",
+    "F": "-1826620913168436955807831",
+    "FPlain": "-1826620913168436955807831"
    }
   }
  ],
@@ -465,6 +532,7 @@
  },
  "breadth": {
   "geometries": 200,
+  "seed": 2,
   "missRangeM": [
    4611,
    18446
@@ -475,14 +543,38 @@
   "valueMismatches": 0,
   "steps": 1638400,
   "stepsBeyondRprime": 1638316,
-  "falseAlertStepsAtNoiseThreshold": 63,
-  "geometriesWithExtraBeyondRprimePlusS": 6,
+  "falseAlertStepsAtNoiseThreshold": 70,
+  "geometriesWithExtraBeyondRprimePlusS": 9,
   "withinR": 8,
   "missesBelowR": 0,
   "extraAlertBoundM": 11588.9,
-  "maxExtraDistanceM": 10914.2,
-  "geometriesWithExtraBeyondBound": 0
+  "maxExtraDistanceM": 11333.6,
+  "geometriesWithExtraBeyondBound": 0,
+  "maxRelativeSpeedKmS": 14.77
  },
+ "breadth2": {
+  "geometries": 200,
+  "seed": 3,
+  "missRangeM": [
+   0,
+   5000
+  ],
+  "withinRprime": 200,
+  "misses": 0,
+  "signMismatches": 0,
+  "valueMismatches": 0,
+  "steps": 1638400,
+  "stepsBeyondRprime": 1637651,
+  "falseAlertStepsAtNoiseThreshold": 141,
+  "geometriesWithExtraBeyondRprimePlusS": 17,
+  "withinR": 200,
+  "missesBelowR": 0,
+  "extraAlertBoundM": 11588.9,
+  "maxExtraDistanceM": 11322.3,
+  "geometriesWithExtraBeyondBound": 0,
+  "maxRelativeSpeedKmS": 14.756
+ },
+ "pairsMaxRelativeSpeedKmS": 14.413,
  "maskLeakage": {
   "method": "multiplicative mask r log-uniform below 2^120, 64-step runs, restated from the plaintext values",
   "samples": 98744,
@@ -492,24 +584,24 @@
   "private": false
  },
  "cost": {
-  "keygenMs": 566.8,
+  "keygenMs": 538.3,
   "keyBytes": 73537924,
   "screening8192": {
-   "aEncryptPerObjectDayMs": 206.7,
+   "aEncryptPerObjectDayMs": 200.3,
    "aUploadPerObjectDayBytes": 51916491,
-   "bComputePerPairDayMs": 1011.6,
+   "bComputePerPairDayMs": 1034.4,
    "bResponsePerPairDayBytes": 17305497,
-   "aDecryptPerPairDayMs": 82.9,
+   "aDecryptPerPairDayMs": 82.1,
    "exchangedPerPairDayBytes": 23795058
   },
   "physics16384": {
-   "aEncryptPerObjectDayMs": 1158.7,
-   "aUploadPerObjectDayBytes": 339758226,
-   "bComputePerObjectDayMs": 15615.6,
-   "bResponsePerObjectDayBytes": 75501828,
-   "aDecryptPerObjectDayMs": 494.5
+   "aEncryptPerObjectDayMs": 1040.3,
+   "aUploadPerObjectDayBytes": 302007312,
+   "bComputePerObjectDayMs": 14316.3,
+   "bResponsePerObjectDayBytes": 67112736,
+   "aDecryptPerObjectDayMs": 427.3
   },
-  "exchangedPerPairDayBytesWithPhysics": 75702565,
+  "exchangedPerPairDayBytesWithPhysics": 69935064,
   "bench": {
    "bComputePerPairDayMs": 169,
    "bResponsePerPairDayBytes": 8654481,

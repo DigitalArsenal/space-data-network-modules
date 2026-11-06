@@ -152,10 +152,51 @@ V3 mul(V3 a, double s) { return {a.x * s, a.y * s, a.z * s}; }
 V3 cross(V3 a, V3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
 V3 unit(V3 a) { return mul(a, 1.0 / std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z)); }
 
-struct Track {  // positions in integer metres on the 1 s grid
+struct Track {  // positions in integer metres on a fixed grid (stepSeconds)
   std::string name;
   std::vector<std::array<int64_t, 3>> p;
+  double stepSeconds = 1;
+  uint32_t boundBits = kCoordBound;
 };
+
+// A real precise orbit from an SP3 file (positions in km, Earth-fixed): the
+// samples of one satellite id, rotated about z by omega t (t from the first
+// epoch, omega the sidereal rate) into a frame that rotates with the stars,
+// which is all the two-body identities need (any fixed rotation is immaterial;
+// the slow precession rate is 1e-7 of omega). Integer metres.
+Track readSp3(const std::string& path, const std::string& id, const std::string& name, uint32_t boundBits) {
+  Track t; t.name = name; t.boundBits = boundBits;
+  FILE* f = std::fopen(path.c_str(), "r");
+  if (!f) { std::fprintf(stderr, "cannot open %s\n", path.c_str()); std::exit(4); }
+  char line[512];
+  double step = 0; bool first = true; double t0 = 0, tPrev = 0, tCur = 0;
+  const double omega = 7.2921150e-5;
+  while (std::fgets(line, sizeof line, f)) {
+    if (line[0] == '#' && line[1] == '#') { std::sscanf(line + 3, "%*d %*lf %lf", &step); continue; }
+    if (line[0] == '*') {
+      int y, mo, d, h, mi; double s;
+      std::sscanf(line + 1, "%d %d %d %d %d %lf", &y, &mo, &d, &h, &mi, &s);
+      // days from an arbitrary origin (the civil date to a day number)
+      const long a = (14 - mo) / 12, yy = y + 4800 - a, mm = mo + 12 * a - 3;
+      const long jdn = d + (153 * mm + 2) / 5 + 365 * yy + yy / 4 - yy / 100 + yy / 400 - 32045;
+      tCur = (double)jdn * 86400.0 + h * 3600.0 + mi * 60.0 + s;
+      if (first) { t0 = tCur; first = false; } else if (std::fabs((tCur - tPrev) - step) > 1e-6) { std::fprintf(stderr, "%s: gap at %s", path.c_str(), line); std::exit(4); }
+      tPrev = tCur;
+      continue;
+    }
+    if (line[0] == 'P' && std::strncmp(line + 1, id.c_str(), id.size()) == 0) {
+      double x, y, z;
+      std::sscanf(line + 4, "%lf %lf %lf", &x, &y, &z);
+      const double th = omega * (tCur - t0), c = std::cos(th), s = std::sin(th);
+      const double xi = x * c - y * s, yi = x * s + y * c;
+      t.p.push_back({std::llround(xi * 1e3), std::llround(yi * 1e3), std::llround(z * 1e3)});
+    }
+  }
+  std::fclose(f);
+  t.stepSeconds = step;
+  if (t.p.empty() || step <= 0) { std::fprintf(stderr, "%s: no samples for %s\n", path.c_str(), id.c_str()); std::exit(4); }
+  return t;
+}
 struct Orbit {
   double r, n; V3 c, d; double tc;
   V3 at(double t) const { const double u = n * (t - tc); return add(mul(c, r * std::cos(u)), mul(d, r * std::sin(u))); }
@@ -216,7 +257,7 @@ Bytes encryptBlock(const HEContext& a, const Track& t, size_t w, uint32_t n, int
     if (s >= 0 && (size_t)s < t.p.size()) v[j] = t.p[(size_t)s][k];
   }
   const auto s0 = Clock::now();
-  Bytes ct = a.EncryptInt64Vector(v, kCoordBound);
+  Bytes ct = a.EncryptInt64Vector(v, t.boundBits);
   c.aEncryptMs += ms(s0, Clock::now());
   if (ct.empty()) { std::fprintf(stderr, "A encrypt refused: %s\n", a.LastError().message.c_str()); std::exit(3); }
   c.aUploadBytes += (double)ct.size();
@@ -313,18 +354,26 @@ DistanceResult maskedDistance(const HEContext& aCtx, const HEContext& bCtx, cons
 struct PhysicsResult {
   size_t stepsChecked = 0, passSteps = 0, failSteps = 0, mismatches = 0; long firstFail = -1;
   double bComputeMs = 0, bResponseBytes = 0, aDecryptMs = 0; int minNoiseBudget = 1 << 30;
+  long strideSeconds = 0; double stepSeconds = 1; size_t blocks = 0, multiplies = 0;
   std::string sampleE, sampleF, sampleEPlain, sampleFPlain;
 };
 
 // S3: the anchor-free physics check at n 16384, depth 3. A submits three
 // slot-aligned copies a(t - D), a(t), a(t + D); B computes d2 and the two
 // two-body identities, masked.
-PhysicsResult physicsCheck(const HEContext& aCtx, const HEContext& bCtx, const Track& t, long stride, size_t steps, Rng& rng, Counters& c) {
+PhysicsResult physicsCheck(const HEContext& aCtx, const HEContext& bCtx, const Track& t, long strideSeconds, size_t, Rng& rng, Counters& c) {
   PhysicsResult r;
   Ops B{bCtx, c.ctxCtMultiplies};
+  // The stride is the smallest whole number of samples of at least strideSeconds.
+  const long stride = (long)std::ceil((double)strideSeconds / t.stepSeconds - 1e-9);
+  const long D = (long)std::llround(stride * t.stepSeconds);
+  const size_t steps = t.p.size();
+  r.strideSeconds = D; r.stepSeconds = t.stepSeconds;
   const size_t blocks = (steps + kN3 - 1) / kN3;
+  r.blocks = blocks;
+  const size_t multipliesBefore = c.ctxCtMultiplies;
   const Big mu = Big::From(kMuM);
-  const Big D2 = Big::From(stride * stride);
+  const Big D2 = Big::From(D * D);
   const Big muD4 = mu * mu * D2 * D2;              // mu^2 D^4
   const Big tol = Shr(muD4, kTolELog2);            // mu^2 D^4 / 128
   std::vector<Big> constVec(kN3, muD4);
@@ -339,7 +388,9 @@ PhysicsResult physicsCheck(const HEContext& aCtx, const HEContext& bCtx, const T
     auto s0 = Clock::now();
     std::vector<Big> rhoE(kN3), rhoF(kN3);
     for (size_t j = 0; j < kN3; ++j) { rhoE[j] = rng.Mask(); rhoF[j] = rng.Mask(); }
-    Bytes eConst = B.EncW(wideVec(constVec), 122);
+    uint32_t constBound = 1;  // bit length of mu^2 D^4 plus one (122 at D = 60 s, 131 at 300 s)
+    for (int i = 3; i >= 0; --i) if (muD4.m[i]) { constBound = (uint32_t)(64 * i + 64 - __builtin_clzll(muD4.m[i]) + 1); break; }
+    Bytes eConst = B.EncW(wideVec(constVec), constBound);
     Bytes eRhoE = B.EncW(wideVec(rhoE), kMaskBound), eRhoF = B.EncW(wideVec(rhoF), kMaskBound);
     Bytes d2[3], a2, dot, dd;
     for (int k = 0; k < 3; ++k) d2[k] = B.Sub(B.Add(am[k], ap[k]), B.MulPlain(a0[k], 2));
@@ -389,6 +440,7 @@ PhysicsResult physicsCheck(const HEContext& aCtx, const HEContext& bCtx, const T
       if (r.sampleE.empty()) { r.sampleE = dE.Str(); r.sampleF = dF.Str(); r.sampleEPlain = pE.Str(); r.sampleFPlain = pF.Str(); }
     }
   }
+  r.multiplies = c.ctxCtMultiplies - multipliesBefore;
   return r;
 }
 
@@ -398,7 +450,7 @@ std::string list(const std::vector<size_t>& v) {
   return s + "]";
 }
 
-struct Args { double days = 1, thresholdKm = 5, vmax = 15.5, noiseKm = 1.25; int pairs = 8; uint64_t seed = 1; long stride = 60; int threads = 1; };
+struct Args { double days = 1, thresholdKm = 5, vmax = 15.5, noiseKm = 1.25; int pairs = 8; uint64_t seed = 1; long stride = 60; int threads = 1; std::vector<std::string> sp3; };
 
 }  // namespace
 
@@ -406,6 +458,7 @@ int main(int argc, char** argv) {
   Args a;
   for (int i = 1; i + 1 < argc; i += 2) {
     const std::string k = argv[i]; const double v = std::atof(argv[i + 1]);
+    if (k == "--sp3") { a.sp3.push_back(argv[i + 1]); continue; }  // path:id:name, a real precise orbit for the physics check
     if (k == "--days") a.days = v; else if (k == "--pairs") a.pairs = (int)v; else if (k == "--seed") a.seed = (uint64_t)v;
     else if (k == "--threshold-km") a.thresholdKm = v; else if (k == "--vmax-kms") a.vmax = v;
     else if (k == "--noise-km") a.noiseKm = v; else if (k == "--stride-s") a.stride = (long)v; else if (k == "--threads") a.threads = (int)v;
@@ -454,22 +507,39 @@ int main(int argc, char** argv) {
   for (size_t j = steps / 2; j < steps; ++j) teleport.p[j] = trackB[0].p[j];
   Track scaled = trackA; scaled.name = "A scaled by 1.01";
   for (auto& p : scaled.p) for (int k = 0; k < 3; ++k) p[k] = std::llround(p[k] * 1.01);
-  // The breadth set (2c): 200 geometries, seed 2, designed miss uniform in [0.5 R', 2 R'].
-  std::mt19937_64 rng2(2);
+  // The breadth sets (2c): 200 geometries, seed 2, designed miss uniform in
+  // [0.5 R', 2 R']; and 200 more, seed 3, designed miss uniform in [0, R].
   struct Geometry { Track b; double tc, missM; size_t block; };
-  std::vector<Geometry> geometries;
-  for (int k = 0; k < 200; ++k) {
-    const double tc = span * (0.1 + 0.8 * uni(rng2));
-    const double angle = (20 + 140 * uni(rng2)) * kPi / 180;
-    const double missM = rprime * (0.5 + 1.5 * uni(rng2));
-    const V3 c = unit(A.at(tc));
-    const V3 dA = cross(nA, c);
-    const V3 nB = add(mul(nA, std::cos(angle)), mul(dA, std::sin(angle)));
-    const size_t block = (size_t)(tc / kN1);
-    Geometry g{Track(), tc, missM, block};
-    g.b = sample("G" + std::to_string(k + 1), circular(rA + missM / 1e3, nB, c, tc), steps);
-    geometries.push_back(std::move(g));
-  }
+  auto makeSet = [&](uint64_t seed, double loM, double hiM) {
+    std::mt19937_64 rng2(seed);
+    std::vector<Geometry> set;
+    for (int k = 0; k < 200; ++k) {
+      const double tc = span * (0.1 + 0.8 * uni(rng2));
+      const double angle = (20 + 140 * uni(rng2)) * kPi / 180;
+      const double missM = loM + (hiM - loM) * uni(rng2);
+      const V3 c = unit(A.at(tc));
+      const V3 dA = cross(nA, c);
+      const V3 nB = add(mul(nA, std::cos(angle)), mul(dA, std::sin(angle)));
+      const size_t block = (size_t)(tc / kN1);
+      Geometry g{Track(), tc, missM, block};
+      g.b = sample("G" + std::to_string(k + 1), circular(rA + missM / 1e3, nB, c, tc), steps);
+      set.push_back(std::move(g));
+    }
+    return set;
+  };
+  const double rM = a.thresholdKm * 1e3;
+  std::vector<Geometry> geometries = makeSet(2, 0.5 * rprime, 2 * rprime);
+  std::vector<Geometry> geometries2 = makeSet(3, 0.0, rM);
+  // The largest relative speed between two sampled tracks over steps [s0, s1), km/s.
+  auto maxRelSpeed = [](const Track& x, const Track& y, size_t s0, size_t s1) {
+    double m = 0;
+    for (size_t s = s0; s + 1 < s1; ++s) {
+      double q = 0;
+      for (int k = 0; k < 3; ++k) { const double d = (double)((x.p[s + 1][k] - y.p[s + 1][k]) - (x.p[s][k] - y.p[s][k])); q += d * d; }
+      m = std::max(m, std::sqrt(q));
+    }
+    return m / 1e3;
+  };
 
   // Per-window keys: one key pair per parameter set; B holds public and relin keys only.
   auto t0 = Clock::now();
@@ -506,6 +576,18 @@ int main(int argc, char** argv) {
   std::vector<const Track*> physTracks = {&trackA};
   for (auto& t : trackB) physTracks.push_back(&t);
   physTracks.push_back(&line); physTracks.push_back(&wrongRate); physTracks.push_back(&teleport); physTracks.push_back(&scaled);
+  std::vector<Track> realTracks;
+  realTracks.reserve(a.sp3.size());
+  for (const std::string& spec : a.sp3) {
+    const size_t c1 = spec.find(':'), c2 = spec.find(':', c1 + 1);
+    if (c1 == std::string::npos || c2 == std::string::npos) { std::fprintf(stderr, "--sp3 wants path:id:name\n"); return 2; }
+    Track t = readSp3(spec.substr(0, c1), spec.substr(c1 + 1, c2 - c1 - 1), spec.substr(c2 + 1), kCoordBound);
+    int64_t maxAbs = 0;
+    for (const auto& p : t.p) for (int k = 0; k < 3; ++k) maxAbs = std::max(maxAbs, p[k] < 0 ? -p[k] : p[k]);
+    while (maxAbs >= (int64_t(1) << t.boundBits)) ++t.boundBits;  // GPS needs 25 bits
+    realTracks.push_back(std::move(t));
+  }
+  for (auto& t : realTracks) physTracks.push_back(&t);
   // --threads t runs the tracks on t workers, each with its own per-window key
   // pair at n 16384 (the costs then carry the contention of t cores).
   std::vector<PhysicsResult> physOut(physTracks.size());
@@ -530,24 +612,35 @@ int main(int argc, char** argv) {
   for (size_t i = 0; i < physTracks.size(); ++i) phys.emplace_back(physTracks[i]->name, physOut[i]);
   // Breadth set: the block holding each crossing, s = 0 and the noise pass.
   Counters cG;
-  size_t gMisses = 0, gStepsBeyond = 0, gFalseAlerts = 0, gExtraBeyondRs = 0, gSteps = 0, gSign = 0, gValue = 0, gWithin = 0;
-  size_t gWithinR = 0, gMissesBelowR = 0, gExtraBeyondBound = 0; double gMaxExtraM = 0;
-  const double rM = a.thresholdKm * 1e3, extraBoundM = std::sqrt((double)raised2 + (double)noiseS);
-  for (const auto& g : geometries) {
-    DistanceResult r0 = maskedDistance(a1, b1, aBlocks, trackA, g.b, rprime2, rprime2, 0, 0, steps, masks, cG, false, g.block, g.block + 1);
-    DistanceResult rn = maskedDistance(a1, b1, aBlocks, trackA, g.b, rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cG, false, g.block, g.block + 1);
-    gSign += r0.signMismatches; gValue += r0.valueMismatches + rn.valueMismatches;
-    const size_t blockSteps = std::min(kN1 * (g.block + 1), steps) - kN1 * g.block;
-    gSteps += blockSteps;
-    if (g.missM < rprime) { ++gWithin; if (r0.alertSteps == 0 || r0.signMismatches) ++gMisses; }
-    if (g.missM < rM) { ++gWithinR; if (r0.alertSteps == 0 || r0.signMismatches) ++gMissesBelowR; }
-    gMaxExtraM = std::max(gMaxExtraM, rn.maxExtraDistanceM);
-    if (rn.maxExtraDistanceM > extraBoundM) ++gExtraBeyondBound;
-    gStepsBeyond += blockSteps - r0.plainAlertSteps;
-    gFalseAlerts += rn.extra;
-    if (rn.maxExtraDistanceM > rprime + sNoise) ++gExtraBeyondRs;
-    if (rn.missed) ++gMisses;
-  }
+  const double extraBoundM = std::sqrt((double)raised2 + (double)noiseS);
+  struct SetResult {
+    size_t misses = 0, stepsBeyond = 0, falseAlerts = 0, extraBeyondRs = 0, steps = 0, sign = 0, value = 0, within = 0;
+    size_t withinR = 0, missesBelowR = 0, extraBeyondBound = 0; double maxExtraM = 0, maxRelSpeedKmS = 0;
+  };
+  auto flySet = [&](const std::vector<Geometry>& set) {
+    SetResult g_;
+    for (const auto& g : set) {
+      DistanceResult r0 = maskedDistance(a1, b1, aBlocks, trackA, g.b, rprime2, rprime2, 0, 0, steps, masks, cG, false, g.block, g.block + 1);
+      DistanceResult rn = maskedDistance(a1, b1, aBlocks, trackA, g.b, rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cG, false, g.block, g.block + 1);
+      g_.sign += r0.signMismatches; g_.value += r0.valueMismatches + rn.valueMismatches;
+      const size_t blockSteps = std::min(kN1 * (g.block + 1), steps) - kN1 * g.block;
+      g_.steps += blockSteps;
+      if (g.missM < rprime) { ++g_.within; if (r0.alertSteps == 0 || r0.signMismatches) ++g_.misses; }
+      if (g.missM < rM) { ++g_.withinR; if (r0.alertSteps == 0 || r0.signMismatches) ++g_.missesBelowR; }
+      g_.maxExtraM = std::max(g_.maxExtraM, rn.maxExtraDistanceM);
+      if (rn.maxExtraDistanceM > extraBoundM) ++g_.extraBeyondBound;
+      g_.stepsBeyond += blockSteps - r0.plainAlertSteps;
+      g_.falseAlerts += rn.extra;
+      if (rn.maxExtraDistanceM > rprime + sNoise) ++g_.extraBeyondRs;
+      if (rn.missed) ++g_.misses;
+      g_.maxRelSpeedKmS = std::max(g_.maxRelSpeedKmS, maxRelSpeed(trackA, g.b, kN1 * g.block, kN1 * g.block + blockSteps));
+    }
+    return g_;
+  };
+  const SetResult set1 = flySet(geometries), set2 = flySet(geometries2);
+  double pairsMaxRelSpeed = 0;
+  std::vector<double> pairRelSpeed;
+  for (const auto& t : trackB) { pairRelSpeed.push_back(maxRelSpeed(trackA, t, 0, steps)); pairsMaxRelSpeed = std::max(pairsMaxRelSpeed, pairRelSpeed.back()); }
   // Reconstruction attempt (2a): A's view of pair 1's first block.
   size_t viewSteps = 0, viewWithin2 = 0; std::vector<double> viewErr;
   for (size_t j = 0; j < s2[0].aView.size(); ++j) {
@@ -589,6 +682,8 @@ int main(int argc, char** argv) {
   double s3B = 0, s3Resp = 0, s3Dec = 0; int s3Budget = 1 << 30;
   for (auto& p : phys) { s3B += p.second.bComputeMs; s3Resp += p.second.bResponseBytes; s3Dec += p.second.aDecryptMs; s3Budget = std::min(s3Budget, p.second.minNoiseBudget); }
   const double nPhys = (double)phys.size();
+  size_t physMultiplies = 0, physBlocks = 0;
+  for (auto& p : phys) { physMultiplies += p.second.multiplies; physBlocks += p.second.blocks; }
   std::printf("{\n  \"seal\": \"4.1.1\", \"scheme\": \"BFV\", \"forkCommit\": \"55a0ca86\", \"days\": %g, \"stepSeconds\": 1, \"steps\": %zu, \"physicsThreads\": %d,\n", a.days, steps, std::max(1, a.threads));
   std::printf("  \"parameters\": {\"screening\": {\"n\": %u, \"blocks\": %zu, \"depth\": 1}, \"physics\": {\"n\": %u, \"blocks\": %zu, \"depth\": 3, \"strideSeconds\": %ld}},\n",
               kN1, blocks1, kN3, (steps + kN3 - 1) / kN3, a.stride);
@@ -596,14 +691,14 @@ int main(int argc, char** argv) {
   std::printf("  \"noise\": {\"sM\": %g, \"truncationM2\": %lld, \"raisedThresholdM2\": %lld, \"betaM2\": %g},\n", sNoise, (long long)noiseS, (long long)raised2, (double)noiseS / 4);
   std::printf("  \"decoys\": 0, \"publicTracksRead\": {\"screening\": 0, \"tube\": 1}, \"responderHasSecretKey\": %s,\n", bHasSecret ? "true" : "false");
   std::printf("  \"submittedVectorsPerBlock\": 3, \"ctxCtMultipliesPerBlock\": {\"screening\": %zu, \"tube\": %zu, \"physics\": %zu}, \"ctxCtMultiplies\": %zu,\n",
-              cS2.ctxCtMultiplies / blocks1 / pairs.size(), cS1.ctxCtMultiplies / blocks1 / 2, cS3.ctxCtMultiplies / ((steps + kN3 - 1) / kN3) / phys.size(),
+              cS2.ctxCtMultiplies / blocks1 / pairs.size(), cS1.ctxCtMultiplies / blocks1 / 2, physMultiplies / physBlocks,
               cS2.ctxCtMultiplies + cS2n.ctxCtMultiplies + cS1.ctxCtMultiplies + cS3.ctxCtMultiplies);
   std::printf("  \"signMismatches\": %zu, \"valueMismatches\": %zu, \"minNoiseBudgetBits\": {\"screening\": %d, \"physics\": %d},\n", mism, valm, s2Budget, s3Budget);
   std::printf("  \"pairs\": [");
   for (size_t q = 0; q < pairs.size(); ++q) {
     const auto& r = s2[q]; const auto& n = s2n[q];
-    std::printf("%s\n    {\"pair\": \"A-%s\", \"designedMissKm\": %.1f, \"plaintextAlertSteps\": %zu, \"protocolAlertSteps\": %zu, \"plaintextAlerts\": %s, \"protocolAlerts\": %s, \"signMismatches\": %zu, \"valueMismatches\": %zu, \"noise\": {\"missedAlerts\": %zu, \"extraAlerts\": %zu, \"maxExtraDistanceM\": %.1f, \"alertSteps\": %zu}}",
-                q ? "," : "", trackB[q].name.c_str(), pairs[q].missKm, r.plainAlertSteps, r.alertSteps, list(r.plainAlertList).c_str(), list(r.alertList).c_str(),
+    std::printf("%s\n    {\"pair\": \"A-%s\", \"designedMissKm\": %.1f, \"maxRelativeSpeedKmS\": %.3f, \"plaintextAlertSteps\": %zu, \"protocolAlertSteps\": %zu, \"plaintextAlerts\": %s, \"protocolAlerts\": %s, \"signMismatches\": %zu, \"valueMismatches\": %zu, \"noise\": {\"missedAlerts\": %zu, \"extraAlerts\": %zu, \"maxExtraDistanceM\": %.1f, \"alertSteps\": %zu}}",
+                q ? "," : "", trackB[q].name.c_str(), pairs[q].missKm, pairRelSpeed[q], r.plainAlertSteps, r.alertSteps, list(r.plainAlertList).c_str(), list(r.alertList).c_str(),
                 r.signMismatches, r.valueMismatches, n.missed, n.extra, n.maxExtraDistanceM, n.alertSteps);
   }
   std::printf("\n  ],\n");
@@ -613,15 +708,20 @@ int main(int argc, char** argv) {
   std::printf("  \"physics\": [");
   for (size_t i = 0; i < phys.size(); ++i) {
     const auto& p = phys[i].second;
-    std::printf("%s\n    {\"track\": \"%s\", \"stepsChecked\": %zu, \"passSteps\": %zu, \"failSteps\": %zu, \"mismatches\": %zu, \"firstFailStep\": %ld, \"sample\": {\"E\": \"%s\", \"EPlain\": \"%s\", \"F\": \"%s\", \"FPlain\": \"%s\"}}",
-                i ? "," : "", phys[i].first.c_str(), p.stepsChecked, p.passSteps, p.failSteps, p.mismatches, p.firstFail, p.sampleE.c_str(), p.sampleEPlain.c_str(), p.sampleF.c_str(), p.sampleFPlain.c_str());
+    std::printf("%s\n    {\"track\": \"%s\", \"stepSeconds\": %g, \"strideSeconds\": %ld, \"stepsChecked\": %zu, \"passSteps\": %zu, \"failSteps\": %zu, \"mismatches\": %zu, \"firstFailStep\": %ld, \"sample\": {\"E\": \"%s\", \"EPlain\": \"%s\", \"F\": \"%s\", \"FPlain\": \"%s\"}}",
+                i ? "," : "", phys[i].first.c_str(), p.stepSeconds, p.strideSeconds, p.stepsChecked, p.passSteps, p.failSteps, p.mismatches, p.firstFail, p.sampleE.c_str(), p.sampleEPlain.c_str(), p.sampleF.c_str(), p.sampleFPlain.c_str());
   }
   std::printf("\n  ],\n");
   std::printf("  \"returnedCiphertextsPerBlock\": {\"tube\": 1, \"screening\": 1, \"physics\": 2},\n");
   std::printf("  \"reconstruction\": {\"pair\": \"A-B1\", \"block\": 0, \"steps\": %zu, \"distanceWithinFactor2Share\": %.6f, \"medianLog2DistanceError\": %.2f},\n",
               viewSteps, viewSteps ? (double)viewWithin2 / viewSteps : 0.0, viewErr.empty() ? 0.0 : viewErr[viewErr.size() / 2]);
-  std::printf("  \"breadth\": {\"geometries\": %zu, \"missRangeM\": [%.0f, %.0f], \"withinRprime\": %zu, \"misses\": %zu, \"signMismatches\": %zu, \"valueMismatches\": %zu, \"steps\": %zu, \"stepsBeyondRprime\": %zu, \"falseAlertStepsAtNoiseThreshold\": %zu, \"geometriesWithExtraBeyondRprimePlusS\": %zu, \"withinR\": %zu, \"missesBelowR\": %zu, \"extraAlertBoundM\": %.1f, \"maxExtraDistanceM\": %.1f, \"geometriesWithExtraBeyondBound\": %zu},\n",
-              geometries.size(), 0.5 * rprime, 2 * rprime, gWithin, gMisses, gSign, gValue, gSteps, gStepsBeyond, gFalseAlerts, gExtraBeyondRs, gWithinR, gMissesBelowR, extraBoundM, gMaxExtraM, gExtraBeyondBound);
+  auto printSet = [&](const char* key, const SetResult& g_, size_t count, uint64_t seed, double lo, double hi) {
+    std::printf("  \"%s\": {\"geometries\": %zu, \"seed\": %llu, \"missRangeM\": [%.0f, %.0f], \"withinRprime\": %zu, \"misses\": %zu, \"signMismatches\": %zu, \"valueMismatches\": %zu, \"steps\": %zu, \"stepsBeyondRprime\": %zu, \"falseAlertStepsAtNoiseThreshold\": %zu, \"geometriesWithExtraBeyondRprimePlusS\": %zu, \"withinR\": %zu, \"missesBelowR\": %zu, \"extraAlertBoundM\": %.1f, \"maxExtraDistanceM\": %.1f, \"geometriesWithExtraBeyondBound\": %zu, \"maxRelativeSpeedKmS\": %.3f},\n",
+                key, count, (unsigned long long)seed, lo, hi, g_.within, g_.misses, g_.sign, g_.value, g_.steps, g_.stepsBeyond, g_.falseAlerts, g_.extraBeyondRs, g_.withinR, g_.missesBelowR, extraBoundM, g_.maxExtraM, g_.extraBeyondBound, g_.maxRelSpeedKmS);
+  };
+  printSet("breadth", set1, geometries.size(), 2, 0.5 * rprime, 2 * rprime);
+  printSet("breadth2", set2, geometries2.size(), 3, 0.0, rM);
+  std::printf("  \"pairsMaxRelativeSpeedKmS\": %.3f,\n", pairsMaxRelSpeed);
   std::printf("  \"maskLeakage\": {\"method\": \"multiplicative mask r log-uniform below 2^120, 64-step runs, restated from the plaintext values\", \"samples\": %zu, \"medianErrorBitsInDistanceSquared\": %.2f, \"withinFactor2InDistance\": %.3f, \"withinFactor10InDistance\": %.3f, \"private\": false},\n",
               leak.size(), leak.empty() ? 0.0 : leak[leak.size() / 2], frac(2.0), frac(2 * std::log2(10.0)));
   std::printf("  \"cost\": {\n");

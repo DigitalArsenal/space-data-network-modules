@@ -1,5 +1,6 @@
 {
   "verdict": "PASS",
+  "registeredFormVerdict": "lines 8 and 13 not met by the letter: line 8: A-B3 farthest extra alert 10591.6 m against the registered 10473 m; line 13: 9 breadth geometries with an extra alert beyond R' + s; line 13: 12 misses below R' as registered (designed misses in (R, R'))",
   "registered": "private-screening/PROTOCOL-19.md",
   "forkCommit": "55a0ca86",
   "steps": 86400,
@@ -8,6 +9,7 @@
     {
       "pair": "A-B1",
       "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 5.028,
       "plaintextAlertSteps": 5,
       "protocolAlertSteps": 5,
       "alertSteps": [
@@ -29,6 +31,7 @@
     {
       "pair": "A-B2",
       "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 2.989,
       "plaintextAlertSteps": 6,
       "protocolAlertSteps": 6,
       "alertSteps": [
@@ -51,6 +54,7 @@
     {
       "pair": "A-B3",
       "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 14.413,
       "plaintextAlertSteps": 5,
       "protocolAlertSteps": 5,
       "alertSteps": [
@@ -72,6 +76,7 @@
     {
       "pair": "A-B4",
       "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 3.941,
       "plaintextAlertSteps": 4,
       "protocolAlertSteps": 4,
       "alertSteps": [
@@ -92,6 +97,7 @@
     {
       "pair": "A-B5",
       "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 12.215,
       "plaintextAlertSteps": 3,
       "protocolAlertSteps": 3,
       "alertSteps": [
@@ -111,6 +117,7 @@
     {
       "pair": "A-B6",
       "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 11.317,
       "plaintextAlertSteps": 3,
       "protocolAlertSteps": 3,
       "alertSteps": [
@@ -130,6 +137,7 @@
     {
       "pair": "A-B7",
       "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 6.468,
       "plaintextAlertSteps": 5,
       "protocolAlertSteps": 5,
       "alertSteps": [
@@ -151,6 +159,7 @@
     {
       "pair": "A-B8",
       "designedMissKm": 60,
+      "maxRelativeSpeedKmS": 8.067,
       "plaintextAlertSteps": 0,
       "protocolAlertSteps": 0,
       "alertSteps": [],
@@ -199,6 +208,8 @@
   "physics": [
     {
       "track": "A",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -207,6 +218,8 @@
     },
     {
       "track": "B1",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -215,6 +228,8 @@
     },
     {
       "track": "B2",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -223,6 +238,8 @@
     },
     {
       "track": "B3",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -231,6 +248,8 @@
     },
     {
       "track": "B4",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -239,6 +258,8 @@
     },
     {
       "track": "B5",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -247,6 +268,8 @@
     },
     {
       "track": "B6",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -255,6 +278,8 @@
     },
     {
       "track": "B7",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -263,6 +288,8 @@
     },
     {
       "track": "B8",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86280,
       "failSteps": 0,
@@ -271,6 +298,8 @@
     },
     {
       "track": "constant-velocity segment at steps 3600-4199",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 85566,
       "failSteps": 714,
@@ -279,6 +308,8 @@
     },
     {
       "track": "A at 1.2 mean motion",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 0,
       "failSteps": 86280,
@@ -287,6 +318,8 @@
     },
     {
       "track": "teleport A -> B1 at step 43200",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 86160,
       "failSteps": 120,
@@ -295,17 +328,55 @@
     },
     {
       "track": "A scaled by 1.01",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
       "stepsChecked": 86280,
       "passSteps": 0,
       "failSteps": 86280,
       "mismatches": 0,
       "firstFailStep": 60
+    },
+    {
+      "track": "Swarm A precise science orbit 2025-11-24 (10 s)",
+      "stepSeconds": 10,
+      "strideSeconds": 60,
+      "stepsChecked": 8628,
+      "passSteps": 8628,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "GPS G01 ESA final orbit 2025-10-17 (300 s)",
+      "stepSeconds": 300,
+      "strideSeconds": 300,
+      "stepsChecked": 287,
+      "passSteps": 287,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
     }
   ],
   "realTracks": {
-    "swarm": "not measured",
-    "sentinel1": "not measured",
-    "gps": "not measured",
+    "swarm": {
+      "track": "Swarm A precise science orbit 2025-11-24 (10 s)",
+      "stepSeconds": 10,
+      "strideSeconds": 60,
+      "stepsChecked": 8628,
+      "passSteps": 8628,
+      "failSteps": 0,
+      "mismatches": 0
+    },
+    "sentinel1": "not measured (no Sentinel-1 precise orbit in the archive)",
+    "gps": {
+      "track": "GPS G01 ESA final orbit 2025-10-17 (300 s)",
+      "stepSeconds": 300,
+      "strideSeconds": 300,
+      "stepsChecked": 287,
+      "passSteps": 287,
+      "failSteps": 0,
+      "mismatches": 0
+    },
     "gate": "real tracks passing the physics check is a gate beside S4 before the feature is offered on any host or the console"
   },
   "reconstruction": {
@@ -317,6 +388,7 @@
   },
   "breadth": {
     "geometries": 200,
+    "seed": 2,
     "missRangeM": [
       4611,
       18446
@@ -327,21 +399,54 @@
     "valueMismatches": 0,
     "steps": 1638400,
     "stepsBeyondRprime": 1638316,
-    "falseAlertStepsAtNoiseThreshold": 63,
-    "geometriesWithExtraBeyondRprimePlusS": 6,
+    "falseAlertStepsAtNoiseThreshold": 70,
+    "geometriesWithExtraBeyondRprimePlusS": 9,
     "withinR": 8,
     "missesBelowR": 0,
     "extraAlertBoundM": 11588.9,
-    "maxExtraDistanceM": 10914.2,
+    "maxExtraDistanceM": 11333.6,
     "geometriesWithExtraBeyondBound": 0,
+    "maxRelativeSpeedKmS": 14.77,
     "registeredFormMissesBelowRprime": 12,
-    "registeredFormExtraBeyondRprimePlusS": 6,
-    "falseAlertRateAtNoiseThreshold": 0.000038454119962205095,
+    "registeredFormExtraBeyondRprimePlusS": 9,
+    "falseAlertRateAtNoiseThreshold": 0.00004272679995800566,
     "wilson95": [
-      0.000030058947610796898,
-      0.00004919386712998996
-    ]
+      0.000033821684933397936,
+      0.00005397646976221322
+    ],
+    "missesBelowROneSidedUpper95": 0.31234397806636793
   },
+  "breadth2": {
+    "geometries": 200,
+    "seed": 3,
+    "missRangeM": [
+      0,
+      5000
+    ],
+    "withinRprime": 200,
+    "misses": 0,
+    "signMismatches": 0,
+    "valueMismatches": 0,
+    "steps": 1638400,
+    "stepsBeyondRprime": 1637651,
+    "falseAlertStepsAtNoiseThreshold": 141,
+    "geometriesWithExtraBeyondRprimePlusS": 17,
+    "withinR": 200,
+    "missesBelowR": 0,
+    "extraAlertBoundM": 11588.9,
+    "maxExtraDistanceM": 11322.3,
+    "geometriesWithExtraBeyondBound": 0,
+    "maxRelativeSpeedKmS": 14.756,
+    "falseAlertRateAtNoiseThreshold": 0.00008609893072455609,
+    "wilson95": [
+      0.00007301252872833249,
+      0.00010153063607351199
+    ],
+    "missesBelowROneSidedUpper95": 0.014867039231272083
+  },
+  "pairsMaxRelativeSpeedKmS": 14.413,
+  "vmaxKmS": 15.5,
+  "noiseChannel": "not measured: A can read each response noise through its budget; a measured noise-based attempt or noise flooding with its cost is a gate beside S4 and the real tracks (PROTOCOL-19.md 2d)",
   "registrationSlips": [
     "R'^2 is 85,062,500 m^2 from the registered formula; the registration wrote 85,061,864",
     "the noise pass's extra alerts reach sqrt((R' + s)^2 + S), not R' + s; the mechanism is as registered",

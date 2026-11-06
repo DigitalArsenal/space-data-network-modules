@@ -30,6 +30,12 @@ const rows = [
   ['B: physics check, S3 n 16384 (per object-day)', `${p.bComputePerObjectDayMs.toFixed(0)} ms`, mb(p.bResponsePerObjectDayBytes), 'not in the bench', ''],
   ['A: decrypt, S3 (per object-day)', `${p.aDecryptPerObjectDayMs.toFixed(0)} ms`, '', 'not in the bench', ''],
   ['bytes exchanged with S3 (per pair-day)', '', mb(c.exchangedPerPairDayBytesWithPhysics), '', ''],
+  // Totals against the registered definitions (PROTOCOL-19.md 4a).
+  ['A: encrypt per object-day, registered total (keys + S2 + S3)', `${(c.keygenMs + s.aEncryptPerObjectDayMs + p.aEncryptPerObjectDayMs).toFixed(0)} ms`, '', `${bench.aEncryptPerObjectDayMs} ms`, ratio(c.keygenMs + s.aEncryptPerObjectDayMs + p.aEncryptPerObjectDayMs, bench.aEncryptPerObjectDayMs)],
+  ['A: upload per object-day, registered total (S2 + S3)', '', mb(s.aUploadPerObjectDayBytes + p.aUploadPerObjectDayBytes), mb(bench.aUploadPerObjectDayBytes), ratio(s.aUploadPerObjectDayBytes + p.aUploadPerObjectDayBytes, bench.aUploadPerObjectDayBytes)],
+  ['keys per window (public and relinearization, both n), in no exchanged figure above', '', mb(c.keyBytes), '', ''],
+  ['bytes exchanged, S2, with the keys amortized over the 8 pairs (per pair-day)', '', mb(s.exchangedPerPairDayBytes + c.keyBytes / 8), '', ''],
+  ['bytes exchanged with S3 and the keys amortized over the 8 pairs (per pair-day)', '', mb(c.exchangedPerPairDayBytesWithPhysics + c.keyBytes / 8), '', ''],
 ];
 const lines = ['| Figure | CPU | Bytes | Bench (1 s) | Ratio |', '| --- | ---: | ---: | ---: | ---: |', ...rows.map((r) => `| ${r.join(' | ')} |`)];
 const table = { verdict: 'PASS', host: 'one core, Apple M3 Ultra, shared host', seal: report.seal, forkCommit: report.forkCommit, days: report.days, pairs: report.pairs.length,

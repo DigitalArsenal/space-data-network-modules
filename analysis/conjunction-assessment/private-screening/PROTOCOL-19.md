@@ -307,7 +307,18 @@ full day.
 
 ## Results (run of 2026-11-06, one day at 1 s, seed 1; `results/`)
 
-Known answers (`results/known-answer.json`, verdict PASS):
+Registered form: lines 8 and 13 not met by the letter. Corrected form: all
+lines pass. The three corrections (R'^2 = 85,062,500; the extra-alert bound
+sqrt((R' + s)^2 + S) = 11,589 m; R' guarantees misses below R, not below R')
+are agreed with SDN-AP and recorded below; `results/known-answer.json`
+carries `registeredFormVerdict` beside `verdict`. Line 8's miss by the
+letter: pair A-B3's farthest extra alert at 10,592 m against the registered
+R' + s = 10,473 m (inside the derived bound). Line 13's: 12 breadth misses
+below R' as registered, and 9 breadth geometries with an extra alert beyond
+R' + s.
+
+Known answers (`results/known-answer.json`, verdict PASS in the corrected
+form):
 
 | Pair | Designed miss | Plaintext alert steps | Protocol alert steps | Sign mismatches | Noise pass: missed, extra, farthest extra |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -346,17 +357,32 @@ constant-velocity segment outside at 583 steps, first at step 3617.
 
 Reconstruction attempt (2a): from A's decrypted view of block 0 of pair A-B1,
 the recovered distance is within a factor of 2 of the truth at 0 of 8192
-steps; median error 37.3 bits in log2 distance.
+steps; median error 37.3 bits in log2 distance. The noise channel (2d) is not
+measured: A can read each response's noise through its budget, and a
+ct x ct product's noise depends on B's operands; a measured noise-based
+attempt, or noise flooding with its cost, is a gate beside S4 and the real
+tracks.
 
 Breadth (2c): 200 geometries, designed misses 4611 to 18,446 m; 8 below R
-(5 km), 62 below R'. Misses below R: 0. In the registration's form (below R'):
+(5 km), 62 below R'. Misses below R: 0 of 8, a one-sided 95 % upper bound of
+31 % on the miss probability, which cannot carry "never missed" on its own;
+the added set below carries it. In the registration's form (below R'):
 12, every one a designed miss in (R, R') whose sampled minimum lies above R'
 (the margin R' guarantees a pair within R, not within R'; a registration slip,
 both counts kept). False-alert rate at the truncated-noise threshold: 63 of
 1,638,316 steps beyond R', 3.8e-5, 95 % Wilson interval [3.0e-5, 4.9e-5].
 Farthest extra alert 10,914 m, inside the derived bound sqrt((R' + s)^2 + S) =
 11,589 m at every geometry; the registration's R' + s (10,473 m) was a
-derivation slip (6 geometries beyond it), the mechanism unchanged.
+derivation slip (9 geometries beyond it), the mechanism unchanged. Largest
+relative speed over the screened steps: 14.77 km/s (set 1), 14.41 km/s (the 8
+pairs), both below the v_max = 15.5 km/s of the R' margin.
+
+Added set (2c amendment, seed 3, designed miss uniform in [0, R]): 200
+geometries, all below R; misses 0 of 200 (one-sided 95 % upper bound 1.5 %);
+signMismatches 0, valueMismatches 0; false-alert rate at the truncated-noise
+threshold 141 of 1,637,651 steps beyond R', 8.6e-5, Wilson 95 % [7.3e-5,
+1.0e-4]; farthest extra alert 11,322 m, inside the derived bound at every
+geometry (17 beyond R' + s by the letter); largest relative speed 14.76 km/s.
 
 maskLeakage (multiplicative mask, restated on this run's plaintext values):
 within a factor of 2 in distance at 88.0 % of steps, within a factor of 10 at
@@ -382,6 +408,14 @@ the known-answer E2E runs the physics check on 12 workers):
 | B: physics check, S3 n 16384 (per object-day) | 15,616 ms | 75.5 MB | not in the bench | |
 | A: decrypt, S3 (per object-day) | 495 ms | | not in the bench | |
 | bytes exchanged with S3 (per pair-day) | | 75.7 MB | | |
+| A: encrypt per object-day, registered total (keys + S2 + S3) | 1933 ms | | 177 ms | 10.9x |
+| A: upload per object-day, registered total (S2 + S3) | | 391.7 MB | 34.6 MB | 11.3x |
+| keys per window (public and relinearization keys, both n), in no exchanged figure above | | 73.5 MB | | |
+| bytes exchanged, S2, with the keys amortized over the 8 pairs of the window (per pair-day) | | 33.0 MB | | |
+| bytes exchanged with S3 and the keys amortized over the 8 pairs (per pair-day) | | 84.9 MB | | |
+
+The keys cross once per window from A to each responder; amortized over the
+window's 8 pairs they add 9.2 MB per pair-day.
 
 Reading: B's screening cost is 6.0 times the bench because every per-step
 operand is a ciphertext (three ct x ct squarings per block where the bench
