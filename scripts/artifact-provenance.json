@@ -2677,11 +2677,11 @@
       }
     },
     "data-source/sensor-definitions/dist/isomorphic/module.wasm": {
-      "sha256": "fa908a3d9263b88c1bb6f2ea8b0ae8b17408e4d95851af6b4842dd1775c48797",
-      "bytes": 279864,
+      "sha256": "fe21d884d24b7b17cd4ae3c71749eb0acc2fa279ceece7a213a6cadf1f258a62",
+      "bytes": 280145,
       "module": "data-source/sensor-definitions",
-      "lastCommit": "4d830a3660f6b951fa8eadd04fb9b36c89a9516e",
-      "lastCommitDate": "2026-11-05T11:25:18-05:00",
+      "lastCommit": "a3302978afb7b3b80a2f434c166e80267222eb3e",
+      "lastCommitDate": "2026-11-05T21:45:06-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -2755,11 +2755,11 @@
       }
     },
     "data-source/space-infrastructure/dist/isomorphic/module.wasm": {
-      "sha256": "c36333a128e9273326a3cc7f209c1a1766ddefde49217baaf02641ef219dfa7b",
-      "bytes": 464064,
+      "sha256": "9d64c4ea7281c40e2414cfd126d0bb82dabcf4d8b0e03595c3cdb1bce753388f",
+      "bytes": 464321,
       "module": "data-source/space-infrastructure",
-      "lastCommit": "a6c38d5a375604020d9e40db2c51a5a6fadfc3f1",
-      "lastCommitDate": "2026-11-05T12:23:38-05:00",
+      "lastCommit": "a3302978afb7b3b80a2f434c166e80267222eb3e",
+      "lastCommitDate": "2026-11-05T21:45:06-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {

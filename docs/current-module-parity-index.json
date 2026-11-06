@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T02:29:49.897Z",
+  "generatedAt": "2026-11-06T02:45:26.986Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -4152,7 +4152,7 @@
       "pluginId": "com.digitalarsenal.data-source.sensor-definitions",
       "name": "Real-world sensor definitions",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "build_sensors",
         "plan_sources"
@@ -4264,7 +4264,7 @@
       "pluginId": "com.digitalarsenal.data-source.space-infrastructure",
       "name": "Space infrastructure: sensor sites",
       "pluginFamily": "data_source",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "build_infrastructure",
         "plan_sources"
