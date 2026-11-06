@@ -1121,6 +1121,20 @@ inline void free_grid(WideGrid* g) {
   std::free(g);
 }
 
+/// The scoped switch "sets initialized now take exact grids" (SPEC 16.11): while an ExactGridScope lives, xp_init gives every new
+/// set exact_grid (a fit's nominal, trial steps and perturbed copies); outside it sets share. Nesting counts.
+inline int32_t& exact_grid_depth() {
+  static int32_t depth = 0;
+  return depth;
+}
+struct ExactGridScope {
+  ExactGridScope() { __atomic_add_fetch(&exact_grid_depth(), 1, __ATOMIC_ACQ_REL); }
+  ~ExactGridScope() { __atomic_sub_fetch(&exact_grid_depth(), 1, __ATOMIC_ACQ_REL); }
+  ExactGridScope(const ExactGridScope&) = delete;
+  ExactGridScope& operator=(const ExactGridScope&) = delete;
+};
+inline bool exact_grids_now() { return __atomic_load_n(&exact_grid_depth(), __ATOMIC_ACQUIRE) > 0; }
+
 /// A grid for (n, e, i): a live or idle one whose sharing range holds the elements (`exact`: one built at these very elements),
 /// else a new one; nullptr out of memory.
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool exact = false) {

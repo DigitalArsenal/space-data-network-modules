@@ -1495,11 +1495,11 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   return true;
 }
 
-/// `exact_grid` (SPEC 16.11): above tess::kWideE this set builds its grids at its own elements and shares none (a fit's
-/// perturbed copies, so its finite-difference partials see the exact grid; flights and covariance share).
+/// `exact_grid`, or a live tess::ExactGridScope (SPEC 16.11): above tess::kWideE this set builds its grids at its own elements and
+/// shares none (a fit's sets, so its finite-difference partials see the exact grid; flights and covariance share).
 inline int32_t xp_init(const Elements& e, XpSat& s, bool exact_grid = false) {
   s = XpSat{};
-  s.ctx.wide_exact = exact_grid ? 1 : 0;
+  s.ctx.wide_exact = exact_grid || tess::exact_grids_now() ? 1 : 0;
   s.norad = e.norad;
   s.epoch_jd_whole = e.epoch_jd_whole;
   s.epoch_jd_frac = e.epoch_jd_frac;
