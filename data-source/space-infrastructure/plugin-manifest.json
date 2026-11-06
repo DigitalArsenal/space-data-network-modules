@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.data-source.space-infrastructure",
   "name": "Space infrastructure: sensor sites",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Publishes every known space-surveillance and missile-warning sensor site worldwide as SDS $SIT, and each sensor at it as $SNR. A site's position is read from Wikidata (P625), a Wikipedia page coordinate or an OpenStreetMap element, and checked against the other sources the roster names for the same place; every other value is a verbatim quote that must occur in the fetched document, with its source, retrieval time and license. A value with no source is absent, never guessed. plan_sources turns a timer tick into the HTTP requests; build_infrastructure reads the responses in C++/WASM. The host executes HTTP requests.",
   "pluginFamily": "data_source",
   "capabilities": [],

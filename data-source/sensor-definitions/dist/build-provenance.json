@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.278.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "OPP",
     "LKS",
@@ -18,5 +18,5 @@
     "src/sensor_definitions.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "fa908a3d9263b88c1bb6f2ea8b0ae8b17408e4d95851af6b4842dd1775c48797"
+  "wasmSha256": "fe21d884d24b7b17cd4ae3c71749eb0acc2fa279ceece7a213a6cadf1f258a62"
 }

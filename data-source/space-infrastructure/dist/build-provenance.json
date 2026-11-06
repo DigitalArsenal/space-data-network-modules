@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.278.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "IDM",
     "PVN",
@@ -21,5 +21,5 @@
     "src/space_infrastructure.cpp"
   ],
   "threadModel": "wasi-sequential",
-  "wasmSha256": "c36333a128e9273326a3cc7f209c1a1766ddefde49217baaf02641ef219dfa7b"
+  "wasmSha256": "9d64c4ea7281c40e2414cfd126d0bb82dabcf4d8b0e03595c3cdb1bce753388f"
 }
