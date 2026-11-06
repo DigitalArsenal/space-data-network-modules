@@ -30,6 +30,7 @@
 #include <vector>
 
 #include "flatbuffers/he_encryption.h"
+#include "seal/util/blake2.h"
 
 using namespace flatbuffers::he;
 using Clock = std::chrono::steady_clock;
@@ -239,6 +240,34 @@ std::vector<WideInt> wideVec(const std::vector<Big>& v) {
   return w;
 }
 
+// The responder's keyed generators (PROTOCOL-19.md 2f): eta and the masks rho
+// are keyed BLAKE2b (SEAL's) over (domain, requester, object, block, slot)
+// under separate keys, so a repeated query sees the same eta and no mask is
+// predictable from the others. TEST KEYS: fixed here for repeatability;
+// production key handling is not built (a gate beside S4).
+constexpr uint8_t kTestKeyEta[32] = {0x19, 0x20, 0x26, 0x11, 0x06, 0xe7, 0xa0, 0x01, 0x5d, 0xa1, 0xc0, 0xde, 0x00, 0x00, 0x00, 0x01,
+                                     0x70, 0x72, 0x69, 0x76, 0x61, 0x74, 0x65, 0x2d, 0x73, 0x63, 0x72, 0x65, 0x65, 0x6e, 0x19, 0x01};
+constexpr uint8_t kTestKeyRho[32] = {0x19, 0x20, 0x26, 0x11, 0x06, 0x5d, 0xa0, 0x02, 0x5d, 0xa1, 0xc0, 0xde, 0x00, 0x00, 0x00, 0x02,
+                                     0x70, 0x72, 0x69, 0x76, 0x61, 0x74, 0x65, 0x2d, 0x73, 0x63, 0x72, 0x65, 0x65, 0x6e, 0x19, 0x02};
+constexpr uint64_t kRequesterId = 1;  // A
+struct PrfInput { uint64_t domain, requester, object, block, slot; };
+void prf(const uint8_t* key, const PrfInput& in, uint8_t* out, size_t outLen) {
+  blake2b(out, outLen, &in, sizeof in, key, 32);
+}
+double keyedUniform(uint64_t objectId, uint64_t step) {  // eta's uniform in (-0.5, 0.5), domain 1
+  uint8_t out[8]; uint64_t h;
+  prf(kTestKeyEta, PrfInput{1, kRequesterId, objectId, 0, step}, out, sizeof out);
+  std::memcpy(&h, out, 8);
+  return ((double)(h >> 11) + 0.5) / 9007199254740992.0 - 0.5;
+}
+Big keyedMask(uint64_t domain, uint64_t objectId, uint64_t block, uint64_t slot) {  // rho uniform in [2^100, 2^119)
+  uint8_t out[16]; Big b;
+  prf(kTestKeyRho, PrfInput{domain, kRequesterId, objectId, block, slot}, out, sizeof out);
+  std::memcpy(&b.m[0], out, 8); std::memcpy(&b.m[1], out + 8, 8);
+  b.m[1] = (b.m[1] & ((1ULL << 55) - 1)) | (1ULL << 36);
+  return b;
+}
+
 struct Rng {
   std::mt19937_64 g;
   explicit Rng(uint64_t seed) : g(seed) {}
@@ -273,6 +302,7 @@ struct DistanceResult {  // S1/S2 on one pair, all blocks
   std::vector<Big> values;  // the plaintext |a-b|^2 - R'^2 per step (for the leakage study)
   // A's view: every decrypted slot of the first block (the reconstruction attempt).
   std::vector<Big> aView; std::vector<double> trueDistanceM;
+  uint64_t etaHash = 14695981039346656037ULL;  // FNV-1a offset; the eta vector's hash (noise pass)
 };
 
 // S1 and S2: masked |a - b|^2 - thr^2 (+ eta) per step. B's operands (b_k, mask,
@@ -280,12 +310,11 @@ struct DistanceResult {  // S1/S2 on one pair, all blocks
 DistanceResult maskedDistance(const HEContext& aCtx, const HEContext& bCtx, const std::vector<std::vector<Bytes>>& aBlocks,
                               const Track& a, const Track& b, int64_t thr2, int64_t raisedThr2, int64_t noiseS, double beta,
                               size_t steps, Rng& rng, Counters& c, bool keepValues,
-                              size_t wStart = 0, size_t wEnd = (size_t)-1) {
+                              size_t wStart = 0, size_t wEnd = (size_t)-1, uint64_t objectId = 0) {
   DistanceResult r;
   Ops B{bCtx, c.ctxCtMultiplies};
   const size_t blocks = std::min(aBlocks.size(), wEnd);
   const Big thrBig = Big::From(raisedThr2);
-  std::mt19937_64 noiseGen(rng.g());
   for (size_t w = wStart; w < blocks; ++w) {
     // B: its own coordinates, the mask and the noise, under A's key.
     auto s0 = Clock::now();
@@ -295,13 +324,13 @@ DistanceResult maskedDistance(const HEContext& aCtx, const HEContext& bCtx, cons
     for (size_t j = 0; j < kN1; ++j) {
       const size_t s = w * kN1 + j;
       if (s < b.p.size()) for (int k = 0; k < 3; ++k) bk[k][j] = b.p[s][k];
-      rho[j] = rng.Mask();
+      rho[j] = keyedMask(2, objectId, w, j);
       if (noiseS > 0) {
-        std::uniform_real_distribution<double> u(-0.5, 0.5);
-        const double x = u(noiseGen);
+        const double x = keyedUniform(objectId, s);  // fixed per (requester, object, step)
         double lap = -beta * (x < 0 ? -1.0 : 1.0) * std::log(1 - 2 * std::fabs(x));
         lap = std::max(-(double)noiseS, std::min((double)noiseS, lap));
         eta[j] = std::llround(lap);
+        r.etaHash = (r.etaHash ^ (uint64_t)(eta[j] + (int64_t)noiseS)) * 1099511628211ULL;  // FNV over the eta vector
       }
     }
     Bytes eb[3];
@@ -361,7 +390,7 @@ struct PhysicsResult {
 // S3: the anchor-free physics check at n 16384, depth 3. A submits three
 // slot-aligned copies a(t - D), a(t), a(t + D); B computes d2 and the two
 // two-body identities, masked.
-PhysicsResult physicsCheck(const HEContext& aCtx, const HEContext& bCtx, const Track& t, long strideSeconds, size_t, Rng& rng, Counters& c) {
+PhysicsResult physicsCheck(const HEContext& aCtx, const HEContext& bCtx, const Track& t, long strideSeconds, size_t, Rng& rng, Counters& c, uint64_t trackId) {
   PhysicsResult r;
   Ops B{bCtx, c.ctxCtMultiplies};
   // The stride is the smallest whole number of samples of at least strideSeconds.
@@ -387,7 +416,7 @@ PhysicsResult physicsCheck(const HEContext& aCtx, const HEContext& bCtx, const T
     }
     auto s0 = Clock::now();
     std::vector<Big> rhoE(kN3), rhoF(kN3);
-    for (size_t j = 0; j < kN3; ++j) { rhoE[j] = rng.Mask(); rhoF[j] = rng.Mask(); }
+    for (size_t j = 0; j < kN3; ++j) { rhoE[j] = keyedMask(3, trackId, w, j); rhoF[j] = keyedMask(4, trackId, w, j); }
     uint32_t constBound = 1;  // bit length of mu^2 D^4 plus one (122 at D = 60 s, 131 at 300 s)
     for (int i = 3; i >= 0; --i) if (muD4.m[i]) { constBound = (uint32_t)(64 * i + 64 - __builtin_clzll(muD4.m[i]) + 1); break; }
     Bytes eConst = B.EncW(wideVec(constVec), constBound);
@@ -565,12 +594,22 @@ int main(int argc, char** argv) {
   Counters cS2, cS2n, cS1, cS3;
   std::vector<DistanceResult> s2, s2n;
   for (size_t q = 0; q < pairs.size(); ++q) {
-    s2.push_back(maskedDistance(a1, b1, aBlocks, trackA, trackB[q], rprime2, rprime2, 0, 0, steps, masks, cS2, true));
-    s2n.push_back(maskedDistance(a1, b1, aBlocks, trackA, trackB[q], rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cS2n, false));
+    s2.push_back(maskedDistance(a1, b1, aBlocks, trackA, trackB[q], rprime2, rprime2, 0, 0, steps, masks, cS2, true, 0, (size_t)-1, 10000 + q + 1));
+    s2n.push_back(maskedDistance(a1, b1, aBlocks, trackA, trackB[q], rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cS2n, false, 0, (size_t)-1, q + 1));
   }
+  // Keyed noise: the same pair screened twice gives identical eta at every
+  // step, and again after an unrelated track (B2) was screened in between.
+  Counters cRepeat;
+  const uint64_t etaFirst = s2n[0].etaHash;
+  const uint64_t etaTwice = maskedDistance(a1, b1, aBlocks, trackA, trackB[0], rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cRepeat, false, 0, 1, 1).etaHash;
+  const uint64_t etaTwiceFirst = maskedDistance(a1, b1, aBlocks, trackA, trackB[0], rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cRepeat, false, 0, 1, 1).etaHash;
+  maskedDistance(a1, b1, aBlocks, trackA, trackB[1 % trackB.size()], rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cRepeat, false, 0, 1, 2);
+  const uint64_t etaAfterUnrelated = maskedDistance(a1, b1, aBlocks, trackA, trackB[0], rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cRepeat, false, 0, 1, 1).etaHash;
+  const bool etaSameTwice = etaTwice == etaTwiceFirst, etaSameAfterUnrelated = etaAfterUnrelated == etaTwice;
+  (void)etaFirst;
   // S1 tube check: A against its declared track, the line against it.
-  DistanceResult tubeA = maskedDistance(a1, b1, aBlocks, trackA, declared, d02, d02, 0, 0, steps, masks, cS1, false);
-  DistanceResult tubeLine = maskedDistance(a1, b1, lineBlocks, line, declared, d02, d02, 0, 0, steps, masks, cS1, false);
+  DistanceResult tubeA = maskedDistance(a1, b1, aBlocks, trackA, declared, d02, d02, 0, 0, steps, masks, cS1, false, 0, (size_t)-1, 500);
+  DistanceResult tubeLine = maskedDistance(a1, b1, lineBlocks, line, declared, d02, d02, 0, 0, steps, masks, cS1, false, 0, (size_t)-1, 501);
   // S3 physics check.
   std::vector<std::pair<std::string, PhysicsResult>> phys;
   std::vector<const Track*> physTracks = {&trackA};
@@ -600,9 +639,9 @@ int main(int argc, char** argv) {
     HEContext wb = HEContext::CreateServer(wpk.data(), wpk.size());
     wb.SetRelinKeys(wrk.data(), wrk.size());
     if (wb.HasSecretKey()) { std::fprintf(stderr, "worker server context holds a secret key\n"); std::exit(3); }
-    for (size_t i = next++; i < physTracks.size(); i = next++) physOut[i] = physicsCheck(wa, wb, *physTracks[i], a.stride, steps, wm, physCounters[(size_t)id]);
+    for (size_t i = next++; i < physTracks.size(); i = next++) physOut[i] = physicsCheck(wa, wb, *physTracks[i], a.stride, steps, wm, physCounters[(size_t)id], 100 + i);
   };
-  if (a.threads <= 1) { for (size_t i = 0; i < physTracks.size(); ++i) physOut[i] = physicsCheck(a3, b3, *physTracks[i], a.stride, steps, masks, cS3); }
+  if (a.threads <= 1) { for (size_t i = 0; i < physTracks.size(); ++i) physOut[i] = physicsCheck(a3, b3, *physTracks[i], a.stride, steps, masks, cS3, 100 + i); }
   else {
     std::vector<std::thread> pool;
     for (int i = 0; i < a.threads; ++i) pool.emplace_back(worker, i);
@@ -617,11 +656,11 @@ int main(int argc, char** argv) {
     size_t misses = 0, stepsBeyond = 0, falseAlerts = 0, extraBeyondRs = 0, steps = 0, sign = 0, value = 0, within = 0;
     size_t withinR = 0, missesBelowR = 0, extraBeyondBound = 0; double maxExtraM = 0, maxRelSpeedKmS = 0;
   };
-  auto flySet = [&](const std::vector<Geometry>& set) {
+  auto flySet = [&](const std::vector<Geometry>& set, uint64_t objectBase) {
     SetResult g_;
     for (const auto& g : set) {
       DistanceResult r0 = maskedDistance(a1, b1, aBlocks, trackA, g.b, rprime2, rprime2, 0, 0, steps, masks, cG, false, g.block, g.block + 1);
-      DistanceResult rn = maskedDistance(a1, b1, aBlocks, trackA, g.b, rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cG, false, g.block, g.block + 1);
+      DistanceResult rn = maskedDistance(a1, b1, aBlocks, trackA, g.b, rprime2, raised2, noiseS, (double)noiseS / 4, steps, masks, cG, false, g.block, g.block + 1, objectBase + (uint64_t)(&g - set.data()));
       g_.sign += r0.signMismatches; g_.value += r0.valueMismatches + rn.valueMismatches;
       const size_t blockSteps = std::min(kN1 * (g.block + 1), steps) - kN1 * g.block;
       g_.steps += blockSteps;
@@ -637,7 +676,7 @@ int main(int argc, char** argv) {
     }
     return g_;
   };
-  const SetResult set1 = flySet(geometries), set2 = flySet(geometries2);
+  const SetResult set1 = flySet(geometries, 1000), set2 = flySet(geometries2, 2000);
   double pairsMaxRelSpeed = 0;
   std::vector<double> pairRelSpeed;
   for (const auto& t : trackB) { pairRelSpeed.push_back(maxRelSpeed(trackA, t, 0, steps)); pairsMaxRelSpeed = std::max(pairsMaxRelSpeed, pairRelSpeed.back()); }
@@ -722,6 +761,8 @@ int main(int argc, char** argv) {
   printSet("breadth", set1, geometries.size(), 2, 0.5 * rprime, 2 * rprime);
   printSet("breadth2", set2, geometries2.size(), 3, 0.0, rM);
   std::printf("  \"pairsMaxRelativeSpeedKmS\": %.3f,\n", pairsMaxRelSpeed);
+  std::printf("  \"etaRepeat\": {\"keyed\": \"BLAKE2b under test key K1 over (domain 1, requester, object, step); rho BLAKE2b under test key K2 over (domain, requester, object, block, slot)\", \"testKeys\": true, \"sameTwice\": %s, \"sameAfterUnrelated\": %s},\n",
+              etaSameTwice ? "true" : "false", etaSameAfterUnrelated ? "true" : "false");
   std::printf("  \"maskLeakage\": {\"method\": \"multiplicative mask r log-uniform below 2^120, 64-step runs, restated from the plaintext values\", \"samples\": %zu, \"medianErrorBitsInDistanceSquared\": %.2f, \"withinFactor2InDistance\": %.3f, \"withinFactor10InDistance\": %.3f, \"private\": false},\n",
               leak.size(), leak.empty() ? 0.0 : leak[leak.size() / 2], frac(2.0), frac(2 * std::log2(10.0)));
   std::printf("  \"cost\": {\n");

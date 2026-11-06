@@ -1,6 +1,6 @@
 {
   "verdict": "PASS",
-  "registeredFormVerdict": "lines 8 and 13 not met by the letter: line 8: A-B3 farthest extra alert 10591.6 m against the registered 10473 m; line 13: 9 breadth geometries with an extra alert beyond R' + s; line 13: 12 misses below R' as registered (designed misses in (R, R'))",
+  "registeredFormVerdict": "lines 8 and 13 not met by the letter: line 8: A-B4 farthest extra alert 10877.7 m against the registered 10473 m; line 13: 7 breadth geometries with an extra alert beyond R' + s; line 13: 12 misses below R' as registered (designed misses in (R, R'))",
   "registered": "private-screening/PROTOCOL-19.md",
   "forkCommit": "55a0ca86",
   "steps": 86400,
@@ -68,9 +68,9 @@
       "valueMismatches": 0,
       "noise": {
         "missedAlerts": 0,
-        "extraAlerts": 3,
-        "maxExtraDistanceM": 10591.6,
-        "alertSteps": 8
+        "extraAlerts": 2,
+        "maxExtraDistanceM": 9806.2,
+        "alertSteps": 7
       }
     },
     {
@@ -89,9 +89,9 @@
       "valueMismatches": 0,
       "noise": {
         "missedAlerts": 0,
-        "extraAlerts": 4,
-        "maxExtraDistanceM": 9610.6,
-        "alertSteps": 8
+        "extraAlerts": 8,
+        "maxExtraDistanceM": 10877.7,
+        "alertSteps": 12
       }
     },
     {
@@ -110,7 +110,7 @@
       "noise": {
         "missedAlerts": 0,
         "extraAlerts": 1,
-        "maxExtraDistanceM": 10391.5,
+        "maxExtraDistanceM": 9872.1,
         "alertSteps": 4
       }
     },
@@ -384,7 +384,7 @@
     "block": 0,
     "steps": 8192,
     "distanceWithinFactor2Share": 0,
-    "medianLog2DistanceError": 37.29
+    "medianLog2DistanceError": 37.3
   },
   "breadth": {
     "geometries": 200,
@@ -399,20 +399,20 @@
     "valueMismatches": 0,
     "steps": 1638400,
     "stepsBeyondRprime": 1638316,
-    "falseAlertStepsAtNoiseThreshold": 70,
-    "geometriesWithExtraBeyondRprimePlusS": 9,
+    "falseAlertStepsAtNoiseThreshold": 69,
+    "geometriesWithExtraBeyondRprimePlusS": 7,
     "withinR": 8,
     "missesBelowR": 0,
     "extraAlertBoundM": 11588.9,
-    "maxExtraDistanceM": 11333.6,
+    "maxExtraDistanceM": 11007.8,
     "geometriesWithExtraBeyondBound": 0,
     "maxRelativeSpeedKmS": 14.77,
     "registeredFormMissesBelowRprime": 12,
-    "registeredFormExtraBeyondRprimePlusS": 9,
-    "falseAlertRateAtNoiseThreshold": 0.00004272679995800566,
+    "registeredFormExtraBeyondRprimePlusS": 7,
+    "falseAlertRateAtNoiseThreshold": 0.000042116417101462725,
     "wilson95": [
-      0.000033821684933397936,
-      0.00005397646976221322
+      0.0000332825595895794,
+      0.000053294832255342586
     ],
     "missesBelowROneSidedUpper95": 0.31234397806636793
   },
@@ -429,22 +429,33 @@
     "valueMismatches": 0,
     "steps": 1638400,
     "stepsBeyondRprime": 1637651,
-    "falseAlertStepsAtNoiseThreshold": 141,
-    "geometriesWithExtraBeyondRprimePlusS": 17,
+    "falseAlertStepsAtNoiseThreshold": 137,
+    "geometriesWithExtraBeyondRprimePlusS": 18,
     "withinR": 200,
     "missesBelowR": 0,
     "extraAlertBoundM": 11588.9,
-    "maxExtraDistanceM": 11322.3,
+    "maxExtraDistanceM": 11076.2,
     "geometriesWithExtraBeyondBound": 0,
     "maxRelativeSpeedKmS": 14.756,
-    "falseAlertRateAtNoiseThreshold": 0.00008609893072455609,
+    "falseAlertRateAtNoiseThreshold": 0.00008365640786712187,
     "wilson95": [
-      0.00007301252872833249,
-      0.00010153063607351199
+      0.00007077231763935197,
+      0.00009888581290651136
     ],
     "missesBelowROneSidedUpper95": 0.014867039231272083
   },
   "pairsMaxRelativeSpeedKmS": 14.413,
+  "etaRepeat": {
+    "keyed": "BLAKE2b under test key K1 over (domain 1, requester, object, step); rho BLAKE2b under test key K2 over (domain, requester, object, block, slot)",
+    "testKeys": true,
+    "sameTwice": true,
+    "sameAfterUnrelated": true
+  },
+  "keyedGenerators": "eta and rho from SEAL keyed BLAKE2b under separate domain-separated TEST keys fixed in the driver; production key handling is not built (a gate beside S4)",
+  "mersenneAttempt": {
+    "oldMasks": "mt19937_64 masks (runs before 2f): the standard state recovery (untemper 312 consecutive full 64-bit outputs) is inapplicable to A's view, which lacks the low 58 bits of each mask's first limb and 10 bits of the second; the partial-view GF(2) solve (about 490,000 known bits per block against 19,937 state bits) was not run within the box: attempted, not recovered within the box, expected to succeed, the reason for the change",
+    "newMasks": "keyed BLAKE2b masks: the same attempt fails by construction (no linear state; the key is the secret)"
+  },
   "vmaxKmS": 15.5,
   "noiseChannel": "not measured: A can read each response noise through its budget; a measured noise-based attempt or noise flooding with its cost is a gate beside S4 and the real tracks (PROTOCOL-19.md 2d)",
   "registrationSlips": [

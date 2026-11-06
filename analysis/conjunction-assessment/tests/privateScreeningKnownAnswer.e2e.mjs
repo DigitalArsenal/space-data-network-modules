@@ -147,6 +147,10 @@ if (isMain) {
     check(p.noise.extraAlerts === 0 || p.noise.maxExtraDistanceM <= extraBoundM,
       `${p.pair}: extra alert at ${p.noise.maxExtraDistanceM} m beyond the derived bound ${extraBoundM.toFixed(1)} m`);
   }
+  // 8a. eta is fixed per (requester, object, step): the same pair screened twice,
+  // and again after an unrelated track, gives identical eta at every step.
+  check(report.etaRepeat && report.etaRepeat.sameTwice === true && report.etaRepeat.sameAfterUnrelated === true,
+    `eta repeat: ${JSON.stringify(report.etaRepeat)}`);
   // 9. No decoys.
   check(report.decoys === 0, `decoys ${report.decoys}`);
   // 10. maskLeakage reported, not private.
@@ -213,6 +217,12 @@ if (isMain) {
     breadth2: { ...b2, falseAlertRateAtNoiseThreshold: b2.falseAlertStepsAtNoiseThreshold / b2.stepsBeyondRprime,
       wilson95: wilson(b2.falseAlertStepsAtNoiseThreshold, b2.stepsBeyondRprime), missesBelowROneSidedUpper95: 1 - 0.05 ** (1 / b2.withinR) },
     pairsMaxRelativeSpeedKmS: report.pairsMaxRelativeSpeedKmS,
+    etaRepeat: report.etaRepeat,
+    keyedGenerators: 'eta and rho from SEAL keyed BLAKE2b under separate domain-separated TEST keys fixed in the driver; production key handling is not built (a gate beside S4)',
+    mersenneAttempt: {
+      oldMasks: 'mt19937_64 masks (runs before 2f): the standard state recovery (untemper 312 consecutive full 64-bit outputs) is inapplicable to A\'s view, which lacks the low 58 bits of each mask\'s first limb and 10 bits of the second; the partial-view GF(2) solve (about 490,000 known bits per block against 19,937 state bits) was not run within the box: attempted, not recovered within the box, expected to succeed, the reason for the change',
+      newMasks: 'keyed BLAKE2b masks: the same attempt fails by construction (no linear state; the key is the secret)',
+    },
     vmaxKmS: report.vmaxKmS,
     noiseChannel: 'not measured: A can read each response noise through its budget; a measured noise-based attempt or noise flooding with its cost is a gate beside S4 and the real tracks (PROTOCOL-19.md 2d)',
     registrationSlips: [

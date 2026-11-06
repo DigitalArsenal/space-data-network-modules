@@ -365,14 +365,26 @@ lines pass. The three corrections (R'^2 = 85,062,500; the extra-alert bound
 sqrt((R' + s)^2 + S) = 11,589 m; R' guarantees misses below R, not below R')
 are agreed with SDN-AP and recorded below; `results/known-answer.json`
 carries `registeredFormVerdict` beside `verdict`. Line 8's miss by the
-letter: pair A-B3's farthest extra alert at 10,592 m against the registered
-R' + s = 10,473 m (inside the derived bound). Line 13's: 12 breadth misses
-below R' as registered, and 9 breadth geometries with an extra alert beyond
-R' + s.
+letter in the landed run: pair A-B4's farthest extra alert at 10,878 m
+against the registered R' + s = 10,473 m (inside the derived bound); in the
+defective stream-eta run it was A-B3 at 10,592 m. Line 13's: 12 breadth
+misses below R' as registered, and 7 breadth geometries with an extra alert
+beyond R' + s (9 in the stream-eta run).
 
-The noise-pass figures below are from the corrected keyed-eta run (2e); the
-defective stream-eta run's figures are kept in a separate paragraph after the
-breadth results.
+The noise-pass figures below are from the landed run (keyed BLAKE2b eta and
+masks, 2f); the two earlier runs' figures are kept, labeled, in "Noise-pass
+runs" after the breadth results. Alert decisions without noise (lines 1 to 7,
+11 to 13) are identical across the three runs.
+
+Mersenne attempt (acceptance 11 as amended): against the old mt19937_64
+masks, the standard state recovery (untempering 312 consecutive full 64-bit
+outputs) is inapplicable to A's view, which lacks the low 58 bits of each
+mask's first limb and 10 bits of the second; the partial-view GF(2) solve
+(about 490,000 known bits per block against 19,937 state bits) was not run
+within this box. Attempted, not recovered within the box; expected to
+succeed, which is the reason for the change. Against the keyed BLAKE2b masks
+the same attempt fails by construction: there is no linear state, and the key
+is the secret (a test key here; production key handling is a gate).
 
 Known answers (`results/known-answer.json`, verdict PASS in the corrected
 form):
@@ -381,9 +393,9 @@ form):
 | --- | ---: | ---: | ---: | ---: | --- |
 | A-B1 | 2 km | 5 | 5 (identical) | 0 | 0, 3, 9827 m |
 | A-B2 | 2 km | 6 | 6 | 0 | 0, 7, 10,119 m |
-| A-B3 | 2 km | 5 | 5 | 0 | 0, 3, 10,592 m |
-| A-B4 | 2 km | 4 | 4 | 0 | 0, 4, 9611 m |
-| A-B5 | 2 km | 3 | 3 | 0 | 0, 1, 10,392 m |
+| A-B3 | 2 km | 5 | 5 | 0 | 0, 2, 9806 m |
+| A-B4 | 2 km | 4 | 4 | 0 | 0, 8, 10,878 m |
+| A-B5 | 2 km | 3 | 3 | 0 | 0, 1, 9872 m |
 | A-B6 | 2 km | 3 | 3 | 0 | 0, 0 |
 | A-B7 | 2 km | 5 | 5 | 0 | 0, 1, 9461 m |
 | A-B8 | 60 km | 0 | 0 | 0 | 0, 0 |
@@ -439,20 +451,33 @@ Breadth (2c): 200 geometries, designed misses 4611 to 18,446 m; 8 below R
 the added set below carries it. In the registration's form (below R'):
 12, every one a designed miss in (R, R') whose sampled minimum lies above R'
 (the margin R' guarantees a pair within R, not within R'; a registration slip,
-both counts kept). False-alert rate at the truncated-noise threshold: 63 of
-1,638,316 steps beyond R', 3.8e-5, 95 % Wilson interval [3.0e-5, 4.9e-5].
-Farthest extra alert 10,914 m, inside the derived bound sqrt((R' + s)^2 + S) =
+both counts kept). False-alert rate at the truncated-noise threshold: 69 of
+1,638,316 steps beyond R', 4.2e-5, 95 % Wilson interval [3.3e-5, 5.3e-5].
+Farthest extra alert 11,008 m, inside the derived bound sqrt((R' + s)^2 + S) =
 11,589 m at every geometry; the registration's R' + s (10,473 m) was a
-derivation slip (9 geometries beyond it), the mechanism unchanged. Largest
+derivation slip (7 geometries beyond it), the mechanism unchanged. Largest
 relative speed over the screened steps: 14.77 km/s (set 1), 14.41 km/s (the 8
 pairs), both below the v_max = 15.5 km/s of the R' margin.
 
 Added set (2c amendment, seed 3, designed miss uniform in [0, R]): 200
 geometries, all below R; misses 0 of 200 (one-sided 95 % upper bound 1.5 %);
 signMismatches 0, valueMismatches 0; false-alert rate at the truncated-noise
-threshold 141 of 1,637,651 steps beyond R', 8.6e-5, Wilson 95 % [7.3e-5,
-1.0e-4]; farthest extra alert 11,322 m, inside the derived bound at every
-geometry (17 beyond R' + s by the letter); largest relative speed 14.76 km/s.
+threshold 137 of 1,637,651 steps beyond R', 8.4e-5, Wilson 95 % [7.1e-5,
+9.9e-5]; farthest extra alert 11,076 m, inside the derived bound at every
+geometry (18 beyond R' + s by the letter); largest relative speed 14.76 km/s.
+
+Noise-pass runs, all three labeled (alert decisions without noise identical
+in all; sign and value mismatches 0 in all; missed real alerts 0 in all):
+
+| Run | Pairs' extra alerts (B1..B8) | Farthest extra | Set 1: beyond R' + s, false-alert steps, farthest | Set 2: beyond R' + s, false-alert steps, farthest |
+| --- | --- | ---: | --- | --- |
+| stream eta, mt19937_64 masks (defective run of the registered mechanism, 2e) | 3, 7, 3, 4, 1, 0, 1, 0 | 10,592 m (A-B3) | 9, 63, 10,914 m | 17, 141, 11,322 m |
+| keyed eta by splitmix64, mt19937_64 masks (intermediate, not landed on) | 3, 7, 2, 6, 1, 1, 1, 0 | 11,437 m | 4, 57, 11,418 m | 19, 147, 11,423 m |
+| keyed BLAKE2b eta and masks, test keys (landed, 2f) | 3, 7, 2, 8, 1, 0, 1, 0 | 10,878 m (A-B4) | 7, 69, 11,008 m | 18, 137, 11,076 m |
+
+Line 14 (keyed noise): the same pair screened twice, and again after an
+unrelated track, gives an identical eta vector at every step (hash equal) in
+the landed run.
 
 maskLeakage (multiplicative mask, restated on this run's plaintext values):
 within a factor of 2 in distance at 88.0 % of steps, within a factor of 10 at
