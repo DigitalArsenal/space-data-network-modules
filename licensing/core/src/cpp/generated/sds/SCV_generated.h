@@ -25,6 +25,10 @@ struct SCVTimeGrid;
 struct SCVTimeGridBuilder;
 struct SCVTimeGridT;
 
+struct SCVAzElMaskPoint;
+struct SCVAzElMaskPointBuilder;
+struct SCVAzElMaskPointT;
+
 struct SCVSensorShapeContract;
 struct SCVSensorShapeContractBuilder;
 struct SCVSensorShapeContractT;
@@ -1040,6 +1044,82 @@ inline ::flatbuffers::Offset<SCVTimeGrid> CreateSCVTimeGridDirect(
 
 ::flatbuffers::Offset<SCVTimeGrid> CreateSCVTimeGrid(::flatbuffers::FlatBufferBuilder &_fbb, const SCVTimeGridT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct SCVAzElMaskPointT : public ::flatbuffers::NativeTable {
+  typedef SCVAzElMaskPoint TableType;
+  double AZIMUTH_DEG = 0.0;
+  double MIN_ELEVATION_DEG = 0.0;
+};
+
+/// One point of an azimuth/elevation mask: the lowest elevation at which the
+/// sensor sees at that azimuth (a terrain or structure horizon). The mask is the
+/// polyline through its points ordered by AZIMUTH_DEG, wrapping from the last
+/// point to the first across 360 degrees, linearly interpolated in azimuth.
+struct SCVAzElMaskPoint FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SCVAzElMaskPointT NativeTableType;
+  typedef SCVAzElMaskPointBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_AZIMUTH_DEG = 4,
+    VT_MIN_ELEVATION_DEG = 6
+  };
+  /// Azimuth, degrees clockwise from north, in [0, 360).
+  double AZIMUTH_DEG() const {
+    return GetField<double>(VT_AZIMUTH_DEG, 0.0);
+  }
+  /// Minimum visible elevation at AZIMUTH_DEG, degrees above the local horizontal.
+  double MIN_ELEVATION_DEG() const {
+    return GetField<double>(VT_MIN_ELEVATION_DEG, 0.0);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_AZIMUTH_DEG, 8) &&
+           VerifyField<double>(verifier, VT_MIN_ELEVATION_DEG, 8) &&
+           verifier.EndTable();
+  }
+  SCVAzElMaskPointT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SCVAzElMaskPointT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SCVAzElMaskPoint> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAzElMaskPointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SCVAzElMaskPointBuilder {
+  typedef SCVAzElMaskPoint Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_AZIMUTH_DEG(double AZIMUTH_DEG) {
+    fbb_.AddElement<double>(SCVAzElMaskPoint::VT_AZIMUTH_DEG, AZIMUTH_DEG, 0.0);
+  }
+  void add_MIN_ELEVATION_DEG(double MIN_ELEVATION_DEG) {
+    fbb_.AddElement<double>(SCVAzElMaskPoint::VT_MIN_ELEVATION_DEG, MIN_ELEVATION_DEG, 0.0);
+  }
+  explicit SCVAzElMaskPointBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SCVAzElMaskPoint> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SCVAzElMaskPoint>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SCVAzElMaskPoint> CreateSCVAzElMaskPoint(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double AZIMUTH_DEG = 0.0,
+    double MIN_ELEVATION_DEG = 0.0) {
+  SCVAzElMaskPointBuilder builder_(_fbb);
+  builder_.add_MIN_ELEVATION_DEG(MIN_ELEVATION_DEG);
+  builder_.add_AZIMUTH_DEG(AZIMUTH_DEG);
+  return builder_.Finish();
+}
+
+struct SCVAzElMaskPoint::Traits {
+  using type = SCVAzElMaskPoint;
+  static auto constexpr Create = CreateSCVAzElMaskPoint;
+};
+
+::flatbuffers::Offset<SCVAzElMaskPoint> CreateSCVAzElMaskPoint(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAzElMaskPointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct SCVSensorShapeContractT : public ::flatbuffers::NativeTable {
   typedef SCVSensorShapeContract TableType;
   scvSensorShapeKind SHAPE_KIND = scvSensorShapeKind::CONIC;
@@ -1058,12 +1138,16 @@ struct SCVSensorShapeContractT : public ::flatbuffers::NativeTable {
   double MAX_RANGE_M = 0.0;
   std::vector<std::unique_ptr<SCVVec3T>> POLYGON_VERTICES{};
   scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN;
+  std::vector<std::unique_ptr<SCVAzElMaskPointT>> AZ_EL_MASK{};
   SCVSensorShapeContractT() = default;
   SCVSensorShapeContractT(const SCVSensorShapeContractT &o);
   SCVSensorShapeContractT(SCVSensorShapeContractT&&) FLATBUFFERS_NOEXCEPT = default;
   SCVSensorShapeContractT &operator=(SCVSensorShapeContractT o) FLATBUFFERS_NOEXCEPT;
 };
 
+/// The field-of-view shape of one sensor. $SCV carries it in SCVSensor; $SNR
+/// carries the same table as the sensor definition's FIELD_OF_VIEW, so a
+/// definition and an analysis request never describe a shape in two types.
 struct SCVSensorShapeContract FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef SCVSensorShapeContractT NativeTableType;
   typedef SCVSensorShapeContractBuilder Builder;
@@ -1084,7 +1168,8 @@ struct SCVSensorShapeContract FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
     VT_MIN_RANGE_M = 28,
     VT_MAX_RANGE_M = 30,
     VT_POLYGON_VERTICES = 32,
-    VT_POLYGON_FRAME = 34
+    VT_POLYGON_FRAME = 34,
+    VT_AZ_EL_MASK = 36
   };
   scvSensorShapeKind SHAPE_KIND() const {
     return static_cast<scvSensorShapeKind>(GetField<uint8_t>(VT_SHAPE_KIND, 0));
@@ -1134,6 +1219,11 @@ struct SCVSensorShapeContract FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
   scvCoordinateFrame POLYGON_FRAME() const {
     return static_cast<scvCoordinateFrame>(GetField<uint8_t>(VT_POLYGON_FRAME, 0));
   }
+  /// Azimuth/elevation mask of a ground sensor, empty when the sensor has none.
+  /// Clips the shape: a direction below the mask is outside the field of view.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SCVAzElMaskPoint>> *AZ_EL_MASK() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SCVAzElMaskPoint>> *>(VT_AZ_EL_MASK);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1155,6 +1245,9 @@ struct SCVSensorShapeContract FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::T
            verifier.VerifyVector(POLYGON_VERTICES()) &&
            verifier.VerifyVectorOfTables(POLYGON_VERTICES()) &&
            VerifyField<uint8_t>(verifier, VT_POLYGON_FRAME, 1) &&
+           VerifyOffset(verifier, VT_AZ_EL_MASK) &&
+           verifier.VerifyVector(AZ_EL_MASK()) &&
+           verifier.VerifyVectorOfTables(AZ_EL_MASK()) &&
            verifier.EndTable();
   }
   SCVSensorShapeContractT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1214,6 +1307,9 @@ struct SCVSensorShapeContractBuilder {
   void add_POLYGON_FRAME(scvCoordinateFrame POLYGON_FRAME) {
     fbb_.AddElement<uint8_t>(SCVSensorShapeContract::VT_POLYGON_FRAME, static_cast<uint8_t>(POLYGON_FRAME), 0);
   }
+  void add_AZ_EL_MASK(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVAzElMaskPoint>>> AZ_EL_MASK) {
+    fbb_.AddOffset(SCVSensorShapeContract::VT_AZ_EL_MASK, AZ_EL_MASK);
+  }
   explicit SCVSensorShapeContractBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1242,7 +1338,8 @@ inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContrac
     double MIN_RANGE_M = 0.0,
     double MAX_RANGE_M = 0.0,
     ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVVec3>>> POLYGON_VERTICES = 0,
-    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN) {
+    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SCVAzElMaskPoint>>> AZ_EL_MASK = 0) {
   SCVSensorShapeContractBuilder builder_(_fbb);
   builder_.add_MAX_RANGE_M(MAX_RANGE_M);
   builder_.add_MIN_RANGE_M(MIN_RANGE_M);
@@ -1255,6 +1352,7 @@ inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContrac
   builder_.add_MIN_CLOCK_ANGLE_DEG(MIN_CLOCK_ANGLE_DEG);
   builder_.add_INNER_HALF_ANGLE_DEG(INNER_HALF_ANGLE_DEG);
   builder_.add_OUTER_HALF_ANGLE_DEG(OUTER_HALF_ANGLE_DEG);
+  builder_.add_AZ_EL_MASK(AZ_EL_MASK);
   builder_.add_POLYGON_VERTICES(POLYGON_VERTICES);
   builder_.add_POLYGON_FRAME(POLYGON_FRAME);
   builder_.add_RANGE_BOUNDARY(RANGE_BOUNDARY);
@@ -1285,8 +1383,10 @@ inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContrac
     double MIN_RANGE_M = 0.0,
     double MAX_RANGE_M = 0.0,
     const std::vector<::flatbuffers::Offset<SCVVec3>> *POLYGON_VERTICES = nullptr,
-    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN) {
+    scvCoordinateFrame POLYGON_FRAME = scvCoordinateFrame::UNKNOWN,
+    const std::vector<::flatbuffers::Offset<SCVAzElMaskPoint>> *AZ_EL_MASK = nullptr) {
   auto POLYGON_VERTICES__ = POLYGON_VERTICES ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>>(*POLYGON_VERTICES) : 0;
+  auto AZ_EL_MASK__ = AZ_EL_MASK ? _fbb.CreateVector<::flatbuffers::Offset<SCVAzElMaskPoint>>(*AZ_EL_MASK) : 0;
   return CreateSCVSensorShapeContract(
       _fbb,
       SHAPE_KIND,
@@ -1304,7 +1404,8 @@ inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContrac
       MIN_RANGE_M,
       MAX_RANGE_M,
       POLYGON_VERTICES__,
-      POLYGON_FRAME);
+      POLYGON_FRAME,
+      AZ_EL_MASK__);
 }
 
 ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContract(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorShapeContractT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5224,6 +5325,35 @@ inline ::flatbuffers::Offset<SCVTimeGrid> SCVTimeGrid::Pack(::flatbuffers::FlatB
       _GRID_INDEX_COUNT);
 }
 
+inline SCVAzElMaskPointT *SCVAzElMaskPoint::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SCVAzElMaskPointT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SCVAzElMaskPoint::UnPackTo(SCVAzElMaskPointT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = AZIMUTH_DEG(); _o->AZIMUTH_DEG = _e; }
+  { auto _e = MIN_ELEVATION_DEG(); _o->MIN_ELEVATION_DEG = _e; }
+}
+
+inline ::flatbuffers::Offset<SCVAzElMaskPoint> CreateSCVAzElMaskPoint(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAzElMaskPointT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SCVAzElMaskPoint::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SCVAzElMaskPoint> SCVAzElMaskPoint::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SCVAzElMaskPointT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SCVAzElMaskPointT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _AZIMUTH_DEG = _o->AZIMUTH_DEG;
+  auto _MIN_ELEVATION_DEG = _o->MIN_ELEVATION_DEG;
+  return CreateSCVAzElMaskPoint(
+      _fbb,
+      _AZIMUTH_DEG,
+      _MIN_ELEVATION_DEG);
+}
+
 inline SCVSensorShapeContractT::SCVSensorShapeContractT(const SCVSensorShapeContractT &o)
       : SHAPE_KIND(o.SHAPE_KIND),
         AXIS_CONVENTION(o.AXIS_CONVENTION),
@@ -5242,6 +5372,8 @@ inline SCVSensorShapeContractT::SCVSensorShapeContractT(const SCVSensorShapeCont
         POLYGON_FRAME(o.POLYGON_FRAME) {
   POLYGON_VERTICES.reserve(o.POLYGON_VERTICES.size());
   for (const auto &POLYGON_VERTICES_ : o.POLYGON_VERTICES) { POLYGON_VERTICES.emplace_back((POLYGON_VERTICES_) ? new SCVVec3T(*POLYGON_VERTICES_) : nullptr); }
+  AZ_EL_MASK.reserve(o.AZ_EL_MASK.size());
+  for (const auto &AZ_EL_MASK_ : o.AZ_EL_MASK) { AZ_EL_MASK.emplace_back((AZ_EL_MASK_) ? new SCVAzElMaskPointT(*AZ_EL_MASK_) : nullptr); }
 }
 
 inline SCVSensorShapeContractT &SCVSensorShapeContractT::operator=(SCVSensorShapeContractT o) FLATBUFFERS_NOEXCEPT {
@@ -5261,6 +5393,7 @@ inline SCVSensorShapeContractT &SCVSensorShapeContractT::operator=(SCVSensorShap
   std::swap(MAX_RANGE_M, o.MAX_RANGE_M);
   std::swap(POLYGON_VERTICES, o.POLYGON_VERTICES);
   std::swap(POLYGON_FRAME, o.POLYGON_FRAME);
+  std::swap(AZ_EL_MASK, o.AZ_EL_MASK);
   return *this;
 }
 
@@ -5289,6 +5422,7 @@ inline void SCVSensorShapeContract::UnPackTo(SCVSensorShapeContractT *_o, const 
   { auto _e = MAX_RANGE_M(); _o->MAX_RANGE_M = _e; }
   { auto _e = POLYGON_VERTICES(); if (_e) { _o->POLYGON_VERTICES.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->POLYGON_VERTICES[_i]) { _e->Get(_i)->UnPackTo(_o->POLYGON_VERTICES[_i].get(), _resolver); } else { _o->POLYGON_VERTICES[_i] = std::unique_ptr<SCVVec3T>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->POLYGON_VERTICES.resize(0); } }
   { auto _e = POLYGON_FRAME(); _o->POLYGON_FRAME = _e; }
+  { auto _e = AZ_EL_MASK(); if (_e) { _o->AZ_EL_MASK.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->AZ_EL_MASK[_i]) { _e->Get(_i)->UnPackTo(_o->AZ_EL_MASK[_i].get(), _resolver); } else { _o->AZ_EL_MASK[_i] = std::unique_ptr<SCVAzElMaskPointT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->AZ_EL_MASK.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<SCVSensorShapeContract> CreateSCVSensorShapeContract(::flatbuffers::FlatBufferBuilder &_fbb, const SCVSensorShapeContractT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -5315,6 +5449,7 @@ inline ::flatbuffers::Offset<SCVSensorShapeContract> SCVSensorShapeContract::Pac
   auto _MAX_RANGE_M = _o->MAX_RANGE_M;
   auto _POLYGON_VERTICES = _o->POLYGON_VERTICES.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVVec3>> (_o->POLYGON_VERTICES.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVVec3(*__va->__fbb, __va->__o->POLYGON_VERTICES[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _POLYGON_FRAME = _o->POLYGON_FRAME;
+  auto _AZ_EL_MASK = _o->AZ_EL_MASK.size() ? _fbb.CreateVector<::flatbuffers::Offset<SCVAzElMaskPoint>> (_o->AZ_EL_MASK.size(), [](size_t i, _VectorArgs *__va) { return CreateSCVAzElMaskPoint(*__va->__fbb, __va->__o->AZ_EL_MASK[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreateSCVSensorShapeContract(
       _fbb,
       _SHAPE_KIND,
@@ -5332,7 +5467,8 @@ inline ::flatbuffers::Offset<SCVSensorShapeContract> SCVSensorShapeContract::Pac
       _MIN_RANGE_M,
       _MAX_RANGE_M,
       _POLYGON_VERTICES,
-      _POLYGON_FRAME);
+      _POLYGON_FRAME,
+      _AZ_EL_MASK);
 }
 
 inline SCVSensorT::SCVSensorT(const SCVSensorT &o)

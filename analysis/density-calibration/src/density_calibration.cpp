@@ -2194,7 +2194,7 @@ extern "C" int calibrate_log_density() {
   double sum=0;for(double r:result.residuals)sum+=r*r;out.FIT->POSTFIT_RMS=std::sqrt(sum/result.residuals.size());
   out.PROVENANCE=std::make_unique<PVNT>();out.PROVENANCE->SOURCE_ID="open-dca-planet";out.PROVENANCE->SOURCE_KIND=pvnSourceKind::Ephemeris;
   out.PROVENANCE->ORIGINATOR="Derived aggregate from Planet Labs PBC orbital ephemerides, https://ephemerides.planet-labs.com/, copyright Planet Labs PBC, CC BY-NC 4.0. GFZ Kp/ap/F10.7: CC BY 4.0, Matzka et al. (2021), doi:10.1029/2020SW002641; NOAA SWPC: public domain.";
-  out.PROVENANCE->PROVIDER_ID="open-dca";out.PROVENANCE->PRODUCER="density-calibration/0.7.0; E13 R1/R2/S3 NRLMSISE-00 exploratory method";
+  out.PROVENANCE->PROVIDER_ID="open-dca";out.PROVENANCE->PRODUCER="density-calibration/0.7.1; E13 R1/R2/S3 NRLMSISE-00 exploratory method";
   out.PROVENANCE->LICENSE_CLASS=pvnLicenseClass::NonCommercial;out.PROVENANCE->LICENSE_ID="CC-BY-NC-4.0 (Planet inputs); CC-BY-4.0 (GFZ); public domain (NOAA SWPC)";
   out.PROVENANCE->LINEAGE=lineage_of(publication);
   if(request->PROVENANCE()&&request->PROVENANCE()->LINEAGE())out.PROVENANCE->LINEAGE+="; "+request->PROVENANCE()->LINEAGE()->str();

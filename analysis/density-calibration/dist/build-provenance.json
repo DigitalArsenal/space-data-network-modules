@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "erfaSourceFiles": 248,
   "jb2008": "propagator/ffm/lib/jb2008.h",
   "nrlmsise00": "third_party/nrlmsise00 (nrlmsise-00.h, nrlmsise-00_data.c, nrlmsise-00.c)",
@@ -28,5 +28,11 @@
     "schema/OEM/main.fbs (scripts/lib/sds-cpp-headers.mjs)",
     "schema/DCL/main.fbs (scripts/lib/sds-cpp-headers.mjs)"
   ],
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "9b8e15756ee898b005ba9b76a4345e1a7648000167a11c3cecfcb63d9ac237be"
 }

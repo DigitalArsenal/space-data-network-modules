@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "RFM",
     "FRM",
@@ -31,5 +31,5 @@
     "keyId": "module-owner-2026-10-15",
     "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
   },
-  "canonicalWasmSha256": "dfa14ff98b3bfadf15ea73c3ddc58134f937aa19d658a81e9ca5f20ea439e241"
+  "canonicalWasmSha256": "68a3f142e731a74712b9f51d2d96270b4ecdd9c2dd9e9e8bb2eed54788a93255"
 }

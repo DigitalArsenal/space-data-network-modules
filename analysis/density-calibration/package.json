@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-analysis-density-calibration",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.276.0",
+    "spacedatastandards.org": "1.279.0",
     "flatc-wasm": "26.1.38",
     "flatbuffers": "25.9.23",
     "esbuild": "0.27.7",

@@ -28,6 +28,10 @@ struct CQRObjectSource;
 struct CQRObjectSourceBuilder;
 struct CQRObjectSourceT;
 
+struct CQRVerifiedCovarianceProducer;
+struct CQRVerifiedCovarianceProducerBuilder;
+struct CQRVerifiedCovarianceProducerT;
+
 struct CQRScreeningControls;
 struct CQRScreeningControlsBuilder;
 struct CQRScreeningControlsT;
@@ -1232,6 +1236,114 @@ inline ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSourceDirect(
 
 ::flatbuffers::Offset<CQRObjectSource> CreateCQRObjectSource(::flatbuffers::FlatBufferBuilder &_fbb, const CQRObjectSourceT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct CQRVerifiedCovarianceProducerT : public ::flatbuffers::NativeTable {
+  typedef CQRVerifiedCovarianceProducer TableType;
+  std::string PRODUCER{};
+  std::string PRODUCER_SHA256{};
+  std::string VERIFICATION_REFERENCE{};
+};
+
+/// One covariance-producing build whose covariance realism was verified. A
+/// collision probability uses AP covariance only when the covariance's PVN
+/// names a listed build.
+struct CQRVerifiedCovarianceProducer FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef CQRVerifiedCovarianceProducerT NativeTableType;
+  typedef CQRVerifiedCovarianceProducerBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_PRODUCER = 4,
+    VT_PRODUCER_SHA256 = 6,
+    VT_VERIFICATION_REFERENCE = 8
+  };
+  /// PVN.PRODUCER verbatim: the module identifier and its version.
+  const ::flatbuffers::String *PRODUCER() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PRODUCER);
+  }
+  /// SHA-256 of the producing build's dist module.wasm, 64 lowercase
+  /// hexadecimal characters (PVN.PRODUCER_SHA256).
+  const ::flatbuffers::String *PRODUCER_SHA256() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PRODUCER_SHA256);
+  }
+  /// Identifier of the record whose covariance realism E2E verified the build.
+  const ::flatbuffers::String *VERIFICATION_REFERENCE() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_VERIFICATION_REFERENCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_PRODUCER) &&
+           verifier.VerifyString(PRODUCER()) &&
+           VerifyOffsetRequired(verifier, VT_PRODUCER_SHA256) &&
+           verifier.VerifyString(PRODUCER_SHA256()) &&
+           VerifyOffset(verifier, VT_VERIFICATION_REFERENCE) &&
+           verifier.VerifyString(VERIFICATION_REFERENCE()) &&
+           verifier.EndTable();
+  }
+  CQRVerifiedCovarianceProducerT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CQRVerifiedCovarianceProducerT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<CQRVerifiedCovarianceProducer> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRVerifiedCovarianceProducerT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CQRVerifiedCovarianceProducerBuilder {
+  typedef CQRVerifiedCovarianceProducer Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_PRODUCER(::flatbuffers::Offset<::flatbuffers::String> PRODUCER) {
+    fbb_.AddOffset(CQRVerifiedCovarianceProducer::VT_PRODUCER, PRODUCER);
+  }
+  void add_PRODUCER_SHA256(::flatbuffers::Offset<::flatbuffers::String> PRODUCER_SHA256) {
+    fbb_.AddOffset(CQRVerifiedCovarianceProducer::VT_PRODUCER_SHA256, PRODUCER_SHA256);
+  }
+  void add_VERIFICATION_REFERENCE(::flatbuffers::Offset<::flatbuffers::String> VERIFICATION_REFERENCE) {
+    fbb_.AddOffset(CQRVerifiedCovarianceProducer::VT_VERIFICATION_REFERENCE, VERIFICATION_REFERENCE);
+  }
+  explicit CQRVerifiedCovarianceProducerBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<CQRVerifiedCovarianceProducer> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<CQRVerifiedCovarianceProducer>(end);
+    fbb_.Required(o, CQRVerifiedCovarianceProducer::VT_PRODUCER);
+    fbb_.Required(o, CQRVerifiedCovarianceProducer::VT_PRODUCER_SHA256);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<CQRVerifiedCovarianceProducer> CreateCQRVerifiedCovarianceProducer(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> PRODUCER = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PRODUCER_SHA256 = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> VERIFICATION_REFERENCE = 0) {
+  CQRVerifiedCovarianceProducerBuilder builder_(_fbb);
+  builder_.add_VERIFICATION_REFERENCE(VERIFICATION_REFERENCE);
+  builder_.add_PRODUCER_SHA256(PRODUCER_SHA256);
+  builder_.add_PRODUCER(PRODUCER);
+  return builder_.Finish();
+}
+
+struct CQRVerifiedCovarianceProducer::Traits {
+  using type = CQRVerifiedCovarianceProducer;
+  static auto constexpr Create = CreateCQRVerifiedCovarianceProducer;
+};
+
+inline ::flatbuffers::Offset<CQRVerifiedCovarianceProducer> CreateCQRVerifiedCovarianceProducerDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *PRODUCER = nullptr,
+    const char *PRODUCER_SHA256 = nullptr,
+    const char *VERIFICATION_REFERENCE = nullptr) {
+  auto PRODUCER__ = PRODUCER ? _fbb.CreateString(PRODUCER) : 0;
+  auto PRODUCER_SHA256__ = PRODUCER_SHA256 ? _fbb.CreateString(PRODUCER_SHA256) : 0;
+  auto VERIFICATION_REFERENCE__ = VERIFICATION_REFERENCE ? _fbb.CreateString(VERIFICATION_REFERENCE) : 0;
+  return CreateCQRVerifiedCovarianceProducer(
+      _fbb,
+      PRODUCER__,
+      PRODUCER_SHA256__,
+      VERIFICATION_REFERENCE__);
+}
+
+::flatbuffers::Offset<CQRVerifiedCovarianceProducer> CreateCQRVerifiedCovarianceProducer(::flatbuffers::FlatBufferBuilder &_fbb, const CQRVerifiedCovarianceProducerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct CQRScreeningControlsT : public ::flatbuffers::NativeTable {
   typedef CQRScreeningControls TableType;
   std::unique_ptr<TIMInstantT> START_EPOCH{};
@@ -1252,6 +1364,7 @@ struct CQRScreeningControlsT : public ::flatbuffers::NativeTable {
   double IN_TRACK_M = 0.0;
   double CROSS_TRACK_M = 0.0;
   cqrVolumeAnchor VOLUME_CENTER = cqrVolumeAnchor::PRIMARY;
+  std::vector<std::unique_ptr<CQRVerifiedCovarianceProducerT>> VERIFIED_COVARIANCE_PRODUCERS{};
   CQRScreeningControlsT() = default;
   CQRScreeningControlsT(const CQRScreeningControlsT &o);
   CQRScreeningControlsT(CQRScreeningControlsT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -1281,7 +1394,8 @@ struct CQRScreeningControls FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
     VT_RADIAL_M = 32,
     VT_IN_TRACK_M = 34,
     VT_CROSS_TRACK_M = 36,
-    VT_VOLUME_CENTER = 38
+    VT_VOLUME_CENTER = 38,
+    VT_VERIFIED_COVARIANCE_PRODUCERS = 40
   };
   const TIMInstant *START_EPOCH() const {
     return GetPointer<const TIMInstant *>(VT_START_EPOCH);
@@ -1346,6 +1460,11 @@ struct CQRScreeningControls FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
   cqrVolumeAnchor VOLUME_CENTER() const {
     return static_cast<cqrVolumeAnchor>(GetField<uint8_t>(VT_VOLUME_CENTER, 1));
   }
+  /// Builds whose AP covariance a collision probability may use. An empty or
+  /// absent list means no collision probability from AP covariance.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<CQRVerifiedCovarianceProducer>> *VERIFIED_COVARIANCE_PRODUCERS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<CQRVerifiedCovarianceProducer>> *>(VT_VERIFIED_COVARIANCE_PRODUCERS);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1368,6 +1487,9 @@ struct CQRScreeningControls FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Tab
            VerifyField<double>(verifier, VT_IN_TRACK_M, 8) &&
            VerifyField<double>(verifier, VT_CROSS_TRACK_M, 8) &&
            VerifyField<uint8_t>(verifier, VT_VOLUME_CENTER, 1) &&
+           VerifyOffset(verifier, VT_VERIFIED_COVARIANCE_PRODUCERS) &&
+           verifier.VerifyVector(VERIFIED_COVARIANCE_PRODUCERS()) &&
+           verifier.VerifyVectorOfTables(VERIFIED_COVARIANCE_PRODUCERS()) &&
            verifier.EndTable();
   }
   CQRScreeningControlsT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1433,6 +1555,9 @@ struct CQRScreeningControlsBuilder {
   void add_VOLUME_CENTER(cqrVolumeAnchor VOLUME_CENTER) {
     fbb_.AddElement<uint8_t>(CQRScreeningControls::VT_VOLUME_CENTER, static_cast<uint8_t>(VOLUME_CENTER), 1);
   }
+  void add_VERIFIED_COVARIANCE_PRODUCERS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRVerifiedCovarianceProducer>>> VERIFIED_COVARIANCE_PRODUCERS) {
+    fbb_.AddOffset(CQRScreeningControls::VT_VERIFIED_COVARIANCE_PRODUCERS, VERIFIED_COVARIANCE_PRODUCERS);
+  }
   explicit CQRScreeningControlsBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1464,7 +1589,8 @@ inline ::flatbuffers::Offset<CQRScreeningControls> CreateCQRScreeningControls(
     double RADIAL_M = 0.0,
     double IN_TRACK_M = 0.0,
     double CROSS_TRACK_M = 0.0,
-    cqrVolumeAnchor VOLUME_CENTER = cqrVolumeAnchor::PRIMARY) {
+    cqrVolumeAnchor VOLUME_CENTER = cqrVolumeAnchor::PRIMARY,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<CQRVerifiedCovarianceProducer>>> VERIFIED_COVARIANCE_PRODUCERS = 0) {
   CQRScreeningControlsBuilder builder_(_fbb);
   builder_.add_CROSS_TRACK_M(CROSS_TRACK_M);
   builder_.add_IN_TRACK_M(IN_TRACK_M);
@@ -1475,6 +1601,7 @@ inline ::flatbuffers::Offset<CQRScreeningControls> CreateCQRScreeningControls(
   builder_.add_COARSE_STEP_SECONDS(COARSE_STEP_SECONDS);
   builder_.add_THRESHOLD_M(THRESHOLD_M);
   builder_.add_DURATION_SECONDS(DURATION_SECONDS);
+  builder_.add_VERIFIED_COVARIANCE_PRODUCERS(VERIFIED_COVARIANCE_PRODUCERS);
   builder_.add_REQUESTED_WORKERS(REQUESTED_WORKERS);
   builder_.add_START_EPOCH(START_EPOCH);
   builder_.add_VOLUME_CENTER(VOLUME_CENTER);
@@ -1491,6 +1618,51 @@ struct CQRScreeningControls::Traits {
   using type = CQRScreeningControls;
   static auto constexpr Create = CreateCQRScreeningControls;
 };
+
+inline ::flatbuffers::Offset<CQRScreeningControls> CreateCQRScreeningControlsDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<TIMInstant> START_EPOCH = 0,
+    double DURATION_SECONDS = 604800.0,
+    double THRESHOLD_M = 5000.0,
+    uint32_t REQUESTED_WORKERS = 1,
+    double COARSE_STEP_SECONDS = 60.0,
+    double REFINEMENT_TOLERANCE_SECONDS = 0.001,
+    double COMBINED_RADIUS_M = 10.0,
+    bool USE_KD_TREE = true,
+    bool USE_DYNAMIC_WINDOW = true,
+    bool USE_PERIGEE_FILTER = true,
+    double PROGRESS_INTERVAL_SECONDS = 0.0,
+    bool HAS_PROGRESS_INTERVAL_SECONDS = false,
+    cqrProbabilityAlgorithm ALGORITHM = cqrProbabilityAlgorithm::ALFANO_MAXIMUM,
+    cqrVolumeGeometry SCREENING = cqrVolumeGeometry::SPHERICAL,
+    double RADIAL_M = 0.0,
+    double IN_TRACK_M = 0.0,
+    double CROSS_TRACK_M = 0.0,
+    cqrVolumeAnchor VOLUME_CENTER = cqrVolumeAnchor::PRIMARY,
+    const std::vector<::flatbuffers::Offset<CQRVerifiedCovarianceProducer>> *VERIFIED_COVARIANCE_PRODUCERS = nullptr) {
+  auto VERIFIED_COVARIANCE_PRODUCERS__ = VERIFIED_COVARIANCE_PRODUCERS ? _fbb.CreateVector<::flatbuffers::Offset<CQRVerifiedCovarianceProducer>>(*VERIFIED_COVARIANCE_PRODUCERS) : 0;
+  return CreateCQRScreeningControls(
+      _fbb,
+      START_EPOCH,
+      DURATION_SECONDS,
+      THRESHOLD_M,
+      REQUESTED_WORKERS,
+      COARSE_STEP_SECONDS,
+      REFINEMENT_TOLERANCE_SECONDS,
+      COMBINED_RADIUS_M,
+      USE_KD_TREE,
+      USE_DYNAMIC_WINDOW,
+      USE_PERIGEE_FILTER,
+      PROGRESS_INTERVAL_SECONDS,
+      HAS_PROGRESS_INTERVAL_SECONDS,
+      ALGORITHM,
+      SCREENING,
+      RADIAL_M,
+      IN_TRACK_M,
+      CROSS_TRACK_M,
+      VOLUME_CENTER,
+      VERIFIED_COVARIANCE_PRODUCERS__);
+}
 
 ::flatbuffers::Offset<CQRScreeningControls> CreateCQRScreeningControls(::flatbuffers::FlatBufferBuilder &_fbb, const CQRScreeningControlsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
@@ -2582,6 +2754,7 @@ struct CQREventT : public ::flatbuffers::NativeTable {
   cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED;
   cqrVolumeGeometry SCREENING = cqrVolumeGeometry::SPHERICAL;
   cqrVolumeAnchor ADMITTED_BY = cqrVolumeAnchor::UNSPECIFIED;
+  std::string PROBABILITY_REFUSAL{};
   CQREventT() = default;
   CQREventT(const CQREventT &o);
   CQREventT(CQREventT&&) FLATBUFFERS_NOEXCEPT = default;
@@ -2630,7 +2803,8 @@ struct CQREvent FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_PRIMARY_COVARIANCE_BASIS = 70,
     VT_SECONDARY_COVARIANCE_BASIS = 72,
     VT_SCREENING = 74,
-    VT_ADMITTED_BY = 76
+    VT_ADMITTED_BY = 76,
+    VT_PROBABILITY_REFUSAL = 78
   };
   const ::flatbuffers::String *PRIMARY_ID() const {
     return GetPointer<const ::flatbuffers::String *>(VT_PRIMARY_ID);
@@ -2760,6 +2934,12 @@ struct CQREvent FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   cqrVolumeAnchor ADMITTED_BY() const {
     return static_cast<cqrVolumeAnchor>(GetField<uint8_t>(VT_ADMITTED_BY, 0));
   }
+  /// Why PROBABILITY is absent for an event that carries covariance, for
+  /// example an AP covariance whose producer is not in
+  /// VERIFIED_COVARIANCE_PRODUCERS. Empty when no probability was refused.
+  const ::flatbuffers::String *PROBABILITY_REFUSAL() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PROBABILITY_REFUSAL);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -2813,6 +2993,8 @@ struct CQREvent FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyField<uint8_t>(verifier, VT_SECONDARY_COVARIANCE_BASIS, 1) &&
            VerifyField<uint8_t>(verifier, VT_SCREENING, 1) &&
            VerifyField<uint8_t>(verifier, VT_ADMITTED_BY, 1) &&
+           VerifyOffset(verifier, VT_PROBABILITY_REFUSAL) &&
+           verifier.VerifyString(PROBABILITY_REFUSAL()) &&
            verifier.EndTable();
   }
   CQREventT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2935,6 +3117,9 @@ struct CQREventBuilder {
   void add_ADMITTED_BY(cqrVolumeAnchor ADMITTED_BY) {
     fbb_.AddElement<uint8_t>(CQREvent::VT_ADMITTED_BY, static_cast<uint8_t>(ADMITTED_BY), 0);
   }
+  void add_PROBABILITY_REFUSAL(::flatbuffers::Offset<::flatbuffers::String> PROBABILITY_REFUSAL) {
+    fbb_.AddOffset(CQREvent::VT_PROBABILITY_REFUSAL, PROBABILITY_REFUSAL);
+  }
   explicit CQREventBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2987,7 +3172,8 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREvent(
     cqrCovarianceBasis PRIMARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED,
     cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED,
     cqrVolumeGeometry SCREENING = cqrVolumeGeometry::SPHERICAL,
-    cqrVolumeAnchor ADMITTED_BY = cqrVolumeAnchor::UNSPECIFIED) {
+    cqrVolumeAnchor ADMITTED_BY = cqrVolumeAnchor::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::String> PROBABILITY_REFUSAL = 0) {
   CQREventBuilder builder_(_fbb);
   builder_.add_SECONDARY_HARD_BODY_RADIUS_M(SECONDARY_HARD_BODY_RADIUS_M);
   builder_.add_PRIMARY_HARD_BODY_RADIUS_M(PRIMARY_HARD_BODY_RADIUS_M);
@@ -2998,6 +3184,7 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREvent(
   builder_.add_DILUTION_THRESHOLD_M(DILUTION_THRESHOLD_M);
   builder_.add_RELATIVE_SPEED_M_S(RELATIVE_SPEED_M_S);
   builder_.add_MISS_DISTANCE_M(MISS_DISTANCE_M);
+  builder_.add_PROBABILITY_REFUSAL(PROBABILITY_REFUSAL);
   builder_.add_SECONDARY_STATE(SECONDARY_STATE);
   builder_.add_PRIMARY_STATE(PRIMARY_STATE);
   builder_.add_CONJUNCTION_MESSAGE(CONJUNCTION_MESSAGE);
@@ -3072,11 +3259,13 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREventDirect(
     cqrCovarianceBasis PRIMARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED,
     cqrCovarianceBasis SECONDARY_COVARIANCE_BASIS = cqrCovarianceBasis::UNSPECIFIED,
     cqrVolumeGeometry SCREENING = cqrVolumeGeometry::SPHERICAL,
-    cqrVolumeAnchor ADMITTED_BY = cqrVolumeAnchor::UNSPECIFIED) {
+    cqrVolumeAnchor ADMITTED_BY = cqrVolumeAnchor::UNSPECIFIED,
+    const char *PROBABILITY_REFUSAL = nullptr) {
   auto PRIMARY_ID__ = PRIMARY_ID ? _fbb.CreateString(PRIMARY_ID) : 0;
   auto SECONDARY_ID__ = SECONDARY_ID ? _fbb.CreateString(SECONDARY_ID) : 0;
   auto PRIMARY_NAME__ = PRIMARY_NAME ? _fbb.CreateString(PRIMARY_NAME) : 0;
   auto SECONDARY_NAME__ = SECONDARY_NAME ? _fbb.CreateString(SECONDARY_NAME) : 0;
+  auto PROBABILITY_REFUSAL__ = PROBABILITY_REFUSAL ? _fbb.CreateString(PROBABILITY_REFUSAL) : 0;
   return CreateCQREvent(
       _fbb,
       PRIMARY_ID__,
@@ -3115,7 +3304,8 @@ inline ::flatbuffers::Offset<CQREvent> CreateCQREventDirect(
       PRIMARY_COVARIANCE_BASIS,
       SECONDARY_COVARIANCE_BASIS,
       SCREENING,
-      ADMITTED_BY);
+      ADMITTED_BY,
+      PROBABILITY_REFUSAL__);
 }
 
 ::flatbuffers::Offset<CQREvent> CreateCQREvent(::flatbuffers::FlatBufferBuilder &_fbb, const CQREventT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -5609,6 +5799,38 @@ inline ::flatbuffers::Offset<CQRObjectSource> CQRObjectSource::Pack(::flatbuffer
       _CATALOG_ENTRY);
 }
 
+inline CQRVerifiedCovarianceProducerT *CQRVerifiedCovarianceProducer::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<CQRVerifiedCovarianceProducerT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void CQRVerifiedCovarianceProducer::UnPackTo(CQRVerifiedCovarianceProducerT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = PRODUCER(); if (_e) _o->PRODUCER = _e->str(); }
+  { auto _e = PRODUCER_SHA256(); if (_e) _o->PRODUCER_SHA256 = _e->str(); }
+  { auto _e = VERIFICATION_REFERENCE(); if (_e) _o->VERIFICATION_REFERENCE = _e->str(); }
+}
+
+inline ::flatbuffers::Offset<CQRVerifiedCovarianceProducer> CreateCQRVerifiedCovarianceProducer(::flatbuffers::FlatBufferBuilder &_fbb, const CQRVerifiedCovarianceProducerT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return CQRVerifiedCovarianceProducer::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<CQRVerifiedCovarianceProducer> CQRVerifiedCovarianceProducer::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const CQRVerifiedCovarianceProducerT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const CQRVerifiedCovarianceProducerT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _PRODUCER = _fbb.CreateString(_o->PRODUCER);
+  auto _PRODUCER_SHA256 = _fbb.CreateString(_o->PRODUCER_SHA256);
+  auto _VERIFICATION_REFERENCE = _o->VERIFICATION_REFERENCE.empty() ? 0 : _fbb.CreateString(_o->VERIFICATION_REFERENCE);
+  return CreateCQRVerifiedCovarianceProducer(
+      _fbb,
+      _PRODUCER,
+      _PRODUCER_SHA256,
+      _VERIFICATION_REFERENCE);
+}
+
 inline CQRScreeningControlsT::CQRScreeningControlsT(const CQRScreeningControlsT &o)
       : START_EPOCH((o.START_EPOCH) ? new TIMInstantT(*o.START_EPOCH) : nullptr),
         DURATION_SECONDS(o.DURATION_SECONDS),
@@ -5628,6 +5850,8 @@ inline CQRScreeningControlsT::CQRScreeningControlsT(const CQRScreeningControlsT 
         IN_TRACK_M(o.IN_TRACK_M),
         CROSS_TRACK_M(o.CROSS_TRACK_M),
         VOLUME_CENTER(o.VOLUME_CENTER) {
+  VERIFIED_COVARIANCE_PRODUCERS.reserve(o.VERIFIED_COVARIANCE_PRODUCERS.size());
+  for (const auto &VERIFIED_COVARIANCE_PRODUCERS_ : o.VERIFIED_COVARIANCE_PRODUCERS) { VERIFIED_COVARIANCE_PRODUCERS.emplace_back((VERIFIED_COVARIANCE_PRODUCERS_) ? new CQRVerifiedCovarianceProducerT(*VERIFIED_COVARIANCE_PRODUCERS_) : nullptr); }
 }
 
 inline CQRScreeningControlsT &CQRScreeningControlsT::operator=(CQRScreeningControlsT o) FLATBUFFERS_NOEXCEPT {
@@ -5649,6 +5873,7 @@ inline CQRScreeningControlsT &CQRScreeningControlsT::operator=(CQRScreeningContr
   std::swap(IN_TRACK_M, o.IN_TRACK_M);
   std::swap(CROSS_TRACK_M, o.CROSS_TRACK_M);
   std::swap(VOLUME_CENTER, o.VOLUME_CENTER);
+  std::swap(VERIFIED_COVARIANCE_PRODUCERS, o.VERIFIED_COVARIANCE_PRODUCERS);
   return *this;
 }
 
@@ -5679,6 +5904,7 @@ inline void CQRScreeningControls::UnPackTo(CQRScreeningControlsT *_o, const ::fl
   { auto _e = IN_TRACK_M(); _o->IN_TRACK_M = _e; }
   { auto _e = CROSS_TRACK_M(); _o->CROSS_TRACK_M = _e; }
   { auto _e = VOLUME_CENTER(); _o->VOLUME_CENTER = _e; }
+  { auto _e = VERIFIED_COVARIANCE_PRODUCERS(); if (_e) { _o->VERIFIED_COVARIANCE_PRODUCERS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->VERIFIED_COVARIANCE_PRODUCERS[_i]) { _e->Get(_i)->UnPackTo(_o->VERIFIED_COVARIANCE_PRODUCERS[_i].get(), _resolver); } else { _o->VERIFIED_COVARIANCE_PRODUCERS[_i] = std::unique_ptr<CQRVerifiedCovarianceProducerT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->VERIFIED_COVARIANCE_PRODUCERS.resize(0); } }
 }
 
 inline ::flatbuffers::Offset<CQRScreeningControls> CreateCQRScreeningControls(::flatbuffers::FlatBufferBuilder &_fbb, const CQRScreeningControlsT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -5707,6 +5933,7 @@ inline ::flatbuffers::Offset<CQRScreeningControls> CQRScreeningControls::Pack(::
   auto _IN_TRACK_M = _o->IN_TRACK_M;
   auto _CROSS_TRACK_M = _o->CROSS_TRACK_M;
   auto _VOLUME_CENTER = _o->VOLUME_CENTER;
+  auto _VERIFIED_COVARIANCE_PRODUCERS = _o->VERIFIED_COVARIANCE_PRODUCERS.size() ? _fbb.CreateVector<::flatbuffers::Offset<CQRVerifiedCovarianceProducer>> (_o->VERIFIED_COVARIANCE_PRODUCERS.size(), [](size_t i, _VectorArgs *__va) { return CreateCQRVerifiedCovarianceProducer(*__va->__fbb, __va->__o->VERIFIED_COVARIANCE_PRODUCERS[i].get(), __va->__rehasher); }, &_va ) : 0;
   return CreateCQRScreeningControls(
       _fbb,
       _START_EPOCH,
@@ -5726,7 +5953,8 @@ inline ::flatbuffers::Offset<CQRScreeningControls> CQRScreeningControls::Pack(::
       _RADIAL_M,
       _IN_TRACK_M,
       _CROSS_TRACK_M,
-      _VOLUME_CENTER);
+      _VOLUME_CENTER,
+      _VERIFIED_COVARIANCE_PRODUCERS);
 }
 
 inline CQRPairRequestT::CQRPairRequestT(const CQRPairRequestT &o)
@@ -6159,7 +6387,8 @@ inline CQREventT::CQREventT(const CQREventT &o)
         PRIMARY_COVARIANCE_BASIS(o.PRIMARY_COVARIANCE_BASIS),
         SECONDARY_COVARIANCE_BASIS(o.SECONDARY_COVARIANCE_BASIS),
         SCREENING(o.SCREENING),
-        ADMITTED_BY(o.ADMITTED_BY) {
+        ADMITTED_BY(o.ADMITTED_BY),
+        PROBABILITY_REFUSAL(o.PROBABILITY_REFUSAL) {
 }
 
 inline CQREventT &CQREventT::operator=(CQREventT o) FLATBUFFERS_NOEXCEPT {
@@ -6200,6 +6429,7 @@ inline CQREventT &CQREventT::operator=(CQREventT o) FLATBUFFERS_NOEXCEPT {
   std::swap(SECONDARY_COVARIANCE_BASIS, o.SECONDARY_COVARIANCE_BASIS);
   std::swap(SCREENING, o.SCREENING);
   std::swap(ADMITTED_BY, o.ADMITTED_BY);
+  std::swap(PROBABILITY_REFUSAL, o.PROBABILITY_REFUSAL);
   return *this;
 }
 
@@ -6249,6 +6479,7 @@ inline void CQREvent::UnPackTo(CQREventT *_o, const ::flatbuffers::resolver_func
   { auto _e = SECONDARY_COVARIANCE_BASIS(); _o->SECONDARY_COVARIANCE_BASIS = _e; }
   { auto _e = SCREENING(); _o->SCREENING = _e; }
   { auto _e = ADMITTED_BY(); _o->ADMITTED_BY = _e; }
+  { auto _e = PROBABILITY_REFUSAL(); if (_e) _o->PROBABILITY_REFUSAL = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<CQREvent> CreateCQREvent(::flatbuffers::FlatBufferBuilder &_fbb, const CQREventT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -6296,6 +6527,7 @@ inline ::flatbuffers::Offset<CQREvent> CQREvent::Pack(::flatbuffers::FlatBufferB
   auto _SECONDARY_COVARIANCE_BASIS = _o->SECONDARY_COVARIANCE_BASIS;
   auto _SCREENING = _o->SCREENING;
   auto _ADMITTED_BY = _o->ADMITTED_BY;
+  auto _PROBABILITY_REFUSAL = _o->PROBABILITY_REFUSAL.empty() ? 0 : _fbb.CreateString(_o->PROBABILITY_REFUSAL);
   return CreateCQREvent(
       _fbb,
       _PRIMARY_ID,
@@ -6334,7 +6566,8 @@ inline ::flatbuffers::Offset<CQREvent> CQREvent::Pack(::flatbuffers::FlatBufferB
       _PRIMARY_COVARIANCE_BASIS,
       _SECONDARY_COVARIANCE_BASIS,
       _SCREENING,
-      _ADMITTED_BY);
+      _ADMITTED_BY,
+      _PROBABILITY_REFUSAL);
 }
 
 inline CQRScreeningStatisticsT *CQRScreeningStatistics::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
