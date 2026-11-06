@@ -1096,6 +1096,7 @@ struct GridSlot {
   WideGrid* g;
   int cls, refs;
   uint32_t stamp;  // when it last became idle
+  bool exact;      // acquired exact: freed when its last holder drops it, never kept idle
 };
 /// Idle grids kept (3.1 MB each): a catalog refresh finds its objects' grids; the oldest goes first. kGridSlots bounds every grid held.
 constexpr int kGridIdle = 128, kGridSlots = 256;
@@ -1165,7 +1166,7 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && std::fabs(e - g.e) <= se && std::fabs(inc - g.i) <= si &&
+    if (g.degree == degree && c.slot[k].cls == cls && (exact || !c.slot[k].exact) && std::fabs(e - g.e) <= se && std::fabs(inc - g.i) <= si &&
         std::fabs(a / g.a - 1.0) <= sa) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
@@ -1181,7 +1182,7 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
   cache_lock(&c.word);
   if (c.count < kGridSlots) {
-    c.slot[c.count++] = GridSlot{g, cls, 1, 0};
+    c.slot[c.count++] = GridSlot{g, cls, 1, 0, exact};
     cache_unlock(&c.word);
     return g;
   }
@@ -1207,8 +1208,13 @@ inline void wide_grid_drop(WideGrid* g) {
   for (int k = 0; k < c.count; ++k)
     if (c.slot[k].g == g) {
       if (--c.slot[k].refs == 0) {
-        c.slot[k].stamp = ++c.clock;
-        evict_idle(c, kGridIdle);
+        if (c.slot[k].exact) {  // a fit's own grid: nothing reuses it after its set
+          free_grid(c.slot[k].g);
+          c.slot[k] = c.slot[--c.count];
+        } else {
+          c.slot[k].stamp = ++c.clock;
+          evict_idle(c, kGridIdle);
+        }
       }
       break;
     }
