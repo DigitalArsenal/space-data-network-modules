@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/client-decrypt",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "SDN client decryption module: decrypts a protected module artifact from its SDS $LGR grant with Crypto++ (typed contracts 1.0: $LGR + $KMF + $FIL in, $FIL out)",
   "private": true,
   "type": "module",
@@ -25,7 +25,7 @@
   "devDependencies": {
     "flatbuffers": "25.9.23",
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.276.0"
+    "spacedatastandards.org": "1.279.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"

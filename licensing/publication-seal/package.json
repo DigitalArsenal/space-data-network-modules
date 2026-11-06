@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/publication-seal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -11,6 +11,6 @@
   "devDependencies": {
     "flatbuffers": "25.9.23",
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.276.0"
+    "spacedatastandards.org": "1.279.0"
   }
 }

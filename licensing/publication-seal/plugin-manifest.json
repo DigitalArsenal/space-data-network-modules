@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.licensing.publication-seal",
   "name": "Publication Seal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Seal opaque file bytes into SDK X25519/HKDF-SHA256/AES-256-GCM protected publications. Release keys arrive only as KMF inputs; entropy comes from WASI random_get.",
   "pluginFamily": "infrastructure",
   "capabilities": [],
