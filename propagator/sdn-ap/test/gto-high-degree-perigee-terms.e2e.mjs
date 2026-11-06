@@ -5,12 +5,12 @@
 // integrations) and, for the 4x4 case, this package and 0.4.14's sources with the Sun's and Moon's mass ratios and J5 zero.
 // Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM96 70x70, Sun and Moon from DE440; 72 h fits from an
 // osculating perigee; 7 days flown hourly; day-7 whole-day RMS along-track / radial, m):
-// 1. GTO (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): each at most 250 and within 2 of 204.15 / 133.92 (0.4.14:
-//    419.32 / 455.90);
-// 2. re-recorded as improvements, each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 109.46 /
-//    70.85, half-day 34.33 / 23.12, 12 h at 55 deg 67.25 / 25.32;
-// 3. Molniya with drag, its coefficient fitted: re-recorded at 276.44 / 208.33 within 0.5 (0.4.16, SPEC 16.12; 0.4.15: 291.41 / 219.72) (0.4.14: 149.82 / 175.90; the
-//    fitted coefficient 0.0457 against the truth's 0.044, SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103);
+// 1. GTO (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): each at most 250 and within 2 of 192.87 / 123.44 (0.4.14:
+//    422.11 / 459.10);
+// 2. re-recorded as improvements, each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 94.07 /
+//    56.07, half-day 31.44 / 16.84, 12 h at 55 deg 66.68 / 5.70 (0.6.3, FFM 2.2.1 truth);
+// 3. Molniya with drag, its coefficient fitted: re-recorded at 238.03 / 173.92 within 0.5 (0.6.3; 0.4.14: 460.98 / 260.43; the
+//    fitted coefficient 0.04462 against the truth's 0.044, SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103);
 //    with the coefficient pinned at the truth's 0.044: along-track no worse than 0.4.14's;
 // 4. the field cut to 4x4 on both sides, the Sun, Moon and J5 off on both sides, 2-minute samples: day-7 3D RMS at most
 //    100 (0.4.14 printed first);
@@ -30,9 +30,9 @@ import {wasmPath} from './lib/module.mjs';
 const BASE = '8fdf5b1af';
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 const scratch = process.env.SDNAP_TEST_SCRATCH ?? path.join(packageRoot, '.build', 'gto-terms');
-// The truth is pinned: the model truth's generator (propagator/ffm's dist, FFM 2.2.0 at modules 8786c53d2) and its $SPW rows. A
+// The truth is pinned: the model truth's generator (propagator/ffm's dist, FFM 2.2.1 on SDS 1.279.0 at modules 9cb02c8e2) and its $SPW rows. A
 // different generator or rows changes every figure below; the figures are re-recorded with a new pin, never silently.
-const FFM_DIST_SHA256 = 'd635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153';
+const FFM_DIST_SHA256 = 'a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4';
 const SPW_ROWS_SHA256 = 'd7018d1d33afa58220f3f95219f3ef3bd3802129dee5aee378fd46b6c7971f42';
 {
   const {createHash} = await import('node:crypto');
@@ -190,13 +190,13 @@ await host.close?.();
 
 const near = (got, want, tol) => Math.abs(got - want) <= tol;
 assert.ok(fixtures.GTO.release.alongTrack <= 250 && fixtures.GTO.release.radial <= 250, `GTO day 7: ${fixtures.GTO.release.alongTrack} / ${fixtures.GTO.release.radial} m`);
-assert.ok(near(fixtures.GTO.release.alongTrack, 204.15, 2) && near(fixtures.GTO.release.radial, 133.92, 2), 'GTO within 2 m of 204.15 / 133.92');
-for (const [name, [t, r]] of Object.entries({'GTO-500': [109.46, 70.85], 'half-day': [34.33, 23.12], '12-hour-55deg': [67.25, 25.32]})) {
+assert.ok(near(fixtures.GTO.release.alongTrack, 192.87, 2) && near(fixtures.GTO.release.radial, 123.44, 2), 'GTO within 2 m of 192.87 / 123.44');
+for (const [name, [t, r]] of Object.entries({'GTO-500': [94.07, 56.07], 'half-day': [31.44, 16.84], '12-hour-55deg': [66.68, 5.70]})) {
   assert.ok(near(fixtures[name].release.alongTrack, t, 0.5) && near(fixtures[name].release.radial, r, 0.5), `${name}: within 0.5 m of ${t} / ${r}`);
   assert.ok(fixtures[name].release.alongTrack < fixtures[name]['0.4.14'].alongTrack && fixtures[name].release.radial < fixtures[name]['0.4.14'].radial, `${name}: below 0.4.14`);
 }
-// Molniya re-recorded at 0.4.16 (SPEC 16.12, 12.8; 291.41 / 219.72 at 0.4.15)
-assert.ok(near(fixtures.Molniya.release.alongTrack, 276.44, 0.5) && near(fixtures.Molniya.release.radial, 208.33, 0.5), 'Molniya, coefficient fitted: within 0.5 m of 276.44 / 208.33');
+// Molniya re-recorded at 0.6.3 (the grid, exact keys in a fit; FFM 2.2.1 truth)
+assert.ok(near(fixtures.Molniya.release.alongTrack, 238.03, 0.5) && near(fixtures.Molniya.release.radial, 173.92, 0.5), 'Molniya, coefficient fitted: within 0.5 m of 238.03 / 173.92');
 assert.ok(fixtures['Molniya-pinned'].release.alongTrack <= fixtures['Molniya-pinned']['0.4.14'].alongTrack, 'Molniya, coefficient pinned: along-track no worse than 0.4.14');
 assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {
