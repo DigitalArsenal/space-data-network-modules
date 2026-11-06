@@ -151,7 +151,8 @@ is its own record; this record only measures the arm.
 
 ## 6. Verdict (three-way)
 
-- No usable leak: no gate fires on the unflooded response.
+- No usable leak (the registered estimator verdict label; the gate line is in
+  the Results section): no gate fires on the unflooded response.
 - Leak mitigated by flooding at the stated cost: a gate fires unflooded and
   none fires flooded.
 - Leak unmitigated: a gate fires flooded too; the gate stays beside S4.
@@ -219,7 +220,7 @@ permutation null. The detection rate per s is reported; the gate line states
 the smallest s detected at a rate of 0.9 or more. The same injection is
 reported for E2/E3-type tests only if a coefficient-level gate fires.
 
-Verdict (replaces the verdict rule of section 6): no usable leak only if E1,
+Verdict (replaces the verdict rule of section 6): the label "no usable leak" only if E1,
 E2, E3, E3-NN and E4 all stay below their gates; a gate firing at the
 coefficient level triggers the flooding arm of section 5.
 
@@ -262,8 +263,11 @@ Verdict rule of 7 extends: E5 firing triggers the flooding arm as the others.
 
 ## Results (run of 2026-11-06, `results/noise-channel.json`)
 
-Verdict: no usable leak by the registered estimators, scalar and coefficient
-level, with the detection limits below. No gate fires on the unflooded
+Gate line: No leak detected by the registered estimators at the stated limits. Circuit privacy is not established. The gate stays open beside S4.
+
+Registered estimator verdict label: "no usable leak", scalar and coefficient
+level, read only with the gate line above and the detection limits below.
+No gate fires on the unflooded
 response; the flooding arm (section 5) is therefore not run and its cost is
 not measured. Flooding stays a stated option. All figures are from the run
 stored in the results file; B's encryption randomness is the library's, so a
@@ -344,6 +348,11 @@ deterministic operand-dependent share of the noise variance of about 1e-4 to
 2e-4 and above, and the measured gap corresponds to a share below that. A
 single response (N = 1) does not detect even 1e-3 (gap 0.2 to 1.3).
 
+E5 is a required regression on any protocol change, not the gate. Its limit
+improves with more queries, and an attacker is not held to 200 queries unless
+the protocol holds them there; each response carries fresh randomness to
+average over.
+
 Mechanism, as found: the cross term t I1 dB + t I2 dA of a ct x ct product
 (I the q-wraparound polynomial of <ct, s>, about 2^6 per coefficient)
 dominates the operand-dependent term m_b dA by about 100 in amplitude, so the
@@ -357,10 +366,13 @@ all eight differences from 0 to 2^23, and the log2 L-infinity spreads over
 zero difference squared costs the full 73 bits, so a slot-constant operand
 does not lower the noise. This is an absence for the norm readings and not a
 sensitivity proof; the sensitivity statements are the injected calibrations
-above.
+above. The injected calibrations carry the sensitivity claim and test only
+the injected forms; a dependence unlike the injections is not bounded by them.
 
-What the verdict does and does not say. "No usable leak" holds for the
-registered estimators at the stated detection limits: operand-dependent
+What the verdict does and does not say. The label "no usable leak" holds only
+beside the gate line (No leak detected by the registered estimators at the
+stated limits. Circuit privacy is not established. The gate stays open beside
+S4.) and for the registered estimators at the stated detection limits: operand-dependent
 noise share below about 1e-4 to 2e-4 against a 200-query adversary, below
 about 1e-3 against a single response, and no coefficient-wise replicate
 structure above 1.4e-3. It is not a proof of circuit privacy: a share under
@@ -369,3 +381,20 @@ eta and mask are fixed per object and step, so extra queries only add fresh
 B encryption randomness), or an estimator outside the registered list is not
 covered. A flood on S2 would be a protocol change and its own record (it
 needs n 16384, section 5).
+
+## S4 design decision (SDN-AP ruling 2026-11-06 14:12Z)
+
+Closing the gate beside S4 takes one of:
+
+(a) Noise flooding with a stated statistical security parameter and its cost
+measured: S2 at n 16384, the expected construction (section 5 states 40 bits,
+statistical distance 2^-40, as the starting value; the parameter is stated and
+the time and bytes per block are measured in the S4 record).
+
+(b) A written argument with a protocol-enforced query cap per (requester,
+object, block), set far enough below E5's detection limit scaled for the cap.
+The scaling law of E5's limit with the number of queries is measured, not
+assumed.
+
+Decision recorded for the S4 record: (a). This does not hold records 20 to 22.
+

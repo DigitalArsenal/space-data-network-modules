@@ -133,9 +133,24 @@ function exactLog2Linf(dump) {
   return Math.log2(Number(maxAbs >> BigInt(sh))) + sh;
 }
 
+// Docs check (text assertion; the driver is not re-run for it): the gate line is exactly the three
+// sentences in both documents, and E5 is marked a required regression on a protocol change.
+const GATE_SENTENCES = [
+  'No leak detected by the registered estimators at the stated limits.',
+  'Circuit privacy is not established.',
+  'The gate stays open beside S4.',
+];
+const E5_RULE = 'E5 is a required regression on any protocol change, not the gate.';
+const flat = (p) => readFileSync(resolve(here, p), 'utf8').replace(/\s+/g, ' ');
+const docChecks = ['../docs/private-screening.md', '../private-screening/PROTOCOL-NOISE.md'].map((p) => {
+  const t = flat(p);
+  return { p, gate: t.includes(GATE_SENTENCES.join(' ')), e5: t.includes(E5_RULE), design: t.includes('S4 design decision') };
+});
+
 const out = runDriver();
 const lines = [];
 const check = (name, ok, detail) => { lines.push({ name, ok, detail }); };
+for (const d of docChecks) check(`docs ${d.p}: exact gate sentences, E5 required-on-change, S4 design decision`, d.gate && d.e5 && d.design, `gate ${d.gate}, E5 rule ${d.e5}, S4 design decision ${d.design}`);
 const rows = out.rows;
 const pop = rows.filter((r) => ['pair', 'g2', 'g3', 'g4'].includes(r.set));
 check('population is 88 + 400 + 1600 responses', pop.length === POPULATION, `${pop.length}`);
