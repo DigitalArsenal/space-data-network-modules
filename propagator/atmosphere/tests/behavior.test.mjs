@@ -643,8 +643,9 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // (switch 9 = -1, 400 km, 45 N 100 W, day 173, 45000 s UT) gives the
     // values below, recorded from the retired JSON surface of 0.1.0. Equality
     // checks the selection; the native published vectors check the model.
-    // The rebuilt module on SDS 1.279.0 differs from the recorded values by one unit in the last place (8.8e-16 and
-    // 2.7e-16 relative): equality to 1e-14.
+    // 0.2.1 carries the NRLMSISE-00 trig reassociation of 2026-10-25/26 (not byte-identical by design), which moves
+    // these values by one unit in the last place (8.8e-16 and 2.7e-16 relative); the toolchain is unchanged (README,
+    // "Build reproducibility"): equality to 1e-14.
     assert.ok(Math.abs(hfc.DENSITY_KG_PER_M3(0) / 2.4114616569297282e-12 - 1) <= 1e-14);
     assert.ok(Math.abs(hfc.TEMPERATURE_K(0) / 1154.2710897873123 - 1) <= 1e-14);
   });
