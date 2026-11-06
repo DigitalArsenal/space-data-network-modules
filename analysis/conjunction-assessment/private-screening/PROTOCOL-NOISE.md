@@ -161,6 +161,68 @@ the gates above and prints PASS when the verdict is "no usable leak" or
 "leak mitigated" with the numbers; it prints FAIL for "leak unmitigated".
 `results/noise-channel.json` is written only with `PRIVATE_SCREENING_WRITE=1`.
 
+## 7. Amendment 2026-11-06 13:55Z (SDN-AP ruling), registered before any row of it
+
+What sections 1 to 6 read: 19 numbers per response, all norm summaries of the
+noise polynomial (section 1). A norm cannot see a coefficient-wise dependence
+on B's operands, so sections 1 to 6 close the scalar and norm channel only.
+This amendment registers the coefficient-level read; the verdict of section 6
+is the conjunction of both.
+
+Exact noise polynomial. Per lane, A computes w, the integer polynomial with
+phase = Delta m + w (Delta = floor(q/t), m the decrypted plaintext polynomial
+with coefficients in [0, t)): w = (d + r m) / t exactly, with d as in section
+1 and r = q mod t, evaluated in the first two RNS limbs and recovered as a
+centered 128-bit integer (|w| < 2^81 < q0 q1 / 2). A's own fresh block
+ciphertexts give its own noise eA_k the same way (m known). Two domains: the
+coefficient domain (w_i) and the slot image (w mod t decoded with the lane's
+batch encoder).
+
+Mechanism written down. For the squared difference, w is about 2 sum_k (m_ak
+- m_bk) * (eA_k - eB_k) (negacyclic products, m as integers in [0, t)), plus a
+rounding term. A knows m_a and eA exactly. Hence 2 sum_k m_ak * eA_k is
+removable, and -2 sum_k m_b'k * eA_k is a known function of any candidate b':
+a matched filter on the full vector can discriminate candidates although the
+norms are flat.
+
+Tests, on the dictionary arm (64 candidates in block 3; 5 simulations each;
+200 targets; 30 repeats of one operand), per lane, aggregated over the 3 lanes
+by summing z = sqrt(8192) x correlation:
+
+- E3, replicate correlation: after removing the grand mean over the 320
+  simulation vectors, the mean correlation of pairs of simulations of the same
+  candidate against pairs of different candidates, in the coefficient domain
+  and in the slot image; null: 2000 random regroupings of the 320 vectors
+  into groups of 5 (seed 20261106); p = (1 + count of null >= observed) /
+  2001. Fires if p <= 0.05 / 2 in either domain.
+- E3-NN, full-vector nearest neighbour: the fingerprint of a candidate is the
+  mean of its 5 grand-mean-centered vectors; a target picks the candidate of
+  largest summed z. Statistics as E2 (top-1 against 1/64, exact binomial).
+  Coefficient domain and slot image.
+- E4, matched filter: the target's coefficient vector minus 2 sum m_ak * eA_k
+  against -2 sum m_b'k * eA_k of each candidate; the largest summed z picks.
+  Statistics as E2.
+- Gates: E3-NN and E4 fire as E2 does (binomial p <= 0.001/3, top-1 rate >=
+  1/64 + 0.03); E3 as above. Multiple-comparison correction: Bonferroni over
+  the three tests (E3, E3-NN, E4) and the two domains, stated at each p.
+  Mass-univariate regression of single coefficients on the block-mean targets
+  is not run: the dependence is bilinear in B's plaintext polynomial, not
+  linear in the targets, and E4 is that dependence's direct test.
+
+Power of E1 (the size of real dependence the gate would detect). A synthetic
+dependence of known size is injected into the 2088-response series: reading
+column 4 (lane 0 log2 L-infinity) is replaced by sqrt(1 - s) z(column) + sqrt(s)
+z(T2 residual to A's features), with s the injected R2 in {0.005, 0.01, 0.02,
+0.05}; 200 replicates per s (a fresh seeded noise draw each); detection means
+delta R2 for T2 >= 0.01 and above the 0.05 / 7 quantile of the stored
+permutation null. The detection rate per s is reported; the gate line states
+the smallest s detected at a rate of 0.9 or more. The same injection is
+reported for E2/E3-type tests only if a coefficient-level gate fires.
+
+Verdict (replaces the verdict rule of section 6): no usable leak only if E1,
+E2, E3, E3-NN and E4 all stay below their gates; a gate firing at the
+coefficient level triggers the flooding arm of section 5.
+
 ## Results (run of 2026-11-06, `results/noise-channel.json`)
 
 Verdict: no usable leak by the registered estimators. Neither gate fires on
