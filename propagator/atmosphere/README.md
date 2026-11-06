@@ -166,6 +166,11 @@ function, table, memory, global, export, element, code and data sections byte
 for byte and names the differing function bodies. Exit 0 means the module
 sections are identical.
 
+The committed 0.2.0 dist was stale against its source from 2026-10-25 to
+2026-11-06: the source changed with no rebuild and no version step. The 0.2.1
+known-answer move is that source change, and the 1e-14 tolerance covers only the
+last-place effect of the globe7 trig and phase change.
+
 Trace of 0.2.0 -> 0.2.1 (SDS 1.279.0 rebuild). The two dists differ in every
 section but memory (code 229231 -> 244131 bytes, 196 -> 190 functions, 186 of
 190 bodies differ). The cause is source, not toolchain: 0.2.0 was built on
