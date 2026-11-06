@@ -237,12 +237,15 @@ const basePath = path.join(scratch, `sdn-ap-${BASE}.wasm`);
 const baseBytes = execFileSync('git', ['-C', modules, 'show', `${BASE}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
 assert.equal(crypto.createHash('sha256').update(baseBytes).digest('hex'), BASE_SHA256, '0.6.2 dist');
 fs.writeFileSync(basePath, baseBytes);
+const AP = {tesseral: 31, zonal: 20};
 const SEEDS = {
-  LEO: {n: 15.07, e: 0.0008, i: 51.6, raan: 40, argp: 30, ma: 10},
-  'Etalon-like': {n: 2.13, e: 0.0007, i: 64.9, raan: 40, argp: 30, ma: 10},
-  'GPS-like': {n: 2.0056, e: 0.01, i: 55, raan: 40, argp: 30, ma: 10},
-  'e 0.25': {n: 2.4, e: 0.25, i: 27, raan: 40, argp: 270, ma: 10},
-  'e 0.3': {n: 2.4, e: 0.3, i: 27, raan: 40, argp: 270, ma: 10},
+  'LEO, AP': {n: 15.07, e: 0.0008, i: 51.6, raan: 40, argp: 30, ma: 10, ...AP},
+  'LEO, SGP4XP': {n: 15.07, e: 0.0008, i: 51.6, raan: 40, argp: 30, ma: 10},
+  'geostationary, AP': {n: 1.0027, e: 0.0002, i: 0.05, raan: 40, argp: 30, ma: 10, ...AP},
+  'Etalon-like, AP': {n: 2.13, e: 0.0007, i: 64.9, raan: 40, argp: 30, ma: 10, ...AP},
+  'GPS-like, AP': {n: 2.0056, e: 0.01, i: 55, raan: 40, argp: 30, ma: 10, ...AP},
+  'e 0.25, AP': {n: 2.4, e: 0.25, i: 27, raan: 40, argp: 270, ma: 10, ...AP},
+  'e 0.3, AP': {n: 2.4, e: 0.3, i: 27, raan: 40, argp: 270, ma: 10, ...AP},
 };
 const epoch = '2026-10-01T00:00:00.000';
 const output = {START_TIME: epoch, STOP_TIME: '2026-10-03T00:00:00.000', STEP_SECONDS: 600};
@@ -255,29 +258,36 @@ const fly = async (file, payload) => {
 };
 const noHarm = {};
 for (const [name, s] of Object.entries(SEEDS)) {
-  const payload = seedOcm({epoch, ...s, tesseral: 31, zonal: 20});
+  const payload = seedOcm({epoch, ...s});
   const [a, b] = [await fly(wasmPath, payload), await fly(basePath, payload)];
   noHarm[name] = a === b;
   console.log(JSON.stringify({seed: name, identical: a === b}));
 }
+// a fitted AP set (analysis/catalog-composer's fixture, LEO), flown on the same output grid
+{
+  const payload = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));
+  const [a, b] = [await fly(wasmPath, payload), await fly(basePath, payload)];
+  noHarm['fitted AP set (catalog-composer fixture)'] = a === b;
+  console.log(JSON.stringify({seed: 'fitted AP set (catalog-composer fixture)', identical: a === b}));
+}
 
 // 3. the 12 THEMIS windows (registration (b) to (d), Amendment 8's paired test): each window's roughness and day 1 / 3 / 7 3D RMS on
-//    the base (sdn-ap 0.6.1, dist 05dd4a66) and on this source's build (c3f32102), as recorded in orbit-accuracy-experiments
-//    results/ap-truth/themis-ripple-fix/investigation.json (rows: operator-theory/themis-ripple-fix/fit-investigation).
+//    the base (sdn-ap 0.6.1, dist 05dd4a66) and on this source's build (a7771b14), as recorded in orbit-accuracy-experiments
+//    results/ap-truth/themis-ripple-fix/investigation.json, arm L (rows: operator-theory/themis-ripple-fix/fit-investigation).
 const THEMIS = [
   // window, roughness (m), base day 1 / 3 / 7, build day 1 / 3 / 7 (m)
-  ['THEMIS A 2013-02-11', 0.2464, 377.0, 1217.7, 2661.9, 379.9, 1233.9, 2665.1],
-  ['THEMIS A 2013-02-13', 0.0872, 123.5, 311.2, 990.2, 113.7, 298.0, 961.8],
-  ['THEMIS A 2013-02-15', 0.0612, 211.7, 314.1, 419.9, 201.1, 294.3, 421.8],
-  ['THEMIS A 2013-02-17', 0.0371, 148.7, 276.7, 914.2, 138.3, 273.9, 910.6],
-  ['THEMIS D 2013-02-11', 0.0967, 282.6, 713.9, 864.1, 273.1, 707.1, 886.0],
-  ['THEMIS D 2013-02-13', 0.0492, 234.4, 605.1, 1019.1, 224.4, 587.5, 962.4],
-  ['THEMIS D 2013-02-15', 0.0571, 178.5, 411.6, 696.6, 168.7, 419.6, 721.5],
-  ['THEMIS D 2013-02-17', 0.0766, 164.0, 363.8, 1154.0, 149.1, 366.3, 1203.9],
-  ['THEMIS E 2013-02-11', 0.1043, 230.2, 788.6, 1184.7, 220.4, 772.5, 1155.4],
-  ['THEMIS E 2013-02-13', 0.0702, 236.2, 709.7, 1385.3, 232.2, 720.3, 1377.2],
-  ['THEMIS E 2013-02-15', 0.0575, 148.6, 398.6, 767.3, 135.2, 404.2, 813.4],
-  ['THEMIS E 2013-02-17', 0.0531, 155.4, 342.6, 1052.6, 131.6, 312.4, 1004.2],
+  ['THEMIS A 2013-02-11', 0.2452, 377.0, 1217.7, 2661.9, 379.9, 1234.0, 2665.1],
+  ['THEMIS A 2013-02-13', 0.0887, 123.5, 311.2, 990.2, 113.7, 298.0, 961.8],
+  ['THEMIS A 2013-02-15', 0.0631, 211.7, 314.1, 419.9, 201.1, 294.3, 421.8],
+  ['THEMIS A 2013-02-17', 0.0391, 148.7, 276.7, 914.2, 138.2, 273.9, 910.7],
+  ['THEMIS D 2013-02-11', 0.0975, 282.6, 713.9, 864.1, 273.1, 707.0, 886.0],
+  ['THEMIS D 2013-02-13', 0.0518, 234.4, 605.1, 1019.1, 224.4, 587.5, 962.3],
+  ['THEMIS D 2013-02-15', 0.0589, 178.5, 411.6, 696.6, 168.7, 419.4, 720.6],
+  ['THEMIS D 2013-02-17', 0.0779, 164.0, 363.8, 1154.0, 149.1, 366.3, 1203.8],
+  ['THEMIS E 2013-02-11', 0.1055, 230.2, 788.6, 1184.7, 220.5, 772.5, 1155.5],
+  ['THEMIS E 2013-02-13', 0.0714, 236.2, 709.7, 1385.3, 232.2, 720.3, 1377.2],
+  ['THEMIS E 2013-02-15', 0.0590, 148.6, 398.6, 767.3, 135.1, 404.3, 813.4],
+  ['THEMIS E 2013-02-17', 0.0531, 155.4, 342.6, 1052.6, 131.7, 312.4, 1004.3],
 ];
 const median = (v) => { const s = [...v].sort((a, b) => a - b), k = s.length >> 1; return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
 /** The registration's window-cluster bootstrap: 10,000 draws, seed 20261106, 95 % percentile interval of the median. */
