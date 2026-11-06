@@ -17,8 +17,8 @@ class VendoringTests(unittest.TestCase):
         cls.lock = json.loads(cls.root.joinpath("bindings.lock.json").read_text())
 
     def test_immutable_sds_source_and_compiler_are_pinned(self):
-        self.assertEqual(self.lock["sds"]["revision"], "a39d51f52ddeb8dc7ba7730610c6b91a117418ca")
-        self.assertEqual(self.lock["sds"]["version"].split("+")[0], "1.276.0")
+        self.assertEqual(self.lock["sds"]["revision"], "cb95255756b5d8947fa988ce1c879e886dd7d704")
+        self.assertEqual(self.lock["sds"]["version"].split("+")[0], "1.279.0")
         self.assertEqual(self.lock["invoke"]["flatc_wasm_version"], "26.1.38")
         source_manifest = (json.dumps(self.lock["sds"]["lib_py_sha256"], sort_keys=True, indent=2) + "\n").encode()
         self.assertEqual(hashlib.sha256(source_manifest).hexdigest(), self.lock["sds"]["lib_py_manifest_sha256"])

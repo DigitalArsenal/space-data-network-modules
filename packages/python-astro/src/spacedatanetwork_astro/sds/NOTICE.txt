@@ -1,7 +1,7 @@
 spacedatastandards.org generated Python bindings
 Source: https://github.com/DigitalArsenal/spacedatastandards.org
-Version: 1.276.0+1793767506254
-Git revision: a39d51f52ddeb8dc7ba7730610c6b91a117418ca
+Version: 1.279.0+1793905746591
+Git revision: cb95255756b5d8947fa988ce1c879e886dd7d704
 License: Apache License, Version 2.0 (see LICENSE.txt).
 The pinned package.json and README.md declare Apache-2.0; the upstream
 tree contains no SDS LICENSE or NOTICE file. Generated-file comments
