@@ -5527,8 +5527,8 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41",
-      "bytes": 951183,
+      "sha256": "aa3ed22aa61a3a514e06619b9bff4aa1b1051d704dc32cd360b5c572b2c57f4e",
+      "bytes": 966222,
       "module": "propagator/sdn-ap",
       "lastCommit": "e746c4a0d319c4d7b84a67e0af615236de3a06a8",
       "lastCommitDate": "2026-11-05T16:13:54-05:00",

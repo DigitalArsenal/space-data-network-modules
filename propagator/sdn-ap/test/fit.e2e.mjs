@@ -15,14 +15,15 @@
 // - assertNoUserDefined on both records; a fit $PCF with ENABLE_DRAG is configuration-refused FORCES.ENABLE_DRAG; one
 //   without ATMOSPHERE_MODEL is configuration-refused FORCES.ATMOSPHERE_MODEL.
 // - No addParameter, USER_DEFINED_PARAMETERS or $OBD writer remains in src/fit_oem.inc.
-// - 0.6.2 is 0.6.1 rebuilt on SDS 1.279.0: against the 0.6.1 dist (git, modules 34b1b2c58, its SHA-256 checked), each fit's
-//   $OCM is byte-identical once PRODUCER's version is read as 0.6.1; each fit's $ODR names its own $OCM (RUN_ID and
-//   OCM_CONTENT_ID are the CID of that version's $OCM bytes, so they differ by PRODUCER alone) and, those two fields
-//   excluded, every decoded value of the two $ODR is identical (Object.is); each set's sdnap_covariance_at at every
-//   fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in EME2000 and TEME every 6 h for
-//   7 days are byte-identical (the $OEM with PRODUCER's version read likewise). With SDNAP_EXAMPLES set to the published
-//   examples (each <id>.ocm and <id>.json), every set flies byte-identical on both builds at every epoch of its window and
-//   its sdnap_covariance_at at every 12th epoch is bit-identical.
+// - 0.6.3 (SPEC 16.11's grid above e 0.3) against the 0.6.2 dist (git, modules c82160de7, its SHA-256 checked), on these
+//   low-eccentricity fits: each fit's $OCM is byte-identical once PRODUCER's version is read as 0.6.2; each fit's $ODR
+//   names its own $OCM (RUN_ID and OCM_CONTENT_ID are the CID of that version's $OCM bytes, so they differ by PRODUCER
+//   alone) and, those two fields excluded, every decoded value of the two $ODR is identical (Object.is); each set's
+//   sdnap_covariance_at at every fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in
+//   EME2000 and TEME every 6 h for 7 days are byte-identical (the $OEM with PRODUCER's version read likewise). With
+//   SDNAP_EXAMPLES set to the published examples (each <id>.ocm and <id>.json), every set at e 0.3 and below flies
+//   byte-identical on both builds at every epoch of its window and its sdnap_covariance_at at every 12th epoch is
+//   bit-identical; a set above e 0.3 (the grid's) flies on both and is counted apart.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
 import fs from "node:fs";
@@ -101,7 +102,7 @@ for (const c of cases) {
   check(ocm.METADATA?.NORAD_CAT_ID === 90400 && ocm.METADATA?.OBJECT_DESIGNATOR === "90400" && ocm.METADATA?.INTERNATIONAL_DESIGNATOR === "2026-904A",
     `${c.name}: METADATA ${ocm.METADATA?.NORAD_CAT_ID} ${ocm.METADATA?.OBJECT_DESIGNATOR} ${ocm.METADATA?.INTERNATIONAL_DESIGNATOR}`);
   check(ocm.ORB_AVERAGING === "BROUWER" && (ocm.STATE_DATA ?? []).length === 0, `${c.name}: ORB_AVERAGING ${ocm.ORB_AVERAGING}, ${ocm.STATE_DATA?.length} state values`);
-  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.2"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
+  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.3"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
 }
 const ap = records.AP, xp = records.XP;
 if (ap && xp) {
@@ -119,8 +120,8 @@ if (ap && xp) {
     `XP: n ${xp.MEAN_ELEMENTS.MEAN_MOTION}, BTERM ${xp.MEAN_ELEMENTS.BTERM}, fit RMS ${xp.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM} km`);
 }
 
-// 0.6.2 against 0.6.1: the same bytes, PRODUCER's version aside
-const BEFORE = { version: "0.6.1", commit: "34b1b2c588360dc95a3b82829010081ffe0828db", sha256: "05dd4a6600fb4c65d5841e1f49dc26df64fca7c14f1084644cafcfa875fe0a87" };
+// 0.6.3 against 0.6.2 on these low-eccentricity fits: the same bytes, PRODUCER's version aside
+const BEFORE = { version: "0.6.2", commit: "c82160de7b1dd1867b04c105049e2dcfe8ab4d68", sha256: "84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41" };
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const beforeBytes = execFileSync("git", ["-C", packageRoot, "show", `${BEFORE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
 check(sha256(beforeBytes) === BEFORE.sha256, `sdn-ap ${BEFORE.version} at ${BEFORE.commit.slice(0, 9)} is ${sha256(beforeBytes)}`);
@@ -221,9 +222,17 @@ const EXAMPLES = process.env.SDNAP_EXAMPLES;
 if (!EXAMPLES) console.log("examples: SDNAP_EXAMPLES not given, the published examples not flown");
 else {
   const ids = fs.readdirSync(EXAMPLES).filter((f) => f.endsWith(".ocm")).map((f) => f.slice(0, -4)).sort();
-  let same = 0, epochsFlown = 0, timesCovered = 0;
+  let same = 0, epochsFlown = 0, timesCovered = 0, wide = 0;
   for (const id of ids) {
     const d = JSON.parse(fs.readFileSync(path.join(EXAMPLES, `${id}.json`), "utf8")), set = new Uint8Array(fs.readFileSync(path.join(EXAMPLES, `${id}.ocm`)));
+    if (ocmOf(set).MEAN_ELEMENTS.ECCENTRICITY > 0.3) {  // SPEC 16.11: the grid's, not 0.6.2's; it flies on both
+      const fly = (harness) => harness.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: set },
+        configuration({ output: { FRAME: pcfOutputFrame.TEME, EPOCHS: [new Date(Date.parse(d.start)).toISOString().replace("Z", "")] } })] });
+      const [p2, p1] = [await fly(h), await fly(before)];
+      check(p2.statusCode === 0 && p1.statusCode === 0, `example ${id} (e above 0.3) propagate: ${p2.errorCode ?? "ok"} | ${p1.errorCode ?? "ok"}`);
+      wide += 1;
+      continue;
+    }
     const t0 = Date.parse(d.start), setMs = Date.parse(`${ocmOf(set).MEAN_ELEMENTS.EPOCH.slice(0, 23)}Z`);
     const epochs = d.epochsSeconds.map((s) => new Date(t0 + 1000 * s).toISOString().replace("Z", ""));
     const times = d.epochsSeconds.filter((_, k) => k % 12 === 0).map((s) => (t0 + 1000 * s - setMs) / 60000);
@@ -237,10 +246,11 @@ else {
     check(covSame, `example ${id} sdnap_covariance_at: ${now} (${a2.status}) differs from ${BEFORE.version} (${a1.status})`);
     if (flownSame && covSame) { same += 1; epochsFlown += epochs.length; timesCovered += times.length; }
   }
-  console.log(`examples: ${same} of ${ids.length} sets identical on ${now} and ${BEFORE.version} (propagate $OEM at ${epochsFlown} epochs ` +
-    `byte-identical, PRODUCER's version aside; sdnap_covariance_at at ${timesCovered} times bit-identical)` +
-    (same === ids.length ? ": 0 difference" : `; ${ids.length - same} differ`));
-  check(ids.length > 0 && same === ids.length, `examples: ${same} of ${ids.length} sets identical to ${BEFORE.version}`);
+  const low = ids.length - wide;
+  console.log(`examples: ${same} of ${low} sets at e 0.3 and below identical on ${now} and ${BEFORE.version} (propagate $OEM at ${epochsFlown} ` +
+    `epochs byte-identical, PRODUCER's version aside; sdnap_covariance_at at ${timesCovered} times bit-identical)` +
+    (same === low ? ": 0 difference" : `; ${low - same} differ`) + `; ${wide} above e 0.3 flown on both`);
+  check(low > 0 && same === low, `examples: ${same} of ${low} sets at e 0.3 and below identical to ${BEFORE.version}`);
 }
 fs.rmSync(scratch, { recursive: true, force: true });
 

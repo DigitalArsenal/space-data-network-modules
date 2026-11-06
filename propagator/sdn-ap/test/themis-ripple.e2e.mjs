@@ -249,12 +249,21 @@ const SEEDS = {
 };
 const epoch = '2026-10-01T00:00:00.000';
 const output = {START_TIME: epoch, STOP_TIME: '2026-10-03T00:00:00.000', STEP_SECONDS: 600};
+// this build's $OEM with PRODUCER's version read as 0.6.2's (the version string is the one difference a release step makes)
+const now = JSON.parse(fs.readFileSync(path.join(packageRoot, 'plugin-manifest.json'), 'utf8')).version;
+const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
+const asBase = (bytes) => {
+  const b = Buffer.from(bytes);
+  for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer('0.6.2').copy(b, at);
+  return b;
+};
 const fly = async (file, payload) => {
   const h = await createStandaloneHarness('browser', file, {surface: 'direct'});
   const r = await h.invoke({methodId: 'propagate', inputs: flight([payload], {output})});
   await h.close?.();
   assert.equal(r.statusCode, 0, `${path.basename(file)}: ${r.errorCode} ${r.errorMessage}`);
-  return crypto.createHash('sha256').update(new Uint8Array(r.outputs.find((o) => o.portId === 'ephemeris').payload)).digest('hex');
+  const bytes = new Uint8Array(r.outputs.find((o) => o.portId === 'ephemeris').payload);
+  return crypto.createHash('sha256').update(file === basePath ? Buffer.from(bytes) : asBase(bytes)).digest('hex');
 };
 const noHarm = {};
 for (const [name, s] of Object.entries(SEEDS)) {

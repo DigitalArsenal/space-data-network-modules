@@ -2311,12 +2311,12 @@ above an epoch eccentricity of 0.3, AP's zonal tail (16.3) carries every long-pe
 q = -w (G = O(e^|w|)), not only w = 0 and +-1. From 0.6.3 the first-order tesseral terms of degree 2 to 12 (16.2) are not a
 series in M there. For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, so each (m, w) family's
 first-order displacement (Lagrange's equations, each harmonic divided by its psi-dot, lambda also through n) is a periodic
-function of the anomaly, complete in j. At init it is built on 256 uniform eccentric anomalies from the family's forcing:
+function of the anomaly, complete in j. At init it is built on 128 uniform eccentric anomalies from the family's forcing:
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
 omega_E)) / M-dot, R the six rates, the harmonics 16.2 leaves out (m-daily, the class's, the half-day class's tail,
-|psi-dot| < 0.045 n) subtracted one
-by one with G and dG/de by the trapezoid on those nodes. Kept on 128 of them with its derivatives in e, i and a / a (forward
-differences), single precision (7.1 MB), and read at output time by the four-point periodic cubic in E, linear in the mean
+|psi-dot| < 0.045 n) subtracted one by one with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
+precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (3.1 MB a grid), and read at
+output time by the four-point periodic cubic in E, linear in the mean
 elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's mean elements at every 48 hours from its epoch
 (the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval. A grid
 is keyed by its set's exact elements (bitwise n, e, i, the class and the degree): a lookup matches only that key, and a grid held
@@ -2326,12 +2326,15 @@ within 3e-4 in e, 1e-4 rad in i and 1e-4 in a / a of them; each set keeps its la
 a thread while tess::FitGridScope lives there (thread-local; the fit holds it around its solve on its calling thread) is freed when
 its last holder drops it, never kept idle, so a fit leaves no grid behind. The export sdnap_wide_grid_stats(reset, out) writes the
 grid lookups since the last reset, out[0] by sets outside a fit and out[1] by a fit's sets (reset != 0 zeroes them after reading);
-sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their bytes (out[1]) and the grids built since the instance began (out[2]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
+sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their bytes (out[1]) and the grids built since the
+instance began (out[2]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; the
 0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the
 table. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded
 sets are byte-identical. The narrow set is 21 m RMS (44 m at most) from the field at e 0.29 to 0.30 for a one-day orbit, so a
-set whose eccentricity crosses 0.3 steps by up to that.
+set whose eccentricity crosses 0.3 steps by up to that; the step is a known limit. A fit above e 0.3 builds a grid for each
+set it initializes at new elements (about 13 an iteration on the GTO fixture, about 45 ms each in wasm), so fits there may take
+up to about twice 0.6.2's time; such a fit's wasm memory stays below 90 MiB on THEMIS A, the GTO and the Molniya fixtures.
 
 The 4x4 case of 16.10 measured a mismatch: XP carries J5 (2) at every FORCES and the 4x4 truth has none. With J5 zero on
 AP's side 0.4.14 is at 98.9 m on day 7 (2-minute samples, Sun and Moon off both sides, 72 h fits, 3D RMS), flat over the
