@@ -1,0 +1,476 @@
+{
+  "verdict": "PASS",
+  "registeredFormVerdict": "lines 8 and 13 not met by the letter: line 8: A-B4 farthest extra alert 10877.7 m against the registered 10473 m; line 13: 7 breadth geometries with an extra alert beyond R' + s; line 13: 12 misses below R' as registered (designed misses in (R, R'))",
+  "registered": "private-screening/PROTOCOL-19.md",
+  "forkCommit": "55a0ca86",
+  "steps": 86400,
+  "testedThresholdM": 9222.9,
+  "pairs": [
+    {
+      "pair": "A-B1",
+      "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 5.028,
+      "plaintextAlertSteps": 5,
+      "protocolAlertSteps": 5,
+      "alertSteps": [
+        14930,
+        17892,
+        17893,
+        17894,
+        17895
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 3,
+        "maxExtraDistanceM": 9827.4,
+        "alertSteps": 8
+      }
+    },
+    {
+      "pair": "A-B2",
+      "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 2.989,
+      "plaintextAlertSteps": 6,
+      "protocolAlertSteps": 6,
+      "alertSteps": [
+        39825,
+        39826,
+        39827,
+        39828,
+        39829,
+        39830
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 7,
+        "maxExtraDistanceM": 10119,
+        "alertSteps": 13
+      }
+    },
+    {
+      "pair": "A-B3",
+      "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 14.413,
+      "plaintextAlertSteps": 5,
+      "protocolAlertSteps": 5,
+      "alertSteps": [
+        26966,
+        29930,
+        32894,
+        35858,
+        38822
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 2,
+        "maxExtraDistanceM": 9806.2,
+        "alertSteps": 7
+      }
+    },
+    {
+      "pair": "A-B4",
+      "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 3.941,
+      "plaintextAlertSteps": 4,
+      "protocolAlertSteps": 4,
+      "alertSteps": [
+        41177,
+        41178,
+        41179,
+        41180
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 8,
+        "maxExtraDistanceM": 10877.7,
+        "alertSteps": 12
+      }
+    },
+    {
+      "pair": "A-B5",
+      "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 12.215,
+      "plaintextAlertSteps": 3,
+      "protocolAlertSteps": 3,
+      "alertSteps": [
+        45064,
+        48028,
+        50992
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 1,
+        "maxExtraDistanceM": 9872.1,
+        "alertSteps": 4
+      }
+    },
+    {
+      "pair": "A-B6",
+      "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 11.317,
+      "plaintextAlertSteps": 3,
+      "protocolAlertSteps": 3,
+      "alertSteps": [
+        11859,
+        14823,
+        17787
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 0,
+        "maxExtraDistanceM": 0,
+        "alertSteps": 3
+      }
+    },
+    {
+      "pair": "A-B7",
+      "designedMissKm": 2,
+      "maxRelativeSpeedKmS": 6.468,
+      "plaintextAlertSteps": 5,
+      "protocolAlertSteps": 5,
+      "alertSteps": [
+        60257,
+        63220,
+        63221,
+        63222,
+        66185
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 1,
+        "maxExtraDistanceM": 9461.2,
+        "alertSteps": 6
+      }
+    },
+    {
+      "pair": "A-B8",
+      "designedMissKm": 60,
+      "maxRelativeSpeedKmS": 8.067,
+      "plaintextAlertSteps": 0,
+      "protocolAlertSteps": 0,
+      "alertSteps": [],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 0,
+        "maxExtraDistanceM": 0,
+        "alertSteps": 0
+      }
+    }
+  ],
+  "signMismatches": 0,
+  "valueMismatches": 0,
+  "minNoiseBudgetBits": {
+    "screening": 32,
+    "physics": 99
+  },
+  "responderHasSecretKey": false,
+  "ctxCtMultipliesPerBlock": {
+    "screening": 3,
+    "tube": 3,
+    "physics": 21
+  },
+  "returnedCiphertextsPerBlock": {
+    "tube": 1,
+    "screening": 1,
+    "physics": 2
+  },
+  "submittedVectorsPerBlock": 3,
+  "decoys": 0,
+  "tube": {
+    "A": {
+      "insideSteps": 86400,
+      "outsideSteps": 0,
+      "valueMismatches": 0
+    },
+    "line": {
+      "insideSteps": 85817,
+      "outsideSteps": 583,
+      "firstOutsideStep": 3617,
+      "valueMismatches": 0
+    }
+  },
+  "physics": [
+    {
+      "track": "A",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B1",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B2",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B3",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B4",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B5",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B6",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B7",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B8",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "constant-velocity segment at steps 3600-4199",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 85566,
+      "failSteps": 714,
+      "mismatches": 0,
+      "firstFailStep": 3546
+    },
+    {
+      "track": "A at 1.2 mean motion",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 0,
+      "failSteps": 86280,
+      "mismatches": 0,
+      "firstFailStep": 60
+    },
+    {
+      "track": "teleport A -> B1 at step 43200",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 86160,
+      "failSteps": 120,
+      "mismatches": 0,
+      "firstFailStep": 43140
+    },
+    {
+      "track": "A scaled by 1.01",
+      "stepSeconds": 1,
+      "strideSeconds": 60,
+      "stepsChecked": 86280,
+      "passSteps": 0,
+      "failSteps": 86280,
+      "mismatches": 0,
+      "firstFailStep": 60
+    },
+    {
+      "track": "Swarm A precise science orbit 2025-11-24 (10 s)",
+      "stepSeconds": 10,
+      "strideSeconds": 60,
+      "stepsChecked": 8628,
+      "passSteps": 8628,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "GPS G01 ESA final orbit 2025-10-17 (300 s)",
+      "stepSeconds": 300,
+      "strideSeconds": 300,
+      "stepsChecked": 287,
+      "passSteps": 287,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    }
+  ],
+  "realTracks": {
+    "swarm": {
+      "track": "Swarm A precise science orbit 2025-11-24 (10 s)",
+      "stepSeconds": 10,
+      "strideSeconds": 60,
+      "stepsChecked": 8628,
+      "passSteps": 8628,
+      "failSteps": 0,
+      "mismatches": 0
+    },
+    "sentinel1": "not measured (no Sentinel-1 precise orbit in the archive)",
+    "gps": {
+      "track": "GPS G01 ESA final orbit 2025-10-17 (300 s)",
+      "stepSeconds": 300,
+      "strideSeconds": 300,
+      "stepsChecked": 287,
+      "passSteps": 287,
+      "failSteps": 0,
+      "mismatches": 0
+    },
+    "gate": "real tracks passing the physics check is a gate beside S4 before the feature is offered on any host or the console"
+  },
+  "reconstruction": {
+    "pair": "A-B1",
+    "block": 0,
+    "steps": 8192,
+    "distanceWithinFactor2Share": 0,
+    "medianLog2DistanceError": 37.3
+  },
+  "breadth": {
+    "geometries": 200,
+    "seed": 2,
+    "missRangeM": [
+      4611,
+      18446
+    ],
+    "withinRprime": 62,
+    "misses": 12,
+    "signMismatches": 0,
+    "valueMismatches": 0,
+    "steps": 1638400,
+    "stepsBeyondRprime": 1638316,
+    "falseAlertStepsAtNoiseThreshold": 69,
+    "geometriesWithExtraBeyondRprimePlusS": 7,
+    "withinR": 8,
+    "missesBelowR": 0,
+    "extraAlertBoundM": 11588.9,
+    "maxExtraDistanceM": 11007.8,
+    "geometriesWithExtraBeyondBound": 0,
+    "maxRelativeSpeedKmS": 14.77,
+    "registeredFormMissesBelowRprime": 12,
+    "registeredFormExtraBeyondRprimePlusS": 7,
+    "falseAlertRateAtNoiseThreshold": 0.000042116417101462725,
+    "wilson95": [
+      0.0000332825595895794,
+      0.000053294832255342586
+    ],
+    "missesBelowROneSidedUpper95": 0.31234397806636793
+  },
+  "breadth2": {
+    "geometries": 200,
+    "seed": 3,
+    "missRangeM": [
+      0,
+      5000
+    ],
+    "withinRprime": 200,
+    "misses": 0,
+    "signMismatches": 0,
+    "valueMismatches": 0,
+    "steps": 1638400,
+    "stepsBeyondRprime": 1637651,
+    "falseAlertStepsAtNoiseThreshold": 137,
+    "geometriesWithExtraBeyondRprimePlusS": 18,
+    "withinR": 200,
+    "missesBelowR": 0,
+    "extraAlertBoundM": 11588.9,
+    "maxExtraDistanceM": 11076.2,
+    "geometriesWithExtraBeyondBound": 0,
+    "maxRelativeSpeedKmS": 14.756,
+    "falseAlertRateAtNoiseThreshold": 0.00008365640786712187,
+    "wilson95": [
+      0.00007077231763935197,
+      0.00009888581290651136
+    ],
+    "missesBelowROneSidedUpper95": 0.014867039231272083
+  },
+  "pairsMaxRelativeSpeedKmS": 14.413,
+  "etaRepeat": {
+    "keyed": "BLAKE2b under test key K1 over (domain 1, requester, object, step); rho BLAKE2b under test key K2 over (domain, requester, object, block, slot)",
+    "testKeys": true,
+    "sameTwice": true,
+    "sameAfterUnrelated": true
+  },
+  "keyedGenerators": "eta and rho from SEAL keyed BLAKE2b under separate domain-separated TEST keys fixed in the driver; production key handling is not built (a gate beside S4)",
+  "mersenneAttempt": {
+    "oldMasks": "mt19937_64 masks (runs before 2f): the standard state recovery (untemper 312 consecutive full 64-bit outputs) is inapplicable to A's view, which lacks the low 58 bits of each mask's first limb and 10 bits of the second; the partial-view GF(2) solve (about 490,000 known bits per block against 19,937 state bits) was not run within the box: attempted, not recovered within the box, expected to succeed, the reason for the change",
+    "newMasks": "keyed BLAKE2b masks: the same attempt fails by construction (no linear state; the key is the secret)"
+  },
+  "vmaxKmS": 15.5,
+  "noiseChannel": "not measured: A can read each response noise through its budget; a measured noise-based attempt or noise flooding with its cost is a gate beside S4 and the real tracks (PROTOCOL-19.md 2d)",
+  "registrationSlips": [
+    "R'^2 is 85,062,500 m^2 from the registered formula; the registration wrote 85,061,864",
+    "the noise pass's extra alerts reach sqrt((R' + s)^2 + S), not R' + s; the mechanism is as registered",
+    "the margin R' guarantees alerts for misses below R, not below R'; misses below R' are reported as registered and misses below R are the guarantee"
+  ],
+  "maskLeakage": {
+    "method": "multiplicative mask r log-uniform below 2^120, 64-step runs, restated from the plaintext values",
+    "samples": 98744,
+    "medianErrorBitsInDistanceSquared": 0.66,
+    "withinFactor2InDistance": 0.88,
+    "withinFactor10InDistance": 0.999,
+    "private": false
+  },
+  "comparisonS4": "not built; decisions through the oracle; the feature is offered on no host and no console",
+  "failures": []
+}

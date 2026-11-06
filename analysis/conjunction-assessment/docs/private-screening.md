@@ -4,9 +4,15 @@ How two operators can learn whether their objects come close without
 either seeing the other's trajectory, what it costs, what it reveals, and how
 it can be abused.
 
-Status: **designed and measured, not built.**
+Status: **designed and measured; the protocol's arithmetic runs on the
+batched homomorphic primitive with known answers against plaintext screening
+(`../private-screening/PROTOCOL-19.md`); the comparison step is not built, and
+the feature is offered on no host or console.**
 
 Files:
+- protocol registration, driver and results: `../private-screening/`
+  (`PROTOCOL-19.md`, `protocol.cpp`, `results/known-answer.json`,
+  `results/cost.json`);
 - benchmark: `bench/private-screening/`;
 - results: `private-screening-bench-1s-2026-10-02.json` and
   `private-screening-bench-10s-2026-10-02.json`;
@@ -241,8 +247,9 @@ fleet's tubes.
 
 | Piece | State |
 | --- | --- |
-| Homomorphic fields in FlatBuffers (SEAL BFV/BGV, `he_encrypted`, client and server contexts) | Built. It encrypts one value per ciphertext, in slot 0, with a 20-bit plaintext modulus, so metre-scale coordinates wrap silently. It needs batched vectors and CRT moduli, as in the benchmark, before it can carry this protocol. |
+| Homomorphic fields in FlatBuffers (SEAL BFV/BGV, `he_encrypted`, client and server contexts) | Built, batched: n 8192 or 16384 slots per ciphertext, three 60-bit CRT plaintext moduli, every slot up to 2^178 - 1, refusals instead of wrapping (fork commit 55a0ca86). |
 | SDN request surface (`/api/v1/conjunction/screen`: encrypted, grant, channel, assessor) | Built. It returns no result (`pending-module-execution`). |
-| The protocol's arithmetic | Measured here (benchmark). |
-| Decoy generators and their measurement (`analysis/private-screening`) | Measured: none ready. |
-| Screening module; bit-only comparison; noise flooding; pre-answer tube check; completeness audit; per-window keys and audit; staking; budgets; Laplace noise | Not built. |
+| The protocol's arithmetic | Measured here (benchmark) and run on the primitive with known answers (`../private-screening/PROTOCOL-19.md`): alert steps identical to plaintext screening on the registered pairs, 0 sign mismatches; B squares the differences itself (no |a|^2 submitted); screening against an encrypted orbit on each side; additive masks; requester-held per-window keys. Responder cost 1012 ms and 17.3 MB per pair-day at 1 s (bench 169 ms, 8.7 MB). |
+| Pre-answer tube check; anchor-free physics check (two-body identities at n 16384, depth 3, J2 band); Laplace noise with a safety offset | Run with known answers in the same record: two-body tracks and the Swarm A and GPS G01 precise orbits pass the band at every step; fabricated tracks fail. A Sentinel-1 class track passing it stays a gate beside the comparison step. |
+| Decoys | Removed from the design (owner 2026-10-07). |
+| Bit-only comparison (DGK or garbled circuit); noise flooding; completeness audit; the exchange; staking; budgets | Not built. Until the comparison exists the output is decided by a test oracle and the feature is offered nowhere. Gates beside the comparison: a Sentinel-1 class precise orbit passing the physics check, the response-noise channel measured or flooded, and production key handling for the keyed noise and mask generators (the driver uses test keys). |
