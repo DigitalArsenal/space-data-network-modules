@@ -5866,10 +5866,10 @@
       }
     },
     "licensing/client-decrypt/dist/isomorphic/module.wasm": {
-      "sha256": "7f2e5177f7a8f665c01f6aba490ba48d1481f187fb76f77ba2572e7268016b7f",
-      "bytes": 1488081,
-      "wasmSha256": "1dfefb2e7d7c81e1be202c40cb5b98c9349bbd7af161ac13ad2db7282bfc96d2",
-      "canonicalModuleSha256": "1dfefb2e7d7c81e1be202c40cb5b98c9349bbd7af161ac13ad2db7282bfc96d2",
+      "sha256": "60cee35cd673bfca5d41313ee2b4f6de41ad13b02ca832c39bb979252e8d6dfd",
+      "bytes": 1515575,
+      "wasmSha256": "3c5756d05691df0f4fe4214c06058c5e466b06a425ab097575a8d6c22166e276",
+      "canonicalModuleSha256": "3c5756d05691df0f4fe4214c06058c5e466b06a425ab097575a8d6c22166e276",
       "form": "bundled",
       "module": "licensing/client-decrypt",
       "lastCommit": "f2cf179afdf6310efc28ed1940d68f423dc79803",
@@ -5929,19 +5929,19 @@
       "declaration": null
     },
     "licensing/publication-seal/dist/isomorphic/module.wasm": {
-      "sha256": "73fd21d93c44b9c3e269024c8c6fa7a6748d26ed80c03248bc6acd1129a4c024",
-      "bytes": 255758,
-      "wasmSha256": "73fd21d93c44b9c3e269024c8c6fa7a6748d26ed80c03248bc6acd1129a4c024",
-      "canonicalModuleSha256": "73fd21d93c44b9c3e269024c8c6fa7a6748d26ed80c03248bc6acd1129a4c024",
-      "form": "raw",
+      "sha256": "7a7b64b22cf8ffb1146b7f16dbde4d47a0508950e17797d88e7ffdb461f937f8",
+      "bytes": 256829,
+      "wasmSha256": "3b1a1f4ad4c2adf391c9cd4abc3bbd3f96914772c044c0691dcc5007ebe6b457",
+      "canonicalModuleSha256": "3b1a1f4ad4c2adf391c9cd4abc3bbd3f96914772c044c0691dcc5007ebe6b457",
+      "form": "bundled",
       "module": "licensing/publication-seal",
       "lastCommit": "0c456f2d06f636435b1895c2da6e52a3de433a72",
       "lastCommitDate": "2026-10-22T13:10:33-04:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "8535716843ea198669bcbb864168ee787a9d19b8",
-        "sdkCommit": "858b28fd13f30e3fcbc5122f82338cb467adcd9b"
+        "superRepoCommit": "d39c5d7abfe5fc1cb61b7ae49810f093f7f526c6",
+        "sdkCommit": "f5ea3ad32b43e2c0dbbcc3c7e623e692e41632a1"
       },
       "declaration": {
         "declares": false,

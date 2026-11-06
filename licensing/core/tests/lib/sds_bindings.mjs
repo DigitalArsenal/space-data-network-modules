@@ -4,11 +4,12 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+// The pinned spacedatastandards.org package (devDependency) and this module's pinned esbuild (devDependency).
 export const STANDARDS_ROOT =
-  process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../../../../spacedatastandards.org/", import.meta.url));
+  process.env.SPACE_DATA_STANDARDS_ROOT ?? fileURLToPath(new URL("../../node_modules/spacedatastandards.org/", import.meta.url));
 
 export async function loadStandard(code) {
-  const esbuild = createRequire(path.join(STANDARDS_ROOT, "package.json"))("esbuild");
+  const esbuild = createRequire(import.meta.url)("esbuild");
   const built = await esbuild.build({
     stdin: {
       contents: `export * from "./lib/ts/${code}/main.ts"; export * as flatbuffers from "flatbuffers";`,
