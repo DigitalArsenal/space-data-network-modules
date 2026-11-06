@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.261.0",
+  "spacedatastandards": "1.279.0",
   "threadModel": "wasi-sequential",
   "records": {
     "in": [
@@ -34,5 +34,5 @@
     "keyId": "module-owner-2026-10-15",
     "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
   },
-  "canonicalWasmSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875"
+  "canonicalWasmSha256": "bd9af4d7ae49fe2dd1834cc6a0ad0c8bbfdb3d3c0b6cc962adbcb58b08b77fe4"
 }

@@ -1,8 +1,14 @@
 {
-  "spacedatastandards": "1.247.0",
+  "spacedatastandards": "1.279.0",
   "schemas": [
     "NCD",
     "GDI"
   ],
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "38739cdf8e3b934a28f7957c299460f862c7958573649aaae93d4f279d089671"
 }

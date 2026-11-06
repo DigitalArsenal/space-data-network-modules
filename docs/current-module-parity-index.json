@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T14:14:20.708Z",
+  "generatedAt": "2026-11-06T14:18:20.617Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -5069,7 +5069,7 @@
       "pluginId": "com.digitalarsenal.files.geotiff",
       "name": "GeoTIFF imagery",
       "pluginFamily": "parser",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "describe",
         "render"
@@ -5123,7 +5123,7 @@
       "pluginId": "com.digitalarsenal.files.misb-klv",
       "name": "MISB ST 0601 full-motion video",
       "pluginFamily": "parser",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "footprints",
         "remux"
@@ -5161,7 +5161,7 @@
       "pluginId": "com.digitalarsenal.files.orbit-products",
       "name": "Orbit Products Reader",
       "pluginFamily": "parser",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "describe_container",
         "normalize_naif_ck",
@@ -5263,7 +5263,7 @@
       "pluginId": "com.digitalarsenal.files.rinex",
       "name": "RINEX Reader",
       "pluginFamily": "parser",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "evaluate_navigation",
         "read_observations"
@@ -6537,7 +6537,7 @@
       ],
       "cxxSourceFileCount": 12,
       "cSourceFileCount": 0,
-      "testFileCount": 7,
+      "testFileCount": 8,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -6560,6 +6560,7 @@
         "src/cpp/tests/test_sixdof.cpp",
         "src/cpp/tests/test_space_weather.cpp",
         "tests/behavior.test.mjs",
+        "tests/compare-dist-sections.mjs",
         "tests/fixtures/hosted-runtime/atmosphere.single-plugin.flow.json",
         "tests/sdk_compat.test.mjs"
       ]

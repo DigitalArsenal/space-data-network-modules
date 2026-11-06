@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.files.rinex",
   "name": "RINEX Reader",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Reads RINEX 3.02 to 3.05 GNSS observation files into SDS $GNO, one record per epoch, with every observation as the file wrote it (the three-character observation code, the value, the loss-of-lock and signal-strength indicators) and an $NCD descriptor that records the file. Strict and named: a version outside 3.02-3.05, an epoch flag other than 0, an observation type $GNO cannot name, a count that disagrees with the lines, a malformed column are each refused by name, never read with a guess. Every request option (time window, satellite systems) travels in the $NCD that frames the file; none is passed in a JSON options file. Broadcast navigation messages cannot be kept as parameters until SDS carries a broadcast-ephemeris record; their positions are evaluated by the ICD algorithm (GPS, QZSS, Galileo, BeiDou MEO and IGSO) into $OEM instead.",
   "tagline": "RINEX observation files in; $GNO per epoch and an $NCD descriptor out.",
   "pluginFamily": "parser",

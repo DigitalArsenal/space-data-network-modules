@@ -3599,11 +3599,11 @@
       }
     },
     "files/geotiff/dist/isomorphic/module.wasm": {
-      "sha256": "31a776c30a340e46ce1170a2081f63251cb37092d468aafba322b53ebdc73495",
-      "bytes": 222656,
-      "wasmSha256": "31a776c30a340e46ce1170a2081f63251cb37092d468aafba322b53ebdc73495",
-      "canonicalModuleSha256": "8f0f4cf5fcb7d2ad5c92bf59bc8773484758a9ff8e6b4ab96eb0a68d01c3d8a5",
-      "form": "raw",
+      "sha256": "b7db508dc7299cc395c34ee9a15c2dab21596a65afb9540fc12208ed2053b557",
+      "bytes": 224280,
+      "wasmSha256": "aecf34c3419dc648b7941b164a4e5851f742266556c38f5352a4c48bc6b4c35a",
+      "canonicalModuleSha256": "aecf34c3419dc648b7941b164a4e5851f742266556c38f5352a4c48bc6b4c35a",
+      "form": "bundled",
       "module": "files/geotiff",
       "lastCommit": "93fc3190586eabbc380aa4d9a08a081d0e857c81",
       "lastCommitDate": "2026-10-14T10:15:35-04:00",
@@ -3628,11 +3628,11 @@
       }
     },
     "files/misb-klv/dist/isomorphic/module.wasm": {
-      "sha256": "4bc5cb22b625334aca4539debc1a9be30f06c4b8e8c00d0ac385040508fb8d80",
-      "bytes": 175171,
-      "wasmSha256": "4bc5cb22b625334aca4539debc1a9be30f06c4b8e8c00d0ac385040508fb8d80",
-      "canonicalModuleSha256": "d4c30e5fcf4cb125142051d77cbfb0b058a482dcbe066469b6476da554db7f32",
-      "form": "raw",
+      "sha256": "d818a0f380047c3fafb8b15a31ae5a4522bde532e1aae8151dd5cb56fdba7a8b",
+      "bytes": 176795,
+      "wasmSha256": "38739cdf8e3b934a28f7957c299460f862c7958573649aaae93d4f279d089671",
+      "canonicalModuleSha256": "38739cdf8e3b934a28f7957c299460f862c7958573649aaae93d4f279d089671",
+      "form": "bundled",
       "module": "files/misb-klv",
       "lastCommit": "d6bb2a7bbc058a0ae92783aa72149ab7b8419837",
       "lastCommitDate": "2026-10-14T08:53:52-04:00",
@@ -3657,10 +3657,10 @@
       }
     },
     "files/orbit-products/dist/isomorphic/module.wasm": {
-      "sha256": "df42851260ee54dc18f904a8bd3fbd354235d0b31d653ad995912320f7331b74",
-      "bytes": 704456,
-      "wasmSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875",
-      "canonicalModuleSha256": "3326b6cfcd57369efb826fb5688c4350a491cf298209bf688e4ee11c63631875",
+      "sha256": "59008ad7589bdd7ec5a6baf7926a2231f0a668edb9bc5ed6d7a50298ead30404",
+      "bytes": 727670,
+      "wasmSha256": "bd9af4d7ae49fe2dd1834cc6a0ad0c8bbfdb3d3c0b6cc962adbcb58b08b77fe4",
+      "canonicalModuleSha256": "bd9af4d7ae49fe2dd1834cc6a0ad0c8bbfdb3d3c0b6cc962adbcb58b08b77fe4",
       "form": "bundled",
       "module": "files/orbit-products",
       "lastCommit": "feec1a11374cf5b991611aa6098eeb4f80ac6f8e",
@@ -3668,8 +3668,8 @@
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "3b0eedc58732987af792d4244658112ae3c8faef",
-        "sdkCommit": "e8d21ec2a9682c97a563d4b733cfa068781b8e5c"
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
       },
       "declaration": {
         "declares": true,
@@ -3686,10 +3686,10 @@
       }
     },
     "files/rinex/dist/isomorphic/module.wasm": {
-      "sha256": "c4acf50555df5120de350c81ef92b88602941717db4a10ee81b751bdefd5d917",
-      "bytes": 256345,
-      "wasmSha256": "0cfeac0560f4b42cbd9859afbafc88c240871a632b941578abedd9be3f6c6fc1",
-      "canonicalModuleSha256": "0cfeac0560f4b42cbd9859afbafc88c240871a632b941578abedd9be3f6c6fc1",
+      "sha256": "92ac94901c47f6f83b7549b076f8d2448db9daa9e8d1c624069682d9a9a6354e",
+      "bytes": 261685,
+      "wasmSha256": "c8f26a687506ef1814ce53b10a0414b1abdb6707d20bf9d0991df260910b3a77",
+      "canonicalModuleSha256": "c8f26a687506ef1814ce53b10a0414b1abdb6707d20bf9d0991df260910b3a77",
       "form": "bundled",
       "module": "files/rinex",
       "lastCommit": "feec1a11374cf5b991611aa6098eeb4f80ac6f8e",
@@ -3697,8 +3697,8 @@
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
-        "superRepoCommit": "a9335b7fa085ba1503ba583a511c91b59adccd46",
-        "sdkCommit": "e8d21ec2a9682c97a563d4b733cfa068781b8e5c"
+        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
+        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
       },
       "declaration": {
         "declares": true,

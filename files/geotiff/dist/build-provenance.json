@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.247.0",
+  "spacedatastandards": "1.279.0",
   "schemas": [
     "NCD",
     "GDI"
@@ -9,5 +9,11 @@
     "vendor/miniz-3.1.2/miniz.c": "e2c1aeb66eef9191d8c3feb164db2def2335a61d039bf04ed849f6b042433b30",
     "vendor/stb_image-2.30/stb_image.h": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3"
   },
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "aecf34c3419dc648b7941b164a4e5851f742266556c38f5352a4c48bc6b4c35a"
 }

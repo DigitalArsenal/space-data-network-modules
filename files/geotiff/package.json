@@ -1,6 +1,6 @@
 {
   "name": "@digitalarsenal/sdn-module-geotiff",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
@@ -12,7 +12,7 @@
     "flatbuffers": "25.9.23",
     "flatc-wasm": "26.1.32",
     "space-data-module-sdk": "0.8.25",
-    "spacedatastandards.org": "1.276.0"
+    "spacedatastandards.org": "1.279.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"
