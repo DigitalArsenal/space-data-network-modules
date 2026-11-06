@@ -2316,7 +2316,8 @@ H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu)))
 omega_E)) / M-dot, R the six rates, the harmonics 16.2 leaves out (m-daily, the class's, |psi-dot| < 0.045 n) subtracted one
 by one with G and dG/de exact. Kept on 128 of them with its derivatives in e, i and a / a (central differences), single
 precision, and read at output time by the four-point periodic cubic in E, linear in the mean elements' offsets, times
-e^{i(w omega + m beta)}; rebuilt when the mean elements move more than 3e-4 in e, 1e-4 rad in i or 1e-4 in a / a. Against
+e^{i(w omega + m beta)}; built once per set at init, each of a fit's perturbed sets its own, so the partials stay
+continuous (7.1 MB per set, freed with it). Against
 the full-field quadrature on THEMIS (e 0.82, 7 days at 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference; the
 0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the
 table. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded

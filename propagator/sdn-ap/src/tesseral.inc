@@ -722,7 +722,6 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
 /// |psi-dot| < kShallowBand n) subtracted, and kept on kGridN of them with its first derivatives in e, i and a / a0.
 constexpr int kGridN = 128, kGridNE = 256;
 constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the central differences of the derivative grids
-constexpr double kRegridE = 3e-4, kRegridI = 1e-4, kRegridA = 1e-4;  // a grid is rebuilt beyond these offsets
 struct WideGrid {
   int degree;         // the families' highest degree
   int count;          // (m, w) families
@@ -945,9 +944,9 @@ inline void wide_grid_release(WideGrid& g) {
   g.m = g.w = nullptr; g.v = nullptr; g.count = 0;
 }
 
-/// Grids are shared by the objects whose mean elements lie in one grid's linear range (a fit's partials, a covariance's
-/// perturbed sets): each counted, freed when its last holder drops it, except the one most recently dropped, kept until
-/// another grid is built (a fit's next iteration finds it). One idle grid at most.
+/// Grids are shared only by sets with the same mean elements (a set's own grid, exact for every perturbed set of a fit, keeps
+/// its finite-difference partials consistent): each counted, freed when its last holder drops it, except the one most recently
+/// dropped, kept until another grid is built. One idle grid at most.
 struct GridSlot {
   WideGrid* g;
   int cls, refs;
@@ -971,15 +970,14 @@ inline void free_grid(WideGrid* g) {
   std::free(g);
 }
 
-/// A grid for (n, e, i): a live or idle one whose linear range holds the elements, else a new one; nullptr out of memory.
+/// A grid for (n, e, i): a live or idle one built at these elements, else a new one; nullptr out of memory.
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc) {
   GridCache& c = grid_cache();
   const double a = std::pow(kKe / n, kX2o3);
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && std::fabs(e - g.e) <= kRegridE && std::fabs(inc - g.i) <= kRegridI &&
-        std::fabs(a / g.a - 1.0) <= kRegridA) {
+    if (g.degree == degree && c.slot[k].cls == cls && e == g.e && inc == g.i && a == g.a) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
       cache_unlock(&c.word);
@@ -1027,10 +1025,6 @@ inline void wide_grid_drop(WideGrid* g) {
   cache_unlock(&c.word);
 }
 
-/// True when the mean elements have left the grid's linear range (kRegridE, kRegridI, kRegridA).
-inline bool wide_grid_stale(const WideGrid& g, const Kepler& kp) {
-  return std::fabs(kp.e - g.e) > kRegridE || std::fabs(kp.i - g.i) > kRegridI || std::fabs(kp.a / g.a - 1.0) > kRegridA;
-}
 
 /// The displacements in the six-component set, the grid's cubic in E at the current anomaly times e^{i (w omega + m beta)}.
 inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta_g0, double* six) {
