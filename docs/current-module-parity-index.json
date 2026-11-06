@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T14:08:38.937Z",
+  "generatedAt": "2026-11-06T14:14:20.708Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -323,13 +323,14 @@
         "c",
         "c++"
       ],
-      "cxxSourceFileCount": 59,
+      "cxxSourceFileCount": 60,
       "cSourceFileCount": 1,
-      "testFileCount": 220,
+      "testFileCount": 221,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
         "bench/private-screening/private_screening_bench.cpp",
+        "private-screening/noise_channel.cpp",
         "private-screening/protocol.cpp",
         "scripts/generate-ephemeris-fixtures.cpp",
         "src/cpp/src/cdm_builder.cpp",
@@ -592,6 +593,7 @@
         "tests/possibilityScreening.test.mjs",
         "tests/privateScreeningCost.e2e.mjs",
         "tests/privateScreeningKnownAnswer.e2e.mjs",
+        "tests/privateScreeningNoiseChannel.e2e.mjs",
         "tests/radialGateBound.e2e.mjs",
         "tests/realCatalogExclusion.test.mjs",
         "tests/record-ocm-sets.mjs",
@@ -5597,7 +5599,7 @@
       "pluginId": "com.digitalarsenal.foundation.cosmology",
       "name": "Planck 2018 cosmology",
       "pluginFamily": "foundation",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "cmb_redshift",
         "distances",
@@ -5833,7 +5835,7 @@
       "pluginId": "com.digitalarsenal.foundation.orbits",
       "name": "Foundation Orbits",
       "pluginFamily": "foundation",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "cartesian_to_keplerian",
         "cdm_relative_hill_to_ocm_deputy_state",
@@ -5895,7 +5897,7 @@
       "pluginId": "com.digitalarsenal.foundation.time",
       "name": "Foundation Time",
       "pluginFamily": "foundation",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "convert_time"
       ],
@@ -6418,7 +6420,7 @@
       "pluginId": "com.digitalarsenal.maneuver.star-search",
       "name": "Star Interplanetary Broad Search",
       "pluginFamily": "maneuver",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "search_trajectories"
       ],
@@ -7842,7 +7844,7 @@
       "pluginId": "com.digitalarsenal.propagator.solar-system-bodies",
       "name": "Solar-system bodies",
       "pluginFamily": "propagator",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "methodIds": [
         "evaluate"
       ],
