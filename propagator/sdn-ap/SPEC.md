@@ -2318,9 +2318,11 @@ omega_E)) / M-dot, R the six rates, the harmonics 16.2 leaves out (m-daily, the 
 by one with G and dG/de by the trapezoid on those nodes. Kept on 128 of them with its derivatives in e, i and a / a (forward
 differences), single precision (7.1 MB), and read at output time by the four-point periodic cubic in E, linear in the mean
 elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's mean elements at every 48 hours from its epoch
-(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval; a set
-within 3e-4 in e, 1e-4 rad in i and 1e-4 in a / a of a held grid's elements shares it (a set's covariance copies), each set
-keeping its last two nodes; a set initialized on a thread while the scoped switch tess::ExactGridScope lives there (thread-local;
+(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval. A grid
+is keyed by its set's exact elements (bitwise n, e, i, the class and the degree): a lookup matches only that key, and a grid held
+from an earlier call is the same bytes a rebuild gives. A copy initialized while its nominal set's xpt::GridShareScope lives (the
+covariance's sigma sets) reads the nominal's grids, its schedule nodes included, linearly, when within 3e-4 in e, 1e-4 rad in i
+and 1e-4 in a / a of them; each set keeps its last two nodes; a set initialized on a thread while the scoped switch tess::ExactGridScope lives there (thread-local;
 the fit holds it around its solve on its calling thread: its nominal, trial steps and perturbed copies), or with xp_init's
 exact_grid, builds its own grids at its own elements and shares
 none, so a fit's finite-difference partials see the exact grid; such a grid is freed when its set is, never kept idle or lent to

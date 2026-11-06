@@ -751,8 +751,8 @@ constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
 constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;
-/// Sets whose mean elements lie this close to a held grid's share it, read linearly in the offsets (a set's perturbed copies for
-/// its partials and covariance share the set's grid).
+/// A copy initialized inside its nominal set's xpt::GridShareScope reads the nominal's grids, linearly in the offsets, when its mean
+/// elements lie this close to theirs (the covariance's sigma sets); otherwise it takes its own.
 constexpr double kShareE = 3e-4, kShareI = 1e-4, kShareA = 1e-4;
 struct WideGrid {
   int degree;         // the families' highest degree
@@ -1090,8 +1090,8 @@ inline size_t wide_grid_bytes(const WideGrid& g) {
   return static_cast<size_t>(g.count) * (6 * kGridN * 2 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t));
 }
 
-/// Grids are shared by sets within kShareE, kShareI, kShareA of a held grid's elements: each counted, freed when its last holder
-/// drops it, the kGridIdle most recently dropped kept until other grids are built.
+/// Grids held by exact key: each counted, freed when its last holder drops it, the kGridIdle most recently dropped kept until other
+/// grids are built (a fit's exact grids are freed at once).
 struct GridSlot {
   WideGrid* g;
   int cls, refs;
@@ -1156,18 +1156,16 @@ extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_w
   return 0;
 }
 
-/// A grid for (n, e, i): a live or idle one whose sharing range holds the elements (`exact`: one built at these very elements),
-/// else a new one; nullptr out of memory.
+/// The grid keyed by (degree, class, n, e, i), bitwise: a live or idle one with that key, else a new one; nullptr out of memory. A
+/// grid is a pure function of its key, so a hit and a rebuild give the same bytes. `exact` (a fit's set): the grid is freed when its
+/// last holder drops it and is never lent to a lookup without `exact`.
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool exact = false) {
   __atomic_add_fetch(exact ? &grid_counts()[1] : &grid_counts()[0], 1, __ATOMIC_RELAXED);
   GridCache& c = grid_cache();
-  const double a = std::pow(kKe / n, kX2o3);
-  const double se = exact ? 0.0 : kShareE, si = exact ? 0.0 : kShareI, sa = exact ? 0.0 : kShareA;
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && (exact || !c.slot[k].exact) && std::fabs(e - g.e) <= se && std::fabs(inc - g.i) <= si &&
-        std::fabs(a / g.a - 1.0) <= sa) {
+    if (g.degree == degree && c.slot[k].cls == cls && (exact || !c.slot[k].exact) && n == g.n && e == g.e && inc == g.i) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
       cache_unlock(&c.word);
