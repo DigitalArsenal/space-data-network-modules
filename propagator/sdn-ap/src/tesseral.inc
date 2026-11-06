@@ -725,6 +725,9 @@ constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
 constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;
+/// Sets whose mean elements lie this close to a held grid's share it, read linearly in the offsets (a set's perturbed copies for
+/// its partials and covariance share the set's grid).
+constexpr double kShareE = 3e-4, kShareI = 1e-4, kShareA = 1e-4;
 struct WideGrid {
   int degree;         // the families' highest degree
   int count;          // (m, w) families
@@ -972,9 +975,8 @@ inline void wide_grid_release(WideGrid& g) {
   g.m = g.w = nullptr; g.v = nullptr; g.count = 0;
 }
 
-/// Grids are shared only by sets with the same mean elements (a set's own grid, exact for every perturbed set of a fit, keeps
-/// its finite-difference partials consistent): each counted, freed when its last holder drops it, except the one most recently
-/// dropped, kept until another grid is built. One idle grid at most.
+/// Grids are shared by sets within kShareE, kShareI, kShareA of a held grid's elements: each counted, freed when its last holder
+/// drops it, the kGridIdle most recently dropped kept until other grids are built.
 struct GridSlot {
   WideGrid* g;
   int cls, refs;
@@ -1003,14 +1005,15 @@ inline void free_grid(WideGrid* g) {
   std::free(g);
 }
 
-/// A grid for (n, e, i): a live or idle one built at these elements, else a new one; nullptr out of memory.
+/// A grid for (n, e, i): a live or idle one whose sharing range holds the elements, else a new one; nullptr out of memory.
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc) {
   GridCache& c = grid_cache();
   const double a = std::pow(kKe / n, kX2o3);
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && e == g.e && inc == g.i && a == g.a) {
+    if (g.degree == degree && c.slot[k].cls == cls && std::fabs(e - g.e) <= kShareE && std::fabs(inc - g.i) <= kShareI &&
+        std::fabs(a / g.a - 1.0) <= kShareA) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
       cache_unlock(&c.word);
@@ -1032,6 +1035,15 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   cache_unlock(&c.word);
   free_grid(g);
   return nullptr;
+}
+
+/// Adds a holder to a grid already held.
+inline void wide_grid_ref(WideGrid* g) {
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  for (int k = 0; k < c.count; ++k)
+    if (c.slot[k].g == g) { ++c.slot[k].refs; break; }
+  cache_unlock(&c.word);
 }
 
 /// Drops a holder; the last holder's grid stays idle until the next build.
