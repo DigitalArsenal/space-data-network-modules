@@ -158,6 +158,33 @@ Artifacts:
 - `dist/browser/module.wasm`
 - `dist/isomorphic/module.wasm`
 
+### Build reproducibility
+
+`node tests/compare-dist-sections.mjs <old.wasm> <new.wasm>` strips the
+publication trailer and every custom section, then compares the type, import,
+function, table, memory, global, export, element, code and data sections byte
+for byte and names the differing function bodies. Exit 0 means the module
+sections are identical.
+
+Trace of 0.2.0 -> 0.2.1 (SDS 1.279.0 rebuild). The two dists differ in every
+section but memory (code 229231 -> 244131 bytes, 196 -> 190 functions, 186 of
+190 bodies differ). The cause is source, not toolchain: 0.2.0 was built on
+2026-10-14, before the NRLMSISE-00 changes of 2026-10-25 and 2026-10-26 (globe7
+trig computed once, Legendre table once, phase terms by angle addition; commit
+fe5e4ca0e, "not byte-identical"), and 0.2.1 is the first atmosphere build that
+carries them. Evidence, with emsdk 6.0.1 and a fresh system-library cache:
+the 2026-10-14 sources and third_party build to a module byte-identical to the
+0.2.0 dist, and the current sources build to a module section byte-identical to
+the 0.2.1 dist. Reassociated trig changes the last place of the density and
+temperature (8.8e-16 and 2.7e-16 relative); the model is otherwise the same.
+
+The known answers of the observed-flux test come from the retired 0.1.0
+surface, so that test compares to 1e-14 (about 45 double-precision steps), not for
+equality. A rebuild from unchanged sources
+and an unchanged toolchain reproduces the module section exactly: run the
+script on the old and new dists, and a difference with no source change is a
+toolchain change to investigate before any tolerance moves.
+
 ## Verification
 
 SDK, browser, and WasmEdge harness:
