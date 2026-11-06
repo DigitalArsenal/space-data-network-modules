@@ -372,8 +372,8 @@
       "canonicalModuleSha256": "64a4b4f7ac4faf1cab8d944c5126adfeb1a9e2d1668d8af28d52ee66250cd527",
       "form": "raw",
       "module": "analysis/access",
-      "lastCommit": "c5514a67f7990b4ce722594dc1300e15ea9e9a1b",
-      "lastCommitDate": "2026-11-06T09:26:56-05:00",
+      "lastCommit": "e34f8167189baf177714befbe09df4e22a297125",
+      "lastCommitDate": "2026-11-06T10:29:08-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
@@ -5895,11 +5895,11 @@
       }
     },
     "licensing/core/dist/browser/module.wasm": {
-      "sha256": "120111ce331705b0c3c9568b9dbeaaf87020618fbeae70718abd19ebe53adf0a",
-      "bytes": 1427795,
+      "sha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
+      "bytes": 1426823,
       "wasmSha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
       "canonicalModuleSha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
-      "form": "bundled",
+      "form": "raw",
       "module": null,
       "lastCommit": "4a544e4d8f1da3e79f319e347673e4f33c9bdc7b",
       "lastCommitDate": "2026-11-06T08:34:18-05:00",

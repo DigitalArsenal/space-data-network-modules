@@ -22,6 +22,7 @@
 //
 // The check never reads a private key: trusted-publishers.json holds public keys only, and the SDK verifier works from
 // the trailer. scripts/sign-module-artifact.mjs is the only script that reads the keypair file, in-process.
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -242,7 +243,68 @@ export async function measure(base = REPO_ROOT) {
   }
   const counts = {};
   for (const r of rows) counts[r.kind] = (counts[r.kind] ?? 0) + 1;
-  return { rows, counts, problems: rows.flatMap((r) => r.problems), publishers };
+  return { rows, counts, problems: [...rows.flatMap((r) => r.problems), ...rawLoadedProblems(base)], publishers };
+}
+
+// RAW-LOADED WASM (modules-raw-loaded-wasm-must-validate-sweep-20261106). A signed file carries a publication trailer that
+// WebAssembly.validate and WebAssembly.compile reject (unknown section code 0x10). Two lists, both kept here and in
+// docs/module-signing.md:
+//  - RAW_CONSUMED: files a loader compiles or validates directly. They must validate, so they stay the unsigned build bytes
+//    (their hashes are pinned in the ledger).
+//  - SDK_LOADED_SIGNED: signed files that are not dist/isomorphic/module.wasm, each with the loader that strips or verifies
+//    the trailer. Every dist/isomorphic/module.wasm is loaded through the SDK harness and is signed.
+// Any other tracked wasm (or base64 wasm in a tracked JS/JSON file) that does not validate is a failure.
+export const RAW_CONSUMED = Object.freeze({
+  "propagator/sgp4/dist/browser/module.wasm": "dist/browser/module.js (Emscripten loader); propagator/ffm/tests/intermodule_sgp4_import.test.mjs",
+  "propagator/sgp4/dist/browser-shared/module.wasm": "dist/browser-shared/module.js (Emscripten loader)",
+  "propagator/atmosphere/dist/browser/module.wasm": "dist/browser/module.js (Emscripten loader)",
+  "analysis/od/dist/browser/module.wasm": "dist/browser/module.js (Emscripten loader); OrbPro analysis.od build",
+  "analysis/access/dist/access.wasm": "OrbPro build:access (WebAssembly.validate)",
+  "analysis/access/dist/access-binary.js": "analysis/access/index.js bundled loader (base64)",
+  "licensing/core/dist/browser/module.wasm": "dist/browser/module.js (Emscripten loader)",
+});
+export const SDK_LOADED_SIGNED = Object.freeze({
+  "analysis/access/dist/browser/module.wasm": "src/browser-adapter.mjs through createBrowserModuleHarness (strips the trailer)",
+  "analysis/od/dist/isomorphic/module.command.wasm": "OrbPro analysis.od build, verified against trusted signers",
+  "data-source/gps-source/dist/gps-source.wasm": "data-source/gps-source/test/module.test.mjs strips the trailer before instantiating",
+  "data-source/oneweb-source/dist/oneweb-source.wasm": "data-source/oneweb-source/test/module.test.mjs strips the trailer before instantiating",
+});
+const WASM_BASE64 = /AGFzbQ[A-Za-z0-9+/=]{1000,}/g;
+function validates(bytes) {
+  try { return WebAssembly.validate(bytes); } catch { return false; }
+}
+export function rawLoadedProblems(base = REPO_ROOT) {
+  let tracked;
+  try {
+    tracked = execFileSync("git", ["ls-files", "-z"], { cwd: base, maxBuffer: 1 << 28 }).toString().split("\0").filter(Boolean);
+  } catch {
+    return [];
+  }
+  const payloads = [];
+  for (const file of tracked) {
+    const full = path.join(base, file);
+    let stat;
+    try { stat = fs.statSync(full); } catch { continue; }
+    if (!stat.isFile()) continue;
+    if (file.endsWith(".wasm")) {
+      const bytes = fs.readFileSync(full);
+      if (bytes.length >= 4 && bytes.subarray(0, 4).equals(Buffer.from([0, 0x61, 0x73, 0x6d]))) payloads.push({ file, label: file, ok: validates(bytes) });
+    } else if (/\.(js|mjs|cjs|json)$/.test(file) && stat.size >= 2000 && stat.size <= 64 * 1024 * 1024) {
+      const matches = fs.readFileSync(full, "utf8").match(WASM_BASE64) ?? [];
+      matches.forEach((m, i) => payloads.push({ file, label: `${file}#base64:${i}`, ok: validates(Buffer.from(m, "base64")) }));
+    }
+  }
+  const problems = [];
+  const seen = new Set(payloads.map((p) => p.file));
+  for (const [file, consumer] of Object.entries(RAW_CONSUMED)) {
+    if (!seen.has(file)) problems.push(`${file}: listed as raw-consumed (${consumer}) but not present as a wasm payload`);
+  }
+  for (const p of payloads) {
+    if (p.ok) continue;
+    if (RAW_CONSUMED[p.file]) problems.push(`${p.label}: consumed raw (${RAW_CONSUMED[p.file]}) but does not validate; it must be the unsigned build bytes`);
+    else if (!p.file.endsWith("/dist/isomorphic/module.wasm") && !SDK_LOADED_SIGNED[p.file]) problems.push(`${p.label}: does not validate and is not named as loaded through the SDK harness (add it to SDK_LOADED_SIGNED with its loader, or restore the unsigned build bytes)`);
+  }
+  return problems;
 }
 
 export function summary(result) {
