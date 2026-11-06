@@ -725,6 +725,8 @@ constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
 constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;
+/// Sets whose mean elements lie this close to a held grid's share it (read linearly in the offsets); zero: each set its own grid.
+constexpr double kShareE = 0.0, kShareI = 0.0, kShareA = 0.0;
 struct WideGrid {
   int degree;         // the families' highest degree
   int count;          // (m, w) families
@@ -1010,7 +1012,8 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && e == g.e && inc == g.i && a == g.a) {
+    if (g.degree == degree && c.slot[k].cls == cls && std::fabs(e - g.e) <= kShareE && std::fabs(inc - g.i) <= kShareI &&
+        std::fabs(a / g.a - 1.0) <= kShareA) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
       cache_unlock(&c.word);
