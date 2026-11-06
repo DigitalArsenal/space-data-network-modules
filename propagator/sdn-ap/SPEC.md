@@ -2321,15 +2321,12 @@ elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's m
 (the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval. A grid
 is keyed by its set's exact elements (bitwise n, e, i, the class and the degree): a lookup matches only that key, and a grid held
 from an earlier call is the same bytes a rebuild gives. A copy initialized while its nominal set's xpt::GridShareScope lives (the
-covariance's sigma sets) reads the nominal's grids, its schedule nodes included, linearly, when within 3e-4 in e, 1e-4 rad in i
-and 1e-4 in a / a of them; each set keeps its last two nodes; a set initialized on a thread while the scoped switch tess::ExactGridScope lives there (thread-local;
-the fit holds it around its solve on its calling thread: its nominal, trial steps and perturbed copies), or with xp_init's
-exact_grid, builds its own grids at its own elements and shares
-none, so a fit's finite-difference partials see the exact grid; such a grid is freed when its set is, never kept idle or lent to
-a shared lookup, so a fit leaves no grid behind; flights and covariance outside a fit share. The export
-sdnap_wide_grid_stats(reset, out) writes the grid lookups since the last reset, out[0] shared and out[1] exact (reset != 0 zeroes
-them after reading), so a test can assert that a fit's solve made no shared lookup; sdnap_wide_grid_cache(out) writes the grids
-the cache holds (out[0]) and their bytes (out[1]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
+covariance's sigma sets, a fit iteration's perturbed copies) reads the nominal's grids, its schedule nodes included, linearly, when
+within 3e-4 in e, 1e-4 rad in i and 1e-4 in a / a of them; each set keeps its last two nodes. A grid built by a set initialized on
+a thread while tess::FitGridScope lives there (thread-local; the fit holds it around its solve on its calling thread) is freed when
+its last holder drops it, never kept idle, so a fit leaves no grid behind. The export sdnap_wide_grid_stats(reset, out) writes the
+grid lookups since the last reset, out[0] by sets outside a fit and out[1] by a fit's sets (reset != 0 zeroes them after reading);
+sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]) and their bytes (out[1]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; the
 0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the
 table. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded

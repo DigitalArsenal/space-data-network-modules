@@ -271,7 +271,7 @@ for (const [name, s] of Object.entries(SEEDS)) {
   console.log(JSON.stringify({seed: 'fitted AP set (catalog-composer fixture)', identical: a === b}));
 }
 
-// 4. the exact-grid switch (tess::ExactGridScope, thread-local, held by a fit around its solve) leaves no trace: in one instance a fit
+// 4. grid retention leaves no trace (exact keys; a fit's grids freed under tess::FitGridScope): in one instance a fit
 //    that succeeds and a fit that is refused, then a flight above e 0.3, give the flight's bytes of a fresh instance
 const {runModelTruth} = await import('./lib/heo-model-truth.mjs');
 const gto = {n: 2.40, e: 0.72, i: 27, raan: 40, argp: 270, ma: 10};

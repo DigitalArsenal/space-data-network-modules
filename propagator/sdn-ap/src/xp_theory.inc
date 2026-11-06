@@ -783,7 +783,7 @@ struct RateContext {
   uint8_t wide_owned;                 ///< this context frees `wide` (a class change's temporary shares it)
   const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
   double wide_blend;
-  uint8_t wide_exact;                 ///< xp_init's exact_grid: this set's grids are built at its own elements, never shared
+  uint8_t wide_fit;                   ///< initialized inside a tess::FitGridScope: the grids it builds are not kept idle
   XpSat* wide_anchor;                 ///< the nominal set whose grids this copy reads (GridShareScope); nullptr: its own
 };
 
@@ -1473,7 +1473,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     if (e.eo > tess::kWideE && s.ctx.wide == nullptr) {
       // SPEC 16.11: the families of degree 2 to spd as a grid in E, by exact key; a copy inside its nominal's GridShareScope reads
       // the nominal's grid when within the share range; a class change's temporary keeps its parent's
-      XpSat* anchor = s.ctx.wide_exact ? nullptr : grid_share_anchor();
+      XpSat* anchor = grid_share_anchor();
       const tess::WideGrid* ag = anchor != nullptr ? anchor->ctx.wide : nullptr;
       if (ag != nullptr && ag->degree == spd && anchor->ctx.resonance == res && std::fabs(e.eo - ag->e) <= tess::kShareE &&
           std::fabs(e.xincl - ag->i) <= tess::kShareI && std::fabs(std::pow(kKe / n0, kX2o3) / ag->a - 1.0) <= tess::kShareA) {
@@ -1481,7 +1481,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         s.ctx.wide = anchor->ctx.wide;
         s.ctx.wide_anchor = anchor;
       } else {
-        tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl, s.ctx.wide_exact != 0);
+        tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl, s.ctx.wide_fit != 0);
         if (g == nullptr) return false;
         s.ctx.wide = g;
       }
@@ -1522,11 +1522,10 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   return true;
 }
 
-/// `exact_grid`, or a live tess::ExactGridScope (SPEC 16.11): above tess::kWideE this set builds its grids at its own elements and
-/// shares none (a fit's sets, so its finite-difference partials see the exact grid; flights and covariance share).
-inline int32_t xp_init(const Elements& e, XpSat& s, bool exact_grid = false) {
+/// Inside a tess::FitGridScope (SPEC 16.11) the grids this set builds above tess::kWideE are freed with it, never kept idle.
+inline int32_t xp_init(const Elements& e, XpSat& s) {
   s = XpSat{};
-  s.ctx.wide_exact = exact_grid || tess::exact_grids_now() ? 1 : 0;
+  s.ctx.wide_fit = tess::fit_grids_now() ? 1 : 0;
   s.norad = e.norad;
   s.epoch_jd_whole = e.epoch_jd_whole;
   s.epoch_jd_frac = e.epoch_jd_frac;
@@ -1736,7 +1735,7 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   if (!mean_at(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
   const Kepler k = kepler_of(yj);
   if (!(k.e < 1.0)) return false;
-  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i, s.ctx.wide_exact != 0);
+  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i, s.ctx.wide_fit != 0);
   if (out == nullptr) return false;
   held = true;
   // keep it in the slot farther from j

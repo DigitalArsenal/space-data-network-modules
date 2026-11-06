@@ -1091,12 +1091,12 @@ inline size_t wide_grid_bytes(const WideGrid& g) {
 }
 
 /// Grids held by exact key: each counted, freed when its last holder drops it, the kGridIdle most recently dropped kept until other
-/// grids are built (a fit's exact grids are freed at once).
+/// grids are built (a grid a fit built is freed at once).
 struct GridSlot {
   WideGrid* g;
   int cls, refs;
   uint32_t stamp;  // when it last became idle
-  bool exact;      // acquired exact: freed when its last holder drops it, never kept idle
+  bool transient;  // built inside a fit: freed when its last holder drops it, never kept idle
 };
 /// Idle grids kept (3.1 MB each): a catalog refresh finds its objects' grids; the oldest goes first. kGridSlots bounds every grid held.
 constexpr int kGridIdle = 128, kGridSlots = 256;
@@ -1122,23 +1122,22 @@ inline void free_grid(WideGrid* g) {
   std::free(g);
 }
 
-/// The scoped switch "sets initialized now take exact grids" (SPEC 16.11): while an ExactGridScope lives on a thread, xp_init on
-/// that thread gives every new set exact_grid (a fit's nominal, trial steps and perturbed copies, all made on the fit's calling
-/// thread; the pool's threads serve batch flights only); other threads, and the thread outside the scope, share. Nesting counts;
-/// the guard clears on every exit from its scope.
-inline int32_t& exact_grid_depth() {
+/// The fit's scope (SPEC 16.11): while a FitGridScope lives on a thread, a grid built by a set initialized there (a fit's nominal,
+/// trial steps and copies, all made on the fit's calling thread; the pool's threads serve batch flights only) is freed when its last
+/// holder drops it, never kept idle. Nesting counts; the guard clears on every exit from its scope.
+inline int32_t& fit_grid_depth() {
   static thread_local int32_t depth = 0;
   return depth;
 }
-struct ExactGridScope {
-  ExactGridScope() { ++exact_grid_depth(); }
-  ~ExactGridScope() { --exact_grid_depth(); }
-  ExactGridScope(const ExactGridScope&) = delete;
-  ExactGridScope& operator=(const ExactGridScope&) = delete;
+struct FitGridScope {
+  FitGridScope() { ++fit_grid_depth(); }
+  ~FitGridScope() { --fit_grid_depth(); }
+  FitGridScope(const FitGridScope&) = delete;
+  FitGridScope& operator=(const FitGridScope&) = delete;
 };
-inline bool exact_grids_now() { return exact_grid_depth() > 0; }
+inline bool fit_grids_now() { return fit_grid_depth() > 0; }
 
-/// Grid lookups since the last reset: [0] shared (a set without exact_grid), [1] exact (SPEC 16.11; read by sdnap_wide_grid_stats).
+/// Grid lookups since the last reset: [0] by sets outside a fit, [1] by a fit's sets (SPEC 16.11; read by sdnap_wide_grid_stats).
 inline int64_t* grid_counts() {
   static int64_t counts[2] = {0, 0};
   return counts;
@@ -1154,7 +1153,8 @@ extern "C" __attribute__((export_name("sdnap_wide_grid_cache"))) int32_t sdnap_w
   return 0;
 }
 
-/// SPEC 16.11: out[0] the shared grid lookups and out[1] the exact ones since the last reset; reset != 0 zeroes them after reading.
+/// SPEC 16.11: out[0] the grid lookups by sets outside a fit and out[1] those by a fit's sets since the last reset; reset != 0
+/// zeroes them after reading.
 extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_wide_grid_stats(int32_t reset, double* out) {
   int64_t* c = grid_counts();
   out[0] = static_cast<double>(__atomic_load_n(&c[0], __ATOMIC_RELAXED));
@@ -1167,15 +1167,15 @@ extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_w
 }
 
 /// The grid keyed by (degree, class, n, e, i), bitwise: a live or idle one with that key, else a new one; nullptr out of memory. A
-/// grid is a pure function of its key, so a hit and a rebuild give the same bytes. `exact` (a fit's set): the grid is freed when its
-/// last holder drops it and is never lent to a lookup without `exact`.
-inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool exact = false) {
-  __atomic_add_fetch(exact ? &grid_counts()[1] : &grid_counts()[0], 1, __ATOMIC_RELAXED);
+/// grid is a pure function of its key, so a hit and a rebuild give the same bytes. `transient` (a fit's set): a grid it builds is
+/// freed when its last holder drops it, never kept idle.
+inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool transient = false) {
+  __atomic_add_fetch(transient ? &grid_counts()[1] : &grid_counts()[0], 1, __ATOMIC_RELAXED);
   GridCache& c = grid_cache();
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && (exact || !c.slot[k].exact) && n == g.n && e == g.e && inc == g.i) {
+    if (g.degree == degree && c.slot[k].cls == cls && n == g.n && e == g.e && inc == g.i) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
       cache_unlock(&c.word);
@@ -1190,7 +1190,7 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
   cache_lock(&c.word);
   if (c.count < kGridSlots) {
-    c.slot[c.count++] = GridSlot{g, cls, 1, 0, exact};
+    c.slot[c.count++] = GridSlot{g, cls, 1, 0, transient};
     cache_unlock(&c.word);
     return g;
   }
@@ -1216,7 +1216,7 @@ inline void wide_grid_drop(WideGrid* g) {
   for (int k = 0; k < c.count; ++k)
     if (c.slot[k].g == g) {
       if (--c.slot[k].refs == 0) {
-        if (c.slot[k].exact) {  // a fit's own grid: nothing reuses it after its set
+        if (c.slot[k].transient) {  // built inside a fit: not kept idle
           free_grid(c.slot[k].g);
           c.slot[k] = c.slot[--c.count];
         } else {
