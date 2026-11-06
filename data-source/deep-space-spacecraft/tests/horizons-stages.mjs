@@ -2,6 +2,7 @@
 // as the authoritative numerical tests, then compares the bytes at storage.
 import assert from "node:assert/strict";
 import { decodeHttpRequest, encodeHttpResponse } from "space-data-module-sdk/runtime-contracts";
+import { stages } from "../flow.mjs";
 
 export const framesOn = (result, port) => result.outputs.filter((f) => f.portId === port).map((f) => Buffer.from(f.payload));
 
@@ -14,9 +15,9 @@ export async function replayStages(harness, { planRequest, answer, checkResult, 
   let result = await harness.invoke(planRequest);
   checkResult(result, "plan_horizons");
   const keys = [], requestsSeen = [], snapshots = [];
-  for (const methodId of [...Array(6).fill("advance"), "build_oem"]) {
+  for (const methodId of [...Array(stages).fill("advance"), "build_oem"]) {
     const requests = framesOn(result, "request").map(decodeHttpRequest);
-    assert.ok(requests.length <= 60, `${methodId} received ${requests.length} requests`);
+    assert.ok(requests.length <= 63, `${methodId} received ${requests.length} requests (stage ceiling 63)`);
     const responses = [];
     for (const request of requests) {
       checkRequest(request);

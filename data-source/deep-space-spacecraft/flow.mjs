@@ -1,3 +1,6 @@
+// Advance stages per run: kMaxStages in src/deep_space_spacecraft.cpp. Each stage
+// carries at most 63 requests (src/runtime_contracts.hpp kStageRequests).
+export const stages = 12;
 const catalogs = ["lunar_orbit", "cislunar", "earth_moon_lagrange", "sun_earth_l1", "sun_earth_l2",
   "mercury_orbit", "venus_orbit", "mars_orbit", "jupiter_orbit", "saturn_orbit", "heliocentric"];
 
@@ -14,8 +17,8 @@ export function deepSpaceFlow({ node, edge: composeEdge, http, storage, packageD
     edge("plan", "request", "fetch0", "request"), edge("plan", "state", "advance1", "state"),
     edge("plan", "status", "egress", "result"), edge("fetch0", "response", "advance1", "response"),
   ];
-  for (let stage = 1; stage <= 6; ++stage) {
-    const advance = `advance${stage}`, fetch = `fetch${stage}`, next = stage < 6 ? `advance${stage + 1}` : "build";
+  for (let stage = 1; stage <= stages; ++stage) {
+    const advance = `advance${stage}`, fetch = `fetch${stage}`, next = stage < stages ? `advance${stage + 1}` : "build";
     nodes.push(node(advance, source, "advance"), node(fetch, http, "request"));
     edges.push(edge(advance, "request", fetch, "request"), edge(advance, "status", "egress", "result"),
       edge(advance, "state", next, "state"), edge(fetch, "response", next, "response"));
@@ -32,7 +35,7 @@ export function deepSpaceFlow({ node, edge: composeEdge, http, storage, packageD
   return {
     flow: {
       programId: "com.digitalarsenal.flows.deep-space-catalogs-ingest",
-      name: "Beyond-Earth spacecraft catalogs (Horizons and SPICE)", version: "0.3.0", engineLinkage: "bridge",
+      name: "Beyond-Earth spacecraft catalogs (Horizons and SPICE)", version: "0.3.1", engineLinkage: "bridge",
       description: "Typed TimerTick, HTTP and ingest contracts retrieve NASA/JPL Horizons ephemerides, Horizons-listing discoveries and NASA NAIF SPICE mission kernels into eleven per-regime OEM catalogs and their EGP query groups. Source-owned provenance and current-batch metadata; disabled cycles emit a Skipped notice.",
       nodes, edges,
       triggers: [{ triggerId: "daily", kind: "timer", source: "host-cron", defaultIntervalMs: 604800000,

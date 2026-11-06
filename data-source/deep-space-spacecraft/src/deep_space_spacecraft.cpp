@@ -9,9 +9,9 @@
 
 using Json = nlohmann::json;
 namespace {
-constexpr size_t kMaxStageRequests = 300, maxControlBytes = 64u * 1024u * 1024u, kMaxCraft = 400;
+constexpr size_t kMaxStageRequests = spacecraft_wire::kStageRequests, maxControlBytes = 64u * 1024u * 1024u, kMaxCraft = 400;
 size_t maxFrames = kMaxStageRequests; // per-stage request cap: config `stage_requests`, from the state's config
-constexpr int kMaxStages = 6;
+constexpr int kMaxStages = 12; // the advance nodes in flow.mjs (`stages`)
 std::string error;
 int fail(const std::string& code) { plugin_set_error(code.c_str(), code.c_str()); return 1; }
 #define NEED(c, code) do { if (!(c)) { error = code; return false; } } while (0)
@@ -335,15 +335,9 @@ bool absorbKernel(Json& state, const Json& pending, const uint8_t* bytes, size_t
   return true;
 }
 // Discovery responses: a source that fails is counted, never fatal to the Horizons catalogs.
-bool absorbDiscovery(Json& state, const Json& pending, const plugin_input_frame_t* frame) {
-  NEED(frame && frame->payload && frame->payload_length >= 8 && frame->payload_length <= 33u * 1024u * 1024u, "invalid-http-response");
-  flatbuffers::Verifier v(frame->payload, frame->payload_length, 64, 1000000, false);
-  NEED(sdn::runtime::VerifyHttpResponseBuffer(v), "invalid-http-response");
-  const auto* r = sdn::runtime::GetHttpResponse(frame->payload);
+bool absorbDiscovery(Json& state, const Json& pending, const sdn::runtime::HttpResponse* r) {
   const std::string kind = pending["kind"];
-  if ((r->ERROR() && r->ERROR()->size()) || r->STATUS() != 200 || !r->BODY() || !r->BODY()->size()) {
-    count(state, "source_errors"); return true;
-  }
+  if (spacecraft_wire::transport_error(*r)) { count(state, "source_errors"); return true; }
   const auto* data = r->BODY()->data();
   const std::string body = kind == "kernel" ? std::string() : std::string(reinterpret_cast<const char*>(data), r->BODY()->size());
   bool ok = kind == "listing" ? absorbListing(state, body) : kind == "discover" ? absorbProbe(state, pending, body) :
@@ -357,20 +351,22 @@ bool consume(Json& state) {
   NEED(rs.size() == state["pending"].size(), "response-count-mismatch");
   for (size_t i = 0; i < rs.size(); ++i) {
     const auto& pending = state["pending"][i];
-    if (pending.contains("kind")) {
-      NEED(pending["kind"].is_string() && absorbDiscovery(state, pending, rs[i]), error.empty() ? "invalid-state" : error);
-      continue;
-    }
     const auto* response = spacecraft_wire::response_on(rs[i], error);
     NEED(response, error);
+    if (pending.contains("kind")) {
+      NEED(pending["kind"].is_string() && absorbDiscovery(state, pending, response), error.empty() ? "invalid-state" : error);
+      continue;
+    }
     NEED(integer(pending, "craft") && pending["craft"].get<size_t>() < state["craft"].size(), "invalid-state");
     auto& craft = state["craft"][pending["craft"].get<size_t>()];
     if (pending.contains("lower")) NEED(pending["lower"].is_boolean(), "invalid-state");
     else NEED(state["planned"].get<bool>() && integer(pending, "group") && pending["group"].get<int64_t>() >= 0 &&
         integer(pending, "start") && integer(pending, "step") && integer(pending, "rows") &&
         integer(pending, "offset"), "invalid-state");
-    // Transport and pending-frame validity stay fatal, even after a craft skips.
+    // Envelope and pending-frame validity stay fatal, even after a craft skips;
+    // one request's transport failure skips only its craft.
     if (craft.contains("skipped")) continue;
+    if (const char* code = spacecraft_wire::transport_error(*response)) { skipCraft(craft, code); continue; }
     const std::string body(reinterpret_cast<const char*>(response->BODY()->data()), response->BODY()->size());
     if (pending.contains("lower")) {
       const bool lower = pending["lower"];
