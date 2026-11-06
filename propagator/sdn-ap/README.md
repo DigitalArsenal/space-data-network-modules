@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.4.18.
+Version 0.6.3 (dist aa3ed22a).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, SGP4XP with parts replaced ($PCF FORCES selects them: the drag atmosphere, the gravity terms; SPEC 15, 16).
@@ -435,7 +435,10 @@ along-track RMS falls to 1.65-3.22 m at the four nodes (1.77-6.76 m at 0.4.11); 
 16.2 ms per object-day on GTO and 10.5 ms on Galileo-like orbits (12.0 and 5.8 before).
 
 Above e 0.3 AP's zonal tail carries every long-period term (w = l - 2p for every p, G = O(e^|w|)) and its first-order
-tesseral set every q to |q| <= 10 (SPEC 16.11); at e 0.3 and below both are 0.4.14's, byte for byte. On FFM model truth
+tesseral families of degree 2 to 12 are a grid in the eccentric anomaly, complete in j, not a series in M (SPEC 16.11): the
+term table builds none of the general set there (`src/tesseral.inc:316`, `for (int l = 2; l <= degree && !wide; ++l)`) and
+keeps only the near-resonant terms above degree 12 (`src/tesseral.inc:315`); the families are the grid of `wide_grid_build`
+(`src/tesseral.inc:742`; kSpCap = 12 at `src/tesseral.inc:35`). At e 0.3 and below both are 0.4.14's, byte for byte. On FFM model truth
 the GTO fixture's day-7 whole-day RMS (along-track/radial) falls from 419.32/455.90 to 204.15/133.92 m, the 500 km
 perigee fixture's from 295.44/304.96 to 109.46/70.85 m, the half-day's from 84.22/75.28 to 34.33/23.12 m and the 12-hour
 55 deg's from 158.02/105.47 to 67.25/25.32 m. Molniya with drag, its coefficient fitted, rises from 149.82/175.90 to
