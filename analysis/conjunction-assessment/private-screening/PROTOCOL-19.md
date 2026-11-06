@@ -168,6 +168,38 @@ threshold (s = 1.25 km) = the share of steps with d > R' that alert, reported
 with a 95 % Wilson interval over the steps of the 200 geometries, and the
 share of extra alerts beyond R' + s (registered 0).
 
+Amendment 2026-11-06 (SDN-AP, registered before any row of the added set):
+0 misses of 8 geometries below R gives a one-sided 95 % upper bound of 31 %
+(1 - 0.05^(1/8)) on the miss probability, which cannot carry "never missed".
+Added set: 200 more geometries, seed 3, designed miss uniform in [0, R] =
+[0, 5000 m], the same generator, block and acceptance; registered misses 0
+(0 of 200 gives an upper bound of 1.5 %). Both sets, and the 8 pairs, report
+the largest relative speed between the two tracks over the screened steps
+(from consecutive samples) against v_max = 15.5 km/s, which the R' margin
+assumes.
+
+### 2d. Noise channel (amendment 2026-11-06, SDN-AP; a gate, not measured here)
+
+The reconstruction attempt of 2a reads only the decrypted slots. A holds the
+secret key and can also read each response's noise, at least through its
+noise budget; the noise of a ct x ct product depends on both operands, B's
+coordinates among them, and adding a freshly encrypted mask does not flood it.
+This channel is not measured in this record. A measured noise-based
+reconstruction attempt, or noise flooding with its cost (S2 has 32 bits of
+budget left, so flooding may change the parameters), is a gate beside S4 and
+the real tracks before the feature is offered on any host or the console; a
+child record files it.
+
+### 4a. Cost totals (amendment 2026-11-06, SDN-AP)
+
+Against the registered definitions, "A encrypt per object-day" is the keys
+plus S2 plus S3 and "A upload per object-day" is S2 plus S3; the split rows
+stay and both totals are added. The keys (public and relinearization keys for
+both n) are 73.5 MB per window and enter no exchanged figure of section 4;
+they are stated apart, and the exchanged figure is also given with the keys
+amortized over the 8 pairs of the window (keys / 8 per pair-day), beside the
+registered figure.
+
 ## 3. Known-answer plan
 
 Pairs (the bench's set, seed 1): A on a circular orbit at r = 7078.137 km,
@@ -299,10 +331,15 @@ Physics check (86,280 steps with both neighbours per track): A and the eight B
 tracks pass every step; the constant-velocity segment fails 714 steps from
 step 3546; the 1.2 mean-motion orbit fails all 86,280; the teleport fails 120
 steps from step 43,140; the 1.01-scaled track fails all 86,280. Exact against
-the plaintext big integers at every step. Real precise-orbit tracks (Swarm,
-Sentinel-1, GPS): not measured in this box; per 2b, real tracks passing the
-physics check is a gate beside S4 before the feature is offered on any host or
-the console.
+the plaintext big integers at every step. Real precise orbits, with J2 and
+drag in them, from the archive (Earth-fixed SP3 rotated about z at the
+sidereal rate into a frame fixed to the stars): Swarm A's precise science
+orbit of 2025-11-24 (10 s samples, stride 60 s) passes 8628 of 8628 checked
+steps; GPS G01 from the ESA final orbit of 2025-10-17 (300 s samples, stride
+300 s, coordinate bound 25 bits) passes 287 of 287. Sentinel-1: not measured
+(no Sentinel-1 precise orbit in the archive); per 2b, a real track of that
+class passing the check stays a gate beside S4 before the feature is offered
+on any host or the console.
 
 Tube check: A inside its 1 km tube at 86,400 of 86,400 steps; the
 constant-velocity segment outside at 583 steps, first at step 3617.
