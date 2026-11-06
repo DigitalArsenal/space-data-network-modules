@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.249.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "RDO",
     "RFM",
@@ -10,6 +10,7 @@
     "PLD",
     "LCC",
     "CAT",
+    "PVN",
     "PPE",
     "OEM",
     "EOP",
@@ -18,7 +19,13 @@
   "erfaSourceFiles": 248,
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "eopSeries": "foundation/frames/src/eop_series.hpp",
-  "moduleSdk": "0.9.7",
+  "moduleSdk": "0.9.12",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "5eaa6ae43506fb1f1b06b2c868545924aeebc0741bef64e5355ac64f8aff2fc2"
+  "wasmSha256": "30c2c87372a3d2107a8d0d15d62b9e9cd70c9d5103b90159cb31577819582aaa",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "ccda8be535c5d0a669697b9a6db88259999352c8f1fae913344384110c6b2eb5"
 }

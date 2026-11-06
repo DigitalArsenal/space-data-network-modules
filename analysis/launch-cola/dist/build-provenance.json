@@ -1,5 +1,11 @@
 {
-  "spacedatastandards": "1.261.0+1792716949507",
+  "spacedatastandards": "1.279.0",
   "schema": "CQR",
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "0ff99e78e60667f05e30bfb9167e1e31a7c605018b92a6cdf933dcffc076c3bf"
 }

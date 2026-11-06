@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.mission-screening",
   "name": "Ballistic Mission Screening Budgets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "pluginFamily": "analysis",
   "description": "Evaluate explicit circular parking injection/capture and hyperbolic-excess objectives for sampled Lambert grids. All budget calculations execute in C++ WASM.",
   "abiVersion": 1,

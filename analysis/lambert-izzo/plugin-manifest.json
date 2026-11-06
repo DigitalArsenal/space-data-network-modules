@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.lambert-izzo",
   "name": "Izzo Lambert Solver",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Izzo Lambert boundary-value solver and bounded departure-by-arrival delta-V grid search.",
   "pluginFamily": "analysis",
   "capabilities": [],

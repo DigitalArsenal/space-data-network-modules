@@ -9,7 +9,7 @@
   "wasmModule": {
     "file": "access.wasm",
     "loader": "access.mjs",
-    "hash": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e",
+    "hash": "3ba1083f8cfd2c12bae6b6f0f26e36f135020f1d4d016bbd9bf4722bab20fd08",
     "exports": [
       "_start",
       "plugin_init",
@@ -31,7 +31,8 @@
       "plugin_get_manifest_flatbuffer_size",
       "plugin_alloc",
       "plugin_free",
-      "plugin_invoke_stream"
+      "plugin_invoke_stream",
+      "__wasm_call_ctors"
     ]
   },
   "embeddedManifest": {

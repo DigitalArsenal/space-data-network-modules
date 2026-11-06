@@ -1,7 +1,7 @@
 {
   "pluginId": "maneuver-planner",
   "name": "Maneuver Planning Plugin",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Orbital maneuver planning over the $MPL (maneuver plan) standard: classical transfers, Lambert, phasing, relative-motion (ROE) targeting, collision avoidance, approach corridors, closed-loop rendezvous and orbit geometry. One $MPL request in, the same $MPL answered out.",
   "pluginFamily": "maneuver",
   "capabilities": [],

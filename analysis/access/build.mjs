@@ -3,8 +3,10 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import createFlatc from "flatc-wasm/module";
 import { compileModuleFromSource, cleanupCompilation } from "space-data-module-sdk/compiler";
+import { toLoadableWasmBytes } from "space-data-module-sdk/bundle";
 import { createAccessPluginManifest, createLegacyBuildManifest } from "./manifest.js";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
@@ -59,6 +61,9 @@ const compilation = await compileModuleFromSource({
 });
 try {
   if (!compilation.report.ok) throw new Error(JSON.stringify(compilation.report.issues, null, 2));
+  // Signed in the build (SDM_MODULE_SIGNING_KEYPAIR_PATH, or SDM_MODULE_UNSIGNED_BUILD=1 for an explicitly unsigned build),
+  // so every copy below carries the bytes that ship.
+  execFileSync(process.execPath, [path.join(root, "..", "..", "scripts", "sign-module-artifact.mjs"), outputPath], { stdio: "inherit" });
   const bytes = await fs.readFile(outputPath);
   const adapter = await read("src/browser-adapter.mjs");
   await fs.mkdir(path.join(root, "dist/browser"), { recursive: true });
@@ -70,7 +75,7 @@ try {
   await fs.copyFile(path.join(root, "plugin-manifest.json"), path.join(root, "dist/plugin-manifest.json"));
   const metadata = createLegacyBuildManifest({ manifest: createAccessPluginManifest(), encrypted: false, requiresProtection: false,
     wasmHash: createHash("sha256").update(bytes).digest("hex"),
-    exportedFunctions: WebAssembly.Module.exports(new WebAssembly.Module(bytes)).filter((entry) => entry.kind === "function").map((entry) => `_${entry.name}`),
+    exportedFunctions: WebAssembly.Module.exports(new WebAssembly.Module(toLoadableWasmBytes(bytes))).filter((entry) => entry.kind === "function").map((entry) => `_${entry.name}`),
     bytesSymbol: "plugin_get_manifest_flatbuffer", sizeSymbol: "plugin_get_manifest_flatbuffer_size",
   });
   metadata.embeddedManifest.file = "isomorphic/module.wasm";

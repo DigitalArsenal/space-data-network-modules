@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.261.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -20,6 +20,8 @@
     "NCD",
     "EOP",
     "SPW",
+    "EVL",
+    "PCF",
     "PRW",
     "ERM"
   ],
@@ -38,5 +40,11 @@
     "src/maneuver_detection.cpp"
   ],
   "sgp4": "foundation/sgp4-str3",
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "f0655a3c94b2ceb6a2761600b968f43d95fab15489144688fb5684cf61558804"
 }

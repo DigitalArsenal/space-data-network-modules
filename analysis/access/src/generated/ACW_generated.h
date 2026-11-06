@@ -1294,6 +1294,7 @@ struct PVNT : public ::flatbuffers::NativeTable {
   std::string RETRIEVED_AT{};
   std::string SOURCE_SHA256{};
   uint64_t SOURCE_BYTES = 0;
+  std::string PRODUCER_SHA256{};
 };
 
 /// Product Provenance
@@ -1313,7 +1314,8 @@ struct PVN FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
     VT_SOURCE_VERSION = 22,
     VT_RETRIEVED_AT = 24,
     VT_SOURCE_SHA256 = 26,
-    VT_SOURCE_BYTES = 28
+    VT_SOURCE_BYTES = 28,
+    VT_PRODUCER_SHA256 = 30
   };
   /// Publisher-stable, lowercase identifier of the source in the provider's
   /// registry of sources.
@@ -1381,6 +1383,13 @@ struct PVN FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   uint64_t SOURCE_BYTES() const {
     return GetField<uint64_t>(VT_SOURCE_BYTES, 0);
   }
+  /// SHA-256 of the build of PRODUCER that made the product (its dist
+  /// module.wasm), 64 lowercase hexadecimal characters. Stamped by the host
+  /// that loaded the producing module: a module cannot hash its own bytes.
+  /// Empty when not stated.
+  const ::flatbuffers::String *PRODUCER_SHA256() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_PRODUCER_SHA256);
+  }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -1407,6 +1416,8 @@ struct PVN FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            VerifyOffset(verifier, VT_SOURCE_SHA256) &&
            verifier.VerifyString(SOURCE_SHA256()) &&
            VerifyField<uint64_t>(verifier, VT_SOURCE_BYTES, 8) &&
+           VerifyOffset(verifier, VT_PRODUCER_SHA256) &&
+           verifier.VerifyString(PRODUCER_SHA256()) &&
            verifier.EndTable();
   }
   PVNT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1457,6 +1468,9 @@ struct PVNBuilder {
   void add_SOURCE_BYTES(uint64_t SOURCE_BYTES) {
     fbb_.AddElement<uint64_t>(PVN::VT_SOURCE_BYTES, SOURCE_BYTES, 0);
   }
+  void add_PRODUCER_SHA256(::flatbuffers::Offset<::flatbuffers::String> PRODUCER_SHA256) {
+    fbb_.AddOffset(PVN::VT_PRODUCER_SHA256, PRODUCER_SHA256);
+  }
   explicit PVNBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1482,9 +1496,11 @@ inline ::flatbuffers::Offset<PVN> CreatePVN(
     ::flatbuffers::Offset<::flatbuffers::String> SOURCE_VERSION = 0,
     ::flatbuffers::Offset<::flatbuffers::String> RETRIEVED_AT = 0,
     ::flatbuffers::Offset<::flatbuffers::String> SOURCE_SHA256 = 0,
-    uint64_t SOURCE_BYTES = 0) {
+    uint64_t SOURCE_BYTES = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> PRODUCER_SHA256 = 0) {
   PVNBuilder builder_(_fbb);
   builder_.add_SOURCE_BYTES(SOURCE_BYTES);
+  builder_.add_PRODUCER_SHA256(PRODUCER_SHA256);
   builder_.add_SOURCE_SHA256(SOURCE_SHA256);
   builder_.add_RETRIEVED_AT(RETRIEVED_AT);
   builder_.add_SOURCE_VERSION(SOURCE_VERSION);
@@ -1514,7 +1530,8 @@ inline ::flatbuffers::Offset<PVN> CreatePVNDirect(
     const char *SOURCE_VERSION = nullptr,
     const char *RETRIEVED_AT = nullptr,
     const char *SOURCE_SHA256 = nullptr,
-    uint64_t SOURCE_BYTES = 0) {
+    uint64_t SOURCE_BYTES = 0,
+    const char *PRODUCER_SHA256 = nullptr) {
   auto SOURCE_ID__ = SOURCE_ID ? _fbb.CreateString(SOURCE_ID) : 0;
   auto ORIGINATOR__ = ORIGINATOR ? _fbb.CreateString(ORIGINATOR) : 0;
   auto PROVIDER_ID__ = PROVIDER_ID ? _fbb.CreateString(PROVIDER_ID) : 0;
@@ -1525,6 +1542,7 @@ inline ::flatbuffers::Offset<PVN> CreatePVNDirect(
   auto SOURCE_VERSION__ = SOURCE_VERSION ? _fbb.CreateString(SOURCE_VERSION) : 0;
   auto RETRIEVED_AT__ = RETRIEVED_AT ? _fbb.CreateString(RETRIEVED_AT) : 0;
   auto SOURCE_SHA256__ = SOURCE_SHA256 ? _fbb.CreateString(SOURCE_SHA256) : 0;
+  auto PRODUCER_SHA256__ = PRODUCER_SHA256 ? _fbb.CreateString(PRODUCER_SHA256) : 0;
   return CreatePVN(
       _fbb,
       SOURCE_ID__,
@@ -1539,7 +1557,8 @@ inline ::flatbuffers::Offset<PVN> CreatePVNDirect(
       SOURCE_VERSION__,
       RETRIEVED_AT__,
       SOURCE_SHA256__,
-      SOURCE_BYTES);
+      SOURCE_BYTES,
+      PRODUCER_SHA256__);
 }
 
 ::flatbuffers::Offset<PVN> CreatePVN(::flatbuffers::FlatBufferBuilder &_fbb, const PVNT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1566,6 +1585,7 @@ inline void PVN::UnPackTo(PVNT *_o, const ::flatbuffers::resolver_function_t *_r
   { auto _e = RETRIEVED_AT(); if (_e) _o->RETRIEVED_AT = _e->str(); }
   { auto _e = SOURCE_SHA256(); if (_e) _o->SOURCE_SHA256 = _e->str(); }
   { auto _e = SOURCE_BYTES(); _o->SOURCE_BYTES = _e; }
+  { auto _e = PRODUCER_SHA256(); if (_e) _o->PRODUCER_SHA256 = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<PVN> CreatePVN(::flatbuffers::FlatBufferBuilder &_fbb, const PVNT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -1589,6 +1609,7 @@ inline ::flatbuffers::Offset<PVN> PVN::Pack(::flatbuffers::FlatBufferBuilder &_f
   auto _RETRIEVED_AT = _o->RETRIEVED_AT.empty() ? 0 : _fbb.CreateString(_o->RETRIEVED_AT);
   auto _SOURCE_SHA256 = _o->SOURCE_SHA256.empty() ? 0 : _fbb.CreateString(_o->SOURCE_SHA256);
   auto _SOURCE_BYTES = _o->SOURCE_BYTES;
+  auto _PRODUCER_SHA256 = _o->PRODUCER_SHA256.empty() ? 0 : _fbb.CreateString(_o->PRODUCER_SHA256);
   return CreatePVN(
       _fbb,
       _SOURCE_ID,
@@ -1603,7 +1624,8 @@ inline ::flatbuffers::Offset<PVN> PVN::Pack(::flatbuffers::FlatBufferBuilder &_f
       _SOURCE_VERSION,
       _RETRIEVED_AT,
       _SOURCE_SHA256,
-      _SOURCE_BYTES);
+      _SOURCE_BYTES,
+      _PRODUCER_SHA256);
 }
 
 inline const PVN *GetPVN(const void *buf) {

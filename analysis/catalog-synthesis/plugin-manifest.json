@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.catalog-synthesis",
   "name": "Supplemental Catalog Synthesis",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "On a timer, reads the stored $OMM records (typed storage.query) - our OD-fitted supplemental OMMs (analysis/od/fit-pipeline, stored under the provider's SOURCE_NAME) and Space-Track GP (stored under a Space-Track source name) - and merges them into ONE canonical CelesTrak-replacement OMM catalog (typed contracts 1.0: FlatBuffers only). Deterministic per-NORAD precedence: a provider's fitted OMM wins over Space-Track GP only when the provider is at gate level hard-pass AND the fit is strictly fresher (epoch); otherwise Space-Track GP. An object present in either lane is never dropped; objects with no NORAD are quarantined, never keyed as NORAD 0. Each catalog record is the winning stored $OMM byte for byte (its CID is the winner's); the decision is one $CAT per object (PRODUCTS[0]: KIND Sgp4Elements or Sgp4XpElements by the set's theory, RECORD_CID the winner's CID, SOURCE_ID the winning source name, EPOCH, SELECTION_REASON the precedence rule); the batch goes out as an IngestRequest plus a size-prefixed $OMM record stream for hostcap/storage-ingest (storing and publishing are the flow's) and the size-prefixed $CAT stream. Gate status is data: config/provider-gate-status.json compiled in, overridden by node config (plugin.getConfig). Deterministic: no wall clock, batch_id = sha256 of the sorted input CIDs, NORADs ascending.",
   "pluginFamily": "analysis",
   "capabilities": [

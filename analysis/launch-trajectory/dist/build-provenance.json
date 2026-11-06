@@ -1,5 +1,11 @@
 {
-  "spacedatastandards": "1.261.0+1792716949507",
+  "spacedatastandards": "1.279.0",
   "schema": "LAM",
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "d1e88a0a59618958ad54cf33fd6f4d90df5752b24c66e7347032844a799643eb"
 }

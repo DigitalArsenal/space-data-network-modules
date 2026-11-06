@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.analysis.launch-trajectory",
   "name": "Launch trajectory tracking and projected insertion",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Reconstructs a launch ascent from altitude and speed telemetry (ground track, downrange, flight-path angle, instantaneous impact point, each sample's osculating apsides, and the insertion orbit at engine cutoff), and projects the insertion orbit of a scheduled launch from its pad, liftoff time, target orbit and a comparable flight's profile, including the liftoff times that join a reference plane. Results are $LAM only; no JSON report.",
   "pluginFamily": "analysis",
   "capabilities": [],

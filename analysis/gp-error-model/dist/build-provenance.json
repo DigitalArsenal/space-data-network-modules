@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -33,5 +33,11 @@
   "axisEngine": "foundation/frames/src/axis_engine.hpp",
   "sgp4": "foundation/sgp4-str3",
   "lambert": "analysis/lambert-izzo/include/lambert_izzo/solver.hpp",
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "d4ed65983c537f1b5fa1167bf9d69b5944d33987b07d91af637477dd93e2161f"
 }

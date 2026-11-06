@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.276.0",
+  "spacedatastandards": "1.279.0",
   "sdsFamilies": [
     "RFM",
     "TIM",
@@ -14,5 +14,11 @@
   ],
   "gateStatusVersion": "2026-07-13",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "bf9b7374d2d198beeb05ed9daf012468fe20dc7e034d3049cd32d1d4b8f2482f"
+  "wasmSha256": "2da50072af6cb753dfd3bfd34ff0edbba621b6cc533ee673df8e04980f4309d7",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "388f06fa7301dd6a27ea789e8b552630d962e8a879ae039a976fe9d2b35eff50"
 }

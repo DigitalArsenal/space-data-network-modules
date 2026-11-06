@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "flatbuffers": "25.9.23",
-    "spacedatastandards.org": "1.276.0"
+    "spacedatastandards.org": "1.279.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"
