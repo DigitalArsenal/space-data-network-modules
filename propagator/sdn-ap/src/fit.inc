@@ -405,7 +405,6 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       const int analytic = o.fit_drag ? 7 : 6;
       bool fd_ok = true;
       const NominalSat nominal(work);
-      xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the columns' copies read the iteration's nominal grids
       for (int a = 0; a < analytic && fd_ok; ++a) {
         const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
         double xh[kMaxParams];
