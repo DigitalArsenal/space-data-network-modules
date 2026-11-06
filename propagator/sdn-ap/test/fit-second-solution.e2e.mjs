@@ -2,7 +2,8 @@
 // E2E (task modules-sdn-ap-fit-second-solution-robustness-20261106; experiments FIT-SECOND-SOLUTION.md, Amendment 2): the
 // fit's second solution, a regression guard on the tesseral grid (SPEC 16.11). With each perturbed set its own grid, the fit's
 // finite-difference partials jump and THEMIS A 2013-02-15 stalls at 249.75 m with BTERM 4.506; the grid's sharing within a
-// set's perturbed copies converges to 104.78 m with BTERM 0.012027 (0.6.2: 109.52 m, 0.012046).
+// set's perturbed copies converges (ripple 6b60710fe: 104.77 m, BTERM 0.012028, days 1 / 3 / 7 201.1 / 294.3 / 421.8 m;
+// 0.6.2: 109.52 m, 0.012046, 211.7 / 314.1 / 419.9 m).
 // - THEMIS A, cutoff 2013-02-15 (SDNAP_THEMIS_ARC: the 72 h fit $OEM the experiment's run.mjs --save writes, NAIF's public
 //   kernel in GCRF at 300 s), AP vacuum (FORCES caps 31 and 20, Jacchia 1970 on the theory's flux model): FIT_RMS_KM at
 //   most 1.1 times the 0.6.2 base's 109.5 m (0.1205 km) and BTERM within 2 times the base's 0.0120 (0.0060 to 0.0240).
