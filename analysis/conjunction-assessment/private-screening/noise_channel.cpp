@@ -306,7 +306,7 @@ int main(int argc, char** argv) {
     aBlocks[w][k] = encryptVec(A, v);
   }
 
-  std::printf("{\"driver\":\"noise_channel\",\"seal\":\"4.1.1\",\"forkCommit\":\"55a0ca86\",\"rprimeM\":%.3f,\"raised2\":%lld,\"noiseS\":%lld,\"histBinsPerOctave\":16,\"rows\":[\n",
+  std::printf("{\n\"driver\":\"noise_channel\",\"seal\":\"4.1.1\",\"forkCommit\":\"55a0ca86\",\"rprimeM\":%.3f,\"raised2\":%lld,\"noiseS\":%lld,\"histBinsPerOctave\":16,\"rows\":[\n",
               rprime, (long long)P.raised2, (long long)P.noiseS);
   bool first = true;
   size_t total = 0, vmTotal = 0;
