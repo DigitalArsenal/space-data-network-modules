@@ -1034,6 +1034,15 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   return nullptr;
 }
 
+/// Adds a holder to a grid already held.
+inline void wide_grid_ref(WideGrid* g) {
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  for (int k = 0; k < c.count; ++k)
+    if (c.slot[k].g == g) { ++c.slot[k].refs; break; }
+  cache_unlock(&c.word);
+}
+
 /// Drops a holder; the last holder's grid stays idle until the next build.
 inline void wide_grid_drop(WideGrid* g) {
   if (g == nullptr) return;

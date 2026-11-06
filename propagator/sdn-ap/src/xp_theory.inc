@@ -1408,6 +1408,9 @@ struct XpSat {
   int32_t window_valid[2];
   int32_t sparse_count[2];    ///< checkpoints held per direction (index stride * (k + 1))
   Node sparse[2][kSparse];
+  int32_t wide_lock;          ///< AP above tess::kWideE: the schedule nodes' grids this set holds (SPEC 16.11)
+  tess::WideGrid* wide_node[2];
+  int32_t wide_node_j[2];
 };
 
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
@@ -1570,6 +1573,10 @@ inline void xp_release(XpSat& s) {
   s.ctx.sp = nullptr;
   s.ctx.sp_count = 0;
   if (s.ctx.wide_owned) tess::wide_grid_drop(s.ctx.wide);
+  for (int k = 0; k < 2; ++k) {
+    tess::wide_grid_drop(s.wide_node[k]);
+    s.wide_node[k] = nullptr;
+  }
   s.ctx.wide = nullptr;
   s.ctx.wide_owned = 0;
 }
@@ -1682,13 +1689,35 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
 inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   held = false;
   if (j == 0) { out = s.ctx.wide; return true; }
+  // the set keeps its last two nodes' grids; a hit adds the caller as a holder
+  lock(&s.wide_lock);
+  for (int k = 0; k < 2; ++k)
+    if (s.wide_node[k] != nullptr && s.wide_node_j[k] == j) {
+      out = s.wide_node[k];
+      tess::wide_grid_ref(out);
+      unlock(&s.wide_lock);
+      held = true;
+      return true;
+    }
+  unlock(&s.wide_lock);
   double yj[6];
   if (!mean_at(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
   const Kepler k = kepler_of(yj);
   if (!(k.e < 1.0)) return false;
   out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i);
-  held = out != nullptr;
-  return held;
+  if (out == nullptr) return false;
+  held = true;
+  // keep it in the slot farther from j
+  tess::wide_grid_ref(out);
+  lock(&s.wide_lock);
+  const int slot = s.wide_node[0] == nullptr ? 0 : s.wide_node[1] == nullptr ? 1
+                   : (std::abs(s.wide_node_j[0] - j) >= std::abs(s.wide_node_j[1] - j) ? 0 : 1);
+  tess::WideGrid* old = s.wide_node[slot];
+  s.wide_node[slot] = out;
+  s.wide_node_j[slot] = j;
+  unlock(&s.wide_lock);
+  tess::wide_grid_drop(old);
+  return true;
 }
 
 inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const Bodies* shared = nullptr) {
