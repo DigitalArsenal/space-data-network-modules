@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T14:18:20.617Z",
+  "generatedAt": "2026-11-06T14:56:06.879Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -84,7 +84,7 @@
       "pluginId": "com.orbpro.access",
       "name": "Access Analysis",
       "pluginFamily": "analysis",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "methodIds": [
         "compute_access_windows"
       ],
@@ -133,7 +133,7 @@
       "pluginId": "com.digitalarsenal.analysis.association",
       "name": "Observation association",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "methodIds": [
         "associate_observations",
         "solve_assignment"
@@ -245,7 +245,7 @@
       "pluginId": "com.orbpro.catalog-synthesis",
       "name": "Supplemental Catalog Synthesis",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "methodIds": [
         "synthesize_catalog"
       ],
@@ -880,7 +880,7 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.14.0",
+      "version": "0.14.1",
       "methodIds": [
         "accumulate",
         "attach_covariance",
@@ -955,7 +955,7 @@
       "pluginId": "com.orbpro.lambert-izzo",
       "name": "Izzo Lambert Solver",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "grid_search",
         "solve_lambert"
@@ -1042,7 +1042,7 @@
       "pluginId": "com.digitalarsenal.analysis.launch-cola",
       "name": "Launch collision avoidance screening",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "screen_launch_window"
       ],
@@ -1074,7 +1074,7 @@
       "pluginId": "com.digitalarsenal.analysis.launch-trajectory",
       "name": "Launch trajectory tracking and projected insertion",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "project_insertion",
         "track_ascent"
@@ -1113,7 +1113,7 @@
       "pluginId": "com.digitalarsenal.analysis.maneuver-detection",
       "name": "Maneuver detection",
       "pluginFamily": "analysis",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "methodIds": [
         "compare_ephemerides",
         "detect_maneuvers",
@@ -1162,7 +1162,7 @@
       "pluginId": "maneuver-planner",
       "name": "Maneuver Planning Plugin",
       "pluginFamily": "maneuver",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "methodIds": [
         "plan"
       ],
@@ -1292,7 +1292,7 @@
       "pluginId": "com.digitalarsenal.analysis.mission-screening",
       "name": "Ballistic Mission Screening Budgets",
       "pluginFamily": "analysis",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "screen_grid"
       ],

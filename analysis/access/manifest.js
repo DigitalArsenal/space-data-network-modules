@@ -12,7 +12,7 @@ import {
 
 export const ACCESS_PLUGIN_ID = "com.orbpro.access";
 export const ACCESS_PLUGIN_NAME = "Access Analysis";
-export const ACCESS_PLUGIN_VERSION = "1.0.0";
+export const ACCESS_PLUGIN_VERSION = "1.0.1";
 export const ACCESS_PLUGIN_DESCRIPTION =
   "Access-window analysis for mission-planning and contact-interval evaluation.";
 export const ACCESS_MANIFEST_BYTES_SYMBOL = "access_plugin_manifest_bytes";
