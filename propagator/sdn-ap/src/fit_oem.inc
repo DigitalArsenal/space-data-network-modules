@@ -376,10 +376,6 @@ static int fit_blocks() {
     uint32_t block_index = 0;
     for (const ephemerisDataBlock* blk : *blocks) {
       ++block_index;
-      // SPEC 16.11: every set the block's fit initializes (the solve's nominal, trial steps and perturbed copies, the fit's
-      // covariance partials, its held-out and residual-record evaluations) takes exact grids, so the fit's own evaluations see
-      // the grid at their own elements; flights and covariance propagation outside the fit share
-      xpt::tess::ExactGridScope exact;
       // the block's center: Earth (the theories here are geocentric; a Moon-centered or heliocentric block is
       // refused by name, never read as geocentric)
       if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0 && !oem::same_text(blk->CENTER_NAME()->c_str(), "EARTH")) {

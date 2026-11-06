@@ -59,15 +59,16 @@ const arc = fs.readFileSync(new URL(`fixtures/${ARC.file}`, import.meta.url));
 check(sha256(arc) === ARC.sha256, `${ARC.file} is ${sha256(arc)}, pinned ${ARC.sha256}`);
 if (sha256(arc) === ARC.sha256) {
   const config = configuration({ theory: "AP", forces: VACUUM_AP });
-  // SPEC 16.11: the fit's grid lookups (sdnap_wide_grid_stats: [0] shared, [1] exact), reset before the fit, read after it
+  // SPEC 16.11: the fit's grid lookups (sdnap_wide_grid_stats: [0] by the set's own key, [1] exact), reset before the fit, read after it
   const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16);
   x.sdnap_wide_grid_stats(1, statsPtr);
   const c = stats(await fit(cand, arc, config));
   x.sdnap_wide_grid_stats(1, statsPtr);
   const [shared, exact] = Array.from(new Float64Array(cand.memory.buffer, statsPtr, 2));
   x.sdnap_free(statsPtr);
-  check(shared === 0 && exact > 0, `THEMIS A fit: ${shared} shared and ${exact} exact grid lookups (every lookup of the fit exact)`);
-  console.log(`THEMIS A fit grid lookups: ${shared} shared, ${exact} exact`);
+  // every lookup is by the set's own exact key ([0]) or, for a copy, through its nominal's GridShareScope (no lookup); none exact
+  check(exact === 0 && shared > 0, `THEMIS A fit: ${shared} keyed and ${exact} exact grid lookups (the fit's sets by their own keys, none exact)`);
+  console.log(`THEMIS A fit grid lookups: ${shared} keyed, ${exact} exact`);
   const b = stats(await fit(base, arc, config));
   const rmsBound = THEMIS_A.rmsRatio * THEMIS_A.baseRmsKm, bLow = THEMIS_A.baseBterm / THEMIS_A.btermRatio, bHigh = THEMIS_A.baseBterm * THEMIS_A.btermRatio;
   check(c.rms <= rmsBound, `THEMIS A: FIT_RMS_KM ${c.rms} above ${rmsBound}`);

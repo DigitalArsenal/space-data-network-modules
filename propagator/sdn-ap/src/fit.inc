@@ -135,6 +135,21 @@ struct Result {
 };
 
 /// Residuals of the trial row: model minus observed, km, 3 per sample.
+/// SPEC 16.11: an iteration's nominal set, held while its copies are built inside its xpt::GridShareScope (nullptr when it does not
+/// initialize: its copies then take their own grids).
+struct NominalSat {
+  xpt::XpSat* s = nullptr;
+  explicit NominalSat(const ElementRow& row) {
+    s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+    if (s != nullptr && xpt::xp_init(elements_of(row), *s) != kPropOk) { std::free(s); s = nullptr; }
+  }
+  ~NominalSat() {
+    if (s != nullptr) { xpt::xp_release(*s); std::free(s); }
+  }
+  NominalSat(const NominalSat&) = delete;
+  NominalSat& operator=(const NominalSat&) = delete;
+};
+
 inline bool residuals(const ElementRow& row, const double* t, const double* r, int count, double* res) {
   Elements e = elements_of(row);
   xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
@@ -292,6 +307,7 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
         ElementRow none = probe;
         none.bterm = 0.0;
         Elements e0 = elements_of(none);
+        xpt::GridShareScope share(s);  // SPEC 16.11: the drag-free copy reads the probe's grids
         xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
         if (s0 != nullptr && xpt::xp_init(e0, *s0) == kPropOk)
           ndot_per_drag = (s->epoch.f[xpt::kN] - s0->epoch.f[xpt::kN]) / probe.bterm;
@@ -320,6 +336,8 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       ElementRow bumped = work;
       const double step = std::fabs(work.agom) * 0.01 > 1e-4 ? std::fabs(work.agom) * 0.01 : 1e-4;
       bumped.agom = work.agom + step;
+      const NominalSat nominal(work);
+      xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
       if (residuals(bumped, t, r, count, trial)) {
         if (o.agom_log)  // per unit ln AGOM: AGOM times the column per unit AGOM
           for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = work.agom * ((trial[i] - res[i]) / step);
@@ -386,6 +404,8 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       // the element and drag columns by one-sided differences of the theory, then the same trial
       const int analytic = o.fit_drag ? 7 : 6;
       bool fd_ok = true;
+      const NominalSat nominal(work);
+      xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the columns' copies read the iteration's nominal grids
       for (int a = 0; a < analytic && fd_ok; ++a) {
         const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
         double xh[kMaxParams];
