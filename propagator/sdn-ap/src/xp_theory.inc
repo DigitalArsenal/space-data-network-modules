@@ -748,6 +748,8 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
 #include "resonance.inc"
 #include "tesseral.inc"
 
+struct XpSat;
+
 /// Per-object constants of the rate function.
 struct RateContext {
   double d50_epoch;
@@ -782,6 +784,7 @@ struct RateContext {
   const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
   double wide_blend;
   uint8_t wide_exact;                 ///< xp_init's exact_grid: this set's grids are built at its own elements, never shared
+  XpSat* wide_anchor;                 ///< the nominal set whose grids this copy reads (GridShareScope); nullptr: its own
 };
 
 inline int ap_resonance_class(const RateContext& ctx, double n) {
@@ -1414,6 +1417,20 @@ struct XpSat {
   int32_t wide_node_j[2];
 };
 
+/// SPEC 16.11: the nominal set whose grids the copies initialized on this thread while a GridShareScope lives read (the covariance's
+/// sigma sets); nullptr outside one.
+inline XpSat*& grid_share_anchor() {
+  static thread_local XpSat* anchor = nullptr;
+  return anchor;
+}
+struct GridShareScope {
+  XpSat* prev;
+  explicit GridShareScope(XpSat* nominal) : prev(grid_share_anchor()) { grid_share_anchor() = nominal; }
+  ~GridShareScope() { grid_share_anchor() = prev; }
+  GridShareScope(const GridShareScope&) = delete;
+  GridShareScope& operator=(const GridShareScope&) = delete;
+};
+
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const tess::Terms& t = s.ctx.selected_terms;
@@ -1454,10 +1471,20 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     s.ctx.sp = kept;
     s.ctx.sp_count = count;
     if (e.eo > tess::kWideE && s.ctx.wide == nullptr) {
-      // SPEC 16.11: the families of degree 2 to spd as a grid in E; a class change's temporary keeps its parent's
-      tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl, s.ctx.wide_exact != 0);
-      if (g == nullptr) return false;
-      s.ctx.wide = g;
+      // SPEC 16.11: the families of degree 2 to spd as a grid in E, by exact key; a copy inside its nominal's GridShareScope reads
+      // the nominal's grid when within the share range; a class change's temporary keeps its parent's
+      XpSat* anchor = s.ctx.wide_exact ? nullptr : grid_share_anchor();
+      const tess::WideGrid* ag = anchor != nullptr ? anchor->ctx.wide : nullptr;
+      if (ag != nullptr && ag->degree == spd && anchor->ctx.resonance == res && std::fabs(e.eo - ag->e) <= tess::kShareE &&
+          std::fabs(e.xincl - ag->i) <= tess::kShareI && std::fabs(std::pow(kKe / n0, kX2o3) / ag->a - 1.0) <= tess::kShareA) {
+        tess::wide_grid_ref(anchor->ctx.wide);
+        s.ctx.wide = anchor->ctx.wide;
+        s.ctx.wide_anchor = anchor;
+      } else {
+        tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl, s.ctx.wide_exact != 0);
+        if (g == nullptr) return false;
+        s.ctx.wide = g;
+      }
       s.ctx.wide_owned = 1;
     }
   }
@@ -1693,6 +1720,7 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
 inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   held = false;
   if (j == 0) { out = s.ctx.wide; return true; }
+  if (s.ctx.wide_anchor != nullptr) return wide_node(*s.ctx.wide_anchor, j, out, held);  // a copy reads its nominal's nodes
   // the set keeps its last two nodes' grids; a hit adds the caller as a holder
   lock(&s.wide_lock);
   for (int k = 0; k < 2; ++k)
