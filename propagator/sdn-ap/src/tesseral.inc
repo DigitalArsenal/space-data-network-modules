@@ -908,38 +908,33 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
 /// The grid of an object above kWideE at its mean elements (n, e, i), with its derivative grids; false out of memory.
 inline bool wide_grid_build(int degree, int cls, double n, double e, double inc, WideGrid& g) {
   const int cap = degree * (2 * degree + 1);
-  const size_t one = static_cast<size_t>(cap) * 6 * kGridN * 2;
-  double* s = static_cast<double*>(std::malloc(7 * one * sizeof(double)));
+  const size_t per = static_cast<size_t>(6) * kGridN * 2, one = static_cast<size_t>(cap) * per;
+  double* sp = static_cast<double*>(std::malloc(one * sizeof(double)));
+  double* sn = static_cast<double*>(std::malloc(one * sizeof(double)));
+  float* v = static_cast<float*>(std::malloc(static_cast<size_t>(cap) * 4 * per * sizeof(float)));
   int8_t* fm = static_cast<int8_t*>(std::malloc(cap));
   int8_t* fw = static_cast<int8_t*>(std::malloc(cap));
   int8_t* sm = static_cast<int8_t*>(std::malloc(2 * cap));
-  const auto fail = [&]() { std::free(s); std::free(fm); std::free(fw); std::free(sm); return false; };
-  if (s == nullptr || fm == nullptr || fw == nullptr || sm == nullptr) return fail();
-  const double nda = 1.0 / std::pow(1.0 + kGridDa, 1.5), ndm = 1.0 / std::pow(1.0 - kGridDa, 1.5);
-  const int count = wide_families(degree, cls, n, e, inc, fm, fw, s);
-  const int checks[6] = {wide_families(degree, cls, n, e + kGridDe, inc, sm, sm + cap, s + one),
-                         wide_families(degree, cls, n, e - kGridDe, inc, sm, sm + cap, s + 2 * one),
-                         wide_families(degree, cls, n, e, inc + kGridDi, sm, sm + cap, s + 3 * one),
-                         wide_families(degree, cls, n, e, inc - kGridDi, sm, sm + cap, s + 4 * one),
-                         wide_families(degree, cls, n * nda, e, inc, sm, sm + cap, s + 5 * one),
-                         wide_families(degree, cls, n * ndm, e, inc, sm, sm + cap, s + 6 * one)};
-  std::free(sm);
+  const auto fail = [&]() { std::free(sp); std::free(sn); std::free(v); std::free(fm); std::free(fw); std::free(sm); return false; };
+  if (sp == nullptr || sn == nullptr || v == nullptr || fm == nullptr || fw == nullptr || sm == nullptr) return fail();
+  const int count = wide_families(degree, cls, n, e, inc, fm, fw, sp);
   if (count < 0) return fail();
-  for (int c = 0; c < 6; ++c) if (checks[c] != count) return fail();
-  const size_t per = static_cast<size_t>(6) * kGridN * 2;
-  float* v = static_cast<float*>(std::malloc(static_cast<size_t>(count) * 4 * per * sizeof(float)));
-  if (v == nullptr) { sm = nullptr; return fail(); }
   for (int f = 0; f < count; ++f)
-    for (size_t k = 0; k < per; ++k) {
-      const size_t at = f * per + k;
-      float* o = v + static_cast<size_t>(f) * 4 * per;
-      o[k] = static_cast<float>(s[at]);
-      o[per + k] = static_cast<float>((s[one + at] - s[2 * one + at]) / (2.0 * kGridDe));
-      o[2 * per + k] = static_cast<float>((s[3 * one + at] - s[4 * one + at]) / (2.0 * kGridDi));
-      o[3 * per + k] = static_cast<float>((s[5 * one + at] - s[6 * one + at]) / (2.0 * kGridDa));
-    }
-  std::free(s);
-  std::free(g.m); std::free(g.w); std::free(g.v);
+    for (size_t k = 0; k < per; ++k) v[static_cast<size_t>(f) * 4 * per + k] = static_cast<float>(sp[f * per + k]);
+  // the derivative grids, one central difference at a time: e, i, a / a
+  const double nda = 1.0 / std::pow(1.0 + kGridDa, 1.5), ndm = 1.0 / std::pow(1.0 - kGridDa, 1.5);
+  const double hp[3][3] = {{n, e + kGridDe, inc}, {n, e, inc + kGridDi}, {n * nda, e, inc}};
+  const double hm[3][3] = {{n, e - kGridDe, inc}, {n, e, inc - kGridDi}, {n * ndm, e, inc}};
+  const double step[3] = {2.0 * kGridDe, 2.0 * kGridDi, 2.0 * kGridDa};
+  for (int d = 0; d < 3; ++d) {
+    if (wide_families(degree, cls, hp[d][0], hp[d][1], hp[d][2], sm, sm + cap, sp) != count ||
+        wide_families(degree, cls, hm[d][0], hm[d][1], hm[d][2], sm, sm + cap, sn) != count)
+      return fail();
+    for (int f = 0; f < count; ++f)
+      for (size_t k = 0; k < per; ++k)
+        v[static_cast<size_t>(f) * 4 * per + (d + 1) * per + k] = static_cast<float>((sp[f * per + k] - sn[f * per + k]) / step[d]);
+  }
+  std::free(sp); std::free(sn); std::free(sm);
   g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v;
   g.n = n; g.e = e; g.i = inc; g.a = std::pow(kKe / n, kX2o3);
   return true;
@@ -948,6 +943,88 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
 inline void wide_grid_release(WideGrid& g) {
   std::free(g.m); std::free(g.w); std::free(g.v);
   g.m = g.w = nullptr; g.v = nullptr; g.count = 0;
+}
+
+/// Grids are shared by the objects whose mean elements lie in one grid's linear range (a fit's partials, a covariance's
+/// perturbed sets): each counted, freed when its last holder drops it, except the one most recently dropped, kept until
+/// another grid is built (a fit's next iteration finds it). One idle grid at most.
+struct GridSlot {
+  WideGrid* g;
+  int cls, refs;
+};
+struct GridCache {
+  int32_t word;
+  int count;
+  GridSlot slot[64];
+};
+inline GridCache& grid_cache() {
+  static GridCache c{};
+  return c;
+}
+inline void cache_lock(int32_t* w) {
+  int32_t expected = 0;
+  while (!__atomic_compare_exchange_n(w, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) expected = 0;
+}
+inline void cache_unlock(int32_t* w) { __atomic_store_n(w, 0, __ATOMIC_RELEASE); }
+inline void free_grid(WideGrid* g) {
+  wide_grid_release(*g);
+  std::free(g);
+}
+
+/// A grid for (n, e, i): a live or idle one whose linear range holds the elements, else a new one; nullptr out of memory.
+inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc) {
+  GridCache& c = grid_cache();
+  const double a = std::pow(kKe / n, kX2o3);
+  cache_lock(&c.word);
+  for (int k = 0; k < c.count; ++k) {
+    const WideGrid& g = *c.slot[k].g;
+    if (g.degree == degree && c.slot[k].cls == cls && std::fabs(e - g.e) <= kRegridE && std::fabs(inc - g.i) <= kRegridI &&
+        std::fabs(a / g.a - 1.0) <= kRegridA) {
+      ++c.slot[k].refs;
+      WideGrid* hit = c.slot[k].g;
+      cache_unlock(&c.word);
+      return hit;
+    }
+  }
+  // a build: the idle grid goes first, so a worker holds one object's grids
+  for (int k = 0; k < c.count; ++k)
+    if (c.slot[k].refs == 0) {
+      free_grid(c.slot[k].g);
+      c.slot[k] = c.slot[--c.count];
+      break;
+    }
+  cache_unlock(&c.word);
+  WideGrid* g = static_cast<WideGrid*>(std::calloc(1, sizeof(WideGrid)));
+  if (g == nullptr) return nullptr;
+  if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
+  cache_lock(&c.word);
+  if (c.count < 64) {
+    c.slot[c.count++] = GridSlot{g, cls, 1};
+    cache_unlock(&c.word);
+    return g;
+  }
+  cache_unlock(&c.word);
+  free_grid(g);
+  return nullptr;
+}
+
+/// Drops a holder; the last holder's grid stays idle until the next build.
+inline void wide_grid_drop(WideGrid* g) {
+  if (g == nullptr) return;
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  for (int k = 0; k < c.count; ++k)
+    if (c.slot[k].g == g) {
+      if (--c.slot[k].refs == 0)
+        for (int j = 0; j < c.count; ++j)
+          if (j != k && c.slot[j].refs == 0) {  // one idle grid at most
+            free_grid(c.slot[j].g);
+            c.slot[j] = c.slot[--c.count];
+            break;
+          }
+      break;
+    }
+  cache_unlock(&c.word);
 }
 
 /// True when the mean elements have left the grid's linear range (kRegridE, kRegridI, kRegridA).
