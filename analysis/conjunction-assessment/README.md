@@ -242,6 +242,17 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   the `UNCERTAINTY_SOURCE`. Where a set carries none, the event keeps the Alfano maximum (`MAXIMUM_PROBABILITY_ONLY`,
   basis `NONE`); the empirical model (`uncertainty_model`) applies to element sets the module flies itself, not to
   a flown `$OEM`. Which one was used is on every event.
+- **AP covariance needs a verified producer build.** An AP set keeps its miss distance, and the collision
+  probability from its covariance is refused until its producer build is verified. The verified builds are the
+  request's `CONTROLS.VERIFIED_COVARIANCE_PRODUCERS` (`controls.verifiedCovarianceProducers`, each a
+  `CQRVerifiedCovarianceProducer`: `PRODUCER`, `PRODUCER_SHA256`, `VERIFICATION_REFERENCE`); nothing is compiled in.
+  A build matches on `PRODUCER_SHA256` where both the list entry and the set's `PROVENANCE.PRODUCER_SHA256` state
+  one, else on `PVN.PRODUCER` verbatim. An AP set whose flight carries covariance and whose build is not listed (an
+  empty or absent list lists none) is screened without that covariance: its `COVARIANCE_BASIS` is `NONE`,
+  its events carry the covariance-free maximum and no probability from covariance, and every event with it states
+  `PROBABILITY_REFUSAL` `pc-covariance-unverified:AP <PVN.PRODUCER>` (`(no producer)` when it states none); the set
+  is named in the result's `covarianceRefused`. Miss distance and TCA are unchanged. SGP4XP sets, SGP4 sets and
+  every other source are unaffected. The module itself never sees a source's producer: the flow applies the list.
 - **Parity.** `node tests/ocm-sets-screening.e2e.mjs`: the registered sets of `tests/fixtures/ocm-sets/`
   (`tests/record-ocm-sets.mjs`: sdn-ap `fit` on its own 0.4.0 fixture inputs, AP and SGP4XP, and two sets turned
   across the first one's plane and refitted by sdn-ap from the other theory's flight, so each carries a fit
@@ -253,7 +264,13 @@ host flow `screenOcmSets` (`src/js/ocmSetScreen.mjs`, exported by `index.js`) sc
   Measured: 104 events over four crossings, 0.010 mm and 0.000 ms apart; the probabilities within 1.8e-4 relative
   (the existing way's records pass through flatc JSON text). Against the existing way at 10 s the same events are
   0.26 m and 0.08 ms apart: the JD double's 40 us resolution at a sample epoch (0.3 m at 7.6 km/s), which cancels
-  between two sources on one grid, not the Hermite truncation (recorded, not gated).
+  between two sources on one grid, not the Hermite truncation (recorded, not gated). The flow lists the sets'
+  producer build for that comparison. On an empty list, a list without it and no list, the AP sets A and B lose
+  their covariance: all 104 events state the refusal, none carries a probability from covariance (A x B: 30 events
+  with a Pc listed, 0 refused), and miss distance and TCA are exactly the listed screen's. Where both sides state a
+  hash, the hash decides: A passes on it under another producer string, B is refused on it under its own. The
+  SGP4XP sets screened alone give the events 0.18.1 gave, byte for byte (30 events, 80,640 bytes, the embedded
+  message's wall-clock creation time and identifier aside; `tests/record-xp-screen.mjs`).
 
 ## Build and runtime contract
 
