@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T02:45:26.986Z",
+  "generatedAt": "2026-11-06T04:14:10.279Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -2494,7 +2494,7 @@
       "pluginId": "com.digitalarsenal.data-source.deep-space-spacecraft",
       "name": "Notable deep-space spacecraft (Horizons)",
       "pluginFamily": "data_source",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "methodIds": [
         "advance",
         "build_oem",
@@ -2515,7 +2515,7 @@
       ],
       "cxxSourceFileCount": 2,
       "cSourceFileCount": 0,
-      "testFileCount": 13,
+      "testFileCount": 16,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -2533,9 +2533,12 @@
         "tests/fixtures/horizons/events-table.json",
         "tests/fixtures/horizons/reference.json",
         "tests/fixtures/horizons/regime-cassette.json.gz",
+        "tests/fixtures/production-volume/cassette.json.gz",
+        "tests/fixtures/production-volume/provenance.json",
         "tests/horizons-stages.mjs",
         "tests/native-publication.mjs",
-        "tests/notable-trajectories.e2e.test.mjs"
+        "tests/notable-trajectories.e2e.test.mjs",
+        "tests/production-volume.e2e.mjs"
       ]
     },
     {
