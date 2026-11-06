@@ -2,14 +2,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { toLoadableWasmBytes } from 'space-data-module-sdk/bundle';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 
 export const root = fileURLToPath(new URL('../..', import.meta.url));
 export const wasmPath = process.env.SGP4_XP_WASM ?? path.join(root, 'dist/isomorphic/module.wasm');
 export const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin-manifest.json'), 'utf8'));
 
+// The artifact is signed: the publication trailer and sds.manifest section are not part of the bytes a runtime compiles.
+export const loadableBytes = toLoadableWasmBytes(fs.readFileSync(wasmPath));
+
 export async function loadModule() {
-  const harness = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: 'direct' });
+  const harness = await createBrowserModuleHarness({ wasmSource: loadableBytes, manifest, surface: 'direct' });
   return {
     harness,
     /** Invokes a method; throws on a nonzero status; returns the output frames by port. */

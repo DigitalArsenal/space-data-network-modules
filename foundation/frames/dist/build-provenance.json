@@ -1,5 +1,5 @@
 {
-  "spacedatastandards": "1.261.0",
+  "spacedatastandards": "1.279.0",
   "erfaSourceFiles": 248,
   "erfaRoot": "../../higherpop/third_party/erfa",
   "threadModel": "wasi-sequential",
@@ -8,5 +8,5 @@
     "keyId": "module-owner-2026-10-15",
     "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
   },
-  "canonicalWasmSha256": "fc289225bb174bdb737dd47b8e48eadc988d61d889641b54923c7e6c98d0b41e"
+  "canonicalWasmSha256": "22160c32a2d7f127ee0efd810d22441d39af3828d98b5e2f413f139712af87ae"
 }

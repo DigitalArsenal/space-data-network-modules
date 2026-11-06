@@ -1,7 +1,7 @@
 {
   "name": "space-data-network-module-propagator-sgp4",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.4.2",
   "type": "module",
   "sdn-module": "./dist/isomorphic/module.wasm",
   "scripts": {
@@ -16,7 +16,7 @@
     "flatbuffers": "^25.2.10",
     "flatc-wasm": "^26.1.32",
     "space-data-module-sdk": "0.9.12",
-    "spacedatastandards.org": "1.276.0"
+    "spacedatastandards.org": "1.279.0"
   },
   "overrides": {
     "hd-wallet-wasm": "2.1.2"

@@ -109,33 +109,19 @@ function encodeSpwRecord({
 } = {}) {
   const builder = new flatbuffers.Builder(256);
   const dateOffset = builder.createString(date);
-  const root = SPW.createSPW(
-    builder,
-    dateOffset,
-    0,
-    1,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    ...ap3Hour,
-    apAvg,
-    0,
-    0,
-    0,
-    f107Obs,
-    f107Adj,
-    f107DataType,
-    f107ObsCenter81,
-    f107Obs,
-    f107AdjCenter81,
-    f107Adj,
-  );
+  SPW.startSPW(builder);
+  SPW.addDate(builder, dateOffset);
+  SPW.addNd(builder, 1);
+  [SPW.addAp1, SPW.addAp2, SPW.addAp3, SPW.addAp4, SPW.addAp5, SPW.addAp6, SPW.addAp7, SPW.addAp8].forEach((add, bin) => add(builder, ap3Hour[bin]));
+  SPW.addApAvg(builder, apAvg);
+  SPW.addF107Obs(builder, f107Obs);
+  SPW.addF107Adj(builder, f107Adj);
+  SPW.addF107DataType(builder, f107DataType);
+  SPW.addF107ObsCenter81(builder, f107ObsCenter81);
+  SPW.addF107ObsLast81(builder, f107Obs);
+  SPW.addF107AdjCenter81(builder, f107AdjCenter81);
+  SPW.addF107AdjLast81(builder, f107Adj);
+  const root = SPW.endSPW(builder);
   SPW.finishSPWBuffer(builder, root);
   return builder.asUint8Array();
 }
@@ -657,8 +643,10 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // (switch 9 = -1, 400 km, 45 N 100 W, day 173, 45000 s UT) gives the
     // values below, recorded from the retired JSON surface of 0.1.0. Equality
     // checks the selection; the native published vectors check the model.
-    assert.equal(hfc.DENSITY_KG_PER_M3(0), 2.4114616569297282e-12);
-    assert.equal(hfc.TEMPERATURE_K(0), 1154.2710897873123);
+    // The rebuilt module on SDS 1.279.0 differs from the recorded values by one unit in the last place (8.8e-16 and
+    // 2.7e-16 relative): equality to 1e-14.
+    assert.ok(Math.abs(hfc.DENSITY_KG_PER_M3(0) / 2.4114616569297282e-12 - 1) <= 1e-14);
+    assert.ok(Math.abs(hfc.TEMPERATURE_K(0) / 1154.2710897873123 - 1) <= 1e-14);
   });
 
   test(`HFC NRLMSISE00 uses daily Ap when the ap history is incomplete and reports forecasts on ${runtimeKind}`, async (t) => {

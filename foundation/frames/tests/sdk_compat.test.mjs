@@ -14,12 +14,9 @@ const MANIFEST_PATH = new URL("../plugin-manifest.json", import.meta.url);
 const ISOMORPHIC_WASM_PATH = new URL("../dist/isomorphic/module.wasm", import.meta.url);
 const STANDARDS_ROOT = fileURLToPath(new URL("../node_modules/spacedatastandards.org/", import.meta.url));
 
-// The dev signer this repo signs committed artifacts with
-// (space-data-module-sdk/test/support/dev-module-signing-keypair.json). It is a
-// DEV key with a published seed: it proves the artifact was produced by this
-// build lane, not that it is trustworthy for production delivery.
+// The module owner's publisher key (scripts/trusted-publishers.json, keyId module-owner-2026-10-15).
 const DEV_MODULE_SIGNER_PUBLIC_KEY_HEX =
-  "cf4625795484d8efe18860141cfdeaaaed7bbee9209488405b6ddeac7543fe78";
+  "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34";
 
 function readManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
@@ -105,7 +102,7 @@ test("foundation/frames artifact is signed, and the signature covers exactly wha
   });
   assert.equal(report.signed, true);
   assert.equal(report.verified, true);
-  assert.equal(report.keyId, "sdm-dev-test-2026");
+  assert.equal(report.keyId, "module-owner-2026-10-15");
 
   const loadable = Buffer.from(toLoadableWasmBytes(bytes));
   const loadableHashHex = createHash("sha256").update(loadable).digest("hex");

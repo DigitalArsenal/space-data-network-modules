@@ -1,6 +1,12 @@
 {
-  "spacedatastandards": "1.263.0",
+  "spacedatastandards": "1.279.0",
   "parameterRosterSize": 335,
   "erfaSourceFiles": 248,
-  "threadModel": "wasi-sequential"
+  "threadModel": "wasi-sequential",
+  "signed": true,
+  "signer": {
+    "keyId": "module-owner-2026-10-15",
+    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
+  },
+  "canonicalWasmSha256": "d2a4cb9c475908c3ca827efd1dd344ddc2895e3c8a383ac7741e5275097ed547"
 }

@@ -13,10 +13,34 @@ static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
               FLATBUFFERS_VERSION_REVISION == 19,
              "Non-compatible flatbuffers version included");
 
+#include "OPP_generated.h"
+#include "RFB_generated.h"
+#include "SCV_generated.h"
+
+struct SNRSpectralBand;
+struct SNRSpectralBandBuilder;
+struct SNRSpectralBandT;
+
+struct SNRMounting;
+struct SNRMountingBuilder;
+struct SNRMountingT;
+
+struct SNRRfParameters;
+struct SNRRfParametersBuilder;
+struct SNRRfParametersT;
+
+struct SNROpticalParameters;
+struct SNROpticalParametersBuilder;
+struct SNROpticalParametersT;
+
 struct SNR;
 struct SNRBuilder;
 struct SNRT;
 
+/// What kind of sensor a definition describes. ORDINALS ARE WIRE VALUES: new
+/// members are APPENDED ONLY, so members after ACOUSTIC are out of family order
+/// by design. RADAR_PULSE is 0, a real kind, so TYPE defaults to UNSPECIFIED and
+/// a writer always sets TYPE.
 enum class SensorType : int8_t {
   RADAR_PULSE = 0,
   RADAR_DOPPLER = 1,
@@ -34,11 +58,27 @@ enum class SensorType : int8_t {
   SONAR_ACTIVE = 13,
   SONAR_PASSIVE = 14,
   ACOUSTIC = 15,
+  OPTICAL_TELESCOPE = 16,
+  MULTISPECTRAL_IMAGER = 17,
+  HYPERSPECTRAL_IMAGER = 18,
+  SAR = 19,
+  ALTIMETER = 20,
+  SCATTEROMETER = 21,
+  RADIOMETER = 22,
+  LIDAR = 23,
+  PASSIVE_RF_ESM = 24,
+  SIGINT = 25,
+  COMMS_ANTENNA = 26,
+  TT_AND_C_ANTENNA = 27,
+  PHASED_ARRAY_EARLY_WARNING = 28,
+  /// The writer states no kind. The default of TYPE, so an unset TYPE is not
+  /// read as RADAR_PULSE.
+  UNSPECIFIED = 29,
   MIN = RADAR_PULSE,
-  MAX = ACOUSTIC
+  MAX = UNSPECIFIED
 };
 
-inline const SensorType (&EnumValuesSensorType())[16] {
+inline const SensorType (&EnumValuesSensorType())[30] {
   static const SensorType values[] = {
     SensorType::RADAR_PULSE,
     SensorType::RADAR_DOPPLER,
@@ -55,13 +95,27 @@ inline const SensorType (&EnumValuesSensorType())[16] {
     SensorType::MAW,
     SensorType::SONAR_ACTIVE,
     SensorType::SONAR_PASSIVE,
-    SensorType::ACOUSTIC
+    SensorType::ACOUSTIC,
+    SensorType::OPTICAL_TELESCOPE,
+    SensorType::MULTISPECTRAL_IMAGER,
+    SensorType::HYPERSPECTRAL_IMAGER,
+    SensorType::SAR,
+    SensorType::ALTIMETER,
+    SensorType::SCATTEROMETER,
+    SensorType::RADIOMETER,
+    SensorType::LIDAR,
+    SensorType::PASSIVE_RF_ESM,
+    SensorType::SIGINT,
+    SensorType::COMMS_ANTENNA,
+    SensorType::TT_AND_C_ANTENNA,
+    SensorType::PHASED_ARRAY_EARLY_WARNING,
+    SensorType::UNSPECIFIED
   };
   return values;
 }
 
 inline const char * const *EnumNamesSensorType() {
-  static const char * const names[17] = {
+  static const char * const names[31] = {
     "RADAR_PULSE",
     "RADAR_DOPPLER",
     "RADAR_CW",
@@ -78,218 +132,1083 @@ inline const char * const *EnumNamesSensorType() {
     "SONAR_ACTIVE",
     "SONAR_PASSIVE",
     "ACOUSTIC",
+    "OPTICAL_TELESCOPE",
+    "MULTISPECTRAL_IMAGER",
+    "HYPERSPECTRAL_IMAGER",
+    "SAR",
+    "ALTIMETER",
+    "SCATTEROMETER",
+    "RADIOMETER",
+    "LIDAR",
+    "PASSIVE_RF_ESM",
+    "SIGINT",
+    "COMMS_ANTENNA",
+    "TT_AND_C_ANTENNA",
+    "PHASED_ARRAY_EARLY_WARNING",
+    "UNSPECIFIED",
     nullptr
   };
   return names;
 }
 
 inline const char *EnumNameSensorType(SensorType e) {
-  if (::flatbuffers::IsOutRange(e, SensorType::RADAR_PULSE, SensorType::ACOUSTIC)) return "";
+  if (::flatbuffers::IsOutRange(e, SensorType::RADAR_PULSE, SensorType::UNSPECIFIED)) return "";
   const size_t index = static_cast<size_t>(e);
   return EnumNamesSensorType()[index];
 }
 
-enum class SensorMode : int8_t {
-  OFF = 0,
-  STANDBY = 1,
-  SEARCH = 2,
-  ACQUISITION = 3,
-  TRACK = 4,
-  TRACK_WHILE_SCAN = 5,
-  DESIGNATE = 6,
-  JAMMED = 7,
-  MIN = OFF,
-  MAX = JAMMED
+/// Whether the sensor radiates to sense (ACTIVE) or only receives (PASSIVE).
+enum class snrEmissionMode : int8_t {
+  UNSPECIFIED = 0,
+  ACTIVE = 1,
+  PASSIVE = 2,
+  MIN = UNSPECIFIED,
+  MAX = PASSIVE
 };
 
-inline const SensorMode (&EnumValuesSensorMode())[8] {
-  static const SensorMode values[] = {
-    SensorMode::OFF,
-    SensorMode::STANDBY,
-    SensorMode::SEARCH,
-    SensorMode::ACQUISITION,
-    SensorMode::TRACK,
-    SensorMode::TRACK_WHILE_SCAN,
-    SensorMode::DESIGNATE,
-    SensorMode::JAMMED
+inline const snrEmissionMode (&EnumValuessnrEmissionMode())[3] {
+  static const snrEmissionMode values[] = {
+    snrEmissionMode::UNSPECIFIED,
+    snrEmissionMode::ACTIVE,
+    snrEmissionMode::PASSIVE
   };
   return values;
 }
 
-inline const char * const *EnumNamesSensorMode() {
-  static const char * const names[9] = {
-    "OFF",
-    "STANDBY",
-    "SEARCH",
-    "ACQUISITION",
+inline const char * const *EnumNamessnrEmissionMode() {
+  static const char * const names[4] = {
+    "UNSPECIFIED",
+    "ACTIVE",
+    "PASSIVE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesnrEmissionMode(snrEmissionMode e) {
+  if (::flatbuffers::IsOutRange(e, snrEmissionMode::UNSPECIFIED, snrEmissionMode::PASSIVE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessnrEmissionMode()[index];
+}
+
+/// How a spectral band is used. Matters for antennas and EW receivers whose
+/// transmit and receive bands differ.
+enum class snrBandDirection : int8_t {
+  UNSPECIFIED = 0,
+  RECEIVE = 1,
+  TRANSMIT = 2,
+  TRANSCEIVE = 3,
+  MIN = UNSPECIFIED,
+  MAX = TRANSCEIVE
+};
+
+inline const snrBandDirection (&EnumValuessnrBandDirection())[4] {
+  static const snrBandDirection values[] = {
+    snrBandDirection::UNSPECIFIED,
+    snrBandDirection::RECEIVE,
+    snrBandDirection::TRANSMIT,
+    snrBandDirection::TRANSCEIVE
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessnrBandDirection() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "RECEIVE",
+    "TRANSMIT",
+    "TRANSCEIVE",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesnrBandDirection(snrBandDirection e) {
+  if (::flatbuffers::IsOutRange(e, snrBandDirection::UNSPECIFIED, snrBandDirection::TRANSCEIVE)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessnrBandDirection()[index];
+}
+
+/// The frame MOUNTING angles are expressed in.
+enum class snrMountingFrame : int8_t {
+  UNSPECIFIED = 0,
+  /// Fixed to the platform body; the angles are body-axis angles.
+  PLATFORM_BODY = 1,
+  /// Local vertical, local horizontal at the platform: radial, along-track,
+  /// cross-track.
+  LVLH = 2,
+  /// Local east-north-up at a ground site. Azimuth clockwise from north,
+  /// elevation above the local horizontal.
+  LOCAL_ENU = 3,
+  MIN = UNSPECIFIED,
+  MAX = LOCAL_ENU
+};
+
+inline const snrMountingFrame (&EnumValuessnrMountingFrame())[4] {
+  static const snrMountingFrame values[] = {
+    snrMountingFrame::UNSPECIFIED,
+    snrMountingFrame::PLATFORM_BODY,
+    snrMountingFrame::LVLH,
+    snrMountingFrame::LOCAL_ENU
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessnrMountingFrame() {
+  static const char * const names[5] = {
+    "UNSPECIFIED",
+    "PLATFORM_BODY",
+    "LVLH",
+    "LOCAL_ENU",
+    nullptr
+  };
+  return names;
+}
+
+inline const char *EnumNamesnrMountingFrame(snrMountingFrame e) {
+  if (::flatbuffers::IsOutRange(e, snrMountingFrame::UNSPECIFIED, snrMountingFrame::LOCAL_ENU)) return "";
+  const size_t index = static_cast<size_t>(e);
+  return EnumNamessnrMountingFrame()[index];
+}
+
+/// Where the sensor points by default.
+enum class snrPointingMode : int8_t {
+  UNSPECIFIED = 0,
+  /// Toward the center of the body the platform orbits.
+  NADIR = 1,
+  /// Fixed at the boresight angles in the mounting frame.
+  FIXED = 2,
+  /// Slews to follow a designated target or object.
+  TRACK = 3,
+  /// Sweeps at the scan rates through the field of regard.
+  SCAN = 4,
+  MIN = UNSPECIFIED,
+  MAX = SCAN
+};
+
+inline const snrPointingMode (&EnumValuessnrPointingMode())[5] {
+  static const snrPointingMode values[] = {
+    snrPointingMode::UNSPECIFIED,
+    snrPointingMode::NADIR,
+    snrPointingMode::FIXED,
+    snrPointingMode::TRACK,
+    snrPointingMode::SCAN
+  };
+  return values;
+}
+
+inline const char * const *EnumNamessnrPointingMode() {
+  static const char * const names[6] = {
+    "UNSPECIFIED",
+    "NADIR",
+    "FIXED",
     "TRACK",
-    "TRACK_WHILE_SCAN",
-    "DESIGNATE",
-    "JAMMED",
+    "SCAN",
     nullptr
   };
   return names;
 }
 
-inline const char *EnumNameSensorMode(SensorMode e) {
-  if (::flatbuffers::IsOutRange(e, SensorMode::OFF, SensorMode::JAMMED)) return "";
+inline const char *EnumNamesnrPointingMode(snrPointingMode e) {
+  if (::flatbuffers::IsOutRange(e, snrPointingMode::UNSPECIFIED, snrPointingMode::SCAN)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesSensorMode()[index];
+  return EnumNamessnrPointingMode()[index];
 }
 
-enum class TrackQuality : int8_t {
-  NONE = 0,
-  TENTATIVE = 1,
-  FIRM = 2,
-  LOCKED = 3,
-  COASTING = 4,
-  LOST = 5,
-  MIN = NONE,
-  MAX = LOST
+/// Radiation pattern of an RF antenna. Names follow OrbPro's antenna patterns.
+enum class snrAntennaPattern : int8_t {
+  UNSPECIFIED = 0,
+  ISOTROPIC = 1,
+  HEMISPHERIC = 2,
+  PARABOLIC = 3,
+  GAUSSIAN = 4,
+  PENCIL = 5,
+  HELIX = 6,
+  DIPOLE = 7,
+  RINGED = 8,
+  /// The earth-coverage (teardrop) beam of a geostationary antenna.
+  TEARDROP = 9,
+  TOROIDAL = 10,
+  CARDIOID = 11,
+  MIN = UNSPECIFIED,
+  MAX = CARDIOID
 };
 
-inline const TrackQuality (&EnumValuesTrackQuality())[6] {
-  static const TrackQuality values[] = {
-    TrackQuality::NONE,
-    TrackQuality::TENTATIVE,
-    TrackQuality::FIRM,
-    TrackQuality::LOCKED,
-    TrackQuality::COASTING,
-    TrackQuality::LOST
+inline const snrAntennaPattern (&EnumValuessnrAntennaPattern())[12] {
+  static const snrAntennaPattern values[] = {
+    snrAntennaPattern::UNSPECIFIED,
+    snrAntennaPattern::ISOTROPIC,
+    snrAntennaPattern::HEMISPHERIC,
+    snrAntennaPattern::PARABOLIC,
+    snrAntennaPattern::GAUSSIAN,
+    snrAntennaPattern::PENCIL,
+    snrAntennaPattern::HELIX,
+    snrAntennaPattern::DIPOLE,
+    snrAntennaPattern::RINGED,
+    snrAntennaPattern::TEARDROP,
+    snrAntennaPattern::TOROIDAL,
+    snrAntennaPattern::CARDIOID
   };
   return values;
 }
 
-inline const char * const *EnumNamesTrackQuality() {
-  static const char * const names[7] = {
-    "NONE",
-    "TENTATIVE",
-    "FIRM",
-    "LOCKED",
-    "COASTING",
-    "LOST",
+inline const char * const *EnumNamessnrAntennaPattern() {
+  static const char * const names[13] = {
+    "UNSPECIFIED",
+    "ISOTROPIC",
+    "HEMISPHERIC",
+    "PARABOLIC",
+    "GAUSSIAN",
+    "PENCIL",
+    "HELIX",
+    "DIPOLE",
+    "RINGED",
+    "TEARDROP",
+    "TOROIDAL",
+    "CARDIOID",
     nullptr
   };
   return names;
 }
 
-inline const char *EnumNameTrackQuality(TrackQuality e) {
-  if (::flatbuffers::IsOutRange(e, TrackQuality::NONE, TrackQuality::LOST)) return "";
+inline const char *EnumNamesnrAntennaPattern(snrAntennaPattern e) {
+  if (::flatbuffers::IsOutRange(e, snrAntennaPattern::UNSPECIFIED, snrAntennaPattern::CARDIOID)) return "";
   const size_t index = static_cast<size_t>(e);
-  return EnumNamesTrackQuality()[index];
+  return EnumNamessnrAntennaPattern()[index];
 }
+
+struct SNRSpectralBandT : public ::flatbuffers::NativeTable {
+  typedef SNRSpectralBand TableType;
+  std::string NAME{};
+  std::string DESIGNATION{};
+  double FREQ_LOW_HZ = 0.0;
+  double FREQ_HIGH_HZ = 0.0;
+  snrBandDirection DIRECTION = snrBandDirection::UNSPECIFIED;
+  std::unique_ptr<OPPProvenanceT> PROVENANCE{};
+  SNRSpectralBandT() = default;
+  SNRSpectralBandT(const SNRSpectralBandT &o);
+  SNRSpectralBandT(SNRSpectralBandT&&) FLATBUFFERS_NOEXCEPT = default;
+  SNRSpectralBandT &operator=(SNRSpectralBandT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// One spectral band of a sensor, in Hz. Hz is the unit for every band, optical
+/// included; a consumer that wants wavelength converts (lambda = c / f).
+/// Positive quantities use the default 0 for "not stated".
+struct SNRSpectralBand FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SNRSpectralBandT NativeTableType;
+  typedef SNRSpectralBandBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_NAME = 4,
+    VT_DESIGNATION = 6,
+    VT_FREQ_LOW_HZ = 8,
+    VT_FREQ_HIGH_HZ = 10,
+    VT_DIRECTION = 12,
+    VT_PROVENANCE = 14
+  };
+  /// The band as its source names it: "UHF", "X-band", "VNIR", "Green".
+  const ::flatbuffers::String *NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
+  }
+  /// The designation exactly as the source states it ("UHF", "X", "Ka", "SWIR").
+  /// Verbatim, never derived from the frequencies. RF designations use $RFB
+  /// rfBandDesignation spellings. Absent when the source states none.
+  const ::flatbuffers::String *DESIGNATION() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DESIGNATION);
+  }
+  /// Lower edge, Hz. 0 = not stated.
+  double FREQ_LOW_HZ() const {
+    return GetField<double>(VT_FREQ_LOW_HZ, 0.0);
+  }
+  /// Upper edge, Hz. 0 = not stated.
+  double FREQ_HIGH_HZ() const {
+    return GetField<double>(VT_FREQ_HIGH_HZ, 0.0);
+  }
+  snrBandDirection DIRECTION() const {
+    return static_cast<snrBandDirection>(GetField<int8_t>(VT_DIRECTION, 0));
+  }
+  /// Where this band was read, when it differs from the record's PROVENANCE.
+  const OPPProvenance *PROVENANCE() const {
+    return GetPointer<const OPPProvenance *>(VT_PROVENANCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(NAME()) &&
+           VerifyOffset(verifier, VT_DESIGNATION) &&
+           verifier.VerifyString(DESIGNATION()) &&
+           VerifyField<double>(verifier, VT_FREQ_LOW_HZ, 8) &&
+           VerifyField<double>(verifier, VT_FREQ_HIGH_HZ, 8) &&
+           VerifyField<int8_t>(verifier, VT_DIRECTION, 1) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           verifier.EndTable();
+  }
+  SNRSpectralBandT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SNRSpectralBandT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SNRSpectralBand> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNRSpectralBandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SNRSpectralBandBuilder {
+  typedef SNRSpectralBand Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
+    fbb_.AddOffset(SNRSpectralBand::VT_NAME, NAME);
+  }
+  void add_DESIGNATION(::flatbuffers::Offset<::flatbuffers::String> DESIGNATION) {
+    fbb_.AddOffset(SNRSpectralBand::VT_DESIGNATION, DESIGNATION);
+  }
+  void add_FREQ_LOW_HZ(double FREQ_LOW_HZ) {
+    fbb_.AddElement<double>(SNRSpectralBand::VT_FREQ_LOW_HZ, FREQ_LOW_HZ, 0.0);
+  }
+  void add_FREQ_HIGH_HZ(double FREQ_HIGH_HZ) {
+    fbb_.AddElement<double>(SNRSpectralBand::VT_FREQ_HIGH_HZ, FREQ_HIGH_HZ, 0.0);
+  }
+  void add_DIRECTION(snrBandDirection DIRECTION) {
+    fbb_.AddElement<int8_t>(SNRSpectralBand::VT_DIRECTION, static_cast<int8_t>(DIRECTION), 0);
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<OPPProvenance> PROVENANCE) {
+    fbb_.AddOffset(SNRSpectralBand::VT_PROVENANCE, PROVENANCE);
+  }
+  explicit SNRSpectralBandBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SNRSpectralBand> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SNRSpectralBand>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SNRSpectralBand> CreateSNRSpectralBand(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> DESIGNATION = 0,
+    double FREQ_LOW_HZ = 0.0,
+    double FREQ_HIGH_HZ = 0.0,
+    snrBandDirection DIRECTION = snrBandDirection::UNSPECIFIED,
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0) {
+  SNRSpectralBandBuilder builder_(_fbb);
+  builder_.add_FREQ_HIGH_HZ(FREQ_HIGH_HZ);
+  builder_.add_FREQ_LOW_HZ(FREQ_LOW_HZ);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_DESIGNATION(DESIGNATION);
+  builder_.add_NAME(NAME);
+  builder_.add_DIRECTION(DIRECTION);
+  return builder_.Finish();
+}
+
+struct SNRSpectralBand::Traits {
+  using type = SNRSpectralBand;
+  static auto constexpr Create = CreateSNRSpectralBand;
+};
+
+inline ::flatbuffers::Offset<SNRSpectralBand> CreateSNRSpectralBandDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    const char *NAME = nullptr,
+    const char *DESIGNATION = nullptr,
+    double FREQ_LOW_HZ = 0.0,
+    double FREQ_HIGH_HZ = 0.0,
+    snrBandDirection DIRECTION = snrBandDirection::UNSPECIFIED,
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0) {
+  auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
+  auto DESIGNATION__ = DESIGNATION ? _fbb.CreateString(DESIGNATION) : 0;
+  return CreateSNRSpectralBand(
+      _fbb,
+      NAME__,
+      DESIGNATION__,
+      FREQ_LOW_HZ,
+      FREQ_HIGH_HZ,
+      DIRECTION,
+      PROVENANCE);
+}
+
+::flatbuffers::Offset<SNRSpectralBand> CreateSNRSpectralBand(::flatbuffers::FlatBufferBuilder &_fbb, const SNRSpectralBandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SNRMountingT : public ::flatbuffers::NativeTable {
+  typedef SNRMounting TableType;
+  snrMountingFrame FRAME = snrMountingFrame::UNSPECIFIED;
+  double BORESIGHT_AZIMUTH_DEG = std::numeric_limits<double>::quiet_NaN();
+  double BORESIGHT_ELEVATION_DEG = std::numeric_limits<double>::quiet_NaN();
+  double ROLL_DEG = std::numeric_limits<double>::quiet_NaN();
+  snrPointingMode POINTING = snrPointingMode::UNSPECIFIED;
+  double SCAN_AZIMUTH_RATE_DEG_S = std::numeric_limits<double>::quiet_NaN();
+  double SCAN_ELEVATION_RATE_DEG_S = std::numeric_limits<double>::quiet_NaN();
+  double AZIMUTH_LIMIT_MIN_DEG = std::numeric_limits<double>::quiet_NaN();
+  double AZIMUTH_LIMIT_MAX_DEG = std::numeric_limits<double>::quiet_NaN();
+  double ELEVATION_LIMIT_MIN_DEG = std::numeric_limits<double>::quiet_NaN();
+  double ELEVATION_LIMIT_MAX_DEG = std::numeric_limits<double>::quiet_NaN();
+  std::unique_ptr<OPPProvenanceT> PROVENANCE{};
+  SNRMountingT() = default;
+  SNRMountingT(const SNRMountingT &o);
+  SNRMountingT(SNRMountingT&&) FLATBUFFERS_NOEXCEPT = default;
+  SNRMountingT &operator=(SNRMountingT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// How the sensor sits on its platform and where it points. Angles are degrees
+/// and signed, so an unset angle is NaN (absent), never 0.
+struct SNRMounting FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SNRMountingT NativeTableType;
+  typedef SNRMountingBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_FRAME = 4,
+    VT_BORESIGHT_AZIMUTH_DEG = 6,
+    VT_BORESIGHT_ELEVATION_DEG = 8,
+    VT_ROLL_DEG = 10,
+    VT_POINTING = 12,
+    VT_SCAN_AZIMUTH_RATE_DEG_S = 14,
+    VT_SCAN_ELEVATION_RATE_DEG_S = 16,
+    VT_AZIMUTH_LIMIT_MIN_DEG = 18,
+    VT_AZIMUTH_LIMIT_MAX_DEG = 20,
+    VT_ELEVATION_LIMIT_MIN_DEG = 22,
+    VT_ELEVATION_LIMIT_MAX_DEG = 24,
+    VT_PROVENANCE = 26
+  };
+  snrMountingFrame FRAME() const {
+    return static_cast<snrMountingFrame>(GetField<int8_t>(VT_FRAME, 0));
+  }
+  /// Boresight azimuth in FRAME. NaN = not stated.
+  double BORESIGHT_AZIMUTH_DEG() const {
+    return GetField<double>(VT_BORESIGHT_AZIMUTH_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Boresight elevation in FRAME. NaN = not stated.
+  double BORESIGHT_ELEVATION_DEG() const {
+    return GetField<double>(VT_BORESIGHT_ELEVATION_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Roll about the boresight. NaN = not stated.
+  double ROLL_DEG() const {
+    return GetField<double>(VT_ROLL_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  snrPointingMode POINTING() const {
+    return static_cast<snrPointingMode>(GetField<int8_t>(VT_POINTING, 0));
+  }
+  /// Azimuth scan rate, degrees per second, for POINTING SCAN. NaN = not stated.
+  double SCAN_AZIMUTH_RATE_DEG_S() const {
+    return GetField<double>(VT_SCAN_AZIMUTH_RATE_DEG_S, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Elevation scan rate, degrees per second, for POINTING SCAN. NaN = not stated.
+  double SCAN_ELEVATION_RATE_DEG_S() const {
+    return GetField<double>(VT_SCAN_ELEVATION_RATE_DEG_S, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Field-of-regard limits in FRAME, degrees. NaN = no limit stated.
+  /// ELEVATION_LIMIT_MIN_DEG is the minimum elevation a ground sensor operates at.
+  double AZIMUTH_LIMIT_MIN_DEG() const {
+    return GetField<double>(VT_AZIMUTH_LIMIT_MIN_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  double AZIMUTH_LIMIT_MAX_DEG() const {
+    return GetField<double>(VT_AZIMUTH_LIMIT_MAX_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  double ELEVATION_LIMIT_MIN_DEG() const {
+    return GetField<double>(VT_ELEVATION_LIMIT_MIN_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  double ELEVATION_LIMIT_MAX_DEG() const {
+    return GetField<double>(VT_ELEVATION_LIMIT_MAX_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Where the mounting was read, when it differs from the record's PROVENANCE.
+  const OPPProvenance *PROVENANCE() const {
+    return GetPointer<const OPPProvenance *>(VT_PROVENANCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_FRAME, 1) &&
+           VerifyField<double>(verifier, VT_BORESIGHT_AZIMUTH_DEG, 8) &&
+           VerifyField<double>(verifier, VT_BORESIGHT_ELEVATION_DEG, 8) &&
+           VerifyField<double>(verifier, VT_ROLL_DEG, 8) &&
+           VerifyField<int8_t>(verifier, VT_POINTING, 1) &&
+           VerifyField<double>(verifier, VT_SCAN_AZIMUTH_RATE_DEG_S, 8) &&
+           VerifyField<double>(verifier, VT_SCAN_ELEVATION_RATE_DEG_S, 8) &&
+           VerifyField<double>(verifier, VT_AZIMUTH_LIMIT_MIN_DEG, 8) &&
+           VerifyField<double>(verifier, VT_AZIMUTH_LIMIT_MAX_DEG, 8) &&
+           VerifyField<double>(verifier, VT_ELEVATION_LIMIT_MIN_DEG, 8) &&
+           VerifyField<double>(verifier, VT_ELEVATION_LIMIT_MAX_DEG, 8) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           verifier.EndTable();
+  }
+  SNRMountingT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SNRMountingT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SNRMounting> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNRMountingT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SNRMountingBuilder {
+  typedef SNRMounting Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_FRAME(snrMountingFrame FRAME) {
+    fbb_.AddElement<int8_t>(SNRMounting::VT_FRAME, static_cast<int8_t>(FRAME), 0);
+  }
+  void add_BORESIGHT_AZIMUTH_DEG(double BORESIGHT_AZIMUTH_DEG) {
+    fbb_.AddElement<double>(SNRMounting::VT_BORESIGHT_AZIMUTH_DEG, BORESIGHT_AZIMUTH_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_BORESIGHT_ELEVATION_DEG(double BORESIGHT_ELEVATION_DEG) {
+    fbb_.AddElement<double>(SNRMounting::VT_BORESIGHT_ELEVATION_DEG, BORESIGHT_ELEVATION_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ROLL_DEG(double ROLL_DEG) {
+    fbb_.AddElement<double>(SNRMounting::VT_ROLL_DEG, ROLL_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_POINTING(snrPointingMode POINTING) {
+    fbb_.AddElement<int8_t>(SNRMounting::VT_POINTING, static_cast<int8_t>(POINTING), 0);
+  }
+  void add_SCAN_AZIMUTH_RATE_DEG_S(double SCAN_AZIMUTH_RATE_DEG_S) {
+    fbb_.AddElement<double>(SNRMounting::VT_SCAN_AZIMUTH_RATE_DEG_S, SCAN_AZIMUTH_RATE_DEG_S, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_SCAN_ELEVATION_RATE_DEG_S(double SCAN_ELEVATION_RATE_DEG_S) {
+    fbb_.AddElement<double>(SNRMounting::VT_SCAN_ELEVATION_RATE_DEG_S, SCAN_ELEVATION_RATE_DEG_S, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_AZIMUTH_LIMIT_MIN_DEG(double AZIMUTH_LIMIT_MIN_DEG) {
+    fbb_.AddElement<double>(SNRMounting::VT_AZIMUTH_LIMIT_MIN_DEG, AZIMUTH_LIMIT_MIN_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_AZIMUTH_LIMIT_MAX_DEG(double AZIMUTH_LIMIT_MAX_DEG) {
+    fbb_.AddElement<double>(SNRMounting::VT_AZIMUTH_LIMIT_MAX_DEG, AZIMUTH_LIMIT_MAX_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ELEVATION_LIMIT_MIN_DEG(double ELEVATION_LIMIT_MIN_DEG) {
+    fbb_.AddElement<double>(SNRMounting::VT_ELEVATION_LIMIT_MIN_DEG, ELEVATION_LIMIT_MIN_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_ELEVATION_LIMIT_MAX_DEG(double ELEVATION_LIMIT_MAX_DEG) {
+    fbb_.AddElement<double>(SNRMounting::VT_ELEVATION_LIMIT_MAX_DEG, ELEVATION_LIMIT_MAX_DEG, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<OPPProvenance> PROVENANCE) {
+    fbb_.AddOffset(SNRMounting::VT_PROVENANCE, PROVENANCE);
+  }
+  explicit SNRMountingBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SNRMounting> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SNRMounting>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SNRMounting> CreateSNRMounting(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    snrMountingFrame FRAME = snrMountingFrame::UNSPECIFIED,
+    double BORESIGHT_AZIMUTH_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double BORESIGHT_ELEVATION_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double ROLL_DEG = std::numeric_limits<double>::quiet_NaN(),
+    snrPointingMode POINTING = snrPointingMode::UNSPECIFIED,
+    double SCAN_AZIMUTH_RATE_DEG_S = std::numeric_limits<double>::quiet_NaN(),
+    double SCAN_ELEVATION_RATE_DEG_S = std::numeric_limits<double>::quiet_NaN(),
+    double AZIMUTH_LIMIT_MIN_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double AZIMUTH_LIMIT_MAX_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double ELEVATION_LIMIT_MIN_DEG = std::numeric_limits<double>::quiet_NaN(),
+    double ELEVATION_LIMIT_MAX_DEG = std::numeric_limits<double>::quiet_NaN(),
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0) {
+  SNRMountingBuilder builder_(_fbb);
+  builder_.add_ELEVATION_LIMIT_MAX_DEG(ELEVATION_LIMIT_MAX_DEG);
+  builder_.add_ELEVATION_LIMIT_MIN_DEG(ELEVATION_LIMIT_MIN_DEG);
+  builder_.add_AZIMUTH_LIMIT_MAX_DEG(AZIMUTH_LIMIT_MAX_DEG);
+  builder_.add_AZIMUTH_LIMIT_MIN_DEG(AZIMUTH_LIMIT_MIN_DEG);
+  builder_.add_SCAN_ELEVATION_RATE_DEG_S(SCAN_ELEVATION_RATE_DEG_S);
+  builder_.add_SCAN_AZIMUTH_RATE_DEG_S(SCAN_AZIMUTH_RATE_DEG_S);
+  builder_.add_ROLL_DEG(ROLL_DEG);
+  builder_.add_BORESIGHT_ELEVATION_DEG(BORESIGHT_ELEVATION_DEG);
+  builder_.add_BORESIGHT_AZIMUTH_DEG(BORESIGHT_AZIMUTH_DEG);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_POINTING(POINTING);
+  builder_.add_FRAME(FRAME);
+  return builder_.Finish();
+}
+
+struct SNRMounting::Traits {
+  using type = SNRMounting;
+  static auto constexpr Create = CreateSNRMounting;
+};
+
+::flatbuffers::Offset<SNRMounting> CreateSNRMounting(::flatbuffers::FlatBufferBuilder &_fbb, const SNRMountingT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SNRRfParametersT : public ::flatbuffers::NativeTable {
+  typedef SNRRfParameters TableType;
+  snrAntennaPattern ANTENNA_PATTERN = snrAntennaPattern::UNSPECIFIED;
+  double PEAK_POWER_W = 0.0;
+  double ANTENNA_GAIN_DBI = std::numeric_limits<double>::quiet_NaN();
+  double BEAMWIDTH_AZIMUTH_DEG = 0.0;
+  double BEAMWIDTH_ELEVATION_DEG = 0.0;
+  double BANDWIDTH_HZ = 0.0;
+  rfPolarization POLARIZATION = rfPolarization::UNKNOWN;
+  double PRF_HZ = 0.0;
+  double PULSE_WIDTH_S = 0.0;
+  std::unique_ptr<OPPProvenanceT> PROVENANCE{};
+  SNRRfParametersT() = default;
+  SNRRfParametersT(const SNRRfParametersT &o);
+  SNRRfParametersT(SNRRfParametersT&&) FLATBUFFERS_NOEXCEPT = default;
+  SNRRfParametersT &operator=(SNRRfParametersT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Radio-frequency parameters. Positive quantities use 0 for "not stated";
+/// ANTENNA_GAIN_DBI is signed and uses NaN.
+struct SNRRfParameters FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SNRRfParametersT NativeTableType;
+  typedef SNRRfParametersBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_ANTENNA_PATTERN = 4,
+    VT_PEAK_POWER_W = 6,
+    VT_ANTENNA_GAIN_DBI = 8,
+    VT_BEAMWIDTH_AZIMUTH_DEG = 10,
+    VT_BEAMWIDTH_ELEVATION_DEG = 12,
+    VT_BANDWIDTH_HZ = 14,
+    VT_POLARIZATION = 16,
+    VT_PRF_HZ = 18,
+    VT_PULSE_WIDTH_S = 20,
+    VT_PROVENANCE = 22
+  };
+  snrAntennaPattern ANTENNA_PATTERN() const {
+    return static_cast<snrAntennaPattern>(GetField<int8_t>(VT_ANTENNA_PATTERN, 0));
+  }
+  /// Peak transmit power, W.
+  double PEAK_POWER_W() const {
+    return GetField<double>(VT_PEAK_POWER_W, 0.0);
+  }
+  /// Antenna gain, dBi. NaN = not stated.
+  double ANTENNA_GAIN_DBI() const {
+    return GetField<double>(VT_ANTENNA_GAIN_DBI, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// 3 dB beamwidth in azimuth, degrees.
+  double BEAMWIDTH_AZIMUTH_DEG() const {
+    return GetField<double>(VT_BEAMWIDTH_AZIMUTH_DEG, 0.0);
+  }
+  /// 3 dB beamwidth in elevation, degrees.
+  double BEAMWIDTH_ELEVATION_DEG() const {
+    return GetField<double>(VT_BEAMWIDTH_ELEVATION_DEG, 0.0);
+  }
+  /// Instantaneous bandwidth, Hz.
+  double BANDWIDTH_HZ() const {
+    return GetField<double>(VT_BANDWIDTH_HZ, 0.0);
+  }
+  rfPolarization POLARIZATION() const {
+    return static_cast<rfPolarization>(GetField<int8_t>(VT_POLARIZATION, 6));
+  }
+  /// Pulse repetition frequency, Hz (radar).
+  double PRF_HZ() const {
+    return GetField<double>(VT_PRF_HZ, 0.0);
+  }
+  /// Pulse width, seconds (radar).
+  double PULSE_WIDTH_S() const {
+    return GetField<double>(VT_PULSE_WIDTH_S, 0.0);
+  }
+  /// Where these values were read, when it differs from the record's PROVENANCE.
+  const OPPProvenance *PROVENANCE() const {
+    return GetPointer<const OPPProvenance *>(VT_PROVENANCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<int8_t>(verifier, VT_ANTENNA_PATTERN, 1) &&
+           VerifyField<double>(verifier, VT_PEAK_POWER_W, 8) &&
+           VerifyField<double>(verifier, VT_ANTENNA_GAIN_DBI, 8) &&
+           VerifyField<double>(verifier, VT_BEAMWIDTH_AZIMUTH_DEG, 8) &&
+           VerifyField<double>(verifier, VT_BEAMWIDTH_ELEVATION_DEG, 8) &&
+           VerifyField<double>(verifier, VT_BANDWIDTH_HZ, 8) &&
+           VerifyField<int8_t>(verifier, VT_POLARIZATION, 1) &&
+           VerifyField<double>(verifier, VT_PRF_HZ, 8) &&
+           VerifyField<double>(verifier, VT_PULSE_WIDTH_S, 8) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           verifier.EndTable();
+  }
+  SNRRfParametersT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SNRRfParametersT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SNRRfParameters> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNRRfParametersT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SNRRfParametersBuilder {
+  typedef SNRRfParameters Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_ANTENNA_PATTERN(snrAntennaPattern ANTENNA_PATTERN) {
+    fbb_.AddElement<int8_t>(SNRRfParameters::VT_ANTENNA_PATTERN, static_cast<int8_t>(ANTENNA_PATTERN), 0);
+  }
+  void add_PEAK_POWER_W(double PEAK_POWER_W) {
+    fbb_.AddElement<double>(SNRRfParameters::VT_PEAK_POWER_W, PEAK_POWER_W, 0.0);
+  }
+  void add_ANTENNA_GAIN_DBI(double ANTENNA_GAIN_DBI) {
+    fbb_.AddElement<double>(SNRRfParameters::VT_ANTENNA_GAIN_DBI, ANTENNA_GAIN_DBI, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_BEAMWIDTH_AZIMUTH_DEG(double BEAMWIDTH_AZIMUTH_DEG) {
+    fbb_.AddElement<double>(SNRRfParameters::VT_BEAMWIDTH_AZIMUTH_DEG, BEAMWIDTH_AZIMUTH_DEG, 0.0);
+  }
+  void add_BEAMWIDTH_ELEVATION_DEG(double BEAMWIDTH_ELEVATION_DEG) {
+    fbb_.AddElement<double>(SNRRfParameters::VT_BEAMWIDTH_ELEVATION_DEG, BEAMWIDTH_ELEVATION_DEG, 0.0);
+  }
+  void add_BANDWIDTH_HZ(double BANDWIDTH_HZ) {
+    fbb_.AddElement<double>(SNRRfParameters::VT_BANDWIDTH_HZ, BANDWIDTH_HZ, 0.0);
+  }
+  void add_POLARIZATION(rfPolarization POLARIZATION) {
+    fbb_.AddElement<int8_t>(SNRRfParameters::VT_POLARIZATION, static_cast<int8_t>(POLARIZATION), 6);
+  }
+  void add_PRF_HZ(double PRF_HZ) {
+    fbb_.AddElement<double>(SNRRfParameters::VT_PRF_HZ, PRF_HZ, 0.0);
+  }
+  void add_PULSE_WIDTH_S(double PULSE_WIDTH_S) {
+    fbb_.AddElement<double>(SNRRfParameters::VT_PULSE_WIDTH_S, PULSE_WIDTH_S, 0.0);
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<OPPProvenance> PROVENANCE) {
+    fbb_.AddOffset(SNRRfParameters::VT_PROVENANCE, PROVENANCE);
+  }
+  explicit SNRRfParametersBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SNRRfParameters> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SNRRfParameters>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SNRRfParameters> CreateSNRRfParameters(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    snrAntennaPattern ANTENNA_PATTERN = snrAntennaPattern::UNSPECIFIED,
+    double PEAK_POWER_W = 0.0,
+    double ANTENNA_GAIN_DBI = std::numeric_limits<double>::quiet_NaN(),
+    double BEAMWIDTH_AZIMUTH_DEG = 0.0,
+    double BEAMWIDTH_ELEVATION_DEG = 0.0,
+    double BANDWIDTH_HZ = 0.0,
+    rfPolarization POLARIZATION = rfPolarization::UNKNOWN,
+    double PRF_HZ = 0.0,
+    double PULSE_WIDTH_S = 0.0,
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0) {
+  SNRRfParametersBuilder builder_(_fbb);
+  builder_.add_PULSE_WIDTH_S(PULSE_WIDTH_S);
+  builder_.add_PRF_HZ(PRF_HZ);
+  builder_.add_BANDWIDTH_HZ(BANDWIDTH_HZ);
+  builder_.add_BEAMWIDTH_ELEVATION_DEG(BEAMWIDTH_ELEVATION_DEG);
+  builder_.add_BEAMWIDTH_AZIMUTH_DEG(BEAMWIDTH_AZIMUTH_DEG);
+  builder_.add_ANTENNA_GAIN_DBI(ANTENNA_GAIN_DBI);
+  builder_.add_PEAK_POWER_W(PEAK_POWER_W);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_POLARIZATION(POLARIZATION);
+  builder_.add_ANTENNA_PATTERN(ANTENNA_PATTERN);
+  return builder_.Finish();
+}
+
+struct SNRRfParameters::Traits {
+  using type = SNRRfParameters;
+  static auto constexpr Create = CreateSNRRfParameters;
+};
+
+::flatbuffers::Offset<SNRRfParameters> CreateSNRRfParameters(::flatbuffers::FlatBufferBuilder &_fbb, const SNRRfParametersT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct SNROpticalParametersT : public ::flatbuffers::NativeTable {
+  typedef SNROpticalParameters TableType;
+  double APERTURE_M = 0.0;
+  double FOCAL_LENGTH_M = 0.0;
+  double IFOV_RAD = 0.0;
+  double GSD_M = 0.0;
+  double LIMITING_MAGNITUDE = std::numeric_limits<double>::quiet_NaN();
+  std::string DETECTOR{};
+  std::unique_ptr<OPPProvenanceT> PROVENANCE{};
+  SNROpticalParametersT() = default;
+  SNROpticalParametersT(const SNROpticalParametersT &o);
+  SNROpticalParametersT(SNROpticalParametersT&&) FLATBUFFERS_NOEXCEPT = default;
+  SNROpticalParametersT &operator=(SNROpticalParametersT o) FLATBUFFERS_NOEXCEPT;
+};
+
+/// Optical parameters. Every quantity is positive except LIMITING_MAGNITUDE,
+/// which is signed and uses NaN for "not stated"; 0 means "not stated" elsewhere.
+struct SNROpticalParameters FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
+  typedef SNROpticalParametersT NativeTableType;
+  typedef SNROpticalParametersBuilder Builder;
+  struct Traits;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_APERTURE_M = 4,
+    VT_FOCAL_LENGTH_M = 6,
+    VT_IFOV_RAD = 8,
+    VT_GSD_M = 10,
+    VT_LIMITING_MAGNITUDE = 12,
+    VT_DETECTOR = 14,
+    VT_PROVENANCE = 16
+  };
+  /// Clear aperture diameter, m.
+  double APERTURE_M() const {
+    return GetField<double>(VT_APERTURE_M, 0.0);
+  }
+  /// Focal length, m.
+  double FOCAL_LENGTH_M() const {
+    return GetField<double>(VT_FOCAL_LENGTH_M, 0.0);
+  }
+  /// Instantaneous field of view of one detector element, radians.
+  double IFOV_RAD() const {
+    return GetField<double>(VT_IFOV_RAD, 0.0);
+  }
+  /// Ground sample distance, m, at the nadir and nominal altitude the source
+  /// states (qualifiers go in PROVENANCE.NOTES).
+  double GSD_M() const {
+    return GetField<double>(VT_GSD_M, 0.0);
+  }
+  /// Limiting visual magnitude. NaN = not stated.
+  double LIMITING_MAGNITUDE() const {
+    return GetField<double>(VT_LIMITING_MAGNITUDE, std::numeric_limits<double>::quiet_NaN());
+  }
+  /// Detector as the source names it ("CCD", "HgCdTe", "sCMOS").
+  const ::flatbuffers::String *DETECTOR() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_DETECTOR);
+  }
+  /// Where these values were read, when it differs from the record's PROVENANCE.
+  const OPPProvenance *PROVENANCE() const {
+    return GetPointer<const OPPProvenance *>(VT_PROVENANCE);
+  }
+  template <bool B = false>
+  bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<double>(verifier, VT_APERTURE_M, 8) &&
+           VerifyField<double>(verifier, VT_FOCAL_LENGTH_M, 8) &&
+           VerifyField<double>(verifier, VT_IFOV_RAD, 8) &&
+           VerifyField<double>(verifier, VT_GSD_M, 8) &&
+           VerifyField<double>(verifier, VT_LIMITING_MAGNITUDE, 8) &&
+           VerifyOffset(verifier, VT_DETECTOR) &&
+           verifier.VerifyString(DETECTOR()) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           verifier.EndTable();
+  }
+  SNROpticalParametersT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(SNROpticalParametersT *_o, const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static ::flatbuffers::Offset<SNROpticalParameters> Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNROpticalParametersT* _o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct SNROpticalParametersBuilder {
+  typedef SNROpticalParameters Table;
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_APERTURE_M(double APERTURE_M) {
+    fbb_.AddElement<double>(SNROpticalParameters::VT_APERTURE_M, APERTURE_M, 0.0);
+  }
+  void add_FOCAL_LENGTH_M(double FOCAL_LENGTH_M) {
+    fbb_.AddElement<double>(SNROpticalParameters::VT_FOCAL_LENGTH_M, FOCAL_LENGTH_M, 0.0);
+  }
+  void add_IFOV_RAD(double IFOV_RAD) {
+    fbb_.AddElement<double>(SNROpticalParameters::VT_IFOV_RAD, IFOV_RAD, 0.0);
+  }
+  void add_GSD_M(double GSD_M) {
+    fbb_.AddElement<double>(SNROpticalParameters::VT_GSD_M, GSD_M, 0.0);
+  }
+  void add_LIMITING_MAGNITUDE(double LIMITING_MAGNITUDE) {
+    fbb_.AddElement<double>(SNROpticalParameters::VT_LIMITING_MAGNITUDE, LIMITING_MAGNITUDE, std::numeric_limits<double>::quiet_NaN());
+  }
+  void add_DETECTOR(::flatbuffers::Offset<::flatbuffers::String> DETECTOR) {
+    fbb_.AddOffset(SNROpticalParameters::VT_DETECTOR, DETECTOR);
+  }
+  void add_PROVENANCE(::flatbuffers::Offset<OPPProvenance> PROVENANCE) {
+    fbb_.AddOffset(SNROpticalParameters::VT_PROVENANCE, PROVENANCE);
+  }
+  explicit SNROpticalParametersBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  ::flatbuffers::Offset<SNROpticalParameters> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = ::flatbuffers::Offset<SNROpticalParameters>(end);
+    return o;
+  }
+};
+
+inline ::flatbuffers::Offset<SNROpticalParameters> CreateSNROpticalParameters(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double APERTURE_M = 0.0,
+    double FOCAL_LENGTH_M = 0.0,
+    double IFOV_RAD = 0.0,
+    double GSD_M = 0.0,
+    double LIMITING_MAGNITUDE = std::numeric_limits<double>::quiet_NaN(),
+    ::flatbuffers::Offset<::flatbuffers::String> DETECTOR = 0,
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0) {
+  SNROpticalParametersBuilder builder_(_fbb);
+  builder_.add_LIMITING_MAGNITUDE(LIMITING_MAGNITUDE);
+  builder_.add_GSD_M(GSD_M);
+  builder_.add_IFOV_RAD(IFOV_RAD);
+  builder_.add_FOCAL_LENGTH_M(FOCAL_LENGTH_M);
+  builder_.add_APERTURE_M(APERTURE_M);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_DETECTOR(DETECTOR);
+  return builder_.Finish();
+}
+
+struct SNROpticalParameters::Traits {
+  using type = SNROpticalParameters;
+  static auto constexpr Create = CreateSNROpticalParameters;
+};
+
+inline ::flatbuffers::Offset<SNROpticalParameters> CreateSNROpticalParametersDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    double APERTURE_M = 0.0,
+    double FOCAL_LENGTH_M = 0.0,
+    double IFOV_RAD = 0.0,
+    double GSD_M = 0.0,
+    double LIMITING_MAGNITUDE = std::numeric_limits<double>::quiet_NaN(),
+    const char *DETECTOR = nullptr,
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0) {
+  auto DETECTOR__ = DETECTOR ? _fbb.CreateString(DETECTOR) : 0;
+  return CreateSNROpticalParameters(
+      _fbb,
+      APERTURE_M,
+      FOCAL_LENGTH_M,
+      IFOV_RAD,
+      GSD_M,
+      LIMITING_MAGNITUDE,
+      DETECTOR__,
+      PROVENANCE);
+}
+
+::flatbuffers::Offset<SNROpticalParameters> CreateSNROpticalParameters(::flatbuffers::FlatBufferBuilder &_fbb, const SNROpticalParametersT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct SNRT : public ::flatbuffers::NativeTable {
   typedef SNR TableType;
-  uint8_t TYPE = 0;
-  uint8_t MODE = 0;
-  uint16_t RESERVED1 = 0;
-  double MAX_RANGE = 0.0;
-  double MIN_RANGE = 0.0;
-  float FOV_AZIMUTH = 0.0f;
-  float FOV_ELEVATION = 0.0f;
-  float ANGULAR_RESOLUTION = 0.0f;
-  float RANGE_RESOLUTION = 0.0f;
-  float UPDATE_RATE = 0.0f;
-  float DETECTION_THRESHOLD = 0.0f;
-  float AZIMUTH_SCAN_RATE = 0.0f;
-  float ELEVATION_SCAN_RATE = 0.0f;
-  float POWER = 0.0f;
-  float FREQUENCY = 0.0f;
-  std::vector<uint8_t> RESERVED{};
+  std::string SENSOR_ID{};
+  std::string NAME{};
+  uint32_t NORAD_CAT_ID = 0;
+  std::string OBJECT_ID{};
+  std::string SITE_ID{};
+  std::string ENTITY_ID{};
+  SensorType TYPE = SensorType::UNSPECIFIED;
+  snrEmissionMode EMISSION = snrEmissionMode::UNSPECIFIED;
+  std::vector<std::unique_ptr<SNRSpectralBandT>> SPECTRAL_BANDS{};
+  std::unique_ptr<SCVSensorShapeContractT> FIELD_OF_VIEW{};
+  std::unique_ptr<OPPProvenanceT> FIELD_OF_VIEW_PROVENANCE{};
+  std::unique_ptr<SNRMountingT> MOUNTING{};
+  std::unique_ptr<SNRRfParametersT> RF{};
+  std::unique_ptr<SNROpticalParametersT> OPTICAL{};
+  std::unique_ptr<OPPProvenanceT> PROVENANCE{};
+  std::string NOTES{};
+  SNRT() = default;
+  SNRT(const SNRT &o);
+  SNRT(SNRT&&) FLATBUFFERS_NOEXCEPT = default;
+  SNRT &operator=(SNRT o) FLATBUFFERS_NOEXCEPT;
 };
 
-/// Sensor Systems
+/// Sensor definition: the sensor a platform carries. One record is one sensor.
+///
+/// UNKNOWN IS ABSENT. A positive quantity unset is 0, a signed quantity unset
+/// is NaN, an unset enum is its UNSPECIFIED (or UNKNOWN) member, an unset
+/// string, table or vector is absent. A value is never invented, never zero as a
+/// placeholder, never copied from another sensor. Hz is the only frequency unit.
+/// Display colors are viewer preferences and never travel in this record.
+///
+/// Platform: NORAD_CAT_ID and OBJECT_ID join to $CAT, SITE_ID to $SIT.ID,
+/// SENSOR_ID to $SEN.ID. A sensor not attached to a platform has none of them.
 struct SNR FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef SNRT NativeTableType;
   typedef SNRBuilder Builder;
   struct Traits;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
-    VT_TYPE = 4,
-    VT_MODE = 6,
-    VT_RESERVED1 = 8,
-    VT_MAX_RANGE = 10,
-    VT_MIN_RANGE = 12,
-    VT_FOV_AZIMUTH = 14,
-    VT_FOV_ELEVATION = 16,
-    VT_ANGULAR_RESOLUTION = 18,
-    VT_RANGE_RESOLUTION = 20,
-    VT_UPDATE_RATE = 22,
-    VT_DETECTION_THRESHOLD = 24,
-    VT_AZIMUTH_SCAN_RATE = 26,
-    VT_ELEVATION_SCAN_RATE = 28,
-    VT_POWER = 30,
-    VT_FREQUENCY = 32,
-    VT_RESERVED = 34
+    VT_SENSOR_ID = 4,
+    VT_NAME = 6,
+    VT_NORAD_CAT_ID = 8,
+    VT_OBJECT_ID = 10,
+    VT_SITE_ID = 12,
+    VT_ENTITY_ID = 14,
+    VT_TYPE = 16,
+    VT_EMISSION = 18,
+    VT_SPECTRAL_BANDS = 20,
+    VT_FIELD_OF_VIEW = 22,
+    VT_FIELD_OF_VIEW_PROVENANCE = 24,
+    VT_MOUNTING = 26,
+    VT_RF = 28,
+    VT_OPTICAL = 30,
+    VT_PROVENANCE = 32,
+    VT_NOTES = 34
   };
-  uint8_t TYPE() const {
-    return GetField<uint8_t>(VT_TYPE, 0);
+  /// Stable identifier of this sensor. $SEN.ID of the same sensor.
+  const ::flatbuffers::String *SENSOR_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SENSOR_ID);
   }
-  uint8_t MODE() const {
-    return GetField<uint8_t>(VT_MODE, 0);
+  const ::flatbuffers::String *NAME() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NAME);
   }
-  uint16_t RESERVED1() const {
-    return GetField<uint16_t>(VT_RESERVED1, 0);
+  /// $CAT.NORAD_CAT_ID of the spacecraft that carries the sensor. 0 = none.
+  uint32_t NORAD_CAT_ID() const {
+    return GetField<uint32_t>(VT_NORAD_CAT_ID, 0);
   }
-  double MAX_RANGE() const {
-    return GetField<double>(VT_MAX_RANGE, 0.0);
+  /// $CAT.OBJECT_ID (COSPAR designator) of the spacecraft that carries it.
+  const ::flatbuffers::String *OBJECT_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_OBJECT_ID);
   }
-  double MIN_RANGE() const {
-    return GetField<double>(VT_MIN_RANGE, 0.0);
+  /// $SIT.ID of the ground site the sensor is at.
+  const ::flatbuffers::String *SITE_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_SITE_ID);
   }
-  float FOV_AZIMUTH() const {
-    return GetField<float>(VT_FOV_AZIMUTH, 0.0f);
+  /// Stable non-catalogue entity key of the platform, for a platform with neither
+  /// a catalogue number nor a $SIT.
+  const ::flatbuffers::String *ENTITY_ID() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_ENTITY_ID);
   }
-  float FOV_ELEVATION() const {
-    return GetField<float>(VT_FOV_ELEVATION, 0.0f);
+  SensorType TYPE() const {
+    return static_cast<SensorType>(GetField<int8_t>(VT_TYPE, 29));
   }
-  float ANGULAR_RESOLUTION() const {
-    return GetField<float>(VT_ANGULAR_RESOLUTION, 0.0f);
+  snrEmissionMode EMISSION() const {
+    return static_cast<snrEmissionMode>(GetField<int8_t>(VT_EMISSION, 0));
   }
-  float RANGE_RESOLUTION() const {
-    return GetField<float>(VT_RANGE_RESOLUTION, 0.0f);
+  /// Spectral bands in Hz. One list serves a radar, a multispectral imager and
+  /// a passive RF receiver. Empty = none stated.
+  const ::flatbuffers::Vector<::flatbuffers::Offset<SNRSpectralBand>> *SPECTRAL_BANDS() const {
+    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<SNRSpectralBand>> *>(VT_SPECTRAL_BANDS);
   }
-  float UPDATE_RATE() const {
-    return GetField<float>(VT_UPDATE_RATE, 0.0f);
+  /// Field-of-view shape: the same table $SCV analyses use.
+  const SCVSensorShapeContract *FIELD_OF_VIEW() const {
+    return GetPointer<const SCVSensorShapeContract *>(VT_FIELD_OF_VIEW);
   }
-  float DETECTION_THRESHOLD() const {
-    return GetField<float>(VT_DETECTION_THRESHOLD, 0.0f);
+  /// Where FIELD_OF_VIEW was read, when it differs from PROVENANCE.
+  const OPPProvenance *FIELD_OF_VIEW_PROVENANCE() const {
+    return GetPointer<const OPPProvenance *>(VT_FIELD_OF_VIEW_PROVENANCE);
   }
-  float AZIMUTH_SCAN_RATE() const {
-    return GetField<float>(VT_AZIMUTH_SCAN_RATE, 0.0f);
+  const SNRMounting *MOUNTING() const {
+    return GetPointer<const SNRMounting *>(VT_MOUNTING);
   }
-  float ELEVATION_SCAN_RATE() const {
-    return GetField<float>(VT_ELEVATION_SCAN_RATE, 0.0f);
+  const SNRRfParameters *RF() const {
+    return GetPointer<const SNRRfParameters *>(VT_RF);
   }
-  float POWER() const {
-    return GetField<float>(VT_POWER, 0.0f);
+  const SNROpticalParameters *OPTICAL() const {
+    return GetPointer<const SNROpticalParameters *>(VT_OPTICAL);
   }
-  float FREQUENCY() const {
-    return GetField<float>(VT_FREQUENCY, 0.0f);
+  /// Where the values of this record were read. A published real-world sensor
+  /// carries SOURCE, RETRIEVED_AT, METHOD and LICENSE; a user-defined sensor
+  /// carries METHOD USER_DEFINED. A section's own PROVENANCE supersedes this one
+  /// for that section.
+  const OPPProvenance *PROVENANCE() const {
+    return GetPointer<const OPPProvenance *>(VT_PROVENANCE);
   }
-  const ::flatbuffers::Vector<uint8_t> *RESERVED() const {
-    return GetPointer<const ::flatbuffers::Vector<uint8_t> *>(VT_RESERVED);
+  const ::flatbuffers::String *NOTES() const {
+    return GetPointer<const ::flatbuffers::String *>(VT_NOTES);
   }
   template <bool B = false>
   bool Verify(::flatbuffers::VerifierTemplate<B> &verifier) const {
     return VerifyTableStart(verifier) &&
-           VerifyField<uint8_t>(verifier, VT_TYPE, 1) &&
-           VerifyField<uint8_t>(verifier, VT_MODE, 1) &&
-           VerifyField<uint16_t>(verifier, VT_RESERVED1, 2) &&
-           VerifyField<double>(verifier, VT_MAX_RANGE, 8) &&
-           VerifyField<double>(verifier, VT_MIN_RANGE, 8) &&
-           VerifyField<float>(verifier, VT_FOV_AZIMUTH, 4) &&
-           VerifyField<float>(verifier, VT_FOV_ELEVATION, 4) &&
-           VerifyField<float>(verifier, VT_ANGULAR_RESOLUTION, 4) &&
-           VerifyField<float>(verifier, VT_RANGE_RESOLUTION, 4) &&
-           VerifyField<float>(verifier, VT_UPDATE_RATE, 4) &&
-           VerifyField<float>(verifier, VT_DETECTION_THRESHOLD, 4) &&
-           VerifyField<float>(verifier, VT_AZIMUTH_SCAN_RATE, 4) &&
-           VerifyField<float>(verifier, VT_ELEVATION_SCAN_RATE, 4) &&
-           VerifyField<float>(verifier, VT_POWER, 4) &&
-           VerifyField<float>(verifier, VT_FREQUENCY, 4) &&
-           VerifyOffset(verifier, VT_RESERVED) &&
-           verifier.VerifyVector(RESERVED()) &&
+           VerifyOffsetRequired(verifier, VT_SENSOR_ID) &&
+           verifier.VerifyString(SENSOR_ID()) &&
+           VerifyOffset(verifier, VT_NAME) &&
+           verifier.VerifyString(NAME()) &&
+           VerifyField<uint32_t>(verifier, VT_NORAD_CAT_ID, 4) &&
+           VerifyOffset(verifier, VT_OBJECT_ID) &&
+           verifier.VerifyString(OBJECT_ID()) &&
+           VerifyOffset(verifier, VT_SITE_ID) &&
+           verifier.VerifyString(SITE_ID()) &&
+           VerifyOffset(verifier, VT_ENTITY_ID) &&
+           verifier.VerifyString(ENTITY_ID()) &&
+           VerifyField<int8_t>(verifier, VT_TYPE, 1) &&
+           VerifyField<int8_t>(verifier, VT_EMISSION, 1) &&
+           VerifyOffset(verifier, VT_SPECTRAL_BANDS) &&
+           verifier.VerifyVector(SPECTRAL_BANDS()) &&
+           verifier.VerifyVectorOfTables(SPECTRAL_BANDS()) &&
+           VerifyOffset(verifier, VT_FIELD_OF_VIEW) &&
+           verifier.VerifyTable(FIELD_OF_VIEW()) &&
+           VerifyOffset(verifier, VT_FIELD_OF_VIEW_PROVENANCE) &&
+           verifier.VerifyTable(FIELD_OF_VIEW_PROVENANCE()) &&
+           VerifyOffset(verifier, VT_MOUNTING) &&
+           verifier.VerifyTable(MOUNTING()) &&
+           VerifyOffset(verifier, VT_RF) &&
+           verifier.VerifyTable(RF()) &&
+           VerifyOffset(verifier, VT_OPTICAL) &&
+           verifier.VerifyTable(OPTICAL()) &&
+           VerifyOffset(verifier, VT_PROVENANCE) &&
+           verifier.VerifyTable(PROVENANCE()) &&
+           VerifyOffset(verifier, VT_NOTES) &&
+           verifier.VerifyString(NOTES()) &&
            verifier.EndTable();
   }
   SNRT *UnPack(const ::flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -301,53 +1220,53 @@ struct SNRBuilder {
   typedef SNR Table;
   ::flatbuffers::FlatBufferBuilder &fbb_;
   ::flatbuffers::uoffset_t start_;
-  void add_TYPE(uint8_t TYPE) {
-    fbb_.AddElement<uint8_t>(SNR::VT_TYPE, TYPE, 0);
+  void add_SENSOR_ID(::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID) {
+    fbb_.AddOffset(SNR::VT_SENSOR_ID, SENSOR_ID);
   }
-  void add_MODE(uint8_t MODE) {
-    fbb_.AddElement<uint8_t>(SNR::VT_MODE, MODE, 0);
+  void add_NAME(::flatbuffers::Offset<::flatbuffers::String> NAME) {
+    fbb_.AddOffset(SNR::VT_NAME, NAME);
   }
-  void add_RESERVED1(uint16_t RESERVED1) {
-    fbb_.AddElement<uint16_t>(SNR::VT_RESERVED1, RESERVED1, 0);
+  void add_NORAD_CAT_ID(uint32_t NORAD_CAT_ID) {
+    fbb_.AddElement<uint32_t>(SNR::VT_NORAD_CAT_ID, NORAD_CAT_ID, 0);
   }
-  void add_MAX_RANGE(double MAX_RANGE) {
-    fbb_.AddElement<double>(SNR::VT_MAX_RANGE, MAX_RANGE, 0.0);
+  void add_OBJECT_ID(::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID) {
+    fbb_.AddOffset(SNR::VT_OBJECT_ID, OBJECT_ID);
   }
-  void add_MIN_RANGE(double MIN_RANGE) {
-    fbb_.AddElement<double>(SNR::VT_MIN_RANGE, MIN_RANGE, 0.0);
+  void add_SITE_ID(::flatbuffers::Offset<::flatbuffers::String> SITE_ID) {
+    fbb_.AddOffset(SNR::VT_SITE_ID, SITE_ID);
   }
-  void add_FOV_AZIMUTH(float FOV_AZIMUTH) {
-    fbb_.AddElement<float>(SNR::VT_FOV_AZIMUTH, FOV_AZIMUTH, 0.0f);
+  void add_ENTITY_ID(::flatbuffers::Offset<::flatbuffers::String> ENTITY_ID) {
+    fbb_.AddOffset(SNR::VT_ENTITY_ID, ENTITY_ID);
   }
-  void add_FOV_ELEVATION(float FOV_ELEVATION) {
-    fbb_.AddElement<float>(SNR::VT_FOV_ELEVATION, FOV_ELEVATION, 0.0f);
+  void add_TYPE(SensorType TYPE) {
+    fbb_.AddElement<int8_t>(SNR::VT_TYPE, static_cast<int8_t>(TYPE), 29);
   }
-  void add_ANGULAR_RESOLUTION(float ANGULAR_RESOLUTION) {
-    fbb_.AddElement<float>(SNR::VT_ANGULAR_RESOLUTION, ANGULAR_RESOLUTION, 0.0f);
+  void add_EMISSION(snrEmissionMode EMISSION) {
+    fbb_.AddElement<int8_t>(SNR::VT_EMISSION, static_cast<int8_t>(EMISSION), 0);
   }
-  void add_RANGE_RESOLUTION(float RANGE_RESOLUTION) {
-    fbb_.AddElement<float>(SNR::VT_RANGE_RESOLUTION, RANGE_RESOLUTION, 0.0f);
+  void add_SPECTRAL_BANDS(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SNRSpectralBand>>> SPECTRAL_BANDS) {
+    fbb_.AddOffset(SNR::VT_SPECTRAL_BANDS, SPECTRAL_BANDS);
   }
-  void add_UPDATE_RATE(float UPDATE_RATE) {
-    fbb_.AddElement<float>(SNR::VT_UPDATE_RATE, UPDATE_RATE, 0.0f);
+  void add_FIELD_OF_VIEW(::flatbuffers::Offset<SCVSensorShapeContract> FIELD_OF_VIEW) {
+    fbb_.AddOffset(SNR::VT_FIELD_OF_VIEW, FIELD_OF_VIEW);
   }
-  void add_DETECTION_THRESHOLD(float DETECTION_THRESHOLD) {
-    fbb_.AddElement<float>(SNR::VT_DETECTION_THRESHOLD, DETECTION_THRESHOLD, 0.0f);
+  void add_FIELD_OF_VIEW_PROVENANCE(::flatbuffers::Offset<OPPProvenance> FIELD_OF_VIEW_PROVENANCE) {
+    fbb_.AddOffset(SNR::VT_FIELD_OF_VIEW_PROVENANCE, FIELD_OF_VIEW_PROVENANCE);
   }
-  void add_AZIMUTH_SCAN_RATE(float AZIMUTH_SCAN_RATE) {
-    fbb_.AddElement<float>(SNR::VT_AZIMUTH_SCAN_RATE, AZIMUTH_SCAN_RATE, 0.0f);
+  void add_MOUNTING(::flatbuffers::Offset<SNRMounting> MOUNTING) {
+    fbb_.AddOffset(SNR::VT_MOUNTING, MOUNTING);
   }
-  void add_ELEVATION_SCAN_RATE(float ELEVATION_SCAN_RATE) {
-    fbb_.AddElement<float>(SNR::VT_ELEVATION_SCAN_RATE, ELEVATION_SCAN_RATE, 0.0f);
+  void add_RF(::flatbuffers::Offset<SNRRfParameters> RF) {
+    fbb_.AddOffset(SNR::VT_RF, RF);
   }
-  void add_POWER(float POWER) {
-    fbb_.AddElement<float>(SNR::VT_POWER, POWER, 0.0f);
+  void add_OPTICAL(::flatbuffers::Offset<SNROpticalParameters> OPTICAL) {
+    fbb_.AddOffset(SNR::VT_OPTICAL, OPTICAL);
   }
-  void add_FREQUENCY(float FREQUENCY) {
-    fbb_.AddElement<float>(SNR::VT_FREQUENCY, FREQUENCY, 0.0f);
+  void add_PROVENANCE(::flatbuffers::Offset<OPPProvenance> PROVENANCE) {
+    fbb_.AddOffset(SNR::VT_PROVENANCE, PROVENANCE);
   }
-  void add_RESERVED(::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> RESERVED) {
-    fbb_.AddOffset(SNR::VT_RESERVED, RESERVED);
+  void add_NOTES(::flatbuffers::Offset<::flatbuffers::String> NOTES) {
+    fbb_.AddOffset(SNR::VT_NOTES, NOTES);
   }
   explicit SNRBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -356,44 +1275,45 @@ struct SNRBuilder {
   ::flatbuffers::Offset<SNR> Finish() {
     const auto end = fbb_.EndTable(start_);
     auto o = ::flatbuffers::Offset<SNR>(end);
+    fbb_.Required(o, SNR::VT_SENSOR_ID);
     return o;
   }
 };
 
 inline ::flatbuffers::Offset<SNR> CreateSNR(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint8_t TYPE = 0,
-    uint8_t MODE = 0,
-    uint16_t RESERVED1 = 0,
-    double MAX_RANGE = 0.0,
-    double MIN_RANGE = 0.0,
-    float FOV_AZIMUTH = 0.0f,
-    float FOV_ELEVATION = 0.0f,
-    float ANGULAR_RESOLUTION = 0.0f,
-    float RANGE_RESOLUTION = 0.0f,
-    float UPDATE_RATE = 0.0f,
-    float DETECTION_THRESHOLD = 0.0f,
-    float AZIMUTH_SCAN_RATE = 0.0f,
-    float ELEVATION_SCAN_RATE = 0.0f,
-    float POWER = 0.0f,
-    float FREQUENCY = 0.0f,
-    ::flatbuffers::Offset<::flatbuffers::Vector<uint8_t>> RESERVED = 0) {
+    ::flatbuffers::Offset<::flatbuffers::String> SENSOR_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> NAME = 0,
+    uint32_t NORAD_CAT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> OBJECT_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> SITE_ID = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> ENTITY_ID = 0,
+    SensorType TYPE = SensorType::UNSPECIFIED,
+    snrEmissionMode EMISSION = snrEmissionMode::UNSPECIFIED,
+    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<SNRSpectralBand>>> SPECTRAL_BANDS = 0,
+    ::flatbuffers::Offset<SCVSensorShapeContract> FIELD_OF_VIEW = 0,
+    ::flatbuffers::Offset<OPPProvenance> FIELD_OF_VIEW_PROVENANCE = 0,
+    ::flatbuffers::Offset<SNRMounting> MOUNTING = 0,
+    ::flatbuffers::Offset<SNRRfParameters> RF = 0,
+    ::flatbuffers::Offset<SNROpticalParameters> OPTICAL = 0,
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0,
+    ::flatbuffers::Offset<::flatbuffers::String> NOTES = 0) {
   SNRBuilder builder_(_fbb);
-  builder_.add_MIN_RANGE(MIN_RANGE);
-  builder_.add_MAX_RANGE(MAX_RANGE);
-  builder_.add_RESERVED(RESERVED);
-  builder_.add_FREQUENCY(FREQUENCY);
-  builder_.add_POWER(POWER);
-  builder_.add_ELEVATION_SCAN_RATE(ELEVATION_SCAN_RATE);
-  builder_.add_AZIMUTH_SCAN_RATE(AZIMUTH_SCAN_RATE);
-  builder_.add_DETECTION_THRESHOLD(DETECTION_THRESHOLD);
-  builder_.add_UPDATE_RATE(UPDATE_RATE);
-  builder_.add_RANGE_RESOLUTION(RANGE_RESOLUTION);
-  builder_.add_ANGULAR_RESOLUTION(ANGULAR_RESOLUTION);
-  builder_.add_FOV_ELEVATION(FOV_ELEVATION);
-  builder_.add_FOV_AZIMUTH(FOV_AZIMUTH);
-  builder_.add_RESERVED1(RESERVED1);
-  builder_.add_MODE(MODE);
+  builder_.add_NOTES(NOTES);
+  builder_.add_PROVENANCE(PROVENANCE);
+  builder_.add_OPTICAL(OPTICAL);
+  builder_.add_RF(RF);
+  builder_.add_MOUNTING(MOUNTING);
+  builder_.add_FIELD_OF_VIEW_PROVENANCE(FIELD_OF_VIEW_PROVENANCE);
+  builder_.add_FIELD_OF_VIEW(FIELD_OF_VIEW);
+  builder_.add_SPECTRAL_BANDS(SPECTRAL_BANDS);
+  builder_.add_ENTITY_ID(ENTITY_ID);
+  builder_.add_SITE_ID(SITE_ID);
+  builder_.add_OBJECT_ID(OBJECT_ID);
+  builder_.add_NORAD_CAT_ID(NORAD_CAT_ID);
+  builder_.add_NAME(NAME);
+  builder_.add_SENSOR_ID(SENSOR_ID);
+  builder_.add_EMISSION(EMISSION);
   builder_.add_TYPE(TYPE);
   return builder_.Finish();
 }
@@ -405,44 +1325,385 @@ struct SNR::Traits {
 
 inline ::flatbuffers::Offset<SNR> CreateSNRDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
-    uint8_t TYPE = 0,
-    uint8_t MODE = 0,
-    uint16_t RESERVED1 = 0,
-    double MAX_RANGE = 0.0,
-    double MIN_RANGE = 0.0,
-    float FOV_AZIMUTH = 0.0f,
-    float FOV_ELEVATION = 0.0f,
-    float ANGULAR_RESOLUTION = 0.0f,
-    float RANGE_RESOLUTION = 0.0f,
-    float UPDATE_RATE = 0.0f,
-    float DETECTION_THRESHOLD = 0.0f,
-    float AZIMUTH_SCAN_RATE = 0.0f,
-    float ELEVATION_SCAN_RATE = 0.0f,
-    float POWER = 0.0f,
-    float FREQUENCY = 0.0f,
-    const std::vector<uint8_t> *RESERVED = nullptr) {
-  auto RESERVED__ = RESERVED ? _fbb.CreateVector<uint8_t>(*RESERVED) : 0;
+    const char *SENSOR_ID = nullptr,
+    const char *NAME = nullptr,
+    uint32_t NORAD_CAT_ID = 0,
+    const char *OBJECT_ID = nullptr,
+    const char *SITE_ID = nullptr,
+    const char *ENTITY_ID = nullptr,
+    SensorType TYPE = SensorType::UNSPECIFIED,
+    snrEmissionMode EMISSION = snrEmissionMode::UNSPECIFIED,
+    const std::vector<::flatbuffers::Offset<SNRSpectralBand>> *SPECTRAL_BANDS = nullptr,
+    ::flatbuffers::Offset<SCVSensorShapeContract> FIELD_OF_VIEW = 0,
+    ::flatbuffers::Offset<OPPProvenance> FIELD_OF_VIEW_PROVENANCE = 0,
+    ::flatbuffers::Offset<SNRMounting> MOUNTING = 0,
+    ::flatbuffers::Offset<SNRRfParameters> RF = 0,
+    ::flatbuffers::Offset<SNROpticalParameters> OPTICAL = 0,
+    ::flatbuffers::Offset<OPPProvenance> PROVENANCE = 0,
+    const char *NOTES = nullptr) {
+  auto SENSOR_ID__ = SENSOR_ID ? _fbb.CreateString(SENSOR_ID) : 0;
+  auto NAME__ = NAME ? _fbb.CreateString(NAME) : 0;
+  auto OBJECT_ID__ = OBJECT_ID ? _fbb.CreateString(OBJECT_ID) : 0;
+  auto SITE_ID__ = SITE_ID ? _fbb.CreateString(SITE_ID) : 0;
+  auto ENTITY_ID__ = ENTITY_ID ? _fbb.CreateString(ENTITY_ID) : 0;
+  auto SPECTRAL_BANDS__ = SPECTRAL_BANDS ? _fbb.CreateVector<::flatbuffers::Offset<SNRSpectralBand>>(*SPECTRAL_BANDS) : 0;
+  auto NOTES__ = NOTES ? _fbb.CreateString(NOTES) : 0;
   return CreateSNR(
       _fbb,
+      SENSOR_ID__,
+      NAME__,
+      NORAD_CAT_ID,
+      OBJECT_ID__,
+      SITE_ID__,
+      ENTITY_ID__,
       TYPE,
-      MODE,
-      RESERVED1,
-      MAX_RANGE,
-      MIN_RANGE,
-      FOV_AZIMUTH,
-      FOV_ELEVATION,
-      ANGULAR_RESOLUTION,
-      RANGE_RESOLUTION,
-      UPDATE_RATE,
-      DETECTION_THRESHOLD,
-      AZIMUTH_SCAN_RATE,
-      ELEVATION_SCAN_RATE,
-      POWER,
-      FREQUENCY,
-      RESERVED__);
+      EMISSION,
+      SPECTRAL_BANDS__,
+      FIELD_OF_VIEW,
+      FIELD_OF_VIEW_PROVENANCE,
+      MOUNTING,
+      RF,
+      OPTICAL,
+      PROVENANCE,
+      NOTES__);
 }
 
 ::flatbuffers::Offset<SNR> CreateSNR(::flatbuffers::FlatBufferBuilder &_fbb, const SNRT *_o, const ::flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+inline SNRSpectralBandT::SNRSpectralBandT(const SNRSpectralBandT &o)
+      : NAME(o.NAME),
+        DESIGNATION(o.DESIGNATION),
+        FREQ_LOW_HZ(o.FREQ_LOW_HZ),
+        FREQ_HIGH_HZ(o.FREQ_HIGH_HZ),
+        DIRECTION(o.DIRECTION),
+        PROVENANCE((o.PROVENANCE) ? new OPPProvenanceT(*o.PROVENANCE) : nullptr) {
+}
+
+inline SNRSpectralBandT &SNRSpectralBandT::operator=(SNRSpectralBandT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(NAME, o.NAME);
+  std::swap(DESIGNATION, o.DESIGNATION);
+  std::swap(FREQ_LOW_HZ, o.FREQ_LOW_HZ);
+  std::swap(FREQ_HIGH_HZ, o.FREQ_HIGH_HZ);
+  std::swap(DIRECTION, o.DIRECTION);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  return *this;
+}
+
+inline SNRSpectralBandT *SNRSpectralBand::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SNRSpectralBandT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SNRSpectralBand::UnPackTo(SNRSpectralBandT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = NAME(); if (_e) _o->NAME = _e->str(); }
+  { auto _e = DESIGNATION(); if (_e) _o->DESIGNATION = _e->str(); }
+  { auto _e = FREQ_LOW_HZ(); _o->FREQ_LOW_HZ = _e; }
+  { auto _e = FREQ_HIGH_HZ(); _o->FREQ_HIGH_HZ = _e; }
+  { auto _e = DIRECTION(); _o->DIRECTION = _e; }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<OPPProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<SNRSpectralBand> CreateSNRSpectralBand(::flatbuffers::FlatBufferBuilder &_fbb, const SNRSpectralBandT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SNRSpectralBand::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SNRSpectralBand> SNRSpectralBand::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNRSpectralBandT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SNRSpectralBandT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _NAME = _o->NAME.empty() ? 0 : _fbb.CreateString(_o->NAME);
+  auto _DESIGNATION = _o->DESIGNATION.empty() ? 0 : _fbb.CreateString(_o->DESIGNATION);
+  auto _FREQ_LOW_HZ = _o->FREQ_LOW_HZ;
+  auto _FREQ_HIGH_HZ = _o->FREQ_HIGH_HZ;
+  auto _DIRECTION = _o->DIRECTION;
+  auto _PROVENANCE = _o->PROVENANCE ? CreateOPPProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  return CreateSNRSpectralBand(
+      _fbb,
+      _NAME,
+      _DESIGNATION,
+      _FREQ_LOW_HZ,
+      _FREQ_HIGH_HZ,
+      _DIRECTION,
+      _PROVENANCE);
+}
+
+inline SNRMountingT::SNRMountingT(const SNRMountingT &o)
+      : FRAME(o.FRAME),
+        BORESIGHT_AZIMUTH_DEG(o.BORESIGHT_AZIMUTH_DEG),
+        BORESIGHT_ELEVATION_DEG(o.BORESIGHT_ELEVATION_DEG),
+        ROLL_DEG(o.ROLL_DEG),
+        POINTING(o.POINTING),
+        SCAN_AZIMUTH_RATE_DEG_S(o.SCAN_AZIMUTH_RATE_DEG_S),
+        SCAN_ELEVATION_RATE_DEG_S(o.SCAN_ELEVATION_RATE_DEG_S),
+        AZIMUTH_LIMIT_MIN_DEG(o.AZIMUTH_LIMIT_MIN_DEG),
+        AZIMUTH_LIMIT_MAX_DEG(o.AZIMUTH_LIMIT_MAX_DEG),
+        ELEVATION_LIMIT_MIN_DEG(o.ELEVATION_LIMIT_MIN_DEG),
+        ELEVATION_LIMIT_MAX_DEG(o.ELEVATION_LIMIT_MAX_DEG),
+        PROVENANCE((o.PROVENANCE) ? new OPPProvenanceT(*o.PROVENANCE) : nullptr) {
+}
+
+inline SNRMountingT &SNRMountingT::operator=(SNRMountingT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(FRAME, o.FRAME);
+  std::swap(BORESIGHT_AZIMUTH_DEG, o.BORESIGHT_AZIMUTH_DEG);
+  std::swap(BORESIGHT_ELEVATION_DEG, o.BORESIGHT_ELEVATION_DEG);
+  std::swap(ROLL_DEG, o.ROLL_DEG);
+  std::swap(POINTING, o.POINTING);
+  std::swap(SCAN_AZIMUTH_RATE_DEG_S, o.SCAN_AZIMUTH_RATE_DEG_S);
+  std::swap(SCAN_ELEVATION_RATE_DEG_S, o.SCAN_ELEVATION_RATE_DEG_S);
+  std::swap(AZIMUTH_LIMIT_MIN_DEG, o.AZIMUTH_LIMIT_MIN_DEG);
+  std::swap(AZIMUTH_LIMIT_MAX_DEG, o.AZIMUTH_LIMIT_MAX_DEG);
+  std::swap(ELEVATION_LIMIT_MIN_DEG, o.ELEVATION_LIMIT_MIN_DEG);
+  std::swap(ELEVATION_LIMIT_MAX_DEG, o.ELEVATION_LIMIT_MAX_DEG);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  return *this;
+}
+
+inline SNRMountingT *SNRMounting::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SNRMountingT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SNRMounting::UnPackTo(SNRMountingT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = FRAME(); _o->FRAME = _e; }
+  { auto _e = BORESIGHT_AZIMUTH_DEG(); _o->BORESIGHT_AZIMUTH_DEG = _e; }
+  { auto _e = BORESIGHT_ELEVATION_DEG(); _o->BORESIGHT_ELEVATION_DEG = _e; }
+  { auto _e = ROLL_DEG(); _o->ROLL_DEG = _e; }
+  { auto _e = POINTING(); _o->POINTING = _e; }
+  { auto _e = SCAN_AZIMUTH_RATE_DEG_S(); _o->SCAN_AZIMUTH_RATE_DEG_S = _e; }
+  { auto _e = SCAN_ELEVATION_RATE_DEG_S(); _o->SCAN_ELEVATION_RATE_DEG_S = _e; }
+  { auto _e = AZIMUTH_LIMIT_MIN_DEG(); _o->AZIMUTH_LIMIT_MIN_DEG = _e; }
+  { auto _e = AZIMUTH_LIMIT_MAX_DEG(); _o->AZIMUTH_LIMIT_MAX_DEG = _e; }
+  { auto _e = ELEVATION_LIMIT_MIN_DEG(); _o->ELEVATION_LIMIT_MIN_DEG = _e; }
+  { auto _e = ELEVATION_LIMIT_MAX_DEG(); _o->ELEVATION_LIMIT_MAX_DEG = _e; }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<OPPProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<SNRMounting> CreateSNRMounting(::flatbuffers::FlatBufferBuilder &_fbb, const SNRMountingT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SNRMounting::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SNRMounting> SNRMounting::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNRMountingT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SNRMountingT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _FRAME = _o->FRAME;
+  auto _BORESIGHT_AZIMUTH_DEG = _o->BORESIGHT_AZIMUTH_DEG;
+  auto _BORESIGHT_ELEVATION_DEG = _o->BORESIGHT_ELEVATION_DEG;
+  auto _ROLL_DEG = _o->ROLL_DEG;
+  auto _POINTING = _o->POINTING;
+  auto _SCAN_AZIMUTH_RATE_DEG_S = _o->SCAN_AZIMUTH_RATE_DEG_S;
+  auto _SCAN_ELEVATION_RATE_DEG_S = _o->SCAN_ELEVATION_RATE_DEG_S;
+  auto _AZIMUTH_LIMIT_MIN_DEG = _o->AZIMUTH_LIMIT_MIN_DEG;
+  auto _AZIMUTH_LIMIT_MAX_DEG = _o->AZIMUTH_LIMIT_MAX_DEG;
+  auto _ELEVATION_LIMIT_MIN_DEG = _o->ELEVATION_LIMIT_MIN_DEG;
+  auto _ELEVATION_LIMIT_MAX_DEG = _o->ELEVATION_LIMIT_MAX_DEG;
+  auto _PROVENANCE = _o->PROVENANCE ? CreateOPPProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  return CreateSNRMounting(
+      _fbb,
+      _FRAME,
+      _BORESIGHT_AZIMUTH_DEG,
+      _BORESIGHT_ELEVATION_DEG,
+      _ROLL_DEG,
+      _POINTING,
+      _SCAN_AZIMUTH_RATE_DEG_S,
+      _SCAN_ELEVATION_RATE_DEG_S,
+      _AZIMUTH_LIMIT_MIN_DEG,
+      _AZIMUTH_LIMIT_MAX_DEG,
+      _ELEVATION_LIMIT_MIN_DEG,
+      _ELEVATION_LIMIT_MAX_DEG,
+      _PROVENANCE);
+}
+
+inline SNRRfParametersT::SNRRfParametersT(const SNRRfParametersT &o)
+      : ANTENNA_PATTERN(o.ANTENNA_PATTERN),
+        PEAK_POWER_W(o.PEAK_POWER_W),
+        ANTENNA_GAIN_DBI(o.ANTENNA_GAIN_DBI),
+        BEAMWIDTH_AZIMUTH_DEG(o.BEAMWIDTH_AZIMUTH_DEG),
+        BEAMWIDTH_ELEVATION_DEG(o.BEAMWIDTH_ELEVATION_DEG),
+        BANDWIDTH_HZ(o.BANDWIDTH_HZ),
+        POLARIZATION(o.POLARIZATION),
+        PRF_HZ(o.PRF_HZ),
+        PULSE_WIDTH_S(o.PULSE_WIDTH_S),
+        PROVENANCE((o.PROVENANCE) ? new OPPProvenanceT(*o.PROVENANCE) : nullptr) {
+}
+
+inline SNRRfParametersT &SNRRfParametersT::operator=(SNRRfParametersT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(ANTENNA_PATTERN, o.ANTENNA_PATTERN);
+  std::swap(PEAK_POWER_W, o.PEAK_POWER_W);
+  std::swap(ANTENNA_GAIN_DBI, o.ANTENNA_GAIN_DBI);
+  std::swap(BEAMWIDTH_AZIMUTH_DEG, o.BEAMWIDTH_AZIMUTH_DEG);
+  std::swap(BEAMWIDTH_ELEVATION_DEG, o.BEAMWIDTH_ELEVATION_DEG);
+  std::swap(BANDWIDTH_HZ, o.BANDWIDTH_HZ);
+  std::swap(POLARIZATION, o.POLARIZATION);
+  std::swap(PRF_HZ, o.PRF_HZ);
+  std::swap(PULSE_WIDTH_S, o.PULSE_WIDTH_S);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  return *this;
+}
+
+inline SNRRfParametersT *SNRRfParameters::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SNRRfParametersT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SNRRfParameters::UnPackTo(SNRRfParametersT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = ANTENNA_PATTERN(); _o->ANTENNA_PATTERN = _e; }
+  { auto _e = PEAK_POWER_W(); _o->PEAK_POWER_W = _e; }
+  { auto _e = ANTENNA_GAIN_DBI(); _o->ANTENNA_GAIN_DBI = _e; }
+  { auto _e = BEAMWIDTH_AZIMUTH_DEG(); _o->BEAMWIDTH_AZIMUTH_DEG = _e; }
+  { auto _e = BEAMWIDTH_ELEVATION_DEG(); _o->BEAMWIDTH_ELEVATION_DEG = _e; }
+  { auto _e = BANDWIDTH_HZ(); _o->BANDWIDTH_HZ = _e; }
+  { auto _e = POLARIZATION(); _o->POLARIZATION = _e; }
+  { auto _e = PRF_HZ(); _o->PRF_HZ = _e; }
+  { auto _e = PULSE_WIDTH_S(); _o->PULSE_WIDTH_S = _e; }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<OPPProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<SNRRfParameters> CreateSNRRfParameters(::flatbuffers::FlatBufferBuilder &_fbb, const SNRRfParametersT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SNRRfParameters::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SNRRfParameters> SNRRfParameters::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNRRfParametersT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SNRRfParametersT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _ANTENNA_PATTERN = _o->ANTENNA_PATTERN;
+  auto _PEAK_POWER_W = _o->PEAK_POWER_W;
+  auto _ANTENNA_GAIN_DBI = _o->ANTENNA_GAIN_DBI;
+  auto _BEAMWIDTH_AZIMUTH_DEG = _o->BEAMWIDTH_AZIMUTH_DEG;
+  auto _BEAMWIDTH_ELEVATION_DEG = _o->BEAMWIDTH_ELEVATION_DEG;
+  auto _BANDWIDTH_HZ = _o->BANDWIDTH_HZ;
+  auto _POLARIZATION = _o->POLARIZATION;
+  auto _PRF_HZ = _o->PRF_HZ;
+  auto _PULSE_WIDTH_S = _o->PULSE_WIDTH_S;
+  auto _PROVENANCE = _o->PROVENANCE ? CreateOPPProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  return CreateSNRRfParameters(
+      _fbb,
+      _ANTENNA_PATTERN,
+      _PEAK_POWER_W,
+      _ANTENNA_GAIN_DBI,
+      _BEAMWIDTH_AZIMUTH_DEG,
+      _BEAMWIDTH_ELEVATION_DEG,
+      _BANDWIDTH_HZ,
+      _POLARIZATION,
+      _PRF_HZ,
+      _PULSE_WIDTH_S,
+      _PROVENANCE);
+}
+
+inline SNROpticalParametersT::SNROpticalParametersT(const SNROpticalParametersT &o)
+      : APERTURE_M(o.APERTURE_M),
+        FOCAL_LENGTH_M(o.FOCAL_LENGTH_M),
+        IFOV_RAD(o.IFOV_RAD),
+        GSD_M(o.GSD_M),
+        LIMITING_MAGNITUDE(o.LIMITING_MAGNITUDE),
+        DETECTOR(o.DETECTOR),
+        PROVENANCE((o.PROVENANCE) ? new OPPProvenanceT(*o.PROVENANCE) : nullptr) {
+}
+
+inline SNROpticalParametersT &SNROpticalParametersT::operator=(SNROpticalParametersT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(APERTURE_M, o.APERTURE_M);
+  std::swap(FOCAL_LENGTH_M, o.FOCAL_LENGTH_M);
+  std::swap(IFOV_RAD, o.IFOV_RAD);
+  std::swap(GSD_M, o.GSD_M);
+  std::swap(LIMITING_MAGNITUDE, o.LIMITING_MAGNITUDE);
+  std::swap(DETECTOR, o.DETECTOR);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  return *this;
+}
+
+inline SNROpticalParametersT *SNROpticalParameters::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = std::make_unique<SNROpticalParametersT>();
+  UnPackTo(_o.get(), _resolver);
+  return _o.release();
+}
+
+inline void SNROpticalParameters::UnPackTo(SNROpticalParametersT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = APERTURE_M(); _o->APERTURE_M = _e; }
+  { auto _e = FOCAL_LENGTH_M(); _o->FOCAL_LENGTH_M = _e; }
+  { auto _e = IFOV_RAD(); _o->IFOV_RAD = _e; }
+  { auto _e = GSD_M(); _o->GSD_M = _e; }
+  { auto _e = LIMITING_MAGNITUDE(); _o->LIMITING_MAGNITUDE = _e; }
+  { auto _e = DETECTOR(); if (_e) _o->DETECTOR = _e->str(); }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<OPPProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+}
+
+inline ::flatbuffers::Offset<SNROpticalParameters> CreateSNROpticalParameters(::flatbuffers::FlatBufferBuilder &_fbb, const SNROpticalParametersT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  return SNROpticalParameters::Pack(_fbb, _o, _rehasher);
+}
+
+inline ::flatbuffers::Offset<SNROpticalParameters> SNROpticalParameters::Pack(::flatbuffers::FlatBufferBuilder &_fbb, const SNROpticalParametersT* _o, const ::flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SNROpticalParametersT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _APERTURE_M = _o->APERTURE_M;
+  auto _FOCAL_LENGTH_M = _o->FOCAL_LENGTH_M;
+  auto _IFOV_RAD = _o->IFOV_RAD;
+  auto _GSD_M = _o->GSD_M;
+  auto _LIMITING_MAGNITUDE = _o->LIMITING_MAGNITUDE;
+  auto _DETECTOR = _o->DETECTOR.empty() ? 0 : _fbb.CreateString(_o->DETECTOR);
+  auto _PROVENANCE = _o->PROVENANCE ? CreateOPPProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  return CreateSNROpticalParameters(
+      _fbb,
+      _APERTURE_M,
+      _FOCAL_LENGTH_M,
+      _IFOV_RAD,
+      _GSD_M,
+      _LIMITING_MAGNITUDE,
+      _DETECTOR,
+      _PROVENANCE);
+}
+
+inline SNRT::SNRT(const SNRT &o)
+      : SENSOR_ID(o.SENSOR_ID),
+        NAME(o.NAME),
+        NORAD_CAT_ID(o.NORAD_CAT_ID),
+        OBJECT_ID(o.OBJECT_ID),
+        SITE_ID(o.SITE_ID),
+        ENTITY_ID(o.ENTITY_ID),
+        TYPE(o.TYPE),
+        EMISSION(o.EMISSION),
+        FIELD_OF_VIEW((o.FIELD_OF_VIEW) ? new SCVSensorShapeContractT(*o.FIELD_OF_VIEW) : nullptr),
+        FIELD_OF_VIEW_PROVENANCE((o.FIELD_OF_VIEW_PROVENANCE) ? new OPPProvenanceT(*o.FIELD_OF_VIEW_PROVENANCE) : nullptr),
+        MOUNTING((o.MOUNTING) ? new SNRMountingT(*o.MOUNTING) : nullptr),
+        RF((o.RF) ? new SNRRfParametersT(*o.RF) : nullptr),
+        OPTICAL((o.OPTICAL) ? new SNROpticalParametersT(*o.OPTICAL) : nullptr),
+        PROVENANCE((o.PROVENANCE) ? new OPPProvenanceT(*o.PROVENANCE) : nullptr),
+        NOTES(o.NOTES) {
+  SPECTRAL_BANDS.reserve(o.SPECTRAL_BANDS.size());
+  for (const auto &SPECTRAL_BANDS_ : o.SPECTRAL_BANDS) { SPECTRAL_BANDS.emplace_back((SPECTRAL_BANDS_) ? new SNRSpectralBandT(*SPECTRAL_BANDS_) : nullptr); }
+}
+
+inline SNRT &SNRT::operator=(SNRT o) FLATBUFFERS_NOEXCEPT {
+  std::swap(SENSOR_ID, o.SENSOR_ID);
+  std::swap(NAME, o.NAME);
+  std::swap(NORAD_CAT_ID, o.NORAD_CAT_ID);
+  std::swap(OBJECT_ID, o.OBJECT_ID);
+  std::swap(SITE_ID, o.SITE_ID);
+  std::swap(ENTITY_ID, o.ENTITY_ID);
+  std::swap(TYPE, o.TYPE);
+  std::swap(EMISSION, o.EMISSION);
+  std::swap(SPECTRAL_BANDS, o.SPECTRAL_BANDS);
+  std::swap(FIELD_OF_VIEW, o.FIELD_OF_VIEW);
+  std::swap(FIELD_OF_VIEW_PROVENANCE, o.FIELD_OF_VIEW_PROVENANCE);
+  std::swap(MOUNTING, o.MOUNTING);
+  std::swap(RF, o.RF);
+  std::swap(OPTICAL, o.OPTICAL);
+  std::swap(PROVENANCE, o.PROVENANCE);
+  std::swap(NOTES, o.NOTES);
+  return *this;
+}
 
 inline SNRT *SNR::UnPack(const ::flatbuffers::resolver_function_t *_resolver) const {
   auto _o = std::make_unique<SNRT>();
@@ -453,22 +1714,22 @@ inline SNRT *SNR::UnPack(const ::flatbuffers::resolver_function_t *_resolver) co
 inline void SNR::UnPackTo(SNRT *_o, const ::flatbuffers::resolver_function_t *_resolver) const {
   (void)_o;
   (void)_resolver;
+  { auto _e = SENSOR_ID(); if (_e) _o->SENSOR_ID = _e->str(); }
+  { auto _e = NAME(); if (_e) _o->NAME = _e->str(); }
+  { auto _e = NORAD_CAT_ID(); _o->NORAD_CAT_ID = _e; }
+  { auto _e = OBJECT_ID(); if (_e) _o->OBJECT_ID = _e->str(); }
+  { auto _e = SITE_ID(); if (_e) _o->SITE_ID = _e->str(); }
+  { auto _e = ENTITY_ID(); if (_e) _o->ENTITY_ID = _e->str(); }
   { auto _e = TYPE(); _o->TYPE = _e; }
-  { auto _e = MODE(); _o->MODE = _e; }
-  { auto _e = RESERVED1(); _o->RESERVED1 = _e; }
-  { auto _e = MAX_RANGE(); _o->MAX_RANGE = _e; }
-  { auto _e = MIN_RANGE(); _o->MIN_RANGE = _e; }
-  { auto _e = FOV_AZIMUTH(); _o->FOV_AZIMUTH = _e; }
-  { auto _e = FOV_ELEVATION(); _o->FOV_ELEVATION = _e; }
-  { auto _e = ANGULAR_RESOLUTION(); _o->ANGULAR_RESOLUTION = _e; }
-  { auto _e = RANGE_RESOLUTION(); _o->RANGE_RESOLUTION = _e; }
-  { auto _e = UPDATE_RATE(); _o->UPDATE_RATE = _e; }
-  { auto _e = DETECTION_THRESHOLD(); _o->DETECTION_THRESHOLD = _e; }
-  { auto _e = AZIMUTH_SCAN_RATE(); _o->AZIMUTH_SCAN_RATE = _e; }
-  { auto _e = ELEVATION_SCAN_RATE(); _o->ELEVATION_SCAN_RATE = _e; }
-  { auto _e = POWER(); _o->POWER = _e; }
-  { auto _e = FREQUENCY(); _o->FREQUENCY = _e; }
-  { auto _e = RESERVED(); if (_e) { _o->RESERVED.resize(_e->size()); std::copy(_e->begin(), _e->end(), _o->RESERVED.begin()); } }
+  { auto _e = EMISSION(); _o->EMISSION = _e; }
+  { auto _e = SPECTRAL_BANDS(); if (_e) { _o->SPECTRAL_BANDS.resize(_e->size()); for (::flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { if(_o->SPECTRAL_BANDS[_i]) { _e->Get(_i)->UnPackTo(_o->SPECTRAL_BANDS[_i].get(), _resolver); } else { _o->SPECTRAL_BANDS[_i] = std::unique_ptr<SNRSpectralBandT>(_e->Get(_i)->UnPack(_resolver)); } } } else { _o->SPECTRAL_BANDS.resize(0); } }
+  { auto _e = FIELD_OF_VIEW(); if (_e) { if(_o->FIELD_OF_VIEW) { _e->UnPackTo(_o->FIELD_OF_VIEW.get(), _resolver); } else { _o->FIELD_OF_VIEW = std::unique_ptr<SCVSensorShapeContractT>(_e->UnPack(_resolver)); } } else if (_o->FIELD_OF_VIEW) { _o->FIELD_OF_VIEW.reset(); } }
+  { auto _e = FIELD_OF_VIEW_PROVENANCE(); if (_e) { if(_o->FIELD_OF_VIEW_PROVENANCE) { _e->UnPackTo(_o->FIELD_OF_VIEW_PROVENANCE.get(), _resolver); } else { _o->FIELD_OF_VIEW_PROVENANCE = std::unique_ptr<OPPProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->FIELD_OF_VIEW_PROVENANCE) { _o->FIELD_OF_VIEW_PROVENANCE.reset(); } }
+  { auto _e = MOUNTING(); if (_e) { if(_o->MOUNTING) { _e->UnPackTo(_o->MOUNTING.get(), _resolver); } else { _o->MOUNTING = std::unique_ptr<SNRMountingT>(_e->UnPack(_resolver)); } } else if (_o->MOUNTING) { _o->MOUNTING.reset(); } }
+  { auto _e = RF(); if (_e) { if(_o->RF) { _e->UnPackTo(_o->RF.get(), _resolver); } else { _o->RF = std::unique_ptr<SNRRfParametersT>(_e->UnPack(_resolver)); } } else if (_o->RF) { _o->RF.reset(); } }
+  { auto _e = OPTICAL(); if (_e) { if(_o->OPTICAL) { _e->UnPackTo(_o->OPTICAL.get(), _resolver); } else { _o->OPTICAL = std::unique_ptr<SNROpticalParametersT>(_e->UnPack(_resolver)); } } else if (_o->OPTICAL) { _o->OPTICAL.reset(); } }
+  { auto _e = PROVENANCE(); if (_e) { if(_o->PROVENANCE) { _e->UnPackTo(_o->PROVENANCE.get(), _resolver); } else { _o->PROVENANCE = std::unique_ptr<OPPProvenanceT>(_e->UnPack(_resolver)); } } else if (_o->PROVENANCE) { _o->PROVENANCE.reset(); } }
+  { auto _e = NOTES(); if (_e) _o->NOTES = _e->str(); }
 }
 
 inline ::flatbuffers::Offset<SNR> CreateSNR(::flatbuffers::FlatBufferBuilder &_fbb, const SNRT *_o, const ::flatbuffers::rehasher_function_t *_rehasher) {
@@ -479,40 +1740,40 @@ inline ::flatbuffers::Offset<SNR> SNR::Pack(::flatbuffers::FlatBufferBuilder &_f
   (void)_rehasher;
   (void)_o;
   struct _VectorArgs { ::flatbuffers::FlatBufferBuilder *__fbb; const SNRT* __o; const ::flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _SENSOR_ID = _fbb.CreateString(_o->SENSOR_ID);
+  auto _NAME = _o->NAME.empty() ? 0 : _fbb.CreateString(_o->NAME);
+  auto _NORAD_CAT_ID = _o->NORAD_CAT_ID;
+  auto _OBJECT_ID = _o->OBJECT_ID.empty() ? 0 : _fbb.CreateString(_o->OBJECT_ID);
+  auto _SITE_ID = _o->SITE_ID.empty() ? 0 : _fbb.CreateString(_o->SITE_ID);
+  auto _ENTITY_ID = _o->ENTITY_ID.empty() ? 0 : _fbb.CreateString(_o->ENTITY_ID);
   auto _TYPE = _o->TYPE;
-  auto _MODE = _o->MODE;
-  auto _RESERVED1 = _o->RESERVED1;
-  auto _MAX_RANGE = _o->MAX_RANGE;
-  auto _MIN_RANGE = _o->MIN_RANGE;
-  auto _FOV_AZIMUTH = _o->FOV_AZIMUTH;
-  auto _FOV_ELEVATION = _o->FOV_ELEVATION;
-  auto _ANGULAR_RESOLUTION = _o->ANGULAR_RESOLUTION;
-  auto _RANGE_RESOLUTION = _o->RANGE_RESOLUTION;
-  auto _UPDATE_RATE = _o->UPDATE_RATE;
-  auto _DETECTION_THRESHOLD = _o->DETECTION_THRESHOLD;
-  auto _AZIMUTH_SCAN_RATE = _o->AZIMUTH_SCAN_RATE;
-  auto _ELEVATION_SCAN_RATE = _o->ELEVATION_SCAN_RATE;
-  auto _POWER = _o->POWER;
-  auto _FREQUENCY = _o->FREQUENCY;
-  auto _RESERVED = _o->RESERVED.size() ? _fbb.CreateVector(_o->RESERVED) : 0;
+  auto _EMISSION = _o->EMISSION;
+  auto _SPECTRAL_BANDS = _o->SPECTRAL_BANDS.size() ? _fbb.CreateVector<::flatbuffers::Offset<SNRSpectralBand>> (_o->SPECTRAL_BANDS.size(), [](size_t i, _VectorArgs *__va) { return CreateSNRSpectralBand(*__va->__fbb, __va->__o->SPECTRAL_BANDS[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _FIELD_OF_VIEW = _o->FIELD_OF_VIEW ? CreateSCVSensorShapeContract(_fbb, _o->FIELD_OF_VIEW.get(), _rehasher) : 0;
+  auto _FIELD_OF_VIEW_PROVENANCE = _o->FIELD_OF_VIEW_PROVENANCE ? CreateOPPProvenance(_fbb, _o->FIELD_OF_VIEW_PROVENANCE.get(), _rehasher) : 0;
+  auto _MOUNTING = _o->MOUNTING ? CreateSNRMounting(_fbb, _o->MOUNTING.get(), _rehasher) : 0;
+  auto _RF = _o->RF ? CreateSNRRfParameters(_fbb, _o->RF.get(), _rehasher) : 0;
+  auto _OPTICAL = _o->OPTICAL ? CreateSNROpticalParameters(_fbb, _o->OPTICAL.get(), _rehasher) : 0;
+  auto _PROVENANCE = _o->PROVENANCE ? CreateOPPProvenance(_fbb, _o->PROVENANCE.get(), _rehasher) : 0;
+  auto _NOTES = _o->NOTES.empty() ? 0 : _fbb.CreateString(_o->NOTES);
   return CreateSNR(
       _fbb,
+      _SENSOR_ID,
+      _NAME,
+      _NORAD_CAT_ID,
+      _OBJECT_ID,
+      _SITE_ID,
+      _ENTITY_ID,
       _TYPE,
-      _MODE,
-      _RESERVED1,
-      _MAX_RANGE,
-      _MIN_RANGE,
-      _FOV_AZIMUTH,
-      _FOV_ELEVATION,
-      _ANGULAR_RESOLUTION,
-      _RANGE_RESOLUTION,
-      _UPDATE_RATE,
-      _DETECTION_THRESHOLD,
-      _AZIMUTH_SCAN_RATE,
-      _ELEVATION_SCAN_RATE,
-      _POWER,
-      _FREQUENCY,
-      _RESERVED);
+      _EMISSION,
+      _SPECTRAL_BANDS,
+      _FIELD_OF_VIEW,
+      _FIELD_OF_VIEW_PROVENANCE,
+      _MOUNTING,
+      _RF,
+      _OPTICAL,
+      _PROVENANCE,
+      _NOTES);
 }
 
 inline const SNR *GetSNR(const void *buf) {
