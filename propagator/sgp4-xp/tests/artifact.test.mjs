@@ -11,12 +11,13 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { manifest, root, wasmPath } from './lib/module.mjs';
+import { loadableBytes, manifest, root, wasmPath } from './lib/module.mjs';
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
-const bytes = fs.readFileSync(wasmPath);
+const bytes = loadableBytes;
 const ussfDir = path.join(root, 'third_party/ussf-sgp4');
 const sdk = path.join(root, 'node_modules/space-data-module-sdk/bin/space-data-module.js');
 const LIBRARY_SHA256 = '9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7';
@@ -55,7 +56,7 @@ test('the Agreement\'s notice is in the artifact, and the library is the one the
   }
   const provenance = JSON.parse(fs.readFileSync(path.join(root, 'dist/build-provenance.json'), 'utf8'));
   assert.equal(provenance.library.sha256, LIBRARY_SHA256);
-  assert.equal(provenance.moduleSha256, sha256(bytes), 'dist/ is the build that was recorded');
+  assert.equal(provenance.canonicalWasmSha256, sha256(bytes), 'dist/ is the build that was recorded');
 });
 
 test('the manifest passes the SDK check and the artifact the propagator conformance', () => {
@@ -64,7 +65,12 @@ test('the manifest passes the SDK check and the artifact the propagator conforma
   assert.match(check.stdout, /No issues found/);
   assert.equal(manifest.threadModel, 'wasi-sequential');
 
-  const conformance = spawnSync(process.execPath, [sdk, 'conformance', 'propagator', '--artifact', wasmPath, '--json'], { encoding: 'utf8' });
+  // This SDK's conformance driver compiles the file as given: it is handed the bytes a runtime compiles (no trailer).
+  const loadableDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sgp4-xp-loadable-'));
+  const loadablePath = path.join(loadableDir, 'module.wasm');
+  fs.writeFileSync(loadablePath, loadableBytes);
+  const conformance = spawnSync(process.execPath, [sdk, 'conformance', 'propagator', '--artifact', loadablePath, '--json'], { encoding: 'utf8' });
+  fs.rmSync(loadableDir, { recursive: true, force: true });
   assert.equal(conformance.status, 0, `${conformance.stdout}${conformance.stderr}`);
   const report = JSON.parse(conformance.stdout);
   const failing = report.checks.filter((c) => c.status === 'fail');

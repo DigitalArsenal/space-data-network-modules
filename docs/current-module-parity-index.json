@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T13:37:15.396Z",
+  "generatedAt": "2026-11-06T13:53:26.799Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -4119,7 +4119,7 @@
       "pluginId": "com.digitalarsenal.data-source.sdn-element-sync",
       "name": "sdn-element-sync",
       "pluginFamily": "data_source",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "merge"
       ],
@@ -4993,7 +4993,7 @@
       "pluginId": "com.digitalarsenal.files.ccsds-messages",
       "name": "CCSDS Message Reader",
       "pluginFamily": "parser",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "methodIds": [
         "read_acm",
         "read_aem",
@@ -5636,7 +5636,7 @@
       "pluginId": "com.digitalarsenal.foundation.frames",
       "name": "Foundation Frames",
       "pluginFamily": "foundation",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "transform_frame_position"
       ],
@@ -6515,7 +6515,7 @@
       "pluginId": "atmosphere-model",
       "name": "Atmosphere Plugin",
       "pluginFamily": "analysis",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "methodIds": [
         "ocm_state_to_drag_acceleration_oem",
         "query_atmosphere_state_batch",
@@ -6610,7 +6610,7 @@
       "pluginId": "com.digitalarsenal.propagator.events",
       "name": "Event Locator",
       "pluginFamily": "propagator",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "methodIds": [
         "locate_access_windows",
         "locate_events",
@@ -7651,7 +7651,7 @@
       "pluginId": "com.digitalarsenal.propagator.sgp4-xp",
       "name": "SGP4-XP propagator and fitter (US Space Force Sgp4Prop)",
       "pluginFamily": "propagator",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "methodIds": [
         "fit",
         "ingest_omm",
@@ -7717,7 +7717,7 @@
       "pluginId": "com.orbpro.sgp4",
       "name": "SGP4/SDP4 Propagator",
       "pluginFamily": "propagator",
-      "version": "1.4.1",
+      "version": "1.4.2",
       "methodIds": [
         "catalog_query",
         "ingest_omm",
