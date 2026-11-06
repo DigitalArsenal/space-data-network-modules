@@ -2319,8 +2319,9 @@ by one with G and dG/de by the trapezoid on those nodes. Kept on 128 of them wit
 differences), single precision (7.1 MB), and read at output time by the four-point periodic cubic in E, linear in the mean
 elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's mean elements at every 48 hours from its epoch
 (the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval; a set
-within 3e-4 in e, 1e-4 rad in i and 1e-4 in a / a of a held grid's elements shares it (a set's perturbed copies for its
-partials and covariance), each set keeping its last two nodes. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
+within 3e-4 in e, 1e-4 rad in i and 1e-4 in a / a of a held grid's elements shares it (a set's covariance copies), each set
+keeping its last two nodes; a set initialized with exact_grid (xp_init's flag; a fit's perturbed copies) builds its own grids at its
+own elements and shares none, so a fit's finite-difference partials see the exact grid. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; the
 0.4.15 to 0.6.2 set (|q| <= 10, |j| <= 33) was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in the
 table. At e 0.3 and below both sets are 0.4.14's: propagations at e 0.25 and 0.3 and of LEO, Etalon- and GPS-like seeded

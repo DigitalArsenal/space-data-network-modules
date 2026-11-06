@@ -1121,15 +1121,17 @@ inline void free_grid(WideGrid* g) {
   std::free(g);
 }
 
-/// A grid for (n, e, i): a live or idle one whose sharing range holds the elements, else a new one; nullptr out of memory.
-inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc) {
+/// A grid for (n, e, i): a live or idle one whose sharing range holds the elements (`exact`: one built at these very elements),
+/// else a new one; nullptr out of memory.
+inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool exact = false) {
   GridCache& c = grid_cache();
   const double a = std::pow(kKe / n, kX2o3);
+  const double se = exact ? 0.0 : kShareE, si = exact ? 0.0 : kShareI, sa = exact ? 0.0 : kShareA;
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && std::fabs(e - g.e) <= kShareE && std::fabs(inc - g.i) <= kShareI &&
-        std::fabs(a / g.a - 1.0) <= kShareA) {
+    if (g.degree == degree && c.slot[k].cls == cls && std::fabs(e - g.e) <= se && std::fabs(inc - g.i) <= si &&
+        std::fabs(a / g.a - 1.0) <= sa) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
       cache_unlock(&c.word);
