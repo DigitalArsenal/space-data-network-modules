@@ -720,7 +720,7 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
 /// equations), integrated by H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot with
 /// nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, the harmonics the table's rules leave out (m-daily, the class's,
 /// |psi-dot| < kShallowBand n) subtracted, and kept on kGridN of them with its first derivatives in e, i and a / a0.
-constexpr int kGridN = 128, kGridNE = 256;
+constexpr int kGridN = 128, kGridNE = 128;
 constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward differences of the derivative grids
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
@@ -783,12 +783,11 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
   const res::TermSet carried = res::class_terms(cls);
   const double h = 1e-5;
   double f[72], fp[72], fmn[72];
-  double* ws = static_cast<double*>(std::malloc(static_cast<size_t>(20) * 2 * NE * sizeof(double)));
+  double* ws = static_cast<double*>(std::malloc(static_cast<size_t>(11) * 2 * NE * sizeof(double)));
   if (ws == nullptr) return -1;
-  double (*R)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws);
-  double (*gr)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 6 * 2 * NE);
-  double (*D)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 11 * 2 * NE);
-  double (*X)[NE] = reinterpret_cast<double (*)[NE]>(ws + 18 * 2 * NE);
+  double (*gr)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws);           // g', g, g_e, g_i, g_a
+  double (*D)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 5 * 2 * NE);  // their transforms and H[H[g]]
+  double (*X)[NE] = reinterpret_cast<double (*)[NE]>(ws + 10 * 2 * NE);
   int count = 0;
   for (int m = 1; m <= degree; ++m)
     for (int w = -degree; w <= degree; ++w) {
@@ -840,20 +839,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         gr[2][0][q] = ar[q] * cf[q] * kR - ei * gI;
         gr[2][1][q] = ar[q] * cf[q] * kI + ei * gR;
       }
-      // rates (a, e, i, Omega, omega, M); i x: (re, im) -> (-im, re)
-      for (int q = 0; q < NE; ++q) {
-        const double gMr = gr[0][0][q], gMi = gr[0][1][q], gR = gr[1][0][q], gI = gr[1][1][q];
-        R[0][0][q] = 2.0 / (n * a) * gMr; R[0][1][q] = 2.0 / (n * a) * gMi;
-        R[1][0][q] = eta * eta / (na2 * e) * gMr + eta / (na2 * e) * w * gI;
-        R[1][1][q] = eta * eta / (na2 * e) * gMi - eta / (na2 * e) * w * gR;
-        R[2][0][q] = -(c * w - m) / (na2 * eta * si) * gI; R[2][1][q] = (c * w - m) / (na2 * eta * si) * gR;
-        R[3][0][q] = gr[3][0][q] / (na2 * eta * si); R[3][1][q] = gr[3][1][q] / (na2 * eta * si);
-        R[4][0][q] = eta / (na2 * e) * gr[2][0][q] - c / (na2 * eta * si) * gr[3][0][q];
-        R[4][1][q] = eta / (na2 * e) * gr[2][1][q] - c / (na2 * eta * si) * gr[3][1][q];
-        R[5][0][q] = -2.0 / (n * a) * gr[4][0][q] - eta * eta / (na2 * e) * gr[2][0][q];
-        R[5][1][q] = -2.0 / (n * a) * gr[4][1][q] - eta * eta / (na2 * e) * gr[2][1][q];
-      }
-      // the harmonics the table's rules leave out, in rate form: m-daily (w = j = 0), the class's, the slow band
+      // the harmonics the table's rules leave out, from each forcing function: m-daily (w = j = 0), the class's, the slow band
       for (int l = l0; l <= degree; l += 2) {
         const int p = (l - w) / 2;
         const double F = f[l], dF = (fp[l] - fmn[l]) / (2.0 * h);
@@ -878,20 +864,12 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
           }
           G /= NE;
           dG /= NE;
-          const double Zr = F * G * Sr, Zi = F * G * Si, Zer = F * dG * Sr, Zei = F * dG * Si, Zir = dF * G * Sr, Zii = dF * G * Si;
-          // the six rates of this harmonic: dV/dM = i j Z, dV/domega = i w Z, dV/dOmega = i m Z, dV/da = -(l + 1) / a Z
-          double rr[6][2];
-          rr[0][0] = 2.0 / (n * a) * (-j * Zi); rr[0][1] = 2.0 / (n * a) * (j * Zr);
-          rr[1][0] = eta * eta / (na2 * e) * (-j * Zi) + eta / (na2 * e) * w * Zi;
-          rr[1][1] = eta * eta / (na2 * e) * (j * Zr) - eta / (na2 * e) * w * Zr;
-          rr[2][0] = -(c * w - m) / (na2 * eta * si) * Zi; rr[2][1] = (c * w - m) / (na2 * eta * si) * Zr;
-          rr[3][0] = Zir / (na2 * eta * si); rr[3][1] = Zii / (na2 * eta * si);
-          rr[4][0] = eta / (na2 * e) * Zer - c / (na2 * eta * si) * Zir; rr[4][1] = eta / (na2 * e) * Zei - c / (na2 * eta * si) * Zii;
-          rr[5][0] = 2.0 / (n * a) * (l + 1) / a * Zr - eta * eta / (na2 * e) * Zer;
-          rr[5][1] = 2.0 / (n * a) * (l + 1) / a * Zi - eta * eta / (na2 * e) * Zei;
+          // the harmonic's part of g', g, g_e, g_i, g_a: i j Z, Z, Z_e, Z_i, -(l + 1) / a Z
+          const double Z[5][2] = {{-j * F * G * Si, j * F * G * Sr}, {F * G * Sr, F * G * Si}, {F * dG * Sr, F * dG * Si},
+                                  {dF * G * Sr, dF * G * Si}, {-(l + 1) / a * F * G * Sr, -(l + 1) / a * F * G * Si}};
           for (int k = 0; k < NE; ++k) {
             const double cj = std::cos(j * M[k]), sj = std::sin(j * M[k]);
-            for (int z = 0; z < 6; ++z) { R[z][0][k] -= rr[z][0] * cj - rr[z][1] * sj; R[z][1][k] -= rr[z][0] * sj + rr[z][1] * cj; }
+            for (int z = 0; z < 5; ++z) { gr[z][0][k] -= Z[z][0] * cj - Z[z][1] * sj; gr[z][1][k] -= Z[z][0] * sj + Z[z][1] * cj; }
           }
         }
       }
@@ -918,17 +896,31 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
           o[1][q] = (X[1][q] * cph - X[0][q] * sph) / mdot;
         }
       };
-      for (int z = 0; z < 6; ++z) op(R[z], D[z]);
-      for (int q = 0; q < NE; ++q) { R[0][0][q] = -1.5 * n / a * D[0][0][q]; R[0][1][q] = -1.5 * n / a * D[0][1][q]; }
-      op(R[0], D[6]);
-      // six components (n, e, i, e varpi, sin i Omega, lambda) on every (NE / kGridN)-th node
+      // five transforms: H[g], H[g_e], H[g_i], H[g_a], H[H[g]]; H[g'] = g / M-dot + i nu H[g] (the M-derivative's integral)
+      op(gr[1], D[0]);
+      op(gr[2], D[1]);
+      op(gr[3], D[2]);
+      op(gr[4], D[3]);
+      op(D[0], D[4]);
+      // six components (n, e, i, e varpi, sin i Omega, lambda) on every (NE / kGridN)-th node; i x: (re, im) -> (-im, re)
       double* o = out + static_cast<size_t>(count) * 6 * kGridN * 2;
-      for (int g = 0; g < kGridN; ++g) {
-        const int q = g * (NE / kGridN);
+      const double ka = 2.0 / (n * a), ke1 = eta * eta / (na2 * e), ke2 = eta / (na2 * e), ki = (c * w - m) / (na2 * eta * si);
+      const double kO = 1.0 / (na2 * eta * si), kw = c / (na2 * eta * si);
+      for (int gq = 0; gq < kGridN; ++gq) {
+        const int q = gq * (NE / kGridN);
+        const double Hgr = D[0][0][q], Hgi = D[0][1][q], Her = D[1][0][q], Hei = D[1][1][q], Hir = D[2][0][q], Hii = D[2][1][q];
+        const double Har = D[3][0][q], Hai = D[3][1][q], HHr = D[4][0][q], HHi = D[4][1][q];
+        const double HMr = gr[1][0][q] / mdot - nu * Hgi, HMi = gr[1][1][q] / mdot + nu * Hgr;  // H[g']
+        const double HHMr = Hgr / mdot - nu * HHi, HHMi = Hgi / mdot + nu * HHr;                // H[H[g']]
+        const double da[2] = {ka * HMr, ka * HMi};
+        const double de[2] = {ke1 * HMr + ke2 * w * Hgi, ke1 * HMi - ke2 * w * Hgr};
+        const double di[2] = {-ki * Hgi, ki * Hgr};
+        const double dO[2] = {kO * Hir, kO * Hii};
+        const double dw[2] = {ke2 * Her - kw * Hir, ke2 * Hei - kw * Hii};
+        const double dM[2] = {-ka * Har - ke1 * Her - 3.0 / (a * a) * HHMr, -ka * Hai - ke1 * Hei - 3.0 / (a * a) * HHMi};
         for (int ri = 0; ri < 2; ++ri) {
-          const double da = D[0][ri][q], de = D[1][ri][q], di = D[2][ri][q], dO = D[3][ri][q], dw = D[4][ri][q], dM = D[5][ri][q] + D[6][ri][q];
-          const double six[6] = {-1.5 * n / a * da, de, di, e * (dw + dO), si * dO, dM + dw + dO};
-          for (int z = 0; z < 6; ++z) o[(z * kGridN + g) * 2 + ri] = six[z];
+          const double six[6] = {-1.5 * n / a * da[ri], de[ri], di[ri], e * (dw[ri] + dO[ri]), si * dO[ri], dM[ri] + dw[ri] + dO[ri]};
+          for (int z = 0; z < 6; ++z) o[(z * kGridN + gq) * 2 + ri] = six[z];
         }
       }
       fm_out[count] = static_cast<int8_t>(m);
