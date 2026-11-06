@@ -10,7 +10,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
 import { createStandaloneHarnessOrSkip } from "space-data-module-sdk/testing/isomorphic";
 import { encodeTimerTick, encodeHttpResponse, decodeHttpRequest, decodeHttpResponse, decodeIngestRequest, decodeFlowNotice } from "space-data-module-sdk/runtime-contracts";
-import { deepSpaceFlow } from "../flow.mjs";
+import { deepSpaceFlow, stages } from "../flow.mjs";
 import { validateArtifactWithStandards } from "space-data-module-sdk/compliance";
 import { replayStages, requestKey as key } from "./horizons-stages.mjs";
 
@@ -229,7 +229,7 @@ function checkMetas(result, expectedMs = firedMs, expectedProducer = producer) {
       license: "LicenseRef-NASA-JPL-Horizons-PD", citation: credit })) assert.equal(meta.tags[key], value, `${id}.${key}`);
     const p = meta.provenance;
     for (const [key, value] of Object.entries({ sourceUrl, httpStatus: 200, retrievedMs: expectedMs,
-      parser: "deep-space-spacecraft", parserVersion: "0.3.0", normalizedSha256: sha, normalizedCount: count }))
+      parser: "deep-space-spacecraft", parserVersion: "0.3.1", normalizedSha256: sha, normalizedCount: count }))
       assert.equal(p[key], value, `${id}.provenance.${key}`);
     // The convenience decoder combines these parallel vectors into a map; verify the wire vectors too.
     const wire = IngestRequest.getRootAsIngestRequest(new ByteBuffer(metas[0])).PROVENANCE();
@@ -649,7 +649,7 @@ test("recorded live regimes preserve mission membership, centers and evaluable b
     },
     checkResult: ok, checkRequest: requestShape,
   });
-  assert.deepEqual(snapshots.map((s) => s.methodId), [...Array(6).fill("advance"), "build_oem"]);
+  assert.deepEqual(snapshots.map((s) => s.methodId), [...Array(stages).fill("advance"), "build_oem"]);
   const urls = requestsSeen.map((r) => r.url);
   assert.equal(urls.length, 27);
   assert.equal(new Set(urls).size, urls.length, "no duplicate requests");
@@ -801,7 +801,7 @@ test("browser and WasmEdge produce byte-identical frames", async (t) => {
     const invalid = J(run.snapshots[0].inputs[0].payload);
     invalid.next = -1;
     namedFailure(await replay.invoke({ methodId: "advance", inputs: [input("state", invalid)] }), /^invalid-state$/);
-    assert.equal(replay.calls.length, 9, "plan, six advances, build and invalid-state failure");
+    assert.equal(replay.calls.length, stages + 3, "plan, every advance, build and invalid-state failure");
     recorded ??= { calls: replay.calls, finalFrames };
   }
 
@@ -841,7 +841,7 @@ test("browser and WasmEdge produce byte-identical frames", async (t) => {
 // Numerical provenance and tolerances are in classifier_cases.cpp. It creates
 // independent analytic/closed-form inputs in C++; JS only transports/asserts.
 // The classifier itself is reached only through the production build_oem.
-test("Offline window plans, six-stage queues and independent regime geometry", async (t) => {
+test("Offline window plans, staged queues and independent regime geometry", async (t) => {
   const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: "direct" });
   t.after(() => h.destroy());
   const fixture = await fixtureHarness(t);
@@ -905,7 +905,8 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
     }
     const httpInputs = [input("state", outs(planned, "state")[0]),
       ...outs(planned, "request").map(() => input("response", respond("unavailable", 503)))];
-    namedFailure(await h.invoke({ methodId: "advance", inputs: httpInputs }), /horizons-http-error/);
+    const unavailable = await h.invoke({ methodId: "advance", inputs: httpInputs });
+    for (const id of config.objects) skippedCraft(unavailable, id, /^horizons-http-error$/);
     const wrongCenter = await advanceWith(h, pages, async (r) => {
       const body = await vectors(r);
       return params(r.url).COMMAND === "-85" ? body.replace("Center body name: Synthetic (301)", "Center body name: Sun (10)") : body;
@@ -1050,7 +1051,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
       assert.deepEqual(recordBytes(built), baseline, "header aliases do not change the published trajectory");
     }
   });
-  await t.test("page validation skips only the craft while transport and state failures stay fatal", async () => {
+  await t.test("page validation and transport failures skip only the craft while envelope and state failures stay fatal", async () => {
     const planned = await plan({ objects: [-21, -92] });
     ok(planned, "validation probes");
     const pages = await advanceWith(h, planned, async (r) => {
@@ -1076,16 +1077,22 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
       assert.deepEqual(missing(result).filter((r) => r.skipped), [{ naif_id: -21, skipped: code }]);
       assert.deepEqual(lanes(result).map((c) => c.naif_id), [-92]);
     }
-    // The second response belongs to the same craft: envelopes/status still
-    // matter after its first response has already caused it to skip.
-    assert.equal(params(requests[1].url).COMMAND, "-21");
-    for (const [response, code] of [[respond("unavailable", 503), /^horizons-http-error$/],
-      [Buffer.from("not an HRSP envelope"), /^invalid-http-response$/]]) {
-      const responses = bodies.map((body) => respond(body));
-      responses[0] = respond("unknown target id\n");
-      responses[1] = response;
-      namedFailure(await invoke(responses), code);
+    // A transport failure skips only its craft.
+    for (const [response, code] of [[respond("unavailable", 503), "horizons-http-error"], [respond("", 200), "horizons-http-error"],
+      [respond("body", 200, "offline"), "fetch-failed"]]) {
+      const result = await invoke(bodies.map((body, i) => i ? respond(body) : response));
+      skippedCraft(result, -21, new RegExp(`^${code}$`));
+      assert.deepEqual(lanes(result).map((c) => c.naif_id), [-92]);
     }
+    // The second response belongs to the same craft: its envelope still
+    // matters after its first response has already caused it to skip.
+    assert.equal(params(requests[1].url).COMMAND, "-21");
+    const responses = bodies.map((body) => respond(body));
+    responses[0] = respond("unknown target id\n");
+    responses[1] = respond("unavailable", 503);
+    assert.deepEqual(lanes(await invoke(responses)).map((c) => c.naif_id), [-92]);
+    responses[1] = Buffer.from("not an HRSP envelope");
+    namedFailure(await invoke(responses), /^invalid-http-response$/);
     namedFailure(await invoke(bodies.slice(1).map((body) => respond(body))), /^response-count-mismatch$/);
     const invalid = J(state); invalid.next = -1;
     namedFailure(await invoke(bodies.map((body) => respond(body)), invalid), /^invalid-state$/);
@@ -1133,7 +1140,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
       ok(result, "containment plan");
       const seen = new Set();
       let ignored = 0, failed = false;
-      for (let stage = 1; stage <= 6; stage++) {
+      for (let stage = 1; stage <= stages; stage++) {
         const before = J(outs(result, "state")[0]);
         assert.equal(before.pending.length, outs(result, "request").length);
         if (injectFailures && stage === 3) {
@@ -1189,7 +1196,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
     assert.deepEqual(lanes(contained), lanes(baseline));
     assert.deepEqual(outs(contained, "catalogs_records"), outs(baseline, "catalogs_records"));
   });
-  await t.test("20-object vectors, split probe queues, six advances and compact full-table state", async () => {
+  await t.test("20-object vectors, split probe queues, every advance and compact full-table state", async () => {
     const table = [...syntheticTargetNames.keys()]; // Independent identities, not the module's plan output.
     for (const full of [false, true]) {
       const config = full ? { now_tdb: "2026-10-21T00:00:00" } :
@@ -1204,7 +1211,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
         vectorRequests++;
         return vectors(request);
       };
-      for (let stage = 1; stage <= 6; stage++) {
+      for (let stage = 1; stage <= stages; stage++) {
         const previous = J(outs(result, "state")[0]);
         if (previous.pending.some((p) => Object.hasOwn(p,"lower"))) probeBatches++;
         result = await advanceWith(h, result, answer);
@@ -1223,7 +1230,7 @@ test("Offline window plans, six-stage queues and independent regime geometry", a
       assert.ok(vectorRequests > 60, "multiple vector batches exercised");
       const completedState = outs(result, "state")[0];
       const built = await advanceWith(h, result, answer, "build_oem");
-      ok(built, "six-stage build");
+      ok(built, "staged build");
       assert.deepEqual(missing(built), [], "every independently named target must survive");
       assert.deepEqual([...new Set(lanes(built).map((c) => c.naif_id))].sort((a, b) => a - b),
         (full ? [...table] : table.slice(0, 20)).sort((a, b) => a - b));
@@ -1265,22 +1272,22 @@ test("typed contracts, disabled runs, producer identity and HTTP failures", asyn
   const h = await createBrowserModuleHarness({ wasmSource: fs.readFileSync(wasmPath), manifest, surface: "direct" });
   t.after(() => h.destroy());
   for (const [response, code] of [[respond("", 200), /^horizons-http-error$/], [respond("body", 200, "offline"), /^fetch-failed$/]]) {
-    namedFailure(await h.invoke({ methodId: "advance", inputs: [input("state", state), input("response", response), input("response", respond("body"))] }), code);
+    skippedCraft(await h.invoke({ methodId: "advance", inputs: [input("state", state), input("response", response), input("response", respond("body"))] }), -21, code);
   }
   namedFailure(await h.invoke({ methodId: "plan_horizons", inputs: [] }), /^missing-required-input$/);
 });
 
-test("typed flow has twelve ingests, seven HTTP stages and only state edges opaque", () => {
+test("typed flow has twelve ingests, one HTTP stage per advance plus plan's, and only state edges opaque", () => {
   const source = manifest.pluginId, http = "http", storage = "storage";
   const { flow, deps } = deepSpaceFlow({
     node: (id, plugin, method, kind) => ({ id, plugin, method, kind }),
     edge: (from, fromPort, to, toPort) => ({ from, fromPort, to, toPort, opaque: true }),
     http, storage, packageDir: root,
   });
-  assert.equal(flow.version, "0.3.0"); assert.equal(flow.programId, "com.digitalarsenal.flows.deep-space-catalogs-ingest");
+  assert.equal(flow.version, "0.3.1"); assert.equal(flow.programId, "com.digitalarsenal.flows.deep-space-catalogs-ingest");
   assert.deepEqual(flow.requiredPlugins, [source, http, storage]); assert.deepEqual(deps, { [source]: root });
   assert.equal(flow.nodes.filter((n) => n.plugin === storage).length, 12);
-  assert.equal(flow.nodes.filter((n) => n.plugin === http).length, 7);
+  assert.equal(flow.nodes.filter((n) => n.plugin === http).length, stages + 1);
   assert.equal(flow.triggers[0].defaultIntervalMs, 604800000, "Horizons predictions refresh every seven days");
   assert.equal(flow.triggerBindings[0].targetNodeId, "plan"); assert.equal(flow.triggerBindings[0].targetPortId, "tick");
   for (const e of flow.edges) assert.equal(e.opaque, e.fromPort === "state" ? true : undefined);

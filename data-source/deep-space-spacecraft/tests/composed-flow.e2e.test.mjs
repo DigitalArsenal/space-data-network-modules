@@ -15,7 +15,7 @@ import {
   decodeFlowNotice, decodeHostCall, decodeIngestRequest, decodeIngestResult,
   encodeHostCallResult, encodeModuleConfig, encodeTimerTick, identifierOf,
 } from "space-data-module-sdk/runtime-contracts";
-import { deepSpaceFlow } from "../flow.mjs";
+import { deepSpaceFlow, stages } from "../flow.mjs";
 import { framesOn, replayStages, requestKey } from "./horizons-stages.mjs";
 
 const require = createRequire(import.meta.url);
@@ -213,7 +213,7 @@ test("composed deep-space flow: offline weekly tick through real HTTP and ingest
       assert.equal(run.nodes[`ingest_${source.replaceAll("-", "_")}`].invocationCount,
         ["heliocentric", "catalogs"].includes(source) ? 1n : 0n, `${source} ingest invocations`);
     }
-    for (const id of ["plan", ...Array.from({ length: 6 }, (_, i) => `advance${i + 1}`), "build"]) {
+    for (const id of ["plan", ...Array.from({ length: stages }, (_, i) => `advance${i + 1}`), "build"]) {
       assert.equal(run.nodes[id].invocationCount, 1n, `${id} executed exactly once`);
     }
     for (const [i, snapshot] of expected.snapshots.entries()) {
@@ -228,7 +228,7 @@ test("composed deep-space flow: offline weekly tick through real HTTP and ingest
         default: assert.fail(`unexpected/error egress: ${identifierOf(frame.bytes)}`);
       }
     }
-    assert.equal(notices.length, 8, "plan, six advances and build summary reach egress");
+    assert.equal(notices.length, stages + 2, "plan, every advance and build summary reach egress");
     assert.ok(notices.every((n) => n.kind === "info"), "no skipped/missing/error notice");
     const summary = notices.filter((n) => n.reason === "catalog-counts");
     assert.deepEqual(summary, framesOn(expected.result, "notice").map(decodeFlowNotice));

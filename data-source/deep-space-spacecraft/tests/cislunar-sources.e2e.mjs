@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createBrowserModuleHarness } from "space-data-module-sdk/host/browser-module";
 import { decodeHttpRequest, encodeHttpResponse, encodeTimerTick, decodeIngestRequest, decodeFlowNotice } from "space-data-module-sdk/runtime-contracts";
+import { stages } from "../flow.mjs";
 import { sha256, LRO_DIR, LADEE_DIR, LISTING_URL, KERNEL_TRIM, trimListing, trimSpk } from "./cislunar-fixtures.mjs";
 
 const root = new URL("../", import.meta.url);
@@ -75,7 +76,7 @@ try {
     payload: encodeTimerTick({ triggerId: "daily", firedMs: cassette.firedMs }) }] });
   ok(result, "plan_horizons");
   let requests = 0;
-  for (const methodId of [...Array(6).fill("advance"), "build_oem"]) {
+  for (const methodId of [...Array(stages).fill("advance"), "build_oem"]) {
     const responses = [];
     for (const request of framesOn(result, "request").map(decodeHttpRequest)) {
       const r = await answer(request.url); requests++;
@@ -185,7 +186,7 @@ try {
   // Licensing and provenance travel with SPICE rows.
   const meta = decodeIngestRequest(framesOn(result, "lunar_orbit_meta")[0]);
   assert.equal(meta.tags.license, "LicenseRef-NASA-JPL-Horizons-PD AND LicenseRef-NASA-NAIF-PDS-Public");
-  assert.equal(meta.provenance.parserVersion, "0.3.0");
+  assert.equal(meta.provenance.parserVersion, "0.3.1");
   const counts = Object.fromEntries(CISLUNAR.map((lane) => [lane, lanes[lane].length]));
   console.log(`PASS cislunar lanes: lunar-orbit ${counts["lunar-orbit"]}, cislunar ${counts.cislunar}, earth-moon-lagrange ${counts["earth-moon-lagrange"]} (fixture selection)`);
 

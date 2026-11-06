@@ -1577,11 +1577,11 @@
       }
     },
     "data-source/deep-space-spacecraft/dist/isomorphic/module.wasm": {
-      "sha256": "8f06e4d3afa2703acdc9fc677137ad38cfb21bec399ee4c13f83f8ee88ee678c",
-      "bytes": 513660,
+      "sha256": "5c43ae89b2a05acc5bfc2c79e07602f22f2f3ffbfb5043f75277ce61d655c05d",
+      "bytes": 513795,
       "module": "data-source/deep-space-spacecraft",
-      "lastCommit": "569b1f5ea8b78d174a6d2e30136065acd07152ad",
-      "lastCommitDate": "2026-11-05T00:17:33-05:00",
+      "lastCommit": "deccb1cc7ad6fd7835426c47f651f813409ebfd5",
+      "lastCommitDate": "2026-11-05T23:11:33-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
