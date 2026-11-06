@@ -134,6 +134,8 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b) {
     return ok;
   };
   if (!start(b.x, 0)) return false;
+  // the sigma sets read the nominal's grids above e 0.3 (SPEC 16.11)
+  xpt::GridShareScope share(&b.sats[0]);
   for (int j = 0; j < b.np; ++j) {
     if (b.slot[j] < 0) continue;
     b.h[j] = step_of(b.kind[j], b.x[j]);
