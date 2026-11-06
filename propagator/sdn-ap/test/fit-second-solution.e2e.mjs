@@ -59,16 +59,21 @@ const arc = fs.readFileSync(new URL(`fixtures/${ARC.file}`, import.meta.url));
 check(sha256(arc) === ARC.sha256, `${ARC.file} is ${sha256(arc)}, pinned ${ARC.sha256}`);
 if (sha256(arc) === ARC.sha256) {
   const config = configuration({ theory: "AP", forces: VACUUM_AP });
-  // SPEC 16.11: the fit's grid lookups (sdnap_wide_grid_stats: [0] by the set's own key, [1] exact), reset before the fit, read after it
-  const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16);
+  // SPEC 16.11: the fit's grid lookups (sdnap_wide_grid_stats: [0] by sets outside a fit, [1] by a fit's sets), reset before the
+  // fit, read after it; the grid cache (sdnap_wide_grid_cache: held grids, bytes) before and after it
+  const x = cand.instance.exports, statsPtr = x.sdnap_alloc(16), cachePtr = x.sdnap_alloc(16);
+  const cache = () => { x.sdnap_wide_grid_cache(cachePtr); return Array.from(new Float64Array(cand.memory.buffer, cachePtr, 2)); };
   x.sdnap_wide_grid_stats(1, statsPtr);
+  const held0 = cache();
   const c = stats(await fit(cand, arc, config));
+  const held1 = cache();
   x.sdnap_wide_grid_stats(1, statsPtr);
-  const [shared, exact] = Array.from(new Float64Array(cand.memory.buffer, statsPtr, 2));
+  const [outside, inside] = Array.from(new Float64Array(cand.memory.buffer, statsPtr, 2));
   x.sdnap_free(statsPtr);
-  // every lookup is by the set's own exact key ([0]) or, for a copy, through its nominal's GridShareScope (no lookup); none exact
-  check(exact === 0 && shared > 0, `THEMIS A fit: ${shared} keyed and ${exact} exact grid lookups (the fit's sets by their own keys, none exact)`);
-  console.log(`THEMIS A fit grid lookups: ${shared} keyed, ${exact} exact`);
+  x.sdnap_free(cachePtr);
+  check(outside === 0 && inside > 0, `THEMIS A fit: ${outside} grid lookups by sets outside a fit and ${inside} by the fit's sets`);
+  check(held1[0] === held0[0] && held1[1] === held0[1], `THEMIS A fit: grid cache ${held0.join(" / ")} before, ${held1.join(" / ")} after (a fit grid retained)`);
+  console.log(`THEMIS A fit grid lookups: ${outside} outside a fit, ${inside} by the fit's sets; cache ${held0[0]} grids / ${held0[1]} bytes before, ${held1[0]} / ${held1[1]} after`);
   const b = stats(await fit(base, arc, config));
   const rmsBound = THEMIS_A.rmsRatio * THEMIS_A.baseRmsKm, bLow = THEMIS_A.baseBterm / THEMIS_A.btermRatio, bHigh = THEMIS_A.baseBterm * THEMIS_A.btermRatio;
   check(c.rms <= rmsBound, `THEMIS A: FIT_RMS_KM ${c.rms} above ${rmsBound}`);

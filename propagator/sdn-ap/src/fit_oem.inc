@@ -376,6 +376,7 @@ static int fit_blocks() {
     uint32_t block_index = 0;
     for (const ephemerisDataBlock* blk : *blocks) {
       ++block_index;
+      xpt::tess::FitGridScope fit_grids;
       // the block's center: Earth (the theories here are geocentric; a Moon-centered or heliocentric block is
       // refused by name, never read as geocentric)
       if (blk->CENTER_NAME() != nullptr && blk->CENTER_NAME()->size() > 0 && !oem::same_text(blk->CENTER_NAME()->c_str(), "EARTH")) {
