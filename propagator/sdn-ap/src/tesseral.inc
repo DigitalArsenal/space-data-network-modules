@@ -1137,9 +1137,28 @@ struct ExactGridScope {
 };
 inline bool exact_grids_now() { return exact_grid_depth() > 0; }
 
+/// Grid lookups since the last reset: [0] shared (a set without exact_grid), [1] exact (SPEC 16.11; read by sdnap_wide_grid_stats).
+inline int64_t* grid_counts() {
+  static int64_t counts[2] = {0, 0};
+  return counts;
+}
+
+/// SPEC 16.11: out[0] the shared grid lookups and out[1] the exact ones since the last reset; reset != 0 zeroes them after reading.
+extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_wide_grid_stats(int32_t reset, double* out) {
+  int64_t* c = grid_counts();
+  out[0] = static_cast<double>(__atomic_load_n(&c[0], __ATOMIC_RELAXED));
+  out[1] = static_cast<double>(__atomic_load_n(&c[1], __ATOMIC_RELAXED));
+  if (reset != 0) {
+    __atomic_store_n(&c[0], 0, __ATOMIC_RELAXED);
+    __atomic_store_n(&c[1], 0, __ATOMIC_RELAXED);
+  }
+  return 0;
+}
+
 /// A grid for (n, e, i): a live or idle one whose sharing range holds the elements (`exact`: one built at these very elements),
 /// else a new one; nullptr out of memory.
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool exact = false) {
+  __atomic_add_fetch(exact ? &grid_counts()[1] : &grid_counts()[0], 1, __ATOMIC_RELAXED);
   GridCache& c = grid_cache();
   const double a = std::pow(kKe / n, kX2o3);
   const double se = exact ? 0.0 : kShareE, si = exact ? 0.0 : kShareI, sa = exact ? 0.0 : kShareA;
