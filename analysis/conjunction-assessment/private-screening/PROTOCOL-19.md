@@ -273,6 +273,81 @@ full day.
    tracks passing and fabricated probes failing (2b, 12); the 200-geometry
    breadth set with the miss count and the false-alert interval (2c, 13).
 
-## Results
+## Results (run of 2026-11-06, one day at 1 s, seed 1; `results/`)
 
-Filled after the run; see `results/known-answer.json` and `results/cost.json`.
+Known answers (`results/known-answer.json`, verdict PASS):
+
+| Pair | Designed miss | Plaintext alert steps | Protocol alert steps | Sign mismatches | Noise pass: missed, extra, farthest extra |
+| --- | ---: | ---: | ---: | ---: | --- |
+| A-B1 | 2 km | 5 | 5 (identical) | 0 | 0, 3, 9827 m |
+| A-B2 | 2 km | 6 | 6 | 0 | 0, 7, 10,119 m |
+| A-B3 | 2 km | 5 | 5 | 0 | 0, 3, 10,592 m |
+| A-B4 | 2 km | 4 | 4 | 0 | 0, 4, 9611 m |
+| A-B5 | 2 km | 3 | 3 | 0 | 0, 1, 10,392 m |
+| A-B6 | 2 km | 3 | 3 | 0 | 0, 0 |
+| A-B7 | 2 km | 5 | 5 | 0 | 0, 1, 9461 m |
+| A-B8 | 60 km | 0 | 0 | 0 | 0, 0 |
+
+The alert-step counts equal the bench's 1 s table. Over 8 x 86,400 steps:
+signMismatches 0, valueMismatches 0 (every decrypted masked value equals its
+plaintext big integer); noise budget left 32 bits (S2) and 99 bits (S3).
+Responder secret key: none. Submitted vectors per block 3; ct x ct multiplies
+per block 3 (S1), 3 (S2), 21 (S3); ciphertexts returned per block 1, 1, 2.
+Decoys 0.
+
+Physics check (86,280 steps with both neighbours per track): A and the eight B
+tracks pass every step; the constant-velocity segment fails 714 steps from
+step 3546; the 1.2 mean-motion orbit fails all 86,280; the teleport fails 120
+steps from step 43,140; the 1.01-scaled track fails all 86,280. Exact against
+the plaintext big integers at every step. Real precise-orbit tracks (Swarm,
+Sentinel-1, GPS): not measured in this box; per 2b, real tracks passing the
+physics check is a gate beside S4 before the feature is offered on any host or
+the console.
+
+Tube check: A inside its 1 km tube at 86,400 of 86,400 steps; the
+constant-velocity segment outside at 583 steps, first at step 3617.
+
+Reconstruction attempt (2a): from A's decrypted view of block 0 of pair A-B1,
+the recovered distance is within a factor of 2 of the truth at 0 of 8192
+steps; median error 37.3 bits in log2 distance.
+
+Breadth (2c): 200 geometries, designed misses 4611 to 18,446 m; 8 below R
+(5 km), 62 below R'. Misses below R: 0. In the registration's form (below R'):
+12, every one a designed miss in (R, R') whose sampled minimum lies above R'
+(the margin R' guarantees a pair within R, not within R'; a registration slip,
+both counts kept). False-alert rate at the truncated-noise threshold: 63 of
+1,638,316 steps beyond R', 3.8e-5, 95 % Wilson interval [3.0e-5, 4.9e-5].
+Farthest extra alert 10,914 m, inside the derived bound sqrt((R' + s)^2 + S) =
+11,589 m at every geometry; the registration's R' + s (10,473 m) was a
+derivation slip (6 geometries beyond it), the mechanism unchanged.
+
+maskLeakage (multiplicative mask, restated on this run's plaintext values):
+within a factor of 2 in distance at 88.0 % of steps, within a factor of 10 at
+99.9 %. That output is not private; the registered output is the additive
+mask plus S4, and S4 is not built.
+
+Registration slips found at the first run, recorded, mechanism unchanged:
+R'^2 is 85,062,500 m^2 from the registered formula (written 85,061,864); the
+two slips above; the two-body tracks are A and the eight B (the control is a
+two-body orbit too).
+
+Cost (`results/cost.json`; one core, Apple M3 Ultra, shared host, serial run;
+the known-answer E2E runs the physics check on 12 workers):
+
+| Figure | CPU | Bytes | Bench (1 s) | Ratio |
+| --- | ---: | ---: | ---: | ---: |
+| A: keys per window (both n) | 567 ms | 73.5 MB | 1.7 ms | |
+| A: encrypt, S2 n 8192 (per object-day) | 207 ms | 51.9 MB | 177 ms, 34.6 MB | 1.2x, 1.5x |
+| B: compute, S2 n 8192 (per pair-day) | 1012 ms | 17.3 MB | 169 ms, 8.7 MB | 6.0x, 2.0x |
+| A: decrypt, S2 (per pair-day) | 83 ms | | 163 ms | 0.5x |
+| bytes exchanged, S2 (per pair-day, upload amortized over 8 pairs) | | 23.8 MB | 13.0 MB | 1.8x |
+| A: encrypt, S3 n 16384 (per object-day) | 1159 ms | 339.8 MB | not in the bench | |
+| B: physics check, S3 n 16384 (per object-day) | 15,616 ms | 75.5 MB | not in the bench | |
+| A: decrypt, S3 (per object-day) | 495 ms | | not in the bench | |
+| bytes exchanged with S3 (per pair-day) | | 75.7 MB | | |
+
+Reading: B's screening cost is 6.0 times the bench because every per-step
+operand is a ciphertext (three ct x ct squarings per block where the bench
+used plaintext vector products) and the response is not modulus-switched; the
+physics check dominates both CPU (15.6 s per object-day) and bytes (340 MB
+uploaded per object-day), as the registration allowed.

@@ -44,8 +44,12 @@ export function runDriver() {
   if (!existsSync(join(buildDir, 'CMakeCache.txt'))) {
     run('cmake', ['-S', source, '-B', buildDir, ...generator, '-DCMAKE_BUILD_TYPE=Release', ...fork]);
   }
-  run('cmake', ['--build', buildDir, '-j', '4']);
-  const r = spawnSync(join(buildDir, 'private_screening_protocol'), ['--days', '1', '--pairs', '8', '--seed', '1'], { encoding: 'utf8', maxBuffer: 1 << 30 });
+  run('cmake', ['--build', buildDir, '-j', '12']);
+  // The physics check of the twelve tracks runs on 12 workers (each with its
+  // own per-window keys); the cost table of record is the serial run
+  // (results/cost.json, --threads 1).
+  const threads = process.env.PRIVATE_SCREENING_THREADS || '12';
+  const r = spawnSync(join(buildDir, 'private_screening_protocol'), ['--days', '1', '--pairs', '8', '--seed', '1', '--threads', threads], { encoding: 'utf8', maxBuffer: 1 << 30 });
   if (r.stdout.length === 0) { process.stderr.write(`driver produced no output (${r.status})\n${r.stderr}\n`); process.exit(1); }
   return JSON.parse(r.stdout);
 }
@@ -92,7 +96,8 @@ if (isMain) {
     else check(t.failSteps === 0 && t.passSteps === t.stepsChecked, `physics ${t.track}: ${t.failSteps} fail steps of ${t.stepsChecked}`);
   }
   const tracked = report.physics.filter((t) => !probes.some((p) => t.track.includes(p)));
-  check(tracked.length === 8, `${tracked.length} two-body tracks checked (A and the seven B)`);
+  // A and the eight B tracks (the seven encounters and the 60 km control are all two-body orbits).
+  check(tracked.length === 9, `${tracked.length} two-body tracks checked (A and the eight B)`);
   check(report.physics.filter((t) => probes.some((p) => t.track.includes(p))).length === 4, 'four fabricated probes');
   check(report.ctxCtMultipliesPerBlock.physics === 21, `ctxCtMultipliesPerBlock.physics ${report.ctxCtMultipliesPerBlock.physics}`);
   // 6. Tube check.

@@ -17,6 +17,8 @@
 // test-only oracle; the costs do not depend on them.
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <thread>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -396,7 +398,7 @@ std::string list(const std::vector<size_t>& v) {
   return s + "]";
 }
 
-struct Args { double days = 1, thresholdKm = 5, vmax = 15.5, noiseKm = 1.25; int pairs = 8; uint64_t seed = 1; long stride = 60; };
+struct Args { double days = 1, thresholdKm = 5, vmax = 15.5, noiseKm = 1.25; int pairs = 8; uint64_t seed = 1; long stride = 60; int threads = 1; };
 
 }  // namespace
 
@@ -406,7 +408,7 @@ int main(int argc, char** argv) {
     const std::string k = argv[i]; const double v = std::atof(argv[i + 1]);
     if (k == "--days") a.days = v; else if (k == "--pairs") a.pairs = (int)v; else if (k == "--seed") a.seed = (uint64_t)v;
     else if (k == "--threshold-km") a.thresholdKm = v; else if (k == "--vmax-kms") a.vmax = v;
-    else if (k == "--noise-km") a.noiseKm = v; else if (k == "--stride-s") a.stride = (long)v;
+    else if (k == "--noise-km") a.noiseKm = v; else if (k == "--stride-s") a.stride = (long)v; else if (k == "--threads") a.threads = (int)v;
     else { std::fprintf(stderr, "unknown option %s\n", k.c_str()); return 2; }
   }
   const size_t steps = (size_t)std::llround(a.days * 86400.0);
@@ -504,7 +506,28 @@ int main(int argc, char** argv) {
   std::vector<const Track*> physTracks = {&trackA};
   for (auto& t : trackB) physTracks.push_back(&t);
   physTracks.push_back(&line); physTracks.push_back(&wrongRate); physTracks.push_back(&teleport); physTracks.push_back(&scaled);
-  for (const Track* t : physTracks) phys.emplace_back(t->name, physicsCheck(a3, b3, *t, a.stride, steps, masks, cS3));
+  // --threads t runs the tracks on t workers, each with its own per-window key
+  // pair at n 16384 (the costs then carry the contention of t cores).
+  std::vector<PhysicsResult> physOut(physTracks.size());
+  std::vector<Counters> physCounters(std::max(1, a.threads));
+  std::atomic<size_t> next{0};
+  auto worker = [&](int id) {
+    Rng wm(a.seed + 100 + (uint64_t)id);
+    HEContext wa = HEContext::CreateClient(kN3);
+    const Bytes wpk = wa.GetPublicKey(), wrk = wa.GetRelinKeys();
+    HEContext wb = HEContext::CreateServer(wpk.data(), wpk.size());
+    wb.SetRelinKeys(wrk.data(), wrk.size());
+    if (wb.HasSecretKey()) { std::fprintf(stderr, "worker server context holds a secret key\n"); std::exit(3); }
+    for (size_t i = next++; i < physTracks.size(); i = next++) physOut[i] = physicsCheck(wa, wb, *physTracks[i], a.stride, steps, wm, physCounters[(size_t)id]);
+  };
+  if (a.threads <= 1) { for (size_t i = 0; i < physTracks.size(); ++i) physOut[i] = physicsCheck(a3, b3, *physTracks[i], a.stride, steps, masks, cS3); }
+  else {
+    std::vector<std::thread> pool;
+    for (int i = 0; i < a.threads; ++i) pool.emplace_back(worker, i);
+    for (auto& th : pool) th.join();
+    for (const auto& pc : physCounters) { cS3.ctxCtMultiplies += pc.ctxCtMultiplies; cS3.aEncryptMs += pc.aEncryptMs; cS3.aUploadBytes += pc.aUploadBytes; }
+  }
+  for (size_t i = 0; i < physTracks.size(); ++i) phys.emplace_back(physTracks[i]->name, physOut[i]);
   // Breadth set: the block holding each crossing, s = 0 and the noise pass.
   Counters cG;
   size_t gMisses = 0, gStepsBeyond = 0, gFalseAlerts = 0, gExtraBeyondRs = 0, gSteps = 0, gSign = 0, gValue = 0, gWithin = 0;
@@ -566,7 +589,7 @@ int main(int argc, char** argv) {
   double s3B = 0, s3Resp = 0, s3Dec = 0; int s3Budget = 1 << 30;
   for (auto& p : phys) { s3B += p.second.bComputeMs; s3Resp += p.second.bResponseBytes; s3Dec += p.second.aDecryptMs; s3Budget = std::min(s3Budget, p.second.minNoiseBudget); }
   const double nPhys = (double)phys.size();
-  std::printf("{\n  \"seal\": \"4.1.1\", \"scheme\": \"BFV\", \"forkCommit\": \"55a0ca86\", \"days\": %g, \"stepSeconds\": 1, \"steps\": %zu,\n", a.days, steps);
+  std::printf("{\n  \"seal\": \"4.1.1\", \"scheme\": \"BFV\", \"forkCommit\": \"55a0ca86\", \"days\": %g, \"stepSeconds\": 1, \"steps\": %zu, \"physicsThreads\": %d,\n", a.days, steps, std::max(1, a.threads));
   std::printf("  \"parameters\": {\"screening\": {\"n\": %u, \"blocks\": %zu, \"depth\": 1}, \"physics\": {\"n\": %u, \"blocks\": %zu, \"depth\": 3, \"strideSeconds\": %ld}},\n",
               kN1, blocks1, kN3, (steps + kN3 - 1) / kN3, a.stride);
   std::printf("  \"thresholdKm\": %g, \"vmaxKmS\": %g, \"testedThresholdM\": %.1f, \"testedThresholdM2\": %lld, \"tubeM\": %lld,\n", a.thresholdKm, a.vmax, rprime, (long long)rprime2, (long long)d0);

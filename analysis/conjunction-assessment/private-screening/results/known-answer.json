@@ -1,0 +1,360 @@
+{
+  "verdict": "PASS",
+  "registered": "private-screening/PROTOCOL-19.md",
+  "forkCommit": "55a0ca86",
+  "steps": 86400,
+  "testedThresholdM": 9222.9,
+  "pairs": [
+    {
+      "pair": "A-B1",
+      "designedMissKm": 2,
+      "plaintextAlertSteps": 5,
+      "protocolAlertSteps": 5,
+      "alertSteps": [
+        14930,
+        17892,
+        17893,
+        17894,
+        17895
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 3,
+        "maxExtraDistanceM": 9827.4,
+        "alertSteps": 8
+      }
+    },
+    {
+      "pair": "A-B2",
+      "designedMissKm": 2,
+      "plaintextAlertSteps": 6,
+      "protocolAlertSteps": 6,
+      "alertSteps": [
+        39825,
+        39826,
+        39827,
+        39828,
+        39829,
+        39830
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 7,
+        "maxExtraDistanceM": 10119,
+        "alertSteps": 13
+      }
+    },
+    {
+      "pair": "A-B3",
+      "designedMissKm": 2,
+      "plaintextAlertSteps": 5,
+      "protocolAlertSteps": 5,
+      "alertSteps": [
+        26966,
+        29930,
+        32894,
+        35858,
+        38822
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 3,
+        "maxExtraDistanceM": 10591.6,
+        "alertSteps": 8
+      }
+    },
+    {
+      "pair": "A-B4",
+      "designedMissKm": 2,
+      "plaintextAlertSteps": 4,
+      "protocolAlertSteps": 4,
+      "alertSteps": [
+        41177,
+        41178,
+        41179,
+        41180
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 4,
+        "maxExtraDistanceM": 9610.6,
+        "alertSteps": 8
+      }
+    },
+    {
+      "pair": "A-B5",
+      "designedMissKm": 2,
+      "plaintextAlertSteps": 3,
+      "protocolAlertSteps": 3,
+      "alertSteps": [
+        45064,
+        48028,
+        50992
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 1,
+        "maxExtraDistanceM": 10391.5,
+        "alertSteps": 4
+      }
+    },
+    {
+      "pair": "A-B6",
+      "designedMissKm": 2,
+      "plaintextAlertSteps": 3,
+      "protocolAlertSteps": 3,
+      "alertSteps": [
+        11859,
+        14823,
+        17787
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 0,
+        "maxExtraDistanceM": 0,
+        "alertSteps": 3
+      }
+    },
+    {
+      "pair": "A-B7",
+      "designedMissKm": 2,
+      "plaintextAlertSteps": 5,
+      "protocolAlertSteps": 5,
+      "alertSteps": [
+        60257,
+        63220,
+        63221,
+        63222,
+        66185
+      ],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 1,
+        "maxExtraDistanceM": 9461.2,
+        "alertSteps": 6
+      }
+    },
+    {
+      "pair": "A-B8",
+      "designedMissKm": 60,
+      "plaintextAlertSteps": 0,
+      "protocolAlertSteps": 0,
+      "alertSteps": [],
+      "signMismatches": 0,
+      "valueMismatches": 0,
+      "noise": {
+        "missedAlerts": 0,
+        "extraAlerts": 0,
+        "maxExtraDistanceM": 0,
+        "alertSteps": 0
+      }
+    }
+  ],
+  "signMismatches": 0,
+  "valueMismatches": 0,
+  "minNoiseBudgetBits": {
+    "screening": 32,
+    "physics": 99
+  },
+  "responderHasSecretKey": false,
+  "ctxCtMultipliesPerBlock": {
+    "screening": 3,
+    "tube": 3,
+    "physics": 21
+  },
+  "returnedCiphertextsPerBlock": {
+    "tube": 1,
+    "screening": 1,
+    "physics": 2
+  },
+  "submittedVectorsPerBlock": 3,
+  "decoys": 0,
+  "tube": {
+    "A": {
+      "insideSteps": 86400,
+      "outsideSteps": 0,
+      "valueMismatches": 0
+    },
+    "line": {
+      "insideSteps": 85817,
+      "outsideSteps": 583,
+      "firstOutsideStep": 3617,
+      "valueMismatches": 0
+    }
+  },
+  "physics": [
+    {
+      "track": "A",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B1",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B2",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B3",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B4",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B5",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B6",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B7",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "B8",
+      "stepsChecked": 86280,
+      "passSteps": 86280,
+      "failSteps": 0,
+      "mismatches": 0,
+      "firstFailStep": -1
+    },
+    {
+      "track": "constant-velocity segment at steps 3600-4199",
+      "stepsChecked": 86280,
+      "passSteps": 85566,
+      "failSteps": 714,
+      "mismatches": 0,
+      "firstFailStep": 3546
+    },
+    {
+      "track": "A at 1.2 mean motion",
+      "stepsChecked": 86280,
+      "passSteps": 0,
+      "failSteps": 86280,
+      "mismatches": 0,
+      "firstFailStep": 60
+    },
+    {
+      "track": "teleport A -> B1 at step 43200",
+      "stepsChecked": 86280,
+      "passSteps": 86160,
+      "failSteps": 120,
+      "mismatches": 0,
+      "firstFailStep": 43140
+    },
+    {
+      "track": "A scaled by 1.01",
+      "stepsChecked": 86280,
+      "passSteps": 0,
+      "failSteps": 86280,
+      "mismatches": 0,
+      "firstFailStep": 60
+    }
+  ],
+  "realTracks": {
+    "swarm": "not measured",
+    "sentinel1": "not measured",
+    "gps": "not measured",
+    "gate": "real tracks passing the physics check is a gate beside S4 before the feature is offered on any host or the console"
+  },
+  "reconstruction": {
+    "pair": "A-B1",
+    "block": 0,
+    "steps": 8192,
+    "distanceWithinFactor2Share": 0,
+    "medianLog2DistanceError": 37.29
+  },
+  "breadth": {
+    "geometries": 200,
+    "missRangeM": [
+      4611,
+      18446
+    ],
+    "withinRprime": 62,
+    "misses": 12,
+    "signMismatches": 0,
+    "valueMismatches": 0,
+    "steps": 1638400,
+    "stepsBeyondRprime": 1638316,
+    "falseAlertStepsAtNoiseThreshold": 63,
+    "geometriesWithExtraBeyondRprimePlusS": 6,
+    "withinR": 8,
+    "missesBelowR": 0,
+    "extraAlertBoundM": 11588.9,
+    "maxExtraDistanceM": 10914.2,
+    "geometriesWithExtraBeyondBound": 0,
+    "registeredFormMissesBelowRprime": 12,
+    "registeredFormExtraBeyondRprimePlusS": 6,
+    "falseAlertRateAtNoiseThreshold": 0.000038454119962205095,
+    "wilson95": [
+      0.000030058947610796898,
+      0.00004919386712998996
+    ]
+  },
+  "registrationSlips": [
+    "R'^2 is 85,062,500 m^2 from the registered formula; the registration wrote 85,061,864",
+    "the noise pass's extra alerts reach sqrt((R' + s)^2 + S), not R' + s; the mechanism is as registered",
+    "the margin R' guarantees alerts for misses below R, not below R'; misses below R' are reported as registered and misses below R are the guarantee"
+  ],
+  "maskLeakage": {
+    "method": "multiplicative mask r log-uniform below 2^120, 64-step runs, restated from the plaintext values",
+    "samples": 98744,
+    "medianErrorBitsInDistanceSquared": 0.66,
+    "withinFactor2InDistance": 0.88,
+    "withinFactor10InDistance": 0.999,
+    "private": false
+  },
+  "comparisonS4": "not built; decisions through the oracle; the feature is offered on no host and no console",
+  "failures": []
+}

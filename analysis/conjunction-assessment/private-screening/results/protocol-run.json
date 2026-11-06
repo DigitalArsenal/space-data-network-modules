@@ -1,0 +1,520 @@
+{
+ "seal": "4.1.1",
+ "scheme": "BFV",
+ "forkCommit": "55a0ca86",
+ "days": 1,
+ "stepSeconds": 1,
+ "steps": 86400,
+ "parameters": {
+  "screening": {
+   "n": 8192,
+   "blocks": 11,
+   "depth": 1
+  },
+  "physics": {
+   "n": 16384,
+   "blocks": 6,
+   "depth": 3,
+   "strideSeconds": 60
+  }
+ },
+ "thresholdKm": 5,
+ "vmaxKmS": 15.5,
+ "testedThresholdM": 9222.9,
+ "testedThresholdM2": 85062500,
+ "tubeM": 1000,
+ "noise": {
+  "sM": 1250,
+  "truncationM2": 24619834,
+  "raisedThresholdM2": 109682334,
+  "betaM2": 6154960
+ },
+ "decoys": 0,
+ "publicTracksRead": {
+  "screening": 0,
+  "tube": 1
+ },
+ "responderHasSecretKey": false,
+ "submittedVectorsPerBlock": 3,
+ "ctxCtMultipliesPerBlock": {
+  "screening": 3,
+  "tube": 3,
+  "physics": 21
+ },
+ "ctxCtMultiplies": 2232,
+ "signMismatches": 0,
+ "valueMismatches": 0,
+ "minNoiseBudgetBits": {
+  "screening": 32,
+  "physics": 99
+ },
+ "pairs": [
+  {
+   "pair": "A-B1",
+   "designedMissKm": 2,
+   "plaintextAlertSteps": 5,
+   "protocolAlertSteps": 5,
+   "plaintextAlerts": [
+    14930,
+    17892,
+    17893,
+    17894,
+    17895
+   ],
+   "protocolAlerts": [
+    14930,
+    17892,
+    17893,
+    17894,
+    17895
+   ],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 3,
+    "maxExtraDistanceM": 9827.4,
+    "alertSteps": 8
+   }
+  },
+  {
+   "pair": "A-B2",
+   "designedMissKm": 2,
+   "plaintextAlertSteps": 6,
+   "protocolAlertSteps": 6,
+   "plaintextAlerts": [
+    39825,
+    39826,
+    39827,
+    39828,
+    39829,
+    39830
+   ],
+   "protocolAlerts": [
+    39825,
+    39826,
+    39827,
+    39828,
+    39829,
+    39830
+   ],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 7,
+    "maxExtraDistanceM": 10119,
+    "alertSteps": 13
+   }
+  },
+  {
+   "pair": "A-B3",
+   "designedMissKm": 2,
+   "plaintextAlertSteps": 5,
+   "protocolAlertSteps": 5,
+   "plaintextAlerts": [
+    26966,
+    29930,
+    32894,
+    35858,
+    38822
+   ],
+   "protocolAlerts": [
+    26966,
+    29930,
+    32894,
+    35858,
+    38822
+   ],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 3,
+    "maxExtraDistanceM": 10591.6,
+    "alertSteps": 8
+   }
+  },
+  {
+   "pair": "A-B4",
+   "designedMissKm": 2,
+   "plaintextAlertSteps": 4,
+   "protocolAlertSteps": 4,
+   "plaintextAlerts": [
+    41177,
+    41178,
+    41179,
+    41180
+   ],
+   "protocolAlerts": [
+    41177,
+    41178,
+    41179,
+    41180
+   ],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 4,
+    "maxExtraDistanceM": 9610.6,
+    "alertSteps": 8
+   }
+  },
+  {
+   "pair": "A-B5",
+   "designedMissKm": 2,
+   "plaintextAlertSteps": 3,
+   "protocolAlertSteps": 3,
+   "plaintextAlerts": [
+    45064,
+    48028,
+    50992
+   ],
+   "protocolAlerts": [
+    45064,
+    48028,
+    50992
+   ],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 1,
+    "maxExtraDistanceM": 10391.5,
+    "alertSteps": 4
+   }
+  },
+  {
+   "pair": "A-B6",
+   "designedMissKm": 2,
+   "plaintextAlertSteps": 3,
+   "protocolAlertSteps": 3,
+   "plaintextAlerts": [
+    11859,
+    14823,
+    17787
+   ],
+   "protocolAlerts": [
+    11859,
+    14823,
+    17787
+   ],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 0,
+    "maxExtraDistanceM": 0,
+    "alertSteps": 3
+   }
+  },
+  {
+   "pair": "A-B7",
+   "designedMissKm": 2,
+   "plaintextAlertSteps": 5,
+   "protocolAlertSteps": 5,
+   "plaintextAlerts": [
+    60257,
+    63220,
+    63221,
+    63222,
+    66185
+   ],
+   "protocolAlerts": [
+    60257,
+    63220,
+    63221,
+    63222,
+    66185
+   ],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 1,
+    "maxExtraDistanceM": 9461.2,
+    "alertSteps": 6
+   }
+  },
+  {
+   "pair": "A-B8",
+   "designedMissKm": 60,
+   "plaintextAlertSteps": 0,
+   "protocolAlertSteps": 0,
+   "plaintextAlerts": [],
+   "protocolAlerts": [],
+   "signMismatches": 0,
+   "valueMismatches": 0,
+   "noise": {
+    "missedAlerts": 0,
+    "extraAlerts": 0,
+    "maxExtraDistanceM": 0,
+    "alertSteps": 0
+   }
+  }
+ ],
+ "tube": {
+  "A": {
+   "insideSteps": 86400,
+   "outsideSteps": 0,
+   "valueMismatches": 0
+  },
+  "line": {
+   "insideSteps": 85817,
+   "outsideSteps": 583,
+   "firstOutsideStep": 3617,
+   "valueMismatches": 0
+  }
+ },
+ "physics": [
+  {
+   "track": "A",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1293676192074821671747299505007952",
+    "EPlain": "-1293676192074821671747299505007952",
+    "F": "-41067615735189201617694",
+    "FPlain": "-41067615735189201617694"
+   }
+  },
+  {
+   "track": "B1",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1425575699247735058404840330848350",
+    "EPlain": "-1425575699247735058404840330848350",
+    "F": "-41047111293771889307620",
+    "FPlain": "-41047111293771889307620"
+   }
+  },
+  {
+   "track": "B2",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1419745768841011526053722227011803",
+    "EPlain": "-1419745768841011526053722227011803",
+    "F": "-41045847967066020212479",
+    "FPlain": "-41045847967066020212479"
+   }
+  },
+  {
+   "track": "B3",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1438754010336598657228901267026088",
+    "EPlain": "-1438754010336598657228901267026088",
+    "F": "-41044658583221453230294",
+    "FPlain": "-41044658583221453230294"
+   }
+  },
+  {
+   "track": "B4",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1347124276096422713537851098492400",
+    "EPlain": "-1347124276096422713537851098492400",
+    "F": "-41041647958032974396890",
+    "FPlain": "-41041647958032974396890"
+   }
+  },
+  {
+   "track": "B5",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1384886042129238698343958234350615",
+    "EPlain": "-1384886042129238698343958234350615",
+    "F": "-41046267373799459690154",
+    "FPlain": "-41046267373799459690154"
+   }
+  },
+  {
+   "track": "B6",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1358915758670177090709471045103104",
+    "EPlain": "-1358915758670177090709471045103104",
+    "F": "-41045292409856478948504",
+    "FPlain": "-41045292409856478948504"
+   }
+  },
+  {
+   "track": "B7",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1307249399373548479435187605780533",
+    "EPlain": "-1307249399373548479435187605780533",
+    "F": "-41049020724308967601251",
+    "FPlain": "-41049020724308967601251"
+   }
+  },
+  {
+   "track": "B8",
+   "stepsChecked": 86280,
+   "passSteps": 86280,
+   "failSteps": 0,
+   "mismatches": 0,
+   "firstFailStep": -1,
+   "sample": {
+    "E": "-1341950859797933393449898769896031",
+    "EPlain": "-1341950859797933393449898769896031",
+    "F": "-40380808321732025931994",
+    "FPlain": "-40380808321732025931994"
+   }
+  },
+  {
+   "track": "constant-velocity segment at steps 3600-4199",
+   "stepsChecked": 86280,
+   "passSteps": 85566,
+   "failSteps": 714,
+   "mismatches": 0,
+   "firstFailStep": 3546,
+   "sample": {
+    "E": "-1293676192074821671747299505007952",
+    "EPlain": "-1293676192074821671747299505007952",
+    "F": "-41067615735189201617694",
+    "FPlain": "-41067615735189201617694"
+   }
+  },
+  {
+   "track": "A at 1.2 mean motion",
+   "stepsChecked": 86280,
+   "passSteps": 0,
+   "failSteps": 86280,
+   "mismatches": 0,
+   "firstFailStep": 60,
+   "sample": {
+    "E": "2206658587376043728654708580469978315",
+    "EPlain": "2206658587376043728654708580469978315",
+    "F": "-85143967853024764803001",
+    "FPlain": "-85143967853024764803001"
+   }
+  },
+  {
+   "track": "teleport A -> B1 at step 43200",
+   "stepsChecked": 86280,
+   "passSteps": 86160,
+   "failSteps": 120,
+   "mismatches": 0,
+   "firstFailStep": 43140,
+   "sample": {
+    "E": "-1293676192074821671747299505007952",
+    "EPlain": "-1293676192074821671747299505007952",
+    "F": "-41067615735189201617694",
+    "FPlain": "-41067615735189201617694"
+   }
+  },
+  {
+   "track": "A scaled by 1.01",
+   "stepsChecked": 86280,
+   "passSteps": 0,
+   "failSteps": 86280,
+   "mismatches": 0,
+   "firstFailStep": 60,
+   "sample": {
+    "E": "125349769089357997488434200858352211",
+    "EPlain": "125349769089357997488434200858352211",
+    "F": "-42724006725688323755211",
+    "FPlain": "-42724006725688323755211"
+   }
+  }
+ ],
+ "returnedCiphertextsPerBlock": {
+  "tube": 1,
+  "screening": 1,
+  "physics": 2
+ },
+ "reconstruction": {
+  "pair": "A-B1",
+  "block": 0,
+  "steps": 8192,
+  "distanceWithinFactor2Share": 0,
+  "medianLog2DistanceError": 37.29
+ },
+ "breadth": {
+  "geometries": 200,
+  "missRangeM": [
+   4611,
+   18446
+  ],
+  "withinRprime": 62,
+  "misses": 12,
+  "signMismatches": 0,
+  "valueMismatches": 0,
+  "steps": 1638400,
+  "stepsBeyondRprime": 1638316,
+  "falseAlertStepsAtNoiseThreshold": 63,
+  "geometriesWithExtraBeyondRprimePlusS": 6,
+  "withinR": 8,
+  "missesBelowR": 0,
+  "extraAlertBoundM": 11588.9,
+  "maxExtraDistanceM": 10914.2,
+  "geometriesWithExtraBeyondBound": 0
+ },
+ "maskLeakage": {
+  "method": "multiplicative mask r log-uniform below 2^120, 64-step runs, restated from the plaintext values",
+  "samples": 98744,
+  "medianErrorBitsInDistanceSquared": 0.66,
+  "withinFactor2InDistance": 0.88,
+  "withinFactor10InDistance": 0.999,
+  "private": false
+ },
+ "cost": {
+  "keygenMs": 566.8,
+  "keyBytes": 73537924,
+  "screening8192": {
+   "aEncryptPerObjectDayMs": 206.7,
+   "aUploadPerObjectDayBytes": 51916491,
+   "bComputePerPairDayMs": 1011.6,
+   "bResponsePerPairDayBytes": 17305497,
+   "aDecryptPerPairDayMs": 82.9,
+   "exchangedPerPairDayBytes": 23795058
+  },
+  "physics16384": {
+   "aEncryptPerObjectDayMs": 1158.7,
+   "aUploadPerObjectDayBytes": 339758226,
+   "bComputePerObjectDayMs": 15615.6,
+   "bResponsePerObjectDayBytes": 75501828,
+   "aDecryptPerObjectDayMs": 494.5
+  },
+  "exchangedPerPairDayBytesWithPhysics": 75702565,
+  "bench": {
+   "bComputePerPairDayMs": 169,
+   "bResponsePerPairDayBytes": 8654481,
+   "aEncryptPerObjectDayMs": 177.3,
+   "aUploadPerObjectDayBytes": 34628616
+  }
+ }
+}
