@@ -245,6 +245,39 @@ SPACE_DATA_MODULE_SDK_ROOT=../space-data-module-sdk ./scripts/test-sdk-compat.sh
 
 These checks require the `wasmedge` CLI.
 
+## Module Signing
+
+Current-version dists are signed with the owner key, an Ed25519 keypair that stays in place outside the repository and is
+named only by the environment variable `SDM_MODULE_SIGNING_KEYPAIR_PATH`:
+
+```bash
+SDM_MODULE_SIGNING_KEYPAIR_PATH=<keypair.json> node scripts/sign-module-artifact.mjs <module>/dist/isomorphic/module.wasm
+```
+
+`scripts/sign-module-artifact.mjs` reads the keypair in-process and prints only the key id and public key. It has no fallback
+key: without the variable it refuses (exit 2), and a build that is meant to ship unsigned says so with `--unsigned` (or
+`SDM_MODULE_UNSIGNED_BUILD=1`), which records `signed: false` in the dist's `build-provenance.json`. The module SDK's development
+keypair (`sdm-dev-test-2026`, shipped publicly in the SDK repository) is never trusted; a dist it signed fails the check.
+
+`scripts/trusted-publishers.json` holds the trusted PUBLIC keys. A key enters it through
+`SDM_MODULE_SIGNING_KEYPAIR_PATH=<keypair.json> node scripts/extract-public-key.mjs`, which prints `keyId` and `publicKeyHex`
+and nothing else.
+
+The signature is a publication trailer. The SDK's trailer writer carries the plugin manifest in the trailer and strips the
+module's `sds.*` custom sections, so a raw build's FIRST signing changes the shipped bytes (its module section shrinks by the
+`sds.manifest` section) and is a version step: a module signs at its next version, and a signed (bundled) dist re-signs
+trailer-only with the module section byte-identical, which the sign script asserts (`--trailer-only` refuses anything else).
+Two identities are recorded for every dist in `scripts/artifact-provenance.json`: the whole-file `sha256` (what a bundled
+dist's citations name) and `canonicalModuleSha256` (the module with `sds.*` stripped, what the signature covers and what a
+first signing preserves), beside `wasmSha256` (the module section as shipped).
+
+`node scripts/check-module-signatures.mjs` classifies every current-version dist (owner-key, dev-key, unsigned, untrusted,
+invalid), verifies each signature against `scripts/trusted-publishers.json`, and compares the module section and canonical
+hash with the ledger and with the dist's own `build-provenance` file; dev-key, untrusted and invalid signatures and any hash
+disagreement fail, an unsigned raw build is reported as "signs at next version". `node scripts/check-artifact-ledger.mjs`
+makes the same hash comparisons for every committed dist. E2E: `scripts/tests/module-signatures.e2e.mjs`,
+`scripts/tests/build-provenance-sha.e2e.mjs`.
+
 ## Cross-Repo Signing And Encryption Regression
 
 The SDK repo owns the real-plugin signing and encrypted-delivery regression. Run

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T05:12:41.375Z",
+  "generatedAt": "2026-11-06T12:57:06.564Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7511,7 +7511,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 122,
+      "testFileCount": 123,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7526,6 +7526,7 @@
         "test/covariance-realism.e2e.mjs",
         "test/covariance-realism.mjs",
         "test/covariance.e2e.mjs",
+        "test/docs-version.e2e.mjs",
         "test/drag-cost.mjs",
         "test/drag-high-eccentricity.e2e.mjs",
         "test/drag-isolation-job.mjs",
