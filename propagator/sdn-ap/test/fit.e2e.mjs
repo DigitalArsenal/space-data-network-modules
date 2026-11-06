@@ -20,7 +20,9 @@
 //   OCM_CONTENT_ID are the CID of that version's $OCM bytes, so they differ by PRODUCER alone) and, those two fields
 //   excluded, every decoded value of the two $ODR is identical (Object.is); each set's sdnap_covariance_at at every
 //   fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in EME2000 and TEME every 6 h for
-//   7 days are byte-identical (the $OEM with PRODUCER's version read likewise).
+//   7 days are byte-identical (the $OEM with PRODUCER's version read likewise). With SDNAP_EXAMPLES set to the published
+//   examples (each <id>.ocm and <id>.json), every set flies byte-identical on both builds at every epoch of its window and
+//   its sdnap_covariance_at at every 12th epoch is bit-identical.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
 import fs from "node:fs";
@@ -163,13 +165,13 @@ const sameValues = (a, b, at = "ODR") => {
 let odrValues = 0;
 const minutes = [];
 for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) minutes.push(t);
-const covarianceAt = (harness, ocmBytes) => {
+const covarianceAt = (harness, ocmBytes, times = minutes) => {
   const x = harness.instance.exports, mem = () => harness.memory.buffer;
-  const po = x.sdnap_alloc(ocmBytes.length), pm = x.sdnap_alloc(8 * minutes.length), pout = x.sdnap_alloc(8 * 42 * minutes.length);
+  const po = x.sdnap_alloc(ocmBytes.length), pm = x.sdnap_alloc(8 * times.length), pout = x.sdnap_alloc(8 * 42 * times.length);
   new Uint8Array(mem(), po, ocmBytes.length).set(ocmBytes);
-  new Float64Array(mem(), pm, minutes.length).set(minutes);
-  const status = x.sdnap_covariance_at(po, ocmBytes.length, pm, minutes.length, pout);
-  const out = Buffer.from(mem().slice(pout, pout + 8 * 42 * minutes.length));
+  new Float64Array(mem(), pm, times.length).set(times);
+  const status = x.sdnap_covariance_at(po, ocmBytes.length, pm, times.length, pout);
+  const out = Buffer.from(mem().slice(pout, pout + 8 * 42 * times.length));
   x.sdnap_free(po); x.sdnap_free(pm); x.sdnap_free(pout);
   return { status, out };
 };
@@ -207,11 +209,40 @@ for (const c of cases) {
     if (same) { identical += 1; flown += EPOCHS.length; }
   }
 }
-fs.rmSync(scratch, { recursive: true, force: true });
 console.log(`${now} against ${BEFORE.version} (${BEFORE.sha256.slice(0, 8)}): ${identical} of 10 products identical (fit $OCM, ` +
   `sdnap_covariance_at at ${minutes.length} times, propagate $OEM at ${flown} epochs byte-identical, PRODUCER's version aside; ` +
   `fit $ODR ${odrValues} decoded values identical, ${ODR_NAMES_OCM.join(" and ")} excluded: each is the CID of its own version's $OCM)`);
 check(identical === 10, `${identical} of 10 products identical to ${BEFORE.version}`);
+
+// the published examples' sets (SDNAP_EXAMPLES: the experiments' results/ap-truth/compare/examples, each <id>.ocm the $OCM
+// AP flew and <id>.json its window): each flown on both builds in TEME at every epoch of its window (propagate $OEM
+// byte-identical, PRODUCER's version aside) and sdnap_covariance_at at every 12th epoch (42 doubles a time, bit-identical)
+const EXAMPLES = process.env.SDNAP_EXAMPLES;
+if (!EXAMPLES) console.log("examples: SDNAP_EXAMPLES not given, the published examples not flown");
+else {
+  const ids = fs.readdirSync(EXAMPLES).filter((f) => f.endsWith(".ocm")).map((f) => f.slice(0, -4)).sort();
+  let same = 0, epochsFlown = 0, timesCovered = 0;
+  for (const id of ids) {
+    const d = JSON.parse(fs.readFileSync(path.join(EXAMPLES, `${id}.json`), "utf8")), set = new Uint8Array(fs.readFileSync(path.join(EXAMPLES, `${id}.ocm`)));
+    const t0 = Date.parse(d.start), setMs = Date.parse(`${ocmOf(set).MEAN_ELEMENTS.EPOCH.slice(0, 23)}Z`);
+    const epochs = d.epochsSeconds.map((s) => new Date(t0 + 1000 * s).toISOString().replace("Z", ""));
+    const times = d.epochsSeconds.filter((_, k) => k % 12 === 0).map((s) => (t0 + 1000 * s - setMs) / 60000);
+    const fly = (harness) => harness.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: set },
+      configuration({ output: { FRAME: pcfOutputFrame.TEME, EPOCHS: epochs } })] });
+    const [p2, p1] = [await fly(h), await fly(before)];
+    const flownSame = p2.statusCode === 0 && p1.statusCode === 0 && asBefore(new Uint8Array(p2.outputs[0].payload)).equals(Buffer.from(new Uint8Array(p1.outputs[0].payload)));
+    check(flownSame, `example ${id} propagate: ${now} ${p2.statusCode ? p2.errorCode : "ok"} differs from ${BEFORE.version} ${p1.statusCode ? p1.errorCode : "ok"}`);
+    const [a2, a1] = [covarianceAt(h, set, times), covarianceAt(before, set, times)];
+    const covSame = a2.status === 0 && a1.status === 0 && a2.out.equals(a1.out);
+    check(covSame, `example ${id} sdnap_covariance_at: ${now} (${a2.status}) differs from ${BEFORE.version} (${a1.status})`);
+    if (flownSame && covSame) { same += 1; epochsFlown += epochs.length; timesCovered += times.length; }
+  }
+  console.log(`examples: ${same} of ${ids.length} sets identical on ${now} and ${BEFORE.version} (propagate $OEM at ${epochsFlown} epochs ` +
+    `byte-identical, PRODUCER's version aside; sdnap_covariance_at at ${timesCovered} times bit-identical)` +
+    (same === ids.length ? ": 0 difference" : `; ${ids.length - same} differ`));
+  check(ids.length > 0 && same === ids.length, `examples: ${same} of ${ids.length} sets identical to ${BEFORE.version}`);
+}
+fs.rmSync(scratch, { recursive: true, force: true });
 
 // refusals by name
 const refused = (label, r, code, field = null) =>
