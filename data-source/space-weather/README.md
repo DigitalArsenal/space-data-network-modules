@@ -20,6 +20,8 @@ F107_DATA_TYPE says where the day's flux came from:
 
 GFZ values take precedence; NOAA fills what GFZ lacks. Missing three-hour ap is -1.
 
+NOAA sometimes delays the 45-day forecast. It is accepted while its first day is at most 7 days before today, and the batch's report (`FlowNotice` ITEMS) states `noaa-45-day-forecast first-day=<date> age-days=<n>`. An older forecast, or one starting after today, is refused with "Invalid or stale NOAA 45-day forecast." and the previous batch stays. Fits of 16 h arcs barely feel the age: median 8.17 km at 24 h and 27.3 km at 72 h on rows 5 days stale, against 8.09 and 26.5 on rows as issued (stack issue 224). Acceptance: `node data-source/space-weather/tests/forecast-age.e2e.mjs`.
+
 The predicted cycle gives one F10.7 per month. Each value stands at the month's midpoint; a day's flux is linear in time between the two midpoints around noon of that day. Months must be consecutive and cover every day through today + 440, or the batch is refused.
 
 CENTER81 is the mean of F10.7 over exactly 40 days either side of the day, LAST81 over the 80 days before it and the day itself. Both run over the one series (OBS, then PRD, then PRM) and never over padding. F107_ADJ_CENTER81 and F107_ADJ_LAST81 are -1 when any day in the window has no GFZ adjusted flux, as for every forecast day.
