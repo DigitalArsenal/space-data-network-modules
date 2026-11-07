@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 
-export const BEFORE=40, AHEAD=400, HALF=40, TRAILING=80, CLIMATOLOGY_DAYS=365, PRODUCER='space-weather/0.3.0';
+export const BEFORE=40, AHEAD=400, HALF=40, TRAILING=80, CLIMATOLOGY_DAYS=365, PRODUCER='space-weather/0.3.1';
 // The standard Kp-ap table, Kp 0o..9o in thirds. verifySources holds it to every (Kp, ap) pair of GFZ's file.
 export const AP_OF_KP_THIRD=[0,2,3,4,5,6,7,9,12,15,18,22,27,32,39,48,56,67,80,94,111,132,154,179,207,236,300,400];
 // The five sources, in the canonical order the module requests and hashes them in.

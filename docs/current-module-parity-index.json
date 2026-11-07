@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T15:32:06.182Z",
+  "generatedAt": "2026-11-07T16:13:41.134Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -4311,7 +4311,7 @@
       "pluginId": "com.digitalarsenal.data-source.space-weather",
       "name": "Licensed space weather",
       "pluginFamily": "data_source",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "methodIds": [
         "parse_weather",
         "plan_weather"
@@ -4329,7 +4329,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 7,
       "parityScope": false,
       "action": "outside-orekit-basilisk-parity",
       "sourceFiles": [
@@ -4337,6 +4337,7 @@
       ],
       "testFiles": [
         "tests/VERIFICATION.md",
+        "tests/forecast-age.e2e.mjs",
         "tests/forecast-horizon.e2e.mjs",
         "tests/local-node.mjs",
         "tests/runtime-parity.mjs",

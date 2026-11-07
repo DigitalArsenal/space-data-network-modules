@@ -1,3 +1,7 @@
-spacedatastandards.org=1.261.0
+spacedatastandards.org=1.276.0
 schema=SPW
 threadModel=wasi-sequential
+signed true
+signer-key-id module-owner-2026-10-15
+signer-public-key c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34
+canonical-sha256 58b4f17d965e9be0e04c3569331544a4ed0a1d3f7cbdac984ffc4a457d84572e

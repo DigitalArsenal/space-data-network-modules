@@ -35,7 +35,11 @@ constexpr int kCenterHalf = 40, kTrailingBack = 80, kSpan = 81;
 constexpr int kBefore = 40, kAhead = 400;
 // Past the 45-day forecast, Ap is the mean of GFZ's daily Ap over this many days before today.
 constexpr int kClimatologyDays = 365;
-const char* producerId = "space-weather/0.3.0";
+// NOAA's 45-day forecast is accepted while its first day is at most this many days before today, and the report states
+// its age. Past that it is refused by name. Fitted orbits barely feel the age: fits of 16 h arcs on rows 5 days stale
+// have a median error of 8.17 km at 24 h and 27.3 km at 72 h against 8.09 and 26.5 on rows as issued.
+constexpr int64_t kForecastMaxAgeDays = 7;
+const char* producerId = "space-weather/0.3.1";
 // The citation travels in the batch's ingest metadata, and the node's storage.ingest operation refuses a batch whose
 // citation is longer than 255 bytes (hostops StorageIngestParams); nothing lands and no error reaches the flow.
 constexpr char credit[] = "GFZ Helmholtz Centre for Geosciences; Matzka et al. (2021), doi:10.1029/2020SW002641; F10.7: DRAO/Natural Resources Canada. NOAA SWPC forecasts and predicted solar cycle. Center81 includes forecasts; GFZ preferred, NOAA fills gaps; SN excluded.";
@@ -79,9 +83,9 @@ bool gfz(const std::string& text,Rows& rows) {
  }
  return count>0;
 }
-// NOAA's 45-day Ap and F10.7 forecast into the rows (GFZ's values stand); `last` is its final day.
-bool forecast(const std::string& text,Rows& rows,int64_t today,int64_t& last) {
- std::istringstream lines(text);std::string line;int section=0,counts[2]={0,0};int64_t first=-1;
+// NOAA's 45-day Ap and F10.7 forecast into the rows (GFZ's values stand); `first` and `last` are its first and final days.
+bool forecast(const std::string& text,Rows& rows,int64_t today,int64_t& first,int64_t& last) {
+ std::istringstream lines(text);std::string line;int section=0,counts[2]={0,0};
  while(std::getline(lines,line)) {
   if(line=="45-DAY AP FORECAST"){section=1;continue;}
   if(line=="45-DAY F10.7 CM FLUX FORECAST"){section=2;continue;}
@@ -98,7 +102,7 @@ bool forecast(const std::string& text,Rows& rows,int64_t today,int64_t& last) {
    ++counts[section-1];
   }
  }
- return counts[0]==45&&counts[1]==45&&first<=today&&first>=today-1;
+ return counts[0]==45&&counts[1]==45&&first<=today&&first>=today-kForecastMaxAgeDays;
 }
 bool kpForecast(const std::string& body,Rows& rows) {
  auto data=Json::parse(body,nullptr,false);if(!data.is_array()||data.empty())return false;
@@ -203,8 +207,8 @@ const char* readSources(Batch& b) {
  for(uint32_t k=0;k<kSources;++k){b.hash.update(reinterpret_cast<const uint8_t*>(urls[k]),std::strlen(urls[k])+1);b.hash.update(reinterpret_cast<const uint8_t*>(b.body[k].data()),b.body[k].size());}
  return nullptr;
 }
-// The merged days, and where NOAA's 45-day forecast ends (the predicted cycle takes over after it).
-struct Series {Rows rows;int64_t lastForecast=-1;};
+// The merged days, and where NOAA's 45-day forecast starts and ends (the predicted cycle takes over after it).
+struct Series {Rows rows;int64_t firstForecast=-1,lastForecast=-1;};
 // The days after today that no source covers: Ap past the 45-day forecast is the climatology; a day without all eight
 // Kp (NOAA's Kp forecast ends about two days out) gets all eight from its Ap, and its three-hour ap are that Ap.
 void completeFuture(Series& s,int64_t today,int climatology) {
@@ -221,7 +225,7 @@ const char* assemble(const Batch& b,Series& s) {
  const int64_t today=b.today();
  if(!(gfz(b.body[GfzHistory],s.rows)&&gfz(b.body[GfzNowcast],s.rows)))return "Invalid GFZ columns or license header.";
  int climatology=0;if(!apClimatology(s.rows,today,climatology))return "GFZ daily Ap is incomplete for the 365 days before today.";
- if(!forecast(b.body[NoaaForecast],s.rows,today,s.lastForecast))return "Invalid or stale NOAA 45-day forecast.";
+ if(!forecast(b.body[NoaaForecast],s.rows,today,s.firstForecast,s.lastForecast))return "Invalid or stale NOAA 45-day forecast.";
  if(!kpForecast(b.body[NoaaKp],s.rows))return "Invalid NOAA Kp forecast.";
  Cycle cycle;if(!predictedCycle(b.body[NoaaCycle],cycle))return "Invalid NOAA predicted solar cycle.";
  for(int64_t z=s.lastForecast+1;z<=today+kAhead+kCenterHalf;++z) {
@@ -245,8 +249,8 @@ Published publishable(const Series& s,int64_t today,const std::string& hash) {
  }
  return out;
 }
-// The ingest metadata and the flow notice of the batch, then its records.
-int publish(const Batch& b,const Published& days,const std::string& hash) {
+// The ingest metadata and the flow notice of the batch, then its records. The notice states the forecast's age.
+int publish(const Batch& b,const Series& s,const Published& days,const std::string& hash) {
  R::IngestRequestT meta;meta.SCHEMA="SPW.fbs";meta.RECONCILE=R::reconcileMode_Current;meta.TAGS=std::make_unique<R::SourceTagsT>();
  auto& tags=*meta.TAGS;tags.PROVIDER_ID="space-weather";tags.SOURCE_NAME="gfz-noaa";tags.BATCH_ID=hash;tags.SOURCE_URL=urls[0];
  tags.LICENSE="CC-BY-4.0 (GFZ); public domain (NOAA SWPC)";tags.LICENSE_URL="https://creativecommons.org/licenses/by/4.0/";tags.CITATION=credit;
@@ -254,6 +258,7 @@ int publish(const Batch& b,const Published& days,const std::string& hash) {
  flatbuffers::FlatBufferBuilder mb(2048);R::FinishIngestRequestBuffer(mb,R::IngestRequest::Pack(mb,&meta));
  R::FlowNoticeT report;report.KIND=R::flowNoticeKind_Info;report.SCHEMA="SPW.fbs";report.PROVIDER_ID=tags.PROVIDER_ID;report.SOURCE_NAME=tags.SOURCE_NAME;report.BATCH_ID=tags.BATCH_ID;report.COUNT=days.count;report.AT_MS=b.retrieved;report.REASON="licensed-mixed-observed-forecast";
  for(uint32_t k=0;k<kSources;++k)report.ITEMS.push_back(std::string(urls[k])+" sha256="+ephem::sha256_hex(reinterpret_cast<const uint8_t*>(b.body[k].data()),b.body[k].size()));
+ report.ITEMS.push_back("noaa-45-day-forecast first-day="+iso(s.firstForecast)+" age-days="+std::to_string(b.today()-s.firstForecast));
  flatbuffers::FlatBufferBuilder rb(2048);R::FinishFlowNoticeBuffer(rb,R::FlowNotice::Pack(rb,&report));
  CHECK(push("meta","IngestRequest.fbs","INGQ","IngestRequest",mb)>=0&&push("report","FlowNotice.fbs","FNTC","FlowNotice",rb)>=0,"Metadata emission failed.");
  return plugin_push_output_ex("records","SPW.fbs","$SPW",PLUGIN_PAYLOAD_WIRE_FORMAT_FLATBUFFER,"SPW",0,0,days.stream.data(),days.stream.size())<0?1:0;
@@ -276,5 +281,5 @@ extern "C" int parse_weather() {
  const std::string hash=batch.hash.hex();const Published days=publishable(series,batch.today(),hash);
  CHECK(days.current&&days.count>=40,"Today's complete drivers and history unavailable; keep previous batch.");
  CHECK(days.ahead==kAhead,"The published horizon is incomplete; keep previous batch.");
- return publish(batch,days,hash);
+ return publish(batch,series,days,hash);
 }
