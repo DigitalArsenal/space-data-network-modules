@@ -3072,20 +3072,17 @@
       }
     },
     "data-source/space-weather/dist/isomorphic/module.wasm": {
-      "sha256": "7abd9f36f0044a9dc3a26a4d57ef7f426834d661a261e25522bfac314b16ff42",
-      "bytes": 302167,
-      "wasmSha256": "7abd9f36f0044a9dc3a26a4d57ef7f426834d661a261e25522bfac314b16ff42",
-      "canonicalModuleSha256": "4d37f1c1e3fb5ce38485166d46e8107551297fe4eaa7f62c57522934540ffc8c",
-      "form": "raw",
+      "sha256": "6e679ec4f7d7b409cc4e54246dd97dc8ad54ac53bd31b23dbb5e28b9d8e460b6",
+      "bytes": 304695,
+      "wasmSha256": "58b4f17d965e9be0e04c3569331544a4ed0a1d3f7cbdac984ffc4a457d84572e",
+      "canonicalModuleSha256": "58b4f17d965e9be0e04c3569331544a4ed0a1d3f7cbdac984ffc4a457d84572e",
+      "form": "bundled",
       "module": "data-source/space-weather",
-      "lastCommit": "44ce9d27a1214c8a4740b5f30d831b0e6a7248f0",
-      "lastCommitDate": "2026-10-29T16:22:59-04:00",
+      "lastCommit": "8a4a0f4f241524ba60f1e05b8c385bac8609c038",
+      "lastCommitDate": "2026-11-07T11:13:40-05:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "b421bb46ac50c8a2486ca21e86ddc75a2bbda629",
-        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": true,
         "threadModels": [
@@ -5901,8 +5898,8 @@
       "canonicalModuleSha256": "fce882d501c751d74d836e2975762c323d9b253836a449f7128d12b9ea46211d",
       "form": "raw",
       "module": null,
-      "lastCommit": "4a544e4d8f1da3e79f319e347673e4f33c9bdc7b",
-      "lastCommitDate": "2026-11-06T08:34:18-05:00",
+      "lastCommit": "fa98368122398e606f93491980dc8b68de71a063",
+      "lastCommitDate": "2026-11-06T10:32:26-05:00",
       "provenance": "inferred",
       "toolchain": null,
       "sdkPinAtCommit": {
