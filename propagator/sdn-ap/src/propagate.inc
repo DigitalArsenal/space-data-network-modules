@@ -30,15 +30,23 @@ extern "C" int propagate(void) {
     if (const int rc = oem::grid_epochs(g, e.epoch_jd_whole, e.epoch_jd_frac, budget, tw, tf)) return rc;
     {
       int32_t lo = ocm::mjd_of(e.epoch_jd_whole, e.epoch_jd_frac), hi = lo;
-      for (size_t k = 0; k < tw.size(); ++k) {
-        const int32_t d = ocm::mjd_of(tw[k], tf[k]);
-        lo = std::min(lo, d);
-        hi = std::max(hi, d);
+      if (!g.explicit_times) {
+        const int32_t d0 = ocm::mjd_of(tw.front(), tf.front());
+        const int32_t d1 = ocm::mjd_of(tw.back(), tf.back());
+        lo = std::min(lo, std::min(d0, d1));
+        hi = std::max(hi, std::max(d0, d1));
+      } else {
+        for (size_t k = 0; k < tw.size(); ++k) {
+          const int32_t d = ocm::mjd_of(tw[k], tf[k]);
+          lo = std::min(lo, d);
+          hi = std::max(hi, d);
+        }
       }
       if (const int rc = ocm::rows_cover(set, lo, hi)) return rc;
     }
     atm::Atmosphere atmosphere;
     ocm::atmosphere_of(set, atmosphere);
+    alignas(16) xpt::XpSat xs_stack;
     xpt::XpSat* xs = nullptr;
     Sat sat{};
     double* nodes = nullptr;
@@ -48,9 +56,9 @@ extern "C" int propagate(void) {
     {
       ocm::Bind bind(set.forces, &atmosphere);
       if (e.theory == kTheorySgp4Xp) {
-        xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+        xs = &xs_stack;
         drag::table();
-        refused = xs == nullptr || xpt::xp_init(e, *xs) != kPropOk;
+        refused = xpt::xp_init(e, *xs) != kPropOk;
       } else {
         refused = sat_init(e, gravity_wgs72(), sat) != kPropOk;
         if (!refused && sat.deep.iresfl != 0) {
@@ -63,7 +71,6 @@ extern "C" int propagate(void) {
       }
       if (refused) {
         if (xs != nullptr) xpt::xp_release(*xs);
-        std::free(xs);
         plugin_set_error("element-set-refused", "The element set describes no orbit this module propagates.");
         return 3;
       }
@@ -71,18 +78,21 @@ extern "C" int propagate(void) {
       if (xs != nullptr) {
         cov::Set cs;
         const int cr = cov::read(set.record, set.row, cs);
-        const int pr = cr == 1 ? cov::prepare(cs, cprop) : 0;
+        const int pr = cr == 1 ? cov::prepare(cs, cprop, xs) : 0;
         if (cr < 0 || pr != 0) {
           xpt::xp_release(*xs);
-          std::free(xs);
           return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                              cr < 0 ? "The set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."
                                     : "The set's covariance does not map onto its parameters (the theory refuses a moved set or the epoch columns are singular).");
         }
         with_cov = cr == 1;
+        if (with_cov && xs->init_error == 0 && xs->ctx.d50_epoch == 0.0 && cprop.b.count > 0 &&
+            xpt::is_ap_ctx(cprop.b.sats[0].ctx)) {
+          xs = nullptr;
+        }
       }
     }
-    flatbuffers::FlatBufferBuilder fbb(1 << 16);
+    flatbuffers::FlatBufferBuilder fbb(tw.size() * (with_cov ? 480u : 140u) + 8192u);
     std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
     char text[48], start[48], stop[48], why[160];
     int rc = 0;
@@ -101,31 +111,45 @@ extern "C" int propagate(void) {
       }
     }
     {
-      std::vector<flatbuffers::Offset<ephemerisDataLine>> lines;
-      std::vector<flatbuffers::Offset<covarianceMatrixLine>> cov_lines;
-      lines.reserve(tw.size());
+      std::vector<flatbuffers::Offset<ephemerisDataLine>> lines(tw.size());
+      std::vector<flatbuffers::Offset<covarianceMatrixLine>> cov_lines(with_cov ? tw.size() : 0);
+      const bool use_raw_fb = (xs != nullptr && xpt::is_ap_ctx(xs->ctx)) || (with_cov && xpt::is_ap_ctx(cprop.b.sats[0].ctx));
+      bool have_ephem_vt = false, have_cov_vt = false;
+      flatbuffers::uoffset_t vt_ephem = 0, vt_cov = 0;
       double bias[3][3];
       if (g.axes == oem::Axes::Eme2000) frames::frame_bias(bias);
       for (size_t k = 0; k < tw.size(); ++k) {
         const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
-        double r[3], v[3];
-        const int32_t status = xs != nullptr ? xpt::xp_propagate(*xs, t, r, v) : sat_propagate(sat, nodes, t, r, v);
+        double r[3], v[3], P[36];
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
-        if (status != kPropOk) {
-          std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", e.norad, text, static_cast<int>(status));
-          rc = oem::refuse("propagation-failed", why);
-          break;
-        }
-        double P[36];
-        if (with_cov) {
-          double rq[3], vq[3];
-          if (!cov::eval(cprop, t, rq, vq, P)) {
-            std::snprintf(why, sizeof why, "NORAD %u: no covariance at %s.", e.norad, text);
+        if (with_cov && xs == nullptr) {
+          int32_t nom_status = kPropOk;
+          if (!cov::eval(cprop, t, r, v, P, nullptr, &nom_status)) {
+            if (nom_status != kPropOk) {
+              std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", e.norad, text, static_cast<int>(nom_status));
+            } else {
+              std::snprintf(why, sizeof why, "NORAD %u: no covariance at %s.", e.norad, text);
+            }
             rc = oem::refuse("propagation-failed", why);
             break;
           }
+        } else {
+          const int32_t status = xs != nullptr ? xpt::xp_propagate_local(*xs, t, r, v) : sat_propagate(sat, nodes, t, r, v);
+          if (status != kPropOk) {
+            std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", e.norad, text, static_cast<int>(status));
+            rc = oem::refuse("propagation-failed", why);
+            break;
+          }
+          if (with_cov) {
+            double rq[3], vq[3];
+            if (!cov::eval(cprop, t, rq, vq, P)) {
+              std::snprintf(why, sizeof why, "NORAD %u: no covariance at %s.", e.norad, text);
+              rc = oem::refuse("propagation-failed", why);
+              break;
+            }
+          }
         }
-        double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};  // output = axes TEME
+        double axes[3][3];
         if (g.axes != oem::Axes::Teme) {
           double m[3][3];
           if (frames::gcrf_to_teme(tw[k], tf[k], m) < 0) {
@@ -153,28 +177,113 @@ extern "C" int propagate(void) {
               axes[a][j] = sum;
             }
         }
-        lines.push_back(CreateephemerisDataLineDirect(fbb, text, r[0], r[1], r[2], v[0], v[1], v[2]));
+        const bool all_ephem_nz =
+            r[0] != 0.0 && r[1] != 0.0 && r[2] != 0.0 && v[0] != 0.0 && v[1] != 0.0 && v[2] != 0.0;
+        if (!use_raw_fb || !all_ephem_nz || text[26] != '\0') {
+          lines[k] = CreateephemerisDataLineDirect(fbb, text, r[0], r[1], r[2], v[0], v[1], v[2]);
+        } else if (have_ephem_vt) {
+          fbb.Align(8);
+          const flatbuffers::uoffset_t s0 = fbb.GetSize();
+          const flatbuffers::uoffset_t line_end = s0 + 88u;
+          struct EphemRaw {
+            int32_t vt_rel;
+            uint32_t epoch_rel;
+            double x, y, z, vx, vy, vz;
+            uint32_t str_len;
+            char str[26];
+            uint16_t pad;
+          } raw;
+          static_assert(sizeof(EphemRaw) == 88, "");
+          raw.vt_rel = static_cast<int32_t>(vt_ephem) - static_cast<int32_t>(line_end);
+          raw.epoch_rel = 52u;
+          raw.x = r[0];
+          raw.y = r[1];
+          raw.z = r[2];
+          raw.vx = v[0];
+          raw.vy = v[1];
+          raw.vz = v[2];
+          raw.str_len = 26u;
+          std::memcpy(raw.str, text, 26);
+          raw.pad = 0u;
+          fbb.PushBytes(reinterpret_cast<const uint8_t*>(&raw), sizeof(raw));
+          lines[k] = flatbuffers::Offset<ephemerisDataLine>(line_end);
+        } else {
+          const auto line_off = CreateephemerisDataLineDirect(fbb, text, r[0], r[1], r[2], v[0], v[1], v[2]);
+          const auto soff = flatbuffers::ReadScalar<flatbuffers::soffset_t>(
+              fbb.GetCurrentBufferPointer() + fbb.GetSize() - line_off.o);
+          vt_ephem = static_cast<flatbuffers::uoffset_t>(static_cast<flatbuffers::soffset_t>(line_off.o) + soff);
+          have_ephem_vt = true;
+          lines[k] = line_off;
+        }
         if (with_cov) {
-          // P' = B P B^T, B = diag(axes, axes)
-          double B[36] = {}, BP[36], C[36];
-          for (int a = 0; a < 3; ++a)
-            for (int j = 0; j < 3; ++j) B[a * 6 + j] = B[(3 + a) * 6 + 3 + j] = axes[a][j];
-          for (int a = 0; a < 6; ++a)
-            for (int j = 0; j < 6; ++j) {
-              double sum = 0.0;
-              for (int q = 0; q < 6; ++q) sum += B[a * 6 + q] * P[q * 6 + j];
-              BP[a * 6 + j] = sum;
-            }
-          for (int a = 0; a < 6; ++a)
-            for (int j = 0; j < 6; ++j) {
-              double sum = 0.0;
-              for (int q = 0; q < 6; ++q) sum += BP[a * 6 + q] * B[j * 6 + q];
-              C[a * 6 + j] = sum;
-            }
+          double C_buf[36];
+          const double* C = P;
+          if (g.axes != oem::Axes::Teme) {
+            // P' = B P B^T, B = diag(axes, axes)
+            double B[36] = {}, BP[36];
+            for (int a = 0; a < 3; ++a)
+              for (int j = 0; j < 3; ++j) B[a * 6 + j] = B[(3 + a) * 6 + 3 + j] = axes[a][j];
+            for (int a = 0; a < 6; ++a)
+              for (int j = 0; j < 6; ++j) {
+                double sum = 0.0;
+                for (int q = 0; q < 6; ++q) sum += B[a * 6 + q] * P[q * 6 + j];
+                BP[a * 6 + j] = sum;
+              }
+            for (int a = 0; a < 6; ++a)
+              for (int j = 0; j < 6; ++j) {
+                double sum = 0.0;
+                for (int q = 0; q < 6; ++q) sum += BP[a * 6 + q] * B[j * 6 + q];
+                C_buf[a * 6 + j] = sum;
+              }
+            C = C_buf;
+          }
           auto c = [&](int a, int j) { return 0.5 * (C[a * 6 + j] + C[j * 6 + a]); };
-          cov_lines.push_back(CreatecovarianceMatrixLineDirect(fbb, text, c(0, 0), c(1, 0), c(1, 1), c(2, 0), c(2, 1), c(2, 2), c(3, 0),
-                                                                c(3, 1), c(3, 2), c(3, 3), c(4, 0), c(4, 1), c(4, 2), c(4, 3), c(4, 4),
-                                                                c(5, 0), c(5, 1), c(5, 2), c(5, 3), c(5, 4), c(5, 5)));
+          const double cv[21] = {
+              c(0, 0), c(1, 0), c(1, 1), c(2, 0), c(2, 1), c(2, 2), c(3, 0),
+              c(3, 1), c(3, 2), c(3, 3), c(4, 0), c(4, 1), c(4, 2), c(4, 3),
+              c(4, 4), c(5, 0), c(5, 1), c(5, 2), c(5, 3), c(5, 4), c(5, 5)};
+          bool all_cov_nz = true;
+          for (int q = 0; q < 21; ++q) {
+            if (cv[q] == 0.0) {
+              all_cov_nz = false;
+              break;
+            }
+          }
+          if (!use_raw_fb || !all_cov_nz || text[26] != '\0') {
+            cov_lines[k] = CreatecovarianceMatrixLineDirect(
+                fbb, text, cv[0], cv[1], cv[2], cv[3], cv[4], cv[5], cv[6], cv[7], cv[8], cv[9],
+                cv[10], cv[11], cv[12], cv[13], cv[14], cv[15], cv[16], cv[17], cv[18], cv[19], cv[20]);
+          } else if (have_cov_vt) {
+            fbb.Align(8);
+            const flatbuffers::uoffset_t c_s0 = fbb.GetSize();
+            const flatbuffers::uoffset_t cov_end = c_s0 + 208u;
+            struct CovRaw {
+              int32_t vt_rel;
+              uint32_t epoch_rel;
+              double c[21];
+              uint32_t str_len;
+              char str[26];
+              uint16_t pad;
+            } craw;
+            static_assert(sizeof(CovRaw) == 208, "");
+            craw.vt_rel = static_cast<int32_t>(vt_cov) - static_cast<int32_t>(cov_end);
+            craw.epoch_rel = 172u;
+            std::memcpy(craw.c, cv, sizeof(cv));
+            craw.str_len = 26u;
+            std::memcpy(craw.str, text, 26);
+            craw.pad = 0u;
+            fbb.PushBytes(reinterpret_cast<const uint8_t*>(&craw), sizeof(craw));
+            cov_lines[k] = flatbuffers::Offset<covarianceMatrixLine>(cov_end);
+          } else {
+            const auto cov_off = CreatecovarianceMatrixLineDirect(
+                fbb, text, cv[0], cv[1], cv[2], cv[3], cv[4], cv[5], cv[6], cv[7], cv[8], cv[9],
+                cv[10], cv[11], cv[12], cv[13], cv[14], cv[15], cv[16], cv[17], cv[18], cv[19], cv[20]);
+            const auto c_soff = flatbuffers::ReadScalar<flatbuffers::soffset_t>(
+                fbb.GetCurrentBufferPointer() + fbb.GetSize() - cov_off.o);
+            vt_cov = static_cast<flatbuffers::uoffset_t>(static_cast<flatbuffers::soffset_t>(cov_off.o) + c_soff);
+            have_cov_vt = true;
+            cov_lines[k] = cov_off;
+          }
         }
       }
       if (rc == 0) {
@@ -188,7 +297,6 @@ extern "C" int propagate(void) {
       }
     }
     if (xs != nullptr) xpt::xp_release(*xs);
-    std::free(xs);
     std::free(nodes);
     if (rc != 0) return rc;
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, "SDN", &blocks);

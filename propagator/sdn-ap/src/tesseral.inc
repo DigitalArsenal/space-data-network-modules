@@ -63,7 +63,7 @@ inline double norm_factor(int l, int m) {
 struct LegendreOrder {
   int m, lmax;
   double km;
-  double a[104], b[104];  // to degree 103 (the lunar field is pinned to degree 100)
+  double a[104], b[104], d[104];  // to degree 103 (the lunar field is pinned to degree 100)
 };
 
 inline void legendre_order(int m, int lmax, LegendreOrder& L) {
@@ -72,10 +72,12 @@ inline void legendre_order(int m, int lmax, LegendreOrder& L) {
   double k = 1.0;
   for (int j = 1; j <= m; ++j) k *= std::sqrt((2.0 * j + 1.0) / (2.0 * j));
   L.km = m >= 1 ? k * std::sqrt(2.0) : 1.0;  // (2 - delta_0m)
+  if (m + 1 <= lmax) L.d[m + 1] = std::sqrt(2.0 * m + 3.0);
   for (int l = m + 2; l <= lmax; ++l) {
     const double lm = (double)(l - m) * (double)(l + m);
     L.a[l] = std::sqrt((2.0 * l - 1.0) * (2.0 * l + 1.0) / lm);
     L.b[l] = std::sqrt((2.0 * l + 1.0) * (l + m - 1.0) * (l - m - 1.0) / (lm * (2.0 * l - 3.0)));
+    L.d[l] = std::sqrt((2.0 * l + 1.0) * lm / (2.0 * l - 1.0));
   }
 }
 
@@ -96,6 +98,38 @@ inline void legendre_column(const LegendreOrder& L, double x, double c, double* 
 /// that function's coefficient at frequency l - 2p. The integrand is a
 /// trigonometric polynomial of degree l: N > l + k points give the coefficient
 /// exactly; the Legendre recurrence keeps it stable to degree 70.
+inline constexpr double kInvM[72] = {
+    0.0,        1.0 / 1.0,  1.0 / 2.0,  1.0 / 3.0,  1.0 / 4.0,  1.0 / 5.0,  1.0 / 6.0,  1.0 / 7.0,
+    1.0 / 8.0,  1.0 / 9.0,  1.0 / 10.0, 1.0 / 11.0, 1.0 / 12.0, 1.0 / 13.0, 1.0 / 14.0, 1.0 / 15.0,
+    1.0 / 16.0, 1.0 / 17.0, 1.0 / 18.0, 1.0 / 19.0, 1.0 / 20.0, 1.0 / 21.0, 1.0 / 22.0, 1.0 / 23.0,
+    1.0 / 24.0, 1.0 / 25.0, 1.0 / 26.0, 1.0 / 27.0, 1.0 / 28.0, 1.0 / 29.0, 1.0 / 30.0, 1.0 / 31.0,
+    1.0 / 32.0, 1.0 / 33.0, 1.0 / 34.0, 1.0 / 35.0, 1.0 / 36.0, 1.0 / 37.0, 1.0 / 38.0, 1.0 / 39.0,
+    1.0 / 40.0, 1.0 / 41.0, 1.0 / 42.0, 1.0 / 43.0, 1.0 / 44.0, 1.0 / 45.0, 1.0 / 46.0, 1.0 / 47.0,
+    1.0 / 48.0, 1.0 / 49.0, 1.0 / 50.0, 1.0 / 51.0, 1.0 / 52.0, 1.0 / 53.0, 1.0 / 54.0, 1.0 / 55.0,
+    1.0 / 56.0, 1.0 / 57.0, 1.0 / 58.0, 1.0 / 59.0, 1.0 / 60.0, 1.0 / 61.0, 1.0 / 62.0, 1.0 / 63.0,
+    1.0 / 64.0, 1.0 / 65.0, 1.0 / 66.0, 1.0 / 67.0, 1.0 / 68.0, 1.0 / 69.0, 1.0 / 70.0, 1.0 / 71.0,
+};
+
+inline void complex_pow(double cr, double ci, int m, double& out_c, double& out_s) {
+  double r = 1.0, i = 0.0;
+  int n = m;
+  while (n > 0) {
+    if (n & 1) {
+      const double nr = r * cr - i * ci;
+      i = r * ci + i * cr;
+      r = nr;
+    }
+    n >>= 1;
+    if (n > 0) {
+      const double ncr = cr * cr - ci * ci;
+      ci = 2.0 * cr * ci;
+      cr = ncr;
+    }
+  }
+  out_c = r;
+  out_s = i;
+}
+
 inline void normalized_Fk(int m, int k, int lmax, double inc, double* F) {
   const int ak = k < 0 ? -k : k;
   const int N = lmax + ak + 2;
@@ -107,117 +141,543 @@ inline void normalized_Fk(int m, int k, int lmax, double inc, double* F) {
   for (int l = 0; l <= lmax; ++l) F[l] = 0.0;
   int l0 = m > ak ? m : ak;
   if ((l0 - ak) & 1) ++l0;
+  const double du = kTwoPi / N;
+  double sdu, cdu, sdku, cdku;
+  fm::sincos(du, sdu, cdu);
+  fm::sincos(k * du, sdku, cdku);
+  double su = 0.0, cu = 1.0, sku = 0.0, cku = 1.0;
   for (int j = 0; j < N; ++j) {
-    const double u = kTwoPi * j / N;
-    double su, cu, sku, cku;
-    fm::sincos(u, su, cu);
-    fm::sincos(k * u, sku, cku);
+    if (j > 0) {
+      const double nsu = su * cdu + cu * sdu;
+      cu = cu * cdu - su * sdu;
+      su = nsu;
+      const double nsku = sku * cdku + cku * sdku;
+      cku = cku * cdku - sku * sdku;
+      sku = nsku;
+    }
     const double x = si * su, c = std::sqrt(std::fmax(0.0, 1.0 - x * x));
     legendre_column(L, x, c, col);
-    double sml, cml;
-    fm::sincos(m * std::atan2(ci * su, cu), sml, cml);
+    double sml = 0.0, cml = 1.0;
+    if (m > 0) {
+      if (c > 1e-12) {
+        const double inv_c = 1.0 / c;
+        complex_pow(cu * inv_c, ci * su * inv_c, m, cml, sml);
+      } else {
+        fm::sincos(m * std::atan2(ci * su, cu), sml, cml);
+      }
+    }
     for (int l = l0; l <= lmax; l += 2) {
       const double f1 = col[l] * cml, f2 = col[l] * sml;
       F[l] += ((l - m) & 1) ? f1 * sku - f2 * cku : f1 * cku + f2 * sku;
     }
   }
-  for (int l = 0; l <= lmax; ++l) F[l] /= N;
+  const double inv_N = 1.0 / N;
+  for (int l = 0; l <= lmax; ++l) F[l] *= inv_N;
+}
+
+inline void normalized_Fk3(int m, int k, int lmax, double i0, double h, double* F0, double* Fp, double* Fm) {
+  const int ak = k < 0 ? -k : k;
+  const int N = lmax + ak + 2;
+  double si[3], ci[3];
+  fm::sincos(i0, si[0], ci[0]);
+  fm::sincos(i0 + h, si[1], ci[1]);
+  fm::sincos(i0 - h, si[2], ci[2]);
+  double* outs[3] = {F0, Fp, Fm};
+  for (int s = 0; s < 3; ++s)
+    for (int l = 0; l <= lmax; ++l) outs[s][l] = 0.0;
+  LegendreOrder L;
+  legendre_order(m, lmax, L);
+  int l0 = m > ak ? m : ak;
+  if ((l0 - ak) & 1) ++l0;
+  const double du = kTwoPi / N;
+  double sdu, cdu, sdku, cdku;
+  fm::sincos(du, sdu, cdu);
+  fm::sincos(k * du, sdku, cdku);
+  double su = 0.0, cu = 1.0, sku = 0.0, cku = 1.0;
+  double col[104];
+  for (int j = 0; j < N; ++j) {
+    if (j > 0) {
+      const double nsu = su * cdu + cu * sdu;
+      cu = cu * cdu - su * sdu;
+      su = nsu;
+      const double nsku = sku * cdku + cku * sdku;
+      cku = cku * cdku - sku * sdku;
+      sku = nsku;
+    }
+    for (int s = 0; s < 3; ++s) {
+      const double x = si[s] * su, c = std::sqrt(std::fmax(0.0, 1.0 - x * x));
+      legendre_column(L, x, c, col);
+      double sml = 0.0, cml = 1.0;
+      if (m > 0) {
+        if (c > 1e-12) {
+          const double inv_c = 1.0 / c;
+          complex_pow(cu * inv_c, ci[s] * su * inv_c, m, cml, sml);
+        } else {
+          fm::sincos(m * std::atan2(ci[s] * su, cu), sml, cml);
+        }
+      }
+      double* F = outs[s];
+      for (int l = l0; l <= lmax; l += 2) {
+        const double f1 = col[l] * cml, f2 = col[l] * sml;
+        F[l] += ((l - m) & 1) ? f1 * sku - f2 * cku : f1 * cku + f2 * sku;
+      }
+    }
+  }
+  const double inv_N = 1.0 / N;
+  for (int s = 0; s < 3; ++s)
+    for (int l = 0; l <= lmax; ++l) outs[s][l] *= inv_N;
+}
+
+inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, double* dF0) {
+  double si0, ci0;
+  fm::sincos(i0, si0, ci0);
+  if (std::fabs(ci0) < 1e-3) {
+    double fp[104], fm_arr[104];
+    constexpr double h = 1e-5;
+    normalized_Fk3(m, k, lmax, i0, h, F0, fp, fm_arr);
+    for (int l = 0; l <= lmax; ++l) dF0[l] = (fp[l] - fm_arr[l]) * (0.5 / h);
+    return;
+  }
+  const int ak = k < 0 ? -k : k;
+  const int NF = (lmax + ak + 3) & ~1;
+  const int NF_HALF = NF >> 1;
+  const int j_top = NF_HALF >> 1;
+  for (int l = 0; l <= lmax; ++l) F0[l] = dF0[l] = 0.0;
+  LegendreOrder L;
+  legendre_order(m, lmax, L);
+  int l0 = m > ak ? m : ak;
+  if ((l0 - ak) & 1) ++l0;
+  const double du = kTwoPi / NF;
+  double sdu, cdu, sdku, cdku;
+  fm::sincos(du, sdu, cdu);
+  fm::sincos(k * du, sdku, cdku);
+  double su = 0.0, cu = 1.0, sku = 0.0, cku = 1.0;
+  double col[104], dcol[104];
+  for (int j = 0; j <= j_top; ++j) {
+    if (j > 0) {
+      const double nsu = su * cdu + cu * sdu;
+      cu = cu * cdu - su * sdu;
+      su = nsu;
+      const double nsku = sku * cdku + cku * sdku;
+      cku = cku * cdku - sku * sdku;
+      sku = nsku;
+    }
+    const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
+    const double x = si0 * su, c2 = 1.0 - x * x, c = std::sqrt(c2);
+    const double inv_c = 1.0 / c, inv_c2 = inv_c * inv_c;
+    legendre_column(L, x, c, col);
+    const double alpha_x = ci0 * su * inv_c2;
+    const double beta_phi = -m * x * cu * inv_c2;
+    dcol[m] = -alpha_x * (m * x * col[m]);
+    for (int l = m + 1; l <= lmax; ++l) dcol[l] = alpha_x * (L.d[l] * col[l - 1] - l * x * col[l]);
+    double sml = 0.0, cml = 1.0;
+    if (m > 0) complex_pow(cu * inv_c, ci0 * su * inv_c, m, cml, sml);
+    cml *= w_j;
+    sml *= w_j;
+    const double dcml = -beta_phi * sml, dsml = beta_phi * cml;
+    for (int l = l0; l <= lmax; l += 2) {
+      const double Pl = col[l], dPl = dcol[l];
+      const double f1 = Pl * cml, f2 = Pl * sml;
+      const double df1 = dPl * cml + Pl * dcml, df2 = dPl * sml + Pl * dsml;
+      if ((l - m) & 1) {
+        F0[l] += f1 * sku - f2 * cku;
+        dF0[l] += df1 * sku - df2 * cku;
+      } else {
+        F0[l] += f1 * cku + f2 * sku;
+        dF0[l] += df1 * cku + df2 * sku;
+      }
+    }
+  }
+  const double two_inv_NF = 2.0 / NF_HALF;
+  for (int l = l0; l <= lmax; l += 2) {
+    F0[l] *= two_inv_NF;
+    dF0[l] *= two_inv_NF;
+  }
 }
 
 /// The m-daily terms' inclination functions at the epoch inclination i0: for even
 /// l = 2..degree and m = 1..l in that order, Fbar_l,m,l/2 and its derivative in i
-/// (central difference) in F[2 j], F[2 j + 1]; returns the term count.
+/// in F[2 j], F[2 j + 1]; returns the term count.
 inline int mdaily_terms(int degree, double i0, double* F) {
   int count = 0;
-  double f[72], fp[72], fm[72];
-  const double h = 1e-5;
+  double f[72], df[72];
   for (int l = 2; l <= degree; l += 2) count += l;
   for (int m = 1; m <= degree; ++m) {
-    normalized_Fk(m, 0, degree, i0, f);
-    normalized_Fk(m, 0, degree, i0 + h, fp);
-    normalized_Fk(m, 0, degree, i0 - h, fm);
+    normalized_Fk_dF(m, 0, degree, i0, f, df);
     // term index of (l, m): sum over even l' < l of l', plus m - 1
     for (int l = (m + 1) / 2 * 2; l <= degree; l += 2) {
       const int j = (l - 2) * l / 4 + (m - 1);
       F[2 * j] = f[l];
-      F[2 * j + 1] = (fp[l] - fm[l]) / (2.0 * h);
+      F[2 * j + 1] = df[l];
     }
   }
   return count;
 }
 
+struct MdailyEvalCache {
+  const float* F = nullptr;
+  uint64_t table_id = 0;
+  int degree = 0;
+  float f0 = -1e30f, f1 = -1e30f;
+  double a = -1.0, a_bake = -1.0, e2 = -1.0;
+  alignas(16) double c0_pair1[20][2]{};
+  alignas(16) double s0_pair1[20][2]{};
+  alignas(16) double c0_pair2[20][2]{};
+  alignas(16) double s0_pair2[20][2]{};
+  alignas(16) double dc_pair1[20][2]{};
+  alignas(16) double ds_pair1[20][2]{};
+  alignas(16) double dc_pair2[20][2]{};
+  alignas(16) double ds_pair2[20][2]{};
+  alignas(16) double c_pair1[20][2]{};
+  alignas(16) double s_pair1[20][2]{};
+  alignas(16) double c_pair2[20][2]{};
+  alignas(16) double s_pair2[20][2]{};
+  alignas(16) float c10_f[24]{}, s10_f[24]{};
+  alignas(16) float c11_f[24]{}, s11_f[24]{};
+  alignas(16) float c20_f[24]{}, s20_f[24]{};
+  alignas(16) float c21_f[24]{}, s21_f[24]{};
+};
+inline thread_local MdailyEvalCache g_mdaily_eval_cache{};
+inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
+
 /// The m-daily corrections in the six-component set (n-dot, e-dot, i-dot,
 /// e varpi, sin i Omega, lambda order), first order, at the mean elements k;
 /// F the object's mdaily_terms (degree even l up to `degree`).
-inline void mdaily_six(const float* F, int degree, double t, const Kepler& k, double n, double eta, double si,
-                       double ci, double theta_g0, double* six) {
-  const double a = k.a, e = k.e;
-  const double sin_i = std::fabs(si) < 1e-12 ? 1e-12 : si;
-  const double p = a * eta * eta;
-  const double node_rate = -1.5 * n * kJ2 * ci / (p * p);  // J2 secular Omega-dot, rad/min
-  const double na2 = n * a * a, tanhalf = sin_i / (1.0 + ci);
-  const double g2 = 1.0 / (1.0 - e * e);
-  double sb, cb;  // beta = Omega - theta_G; the m multiples by recurrence
-  fm::sincos(k.node - (theta_g0 + kOmegaE * t), sb, cb);
-  double cm[72], sm[72];
-  cm[0] = 1.0;
-  sm[0] = 0.0;
-  for (int m = 1; m <= degree; ++m) {
-    cm[m] = cm[m - 1] * cb - sm[m - 1] * sb;
-    sm[m] = sm[m - 1] * cb + cm[m - 1] * sb;
-  }
-  double dlam = 0.0, di = 0.0, dsO = 0.0, dev = 0.0;
-  const double ia = 1.0 / a;
-  double A = kMu * ia * ia * ia;     // mu / a^(l+1), l = 2
-  double W = g2 * std::sqrt(g2);      // (1 - e^2)^-(l - 1/2), l = 2
-  int j = 0;
-  for (int l = 2; l <= degree; l += 2) {
-    // G = <(a/r)^(l+1)> = (1 - e^2)^-(l - 1/2) Q(e), Q = sum over even s of C(l-1, s) C(s, s/2) (e/2)^s
-    double Q = 0.0, dQ = 0.0, binom = 1.0, es = 1.0;  // binom = C(l-1, s), es = (e/2)^s
-    for (int s2 = 0; s2 <= l - 1; s2 += 2) {
-      double central = 1.0;  // C(s, s/2)
-      for (int r = 1; r <= s2 / 2; ++r) central = central * (s2 / 2 + r) / r;
-      Q += binom * central * es;
-      if (s2 > 0 && e > 0.0) dQ += binom * central * s2 * es / e;  // 0 at e = 0 (every term has a factor e)
-      binom = binom * (l - 1 - s2) * (l - 2 - s2) / ((s2 + 1.0) * (s2 + 2.0));
-      es *= 0.25 * e * e;
+[[gnu::noinline]] inline void mdaily_sync_cache(MdailyEvalCache& mc, const float* F, int degree, double a, double e2,
+                                                uint64_t table_id = 0) {
+  auto sync_f32 = [&]() {
+    if (degree <= 20) {
+      const int n_quad = (degree + 3) & ~3;
+      for (int m = 1; m <= degree; ++m) {
+        const int idx = m - 1;
+        mc.c10_f[idx] = static_cast<float>(mc.c_pair1[m][0]);
+        mc.s10_f[idx] = static_cast<float>(mc.s_pair1[m][0]);
+        mc.c11_f[idx] = static_cast<float>(mc.c_pair1[m][1]);
+        mc.s11_f[idx] = static_cast<float>(mc.s_pair1[m][1]);
+        mc.c20_f[idx] = static_cast<float>(mc.c_pair2[m][0]);
+        mc.s20_f[idx] = static_cast<float>(mc.s_pair2[m][0]);
+        mc.c21_f[idx] = static_cast<float>(mc.c_pair2[m][1]);
+        mc.s21_f[idx] = static_cast<float>(mc.s_pair2[m][1]);
+      }
+      for (int idx = degree; idx < n_quad; ++idx) {
+        mc.c10_f[idx] = mc.s10_f[idx] = 0.0f;
+        mc.c11_f[idx] = mc.s11_f[idx] = 0.0f;
+        mc.c20_f[idx] = mc.s20_f[idx] = 0.0f;
+        mc.c21_f[idx] = mc.s21_f[idx] = 0.0f;
+      }
     }
-    const double G = W * Q;
-    const double dG = W * ((2.0 * l - 1.0) * e * g2 * Q + dQ);
-    for (int m = 1; m <= l; ++m, ++j) {
-      const double C = kEgmC[l][m], S = kEgmS[l][m];
-      const double Fv = F[2 * j], dF = F[2 * j + 1];
-      const double psidot = m * (node_rate - kOmegaE);
-      const bool odd = ((l - m) & 1) != 0;
-      const double Spsi = odd ? -S * cm[m] + C * sm[m] : C * cm[m] + S * sm[m];
-      const double S1 = odd ? -S * sm[m] - C * cm[m] : C * sm[m] - S * cm[m];
-      const double AFG = A * Fv * G, AdFG = A * dF * G, AFdG = A * Fv * dG;
-      di += -m * AFG * Spsi / (na2 * eta * sin_i * psidot);
-      dsO += AdFG * S1 / (na2 * eta * psidot);
-      dev += (eta * AFdG / na2 + e * tanhalf * AdFG / (na2 * eta)) * S1 / psidot;
-      dlam += (2.0 * (l + 1) * AFG / na2 + eta * e * AFdG / (na2 * (1.0 + eta)) + tanhalf * AdFG / (na2 * eta)) * S1 / psidot;
+  };
+  if (table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] || mc.f1 != F[1] ||
+      std::fabs(a - mc.a) > 3e-5 * a || std::fabs(e2 - mc.e2) > 2e-6) {
+    mc.F = F;
+    mc.table_id = table_id;
+    mc.degree = degree;
+    mc.f0 = F[0];
+    mc.f1 = F[1];
+    mc.a = a;
+    mc.a_bake = a;
+    mc.e2 = e2;
+    for (int m = 1; m <= degree; ++m) {
+      mc.c0_pair1[m][0] = mc.c0_pair1[m][1] = 0.0;
+      mc.s0_pair1[m][0] = mc.s0_pair1[m][1] = 0.0;
+      mc.c0_pair2[m][0] = mc.c0_pair2[m][1] = 0.0;
+      mc.s0_pair2[m][0] = mc.s0_pair2[m][1] = 0.0;
+      mc.dc_pair1[m][0] = mc.dc_pair1[m][1] = 0.0;
+      mc.ds_pair1[m][0] = mc.ds_pair1[m][1] = 0.0;
+      mc.dc_pair2[m][0] = mc.dc_pair2[m][1] = 0.0;
+      mc.ds_pair2[m][0] = mc.ds_pair2[m][1] = 0.0;
     }
-    A *= ia * ia;
-    W *= g2 * g2;
+    const double g2 = 1.0 / (1.0 - e2);
+    const double ia = 1.0 / a;
+    double A = kMu * ia * ia * ia;
+    double W = g2 * std::sqrt(g2);
+    const double e2_4 = 0.25 * e2;
+    int j = 0;
+    for (int l = 2; l <= degree; l += 2) {
+      double Q = 1.0, dQ_oe = 0.0, term = 1.0;
+      for (int s2 = 2, k_idx = 1; s2 <= l - 1; s2 += 2, ++k_idx) {
+        const double step_f = static_cast<double>((l - s2 + 1) * (l - s2)) * kInvM[k_idx] * kInvM[k_idx];
+        dQ_oe += (term * step_f) * (0.25 * s2);
+        term *= step_f * e2_4;
+        Q += term;
+      }
+      const double G = W * Q;
+      const double dG_oe = W * ((2.0 * l - 1.0) * g2 * Q + dQ_oe);
+      const double AG = A * G, AdG_oe = A * dG_oe;
+      const double lp1 = static_cast<double>(l + 1);
+      for (int m = 1; m <= l; ++m, ++j) {
+        const double C = kEgmC[l][m], S = kEgmS[l][m];
+        const double Fv = F[2 * j], dF = F[2 * j + 1];
+        const bool odd = ((l - m) & 1) != 0;
+        const double inv_m = kInvM[m];
+        const double sc_psi = odd ? -S : C, ss_psi = odd ? C : S;
+        const double sc_1 = (odd ? -C : -S) * inv_m, ss_1 = (odd ? -S : C) * inv_m;
+        const double AFG = AG * Fv, AdFG = AG * dF, AFdG_oe = AdG_oe * Fv;
+        const double t_c10 = AFG * sc_psi, t_s10 = AFG * ss_psi;
+        const double t_c11 = (lp1 * AFG) * sc_1, t_s11 = (lp1 * AFG) * ss_1;
+        const double t_c20 = AdFG * sc_1, t_s20 = AdFG * ss_1;
+        const double t_c21 = AFdG_oe * sc_1, t_s21 = AFdG_oe * ss_1;
+        mc.c0_pair1[m][0] += t_c10;
+        mc.s0_pair1[m][0] += t_s10;
+        mc.c0_pair1[m][1] += t_c11;
+        mc.s0_pair1[m][1] += t_s11;
+        mc.c0_pair2[m][0] += t_c20;
+        mc.s0_pair2[m][0] += t_s20;
+        mc.c0_pair2[m][1] += t_c21;
+        mc.s0_pair2[m][1] += t_s21;
+        mc.dc_pair1[m][0] += lp1 * t_c10;
+        mc.ds_pair1[m][0] += lp1 * t_s10;
+        mc.dc_pair1[m][1] += lp1 * t_c11;
+        mc.ds_pair1[m][1] += lp1 * t_s11;
+        mc.dc_pair2[m][0] += lp1 * t_c20;
+        mc.ds_pair2[m][0] += lp1 * t_s20;
+        mc.dc_pair2[m][1] += lp1 * t_c21;
+        mc.ds_pair2[m][1] += lp1 * t_s21;
+      }
+      A *= ia * ia;
+      W *= g2 * g2;
+    }
+    for (int m = 1; m <= degree; ++m) {
+      mc.c_pair1[m][0] = mc.c0_pair1[m][0];
+      mc.c_pair1[m][1] = mc.c0_pair1[m][1];
+      mc.s_pair1[m][0] = mc.s0_pair1[m][0];
+      mc.s_pair1[m][1] = mc.s0_pair1[m][1];
+      mc.c_pair2[m][0] = mc.c0_pair2[m][0];
+      mc.c_pair2[m][1] = mc.c0_pair2[m][1];
+      mc.s_pair2[m][0] = mc.s0_pair2[m][0];
+      mc.s_pair2[m][1] = mc.s0_pair2[m][1];
+    }
+    sync_f32();
+  } else if (std::fabs(a - mc.a_bake) > 2e-6 * a) {
+    mc.a_bake = a;
+    const double u_a = mc.a / a - 1.0;
+#ifdef __wasm_simd128__
+    const v128_t vu = wasm_f64x2_splat(u_a);
+    for (int m = 1; m <= degree; ++m) {
+      wasm_v128_store(mc.c_pair1[m], wasm_f64x2_add(wasm_v128_load(mc.c0_pair1[m]), wasm_f64x2_mul(wasm_v128_load(mc.dc_pair1[m]), vu)));
+      wasm_v128_store(mc.s_pair1[m], wasm_f64x2_add(wasm_v128_load(mc.s0_pair1[m]), wasm_f64x2_mul(wasm_v128_load(mc.ds_pair1[m]), vu)));
+      wasm_v128_store(mc.c_pair2[m], wasm_f64x2_add(wasm_v128_load(mc.c0_pair2[m]), wasm_f64x2_mul(wasm_v128_load(mc.dc_pair2[m]), vu)));
+      wasm_v128_store(mc.s_pair2[m], wasm_f64x2_add(wasm_v128_load(mc.s0_pair2[m]), wasm_f64x2_mul(wasm_v128_load(mc.ds_pair2[m]), vu)));
+    }
+#else
+    for (int m = 1; m <= degree; ++m) {
+      mc.c_pair1[m][0] = mc.c0_pair1[m][0] + mc.dc_pair1[m][0] * u_a;
+      mc.c_pair1[m][1] = mc.c0_pair1[m][1] + mc.dc_pair1[m][1] * u_a;
+      mc.s_pair1[m][0] = mc.s0_pair1[m][0] + mc.ds_pair1[m][0] * u_a;
+      mc.s_pair1[m][1] = mc.s0_pair1[m][1] + mc.ds_pair1[m][1] * u_a;
+      mc.c_pair2[m][0] = mc.c0_pair2[m][0] + mc.dc_pair2[m][0] * u_a;
+      mc.c_pair2[m][1] = mc.c0_pair2[m][1] + mc.dc_pair2[m][1] * u_a;
+      mc.s_pair2[m][0] = mc.s0_pair2[m][0] + mc.ds_pair2[m][0] * u_a;
+      mc.s_pair2[m][1] = mc.s0_pair2[m][1] + mc.ds_pair2[m][1] * u_a;
+    }
+#endif
+    sync_f32();
   }
-  six[2] += di;
-  six[3] += dev;
-  six[4] += dsO;
-  six[5] += dlam;
 }
 
-/// The remaining first-order tesseral terms at output time, Kaula's (l, m, p, q) with q in {-1, 0, 1}: every term of
-/// degree 2 to the general degree except the m-daily set (q = 0, l = 2p), and the near-resonant terms above that degree
-/// (below). psi = w omega + j M + m (Omega - theta_G), w = l - 2p, j = w + q. The rates of res::resonance_six integrated
-/// over psi with the slow elements frozen (int dS dt = S / psi-dot, int S dt = -dS / psi-dot), plus the mean longitude's
-/// second integral of the n oscillation, 3 j A F G dS / (a^2 psi-dot^2). The q = +-1 terms are O(e) in G but O(1) in the
-/// eccentricity vector (Lagrange's 1/e). Per term at the epoch: Fbar, dFbar/di and G(e) = g0 + g1 e linearized there
-/// (g0 = 0 for q = +-1 at small e). A term the rates carry (the shallow set, by the same taper) or whose position
-/// amplitude is below kSpKeepM is not kept.
+[[gnu::always_inline]] inline void mdaily_six(
+    const float* F, int degree, double t, const Kepler& k, double n, double eta, double si,
+    double ci, double theta_g0, double* six, double* sb_out = nullptr, double* cb_out = nullptr,
+    float* cm_f32_out = nullptr, float* sm_f32_out = nullptr, int* cm_count_out = nullptr,
+    double* cm_last_out = nullptr, double* sm_last_out = nullptr,
+    const double* sb_in = nullptr, const double* cb_in = nullptr, uint64_t table_id = 0) {
+  const double a = k.a, e = k.e, e2 = e * e;
+  MdailyEvalCache& mc = mdaily_eval_cache();
+  if (__builtin_expect(table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree ||
+                           mc.f0 != F[0] || mc.f1 != F[1] ||
+                           std::fabs(a - mc.a_bake) > 2e-6 * a || std::fabs(a - mc.a) > 3e-5 * a ||
+                           std::fabs(e2 - mc.e2) > 2e-6,
+                       0)) {
+    mdaily_sync_cache(mc, F, degree, a, e2, table_id);
+  }
+  double sb, cb;
+  if (sb_in != nullptr && cb_in != nullptr) {
+    sb = *sb_in;
+    cb = *cb_in;
+  } else {
+    fm::sincos_fast(k.node - (theta_g0 + kOmegaE * t), sb, cb);
+  }
+  if (sb_out != nullptr) {
+    *sb_out = sb;
+    *cb_out = cb;
+  }
+  double cm = 1.0, sm = 0.0;
+  double s_afg_psi = 0.0, s_afg_l1 = 0.0, s_adfg = 0.0, s_afdg_oe = 0.0;
+#ifdef __wasm_simd128__
+  if (t != 0.0 && degree >= 2 && degree <= 20) {
+    const int n_quad = (degree + 3) & ~3;
+    const double c1 = cb, s1 = sb;
+    const double c2 = c1 * cb - s1 * sb, s2 = s1 * cb + c1 * sb;
+    const double c3 = c2 * cb - s2 * sb, s3 = s2 * cb + c2 * sb;
+    const double c4 = c3 * cb - s3 * sb, s4 = s3 * cb + c3 * sb;
+    v128_t v_cm = wasm_f32x4_make(static_cast<float>(c1), static_cast<float>(c2), static_cast<float>(c3), static_cast<float>(c4));
+    v128_t v_sm = wasm_f32x4_make(static_cast<float>(s1), static_cast<float>(s2), static_cast<float>(s3), static_cast<float>(s4));
+    const v128_t v_c4 = wasm_f32x4_splat(static_cast<float>(c4));
+    const v128_t v_s4 = wasm_f32x4_splat(static_cast<float>(s4));
+    v128_t a10 = wasm_f32x4_splat(0.0f), a11 = wasm_f32x4_splat(0.0f);
+    v128_t a20 = wasm_f32x4_splat(0.0f), a21 = wasm_f32x4_splat(0.0f);
+    for (int idx = 0;;) {
+      if (cm_f32_out != nullptr) {
+        wasm_v128_store(cm_f32_out + idx, v_cm);
+        wasm_v128_store(sm_f32_out + idx, v_sm);
+      }
+      a10 = wasm_f32x4_add(a10, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(mc.c10_f + idx), v_cm),
+                                               wasm_f32x4_mul(wasm_v128_load(mc.s10_f + idx), v_sm)));
+      a11 = wasm_f32x4_add(a11, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(mc.c11_f + idx), v_cm),
+                                               wasm_f32x4_mul(wasm_v128_load(mc.s11_f + idx), v_sm)));
+      a20 = wasm_f32x4_add(a20, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(mc.c20_f + idx), v_cm),
+                                               wasm_f32x4_mul(wasm_v128_load(mc.s20_f + idx), v_sm)));
+      a21 = wasm_f32x4_add(a21, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(mc.c21_f + idx), v_cm),
+                                               wasm_f32x4_mul(wasm_v128_load(mc.s21_f + idx), v_sm)));
+      idx += 4;
+      if (idx >= n_quad) break;
+      const v128_t ncm = wasm_f32x4_sub(wasm_f32x4_mul(v_cm, v_c4), wasm_f32x4_mul(v_sm, v_s4));
+      v_sm = wasm_f32x4_add(wasm_f32x4_mul(v_sm, v_c4), wasm_f32x4_mul(v_cm, v_s4));
+      v_cm = ncm;
+    }
+    if (cm_f32_out != nullptr) {
+      *cm_count_out = n_quad;
+      *cm_last_out = wasm_f32x4_extract_lane(v_cm, 3);
+      *sm_last_out = wasm_f32x4_extract_lane(v_sm, 3);
+    }
+    const v128_t s10_11 = wasm_f32x4_add(wasm_i32x4_shuffle(a10, a11, 0, 1, 4, 5),
+                                         wasm_i32x4_shuffle(a10, a11, 2, 3, 6, 7));
+    const v128_t s20_21 = wasm_f32x4_add(wasm_i32x4_shuffle(a20, a21, 0, 1, 4, 5),
+                                         wasm_i32x4_shuffle(a20, a21, 2, 3, 6, 7));
+    const v128_t sums = wasm_f32x4_add(wasm_i32x4_shuffle(s10_11, s20_21, 0, 2, 4, 6),
+                                       wasm_i32x4_shuffle(s10_11, s20_21, 1, 3, 5, 7));
+    s_afg_psi = wasm_f32x4_extract_lane(sums, 0);
+    s_afg_l1 = wasm_f32x4_extract_lane(sums, 1);
+    s_adfg = wasm_f32x4_extract_lane(sums, 2);
+    s_afdg_oe = wasm_f32x4_extract_lane(sums, 3);
+  } else {
+    v128_t acc1 = wasm_f64x2_splat(0.0);
+    v128_t acc2 = wasm_f64x2_splat(0.0);
+    for (int m = 1; m <= degree; ++m) {
+      const double ncm = cm * cb - sm * sb;
+      sm = sm * cb + cm * sb;
+      cm = ncm;
+      if (cm_f32_out != nullptr) {
+        cm_f32_out[m - 1] = static_cast<float>(cm);
+        sm_f32_out[m - 1] = static_cast<float>(sm);
+      }
+      const v128_t v_cm = wasm_f64x2_splat(cm);
+      const v128_t v_sm = wasm_f64x2_splat(sm);
+      acc1 = wasm_f64x2_add(acc1, wasm_f64x2_add(wasm_f64x2_mul(wasm_v128_load(mc.c_pair1[m]), v_cm),
+                                                 wasm_f64x2_mul(wasm_v128_load(mc.s_pair1[m]), v_sm)));
+      acc2 = wasm_f64x2_add(acc2, wasm_f64x2_add(wasm_f64x2_mul(wasm_v128_load(mc.c_pair2[m]), v_cm),
+                                                 wasm_f64x2_mul(wasm_v128_load(mc.s_pair2[m]), v_sm)));
+    }
+    if (cm_f32_out != nullptr) {
+      *cm_count_out = degree;
+      *cm_last_out = cm;
+      *sm_last_out = sm;
+    }
+    s_afg_psi = wasm_f64x2_extract_lane(acc1, 0);
+    s_afg_l1 = wasm_f64x2_extract_lane(acc1, 1);
+    s_adfg = wasm_f64x2_extract_lane(acc2, 0);
+    s_afdg_oe = wasm_f64x2_extract_lane(acc2, 1);
+  }
+#else
+  for (int m = 1; m <= degree; ++m) {
+    const double ncm = cm * cb - sm * sb;
+    sm = sm * cb + cm * sb;
+    cm = ncm;
+    if (cm_f32_out != nullptr) {
+      cm_f32_out[m - 1] = static_cast<float>(cm);
+      sm_f32_out[m - 1] = static_cast<float>(sm);
+    }
+    s_afg_psi += mc.c_pair1[m][0] * cm + mc.s_pair1[m][0] * sm;
+    s_afg_l1 += mc.c_pair1[m][1] * cm + mc.s_pair1[m][1] * sm;
+    s_adfg += mc.c_pair2[m][0] * cm + mc.s_pair2[m][0] * sm;
+    s_afdg_oe += mc.c_pair2[m][1] * cm + mc.s_pair2[m][1] * sm;
+  }
+  if (cm_f32_out != nullptr) {
+    *cm_count_out = degree;
+    *cm_last_out = cm;
+    *sm_last_out = sm;
+  }
+#endif
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+  const double p = a * eta * eta;
+  const double na2 = n * a * a;
+#ifdef __wasm_simd128__
+  const v128_t vd0 = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(p * p, eta));
+  const v128_t vd2 = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(sin_i, 1.0 + eta));
+  const double node_rate = -1.5 * n * kJ2 * ci * wasm_f64x2_extract_lane(vd0, 0);
+  const double inv_eta = wasm_f64x2_extract_lane(vd0, 1);
+  const v128_t vd1 = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(na2 * (node_rate - kOmegaE), 1.0 + ci));
+  const double inv_na2_bdot = wasm_f64x2_extract_lane(vd1, 0);
+  const double tanhalf = sin_i * wasm_f64x2_extract_lane(vd1, 1);
+  const double dsO = (inv_na2_bdot * inv_eta) * s_adfg;
+  const double th_dsO = tanhalf * dsO;
+  six[2] += (-inv_na2_bdot * inv_eta * wasm_f64x2_extract_lane(vd2, 0)) * s_afg_psi;
+  six[3] += e * ((eta * inv_na2_bdot) * s_afdg_oe + th_dsO);
+  six[4] += dsO;
+  six[5] += (2.0 * inv_na2_bdot) * s_afg_l1 + ((eta * e2 * wasm_f64x2_extract_lane(vd2, 1)) * inv_na2_bdot) * s_afdg_oe + th_dsO;
+#else
+  const double node_rate = -1.5 * n * kJ2 * ci / (p * p);
+  const double tanhalf = sin_i / (1.0 + ci);
+  const double inv_na2_bdot = 1.0 / (na2 * (node_rate - kOmegaE));
+  const double inv_eta = 1.0 / eta;
+  const double dsO = (inv_na2_bdot * inv_eta) * s_adfg;
+  const double th_dsO = tanhalf * dsO;
+  six[2] += (-inv_na2_bdot * inv_eta / sin_i) * s_afg_psi;
+  six[3] += e * ((eta * inv_na2_bdot) * s_afdg_oe + th_dsO);
+  six[4] += dsO;
+  six[5] += (2.0 * inv_na2_bdot) * s_afg_l1 + ((eta * e2 / (1.0 + eta)) * inv_na2_bdot) * s_afdg_oe + th_dsO;
+#endif
+}
+
+/// The remaining first-order tesseral terms at output time, grouped by unique (m, w, j) angle psi = w omega + j M + m beta.
+/// All degrees l sharing (m, w, j) are pre-combined at the epoch (a0, e0) along with their exact first/second derivatives
+/// in da = a0 / a - 1 and de = e - e0.
 struct SpCoef {
   int8_t l, m, w, j;
   float f, df, g0, g1;
 };
+
+struct SpCombCoef {
+  int8_t m, w, j, pad;
+  float uc0, us0, dc0, ds0, dca, dsa, ec0, es0, eca, esa, ic0, is0, ica, isa, ice, ise;
+};
+
+struct EgmTables {
+  double hypot_cs[72][72]{};
+  double hypot_fb[72][72]{};
+};
+[[gnu::noinline]] inline void init_egm_tables(EgmTables& out) {
+  for (int l = 0; l <= 70; ++l) {
+    const double fb = std::sqrt(2.0 * (2.0 * l + 1.0));
+    for (int m = 0; m <= l; ++m) {
+      const double h = std::sqrt(kEgmC[l][m] * kEgmC[l][m] + kEgmS[l][m] * kEgmS[l][m]);
+      out.hypot_cs[l][m] = h;
+      out.hypot_fb[l][m] = h * fb;
+    }
+  }
+}
+inline const EgmTables& egm_tables() {
+  static EgmTables t;
+  static int32_t ready = 0;
+  if (__builtin_expect(__atomic_load_n(&ready, __ATOMIC_ACQUIRE) == 0, 0)) {
+    init_egm_tables(t);
+    __atomic_store_n(&ready, 1, __ATOMIC_RELEASE);
+  }
+  return t;
+}
+
+struct SpTermsScratch {
+  double Fw[3][35][72];
+  alignas(16) double AB_re[18][38];
+  alignas(16) double AB_im[18][38];
+  alignas(16) double dAB_re[18][38];
+  alignas(16) double dAB_im[18][38];
+};
+inline thread_local SpTermsScratch* g_sp_terms_scratch_ptr = nullptr;
+inline SpTermsScratch& sp_terms_scratch() {
+  if (__builtin_expect(!g_sp_terms_scratch_ptr, 0)) g_sp_terms_scratch_ptr = new SpTermsScratch{};
+  return *g_sp_terms_scratch_ptr;
+}
 
 /// G about e0 for one term: g0 + g1 e.
 inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
@@ -242,37 +702,49 @@ inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
   }
 }
 
-/// The upper bound of the table: the general set of `degree` (none when `wide`: the grid carries it) and kNearMax near-resonant terms.
+/// The upper bound of the table: at most 33 orders x 65 w values x 3 q values + kNearMax.
 constexpr int kNearMax = 500;
 inline int sp_bound(int degree, bool wide) {
   int c = kNearMax;
   for (int l = 2; l <= degree && !wide; ++l) c += l * (l + 1) * 3;
   return c;
 }
+inline int sp_comb_bound(int degree, bool wide) {
+  if (wide) return kNearMax;
+  return (degree + 3) * (2 * degree + 1) * 3 + kNearMax;
+}
 
 /// Fills out at the epoch mean motion n0, inclination i0 and eccentricity e0; returns the count. `cls`: the resonance class,
 /// whose terms the rates carry and this table must not. `low`: no class and the shallow set active, so a term near
 /// commensurability other than the shallow set's is kept here.
-inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, double i0, double e0, SpCoef* out) {
+inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, double i0, double e0, SpCombCoef* out,
+                    SpCoef* raw_out = nullptr, int* raw_count_out = nullptr) {
+  int raw_count = 0;
+  const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
   const double c0 = std::cos(i0), j2 = 1.5 * kJ2 / (p0 * p0);
   const double mdot = n0 + 0.5 * j2 * n0 * eta * (3.0 * c0 * c0 - 1.0), wdot = 0.5 * j2 * n0 * (5.0 * c0 * c0 - 1.0);
   const double node_rate = -j2 * n0 * c0;
-  const double h = 1e-5;
+  const double h = 1e-5, inv_2h = 1.0 / (2.0 * h);
   const double na2 = n0 * a0 * a0, keep = kSpKeepM * 1e-3 / kRe;
-  int count = 0;
+  const double inv_na2 = 1.0 / na2, inv_a02 = 1.0 / (a0 * a0);
+  const double inv_shallow_n0 = 1.0 / (kShallowBand * n0);
   const bool wide = wide_set(cls, e0);
-  // The term's weight (0: not kept here) and its angle rate.
+  const res::TermSet carried = res::class_terms(cls);
+
+  const double ia0 = 1.0 / a0;
+  double amp0[72];
+  amp0[0] = kMu * ia0;
+  for (int l = 1; l <= 70; ++l) amp0[l] = amp0[l - 1] * ia0;
+
   const auto weight_of = [&](int l, int m, int p, int q, double& psidot) -> double {
     const int w = l - 2 * p, j = w + q;
-    // The half-day tail is integrated, including away from exact commensurability.
     if (cls == 2 && l > 5 && l <= near_degree && (m & 1) == 0 && j == m / 2) return 0.0;
-    const res::TermSet carried = res::class_terms(cls);
     for (int c = 0; c < carried.count; ++c)
       if (carried.t[c].l == l && carried.t[c].m == m && carried.t[c].p == p && carried.t[c].q == q) return 0.0;
     psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
     double weight = 1.0;
-    const double x = std::fabs(psidot) / (kShallowBand * n0);
+    const double x = std::fabs(psidot) * inv_shallow_n0;
     if (low) {
       if (q == 0 && w == 1 && j == 1) {
         if (x <= 0.9) weight = 0.0;
@@ -285,90 +757,2050 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
     }
     return weight;
   };
-  const auto put = [&](int l, int m, int p, int q, double fv, double dfv, double g0, double g1, double weight,
-                       double psidot) {
-    const int w = l - 2 * p, j = w + q;
-    const double G = g0 + g1 * e0;
-    const double sv = std::hypot(kEgmC[l][m], kEgmS[l][m]);
-    const double A = kMu * std::pow(1.0 / a0, l + 1) * sv * weight;
-    const double ap = std::fabs(psidot);
-    const double mag = a0 * A * (std::fabs(fv * G) * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * (l + 1) / (na2 * ap)) +
-                                 std::fabs(fv * g1) / (na2 * ap) + std::fabs(dfv * G) / (na2 * ap));
-    if (mag < keep) return;
-    out[count++] = SpCoef{static_cast<int8_t>(l), static_cast<int8_t>(m), static_cast<int8_t>(w), static_cast<int8_t>(j),
-                          static_cast<float>(fv * weight), static_cast<float>(dfv * weight), static_cast<float>(g0), static_cast<float>(g1)};
-  };
-  const auto add = [&](int l, int m, int p, int q, double fv, double dfv) {
-    double psidot = 0.0;
-    const double weight = weight_of(l, m, p, q, psidot);
-    if (weight == 0.0) return;
-    double g0, g1;
-    sp_g(l, p, q, e0, g0, g1);
-    put(l, m, p, q, fv, dfv, g0, g1, weight, psidot);
-  };
-  double f[72], fp[72], fm[72];
-  // A term cannot pass `keep` if this bound on its amplitude does not: Fbar <= sqrt(2 (2 l + 1)), dFbar/di <= l Fbar,
-  // G <= 1 + (l e0)^2 for q = 0 and (l + 1) e0 otherwise, dG/de <= (l + 1)^2. Saves the inclination functions and Hansen
-  // coefficients of the terms that would be dropped.
+
+  const double e_floor = e0 > 1e-3 ? e0 : 1e-3;
+  const double e02 = e0 * e0;
   const auto can_pass = [&](int l, int m, int w, int q) {
     const int j = w + q;
     const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE));
     if (ap < 1e-3 * n0) return false;
-    const double ll = l + 1.0, Fb = std::sqrt(2.0 * (2.0 * l + 1.0));
-    const double Gb = q == 0 ? 1.0 + l * l * e0 * e0 : ll * (e0 > 1e-3 ? e0 : 1e-3);
-    const double A = kMu * std::pow(1.0 / a0, l + 1) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
-    const double bound = a0 * A * Fb * (Gb * (3.0 * std::abs(j) / (a0 * a0 * ap * ap) + 2.0 * ll / (na2 * ap)) + ll * ll / (na2 * ap) + l * Gb / (na2 * ap));
-    return bound >= keep;
+    const double ll = l + 1.0;
+    const double Gb = q == 0 ? 1.0 + (l * l) * e02 : ll * e_floor;
+    const double a0_AFb = a0 * amp0[l] * egm.hypot_fb[l][m];
+    const double lhs = a0_AFb * (Gb * (3.0 * std::abs(j) * inv_a02 + 2.0 * ll * inv_na2 * ap) +
+                                 (ll * ll + l * Gb) * inv_na2 * ap);
+    return lhs >= keep * ap * ap;
   };
-  // Above kWideE the general set is the grid of wide_grid_build (SPEC 16.11); the table keeps the near-resonant terms below.
-  for (int l = 2; l <= degree && !wide; ++l)
-    for (int m = 1; m <= l; ++m)
-      for (int p = 0; p <= l; ++p) {
-        const int w = l - 2 * p;
-        if (!can_pass(l, m, w, -1) && !can_pass(l, m, w, 0) && !can_pass(l, m, w, 1)) continue;
-        normalized_Fk(m, w, l, i0, f);
-        // dFbar/di only for a term that passes the bound at this q.
-        double dfv = 0.0;
-        bool have_df = false;
-        for (int q = -1; q <= 1; ++q) {
-          const int j = w + q;
-          if (q == 0 && w == 0) continue;  // the m-daily set
-          if (j < -(l + 1) || j > l + 1) continue;
-          if (!can_pass(l, m, w, q)) continue;
-          if (!have_df) {
-            normalized_Fk(m, w, l, i0 + h, fp);
-            normalized_Fk(m, w, l, i0 - h, fm);
-            dfv = (fp[l] - fm[l]) / (2.0 * h);
-            have_df = true;
+
+  double si3[3], ci3[3];
+  fm::sincos(i0, si3[0], ci3[0]);
+  const bool analytic_df = std::fabs(ci3[0]) >= 1e-3;
+  if (!analytic_df) {
+    fm::sincos(i0 + h, si3[1], ci3[1]);
+    fm::sincos(i0 - h, si3[2], ci3[2]);
+  }
+
+  SpTermsScratch& sp_sc = sp_terms_scratch();
+  auto (&Fw)[3][35][72] = sp_sc.Fw;
+  double col[104], dcol[104], cku[18], sku[18];
+
+  int count = 0;
+  const int max_m = low ? (near_degree > degree ? near_degree : degree) : (wide ? 0 : degree);
+  for (int m = 1; m <= max_m; ++m) {
+    const int w_lo = !wide && m <= degree ? -degree : 0;
+    const int w_hi = !wide && m <= degree ? degree : 2;
+    int l_max_w[35]{};
+    int l_max_aw[18]{};
+    int l_max_m = 0, aw_max_m = 0;
+    for (int w = w_lo; w <= w_hi; ++w) {
+      const int aw = w < 0 ? -w : w;
+      int l0 = m > aw ? m : aw;
+      if (l0 < 2) l0 = 2;
+      if ((l0 - w) & 1) ++l0;
+      const bool has_gen = !wide && m <= degree && aw <= degree;
+      const bool has_near = low && m >= 2 && m <= near_degree && (w == 1 || w == 0 || w == 2) &&
+                            (std::fabs(w * wdot + mdot + m * (node_rate - kOmegaE)) < kNearBand * n0);
+      if (!has_gen && !has_near) continue;
+      int lw = 0;
+      if (has_near) {
+        const int q_near = 1 - w;
+        int ln0 = l0;
+        while (ln0 <= degree) ln0 += 2;
+        int l_top = near_degree;
+        if ((l_top - ln0) & 1) --l_top;
+        for (int l = l_top; l >= ln0; l -= 2) {
+          if (can_pass(l, m, w, q_near)) { lw = l; break; }
+        }
+      }
+      if (lw == 0 && has_gen) {
+        int l_top = degree;
+        if ((l_top - l0) & 1) --l_top;
+        for (int l = l_top; l >= l0; l -= 2) {
+          if (aw <= l && (can_pass(l, m, w, -1) || can_pass(l, m, w, 0) || can_pass(l, m, w, 1))) { lw = l; break; }
+        }
+      }
+      l_max_w[w + 17] = lw;
+      if (lw > 0) {
+        if (lw > l_max_aw[aw]) l_max_aw[aw] = lw;
+        if (lw > l_max_m) l_max_m = lw;
+        if (aw > aw_max_m) aw_max_m = aw;
+      }
+    }
+    if (l_max_m == 0) continue;
+
+    const int NF = (l_max_m + aw_max_m + 3) & ~1;
+    const int NF_HALF = NF >> 1;
+    const int j_top = NF_HALF >> 1;
+    const double du = kTwoPi / NF, two_inv_NF = 2.0 / NF_HALF;
+    double sdu, cdu;
+    fm::sincos(du, sdu, cdu);
+    LegendreOrder L;
+    legendre_order(m, l_max_m, L);
+    auto (&AB_re)[18][38] = sp_sc.AB_re;
+    auto (&AB_im)[18][38] = sp_sc.AB_im;
+    auto (&dAB_re)[18][38] = sp_sc.dAB_re;
+    auto (&dAB_im)[18][38] = sp_sc.dAB_im;
+    alignas(16) double col_p[2][38], dcol_p[2][38];
+
+    if (analytic_df) {
+      for (int aw = 0; aw <= aw_max_m; ++aw) {
+        const int k_lim = l_max_aw[aw] >> 1;
+        std::memset(AB_re[aw], 0, static_cast<size_t>(k_lim + 1) * sizeof(double));
+        std::memset(AB_im[aw], 0, static_cast<size_t>(k_lim + 1) * sizeof(double));
+        std::memset(dAB_re[aw], 0, static_cast<size_t>(k_lim + 1) * sizeof(double));
+        std::memset(dAB_im[aw], 0, static_cast<size_t>(k_lim + 1) * sizeof(double));
+      }
+      const double sis = si3[0], cis = ci3[0];
+      double su = 0.0, cu = 1.0;
+      for (int j = 0; j <= j_top; ++j) {
+        if (j > 0) {
+          const double nsu = su * cdu + cu * sdu;
+          cu = cu * cdu - su * sdu;
+          su = nsu;
+        }
+        const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
+        const double x = sis * su, c2_lat = 1.0 - x * x, c = std::sqrt(c2_lat);
+        const double inv_c = 1.0 / c, inv_c2 = inv_c * inv_c;
+        legendre_column(L, x, c, col);
+        const double alpha_x = cis * su * inv_c2;
+        const double beta_phi = -m * x * cu * inv_c2;
+        dcol[m] = -alpha_x * (m * x * col[m]);
+        for (int l = m + 1; l <= l_max_m; ++l) dcol[l] = alpha_x * (L.d[l] * col[l - 1] - l * x * col[l]);
+        for (int l = m; l <= l_max_m; ++l) {
+          col_p[l & 1][l >> 1] = col[l];
+          dcol_p[l & 1][l >> 1] = dcol[l];
+        }
+        double sml = 0.0, cml = 1.0;
+        if (j > 0) complex_pow(cu * inv_c, cis * su * inv_c, m, cml, sml);
+        const double dcml = -beta_phi * sml, dsml = beta_phi * cml;
+        cku[0] = 1.0;
+        sku[0] = 0.0;
+        for (int aw = 1; aw <= aw_max_m; ++aw) {
+          cku[aw] = cku[aw - 1] * cu - sku[aw - 1] * su;
+          sku[aw] = sku[aw - 1] * cu + cku[aw - 1] * su;
+        }
+        for (int aw = 0; aw <= aw_max_m; ++aw) {
+          const int lim = l_max_aw[aw];
+          if (lim == 0) continue;
+          const double ck = cku[aw], sk = sku[aw];
+          const bool odd = ((aw - m) & 1) != 0;
+          const double c1 = (odd ? cml * sk : cml * ck) * w_j;
+          const double c2 = (odd ? sml * ck : sml * sk) * w_j;
+          const double dc1 = (odd ? dcml * sk : dcml * ck) * w_j;
+          const double dc2 = (odd ? dsml * ck : dsml * sk) * w_j;
+          int first = m > aw ? m : aw;
+          if (first < 2) first = 2;
+          if ((first - aw) & 1) ++first;
+          const int p = first & 1;
+          const int k_first = first >> 1, k_lim = lim >> 1;
+          const double* cp_row = col_p[p];
+          const double* dcp_row = dcol_p[p];
+          double* re_row = AB_re[aw];
+          double* im_row = AB_im[aw];
+          double* dre_row = dAB_re[aw];
+          double* dim_row = dAB_im[aw];
+#ifdef __wasm_simd128__
+          int k = k_first;
+          if (k & 1) {
+            const double Pl = cp_row[k], dPl = dcp_row[k];
+            re_row[k] += Pl * c1;
+            im_row[k] += Pl * c2;
+            dre_row[k] += dPl * c1 + Pl * dc1;
+            dim_row[k] += dPl * c2 + Pl * dc2;
+            ++k;
           }
-          add(l, m, p, q, f[l], dfv);
+          const v128_t vc1 = wasm_f64x2_splat(c1), vc2 = wasm_f64x2_splat(c2);
+          const v128_t vdc1 = wasm_f64x2_splat(dc1), vdc2 = wasm_f64x2_splat(dc2);
+          for (; k + 1 <= k_lim; k += 2) {
+            const v128_t vPl = wasm_v128_load(cp_row + k);
+            const v128_t vdPl = wasm_v128_load(dcp_row + k);
+            wasm_v128_store(re_row + k, wasm_f64x2_add(wasm_v128_load(re_row + k), wasm_f64x2_mul(vPl, vc1)));
+            wasm_v128_store(im_row + k, wasm_f64x2_add(wasm_v128_load(im_row + k), wasm_f64x2_mul(vPl, vc2)));
+            wasm_v128_store(dre_row + k, wasm_f64x2_add(wasm_v128_load(dre_row + k),
+                                                        wasm_f64x2_add(wasm_f64x2_mul(vdPl, vc1), wasm_f64x2_mul(vPl, vdc1))));
+            wasm_v128_store(dim_row + k, wasm_f64x2_add(wasm_v128_load(dim_row + k),
+                                                        wasm_f64x2_add(wasm_f64x2_mul(vdPl, vc2), wasm_f64x2_mul(vPl, vdc2))));
+          }
+          if (k <= k_lim) {
+            const double Pl = cp_row[k], dPl = dcp_row[k];
+            re_row[k] += Pl * c1;
+            im_row[k] += Pl * c2;
+            dre_row[k] += dPl * c1 + Pl * dc1;
+            dim_row[k] += dPl * c2 + Pl * dc2;
+          }
+#else
+          for (int k = k_first; k <= k_lim; ++k) {
+            const double Pl = cp_row[k], dPl = dcp_row[k];
+            re_row[k] += Pl * c1;
+            im_row[k] += Pl * c2;
+            dre_row[k] += dPl * c1 + Pl * dc1;
+            dim_row[k] += dPl * c2 + Pl * dc2;
+          }
+#endif
         }
       }
-  if (low) {
-    // Above that degree, j = 1 near commensurability: q = 0 with w = 1 (odd l) outside the shallow band, and q = +-1 with
-    // w = 0 or 2 (even l), O(e) in G, O(1) in the eccentricity vector, amplified by n / psi-dot.
-    static constexpr int kW[3] = {1, 0, 2}, kQ[3] = {0, 1, -1};
-    for (int m = 2; m <= near_degree; ++m)
-      for (int fam = 0; fam < 3; ++fam) {
-        const int w = kW[fam], q = kQ[fam];
-        const double psidot = w * wdot + mdot + m * (node_rate - kOmegaE);
-        if (!(std::fabs(psidot) < kNearBand * n0)) continue;
-        normalized_Fk(m, w, near_degree, i0, f);
-        normalized_Fk(m, w, near_degree, i0 + h, fp);
-        normalized_Fk(m, w, near_degree, i0 - h, fm);
-        int l0 = m > w ? m : w;
-        if ((l0 - w) & 1) ++l0;
-        for (int l = l0; l <= near_degree; l += 2) {
-          if (l <= degree || !can_pass(l, m, w, q)) continue;
-          if (count >= sp_bound(degree, wide)) break;
-          add(l, m, (l - w) / 2, q, f[l], (fp[l] - fm[l]) / (2.0 * h));
+      for (int aw = 0; aw <= aw_max_m; ++aw) {
+        const int lim = l_max_aw[aw];
+        if (lim == 0) continue;
+        const bool odd = ((aw - m) & 1) != 0;
+        int first = m > aw ? m : aw;
+        if (first < 2) first = 2;
+        if ((first - aw) & 1) ++first;
+        double* dst_pos = Fw[0][aw + 17];
+        double* dst_neg = Fw[0][-aw + 17];
+        double* ddst_pos = Fw[1][aw + 17];
+        double* ddst_neg = Fw[1][-aw + 17];
+        for (int l = first; l <= lim; l += 2) {
+          const int k = l >> 1;
+          const double a_val = AB_re[aw][k] * two_inv_NF, b_val = AB_im[aw][k] * two_inv_NF;
+          const double da_val = dAB_re[aw][k] * two_inv_NF, db_val = dAB_im[aw][k] * two_inv_NF;
+          dst_pos[l] = odd ? (a_val - b_val) : (a_val + b_val);
+          ddst_pos[l] = odd ? (da_val - db_val) : (da_val + db_val);
+          if (aw > 0) {
+            dst_neg[l] = odd ? (-a_val - b_val) : (a_val - b_val);
+            ddst_neg[l] = odd ? (-da_val - db_val) : (da_val - db_val);
+          }
         }
       }
+    } else {
+      for (int s = 0; s < 3; ++s) {
+        for (int aw = 0; aw <= aw_max_m; ++aw) {
+          const int k_lim = l_max_aw[aw] >> 1;
+          std::memset(AB_re[aw], 0, static_cast<size_t>(k_lim + 1) * sizeof(double));
+          std::memset(AB_im[aw], 0, static_cast<size_t>(k_lim + 1) * sizeof(double));
+        }
+        const double sis = si3[s], cis = ci3[s];
+        double su = 0.0, cu = 1.0;
+        for (int j = 0; j <= j_top; ++j) {
+          if (j > 0) {
+            const double nsu = su * cdu + cu * sdu;
+            cu = cu * cdu - su * sdu;
+            su = nsu;
+          }
+          const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
+          const double x = sis * su, c = std::sqrt(std::fmax(0.0, 1.0 - x * x));
+          legendre_column(L, x, c, col);
+          for (int l = m; l <= l_max_m; ++l) col_p[l & 1][l >> 1] = col[l];
+          double sml = 0.0, cml = 1.0;
+          if (c > 1e-12) {
+            const double inv_c = 1.0 / c;
+            complex_pow(cu * inv_c, cis * su * inv_c, m, cml, sml);
+          } else {
+            fm::sincos(m * std::atan2(cis * su, cu), sml, cml);
+          }
+          cku[0] = 1.0;
+          sku[0] = 0.0;
+          for (int aw = 1; aw <= aw_max_m; ++aw) {
+            cku[aw] = cku[aw - 1] * cu - sku[aw - 1] * su;
+            sku[aw] = sku[aw - 1] * cu + cku[aw - 1] * su;
+          }
+          for (int aw = 0; aw <= aw_max_m; ++aw) {
+            const int lim = l_max_aw[aw];
+            if (lim == 0) continue;
+            const double ck = cku[aw], sk = sku[aw];
+            const bool odd = ((aw - m) & 1) != 0;
+            const double c1 = (odd ? cml * sk : cml * ck) * w_j;
+            const double c2 = (odd ? sml * ck : sml * sk) * w_j;
+            int first = m > aw ? m : aw;
+            if (first < 2) first = 2;
+            if ((first - aw) & 1) ++first;
+            const int p = first & 1;
+            const int k_first = first >> 1, k_lim = lim >> 1;
+            const double* cp_row = col_p[p];
+            double* re_row = AB_re[aw];
+            double* im_row = AB_im[aw];
+            for (int k = k_first; k <= k_lim; ++k) {
+              re_row[k] += cp_row[k] * c1;
+              im_row[k] += cp_row[k] * c2;
+            }
+          }
+        }
+        for (int aw = 0; aw <= aw_max_m; ++aw) {
+          const int lim = l_max_aw[aw];
+          if (lim == 0) continue;
+          const bool odd = ((aw - m) & 1) != 0;
+          int first = m > aw ? m : aw;
+          if (first < 2) first = 2;
+          if ((first - aw) & 1) ++first;
+          double* dst_pos = Fw[s][aw + 17];
+          double* dst_neg = Fw[s][-aw + 17];
+          for (int l = first; l <= lim; l += 2) {
+            const int k = l >> 1;
+            const double a_val = AB_re[aw][k] * two_inv_NF, b_val = AB_im[aw][k] * two_inv_NF;
+            dst_pos[l] = odd ? (a_val - b_val) : (a_val + b_val);
+            if (aw > 0) dst_neg[l] = odd ? (-a_val - b_val) : (a_val - b_val);
+          }
+        }
+      }
+    }
+
+    for (int w = w_lo; w <= w_hi; ++w) {
+      const int l_max = l_max_w[w + 17];
+      if (l_max == 0) continue;
+      const int aw = w < 0 ? -w : w;
+      int l0 = m > aw ? m : aw;
+      if (l0 < 2) l0 = 2;
+      if ((l0 - w) & 1) ++l0;
+      const bool has_gen = !wide && m <= degree && aw <= degree;
+      const bool has_near = low && m >= 2 && m <= near_degree && (w == 1 || w == 0 || w == 2) &&
+                            (std::fabs(w * wdot + mdot + m * (node_rate - kOmegaE)) < kNearBand * n0);
+      const double* f = Fw[0][w + 17];
+      const double* fp = Fw[1][w + 17];
+      const double* fm = Fw[2][w + 17];
+
+      for (int q = -1; q <= 1; ++q) {
+        if (q == 0 && w == 0) continue;
+        const int j = w + q;
+        const bool q_near = has_near && (j == 1);
+        if (!has_gen && !q_near) continue;
+
+        double uc0 = 0, us0 = 0, dc0 = 0, ds0 = 0, dca = 0, dsa = 0;
+        double ec0 = 0, es0 = 0, eca = 0, esa = 0;
+        double ic0 = 0, is0 = 0, ica = 0, isa = 0, ice = 0, ise = 0;
+        bool any = false;
+
+        const int l_lim = q_near ? l_max : (l_max < degree ? l_max : degree);
+        for (int l = l0; l <= l_lim; l += 2) {
+          if (l <= degree) {
+            if (!has_gen || aw > l || j < -(l + 1) || j > l + 1) continue;
+          } else {
+            if (!q_near) continue;
+          }
+          if (!can_pass(l, m, w, q)) continue;
+          const int p = (l - w) / 2;
+          double psidot = 0.0;
+          const double weight = weight_of(l, m, p, q, psidot);
+          if (weight == 0.0) continue;
+          double g0, g1;
+          sp_g(l, p, q, e0, g0, g1);
+          const double fv = f[l], dfv = analytic_df ? fp[l] : (fp[l] - fm[l]) * inv_2h;
+          const double G = g0 + g1 * e0;
+          const double sv = egm.hypot_cs[l][m];
+          const double A = amp0[l] * sv * weight;
+          const double ap = std::fabs(psidot);
+          const double mag = a0 * A * (std::fabs(fv * G) * (3.0 * std::abs(j) * inv_a02 + 2.0 * (l + 1) * inv_na2 * ap) +
+                                       (std::fabs(fv * g1) + std::fabs(dfv * G)) * inv_na2 * ap);
+          if (mag < keep * ap * ap) continue;
+
+          const double f_w = static_cast<float>(fv * weight);
+          const double df_w = static_cast<float>(dfv * weight);
+          const double g0_f = static_cast<float>(g0);
+          const double g1_f = static_cast<float>(g1);
+          if (raw_out != nullptr) {
+            raw_out[raw_count++] = SpCoef{static_cast<int8_t>(l), static_cast<int8_t>(m), static_cast<int8_t>(w),
+                                          static_cast<int8_t>(j), static_cast<float>(f_w), static_cast<float>(df_w),
+                                          static_cast<float>(g0_f), static_cast<float>(g1_f)};
+          }
+          const double G0 = g0_f + g1_f * e0;
+          const double A0 = amp0[l];
+          const bool odd = ((l - m) & 1) != 0;
+          const double cl = odd ? -kEgmS[l][m] : kEgmC[l][m];
+          const double sl = odd ? kEgmC[l][m] : kEgmS[l][m];
+          const double lp1 = l + 1.0;
+
+          const double afg = A0 * f_w * G0;
+          const double afdg = A0 * f_w * g1_f;
+          const double adfg = A0 * df_w * G0;
+          const double adfdg = A0 * df_w * g1_f;
+
+          uc0 += afg * cl;
+          us0 += afg * sl;
+          dc0 += -lp1 * afg * cl;
+          ds0 += -lp1 * afg * sl;
+          dca += -lp1 * l * afg * cl;
+          dsa += -lp1 * l * afg * sl;
+          ec0 += afdg * cl;
+          es0 += afdg * sl;
+          eca += lp1 * afdg * cl;
+          esa += lp1 * afdg * sl;
+          ic0 += adfg * cl;
+          is0 += adfg * sl;
+          ica += lp1 * adfg * cl;
+          isa += lp1 * adfg * sl;
+          ice += adfdg * cl;
+          ise += adfdg * sl;
+          any = true;
+        }
+        if (any) {
+          out[count++] = SpCombCoef{
+              static_cast<int8_t>(m),   static_cast<int8_t>(w),   static_cast<int8_t>(j),   0,
+              static_cast<float>(uc0),  static_cast<float>(us0),  static_cast<float>(dc0),  static_cast<float>(ds0),
+              static_cast<float>(dca),  static_cast<float>(dsa),  static_cast<float>(ec0),  static_cast<float>(es0),
+              static_cast<float>(eca),  static_cast<float>(esa),  static_cast<float>(ic0),  static_cast<float>(is0),
+              static_cast<float>(ica),  static_cast<float>(isa),  static_cast<float>(ice),  static_cast<float>(ise),
+          };
+        }
+      }
+    }
+  }
+  if (raw_count_out != nullptr) *raw_count_out = raw_count;
+  if (count > 0) {
+    static uint32_t g_sp_gen = 0;
+    uint32_t gen = __atomic_add_fetch(&g_sp_gen, 1u, __ATOMIC_RELAXED);
+    if (gen == 0u) gen = __atomic_add_fetch(&g_sp_gen, 1u, __ATOMIC_RELAXED);
+    const int n_tag = count < 4 ? count : 4;
+    for (int k = 0; k < n_tag; ++k) {
+      out[k].pad = static_cast<int8_t>((gen >> (8 * k)) & 0xffu);
+    }
   }
   return count;
 }
 
-/// The displacements in the six-component set (n, e, i, e varpi, sin i Omega, lambda), first order.
+alignas(16) static constexpr float kSpMSeq[76] = {
+    1.0f,  2.0f,  3.0f,  4.0f,  5.0f,  6.0f,  7.0f,  8.0f,  9.0f,  10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f,
+    17.0f, 18.0f, 19.0f, 20.0f, 21.0f, 22.0f, 23.0f, 24.0f, 25.0f, 26.0f, 27.0f, 28.0f, 29.0f, 30.0f, 31.0f, 32.0f,
+    33.0f, 34.0f, 35.0f, 36.0f, 37.0f, 38.0f, 39.0f, 40.0f, 41.0f, 42.0f, 43.0f, 44.0f, 45.0f, 46.0f, 47.0f, 48.0f,
+    49.0f, 50.0f, 51.0f, 52.0f, 53.0f, 54.0f, 55.0f, 56.0f, 57.0f, 58.0f, 59.0f, 60.0f, 61.0f, 62.0f, 63.0f, 64.0f,
+    65.0f, 66.0f, 67.0f, 68.0f, 69.0f, 70.0f, 71.0f, 72.0f, 73.0f, 74.0f, 75.0f, 76.0f};
+
+struct alignas(16) SpRow {
+  uint16_t blk_end;
+  uint8_t wq0;
+  uint8_t c_start;
+  float wf;
+  float qf;
+  float jf;
+};
+static_assert(sizeof(SpRow) == 16, "");
+
+struct SpEvalCache {
+  static constexpr int kMaxBlks = 768;
+  static constexpr int kMaxRows = 384;
+  const SpCombCoef* F = nullptr;
+  int count = 0, max_m = 0, max_aw = 0, total_blks = 0, n_rows = 0, n_res_blks = 0, n_pe_blks = 0;
+  int b_fast_q0 = 0, b_fast_qm1 = 0, b_fast_qp1 = 0, b_c_q0 = 0, b_c_qm1 = 0, b_contig_end = 0;
+  int seg_row_end[6]{};
+  uint32_t table_tag = 0;
+  float f0_uc = -1e30f, f0_ic = -1e30f, fn_uc = -1e30f;
+  bool grouped_ok = false, res_overflow = false, uil_b_dirty = false;
+  double a0 = 0.0, e0 = 0.0, da_base = 0.0;
+  double a = -1.0, e = -1.0, n = -1.0, ci = -10.0;
+  double a_bake = -1.0, e_bake = -1.0, e_bake_a = -1.0, e_pe_bake = -1.0, de_pe_thresh = 5.0e-7;
+  double a_res = -1.0, e_res = -1.0, ci_res = -10.0;
+  double a_ref = -1.0, da_thresh = -1.0;
+  double e_ref = -1.0, de_thresh = -1.0;
+  double ci_ref = -10.0, dci_thresh = -1.0;
+  alignas(64) float blk_hot[kMaxBlks * 32]{};
+  alignas(16) float cswq_c[120]{};
+  alignas(16) float cswq_s[120]{};
+  alignas(16) float cm_f32_local[80]{};
+  alignas(16) float sm_f32_local[80]{};
+  SpRow rows[kMaxRows]{};
+  uint16_t res_blk[kMaxBlks]{};
+  uint16_t pe_blk[kMaxBlks]{};
+  uint8_t blk_is_pe[kMaxBlks]{};
+  uint8_t blk_is_res[kMaxBlks]{};
+  uint8_t blk_m0[kMaxBlks]{};
+  uint8_t blk_wq0[kMaxBlks]{};
+  uint16_t blk_mw4[kMaxBlks * 2]{};
+  float blk_wf1[kMaxBlks]{};
+  float blk_qf1[kMaxBlks]{};
+  uint8_t blk_mlane[kMaxBlks * 4]{};
+  uint8_t blk_wq[kMaxBlks * 4]{};
+  alignas(16) uint32_t blk_active[kMaxBlks * 4]{};
+  alignas(16) float blk_mf[kMaxBlks * 4]{};
+  alignas(16) float blk_w[kMaxBlks * 4]{};
+  alignas(16) float blk_q[kMaxBlks * 4]{};
+  alignas(16) float blk_c[kMaxBlks * 64]{};
+  alignas(16) float blk_p[kMaxBlks * 32]{};
+  alignas(16) float blk_a[kMaxBlks * 32]{};
+  alignas(16) float blk_e[kMaxBlks * 16]{};
+  uint16_t qw_slot[3][35][71]{};
+  uint8_t qw_cnt[3][35]{};
+  uint8_t fast_item[2600]{};
+  uint16_t rem_items[2600]{};
+};
+inline thread_local SpEvalCache* g_sp_eval_cache_ptr = nullptr;
+inline SpEvalCache& sp_eval_cache() {
+  if (__builtin_expect(!g_sp_eval_cache_ptr, 0)) g_sp_eval_cache_ptr = new SpEvalCache{};
+  return *g_sp_eval_cache_ptr;
+}
+
+inline void sp_split16_f32(double x, float& hi, float& lo) {
+  float f = static_cast<float>(x);
+  uint32_t u = 0;
+  std::memcpy(&u, &f, sizeof(u));
+  u &= ~0xffu;
+  std::memcpy(&hi, &u, sizeof(hi));
+  lo = static_cast<float>(x - static_cast<double>(hi));
+}
+
+[[gnu::noinline]] inline void sp_rebuild_cache(SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag,
+                                               double a0, double e0, double ci) {
+  sc.F = F;
+  sc.count = count;
+  sc.table_tag = tag;
+  sc.a0 = a0;
+  sc.e0 = e0;
+  sc.f0_uc = F[0].uc0;
+  sc.f0_ic = F[0].ic0;
+  sc.fn_uc = F[count - 1].uc0;
+  sc.a = -1.0;
+  sc.grouped_ok = false;
+  sc.res_overflow = false;
+  sc.n_res_blks = 0;
+  if (count > 2600) return;
+  int max_m = 0, max_aw = 0;
+  bool ok = true;
+  for (int idx = 0; idx < count; ++idx) {
+    const SpCombCoef& f = F[idx];
+    const int m = f.m, w = f.w, q = f.j - f.w;
+    if (m < 1 || m > 70 || w < -17 || w > 17 || q < -1 || q > 1) { ok = false; break; }
+    if (m > max_m) max_m = m;
+    const int aw = w < 0 ? -w : w;
+    if (aw > max_aw) max_aw = aw;
+  }
+  if (!ok || max_m < 1) return;
+  const int m_stride = max_m + 1;
+  auto& qw_slot = sc.qw_slot;
+  auto& qw_cnt = sc.qw_cnt;
+  for (int qi = 0; qi < 3; ++qi) {
+    for (int w = -max_aw; w <= max_aw; ++w) {
+      qw_cnt[qi][w + 17] = 0u;
+      std::memset(qw_slot[qi][w + 17], 0xff, static_cast<size_t>(m_stride) * sizeof(uint16_t));
+    }
+  }
+  for (int idx = 0; idx < count; ++idx) {
+    const SpCombCoef& f = F[idx];
+    const int m = f.m, w = f.w, q = f.j - f.w;
+    const int qi = q == 0 ? 0 : (q < 0 ? 1 : 2);
+    const int wi = w + 17;
+    if (qw_slot[qi][wi][m] != 0xffffu) { ok = false; break; }
+    qw_slot[qi][wi][m] = static_cast<uint16_t>(idx);
+    ++qw_cnt[qi][wi];
+  }
+  if (!ok) return;
+  uint8_t* const fast_item = sc.fast_item;
+  std::memset(fast_item, 0, static_cast<size_t>(count));
+  {
+    auto oct_norm = [](double x, double y) -> double {
+      const double ax = std::fabs(x), ay = std::fabs(y);
+      return ax > ay ? (ax + 0.41421356237309505 * ay) : (ay + 0.41421356237309505 * ax);
+    };
+    const double eta0_c = std::sqrt(std::fmax(1e-12, 1.0 - e0 * e0));
+    const double n0_c = std::sqrt(kMu / (a0 * a0 * a0));
+    const double p0_c = a0 * eta0_c * eta0_c, j2_0 = 1.5 * kJ2 / (p0_c * p0_c);
+    const double nr0 = -j2_0 * n0_c * ci, wd0 = 0.5 * j2_0 * n0_c * (5.0 * ci * ci - 1.0);
+    const double md0 = n0_c + 0.5 * j2_0 * n0_c * eta0_c * (3.0 * ci * ci - 1.0);
+    const double bd0 = nr0 - kOmegaE;
+    const double dwd0 = 3.5 * wd0, dnr0 = 3.5 * nr0, dmd0 = 1.5 * n0_c + 3.5 * (md0 - n0_c);
+    const double na2_0 = n0_c * a0 * a0;
+    const double alpha_A0 = -2.0 / na2_0, beta_L0 = 3.0 / (a0 * a0);
+    constexpr double kPeTolEr = 8.0e-11;  // ~0.51 mm per oscillating term at de = 2.5e-5
+    const double scale_I0 = a0 / (na2_0 * eta0_c);
+    double max_pos_pe = 1.0e-12;
+    for (int idx = 0; idx < count; ++idx) {
+      const SpCombCoef& f = F[idx];
+      const int m = f.m, w = f.w, j = f.j;
+      const double psidot0 = w * wd0 + j * md0 + m * bd0;
+      if (std::fabs(psidot0) < 1e-12) {
+        max_pos_pe = 1.0e-6;
+        continue;
+      }
+      const double ip0 = 1.0 / psidot0, abs_ip0 = std::fabs(ip0);
+      const double abs_dpr0 = std::fabs((w * dwd0 + j * dmd0 + m * dnr0) * ip0);
+      const double pos_pe_I = 2.5e-5 * scale_I0 * oct_norm(f.ice, f.ise) * abs_ip0;
+      const double pos_pe_L = 2.5e-5 * a0 *
+                              oct_norm(-alpha_A0 * f.eca - beta_L0 * j * (f.ec0 * ip0),
+                                       -alpha_A0 * f.esa - beta_L0 * j * (f.es0 * ip0)) *
+                              abs_ip0;
+      const double pos_pe = pos_pe_I + pos_pe_L;
+      const double eff_pe = (abs_ip0 >= 100.0 || abs_dpr0 >= 6.0) ? (3.0 * pos_pe) : pos_pe;
+      if (eff_pe > max_pos_pe) max_pos_pe = eff_pe;
+      if (abs_ip0 >= 200.0 || abs_dpr0 >= 12.0) continue;
+      if (pos_pe < kPeTolEr) fast_item[idx] = 1u;
+    }
+    if (max_pos_pe >= 6.0e-9) {
+      sc.de_pe_thresh = 1.5e-7;
+    } else {
+      const double raw_thresh = 5.0e-15 / max_pos_pe;
+      sc.de_pe_thresh = raw_thresh < 6.0e-7 ? 6.0e-7 : (raw_thresh > 2.5e-5 ? 2.5e-5 : raw_thresh);
+    }
+  }
+  int cur_blk = 0;
+  auto alloc_blk = [&](uint8_t m0_val, uint8_t wq0_val, float wf_val, float qf_val, bool full4) -> int {
+    if (cur_blk >= SpEvalCache::kMaxBlks) { ok = false; return -1; }
+    const int bi = cur_blk++;
+    sc.blk_m0[bi] = m0_val;
+    sc.blk_wq0[bi] = wq0_val;
+    sc.blk_mw4[bi * 2 + 0] = static_cast<uint16_t>(m0_val) * 4u;
+    sc.blk_mw4[bi * 2 + 1] = static_cast<uint16_t>(wq0_val) * 4u;
+    sc.blk_wf1[bi] = wf_val;
+    sc.blk_qf1[bi] = qf_val;
+    sc.blk_is_pe[bi] = 0u;
+    if (!full4) {
+      const int lo = bi * 4;
+      for (int l = 0; l < 4; ++l) {
+        sc.blk_mlane[lo + l] = 0u;
+        sc.blk_wq[lo + l] = 20u;
+        sc.blk_active[lo + l] = 0u;
+        sc.blk_mf[lo + l] = 0.0f;
+        sc.blk_w[lo + l] = 0.0f;
+        sc.blk_q[lo + l] = 0.0f;
+      }
+      std::memset(sc.blk_c + static_cast<size_t>(bi) * 64u, 0, 64u * sizeof(float));
+    }
+    return bi;
+  };
+  sc.n_pe_blks = 0;
+  auto store_lane = [&](int lane_idx, uint16_t it) {
+    const SpCombCoef& f = F[it];
+    const int m = f.m, w = f.w, q = f.j - w;
+    const int qi_lane = q == 0 ? 0 : (q < 0 ? 1 : 2);
+    sc.blk_mlane[lane_idx] = static_cast<uint8_t>(m - 1);
+    sc.blk_wq[lane_idx] = static_cast<uint8_t>(qi_lane * 40 + (w + 20));
+    sc.blk_active[lane_idx] = 0xFFFFFFFFu;
+    sc.blk_mf[lane_idx] = static_cast<float>(m);
+    sc.blk_w[lane_idx] = static_cast<float>(w);
+    sc.blk_q[lane_idx] = static_cast<float>(q);
+    float* const pc = sc.blk_c + static_cast<uint32_t>(lane_idx >> 2) * 64u + (lane_idx & 3);
+    pc[0] = f.uc0;   pc[4] = f.us0;   pc[8] = f.dc0;   pc[12] = f.ds0;
+    pc[16] = f.dca;  pc[20] = f.dsa;  pc[24] = f.ec0;  pc[28] = f.es0;
+    pc[32] = f.eca;  pc[36] = f.esa;  pc[40] = f.ic0;  pc[44] = f.is0;
+    pc[48] = f.ica;  pc[52] = f.isa;  pc[56] = f.ice;  pc[60] = f.ise;
+  };
+  const int q_vals[3] = {0, -1, 1};
+  const int n_chunks = (max_m + 3) >> 2;
+  int c_ends[3] = {0, 0, 0};
+  int cur_row = 0;
+  for (int qi = 0; qi < 3 && ok; ++qi) {
+    const int q = q_vals[qi];
+    const float qf = static_cast<float>(q);
+    for (int w = -max_aw; w <= max_aw && ok; ++w) {
+      const int wi = w + 17;
+      if (qw_cnt[qi][wi] < 2) continue;
+      uint16_t* slot = qw_slot[qi][wi];
+      const uint8_t wq0 = static_cast<uint8_t>(qi * 40 + (w + 20));
+      const float wf = static_cast<float>(w);
+      int open_row = -1;
+      for (int c = 0; c < n_chunks && ok; ++c) {
+        const int m0 = c << 2;
+        int win_c = 0;
+        for (int l = 0; l < 4; ++l) {
+          const int mk = m0 + 1 + l;
+          if (mk <= max_m && slot[mk] != 0xffffu) ++win_c;
+        }
+        bool take = (win_c >= 2);
+        if (!take && win_c == 1 && open_row >= 0 && (c + 1) < n_chunks) {
+          int next_c = 0;
+          const int nm0 = (c + 1) << 2;
+          for (int l = 0; l < 4; ++l) {
+            const int mk = nm0 + 1 + l;
+            if (mk <= max_m && slot[mk] != 0xffffu) ++next_c;
+          }
+          if (next_c >= 2) take = true;
+        }
+        if (take) {
+          if (open_row < 0) {
+            if (cur_row >= SpEvalCache::kMaxRows) { ok = false; break; }
+            open_row = cur_row++;
+            sc.rows[open_row].wq0 = wq0;
+            sc.rows[open_row].c_start = static_cast<uint8_t>(c);
+            sc.rows[open_row].wf = wf;
+            sc.rows[open_row].qf = qf;
+            sc.rows[open_row].jf = wf + qf;
+          }
+          const int bi = alloc_blk(static_cast<uint8_t>(m0), wq0, wf, qf, win_c == 4);
+          if (bi < 0) break;
+          bool blk_has_pe = false;
+          for (int l = 0; l < 4; ++l) {
+            const int mk = m0 + 1 + l;
+            if (mk <= max_m && slot[mk] != 0xffffu) {
+              const uint16_t it = slot[mk];
+              if (fast_item[it] == 0u) blk_has_pe = true;
+              store_lane(bi * 4 + l, it);
+              slot[mk] = 0xffffu;
+              --qw_cnt[qi][wi];
+            }
+          }
+          if (blk_has_pe) {
+            sc.pe_blk[sc.n_pe_blks++] = static_cast<uint16_t>(bi);
+            sc.blk_is_pe[bi] = 1u;
+          }
+          sc.rows[open_row].blk_end = static_cast<uint16_t>(cur_blk);
+        } else {
+          open_row = -1;
+        }
+      }
+    }
+    c_ends[qi] = cur_blk;
+  }
+  const int b_contig_end = cur_blk;
+  // Segment D: pack all remaining items densely 4 per block
+  uint16_t* const rem_items = sc.rem_items;
+  int n_rem = 0;
+  for (int qi = 0; qi < 3; ++qi) {
+    for (int w = -max_aw; w <= max_aw; ++w) {
+      const int wi = w + 17;
+      if (qw_cnt[qi][wi] == 0) continue;
+      const uint16_t* slot = qw_slot[qi][wi];
+      for (int m = 1; m <= max_m; ++m) {
+        if (slot[m] != 0xffffu) rem_items[n_rem++] = slot[m];
+      }
+    }
+  }
+  for (int r = 0; r < n_rem && ok; r += 4) {
+    const int lim = (r + 4 <= n_rem) ? 4 : (n_rem - r);
+    const int bi = alloc_blk(0xffu, 20u, 0.0f, 0.0f, lim == 4);
+    if (bi < 0) break;
+    bool blk_has_pe = false;
+    for (int l = 0; l < lim; ++l) {
+      const uint16_t it = rem_items[r + l];
+      if (fast_item[it] == 0u) blk_has_pe = true;
+      store_lane(bi * 4 + l, it);
+    }
+    if (blk_has_pe) {
+      sc.pe_blk[sc.n_pe_blks++] = static_cast<uint16_t>(bi);
+      sc.blk_is_pe[bi] = 1u;
+    }
+  }
+  if (ok && cur_blk > 0) {
+    sc.max_m = max_m;
+    sc.max_aw = max_aw;
+    sc.n_rows = cur_row;
+    sc.b_fast_q0 = 0;
+    sc.b_fast_qm1 = 0;
+    sc.b_fast_qp1 = 0;
+    sc.b_c_q0 = c_ends[0];
+    sc.b_c_qm1 = c_ends[1];
+    sc.b_contig_end = b_contig_end;
+    sc.total_blks = cur_blk;
+    sc.a_bake = -1.0;
+    sc.e_bake = -1.0;
+    sc.e_bake_a = -1.0;
+    sc.e_pe_bake = -1.0;
+    sc.a_res = -1.0;
+    sc.da_thresh = -1.0;
+    sc.grouped_ok = true;
+  }
+}
+
+[[gnu::noinline]] inline void sp_rebake_pe_fast(SpEvalCache& sc, double e_target) {
+  const float dde_pe = static_cast<float>(e_target - sc.e_pe_bake);
+  sc.e_pe_bake = e_target;
+  const int np = sc.n_pe_blks;
+#ifdef __wasm_simd128__
+  const v128_t v_dde = wasm_f32x4_splat(dde_pe);
+  for (int rk = 0; rk < np; ++rk) {
+    const int bi = sc.pe_blk[rk];
+    float* const pu = sc.blk_hot + bi * 32 + 8;
+    const float* const pe = sc.blk_e + bi * 16;
+    wasm_v128_store(pu + 8,  wasm_f32x4_add(wasm_v128_load(pu + 8),  wasm_f32x4_mul(wasm_v128_load(pe + 0),  v_dde)));
+    wasm_v128_store(pu + 12, wasm_f32x4_add(wasm_v128_load(pu + 12), wasm_f32x4_mul(wasm_v128_load(pe + 4),  v_dde)));
+    wasm_v128_store(pu + 16, wasm_f32x4_add(wasm_v128_load(pu + 16), wasm_f32x4_mul(wasm_v128_load(pe + 8),  v_dde)));
+    wasm_v128_store(pu + 20, wasm_f32x4_add(wasm_v128_load(pu + 20), wasm_f32x4_mul(wasm_v128_load(pe + 12), v_dde)));
+  }
+#else
+  for (int rk = 0; rk < np; ++rk) {
+    const int bi = sc.pe_blk[rk];
+    float* const pu = sc.blk_hot + bi * 32 + 8;
+    const float* const pe = sc.blk_e + bi * 16;
+    for (int l = 0; l < 16; ++l) pu[8 + l] += pe[l] * dde_pe;
+  }
+#endif
+}
+
+[[gnu::noinline]] inline void sp_rebake_base(SpEvalCache& sc, double a0, double e0, double a, double e,
+                                             double n, double eta, double ci, double ia) {
+  sc.a0 = a0;
+  sc.e0 = e0;
+  sc.a = a;
+  sc.e = e;
+  sc.n = n;
+  sc.ci = ci;
+  sc.n_res_blks = 0;
+  sc.res_overflow = false;
+  sc.uil_b_dirty = false;
+  std::memset(sc.blk_is_res, 0, static_cast<size_t>(sc.total_blks));
+  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
+  const double node_rate = -j2 * n * ci, wdot = 0.5 * j2 * n * (5.0 * ci * ci - 1.0);
+  const double mdot = n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0);
+  const double beta_dot = node_rate - kOmegaE;
+  const double da = a0 * ia - 1.0;
+  sc.da_base = da;
+  const double inv_1pda = 1.0 / (1.0 + da);
+  const double dwdot_ddda = 3.5 * wdot * inv_1pda;
+  const double dnoder_ddda = 3.5 * node_rate * inv_1pda;
+  const double dmdot_ddda = (1.5 * n + 3.5 * (mdot - n)) * inv_1pda;
+  const double de = e - e0;
+  const double alpha_A = -2.0 * ia / (n * a);
+  const double dalpha_ddda = 0.5 * alpha_A * inv_1pda;
+  const double beta_L = 3.0 * ia * ia;
+  const double dbeta_ddda = 2.0 * beta_L * inv_1pda;
+#ifdef __wasm_simd128__
+  float mdot_hi = 0.0f, mdot_lo = 0.0f, bdot_hi = 0.0f, bdot_lo = 0.0f;
+  sp_split16_f32(mdot, mdot_hi, mdot_lo);
+  sp_split16_f32(beta_dot, bdot_hi, bdot_lo);
+  const v128_t v_one_f = wasm_f32x4_splat(1.0f);
+  const v128_t v_res_dpr = wasm_f32x4_splat(6.0f);
+  const v128_t v_res_ip = wasm_f32x4_splat(250.0f);
+  const v128_t v_wdot_f = wasm_f32x4_splat(static_cast<float>(wdot));
+  const v128_t v_mdot_hi = wasm_f32x4_splat(mdot_hi);
+  const v128_t v_mdot_lo = wasm_f32x4_splat(mdot_lo);
+  const v128_t v_bdot_hi = wasm_f32x4_splat(bdot_hi);
+  const v128_t v_bdot_lo = wasm_f32x4_splat(bdot_lo);
+  const v128_t v_dwdot_f = wasm_f32x4_splat(static_cast<float>(dwdot_ddda));
+  const v128_t v_dmdot_f = wasm_f32x4_splat(static_cast<float>(dmdot_ddda));
+  const v128_t v_dnoder_f = wasm_f32x4_splat(static_cast<float>(dnoder_ddda));
+  const v128_t v_da = wasm_f32x4_splat(static_cast<float>(da));
+  const v128_t v_hda = wasm_f32x4_splat(static_cast<float>(0.5 * da));
+  const v128_t v_de_r = wasm_f32x4_splat(static_cast<float>(de));
+  const v128_t v_alpha = wasm_f32x4_splat(static_cast<float>(alpha_A));
+  const v128_t v_nalpha = wasm_f32x4_splat(static_cast<float>(-alpha_A));
+  const v128_t v_dalpha = wasm_f32x4_splat(static_cast<float>(dalpha_ddda));
+  const v128_t v_beta_L = wasm_f32x4_splat(static_cast<float>(beta_L));
+  const v128_t v_dbeta_L = wasm_f32x4_splat(static_cast<float>(dbeta_ddda));
+  const int nblks = sc.total_blks;
+  for (int bi = 0; bi < nblks; ++bi) {
+    const int lane_off = bi * 4;
+    const v128_t v_active = wasm_v128_load(sc.blk_active + lane_off);
+    const v128_t v_mf = wasm_v128_load(sc.blk_mf + lane_off);
+    const v128_t v_wf = wasm_v128_load(sc.blk_w + lane_off);
+    const v128_t v_jf = wasm_f32x4_add(v_wf, wasm_v128_load(sc.blk_q + lane_off));
+    const v128_t v_psidot = wasm_f32x4_add(
+        wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_hi), wasm_f32x4_mul(v_mf, v_bdot_hi)),
+        wasm_f32x4_add(wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_lo), wasm_f32x4_mul(v_mf, v_bdot_lo)),
+                       wasm_f32x4_mul(v_wf, v_wdot_f)));
+    const v128_t v_ip = wasm_v128_and(wasm_f32x4_div(v_one_f, v_psidot), v_active);
+    const v128_t v_dpr = wasm_f32x4_mul(
+        wasm_f32x4_add(wasm_f32x4_add(wasm_f32x4_mul(v_wf, v_dwdot_f), wasm_f32x4_mul(v_jf, v_dmdot_f)),
+                       wasm_f32x4_mul(v_mf, v_dnoder_f)),
+        v_ip);
+    const v128_t v_bj = wasm_f32x4_mul(v_beta_L, v_jf);
+    const v128_t v_dbj = wasm_f32x4_mul(v_dbeta_L, v_jf);
+    if (wasm_v128_any_true(wasm_v128_or(wasm_f32x4_gt(wasm_f32x4_abs(v_dpr), v_res_dpr),
+                                        wasm_f32x4_gt(wasm_f32x4_abs(v_ip), v_res_ip)))) {
+      sc.res_blk[sc.n_res_blks++] = static_cast<uint16_t>(bi);
+      sc.blk_is_res[bi] = 1u;
+    }
+    const float* const pc = sc.blk_c + bi * 64;
+    float* const pp = sc.blk_p + bi * 32;
+    float* const pec = sc.blk_hot + bi * 32;
+    float* const pu = pec + 8;
+    float* const pa = sc.blk_a + bi * 32;
+    float* const pe = sc.blk_e + bi * 16;
+    const v128_t uc0 = wasm_v128_load(pc + 0), us0 = wasm_v128_load(pc + 4);
+    const v128_t dc0 = wasm_v128_load(pc + 8), ds0 = wasm_v128_load(pc + 12);
+    const v128_t dca = wasm_v128_load(pc + 16), dsa = wasm_v128_load(pc + 20);
+    const v128_t ec0 = wasm_v128_load(pc + 24), es0 = wasm_v128_load(pc + 28);
+    const v128_t eca = wasm_v128_load(pc + 32), esa = wasm_v128_load(pc + 36);
+    const v128_t ic0 = wasm_v128_load(pc + 40), is0 = wasm_v128_load(pc + 44);
+    const v128_t ica = wasm_v128_load(pc + 48), isa = wasm_v128_load(pc + 52);
+    const v128_t ice = wasm_v128_load(pc + 56), ise = wasm_v128_load(pc + 60);
+
+    const v128_t ec = wasm_f32x4_add(ec0, wasm_f32x4_mul(eca, v_da));
+    const v128_t es = wasm_f32x4_add(es0, wasm_f32x4_mul(esa, v_da));
+    const v128_t uc = wasm_f32x4_add(wasm_f32x4_sub(uc0, wasm_f32x4_mul(wasm_f32x4_add(dc0, wasm_f32x4_mul(dca, v_hda)), v_da)),
+                                     wasm_f32x4_mul(ec, v_de_r));
+    const v128_t us = wasm_f32x4_add(wasm_f32x4_sub(us0, wasm_f32x4_mul(wasm_f32x4_add(ds0, wasm_f32x4_mul(dsa, v_hda)), v_da)),
+                                     wasm_f32x4_mul(es, v_de_r));
+    const v128_t ic = wasm_f32x4_add(wasm_f32x4_add(ic0, wasm_f32x4_mul(ica, v_da)), wasm_f32x4_mul(ice, v_de_r));
+    const v128_t is = wasm_f32x4_add(wasm_f32x4_add(is0, wasm_f32x4_mul(isa, v_da)), wasm_f32x4_mul(ise, v_de_r));
+    const v128_t duc_dda = wasm_f32x4_sub(wasm_f32x4_mul(eca, v_de_r), wasm_f32x4_add(dc0, wasm_f32x4_mul(dca, v_da)));
+    const v128_t dus_dda = wasm_f32x4_sub(wasm_f32x4_mul(esa, v_de_r), wasm_f32x4_add(ds0, wasm_f32x4_mul(dsa, v_da)));
+    const v128_t dc = wasm_f32x4_sub(wasm_f32x4_mul(dc0, v_da), duc_dda);
+    const v128_t ds = wasm_f32x4_sub(wasm_f32x4_mul(ds0, v_da), dus_dda);
+
+    const v128_t ec_ip = wasm_f32x4_mul(ec, v_ip), es_ip = wasm_f32x4_mul(es, v_ip);
+    const v128_t uc_ip = wasm_f32x4_mul(uc, v_ip), us_ip = wasm_f32x4_mul(us, v_ip);
+    const v128_t ic_ip = wasm_f32x4_mul(ic, v_ip), is_ip = wasm_f32x4_mul(is, v_ip);
+    const v128_t dc_ip = wasm_f32x4_mul(dc, v_ip), ds_ip = wasm_f32x4_mul(ds, v_ip);
+    const v128_t uc_ip2 = wasm_f32x4_mul(uc_ip, v_ip), us_ip2 = wasm_f32x4_mul(us_ip, v_ip);
+    const v128_t lc_ip = wasm_f32x4_sub(wasm_f32x4_mul(v_alpha, dc_ip), wasm_f32x4_mul(v_bj, uc_ip2));
+    const v128_t ls_ip = wasm_f32x4_sub(wasm_f32x4_mul(v_alpha, ds_ip), wasm_f32x4_mul(v_bj, us_ip2));
+
+    wasm_v128_store(pp + 0, ec_ip);  wasm_v128_store(pec + 0, ec_ip);
+    wasm_v128_store(pp + 4, es_ip);  wasm_v128_store(pec + 4, es_ip);
+    wasm_v128_store(pp + 8, uc_ip);  wasm_v128_store(pu + 0, uc_ip);
+    wasm_v128_store(pp + 12, us_ip); wasm_v128_store(pu + 4, us_ip);
+    wasm_v128_store(pp + 16, ic_ip); wasm_v128_store(pu + 8, ic_ip);
+    wasm_v128_store(pp + 20, is_ip); wasm_v128_store(pu + 12, is_ip);
+    wasm_v128_store(pp + 24, lc_ip); wasm_v128_store(pu + 16, lc_ip);
+    wasm_v128_store(pp + 28, ls_ip); wasm_v128_store(pu + 20, ls_ip);
+
+    const v128_t duc_ip = wasm_f32x4_sub(wasm_f32x4_mul(duc_dda, v_ip), wasm_f32x4_mul(uc_ip, v_dpr));
+    const v128_t dus_ip = wasm_f32x4_sub(wasm_f32x4_mul(dus_dda, v_ip), wasm_f32x4_mul(us_ip, v_dpr));
+    const v128_t ddc_ip = wasm_f32x4_sub(wasm_f32x4_mul(wasm_f32x4_add(dc0, dca), v_ip), wasm_f32x4_mul(dc_ip, v_dpr));
+    const v128_t dds_ip = wasm_f32x4_sub(wasm_f32x4_mul(wasm_f32x4_add(ds0, dsa), v_ip), wasm_f32x4_mul(ds_ip, v_dpr));
+    wasm_v128_store(pa + 0, wasm_f32x4_sub(wasm_f32x4_mul(eca, v_ip), wasm_f32x4_mul(ec_ip, v_dpr)));
+    wasm_v128_store(pa + 4, wasm_f32x4_sub(wasm_f32x4_mul(esa, v_ip), wasm_f32x4_mul(es_ip, v_dpr)));
+    wasm_v128_store(pa + 8, duc_ip);
+    wasm_v128_store(pa + 12, dus_ip);
+    wasm_v128_store(pa + 16, wasm_f32x4_sub(wasm_f32x4_mul(ica, v_ip), wasm_f32x4_mul(ic_ip, v_dpr)));
+    wasm_v128_store(pa + 20, wasm_f32x4_sub(wasm_f32x4_mul(isa, v_ip), wasm_f32x4_mul(is_ip, v_dpr)));
+    wasm_v128_store(pa + 24, wasm_f32x4_sub(wasm_f32x4_sub(wasm_f32x4_add(wasm_f32x4_mul(v_dalpha, dc_ip), wasm_f32x4_mul(v_alpha, ddc_ip)),
+                                                           wasm_f32x4_mul(v_dbj, uc_ip2)),
+                                            wasm_f32x4_mul(v_bj, wasm_f32x4_mul(wasm_f32x4_sub(duc_ip, wasm_f32x4_mul(uc_ip, v_dpr)), v_ip))));
+    wasm_v128_store(pa + 28, wasm_f32x4_sub(wasm_f32x4_sub(wasm_f32x4_add(wasm_f32x4_mul(v_dalpha, ds_ip), wasm_f32x4_mul(v_alpha, dds_ip)),
+                                                           wasm_f32x4_mul(v_dbj, us_ip2)),
+                                            wasm_f32x4_mul(v_bj, wasm_f32x4_mul(wasm_f32x4_sub(dus_ip, wasm_f32x4_mul(us_ip, v_dpr)), v_ip))));
+
+    wasm_v128_store(pe + 0, wasm_f32x4_mul(ice, v_ip));
+    wasm_v128_store(pe + 4, wasm_f32x4_mul(ise, v_ip));
+    wasm_v128_store(pe + 8, wasm_f32x4_mul(wasm_f32x4_sub(wasm_f32x4_mul(v_nalpha, eca), wasm_f32x4_mul(v_bj, ec_ip)), v_ip));
+    wasm_v128_store(pe + 12, wasm_f32x4_mul(wasm_f32x4_sub(wasm_f32x4_mul(v_nalpha, esa), wasm_f32x4_mul(v_bj, es_ip)), v_ip));
+  }
+#else
+  for (int bi = 0; bi < sc.total_blks; ++bi) {
+    const int lane_off = bi * 4;
+    const float* const pc = sc.blk_c + bi * 64;
+    float* const pp = sc.blk_p + bi * 32;
+    float* const pec = sc.blk_hot + bi * 32;
+    float* const pu = pec + 8;
+    float* const pa = sc.blk_a + bi * 32;
+    float* const pe = sc.blk_e + bi * 16;
+    bool is_res = false;
+    for (int l = 0; l < 4; ++l) {
+      if (sc.blk_active[lane_off + l] == 0u) {
+        pec[0 + l] = pec[4 + l] = 0.0f;
+        for (int k = 0; k < 6; ++k) pu[k * 4 + l] = 0.0f;
+        for (int k = 0; k < 8; ++k) pp[k * 4 + l] = pa[k * 4 + l] = 0.0f;
+        for (int k = 0; k < 4; ++k) pe[k * 4 + l] = 0.0f;
+        continue;
+      }
+      const double mv = sc.blk_mf[lane_off + l];
+      const double wv = sc.blk_w[lane_off + l], j = wv + sc.blk_q[lane_off + l];
+      const double inv_psidot = 1.0 / (wv * wdot + j * mdot + mv * beta_dot);
+      const double inv_psidot2 = inv_psidot * inv_psidot;
+      const double dpsidot_rel = (wv * dwdot_ddda + j * dmdot_ddda + mv * dnoder_ddda) * inv_psidot;
+      if (std::fabs(dpsidot_rel) > 6.0 || std::fabs(inv_psidot) > 250.0) is_res = true;
+      const double uc0 = pc[0 + l], us0 = pc[4 + l], dc0 = pc[8 + l], ds0 = pc[12 + l];
+      const double dca = pc[16 + l], dsa = pc[20 + l], ec0 = pc[24 + l], es0 = pc[28 + l];
+      const double eca = pc[32 + l], esa = pc[36 + l], ic0 = pc[40 + l], is0 = pc[44 + l];
+      const double ica = pc[48 + l], isa = pc[52 + l], ice = pc[56 + l], ise = pc[60 + l];
+      const double ec = ec0 + eca * da, es = es0 + esa * da;
+      const double uc = uc0 + (-dc0 - 0.5 * dca * da) * da + ec * de;
+      const double us = us0 + (-ds0 - 0.5 * dsa * da) * da + es * de;
+      const double ic = ic0 + ica * da + ice * de, is = is0 + isa * da + ise * de;
+      const double dc = dc0 + (dc0 + dca) * da - eca * de, ds = ds0 + (ds0 + dsa) * da - esa * de;
+      const double ec_ip = ec * inv_psidot, es_ip = es * inv_psidot;
+      const double uc_ip = uc * inv_psidot, us_ip = us * inv_psidot;
+      const double ic_ip = ic * inv_psidot, is_ip = is * inv_psidot;
+      const double dc_ip = dc * inv_psidot, ds_ip = ds * inv_psidot;
+      const double duc_dda = -dc0 - dca * da + eca * de, dus_dda = -ds0 - dsa * da + esa * de;
+      const double duc_ip = duc_dda * inv_psidot - uc_ip * dpsidot_rel;
+      const double dus_ip = dus_dda * inv_psidot - us_ip * dpsidot_rel;
+      const double ddc_ip = (dc0 + dca) * inv_psidot - dc_ip * dpsidot_rel;
+      const double dds_ip = (ds0 + dsa) * inv_psidot - ds_ip * dpsidot_rel;
+      const double j_uc_ip2 = j * uc * inv_psidot2, j_us_ip2 = j * us * inv_psidot2;
+      const double dj_uc_ip2 = j * (duc_dda * inv_psidot - 2.0 * uc_ip * dpsidot_rel) * inv_psidot;
+      const double dj_us_ip2 = j * (dus_dda * inv_psidot - 2.0 * us_ip * dpsidot_rel) * inv_psidot;
+      pec[0 + l] = pp[0 + l] = static_cast<float>(ec_ip);
+      pec[4 + l] = pp[4 + l] = static_cast<float>(es_ip);
+      pu[0 + l] = pp[8 + l] = static_cast<float>(uc_ip);
+      pu[4 + l] = pp[12 + l] = static_cast<float>(us_ip);
+      pu[8 + l] = pp[16 + l] = static_cast<float>(ic_ip);
+      pu[12 + l] = pp[20 + l] = static_cast<float>(is_ip);
+      pu[16 + l] = pp[24 + l] = static_cast<float>(alpha_A * dc_ip - beta_L * j_uc_ip2);
+      pu[20 + l] = pp[28 + l] = static_cast<float>(alpha_A * ds_ip - beta_L * j_us_ip2);
+      pa[0 + l] = static_cast<float>(eca * inv_psidot - ec_ip * dpsidot_rel);
+      pa[4 + l] = static_cast<float>(esa * inv_psidot - es_ip * dpsidot_rel);
+      pa[8 + l] = static_cast<float>(duc_ip);
+      pa[12 + l] = static_cast<float>(dus_ip);
+      pa[16 + l] = static_cast<float>(ica * inv_psidot - ic_ip * dpsidot_rel);
+      pa[20 + l] = static_cast<float>(isa * inv_psidot - is_ip * dpsidot_rel);
+      pa[24 + l] = static_cast<float>(dalpha_ddda * dc_ip + alpha_A * ddc_ip - dbeta_ddda * j_uc_ip2 - beta_L * dj_uc_ip2);
+      pa[28 + l] = static_cast<float>(dalpha_ddda * ds_ip + alpha_A * dds_ip - dbeta_ddda * j_us_ip2 - beta_L * dj_us_ip2);
+      pe[0 + l] = static_cast<float>(ice * inv_psidot);
+      pe[4 + l] = static_cast<float>(ise * inv_psidot);
+      pe[8 + l] = static_cast<float>((-alpha_A * eca - beta_L * j * ec_ip) * inv_psidot);
+      pe[12 + l] = static_cast<float>((-alpha_A * esa - beta_L * j * es_ip) * inv_psidot);
+    }
+    if (is_res) {
+      sc.res_blk[sc.n_res_blks++] = static_cast<uint16_t>(bi);
+      sc.blk_is_res[bi] = 1u;
+    }
+  }
+#endif
+  sc.a_bake = a;
+  sc.e_bake = e;
+  sc.e_bake_a = e;
+  sc.e_pe_bake = e;
+  sc.a_res = a;
+  sc.e_res = e;
+  sc.ci_res = ci;
+}
+
+[[gnu::noinline]] inline void sp_six_fallback(const SpEvalCache& sc, const SpCombCoef* F, int count, double a0, double e0,
+                                              double a, double e, double n, double eta, double sin_i, double ci,
+                                              double ia, double sb, double cb, double su1, double cu1,
+                                              double sM1, double cM1, double* six, double* dsix_dlam, double* d2six_dlam2) {
+  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
+  const double node_rate = -j2 * n * ci, wdot = 0.5 * j2 * n * (5.0 * ci * ci - 1.0);
+  const double mdot = n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0);
+  const double beta_dot = node_rate - kOmegaE;
+  const double da = a0 * ia - 1.0, de = e - e0;
+  const double alpha_A = -2.0 * ia / (n * a), beta_L = 3.0 * ia * ia;
+  double cm[72], sm[72], cu_buf[35], su_buf[35];
+  double* const cu = cu_buf + 17;
+  double* const su = su_buf + 17;
+  cm[0] = cu[0] = 1.0;
+  sm[0] = su[0] = 0.0;
+  const int fb_max_aw = sc.grouped_ok ? sc.max_aw : 17;
+  const int fb_max_m = sc.grouped_ok ? sc.max_m : 70;
+  for (int q = 1; q <= fb_max_aw; ++q) {
+    cu[q] = cu[q - 1] * cu1 - su[q - 1] * su1;
+    su[q] = su[q - 1] * cu1 + cu[q - 1] * su1;
+    cu[-q] = cu[q];
+    su[-q] = -su[q];
+  }
+  for (int q = 1; q <= fb_max_m; ++q) {
+    cm[q] = cm[q - 1] * cb - sm[q - 1] * sb;
+    sm[q] = sm[q - 1] * cb + cm[q - 1] * sb;
+  }
+  double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sL = 0;
+  double dsM = 0, dsW = 0, dsO = 0, dsE = 0, dsI = 0, dsL = 0;
+  double d2sM = 0, d2sW = 0, d2sO = 0, d2sE = 0, d2sI = 0, d2sL = 0;
+  for (int idx = 0; idx < count; ++idx) {
+    const SpCombCoef& f = F[idx];
+    const int m = f.m, w = f.w, j = f.j, qv = j - w;
+    const double c0 = cu[w], s0 = su[w];
+    const double cwjq = qv == 0 ? c0 : (qv > 0 ? c0 * cM1 - s0 * sM1 : c0 * cM1 + s0 * sM1);
+    const double swjq = qv == 0 ? s0 : (qv > 0 ? s0 * cM1 + c0 * sM1 : s0 * cM1 - c0 * sM1);
+    const double cp = cwjq * cm[m] - swjq * sm[m], sp = swjq * cm[m] + cwjq * sm[m];
+    const double inv_p = 1.0 / (w * wdot + m * beta_dot + j * mdot);
+    const double uc = (f.uc0 + (-f.dc0 - 0.5 * f.dca * da) * da + (f.ec0 + f.eca * da) * de) * inv_p;
+    const double us = (f.us0 + (-f.ds0 - 0.5 * f.dsa * da) * da + (f.es0 + f.esa * da) * de) * inv_p;
+    const double ec = (f.ec0 + f.eca * da) * inv_p, es = (f.es0 + f.esa * da) * inv_p;
+    const double ic = (f.ic0 + f.ica * da + f.ice * de) * inv_p, is = (f.is0 + f.isa * da + f.ise * de) * inv_p;
+    const double dc = f.dc0 + (f.dc0 + f.dca) * da - f.eca * de, ds = f.ds0 + (f.ds0 + f.dsa) * da - f.esa * de;
+    const double lc = alpha_A * (dc * inv_p) - beta_L * (j * uc * inv_p), ls = alpha_A * (ds * inv_p) - beta_L * (j * us * inv_p);
+    const double idS = uc * cp + us * sp, tE = ec * sp - es * cp, tI = ic * sp - is * cp, tL = lc * sp - ls * cp;
+    sM += j * idS; sW += w * idS; sO += m * idS; sE += tE; sI += tI; sL += tL;
+    if (dsix_dlam != nullptr) {
+      const double didS = j * (-uc * sp + us * cp);
+      dsM += j * didS; dsW += w * didS; dsO += m * didS;
+      dsE += j * (ec * cp + es * sp); dsI += j * (ic * cp + is * sp); dsL += j * (lc * cp + ls * sp);
+      if (d2six_dlam2 != nullptr) {
+        const double nj2 = -(double)(j * j);
+        d2sM += nj2 * j * idS; d2sW += nj2 * w * idS; d2sO += nj2 * m * idS;
+        d2sE += nj2 * tE; d2sI += nj2 * tI; d2sL += nj2 * tL;
+      }
+    }
+  }
+  const double na2 = n * a * a, tanhalf = sin_i / (1.0 + ci);
+  six[0] += -3.0 * ia * ia * sM;
+  six[1] += (eta * eta * sM - eta * sW) / (na2 * e);
+  six[2] += (ci * sW - sO) / (na2 * eta * sin_i);
+  six[3] += (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
+  six[4] += sI / (na2 * eta);
+  six[5] += sL + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
+  if (dsix_dlam != nullptr) {
+    dsix_dlam[0] += -3.0 * ia * ia * dsM;
+    dsix_dlam[1] += (eta * eta * dsM - eta * dsW) / (na2 * e);
+    dsix_dlam[2] += (ci * dsW - dsO) / (na2 * eta * sin_i);
+    dsix_dlam[3] += (eta / na2) * dsE + e * tanhalf / (na2 * eta) * dsI;
+    dsix_dlam[4] += dsI / (na2 * eta);
+    dsix_dlam[5] += dsL + (eta * e / (na2 * (1.0 + eta))) * dsE + (tanhalf / (na2 * eta)) * dsI;
+    if (d2six_dlam2 != nullptr) {
+      d2six_dlam2[0] += -3.0 * ia * ia * d2sM;
+      d2six_dlam2[1] += (eta * eta * d2sM - eta * d2sW) / (na2 * e);
+      d2six_dlam2[2] += (ci * d2sW - d2sO) / (na2 * eta * sin_i);
+      d2six_dlam2[3] += (eta / na2) * d2sE + e * tanhalf / (na2 * eta) * d2sI;
+      d2six_dlam2[4] += d2sI / (na2 * eta);
+      d2six_dlam2[5] += d2sL + (eta * e / (na2 * (1.0 + eta))) * d2sE + (tanhalf / (na2 * eta)) * d2sI;
+    }
+  }
+}
+
+[[gnu::noinline]] inline void sp_rebake_ae(SpEvalCache& sc, double a0, double a, double e, double ia,
+                                           bool need_b_uil = false) {
+  sc.a_bake = a;
+  sc.e_bake = e;
+  sc.e_bake_a = e;
+  sc.e_pe_bake = e;
+  sc.a_res = -1.0;
+  const float dda_f32 = static_cast<float>((a0 * ia - 1.0) - sc.da_base);
+  const float dde_f32 = static_cast<float>(e - sc.e);
+  const int nblks = sc.total_blks;
+  const int b_q0 = need_b_uil ? nblks : sc.b_fast_q0;
+  const int b_qp1 = need_b_uil ? nblks : sc.b_fast_qp1;
+  sc.uil_b_dirty = !need_b_uil && (sc.b_fast_qp1 > sc.b_fast_q0);
+#ifdef __wasm_simd128__
+  const v128_t v_dda = wasm_f32x4_splat(dda_f32);
+  const v128_t v_dde = wasm_f32x4_splat(dde_f32);
+  auto upd_full = [&](int bi_start, int bi_end) {
+    for (int bi = bi_start; bi < bi_end; ++bi) {
+      float* pec = sc.blk_hot + bi * 32;
+      float* pu = pec + 8;
+      const float* pp = sc.blk_p + bi * 32;
+      const float* pa = sc.blk_a + bi * 32;
+      const float* pe = sc.blk_e + bi * 16;
+      const v128_t v_ec = wasm_f32x4_add(wasm_v128_load(pp + 0), wasm_f32x4_mul(wasm_v128_load(pa + 0), v_dda));
+      const v128_t v_es = wasm_f32x4_add(wasm_v128_load(pp + 4), wasm_f32x4_mul(wasm_v128_load(pa + 4), v_dda));
+      const v128_t v_uc = wasm_f32x4_add(wasm_f32x4_add(wasm_v128_load(pp + 8), wasm_f32x4_mul(wasm_v128_load(pa + 8), v_dda)), wasm_f32x4_mul(v_ec, v_dde));
+      const v128_t v_us = wasm_f32x4_add(wasm_f32x4_add(wasm_v128_load(pp + 12), wasm_f32x4_mul(wasm_v128_load(pa + 12), v_dda)), wasm_f32x4_mul(v_es, v_dde));
+      const v128_t v_ic = wasm_f32x4_add(wasm_f32x4_add(wasm_v128_load(pp + 16), wasm_f32x4_mul(wasm_v128_load(pa + 16), v_dda)), wasm_f32x4_mul(wasm_v128_load(pe + 0), v_dde));
+      const v128_t v_is = wasm_f32x4_add(wasm_f32x4_add(wasm_v128_load(pp + 20), wasm_f32x4_mul(wasm_v128_load(pa + 20), v_dda)), wasm_f32x4_mul(wasm_v128_load(pe + 4), v_dde));
+      const v128_t v_lc = wasm_f32x4_add(wasm_f32x4_add(wasm_v128_load(pp + 24), wasm_f32x4_mul(wasm_v128_load(pa + 24), v_dda)), wasm_f32x4_mul(wasm_v128_load(pe + 8), v_dde));
+      const v128_t v_ls = wasm_f32x4_add(wasm_f32x4_add(wasm_v128_load(pp + 28), wasm_f32x4_mul(wasm_v128_load(pa + 28), v_dda)), wasm_f32x4_mul(wasm_v128_load(pe + 12), v_dde));
+      wasm_v128_store(pec + 0, v_ec); wasm_v128_store(pec + 4, v_es);
+      wasm_v128_store(pu + 0, v_uc);  wasm_v128_store(pu + 4, v_us);
+      wasm_v128_store(pu + 8, v_ic);  wasm_v128_store(pu + 12, v_is);
+      wasm_v128_store(pu + 16, v_lc); wasm_v128_store(pu + 20, v_ls);
+    }
+  };
+  upd_full(0, b_q0);
+  for (int bi = b_q0; bi < b_qp1; ++bi) {
+    float* pec = sc.blk_hot + bi * 32;
+    const float* pp = sc.blk_p + bi * 32;
+    const float* pa = sc.blk_a + bi * 32;
+    wasm_v128_store(pec + 0, wasm_f32x4_add(wasm_v128_load(pp + 0), wasm_f32x4_mul(wasm_v128_load(pa + 0), v_dda)));
+    wasm_v128_store(pec + 4, wasm_f32x4_add(wasm_v128_load(pp + 4), wasm_f32x4_mul(wasm_v128_load(pa + 4), v_dda)));
+  }
+  upd_full(b_qp1, nblks);
+#else
+  for (int bi = 0; bi < nblks; ++bi) {
+    float* pec = sc.blk_hot + bi * 32;
+    const float* pp = sc.blk_p + bi * 32;
+    const float* pa = sc.blk_a + bi * 32;
+    for (int l = 0; l < 8; ++l) pec[l] = pp[l] + pa[l] * dda_f32;
+    if (bi < b_q0 || bi >= b_qp1) {
+      float* pu = pec + 8;
+      const float* pe = sc.blk_e + bi * 16;
+      for (int l = 0; l < 8; ++l) pu[l] = pp[8 + l] + pa[8 + l] * dda_f32 + pec[l] * dde_f32;
+      for (int l = 0; l < 16; ++l) pu[8 + l] = pp[16 + l] + pa[16 + l] * dda_f32 + pe[l] * dde_f32;
+    }
+  }
+#endif
+}
+
+[[gnu::noinline]] inline void sp_rebake_res(SpEvalCache& sc, double a0, double e0, double a, double e,
+                                            double n, double eta, double ci, double ia) {
+  sc.a_res = a;
+  sc.e_res = e;
+  sc.ci_res = ci;
+  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
+  const double node_rate = -j2 * n * ci, wdot = 0.5 * j2 * n * (5.0 * ci * ci - 1.0);
+  const double mdot = n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0);
+  const double beta_dot = node_rate - kOmegaE;
+  const double da = a0 * ia - 1.0, de_bake = sc.e_bake - e0;
+  const float de_pe_diff_f = static_cast<float>(sc.e_pe_bake - sc.e_bake);
+  const double alpha_A = -2.0 * ia / (n * a), beta_L = 3.0 * ia * ia;
+#ifdef __wasm_simd128__
+  float mdot_hi = 0.0f, mdot_lo = 0.0f, bdot_hi = 0.0f, bdot_lo = 0.0f;
+  sp_split16_f32(mdot, mdot_hi, mdot_lo);
+  sp_split16_f32(beta_dot, bdot_hi, bdot_lo);
+  const v128_t v_one_f = wasm_f32x4_splat(1.0f);
+  const v128_t v_wdot_f = wasm_f32x4_splat(static_cast<float>(wdot));
+  const v128_t v_mdot_hi = wasm_f32x4_splat(mdot_hi);
+  const v128_t v_mdot_lo = wasm_f32x4_splat(mdot_lo);
+  const v128_t v_bdot_hi = wasm_f32x4_splat(bdot_hi);
+  const v128_t v_bdot_lo = wasm_f32x4_splat(bdot_lo);
+  const v128_t v_da = wasm_f32x4_splat(static_cast<float>(da));
+  const v128_t v_hda = wasm_f32x4_splat(static_cast<float>(0.5 * da));
+  const v128_t v_de_b = wasm_f32x4_splat(static_cast<float>(de_bake));
+  const v128_t v_de_pe_diff = wasm_f32x4_splat(de_pe_diff_f);
+  const v128_t v_alpha = wasm_f32x4_splat(static_cast<float>(alpha_A));
+  const v128_t v_nalpha = wasm_f32x4_splat(static_cast<float>(-alpha_A));
+  const v128_t v_beta_L = wasm_f32x4_splat(static_cast<float>(beta_L));
+  for (int rk = 0; rk < sc.n_res_blks; ++rk) {
+    const int bi = sc.res_blk[rk];
+    const int lane_off = bi * 4;
+    const v128_t v_active = wasm_v128_load(sc.blk_active + lane_off);
+    const v128_t v_mf = wasm_v128_load(sc.blk_mf + lane_off);
+    const v128_t v_wf = wasm_v128_load(sc.blk_w + lane_off);
+    const v128_t v_jf = wasm_f32x4_add(v_wf, wasm_v128_load(sc.blk_q + lane_off));
+    const v128_t v_bj = wasm_f32x4_mul(v_beta_L, v_jf);
+    const v128_t v_psidot = wasm_f32x4_add(
+        wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_hi), wasm_f32x4_mul(v_mf, v_bdot_hi)),
+        wasm_f32x4_add(wasm_f32x4_add(wasm_f32x4_mul(v_jf, v_mdot_lo), wasm_f32x4_mul(v_mf, v_bdot_lo)),
+                       wasm_f32x4_mul(v_wf, v_wdot_f)));
+    const v128_t v_ip = wasm_v128_and(wasm_f32x4_div(v_one_f, v_psidot), v_active);
+    const float* const pc = sc.blk_c + bi * 64;
+    float* const pec = sc.blk_hot + bi * 32;
+    float* const pu = pec + 8;
+    float* const pe = sc.blk_e + bi * 16;
+    const v128_t uc0 = wasm_v128_load(pc + 0), us0 = wasm_v128_load(pc + 4);
+    const v128_t dc0 = wasm_v128_load(pc + 8), ds0 = wasm_v128_load(pc + 12);
+    const v128_t dca = wasm_v128_load(pc + 16), dsa = wasm_v128_load(pc + 20);
+    const v128_t ec0 = wasm_v128_load(pc + 24), es0 = wasm_v128_load(pc + 28);
+    const v128_t eca = wasm_v128_load(pc + 32), esa = wasm_v128_load(pc + 36);
+    const v128_t ic0 = wasm_v128_load(pc + 40), is0 = wasm_v128_load(pc + 44);
+    const v128_t ica = wasm_v128_load(pc + 48), isa = wasm_v128_load(pc + 52);
+    const v128_t ice = wasm_v128_load(pc + 56), ise = wasm_v128_load(pc + 60);
+    const v128_t ec = wasm_f32x4_add(ec0, wasm_f32x4_mul(eca, v_da));
+    const v128_t es = wasm_f32x4_add(es0, wasm_f32x4_mul(esa, v_da));
+    const v128_t uc_base = wasm_f32x4_sub(uc0, wasm_f32x4_mul(wasm_f32x4_add(dc0, wasm_f32x4_mul(dca, v_hda)), v_da));
+    const v128_t us_base = wasm_f32x4_sub(us0, wasm_f32x4_mul(wasm_f32x4_add(ds0, wasm_f32x4_mul(dsa, v_hda)), v_da));
+    const v128_t uc_b = wasm_f32x4_add(uc_base, wasm_f32x4_mul(ec, v_de_b));
+    const v128_t us_b = wasm_f32x4_add(us_base, wasm_f32x4_mul(es, v_de_b));
+    const v128_t ic_b = wasm_f32x4_add(wasm_f32x4_add(ic0, wasm_f32x4_mul(ica, v_da)), wasm_f32x4_mul(ice, v_de_b));
+    const v128_t is_b = wasm_f32x4_add(wasm_f32x4_add(is0, wasm_f32x4_mul(isa, v_da)), wasm_f32x4_mul(ise, v_de_b));
+    const v128_t duc_dda = wasm_f32x4_sub(wasm_f32x4_mul(eca, v_de_b), wasm_f32x4_add(dc0, wasm_f32x4_mul(dca, v_da)));
+    const v128_t dus_dda = wasm_f32x4_sub(wasm_f32x4_mul(esa, v_de_b), wasm_f32x4_add(ds0, wasm_f32x4_mul(dsa, v_da)));
+    const v128_t dc_b = wasm_f32x4_sub(wasm_f32x4_mul(dc0, v_da), duc_dda);
+    const v128_t ds_b = wasm_f32x4_sub(wasm_f32x4_mul(ds0, v_da), dus_dda);
+    const v128_t ec_ip = wasm_f32x4_mul(ec, v_ip), es_ip = wasm_f32x4_mul(es, v_ip);
+    const v128_t uc_b_ip = wasm_f32x4_mul(uc_b, v_ip), us_b_ip = wasm_f32x4_mul(us_b, v_ip);
+    v128_t ic_b_ip = wasm_f32x4_mul(ic_b, v_ip), is_b_ip = wasm_f32x4_mul(is_b, v_ip);
+    v128_t lc_b_ip = wasm_f32x4_sub(wasm_f32x4_mul(v_alpha, wasm_f32x4_mul(dc_b, v_ip)), wasm_f32x4_mul(v_bj, wasm_f32x4_mul(uc_b_ip, v_ip)));
+    v128_t ls_b_ip = wasm_f32x4_sub(wasm_f32x4_mul(v_alpha, wasm_f32x4_mul(ds_b, v_ip)), wasm_f32x4_mul(v_bj, wasm_f32x4_mul(us_b_ip, v_ip)));
+    const v128_t pe0 = wasm_f32x4_mul(ice, v_ip);
+    const v128_t pe4 = wasm_f32x4_mul(ise, v_ip);
+    const v128_t pe8 = wasm_f32x4_mul(wasm_f32x4_sub(wasm_f32x4_mul(v_nalpha, eca), wasm_f32x4_mul(v_bj, ec_ip)), v_ip);
+    const v128_t pe12 = wasm_f32x4_mul(wasm_f32x4_sub(wasm_f32x4_mul(v_nalpha, esa), wasm_f32x4_mul(v_bj, es_ip)), v_ip);
+    if (sc.blk_is_pe[bi]) {
+      ic_b_ip = wasm_f32x4_add(ic_b_ip, wasm_f32x4_mul(pe0, v_de_pe_diff));
+      is_b_ip = wasm_f32x4_add(is_b_ip, wasm_f32x4_mul(pe4, v_de_pe_diff));
+      lc_b_ip = wasm_f32x4_add(lc_b_ip, wasm_f32x4_mul(pe8, v_de_pe_diff));
+      ls_b_ip = wasm_f32x4_add(ls_b_ip, wasm_f32x4_mul(pe12, v_de_pe_diff));
+    }
+    wasm_v128_store(pec + 0, ec_ip);  wasm_v128_store(pec + 4, es_ip);
+    wasm_v128_store(pu + 0, uc_b_ip); wasm_v128_store(pu + 4, us_b_ip);
+    wasm_v128_store(pu + 8, ic_b_ip); wasm_v128_store(pu + 12, is_b_ip);
+    wasm_v128_store(pu + 16, lc_b_ip); wasm_v128_store(pu + 20, ls_b_ip);
+    wasm_v128_store(pe + 0, pe0);
+    wasm_v128_store(pe + 4, pe4);
+    wasm_v128_store(pe + 8, pe8);
+    wasm_v128_store(pe + 12, pe12);
+  }
+#else
+  for (int rk = 0; rk < sc.n_res_blks; ++rk) {
+    const int bi = sc.res_blk[rk];
+    const int lane_off = bi * 4;
+    const float* const pc = sc.blk_c + bi * 64;
+    float* const pec = sc.blk_hot + bi * 32;
+    float* const pu = pec + 8;
+    float* const pe = sc.blk_e + bi * 16;
+    const float dpe = sc.blk_is_pe[bi] ? de_pe_diff_f : 0.0f;
+    for (int l = 0; l < 4; ++l) {
+      if (sc.blk_active[lane_off + l] == 0u) continue;
+      const double mv = sc.blk_mf[lane_off + l];
+      const double wv = sc.blk_w[lane_off + l], j = wv + sc.blk_q[lane_off + l];
+      const double inv_psidot = 1.0 / (wv * wdot + j * mdot + mv * beta_dot);
+      const double inv_psidot2 = inv_psidot * inv_psidot;
+      const double ec = pc[24 + l] + pc[32 + l] * da, es = pc[28 + l] + pc[36 + l] * da;
+      const double uc_base = pc[0 + l] + (-pc[8 + l] - 0.5 * pc[16 + l] * da) * da;
+      const double us_base = pc[4 + l] + (-pc[12 + l] - 0.5 * pc[20 + l] * da) * da;
+      const double uc_b = uc_base + ec * de_bake, us_b = us_base + es * de_bake;
+      const double dc_b = pc[8 + l] + (pc[8 + l] + pc[16 + l]) * da - pc[32 + l] * de_bake;
+      const double ds_b = pc[12 + l] + (pc[12 + l] + pc[20 + l]) * da - pc[36 + l] * de_bake;
+      const double ec_ip = ec * inv_psidot, es_ip = es * inv_psidot;
+      pe[0 + l] = static_cast<float>(pc[56 + l] * inv_psidot);
+      pe[4 + l] = static_cast<float>(pc[60 + l] * inv_psidot);
+      pe[8 + l] = static_cast<float>((-alpha_A * pc[32 + l] - beta_L * j * ec_ip) * inv_psidot);
+      pe[12 + l] = static_cast<float>((-alpha_A * pc[36 + l] - beta_L * j * es_ip) * inv_psidot);
+      pec[0 + l] = static_cast<float>(ec_ip);
+      pec[4 + l] = static_cast<float>(es_ip);
+      pu[0 + l] = static_cast<float>(uc_b * inv_psidot);
+      pu[4 + l] = static_cast<float>(us_b * inv_psidot);
+      pu[8 + l] = static_cast<float>((pc[40 + l] + pc[48 + l] * da + pc[56 + l] * de_bake) * inv_psidot) + pe[0 + l] * dpe;
+      pu[12 + l] = static_cast<float>((pc[44 + l] + pc[52 + l] * da + pc[60 + l] * de_bake) * inv_psidot) + pe[4 + l] * dpe;
+      pu[16 + l] = static_cast<float>(alpha_A * dc_b * inv_psidot - beta_L * j * uc_b * inv_psidot2) + pe[8 + l] * dpe;
+      pu[20 + l] = static_cast<float>(alpha_A * ds_b * inv_psidot - beta_L * j * us_b * inv_psidot2) + pe[12 + l] * dpe;
+    }
+  }
+#endif
+}
+
+template <bool kNeedD2>
+[[gnu::noinline]] inline void sp_six_deriv_impl(const SpEvalCache& sc, float de_f32, double a, double e, double n,
+                                                double eta, double eta_m1, double ci_p0, double sin_i, double ci,
+                                                double ia, double inv_1peta, const float* cswq_c, const float* cswq_s,
+                                                const float* cm_f32, const float* sm_f32,
+                                                double* six, double* dsix_dlam, double* d2six_dlam2) {
+  const int nblks = sc.total_blks, b_contig_end = sc.b_contig_end;
+  double sM = 0.0, s1_num = 0.0, s2_num = 0.0, sE = 0.0, sI = 0.0, sL = 0.0;
+  double dsM = 0.0, ds1_num = 0.0, ds2_num = 0.0, dsE = 0.0, dsI = 0.0, dsL = 0.0;
+  double d2sM = 0.0, d2s1_num = 0.0, d2s2_num = 0.0, d2sE = 0.0, d2sI = 0.0, d2sL = 0.0;
+#ifdef __wasm_simd128__
+  auto hsum_f32x4 = [](v128_t v) -> double {
+    const v128_t d = wasm_f64x2_add(wasm_f64x2_promote_low_f32x4(v),
+                                    wasm_f64x2_promote_low_f32x4(wasm_i64x2_shuffle(v, v, 1, 0)));
+    return wasm_f64x2_extract_lane(d, 0) + wasm_f64x2_extract_lane(d, 1);
+  };
+  const v128_t v_de = wasm_f32x4_splat(de_f32);
+  v128_t vg_w = wasm_f32x4_splat(0.0f),   vg_q = wasm_f32x4_splat(0.0f),   vg_m = wasm_f32x4_splat(0.0f);
+  v128_t vg_sE = wasm_f32x4_splat(0.0f),  vg_sI = wasm_f32x4_splat(0.0f),  vg_sL = wasm_f32x4_splat(0.0f);
+  v128_t vdg_w = wasm_f32x4_splat(0.0f),  vdg_q = wasm_f32x4_splat(0.0f),  vdg_m = wasm_f32x4_splat(0.0f);
+  v128_t vdg_sE = wasm_f32x4_splat(0.0f), vdg_sI = wasm_f32x4_splat(0.0f), vdg_sL = wasm_f32x4_splat(0.0f);
+  v128_t vd2_w = wasm_f32x4_splat(0.0f),  vd2_q = wasm_f32x4_splat(0.0f),  vd2_m = wasm_f32x4_splat(0.0f);
+  v128_t vd2_sE = wasm_f32x4_splat(0.0f), vd2_sI = wasm_f32x4_splat(0.0f), vd2_sL = wasm_f32x4_splat(0.0f);
+  const v128_t* vhot = reinterpret_cast<const v128_t*>(sc.blk_hot);
+  const v128_t* vpe = reinterpret_cast<const v128_t*>(sc.blk_e);
+  const v128_t* const vmseq_base = reinterpret_cast<const v128_t*>(kSpMSeq);
+  const int nrows = sc.n_rows;
+  int bi = 0;
+  for (int ri = 0; ri < nrows; ++ri) {
+    const SpRow& row = sc.rows[ri];
+    const int bend = row.blk_end;
+    const uint8_t wq0 = row.wq0;
+    const v128_t cw = wasm_v128_load32_splat(cswq_c + wq0);
+    const v128_t sw = wasm_v128_load32_splat(cswq_s + wq0);
+    const float* pcm = cm_f32 + (static_cast<int>(row.c_start) << 2);
+    const float* psm = sm_f32 + (static_cast<int>(row.c_start) << 2);
+    const v128_t* pmf = vmseq_base + row.c_start;
+    v128_t vr_idS = wasm_f32x4_splat(0.0f), vr_didS_u = wasm_f32x4_splat(0.0f);
+    v128_t vr_m_idS = wasm_f32x4_splat(0.0f), vr_m_didS_u = wasm_f32x4_splat(0.0f);
+    v128_t vr_sE = wasm_f32x4_splat(0.0f), vr_sI = wasm_f32x4_splat(0.0f), vr_sL = wasm_f32x4_splat(0.0f);
+    v128_t vr_dsE = wasm_f32x4_splat(0.0f), vr_dsI = wasm_f32x4_splat(0.0f), vr_dsL = wasm_f32x4_splat(0.0f);
+    for (; bi < bend; ++bi, vhot += 8, vpe += 4, pcm += 4, psm += 4, ++pmf) {
+      const v128_t v_cm = wasm_v128_load(pcm), v_sm = wasm_v128_load(psm);
+      const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(cw, v_cm), wasm_f32x4_mul(sw, v_sm));
+      const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(sw, v_cm), wasm_f32x4_mul(cw, v_sm));
+      const v128_t v_ec = vhot[0], v_es = vhot[1];
+      const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
+      const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
+      const v128_t v_ic = wasm_f32x4_add(vhot[4], wasm_f32x4_mul(vpe[0], v_de));
+      const v128_t v_is = wasm_f32x4_add(vhot[5], wasm_f32x4_mul(vpe[1], v_de));
+      const v128_t v_lc = wasm_f32x4_add(vhot[6], wasm_f32x4_mul(vpe[2], v_de));
+      const v128_t v_ls = wasm_f32x4_add(vhot[7], wasm_f32x4_mul(vpe[3], v_de));
+      const v128_t v_mf = *pmf;
+      const v128_t idS_b = wasm_f32x4_add(wasm_f32x4_mul(v_uc, v_cp), wasm_f32x4_mul(v_us, v_sp));
+      const v128_t didS_u = wasm_f32x4_sub(wasm_f32x4_mul(v_us, v_cp), wasm_f32x4_mul(v_uc, v_sp));
+      vr_idS = wasm_f32x4_add(vr_idS, idS_b);
+      vr_didS_u = wasm_f32x4_add(vr_didS_u, didS_u);
+      vr_m_idS = wasm_f32x4_add(vr_m_idS, wasm_f32x4_mul(v_mf, idS_b));
+      vr_m_didS_u = wasm_f32x4_add(vr_m_didS_u, wasm_f32x4_mul(v_mf, didS_u));
+      vr_sE = wasm_f32x4_add(vr_sE, wasm_f32x4_sub(wasm_f32x4_mul(v_ec, v_sp), wasm_f32x4_mul(v_es, v_cp)));
+      vr_sI = wasm_f32x4_add(vr_sI, wasm_f32x4_sub(wasm_f32x4_mul(v_ic, v_sp), wasm_f32x4_mul(v_is, v_cp)));
+      vr_sL = wasm_f32x4_add(vr_sL, wasm_f32x4_sub(wasm_f32x4_mul(v_lc, v_sp), wasm_f32x4_mul(v_ls, v_cp)));
+      vr_dsE = wasm_f32x4_add(vr_dsE, wasm_f32x4_add(wasm_f32x4_mul(v_ec, v_cp), wasm_f32x4_mul(v_es, v_sp)));
+      vr_dsI = wasm_f32x4_add(vr_dsI, wasm_f32x4_add(wasm_f32x4_mul(v_ic, v_cp), wasm_f32x4_mul(v_is, v_sp)));
+      vr_dsL = wasm_f32x4_add(vr_dsL, wasm_f32x4_add(wasm_f32x4_mul(v_lc, v_cp), wasm_f32x4_mul(v_ls, v_sp)));
+    }
+    const v128_t v_wf = wasm_v128_load32_splat(&row.wf);
+    const v128_t v_qf = wasm_v128_load32_splat(&row.qf);
+    const v128_t v_jf = wasm_v128_load32_splat(&row.jf);
+    vg_w = wasm_f32x4_add(vg_w, wasm_f32x4_mul(v_wf, vr_idS));
+    vg_q = wasm_f32x4_add(vg_q, wasm_f32x4_mul(v_qf, vr_idS));
+    vg_m = wasm_f32x4_add(vg_m, vr_m_idS);
+    vg_sE = wasm_f32x4_add(vg_sE, vr_sE);
+    vg_sI = wasm_f32x4_add(vg_sI, vr_sI);
+    vg_sL = wasm_f32x4_add(vg_sL, vr_sL);
+    const v128_t vr_didS = wasm_f32x4_mul(v_jf, vr_didS_u);
+    vdg_w = wasm_f32x4_add(vdg_w, wasm_f32x4_mul(v_wf, vr_didS));
+    vdg_q = wasm_f32x4_add(vdg_q, wasm_f32x4_mul(v_qf, vr_didS));
+    vdg_m = wasm_f32x4_add(vdg_m, wasm_f32x4_mul(v_jf, vr_m_didS_u));
+    vdg_sE = wasm_f32x4_add(vdg_sE, wasm_f32x4_mul(v_jf, vr_dsE));
+    vdg_sI = wasm_f32x4_add(vdg_sI, wasm_f32x4_mul(v_jf, vr_dsI));
+    vdg_sL = wasm_f32x4_add(vdg_sL, wasm_f32x4_mul(v_jf, vr_dsL));
+    if constexpr (kNeedD2) {
+      const v128_t v_nj2 = wasm_f32x4_neg(wasm_f32x4_mul(v_jf, v_jf));
+      const v128_t vr_d2idS = wasm_f32x4_mul(v_nj2, vr_idS);
+      vd2_w = wasm_f32x4_add(vd2_w, wasm_f32x4_mul(v_wf, vr_d2idS));
+      vd2_q = wasm_f32x4_add(vd2_q, wasm_f32x4_mul(v_qf, vr_d2idS));
+      vd2_m = wasm_f32x4_add(vd2_m, wasm_f32x4_mul(v_nj2, vr_m_idS));
+      vd2_sE = wasm_f32x4_add(vd2_sE, wasm_f32x4_mul(v_nj2, vr_sE));
+      vd2_sI = wasm_f32x4_add(vd2_sI, wasm_f32x4_mul(v_nj2, vr_sI));
+      vd2_sL = wasm_f32x4_add(vd2_sL, wasm_f32x4_mul(v_nj2, vr_sL));
+    }
+  }
+  (void)b_contig_end;
+  for (; bi < nblks; ++bi, vhot += 8, vpe += 4) {
+    const int lo = bi * 4;
+    const uint8_t* wqp = sc.blk_wq + lo;
+    const uint8_t* mp = sc.blk_mlane + lo;
+    const v128_t v_cwj = wasm_f32x4_make(cswq_c[wqp[0]], cswq_c[wqp[1]], cswq_c[wqp[2]], cswq_c[wqp[3]]);
+    const v128_t v_swj = wasm_f32x4_make(cswq_s[wqp[0]], cswq_s[wqp[1]], cswq_s[wqp[2]], cswq_s[wqp[3]]);
+    const v128_t v_cm  = wasm_f32x4_make(cm_f32[mp[0]],  cm_f32[mp[1]],  cm_f32[mp[2]],  cm_f32[mp[3]]);
+    const v128_t v_sm  = wasm_f32x4_make(sm_f32[mp[0]],  sm_f32[mp[1]],  sm_f32[mp[2]],  sm_f32[mp[3]]);
+    const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(v_cwj, v_cm), wasm_f32x4_mul(v_swj, v_sm));
+    const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(v_swj, v_cm), wasm_f32x4_mul(v_cwj, v_sm));
+    const v128_t v_ec = vhot[0], v_es = vhot[1];
+    const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
+    const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
+    const v128_t v_ic = wasm_f32x4_add(vhot[4], wasm_f32x4_mul(vpe[0], v_de));
+    const v128_t v_is = wasm_f32x4_add(vhot[5], wasm_f32x4_mul(vpe[1], v_de));
+    const v128_t v_lc = wasm_f32x4_add(vhot[6], wasm_f32x4_mul(vpe[2], v_de));
+    const v128_t v_ls = wasm_f32x4_add(vhot[7], wasm_f32x4_mul(vpe[3], v_de));
+    const v128_t v_wf = wasm_v128_load(sc.blk_w + lo);
+    const v128_t v_qf = wasm_v128_load(sc.blk_q + lo);
+    const v128_t v_jf = wasm_f32x4_add(v_wf, v_qf);
+    const v128_t v_mf = wasm_v128_load(sc.blk_mf + lo);
+    const v128_t idS_b = wasm_f32x4_add(wasm_f32x4_mul(v_uc, v_cp), wasm_f32x4_mul(v_us, v_sp));
+    const v128_t didS_b = wasm_f32x4_mul(v_jf, wasm_f32x4_sub(wasm_f32x4_mul(v_us, v_cp), wasm_f32x4_mul(v_uc, v_sp)));
+    const v128_t tE_b = wasm_f32x4_sub(wasm_f32x4_mul(v_ec, v_sp), wasm_f32x4_mul(v_es, v_cp));
+    const v128_t tI_b = wasm_f32x4_sub(wasm_f32x4_mul(v_ic, v_sp), wasm_f32x4_mul(v_is, v_cp));
+    const v128_t tL_b = wasm_f32x4_sub(wasm_f32x4_mul(v_lc, v_sp), wasm_f32x4_mul(v_ls, v_cp));
+    vg_w = wasm_f32x4_add(vg_w, wasm_f32x4_mul(v_wf, idS_b));
+    vg_q = wasm_f32x4_add(vg_q, wasm_f32x4_mul(v_qf, idS_b));
+    vg_m = wasm_f32x4_add(vg_m, wasm_f32x4_mul(v_mf, idS_b));
+    vg_sE = wasm_f32x4_add(vg_sE, tE_b);
+    vg_sI = wasm_f32x4_add(vg_sI, tI_b);
+    vg_sL = wasm_f32x4_add(vg_sL, tL_b);
+    vdg_w = wasm_f32x4_add(vdg_w, wasm_f32x4_mul(v_wf, didS_b));
+    vdg_q = wasm_f32x4_add(vdg_q, wasm_f32x4_mul(v_qf, didS_b));
+    vdg_m = wasm_f32x4_add(vdg_m, wasm_f32x4_mul(v_mf, didS_b));
+    vdg_sE = wasm_f32x4_add(vdg_sE, wasm_f32x4_mul(v_jf, wasm_f32x4_add(wasm_f32x4_mul(v_ec, v_cp), wasm_f32x4_mul(v_es, v_sp))));
+    vdg_sI = wasm_f32x4_add(vdg_sI, wasm_f32x4_mul(v_jf, wasm_f32x4_add(wasm_f32x4_mul(v_ic, v_cp), wasm_f32x4_mul(v_is, v_sp))));
+    vdg_sL = wasm_f32x4_add(vdg_sL, wasm_f32x4_mul(v_jf, wasm_f32x4_add(wasm_f32x4_mul(v_lc, v_cp), wasm_f32x4_mul(v_ls, v_sp))));
+    if constexpr (kNeedD2) {
+      const v128_t nj2 = wasm_f32x4_neg(wasm_f32x4_mul(v_jf, v_jf));
+      const v128_t d2idS = wasm_f32x4_mul(nj2, idS_b);
+      vd2_w = wasm_f32x4_add(vd2_w, wasm_f32x4_mul(v_wf, d2idS));
+      vd2_q = wasm_f32x4_add(vd2_q, wasm_f32x4_mul(v_qf, d2idS));
+      vd2_m = wasm_f32x4_add(vd2_m, wasm_f32x4_mul(v_mf, d2idS));
+      vd2_sE = wasm_f32x4_add(vd2_sE, wasm_f32x4_mul(nj2, tE_b));
+      vd2_sI = wasm_f32x4_add(vd2_sI, wasm_f32x4_mul(nj2, tI_b));
+      vd2_sL = wasm_f32x4_add(vd2_sL, wasm_f32x4_mul(nj2, tL_b));
+    }
+  }
+  double sum_w = hsum_f32x4(vg_w), sum_q = hsum_f32x4(vg_q), midS = hsum_f32x4(vg_m);
+  sE = hsum_f32x4(vg_sE); sI = hsum_f32x4(vg_sI); sL = hsum_f32x4(vg_sL);
+  double dsum_w = hsum_f32x4(vdg_w), dsum_q = hsum_f32x4(vdg_q), dmidS = hsum_f32x4(vdg_m);
+  dsE = hsum_f32x4(vdg_sE); dsI = hsum_f32x4(vdg_sI); dsL = hsum_f32x4(vdg_sL);
+  double d2sum_w = 0.0, d2sum_q = 0.0, d2midS = 0.0;
+  if constexpr (kNeedD2) {
+    d2sum_w = hsum_f32x4(vd2_w); d2sum_q = hsum_f32x4(vd2_q); d2midS = hsum_f32x4(vd2_m);
+    d2sE = hsum_f32x4(vd2_sE); d2sI = hsum_f32x4(vd2_sI); d2sL = hsum_f32x4(vd2_sL);
+  }
+  sM = sum_w + sum_q;
+  s1_num = eta * sum_q + eta_m1 * sum_w;
+  s2_num = ci_p0 * sum_w - midS;
+  dsM = dsum_w + dsum_q;
+  ds1_num = eta * dsum_q + eta_m1 * dsum_w;
+  ds2_num = ci_p0 * dsum_w - dmidS;
+  if constexpr (kNeedD2) {
+    d2sM = d2sum_w + d2sum_q;
+    d2s1_num = eta * d2sum_q + eta_m1 * d2sum_w;
+    d2s2_num = ci_p0 * d2sum_w - d2midS;
+  }
+#else
+  (void)b_contig_end;
+  double sum_w = 0.0, sum_q = 0.0, midS = 0.0;
+  double dsum_w = 0.0, dsum_q = 0.0, dmidS = 0.0;
+  double d2sum_w = 0.0, d2sum_q = 0.0, d2midS = 0.0;
+  const float* pec = sc.blk_hot;
+  const float* pu = pec + 8;
+  const float* pe = sc.blk_e;
+  for (int bi = 0; bi < nblks; ++bi, pec += 32, pu += 32, pe += 16) {
+    const int lane_off = bi * 4;
+    for (int l = 0; l < 4; ++l) {
+      if (sc.blk_active[lane_off + l] == 0u) continue;
+      const int m_idx = sc.blk_mlane[lane_off + l];
+      const int wq_idx = sc.blk_wq[lane_off + l];
+      const float cmv = cm_f32[m_idx], smv = sm_f32[m_idx];
+      const float cs0 = cswq_c[wq_idx], cs1 = cswq_s[wq_idx];
+      const float cp = cs0 * cmv - cs1 * smv;
+      const float sp = cs1 * cmv + cs0 * smv;
+      const float ec = pec[0 + l], es = pec[4 + l];
+      const float uc = pu[0 + l] + ec * de_f32, us = pu[4 + l] + es * de_f32;
+      const float ic = pu[8 + l] + pe[0 + l] * de_f32, is = pu[12 + l] + pe[4 + l] * de_f32;
+      const float lc = pu[16 + l] + pe[8 + l] * de_f32, ls = pu[20 + l] + pe[12 + l] * de_f32;
+      const double mv = sc.blk_mf[lane_off + l];
+      const double wv = sc.blk_w[lane_off + l], qv = sc.blk_q[lane_off + l], jf = wv + qv;
+      const double idS = uc * cp + us * sp, didS = jf * (us * cp - uc * sp);
+      const double tE = ec * sp - es * cp, tI = ic * sp - is * cp, tL = lc * sp - ls * cp;
+      sum_w += wv * idS; sum_q += qv * idS; midS += mv * idS;
+      sE += tE; sI += tI; sL += tL;
+      dsum_w += wv * didS; dsum_q += qv * didS; dmidS += mv * didS;
+      dsE += jf * (ec * cp + es * sp); dsI += jf * (ic * cp + is * sp); dsL += jf * (lc * cp + ls * sp);
+      if constexpr (kNeedD2) {
+        const double nj2 = -(jf * jf);
+        d2sum_w += nj2 * wv * idS; d2sum_q += nj2 * qv * idS; d2midS += nj2 * mv * idS;
+        d2sE += nj2 * tE; d2sI += nj2 * tI; d2sL += nj2 * tL;
+      }
+    }
+  }
+  sM = sum_w + sum_q;
+  s1_num = eta * sum_q + eta_m1 * sum_w; s2_num = ci_p0 * sum_w - midS;
+  dsM = dsum_w + dsum_q;
+  ds1_num = eta * dsum_q + eta_m1 * dsum_w; ds2_num = ci_p0 * dsum_w - dmidS;
+  if constexpr (kNeedD2) {
+    d2sM = d2sum_w + d2sum_q;
+    d2s1_num = eta * d2sum_q + eta_m1 * d2sum_w; d2s2_num = ci_p0 * d2sum_w - d2midS;
+  }
+#endif
+  const double na2 = n * a * a;
+#ifdef __wasm_simd128__
+  const v128_t v_one_d = wasm_f64x2_splat(1.0);
+  const v128_t v_r1 = wasm_f64x2_div(v_one_d, wasm_f64x2_make(1.0 + ci, sin_i));
+  const v128_t v_r2 = wasm_f64x2_div(v_one_d, wasm_f64x2_make(na2 * e, na2 * eta));
+  const double inv_1pci = wasm_f64x2_extract_lane(v_r1, 0);
+  const double inv_sini = wasm_f64x2_extract_lane(v_r1, 1);
+  const double inv_na2e = wasm_f64x2_extract_lane(v_r2, 0);
+  const double inv_na2eta = wasm_f64x2_extract_lane(v_r2, 1);
+#else
+  const double inv_1pci = 1.0 / (1.0 + ci);
+  const double inv_sini = 1.0 / sin_i;
+  const double inv_na2e = 1.0 / (na2 * e);
+  const double inv_na2eta = 1.0 / (na2 * eta);
+#endif
+  const double tanhalf = sin_i * inv_1pci;
+  const double k0 = -3.0 * ia * ia;
+  const double k1 = eta * inv_na2e;
+  const double k2 = inv_na2eta * inv_sini;
+  const double kE = (eta * eta) * inv_na2eta;
+  const double kEI = e * tanhalf * inv_na2eta;
+  const double kLE = (e * inv_1peta) * kE;
+  const double kLI = tanhalf * inv_na2eta;
+  six[0] += k0 * sM;
+  six[1] += k1 * s1_num;
+  six[2] += k2 * s2_num;
+  six[3] += kE * sE + kEI * sI;
+  six[4] += inv_na2eta * sI;
+  six[5] += sL + kLE * sE + kLI * sI;
+  dsix_dlam[0] += k0 * dsM;
+  dsix_dlam[1] += k1 * ds1_num;
+  dsix_dlam[2] += k2 * ds2_num;
+  dsix_dlam[3] += kE * dsE + kEI * dsI;
+  dsix_dlam[4] += inv_na2eta * dsI;
+  dsix_dlam[5] += dsL + kLE * dsE + kLI * dsI;
+  if constexpr (kNeedD2) {
+    d2six_dlam2[0] += k0 * d2sM;
+    d2six_dlam2[1] += k1 * d2s1_num;
+    d2six_dlam2[2] += k2 * d2s2_num;
+    d2six_dlam2[3] += kE * d2sE + kEI * d2sI;
+    d2six_dlam2[4] += inv_na2eta * d2sI;
+    d2six_dlam2[5] += d2sL + kLE * d2sE + kLI * d2sI;
+  }
+}
+
+inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e, double n,
+                         double eta, double eta_m1, double ci_p0, double sin_i, double ci,
+                         double ia, double inv_1peta, const float* cswq_c, const float* cswq_s,
+                         const float* cm_f32, const float* sm_f32,
+                         double* six, double* dsix_dlam, double* d2six_dlam2) {
+  if (d2six_dlam2 != nullptr) {
+    sp_six_deriv_impl<true>(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
+                            cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2);
+  } else {
+    sp_six_deriv_impl<false>(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
+                             cswq_c, cswq_s, cm_f32, sm_f32, six, dsix_dlam, nullptr);
+  }
+}
+
+[[gnu::noinline]] inline bool sp_init_or_fallback(
+    SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
+    const Kepler& kp, double a, double e, double n, double eta, double sin_i, double ci, double ia,
+    double theta_g0, const double* sb_in, const double* cb_in, const double* su1_in, const double* cu1_in,
+    const double* sM1_in, const double* cM1_in, double* six, double* dsix_dlam, double* d2six_dlam2) {
+  if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
+      sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci);
+  }
+  if (!sc.grouped_ok || t == 0.0) {
+    double sb, cb, su1, cu1, sM1, cM1;
+    if (sb_in != nullptr && cb_in != nullptr) { sb = *sb_in; cb = *cb_in; }
+    else fm::sincos(kp.node - (theta_g0 + kOmegaE * t), sb, cb);
+    if (su1_in != nullptr && cu1_in != nullptr) { su1 = *su1_in; cu1 = *cu1_in; }
+    else fm::sincos(kp.argp + kp.m, su1, cu1);
+    if (sM1_in != nullptr && cM1_in != nullptr) { sM1 = *sM1_in; cM1 = *cM1_in; }
+    else fm::sincos(kp.m, sM1, cM1);
+    sp_six_fallback(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
+                    six, dsix_dlam, d2six_dlam2);
+    return false;
+  }
+  return true;
+}
+
+[[gnu::noinline]] inline bool sp_init_or_fallback_val(
+    SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
+    double a, double e, double n, double eta, double sin_i, double ci, double ia,
+    double sb, double cb, double su1, double cu1, double sM1, double cM1, double* six) {
+  if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
+      sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci);
+  }
+  if (!sc.grouped_ok || t == 0.0) {
+    sp_six_fallback(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
+                    six, nullptr, nullptr);
+    return false;
+  }
+  return true;
+}
+
+[[gnu::noinline]] inline void sp_rebake_sync(
+    SpEvalCache& sc, double a0, double e0, double a, double e, double n, double eta, double ci, double ia,
+    bool need_b_uil = false) {
+  const double da_tol = sc.res_overflow ? 2e-6 : 3e-5;
+  const double dn_tol = 1.6 * da_tol;
+  const double dci_tol = sc.res_overflow ? 1e-6 : (e0 < 0.03 ? 1.5e-4 : 6e-5);
+  const double e2_tol = 2e-5;
+  const double ae_da_tol = 1.8e-6;
+  const double ae_de_a_tol = need_b_uil ? 1e30 : 2.0e-5;
+  const double res_da_tol = 2e-7;
+  const double res_dci_tol = 1e-6;
+  const double res_e2_tol = 1e-5;
+  const bool e_stale = sc.res_overflow ? (std::fabs(e - sc.e) * (1.0 + 10.0 * e) > 2e-6)
+                                       : (std::fabs(e * e - sc.e * sc.e) > e2_tol);
+  if (sc.a < 0.0 || std::fabs(a - sc.a) > da_tol * sc.a || e_stale ||
+      std::fabs(ci - sc.ci) > dci_tol || std::fabs(n - sc.n) > dn_tol * sc.n) {
+    sp_rebake_base(sc, a0, e0, a, e, n, eta, ci, ia);
+  } else {
+    if ((need_b_uil && sc.uil_b_dirty) || std::fabs(a - sc.a_bake) > ae_da_tol * sc.a_bake ||
+        std::fabs(e - sc.e_bake_a) > ae_de_a_tol) {
+      sp_rebake_ae(sc, a0, a, e, ia, need_b_uil);
+    }
+    if (sc.n_res_blks > 0 && !sc.res_overflow &&
+        (sc.a_res < 0.0 || std::fabs(a - sc.a_res) > res_da_tol * sc.a_res ||
+         std::fabs(ci - sc.ci_res) > res_dci_tol || std::fabs(e * e - sc.e_res * sc.e_res) > res_e2_tol)) {
+      sp_rebake_res(sc, a0, e0, a, e, n, eta, ci, ia);
+    }
+  }
+  const bool has_res = sc.n_res_blks > 0 && !sc.res_overflow;
+  const double rem_base_a = std::fmax(0.0, std::fmin(da_tol * sc.a - std::fabs(a - sc.a),
+                                                     (dn_tol / 1.55) * sc.a - std::fabs(a - sc.a)));
+  const double rem_ae_a = std::fmax(0.0, ae_da_tol * sc.a_bake - std::fabs(a - sc.a_bake));
+  const double rem_res_a = has_res ? std::fmax(0.0, res_da_tol * sc.a_res - std::fabs(a - sc.a_res)) : 1e30;
+  sc.a_ref = a;
+  sc.da_thresh = std::fmin(rem_base_a, std::fmin(rem_ae_a, rem_res_a));
+
+  const double rem_base_e = sc.res_overflow
+      ? std::fmax(0.0, 2e-6 / (1.0 + 10.0 * (e + 2e-6)) - std::fabs(e - sc.e))
+      : std::fmax(0.0, (e2_tol - std::fabs(e * e - sc.e * sc.e)) / (2.0 * e + 1e-3));
+  const double rem_ae_e = std::fmax(0.0, ae_de_a_tol - std::fabs(e - sc.e_bake_a));
+  const double rem_res_e = has_res ? std::fmax(0.0, (res_e2_tol - std::fabs(e * e - sc.e_res * sc.e_res)) / (2.0 * e + 1e-3)) : 1e30;
+  sc.e_ref = e;
+  sc.de_thresh = std::fmin(rem_base_e, std::fmin(rem_ae_e, rem_res_e));
+
+  const double rem_base_ci = std::fmax(0.0, dci_tol - std::fabs(ci - sc.ci));
+  const double rem_res_ci = has_res ? std::fmax(0.0, res_dci_tol - std::fabs(ci - sc.ci_res)) : 1e30;
+  sc.ci_ref = ci;
+  sc.dci_thresh = std::fmin(rem_base_ci, rem_res_ci);
+}
+
+[[gnu::always_inline]] inline void sp_fill_trig(SpEvalCache& sc, double cb, double sb, double cu1, double su1,
+                                                double cM1, double sM1, float* cm_f32, float* sm_f32,
+                                                int start_m, double cm_last, double sm_last, bool has_ext_cm) {
+  const int max_aw = sc.max_aw, max_m = sc.max_m;
+  float* const cswq_c = sc.cswq_c;
+  float* const cswq_s = sc.cswq_s;
+  const float cMf = static_cast<float>(cM1), sMf = static_cast<float>(sM1);
+  cswq_c[0 * 40 + 20] = 1.0f; cswq_s[0 * 40 + 20] = 0.0f;
+  cswq_c[1 * 40 + 20] = cMf;  cswq_s[1 * 40 + 20] = -sMf;
+  cswq_c[2 * 40 + 20] = cMf;  cswq_s[2 * 40 + 20] = sMf;
+#ifdef __wasm_simd128__
+  if (max_aw > 0) {
+    const double u_c1 = cu1, u_s1 = su1;
+    const double u_c2 = u_c1 * cu1 - u_s1 * su1, u_s2 = u_s1 * cu1 + u_c1 * su1;
+    const double u_c3 = u_c2 * cu1 - u_s2 * su1, u_s3 = u_s2 * cu1 + u_c2 * su1;
+    const double u_c4 = u_c3 * cu1 - u_s3 * su1, u_s4 = u_s3 * cu1 + u_c3 * su1;
+    v128_t v_cu = wasm_f32x4_make(static_cast<float>(u_c1), static_cast<float>(u_c2), static_cast<float>(u_c3), static_cast<float>(u_c4));
+    v128_t v_su = wasm_f32x4_make(static_cast<float>(u_s1), static_cast<float>(u_s2), static_cast<float>(u_s3), static_cast<float>(u_s4));
+    const v128_t v_cu4 = wasm_f32x4_splat(static_cast<float>(u_c4));
+    const v128_t v_su4 = wasm_f32x4_splat(static_cast<float>(u_s4));
+    const v128_t v_cM = wasm_f32x4_splat(cMf);
+    const v128_t v_sM = wasm_f32x4_splat(sMf);
+    const int lim_aw = max_aw <= 16 ? max_aw : 16;
+    for (int idx = 0;;) {
+      const v128_t v_cc = wasm_f32x4_mul(v_cu, v_cM), v_ss = wasm_f32x4_mul(v_su, v_sM);
+      const v128_t v_sc = wasm_f32x4_mul(v_su, v_cM), v_cs = wasm_f32x4_mul(v_cu, v_sM);
+      const v128_t v_cwm = wasm_f32x4_add(v_cc, v_ss), v_swm = wasm_f32x4_sub(v_sc, v_cs);
+      const v128_t v_cwp = wasm_f32x4_sub(v_cc, v_ss), v_swp = wasm_f32x4_add(v_sc, v_cs);
+      const int pos = 21 + idx, neg = 16 - idx;
+      wasm_v128_store(cswq_c + 0 * 40 + pos, v_cu);
+      wasm_v128_store(cswq_s + 0 * 40 + pos, v_su);
+      wasm_v128_store(cswq_c + 0 * 40 + neg, wasm_i32x4_shuffle(v_cu, v_cu, 3, 2, 1, 0));
+      wasm_v128_store(cswq_s + 0 * 40 + neg, wasm_f32x4_neg(wasm_i32x4_shuffle(v_su, v_su, 3, 2, 1, 0)));
+      wasm_v128_store(cswq_c + 1 * 40 + pos, v_cwm);
+      wasm_v128_store(cswq_s + 1 * 40 + pos, v_swm);
+      wasm_v128_store(cswq_c + 1 * 40 + neg, wasm_i32x4_shuffle(v_cwp, v_cwp, 3, 2, 1, 0));
+      wasm_v128_store(cswq_s + 1 * 40 + neg, wasm_f32x4_neg(wasm_i32x4_shuffle(v_swp, v_swp, 3, 2, 1, 0)));
+      wasm_v128_store(cswq_c + 2 * 40 + pos, v_cwp);
+      wasm_v128_store(cswq_s + 2 * 40 + pos, v_swp);
+      wasm_v128_store(cswq_c + 2 * 40 + neg, wasm_i32x4_shuffle(v_cwm, v_cwm, 3, 2, 1, 0));
+      wasm_v128_store(cswq_s + 2 * 40 + neg, wasm_f32x4_neg(wasm_i32x4_shuffle(v_swm, v_swm, 3, 2, 1, 0)));
+      idx += 4;
+      if (idx >= lim_aw) break;
+      const v128_t ncu = wasm_f32x4_sub(wasm_f32x4_mul(v_cu, v_cu4), wasm_f32x4_mul(v_su, v_su4));
+      v_su = wasm_f32x4_add(wasm_f32x4_mul(v_su, v_cu4), wasm_f32x4_mul(v_cu, v_su4));
+      v_cu = ncu;
+    }
+    if (__builtin_expect(max_aw > 16, 0)) {
+      const float cu16 = cswq_c[20 + 16], su16 = cswq_s[20 + 16];
+      const float cu1f = static_cast<float>(cu1), su1f = static_cast<float>(su1);
+      const float c_w0 = cu16 * cu1f - su16 * su1f, s_w0 = su16 * cu1f + cu16 * su1f;
+      const float cc = c_w0 * cMf, ss = s_w0 * sMf, sc_ = s_w0 * cMf, cs = c_w0 * sMf;
+      const float c_wm = cc + ss, s_wm = sc_ - cs, c_wp = cc - ss, s_wp = sc_ + cs;
+      cswq_c[0 * 40 + 37] = c_w0; cswq_s[0 * 40 + 37] = s_w0;
+      cswq_c[0 * 40 + 3]  = c_w0; cswq_s[0 * 40 + 3]  = -s_w0;
+      cswq_c[1 * 40 + 37] = c_wm; cswq_s[1 * 40 + 37] = s_wm;
+      cswq_c[1 * 40 + 3]  = c_wp; cswq_s[1 * 40 + 3]  = -s_wp;
+      cswq_c[2 * 40 + 37] = c_wp; cswq_s[2 * 40 + 37] = s_wp;
+      cswq_c[2 * 40 + 3]  = c_wm; cswq_s[2 * 40 + 3]  = -s_wm;
+    }
+  }
+  (void)has_ext_cm;
+  if (start_m == 0) {
+    const double c1 = cb, s1 = sb;
+    const double c2 = c1 * cb - s1 * sb, s2 = s1 * cb + c1 * sb;
+    const double c3 = c2 * cb - s2 * sb, s3 = s2 * cb + c2 * sb;
+    const double c4 = c3 * cb - s3 * sb, s4 = s3 * cb + c3 * sb;
+    v128_t v_cm = wasm_f32x4_make(static_cast<float>(c1), static_cast<float>(c2), static_cast<float>(c3), static_cast<float>(c4));
+    v128_t v_sm = wasm_f32x4_make(static_cast<float>(s1), static_cast<float>(s2), static_cast<float>(s3), static_cast<float>(s4));
+    const v128_t v_c4 = wasm_f32x4_splat(static_cast<float>(c4));
+    const v128_t v_s4 = wasm_f32x4_splat(static_cast<float>(s4));
+    for (int idx = 0;;) {
+      wasm_v128_store(cm_f32 + idx, v_cm);
+      wasm_v128_store(sm_f32 + idx, v_sm);
+      idx += 4;
+      if (idx >= max_m) break;
+      const v128_t ncm = wasm_f32x4_sub(wasm_f32x4_mul(v_cm, v_c4), wasm_f32x4_mul(v_sm, v_s4));
+      v_sm = wasm_f32x4_add(wasm_f32x4_mul(v_sm, v_c4), wasm_f32x4_mul(v_cm, v_s4));
+      v_cm = ncm;
+    }
+  } else if (start_m >= 4 && (start_m & 3) == 0) {
+    if (start_m < max_m) {
+      const v128_t v_c4 = wasm_f32x4_splat(cm_f32[3]);
+      const v128_t v_s4 = wasm_f32x4_splat(sm_f32[3]);
+      v128_t v_cm = wasm_v128_load(cm_f32 + start_m - 4);
+      v128_t v_sm = wasm_v128_load(sm_f32 + start_m - 4);
+      for (int idx = start_m; idx < max_m; idx += 4) {
+        const v128_t ncm = wasm_f32x4_sub(wasm_f32x4_mul(v_cm, v_c4), wasm_f32x4_mul(v_sm, v_s4));
+        v_sm = wasm_f32x4_add(wasm_f32x4_mul(v_sm, v_c4), wasm_f32x4_mul(v_cm, v_s4));
+        v_cm = ncm;
+        wasm_v128_store(cm_f32 + idx, v_cm);
+        wasm_v128_store(sm_f32 + idx, v_sm);
+      }
+    }
+  } else {
+    double cmq = cm_last, smq = sm_last;
+    for (int q = start_m + 1; q <= max_m; ++q) {
+      const double ncm = cmq * cb - smq * sb;
+      smq = smq * cb + cmq * sb;
+      cmq = ncm;
+      cm_f32[q - 1] = static_cast<float>(cmq);
+      sm_f32[q - 1] = static_cast<float>(smq);
+    }
+    const int pad_lim = (max_m + 3) & ~3;
+    for (int q = max_m; q < pad_lim; ++q) cm_f32[q] = sm_f32[q] = 0.0f;
+  }
+#else
+  double cu_w = 1.0, su_w = 0.0;
+  for (int w = 1; w <= max_aw; ++w) {
+    const double ncu = cu_w * cu1 - su_w * su1;
+    su_w = su_w * cu1 + cu_w * su1;
+    cu_w = ncu;
+    const float c_w0 = static_cast<float>(cu_w), s_w0 = static_cast<float>(su_w);
+    const float cc = c_w0 * cMf, ss = s_w0 * sMf, sc_ = s_w0 * cMf, cs = c_w0 * sMf;
+    const float c_wm = cc + ss, s_wm = sc_ - cs, c_wp = cc - ss, s_wp = sc_ + cs;
+    cswq_c[0 * 40 + 20 + w] = c_w0; cswq_s[0 * 40 + 20 + w] = s_w0;
+    cswq_c[0 * 40 + 20 - w] = c_w0; cswq_s[0 * 40 + 20 - w] = -s_w0;
+    cswq_c[1 * 40 + 20 + w] = c_wm; cswq_s[1 * 40 + 20 + w] = s_wm;
+    cswq_c[1 * 40 + 20 - w] = c_wp; cswq_s[1 * 40 + 20 - w] = -s_wp;
+    cswq_c[2 * 40 + 20 + w] = c_wp; cswq_s[2 * 40 + 20 + w] = s_wp;
+    cswq_c[2 * 40 + 20 - w] = c_wm; cswq_s[2 * 40 + 20 - w] = -s_wm;
+  }
+  double cmq = has_ext_cm ? cm_last : 1.0;
+  double smq = has_ext_cm ? sm_last : 0.0;
+  for (int q = start_m + 1; q <= max_m; ++q) {
+    const double ncm = cmq * cb - smq * sb;
+    smq = smq * cb + cmq * sb;
+    cmq = ncm;
+    cm_f32[q - 1] = static_cast<float>(cmq);
+    sm_f32[q - 1] = static_cast<float>(smq);
+  }
+  for (int q = max_m; q < 4; ++q) cm_f32[q] = sm_f32[q] = 0.0f;
+#endif
+}
+
+#ifdef __wasm_simd128__
+[[gnu::always_inline]] inline void sp_eval_simd_kernel(const SpEvalCache& sc, float de_f32, double out6[6]) {
+  auto hsum_f32x4 = [](v128_t v) -> double {
+    const v128_t d = wasm_f64x2_add(wasm_f64x2_promote_low_f32x4(v),
+                                    wasm_f64x2_promote_low_f32x4(wasm_i64x2_shuffle(v, v, 1, 0)));
+    return wasm_f64x2_extract_lane(d, 0) + wasm_f64x2_extract_lane(d, 1);
+  };
+  const float* const cswq_c = sc.cswq_c;
+  const float* const cswq_s = sc.cswq_s;
+  const float* const cm_f32 = sc.cm_f32_local;
+  const float* const sm_f32 = sc.sm_f32_local;
+  const v128_t* const vcm_base = reinterpret_cast<const v128_t*>(cm_f32);
+  const v128_t* const vsm_base = reinterpret_cast<const v128_t*>(sm_f32);
+  const v128_t* const vmseq_base = reinterpret_cast<const v128_t*>(kSpMSeq);
+  const v128_t v_de = wasm_f32x4_splat(de_f32);
+  v128_t vg_w = wasm_f32x4_splat(0.0f);
+  v128_t vg_q = wasm_f32x4_splat(0.0f);
+  v128_t vg_midS = wasm_f32x4_splat(0.0f), vg_sE = wasm_f32x4_splat(0.0f);
+  v128_t vg_sI = wasm_f32x4_splat(0.0f),   vg_sL = wasm_f32x4_splat(0.0f);
+
+  int bi = 0;
+  const int nrows = sc.n_rows;
+  const int nblks = sc.total_blks;
+  const v128_t* vhot = reinterpret_cast<const v128_t*>(sc.blk_hot);
+
+  for (int ri = 0; ri < nrows; ++ri) {
+    const SpRow& row = sc.rows[ri];
+    const int bend = row.blk_end;
+    const uint8_t wq0 = row.wq0;
+    const v128_t cw = wasm_v128_load32_splat(cswq_c + wq0);
+    const v128_t sw = wasm_v128_load32_splat(cswq_s + wq0);
+    const v128_t* pcm = vcm_base + row.c_start;
+    const v128_t* psm = vsm_base + row.c_start;
+    const v128_t* pmf = vmseq_base + row.c_start;
+    v128_t vr_idS = wasm_f32x4_splat(0.0f);
+    for (; bi < bend; ++bi, vhot += 8, ++pcm, ++psm, ++pmf) {
+      const v128_t cm_ = *pcm, sm_ = *psm;
+      const v128_t cp_ = wasm_f32x4_sub(wasm_f32x4_mul(cw, cm_), wasm_f32x4_mul(sw, sm_));
+      const v128_t sp_ = wasm_f32x4_add(wasm_f32x4_mul(sw, cm_), wasm_f32x4_mul(cw, sm_));
+      const v128_t ec_ = vhot[0], es_ = vhot[1];
+      const v128_t uc_ = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(ec_, v_de));
+      const v128_t us_ = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(es_, v_de));
+      const v128_t idS_ = wasm_f32x4_add(wasm_f32x4_mul(uc_, cp_), wasm_f32x4_mul(us_, sp_));
+      vr_idS = wasm_f32x4_add(vr_idS, idS_);
+      vg_midS = wasm_f32x4_add(vg_midS, wasm_f32x4_mul(*pmf, idS_));
+      vg_sE = wasm_f32x4_add(vg_sE, wasm_f32x4_sub(wasm_f32x4_mul(ec_, sp_), wasm_f32x4_mul(es_, cp_)));
+      vg_sI = wasm_f32x4_add(vg_sI, wasm_f32x4_sub(wasm_f32x4_mul(vhot[4], sp_), wasm_f32x4_mul(vhot[5], cp_)));
+      vg_sL = wasm_f32x4_add(vg_sL, wasm_f32x4_sub(wasm_f32x4_mul(vhot[6], sp_), wasm_f32x4_mul(vhot[7], cp_)));
+    }
+    vg_w = wasm_f32x4_add(vg_w, wasm_f32x4_mul(wasm_v128_load32_splat(&row.wf), vr_idS));
+    vg_q = wasm_f32x4_add(vg_q, wasm_f32x4_mul(wasm_v128_load32_splat(&row.qf), vr_idS));
+  }
+
+  for (; bi < nblks; ++bi, vhot += 8) {
+    const int lo = bi * 4;
+    const uint8_t* wqp = sc.blk_wq + lo;
+    const uint8_t* mp = sc.blk_mlane + lo;
+    const v128_t v_cwj = wasm_f32x4_make(cswq_c[wqp[0]], cswq_c[wqp[1]], cswq_c[wqp[2]], cswq_c[wqp[3]]);
+    const v128_t v_swj = wasm_f32x4_make(cswq_s[wqp[0]], cswq_s[wqp[1]], cswq_s[wqp[2]], cswq_s[wqp[3]]);
+    const v128_t v_cm  = wasm_f32x4_make(cm_f32[mp[0]],  cm_f32[mp[1]],  cm_f32[mp[2]],  cm_f32[mp[3]]);
+    const v128_t v_sm  = wasm_f32x4_make(sm_f32[mp[0]],  sm_f32[mp[1]],  sm_f32[mp[2]],  sm_f32[mp[3]]);
+    const v128_t v_cp = wasm_f32x4_sub(wasm_f32x4_mul(v_cwj, v_cm), wasm_f32x4_mul(v_swj, v_sm));
+    const v128_t v_sp = wasm_f32x4_add(wasm_f32x4_mul(v_swj, v_cm), wasm_f32x4_mul(v_cwj, v_sm));
+    const v128_t v_ec = vhot[0], v_es = vhot[1];
+    const v128_t v_uc = wasm_f32x4_add(vhot[2], wasm_f32x4_mul(v_ec, v_de));
+    const v128_t v_us = wasm_f32x4_add(vhot[3], wasm_f32x4_mul(v_es, v_de));
+    const v128_t v_idS = wasm_f32x4_add(wasm_f32x4_mul(v_uc, v_cp), wasm_f32x4_mul(v_us, v_sp));
+    vg_w = wasm_f32x4_add(vg_w, wasm_f32x4_mul(wasm_v128_load(sc.blk_w + lo), v_idS));
+    vg_q = wasm_f32x4_add(vg_q, wasm_f32x4_mul(wasm_v128_load(sc.blk_q + lo), v_idS));
+    vg_midS = wasm_f32x4_add(vg_midS, wasm_f32x4_mul(wasm_v128_load(sc.blk_mf + lo), v_idS));
+    vg_sE = wasm_f32x4_add(vg_sE, wasm_f32x4_sub(wasm_f32x4_mul(v_ec, v_sp), wasm_f32x4_mul(v_es, v_cp)));
+    vg_sI = wasm_f32x4_add(vg_sI, wasm_f32x4_sub(wasm_f32x4_mul(vhot[4], v_sp), wasm_f32x4_mul(vhot[5], v_cp)));
+    vg_sL = wasm_f32x4_add(vg_sL, wasm_f32x4_sub(wasm_f32x4_mul(vhot[6], v_sp), wasm_f32x4_mul(vhot[7], v_cp)));
+  }
+  out6[0] = hsum_f32x4(vg_w);
+  out6[1] = hsum_f32x4(vg_q);
+  out6[2] = hsum_f32x4(vg_midS);
+  out6[3] = hsum_f32x4(vg_sE);
+  out6[4] = hsum_f32x4(vg_sI);
+  out6[5] = hsum_f32x4(vg_sL);
+}
+#endif
+
+[[gnu::noinline]] inline void sp_six_with_deriv(
+    const SpCombCoef* F, int count, double a0, double e0, double t, const Kepler& kp, double n, double eta,
+    double si, double ci, double theta_g0, double* six, double* dsix_dlam, double* d2six_dlam2,
+    const double* sb_in = nullptr, const double* cb_in = nullptr,
+    float* cm_f32_io = nullptr, float* sm_f32_io = nullptr, int cm_in_count = 0,
+    double cm_last = 1.0, double sm_last = 0.0,
+    const double* su1_in = nullptr, const double* cu1_in = nullptr,
+    const double* sM1_in = nullptr, const double* cM1_in = nullptr) {
+  if (count <= 0) return;
+  const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+#ifdef __wasm_simd128__
+  const v128_t v_one_d = wasm_f64x2_splat(1.0);
+  const v128_t v_r0 = wasm_f64x2_div(v_one_d, wasm_f64x2_make(a, 1.0 + eta));
+  const double ia = wasm_f64x2_extract_lane(v_r0, 0);
+  const double inv_1peta = wasm_f64x2_extract_lane(v_r0, 1);
+#else
+  const double ia = 1.0 / a;
+  const double inv_1peta = 1.0 / (1.0 + eta);
+#endif
+  uint32_t tag = static_cast<uint8_t>(F[0].pad);
+  if (count >= 4) {
+    tag |= (static_cast<uint32_t>(static_cast<uint8_t>(F[1].pad)) << 8) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(F[2].pad)) << 16) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(F[3].pad)) << 24);
+  } else {
+    for (int k = 1; k < count; ++k) tag |= static_cast<uint32_t>(static_cast<uint8_t>(F[k].pad)) << (8 * k);
+  }
+  SpEvalCache& sc = sp_eval_cache();
+  if (__builtin_expect(t == 0.0 || sc.F != F || sc.count != count || sc.table_tag != tag ||
+                           sc.a0 != a0 || sc.e0 != e0 || sc.f0_uc != F[0].uc0 ||
+                           sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0 || !sc.grouped_ok,
+                       0)) {
+    if (!sp_init_or_fallback(sc, F, count, tag, a0, e0, t, kp, a, e, n, eta, sin_i, ci, ia,
+                             theta_g0, sb_in, cb_in, su1_in, cu1_in, sM1_in, cM1_in, six, dsix_dlam, d2six_dlam2)) {
+      return;
+    }
+  }
+  if (__builtin_expect(sc.a < 0.0 || sc.uil_b_dirty ||
+                           std::fabs(a - sc.a_ref) > sc.da_thresh ||
+                           std::fabs(e - sc.e_ref) > sc.de_thresh ||
+                           std::fabs(ci - sc.ci_ref) > sc.dci_thresh,
+                       0)) {
+    sp_rebake_sync(sc, a0, e0, a, e, n, eta, ci, ia, true);
+  }
+  if (__builtin_expect(sc.e_pe_bake != sc.e_bake, 0)) {
+    sp_rebake_pe_fast(sc, sc.e_bake);
+  }
+  double sb, cb, su1, cu1, sM1, cM1;
+  if (sb_in != nullptr && cb_in != nullptr && su1_in != nullptr && cu1_in != nullptr && sM1_in != nullptr && cM1_in != nullptr) {
+    sb = *sb_in; cb = *cb_in;
+    su1 = *su1_in; cu1 = *cu1_in;
+    sM1 = *sM1_in; cM1 = *cM1_in;
+  } else {
+    if (sb_in != nullptr && cb_in != nullptr) { sb = *sb_in; cb = *cb_in; }
+    else fm::sincos_fast(kp.node - (theta_g0 + kOmegaE * t), sb, cb);
+#ifdef __wasm_simd128__
+    if (su1_in == nullptr && cu1_in == nullptr && sM1_in == nullptr && cM1_in == nullptr) {
+      v128_t vs2, vc2;
+      fm::sincos2_f64x2(wasm_f64x2_make(kp.argp + kp.m, kp.m), vs2, vc2);
+      su1 = wasm_f64x2_extract_lane(vs2, 0); cu1 = wasm_f64x2_extract_lane(vc2, 0);
+      sM1 = wasm_f64x2_extract_lane(vs2, 1); cM1 = wasm_f64x2_extract_lane(vc2, 1);
+    } else
+#endif
+    {
+      if (su1_in != nullptr && cu1_in != nullptr) { su1 = *su1_in; cu1 = *cu1_in; }
+      else fm::sincos_fast(kp.argp + kp.m, su1, cu1);
+      if (sM1_in != nullptr && cM1_in != nullptr) { sM1 = *sM1_in; cM1 = *cM1_in; }
+      else fm::sincos_fast(kp.m, sM1, cM1);
+    }
+  }
+  float* const cm_f32 = cm_f32_io != nullptr ? cm_f32_io : sc.cm_f32_local;
+  float* const sm_f32 = sm_f32_io != nullptr ? sm_f32_io : sc.sm_f32_local;
+  sp_fill_trig(sc, cb, sb, cu1, su1, cM1, sM1, cm_f32, sm_f32,
+               cm_f32_io != nullptr ? cm_in_count : 0, cm_last, sm_last, cm_f32_io != nullptr);
+  const float de_f32 = static_cast<float>(e - sc.e_bake);
+  const double eta_m1 = -(kp.e * kp.e) * inv_1peta;
+  const double ci_p0 = (ci >= 0.0 ? -(si * si) / (1.0 + ci) : (ci - 1.0)) + 1.0;
+#ifdef __wasm_simd128__
+  if (__builtin_expect(dsix_dlam == nullptr && d2six_dlam2 == nullptr && cm_f32_io == nullptr, 0)) {
+    double out6[6];
+    sp_eval_simd_kernel(sc, de_f32, out6);
+    const double sum_w = out6[0], sum_q = out6[1], sum_m = out6[2];
+    const double sE = out6[3], sI = out6[4], sL = out6[5];
+    const double na2 = n * a * a;
+    const double inv_1pci = 1.0 / (1.0 + ci), inv_sini = 1.0 / sin_i;
+    const double inv_na2e = 1.0 / (na2 * e), inv_na2eta = 1.0 / (na2 * eta);
+    const double sM = sum_w + sum_q;
+    const double s1_num = eta * sum_q + eta_m1 * sum_w;
+    const double s2_num = ci_p0 * sum_w - sum_m;
+    const double tanhalf = sin_i * inv_1pci;
+    const double sI_na2eta = sI * inv_na2eta;
+    const double eta_sE_na2 = ((eta * eta) * inv_na2eta) * sE;
+    six[0] += -3.0 * ia * ia * sM;
+    six[1] += (eta * s1_num) * inv_na2e;
+    six[2] += (s2_num * inv_na2eta) * inv_sini;
+    six[3] += eta_sE_na2 + (e * tanhalf) * sI_na2eta;
+    six[4] += sI_na2eta;
+    six[5] += sL + (e * inv_1peta) * eta_sE_na2 + tanhalf * sI_na2eta;
+    return;
+  }
+#endif
+  sp_six_deriv(sc, de_f32, a, e, n, eta, eta_m1, ci_p0, sin_i, ci, ia, inv_1peta,
+               sc.cswq_c, sc.cswq_s, cm_f32, sm_f32, six, dsix_dlam, d2six_dlam2);
+}
+
+/// The displacements in the six-component set (n, e, i, e varpi, sin i Omega, lambda), value-only hot path.
+[[gnu::noinline]] inline void sp_six_val(
+    const SpCombCoef* F, int count, double a0, double e0, double t, double kp_a, double kp_e, double n, double eta,
+    double si, double ci, double* six,
+    double sb, double cb, double su1, double cu1, double sM1, double cM1,
+    int cm_in_count, double cm_last, double sm_last, bool has_ext_cm) {
+  if (count <= 0) return;
+  const double a = kp_a, e = kp_e < 1e-12 ? 1e-12 : kp_e;
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+#ifdef __wasm_simd128__
+  const v128_t v_one_d = wasm_f64x2_splat(1.0);
+  const v128_t v_r0 = wasm_f64x2_div(v_one_d, wasm_f64x2_make(a, 1.0 + eta));
+  const double ia = wasm_f64x2_extract_lane(v_r0, 0);
+  const double inv_1peta = wasm_f64x2_extract_lane(v_r0, 1);
+#else
+  const double ia = 1.0 / a;
+  const double inv_1peta = 1.0 / (1.0 + eta);
+#endif
+  uint32_t tag = static_cast<uint8_t>(F[0].pad);
+  if (__builtin_expect(count >= 4, 1)) {
+    tag |= (static_cast<uint32_t>(static_cast<uint8_t>(F[1].pad)) << 8) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(F[2].pad)) << 16) |
+           (static_cast<uint32_t>(static_cast<uint8_t>(F[3].pad)) << 24);
+  } else {
+    if (count >= 2) tag |= static_cast<uint32_t>(static_cast<uint8_t>(F[1].pad)) << 8;
+    if (count == 3) tag |= static_cast<uint32_t>(static_cast<uint8_t>(F[2].pad)) << 16;
+  }
+  SpEvalCache& sc = sp_eval_cache();
+  if (__builtin_expect(t == 0.0 || sc.F != F || sc.count != count || sc.table_tag != tag ||
+                           sc.a0 != a0 || sc.e0 != e0 || !sc.grouped_ok ||
+                           (tag == 0u && (sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0)),
+                       0)) {
+    if (!sp_init_or_fallback_val(sc, F, count, tag, a0, e0, t, a, e, n, eta, sin_i, ci, ia,
+                                 sb, cb, su1, cu1, sM1, cM1, six)) {
+      return;
+    }
+  }
+  if (__builtin_expect(sc.a < 0.0 ||
+                           std::fabs(a - sc.a_ref) > sc.da_thresh ||
+                           std::fabs(e - sc.e_ref) > sc.de_thresh ||
+                           std::fabs(ci - sc.ci_ref) > sc.dci_thresh,
+                       0)) {
+    sp_rebake_sync(sc, a0, e0, a, e, n, eta, ci, ia, false);
+  }
+  if (__builtin_expect(sc.n_pe_blks > 0 && std::fabs(e - sc.e_pe_bake) > sc.de_pe_thresh, 0)) {
+    sp_rebake_pe_fast(sc, e);
+  }
+
+  float* const cm_f32 = sc.cm_f32_local;
+  float* const sm_f32 = sc.sm_f32_local;
+  sp_fill_trig(sc, cb, sb, cu1, su1, cM1, sM1, cm_f32, sm_f32,
+               has_ext_cm ? cm_in_count : 0, cm_last, sm_last, has_ext_cm);
+  const float de_f32 = static_cast<float>(e - sc.e_bake);
+
+#ifdef __wasm_simd128__
+  double out6[6];
+  sp_eval_simd_kernel(sc, de_f32, out6);
+  const double sum_w = out6[0], sum_q = out6[1], sum_m = out6[2];
+  const double sE = out6[3], sI = out6[4], sL = out6[5];
+  const double na2 = n * a * a;
+  const v128_t v_r1 = wasm_f64x2_div(v_one_d, wasm_f64x2_make(1.0 + ci, sin_i));
+  const v128_t v_r2 = wasm_f64x2_div(v_one_d, wasm_f64x2_make(na2 * e, na2 * eta));
+  const double inv_1pci = wasm_f64x2_extract_lane(v_r1, 0);
+  const double inv_sini = wasm_f64x2_extract_lane(v_r1, 1);
+  const double inv_na2e = wasm_f64x2_extract_lane(v_r2, 0);
+  const double inv_na2eta = wasm_f64x2_extract_lane(v_r2, 1);
+  const double eta_m1 = -(kp_e * kp_e) * inv_1peta;
+  const double ci_p0 = (ci >= 0.0 ? -(si * si) * inv_1pci : (ci - 1.0)) + 1.0;
+  const double sM = sum_w + sum_q;
+  const double s1_num = eta * sum_q + eta_m1 * sum_w;
+  const double s2_num = ci_p0 * sum_w - sum_m;
+  const double tanhalf = sin_i * inv_1pci;
+  const double sI_na2eta = sI * inv_na2eta;
+  const double eta_sE_na2 = ((eta * eta) * inv_na2eta) * sE;
+  six[0] += -3.0 * ia * ia * sM;
+  six[1] += (eta * s1_num) * inv_na2e;
+  six[2] += (s2_num * inv_na2eta) * inv_sini;
+  six[3] += eta_sE_na2 + (e * tanhalf) * sI_na2eta;
+  six[4] += sI_na2eta;
+  six[5] += sL + (e * inv_1peta) * eta_sE_na2 + tanhalf * sI_na2eta;
+#else
+  const float* const cswq_c = sc.cswq_c;
+  const float* const cswq_s = sc.cswq_s;
+  const int nblks = sc.total_blks;
+  double sM = 0.0, s1_num = 0.0, s2_num = 0.0, sE = 0.0, sI = 0.0, sL = 0.0;
+  const double eta_m1 = -(kp_e * kp_e) * inv_1peta;
+  const double ci_p0 = (ci >= 0.0 ? -(si * si) / (1.0 + ci) : (ci - 1.0)) + 1.0;
+  double sum_w = 0.0, sum_q = 0.0, midS = 0.0;
+  const float* pec = sc.blk_hot;
+  const float* pu = pec + 8;
+  const float* pe = sc.blk_e;
+  for (int bi = 0; bi < nblks; ++bi, pec += 32, pu += 32, pe += 16) {
+    const int lane_off = bi * 4;
+    for (int l = 0; l < 4; ++l) {
+      if (sc.blk_active[lane_off + l] == 0u) continue;
+      const int m_idx = sc.blk_mlane[lane_off + l];
+      const int wq_idx = sc.blk_wq[lane_off + l];
+      const float cmv = cm_f32[m_idx], smv = sm_f32[m_idx];
+      const float cs0 = cswq_c[wq_idx], cs1 = cswq_s[wq_idx];
+      const float cp = cs0 * cmv - cs1 * smv;
+      const float sp = cs1 * cmv + cs0 * smv;
+      const float ec = pec[0 + l], es = pec[4 + l];
+      const float idS = (pu[0 + l] + ec * de_f32) * cp + (pu[4 + l] + es * de_f32) * sp;
+      sum_w += static_cast<double>(sc.blk_w[lane_off + l]) * idS;
+      sum_q += static_cast<double>(sc.blk_q[lane_off + l]) * idS;
+      midS += static_cast<double>(sc.blk_mf[lane_off + l]) * idS;
+      sE += ec * sp - es * cp;
+      sI += (pu[8 + l] + pe[0 + l] * de_f32) * sp - (pu[12 + l] + pe[4 + l] * de_f32) * cp;
+      sL += (pu[16 + l] + pe[8 + l] * de_f32) * sp - (pu[20 + l] + pe[12 + l] * de_f32) * cp;
+    }
+  }
+  sM = sum_w + sum_q;
+  s1_num = eta * sum_q + eta_m1 * sum_w;
+  s2_num = ci_p0 * sum_w - midS;
+  const double na2 = n * a * a;
+  const double tanhalf = sin_i / (1.0 + ci);
+  six[0] += -3.0 * ia * ia * sM;
+  six[1] += (eta * s1_num) / (na2 * e);
+  six[2] += s2_num / (na2 * eta * sin_i);
+  six[3] += (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
+  six[4] += sI / (na2 * eta);
+  six[5] += sL + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
+#endif
+}
+
 inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, double n, double eta, double si, double ci,
                    double theta_g0, double* six) {
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
@@ -403,7 +2835,6 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
     const int aw = w < 0 ? -w : w, aj = j < 0 ? -j : j;
     const double cww = cw[aw], sww = w < 0 ? -swv[aw] : swv[aw];
     const double cjj = cj[aj], sjj = j < 0 ? -sj[aj] : sj[aj];
-    // psi = w omega + j M + m beta
     const double c1 = cww * cjj - sww * sjj, s1 = sww * cjj + cww * sjj;
     const double cp = c1 * cm[m] - s1 * sm[m], sp = s1 * cm[m] + c1 * sm[m];
     const double C = kEgmC[l][m], S0 = kEgmS[l][m];
@@ -432,105 +2863,735 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
   six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI + 3.0 * ia * ia * sL;
 }
 
+inline void sp_six(const SpCombCoef* F, int count, double a0, double e0, double t, const Kepler& kp, double n, double eta,
+                   double si, double ci, double theta_g0, double* six, double* dsix_dlam = nullptr,
+                   double* d2six_dlam2 = nullptr, const double* sb_in = nullptr, const double* cb_in = nullptr,
+                   float* cm_f32_io = nullptr, float* sm_f32_io = nullptr, int cm_in_count = 0,
+                   double cm_last = 1.0, double sm_last = 0.0,
+                   const double* su1_in = nullptr, const double* cu1_in = nullptr,
+                   const double* sM1_in = nullptr, const double* cM1_in = nullptr) {
+  if (dsix_dlam != nullptr) {
+    sp_six_with_deriv(F, count, a0, e0, t, kp, n, eta, si, ci, theta_g0, six, dsix_dlam, d2six_dlam2,
+                      sb_in, cb_in, cm_f32_io, sm_f32_io, cm_in_count, cm_last, sm_last,
+                      su1_in, cu1_in, sM1_in, cM1_in);
+  } else {
+    double sb, cb, su1, cu1, sM1, cM1;
+    if (sb_in != nullptr && cb_in != nullptr) { sb = *sb_in; cb = *cb_in; }
+    else fm::sincos_fast(kp.node - (theta_g0 + kOmegaE * t), sb, cb);
+    if (su1_in != nullptr && cu1_in != nullptr) { su1 = *su1_in; cu1 = *cu1_in; }
+    else fm::sincos_fast(kp.argp + kp.m, su1, cu1);
+    if (sM1_in != nullptr && cM1_in != nullptr) { sM1 = *sM1_in; cM1 = *cM1_in; }
+    else fm::sincos_fast(kp.m, sM1, cM1);
+    float* const cm_loc = sp_eval_cache().cm_f32_local;
+    float* const sm_loc = sp_eval_cache().sm_f32_local;
+    if (cm_f32_io != nullptr && cm_f32_io != cm_loc && cm_in_count > 0) {
+      std::memcpy(cm_loc, cm_f32_io, static_cast<size_t>(cm_in_count) * sizeof(float));
+      std::memcpy(sm_loc, sm_f32_io, static_cast<size_t>(cm_in_count) * sizeof(float));
+    }
+    sp_six_val(F, count, a0, e0, t, kp.a, kp.e, n, eta, si, ci, six,
+               sb, cb, su1, cu1, sM1, cM1, cm_in_count, cm_last, sm_last, cm_f32_io != nullptr);
+  }
+}
+
 /// Half-day resonant tail: every even order m, k=m/2, degree 6..31.
 /// Normalized F and dF/di at the epoch; G is cubic about the epoch eccentricity.
 struct HalfDayCoef {
+  int8_t m, w, k, pad;
+  float uc0, uce, ucee, uceee, uci, ucii, uciii, ucei, uceei, uceii, uca, ucaa, ucae, uceea, uceeea, ucai;
+  float us0, use, usee, useee, usi, usii, usiii, usei, useei, useii, usa, usaa, usae, useea, useeea, usai;
+};
+struct HalfDayRawTerm {
   int8_t l, m, p, k;
   double f, df, ddf, dddf;
-  res::GTaylor g;
 };
+struct HalfDayScratch {
+  double* grid = nullptr;
+  size_t grid_cap = 0;
+  double* values = nullptr;
+  size_t values_cap = 0;
+  HalfDayRawTerm* raw = nullptr;
+  size_t raw_cap = 0;
+};
+inline thread_local HalfDayScratch g_half_day_scratch{};
 inline int half_day_bound(int degree) {
-  int count = 0;
-  for (int l = 6; l <= degree; ++l) count += (l / 2) * (l + 1);
-  return count;
+  return (degree / 2 + 1) * (2 * degree + 1);
 }
-inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out) {
-  int count = 0;
-  double f[72], fp[72], fm[72], fpp[72], fmm[72];
+inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, double a0 = 1.0) {
+  const EgmTables& egm = egm_tables();
+  const double ia0 = 1.0 / a0;
+  const double irp0 = 1.0 / (a0 * std::fmax(0.02, 1.0 - e0));
+  double amp0[36], amp_rp[36];
+  amp0[0] = kMu * ia0;
+  amp_rp[0] = kMu * irp0;
+  for (int l = 1; l <= 33; ++l) {
+    amp0[l] = amp0[l - 1] * ia0;
+    amp_rp[l] = amp_rp[l - 1] * irp0;
+  }
+
+  int raw_max = 0;
+  for (int l = 6; l <= degree; ++l) raw_max += (l / 2) * (l + 1);
   const double h = 5e-4;
-  // Adjacent degrees share one angle in resonance_six.
-  for (int m = 2; m <= degree; m += 2) {
-    for (int w = -degree; w <= degree; ++w) {
-      normalized_Fk(m, w, degree, i0, f);
-      normalized_Fk(m, w, degree, i0 + h, fp);
-      normalized_Fk(m, w, degree, i0 - h, fm);
-      normalized_Fk(m, w, degree, i0 + 2*h, fpp);
-      normalized_Fk(m, w, degree, i0 - 2*h, fmm);
-      int first = std::max(6, std::max(m, std::abs(w)));
-      if ((first - w) & 1) ++first;
-      for (int l = first; l <= degree; l += 2) {
-        const int p = (l - w) / 2, k = m / 2;
-        out[count++] = HalfDayCoef{static_cast<int8_t>(l), static_cast<int8_t>(m),
-          static_cast<int8_t>(p), static_cast<int8_t>(k), f[l],
-          (fmm[l]-8*fm[l]+8*fp[l]-fpp[l])/(12*h),
-          (-fpp[l]+16*fp[l]-30*f[l]+16*fm[l]-fmm[l])/(12*h*h),
-          (fpp[l]-2*fp[l]+2*fm[l]-fmm[l])/(2*h*h*h), res::GTaylor{}};
-      }
-    }
-  }
-  // Share the eccentric-anomaly quadrature across every coefficient. Each
-  // sample's anomaly, radial powers and Fourier factors are evaluated once.
+  constexpr int NF = 64, NF_HALF = NF / 2;
   const int N = e0 < 0.1 ? 128 : e0 < 0.8 ? 512 : e0 < 0.95 ? 2048 : 4096;
+  const int N_half = e0 < 0.05 ? 24 : (N / 2);
   const int width = 3 * (degree + 1) + 2 * (degree / 2 + 1);
-  double* grid = static_cast<double*>(std::malloc(N * width * sizeof(double)));
-  double* values = static_cast<double*>(std::malloc(5 * count * sizeof(double)));
-  if (grid == nullptr || values == nullptr) { std::free(grid); std::free(values); return -1; }
-  const double dh = std::min(5e-4, (1.0-e0)/4.0);
+  using RawTerm = HalfDayRawTerm;
+  HalfDayScratch& sc = g_half_day_scratch;
+  const size_t need_grid = static_cast<size_t>(N_half * width);
+  const size_t need_vals = std::max<size_t>(5 * raw_max, 5 * 65 * 36);
+  const size_t need_raw = static_cast<size_t>(raw_max > 0 ? raw_max : 1);
+  if (need_grid > sc.grid_cap) {
+    double* p = static_cast<double*>(std::realloc(sc.grid, need_grid * sizeof(double)));
+    if (p == nullptr) return -1;
+    sc.grid = p;
+    sc.grid_cap = need_grid;
+  }
+  if (need_vals > sc.values_cap) {
+    double* p = static_cast<double*>(std::realloc(sc.values, need_vals * sizeof(double)));
+    if (p == nullptr) return -1;
+    sc.values = p;
+    sc.values_cap = need_vals;
+  }
+  if (need_raw > sc.raw_cap) {
+    RawTerm* p = static_cast<RawTerm*>(std::realloc(sc.raw, need_raw * sizeof(RawTerm)));
+    if (p == nullptr) return -1;
+    sc.raw = p;
+    sc.raw_cap = need_raw;
+  }
+  double* grid = sc.grid;
+  double* values = sc.values;
+  RawTerm* raw = sc.raw;
+
+  double si5[5], ci5[5];
+  const double incs[5] = {i0, i0 + h, i0 - h, i0 + 2.0 * h, i0 - 2.0 * h};
+  for (int s = 0; s < 5; ++s) fm::sincos(incs[s], si5[s], ci5[s]);
+  constexpr int J_TOP = NF_HALF / 2;
+  double suN[J_TOP + 1], cuN[J_TOP + 1];
+  for (int j = 0; j <= J_TOP; ++j) {
+    const double u = kTwoPi * j / NF;
+    fm::sincos(u, suN[j], cuN[j]);
+  }
+  double (*Fw)[65][36] = reinterpret_cast<double (*)[65][36]>(values);
+  alignas(16) double A_p[36][2][18], B_p[36][2][18], col_p[2][18];
+  double col[104], cku[36], sku[36];
+  int raw_count = 0;
+  int max_l_used = 6;
+  for (int m = 2; m <= degree; m += 2) {
+    int max_l_m = 0;
+    for (int l = degree; l >= std::max(6, m); --l) {
+      if (amp_rp[l] * egm.hypot_fb[l][m] >= 1e-19) { max_l_m = l; break; }
+    }
+    if (max_l_m == 0) continue;
+    if (max_l_m > max_l_used) max_l_used = max_l_m;
+    const int k = m / 2;
+    const int w_lo = e0 < 0.05 ? std::max(-max_l_m, k - 8) : -max_l_m;
+    const int w_hi = e0 < 0.05 ? std::min(max_l_m, k + 8) : max_l_m;
+    const int aw_max = std::max(std::abs(w_lo), std::abs(w_hi));
+
+    LegendreOrder L;
+    legendre_order(m, max_l_m, L);
+    for (int s = 0; s < 5; ++s) {
+      std::memset(A_p, 0, static_cast<size_t>(aw_max + 1) * sizeof(A_p[0]));
+      std::memset(B_p, 0, static_cast<size_t>(aw_max + 1) * sizeof(B_p[0]));
+      const double sis = si5[s], cis = ci5[s];
+      for (int j = 0; j <= J_TOP; ++j) {
+        const double w_j = (j == 0 || j == J_TOP) ? 0.5 : 1.0;
+        const double su = suN[j], cu = cuN[j];
+        const double x = sis * su, c = std::sqrt(std::fmax(0.0, 1.0 - x * x));
+        legendre_column(L, x, c, col);
+        const int k_top = max_l_m >> 1;
+        col_p[0][k_top] = 0.0;
+        col_p[1][k_top] = 0.0;
+        col_p[0][k_top + 1] = 0.0;
+        col_p[1][k_top + 1] = 0.0;
+        for (int l = m; l <= max_l_m; ++l) col_p[l & 1][l >> 1] = col[l] * w_j;
+        double sml = 0.0, cml = 1.0;
+        if (c > 1e-12) {
+          const double inv_c = 1.0 / c;
+          complex_pow(cu * inv_c, cis * su * inv_c, m, cml, sml);
+        } else {
+          fm::sincos(m * std::atan2(cis * su, cu), sml, cml);
+        }
+        cku[0] = 1.0;
+        sku[0] = 0.0;
+        for (int aw = 1; aw <= aw_max; ++aw) {
+          cku[aw] = cku[aw - 1] * cu - sku[aw - 1] * su;
+          sku[aw] = sku[aw - 1] * cu + cku[aw - 1] * su;
+        }
+        for (int aw = 0; aw <= aw_max; ++aw) {
+          const double ck = cku[aw], sk = sku[aw];
+          const bool odd = (aw & 1) != 0;
+          const double c1 = odd ? cml * sk : cml * ck;
+          const double c2 = odd ? sml * ck : sml * sk;
+          int first = std::max(6, std::max(m, aw));
+          if ((first - aw) & 1) ++first;
+          if (first > max_l_m) continue;
+          const int par = first & 1;
+          const int k0 = first >> 1, k1 = (max_l_m - par) >> 1;
+          double* a_row = A_p[aw][par];
+          double* b_row = B_p[aw][par];
+          const double* cp = col_p[par];
+#ifdef __wasm_simd128__
+          const v128_t vc1 = wasm_f64x2_splat(c1);
+          const v128_t vc2 = wasm_f64x2_splat(c2);
+          int kk = k0;
+          for (; kk + 1 <= k1; kk += 2) {
+            const v128_t vcp = wasm_v128_load(cp + kk);
+            wasm_v128_store(a_row + kk, wasm_f64x2_add(wasm_v128_load(a_row + kk), wasm_f64x2_mul(vcp, vc1)));
+            wasm_v128_store(b_row + kk, wasm_f64x2_add(wasm_v128_load(b_row + kk), wasm_f64x2_mul(vcp, vc2)));
+          }
+          if (kk <= k1) {
+            a_row[kk] += cp[kk] * c1;
+            b_row[kk] += cp[kk] * c2;
+          }
+#else
+          for (int kk = k0; kk <= k1; ++kk) {
+            a_row[kk] += cp[kk] * c1;
+            b_row[kk] += cp[kk] * c2;
+          }
+#endif
+        }
+      }
+      for (int aw = 0; aw <= aw_max; ++aw) {
+        const bool odd = (aw & 1) != 0;
+        int first = std::max(6, std::max(m, aw));
+        if ((first - aw) & 1) ++first;
+        const int par = first & 1;
+        double* dst_pos = Fw[s][aw + degree];
+        double* dst_neg = Fw[s][-aw + degree];
+        for (int l = first; l <= max_l_m; l += 2) {
+          const int kk = l >> 1;
+          const double a_val = A_p[aw][par][kk], b_val = B_p[aw][par][kk];
+          dst_pos[l] = odd ? (a_val - b_val) : (a_val + b_val);
+          if (aw > 0) dst_neg[l] = odd ? (-a_val - b_val) : (a_val - b_val);
+        }
+      }
+    }
+    constexpr double kTwoInvNF = 2.0 / NF_HALF;
+    const double inv_12h = 1.0 / (12.0 * h), inv_12h2 = 1.0 / (12.0 * h * h), inv_2h3 = 1.0 / (2.0 * h * h * h);
+    for (int w = w_lo; w <= w_hi; ++w) {
+      const int aw = w < 0 ? -w : w;
+      int first = std::max(6, std::max(m, aw));
+      if ((first - w) & 1) ++first;
+      const double* f0 = Fw[0][w + degree];
+      const double* fp = Fw[1][w + degree];
+      const double* fm = Fw[2][w + degree];
+      const double* fpp = Fw[3][w + degree];
+      const double* fmm = Fw[4][w + degree];
+      for (int l = first; l <= max_l_m; l += 2) {
+        if (amp_rp[l] * egm.hypot_fb[l][m] < 1e-19) continue;
+        const double v0 = f0[l] * kTwoInvNF, vp = fp[l] * kTwoInvNF, vm = fm[l] * kTwoInvNF;
+        const double vpp = fpp[l] * kTwoInvNF, vmm = fmm[l] * kTwoInvNF;
+        const int p = (l - w) / 2;
+        raw[raw_count++] = RawTerm{static_cast<int8_t>(l),
+                                   static_cast<int8_t>(m),
+                                   static_cast<int8_t>(p),
+                                   static_cast<int8_t>(k),
+                                   v0,
+                                   (vmm - 8.0 * vm + 8.0 * vp - vpp) * inv_12h,
+                                   (-vpp + 16.0 * vp - 30.0 * v0 + 16.0 * vm - vmm) * inv_12h2,
+                                   (vpp - 2.0 * vp + 2.0 * vm - vmm) * inv_2h3};
+      }
+    }
+  }
+  const double dh = std::min(5e-4, (1.0 - e0) / 4.0);
+  const double inv_N = 1.0 / N_half;
+  const int k_max_used = max_l_used / 2;
+  const double dE = kPi / N_half;
+  double sde0, cde0, sde, cde;
+  fm::sincos(0.5 * dE, sde0, cde0);
+  fm::sincos(dE, sde, cde);
+  const int cw_base = degree + 1;
+  const int sw_base = 2 * (degree + 1);
+  const int ck_base = 3 * (degree + 1);
+  const int sk_base = ck_base + degree / 2 + 1;
   for (int off = -2; off <= 2; ++off) {
-    const double e = e0 + off * dh, eta = std::sqrt(1.0-e*e);
-    for (int j = 0; j < N; ++j) {
-      const double E = kTwoPi*(j+0.5)/N;
-      double se, ce; fm::sincos(E,se,ce);
-      const double ir = 1.0/(1.0-e*ce), nu = std::atan2(eta*se,ce-e), M = E-e*se;
-      double sn, cn, sm, cm; fm::sincos(nu,sn,cn); fm::sincos(M,sm,cm);
-      double* r = grid+j*width;
-      double* cw = r+degree+1; double* sw = cw+degree+1;
-      double* ck = sw+degree+1; double* sk = ck+degree/2+1;
-      r[0]=cw[0]=ck[0]=1.0; sw[0]=sk[0]=0.0;
-      for (int l=1;l<=degree;++l) {
-        r[l]=r[l-1]*ir; cw[l]=cw[l-1]*cn-sw[l-1]*sn; sw[l]=sw[l-1]*cn+cw[l-1]*sn;
+    const double e = e0 + off * dh, eta = std::sqrt(1.0 - e * e);
+    double se = sde0, ce = cde0;
+#ifdef __wasm_simd128__
+    const v128_t v_one = wasm_f64x2_splat(1.0);
+    const v128_t v_zero = wasm_f64x2_splat(0.0);
+    for (int j = 0; j < N_half; j += 2) {
+      const double E0 = kPi * (j + 0.5) / N_half;
+      const double se0 = se, ce0 = ce;
+      const double nse0 = se * cde + ce * sde;
+      ce = ce * cde - se * sde;
+      se = nse0;
+      const double E1 = kPi * (j + 1.5) / N_half;
+      const double se1 = se, ce1 = ce;
+      const double nse1 = se * cde + ce * sde;
+      ce = ce * cde - se * sde;
+      se = nse1;
+      const double ir0 = 1.0 / (1.0 - e * ce0), ir1 = 1.0 / (1.0 - e * ce1);
+      const double cn0 = (ce0 - e) * ir0, sn0 = eta * se0 * ir0;
+      const double cn1 = (ce1 - e) * ir1, sn1 = eta * se1 * ir1;
+      double sm0, cm0, sm1, cm1;
+      fm::sincos(E0 - e * se0, sm0, cm0);
+      fm::sincos(E1 - e * se1, sm1, cm1);
+      const v128_t v_ir = wasm_f64x2_make(ir0, ir1);
+      const v128_t v_cn = wasm_f64x2_make(cn0, cn1);
+      const v128_t v_sn = wasm_f64x2_make(sn0, sn1);
+      const v128_t v_cm = wasm_f64x2_make(cm0, cm1);
+      const v128_t v_sm = wasm_f64x2_make(sm0, sm1);
+      v128_t vr = v_one, vcw = v_one, vsw = v_zero;
+      wasm_v128_store(grid + cw_base * N_half + j, vcw);
+      wasm_v128_store(grid + sw_base * N_half + j, vsw);
+      for (int l = 1; l <= max_l_used; ++l) {
+        vr = wasm_f64x2_mul(vr, v_ir);
+        const v128_t ncw = wasm_f64x2_sub(wasm_f64x2_mul(vcw, v_cn), wasm_f64x2_mul(vsw, v_sn));
+        vsw = wasm_f64x2_add(wasm_f64x2_mul(vsw, v_cn), wasm_f64x2_mul(vcw, v_sn));
+        vcw = ncw;
+        wasm_v128_store(grid + l * N_half + j, vr);
+        wasm_v128_store(grid + (cw_base + l) * N_half + j, vcw);
+        wasm_v128_store(grid + (sw_base + l) * N_half + j, vsw);
       }
-      for (int k=1;k<=degree/2;++k) { ck[k]=ck[k-1]*cm-sk[k-1]*sm; sk[k]=sk[k-1]*cm+ck[k-1]*sm; }
-    }
-    for (int q=0;q<count;++q) {
-      const HalfDayCoef& c=out[q]; const int w=c.l-2*c.p, aw=std::abs(w);
-      double sum=0.0;
-      for (int j=0;j<N;++j) {
-        const double* r=grid+j*width; const double* cw=r+degree+1; const double* sw=cw+degree+1;
-        const double* ck=sw+degree+1; const double* sk=ck+degree/2+1;
-        sum+=r[c.l]*(cw[aw]*ck[c.k]+(w<0?-sw[aw]:sw[aw])*sk[c.k]);
+      v128_t vck = v_one, vsk = v_zero;
+      wasm_v128_store(grid + ck_base * N_half + j, vck);
+      wasm_v128_store(grid + sk_base * N_half + j, vsk);
+      for (int kv = 1; kv <= k_max_used; ++kv) {
+        const v128_t nck = wasm_f64x2_sub(wasm_f64x2_mul(vck, v_cm), wasm_f64x2_mul(vsk, v_sm));
+        vsk = wasm_f64x2_add(wasm_f64x2_mul(vsk, v_cm), wasm_f64x2_mul(vck, v_sm));
+        vck = nck;
+        wasm_v128_store(grid + (ck_base + kv) * N_half + j, vck);
+        wasm_v128_store(grid + (sk_base + kv) * N_half + j, vsk);
       }
-      values[(off+2)*count+q]=sum/N;
     }
+    double* ang = grid;  // r[0] slot is unused (all raw terms have l >= 6)
+    double* val_row = values + (off + 2) * raw_count;
+    int q = 0;
+    while (q < raw_count) {
+      const int m = raw[q].m, w = raw[q].l - 2 * raw[q].p, k = raw[q].k, aw = w < 0 ? -w : w;
+      int q_end = q + 1;
+      while (q_end < raw_count && raw[q_end].m == m && (raw[q_end].l - 2 * raw[q_end].p) == w) ++q_end;
+      const int n_l = q_end - q;
+      const double* cw_p = grid + (cw_base + aw) * N_half;
+      const double* sw_p = grid + (sw_base + aw) * N_half;
+      const double* ck_p = grid + (ck_base + k) * N_half;
+      const double* sk_p = grid + (sk_base + k) * N_half;
+      if (w < 0) {
+        for (int j = 0; j < N_half; j += 2) {
+          wasm_v128_store(ang + j, wasm_f64x2_sub(wasm_f64x2_mul(wasm_v128_load(cw_p + j), wasm_v128_load(ck_p + j)),
+                                                  wasm_f64x2_mul(wasm_v128_load(sw_p + j), wasm_v128_load(sk_p + j))));
+        }
+      } else {
+        for (int j = 0; j < N_half; j += 2) {
+          wasm_v128_store(ang + j, wasm_f64x2_add(wasm_f64x2_mul(wasm_v128_load(cw_p + j), wasm_v128_load(ck_p + j)),
+                                                  wasm_f64x2_mul(wasm_v128_load(sw_p + j), wasm_v128_load(sk_p + j))));
+        }
+      }
+      for (int idx = 0; idx < n_l; ++idx) {
+        const double* rl = grid + raw[q + idx].l * N_half;
+        v128_t acc0 = v_zero, acc1 = v_zero;
+        int j = 0;
+        for (; j + 3 < N_half; j += 4) {
+          acc0 = wasm_f64x2_add(acc0, wasm_f64x2_mul(wasm_v128_load(rl + j), wasm_v128_load(ang + j)));
+          acc1 = wasm_f64x2_add(acc1, wasm_f64x2_mul(wasm_v128_load(rl + j + 2), wasm_v128_load(ang + j + 2)));
+        }
+        for (; j < N_half; j += 2) {
+          acc0 = wasm_f64x2_add(acc0, wasm_f64x2_mul(wasm_v128_load(rl + j), wasm_v128_load(ang + j)));
+        }
+        const v128_t acc = wasm_f64x2_add(acc0, acc1);
+        val_row[q + idx] = (wasm_f64x2_extract_lane(acc, 0) + wasm_f64x2_extract_lane(acc, 1)) * inv_N;
+      }
+      q = q_end;
+    }
+#else
+    for (int j = 0; j < N_half; ++j) {
+      const double E = kPi * (j + 0.5) / N_half;
+      const double se_j = se, ce_j = ce;
+      const double nse = se * cde + ce * sde;
+      ce = ce * cde - se * sde;
+      se = nse;
+      const double ir = 1.0 / (1.0 - e * ce_j), M = E - e * se_j;
+      const double cn = (ce_j - e) * ir, sn = eta * se_j * ir;
+      double sm, cm;
+      fm::sincos(M, sm, cm);
+      grid[(cw_base + 0) * N_half + j] = 1.0;
+      grid[(sw_base + 0) * N_half + j] = 0.0;
+      double rl = 1.0, cwl = 1.0, swl = 0.0;
+      for (int l = 1; l <= max_l_used; ++l) {
+        rl *= ir;
+        const double ncwl = cwl * cn - swl * sn;
+        swl = swl * cn + cwl * sn;
+        cwl = ncwl;
+        grid[l * N_half + j] = rl;
+        grid[(cw_base + l) * N_half + j] = cwl;
+        grid[(sw_base + l) * N_half + j] = swl;
+      }
+      grid[(ck_base + 0) * N_half + j] = 1.0;
+      grid[(sk_base + 0) * N_half + j] = 0.0;
+      double ckk = 1.0, skk = 0.0;
+      for (int kv = 1; kv <= k_max_used; ++kv) {
+        const double nckk = ckk * cm - skk * sm;
+        skk = skk * cm + ckk * sm;
+        ckk = nckk;
+        grid[(ck_base + kv) * N_half + j] = ckk;
+        grid[(sk_base + kv) * N_half + j] = skk;
+      }
+    }
+    double* ang = grid;
+    double* val_row = values + (off + 2) * raw_count;
+    int q = 0;
+    while (q < raw_count) {
+      const int m = raw[q].m, w = raw[q].l - 2 * raw[q].p, k = raw[q].k, aw = w < 0 ? -w : w;
+      int q_end = q + 1;
+      while (q_end < raw_count && raw[q_end].m == m && (raw[q_end].l - 2 * raw[q_end].p) == w) ++q_end;
+      const int n_l = q_end - q;
+      const double* cw_p = grid + (cw_base + aw) * N_half;
+      const double* sw_p = grid + (sw_base + aw) * N_half;
+      const double* ck_p = grid + (ck_base + k) * N_half;
+      const double* sk_p = grid + (sk_base + k) * N_half;
+      for (int j = 0; j < N_half; ++j) {
+        ang[j] = cw_p[j] * ck_p[j] + (w < 0 ? -sw_p[j] : sw_p[j]) * sk_p[j];
+      }
+      for (int idx = 0; idx < n_l; ++idx) {
+        const double* rl = grid + raw[q + idx].l * N_half;
+        double s = 0.0;
+        for (int j = 0; j < N_half; ++j) s += rl[j] * ang[j];
+        val_row[q + idx] = s * inv_N;
+      }
+      q = q_end;
+    }
+#endif
   }
-  for(int j=0;j<count;++j) {
-    const double gm2=values[j],gm1=values[count+j],g0=values[2*count+j],gp1=values[3*count+j],gp2=values[4*count+j];
-    out[j].g=res::GTaylor{g0,(gm2-8*gm1+8*gp1-gp2)/(12*dh),
-      (-gp2+16*gp1-30*g0+16*gm1-gm2)/(12*dh*dh),(gp2-2*gp1+2*gm1-gm2)/(2*dh*dh*dh)};
+  const double inv_12dh = 1.0 / (12.0 * dh), inv_12dh2 = 1.0 / (12.0 * dh * dh), inv_2dh3 = 1.0 / (2.0 * dh * dh * dh);
+
+  int count = 0;
+  int q = 0;
+  while (q < raw_count) {
+    const int m = raw[q].m, w = raw[q].l - 2 * raw[q].p, k = raw[q].k;
+    int q_end = q + 1;
+    while (q_end < raw_count && raw[q_end].m == m && (raw[q_end].l - 2 * raw[q_end].p) == w) ++q_end;
+    double uc0 = 0, uce = 0, ucee = 0, uceee = 0, uci = 0, ucii = 0, uciii = 0, ucei = 0, uceei = 0, uceii = 0;
+    double uca = 0, ucaa = 0, ucae = 0, uceea = 0, uceeea = 0, ucai = 0;
+    double us0 = 0, use = 0, usee = 0, useee = 0, usi = 0, usii = 0, usiii = 0, usei = 0, useei = 0, useii = 0;
+    double usa = 0, usaa = 0, usae = 0, useea = 0, useeea = 0, usai = 0;
+    for (int idx = q; idx < q_end; ++idx) {
+      const RawTerm& c = raw[idx];
+      const int l = c.l;
+      const double gm2 = values[idx], gm1 = values[raw_count + idx], g0 = values[2 * raw_count + idx];
+      const double gp1 = values[3 * raw_count + idx], gp2 = values[4 * raw_count + idx];
+      const double g1 = (gm2 - 8.0 * gm1 + 8.0 * gp1 - gp2) * inv_12dh;
+      const double g2 = (-gp2 + 16.0 * gp1 - 30.0 * g0 + 16.0 * gm1 - gm2) * inv_12dh2;
+      const double g3 = (gp2 - 2.0 * gp1 + 2.0 * gm1 - gm2) * inv_2dh3;
+      const bool odd = ((l - m) & 1) != 0;
+      const double A0 = amp0[l];
+      const double cl = A0 * (odd ? -kEgmS[l][m] : kEgmC[l][m]);
+      const double sl = A0 * (odd ? kEgmC[l][m] : kEgmS[l][m]);
+      const double lp1 = l + 1.0, lp1_l = lp1 * l;
+      const double f0g0 = c.f * g0, f0g1 = c.f * g1, f0g2 = c.f * g2, f0g3 = c.f * g3;
+      const double f1g0 = c.df * g0, f2g0 = c.ddf * g0, f3g0 = c.dddf * g0;
+      const double f1g1 = c.df * g1, f1g2 = c.df * g2, f2g1 = c.ddf * g1;
+      uc0 += cl * f0g0;    us0 += sl * f0g0;
+      uce += cl * f0g1;    use += sl * f0g1;
+      ucee += cl * f0g2;   usee += sl * f0g2;
+      uceee += cl * f0g3;  useee += sl * f0g3;
+      uci += cl * f1g0;    usi += sl * f1g0;
+      ucii += cl * f2g0;   usii += sl * f2g0;
+      uciii += cl * f3g0;  usiii += sl * f3g0;
+      ucei += cl * f1g1;   usei += sl * f1g1;
+      uceei += cl * f1g2;  useei += sl * f1g2;
+      uceii += cl * f2g1;  useii += sl * f2g1;
+      uca += cl * lp1 * f0g0;    usa += sl * lp1 * f0g0;
+      ucaa += cl * lp1_l * f0g0; usaa += sl * lp1_l * f0g0;
+      ucae += cl * lp1 * f0g1;   usae += sl * lp1 * f0g1;
+      uceea += cl * lp1 * f0g2;  useea += sl * lp1 * f0g2;
+      uceeea += cl * lp1 * f0g3; useeea += sl * lp1 * f0g3;
+      ucai += cl * lp1 * f1g0;   usai += sl * lp1 * f1g0;
+    }
+    out[count++] = HalfDayCoef{
+        static_cast<int8_t>(m), static_cast<int8_t>(w), static_cast<int8_t>(k), 0,
+        static_cast<float>(uc0), static_cast<float>(uce), static_cast<float>(ucee), static_cast<float>(uceee),
+        static_cast<float>(uci), static_cast<float>(ucii), static_cast<float>(uciii),
+        static_cast<float>(ucei), static_cast<float>(uceei), static_cast<float>(uceii),
+        static_cast<float>(uca), static_cast<float>(ucaa), static_cast<float>(ucae), static_cast<float>(uceea), static_cast<float>(uceeea), static_cast<float>(ucai),
+        static_cast<float>(us0), static_cast<float>(use), static_cast<float>(usee), static_cast<float>(useee),
+        static_cast<float>(usi), static_cast<float>(usii), static_cast<float>(usiii),
+        static_cast<float>(usei), static_cast<float>(useei), static_cast<float>(useii),
+        static_cast<float>(usa), static_cast<float>(usaa), static_cast<float>(usae), static_cast<float>(useea), static_cast<float>(useeea), static_cast<float>(usai),
+    };
+    q = q_end;
   }
-  std::free(grid); std::free(values);
   return count;
 }
+struct HdGroup {
+  uint16_t start, end;
+  int8_t k, m, pad0, pad1;
+};
+struct HalfDayEvalCache {
+  const HalfDayCoef* table = nullptr;
+  uint64_t table_id = 0;
+  int count = 0;
+  int n_groups = 0;
+  int n_pad = 0;
+  bool grouped_ok = false;
+  float f0 = 0.0f, fn = 0.0f;
+  double a0 = -1.0, e0 = -1.0, i0 = -1.0;
+  double a = -1.0, e = -1.0, i = -1.0;
+  int max_aw = 33, max_k = 16;
+  HdGroup groups[32]{};
+  uint16_t slot_of[1024]{};
+  uint8_t w_off[1152]{};
+  alignas(16) float wf[1152]{};
+  alignas(16) float b0[1152]{};
+  alignas(16) float b1[1152]{};
+  alignas(16) float b2[1152]{};
+  alignas(16) float b3[1152]{};
+  alignas(16) float b4[1152]{};
+  alignas(16) float b5[1152]{};
+  alignas(16) float b6[1152]{};
+  alignas(16) float b7[1152]{};
+};
+inline thread_local HalfDayEvalCache* g_half_day_eval_cache_ptr = nullptr;
+inline HalfDayEvalCache& half_day_eval_cache() {
+  if (__builtin_expect(!g_half_day_eval_cache_ptr, 0)) g_half_day_eval_cache_ptr = new HalfDayEvalCache{};
+  return *g_half_day_eval_cache_ptr;
+}
+inline int32_t& fit_grid_depth();
 inline void half_day_six(const HalfDayCoef* table, int count, double e0, double i0,
-                        double t, const Kepler& k, double n, double eta, double si,
-                        double ci, double theta, double* six) {
-  // Fixed-size blocks retain bounded stack usage; coefficients remain per object.
-  constexpr int block = 64;
-  res::ResCoef terms[block];
-  const double d = k.e - e0, di = k.i - i0;
-  for (int first = 0; first < count; first += block) {
-    const int size = std::min(block, count - first);
-    for (int j = 0; j < size; ++j) {
-      const HalfDayCoef& c = table[first+j];
-      const double G = c.g.g0+d*(c.g.g1+d*(0.5*c.g.g2+d*c.g.g3/6.0));
-      const double dG = c.g.g1+d*(c.g.g2+0.5*d*c.g.g3);
-      const double F = c.f+di*(c.df+di*(0.5*c.ddf+di*c.dddf/6.0));
-      const double dF = c.df+di*(c.ddf+0.5*di*c.dddf);
-      terms[j] = res::ResCoef{c.l,c.m,c.p,c.k,static_cast<int8_t>((c.l-c.m)&1),
-        kEgmC[c.l][c.m],kEgmS[c.l][c.m],F*G,F*dG,dF*G};
+                        double t, const Kepler& kp, double n, double eta, double si,
+                        double ci, double theta_g0, double* six, double a0 = 1.0, uint64_t table_id = 0) {
+  if (count == 0) return;
+  const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+  const double thetag = theta_g0 + kOmegaE * t;
+  const double ia = 1.0 / a;
+  const double da = a0 * ia - 1.0;
+
+  HalfDayEvalCache& hc = half_day_eval_cache();
+  const bool cacheable = count <= 1024 && t != 0.0 && table_id != 0 && fit_grid_depth() == 0;
+  if (cacheable &&
+      (hc.table_id != table_id || hc.table != table || hc.count != count ||
+       hc.f0 != table[0].uc0 || hc.fn != table[count - 1].uc0 ||
+       hc.a0 != a0 || hc.e0 != e0 || hc.i0 != i0 ||
+       a != hc.a || kp.e != hc.e || kp.i != hc.i)) {
+    const bool new_table = (hc.table_id != table_id || hc.table != table || hc.count != count ||
+                            hc.f0 != table[0].uc0 || hc.fn != table[count - 1].uc0);
+    hc.table_id = table_id;
+    hc.table = table;
+    hc.count = count;
+    hc.f0 = table[0].uc0;
+    hc.fn = table[count - 1].uc0;
+    hc.a0 = a0;
+    hc.e0 = e0;
+    hc.i0 = i0;
+    hc.a = a;
+    hc.e = kp.e;
+    hc.i = kp.i;
+    if (new_table) {
+      int maw = 0, mk = 0, ng = 0, npad = 0;
+      bool ok = true;
+      int j = 0;
+      while (j < count) {
+        const int kv = table[j].k, mv = table[j].m;
+        if (kv < 0 || kv > 17) { ok = false; break; }
+        int j_end = j + 1;
+        while (j_end < count && table[j_end].k == kv && table[j_end].m == mv) ++j_end;
+        const int n_run = j_end - j;
+        const int run_pad = (n_run + 3) & ~3;
+        if (ng >= 32 || npad + run_pad > 1152) { ok = false; break; }
+        for (int idx = 0; idx < n_run; ++idx) {
+          const int wv = table[j + idx].w;
+          const int aw = wv < 0 ? -wv : wv;
+          if (aw > 35) { ok = false; break; }
+          if (aw > maw) maw = aw;
+          const int slot = npad + idx;
+          hc.slot_of[j + idx] = static_cast<uint16_t>(slot);
+          hc.w_off[slot] = static_cast<uint8_t>(wv + 35);
+          hc.wf[slot] = static_cast<float>(wv);
+        }
+        if (!ok) break;
+        for (int idx = n_run; idx < run_pad; ++idx) {
+          const int slot = npad + idx;
+          hc.w_off[slot] = 35u;
+          hc.wf[slot] = 0.0f;
+          hc.b0[slot] = hc.b1[slot] = hc.b2[slot] = hc.b3[slot] = 0.0f;
+          hc.b4[slot] = hc.b5[slot] = hc.b6[slot] = hc.b7[slot] = 0.0f;
+        }
+        if (kv > mk) mk = kv;
+        hc.groups[ng++] = HdGroup{static_cast<uint16_t>(npad), static_cast<uint16_t>(npad + run_pad),
+                                  static_cast<int8_t>(kv), static_cast<int8_t>(mv), 0, 0};
+        npad += run_pad;
+        j = j_end;
+      }
+      hc.grouped_ok = ok;
+      hc.n_groups = ok ? ng : 0;
+      hc.n_pad = ok ? npad : 0;
+      hc.max_aw = ok ? maw : 33;
+      hc.max_k = ok ? mk : 16;
     }
-    res::resonance_six(terms,size,t,k,n,eta,si,ci,theta,six);
+    if (hc.grouped_ok) {
+      const double dd = kp.e - e0, did = kp.i - i0;
+      const double dd2_2 = 0.5 * dd, dd_6 = dd * (1.0 / 6.0);
+      const double did2_2 = 0.5 * did, did_6 = did * (1.0 / 6.0);
+      const double dd_di = dd * did, da2_2d = 0.5 * da;
+      const float d = static_cast<float>(dd), di = static_cast<float>(did), daf = static_cast<float>(da);
+      const float d2_2 = 0.5f * d, d_6f = d * (1.0f / 6.0f), di2_2 = 0.5f * di, neg_1pda = -(1.0f + daf);
+      for (int j = 0; j < count; ++j) {
+        const HalfDayCoef& c = table[j];
+        const uint16_t slot = hc.slot_of[j];
+        hc.b0[slot] = static_cast<float>(
+            c.uc0 + dd * (c.uce + dd * (dd2_2 * c.ucee + dd_6 * c.uceee)) +
+            did * (c.uci + did * (did2_2 * c.ucii + did_6 * c.uciii)) +
+            dd_di * (c.ucei + dd2_2 * c.uceei + did2_2 * c.uceii) +
+            da * (c.uca + da2_2d * c.ucaa + dd * (c.ucae + dd * (dd2_2 * c.uceea + dd_6 * c.uceeea)) + did * c.ucai));
+        hc.b1[slot] = static_cast<float>(
+            c.us0 + dd * (c.use + dd * (dd2_2 * c.usee + dd_6 * c.useee)) +
+            did * (c.usi + did * (did2_2 * c.usii + did_6 * c.usiii)) +
+            dd_di * (c.usei + dd2_2 * c.useei + did2_2 * c.useii) +
+            da * (c.usa + da2_2d * c.usaa + dd * (c.usae + dd * (dd2_2 * c.useea + dd_6 * c.useeea)) + did * c.usai));
+        hc.b2[slot] = c.uce + d * (c.ucee + d2_2 * c.uceee) + di * (c.ucei + d * c.uceei + di2_2 * c.uceii) + daf * (c.ucae + d * (c.uceea + d2_2 * c.uceeea));
+        hc.b3[slot] = c.use + d * (c.usee + d2_2 * c.useee) + di * (c.usei + d * c.useei + di2_2 * c.useii) + daf * (c.usae + d * (c.useea + d2_2 * c.useeea));
+        hc.b4[slot] = c.uci + di * (c.ucii + di2_2 * c.uciii) + d * (c.ucei + d2_2 * c.uceei + di * c.uceii) + daf * c.ucai;
+        hc.b5[slot] = c.usi + di * (c.usii + di2_2 * c.usiii) + d * (c.usei + d2_2 * c.useei + di * c.useii) + daf * c.usai;
+        hc.b6[slot] = neg_1pda * (c.uca + daf * c.ucaa + d * (c.ucae + d * (d2_2 * c.uceea + d_6f * c.uceeea)) + di * c.ucai);
+        hc.b7[slot] = neg_1pda * (c.usa + daf * c.usaa + d * (c.usae + d * (d2_2 * c.useea + d_6f * c.useeea)) + di * c.usai);
+      }
+    }
   }
+
+  double sw1, cw1, sT1, cT1;
+  fm::sincos(kp.argp, sw1, cw1);
+  fm::sincos(kp.m + 2.0 * (kp.node - thetag), sT1, cT1);
+  double cw_buf[71], sw_buf[71], ck[18], sk[18];
+  double* const cw = cw_buf + 35;
+  double* const sw = sw_buf + 35;
+  cw[0] = ck[0] = 1.0;
+  sw[0] = sk[0] = 0.0;
+  const bool fast_eval = cacheable && hc.grouped_ok;
+  const int max_aw = fast_eval ? hc.max_aw : 33;
+  const int max_k = fast_eval ? hc.max_k : 16;
+  for (int q = 1; q <= max_aw; ++q) {
+    cw[q] = cw[q - 1] * cw1 - sw[q - 1] * sw1;
+    sw[q] = sw[q - 1] * cw1 + cw[q - 1] * sw1;
+    cw[-q] = cw[q];
+    sw[-q] = -sw[q];
+  }
+  for (int q = 1; q <= max_k; ++q) {
+    ck[q] = ck[q - 1] * cT1 - sk[q - 1] * sT1;
+    sk[q] = sk[q - 1] * cT1 + ck[q - 1] * sT1;
+  }
+
+  double sM = 0.0, sW = 0.0, sO = 0.0, sE = 0.0, sI = 0.0, sA = 0.0;
+  if (fast_eval) {
+#ifdef __wasm_simd128__
+    alignas(8) float csw_f[71][2];
+    csw_f[35][0] = 1.0f;
+    csw_f[35][1] = 0.0f;
+    for (int q = 1; q <= max_aw; ++q) {
+      const float cwf = static_cast<float>(cw[q]), swf = static_cast<float>(sw[q]);
+      csw_f[35 + q][0] = cwf;
+      csw_f[35 + q][1] = swf;
+      csw_f[35 - q][0] = cwf;
+      csw_f[35 - q][1] = -swf;
+    }
+    v128_t vM = wasm_f32x4_splat(0.0f), vW = wasm_f32x4_splat(0.0f), vO = wasm_f32x4_splat(0.0f);
+    v128_t vE = wasm_f32x4_splat(0.0f), vI = wasm_f32x4_splat(0.0f), vA = wasm_f32x4_splat(0.0f);
+    const int ng = hc.n_groups;
+    for (int gi = 0; gi < ng; ++gi) {
+      const HdGroup& grp = hc.groups[gi];
+      const v128_t v_ck = wasm_f32x4_splat(static_cast<float>(ck[grp.k]));
+      const v128_t v_sk = wasm_f32x4_splat(static_cast<float>(sk[grp.k]));
+      v128_t v_grp_fg = wasm_f32x4_splat(0.0f);
+      for (int slot = grp.start; slot < grp.end; slot += 4) {
+        const uint8_t* wp = hc.w_off + slot;
+        v128_t w01 = wasm_v128_load64_zero(csw_f[wp[0]]);
+        w01 = wasm_v128_load64_lane(csw_f[wp[1]], w01, 1);
+        v128_t w23 = wasm_v128_load64_zero(csw_f[wp[2]]);
+        w23 = wasm_v128_load64_lane(csw_f[wp[3]], w23, 1);
+        const v128_t cww = wasm_i32x4_shuffle(w01, w23, 0, 2, 4, 6);
+        const v128_t sww = wasm_i32x4_shuffle(w01, w23, 1, 3, 5, 7);
+        const v128_t vcp = wasm_f32x4_sub(wasm_f32x4_mul(cww, v_ck), wasm_f32x4_mul(sww, v_sk));
+        const v128_t vsp = wasm_f32x4_add(wasm_f32x4_mul(sww, v_ck), wasm_f32x4_mul(cww, v_sk));
+        const v128_t fgdS = wasm_f32x4_sub(wasm_f32x4_mul(wasm_v128_load(hc.b1 + slot), vcp),
+                                           wasm_f32x4_mul(wasm_v128_load(hc.b0 + slot), vsp));
+        v_grp_fg = wasm_f32x4_add(v_grp_fg, fgdS);
+        vW = wasm_f32x4_add(vW, wasm_f32x4_mul(wasm_v128_load(hc.wf + slot), fgdS));
+        vE = wasm_f32x4_add(vE, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(hc.b2 + slot), vcp),
+                                               wasm_f32x4_mul(wasm_v128_load(hc.b3 + slot), vsp)));
+        vI = wasm_f32x4_add(vI, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(hc.b4 + slot), vcp),
+                                               wasm_f32x4_mul(wasm_v128_load(hc.b5 + slot), vsp)));
+        vA = wasm_f32x4_add(vA, wasm_f32x4_add(wasm_f32x4_mul(wasm_v128_load(hc.b6 + slot), vcp),
+                                               wasm_f32x4_mul(wasm_v128_load(hc.b7 + slot), vsp)));
+      }
+      vM = wasm_f32x4_add(vM, wasm_f32x4_mul(wasm_f32x4_splat(static_cast<float>(grp.k)), v_grp_fg));
+      vO = wasm_f32x4_add(vO, wasm_f32x4_mul(wasm_f32x4_splat(static_cast<float>(grp.m)), v_grp_fg));
+    }
+    auto hsum = [](v128_t v) -> double {
+      const v128_t p2 = wasm_f32x4_add(v, wasm_i64x2_shuffle(v, v, 1, 0));
+      const v128_t d2 = wasm_f64x2_promote_low_f32x4(p2);
+      return wasm_f64x2_extract_lane(d2, 0) + wasm_f64x2_extract_lane(d2, 1);
+    };
+    sM = hsum(vM);
+    sW = hsum(vW);
+    sO = hsum(vO);
+    sE = hsum(vE);
+    sI = hsum(vI);
+    sA = hsum(vA);
+#else
+    for (int gi = 0; gi < hc.n_groups; ++gi) {
+      const HdGroup& grp = hc.groups[gi];
+      const double ckv = ck[grp.k], skv = sk[grp.k];
+      double grp_fg = 0.0;
+      for (int slot = grp.start; slot < grp.end; ++slot) {
+        const int w = static_cast<int>(hc.w_off[slot]) - 35;
+        const double cww = cw[w], sww = sw[w];
+        const double cp = cww * ckv - sww * skv;
+        const double sp = sww * ckv + cww * skv;
+        const double fgdS = -static_cast<double>(hc.b0[slot]) * sp + static_cast<double>(hc.b1[slot]) * cp;
+        grp_fg += fgdS;
+        sW += static_cast<double>(hc.wf[slot]) * fgdS;
+        sE += static_cast<double>(hc.b2[slot]) * cp + static_cast<double>(hc.b3[slot]) * sp;
+        sI += static_cast<double>(hc.b4[slot]) * cp + static_cast<double>(hc.b5[slot]) * sp;
+        sA += static_cast<double>(hc.b6[slot]) * cp + static_cast<double>(hc.b7[slot]) * sp;
+      }
+      sM += grp.k * grp_fg;
+      sO += grp.m * grp_fg;
+    }
+#endif
+  } else {
+    const double d = kp.e - e0, di = kp.i - i0;
+    const double d2_2 = 0.5 * d, d_6 = d / 6.0;
+    const double di2_2 = 0.5 * di, di_6 = di / 6.0;
+    const double d_di = d * di, da2_2 = 0.5 * da, neg_1pda = -(1.0 + da);
+    for (int j = 0; j < count; ++j) {
+      const HalfDayCoef& c = table[j];
+      const int m = c.m, k = c.k, w = c.w;
+      const double cww = cw[w], sww = sw[w];
+      const double cp = cww * ck[k] - sww * sk[k];
+      const double sp = sww * ck[k] + cww * sk[k];
+      const double phi_c = c.uc0 + d * (c.uce + d * (d2_2 * c.ucee + d_6 * c.uceee)) +
+                           di * (c.uci + di * (di2_2 * c.ucii + di_6 * c.uciii)) +
+                           d_di * (c.ucei + d2_2 * c.uceei + di2_2 * c.uceii) +
+                           da * (c.uca + da2_2 * c.ucaa + d * (c.ucae + d * (d2_2 * c.uceea + d_6 * c.uceeea)) + di * c.ucai);
+      const double phi_s = c.us0 + d * (c.use + d * (d2_2 * c.usee + d_6 * c.useee)) +
+                           di * (c.usi + di * (di2_2 * c.usii + di_6 * c.usiii)) +
+                           d_di * (c.usei + d2_2 * c.useei + di2_2 * c.useii) +
+                           da * (c.usa + da2_2 * c.usaa + d * (c.usae + d * (d2_2 * c.useea + d_6 * c.useeea)) + di * c.usai);
+      const double pe_c = c.uce + d * (c.ucee + d2_2 * c.uceee) + di * (c.ucei + d * c.uceei + di2_2 * c.uceii) + da * (c.ucae + d * (c.uceea + d2_2 * c.uceeea));
+      const double pe_s = c.use + d * (c.usee + d2_2 * c.useee) + di * (c.usei + d * c.useei + di2_2 * c.useii) + da * (c.usae + d * (c.useea + d2_2 * c.useeea));
+      const double pi_c = c.uci + di * (c.ucii + di2_2 * c.uciii) + d * (c.ucei + d2_2 * c.uceei + di * c.uceii) + da * c.ucai;
+      const double pi_s = c.usi + di * (c.usii + di2_2 * c.usiii) + d * (c.usei + d2_2 * c.useei + di * c.useii) + da * c.usai;
+      const double pa_c = neg_1pda * (c.uca + da * c.ucaa + d * (c.ucae + d * (d2_2 * c.uceea + d_6 * c.uceeea)) + di * c.ucai);
+      const double pa_s = neg_1pda * (c.usa + da * c.usaa + d * (c.usae + d * (d2_2 * c.useea + d_6 * c.useeea)) + di * c.usai);
+      const double fgdS = -phi_c * sp + phi_s * cp;
+      sM += k * fgdS;
+      sW += w * fgdS;
+      sO += m * fgdS;
+      sE += pe_c * cp + pe_s * sp;
+      sI += pi_c * cp + pi_s * sp;
+      sA += pa_c * cp + pa_s * sp;
+    }
+  }
+  sA *= ia;
+  const double na2 = n * a * a;
+  const double tanhalf = sin_i / (1.0 + ci);
+  six[0] += -3.0 * ia * ia * sM;
+  six[1] += (eta * eta * sM - eta * sW) / (na2 * e);
+  six[2] += (ci * sW - sO) / (na2 * eta * sin_i);
+  six[3] += (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
+  six[4] += sI / (na2 * eta);
+  six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
 }
 
 /// The zonal tail, J_l for 6 <= l <= the degree (SPEC 2 carries J2-J5), first order in the
@@ -564,39 +3625,130 @@ inline void node_G(int l, int p, int q, double e, double& G, double& dG) {
   dG /= N;
 }
 
+struct OddZonalG1 {
+  bool ready = false;
+  double g1[72]{};
+};
+inline thread_local OddZonalG1 g_odd_zonal_g1{};
+[[gnu::noinline]] inline void init_odd_zonal_g1(OddZonalG1& r) {
+  for (int l = 7; l <= 70; l += 2) r.g1[l] = res::hansen_G(l, (l - 1) / 2, -1, 1e-3) / 1e-3;
+  r.ready = true;
+}
+inline const OddZonalG1& odd_zonal_g1() {
+  OddZonalG1& r = g_odd_zonal_g1;
+  if (__builtin_expect(!r.ready, 0)) init_odd_zonal_g1(r);
+  return r;
+}
+
 inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float* F) {
-  double f[72], fp[72], fm[72];
   const double h = 1e-5;
   int idx = 0;
-  for (int l = 6; l <= degree; ++l) {
-    const int wl = wide ? l : (l & 1);
-    for (int w = -wl; w <= wl; w += 2) {
-      const int p = (l - w) / 2, q = -w;
-      normalized_Fk(0, w, l, i0, f);
-      normalized_Fk(0, w, l, i0 + h, fp);
-      normalized_Fk(0, w, l, i0 - h, fm);
-      double g0, g1;
-      if (wide) {
-        double G, dG;
-        node_G(l, p, q, e0, G, dG);
-        g1 = dG;
-        g0 = G - dG * e0;
-      } else if (q == 0) {
+  if (!wide) {
+    const OddZonalG1& kOddG1 = odd_zonal_g1();
+    double si0, ci0;
+    fm::sincos(i0, si0, ci0);
+    double f_even[72]{}, df_even[72]{}, f_pos1[72]{}, df_pos1[72]{};
+    double f_neg1[72]{}, df_neg1[72]{};
+    if (std::fabs(ci0) >= 1e-3) {
+      const int NF = (degree + 4) & ~1;
+      const int NF_HALF = NF >> 1;
+      const int j_top = NF_HALF >> 1;
+      LegendreOrder L;
+      legendre_order(0, degree, L);
+      const double du = kTwoPi / NF, two_inv_NF = 2.0 / NF_HALF;
+      double sdu, cdu;
+      fm::sincos(du, sdu, cdu);
+      double su = 0.0, cu = 1.0;
+      double col[104], dcol[104];
+      for (int j = 0; j <= j_top; ++j) {
+        if (j > 0) {
+          const double nsu = su * cdu + cu * sdu;
+          cu = cu * cdu - su * sdu;
+          su = nsu;
+        }
+        const double w_j = (j == 0 || 2 * j == NF_HALF) ? 0.5 : 1.0;
+        const double x = si0 * su, c2 = 1.0 - x * x, c = std::sqrt(c2);
+        const double inv_c2 = 1.0 / c2;
+        legendre_column(L, x, c, col);
+        const double alpha_x = ci0 * su * inv_c2;
+        for (int l = 1; l <= degree; ++l) dcol[l] = alpha_x * (L.d[l] * col[l - 1] - l * x * col[l]);
+        for (int l = 6; l <= degree; l += 2) {
+          f_even[l] += col[l] * w_j;
+          df_even[l] += dcol[l] * w_j;
+        }
+        const double su_w = su * w_j;
+        for (int l = 7; l <= degree; l += 2) {
+          f_pos1[l] += col[l] * su_w;
+          df_pos1[l] += dcol[l] * su_w;
+        }
+      }
+      for (int l = 6; l <= degree; l += 2) {
+        f_even[l] *= two_inv_NF;
+        df_even[l] *= two_inv_NF;
+      }
+      for (int l = 7; l <= degree; l += 2) {
+        f_pos1[l] *= two_inv_NF;
+        df_pos1[l] *= two_inv_NF;
+        f_neg1[l] = -f_pos1[l];
+        df_neg1[l] = -df_pos1[l];
+      }
+    } else {
+      double fp_even[72], fm_even[72], fp_neg1[72], fm_neg1[72], fp_pos1[72], fm_pos1[72];
+      normalized_Fk3(0, 0, degree, i0, h, f_even, fp_even, fm_even);
+      normalized_Fk3(0, -1, degree, i0, h, f_neg1, fp_neg1, fm_neg1);
+      normalized_Fk3(0, 1, degree, i0, h, f_pos1, fp_pos1, fm_pos1);
+      const double inv_2h = 0.5 / h;
+      for (int l = 6; l <= degree; ++l) {
+        df_even[l] = (fp_even[l] - fm_even[l]) * inv_2h;
+        df_neg1[l] = (fp_neg1[l] - fm_neg1[l]) * inv_2h;
+        df_pos1[l] = (fp_pos1[l] - fm_pos1[l]) * inv_2h;
+      }
+    }
+    for (int l = 6; l <= degree; ++l) {
+      if ((l & 1) == 0) {
         const double c2 = 0.25 * l * (l + 1);
         double G, dG;
         if (e0 < 0.005) { G = 1.0 + c2 * e0 * e0; dG = 2.0 * c2 * e0; }
-        else res::exact_G(l, p, 0, e0, G, dG);
-        g1 = dG;
-        g0 = G - dG * e0;
-      } else if (e0 < 0.01) {
-        g1 = res::hansen_G(l, p, q, 1e-3) / 1e-3;
-        g0 = 0.0;
+        else res::exact_G(l, l / 2, 0, e0, G, dG);
+        float* t = F + 4 * idx++;
+        t[0] = static_cast<float>(f_even[l]);
+        t[1] = static_cast<float>(df_even[l]);
+        t[2] = static_cast<float>(G - dG * e0);
+        t[3] = static_cast<float>(dG);
       } else {
-        double G, dG;
-        res::exact_G(l, p, q, e0, G, dG);
-        g1 = dG;
-        g0 = G - dG * e0;
+        double g0, g1;
+        if (e0 < 0.01) {
+          g1 = kOddG1.g1[l];
+          g0 = 0.0;
+        } else {
+          double G, dG;
+          res::exact_G(l, (l - 1) / 2, -1, e0, G, dG);
+          g1 = dG;
+          g0 = G - dG * e0;
+        }
+        float* tn = F + 4 * idx++;
+        tn[0] = static_cast<float>(f_neg1[l]);
+        tn[1] = static_cast<float>(df_neg1[l]);
+        tn[2] = static_cast<float>(g0);
+        tn[3] = static_cast<float>(g1);
+        float* tp = F + 4 * idx++;
+        tp[0] = static_cast<float>(f_pos1[l]);
+        tp[1] = static_cast<float>(df_pos1[l]);
+        tp[2] = static_cast<float>(g0);
+        tp[3] = static_cast<float>(g1);
       }
+    }
+    return;
+  }
+  double f[72], fp[72], fm[72];
+  for (int l = 6; l <= degree; ++l) {
+    const int wl = l;
+    for (int w = -wl; w <= wl; w += 2) {
+      const int p = (l - w) / 2, q = -w;
+      normalized_Fk3(0, w, l, i0, h, f, fp, fm);
+      double G, dG;
+      node_G(l, p, q, e0, G, dG);
+      const double g1 = dG, g0 = G - dG * e0;
       float* t = F + 4 * idx++;
       t[0] = static_cast<float>(f[l]);
       t[1] = static_cast<float>((fp[l] - fm[l]) / (2.0 * h));
@@ -606,42 +3758,140 @@ inline void zonal_visit_terms(int degree, bool wide, double i0, double e0, float
   }
 }
 
+struct ZonalEvalCache {
+  const float* F = nullptr;
+  uint64_t table_id = 0;
+  int degree = 0;
+  bool eq_cut = false;
+  float f0 = 0.0f, f1 = 0.0f, f2 = 0.0f, f3 = 0.0f, flast = 0.0f;
+  double a_ref = -1.0;
+  double c[11][3]{};
+};
+inline thread_local ZonalEvalCache g_zonal_eval_cache{};
+inline ZonalEvalCache& zonal_eval_cache() { return g_zonal_eval_cache; }
+
 /// The zonal tail's contribution to the six rates (n-dot, e-dot, i-dot, e varpi-dot, sin i Omega-dot,
 /// lambda-dot - n), at the current mean elements.
 inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, double n, double eta, double si, double ci,
-                      double* six) {
+                      double* six, const double* sw_in = nullptr, const double* cw_in = nullptr, uint64_t table_id = 0) {
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
   double sw, cw;
-  fm::sincos(kp.argp, sw, cw);
-  double ck[72], sk[72];  // cos and sin of k omega, `wide`
-  ck[0] = 1.0;
-  sk[0] = 0.0;
-  for (int k = 1; wide && k <= degree; ++k) {
-    ck[k] = ck[k - 1] * cw - sk[k - 1] * sw;
-    sk[k] = sk[k - 1] * cw + ck[k - 1] * sw;
+  if (sw_in != nullptr && cw_in != nullptr) {
+    sw = *sw_in;
+    cw = *cw_in;
+  } else {
+    fm::sincos(kp.argp, sw, cw);
   }
   const double ia = 1.0 / a;
-  double A = kMu * std::pow(ia, 7);  // mu / a^(l+1), l = 6
+  const double ia2 = ia * ia;
+  const double ia3 = ia2 * ia;
+  double A = kMu * ia3 * ia3 * ia;  // mu / a^(l+1), l = 6
+  const bool eq_cut = !(std::fabs(si) > 0.02);
+  const double a_cut = eq_cut ? 1e-25 : 1e-20;
   double sW = 0, sE = 0, sI = 0, sA = 0;
-  int idx = 0;
-  for (int l = 6; l <= degree; ++l) {
-    const double C = kEgmC[l][0];
-    const int wl = wide ? l : (l & 1);
-    for (int w = -wl; w <= wl; w += 2) {
-      const float* f = F + 4 * idx++;
-      // psi = w omega; S = C cos psi (l even), C sin psi (l odd; S_l0 = 0)
-      const int aw = w < 0 ? -w : w;
-      const double sp = wide ? (w < 0 ? -sk[aw] : sk[aw]) : w * sw, cp = wide ? ck[aw] : cw;
-      const double Sv = (l & 1) ? C * sp : (w == 0 ? C : C * cp);
-      const double dS = (l & 1) ? C * cp : (w == 0 ? 0.0 : -C * sp);
-      const double G = f[2] + f[3] * e, dG = f[3];
-      sW += w * A * f[0] * G * dS;
-      sE += A * f[0] * dG * Sv;
-      sI += A * f[1] * G * Sv;
-      sA += -(l + 1) * A * f[0] * G * Sv * ia;
+  if (!wide) {
+    ZonalEvalCache& zc = zonal_eval_cache();
+    const int last_i = 4 * zonal_count(degree, false) - 1;
+    const float flast = last_i >= 0 ? F[last_i] : 0.0f;
+    if (table_id == 0 || zc.table_id != table_id || zc.F != F || zc.degree != degree || zc.eq_cut != eq_cut ||
+        zc.f0 != F[0] || zc.f1 != F[1] || zc.f2 != F[2] || zc.f3 != F[3] || zc.flast != flast ||
+        std::fabs(a - zc.a_ref) > 2e-3 * zc.a_ref) {
+      zc.table_id = table_id;
+      zc.F = F;
+      zc.degree = degree;
+      zc.eq_cut = eq_cut;
+      zc.f0 = F[0];
+      zc.f1 = F[1];
+      zc.f2 = F[2];
+      zc.f3 = F[3];
+      zc.flast = flast;
+      zc.a_ref = a;
+      std::memset(zc.c, 0, sizeof(zc.c));
+      auto add_p = [&](int idx, double val, int p) {
+        zc.c[idx][0] += val;
+        zc.c[idx][1] += p * val;
+        zc.c[idx][2] += 0.5 * p * (p - 1) * val;
+      };
+      const float* f = F;
+      double Ar = A;
+      int l = 6;
+      for (; l + 1 <= degree; l += 2) {
+        if (Ar < a_cut) break;
+        const double Ce = Ar * kEgmC[l][0];
+        const double f0 = f[0], f1 = f[1], f2 = f[2], f3 = f[3];
+        add_p(0, Ce * f0 * f3, l + 1);
+        add_p(1, Ce * f1 * f2, l + 1);
+        add_p(2, Ce * f1 * f3, l + 1);
+        const double Ce_a = -(l + 1) * Ce * ia;
+        add_p(3, Ce_a * f0 * f2, l + 2);
+        add_p(4, Ce_a * f0 * f3, l + 2);
+
+        const double Co = Ar * ia * kEgmC[l + 1][0];
+        const float* fn = f + 4;
+        const float* fp = f + 8;
+        const double fg0 = static_cast<double>(fp[0]) * fp[2] - static_cast<double>(fn[0]) * fn[2];
+        const double fg1 = static_cast<double>(fp[0]) * fp[3] - static_cast<double>(fn[0]) * fn[3];
+        const double ig0 = static_cast<double>(fp[1]) * fp[2] - static_cast<double>(fn[1]) * fn[2];
+        const double ig1 = static_cast<double>(fp[1]) * fp[3] - static_cast<double>(fn[1]) * fn[3];
+        add_p(5, Co * fg0, l + 2);
+        add_p(6, Co * fg1, l + 2);
+        add_p(7, Co * ig0, l + 2);
+        add_p(8, Co * ig1, l + 2);
+        const double Co_a = -(l + 2) * Co * ia;
+        add_p(9, Co_a * fg0, l + 3);
+        add_p(10, Co_a * fg1, l + 3);
+        f += 12;
+        Ar *= ia2;
+      }
+      if (l <= degree && Ar >= a_cut) {
+        const double Ce = Ar * kEgmC[l][0];
+        const double f0 = f[0], f1 = f[1], f2 = f[2], f3 = f[3];
+        add_p(0, Ce * f0 * f3, l + 1);
+        add_p(1, Ce * f1 * f2, l + 1);
+        add_p(2, Ce * f1 * f3, l + 1);
+        const double Ce_a = -(l + 1) * Ce * ia;
+        add_p(3, Ce_a * f0 * f2, l + 2);
+        add_p(4, Ce_a * f0 * f3, l + 2);
+      }
     }
-    A *= ia;
+    const double da = zc.a_ref * ia - 1.0;
+    auto ev = [&](int idx) { return zc.c[idx][0] + da * (zc.c[idx][1] + da * zc.c[idx][2]); };
+    const double odd_E = ev(6);
+    const double odd_W = ev(5) + e * odd_E;
+    const double odd_I = ev(7) + e * ev(8);
+    const double odd_A_ia = ev(9) + e * ev(10);
+    sW = odd_W * cw;
+    sE = ev(0) + odd_E * sw;
+    sI = (ev(1) + e * ev(2)) + odd_I * sw;
+    sA = (ev(3) + e * ev(4)) + odd_A_ia * sw;
+  } else {
+    double ck[72], sk[72];  // cos and sin of k omega, `wide`
+    ck[0] = 1.0;
+    sk[0] = 0.0;
+    for (int k = 1; k <= degree; ++k) {
+      ck[k] = ck[k - 1] * cw - sk[k - 1] * sw;
+      sk[k] = sk[k - 1] * cw + ck[k - 1] * sw;
+    }
+    int idx = 0;
+    for (int l = 6; l <= degree; ++l) {
+      if (A < a_cut) break;
+      const double C = kEgmC[l][0];
+      const int wl = l;
+      for (int w = -wl; w <= wl; w += 2) {
+        const float* f = F + 4 * idx++;
+        const int aw = w < 0 ? -w : w;
+        const double sp = w < 0 ? -sk[aw] : sk[aw], cp = ck[aw];
+        const double Sv = (l & 1) ? C * sp : (w == 0 ? C : C * cp);
+        const double dS = (l & 1) ? C * cp : (w == 0 ? 0.0 : -C * sp);
+        const double G = f[2] + f[3] * e, dG = f[3];
+        sW += w * A * f[0] * G * dS;
+        sE += A * f[0] * dG * Sv;
+        sI += A * f[1] * G * Sv;
+        sA += -(l + 1) * A * f[0] * G * Sv * ia;
+      }
+      A *= ia;
+    }
   }
   const double na2 = n * a * a;
   const double tanhalf = sin_i / (1.0 + ci);
@@ -710,27 +3960,206 @@ inline double shallow_weight(const SecularRates& sr, int k, int m, double n) {
   return c * c;
 }
 
+struct ShallowGroupPoly {
+  int16_t k, m, w;
+  double c[12][3];
+};
+struct ShallowEvalCache {
+  static constexpr int kMaxGroups = 16;
+  const ShallowCoef* table = nullptr;
+  uint64_t table_id = 0;
+  int count = 0;
+  int8_t l0 = 0, m0 = 0, llast = 0;
+  float fg0 = 0.0f, fglast = 0.0f;
+  double a_ref = -1.0;
+  int n_groups = 0;
+  bool ok = false;
+  ShallowGroupPoly groups[kMaxGroups]{};
+};
+inline thread_local ShallowEvalCache g_shallow_eval_cache{};
+inline ShallowEvalCache& shallow_eval_cache() { return g_shallow_eval_cache; }
+
+inline void shallow_six(const ShallowCoef* table, int count, double e0, double i0, double t, const Kepler& kp,
+                        double a, double n, double eta, double si, double ci, double theta_g0, double* six,
+                        uint64_t table_id = 0) {
+  if (count <= 0) return;
+  const double e = kp.e < 1e-12 ? 1e-12 : kp.e;
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
+  const SecularRates sr{-j2 * n * ci, 0.5 * j2 * n * (5.0 * ci * ci - 1.0), n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0)};
+  const double de = kp.e - e0, di = kp.i - i0;
+  const double thetag = theta_g0 + kOmegaE * t;
+  const double ia = 1.0 / a;
+  ShallowEvalCache& cache = shallow_eval_cache();
+  if (table_id == 0 || cache.table_id != table_id || cache.table != table || cache.count != count ||
+      cache.l0 != table[0].l || cache.m0 != table[0].m || cache.fg0 != table[0].fg ||
+      cache.llast != table[count - 1].l || cache.fglast != table[count - 1].fg ||
+      std::fabs(a - cache.a_ref) > 2e-3 * cache.a_ref) {
+    cache.table_id = table_id;
+    cache.table = table;
+    cache.count = count;
+    cache.l0 = table[0].l;
+    cache.m0 = table[0].m;
+    cache.fg0 = table[0].fg;
+    cache.llast = table[count - 1].l;
+    cache.fglast = table[count - 1].fg;
+    cache.a_ref = a;
+    cache.n_groups = 0;
+    cache.ok = true;
+    double amp0[71];
+    amp0[0] = kMu * ia;
+    int lmax = 0;
+    for (int j = 0; j < count; ++j) {
+      if (table[j].l > lmax) lmax = table[j].l;
+    }
+    for (int l = 1; l <= lmax; ++l) amp0[l] = amp0[l - 1] * ia;
+    int idx = 0;
+    while (idx < count) {
+      const int k = table[idx].k, m = table[idx].m, w = table[idx].l - 2 * table[idx].p;
+      int end = idx + 1;
+      while (end < count && table[end].k == k && table[end].m == m && (table[end].l - 2 * table[end].p) == w) ++end;
+      if (cache.n_groups >= ShallowEvalCache::kMaxGroups) {
+        cache.ok = false;
+        break;
+      }
+      ShallowGroupPoly& gp = cache.groups[cache.n_groups++];
+      gp.k = static_cast<int16_t>(k);
+      gp.m = static_cast<int16_t>(m);
+      gp.w = static_cast<int16_t>(w);
+      std::memset(gp.c, 0, sizeof(gp.c));
+      auto add_p = [&](int ci_idx, double val, int p) {
+        gp.c[ci_idx][0] += val;
+        gp.c[ci_idx][1] += p * val;
+        gp.c[ci_idx][2] += 0.5 * p * (p - 1) * val;
+      };
+      for (int j = idx; j < end; ++j) {
+        const ShallowCoef& sc = table[j];
+        const int l = sc.l;
+        const bool odd = ((l - m) & 1) != 0;
+        const double C = kEgmC[l][m], S_c = kEgmS[l][m];
+        const double Rc = odd ? -S_c : C, Rs = odd ? C : S_c;
+        const double A0 = amp0[l];
+        const double Aa0 = -(l + 1) * A0 * ia;
+        add_p(0, A0 * sc.fg * Rc, l + 1);
+        add_p(1, A0 * sc.fg * Rs, l + 1);
+        add_p(2, A0 * sc.fdg * Rc, l + 1);
+        add_p(3, A0 * sc.fdg * Rs, l + 1);
+        add_p(4, A0 * sc.dfg * Rc, l + 1);
+        add_p(5, A0 * sc.dfg * Rs, l + 1);
+        add_p(6, Aa0 * sc.fg * Rc, l + 2);
+        add_p(7, Aa0 * sc.fg * Rs, l + 2);
+        add_p(8, Aa0 * sc.fdg * Rc, l + 2);
+        add_p(9, Aa0 * sc.fdg * Rs, l + 2);
+        add_p(10, Aa0 * sc.dfg * Rc, l + 2);
+        add_p(11, Aa0 * sc.dfg * Rs, l + 2);
+      }
+      idx = end;
+    }
+  }
+  double sM = 0.0, sW = 0.0, sO = 0.0, sE = 0.0, sI = 0.0, sA = 0.0;
+  if (cache.ok) {
+    const double da = cache.a_ref * ia - 1.0;
+    for (int gi = 0; gi < cache.n_groups; ++gi) {
+      const ShallowGroupPoly& gp = cache.groups[gi];
+      const double wgt = shallow_weight(sr, gp.k, gp.m, n);
+      if (wgt > 0.0) {
+        double sp = 0.0, cp = 1.0;
+        fm::sincos(gp.w * kp.argp + gp.k * kp.m + gp.m * (kp.node - thetag), sp, cp);
+        auto ev = [&](int ci_idx) { return gp.c[ci_idx][0] + da * (gp.c[ci_idx][1] + da * gp.c[ci_idx][2]); };
+        const double fdg_c = ev(2), fdg_s = ev(3);
+        const double dfg_c = ev(4), dfg_s = ev(5);
+        const double fg_c = ev(0) + de * fdg_c + di * dfg_c;
+        const double fg_s = ev(1) + de * fdg_s + di * dfg_s;
+        const double afg_c = ev(6) + de * ev(8) + di * ev(10);
+        const double afg_s = ev(7) + de * ev(9) + di * ev(11);
+        const double fgdS = wgt * (fg_s * cp - fg_c * sp);
+        sM += gp.k * fgdS;
+        sW += gp.w * fgdS;
+        sO += gp.m * fgdS;
+        sE += wgt * (fdg_c * cp + fdg_s * sp);
+        sI += wgt * (dfg_c * cp + dfg_s * sp);
+        sA += wgt * (afg_c * cp + afg_s * sp);
+      }
+    }
+  } else {
+    double amp[71];
+    amp[0] = kMu * ia;
+    int lmax = 0;
+    for (int j = 0; j < count; ++j) {
+      if (table[j].l > lmax) lmax = table[j].l;
+    }
+    for (int l = 1; l <= lmax; ++l) amp[l] = amp[l - 1] * ia;
+    int idx = 0;
+    while (idx < count) {
+      const int k = table[idx].k, m = table[idx].m;
+      int end = idx + 1;
+      while (end < count && table[end].k == k && table[end].m == m) ++end;
+      const double wgt = shallow_weight(sr, k, m, n);
+      if (wgt > 0.0) {
+        int last_w = 0x7fff;
+        double sp = 0.0, cp = 1.0;
+        for (int j = idx; j < end; ++j) {
+          const ShallowCoef& sc = table[j];
+          const int l = sc.l, w = l - 2 * sc.p;
+          if (w != last_w) {
+            fm::sincos(w * kp.argp + k * kp.m + m * (kp.node - thetag), sp, cp);
+            last_w = w;
+          }
+          const bool odd = ((l - m) & 1) != 0;
+          const double C = kEgmC[l][m], S_c = kEgmS[l][m];
+          const double Sv = odd ? -S_c * cp + C * sp : C * cp + S_c * sp;
+          const double dSv = odd ? S_c * sp + C * cp : -C * sp + S_c * cp;
+          const double A = amp[l] * wgt;
+          const double fg = sc.fg + sc.fdg * de + sc.dfg * di;
+          const double fgdS = A * fg * dSv;
+          sM += k * fgdS;
+          sW += w * fgdS;
+          sO += m * fgdS;
+          sE += A * sc.fdg * Sv;
+          sI += A * sc.dfg * Sv;
+          sA += -(l + 1) * A * fg * Sv * ia;
+        }
+      }
+      idx = end;
+    }
+  }
+  const double na2 = n * a * a;
+  const double tanhalf = sin_i / (1.0 + ci);
+  six[0] += -3.0 * ia * ia * sM;
+  six[1] += (eta * eta * sM - eta * sW) / (na2 * e);
+  six[2] += (ci * sW - sO) / (na2 * eta * sin_i);
+  six[3] += (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
+  six[4] += sI / (na2 * eta);
+  six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
+}
+
 inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerms& out) {
   out.count = 0;
   const int lmax = degree > 70 ? 70 : degree;
   if (lmax < 2) return 0;
   const SecularRates sr = secular_rates(n, e0, i0);
   constexpr int k = 1;  // k = 2, 3 do not pay (2.13 against 2.03 km at day 3)
+  double F[72], dF[72];
   for (int m = 2; m <= lmax; ++m) {
     const double psidot = k * (sr.mdot + sr.argp) + m * (sr.node - kOmegaE);
     if (!(std::fabs(psidot) < kShallowSelect * kShallowBand * n)) continue;
-    double F[72], Fp[72], Fm[72];
-    const double h = 1e-5;
-    normalized_Fk(m, k, lmax, i0, F);
-    normalized_Fk(m, k, lmax, i0 + h, Fp);
-    normalized_Fk(m, k, lmax, i0 - h, Fm);
+    normalized_Fk_dF(m, k, lmax, i0, F, dF);
     int l0 = m > k ? m : k;
     if ((l0 - k) & 1) ++l0;
     for (int l = l0; l <= lmax; l += 2) {
       if (out.count >= kShallowMax) break;
       const int pp = (l - k) / 2;
       double G, dG;
-      res::exact_G(l, pp, 0, e0, G, dG);
+      if (e0 < 0.03) {
+        const double lp = static_cast<double>(l);
+        const double c2 = 0.25 * lp * (lp + 1.0) - static_cast<double>(k) * k;
+        const double c4 = (lp * (lp + 1.0) * (lp + 2.0) * (lp + 3.0) - (8.0 * lp * (lp + 2.0) + 1.0)) * (1.0 / 64.0);
+        const double e2 = e0 * e0;
+        G = 1.0 + e2 * (c2 + c4 * e2);
+        dG = (e0 >= 2e-4 || l <= 5) ? e0 * (2.0 * c2 + 4.0 * c4 * e2) : 0.0;
+      } else {
+        res::exact_G(l, pp, 0, e0, G, dG);
+      }
       res::ResCoef& c = out.c[out.count++];
       c.l = static_cast<int8_t>(l);
       c.m = static_cast<int8_t>(m);
@@ -741,7 +4170,7 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
       c.S = kEgmS[l][m];
       c.fg = F[l] * G;
       c.fdg = F[l] * dG;
-      c.dfg = (Fp[l] - Fm[l]) / (2.0 * h) * G;
+      c.dfg = dF[l] * G;
     }
   }
   return out.count;
@@ -1133,9 +4562,9 @@ inline void free_grid(WideGrid* g) {
 /// The fit's scope (SPEC 16.11): while a FitGridScope lives on a thread, a grid built by a set initialized there (a fit's nominal,
 /// trial steps and copies, all made on the fit's calling thread; the pool's threads serve batch flights only) is freed when its last
 /// holder drops it, never kept idle. Nesting counts; the guard clears on every exit from its scope.
+inline thread_local int32_t g_fit_grid_depth = 0;
 inline int32_t& fit_grid_depth() {
-  static thread_local int32_t depth = 0;
-  return depth;
+  return g_fit_grid_depth;
 }
 struct FitGridScope {
   FitGridScope() { ++fit_grid_depth(); }
@@ -1264,37 +4693,64 @@ inline void evict_idle(GridCache& c, int keep) {
 
 
 /// The displacements in the six-component set, the grid's cubic in E at the current anomaly times e^{i (w omega + m beta)}.
-inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta_g0, double* six) {
+inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta_g0, double* six,
+                     double E_in = std::numeric_limits<double>::quiet_NaN(), double* dsix_dlam = nullptr, double weight = 1.0) {
   const double de = kp.e - g.e, di = kp.i - g.i, da = kp.a / g.a - 1.0;
-  double E = kp.m;
-  for (int it = 0; it < 50; ++it) {
-    const double d = (E - kp.e * std::sin(E) - kp.m) / (1.0 - kp.e * std::cos(E));
-    E -= d;
-    if (std::fabs(d) < 1e-14) break;
+  double E = E_in;
+  if (!(E == E)) {
+    E = kp.m;
+    for (int it = 0; it < 50; ++it) {
+      double sE, cE;
+      fm::sincos(E, sE, cE);
+      const double d = (E - kp.e * sE - kp.m) / (1.0 - kp.e * cE);
+      E -= d;
+      if (std::fabs(d) < 1e-14) break;
+    }
   }
   E = std::fmod(E, kTwoPi);
   if (E < 0.0) E += kTwoPi;
-  // the four-point periodic cubic on N nodes at E: node indices and weights
-  const auto cubic = [&](int N, int* idx, double* wt) {
+  const double dE_dlam = dsix_dlam != nullptr ? (1.0 / (1.0 - kp.e * std::cos(E))) : 0.0;
+  const auto cubic = [&](int N, int* idx, double* wt, double* dwt) {
     const double x = E / kTwoPi * N;
     int i1 = static_cast<int>(x);
     const double u = x - i1;
-    idx[0] = (i1 - 1 + N) % N; idx[1] = i1 % N; idx[2] = (i1 + 1) % N; idx[3] = (i1 + 2) % N;
+    idx[0] = (i1 - 1 + N) & (N - 1); idx[1] = i1 & (N - 1); idx[2] = (i1 + 1) & (N - 1); idx[3] = (i1 + 2) & (N - 1);
     wt[0] = -u * (u - 1.0) * (u - 2.0) / 6.0; wt[1] = (u + 1.0) * (u - 1.0) * (u - 2.0) / 2.0;
     wt[2] = -(u + 1.0) * u * (u - 2.0) / 2.0; wt[3] = (u + 1.0) * u * (u - 1.0) / 6.0;
+    if (dwt != nullptr) {
+      const double s = (N / kTwoPi) * dE_dlam;
+      dwt[0] = s * (-3.0 * u * u + 6.0 * u - 2.0) / 6.0;
+      dwt[1] = s * (3.0 * u * u - 4.0 * u - 1.0) / 2.0;
+      dwt[2] = s * (-3.0 * u * u + 2.0 * u + 2.0) / 2.0;
+      dwt[3] = s * (3.0 * u * u - 1.0) / 6.0;
+    }
   };
   int idx[4], jdx[4];
-  double wt[4], wd[4];
-  cubic(kGridN, idx, wt);
-  cubic(kGridD, jdx, wd);
+  double wt[4], wd[4], dwt[4], dwd[4];
+  cubic(kGridN, idx, wt, dsix_dlam != nullptr ? dwt : nullptr);
+  cubic(kGridD, jdx, wd, dsix_dlam != nullptr ? dwd : nullptr);
   const double off[3] = {de, di, da};
   const double beta = kp.node - (theta_g0 + kOmegaE * t);
+  double sb, cb, sw1, cw1;
+  fm::sincos(beta, sb, cb);
+  fm::sincos(kp.argp, sw1, cw1);
+  double cm[36], sm[36], cw[36], sw[36];
+  cm[0] = cw[0] = 1.0;
+  sm[0] = sw[0] = 0.0;
+  for (int q = 1; q <= 33; ++q) {
+    cm[q] = cm[q - 1] * cb - sm[q - 1] * sb;
+    sm[q] = sm[q - 1] * cb + cm[q - 1] * sb;
+    cw[q] = cw[q - 1] * cw1 - sw[q - 1] * sw1;
+    sw[q] = sw[q - 1] * cw1 + cw[q - 1] * sw1;
+  }
   const size_t per = static_cast<size_t>(6) * kGridN * 2, dper = static_cast<size_t>(6) * kGridD * 2;
   const float* half = half_table();
   for (int f = 0; f < g.count; ++f) {
     const float* v = g.v + static_cast<size_t>(f) * per;
     const uint16_t* dv = g.dv + static_cast<size_t>(f) * 3 * dper;
-    const double ph = g.w[f] * kp.argp + g.m[f] * beta, cph = std::cos(ph), sph = std::sin(ph);
+    const int wf = g.w[f], mf = g.m[f], aw = wf < 0 ? -wf : wf;
+    const double cww = cw[aw], sww = wf < 0 ? -sw[aw] : sw[aw];
+    const double cph = (cww * cm[mf] - sww * sm[mf]) * weight, sph = (sww * cm[mf] + cww * sm[mf]) * weight;
     for (int z = 0; z < 6; ++z) {
       double hr = 0.0, hi = 0.0;
       for (int k = 0; k < 4; ++k) {
@@ -1302,13 +4758,32 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
         hr += wt[k] * v[at];
         hi += wt[k] * v[at + 1];
       }
-      for (int d = 0; d < 3; ++d)
+      for (int d = 0; d < 3; ++d) {
+        const double od = off[d];
         for (int k = 0; k < 4; ++k) {
           const size_t at = d * dper + (static_cast<size_t>(z) * kGridD + jdx[k]) * 2;
-          hr += off[d] * wd[k] * half[dv[at]];
-          hi += off[d] * wd[k] * half[dv[at + 1]];
+          hr += od * wd[k] * half[dv[at]];
+          hi += od * wd[k] * half[dv[at + 1]];
         }
+      }
       six[z] += hr * cph - hi * sph;
+      if (dsix_dlam != nullptr) {
+        double dhr = 0.0, dhi = 0.0;
+        for (int k = 0; k < 4; ++k) {
+          const size_t at = (static_cast<size_t>(z) * kGridN + idx[k]) * 2;
+          dhr += dwt[k] * v[at];
+          dhi += dwt[k] * v[at + 1];
+        }
+        for (int d = 0; d < 3; ++d) {
+          const double od = off[d];
+          for (int k = 0; k < 4; ++k) {
+            const size_t at = d * dper + (static_cast<size_t>(z) * kGridD + jdx[k]) * 2;
+            dhr += od * dwd[k] * half[dv[at]];
+            dhi += od * dwd[k] * half[dv[at + 1]];
+          }
+        }
+        dsix_dlam[z] += dhr * cph - dhi * sph;
+      }
     }
   }
 }

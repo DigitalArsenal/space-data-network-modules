@@ -89,18 +89,102 @@ inline flatbuffers::Offset<RFM> rfm_of(flatbuffers::FlatBufferBuilder& fbb, Axes
   return CreateRFMDirect(fbb, RFMUnion_CelestialFrameWrapper, CreateCelestialFrameWrapper(fbb, f).Union(), 0, name);
 }
 
+struct IsoDayCache {
+  int64_t days_p1;
+  uint8_t valid_4digit;
+  char prefix[12];
+};
+inline thread_local IsoDayCache g_iso_day_cache{};
+
 /// ISO 8601 UTC text of a split Julian date plus minutes.
 inline void iso_text(double jd_whole, double jd_frac, double minutes, char* out, size_t size) {
+  static constexpr char kDigits2[201] =
+      "0001020304050607080910111213141516171819"
+      "2021222324252627282930313233343536373839"
+      "4041424344454647484950515253545556575859"
+      "6061626364656667686970717273747576777879"
+      "8081828384858687888990919293949596979899";
   const double day_offset = (jd_whole - 2440587.5);
-  double frac = jd_frac + minutes / kMinutesPerDay;
+  double frac = jd_frac + minutes * (1.0 / kMinutesPerDay);
   const double whole_days = std::floor(frac);
   frac -= whole_days;
   int64_t days = static_cast<int64_t>(day_offset + whole_days);
-  double seconds = frac * 86400.0;
-  seconds = std::round(seconds * 1e6) / 1e6;
-  if (seconds >= 86400.0) {
-    seconds -= 86400.0;
+  int64_t us_day = static_cast<int64_t>(frac * 86400000000.0 + 0.5);
+  if (us_day >= 86400000000LL) {
+    us_day -= 86400000000LL;
     days += 1;
+  } else if (us_day < 0) {
+    us_day += 86400000000LL;
+    days -= 1;
+  }
+  if (size >= 27) {
+    IsoDayCache& dc = g_iso_day_cache;
+    const int64_t dp1 = days + 1;
+    if (__builtin_expect(dc.days_p1 != dp1, 0)) {
+      int64_t z = days + 719468;
+      const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+      const int64_t doe = z - era * 146097;
+      const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+      int64_t y = yoe + era * 400;
+      const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+      const int64_t mp = (5 * doy + 2) / 153;
+      const int64_t d = doy - (153 * mp + 2) / 5 + 1;
+      const int64_t m = mp + (mp < 10 ? 3 : -9);
+      if (m <= 2) ++y;
+      dc.days_p1 = dp1;
+      dc.valid_4digit = (y >= 0 && y <= 9999) ? 1u : 0u;
+      if (dc.valid_4digit) {
+        const uint32_t yy = static_cast<uint32_t>(y);
+        const uint32_t y_hi = yy / 100, y_lo = yy - y_hi * 100;
+        dc.prefix[0] = kDigits2[2 * y_hi];
+        dc.prefix[1] = kDigits2[2 * y_hi + 1];
+        dc.prefix[2] = kDigits2[2 * y_lo];
+        dc.prefix[3] = kDigits2[2 * y_lo + 1];
+        dc.prefix[4] = '-';
+        const uint32_t mo = static_cast<uint32_t>(m);
+        dc.prefix[5] = kDigits2[2 * mo];
+        dc.prefix[6] = kDigits2[2 * mo + 1];
+        dc.prefix[7] = '-';
+        const uint32_t dy = static_cast<uint32_t>(d);
+        dc.prefix[8] = kDigits2[2 * dy];
+        dc.prefix[9] = kDigits2[2 * dy + 1];
+        dc.prefix[10] = 'T';
+      }
+    }
+    if (dc.valid_4digit) {
+      std::memcpy(out, dc.prefix, 11);
+      const uint32_t total_sec = static_cast<uint32_t>(us_day / 1000000LL);
+      uint32_t us = static_cast<uint32_t>(us_day - static_cast<int64_t>(total_sec) * 1000000LL);
+      const uint32_t hh = total_sec / 3600u;
+      const uint32_t rem = total_sec - hh * 3600u;
+      const uint32_t mm = rem / 60u;
+      const uint32_t ss = rem - mm * 60u;
+      out[11] = kDigits2[2 * hh];
+      out[12] = kDigits2[2 * hh + 1];
+      out[13] = ':';
+      out[14] = kDigits2[2 * mm];
+      out[15] = kDigits2[2 * mm + 1];
+      out[16] = ':';
+      out[17] = kDigits2[2 * ss];
+      out[18] = kDigits2[2 * ss + 1];
+      if (us == 0u) {
+        std::memcpy(out + 19, ".000000", 8);
+      } else {
+        out[19] = '.';
+        const uint32_t u_hi = us / 10000u;
+        const uint32_t u_rem = us - u_hi * 10000u;
+        const uint32_t u_mid = u_rem / 100u;
+        const uint32_t u_lo = u_rem - u_mid * 100u;
+        out[20] = kDigits2[2 * u_hi];
+        out[21] = kDigits2[2 * u_hi + 1];
+        out[22] = kDigits2[2 * u_mid];
+        out[23] = kDigits2[2 * u_mid + 1];
+        out[24] = kDigits2[2 * u_lo];
+        out[25] = kDigits2[2 * u_lo + 1];
+        out[26] = '\0';
+      }
+      return;
+    }
   }
   int64_t z = days + 719468;
   const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
@@ -112,11 +196,15 @@ inline void iso_text(double jd_whole, double jd_frac, double minutes, char* out,
   const int64_t d = doy - (153 * mp + 2) / 5 + 1;
   const int64_t m = mp + (mp < 10 ? 3 : -9);
   if (m <= 2) ++y;
-  const int hh = static_cast<int>(seconds / 3600.0);
-  const int mm = static_cast<int>((seconds - hh * 3600.0) / 60.0);
-  const double ss = seconds - hh * 3600.0 - mm * 60.0;
+  const int64_t total_sec = us_day / 1000000LL;
+  uint32_t us = static_cast<uint32_t>(us_day - total_sec * 1000000LL);
+  const uint32_t hh = static_cast<uint32_t>(total_sec / 3600);
+  const uint32_t rem = static_cast<uint32_t>(total_sec - hh * 3600);
+  const uint32_t mm = rem / 60;
+  const uint32_t ss = rem - mm * 60;
   std::snprintf(out, size, "%04d-%02d-%02dT%02d:%02d:%09.6f", static_cast<int>(y), static_cast<int>(m),
-                static_cast<int>(d), hh, mm, ss);
+                static_cast<int>(d), static_cast<int>(hh), static_cast<int>(mm),
+                static_cast<double>(ss) + static_cast<double>(us) * 1e-6);
 }
 
 inline int refuse(const char* code, const char* message) {
@@ -170,9 +258,11 @@ inline int grid_epochs(const Grid& g, double whole, double frac, size_t& budget,
     if (!(span >= 0.0) || !(g.step > 0.0)) return refuse("bad-grid", "The grid's span or step is not positive.");
     const double count_d = std::floor(span / g.step + 1e-9) + 1.0;
     if (count_d > static_cast<double>(budget)) return refuse("too-many-states", "The request asks for more than OUTPUT.MAXIMUM_STATES states.");
-    for (size_t k = 0; k < static_cast<size_t>(count_d); ++k) {
-      tw.push_back(sw);
-      tf.push_back(sf + static_cast<double>(k) * g.step / 86400.0);
+    const size_t n_pts = static_cast<size_t>(count_d);
+    tw.assign(n_pts, sw);
+    tf.resize(n_pts);
+    for (size_t k = 0; k < n_pts; ++k) {
+      tf[k] = sf + static_cast<double>(k) * g.step / 86400.0;
     }
   }
   if (tw.empty()) return refuse("bad-grid", "The grid holds no epochs.");

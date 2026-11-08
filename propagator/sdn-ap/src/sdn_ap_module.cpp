@@ -51,6 +51,14 @@
 #include <utility>
 #include <vector>
 
+#ifdef __wasm__
+#pragma clang attribute push(__attribute__((target("simd128"))), apply_to=function)
+#include <wasm_simd128.h>
+#ifndef __wasm_simd128__
+#define __wasm_simd128__ 1
+#endif
+#endif
+
 #include "constants.inc"
 #include "sgp4_core.inc"
 #include "model.inc"
@@ -260,3 +268,7 @@ int32_t sdnap_covariance_full_at(const uint8_t* ocm, uint32_t length, const doub
 /// reports status -4), or 0 when the fit runs.
 SDNAP_EXPORT("sdnap_fit_refusal")
 const char* sdnap_fit_refusal(const sdnap::fit::Options* options) { return options == nullptr ? nullptr : sdnap::fit::refusal(*options); }
+
+#ifdef __wasm__
+#pragma clang attribute pop
+#endif

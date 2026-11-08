@@ -1,7 +1,7 @@
 {
   "version": 1,
   "note": "Which toolchain produced which bytes. Regenerate with `node scripts/check-artifact-reproducibility.mjs --write [--super-repo <path>]`. See scripts/build-provenance.mjs for why each recorded input can change the bytes.",
-  "generatedBy": "tc-07322c2265a5a23c",
+  "generatedBy": "tc-7d4d9b942182e74e",
   "toolchains": {
     "tc-0386abf07580d473": {
       "sdk": {
@@ -286,6 +286,27 @@
         "commit": "1a7c352eccf0900104ed3a2c4cc177d25ad30a65"
       },
       "id": "tc-c90cc204912a34b7"
+    },
+    "tc-7d4d9b942182e74e": {
+      "sdk": {
+        "resolved": true,
+        "version": "0.8.25",
+        "commit": null,
+        "integrity": "sha512-hwZFUcFZJ3qDMWRjrX68hrvi64AVvFvv1dkSETYQZNwsyUb4NzEOyA8bW0Sc2bSxgOdN9Ns+wAmBtgYOH6WO5A==",
+        "dirty": null
+      },
+      "sdkDependencies": {
+        "spacedatastandards.org": "1.206.0",
+        "flatc-wasm": "26.1.38",
+        "flatbuffers": "25.9.23",
+        "sdn-emception": "1.0.0"
+      },
+      "externalStandardsRoot": {
+        "resolved": true,
+        "version": "1.279.0+1793905746591",
+        "commit": "cb95255756b5d8947fa988ce1c879e886dd7d704"
+      },
+      "id": "tc-7d4d9b942182e74e"
     }
   },
   "inferenceHazardBaseline": 7,
@@ -6229,20 +6250,17 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "e98b63558d84cfd3b8509f4c4c640502e38f81cc05a0e0277fcffa7da97cf51d",
-      "bytes": 967468,
-      "wasmSha256": "fd1ef4682edc68836d27fdb1f606a45b22bb3605354c55312287f87771a804b5",
-      "canonicalModuleSha256": "fd1ef4682edc68836d27fdb1f606a45b22bb3605354c55312287f87771a804b5",
+      "sha256": "f0b8352a43f305fbdd1ad15c9894e2d28f3179528838cae8f967bf1ea5d089b7",
+      "bytes": 1302846,
+      "wasmSha256": "ca5515048baf7ab43bdecda67cd27173ebef424044233c5e8ff2ac6db85487c6",
+      "canonicalModuleSha256": "ca5515048baf7ab43bdecda67cd27173ebef424044233c5e8ff2ac6db85487c6",
       "form": "bundled",
       "module": "propagator/sdn-ap",
       "lastCommit": "cfd750eb8de2f5d7c339173ee674bc7a481da8c2",
       "lastCommitDate": "2026-11-06T08:02:55-05:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
-        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": {
         "declares": false,
         "threadModels": [],

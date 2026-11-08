@@ -115,7 +115,7 @@ inline void release(Bank& b) {
   b.count = 0;
 }
 
-inline bool init(const ElementRow& row, const fit::Options& o, Bank& b) {
+inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpSat* nominal = nullptr) {
   release(b);
   b.o = o;
   b.np = kinds_of(o, b.kind);
@@ -130,12 +130,20 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b) {
     ElementRow r = row;
     fit::row_of(x, o, r);
     const bool ok = xpt::xp_init(elements_of(r), b.sats[slot]) == kPropOk;
-    b.count = slot + 1;
+    if (slot + 1 > b.count) b.count = slot + 1;
     return ok;
   };
-  if (!start(b.x, 0)) return false;
+  if (nominal != nullptr && xpt::is_ap_ctx(nominal->ctx)) {
+    b.sats[0] = *nominal;
+    *nominal = xpt::XpSat{};
+    b.count = 1;
+    if (b.sats[0].init_error != 0) return false;
+  } else {
+    if (!start(b.x, 0)) return false;
+  }
   // the sigma sets read the nominal's grids above e 0.3 (SPEC 16.11)
   xpt::GridShareScope share(&b.sats[0]);
+  xpt::CovBankScope cov_share(&b.sats[0]);
   for (int j = 0; j < b.np; ++j) {
     if (b.slot[j] < 0) continue;
     b.h[j] = step_of(b.kind[j], b.x[j]);
@@ -143,31 +151,21 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b) {
     double xp[fit::kMaxParams], xm[fit::kMaxParams];
     for (int q = 0; q < b.np; ++q) xp[q] = xm[q] = b.x[q];
     xp[j] += b.h[j];
-    xm[j] -= b.central[j] ? b.h[j] : 0.0;
-    if (!start(xp, 1 + 2 * b.slot[j]) || !start(xm, 2 + 2 * b.slot[j])) return false;
+    if (!start(xp, 1 + 2 * b.slot[j])) return false;
+    if (b.central[j] || !xpt::is_ap_ctx(b.sats[0].ctx)) {
+      xm[j] -= b.central[j] ? b.h[j] : 0.0;
+      if (!start(xm, 2 + 2 * b.slot[j])) return false;
+    } else if (2 + 2 * b.slot[j] + 1 > b.count) {
+      b.count = 2 + 2 * b.slot[j] + 1;
+    }
   }
   return true;
 }
 
 /// The set's state at t (TEME km, km/s) and J = d state / d parameters (6 x np, row-major; a parameter the theories
 /// have no sensitivity to: a zero column).
-inline bool at(Bank& b, double t, double r[3], double v[3], double* J) {
-  if (xpt::xp_propagate(b.sats[0], t, r, v) != kPropOk) return false;
-  for (int j = 0; j < b.np; ++j) {
-    if (b.slot[j] < 0) {
-      for (int c = 0; c < 6; ++c) J[c * b.np + j] = 0.0;
-      continue;
-    }
-    double rp[3], vp[3], rm[3], vm[3];
-    if (xpt::xp_propagate(b.sats[1 + 2 * b.slot[j]], t, rp, vp) != kPropOk) return false;
-    if (xpt::xp_propagate(b.sats[2 + 2 * b.slot[j]], t, rm, vm) != kPropOk) return false;
-    const double d = b.central[j] ? 2.0 * b.h[j] : b.h[j];
-    for (int c = 0; c < 3; ++c) {
-      J[c * b.np + j] = (rp[c] - rm[c]) / d;
-      J[(3 + c) * b.np + j] = (vp[c] - vm[c]) / d;
-    }
-  }
-  return true;
+inline bool at(Bank& b, double t, double r[3], double v[3], double* J, int32_t* nom_status = nullptr) {
+  return xpt::xp_propagate_cov_at(b.sats, b.np, b.slot, b.central, b.h, t, r, v, J, nom_status);
 }
 
 /// Symmetric positive definite inverse (n <= kMaxAug) by Cholesky; false when not positive definite.
@@ -241,24 +239,54 @@ inline void to_uvw(const double r[3], const double v[3], const double* vec, doub
 
 /// The theory floor at the state (r, v): the UVW covariance F (lower triangle uu, vu, vv, wu, wv, ww; km^2) in TEME
 /// axes, added to P (6 x 6): position F, velocity F times the angular rate squared.
-inline void add_floor(const double* F, const double r[3], const double v[3], double* P) {
-  double basis[3][3];
-  for (int a = 0; a < 3; ++a) {
-    const double e[3] = {a == 0 ? 1.0 : 0.0, a == 1 ? 1.0 : 0.0, a == 2 ? 1.0 : 0.0};
-    events::uvw_to_teme(r, v, e, basis[a]);
-  }
-  const double M[3][3] = {{F[0], F[1], F[3]}, {F[1], F[2], F[4]}, {F[3], F[4], F[5]}};
-  const double h[3] = {r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]};
-  const double rr = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
-  const double w = std::sqrt(h[0] * h[0] + h[1] * h[1] + h[2] * h[2]) / rr;  // rad/s
-  for (int i = 0; i < 3; ++i)
-    for (int j = 0; j < 3; ++j) {
-      double s = 0.0;
-      for (int a = 0; a < 3; ++a)
-        for (int c = 0; c < 3; ++c) s += basis[a][i] * M[a][c] * basis[c][j];
-      P[i * 6 + j] += s;
-      P[(3 + i) * 6 + 3 + j] += w * w * s;
+inline void add_floor(const double* F, const double r[3], const double v[3], double* P, bool fast_ap = false) {
+  if (!fast_ap) {
+    double basis[3][3];
+    for (int a = 0; a < 3; ++a) {
+      const double e[3] = {a == 0 ? 1.0 : 0.0, a == 1 ? 1.0 : 0.0, a == 2 ? 1.0 : 0.0};
+      events::uvw_to_teme(r, v, e, basis[a]);
     }
+    const double M[3][3] = {{F[0], F[1], F[3]}, {F[1], F[2], F[4]}, {F[3], F[4], F[5]}};
+    const double h[3] = {r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]};
+    const double rr = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
+    const double w = std::sqrt(h[0] * h[0] + h[1] * h[1] + h[2] * h[2]) / rr;  // rad/s
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j) {
+        double s = 0.0;
+        for (int a = 0; a < 3; ++a)
+          for (int c = 0; c < 3; ++c) s += basis[a][i] * M[a][c] * basis[c][j];
+        P[i * 6 + j] += s;
+        P[(3 + i) * 6 + 3 + j] += w * w * s;
+      }
+    return;
+  }
+  if ((F[0] == 0.0) && (F[1] == 0.0) && (F[2] == 0.0) && (F[3] == 0.0) && (F[4] == 0.0) && (F[5] == 0.0)) return;
+  const double rr = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
+  const double inv_rn = 1.0 / std::sqrt(rr);
+  const double U0 = r[0] * inv_rn, U1 = r[1] * inv_rn, U2 = r[2] * inv_rn;
+  const double h0 = r[1] * v[2] - r[2] * v[1], h1 = r[2] * v[0] - r[0] * v[2], h2 = r[0] * v[1] - r[1] * v[0];
+  const double hh = h0 * h0 + h1 * h1 + h2 * h2;
+  const double inv_wn = 1.0 / std::sqrt(hh);
+  const double W0 = h0 * inv_wn, W1 = h1 * inv_wn, W2 = h2 * inv_wn;
+  const double V0 = W1 * U2 - W2 * U1, V1 = W2 * U0 - W0 * U2, V2 = W0 * U1 - W1 * U0;
+  const double B[3][3] = {{U0, U1, U2}, {V0, V1, V2}, {W0, W1, W2}};
+  const double M[3][3] = {{F[0], F[1], F[3]}, {F[1], F[2], F[4]}, {F[3], F[4], F[5]}};
+  const double w2 = hh / (rr * rr);
+  double BM[3][3];
+  for (int i = 0; i < 3; ++i)
+    for (int c = 0; c < 3; ++c)
+      BM[i][c] = B[0][i] * M[0][c] + B[1][i] * M[1][c] + B[2][i] * M[2][c];
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j <= i; ++j) {
+      const double s = BM[i][0] * B[0][j] + BM[i][1] * B[1][j] + BM[i][2] * B[2][j];
+      P[i * 6 + j] += s;
+      P[(3 + i) * 6 + 3 + j] += w2 * s;
+      if (j != i) {
+        P[j * 6 + i] += s;
+        P[(3 + j) * 6 + 3 + i] += w2 * s;
+      }
+    }
+  }
 }
 
 /// A covariance-bearing set: the row, its parameter layout, the epoch covariance (COVARIANCE, 6 x 6, the floor
@@ -487,9 +515,9 @@ struct Propagator {
 };
 
 /// 0 ready; -3 the theory refuses the set or a moved one; -5 the epoch columns are singular.
-inline int prepare(const Set& s, Propagator& p) {
+inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr) {
   p.s = s;
-  if (!init(s.row, s.o, p.b)) return -3;
+  if (!init(s.row, s.o, p.b, nominal)) return -3;
   const int np = p.b.np;
   double J[6 * kMaxAug], r0[3], v0[3];
   if (!at(p.b, 0.0, r0, v0, J)) return -3;
@@ -534,20 +562,59 @@ inline int prepare(const Set& s, Propagator& p) {
 }
 
 /// The state (TEME km, km/s) and its 6 x 6 covariance (row-major; km^2, km^2/s, km^2/s^2) at `t` minutes from epoch.
-inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P) {
+inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P, double* J_out = nullptr, int32_t* nom_status = nullptr) {
   const int np = p.b.np;
-  double J[6 * kMaxAug];
-  if (!at(p.b, t, r, v, J)) return false;
-  for (int i = 0; i < 6; ++i)
-    for (int j = 0; j <= i; ++j) {
-      double s = 0.0;
-      for (int a = 0; a < np; ++a) {
-        double ja = 0.0;
-        for (int c = 0; c < np; ++c) ja += p.Pp[a * np + c] * J[j * np + c];
-        s += J[i * np + a] * ja;
+  double J_buf[6 * kMaxAug];
+  double* J = J_out != nullptr ? J_out : J_buf;
+  if (!at(p.b, t, r, v, J, nom_status)) return false;
+  const bool fast_ap = xpt::is_ap_ctx(p.b.sats[0].ctx);
+  if (fast_ap) {
+    double JP[6][kMaxAug];
+    for (int i = 0; i < 6; ++i) {
+      const double* const Ji = J + i * np;
+#ifdef __wasm_simd128__
+      int c = 0;
+      for (; c + 1 < np; c += 2) {
+        v128_t acc = wasm_f64x2_splat(0.0);
+        for (int a = 0; a < np; ++a) {
+          acc = wasm_f64x2_add(acc, wasm_f64x2_mul(wasm_f64x2_splat(Ji[a]), wasm_v128_load(p.Pp + a * np + c)));
+        }
+        wasm_v128_store(JP[i] + c, acc);
       }
-      P[i * 6 + j] = P[j * 6 + i] = s;
+      if (c < np) {
+        double acc = 0.0;
+        for (int a = 0; a < np; ++a) acc += Ji[a] * p.Pp[a * np + c];
+        JP[i][c] = acc;
+      }
+#else
+      for (int c = 0; c < np; ++c) {
+        double acc = 0.0;
+        for (int a = 0; a < np; ++a) acc += Ji[a] * p.Pp[a * np + c];
+        JP[i][c] = acc;
+      }
+#endif
     }
+    for (int i = 0; i < 6; ++i) {
+      const double* const JPi = JP[i];
+      for (int j = 0; j <= i; ++j) {
+        const double* const Jj = J + j * np;
+        double s = 0.0;
+        for (int c = 0; c < np; ++c) s += JPi[c] * Jj[c];
+        P[i * 6 + j] = P[j * 6 + i] = s;
+      }
+    }
+  } else {
+    for (int i = 0; i < 6; ++i)
+      for (int j = 0; j <= i; ++j) {
+        double s = 0.0;
+        for (int a = 0; a < np; ++a) {
+          double ja = 0.0;
+          for (int c = 0; c < np; ++c) ja += p.Pp[a * np + c] * J[j * np + c];
+          s += J[i * np + a] * ja;
+        }
+        P[i * 6 + j] = P[j * 6 + i] = s;
+      }
+  }
   // process noise (SPEC 12.5): rate errors constant from the end of the fit arc (from the epoch backward before it)
   const double t_a = p.s.noise[4];
   const double start = t > t_a ? t_a : t < 0.0 ? 0.0 : t;
@@ -579,7 +646,7 @@ inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P) {
       add(g);
     }
   }
-  add_floor(p.s.floor, r, v, P);
+  add_floor(p.s.floor, r, v, P, fast_ap);
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < i; ++j) P[i * 6 + j] = P[j * 6 + i] = 0.5 * (P[i * 6 + j] + P[j * 6 + i]);
   return true;
@@ -591,10 +658,8 @@ inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P) {
 /// parameter the theories have no sensitivity to keeps its variance, its cross terms carried by the state columns).
 inline bool eval_full(Propagator& p, double t, double r[3], double v[3], double* P) {
   const int np = p.b.np;
-  double S6[36];
-  if (!eval(p, t, r, v, S6)) return false;
-  double J[6 * kMaxAug], rr[3], vv[3];
-  if (!at(p.b, t, rr, vv, J)) return false;
+  double S6[36], J[6 * kMaxAug];
+  if (!eval(p, t, r, v, S6, J)) return false;
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < 6; ++j) P[i * np + j] = S6[i * 6 + j];
   for (int i = 0; i < 6; ++i)

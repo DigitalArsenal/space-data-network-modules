@@ -44,9 +44,15 @@
 //   10       TEME km, km/s                                implemented
 // -----------------------------------------------------------------------------
 
+#ifdef __wasm_simd128__
+#include <wasm_simd128.h>
+#endif
+
 namespace sdnap {
 namespace frames {
 inline void teme_drift(double epoch_whole, double epoch_frac, double t_minutes, double r[3], double v[3]);  // gcrf.inc
+inline bool teme_drift_matrix(double epoch_whole, double epoch_frac, double t_minutes, double R[3][3]);
+inline void apply_drift(const double R[3][3], double r[3], double v[3]);
 }  // namespace frames
 namespace xpt {
 
@@ -94,6 +100,28 @@ inline double wrap(double x) {
   return r;
 }
 
+inline double fast_wrap(double x) {
+  constexpr double kInvTwoPi = 1.0 / kTwoPi;
+  double r = x - kTwoPi * std::floor(x * kInvTwoPi);
+  if (r >= kTwoPi) r -= kTwoPi;
+  if (r < 0.0) r += kTwoPi;
+  return r;
+}
+
+inline double fast_a_from_n(double n) {
+  const double x = kMu / (n * n);
+  uint64_t u = 0;
+  std::memcpy(&u, &x, 8);
+  u = u / 3 + 0x2a9f7893e46d0000ULL;
+  double a = 0.0;
+  std::memcpy(&a, &u, 8);
+  double a3 = a * a * a;
+  a = a * (a3 + 2.0 * x) / (2.0 * a3 + x);
+  a3 = a * a * a;
+  a = a * (a3 + 2.0 * x) / (2.0 * a3 + x);
+  return a;
+}
+
 inline Kepler kepler_of(const double* y, double a) {
   Kepler k{};
   k.a = a;
@@ -139,6 +167,69 @@ struct Cx {
 };
 inline Cx cmul(Cx a, Cx b) { return {a.c * b.c - a.s * b.s, a.s * b.c + a.c * b.s}; }
 
+inline void sun_at(double d50, Vec3& sun_u, double& sun_r, Cx* pm_out = nullptr, double* ce_out = nullptr,
+                   double* se_out = nullptr) {
+  const double T = (d50 - 18263.5) / 36525.0;
+  const double ms = (357.52772333333 + 35999.05034 * T - 1.6027777777777777e-4 * T * T -
+                     3.3333333333333e-6 * T * T * T) * kDeg;
+  const double e = 0.01670832 - 4.2229e-5 * T - 1.26e-7 * T * T;
+  const double varpi = (282.938346111111 + 1.71945722222222 * T + 4.62777777777776e-4 * T * T +
+                        3.3333333333333e-6 * T * T * T) * kDeg;
+  const double eps = (23.4392635861111 - 0.0130253805555555 * T - 1.30555555555555e-7 * T * T +
+                      5.02777777777776e-7 * T * T * T) * kDeg;
+  Cx pm[6];
+  pm[0] = {1.0, 0.0};
+  fm::sincos(ms, pm[1].s, pm[1].c);
+  for (int k = 2; k <= 5; ++k) pm[k] = cmul(pm[k - 1], pm[1]);
+  const double e2 = e * e, e3 = e2 * e, e4 = e3 * e, e5 = e4 * e;
+  const double nu = ms + (2.0 * e - e3 / 4.0 + 5.0 * e5 / 96.0) * pm[1].s + (5.0 * e2 / 4.0 - 11.0 * e4 / 24.0) * pm[2].s +
+                    (13.0 * e3 / 12.0 - 43.0 * e5 / 64.0) * pm[3].s + (103.0 * e4 / 96.0) * pm[4].s +
+                    (1097.0 * e5 / 960.0) * pm[5].s;
+  const double lam = nu + varpi;
+  double ce, se, cl, sl;
+  fm::sincos(eps, se, ce);
+  fm::sincos(lam, sl, cl);
+  sun_u = {cl, sl * ce, sl * se};
+  const double roa = 1.0 + e2 / 2.0 - (e - 3.0 * e3 / 8.0 + 5.0 * e5 / 192.0) * pm[1].c - (e2 / 2.0 - e4 / 3.0) * pm[2].c -
+                     (3.0 * e3 / 8.0 - 45.0 * e5 / 128.0) * pm[3].c - (e4 / 3.0) * pm[4].c - (125.0 * e5 / 384.0) * pm[5].c;
+  sun_r = kAu * roa / kRe;
+  if (pm_out != nullptr) {
+    pm_out[1] = pm[1];
+    pm_out[2] = pm[2];
+  }
+  if (ce_out != nullptr) *ce_out = ce;
+  if (se_out != nullptr) *se_out = se;
+}
+
+struct SunHourCache {
+  int64_t hkey = std::numeric_limits<int64_t>::min();
+  Vec3 u0{}, du{};
+  double r0 = 0.0, dr = 0.0;
+};
+inline thread_local SunHourCache g_sun_hour_cache{};
+
+inline void sun_at_ap(double d50, Vec3& sun_u, double& sun_r) {
+  SunHourCache& sc = g_sun_hour_cache;
+  const double h = d50 * 24.0;
+  const double hfloor = std::floor(h);
+  const int64_t hkey = static_cast<int64_t>(hfloor);
+  if (sc.hkey != hkey) {
+    Vec3 u1{};
+    double r1 = 0.0;
+    sun_at(hfloor * (1.0 / 24.0), sc.u0, sc.r0);
+    sun_at((hfloor + 1.0) * (1.0 / 24.0), u1, r1);
+    sc.du = u1 - sc.u0;
+    sc.dr = r1 - sc.r0;
+    sc.hkey = hkey;
+  }
+  const double u = h - hfloor;
+  const Vec3 raw = {sc.u0.x + u * sc.du.x, sc.u0.y + u * sc.du.y, sc.u0.z + u * sc.du.z};
+  const double n2 = raw.x * raw.x + raw.y * raw.y + raw.z * raw.z;
+  const double inv_n = 1.5 - 0.5 * n2;
+  sun_u = {raw.x * inv_n, raw.y * inv_n, raw.z * inv_n};
+  sun_r = sc.r0 + u * sc.dr;
+}
+
 /// Sun and Moon at d50 (SPEC 5). The periodic series are evaluated with the
 /// sines and cosines of the fundamental arguments and their integer
 /// combinations built by complex multiplication.
@@ -152,7 +243,6 @@ inline Bodies bodies_at(double d50) {
                         3.3333333333333e-6 * T * T * T) * kDeg;
   const double eps = (23.4392635861111 - 0.0130253805555555 * T - 1.30555555555555e-7 * T * T +
                       5.02777777777776e-7 * T * T * T) * kDeg;
-  // multiples of the solar mean anomaly
   Cx pm[6];
   pm[0] = {1.0, 0.0};
   fm::sincos(ms, pm[1].s, pm[1].c);
@@ -233,6 +323,84 @@ inline Bodies bodies_at(double d50) {
   return b;
 }
 
+struct alignas(16) BodiesHourCache {
+  alignas(16) Bodies b[4]{};
+  int64_t hkey_p1 = 0;
+};
+inline thread_local BodiesHourCache g_bodies_hour_cache{};
+
+inline Bodies bodies_at_ap(double d50) {
+  BodiesHourCache& bc = g_bodies_hour_cache;
+  const double h = d50 * 24.0;
+  const double hfloor = std::floor(h);
+  const int64_t hkey = static_cast<int64_t>(hfloor);
+  const int64_t hp1 = hkey + 1;
+  if (__builtin_expect(bc.hkey_p1 != hp1, 0)) {
+    if (bc.hkey_p1 != 0 && hp1 == bc.hkey_p1 + 1) {
+      bc.b[0] = bc.b[1];
+      bc.b[1] = bc.b[2];
+      bc.b[2] = bc.b[3];
+      bc.b[3] = bodies_at((hfloor + 2.0) * (1.0 / 24.0));
+    } else if (bc.hkey_p1 != 0 && hp1 == bc.hkey_p1 - 1) {
+      bc.b[3] = bc.b[2];
+      bc.b[2] = bc.b[1];
+      bc.b[1] = bc.b[0];
+      bc.b[0] = bodies_at((hfloor - 1.0) * (1.0 / 24.0));
+    } else {
+      bc.b[0] = bodies_at((hfloor - 1.0) * (1.0 / 24.0));
+      bc.b[1] = bodies_at(hfloor * (1.0 / 24.0));
+      bc.b[2] = bodies_at((hfloor + 1.0) * (1.0 / 24.0));
+      bc.b[3] = bodies_at((hfloor + 2.0) * (1.0 / 24.0));
+    }
+    bc.hkey_p1 = hp1;
+  }
+  const double u = h - hfloor;
+  const double um1 = u - 1.0, up1 = u + 1.0, um2 = u - 2.0;
+  const double w0 = -(1.0 / 6.0) * u * um1 * um2;
+  const double w1 = 0.5 * up1 * um1 * um2;
+  const double w2 = -0.5 * up1 * u * um2;
+  const double w3 = (1.0 / 6.0) * up1 * u * um1;
+  alignas(16) Bodies out{};
+#ifdef __wasm_simd128__
+  const v128_t vw0 = wasm_f64x2_splat(w0), vw1 = wasm_f64x2_splat(w1);
+  const v128_t vw2 = wasm_f64x2_splat(w2), vw3 = wasm_f64x2_splat(w3);
+  const double* p0 = &bc.b[0].sun_u.x;
+  const double* p1 = &bc.b[1].sun_u.x;
+  const double* p2 = &bc.b[2].sun_u.x;
+  const double* p3 = &bc.b[3].sun_u.x;
+  double* po = &out.sun_u.x;
+  for (int q = 0; q < 8; q += 2) {
+    const v128_t s01 = wasm_f64x2_add(wasm_f64x2_mul(vw0, wasm_v128_load(p0 + q)),
+                                      wasm_f64x2_mul(vw1, wasm_v128_load(p1 + q)));
+    const v128_t s23 = wasm_f64x2_add(wasm_f64x2_mul(vw2, wasm_v128_load(p2 + q)),
+                                      wasm_f64x2_mul(vw3, wasm_v128_load(p3 + q)));
+    wasm_v128_store(po + q, wasm_f64x2_add(s01, s23));
+  }
+  const double sn2 = out.sun_u.x * out.sun_u.x + out.sun_u.y * out.sun_u.y + out.sun_u.z * out.sun_u.z;
+  const double sinv = 1.5 - 0.5 * sn2;
+  out.sun_u = {out.sun_u.x * sinv, out.sun_u.y * sinv, out.sun_u.z * sinv};
+  const double mn2 = out.moon_u.x * out.moon_u.x + out.moon_u.y * out.moon_u.y + out.moon_u.z * out.moon_u.z;
+  const double minv = 1.5 - 0.5 * mn2;
+  out.moon_u = {out.moon_u.x * minv, out.moon_u.y * minv, out.moon_u.z * minv};
+#else
+  const Vec3 su = {w0 * bc.b[0].sun_u.x + w1 * bc.b[1].sun_u.x + w2 * bc.b[2].sun_u.x + w3 * bc.b[3].sun_u.x,
+                   w0 * bc.b[0].sun_u.y + w1 * bc.b[1].sun_u.y + w2 * bc.b[2].sun_u.y + w3 * bc.b[3].sun_u.y,
+                   w0 * bc.b[0].sun_u.z + w1 * bc.b[1].sun_u.z + w2 * bc.b[2].sun_u.z + w3 * bc.b[3].sun_u.z};
+  const double sn2 = su.x * su.x + su.y * su.y + su.z * su.z;
+  const double sinv = 1.5 - 0.5 * sn2;
+  out.sun_u = {su.x * sinv, su.y * sinv, su.z * sinv};
+  out.sun_r = w0 * bc.b[0].sun_r + w1 * bc.b[1].sun_r + w2 * bc.b[2].sun_r + w3 * bc.b[3].sun_r;
+  const Vec3 mu = {w0 * bc.b[0].moon_u.x + w1 * bc.b[1].moon_u.x + w2 * bc.b[2].moon_u.x + w3 * bc.b[3].moon_u.x,
+                   w0 * bc.b[0].moon_u.y + w1 * bc.b[1].moon_u.y + w2 * bc.b[2].moon_u.y + w3 * bc.b[3].moon_u.y,
+                   w0 * bc.b[0].moon_u.z + w1 * bc.b[1].moon_u.z + w2 * bc.b[2].moon_u.z + w3 * bc.b[3].moon_u.z};
+  const double mn2 = mu.x * mu.x + mu.y * mu.y + mu.z * mu.z;
+  const double minv = 1.5 - 0.5 * mn2;
+  out.moon_u = {mu.x * minv, mu.y * minv, mu.z * minv};
+  out.moon_r = w0 * bc.b[0].moon_r + w1 * bc.b[1].moon_r + w2 * bc.b[2].moon_r + w3 * bc.b[3].moon_r;
+#endif
+  return out;
+}
+
 /// Point-mass third-body acceleration at r (ER/min^2), the direct minus the
 /// indirect term.
 inline Vec3 third_body_accel(Vec3 r, Vec3 su, double sr, double mass_ratio) {
@@ -248,7 +416,7 @@ inline Vec3 third_body_accel(Vec3 r, Vec3 su, double sr, double mass_ratio) {
 /// The equinoctial frame and orbit geometry of a state.
 struct Frame {
   Vec3 f, g, w;
-  double a, n, e2, eta, c;
+  double a, n, e2, eta, c, ic;
 };
 
 inline Frame frame_of(const double* y) {
@@ -256,6 +424,7 @@ inline Frame frame_of(const double* y) {
   const double chi = y[kChi], psi = y[kPsi];
   fr.c = 1.0 + chi * chi + psi * psi;
   const double ic = 1.0 / fr.c;
+  fr.ic = ic;
   fr.f = {(1.0 - chi * chi + psi * psi) * ic, 2.0 * chi * psi * ic, -2.0 * chi * ic};
   fr.g = {2.0 * chi * psi * ic, (1.0 + chi * chi - psi * psi) * ic, 2.0 * psi * ic};
   fr.w = {2.0 * chi * ic, -2.0 * psi * ic, (1.0 - chi * chi - psi * psi) * ic};
@@ -266,12 +435,26 @@ inline Frame frame_of(const double* y) {
   return fr;
 }
 
+inline Frame frame_of_fast(const double* y) {
+  Frame fr{};
+  const double chi = y[kChi], psi = y[kPsi];
+  fr.c = 1.0 + chi * chi + psi * psi;
+  const double ic = 1.0 / fr.c;
+  fr.ic = ic;
+  fr.f = {(1.0 - chi * chi + psi * psi) * ic, 2.0 * chi * psi * ic, -2.0 * chi * ic};
+  fr.g = {2.0 * chi * psi * ic, (1.0 + chi * chi - psi * psi) * ic, 2.0 * psi * ic};
+  fr.w = {2.0 * chi * ic, -2.0 * psi * ic, (1.0 - chi * chi - psi * psi) * ic};
+  fr.n = y[kN];
+  fr.a = fast_a_from_n(fr.n);
+  fr.e2 = y[kAf] * y[kAf] + y[kAg] * y[kAg];
+  fr.eta = std::sqrt(1.0 - fr.e2);
+  return fr;
+}
+
 /// Position and velocity (ER, ER/min) at eccentric longitude F.
-inline void state_at_F(const double* y, const Frame& fr, double F, Vec3& r, Vec3& v, double& r_over_a) {
+inline void state_at_scF(const double* y, const Frame& fr, double sf, double cf, Vec3& r, Vec3& v, double& r_over_a) {
   const double k = y[kAf], h = y[kAg];
   const double beta = 1.0 / (1.0 + fr.eta);
-  double sf, cf;
-  fm::sincos(F, sf, cf);
   const double X = fr.a * ((1.0 - h * h * beta) * cf + h * k * beta * sf - k);
   const double Y = fr.a * ((1.0 - k * k * beta) * sf + h * k * beta * cf - h);
   r_over_a = 1.0 - k * cf - h * sf;
@@ -281,6 +464,12 @@ inline void state_at_F(const double* y, const Frame& fr, double F, Vec3& r, Vec3
   const double Yd = s * ((1.0 - k * k * beta) * cf - h * k * beta * sf);
   r = X * fr.f + Y * fr.g;
   v = Xd * fr.f + Yd * fr.g;
+}
+
+inline void state_at_F(const double* y, const Frame& fr, double F, Vec3& r, Vec3& v, double& r_over_a) {
+  double sf, cf;
+  fm::sincos(F, sf, cf);
+  state_at_scF(y, fr, sf, cf, r, v, r_over_a);
 }
 
 /// Gauss equations: the rates of the six equinoctial elements under the
@@ -321,6 +510,221 @@ inline void gauss(const double* y, const Frame& fr, Vec3 r, Vec3 v, Vec3 d, doub
   out[kN] = -1.5 * fr.n / fr.a * adot;
 }
 
+#ifdef __wasm_simd128__
+struct F64x2 {
+  v128_t v;
+  F64x2() = default;
+  constexpr F64x2(v128_t x) : v(x) {}
+  explicit F64x2(double s) : v(wasm_f64x2_splat(s)) {}
+  F64x2(double a, double b) : v(wasm_f64x2_make(a, b)) {}
+  double lo() const { return wasm_f64x2_extract_lane(v, 0); }
+  double hi() const { return wasm_f64x2_extract_lane(v, 1); }
+};
+[[gnu::always_inline]] inline F64x2 operator+(F64x2 a, F64x2 b) { return F64x2(wasm_f64x2_add(a.v, b.v)); }
+[[gnu::always_inline]] inline F64x2 operator-(F64x2 a, F64x2 b) { return F64x2(wasm_f64x2_sub(a.v, b.v)); }
+[[gnu::always_inline]] inline F64x2 operator-(F64x2 a) { return F64x2(wasm_f64x2_neg(a.v)); }
+[[gnu::always_inline]] inline F64x2 operator*(F64x2 a, F64x2 b) { return F64x2(wasm_f64x2_mul(a.v, b.v)); }
+[[gnu::always_inline]] inline F64x2 operator/(F64x2 a, F64x2 b) { return F64x2(wasm_f64x2_div(a.v, b.v)); }
+[[gnu::always_inline]] inline F64x2 operator+(double a, F64x2 b) { return F64x2(a) + b; }
+[[gnu::always_inline]] inline F64x2 operator+(F64x2 a, double b) { return a + F64x2(b); }
+[[gnu::always_inline]] inline F64x2 operator-(double a, F64x2 b) { return F64x2(a) - b; }
+[[gnu::always_inline]] inline F64x2 operator-(F64x2 a, double b) { return a - F64x2(b); }
+[[gnu::always_inline]] inline F64x2 operator*(double a, F64x2 b) { return F64x2(a) * b; }
+[[gnu::always_inline]] inline F64x2 operator*(F64x2 a, double b) { return a * F64x2(b); }
+[[gnu::always_inline]] inline F64x2 f64x2_sqrt(F64x2 a) { return F64x2(wasm_f64x2_sqrt(a.v)); }
+
+inline F64x2 fast_a_from_n_f64x2(F64x2 vn) {
+  const F64x2 vx = F64x2(kMu) / (vn * vn);
+  uint64_t u0 = 0, u1 = 0;
+  const double x0 = vx.lo(), x1 = vx.hi();
+  std::memcpy(&u0, &x0, 8);
+  std::memcpy(&u1, &x1, 8);
+  u0 = u0 / 3 + 0x2a9f7893e46d0000ULL;
+  u1 = u1 / 3 + 0x2a9f7893e46d0000ULL;
+  double a0 = 0.0, a1 = 0.0;
+  std::memcpy(&a0, &u0, 8);
+  std::memcpy(&a1, &u1, 8);
+  F64x2 va(a0, a1);
+  F64x2 va3 = va * va * va;
+  va = va * (va3 + 2.0 * vx) / (2.0 * va3 + vx);
+  va3 = va * va * va;
+  va = va * (va3 + 2.0 * vx) / (2.0 * va3 + vx);
+  return va;
+}
+#endif
+
+inline void lp_third_body_gauss_ap(const double* y, const Frame& fr, double sf, double cf,
+                                   const Bodies& b, double tb[6]) {
+  const double k = y[kAf], h = y[kAg], chi = y[kChi], psi = y[kPsi];
+  const double roa = 1.0 - k * cf - h * sf;
+  const double rn = fr.a * roa;
+  const double op_eta = 1.0 + fr.eta;
+  const double na = fr.n * fr.a;
+#ifdef __wasm_simd128__
+  const v128_t vinv = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(op_eta * rn, na * fr.eta));
+  const double inv_p1 = wasm_f64x2_extract_lane(vinv, 0);
+  const double inv_na_eta = wasm_f64x2_extract_lane(vinv, 1);
+  const double beta = inv_p1 * rn;
+  const double inv_rn = inv_p1 * op_eta;
+#else
+  const double beta = 1.0 / op_eta;
+  const double inv_rn = 1.0 / rn;
+  const double inv_na_eta = 1.0 / (na * fr.eta);
+#endif
+  const double inv_a = inv_rn * roa;
+  const double inv_na = inv_na_eta * fr.eta;
+  const double inv_eta = inv_na_eta * na;
+  const double inv_hn = inv_na_eta * inv_a;
+
+  const double c_xx = 1.0 - h * h * beta, c_xy = h * k * beta, c_yy = 1.0 - k * k * beta;
+  const double X = fr.a * (c_xx * cf + c_xy * sf - k);
+  const double Y = fr.a * (c_xy * cf + c_yy * sf - h);
+  const double s_vel = na * fr.a * inv_rn;
+  const double Xd = s_vel * (c_xy * cf - c_xx * sf);
+  const double Yd = s_vel * (c_yy * cf - c_xy * sf);
+
+  const Vec3 sv_s = b.sun_r * b.sun_u;
+  const Vec3 sv_m = b.moon_r * b.moon_u;
+  const double xs0 = dot(sv_s, fr.f), ys0 = dot(sv_s, fr.g), zs0 = dot(sv_s, fr.w);
+  const double xm0 = dot(sv_m, fr.f), ym0 = dot(sv_m, fr.g), zm0 = dot(sv_m, fr.w);
+  const double ds_f = xs0 - X, ds_g = ys0 - Y;
+  const double dm_f = xm0 - X, dm_g = ym0 - Y;
+#ifdef __wasm_simd128__
+  const v128_t vd2 = wasm_f64x2_make(ds_f * ds_f + ds_g * ds_g + zs0 * zs0,
+                                     dm_f * dm_f + dm_g * dm_g + zm0 * zm0);
+  const v128_t vdn = wasm_f64x2_sqrt(vd2);
+  const v128_t vsr = wasm_f64x2_make(b.sun_r, b.moon_r);
+  const v128_t vden_d = wasm_f64x2_mul(vd2, vdn);
+  const v128_t vden_s = wasm_f64x2_mul(wasm_f64x2_mul(vsr, vsr), vsr);
+  const v128_t vinv_ds = wasm_f64x2_div(wasm_f64x2_make(kSunMass * kMu, kMoonMass * kMu),
+                                        wasm_f64x2_mul(vden_d, vden_s));
+  const v128_t vc_dir = wasm_f64x2_mul(vinv_ds, vden_s);
+  const v128_t vc_ind = wasm_f64x2_mul(vinv_ds, vden_d);
+  const double c_dir_s = wasm_f64x2_extract_lane(vc_dir, 0), c_dir_m = wasm_f64x2_extract_lane(vc_dir, 1);
+  const double c_ind_s = wasm_f64x2_extract_lane(vc_ind, 0), c_ind_m = wasm_f64x2_extract_lane(vc_ind, 1);
+#else
+  const double dsn = std::sqrt(ds_f * ds_f + ds_g * ds_g + zs0 * zs0);
+  const double dmn = std::sqrt(dm_f * dm_f + dm_g * dm_g + zm0 * zm0);
+  const double c_dir_s = (kSunMass * kMu) / (dsn * dsn * dsn);
+  const double c_ind_s = (kSunMass * kMu) / (b.sun_r * b.sun_r * b.sun_r);
+  const double c_dir_m = (kMoonMass * kMu) / (dmn * dmn * dmn);
+  const double c_ind_m = (kMoonMass * kMu) / (b.moon_r * b.moon_r * b.moon_r);
+#endif
+  const double df = (c_dir_s * ds_f - c_ind_s * xs0) + (c_dir_m * dm_f - c_ind_m * xm0);
+  const double dg = (c_dir_s * ds_g - c_ind_s * ys0) + (c_dir_m * dm_g - c_ind_m * ym0);
+  const double W = (c_dir_s - c_ind_s) * zs0 + (c_dir_m - c_ind_m) * zm0;
+
+  const double xu = X * inv_rn, yu = Y * inv_rn;
+  const double R = df * xu + dg * yu;
+  const double S = dg * xu - df * yu;
+  const double vd = Xd * df + Yd * dg;
+  constexpr double kInvMu = 1.0 / kMu;
+  const double adot = (2.0 * kInvMu) * fr.a * fr.a * vd;
+  const double rd = X * df + Y * dg;
+  const double rv = X * Xd + Y * Yd;
+  const double two_vd = 2.0 * vd;
+  const double edot_f = kInvMu * (two_vd * X - rd * Xd - rv * df);
+  const double edot_g = kInvMu * (two_vd * Y - rd * Yd - rv * dg);
+  const double c_W = (0.5 * fr.c * inv_hn) * W;
+  const double omega_rot = (chi * X - psi * Y) * W * inv_hn;
+  const double er = k * xu + h * yu;
+  const double es = h * xu - k * yu;
+  const double inv_p = inv_a * inv_eta * inv_eta;
+
+  tb[kAf] = edot_f + h * omega_rot;
+  tb[kAg] = edot_g - k * omega_rot;
+  tb[kChi] = c_W * Y;
+  tb[kPsi] = c_W * X;
+  tb[kLam] = -(2.0 * roa * inv_na) * R - (fr.eta * inv_na * beta) * (er * R + (1.0 + rn * inv_p) * es * S) - omega_rot;
+  tb[kN] = -1.5 * fr.n * inv_a * adot;
+}
+
+#ifdef __wasm_simd128__
+inline void lp_tb_gauss_pair_f64x2(const F64x2 vy[6], F64x2 va, F64x2 vsf, F64x2 vcf,
+                                   const Bodies& b, F64x2 vtb[6]) {
+  const F64x2 vk = vy[kAf], vh = vy[kAg], vchi = vy[kChi], vpsi = vy[kPsi], vn = vy[kN];
+  const F64x2 vchi2 = vchi * vchi, vpsi2 = vpsi * vpsi, v2cp = 2.0 * vchi * vpsi;
+  const F64x2 vc = 1.0 + vchi2 + vpsi2;
+  const F64x2 vic = F64x2(1.0) / vc;
+  const F64x2 vfx = (1.0 - vchi2 + vpsi2) * vic, vfy = v2cp * vic, vfz = (-2.0 * vchi) * vic;
+  const F64x2 vgx = v2cp * vic, vgy = (1.0 + vchi2 - vpsi2) * vic, vgz = (2.0 * vpsi) * vic;
+  const F64x2 vwx = (2.0 * vchi) * vic, vwy = (-2.0 * vpsi) * vic, vwz = (1.0 - vchi2 - vpsi2) * vic;
+
+  const F64x2 ve2 = vk * vk + vh * vh;
+  const F64x2 veta = f64x2_sqrt(1.0 - ve2);
+  const F64x2 vroa = 1.0 - vk * vcf - vh * vsf;
+  const F64x2 vrn = va * vroa;
+  const F64x2 vop_eta = 1.0 + veta;
+  const F64x2 vna = vn * va;
+  const F64x2 vinv_p1 = F64x2(1.0) / (vop_eta * vrn);
+  const F64x2 vinv_na_eta = F64x2(1.0) / (vna * veta);
+  const F64x2 vbeta = vinv_p1 * vrn;
+  const F64x2 vinv_rn = vinv_p1 * vop_eta;
+  const F64x2 vinv_a = vinv_rn * vroa;
+  const F64x2 vinv_na = vinv_na_eta * veta;
+  const F64x2 vinv_eta = vinv_na_eta * vna;
+  const F64x2 vinv_hn = vinv_na_eta * vinv_a;
+
+  const F64x2 vcxx = 1.0 - vh * vh * vbeta, vcxy = vh * vk * vbeta, vcyy = 1.0 - vk * vk * vbeta;
+  const F64x2 vX = va * (vcxx * vcf + vcxy * vsf - vk);
+  const F64x2 vY = va * (vcxy * vcf + vcyy * vsf - vh);
+  const F64x2 vs_vel = vna * va * vinv_rn;
+  const F64x2 vXd = vs_vel * (vcxy * vcf - vcxx * vsf);
+  const F64x2 vYd = vs_vel * (vcyy * vcf - vcxy * vsf);
+
+  const Vec3 sv_s = b.sun_r * b.sun_u;
+  const Vec3 sv_m = b.moon_r * b.moon_u;
+  const F64x2 vxs0 = sv_s.x * vfx + sv_s.y * vfy + sv_s.z * vfz;
+  const F64x2 vys0 = sv_s.x * vgx + sv_s.y * vgy + sv_s.z * vgz;
+  const F64x2 vzs0 = sv_s.x * vwx + sv_s.y * vwy + sv_s.z * vwz;
+  const F64x2 vxm0 = sv_m.x * vfx + sv_m.y * vfy + sv_m.z * vfz;
+  const F64x2 vym0 = sv_m.x * vgx + sv_m.y * vgy + sv_m.z * vgz;
+  const F64x2 vzm0 = sv_m.x * vwx + sv_m.y * vwy + sv_m.z * vwz;
+
+  const F64x2 vds_f = vxs0 - vX, vds_g = vys0 - vY;
+  const F64x2 vdm_f = vxm0 - vX, vdm_g = vym0 - vY;
+  const F64x2 vds2 = vds_f * vds_f + vds_g * vds_g + vzs0 * vzs0;
+  const F64x2 vdm2 = vdm_f * vdm_f + vdm_g * vdm_g + vzm0 * vzm0;
+  const F64x2 vdsn = f64x2_sqrt(vds2), vdmn = f64x2_sqrt(vdm2);
+  const v128_t vsr = wasm_f64x2_make(b.sun_r, b.moon_r);
+  const v128_t vc_ind = wasm_f64x2_div(wasm_f64x2_make(kSunMass * kMu, kMoonMass * kMu),
+                                       wasm_f64x2_mul(wasm_f64x2_mul(vsr, vsr), vsr));
+  const double c_ind_s = wasm_f64x2_extract_lane(vc_ind, 0);
+  const double c_ind_m = wasm_f64x2_extract_lane(vc_ind, 1);
+  const F64x2 vc_dir_s = F64x2(kSunMass * kMu) / (vds2 * vdsn);
+  const F64x2 vc_dir_m = F64x2(kMoonMass * kMu) / (vdm2 * vdmn);
+
+  const F64x2 vdf = (vc_dir_s * vds_f - c_ind_s * vxs0) + (vc_dir_m * vdm_f - c_ind_m * vxm0);
+  const F64x2 vdg = (vc_dir_s * vds_g - c_ind_s * vys0) + (vc_dir_m * vdm_g - c_ind_m * vym0);
+  const F64x2 vW = (vc_dir_s - c_ind_s) * vzs0 + (vc_dir_m - c_ind_m) * vzm0;
+
+  const F64x2 vxu = vX * vinv_rn, vyu = vY * vinv_rn;
+  const F64x2 vR = vdf * vxu + vdg * vyu;
+  const F64x2 vS = vdg * vxu - vdf * vyu;
+  const F64x2 vvd = vXd * vdf + vYd * vdg;
+  constexpr double kInvMu = 1.0 / kMu;
+  const F64x2 vadot = (2.0 * kInvMu) * va * va * vvd;
+  const F64x2 vrd = vX * vdf + vY * vdg;
+  const F64x2 vrv = vX * vXd + vY * vYd;
+  const F64x2 vtwo_vd = 2.0 * vvd;
+  const F64x2 vedot_f = kInvMu * (vtwo_vd * vX - vrd * vXd - vrv * vdf);
+  const F64x2 vedot_g = kInvMu * (vtwo_vd * vY - vrd * vYd - vrv * vdg);
+  const F64x2 vc_W = (0.5 * vc * vinv_hn) * vW;
+  const F64x2 vomega_rot = (vchi * vX - vpsi * vY) * vW * vinv_hn;
+  const F64x2 ver = vk * vxu + vh * vyu;
+  const F64x2 ves = vh * vxu - vk * vyu;
+  const F64x2 vinv_p = vinv_a * vinv_eta * vinv_eta;
+
+  vtb[kAf] = vedot_f + vh * vomega_rot;
+  vtb[kAg] = vedot_g - vk * vomega_rot;
+  vtb[kChi] = vc_W * vY;
+  vtb[kPsi] = vc_W * vX;
+  vtb[kLam] = -(2.0 * vroa * vinv_na) * vR -
+              (veta * vinv_na * vbeta) * (ver * vR + (1.0 + vrn * vinv_p) * ves * vS) - vomega_rot;
+  vtb[kN] = -1.5 * vn * vinv_a * vadot;
+}
+#endif
+
 template <int K>
 inline double ipow(double x) {
   double r = 1.0;
@@ -329,6 +733,111 @@ inline double ipow(double x) {
 }
 
 #include "xp_spec_terms.inc"
+
+[[gnu::always_inline]] inline void srp_output_ap(double e, double eta, double sE1, double cE1, double sw1, double cw1,
+                                                 double sO1, double cO1, double sinc1, double cinc1, double a, double n,
+                                                 double A, double B, double Cw, double Fs, double* d) {
+  const double cEw = cE1 * cw1 - sE1 * sw1, sEw = sE1 * cw1 + cE1 * sw1;
+  const double cOw = cw1 * cO1 - sw1 * sO1, sOw = sw1 * cO1 + cw1 * sO1;
+  const double cE2 = cE1 * cE1 - sE1 * sE1, sE2 = sE1 * cE1 + cE1 * sE1;
+  const double cmE_Ow = cE1 * cOw + sE1 * sOw, smE_Ow = cE1 * sOw - sE1 * cOw;
+  const double cpE_Ow = cE1 * cOw - sE1 * sOw, spE_Ow = sE1 * cOw + cE1 * sOw;
+  const double cm2E_Ow = cE2 * cOw + sE2 * sOw, sm2E_Ow = cE2 * sOw - sE2 * cOw;
+  const double cp2E_Ow = cE2 * cOw - sE2 * sOw, sp2E_Ow = sE2 * cOw + cE2 * sOw;
+  const double e2 = e * e, e3 = e2 * e, e4 = e2 * e2;
+  const double sE1_2 = sE1 * sE1, cE1_2 = cE1 * cE1;
+#ifdef __wasm_simd128__
+  const v128_t vd_one = wasm_f64x2_splat(1.0);
+  const double an = a * n, an2 = an * n;
+  const v128_t v_inv0 = wasm_f64x2_div(vd_one, wasm_f64x2_make(an, an2 * eta));
+  const v128_t v_inv1 = wasm_f64x2_div(vd_one, wasm_f64x2_make(cinc1 + 1.0, e2 - eta - 1.0));
+  const double inv_an = wasm_f64x2_extract_lane(v_inv0, 0);
+  const double inv_eta_an2 = wasm_f64x2_extract_lane(v_inv0, 1);
+  const double inv_an2 = inv_eta_an2 * eta;
+  const double inv_cinc1 = wasm_f64x2_extract_lane(v_inv1, 0);
+  const double inv_eem1 = wasm_f64x2_extract_lane(v_inv1, 1);
+#else
+  const double inv_an = 1.0 / (a * n);
+  const double inv_an2 = inv_an / n;
+  const double inv_eta_an2 = inv_an2 / eta;
+  const double inv_cinc1 = 1.0 / (cinc1 + 1.0);
+  const double inv_eem1 = 1.0 / (e2 - eta - 1.0);
+#endif
+  d[4] = Fs * (
+        A * ((-(4.0 * e4 + 6.0 * e3 * cE1 - 5.0 * e2 * eta - 14.0 * e2 - 5.0 * e * eta * cE1 - 6.0 * e * cE1 + 10.0 * eta + 10.0)) * sE1 * 0.5 * inv_an2 * inv_eem1)
+        + B * ((-(10.0 * e3 * eta * sE1_2 - 5.0 * e3 * eta + 10.0 * e3 * sE1_2 - 5.0 * e3 + 16.0 * e2 * eta * cE1 + 20.0 * e2 * cE1 - 12.0 * e * eta * sE1_2 + 6.0 * e * eta - 10.0 * e * sE1_2 + 5.0 * e - 20.0 * eta * cE1 - 20.0 * cE1)) * 0.25 * inv_an2 * inv_eem1)
+        + Cw * ((2.0 * e3 * sE1_2 * cw1 - e3 * cw1 - 2.0 * e2 * eta * sE1 * sw1 - 2.0 * e2 * sE1 * sw1 + 4.0 * e2 * cE1 * cw1 - 2.0 * e * eta * sE1 * sEw + e * eta * cw1 - 2.0 * e * sE1 * sEw + e * cw1 - 4.0 * eta * cEw - 4.0 * cEw) * sinc1 * 0.25 * inv_an2 * inv_cinc1 * inv_eem1));
+  d[5] = Fs * (A * (3.0 * cE1 * inv_an) + B * (3.0 * eta * sE1 * inv_an));
+  d[2] = Fs * Cw * ((4.0 * e2 * sE1 * sOw - 4.0 * e * eta * cE1_2 * cOw + 2.0 * e * eta * cOw + e * (cm2E_Ow - cp2E_Ow) + 8.0 * eta * cE1 * cOw - 8.0 * sE1 * sOw) * 0.125 * inv_eta_an2 * inv_cinc1);
+  d[3] = Fs * Cw * ((4.0 * e2 * sE1 * cOw - 4.0 * e * eta * sE1_2 * sOw + 2.0 * e * eta * sOw + e * (sp2E_Ow - sm2E_Ow) - 8.0 * eta * sOw * cE1 - 8.0 * sE1 * cOw) * 0.125 * inv_eta_an2 * inv_cinc1);
+  d[0] = Fs * (
+        A * ((e2 - 1.0) * (e * (cmE_Ow - cpE_Ow) + cp2E_Ow) * 0.25 * inv_eta_an2)
+        + B * ((2.0 * e3 * (smE_Ow - spE_Ow) + e2 * (sp2E_Ow - sm2E_Ow) + 8.0 * e * eta * sOw * cE1 + 2.0 * e * (spE_Ow - smE_Ow) + 4.0 * eta * sE1_2 * sOw - 2.0 * eta * sOw + sm2E_Ow - sp2E_Ow) * 0.125 * inv_eta_an2)
+        + Cw * ((-e) * (2.0 * e2 * sE1 * sw1 * sOw - 2.0 * e * eta * sO1 * cE1_2 + e * eta * sO1 - 2.0 * e * eta * sw1 * cE1_2 * cOw + e * eta * sw1 * cOw + 2.0 * e * sE1 * sw1 * sOw * cE1 + 4.0 * eta * sO1 * cE1 + 4.0 * eta * sw1 * cE1 * cOw - 4.0 * sE1 * sw1 * sOw) * sinc1 * 0.25 * inv_eta_an2 * inv_cinc1));
+  d[1] = Fs * (
+        A * ((e2 - 1.0) * (e * (smE_Ow - spE_Ow) + sp2E_Ow) * 0.25 * inv_eta_an2)
+        + B * ((-(2.0 * e3 * (cmE_Ow - cpE_Ow) + e2 * (cp2E_Ow - cm2E_Ow) + 8.0 * e * eta * cE1 * cOw + 2.0 * e * (cpE_Ow - cmE_Ow) + 4.0 * eta * sE1_2 * cOw - 2.0 * eta * cOw + cm2E_Ow - cp2E_Ow)) * 0.125 * inv_eta_an2)
+        + Cw * (e * (2.0 * e2 * sE1 * sw1 * cOw - 2.0 * e * eta * sE1_2 * sw1 * sOw + 2.0 * e * eta * sE1_2 * cO1 + e * eta * sw1 * sOw - e * eta * cO1 + 2.0 * e * sE1 * sw1 * cE1 * cOw - 4.0 * eta * sw1 * sOw * cE1 + 4.0 * eta * cE1 * cO1 - 4.0 * sE1 * sw1 * cOw) * sinc1 * 0.25 * inv_eta_an2 * inv_cinc1));
+}
+
+inline void srp_rates_sunlit_ap(double e, double eta, double sw1, double cw1, double sO1, double cO1, double sinc1, double cinc1,
+                                double a, double n, double A, double B, double Cw, double Fs, double* d) {
+  const double cOw = cw1 * cO1 - sw1 * sO1, sOw = sw1 * cO1 + cw1 * sO1;
+  const double e2 = e * e;
+  const double inv_2an = 0.5 / (a * n);
+  const double inv_2ean = inv_2an / eta;
+  const double inv_cinc1 = 1.0 / (cinc1 + 1.0);
+  const double inv_eem1 = 1.0 / (e2 - eta - 1.0);
+  d[4] = Fs * (A * ((-3.0) * e * (2.0 * e2 - 3.0 * eta - 2.0) * inv_2an * inv_eem1)
+        + Cw * ((-3.0) * e * (eta + 1.0) * sinc1 * sw1 * inv_2an * inv_cinc1 * inv_eem1));
+  d[5] = 0.0;
+  d[2] = Fs * Cw * (3.0 * e * sOw * inv_2ean * inv_cinc1);
+  d[3] = Fs * Cw * (3.0 * e * cOw * inv_2ean * inv_cinc1);
+  d[0] = Fs * (A * ((-3.0) * eta * sOw * inv_2an) + B * ((-3.0) * eta * cOw * inv_2an)
+        + Cw * ((-3.0) * e2 * sinc1 * sw1 * sOw * inv_2ean * inv_cinc1));
+  d[1] = Fs * (A * (3.0 * eta * cOw * inv_2an) + B * ((-3.0) * eta * sOw * inv_2an)
+        + Cw * (3.0 * e2 * sinc1 * sw1 * cOw * inv_2ean * inv_cinc1));
+}
+
+inline void srp_rates_arc_ap(double e, double eta, double sw1, double cw1, double sO1, double cO1, double sinc1, double cinc1,
+                             double a, double n, double E1, double E2, double s1, double c1, double s2, double c2,
+                             double A, double B, double Cw, double Fs, double* d) {
+  const double s2_1 = s1 * c1 + c1 * s1, c2_1 = c1 * c1 - s1 * s1;
+  const double s2_2 = s2 * c2 + c2 * s2, c2_2 = c2 * c2 - s2 * s2;
+  const double c1mw = c1 * cw1 + s1 * sw1, c2mw = c2 * cw1 + s2 * sw1;
+  const double s1pw = s1 * cw1 + c1 * sw1, c1pw = c1 * cw1 - s1 * sw1;
+  const double s2pw = s2 * cw1 + c2 * sw1, c2pw = c2 * cw1 - s2 * sw1;
+  const double cOw = cw1 * cO1 - sw1 * sO1, sOw = sw1 * cO1 + cw1 * sO1;
+  const double cmE1_Ow = c1 * cOw + s1 * sOw, cpE1_Ow = c1 * cOw - s1 * sOw;
+  const double smE1_Ow = c1 * sOw - s1 * cOw, spE1_Ow = s1 * cOw + c1 * sOw;
+  const double cmE2_Ow = c2 * cOw + s2 * sOw, cpE2_Ow = c2 * cOw - s2 * sOw;
+  const double smE2_Ow = c2 * sOw - s2 * cOw, spE2_Ow = s2 * cOw + c2 * sOw;
+  const double cm2E1_Ow = c2_1 * cOw + s2_1 * sOw, cp2E1_Ow = c2_1 * cOw - s2_1 * sOw;
+  const double sm2E1_Ow = c2_1 * sOw - s2_1 * cOw, sp2E1_Ow = s2_1 * cOw + c2_1 * sOw;
+  const double cm2E2_Ow = c2_2 * cOw + s2_2 * sOw, cp2E2_Ow = c2_2 * cOw - s2_2 * sOw;
+  const double sm2E2_Ow = c2_2 * sOw - s2_2 * cOw, sp2E2_Ow = s2_2 * cOw + c2_2 * sOw;
+  const double e2 = e * e, e3 = e2 * e, e4 = e2 * e2;
+  const double s1_2 = s1 * s1, s2_sq = s2 * s2;
+  const double inv_pian = 1.0 / (kPi * a * n);
+  const double inv_piean = inv_pian / eta;
+  const double inv_cinc1 = 1.0 / (cinc1 + 1.0);
+  const double inv_eem1 = 1.0 / (e2 - eta - 1.0);
+  d[4] = Fs * (
+        A * ((-((-12.0) * E1 * e3 + 18.0 * E1 * e * eta + 12.0 * E1 * e + 12.0 * E2 * e3 - 18.0 * E2 * e * eta - 12.0 * E2 * e + 4.0 * e4 * (s1 - s2) - 6.0 * e3 * (s2_1 - s2_2) - 8.0 * e2 * eta * (s1 - s2) + 16.0 * e2 * (s1 - s2) + 5.0 * e * eta * (s2_1 - s2_2) + 6.0 * e * (s2_1 - s2_2) - 20.0 * eta * (s1 - s2) - 20.0 * (s1 - s2))) * 0.125 * inv_pian * inv_eem1)
+        + B * ((5.0 * e3 * eta * (s1_2 - s2_sq) + 5.0 * e3 * (s1_2 - s2_sq) + 8.0 * e2 * eta * (c1 - c2) + 10.0 * e2 * (c1 - c2) - 6.0 * e * eta * (s1_2 - s2_sq) - 5.0 * e * (s1_2 - s2_sq) - 10.0 * eta * (c1 - c2) - 10.0 * (c1 - c2)) * 0.25 * inv_pian * inv_eem1)
+        + Cw * ((-((-3.0) * E1 * e * eta * sw1 - 3.0 * E1 * e * sw1 + 3.0 * E2 * e * eta * sw1 + 3.0 * E2 * e * sw1 + e3 * (s1_2 - s2_sq) * cw1 + 2.0 * e2 * eta * (s1 - s2) * sw1 + 2.0 * e2 * (c1mw - c2mw) - e * eta * (s1 * s1pw - s2 * s2pw) - e * (s1 * s1pw - s2 * s2pw) - 2.0 * eta * (c1pw - c2pw) - 2.0 * (c1pw - c2pw))) * sinc1 * 0.25 * inv_pian * inv_cinc1 * inv_eem1));
+  d[5] = Fs * (A * ((-3.0) * (c1 - c2) / (2.0 * kPi * a)) + B * ((-3.0) * eta * (s1 - s2) / (2.0 * kPi * a)));
+  d[2] = Fs * Cw * (((-12.0) * E1 * e * sOw + 12.0 * E2 * e * sOw + 8.0 * e2 * (s1 - s2) * sOw - 4.0 * e * eta * (s1_2 - s2_sq) * cOw - e * cm2E1_Ow + e * cp2E1_Ow + e * cm2E2_Ow - e * cp2E2_Ow - 8.0 * eta * (c1 - c2) * cOw + 8.0 * (s1 - s2) * sOw) * 0.0625 * inv_piean * inv_cinc1);
+  d[3] = Fs * Cw * (((-12.0) * E1 * e * cOw + 12.0 * E2 * e * cOw + 8.0 * e2 * (s1 - s2) * cOw + 4.0 * e * eta * (s1_2 - s2_sq) * sOw + e * sm2E1_Ow - e * sp2E1_Ow - e * sm2E2_Ow + e * sp2E2_Ow + 8.0 * eta * sOw * (c1 - c2) + 8.0 * (s1 - s2) * cOw) * 0.0625 * inv_piean * inv_cinc1);
+  d[0] = Fs * (
+        A * ((e2 - 1.0) * ((-6.0) * E1 * sOw + 6.0 * E2 * sOw + 2.0 * e * (cmE1_Ow - cpE1_Ow - cmE2_Ow + cpE2_Ow) - cp2E1_Ow + cp2E2_Ow) * 0.125 * inv_piean)
+        + B * ((-(12.0 * (E1 - E2) * (e2 - 1.0) * cOw + 8.0 * e3 * (smE1_Ow - spE1_Ow - smE2_Ow + spE2_Ow) + e2 * (-sm2E1_Ow + sp2E1_Ow + sm2E2_Ow - sp2E2_Ow) + 8.0 * e * eta * sOw * (c1 - c2) + 8.0 * e * (-smE1_Ow + spE1_Ow + smE2_Ow - spE2_Ow) + 4.0 * eta * (s1_2 - s2_sq) * sOw + sm2E1_Ow - sp2E1_Ow - sm2E2_Ow + sp2E2_Ow)) * 0.0625 * inv_piean)
+        + Cw * ((-e) * ((-3.0) * (E1 - E2) * e * sw1 * sOw + 2.0 * e2 * (s1 - s2) * sw1 * sOw - e * eta * (s1_2 - s2_sq) * (sO1 + sw1 * cOw) - e * sw1 * sOw * (s1 * c1 - s2 * c2) - 2.0 * eta * (c1 - c2) * (sO1 + sw1 * cOw) + 2.0 * (s1 - s2) * sw1 * sOw) * sinc1 * 0.25 * inv_piean * inv_cinc1));
+  d[1] = Fs * (
+        A * ((e2 - 1.0) * (6.0 * (E1 - E2) * cOw + 2.0 * e * (smE1_Ow - spE1_Ow - smE2_Ow + spE2_Ow) - sp2E1_Ow + sp2E2_Ow) * 0.125 * inv_piean)
+        + B * (((-12.0) * (E1 - E2) * (e2 - 1.0) * sOw + 8.0 * e3 * (cmE1_Ow - cpE1_Ow - cmE2_Ow + cpE2_Ow) + e2 * (-cm2E1_Ow + cp2E1_Ow + cm2E2_Ow - cp2E2_Ow) + 8.0 * e * eta * (c1 - c2) * cOw + 8.0 * e * (-cmE1_Ow + cpE1_Ow + cmE2_Ow - cpE2_Ow) + 4.0 * eta * (s1_2 - s2_sq) * cOw + cm2E1_Ow - cp2E1_Ow - cm2E2_Ow + cp2E2_Ow) * 0.0625 * inv_piean)
+        + Cw * (e * ((-3.0) * (E1 - E2) * e * sw1 * cOw + 2.0 * e2 * (s1 - s2) * sw1 * cOw + e * eta * (s1_2 - s2_sq) * (sw1 * sOw - cO1) - e * sw1 * cOw * (s1 * c1 - s2 * c2) + 2.0 * eta * (c1 - c2) * (sw1 * sOw - cO1) + 2.0 * (s1 - s2) * sw1 * cOw) * sinc1 * 0.25 * inv_piean * inv_cinc1));
+}
 
 /// The six-component set (n-dot, e-dot, i-dot, e varpi-dot, sin i Omega-dot,
 /// lambda-dot - n) carried to the equinoctial rates (SPEC 1.5, 2).
@@ -422,18 +931,30 @@ inline double node_density(const atm::Atmosphere* atmosphere, const drag::DateTe
 /// AP above e 0.3 (SPEC 16.12, `pass`): d50 and theta_g are those of a perigee passage, each node takes the Earth angle and
 /// date of its own time on that pass (M(nu) / n after perigee), the arcs beyond nu_c to apogee are added (13 nodes each,
 /// nu = nu_c + (pi - nu_c) s^2), and `scale` multiplies the rates.
-inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag, double bterm,
-                       const Bodies& b, double d50, const atm::Atmosphere* atmosphere, double theta_g, double* out,
-                       bool pass = false, double scale = 1.0) {
-  static const double gx[13] = {-0.98418305471858814, -0.91759839922297803, -0.80157809073330988,
+constexpr double kDragGx[13] = {-0.98418305471858814, -0.91759839922297803, -0.80157809073330988,
                                 -0.64234933944034023, -0.44849275103644692, -0.23045831595513480, 0.0,
                                 0.23045831595513480, 0.44849275103644692, 0.64234933944034023,
                                 0.80157809073330988, 0.91759839922297803, 0.98418305471858814};
-  static const double gw[13] = {0.040484004765315877, 0.092121499837728452, 0.13887351021978719,
+constexpr double kDragGw[13] = {0.040484004765315877, 0.092121499837728452, 0.13887351021978719,
                                 0.17814598076194571, 0.20781604753688851, 0.22628318026289720,
                                 0.23255155323087390, 0.22628318026289720, 0.20781604753688851,
                                 0.17814598076194571, 0.13887351021978719, 0.092121499837728452,
                                 0.040484004765315877};
+struct GxPiTrig {
+  double c[13]{}, s[13]{};
+};
+inline constexpr GxPiTrig kGxPiTrig = []() constexpr {
+  GxPiTrig t{};
+  for (int j = 0; j < 13; ++j) fm::sincos(kPi * kDragGx[j], t.s[j], t.c[j]);
+  return t;
+}();
+
+inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag, double bterm,
+                       const Bodies& b, double d50, const atm::Atmosphere* atmosphere, double theta_g, double* out,
+                       bool pass = false, double scale = 1.0, bool ap_fast = false) {
+  (void)y;
+  const double* const gx = kDragGx;
+  const double* const gw = kDragGw;
   const double e = k.e, a = fr.a, n = fr.n, eta = fr.eta;
   const double p = a * eta * eta;
   const double th = ag.ci, si = ag.si;
@@ -441,6 +962,7 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
   // arc
   const double rp = a * (1.0 - e);
   const double hp = kRe * (rp - 1.0 + f * si * si * ag.sw * ag.sw);
+  if (ap_fast && !pass && hp > 2550.0 && std::fabs(bterm) < 10.0) return;
   const double bb = hp < 90.0 ? 90.0 : (hp > 900.0 ? 900.0 : hp);
   const double band = bb * (-3.130124 + bb * (0.061710434 + bb * (-3.4111266e-4 + bb * (8.7321429e-7 +
                       bb * (-1.122534e-9 + bb * (7.1123451e-13 + bb * -1.776575e-16)))))) / kRe;
@@ -449,66 +971,408 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
     const double c = (rp * e - band) / (e * (rp + band));
     nuc = std::acos(c < -1.0 ? -1.0 : (c > 1.0 ? 1.0 : c));
   }
-  // the drivers: SPEC 3.1's generic flux model, or the atmosphere's measured rows (atmosphere.inc)
-  const bool generic = atmosphere == nullptr || !atmosphere->measured;
-  const drag::Flux fl = generic ? drag::flux_at(d50) : atm::drivers_at(*atmosphere, d50);
-  double D, N;
-  drag::day_of_year(d50, D, N);
-  const drag::DateTerms dt = drag::date_terms(fl, D, N);
-  const double dca = atmosphere != nullptr && !atmosphere->dca_d50.empty() ? atm::dca_scale(*atmosphere, d50) : 1.0;
-  const double sdsun = b.sun_u.z, cdsun = std::sqrt(1.0 - b.sun_u.z * b.sun_u.z);  // the Sun's declination
-  const double rasun = std::atan2(b.sun_u.y, b.sun_u.x);
   const double q = kOmegaE * eta * eta * eta / n;
   const double cj2 = kJ2 / (4.0 * p);
+  const GxPiTrig& pt = kGxPiTrig;
   double G = 0, SD = 0, Se = 0, Ssu = 0, Sn = 0, Snc = 0, Suu = 0, Ss = 0, Sw = 0;
-  const double ve = std::sqrt((1.0 - e) / (1.0 + e));
-  const auto node = [&](double nu, double w) {
-    double sn, cn;
-    fm::sincos(nu, sn, cn);
-    const double cu = ag.cw * cn - ag.sw * sn, su = ag.sw * cn + ag.cw * sn;  // u = omega + nu
-    const double Dn = 1.0 + e * cn;
-    const double c2u = cu * cu - su * su;
-    const double r = p / Dn + cj2 * ((1.0 - th * th) * c2u - (3.0 * th * th - 1.0) * (e * cn / (1.0 + eta) + 2.0 * eta / Dn + 1.0));
-    // geocentric latitude phi' = arcsin(sin i sin u), carried as its sine and (non-negative) cosine
-    const double sp = si * su, cp = std::sqrt(1.0 - sp * sp);
-    const NodeHeight nh = node_height(sp, cp, r);
-    const double alpha = std::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th);
-    double H = alpha - rasun;
-    H -= kTwoPi * std::floor(H / kTwoPi);
-    double d50n = d50, thn = theta_g;
-    if (pass) {
-      // the node's time after perigee: M(nu) / n, E = 2 atan(sqrt((1 - e) / (1 + e)) tan(nu / 2))
-      const double E = 2.0 * std::atan(ve * std::tan(0.5 * nu));
-      const double tau = (E - e * std::sin(E)) / n;
-      d50n = d50 + tau / kMinutesPerDay;
-      thn = theta_g + kOmegaE * tau;
-    }
-    const double rho = node_density(atmosphere, dt, fl, dca, d50n, sp, cp, sdsun, cdsun, H, alpha, thn, nh);
-    // above e 0.3 (`pass`) the co-rotating air at the node's radius r rather than the mean orbit's p / D
-    const double rr = pass ? r * Dn / p : 1.0;
-    const double V = pass ? std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th * rr + q * q * cp * cp * rr * rr / (Dn * Dn))
-                          : std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th + q * q * cp * cp / (Dn * Dn));
-    const double K = w * rho * V / (Dn * Dn);
-    const double iD2 = 1.0 / (Dn * Dn);
-    G += K;
-    SD += K * Dn;
-    Se += K * (e + cn);
-    Ssu += K * su * cu * iD2;
-    Sn += K * sn / Dn;
-    Snc += K * sn * cn * iD2;
-    Suu += K * cu * cu * iD2;
-    Ss += K * sn * (1.0 - q * th * iD2);
-    Sw += K * (Dn * cn + e + cn) * iD2;
-  };
-  for (int j = 0; j < 13; ++j) node(nuc * gx[j], gw[j]);
-  if (pass && nuc < kPi) {
-    // the arcs nu_c < |nu| < pi: int g dnu = sum w_j (pi - nu_c) s_j g(nu_j), s_j = (x_j + 1) / 2, in the units of the
-    // perigee arc's sums (whose integral is nu_c sum w_j g)
+  if (ap_fast && !pass && hp > 2550.0) {
     for (int j = 0; j < 13; ++j) {
-      const double sj = 0.5 * (gx[j] + 1.0);
-      const double nu = nuc + (kPi - nuc) * sj * sj, w = gw[j] * (kPi - nuc) * sj / nuc;
-      node(nu, w);
-      node(-nu, w);
+      double sn, cn;
+      if (nuc == kPi) {
+        cn = pt.c[j];
+        sn = pt.s[j];
+      } else {
+        fm::sincos(nuc * gx[j], sn, cn);
+      }
+      const double cu = ag.cw * cn - ag.sw * sn, su = ag.sw * cn + ag.cw * sn;
+      const double Dn = 1.0 + e * cn;
+      const double iD2 = 1.0 / (Dn * Dn);
+      const double sp = si * su, cp2 = 1.0 - sp * sp;
+      const double V = std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th + q * q * cp2 * iD2);
+      const double K = gw[j] * 1e-20 * V * iD2;
+      G += K;
+      SD += K * Dn;
+      Se += K * (e + cn);
+      Ssu += K * su * cu * iD2;
+      Sn += K * sn / Dn;
+      Snc += K * sn * cn * iD2;
+      Suu += K * cu * cu * iD2;
+      Ss += K * sn * (1.0 - q * th * iD2);
+      Sw += K * (Dn * cn + e + cn) * iD2;
+    }
+  } else {
+    // the drivers: SPEC 3.1's generic flux model, or the atmosphere's measured rows (atmosphere.inc)
+    const bool generic = atmosphere == nullptr || !atmosphere->measured;
+    const drag::Flux fl = generic ? drag::flux_at(d50) : atm::drivers_at(*atmosphere, d50);
+    const double dca = atmosphere != nullptr && !atmosphere->dca_d50.empty() ? atm::dca_scale(*atmosphere, d50) : 1.0;
+    if (!pass && nuc == kPi && atmosphere != nullptr && atmosphere->model == atm::kNrlmsise00) {
+      const atm::ThermoTimeCache& tc = atm::prepare_msis_time(d50, fl);
+      double s_thg = 0.0, c_thg = 1.0;
+      const double s_ut = tc.s_ut_pi12, c_ut = tc.c_ut_pi12;
+      if (ap_fast) {
+        fm::sincos(theta_g, s_thg, c_thg);
+      }
+      const double cj2_c = cj2 * (1.0 - th * th);
+      const double cj2_s = cj2 * (3.0 * th * th - 1.0);
+      const double inv_1peta = 1.0 / (1.0 + eta);
+      const double ve_const = 1.0 + e * e - 2.0 * q * th;
+      const double q2 = q * q;
+#if defined(__wasm_simd128__)
+      if (ap_fast && hp > 355.0 && a * (1.0 + e) < 1.0 + (2470.0 / kRe) && std::fabs(th) > 1e-6) {
+        alignas(16) float hi_c[16], hi_s[16], hi_slon[16], hi_clon[16], hi_stloc[16], hi_ctloc[16];
+        alignas(16) double hi_h[16], rho_arr[16], Kw_a[14], cu_a[14], su_a[14];
+        double Dn_p[7], iD_p[7], iD2_p[7];
+        constexpr double eps2 = kFlattening * (2.0 - kFlattening);
+        constexpr double kEpsDgtr = 1.74533e-2 / kDeg - 1.0;
+        constexpr double kEpsHr = 0.2618 - kPi / 12.0;
+        const v128_t vd_one = wasm_f64x2_splat(1.0);
+        const v128_t vd_half = wasm_f64x2_splat(0.5);
+        const v128_t vd_eps2 = wasm_f64x2_splat(eps2);
+        const v128_t vd_si = wasm_f64x2_splat(si);
+        const v128_t vd_cj2_c = wasm_f64x2_splat(cj2_c);
+        const v128_t vd_cO = wasm_f64x2_splat(ag.cO), vd_sO = wasm_f64x2_splat(ag.sO);
+        const v128_t vd_cO_th = wasm_f64x2_splat(ag.cO * th), vd_sO_th = wasm_f64x2_splat(ag.sO * th);
+        const v128_t vd_cthg = wasm_f64x2_splat(c_thg), vd_sthg = wasm_f64x2_splat(s_thg);
+        const v128_t vd_cut = wasm_f64x2_splat(c_ut), vd_sut = wasm_f64x2_splat(s_ut);
+        const v128_t vd_sechr = wasm_f64x2_splat(tc.sec_hr);
+        const v128_t vd_zero = wasm_f64x2_splat(0.0);
+
+        for (int j = 0; j <= 6; ++j) {
+          const double cn = pt.c[j], sn = pt.s[j];
+          const double ecn = e * cn;
+          const double Dn = 1.0 + ecn;
+          const double iD = 1.0 / Dn, iD2 = iD * iD;
+          Dn_p[j] = Dn;
+          iD_p[j] = iD;
+          iD2_p[j] = iD2;
+          const double rb = p * iD - cj2_s * (ecn * inv_1peta + 2.0 * eta * iD + 1.0);
+          const double cw_cn = ag.cw * cn, sw_sn = ag.sw * sn;
+          const double sw_cn = ag.sw * cn, cw_sn = ag.cw * sn;
+          const v128_t vcu = wasm_f64x2_make(cw_cn - sw_sn, cw_cn + sw_sn);
+          const v128_t vsu = wasm_f64x2_make(sw_cn + cw_sn, sw_cn - cw_sn);
+          wasm_v128_store(cu_a + 2 * j, vcu);
+          wasm_v128_store(su_a + 2 * j, vsu);
+
+          const v128_t vc2u = wasm_f64x2_sub(wasm_f64x2_mul(vcu, vcu), wasm_f64x2_mul(vsu, vsu));
+          const v128_t vr = wasm_f64x2_add(wasm_f64x2_splat(rb), wasm_f64x2_mul(vd_cj2_c, vc2u));
+          const v128_t vsp = wasm_f64x2_mul(vd_si, vsu);
+          const v128_t vsp2 = wasm_f64x2_mul(vsp, vsp);
+          const v128_t vcp2 = wasm_f64x2_sub(vd_one, vsp2);
+          const v128_t vcp = wasm_f64x2_sqrt(vcp2);
+          const v128_t vinv_cp = wasm_f64x2_div(vd_one, vcp);
+
+          const v128_t vV = wasm_f64x2_sqrt(
+              wasm_f64x2_add(wasm_f64x2_splat(ve_const + 2.0 * ecn), wasm_f64x2_mul(wasm_f64x2_splat(q2 * iD2), vcp2)));
+          wasm_v128_store(Kw_a + 2 * j, wasm_f64x2_mul(wasm_f64x2_splat(gw[j] * iD2), vV));
+
+          const v128_t vNn = wasm_f64x2_mul(vd_eps2, wasm_f64x2_mul(vsp, vcp));
+          const v128_t vn0 = wasm_f64x2_sub(vd_one, wasm_f64x2_mul(vd_eps2, vcp2));
+          const v128_t vu0 = wasm_f64x2_mul(vd_eps2, vsp2);
+          const v128_t vW0 = wasm_f64x2_sub(
+              vd_one,
+              wasm_f64x2_mul(vu0, wasm_f64x2_add(vd_half,
+                                                 wasm_f64x2_mul(vu0, wasm_f64x2_add(wasm_f64x2_splat(0.125),
+                                                                                    wasm_f64x2_mul(vu0, wasm_f64x2_add(wasm_f64x2_splat(0.0625),
+                                                                                                                       wasm_f64x2_mul(wasm_f64x2_splat(5.0 / 128.0), vu0))))))));
+          const v128_t vt1 = wasm_f64x2_div(vNn, wasm_f64x2_add(vn0, wasm_f64x2_mul(vW0, wasm_f64x2_sub(vr, vW0))));
+          const v128_t vt1_2 = wasm_f64x2_mul(vt1, vt1);
+          const v128_t vinv_q1 = wasm_f64x2_sub(
+              vd_one, wasm_f64x2_mul(vt1_2, wasm_f64x2_sub(vd_half, wasm_f64x2_mul(wasm_f64x2_splat(0.375), vt1_2))));
+          const v128_t vs1 = wasm_f64x2_mul(wasm_f64x2_add(vsp, wasm_f64x2_mul(vcp, vt1)), vinv_q1);
+          const v128_t vu1 = wasm_f64x2_mul(vd_eps2, wasm_f64x2_mul(vs1, vs1));
+          const v128_t vW1 = wasm_f64x2_sub(
+              vd_one,
+              wasm_f64x2_mul(vu1, wasm_f64x2_add(vd_half,
+                                                 wasm_f64x2_mul(vu1, wasm_f64x2_add(wasm_f64x2_splat(0.125),
+                                                                                    wasm_f64x2_mul(vu1, wasm_f64x2_add(wasm_f64x2_splat(0.0625),
+                                                                                                                       wasm_f64x2_mul(wasm_f64x2_splat(5.0 / 128.0), vu1))))))));
+          const v128_t vh_re = wasm_f64x2_sub(wasm_f64x2_mul(vr, vinv_q1), vW1);
+          wasm_v128_store(hi_h + 2 * j, wasm_f64x2_mul(wasm_f64x2_splat(kRe), vh_re));
+
+          const v128_t vtd = wasm_f64x2_div(vNn, wasm_f64x2_add(vn0, wasm_f64x2_mul(vW1, vh_re)));
+          const v128_t vtd2 = wasm_f64x2_mul(vtd, vtd);
+          const v128_t vdlat = wasm_f64x2_mul(
+              vtd, wasm_f64x2_sub(vd_one, wasm_f64x2_mul(vtd2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 3.0),
+                                                                               wasm_f64x2_mul(wasm_f64x2_splat(0.2), vtd2)))));
+          const v128_t vphi_est = wasm_f64x2_mul(
+              vsp, wasm_f64x2_sub(wasm_f64x2_splat(0.5 * kPi), wasm_f64x2_mul(wasm_f64x2_splat(0.5 * kPi - 1.0), vcp)));
+          const v128_t vdlat_tot = wasm_f64x2_add(
+              vdlat, wasm_f64x2_mul(wasm_f64x2_splat(kEpsDgtr), wasm_f64x2_add(vphi_est, vdlat)));
+          const v128_t vdlat2 = wasm_f64x2_mul(vdlat_tot, vdlat_tot);
+          const v128_t vcdlat = wasm_f64x2_sub(
+              vd_one, wasm_f64x2_mul(vdlat2, wasm_f64x2_sub(vd_half, wasm_f64x2_mul(wasm_f64x2_splat(1.0 / 24.0), vdlat2))));
+          const v128_t vsdlat = wasm_f64x2_mul(
+              vdlat_tot, wasm_f64x2_sub(vd_one, wasm_f64x2_mul(wasm_f64x2_splat(1.0 / 6.0), vdlat2)));
+          const v128_t out_c = wasm_f64x2_add(wasm_f64x2_mul(vsp, vcdlat), wasm_f64x2_mul(vcp, vsdlat));
+          const v128_t out_s = wasm_f64x2_sub(wasm_f64x2_mul(vcp, vcdlat), wasm_f64x2_mul(vsp, vsdlat));
+
+          const v128_t vc_ra = wasm_f64x2_mul(
+              wasm_f64x2_sub(wasm_f64x2_mul(vd_cO, vcu), wasm_f64x2_mul(vd_sO_th, vsu)), vinv_cp);
+          const v128_t vs_ra = wasm_f64x2_mul(
+              wasm_f64x2_add(wasm_f64x2_mul(vd_sO, vcu), wasm_f64x2_mul(vd_cO_th, vsu)), vinv_cp);
+          const v128_t vclong0 = wasm_f64x2_add(wasm_f64x2_mul(vc_ra, vd_cthg), wasm_f64x2_mul(vs_ra, vd_sthg));
+          const v128_t vslong0 = wasm_f64x2_sub(wasm_f64x2_mul(vs_ra, vd_cthg), wasm_f64x2_mul(vc_ra, vd_sthg));
+          const v128_t vax = wasm_f64x2_abs(vclong0), vay = wasm_f64x2_abs(vslong0);
+          const v128_t vswp = wasm_f64x2_gt(vay, vax);
+          const v128_t vz_at = wasm_f64x2_div(wasm_f64x2_min(vax, vay), wasm_f64x2_max(vax, vay));
+          const v128_t vz2 = wasm_f64x2_mul(vz_at, vz_at);
+          v128_t vang = wasm_f64x2_mul(
+              vz_at,
+              wasm_f64x2_add(wasm_f64x2_splat(0.99997726),
+                             wasm_f64x2_mul(vz2, wasm_f64x2_add(wasm_f64x2_splat(-0.33262347),
+                                                                wasm_f64x2_mul(vz2, wasm_f64x2_add(wasm_f64x2_splat(0.19354346),
+                                                                                                   wasm_f64x2_mul(vz2, wasm_f64x2_add(wasm_f64x2_splat(-0.11643287),
+                                                                                                                                      wasm_f64x2_mul(vz2, wasm_f64x2_add(wasm_f64x2_splat(0.05265332),
+                                                                                                                                                                         wasm_f64x2_mul(wasm_f64x2_splat(-0.01172120), vz2)))))))))));
+          vang = wasm_v128_bitselect(wasm_f64x2_sub(wasm_f64x2_splat(0.5 * kPi), vang), vang, vswp);
+          vang = wasm_v128_bitselect(wasm_f64x2_sub(wasm_f64x2_splat(kPi), vang), vang, wasm_f64x2_lt(vclong0, vd_zero));
+          const v128_t vlon = wasm_v128_bitselect(wasm_f64x2_neg(vang), vang, wasm_f64x2_lt(vslong0, vd_zero));
+          const v128_t vdlon = wasm_f64x2_mul(wasm_f64x2_splat(kEpsDgtr), vlon);
+          const v128_t out_clon = wasm_f64x2_sub(vclong0, wasm_f64x2_mul(vdlon, vslong0));
+          const v128_t out_slon = wasm_f64x2_add(vslong0, wasm_f64x2_mul(vdlon, vclong0));
+
+          v128_t vlst = wasm_f64x2_add(vd_sechr, wasm_f64x2_mul(vlon, wasm_f64x2_splat(12.0 / kPi)));
+          vlst = wasm_f64x2_sub(vlst, wasm_f64x2_mul(wasm_f64x2_splat(24.0),
+                                                     wasm_f64x2_floor(wasm_f64x2_mul(vlst, wasm_f64x2_splat(1.0 / 24.0)))));
+          const v128_t vctloc0 = wasm_f64x2_sub(wasm_f64x2_mul(vd_cut, vclong0), wasm_f64x2_mul(vd_sut, vslong0));
+          const v128_t vstloc0 = wasm_f64x2_add(wasm_f64x2_mul(vd_sut, vclong0), wasm_f64x2_mul(vd_cut, vslong0));
+          const v128_t vdtloc = wasm_f64x2_mul(wasm_f64x2_splat(kEpsHr), vlst);
+          const v128_t out_ctloc = wasm_f64x2_sub(vctloc0, wasm_f64x2_mul(vdtloc, vstloc0));
+          const v128_t out_stloc = wasm_f64x2_add(vstloc0, wasm_f64x2_mul(vdtloc, vctloc0));
+
+          const int off2 = 2 * j;
+          wasm_v128_store64_lane(hi_c + off2, wasm_f32x4_demote_f64x2_zero(out_c), 0);
+          wasm_v128_store64_lane(hi_s + off2, wasm_f32x4_demote_f64x2_zero(out_s), 0);
+          wasm_v128_store64_lane(hi_slon + off2, wasm_f32x4_demote_f64x2_zero(out_slon), 0);
+          wasm_v128_store64_lane(hi_clon + off2, wasm_f32x4_demote_f64x2_zero(out_clon), 0);
+          wasm_v128_store64_lane(hi_stloc + off2, wasm_f32x4_demote_f64x2_zero(out_stloc), 0);
+          wasm_v128_store64_lane(hi_ctloc + off2, wasm_f32x4_demote_f64x2_zero(out_ctloc), 0);
+        }
+        hi_c[14] = hi_c[15] = hi_c[12];
+        hi_s[14] = hi_s[15] = hi_s[12];
+        hi_slon[14] = hi_slon[15] = hi_slon[12];
+        hi_clon[14] = hi_clon[15] = hi_clon[12];
+        hi_stloc[14] = hi_stloc[15] = hi_stloc[12];
+        hi_ctloc[14] = hi_ctloc[15] = hi_ctloc[12];
+        hi_h[14] = hi_h[15] = hi_h[12];
+        atm::msis_density_hi_trig4(tc, hi_c + 0, hi_s + 0, hi_slon + 0, hi_clon + 0, hi_stloc + 0, hi_ctloc + 0, hi_h + 0, 4, rho_arr + 0);
+        atm::msis_density_hi_trig4(tc, hi_c + 4, hi_s + 4, hi_slon + 4, hi_clon + 4, hi_stloc + 4, hi_ctloc + 4, hi_h + 4, 4, rho_arr + 4);
+        atm::msis_density_hi_trig4(tc, hi_c + 8, hi_s + 8, hi_slon + 8, hi_clon + 8, hi_stloc + 8, hi_ctloc + 8, hi_h + 8, 4, rho_arr + 8);
+        atm::msis_density_hi_trig4(tc, hi_c + 12, hi_s + 12, hi_slon + 12, hi_clon + 12, hi_stloc + 12, hi_ctloc + 12, hi_h + 12, 1, rho_arr + 12);
+        for (int j = 0; j < 6; ++j) {
+          const double cn = pt.c[j], sn = pt.s[j];
+          const double Dn = Dn_p[j], iD = iD_p[j], iD2 = iD2_p[j];
+          const double K0 = Kw_a[2 * j] * rho_arr[2 * j] * dca;
+          const double K1 = Kw_a[2 * j + 1] * rho_arr[2 * j + 1] * dca;
+          const double Ksum = K0 + K1, Kdiff = K0 - K1;
+          const double cu0 = cu_a[2 * j], cu1 = cu_a[2 * j + 1];
+          const double su0 = su_a[2 * j], su1 = su_a[2 * j + 1];
+          G += Ksum;
+          SD += Ksum * Dn;
+          Se += Ksum * (e + cn);
+          Ssu += (K0 * su0 * cu0 + K1 * su1 * cu1) * iD2;
+          Sn += Kdiff * sn * iD;
+          Snc += Kdiff * sn * cn * iD2;
+          Suu += (K0 * cu0 * cu0 + K1 * cu1 * cu1) * iD2;
+          Ss += Kdiff * sn * (1.0 - q * th * iD2);
+          Sw += Ksum * (Dn * cn + e + cn) * iD2;
+        }
+        {
+          const double Dn6 = Dn_p[6], iD2_6 = iD2_p[6];
+          const double cu6 = ag.cw, su6 = ag.sw;
+          const double K6 = Kw_a[12] * rho_arr[12] * dca;
+          G += K6;
+          SD += K6 * Dn6;
+          Se += K6 * (e + 1.0);
+          Ssu += K6 * su6 * cu6 * iD2_6;
+          Suu += K6 * cu6 * cu6 * iD2_6;
+          Sw += K6 * (Dn6 + e + 1.0) * iD2_6;
+        }
+      } else
+#endif
+      {
+        alignas(16) float hi_c[16], hi_s[16], hi_slon[16], hi_clon[16], hi_stloc[16], hi_ctloc[16];
+        alignas(16) double hi_h[16];
+        int hi_j[13];
+        int n_hi = 0;
+        double rho_arr[13];
+        double Dn_a[13], iD_a[13], iD2_a[13], r_base_a[13], cu_a[13], su_a[13], Kw_a[13];
+        for (int j = 0; j <= 6; ++j) {
+          const double cn = pt.c[j];
+          const double Dn = 1.0 + e * cn;
+          const double iD = 1.0 / Dn, iD2 = iD * iD;
+          const double rb = p * iD - cj2_s * (e * cn * inv_1peta + 2.0 * eta * iD + 1.0);
+          Dn_a[j] = Dn_a[12 - j] = Dn;
+          iD_a[j] = iD_a[12 - j] = iD;
+          iD2_a[j] = iD2_a[12 - j] = iD2;
+          r_base_a[j] = r_base_a[12 - j] = rb;
+        }
+        for (int j = 0; j < 13; ++j) {
+          const double cn = pt.c[j], sn = pt.s[j];
+          const double cu = ag.cw * cn - ag.sw * sn, su = ag.sw * cn + ag.cw * sn;
+          const double iD2 = iD2_a[j];
+          const double c2u = cu * cu - su * su;
+          const double r = r_base_a[j] + cj2_c * c2u;
+          const double sp = si * su, cp2 = 1.0 - sp * sp, cp = std::sqrt(cp2);
+          NodeHeight nh;
+          if (ap_fast) {
+            constexpr double eps2 = kFlattening * (2.0 - kFlattening);
+            const double Nn = eps2 * sp * cp, n0 = 1.0 - eps2 * cp2;
+            const double u0 = eps2 * sp * sp;
+            const double W0 = 1.0 - u0 * (0.5 + u0 * (0.125 + u0 * (0.0625 + (5.0 / 128.0) * u0)));
+            const double t1 = Nn / (n0 + W0 * (r - W0));
+            const double t1_2 = t1 * t1;
+            const double inv_q1 = 1.0 - t1_2 * (0.5 - 0.375 * t1_2);
+            const double s1 = (sp + cp * t1) * inv_q1;
+            const double u1 = eps2 * s1 * s1;
+            const double W1 = 1.0 - u1 * (0.5 + u1 * (0.125 + u1 * (0.0625 + (5.0 / 128.0) * u1)));
+            nh = {Nn, n0, W1, kRe * (r * inv_q1 - W1)};
+          } else {
+            nh = node_height(sp, cp, r);
+          }
+          cu_a[j] = cu;
+          su_a[j] = su;
+          const double V = std::sqrt(ve_const + 2.0 * e * cn + q2 * cp2 * iD2);
+          Kw_a[j] = gw[j] * V * iD2;
+          if (nh.h > 2500.0) {
+            rho_arr[j] = 1e-20;
+          } else if (ap_fast && nh.h > 325.0 && cp > 1e-12) {
+            constexpr double kEpsDgtr = 1.74533e-2 / kDeg - 1.0;
+            constexpr double kEpsHr = 0.2618 - kPi / 12.0;
+            const double td = nh.Nn / (nh.n0 + nh.W1 * nh.h * (1.0 / kRe));
+            const double td2 = td * td;
+            const double dlat = td * (1.0 - td2 * ((1.0 / 3.0) - 0.2 * td2));
+            const double phi_est = sp * (0.5 * kPi - (0.5 * kPi - 1.0) * cp);
+            const double dlat_tot = dlat + kEpsDgtr * (phi_est + dlat);
+            const double dlat2 = dlat_tot * dlat_tot;
+            const double cdlat = 1.0 - dlat2 * (0.5 - (1.0 / 24.0) * dlat2);
+            const double sdlat = dlat_tot * (1.0 - (1.0 / 6.0) * dlat2);
+            hi_c[n_hi] = static_cast<float>(sp * cdlat + cp * sdlat);
+            hi_s[n_hi] = static_cast<float>(cp * cdlat - sp * sdlat);
+            const double inv_cp = 1.0 / cp;
+            const double c_ra = (ag.cO * cu - ag.sO * su * th) * inv_cp;
+            const double s_ra = (ag.sO * cu + ag.cO * su * th) * inv_cp;
+            const double clong0 = c_ra * c_thg + s_ra * s_thg;
+            const double slong0 = s_ra * c_thg - c_ra * s_thg;
+            const double ax = std::fabs(clong0), ay = std::fabs(slong0);
+            const bool swp = ay > ax;
+            const double z_at = (swp ? ax : ay) / (swp ? ay : ax);
+            const double z2_at = z_at * z_at;
+            double ang = z_at * (0.99997726 + z2_at * (-0.33262347 + z2_at * (0.19354346 + z2_at * (-0.11643287 + z2_at * (0.05265332 - 0.01172120 * z2_at)))));
+            if (swp) ang = (0.5 * kPi) - ang;
+            if (clong0 < 0.0) ang = kPi - ang;
+            const double lon = slong0 < 0.0 ? -ang : ang;
+            const double dlon = kEpsDgtr * lon;
+            hi_clon[n_hi] = static_cast<float>(clong0 - dlon * slong0);
+            hi_slon[n_hi] = static_cast<float>(slong0 + dlon * clong0);
+            double lst = tc.sec_hr + lon * (12.0 / kPi);
+            lst -= 24.0 * std::floor(lst * (1.0 / 24.0));
+            const double ctloc0 = c_ut * clong0 - s_ut * slong0;
+            const double stloc0 = s_ut * clong0 + c_ut * slong0;
+            const double dtloc = kEpsHr * lst;
+            hi_ctloc[n_hi] = static_cast<float>(ctloc0 - dtloc * stloc0);
+            hi_stloc[n_hi] = static_cast<float>(stloc0 + dtloc * ctloc0);
+            hi_h[n_hi] = nh.h;
+            hi_j[n_hi] = j;
+            ++n_hi;
+          } else {
+            const double alpha = fm::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th);
+            const double td = nh.Nn / (nh.n0 + nh.W1 * nh.h * (1.0 / kRe));
+            const double lat = fm::atan2(sp, cp) + td * (1.0 - (1.0 / 3.0) * td * td);
+            rho_arr[j] = atm::msis_density_prepared(tc, lat, atm::wrap_pi(alpha - theta_g), nh.h < 10.0 ? 10.0 : nh.h, fl) * dca;
+          }
+        }
+        if (n_hi > 0) {
+          const int pad_hi = (n_hi + 3) & ~3;
+          for (int p_i = n_hi; p_i < pad_hi; ++p_i) {
+            hi_c[p_i] = hi_c[n_hi - 1];
+            hi_s[p_i] = hi_s[n_hi - 1];
+            hi_slon[p_i] = hi_slon[n_hi - 1];
+            hi_clon[p_i] = hi_clon[n_hi - 1];
+            hi_stloc[p_i] = hi_stloc[n_hi - 1];
+            hi_ctloc[p_i] = hi_ctloc[n_hi - 1];
+            hi_h[p_i] = hi_h[n_hi - 1];
+          }
+          for (int k_hi = 0; k_hi < n_hi; k_hi += 4) {
+            const int rem = n_hi - k_hi < 4 ? (n_hi - k_hi) : 4;
+            alignas(16) double rho_q[4];
+            atm::msis_density_hi_trig4(tc, hi_c + k_hi, hi_s + k_hi, hi_slon + k_hi, hi_clon + k_hi,
+                                       hi_stloc + k_hi, hi_ctloc + k_hi, hi_h + k_hi, rem, rho_q);
+            for (int lane = 0; lane < rem; ++lane) {
+              rho_arr[hi_j[k_hi + lane]] = rho_q[lane] * dca;
+            }
+          }
+        }
+        for (int j = 0; j < 13; ++j) {
+          const double Dn = Dn_a[j], cn = pt.c[j], sn = pt.s[j], cu = cu_a[j], su = su_a[j], iD2 = iD2_a[j];
+          const double K = Kw_a[j] * rho_arr[j];
+          G += K;
+          SD += K * Dn;
+          Se += K * (e + cn);
+          Ssu += K * su * cu * iD2;
+          Sn += K * sn * iD_a[j];
+          Snc += K * sn * cn * iD2;
+          Suu += K * cu * cu * iD2;
+          Ss += K * sn * (1.0 - q * th * iD2);
+          Sw += K * (Dn * cn + e + cn) * iD2;
+        }
+      }
+    } else {
+      double D, N;
+      drag::day_of_year(d50, D, N);
+      const drag::DateTerms dt = drag::date_terms(fl, D, N);
+      const double sdsun = b.sun_u.z, cdsun = std::sqrt(1.0 - b.sun_u.z * b.sun_u.z);  // the Sun's declination
+      const double rasun = std::atan2(b.sun_u.y, b.sun_u.x);
+      const double ve = std::sqrt((1.0 - e) / (1.0 + e));
+      const auto node = [&](double nu, double w) {
+        double sn, cn;
+        fm::sincos(nu, sn, cn);
+        const double cu = ag.cw * cn - ag.sw * sn, su = ag.sw * cn + ag.cw * sn;  // u = omega + nu
+        const double Dn = 1.0 + e * cn;
+        const double c2u = cu * cu - su * su;
+        const double r = p / Dn + cj2 * ((1.0 - th * th) * c2u - (3.0 * th * th - 1.0) * (e * cn / (1.0 + eta) + 2.0 * eta / Dn + 1.0));
+        // geocentric latitude phi' = arcsin(sin i sin u), carried as its sine and (non-negative) cosine
+        const double sp = si * su, cp = std::sqrt(1.0 - sp * sp);
+        const NodeHeight nh = node_height(sp, cp, r);
+        const double alpha = std::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th);
+        double H = alpha - rasun;
+        H -= kTwoPi * std::floor(H / kTwoPi);
+        double d50n = d50, thn = theta_g;
+        if (pass) {
+          // the node's time after perigee: M(nu) / n, E = 2 atan(sqrt((1 - e) / (1 + e)) tan(nu / 2))
+          const double E = 2.0 * std::atan(ve * std::tan(0.5 * nu));
+          const double tau = (E - e * std::sin(E)) / n;
+          d50n = d50 + tau / kMinutesPerDay;
+          thn = theta_g + kOmegaE * tau;
+        }
+        const double rho = node_density(atmosphere, dt, fl, dca, d50n, sp, cp, sdsun, cdsun, H, alpha, thn, nh);
+        // above e 0.3 (`pass`) the co-rotating air at the node's radius r rather than the mean orbit's p / D
+        const double rr = pass ? r * Dn / p : 1.0;
+        const double V = pass ? std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th * rr + q * q * cp * cp * rr * rr / (Dn * Dn))
+                              : std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th + q * q * cp * cp / (Dn * Dn));
+        const double K = w * rho * V / (Dn * Dn);
+        const double iD2 = 1.0 / (Dn * Dn);
+        G += K;
+        SD += K * Dn;
+        Se += K * (e + cn);
+        Ssu += K * su * cu * iD2;
+        Sn += K * sn / Dn;
+        Snc += K * sn * cn * iD2;
+        Suu += K * cu * cu * iD2;
+        Ss += K * sn * (1.0 - q * th * iD2);
+        Sw += K * (Dn * cn + e + cn) * iD2;
+      };
+      for (int j = 0; j < 13; ++j) node(nuc * gx[j], gw[j]);
+      if (pass && nuc < kPi) {
+        // the arcs nu_c < |nu| < pi: int g dnu = sum w_j (pi - nu_c) s_j g(nu_j), s_j = (x_j + 1) / 2, in the units of the
+        // perigee arc's sums (whose integral is nu_c sum w_j g)
+        for (int j = 0; j < 13; ++j) {
+          const double sj = 0.5 * (gx[j] + 1.0);
+          const double nu = nuc + (kPi - nuc) * sj * sj, w = gw[j] * (kPi - nuc) * sj / nuc;
+          node(nu, w);
+          node(-nu, w);
+        }
+      }
     }
   }
   const double P = 500.0 * kRe * nuc / kPi;
@@ -537,39 +1401,30 @@ inline double cube_root(double x) {
   return x < 0.0 ? -r : r;
 }
 
+inline thread_local double g_shadow_margin_slot = 0.0;
+inline thread_local double g_shadow_margin2 = 0.0;
+inline thread_local double g_shadow_margin_nu = 0.0;
+inline double g_shadow_threshold = 1e-12;
+inline int g_shadow_envelope = 0;
+
 /// Diagnostics (sdnap_shadow_margin): the smallest |S(nu)| over the candidates with n(nu) < 0 at the last shadow
 /// evaluation of this thread.
-inline double& shadow_margin_slot() {
-  static thread_local double m = 0.0;
-  return m;
-}
+inline double& shadow_margin_slot() { return g_shadow_margin_slot; }
 
 /// The second smallest |S| over the candidates with n < 0 (diagnostics: a near-miss second boundary).
-inline double& shadow_margin2() {
-  static thread_local double m = 0.0;
-  return m;
-}
+inline double& shadow_margin2() { return g_shadow_margin2; }
 
 /// The true anomaly of the candidate that set shadow_margin_slot (diagnostics).
-inline double& shadow_margin_nu() {
-  static thread_local double nu = 0.0;
-  return nu;
-}
+inline double& shadow_margin_nu() { return g_shadow_margin_nu; }
 
 /// SPEC 4's boundary test |S| < 1e-12 (diagnostics may move it: sdnap_shadow_policy 3 takes no boundary at all).
-inline double& shadow_threshold() {
-  static double t = 1e-12;
-  return t;
-}
+inline double& shadow_threshold() { return g_shadow_threshold; }
 
 /// SPEC 4 (amendment 6) rounding-limited decisions, for the conformance envelope: 0 the sequence as written; 1 every
 /// rounding-limited decision taken as a sunlit arc, 2 as wholly sunlit. A decision is rounding-limited when a candidate
 /// with n < 0 has 1e-13 <= |S| <= 1e-11, or when moving each input (a, e, i, Omega, omega, the Sun direction) by up to
 /// 8 units in the last place changes it; the setting holds for every rate evaluation, nodes and stages included.
-inline int& shadow_envelope() {
-  static int e = 0;
-  return e;
-}
+inline int& shadow_envelope() { return g_shadow_envelope; }
 
 /// SPEC 4 shadow (Escobal 1965, 5.3; cylindrical shadow of radius R_E), amendment 3: the library's closed-form
 /// sequence, steps 2 to 8, every operation in the stated order (no fused operations on wasm32; std:: pow, sqrt,
@@ -727,17 +1582,153 @@ inline bool xp_shadow(const Kepler& k, const Vec3& s, double& E1, double& E2) {
   return nominal;
 }
 
+inline double fast_cbrt(double x) {
+  if (x == 0.0) return 0.0;
+  const double ax = x < 0.0 ? -x : x;
+  if (ax < 1e-300) return x < 0.0 ? -std::cbrt(ax) : std::cbrt(ax);
+  uint64_t bits = 0;
+  std::memcpy(&bits, &ax, sizeof(bits));
+  bits = bits / 3u + 0x2aa0000000000000ULL;
+  double y = 0.0;
+  std::memcpy(&y, &bits, sizeof(y));
+  for (int i = 0; i < 3; ++i) {
+    const double y3 = y * y * y;
+    y *= (y3 + ax + ax) / (y3 + y3 + ax);
+  }
+  return x < 0.0 ? -y : y;
+}
+
+inline bool shadow_sequence_ap(double A, double B, double e, double eta, double p, double& E1, double& E2,
+                               double& sE1, double& cE1, double& sE2, double& cE2) {
+  const double G = B * B, H = A * A, F = G + H, e2 = e * e;
+  const double a_min = p / (1.0 + e);
+  if (F < 1.0 && (1.0 - F) * a_min * a_min > 1.000002) return false;
+  const double j = (1.0 / p) * (1.0 / p), h = j * j, k = G - H, g = 1.0 - G, m = j * (-2.0);
+  const double c4 = (F * F + (h * e2) * e2) + e2 * (k * m);
+  const double c3 = (e * e2) * (4.0 * h) + (e * (-4.0 * j)) * k;
+  const double c2 = ((((H * (-4.0)) * G + (k + k) * g) + (g * m) * e2) + (6.0 * h) * e2) + k * m;
+  const double c1 = (4.0 * h) * e + (e * (-4.0 * j)) * g;
+  const double c0 = ((g * m + h) + g * g);
+  if (c4 == 0.0) return false;
+  const double a3 = c3 / c4, a2 = c2 / c4, a1 = c1 / c4, a0 = c0 / c4;
+  const double f = a3 * (-0.25), f2 = f * f, f3 = f2 * f, f4 = f2 * f2, b3 = 3.0 * a3;
+  const double P = (a2 + 6.0 * f2) + b3 * f;
+  const double Q = ((a1 + (a2 + a2) * f) + 4.0 * f3) + b3 * f2;
+  const double W = (((((a0 + a1 * f) + a2 * f2) + f4) + a3 * f3) * (-4.0)) + P * P;
+  const double P2 = P * P, P3 = P2 * P;
+  const double s3 = (((Q * Q) * (-27.0) + P3 * 16.0) + (P * (-18.0)) * W) / 27.0;
+  const double s1 = (3.0 * W + P2 * (-4.0)) / 3.0;
+  const double s1_3 = s1 * s1 * s1;
+  const double D = (s3 * s3) * 0.25 + s1_3 / 27.0;
+  double t1, t2, t3;
+  if (D > 0.0) {
+    const double sqD = std::sqrt(D);
+    t1 = fast_cbrt(s3 * (-0.5) + sqD) + fast_cbrt(s3 * (-0.5) - sqD);
+    t2 = t3 = 0.0;
+  } else if (D == 0.0) {
+    t1 = 2.0 * fast_cbrt(s3 * (-0.5));
+    t2 = t3 = fast_cbrt(s3 * 0.5);
+  } else if (D < 0.0) {
+    const double w = std::sqrt((-s1_3) / 27.0), c = -s3 / (w + w);
+    const double phi = std::atan2(std::sqrt(std::fmax(0.0, 1.0 - c * c)), c) / 3.0;
+    const double u = 2.0 * std::sqrt(s1 / (-3.0));
+    double sphi, cphi;
+    fm::sincos(phi, sphi, cphi);
+    t1 = u * cphi;
+    t2 = u * (-0.5 * cphi - 0.86602540378443864676 * sphi);
+    t3 = u * (-0.5 * cphi + 0.86602540378443864676 * sphi);
+  } else {
+    t1 = t2 = t3 = 0.0;
+  }
+  const double z1 = (P * (-2.0)) / 3.0 + t1, z2 = (P * (-2.0)) / 3.0 + t2, z3 = (P * (-2.0)) / 3.0 + t3;
+  double z = z2 > z3 ? z2 : z3;
+  z = z1 > z ? z1 : z;
+  if (z < 0.0) return false;
+  const double r = std::sqrt(z), q = Q / r;
+  const double D1 = ((((P + z) - q) * 0.5) * (-4.0)) + z, D2 = ((((P + z) + q) * 0.5) * (-4.0)) + z;
+  double ys[4];
+  int ny = 0;
+  if (D1 >= 0.0) {
+    const double sq1 = std::sqrt(D1);
+    ys[ny++] = (sq1 - r) * 0.5;
+    ys[ny++] = (-r - sq1) * 0.5;
+  }
+  if (D2 >= 0.0) {
+    const double sq2 = std::sqrt(D2);
+    ys[ny++] = (r + sq2) * 0.5;
+    ys[ny++] = (r - sq2) * 0.5;
+  }
+  double cns[4], sns[4];
+  int base = 0;
+  for (int q2 = 0; q2 < ny; ++q2) {
+    const double x = f + ys[q2];
+    if (!(x >= -1.0 && x <= 1.0)) continue;
+    cns[base] = x;
+    sns[base] = std::sqrt(std::fmax(0.0, 1.0 - x * x));
+    ++base;
+  }
+  if (base == 0) return false;
+  const double threshold = shadow_threshold();
+  const double pp = p * p;
+  double cn_entry = 1.0, sn_entry = 0.0, cn_exit = 1.0, sn_exit = 0.0;
+  int found = 0;
+  for (int pass = 0; pass < 2; ++pass) {
+    const double sgn = pass == 0 ? 1.0 : -1.0;
+    for (int q2 = 0; q2 < base; ++q2) {
+      const double cn = cns[q2];
+      const double sn = sgn * sns[q2];
+      const double nv = A * cn + B * sn, d = e * cn + 1.0;
+      const double S = ((pp * nv) * nv + d * d) - pp;
+      if (!(nv < 0.0 && std::fabs(S) < threshold)) continue;
+      ++found;
+      if (found > 2) continue;
+      const double dS = ((e * d) * (-2.0)) * sn + (((-A) * sn + B * cn) * pp) * (nv + nv);
+      if (dS > 0.0) { cn_entry = cn; sn_entry = sn; }
+      else { cn_exit = cn; sn_exit = sn; }
+    }
+  }
+  if (found < 2) return false;
+  constexpr double kTwoPiD = 6.283185307179586;
+  const double inv_d1 = 1.0 / (1.0 + e * cn_exit);
+  sE1 = eta * sn_exit * inv_d1;
+  cE1 = (e + cn_exit) * inv_d1;
+  E1 = std::atan2(sE1, cE1);
+  if (E1 < 0.0) E1 += kTwoPiD;
+  const double inv_d2 = 1.0 / (1.0 + e * cn_entry);
+  sE2 = eta * sn_entry * inv_d2;
+  cE2 = (e + cn_entry) * inv_d2;
+  E2 = std::atan2(sE2, cE2);
+  if (E2 < 0.0) E2 += kTwoPiD;
+  if (E2 < E1) E2 += kTwoPiD;
+  if (std::fabs(E2 - E1) < 1e-12) return false;
+  return true;
+}
+
 /// SPEC 4 averaged SRP rates on the current mean orbit (Sun held fixed over
 /// the orbit): the explicit formulas of the wholly sunlit orbit or of the sunlit
 /// arc E1 .. E2 (xp_spec_terms.inc), added to the rates in the state order.
 inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, const Perifocal& pf, double agom,
-                      const Bodies& b, double* out) {
+                      const Bodies& b, double* out, const AngleTrig* ag_opt = nullptr, bool ap = false,
+                      bool* sunlit_safe = nullptr) {
   double A, B, C;
   direction_cosines(pf, b.sun_u, A, B, C);
+  if (sunlit_safe != nullptr) {
+    const double F_sun = A * A + B * B, a_min = k.a * (1.0 - k.e);
+    *sunlit_safe = F_sun < 1.0 && (1.0 - F_sun) * a_min * a_min > 1.01;
+  }
   const double rs_au = b.sun_r * kRe / kAu;
   const double Fs = kSrpPressure * agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
   double E1, E2, d[6];
-  if (xp_shadow(k, b.sun_u, E1, E2)) {
+  if (ap && ag_opt != nullptr && shadow_envelope() == 0 && (!fr.e2 || k.a < 5.0 || ag_opt->si > 0.02)) {
+    double sE1, cE1, sE2, cE2;
+    if (shadow_sequence_ap(A, B, k.e, fr.eta, (1.0 - fr.e2) * k.a, E1, E2, sE1, cE1, sE2, cE2)) {
+      srp_rates_arc_ap(k.e, fr.eta, ag_opt->sw, ag_opt->cw, ag_opt->sO, ag_opt->cO, ag_opt->si, ag_opt->ci,
+                       k.a, fr.n, E1, E2, sE1, cE1, sE2, cE2, A, B, C, Fs, d);
+    } else {
+      srp_rates_sunlit_ap(k.e, fr.eta, ag_opt->sw, ag_opt->cw, ag_opt->sO, ag_opt->cO, ag_opt->si, ag_opt->ci,
+                          k.a, fr.n, A, B, C, Fs, d);
+    }
+  } else if (xp_shadow(k, b.sun_u, E1, E2)) {
     srp_rates_arc(k.e, fr.eta, k.argp, k.node, k.i, k.a, fr.n, E1, E2, A, B, C, Fs, d);
   } else {
     srp_rates_sunlit(k.e, fr.eta, k.argp, k.node, k.i, k.a, fr.n, A, B, C, Fs, d);
@@ -750,8 +1741,15 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
 
 struct XpSat;
 
+inline uint64_t next_ctx_id() {
+  static uint64_t next = 1;
+  return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
+}
+
 /// Per-object constants of the rate function.
 struct RateContext {
+  uint64_t ctx_id;
+  uint64_t cov_anchor_id;
   double d50_epoch;
   tess::Terms selected_terms;  ///< AP force selection, also used when a class changes
   double bterm, agom;
@@ -761,9 +1759,11 @@ struct RateContext {
   int32_t res_count;
   double theta_g0;      ///< Greenwich angle at epoch (SPEC 1.2)
   const atm::Atmosphere* atmosphere;  ///< the drag's atmosphere (null: the theory's own, SPEC 3; atmosphere.inc)
-  double e0, i0;                      ///< AP: epoch e and i (rad), the shallow terms to first order about them
+  double e0, i0, a0, n0;              ///< AP: epoch e, i (rad), a (ER), n (rad/min)
+  double hd_e0, hd_i0, hd_a0;         ///< AP: reference e, i and a of half_day table
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
+  uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release)
   uint8_t ap_resonance;               ///< AP: tables follow the current class; functions at the current elements
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
   uint8_t ap_third_body;              ///< AP: the third bodies' degree 4-10 averaged rates and degree 2-10 short-period
@@ -779,13 +1779,27 @@ struct RateContext {
   int32_t mdaily_degree;
   const tess::SpCoef* sp;             ///< AP: the other first-order tesseral terms, at output time (owned, xp_release)
   int32_t sp_count;
+  const tess::SpCombCoef* sp_comb;    ///< AP: combined (l, m, k) first-order tesseral terms for fast SIMD evaluation
+  int32_t sp_comb_count;
+  const tess::SpCoef* sp_orig;        ///< AP: original sp pointer for diagnostic override detection
+  int32_t sp_orig_count;
   tess::WideGrid* wide;               ///< AP above tess::kWideE: the first-order tesseral families' grid (SPEC 16.11)
   uint8_t wide_owned;                 ///< this context frees `wide` (a class change's temporary shares it)
   const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
   double wide_blend;
   uint8_t wide_fit;                   ///< initialized inside a tess::FitGridScope: the grids it builds are not kept idle
+  uint8_t is_cov_sigma;               ///< non-zero if initialized inside CovBankScope as a covariance sigma satellite
   XpSat* wide_anchor;                 ///< the nominal set whose grids this copy reads (GridShareScope); nullptr: its own
 };
+
+inline uint64_t hd_table_id(const RateContext& ctx) { return (ctx.shared_mask & 1) ? ctx.cov_anchor_id : ctx.ctx_id; }
+inline uint64_t sh_table_id(const RateContext& ctx) { return (ctx.shared_mask & 8) ? ctx.cov_anchor_id : ctx.ctx_id; }
+inline uint64_t zt_table_id(const RateContext& ctx) { return (ctx.shared_mask & 16) ? ctx.cov_anchor_id : ctx.ctx_id; }
+inline uint64_t md_table_id(const RateContext& ctx) { return (ctx.shared_mask & 32) ? ctx.cov_anchor_id : ctx.ctx_id; }
+
+inline bool is_ap_ctx(const RateContext& ctx) {
+  return ctx.ap_third_body != 0 || ctx.ap_resonance != 0 || ctx.ap_frame != 0;
+}
 
 inline int ap_resonance_class(const RateContext& ctx, double n) {
   (void)ctx;
@@ -807,13 +1821,18 @@ inline int state_test(const RateContext& ctx, const double* y) {
 /// mu_b r^(l-1) / r_b^(l+1) [(l P_l - u P_l') r_hat + P_l' s_hat], u = r_hat . s_hat.
 constexpr int kThirdBodyTailDegree = 10;
 constexpr int kThirdBodyTailNodes = 32;
+inline constexpr double kInvLp1[17] = {
+    1.0,        1.0 / 2.0,  1.0 / 3.0,  1.0 / 4.0,  1.0 / 5.0,  1.0 / 6.0,
+    1.0 / 7.0,  1.0 / 8.0,  1.0 / 9.0,  1.0 / 10.0, 1.0 / 11.0, 1.0 / 12.0,
+    1.0 / 13.0, 1.0 / 14.0, 1.0 / 15.0, 1.0 / 16.0, 1.0 / 17.0,
+};
 inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio, int lo, int hi) {
   const double rn = norm(r);
   const Vec3 ru = (1.0 / rn) * r;
   const double u = dot(ru, su), x = rn / sr;
   double pm = 1.0, p = u, dm = 0.0, dp = 1.0, xp = 1.0, ar = 0.0, as = 0.0;
   for (int l = 1; l < hi; ++l) {
-    const double pn = ((2 * l + 1) * u * p - l * pm) / (l + 1);
+    const double pn = ((2 * l + 1) * u * p - l * pm) * kInvLp1[l];
     const double dn = dm + (2 * l + 1) * p;  // P'_{l+1} = P'_{l-1} + (2l + 1) P_l
     pm = p;
     p = pn;
@@ -830,20 +1849,268 @@ inline Vec3 tidal_tail(Vec3 r, Vec3 su, double sr, double mass_ratio, int lo, in
   return (k * ar) * ru + (k * as) * su;
 }
 
+struct NodeTrig {
+  alignas(16) double c[kThirdBodyTailNodes]{}, s[kThirdBodyTailNodes]{};  ///< cos, sin of 2 pi k / kThirdBodyTailNodes
+  alignas(16) double c16[16]{}, s16[16]{};                                ///< cos, sin of 2 pi k / 16
+  alignas(16) double cm[17][kThirdBodyTailNodes]{};                       ///< cos(m * F_j)
+  alignas(16) double sm[17][kThirdBodyTailNodes]{};                       ///< sin(m * F_j)
+};
+inline constexpr NodeTrig kNodeTrig = []() constexpr {
+  NodeTrig r{};
+  for (int k = 0; k < kThirdBodyTailNodes; ++k) {
+    fm::sincos(kTwoPi * k / kThirdBodyTailNodes, r.s[k], r.c[k]);
+  }
+  r.c[0] = 1.0;
+  r.s[0] = 0.0;
+  r.c[kThirdBodyTailNodes / 4] = 0.0;
+  r.s[kThirdBodyTailNodes / 4] = 1.0;
+  r.c[kThirdBodyTailNodes / 2] = -1.0;
+  r.s[kThirdBodyTailNodes / 2] = 0.0;
+  r.c[(3 * kThirdBodyTailNodes) / 4] = 0.0;
+  r.s[(3 * kThirdBodyTailNodes) / 4] = -1.0;
+  for (int k = 0; k < 16; ++k) {
+    r.c16[k] = r.c[2 * k];
+    r.s16[k] = r.s[2 * k];
+  }
+  for (int m = 0; m <= 16; ++m) {
+    for (int j = 0; j < kThirdBodyTailNodes; ++j) {
+      const int idx = (j * m) & (kThirdBodyTailNodes - 1);
+      r.cm[m][j] = r.c[idx];
+      r.sm[m][j] = r.s[idx];
+    }
+  }
+  return r;
+}();
+inline const NodeTrig& node_trig() { return kNodeTrig; }
+
 /// The Gauss rates (state order) of the Sun's and the Moon's tidal terms of degree lo to hi on the mean orbit at the
 /// eccentric longitudes F_j = 2 pi j / kThirdBodyTailNodes, each body at its position in b, and the weights r/a.
 struct TailSamples {
-  double f[kThirdBodyTailNodes][6];
-  double w[kThirdBodyTailNodes];
+  alignas(16) double f[6][kThirdBodyTailNodes];
+  alignas(16) double w[kThirdBodyTailNodes];
 };
 inline void tail_samples(const double* y, const Frame& fr, const Bodies& b, int lo, int hi, TailSamples& s) {
-  for (int j = 0; j < kThirdBodyTailNodes; ++j) {
-    const double F = kTwoPi * j / kThirdBodyTailNodes;
-    Vec3 r, v;
-    state_at_F(y, fr, F, r, v, s.w[j]);
-    const Vec3 d = tidal_tail(r, b.sun_u, b.sun_r, kSunMass, lo, hi) + tidal_tail(r, b.moon_u, b.moon_r, kMoonMass, lo, hi);
-    gauss(y, fr, r, v, d, s.f[j]);
+  const NodeTrig& nt = node_trig();
+  const double k = y[kAf], h = y[kAg], chi = y[kChi], psi = y[kPsi];
+  const double beta = 1.0 / (1.0 + fr.eta);
+  const double c_xx = 1.0 - h * h * beta;
+  const double c_xy = h * k * beta;
+  const double c_yy = 1.0 - k * k * beta;
+  const double na = fr.n * fr.a;
+  const double na2 = na * fr.a;
+  const double hn = na2 * fr.eta;
+  const double inv_hn = 1.0 / hn;
+  const double inv_mu = 1.0 / kMu;
+  const double two_a2_mu = 2.0 * fr.a * fr.a * inv_mu;
+  const double neg_3n_2a = -1.5 * fr.n / fr.a;
+  const double p = fr.a * fr.eta * fr.eta;
+  const double inv_p = 1.0 / p;
+  const double two_inv_na2 = 2.0 / na2;
+  const double eta_na_1peta = fr.eta / (na * (1.0 + fr.eta));
+  const double c_half_inv_hn = 0.5 * fr.c * inv_hn;
+
+  const double suf = dot(b.sun_u, fr.f), sug = dot(b.sun_u, fr.g), suw = dot(b.sun_u, fr.w);
+  const double muf = dot(b.moon_u, fr.f), mug = dot(b.moon_u, fr.g), muw = dot(b.moon_u, fr.w);
+  const double inv_sr = 1.0 / b.sun_r, inv_mr = 1.0 / b.moon_r;
+  const double k_sun = kSunMass * kMu * inv_sr * inv_sr;
+  const double k_moon = kMoonMass * kMu * inv_mr * inv_mr;
+
+  const int hi_m = fr.a < 1.6 ? std::min(hi, 5) : (fr.a < 5.0 ? std::min(hi, 7) : hi);
+  const int hi_s = lo >= 4 ? 1 : std::min(hi, 3);
+
+#ifdef __wasm_simd128__
+  const v128_t v_one = wasm_f64x2_splat(1.0);
+  const v128_t v_two = wasm_f64x2_splat(2.0);
+  const v128_t v_zero = wasm_f64x2_splat(0.0);
+  const v128_t v_k = wasm_f64x2_splat(k), v_h = wasm_f64x2_splat(h);
+  const v128_t v_chi = wasm_f64x2_splat(chi), v_psi = wasm_f64x2_splat(psi);
+  const v128_t v_a = wasm_f64x2_splat(fr.a), v_na2 = wasm_f64x2_splat(na2);
+  const v128_t v_cxx = wasm_f64x2_splat(c_xx), v_cxy = wasm_f64x2_splat(c_xy), v_cyy = wasm_f64x2_splat(c_yy);
+  const v128_t v_inv_hn = wasm_f64x2_splat(inv_hn), v_inv_mu = wasm_f64x2_splat(inv_mu);
+  const v128_t v_two_a2_mu = wasm_f64x2_splat(two_a2_mu), v_neg_3n_2a = wasm_f64x2_splat(neg_3n_2a);
+  const v128_t v_inv_p = wasm_f64x2_splat(inv_p), v_two_inv_na2 = wasm_f64x2_splat(two_inv_na2);
+  const v128_t v_eta_na_1peta = wasm_f64x2_splat(eta_na_1peta), v_c_half_inv_hn = wasm_f64x2_splat(c_half_inv_hn);
+  const v128_t v_suf = wasm_f64x2_splat(suf), v_sug = wasm_f64x2_splat(sug), v_suw = wasm_f64x2_splat(suw);
+  const v128_t v_muf = wasm_f64x2_splat(muf), v_mug = wasm_f64x2_splat(mug), v_muw = wasm_f64x2_splat(muw);
+  const v128_t v_inv_sr = wasm_f64x2_splat(inv_sr), v_inv_mr = wasm_f64x2_splat(inv_mr);
+  const v128_t v_ksun = wasm_f64x2_splat(k_sun), v_kmoon = wasm_f64x2_splat(k_moon);
+
+  for (int j = 0; j < kThirdBodyTailNodes; j += 2) {
+    const v128_t cf = wasm_v128_load(nt.c + j);
+    const v128_t sf = wasm_v128_load(nt.s + j);
+    const v128_t roa = wasm_f64x2_sub(wasm_f64x2_sub(v_one, wasm_f64x2_mul(v_k, cf)), wasm_f64x2_mul(v_h, sf));
+    wasm_v128_store(s.w + j, roa);
+    const v128_t rn = wasm_f64x2_mul(v_a, roa);
+    const v128_t inv_rn = wasm_f64x2_div(v_one, rn);
+    const v128_t X = wasm_f64x2_mul(v_a, wasm_f64x2_sub(wasm_f64x2_add(wasm_f64x2_mul(v_cxx, cf), wasm_f64x2_mul(v_cxy, sf)), v_k));
+    const v128_t Y = wasm_f64x2_mul(v_a, wasm_f64x2_sub(wasm_f64x2_add(wasm_f64x2_mul(v_cxy, cf), wasm_f64x2_mul(v_cyy, sf)), v_h));
+    const v128_t xu = wasm_f64x2_mul(X, inv_rn);
+    const v128_t yu = wasm_f64x2_mul(Y, inv_rn);
+    const v128_t v_scale = wasm_f64x2_mul(v_na2, inv_rn);
+    const v128_t Xd = wasm_f64x2_mul(v_scale, wasm_f64x2_sub(wasm_f64x2_mul(v_cxy, cf), wasm_f64x2_mul(v_cxx, sf)));
+    const v128_t Yd = wasm_f64x2_mul(v_scale, wasm_f64x2_sub(wasm_f64x2_mul(v_cyy, cf), wasm_f64x2_mul(v_cxy, sf)));
+
+    v128_t ars = v_zero, ass = v_zero;
+    if (hi_s > 1) {
+      const v128_t us = wasm_f64x2_add(wasm_f64x2_mul(xu, v_suf), wasm_f64x2_mul(yu, v_sug));
+      const v128_t xs = wasm_f64x2_mul(rn, v_inv_sr);
+      v128_t pms = v_one, ps = us, dms = v_zero, dps = v_one, xps = v_one;
+      for (int l = 1; l < hi_s; ++l) {
+        const v128_t vc2l1 = wasm_f64x2_splat(static_cast<double>(2 * l + 1));
+        const v128_t vl = wasm_f64x2_splat(static_cast<double>(l));
+        const v128_t vilp1 = wasm_f64x2_splat(kInvLp1[l]);
+        const v128_t pns = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_mul(vc2l1, us), ps), wasm_f64x2_mul(vl, pms)), vilp1);
+        const v128_t dns = wasm_f64x2_add(dms, wasm_f64x2_mul(vc2l1, ps));
+        pms = ps;
+        ps = pns;
+        dms = dps;
+        dps = dns;
+        xps = wasm_f64x2_mul(xps, xs);
+        const int L = l + 1;
+        if (L >= lo) {
+          const v128_t vL = wasm_f64x2_splat(static_cast<double>(L));
+          ars = wasm_f64x2_add(ars, wasm_f64x2_mul(xps, wasm_f64x2_sub(wasm_f64x2_mul(vL, ps), wasm_f64x2_mul(us, dps))));
+          ass = wasm_f64x2_add(ass, wasm_f64x2_mul(xps, dps));
+        }
+      }
+    }
+
+    const v128_t um = wasm_f64x2_add(wasm_f64x2_mul(xu, v_muf), wasm_f64x2_mul(yu, v_mug));
+    const v128_t xm = wasm_f64x2_mul(rn, v_inv_mr);
+    v128_t pmm = v_one, pm = um, dmm = v_zero, dpm = v_one, xpm = v_one, arm = v_zero, asm_ = v_zero;
+    for (int l = 1; l < hi_m; ++l) {
+      const v128_t vc2l1 = wasm_f64x2_splat(static_cast<double>(2 * l + 1));
+      const v128_t vl = wasm_f64x2_splat(static_cast<double>(l));
+      const v128_t vilp1 = wasm_f64x2_splat(kInvLp1[l]);
+      const v128_t pnm = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_mul(vc2l1, um), pm), wasm_f64x2_mul(vl, pmm)), vilp1);
+      const v128_t dnm = wasm_f64x2_add(dmm, wasm_f64x2_mul(vc2l1, pm));
+      pmm = pm;
+      pm = pnm;
+      dmm = dpm;
+      dpm = dnm;
+      xpm = wasm_f64x2_mul(xpm, xm);
+      const int L = l + 1;
+      if (L >= lo) {
+        const v128_t vL = wasm_f64x2_splat(static_cast<double>(L));
+        arm = wasm_f64x2_add(arm, wasm_f64x2_mul(xpm, wasm_f64x2_sub(wasm_f64x2_mul(vL, pm), wasm_f64x2_mul(um, dpm))));
+        asm_ = wasm_f64x2_add(asm_, wasm_f64x2_mul(xpm, dpm));
+      }
+    }
+
+    const v128_t k_ar = wasm_f64x2_add(wasm_f64x2_mul(v_ksun, ars), wasm_f64x2_mul(v_kmoon, arm));
+    const v128_t k_as_s = wasm_f64x2_mul(v_ksun, ass);
+    const v128_t k_as_m = wasm_f64x2_mul(v_kmoon, asm_);
+    const v128_t df = wasm_f64x2_add(wasm_f64x2_mul(k_ar, xu), wasm_f64x2_add(wasm_f64x2_mul(k_as_s, v_suf), wasm_f64x2_mul(k_as_m, v_muf)));
+    const v128_t dg = wasm_f64x2_add(wasm_f64x2_mul(k_ar, yu), wasm_f64x2_add(wasm_f64x2_mul(k_as_s, v_sug), wasm_f64x2_mul(k_as_m, v_mug)));
+    const v128_t W = wasm_f64x2_add(wasm_f64x2_mul(k_as_s, v_suw), wasm_f64x2_mul(k_as_m, v_muw));
+
+    const v128_t R = wasm_f64x2_add(wasm_f64x2_mul(df, xu), wasm_f64x2_mul(dg, yu));
+    const v128_t S = wasm_f64x2_sub(wasm_f64x2_mul(dg, xu), wasm_f64x2_mul(df, yu));
+    const v128_t vd = wasm_f64x2_add(wasm_f64x2_mul(Xd, df), wasm_f64x2_mul(Yd, dg));
+    const v128_t adot = wasm_f64x2_mul(v_two_a2_mu, vd);
+    const v128_t rd = wasm_f64x2_add(wasm_f64x2_mul(X, df), wasm_f64x2_mul(Y, dg));
+    const v128_t rv = wasm_f64x2_add(wasm_f64x2_mul(X, Xd), wasm_f64x2_mul(Y, Yd));
+    const v128_t two_vd = wasm_f64x2_mul(v_two, vd);
+    const v128_t edot_f = wasm_f64x2_mul(v_inv_mu, wasm_f64x2_sub(wasm_f64x2_sub(wasm_f64x2_mul(two_vd, X), wasm_f64x2_mul(rd, Xd)), wasm_f64x2_mul(rv, df)));
+    const v128_t edot_g = wasm_f64x2_mul(v_inv_mu, wasm_f64x2_sub(wasm_f64x2_sub(wasm_f64x2_mul(two_vd, Y), wasm_f64x2_mul(rd, Yd)), wasm_f64x2_mul(rv, dg)));
+    const v128_t c_W = wasm_f64x2_mul(v_c_half_inv_hn, W);
+    const v128_t chid = wasm_f64x2_mul(c_W, Y);
+    const v128_t psid = wasm_f64x2_mul(c_W, X);
+    const v128_t omega_rot = wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(v_chi, X), wasm_f64x2_mul(v_psi, Y)), W), v_inv_hn);
+    const v128_t er = wasm_f64x2_add(wasm_f64x2_mul(v_k, xu), wasm_f64x2_mul(v_h, yu));
+    const v128_t es = wasm_f64x2_sub(wasm_f64x2_mul(v_h, xu), wasm_f64x2_mul(v_k, yu));
+
+    wasm_v128_store(s.f[kAf] + j, wasm_f64x2_add(edot_f, wasm_f64x2_mul(v_h, omega_rot)));
+    wasm_v128_store(s.f[kAg] + j, wasm_f64x2_sub(edot_g, wasm_f64x2_mul(v_k, omega_rot)));
+    wasm_v128_store(s.f[kChi] + j, chid);
+    wasm_v128_store(s.f[kPsi] + j, psid);
+    const v128_t lam_t1 = wasm_f64x2_mul(v_two_inv_na2, wasm_f64x2_mul(rn, R));
+    const v128_t lam_t2 = wasm_f64x2_mul(v_eta_na_1peta,
+                                         wasm_f64x2_add(wasm_f64x2_mul(er, R),
+                                                        wasm_f64x2_mul(wasm_f64x2_add(v_one, wasm_f64x2_mul(rn, v_inv_p)),
+                                                                       wasm_f64x2_mul(es, S))));
+    wasm_v128_store(s.f[kLam] + j, wasm_f64x2_sub(wasm_f64x2_neg(wasm_f64x2_add(lam_t1, lam_t2)), omega_rot));
+    wasm_v128_store(s.f[kN] + j, wasm_f64x2_mul(v_neg_3n_2a, adot));
   }
+#else
+  for (int j = 0; j < kThirdBodyTailNodes; ++j) {
+    const double cf = nt.c[j], sf = nt.s[j];
+    const double roa = 1.0 - k * cf - h * sf;
+    s.w[j] = roa;
+    const double rn = fr.a * roa;
+    const double inv_rn = 1.0 / rn;
+    const double X = fr.a * (c_xx * cf + c_xy * sf - k);
+    const double Y = fr.a * (c_xy * cf + c_yy * sf - h);
+    const double xu = X * inv_rn, yu = Y * inv_rn;
+    const double v_scale = na2 * inv_rn;
+    const double Xd = v_scale * (c_xy * cf - c_xx * sf);
+    const double Yd = v_scale * (c_yy * cf - c_xy * sf);
+
+    double ars = 0.0, ass = 0.0;
+    if (hi_s > 1) {
+      const double us = xu * suf + yu * sug, xs = rn * inv_sr;
+      double pms = 1.0, ps = us, dms = 0.0, dps = 1.0, xps = 1.0;
+      for (int l = 1; l < hi_s; ++l) {
+        const double c2l1 = 2 * l + 1;
+        const double pns = (c2l1 * us * ps - l * pms) * kInvLp1[l];
+        const double dns = dms + c2l1 * ps;
+        pms = ps;
+        ps = pns;
+        dms = dps;
+        dps = dns;
+        xps *= xs;
+        const int L = l + 1;
+        if (L >= lo) {
+          ars += xps * (L * ps - us * dps);
+          ass += xps * dps;
+        }
+      }
+    }
+    const double um = xu * muf + yu * mug, xm = rn * inv_mr;
+    double pmm = 1.0, pm = um, dmm = 0.0, dpm = 1.0, xpm = 1.0, arm = 0.0, asm_ = 0.0;
+    for (int l = 1; l < hi_m; ++l) {
+      const double c2l1 = 2 * l + 1;
+      const double pnm = (c2l1 * um * pm - l * pmm) * kInvLp1[l];
+      const double dnm = dmm + c2l1 * pm;
+      pmm = pm;
+      pm = pnm;
+      dmm = dpm;
+      dpm = dnm;
+      xpm *= xm;
+      const int L = l + 1;
+      if (L >= lo) {
+        arm += xpm * (L * pm - um * dpm);
+        asm_ += xpm * dpm;
+      }
+    }
+    const double k_ar = k_sun * ars + k_moon * arm;
+    const double k_as_s = k_sun * ass, k_as_m = k_moon * asm_;
+    const double df = k_ar * xu + k_as_s * suf + k_as_m * muf;
+    const double dg = k_ar * yu + k_as_s * sug + k_as_m * mug;
+    const double W = k_as_s * suw + k_as_m * muw;
+
+    const double R = df * xu + dg * yu;
+    const double S = -df * yu + dg * xu;
+    const double vd = Xd * df + Yd * dg;
+    const double adot = two_a2_mu * vd;
+    const double rd = X * df + Y * dg;
+    const double rv = X * Xd + Y * Yd;
+    const double edot_f = inv_mu * (2.0 * vd * X - rd * Xd - rv * df);
+    const double edot_g = inv_mu * (2.0 * vd * Y - rd * Yd - rv * dg);
+    const double chid = c_half_inv_hn * W * Y;
+    const double psid = c_half_inv_hn * W * X;
+    const double omega_rot = (chi * X - psi * Y) * W * inv_hn;
+    const double er = k * xu + h * yu;
+    const double es = -k * yu + h * xu;
+
+    s.f[kAf][j] = edot_f + h * omega_rot;
+    s.f[kAg][j] = edot_g - k * omega_rot;
+    s.f[kChi][j] = chid;
+    s.f[kPsi][j] = psid;
+    s.f[kLam][j] = -two_inv_na2 * rn * R - eta_na_1peta * (er * R + (1.0 + rn * inv_p) * es * S) - omega_rot;
+    s.f[kN][j] = neg_3n_2a * adot;
+  }
+#endif
 }
 
 /// AP (SPEC 16.8): the Sun's and the Moon's tidal terms of degree 4 to kThirdBodyTailDegree, averaged over the mean
@@ -852,8 +2119,26 @@ inline void tail_samples(const double* y, const Frame& fr, const Bodies& b, int 
 inline void third_body_tail(const double* y, const Frame& fr, const Bodies& b, double* out) {
   TailSamples s;
   tail_samples(y, fr, b, 4, kThirdBodyTailDegree, s);
-  for (int j = 0; j < kThirdBodyTailNodes; ++j)
-    for (int m = 0; m < 6; ++m) out[m] += s.w[j] * s.f[j][m] / kThirdBodyTailNodes;
+  constexpr double kInvN = 1.0 / kThirdBodyTailNodes;
+#ifdef __wasm_simd128__
+  for (int m = 0; m < 6; ++m) {
+    v128_t acc0 = wasm_f64x2_splat(0.0);
+    v128_t acc1 = wasm_f64x2_splat(0.0);
+    const double* fm = s.f[m];
+    for (int j = 0; j < kThirdBodyTailNodes; j += 4) {
+      acc0 = wasm_f64x2_add(acc0, wasm_f64x2_mul(wasm_v128_load(s.w + j), wasm_v128_load(fm + j)));
+      acc1 = wasm_f64x2_add(acc1, wasm_f64x2_mul(wasm_v128_load(s.w + j + 2), wasm_v128_load(fm + j + 2)));
+    }
+    const v128_t sum = wasm_f64x2_add(acc0, acc1);
+    out[m] += (wasm_f64x2_extract_lane(sum, 0) + wasm_f64x2_extract_lane(sum, 1)) * kInvN;
+  }
+#else
+  for (int m = 0; m < 6; ++m) {
+    double sum = 0.0;
+    for (int j = 0; j < kThirdBodyTailNodes; ++j) sum += s.w[j] * s.f[m][j];
+    out[m] += sum * kInvN;
+  }
+#endif
 }
 
 /// The integral from 0 to F of a zero-mean function g sampled at the nodes F_j = 2 pi j / N (its trigonometric
@@ -862,20 +2147,6 @@ struct NodeIntegral {
   double at;                           ///< at F
   double nodes[kThirdBodyTailNodes];   ///< at each node
 };
-struct NodeTrig {
-  double c[kThirdBodyTailNodes], s[kThirdBodyTailNodes];  ///< cos, sin of 2 pi k / kThirdBodyTailNodes
-};
-inline const NodeTrig& node_trig() {
-  static const NodeTrig t = [] {
-    NodeTrig r{};
-    for (int k = 0; k < kThirdBodyTailNodes; ++k) {
-      r.c[k] = std::cos(kTwoPi * k / kThirdBodyTailNodes);
-      r.s[k] = std::sin(kTwoPi * k / kThirdBodyTailNodes);
-    }
-    return r;
-  }();
-  return t;
-}
 inline NodeIntegral integrate_nodes(const double* g, double F) {
   constexpr int N = kThirdBodyTailNodes, M = N / 2;
   const NodeTrig& t = node_trig();
@@ -906,31 +2177,934 @@ inline NodeIntegral integrate_nodes(const double* g, double F) {
 /// mean orbit, each body held at its output-time position: for every element the integral over the mean longitude of
 /// its rate less the average (zero mean over the orbit), divided by n; the mean longitude also takes the integral of
 /// the mean motion's own short-period term. Added to `d` (state order).
-inline void third_body_short_period(const double* y, const Frame& fr, const Bodies& b, double F, int lo, int hi,
-                                    double* d) {
-  constexpr int N = kThirdBodyTailNodes;
+inline void tbsp_coefs(const double* y, const Frame& fr, const Bodies& b, int lo, int hi,
+                       double A[6][kThirdBodyTailNodes / 2 + 1], double B[6][kThirdBodyTailNodes / 2 + 1]) {
+  constexpr int N = kThirdBodyTailNodes, M = N / 2, Q = N / 4;
+  constexpr double kInvN = 1.0 / N;
+  constexpr double kTwoOverN = 2.0 / N;
   TailSamples s;
   tail_samples(y, fr, b, lo, hi, s);
-  const double n = fr.n;
-  double dn_nodes[N];
+  const NodeTrig& nt = node_trig();
+  const double inv_n = 1.0 / fr.n;
+  const double scale_ab = kTwoOverN * inv_n;
+  const double k = y[kAf], h = y[kAg];
+
   for (int m = 0; m < 6; ++m) {
+    const double* fm = s.f[m];
+    alignas(16) double g[N];
+#ifdef __wasm_simd128__
+    v128_t m0 = wasm_f64x2_splat(0.0), m1 = wasm_f64x2_splat(0.0);
+    for (int j = 0; j < N; j += 4) {
+      m0 = wasm_f64x2_add(m0, wasm_f64x2_mul(wasm_v128_load(s.w + j), wasm_v128_load(fm + j)));
+      m1 = wasm_f64x2_add(m1, wasm_f64x2_mul(wasm_v128_load(s.w + j + 2), wasm_v128_load(fm + j + 2)));
+    }
+    const v128_t ms = wasm_f64x2_add(m0, m1);
+    const double mean = (wasm_f64x2_extract_lane(ms, 0) + wasm_f64x2_extract_lane(ms, 1)) * kInvN;
+    const v128_t v_mean = wasm_f64x2_splat(mean);
+    for (int j = 0; j < N; j += 2) {
+      wasm_v128_store(g + j, wasm_f64x2_mul(wasm_f64x2_sub(wasm_v128_load(fm + j), v_mean), wasm_v128_load(s.w + j)));
+    }
+#else
     double mean = 0.0;
-    for (int j = 0; j < N; ++j) mean += s.w[j] * s.f[j][m] / N;
-    double g[N];
-    for (int j = 0; j < N; ++j) g[j] = (s.f[j][m] - mean) * s.w[j];
-    const NodeIntegral I = integrate_nodes(g, F);
-    double avg = 0.0;
-    for (int j = 0; j < N; ++j) avg += I.nodes[j] * s.w[j] / N;
-    d[m] += (I.at - avg) / n;
-    if (m == kN)
-      for (int j = 0; j < N; ++j) dn_nodes[j] = (I.nodes[j] - avg) / n;
+    for (int j = 0; j < N; ++j) mean += s.w[j] * fm[j];
+    mean *= kInvN;
+    for (int j = 0; j < N; ++j) g[j] = (fm[j] - mean) * s.w[j];
+#endif
+
+    double gp[M + 1], gm[M];
+    gp[0] = g[0];
+    gp[M] = g[M];
+    for (int j = 1; j < M; ++j) {
+      gp[j] = g[j] + g[N - j];
+      gm[j] = g[j] - g[N - j];
+    }
+    alignas(16) double gpe[Q + 2], gpo[Q], gme[Q], gmo[Q + 2];
+    gpe[0] = gp[0] + gp[M];
+    gpo[0] = gp[0] - gp[M];
+    gme[0] = 0.0;
+    gmo[0] = 0.0;
+    gpe[Q] = gp[Q];
+    gmo[Q] = gm[Q];
+    for (int j = 1; j < Q; ++j) {
+      gpe[j] = gp[j] + gp[M - j];
+      gpo[j] = gp[j] - gp[M - j];
+      gme[j] = gm[j] - gm[M - j];
+      gmo[j] = gm[j] + gm[M - j];
+    }
+
+    A[m][0] = 0.0;
+    B[m][0] = 0.0;
+#ifdef __wasm_simd128__
+    const v128_t gpe0 = wasm_v128_load(gpe + 0), gpe2 = wasm_v128_load(gpe + 2), gpe4 = wasm_v128_load(gpe + 4), gpe6 = wasm_v128_load(gpe + 6);
+    const v128_t gme0 = wasm_v128_load(gme + 0), gme2 = wasm_v128_load(gme + 2), gme4 = wasm_v128_load(gme + 4), gme6 = wasm_v128_load(gme + 6);
+    const v128_t gpo0 = wasm_v128_load(gpo + 0), gpo2 = wasm_v128_load(gpo + 2), gpo4 = wasm_v128_load(gpo + 4), gpo6 = wasm_v128_load(gpo + 6);
+    const v128_t gmo0 = wasm_v128_load(gmo + 0), gmo2 = wasm_v128_load(gmo + 2), gmo4 = wasm_v128_load(gmo + 4), gmo6 = wasm_v128_load(gmo + 6);
+    for (int r = 1; r < M; ++r) {
+      const double* cmr = nt.cm[r];
+      const double* smr = nt.sm[r];
+      double ar, br;
+      if ((r & 1) == 0) {
+        const v128_t va = wasm_f64x2_add(wasm_f64x2_add(wasm_f64x2_mul(gpe0, wasm_v128_load(cmr + 0)), wasm_f64x2_mul(gpe2, wasm_v128_load(cmr + 2))),
+                                         wasm_f64x2_add(wasm_f64x2_mul(gpe4, wasm_v128_load(cmr + 4)), wasm_f64x2_mul(gpe6, wasm_v128_load(cmr + 6))));
+        const v128_t vb = wasm_f64x2_add(wasm_f64x2_add(wasm_f64x2_mul(gme0, wasm_v128_load(smr + 0)), wasm_f64x2_mul(gme2, wasm_v128_load(smr + 2))),
+                                         wasm_f64x2_add(wasm_f64x2_mul(gme4, wasm_v128_load(smr + 4)), wasm_f64x2_mul(gme6, wasm_v128_load(smr + 6))));
+        ar = (wasm_f64x2_extract_lane(va, 0) + wasm_f64x2_extract_lane(va, 1)) + ((r & 2) ? -gpe[Q] : gpe[Q]);
+        br = wasm_f64x2_extract_lane(vb, 0) + wasm_f64x2_extract_lane(vb, 1);
+      } else {
+        const v128_t va = wasm_f64x2_add(wasm_f64x2_add(wasm_f64x2_mul(gpo0, wasm_v128_load(cmr + 0)), wasm_f64x2_mul(gpo2, wasm_v128_load(cmr + 2))),
+                                         wasm_f64x2_add(wasm_f64x2_mul(gpo4, wasm_v128_load(cmr + 4)), wasm_f64x2_mul(gpo6, wasm_v128_load(cmr + 6))));
+        const v128_t vb = wasm_f64x2_add(wasm_f64x2_add(wasm_f64x2_mul(gmo0, wasm_v128_load(smr + 0)), wasm_f64x2_mul(gmo2, wasm_v128_load(smr + 2))),
+                                         wasm_f64x2_add(wasm_f64x2_mul(gmo4, wasm_v128_load(smr + 4)), wasm_f64x2_mul(gmo6, wasm_v128_load(smr + 6))));
+        ar = wasm_f64x2_extract_lane(va, 0) + wasm_f64x2_extract_lane(va, 1);
+        br = (wasm_f64x2_extract_lane(vb, 0) + wasm_f64x2_extract_lane(vb, 1)) + ((r & 2) ? -gmo[Q] : gmo[Q]);
+      }
+      A[m][r] = ar * scale_ab;
+      B[m][r] = br * scale_ab;
+    }
+    const v128_t vs = wasm_f64x2_add(wasm_f64x2_add(gpe0, gpe2), wasm_f64x2_add(gpe4, gpe6));
+    const double aM = wasm_f64x2_extract_lane(vs, 0) - wasm_f64x2_extract_lane(vs, 1) + gpe[Q];
+#else
+    for (int r = 1; r < M; ++r) {
+      double ar, br;
+      if ((r & 1) == 0) {
+        ar = gpe[0] + ((r & 2) ? -gpe[Q] : gpe[Q]);
+        br = 0.0;
+        for (int j = 1; j < Q; ++j) {
+          ar += gpe[j] * nt.cm[r][j];
+          br += gme[j] * nt.sm[r][j];
+        }
+      } else {
+        ar = gpo[0];
+        br = ((r & 2) ? -gmo[Q] : gmo[Q]);
+        for (int j = 1; j < Q; ++j) {
+          ar += gpo[j] * nt.cm[r][j];
+          br += gmo[j] * nt.sm[r][j];
+        }
+      }
+      A[m][r] = ar * scale_ab;
+      B[m][r] = br * scale_ab;
+    }
+    double aM = gpe[0] + gpe[Q];
+    for (int j = 1; j < Q; ++j) aM += (j & 1) ? -gpe[j] : gpe[j];
+#endif
+    A[m][M] = aM * scale_ab;
+    B[m][M] = 0.0;
   }
-  double h[N];
-  for (int j = 0; j < N; ++j) h[j] = dn_nodes[j] * s.w[j];
-  const NodeIntegral L = integrate_nodes(h, F);
-  double avg = 0.0;
-  for (int j = 0; j < N; ++j) avg += L.nodes[j] * s.w[j] / N;
-  d[kLam] += (L.at - avg) / n;
+
+  double C[M + 1]{}, S[M + 1]{};
+  for (int r = 1; r < M; ++r) {
+    const double inv_r = kInvLp1[r - 1];
+    C[r] = -B[kN][r] * inv_r;
+    S[r] = A[kN][r] * inv_r;
+  }
+  C[0] = 0.5 * (k * C[1] + h * S[1]);
+  A[kLam][1] += (C[1] - k * C[0] - 0.5 * k * C[2] - 0.5 * h * S[2]) * inv_n;
+  B[kLam][1] += (S[1] - h * C[0] - 0.5 * k * S[2] + 0.5 * h * C[2]) * inv_n;
+  for (int r = 2; r < M; ++r) {
+    A[kLam][r] += (C[r] - 0.5 * k * (C[r - 1] + C[r + 1]) + 0.5 * h * (S[r - 1] - S[r + 1])) * inv_n;
+    B[kLam][r] += (S[r] - 0.5 * k * (S[r - 1] + S[r + 1]) - 0.5 * h * (C[r - 1] - C[r + 1])) * inv_n;
+  }
+  A[kLam][M] += (-k * C[M - 1] + h * S[M - 1]) * inv_n;
+}
+
+inline void eval_tbsp(const double* y, double F, const double A[6][kThirdBodyTailNodes / 2 + 1],
+                      const double B[6][kThirdBodyTailNodes / 2 + 1], double* d, double* dd_dlam = nullptr,
+                      const double* sF_in = nullptr, const double* cF_in = nullptr) {
+  constexpr int M = kThirdBodyTailNodes / 2;
+  const double k = y[kAf], h = y[kAg];
+  const int r_max = (dd_dlam == nullptr && (k * k + h * h < 4e-4))
+                        ? (y[kN] > 0.035 ? 5 : (y[kN] > 0.015 ? 6 : (y[kN] > 0.006 ? 7 : M)))
+                        : M;
+  double sF, cF;
+  if (sF_in != nullptr && cF_in != nullptr) {
+    sF = *sF_in;
+    cF = *cF_in;
+  } else {
+    fm::sincos(F, sF, cF);
+  }
+  double alpha[M + 1], beta[M + 1];
+  double sm = 0.0, cm = 1.0;
+  if (dd_dlam == nullptr) {
+    for (int m = 1; m <= r_max; ++m) {
+      const double s1 = sm * cF + cm * sF;
+      cm = cm * cF - sm * sF;
+      sm = s1;
+      const double inv_m = kInvLp1[m - 1];
+      alpha[m] = sm * inv_m;
+      beta[m] = -cm * inv_m;
+    }
+    alpha[1] += 0.5 * h;
+    beta[1] -= 0.5 * k;
+    if (r_max == M) {
+      alpha[M] *= 0.5;
+      beta[M] = 0.0;
+    }
+    for (int m = 0; m < 6; ++m) {
+      double acc = 0.0;
+      for (int r = 1; r <= r_max; ++r) acc += alpha[r] * A[m][r] + beta[r] * B[m][r];
+      d[m] += acc;
+    }
+    return;
+  }
+  const double dF_dlam = 1.0 / (1.0 - k * cF - h * sF);
+  double dalpha[M + 1], dbeta[M + 1];
+  for (int m = 1; m <= r_max; ++m) {
+    const double s1 = sm * cF + cm * sF;
+    cm = cm * cF - sm * sF;
+    sm = s1;
+    const double inv_m = kInvLp1[m - 1];
+    alpha[m] = sm * inv_m;
+    beta[m] = -cm * inv_m;
+    dalpha[m] = cm * dF_dlam;
+    dbeta[m] = sm * dF_dlam;
+  }
+  alpha[1] += 0.5 * h;
+  beta[1] -= 0.5 * k;
+  if (r_max == M) {
+    alpha[M] *= 0.5;
+    beta[M] = 0.0;
+    dalpha[M] *= 0.5;
+    dbeta[M] = 0.0;
+  }
+  for (int m = 0; m < 6; ++m) {
+    double acc = 0.0, dacc = 0.0;
+    for (int r = 1; r <= r_max; ++r) {
+      acc += alpha[r] * A[m][r] + beta[r] * B[m][r];
+      dacc += dalpha[r] * A[m][r] + dbeta[r] * B[m][r];
+    }
+    d[m] += acc;
+    dd_dlam[m] += dacc;
+  }
+}
+
+[[gnu::always_inline]] inline void eval_tbsp_lerp_f32(
+    const double* y, double F, float u_f,
+    const float AT0_f[kThirdBodyTailNodes / 2 + 1][8],
+    const float BT0_f[kThirdBodyTailNodes / 2 + 1][8],
+    const float dAT_f[kThirdBodyTailNodes / 2 + 1][8],
+    const float dBT_f[kThirdBodyTailNodes / 2 + 1][8],
+    double* d, const double* sF_in = nullptr, const double* cF_in = nullptr) {
+  constexpr int M = kThirdBodyTailNodes / 2;
+  const double k = y[kAf], h = y[kAg];
+  const int r_max = (k * k + h * h < 4e-4)
+                        ? (y[kN] > 0.035 ? 5 : (y[kN] > 0.015 ? 6 : (y[kN] > 0.006 ? 7 : M)))
+                        : M;
+  double sF, cF;
+  if (sF_in != nullptr && cF_in != nullptr) {
+    sF = *sF_in;
+    cF = *cF_in;
+  } else {
+    fm::sincos_fast(F, sF, cF);
+  }
+#ifdef __wasm_simd128__
+  const v128_t va1 = wasm_f32x4_splat(static_cast<float>(sF + 0.5 * h));
+  const v128_t vb1 = wasm_f32x4_splat(static_cast<float>(-cF - 0.5 * k));
+  v128_t a0_lo = wasm_f32x4_add(wasm_f32x4_mul(va1, wasm_v128_load(AT0_f[1] + 0)),
+                                wasm_f32x4_mul(vb1, wasm_v128_load(BT0_f[1] + 0)));
+  v128_t a0_hi = wasm_f32x4_add(wasm_f32x4_mul(va1, wasm_v128_load(AT0_f[1] + 4)),
+                                wasm_f32x4_mul(vb1, wasm_v128_load(BT0_f[1] + 4)));
+  v128_t da_lo = wasm_f32x4_add(wasm_f32x4_mul(va1, wasm_v128_load(dAT_f[1] + 0)),
+                                wasm_f32x4_mul(vb1, wasm_v128_load(dBT_f[1] + 0)));
+  v128_t da_hi = wasm_f32x4_add(wasm_f32x4_mul(va1, wasm_v128_load(dAT_f[1] + 4)),
+                                wasm_f32x4_mul(vb1, wasm_v128_load(dBT_f[1] + 4)));
+  double sm = sF, cm = cF;
+  const int r_loop_end = r_max == M ? M - 1 : r_max;
+  for (int r = 2; r <= r_loop_end; ++r) {
+    const double s1 = sm * cF + cm * sF;
+    cm = cm * cF - sm * sF;
+    sm = s1;
+    const double inv_r = kInvLp1[r - 1];
+    const v128_t va = wasm_f32x4_splat(static_cast<float>(sm * inv_r));
+    const v128_t vb = wasm_f32x4_splat(static_cast<float>(-cm * inv_r));
+    a0_lo = wasm_f32x4_add(a0_lo, wasm_f32x4_add(wasm_f32x4_mul(va, wasm_v128_load(AT0_f[r] + 0)),
+                                                 wasm_f32x4_mul(vb, wasm_v128_load(BT0_f[r] + 0))));
+    a0_hi = wasm_f32x4_add(a0_hi, wasm_f32x4_add(wasm_f32x4_mul(va, wasm_v128_load(AT0_f[r] + 4)),
+                                                 wasm_f32x4_mul(vb, wasm_v128_load(BT0_f[r] + 4))));
+    da_lo = wasm_f32x4_add(da_lo, wasm_f32x4_add(wasm_f32x4_mul(va, wasm_v128_load(dAT_f[r] + 0)),
+                                                 wasm_f32x4_mul(vb, wasm_v128_load(dBT_f[r] + 0))));
+    da_hi = wasm_f32x4_add(da_hi, wasm_f32x4_add(wasm_f32x4_mul(va, wasm_v128_load(dAT_f[r] + 4)),
+                                                 wasm_f32x4_mul(vb, wasm_v128_load(dBT_f[r] + 4))));
+  }
+  if (r_max == M) {
+    const double s1 = sm * cF + cm * sF;
+    const v128_t vaM = wasm_f32x4_splat(static_cast<float>(0.5 * s1 * kInvLp1[M - 1]));
+    a0_lo = wasm_f32x4_add(a0_lo, wasm_f32x4_mul(vaM, wasm_v128_load(AT0_f[M] + 0)));
+    a0_hi = wasm_f32x4_add(a0_hi, wasm_f32x4_mul(vaM, wasm_v128_load(AT0_f[M] + 4)));
+    da_lo = wasm_f32x4_add(da_lo, wasm_f32x4_mul(vaM, wasm_v128_load(dAT_f[M] + 0)));
+    da_hi = wasm_f32x4_add(da_hi, wasm_f32x4_mul(vaM, wasm_v128_load(dAT_f[M] + 4)));
+  }
+  const v128_t vu = wasm_f32x4_splat(u_f);
+  const v128_t res_lo = wasm_f32x4_add(a0_lo, wasm_f32x4_mul(vu, da_lo));
+  const v128_t res_hi = wasm_f32x4_add(a0_hi, wasm_f32x4_mul(vu, da_hi));
+  wasm_v128_store(d + 0, wasm_f64x2_add(wasm_v128_load(d + 0), wasm_f64x2_promote_low_f32x4(res_lo)));
+  wasm_v128_store(d + 2, wasm_f64x2_add(wasm_v128_load(d + 2), wasm_f64x2_promote_low_f32x4(wasm_i64x2_shuffle(res_lo, res_lo, 1, 1))));
+  wasm_v128_store(d + 4, wasm_f64x2_add(wasm_v128_load(d + 4), wasm_f64x2_promote_low_f32x4(res_hi)));
+#else
+  float alpha_f[M + 1], beta_f[M + 1];
+  double sm = 0.0, cm = 1.0;
+  for (int m = 1; m <= r_max; ++m) {
+    const double s1 = sm * cF + cm * sF;
+    cm = cm * cF - sm * sF;
+    sm = s1;
+    const double inv_m = kInvLp1[m - 1];
+    alpha_f[m] = static_cast<float>(sm * inv_m);
+    beta_f[m] = static_cast<float>(-cm * inv_m);
+  }
+  alpha_f[1] += static_cast<float>(0.5 * h);
+  beta_f[1] -= static_cast<float>(0.5 * k);
+  if (r_max == M) {
+    alpha_f[M] *= 0.5f;
+    beta_f[M] = 0.0f;
+  }
+  for (int m = 0; m < 6; ++m) {
+    float acc0 = 0.0f, dacc = 0.0f;
+    for (int r = 1; r <= r_max; ++r) {
+      acc0 += alpha_f[r] * AT0_f[r][m] + beta_f[r] * BT0_f[r][m];
+      dacc += alpha_f[r] * dAT_f[r][m] + beta_f[r] * dBT_f[r][m];
+    }
+    d[m] += static_cast<double>(acc0 + u_f * dacc);
+  }
+#endif
+}
+
+inline void eval_tbsp_lerp(const double* y, double F, double w0, double w1,
+                           const double AT0[kThirdBodyTailNodes / 2 + 1][6],
+                           const double BT0[kThirdBodyTailNodes / 2 + 1][6],
+                           const double AT1[kThirdBodyTailNodes / 2 + 1][6],
+                           const double BT1[kThirdBodyTailNodes / 2 + 1][6],
+                           double* d, double* dd_dlam = nullptr,
+                           const double* sF_in = nullptr, const double* cF_in = nullptr) {
+  constexpr int M = kThirdBodyTailNodes / 2;
+  const double k = y[kAf], h = y[kAg];
+  const int r_max = (dd_dlam == nullptr && (k * k + h * h < 4e-4))
+                        ? (y[kN] > 0.035 ? 5 : (y[kN] > 0.015 ? 6 : (y[kN] > 0.006 ? 7 : M)))
+                        : M;
+  double sF, cF;
+  if (sF_in != nullptr && cF_in != nullptr) {
+    sF = *sF_in;
+    cF = *cF_in;
+  } else {
+    fm::sincos(F, sF, cF);
+  }
+  double alpha[M + 1], beta[M + 1];
+  double sm = 0.0, cm = 1.0;
+  if (dd_dlam == nullptr) {
+    for (int m = 1; m <= r_max; ++m) {
+      const double s1 = sm * cF + cm * sF;
+      cm = cm * cF - sm * sF;
+      sm = s1;
+      const double inv_m = kInvLp1[m - 1];
+      alpha[m] = sm * inv_m;
+      beta[m] = -cm * inv_m;
+    }
+    alpha[1] += 0.5 * h;
+    beta[1] -= 0.5 * k;
+    if (r_max == M) {
+      alpha[M] *= 0.5;
+      beta[M] = 0.0;
+    }
+#ifdef __wasm_simd128__
+    v128_t a0_01 = wasm_f64x2_splat(0.0), a0_23 = wasm_f64x2_splat(0.0), a0_45 = wasm_f64x2_splat(0.0);
+    v128_t a1_01 = wasm_f64x2_splat(0.0), a1_23 = wasm_f64x2_splat(0.0), a1_45 = wasm_f64x2_splat(0.0);
+    for (int r = 1; r <= r_max; ++r) {
+      const v128_t va = wasm_f64x2_splat(alpha[r]);
+      const v128_t vb = wasm_f64x2_splat(beta[r]);
+      a0_01 = wasm_f64x2_add(a0_01, wasm_f64x2_add(wasm_f64x2_mul(va, wasm_v128_load(AT0[r] + 0)), wasm_f64x2_mul(vb, wasm_v128_load(BT0[r] + 0))));
+      a0_23 = wasm_f64x2_add(a0_23, wasm_f64x2_add(wasm_f64x2_mul(va, wasm_v128_load(AT0[r] + 2)), wasm_f64x2_mul(vb, wasm_v128_load(BT0[r] + 2))));
+      a0_45 = wasm_f64x2_add(a0_45, wasm_f64x2_add(wasm_f64x2_mul(va, wasm_v128_load(AT0[r] + 4)), wasm_f64x2_mul(vb, wasm_v128_load(BT0[r] + 4))));
+      a1_01 = wasm_f64x2_add(a1_01, wasm_f64x2_add(wasm_f64x2_mul(va, wasm_v128_load(AT1[r] + 0)), wasm_f64x2_mul(vb, wasm_v128_load(BT1[r] + 0))));
+      a1_23 = wasm_f64x2_add(a1_23, wasm_f64x2_add(wasm_f64x2_mul(va, wasm_v128_load(AT1[r] + 2)), wasm_f64x2_mul(vb, wasm_v128_load(BT1[r] + 2))));
+      a1_45 = wasm_f64x2_add(a1_45, wasm_f64x2_add(wasm_f64x2_mul(va, wasm_v128_load(AT1[r] + 4)), wasm_f64x2_mul(vb, wasm_v128_load(BT1[r] + 4))));
+    }
+    const v128_t vw0 = wasm_f64x2_splat(w0), vw1 = wasm_f64x2_splat(w1);
+    wasm_v128_store(d + 0, wasm_f64x2_add(wasm_v128_load(d + 0), wasm_f64x2_add(wasm_f64x2_mul(vw0, a0_01), wasm_f64x2_mul(vw1, a1_01))));
+    wasm_v128_store(d + 2, wasm_f64x2_add(wasm_v128_load(d + 2), wasm_f64x2_add(wasm_f64x2_mul(vw0, a0_23), wasm_f64x2_mul(vw1, a1_23))));
+    wasm_v128_store(d + 4, wasm_f64x2_add(wasm_v128_load(d + 4), wasm_f64x2_add(wasm_f64x2_mul(vw0, a0_45), wasm_f64x2_mul(vw1, a1_45))));
+#else
+    for (int m = 0; m < 6; ++m) {
+      double acc0 = 0.0, acc1 = 0.0;
+      for (int r = 1; r <= r_max; ++r) {
+        acc0 += alpha[r] * AT0[r][m] + beta[r] * BT0[r][m];
+        acc1 += alpha[r] * AT1[r][m] + beta[r] * BT1[r][m];
+      }
+      d[m] += w0 * acc0 + w1 * acc1;
+    }
+#endif
+    return;
+  }
+  const double dF_dlam = 1.0 / (1.0 - k * cF - h * sF);
+  double dalpha[M + 1], dbeta[M + 1];
+  for (int m = 1; m <= r_max; ++m) {
+    const double s1 = sm * cF + cm * sF;
+    cm = cm * cF - sm * sF;
+    sm = s1;
+    const double inv_m = kInvLp1[m - 1];
+    alpha[m] = sm * inv_m;
+    beta[m] = -cm * inv_m;
+    dalpha[m] = cm * dF_dlam;
+    dbeta[m] = sm * dF_dlam;
+  }
+  alpha[1] += 0.5 * h;
+  beta[1] -= 0.5 * k;
+  if (r_max == M) {
+    alpha[M] *= 0.5;
+    beta[M] = 0.0;
+    dalpha[M] *= 0.5;
+    dbeta[M] = 0.0;
+  }
+#ifdef __wasm_simd128__
+  v128_t a0_01 = wasm_f64x2_splat(0.0), a0_23 = wasm_f64x2_splat(0.0), a0_45 = wasm_f64x2_splat(0.0);
+  v128_t a1_01 = wasm_f64x2_splat(0.0), a1_23 = wasm_f64x2_splat(0.0), a1_45 = wasm_f64x2_splat(0.0);
+  v128_t da0_01 = wasm_f64x2_splat(0.0), da0_23 = wasm_f64x2_splat(0.0), da0_45 = wasm_f64x2_splat(0.0);
+  v128_t da1_01 = wasm_f64x2_splat(0.0), da1_23 = wasm_f64x2_splat(0.0), da1_45 = wasm_f64x2_splat(0.0);
+  for (int r = 1; r <= r_max; ++r) {
+    const v128_t va = wasm_f64x2_splat(alpha[r]), vb = wasm_f64x2_splat(beta[r]);
+    const v128_t vda = wasm_f64x2_splat(dalpha[r]), vdb = wasm_f64x2_splat(dbeta[r]);
+    const v128_t at0_01 = wasm_v128_load(AT0[r] + 0), bt0_01 = wasm_v128_load(BT0[r] + 0);
+    const v128_t at0_23 = wasm_v128_load(AT0[r] + 2), bt0_23 = wasm_v128_load(BT0[r] + 2);
+    const v128_t at0_45 = wasm_v128_load(AT0[r] + 4), bt0_45 = wasm_v128_load(BT0[r] + 4);
+    const v128_t at1_01 = wasm_v128_load(AT1[r] + 0), bt1_01 = wasm_v128_load(BT1[r] + 0);
+    const v128_t at1_23 = wasm_v128_load(AT1[r] + 2), bt1_23 = wasm_v128_load(BT1[r] + 2);
+    const v128_t at1_45 = wasm_v128_load(AT1[r] + 4), bt1_45 = wasm_v128_load(BT1[r] + 4);
+    a0_01 = wasm_f64x2_add(a0_01, wasm_f64x2_add(wasm_f64x2_mul(va, at0_01), wasm_f64x2_mul(vb, bt0_01)));
+    a0_23 = wasm_f64x2_add(a0_23, wasm_f64x2_add(wasm_f64x2_mul(va, at0_23), wasm_f64x2_mul(vb, bt0_23)));
+    a0_45 = wasm_f64x2_add(a0_45, wasm_f64x2_add(wasm_f64x2_mul(va, at0_45), wasm_f64x2_mul(vb, bt0_45)));
+    a1_01 = wasm_f64x2_add(a1_01, wasm_f64x2_add(wasm_f64x2_mul(va, at1_01), wasm_f64x2_mul(vb, bt1_01)));
+    a1_23 = wasm_f64x2_add(a1_23, wasm_f64x2_add(wasm_f64x2_mul(va, at1_23), wasm_f64x2_mul(vb, bt1_23)));
+    a1_45 = wasm_f64x2_add(a1_45, wasm_f64x2_add(wasm_f64x2_mul(va, at1_45), wasm_f64x2_mul(vb, bt1_45)));
+    da0_01 = wasm_f64x2_add(da0_01, wasm_f64x2_add(wasm_f64x2_mul(vda, at0_01), wasm_f64x2_mul(vdb, bt0_01)));
+    da0_23 = wasm_f64x2_add(da0_23, wasm_f64x2_add(wasm_f64x2_mul(vda, at0_23), wasm_f64x2_mul(vdb, bt0_23)));
+    da0_45 = wasm_f64x2_add(da0_45, wasm_f64x2_add(wasm_f64x2_mul(vda, at0_45), wasm_f64x2_mul(vdb, bt0_45)));
+    da1_01 = wasm_f64x2_add(da1_01, wasm_f64x2_add(wasm_f64x2_mul(vda, at1_01), wasm_f64x2_mul(vdb, bt1_01)));
+    da1_23 = wasm_f64x2_add(da1_23, wasm_f64x2_add(wasm_f64x2_mul(vda, at1_23), wasm_f64x2_mul(vdb, bt1_23)));
+    da1_45 = wasm_f64x2_add(da1_45, wasm_f64x2_add(wasm_f64x2_mul(vda, at1_45), wasm_f64x2_mul(vdb, bt1_45)));
+  }
+  const v128_t vw0 = wasm_f64x2_splat(w0), vw1 = wasm_f64x2_splat(w1);
+  wasm_v128_store(d + 0, wasm_f64x2_add(wasm_v128_load(d + 0), wasm_f64x2_add(wasm_f64x2_mul(vw0, a0_01), wasm_f64x2_mul(vw1, a1_01))));
+  wasm_v128_store(d + 2, wasm_f64x2_add(wasm_v128_load(d + 2), wasm_f64x2_add(wasm_f64x2_mul(vw0, a0_23), wasm_f64x2_mul(vw1, a1_23))));
+  wasm_v128_store(d + 4, wasm_f64x2_add(wasm_v128_load(d + 4), wasm_f64x2_add(wasm_f64x2_mul(vw0, a0_45), wasm_f64x2_mul(vw1, a1_45))));
+  wasm_v128_store(dd_dlam + 0, wasm_f64x2_add(wasm_v128_load(dd_dlam + 0), wasm_f64x2_add(wasm_f64x2_mul(vw0, da0_01), wasm_f64x2_mul(vw1, da1_01))));
+  wasm_v128_store(dd_dlam + 2, wasm_f64x2_add(wasm_v128_load(dd_dlam + 2), wasm_f64x2_add(wasm_f64x2_mul(vw0, da0_23), wasm_f64x2_mul(vw1, da1_23))));
+  wasm_v128_store(dd_dlam + 4, wasm_f64x2_add(wasm_v128_load(dd_dlam + 4), wasm_f64x2_add(wasm_f64x2_mul(vw0, da0_45), wasm_f64x2_mul(vw1, da1_45))));
+#else
+  for (int m = 0; m < 6; ++m) {
+    double acc0 = 0.0, acc1 = 0.0, dacc0 = 0.0, dacc1 = 0.0;
+    for (int r = 1; r <= r_max; ++r) {
+      acc0 += alpha[r] * AT0[r][m] + beta[r] * BT0[r][m];
+      acc1 += alpha[r] * AT1[r][m] + beta[r] * BT1[r][m];
+      dacc0 += dalpha[r] * AT0[r][m] + dbeta[r] * BT0[r][m];
+      dacc1 += dalpha[r] * AT1[r][m] + dbeta[r] * BT1[r][m];
+    }
+    d[m] += w0 * acc0 + w1 * acc1;
+    dd_dlam[m] += w0 * dacc0 + w1 * dacc1;
+  }
+#endif
+}
+
+struct Node {
+  double t;        ///< minutes from epoch
+  double y[6];
+  double f[6];
+  int32_t index;   ///< signed node index (negative: backward)
+};
+
+/// Cubic Hermite interpolation between nodes a and b (SPEC 9).
+inline void hermite(const Node& a, const Node& b, double t, double* y) {
+  const double h = b.t - a.t;
+  const double q = (t - a.t) / h;
+  if (q == 0.0) {
+    for (int j = 0; j < 6; ++j) y[j] = a.y[j];
+    return;
+  }
+  const double omq = 1.0 - q;
+  const double h00 = (1.0 + 2.0 * q) * omq * omq;
+  const double h10h = (q * omq * omq) * h;
+  const double h01 = q * q * (3.0 - 2.0 * q);
+  const double h11h = (q * q * (q - 1.0)) * h;
+#ifdef __wasm_simd128__
+  const v128_t v00 = wasm_f64x2_splat(h00), v10 = wasm_f64x2_splat(h10h);
+  const v128_t v01 = wasm_f64x2_splat(h01), v11 = wasm_f64x2_splat(h11h);
+  for (int j = 0; j < 6; j += 2) {
+    const v128_t p0 = wasm_f64x2_add(wasm_f64x2_mul(v00, wasm_v128_load(a.y + j)),
+                                     wasm_f64x2_mul(v10, wasm_v128_load(a.f + j)));
+    const v128_t p1 = wasm_f64x2_add(p0, wasm_f64x2_mul(v01, wasm_v128_load(b.y + j)));
+    wasm_v128_store(y + j, wasm_f64x2_add(p1, wasm_f64x2_mul(v11, wasm_v128_load(b.f + j))));
+  }
+#else
+  for (int j = 0; j < 6; ++j) y[j] = h00 * a.y[j] + h10h * a.f[j] + h01 * b.y[j] + h11h * b.f[j];
+#endif
+  if (!(y[kN] > 0.0))
+    for (int j = 0; j < 6; ++j) y[j] = omq * a.y[j] + q * b.y[j];
+}
+
+struct ActiveBracket {
+  uint64_t ctx_id = 0;
+  double d50_epoch = -1e30;
+  double epoch_y[6]{};
+  Node lo{};
+  Node hi{};
+  bool valid = false;
+  bool has_t1 = false;
+  int sub_idx = -1;
+  double t0 = 0.0, t1 = 0.0;
+  double sub_t_lo = 0.0, sub_t_hi = -1.0, inv_dt = 0.0;
+  Vec3 sun_u0{}, sun_u1{}, dsun_u{};
+  double sun_r0 = 0.0, sun_r1 = 0.0, dsun_r = 0.0;
+  alignas(16) double AT0[kThirdBodyTailNodes / 2 + 1][6]{};
+  alignas(16) double BT0[kThirdBodyTailNodes / 2 + 1][6]{};
+  alignas(16) double AT1[kThirdBodyTailNodes / 2 + 1][6]{};
+  alignas(16) double BT1[kThirdBodyTailNodes / 2 + 1][6]{};
+  alignas(16) float AT0_f[kThirdBodyTailNodes / 2 + 1][8]{};
+  alignas(16) float BT0_f[kThirdBodyTailNodes / 2 + 1][8]{};
+  alignas(16) float dAT_f[kThirdBodyTailNodes / 2 + 1][8]{};
+  alignas(16) float dBT_f[kThirdBodyTailNodes / 2 + 1][8]{};
+};
+inline thread_local ActiveBracket g_active_bracket{};
+inline ActiveBracket& active_bracket() { return g_active_bracket; }
+
+inline void tbsp_coefs_leo16_transposed(const double* y, const Frame& fr, const Bodies& b,
+                                        double AT[kThirdBodyTailNodes / 2 + 1][6],
+                                        double BT[kThirdBodyTailNodes / 2 + 1][6],
+                                        bool inc_l4 = false, bool inc_l5 = false) {
+  constexpr int N16 = 16, M16 = 8, Q16 = 4;
+  constexpr double kInv16 = 1.0 / 16.0;
+  constexpr double kTwoOver16 = 2.0 / 16.0;
+  const NodeTrig& nt = node_trig();
+  const double k = y[kAf], h = y[kAg], chi = y[kChi], psi = y[kPsi];
+  const double beta = 1.0 / (1.0 + fr.eta);
+  const double c_xx = 1.0 - h * h * beta;
+  const double c_xy = h * k * beta;
+  const double c_yy = 1.0 - k * k * beta;
+  const double na = fr.n * fr.a;
+  const double na2 = na * fr.a;
+  const double hn = na2 * fr.eta;
+  const double inv_hn = 1.0 / hn;
+  const double inv_mu = 1.0 / kMu;
+  const double two_a2_mu = 2.0 * fr.a * fr.a * inv_mu;
+  const double neg_3n_2a = -1.5 * fr.n / fr.a;
+  const double p = fr.a * fr.eta * fr.eta;
+  const double inv_p = 1.0 / p;
+  const double two_inv_na2 = 2.0 / na2;
+  const double eta_na_1peta = fr.eta / (na * (1.0 + fr.eta));
+  const double c_half_inv_hn = 0.5 * fr.c * inv_hn;
+
+  const double suf = dot(b.sun_u, fr.f), sug = dot(b.sun_u, fr.g), suw = dot(b.sun_u, fr.w);
+  const double muf = dot(b.moon_u, fr.f), mug = dot(b.moon_u, fr.g), muw = dot(b.moon_u, fr.w);
+  const double inv_sr = 1.0 / b.sun_r, inv_mr = 1.0 / b.moon_r;
+  const double k_sun = kSunMass * kMu * inv_sr * inv_sr;
+  const double k_moon = kMoonMass * kMu * inv_mr * inv_mr;
+
+  alignas(16) double sf16[6][N16];
+  alignas(16) double sw16[N16];
+
+#ifdef __wasm_simd128__
+  const v128_t v_one = wasm_f64x2_splat(1.0), v_two = wasm_f64x2_splat(2.0), v_three = wasm_f64x2_splat(3.0);
+  const v128_t v_five = wasm_f64x2_splat(5.0), v_half = wasm_f64x2_splat(0.5), v_third = wasm_f64x2_splat(1.0 / 3.0);
+  const v128_t v_k = wasm_f64x2_splat(k), v_h = wasm_f64x2_splat(h);
+  const v128_t v_chi = wasm_f64x2_splat(chi), v_psi = wasm_f64x2_splat(psi);
+  const v128_t v_a = wasm_f64x2_splat(fr.a), v_na2 = wasm_f64x2_splat(na2);
+  const v128_t v_cxx = wasm_f64x2_splat(c_xx), v_cxy = wasm_f64x2_splat(c_xy), v_cyy = wasm_f64x2_splat(c_yy);
+  const v128_t v_inv_hn = wasm_f64x2_splat(inv_hn), v_inv_mu = wasm_f64x2_splat(inv_mu);
+  const v128_t v_two_a2_mu = wasm_f64x2_splat(two_a2_mu), v_neg_3n_2a = wasm_f64x2_splat(neg_3n_2a);
+  const v128_t v_inv_p = wasm_f64x2_splat(inv_p), v_two_inv_na2 = wasm_f64x2_splat(two_inv_na2);
+  const v128_t v_eta_na_1peta = wasm_f64x2_splat(eta_na_1peta), v_c_half_inv_hn = wasm_f64x2_splat(c_half_inv_hn);
+  const v128_t v_suf = wasm_f64x2_splat(suf), v_sug = wasm_f64x2_splat(sug), v_suw = wasm_f64x2_splat(suw);
+  const v128_t v_muf = wasm_f64x2_splat(muf), v_mug = wasm_f64x2_splat(mug), v_muw = wasm_f64x2_splat(muw);
+  const v128_t v_inv_sr = wasm_f64x2_splat(inv_sr), v_inv_mr = wasm_f64x2_splat(inv_mr);
+  const v128_t v_ksun = wasm_f64x2_splat(k_sun), v_kmoon = wasm_f64x2_splat(k_moon);
+
+  for (int j = 0; j < N16; j += 2) {
+    const v128_t cf = wasm_v128_load(nt.c16 + j);
+    const v128_t sf = wasm_v128_load(nt.s16 + j);
+    const v128_t roa = wasm_f64x2_sub(wasm_f64x2_sub(v_one, wasm_f64x2_mul(v_k, cf)), wasm_f64x2_mul(v_h, sf));
+    wasm_v128_store(sw16 + j, roa);
+    const v128_t rn = wasm_f64x2_mul(v_a, roa);
+    const v128_t inv_rn = wasm_f64x2_div(v_one, rn);
+    const v128_t X = wasm_f64x2_mul(v_a, wasm_f64x2_sub(wasm_f64x2_add(wasm_f64x2_mul(v_cxx, cf), wasm_f64x2_mul(v_cxy, sf)), v_k));
+    const v128_t Y = wasm_f64x2_mul(v_a, wasm_f64x2_sub(wasm_f64x2_add(wasm_f64x2_mul(v_cxy, cf), wasm_f64x2_mul(v_cyy, sf)), v_h));
+    const v128_t xu = wasm_f64x2_mul(X, inv_rn), yu = wasm_f64x2_mul(Y, inv_rn);
+    const v128_t v_scale = wasm_f64x2_mul(v_na2, inv_rn);
+    const v128_t Xd = wasm_f64x2_mul(v_scale, wasm_f64x2_sub(wasm_f64x2_mul(v_cxy, cf), wasm_f64x2_mul(v_cxx, sf)));
+    const v128_t Yd = wasm_f64x2_mul(v_scale, wasm_f64x2_sub(wasm_f64x2_mul(v_cyy, cf), wasm_f64x2_mul(v_cxy, sf)));
+
+    // Sun l = 2, 3 (+ optional l = 4 on high MEO / GEO)
+    const v128_t us = wasm_f64x2_add(wasm_f64x2_mul(xu, v_suf), wasm_f64x2_mul(yu, v_sug));
+    const v128_t xs1 = wasm_f64x2_mul(rn, v_inv_sr), xs2 = wasm_f64x2_mul(xs1, xs1);
+    const v128_t p2s = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(v_three, wasm_f64x2_mul(us, us)), v_one), v_half);
+    const v128_t dp2s = wasm_f64x2_mul(v_three, us);
+    const v128_t p3s = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_mul(v_five, us), p2s), wasm_f64x2_mul(v_two, us)), v_third);
+    const v128_t dp3s = wasm_f64x2_add(v_one, wasm_f64x2_mul(v_five, p2s));
+    v128_t ars = wasm_f64x2_add(wasm_f64x2_mul(xs1, wasm_f64x2_sub(wasm_f64x2_mul(v_two, p2s), wasm_f64x2_mul(us, dp2s))),
+                                wasm_f64x2_mul(xs2, wasm_f64x2_sub(wasm_f64x2_mul(v_three, p3s), wasm_f64x2_mul(us, dp3s))));
+    v128_t ass = wasm_f64x2_add(wasm_f64x2_mul(xs1, dp2s), wasm_f64x2_mul(xs2, dp3s));
+    if (inc_l5) {
+      const v128_t xs3 = wasm_f64x2_mul(xs2, xs1);
+      const v128_t p4s = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(7.0), wasm_f64x2_mul(us, p3s)),
+                                                       wasm_f64x2_mul(v_three, p2s)),
+                                        wasm_f64x2_splat(0.25));
+      const v128_t dp4s = wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(7.0), p3s), dp2s);
+      ars = wasm_f64x2_add(ars, wasm_f64x2_mul(xs3, wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(4.0), p4s),
+                                                                   wasm_f64x2_mul(us, dp4s))));
+      ass = wasm_f64x2_add(ass, wasm_f64x2_mul(xs3, dp4s));
+    }
+
+    // Moon l = 2, 3 (+ optional l = 4..6 on MEO / GEO)
+    const v128_t um = wasm_f64x2_add(wasm_f64x2_mul(xu, v_muf), wasm_f64x2_mul(yu, v_mug));
+    const v128_t xm1 = wasm_f64x2_mul(rn, v_inv_mr), xm2 = wasm_f64x2_mul(xm1, xm1);
+    const v128_t p2m = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(v_three, wasm_f64x2_mul(um, um)), v_one), v_half);
+    const v128_t dp2m = wasm_f64x2_mul(v_three, um);
+    const v128_t p3m = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_mul(v_five, um), p2m), wasm_f64x2_mul(v_two, um)), v_third);
+    const v128_t dp3m = wasm_f64x2_add(v_one, wasm_f64x2_mul(v_five, p2m));
+    v128_t arm = wasm_f64x2_add(wasm_f64x2_mul(xm1, wasm_f64x2_sub(wasm_f64x2_mul(v_two, p2m), wasm_f64x2_mul(um, dp2m))),
+                                wasm_f64x2_mul(xm2, wasm_f64x2_sub(wasm_f64x2_mul(v_three, p3m), wasm_f64x2_mul(um, dp3m))));
+    v128_t asm_ = wasm_f64x2_add(wasm_f64x2_mul(xm1, dp2m), wasm_f64x2_mul(xm2, dp3m));
+    if (inc_l4) {
+      const v128_t xm3 = wasm_f64x2_mul(xm2, xm1);
+      const v128_t p4m = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(7.0), wasm_f64x2_mul(um, p3m)),
+                                                       wasm_f64x2_mul(v_three, p2m)),
+                                        wasm_f64x2_splat(0.25));
+      const v128_t dp4m = wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(7.0), p3m), dp2m);
+      arm = wasm_f64x2_add(arm, wasm_f64x2_mul(xm3, wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(4.0), p4m),
+                                                                   wasm_f64x2_mul(um, dp4m))));
+      asm_ = wasm_f64x2_add(asm_, wasm_f64x2_mul(xm3, dp4m));
+      if (inc_l5) {
+        const v128_t xm4 = wasm_f64x2_mul(xm2, xm2);
+        const v128_t p5m = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(9.0), wasm_f64x2_mul(um, p4m)),
+                                                         wasm_f64x2_mul(wasm_f64x2_splat(4.0), p3m)),
+                                          wasm_f64x2_splat(0.2));
+        const v128_t dp5m = wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(9.0), p4m), dp3m);
+        arm = wasm_f64x2_add(arm, wasm_f64x2_mul(xm4, wasm_f64x2_sub(wasm_f64x2_mul(v_five, p5m),
+                                                                     wasm_f64x2_mul(um, dp5m))));
+        asm_ = wasm_f64x2_add(asm_, wasm_f64x2_mul(xm4, dp5m));
+        const v128_t xm5 = wasm_f64x2_mul(xm4, xm1);
+        const v128_t p6m = wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(11.0), wasm_f64x2_mul(um, p5m)),
+                                                         wasm_f64x2_mul(v_five, p4m)),
+                                          wasm_f64x2_splat(1.0 / 6.0));
+        const v128_t dp6m = wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(11.0), p5m), dp4m);
+        arm = wasm_f64x2_add(arm, wasm_f64x2_mul(xm5, wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(6.0), p6m),
+                                                                     wasm_f64x2_mul(um, dp6m))));
+        asm_ = wasm_f64x2_add(asm_, wasm_f64x2_mul(xm5, dp6m));
+      }
+    }
+
+    const v128_t k_ar = wasm_f64x2_add(wasm_f64x2_mul(v_ksun, ars), wasm_f64x2_mul(v_kmoon, arm));
+    const v128_t k_as_s = wasm_f64x2_mul(v_ksun, ass), k_as_m = wasm_f64x2_mul(v_kmoon, asm_);
+    const v128_t df = wasm_f64x2_add(wasm_f64x2_mul(k_ar, xu), wasm_f64x2_add(wasm_f64x2_mul(k_as_s, v_suf), wasm_f64x2_mul(k_as_m, v_muf)));
+    const v128_t dg = wasm_f64x2_add(wasm_f64x2_mul(k_ar, yu), wasm_f64x2_add(wasm_f64x2_mul(k_as_s, v_sug), wasm_f64x2_mul(k_as_m, v_mug)));
+    const v128_t W = wasm_f64x2_add(wasm_f64x2_mul(k_as_s, v_suw), wasm_f64x2_mul(k_as_m, v_muw));
+
+    const v128_t R = wasm_f64x2_add(wasm_f64x2_mul(df, xu), wasm_f64x2_mul(dg, yu));
+    const v128_t S = wasm_f64x2_sub(wasm_f64x2_mul(dg, xu), wasm_f64x2_mul(df, yu));
+    const v128_t vd = wasm_f64x2_add(wasm_f64x2_mul(Xd, df), wasm_f64x2_mul(Yd, dg));
+    const v128_t adot = wasm_f64x2_mul(v_two_a2_mu, vd);
+    const v128_t rd = wasm_f64x2_add(wasm_f64x2_mul(X, df), wasm_f64x2_mul(Y, dg));
+    const v128_t rv = wasm_f64x2_add(wasm_f64x2_mul(X, Xd), wasm_f64x2_mul(Y, Yd));
+    const v128_t two_vd = wasm_f64x2_mul(v_two, vd);
+    const v128_t edot_f = wasm_f64x2_mul(v_inv_mu, wasm_f64x2_sub(wasm_f64x2_sub(wasm_f64x2_mul(two_vd, X), wasm_f64x2_mul(rd, Xd)), wasm_f64x2_mul(rv, df)));
+    const v128_t edot_g = wasm_f64x2_mul(v_inv_mu, wasm_f64x2_sub(wasm_f64x2_sub(wasm_f64x2_mul(two_vd, Y), wasm_f64x2_mul(rd, Yd)), wasm_f64x2_mul(rv, dg)));
+    const v128_t c_W = wasm_f64x2_mul(v_c_half_inv_hn, W);
+    const v128_t omega_rot = wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_mul(v_chi, X), wasm_f64x2_mul(v_psi, Y)), W), v_inv_hn);
+    const v128_t er = wasm_f64x2_add(wasm_f64x2_mul(v_k, xu), wasm_f64x2_mul(v_h, yu));
+    const v128_t es = wasm_f64x2_sub(wasm_f64x2_mul(v_h, xu), wasm_f64x2_mul(v_k, yu));
+
+    wasm_v128_store(sf16[kAf] + j, wasm_f64x2_add(edot_f, wasm_f64x2_mul(v_h, omega_rot)));
+    wasm_v128_store(sf16[kAg] + j, wasm_f64x2_sub(edot_g, wasm_f64x2_mul(v_k, omega_rot)));
+    wasm_v128_store(sf16[kChi] + j, wasm_f64x2_mul(c_W, Y));
+    wasm_v128_store(sf16[kPsi] + j, wasm_f64x2_mul(c_W, X));
+    const v128_t lam_t1 = wasm_f64x2_mul(v_two_inv_na2, wasm_f64x2_mul(rn, R));
+    const v128_t lam_t2 = wasm_f64x2_mul(v_eta_na_1peta,
+                                         wasm_f64x2_add(wasm_f64x2_mul(er, R),
+                                                        wasm_f64x2_mul(wasm_f64x2_add(v_one, wasm_f64x2_mul(rn, v_inv_p)),
+                                                                       wasm_f64x2_mul(es, S))));
+    wasm_v128_store(sf16[kLam] + j, wasm_f64x2_sub(wasm_f64x2_neg(wasm_f64x2_add(lam_t1, lam_t2)), omega_rot));
+    wasm_v128_store(sf16[kN] + j, wasm_f64x2_mul(v_neg_3n_2a, adot));
+  }
+#else
+  for (int j = 0; j < N16; ++j) {
+    const double cf = nt.c16[j], sf = nt.s16[j];
+    const double roa = 1.0 - k * cf - h * sf;
+    sw16[j] = roa;
+    const double rn = fr.a * roa, inv_rn = 1.0 / rn;
+    const double X = fr.a * (c_xx * cf + c_xy * sf - k), Y = fr.a * (c_xy * cf + c_yy * sf - h);
+    const double xu = X * inv_rn, yu = Y * inv_rn, v_scale = na2 * inv_rn;
+    const double Xd = v_scale * (c_xy * cf - c_xx * sf), Yd = v_scale * (c_yy * cf - c_xy * sf);
+    const double us = xu * suf + yu * sug, xs1 = rn * inv_sr, xs2 = xs1 * xs1;
+    const double p2s = 0.5 * (3.0 * us * us - 1.0), dp2s = 3.0 * us;
+    const double p3s = (5.0 * us * p2s - 2.0 * us) / 3.0, dp3s = 1.0 + 5.0 * p2s;
+    double ars = xs1 * (2.0 * p2s - us * dp2s) + xs2 * (3.0 * p3s - us * dp3s);
+    double ass = xs1 * dp2s + xs2 * dp3s;
+    if (inc_l5) {
+      const double xs3 = xs2 * xs1;
+      const double p4s = 0.25 * (7.0 * us * p3s - 3.0 * p2s), dp4s = 7.0 * p3s + dp2s;
+      ars += xs3 * (4.0 * p4s - us * dp4s);
+      ass += xs3 * dp4s;
+    }
+    const double um = xu * muf + yu * mug, xm1 = rn * inv_mr, xm2 = xm1 * xm1;
+    const double p2m = 0.5 * (3.0 * um * um - 1.0), dp2m = 3.0 * um;
+    const double p3m = (5.0 * um * p2m - 2.0 * um) / 3.0, dp3m = 1.0 + 5.0 * p2m;
+    double arm = xm1 * (2.0 * p2m - um * dp2m) + xm2 * (3.0 * p3m - um * dp3m);
+    double asm_ = xm1 * dp2m + xm2 * dp3m;
+    if (inc_l4) {
+      const double xm3 = xm2 * xm1;
+      const double p4m = 0.25 * (7.0 * um * p3m - 3.0 * p2m), dp4m = 7.0 * p3m + dp2m;
+      arm += xm3 * (4.0 * p4m - um * dp4m);
+      asm_ += xm3 * dp4m;
+      if (inc_l5) {
+        const double xm4 = xm2 * xm2, xm5 = xm4 * xm1;
+        const double p5m = 0.2 * (9.0 * um * p4m - 4.0 * p3m), dp5m = 9.0 * p4m + dp3m;
+        const double p6m = (11.0 * um * p5m - 5.0 * p4m) * (1.0 / 6.0), dp6m = 11.0 * p5m + dp4m;
+        arm += xm4 * (5.0 * p5m - um * dp5m) + xm5 * (6.0 * p6m - um * dp6m);
+        asm_ += xm4 * dp5m + xm5 * dp6m;
+      }
+    }
+    const double k_ar = k_sun * ars + k_moon * arm, k_as_s = k_sun * ass, k_as_m = k_moon * asm_;
+    const double df = k_ar * xu + k_as_s * suf + k_as_m * muf, dg = k_ar * yu + k_as_s * sug + k_as_m * mug;
+    const double W = k_as_s * suw + k_as_m * muw;
+    const double R = df * xu + dg * yu, S = -df * yu + dg * xu;
+    const double vd = Xd * df + Yd * dg, adot = two_a2_mu * vd;
+    const double rd = X * df + Y * dg, rv = X * Xd + Y * Yd;
+    const double omega_rot = (chi * X - psi * Y) * W * inv_hn;
+    const double er = k * xu + h * yu, es = -k * yu + h * xu;
+    sf16[kAf][j] = inv_mu * (2.0 * vd * X - rd * Xd - rv * df) + h * omega_rot;
+    sf16[kAg][j] = inv_mu * (2.0 * vd * Y - rd * Yd - rv * dg) - k * omega_rot;
+    sf16[kChi][j] = c_half_inv_hn * W * Y;
+    sf16[kPsi][j] = c_half_inv_hn * W * X;
+    sf16[kLam][j] = -two_inv_na2 * rn * R - eta_na_1peta * (er * R + (1.0 + rn * inv_p) * es * S) - omega_rot;
+    sf16[kN][j] = neg_3n_2a * adot;
+  }
+#endif
+
+  const int r_top = inc_l5 ? 7 : (inc_l4 ? 6 : 5);
+  const double inv_n = 1.0 / fr.n;
+  const double scale_ab = kTwoOver16 * inv_n;
+  constexpr double kC1 = 0.92387953251128675613;  // cos(pi / 8)
+  constexpr double kS1 = 0.38268343236508977173;  // sin(pi / 8)
+  constexpr double kC2 = 0.70710678118654752440;  // cos(pi / 4)
+  double A6[6][9]{}, B6[6][9]{};
+  for (int m = 0; m < 6; ++m) {
+    const double* fm = sf16[m];
+    alignas(16) double g[N16];
+#ifdef __wasm_simd128__
+    v128_t m0 = wasm_f64x2_splat(0.0), m1 = wasm_f64x2_splat(0.0);
+    for (int j = 0; j < N16; j += 4) {
+      m0 = wasm_f64x2_add(m0, wasm_f64x2_mul(wasm_v128_load(sw16 + j), wasm_v128_load(fm + j)));
+      m1 = wasm_f64x2_add(m1, wasm_f64x2_mul(wasm_v128_load(sw16 + j + 2), wasm_v128_load(fm + j + 2)));
+    }
+    const v128_t ms = wasm_f64x2_add(m0, m1);
+    const double mean = (wasm_f64x2_extract_lane(ms, 0) + wasm_f64x2_extract_lane(ms, 1)) * kInv16;
+    const v128_t v_mean = wasm_f64x2_splat(mean);
+    for (int j = 0; j < N16; j += 2) {
+      wasm_v128_store(g + j, wasm_f64x2_mul(wasm_f64x2_sub(wasm_v128_load(fm + j), v_mean), wasm_v128_load(sw16 + j)));
+    }
+#else
+    double mean = 0.0;
+    for (int j = 0; j < N16; ++j) mean += sw16[j] * fm[j];
+    mean *= kInv16;
+    for (int j = 0; j < N16; ++j) g[j] = (fm[j] - mean) * sw16[j];
+#endif
+    double gp[M16 + 1], gm[M16];
+    gp[0] = g[0];
+    gp[M16] = g[M16];
+    for (int j = 1; j < M16; ++j) {
+      gp[j] = g[j] + g[N16 - j];
+      gm[j] = g[j] - g[N16 - j];
+    }
+    const double gpe0 = gp[0] + gp[8], gpo0 = gp[0] - gp[8], gp4 = gp[4], gm4 = gm[4];
+    const double gpe1 = gp[1] + gp[7], gpo1 = gp[1] - gp[7], gme1 = gm[1] - gm[7], gmo1 = gm[1] + gm[7];
+    const double gpe2 = gp[2] + gp[6], gpo2 = gp[2] - gp[6], gme2 = gm[2] - gm[6], gmo2 = gm[2] + gm[6];
+    const double gpe3 = gp[3] + gp[5], gpo3 = gp[3] - gp[5], gme3 = gm[3] - gm[5], gmo3 = gm[3] + gm[5];
+
+    const double c2_gpo2 = kC2 * gpo2;
+    const double c2_gmo2 = kC2 * gmo2;
+    const double c2_gpe13 = kC2 * (gpe1 - gpe3);
+    const double c2_gme13 = kC2 * (gme1 + gme3);
+    A6[m][1] = (gpo0 + kC1 * gpo1 + c2_gpo2 + kS1 * gpo3) * scale_ab;
+    B6[m][1] = (kS1 * gmo1 + c2_gmo2 + kC1 * gmo3 + gm4) * scale_ab;
+    A6[m][2] = (gpe0 - gp4 + c2_gpe13) * scale_ab;
+    B6[m][2] = (gme2 + c2_gme13) * scale_ab;
+    A6[m][3] = (gpo0 + kS1 * gpo1 - c2_gpo2 - kC1 * gpo3) * scale_ab;
+    B6[m][3] = (kC1 * gmo1 + c2_gmo2 - kS1 * gmo3 - gm4) * scale_ab;
+    A6[m][4] = (gpe0 + gp4 - gpe2) * scale_ab;
+    B6[m][4] = (gme1 - gme3) * scale_ab;
+    A6[m][5] = (gpo0 - kS1 * gpo1 - c2_gpo2 + kC1 * gpo3) * scale_ab;
+    B6[m][5] = (kC1 * gmo1 - c2_gmo2 - kS1 * gmo3 + gm4) * scale_ab;
+    if (inc_l4 || m == kN) {
+      A6[m][6] = (gpe0 - gp4 - c2_gpe13) * scale_ab;
+      B6[m][6] = (-gme2 + c2_gme13) * scale_ab;
+    }
+    if (inc_l5 || (inc_l4 && m == kN)) {
+      A6[m][7] = (gpo0 - kC1 * gpo1 + c2_gpo2 - kS1 * gpo3) * scale_ab;
+      B6[m][7] = (kS1 * gmo1 - c2_gmo2 + kC1 * gmo3 - gm4) * scale_ab;
+    }
+    if (inc_l5 && m == kN) {
+      A6[kN][8] = 0.5 * (gpe0 + gp4 + gpe2 - gpe1 - gpe3) * scale_ab;
+      B6[kN][8] = 0.0;
+    }
+  }
+  double C[9]{}, S[9]{};
+  for (int r = 1; r <= r_top + 1; ++r) {
+    const double inv_r = kInvLp1[r - 1];
+    C[r] = -B6[kN][r] * inv_r;
+    S[r] = A6[kN][r] * inv_r;
+  }
+  C[0] = 0.5 * (k * C[1] + h * S[1]);
+  A6[kLam][1] += (C[1] - k * C[0] - 0.5 * k * C[2] - 0.5 * h * S[2]) * inv_n;
+  B6[kLam][1] += (S[1] - h * C[0] - 0.5 * k * S[2] + 0.5 * h * C[2]) * inv_n;
+  for (int r = 2; r <= r_top; ++r) {
+    A6[kLam][r] += (C[r] - 0.5 * k * (C[r - 1] + C[r + 1]) + 0.5 * h * (S[r - 1] - S[r + 1])) * inv_n;
+    B6[kLam][r] += (S[r] - 0.5 * k * (S[r - 1] + S[r + 1]) - 0.5 * h * (C[r - 1] - C[r + 1])) * inv_n;
+  }
+  for (int r = 1; r <= r_top; ++r) {
+    for (int m = 0; m < 6; ++m) {
+      AT[r][m] = A6[m][r];
+      BT[r][m] = B6[m][r];
+    }
+  }
+}
+
+inline void tbsp_coefs_transposed(const double* y, const Frame& frm, const Bodies& b, int lo, int hi,
+                                  double AT[kThirdBodyTailNodes / 2 + 1][6],
+                                  double BT[kThirdBodyTailNodes / 2 + 1][6]) {
+  constexpr int M = kThirdBodyTailNodes / 2;
+  double A[6][M + 1], B[6][M + 1];
+  tbsp_coefs(y, frm, b, lo, hi, A, B);
+  for (int r = 1; r <= M; ++r) {
+    for (int m = 0; m < 6; ++m) {
+      AT[r][m] = A[m][r];
+      BT[r][m] = B[m][r];
+    }
+  }
+}
+
+[[gnu::noinline]] inline void third_body_short_period_slow(
+    const double* y, const Bodies* b_opt, double F, int lo, int hi,
+    double* d, double* dd_dlam, double d50_epoch, double t,
+    const double* sF_in, const double* cF_in, uint64_t ctx_id = 0) {
+  constexpr int M = kThirdBodyTailNodes / 2;
+  const double e2 = y[kAf] * y[kAf] + y[kAg] * y[kAg];
+  const bool use_fast16 = t != 0.0 && lo == 2 && hi == kThirdBodyTailDegree && y[kN] > 0.006 && e2 < 4e-4;
+  const bool inc_l4 = y[kN] <= 0.035;
+  const bool inc_l5 = y[kN] <= 0.015;
+  ActiveBracket& ab = active_bracket();
+  if (lo == 2 && hi == kThirdBodyTailDegree && t != 0.0 && ctx_id != 0 && ab.valid && ab.ctx_id == ctx_id &&
+      ab.d50_epoch == d50_epoch) {
+    const double t_min = std::fmin(ab.lo.t, ab.hi.t), t_max = std::fmax(ab.lo.t, ab.hi.t);
+    const double span = ab.hi.t - ab.lo.t;
+    if (t >= t_min && t <= t_max && std::fabs(span) > 1e-6) {
+      const double max_sub = (y[kN] > 0.035 && e2 < 0.01)
+                                 ? 250.0
+                                 : (y[kN] > 0.020 && e2 < 0.01 ? 120.0 : (y[kN] < 0.015 ? 45.0 : 90.0));
+      const int n_sub = std::max(1, static_cast<int>(std::ceil(std::fabs(span) / max_sub)));
+      const double step = span / n_sub;
+      int idx = static_cast<int>(std::floor((t - ab.lo.t) / step));
+      if (idx < 0) idx = 0;
+      if (idx >= n_sub) idx = n_sub - 1;
+      if (ab.sub_idx != idx) {
+        const double ta = ab.lo.t + idx * step;
+        const double tb = idx + 1 == n_sub ? ab.hi.t : ab.lo.t + (idx + 1) * step;
+        if (ab.has_t1 && std::fabs(ab.t1 - ta) < 1e-9) {
+          ab.sun_u0 = ab.sun_u1;
+          ab.sun_r0 = ab.sun_r1;
+          if (use_fast16) {
+            const size_t n_bytes = static_cast<size_t>(inc_l5 ? 7 : (inc_l4 ? 6 : 5)) * 6 * sizeof(double);
+            std::memcpy(ab.AT0[1], ab.AT1[1], n_bytes);
+            std::memcpy(ab.BT0[1], ab.BT1[1], n_bytes);
+          } else {
+            std::memcpy(ab.AT0, ab.AT1, sizeof(ab.AT0));
+            std::memcpy(ab.BT0, ab.BT1, sizeof(ab.BT0));
+          }
+        } else if (idx == 0) {
+          const Bodies ba = bodies_at_ap(d50_epoch + ta / kMinutesPerDay);
+          ab.sun_u0 = ba.sun_u;
+          ab.sun_r0 = ba.sun_r;
+          if (use_fast16) tbsp_coefs_leo16_transposed(ab.lo.y, frame_of_fast(ab.lo.y), ba, ab.AT0, ab.BT0, inc_l4, inc_l5);
+          else tbsp_coefs_transposed(ab.lo.y, frame_of_fast(ab.lo.y), ba, lo, hi, ab.AT0, ab.BT0);
+        } else {
+          double ya[6];
+          hermite(ab.lo, ab.hi, ta, ya);
+          const Bodies ba = bodies_at_ap(d50_epoch + ta / kMinutesPerDay);
+          ab.sun_u0 = ba.sun_u;
+          ab.sun_r0 = ba.sun_r;
+          if (use_fast16) tbsp_coefs_leo16_transposed(ya, frame_of_fast(ya), ba, ab.AT0, ab.BT0, inc_l4, inc_l5);
+          else tbsp_coefs_transposed(ya, frame_of_fast(ya), ba, lo, hi, ab.AT0, ab.BT0);
+        }
+        if (idx + 1 == n_sub) {
+          const Bodies bb = bodies_at_ap(d50_epoch + tb / kMinutesPerDay);
+          ab.sun_u1 = bb.sun_u;
+          ab.sun_r1 = bb.sun_r;
+          if (use_fast16) tbsp_coefs_leo16_transposed(ab.hi.y, frame_of_fast(ab.hi.y), bb, ab.AT1, ab.BT1, inc_l4, inc_l5);
+          else tbsp_coefs_transposed(ab.hi.y, frame_of_fast(ab.hi.y), bb, lo, hi, ab.AT1, ab.BT1);
+        } else {
+          double yb[6];
+          hermite(ab.lo, ab.hi, tb, yb);
+          const Bodies bb = bodies_at_ap(d50_epoch + tb / kMinutesPerDay);
+          ab.sun_u1 = bb.sun_u;
+          ab.sun_r1 = bb.sun_r;
+          if (use_fast16) tbsp_coefs_leo16_transposed(yb, frame_of_fast(yb), bb, ab.AT1, ab.BT1, inc_l4, inc_l5);
+          else tbsp_coefs_transposed(yb, frame_of_fast(yb), bb, lo, hi, ab.AT1, ab.BT1);
+        }
+        ab.dsun_u = ab.sun_u1 - ab.sun_u0;
+        ab.dsun_r = ab.sun_r1 - ab.sun_r0;
+        const int r_top = use_fast16 ? (inc_l5 ? 7 : (inc_l4 ? 6 : 5)) : M;
+        for (int r = 1; r <= r_top; ++r) {
+          for (int m = 0; m < 6; ++m) {
+            ab.AT0_f[r][m] = static_cast<float>(ab.AT0[r][m]);
+            ab.BT0_f[r][m] = static_cast<float>(ab.BT0[r][m]);
+            ab.dAT_f[r][m] = static_cast<float>(ab.AT1[r][m] - ab.AT0[r][m]);
+            ab.dBT_f[r][m] = static_cast<float>(ab.BT1[r][m] - ab.BT0[r][m]);
+          }
+          ab.AT0_f[r][6] = ab.AT0_f[r][7] = 0.0f;
+          ab.BT0_f[r][6] = ab.BT0_f[r][7] = 0.0f;
+          ab.dAT_f[r][6] = ab.dAT_f[r][7] = 0.0f;
+          ab.dBT_f[r][6] = ab.dBT_f[r][7] = 0.0f;
+        }
+        ab.t0 = ta;
+        ab.t1 = tb;
+        ab.sub_t_lo = std::fmin(ta, tb);
+        ab.sub_t_hi = std::fmax(ta, tb);
+        ab.inv_dt = 1.0 / (tb - ta);
+        ab.has_t1 = true;
+        ab.sub_idx = idx;
+      }
+      const double u = (t - ab.t0) * ab.inv_dt;
+      if (dd_dlam == nullptr) {
+        eval_tbsp_lerp_f32(y, F, static_cast<float>(u), ab.AT0_f, ab.BT0_f, ab.dAT_f, ab.dBT_f, d, sF_in, cF_in);
+      } else {
+        eval_tbsp_lerp(y, F, 1.0 - u, u, ab.AT0, ab.BT0, ab.AT1, ab.BT1, d, dd_dlam, sF_in, cF_in);
+      }
+      return;
+    }
+  }
+  const Bodies b_local = b_opt != nullptr ? *b_opt : bodies_at_ap(d50_epoch + t / kMinutesPerDay);
+  if (use_fast16) {
+    alignas(16) double AT[M + 1][6]{}, BT[M + 1][6]{};
+    tbsp_coefs_leo16_transposed(y, frame_of_fast(y), b_local, AT, BT, inc_l4, inc_l5);
+    eval_tbsp_lerp(y, F, 1.0, 0.0, AT, BT, AT, BT, d, dd_dlam, sF_in, cF_in);
+    return;
+  }
+  double A[6][M + 1], B[6][M + 1];
+  tbsp_coefs(y, frame_of_fast(y), b_local, lo, hi, A, B);
+  eval_tbsp(y, F, A, B, d, dd_dlam, sF_in, cF_in);
+}
+
+[[gnu::always_inline]] inline void third_body_short_period(
+    const double* y, const Bodies* b_opt, double F, int lo, int hi,
+    double* d, double* dd_dlam = nullptr, double d50_epoch = -1e30, double t = 0.0,
+    const double* sF_in = nullptr, const double* cF_in = nullptr, uint64_t ctx_id = 0) {
+  ActiveBracket& ab = active_bracket();
+  if (__builtin_expect(dd_dlam == nullptr && t != 0.0 && lo == 2 && hi == kThirdBodyTailDegree &&
+                           ctx_id != 0 && ab.valid && ab.has_t1 && ab.ctx_id == ctx_id && ab.d50_epoch == d50_epoch &&
+                           t >= ab.sub_t_lo && t <= ab.sub_t_hi,
+                       1)) {
+    const double u = (t - ab.t0) * ab.inv_dt;
+    eval_tbsp_lerp_f32(y, F, static_cast<float>(u), ab.AT0_f, ab.BT0_f, ab.dAT_f, ab.dBT_f, d, sF_in, cF_in);
+    return;
+  }
+  third_body_short_period_slow(y, b_opt, F, lo, hi, d, dd_dlam, d50_epoch, t, sF_in, cF_in, ctx_id);
+}
+
+inline void third_body_short_period(const double* y, const Frame&, const Bodies& b, double F, int lo, int hi, double* d) {
+  third_body_short_period_slow(y, &b, F, lo, hi, d, nullptr, -1e30, 0.0, nullptr, nullptr);
 }
 
 /// The eccentric longitude F of an equinoctial state: lambda = F + ag cos F - af sin F (Halley iteration).
@@ -962,7 +3136,8 @@ inline void drag_part(const RateContext& ctx, double t, const double* y, const F
                  out, true, 0.5);
     }
   } else {
-    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out);
+    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out,
+               false, 1.0, ctx.ap_third_body != 0);
   }
 }
 
@@ -1033,27 +3208,450 @@ inline bool drag_orbit_check(const RateContext& ctx, double t, const double* y, 
   return true;
 }
 
+struct EpochAux {
+  uint64_t ctx_id = 0;
+  double d50_epoch = -1e30;
+  double n0 = 0.0;
+  Bodies b{};
+  double tb[6]{};
+  double drag_unit[6]{};
+  double srp_unit[6]{};
+  double six_tail[6]{};
+  double tail_eq[6]{};
+  double lam_lp = 0.0;
+  double F_lp = 0.0;
+  double s0_lp = 0.0;
+  double c0_lp = 1.0;
+  bool valid = false;
+  bool has_tb = false;
+  bool has_drag = false;
+  bool has_srp = false;
+  bool srp_sunlit_safe = false;
+  bool has_tail = false;
+  bool has_tail_eq = false;
+  bool has_F_lp = false;
+  bool has_sc0_lp = false;
+};
+inline thread_local EpochAux g_epoch_aux{};
+inline EpochAux& epoch_aux() { return g_epoch_aux; }
+
+struct CovStageAux {
+  uint32_t gen = 0;
+  double t = -1e30;
+  Bodies b{};
+  double tb[6]{};
+  double drag_unit[6]{};
+  double srp_unit[6]{};
+  double six_tail[6]{};
+  double tail_eq[6]{};
+  double lam_lp = 0.0;
+  double F_lp = 0.0;
+  double sF_lp = 0.0;
+  double cF_lp = 1.0;
+  double n_lp = 0.0;
+  double inv_n_lp = 0.0;
+  double a_lp = 0.0;
+  double s0_lp = 0.0;
+  double c0_lp = 1.0;
+  bool has_tb = false;
+  bool has_drag = false;
+  bool has_srp = false;
+  bool srp_sunlit_safe = false;
+  bool has_tail = false;
+  bool has_tail_eq = false;
+  bool has_F_lp = false;
+  bool has_sc0_lp = false;
+};
+struct CovStepAux {
+  CovStageAux st[3];
+};
+struct CovGridCache {
+  static constexpr int kMaxCovSteps = 420;
+  uint32_t gen = 1;
+  uint64_t anchor_id = 0;
+  double d50_epoch = -1e30;
+  double n0 = 0.0;
+  double epoch_f0 = 0.0;
+  double epoch_bterm = -1.0;
+  double epoch_agom = -1.0;
+  double epoch_tb[6]{};
+  double epoch_drag_unit[6]{};
+  double epoch_srp_unit[6]{};
+  double epoch_six_tail[6]{};
+  double epoch_tail_eq[6]{};
+  bool has_epoch_tb = false;
+  bool has_epoch_drag = false;
+  bool has_epoch_srp = false;
+  bool epoch_srp_safe = false;
+  bool has_epoch_tail_eq = false;
+  double sigma_df_drag[18][6]{};
+  double sigma_df_srp[18][6]{};
+  double sigma_dsix_tail[18][6]{};
+  double sigma_dtail_eq[18][6]{};
+  uint64_t sigma_aux_ctx_id[18]{};
+  double sigma_aux_d50[18]{};
+  double sigma_aux_n0[18]{};
+  double sigma_zonal_eq[18][6]{};
+  uint32_t sigma_zonal_gen[18]{};
+  int32_t sigma_zonal_idx[18]{};
+  int8_t sigma_zonal_di[18]{};
+  CovStepAux steps[2][kMaxCovSteps]{};
+};
+inline thread_local CovGridCache* g_cov_grid_cache_ptr = nullptr;
+inline CovGridCache& cov_grid_cache() {
+  if (__builtin_expect(!g_cov_grid_cache_ptr, 0)) g_cov_grid_cache_ptr = new CovGridCache{};
+  return *g_cov_grid_cache_ptr;
+}
+
+struct Rk3StageOverride {
+  const double* tb = nullptr;
+  const double* drag = nullptr;
+  const double* tail_eq = nullptr;
+  const double* srp = nullptr;
+  double* tb_out = nullptr;
+  double* drag_out = nullptr;
+  double* tail_eq_out = nullptr;
+  double* six_tail_out = nullptr;
+  double* srp_out = nullptr;
+};
+
+inline void zonal_six_ap(double e, double n, double s, double c, double eta, double p, double sw1, double cw1, double inv_cp1, double* six) {
+  const double cw1_2 = cw1 * cw1;
+  const double cw2 = cw1_2 - sw1 * sw1, sw2 = 2.0 * sw1 * cw1;
+  const double cw3 = cw2 * cw1 - sw2 * sw1, sw3 = sw2 * cw1 + cw2 * sw1;
+  const double cw4 = cw3 * cw1 - sw3 * sw1;
+  const double sinc2 = 2.0 * s * c;
+  const double e2 = e * e, e4 = e2 * e2, em1p1 = (e - 1.0) * (e + 1.0);
+  const double s2 = s * s, s4 = s2 * s2;
+  const double c2 = c * c, c3 = c2 * c, c4 = c2 * c2, c5 = c4 * c;
+  const double ep_den = (-e2) + eta + 1.0;
+#ifdef __wasm_simd128__
+  const v128_t vinv = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(p, em1p1 * ep_den));
+  const double inv_p = wasm_f64x2_extract_lane(vinv, 0);
+  const double inv_prod = wasm_f64x2_extract_lane(vinv, 1);
+  const double inv_e2m1 = inv_prod * ep_den;
+  const double inv_ep = inv_prod * em1p1;
+#else
+  const double inv_p = 1.0 / p;
+  const double inv_e2m1 = 1.0 / em1p1;
+  const double inv_ep = 1.0 / ep_den;
+#endif
+  const double inv_p2 = inv_p * inv_p, inv_p3 = inv_p2 * inv_p, inv_p4 = inv_p2 * inv_p2, inv_p5 = inv_p4 * inv_p;
+  const double j5_poly1 = 126.0 * c4 * e2 * cw1 - 63.0 * c4 * e2 * cw3 + 168.0 * c4 * cw1 - 84.0 * c2 * e2 * cw1 +
+                          70.0 * c2 * e2 * cw3 - 112.0 * c2 * cw1 + 6.0 * e2 * cw1 - 7.0 * e2 * cw3 + 8.0 * cw1;
+  const double edot =
+      (kJ2 * kJ2) * ((-3.0 / 32.0) * e * n * s2 * em1p1 * (15.0 * s2 - 14.0) * sw2 * inv_p4)
+      + kJ3 * ((-3.0 / 8.0) * n * s * em1p1 * (5.0 * s2 - 4.0) * cw1 * inv_p3)
+      + kJ4 * ((-15.0 / 32.0) * e * n * s2 * em1p1 * (7.0 * s2 - 6.0) * sw2 * inv_p4)
+      + kJ5 * ((-15.0 / 256.0) * n * s * em1p1 * j5_poly1 * inv_p5);
+  const double idot =
+      (kJ2 * kJ2) * ((3.0 / 64.0) * e2 * n * (14.0 - 15.0 * s2) * sinc2 * sw2 * inv_p4)
+      + kJ3 * ((3.0 / 8.0) * c * e * n * (4.0 - 5.0 * s2) * cw1 * inv_p3)
+      + kJ4 * ((15.0 / 64.0) * e2 * n * (6.0 - 7.0 * s2) * sinc2 * sw2 * inv_p4)
+      + kJ5 * ((-15.0 / 256.0) * c * e * n * j5_poly1 * inv_p5);
+  const double evdot =
+      kJ2 * ((3.0 / 4.0) * e * n * ((-2.0) * c - 5.0 * s2 + 4.0) * inv_p2)
+      + (kJ2 * kJ2) * ((3.0 / 128.0) * e * n * (240.0 * c * e2 * s2 * cw1_2 - 140.0 * c * e2 * s2 - 112.0 * c * e2 * cw1_2 + 40.0 * c * e2 + 144.0 * c * eta * s2 - 96.0 * c * eta + 160.0 * c * s2 - 144.0 * c + 540.0 * e2 * s4 * cw1_2 - 315.0 * e2 * s4 - 632.0 * e2 * s2 * cw1_2 + 280.0 * e2 * s2 + 112.0 * e2 * cw1_2 + 360.0 * eta * s4 - 528.0 * eta * s2 + 192.0 * eta + 120.0 * s4 * cw1_2 + 370.0 * s4 - 112.0 * s2 * cw1_2 - 768.0 * s2 + 384.0) * inv_p4)
+      + kJ3 * ((3.0 / 8.0) * n * s * (5.0 * c3 * e2 - 10.0 * c2 * e2 - 30.0 * c * e2 * s2 + 15.0 * c * e2 - 5.0 * c * s2 + 4.0 * c - 30.0 * e2 * s2 + 26.0 * e2 - 5.0 * s2 + 4.0) * sw1 * inv_p3 * inv_cp1)
+      + kJ4 * ((15.0 / 128.0) * e * n * (56.0 * c * e2 * s2 * cw2 - 84.0 * c * e2 * s2 - 24.0 * c * e2 * cw2 + 48.0 * c * e2 - 56.0 * c * s2 + 32.0 * c + 126.0 * e2 * s4 * cw2 - 189.0 * e2 * s4 - 140.0 * e2 * s2 * cw2 + 252.0 * e2 * s2 + 24.0 * e2 * cw2 - 72.0 * e2 + 28.0 * s4 * cw2 - 196.0 * s4 - 24.0 * s2 * cw2 + 248.0 * s2 - 64.0) * inv_p4)
+      + kJ5 * ((5.0 / 256.0) * n * s * ((-2646.0) * c5 * e4 * sw1 + 441.0 * c5 * e4 * sw3 - 5670.0 * c5 * e2 * sw1 + 189.0 * c5 * e2 * sw3 - 504.0 * c5 * sw1 - 2268.0 * c4 * e4 * sw1 + 378.0 * c4 * e4 * sw3 - 5166.0 * c4 * e2 * sw1 + 189.0 * c4 * e2 * sw3 - 504.0 * c4 * sw1 + 1512.0 * c3 * e4 * s2 * sw1 - 252.0 * c3 * e4 * s2 * sw3 + 1764.0 * c3 * e4 * sw1 - 490.0 * c3 * e4 * sw3 + 2016.0 * c3 * e2 * s2 * sw1 + 3780.0 * c3 * e2 * sw1 - 210.0 * c3 * e2 * sw3 + 336.0 * c3 * sw1 + 1512.0 * c2 * e4 * sw1 - 420.0 * c2 * e4 * sw3 + 3444.0 * c2 * e2 * sw1 - 210.0 * c2 * e2 * sw3 + 336.0 * c2 * sw1 - 504.0 * c * e4 * s2 * sw1 + 140.0 * c * e4 * s2 * sw3 - 126.0 * c * e4 * sw1 + 49.0 * c * e4 * sw3 - 672.0 * c * e2 * s2 * sw1 - 270.0 * c * e2 * sw1 + 21.0 * c * e2 * sw3 - 24.0 * c * sw1 - 108.0 * e4 * sw1 + 42.0 * e4 * sw3 - 246.0 * e2 * sw1 + 21.0 * e2 * sw3 - 24.0 * sw1) * inv_p5 * inv_cp1);
+  const double sodot =
+      kJ2 * ((-3.0 / 2.0) * c * n * s * inv_p2)
+      + (kJ2 * kJ2) * ((3.0 / 32.0) * c * n * s * (30.0 * e2 * s2 * cw2 - 5.0 * e2 * s2 - 14.0 * e2 * cw2 - 4.0 * e2 + 36.0 * eta * s2 - 24.0 * eta + 40.0 * s2 - 36.0) * inv_p4)
+      + kJ3 * ((3.0 / 8.0) * c * e * n * (4.0 - 15.0 * s2) * sw1 * inv_p3)
+      + kJ4 * ((15.0 / 32.0) * c * n * s * (14.0 * e2 * s2 * cw2 - 21.0 * e2 * s2 - 6.0 * e2 * cw2 + 12.0 * e2 - 14.0 * s2 + 8.0) * inv_p4)
+      + kJ5 * ((5.0 / 256.0) * c * e * n * ((-378.0) * c4 * e2 * sw1 + 63.0 * c4 * e2 * sw3 - 504.0 * c4 * sw1 + 1512.0 * c2 * e2 * s2 * sw1 - 252.0 * c2 * e2 * s2 * sw3 + 252.0 * c2 * e2 * sw1 - 70.0 * c2 * e2 * sw3 + 2016.0 * c2 * s2 * sw1 + 336.0 * c2 * sw1 - 504.0 * e2 * s2 * sw1 + 140.0 * e2 * s2 * sw3 - 18.0 * e2 * sw1 + 7.0 * e2 * sw3 - 672.0 * s2 * sw1 - 24.0 * sw1) * inv_p5);
+  const double ldot =
+      kJ2 * ((3.0 / 4.0) * n * ((-2.0) * c - 3.0 * eta * s2 + 2.0 * eta - 5.0 * s2 + 4.0) * inv_p2)
+      + (kJ2 * kJ2) * ((3.0 / 1024.0) * n * (960.0 * c * e4 * s2 * cw2 - 160.0 * c * e4 * s2 - 448.0 * c * e4 * cw2 - 128.0 * c * e4 + 1152.0 * c * e2 * eta * s2 - 768.0 * c * e2 * eta - 960.0 * c * e2 * s2 * cw2 + 1440.0 * c * e2 * s2 + 448.0 * c * e2 * cw2 - 1024.0 * c * e2 - 1152.0 * c * eta * s2 + 768.0 * c * eta - 1280.0 * c * s2 + 1152.0 * c + 2256.0 * e4 * eta * s4 * cw2 - 27.0 * e4 * eta * s4 * cw4 - 806.0 * e4 * eta * s4 - 2016.0 * e4 * eta * s2 * cw2 - 80.0 * e4 * eta * s2 + 368.0 * e4 * eta + 2160.0 * e4 * s4 * cw2 - 1512.0 * e4 * s4 - 2528.0 * e4 * s2 * cw2 + 1248.0 * e4 * s2 + 448.0 * e4 * cw2 - 64.0 * e4 + 288.0 * e2 * eta * s4 * cw2 + 1312.0 * e2 * eta * s4 + 448.0 * e2 * eta * s2 * cw2 - 3584.0 * e2 * eta * s2 + 1280.0 * e2 * eta - 1680.0 * e2 * s4 * cw2 + 6104.0 * e2 * s4 + 2080.0 * e2 * s2 * cw2 - 9376.0 * e2 * s2 - 448.0 * e2 * cw2 + 3648.0 * e2 + 480.0 * eta * s4 * cw2 - 6176.0 * eta * s4 - 448.0 * eta * s2 * cw2 + 8704.0 * eta * s2 - 3328.0 * eta - 480.0 * s4 * cw2 - 4592.0 * s4 + 448.0 * s2 * cw2 + 8128.0 * s2 - 3584.0) * inv_p4 * inv_e2m1)
+      + kJ3 * ((-3.0 / 8.0) * e * n * s * (5.0 * c3 * e2 - 5.0 * c3 * eta - 5.0 * c3 - 10.0 * c2 * e2 + 10.0 * c2 * eta + 10.0 * c2 - 20.0 * c * e2 * eta * s2 + 16.0 * c * e2 * eta - 50.0 * c * e2 * s2 + 31.0 * c * e2 + 55.0 * c * eta * s2 - 35.0 * c * eta + 50.0 * c * s2 - 31.0 * c - 20.0 * e2 * eta * s2 + 16.0 * e2 * eta - 50.0 * e2 * s2 + 42.0 * e2 + 55.0 * eta * s2 - 46.0 * eta + 50.0 * s2 - 42.0) * sw1 * inv_p3 * inv_cp1 * inv_ep)
+      + kJ4 * ((15.0 / 128.0) * n * (56.0 * c * e2 * s2 * cw2 - 84.0 * c * e2 * s2 - 24.0 * c * e2 * cw2 + 48.0 * c * e2 - 56.0 * c * s2 + 32.0 * c + 70.0 * e2 * eta * s4 * cw2 - 105.0 * e2 * eta * s4 - 60.0 * e2 * eta * s2 * cw2 + 120.0 * e2 * eta * s2 - 24.0 * e2 * eta + 126.0 * e2 * s4 * cw2 - 189.0 * e2 * s4 - 140.0 * e2 * s2 * cw2 + 252.0 * e2 * s2 + 24.0 * e2 * cw2 - 72.0 * e2 - 28.0 * eta * s4 * cw2 + 24.0 * eta * s2 * cw2 + 28.0 * s4 * cw2 - 196.0 * s4 - 24.0 * s2 * cw2 + 248.0 * s2 - 64.0) * inv_p4)
+      + kJ5 * ((5.0 / 256.0) * e * n * s * (2268.0 * c5 * e4 * eta * sw1 - 378.0 * c5 * e4 * eta * sw3 + 4914.0 * c5 * e4 * sw1 - 819.0 * c5 * e4 * sw3 - 4032.0 * c5 * e2 * eta * sw1 + 1008.0 * c5 * e2 * eta * sw3 + 1638.0 * c5 * e2 * sw1 + 819.0 * c5 * e2 * sw3 - 7056.0 * c5 * eta * sw1 - 6552.0 * c5 * sw1 + 2268.0 * c4 * e4 * eta * sw1 - 378.0 * c4 * e4 * eta * sw3 + 4536.0 * c4 * e4 * sw1 - 756.0 * c4 * e4 * sw3 - 3654.0 * c4 * e2 * eta * sw1 + 945.0 * c4 * e2 * eta * sw3 + 1512.0 * c4 * e2 * sw1 + 756.0 * c4 * e2 * sw3 - 6552.0 * c4 * eta * sw1 - 6048.0 * c4 * sw1 - 1512.0 * c3 * e4 * eta * sw1 + 420.0 * c3 * e4 * eta * sw3 - 1512.0 * c3 * e4 * s2 * sw1 + 252.0 * c3 * e4 * s2 * sw3 - 3276.0 * c3 * e4 * sw1 + 910.0 * c3 * e4 * sw3 + 1512.0 * c3 * e2 * eta * s2 * sw1 - 252.0 * c3 * e2 * eta * s2 * sw3 + 2688.0 * c3 * e2 * eta * sw1 - 1120.0 * c3 * e2 * eta * sw3 - 504.0 * c3 * e2 * s2 * sw1 - 252.0 * c3 * e2 * s2 * sw3 - 1092.0 * c3 * e2 * sw1 - 910.0 * c3 * e2 * sw3 + 2016.0 * c3 * eta * s2 * sw1 + 4704.0 * c3 * eta * sw1 + 2016.0 * c3 * s2 * sw1 + 4368.0 * c3 * sw1 - 1512.0 * c2 * e4 * eta * sw1 + 420.0 * c2 * e4 * eta * sw3 - 3024.0 * c2 * e4 * sw1 + 840.0 * c2 * e4 * sw3 + 2436.0 * c2 * e2 * eta * sw1 - 1050.0 * c2 * e2 * eta * sw3 - 1008.0 * c2 * e2 * sw1 - 840.0 * c2 * e2 * sw3 + 4368.0 * c2 * eta * sw1 + 4032.0 * c2 * sw1 + 108.0 * c * e4 * eta * sw1 - 42.0 * c * e4 * eta * sw3 + 504.0 * c * e4 * s2 * sw1 - 140.0 * c * e4 * s2 * sw3 + 234.0 * c * e4 * sw1 - 91.0 * c * e4 * sw3 - 504.0 * c * e2 * eta * s2 * sw1 + 140.0 * c * e2 * eta * s2 * sw3 - 192.0 * c * e2 * eta * sw1 + 112.0 * c * e2 * eta * sw3 + 168.0 * c * e2 * s2 * sw1 + 140.0 * c * e2 * s2 * sw3 + 78.0 * c * e2 * sw1 + 91.0 * c * e2 * sw3 - 672.0 * c * eta * s2 * sw1 - 336.0 * c * eta * sw1 - 672.0 * c * s2 * sw1 - 312.0 * c * sw1 + 108.0 * e4 * eta * sw1 - 42.0 * e4 * eta * sw3 + 216.0 * e4 * sw1 - 84.0 * e4 * sw3 - 174.0 * e2 * eta * sw1 + 105.0 * e2 * eta * sw3 + 72.0 * e2 * sw1 + 84.0 * e2 * sw3 - 312.0 * eta * sw1 - 288.0 * sw1) * inv_p5 * inv_cp1 * inv_ep);
+  six[0] = 0.0;
+  six[1] = edot;
+  six[2] = idot;
+  six[3] = evdot;
+  six[4] = sodot;
+  six[5] = ldot;
+}
+
+#ifdef __wasm_simd128__
+inline bool zonal_eq_pair_f64x2(const F64x2 vy[6], F64x2 va, F64x2 vzonal_eq[6]) {
+  const F64x2 vk = vy[kAf], vh = vy[kAg], vchi = vy[kChi], vpsi = vy[kPsi], vn = vy[kN];
+  const F64x2 ve2 = vk * vk + vh * vh;
+  const F64x2 vt2 = vchi * vchi + vpsi * vpsi;
+  if (!(ve2.lo() > 1e-24 && ve2.hi() > 1e-24 && ve2.lo() < 0.99 && ve2.hi() < 0.99 &&
+        vt2.lo() > 1e-24 && vt2.hi() > 1e-24))
+    return false;
+  const F64x2 ve = f64x2_sqrt(ve2);
+  const F64x2 vt_inc = f64x2_sqrt(vt2);
+  const F64x2 vom_e2 = 1.0 - ve2;
+  const F64x2 veta = f64x2_sqrt(vom_e2);
+  const F64x2 vc_fr = 1.0 + vt2;
+  const F64x2 vic = F64x2(1.0) / vc_fr;
+  const F64x2 vinv_et = F64x2(1.0) / (ve * vt_inc);
+  const F64x2 vinv_e = vinv_et * vt_inc;
+  const F64x2 vinv_t = vinv_et * ve;
+  const F64x2 vc = (1.0 - vt2) * vic;
+  const F64x2 vs = (2.0 * vt_inc) * vic;
+  const F64x2 vsO = vchi * vinv_t;
+  const F64x2 vcO = vpsi * vinv_t;
+  const F64x2 vcv = vk * vinv_e;
+  const F64x2 vsv = vh * vinv_e;
+  const F64x2 vcw1 = vcv * vcO + vsv * vsO;
+  const F64x2 vsw1 = vsv * vcO - vcv * vsO;
+  const F64x2 vp = va * vom_e2;
+  const F64x2 vinv_cp1 = 0.5 * vc_fr;
+
+  const F64x2 vcw1_2 = vcw1 * vcw1;
+  const F64x2 vcw2 = vcw1_2 - vsw1 * vsw1, vsw2 = 2.0 * vsw1 * vcw1;
+  const F64x2 vcw3 = vcw2 * vcw1 - vsw2 * vsw1, vsw3 = vsw2 * vcw1 + vcw2 * vsw1;
+  const F64x2 vcw4 = vcw3 * vcw1 - vsw3 * vsw1;
+  const F64x2 vsinc2 = 2.0 * vs * vc;
+  const F64x2 ve4 = ve2 * ve2, vem1p1 = -vom_e2;
+  const F64x2 vs2 = vs * vs, vs4 = vs2 * vs2;
+  const F64x2 vc2 = vc * vc, vc3 = vc2 * vc, vc4 = vc2 * vc2, vc5 = vc4 * vc;
+  const F64x2 vep_den = vom_e2 + veta;
+  const F64x2 vinv_p = F64x2(1.0) / vp;
+  const F64x2 vinv_prod = F64x2(1.0) / (vem1p1 * vep_den);
+  const F64x2 vinv_e2m1 = vinv_prod * vep_den;
+  const F64x2 vinv_ep = vinv_prod * vem1p1;
+  const F64x2 vinv_p2 = vinv_p * vinv_p, vinv_p3 = vinv_p2 * vinv_p, vinv_p4 = vinv_p2 * vinv_p2, vinv_p5 = vinv_p4 * vinv_p;
+
+  const F64x2 vj5_poly1 = 126.0 * vc4 * ve2 * vcw1 - 63.0 * vc4 * ve2 * vcw3 + 168.0 * vc4 * vcw1 - 84.0 * vc2 * ve2 * vcw1 +
+                          70.0 * vc2 * ve2 * vcw3 - 112.0 * vc2 * vcw1 + 6.0 * ve2 * vcw1 - 7.0 * ve2 * vcw3 + 8.0 * vcw1;
+  const F64x2 vedot =
+      (kJ2 * kJ2) * ((-3.0 / 32.0) * ve * vn * vs2 * vem1p1 * (15.0 * vs2 - 14.0) * vsw2 * vinv_p4)
+      + kJ3 * ((-3.0 / 8.0) * vn * vs * vem1p1 * (5.0 * vs2 - 4.0) * vcw1 * vinv_p3)
+      + kJ4 * ((-15.0 / 32.0) * ve * vn * vs2 * vem1p1 * (7.0 * vs2 - 6.0) * vsw2 * vinv_p4)
+      + kJ5 * ((-15.0 / 256.0) * vn * vs * vem1p1 * vj5_poly1 * vinv_p5);
+  const F64x2 vidot =
+      (kJ2 * kJ2) * ((3.0 / 64.0) * ve2 * vn * (14.0 - 15.0 * vs2) * vsinc2 * vsw2 * vinv_p4)
+      + kJ3 * ((3.0 / 8.0) * vc * ve * vn * (4.0 - 5.0 * vs2) * vcw1 * vinv_p3)
+      + kJ4 * ((15.0 / 64.0) * ve2 * vn * (6.0 - 7.0 * vs2) * vsinc2 * vsw2 * vinv_p4)
+      + kJ5 * ((-15.0 / 256.0) * vc * ve * vn * vj5_poly1 * vinv_p5);
+  const F64x2 vevdot =
+      kJ2 * ((3.0 / 4.0) * ve * vn * ((-2.0) * vc - 5.0 * vs2 + 4.0) * vinv_p2)
+      + (kJ2 * kJ2) * ((3.0 / 128.0) * ve * vn * (240.0 * vc * ve2 * vs2 * vcw1_2 - 140.0 * vc * ve2 * vs2 - 112.0 * vc * ve2 * vcw1_2 + 40.0 * vc * ve2 + 144.0 * vc * veta * vs2 - 96.0 * vc * veta + 160.0 * vc * vs2 - 144.0 * vc + 540.0 * ve2 * vs4 * vcw1_2 - 315.0 * ve2 * vs4 - 632.0 * ve2 * vs2 * vcw1_2 + 280.0 * ve2 * vs2 + 112.0 * ve2 * vcw1_2 + 360.0 * veta * vs4 - 528.0 * veta * vs2 + 192.0 * veta + 120.0 * vs4 * vcw1_2 + 370.0 * vs4 - 112.0 * vs2 * vcw1_2 - 768.0 * vs2 + 384.0) * vinv_p4)
+      + kJ3 * ((3.0 / 8.0) * vn * vs * (5.0 * vc3 * ve2 - 10.0 * vc2 * ve2 - 30.0 * vc * ve2 * vs2 + 15.0 * vc * ve2 - 5.0 * vc * vs2 + 4.0 * vc - 30.0 * ve2 * vs2 + 26.0 * ve2 - 5.0 * vs2 + 4.0) * vsw1 * vinv_p3 * vinv_cp1)
+      + kJ4 * ((15.0 / 128.0) * ve * vn * (56.0 * vc * ve2 * vs2 * vcw2 - 84.0 * vc * ve2 * vs2 - 24.0 * vc * ve2 * vcw2 + 48.0 * vc * ve2 - 56.0 * vc * vs2 + 32.0 * vc + 126.0 * ve2 * vs4 * vcw2 - 189.0 * ve2 * vs4 - 140.0 * ve2 * vs2 * vcw2 + 252.0 * ve2 * vs2 + 24.0 * ve2 * vcw2 - 72.0 * ve2 + 28.0 * vs4 * vcw2 - 196.0 * vs4 - 24.0 * vs2 * vcw2 + 248.0 * vs2 - 64.0) * vinv_p4)
+      + kJ5 * ((5.0 / 256.0) * vn * vs * ((-2646.0) * vc5 * ve4 * vsw1 + 441.0 * vc5 * ve4 * vsw3 - 5670.0 * vc5 * ve2 * vsw1 + 189.0 * vc5 * ve2 * vsw3 - 504.0 * vc5 * vsw1 - 2268.0 * vc4 * ve4 * vsw1 + 378.0 * vc4 * ve4 * vsw3 - 5166.0 * vc4 * ve2 * vsw1 + 189.0 * vc4 * ve2 * vsw3 - 504.0 * vc4 * vsw1 + 1512.0 * vc3 * ve4 * vs2 * vsw1 - 252.0 * vc3 * ve4 * vs2 * vsw3 + 1764.0 * vc3 * ve4 * vsw1 - 490.0 * vc3 * ve4 * vsw3 + 2016.0 * vc3 * ve2 * vs2 * vsw1 + 3780.0 * vc3 * ve2 * vsw1 - 210.0 * vc3 * ve2 * vsw3 + 336.0 * vc3 * vsw1 + 1512.0 * vc2 * ve4 * vsw1 - 420.0 * vc2 * ve4 * vsw3 + 3444.0 * vc2 * ve2 * vsw1 - 210.0 * vc2 * ve2 * vsw3 + 336.0 * vc2 * vsw1 - 504.0 * vc * ve4 * vs2 * vsw1 + 140.0 * vc * ve4 * vs2 * vsw3 - 126.0 * vc * ve4 * vsw1 + 49.0 * vc * ve4 * vsw3 - 672.0 * vc * ve2 * vs2 * vsw1 - 270.0 * vc * ve2 * vsw1 + 21.0 * vc * ve2 * vsw3 - 24.0 * vc * vsw1 - 108.0 * ve4 * vsw1 + 42.0 * ve4 * vsw3 - 246.0 * ve2 * vsw1 + 21.0 * ve2 * vsw3 - 24.0 * vsw1) * vinv_p5 * vinv_cp1);
+  const F64x2 vsodot =
+      kJ2 * ((-3.0 / 2.0) * vc * vn * vs * vinv_p2)
+      + (kJ2 * kJ2) * ((3.0 / 32.0) * vc * vn * vs * (30.0 * ve2 * vs2 * vcw2 - 5.0 * ve2 * vs2 - 14.0 * ve2 * vcw2 - 4.0 * ve2 + 36.0 * veta * vs2 - 24.0 * veta + 40.0 * vs2 - 36.0) * vinv_p4)
+      + kJ3 * ((3.0 / 8.0) * vc * ve * vn * (4.0 - 15.0 * vs2) * vsw1 * vinv_p3)
+      + kJ4 * ((15.0 / 32.0) * vc * vn * vs * (14.0 * ve2 * vs2 * vcw2 - 21.0 * ve2 * vs2 - 6.0 * ve2 * vcw2 + 12.0 * ve2 - 14.0 * vs2 + 8.0) * vinv_p4)
+      + kJ5 * ((5.0 / 256.0) * vc * ve * vn * ((-378.0) * vc4 * ve2 * vsw1 + 63.0 * vc4 * ve2 * vsw3 - 504.0 * vc4 * vsw1 + 1512.0 * vc2 * ve2 * vs2 * vsw1 - 252.0 * vc2 * ve2 * vs2 * vsw3 + 252.0 * vc2 * ve2 * vsw1 - 70.0 * vc2 * ve2 * vsw3 + 2016.0 * vc2 * vs2 * vsw1 + 336.0 * vc2 * vsw1 - 504.0 * ve2 * vs2 * vsw1 + 140.0 * ve2 * vs2 * vsw3 - 18.0 * ve2 * vsw1 + 7.0 * ve2 * vsw3 - 672.0 * vs2 * vsw1 - 24.0 * vsw1) * vinv_p5);
+  const F64x2 vldot =
+      kJ2 * ((3.0 / 4.0) * vn * ((-2.0) * vc - 3.0 * veta * vs2 + 2.0 * veta - 5.0 * vs2 + 4.0) * vinv_p2)
+      + (kJ2 * kJ2) * ((3.0 / 1024.0) * vn * (960.0 * vc * ve4 * vs2 * vcw2 - 160.0 * vc * ve4 * vs2 - 448.0 * vc * ve4 * vcw2 - 128.0 * vc * ve4 + 1152.0 * vc * ve2 * veta * vs2 - 768.0 * vc * ve2 * veta - 960.0 * vc * ve2 * vs2 * vcw2 + 1440.0 * vc * ve2 * vs2 + 448.0 * vc * ve2 * vcw2 - 1024.0 * vc * ve2 - 1152.0 * vc * veta * vs2 + 768.0 * vc * veta - 1280.0 * vc * vs2 + 1152.0 * vc + 2256.0 * ve4 * veta * vs4 * vcw2 - 27.0 * ve4 * veta * vs4 * vcw4 - 806.0 * ve4 * veta * vs4 - 2016.0 * ve4 * veta * vs2 * vcw2 - 80.0 * ve4 * veta * vs2 + 368.0 * ve4 * veta + 2160.0 * ve4 * vs4 * vcw2 - 1512.0 * ve4 * vs4 - 2528.0 * ve4 * vs2 * vcw2 + 1248.0 * ve4 * vs2 + 448.0 * ve4 * vcw2 - 64.0 * ve4 + 288.0 * ve2 * veta * vs4 * vcw2 + 1312.0 * ve2 * veta * vs4 + 448.0 * ve2 * veta * vs2 * vcw2 - 3584.0 * ve2 * veta * vs2 + 1280.0 * ve2 * veta - 1680.0 * ve2 * vs4 * vcw2 + 6104.0 * ve2 * vs4 + 2080.0 * ve2 * vs2 * vcw2 - 9376.0 * ve2 * vs2 - 448.0 * ve2 * vcw2 + 3648.0 * ve2 + 480.0 * veta * vs4 * vcw2 - 6176.0 * veta * vs4 - 448.0 * veta * vs2 * vcw2 + 8704.0 * veta * vs2 - 3328.0 * veta - 480.0 * vs4 * vcw2 - 4592.0 * vs4 + 448.0 * vs2 * vcw2 + 8128.0 * vs2 - 3584.0) * vinv_p4 * vinv_e2m1)
+      + kJ3 * ((-3.0 / 8.0) * ve * vn * vs * (5.0 * vc3 * ve2 - 5.0 * vc3 * veta - 5.0 * vc3 - 10.0 * vc2 * ve2 + 10.0 * vc2 * veta + 10.0 * vc2 - 20.0 * vc * ve2 * veta * vs2 + 16.0 * vc * ve2 * veta - 50.0 * vc * ve2 * vs2 + 31.0 * vc * ve2 + 55.0 * vc * veta * vs2 - 35.0 * vc * veta + 50.0 * vc * vs2 - 31.0 * vc - 20.0 * ve2 * veta * vs2 + 16.0 * ve2 * veta - 50.0 * ve2 * vs2 + 42.0 * ve2 + 55.0 * veta * vs2 - 46.0 * veta + 50.0 * vs2 - 42.0) * vsw1 * vinv_p3 * vinv_cp1 * vinv_ep)
+      + kJ4 * ((15.0 / 128.0) * vn * (56.0 * vc * ve2 * vs2 * vcw2 - 84.0 * vc * ve2 * vs2 - 24.0 * vc * ve2 * vcw2 + 48.0 * vc * ve2 - 56.0 * vc * vs2 + 32.0 * vc + 70.0 * ve2 * veta * vs4 * vcw2 - 105.0 * ve2 * veta * vs4 - 60.0 * ve2 * veta * vs2 * vcw2 + 120.0 * ve2 * veta * vs2 - 24.0 * ve2 * veta + 126.0 * ve2 * vs4 * vcw2 - 189.0 * ve2 * vs4 - 140.0 * ve2 * vs2 * vcw2 + 252.0 * ve2 * vs2 + 24.0 * ve2 * vcw2 - 72.0 * ve2 - 28.0 * veta * vs4 * vcw2 + 24.0 * veta * vs2 * vcw2 + 28.0 * vs4 * vcw2 - 196.0 * vs4 - 24.0 * vs2 * vcw2 + 248.0 * vs2 - 64.0) * vinv_p4)
+      + kJ5 * ((5.0 / 256.0) * ve * vn * vs * (2268.0 * vc5 * ve4 * veta * vsw1 - 378.0 * vc5 * ve4 * veta * vsw3 + 4914.0 * vc5 * ve4 * vsw1 - 819.0 * vc5 * ve4 * vsw3 - 4032.0 * vc5 * ve2 * veta * vsw1 + 1008.0 * vc5 * ve2 * veta * vsw3 + 1638.0 * vc5 * ve2 * vsw1 + 819.0 * vc5 * ve2 * vsw3 - 7056.0 * vc5 * veta * vsw1 - 6552.0 * vc5 * vsw1 + 2268.0 * vc4 * ve4 * veta * vsw1 - 378.0 * vc4 * ve4 * veta * vsw3 + 4536.0 * vc4 * ve4 * vsw1 - 756.0 * vc4 * ve4 * vsw3 - 3654.0 * vc4 * ve2 * veta * vsw1 + 945.0 * vc4 * ve2 * veta * vsw3 + 1512.0 * vc4 * ve2 * vsw1 + 756.0 * vc4 * ve2 * vsw3 - 6552.0 * vc4 * veta * vsw1 - 6048.0 * vc4 * vsw1 - 1512.0 * vc3 * ve4 * veta * vsw1 + 420.0 * vc3 * ve4 * veta * vsw3 - 1512.0 * vc3 * ve4 * vs2 * vsw1 + 252.0 * vc3 * ve4 * vs2 * vsw3 - 3276.0 * vc3 * ve4 * vsw1 + 910.0 * vc3 * ve4 * vsw3 + 1512.0 * vc3 * ve2 * veta * vs2 * vsw1 - 252.0 * vc3 * ve2 * veta * vs2 * vsw3 + 2688.0 * vc3 * ve2 * veta * vsw1 - 1120.0 * vc3 * ve2 * veta * vsw3 - 504.0 * vc3 * ve2 * vs2 * vsw1 - 252.0 * vc3 * ve2 * vs2 * vsw3 - 1092.0 * vc3 * ve2 * vsw1 - 910.0 * vc3 * ve2 * vsw3 + 2016.0 * vc3 * veta * vs2 * vsw1 + 4704.0 * vc3 * veta * vsw1 + 2016.0 * vc3 * vs2 * vsw1 + 4368.0 * vc3 * vsw1 - 1512.0 * vc2 * ve4 * veta * vsw1 + 420.0 * vc2 * ve4 * veta * vsw3 - 3024.0 * vc2 * ve4 * vsw1 + 840.0 * vc2 * ve4 * vsw3 + 2436.0 * vc2 * ve2 * veta * vsw1 - 1050.0 * vc2 * ve2 * veta * vsw3 - 1008.0 * vc2 * ve2 * vsw1 - 840.0 * vc2 * ve2 * vsw3 + 4368.0 * vc2 * veta * vsw1 + 4032.0 * vc2 * vsw1 + 108.0 * vc * ve4 * veta * vsw1 - 42.0 * vc * ve4 * veta * vsw3 + 504.0 * vc * ve4 * vs2 * vsw1 - 140.0 * vc * ve4 * vs2 * vsw3 + 234.0 * vc * ve4 * vsw1 - 91.0 * vc * ve4 * vsw3 - 504.0 * vc * ve2 * veta * vs2 * vsw1 + 140.0 * vc * ve2 * veta * vs2 * vsw3 - 192.0 * vc * ve2 * veta * vsw1 + 112.0 * vc * ve2 * veta * vsw3 + 168.0 * vc * ve2 * vs2 * vsw1 + 140.0 * vc * ve2 * vs2 * vsw3 + 78.0 * vc * ve2 * vsw1 + 91.0 * vc * ve2 * vsw3 - 672.0 * vc * veta * vs2 * vsw1 - 336.0 * vc * veta * vsw1 - 672.0 * vc * vs2 * vsw1 - 312.0 * vc * vsw1 + 108.0 * ve4 * veta * vsw1 - 42.0 * ve4 * veta * vsw3 + 216.0 * ve4 * vsw1 - 84.0 * ve4 * vsw3 - 174.0 * ve2 * veta * vsw1 + 105.0 * ve2 * veta * vsw3 + 72.0 * ve2 * vsw1 + 84.0 * ve2 * vsw3 - 312.0 * veta * vsw1 - 288.0 * vsw1) * vinv_p5 * vinv_cp1 * vinv_ep);
+
+  vzonal_eq[kAf] = vedot * vcv - vevdot * vsv;
+  vzonal_eq[kAg] = vedot * vsv + vevdot * vcv;
+  vzonal_eq[kChi] = (vidot * vsO + vsodot * vcO) * vinv_cp1;
+  vzonal_eq[kPsi] = (vidot * vcO - vsodot * vsO) * vinv_cp1;
+  vzonal_eq[kLam] = vldot;
+  vzonal_eq[kN] = F64x2(0.0);
+  return true;
+}
+#endif
+
+inline void third_body_six_coefs_ap(double e, double eta, double sinc1, double inv_cp1, double sw1, double cw1, double* coef) {
+  const double e2 = e * e, em1p1 = (e - 1.0) * (e + 1.0);
+#ifdef __wasm_simd128__
+  const v128_t vinv = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(eta, eta + 1.0));
+  const double inv_eta = wasm_f64x2_extract_lane(vinv, 0);
+  const double inv_ep1 = wasm_f64x2_extract_lane(vinv, 1);
+#else
+  const double inv_eta = 1.0 / eta, inv_ep1 = 1.0 / (eta + 1.0);
+#endif
+  const double sc_eta = sinc1 * inv_eta * inv_cp1;
+  coef[0] = (-7.5) * e * eta;
+  coef[1] = (75.0 / 16.0) * eta * (6.0 * e2 + 1.0);
+  coef[2] = (-75.0 / 16.0) * eta * em1p1;
+  coef[3] = (-15.0 / 16.0) * eta * (3.0 * e2 + 4.0);
+  coef[4] = 1.5 * (4.0 * e2 + 1.0) * cw1 * inv_eta;
+  coef[5] = 1.5 * em1p1 * sw1 * inv_eta;
+  coef[6] = (-75.0 / 16.0) * e * (4.0 * e2 + 3.0) * cw1 * inv_eta;
+  coef[7] = (-75.0 / 8.0) * e * em1p1 * sw1 * inv_eta;
+  coef[8] = (75.0 / 16.0) * e * em1p1 * cw1 * inv_eta;
+  coef[9] = (15.0 / 16.0) * e * (3.0 * e2 + 4.0) * cw1 * inv_eta;
+  coef[10] = 6.0 * e * eta;
+  coef[11] = (-1.5) * e * eta;
+  coef[12] = 1.5 * e * (4.0 * e2 + 1.0) * sw1 * sc_eta;
+  coef[13] = (-1.5) * e * em1p1 * cw1 * sc_eta;
+  coef[14] = (-1.5) * e * eta;
+  coef[15] = (-75.0 / 16.0) * eta * (4.0 * e2 + 1.0);
+  coef[16] = (75.0 / 16.0) * eta * (3.0 * e2 - 1.0);
+  coef[17] = (-75.0 / 16.0) * e2 * (4.0 * e2 + 3.0) * sw1 * sc_eta;
+  coef[18] = (75.0 / 8.0) * e2 * em1p1 * cw1 * sc_eta;
+  coef[19] = (75.0 / 16.0) * e2 * em1p1 * sw1 * sc_eta;
+  coef[20] = (15.0 / 16.0) * eta * (9.0 * e2 + 4.0);
+  coef[21] = (15.0 / 16.0) * e2 * (3.0 * e2 + 4.0) * sw1 * sc_eta;
+  coef[22] = 1.5 * (4.0 * e2 + 1.0) * sw1 * inv_eta;
+  coef[23] = (-1.5) * em1p1 * cw1 * inv_eta;
+  coef[24] = (-75.0 / 16.0) * e * (4.0 * e2 + 3.0) * sw1 * inv_eta;
+  coef[25] = (75.0 / 8.0) * e * em1p1 * cw1 * inv_eta;
+  coef[26] = (75.0 / 16.0) * e * em1p1 * sw1 * inv_eta;
+  coef[27] = (15.0 / 16.0) * e * (3.0 * e2 + 4.0) * sw1 * inv_eta;
+  coef[28] = (-3.0) * (2.0 * e2 * eta + 4.0 * e2 + eta + 1.0) * inv_ep1;
+  coef[29] = 1.5 * (e2 * eta + 2.0 * e2 - 2.0 * eta - 2.0) * inv_ep1;
+  coef[30] = 1.5 * (4.0 * e2 + 1.0) * sw1 * sc_eta;
+  coef[31] = (-1.5) * em1p1 * cw1 * sc_eta;
+  coef[32] = 0.5 * (3.0 * e2 * eta + 6.0 * e2 + 4.0 * eta + 4.0) * inv_ep1;
+  coef[33] = (75.0 / 16.0) * e * (4.0 * e2 * eta + 8.0 * e2 + 5.0 * eta + 6.0) * inv_ep1;
+  coef[34] = (-75.0 / 16.0) * e * (3.0 * e2 * eta + 6.0 * e2 - 5.0 * eta - 6.0) * inv_ep1;
+  coef[35] = (-75.0 / 16.0) * e * (4.0 * e2 + 3.0) * sw1 * sc_eta;
+  coef[36] = (75.0 / 8.0) * e * em1p1 * cw1 * sc_eta;
+  coef[37] = (75.0 / 16.0) * e * em1p1 * sw1 * sc_eta;
+  coef[38] = (-15.0 / 16.0) * e * (9.0 * e2 * eta + 18.0 * e2 + 20.0 * eta + 24.0) * inv_ep1;
+  coef[39] = (15.0 / 16.0) * e * (3.0 * e2 + 4.0) * sw1 * sc_eta;
+}
+
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
-inline bool reclass_rates(const RateContext&, double, const double*, double*);
-inline int32_t reclass_output(const RateContext&, double, const double*, double*, double*, const Bodies*);
-inline bool rates(const RateContext& ctx, double t, const double* y, double* out) {
+[[gnu::noinline]] inline bool reclass_rates(const RateContext&, double, const double*, double*);
+[[gnu::noinline]] inline int32_t reclass_output(const RateContext&, double, const double*, double*, double*, const Bodies*);
+inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
+                  int dir_idx = 0, int step_idx = 0, int stage_idx = -1,
+                  const Rk3StageOverride* ov = nullptr) {
   if (state_test(ctx, y) != 0) return false;
-  if (ctx.ap_resonance && ap_resonance_class(ctx, y[kN]) != ctx.resonance)
+  const int cls = ctx.ap_resonance ? ap_resonance_class(ctx, y[kN]) : 0;
+  if (ctx.ap_resonance && cls != ctx.resonance)
     return reclass_rates(ctx, t, y, out);
-  const Frame fr = frame_of(y);
-  const Kepler k = kepler_of(y, fr.a);
-  const double s = std::sin(k.i), c = std::cos(k.i);
-  const double p = fr.a * (1.0 - k.e * k.e);
+  const bool fast_ap = ctx.ap_third_body && (!ctx.long_period || ctx.i0 > 0.02);
+  const Frame fr = fast_ap ? frame_of_fast(y) : frame_of(y);
+
+  CovGridCache& cgc = cov_grid_cache();
+  EpochAux& ea = epoch_aux();
+  const bool ap_ctx = is_ap_ctx(ctx);
+  const bool is_sigma = ap_ctx && (ctx.is_cov_sigma != 0);
+  const int sigma_slot = ctx.is_cov_sigma & 31;
+  const bool exact_orb_match = (ctx.is_cov_sigma & 32) != 0;
+  const bool same_all6 = (ctx.is_cov_sigma & 64) != 0;
+  const bool same_plane = !is_sigma || (ctx.is_cov_sigma & 128) != 0;
+  (void)same_plane;
+  const bool use_epoch_aux = is_sigma && stage_idx == -1 && t == 0.0 && ea.valid &&
+                             ea.ctx_id == ctx.cov_anchor_id && ea.d50_epoch == ctx.d50_epoch &&
+                             std::fabs(ctx.n0 - ea.n0) < 1e-3;
+  const bool record_epoch_aux = ap_ctx && !is_sigma && stage_idx == -1 && t == 0.0;
+  CovStageAux* csa = (ap_ctx && stage_idx >= 0 && step_idx > 0 && step_idx < CovGridCache::kMaxCovSteps)
+                         ? &cgc.steps[dir_idx][step_idx].st[stage_idx]
+                         : nullptr;
+  const bool use_stage_aux = is_sigma && csa != nullptr && cgc.anchor_id == ctx.cov_anchor_id &&
+                             cgc.d50_epoch == ctx.d50_epoch &&
+                             std::fabs(ctx.n0 - cgc.n0) < 1e-3 && csa->gen == cgc.gen && std::fabs(csa->t - t) < 0.5;
+  const bool record_stage_aux = ap_ctx && !is_sigma && csa != nullptr && cgc.anchor_id == ctx.ctx_id;
+  const bool skip_tail = ov != nullptr && ov->tail_eq != nullptr;
+  const bool cache_geo_res = ctx.ap_resonance != 0 && ctx.i0 > 0.02;
+  const bool use_lp_tail_eq = ctx.long_period && ctx.ap_third_body && ctx.i0 > 0.02;
+  const bool aux_slot_valid = sigma_slot >= 1 && sigma_slot < 18 &&
+                              cgc.sigma_aux_ctx_id[sigma_slot] == ctx.ctx_id;
+  const bool cached_sigma_tail =
+      skip_tail ||
+      (use_stage_aux && aux_slot_valid && sigma_slot >= 1 && sigma_slot < 18 &&
+       !(stage_idx == 2 && (step_idx & 3) == 0) &&
+       (use_lp_tail_eq ? csa->has_tail_eq : (csa->has_tail && ctx.i0 > 0.02)));
+
+  Kepler k{};
+  AngleTrig ag{};
+  double s = 0.0, c = 1.0;
+  const double t2_ap = y[kChi] * y[kChi] + y[kPsi] * y[kPsi];
+  if (fast_ap && fr.e2 > 1e-24 && t2_ap > 1e-24 && fr.e2 < 1.0) {
+    k.a = fr.a;
+#ifdef __wasm_simd128__
+    const v128_t vet = wasm_f64x2_sqrt(wasm_f64x2_make(fr.e2, t2_ap));
+    const v128_t viv = wasm_f64x2_div(wasm_f64x2_splat(1.0), vet);
+    k.e = wasm_f64x2_extract_lane(vet, 0);
+    const double t_inc = wasm_f64x2_extract_lane(vet, 1);
+    const double inv_e = wasm_f64x2_extract_lane(viv, 0);
+    const double inv_t = wasm_f64x2_extract_lane(viv, 1);
+#else
+    k.e = std::sqrt(fr.e2);
+    const double t_inc = std::sqrt(t2_ap);
+    const double inv_t = 1.0 / t_inc;
+    const double inv_e = 1.0 / k.e;
+#endif
+    ag.ci = fr.w.z;
+    ag.si = 2.0 * t_inc * fr.ic;
+    ag.sO = y[kChi] * inv_t;
+    ag.cO = y[kPsi] * inv_t;
+    const double cv = y[kAf] * inv_e, sv = y[kAg] * inv_e;
+    ag.cw = cv * ag.cO + sv * ag.sO;
+    ag.sw = sv * ag.cO - cv * ag.sO;
+    const bool need_tail_angles =
+        !cached_sigma_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0));
+    const bool need_k_angles = (ctx.res_epoch != nullptr) || (ctx.drag_pass != 0) || need_tail_angles ||
+                               (ctx.ap_resonance && cls != 0 && !(cls == 1 && cache_geo_res)) ||
+                               (ctx.agom > 0.0 && fr.e2 != 0.0 && k.a >= 5.0 && ag.si <= 0.02) ||
+                               (shadow_envelope() != 0);
+    if (need_k_angles) {
+      const double varpi = fm::atan2(y[kAg], y[kAf]);
+      const double node_raw = fm::atan2(y[kChi], y[kPsi]);
+      k.node = fast_wrap(node_raw);
+      k.argp = fast_wrap(varpi - node_raw);
+      k.m = fast_wrap(y[kLam] - varpi);
+      k.i = 2.0 * fm::atan(t_inc);
+    }
+    s = ag.si;
+    c = ag.ci;
+  } else {
+    k = kepler_of(y, fr.a);
+    s = std::sin(k.i);
+    c = std::cos(k.i);
+    ag = angle_trig(k);
+  }
+  const double p = fr.a * (1.0 - fr.e2);
+  const double inv_cp1 = 0.5 * fr.c;
   double six[6] = {0, 0, 0, 0, 0, 0};
-  zonal_six(k.e, fr.n, s, c, fr.eta, p, k.argp, k.i, six);
-  const Bodies b = bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
-  const AngleTrig ag = angle_trig(k);
+  if (fast_ap) zonal_six_ap(k.e, fr.n, s, c, fr.eta, p, ag.sw, ag.cw, inv_cp1, six);
+  else zonal_six(k.e, fr.n, s, c, fr.eta, p, k.argp, k.i, six);
+
+  const Bodies b = use_epoch_aux ? ea.b
+                                 : (use_stage_aux ? csa->b
+                                                  : (ctx.ap_third_body && fr.n < 0.016 && ctx.i0 > 0.02
+                                                         ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay)
+                                                         : bodies_at(ctx.d50_epoch + t / kMinutesPerDay)));
+  if (record_epoch_aux) {
+    ea.ctx_id = ctx.ctx_id;
+    ea.d50_epoch = ctx.d50_epoch;
+    ea.n0 = ctx.n0;
+    ea.b = b;
+    ea.valid = true;
+    ea.has_tb = false;
+    ea.has_drag = false;
+    ea.has_srp = false;
+    ea.srp_sunlit_safe = false;
+    ea.has_tail = false;
+    ea.has_tail_eq = false;
+    ea.has_F_lp = false;
+    ea.has_sc0_lp = false;
+  } else if (record_stage_aux) {
+    csa->gen = cgc.gen;
+    csa->t = t;
+    csa->b = b;
+    csa->n_lp = fr.n;
+    csa->inv_n_lp = 1.0 / fr.n;
+    csa->a_lp = fr.a;
+    csa->has_tb = false;
+    csa->has_drag = false;
+    csa->has_srp = false;
+    csa->srp_sunlit_safe = false;
+    csa->has_tail = false;
+    csa->has_tail_eq = false;
+    csa->has_F_lp = false;
+    csa->has_sc0_lp = false;
+  }
+
   const Perifocal pf = perifocal_of(ag);
   if (!ctx.long_period) {
     const Vec3 us[2] = {b.sun_u, b.moon_u};
     const double rs[2] = {b.sun_r, b.moon_r}, ms[2] = {kSunMass, kMoonMass};
     double coef[kThird_body_sixCoefs];
-    third_body_six_coefs(k.e, fr.n, fr.eta, k.i, k.argp, coef);
+    if (fast_ap) third_body_six_coefs_ap(k.e, fr.eta, ag.si, inv_cp1, ag.sw, ag.cw, coef);
+    else third_body_six_coefs(k.e, fr.n, fr.eta, k.i, k.argp, coef);
     for (int j = 0; j < 2; ++j) {
       double A, B, C;
       direction_cosines(pf, us[j], A, B, C);
@@ -1066,96 +3664,657 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   // initialization at its time, abi.inc)
   if (ctx.res_epoch != nullptr) res::resonance_six(ctx.res_epoch, ctx.res_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
   if (ctx.ap_resonance) {
-    const int cls = ap_resonance_class(ctx, fr.n);
-    if (cls != 0) {
+    if (cls != 0 && !(cls == 1 && cache_geo_res)) {
       res::ResCoef terms[29];
       const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
-      res::resonance_six(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
-      if (cls == 2 && ctx.half_day != nullptr)
-        tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.e0, ctx.i0, t, k,
-                          fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
+      if (ctx.i0 > 0.02) res::resonance_six_ap(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
+      else res::resonance_six(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
     }
   }
-  if (ctx.shallow != nullptr) {
-    // AP, following the current elements: F G to first order about the epoch e and i, and each (k, m) weighted by the
-    // current distance from commensurability, so the term set does not depend on the epoch it was taken at
-    res::ResCoef terms[tess::kShallowMax];
-    const double de = k.e - ctx.e0, di = k.i - ctx.i0;
-    const tess::SecularRates sr = tess::secular_rates(fr.n, k.e, k.i);
-    int last_k = 0, last_m = 0;
-    double wgt = 1.0;
-    for (int j = 0; j < ctx.shallow_count; ++j) {
-      terms[j] = tess::expand(ctx.shallow[j]);
-      if (terms[j].k != last_k || terms[j].m != last_m) {
-        last_k = terms[j].k;
-        last_m = terms[j].m;
-        wgt = tess::shallow_weight(sr, last_k, last_m, fr.n);
+  auto eval_tail = [&](double* dst) {
+    if (cls == 1 && cache_geo_res) {
+      res::ResCoef terms[29];
+      const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
+      res::resonance_six_ap(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
+    }
+    if (ctx.ap_resonance && cls == 2 && ctx.half_day != nullptr) {
+      tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
+                         fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst, ctx.hd_a0, hd_table_id(ctx));
+    }
+    if (ctx.shallow != nullptr) {
+      tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci,
+                        ctx.theta_g0, dst, sh_table_id(ctx));
+    }
+    if (ctx.zt != nullptr)
+      tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, dst, &ag.sw, &ag.cw,
+                      zt_table_id(ctx));
+  };
+  bool add_cached_lp_teq = false;
+  if (!skip_tail) {
+    if (use_lp_tail_eq && use_epoch_aux && ea.has_tail_eq) {
+      double st_tail[6] = {0, 0, 0, 0, 0, 0}, teq_cur[6];
+      eval_tail(st_tail);
+      six_to_equinoctial(ag, st_tail, teq_cur);
+      for (int m = 0; m < 6; ++m) {
+        six[m] += st_tail[m];
+        if (sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_dtail_eq[sigma_slot][m] = teq_cur[m] - ea.tail_eq[m];
       }
-      terms[j].fg = (terms[j].fg + terms[j].fdg * de + terms[j].dfg * di) * wgt;
-      terms[j].fdg *= wgt;
-      terms[j].dfg *= wgt;
+    } else if (use_lp_tail_eq && use_stage_aux && csa->has_tail_eq && sigma_slot >= 1 && sigma_slot < 18) {
+      if (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0)) {
+        double st_tail[6] = {0, 0, 0, 0, 0, 0}, teq_cur[6];
+        eval_tail(st_tail);
+        six_to_equinoctial(ag, st_tail, teq_cur);
+        for (int m = 0; m < 6; ++m) {
+          six[m] += st_tail[m];
+          cgc.sigma_dtail_eq[sigma_slot][m] = teq_cur[m] - csa->tail_eq[m];
+        }
+      } else {
+        add_cached_lp_teq = true;
+      }
+    } else if (!use_lp_tail_eq && use_epoch_aux && ea.has_tail && ctx.i0 > 0.02) {
+      double st_tail[6] = {0, 0, 0, 0, 0, 0};
+      eval_tail(st_tail);
+      for (int m = 0; m < 6; ++m) {
+        six[m] += st_tail[m];
+        if (sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_dsix_tail[sigma_slot][m] = st_tail[m] - ea.six_tail[m];
+      }
+    } else if (!use_lp_tail_eq && use_stage_aux && csa->has_tail && ctx.i0 > 0.02 && sigma_slot >= 1 && sigma_slot < 18) {
+      if (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0)) {
+        double st_tail[6] = {0, 0, 0, 0, 0, 0};
+        eval_tail(st_tail);
+        for (int m = 0; m < 6; ++m) {
+          six[m] += st_tail[m];
+          cgc.sigma_dsix_tail[sigma_slot][m] = st_tail[m] - csa->six_tail[m];
+        }
+      } else {
+        for (int m = 0; m < 6; ++m) six[m] += csa->six_tail[m] + cgc.sigma_dsix_tail[sigma_slot][m];
+      }
+    } else if (record_epoch_aux || record_stage_aux || (ov != nullptr && ov->tail_eq_out != nullptr)) {
+      double six_before_tail[6];
+      for (int m = 0; m < 6; ++m) six_before_tail[m] = six[m];
+      eval_tail(six);
+      double st_tail[6];
+      for (int m = 0; m < 6; ++m) st_tail[m] = six[m] - six_before_tail[m];
+      double teq[6];
+      const bool need_teq = ctx.long_period && ctx.ap_third_body;
+      if (need_teq || (ov != nullptr && ov->tail_eq_out != nullptr)) {
+        six_to_equinoctial(ag, st_tail, teq);
+      }
+      if (ov != nullptr && ov->tail_eq_out != nullptr) {
+        for (int m = 0; m < 6; ++m) ov->tail_eq_out[m] = teq[m];
+      }
+      if (ov != nullptr && ov->six_tail_out != nullptr) {
+        for (int m = 0; m < 6; ++m) ov->six_tail_out[m] = st_tail[m];
+      }
+      if (record_epoch_aux) {
+        for (int m = 0; m < 6; ++m) ea.six_tail[m] = st_tail[m];
+        ea.has_tail = true;
+        if (need_teq) {
+          for (int m = 0; m < 6; ++m) ea.tail_eq[m] = teq[m];
+          ea.has_tail_eq = true;
+        }
+      } else if (record_stage_aux) {
+        for (int m = 0; m < 6; ++m) csa->six_tail[m] = st_tail[m];
+        csa->has_tail = true;
+        if (need_teq) {
+          for (int m = 0; m < 6; ++m) csa->tail_eq[m] = teq[m];
+          csa->has_tail_eq = true;
+        }
+      }
+    } else {
+      eval_tail(six);
     }
-    res::resonance_six(terms, ctx.shallow_count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, six);
   }
-  if (ctx.zt != nullptr) tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, six);
   six_to_equinoctial(ag, six, out);
   out[kLam] += fr.n;  // the set carries lambda-dot - n
-  if (ctx.ap_third_body && !ctx.long_period) third_body_tail(y, fr, b, out);
-  if (ctx.long_period) {
-    // Instantaneous geometry: the satellite from the equinoctial Kepler
-    // equation lambda = F + ag cos F - af sin F (Halley iteration, at most 25 steps).
-    const double lam = y[kLam];
-    double F = lam;
-    for (int it = 0; it < 25; ++it) {
-      double sF, cF;
-      fm::sincos(F, sF, cF);
-      const double fv = F + y[kAg] * cF - y[kAf] * sF - lam;
-      const double f1 = 1.0 - y[kAg] * sF - y[kAf] * cF;
-      const double f2 = -y[kAg] * cF + y[kAf] * sF;
-      const double dF = -fv / (f1 - 0.5 * fv * f2 / f1);
-      F += dF;
-      if (std::fabs(dF) < 1e-14) break;
-    }
-    Vec3 r, v;
-    double roa;
-    state_at_F(y, fr, F, r, v, roa);
-    const Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) +
-                   third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
-    double tb[6];
-    gauss(y, fr, r, v, d, tb);
-    for (int j = 0; j < 6; ++j) out[j] += tb[j];
+  if (add_cached_lp_teq) {
+    for (int m = 0; m < 6; ++m) out[m] += csa->tail_eq[m] + cgc.sigma_dtail_eq[sigma_slot][m];
   }
-  if (ctx.agom > 0.0) srp_rates(y, fr, k, pf, ctx.agom, b, out);
-  if (ctx.bterm > 0.0) drag_part(ctx, t, y, fr, k, ag, b, out);
+  if (skip_tail) {
+    for (int m = 0; m < 6; ++m) out[m] += ov->tail_eq[m];
+  }
+  if (ctx.ap_third_body && !ctx.long_period) {
+    if (use_epoch_aux && ea.has_tb) {
+      for (int m = 0; m < 6; ++m) out[m] += ea.tb[m];
+    } else if (use_stage_aux && csa->has_tb) {
+      for (int m = 0; m < 6; ++m) out[m] += csa->tb[m];
+    } else if (ov != nullptr && ov->tb != nullptr) {
+      for (int m = 0; m < 6; ++m) out[m] += ov->tb[m];
+      if (record_stage_aux) {
+        for (int m = 0; m < 6; ++m) csa->tb[m] = ov->tb[m];
+        csa->has_tb = true;
+      }
+    } else {
+      double tb[6] = {0, 0, 0, 0, 0, 0};
+      third_body_tail(y, fr, b, tb);
+      for (int m = 0; m < 6; ++m) out[m] += tb[m];
+      if (ov != nullptr && ov->tb_out != nullptr) {
+        for (int m = 0; m < 6; ++m) ov->tb_out[m] = tb[m];
+      }
+      if (record_epoch_aux) {
+        for (int m = 0; m < 6; ++m) ea.tb[m] = tb[m];
+        ea.has_tb = true;
+      } else if (record_stage_aux) {
+        for (int m = 0; m < 6; ++m) csa->tb[m] = tb[m];
+        csa->has_tb = true;
+      }
+    }
+  }
+  if (ctx.long_period) {
+    if (same_all6 && use_epoch_aux && ea.has_tb) {
+      for (int j = 0; j < 6; ++j) out[j] += ea.tb[j];
+    } else if (same_all6 && use_stage_aux && csa->has_tb) {
+      for (int j = 0; j < 6; ++j) out[j] += csa->tb[j];
+    } else {
+      // Instantaneous geometry: the satellite from the equinoctial Kepler
+      // equation lambda = F + ag cos F - af sin F (Halley iteration, at most 25 steps).
+      const double lam = y[kLam];
+      double F = 0.0, sF_lp = 0.0, cF_lp = 1.0;
+      double s0_rec = 0.0, c0_rec = 1.0;
+      bool have_sc0_rec = false;
+      const bool ap_lp_fast = ctx.ap_third_body && ctx.i0 > 0.02;
+      if (ap_lp_fast && fr.e2 <= 3e-4) {
+        double s0, c0;
+        if (use_epoch_aux && ea.has_sc0_lp && std::fabs(lam - ea.lam_lp) < 0.02) {
+          const double dl = lam - ea.lam_lp, dl2 = dl * dl;
+          const double cdl = 1.0 - dl2 * (0.5 - dl2 * (1.0 / 24.0));
+          const double sdl = dl * (1.0 - dl2 * ((1.0 / 6.0) - dl2 * (1.0 / 120.0)));
+          s0 = ea.s0_lp * cdl + ea.c0_lp * sdl;
+          c0 = ea.c0_lp * cdl - ea.s0_lp * sdl;
+        } else if (use_stage_aux && csa->has_sc0_lp && std::fabs(lam - csa->lam_lp) < 0.02) {
+          const double dl = lam - csa->lam_lp, dl2 = dl * dl;
+          const double cdl = 1.0 - dl2 * (0.5 - dl2 * (1.0 / 24.0));
+          const double sdl = dl * (1.0 - dl2 * ((1.0 / 6.0) - dl2 * (1.0 / 120.0)));
+          s0 = csa->s0_lp * cdl + csa->c0_lp * sdl;
+          c0 = csa->c0_lp * cdl - csa->s0_lp * sdl;
+        } else {
+          fm::sincos_fast(lam, s0, c0);
+          s0_rec = s0;
+          c0_rec = c0;
+          have_sc0_rec = true;
+        }
+        const double es = y[kAf] * s0 - y[kAg] * c0;
+        const double ec = y[kAf] * c0 + y[kAg] * s0;
+        const double inv_ome0 = 1.0 / (1.0 - ec);
+        const double r1 = es * inv_ome0;
+        const double rc = ec * inv_ome0;
+        const double r1_2 = r1 * r1;
+        const double u = r1 * (1.0 - r1_2 * (0.5 + (1.0 / 6.0) * rc - (13.0 / 24.0) * r1_2));
+        F = lam + u;
+        const double u2 = u * u;
+        const double cu = 1.0 - 0.5 * u2 * (1.0 - (1.0 / 12.0) * u2);
+        const double su = u * (1.0 - (1.0 / 6.0) * u2 * (1.0 - 0.05 * u2));
+        sF_lp = s0 * cu + c0 * su;
+        cF_lp = c0 * cu - s0 * su;
+      } else {
+        if (use_epoch_aux && ea.has_F_lp && std::fabs(lam - ea.lam_lp) < 0.05) {
+          F = ea.F_lp + (lam - ea.lam_lp);
+        } else if (use_stage_aux && csa->has_F_lp && std::fabs(lam - csa->lam_lp) < 0.05) {
+          F = csa->F_lp + (lam - csa->lam_lp);
+        } else if (ap_lp_fast) {
+          double s0, c0;
+          fm::sincos_fast(lam, s0, c0);
+          F = lam + y[kAf] * s0 - y[kAg] * c0;
+        } else {
+          F = lam;
+        }
+        double last_dF = 1.0;
+        for (int it = 0; it < 25; ++it) {
+          if (ap_lp_fast) fm::sincos_fast(F, sF_lp, cF_lp);
+          else fm::sincos(F, sF_lp, cF_lp);
+          const double fv = F + y[kAg] * cF_lp - y[kAf] * sF_lp - lam;
+          const double f1 = 1.0 - y[kAg] * sF_lp - y[kAf] * cF_lp;
+          const double f2 = -y[kAg] * cF_lp + y[kAf] * sF_lp;
+          const double dF = -fv / (f1 - 0.5 * fv * f2 / f1);
+          F += dF;
+          last_dF = dF;
+          if (std::fabs(dF) < 1e-14) {
+            if (ap_lp_fast) {
+              const double s_old = sF_lp;
+              sF_lp = s_old + cF_lp * dF;
+              cF_lp = cF_lp - s_old * dF;
+              last_dF = 0.0;
+            }
+            break;
+          }
+        }
+        if (ap_lp_fast && last_dF != 0.0) fm::sincos_fast(F, sF_lp, cF_lp);
+      }
+      double tb[6];
+      if (ap_lp_fast) {
+        lp_third_body_gauss_ap(y, fr, sF_lp, cF_lp, b, tb);
+      } else {
+        Vec3 r, v;
+        double roa;
+        state_at_F(y, fr, F, r, v, roa);
+        const Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) +
+                       third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+        gauss(y, fr, r, v, d, tb);
+      }
+      for (int j = 0; j < 6; ++j) out[j] += tb[j];
+      if (record_epoch_aux) {
+        for (int j = 0; j < 6; ++j) ea.tb[j] = tb[j];
+        ea.has_tb = true;
+        ea.lam_lp = lam;
+        ea.F_lp = F;
+        ea.has_F_lp = true;
+        if (have_sc0_rec) {
+          ea.s0_lp = s0_rec;
+          ea.c0_lp = c0_rec;
+          ea.has_sc0_lp = true;
+        }
+      } else if (record_stage_aux) {
+        for (int j = 0; j < 6; ++j) csa->tb[j] = tb[j];
+        csa->has_tb = true;
+        csa->lam_lp = lam;
+        csa->F_lp = F;
+        csa->sF_lp = sF_lp;
+        csa->cF_lp = cF_lp;
+        csa->has_F_lp = true;
+        if (have_sc0_rec) {
+          csa->s0_lp = s0_rec;
+          csa->c0_lp = c0_rec;
+          csa->has_sc0_lp = true;
+        }
+      }
+    }
+  }
+  if (ctx.agom > 0.0) {
+    if (!ap_ctx) {
+      srp_rates(y, fr, k, pf, ctx.agom, b, out);
+    } else {
+    const bool share_srp_rate = same_all6 || (!ctx.long_period && exact_orb_match);
+    const bool allow_srp_step_cache = !ctx.long_period || ctx.i0 > 0.02;
+    const bool ap_srp = ctx.ap_third_body && (!ctx.long_period || ctx.i0 > 0.02);
+    if (ov != nullptr && ov->srp != nullptr) {
+      for (int m = 0; m < 6; ++m) out[m] += ov->srp[m];
+    } else if (use_epoch_aux && ea.has_srp) {
+      if (share_srp_rate || exact_orb_match) {
+        for (int m = 0; m < 6; ++m) out[m] += ea.srp_unit[m] * ctx.agom;
+        if (allow_srp_step_cache && sigma_slot >= 1 && sigma_slot < 18) {
+          for (int m = 0; m < 6; ++m) cgc.sigma_df_srp[sigma_slot][m] = 0.0;
+        }
+      } else {
+        double ds[6] = {0, 0, 0, 0, 0, 0};
+        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
+        for (int m = 0; m < 6; ++m) {
+          out[m] += ds[m];
+          if (allow_srp_step_cache && sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_df_srp[sigma_slot][m] = ds[m] - ea.srp_unit[m] * ctx.agom;
+        }
+      }
+    } else if (use_stage_aux && csa->has_srp) {
+      if (share_srp_rate) {
+        for (int m = 0; m < 6; ++m) out[m] += csa->srp_unit[m] * ctx.agom;
+      } else if (allow_srp_step_cache && (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0))) {
+        double ds[6] = {0, 0, 0, 0, 0, 0};
+        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
+        for (int m = 0; m < 6; ++m) {
+          out[m] += ds[m];
+          if (sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_df_srp[sigma_slot][m] = ds[m] - csa->srp_unit[m] * ctx.agom;
+        }
+      } else if (allow_srp_step_cache && sigma_slot >= 1 && sigma_slot < 18) {
+        for (int m = 0; m < 6; ++m) out[m] += csa->srp_unit[m] * ctx.agom + cgc.sigma_df_srp[sigma_slot][m];
+      } else {
+        double ds[6] = {0, 0, 0, 0, 0, 0};
+        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
+        for (int m = 0; m < 6; ++m) out[m] += ds[m];
+      }
+    } else {
+      double ds[6] = {0, 0, 0, 0, 0, 0};
+      bool sunlit_safe = false;
+      srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp, &sunlit_safe);
+      for (int m = 0; m < 6; ++m) out[m] += ds[m];
+      if (ov != nullptr && ov->srp_out != nullptr) {
+        for (int m = 0; m < 6; ++m) ov->srp_out[m] = ds[m];
+      }
+      if (record_epoch_aux) {
+        const double inv_agom = 1.0 / ctx.agom;
+        for (int m = 0; m < 6; ++m) ea.srp_unit[m] = ds[m] * inv_agom;
+        ea.has_srp = true;
+        ea.srp_sunlit_safe = sunlit_safe;
+      } else if (record_stage_aux) {
+        const double inv_agom = 1.0 / ctx.agom;
+        for (int m = 0; m < 6; ++m) csa->srp_unit[m] = ds[m] * inv_agom;
+        csa->has_srp = true;
+        csa->srp_sunlit_safe = sunlit_safe;
+      }
+    }
+    }
+  }
+  if (ctx.bterm > 0.0) {
+    if (ov != nullptr && ov->drag != nullptr) {
+      for (int m = 0; m < 6; ++m) out[m] += ov->drag[m];
+    } else if (!ctx.drag_pass && use_epoch_aux && ea.has_drag) {
+      if (exact_orb_match) {
+        for (int m = 0; m < 6; ++m) out[m] += ea.drag_unit[m] * ctx.bterm;
+      } else {
+        double dd[6] = {0, 0, 0, 0, 0, 0};
+        drag_part(ctx, t, y, fr, k, ag, b, dd);
+        for (int m = 0; m < 6; ++m) {
+          out[m] += dd[m];
+          if (sigma_slot >= 1 && sigma_slot < 18) {
+            cgc.sigma_df_drag[sigma_slot][m] = dd[m] - ea.drag_unit[m] * ctx.bterm;
+          }
+        }
+      }
+    } else if (!ctx.drag_pass && use_stage_aux && csa->has_drag) {
+      if (exact_orb_match) {
+        for (int m = 0; m < 6; ++m) out[m] += csa->drag_unit[m] * ctx.bterm;
+      } else if (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0)) {
+        double dd[6] = {0, 0, 0, 0, 0, 0};
+        drag_part(ctx, t, y, fr, k, ag, b, dd);
+        for (int m = 0; m < 6; ++m) {
+          out[m] += dd[m];
+          if (sigma_slot >= 1 && sigma_slot < 18) {
+            cgc.sigma_df_drag[sigma_slot][m] = dd[m] - csa->drag_unit[m] * ctx.bterm;
+          }
+        }
+      } else if (sigma_slot >= 1 && sigma_slot < 18) {
+        for (int m = 0; m < 6; ++m) out[m] += csa->drag_unit[m] * ctx.bterm + cgc.sigma_df_drag[sigma_slot][m];
+      } else {
+        drag_part(ctx, t, y, fr, k, ag, b, out);
+      }
+    } else if (!ctx.drag_pass && (record_epoch_aux || record_stage_aux || (ov != nullptr && ov->drag_out != nullptr))) {
+      double dd[6] = {0, 0, 0, 0, 0, 0};
+      drag_part(ctx, t, y, fr, k, ag, b, dd);
+      const double inv_b = 1.0 / ctx.bterm;
+      if (ov != nullptr && ov->drag_out != nullptr) {
+        for (int m = 0; m < 6; ++m) ov->drag_out[m] = dd[m];
+      }
+      for (int m = 0; m < 6; ++m) {
+        out[m] += dd[m];
+        const double du = dd[m] * inv_b;
+        if (record_epoch_aux) ea.drag_unit[m] = du;
+        else if (record_stage_aux) csa->drag_unit[m] = du;
+      }
+      if (record_epoch_aux) ea.has_drag = true;
+      else if (record_stage_aux) csa->has_drag = true;
+    } else {
+      drag_part(ctx, t, y, fr, k, ag, b, out);
+    }
+  }
+  if ((use_epoch_aux || (use_stage_aux && !aux_slot_valid)) && sigma_slot >= 1 && sigma_slot < 18) {
+    cgc.sigma_aux_ctx_id[sigma_slot] = ctx.ctx_id;
+    cgc.sigma_aux_d50[sigma_slot] = ctx.d50_epoch;
+    cgc.sigma_aux_n0[sigma_slot] = ctx.n0;
+  }
   return true;
 }
 
 // --- SPEC 9: the grid ---------------------------------------------------------
 
-struct Node {
-  double t;        ///< minutes from epoch
-  double y[6];
-  double f[6];
-  int32_t index;   ///< signed node index (negative: backward)
-};
-
 /// One third-order Runge-Kutta step of length h from node `a` (SPEC 9): 0, or kStageFailed when a stage's rates fail
 /// (the step's fallbacks apply), kNodeFailed when the new node's own rates do (SPEC 8.4: the node cannot be used).
 constexpr int kStageFailed = 1, kNodeFailed = 2;
 inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
+  const int di = out.index >= 0 ? 0 : 1;
+  const int idx = std::abs(out.index);
+  const int a_idx = std::abs(a.index);
+  CovGridCache& cgc = cov_grid_cache();
+  if (is_ap_ctx(ctx) && !ctx.is_cov_sigma &&
+      (cgc.anchor_id != ctx.ctx_id || cgc.d50_epoch != ctx.d50_epoch || std::fabs(cgc.n0 - ctx.n0) > 1e-9 ||
+       (a_idx == 0 && (cgc.epoch_f0 != a.f[0] || cgc.epoch_bterm != ctx.bterm || cgc.epoch_agom != ctx.agom)))) {
+    if (++cgc.gen == 0) cgc.gen = 1;
+    cgc.anchor_id = ctx.ctx_id;
+    cgc.d50_epoch = ctx.d50_epoch;
+    cgc.n0 = ctx.n0;
+    if (a_idx == 0) {
+      cgc.epoch_f0 = a.f[0];
+      cgc.epoch_bterm = ctx.bterm;
+      cgc.epoch_agom = ctx.agom;
+    }
+    const EpochAux& ea = epoch_aux();
+    const bool same_ep = ea.valid && ea.ctx_id == ctx.ctx_id;
+    cgc.has_epoch_tb = same_ep && ea.has_tb;
+    if (cgc.has_epoch_tb) {
+      for (int m = 0; m < 6; ++m) cgc.epoch_tb[m] = ea.tb[m];
+    }
+    cgc.has_epoch_drag = same_ep && ea.has_drag;
+    if (cgc.has_epoch_drag) {
+      for (int m = 0; m < 6; ++m) cgc.epoch_drag_unit[m] = ea.drag_unit[m];
+    }
+    cgc.has_epoch_srp = same_ep && ea.has_srp;
+    cgc.epoch_srp_safe = same_ep && ea.srp_sunlit_safe;
+    if (cgc.has_epoch_srp) {
+      for (int m = 0; m < 6; ++m) cgc.epoch_srp_unit[m] = ea.srp_unit[m];
+    }
+    cgc.has_epoch_tail_eq = same_ep && ea.has_tail && ea.has_tail_eq;
+    if (cgc.has_epoch_tail_eq) {
+      for (int m = 0; m < 6; ++m) {
+        cgc.epoch_six_tail[m] = ea.six_tail[m];
+        cgc.epoch_tail_eq[m] = ea.tail_eq[m];
+      }
+    }
+  }
+
+  Rk3StageOverride ov_stage{};
+  bool any_ov = false;
+  if (!ctx.is_cov_sigma && !ctx.long_period && ctx.resonance == 0 && std::fabs(h) <= 300.0 && ctx.ap_third_body) {
+    if (a_idx == 0 && cgc.has_epoch_tb) {
+      ov_stage.tb = cgc.epoch_tb;
+      any_ov = true;
+    } else if (a_idx > 0 && a_idx < CovGridCache::kMaxCovSteps &&
+               cgc.steps[di][a_idx].st[2].gen == cgc.gen && cgc.steps[di][a_idx].st[2].has_tb) {
+      ov_stage.tb = cgc.steps[di][a_idx].st[2].tb;
+      any_ov = true;
+    }
+  }
+
+  const double* six_tail_a = nullptr;
+  double srp_a[6]{};
+  const double* srp_a_unit = nullptr;
+  if (!ctx.is_cov_sigma && ctx.long_period && ctx.ap_third_body && ctx.i0 > 0.02 && std::fabs(h) <= 45.0) {
+    if (a_idx == 0 && cgc.has_epoch_tail_eq) {
+      ov_stage.tail_eq = cgc.epoch_tail_eq;
+      six_tail_a = cgc.epoch_six_tail;
+      any_ov = true;
+      if (ctx.agom > 0.0 && cgc.has_epoch_srp && cgc.epoch_srp_safe) {
+        srp_a_unit = cgc.epoch_srp_unit;
+      }
+    } else if (a_idx > 0 && a_idx < CovGridCache::kMaxCovSteps &&
+               cgc.steps[di][a_idx].st[2].gen == cgc.gen &&
+               cgc.steps[di][a_idx].st[2].has_tail && cgc.steps[di][a_idx].st[2].has_tail_eq) {
+      ov_stage.tail_eq = cgc.steps[di][a_idx].st[2].tail_eq;
+      six_tail_a = cgc.steps[di][a_idx].st[2].six_tail;
+      any_ov = true;
+      if (ctx.agom > 0.0 && cgc.steps[di][a_idx].st[2].has_srp && cgc.steps[di][a_idx].st[2].srp_sunlit_safe) {
+        srp_a_unit = cgc.steps[di][a_idx].st[2].srp_unit;
+      }
+    }
+    if (srp_a_unit != nullptr) {
+      for (int m = 0; m < 6; ++m) srp_a[m] = srp_a_unit[m] * ctx.agom;
+      ov_stage.srp = srp_a;
+    }
+  }
+
+  const double* drag_a_unit = nullptr;
+  bool drag_linear_1stage = false;
+  double drag_u0[6]{}, drag_u38[6]{}, drag_s0[6]{}, drag_s1[6]{};
+  double dca_s0 = 1.0, inv_dca_s0 = 1.0, dca_s1 = 1.0, inv_dca_1 = 1.0;
+  if (!ctx.is_cov_sigma && !ctx.long_period && !ctx.drag_pass && ctx.bterm > 0.0 && ctx.ap_third_body &&
+      ctx.atmosphere != nullptr && ctx.atmosphere->model == atm::kNrlmsise00 && std::fabs(h) <= 250.0) {
+    const double d50_a = ctx.d50_epoch + a.t * (1.0 / kMinutesPerDay);
+    const double d50_b = ctx.d50_epoch + (a.t + h) * (1.0 / kMinutesPerDay);
+    if (static_cast<int32_t>(std::floor(d50_a + 33281.0)) == static_cast<int32_t>(std::floor(d50_b + 33281.0))) {
+      if (a_idx == 0 && cgc.has_epoch_drag) {
+        drag_a_unit = cgc.epoch_drag_unit;
+      } else if (a_idx > 0 && a_idx < CovGridCache::kMaxCovSteps &&
+                 cgc.steps[di][a_idx].st[2].gen == cgc.gen && cgc.steps[di][a_idx].st[2].has_drag) {
+        drag_a_unit = cgc.steps[di][a_idx].st[2].drag_unit;
+      }
+      if (drag_a_unit != nullptr) {
+        const double dn_drag = std::fabs(drag_a_unit[kN] * ctx.bterm);
+        const double e2_a = a.y[kAf] * a.y[kAf] + a.y[kAg] * a.y[kAg];
+        const bool allow_1stage = (dn_drag < 5.0e-15);
+        const bool allow_2stage = (dn_drag < 7.0e-12) && (std::fabs(h) <= 120.0 || e2_a >= 1.0e-6);
+        if (!allow_1stage && !allow_2stage) {
+          drag_a_unit = nullptr;
+        } else {
+          double inv_dca_0 = 1.0;
+          if (!ctx.atmosphere->dca_d50.empty()) {
+            inv_dca_0 = 1.0 / atm::dca_scale(*ctx.atmosphere, d50_a);
+            dca_s0 = atm::dca_scale(*ctx.atmosphere, ctx.d50_epoch + (a.t + (3.0 / 8.0) * h) * (1.0 / kMinutesPerDay));
+            inv_dca_s0 = 1.0 / dca_s0;
+            dca_s1 = atm::dca_scale(*ctx.atmosphere, ctx.d50_epoch + (a.t + (25.0 / 32.0) * h) * (1.0 / kMinutesPerDay));
+            inv_dca_1 = 1.0 / atm::dca_scale(*ctx.atmosphere, d50_b);
+          }
+          drag_linear_1stage = allow_1stage;
+          const double b_inv_dca0 = ctx.bterm * inv_dca_0;
+          for (int m = 0; m < 6; ++m) {
+            drag_u0[m] = drag_a_unit[m] * b_inv_dca0;
+            if (drag_linear_1stage) {
+              drag_s0[m] = drag_u0[m] * dca_s0;
+              drag_s1[m] = drag_u0[m] * dca_s1;
+            }
+          }
+          if (drag_linear_1stage) {
+            ov_stage.drag = drag_s0;
+          } else {
+            ov_stage.drag_out = drag_s0;
+          }
+          any_ov = true;
+        }
+      }
+    }
+  }
+
+  const Rk3StageOverride* ov_ptr = any_ov ? &ov_stage : nullptr;
   double y2[6], y4[6], k2[6], k4[6];
   for (int j = 0; j < 6; ++j) y2[j] = a.y[j] + (3.0 / 8.0) * h * a.f[j];
-  if (!rates(ctx, a.t + (3.0 / 8.0) * h, y2, k2)) return kStageFailed;
+  if (!rates(ctx, a.t + (3.0 / 8.0) * h, y2, k2, di, idx, 0, ov_ptr)) return kStageFailed;
   // k3 (SPEC 9): its rates do not enter the update, but its state is tested like the others
   double y3[6];
   for (int j = 0; j < 6; ++j) y3[j] = a.y[j] + (9.0 / 16.0) * h * k2[j];
   if (state_test(ctx, y3) != 0) return kStageFailed;
+  if (drag_a_unit != nullptr) {
+    ov_stage.drag_out = nullptr;
+    if (!drag_linear_1stage) {
+      for (int m = 0; m < 6; ++m) {
+        drag_u38[m] = drag_s0[m] * inv_dca_s0;
+        const double u_pred = drag_u0[m] + (25.0 / 12.0) * (drag_u38[m] - drag_u0[m]);
+        drag_s1[m] = u_pred * dca_s1;
+      }
+    }
+    ov_stage.drag = drag_s1;
+  }
   for (int j = 0; j < 6; ++j) y4[j] = a.y[j] + h * (-(125.0 / 672.0) * a.f[j] + (325.0 / 336.0) * k2[j]);
-  if (!rates(ctx, a.t + (25.0 / 32.0) * h, y4, k4)) return kStageFailed;
+  if (!rates(ctx, a.t + (25.0 / 32.0) * h, y4, k4, di, idx, 1, ov_ptr)) return kStageFailed;
   for (int j = 0; j < 6; ++j)
     out.y[j] = a.y[j] + h * ((37.0 / 225.0) * a.f[j] + (44.0 / 117.0) * k2[j] + (448.0 / 975.0) * k4[j]);
   out.t = a.t + h;
-  return rates(ctx, out.t, out.y, out.f) ? 0 : kNodeFailed;
+  if (any_ov) {
+    double tb_out[6]{}, drag_out[6]{}, tail_eq_out[6]{}, six_tail_out[6]{}, srp_out[6]{};
+    Rk3StageOverride ov_end{};
+    if (ov_stage.tb != nullptr) ov_end.tb_out = tb_out;
+    if (ov_stage.drag != nullptr) ov_end.drag_out = drag_out;
+    if (ov_stage.tail_eq != nullptr) {
+      ov_end.tail_eq_out = tail_eq_out;
+      ov_end.six_tail_out = six_tail_out;
+    }
+    if (ov_stage.srp != nullptr) ov_end.srp_out = srp_out;
+    if (!rates(ctx, out.t, out.y, out.f, di, idx, 2, &ov_end)) return kNodeFailed;
+    const bool in_cache = idx > 0 && idx < CovGridCache::kMaxCovSteps;
+    if (ov_stage.tb != nullptr) {
+      for (int j = 0; j < 6; ++j) {
+        const double dtb = tb_out[j] - ov_stage.tb[j];
+        out.y[j] += (1873.0 / 3744.0) * h * dtb;
+        if (in_cache) {
+          cgc.steps[di][idx].st[0].tb[j] = ov_stage.tb[j] + (3.0 / 8.0) * dtb;
+          cgc.steps[di][idx].st[1].tb[j] = ov_stage.tb[j] + (25.0 / 32.0) * dtb;
+        }
+      }
+      out.y[kLam] += (1.0 / 6.0) * h * h * (tb_out[kN] - ov_stage.tb[kN]);
+      out.f[kLam] += (1873.0 / 3744.0) * h * (tb_out[kN] - ov_stage.tb[kN]);
+    }
+    if (drag_a_unit != nullptr) {
+      const double inv_b = 1.0 / ctx.bterm;
+      if (drag_linear_1stage) {
+        const double w_du = (11.0 / 78.0) * dca_s0 + (28.0 / 78.0) * dca_s1;
+        const double du_n = drag_out[kN] * inv_dca_1 - drag_u0[kN];
+        for (int j = 0; j < 6; ++j) {
+          const double du = drag_out[j] * inv_dca_1 - drag_u0[j];
+          out.y[j] += w_du * h * du;
+          if (in_cache) {
+            cgc.steps[di][idx].st[0].drag_unit[j] = (drag_u0[j] + (3.0 / 8.0) * du) * (dca_s0 * inv_b);
+            cgc.steps[di][idx].st[1].drag_unit[j] = (drag_u0[j] + (25.0 / 32.0) * du) * (dca_s1 * inv_b);
+          }
+        }
+        if (in_cache) {
+          cgc.steps[di][idx].st[0].has_drag = true;
+          cgc.steps[di][idx].st[1].has_drag = true;
+        }
+        out.y[kLam] += (1.0 / 6.0) * dca_s0 * h * h * du_n;
+        out.f[kLam] += w_du * h * du_n;
+      } else {
+        double dd1_n = 0.0;
+        for (int j = 0; j < 6; ++j) {
+          const double u1 = drag_out[j] * inv_dca_1;
+          const double u_quad = (-91.0 / 384.0) * drag_u0[j] + (280.0 / 384.0) * drag_u38[j] + (195.0 / 384.0) * u1;
+          const double d_quad = u_quad * dca_s1;
+          const double dd1 = d_quad - drag_s1[j];
+          out.y[j] += (448.0 / 975.0) * h * dd1;
+          if (j == kN) dd1_n = dd1;
+          if (in_cache) {
+            cgc.steps[di][idx].st[1].drag_unit[j] = d_quad * inv_b;
+          }
+        }
+        if (in_cache) {
+          cgc.steps[di][idx].st[1].has_drag = true;
+        }
+        out.f[kLam] += (448.0 / 975.0) * h * dd1_n;
+      }
+    }
+    double d_extra[6]{};
+    bool has_extra = false;
+    if (ov_stage.tail_eq != nullptr) {
+      has_extra = true;
+      for (int j = 0; j < 6; ++j) {
+        const double dteq = tail_eq_out[j] - ov_stage.tail_eq[j];
+        d_extra[j] += dteq;
+        if (in_cache) {
+          cgc.steps[di][idx].st[0].tail_eq[j] = ov_stage.tail_eq[j] + (3.0 / 8.0) * dteq;
+          cgc.steps[di][idx].st[1].tail_eq[j] = ov_stage.tail_eq[j] + (25.0 / 32.0) * dteq;
+        }
+        if (in_cache && six_tail_a != nullptr) {
+          const double dst = six_tail_out[j] - six_tail_a[j];
+          cgc.steps[di][idx].st[0].six_tail[j] = six_tail_a[j] + (3.0 / 8.0) * dst;
+          cgc.steps[di][idx].st[1].six_tail[j] = six_tail_a[j] + (25.0 / 32.0) * dst;
+        }
+      }
+      if (in_cache) {
+        cgc.steps[di][idx].st[0].has_tail_eq = true;
+        cgc.steps[di][idx].st[1].has_tail_eq = true;
+      }
+      if (in_cache && six_tail_a != nullptr) {
+        cgc.steps[di][idx].st[0].has_tail = true;
+        cgc.steps[di][idx].st[1].has_tail = true;
+      }
+    }
+    if (ov_stage.srp != nullptr) {
+      has_extra = true;
+      const double inv_agom = 1.0 / ctx.agom;
+      for (int j = 0; j < 6; ++j) {
+        const double dsrp = srp_out[j] - srp_a[j];
+        d_extra[j] += dsrp;
+        if (in_cache) {
+          const double dsu = dsrp * inv_agom;
+          cgc.steps[di][idx].st[0].srp_unit[j] = srp_a_unit[j] + (3.0 / 8.0) * dsu;
+          cgc.steps[di][idx].st[1].srp_unit[j] = srp_a_unit[j] + (25.0 / 32.0) * dsu;
+        }
+      }
+      if (in_cache) {
+        cgc.steps[di][idx].st[0].has_srp = true;
+        cgc.steps[di][idx].st[1].has_srp = true;
+      }
+    }
+    if (has_extra) {
+      for (int j = 0; j < 6; ++j) out.y[j] += 0.5 * h * d_extra[j];
+      out.y[kLam] += (1.0 / 6.0) * h * h * d_extra[kN];
+      out.f[kLam] += 0.5 * h * d_extra[kN];
+    }
+    return 0;
+  }
+  return rates(ctx, out.t, out.y, out.f, di, idx, 2, nullptr) ? 0 : kNodeFailed;
 }
 
 /// The node after `a` in direction dir (+1, -1), with the SPEC 9 fallbacks.
@@ -1194,127 +4353,9 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
   return false;
 }
 
-/// Cubic Hermite interpolation between nodes a and b (SPEC 9).
-inline void hermite(const Node& a, const Node& b, double t, double* y) {
-  const double h = b.t - a.t;
-  const double q = (t - a.t) / h;
-  if (q == 0.0) {
-    for (int j = 0; j < 6; ++j) y[j] = a.y[j];
-    return;
-  }
-  const double h00 = (1.0 + 2.0 * q) * (1.0 - q) * (1.0 - q);
-  const double h10 = q * (1.0 - q) * (1.0 - q);
-  const double h01 = q * q * (3.0 - 2.0 * q);
-  const double h11 = q * q * (q - 1.0);
-  for (int j = 0; j < 6; ++j) y[j] = h00 * a.y[j] + h10 * h * a.f[j] + h01 * b.y[j] + h11 * h * b.f[j];
-  if (!(y[kN] > 0.0))
-    for (int j = 0; j < 6; ++j) y[j] = (1.0 - q) * a.y[j] + q * b.y[j];
-}
-
 // --- SPEC 8: osculating output ------------------------------------------------
 
-/// TEME position (km) and velocity (km/s) of the mean equinoctial state y.
-/// `shared`, when given, holds the Sun and Moon at the output time (a batch at
-/// one time evaluates them once for every object).
-inline int32_t output(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
-                      const Bodies* shared) {
-  if (!(ym[kN] > 0.0)) return kPropMeanMotion;
-  if (ctx.ap_resonance && ap_resonance_class(ctx, ym[kN]) != ctx.resonance)
-    return reclass_output(ctx, t, ym, r_out, v_out, shared);
-  double y[6] = {ym[0], ym[1], ym[2], ym[3], ym[4], ym[5]};
-  double Ewarm = std::numeric_limits<double>::quiet_NaN();
-  if (!ctx.long_period || ctx.agom > 0.0) {
-    const Kepler km = kepler_of(ym);
-    if (!(km.e < 1.0)) return kPropEccentricity;
-    double Em = km.m + km.e * std::sin(km.m);
-    for (int it = 0; it < 30; ++it) {
-      double sEm, cEm;
-      fm::sincos(Em, sEm, cEm);
-      const double dE = (Em - km.e * sEm - km.m) / (1.0 - km.e * cEm);
-      Em -= dE;
-      if (std::fabs(dE) < 1e-15) break;
-    }
-    const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
-    const double n = ym[kN], etam = std::sqrt(1.0 - km.e * km.e);
-    const AngleTrig agm = angle_trig(km);
-    const Perifocal pfm = perifocal_of(agm);
-    if (!ctx.long_period && ctx.ap_third_body) {
-      // AP (SPEC 5.4): the third bodies' short-period terms of degree 2 to 10 by quadrature, the bodies at the output
-      // time
-      double d[6] = {0, 0, 0, 0, 0, 0};
-      third_body_short_period(ym, frame_of(ym), b, eccentric_longitude(ym), 2, kThirdBodyTailDegree, d);
-      for (int j = 0; j < 6; ++j) y[j] += d[j];
-    } else if (!ctx.long_period) {
-      // SPEC 5.4: the Sun and Moon output-time corrections, added to the
-      // equinoctial elements before the short-period step.
-      const Vec3 us[2] = {b.sun_u, b.moon_u};
-      const double rs[2] = {b.sun_r, b.moon_r}, ms[2] = {kSunMass, kMoonMass};
-      double six[6] = {0, 0, 0, 0, 0, 0};
-      double coef[kOutput_sixCoefs];
-      output_six_coefs(km.e, n, etam, km.i, km.argp, Em, coef);
-      for (int j = 0; j < 2; ++j) {
-        double A, B, C;
-        direction_cosines(pfm, us[j], A, B, C);
-        const double ar = km.a / rs[j];
-        const double C2 = ms[j] * ar * ar * ar * n;
-        output_six(coef, A, B, C, C2, C2 * ar, six);
-      }
-      double d[6];
-      six_to_equinoctial(agm, six, d);
-      for (int j = 0; j < 6; ++j) y[j] += d[j];
-    }
-    if (ctx.agom > 0.0) {
-      // SPEC 4: the output-time SRP corrections, after those of 5.4.
-      double A, B, C;
-      direction_cosines(pfm, b.sun_u, A, B, C);
-      const double rs_au = b.sun_r * kRe / kAu;
-      const double Fs = kSrpPressure * ctx.agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
-      double ds[6];
-      srp_output(km.e, etam, Em, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, ds);
-      for (int j = 0; j < 6; ++j) y[j] += ds[j];
-    }
-    if (!(y[kN] > 0.0)) return kPropMeanMotion;
-    Ewarm = Em;
-  }
-  if (ctx.mdaily != nullptr || ctx.sp != nullptr || ctx.wide != nullptr) {
-    // AP: the tesseral m-daily short-periodics, first order at the mean elements
-    const Kepler km = kepler_of(ym);
-    if (km.e < 1.0) {
-      const AngleTrig agm = angle_trig(km);
-      double six[6] = {0, 0, 0, 0, 0, 0};
-      if (ctx.mdaily != nullptr)
-        tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci,
-                         ctx.theta_g0, six);
-      if (ctx.sp != nullptr)
-        tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], std::sqrt(1.0 - km.e * km.e), agm.si, agm.ci, ctx.theta_g0, six);
-      if (ctx.wide != nullptr) {
-        if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
-          double s0[6] = {0, 0, 0, 0, 0, 0}, s1[6] = {0, 0, 0, 0, 0, 0};
-          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, s0);
-          tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, s1);
-          for (int j = 0; j < 6; ++j) six[j] += (1.0 - ctx.wide_blend) * s0[j] + ctx.wide_blend * s1[j];
-        } else {
-          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six);
-        }
-      }
-      double d[6];
-      six_to_equinoctial(agm, six, d);
-      for (int j = 0; j < 6; ++j) y[j] += d[j];
-    }
-  }
-  if (ctx.drag_pass && ctx.bterm > 0.0) {
-    // AP above e 0.3 (SPEC 16.12): the drag's short-period terms of a pass narrow against the orbit, so the osculating
-    // elements step at perigee where the mean elements ramp: each element y_j + (ydot_j / n)(pi - M), M in [0, 2 pi), and
-    // lambda also + (ndot / n^2)(pi M - M^2 / 2 - pi^2 / 3), the integral of the mean motion's own sawtooth
-    const Frame frm = frame_of(ym);
-    const Kepler km = kepler_of(ym, frm.a);
-    const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
-    double fd[6] = {0, 0, 0, 0, 0, 0};
-    drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
-    const double M = km.m, n = ym[kN], saw = (kPi - M) / n;
-    for (int j = 0; j < 6; ++j) y[j] += fd[j] * saw;
-    y[kLam] += fd[kN] / (n * n) * (kPi * M - 0.5 * M * M - kPi * kPi / 3.0);
-  }
+[[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]) {
   const Kepler k = kepler_of(y);
   if (!(k.e < 1.0)) return kPropEccentricity;
   if (!std::isfinite(y[kLam]) || std::fabs(y[kLam]) > 1e10) return kPropEccentricity;
@@ -1393,6 +4434,887 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
   return kPropOk;
 }
 
+[[gnu::noinline]] inline int32_t output_xp(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
+                                           const Bodies* shared, double* d_srp_unit_out = nullptr,
+                                           const double* d_srp_unit_in = nullptr) {
+  if (!(ym[kN] > 0.0)) return kPropMeanMotion;
+  double y[6] = {ym[0], ym[1], ym[2], ym[3], ym[4], ym[5]};
+  if (d_srp_unit_out != nullptr) {
+    for (int j = 0; j < 6; ++j) d_srp_unit_out[j] = 0.0;
+  }
+  const bool use_shared_srp = (d_srp_unit_in != nullptr);
+  if (use_shared_srp && ctx.agom > 0.0) {
+    for (int j = 0; j < 6; ++j) y[j] += d_srp_unit_in[j] * ctx.agom;
+  }
+  double Ewarm = std::numeric_limits<double>::quiet_NaN();
+  const bool need_first = !ctx.long_period || (ctx.agom > 0.0 && !use_shared_srp);
+  if (need_first) {
+    const Kepler km = kepler_of(ym);
+    if ((!ctx.long_period || ctx.agom > 0.0) && !(km.e < 1.0)) return kPropEccentricity;
+    const double etam = km.e < 1.0 ? std::sqrt(1.0 - km.e * km.e) : 0.0;
+    const AngleTrig agm = km.e < 1.0 ? angle_trig(km) : AngleTrig{};
+    double sEm = 0.0, cEm = 1.0;
+    double Em = km.m + km.e * std::sin(km.m);
+    for (int it = 0; it < 30; ++it) {
+      fm::sincos(Em, sEm, cEm);
+      const double dE = (Em - km.e * sEm - km.m) / (1.0 - km.e * cEm);
+      Em -= dE;
+      if (std::fabs(dE) < 1e-15) break;
+    }
+    const double n = ym[kN];
+    Perifocal pfm{};
+    bool have_pfm = false;
+    Vec3 sun_u{};
+    double sun_r = 0.0;
+    bool have_sun = false;
+    if (!ctx.long_period) {
+      const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+      pfm = perifocal_of(agm);
+      have_pfm = true;
+      sun_u = b.sun_u;
+      sun_r = b.sun_r;
+      have_sun = true;
+      const Vec3 us[2] = {b.sun_u, b.moon_u};
+      const double rs[2] = {b.sun_r, b.moon_r}, ms[2] = {kSunMass, kMoonMass};
+      double six[6] = {0, 0, 0, 0, 0, 0};
+      double coef[kOutput_sixCoefs];
+      output_six_coefs(km.e, n, etam, km.i, km.argp, Em, coef);
+      for (int j = 0; j < 2; ++j) {
+        double A, B, C;
+        direction_cosines(pfm, us[j], A, B, C);
+        const double ar = km.a / rs[j];
+        const double C2 = ms[j] * ar * ar * ar * n;
+        output_six(coef, A, B, C, C2, C2 * ar, six);
+      }
+      double d[6];
+      six_to_equinoctial(agm, six, d);
+      for (int j = 0; j < 6; ++j) y[j] += d[j];
+    }
+    if (ctx.agom > 0.0 && !use_shared_srp) {
+      if (!have_pfm) pfm = perifocal_of(agm);
+      if (!have_sun) {
+        if (shared != nullptr) {
+          sun_u = shared->sun_u;
+          sun_r = shared->sun_r;
+        } else {
+          sun_at(ctx.d50_epoch + t / kMinutesPerDay, sun_u, sun_r);
+        }
+      }
+      double A, B, C;
+      direction_cosines(pfm, sun_u, A, B, C);
+      const double rs_au = sun_r * kRe / kAu;
+      const double Fs = kSrpPressure * ctx.agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
+      double ds[6];
+      srp_output(km.e, etam, Em, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, ds);
+      for (int j = 0; j < 6; ++j) y[j] += ds[j];
+      if (d_srp_unit_out != nullptr) {
+        const double inv_agom = 1.0 / ctx.agom;
+        for (int j = 0; j < 6; ++j) d_srp_unit_out[j] = ds[j] * inv_agom;
+      }
+    }
+    if (!(y[kN] > 0.0)) return kPropMeanMotion;
+    Ewarm = Em;
+  } else {
+    if ((!ctx.long_period || ctx.agom > 0.0) && !(ym[kAf] * ym[kAf] + ym[kAg] * ym[kAg] < 1.0))
+      return kPropEccentricity;
+    if (use_shared_srp && !(y[kN] > 0.0)) return kPropMeanMotion;
+  }
+  return output_j2_osc(y, Ewarm, r_out, v_out);
+}
+
+[[gnu::noinline]] inline void output_drag_pass(const RateContext& ctx, double t, const double* ym,
+                                               const Bodies* shared, double* y) {
+  const Frame frm = frame_of(ym);
+  const Kepler km = kepler_of(ym, frm.a);
+  const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+  double fd[6] = {0, 0, 0, 0, 0, 0};
+  drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
+  const double M = km.m, n = ym[kN], saw = (kPi - M) / n;
+  for (int j = 0; j < 6; ++j) y[j] += fd[j] * saw;
+  y[kLam] += fd[kN] / (n * n) * (kPi * M - 0.5 * M * M - kPi * kPi / 3.0);
+}
+
+struct CovNomOsc {
+  double a0 = 0.0;
+  double n0 = 0.0;
+  double inv_n0 = 0.0;
+  double lam0 = 0.0;
+  double dF0 = 0.0;
+  double sF0 = 0.0;
+  double cF0 = 1.0;
+  double tv0 = 0.0;
+  double phi_v0 = 0.0;
+  bool valid = false;
+};
+
+/// TEME position (km) and velocity (km/s) of the mean equinoctial state y.
+/// `shared`, when given, holds the Sun and Moon at the output time (a batch at
+/// one time evaluates them once for every object).
+template <bool kCov>
+inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
+                           const Bodies* shared, double* d_3b_out = nullptr, double* dd_3b_dlam_out = nullptr,
+                           double* d_sp_out = nullptr, double* dd_sp_dlam_out = nullptr,
+                           const double* d_3b_in = nullptr, const double* dd_3b_dlam_in = nullptr,
+                           const double* d_sp_in = nullptr, const double* dd_sp_dlam_in = nullptr, double dlam = 0.0,
+                           double* d2_sp_dlam2_out = nullptr, const double* d2_sp_dlam2_in = nullptr,
+                           double* d_srp_unit_out = nullptr, const double* d_srp_unit_in = nullptr,
+                           double* E_osc_out = nullptr, double* sE_osc_out = nullptr, double* cE_osc_out = nullptr,
+                           double E_osc_in = std::numeric_limits<double>::quiet_NaN(),
+                           double sE_osc_in = 0.0, double cE_osc_in = 1.0,
+                           double* lam_ref_out = nullptr, double* sLam_ref_out = nullptr, double* cLam_ref_out = nullptr,
+                           double lam_ref_in = std::numeric_limits<double>::quiet_NaN(),
+                           double sLam_ref_in = 0.0, double cLam_ref_in = 1.0,
+                           CovNomOsc* nom_osc_out = nullptr) {
+  if (__builtin_expect(!ctx.ap_third_body, 0)) {
+    if constexpr (kCov) {
+      return output_xp(ctx, t, ym, r_out, v_out, shared, d_srp_unit_out, d_srp_unit_in);
+    } else {
+      return output_xp(ctx, t, ym, r_out, v_out, shared);
+    }
+  }
+  if (!(ym[kN] > 0.0)) return kPropMeanMotion;
+  if (__builtin_expect(ctx.ap_resonance && ap_resonance_class(ctx, ym[kN]) != ctx.resonance, 0))
+    return reclass_output(ctx, t, ym, r_out, v_out, shared);
+  double y[6] = {ym[0], ym[1], ym[2], ym[3], ym[4], ym[5]};
+  bool use_shared_3b = false;
+  bool use_shared_sp = false;
+  bool use_shared_srp = false;
+  if constexpr (kCov) {
+    if (d_3b_out != nullptr && dd_3b_dlam_out != nullptr) {
+      for (int j = 0; j < 6; ++j) d_3b_out[j] = dd_3b_dlam_out[j] = 0.0;
+    }
+    if (d_sp_out != nullptr && dd_sp_dlam_out != nullptr) {
+      for (int j = 0; j < 6; ++j) d_sp_out[j] = dd_sp_dlam_out[j] = 0.0;
+      if (d2_sp_dlam2_out != nullptr) {
+        for (int j = 0; j < 6; ++j) d2_sp_dlam2_out[j] = 0.0;
+      }
+    }
+    if (d_srp_unit_out != nullptr) {
+      for (int j = 0; j < 6; ++j) d_srp_unit_out[j] = 0.0;
+    }
+    use_shared_3b = (d_3b_in != nullptr && dd_3b_dlam_in != nullptr);
+    use_shared_sp = (d_sp_in != nullptr && dd_sp_dlam_in != nullptr);
+    use_shared_srp = (d_srp_unit_in != nullptr);
+    if (use_shared_3b) {
+      for (int j = 0; j < 6; ++j) y[j] += d_3b_in[j] + dd_3b_dlam_in[j] * dlam;
+    }
+    if (use_shared_sp) {
+      if (d2_sp_dlam2_in != nullptr) {
+        for (int j = 0; j < 6; ++j) y[j] += d_sp_in[j] + (dd_sp_dlam_in[j] + 0.5 * d2_sp_dlam2_in[j] * dlam) * dlam;
+      } else {
+        for (int j = 0; j < 6; ++j) y[j] += d_sp_in[j] + dd_sp_dlam_in[j] * dlam;
+      }
+    }
+    if (use_shared_srp && ctx.agom > 0.0) {
+      for (int j = 0; j < 6; ++j) y[j] += d_srp_unit_in[j] * ctx.agom;
+    }
+  }
+  double Ewarm = kCov ? E_osc_in : std::numeric_limits<double>::quiet_NaN();
+  double sEwarm = kCov ? sE_osc_in : 0.0, cEwarm = kCov ? cE_osc_in : 1.0;
+  const bool fast_ang = (t != 0.0) || !ctx.long_period || ctx.i0 > 0.02;
+  const bool has_sp_orig =
+      (ctx.sp_comb != nullptr) && (ctx.sp_comb_count > 0) && (ctx.sp == ctx.sp_orig) && (ctx.sp_count == ctx.sp_orig_count);
+  const bool has_sp_custom =
+      (ctx.sp != ctx.sp_orig || ctx.sp_count != ctx.sp_orig_count) && (ctx.sp != nullptr) && (ctx.sp_count > 0);
+  const bool has_sp_any = has_sp_orig || has_sp_custom;
+  const bool need_first = (!ctx.long_period && !use_shared_3b) || (ctx.agom > 0.0 && !use_shared_srp);
+  const bool need_tess = !use_shared_sp && (ctx.mdaily != nullptr || has_sp_any || ctx.wide != nullptr);
+  Kepler km{};
+  double etam = 0.0;
+  AngleTrig agm{};
+  bool have_lam_m = false, have_m0 = false, have_th_pre = false, have_cv_m = false;
+  double sLam_m = 0.0, cLam_m = 1.0, sm0_m = 0.0, cm0_m = 1.0, cv_m = 1.0, sv_m = 0.0, inv_opc_m = 0.0;
+  double sth_pre = 0.0, cth_pre = 1.0;
+  if (need_first || need_tess) {
+    const double e2m = ym[kAf] * ym[kAf] + ym[kAg] * ym[kAg];
+    const double t2m = ym[kChi] * ym[kChi] + ym[kPsi] * ym[kPsi];
+    if ((!ctx.long_period || ctx.agom > 0.0) && !(e2m < 1.0)) return kPropEccentricity;
+    if (__builtin_expect(e2m > 1e-24 && t2m > 1e-24 && e2m < 1.0, 1)) {
+      km.a = fast_a_from_n(ym[kN]);
+#ifdef __wasm_simd128__
+      const v128_t vsqm = wasm_f64x2_sqrt(wasm_f64x2_make(e2m, 1.0 - e2m));
+      km.e = wasm_f64x2_extract_lane(vsqm, 0);
+      etam = wasm_f64x2_extract_lane(vsqm, 1);
+      const double t_inc = std::sqrt(t2m);
+      const v128_t vinvm = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(1.0 + t2m, t_inc));
+      const double inv_1pt2 = wasm_f64x2_extract_lane(vinvm, 0);
+      const double inv_t = wasm_f64x2_extract_lane(vinvm, 1);
+#else
+      km.e = std::sqrt(e2m);
+      etam = std::sqrt(1.0 - e2m);
+      const double t_inc = std::sqrt(t2m);
+      const double inv_1pt2 = 1.0 / (1.0 + t2m);
+      const double inv_t = 1.0 / t_inc;
+#endif
+      agm.ci = (1.0 - t2m) * inv_1pt2;
+      agm.si = 2.0 * t_inc * inv_1pt2;
+      agm.sO = ym[kChi] * inv_t;
+      agm.cO = ym[kPsi] * inv_t;
+      const double inv_em = 1.0 / km.e;
+      cv_m = ym[kAf] * inv_em;
+      sv_m = ym[kAg] * inv_em;
+      inv_opc_m = 0.5 * (1.0 + t2m);
+      have_cv_m = true;
+      agm.cw = cv_m * agm.cO + sv_m * agm.sO;
+      agm.sw = sv_m * agm.cO - cv_m * agm.sO;
+      if (fast_ang && t != 0.0 && ctx.wide == nullptr && km.e <= 0.08 && !has_sp_custom) {
+#ifdef __wasm_simd128__
+        if (need_tess) {
+          fm::sincos2_f64x2(ym[kLam], ctx.theta_g0 + kOmegaE * t, sLam_m, cLam_m, sth_pre, cth_pre);
+          have_th_pre = true;
+        } else {
+          fm::sincos_fast(ym[kLam], sLam_m, cLam_m);
+        }
+#else
+        fm::sincos_fast(ym[kLam], sLam_m, cLam_m);
+#endif
+        have_lam_m = true;
+        sm0_m = sLam_m * cv_m - cLam_m * sv_m;
+        cm0_m = cLam_m * cv_m + sLam_m * sv_m;
+        have_m0 = true;
+        if constexpr (kCov) {
+          if (lam_ref_out != nullptr) {
+            *lam_ref_out = ym[kLam];
+            *sLam_ref_out = sLam_m;
+            *cLam_ref_out = cLam_m;
+          }
+        }
+      } else {
+        const double varpi = fast_ang ? fm::atan2(ym[kAg], ym[kAf]) : std::atan2(ym[kAg], ym[kAf]);
+        const double node_raw = fast_ang ? fm::atan2(ym[kChi], ym[kPsi]) : std::atan2(ym[kChi], ym[kPsi]);
+        km.node = fast_wrap(node_raw);
+        km.argp = fast_wrap(varpi - node_raw);
+        km.m = fast_wrap(ym[kLam] - varpi);
+        if (ctx.wide != nullptr) km.i = 2.0 * (fast_ang ? fm::atan(t_inc) : std::atan(t_inc));
+      }
+    } else {
+      km = kepler_of(ym, fast_a_from_n(ym[kN]));
+      if (km.e < 1.0) {
+        etam = std::sqrt(1.0 - km.e * km.e);
+        agm = angle_trig(km);
+      }
+    }
+  } else if (!ctx.long_period || ctx.agom > 0.0) {
+    if (!(ym[kAf] * ym[kAf] + ym[kAg] * ym[kAg] < 1.0)) return kPropEccentricity;
+  }
+  if (need_first) {
+    double sEm = 0.0, cEm = 1.0;
+    double Em = 0.0;
+    bool have_F_trig = false;
+    double sF_m = 0.0, cF_m = 1.0;
+    if (have_m0) {
+      const double inv_ome0 = 1.0 / (1.0 - km.e * cm0_m);
+      const double r1 = (km.e * sm0_m) * inv_ome0;
+      const double rc = (km.e * cm0_m) * inv_ome0;
+      const double r1_2 = r1 * r1;
+      const double u0 = r1 * (1.0 - r1_2 * (0.5 + (1.0 / 6.0) * rc - (13.0 / 24.0) * r1_2));
+      const double u2 = u0 * u0;
+      const double cu0 = 1.0 - u2 * (0.5 - u2 * ((1.0 / 24.0) - u2 * (1.0 / 720.0)));
+      const double su0 = u0 * (1.0 - u2 * ((1.0 / 6.0) - u2 * ((1.0 / 120.0) - u2 * (1.0 / 5040.0))));
+      sEm = sm0_m * cu0 + cm0_m * su0;
+      cEm = cm0_m * cu0 - sm0_m * su0;
+      if (km.e > 0.012) {
+        const double du = (u0 - km.e * sEm) / (1.0 - km.e * cEm);
+        const double h2 = 0.5 * du * du, s_prev = sEm;
+        sEm = s_prev * (1.0 - h2) - cEm * du;
+        cEm = cEm * (1.0 - h2) + s_prev * du;
+      }
+    } else if (fast_ang && ctx.wide == nullptr && km.e <= (ctx.long_period ? 0.008 : 0.018)) {
+      double sm0, cm0;
+      fm::sincos_fast(km.m, sm0, cm0);
+      const double inv_ome0 = 1.0 / (1.0 - km.e * cm0);
+      const double r1 = (km.e * sm0) * inv_ome0;
+      const double rc = (km.e * cm0) * inv_ome0;
+      const double r1_2 = r1 * r1;
+      const double u = r1 * (1.0 - r1_2 * (0.5 + (1.0 / 6.0) * rc - (13.0 / 24.0) * r1_2));
+      Em = km.m + u;
+      const double u2 = u * u;
+      const double cu = 1.0 - 0.5 * u2 * (1.0 - (1.0 / 12.0) * u2);
+      const double su = u * (1.0 - (1.0 / 6.0) * u2 * (1.0 - 0.05 * u2));
+      sEm = sm0 * cu + cm0 * su;
+      cEm = cm0 * cu - sm0 * su;
+    } else if (fast_ang) {
+      double sm0, cm0;
+      fm::sincos_fast(km.m, sm0, cm0);
+      Em = km.m + km.e * sm0 * (1.0 + km.e * (cm0 + 0.5 * km.e * (3.0 * cm0 * cm0 - 1.0)));
+      double last_dE = 1.0;
+      for (int it = 0; it < 30; ++it) {
+        fm::sincos_fast(Em, sEm, cEm);
+        const double dE = (Em - km.e * sEm - km.m) / (1.0 - km.e * cEm);
+        Em -= dE;
+        last_dE = dE;
+        if (std::fabs(dE) < 5e-6 && km.e * dE * dE < (1.0 - km.e) * 1e-15) {
+          const double h2 = 0.5 * dE * dE, s0 = sEm;
+          sEm = s0 * (1.0 - h2) - cEm * dE;
+          cEm = cEm * (1.0 - h2) + s0 * dE;
+          last_dE = 0.0;
+          break;
+        }
+      }
+      if (std::fabs(last_dE) >= 1e-8) fm::sincos_fast(Em, sEm, cEm);
+    } else {
+      Em = km.m + km.e * std::sin(km.m);
+      double last_dE = 1.0;
+      for (int it = 0; it < 30; ++it) {
+        fm::sincos(Em, sEm, cEm);
+        const double dE = (Em - km.e * sEm - km.m) / (1.0 - km.e * cEm);
+        Em -= dE;
+        last_dE = dE;
+        if (std::fabs(dE) < 1e-15) {
+          const double s0 = sEm;
+          sEm = s0 - cEm * dE;
+          cEm = cEm + s0 * dE;
+          break;
+        }
+      }
+      if (std::fabs(last_dE) >= 1e-8) fm::sincos(Em, sEm, cEm);
+    }
+    if (have_cv_m) {
+      sF_m = sEm * cv_m + cEm * sv_m;
+      cF_m = cEm * cv_m - sEm * sv_m;
+      have_F_trig = true;
+    }
+    const double n = ym[kN];
+    if (!ctx.long_period && !use_shared_3b) {
+      double d[6] = {0, 0, 0, 0, 0, 0};
+      third_body_short_period(ym, shared, have_F_trig ? 0.0 : (Em + km.argp + km.node), 2, kThirdBodyTailDegree, d,
+                              kCov ? dd_3b_dlam_out : nullptr,
+                              ctx.d50_epoch, t, have_F_trig ? &sF_m : nullptr, have_F_trig ? &cF_m : nullptr,
+                              ctx.ctx_id);
+      for (int j = 0; j < 6; ++j) y[j] += d[j];
+      if constexpr (kCov) {
+        if (d_3b_out != nullptr) {
+          for (int j = 0; j < 6; ++j) d_3b_out[j] += d[j];
+        }
+      }
+    }
+    if (ctx.agom > 0.0 && !use_shared_srp) {
+      const Perifocal pfm = perifocal_of(agm);
+      Vec3 sun_u{};
+      double sun_r = 0.0;
+      if (shared != nullptr) {
+        sun_u = shared->sun_u;
+        sun_r = shared->sun_r;
+      } else {
+        const ActiveBracket& ab = active_bracket();
+        if (__builtin_expect(t != 0.0 && ab.valid && ab.has_t1 && ab.ctx_id == ctx.ctx_id &&
+                                 ab.d50_epoch == ctx.d50_epoch &&
+                                 t >= ab.sub_t_lo && t <= ab.sub_t_hi,
+                             1)) {
+          const double u_ab = (t - ab.t0) * ab.inv_dt;
+          sun_u = ab.sun_u0 + u_ab * ab.dsun_u;
+          sun_r = ab.sun_r0 + u_ab * ab.dsun_r;
+        } else {
+          sun_at_ap(ctx.d50_epoch + t / kMinutesPerDay, sun_u, sun_r);
+        }
+      }
+      double A, B, C;
+      direction_cosines(pfm, sun_u, A, B, C);
+      const double rs_au = sun_r * kRe / kAu;
+      const double Fs = kSrpPressure * ctx.agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
+      double ds[6];
+      srp_output_ap(km.e, etam, sEm, cEm, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, ds);
+      for (int j = 0; j < 6; ++j) y[j] += ds[j];
+      if constexpr (kCov) {
+        if (d_srp_unit_out != nullptr) {
+          const double inv_agom = 1.0 / ctx.agom;
+          for (int j = 0; j < 6; ++j) d_srp_unit_out[j] = ds[j] * inv_agom;
+        }
+      }
+    }
+    if (!(y[kN] > 0.0)) return kPropMeanMotion;
+    if (!have_m0) {
+      Ewarm = Em;
+      sEwarm = sEm;
+      cEwarm = cEm;
+    }
+  } else if constexpr (kCov) {
+    if ((use_shared_3b || use_shared_sp || use_shared_srp) && !(y[kN] > 0.0)) {
+      return kPropMeanMotion;
+    }
+  }
+  if (need_tess && km.e < 1.0) {
+    tess::SpEvalCache& sec_buf = tess::sp_eval_cache();
+    float* const cm_f32_buf = sec_buf.cm_f32_local;
+    float* const sm_f32_buf = sec_buf.sm_f32_local;
+    int cm_cnt = 0;
+    double cm_last = 1.0, sm_last = 0.0;
+    const bool has_md = ctx.mdaily != nullptr;
+    const bool has_sp = has_sp_orig;
+    double sb_pre = 0.0, cb_pre = 1.0, su1_pre = 0.0, cu1_pre = 1.0, sM1_pre = sm0_m, cM1_pre = cm0_m;
+    if (__builtin_expect(have_m0, 1)) {
+      double sth = sth_pre, cth = cth_pre;
+      if (!have_th_pre) fm::sincos_fast(ctx.theta_g0 + kOmegaE * t, sth, cth);
+      sb_pre = agm.sO * cth - agm.cO * sth;
+      cb_pre = agm.cO * cth + agm.sO * sth;
+      su1_pre = agm.sw * cm0_m + agm.cw * sm0_m;
+      cu1_pre = agm.cw * cm0_m - agm.sw * sm0_m;
+    } else {
+      fm::sincos_fast(km.node - (ctx.theta_g0 + kOmegaE * t), sb_pre, cb_pre);
+      if (has_sp) fm::sincos2_f64x2(km.argp + km.m, km.m, su1_pre, cu1_pre, sM1_pre, cM1_pre);
+    }
+    const uint64_t mdt_id = md_table_id(ctx);
+    if constexpr (kCov) {
+      if (d_sp_out != nullptr && dd_sp_dlam_out != nullptr) {
+        double six_sp[6] = {0, 0, 0, 0, 0, 0}, dsix_sp[6] = {0, 0, 0, 0, 0, 0}, d2six_sp[6] = {0, 0, 0, 0, 0, 0};
+        double sb_t = sb_pre, cb_t = cb_pre;
+        if (has_md) {
+          tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six_sp, &sb_t, &cb_t,
+                           has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
+                           has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
+                           &sb_pre, &cb_pre, mdt_id);
+        }
+        if (has_sp) {
+          tess::sp_six_with_deriv(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0,
+                                  six_sp, dsix_sp, d2_sp_dlam2_out != nullptr ? d2six_sp : nullptr,
+                                  &sb_t, &cb_t,
+                                  has_md ? cm_f32_buf : nullptr, has_md ? sm_f32_buf : nullptr, cm_cnt, cm_last, sm_last,
+                                  &su1_pre, &cu1_pre, &sM1_pre, &cM1_pre);
+        } else if (has_sp_custom) {
+          tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six_sp);
+        }
+        if (ctx.wide != nullptr) {
+          if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - ctx.wide_blend);
+            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - (1.0 - ctx.wide_blend));
+          } else {
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0);
+          }
+        }
+        auto conv_six = [&](const double* sx, double* eq) {
+          if (__builtin_expect(have_cv_m, 1)) {
+            eq[kAf] = sx[1] * cv_m - sx[3] * sv_m;
+            eq[kAg] = sx[1] * sv_m + sx[3] * cv_m;
+            eq[kChi] = (sx[2] * agm.sO + sx[4] * agm.cO) * inv_opc_m;
+            eq[kPsi] = (sx[2] * agm.cO - sx[4] * agm.sO) * inv_opc_m;
+            eq[kLam] = sx[5];
+            eq[kN] = sx[0];
+          } else {
+            six_to_equinoctial(agm, sx, eq);
+          }
+        };
+        double d_sp[6], dd_sp[6];
+        conv_six(six_sp, d_sp);
+        conv_six(dsix_sp, dd_sp);
+        for (int j = 0; j < 6; ++j) {
+          y[j] += d_sp[j];
+          d_sp_out[j] += d_sp[j];
+          dd_sp_dlam_out[j] += dd_sp[j];
+        }
+        if (d2_sp_dlam2_out != nullptr) {
+          double d2d_sp[6];
+          conv_six(d2six_sp, d2d_sp);
+          for (int j = 0; j < 6; ++j) d2_sp_dlam2_out[j] += d2d_sp[j];
+        }
+      } else {
+        double six[6] = {0, 0, 0, 0, 0, 0};
+        double sb_t = sb_pre, cb_t = cb_pre;
+        if (has_md)
+          tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci,
+                           ctx.theta_g0, six, &sb_t, &cb_t,
+                           has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
+                           has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
+                           &sb_pre, &cb_pre, mdt_id);
+        if (has_sp)
+          tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, six,
+                           sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
+        else if (has_sp_custom)
+          tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
+        if (ctx.wide != nullptr) {
+          if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend);
+            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend);
+          } else {
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0);
+          }
+        }
+        if (__builtin_expect(have_cv_m, 1)) {
+          y[kAf] += six[1] * cv_m - six[3] * sv_m;
+          y[kAg] += six[1] * sv_m + six[3] * cv_m;
+          y[kChi] += (six[2] * agm.sO + six[4] * agm.cO) * inv_opc_m;
+          y[kPsi] += (six[2] * agm.cO - six[4] * agm.sO) * inv_opc_m;
+          y[kLam] += six[5];
+          y[kN] += six[0];
+        } else {
+          double d[6];
+          six_to_equinoctial(agm, six, d);
+          for (int j = 0; j < 6; ++j) y[j] += d[j];
+        }
+      }
+    } else {
+      double six[6] = {0, 0, 0, 0, 0, 0};
+      double sb_t = sb_pre, cb_t = cb_pre;
+      if (has_md)
+        tess::mdaily_six(ctx.mdaily, ctx.mdaily_degree, t, km, ym[kN], etam, agm.si, agm.ci,
+                         ctx.theta_g0, six, &sb_t, &cb_t,
+                         has_sp ? cm_f32_buf : nullptr, has_sp ? sm_f32_buf : nullptr,
+                         has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
+                         &sb_pre, &cb_pre, mdt_id);
+      if (has_sp)
+        tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, six,
+                         sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
+      else if (has_sp_custom)
+        tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
+      if (ctx.wide != nullptr) {
+        if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend);
+          tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend);
+        } else {
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0);
+        }
+      }
+      if (__builtin_expect(have_cv_m, 1)) {
+        y[kAf] += six[1] * cv_m - six[3] * sv_m;
+        y[kAg] += six[1] * sv_m + six[3] * cv_m;
+        y[kChi] += (six[2] * agm.sO + six[4] * agm.cO) * inv_opc_m;
+        y[kPsi] += (six[2] * agm.cO - six[4] * agm.sO) * inv_opc_m;
+        y[kLam] += six[5];
+        y[kN] += six[0];
+      } else {
+        double d[6];
+        six_to_equinoctial(agm, six, d);
+        for (int j = 0; j < 6; ++j) y[j] += d[j];
+      }
+    }
+  }
+  if (__builtin_expect(ctx.drag_pass && ctx.bterm > 0.0, 0)) {
+    output_drag_pass(ctx, t, ym, shared, y);
+  }
+  const double e2 = y[kAf] * y[kAf] + y[kAg] * y[kAg];
+  const double t2 = y[kChi] * y[kChi] + y[kPsi] * y[kPsi];
+  if (!(e2 < 1.0)) return kPropEccentricity;
+  if (!std::isfinite(y[kLam]) || std::fabs(y[kLam]) > 1e10) return kPropEccentricity;
+  if (__builtin_expect(e2 > 1e-24 && t2 > 1e-24, 1)) {
+    double a;
+    if (km.a > 0.0) {
+      const double du_n = (y[kN] - ym[kN]) / ym[kN];
+      a = std::fabs(du_n) < 2e-3
+              ? km.a * (1.0 + du_n * (-(2.0 / 3.0) + du_n * ((5.0 / 9.0) + du_n * (-(40.0 / 81.0) + du_n * (110.0 / 243.0)))))
+              : fast_a_from_n(y[kN]);
+    } else {
+      a = fast_a_from_n(y[kN]);
+    }
+    const double om_e2 = 1.0 - e2;
+    const double p = a * om_e2;
+#ifdef __wasm_simd128__
+    const v128_t vsq = wasm_f64x2_sqrt(wasm_f64x2_make(e2, om_e2));
+    const double e = wasm_f64x2_extract_lane(vsq, 0);
+    const double eta = wasm_f64x2_extract_lane(vsq, 1);
+    const double t_inc = std::sqrt(t2);
+    const v128_t vinv_t = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(1.0 + t2, t_inc));
+    const v128_t vinv_ee = wasm_f64x2_div(wasm_f64x2_splat(1.0), vsq);
+    const v128_t vinv_ep = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(1.0 + eta, p));
+    const double inv_1pt2 = wasm_f64x2_extract_lane(vinv_t, 0);
+    const double inv_t = wasm_f64x2_extract_lane(vinv_t, 1);
+    const double inv_e = wasm_f64x2_extract_lane(vinv_ee, 0);
+    const double inv_eta = wasm_f64x2_extract_lane(vinv_ee, 1);
+    const double inv_1peta = wasm_f64x2_extract_lane(vinv_ep, 0);
+    const double inv_p = wasm_f64x2_extract_lane(vinv_ep, 1);
+#else
+    const double e = std::sqrt(e2);
+    const double eta = std::sqrt(om_e2);
+    const double t_inc = std::sqrt(t2);
+    const double inv_1pt2 = 1.0 / (1.0 + t2);
+    const double inv_t = 1.0 / t_inc;
+    const double inv_e = 1.0 / e;
+    const double inv_eta = 1.0 / eta;
+    const double inv_1peta = 1.0 / (1.0 + eta);
+    const double inv_p = 1.0 / p;
+#endif
+    const double th = (1.0 - t2) * inv_1pt2;
+    const double si = 2.0 * t_inc * inv_1pt2;
+    const double sO = y[kChi] * inv_t, cO = y[kPsi] * inv_t;
+    const double cv = y[kAf] * inv_e, sv = y[kAg] * inv_e;
+    const double cw = cv * cO + sv * sO, sw = sv * cO - cv * sO;
+    double E = 0.0, sE = 0.0, cE = 1.0;
+    double dF_osc = 0.0;
+    if (fast_ang && t != 0.0 && e <= 0.08) {
+      double sLam, cLam;
+      const double lref = kCov ? (have_lam_m ? ym[kLam] : lam_ref_in) : (have_lam_m ? ym[kLam] : std::numeric_limits<double>::quiet_NaN());
+      if (lref == lref && std::fabs(y[kLam] - lref) < 0.02) {
+        const double slref = kCov ? (have_lam_m ? sLam_m : sLam_ref_in) : sLam_m;
+        const double clref = kCov ? (have_lam_m ? cLam_m : cLam_ref_in) : cLam_m;
+        const double dl = y[kLam] - lref;
+        const double dl2 = dl * dl;
+        const double cdl = 1.0 - dl2 * (0.5 - dl2 * (1.0 / 24.0));
+        const double sdl = dl * (1.0 - dl2 * ((1.0 / 6.0) - dl2 * (1.0 / 120.0)));
+        sLam = slref * cdl + clref * sdl;
+        cLam = clref * cdl - slref * sdl;
+      } else {
+        fm::sincos_fast(y[kLam], sLam, cLam);
+      }
+      const double sm_osc = sLam * cv - cLam * sv;
+      const double cm_osc = cLam * cv + sLam * sv;
+      const double inv_ome0 = 1.0 / (1.0 - e * cm_osc);
+      const double r1 = (e * sm_osc) * inv_ome0;
+      const double rc = (e * cm_osc) * inv_ome0;
+      const double r1_2 = r1 * r1;
+      const double u0 = r1 * (1.0 - r1_2 * (0.5 + (1.0 / 6.0) * rc - (13.0 / 24.0) * r1_2));
+      const double u2 = u0 * u0;
+      const double cu0 = 1.0 - u2 * (0.5 - u2 * ((1.0 / 24.0) - u2 * (1.0 / 720.0)));
+      const double su0 = u0 * (1.0 - u2 * ((1.0 / 6.0) - u2 * ((1.0 / 120.0) - u2 * (1.0 / 5040.0))));
+      sE = sm_osc * cu0 + cm_osc * su0;
+      cE = cm_osc * cu0 - sm_osc * su0;
+      dF_osc = u0;
+      if (e > 0.008) {
+        const double du = (u0 - e * sE) / (1.0 - e * cE);
+        const double h2 = 0.5 * du * du, s_prev = sE;
+        sE = s_prev * (1.0 - h2) - cE * du;
+        cE = cE * (1.0 - h2) + s_prev * du;
+        dF_osc = u0 - du;
+      }
+      if constexpr (kCov) {
+        if (E_osc_out != nullptr) {
+          *E_osc_out = std::numeric_limits<double>::quiet_NaN();
+          *sE_osc_out = sE;
+          *cE_osc_out = cE;
+        }
+      }
+    } else {
+      const double varpi = fast_ang ? fm::atan2(y[kAg], y[kAf]) : std::atan2(y[kAg], y[kAf]);
+      const double m_ang = fast_wrap(y[kLam] - varpi);
+      bool solved_kepler = false;
+      if (fast_ang && Ewarm == Ewarm) {
+        double dm = m_ang - (Ewarm - e * sEwarm);
+        dm -= kTwoPi * std::floor((dm + kPi) * (1.0 / kTwoPi));
+        const double f1 = 1.0 - e * cEwarm;
+        const double r1 = dm / f1;
+        if (std::fabs(r1) < 0.004) {
+          const double f2 = e * sEwarm;
+          const double f3 = e * cEwarm;
+          const double inv_f1 = 1.0 / f1;
+          const double f2_o_f1 = f2 * inv_f1;
+          const double u = r1 * (1.0 - 0.5 * r1 * f2_o_f1 + r1 * r1 * (0.5 * f2_o_f1 * f2_o_f1 - (1.0 / 6.0) * f3 * inv_f1));
+          E = Ewarm + u;
+          const double u2 = u * u;
+          const double cu = 1.0 - 0.5 * u2 * (1.0 - (1.0 / 12.0) * u2);
+          const double su = u * (1.0 - (1.0 / 6.0) * u2 * (1.0 - 0.05 * u2));
+          sE = sEwarm * cu + cEwarm * su;
+          cE = cEwarm * cu - sEwarm * su;
+          solved_kepler = true;
+        }
+      }
+      if (!solved_kepler && fast_ang && e <= (ctx.long_period ? 0.008 : 0.018)) {
+        double sm0, cm0;
+        fm::sincos_fast(m_ang, sm0, cm0);
+        const double inv_ome0 = 1.0 / (1.0 - e * cm0);
+        const double r1 = (e * sm0) * inv_ome0;
+        const double rc = (e * cm0) * inv_ome0;
+        const double r1_2 = r1 * r1;
+        const double u = r1 * (1.0 - r1_2 * (0.5 + (1.0 / 6.0) * rc - (13.0 / 24.0) * r1_2));
+        E = m_ang + u;
+        const double u2 = u * u;
+        const double cu = 1.0 - 0.5 * u2 * (1.0 - (1.0 / 12.0) * u2);
+        const double su = u * (1.0 - (1.0 / 6.0) * u2 * (1.0 - 0.05 * u2));
+        sE = sm0 * cu + cm0 * su;
+        cE = cm0 * cu - sm0 * su;
+        solved_kepler = true;
+      }
+      if (!solved_kepler) {
+        if (Ewarm == Ewarm) {
+          double dm = m_ang - (Ewarm - e * sEwarm);
+          dm -= kTwoPi * std::floor((dm + kPi) * (1.0 / kTwoPi));
+          E = fast_ang ? (Ewarm + dm / (1.0 - e * cEwarm)) : (Ewarm + dm);
+        } else if (fast_ang) {
+          double sm0, cm0;
+          fm::sincos_fast(m_ang, sm0, cm0);
+          E = m_ang + e * sm0 * (1.0 + e * (cm0 + 0.5 * e * (3.0 * cm0 * cm0 - 1.0)));
+        } else {
+          E = m_ang + e * std::sin(m_ang);
+        }
+        double last_dE = 1.0;
+        for (int it = 0; it < 30; ++it) {
+          double sEi, cEi;
+          if (fast_ang) fm::sincos_fast(E, sEi, cEi);
+          else fm::sincos(E, sEi, cEi);
+          const double dE = (E - e * sEi - m_ang) / (1.0 - e * cEi);
+          E -= dE;
+          last_dE = dE;
+          if (fast_ang ? (std::fabs(dE) < 5e-6 && e * dE * dE < (1.0 - e) * 1e-15) : (std::fabs(dE) < 1e-15)) {
+            const double h2 = 0.5 * dE * dE;
+            sE = sEi * (1.0 - h2) - cEi * dE;
+            cE = cEi * (1.0 - h2) + sEi * dE;
+            last_dE = 0.0;
+            break;
+          }
+        }
+        if (std::fabs(last_dE) >= 1e-8) {
+          if (fast_ang) fm::sincos_fast(E, sE, cE);
+          else fm::sincos(E, sE, cE);
+        }
+      }
+      dF_osc = fast_wrap(E - m_ang);
+      if constexpr (kCov) {
+        if (E_osc_out != nullptr) {
+          *E_osc_out = E;
+          *sE_osc_out = sE;
+          *cE_osc_out = cE;
+        }
+      }
+    }
+    const double ome = 1.0 - e * cE;
+#ifdef __wasm_simd128__
+    const v128_t vinv_ome = wasm_f64x2_div(wasm_f64x2_splat(1.0), wasm_f64x2_make(ome, ome + eta));
+    const double inv_ome = wasm_f64x2_extract_lane(vinv_ome, 0);
+    const double tv = (e * sE) * wasm_f64x2_extract_lane(vinv_ome, 1);
+#else
+    const double inv_ome = 1.0 / ome;
+    const double tv = (e * sE) / (ome + eta);
+#endif
+    const double snu = eta * sE * inv_ome, cnu = (cE - e) * inv_ome;
+    const double r = a * ome;
+    const double th2 = th * th;
+    const double c = 0.25 * kJ2 * inv_p, d = c * inv_p;
+    const double beta = e * inv_1peta;
+    double phi_v = 0.0;
+    if (std::fabs(tv) < 0.06) {
+      const double tv2 = tv * tv;
+      phi_v = tv * (1.0 - tv2 * ((1.0 / 3.0) - tv2 * ((1.0 / 5.0) - tv2 * (1.0 / 7.0))));
+    } else {
+      phi_v = fast_ang ? fm::atan(tv) : std::atan(tv);
+    }
+    if constexpr (kCov) {
+      if (nom_osc_out != nullptr) {
+        nom_osc_out->a0 = a;
+        nom_osc_out->n0 = y[kN];
+        nom_osc_out->inv_n0 = 1.0 / y[kN];
+        nom_osc_out->lam0 = y[kLam];
+        nom_osc_out->dF0 = dF_osc;
+        nom_osc_out->sF0 = sE * cv + cE * sv;
+        nom_osc_out->cF0 = cE * cv - sE * sv;
+        nom_osc_out->tv0 = tv;
+        nom_osc_out->phi_v0 = phi_v;
+        nom_osc_out->valid = true;
+      }
+    }
+    const double eoc = e * sE + 2.0 * phi_v;
+    const double Qw = eoc + e * snu;
+    const double n_a = y[kN];
+    const double c2w = cw * cw - sw * sw, s2w = 2.0 * sw * cw;
+    const double c2n = cnu * cnu - snu * snu, s2n = 2.0 * snu * cnu;
+    const double c3n = c2n * cnu - s2n * snu, s3n = s2n * cnu + c2n * snu;
+    const double c2u = c2w * c2n - s2w * s2n, s2u = s2w * c2n + c2w * s2n;
+    const double cw1 = c2w * cnu - s2w * snu, sw1 = s2w * cnu + c2w * snu;
+    const double cw3 = c2w * c3n - s2w * s3n, sw3 = s2w * c3n + c2w * s3n;
+    const double dr = c * ((1.0 - th2) * c2u - (beta * cnu + 2.0 * ome * inv_eta + 1.0) * (3.0 * th2 - 1.0));
+    const double di = d * th * si * (3.0 * c2u + e * (3.0 * cw1 + cw3));
+    const double dnode = d * th * (3.0 * s2u - 6.0 * Qw + e * (3.0 * sw1 + sw3));
+    const double du = d * ((1.0 - eta) * (3.0 * th2 - 1.0) * snu * (beta + cnu) - 3.0 * (1.0 - 5.0 * th2) * Qw +
+                           0.5 * (1.0 - 7.0 * th2) * s2u +
+                           e * ((2.0 - 5.0 * th2) * sw1 - th2 * sw3));
+    const double aor = inv_ome;
+    const double aor2 = aor * aor;
+    const double rdot0 = n_a * a * e * snu * inv_eta;
+    const double rfdot0 = n_a * a * eta * aor;
+    const double drdot = eta * (-2.0 * c * n_a * aor2 * (1.0 - th2) * s2u +
+                                c * n_a * e * snu * (3.0 * th2 - 1.0) * (aor2 * inv_1peta + inv_eta * inv_eta * inv_eta));
+    const double drfdot = eta * (-n_a * aor2 * dr +
+                                 n_a * (a * aor) * d * si * si * (3.0 * c2u + e * (3.0 * cw1 + cw3)));
+    const double rk = r + dr, rdotk = rdot0 + drdot, rfdotk = rfdot0 + drfdot;
+    const double cu0 = cw * cnu - sw * snu, su0 = sw * cnu + cw * snu;
+    double sinsu, cossu, snod, cnod, sini, cosi;
+    if (__builtin_expect(std::fabs(du) < 0.02 && std::fabs(dnode) < 0.02 && std::fabs(di) < 0.02, 1)) {
+#ifdef __wasm_simd128__
+      const v128_t vang = wasm_f64x2_make(du, dnode);
+      const v128_t va2 = wasm_f64x2_mul(vang, vang);
+      const v128_t vc = wasm_f64x2_sub(wasm_f64x2_splat(1.0),
+                                       wasm_f64x2_mul(va2, wasm_f64x2_sub(wasm_f64x2_splat(0.5),
+                                                                          wasm_f64x2_mul(va2, wasm_f64x2_splat(1.0 / 24.0)))));
+      const v128_t vs_a = wasm_f64x2_mul(vang,
+                                         wasm_f64x2_sub(wasm_f64x2_splat(1.0),
+                                                        wasm_f64x2_mul(va2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 6.0),
+                                                                                           wasm_f64x2_mul(va2, wasm_f64x2_splat(1.0 / 120.0))))));
+      const v128_t vc0 = wasm_f64x2_make(cu0, cO);
+      const v128_t vs0 = wasm_f64x2_make(su0, sO);
+      const v128_t vcos = wasm_f64x2_sub(wasm_f64x2_mul(vc0, vc), wasm_f64x2_mul(vs0, vs_a));
+      const v128_t vsin = wasm_f64x2_add(wasm_f64x2_mul(vs0, vc), wasm_f64x2_mul(vc0, vs_a));
+      cossu = wasm_f64x2_extract_lane(vcos, 0);
+      cnod = wasm_f64x2_extract_lane(vcos, 1);
+      sinsu = wasm_f64x2_extract_lane(vsin, 0);
+      snod = wasm_f64x2_extract_lane(vsin, 1);
+      const double di2 = di * di;
+      const double cdi = 1.0 - di2 * (0.5 - di2 * (1.0 / 24.0));
+      const double sdi = di * (1.0 - di2 * ((1.0 / 6.0) - di2 * (1.0 / 120.0)));
+      cosi = th * cdi - si * sdi;
+      sini = si * cdi + th * sdi;
+#else
+      const double du2 = du * du, dn2 = dnode * dnode, di2 = di * di;
+      const double cdu = 1.0 - du2 * (0.5 - du2 * (1.0 / 24.0));
+      const double sdu = du * (1.0 - du2 * ((1.0 / 6.0) - du2 * (1.0 / 120.0)));
+      const double cdn = 1.0 - dn2 * (0.5 - dn2 * (1.0 / 24.0));
+      const double sdn = dnode * (1.0 - dn2 * ((1.0 / 6.0) - dn2 * (1.0 / 120.0)));
+      const double cdi = 1.0 - di2 * (0.5 - di2 * (1.0 / 24.0));
+      const double sdi = di * (1.0 - di2 * ((1.0 / 6.0) - di2 * (1.0 / 120.0)));
+      cossu = cu0 * cdu - su0 * sdu;
+      sinsu = su0 * cdu + cu0 * sdu;
+      cnod = cO * cdn - sO * sdn;
+      snod = sO * cdn + cO * sdn;
+      cosi = th * cdi - si * sdi;
+      sini = si * cdi + th * sdi;
+#endif
+    } else {
+      const double node_ang = fast_ang ? fm::atan2(y[kChi], y[kPsi]) : std::atan2(y[kChi], y[kPsi]);
+      const double ik = 2.0 * (fast_ang ? fm::atan(t_inc) : std::atan(t_inc)) + di;
+      fm::sincos((fast_ang ? fm::atan2(su0, cu0) : std::atan2(su0, cu0)) + du, sinsu, cossu);
+      fm::sincos(node_ang + dnode, snod, cnod);
+      fm::sincos(ik, sini, cosi);
+    }
+    const double rk_re = rk * kRe;
+    const double vs = kRe / 60.0;
+    const double rdk_vs = rdotk * vs, rfdk_vs = rfdotk * vs;
+#ifdef __wasm_simd128__
+    const v128_t v_csn = wasm_f64x2_make(cnod, snod);
+    const v128_t v_xm = wasm_f64x2_mul(wasm_f64x2_make(-snod, cnod), wasm_f64x2_splat(cosi));
+    const v128_t v_ssu = wasm_f64x2_splat(sinsu);
+    const v128_t v_csu = wasm_f64x2_splat(cossu);
+    const v128_t v_uxy = wasm_f64x2_add(wasm_f64x2_mul(v_xm, v_ssu), wasm_f64x2_mul(v_csn, v_csu));
+    const v128_t v_vxy = wasm_f64x2_sub(wasm_f64x2_mul(v_xm, v_csu), wasm_f64x2_mul(v_csn, v_ssu));
+    wasm_v128_store(r_out, wasm_f64x2_mul(v_uxy, wasm_f64x2_splat(rk_re)));
+    r_out[2] = rk_re * (sini * sinsu);
+    wasm_v128_store(v_out, wasm_f64x2_add(wasm_f64x2_mul(v_uxy, wasm_f64x2_splat(rdk_vs)),
+                                           wasm_f64x2_mul(v_vxy, wasm_f64x2_splat(rfdk_vs))));
+    v_out[2] = rdk_vs * (sini * sinsu) + rfdk_vs * (sini * cossu);
+#else
+    const double xmx = -snod * cosi, xmy = cnod * cosi;
+    const double ux = xmx * sinsu + cnod * cossu, uy = xmy * sinsu + snod * cossu, uz = sini * sinsu;
+    const double vx = xmx * cossu - cnod * sinsu, vy = xmy * cossu - snod * sinsu, vz = sini * cossu;
+    r_out[0] = rk_re * ux;
+    r_out[1] = rk_re * uy;
+    r_out[2] = rk_re * uz;
+    v_out[0] = rdk_vs * ux + rfdk_vs * vx;
+    v_out[1] = rdk_vs * uy + rfdk_vs * vy;
+    v_out[2] = rdk_vs * uz + rfdk_vs * vz;
+#endif
+    return kPropOk;
+  }
+  return output_j2_osc(y, Ewarm, r_out, v_out);
+}
+
+inline int32_t output(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
+                      const Bodies* shared) {
+  return output_impl<false>(ctx, t, ym, r_out, v_out, shared);
+}
+
+inline int32_t output(const RateContext& ctx, double t, const double* ym, double r_out[3], double v_out[3],
+                      const Bodies* shared, double* d_3b_out, double* dd_3b_dlam_out = nullptr,
+                      double* d_sp_out = nullptr, double* dd_sp_dlam_out = nullptr,
+                      const double* d_3b_in = nullptr, const double* dd_3b_dlam_in = nullptr,
+                      const double* d_sp_in = nullptr, const double* dd_sp_dlam_in = nullptr, double dlam = 0.0,
+                      double* d2_sp_dlam2_out = nullptr, const double* d2_sp_dlam2_in = nullptr,
+                      double* d_srp_unit_out = nullptr, const double* d_srp_unit_in = nullptr,
+                      double* E_osc_out = nullptr, double* sE_osc_out = nullptr, double* cE_osc_out = nullptr,
+                      double E_osc_in = std::numeric_limits<double>::quiet_NaN(),
+                      double sE_osc_in = 0.0, double cE_osc_in = 1.0,
+                      double* lam_ref_out = nullptr, double* sLam_ref_out = nullptr, double* cLam_ref_out = nullptr,
+                      double lam_ref_in = std::numeric_limits<double>::quiet_NaN(),
+                      double sLam_ref_in = 0.0, double cLam_ref_in = 1.0,
+                      CovNomOsc* nom_osc_out = nullptr) {
+  return output_impl<true>(ctx, t, ym, r_out, v_out, shared, d_3b_out, dd_3b_dlam_out, d_sp_out, dd_sp_dlam_out,
+                           d_3b_in, dd_3b_dlam_in, d_sp_in, dd_sp_dlam_in, dlam, d2_sp_dlam2_out, d2_sp_dlam2_in,
+                           d_srp_unit_out, d_srp_unit_in, E_osc_out, sE_osc_out, cE_osc_out, E_osc_in, sE_osc_in, cE_osc_in,
+                           lam_ref_out, sLam_ref_out, cLam_ref_out, lam_ref_in, sLam_ref_in, cLam_ref_in, nom_osc_out);
+}
+
 // --- Per-object record and node cache --------------------------------------------
 
 /// Sparse checkpoints per direction and the stride between them is chosen at
@@ -1419,10 +5341,8 @@ struct XpSat {
 
 /// SPEC 16.11: the nominal set whose grids the copies initialized on this thread while a GridShareScope lives read (the covariance's
 /// sigma sets); nullptr outside one.
-inline XpSat*& grid_share_anchor() {
-  static thread_local XpSat* anchor = nullptr;
-  return anchor;
-}
+inline thread_local XpSat* g_grid_share_anchor = nullptr;
+inline XpSat*& grid_share_anchor() { return g_grid_share_anchor; }
 struct GridShareScope {
   XpSat* prev;
   explicit GridShareScope(XpSat* nominal) : prev(grid_share_anchor()) { grid_share_anchor() = nominal; }
@@ -1431,9 +5351,35 @@ struct GridShareScope {
   GridShareScope& operator=(const GridShareScope&) = delete;
 };
 
+inline thread_local XpSat* g_cov_bank_anchor = nullptr;
+inline XpSat*& cov_bank_anchor() { return g_cov_bank_anchor; }
+struct CovBankScope {
+  XpSat* prev;
+  explicit CovBankScope(XpSat* nominal) : prev(cov_bank_anchor()) { cov_bank_anchor() = nominal; }
+  ~CovBankScope() { cov_bank_anchor() = prev; }
+  CovBankScope(const CovBankScope&) = delete;
+  CovBankScope& operator=(const CovBankScope&) = delete;
+};
+
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const tess::Terms& t = s.ctx.selected_terms;
+  s.ctx.n0 = n0;
+  s.ctx.a0 = std::pow(kKe / n0, kX2o3);
+  s.ctx.hd_e0 = e.eo;
+  s.ctx.hd_i0 = e.xincl;
+  s.ctx.hd_a0 = s.ctx.a0;
+  XpSat* anchor = cov_bank_anchor();
+  if (anchor == &s) anchor = nullptr;
+  XpSat* grid_anchor = grid_share_anchor();
+  if (grid_anchor == &s) grid_anchor = nullptr;
+  s.ctx.cov_anchor_id = anchor != nullptr ? anchor->ctx.ctx_id : s.ctx.ctx_id;
+  s.ctx.is_cov_sigma = anchor != nullptr ? 1 : 0;
+  const bool same_res = anchor != nullptr && anchor->ctx.resonance == res && anchor->ctx.long_period == s.ctx.long_period;
+  const bool within_share = same_res && std::fabs(e.eo - anchor->ctx.e0) <= tess::kShareE &&
+                            std::fabs(e.xincl - anchor->ctx.i0) <= tess::kShareI &&
+                            std::fabs(s.ctx.a0 / anchor->ctx.a0 - 1.0) <= tess::kShareA;
+  const bool same_inc = anchor != nullptr && e.xincl == anchor->ctx.i0;
   // The nonresonant long-period branch retains its native TEME-of-date
   // convention. A second epoch-axis rotation is not part of that branch.
   // This one ingest-time policy is shared by fit residuals and every flight.
@@ -1443,43 +5389,94 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
-      const res::TermSet ts = res::class_terms(res);
-      res::GTaylor* g = static_cast<res::GTaylor*>(std::malloc(ts.count * sizeof(res::GTaylor)));
-      if (g == nullptr) return false;
-      for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
-      s.ctx.res_taylor = g;
+      if (within_share && anchor->ctx.res_taylor != nullptr) {
+        s.ctx.res_taylor = anchor->ctx.res_taylor;
+        s.ctx.e0 = anchor->ctx.e0;
+        s.ctx.shared_mask |= 4;
+      } else {
+        const res::TermSet ts = res::class_terms(res);
+        res::GTaylor* g = static_cast<res::GTaylor*>(std::malloc(ts.count * sizeof(res::GTaylor)));
+        if (g == nullptr) return false;
+        for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
+        s.ctx.res_taylor = g;
+      }
     }
   }
   const int md = (t.tesseral > tess::kMdailyCap ? tess::kMdailyCap : t.tesseral) & ~1;
   if (md >= 2) {
-    double scratch[2 * 72];
-    const int count = tess::mdaily_terms(md, e.xincl, scratch);
-    float* kept = static_cast<float*>(std::malloc(2 * count * sizeof(float)));
-    if (kept == nullptr) return false;
-    for (int q = 0; q < 2 * count; ++q) kept[q] = static_cast<float>(scratch[q]);
-    s.ctx.mdaily = kept;
-    s.ctx.mdaily_degree = md;
+    if (same_inc && anchor->ctx.mdaily != nullptr && anchor->ctx.mdaily_degree == md) {
+      s.ctx.mdaily = anchor->ctx.mdaily;
+      s.ctx.mdaily_degree = md;
+      s.ctx.shared_mask |= 32;
+    } else {
+      double scratch[2 * 72];
+      const int count = tess::mdaily_terms(md, e.xincl, scratch);
+      float* kept = static_cast<float*>(std::malloc(2 * count * sizeof(float)));
+      if (kept == nullptr) return false;
+      for (int q = 0; q < 2 * count; ++q) kept[q] = static_cast<float>(scratch[q]);
+      s.ctx.mdaily = kept;
+      s.ctx.mdaily_degree = md;
+    }
   }
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
-    tess::SpCoef* table = static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd, tess::wide_set(res, e.eo)) * sizeof(tess::SpCoef)));
-    if (table == nullptr) return false;
-    const int count = tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, n0, e.xincl, e.eo, table);
-    tess::SpCoef* kept = static_cast<tess::SpCoef*>(std::realloc(table, (count > 0 ? count : 1) * sizeof(tess::SpCoef)));
-    if (kept == nullptr) { std::free(table); return false; }
-    s.ctx.sp = kept;
-    s.ctx.sp_count = count;
-    if (tess::wide_set(res, e.eo) && s.ctx.wide == nullptr) {
+    const bool wide_sp = tess::wide_set(res, e.eo);
+    if (within_share && same_inc && anchor->ctx.sp_comb != nullptr && anchor->ctx.sp_orig != nullptr &&
+        anchor->ctx.sp == anchor->ctx.sp_orig && anchor->ctx.sp_count == anchor->ctx.sp_orig_count &&
+        wide_sp == tess::wide_set(res, anchor->ctx.e0)) {
+      s.ctx.sp_comb = anchor->ctx.sp_comb;
+      s.ctx.sp_comb_count = anchor->ctx.sp_comb_count;
+      s.ctx.sp = anchor->ctx.sp_orig;
+      s.ctx.sp_count = anchor->ctx.sp_orig_count;
+      s.ctx.sp_orig = anchor->ctx.sp_orig;
+      s.ctx.sp_orig_count = anchor->ctx.sp_orig_count;
+      s.ctx.a0 = anchor->ctx.a0;
+      s.ctx.e0 = anchor->ctx.e0;
+      s.ctx.shared_mask |= 64;
+    } else {
+      tess::SpCombCoef* comb_table =
+          static_cast<tess::SpCombCoef*>(std::malloc(tess::sp_comb_bound(spd, wide_sp) * sizeof(tess::SpCombCoef)));
+      if (comb_table == nullptr) return false;
+      tess::SpCoef* raw_table =
+          static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd, wide_sp) * sizeof(tess::SpCoef)));
+      if (raw_table == nullptr) {
+        std::free(comb_table);
+        return false;
+      }
+      int raw_count = 0;
+      const int comb_count =
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count);
+      tess::SpCombCoef* comb_kept =
+          static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
+      if (comb_kept == nullptr) {
+        std::free(comb_table);
+        std::free(raw_table);
+        return false;
+      }
+      tess::SpCoef* raw_kept =
+          static_cast<tess::SpCoef*>(std::realloc(raw_table, (raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
+      if (raw_kept == nullptr) {
+        std::free(comb_kept);
+        std::free(raw_table);
+        return false;
+      }
+      s.ctx.sp_comb = comb_kept;
+      s.ctx.sp_comb_count = comb_count;
+      s.ctx.sp = raw_kept;
+      s.ctx.sp_count = raw_count;
+      s.ctx.sp_orig = raw_kept;
+      s.ctx.sp_orig_count = raw_count;
+    }
+    if (wide_sp && s.ctx.wide == nullptr) {
       // SPEC 16.11: the families of degree 2 to spd as a grid in E, by exact key (the switch by class: tess::wide_set); a copy inside its nominal's GridShareScope reads
       // the nominal's grid when within the share range; a class change's temporary keeps its parent's
-      XpSat* anchor = grid_share_anchor();
-      const tess::WideGrid* ag = anchor != nullptr ? anchor->ctx.wide : nullptr;
-      if (ag != nullptr && ag->degree == spd && anchor->ctx.resonance == res && std::fabs(e.eo - ag->e) <= tess::kShareE &&
-          std::fabs(e.xincl - ag->i) <= tess::kShareI && std::fabs(std::pow(kKe / n0, kX2o3) / ag->a - 1.0) <= tess::kShareA) {
-        tess::wide_grid_ref(anchor->ctx.wide);
-        s.ctx.wide = anchor->ctx.wide;
-        s.ctx.wide_anchor = anchor;
+      const tess::WideGrid* ag = grid_anchor != nullptr ? grid_anchor->ctx.wide : nullptr;
+      if (ag != nullptr && ag->degree == spd && grid_anchor->ctx.resonance == res && std::fabs(e.eo - ag->e) <= tess::kShareE &&
+          std::fabs(e.xincl - ag->i) <= tess::kShareI && std::fabs(s.ctx.a0 / ag->a - 1.0) <= tess::kShareA) {
+        tess::wide_grid_ref(grid_anchor->ctx.wide);
+        s.ctx.wide = grid_anchor->ctx.wide;
+        s.ctx.wide_anchor = grid_anchor;
       } else {
         tess::WideGrid* g = tess::wide_grid_acquire(spd, res, n0, e.eo, e.xincl, s.ctx.wide_fit != 0);
         if (g == nullptr) return false;
@@ -1491,32 +5488,59 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const int zd = t.zonal > 70 ? 70 : t.zonal;
   if (zd >= 6) {
     const bool wide = e.eo > tess::kWideE;
-    float* kept = static_cast<float*>(std::malloc(4 * tess::zonal_count(zd, wide) * sizeof(float)));
-    if (kept == nullptr) return false;
-    tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
-    s.ctx.zt = kept;
-    s.ctx.zt_degree = zd;
-    s.ctx.zt_wide = wide ? 1 : 0;
+    if (same_inc && std::fabs(e.eo - anchor->ctx.e0) <= tess::kShareE &&
+        anchor->ctx.zt != nullptr && anchor->ctx.zt_degree == zd && anchor->ctx.zt_wide == (wide ? 1 : 0)) {
+      s.ctx.zt = anchor->ctx.zt;
+      s.ctx.zt_degree = zd;
+      s.ctx.zt_wide = wide ? 1 : 0;
+      s.ctx.shared_mask |= 16;
+    } else {
+      const int zc = tess::zonal_count(zd, wide);
+      float* kept = static_cast<float*>(std::malloc(4 * zc * sizeof(float)));
+      if (kept == nullptr) return false;
+      tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
+      s.ctx.zt = kept;
+      s.ctx.zt_degree = zd;
+      s.ctx.zt_wide = wide ? 1 : 0;
+    }
   }
   const int sd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
   if (res == 2 && sd >= 6) {
-    tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd) * sizeof(tess::HalfDayCoef)));
-    if (table == nullptr) return false;
-    s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table);
-    if (s.ctx.half_day_count < 0) { std::free(table); return false; }
-    s.ctx.half_day = table;
+    if (same_res && anchor->ctx.half_day != nullptr && std::fabs(e.eo - anchor->ctx.hd_e0) <= tess::kShareE &&
+        std::fabs(e.xincl - anchor->ctx.hd_i0) <= tess::kShareI && std::fabs(s.ctx.a0 / anchor->ctx.hd_a0 - 1.0) <= tess::kShareA) {
+      s.ctx.half_day = anchor->ctx.half_day;
+      s.ctx.half_day_count = anchor->ctx.half_day_count;
+      s.ctx.hd_e0 = anchor->ctx.hd_e0;
+      s.ctx.hd_i0 = anchor->ctx.hd_i0;
+      s.ctx.hd_a0 = anchor->ctx.hd_a0;
+      s.ctx.shared_mask |= 1;
+    } else {
+      tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd) * sizeof(tess::HalfDayCoef)));
+      if (table == nullptr) return false;
+      s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0);
+      if (s.ctx.half_day_count < 0) { std::free(table); return false; }
+      s.ctx.half_day = table;
+    }
   }
   if (sd >= 2 && res == 0 && !s.ctx.long_period) {
-    tess::ShallowTerms scratch;
-    const int count = tess::shallow_terms(sd, n0, e.eo, e.xincl, scratch);
-    if (count > 0) {
-      tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(count * sizeof(tess::ShallowCoef)));
-      if (kept == nullptr) return false;
-      for (int j = 0; j < count; ++j)
-        kept[j] = tess::ShallowCoef{scratch.c[j].l, scratch.c[j].m, scratch.c[j].p, scratch.c[j].k, static_cast<float>(scratch.c[j].fg),
-                                    static_cast<float>(scratch.c[j].fdg), static_cast<float>(scratch.c[j].dfg)};
-      s.ctx.shallow = kept;
-      s.ctx.shallow_count = count;
+    if (within_share && anchor->ctx.shallow != nullptr) {
+      s.ctx.shallow = anchor->ctx.shallow;
+      s.ctx.shallow_count = anchor->ctx.shallow_count;
+      s.ctx.e0 = anchor->ctx.e0;
+      s.ctx.i0 = anchor->ctx.i0;
+      s.ctx.shared_mask |= 8;
+    } else {
+      tess::ShallowTerms scratch;
+      const int count = tess::shallow_terms(sd, n0, e.eo, e.xincl, scratch);
+      if (count > 0) {
+        tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(count * sizeof(tess::ShallowCoef)));
+        if (kept == nullptr) return false;
+        for (int j = 0; j < count; ++j)
+          kept[j] = tess::ShallowCoef{scratch.c[j].l, scratch.c[j].m, scratch.c[j].p, scratch.c[j].k, static_cast<float>(scratch.c[j].fg),
+                                      static_cast<float>(scratch.c[j].fdg), static_cast<float>(scratch.c[j].dfg)};
+        s.ctx.shallow = kept;
+        s.ctx.shallow_count = count;
+      }
     }
   }
   return true;
@@ -1525,6 +5549,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
 /// Inside a tess::FitGridScope (SPEC 16.11) the grids this set builds above tess::kWideE are freed with it, never kept idle.
 inline int32_t xp_init(const Elements& e, XpSat& s) {
   s = XpSat{};
+  s.ctx.ctx_id = next_ctx_id();
+  s.ctx.cov_anchor_id = s.ctx.ctx_id;
   s.ctx.wide_fit = tess::fit_grids_now() ? 1 : 0;
   s.norad = e.norad;
   s.epoch_jd_whole = e.epoch_jd_whole;
@@ -1566,6 +5592,23 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.ctx.res_epoch = rc;
   }
   equinoctial_of(n0, e.eo, e.xincl, e.xnodeo, e.omegao, e.xmo, s.epoch.y);
+  XpSat* anchor = cov_bank_anchor();
+  if (is_ap_ctx(s.ctx) && anchor != nullptr && anchor != &s) {
+    const ptrdiff_t diff = &s - anchor;
+    if (diff >= 1 && diff < 18) {
+      const int slot = static_cast<int>(diff);
+      const bool same_plane = (s.epoch.y[2] == anchor->epoch.y[2] && s.epoch.y[3] == anchor->epoch.y[3]);
+      const bool same_slow = same_plane && (s.epoch.y[0] == anchor->epoch.y[0] && s.epoch.y[1] == anchor->epoch.y[1] &&
+                                            s.epoch.y[5] == anchor->epoch.y[5]);
+      const bool same_all6 = same_slow && (s.epoch.y[4] == anchor->epoch.y[4]) && (s.ctx.agom == anchor->ctx.agom);
+      s.ctx.is_cov_sigma =
+          static_cast<uint8_t>(slot | (same_slow ? 32 : 0) | (same_all6 ? 64 : 0) | (same_plane ? 128 : 0));
+    } else {
+      s.ctx.is_cov_sigma = 0;
+    }
+  } else {
+    s.ctx.is_cov_sigma = 0;
+  }
   s.epoch.t = 0.0;
   s.epoch.index = 0;
   bool finite = rates(s.ctx, 0.0, s.epoch.y, s.epoch.f);
@@ -1584,24 +5627,32 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
 /// Frees what xp_init allocated (the resonance expansion); the XpSat stays usable
 /// for nothing but a new xp_init.
 inline void xp_release(XpSat& s) {
-  std::free(const_cast<tess::HalfDayCoef*>(s.ctx.half_day));
+  if (!(s.ctx.shared_mask & 1)) std::free(const_cast<tess::HalfDayCoef*>(s.ctx.half_day));
   s.ctx.half_day = nullptr;
   s.ctx.half_day_count = 0;
-  std::free(const_cast<res::ResCoef*>(s.ctx.res_epoch));
+  if (!(s.ctx.shared_mask & 2)) std::free(const_cast<res::ResCoef*>(s.ctx.res_epoch));
   s.ctx.res_epoch = nullptr;
   s.ctx.res_count = 0;
-  std::free(const_cast<res::GTaylor*>(s.ctx.res_taylor));
+  if (!(s.ctx.shared_mask & 4)) std::free(const_cast<res::GTaylor*>(s.ctx.res_taylor));
   s.ctx.res_taylor = nullptr;
-  std::free(const_cast<tess::ShallowCoef*>(s.ctx.shallow));
+  if (!(s.ctx.shared_mask & 8)) std::free(const_cast<tess::ShallowCoef*>(s.ctx.shallow));
   s.ctx.shallow = nullptr;
   s.ctx.shallow_count = 0;
-  std::free(const_cast<float*>(s.ctx.zt));
+  if (!(s.ctx.shared_mask & 16)) std::free(const_cast<float*>(s.ctx.zt));
   s.ctx.zt = nullptr;
-  std::free(const_cast<float*>(s.ctx.mdaily));
+  if (!(s.ctx.shared_mask & 32)) std::free(const_cast<float*>(s.ctx.mdaily));
   s.ctx.mdaily = nullptr;
-  std::free(const_cast<tess::SpCoef*>(s.ctx.sp));
+  if (!(s.ctx.shared_mask & 64)) {
+    std::free(const_cast<tess::SpCoef*>(s.ctx.sp_orig != nullptr ? s.ctx.sp_orig : s.ctx.sp));
+    std::free(const_cast<tess::SpCombCoef*>(s.ctx.sp_comb));
+  }
   s.ctx.sp = nullptr;
   s.ctx.sp_count = 0;
+  s.ctx.sp_orig = nullptr;
+  s.ctx.sp_orig_count = 0;
+  s.ctx.sp_comb = nullptr;
+  s.ctx.sp_comb_count = 0;
+  s.ctx.shared_mask = 0;
   if (s.ctx.wide_owned) tess::wide_grid_drop(s.ctx.wide);
   for (int k = 0; k < 2; ++k) {
     tess::wide_grid_drop(s.wide_node[k]);
@@ -1619,15 +5670,15 @@ inline void unlock(int32_t* word) { __atomic_store_n(word, 0, __ATOMIC_RELEASE);
 
 /// The bracketing nodes of t (lower, upper in the direction of t). Lazily
 /// fills the checkpoints; any order of requests gives the same nodes.
-inline bool bracket(XpSat& s, double t, Node& lo, Node& hi) {
+inline bool bracket_ptr(XpSat& s, double t, const Node*& lo, const Node*& hi) {
   const int dir = t >= 0.0 ? 1 : -1;
   const int di = dir > 0 ? 0 : 1;
   const double at = dir * t;
   auto beyond = [&](const Node& n) { return dir * n.t > at; };
   // window hit
   if (s.window_valid[di] && !beyond(s.window[di][0]) && beyond(s.window[di][1])) {
-    lo = s.window[di][0];
-    hi = s.window[di][1];
+    lo = &s.window[di][0];
+    hi = &s.window[di][1];
     return true;
   }
   // start: the furthest known node at or before t
@@ -1636,8 +5687,12 @@ inline bool bracket(XpSat& s, double t, Node& lo, Node& hi) {
     if (beyond(s.sparse[di][k])) break;
     cur = s.sparse[di][k];
   }
-  if (s.window_valid[di] && !beyond(s.window[di][0]) && dir * s.window[di][0].index > dir * cur.index)
-    cur = s.window[di][0];
+  if (s.window_valid[di]) {
+    if (!beyond(s.window[di][1]) && dir * s.window[di][1].index > dir * cur.index)
+      cur = s.window[di][1];
+    else if (!beyond(s.window[di][0]) && dir * s.window[di][0].index > dir * cur.index)
+      cur = s.window[di][0];
+  }
   Node nxt;
   for (;;) {
     if (!next_node(s.ctx, cur, dir, nxt)) return false;
@@ -1657,8 +5712,50 @@ inline bool bracket(XpSat& s, double t, Node& lo, Node& hi) {
   s.window[di][0] = cur;
   s.window[di][1] = nxt;
   s.window_valid[di] = 1;
-  lo = cur;
-  hi = nxt;
+  lo = &s.window[di][0];
+  hi = &s.window[di][1];
+  return true;
+}
+
+inline bool bracket(XpSat& s, double t, Node& lo, Node& hi) {
+  const Node *lo_p = nullptr, *hi_p = nullptr;
+  if (!bracket_ptr(s, t, lo_p, hi_p)) return false;
+  lo = *lo_p;
+  hi = *hi_p;
+  return true;
+}
+
+inline void update_active_bracket(const XpSat& s, const Node& lo, const Node& hi) {
+  ActiveBracket& ab = active_bracket();
+  const bool same_sat = ab.valid && ab.ctx_id == s.ctx.ctx_id;
+  if (!same_sat || ab.lo.index != lo.index || ab.hi.index != hi.index) {
+    if (!same_sat || ab.hi.index != lo.index || ab.hi.y[kN] != lo.y[kN]) {
+      ab.has_t1 = false;
+    }
+    if (!same_sat) {
+      ab.ctx_id = s.ctx.ctx_id;
+      for (int j = 0; j < 6; ++j) ab.epoch_y[j] = s.epoch.y[j];
+    }
+    ab.d50_epoch = s.ctx.d50_epoch;
+    ab.lo = lo;
+    ab.hi = hi;
+    ab.valid = true;
+    ab.sub_idx = -1;
+    ab.sub_t_lo = 0.0;
+    ab.sub_t_hi = -1.0;
+  }
+}
+
+/// Mean equinoctial state at t on a caller-private XpSat (lock-free, zero Node copies).
+inline bool mean_at_local(XpSat& s, double t, double* y) {
+  if (t == 0.0) {
+    for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
+    return true;
+  }
+  const Node *lo = nullptr, *hi = nullptr;
+  if (!bracket_ptr(s, t, lo, hi)) return false;
+  if (!s.ctx.is_cov_sigma) update_active_bracket(s, *lo, *hi);
+  hermite(*lo, *hi, t, y);
   return true;
 }
 
@@ -1673,6 +5770,7 @@ inline bool mean_at(XpSat& s, double t, double* y) {
   const bool ok = bracket(s, t, lo, hi);
   unlock(&s.lock);
   if (!ok) return false;
+  if (!s.ctx.is_cov_sigma) update_active_bracket(s, lo, hi);
   hermite(lo, hi, t, y);
   return true;
 }
@@ -1751,10 +5849,10 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   return true;
 }
 
-inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const Bodies* shared = nullptr) {
+inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], const Bodies* shared, bool local_sat) {
   if (s.init_error != 0) return kPropRefused;
   double y[6];
-  if (!mean_at(s, t, y)) return kPropMeanMotion;
+  if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) return kPropMeanMotion;
   int32_t status;
   if (s.ctx.wide != nullptr && s.ctx.wide_owned) {
     // the nodes around t, the same for every set of a fit; the context per call, so concurrent calls on one set share nothing
@@ -1785,32 +5883,958 @@ inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const 
   return status;
 }
 
+inline int32_t xp_propagate(XpSat& s, double t, double r[3], double v[3], const Bodies* shared = nullptr) {
+  return xp_propagate_impl(s, t, r, v, shared, false);
+}
+
+inline int32_t xp_propagate_local(XpSat& s, double t, double r[3], double v[3], const Bodies* shared = nullptr) {
+  return xp_propagate_impl(s, t, r, v, shared, true);
+}
+
+#ifdef __wasm_simd128__
+inline void refresh_lp_sigma_tail_srp(const RateContext& ctx, double t, const double y[6], double a,
+                                      const CovStageAux& csa, int slot) {
+  CovGridCache& cgc = cov_grid_cache();
+  const double e2 = y[kAf] * y[kAf] + y[kAg] * y[kAg];
+  const double t2 = y[kChi] * y[kChi] + y[kPsi] * y[kPsi];
+  const double eta = std::sqrt(1.0 - e2);
+  const double n = y[kN];
+  const int cls = ctx.ap_resonance ? ap_resonance_class(ctx, n) : 0;
+  Kepler k{};
+  AngleTrig ag{};
+  if (ctx.i0 > 0.02 && e2 > 1e-24 && t2 > 1e-24 && e2 < 1.0) {
+    k.a = a;
+    const v128_t vet = wasm_f64x2_sqrt(wasm_f64x2_make(e2, t2));
+    const v128_t viv = wasm_f64x2_div(wasm_f64x2_splat(1.0), vet);
+    k.e = wasm_f64x2_extract_lane(vet, 0);
+    const double t_inc = wasm_f64x2_extract_lane(vet, 1);
+    const double inv_e = wasm_f64x2_extract_lane(viv, 0);
+    const double inv_t = wasm_f64x2_extract_lane(viv, 1);
+    const double ic = 1.0 / (1.0 + t2);
+    ag.ci = (1.0 - t2) * ic;
+    ag.si = 2.0 * t_inc * ic;
+    ag.sO = y[kChi] * inv_t;
+    ag.cO = y[kPsi] * inv_t;
+    const double cv = y[kAf] * inv_e, sv = y[kAg] * inv_e;
+    ag.cw = cv * ag.cO + sv * ag.sO;
+    ag.sw = sv * ag.cO - cv * ag.sO;
+    const bool need_k = (cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0) ||
+                        (ctx.agom > 0.0 && e2 != 0.0 && k.a >= 5.0 && ag.si <= 0.02);
+    if (need_k) {
+      const double varpi = fm::atan2(y[kAg], y[kAf]);
+      const double node_raw = fm::atan2(y[kChi], y[kPsi]);
+      k.node = fast_wrap(node_raw);
+      k.argp = fast_wrap(varpi - node_raw);
+      k.m = fast_wrap(y[kLam] - varpi);
+      k.i = 2.0 * fm::atan(t_inc);
+    }
+  } else {
+    k = kepler_of(y, a);
+    ag = angle_trig(k);
+  }
+  double st_tail[6] = {0, 0, 0, 0, 0, 0};
+  if (cls == 1 && ctx.ap_resonance) {
+    res::ResCoef terms[29];
+    const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
+    res::resonance_six_ap(terms, count, t, k, n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail);
+  }
+  if (ctx.ap_resonance && cls == 2 && ctx.half_day != nullptr) {
+    tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
+                       n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail, ctx.hd_a0, hd_table_id(ctx));
+  }
+  if (ctx.shallow != nullptr) {
+    tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, a, n, eta, ag.si, ag.ci, ctx.theta_g0,
+                      st_tail, sh_table_id(ctx));
+  }
+  if (ctx.zt != nullptr) {
+    tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, n, eta, ag.si, ag.ci, st_tail, &ag.sw, &ag.cw,
+                    zt_table_id(ctx));
+  }
+  double teq[6];
+  six_to_equinoctial(ag, st_tail, teq);
+  for (int m = 0; m < 6; ++m) cgc.sigma_dtail_eq[slot][m] = teq[m] - csa.tail_eq[m];
+
+  if (ctx.agom > 0.0 && csa.has_srp) {
+    if ((ctx.is_cov_sigma & 64) != 0) {
+      for (int m = 0; m < 6; ++m) cgc.sigma_df_srp[slot][m] = 0.0;
+    } else {
+      Frame fr_min{};
+      fr_min.a = a;
+      fr_min.n = n;
+      fr_min.e2 = e2;
+      fr_min.eta = eta;
+      const Perifocal pf = perifocal_of(ag);
+      double ds[6] = {0, 0, 0, 0, 0, 0};
+      srp_rates(y, fr_min, k, pf, ctx.agom, csa.b, ds, &ag, ctx.i0 > 0.02);
+      for (int m = 0; m < 6; ++m) cgc.sigma_df_srp[slot][m] = ds[m] - csa.srp_unit[m] * ctx.agom;
+    }
+  }
+  cgc.sigma_aux_ctx_id[slot] = ctx.ctx_id;
+  cgc.sigma_aux_d50[slot] = ctx.d50_epoch;
+  cgc.sigma_aux_n0[slot] = ctx.n0;
+}
+
+inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const RateContext& ctx_m,
+                           const Node& ap, const Node& am, double h, Node& out_p, Node& out_m) {
+  if (ap.index != am.index || ap.t != am.t || out_p.index != out_m.index) return -1;
+  if (ctx_p.res_epoch != nullptr || ctx_m.res_epoch != nullptr || shadow_envelope() != 0) return -1;
+  const int di = out_p.index >= 0 ? 0 : 1;
+  const int idx = std::abs(out_p.index);
+  const int a_idx = std::abs(ap.index);
+  if (idx <= 0 || idx >= CovGridCache::kMaxCovSteps) return -1;
+  CovGridCache& cgc = cov_grid_cache();
+  if (cgc.anchor_id != s0.ctx.ctx_id || cgc.d50_epoch != s0.ctx.d50_epoch || std::fabs(cgc.n0 - s0.ctx.n0) > 1e-3) return -1;
+  const CovStageAux& csa0 = cgc.steps[di][idx].st[0];
+  const CovStageAux& csa1 = cgc.steps[di][idx].st[1];
+  const CovStageAux& csa2 = cgc.steps[di][idx].st[2];
+  if (csa0.gen != cgc.gen || csa1.gen != cgc.gen || csa2.gen != cgc.gen) return -1;
+  if (std::fabs(csa2.t - (ap.t + h)) > 1e-6) return -1;
+  if (!csa0.has_F_lp || !csa1.has_F_lp || !csa2.has_F_lp) return -1;
+  if (!csa0.has_tail_eq || !csa1.has_tail_eq || !csa2.has_tail_eq) return -1;
+  const bool need_srp = (ctx_p.agom > 0.0 || ctx_m.agom > 0.0);
+  if (need_srp && (!csa0.has_srp || !csa1.has_srp || !csa2.has_srp)) return -1;
+
+  const int slot_p = ctx_p.is_cov_sigma & 31;
+  const int slot_m = ctx_m.is_cov_sigma & 31;
+  if (slot_p < 1 || slot_p >= 18 || slot_m < 1 || slot_m >= 18 || slot_p == slot_m) return -1;
+
+  F64x2 vya[6], vfa[6];
+  for (int m = 0; m < 6; ++m) {
+    vya[m] = F64x2(ap.y[m], am.y[m]);
+    vfa[m] = F64x2(ap.f[m], am.f[m]);
+  }
+
+  F64x2 vzonal_a[6];
+  if (cgc.sigma_zonal_gen[slot_p] == cgc.gen && cgc.sigma_zonal_idx[slot_p] == a_idx &&
+      cgc.sigma_zonal_di[slot_p] == di &&
+      cgc.sigma_zonal_gen[slot_m] == cgc.gen && cgc.sigma_zonal_idx[slot_m] == a_idx &&
+      cgc.sigma_zonal_di[slot_m] == di) {
+    for (int m = 0; m < 6; ++m) vzonal_a[m] = F64x2(cgc.sigma_zonal_eq[slot_p][m], cgc.sigma_zonal_eq[slot_m][m]);
+  } else {
+    const F64x2 va_a = fast_a_from_n_f64x2(vya[kN]);
+    if (!zonal_eq_pair_f64x2(vya, va_a, vzonal_a)) return -1;
+  }
+
+  auto eval_fast_stage = [&](const F64x2 vy[6], const CovStageAux& csa, F64x2& va_out, F64x2 vtb_out[6]) -> bool {
+    const double n_p = vy[kN].lo(), n_m = vy[kN].hi();
+    if (!(n_p > 0.0 && n_m > 0.0)) return false;
+    if ((ctx_p.ap_resonance && ap_resonance_class(ctx_p, n_p) != ctx_p.resonance) ||
+        (ctx_m.ap_resonance && ap_resonance_class(ctx_m, n_m) != ctx_m.resonance))
+      return false;
+    const F64x2 ve2 = vy[kAf] * vy[kAf] + vy[kAg] * vy[kAg];
+    if (!(ve2.lo() < 0.90 && ve2.hi() < 0.90)) return false;
+    const F64x2 vdu_n = (vy[kN] - csa.n_lp) * csa.inv_n_lp;
+    if (!(std::fabs(vdu_n.lo()) < 2e-3 && std::fabs(vdu_n.hi()) < 2e-3)) return false;
+    va_out = csa.a_lp * (1.0 + vdu_n * ((-2.0 / 3.0) + vdu_n * ((5.0 / 9.0) + vdu_n * ((-40.0 / 81.0) + vdu_n * (110.0 / 243.0)))));
+
+    const bool same_all6_both = ((ctx_p.is_cov_sigma & 64) != 0) && ((ctx_m.is_cov_sigma & 64) != 0) && csa.has_tb;
+    if (same_all6_both &&
+        std::fabs(vy[kLam].lo() - csa.lam_lp) < 1e-13 &&
+        std::fabs(vy[kLam].hi() - csa.lam_lp) < 1e-13) {
+      for (int m = 0; m < 6; ++m) vtb_out[m] = F64x2(csa.tb[m]);
+      return true;
+    }
+
+    const double sF0 = csa.sF_lp, cF0 = csa.cF_lp, F0 = csa.F_lp;
+    const F64x2 vesF0 = vy[kAf] * sF0 - vy[kAg] * cF0;
+    const F64x2 vecF0 = vy[kAf] * cF0 + vy[kAg] * sF0;
+    const F64x2 vfv0 = (F0 - vy[kLam]) - vesF0;
+    const F64x2 vf1 = 1.0 - vecF0;
+    const F64x2 vinv_f1 = F64x2(1.0) / vf1;
+    const F64x2 vr1 = (-vfv0) * vinv_f1;
+    const double r1_p = vr1.lo(), r1_m = vr1.hi();
+    if (!(std::fabs(r1_p) < 0.05 && std::fabs(r1_m) < 0.05)) return false;
+    const F64x2 vf2_o_f1 = vesF0 * vinv_f1;
+    const F64x2 vf3_o_f1 = vecF0 * vinv_f1;
+    const F64x2 vr1_2 = vr1 * vr1;
+    const F64x2 vu0 = vr1 * (1.0 - 0.5 * vr1 * vf2_o_f1 +
+                             vr1_2 * (0.5 * vf2_o_f1 * vf2_o_f1 - (1.0 / 6.0) * vf3_o_f1));
+    const F64x2 vu2 = vu0 * vu0;
+    const F64x2 vcu0 = 1.0 - vu2 * (0.5 - vu2 * ((1.0 / 24.0) - vu2 * (1.0 / 720.0)));
+    const F64x2 vsu0 = vu0 * (1.0 - vu2 * ((1.0 / 6.0) - vu2 * ((1.0 / 120.0) - vu2 * (1.0 / 5040.0))));
+    F64x2 vsF = sF0 * vcu0 + cF0 * vsu0;
+    F64x2 vcF = cF0 * vcu0 - sF0 * vsu0;
+    if (ve2.lo() > 1.6e-5 || ve2.hi() > 1.6e-5 || std::fabs(r1_p) > 0.003 || std::fabs(r1_m) > 0.003) {
+      const F64x2 vesF1 = vy[kAf] * vsF - vy[kAg] * vcF;
+      const F64x2 vecF1 = vy[kAf] * vcF + vy[kAg] * vsF;
+      const F64x2 vfv1 = (F0 - vy[kLam]) + vu0 - vesF1;
+      const F64x2 vduF = vfv1 / (1.0 - vecF1);
+      const F64x2 vh2 = 1.0 - 0.5 * vduF * vduF;
+      const F64x2 vs_prev = vsF;
+      vsF = vs_prev * vh2 - vcF * vduF;
+      vcF = vcF * vh2 + vs_prev * vduF;
+    }
+    lp_tb_gauss_pair_f64x2(vy, va_out, vsF, vcF, csa.b, vtb_out);
+    return true;
+  };
+
+  F64x2 vy2[6];
+  for (int m = 0; m < 6; ++m) vy2[m] = vya[m] + (3.0 / 8.0) * h * vfa[m];
+  F64x2 va0, vtb0[6];
+  if (!eval_fast_stage(vy2, csa0, va0, vtb0)) return -1;
+
+  if (cgc.sigma_aux_ctx_id[slot_p] != ctx_p.ctx_id) {
+    double y2p[6];
+    for (int m = 0; m < 6; ++m) y2p[m] = vy2[m].lo();
+    refresh_lp_sigma_tail_srp(ctx_p, csa0.t, y2p, va0.lo(), csa0, slot_p);
+  }
+  if (cgc.sigma_aux_ctx_id[slot_m] != ctx_m.ctx_id) {
+    double y2m[6];
+    for (int m = 0; m < 6; ++m) y2m[m] = vy2[m].hi();
+    refresh_lp_sigma_tail_srp(ctx_m, csa0.t, y2m, va0.hi(), csa0, slot_m);
+  }
+
+  const F64x2 vagom(ctx_p.agom, ctx_m.agom);
+  F64x2 vk2[6];
+  for (int m = 0; m < 6; ++m) {
+    F64x2 vr = vzonal_a[m] + vtb0[m] + csa0.tail_eq[m] +
+               F64x2(cgc.sigma_dtail_eq[slot_p][m], cgc.sigma_dtail_eq[slot_m][m]);
+    if (need_srp) {
+      vr = vr + csa0.srp_unit[m] * vagom +
+           F64x2(cgc.sigma_df_srp[slot_p][m], cgc.sigma_df_srp[slot_m][m]);
+    }
+    vk2[m] = vr;
+  }
+  vk2[kLam] = vk2[kLam] + vy2[kN];
+
+  // SPEC 9 state_test on y3
+  const F64x2 vy3_af = vya[kAf] + (9.0 / 16.0) * h * vk2[kAf];
+  const F64x2 vy3_ag = vya[kAg] + (9.0 / 16.0) * h * vk2[kAg];
+  const F64x2 vy3_n = vya[kN] + (9.0 / 16.0) * h * vk2[kN];
+  const F64x2 ve2_3 = vy3_af * vy3_af + vy3_ag * vy3_ag;
+  if (!(vy3_n.lo() > 0.0 && vy3_n.hi() > 0.0 && ve2_3.lo() < 0.999999 && ve2_3.hi() < 0.999999)) return -1;
+
+  F64x2 vy4[6];
+  for (int m = 0; m < 6; ++m) vy4[m] = vya[m] + h * (-(125.0 / 672.0) * vfa[m] + (325.0 / 336.0) * vk2[m]);
+  F64x2 va1, vtb1[6];
+  if (!eval_fast_stage(vy4, csa1, va1, vtb1)) return -1;
+
+  F64x2 vk4[6];
+  for (int m = 0; m < 6; ++m) {
+    F64x2 vr = vzonal_a[m] + vtb1[m] + csa1.tail_eq[m] +
+               F64x2(cgc.sigma_dtail_eq[slot_p][m], cgc.sigma_dtail_eq[slot_m][m]);
+    if (need_srp) {
+      vr = vr + csa1.srp_unit[m] * vagom +
+           F64x2(cgc.sigma_df_srp[slot_p][m], cgc.sigma_df_srp[slot_m][m]);
+    }
+    vk4[m] = vr;
+  }
+  vk4[kLam] = vk4[kLam] + vy4[kN];
+
+  F64x2 vout_y[6];
+  for (int m = 0; m < 6; ++m)
+    vout_y[m] = vya[m] + h * ((37.0 / 225.0) * vfa[m] + (44.0 / 117.0) * vk2[m] + (448.0 / 975.0) * vk4[m]);
+
+  F64x2 va2, vtb2[6], vzonal_b[6];
+  if (!eval_fast_stage(vout_y, csa2, va2, vtb2)) return -1;
+  if (!zonal_eq_pair_f64x2(vout_y, va2, vzonal_b)) return -1;
+
+  for (int m = 0; m < 6; ++m) {
+    vout_y[m] = vout_y[m] + (0.5 * h) * (vzonal_b[m] - vzonal_a[m]);
+    cgc.sigma_zonal_eq[slot_p][m] = vzonal_b[m].lo();
+    cgc.sigma_zonal_eq[slot_m][m] = vzonal_b[m].hi();
+  }
+  cgc.sigma_zonal_gen[slot_p] = cgc.gen;
+  cgc.sigma_zonal_idx[slot_p] = idx;
+  cgc.sigma_zonal_di[slot_p] = static_cast<int8_t>(di);
+  cgc.sigma_zonal_gen[slot_m] = cgc.gen;
+  cgc.sigma_zonal_idx[slot_m] = idx;
+  cgc.sigma_zonal_di[slot_m] = static_cast<int8_t>(di);
+
+  const double t_out = ap.t + h;
+  out_p.t = t_out;
+  out_m.t = t_out;
+  for (int m = 0; m < 6; ++m) {
+    out_p.y[m] = vout_y[m].lo();
+    out_m.y[m] = vout_y[m].hi();
+  }
+
+  if ((idx & 3) == 0) {
+    refresh_lp_sigma_tail_srp(ctx_p, t_out, out_p.y, va2.lo(), csa2, slot_p);
+    refresh_lp_sigma_tail_srp(ctx_m, t_out, out_m.y, va2.hi(), csa2, slot_m);
+  }
+
+  for (int m = 0; m < 6; ++m) {
+    F64x2 vr = vzonal_b[m] + vtb2[m] + csa2.tail_eq[m] +
+               F64x2(cgc.sigma_dtail_eq[slot_p][m], cgc.sigma_dtail_eq[slot_m][m]);
+    if (need_srp) {
+      vr = vr + csa2.srp_unit[m] * vagom +
+           F64x2(cgc.sigma_df_srp[slot_p][m], cgc.sigma_df_srp[slot_m][m]);
+    }
+    if (m == kLam) vr = vr + vout_y[kN];
+    out_p.f[m] = vr.lo();
+    out_m.f[m] = vr.hi();
+    if (!std::isfinite(out_p.y[m]) || !std::isfinite(out_m.y[m]) ||
+        !std::isfinite(out_p.f[m]) || !std::isfinite(out_m.f[m]))
+      return -1;
+  }
+  return 0;
+}
+
+inline void hermite_pair_same_grid(const Node& ap, const Node& bp, const Node& am, const Node& bm,
+                                   double t, double* yp, double* ym) {
+  const double h = bp.t - ap.t;
+  const double q = (t - ap.t) / h;
+  if (q == 0.0) {
+    for (int j = 0; j < 6; ++j) {
+      yp[j] = ap.y[j];
+      ym[j] = am.y[j];
+    }
+    return;
+  }
+  const double omq = 1.0 - q;
+  const double omq2 = omq * omq, q2 = q * q;
+  const v128_t v00 = wasm_f64x2_splat((1.0 + 2.0 * q) * omq2);
+  const v128_t v10 = wasm_f64x2_splat((q * omq2) * h);
+  const v128_t v01 = wasm_f64x2_splat(q2 * (3.0 - 2.0 * q));
+  const v128_t v11 = wasm_f64x2_splat((q2 * (q - 1.0)) * h);
+  for (int j = 0; j < 6; j += 2) {
+    const v128_t p0 = wasm_f64x2_add(wasm_f64x2_mul(v00, wasm_v128_load(ap.y + j)),
+                                     wasm_f64x2_mul(v10, wasm_v128_load(ap.f + j)));
+    const v128_t p1 = wasm_f64x2_add(p0, wasm_f64x2_mul(v01, wasm_v128_load(bp.y + j)));
+    wasm_v128_store(yp + j, wasm_f64x2_add(p1, wasm_f64x2_mul(v11, wasm_v128_load(bp.f + j))));
+
+    const v128_t m0 = wasm_f64x2_add(wasm_f64x2_mul(v00, wasm_v128_load(am.y + j)),
+                                     wasm_f64x2_mul(v10, wasm_v128_load(am.f + j)));
+    const v128_t m1 = wasm_f64x2_add(m0, wasm_f64x2_mul(v01, wasm_v128_load(bm.y + j)));
+    wasm_v128_store(ym + j, wasm_f64x2_add(m1, wasm_f64x2_mul(v11, wasm_v128_load(bm.f + j))));
+  }
+  if (!(yp[kN] > 0.0)) {
+    for (int j = 0; j < 6; ++j) yp[j] = omq * ap.y[j] + q * bp.y[j];
+  }
+  if (!(ym[kN] > 0.0)) {
+    for (int j = 0; j < 6; ++j) ym[j] = omq * am.y[j] + q * bm.y[j];
+  }
+}
+
+inline bool mean_at_cov_pair_lp(const XpSat& s0, XpSat& sp, XpSat& sm, double t, double* ym_p, double* ym_m) {
+  if (t == 0.0) {
+    for (int j = 0; j < 6; ++j) {
+      ym_p[j] = sp.epoch.y[j];
+      ym_m[j] = sm.epoch.y[j];
+    }
+    return true;
+  }
+  if (!(s0.ctx.long_period && s0.ctx.ap_third_body && s0.ctx.i0 > 0.02 && !s0.ctx.drag_pass &&
+        sp.ctx.long_period && sm.ctx.long_period &&
+        sp.ctx.ap_frame == s0.ctx.ap_frame && sm.ctx.ap_frame == s0.ctx.ap_frame &&
+        sp.ctx.resonance == s0.ctx.resonance && sm.ctx.resonance == s0.ctx.resonance &&
+        !sp.ctx.drag_pass && !sm.ctx.drag_pass &&
+        std::fabs(sp.ctx.bterm) < 10.0 && std::fabs(sm.ctx.bterm) < 10.0 &&
+        s0.ctx.a0 * (1.0 - s0.ctx.e0) > 1.50)) {
+    return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
+  }
+  const int dir = t >= 0.0 ? 1 : -1;
+  const int di = dir > 0 ? 0 : 1;
+  const double at = dir * t;
+  auto beyond = [&](const Node& n) { return dir * n.t > at; };
+
+  if (sp.window_valid[di] && sm.window_valid[di] &&
+      !beyond(sp.window[di][0]) && beyond(sp.window[di][1]) &&
+      !beyond(sm.window[di][0]) && beyond(sm.window[di][1])) {
+    if (sp.window[di][0].t == sm.window[di][0].t && sp.window[di][1].t == sm.window[di][1].t) {
+      hermite_pair_same_grid(sp.window[di][0], sp.window[di][1], sm.window[di][0], sm.window[di][1], t, ym_p, ym_m);
+    } else {
+      hermite(sp.window[di][0], sp.window[di][1], t, ym_p);
+      hermite(sm.window[di][0], sm.window[di][1], t, ym_m);
+    }
+    return true;
+  }
+
+  Node cur_p = sp.epoch, cur_m = sm.epoch;
+  for (int k = 0; k < sp.sparse_count[di]; ++k) {
+    if (beyond(sp.sparse[di][k])) break;
+    cur_p = sp.sparse[di][k];
+  }
+  if (sp.window_valid[di]) {
+    if (!beyond(sp.window[di][1]) && dir * sp.window[di][1].index > dir * cur_p.index)
+      cur_p = sp.window[di][1];
+    else if (!beyond(sp.window[di][0]) && dir * sp.window[di][0].index > dir * cur_p.index)
+      cur_p = sp.window[di][0];
+  }
+  for (int k = 0; k < sm.sparse_count[di]; ++k) {
+    if (beyond(sm.sparse[di][k])) break;
+    cur_m = sm.sparse[di][k];
+  }
+  if (sm.window_valid[di]) {
+    if (!beyond(sm.window[di][1]) && dir * sm.window[di][1].index > dir * cur_m.index)
+      cur_m = sm.window[di][1];
+    else if (!beyond(sm.window[di][0]) && dir * sm.window[di][0].index > dir * cur_m.index)
+      cur_m = sm.window[di][0];
+  }
+  if (cur_p.index != cur_m.index || cur_p.t != cur_m.t || sp.stride != sm.stride) {
+    return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
+  }
+
+  const double h_step = dir * long_period_step(s0.ctx);
+  Node nxt_p{}, nxt_m{};
+  for (;;) {
+    nxt_p.index = cur_p.index + dir;
+    nxt_m.index = cur_m.index + dir;
+    if (rk3_cov_pair_lp(s0, sp.ctx, sm.ctx, cur_p, cur_m, h_step, nxt_p, nxt_m) != 0) {
+      return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
+    }
+    if (!(dir * nxt_p.t > dir * cur_p.t)) return false;
+    const int32_t idx = dir * nxt_p.index;
+    if (idx % sp.stride == 0) {
+      const int32_t slot = idx / sp.stride - 1;
+      if (slot == sp.sparse_count[di] && slot < kSparse) {
+        sp.sparse[di][slot] = nxt_p;
+        sp.sparse_count[di] = slot + 1;
+      }
+      if (slot == sm.sparse_count[di] && slot < kSparse) {
+        sm.sparse[di][slot] = nxt_m;
+        sm.sparse_count[di] = slot + 1;
+      }
+    }
+    if (beyond(nxt_p)) break;
+    cur_p = nxt_p;
+    cur_m = nxt_m;
+  }
+  sp.window[di][0] = cur_p;
+  sp.window[di][1] = nxt_p;
+  sp.window_valid[di] = 1;
+  sm.window[di][0] = cur_m;
+  sm.window[di][1] = nxt_m;
+  sm.window_valid[di] = 1;
+  hermite_pair_same_grid(cur_p, nxt_p, cur_m, nxt_m, t, ym_p, ym_m);
+  return true;
+}
+
+[[gnu::noinline]] inline int eval_cov_pair_j2_fast(
+    XpSat& s0, XpSat& sp, XpSat& sm, double t, const double* ym0, const CovNomOsc& nom_osc,
+    bool can_share_3b, bool can_share_sp, bool can_share_srp,
+    const double* d_3b0, const double* dd_3b_dlam,
+    const double* d_sp0, const double* dd_sp_dlam, const double* d2_sp_dlam2,
+    const double* d_srp_unit0, bool has_drift, const double R_drift[3][3],
+    double inv_d, double* J, int np, int col_j) {
+  if (!nom_osc.valid || t == 0.0 || !s0.ctx.ap_third_body || s0.ctx.drag_pass) return 0;
+  if (sp.init_error != 0 || sm.init_error != 0) return -1;
+  if (sp.ctx.ap_frame != sm.ctx.ap_frame ||
+      (sp.ctx.drag_pass && sp.ctx.bterm > 0.0) || (sm.ctx.drag_pass && sm.ctx.bterm > 0.0))
+    return 0;
+  double ym_p[6], ym_m[6];
+  if (s0.ctx.long_period) {
+    if (!mean_at_cov_pair_lp(s0, sp, sm, t, ym_p, ym_m)) return -1;
+  } else {
+    if (!mean_at_local(sp, t, ym_p) || !mean_at_local(sm, t, ym_m)) return -1;
+  }
+  const bool same_cls_p = sp.ctx.long_period == s0.ctx.long_period && sp.ctx.resonance == s0.ctx.resonance &&
+                          !(sp.ctx.ap_resonance && ap_resonance_class(sp.ctx, ym_p[kN]) != sp.ctx.resonance) &&
+                          (sp.ctx.wide == nullptr || sp.ctx.wide_anchor == &s0);
+  const bool same_cls_m = sm.ctx.long_period == s0.ctx.long_period && sm.ctx.resonance == s0.ctx.resonance &&
+                          !(sm.ctx.ap_resonance && ap_resonance_class(sm.ctx, ym_m[kN]) != sm.ctx.resonance) &&
+                          (sm.ctx.wide == nullptr || sm.ctx.wide_anchor == &s0);
+  if (!same_cls_p || !same_cls_m) return 0;
+  if (!s0.ctx.long_period && !can_share_3b) return 0;
+  const double plane_lim = (s0.ctx.i0 > 0.02 ? 0.005 : 0.0005) * s0.ctx.i0;
+  const bool small_plane =
+      (s0.ctx.i0 > 1e-5) &&
+      (std::fabs(ym_p[kChi] - ym0[kChi]) + std::fabs(ym_p[kPsi] - ym0[kPsi])) < plane_lim &&
+      (std::fabs(ym_m[kChi] - ym0[kChi]) + std::fabs(ym_m[kPsi] - ym0[kPsi])) < plane_lim;
+  const double dlam_p = ym_p[kLam] - ym0[kLam], dlam_m = ym_m[kLam] - ym0[kLam];
+  const bool need_sp_any = (sp.ctx.mdaily != nullptr || sp.ctx.sp != nullptr || sp.ctx.wide != nullptr ||
+                            sm.ctx.mdaily != nullptr || sm.ctx.sp != nullptr || sm.ctx.wide != nullptr);
+  if (need_sp_any && !(can_share_sp && small_plane && std::fabs(dlam_p) < 0.15 && std::fabs(dlam_m) < 0.15))
+    return 0;
+  const bool need_srp_any = (sp.ctx.agom > 0.0 || sm.ctx.agom > 0.0);
+  if (need_srp_any && !(can_share_srp && small_plane)) return 0;
+
+  const v128_t vdlam = wasm_f64x2_make(dlam_p, dlam_m);
+  const v128_t vagom = wasm_f64x2_make(sp.ctx.agom, sm.ctx.agom);
+  v128_t vy[6];
+  for (int m = 0; m < 6; ++m) {
+    v128_t v = wasm_f64x2_make(ym_p[m], ym_m[m]);
+    if (can_share_3b) {
+      v = wasm_f64x2_add(v, wasm_f64x2_add(wasm_f64x2_splat(d_3b0[m]),
+                                           wasm_f64x2_mul(wasm_f64x2_splat(dd_3b_dlam[m]), vdlam)));
+    }
+    if (need_sp_any) {
+      const v128_t vsp_lin = wasm_f64x2_add(wasm_f64x2_splat(dd_sp_dlam[m]),
+                                            wasm_f64x2_mul(wasm_f64x2_splat(0.5 * d2_sp_dlam2[m]), vdlam));
+      v = wasm_f64x2_add(v, wasm_f64x2_add(wasm_f64x2_splat(d_sp0[m]), wasm_f64x2_mul(vsp_lin, vdlam)));
+    }
+    if (need_srp_any) {
+      v = wasm_f64x2_add(v, wasm_f64x2_mul(wasm_f64x2_splat(d_srp_unit0[m]), vagom));
+    }
+    vy[m] = v;
+  }
+
+  const double yn_p = wasm_f64x2_extract_lane(vy[kN], 0), yn_m = wasm_f64x2_extract_lane(vy[kN], 1);
+  if (!(yn_p > 0.0 && yn_m > 0.0)) return 0;
+  const v128_t ve2 = wasm_f64x2_add(wasm_f64x2_mul(vy[kAf], vy[kAf]), wasm_f64x2_mul(vy[kAg], vy[kAg]));
+  const v128_t vt2 = wasm_f64x2_add(wasm_f64x2_mul(vy[kChi], vy[kChi]), wasm_f64x2_mul(vy[kPsi], vy[kPsi]));
+  const double e2_p = wasm_f64x2_extract_lane(ve2, 0), e2_m = wasm_f64x2_extract_lane(ve2, 1);
+  const double t2_p = wasm_f64x2_extract_lane(vt2, 0), t2_m = wasm_f64x2_extract_lane(vt2, 1);
+  if (!(e2_p > 1e-24 && e2_m > 1e-24 && e2_p < 0.90 && e2_m < 0.90 && t2_p > 1e-24 && t2_m > 1e-24)) return 0;
+
+  const v128_t vdu_n = wasm_f64x2_mul(wasm_f64x2_sub(vy[kN], wasm_f64x2_splat(nom_osc.n0)),
+                                      wasm_f64x2_splat(nom_osc.inv_n0));
+  if (!(std::fabs(wasm_f64x2_extract_lane(vdu_n, 0)) < 2e-3 &&
+        std::fabs(wasm_f64x2_extract_lane(vdu_n, 1)) < 2e-3))
+    return 0;
+
+  const v128_t vone = wasm_f64x2_splat(1.0);
+  const v128_t va_poly = wasm_f64x2_add(
+      vone,
+      wasm_f64x2_mul(vdu_n, wasm_f64x2_add(
+          wasm_f64x2_splat(-2.0 / 3.0),
+          wasm_f64x2_mul(vdu_n, wasm_f64x2_add(
+              wasm_f64x2_splat(5.0 / 9.0),
+              wasm_f64x2_mul(vdu_n, wasm_f64x2_add(
+                  wasm_f64x2_splat(-40.0 / 81.0),
+                  wasm_f64x2_mul(vdu_n, wasm_f64x2_splat(110.0 / 243.0)))))))));
+  const v128_t va = wasm_f64x2_mul(wasm_f64x2_splat(nom_osc.a0), va_poly);
+  const v128_t vom_e2 = wasm_f64x2_sub(vone, ve2);
+  const v128_t vp = wasm_f64x2_mul(va, vom_e2);
+  const v128_t ve = wasm_f64x2_sqrt(ve2);
+  const v128_t veta = wasm_f64x2_sqrt(vom_e2);
+  const v128_t vt_inc = wasm_f64x2_sqrt(vt2);
+  const v128_t v1pt2 = wasm_f64x2_add(vone, vt2);
+  const v128_t v1peta = wasm_f64x2_add(vone, veta);
+  const v128_t vinv_1pt2 = wasm_f64x2_div(vone, v1pt2);
+  const v128_t vinv_t = wasm_f64x2_div(vone, vt_inc);
+  const v128_t vinv_e = wasm_f64x2_div(vone, ve);
+  const v128_t vinv_eta = wasm_f64x2_div(vone, veta);
+  const v128_t vinv_ep = wasm_f64x2_div(vone, wasm_f64x2_mul(v1peta, vp));
+  const v128_t vinv_1peta = wasm_f64x2_mul(vinv_ep, vp);
+  const v128_t vinv_p = wasm_f64x2_mul(vinv_ep, v1peta);
+
+  const v128_t vsF0 = wasm_f64x2_splat(nom_osc.sF0);
+  const v128_t vcF0 = wasm_f64x2_splat(nom_osc.cF0);
+  const v128_t vdlam_osc = wasm_f64x2_sub(vy[kLam], wasm_f64x2_splat(nom_osc.lam0));
+  const v128_t vesF0 = wasm_f64x2_sub(wasm_f64x2_mul(vy[kAf], vsF0), wasm_f64x2_mul(vy[kAg], vcF0));
+  const v128_t vecF0 = wasm_f64x2_add(wasm_f64x2_mul(vy[kAf], vcF0), wasm_f64x2_mul(vy[kAg], vsF0));
+  const v128_t vdm = wasm_f64x2_add(wasm_f64x2_sub(vdlam_osc, wasm_f64x2_splat(nom_osc.dF0)), vesF0);
+  const v128_t vf1 = wasm_f64x2_sub(vone, vecF0);
+  const v128_t vinv_f1 = wasm_f64x2_div(vone, vf1);
+  const v128_t vr1 = wasm_f64x2_mul(vdm, vinv_f1);
+  const double r1_p = wasm_f64x2_extract_lane(vr1, 0), r1_m = wasm_f64x2_extract_lane(vr1, 1);
+  if (!(std::fabs(r1_p) < 0.08 && std::fabs(r1_m) < 0.08))
+    return 0;
+  const v128_t vf2_o_f1 = wasm_f64x2_mul(vesF0, vinv_f1);
+  const v128_t vf3_o_f1 = wasm_f64x2_mul(vecF0, vinv_f1);
+  const v128_t vr1_2 = wasm_f64x2_mul(vr1, vr1);
+  const v128_t vu0 = wasm_f64x2_mul(
+      vr1,
+      wasm_f64x2_add(wasm_f64x2_sub(vone, wasm_f64x2_mul(wasm_f64x2_splat(0.5), wasm_f64x2_mul(vr1, vf2_o_f1))),
+                     wasm_f64x2_mul(vr1_2, wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(0.5), wasm_f64x2_mul(vf2_o_f1, vf2_o_f1)),
+                                                          wasm_f64x2_mul(wasm_f64x2_splat(1.0 / 6.0), vf3_o_f1)))));
+  const v128_t vu2 = wasm_f64x2_mul(vu0, vu0);
+  const v128_t vcu0_k = wasm_f64x2_sub(
+      vone,
+      wasm_f64x2_mul(vu2, wasm_f64x2_sub(wasm_f64x2_splat(0.5),
+                                         wasm_f64x2_mul(vu2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 24.0),
+                                                                            wasm_f64x2_mul(vu2, wasm_f64x2_splat(1.0 / 720.0)))))));
+  const v128_t vsu0_k = wasm_f64x2_mul(
+      vu0,
+      wasm_f64x2_sub(vone,
+                     wasm_f64x2_mul(vu2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 6.0),
+                                                        wasm_f64x2_mul(vu2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 120.0),
+                                                                                           wasm_f64x2_mul(vu2, wasm_f64x2_splat(1.0 / 5040.0))))))));
+  v128_t vsF = wasm_f64x2_add(wasm_f64x2_mul(vsF0, vcu0_k), wasm_f64x2_mul(vcF0, vsu0_k));
+  v128_t vcF = wasm_f64x2_sub(wasm_f64x2_mul(vcF0, vcu0_k), wasm_f64x2_mul(vsF0, vsu0_k));
+  if (e2_p > 1.6e-5 || e2_m > 1.6e-5 || std::fabs(r1_p) > 0.003 || std::fabs(r1_m) > 0.003) {
+    const v128_t vesF1 = wasm_f64x2_sub(wasm_f64x2_mul(vy[kAf], vsF), wasm_f64x2_mul(vy[kAg], vcF));
+    const v128_t vecF1 = wasm_f64x2_add(wasm_f64x2_mul(vy[kAf], vcF), wasm_f64x2_mul(vy[kAg], vsF));
+    const v128_t vfv1 = wasm_f64x2_sub(wasm_f64x2_add(wasm_f64x2_sub(wasm_f64x2_splat(nom_osc.dF0), vdlam_osc), vu0), vesF1);
+    const v128_t vduF = wasm_f64x2_div(vfv1, wasm_f64x2_sub(vone, vecF1));
+    const v128_t vh2 = wasm_f64x2_sub(vone, wasm_f64x2_mul(wasm_f64x2_splat(0.5), wasm_f64x2_mul(vduF, vduF)));
+    const v128_t vs_prev = vsF;
+    vsF = wasm_f64x2_sub(wasm_f64x2_mul(vs_prev, vh2), wasm_f64x2_mul(vcF, vduF));
+    vcF = wasm_f64x2_add(wasm_f64x2_mul(vcF, vh2), wasm_f64x2_mul(vs_prev, vduF));
+  }
+
+  const v128_t vth = wasm_f64x2_mul(wasm_f64x2_sub(vone, vt2), vinv_1pt2);
+  const v128_t vsi = wasm_f64x2_mul(wasm_f64x2_add(vt_inc, vt_inc), vinv_1pt2);
+  const v128_t vsO = wasm_f64x2_mul(vy[kChi], vinv_t);
+  const v128_t vcO = wasm_f64x2_mul(vy[kPsi], vinv_t);
+  const v128_t vcv = wasm_f64x2_mul(vy[kAf], vinv_e);
+  const v128_t vsv = wasm_f64x2_mul(vy[kAg], vinv_e);
+  const v128_t vcw = wasm_f64x2_add(wasm_f64x2_mul(vcv, vcO), wasm_f64x2_mul(vsv, vsO));
+  const v128_t vsw = wasm_f64x2_sub(wasm_f64x2_mul(vsv, vcO), wasm_f64x2_mul(vcv, vsO));
+  const v128_t vsE = wasm_f64x2_sub(wasm_f64x2_mul(vsF, vcv), wasm_f64x2_mul(vcF, vsv));
+  const v128_t vcE = wasm_f64x2_add(wasm_f64x2_mul(vcF, vcv), wasm_f64x2_mul(vsF, vsv));
+
+  const v128_t vesE = wasm_f64x2_mul(ve, vsE);
+  const v128_t vome = wasm_f64x2_sub(vone, wasm_f64x2_mul(ve, vcE));
+  const v128_t vinv_ome = wasm_f64x2_div(vone, vome);
+  const v128_t vtv = wasm_f64x2_div(vesE, wasm_f64x2_add(vome, veta));
+  const double tv_p = wasm_f64x2_extract_lane(vtv, 0), tv_m = wasm_f64x2_extract_lane(vtv, 1);
+  v128_t vphi_v;
+  if (std::fabs(tv_p) < 0.06 && std::fabs(tv_m) < 0.06) {
+    const v128_t vtv2 = wasm_f64x2_mul(vtv, vtv);
+    vphi_v = wasm_f64x2_mul(
+        vtv,
+        wasm_f64x2_sub(vone, wasm_f64x2_mul(vtv2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 3.0),
+                                                                 wasm_f64x2_mul(vtv2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 5.0),
+                                                                                                     wasm_f64x2_mul(vtv2, wasm_f64x2_splat(1.0 / 7.0))))))));
+  } else {
+    const v128_t vdtv = wasm_f64x2_sub(vtv, wasm_f64x2_splat(nom_osc.tv0));
+    const v128_t vden_tv = wasm_f64x2_add(vone, wasm_f64x2_mul(wasm_f64x2_splat(nom_osc.tv0), vtv));
+    const v128_t vz = wasm_f64x2_div(vdtv, vden_tv);
+    if (!(std::fabs(wasm_f64x2_extract_lane(vz, 0)) < 0.02 &&
+          std::fabs(wasm_f64x2_extract_lane(vz, 1)) < 0.02))
+      return 0;
+    const v128_t vz2 = wasm_f64x2_mul(vz, vz);
+    const v128_t vdphi = wasm_f64x2_mul(
+        vz,
+        wasm_f64x2_sub(vone, wasm_f64x2_mul(vz2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 3.0),
+                                                                wasm_f64x2_mul(vz2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 5.0),
+                                                                                                    wasm_f64x2_mul(vz2, wasm_f64x2_splat(1.0 / 7.0))))))));
+    vphi_v = wasm_f64x2_add(wasm_f64x2_splat(nom_osc.phi_v0), vdphi);
+  }
+
+  const v128_t vsnu = wasm_f64x2_mul(wasm_f64x2_mul(veta, vsE), vinv_ome);
+  const v128_t vcnu = wasm_f64x2_mul(wasm_f64x2_sub(vcE, ve), vinv_ome);
+  const v128_t vr = wasm_f64x2_mul(va, vome);
+  const v128_t vth2 = wasm_f64x2_mul(vth, vth);
+  const v128_t vc_j2 = wasm_f64x2_mul(wasm_f64x2_splat(0.25 * kJ2), vinv_p);
+  const v128_t vd_j2 = wasm_f64x2_mul(vc_j2, vinv_p);
+  const v128_t vbeta = wasm_f64x2_mul(ve, vinv_1peta);
+  const v128_t vesnu = wasm_f64x2_mul(ve, vsnu);
+  const v128_t vQw = wasm_f64x2_add(wasm_f64x2_add(vesE, wasm_f64x2_add(vphi_v, vphi_v)), vesnu);
+  const v128_t vn_a = vy[kN];
+
+  const v128_t vc2w = wasm_f64x2_sub(wasm_f64x2_mul(vcw, vcw), wasm_f64x2_mul(vsw, vsw));
+  const v128_t vs2w = wasm_f64x2_mul(wasm_f64x2_add(vsw, vsw), vcw);
+  const v128_t vc2n = wasm_f64x2_sub(wasm_f64x2_mul(vcnu, vcnu), wasm_f64x2_mul(vsnu, vsnu));
+  const v128_t vs2n = wasm_f64x2_mul(wasm_f64x2_add(vsnu, vsnu), vcnu);
+  const v128_t vc3n = wasm_f64x2_sub(wasm_f64x2_mul(vc2n, vcnu), wasm_f64x2_mul(vs2n, vsnu));
+  const v128_t vs3n = wasm_f64x2_add(wasm_f64x2_mul(vs2n, vcnu), wasm_f64x2_mul(vc2n, vsnu));
+  const v128_t vc2u = wasm_f64x2_sub(wasm_f64x2_mul(vc2w, vc2n), wasm_f64x2_mul(vs2w, vs2n));
+  const v128_t vs2u = wasm_f64x2_add(wasm_f64x2_mul(vs2w, vc2n), wasm_f64x2_mul(vc2w, vs2n));
+  const v128_t vcw1 = wasm_f64x2_sub(wasm_f64x2_mul(vc2w, vcnu), wasm_f64x2_mul(vs2w, vsnu));
+  const v128_t vsw1 = wasm_f64x2_add(wasm_f64x2_mul(vs2w, vcnu), wasm_f64x2_mul(vc2w, vsnu));
+  const v128_t vcw3 = wasm_f64x2_sub(wasm_f64x2_mul(vc2w, vc3n), wasm_f64x2_mul(vs2w, vs3n));
+  const v128_t vsw3 = wasm_f64x2_add(wasm_f64x2_mul(vs2w, vc3n), wasm_f64x2_mul(vc2w, vs3n));
+
+  const v128_t v1mth2 = wasm_f64x2_sub(vone, vth2);
+  const v128_t v3th2m1 = wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(3.0), vth2), vone);
+  const v128_t vc_sum = wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(3.0), vc2u),
+                                       wasm_f64x2_mul(ve, wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(3.0), vcw1), vcw3)));
+  const v128_t vdr = wasm_f64x2_mul(
+      vc_j2,
+      wasm_f64x2_sub(wasm_f64x2_mul(v1mth2, vc2u),
+                     wasm_f64x2_mul(wasm_f64x2_add(wasm_f64x2_add(wasm_f64x2_mul(vbeta, vcnu),
+                                                                  wasm_f64x2_mul(wasm_f64x2_add(vome, vome), vinv_eta)),
+                                                   vone),
+                                    v3th2m1)));
+  const v128_t vdi = wasm_f64x2_mul(wasm_f64x2_mul(vd_j2, wasm_f64x2_mul(vth, vsi)), vc_sum);
+  const v128_t vdnode = wasm_f64x2_mul(
+      wasm_f64x2_mul(vd_j2, vth),
+      wasm_f64x2_add(wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_splat(3.0), vs2u),
+                                    wasm_f64x2_mul(wasm_f64x2_splat(6.0), vQw)),
+                     wasm_f64x2_mul(ve, wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(3.0), vsw1), vsw3))));
+  const v128_t vdu = wasm_f64x2_mul(
+      vd_j2,
+      wasm_f64x2_add(
+          wasm_f64x2_add(
+              wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_sub(vone, veta), v3th2m1),
+                                            wasm_f64x2_mul(vsnu, wasm_f64x2_add(vbeta, vcnu))),
+                             wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_splat(3.0),
+                                                           wasm_f64x2_sub(vone, wasm_f64x2_mul(wasm_f64x2_splat(5.0), vth2))),
+                                            vQw)),
+              wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_splat(0.5),
+                                            wasm_f64x2_sub(vone, wasm_f64x2_mul(wasm_f64x2_splat(7.0), vth2))),
+                             vs2u)),
+          wasm_f64x2_mul(ve, wasm_f64x2_sub(wasm_f64x2_mul(wasm_f64x2_sub(wasm_f64x2_splat(2.0),
+                                                                          wasm_f64x2_mul(wasm_f64x2_splat(5.0), vth2)),
+                                                           vsw1),
+                                            wasm_f64x2_mul(vth2, vsw3)))));
+
+  if (!(std::fabs(wasm_f64x2_extract_lane(vdu, 0)) < 0.02 &&
+        std::fabs(wasm_f64x2_extract_lane(vdu, 1)) < 0.02 &&
+        std::fabs(wasm_f64x2_extract_lane(vdnode, 0)) < 0.02 &&
+        std::fabs(wasm_f64x2_extract_lane(vdnode, 1)) < 0.02 &&
+        std::fabs(wasm_f64x2_extract_lane(vdi, 0)) < 0.02 &&
+        std::fabs(wasm_f64x2_extract_lane(vdi, 1)) < 0.02))
+    return 0;
+
+  const v128_t vaor = vinv_ome;
+  const v128_t vaor2 = wasm_f64x2_mul(vaor, vaor);
+  const v128_t vna = wasm_f64x2_mul(vn_a, va);
+  const v128_t vrdot0 = wasm_f64x2_mul(wasm_f64x2_mul(vna, vesnu), vinv_eta);
+  const v128_t vrfdot0 = wasm_f64x2_mul(wasm_f64x2_mul(vna, veta), vaor);
+  const v128_t vinv_eta3 = wasm_f64x2_mul(wasm_f64x2_mul(vinv_eta, vinv_eta), vinv_eta);
+  const v128_t vdrdot = wasm_f64x2_mul(
+      veta,
+      wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_splat(-2.0), wasm_f64x2_mul(vc_j2, vn_a)),
+                                    wasm_f64x2_mul(vaor2, wasm_f64x2_mul(v1mth2, vs2u))),
+                     wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_mul(vc_j2, vn_a), wasm_f64x2_mul(vesnu, v3th2m1)),
+                                    wasm_f64x2_add(wasm_f64x2_mul(vaor2, vinv_1peta), vinv_eta3))));
+  const v128_t vdrfdot = wasm_f64x2_mul(
+      veta,
+      wasm_f64x2_add(wasm_f64x2_neg(wasm_f64x2_mul(wasm_f64x2_mul(vn_a, vaor2), vdr)),
+                     wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_mul(vna, vaor), wasm_f64x2_mul(vd_j2, wasm_f64x2_mul(vsi, vsi))),
+                                    vc_sum)));
+
+  const v128_t vrk_re = wasm_f64x2_mul(wasm_f64x2_add(vr, vdr), wasm_f64x2_splat(kRe));
+  const v128_t vvs = wasm_f64x2_splat(kRe / 60.0);
+  const v128_t vrdk_vs = wasm_f64x2_mul(wasm_f64x2_add(vrdot0, vdrdot), vvs);
+  const v128_t vrfdk_vs = wasm_f64x2_mul(wasm_f64x2_add(vrfdot0, vdrfdot), vvs);
+
+  const v128_t vcu0 = wasm_f64x2_sub(wasm_f64x2_mul(vcw, vcnu), wasm_f64x2_mul(vsw, vsnu));
+  const v128_t vsu0 = wasm_f64x2_add(wasm_f64x2_mul(vsw, vcnu), wasm_f64x2_mul(vcw, vsnu));
+  const v128_t vdu2 = wasm_f64x2_mul(vdu, vdu);
+  const v128_t vdn2 = wasm_f64x2_mul(vdnode, vdnode);
+  const v128_t vdi2 = wasm_f64x2_mul(vdi, vdi);
+  const v128_t vcdu = wasm_f64x2_sub(vone, wasm_f64x2_mul(vdu2, wasm_f64x2_sub(wasm_f64x2_splat(0.5), wasm_f64x2_mul(vdu2, wasm_f64x2_splat(1.0 / 24.0)))));
+  const v128_t vsdu = wasm_f64x2_mul(vdu, wasm_f64x2_sub(vone, wasm_f64x2_mul(vdu2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 6.0), wasm_f64x2_mul(vdu2, wasm_f64x2_splat(1.0 / 120.0))))));
+  const v128_t vcdn = wasm_f64x2_sub(vone, wasm_f64x2_mul(vdn2, wasm_f64x2_sub(wasm_f64x2_splat(0.5), wasm_f64x2_mul(vdn2, wasm_f64x2_splat(1.0 / 24.0)))));
+  const v128_t vsdn = wasm_f64x2_mul(vdnode, wasm_f64x2_sub(vone, wasm_f64x2_mul(vdn2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 6.0), wasm_f64x2_mul(vdn2, wasm_f64x2_splat(1.0 / 120.0))))));
+  const v128_t vcdi = wasm_f64x2_sub(vone, wasm_f64x2_mul(vdi2, wasm_f64x2_sub(wasm_f64x2_splat(0.5), wasm_f64x2_mul(vdi2, wasm_f64x2_splat(1.0 / 24.0)))));
+  const v128_t vsdi = wasm_f64x2_mul(vdi, wasm_f64x2_sub(vone, wasm_f64x2_mul(vdi2, wasm_f64x2_sub(wasm_f64x2_splat(1.0 / 6.0), wasm_f64x2_mul(vdi2, wasm_f64x2_splat(1.0 / 120.0))))));
+
+  const v128_t vcossu = wasm_f64x2_sub(wasm_f64x2_mul(vcu0, vcdu), wasm_f64x2_mul(vsu0, vsdu));
+  const v128_t vsinsu = wasm_f64x2_add(wasm_f64x2_mul(vsu0, vcdu), wasm_f64x2_mul(vcu0, vsdu));
+  const v128_t vcnod = wasm_f64x2_sub(wasm_f64x2_mul(vcO, vcdn), wasm_f64x2_mul(vsO, vsdn));
+  const v128_t vsnod = wasm_f64x2_add(wasm_f64x2_mul(vsO, vcdn), wasm_f64x2_mul(vcO, vsdn));
+  const v128_t vcosi = wasm_f64x2_sub(wasm_f64x2_mul(vth, vcdi), wasm_f64x2_mul(vsi, vsdi));
+  const v128_t vsini = wasm_f64x2_add(wasm_f64x2_mul(vsi, vcdi), wasm_f64x2_mul(vth, vsdi));
+
+  const v128_t vxmx = wasm_f64x2_neg(wasm_f64x2_mul(vsnod, vcosi));
+  const v128_t vxmy = wasm_f64x2_mul(vcnod, vcosi);
+  const v128_t vux = wasm_f64x2_add(wasm_f64x2_mul(vxmx, vsinsu), wasm_f64x2_mul(vcnod, vcossu));
+  const v128_t vuy = wasm_f64x2_add(wasm_f64x2_mul(vxmy, vsinsu), wasm_f64x2_mul(vsnod, vcossu));
+  const v128_t vuz = wasm_f64x2_mul(vsini, vsinsu);
+  const v128_t vvx = wasm_f64x2_sub(wasm_f64x2_mul(vxmx, vcossu), wasm_f64x2_mul(vcnod, vsinsu));
+  const v128_t vvy = wasm_f64x2_sub(wasm_f64x2_mul(vxmy, vcossu), wasm_f64x2_mul(vsnod, vsinsu));
+  const v128_t vvz = wasm_f64x2_mul(vsini, vcossu);
+
+  const v128_t vrx = wasm_f64x2_mul(vrk_re, vux);
+  const v128_t vry = wasm_f64x2_mul(vrk_re, vuy);
+  const v128_t vrz = wasm_f64x2_mul(vrk_re, vuz);
+  const v128_t vvox = wasm_f64x2_add(wasm_f64x2_mul(vrdk_vs, vux), wasm_f64x2_mul(vrfdk_vs, vvx));
+  const v128_t vvoy = wasm_f64x2_add(wasm_f64x2_mul(vrdk_vs, vuy), wasm_f64x2_mul(vrfdk_vs, vvy));
+  const v128_t vvoz = wasm_f64x2_add(wasm_f64x2_mul(vrdk_vs, vuz), wasm_f64x2_mul(vrfdk_vs, vvz));
+
+  alignas(16) double dr[3] = {
+      (wasm_f64x2_extract_lane(vrx, 0) - wasm_f64x2_extract_lane(vrx, 1)) * inv_d,
+      (wasm_f64x2_extract_lane(vry, 0) - wasm_f64x2_extract_lane(vry, 1)) * inv_d,
+      (wasm_f64x2_extract_lane(vrz, 0) - wasm_f64x2_extract_lane(vrz, 1)) * inv_d,
+  };
+  alignas(16) double dv[3] = {
+      (wasm_f64x2_extract_lane(vvox, 0) - wasm_f64x2_extract_lane(vvox, 1)) * inv_d,
+      (wasm_f64x2_extract_lane(vvoy, 0) - wasm_f64x2_extract_lane(vvoy, 1)) * inv_d,
+      (wasm_f64x2_extract_lane(vvoz, 0) - wasm_f64x2_extract_lane(vvoz, 1)) * inv_d,
+  };
+  if (sp.ctx.ap_frame && has_drift) frames::apply_drift(R_drift, dr, dv);
+  for (int c = 0; c < 3; ++c) {
+    J[c * np + col_j] = dr[c];
+    J[(3 + c) * np + col_j] = dv[c];
+  }
+  return 1;
+}
+#endif
+
+inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool* central, const double* h,
+                                double t, double r[3], double v[3], double* J, int32_t* nom_status = nullptr) {
+  XpSat& s0 = sats[0];
+  if (!is_ap_ctx(s0.ctx)) {
+    const int32_t st0 = xp_propagate(s0, t, r, v);
+    if (nom_status != nullptr) *nom_status = st0;
+    if (st0 != kPropOk) return false;
+    for (int j = 0; j < np; ++j) {
+      if (slot[j] < 0) {
+        for (int c = 0; c < 6; ++c) J[c * np + j] = 0.0;
+        continue;
+      }
+      double rp[3], vp[3], rm[3], vm[3];
+      if (xp_propagate(sats[1 + 2 * slot[j]], t, rp, vp) != kPropOk) return false;
+      if (xp_propagate(sats[2 + 2 * slot[j]], t, rm, vm) != kPropOk) return false;
+      const double d = central[j] ? 2.0 * h[j] : h[j];
+      for (int c = 0; c < 3; ++c) {
+        J[c * np + j] = (rp[c] - rm[c]) / d;
+        J[(3 + c) * np + j] = (vp[c] - vm[c]) / d;
+      }
+    }
+    return true;
+  }
+  if (s0.init_error != 0) {
+    if (nom_status != nullptr) *nom_status = kPropRefused;
+    return false;
+  }
+  double ym0[6];
+  if (!mean_at_local(s0, t, ym0)) {
+    if (nom_status != nullptr) *nom_status = kPropMeanMotion;
+    return false;
+  }
+  const Bodies shared = s0.ctx.ap_third_body ? bodies_at_ap(s0.ctx.d50_epoch + t / kMinutesPerDay)
+                                             : bodies_at(s0.ctx.d50_epoch + t / kMinutesPerDay);
+  const bool no_reclass = !(s0.ctx.ap_resonance && ap_resonance_class(s0.ctx, ym0[kN]) != s0.ctx.resonance);
+  const bool can_share_3b = (t != 0.0) && !s0.ctx.long_period && s0.ctx.ap_third_body && no_reclass;
+  const bool can_share_sp = (t != 0.0) && (s0.ctx.mdaily != nullptr || s0.ctx.sp != nullptr || s0.ctx.wide != nullptr) && no_reclass;
+  const bool can_share_srp = (t != 0.0) && s0.ctx.agom > 0.0 && no_reclass;
+  double d_3b0[6] = {0, 0, 0, 0, 0, 0}, dd_3b_dlam[6] = {0, 0, 0, 0, 0, 0};
+  double d_sp0[6] = {0, 0, 0, 0, 0, 0}, dd_sp_dlam[6] = {0, 0, 0, 0, 0, 0}, d2_sp_dlam2[6] = {0, 0, 0, 0, 0, 0};
+  double d_srp_unit0[6] = {0, 0, 0, 0, 0, 0};
+  double E0_osc = std::numeric_limits<double>::quiet_NaN(), sE0_osc = 0.0, cE0_osc = 1.0;
+  double lam0_ref = std::numeric_limits<double>::quiet_NaN(), sLam0_ref = 0.0, cLam0_ref = 1.0;
+  CovNomOsc nom_osc{};
+  double* const pE0 = s0.ctx.ap_third_body ? &E0_osc : nullptr;
+  double* const psE0 = s0.ctx.ap_third_body ? &sE0_osc : nullptr;
+  double* const pcE0 = s0.ctx.ap_third_body ? &cE0_osc : nullptr;
+  double* const plam0 = s0.ctx.ap_third_body ? &lam0_ref : nullptr;
+  double* const psLam0 = s0.ctx.ap_third_body ? &sLam0_ref : nullptr;
+  double* const pcLam0 = s0.ctx.ap_third_body ? &cLam0_ref : nullptr;
+  CovNomOsc* const pNomOsc = s0.ctx.ap_third_body ? &nom_osc : nullptr;
+  int32_t st0;
+  if (s0.ctx.wide != nullptr && s0.ctx.wide_owned) {
+    const double x = t / tess::kGridEvery;
+    const int jn = t >= 0.0 ? static_cast<int>(std::floor(x)) : static_cast<int>(std::ceil(x));
+    const int next = t >= 0.0 ? jn + 1 : jn - 1;
+    const double u = std::fabs(x - jn);
+    const double blend = u < 1.0 - tess::kGridBlend ? 0.0 : (u - (1.0 - tess::kGridBlend)) / tess::kGridBlend;
+    tess::WideGrid* g0 = nullptr;
+    tess::WideGrid* g1 = nullptr;
+    bool h0 = false, h1 = false;
+    if (!wide_node(s0, jn, g0, h0) || (blend > 0.0 && !wide_node(s0, next, g1, h1))) {
+      if (h0) tess::wide_grid_drop(g0);
+      if (nom_status != nullptr) *nom_status = kPropRefused;
+      return false;
+    }
+    RateContext c = s0.ctx;
+    c.wide = g0;
+    c.wide_next = g1;
+    c.wide_blend = blend;
+    st0 = output(c, t, ym0, r, v, &shared, can_share_3b ? d_3b0 : nullptr, can_share_3b ? dd_3b_dlam : nullptr,
+                 can_share_sp ? d_sp0 : nullptr, can_share_sp ? dd_sp_dlam : nullptr,
+                 nullptr, nullptr, nullptr, nullptr, 0.0,
+                 can_share_sp ? d2_sp_dlam2 : nullptr, nullptr,
+                 can_share_srp ? d_srp_unit0 : nullptr, nullptr,
+                 pE0, psE0, pcE0, std::numeric_limits<double>::quiet_NaN(), 0.0, 1.0,
+                 plam0, psLam0, pcLam0, std::numeric_limits<double>::quiet_NaN(), 0.0, 1.0, pNomOsc);
+    if (h0) tess::wide_grid_drop(g0);
+    if (h1) tess::wide_grid_drop(g1);
+  } else {
+    st0 = output(s0.ctx, t, ym0, r, v, &shared, can_share_3b ? d_3b0 : nullptr, can_share_3b ? dd_3b_dlam : nullptr,
+                 can_share_sp ? d_sp0 : nullptr, can_share_sp ? dd_sp_dlam : nullptr,
+                 nullptr, nullptr, nullptr, nullptr, 0.0,
+                 can_share_sp ? d2_sp_dlam2 : nullptr, nullptr,
+                 can_share_srp ? d_srp_unit0 : nullptr, nullptr,
+                 pE0, psE0, pcE0, std::numeric_limits<double>::quiet_NaN(), 0.0, 1.0,
+                 plam0, psLam0, pcLam0, std::numeric_limits<double>::quiet_NaN(), 0.0, 1.0, pNomOsc);
+  }
+  if (nom_status != nullptr) *nom_status = st0;
+  if (st0 != kPropOk) return false;
+  double R_drift[3][3];
+  const bool has_drift = s0.ctx.ap_frame && frames::teme_drift_matrix(s0.epoch_jd_whole, s0.epoch_jd_frac, t, R_drift);
+  if (has_drift) frames::apply_drift(R_drift, r, v);
+
+  auto eval_sigma = [&](XpSat& ss, int param_idx, double rs[3], double vs[3]) -> bool {
+    (void)param_idx;
+    if (ss.init_error != 0) return false;
+    double yms[6];
+    if (!mean_at_local(ss, t, yms)) return false;
+    const bool same_cls = ss.ctx.long_period == s0.ctx.long_period && ss.ctx.resonance == s0.ctx.resonance &&
+                          !(ss.ctx.ap_resonance && ap_resonance_class(ss.ctx, yms[kN]) != ss.ctx.resonance) &&
+                          (ss.ctx.wide == nullptr || ss.ctx.wide_anchor == &s0);
+    const bool small_plane_diff =
+        (s0.ctx.i0 > 0.02) &&
+        (std::fabs(yms[kChi] - ym0[kChi]) + std::fabs(yms[kPsi] - ym0[kPsi])) < 0.005 * s0.ctx.i0;
+    const double dlam = yms[kLam] - ym0[kLam];
+    const bool share_3b = can_share_3b && same_cls;
+    const bool share_sp = can_share_sp && same_cls && small_plane_diff && (std::fabs(dlam) < 0.15);
+    const bool share_srp = can_share_srp && same_cls && small_plane_diff;
+    if (share_3b || share_sp || share_srp) {
+      if (output(ss.ctx, t, yms, rs, vs, &shared, nullptr, nullptr, nullptr, nullptr,
+                 share_3b ? d_3b0 : nullptr, share_3b ? dd_3b_dlam : nullptr,
+                 share_sp ? d_sp0 : nullptr, share_sp ? dd_sp_dlam : nullptr,
+                 dlam, nullptr, share_sp ? d2_sp_dlam2 : nullptr,
+                 nullptr, share_srp ? d_srp_unit0 : nullptr,
+                 nullptr, nullptr, nullptr, E0_osc, sE0_osc, cE0_osc,
+                 nullptr, nullptr, nullptr, lam0_ref, sLam0_ref, cLam0_ref) != kPropOk)
+        return false;
+      if (ss.ctx.ap_frame && has_drift) frames::apply_drift(R_drift, rs, vs);
+      return true;
+    }
+    return xp_propagate_local(ss, t, rs, vs, &shared) == kPropOk;
+  };
+
+  const double e0_ym = std::sqrt(ym0[kAf] * ym0[kAf] + ym0[kAg] * ym0[kAg]);
+  const bool zero_drag_orbit =
+      !s0.ctx.drag_pass && s0.ctx.ap_third_body &&
+      s0.ctx.a0 * (1.0 - s0.ctx.e0) > 1.50 &&
+      (nom_osc.valid ? nom_osc.a0 : s0.ctx.a0) * (1.0 - e0_ym) > 1.48 &&
+      std::fabs(s0.ctx.bterm) < 10.0;
+
+  for (int j = 0; j < np; ++j) {
+    if (slot[j] < 0) {
+      for (int c = 0; c < 6; ++c) J[c * np + j] = 0.0;
+      continue;
+    }
+    XpSat& sp_sat = sats[1 + 2 * slot[j]];
+    if (zero_drag_orbit && (sp_sat.ctx.is_cov_sigma & 64) != 0 &&
+        !sp_sat.ctx.drag_pass && std::fabs(sp_sat.ctx.bterm) < 10.0 &&
+        (!central[j] || ((sats[2 + 2 * slot[j]].ctx.is_cov_sigma & 64) != 0 &&
+                         !sats[2 + 2 * slot[j]].ctx.drag_pass &&
+                         std::fabs(sats[2 + 2 * slot[j]].ctx.bterm) < 10.0))) {
+      for (int c = 0; c < 6; ++c) J[c * np + j] = 0.0;
+      continue;
+    }
+    const double d = central[j] ? 2.0 * h[j] : h[j];
+    const double inv_d = 1.0 / d;
+#ifdef __wasm_simd128__
+    if (central[j]) {
+      const int fast_rc = eval_cov_pair_j2_fast(
+          s0, sp_sat, sats[2 + 2 * slot[j]], t, ym0, nom_osc,
+          can_share_3b, can_share_sp, can_share_srp,
+          d_3b0, dd_3b_dlam, d_sp0, dd_sp_dlam, d2_sp_dlam2, d_srp_unit0,
+          has_drift, R_drift, inv_d, J, np, j);
+      if (fast_rc > 0) continue;
+      if (fast_rc < 0) return false;
+    }
+#endif
+    double rp[3], vp[3], rm[3], vm[3];
+    if (!eval_sigma(sp_sat, j, rp, vp)) return false;
+    if (central[j]) {
+      if (!eval_sigma(sats[2 + 2 * slot[j]], j, rm, vm)) return false;
+    } else {
+      for (int c = 0; c < 3; ++c) { rm[c] = r[c]; vm[c] = v[c]; }
+    }
+    for (int c = 0; c < 3; ++c) {
+      J[c * np + j] = (rp[c] - rm[c]) * inv_d;
+      J[(3 + c) * np + j] = (vp[c] - vm[c]) * inv_d;
+    }
+  }
+  return true;
+}
+
 /// A class change gets one consistent set of AP tables for both rates and
 /// output. The temporary owns its coefficients; atmosphere and frame epoch
 /// remain those of the original set. No global force selection is modified.
-inline bool reclass_make(const RateContext& ctx, const double* y, XpSat& tmp) {
+[[gnu::noinline]] inline bool reclass_make(const RateContext& ctx, const double* y, XpSat& tmp) {
   if (state_test(ctx, y) != 0) return false;
   const Kepler k = kepler_of(y);
   tmp = XpSat{};
   tmp.ctx = ctx;
+  tmp.ctx.ctx_id = next_ctx_id();
+  tmp.ctx.cov_anchor_id = tmp.ctx.ctx_id;
+  tmp.ctx.is_cov_sigma = 0;
+  tmp.ctx.shared_mask = 0;
   tmp.ctx.res_epoch = nullptr; tmp.ctx.res_count = 0; tmp.ctx.res_taylor = nullptr;
   tmp.ctx.half_day = nullptr; tmp.ctx.half_day_count = 0;
   tmp.ctx.shallow = nullptr; tmp.ctx.shallow_count = 0;
-  tmp.ctx.zt = nullptr; tmp.ctx.mdaily = nullptr; tmp.ctx.sp = nullptr; tmp.ctx.sp_count = 0;
+  tmp.ctx.zt = nullptr; tmp.ctx.mdaily = nullptr;
+  tmp.ctx.sp = nullptr; tmp.ctx.sp_count = 0;
+  tmp.ctx.sp_orig = nullptr; tmp.ctx.sp_orig_count = 0;
+  tmp.ctx.sp_comb = nullptr; tmp.ctx.sp_comb_count = 0;
   tmp.ctx.wide_owned = 0;  // shares the parent's grid (SPEC 16.11)
   tmp.ctx.resonance = static_cast<int8_t>(ap_resonance_class(ctx, y[kN]));
   tmp.ctx.e0 = k.e; tmp.ctx.i0 = k.i;
   Elements e{}; e.eo = k.e; e.xincl = k.i;
+  CovBankScope no_cov_share(nullptr);
   return ap_init(e, y[kN], tmp.ctx.resonance, tmp);
 }
-inline bool reclass_rates(const RateContext& ctx, double t, const double* y, double* out) {
+[[gnu::noinline]] inline bool reclass_rates(const RateContext& ctx, double t, const double* y, double* out) {
   XpSat tmp{};
   const bool made = reclass_make(ctx, y, tmp);
   const bool ok = made && rates(tmp.ctx, t, y, out);
   xp_release(tmp);
   return ok;
 }
-inline int32_t reclass_output(const RateContext& ctx, double t, const double* y, double* r, double* v, const Bodies* shared) {
+[[gnu::noinline]] inline int32_t reclass_output(const RateContext& ctx, double t, const double* y, double* r, double* v, const Bodies* shared) {
   XpSat tmp{};
   const bool made = reclass_make(ctx, y, tmp);
   const int32_t rc = made ? output(tmp.ctx, t, y, r, v, shared) : kPropRefused;

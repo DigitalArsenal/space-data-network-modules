@@ -212,24 +212,26 @@ inline void series_G(const HansenSeries& h, double e, double& G, double& dG, boo
   G = 0.0;
   dG = 0.0;
   auto coef_of = [&](int j) { return library ? library_coef(h, j) : h.c[j]; };
-  const int nG = drop_last ? h.count - 1 : h.count;
+  const int nG_full = drop_last ? h.count - 1 : h.count;
+  const int cap = library ? h.count : (e2 < 1e-6 ? 3 : (e2 < 2.5e-3 ? 7 : h.count));
+  const int nG = nG_full < cap ? nG_full : cap;
+  const int ndG = h.count < cap ? h.count : cap;
   for (int j = nG - 1; j >= 0; --j) G = G * e2 + coef_of(j);
   G *= lead;
   // dG/de = sum (lead + 2j) c_j e^(lead + 2j - 1)
-  for (int j = h.count - 1; j >= 0; --j) {
-    const int power = h.lead + 2 * j - 1;  // power of e in this derivative term
-    const double coef = (power == skip_d0 || power == skip_d1) ? 0.0 : (h.lead + 2 * j) * coef_of(j);
-    dG = dG * e2 + coef;
-  }
-  // the lowest derivative power is lead - 1 (lead >= 1) or 1 (lead = 0, whose j = 0 term vanishes)
   if (h.lead >= 1) {
+    for (int j = ndG - 1; j >= 0; --j) {
+      const int power = h.lead + 2 * j - 1;  // power of e in this derivative term
+      const double coef = (power == skip_d0 || power == skip_d1) ? 0.0 : (h.lead + 2 * j) * coef_of(j);
+      dG = dG * e2 + coef;
+    }
     double lm1 = 1.0;
     for (int j = 0; j < h.lead - 1; ++j) lm1 *= e;
     dG *= lm1;
   } else {
     // lead 0: the j = 0 coefficient is 0 * c_0, so dG / e is the polynomial in e^2 starting at j = 1
     dG = 0.0;
-    for (int j = h.count - 1; j >= 1; --j) {
+    for (int j = ndG - 1; j >= 1; --j) {
       const int power = 2 * j - 1;
       const double coef = (power == skip_d0 || power == skip_d1) ? 0.0 : (2 * j) * coef_of(j);
       dG = dG * e2 + coef;
@@ -243,6 +245,32 @@ inline const HansenSeries* hansen_series(int l, int p, int q) {
   for (int i = 0; i < kHansenCount; ++i)
     if (kHansen[i].l == l && kHansen[i].p == p && kHansen[i].q == q) return &kHansen[i];
   return nullptr;
+}
+
+inline double pow_uint(double x, int n) {
+  double r = 1.0;
+  while (n > 0) {
+    if (n & 1) r *= x;
+    x *= x;
+    n >>= 1;
+  }
+  return r;
+}
+
+inline void cpow_uint(double cr, double ci, int n, double& out_r, double& out_i) {
+  out_r = 1.0;
+  out_i = 0.0;
+  while (n > 0) {
+    if (n & 1) {
+      const double nr = out_r * cr - out_i * ci;
+      out_i = out_r * ci + out_i * cr;
+      out_r = nr;
+    }
+    const double ncr = cr * cr - ci * ci;
+    ci = 2.0 * cr * ci;
+    cr = ncr;
+    n >>= 1;
+  }
 }
 
 /// Kaula's eccentricity function G_lpq(e) itself, the Hansen coefficient
@@ -270,14 +298,43 @@ inline double hansen_G(int l, int p, int q, double e) {
 }
 
 /// One term's parts (SPEC 6.3): the integers, the tesserals and F G, F dG/de, dF/di G at the elements evaluated.
-/// AP (tesseral.inc): G_lpq(e) and dG_lpq/de from the Hansen coefficient, the derivative by a fourth-order central
-/// difference; near e = 0 the Maclaurin polynomial, exact to rounding there.
+/// AP (tesseral.inc): G_lpq(e) and dG_lpq/de evaluated analytically in one symmetric pass over (0, pi).
 inline void exact_G(int l, int p, int q, double e, double& G, double& dG) {
-  G = hansen_G(l, p, q, e);
-  const double h = 1e-4;
-  if (e >= 2.0 * h && e + 2.0 * h < 1.0) {
-    dG = (hansen_G(l, p, q, e - 2.0 * h) - 8.0 * hansen_G(l, p, q, e - h) + 8.0 * hansen_G(l, p, q, e + h) -
-          hansen_G(l, p, q, e + 2.0 * h)) / (12.0 * h);
+  const int kN = e < 0.01 ? 32 : e < 0.1 ? 64 : e < 0.8 ? 128 : (e < 0.95 ? 512 : 4096);
+  const int halfN = kN / 2;
+  const double eta = std::sqrt(1.0 - e * e);
+  const double inv_eta = 1.0 / eta;
+  const int w = l - 2 * p, j = w + q, aw = w < 0 ? -w : w;
+  const double dE = kTwoPi / kN;
+  double sdE, cdE, sE, cE;
+  fm::sincos(dE, sdE, cdE);
+  fm::sincos(0.5 * dE, sE, cE);
+  double E = 0.5 * dE;
+  double sumG = 0.0, sumdG = 0.0;
+  for (int i = 0; i < halfN; ++i) {
+    if (i > 0) {
+      const double nsE = sE * cdE + cE * sdE;
+      cE = cE * cdE - sE * sdE;
+      sE = nsE;
+      E += dE;
+    }
+    const double ar = 1.0 / (1.0 - e * cE);
+    const double cf = (cE - e) * ar, sf = eta * sE * ar;
+    double cwf, swf;
+    cpow_uint(cf, w < 0 ? -sf : sf, aw, cwf, swf);
+    const double M = E - e * sE;
+    double sjM, cjM;
+    fm::sincos(j * M, sjM, cjM);
+    const double cp = cwf * cjM + swf * sjM;
+    const double sp = swf * cjM - cwf * sjM;
+    const double ak = pow_uint(ar, l);
+    sumG += ak * cp;
+    sumdG += ak * (l * ar * cE * cp - (w * ar * inv_eta + j) * sE * sp);
+  }
+  const double inv_halfN = 1.0 / halfN;
+  G = sumG * inv_halfN;
+  if (e >= 2e-4 && e + 2e-4 < 1.0) {
+    dG = sumdG * inv_halfN;
   } else {
     double Gs;
     const HansenSeries* hs = hansen_series(l, p, q);
@@ -425,6 +482,81 @@ inline void resonance_six(const ResCoef* coefs, int count, double t, const Keple
     const double fgdS = A * c.fg * dS;
     sM += c.k * fgdS;
     sW += (c.l - 2 * c.p) * fgdS;
+    sO += c.m * fgdS;
+    sE += A * c.fdg * S;
+    sI += A * c.dfg * S;
+    sA += -(c.l + 1) * A * c.fg * S * ia;
+  }
+  const double na2 = n * a * a;
+  const double tanhalf = sin_i / (1.0 + ci);
+  six[0] += -3.0 * ia * ia * sM;
+  six[1] += (eta * eta * sM - eta * sW) / (na2 * e);
+  six[2] += (ci * sW - sO) / (na2 * eta * sin_i);
+  six[3] += (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
+  six[4] += sI / (na2 * eta);
+  six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
+}
+
+inline void resonance_six_ap(const ResCoef* coefs, int count, double t, const Kepler& kp, double n, double eta,
+                             double si, double ci, double theta_g0, double* six) {
+  if (count == 0) return;
+  const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+  const double thetag = theta_g0 + kOmegaE * t;
+  const double ia = 1.0 / a;
+  double amp[8];
+  amp[0] = kMu * ia;
+  for (int l = 1; l <= 6; ++l) amp[l] = amp[l - 1] * ia;
+
+  double sw1, cw1, sk1, ck1, sm1, cm1;
+  fm::sincos(kp.argp, sw1, cw1);
+  fm::sincos(kp.m, sk1, ck1);
+  fm::sincos(kp.node - thetag, sm1, cm1);
+  double cw_buf[17], sw_buf[17], ck_buf[17], sk_buf[17], cm[5], sm[5];
+  double* const cw = cw_buf + 8;
+  double* const sw = sw_buf + 8;
+  double* const ck = ck_buf + 8;
+  double* const sk = sk_buf + 8;
+  cw[0] = ck[0] = cm[0] = 1.0;
+  sw[0] = sk[0] = sm[0] = 0.0;
+  for (int q = 1; q <= 6; ++q) {
+    cw[q] = cw[q - 1] * cw1 - sw[q - 1] * sw1;
+    sw[q] = sw[q - 1] * cw1 + cw[q - 1] * sw1;
+    cw[-q] = cw[q];
+    sw[-q] = -sw[q];
+  }
+  for (int q = 1; q <= 8; ++q) {
+    ck[q] = ck[q - 1] * ck1 - sk[q - 1] * sk1;
+    sk[q] = sk[q - 1] * ck1 + ck[q - 1] * sk1;
+    ck[-q] = ck[q];
+    sk[-q] = -sk[q];
+  }
+  for (int q = 1; q <= 4; ++q) {
+    cm[q] = cm[q - 1] * cm1 - sm[q - 1] * sm1;
+    sm[q] = sm[q - 1] * cm1 + cm[q - 1] * sm1;
+  }
+
+  double sM = 0.0, sW = 0.0, sO = 0.0, sE = 0.0, sI = 0.0, sA = 0.0;
+  int last_w = 0x7fff, last_k = 0, last_m = 0;
+  double sp = 0.0, cp = 1.0;
+  for (int j = 0; j < count; ++j) {
+    const ResCoef& c = coefs[j];
+    const int w = c.l - 2 * c.p;
+    if (w != last_w || c.k != last_k || c.m != last_m) {
+      const double cwk = cw[w] * ck[c.k] - sw[w] * sk[c.k];
+      const double swk = sw[w] * ck[c.k] + cw[w] * sk[c.k];
+      cp = cwk * cm[c.m] - swk * sm[c.m];
+      sp = swk * cm[c.m] + cwk * sm[c.m];
+      last_w = w;
+      last_k = c.k;
+      last_m = c.m;
+    }
+    const double S = c.odd ? -c.S * cp + c.C * sp : c.C * cp + c.S * sp;
+    const double dS = c.odd ? c.S * sp + c.C * cp : -c.C * sp + c.S * cp;
+    const double A = amp[c.l];
+    const double fgdS = A * c.fg * dS;
+    sM += c.k * fgdS;
+    sW += w * fgdS;
     sO += c.m * fgdS;
     sE += A * c.fdg * S;
     sI += A * c.dfg * S;

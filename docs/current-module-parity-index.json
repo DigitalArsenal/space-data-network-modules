@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T16:13:41.134Z",
+  "generatedAt": "2026-11-08T14:05:05.355Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7495,7 +7495,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7518,13 +7518,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 123,
+      "testFileCount": 124,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/sdn_ap_module.cpp"
       ],
       "testFiles": [
+        "test/ap-simd-speedup.e2e.mjs",
         "test/ap-terms.e2e.mjs",
         "test/atmosphere.e2e.mjs",
         "test/bench.mjs",
