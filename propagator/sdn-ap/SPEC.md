@@ -14,7 +14,7 @@ builds from this document and the oracle alone.
 **Version specified.** 9.9 (native MacOS ARM library of the archived 9.9 package). Its native library works as an
 oracle (the harness's leg `9.9`). Section 11 states where 9.1.1.0 (the vendored WebAssembly build) differs.
 
-**Implementation.** Side B builds the bundle `propagator/sdn-ap/` of the public modules repository (Apache-2.0) from this
+**Implementation.** Side B builds the bundle `propagator/sdn-ap/` of the public modules repository (Apache-2.0, except this directory: PolyForm Noncommercial 1.0.0) from this
 document; it keeps the name SDN-AP and carries SGP4 and SGP4XP. The public description of SGP4-XP is
 [Payne et al. (2022), Improvements to the SGP4 Propagator (SGP4-XP)](https://amostech.com/TechnicalPapers/2022/Astrodynamics/Payne_2.pdf).
 Agreement with the USSF library measures implementation conformance, not orbit accuracy. Orbit accuracy
