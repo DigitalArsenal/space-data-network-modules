@@ -174,3 +174,4 @@ try {
   fs.rmSync(scratch, { recursive: true, force: true });
 }
 console.log("ap-simd-speedup E2E: PASS");
+process.exit(0);
