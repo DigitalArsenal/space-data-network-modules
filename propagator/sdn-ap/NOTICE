@@ -1,15 +1,21 @@
 SDN-AP propagator bundle (space-data-network-modules, propagator/sdn-ap)
 Copyright 2026 Edgesource Corporation
 
-Licensed under the Apache License, Version 2.0 (LICENSE).
+Licensed under the PolyForm Noncommercial License 1.0.0 (LICENSE): free for any
+noncommercial purpose; commercial use needs a license from Edgesource
+Corporation (tj@edgesource.com). Versions released before 2026-11-08 were
+released under the Apache License, Version 2.0, and stay under it.
+
+Required Notice: Copyright 2026 Edgesource Corporation
 
 The SGP4/SDP4 base, foundation/sgp4-str3/src/sgp4_core.inc and
 foundation/sgp4-str3/src/model.inc (the shared library build.mjs compiles), is
 written clean room
 from Spacetrack Report No. 3 (Hoots & Roehrich 1980, US Air Force, approved for
 public release) and the corrections documented in the text of Vallado,
-Crawford, Hujsak & Kelso (2006), AIAA 2006-6753; it is covered by the
-Apache-2.0 license of this package like the rest.
+Crawford, Hujsak & Kelso (2006), AIAA 2006-6753; in this bundle it is
+covered by this package's license like the rest; the files in their own
+directory stay under the Apache License 2.0.
 
 The module compiles, from this repository, pinned by SHA-256 in build.mjs:
 - ERFA (Essential Routines for Fundamental Astronomy), BSD-3-Clause, derived with
@@ -35,7 +41,8 @@ paragraphs above stay in force. Paths are relative to the root of that
 repository (this package is propagator/sdn-ap/). License is an SPDX identifier
 or expression, or a statement that ends in a LicenseRef-* identifier, defined
 below. License text lists the files that carry the terms; LICENSE is this
-package's Apache License 2.0. dist/build-provenance.txt records the pinned
+package's PolyForm Noncommercial License 1.0.0; a file listed with Apache-2.0
+keeps that license in its own directory. dist/build-provenance.txt records the pinned
 commits and the SHA-256 of every file the build reads.
 
 | Path | Component | License | License text |
@@ -59,7 +66,7 @@ commits and the SHA-256 of every file the build reads.
 LicenseRef identifiers
 
 - LicenseRef-USSF-SGP4: the US Space Force Open Source Agreement for SGP4
-  (LICENSES/USSF-SGP4-AGREEMENT.txt). It is not the Apache License 2.0.
+  (LICENSES/USSF-SGP4-AGREEMENT.txt). It is not this package's license.
   Redistribution is under the Agreement, with its copyright notice, the
   Agreement and its disclaimer; it bars endorsement by the US Space Force and
   notes that export from the United States may need a license. Only what comes

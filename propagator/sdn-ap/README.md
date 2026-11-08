@@ -13,7 +13,7 @@ An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose T
 | SGP4 | type 0 | SPACETRACK REPORT No. 3; Vallado et al. 2006 (AFSPC mode) |
 | SGP4XP | type 4: BTERM, AGOM (m^2/kg) | [Payne et al. (2022)](https://amostech.com/TechnicalPapers/2022/Astrodynamics/Payne_2.pdf); clean-room implementation from the public change list and SPEC.md |
 
-License: Apache-2.0 ([LICENSE](LICENSE)), the SGP4/SDP4 base included (written clean room from Spacetrack Report No. 3
+License: PolyForm Noncommercial 1.0.0 ([LICENSE](LICENSE)): free for any noncommercial purpose; commercial use needs a license from Edgesource Corporation (tj@edgesource.com). Versions released before 2026-11-08 stay under Apache-2.0. The SGP4/SDP4 base is included (written clean room from Spacetrack Report No. 3
 and the corrections AIAA 2006-6753 documents); [NOTICE](NOTICE) names what the build compiles and reads.
 
 Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`, no exception handling) writes

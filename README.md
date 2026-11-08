@@ -8,7 +8,7 @@ including migrated module families and Basilisk-derived module families.
 
 ## License
 
-Apache License 2.0 (LICENSE). Copyright 2026 Edgesource Corporation. Third-party code in third_party/ and vendor/ directories keeps its own license; see NOTICE. Data notices: NOTICE.md.
+Apache License 2.0 (LICENSE). Copyright 2026 Edgesource Corporation. One directory differs: `propagator/sdn-ap` (SDN-AP) is under the PolyForm Noncommercial License 1.0.0 (its own `LICENSE`) from 2026-11-08; the rest of this repository stays Apache-2.0. Third-party code in third_party/ and vendor/ directories keeps its own license; see NOTICE. Data notices: NOTICE.md.
 
 ## Structure
 
@@ -93,7 +93,7 @@ Apache License 2.0 (LICENSE). Copyright 2026 Edgesource Corporation. Third-party
 | `packages/satfoot` | `DigitalArsenal/space-data-network-plugin-satfoot` | `Friends-Of-Lobsternaut/satfoot-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/satobs` | `DigitalArsenal/space-data-network-plugin-satobs` | `Friends-Of-Lobsternaut/satobs-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/sda-visualization` | `DigitalArsenal/space-data-network-plugin-sda-visualization` | `Friends-Of-Lobsternaut/sda-visualization-sdn-plugin` | Pending | Not migrated yet. |
-| `propagator/sdn-ap` | none (this repository) | `space-data-network-closed-modules` `packages/sdn-ap-propagator` (imported 2026-10-24, owner: open source and free) | Completed | Apache-2.0 (its own `LICENSE` and `NOTICE`). One isomorphic WASI-threads module, byte-identical on the browser and WasmEdge lanes: SGP4, SGP4XP (the US Space Force SGP4-XP theory, clean room: `SPEC.md` and the spec vectors) and SDN-AP (SDN's advanced propagator); the conformance E2E runs against the private oracle (`SDN_AP_ORACLE_ROOT`). |
+| `propagator/sdn-ap` | none (this repository) | `space-data-network-closed-modules` `packages/sdn-ap-propagator` (imported 2026-10-24, owner: open source and free) | Completed | PolyForm Noncommercial 1.0.0 from 2026-11-08 (its own `LICENSE` and `NOTICE`; earlier releases Apache-2.0). One isomorphic WASI-threads module, byte-identical on the browser and WasmEdge lanes: SGP4, SGP4XP (the US Space Force SGP4-XP theory, clean room: `SPEC.md` and the spec vectors) and SDN-AP (SDN's advanced propagator); the conformance E2E runs against the private oracle (`SDN_AP_ORACLE_ROOT`). |
 | `propagator/sgp4` | `DigitalArsenal/space-data-network-module-propagator-sgp4` | `Friends-Of-Lobsternaut/propagator-sgp4-sdn-module` | Completed | Isomorphic: Emscripten browser + standalone WASI builds, SDK compliance, browser shim, WasmEdge smoke, native SGP4 tests, flow example. |
 | `packages/small-bodies` | `DigitalArsenal/space-data-network-plugin-small-bodies` | `Friends-Of-Lobsternaut/small-bodies-sdn-plugin` | Pending | Not migrated yet. |
 | `packages/socmint` | `DigitalArsenal/space-data-network-plugin-socmint` | `Friends-Of-Lobsternaut/socmint-sdn-plugin` | Pending | Not migrated yet. |
