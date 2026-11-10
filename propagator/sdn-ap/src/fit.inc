@@ -264,6 +264,10 @@ struct Consider {
   bool on = false;
   bool free = false;           ///< no penalty on c (K infinite): the calibration of kappa
   double kappa[3] = {};        ///< per unit sigma: in-track rate-of-rate (1/day^2), e-vector and i-vector rates (1/day)
+  /// the theory's share of sigma, sqrt(1 - sigma_w^2 / sigma^2) with sigma_w the input's white noise (its stated sigma, or
+  /// the residuals' third differences): the rates' sizes are kappa times the theory's scatter, not the noise's
+  double scale = 1.0;
+  double white_km = 0.0;       ///< sigma_w (km per component)
   double t_end_min = 0.0;      ///< the columns' time origin, minutes from the epoch: the fit arc's end
   // out of run(): the profiled consider coefficients at the solution and the profiled residual sum
   double c[kConsider] = {};    ///< km/day^2, then km/day x 4
@@ -286,9 +290,10 @@ inline void consider_row(const double* Jc, double t_min, double t_end_min, doubl
   g[4] = Jc[3] * tau / a_km;
 }
 
-/// The consider penalty 1 / kappa^2 of each of the five c (0 when free).
+/// The consider penalty 1 / (kappa scale)^2 of each of the five c (0 when free).
 inline void consider_weights(const Consider& cons, double k_inv2[kConsider]) {
-  const double k[kConsider] = {cons.kappa[0], cons.kappa[1], cons.kappa[1], cons.kappa[2], cons.kappa[2]};
+  const double s = std::fmax(cons.scale, 1e-3);
+  const double k[kConsider] = {cons.kappa[0] * s, cons.kappa[1] * s, cons.kappa[1] * s, cons.kappa[2] * s, cons.kappa[2] * s};
   for (int i = 0; i < kConsider; ++i) k_inv2[i] = cons.free || !(k[i] > 0.0) ? 0.0 : 1.0 / (k[i] * k[i]);
 }
 
@@ -317,9 +322,11 @@ constexpr KappaNode kKappaNodes[] = {
     {16378.0, 0.002, 45, 4, {1, 2, 3, 5}, {4.97, 0.443, 0.179, 0.0885}, {0.84, 0.17, 0.0909, 0.0666}, {0.292, 0.0772, 0.0692, 0.0723}},  // meo-10000-45
     {23000.0, 0.002, 40, 4, {1, 2, 3, 5}, {30.6, 4.72, 1.38, 1.26}, {0.618, 0.24, 0.134, 0.105}, {0.242, 0.0981, 0.0635, 0.0564}},  // meo-23000-40
     {27900.0, 0.003, 52, 4, {1, 2, 3, 5}, {4.57, 0.975, 0.336, 0.273}, {1.31, 0.185, 0.171, 0.131}, {0.229, 0.151, 0.147, 0.131}},  // meo-27900-52
-    {42164.0, 0.0004, 2, 4, {1, 2, 3, 5}, {61.4, 3.64, 3.59, 3.34}, {9.64, 0.518, 0.435, 0.36}, {4.17, 1.53, 1.32, 1.13}},  // geo-2
+    {42164.0, 0.0004, 2, 4, {1, 2, 3, 5}, {74.8, 4.26, 3.94, 3.65}, {10.7, 0.501, 0.419, 0.345}, {4.33, 1.44, 1.25, 1.08}},  // geo-2
     {42164.0, 0.002, 30, 4, {1, 2, 3, 5}, {90.9, 4.71, 4.06, 3.44}, {12, 0.833, 0.655, 0.442}, {2, 1.31, 1.21, 1}},  // geo-30
     {42164.0, 0.07, 43, 4, {1, 2, 3, 5}, {141, 1.39, 1.07, 0.869}, {12.5, 0.589, 0.474, 0.371}, {0.974, 0.685, 0.658, 0.566}},  // geo-e07-43
+    {26560.0, 0.72, 63.4, 4, {1, 2, 3, 5}, {4.36, 1.26, 0.91, 0.618}, {1.85, 0.828, 0.703, 0.545}, {3.86, 1.06, 0.589, 0.339}},  // heo-e72-63
+    {24400.0, 0.73, 20, 4, {1, 2, 3, 5}, {17.1, 5.47, 3.6, 2.11}, {2.28, 1.31, 1, 0.591}, {0.616, 0.395, 0.294, 0.182}},  // gto-e73-20
 };
 /// The kernel widths: in ln a, inclination (deg) and eccentricity.
 constexpr double kKappaWidthLnA = 0.05, kKappaWidthInc = 20.0, kKappaWidthE = 0.1;
@@ -664,6 +671,39 @@ inline double data_sigma_km(const Result& res, int count, const Options& o, doub
   return std::fmax(std::fmax(s, stated_km), kDataSigmaFloorKm);
 }
 
+/// SPEC 12.1: the input's white noise (km per position component) from the fit's residuals: the third differences of
+/// consecutive states, var(d3) = 20 sigma_w^2 for white noise, while the theory's error, smooth over the sampling, nearly
+/// cancels in them. Only where the sampling is dense against the orbit (the median step at most kWhiteSteps-th of the
+/// period at perigee, P (1 - e)^1.5: there a twice-a-revolution term leaves under 1 % of its variance in the estimate);
+/// 0 otherwise, below 8 states or where the theory refuses the set.
+constexpr double kWhiteSteps = 40.0;
+inline double white_sigma_km(const ElementRow& row, const double* t, const double* r, int count) {
+  if (count < 8 || !(row.mean_motion_rev_day > 0.0)) return 0.0;
+  {
+    double* dt = static_cast<double*>(std::malloc(sizeof(double) * static_cast<size_t>(count - 1)));
+    if (dt == nullptr) return 0.0;
+    for (int k = 0; k + 1 < count; ++k) dt[k] = std::fabs(t[k + 1] - t[k]);
+    std::nth_element(dt, dt + (count - 1) / 2, dt + (count - 1));
+    const double median_min = dt[(count - 1) / 2];
+    std::free(dt);
+    const double perigee_min = kMinutesPerDay / row.mean_motion_rev_day * std::pow(std::fmax(1.0 - row.eccentricity, 0.0), 1.5);
+    if (!(median_min * kWhiteSteps <= perigee_min)) return 0.0;
+  }
+  double* res = static_cast<double*>(std::malloc(sizeof(double) * 3 * static_cast<size_t>(count)));
+  if (res == nullptr) return 0.0;
+  double ss = 0.0;
+  int m = 0;
+  if (residuals(row, t, r, count, res))
+    for (int k = 0; k + 3 < count; ++k)
+      for (int c = 0; c < 3; ++c) {
+        const double d = res[3 * (k + 3) + c] - 3.0 * res[3 * (k + 2) + c] + 3.0 * res[3 * (k + 1) + c] - res[3 * k + c];
+        ss += d * d;
+        ++m;
+      }
+  std::free(res);
+  return m > 0 ? std::sqrt(ss / (20.0 * m)) : 0.0;
+}
+
 /// SPEC 12.1: the fit at the data's own sigma. `row` and `res` hold a fit weighted at `sigma_km`; while its data sigma
 /// differs from `sigma_km` by more than kSigmaTolerance of it, the fit is redone from the last set at the data sigma (at
 /// most kSigmaPasses times). `row`, `res` and `sigma_km` take the last fit, whose iterations add to `iterations`; a
@@ -688,10 +728,13 @@ inline void reweight(ElementRow& row, const double* t, const double* r, int coun
   };
   const int passes = with_c ? kSigmaPassesConsider : kSigmaPasses;
   const double tolerance = with_c ? kSigmaToleranceConsider : kSigmaTolerance;
+  // the white part of sigma: the input's stated sigma, or its residuals' (the larger)
+  if (with_c) cons->white_km = std::fmax(stated_km, white_sigma_km(row, t, r, count));
   bool profiled_rss = false;
   for (int pass = 0; pass < passes; ++pass) {
     const double next = sigma_of(profiled_rss);
     if (!(with_c && pass == 0) && std::fabs(next - sigma_km) <= tolerance * sigma_km) return;
+    if (with_c) cons->scale = std::sqrt(std::fmax(1.0 - (cons->white_km * cons->white_km) / (next * next), 0.0));
     ElementRow trial = row;
     const Result again = run(trial, t, r, count, o, next, true, with_c ? cons : nullptr);
     iterations += again.iterations;

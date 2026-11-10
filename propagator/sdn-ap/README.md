@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.8 (dist 51a52e99).
+Version 0.6.8 (dist 9a8e8ce3).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -102,10 +102,16 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   no step along the analytic Jacobian lowers the cost. The data are weighted at their own sigma (SPEC 12.1): the stages
   weigh at 1 km, then the whole-arc fit is redone at its post-fit residual scatter, not below the ephemeris' stated
   covariance (COVARIANCE_MATRIX_LINES) or 1 mm, until that holds, so precise data outweigh the priors and noisy data
-  leave them their weight (`test/fit-data-sigma.e2e.mjs`; fixtures by `test/record-fit-fixtures.mjs`). BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
+  leave them their weight (`test/fit-data-sigma.e2e.mjs`; fixtures by `test/record-fit-fixtures.mjs`). An AP fit is
+  generalized least squares with the theory's rate errors (in-track rate-of-rate, eccentricity- and inclination-vector
+  rates, from the arc's end) as consider terms, their sizes per unit of the theory's scatter from a table measured on
+  the project's own numerical truth (`test/consider-calibration.mjs`), the scale profiled; its default priors are BTERM
+  LOG_NORMAL 0.01 m^2/kg, sigma of the log ln 10, and AGOM GAUSSIAN_SIGNED 0.01 +- 0.01 m^2/kg on every arc, and a
+  term the arc leaves prior-limited (posterior variance above half the prior's) is held at its prior and marked in OD
+  COMMENT (SPEC 12.1). BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. SGP4XP's BTERM
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
   xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
-  no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
+  no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. SGP4XP's AGOM default is
   GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg on arcs of 36 h or more and the Space Force wrapper's 0 +- 0.1 m^2/kg on shorter
   arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). On 748 already-read 24 h GNSS windows (exploratory) the
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
@@ -172,8 +178,8 @@ to unresolved perigee-drag and third-body force detail, not isolated here. SPEC 
 SGP4XP's drag is section 3's (Jacchia 1970 on the generic flux model) unless the call's `$PCF` FORCES selects another;
 with no FORCES field off its default and no 'space_weather' or 'density_correction' frame the outputs are SGP4XP's bit
 for bit (the conformance E2E reproduces XP 72dcf6005046 and the control 9ecfafcd9027 on this build). Under NRLMSISE-00
-or `< 24 h` minimum spans, `fit` enables finite-difference Jacobian fallback and scales an unset LOG_NORMAL BTERM prior
-median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`), with the sigma of
+or `< 24 h` minimum spans, `fit` enables finite-difference Jacobian fallback and, for SGP4XP (AP keeps one median, 0.01,
+and ln 10 in every band: SPEC 12.1), scales an unset LOG_NORMAL BTERM prior median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`), with the sigma of
 the log `10 ln 10` under NRLMSISE-00 at `800-1400 km` so that the arc, not the median, sets BTERM there (SPEC 12.8),
 falling back to the band median's `ln 10` prior where that arc's BTERM is undetermined, moved far on a rough arc, or the
 arc holds a gap or an along-track step; a stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an

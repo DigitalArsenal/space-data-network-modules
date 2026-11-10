@@ -3,8 +3,9 @@
 // forecast flies it, and fit without OUTPUT writes that build's record. That build's dist (review-0's 0.6.6 at
 // d74d3129, or with CARRIED_IDENTITY_BASE=0.6.5 main's 0.6.5 at 3a3661eaf) from git, in the system's temporary folder;
 // on the same inputs:
-// - fit (the AP and XP fixture fits): the $OCM byte for byte with PRODUCER's version masked (the one field that names the
-//   build), the $ODR byte for byte with its two CIDs of that $OCM masked;
+// - fit (the AP and XP fixture fits): no forecast in a record fitted without OUTPUT. Since review-0 M1 (SPEC 12.1) the
+//   fits land elsewhere than the base's by design; SDN_AP_CARRIED_FIT_IDENTITY=1 still compares the residuals call's
+//   $OCM byte for byte with PRODUCER's version masked and its $ODR with its two CIDs of that $OCM masked;
 // - propagate of each record in TEME, GCRF and EME2000 at the fixture grid: the $OEM byte for byte;
 // - load_epochs of both records and an SGP4 record, then sdnap_epochs_set_at and sdnap_epochs_at (TEME and Earth-fixed)
 //   at 40 times: every double the same (Object.is); propagate_epochs: the $OEM byte for byte.
@@ -48,13 +49,17 @@ try {
   const version = JSON.parse(fs.readFileSync(path.join(packageRoot, "plugin-manifest.json"), "utf8")).version;
   const mask = (buf, from, to) => { const b = Buffer.from(buf); for (let at = b.indexOf(from); at >= 0; at = b.indexOf(from, at + 1)) to.copy(b, at); return b; };
 
-  // fit: the fixtures' AP and XP fits on both builds
+  // fit: the fixtures' AP and XP fits on both builds. Since review-0 M1 (SPEC 12.1: the data sigma, and AP's consider
+  // estimator) every fit lands elsewhere than the base's by design, so a fit without OUTPUT is held to carrying no
+  // forecast (no POLYNOMIAL_POSITION_RECORDS), and the base's records are flown below
   const oldSets = await fixtureSets(oldC), newSets = await fixtureSets(newC);
+  const { ocmOf } = await import("./lib/ocm.mjs");
   for (const kind of ["ap", "xp"]) {
-    check(same(mask(newSets[kind], producer(version), producer(BASE_VERSION)), oldSets[kind]), `fit ${kind}: the $OCM differs from ${BASE_VERSION}'s beyond PRODUCER`);
+    check((ocmOf(newSets[kind]).POLYNOMIAL_POSITION_RECORDS ?? []).length === 0, `fit ${kind}: a record without OUTPUT carries a forecast`);
   }
-  // the residual record of one fit, its CIDs of the $OCM masked
-  {
+  // the residual record of one fit, its CIDs of the $OCM masked (the base comparison only where the estimator does not
+  // move the fit: SDN_AP_CARRIED_FIT_IDENTITY=1)
+  if (process.env.SDN_AP_CARRIED_FIT_IDENTITY === "1") {
     const { inputs } = await import("./lib/fixture-inputs.mjs");
     const { AP_FORCES } = await import("./lib/ocm.mjs");
     const { arc, rows } = inputs();

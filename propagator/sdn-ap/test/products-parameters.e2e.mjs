@@ -17,7 +17,8 @@
 // - The data sigma sigma_r the fit weighted with (SPEC 12.1): every accepted $ODR row's WEIGHT is 1 / sigma_r^2 and its
 //   NORMALIZED_RESIDUAL (observed - computed) / sigma_r; OD_DATA_WEIGHTING states sigma_r (6 digits);
 //   ORBIT_DETERMINATION.WEIGHTED_RMS = FIT_RMS_KM / sqrt(3) / sigma_r, and, sigma_r being the fit's residual scatter to
-//   10 %, within 10 % of sqrt((3N - 8) / 3N) (the 1 km unit of 0.6.5 gave 0.26 and 0.014 here); SEDR, the energy removed
+//   10 %, within 10 % of sqrt((3N - 8) / 3N) for XP and at least 0.9 of it for AP (whose sigma_r is profiled over the
+//   consider rates) (the 1 km unit of 0.6.5 gave 0.26 and 0.014 here); SEDR, the energy removed
 //   (the $OCM's definition), finite and positive under drag: the sign of NON_GRAVITATIONAL_RATE_PER_DAY. Stored rows:
 //   the first 0.6.0 build (modules a54ff2245) wrote SEDR as the signed dE/dt, negative under drag; an $OCM it wrote
 //   reads here with the opposite sign, its magnitude unchanged. On 2026-11-05 no tracked $OCM in this repository (259
@@ -99,7 +100,9 @@ for (const [name, config, spw, code] of [["XP", configuration({ theory: "SGP4XP"
   check(close(stated, sigma, 1e-5), `${name}: OD_DATA_WEIGHTING '${od.OD_DATA_WEIGHTING}' against the $ODR's sigma ${sigma} km`);
   const wantRms = st.FIT_RMS_KM / Math.sqrt(3) / sigma, scatter = Math.sqrt((3 * st.FIT_STATES - 8) / (3 * st.FIT_STATES));
   check(Number.isFinite(od.WEIGHTED_RMS) && close(od.WEIGHTED_RMS, wantRms, 1e-12), `${name}: WEIGHTED_RMS ${od.WEIGHTED_RMS} against FIT_RMS_KM / sqrt(3) / sigma ${wantRms}`);
-  check(close(od.WEIGHTED_RMS, scatter, 0.1), `${name}: WEIGHTED_RMS ${od.WEIGHTED_RMS}, not the residual scatter's ${scatter} to 10 %`);
+  // (AP: sigma_r is profiled over the consider rates, which lower it below the residual's scatter, SPEC 12.1)
+  check(name === "AP" ? od.WEIGHTED_RMS >= 0.9 * scatter : close(od.WEIGHTED_RMS, scatter, 0.1),
+    `${name}: WEIGHTED_RMS ${od.WEIGHTED_RMS}, ${name === "AP" ? "below 0.9 of" : "not"} the residual scatter's ${scatter}${name === "AP" ? "" : " to 10 %"}`);
   const normalized = edited.filter((e) => e.ACCEPTED && !close(e.NORMALIZED_RESIDUAL * sigma, e.OBSERVED_VALUE - e.COMPUTED_VALUE, 1e-9)).length;
   check(normalized === 0, `${name}: ${normalized} accepted rows' NORMALIZED_RESIDUAL not (observed - computed) / sigma`);
   const codes = new Set(edited.map((e) => e.PERTURBATION_MODEL_CODE));

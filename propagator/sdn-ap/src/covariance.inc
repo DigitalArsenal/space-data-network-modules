@@ -115,7 +115,7 @@ inline void release(Bank& b) {
   b.count = 0;
 }
 
-inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpSat* nominal = nullptr) {
+inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpSat* nominal = nullptr, bool srp_from_zero = false) {
   release(b);
   b.o = o;
   b.np = kinds_of(o, b.kind);
@@ -150,8 +150,9 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
     b.central[j] = !(b.kind[j] == kKindSrp && !o.agom_log && b.x[j] - b.h[j] <= 0.0);  // ln AGOM moves both ways
     double xp[fit::kMaxParams], xm[fit::kMaxParams];
     for (int q = 0; q < b.np; ++q) xp[q] = xm[q] = b.x[q];
-    // an AP set at AGOM <= 0 (no radiation pressure in the theory) takes the slope from 0 on the side where it acts
-    if (!b.central[j] && b.kind[j] == kKindSrp && xpt::is_ap_ctx(b.sats[0].ctx)) xp[j] = std::fmax(b.x[j], 0.0);
+    // an AP fit's covariance (srp_from_zero) at AGOM <= 0 (no radiation pressure in the theory) takes the slope from 0 on
+    // the side where the term acts, so the hold rule never reads the flat side as no information
+    if (srp_from_zero && !b.central[j] && b.kind[j] == kKindSrp) xp[j] = std::fmax(b.x[j], 0.0);
     xp[j] += b.h[j];
     if (!start(xp, 1 + 2 * b.slot[j])) return false;
     if (b.central[j] || !xpt::is_ap_ctx(b.sats[0].ctx)) {
@@ -350,7 +351,7 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
     Bank& b;
     ~Scope() { release(b); }
   } scope{b};
-  if (count < 8 || !init(row, o, b)) return false;
+  if (count < 8 || !init(row, o, b, nullptr, cons != nullptr && cons->on)) return false;
   const int np = b.np;
   double A[kMaxAug * kMaxAug] = {};
   double floor[6] = {};

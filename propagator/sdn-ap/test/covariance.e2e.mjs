@@ -14,7 +14,8 @@
 // - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
 //   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n) and its covariance is pinned:
 //   the SHA-256 of COVARIANCE_DATA, the six floor doubles and sdnap_covariance_at of the AP set at the fixture grid
-//   (AP_COVARIANCE_SHA256, recorded with SPEC 12.1's data-sigma weighting; the SGP4XP noise table is unchanged).
+//   (AP_COVARIANCE_SHA256, recorded with SPEC 12.1's AP estimator: consider rates, the hold rule; the SGP4XP noise table
+//   is unchanged).
 // - export_omm of the XP $OCM equals test/fixtures/xp-fit-data-sigma.omm (export_omm of the recorded set) with
 //   PROVENANCE that of the $OCM exported: the two records packed by one builder are byte-equal;
 //   assertNoUserDefined on it; export_omm of the AP $OCM is theory-not-exportable:AP; garbage is invalid-ocm; under an
@@ -39,7 +40,7 @@ import { createHash } from "node:crypto";
 
 /// SPEC 12.5's AP DRAG row (0.6.1) and the pinned AP covariance numbers.
 const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.647194501793458e-7, c: 0.112126311682426 };
-const AP_COVARIANCE_SHA256 = "73181a282ee9d569565b9b057a3f0676f8ece03bc2d74305a01d6af2cbb9de8c";
+const AP_COVARIANCE_SHA256 = "03a9c8df9bdcc8e4c114bfc39fb9e1634c8f1e513b9bc918936a6d311eaae359";
 
 ensureBuilt();
 const failures = [];

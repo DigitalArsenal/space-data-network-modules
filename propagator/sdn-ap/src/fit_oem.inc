@@ -89,7 +89,7 @@ inline double minutes_between(double w0, double f0, double w1, double f1) {
 /// position component with (fit::reweight, SPEC 12.1), and WEIGHTED_RMS: the post-fit RMS of the position components
 /// over it, sqrt(sum (r_i / sigma_r)^2 / (3 states)) = FIT_RMS_KM / sqrt(3) / sigma_r.
 inline std::string weighting_text(double sigma_km, const fit::Consider* cons = nullptr) {
-  char text[320];
+  char text[400];
   if (cons == nullptr)
     std::snprintf(text, sizeof text,
                   "EQUAL WEIGHTS: SIGMA %.6g KM PER TEME POSITION COMPONENT, THE POST-FIT RESIDUAL SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM",
@@ -97,8 +97,9 @@ inline std::string weighting_text(double sigma_km, const fit::Consider* cons = n
   else
     std::snprintf(text, sizeof text,
                   "SIGMA %.6g KM PER TEME POSITION COMPONENT, THE PROFILED POST-FIT SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM; "
-                  "CONSIDER RATE ERRORS PER UNIT SIGMA: IN-TRACK %.4g /DAY^2, ECCENTRICITY %.4g /DAY, INCLINATION %.4g /DAY",
-                  sigma_km, cons->kappa[0], cons->kappa[1], cons->kappa[2]);
+                  "WHITE NOISE %.6g KM; CONSIDER RATE ERRORS PER UNIT OF THE THEORY'S SCATTER (%.4g SIGMA): IN-TRACK %.4g /DAY^2, "
+                  "ECCENTRICITY %.4g /DAY, INCLINATION %.4g /DAY",
+                  sigma_km, cons->white_km, cons->scale, cons->kappa[0], cons->kappa[1], cons->kappa[2]);
   return text;
 }
 inline double weighted_rms(double fit_rms_km, double sigma_km) { return fit_rms_km / std::sqrt(3.0) / sigma_km; }
@@ -720,7 +721,15 @@ static int fit_blocks() {
           double post_ng = 0.0;
           if (cov::of_fit(row, opt, t_fit.data(), r_fit.data(), n_fit, fit_end_min, sigma_km, post, post_ng, &cons)) {
             const int agom_at = 6 + (opt.fit_drag ? 1 : 0);
-            const double var_b = opt.drag_log ? post.log_sigma[0] * post.log_sigma[0] : post.C[6 * post.np + 6];
+            double var_b = opt.drag_log ? post.log_sigma[0] * post.log_sigma[0] : post.C[6 * post.np + 6];
+            // SPEC 12.8: above e 0.3 with the perigee in the drag, on an arc shorter than 7 days, the residual is the
+            // theory's at each perigee pass and the consider rates do not span it: the arc counts as one sample on BTERM
+            if (opt.fit_drag && opt.drag_sigma > 0.0 && var_b > 0.0 && fitoem::high_e_drag_block(blk) &&
+                fit_end_min - fit_begin_min < fitoem::kHighEDragArcMinutes - 1e-6) {
+              const double var_p = opt.drag_sigma * opt.drag_sigma;
+              const double info_arc = std::fmax(0.0, 1.0 / var_b - 1.0 / var_p);
+              var_b = 1.0 / (info_arc / (3.0 * static_cast<double>(n_fit)) + 1.0 / var_p);
+            }
             const double var_s = opt.agom_log ? post.log_sigma[2] * post.log_sigma[2] : post.C[agom_at * post.np + agom_at];
             const bool hold_b = opt.fit_drag && opt.drag_sigma > 0.0 && var_b > 0.5 * opt.drag_sigma * opt.drag_sigma;
             const bool hold_s = opt.fit_agom && opt.agom_sigma > 0.0 && var_s > 0.5 * opt.agom_sigma * opt.agom_sigma;
