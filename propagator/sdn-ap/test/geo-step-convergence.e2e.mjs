@@ -11,7 +11,7 @@
 // can be called confirmation. Report every admitted window and both arms.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {OMM,OMMT} from 'spacedatastandards.org/lib/js/OMM/OMM.js';
@@ -47,4 +47,4 @@ for(const step of steps){const candidate=await open(step==='production'?wasmPath
 await baseline.h.close?.();await reference.h.close?.();
 if(!pilot)report.confirmation=await confirmWindows(baselinePath,wasmPath);
 if(process.env.SDN_AP_GEO_REPORT)fs.writeFileSync(process.env.SDN_AP_GEO_REPORT,JSON.stringify(report,null,2)+'\n');
-if(!pilot){execFileSync(process.execPath,[new URL('./conformance.e2e.mjs',import.meta.url).pathname,'--reproduce',new URL('./results/conformance.json',import.meta.url).pathname],{stdio:'inherit',env:{...process.env,SDN_AP_ORACLE_ROOT:process.env.SDN_AP_ORACLE_ROOT??'/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});console.log('GEO step convergence E2E: PASS');}
+if(!pilot){reproduceConformance();console.log('GEO step convergence E2E: PASS');}

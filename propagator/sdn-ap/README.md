@@ -384,7 +384,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   unmodified US Space Force Sgp4Prop library behind a black-box harness) is not in this repository:
   `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default;
   `SDN_AP_ORACLE_SECOND` the other build for the reference-split class, 9.1.1.0 by default), and the E2E and
-  `spec-vectors/verify.mjs` refuse without it.
+  `spec-vectors/verify.mjs` refuse without it. `--digest-only` checks the module's side of the stored run alone (the
+  SGP4XP corpus's and the SGP4 control's output digests), no oracle. Every E2E that ends with the conformance
+  reproduction (`test/lib/conformance-step.mjs`) refuses at its start when `SDN_AP_ORACLE_ROOT` is unset;
+  `SDN_AP_ORACLE=skip` runs it with that step reduced to `--digest-only`, and says so.
 - `test/rigor/run.mjs`: the rigor suite (`test/rigor/README.md`).
 - `test/bench.mjs`: memory per object and µs per object for a 60 s step, a 1-day jump and a 7-day jump.
 - `test/kernel-cost.mjs`: AP's CPU cost per state against SGP4's and SGP4XP's in the resident epoch store (one

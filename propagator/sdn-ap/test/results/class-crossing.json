@@ -113,7 +113,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -301,7 +301,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -494,7 +494,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -682,7 +682,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -876,7 +876,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3743.0421141759753,
@@ -1064,7 +1064,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3746.5064636839643,
@@ -1254,7 +1254,7 @@
         "bterm": 0.06,
         "dragSigma": 1e-10,
         "mode": "seed",
-        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-hold-reference/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "probePath": "$SDN_AP_TEST_SCRATCH/class-hold-reference/propagator/sdn-ap/dist/isomorphic/module.wasm",
         "initialization": "AP mean-element epoch state",
         "initialGcrfKm": [
           3743.0421141759753,
@@ -1270,7 +1270,7 @@
           "minStep": 0.01,
           "maxStep": 300
         },
-        "modulePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-hold-reference/propagator/sdn-ap/dist/isomorphic/module.wasm"
+        "modulePath": "$SDN_AP_TEST_SCRATCH/class-hold-reference/propagator/sdn-ap/dist/isomorphic/module.wasm"
       },
       "referenceStates": [
         {
@@ -1441,7 +1441,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -1620,7 +1620,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -1804,7 +1804,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -1983,7 +1983,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -2168,7 +2168,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3743.0421141759753,
@@ -2347,7 +2347,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3746.5064636839643,
@@ -2536,7 +2536,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -2716,7 +2716,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -2901,7 +2901,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -3081,7 +3081,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -3267,7 +3267,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3743.0421141759753,
@@ -3447,7 +3447,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3746.5064636839643,
@@ -3636,7 +3636,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -3816,7 +3816,7 @@
               "bterm": 0.04,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -4001,7 +4001,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3743.0421141759753,
@@ -4181,7 +4181,7 @@
               "bterm": 0.06,
               "dragSigma": 1e-10,
               "mode": "seed",
-              "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+              "probePath": "$SDN_AP_TEST_SCRATCH/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
               "initialization": "AP mean-element epoch state",
               "initialGcrfKm": [
                 3746.5064636839643,
@@ -4367,7 +4367,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3743.0421141759753,
@@ -4547,7 +4547,7 @@
             "bterm": 0.06,
             "dragSigma": 1e-10,
             "mode": "seed",
-            "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
+            "probePath": "$SDN_AP_TEST_SCRATCH/class-rebuild/propagator/sdn-ap/dist/isomorphic/module.wasm",
             "initialization": "AP mean-element epoch state",
             "initialGcrfKm": [
               3746.5064636839643,
@@ -4729,7 +4729,7 @@
         "drag": true,
         "bterm": 0.05,
         "dragSigma": 1e-10,
-        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
         "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           3743.968740905301,
@@ -4907,7 +4907,7 @@
         "drag": true,
         "bterm": 0.05,
         "dragSigma": 1e-10,
-        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
         "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           3747.4200289737178,
@@ -5085,7 +5085,7 @@
         "drag": true,
         "bterm": 0.1,
         "dragSigma": 1e-10,
-        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
         "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           3743.968740905301,
@@ -5263,7 +5263,7 @@
         "drag": true,
         "bterm": 0.1,
         "dragSigma": 1e-10,
-        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
         "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           3747.4200289737178,
@@ -5441,7 +5441,7 @@
         "drag": true,
         "bterm": 0.2,
         "dragSigma": 1e-10,
-        "probePath": "/Users/tj/software/terrain-work/body-look/codex-apfix-d9/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
+        "probePath": "$SDN_AP_TEST_SCRATCH/class-probe/propagator/sdn-ap/dist/isomorphic/module.wasm",
         "initialization": "osculating perigee (argument of latitude equals argument of perigee)",
         "initialGcrfKm": [
           3743.968740905301,

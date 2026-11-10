@@ -29,6 +29,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 
 if (!isMainThread) {
@@ -141,7 +142,6 @@ if (!isMainThread) {
   for (const o of ['SWOT-like', 'Sentinel-3-like'])
     assert.ok(Math.abs(results[`release ${o} 0.044`].day3 - results[`0.4.17 ${o} 0.044`].day3) <= 2, `${o} 0.044: day 3 within 2 m of 0.4.17`);
   // 6
-  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  reproduceConformance();
   console.log('drag prior fall-back E2E: PASS');
 }
