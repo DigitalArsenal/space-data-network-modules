@@ -4,18 +4,19 @@
 //   record's TRAJ_REF_FRAME, COV_PARAMETER_KINDS [DRAG_AREA_OVER_MASS, SRP_AREA_OVER_MASS] with COV_PARAMETERS and
 //   COV_UNITS, COV_PROPAGATION (six named floor doubles, the noise, the share and the rate) and COV_REALISM[0]
 //   (SourceModel, the noise model, its regime, Uncalibrated).
-// - sdnap_covariance_at of that $OCM at every time of the fixture grid reproduces the 0.4.0 numbers
-//   (test/fixtures/xp-fit-0.4.0.cov) to the last bit: state and covariance, 42 doubles a time.
-// - Each floor field equals, by name, the 0.4.0 SDNAP_COV_FLOOR_UVW of xp-fit-0.4.0.omm; the noise fields its
-//   SDNAP_COV_NOISE and SDNAP_COV_NG_RATE; |NOISE_NON_GRAVITATIONAL_RAD_DAY2 - NON_GRAVITATIONAL_SHARE x
-//   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day).
+// - sdnap_covariance_at of that $OCM at every time of the fixture grid reproduces the recorded numbers
+//   (test/fixtures/xp-fit-data-sigma.cov, test/record-fit-fixtures.mjs) to the last bit: state and covariance, 42 doubles
+//   a time.
+// - Each COV_PROPAGATION field (the floor, the noise, the share and the rate) equals, by name, that of the recorded set
+//   test/fixtures/xp-fit-data-sigma.ocm; |NOISE_NON_GRAVITATIONAL_RAD_DAY2 - NON_GRAVITATIONAL_SHARE x
+//   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day). The recorded set is SPEC 12.1's data-sigma fit
+//   (its numbers moved from the 0.4.0 set's with the weighting; fit.e2e.mjs states why they are the better ones).
 // - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
 //   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n) and its covariance is pinned:
 //   the SHA-256 of COVARIANCE_DATA, the six floor doubles and sdnap_covariance_at of the AP set at the fixture grid
-//   (AP_COVARIANCE_SHA256, recorded on the 0.6.1 build; the SGP4XP table and numbers are unchanged).
-// - export_omm of the XP $OCM equals xp-fit-0.4.0.omm with USER_DEFINED_PARAMETERS, COMMENT and
-//   USER_DEFINED_EPOCH_TIMESTAMP / MICROSECONDS removed and PROVENANCE carried, BTERM and AGOM in their own fields
-//   (the 0.4.0 set's BSTAR and MEAN_MOTION_DDOT moved there): the two records packed by one builder are byte-equal;
+//   (AP_COVARIANCE_SHA256, recorded with SPEC 12.1's data-sigma weighting; the SGP4XP noise table is unchanged).
+// - export_omm of the XP $OCM equals test/fixtures/xp-fit-data-sigma.omm (export_omm of the recorded set) with
+//   PROVENANCE that of the $OCM exported: the two records packed by one builder are byte-equal;
 //   assertNoUserDefined on it; export_omm of the AP $OCM is theory-not-exportable:AP; garbage is invalid-ocm; under an
 //   optional $PCF THEORY SGP4 the XP set is configuration-refused (THEORY admits only its own sets).
 // JS only moves bytes and compares numbers the module produced.
@@ -38,7 +39,7 @@ import { createHash } from "node:crypto";
 
 /// SPEC 12.5's AP DRAG row (0.6.1) and the pinned AP covariance numbers.
 const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.647194501793458e-7, c: 0.112126311682426 };
-const AP_COVARIANCE_SHA256 = "f65830a2c65770bd3c94dc0208127a40861f42829da6384c8427c961307907e9";
+const AP_COVARIANCE_SHA256 = "73181a282ee9d569565b9b057a3f0676f8ece03bc2d74305a01d6af2cbb9de8c";
 
 ensureBuilt();
 const failures = [];
@@ -60,9 +61,7 @@ const exportOmm = (ocm) => h.invoke({ methodId: "export_omm", inputs: [{ portId:
 const xpBytes = await fit(configuration({ theory: "SGP4XP", forces: XP_FORCES }));
 if (!xpBytes) { console.error(failures.join("\n")); process.exit(1); }
 const ocm = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(xpBytes)).unpack();
-const was = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(fixture("xp-fit-0.4.0.omm"))).unpack();
-const user = Object.fromEntries(was.USER_DEFINED_PARAMETERS.map((p) => [p.PARAM_NAME, p.PARAM_VALUE]));
-const numbers = (text) => text.trim().split(/\s+/).map(Number);
+const recordedSet = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fixture("xp-fit-data-sigma.ocm"))).unpack();
 
 // --- the covariance's shape
 check(ocm.COV_SIZE === 8 && ocm.COVARIANCE_DATA.length === 36 && ocm.COV_TYPE === "CARTPV" && ocm.COV_ORDERING === 0,
@@ -74,22 +73,20 @@ check(JSON.stringify(ocm.COV_PARAMETERS) === JSON.stringify(["DRAG_AREA_OVER_MAS
 check(ocm.COV_REF_FRAME?.NAME === ocm.TRAJ_REF_FRAME?.NAME, `COV_REF_FRAME ${ocm.COV_REF_FRAME?.NAME} against TRAJ_REF_FRAME ${ocm.TRAJ_REF_FRAME?.NAME}`);
 const cvr = ocm.COV_REALISM?.[0];
 check(ocm.COV_REALISM?.length === 1 && cvr.RULE === covarianceRule.SourceModel && cvr.CALIBRATION === covarianceCalibration.Uncalibrated &&
-  cvr.REGIME === user.SDNAP_COV_REGIME && /process noise/.test(cvr.MODEL_ID ?? ""), `COV_REALISM ${JSON.stringify(cvr)}`);
+  cvr.REGIME === recordedSet.COV_REALISM?.[0]?.REGIME && /process noise/.test(cvr.MODEL_ID ?? ""), `COV_REALISM ${JSON.stringify(cvr)}`);
 
-// --- COV_PROPAGATION, field by field against the 0.4.0 rows
-const cp = ocm.COV_PROPAGATION;
-const floor = numbers(user.SDNAP_COV_FLOOR_UVW), noise = numbers(user.SDNAP_COV_NOISE);
-["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"].forEach((name, k) =>
-  check(Object.is(cp[name], floor[k]), `${name} ${cp[name]} against the 0.4.0 ${floor[k]}`));
-["NOISE_ECCENTRICITY_PER_DAY", "NOISE_INCLINATION_PER_DAY", "NOISE_MEAN_MOTION_RELATIVE", "NOISE_NON_GRAVITATIONAL_RAD_DAY2", "NOISE_START_MINUTES"].forEach((name, k) =>
-  check(Object.is(cp[name], noise[k]), `${name} ${cp[name]} against the 0.4.0 ${noise[k]}`));
-check(Object.is(cp.NON_GRAVITATIONAL_RATE_PER_DAY, Number(user.SDNAP_COV_NG_RATE)), `NON_GRAVITATIONAL_RATE_PER_DAY ${cp.NON_GRAVITATIONAL_RATE_PER_DAY}`);
+// --- COV_PROPAGATION, field by field against the recorded set's
+const cp = ocm.COV_PROPAGATION, rcp = recordedSet.COV_PROPAGATION;
+for (const name of ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2", "NOISE_ECCENTRICITY_PER_DAY",
+  "NOISE_INCLINATION_PER_DAY", "NOISE_MEAN_MOTION_RELATIVE", "NOISE_NON_GRAVITATIONAL_RAD_DAY2", "NOISE_START_MINUTES", "NON_GRAVITATIONAL_SHARE",
+  "NON_GRAVITATIONAL_RATE_PER_DAY"])
+  check(Object.is(cp[name], rcp[name]), `${name} ${cp[name]} against the recorded ${rcp[name]}`);
 const n = ocm.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI;
 const want = cp.NON_GRAVITATIONAL_SHARE * Math.abs(cp.NON_GRAVITATIONAL_RATE_PER_DAY) * n;
 const rel = Math.abs(cp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 - want) / Math.max(Math.abs(want), Number.MIN_VALUE);
 check(rel <= 1e-12, `the noise invariant: ${rel} relative`);
 
-// --- the propagated covariance against the 0.4.0 numbers, to the last bit
+// --- the propagated covariance against the recorded numbers, to the last bit
 const minutes = [];
 for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) minutes.push(t);
 const po = x.sdnap_alloc(xpBytes.length), pm = x.sdnap_alloc(8 * minutes.length), pout = x.sdnap_alloc(8 * 42 * minutes.length);
@@ -97,12 +94,12 @@ new Uint8Array(mem(), po, xpBytes.length).set(xpBytes);
 new Float64Array(mem(), pm, minutes.length).set(minutes);
 const status = x.sdnap_covariance_at(po, xpBytes.length, pm, minutes.length, pout);
 check(status === 0, `sdnap_covariance_at: ${status}`);
-const got = Buffer.from(mem().slice(pout, pout + 8 * 42 * minutes.length)), recorded = fixture("xp-fit-0.4.0.cov");
+const got = Buffer.from(mem().slice(pout, pout + 8 * 42 * minutes.length)), recorded = fixture("xp-fit-data-sigma.cov");
 const gotF = new Float64Array(got.buffer, got.byteOffset, got.length / 8), recF = new Float64Array(recorded.buffer, recorded.byteOffset, recorded.length / 8);
 let differ = 0;
 for (let k = 0; k < recF.length; k++) if (!Object.is(gotF[k], recF[k])) differ++;
-console.log(`sdnap_covariance_at at ${minutes.length} grid times: ${differ} of ${recF.length} doubles differ from the 0.4.0 numbers`);
-check(got.length === recorded.length && differ === 0, `the propagated covariance differs from the 0.4.0 numbers in ${differ} doubles`);
+console.log(`sdnap_covariance_at at ${minutes.length} grid times: ${differ} of ${recF.length} doubles differ from the recorded numbers`);
+check(got.length === recorded.length && differ === 0, `the propagated covariance differs from the recorded numbers in ${differ} doubles`);
 x.sdnap_free(po); x.sdnap_free(pm); x.sdnap_free(pout);
 
 // --- export_omm
@@ -111,22 +108,14 @@ check(exported.statusCode === 0 && exported.outputs.length === 1 && exported.out
 if (exported.statusCode === 0) {
   const bytes = new Uint8Array(exported.outputs[0].payload);
   try { assertNoUserDefined(bytes); } catch (e) { check(false, e.message); }
-  const expected = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(fixture("xp-fit-0.4.0.omm"))).unpack();
-  expected.USER_DEFINED_PARAMETERS = [];
-  expected.COMMENT = null;
-  expected.USER_DEFINED_EPOCH_TIMESTAMP = 0;
-  expected.USER_DEFINED_MICROSECONDS = 0;
+  const expected = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(fixture("xp-fit-data-sigma.omm"))).unpack();
   expected.PROVENANCE = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(xpBytes)).PROVENANCE().unpack();
-  expected.BTERM = expected.BSTAR;
-  expected.AGOM = expected.MEAN_MOTION_DDOT;
-  expected.BSTAR = 0;
-  expected.MEAN_MOTION_DDOT = 0;
   const pack = (t) => { const b = new flatbuffers.Builder(2048); OMM.finishOMMBuffer(b, t.pack(b)); return Buffer.from(b.asUint8Array()); };
   const mine = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(bytes)).unpack();
   const same = pack(mine).equals(pack(expected));
-  console.log(`export_omm: ${bytes.length} B, the 0.4.0 set less its list, COMMENT and epoch fields: ${same ? "byte-equal" : "differs"} (one builder); raw against the 0.4.0 bytes less those fields: ${Buffer.from(bytes).equals(pack(expected)) ? "equal" : "other layout"}`);
+  console.log(`export_omm: ${bytes.length} B, the recorded set with this $OCM's PROVENANCE: ${same ? "byte-equal" : "differs"} (one builder)`);
   const text = (t) => JSON.stringify(t, (k, v) => (typeof v === "bigint" ? String(v) : v));
-  if (!same) check(false, `export_omm differs from the 0.4.0 set: ${text(mine)} against ${text(expected)}`);
+  if (!same) check(false, `export_omm differs from the recorded set: ${text(mine)} against ${text(expected)}`);
 }
 const apBytes = await fit(configuration({ theory: "AP", forces: { ...MSIS_FORCES, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31,
   HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20, WEATHER_SOURCE: pcfWeatherSource.RECORDS } }), rows.bytes);

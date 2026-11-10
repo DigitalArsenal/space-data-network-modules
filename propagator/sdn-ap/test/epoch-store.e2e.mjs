@@ -13,8 +13,9 @@
 //   configuration-refused OUTPUT.START_TIME; a request past a set's last row: weather-rows-short:2026-11-01.
 // - The covariance from COVARIANCE_DATA and COV_PROPAGATION: the fixture $OEM above carries the store's covariance line
 //   at every grid time, so it equals the 0.4.0 store's to the last bit; the resident store's covariance of the XP
-//   fixture $OCM against the 0.4.0 sdnap_covariance_at numbers (test/fixtures/xp-fit-0.4.0.cov) within 1e-6 of the
-//   matrix's largest entry (the store counts minutes from J2000, about 1e-7 s of rounding at a time).
+//   fixture $OCM against the recorded sdnap_covariance_at numbers of that fit (test/fixtures/xp-fit-data-sigma.cov,
+//   test/record-fit-fixtures.mjs) within 1e-6 of the matrix's largest entry (the store counts minutes from J2000, about
+//   1e-7 s of rounding at a time).
 // - The store's bytes: 100 series sharing one row series hold it once (100 sets with distinct rows hold 99 more,
 //   exactly 99 times one series' copy).
 // Synthetic history: an SGP4XP series (a truth set's own mean elements, from sdnap_mean_elements_at, every 6 h over 3
@@ -283,9 +284,9 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   refused("a request past the last row", await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: { START_TIME: "2026-10-31T12:00:00", STOP_TIME: "2026-11-01T12:00:00", STEP_SECONDS: 3600 } }), one([ap])] }),
     "weather-rows-short:2026-11-01");
   refused("an $OMM in the snapshot", await m.harness.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: ocmType, payload: fs.readFileSync(new URL("fixtures/xp-fit-0.4.0.omm", import.meta.url)) }] }), "omm-not-flown");
-  // the covariance against the 0.4.0 numbers
+  // the covariance against the recorded numbers
   check((await loadSets([fixtures.xp])).statusCode === 0, "load the XP fixture");
-  const recorded = fs.readFileSync(new URL("fixtures/xp-fit-0.4.0.cov", import.meta.url));
+  const recorded = fs.readFileSync(new URL("fixtures/xp-fit-data-sigma.cov", import.meta.url));
   const rec = new Float64Array(recorded.buffer, recorded.byteOffset, recorded.length / 8);
   const t0 = Date.parse(`${GRID.start}Z`);
   let worst = 0, n = 0;
@@ -294,8 +295,8 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
     const want = rec.subarray(42 * k + 6, 42 * k + 42), top = Math.max(...want.map(Math.abs));
     s.P.forEach((v, q) => { worst = Math.max(worst, Math.abs(v - want[q]) / top); });
   }
-  console.log(`the store's covariance of the XP fixture at ${n} grid times against the 0.4.0 numbers: worst ${worst.toExponential(2)} of the largest entry`);
-  check(worst <= 1e-6, `the store's covariance is ${worst} of the largest entry from the 0.4.0 numbers`);
+  console.log(`the store's covariance of the XP fixture at ${n} grid times against the recorded numbers: worst ${worst.toExponential(2)} of the largest entry`);
+  check(worst <= 1e-6, `the store's covariance is ${worst} of the largest entry from the recorded numbers`);
   // one copy of a row series shared by 100 sets
   const sharing = Array.from({ length: 100 }, (_, k) => repackOcm(ap, (t) => { t.METADATA.NORAD_CAT_ID = 91000 + k; }));
   const distinct = Array.from({ length: 100 }, (_, k) => repackOcm(ap, (t) => { t.METADATA.NORAD_CAT_ID = 91000 + k; t.PERTURBATIONS.SPACE_WEATHER[0].AP_AVG += k; }));

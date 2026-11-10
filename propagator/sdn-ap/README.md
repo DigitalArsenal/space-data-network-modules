@@ -91,7 +91,10 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
   down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
-  no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
+  no step along the analytic Jacobian lowers the cost. The data are weighted at their own sigma (SPEC 12.1): the stages
+  weigh at 1 km, then the whole-arc fit is redone at its post-fit residual scatter, not below the ephemeris' stated
+  covariance (COVARIANCE_MATRIX_LINES) or 1 mm, until that holds, so precise data outweigh the priors and noisy data
+  leave them their weight (`test/fit-data-sigma.e2e.mjs`; fixtures by `test/record-fit-fixtures.mjs`). BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
   xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
   no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
@@ -106,7 +109,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   `$OBD` BALLISTIC_COEFF_MODEL and AGOM_MODEL state each prior's form and values as used; under LOG_NORMAL with a
   covariance, the posterior sigma of the log, and "covariance prior-limited" when it passes 0.5 (the term effectively
   unobserved). The raw export `sdnap_fit` takes the 56-byte fit options with drag_log and agom_log, and fit_bdot,
-  fit_thrust and fit_outgassing, refused `parameter-not-modeled:<NAME>` (SPEC 17.2; `sdnap_fit_refusal`).
+  fit_thrust and fit_outgassing, refused `parameter-not-modeled:<NAME>` (SPEC 17.2; `sdnap_fit_refusal`); it runs one
+  Levenberg-Marquardt pass weighted at 1 km, without the data sigma.
 - Known limit of BTERM's default start (study 2026-10-31): the fit starts at the prior's median, 0.01 m^2/kg, and an
   object whose B lies far below it can stop in a local minimum. On noise-free synthetic tracks (a day of an SGP4XP set's
   own states at 60 s, e 0.0003, i 51.6 deg, AGOM 0.01 m^2/kg, n 15.5, 15.2 and 14.9 rev/day for 400, 500 and 600 km,
@@ -127,8 +131,10 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 - Covariance rows: the state, then DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS,
   IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION when solved, in that order; COV_UNITS one per row. A record's rows the
   theories have no sensitivity to fly as constant parameters.
-- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the 1 km a priori sigma) and SEDR, and one `$ODR` per fit on
-  `residuals`: a row per input state (geocentric distance observed and computed, weight, accepted).
+- `fit` weighs the data at their own sigma (SPEC 12.1: the post-fit residual scatter, iterated, not below the ephemeris'
+  stated covariance or 1 mm; `OD_DATA_WEIGHTING` states it) and writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over that
+  sigma) and SEDR, and one `$ODR` per fit on `residuals`: a row per input state (geocentric distance observed and
+  computed, weight 1 / sigma^2, accepted).
 - `sdnap_covariance_full_at` gives the covariance of the state and the parameter rows per time; no sensitivities are
   exposed, so P8 is refused.
 
@@ -235,8 +241,11 @@ rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
 Neither table earns a realism label. The covariance is positive semidefinite by construction and is not calibrated. The
 band of SPEC 12.7 cannot establish realism: it accepts variance errors of 2.3, 0.2 and 0.01 on the three principal axes
 together, a perfect covariance fails it with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise
-sizes were tuned on the windows tested. With the model otherwise exact, the fitted sigma of B and S is too small by
-sqrt(3N - L), 46 for a 24 h arc sampled every 120 s. SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track
+sizes were tuned on the windows tested. With the model otherwise exact, the fitted sigma of B and S was too small by
+sqrt(3N - L), 46 for a 24 h arc sampled every 120 s, while the fit weighed the data at 1 km (through 0.6.5); with the data
+sigma of SPEC 12.1 the fit recovers B and S on that model truth and their sigma is the posterior of the cost it minimized,
+which treats the residuals as independent and does not bound the error where they are the theory's own (SPEC 12.1).
+SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track
 and cross-track axis; on held-out windows the median |z| of 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7)
 lies inside 0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times
 too wide in-track and radially); that count does not establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.

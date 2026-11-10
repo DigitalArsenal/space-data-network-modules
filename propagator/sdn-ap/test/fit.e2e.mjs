@@ -4,24 +4,26 @@
 //   fitted under AP's forces (gravity caps 31 and 20, NRLMSISE-00 on daily $SPW rows) and under stock SGP4XP (Jacchia
 //   1970 on the theory's flux model), fit returns exactly two outputs, 'elements', an $OCM, then 'residuals', its $ODR
 //   (SPEC 17.4).
-// - MEAN_ELEMENTS equal, bit for bit, the elements of test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18
-//   dist's $OMM: BTERM in BSTAR, AGOM in MEAN_MOTION_DDOT); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
+// - MEAN_ELEMENTS equal, bit for bit, those of test/fixtures/ap-fit-data-sigma.ocm and xp-fit-data-sigma.ocm (the fits
+//   under SPEC 12.1's data-sigma weighting, recorded by test/record-fit-fixtures.mjs); MEAN_ELEMENT_THEORY AP (5) and
+//   SGP4XP (1). The truth has no drag and no radiation pressure: the recorded BTERM and AGOM are near 0 (AP 1.9e-5 and
+//   -9.5e-5, SGP4XP 6.4e-4 and -2.2e-4 m^2/kg) where the 0.4.0 sets' 1 km weighting held BTERM at its prior (2.0e-3,
+//   2.9e-3), and the AP set's forecast against the FFM states after the arc is 38 / 87 / 146 m on days 1 / 2 / 3 against
+//   the 0.4.0 weighting's 484 / 1,706 / 3,754 m (SGP4XP 728 / 1,214 / 1,204 against 917 / 1,990 / 2,911 m).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
-// - FIT_STATISTICS: FIT_STATES, FIT_RMS_KM, ITERATIONS as the 0.4.0 COMMENT states them; CONVERGED true (the 0.4.0
-//   COMMENT states no convergence: a set was emitted only on a converged or iteration-limited fit).
+// - FIT_STATISTICS: FIT_STATES, FIT_RMS_KM, ITERATIONS and CONVERGED (true) as the recorded $OCM states them.
 // - WEATHER_SOURCE THEORY_FLUX_MODEL (XP) and RECORDS (AP); the AP record's SPACE_WEATHER rows equal the supplied rows
 //   field for field over the span, the day before the arc through the epoch's day plus FIT.WEATHER_HORIZON_DAYS (30):
 //   2026-09-30 to 2026-10-31; rows one day short are refused weather-rows-short:2026-10-31; the XP record has none.
 // - assertNoUserDefined on both records; a fit $PCF with ENABLE_DRAG is configuration-refused FORCES.ENABLE_DRAG; one
 //   without ATMOSPHERE_MODEL is configuration-refused FORCES.ATMOSPHERE_MODEL.
 // - No addParameter, USER_DEFINED_PARAMETERS or $OBD writer remains in src/fit_oem.inc.
-// - 0.6.4 (SPEC 16.11's tesseral switch by class: class 0 sets fly the grid above e 0.05) against the 0.6.3 dist (git, modules
-//   03ee86234, its SHA-256 checked), on these
-//   low-eccentricity fits: each fit's $OCM is byte-identical once PRODUCER's version is read as 0.6.3; each fit's $ODR
-//   names its own $OCM (RUN_ID and OCM_CONTENT_ID are the CID of that version's $OCM bytes, so they differ by PRODUCER
-//   alone) and, those two fields excluded, every decoded value of the two $ODR is identical (Object.is); each set's
-//   sdnap_covariance_at at every fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in
-//   EME2000 and TEME every 6 h for 7 days are byte-identical (the $OEM with PRODUCER's version read likewise). With
+// - Against the 0.6.3 dist (git, modules 03ee86234, its SHA-256 checked), on these low-eccentricity fits: each fit's $ODR
+//   names its own $OCM (RUN_ID and OCM_CONTENT_ID are the CID of that version's $OCM bytes); the fits themselves differ
+//   (SPEC 12.1: 0.6.3 weighs the data at 1 km, this build at the data's own sigma), so the products compared are the
+//   flights of 0.6.3's sets: each set's sdnap_covariance_at at every fixture grid time (state and covariance, 42 doubles
+//   a time) and its propagate $OEM in EME2000 and TEME every 6 h for 7 days are byte-identical on both builds (the $OEM
+//   with PRODUCER's version read as 0.6.3's). With
 //   SDNAP_EXAMPLES set to the published examples (each <id>.ocm and <id>.json), every set outside the band the switch moves
 //   (class 0 by the SPEC 6 bands of its mean motion with 0.05 < e <= 0.3; the 56 published sets are all outside it) flies
 //   byte-identical on both builds at every epoch of its window and its sdnap_covariance_at at every 12th epoch is
@@ -64,9 +66,10 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
   { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, config, ...(spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: spw }] : [])] });
 
 const cases = [
-  { name: "AP", fixture: "ap-fit-0.4.0.omm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS },
-  { name: "XP", fixture: "xp-fit-0.4.0.omm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
+  { name: "AP", fixture: "ap-fit-data-sigma.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS },
+  { name: "XP", fixture: "xp-fit-data-sigma.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
+const now = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8")).version;
 const records = {};
 for (const c of cases) {
   const r = await fit(c.config, c.spw);
@@ -78,26 +81,24 @@ for (const c of cases) {
   const bytes = new Uint8Array(r.outputs[0].payload);
   check(String.fromCharCode(...bytes.subarray(4, 8)) === "$OCM", `${c.name}: not an $OCM`);
   try { assertNoUserDefined(bytes); } catch (e) { check(false, `${c.name}: ${e.message}`); }
-  const ocm = ocmOf(bytes), was = ommOf(fixture(c.fixture)), me = ocm.MEAN_ELEMENTS;
+  const ocm = ocmOf(bytes), recorded = ocmOf(fixture(c.fixture)), was = recorded.MEAN_ELEMENTS, me = ocm.MEAN_ELEMENTS;
   records[c.name] = ocm;
   // the twelve: EPOCH, the six elements, BSTAR, MEAN_MOTION_DOT, MEAN_MOTION_DDOT, BTERM, AGOM
   const pairs = [["EPOCH", me.EPOCH, was.EPOCH], ["MEAN_MOTION", me.MEAN_MOTION, was.MEAN_MOTION], ["ECCENTRICITY", me.ECCENTRICITY, was.ECCENTRICITY],
     ["INCLINATION", me.INCLINATION, was.INCLINATION], ["RA_OF_ASC_NODE", me.RA_OF_ASC_NODE, was.RA_OF_ASC_NODE],
     ["ARG_OF_PERICENTER", me.ARG_OF_PERICENTER, was.ARG_OF_PERICENTER], ["MEAN_ANOMALY", me.MEAN_ANOMALY, was.MEAN_ANOMALY],
     ["BSTAR", me.BSTAR, 0], ["MEAN_MOTION_DOT", me.MEAN_MOTION_DOT, 0], ["MEAN_MOTION_DDOT", me.MEAN_MOTION_DDOT, 0],
-    ["BTERM", me.BTERM, was.BSTAR], ["AGOM", me.AGOM, was.MEAN_MOTION_DDOT]];
-  for (const [field, got, want] of pairs) check(Object.is(got, want), `${c.name} ${field}: ${got} against the 0.4.0 ${want}`);
+    ["BTERM", me.BTERM, was.BTERM], ["AGOM", me.AGOM, was.AGOM]];
+  for (const [field, got, want] of pairs) check(Object.is(got, want), `${c.name} ${field}: ${got} against the recorded ${want}`);
   check(me.MEAN_ELEMENT_THEORY === c.theory, `${c.name}: MEAN_ELEMENT_THEORY ${me.MEAN_ELEMENT_THEORY}, expected ${c.theory}`);
   const dyn = ocm.ORBIT_DETERMINATION?.OD_DYNAMIC_PARAMETERS ?? [];
   const drag = dyn.find((p) => p.PARAMETER === prwDynamicParameter.DRAG_AREA_OVER_MASS), srp = dyn.find((p) => p.PARAMETER === prwDynamicParameter.SRP_AREA_OVER_MASS);
   check(dyn.length === 2 && drag && srp && Object.is(drag.VALUE, me.BTERM) && Object.is(srp.VALUE, me.AGOM) && drag.SOLVED_FOR && srp.SOLVED_FOR,
     `${c.name}: OD_DYNAMIC_PARAMETERS ${JSON.stringify(dyn.map((p) => [p.PARAMETER, p.VALUE, p.SOLVED_FOR]))}`);
-  const st = ocm.ORBIT_DETERMINATION?.FIT_STATISTICS ?? {};
-  const comment = String(was.COMMENT);
-  const states = Number(/(\d+) states fitted/.exec(comment)?.[1]), rms = /fit RMS ([\d.]+) km/.exec(comment)?.[1], iterations = Number(/(\d+) iterations/.exec(comment)?.[1]);
-  check(st.FIT_STATES === states, `${c.name}: FIT_STATES ${st.FIT_STATES} against the 0.4.0 ${states}`);
-  check(st.FIT_RMS_KM?.toFixed(6) === rms, `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against the 0.4.0 ${rms}`);
-  check(st.ITERATIONS === iterations, `${c.name}: ITERATIONS ${st.ITERATIONS} against the 0.4.0 ${iterations}`);
+  const st = ocm.ORBIT_DETERMINATION?.FIT_STATISTICS ?? {}, rst = recorded.ORBIT_DETERMINATION?.FIT_STATISTICS ?? {};
+  check(st.FIT_STATES === rst.FIT_STATES, `${c.name}: FIT_STATES ${st.FIT_STATES} against the recorded ${rst.FIT_STATES}`);
+  check(Object.is(st.FIT_RMS_KM, rst.FIT_RMS_KM), `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against the recorded ${rst.FIT_RMS_KM}`);
+  check(st.ITERATIONS === rst.ITERATIONS, `${c.name}: ITERATIONS ${st.ITERATIONS} against the recorded ${rst.ITERATIONS}`);
   check(st.CONVERGED === true, `${c.name}: CONVERGED ${st.CONVERGED}`);
   check(st.FIT_START === "2026-10-01T00:00:00.000000" && st.FIT_STOP === "2026-10-02T00:00:00.000000", `${c.name}: arc ${st.FIT_START} to ${st.FIT_STOP}`);
   check(typeof st.PCF_CID === "string" && st.PCF_CID.startsWith("b"), `${c.name}: PCF_CID ${st.PCF_CID}`);
@@ -105,7 +106,7 @@ for (const c of cases) {
   check(ocm.METADATA?.NORAD_CAT_ID === 90400 && ocm.METADATA?.OBJECT_DESIGNATOR === "90400" && ocm.METADATA?.INTERNATIONAL_DESIGNATOR === "2026-904A",
     `${c.name}: METADATA ${ocm.METADATA?.NORAD_CAT_ID} ${ocm.METADATA?.OBJECT_DESIGNATOR} ${ocm.METADATA?.INTERNATIONAL_DESIGNATOR}`);
   check(ocm.ORB_AVERAGING === "BROUWER" && (ocm.STATE_DATA ?? []).length === 0, `${c.name}: ORB_AVERAGING ${ocm.ORB_AVERAGING}, ${ocm.STATE_DATA?.length} state values`);
-  check((ocm.PROVENANCE?.PRODUCER ?? "").startsWith("com.spacedatanetwork.sdn-ap-propagator 0.6.4"), `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
+  check((ocm.PROVENANCE?.PRODUCER ?? "") === `com.spacedatanetwork.sdn-ap-propagator ${now}`, `${c.name}: PRODUCER ${ocm.PROVENANCE?.PRODUCER}`);
 }
 const ap = records.AP, xp = records.XP;
 if (ap && xp) {
@@ -123,7 +124,7 @@ if (ap && xp) {
     `XP: n ${xp.MEAN_ELEMENTS.MEAN_MOTION}, BTERM ${xp.MEAN_ELEMENTS.BTERM}, fit RMS ${xp.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM} km`);
 }
 
-// 0.6.4 against 0.6.3 on these low-eccentricity fits: the same bytes, PRODUCER's version aside
+// this build against 0.6.3 on these low-eccentricity fits: 0.6.3's sets fly to the same bytes, PRODUCER's version aside
 const BEFORE = { version: "0.6.3", commit: "03ee8623437f8c85900cabc0cc2a35b9288f4e36", sha256: "aa3ed22aa61a3a514e06619b9bff4aa1b1051d704dc32cd360b5c572b2c57f4e" };
 // The band 0.6.4 moves (SPEC 16.11, the switch by class): class 0 by the SPEC 6 bands of the mean motion (resonance.inc band_of,
 // rad/min) with 0.05 < e <= 0.3. Sets above e 0.3 fly the grid on both builds; both kinds are flown on both and counted apart.
@@ -143,7 +144,6 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-fit-e2e-"));
 const beforePath = path.join(scratch, `module-${BEFORE.version}.wasm`);
 fs.writeFileSync(beforePath, beforeBytes);
 const before = await createStandaloneHarness("browser", beforePath, { surface: "direct" });
-const now = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8")).version;
 const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
 const asBefore = (bytes) => { const b = Buffer.from(bytes); for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BEFORE.version).copy(b, at); return b; };
 // CIDv1, raw codec, sha2-256, base32 lower case with the 'b' prefix
@@ -158,26 +158,9 @@ const cidOf = (bytes) => {
   if (bits > 0) out += alphabet[(value << (5 - bits)) & 31];
   return out;
 };
-// $ODR fields that name the producing version's own $OCM (its CID), excluded from the value comparison
+// $ODR fields that name the producing version's own $OCM (its CID)
 const ODR_NAMES_OCM = ["RUN_ID", "OCM_CONTENT_ID"];
 const odrOf = (bytes) => ODR.getRootAsODR(new flatbuffers.ByteBuffer(bytes)).unpack();
-// every leaf value of a against b (Object.is for numbers); returns [compared, first difference or null]
-const sameValues = (a, b, at = "ODR") => {
-  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) { a = Array.from(a ?? []); b = Array.from(b ?? []); }
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return [0, `${at}.length ${a?.length} | ${b?.length}`];
-    let n = 0;
-    for (let i = 0; i < a.length; i += 1) { const [m, d] = sameValues(a[i], b[i], `${at}[${i}]`); n += m; if (d) return [n, d]; }
-    return [n, null];
-  }
-  if (a && b && typeof a === "object" && typeof b === "object") {
-    let n = 0;
-    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { const [m, d] = sameValues(a[k], b[k], `${at}.${k}`); n += m; if (d) return [n, d]; }
-    return [n, null];
-  }
-  return Object.is(a, b) ? [1, null] : [0, `${at} ${a} | ${b}`];
-};
-let odrValues = 0;
 const minutes = [];
 for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) minutes.push(t);
 const covarianceAt = (harness, ocmBytes, times = minutes) => {
@@ -193,26 +176,17 @@ const covarianceAt = (harness, ocmBytes, times = minutes) => {
 const EPOCHS = Array.from({ length: 29 }, (_, k) => new Date(Date.parse("2026-10-02T00:00:00Z") + k * 6 * 3600e3).toISOString().replace("Z", ""));
 const flight = (harness, ocmBytes, frame) => harness.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: ocmBytes },
   configuration({ output: { FRAME: frame, EPOCHS } })] });
-let identical = 0, flown = 0;
+let identical = 0, flown = 0, fitsDiffer = 0;
 for (const c of cases) {
   const [r2, r1] = [await fit(c.config, c.spw), await before.invoke({ methodId: "fit", inputs: [
     { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, c.config, ...(c.spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: c.spw }] : [])] })];
   if (r2.statusCode !== 0 || r1.statusCode !== 0) { check(false, `${c.name}: fit on ${now} ${r2.errorCode}, on ${BEFORE.version} ${r1.errorCode}`); continue; }
   check(r2.outputs.length === r1.outputs.length, `${c.name}: ${r2.outputs.length} outputs on ${now}, ${r1.outputs.length} on ${BEFORE.version}`);
   const [ocm2, ocm1] = [new Uint8Array(r2.outputs[0].payload), new Uint8Array(r1.outputs[0].payload)];
-  const ocmSame = asBefore(ocm2).equals(Buffer.from(ocm1));
-  check(ocmSame, `${c.name} fit ${r2.outputs[0].portId}: ${now} differs from ${BEFORE.version}`);
-  if (ocmSame) identical += 1;
+  if (!asBefore(ocm2).equals(Buffer.from(ocm1))) fitsDiffer += 1;  // SPEC 12.1: the weighting differs, so the fits do
   const [d2, d1] = [odrOf(new Uint8Array(r2.outputs[1].payload)), odrOf(new Uint8Array(r1.outputs[1].payload))];
-  const named = [[now, d2, ocm2], [BEFORE.version, d1, ocm1]].every(([v, d, o]) => ODR_NAMES_OCM.every((f) => {
-    const ok = d[f] === cidOf(o);
-    check(ok, `${c.name} $ODR ${f} on ${v}: ${d[f]}, its $OCM is ${cidOf(o)}`);
-    return ok;
-  }));
-  for (const f of ODR_NAMES_OCM) { delete d2[f]; delete d1[f]; }
-  const [compared, first] = sameValues(d2, d1);
-  check(first === null, `${c.name} fit ${r2.outputs[1].portId}: ${now} differs from ${BEFORE.version} at ${first}`);
-  if (named && first === null) { identical += 1; odrValues += compared; }
+  for (const [v, d, o] of [[now, d2, ocm2], [BEFORE.version, d1, ocm1]])
+    for (const f of ODR_NAMES_OCM) check(d[f] === cidOf(o), `${c.name} $ODR ${f} on ${v}: ${d[f]}, its $OCM is ${cidOf(o)}`);
   const set = new Uint8Array(r1.outputs[0].payload);
   const [a2, a1] = [covarianceAt(h, set), covarianceAt(before, set)];
   check(a2.status === 0 && a1.status === 0 && a2.out.equals(a1.out), `${c.name} sdnap_covariance_at: ${now} (${a2.status}) differs from ${BEFORE.version} (${a1.status})`);
@@ -224,10 +198,10 @@ for (const c of cases) {
     if (same) { identical += 1; flown += EPOCHS.length; }
   }
 }
-console.log(`${now} against ${BEFORE.version} (${BEFORE.sha256.slice(0, 8)}): ${identical} of 10 products identical (fit $OCM, ` +
-  `sdnap_covariance_at at ${minutes.length} times, propagate $OEM at ${flown} epochs byte-identical, PRODUCER's version aside; ` +
-  `fit $ODR ${odrValues} decoded values identical, ${ODR_NAMES_OCM.join(" and ")} excluded: each is the CID of its own version's $OCM)`);
-check(identical === 10, `${identical} of 10 products identical to ${BEFORE.version}`);
+console.log(`${now} against ${BEFORE.version} (${BEFORE.sha256.slice(0, 8)}): ${identical} of 6 flights of ${BEFORE.version}'s sets identical ` +
+  `(sdnap_covariance_at at ${minutes.length} times, propagate $OEM at ${flown} epochs byte-identical, PRODUCER's version aside); ` +
+  `${fitsDiffer} of ${cases.length} fits differ (SPEC 12.1's weighting); each $ODR's ${ODR_NAMES_OCM.join(" and ")} the CID of its own version's $OCM`);
+check(identical === 6, `${identical} of 6 flights identical to ${BEFORE.version}`);
 
 // the published examples' sets (SDNAP_EXAMPLES: the experiments' results/ap-truth/compare/examples, each <id>.ocm the $OCM
 // AP flew and <id>.json its window): each flown on both builds in TEME at every epoch of its window (propagate $OEM

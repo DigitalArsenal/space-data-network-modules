@@ -1589,13 +1589,29 @@ SGP4XP. Nothing in it comes from the Space Force library, and no SGP4XP conforma
 **12.1 Fit covariance.** The parameter vector p of a fit is the fit's own (`params_of`): the mean equinoctial af, ag,
 chi, psi, lambda0 (rad), n (rad/min), then those of the drag term (BTERM; m^2/kg) and AGOM
 (m^2/kg) the fit solved for, each as its natural log where its prior's form is LOG_NORMAL ($PCF FIT.DRAG_PRIOR_FORM,
-SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set at its two-line digits, an AP set at full precision: 16.9), with the residuals e_k (model minus reference position, km, TEME) of the N fit states,
+SRP_PRIOR_FORM: the iteration steps in the log).
+
+The fit minimizes Phi = sum |e_k|^2 / sigma_r^2 + sum over its priors of ((x - mu) / sigma)^2, e_k the residual of fit
+state k (model minus reference position, km, TEME), x the term or its log, mu and sigma its prior's (below). sigma_r is
+the data sigma per position component. The fit's stages (two revolutions, the arc grown by threes, the whole arc with
+BTERM, then with AGOM) weigh at 1 km to reach the minimum's basin; the whole-arc fit is then redone at sigma_r =
+max(s, sigma_OEM, 1 mm), s^2 = sum |e_k|^2 / (3N - dim p) its post-fit residual variance, until sigma_r moves by at
+most 10 % of the sigma the pass weighted with (at most 8 passes). These passes take the theory's own finite-difference
+columns where no step along the analytic ones lowers Phi, and stop when a step lowers Phi by less than 1e-6 or 1e-10 of
+it. sigma_OEM is the input's stated position sigma: the root of the mean, over the block's COVARIANCE_MATRIX_LINES, of
+(CX_X + CY_Y + CZ_Z) / 3 (a trace, the same in any axes the lines are in); 0 when the block states none. The $PCF has
+no field for the input's accuracy, and an SP3 source's per-state sigma exponents need the SP3 header's base, which the
+$OEM does not carry. Precise input makes the priors negligible; noisy input (an SGP4 flight used as pseudo-observations,
+s about 0.5 km) leaves them their weight. Through 0.6.5 the fit weighed every component at 1 km, the unit of the
+residual, not a sigma: data good to meters counted 2,500 to 40,000 times too little against the priors.
+
+At the solution (an SGP4XP set at its two-line digits, an AP set at full precision: 16.9), over the N fit states,
 
 - J_k = d r_k / d p, every column the central difference of the theory itself (steps 1e-6 in af, ag, chi, psi and
   lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM or their logs; AGOM forward where p - h <= 0,
   the theory reading AGOM <= 0 as no SRP (its log moves both ways);
-- s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance per component;
-- A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
+- sigma_r^2, the data variance the fit weighted with: within 10 % of s^2 where neither sigma_OEM nor the floor sets it;
+- A = sum J_k^T J_k / sigma_r^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
   under LOG_NORMAL sigma is that of the log). BTERM's prior, where FIT.DRAG_PRIOR is absent or without a sigma and
   FIT.DRAG_PRIOR_FORM is unset, is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free
   fits of experiments xp2-fit-design (1,214 windows, every one converged); AGOM's is GAUSSIAN_SIGNED with mean 0 and
@@ -1606,10 +1622,34 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   moves no drag-free orbit and, below, ended at BTERM <= 0. A Gaussian on BTERM is stated by its mean and sigma
   (FIT.DRAG_PRIOR with HAS_SIGMA true): 0 +- 0.05 ended at BTERM <= 0, no drag at all, on the real ISS window of
   test/fit.e2e.mjs;
-- P_p = A^-1; a term estimated as its log is carried back to m^2/kg by the Jacobian (the delta method): its rows and
+- P_p = A^-1, the inverse curvature of the Phi the fit minimized; a term estimated as its log is carried back to m^2/kg
+  by the Jacobian (the delta method): its rows and
   columns of P_p times the term, so sigma_B = B sigma_lnB. The $OBD gives the posterior sigma of the log and marks the
   term's covariance prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands
   in poorly for a wide log-normal).
+
+The estimator on model truth *[review-0 finding M1, 2026-11-10: the module's own flight of an AP set with known BTERM and
+AGOM, caps 31 and 20, NRLMSISE-00 on constant rows, the default priors; the referee's `12-estimator-consistency.mjs`,
+fit arcs of 24 and 72 h ending 72 h after the truth's epoch]*. At the 1 km unit the fit returned AGOM 14 to 62 % low on
+24 h arcs in GPS, Galileo, geostationary and inclined geosynchronous orbits (25 to 37 m at day 1), BTERM near the
+band's prior median at 700 km on 24 h arcs whatever its true value (22 to 268 m at day 1), and a biased term sqrt(3N - L)
+of its own sigmas from the truth (exactly where one term was biased). With the data sigma, every 72 h row and every 24 h row above 20,000 km
+returns BTERM and AGOM to 0.0 % and 0.0 m at day 1. The 24 h rows at 450 to 1,336 km, whose fitted set's epoch lies 48 h
+after the truth's, return them to 0.0 to 2.3 % (1.4 record sigmas at most at 700 to 1,336 km) and 0.3 to 0.5 m at day 1,
+but 2.3 and 6.0 m at 450 km with BTERM 0.02 and 0.05 (19 record sigmas for the latter); fitted from the truth's own epoch
+those rows return 0.0 % and 0.0 m, so what remains there is AP flying one orbit from two epochs, not the estimator. On
+a numerical truth without drag or radiation pressure (the 0.4.0 fixture: propagator/ffm, 70 x 70, Sun and Moon, 24 h at
+550 km) the AP set's BTERM falls from 0.0020 to 1.9e-5 m^2/kg and its error over the next three days from 484, 1,706
+and 3,754 m to 38, 87 and 146 m (SGP4XP: 917, 1,990 and 2,911 m to 728, 1,214 and 1,204 m). `test/fit-data-sigma.e2e.mjs`
+pins the recovery, the stated sigma and the priors under 500 m of noise.
+
+Where the residual is the theory's own error, correlated over the arc and not noise, sigma_r = s weighs it as data and
+BTERM and AGOM absorb part of it *[the referee's `11-free-parameters.mjs`: truth by the referee's integrator, 31 x 31
+field, zonals to 20, Sun and Moon, no drag, no radiation pressure; AP under NRLMSISE-00]*. 24 h fits at 800 and 1,336 km
+move BTERM to 0.010 and 0.064 m^2/kg, 8.5 and 5.9 record sigmas from 0, and day 7 to 2,216 and 975 m, against 426 and 15 m
+at the 1 km unit and 29 and 20 m with BTERM and AGOM held at 0. At 450 km BTERM falls from 35 to 6.6 record sigmas from 0
+and day 1 from 434 to 71 m, at 700 km day 7 from 1,241 to 641 m, and every 72 h fit gains (450 km day 1 116 to 29 m; 800
+km day 7 404 to 25 m); the medium, geosynchronous and 5,900 km orbits change by under 2 m at day 7.
 
 Known limit of BTERM's default start *[study 2026-10-31, noise-free synthetic tracks]*. The fit starts at the prior's
 median, 0.01 m^2/kg, and an object whose B lies far below it can stop in a local minimum. A day of an SGP4XP set's own
@@ -1758,7 +1798,12 @@ too large from day 2 (coverage 0.98 to 1.0). The band is not widened.
 The covariance is positive semidefinite by construction and is not calibrated. The band of SPEC 12.7 cannot establish
 realism: it accepts variance errors of 2.3, 0.2 and 0.01 on the three principal axes together, a perfect covariance fails it
 with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise sizes were tuned on the windows tested. With
-the model otherwise exact, the fitted sigma of B and S is too small by sqrt(3N - L), 46 for a 24 h arc sampled every 120 s.
+the model otherwise exact, the fitted sigma of B and S was too small by sqrt(3N - L), 46 for a 24 h arc sampled every
+120 s, while the fit weighed the data at 1 km (through 0.6.5). With the data sigma (12.1) that bias is gone and the sigma
+is the posterior of the cost the fit minimized: on the same model truth B and S lie 0.0 to 6.3 of their record sigmas
+from the truth, and 19 where the residual is AP's own (a 24 h fit 48 h after the truth's epoch at 450 km, BTERM 0.05).
+The sigma treats the residuals as independent; where they are the theory's correlated error it does not bound the error
+of B and S (12.1). The sizes of 12.5 and the cells above were measured before the data sigma.
 
 
 SDNAP: the held-out cells of 12.5 (per axis); neither theory's table earns a realism label.
@@ -1792,6 +1837,14 @@ the arc holds; under 10 ln 10 it reaches the value the arc determines (posterior
 814-891 km over 72 h). A GAUSSIAN_SIGNED prior starts at its mean, and at B = 0 the theory carries no drag and the
 fit does not move B: a flat 0 +- 10 ends at 0. FFM's estimator (analysis/estimation) bounds each step in ln p to a
 factor of ten and judges convergence on the undamped step, its a priori Gaussian in p.
+
+That paragraph, the tables of this section and the fall-back's B, k and band median RMS below were measured with the
+data weighted at 1 km (0.4.11 to 0.6.5), before 12.1's data sigma, and are not re-derived here. Under the data sigma a ln
+10 prior no longer holds BTERM at the median where the arc determines it, and where the arc does not, 10 ln 10 lets it
+wander *[M1 lane, 2026-11-10: the module's own flight at 1,336 km, BTERM 0.005, AGOM 0.02, seeded Gaussian noise on the
+positions, four draws, medians; not one of this repository's tests]*: with 10 m of noise a 72 h fit returns BTERM 0.0043
+under 10 ln 10 and 0.0042 under ln 10; with 100 m of noise a 24 h fit returns 0.053 and 862 m at day 7 under 10 ln 10,
+against 0.0005 and 132 m under ln 10 (126 m at the 1 km unit).
 
 Model truth: FFM EGM96 70x70, Sun and Moon from DE440 and NRLMSISE-00 drag at constant weather on both sides; AP
 FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee; day-3 3D RMS over 2-minute samples (m), the fitted
@@ -2609,9 +2662,10 @@ carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `
 
 ### 17.3 Statistics
 
-- Weighting: the fit weights each TEME position component with the a priori sigma 1 km (unit weights;
-  `OD_DATA_WEIGHTING` states it).
-- `WEIGHTED_RMS` = sqrt(sum (r_i / sigma)^2 / (3 N)) over the N fitted states' components = `FIT_RMS_KM` / sqrt(3) / 1 km.
+- Weighting: the fit weights each TEME position component with the data sigma sigma_r of 12.1 (its post-fit residual
+  scatter, not below the ephemeris' stated covariance or 1 mm); `OD_DATA_WEIGHTING` states it in km, six digits.
+- `WEIGHTED_RMS` = sqrt(sum (r_i / sigma_r)^2 / (3 N)) over the N fitted states' components = `FIT_RMS_KM` / sqrt(3) /
+  sigma_r: about sqrt((3N - dim p) / 3N) where the scatter sets sigma_r.
 - `SEDR` (W/kg), the energy the non-gravitational forces remove (the `$OCM` definition): -dE/dt =
   (mu / (3 a)) (n-dot_ng / n), positive under drag, with mu / a = (n a)^2 from the set's mean motion and the theory's
   semi-major axis, and n-dot_ng / n the theory's epoch rate with BTERM less the rate without it
@@ -2633,9 +2687,9 @@ carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `
 | EPOCH | the state's UTC time |
 | OBSERVATION_TYPE | POSITION_VECTOR |
 | OBSERVED_VALUE, COMPUTED_VALUE | the state's and the fitted set's geocentric distance, km (frame independent) |
-| WEIGHT | 1 / sigma^2 = 1 per km^2 inside the fit arc; 0 outside |
+| WEIGHT | 1 / sigma_r^2 (per km^2, sigma_r the data sigma of 12.1) inside the fit arc; 0 outside |
 | ACCEPTED, REASON | inside the fit arc; REASON BEFORE FIT ARC or HELD OUT otherwise |
-| NORMALIZED_RESIDUAL | (observed - computed) / sigma |
+| NORMALIZED_RESIDUAL | (observed - computed) / sigma_r |
 | PERTURBATION_MODEL_CODE | SGP4XP or AP, the set's theory |
 
 The residual is OBSERVED_VALUE minus COMPUTED_VALUE. A fit whose inputs have no per-observation form writes no rows,

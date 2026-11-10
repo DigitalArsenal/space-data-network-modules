@@ -8,6 +8,9 @@
 // the J2 secular drift of the node, the perigee and the mean longitude, in the
 // equinoctial elements of SPEC 1.5, plus the drag column through the
 // mean-motion rate per unit B. Priors (DESIGN 2e.3) enter as extra rows.
+// The cost is sum |e_k|^2 / sigma_r^2 plus the priors (SPEC 12.1): sigma_r the
+// data's own sigma per position component, from the fit's residual scatter
+// (reweight), never the unit of the residual.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -134,6 +137,19 @@ struct Result {
   double max_km;
 };
 
+/// SPEC 12.1, the weighting: the data term of the cost is sum |e_k|^2 / sigma_r^2, sigma_r (km, per TEME position
+/// component) the data's own sigma. A fit's first pass weighs at kUnitSigmaKm; reweight() then redoes it at
+/// sigma_r = max(s, stated, kDataSigmaFloorKm), s the pass's residual scatter, until sigma_r moves by at most
+/// kSigmaTolerance of the sigma the pass weighted with (at most kSigmaPasses passes). Below the floor, a millimeter, the
+/// residual is the theory's arithmetic, not the data.
+constexpr double kUnitSigmaKm = 1.0;
+constexpr double kDataSigmaFloorKm = 1e-6;
+constexpr double kSigmaTolerance = 0.1;
+constexpr int kSigmaPasses = 8;
+/// A pass weighted at the data sigma has its cost in chi-square units: it has converged when a step lowers the cost by
+/// less than this (a move of about 0.001 posterior sigma), as well as by less than 1e-10 of it.
+constexpr double kChiSquareTolerance = 1e-6;
+
 /// Residuals of the trial row: model minus observed, km, 3 per sample.
 /// SPEC 16.11: an iteration's nominal set, held while its copies are built inside its xpt::GridShareScope (nullptr when it does not
 /// initialize: its copies then take their own grids).
@@ -241,8 +257,10 @@ inline bool& jacobian_fallback() {
 }
 
 /// Levenberg-Marquardt. `row` holds the starting set (epoch, theory and the
-/// fixed terms) and receives the fitted one.
-inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
+/// fixed terms) and receives the fitted one. The cost is sum |e_k|^2 / sigma_km^2 plus the priors; `data_sigma` marks
+/// sigma_km as the data's own (the cost then in chi-square units, kChiSquareTolerance its stop).
+inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o, double sigma_km = kUnitSigmaKm,
+                  bool data_sigma = false) {
   Result out{};
   // SPEC 17.2: a parameter the theories have no sensitivity to is refused, never fitted
   if (not_modeled(o) != nullptr) {
@@ -270,9 +288,11 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
   const bool prior = o.fit_drag && o.drag_sigma > 0.0;
   const int agom_index = o.fit_drag ? 7 : 6;
   const bool agom_prior = o.fit_agom && o.agom_sigma > 0.0;
+  const double w = 1.0 / (sigma_km * sigma_km);  // the data's weight, 1 / sigma_r^2 (km^-2)
   auto cost_of = [&](const double* rr, const double* xx) {
     double c = 0.0;
     for (int i = 0; i < nres; ++i) c += rr[i] * rr[i];
+    c *= w;
     if (prior) {
       const double d = (xx[6] - o.drag_prior) / o.drag_sigma;
       c += d * d;
@@ -354,6 +374,10 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
         g[a] -= jac[i * kMaxParams + a] * res[i];
         for (int b = 0; b <= a; ++b) A[a * np + b] += jac[i * kMaxParams + a] * jac[i * kMaxParams + b];
       }
+    for (int a = 0; a < np; ++a) {
+      g[a] *= w;
+      for (int b = 0; b <= a; ++b) A[a * np + b] *= w;
+    }
     if (prior) {
       A[6 * np + 6] += 1.0 / (o.drag_sigma * o.drag_sigma);
       g[6] -= (x[6] - o.drag_prior) / (o.drag_sigma * o.drag_sigma);
@@ -383,14 +407,14 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
         if (residuals(cand, t, r, count, trial)) {
           const double c = cost_of(trial, xt);
           if (c < cost) {
-            const double rel = (cost - c) / cost;
+            const double drop = cost - c, rel = drop / cost;
             for (int a = 0; a < np; ++a) x[a] = xt[a];
             for (int i = 0; i < nres; ++i) res[i] = trial[i];
             work = cand;
             cost = c;
             mu = mu * 0.3 > 1e-12 ? mu * 0.3 : 1e-12;
             improved = true;
-            if (rel < 1e-10) converged = true;
+            if (rel < 1e-10 || (data_sigma && drop < kChiSquareTolerance)) converged = true;
             continue;
           }
         }
@@ -436,6 +460,46 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
   out.status = converged ? 0 : 1;
   release();
   return out;
+}
+
+/// The number of parameters of options `o` (params_of): the six elements and those of the dynamical terms it carries.
+inline int param_count(const Options& o) {
+  return 6 + (o.fit_drag ? 1 : 0) + (o.fit_bdot ? 1 : 0) + (o.fit_agom ? 1 : 0) + (o.fit_thrust ? 1 : 0) + (o.fit_outgassing ? 1 : 0);
+}
+
+/// SPEC 12.1: the data sigma of a fit over `count` states (km per TEME position component): max(s, stated_km,
+/// kDataSigmaFloorKm), s = sqrt(sum |e_k|^2 / (3N - dim p)) the post-fit residual scatter and stated_km the input's
+/// own sigma (0: none stated).
+inline double data_sigma_km(const Result& res, int count, const Options& o, double stated_km) {
+  const int dof = 3 * count - param_count(o);
+  const double s = dof > 0 ? res.rms_km * std::sqrt(static_cast<double>(count) / dof) : res.rms_km;
+  return std::fmax(std::fmax(s, stated_km), kDataSigmaFloorKm);
+}
+
+/// SPEC 12.1: the fit at the data's own sigma. `row` and `res` hold a fit weighted at `sigma_km`; while its data sigma
+/// differs from `sigma_km` by more than kSigmaTolerance of it, the fit is redone from the last set at the data sigma (at
+/// most kSigmaPasses times). `row`, `res` and `sigma_km` take the last fit, whose iterations add to `iterations`; a
+/// refit the theory refuses leaves the one before.
+inline void reweight(ElementRow& row, const double* t, const double* r, int count, const Options& o, double stated_km, Result& res,
+                     double& sigma_km, int& iterations) {
+  // near the minimum the analytic columns (two-body motion, J2 secular, the drag column through n-dot) stop short of
+  // it once the data outweigh the priors: these passes take the theory's own columns where no analytic step helps
+  struct FallbackScope {
+    bool prev;
+    FallbackScope() : prev(jacobian_fallback()) { jacobian_fallback() = true; }
+    ~FallbackScope() { jacobian_fallback() = prev; }
+  } fallback_scope;
+  for (int pass = 0; pass < kSigmaPasses; ++pass) {
+    const double next = data_sigma_km(res, count, o, stated_km);
+    if (std::fabs(next - sigma_km) <= kSigmaTolerance * sigma_km) return;
+    ElementRow trial = row;
+    const Result again = run(trial, t, r, count, o, next, true);
+    iterations += again.iterations;
+    if (again.status < 0) return;
+    row = trial;
+    res = again;
+    sigma_km = next;
+  }
 }
 
 /// The two-line text's digits: mean motion 1e-8 rev/day, eccentricity 1e-7,

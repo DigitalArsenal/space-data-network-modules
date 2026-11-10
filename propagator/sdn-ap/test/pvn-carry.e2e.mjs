@@ -7,7 +7,8 @@
 //   $OCM's PROVENANCE equals it in 12 of 12 fields other than PRODUCER, and PRODUCER is this module and version;
 // - without one: PROVENANCE is this module's (PROVIDER_ID the module id, PRODUCER id and version, every other field
 //   unset);
-// - the two $OCM are equal in every field but PROVENANCE, and their MEAN_ELEMENTS equal xp-fit-0.4.0.omm bit for bit;
+// - the two $OCM are equal in every field but PROVENANCE, and their MEAN_ELEMENTS equal those of
+//   test/fixtures/xp-fit-data-sigma.ocm (test/record-fit-fixtures.mjs) bit for bit;
 //   OD_OBSERVATIONS_USED is the fitted-state count (FIT_STATES) in both: neither the $OEM nor the $PVN has a typed
 //   observation count to copy;
 // - two ephemeris frames with two $PVN: each $OCM carries its own frame's; with one $PVN: provenance-count; an $OEM
@@ -18,7 +19,6 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
-import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
 import { OCM } from "spacedatastandards.org/lib/js/OCM/OCM.js";
 import { PVNT } from "spacedatastandards.org/lib/js/PVN/PVN.js";
 import { pvnSourceKind } from "spacedatastandards.org/lib/js/PVN/pvnSourceKind.js";
@@ -34,7 +34,7 @@ const check = (ok, what) => { if (!ok) failures.push(what); };
 const h = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
 const T = (name) => ({ schemaName: `${name}.fbs`, fileIdentifier: `$${name}`, rootTypeName: name });
 const ocmOf = (bytes) => OCM.getRootAsOCM(new flatbuffers.ByteBuffer(bytes)).unpack();
-const was = OMM.getRootAsOMM(new flatbuffers.ByteBuffer(fs.readFileSync(fileURLToPath(new URL("fixtures/xp-fit-0.4.0.omm", import.meta.url))))).unpack();
+const was = ocmOf(fs.readFileSync(fileURLToPath(new URL("fixtures/xp-fit-data-sigma.ocm", import.meta.url)))).MEAN_ELEMENTS;
 const { pluginId, version } = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8"));
 const PRODUCER = `${pluginId} ${version}`;
 const FIELDS = ["SOURCE_ID", "SOURCE_KIND", "ORIGINATOR", "PROVIDER_ID", "PRODUCER", "LICENSE_CLASS", "LICENSE_ID", "LINEAGE",
@@ -79,15 +79,15 @@ if (carriedBytes && ownBytes) {
   const unset = FIELDS.filter((f) => !["PROVIDER_ID", "PRODUCER"].includes(f) && ownPvn[f] !== new PVNT()[f]);
   check(ownPvn.PROVIDER_ID === pluginId && ownPvn.PRODUCER === PRODUCER && unset.length === 0,
     `own PVN: PROVIDER_ID ${ownPvn.PROVIDER_ID}, PRODUCER ${ownPvn.PRODUCER}, set beyond them ${unset.join(", ")}`);
-  // every field but PROVENANCE equal; the elements those of 0.4.0
+  // every field but PROVENANCE equal; the elements those recorded
   const rest = (o) => JSON.stringify({ ...o, PROVENANCE: null }, (k, v) => (typeof v === "bigint" ? `${v}n` : v));
   check(rest(carried) === rest(own), "the carried and own $OCM differ beyond PROVENANCE");
   const me = carried.MEAN_ELEMENTS;
   const pairs = [["EPOCH", me.EPOCH, was.EPOCH], ["MEAN_MOTION", me.MEAN_MOTION, was.MEAN_MOTION], ["ECCENTRICITY", me.ECCENTRICITY, was.ECCENTRICITY],
     ["INCLINATION", me.INCLINATION, was.INCLINATION], ["RA_OF_ASC_NODE", me.RA_OF_ASC_NODE, was.RA_OF_ASC_NODE],
     ["ARG_OF_PERICENTER", me.ARG_OF_PERICENTER, was.ARG_OF_PERICENTER], ["MEAN_ANOMALY", me.MEAN_ANOMALY, was.MEAN_ANOMALY],
-    ["BTERM", me.BTERM, was.BSTAR], ["AGOM", me.AGOM, was.MEAN_MOTION_DDOT]];
-  for (const [field, got, want] of pairs) check(Object.is(got, want), `${field}: ${got} against the 0.4.0 ${want}`);
+    ["BTERM", me.BTERM, was.BTERM], ["AGOM", me.AGOM, was.AGOM]];
+  for (const [field, got, want] of pairs) check(Object.is(got, want), `${field}: ${got} against the recorded ${want}`);
   const od = carried.ORBIT_DETERMINATION;
   check(od?.OD_OBSERVATIONS_USED === od?.FIT_STATISTICS?.FIT_STATES && od.OD_OBSERVATIONS_USED > 0,
     `OD_OBSERVATIONS_USED ${od?.OD_OBSERVATIONS_USED} against FIT_STATES ${od?.FIT_STATISTICS?.FIT_STATES}`);

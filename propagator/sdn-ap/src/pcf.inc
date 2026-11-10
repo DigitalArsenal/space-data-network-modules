@@ -507,7 +507,9 @@ inline int read(Method method, bool optional = false) {
     if (const int rc = read_forces(c->FORCES(), method == kFit, o)) return rc;
   if (method == kFit && o.theory == pcfTheory_SGP4XP && !o.forces.stock())
     return refuse("THEORY", "SGP4XP sets fly on the theory's own forces (FORCES JACCHIA70 on its flux model, no terms, no correction)");
-  if (method == kFit && o.theory == pcfTheory_AP && o.forces.stock()) return refuse("THEORY", "AP sets replace a part of SGP4XP's forces");
+  if (method == kFit && o.theory == pcfTheory_AP && o.forces.stock())
+    return refuse("THEORY", "an AP set is fitted under its own force model (FORCES with gravity terms, NRLMSISE00, RECORDS weather or a "
+                            "density correction); these FORCES are SGP4XP's own: THEORY SGP4XP or UNSPECIFIED");
   return 0;
 }
 

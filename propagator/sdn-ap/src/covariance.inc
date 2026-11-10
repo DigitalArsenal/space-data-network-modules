@@ -2,8 +2,8 @@
 // Covariance (SPEC 12): the fit's covariance carried forward by the theory's own state transition matrix.
 //
 // - The fit (fit_oem.inc, SGP4XP theory) forms the normal matrix of its parameters at the solution, every column a
-//   central difference of the theory itself, with its priors; the inverse, the measurement variance being the post-fit
-//   residual variance, is the parameter covariance. Its image at epoch (TEME position and velocity, then the solved
+//   central difference of the theory itself, with its priors; the inverse, the measurement variance being the data
+//   variance the fit weighted with (its post-fit residual scatter, SPEC 12.1), is the parameter covariance. Its image at epoch (TEME position and velocity, then the solved
 //   parameters) is the $OCM's COVARIANCE_DATA (LTM, CARTPV, COV_SIZE 6 plus the parameter rows), the parameter rows
 //   named by COV_PARAMETER_KINDS in the fixed order of SPEC 17.1: DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE,
 //   SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION. The fit solves BTERM and AGOM; the theories
@@ -337,11 +337,12 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   return true;
 }
 
-/// The fit's covariance at its solution (fit_oem, SGP4XP sets): `t`, `r` the fit samples (minutes, TEME km). Fills
-/// `s` (row and options as fitted) and the non-gravitational rate r_ng (1/day). False when the normal matrix is not
-/// positive definite or the theory refuses a moved set.
+/// The fit's covariance at its solution (fit_oem, SGP4XP sets): `t`, `r` the fit samples (minutes, TEME km), `sigma_km`
+/// the data sigma the fit weighted them with (fit::reweight). Fills `s` (row and options as fitted) and the
+/// non-gravitational rate r_ng (1/day). False when the normal matrix is not positive definite or the theory refuses a
+/// moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t, const double* r, int count, double arc_end_min,
-                   Set& s, double& ng_rate) {
+                   double sigma_km, Set& s, double& ng_rate) {
   Bank b;
   struct Scope {
     Bank& b;
@@ -371,7 +372,10 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   }
   const int nres = 3 * count;
   if (nres <= np) return false;
-  const double s2 = ss / static_cast<double>(nres - np);  // km^2 per residual component
+  // km^2 per residual component: the data variance the fit weighted with (SPEC 12.1: its residual scatter, not below the
+  // input's stated sigma or the 1 mm floor), so P_p is the inverse curvature of the cost the fit minimized; the scatter
+  // itself where no sigma is given
+  const double s2 = sigma_km > 0.0 ? sigma_km * sigma_km : ss / static_cast<double>(nres - np);
   if (!(s2 > 0.0)) return false;
   for (int a = 0; a < np; ++a)
     for (int c = 0; c <= a; ++c) A[c * np + a] = A[a * np + c] = A[a * np + c] / s2;
