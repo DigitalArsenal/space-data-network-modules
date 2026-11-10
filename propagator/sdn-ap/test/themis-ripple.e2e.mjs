@@ -27,9 +27,10 @@ import {configuration} from './lib/pcf.mjs';
 
 const BASE = 'c82160de7', BASE_SHA256 = '84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41';
 // 2's bound on the AP seeds (fixed elements, 48 h at 600 s): byte-identical to 0.6.2 until 0.6.5, whose speed changes
-// move a flight of fixed elements by millimeters (SPEC 16.8); measured 2026-11-10 on 0.6.8, printed per seed. SGP4XP stays
-// byte-identical.
-const NO_HARM = {posM: 0.01, velMmS: 0.01, covOfLargest: 1e-3};
+// move a flight of fixed elements by millimeters (SPEC 16.8). Measured 2026-11-10 on 0.6.8, printed per seed: LEO 3.10,
+// GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm (velocity at most 0.0022 mm/s); the bound is 15 mm.
+// SGP4XP stays byte-identical.
+const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
 const scratch = scratchTemp('sdn-ap-themis-ripple-');
