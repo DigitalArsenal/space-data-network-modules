@@ -63,7 +63,8 @@ if (!isMainThread) {
   parentPort.postMessage({bterm: r.fitted.bterm, model: r.fitted.bModel, t: last ? w[last].t : null, r: last ? w[last].r : null, omm: r.omm});
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
-  const BASE = '1ec779200', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/arc-e2e';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const BASE = '1ec779200', scratch = path.join(scratchRoot, 'arc-e2e');
   const modules = fileURLToPath(new URL('../../../', import.meta.url));
   fs.mkdirSync(scratch, {recursive: true});
   const baseline = path.join(scratch, `release-${BASE}.wasm`);

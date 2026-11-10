@@ -31,7 +31,8 @@ if (!isMainThread) {
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
   const {archive} = await import('./lib/regime-windows.mjs');
-  const BASE = 'a0f33bc54', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/fit-bterm';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const BASE = 'a0f33bc54', scratch = path.join(scratchRoot, 'fit-bterm');
   const modules = fileURLToPath(new URL('../../../', import.meta.url));
   fs.mkdirSync(scratch, {recursive: true});
   const baseline = path.join(scratch, `release-${BASE}.wasm`);

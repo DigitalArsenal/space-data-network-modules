@@ -17,10 +17,12 @@ import {PCF} from 'spacedatastandards.org/lib/js/PCF/PCF.js';
 import {PCFOutputT} from 'spacedatastandards.org/lib/js/PCF/PCFOutput.js';
 import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js';
 import {experiments as root} from './experiments.mjs';
-const scratch='/Users/tj/software/terrain-work/body-look/codex-apfix-d9';
+import {scratchRoot} from './scratch.mjs';
+const scratch=path.join(scratchRoot,'geo-windows');
 const DAY=86400000,cutoffs=['2025-10-05','2025-10-09','2025-10-13'];
 const median=a=>{const b=a.toSorted((a,b)=>a-b),n=b.length;return n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2;};
 export async function confirmWindows(baseline,candidate){
+ fs.mkdirSync(scratch,{recursive:true});for(let i=0;i<12;++i)fs.rmSync(path.join(scratch,`geo-windows-${i}.json`),{force:true});
  const jobs=Array.from({length:12},(_,shard)=>new Promise((resolve,reject)=>{const log=fs.openSync(path.join(scratch,`geo-windows-${shard}.log`),'w');const p=spawn(process.execPath,[fileURLToPath(import.meta.url),'--worker',String(shard),baseline,candidate],{env:{...process.env,SDN_MODULES_ROOT:path.resolve(fileURLToPath(new URL('../../../../',import.meta.url)))},stdio:['ignore',log,log]});p.on('error',reject);p.on('exit',code=>{fs.closeSync(log);code===0?resolve():reject(new Error(`GE/IG shard ${shard} failed; see geo-windows-${shard}.log`));});}));
  await Promise.all(jobs);const rows=Array.from({length:12},(_,i)=>JSON.parse(fs.readFileSync(path.join(scratch,`geo-windows-${i}.json`)))).flat();
  for(const row of rows)console.log(JSON.stringify({confirmation:row}));
