@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.9 (dist 07d96b75).
+Version 0.6.9 (dist 072b233c).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2257,7 +2257,9 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   1e-16 from the limit, where one Gauss-Newton step of the full theory would have removed 73 % of its cost: its trial
   steps across are refused until it creeps onto the limit). Where the fitted set lies on a switch (within 1e-8, relative
   in n, absolute in e; every other fit is the free one bit for bit), `fit` fits again from it with every trial set
-  pinned to its branch; a minimum on that branch is the answer; a minimum across the switch is fitted again pinned to the
+  pinned to its branch (its columns: the analytic two-body and J2 ones, and where an eccentric or short arc takes them,
+  one-sided differences of moved sets that fly the iterate's branch, as the covariance's fly the nominal's, so no column
+  holds a switch's jump); a minimum on that branch is the answer; a minimum across the switch is fitted again pinned to the
   branch it reached, and its minimum is the answer when it stays there; otherwise the fit is refused fit-at-branch-limit,
   naming the switch, the set's mean motion and eccentricity, and asking for another span or epoch. On the referee's
   full-field truths (its own integrator, 31 x 31, Sun and Moon) seven fits whose mean motion lies 2e-8 to 5.6e-7 from a

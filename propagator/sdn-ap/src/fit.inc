@@ -405,16 +405,22 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       // the element and drag columns by one-sided differences of the theory, then the same trial
       const int analytic = o.fit_drag ? 7 : 6;
       bool fd_ok = true;
-      for (int a = 0; a < analytic && fd_ok; ++a) {
-        const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
-        double xh[kMaxParams];
-        for (int q = 0; q < np; ++q) xh[q] = x[q];
-        xh[a] += h;
-        ElementRow bumped = work;
-        row_of(xh, o, bumped);
-        fd_ok = residuals(bumped, t, r, count, trial);
-        if (fd_ok)
-          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - res[i]) / h;
+      {
+        // SPEC 16.7: every moved set flies the iterate's branch (the pinned one inside a settle pass), so no column
+        // differences two branches
+        const xpt::Branch wb = xpt::g_branch_pin != nullptr ? *xpt::g_branch_pin : row_branch(work);
+        const xpt::BranchScope pin(&wb);
+        for (int a = 0; a < analytic && fd_ok; ++a) {
+          const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
+          double xh[kMaxParams];
+          for (int q = 0; q < np; ++q) xh[q] = x[q];
+          xh[a] += h;
+          ElementRow bumped = work;
+          row_of(xh, o, bumped);
+          fd_ok = residuals(bumped, t, r, count, trial);
+          if (fd_ok)
+            for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - res[i]) / h;
+        }
       }
       if (fd_ok) {
         normal();
