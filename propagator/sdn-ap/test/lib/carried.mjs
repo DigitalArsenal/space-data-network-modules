@@ -76,7 +76,10 @@ export async function refusal(h, methodId, inputs) {
  */
 export function sourcesOf(comment) {
   if (!comment || !comment.startsWith("SOURCES: ")) return null;
-  return comment.slice("SOURCES: ".length).split("; ").map((run) => {
+  // SPEC 18.8: the runs, then after ". " the switches not blended (14.3)
+  const end = comment.indexOf(". ");
+  if (end >= 0 && !comment.slice(end + 2).startsWith("Not blended (SPEC 14.3): ")) throw new Error(`a SOURCES comment with a tail that does not parse: "${comment}"`);
+  return comment.slice("SOURCES: ".length, end >= 0 ? end : comment.length).split("; ").map((run) => {
     const m = /^(CARRIED FORECAST|HAND-OVER|THEORY|BLEND) (\d+)-(\d+) (\S+) TO (\S+)$/.exec(run);
     if (!m) throw new Error(`a SOURCES run that does not parse: "${run}"`);
     return { source: m[1], first: Number(m[2]), last: Number(m[3]), from: m[4], to: m[5] };

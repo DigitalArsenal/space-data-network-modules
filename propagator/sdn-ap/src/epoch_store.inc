@@ -18,12 +18,17 @@
 //   SMOOTHSTEP: w = 3 s^2 - 2 s^3 over the window, r = (1 - w) r_a + w r_b, v = (1 - w) v_a + w v_b + w' (r_b - r_a), so
 //   r and v are continuous (w' = 0 at both edges). HERMITE: set a's state plus a cubic Hermite correction that is zero
 //   with a zero rate at the window's start and reaches set b's position and velocity at its end. Covariance: the two-component mixture (1 - w) P_a + w P_b + w (1 - w) d d^T
-//   (d = x_b - x_a; the smoothstep weight for both shapes), for sets that carry COVARIANCE (SPEC 12).
+//   (d = x_b - x_a; the smoothstep weight for both shapes), for sets that carry COVARIANCE (SPEC 12). Two AP sets on
+//   different branches (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches) are different orbits and
+//   are never blended, nor a carried forecast with a theory state (SPEC 18): their switch is a step, sdnap_epochs_select
+//   reports b = -2 (branches) or -3 (carried and theory) in its window and propagate_epochs names its time in the block's
+//   COMMENT (SPEC 14.3).
 // - Calls: the resident exports sdnap_epochs_* over the loaded store, and `propagate_epochs`, the same on a grid for a
 //   snapshot given with the call (stateless).
 // - A set whose record carries a forecast (SPEC 18) returns it inside the forecast's span: selection first takes a set
-//   whose span holds t (the latest by epoch), unblended; elsewhere selection and blend as above. Sets of one epoch with
-//   different spans (records split by day) are both kept. Every state's source is labeled (SPEC 18.8).
+//   whose span holds t (the latest by epoch), unblended (sdnap_epochs_select b = -3 where that overrides a blend);
+//   elsewhere selection and blend as above, a blend joining two forecasts or two theory states only. Sets of one epoch
+//   with different spans (records split by day) are both kept. Every state's source is labeled (SPEC 18.8).
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -47,6 +52,7 @@ struct Entry {
   Forces forces{};
   const atm::Atmosphere* atmosphere = nullptr;
   int32_t first_day = 0, last_day = 0;  ///< RECORDS: the MJDs it flies through (its first row's day + 1, its last row's day)
+  xpt::Branch branch{};                 ///< an AP set's branch (SPEC 14.3, 16.7); every other set the default
   std::shared_ptr<const carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none: read as flown
   double handover = HUGE_VAL;  ///< a hand-over set: the time it serves from, minutes from J2000 (SPEC 18.7); else HUGE_VAL
 };
@@ -350,6 +356,10 @@ inline int build(Store& st, const Config& cfg) {
           en.first_day = en.atmosphere->days.front().mjd + 1;
           en.last_day = en.atmosphere->days.back().mjd;
         }
+        if (en.row.theory == kTheorySgp4Xp) {
+          ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
+          if (ap_selected()) en.branch = row_branch(en.row);
+        }
         recs[q].cov = nullptr;
         st.entries.push_back(en);
       }
@@ -476,23 +486,49 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
 }
 
 /// The selection at t: sets a (and b, the next, with weight w and the window when blending; b = -1 otherwise).
+/// `unblended` (SPEC 14.3): t lies in the window of a switch that is a step, set a alone, switching at tau: 1 the two sets
+/// fly theory on different branches, 2 over the window one gives (or may give) its carried forecast and the other the theory.
 struct Choice {
   int32_t a = 0, b = -1;
   double t0 = 0, t1 = 0;      ///< the blend window
+  int32_t unblended = 0;
+  double tau = 0;             ///< the unblended switch's time (minutes from J2000)
+  bool spanned = false;       ///< SPEC 18.3: a carried span holding t took the set where the selection by epoch blends
 };
+/// What a set gives over the window [t0, t1] (minutes from J2000): 0 the theory throughout, 1 its carried forecast
+/// throughout (SPEC 18), 2 both (its span ends or starts inside the window).
+inline int window_kind(const Entry& e, double t0, double t1) {
+  const carried::Track* tr = e.track.get();
+  if (tr == nullptr) return 0;
+  const double s0 = (t0 - e.epoch) * 60.0, s1 = (t1 - e.epoch) * 60.0;
+  if (tr->covers(s0) && tr->covers(s1)) return 1;
+  return s1 < tr->start || s0 > tr->stop ? 0 : 2;
+}
+inline Choice choose_by_epoch(const Store& st, const Series& s, double t);
 inline Choice choose(const Store& st, const Series& s, double t) {
+  Choice c;
+  if (s.count == 1) return c;
+  // SPEC 18.3: a set whose carried span holds t flies there, the latest by epoch when more than one does (a fresher
+  // forecast), without a blend (`spanned` where the selection by epoch would have blended or stepped there); elsewhere
+  // the selection by epoch
+  if (s.carried) {
+    const Entry* E = st.entries.data() + s.first;
+    for (uint32_t k = s.count; k-- > 0;)
+      if (E[k].track && E[k].track->covers((t - E[k].epoch) * 60.0)) {
+        const Choice e = choose_by_epoch(st, s, t);
+        c.a = static_cast<int32_t>(k);
+        c.spanned = e.b >= 0 || e.unblended != 0;
+        return c;
+      }
+  }
+  return choose_by_epoch(st, s, t);
+}
+/// The selection by epoch (SPEC 14) with 14.3's blend rule.
+inline Choice choose_by_epoch(const Store& st, const Series& s, double t) {
   Choice c;
   const Entry* E = st.entries.data() + s.first;
   const uint32_t n = s.count;
   if (n == 1) return c;
-  // SPEC 18.3: a set whose carried span holds t flies there, the latest by epoch when more than one does (a fresher
-  // forecast), without a blend; elsewhere the selection by epoch
-  if (s.carried)
-    for (uint32_t k = n; k-- > 0;)
-      if (E[k].track && E[k].track->covers((t - E[k].epoch) * 60.0)) {
-        c.a = static_cast<int32_t>(k);
-        return c;
-      }
   // k = the first set with epoch > t
   uint32_t lo = 0, hi = n;
   while (lo < hi) { const uint32_t mid = (lo + hi) >> 1; if (E[mid].epoch <= t) lo = mid + 1; else hi = mid; }
@@ -523,6 +559,16 @@ inline Choice choose(const Store& st, const Series& s, double t) {
     if (i < 0 || i + 1 >= static_cast<int32_t>(n)) continue;
     const double tau = switch_time(static_cast<uint32_t>(i)), h = half_width(static_cast<uint32_t>(i));
     if (h > 0.0 && t > tau - h && t < tau + h) {
+      // SPEC 14.3: a blend joins two theory states on one branch (16.7: sets on different branches are different orbits;
+      // two carried forecasts never reach here, choose flies a span's set first, 18.3); anything else is a step, so every
+      // state is one or the other
+      const int ka = window_kind(E[i], tau - h, tau + h), kb = window_kind(E[i + 1], tau - h, tau + h);
+      const int why = ka != kb || ka == 2 ? 2 : ka == 0 && E[i].branch != E[i + 1].branch ? 1 : 0;
+      if (why != 0) {
+        c.unblended = why;
+        c.tau = tau;
+        return c;
+      }
       c.a = i;
       c.b = i + 1;
       c.t0 = tau - h;
@@ -534,9 +580,16 @@ inline Choice choose(const Store& st, const Series& s, double t) {
 }
 
 /// Series s at t (minutes from J2000): the TEME state (km, km/s) and, when P is given, the covariance (have_p false
-/// when the sets carry none). 0, or the theory's error code.
-inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr) {
+/// when the sets carry none). 0, or the theory's error code. `jd` (the split Julian date of t, when the caller has it) times
+/// a carried forecast (state_of). `unblended` (optional): the switch t was not blended across (SPEC 14.3), its time and
+/// why (Choice::unblended), or {NaN, 0}.
+inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr,
+                  double* unblended = nullptr) {
   const Choice c = choose(st, s, t);
+  if (unblended != nullptr) {
+    unblended[0] = c.unblended ? c.tau : std::numeric_limits<double>::quiet_NaN();
+    unblended[1] = c.unblended;
+  }
   if (c.b < 0) return state_of(st, s, static_cast<uint32_t>(c.a), t, r, v, P, have_p, jd);
   double ra[3], va[3], rb[3], vb[3], Pa[36], Pb[36];
   bool ha = false, hb = false;
@@ -670,11 +723,13 @@ extern "C" int propagate_epochs(void) {
       double bias[3][3];
       if (g.axes == oem::Axes::Eme2000) frames::frame_bias(bias);
       bool any_cov = false;
+      std::vector<std::pair<double, double>> unblended;  // SPEC 14.3: the switches the grid crosses without a blend, and why
       for (size_t k = 0; k < tw.size(); ++k) {
-        double r[3], v[3], P[36];
+        double r[3], v[3], P[36], ub[2];
         bool have_p = false;
         const double jd[2] = {tw[k], tf[k]};
-        const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p, jd);
+        const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p, jd, ub);
+        if (ub[0] == ub[0] && (unblended.empty() || unblended.back().first != ub[0])) unblended.emplace_back(ub[0], ub[1]);
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
         if (e == epochs::kRowsShort) {
           char day[16];
@@ -720,6 +775,17 @@ extern "C" int propagate_epochs(void) {
         }
       }
       if (any_cov && cov_lines.size() != lines.size()) cov_lines.clear();  // a covariance on every state or on none
+      oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
+      oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
+      std::string comment;
+      for (const auto& u : unblended) {
+        const double d = u.first / kMinutesPerDay, whole = std::floor(d + 0.5) - 0.5;
+        char when[48];
+        oem::iso_text(2451545.0 + whole, d - whole, 0.0, when, sizeof when);
+        comment += comment.empty() ? "Not blended (SPEC 14.3): " : ", ";
+        comment += when;
+        comment += u.second == 1.0 ? " (sets on different branches)" : " (a carried forecast and the theory)";
+      }
       const auto frame = oem::rfm_of(fbb, g.axes);
       const bool with_cov = !cov_lines.empty();
       const auto cov_frame = with_cov ? oem::rfm_of(fbb, g.axes) : flatbuffers::Offset<RFM>(0);
@@ -734,18 +800,15 @@ extern "C" int propagate_epochs(void) {
         object = cb.Finish();
       }
       // SPEC 18.8: one block per series; a series with a set carrying a forecast or a hand-over set states every state's
-      // source in the block's COMMENT (carried::sources_comment); any other writes none
-      std::string sources;
+      // source in the block's COMMENT (carried::sources_comment), then, after ". ", the switches not blended (14.3);
+      // any other series writes 14.3's text alone, or none
       if (epochs::any_labeled(st, s)) {
         std::vector<uint8_t> src(tw.size());
         for (size_t k = 0; k < tw.size(); ++k) src[k] = static_cast<uint8_t>(epochs::source_at(st, s, tw[k], tf[k]));
-        sources = carried::sources_comment(src, tw, tf);
+        comment = comment.empty() ? carried::sources_comment(src, tw, tf) : carried::sources_comment(src, tw, tf) + ". " + comment;
       }
-      oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
-      oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
-      blocks.push_back(CreateephemerisDataBlockDirect(fbb, sources.empty() ? nullptr : sources.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC,
-                                                      start, nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines,
-                                                      with_cov ? &cov_lines : nullptr));
+      blocks.push_back(CreateephemerisDataBlockDirect(fbb, comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start, nullptr, nullptr,
+                                                      stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines, with_cov ? &cov_lines : nullptr));
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
     FinishOEMBuffer(fbb, root);
@@ -822,8 +885,11 @@ int32_t sdnap_epochs_series(uint32_t i, double* out, double* epochs, uint32_t ca
   return 0;
 }
 
-/// The selection of series i at a split Julian date: out[0] set a, out[1] set b (-1 without a blend), out[2] the
-/// blend weight of b (0 without one). 0, or -1 for an unknown series.
+/// The selection of series i at a split Julian date: out[0] set a, out[1] set b (-1 without a blend; -2 inside the
+/// window of a switch not blended because its two sets are on different branches, -3 because one gives its carried
+/// forecast and the other the theory, or because a carried span holding t took set a there; SPEC 14.3, 18.3), out[2]
+/// the blend weight
+/// of b (0 without one). 0, or -1 for an unknown series.
 SDNAP_EXPORT("sdnap_epochs_select")
 int32_t sdnap_epochs_select(uint32_t i, double jd_whole, double jd_frac, double* out) {
   auto& st = sdnap::epochs::resident();
@@ -831,7 +897,7 @@ int32_t sdnap_epochs_select(uint32_t i, double jd_whole, double jd_frac, double*
   const double t = sdnap::epochs::minutes_of(jd_whole, jd_frac);
   const auto c = sdnap::epochs::choose(st, st.series[i], t);
   out[0] = c.a;
-  out[1] = c.b;
+  out[1] = c.unblended == 1 ? -2 : c.unblended == 2 || c.spanned ? -3 : c.b;
   double w = 0.0;
   if (c.b >= 0) { const double s = (t - c.t0) / (c.t1 - c.t0); w = s * s * (3.0 - 2.0 * s); }
   out[2] = w;
