@@ -332,7 +332,9 @@ inline int read_carry(const PCFOutput* p, Options& o) {
   if (p->FRAME() != pcfOutputFrame_UNSPECIFIED) return refuse("OUTPUT.FRAME", "a carried forecast is in the set's own TRAJ_REF_FRAME");
   if (has(p, PCFOutput::VT_STEP_SECONDS) && p->STEP_SECONDS() != 60.0) return refuse("OUTPUT.STEP_SECONDS", "fit chooses the carried segments");
   if (has(p, PCFOutput::VT_MAXIMUM_STATES) && p->MAXIMUM_STATES() != 500000) return refuse("OUTPUT.MAXIMUM_STATES", "fit chooses the carried segments");
-  if (o.has_start != o.has_stop) return refuse(o.has_start ? "OUTPUT.STOP_TIME" : "OUTPUT.START_TIME", "fit carries the block's states from START_TIME to STOP_TIME: both, or neither");
+  // SPEC 18.7: START_TIME and STOP_TIME carry the block's states between them; START_TIME alone makes the hand-over set
+  // that serves from it
+  if (o.has_stop && !o.has_start) return refuse("OUTPUT.START_TIME", "fit carries the block's states from START_TIME to STOP_TIME, or makes the hand-over set from START_TIME alone");
   return 0;
 }
 

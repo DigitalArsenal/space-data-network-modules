@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // E2E (issue 316, SPEC 18): a record without a carried forecast flies bit for bit as the build before the carried
-// forecast flies it, and fit without OUTPUT writes that build's record. That build's dist (review-0's 0.6.6 at
-// d74d3129, or with CARRIED_IDENTITY_BASE=0.6.5 main's 0.6.5 at 3a3661eaf) from git, in the system's temporary folder;
+// forecast's version 2 flies it, and fit without OUTPUT writes that build's record. That build's dist (main's 0.6.9 at
+// c0819777; CARRIED_IDENTITY_BASE names 0.6.8, 0.6.7, 0.6.6 or 0.6.5 instead) from git, in the system's temporary folder;
 // on the same inputs:
 // - fit (the AP and XP fixture fits): the $OCM byte for byte with PRODUCER's version masked (the one field that names the
-//   build), the $ODR byte for byte with its two CIDs of that $OCM masked;
+//   build; field by field when the two versions' texts differ in length), the $ODR byte for byte with its two CIDs of
+//   that $OCM masked;
 // - propagate of each record in TEME, GCRF and EME2000 at the fixture grid: the $OEM byte for byte;
 // - load_epochs of both records and an SGP4 record, then sdnap_epochs_set_at and sdnap_epochs_at (TEME and Earth-fixed)
 //   at 40 times: every double the same (Object.is); propagate_epochs: the $OEM byte for byte.
@@ -22,13 +23,16 @@ import { T, fixtureSets, flight, GRID_OUTPUT } from "./lib/ocm.mjs";
 import { configuration } from "./lib/pcf.mjs";
 import { jdOf } from "./lib/frames.mjs";
 
-// the build this branch adds the carried forecast to: review-0's 0.6.6 (the cost lane's), or 0.6.5 (main) with
-// CARRIED_IDENTITY_BASE=0.6.5
+// the build version 2 starts from: main's 0.6.9; review-0's 0.6.8, 0.6.7 (version 1), 0.6.6 (before the carried
+// forecast) or 0.6.5 by CARRIED_IDENTITY_BASE
 const BASES = {
+  "0.6.9": { commit: "c08197778347274f1edb60b224748bb8ba02a253", sha256: "8ec4a1b9ec1462eca788582b7dfbec0cb03429e494e258c03c740a58fc0d9370" },
+  "0.6.8": { commit: "7d5b6ef7d8ab90c83ec7fecdaf539a08dc68691e", sha256: "c19f8cae856ba0117763873e068438a8d493987a288a9648f79d194263a6b6b0" },
+  "0.6.7": { commit: "64e5f2018afba14a0abd58cfafad007ea2e17215", sha256: "1104598edeebe41cb8daa81bba3c9e82e3181d012a053aefd07d09611b2b81f5" },
   "0.6.6": { commit: "d74d3129db071f9aaaffba3cca421453b348d274", sha256: "5566784bd36613ed3cd4f963f6e2e52b40e08819dfe49e5362b34102413a291c" },
   "0.6.5": { commit: "3a3661eaf9caa84fc776a9959494e1ca14358db1", sha256: "f0b8352a43f305fbdd1ad15c9894e2d28f3179528838cae8f967bf1ea5d089b7" },
 };
-const BASE_VERSION = process.env.CARRIED_IDENTITY_BASE ?? "0.6.6";
+const BASE_VERSION = process.env.CARRIED_IDENTITY_BASE ?? "0.6.9";
 const { commit: BASE_COMMIT, sha256: BASE_SHA256 } = BASES[BASE_VERSION];
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
@@ -43,15 +47,22 @@ try {
   const direct = (file) => createStandaloneHarness("browser", file, { surface: "direct" });
   const [oldC, newC] = [await command(basePath), await command(wasmPath)];
   const same = (a, b) => Buffer.from(a).equals(Buffer.from(b));
-  // the version PRODUCER names, masked to the base's (both are X.Y.Z of five characters)
+  // the version PRODUCER names: masked byte for byte to the base's when the two are of one length (X.Y.Z of five
+  // characters), else every field compared with PRODUCER's text set to the base's (0.6.10 is a character longer: the
+  // buffer's layout moves with it)
   const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
   const version = JSON.parse(fs.readFileSync(path.join(packageRoot, "plugin-manifest.json"), "utf8")).version;
   const mask = (buf, from, to) => { const b = Buffer.from(buf); for (let at = b.indexOf(from); at >= 0; at = b.indexOf(from, at + 1)) to.copy(b, at); return b; };
+  const { OCM } = await import("spacedatastandards.org/lib/js/OCM/OCM.js");
+  const flatbuffers = await import("flatbuffers");
+  const fields = (bytes) => JSON.stringify(OCM.getRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack(),
+    (k, v) => (typeof v === "bigint" ? String(v) : v === producer(version).toString() ? producer(BASE_VERSION).toString() : v));
+  const sameOcm = (fresh, base) => (version.length === BASE_VERSION.length ? same(mask(fresh, producer(version), producer(BASE_VERSION)), base) : fields(fresh) === fields(base));
 
   // fit: the fixtures' AP and XP fits on both builds
   const oldSets = await fixtureSets(oldC), newSets = await fixtureSets(newC);
   for (const kind of ["ap", "xp"]) {
-    check(same(mask(newSets[kind], producer(version), producer(BASE_VERSION)), oldSets[kind]), `fit ${kind}: the $OCM differs from ${BASE_VERSION}'s beyond PRODUCER`);
+    check(sameOcm(newSets[kind], oldSets[kind]), `fit ${kind}: the $OCM differs from ${BASE_VERSION}'s beyond PRODUCER`);
   }
   // the residual record of one fit, its CIDs of the $OCM masked
   {
@@ -63,7 +74,7 @@ try {
     const odr = (r) => Buffer.from(r.outputs.find((q) => q.portId === "residuals").payload);
     // the CID text of each $OCM is the only difference: replace the new one's with the old one's (same length)
     const ocmA = Buffer.from(a.outputs.find((q) => q.portId === "elements").payload), ocmB = Buffer.from(b.outputs.find((q) => q.portId === "elements").payload);
-    check(same(mask(ocmB, producer(version), producer(BASE_VERSION)), ocmA), `fit (residuals call): the $OCM differs from ${BASE_VERSION}'s beyond PRODUCER`);
+    check(sameOcm(ocmB, ocmA), `fit (residuals call): the $OCM differs from ${BASE_VERSION}'s beyond PRODUCER`);
     const ra = odr(a), rb = odr(b);
     const cids = (buf) => [...buf.toString("latin1").matchAll(/bafk[a-z2-7]{55}/g)].map((m) => m[0]);
     const [ca, cb] = [cids(ra), cids(rb)];
@@ -83,8 +94,7 @@ try {
   }
   // the epoch store: an SGP4 record from ingest_omm beside the two
   const { OMMT } = await import("spacedatastandards.org/lib/js/OMM/OMM.js");
-  const flatbuffers = await import("flatbuffers");
-  const omm = Object.assign(new OMMT(), { OBJECT_NAME: "SGP4 IDENTITY", NORAD_CAT_ID: 99310, EPOCH: "2026-10-01T00:00:00.000000", MEAN_MOTION: 15.2, ECCENTRICITY: 0.0012,
+  const omm =Object.assign(new OMMT(), { OBJECT_NAME: "SGP4 IDENTITY", NORAD_CAT_ID: 99310, EPOCH: "2026-10-01T00:00:00.000000", MEAN_MOTION: 15.2, ECCENTRICITY: 0.0012,
     INCLINATION: 51.6, RA_OF_ASC_NODE: 40, ARG_OF_PERICENTER: 30, MEAN_ANOMALY: 10, BSTAR: 1e-4, MEAN_ELEMENT_THEORY: 0 });
   const ob = new flatbuffers.Builder(1024);
   ob.finish(omm.pack(ob), "$OMM");

@@ -32,6 +32,19 @@ const sdsRoot = path.dirname(require.resolve("spacedatastandards.org/package.jso
 // C++ bindings of $OEM (propagate's output, fit's input), $OCM (fit's output), $OMM (ingest_omm's input),
 // $SPW and $DCL (the drag atmosphere's inputs, SPEC 15), $ODR (fit's residual record, SPEC 17.4) and the schemas
 // they include, generated from the pinned SDS package in dependency order.
+// SPEC 18.5: the $OCM verifier checks the vector of a record's carried segments (POLYNOMIAL_POSITION_RECORDS), not each
+// segment's table: flight verifies a segment by its own verifier when a state first needs it (carried.inc ensure), so
+// a fresh record's load does not walk a forecast it may never fly. The one call in OCM::Verify, asserted.
+function lazyCarriedSegments(code, header) {
+  if (code !== "OCM") return header;
+  const call = "verifier.VerifyVectorOfTables(POLYNOMIAL_POSITION_RECORDS()) &&";
+  const root = header.indexOf("struct OCM FLATBUFFERS_FINAL_CLASS");
+  const at = header.indexOf(call, root);
+  if (root < 0 || at < 0 || header.indexOf(call, at + 1) >= 0 || header.indexOf(call) !== at)
+    throw new Error("the $OCM header's verifier no longer holds exactly one POLYNOMIAL_POSITION_RECORDS table walk, in OCM::Verify");
+  return `${header.slice(0, at)}/* SPEC 18.5: each segment verified when first flown */ true &&${header.slice(at + call.length)}`;
+}
+
 async function oemBindings() {
   const files = {};
   const deps = new Map();
@@ -57,7 +70,7 @@ async function oemBindings() {
     .map((code) => {
       const generated = flatc.generateCode({ entry: `/sds/${code}/main.fbs`, files }, "cpp", { genObjectApi: false })["main_generated.h"];
       if (!generated) throw new Error(`flatc produced no ${code} C++ header`);
-      return generated
+      return lazyCarriedSegments(code, generated)
         .replaceAll("FLATBUFFERS_GENERATED_MAIN_H_", `FLATBUFFERS_GENERATED_SDS_${code}_MAIN_H_`)
         .replace(/^#include "main_generated\.h"\s*$/gm, "");
     })
