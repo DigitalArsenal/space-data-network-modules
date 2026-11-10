@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.5 (dist ca551504, bundle f0b8352a).
+Version 0.6.6 (dist f4667b66).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1460,8 +1460,16 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
 agree to 0 mm]*. An AP state in this module depends on the order of requests: the same record flown in ascending and in random
 order differs by up to 12.7 mm at 500 km (median 2.0 mm), 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at
-geosynchronous altitude; a single state from a fresh record differs from the ascending pass by up to 8.8 mm. SGP4 differs by 0
-in every case. SGP4XP GEO nodes fall on
+geosynchronous altitude; a single state from a fresh record differs from the ascending pass by up to 8.8 mm; over 30 days at
+60 s, reversed or shuffled against the ascending pass, test/kernel-cost.mjs --diff measures up to 0.18 m at 300 km (B 6.4e-3
+m^2/kg, active weather) and 0.29 m on a low orbit at e 0.05 with tesseral degree 31; on a transfer orbit at e 0.72, 7 days
+at 300 s, random against ascending, 0.9 µm. SGP4 differs by 0 in every case. The same build asked the same requests in
+the same order writes the same bytes (ascending twice: 0 in every case); a comparison of two builds
+(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity)
+and prints the reversed and shuffled differences beside it. Out of order AP pays for it: a request outside the cached
+bracket integrates from the nearest checkpoint, and in random order an AP state costs 37 to 153 times SGP4's on
+near-circular orbits and 1,990 times on the transfer orbit (test/kernel-patterns.mjs order, 7 days at 300 s; 1.2 to
+2.5 times ascending). SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 
@@ -2127,7 +2135,19 @@ Its instantaneous third-body geometry does not take the epoch-axis output correc
 
 Fit residuals and propagation share `xp_propagate`, including this policy; there is no separate fit-only
 rotation. GCRF fit inputs are converted to TEME at each sample date, and GCRF output converts the propagated
-TEME state at that date. Default FORCES retains the XP path bit for bit. The one-day class retains its frame
+TEME state at that date. The output's GCRF-to-TEME matrix (`propagate`, `propagate_epochs`; EME2000 through it) is the
+quintic through the matrix at the six 6-hour nodes about the date (UTC quarter days, held per thread), each node the
+same IAU 2006/2000A chain with GMST82 summed without gmst()'s rounding: one IAU 2000A nutation series per 6 hours of
+output, not one per state, and a function of the date alone. Against the per-state chain with GMST82 in exact
+arithmetic it is off by at most 0.0042 mm at the geostationary radius; the per-state matrix it replaces was off by up
+to 1.5 mm there (gmst()'s rounding: up to 3.6e-11 rad), and the two differ by at most 1.6 mm and 1.2e-4 mm/s (SGP4
+sets with epochs from 2020 to 2035, 7 days each; test/output-frames.mjs). A GCRF state then costs what a TEME state
+costs, against about 31 µs with the matrix at each state; a one-state call at a date whose nodes are not yet held
+computes six nodes. The fit's GCRF inputs keep the matrix at each state. GMST82 itself (gmst(), store.inc) sums its
+polynomial in seconds of time near 8e8 s and turns that into radians near 6e4 rad, so it is off GMST82 in exact
+arithmetic by up to 3.6e-11 rad (1.5 mm at the geostationary radius), an error that changes from one instant to the
+next (2020 to 2035, test/output-frames.mjs); the fit's GCRF inputs and every Earth-fixed state (TEME to Earth-fixed by
+gmst()) carry that rounding. Default FORCES retains the XP path bit for bit. The one-day class retains its frame
 correction and 38-minute grid; the half-day and GTO fixtures retain their previous paths.
 
 The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS windows, 72-hour fits, the
@@ -2496,7 +2516,13 @@ per perigee passage:
   node's radius r: V = sqrt(1 + 2 e cos nu + e^2 - 2 q theta rho + q^2 cos^2 phi' rho^2 / D^2), rho = r D / p.
 - **Short-period steps.** In the output, each element y_j + (ydot_j / n)(pi - M), M in [0, 2 pi) and ydot the drag's
   rates at the output time, and lambda also + (ndot / n^2)(pi M - M^2/2 - pi^2/3), the integral of n's own sawtooth: the
-  osculating elements step at perigee where the mean elements ramp.
+  osculating elements step at perigee where the mean elements ramp. From 0.6.6 those rates are evaluated per segment,
+  the stretch of one revolution (its two passages fixed) inside one interval of the mean-element grid (the mean state
+  one cubic): the quadratic in t through the rates at the segment's three points s_0 + (k + 1/2)(s_1 - s_0)/3, each at
+  the grid's own mean state there. Three evaluations serve every output state of the segment in place of one at each;
+  against the rates at each output time the state differs by 0.23 mm and 1.4e-7 m/s at most over 30 days
+  (test/kernel-cost.mjs --diff; the largest at a 250 km perigee, B 0.01 m^2/kg, active weather). A fit keeps the rates
+  at each of its states.
 
 At e 0.3 and below, and without drag, the path is 0.4.15's, byte for byte (the XP digest and the drag-off runs below).
 
