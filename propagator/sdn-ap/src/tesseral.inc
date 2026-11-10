@@ -4298,6 +4298,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
     fwang[k] = std::atan2(sf[k], cf[k]);
   }
   const res::TermSet carried = res::class_terms(cls);
+  const bool low = cls == 0 && kTwoPi / n < kLongPeriodMinutes;  // sp_terms' `low`: no class, the shallow set active
   const double h = 1e-5;
   double f[72], fp[72], fmn[72];
   double* ws = static_cast<double*>(std::malloc(static_cast<size_t>(11) * 2 * NE * sizeof(double)));
@@ -4356,7 +4357,9 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         gr[2][0][q] = ar[q] * cf[q] * kR - ei * gI;
         gr[2][1][q] = ar[q] * cf[q] * kI + ei * gR;
       }
-      // the harmonics the table's rules leave out, from each forcing function: m-daily (w = j = 0), the class's, the half-day
+      // the harmonics the table's rules leave out (sp_terms' weight_of, the same rule harmonic by harmonic: 0.6.2 to 0.6.10 left
+      // the whole slow band out in low orbit too, where neither the table nor the shallow set carries its q != 0 terms; #393),
+      // from each forcing function: m-daily (w = j = 0), the class's, the half-day
       // tail, the slow band
       for (int l = l0; l <= degree; l += 2) {
         const int p = (l - w) / 2;
@@ -4367,13 +4370,23 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         const int jlo = static_cast<int>(std::floor(nu - kShallowBand * n / mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + kShallowBand * n / mdot)) + 1;
         for (int j = -(degree + 64); j <= degree + 64; ++j) {
           const int q = j - w;
-          bool out_ = w == 0 && j == 0;
+          // the share of the harmonic left out (sp_terms' weight_of, 1 - its weight)
+          double out_ = w == 0 && j == 0 ? 1.0 : 0.0;
           // the half-day tail, carried in the half-day class's rates (16.2; sp_terms leaves it out of the table the same way)
-          if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = true;
-          for (int t = 0; t < carried.count && !out_; ++t)
-            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = true;
-          if (!out_ && j >= jlo && j <= jhi) out_ = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)) < kShallowBand * n;
-          if (!out_) continue;
+          if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = 1.0;
+          for (int t = 0; t < carried.count && out_ == 0.0; ++t)
+            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = 1.0;
+          if (out_ == 0.0 && j >= jlo && j <= jhi) {
+            // the slow band: in low orbit (class 0, period below 1100 min) only the shallow set's terms (q = 0, w = j = 1, which
+            // the rates carry with the same taper) and the terms drifting slower than 1e-3 n; everywhere else the whole band
+            const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)), x = ap / (kShallowBand * n);
+            if (!low) out_ = x < 1.0 ? 1.0 : 0.0;
+            else if (q == 0 && w == 1 && j == 1) {
+              const double cc = std::cos(0.5 * kPi * (x - 0.9) / 0.2);
+              out_ = x <= 0.9 ? 1.0 : x < 1.1 ? cc * cc : 0.0;
+            } else out_ = ap < 1e-3 * n ? 1.0 : 0.0;
+          }
+          if (out_ == 0.0) continue;
           // G and dG/de at fixed M by the trapezoid on the E nodes (dM = (1 - e cos E) dE; spectral for these periodic integrands)
           double G = 0.0, dG = 0.0;
           for (int k = 0; k < NE; ++k) {
@@ -4385,8 +4398,9 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
           G /= NE;
           dG /= NE;
           // the harmonic's part of g', g, g_e, g_i, g_a: i j Z, Z, Z_e, Z_i, -(l + 1) / a Z
-          const double Z[5][2] = {{-j * F * G * Si, j * F * G * Sr}, {F * G * Sr, F * G * Si}, {F * dG * Sr, F * dG * Si},
-                                  {dF * G * Sr, dF * G * Si}, {-(l + 1) / a * F * G * Sr, -(l + 1) / a * F * G * Si}};
+          const double Fo = out_ * F, dFo = out_ * dF;
+          const double Z[5][2] = {{-j * Fo * G * Si, j * Fo * G * Sr}, {Fo * G * Sr, Fo * G * Si}, {Fo * dG * Sr, Fo * dG * Si},
+                                  {dFo * G * Sr, dFo * G * Si}, {-(l + 1) / a * Fo * G * Sr, -(l + 1) / a * Fo * G * Si}};
           for (int k = 0; k < NE; ++k) {
             const double cj = std::cos(j * M[k]), sj = std::sin(j * M[k]);
             for (int z = 0; z < 5; ++z) { gr[z][0][k] -= Z[z][0] * cj - Z[z][1] * sj; gr[z][1][k] -= Z[z][0] * sj + Z[z][1] * cj; }
