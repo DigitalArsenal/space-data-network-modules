@@ -5,7 +5,7 @@
   "type": "Propagator",
   "encrypted": false,
   "requiresProtection": false,
-  "description": "General-perturbations propagation of whole catalogs: SGP4 and SGP4XP (the US Space Force SGP4-XP theory, clean-room), batch and structure-of-arrays, bounded memory, deterministic random access in time.",
+  "description": "General-perturbations propagation of whole catalogs: SGP4 and SGP4XP (the US Space Force SGP4-XP theory, clean-room), batch and structure-of-arrays, bounded memory, random access in time; an AP state depends on the order of requests, by up to 12.7 mm at 500 km (SPEC 9).",
   "delivery": {
     "channel": "sdn-module-delivery",
     "catalogId": "com.spacedatanetwork.sdn-ap-propagator"
