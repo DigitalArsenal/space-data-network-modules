@@ -646,6 +646,7 @@ static int fit_blocks() {
         fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
+        if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
         P.t_fit = std::move(t_fit);
         P.r_fit = std::move(r_fit);
@@ -681,6 +682,7 @@ static int fit_blocks() {
           plugin_set_error("fit-failed", "The fit did not converge on the block.");
           return 3;
         }
+        if (rc == 3) return fit::refuse_branch_limit(chosen.row);
       }
       double span_used = start_given ? -1.0 : default_span;
       // SPEC 12.8: above e 0.3 with the perigee in the drag and no stated drag prior, the longest arc the ephemeris holds
