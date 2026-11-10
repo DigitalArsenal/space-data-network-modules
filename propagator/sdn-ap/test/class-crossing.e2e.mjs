@@ -5,8 +5,8 @@
 // of .04, .06, .08, .1 whose primary leaves the half-day band in the week and whose companion does not), AGOM 0, FORCES
 // 31,20, NRLMSISE-00 on the constant rows of test/lib/spw-constant.mjs. Its drag carries the mean motion past the half-day
 // class's upper limit, 2.4066852459 rev/day, between days 3 and 7 (2.4035 at day 3, 2.4084 at day 7). The companion
-// starts at 2.3966852459 and stays inside the band. The AP seed's GCRF state seeds FFM (16.6's gravity, DE440, zero EOP);
-// no fit.
+// starts at 2.3966852459 and stays inside the band. The AP seed's GCRF state seeds FFM (16.6's gravity, DE440, zero EOP;
+// the FFM build named by its SHA-256 below, any other refused); no fit.
 // - Continuity in time: the primary flown in GCRF every 10 s from day 3 to day 7 (34,561 states): the jump detector
 //   |d_k - (d_(k-1) + d_(k+1)) / 2|, d the second difference of position less h^2 times the two-body acceleration
 //   (mu 398600.4415 km^3/s^2), stays below 1 m away from perigee (10 min each side of each of the 9 passages left out).
@@ -21,6 +21,7 @@
 //   node test/class-crossing.e2e.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {createHash} from 'node:crypto';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {OEM} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
@@ -29,9 +30,17 @@ import {wasmPath} from './lib/module.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 import {seedOcm, rowsThrough, flight} from './lib/ocm.mjs';
 import {spwFixtureRows} from './lib/spw-constant.mjs';
+// the truth's FFM build (propagator/ffm 2.2.1, dist/isomorphic/module.wasm); test/lib/heo-model-truth.mjs keys its cached
+// truths by that file's bytes, so a truth of another build is never read, and another build is refused here by name
+const FFM_SHA256='a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4';
+{
+ const ffm=createHash('sha256').update(fs.readFileSync(new URL('../../ffm/dist/isomorphic/module.wasm',import.meta.url))).digest('hex');
+ assert.equal(ffm,FFM_SHA256,`the truth's FFM build is ${FFM_SHA256}, not ${ffm}: the registered numbers are that build's`);
+}
 const edge=2.4066852459,bterm=.06,MU=398600.4415,epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000;
 const fixture={e:.72,i:27,raan:40,argp:270,ma:0,drag:true,bterm,dragSigma:1e-10,mode:'seed'};
 const a=await runModelTruth({...fixture,name:'crossing',n:2.40}),b=await runModelTruth({...fixture,name:'companion',n:edge-.01});
+assert.ok(a.ffmSha256===FFM_SHA256&&b.ffmSha256===FFM_SHA256,'both truths flown by the named FFM build');
 const ratio=a.days[7].t/b.days[7].t;
 // the primary's own flight, days 3 to 7 every 10 s
 const rows=rowsThrough(spwFixtureRows());
@@ -59,7 +68,7 @@ for(let k=1;k+1<d.length;++k){
  if(nearPerigee(s)){worstPerigee=Math.max(worstPerigee,j);continue;}
  if(j>worst){worst=j;at=s;}
 }
-const report={bterm,day7AlongTrackMeters:[a.days[7].t,b.days[7].t],ratio,allowed:[.75,1.25],jumpDetectorWorstMeters:worst,atDays:at/86400,bound:1,perigees:perigees.length,worstWithin10MinOfPerigeeMeters:worstPerigee};
+const report={ffmSha256:FFM_SHA256,bterm,day7AlongTrackMeters:[a.days[7].t,b.days[7].t],ratio,allowed:[.75,1.25],jumpDetectorWorstMeters:worst,atDays:at/86400,bound:1,perigees:perigees.length,worstWithin10MinOfPerigeeMeters:worstPerigee};
 console.log(JSON.stringify(report));
 if(process.env.SDN_AP_CLASS_REPORT)fs.writeFileSync(process.env.SDN_AP_CLASS_REPORT,JSON.stringify({edge,report,pair:[a,b].map(r=>({name:r.name,n:r.n,days:r.days,apSha256:r.apSha256}))},null,2)+'\n');
 await h.close?.();
