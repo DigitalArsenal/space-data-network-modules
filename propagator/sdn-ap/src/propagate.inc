@@ -7,7 +7,8 @@
 // 60 s) in OUTPUT.FRAME (TEME, GCRF or EME2000), with a covariance line per
 // state when the set carries COVARIANCE_DATA (SPEC 12). The $PCF is optional:
 // a lone $OCM flies. One request holds at most OUTPUT.MAXIMUM_STATES states.
-// A record carrying a forecast (SPEC 18) flies it inside its span.
+// A record carrying a forecast (SPEC 18) flies it inside its span, a block per
+// run of states from one source, labeled in its COMMENT.
 // -----------------------------------------------------------------------------
 
 extern "C" int propagate(void) {
@@ -48,7 +49,7 @@ extern "C" int propagate(void) {
     // SPEC 18: the forecast the record carries flies inside its span; the theory is not initialized when every time is
     // there and the record carries no covariance
     carried::Track track;
-    if (const int rc = carried::read(set.record, set.row, track)) return rc;
+    if (const int rc = carried::read(set.record, set.row, f->payload, f->payload_length, track)) return rc;
     bool all_carried = !track.empty() && (set.record->COVARIANCE_DATA() == nullptr || set.record->COVARIANCE_DATA()->size() == 0);
     for (size_t k = 0; all_carried && k < tw.size(); ++k)
       all_carried = track.covers(((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * 86400.0);
@@ -102,7 +103,7 @@ extern "C" int propagate(void) {
     }
     flatbuffers::FlatBufferBuilder fbb(tw.size() * (with_cov ? 480u : 140u) + 8192u);
     std::vector<flatbuffers::Offset<ephemerisDataBlock>> blocks;
-    char text[48], start[48], stop[48], why[160];
+    char text[48], start[48], stop[48], why[320];
     int rc = 0;
     // The object the set describes (NORAD number, name, designator) goes to the block, so a fit of the ephemeris names its set.
     flatbuffers::Offset<CAT> object_offset;
@@ -121,6 +122,7 @@ extern "C" int propagate(void) {
     {
       std::vector<flatbuffers::Offset<ephemerisDataLine>> lines(tw.size());
       std::vector<flatbuffers::Offset<covarianceMatrixLine>> cov_lines(with_cov ? tw.size() : 0);
+      std::vector<uint8_t> source(tw.size(), 0);  ///< 1: the state is the carried forecast's (SPEC 18.8)
       const bool use_raw_fb = (xs != nullptr && xpt::is_ap_ctx(xs->ctx)) || (with_cov && xpt::is_ap_ctx(cprop.b.sats[0].ctx));
       bool have_ephem_vt = false, have_cov_vt = false;
       flatbuffers::uoffset_t vt_ephem = 0, vt_cov = 0;
@@ -133,11 +135,13 @@ extern "C" int propagate(void) {
         const double ts = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * 86400.0;
         // SPEC 18: the carried forecast; GCRF and EME2000 straight from its axes (the exact matrix turns the covariance)
         bool in_gcrf = false;
-        if (track.covers(ts)) {  // the covariance stays the theory's (version 1)
+        source[k] = track.covers(ts);
+        if (source[k]) {  // the covariance stays the theory's
           in_gcrf = g.axes != oem::Axes::Teme;
-          if (!(in_gcrf ? carried::at_gcrf(track, ts, r, v) : carried::at(track, ts, r, v))) {
-            std::snprintf(why, sizeof why, "No GCRF axes at %s (outside ERFA's calendar).", text);
-            rc = oem::refuse("frame-failed", why);
+          if (const int32_t e = in_gcrf ? carried::at_gcrf(track, ts, r, v) : carried::at(track, ts, r, v)) {
+            // a segment read as the time first needs it: refused by name as at load
+            std::snprintf(why, sizeof why, "%s (%s)", carried::refusal_text(e), text);
+            rc = oem::refuse(carried::refusal_name(e), why);
             break;
           }
           if (with_cov) {
@@ -320,13 +324,26 @@ extern "C" int propagate(void) {
         }
       }
       if (rc == 0) {
-        oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
-        oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
         const auto frame = oem::rfm_of(fbb, g.axes);
         const auto cov_frame = with_cov ? oem::rfm_of(fbb, g.axes) : flatbuffers::Offset<RFM>(0);
-        blocks.push_back(CreateephemerisDataBlockDirect(fbb, nullptr, object_offset, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
-                                                        nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6,
-                                                        nullptr, &lines, with_cov ? &cov_lines : nullptr));
+        // SPEC 18.8: a record carrying a forecast writes a block per run of states from one source, its COMMENT the
+        // source's label; a record without one, one block without a COMMENT
+        for (size_t k0 = 0; k0 < tw.size();) {
+          size_t k1 = tw.size() - 1;
+          if (!track.empty())
+            for (k1 = k0; k1 + 1 < tw.size() && source[k1 + 1] == source[k0];) ++k1;
+          oem::iso_text(tw[k0], tf[k0], 0.0, start, sizeof start);
+          oem::iso_text(tw[k1], tf[k1], 0.0, stop, sizeof stop);
+          const char* label = track.empty() ? nullptr : source[k0] ? "CARRIED FORECAST: the forecast the record carries, inside its span (SPEC 18)"
+                                                                   : "THEORY: the record's element set, outside the carried span (SPEC 18)";
+          const std::vector<flatbuffers::Offset<ephemerisDataLine>> part(lines.begin() + static_cast<std::ptrdiff_t>(k0), lines.begin() + static_cast<std::ptrdiff_t>(k1 + 1));
+          std::vector<flatbuffers::Offset<covarianceMatrixLine>> cov_part;
+          if (with_cov) cov_part.assign(cov_lines.begin() + static_cast<std::ptrdiff_t>(k0), cov_lines.begin() + static_cast<std::ptrdiff_t>(k1 + 1));
+          blocks.push_back(CreateephemerisDataBlockDirect(fbb, label, object_offset, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start,
+                                                          nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6,
+                                                          nullptr, &part, with_cov ? &cov_part : nullptr));
+          k0 = k1 + 1;
+        }
       }
     }
     if (xs != nullptr) xpt::xp_release(*xs);

@@ -5,6 +5,10 @@
 // - sdnap_epochs_set_at, sdnap_epochs_at (TEME) and propagate_epochs (TEME) give propagate's states of the same record
 //   at 200 times inside the span to 1e-9 km (the store times the forecast by the call's split Julian date), at 20 after
 //   it to 1e-5 km (the theory, which the store times in minutes from J2000), and there the plain record's state;
+// - every state labeled (SPEC 18.8): propagate_epochs' blocks "CARRIED FORECAST" inside the span and "THEORY" after it,
+//   as propagate's, and sdnap_epochs_source_at 1 and 0 at the same times;
+// - records split by day (one object's forecast carried by two records, each half its span): the store flies, at every
+//   time, the set whose span holds it, as propagate flies that record (to 1e-9 km), labeled carried;
 // - the record unpacked and packed again by the SDS bindings flies the same, bit for bit;
 // - the store's bytes count the forecast it holds (sdnap_epochs_stats).
 // JS only moves bytes and compares numbers the module produced.
@@ -65,9 +69,16 @@ for (let k = 0; k < outside.length; k++) check(dist(ref[inside.length + k].r, pl
   const o = await d.invoke({ methodId: "propagate_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: gto.ocm }, configuration({ output: { EPOCHS: times.map(isoAt), FRAME: pcfOutputFrame.TEME } })] });
   check(o.statusCode === 0, `propagate_epochs: ${o.errorCode} ${o.errorMessage}`);
   if (o.statusCode === 0) {
-    const lines = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(o.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+    const blocks = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(o.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK;
+    const lines = blocks.flatMap((b) => b.EPHEMERIS_DATA_LINES.map((l) => Object.assign(l, { source: b.COMMENT.split(":")[0] })));
     const over = Math.max(...lines.map((l, k) => Math.max(dist([l.X, l.Y, l.Z], ref[k].r), dist([l.X_DOT, l.Y_DOT, l.Z_DOT], ref[k].v)) / bound(k)));
     check(over < 1, `propagate_epochs is farther from propagate's states than the bound (${over} of it)`);
+    // SPEC 18.8: every state labeled, as propagate labels it
+    check(lines.length === times.length && lines.every((l, k) => l.source === (k < inside.length ? "CARRIED FORECAST" : "THEORY") && l.source === ref[k].source.split(":")[0]),
+      `propagate_epochs' labels: ${[...new Set(lines.map((l) => l.source))].join(", ")} in ${blocks.length} blocks`);
+    // and sdnap_epochs_source_at at the same times
+    const codes = times.map((t, k) => { const { whole, frac } = jdOf(ref[k].epoch); x.sdnap_epochs_source_at(whole, frac, gi, 1, p); return new Int32Array(d.memory.buffer, p, 1)[0]; });
+    check(codes.every((c, k) => c === (k < inside.length ? 1 : 0)), "sdnap_epochs_source_at does not label the store's states as carried inside the span and theory after it");
   }
 }
 // unpacked and packed again
@@ -75,6 +86,31 @@ for (let k = 0; k < outside.length; k++) check(dist(ref[inside.length + k].r, pl
   const again = repackOcm(gto.ocm, () => {});
   const a = await fly(h, again, times.slice(0, 50), pcfOutputFrame.TEME);
   check(a.every((s, k) => s.r.every((v, j) => Object.is(v, ref[k].r[j])) && s.v.every((v, j) => Object.is(v, ref[k].v[j]))), "the record repacked by the SDS bindings flies otherwise");
+}
+// records split by day (SPEC 18.3): one object's forecast carried by two records, its first half and its second, one
+// series of two sets; at every time the store flies the set whose span holds it (the later set's where both do), as
+// propagate flies that record, labeled carried
+{
+  const { fitCarried } = await import("./lib/carried.mjs");
+  const c = CLASSES.find((q) => q.name.startsWith("GTO"));
+  const half = gto.span / 2;
+  const a = (await fitCarried(h, c, gto.oem, [0, half])).ocm, b = (await fitCarried(h, c, gto.oem, [half, gto.span])).ocm;
+  const r2 = await d.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: new Uint8Array([...sizePrefixed(a), ...sizePrefixed(b)]) }] });
+  check(r2.statusCode === 0 && x.sdnap_epochs_count() === 1, `two day records of one object: ${r2.errorCode ?? ""} ${x.sdnap_epochs_count()} series`);
+  const ts = Array.from({ length: 40 }, (_, k) => (gto.span * (k + 0.5)) / 40);
+  const ra = await fly(h, a, ts, pcfOutputFrame.TEME), rb = await fly(h, b, ts, pcfOutputFrame.TEME);
+  let worst = 0, labels = true;
+  for (let k = 0; k < ts.length; k++) {
+    const want = ts[k] <= half ? ra[k] : rb[k];
+    const { whole, frac } = jdOf(want.epoch);
+    x.sdnap_epochs_at(whole, frac, 0, 1, 0, p, 0, 0);
+    const s = Array.from(new Float64Array(d.memory.buffer, p, 6));
+    worst = Math.max(worst, dist(s, want.r), dist(s.slice(3), want.v));
+    x.sdnap_epochs_source_at(whole, frac, 0, 1, p);
+    labels = labels && new Int32Array(d.memory.buffer, p, 1)[0] === 1;
+  }
+  check(worst < 1e-9, `two day records: the store is ${worst} km from the record whose span holds the time`);
+  check(labels, "two day records: a state inside a span not labeled carried");
 }
 // the store's bytes
 {

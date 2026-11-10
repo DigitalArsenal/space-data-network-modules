@@ -2701,27 +2701,36 @@ trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low
 ## 18. The carried forecast (side B's method, outside the SGP4-XP specification)
 
 An `$OCM` element set may carry a numerical forecast of its object (`src/carried.inc`). Inside the forecast's span flight
-returns the forecast; everywhere else the theory, exactly as without it: a record without one flies as 0.6.6 (the build
-before it) flies it, bit for bit (`test/carried-identity.e2e.mjs`).
+returns the forecast; everywhere else the theory, exactly as without it: a record without one flies as 0.6.8 (the build
+before version 2 of the carried forecast) flies it, bit for bit (`test/carried-identity.e2e.mjs`). Version 2 (0.6.9)
+holds the record to 1 cm and 0.1 mm/s against the forecast at any time (18.4, 18.9), reads a fresh record's forecast
+only where it is flown (18.5), states the forecast's source in the record (18.6), fits the theory to the forecast's last
+part (18.7) and labels every output state (18.8).
 
 ### 18.1 Layout
 
 SDS 1.279.0 as pinned, no schema change. `POLYNOMIAL_POSITION_RECORDS`, one `PPEPositionRecord` per segment:
-`BASIS_TYPE` CHEBYSHEV, `NUM_COEFFICIENTS` n (fit writes 16, 24 or 32; a reader takes 1 to 64), `POS_COEFF_X`, `_Y`,
-`_Z` (km), `EPOCH_MID` (ISO 8601 UTC, microseconds), `EPOCH_HALF_SPAN` (s), `MAX_POSITION_RESIDUAL` and
-`RMS_POSITION_RESIDUAL` (km, against the densified forecast, 18.4). No velocity coefficients: the velocity is the series'
-derivative. `TRAJ_TYPE` POLYNOMIAL_POS, `TRAJ_BASIS` PREDICTED. The frame is the set's `TRAJ_REF_FRAME`: TEMEOFEPOCH at
-the set's `EPOCH` for AP with gravity terms, TEMEOFDATE otherwise. Each segment starts where the one before ends, within
-1 ms; the span is the first segment's `EPOCH_MID - EPOCH_HALF_SPAN` to the last's `EPOCH_MID + EPOCH_HALF_SPAN`, both
-included. Refused by name, on every flight: `POLYNOMIAL_OE_RECORDS` (carried-type-unsupported), records without
-`TRAJ_TYPE` POLYNOMIAL_POS or that type without records (carried-type-mismatch, carried-records-missing), `STATE_DATA`
-beside them (carried-state-data), another basis (carried-basis-unsupported), velocity coefficients
-(carried-velocity-coefficients), a malformed segment or a coefficient that is not finite (carried-segment-invalid), a
-gap or overlap over 1 ms (carried-gap).
+`BASIS_TYPE` CHEBYSHEV, `NUM_COEFFICIENTS` n (fit writes 16, 24, 32, 48 or 64; a reader takes 1 to 64), `POS_COEFF_X`,
+`_Y`, `_Z` (km), `EPOCH_MID` (ISO 8601 UTC, microseconds), `EPOCH_HALF_SPAN` (s), `MAX_POSITION_RESIDUAL` and
+`RMS_POSITION_RESIDUAL` (km, against the forecast's interpolant at the points checked, 18.4). No velocity coefficients:
+the velocity is the series' derivative. `TRAJ_TYPE` POLYNOMIAL_POS, `TRAJ_BASIS` PREDICTED, `TRAJECTORY_BLOCKS` and
+`METADATA` START_TIME and STOP_TIME (18.6). The frame is the set's `TRAJ_REF_FRAME`: TEMEOFEPOCH at the set's `EPOCH` for
+AP with gravity terms, TEMEOFDATE otherwise. Each segment starts where the one before ends, within 1 ms; the span is the
+first segment's `EPOCH_MID - EPOCH_HALF_SPAN` to the last's `EPOCH_MID + EPOCH_HALF_SPAN`, both included. Refused by
+name when the record is read (propagate, load_epochs, propagate_epochs): `POLYNOMIAL_OE_RECORDS`
+(carried-type-unsupported), records without `TRAJ_TYPE` POLYNOMIAL_POS or that type without records
+(carried-type-mismatch, carried-records-missing), `STATE_DATA` beside them (carried-state-data), and any fault of the
+first or last segment (below). Every other segment is read when a state first needs it (18.5): another basis
+(carried-basis-unsupported), velocity coefficients (carried-velocity-coefficients), a table that does not verify, a
+malformed segment or a coefficient that is not finite (carried-segment-invalid), a time inside the span the segment
+found does not hold within 1 ms (carried-gap). `propagate` refuses such a state by name; the store returns
+ORBPRO_PROP_BAD_INPUT (-4) for it; the record's other states fly (`test/carried-edges.e2e.mjs`).
 
 ### 18.2 Evaluation
 
-The segment holding t (the last starting at or before it), tau = (t - EPOCH_MID) / EPOCH_HALF_SPAN, p = sum c_k T_k(tau),
+The segment holding t (the last starting at or before it: the segment last flown or its successor, else interpolation
+search over the segments' start times, each segment read as the search reaches it), tau = (t - EPOCH_MID) /
+EPOCH_HALF_SPAN, p = sum c_k T_k(tau),
 p' = sum c_k T_k'(tau) / EPOCH_HALF_SPAN. M(t), GCRF to TEME of date: the module's output matrix, the one every GCRF
 state takes (gcrf.inc `gcrf_to_teme_output`, the quintic through 6-hour nodes with GMST82 unrounded), made orthonormal
 (one Newton step of the polar decomposition); dM/dt its central difference over +-60 s. TEMEOFEPOCH: Q0 = M(t0) at the
@@ -2735,41 +2744,51 @@ flies back in GCRF to the series alone.
 ### 18.3 Flight
 
 `propagate`: inside the span the forecast in OUTPUT.FRAME; the theory is not initialized when every requested time is
-inside the span and the record carries no `COVARIANCE_DATA`. `load_epochs`: the store keeps the segments;
-`sdnap_epochs_set_at`, `sdnap_epochs_at` and `propagate_epochs` time the forecast by the call's split Julian date
-(`test/carried-epochs.e2e.mjs`); selection and blend (SPEC 14) are unchanged. Covariance: the theory's (SPEC 12) beside
-the forecast's states. `sdnap_covariance_at`, `sdnap_covariance_full_at`, `events`, `maneuver` and `export_omm` use the
-theory; `export_omm` writes the set (an `$OMM` has no place for the forecast). At the span's ends the state jumps by the
-theory's distance from the forecast there (no blend), which fit states (18.4).
+inside the span and the record carries no `COVARIANCE_DATA`. `load_epochs`: the store keeps the record's bytes (one
+copy) and reads its segments as flown (18.5); `sdnap_epochs_set_at`, `sdnap_epochs_at` and `propagate_epochs` time the
+forecast by the call's split Julian date (`test/carried-epochs.e2e.mjs`). Selection (SPEC 14) first takes a set whose
+carried span holds t, the latest by epoch where more than one does, without a blend; elsewhere the selection and blend
+by epoch as before. Sets of one epoch carrying different spans are both kept (records split by day: one object's
+forecast in a record per day), ordered by their span's start; a later record of the same epoch and span replaces as
+before. Covariance: the theory's (SPEC 12) beside the forecast's states. `sdnap_covariance_at`,
+`sdnap_covariance_full_at`, `events`, `maneuver` and `export_omm` use the theory; `export_omm` writes the set (an `$OMM`
+has no place for the forecast). At the span's ends the state jumps by the theory's distance from the forecast there (no
+blend), which fit states (18.4) and 18.7 keeps small at the stop.
 
 ### 18.4 fit
 
 `$PCF` OUTPUT on fit names the forecast the record carries: START_TIME and STOP_TIME, both or neither; EPOCHS, FRAME
 other than UNSPECIFIED, STEP_SECONDS and MAXIMUM_STATES away from their defaults are refused by name
-(configuration-refused). The theory set is fitted exactly as without OUTPUT: the block marks its fit arc as before
-(USEABLE_STOP_TIME or FIT.HOLDOUT_HOURS), its later states held out and scored. The block's states, ascending, reach from
-at or before START_TIME to at or after STOP_TIME (carry-order, carry-not-covered). From those states and up to four
-beyond each end:
+(configuration-refused). The theory set is fitted as without OUTPUT but for its arc's end (18.7). The block's states,
+ascending, reach from at or before START_TIME to at or after STOP_TIME (carry-order, carry-not-covered). From those
+states and up to four beyond each end:
 
 1. Each state in GCRF (a GCRF or EME2000 block's own, undoing the fit's exact rotation; any other block's by M), then in
    the record's axes: Q0, or M with the velocity M v + dM/dt r.
-2. Consecutive states inside the span at most 0.1 rad of arc apart about the Earth's center (carry-states-sparse): 60 s
-   in low orbit and at the perigee of a transfer orbit. Measured on FFM states: 0.4 to 5 mm at 0.066 to 0.092 rad; 5 to
-   1,600 mm at 0.11 to 0.13 rad (120 s in low orbit).
+2. Consecutive states inside the span at most 0.05 rad of arc apart about the Earth's center (carry-states-sparse): 30 s
+   in low orbit and at the perigee of an e 0.9 orbit at 500 km. Measured, the 4-node Hermite's velocity error between
+   FFM states: at most 0.002 mm/s at 30 s; at 60 s (0.066 to 0.07 rad in low orbit) 0.017 mm/s at 500 km and 0.075 mm/s
+   at 300 km, too much of the 0.1 mm/s bound; 1.4 mm/s at 120 s.
 3. The interpolant: the 4-node Hermite of positions and velocities (degree 7); the 8-node Lagrange of the positions
-   when a state has no velocity, or when the velocities differ from that Lagrange's derivative, times the interval to
-   the neighbor, by more than 20 mm RMS (FFM: 3 to 11 mm in low orbit at 60 s, under 0.1 mm above; SGP4XP: 37 mm at
-   geosynchronous altitude, 1.3 m in low orbit: an analytic theory's velocity is not its position's derivative).
-4. Densified: four points per interval and the span's two ends.
-5. Segments from the span's start: the longest window of at least n points whose least squares (Householder QR; a
-   position row and a velocity row times EPOCH_HALF_SPAN / n per point, the window's two end points weighted 1e4 so that
-   consecutive segments share them: position and velocity continuous across a join) holds every point within 5 mm,
-   velocity times EPOCH_HALF_SPAN / n included; EPOCH_MID the window's middle at the text's microsecond. n is 16, 24 or
-   32, the one with the fewest bytes (112 + 24 n a segment). None holds: carry-tolerance (states too sparse, or a
+   when a state has no velocity, or when the velocities differ from that Lagrange's derivative by more than 0.05 mm/s
+   RMS (FFM's states, at the steps 2 allows: 0.0002 to 0.011 mm/s; SGP4 and SGP4XP: 20 to 70 mm/s in low orbit, an
+   analytic theory's velocity is not its position's derivative).
+4. Densified: four points per interval and the span's two ends; the interpolant halfway between consecutive points.
+5. Segments from the span's start: the longest window of at least n points whose least squares (Householder QR) holds,
+   within 5 mm and the velocity bound, every densified point of the window, the interpolant halfway between two, at
+   the window's 2n Chebyshev points (cos((j + 1/2) pi / 2n)) and halfway between those. The rows: position and velocity
+   at the 2n Chebyshev points (the series is pinned near the window's ends, where its high terms move between densified
+   points), the velocity row times 5 mm over the velocity bound; the window's end, and its start (the segment before's
+   own position, velocity and acceleration there, or the span's first point), weighted 1e4: consecutive segments meet in
+   position, velocity and acceleration, so the output's second difference has no step at a joint. The velocity bound:
+   0.05 mm/s (the Hermite path); 1 mm/s against the Lagrange's derivative (the positions-only path: that derivative
+   misses FFM states 30 s apart by up to 0.04 mm/s and steps by up to 0.12 mm/s where two windows meet; an analytic
+   theory's positions hold no tighter). EPOCH_MID the window's middle at the text's microsecond. n is 16, 24, 32, 48 or
+   64, the one with the fewest bytes (112 + 24 n a segment). None holds: carry-tolerance (states too sparse, or a
    forecast that is not smooth: a maneuver).
-6. `ORBIT_DETERMINATION.COMMENT`: the segments, the span, the bytes, the largest residual and the interpolant; at the
-   span's start and stop, the theory minus the forecast (km, and radial, in-track and cross-track in the forecast's UVW
-   axes): the jump flight makes there.
+6. `ORBIT_DETERMINATION.COMMENT`: the segments, the span, the bytes, the largest position and velocity residuals and the
+   interpolant; at the span's start and stop, the theory minus the forecast (km, and radial, in-track and cross-track in
+   the forecast's UVW axes): the jump flight makes there.
 
 ### 18.5 Bound and size
 

@@ -59,6 +59,8 @@ struct Extras {
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CVR>>> cov_realism = 0;
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> header_comment = 0;  ///< HEADER.COMMENT
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;  ///< the carried forecast (SPEC 18)
+  flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OCMTrajectoryBlock>>> trajectory = 0;  ///< its statement (SPEC 18.6)
+  std::string span_start, span_stop;  ///< its span: METADATA START_TIME and STOP_TIME
 };
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
@@ -238,7 +240,11 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
     s_designator = fbb.CreateString(designator);
   }
   const auto s_time = fbb.CreateString("UTC");
+  const auto s_span_start = x.span_start.empty() ? flatbuffers::Offset<flatbuffers::String>(0) : fbb.CreateString(x.span_start);
+  const auto s_span_stop = x.span_stop.empty() ? flatbuffers::Offset<flatbuffers::String>(0) : fbb.CreateString(x.span_stop);
   MetadataBuilder mb(fbb);
+  if (!s_span_start.IsNull()) mb.add_START_TIME(s_span_start);
+  if (!s_span_stop.IsNull()) mb.add_STOP_TIME(s_span_stop);
   if (!s_name.IsNull()) mb.add_OBJECT_NAME(s_name);
   if (!s_intl.IsNull()) mb.add_INTERNATIONAL_DESIGNATOR(s_intl);
   if (!s_catalog.IsNull()) {
@@ -280,6 +286,7 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
     b.add_TRAJ_TYPE(trajectoryType_POLYNOMIAL_POS);
     b.add_POLYNOMIAL_POSITION_RECORDS(x.forecast);
     b.add_TRAJ_BASIS(ocmTrajectoryBasis_PREDICTED);
+    if (!x.trajectory.IsNull()) b.add_TRAJECTORY_BLOCKS(x.trajectory);
   }
   b.add_MEAN_ELEMENTS(mean);
   FinishOCMBuffer(fbb, b.Finish());
@@ -357,10 +364,16 @@ inline int rows_of(const Perturbations* pt, std::vector<atm::SpwDay>& rows) {
 }
 
 /// Decodes one $OCM element set (plain or size-prefixed): 0 with `s` filled, or 3 with the named refusal set.
+inline int decode_view(const OCM* o, Set& s);
 inline int decode(const uint8_t* p, uint32_t n, Set& s) {
   s = Set{};
   const OCM* o = view(p, n);
   if (o == nullptr) return refuse("invalid-ocm", "An 'ocm' payload is not a verifiable SDS $OCM.");
+  return decode_view(o, s);
+}
+/// decode() of a record view() has verified.
+inline int decode_view(const OCM* o, Set& s) {
+  s = Set{};
   s.record = o;
   if (o->CENTER_NAME() != nullptr && o->CENTER_NAME()->size() > 0 && !oem::same_text(o->CENTER_NAME()->c_str(), "EARTH"))
     return refuse("unsupported-center", "An 'ocm' record is not centered on the Earth (CENTER_NAME); the theories here are geocentric.");

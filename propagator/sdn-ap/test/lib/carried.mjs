@@ -31,14 +31,15 @@ export function isoAt(s) {
 export const revPerDay = (a) => (Math.sqrt(MU / a ** 3) * 86400) / (2 * Math.PI);
 
 /**
- * The orbit classes of SPEC 18's bound: a, e, i and the step of the fit's states (s); `ap` flies AP under a gravity cap
- * (TEMEOFEPOCH), otherwise stock SGP4XP (TEMEOFDATE); `days` the carried span.
+ * The orbit classes of SPEC 18's bound: a, e, i and the step of the fit's states (s: at most 0.05 rad of arc, 30 s in
+ * low orbit); `ap` flies AP under a gravity cap (TEMEOFEPOCH), otherwise stock SGP4XP (TEMEOFDATE); `days` the carried
+ * span.
  */
 export const CLASSES = Object.freeze([
-  { name: "LEO 300 km", a: 6678.137, e: 0.0005, i: 51.6, step: 60, days: 1, ap: true },
-  { name: "LEO 500 km", a: 6878.137, e: 0.001, i: 97.4, step: 60, days: 1, ap: false },
-  { name: "LEO 830 km", a: 7208.137, e: 0.0012, i: 98.7, step: 60, days: 1, ap: true },
-  { name: "LEO 1336 km", a: 7714.137, e: 0.0008, i: 66.04, step: 60, days: 1, ap: false },
+  { name: "LEO 300 km", a: 6678.137, e: 0.0005, i: 51.6, step: 30, days: 1, ap: true },
+  { name: "LEO 500 km", a: 6878.137, e: 0.001, i: 97.4, step: 30, days: 1, ap: false },
+  { name: "LEO 830 km", a: 7208.137, e: 0.0012, i: 98.7, step: 30, days: 1, ap: true },
+  { name: "LEO 1336 km", a: 7714.137, e: 0.0008, i: 66.04, step: 30, days: 1, ap: false },
   { name: "MEO", a: 26560, e: 0.005, i: 55, step: 120, days: 2, ap: true },
   { name: "GEO", a: 42164.2, e: 0.0002, i: 0.05, step: 120, days: 3, ap: true },
   { name: "IGSO", a: 42164.2, e: 0.075, i: 55, step: 120, days: 3, ap: false },
@@ -46,6 +47,7 @@ export const CLASSES = Object.freeze([
   { name: "Molniya", a: 26560, e: 0.74, i: 63.4, step: 30, days: 1, ap: false, argp: 270 },
   { name: "THEMIS-like", a: 40940, e: 1 - 7278.137 / 40940, i: 10, step: 30, days: 2, ap: false },
   { name: "TESS-like", a: 241800, e: 0.55, i: 37, step: 120, days: 14, ap: false },
+  { name: "HEO e 0.9", a: 6878.137 / 0.1, e: 0.9, i: 63.4, step: 30, days: 2, ap: false, argp: 270 },
 ]);
 
 /** A command harness on this build (or `file`). */
@@ -67,7 +69,10 @@ export async function refusal(h, methodId, inputs) {
   return r.statusCode === 0 ? null : r.errorCode;
 }
 
-export const oemLines = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+/** Every state of an $OEM in order, its block's COMMENT beside it as `source` (SPEC 18.8: a block per run of states
+ * from one source when the record carries a forecast). */
+export const oemLines = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack().EPHEMERIS_DATA_BLOCK
+  .flatMap((b) => b.EPHEMERIS_DATA_LINES.map((l) => Object.assign(l, { source: b.COMMENT })));
 export const ocmOf = (bytes) => OCM.getRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack();
 
 /** The seed set of a class: stock SGP4XP or AP under a cap, at perigee at the epoch. */
@@ -82,7 +87,7 @@ export async function fly(h, set, times, frame = pcfOutputFrame.GCRF) {
   for (let k = 0; k < times.length; k += 50000) {
     const part = times.slice(k, k + 50000);
     const o = await call(h, "propagate", flight([set], { output: { EPOCHS: part.map(isoAt), FRAME: frame } }));
-    oemLines(o.find((q) => q.portId === "ephemeris").payload).forEach((l, j) => out.push({ t: part[j], r: [l.X, l.Y, l.Z], v: [l.X_DOT, l.Y_DOT, l.Z_DOT], epoch: l.EPOCH }));
+    oemLines(o.find((q) => q.portId === "ephemeris").payload).forEach((l, j) => out.push({ t: part[j], r: [l.X, l.Y, l.Z], v: [l.X_DOT, l.Y_DOT, l.Z_DOT], epoch: l.EPOCH, source: l.source }));
   }
   return out;
 }

@@ -25,6 +25,8 @@ import { jdOf } from "./lib/frames.mjs";
 // the build this branch adds the carried forecast to: review-0's 0.6.6 (the cost lane's), or 0.6.5 (main) with
 // CARRIED_IDENTITY_BASE=0.6.5
 const BASES = {
+  "0.6.8": { commit: "7d5b6ef7d8ab90c83ec7fecdaf539a08dc68691e", sha256: "c19f8cae856ba0117763873e068438a8d493987a288a9648f79d194263a6b6b0" },
+  "0.6.7": { commit: "64e5f2018afba14a0abd58cfafad007ea2e17215", sha256: "1104598edeebe41cb8daa81bba3c9e82e3181d012a053aefd07d09611b2b81f5" },
   "0.6.6": { commit: "d74d3129db071f9aaaffba3cca421453b348d274", sha256: "5566784bd36613ed3cd4f963f6e2e52b40e08819dfe49e5362b34102413a291c" },
   "0.6.5": { commit: "3a3661eaf9caa84fc776a9959494e1ca14358db1", sha256: "f0b8352a43f305fbdd1ad15c9894e2d28f3179528838cae8f967bf1ea5d089b7" },
 };

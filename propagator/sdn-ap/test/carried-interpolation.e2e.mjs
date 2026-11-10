@@ -7,7 +7,9 @@
 // 10 s, offset from the grid) and compared with the seed flown at the same times; and the record's own states at the
 // step (positions and velocities that agree) are fitted again and that record compared with the first:
 // - in GCRF and in TEME, the largest position error is under 1 cm (SPEC 18's bound) on both paths, and the velocity
-//   error under 1 mm/s where velocities come in;
+//   error under 1 mm/s where velocities come in (the first record, built from an analytic theory's positions to 1 mm/s
+//   in velocity, is not smooth to 0.1 mm/s on the step's scale: the referee's 0.1 mm/s is carried-compression's, on
+//   numerical forecasts);
 // - the record is the same as the plain fit's but for POLYNOMIAL_POSITION_RECORDS, TRAJ_TYPE POLYNOMIAL_POS, TRAJ_BASIS
 //   PREDICTED, the COMMENT lines on the forecast and FIT_STATISTICS.PCF_CID (its $PCF has OUTPUT): the theory set is
 //   fitted as without them;
@@ -48,6 +50,7 @@ for (const c of CLASSES) {
   // the set fitted as without the forecast: everything but the forecast's fields and COMMENT lines
   const strip = (o) => { const t = JSON.parse(JSON.stringify(o, (k, v) => (typeof v === "bigint" ? String(v) : v)));
     delete t.POLYNOMIAL_POSITION_RECORDS; delete t.TRAJ_TYPE; delete t.TRAJ_BASIS; delete t.ORBIT_DETERMINATION.FIT_STATISTICS.PCF_CID;
+    delete t.TRAJECTORY_BLOCKS; delete t.METADATA.START_TIME; delete t.METADATA.STOP_TIME;
     t.ORBIT_DETERMINATION.COMMENT = t.ORBIT_DETERMINATION.COMMENT.filter((l) => !l.startsWith("carried")); return JSON.stringify(t); };
   check(strip(carried) === strip(plain), `${c.name}: the record differs from the plain fit beyond the carried forecast`);
   // positions (the Lagrange path) against the seed; then the record's own states (velocities that agree with the

@@ -10,11 +10,14 @@
 //   to within 0.1 mm (the segments share their end points);
 // - a record carrying COVARIANCE_DATA writes the theory's covariance beside the forecast's states, the same lines as
 //   the plain record's (version 1);
+// - every state is labeled: propagate writes a block per run of states from one source, its COMMENT "CARRIED
+//   FORECAST" or "THEORY", and sdnap_epochs_source_at gives the store's 1 or 0 at the same times (SPEC 18.8);
 // - refused by name: OUTPUT with START_TIME alone, OUTPUT.EPOCHS or OUTPUT.FRAME on fit (configuration-refused), a
-//   window the block does not reach (carry-not-covered), states 120 s apart in low orbit (carry-states-sparse); records
-//   with a gap between segments (carried-gap), TRAJ_TYPE other than POLYNOMIAL_POS (carried-type-mismatch), a basis
-//   other than Chebyshev (carried-basis-unsupported), velocity coefficients (carried-velocity-coefficients), on
-//   propagate and on load_epochs.
+//   window the block does not reach (carry-not-covered), states 60 s apart in low orbit (carry-states-sparse); records
+//   with TRAJ_TYPE other than POLYNOMIAL_POS (carried-type-mismatch), a first segment of a basis other than Chebyshev
+//   (carried-basis-unsupported) or with velocity coefficients (carried-velocity-coefficients), on propagate and on
+//   load_epochs; an inner segment missing (carried-gap), of another basis or short of coefficients
+//   (carried-segment-invalid) when a state first needs it (SPEC 18.5): on propagate by name, from the store as -4.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/carried-edges.e2e.mjs
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
@@ -40,6 +43,21 @@ const span = rec.span;
   for (const k of [1, 2]) {
     check(dist(carried[k].r, truth[k].r) < 1e-5, `${times[k]} s, the span's ${k === 1 ? "first" : "last"} instant: ${dist(carried[k].r, truth[k].r) * 1e6} mm from the forecast`);
     check(dist(carried[k].r, plain[k].r) > 1e-4, `${times[k]} s: the theory's state, not the forecast (they differ by under 10 cm)`);
+  }
+  // the labels: three blocks (theory, carried, theory) on propagate; the store's codes at the same times
+  const labels = carried.map((s) => (s.source ?? "").split(":")[0]);
+  check(JSON.stringify(labels) === JSON.stringify(["THEORY", "CARRIED FORECAST", "CARRIED FORECAST", "THEORY"]), `propagate's labels: ${labels.join(", ")}`);
+  check(plain.every((s) => s.source == null || s.source === ""), "a record without a forecast writes a label");
+  {
+    const { createStandaloneHarness } = await import("space-data-module-sdk/testing/isomorphic");
+    const { wasmPath } = await import("./lib/module.mjs");
+    const { jdOf } = await import("./lib/frames.mjs");
+    const d = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
+    const x = d.instance.exports, p = x.sdnap_alloc(16);
+    const loaded = await d.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: rec.ocm }] });
+    check(loaded.statusCode === 0, `load_epochs: ${loaded.errorCode}`);
+    const codes = carried.map((s) => { const { whole, frac } = jdOf(s.epoch); x.sdnap_epochs_source_at(whole, frac, 0, 1, p); return new Int32Array(d.memory.buffer, p, 1)[0]; });
+    check(JSON.stringify(codes) === "[0,1,1,0]", `the store's labels: ${codes.join(", ")}`);
   }
   // the jump fit states at each end
   const comment = ocmOf(rec.ocm).ORBIT_DETERMINATION.COMMENT;
@@ -94,24 +112,47 @@ const span = rec.span;
   check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(600), FRAME: pcfOutputFrame.GCRF })) === "configuration-refused", "OUTPUT.FRAME on fit is not refused");
   check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(span + 3600) })) === "carry-not-covered", "a window past the block is not refused");
   const sparse = forecastOem(rec.states.filter((_, k) => k % 2 === 0), 12);
-  check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(span) }, sparse)) === "carry-states-sparse", "states 120 s apart in low orbit are not refused");
+  check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(span) }, sparse)) === "carry-states-sparse", "states 60 s apart in low orbit are not refused");
 }
 
-// refusals at flight: propagate and load_epochs
+// refusals at flight: propagate and load_epochs. A record's first and last segments (its span) are read at load; any
+// other when a state first needs it (SPEC 18.5): a fault there refuses that state, by name on propagate and as
+// ORBPRO_PROP_BAD_INPUT (-4) from the store, and the record's other states fly
 {
+  const segs = ocmOf(rec.ocm).POLYNOMIAL_POSITION_RECORDS;
+  const epoch = Date.parse(`${isoAt(0)}Z`);
+  const midOf = (s) => (Date.parse(`${s.EPOCH_MID.slice(0, 19)}Z`) - epoch) / 1000 + Number(`0${s.EPOCH_MID.slice(19)}`);
+  const inner = midOf(segs[2]);  // inside the third segment
+  const first = isoAt(60);       // inside the first
   const variants = {
-    "carried-gap": (t) => { t.POLYNOMIAL_POSITION_RECORDS.splice(2, 1); },
-    "carried-type-mismatch": (t) => { t.TRAJ_TYPE = 0; },
-    "carried-basis-unsupported": (t) => { t.POLYNOMIAL_POSITION_RECORDS[0].BASIS_TYPE = 1; },
-    "carried-velocity-coefficients": (t) => { const p = t.POLYNOMIAL_POSITION_RECORDS[0]; p.HAS_VELOCITY_COEFFICIENTS = true; p.VEL_COEFF_X = p.POS_COEFF_X; p.VEL_COEFF_Y = p.POS_COEFF_Y; p.VEL_COEFF_Z = p.POS_COEFF_Z; },
+    "carried-type-mismatch": [(t) => { t.TRAJ_TYPE = 0; }, first, true],
+    "carried-basis-unsupported": [(t) => { t.POLYNOMIAL_POSITION_RECORDS[0].BASIS_TYPE = 1; }, first, true],
+    "carried-velocity-coefficients": [(t) => { const p = t.POLYNOMIAL_POSITION_RECORDS[0]; p.HAS_VELOCITY_COEFFICIENTS = true; p.VEL_COEFF_X = p.POS_COEFF_X; p.VEL_COEFF_Y = p.POS_COEFF_Y; p.VEL_COEFF_Z = p.POS_COEFF_Z; }, first, true],
+    "carried-gap": [(t) => { t.POLYNOMIAL_POSITION_RECORDS.splice(2, 1); }, isoAt(inner), false],
+    "carried-basis-unsupported ": [(t) => { t.POLYNOMIAL_POSITION_RECORDS[2].BASIS_TYPE = 1; }, isoAt(inner), false],
+    "carried-segment-invalid": [(t) => { t.POLYNOMIAL_POSITION_RECORDS[2].POS_COEFF_Y = t.POLYNOMIAL_POSITION_RECORDS[2].POS_COEFF_Y.slice(1); }, isoAt(inner), false],
   };
-  for (const [code, edit] of Object.entries(variants)) {
-    const bad = repackOcm(rec.ocm, edit);
-    check((await refusal(h, "propagate", flight([bad], { output: { EPOCHS: [isoAt(60)] } }))) === code, `propagate does not refuse ${code}`);
-    check((await refusal(h, "load_epochs", [{ portId: "ocm", typeRef: T("OCM"), payload: bad }])) === code, `load_epochs does not refuse ${code}`);
+  const { createStandaloneHarness } = await import("space-data-module-sdk/testing/isomorphic");
+  const { wasmPath } = await import("./lib/module.mjs");
+  const { jdOf } = await import("./lib/frames.mjs");
+  const d = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
+  const x = d.instance.exports, p = x.sdnap_alloc(64);
+  for (const [name, [edit, when, atLoad]] of Object.entries(variants)) {
+    const code = name.trim(), bad = repackOcm(rec.ocm, edit);
+    check((await refusal(h, "propagate", flight([bad], { output: { EPOCHS: [when] } }))) === code, `propagate does not refuse ${name} at ${when}`);
+    const loaded = await d.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: bad }] });
+    if (atLoad) {
+      check(loaded.statusCode !== 0 && loaded.errorCode === code, `load_epochs does not refuse ${name}`);
+    } else {
+      check(loaded.statusCode === 0, `load_epochs refuses ${name}, a fault inside the span it reads as flown`);
+      const { whole, frac } = jdOf(when), t0 = jdOf(first);
+      check(x.sdnap_epochs_set_at(0, 0, whole, frac, p) === -4, `the store's state at ${when} is not refused (ORBPRO_PROP_BAD_INPUT) for ${name}`);
+      check(x.sdnap_epochs_set_at(0, 0, t0.whole, t0.frac, p) === 0, `the store's state at ${first}, in a sound segment, is refused for ${name}`);
+      check((await refusal(h, "propagate", flight([bad], { output: { EPOCHS: [first] } }))) === null, `propagate refuses ${first}, in a sound segment, for ${name}`);
+    }
   }
   // the same record repacked unchanged flies
-  check((await refusal(h, "propagate", flight([repackOcm(rec.ocm, () => {})], { output: { EPOCHS: [isoAt(60)] } }))) === null, "the record repacked unchanged is refused");
+  check((await refusal(h, "propagate", flight([repackOcm(rec.ocm, () => {})], { output: { EPOCHS: [isoAt(60), isoAt(inner)] } }))) === null, "the record repacked unchanged is refused");
 }
 
 if (failures.length) {

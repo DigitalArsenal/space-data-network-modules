@@ -46,7 +46,7 @@ struct Entry {
   Forces forces{};
   const atm::Atmosphere* atmosphere = nullptr;
   int32_t first_day = 0, last_day = 0;  ///< RECORDS: the MJDs it flies through (its first row's day + 1, its last row's day)
-  std::shared_ptr<const carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none
+  std::shared_ptr<carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none: read as flown
 };
 
 /// An initialized record of one set (the lazy cache: two per series).
@@ -65,6 +65,7 @@ struct Series {
   int32_t theory = 0;         ///< sdnap::Theory (the record family)
   int32_t met = 0;            ///< MEAN_ELEMENT_THEORY
   uint32_t first = 0, count = 0;  ///< into Store::entries, by epoch
+  bool carried = false;           ///< a set carries a forecast (SPEC 18.3: selection prefers a span holding t)
   Slot slots[2];
   uint32_t next = 0;              ///< the slot replaced next
 };
@@ -155,15 +156,16 @@ struct Record {
   cov::Set* cov = nullptr;
   Forces forces{};
   ocm::Weather weather;
-  std::shared_ptr<const carried::Track> track;
+  std::shared_ptr<carried::Track> track;  ///< reading the call's bytes until the record is kept (carried::keep)
 };
 inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r = Record{};
-  if (const OCM* o = ocm::view(p, n); o != nullptr && o->CENTER_NAME() != nullptr && o->CENTER_NAME()->size() > 0 &&
-                                      !oem::same_text(o->CENTER_NAME()->c_str(), "EARTH"))
-    return 0;
+  // verified once: a record not centered on the Earth is skipped, any other decoded from the same view
+  const OCM* o = ocm::view(p, n);
+  if (o == nullptr) return ocm::refuse("invalid-ocm", "An 'ocm' payload is not a verifiable SDS $OCM."), -1;
+  if (o->CENTER_NAME() != nullptr && o->CENTER_NAME()->size() > 0 && !oem::same_text(o->CENTER_NAME()->c_str(), "EARTH")) return 0;
   ocm::Set s;
-  if (ocm::decode(p, n, s) != 0) return -1;
+  if (ocm::decode_view(o, s) != 0) return -1;
   r.row = s.row;
   r.met = s.theory;
   r.norad = s.id.norad;
@@ -174,7 +176,7 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r.weather = std::move(s.weather);
   {
     auto track = std::make_shared<carried::Track>();
-    if (carried::read(s.record, r.row, *track) != 0) return -1;
+    if (carried::read(s.record, r.row, p, n, *track) != 0) return -1;
     if (!track->empty()) r.track = std::move(track);
   }
   if (r.row.theory != kTheorySgp4) {
@@ -269,7 +271,9 @@ inline int build(Store& st, const Config& cfg) {
     if (x.object_id != y.object_id) return x.object_id < y.object_id;
     if (x.met != y.met) return x.met < y.met;
     if (x.originator != y.originator) return x.originator < y.originator;
-    return epoch_of(x) < epoch_of(y);
+    if (epoch_of(x) != epoch_of(y)) return epoch_of(x) < epoch_of(y);
+    // SPEC 18.3: sets of one epoch carrying different spans (records split by day) by their span's start
+    return (x.track ? x.track->start : -HUGE_VAL) < (y.track ? y.track->start : -HUGE_VAL);
   });
   // a series flies one force model: its sets' forces equal its first's
   for (uint32_t k = 1; k < order.size(); ++k) {
@@ -295,7 +299,11 @@ inline int build(Store& st, const Config& cfg) {
     for (uint32_t q = k; q < e; ++q) {
       Record& r = recs[order[q]];
       if (epoch_of(r) < oldest_kept) { ++st.stats.aged; delete r.cov; r.cov = nullptr; continue; }
-      if (!keep.empty() && epoch_of(recs[keep.back()]) == epoch_of(r)) {
+      // a later record of the same epoch replaces, unless the two carry different spans (records split by day)
+      auto same_span = [](const Record& a, const Record& b) {
+        return !a.track == !b.track && (!a.track || (a.track->start == b.track->start && a.track->stop == b.track->stop));
+      };
+      if (!keep.empty() && epoch_of(recs[keep.back()]) == epoch_of(r) && same_span(recs[keep.back()], r)) {
         ++st.stats.duplicate;
         delete recs[keep.back()].cov;
         recs[keep.back()].cov = nullptr;
@@ -326,6 +334,10 @@ inline int build(Store& st, const Config& cfg) {
         en.epoch = epoch_of(recs[q]);
         en.cov = recs[q].cov;
         en.track = recs[q].track;
+        if (en.track) {
+          carried::keep(*en.track);  // a kept record's bytes, copied once (the call's are freed after it)
+          s.carried = true;
+        }
         en.forces = recs[q].forces;
         en.atmosphere = intern(st, recs[q]);
         if (en.atmosphere != nullptr && !en.atmosphere->days.empty()) {
@@ -428,12 +440,13 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
 inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr) {
   have_p = false;
   if (const int32_t rc = rows_cover(st, st.entries[s.first + k], t)) return rc;
-  if (const carried::Track* tr = st.entries[s.first + k].track.get()) {
-    // SPEC 18: inside its span the forecast the record carries; the covariance stays the theory's (version 1)
+  if (carried::Track* tr = st.entries[s.first + k].track.get()) {
+    // SPEC 18: inside its span the forecast the record carries; the covariance stays the theory's
     const ElementRow& row = st.entries[s.first + k].row;
     const double ts = jd != nullptr ? ((jd[0] - row.epoch_jd_whole) + (jd[1] - row.epoch_jd_frac)) * 86400.0 : (t - st.entries[s.first + k].epoch) * 60.0;
     if (tr->covers(ts)) {
-      if (!carried::at(*tr, ts, r, v)) return kPropRefused;
+      // a segment read now that does not verify or falls short of the time: the input's fault (malformed record)
+      if (const int32_t e = carried::at(*tr, ts, r, v)) return e == carried::kFrame ? kPropRefused : ORBPRO_PROP_BAD_INPUT;
       if (P != nullptr && st.entries[s.first + k].cov != nullptr) {
         Slot& q = slot_of(st, s, k, true);
         if (q.error == 0 && q.cp != nullptr) {
@@ -466,6 +479,14 @@ inline Choice choose(const Store& st, const Series& s, double t) {
   const Entry* E = st.entries.data() + s.first;
   const uint32_t n = s.count;
   if (n == 1) return c;
+  // SPEC 18.3: a set whose carried span holds t flies there, the latest by epoch when more than one does (a fresher
+  // forecast), without a blend; elsewhere the selection by epoch
+  if (s.carried)
+    for (uint32_t k = n; k-- > 0;)
+      if (E[k].track && E[k].track->covers((t - E[k].epoch) * 60.0)) {
+        c.a = static_cast<int32_t>(k);
+        return c;
+      }
   // k = the first set with epoch > t
   uint32_t lo = 0, hi = n;
   while (lo < hi) { const uint32_t mid = (lo + hi) >> 1; if (E[mid].epoch <= t) lo = mid + 1; else hi = mid; }
@@ -550,6 +571,31 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
     have_p = true;
   }
   return kPropOk;
+}
+
+/// SPEC 18.8: where at() takes series s's state at the split Julian date (w, f) from: 0 the theory, 1 the forecast a set
+/// carries (inside its span), 2 a blend of a carried state and a theory state.
+inline int32_t source_at(const Store& st, const Series& s, double w, double f) {
+  const Choice c = choose(st, s, minutes_of(w, f));
+  auto carried = [&](int32_t j) {
+    const Entry& en = st.entries[s.first + static_cast<uint32_t>(j)];
+    return en.track && en.track->covers(((w - en.row.epoch_jd_whole) + (f - en.row.epoch_jd_frac)) * 86400.0);
+  };
+  const bool a = carried(c.a);
+  if (c.b < 0) return a ? 1 : 0;
+  return a == carried(c.b) ? (a ? 1 : 0) : 2;
+}
+/// Whether a set of series s carries a forecast.
+inline bool any_carried(const Store& st, const Series& s) {
+  for (uint32_t k = 0; k < s.count; ++k)
+    if (st.entries[s.first + k].track) return true;
+  return false;
+}
+/// The COMMENT of an $OEM block of states from one source (source_at's code).
+inline const char* source_label(int32_t src) {
+  return src == 1 ? "CARRIED FORECAST: the forecast a set carries, inside its span (SPEC 18)"
+         : src == 2 ? "BLEND: a carried forecast blended with the theory (SPEC 18)"
+                    : "THEORY: the sets' element sets, outside any carried span (SPEC 18)";
 }
 
 inline uint64_t bytes_of(const Store& st) {
@@ -671,8 +717,6 @@ extern "C" int propagate_epochs(void) {
         }
       }
       if (any_cov && cov_lines.size() != lines.size()) cov_lines.clear();  // a covariance on every state or on none
-      oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
-      oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
       const auto frame = oem::rfm_of(fbb, g.axes);
       const bool with_cov = !cov_lines.empty();
       const auto cov_frame = with_cov ? oem::rfm_of(fbb, g.axes) : flatbuffers::Offset<RFM>(0);
@@ -686,8 +730,26 @@ extern "C" int propagate_epochs(void) {
         if (!s_id.IsNull()) cb.add_OBJECT_ID(s_id);
         object = cb.Finish();
       }
-      blocks.push_back(CreateephemerisDataBlockDirect(fbb, nullptr, object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start, nullptr, nullptr,
-                                                      stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines, with_cov ? &cov_lines : nullptr));
+      // SPEC 18.8: a series with a set carrying a forecast writes a block per run of states from one source, labeled in
+      // its COMMENT; any other, one block without a COMMENT
+      const bool labeled = epochs::any_carried(st, s);
+      for (size_t k0 = 0; k0 < tw.size();) {
+        size_t k1 = tw.size() - 1;
+        int32_t src = 0;
+        if (labeled) {
+          src = epochs::source_at(st, s, tw[k0], tf[k0]);
+          for (k1 = k0; k1 + 1 < tw.size() && epochs::source_at(st, s, tw[k1 + 1], tf[k1 + 1]) == src;) ++k1;
+        }
+        oem::iso_text(tw[k0], tf[k0], 0.0, start, sizeof start);
+        oem::iso_text(tw[k1], tf[k1], 0.0, stop, sizeof stop);
+        const std::vector<flatbuffers::Offset<ephemerisDataLine>> part(lines.begin() + static_cast<std::ptrdiff_t>(k0), lines.begin() + static_cast<std::ptrdiff_t>(k1 + 1));
+        std::vector<flatbuffers::Offset<covarianceMatrixLine>> cov_part;
+        if (with_cov) cov_part.assign(cov_lines.begin() + static_cast<std::ptrdiff_t>(k0), cov_lines.begin() + static_cast<std::ptrdiff_t>(k1 + 1));
+        blocks.push_back(CreateephemerisDataBlockDirect(fbb, labeled ? epochs::source_label(src) : nullptr, object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC,
+                                                        start, nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &part,
+                                                        with_cov ? &cov_part : nullptr));
+        k0 = k1 + 1;
+      }
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
     FinishOEMBuffer(fbb, root);
@@ -804,6 +866,17 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
     if (cov != nullptr)
       for (int q = 0; q < 36; ++q) cov[36 * k + q] = e == sdnap::kPropOk && have_p ? P[q] : std::numeric_limits<double>::quiet_NaN();
   }
+  return 0;
+}
+
+/// SPEC 18.8: the source of what sdnap_epochs_at returns for series [first, first + count) at one split Julian date
+/// (UTC), one code per series: 0 the theory, 1 the forecast a set carries (inside its span), 2 a blend of the two (the
+/// selection blends a carried state with a theory state). 0, or -1.
+SDNAP_EXPORT("sdnap_epochs_source_at")
+int32_t sdnap_epochs_source_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, int32_t* out) {
+  auto& st = sdnap::epochs::resident();
+  if (out == nullptr || first > st.series.size() || count > st.series.size() - first) return -1;
+  for (uint32_t k = 0; k < count; ++k) out[k] = sdnap::epochs::source_at(st, st.series[first + k], jd_whole, jd_frac);
   return 0;
 }
 
