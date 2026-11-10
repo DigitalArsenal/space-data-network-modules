@@ -21,6 +21,10 @@
 //   of their switch sdnap_epochs_select gives b = -2 and weight 0, the state is the chosen set's bit for bit, and
 //   propagate_epochs names the switch time in the block's COMMENT; two sets on one side blend (b = 1, weight in (0, 1)) and
 //   their block has no COMMENT.
+// - Epoch store and carried forecasts (SPEC 14.3, 18): a record carrying its forecast (test/lib/carried.mjs, the "LEO 500
+//   km" class, span 0 to 24 h) followed 12 h later by the plain record: the switch at 6 h, inside the span, is a step
+//   (b = -3, weight 0, each side the chosen set's state bit for bit) named in propagate_epochs' COMMENT; the carried
+//   record followed by itself 12 h later (both forecasts cover the window) blends, with no COMMENT.
 // Made-up orbits only. JS only moves bytes and compares numbers the module produced.
 //   node test/branch-at-epoch.e2e.mjs
 import * as flatbuffers from "flatbuffers";
@@ -37,6 +41,7 @@ import { openModule, wasmPath } from "./lib/module.mjs";
 import { configuration, prior, pcfPriorForm } from "./lib/pcf.mjs";
 import { T, seedOcm, rowsThrough, spwStream, flight, ocmOf, repackOcm } from "./lib/ocm.mjs";
 import { packOem, rfm, jdOf } from "./lib/frames.mjs";
+import { CLASSES, carriedRecord, EPOCH as CARRIED_EPOCH } from "./lib/carried.mjs";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
@@ -160,8 +165,44 @@ const arc = Array.from({ length: 145 }, (_, k) => EPOCH + k * 600000);
   const pe = await call("propagate_epochs", [configuration({ epochStore: {}, output: { START_TIME: iso(EPOCH + 2 * 3600000), STOP_TIME: iso(EPOCH + 4 * 3600000), STEP_SECONDS: 600 } }), snapshot]);
   const comments = Object.fromEntries(pe.map((o) => blocks(o.payload)[0]).map((b) => [b.OBJECT.NORAD_CAT_ID, b.COMMENT]));
   console.log(`propagate_epochs COMMENT: across ${JSON.stringify(comments[99011])}; one side ${JSON.stringify(comments[99012])}`);
-  check(typeof comments[99011] === "string" && comments[99011].includes("2026-10-01T03:00:00") && /SPEC 14\.3/.test(comments[99011]) && comments[99012] == null,
-    `propagate_epochs COMMENT: ${JSON.stringify(comments)}`);
+  check(typeof comments[99011] === "string" && comments[99011].includes("2026-10-01T03:00:00") && /SPEC 14\.3/.test(comments[99011]) &&
+    /different branches/.test(comments[99011]) && comments[99012] == null, `propagate_epochs COMMENT: ${JSON.stringify(comments)}`);
+}
+
+// --- the epoch store between a carried forecast and the theory (SPEC 14.3, 18)
+{
+  const c = CLASSES.find((q) => q.name === "LEO 500 km");
+  const rec = await carriedRecord(h, c, { norad: 99320 });
+  // the record's epoch is its fit arc's first state (before the span's start); the second set 12 h after it, the switch half way
+  const T0 = Date.parse(`${CARRIED_EPOCH}Z`), E0 = Date.parse(`${ocmOf(rec.ocm).MEAN_ELEMENTS.EPOCH.replace(/Z$/, "")}Z`);
+  const twelve = E0 + 12 * 3600000, sw = E0 + 6 * 3600000;
+  const moved = (bytes) => repackOcm(bytes, (t) => { t.MEAN_ELEMENTS.EPOCH = iso(twelve); if (t.TRAJ_FRAME_EPOCH) t.TRAJ_FRAME_EPOCH = iso(twelve); });
+  const prefixed = (plain) => { const b = Buffer.alloc(4 + plain.length); b.writeUInt32LE(plain.length, 0); Buffer.from(plain).copy(b, 4); return b; };
+  // one series: the carried record (span 0 to 24 h), then the plain record 12 h later; the switch at 6 h lies in the span
+  const mixed = { portId: "ocm", typeRef: T("OCM"), payload: new Uint8Array(Buffer.concat([rec.ocm, moved(rec.plain)].map(prefixed))) };
+  // one series: the carried record, then the same record 12 h later (its forecast covers the switch too)
+  const carried = { portId: "ocm", typeRef: T("OCM"), payload: new Uint8Array(Buffer.concat([rec.ocm, moved(rec.ocm)].map(prefixed))) };
+  const p = x.sdnap_alloc(4096), f64 = (o, n) => Array.from(new Float64Array(mem(), p + o, n));
+  const select = (t) => { const j = jdOf(iso(t)); x.sdnap_epochs_select(0, j.whole, j.frac, p); return f64(0, 3); };
+  const state = (t) => { const j = jdOf(iso(t)); x.sdnap_epochs_at(j.whole, j.frac, 0, 1, 0, p + 64, p + 512, 0); return f64(64, 6); };
+  const setAt = (k, t) => { const j = jdOf(iso(t)); x.sdnap_epochs_set_at(0, k, j.whole, j.frac, p + 1024); return f64(1024, 6); };
+  const same = (u, v) => u.every((q, k) => q === v[k]);
+  const before = sw - 600000, after = sw + 600000;
+  const lm = await m.harness.invoke({ methodId: "load_epochs", inputs: [configuration({ epochStore: {} }), mixed] });
+  const sm = lm.statusCode === 0 ? [select(before), select(after)] : null;
+  const steps = lm.statusCode === 0 && same(state(before), setAt(0, before)) && same(state(after), setAt(1, after));
+  console.log(`store, a carried forecast then the theory, 10 min each side of the switch: ${lm.statusCode === 0 ? `select ${JSON.stringify(sm)}` : lm.errorCode}`);
+  check(lm.statusCode === 0 && sm[0][1] === -3 && sm[0][2] === 0 && sm[1][1] === -3 && sm[1][0] === 1 && steps, `carried then theory: ${JSON.stringify(sm)}, steps ${steps}`);
+  const lc = await m.harness.invoke({ methodId: "load_epochs", inputs: [configuration({ epochStore: {} }), carried] });
+  const sc = lc.statusCode === 0 ? select(before) : null;
+  console.log(`store, two carried forecasts: ${lc.statusCode === 0 ? `select ${JSON.stringify(sc)}` : lc.errorCode}`);
+  check(lc.statusCode === 0 && sc[1] === 1 && sc[2] > 0 && sc[2] < 1, `two carried: ${JSON.stringify(sc)}`);
+  const grid = configuration({ epochStore: {}, output: { START_TIME: iso(T0 + 5 * 3600000), STOP_TIME: iso(T0 + 7 * 3600000), STEP_SECONDS: 600 } });
+  const cm = blocks((await call("propagate_epochs", [grid, mixed]))[0].payload)[0].COMMENT;
+  const cc = blocks((await call("propagate_epochs", [grid, carried]))[0].payload)[0].COMMENT;
+  console.log(`propagate_epochs COMMENT: carried then theory ${JSON.stringify(cm)}; two carried ${JSON.stringify(cc)}`);
+  check(typeof cm === "string" && cm.includes(iso(sw).slice(0, 16)) && /carried forecast and the theory/.test(cm) && cc == null,
+    `carried COMMENT: ${JSON.stringify([cm, cc])}`);
 }
 
 m.destroy?.();
