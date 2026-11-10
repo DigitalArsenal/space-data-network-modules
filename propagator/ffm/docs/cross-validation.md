@@ -636,10 +636,10 @@ runtime. Its theory has no independent public reference outside that library;
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | LEO400 | point mass | 0.162 mm | 0.005 mm | 0.002 mm | 0.012 mm | 0.008 mm | 0.002 mm | 0.002 mm | 0.162 mm |
 | LEO400 | field + third bodies + SRP (no drag) | 1.264 mm | 30.389 mm | 30.370 mm | 0.888 mm | 23.017 mm | 2.106 mm | 1.138 mm | 1.313 mm |
-| LEO400 | drag | 8.448 mm | 2.319 m | 1.362 m | 12.462 m | 41.170 mm | 34.302 mm | 5418.767 m | 4.074 mm |
+| LEO400 | drag | 8.448 mm | 2.319 m | 1.362 m | 12.462 m | 41.170 mm | 34.302 mm | 44.175 mm | 4.074 mm |
 | SSO700 | point mass | 0.189 mm | 0.002 mm | 0.012 mm | 0.005 mm | 0.010 mm | 0.003 mm | 0.002 mm | 0.180 mm |
 | SSO700 | field + third bodies + SRP (no drag) | 1.803 mm | 10.531 mm | 12.699 mm | 0.675 mm | 1.700 mm | 2.180 mm | 0.293 mm | 1.355 mm |
-| SSO700 | drag | 1.482 mm | 7.950 m | 180.379 mm | 61.282 mm | 2.420 mm | 53.310 mm | 58.144 m | 1.061 mm |
+| SSO700 | drag | 1.482 mm | 7.950 m | 180.379 mm | 61.282 mm | 2.420 mm | 53.310 mm | 0.764 mm | 1.061 mm |
 | GPS | point mass | 0.160 mm | 0.004 mm | 0.004 mm | 0.004 mm | 5.440e-04 mm | 0.001 mm | 0.002 mm | 0.158 mm |
 | GPS | field + third bodies + SRP (no drag) | 0.219 mm | 1.500 mm | 2.512 mm | 0.115 mm | 1.389 mm | 0.125 mm | 0.156 mm | 0.218 mm |
 | GPS | drag | — | — | — | — | — | — | — | — |

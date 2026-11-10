@@ -63,7 +63,9 @@ try {
     if(!value||typeof value!=='object')return;
     if(value.trajectory&&value.ffmWorstM) {
      const rows=value.trajectory==='basilisk-2.12.0.json'?s.cases:Object.values(s.diagnostics).find(x=>x.file===value.trajectory)?.cases;
-     const current=rows?.find(c=>c.id===row.id);if(!current)throw new Error(`Missing Basilisk diagnostic ${value.trajectory} ${row.id}`);
+     // A row scored against the matched-settings run keeps the stock trajectory's scores under stock.
+     const found=rows?.find(c=>c.id===row.id),current=value.trajectory==='basilisk-2.12.0.json'?found?.stock??found:found;
+     if(!current)throw new Error(`Missing Basilisk diagnostic ${value.trajectory} ${row.id}`);
      value.ffmWorstM=verify(Object.fromEntries(ALL.map(x=>[x.id,current[x.id].worstM])),value.ffmWorstM,`Basilisk ${row.id}`);
     }
     for(const child of Object.values(value))walk(child);

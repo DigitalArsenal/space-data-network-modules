@@ -57,7 +57,9 @@ const EV = 'propagator/ffm/tests/evidence';
 //   second time, from the same cached states).
 const BASILISK = ['Basilisk', '.', `${EV}/basilisk/score-basilisk.mjs`, ['--cached-only', '--cache', TUDAT_CACHE,
   '--diagnostics', `${EV}/basilisk/basilisk-wgs84-diagnostic.json`,
-  '--diagnostics', `${EV}/basilisk/basilisk-wgs84-gtd7d-diagnostic.json`, '--causes', `${EV}/basilisk/diagnoses.json`]];
+  '--diagnostics', `${EV}/basilisk/basilisk-wgs84-gtd7d-diagnostic.json`, '--causes', `${EV}/basilisk/diagnoses.json`,
+  // The drag cases are scored against Basilisk run with FFM's atmosphere settings; the stock run stays beside them.
+  '--primary', 'wgs84-gtd7d']];
 const steps = (NYX_OUT) => [
   ['ERFA / SPICE', '.', `${EV}/erfa-spice/run-erfa-spice.mjs`, ['--stored-reference']],
   ['Horizons', '.', `${EV}/horizons/run-horizons.mjs`, ['--stored-reference']],
@@ -138,7 +140,9 @@ function comparison(tool, data) {
     const key = limited.length ? (h) => ratio(h.value, h.limit) : (h) => h.value;
     for (const h of limited.length ? limited : unlimited) if (!headline || key(h) > key(headline)) headline = h;
   }
-  return { ...base, ...pinned, ran: true, passed, rows, headline, missed, publicNote: passed === false ? publicNote(tool, missed, data) : null };
+  const matched = tool.matchedRun ? { matchedRun: { variant: tool.matchedRun.variant, cases: tool.matchedRun.stock.length } } : {};
+  const note = passed === false ? publicNote(tool, missed, data) : tool.matchedRun ? matchedNote(tool) : null;
+  return { ...base, ...pinned, ran: true, passed, rows, headline, missed, ...matched, publicNote: note };
 }
 
 // A neutral note the site prints as written, for a comparison that did not meet every limit. The explanations below
@@ -173,6 +177,12 @@ const NOTES = {
     return `FFM's GCRF to ITRF rotation differs from SPICE's ITRF93 kernel by ${sig(missed[0].value)} mas against a ${sig(missed[0].limit)} mas limit. That is a difference between the references: the ITRF93 kernel carries its own Earth orientation data and the IAU 1976/1980 model, and against ERFA with the case's Earth orientation data FFM agrees to ${sig(same.value)} mas.`;
   },
 };
+// A comparison scored partly against a run with FFM's settings says so, with what the tool's stock settings gave.
+function matchedNote(tool) {
+  const stock = tool.matchedRun.stock.map((r) => ({ value: r.suiteM }));
+  if (tool.id !== 'basilisk' || tool.matchedRun.variant !== 'wgs84-gtd7d') return tool.matchedRun.statement;
+  return `The ${count(stock.length).toLowerCase()} drag cases are scored against Basilisk run with FFM's atmosphere settings (WGS84 height and geodetic latitude, and the NRLMSISE-00 density with anomalous oxygen). With Basilisk's stock settings, which differ from FFM's, the same cases differ by ${span(stock)}.`;
+}
 function publicNote(tool, missed, data) {
   const note = NOTES[tool.id]?.(missed, data, tool);
   if (note) return note;
@@ -182,7 +192,7 @@ function publicNote(tool, missed, data) {
 
 export function scoredRecord(data, extra = {}) {
   return {
-    about: 'FFM reference evidence scored on one build: each comparison against its stored reference. passed is true when every primary row met its limit, false with the missed rows and their recorded causes otherwise, and null for a comparison with no limit. headline is the row nearest its limit, or furthest past it. publicNote, for a comparison that did not pass, states what differs and what the recorded diagnostic shows, in words that can be printed as written.',
+    about: 'FFM reference evidence scored on one build: each comparison against its stored reference. passed is true when every primary row met its limit, false with the missed rows and their recorded causes otherwise, and null for a comparison with no limit. headline is the row nearest its limit, or furthest past it. matchedRun names the run with FFM\'s settings that some cases are scored against, and how many. publicNote, for a comparison that did not pass, states what differs and what the recorded diagnostic shows; for one with a matchedRun, what the tool\'s stock settings gave. It is written to be printed as is.',
     module: { name: 'propagator/ffm', version: data.module.version, wasmSha256: data.module.sha256 },
     scoredOn: data.rescore.date,
     ...extra,
