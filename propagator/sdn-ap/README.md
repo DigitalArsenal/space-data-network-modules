@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.9 (dist 072b233c).
+Version 0.6.11 (dist 81819cde).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -165,6 +165,14 @@ module never differences or blends two branches (covariance, fit, epoch store). 
 motion leaves the half-day band during the week, the day-7 along-track error is -168,218.829 m with the class held
 against -167,341.326 m when 0.6.6 and 0.6.7 rebuilt their tables for the current class, and -136,267.630 m for the noncrossing
 companion (23.4 %; E2E bound 25 %). SPEC 16.7 defines the fixture.
+
+From 0.6.3 above e 0.3 and from 0.6.4 above e 0.05, to 0.6.10, a set outside every resonance class (class 0) near an m:1
+commensurability with the Earth's rotation (4, 5, 6, 7, 8 rev/day, within about 4.5 % of n) flew without its slow tesseral
+terms of q != 0: after a 72 h fit, 2.3 to 5.9 km along-track at day 7 at e 0.25, 1.5 km at e 0.1, 14.6 km at e 0.35 (stack
+#393). From 0.6.11 the eccentric-anomaly grid leaves out only what the first-order table leaves out: 6 to 29 m at 4 to 7
+rev/day, 220 m at 8 (the 8:1 resonance's shoulder) and 159 m at 6 rev/day e 0.35; orbits off those bands fly the same bytes.
+The exact resonance (an order-m term slower than 1e-3 n, 8.05 rev/day at e 0.25: 1.27 km) is not carried. SPEC 16.11 has the
+table; `test/class0-commensurability.e2e.mjs` pins it.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
@@ -427,6 +435,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   / HERMITE; the blended covariance; `propagate_epochs` against the resident store bit for bit; and, from the local
   Space-Track archive, seven days of the catalog (its memory, selection and continuity on a sample; NOT MEASURED
   without the archive).
+- `test/class0-commensurability.e2e.mjs`: SPEC 16.11 (#393): class 0 sets at e 0.25 at 4, 5, 6, 7 and 8 rev/day, at 4.5 and
+  6.5, and at 6 rev/day e 0.35, each a 72 h fit flown 7 days against FFM 2.2.1 (named by its SHA-256), day-7 along-track under
+  a bound.
 - `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
   the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
   step between two sets on different branches and between a carried forecast and the theory (two forecasts blend).

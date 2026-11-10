@@ -4357,7 +4357,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         gr[2][0][q] = ar[q] * cf[q] * kR - ei * gI;
         gr[2][1][q] = ar[q] * cf[q] * kI + ei * gR;
       }
-      // the harmonics the table's rules leave out (sp_terms' weight_of, the same rule harmonic by harmonic: 0.6.2 to 0.6.10 left
+      // the harmonics the table's rules leave out (sp_terms' weight_of, the same rule harmonic by harmonic: 0.6.3 to 0.6.10 left
       // the whole slow band out in low orbit too, where neither the table nor the shallow set carries its q != 0 terms; #393),
       // from each forcing function: m-daily (w = j = 0), the class's, the half-day
       // tail, the slow band
