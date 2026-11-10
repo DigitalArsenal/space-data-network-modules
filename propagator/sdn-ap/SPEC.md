@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.8 (dist 9a8e8ce3).
+Version 0.6.8 (dist 41aa649f).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2202,6 +2202,10 @@ fitted as given. When `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS 
 non-eccentric orbit without `USEABLE_START_TIME`, `fit` runs a two-stage decoupled solve: Stage 1 fits the `48-72 h`
 span to determine `BTERM` and `AGOM`; Stage 2 fits the trailing `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2
 tesseral null) with `BTERM` and `AGOM` pinned to Stage 1 (`sigma = 1e-9`) and the epoch placed at cutoff (`last_useable`).
+Under AP, Stage 2's record holds both (OD COMMENT marks them, OD_EST_PARAMETERS leaves them out) and its covariance
+carries them as consider parameters of Stage 1's posterior variance, consider block included (12.1's Schmidt rows),
+in m^2/kg: on the module's own 72 h flight at 800 km (BTERM 0.02, AGOM 0.01) Stage 2 states BTERM's sigma 1.66e-7 and
+AGOM's 5.0e-7, Stage 1's; before review-0's audit #398 it stated the pin's 4e-10 and 1e-8.
 A set fitted under NRLMSISE-00 records `SDNAP_ATMOSPHERE_MODEL` (`"NRLMSISE00"` or `"NRLMSISE00_DCA"`) in
 `$OMM.USER_DEFINED_PARAMETERS`; `propagate`, `ingest_omm`, `load_epochs` and `propagate_epochs` refuse a set whose mark
 disagrees with the call's atmosphere (`atmosphere-mismatch`).

@@ -166,7 +166,9 @@ struct ConsiderCalibration {
   double sigma_km = 0.0;
 };
 inline ConsiderCalibration& consider_calibration() {
-  static ConsiderCalibration c;
+  // per thread (the batch entries run on src/pool.inc's threads; fit does not, but nothing a fit writes is shared), and
+  // written only while the calibration is on
+  thread_local ConsiderCalibration c;
   return c;
 }
 
@@ -733,23 +735,26 @@ static int fit_blocks() {
             const double var_s = opt.agom_log ? post.log_sigma[2] * post.log_sigma[2] : post.C[agom_at * post.np + agom_at];
             const bool hold_b = opt.fit_drag && opt.drag_sigma > 0.0 && var_b > 0.5 * opt.drag_sigma * opt.drag_sigma;
             const bool hold_s = opt.fit_agom && opt.agom_sigma > 0.0 && var_s > 0.5 * opt.agom_sigma * opt.agom_sigma;
+            // the refit pins a held term in a copy of the options: opt keeps the priors as stated (the covariance's
+            // Schmidt rows and anything later that reads them)
+            fit::Options pinned = opt;
             if (hold_b) {
               cons.held_drag = true;
               cons.held_drag_sigma = opt.drag_sigma;
-              opt.drag_sigma = opt.drag_log ? 1e-9 : 1e-12;
+              pinned.drag_sigma = opt.drag_log ? 1e-9 : 1e-12;
               row.bterm = opt.drag_log ? std::exp(opt.drag_prior) : opt.drag_prior;
             }
             if (hold_s) {
               cons.held_agom = true;
               cons.held_agom_sigma = opt.agom_sigma;
-              opt.agom_sigma = opt.agom_log ? 1e-9 : 1e-12;
+              pinned.agom_sigma = opt.agom_log ? 1e-9 : 1e-12;
               row.agom = opt.agom_log ? std::exp(opt.agom_prior) : opt.agom_prior;
             }
             if (hold_b || hold_s)
-              fit::reweight(row, t_fit.data(), r_fit.data(), n_fit, opt, stated_km, res, sigma_km, iterations, &cons);
+              fit::reweight(row, t_fit.data(), r_fit.data(), n_fit, pinned, stated_km, res, sigma_km, iterations, &cons);
           }
         }
-        if (cons.on) {
+        if (cons.on && fitoem::consider_calibration().on) {
           fitoem::consider_calibration().last = cons;
           fitoem::consider_calibration().sigma_km = sigma_km;
         }
@@ -882,7 +887,8 @@ static int fit_blocks() {
         cov::Set first_cov;
         double first_ng = 0.0;
         const bool first_have = cov::of_fit(chosen.row, chosen.opt, chosen.t_fit.data(), chosen.r_fit.data(),
-                                            static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, chosen.sigma_km, first_cov, first_ng);
+                                            static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, chosen.sigma_km, first_cov, first_ng,
+                                            chosen.cons.on ? &chosen.cons : nullptr);
         const double sl = first_have ? first_cov.log_sigma[0] : 0.0;
         const fitoem::ArcCheck first_arc =
             fitoem::arc_check(chosen.row, chosen.t_fit.data(), chosen.r_fit.data(), static_cast<int>(chosen.t_fit.size()));
@@ -914,12 +920,32 @@ static int fit_blocks() {
             stage2.res.rms_km <= po.implausible_rms_km) {
           stage2.iterations += chosen.iterations;
           stage2.first_pass_rms = std::fmin(chosen.first_pass_rms, stage2.first_pass_rms);
-          stage2.opt.drag_log = chosen.opt.drag_log;
-          stage2.opt.drag_prior = chosen.opt.drag_prior;
-          stage2.opt.drag_sigma = chosen.opt.drag_sigma;
-          stage2.opt.agom_log = chosen.opt.agom_log;
-          stage2.opt.agom_prior = chosen.opt.agom_prior;
-          stage2.opt.agom_sigma = chosen.opt.agom_sigma;
+          if (stage2.cons.on) {
+            // AP: Stage 2 holds BTERM and AGOM at Stage 1's values in its own (linear, pinned) options, and its
+            // covariance carries them as consider parameters of Stage 1's posterior variance, consider block included
+            // (SPEC 12.1's Schmidt rows), in m^2/kg like the pinned options
+            cov::Set s1;
+            double s1_ng = 0.0;
+            if (cov::of_fit(chosen.row, chosen.opt, chosen.t_fit.data(), chosen.r_fit.data(), static_cast<int>(chosen.t_fit.size()),
+                            chosen.fit_end_min, chosen.sigma_km, s1, s1_ng, chosen.cons.on ? &chosen.cons : nullptr)) {
+              const int s1_agom = 6 + (s1.o.fit_drag ? 1 : 0);
+              if (stage2.opt.fit_drag && s1.o.fit_drag) {
+                stage2.cons.held_drag = true;
+                stage2.cons.held_drag_sigma = std::sqrt(std::fmax(s1.C[6 * s1.np + 6], 0.0));
+              }
+              if (stage2.opt.fit_agom && s1.o.fit_agom) {
+                stage2.cons.held_agom = true;
+                stage2.cons.held_agom_sigma = std::sqrt(std::fmax(s1.C[s1_agom * s1.np + s1_agom], 0.0));
+              }
+            }
+          } else {
+            stage2.opt.drag_log = chosen.opt.drag_log;
+            stage2.opt.drag_prior = chosen.opt.drag_prior;
+            stage2.opt.drag_sigma = chosen.opt.drag_sigma;
+            stage2.opt.agom_log = chosen.opt.agom_log;
+            stage2.opt.agom_prior = chosen.opt.agom_prior;
+            stage2.opt.agom_sigma = chosen.opt.agom_sigma;
+          }
           stage2.srp = chosen.srp;
           chosen = std::move(stage2);
         }
