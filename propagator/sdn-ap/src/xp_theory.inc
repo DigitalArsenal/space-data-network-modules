@@ -3617,7 +3617,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     c = std::cos(k.i);
     ag = angle_trig(k);
   }
-  const double p = fr.a * (1.0 - fr.e2);
+  // SGP4XP's zonal rates take p = a (1 - e e) with e the square root of af^2 + ag^2 (its conformance digest, SPEC 16.4);
+  // AP's take af^2 + ag^2 as summed (0.6.5). The two differ by up to a unit in the last place.
+  const double p = ap_ctx ? fr.a * (1.0 - fr.e2) : fr.a * (1.0 - k.e * k.e);
   const double inv_cp1 = 0.5 * fr.c;
   double six[6] = {0, 0, 0, 0, 0, 0};
   if (fast_ap) zonal_six_ap(k.e, fr.n, s, c, fr.eta, p, ag.sw, ag.cw, inv_cp1, six);
