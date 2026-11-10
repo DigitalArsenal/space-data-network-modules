@@ -61,6 +61,7 @@ inline int32_t write_state(uint32_t i, double jd_whole, double jd_frac, OrbProSt
 
 namespace pool {
 void run_chunk(const Job& j, int32_t chunk) {
+  if (j.kind == kJobSegmentsBuild || j.kind == kJobSegmentsAt) return segments_chunk(j, chunk);
   const uint32_t begin = static_cast<uint32_t>(chunk) * kChunk;
   const uint32_t end = begin + kChunk < j.count ? begin + kChunk : j.count;
   const uint32_t n = j.count;
