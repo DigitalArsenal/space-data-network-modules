@@ -59,6 +59,8 @@ function ratioSpread(a) {
   const meds = Array.from({ length: 2000 }, () => median(a.map(() => a[Math.floor(r() * a.length)]))).sort((x, y) => x - y);
   return { ...spread(a), ci95: [meds[49], meds[1949]], rounds: a.length };
 }
+// the 1-minute load average when a row was taken, marked above 30 (such a row is flown again on a quieter machine)
+const loadMark = (row) => ` | load ${row.load1.toFixed(0)}${row.load1 > 30 ? " (above 30)" : ""}`;
 const fmt = (s, d = 2) => `${s.median.toFixed(d)}${s.ci95 ? ` (95 % ${s.ci95[0].toFixed(d)} to ${s.ci95[1].toFixed(d)})` : ""} [${s.min.toFixed(d)}, ${s.max.toFixed(d)}]`;
 const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
 const jd = (ms) => { const d = ms / DAY; return [Math.floor(d) + 2440587.5, d - Math.floor(d)]; };
@@ -161,9 +163,10 @@ async function catalog(helper) {
       const t = per(), rm = per();
       for (let q = 0; q < rounds; ++q) for (const theory of turn(q)) { t[theory].push(await timeMajor(arms[theory])); rm[theory].push(await recordMajor(arms[theory])); }
       const row = { orbit: name, records: N, timeMajor: { ...spreads(t), ...ratios(t) }, recordMajor: { ...spreads(rm), ...ratios(rm) } };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
       const line = (c) => `AP ${fmt(c.AP, 3)} XP ${fmt(c.XP, 3)} SGP4 ${fmt(c.SGP4, 3)} us/state, AP/SGP4 ${fmt(c.ratio, 1)}, AP/XP ${fmt(c.ratioXp, 1)}`;
-      console.log(`catalog ${name} N=${N} | time-major: ${line(row.timeMajor)} | record-major: ${line(row.recordMajor)}`);
+      console.log(`catalog ${name} N=${N} | time-major: ${line(row.timeMajor)} | record-major: ${line(row.recordMajor)}${loadMark(row)}`);
     }
   }
   return rows;
@@ -200,8 +203,9 @@ async function first(helper) {
       row.perProcess = Object.fromEntries(THEORIES.map((t) => [t, row.freshInstance[t].median - row.perRecord[t].median]));
       row.perRecordRatio = row.perRecord.AP.median / row.perRecord.SGP4.median;
       row.perRecordRatioXp = row.perRecord.AP.median / row.perRecord.XP.median;
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} XP ${fmt(row.freshInstance.XP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} XP ${fmt(row.perRecord.XP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)}, AP/XP ${row.perRecordRatioXp.toFixed(1)} | load and first state: AP ${fmt(row.perRecordWithLoad.AP, 0)} XP ${fmt(row.perRecordWithLoad.XP, 0)} SGP4 ${fmt(row.perRecordWithLoad.SGP4, 0)} us | once per process: AP ${row.perProcess.AP.toFixed(0)} XP ${row.perProcess.XP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us`);
+      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} XP ${fmt(row.freshInstance.XP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} XP ${fmt(row.perRecord.XP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)}, AP/XP ${row.perRecordRatioXp.toFixed(1)} | load and first state: AP ${fmt(row.perRecordWithLoad.AP, 0)} XP ${fmt(row.perRecordWithLoad.XP, 0)} SGP4 ${fmt(row.perRecordWithLoad.SGP4, 0)} us | once per process: AP ${row.perProcess.AP.toFixed(0)} XP ${row.perProcess.XP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us${loadMark(row)}`);
     }
   }
   return rows;
@@ -228,8 +232,9 @@ async function order(helper) {
       const rounds = name === "gto" && label !== "ascending" ? 3 : ROUNDS;
       for (let q = 0; q < rounds; ++q) for (const theory of turn(q)) v[theory].push(sweep(arms[theory]));
       const row = { orbit: name, order: label, ...spreads(v), ...ratios(v) };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`order ${name} ${label} | AP ${fmt(row.AP, 3)} XP ${fmt(row.XP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}, AP/XP ${fmt(row.ratioXp, 1)}`);
+      console.log(`order ${name} ${label} | AP ${fmt(row.AP, 3)} XP ${fmt(row.XP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}, AP/XP ${fmt(row.ratioXp, 1)}${loadMark(row)}`);
     }
   }
   return rows;
@@ -252,8 +257,9 @@ async function ecc(helper) {
       const at = jd(EPOCH + DAY);
       for (let q = 0; q < 5; ++q) { await arms.AP.m.load([arms.AP.set]); const t0 = wallUs(); arms.AP.m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], arms.AP.out); firstUs.push(wallUs() - t0); }
       const row = { e, tesseral, ...spreads(v), ...ratios(v), apFirstAt1dUs: spread(firstUs) };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`ecc perigee 600 km e ${e} tesseral ${tesseral} | AP ${fmt(row.AP, 3)} XP ${fmt(row.XP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}, AP/XP ${fmt(row.ratioXp, 1)} | AP first state at 1 d ${fmt(row.apFirstAt1dUs, 0)} us`);
+      console.log(`ecc perigee 600 km e ${e} tesseral ${tesseral} | AP ${fmt(row.AP, 3)} XP ${fmt(row.XP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}, AP/XP ${fmt(row.ratioXp, 1)} | AP first state at 1 d ${fmt(row.apFirstAt1dUs, 0)} us${loadMark(row)}`);
     }
   }
   return rows;
@@ -294,8 +300,9 @@ async function call(helper) {
       for (let q = 0; q < ROUNDS; ++q) for (const [label, ocm] of Object.entries(records)) { const f = await fly(ocm); (v[label] ??= []).push(f.us); bytes[label] = f.bytes; }
       const row = { orbit: name, frame, usPerState: Object.fromEntries(Object.entries(v).map(([k, a]) => [k, spread(a)])), oemBytes: bytes,
         seededOverSgp4: ratioSpread(v["AP seeded"].map((x, i) => x / v.SGP4[i])), fittedOverSgp4: ratioSpread(v["AP fitted"].map((x, i) => x / v.SGP4[i])) };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`call ${name} ${frame} | SGP4 ${fmt(row.usPerState.SGP4, 2)}, AP seeded ${fmt(row.usPerState["AP seeded"], 2)}, AP fitted ${fmt(row.usPerState["AP fitted"], 2)} us/state | AP/SGP4 seeded ${fmt(row.seededOverSgp4, 1)}, fitted ${fmt(row.fittedOverSgp4, 1)} | $OEM bytes SGP4 ${bytes.SGP4}, AP seeded ${bytes["AP seeded"]}, AP fitted ${bytes["AP fitted"]}`);
+      console.log(`call ${name} ${frame} | SGP4 ${fmt(row.usPerState.SGP4, 2)}, AP seeded ${fmt(row.usPerState["AP seeded"], 2)}, AP fitted ${fmt(row.usPerState["AP fitted"], 2)} us/state | AP/SGP4 seeded ${fmt(row.seededOverSgp4, 1)}, fitted ${fmt(row.fittedOverSgp4, 1)} | $OEM bytes SGP4 ${bytes.SGP4}, AP seeded ${bytes["AP seeded"]}, AP fitted ${bytes["AP fitted"]}${loadMark(row)}`);
     }
   }
   return rows;
