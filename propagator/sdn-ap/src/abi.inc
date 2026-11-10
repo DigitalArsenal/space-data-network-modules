@@ -325,7 +325,8 @@ int32_t sdnap_init_error(uint32_t index) {
 /// parameter-not-modeled:<NAME>, SPEC 17.2; 1 byte of padding follows), double AGOM prior mean and
 /// sigma, int32 drag_log, int32 agom_log (1: the term is estimated as its
 /// natural log, its prior mean and sigma those of the log; the row's term must
-/// then start > 0). `stats` (4 doubles): status, iterations, rms km, max km.
+/// then start > 0). `stats` (4 doubles): status (-5: the least-squares set lies on a switch, SPEC 16.7), iterations,
+/// rms km, max km.
 /// Returns 0 or a negative code.
 SDNAP_EXPORT("sdnap_fit")
 int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* positions, uint32_t count,
