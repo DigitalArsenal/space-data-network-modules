@@ -4,7 +4,8 @@
 // and package.json carry and the first eight hex digits of the SHA-256 that identifies the committed dist/isomorphic/module.wasm;
 // no other `Version ...` line appears in either document. Fails on any header that names another version or another binary,
 // and on the phrases "parts replaced" and "parts swapped" (AP is an advanced propagator that builds on the entire history of
-// astrodynamics) in either document.
+// astrodynamics) in either document. Also fails when the vendored replay harness registers an install (its build.json
+// `packages`) other than the version that folder's committed package-lock.json pins.
 //
 // Two identity forms, by version (ruling 2026-11-06). Through 0.6.3 the dist ships raw (its sds.manifest section embedded, no
 // trailer) and the header names the whole-file SHA-256: `Version 0.6.3 (dist hhhhhhhh).` From 0.6.4 the dist ships signed: the
@@ -58,9 +59,24 @@ for (const doc of ["SPEC.md", "README.md"]) {
   }
 }
 
+// The vendored replay harness's registered installs (test/vendor/.../xp-atmosphere-merit/build.json `packages`, which its
+// modulesRoot() guard compares with the installs) equal what each folder's committed package-lock.json pins: a pin bump
+// that leaves the registration behind stops the seven archive replays at the guard (2026-11-05 to 2026-11-10).
+const modulesRoot = path.resolve(packageRoot, "..", "..");
+const vendored = JSON.parse(read("test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/build.json"));
+let registered = 0;
+for (const [rel, packages] of Object.entries(vendored.packages)) {
+  const lock = JSON.parse(fs.readFileSync(path.join(modulesRoot, rel, "package-lock.json"), "utf8")).packages;
+  for (const [name, version] of Object.entries(packages)) {
+    const pinned = lock[`node_modules/${name}`]?.version;
+    check(pinned === version, `vendored build.json registers ${rel} ${name} ${version}, ${rel}/package-lock.json pins ${pinned}`);
+    registered += 1;
+  }
+}
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.log(`DOCS-VERSION FAIL: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.log(`DOCS-VERSION PASS: SPEC.md and README.md read '${expectedHeader}' = plugin-manifest.json, package.json, dist/isomorphic/module.wasm (${rawForm ? "raw form, whole-file sha256" : `signed form, canonical module sha256${bundle ? " and whole signed file" : ""}`})`);
+console.log(`DOCS-VERSION PASS: SPEC.md and README.md read '${expectedHeader}' = plugin-manifest.json, package.json, dist/isomorphic/module.wasm (${rawForm ? "raw form, whole-file sha256" : `signed form, canonical module sha256${bundle ? " and whole signed file" : ""}`}); the vendored replay harness registers ${registered} installs, each its folder's lockfile pin`);

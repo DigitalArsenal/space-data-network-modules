@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.7 (dist 5fbfd365).
+Version 0.6.8 (dist 51a52e99).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2351,7 +2351,11 @@ Gauss equations on the mean orbit at 32 equally spaced eccentric longitudes F, w
 P_l and P_l' follow the Legendre recurrences. Over all degrees from 2, the same quadrature reproduces 5's closed form
 for degrees 2 and 3 within 0.1 m of day-3 error on the Etalon model-truth cases; degree 10 leaves under 1e-7 of the
 quadrupole at r / r_b = 0.12. The output takes the short-period terms of degrees 2 to 10 by 5.4's quadrature. Default
-FORCES keeps SGP4XP bit for bit (XP digest 72dcf6005046).
+FORCES keeps SGP4XP bit for bit (XP digest 72dcf6005046). Builds 0.6.5 to 0.6.7 departed from it: their rates took the
+semi-latus rectum of SGP4XP's zonal terms from af^2 + ag^2 as summed rather than from e e, a unit in the last place,
+which moved 282 of the conformance corpus's 80,974 XP samples (130 sets, 128 of them at e 0.6 to 0.75) by at most
+1.13e-5 m and one, a set whose orbit grazes the Earth's shadow so that a rounding-limited decision of 4 went the other
+way, by 0.197 m at day 7 (digest 34cc810d5d99); 0.6.8 restores the digest.
 
 Exploratory (the 2026-11-03 AP6 windows, already read; 72 h fits, day 3, leads from the fit end): the median paired
 AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and from 36.39 to 23.55 m on Etalon-2
