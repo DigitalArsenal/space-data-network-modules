@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-10T22:30:42.158Z",
+  "generatedAt": "2026-11-10T23:11:40.864Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -1361,7 +1361,7 @@
       "pluginId": "com.orbpro.od-fit-pipeline",
       "name": "OD Fit Pipeline",
       "pluginFamily": "orbit_determination",
-      "version": "0.3.0",
+      "version": "0.2.0",
       "methodIds": [
         "fit_pipeline"
       ],
@@ -1393,7 +1393,7 @@
       "pluginId": "orbit-determination",
       "name": "Orbit Determination Plugin",
       "pluginFamily": "orbit_determination",
-      "version": "0.4.0",
+      "version": "0.3.0",
       "methodIds": [
         "fit",
         "fit_ffm"
@@ -6683,7 +6683,7 @@
       ],
       "cxxSourceFileCount": 57,
       "cSourceFileCount": 1,
-      "testFileCount": 608,
+      "testFileCount": 612,
       "parityScope": true,
       "action": "update-for-parity",
       "sourceFiles": [
@@ -6928,7 +6928,11 @@
         "tests/evidence/recorded-numbers.mjs",
         "tests/evidence/refresh-derived-comparisons.mjs",
         "tests/evidence/refresh-provenance.mjs",
+        "tests/evidence/rescore-all.mjs",
         "tests/evidence/rescore.json",
+        "tests/evidence/scored/2.2.0-d635a3d5.json",
+        "tests/evidence/scored/2.2.1-a9133120.json",
+        "tests/evidence/scored/2.3.0-ea457690.json",
         "tests/evidence/tudat/.gitignore",
         "tests/evidence/tudat/README.md",
         "tests/evidence/tudat/check-tudat.mjs",
