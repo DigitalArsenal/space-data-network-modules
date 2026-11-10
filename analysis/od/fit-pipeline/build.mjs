@@ -24,7 +24,6 @@ import { fileURLToPath } from "node:url";
 
 import { compileModuleFromSource } from "space-data-module-sdk/compiler";
 import { assertArtifactThreadModel } from "../../../scripts/lib/thread-model.mjs";
-import { composeErfaTranslationUnit } from "../../../foundation/frames/erfa-amalgamation.mjs";
 
 // THREAD MODEL - declared, never inferred (scripts/lib/thread-model.mjs): one pass fits object after object on the
 // calling thread and spawns nothing; the SDK's wasm32-wasip1-threads toolchain builds it without threads, as it
@@ -35,12 +34,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(root, "../../..");
 const odCpp = path.resolve(root, "../src/cpp");
 const sdsDir = path.join(repo, "licensing/core/src/cpp/generated/sds");
-// frame_transform.cpp takes TEME from foundation/frames' axis engine over the vendored ERFA: the ERFA amalgamation
-// leads the unit (composeErfaTranslationUnit, as foundation/frames compiles it), so `#include "erfa.h"` and
-// `"erfam.h"` are dropped where they appear.
-const includeRoots = [path.join(odCpp, "include"), path.join(odCpp, "include/od"), path.join(repo, "foundation/sgp4-str3/include"), sdsDir,
-  path.join(repo, "foundation/frames/src")];
-const amalgamated = new Set(["erfa.h", "erfam.h"]);
+const includeRoots = [path.join(odCpp, "include"), path.join(odCpp, "include/od"), path.join(repo, "foundation/sgp4-str3/include"), sdsDir];
 // Headers the SDK compiler stages itself.
 const staged = new Set(["space_data_module_invoke.h", "typedHostcall.hpp", "FlowNotice_generated.h", "TimerTick_generated.h"]);
 
@@ -64,7 +58,6 @@ async function inline(file) {
   const lines = [];
   for (const line of text.split("\n")) {
     const match = /^\s*#\s*include\s+"([^"]+)"/.exec(line);
-    if (match && amalgamated.has(match[1])) continue;
     if (!match || staged.has(match[1]) || match[1].startsWith("flatbuffers/")) {
       lines.push(line);
       continue;
@@ -78,7 +71,7 @@ async function inline(file) {
 
 const odSources = ["meme_parser", "frame_transform", "oem_fb_reader", "omm_fb_builder", "obd_fb_builder", "sgp4_fitter"]
   .map((name) => path.join(odCpp, "src", `${name}.cpp`));
-const pieces = [(await composeErfaTranslationUnit()).source];
+const pieces = [];
 for (const file of [path.join(root, "src/fit_pipeline.cpp"), ...odSources]) {
   pieces.push(await inline(file));
 }

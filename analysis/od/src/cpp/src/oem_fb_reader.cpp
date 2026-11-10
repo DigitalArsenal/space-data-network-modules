@@ -123,9 +123,7 @@ void to_teme(FrameKind fk, double jd, bool has_vel,
             pt->vx = vx; pt->vy = vy; pt->vz = vz;
             break;
         case FrameKind::EciJ2000:
-        case FrameKind::Gcrf:
-            if (fk == FrameKind::Gcrf) gcrf_to_teme(jd, r_in, v_in, r_out, v_out);
-            else eci_j2000_to_teme(jd, r_in, v_in, r_out, v_out);
+            eci_j2000_to_teme(jd, r_in, v_in, r_out, v_out);
             pt->x = r_out[0]; pt->y = r_out[1]; pt->z = r_out[2];
             pt->vx = v_out[0]; pt->vy = v_out[1]; pt->vz = v_out[2];
             break;
