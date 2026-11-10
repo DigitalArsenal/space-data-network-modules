@@ -19,7 +19,7 @@ From the repository root, run these commands **serially**:
 /Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/run-basilisk.py --step 8 --only srp-drag --variant wgs84-gtd7d --out propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json
 /Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/investigate-basilisk.py propagator/ffm/tests/evidence/basilisk/model-probes.json
 /Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/diagnose-lst.py --trajectories propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json
-UV_THREADPOOL_SIZE=1 node --single-threaded --wasm-num-compilation-tasks=1 propagator/ffm/tests/evidence/basilisk/score-basilisk.mjs --cached-only --cache propagator/ffm/tests/evidence/tudat/ffm-tudatpy-1.0.0.json --diagnostics propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-diagnostic.json --diagnostics propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json --causes propagator/ffm/tests/evidence/basilisk/diagnoses.json
+UV_THREADPOOL_SIZE=1 node --single-threaded --wasm-num-compilation-tasks=1 propagator/ffm/tests/evidence/basilisk/score-basilisk.mjs --cached-only --cache propagator/ffm/tests/evidence/tudat/ffm-tudatpy-1.0.0.json --diagnostics propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-diagnostic.json --diagnostics propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json --causes propagator/ffm/tests/evidence/basilisk/diagnoses.json --primary wgs84-gtd7d
 UV_THREADPOOL_SIZE=1 node --single-threaded --wasm-num-compilation-tasks=1 propagator/ffm/tests/evidence/basilisk/check-basilisk.mjs
 ```
 
@@ -136,12 +136,19 @@ measured model-setting mismatch, Basilisk defect, or FFM defect diagnosis.
 Convergence establishes numerical stability of this oracle configuration; it
 does not establish force-model equivalence.
 
-The nominal result is **43 passing state cases and 7 diagnosed drag misses**
-at each of the three FFM settings. All 50 native trajectories meet the
-step-halving requirement; the largest change is 0.284212 mm. The seven drag
-cases retain Basilisk's native spherical atmosphere coordinates and native
-MSIS species selection. Their diagnostic comparisons are reported separately,
-so correcting an oracle input does not silently replace the nominal result.
+The seven drag cases are scored against the **WGS84 + native gtd7d** run
+(`--primary wgs84-gtd7d`), Basilisk run with FFM's atmosphere settings. With
+its stock settings (spherical altitude and geocentric latitude, and gtd7
+without anomalous oxygen below 500 km) Basilisk is not set up like FFM. A
+comparison against that run would measure the setting difference, not the
+propagation, so it does not test FFM. The stock run of each drag case stays
+in its row under `stock`, with its measured cause. The check recomputes it
+beside the matched run.
+
+The result is **50 passing state cases** at each of the three FFM settings.
+The stock-settings runs of the seven drag cases are 34.8 m to 5.42 km from
+FFM. All 50 scored native trajectories meet the step-halving requirement;
+the largest change is 0.278880 mm (0.284212 mm over the stock-settings runs).
 
 The measured drag comparison below uses the **finest FFM** setting. Each
 entry is maximum hourly 3D position separation over 24 hours, in meters; the

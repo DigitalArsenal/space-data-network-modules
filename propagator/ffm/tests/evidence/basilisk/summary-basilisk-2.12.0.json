@@ -2467,36 +2467,36 @@
    "orekitMinusBasilisk": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.649889025366
+    "worstM": 0.047387242859726626
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.64601040913,
+    "worstM": 0.043508740090461136,
     "steps": 1417,
-    "met": false
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.645891017559,
+    "worstM": 0.04338934889071401,
     "steps": 2958,
-    "met": false
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5250.645916904503,
+    "worstM": 0.0434152347167933,
     "steps": 8634,
-    "met": false
+    "met": true
    },
-   "met": false,
+   "met": true,
    "convergence": {
-    "maxStepS": 1,
-    "fineStepS": 0.5,
-    "atHour": 24,
+    "maxStepS": 2,
+    "fineStepS": 1,
+    "atHour": 11,
     "sampleCount": 24,
-    "worstM": 0.00020288695402411057,
+    "worstM": 0.00015045426293587477,
     "limitM": 0.0003,
     "met": true
    },
@@ -2506,71 +2506,64 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.010260626640967463
+     "worstM": 0.005177041364295589
     },
     {
      "maxStepS": 4,
      "fineStepS": 2,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0058918394377480855
+     "worstM": 0.0035778449601348876
     },
     {
      "maxStepS": 2,
      "fineStepS": 1,
-     "atHour": 24,
+     "atHour": 11,
      "sampleCount": 24,
-     "worstM": 0.0004627693458308811
-    },
-    {
-     "maxStepS": 1,
-     "fineStepS": 0.5,
-     "atHour": 24,
-     "sampleCount": 24,
-     "worstM": 0.00020288695402411057
+     "worstM": 0.00015045426293587477
     }
    ],
    "diagnostics": {
-    "environmentStepS": 1,
+    "environmentStepS": 2,
     "integrator": "Basilisk svIntegratorRKF78",
     "relativeTolerance": 1e-14,
     "absoluteTolerance": 1e-12,
-    "environmentUpdates": 86401,
+    "environmentUpdates": 43201,
     "nativeSunRadiusM": 695000000,
-    "variant": "nominal",
+    "variant": "wgs84-gtd7d",
     "orientationEvaluation": "memoized exact pinned ERFA",
     "orientationCacheLimit": 800000,
-    "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
+    "densityModel": "native wheel gtd7d at every altitude",
     "sphericalMinusWgs84AltitudeM": {
-     "min": -13122.526789692638,
-     "max": -1.909211277961731e-7
+     "min": -13122.530103826779,
+     "max": -0.00002367433626204729
     },
     "hourlyNativeDensityKgM3": [
-     3.082498308722732e-12,
-     2.6911121008171525e-12,
-     5.09055550478283e-12,
-     2.5414881798029423e-12,
-     2.6642560631104217e-12,
-     5.2598309707563865e-12,
-     2.4496051557449125e-12,
-     3.10015910517868e-12,
-     5.300283467176948e-12,
-     2.5054438159006e-12,
-     3.804411930983984e-12,
-     4.9949639907536384e-12,
-     2.4021951490832634e-12,
-     4.389307830930062e-12,
-     4.228156037299057e-12,
-     2.6078991017390314e-12,
-     4.818036103960403e-12,
-     3.378742966724715e-12,
-     2.92274904609717e-12,
-     5.141708544706802e-12,
-     2.776877405247572e-12,
-     2.78870535507964e-12,
-     5.3029907073430105e-12,
-     2.4447854754438708e-12,
-     2.8229558980402403e-12
+     2.7951346035729718e-12,
+     2.086553530322695e-12,
+     4.797911778648856e-12,
+     2.4597191584129392e-12,
+     2.1140532131161673e-12,
+     4.6252819017921584e-12,
+     2.4482801854110235e-12,
+     2.647826995634874e-12,
+     4.375898792083344e-12,
+     2.4454856818496866e-12,
+     3.5231951253545876e-12,
+     4.021488959592012e-12,
+     2.1854155096317585e-12,
+     4.309511255802022e-12,
+     3.480193474779395e-12,
+     2.202548402198582e-12,
+     4.814460801653786e-12,
+     2.941447097450217e-12,
+     2.3413478998366556e-12,
+     5.00355586419037e-12,
+     2.5870830949823504e-12,
+     2.1769474396393775e-12,
+     4.861958226664446e-12,
+     2.4080952922365783e-12,
+     2.2906246848401297e-12
     ],
     "hourlyShadowFactor": [
      1,
@@ -2600,104 +2593,243 @@
      0
     ]
    },
+   "basiliskRun": "wgs84-gtd7d",
    "stmSkipped": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.",
-   "cause": {
-    "classification": "model-setting mismatch",
-    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
-    "evidence": {
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "units": "m for position/altitude; s for steps",
-     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
-     "toleranceM": 0.1,
-     "nominal": {
-      "trajectory": "basilisk-2.12.0.json",
-      "ffmWorstM": {
-       "suite": 5250.64601040913,
-       "steps30": 5250.645891017559,
-       "finest": 5250.645916904503
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 5250.649889025366
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.00020288695402411057,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84Only": {
-      "trajectory": "basilisk-wgs84-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 2.297573628110015,
-       "steps30": 2.297693017501085,
-       "finest": 2.2976671303647977
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 2.2936950096884634
-      },
-      "stepHalving": {
-       "maxStepS": 2,
-       "fineStepS": 1,
-       "atHour": 8,
-       "sampleCount": 24,
-       "worstM": 0.00013943685330777597,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84AndGtd7d": {
-      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.043508740090461136,
-       "steps30": 0.04338934889071401,
-       "finest": 0.0434152347167933
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.047387242859726626
-      },
-      "stepHalving": {
-       "maxStepS": 2,
-       "fineStepS": 1,
-       "atHour": 11,
-       "sampleCount": 24,
-       "worstM": 0.00015045426293587477,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "coordinateChangeDirectPositionDifference": {
+   "stock": {
+    "orekitMinusBasilisk": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5250.649889025366
+    },
+    "suite": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5250.64601040913,
+     "steps": 1417,
+     "met": false
+    },
+    "steps30": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5250.645891017559,
+     "steps": 2958,
+     "met": false
+    },
+    "finest": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5250.645916904503,
+     "steps": 8634,
+     "met": false
+    },
+    "met": false,
+    "convergence": {
+     "maxStepS": 1,
+     "fineStepS": 0.5,
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 0.00020288695402411057,
+     "limitM": 0.0003,
+     "met": true
+    },
+    "convergenceAttempts": [
+     {
+      "maxStepS": 8,
+      "fineStepS": 4,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 5252.943565505551
+      "worstM": 0.010260626640967463
      },
-     "gtd7dChangeDirectPositionDifference": {
+     {
+      "maxStepS": 4,
+      "fineStepS": 2,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.341080172541303
+      "worstM": 0.0058918394377480855
      },
-     "combinedChangeDirectPositionDifference": {
+     {
+      "maxStepS": 2,
+      "fineStepS": 1,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 5250.602502485088
+      "worstM": 0.0004627693458308811
      },
+     {
+      "maxStepS": 1,
+      "fineStepS": 0.5,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.00020288695402411057
+     }
+    ],
+    "diagnostics": {
+     "environmentStepS": 1,
+     "integrator": "Basilisk svIntegratorRKF78",
+     "relativeTolerance": 1e-14,
+     "absoluteTolerance": 1e-12,
+     "environmentUpdates": 86401,
+     "nativeSunRadiusM": 695000000,
+     "variant": "nominal",
+     "orientationEvaluation": "memoized exact pinned ERFA",
+     "orientationCacheLimit": 800000,
+     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
      "sphericalMinusWgs84AltitudeM": {
       "min": -13122.526789692638,
       "max": -1.909211277961731e-7
      },
-     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
-     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
-     "matchedDiagnosticMeetsAllSettings": true,
-     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     "hourlyNativeDensityKgM3": [
+      3.082498308722732e-12,
+      2.6911121008171525e-12,
+      5.09055550478283e-12,
+      2.5414881798029423e-12,
+      2.6642560631104217e-12,
+      5.2598309707563865e-12,
+      2.4496051557449125e-12,
+      3.10015910517868e-12,
+      5.300283467176948e-12,
+      2.5054438159006e-12,
+      3.804411930983984e-12,
+      4.9949639907536384e-12,
+      2.4021951490832634e-12,
+      4.389307830930062e-12,
+      4.228156037299057e-12,
+      2.6078991017390314e-12,
+      4.818036103960403e-12,
+      3.378742966724715e-12,
+      2.92274904609717e-12,
+      5.141708544706802e-12,
+      2.776877405247572e-12,
+      2.78870535507964e-12,
+      5.3029907073430105e-12,
+      2.4447854754438708e-12,
+      2.8229558980402403e-12
+     ],
+     "hourlyShadowFactor": [
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0
+     ]
+    },
+    "cause": {
+     "classification": "model-setting mismatch",
+     "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
+     "evidence": {
+      "epochUtc": "2026-08-02T00:00:00.000",
+      "units": "m for position/altitude; s for steps",
+      "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+      "toleranceM": 0.1,
+      "nominal": {
+       "trajectory": "basilisk-2.12.0.json",
+       "ffmWorstM": {
+        "suite": 5250.64601040913,
+        "steps30": 5250.645891017559,
+        "finest": 5250.645916904503
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 5250.649889025366
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.00020288695402411057,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84Only": {
+       "trajectory": "basilisk-wgs84-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 2.297573628110015,
+        "steps30": 2.297693017501085,
+        "finest": 2.2976671303647977
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 2.2936950096884634
+       },
+       "stepHalving": {
+        "maxStepS": 2,
+        "fineStepS": 1,
+        "atHour": 8,
+        "sampleCount": 24,
+        "worstM": 0.00013943685330777597,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84AndGtd7d": {
+       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.043508740090461136,
+        "steps30": 0.04338934889071401,
+        "finest": 0.0434152347167933
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.047387242859726626
+       },
+       "stepHalving": {
+        "maxStepS": 2,
+        "fineStepS": 1,
+        "atHour": 11,
+        "sampleCount": 24,
+        "worstM": 0.00015045426293587477,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "coordinateChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5252.943565505551
+      },
+      "gtd7dChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 2.341080172541303
+      },
+      "combinedChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5250.602502485088
+      },
+      "sphericalMinusWgs84AltitudeM": {
+       "min": -13122.526789692638,
+       "max": -1.909211277961731e-7
+      },
+      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+      "matchedDiagnosticMeetsAllSettings": true,
+      "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     }
     }
    }
   },
@@ -3017,36 +3149,36 @@
    "orekitMinusBasilisk": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.319477717685
+    "worstM": 0.047583320193358244
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.315516236437,
+    "worstM": 0.04362194839479124,
     "steps": 1416,
-    "met": false
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.31538598664,
+    "worstM": 0.04349169822855953,
     "steps": 2959,
-    "met": false
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5248.3154037037775,
+    "worstM": 0.043509414222034394,
     "steps": 8635,
-    "met": false
+    "met": true
    },
-   "met": false,
+   "met": true,
    "convergence": {
     "maxStepS": 0.5,
     "fineStepS": 0.25,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.0002410659205923833,
+    "worstM": 0.00018072665310480066,
     "limitM": 0.0003,
     "met": true
    },
@@ -3056,35 +3188,35 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.04599815649826566
+     "worstM": 0.04041497286137496
     },
     {
      "maxStepS": 4,
      "fineStepS": 2,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.013170100824298026
+     "worstM": 0.011245679383284014
     },
     {
      "maxStepS": 2,
      "fineStepS": 1,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0033779301991778313
+     "worstM": 0.0034391411861032107
     },
     {
      "maxStepS": 1,
      "fineStepS": 0.5,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0006313658557321523
+     "worstM": 0.0005209145350954318
     },
     {
      "maxStepS": 0.5,
      "fineStepS": 0.25,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0002410659205923833
+     "worstM": 0.00018072665310480066
     }
    ],
    "diagnostics": {
@@ -3094,40 +3226,40 @@
     "absoluteTolerance": 1e-12,
     "environmentUpdates": 172801,
     "nativeSunRadiusM": 695000000,
-    "variant": "nominal",
+    "variant": "wgs84-gtd7d",
     "orientationEvaluation": "memoized exact pinned ERFA",
     "orientationCacheLimit": 800000,
-    "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
+    "densityModel": "native wheel gtd7d at every altitude",
     "sphericalMinusWgs84AltitudeM": {
-     "min": -13123.768528132758,
-     "max": -0.000001882319338619709
+     "min": -13123.7693403936,
+     "max": -1.1641532182693481e-10
     },
     "hourlyNativeDensityKgM3": [
-     3.082498308722732e-12,
-     2.684485782864844e-12,
-     5.083046506451545e-12,
-     2.5440801554674537e-12,
-     2.6612409574648933e-12,
-     5.252763012400958e-12,
-     2.453452564880138e-12,
-     3.1004569331760985e-12,
-     5.293872602806931e-12,
-     2.513053244658253e-12,
-     3.802014937905553e-12,
-     4.980516166146318e-12,
-     2.394608882416459e-12,
-     4.399353332452497e-12,
-     4.2211603731245186e-12,
-     2.6002948460950326e-12,
-     4.839351383655046e-12,
-     3.3683155382348807e-12,
-     2.924740598428522e-12,
-     5.149217926482637e-12,
-     2.7715578303601153e-12,
-     2.7843186476640912e-12,
-     5.313808663807485e-12,
-     2.444216429574535e-12,
-     2.8151909070916484e-12
+     2.7951346035729718e-12,
+     2.0816753501744877e-12,
+     4.7913134672727155e-12,
+     2.462442815359264e-12,
+     2.111304558246934e-12,
+     4.619673805990191e-12,
+     2.4519387065496712e-12,
+     2.6467966292608e-12,
+     4.371306006980867e-12,
+     2.453201779288181e-12,
+     3.5194593647628613e-12,
+     4.010806515273091e-12,
+     2.178969317562473e-12,
+     4.3182906449765585e-12,
+     3.4755202038232484e-12,
+     2.195980170447141e-12,
+     4.8350910067521206e-12,
+     2.9332463337995705e-12,
+     2.3428199805743894e-12,
+     5.0106561073637506e-12,
+     2.5826570256509157e-12,
+     2.17370698425991e-12,
+     4.872147046037769e-12,
+     2.4074959326927765e-12,
+     2.2835719009761224e-12
     ],
     "hourlyShadowFactor": [
      1,
@@ -3157,104 +3289,250 @@
      0
     ]
    },
+   "basiliskRun": "wgs84-gtd7d",
    "stmSkipped": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.",
-   "cause": {
-    "classification": "model-setting mismatch",
-    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
-    "evidence": {
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "units": "m for position/altitude; s for steps",
-     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
-     "toleranceM": 0.1,
-     "nominal": {
-      "trajectory": "basilisk-2.12.0.json",
-      "ffmWorstM": {
-       "suite": 5248.315516236437,
-       "steps30": 5248.31538598664,
-       "finest": 5248.3154037037775
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 5248.319477717685
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0002410659205923833,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84Only": {
-      "trajectory": "basilisk-wgs84-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 2.2992355471255777,
-       "steps30": 2.299365794026618,
-       "finest": 2.2993480765229726
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 2.2952740697415317
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.00014010087025295687,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84AndGtd7d": {
-      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.04362194839479124,
-       "steps30": 0.04349169822855953,
-       "finest": 0.043509414222034394
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.047583320193358244
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.00018072665310480066,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "coordinateChangeDirectPositionDifference": {
+   "stock": {
+    "orekitMinusBasilisk": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5248.319477717685
+    },
+    "suite": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5248.315516236437,
+     "steps": 1416,
+     "met": false
+    },
+    "steps30": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5248.31538598664,
+     "steps": 2959,
+     "met": false
+    },
+    "finest": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5248.3154037037775,
+     "steps": 8635,
+     "met": false
+    },
+    "met": false,
+    "convergence": {
+     "maxStepS": 0.5,
+     "fineStepS": 0.25,
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 0.0002410659205923833,
+     "limitM": 0.0003,
+     "met": true
+    },
+    "convergenceAttempts": [
+     {
+      "maxStepS": 8,
+      "fineStepS": 4,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 5250.614733241735
+      "worstM": 0.04599815649826566
      },
-     "gtd7dChangeDirectPositionDifference": {
+     {
+      "maxStepS": 4,
+      "fineStepS": 2,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.3428552676596874
+      "worstM": 0.013170100824298026
      },
-     "combinedChangeDirectPositionDifference": {
+     {
+      "maxStepS": 2,
+      "fineStepS": 1,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 5248.271895122785
+      "worstM": 0.0033779301991778313
      },
+     {
+      "maxStepS": 1,
+      "fineStepS": 0.5,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.0006313658557321523
+     },
+     {
+      "maxStepS": 0.5,
+      "fineStepS": 0.25,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.0002410659205923833
+     }
+    ],
+    "diagnostics": {
+     "environmentStepS": 0.5,
+     "integrator": "Basilisk svIntegratorRKF78",
+     "relativeTolerance": 1e-14,
+     "absoluteTolerance": 1e-12,
+     "environmentUpdates": 172801,
+     "nativeSunRadiusM": 695000000,
+     "variant": "nominal",
+     "orientationEvaluation": "memoized exact pinned ERFA",
+     "orientationCacheLimit": 800000,
+     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
      "sphericalMinusWgs84AltitudeM": {
       "min": -13123.768528132758,
       "max": -0.000001882319338619709
      },
-     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
-     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
-     "matchedDiagnosticMeetsAllSettings": true,
-     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     "hourlyNativeDensityKgM3": [
+      3.082498308722732e-12,
+      2.684485782864844e-12,
+      5.083046506451545e-12,
+      2.5440801554674537e-12,
+      2.6612409574648933e-12,
+      5.252763012400958e-12,
+      2.453452564880138e-12,
+      3.1004569331760985e-12,
+      5.293872602806931e-12,
+      2.513053244658253e-12,
+      3.802014937905553e-12,
+      4.980516166146318e-12,
+      2.394608882416459e-12,
+      4.399353332452497e-12,
+      4.2211603731245186e-12,
+      2.6002948460950326e-12,
+      4.839351383655046e-12,
+      3.3683155382348807e-12,
+      2.924740598428522e-12,
+      5.149217926482637e-12,
+      2.7715578303601153e-12,
+      2.7843186476640912e-12,
+      5.313808663807485e-12,
+      2.444216429574535e-12,
+      2.8151909070916484e-12
+     ],
+     "hourlyShadowFactor": [
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0
+     ]
+    },
+    "cause": {
+     "classification": "model-setting mismatch",
+     "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
+     "evidence": {
+      "epochUtc": "2026-08-02T00:00:00.000",
+      "units": "m for position/altitude; s for steps",
+      "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+      "toleranceM": 0.1,
+      "nominal": {
+       "trajectory": "basilisk-2.12.0.json",
+       "ffmWorstM": {
+        "suite": 5248.315516236437,
+        "steps30": 5248.31538598664,
+        "finest": 5248.3154037037775
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 5248.319477717685
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0002410659205923833,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84Only": {
+       "trajectory": "basilisk-wgs84-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 2.2992355471255777,
+        "steps30": 2.299365794026618,
+        "finest": 2.2993480765229726
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 2.2952740697415317
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.00014010087025295687,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84AndGtd7d": {
+       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.04362194839479124,
+        "steps30": 0.04349169822855953,
+        "finest": 0.043509414222034394
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.047583320193358244
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.00018072665310480066,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "coordinateChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5250.614733241735
+      },
+      "gtd7dChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 2.3428552676596874
+      },
+      "combinedChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5248.271895122785
+      },
+      "sphericalMinusWgs84AltitudeM": {
+       "min": -13123.768528132758,
+       "max": -0.000001882319338619709
+      },
+      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+      "matchedDiagnosticMeetsAllSettings": true,
+      "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     }
     }
    }
   },
@@ -3268,36 +3546,36 @@
    "orekitMinusBasilisk": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.770622154647
+    "worstM": 0.04768576041001922
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.767111222807,
+    "worstM": 0.044174938732615035,
     "steps": 1414,
-    "met": false
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.766986379542,
+    "worstM": 0.04405009524364963,
     "steps": 2959,
-    "met": false
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 5418.767013640304,
+    "worstM": 0.0440773551759863,
     "steps": 8636,
-    "met": false
+    "met": true
    },
-   "met": false,
+   "met": true,
    "convergence": {
     "maxStepS": 0.5,
     "fineStepS": 0.25,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00019337003836653995,
+    "worstM": 0.00018683875141554016,
     "limitM": 0.0003,
     "met": true
    },
@@ -3307,35 +3585,35 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.046366280723934596
+     "worstM": 0.040643913614718113
     },
     {
      "maxStepS": 4,
      "fineStepS": 2,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.013344829265293304
+     "worstM": 0.011388407056256841
     },
     {
      "maxStepS": 2,
      "fineStepS": 1,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.003325202936433737
+     "worstM": 0.003417292506788843
     },
     {
      "maxStepS": 1,
      "fineStepS": 0.5,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0006145978197299822
+     "worstM": 0.0005110587199486036
     },
     {
      "maxStepS": 0.5,
      "fineStepS": 0.25,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00019337003836653995
+     "worstM": 0.00018683875141554016
     }
    ],
    "diagnostics": {
@@ -3345,40 +3623,40 @@
     "absoluteTolerance": 1e-12,
     "environmentUpdates": 172801,
     "nativeSunRadiusM": 695000000,
-    "variant": "nominal",
+    "variant": "wgs84-gtd7d",
     "orientationEvaluation": "memoized exact pinned ERFA",
     "orientationCacheLimit": 800000,
-    "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
+    "densityModel": "native wheel gtd7d at every altitude",
     "sphericalMinusWgs84AltitudeM": {
-     "min": -13123.767363351362,
-     "max": -3.463355824351311e-8
+     "min": -13123.76909535157,
+     "max": -1.5454133972525597e-7
     },
     "hourlyNativeDensityKgM3": [
-     3.082498308722732e-12,
-     2.684488840301867e-12,
-     5.083060261106173e-12,
-     2.544106251635936e-12,
-     2.661291602397037e-12,
-     5.25285501656205e-12,
-     2.4535626253983737e-12,
-     3.1006069162888785e-12,
-     5.294131015817204e-12,
-     2.5133221989127738e-12,
-     3.802333608112541e-12,
-     4.981036571150788e-12,
-     2.395084171035605e-12,
-     4.399914406016192e-12,
-     4.222007618866781e-12,
-     2.6010017929222373e-12,
-     4.840194355796647e-12,
-     3.369452301981253e-12,
-     2.9258576266901385e-12,
-     5.15043549654622e-12,
-     2.77300984083173e-12,
-     2.785898685663517e-12,
-     5.315599137375908e-12,
-     2.4458985438951234e-12,
-     2.8167332948571763e-12
+     2.7951346035729718e-12,
+     2.081677480345196e-12,
+     4.79132496335398e-12,
+     2.462465363971414e-12,
+     2.1113396077357975e-12,
+     4.619746601506354e-12,
+     2.4520378643931564e-12,
+     2.6469056278245584e-12,
+     4.371498090924972e-12,
+     2.4534424470004548e-12,
+     3.5197062968075627e-12,
+     4.011175615164986e-12,
+     2.1793710664930533e-12,
+     4.318757419428239e-12,
+     3.4761183568078974e-12,
+     2.196532618030656e-12,
+     4.835837154100709e-12,
+     2.9340844765858693e-12,
+     2.3436315455266366e-12,
+     5.011771461579089e-12,
+     2.583807229476876e-12,
+     2.174784369173749e-12,
+     4.873756042899605e-12,
+     2.408938921510382e-12,
+     2.2845622158023213e-12
     ],
     "hourlyShadowFactor": [
      1,
@@ -3408,104 +3686,250 @@
      0
     ]
    },
+   "basiliskRun": "wgs84-gtd7d",
    "stmSkipped": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.",
-   "cause": {
-    "classification": "model-setting mismatch",
-    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
-    "evidence": {
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "units": "m for position/altitude; s for steps",
-     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
-     "toleranceM": 0.1,
-     "nominal": {
-      "trajectory": "basilisk-2.12.0.json",
-      "ffmWorstM": {
-       "suite": 5418.767111222807,
-       "steps30": 5418.766986379542,
-       "finest": 5418.767013640304
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 5418.770622154647
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.00019337003836653995,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84Only": {
-      "trajectory": "basilisk-wgs84-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 2.373275114080124,
-       "steps30": 2.373399954647277,
-       "finest": 2.373372693902003
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 2.369764173530043
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.00020076441861582744,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84AndGtd7d": {
-      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.044174938732615035,
-       "steps30": 0.04405009524364963,
-       "finest": 0.0440773551759863
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.04768576041001922
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.00018683875141554016,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "coordinateChangeDirectPositionDifference": {
+   "stock": {
+    "orekitMinusBasilisk": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5418.770622154647
+    },
+    "suite": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5418.767111222807,
+     "steps": 1414,
+     "met": false
+    },
+    "steps30": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5418.766986379542,
+     "steps": 2959,
+     "met": false
+    },
+    "finest": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 5418.767013640304,
+     "steps": 8636,
+     "met": false
+    },
+    "met": false,
+    "convergence": {
+     "maxStepS": 0.5,
+     "fineStepS": 0.25,
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 0.00019337003836653995,
+     "limitM": 0.0003,
+     "met": true
+    },
+    "convergenceAttempts": [
+     {
+      "maxStepS": 8,
+      "fineStepS": 4,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 5421.140366684161
+      "worstM": 0.046366280723934596
      },
-     "gtd7dChangeDirectPositionDifference": {
+     {
+      "maxStepS": 4,
+      "fineStepS": 2,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 2.41744785221881
+      "worstM": 0.013344829265293304
      },
-     "combinedChangeDirectPositionDifference": {
+     {
+      "maxStepS": 2,
+      "fineStepS": 1,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 5418.722937080509
+      "worstM": 0.003325202936433737
      },
+     {
+      "maxStepS": 1,
+      "fineStepS": 0.5,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.0006145978197299822
+     },
+     {
+      "maxStepS": 0.5,
+      "fineStepS": 0.25,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.00019337003836653995
+     }
+    ],
+    "diagnostics": {
+     "environmentStepS": 0.5,
+     "integrator": "Basilisk svIntegratorRKF78",
+     "relativeTolerance": 1e-14,
+     "absoluteTolerance": 1e-12,
+     "environmentUpdates": 172801,
+     "nativeSunRadiusM": 695000000,
+     "variant": "nominal",
+     "orientationEvaluation": "memoized exact pinned ERFA",
+     "orientationCacheLimit": 800000,
+     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
      "sphericalMinusWgs84AltitudeM": {
       "min": -13123.767363351362,
       "max": -3.463355824351311e-8
      },
-     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
-     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
-     "matchedDiagnosticMeetsAllSettings": true,
-     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     "hourlyNativeDensityKgM3": [
+      3.082498308722732e-12,
+      2.684488840301867e-12,
+      5.083060261106173e-12,
+      2.544106251635936e-12,
+      2.661291602397037e-12,
+      5.25285501656205e-12,
+      2.4535626253983737e-12,
+      3.1006069162888785e-12,
+      5.294131015817204e-12,
+      2.5133221989127738e-12,
+      3.802333608112541e-12,
+      4.981036571150788e-12,
+      2.395084171035605e-12,
+      4.399914406016192e-12,
+      4.222007618866781e-12,
+      2.6010017929222373e-12,
+      4.840194355796647e-12,
+      3.369452301981253e-12,
+      2.9258576266901385e-12,
+      5.15043549654622e-12,
+      2.77300984083173e-12,
+      2.785898685663517e-12,
+      5.315599137375908e-12,
+      2.4458985438951234e-12,
+      2.8167332948571763e-12
+     ],
+     "hourlyShadowFactor": [
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0
+     ]
+    },
+    "cause": {
+     "classification": "model-setting mismatch",
+     "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
+     "evidence": {
+      "epochUtc": "2026-08-02T00:00:00.000",
+      "units": "m for position/altitude; s for steps",
+      "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+      "toleranceM": 0.1,
+      "nominal": {
+       "trajectory": "basilisk-2.12.0.json",
+       "ffmWorstM": {
+        "suite": 5418.767111222807,
+        "steps30": 5418.766986379542,
+        "finest": 5418.767013640304
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 5418.770622154647
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.00019337003836653995,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84Only": {
+       "trajectory": "basilisk-wgs84-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 2.373275114080124,
+        "steps30": 2.373399954647277,
+        "finest": 2.373372693902003
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 2.369764173530043
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.00020076441861582744,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84AndGtd7d": {
+       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.044174938732615035,
+        "steps30": 0.04405009524364963,
+        "finest": 0.0440773551759863
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.04768576041001922
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.00018683875141554016,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "coordinateChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5421.140366684161
+      },
+      "gtd7dChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 2.41744785221881
+      },
+      "combinedChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 5418.722937080509
+      },
+      "sphericalMinusWgs84AltitudeM": {
+       "min": -13123.767363351362,
+       "max": -3.463355824351311e-8
+      },
+      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+      "matchedDiagnosticMeetsAllSettings": true,
+      "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     }
     }
    }
   },
@@ -3519,36 +3943,36 @@
    "orekitMinusBasilisk": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.035187508141
+    "worstM": 0.038606297077565244
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.0314047448937,
+    "worstM": 0.03482371008874818,
     "steps": 1416,
-    "met": false
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.0312817977056,
+    "worstM": 0.03470076317017146,
     "steps": 2959,
-    "met": false
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 4094.031299499947,
+    "worstM": 0.034718463655355046,
     "steps": 8635,
-    "met": false
+    "met": true
    },
-   "met": false,
+   "met": true,
    "convergence": {
     "maxStepS": 0.5,
     "fineStepS": 0.25,
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 0.00006626020064067274,
+    "worstM": 0.0001293457827866407,
     "limitM": 0.0003,
     "met": true
    },
@@ -3558,35 +3982,35 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.04178058734981179
+     "worstM": 0.03722300324157829
     },
     {
      "maxStepS": 4,
      "fineStepS": 2,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.011304957490563039
+     "worstM": 0.010229250958587809
     },
     {
      "maxStepS": 2,
      "fineStepS": 1,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.003498592528684538
+     "worstM": 0.0031115914860106453
     },
     {
      "maxStepS": 1,
      "fineStepS": 0.5,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0007806964043583375
+     "worstM": 0.000854960026136473
     },
     {
      "maxStepS": 0.5,
      "fineStepS": 0.25,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00006626020064067274
+     "worstM": 0.0001293457827866407
     }
    ],
    "diagnostics": {
@@ -3596,40 +4020,40 @@
     "absoluteTolerance": 1e-12,
     "environmentUpdates": 172801,
     "nativeSunRadiusM": 695000000,
-    "variant": "nominal",
+    "variant": "wgs84-gtd7d",
     "orientationEvaluation": "memoized exact pinned ERFA",
     "orientationCacheLimit": 800000,
-    "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
+    "densityModel": "native wheel gtd7d at every altitude",
     "sphericalMinusWgs84AltitudeM": {
-     "min": -13123.772999245673,
-     "max": -3.8958387449383736e-7
+     "min": -13123.77402882895,
+     "max": -1.150183379650116e-7
     },
     "hourlyNativeDensityKgM3": [
-     2.2931542228061035e-12,
-     1.8779483360798104e-12,
-     3.959598988183429e-12,
-     1.851751379064609e-12,
-     1.9456099584980616e-12,
-     4.035048727176164e-12,
-     1.7054823244953215e-12,
-     2.3220647289438754e-12,
-     4.03068335607219e-12,
-     1.770880329514104e-12,
-     2.8929242082431555e-12,
-     3.79102889226297e-12,
-     1.75416251490872e-12,
-     3.3890311169226463e-12,
-     3.179780536341666e-12,
-     1.948207969543854e-12,
-     3.76466323216208e-12,
-     2.4965355715881696e-12,
-     2.140867232556971e-12,
-     4.016313738513847e-12,
-     2.0212440889483633e-12,
-     1.9491403174051072e-12,
-     4.1345325576077865e-12,
-     1.7398465231724265e-12,
-     2.0512048553494747e-12
+     2.0702602464248533e-12,
+     1.4319564603434384e-12,
+     3.72250660522767e-12,
+     1.790102331222609e-12,
+     1.5268275039338366e-12,
+     3.5273243305279495e-12,
+     1.7045179155290996e-12,
+     1.9688978662171726e-12,
+     3.3011339356198895e-12,
+     1.7270297805422685e-12,
+     2.6691489961465218e-12,
+     3.0243513365059273e-12,
+     1.5907156501688315e-12,
+     3.3245192477870233e-12,
+     2.5944128036247826e-12,
+     1.6328811330247373e-12,
+     3.761691609512078e-12,
+     2.1596426895383796e-12,
+     1.6913099594054781e-12,
+     3.903764602781131e-12,
+     1.8784349127854566e-12,
+     1.4960830939227127e-12,
+     3.775025129749112e-12,
+     1.713487667378795e-12,
+     1.6485289279157034e-12
     ],
     "hourlyShadowFactor": [
      1,
@@ -3659,104 +4083,250 @@
      0
     ]
    },
+   "basiliskRun": "wgs84-gtd7d",
    "stmSkipped": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.",
-   "cause": {
-    "classification": "model-setting mismatch",
-    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
-    "evidence": {
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "units": "m for position/altitude; s for steps",
-     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
-     "toleranceM": 0.1,
-     "nominal": {
-      "trajectory": "basilisk-2.12.0.json",
-      "ffmWorstM": {
-       "suite": 4094.0314047448937,
-       "steps30": 4094.0312817977056,
-       "finest": 4094.031299499947
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 4094.035187508141
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.00006626020064067274,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84Only": {
-      "trajectory": "basilisk-wgs84-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 1.541284143752148,
-       "steps30": 1.5414070880723285,
-       "finest": 1.5413893851736518
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 1.5375013493011922
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 18,
-       "sampleCount": 24,
-       "worstM": 0.00007927686585303935,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84AndGtd7d": {
-      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.03482371008874818,
-       "steps30": 0.03470076317017146,
-       "finest": 0.034718463655355046
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.038606297077565244
-      },
-      "stepHalving": {
-       "maxStepS": 0.5,
-       "fineStepS": 0.25,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0001293457827866407,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "coordinateChangeDirectPositionDifference": {
+   "stock": {
+    "orekitMinusBasilisk": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 4094.035187508141
+    },
+    "suite": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 4094.0314047448937,
+     "steps": 1416,
+     "met": false
+    },
+    "steps30": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 4094.0312817977056,
+     "steps": 2959,
+     "met": false
+    },
+    "finest": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 4094.031299499947,
+     "steps": 8635,
+     "met": false
+    },
+    "met": false,
+    "convergence": {
+     "maxStepS": 0.5,
+     "fineStepS": 0.25,
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 0.00006626020064067274,
+     "limitM": 0.0003,
+     "met": true
+    },
+    "convergenceAttempts": [
+     {
+      "maxStepS": 8,
+      "fineStepS": 4,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 4095.5726741043422
+      "worstM": 0.04178058734981179
      },
-     "gtd7dChangeDirectPositionDifference": {
+     {
+      "maxStepS": 4,
+      "fineStepS": 2,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 1.5761056714534798
+      "worstM": 0.011304957490563039
      },
-     "combinedChangeDirectPositionDifference": {
+     {
+      "maxStepS": 2,
+      "fineStepS": 1,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 4093.99658187383
+      "worstM": 0.003498592528684538
      },
+     {
+      "maxStepS": 1,
+      "fineStepS": 0.5,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.0007806964043583375
+     },
+     {
+      "maxStepS": 0.5,
+      "fineStepS": 0.25,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.00006626020064067274
+     }
+    ],
+    "diagnostics": {
+     "environmentStepS": 0.5,
+     "integrator": "Basilisk svIntegratorRKF78",
+     "relativeTolerance": 1e-14,
+     "absoluteTolerance": 1e-12,
+     "environmentUpdates": 172801,
+     "nativeSunRadiusM": 695000000,
+     "variant": "nominal",
+     "orientationEvaluation": "memoized exact pinned ERFA",
+     "orientationCacheLimit": 800000,
+     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
      "sphericalMinusWgs84AltitudeM": {
       "min": -13123.772999245673,
       "max": -3.8958387449383736e-7
      },
-     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
-     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
-     "matchedDiagnosticMeetsAllSettings": true,
-     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     "hourlyNativeDensityKgM3": [
+      2.2931542228061035e-12,
+      1.8779483360798104e-12,
+      3.959598988183429e-12,
+      1.851751379064609e-12,
+      1.9456099584980616e-12,
+      4.035048727176164e-12,
+      1.7054823244953215e-12,
+      2.3220647289438754e-12,
+      4.03068335607219e-12,
+      1.770880329514104e-12,
+      2.8929242082431555e-12,
+      3.79102889226297e-12,
+      1.75416251490872e-12,
+      3.3890311169226463e-12,
+      3.179780536341666e-12,
+      1.948207969543854e-12,
+      3.76466323216208e-12,
+      2.4965355715881696e-12,
+      2.140867232556971e-12,
+      4.016313738513847e-12,
+      2.0212440889483633e-12,
+      1.9491403174051072e-12,
+      4.1345325576077865e-12,
+      1.7398465231724265e-12,
+      2.0512048553494747e-12
+     ],
+     "hourlyShadowFactor": [
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0
+     ]
+    },
+    "cause": {
+     "classification": "model-setting mismatch",
+     "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect.",
+     "evidence": {
+      "epochUtc": "2026-08-02T00:00:00.000",
+      "units": "m for position/altitude; s for steps",
+      "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+      "toleranceM": 0.1,
+      "nominal": {
+       "trajectory": "basilisk-2.12.0.json",
+       "ffmWorstM": {
+        "suite": 4094.0314047448937,
+        "steps30": 4094.0312817977056,
+        "finest": 4094.031299499947
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 4094.035187508141
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.00006626020064067274,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84Only": {
+       "trajectory": "basilisk-wgs84-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 1.541284143752148,
+        "steps30": 1.5414070880723285,
+        "finest": 1.5413893851736518
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 1.5375013493011922
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 18,
+        "sampleCount": 24,
+        "worstM": 0.00007927686585303935,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84AndGtd7d": {
+       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.03482371008874818,
+        "steps30": 0.03470076317017146,
+        "finest": 0.034718463655355046
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.038606297077565244
+       },
+       "stepHalving": {
+        "maxStepS": 0.5,
+        "fineStepS": 0.25,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0001293457827866407,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "coordinateChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 4095.5726741043422
+      },
+      "gtd7dChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 1.5761056714534798
+      },
+      "combinedChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 4093.99658187383
+      },
+      "sphericalMinusWgs84AltitudeM": {
+       "min": -13123.772999245673,
+       "max": -3.8958387449383736e-7
+      },
+      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+      "matchedDiagnosticMeetsAllSettings": true,
+      "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     }
     }
    }
   },
@@ -4329,36 +4899,36 @@
    "orekitMinusBasilisk": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.14257962122024
+    "worstM": 0.0007469313330466536
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.14406103225704,
+    "worstM": 0.0007349794468518378,
     "steps": 1342,
-    "met": false
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.14396663898893,
+    "worstM": 0.0006405872841590743,
     "steps": 2957,
-    "met": false
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.14360933786309,
+    "worstM": 0.00028329692797259237,
     "steps": 8676,
-    "met": false
+    "met": true
    },
-   "met": false,
+   "met": true,
    "convergence": {
-    "maxStepS": 2,
-    "fineStepS": 1,
-    "atHour": 24,
+    "maxStepS": 1,
+    "fineStepS": 0.5,
+    "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.0002842117576465992,
+    "worstM": 0.0001404042020067674,
     "limitM": 0.0003,
     "met": true
    },
@@ -4368,64 +4938,71 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.03730480559214621
+     "worstM": 0.03738147259124807
     },
     {
      "maxStepS": 4,
      "fineStepS": 2,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.010905385899142566
+     "worstM": 0.010910108623900319
     },
     {
      "maxStepS": 2,
      "fineStepS": 1,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0002842117576465992
+     "worstM": 0.00034422529733509104
+    },
+    {
+     "maxStepS": 1,
+     "fineStepS": 0.5,
+     "atHour": 21,
+     "sampleCount": 24,
+     "worstM": 0.0001404042020067674
     }
    ],
    "diagnostics": {
-    "environmentStepS": 2,
+    "environmentStepS": 1,
     "integrator": "Basilisk svIntegratorRKF78",
     "relativeTolerance": 1e-14,
     "absoluteTolerance": 1e-12,
-    "environmentUpdates": 43201,
+    "environmentUpdates": 86401,
     "nativeSunRadiusM": 695000000,
-    "variant": "nominal",
+    "variant": "wgs84-gtd7d",
     "orientationEvaluation": "memoized exact pinned ERFA",
     "orientationCacheLimit": 800000,
-    "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
+    "densityModel": "native wheel gtd7d at every altitude",
     "sphericalMinusWgs84AltitudeM": {
-     "min": -20966.814123925753,
-     "max": 1.1641532182693481e-10
+     "min": -20966.813660502667,
+     "max": -0.0000639123609289527
     },
     "hourlyNativeDensityKgM3": [
-     5.195846238730362e-14,
-     3.419210319018068e-14,
-     1.8342886515762525e-14,
-     4.487304990100394e-14,
-     2.266338618680869e-14,
-     4.6431053630991124e-14,
-     3.3184166643091045e-14,
-     1.9078778238963233e-14,
-     5.043829382771921e-14,
-     3.3918514259922157e-14,
-     3.517563130018431e-14,
-     3.14476950715606e-14,
-     1.9591214365424858e-14,
-     6.017293752861882e-14,
-     3.109013846952083e-14,
-     2.7355945193221243e-14,
-     3.291867537478082e-14,
-     1.9620901127146046e-14,
-     6.186617163222705e-14,
-     2.6238504467822472e-14,
-     2.2941612304671948e-14,
-     3.6212997613601257e-14,
-     1.7399540660700645e-14,
-     5.851607247645986e-14,
-     3.0264013093454955e-14
+     4.073003364940934e-14,
+     3.0930135015792864e-14,
+     1.832063319513977e-14,
+     4.131418562040411e-14,
+     1.8622081187206744e-14,
+     3.698349900672494e-14,
+     3.1096067864990775e-14,
+     1.901859160914308e-14,
+     4.4368766011549295e-14,
+     2.699753540163328e-14,
+     2.8751888913826404e-14,
+     3.037850855809004e-14,
+     1.9191110471070944e-14,
+     5.085751988459971e-14,
+     2.5007077933692882e-14,
+     2.3278433474255885e-14,
+     3.2557329606465697e-14,
+     1.8671977638247796e-14,
+     5.0479235405685247e-14,
+     2.1897842322995984e-14,
+     2.047661725510831e-14,
+     3.620736508289429e-14,
+     1.599341175379503e-14,
+     4.635099833185528e-14,
+     2.5144997576815956e-14
     ],
     "hourlyShadowFactor": [
      1,
@@ -4455,104 +5032,236 @@
      1
     ]
    },
+   "basiliskRun": "wgs84-gtd7d",
    "stmSkipped": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.",
-   "cause": {
-    "classification": "model-setting mismatch",
-    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every FFM setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an FFM defect.",
-    "evidence": {
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "units": "m for position/altitude; s for steps",
-     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
-     "toleranceM": 0.1,
-     "nominal": {
-      "trajectory": "basilisk-2.12.0.json",
-      "ffmWorstM": {
-       "suite": 58.14406103225704,
-       "steps30": 58.14396663898893,
-       "finest": 58.14360933786309
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 58.14257962122024
-      },
-      "stepHalving": {
-       "maxStepS": 2,
-       "fineStepS": 1,
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0002842117576465992,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84Only": {
-      "trajectory": "basilisk-wgs84-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.0007349794468518378,
-       "steps30": 0.0006405872841590743,
-       "finest": 0.00028329692797259237
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0007469313330466536
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 21,
-       "sampleCount": 24,
-       "worstM": 0.0001404042020067674,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84AndGtd7d": {
-      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.0007349794468518378,
-       "steps30": 0.0006405872841590743,
-       "finest": 0.00028329692797259237
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0007469313330466536
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 21,
-       "sampleCount": 24,
-       "worstM": 0.0001404042020067674,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "coordinateChangeDirectPositionDifference": {
+   "stock": {
+    "orekitMinusBasilisk": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.14257962122024
+    },
+    "suite": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.14406103225704,
+     "steps": 1342,
+     "met": false
+    },
+    "steps30": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.14396663898893,
+     "steps": 2957,
+     "met": false
+    },
+    "finest": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.14360933786309,
+     "steps": 8676,
+     "met": false
+    },
+    "met": false,
+    "convergence": {
+     "maxStepS": 2,
+     "fineStepS": 1,
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 0.0002842117576465992,
+     "limitM": 0.0003,
+     "met": true
+    },
+    "convergenceAttempts": [
+     {
+      "maxStepS": 8,
+      "fineStepS": 4,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 58.14332605613738
+      "worstM": 0.03730480559214621
      },
-     "gtd7dChangeDirectPositionDifference": {
-      "atHour": 1,
-      "sampleCount": 24,
-      "worstM": 0
-     },
-     "combinedChangeDirectPositionDifference": {
+     {
+      "maxStepS": 4,
+      "fineStepS": 2,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 58.14332605613738
+      "worstM": 0.010905385899142566
      },
+     {
+      "maxStepS": 2,
+      "fineStepS": 1,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.0002842117576465992
+     }
+    ],
+    "diagnostics": {
+     "environmentStepS": 2,
+     "integrator": "Basilisk svIntegratorRKF78",
+     "relativeTolerance": 1e-14,
+     "absoluteTolerance": 1e-12,
+     "environmentUpdates": 43201,
+     "nativeSunRadiusM": 695000000,
+     "variant": "nominal",
+     "orientationEvaluation": "memoized exact pinned ERFA",
+     "orientationCacheLimit": 800000,
+     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
      "sphericalMinusWgs84AltitudeM": {
       "min": -20966.814123925753,
       "max": 1.1641532182693481e-10
      },
-     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
-     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
-     "matchedDiagnosticMeetsAllSettings": true,
-     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     "hourlyNativeDensityKgM3": [
+      5.195846238730362e-14,
+      3.419210319018068e-14,
+      1.8342886515762525e-14,
+      4.487304990100394e-14,
+      2.266338618680869e-14,
+      4.6431053630991124e-14,
+      3.3184166643091045e-14,
+      1.9078778238963233e-14,
+      5.043829382771921e-14,
+      3.3918514259922157e-14,
+      3.517563130018431e-14,
+      3.14476950715606e-14,
+      1.9591214365424858e-14,
+      6.017293752861882e-14,
+      3.109013846952083e-14,
+      2.7355945193221243e-14,
+      3.291867537478082e-14,
+      1.9620901127146046e-14,
+      6.186617163222705e-14,
+      2.6238504467822472e-14,
+      2.2941612304671948e-14,
+      3.6212997613601257e-14,
+      1.7399540660700645e-14,
+      5.851607247645986e-14,
+      3.0264013093454955e-14
+     ],
+     "hourlyShadowFactor": [
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1
+     ]
+    },
+    "cause": {
+     "classification": "model-setting mismatch",
+     "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every FFM setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an FFM defect.",
+     "evidence": {
+      "epochUtc": "2026-08-02T00:00:00.000",
+      "units": "m for position/altitude; s for steps",
+      "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+      "toleranceM": 0.1,
+      "nominal": {
+       "trajectory": "basilisk-2.12.0.json",
+       "ffmWorstM": {
+        "suite": 58.14406103225704,
+        "steps30": 58.14396663898893,
+        "finest": 58.14360933786309
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 58.14257962122024
+       },
+       "stepHalving": {
+        "maxStepS": 2,
+        "fineStepS": 1,
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0002842117576465992,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84Only": {
+       "trajectory": "basilisk-wgs84-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.0007349794468518378,
+        "steps30": 0.0006405872841590743,
+        "finest": 0.00028329692797259237
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0007469313330466536
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 21,
+        "sampleCount": 24,
+        "worstM": 0.0001404042020067674,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84AndGtd7d": {
+       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.0007349794468518378,
+        "steps30": 0.0006405872841590743,
+        "finest": 0.00028329692797259237
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0007469313330466536
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 21,
+        "sampleCount": 24,
+        "worstM": 0.0001404042020067674,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "coordinateChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 58.14332605613738
+      },
+      "gtd7dChangeDirectPositionDifference": {
+       "atHour": 1,
+       "sampleCount": 24,
+       "worstM": 0
+      },
+      "combinedChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 58.14332605613738
+      },
+      "sphericalMinusWgs84AltitudeM": {
+       "min": -20966.814123925753,
+       "max": 1.1641532182693481e-10
+      },
+      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+      "matchedDiagnosticMeetsAllSettings": true,
+      "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     }
     }
    }
   },
@@ -4823,36 +5532,36 @@
    "orekitMinusBasilisk": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.12727087004967
+    "worstM": 0.0006160926198361819
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.128649708156736,
+    "worstM": 0.0007636595875388022,
     "steps": 1346,
-    "met": false
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.12854641759604,
+    "worstM": 0.0006603688410755276,
     "steps": 2957,
-    "met": false
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 58.12820607420368,
+    "worstM": 0.00032002511779255125,
     "steps": 8674,
-    "met": false
+    "met": true
    },
-   "met": false,
+   "met": true,
    "convergence": {
     "maxStepS": 1,
     "fineStepS": 0.5,
     "atHour": 23,
     "sampleCount": 24,
-    "worstM": 0.00012087102452486651,
+    "worstM": 0.00015864952015093845,
     "limitM": 0.0003,
     "met": true
    },
@@ -4862,28 +5571,28 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.038308232090705975
+     "worstM": 0.03842027526251891
     },
     {
      "maxStepS": 4,
      "fineStepS": 2,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.011815086190748388
+     "worstM": 0.011810428124650286
     },
     {
      "maxStepS": 2,
      "fineStepS": 1,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.0003959418818968518
+     "worstM": 0.00035623008665886283
     },
     {
      "maxStepS": 1,
      "fineStepS": 0.5,
      "atHour": 23,
      "sampleCount": 24,
-     "worstM": 0.00012087102452486651
+     "worstM": 0.00015864952015093845
     }
    ],
    "diagnostics": {
@@ -4893,40 +5602,40 @@
     "absoluteTolerance": 1e-12,
     "environmentUpdates": 86401,
     "nativeSunRadiusM": 695000000,
-    "variant": "nominal",
+    "variant": "wgs84-gtd7d",
     "orientationEvaluation": "memoized exact pinned ERFA",
     "orientationCacheLimit": 800000,
-    "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
+    "densityModel": "native wheel gtd7d at every altitude",
     "sphericalMinusWgs84AltitudeM": {
-     "min": -20967.18505136273,
-     "max": -5.291076377034187e-7
+     "min": -20967.185053546564,
+     "max": -5.504116415977478e-7
     },
     "hourlyNativeDensityKgM3": [
-     5.195846238730362e-14,
-     3.419089907485924e-14,
-     1.837883766801148e-14,
-     4.4776318498237296e-14,
-     2.2695499338064028e-14,
-     4.6327258469044645e-14,
-     3.316877987972903e-14,
-     1.9105892245807273e-14,
-     5.0383004113867507e-14,
-     3.396301307971852e-14,
-     3.524112911724237e-14,
-     3.140045581913726e-14,
-     1.9649052209819028e-14,
-     6.011027327821956e-14,
-     3.1096279176699115e-14,
-     2.736449410741011e-14,
-     3.2885259187512074e-14,
-     1.960619487246833e-14,
-     6.189460988367542e-14,
-     2.6237907740730152e-14,
-     2.290235149641985e-14,
-     3.628005518899556e-14,
-     1.7392385431089733e-14,
-     5.851545161635733e-14,
-     3.031048987743798e-14
+     4.073003364940934e-14,
+     3.092792529274675e-14,
+     1.835519032467665e-14,
+     4.121644077681039e-14,
+     1.8636616223558883e-14,
+     3.6915863772217804e-14,
+     3.1079450113882734e-14,
+     1.904492249947494e-14,
+     4.4310839435662246e-14,
+     2.702373482135049e-14,
+     2.881620499079575e-14,
+     3.0327768361251303e-14,
+     1.9247253328092406e-14,
+     5.079668580591945e-14,
+     2.5014045660800712e-14,
+     2.3296966446934658e-14,
+     3.251850348991073e-14,
+     1.8658873372839153e-14,
+     5.050322900320498e-14,
+     2.189660830676288e-14,
+     2.0454268209766037e-14,
+     3.626730835434541e-14,
+     1.5990138922952246e-14,
+     4.635213876185204e-14,
+     2.5177428364260066e-14
     ],
     "hourlyShadowFactor": [
      1,
@@ -4956,104 +5665,243 @@
      1
     ]
    },
+   "basiliskRun": "wgs84-gtd7d",
    "stmSkipped": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.",
-   "cause": {
-    "classification": "model-setting mismatch",
-    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every FFM setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an FFM defect.",
-    "evidence": {
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "units": "m for position/altitude; s for steps",
-     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
-     "toleranceM": 0.1,
-     "nominal": {
-      "trajectory": "basilisk-2.12.0.json",
-      "ffmWorstM": {
-       "suite": 58.128649708156736,
-       "steps30": 58.12854641759604,
-       "finest": 58.12820607420368
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 58.12727087004967
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 23,
-       "sampleCount": 24,
-       "worstM": 0.00012087102452486651,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84Only": {
-      "trajectory": "basilisk-wgs84-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.0007636595875388022,
-       "steps30": 0.0006603688410755276,
-       "finest": 0.00032002511779255125
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0006160926198361819
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 23,
-       "sampleCount": 24,
-       "worstM": 0.00015864952015093845,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84AndGtd7d": {
-      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.0007636595875388022,
-       "steps30": 0.0006603688410755276,
-       "finest": 0.00032002511779255125
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0006160926198361819
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 23,
-       "sampleCount": 24,
-       "worstM": 0.00015864952015093845,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "coordinateChangeDirectPositionDifference": {
+   "stock": {
+    "orekitMinusBasilisk": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.12727087004967
+    },
+    "suite": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.128649708156736,
+     "steps": 1346,
+     "met": false
+    },
+    "steps30": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.12854641759604,
+     "steps": 2957,
+     "met": false
+    },
+    "finest": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 58.12820607420368,
+     "steps": 8674,
+     "met": false
+    },
+    "met": false,
+    "convergence": {
+     "maxStepS": 1,
+     "fineStepS": 0.5,
+     "atHour": 23,
+     "sampleCount": 24,
+     "worstM": 0.00012087102452486651,
+     "limitM": 0.0003,
+     "met": true
+    },
+    "convergenceAttempts": [
+     {
+      "maxStepS": 8,
+      "fineStepS": 4,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 58.12788604925722
+      "worstM": 0.038308232090705975
      },
-     "gtd7dChangeDirectPositionDifference": {
-      "atHour": 1,
-      "sampleCount": 24,
-      "worstM": 0
-     },
-     "combinedChangeDirectPositionDifference": {
+     {
+      "maxStepS": 4,
+      "fineStepS": 2,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 58.12788604925722
+      "worstM": 0.011815086190748388
      },
+     {
+      "maxStepS": 2,
+      "fineStepS": 1,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.0003959418818968518
+     },
+     {
+      "maxStepS": 1,
+      "fineStepS": 0.5,
+      "atHour": 23,
+      "sampleCount": 24,
+      "worstM": 0.00012087102452486651
+     }
+    ],
+    "diagnostics": {
+     "environmentStepS": 1,
+     "integrator": "Basilisk svIntegratorRKF78",
+     "relativeTolerance": 1e-14,
+     "absoluteTolerance": 1e-12,
+     "environmentUpdates": 86401,
+     "nativeSunRadiusM": 695000000,
+     "variant": "nominal",
+     "orientationEvaluation": "memoized exact pinned ERFA",
+     "orientationCacheLimit": 800000,
+     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
      "sphericalMinusWgs84AltitudeM": {
       "min": -20967.18505136273,
       "max": -5.291076377034187e-7
      },
-     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
-     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
-     "matchedDiagnosticMeetsAllSettings": true,
-     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     "hourlyNativeDensityKgM3": [
+      5.195846238730362e-14,
+      3.419089907485924e-14,
+      1.837883766801148e-14,
+      4.4776318498237296e-14,
+      2.2695499338064028e-14,
+      4.6327258469044645e-14,
+      3.316877987972903e-14,
+      1.9105892245807273e-14,
+      5.0383004113867507e-14,
+      3.396301307971852e-14,
+      3.524112911724237e-14,
+      3.140045581913726e-14,
+      1.9649052209819028e-14,
+      6.011027327821956e-14,
+      3.1096279176699115e-14,
+      2.736449410741011e-14,
+      3.2885259187512074e-14,
+      1.960619487246833e-14,
+      6.189460988367542e-14,
+      2.6237907740730152e-14,
+      2.290235149641985e-14,
+      3.628005518899556e-14,
+      1.7392385431089733e-14,
+      5.851545161635733e-14,
+      3.031048987743798e-14
+     ],
+     "hourlyShadowFactor": [
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1
+     ]
+    },
+    "cause": {
+     "classification": "model-setting mismatch",
+     "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every FFM setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an FFM defect.",
+     "evidence": {
+      "epochUtc": "2026-08-02T00:00:00.000",
+      "units": "m for position/altitude; s for steps",
+      "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+      "toleranceM": 0.1,
+      "nominal": {
+       "trajectory": "basilisk-2.12.0.json",
+       "ffmWorstM": {
+        "suite": 58.128649708156736,
+        "steps30": 58.12854641759604,
+        "finest": 58.12820607420368
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 58.12727087004967
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 23,
+        "sampleCount": 24,
+        "worstM": 0.00012087102452486651,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84Only": {
+       "trajectory": "basilisk-wgs84-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.0007636595875388022,
+        "steps30": 0.0006603688410755276,
+        "finest": 0.00032002511779255125
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0006160926198361819
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 23,
+        "sampleCount": 24,
+        "worstM": 0.00015864952015093845,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84AndGtd7d": {
+       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.0007636595875388022,
+        "steps30": 0.0006603688410755276,
+        "finest": 0.00032002511779255125
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0006160926198361819
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 23,
+        "sampleCount": 24,
+        "worstM": 0.00015864952015093845,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "coordinateChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 58.12788604925722
+      },
+      "gtd7dChangeDirectPositionDifference": {
+       "atHour": 1,
+       "sampleCount": 24,
+       "worstM": 0
+      },
+      "combinedChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 58.12788604925722
+      },
+      "sphericalMinusWgs84AltitudeM": {
+       "min": -20967.18505136273,
+       "max": -5.291076377034187e-7
+      },
+      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+      "matchedDiagnosticMeetsAllSettings": true,
+      "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     }
     }
    }
   },
@@ -5067,36 +5915,36 @@
    "orekitMinusBasilisk": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.81059817160838
+    "worstM": 0.0007949855574971713
    },
    "suite": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.811811443496794,
+    "worstM": 0.00041896305994396695,
     "steps": 1341,
-    "met": false
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
-    "worstM": 34.81170874177225,
+    "worstM": 0.00031626103751451973,
     "steps": 2957,
-    "met": false
+    "met": true
    },
    "finest": {
-    "atHour": 24,
+    "atHour": 23,
     "sampleCount": 24,
-    "worstM": 34.81135686345852,
+    "worstM": 0.00004429750200414867,
     "steps": 8674,
-    "met": false
+    "met": true
    },
-   "met": false,
+   "met": true,
    "convergence": {
     "maxStepS": 1,
     "fineStepS": 0.5,
-    "atHour": 23,
+    "atHour": 21,
     "sampleCount": 24,
-    "worstM": 0.00013367420652487283,
+    "worstM": 0.00011917418862387129,
     "limitM": 0.0003,
     "met": true
    },
@@ -5106,28 +5954,28 @@
      "fineStepS": 4,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.03852629726834478
+     "worstM": 0.038594620483198804
     },
     {
      "maxStepS": 4,
      "fineStepS": 2,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.011859566013416372
+     "worstM": 0.011861531254691315
     },
     {
      "maxStepS": 2,
      "fineStepS": 1,
      "atHour": 24,
      "sampleCount": 24,
-     "worstM": 0.00041070733968128647
+     "worstM": 0.00036411125867907894
     },
     {
      "maxStepS": 1,
      "fineStepS": 0.5,
-     "atHour": 23,
+     "atHour": 21,
      "sampleCount": 24,
-     "worstM": 0.00013367420652487283
+     "worstM": 0.00011917418862387129
     }
    ],
    "diagnostics": {
@@ -5137,40 +5985,40 @@
     "absoluteTolerance": 1e-12,
     "environmentUpdates": 86401,
     "nativeSunRadiusM": 695000000,
-    "variant": "nominal",
+    "variant": "wgs84-gtd7d",
     "orientationEvaluation": "memoized exact pinned ERFA",
     "orientationCacheLimit": 800000,
-    "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
+    "densityModel": "native wheel gtd7d at every altitude",
     "sphericalMinusWgs84AltitudeM": {
-     "min": -20967.18505576742,
-     "max": -6.009358912706375e-7
+     "min": -20967.185057074763,
+     "max": -6.142072379589081e-7
     },
     "hourlyNativeDensityKgM3": [
-     3.011852078113541e-14,
-     2.4279300069997113e-14,
-     1.0854691776054872e-14,
-     2.7570055482980678e-14,
-     1.516276172801752e-14,
-     2.519291969166051e-14,
-     2.256342065885181e-14,
-     1.1288557032021659e-14,
-     3.0201453042614674e-14,
-     1.959440090518361e-14,
-     1.9026710675539245e-14,
-     2.0614580692476894e-14,
-     1.2248454173580213e-14,
-     3.54007693641642e-14,
-     1.8734718998710318e-14,
-     1.5615054011999462e-14,
-     2.0714721021151042e-14,
-     1.2627623591491062e-14,
-     3.605073592884894e-14,
-     1.924554548658339e-14,
-     1.339450955471258e-14,
-     2.2477408037102273e-14,
-     1.1319070958954082e-14,
-     3.438153924853978e-14,
-     2.1896900546636017e-14
+     2.3308358073482484e-14,
+     2.2185200126858944e-14,
+     1.084118652155268e-14,
+     2.533698237677393e-14,
+     1.2818833903126273e-14,
+     1.9822970311119366e-14,
+     2.1261459178064538e-14,
+     1.1254080767904801e-14,
+     2.6456543364036556e-14,
+     1.5886565569567244e-14,
+     1.545177549734121e-14,
+     1.9946203337675844e-14,
+     1.201340630711162e-14,
+     2.965469215532473e-14,
+     1.5733741102200128e-14,
+     1.326665305327977e-14,
+     2.0492446449260714e-14,
+     1.205945454576676e-14,
+     2.9076175921373585e-14,
+     1.6673027423257545e-14,
+     1.194810370866405e-14,
+     2.2469680526791974e-14,
+     1.0480155295427761e-14,
+     2.6916745184198983e-14,
+     1.8688087728791445e-14
     ],
     "hourlyShadowFactor": [
      1,
@@ -5200,104 +6048,243 @@
      1
     ]
    },
+   "basiliskRun": "wgs84-gtd7d",
    "stmSkipped": "Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.",
-   "cause": {
-    "classification": "model-setting mismatch",
-    "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every FFM setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an FFM defect.",
-    "evidence": {
-     "epochUtc": "2026-08-02T00:00:00.000",
-     "units": "m for position/altitude; s for steps",
-     "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
-     "toleranceM": 0.1,
-     "nominal": {
-      "trajectory": "basilisk-2.12.0.json",
-      "ffmWorstM": {
-       "suite": 34.811811443496794,
-       "steps30": 34.81170874177225,
-       "finest": 34.81135686345852
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 34.81059817160838
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 23,
-       "sampleCount": 24,
-       "worstM": 0.00013367420652487283,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84Only": {
-      "trajectory": "basilisk-wgs84-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.00041896305994396695,
-       "steps30": 0.00031626103751451973,
-       "finest": 0.00004429750200414867
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0007949855574971713
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 21,
-       "sampleCount": 24,
-       "worstM": 0.00011917418862387129,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "wgs84AndGtd7d": {
-      "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
-      "ffmWorstM": {
-       "suite": 0.00041896305994396695,
-       "steps30": 0.00031626103751451973,
-       "finest": 0.00004429750200414867
-      },
-      "orekitMinusBasilisk": {
-       "atHour": 24,
-       "sampleCount": 24,
-       "worstM": 0.0007949855574971713
-      },
-      "stepHalving": {
-       "maxStepS": 1,
-       "fineStepS": 0.5,
-       "atHour": 21,
-       "sampleCount": 24,
-       "worstM": 0.00011917418862387129,
-       "limitM": 0.0003,
-       "met": true
-      }
-     },
-     "coordinateChangeDirectPositionDifference": {
+   "stock": {
+    "orekitMinusBasilisk": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 34.81059817160838
+    },
+    "suite": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 34.811811443496794,
+     "steps": 1341,
+     "met": false
+    },
+    "steps30": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 34.81170874177225,
+     "steps": 2957,
+     "met": false
+    },
+    "finest": {
+     "atHour": 24,
+     "sampleCount": 24,
+     "worstM": 34.81135686345852,
+     "steps": 8674,
+     "met": false
+    },
+    "met": false,
+    "convergence": {
+     "maxStepS": 1,
+     "fineStepS": 0.5,
+     "atHour": 23,
+     "sampleCount": 24,
+     "worstM": 0.00013367420652487283,
+     "limitM": 0.0003,
+     "met": true
+    },
+    "convergenceAttempts": [
+     {
+      "maxStepS": 8,
+      "fineStepS": 4,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 34.81139248090623
+      "worstM": 0.03852629726834478
      },
-     "gtd7dChangeDirectPositionDifference": {
-      "atHour": 1,
-      "sampleCount": 24,
-      "worstM": 0
-     },
-     "combinedChangeDirectPositionDifference": {
+     {
+      "maxStepS": 4,
+      "fineStepS": 2,
       "atHour": 24,
       "sampleCount": 24,
-      "worstM": 34.81139248090623
+      "worstM": 0.011859566013416372
      },
+     {
+      "maxStepS": 2,
+      "fineStepS": 1,
+      "atHour": 24,
+      "sampleCount": 24,
+      "worstM": 0.00041070733968128647
+     },
+     {
+      "maxStepS": 1,
+      "fineStepS": 0.5,
+      "atHour": 23,
+      "sampleCount": 24,
+      "worstM": 0.00013367420652487283
+     }
+    ],
+    "diagnostics": {
+     "environmentStepS": 1,
+     "integrator": "Basilisk svIntegratorRKF78",
+     "relativeTolerance": 1e-14,
+     "absoluteTolerance": 1e-12,
+     "environmentUpdates": 86401,
+     "nativeSunRadiusM": 695000000,
+     "variant": "nominal",
+     "orientationEvaluation": "memoized exact pinned ERFA",
+     "orientationCacheLimit": 800000,
+     "densityModel": "native MsisAtmosphere: gtd7 below 500 km, gtd7d above",
      "sphericalMinusWgs84AltitudeM": {
       "min": -20967.18505576742,
       "max": -6.009358912706375e-7
      },
-     "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
-     "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
-     "matchedDiagnosticMeetsAllSettings": true,
-     "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     "hourlyNativeDensityKgM3": [
+      3.011852078113541e-14,
+      2.4279300069997113e-14,
+      1.0854691776054872e-14,
+      2.7570055482980678e-14,
+      1.516276172801752e-14,
+      2.519291969166051e-14,
+      2.256342065885181e-14,
+      1.1288557032021659e-14,
+      3.0201453042614674e-14,
+      1.959440090518361e-14,
+      1.9026710675539245e-14,
+      2.0614580692476894e-14,
+      1.2248454173580213e-14,
+      3.54007693641642e-14,
+      1.8734718998710318e-14,
+      1.5615054011999462e-14,
+      2.0714721021151042e-14,
+      1.2627623591491062e-14,
+      3.605073592884894e-14,
+      1.924554548658339e-14,
+      1.339450955471258e-14,
+      2.2477408037102273e-14,
+      1.1319070958954082e-14,
+      3.438153924853978e-14,
+      2.1896900546636017e-14
+     ],
+     "hourlyShadowFactor": [
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      1,
+      1
+     ]
+    },
+    "cause": {
+     "classification": "model-setting mismatch",
+     "statement": "Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude instead of the exported WGS84 geodetic coordinates. Changing only its atmosphere-position input resolves the nominal failure at every FFM setting. The separate native gtd7d diagnostic is bit-identical at all stored hourly states because the module already uses gtd7d above 500 km. This is a measured coordinate-model limitation, not evidence of an FFM defect.",
+     "evidence": {
+      "epochUtc": "2026-08-02T00:00:00.000",
+      "units": "m for position/altitude; s for steps",
+      "frame": "GCRF position, exported ITRF/WGS84 atmosphere coordinates",
+      "toleranceM": 0.1,
+      "nominal": {
+       "trajectory": "basilisk-2.12.0.json",
+       "ffmWorstM": {
+        "suite": 34.811811443496794,
+        "steps30": 34.81170874177225,
+        "finest": 34.81135686345852
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 34.81059817160838
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 23,
+        "sampleCount": 24,
+        "worstM": 0.00013367420652487283,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84Only": {
+       "trajectory": "basilisk-wgs84-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.00041896305994396695,
+        "steps30": 0.00031626103751451973,
+        "finest": 0.00004429750200414867
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0007949855574971713
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 21,
+        "sampleCount": 24,
+        "worstM": 0.00011917418862387129,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "wgs84AndGtd7d": {
+       "trajectory": "basilisk-wgs84-gtd7d-diagnostic.json",
+       "ffmWorstM": {
+        "suite": 0.00041896305994396695,
+        "steps30": 0.00031626103751451973,
+        "finest": 0.00004429750200414867
+       },
+       "orekitMinusBasilisk": {
+        "atHour": 24,
+        "sampleCount": 24,
+        "worstM": 0.0007949855574971713
+       },
+       "stepHalving": {
+        "maxStepS": 1,
+        "fineStepS": 0.5,
+        "atHour": 21,
+        "sampleCount": 24,
+        "worstM": 0.00011917418862387129,
+        "limitM": 0.0003,
+        "met": true
+       }
+      },
+      "coordinateChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 34.81139248090623
+      },
+      "gtd7dChangeDirectPositionDifference": {
+       "atHour": 1,
+       "sampleCount": 24,
+       "worstM": 0
+      },
+      "combinedChangeDirectPositionDifference": {
+       "atHour": 24,
+       "sampleCount": 24,
+       "worstM": 34.81139248090623
+      },
+      "sphericalMinusWgs84AltitudeM": {
+       "min": -20967.18505576742,
+       "max": -6.009358912706375e-7
+      },
+      "nativeBehaviorEvidence": "model-probes.json: msis.rows; the installed module is compared directly with its own gtd7/gtd7d entry points.",
+      "localSolarTimeEvidence": "lst-probes.json: identical-state native gtd7d pairs; this measures density differences, not their propagated position effect.",
+      "matchedDiagnosticMeetsAllSettings": true,
+      "reduction": "All trajectory differences are direct calls to unchanged ../nyx/score-metrics.cpp, never differences of separate maxima."
+     }
     }
    }
   },
@@ -7263,6 +8250,20 @@
    "reason": "no matching exported FES2004 ocean gravity tide model; no matching Knocke albedo/infrared 15-degree quadrature; Basilisk spacecraft has no variational equations for the requested STM and parameter sensitivities"
   }
  ],
+ "primary": {
+  "variant": "wgs84-gtd7d",
+  "file": "basilisk-wgs84-gtd7d-diagnostic.json",
+  "cases": [
+   "LEO400 Z3-zonal20-sun-moon-srp-drag",
+   "LEO400 F6-field-sun-moon-srp-drag",
+   "LEO400 B1-field-sun-moon-srp-drag-bdot",
+   "LEO400 W1-field-sun-moon-srp-drag-cssi",
+   "SSO700 Z3-zonal20-sun-moon-srp-drag",
+   "SSO700 F6-field-sun-moon-srp-drag",
+   "SSO700 W1-field-sun-moon-srp-drag-cssi"
+  ],
+  "statement": "These cases are scored against Basilisk run with FFM's atmosphere settings: WGS84 height and geodetic latitude, and the native gtd7d density. Basilisk's stock settings (spherical altitude and geocentric latitude, gtd7 without anomalous oxygen below 500 km) do not match FFM's, so their run is kept in each row under stock, with its measured cause."
+ },
  "diagnostics": {
   "wgs84": {
    "file": "basilisk-wgs84-diagnostic.json",
@@ -13662,9 +14663,9 @@
   "tool": {
    "version": "2.12.0",
    "total": 50,
-   "met": 43,
-   "missed": 7,
-   "diagnosed": 7,
+   "met": 50,
+   "missed": 0,
+   "diagnosed": 0,
    "statement": "Counts use the FFM suite request and unchanged shared tolerances. Every missed limit requires a measured cause; smaller FFM steps are reported separately."
   },
   "coverage": {
@@ -13692,11 +14693,11 @@
    },
    {
     "path": "score-basilisk.mjs",
-    "sha256": "96cb7e78ccc184bc7debc5d8a1fd1857c3f3ae0bc24741b622d895a656dd8adc"
+    "sha256": "ce00f6404ad303fde11ec17be83c2f2c1dad1ebc24f2fdfbf9a220caa463cf95"
    },
    {
     "path": "check-basilisk.mjs",
-    "sha256": "c5f26ce186f44eb627b4b0238a676e7d9d7c3c876570d76a78f05090b3338d22"
+    "sha256": "5e1a9ac53a4607164fc00ea75a0e769bee57847b2d902975da0b4cedac6b9cfd"
    },
    {
     "path": "run-basilisk.py",
@@ -13728,7 +14729,7 @@
    },
    {
     "path": "README.md",
-    "sha256": "32bac55c13ad96f0d29f4e539ddc14b1ad0f71e68c72cd9304df11376caebc63"
+    "sha256": "ad4c7a27ed35a3d1ea1f55c2e8f29b26cf33dfb186d18b7f71da67e02f1bf912"
    },
    {
     "path": ".gitignore",
@@ -13744,7 +14745,7 @@
    },
    {
     "path": "diagnoses.json",
-    "sha256": "019c5ce35d0e79fd929d426e74fc4673f7233a039571337a23c665a4f721f45b"
+    "sha256": "e764c6c6bcf2302cf9bd256f3b682558d148e0b8d678ef20dfa1774f68f1d61b"
    }
   ],
   "propagationInputs": [
@@ -17754,11 +18755,11 @@
   },
   {
    "path": "score-basilisk.mjs",
-   "sha256": "96cb7e78ccc184bc7debc5d8a1fd1857c3f3ae0bc24741b622d895a656dd8adc"
+   "sha256": "ce00f6404ad303fde11ec17be83c2f2c1dad1ebc24f2fdfbf9a220caa463cf95"
   },
   {
    "path": "check-basilisk.mjs",
-   "sha256": "c5f26ce186f44eb627b4b0238a676e7d9d7c3c876570d76a78f05090b3338d22"
+   "sha256": "5e1a9ac53a4607164fc00ea75a0e769bee57847b2d902975da0b4cedac6b9cfd"
   },
   {
    "path": "run-basilisk.py",
@@ -17790,7 +18791,7 @@
   },
   {
    "path": "README.md",
-   "sha256": "32bac55c13ad96f0d29f4e539ddc14b1ad0f71e68c72cd9304df11376caebc63"
+   "sha256": "ad4c7a27ed35a3d1ea1f55c2e8f29b26cf33dfb186d18b7f71da67e02f1bf912"
   },
   {
    "path": ".gitignore",
@@ -17806,7 +18807,7 @@
   },
   {
    "path": "diagnoses.json",
-   "sha256": "019c5ce35d0e79fd929d426e74fc4673f7233a039571337a23c665a4f721f45b"
+   "sha256": "e764c6c6bcf2302cf9bd256f3b682558d148e0b8d678ef20dfa1774f68f1d61b"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
