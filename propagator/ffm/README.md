@@ -1001,8 +1001,11 @@ out of its variational equations (shadow function, relativity, thrust).
 
 `lib/coords` uses ERFA 2.0.1 for IAU 1976 precession and the full IAU 1980
 nutation series. GCRF/J2000 are aliases in this classical API (no frame bias);
-MOD, TOD and FK5 TEME follow `eraPmat76`, `eraPnm80` and
-`R3(eraEqeq94) * eraPnm80`. ECEF/ITRF/PEF use the equinox chain
+MOD and TOD follow `eraPmat76` and `eraPnm80`. TEME is the frame of AIAA
+2006-6753 as `foundation/frames` defines it, `R3(eraGst06 - eraGmst82) *
+eraPnm06a` (UT1 = UTC without EOP); until 2.3.0 it was the FK5
+`R3(eraEqeq94) * eraPnm80`, 20 to 47 mas of pole away (0.91 m on the paper's
+example, 9.6 m at 42,164 km in 2026). ECEF/ITRF/PEF use the equinox chain
 `R3(eraGst94) * eraPnm80`; the general API has zero polar motion.
 The compatibility `gcrfToItrf` helper accepts xp/yp and applies `eraPom00`
 with zero TIO locator.

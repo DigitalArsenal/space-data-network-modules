@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.ffm",
   "name": "FFM Full Force Model propagator",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "Full Force Model profile FFM-1. An execution is integrated with the algorithm it names, a requested RK78 or RKF78 propagating its eighth-order solution under the request's tolerances; resident propagation flies forward arcs on automatic GJ8 PEC and eccentric-orbit Sundman grids, named in each trajectory's PPE COMMENT. Selected-object batching and physical reentry handling. Optional published DCL log-density correction for NRLMSISE-00.",
   "pluginFamily": "propagator",
   "capabilities": [],

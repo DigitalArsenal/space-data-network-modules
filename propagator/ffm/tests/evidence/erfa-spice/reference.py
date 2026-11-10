@@ -24,11 +24,11 @@ Conventions, as the case export states them (earthOrientation, timeScales):
   eraXy06 plus the rows' dX, dY; s from eraS06; ERA from eraEra00 at UT1;
   s' from eraSp00; polar motion by eraPom00; eraC2tcio.
 - GMST: eraGmst06 at UT1 and TT (IERS Conventions 2010 eq. 5.32).
-- TEME (the SGP4 axes) in two definitions: true equator of date (eraPnm06a)
-  rotated by the equation of the equinoxes eraEe06a (the definition
-  foundation/frames and propagator/sgp4 use), and the FK5 one, eraPnm80 rotated
-  by eraEqeq94 (Vallado et al. 2006, AIAA 2006-6753), for the spread between
-  the two.
+- TEME (the SGP4 axes): AIAA 2006-6753's (Vallado et al. 2006, sec. II.D eq. 1:
+  r_PEF = R3(GMST82) r_TEME), GCRF -> TEME = R3(GAST06 - GMST82) NPB06
+  (eraGst06, eraGmst82, eraPnm06a; the definition foundation/frames,
+  propagator/sgp4 and FFM's lib/coords use), at UT1 = UTC as those take it; and
+  the FK5 one, eraPnm80 rotated by eraEqeq94, for the spread between the two.
 - SPICE: J2000 -> ITRF93 from the high-precision binary Earth PCK
   (earth_latest_high_prec.bpc, its own EOP); Sun (10) and Moon (301) relative
   to the Earth (399), geometric, J2000 axes, from the case export's DE440 file.
@@ -104,6 +104,12 @@ def rz(angle):
     return erfa.rz(angle, r)
 
 
+def teme_aiaa(tt1, tt2, ut11, ut12):
+    """GCRF -> TEME of AIAA 2006-6753: R3(GAST06 - GMST82) NPB06."""
+    npb = erfa.pnm06a(tt1, tt2)
+    return erfa.rz(erfa.gst06(ut11, ut12, tt1, tt2, npb) - erfa.gmst82(ut11, ut12), npb)
+
+
 def split(jd):
     """A single-double Julian date as two parts, exactly (Sterbenz)."""
     return DJ00, jd - DJ00
@@ -143,7 +149,7 @@ def main():
             c2t_ffm_instant, _ = c2t_iers2010(h["tt1"], h["tt2"], rows)
             gmst = erfa.gmst06(ut11, ut12, tt1, tt2)
             gmst_ffm_instant = erfa.gmst06(h["ut11"], h["ut12"], h["tt1"], h["tt2"])
-            teme06 = rz(erfa.ee06a(tt1, tt2)) @ erfa.pnm06a(tt1, tt2)
+            teme06 = teme_aiaa(tt1, tt2, u1, u2)
             # IAU 1976/1980 pieces at FFM's own TT, and the classical
             # Earth-fixed chain (UT1 = UTC, no polar motion, no frame bias)
             # that FFM's no-EOP fallback states it implements.
@@ -174,10 +180,10 @@ def main():
                 "c2tErfaAtFfmInstant": c2t_ffm_instant.ravel().tolist(),
                 "c2tSpiceItrf93": np.array(sp.pxform("J2000", "ITRF93", et_spice)).ravel().tolist(),
                 "gmst06": gmst, "gmst06AtFfmInstant": gmst_ffm_instant,
-                "gcrfToTemeErfa06": teme06.ravel().tolist(),
+                "gcrfToTemeAiaa": teme06.ravel().tolist(),
                 "pmat76AtFfmInstant": erfa.pmat76(ht1, ht2).ravel().tolist(),
                 "nutm80AtFfmInstant": erfa.nutm80(ht1, ht2).ravel().tolist(),
-                "gcrfToTemeFk5AtFfmInstant": (rz(erfa.eqeq94(ht1, ht2)) @ erfa.pnm80(ht1, ht2)).ravel().tolist(),
+                "gcrfToTemeAtFfmInstant": teme_aiaa(ht1, ht2, hu1, hu2).ravel().tolist(),
                 "c2tClassicalAtFfmInstant": classical.ravel().tolist(),
                 "gcrfToTemeFk5": teme80.ravel().tolist(),
                 "sunSpiceAtFfmInstant": body(10, et_ffm),
