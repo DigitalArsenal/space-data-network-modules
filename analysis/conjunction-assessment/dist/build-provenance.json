@@ -43,8 +43,8 @@
     "browser",
     "wasmedge"
   ],
-  "sourceSha256": "4b46f0b7ced260ada2469976dc9fd4bb43fec64298af6d838f98e3d6fab7a129",
-  "wasmSha256": "fe7533e9168c65f31b5d98ea90bafb76024a5e035df5c7f34d252da44718bfec",
+  "sourceSha256": "dfadc00b6f62aaec75d75fb61fb2305d9fadd5e2edeaab50c2bf807ac402c363",
+  "wasmSha256": "ad1e9fe1abc132a4f82ef0425c87686586e161e5d77f220703ccfdf97f54170f",
   "threadFeatures": {
     "hasSharedMemory": true,
     "sharedMemory": {
@@ -94,5 +94,6 @@
   "buildSupportSha256": {
     "build-driver.mjs": "84cfdd391a5eea3fc15f9bc138ad52a41a6fbc234ab28f92190d1666a8f0f317",
     "src/cpp/src/cqr_initialization.cpp": "4a1727981275cd1a4fa539afcb9029c964c7872eb946847ef824a9a449982bf2"
-  }
+  },
+  "signed": false
 }

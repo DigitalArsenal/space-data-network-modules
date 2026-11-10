@@ -6,22 +6,15 @@
  *
  * The SGP4 fitter propagates in TEME (True Equator, Mean Equinox of date),
  * so every ephemeris sample handed to the fitter must be expressed in TEME.
- * The SpaceX MEME path is already effectively TEME (its <1 m fit RMS on the
- * checked-in Starlink suite confirms it), so it needs no rotation.
  *
- * CCSDS OEM feeds commonly publish EME2000 / J2000 (e.g. NASA's public ISS
- * OEM), which differs from TEME by precession + nutation + the equation of the
- * equinoxes — of order 0.4 deg for 2026 epochs, i.e. tens of km of position if
- * ignored. This module implements the standard IAU-76/FK5 J2000 -> TEME
- * rotation (Montenbruck & Gill "Satellite Orbits" 5.3; Vallado teme2eci) so
- * OEM elements are produced in the same TEME frame CelesTrak SupGP uses.
- *
- * Accuracy: IAU-76 precession (full), the FULL 106-term IAU-1980 nutation series
- * (A2.4b — was truncated to the ten leading terms, which cost ~13 m on ISS
- * EME2000->TEME; the full series reproduces the SOFA/ERFA eraNut80 reference to
- * < 1e-13 rad), and the 1982 equation of the equinoxes (Dpsi*cos(eps_mean)). The
- * eqe convention is TEME-standard (no 1994 complementary terms): its <9 cm effect
- * at LEO is far below the fit floor and matches the SGP4/CelesTrak TEME datum.
+ * TEME is AIAA 2006-6753's (sec. II.D eq. 1: r_PEF = R3(GMST82) r_TEME). The
+ * inertial legs are foundation/frames' axis engine: GCRF/ICRF -> TEME by
+ * gcrfToTeme, R3(GAST06 - GMST82) NPB06, and EME2000/J2000 through the IAU 2006
+ * frame bias first; TT from UTC by ERFA's leap-second table, UT1 = UTC. CCSDS
+ * OEM feeds commonly publish EME2000 (NASA's public ISS OEM) or GCRF; both
+ * differ from TEME by about 0.4 deg in 2026. Until 0.4.0 every inertial frame
+ * went through IAU-76/FK5 with no frame bias (0.94 m off on the paper's
+ * example, 9.6 m at 42,164 km in 2026).
  */
 
 #include <array>
@@ -36,7 +29,8 @@ using Mat3 = std::array<std::array<double, 3>, 3>;
 // the JSON-record converter classify frames identically.
 enum class FrameKind {
     Teme,          // used as-is
-    EciJ2000,      // EME2000/J2000/GCRF -> rotate via eci_j2000_to_teme
+    EciJ2000,      // EME2000/J2000 -> rotate via eci_j2000_to_teme
+    Gcrf,          // GCRF/ICRF -> rotate via gcrf_to_teme
     Ecef,          // ITRF/IGS20/ECEF/ECF -> rotate via ecef_to_teme
     Unsupported,   // fail-closed
 };
@@ -46,24 +40,23 @@ enum class FrameKind {
 /// generic Earth-fixed tokens ECEF/ECF/ITRF/TRF as FrameKind::Ecef.
 FrameKind classify_frame(const std::string& token);
 
-/// IAU-1980 nutation in longitude (dpsi) and obliquity (deps), radians, from the
-/// FULL 106-term series (Wahr 1980 / IAU-1980), transcribed from SOFA/ERFA
-/// eraNut80 (Explanatory Supplement to the Astronomical Almanac, §3.222). t is
-/// Julian centuries of TT from J2000.0. Reproduces eraNut80(2400000.5, 53736.0)
-/// = (dpsi -0.9643658353226563966e-5, deps 0.4060051006879713322e-4) rad at
-/// t=0.06, the SOFA t_sofa_c/ERFA t_erfa_c reference vector, to < 1e-13 rad.
-void iau1980_nutation(double t, double& dpsi, double& deps);
+/// Rotation matrix R such that r_TEME = R * r_GCRF at the UTC Julian date
+/// (foundation/frames gcrfToTeme). All NaN for a date ERFA refuses (before -4799)
+/// or a non-finite one.
+Mat3 gcrf_to_teme_matrix(double jd_utc);
 
-/// Rotation matrix R such that r_TEME = R * r_J2000 for the given UTC epoch.
-/// jd_utc: UTC Julian Date. (TT-UTC is neglected: it shifts precession/nutation
-/// by < 1e-4 arcsec, well below the model floor — the same policy the precession
-/// term uses.)
+/// Rotation matrix R such that r_TEME = R * r_EME2000: gcrf_to_teme_matrix times
+/// the transpose of the IAU 2006 frame bias.
 Mat3 eci_j2000_to_teme_matrix(double jd_utc);
 
-/// Rotate a J2000/EME2000 position (km) and velocity (km/s) pair into TEME.
-/// The J2000<->TEME relative rotation rate is < 1e-11 rad/s, so the same frame
-/// rotation is applied to position and velocity (the transport term is < 1e-7
-/// km/s and irrelevant to the fit's initial guess).
+/// Rotate a GCRF/ICRF (gcrf_to_teme) or J2000/EME2000 (eci_j2000_to_teme)
+/// position (km) and velocity (km/s) pair into TEME. The inertial-to-TEME
+/// rotation rate is < 1e-11 rad/s, so the same rotation is applied to position
+/// and velocity (the transport term is < 1e-7 km/s and irrelevant to the fit's
+/// initial guess).
+void gcrf_to_teme(double jd_utc,
+                  const double r_in[3], const double v_in[3],
+                  double r_out[3], double v_out[3]);
 void eci_j2000_to_teme(double jd_utc,
                        const double r_in[3], const double v_in[3],
                        double r_out[3], double v_out[3]);
@@ -80,13 +73,10 @@ void eci_j2000_to_teme(double jd_utc,
 // floor and, being a quasi-constant orientation offset over a multi-hour arc,
 // are largely absorbed into the fitted node/orientation rather than the RMS.
 //
-// EARTH-ROTATION CHOICE (consistent with the FK5 path above): the ECEF<->TEME
-// rotation uses GMST (Greenwich Mean Sidereal Time, IAU-1982), NOT GAST. This is
-// the correct and self-consistent choice because TEME is defined on the *mean*
-// equinox of date: in the FK5 path r_TEME = R3(Eqe)·r_TOD while the Earth-fixed
-// (PEF) frame is r_PEF = R3(GAST)·r_TOD with GAST = GMST + Eqe, hence
-// r_PEF = R3(GMST)·r_TEME. So r_TEME = R3(-GMST)·r_PEF, using GMST (mean),
-// with the equation-of-the-equinoxes already carried by TEME's definition.
+// EARTH-ROTATION CHOICE: the ECEF<->TEME rotation uses GMST (Greenwich Mean
+// Sidereal Time, IAU-1982), NOT GAST. That is TEME's definition (AIAA 2006-6753
+// eq. 1: r_PEF = R3(GMST82)·r_TEME), and the inertial legs above are built on
+// it: r_TEME = R3(GAST06 - GMST82)·NPB06·r_GCRF, so r_PEF = R3(GAST06)·NPB06·r_GCRF.
 //
 // POLAR-MOTION POLICY (explicit — never silently pretended): polar motion
 // (ITRF->PEF, the sub-arcsecond wobble of the Earth's figure axis) is NEGLECTED

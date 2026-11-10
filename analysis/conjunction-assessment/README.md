@@ -125,7 +125,10 @@ No uncertainty is invented. A TLE or SGP4 element set carries no covariance:
   (`cdm-covariance-required`) and uncatalogued objects
   (`cdm-object-uncatalogued`), returning no document. A NORAD identifier or an
   all-digit source `OBJECT_ID` supplies the SATCAT designator. CDM states from
-  TEME evaluation are transformed to EME2000 in C++ with ERFA; event states
+  TEME evaluation are transformed to EME2000 in C++ with ERFA: TEME as AIAA
+  2006-6753 defines it (`foundation/frames`: GCRF -> TEME = `R3(GAST06 -
+  GMST82) NPB06`, UT1 = UTC), then the IAU 2006 frame bias (until 0.19.0 the
+  FK5 `R3(Eqeq94) Pnm80`, 6.8 m away at 42,164 km in 2026); event states
   retain TEME. GCRF and EME2000 evaluations retain their frames in the CDM.
   The TEME conversion rotates position and osculating inertial velocity as
   vectors at TCA, preserving the RTN covariance and relative RTN data. The
