@@ -2769,7 +2769,8 @@ trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low
 An `$OCM` element set may carry a numerical forecast of its object made by another propagator (a numerical propagator
 such as propagator/ffm, or an operator's own ephemeris), stored in the record (`src/carried.inc`). Inside the forecast's
 span flight returns that forecast, not AP's theory; everywhere else the theory, exactly as without it: a record without
-one flies as 0.6.9 flies it, bit for bit (`test/carried-identity.e2e.mjs`). The record is a separate product, a way to
+one is untouched by the carried code (SGP4XP and SGP4 records fly as 0.6.9 flies them, bit for bit; an AP record flies
+alike through propagate_epochs and the store, `test/carried-identity.e2e.mjs`). The record is a separate product, a way to
 deliver another propagator's forecast with AP's flight around it. Its figures (its error against truth, which is the
 forecast's; its compression error against the forecast; the step at the span's end; bytes a day; the cost of making
 it) are its own and never AP's accuracy: AP's accuracy is the theory's alone (SPEC 16). Version 2 (0.6.10)
