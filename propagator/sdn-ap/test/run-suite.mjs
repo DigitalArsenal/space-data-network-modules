@@ -7,9 +7,11 @@
 // The longest tests of the previous run start first (their times are kept in the scratch root).
 //   node test/run-suite.mjs [--jobs N] [test ...]
 // --jobs N: at most N tests at once (default 14). test ...: only these (names without .e2e.mjs).
-// The E2Es need what they need alone: SDN_AP_ORACLE_ROOT for conformance.e2e.mjs, the model truth's FFM build.
+// The E2Es need what they need alone: SDN_AP_ORACLE_ROOT for conformance.e2e.mjs, the model truth's FFM build. A
+// preflight checks the installs and the oracle before any test starts (exit 2 when one is missing).
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scratchRoot, scratchDir } from "./lib/scratch.mjs";
@@ -28,6 +30,32 @@ if (!Number.isInteger(jobs) || jobs < 1) throw new Error(`--jobs needs a whole n
 const all = fs.readdirSync(testDir).filter((f) => f.endsWith(".e2e.mjs")).map((f) => f.slice(0, -".e2e.mjs".length)).sort();
 for (const t of only) if (!all.includes(t)) throw new Error(`no test/${t}.e2e.mjs`);
 const tests = only.length ? only : all;
+
+// Preflight, before any test starts: every install the tests' hosts load, resolved the way the hosts resolve it
+// (createRequire(<folder>/package.json).resolve(<entry>), so a package the repository root's node_modules supplies
+// counts). A missing one stops the run in a second, one line each with its fix. A test that loads another folder's
+// install adds it here.
+const repoRoot = path.resolve(packageRoot, "../..");
+const INSTALLS = [
+  ["propagator/sdn-ap", "space-data-module-sdk/testing/isomorphic", "every test's module host"],
+  ["propagator/sgp4", "space-data-module-sdk/host/browser-module", "the archive replays' SGP4 host (test/vendor/.../xp-atmosphere-merit/lib/modules.mjs)"],
+  ["analysis/gp-error-model", "space-data-module-sdk/host/browser-module", "the archive replays' scorer and density-calibration hosts"],
+  ["foundation/frames", "space-data-module-sdk/host/browser-module", "the archive replays' frames host"],
+  ["propagator/ffm", "flatbuffers", "the model truth's codec (propagator/ffm/tests/lib/prwCodec.mjs)"],
+];
+const missing = [];
+for (const [rel, entry, who] of INSTALLS) {
+  const dir = path.join(repoRoot, rel);
+  try { createRequire(path.join(dir, "package.json")).resolve(entry); }
+  catch { missing.push(`missing install: ${rel} cannot resolve ${entry} (${who}); fix: npm ci --prefix ${dir}`); }
+}
+if (tests.includes("conformance") && !process.env.SDN_AP_ORACLE_ROOT)
+  missing.push("missing oracle: conformance.e2e.mjs needs SDN_AP_ORACLE_ROOT, the SGP4-XP oracle's harness directory");
+if (missing.length) {
+  for (const line of missing) console.log(line);
+  console.log(`preflight: ${missing.length} missing; no test started`);
+  process.exit(2);
+}
 
 const defects = JSON.parse(fs.readFileSync(path.join(testDir, "known-defects.json"), "utf8"));
 const known = new Map(defects.map((d) => [d.test, d]));
