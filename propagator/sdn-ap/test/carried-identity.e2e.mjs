@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // E2E (issue 316, SPEC 18): a record without a carried forecast flies bit for bit as the build before the carried
-// forecast flies it, and fit without OUTPUT writes that build's record. That build's dist (review-0's 0.6.6 at
-// d74d3129, or with CARRIED_IDENTITY_BASE=0.6.5 main's 0.6.5 at 3a3661eaf) from git, in the system's temporary folder;
+// forecast's version 2 flies it, and fit without OUTPUT writes that build's record. That build's dist (review-0's 0.6.8
+// at 7d5b6ef7; CARRIED_IDENTITY_BASE names 0.6.7, 0.6.6 or 0.6.5 instead) from git, in the system's temporary folder;
 // on the same inputs:
 // - fit (the AP and XP fixture fits): the $OCM byte for byte with PRODUCER's version masked (the one field that names the
 //   build), the $ODR byte for byte with its two CIDs of that $OCM masked;
@@ -22,15 +22,15 @@ import { T, fixtureSets, flight, GRID_OUTPUT } from "./lib/ocm.mjs";
 import { configuration } from "./lib/pcf.mjs";
 import { jdOf } from "./lib/frames.mjs";
 
-// the build this branch adds the carried forecast to: review-0's 0.6.6 (the cost lane's), or 0.6.5 (main) with
-// CARRIED_IDENTITY_BASE=0.6.5
+// the build version 2 starts from: review-0's 0.6.8; 0.6.7 (version 1), 0.6.6 (before the carried forecast) or 0.6.5
+// (main) by CARRIED_IDENTITY_BASE
 const BASES = {
   "0.6.8": { commit: "7d5b6ef7d8ab90c83ec7fecdaf539a08dc68691e", sha256: "c19f8cae856ba0117763873e068438a8d493987a288a9648f79d194263a6b6b0" },
   "0.6.7": { commit: "64e5f2018afba14a0abd58cfafad007ea2e17215", sha256: "1104598edeebe41cb8daa81bba3c9e82e3181d012a053aefd07d09611b2b81f5" },
   "0.6.6": { commit: "d74d3129db071f9aaaffba3cca421453b348d274", sha256: "5566784bd36613ed3cd4f963f6e2e52b40e08819dfe49e5362b34102413a291c" },
   "0.6.5": { commit: "3a3661eaf9caa84fc776a9959494e1ca14358db1", sha256: "f0b8352a43f305fbdd1ad15c9894e2d28f3179528838cae8f967bf1ea5d089b7" },
 };
-const BASE_VERSION = process.env.CARRIED_IDENTITY_BASE ?? "0.6.6";
+const BASE_VERSION = process.env.CARRIED_IDENTITY_BASE ?? "0.6.8";
 const { commit: BASE_COMMIT, sha256: BASE_SHA256 } = BASES[BASE_VERSION];
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
