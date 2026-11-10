@@ -9,9 +9,12 @@ For each `$MPE` on the `elements` stream:
 1. SGP4 at zero elapsed time: the clean-room SGP4/SDP4 base
    `foundation/sgp4-str3`, WGS-72, AFSPC mode, as `propagator/sgp4` and the conjunction screen compile it.
 2. TEME to GCRF at the same instant, using the `foundation/frames` axis engine:
-   IAU 2006/2000A precession-nutation and the equation of the equinoxes from
-   the vendored ERFA. TT comes from UTC through the ERFA leap-second table. The
-   velocity includes the frame rotation rate.
+   TEME as AIAA 2006-6753 defines it, `R3(GAST06 - GMST82) NPB06` (IAU 2006/2000A
+   from the vendored ERFA). TT comes from UTC through the ERFA leap-second
+   table; UT1 = UTC. The velocity includes the frame rotation rate. Until 0.6.0
+   TEME's x axis was placed by GMST06 (`eraEe06a`); a 0.5.1 GCRF state differs
+   by a rotation about the pole of 13.0 mas at 2010, 40.8 at 2020, 57.4 at 2026
+   (0.44, 1.38, 1.95 m at 7,000 km).
 3. The round trip back to TEME is checked. A state outside 1e-12 relative is
    refused.
 4. One `$OEM` is emitted on `states`:

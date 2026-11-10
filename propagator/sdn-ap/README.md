@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.9 (dist 072b233c).
+Version 0.6.10 (dist 30103537).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -56,14 +56,25 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
   13 frames of at most 4 MiB) load in 0.1 s into 30,931 series and 106,813 sets, 17.0 MiB (577 bytes a series) before
   any series is propagated.
-- Carried forecast (SPEC 18; `test/carried-*.e2e.mjs`): `fit` with `$PCF` OUTPUT.START_TIME and STOP_TIME writes the
+- Carried forecast (SPEC 18; `test/carried-*.e2e.mjs`), a separate product: the record carries a numerical forecast made
+  by another propagator (propagator/ffm, or an operator's ephemeris) and returns it inside its span; its figures are
+  that forecast's and the record's, never AP's accuracy, which is the theory's alone. `fit` with `$PCF`
+  OUTPUT.START_TIME and STOP_TIME writes the
   ephemeris block's states between them into the `$OCM` as Chebyshev position segments (POLYNOMIAL_POSITION_RECORDS,
-  TRAJ_TYPE POLYNOMIAL_POS, in the set's TRAJ_REF_FRAME) within 1 cm, the theory set fitted as without them and the jump
-  to the theory at each end in the OD COMMENT; `propagate`, `load_epochs` with `sdnap_epochs_set_at` and
-  `sdnap_epochs_at`, and `propagate_epochs` fly the forecast inside its span and the theory elsewhere. Measured on
-  FFM's flights at 60 s: at most 5.1 mm from the forecast, 0.2 to 2.2 mm RMS over a day; 18 to 52 KB per object-day in
-  low orbit, 1 to 7 KB above it and on eccentric orbits (10 to 22 KB and 0.2 to 5 KB at a 10 cm bound). States at most
-  0.1 rad of arc apart (60 s in low orbit); `sdnap_carried_frame_error` gives the frame's bound.
+  TRAJ_TYPE POLYNOMIAL_POS, in the set's TRAJ_REF_FRAME) held to 1 cm and 0.1 mm/s against the forecast (about
+  0.2 mm/s from states 60 s apart in low orbit), joints
+  continuous to the acceleration, with the record's statement of its span and source (TRAJECTORY_BLOCKS, METADATA
+  START_TIME and STOP_TIME); its theory is anchored at the span's start (the observation cutoff; its covariance grows
+  forward), and `fit` with OUTPUT.START_TIME alone at the stop makes the hand-over set (TRAJ_ID "HAND-OVER") fitted to
+  the forecast's last part; the steps at each end are in the OD COMMENT. `propagate`, `load_epochs` with
+  `sdnap_epochs_set_at` and `sdnap_epochs_at`, and `propagate_epochs` fly the forecast inside its span, the hand-over
+  set after it and the theory elsewhere, one block per record or series with every state's source in its COMMENT
+  (SPEC 18.8's grammar; `sdnap_epochs_source_at` for the store); a record's segments are read when first flown, safely
+  for concurrent readers. The compression test on FFM
+  forecasts in 12 regimes up to e 0.9 (`test/carried-compression.e2e.mjs`): at most 5 mm and 0.051 mm/s off the build's
+  times, joints under 0.6 mm; 20 to 68 KB per object-day in low orbit, 0.3 to 10 KB above it and on eccentric orbits.
+  States at most 0.1 rad of arc apart (60 s in low orbit, the common operator step, holds 1 cm and about 0.2 mm/s; at
+  most 0.05 rad, 30 s, 1 cm and 0.1 mm/s); `sdnap_carried_frame_error` gives the frame's bound.
 - Configuration (SDS 1.272.0, `$PCF` 1.0.6): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
   `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
   fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults
@@ -389,9 +400,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default;
   `SDN_AP_ORACLE_SECOND` the other build for the reference-split class, 9.1.1.0 by default), and the E2E and
   `spec-vectors/verify.mjs` refuse without it. `--digest-only` checks the module's side of the stored run alone (the
-  SGP4XP corpus's and the SGP4 control's output digests), no oracle. Every E2E that ends with the conformance
-  reproduction (`test/lib/conformance-step.mjs`) refuses at its start when `SDN_AP_ORACLE_ROOT` is unset;
-  `SDN_AP_ORACLE=skip` runs it with that step reduced to `--digest-only`, and says so.
+  SGP4XP corpus's and the SGP4 control's output digests), no oracle. The other E2Es end with that digest check
+  (`test/lib/conformance-step.mjs`, about 9 s); the oracle comparison is this E2E's alone.
+- `test/run-suite.mjs`: every E2E in parallel (14 at a time by default), a table of exit code and time per test at
+  the end, logs under the scratch root; its KNOWN_DEFECTS list names tests that fail for an open issue.
 - `test/rigor/run.mjs`: the rigor suite (`test/rigor/README.md`).
 - `test/bench.mjs`: memory per object and µs per object for a 60 s step, a 1-day jump and a 7-day jump.
 - `test/kernel-cost.mjs`: AP's CPU cost per state against SGP4's and SGP4XP's in the resident epoch store (one
@@ -429,7 +441,8 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   without the archive).
 - `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
   the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
-  step between two sets on different branches and between a carried forecast and the theory (two forecasts blend).
+  step between two sets on different branches; inside a carried span its set alone (two forecasts never blend), the
+  step to the theory at the span's end.
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.

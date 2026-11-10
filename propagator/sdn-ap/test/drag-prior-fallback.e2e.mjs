@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
+// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
+// moves the scoring to the module's own GCRF).
 // Registration (2026-11-03, modules-sdn-ap-drag-prior-fallback-20261103): the fit's per-window drag diagnostics and the
 // drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), the module under test
 // this build's dist.
@@ -11,8 +14,10 @@
 //    (0.4.11 0.087 and 0.113 km, 0.4.17 0.312 and 1.335 km);
 // 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D; on SWOT and Jason-3
 //    within 5 points of 0.4.17's;
-// 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) bit-identical to 0.4.17 on every window (errors per lead and
-//    axis, BTERM, AGOM);
+// 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of 0.4.17 on every window (errors per
+//    lead and axis, BTERM, AGOM); bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by
+//    millimeters and a fit by centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8,
+//    at most 0.022 m in the errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM;
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
 //    step 36 h into the arc takes the fall-back, on SWOT-like and Sentinel-3-like (the step flag's figures were $OBD text,
@@ -24,10 +29,14 @@
 // band median RMS); per object the DO medians at days 1, 2, 3 and 7; every DO window that takes the fall-back and why;
 // the mean fit time per arm on the DO arcs.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
+// 3's bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg), against 0.4.17 (measured 0.022 m, 2.3e-5, 3.6e-6)
+const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
@@ -128,7 +137,14 @@ if (!isMainThread) {
     assert.equal(v.length, 15, `${o}: 15 windows`);
     for (const r of v) {
       const [a, b] = [r.arms[1], r.arms[2]];
-      assert.ok(a.ok && b.ok && a.bterm === b.bterm && a.agom === b.agom && JSON.stringify(a.days) === JSON.stringify(b.days), `${r.key}: identical to 0.4.17`);
+      assert.ok(a.ok && b.ok, `${r.key}: both fits`);
+      let errM = 0;
+      for (const [k, da] of Object.entries(a.days ?? {})) for (const axis of Object.keys(da))
+        if (typeof da[axis] === 'number') errM = Math.max(errM, 1000 * Math.abs(da[axis] - (b.days?.[k]?.[axis] ?? Infinity)));
+      const dB = Math.abs(a.bterm - b.bterm) / Math.abs(a.bterm), dA = Math.abs(a.agom - b.agom);
+      console.log(JSON.stringify({outsideTheRule: r.key, errorsMeters: errM, btermRelative: dB, agom: dA}));
+      assert.ok(errM <= OUTSIDE_RULE.errorsM && dB <= OUTSIDE_RULE.btermRelative && dA <= OUTSIDE_RULE.agom,
+        `${r.key}: ${errM} m in the errors, BTERM ${dB} relative, AGOM ${dA} from 0.4.17's (within ${JSON.stringify(OUTSIDE_RULE)})`);
     }
   }
   // 4

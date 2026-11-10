@@ -9,11 +9,12 @@
 //   most 1.1 times the 0.6.2 base's 109.5 m (0.1205 km) and BTERM within 2 times the base's 0.0120 (0.0060 to 0.0240).
 // - Molniya start 0, fitted drag (test/fixtures/molniya-start0-fit-72h.oem, .pcf, .spw, SHA-256 pinned; the pinned FFM model
 //   truth, argp 270, 72 h arc; its fit takes the finite-difference fall-back): BTERM 0.04461633761935712 and FIT_RMS_KM
-//   0.021800715473184688 bit for bit; every grid lookup of the fit a fit set's; no fit grid held after it.
-// - Below e 0.3 the fit emits the 0.6.2 dist's bytes (git, modules c82160de7, its SHA-256 checked),
-//   PRODUCER's version read as 0.6.2: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of propagator/ffm's 550 km
-//   trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP, and a GEO arc (an AP set, caps 31 and 20,
-//   flown by this module 72 h at 300 s in GCRF, refitted under the same forces).
+//   0.021800715473184688 within MOLNIYA's bounds (bit for bit until 0.6.5); every grid lookup of the fit a fit set's; no fit
+//   grid held after it.
+// - Below e 0.3 the fit's record flown 4 days within NO_HARM of the 0.6.2 dist's (git, modules c82160de7, its SHA-256
+//   checked; byte identity until 0.6.5) and its FIT_RMS within 0.01 m: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of
+//   propagator/ffm's 550 km trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP, and a GEO arc (an
+//   AP set, caps 31 and 20, flown by this module 72 h at 300 s in GCRF, refitted under the same forces).
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit-second-solution.e2e.mjs
 import fs from "node:fs";
@@ -30,6 +31,7 @@ import { ensureBuilt, wasmPath, packageRoot } from "./lib/module.mjs";
 import { configuration, MSIS_FORCES, XP_FORCES, pcfAtmosphereFamily } from "./lib/pcf.mjs";
 import { inputs } from "./lib/fixture-inputs.mjs";
 import { T, ocmOf, seedOcm, flight } from "./lib/ocm.mjs";
+import { oemDistance } from "./lib/oem-distance.mjs";
 
 ensureBuilt();
 const failures = [];
@@ -92,8 +94,14 @@ const MOLNIYA = {
   frames: [["ephemeris", "OEM", "molniya-start0-fit-72h.oem", "608697e99920e5a699d330a457f4ef74444a8301d186213696cb040b4b235ae2"],
     ["configuration", "PCF", "molniya-start0-fit.pcf", "21ca6686ac0f24f2e8bd7e7bd5e86f055392099e562b62a95fabf8eb3ad176ea"],
     ["space_weather", "SPW", "molniya-start0-fit.spw", "647760dfb43168f4b0c9e98cf9b86e91a108f725edfd918f6be2b870a5919ebb"]],
-  bterm: 0.04461633761935712, fitRmsKm: 0.021800715473184688,
+  // bit for bit until 0.6.5, whose fit stops at another point inside its tolerance (SPEC 16.8): 0.04461830424914888 and
+  // 0.02180476515880898 km on 0.6.5 to 0.6.8, 4.4e-5 relative and 4.0 mm
+  bterm: 0.04461633761935712, fitRmsKm: 0.021800715473184688, btermRelative: 1e-4, fitRmsM: 0.01,
 };
+// the no-harm fits' flights against 0.6.2's (m over 4 days; byte identity until 0.6.5), measured 2026-11-10 on 0.6.8:
+// LEO AP 0.446 m (0.6.5's fit stops at another point inside its tolerance, FIT_RMS 41.127 against 41.130 m), GEO AP
+// 0.12 mm (FIT_RMS 1.050 m on both), LEO SGP4XP byte-identical
+const NO_HARM = { "LEO AP": 1, "LEO SGP4XP": 0.001, "GEO AP": 0.01 };
 {
   const inputs = MOLNIYA.frames.map(([portId, type, file, pin]) => {
     const payload = fs.readFileSync(new URL(`fixtures/${file}`, import.meta.url));
@@ -113,8 +121,8 @@ const MOLNIYA = {
   check(r.statusCode === 0, `Molniya start 0 fit: ${r.errorCode} ${r.errorMessage}`);
   if (r.statusCode === 0) {
     const m = stats(new Uint8Array(r.outputs.find((o) => o.portId === "elements").payload));
-    check(Object.is(m.b, MOLNIYA.bterm), `Molniya start 0: BTERM ${m.b}, expected ${MOLNIYA.bterm}`);
-    check(Object.is(m.rms, MOLNIYA.fitRmsKm), `Molniya start 0: FIT_RMS_KM ${m.rms}, expected ${MOLNIYA.fitRmsKm}`);
+    check(Math.abs(m.b / MOLNIYA.bterm - 1) <= MOLNIYA.btermRelative, `Molniya start 0: BTERM ${m.b}, ${MOLNIYA.bterm} within ${MOLNIYA.btermRelative} relative`);
+    check(Math.abs(m.rms - MOLNIYA.fitRmsKm) * 1000 <= MOLNIYA.fitRmsM, `Molniya start 0: FIT_RMS_KM ${m.rms}, ${MOLNIYA.fitRmsKm} within ${MOLNIYA.fitRmsM} m`);
     console.log(`Molniya start 0: BTERM ${m.b}, FIT_RMS_KM ${m.rms}, ITERATIONS ${m.it}`);
   }
   check(outside === 0 && inside > 0, `Molniya start 0 fit: ${outside} grid lookups by sets outside a fit and ${inside} by the fit's sets`);
@@ -133,11 +141,18 @@ check(flown.statusCode === 0, `GEO flight: ${flown.errorCode} ${flown.errorMessa
 const geo = flown.statusCode === 0 ? new Uint8Array(flown.outputs.find((o) => o.portId === "ephemeris").payload) : null;
 const cases = [["LEO AP", leo, configuration({ theory: "AP", forces: AP_FORCES }), rows.bytes], ["LEO SGP4XP", leo, configuration({ theory: "SGP4XP", forces: XP_FORCES }), null],
   ...(geo ? [["GEO AP", geo, configuration({ theory: "AP", forces: VACUUM_AP }), null]] : [])];
+// the two builds' fitted records flown by this build from the arc's start for 4 days at 1 h: what a consumer sees of the fit
+const span = { START_TIME: iso(t0), STOP_TIME: iso(t0 + 4 * 86400000), STEP_SECONDS: 3600 };
 for (const [name, oem, config, spw] of cases) {
   const c = await fit(cand, oem, config, spw), b = await fit(base, oem, config, spw);
   const same = Buffer.compare(asBase(c), Buffer.from(b)) === 0;
-  check(same, `${name}: the $OCM differs from 0.6.2's (${stats(c).rms} km, BTERM ${stats(c).b} against ${stats(b).rms} km, ${stats(b).b})`);
-  console.log(`${name}: ${c.length} bytes, ${same ? "byte-identical to 0.6.2" : "differs"}; FIT_RMS ${(stats(c).rms * 1000).toFixed(2)} m, BTERM ${stats(c).b}`);
+  const [fc, fb] = [await cand.invoke({ methodId: "propagate", inputs: flight([c], { output: span }) }), await cand.invoke({ methodId: "propagate", inputs: flight([b], { output: span }) })];
+  check(fc.statusCode === 0 && fb.statusCode === 0, `${name}: flights of the two fits ${fc.errorCode ?? "ok"} | ${fb.errorCode ?? "ok"}`);
+  const d = fc.statusCode === 0 && fb.statusCode === 0
+    ? oemDistance(new Uint8Array(fc.outputs.find((o) => o.portId === "ephemeris").payload), new Uint8Array(fb.outputs.find((o) => o.portId === "ephemeris").payload)) : null;
+  const dRms = Math.abs(stats(c).rms - stats(b).rms) * 1000;
+  console.log(`${name}: ${c.length} bytes, ${same ? "byte-identical to 0.6.2" : "differs"}; the fits flown 4 days ${d ? `${(1000 * d.posM).toFixed(2)} mm` : "-"} apart; FIT_RMS ${(stats(c).rms * 1000).toFixed(3)} m against ${(stats(b).rms * 1000).toFixed(3)} m, BTERM ${stats(c).b} against ${stats(b).b}`);
+  check(d && d.posM <= NO_HARM[name] && dRms <= 0.01, `${name}: the fit flown 4 days ${d?.posM} m from 0.6.2's (within ${NO_HARM[name]} m), FIT_RMS ${dRms} m apart (within 0.01 m)`);
 }
 if (geo) console.log(`GEO arc: ${OEM.getRootAsOEM(new flatbuffers.ByteBuffer(geo)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.length} states`);
 

@@ -1,6 +1,8 @@
 // modules-sdn-ap-drag-high-eccentricity-20261103: ms per object-day of `propagate` over 7 days (browser host), the seeded
 // HEO sets with drag (B 0.044, NRLMSISE-00), two modules interleaved, median of `runs`. node drag-cost.mjs <before.wasm> <after.wasm> [runs]
 import {runModelTruth} from './lib/heo-model-truth.mjs';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 const [before, after, runs = '9'] = process.argv.slice(2);
 const FIXTURES = {
   Molniya: {n: 2, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10},

@@ -184,7 +184,7 @@ const check = (condition, message) => { if (!condition) failures.push(message); 
 async function main() {
   assert(!fs.existsSync(path.resolve(packageRoot, '../ffm-fast')), 'Retired sibling directory remains');
   const manifest=readJson(path.join(packageRoot, 'plugin-manifest.json'));
-  assert.equal(manifest.pluginId, 'com.orbpro.ffm');assert.equal(manifest.version, '2.0.0');
+  assert.equal(manifest.pluginId, 'com.orbpro.ffm');assert.equal(manifest.version, readJson(path.join(packageRoot, 'package.json')).version);
   assert.equal(sha(fs.readFileSync(path.join(packageRoot,'dist/browser/module.wasm'))), sha(fs.readFileSync(path.join(packageRoot,'dist/isomorphic/module.wasm'))));
   const hashes = integrity(), loadStart = os.loadavg(), rows = [];
   const truthMetadata = readJson(path.join(fixtureRoot, 'truth/truth.json'));

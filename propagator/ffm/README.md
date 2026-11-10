@@ -175,7 +175,7 @@ do. Radiation pressure therefore needs no special step limit or tolerance
 Against the stored Orekit 13.1 trajectories, the LEO 400 km cases with radiation
 pressure and drag are within 8.448 mm after a day, sampled hourly, at RK78 1e-13 and
 steps of at most 300 s, 4.092 mm with steps of at most 30 s and 4.074 mm at 1e-15 with
-steps of at most 10 s (FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04). The first figure includes FFM's own
+steps of at most 10 s (FFM 2.3.0, module SHA-256 `ea457690`, scored 2026-11-10). The first figure includes FFM's own
 integration error at 300 s steps, which (FFM there against FFM at 1e-15 and steps of at most 10 s, the largest over the day) is 9.801 mm in LEO 400 km and 0.455 mm at 700 km.
 <!-- END GENERATED OREKIT RADIATION PRESSURE -->
 
@@ -870,6 +870,12 @@ The [72-case reference suite](docs/cross-validation.md#reference-suite-on-72-cas
 reports agreement, supported cases, model settings and measured causes using the
 shipped WASM. The [consolidated evidence](tests/evidence/CONSOLIDATED.md) includes
 STM, frame/time/ephemeris and SGP4 checks, with reproducible version and checksum pins.
+Each build's result, comparison by comparison, is kept in
+[tests/evidence/scored/](tests/evidence/scored/), named by version and wasm SHA-256. A new
+build is re-scored with `nice -n 19 node propagator/ffm/tests/evidence/rescore-all.mjs` from the
+repository root. `FFM_XVAL_NYX_OUT` must name the stored Nyx runs, and `FFM_XVAL_GMAT_WORK` the GMAT
+diagnostic reports; both live with the tool installs, outside the repository
+([Re-scoring a new build](docs/cross-validation.md#re-scoring-a-new-build)).
 
 ## Verification
 
@@ -956,8 +962,8 @@ names; Orekit with Dormand-Prince 8(5,3) at a relative tolerance of 1e-14 and
 steps of at most 10 s.
 
 <!-- BEGIN GENERATED OREKIT SUMMARY -->
-The [current summary](tests/evidence/orekit/summary.json) pins FFM 2.2.0,
-module SHA-256 `d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153` (scored 2026-11-04),
+The [current summary](tests/evidence/orekit/summary.json) pins FFM 2.3.0,
+module SHA-256 `ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934` (scored 2026-11-10),
 and records every case at all three settings. All 72 published suite limits are met. The [generated comparison table](docs/cross-validation.md#reference-suite-on-72-cases)
 reports current maxima by orbit and force class.
 <!-- END GENERATED OREKIT SUMMARY -->
@@ -986,7 +992,7 @@ in `docs/cross-validation.md`):
 | Field, third bodies, radiation pressure, tides, relativity, thrust | 46 | 30.389 mm | 30.502 mm | 30.510 mm |
 | With drag (NRLMSISE-00) | 6 | 7.950 m | 7.950 m | 7.950 m |
 
-*FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04.*
+*FFM 2.3.0, module SHA-256 `ea457690`, scored 2026-11-10.*
 
 The drag rows are the anomalous oxygen GMAT's NRLMSISE-00 leaves out of its
 total density (`gtd7`; FFM and Orekit use `gtd7d`): 0.005 % of the density at
@@ -1001,8 +1007,11 @@ out of its variational equations (shadow function, relativity, thrust).
 
 `lib/coords` uses ERFA 2.0.1 for IAU 1976 precession and the full IAU 1980
 nutation series. GCRF/J2000 are aliases in this classical API (no frame bias);
-MOD, TOD and FK5 TEME follow `eraPmat76`, `eraPnm80` and
-`R3(eraEqeq94) * eraPnm80`. ECEF/ITRF/PEF use the equinox chain
+MOD and TOD follow `eraPmat76` and `eraPnm80`. TEME is the frame of AIAA
+2006-6753 as `foundation/frames` defines it, `R3(eraGst06 - eraGmst82) *
+eraPnm06a` (UT1 = UTC without EOP); until 2.3.0 it was the FK5
+`R3(eraEqeq94) * eraPnm80`, 20 to 47 mas of pole away (0.91 m on the paper's
+example, 9.6 m at 42,164 km in 2026). ECEF/ITRF/PEF use the equinox chain
 `R3(eraGst94) * eraPnm80`; the general API has zero polar motion.
 The compatibility `gcrfToItrf` helper accepts xp/yp and applies `eraPom00`
 with zero TIO locator.

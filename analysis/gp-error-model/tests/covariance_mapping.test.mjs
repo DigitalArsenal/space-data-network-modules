@@ -9,7 +9,9 @@ import { json, call as ermCall, invoke } from './erm-harness.mjs';
 // common_epoch, map_covariance and screening_cases through the built artifact.
 // Expected values do not come from this module: tests/stm-reference.json is
 // written by tests/stm-reference.py from python-sgp4's pure-Python SGP4
-// (WGS-72, opsmode i), pyerfa (GCRF -> TEME = Rz(ee06a) pnm06a at TT), a
+// (WGS-72, opsmode i), pyerfa (GCRF -> TEME = R3(GAST06 - GMST82) NPB06 at
+// TT and UT1 = UTC, the TEME of AIAA 2006-6753; the common_epoch states moved
+// up to 6.4 cm when it replaced Rz(ee06a) pnm06a on 2026-11-10), a
 // two-body propagator in the eccentric anomaly with Richardson-extrapolated
 // central differences for its STM, and Newton shooting for the Lambert arc.
 // Element sets: Vallado's SGP4-VER 06251, two variants, and a GPS-like set.

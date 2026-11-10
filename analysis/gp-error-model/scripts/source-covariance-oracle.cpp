@@ -20,7 +20,8 @@ void rotation(int kind, double offset, double r[3][3]) {
   eraUtcut1(utc1,utc2,double(float(-.1771554)),&u1,&u2);
   tt2+=offset/86400.;u2+=offset/86400.;
   if(kind==3) { double rp[3][3],rbp[3][3];eraBp06(2451545.,0,base,rp,rbp); }
-  if(kind==4) { double tod[3][3],z[3][3];eraPnm06a(tt1,tt2,tod);eraIr(z);eraRz(eraEe06a(tt1,tt2),z);eraRxr(z,tod,base); }
+  // TEME of AIAA 2006-6753: R3(GAST06 - GMST82) NPB06, both sidereal angles of UT1.
+  if(kind==4) { eraPnm06a(tt1,tt2,base);eraRz(eraGst06(u1,u2,tt1,tt2,base)-eraGmst82(u1,u2),base); }
   if(kind==5) {
     double x,y;eraXy06(tt1,tt2,&x,&y);double s=eraS06(tt1,tt2,x,y);
     double ci[3][3],pm[3][3];eraC2ixys(x,y,s,ci);

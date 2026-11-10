@@ -4,7 +4,9 @@ FFM (Full Force Model) is defined in [the FFM profile](../../FFM.md).
 
 Generated from pinned summaries by `consolidate.mjs`; checked by `node propagator/ffm/tests/evidence/check-all.mjs` from the repository root. No timestamps or host details enter this report; the re-score date is authored in [rescore.json](rescore.json).
 
-FFM 2.2.0, SHA-256 `d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153`, re-scored 2026-11-04. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+FFM 2.3.0, SHA-256 `ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934`, re-scored 2026-11-10. Numerical aggregation and unit formatting run in C++; replay physics stays in C++/WASM.
+
+The current build's result, comparison by comparison, is [scored/2.3.0-ea457690.json](scored/2.3.0-ea457690.json); [scored/](scored/) keeps one file per build, named by version and wasm SHA-256. Re-score with `nice -n 19 node propagator/ffm/tests/evidence/rescore-all.mjs` from the repository root.
 
 ## Not re-scored
 
@@ -50,8 +52,8 @@ The GMAT limits apply only to GMAT. These are agreement limits from the shared p
 | Basilisk | 2.12.0 | 50 | 22 | 43 | 7 | 0 | 0 |
 | ERFA / SPICE | 2.0.1 / CSPICE_N0067 | 13 | 0 | 12 | 1 | 13 | 0 |
 | JPL Horizons | 1.2 | 6 | 1 | 6 | 0 | 4 | 0 |
-| SGP4 against its STR#3 base | foundation/sgp4-str3; module 1.4.1 | 0 | 0 | 0 | 0 | 3 | 0 |
-| SGP4-XP | 9.1.1.0; module 0.2.1 | 1 | 0 | 1 | 0 | 0 | 0 |
+| SGP4 against its STR#3 base | foundation/sgp4-str3; module 1.5.0 | 0 | 0 | 0 | 0 | 3 | 0 |
+| SGP4-XP | 9.1.1.0; module 0.3.0 | 1 | 0 | 1 | 0 | 0 | 0 |
 
 ## Maximum position difference
 
@@ -135,10 +137,10 @@ No STM pass threshold is defined by the export.
 | No-EOP fallback versus CIO | maximum difference: 533.295 mas | not specified | diagnostic | Legacy UT1=UTC, zero polar motion, no frame bias, IAU 1976/1980.. |
 | Classical GCRF/J2000 -> MOD | maximum difference: 0 mas | maximum difference: ≤ 0.001 mas | met | ERFA is the sole implementation. |
 | Classical MOD -> TOD | maximum difference: 0 mas | maximum difference: ≤ 1e-07 mas | met | ERFA is the sole implementation; full IAU 1980 series. |
-| Classical GCRF/J2000 -> TEME | maximum difference: 2.0002e-10 mas | maximum difference: ≤ 1e-07 mas | met | FK5 TEME definition. |
+| Classical GCRF/J2000 -> TEME | maximum difference: 0 mas | maximum difference: ≤ 1e-07 mas | met | The TEME of AIAA 2006-6753 (lib/coords since 2.3.0). |
 | No-EOP fallback classical chain | maximum difference: 2.86251e-08 mas | maximum difference: ≤ 1e-07 mas | met | Reevaluated at every call, exact two-part dates, no hourly N*P cache. |
-| SGP4 GCRF -> TEME | maximum difference: 1.97811e-07 mas | maximum difference: ≤ 0.001 mas | met | Separate foundation/frames IAU 2006/2000A TEME definition. |
-| SGP4 versus FK5 TEME definitions | maximum difference: 77.6555 mas | not specified | diagnostic | Definition spread. |
+| SGP4 GCRF -> TEME | maximum difference: 1.17245e-05 mas | maximum difference: ≤ 0.001 mas | met | foundation/frames gcrfToTeme: the TEME of AIAA 2006-6753. |
+| SGP4 versus FK5 TEME definitions | maximum difference: 50.3914 mas | not specified | diagnostic | Definition spread. |
 | Sun relative to Earth at force TDB | maximum difference: 0 mm | maximum difference: ≤ 1.000 mm | met | Native FFM force API kernel read; km/km/s converted in C++ to meters. |
 | Sun relative to Earth at ERFA TDB | maximum difference: 395.263 mm | not specified | diagnostic | Remaining two-term TDB model spread. |
 | Moon relative to Earth at force TDB | maximum difference: 0 mm | maximum difference: ≤ 1.000 mm | met | Native FFM force API kernel read. |
@@ -407,9 +409,9 @@ Provenance limit:
 
 ### SGP4 against its STR#3 base
 
-Version: foundation/sgp4-str3; module 1.4.1. Evidence: [../../../sgp4/tests/evidence/str3/summary-str3.json](../../../sgp4/tests/evidence/str3/summary-str3.json).
+Version: foundation/sgp4-str3; module 1.5.0. Evidence: [../../../sgp4/tests/evidence/str3/summary-str3.json](../../../sgp4/tests/evidence/str3/summary-str3.json).
 
-- shipped WASM (propagator/sgp4 dist/browser): `2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643`.
+- shipped WASM (propagator/sgp4 dist/browser): `66789d827227af78fa339693f974266634081b56b14568fd5e162f80ac7ce048`.
 - library_states.cpp: `d029b0f44bf158cead38ca6795411d5f1412169ea587ab25153efa7d3b4f8a15`.
 - run-str3.mjs: `8bafb16a48d2b9b79010924d1325a79603d97354754d27a51e3481fb131f2a83`.
 
@@ -423,9 +425,9 @@ Step setting: 12 times per set, from -1440 to 10080 minutes from epoch
 
 ### SGP4-XP
 
-Version: 9.1.1.0; module 0.2.1. Evidence: [../../../sgp4/tests/evidence/xp/summary-xp.json](../../../sgp4/tests/evidence/xp/summary-xp.json).
+Version: 9.1.1.0; module 0.3.0. Evidence: [../../../sgp4/tests/evidence/xp/summary-xp.json](../../../sgp4/tests/evidence/xp/summary-xp.json).
 
-- dist/isomorphic/module.wasm: `816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef`.
+- dist/isomorphic/module.wasm: `d9dcd6153f7787ad50cda808652ce721901d8ae2673e410a5fe7ad28b7666b6b`.
 - third_party/ussf-sgp4/Sgp4Prop.xp.wasm: `9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7`.
 
 Model settings:
@@ -442,8 +444,8 @@ Step setting: 640 sets × 7 times
 
 ### GMAT R2026a drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a`.
-- Anomalous-oxygen diagnostic: `0972d4cb7de6c5c264544c4ea26597d21a81d71176cd8f394864bb431a4ddcfe`.
+- FFM trajectories at suite / steps30 / finest: `96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8`.
+- Anomalous-oxygen diagnostic: `cc8e11b8e168e6eb117b2122a9fac75c9ed28305bd3d619545ea98832c37c415`.
 - LEO400_F6-field-sun-moon-srp-drag.txt: `aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78`.
 - LEO400_F6-field-sun-moon-srp-drag.script: `a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813`.
 - LEO400_Z3-zonal20-sun-moon-srp-drag.txt: `a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2`.
@@ -459,8 +461,8 @@ Step setting: 640 sets × 7 times
 
 ### Nyx drag diagnostic inputs
 
-- FFM trajectories at suite / steps30 / finest: `76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a`.
-- Published-formula / WGS84 trajectories: `dc156bb8c11198557061749148076e6639a1e80158675d48cf4005750f7f7e4b`.
+- FFM trajectories at suite / steps30 / finest: `96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8`.
+- Published-formula / WGS84 trajectories: `47f4720b1fdc6b425bd0d54057b78aedcc0a39f5f7473a8a66d95e470c9f7fd5`.
 
 ### Basilisk drag diagnostic inputs
 

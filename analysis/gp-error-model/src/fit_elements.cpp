@@ -18,7 +18,7 @@
 // an OrbitFrameWrapper RSW) means the state's radial, transverse and normal
 // axes. Every state is taken to TEME (SGP4's frame): EME2000 through the
 // IAU 2006 frame bias to GCRF, GCRF through foundation/frames' gcrfToTeme
-// (IAU 2006/2000A and the equation of the equinoxes). Copies of an epoch
+// (the TEME of AIAA 2006-6753, R3(GAST06 - GMST82) NPB06). Copies of an epoch
 // within 1 ms keep the first in input order.
 //
 // The fit (fit_one): weighted least squares on the residuals model minus

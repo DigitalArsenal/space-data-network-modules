@@ -104,12 +104,13 @@ SynCoPate files, read by `files/orbit-products` 0.1.4) is scored for realism.
 - **Interpolation:** the block's `INTERPOLATION_DEGREE` (5 when absent) Lagrange
   interpolant through the nearest degree + 1 states; the same interpolant through
   the nearest covariance rows for each position-block element.
-- **Frames:** TEME → GCRF by the `foundation/frames` IAU 2006/2000A chain with the
-  equation of the equinoxes (UT1 does not enter); the covariance as M P Mᵀ. EME2000
-  → GCRF by the IAU 2006 frame bias.
+- **Frames:** TEME → GCRF by the `foundation/frames` axis engine: the TEME of
+  AIAA 2006-6753, `R3(GAST06 - GMST82) NPB06` by IAU 2006/2000A, UT1 = UTC; the
+  covariance as M P Mᵀ. EME2000 → GCRF by the IAU 2006 frame bias.
 - **Check:** the TEME state of Vallado, Crawford, Hujsak and Kelso (2006,
-  AIAA 2006-6753) at 2004-04-06 07:51:28.386009 UTC maps to their GCRF state within
-  0.11 m. Browser and WasmEdge agree byte for byte
+  AIAA 2006-6753) at 2004-04-06 07:51:28.386009 UTC maps to the GCRF of the same
+  state (Vallado, Example 3-15) within 1 cm (0.4.0, TEME's x axis by GMST06:
+  0.11 m). Browser and WasmEdge agree byte for byte
   (`tests/parity.mjs`; the Docker leg is waived by the owner, 2026-10-22).
 
 ## Products

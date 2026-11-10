@@ -1,9 +1,9 @@
 {
  "about": "Offline Horizons sanity references. All dynamics and numerical arithmetic are C++/WASM/native CSPICE; JavaScript and Python only orchestrate transport.",
  "module": {
-  "version": "2.2.0",
+  "version": "2.3.0",
   "file": "../../../dist/isomorphic/module.wasm",
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+  "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
  },
  "horizons": {
   "version": "1.2",
@@ -945,11 +945,11 @@
   },
   {
    "file": "../../../plugin-manifest.json",
-   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
   },
   {
    "file": "../../../package.json",
-   "sha256": "088b4fb56f78a074fe096670025fd80a482e054e6331b3e15976802cdacba941"
+   "sha256": "e8ba92edacd855da17b1f9826bd3f4360353f6d90a6601ab9c2282043b47d1e0"
   },
   {
    "file": "../../../src/cpp/include/ffm/prw_codec.h",

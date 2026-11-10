@@ -1,0 +1,545 @@
+{
+ "about": "FFM reference evidence scored on one build: each comparison against its stored reference. passed is true when every primary row met its limit, false with the missed rows and their recorded causes otherwise, and null for a comparison with no limit. headline is the row nearest its limit, or furthest past it. publicNote, for a comparison that did not pass, states what differs and what the recorded diagnostic shows, in words that can be printed as written.",
+ "module": {
+  "name": "propagator/ffm",
+  "version": "2.2.0",
+  "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+ },
+ "scoredOn": "2026-11-04",
+ "evidenceCommit": "87babcd5f5abdc8a04b0dd6ebbdb4aee25290be4",
+ "checks": null,
+ "note": "Written from the consolidated.json committed with this build's evidence; the check scripts were not run again.",
+ "comparisons": [
+  {
+   "id": "orekit",
+   "against": "Orekit 13.1",
+   "evidence": "orekit/summary.json",
+   "summarySha256": "127fc51b056ef5fb229f200776b5c22c8b0b2d3e49a7f3407cbe899bd9624561",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": true,
+   "rows": {
+    "scored": 72,
+    "met": 72,
+    "missed": 0,
+    "skipped": 0,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "largest 3D position difference over 24 h, suite setting",
+    "case": "MOLNIYA F0-point-mass",
+    "value": 0.000575672,
+    "unit": "m",
+    "display": "0.576 mm",
+    "limit": 0.001
+   },
+   "missed": [],
+   "publicNote": null
+  },
+  {
+   "id": "gmat-2026",
+   "against": "GMAT R2026a",
+   "evidence": "gmat/summary-gmat-R2026a.json",
+   "summarySha256": "5ecf13508ce13cb969020599b35f955dd86c98200acc533abb7150a17c0740ad",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": false,
+   "rows": {
+    "scored": 57,
+    "met": 51,
+    "missed": 6,
+    "skipped": 15,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "largest 3D position difference over 24 h, suite setting",
+    "case": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+    "value": 7.9498,
+    "unit": "m",
+    "display": "7.950 m",
+    "limit": 1.5
+   },
+   "missed": [
+    {
+     "case": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+     "value": 2.31458,
+     "unit": "m",
+     "display": "2.315 m",
+     "limit": 1.5,
+     "cause": "model-setting difference (GMAT density without anomalous oxygen)"
+    },
+    {
+     "case": "LEO400 F6-field-sun-moon-srp-drag",
+     "value": 2.31936,
+     "unit": "m",
+     "display": "2.319 m",
+     "limit": 1.5,
+     "cause": "model-setting difference (GMAT density without anomalous oxygen)"
+    },
+    {
+     "case": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+     "value": 1.52757,
+     "unit": "m",
+     "display": "1.528 m",
+     "limit": 1.5,
+     "cause": "model-setting difference (GMAT density without anomalous oxygen)"
+    },
+    {
+     "case": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+     "value": 7.9498,
+     "unit": "m",
+     "display": "7.950 m",
+     "limit": 1.5,
+     "cause": "model-setting difference (GMAT density without anomalous oxygen)"
+    },
+    {
+     "case": "SSO700 F6-field-sun-moon-srp-drag",
+     "value": 7.93435,
+     "unit": "m",
+     "display": "7.934 m",
+     "limit": 1.5,
+     "cause": "model-setting difference (GMAT density without anomalous oxygen)"
+    },
+    {
+     "case": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+     "value": 6.29596,
+     "unit": "m",
+     "display": "6.296 m",
+     "limit": 1.5,
+     "cause": "model-setting difference (GMAT density without anomalous oxygen)"
+    }
+   ],
+   "publicNote": "Six drag cases differ by 1.53 m to 7.95 m against a 1.5 m limit. GMAT R2026a's density has no anomalous oxygen; scaling the drag coefficient for it brings them to 33.5 mm at 400 km and 123 mm at 700 km."
+  },
+  {
+   "id": "gmat-2022",
+   "against": "GMAT R2022a",
+   "evidence": "gmat/summary-gmat-R2022a.json",
+   "summarySha256": "d180f19282ee690173e07d1a365bd9391ad664a87ef63b9429ac24d2c714d295",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": true,
+   "rows": {
+    "scored": 55,
+    "met": 55,
+    "missed": 0,
+    "skipped": 17,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "largest 3D position difference over 24 h, suite setting",
+    "case": "LEO400 F6-field-sun-moon-srp-drag",
+    "value": 1.3624,
+    "unit": "m",
+    "display": "1.362 m",
+    "limit": 1.5
+   },
+   "missed": [],
+   "publicNote": null
+  },
+  {
+   "id": "nyx",
+   "against": "Nyx 2.6.0",
+   "evidence": "nyx/summary-nyx-2.6.0.json",
+   "summarySha256": "d8d418bfb23ae0712a1a081f6cb673a273b591799e462e91931c1bf7821ad0e4",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": false,
+   "rows": {
+    "scored": 59,
+    "met": 54,
+    "missed": 5,
+    "skipped": 13,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "largest 3D position difference over 24 h, suite setting",
+    "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+    "value": 12.4616,
+    "unit": "m",
+    "display": "12.462 m",
+    "limit": 0.1
+   },
+   "missed": [
+    {
+     "case": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+     "value": 12.0732,
+     "unit": "m",
+     "display": "12.073 m",
+     "limit": 0.1,
+     "cause": "Nyx NRLMSISE-00 port defect and model-setting mismatch"
+    },
+    {
+     "case": "LEO400 F6-field-sun-moon-srp-drag",
+     "value": 12.0689,
+     "unit": "m",
+     "display": "12.069 m",
+     "limit": 0.1,
+     "cause": "Nyx NRLMSISE-00 port defect and model-setting mismatch"
+    },
+    {
+     "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+     "value": 12.4616,
+     "unit": "m",
+     "display": "12.462 m",
+     "limit": 0.1,
+     "cause": "Nyx NRLMSISE-00 port defect and model-setting mismatch"
+    },
+    {
+     "case": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+     "value": 8.62413,
+     "unit": "m",
+     "display": "8.624 m",
+     "limit": 0.1,
+     "cause": "Nyx NRLMSISE-00 port defect and model-setting mismatch"
+    },
+    {
+     "case": "LEO400 C1-field-sun-moon-srp-drag-intrack-bdot-jacobians",
+     "value": 12.461,
+     "unit": "m",
+     "display": "12.461 m",
+     "limit": 0.1,
+     "cause": "Nyx NRLMSISE-00 port defect and model-setting mismatch"
+    }
+   ],
+   "publicNote": "Five drag cases differ by 8.62 m to 12.5 m against a 0.1 m limit. Nyx's NRLMSISE-00 differs from the model's published formulas, and the Nyx runner's Earth shape was not WGS84; with both matched, the same cases agree to within 52.4 mm."
+  },
+  {
+   "id": "tudatpy",
+   "against": "tudatpy 1.0.0",
+   "evidence": "tudat/summary-tudatpy-1.0.0.json",
+   "summarySha256": "9a279d83224832641f11dd9d7cae0acd30a2fd9e176320e16245d94bbc4d2745",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": true,
+   "rows": {
+    "scored": 59,
+    "met": 59,
+    "missed": 0,
+    "skipped": 13,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "largest 3D position difference over 24 h, suite setting",
+    "case": "LEO400 R2-field-sun-moon-relativity-iers2010",
+    "value": 0.0230167,
+    "unit": "m",
+    "display": "23.017 mm",
+    "limit": 0.05
+   },
+   "missed": [],
+   "publicNote": null
+  },
+  {
+   "id": "tudat-wasm",
+   "against": "Tudat WASM 1.0.0.dev4",
+   "evidence": "tudat/summary-tudat-wasm.json",
+   "summarySha256": "96e9d3cce48bb1879137bab5c20bfaa5fd299c5078d82c009045b95049134c86",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": true,
+   "rows": {
+    "scored": 27,
+    "met": 27,
+    "missed": 0,
+    "skipped": 45,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "largest 3D position difference over 24 h, suite setting",
+    "case": "SSO700 F6-field-sun-moon-srp-drag",
+    "value": 0.0533097,
+    "unit": "m",
+    "display": "53.310 mm",
+    "limit": 0.1
+   },
+   "missed": [],
+   "publicNote": null
+  },
+  {
+   "id": "basilisk",
+   "against": "Basilisk 2.12.0",
+   "evidence": "basilisk/summary-basilisk-2.12.0.json",
+   "summarySha256": "4f575b1e35d158d79be86fadbaa55bfc73f8c7697376926c7bf9d78440bf908d",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": false,
+   "rows": {
+    "scored": 50,
+    "met": 43,
+    "missed": 7,
+    "skipped": 22,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "largest 3D position difference over 24 h, suite setting",
+    "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+    "value": 5418.77,
+    "unit": "m",
+    "display": "5418.767 m",
+    "limit": 0.1
+   },
+   "missed": [
+    {
+     "case": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+     "value": 5250.65,
+     "unit": "m",
+     "display": "5250.646 m",
+     "limit": 0.1,
+     "cause": "model-setting mismatch"
+    },
+    {
+     "case": "LEO400 F6-field-sun-moon-srp-drag",
+     "value": 5248.32,
+     "unit": "m",
+     "display": "5248.316 m",
+     "limit": 0.1,
+     "cause": "model-setting mismatch"
+    },
+    {
+     "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
+     "value": 5418.77,
+     "unit": "m",
+     "display": "5418.767 m",
+     "limit": 0.1,
+     "cause": "model-setting mismatch"
+    },
+    {
+     "case": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+     "value": 4094.03,
+     "unit": "m",
+     "display": "4094.031 m",
+     "limit": 0.1,
+     "cause": "model-setting mismatch"
+    },
+    {
+     "case": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+     "value": 58.1441,
+     "unit": "m",
+     "display": "58.144 m",
+     "limit": 0.1,
+     "cause": "model-setting mismatch"
+    },
+    {
+     "case": "SSO700 F6-field-sun-moon-srp-drag",
+     "value": 58.1286,
+     "unit": "m",
+     "display": "58.129 m",
+     "limit": 0.1,
+     "cause": "model-setting mismatch"
+    },
+    {
+     "case": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+     "value": 34.8118,
+     "unit": "m",
+     "display": "34.812 m",
+     "limit": 0.1,
+     "cause": "model-setting mismatch"
+    }
+   ],
+   "publicNote": "In seven drag cases Basilisk's atmosphere was not set up like FFM's (spherical rather than WGS84 altitude and latitude, and a different NRLMSISE-00 density entry point), so their 34.8 m to 5.42 km differences against a 0.1 m limit are not a like-for-like comparison. With those settings matched, the same cases agree to within 44.2 mm."
+  },
+  {
+   "id": "frames",
+   "against": "ERFA / SPICE 2.0.1 / CSPICE_N0067",
+   "evidence": "erfa-spice/summary-erfa-spice.json",
+   "summarySha256": "8c4526134e29d618139497993fee4b60d9ef1bdb9f0beea254ffc3e1d1de38c5",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": false,
+   "rows": {
+    "scored": 13,
+    "met": 12,
+    "missed": 1,
+    "skipped": 0,
+    "diagnostic": 13
+   },
+   "headline": {
+    "quantity": "Force GCRF -> ITRF: maximum difference",
+    "case": "c2tSpice",
+    "value": 8.85737,
+    "unit": "mas",
+    "display": "8.85737 mas",
+    "limit": 5
+   },
+   "missed": [
+    {
+     "case": "c2tSpice",
+     "value": 8.85737,
+     "unit": "mas",
+     "display": "8.85737 mas",
+     "limit": 5,
+     "cause": "reference spread"
+    }
+   ],
+   "publicNote": "FFM's GCRF to ITRF rotation differs from SPICE's ITRF93 kernel by 8.86 mas against a 5 mas limit. That is a difference between the references: the ITRF93 kernel carries its own Earth orientation data and the IAU 1976/1980 model, and against ERFA with the case's Earth orientation data FFM agrees to 0.000483 mas."
+  },
+  {
+   "id": "horizons",
+   "against": "JPL Horizons 1.2",
+   "evidence": "horizons/summary-horizons.json",
+   "summarySha256": "cd6a63b9190843260bd5ac1f1f2d65af1424fc7c8dfde4a99f66bcdf42849489",
+   "module": "FFM 2.2.0",
+   "wasmSha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153",
+   "ran": true,
+   "passed": true,
+   "rows": {
+    "scored": 6,
+    "met": 6,
+    "missed": 0,
+    "skipped": 1,
+    "diagnostic": 4
+   },
+   "headline": {
+    "quantity": "moon: shipped FFM WASM / DE440: position",
+    "case": "moon",
+    "value": 2.4168,
+    "unit": "m",
+    "display": "2.417 m",
+    "limit": 10
+   },
+   "missed": [],
+   "publicNote": null
+  },
+  {
+   "id": "str3",
+   "against": "SGP4 against its STR#3 base",
+   "evidence": "../../../sgp4/tests/evidence/str3/summary-str3.json",
+   "summarySha256": "7ec6cc8464f7ff968126db9764b23844df8466bf1fc7c01a444b2e6ba842af73",
+   "module": "foundation/sgp4-str3; module 1.4.1",
+   "wasmSha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643",
+   "ran": true,
+   "passed": null,
+   "rows": {
+    "scored": 0,
+    "met": 0,
+    "missed": 0,
+    "skipped": 0,
+    "diagnostic": 3
+   },
+   "headline": {
+    "quantity": "deep space (SDP4): 5 sets, 60 states: position 3D",
+    "case": "str3/deep",
+    "value": 0.00000628926,
+    "unit": "m",
+    "display": "0.006 mm",
+    "limit": null
+   },
+   "missed": [],
+   "publicNote": null
+  },
+  {
+   "id": "xp",
+   "against": "SGP4-XP",
+   "evidence": "../../../sgp4/tests/evidence/xp/summary-xp.json",
+   "summarySha256": "13904736d313cc2298eef683a83b01b00401ba5a33b4e15a131d177d8edc6791",
+   "module": "9.1.1.0; module 0.2.1",
+   "wasmSha256": "816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef",
+   "ran": true,
+   "passed": true,
+   "rows": {
+    "scored": 1,
+    "met": 1,
+    "missed": 0,
+    "skipped": 0,
+    "diagnostic": 0
+   },
+   "headline": {
+    "quantity": "Exact library parity: failed parity tests",
+    "case": "library-parity",
+    "value": 0,
+    "unit": "tests",
+    "display": "0 tests",
+    "limit": 0
+   },
+   "missed": [],
+   "publicNote": null
+  }
+ ],
+ "dragDiagnostics": [
+  {
+   "id": "gmat-2026",
+   "against": "GMAT R2026a",
+   "adjustment": "Cd scaled by 1 + eps from the anomalous-oxygen diagnostic",
+   "rows": [
+    {
+     "orbit": "LEO400",
+     "cases": 3,
+     "stock": "2.319 m",
+     "adjusted": "33.544 mm",
+     "limit": "1.500 m",
+     "met": true
+    },
+    {
+     "orbit": "SSO700",
+     "cases": 3,
+     "stock": "7.950 m",
+     "adjusted": "122.934 mm",
+     "limit": "1.500 m",
+     "met": true
+    }
+   ]
+  },
+  {
+   "id": "nyx",
+   "against": "Nyx",
+   "adjustment": "Published NRLMSISE-00 formulas + WGS84 shape",
+   "rows": [
+    {
+     "orbit": "LEO400",
+     "cases": 5,
+     "stock": "12.462 m",
+     "adjusted": "52.448 mm",
+     "limit": "100.000 mm",
+     "met": true
+    },
+    {
+     "orbit": "SSO700",
+     "cases": 3,
+     "stock": "61.282 mm",
+     "adjusted": "0.850 mm",
+     "limit": "100.000 mm",
+     "met": true
+    }
+   ]
+  },
+  {
+   "id": "basilisk",
+   "against": "Basilisk",
+   "adjustment": "WGS84 coordinates + native gtd7d density",
+   "rows": [
+    {
+     "orbit": "LEO400",
+     "cases": 4,
+     "stock": "5418.767 m",
+     "adjusted": "44.175 mm",
+     "limit": "100.000 mm",
+     "met": true
+    },
+    {
+     "orbit": "SSO700",
+     "cases": 3,
+     "stock": "58.144 m",
+     "adjusted": "0.764 mm",
+     "limit": "100.000 mm",
+     "met": true
+    }
+   ]
+  }
+ ],
+ "subset27": {
+  "gmat": "15.962 mm",
+  "nyx": "12.097 m",
+  "orekit": "9.668 mm",
+  "tudat-wasm": "53.310 mm",
+  "tudatpy": "53.314 mm"
+ }
+}
