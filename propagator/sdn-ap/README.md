@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.7 (dist 5fbfd365).
+Version 0.6.8 (dist df8ab715).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -48,8 +48,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   MAX_SETS_PER_OBJECT, of THEORIES (SGP4, SGP4XP). SELECTION NEAREST or LATEST_BEFORE by binary search; across
   BLEND_WINDOW_SECONDS (3600) around each switch the two sets' states blend (SMOOTHSTEP weight with its derivative in
   the velocity, or HERMITE: set a plus a cubic correction landing on set b), position and velocity continuous; the
-  covariance mixture where sets carry COVARIANCE. Two AP sets on different branches (SPEC 16.7) are not blended: their
-  switch is a step, `_select` gives b = -2 in its window and `propagate_epochs` names it in the block's COMMENT. Exports `sdnap_epochs_count`, `_stats` (records, kept, aged, capped,
+  covariance mixture where sets carry COVARIANCE. Two AP sets on different branches (SPEC 16.7), or a carried forecast and
+  a theory state (SPEC 18), are not blended: their switch is a step, `_select` gives b = -2 (branches) or -3 (carried and
+  theory) in its window and `propagate_epochs` names it in the block's COMMENT. Exports `sdnap_epochs_count`, `_stats` (records, kept, aged, capped,
   by THEORIES, not centered on the Earth, same-epoch duplicates, bytes), `_series`, `_select`, `_set_at`, `_at` (a
   batch of series at one time, TEME or Earth-fixed, with the covariance); `propagate_epochs` gives the same for a
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
@@ -425,7 +426,7 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   without the archive).
 - `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
   the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
-  step between two sets on different branches.
+  step between two sets on different branches and between a carried forecast and the theory (two forecasts blend).
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.

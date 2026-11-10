@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.7 (dist 5fbfd365).
+Version 0.6.8 (dist df8ab715).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1992,15 +1992,23 @@ For t in (tau_i - h_i, tau_i + h_i), s = (t - tau_i + h_i) / (2 h_i), and x_a, x
 
 Position and velocity are continuous across the window's edges; the acceleration steps by w'' (r_b - r_a) there.
 
-Two consecutive AP sets on different branches (16.7: resonance class, the 1,100-minute regime, the eccentricity switches;
-each set's from its own epoch elements) are different orbits and are never blended: their switch tau_i is a step of
-x_b - x_a, as with W = 0, and the covariance is the selected set's. Inside the window that switch would have had,
-`sdnap_epochs_select` gives b = -2 and weight 0; `propagate_epochs` writes the block's COMMENT "Not blended, the two sets
-on different branches (SPEC 14.3): " and the switch times its grid crosses. Each set's own flight is continuous in time
-(16.7), so a blend of two sets on one branch is continuous.
+A blend joins two states of one kind only: two theory states of sets on one branch, or two carried forecasts (18). Every
+other switch tau_i is a step of x_b - x_a, as with W = 0, with the selected set's covariance:
+
+- two consecutive AP sets on different branches (16.7: resonance class, the 1,100-minute regime, the eccentricity switches;
+  each set's from its own epoch elements): different orbits, never blended;
+- a set that gives its carried forecast over the window and one that gives the theory, or a set whose forecast span begins
+  or ends inside the window: a blend would be neither a forecast state nor a theory state, and every state the store gives
+  is one or the other (18).
+
+Inside the window that switch would have had, `sdnap_epochs_select` gives b = -2 (branches) or -3 (a carried forecast and
+the theory) and weight 0; `propagate_epochs` writes the block's COMMENT "Not blended (SPEC 14.3): " with each switch time its
+grid crosses and its reason, "(sets on different branches)" or "(a carried forecast and the theory)". Each set's own flight
+is continuous in time (16.7), so a blend of two theory sets on one branch is continuous; a carried set's step at its span's
+end is 18's.
 
 **14.4 Covariance.** For sets that carry COVARIANCE (SPEC 12), P = (1 - w) P_a + w P_b + w (1 - w) d d^T with
-d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture (sets on one branch,
+d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture (a blended switch,
 14.3).
 
 **14.5 Calls.** `load_epochs`; the resident exports `sdnap_epochs_count`, `_stats` (the load's counts and the store's
@@ -2256,7 +2264,7 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   theory's Jacobian lowers the cost by at most 1.8e-8 relative, steps of 0 mm); arcs whose two branches' minima lie
   across each other are refused (the 72 h arcs seeded at 0.8022 and at 1.6045 rev/day, whose 24 h arcs fit, and four of
   eight 24 h arcs seeded up to 7e-5 below 0.8022).
-- Epoch store (14.3): two sets on different branches are not blended.
+- Epoch store (14.3): two sets on different branches are not blended (nor a carried forecast with a theory state).
 
 Model truth (`test/class-crossing.e2e.mjs`): an AP mean-element GTO at 2026-10-29 00:00 UTC seeds FFM with the same GCRF
 state. There is no fit. The primary has n = 2.40 rev/day, e = 0.72, i = 27 degrees, RAAN = 40 degrees, argument of perigee
@@ -2769,7 +2777,8 @@ flies back in GCRF to the series alone.
 `propagate`: inside the span the forecast in OUTPUT.FRAME; the theory is not initialized when every requested time is
 inside the span and the record carries no `COVARIANCE_DATA`. `load_epochs`: the store keeps the segments;
 `sdnap_epochs_set_at`, `sdnap_epochs_at` and `propagate_epochs` time the forecast by the call's split Julian date
-(`test/carried-epochs.e2e.mjs`); selection and blend (SPEC 14) are unchanged. Covariance: the theory's (SPEC 12) beside
+(`test/carried-epochs.e2e.mjs`); selection (SPEC 14) is unchanged, and a blend joins two carried forecasts or two theory
+states only: a switch between a carried forecast and the theory is a step (14.3). Covariance: the theory's (SPEC 12) beside
 the forecast's states. `sdnap_covariance_at`, `sdnap_covariance_full_at`, `events`, `maneuver` and `export_omm` use the
 theory; `export_omm` writes the set (an `$OMM` has no place for the forecast). At the span's ends the state jumps by the
 theory's distance from the forecast there (no blend), which fit states (18.4).
