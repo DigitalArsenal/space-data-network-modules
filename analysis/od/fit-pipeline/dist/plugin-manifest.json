@@ -1,7 +1,7 @@
 {
   "pluginId": "com.orbpro.od-fit-pipeline",
   "name": "OD Fit Pipeline",
-  "version": "0.3.0",
+  "version": "0.2.0",
   "description": "On a timer, reads the stored operator ephemerides ($OEM records, typed storage.query) and fits SGP4 supplemental-GP mean elements per object with analysis/od's fitter, emitting $OMM and $OBD records (analysis/od's builders). Provider set, per-provider fit policy and the object-ID registry are node config (plugin.getConfig). Records that cannot be fitted (unsupported frame/time/center, unreadable, too few samples, non-converged) are FlowNotices with the reason; storing and publishing the fits is the flow's (hostcap/storage-ingest).",
   "pluginFamily": "orbit_determination",
   "capabilities": [
