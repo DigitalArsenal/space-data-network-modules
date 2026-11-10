@@ -1118,6 +1118,11 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 removed from the truth, and 1.5 to 1.8 km with the full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km
 at degree 4.
 
+A set in no class at an exact m:1 commensurability (its order-m harmonics drifting slower than 1e-3 n: 8.05 rev/day at e 0.25)
+flies without those harmonics: the first-order table and the grid of 16.11 both leave them out and no class carries them in the
+rates, 1.27 km along-track at day 7 after a 72 h fit at e 0.25 (stack #419; `test/class0-exact-resonance.e2e.mjs`, a known
+defect).
+
 **Bands.** The resonance class is decided once, at initialization, from the epoch mean motion n_0 in rad/min (the
 element set's mean motion in rev/day times 2 pi / 1440), tested in this order *[study; probe 6.2, 6.10]*:
 
@@ -2446,7 +2451,7 @@ flew without part of its tesseral field (stack #393). The grid left the whole sl
 outside low orbit; in low orbit the table leaves out only the shallow set's terms and those slower than 1e-3 n, and above the
 switch it holds nothing of degree 2 to 12, so the slow terms with q != 0 (of order e^|q|) were carried nowhere. They are
 near-resonant (periods of days to weeks, along-track as 1 / psi-dot^2), which a fit cannot absorb. From 0.6.11 the grid leaves
-out exactly what the table leaves out. Day-7 along-track RMS after a 72 h fit (FFM 2.2.1 truth: EGM96 70 x 70, DE440 Sun and
+out exactly what the table leaves out. Day-7 along-track RMS after a 72 h fit (FFM truth, 2.2.1 and 2.3.0 alike: EGM96 70 x 70, DE440 Sun and
 Moon, NRLMSISE-00 at constant weather, B 0.044 m^2/kg; i 50; `test/class0-commensurability.e2e.mjs`), 0.6.9 against 0.6.11,
 with 0.6.9's switch back at 0.3 beside it:
 

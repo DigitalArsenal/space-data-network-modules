@@ -436,8 +436,8 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   Space-Track archive, seven days of the catalog (its memory, selection and continuity on a sample; NOT MEASURED
   without the archive).
 - `test/class0-commensurability.e2e.mjs`: SPEC 16.11 (#393): class 0 sets at e 0.25 at 4, 5, 6, 7 and 8 rev/day, at 4.5 and
-  6.5, and at 6 rev/day e 0.35, each a 72 h fit flown 7 days against FFM 2.2.1 (named by its SHA-256), day-7 along-track under
-  a bound.
+  6.5, and at 6 rev/day e 0.35, each a 72 h fit flown 7 days against FFM 2.3.0 (named by its SHA-256), day-7 along-track under
+  a bound. `test/class0-exact-resonance.e2e.mjs`: the exact 8:1 resonance (8.05 rev/day, e 0.25), a known defect (#419).
 - `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
   the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
   step between two sets on different branches and between a carried forecast and the theory (two forecasts blend).

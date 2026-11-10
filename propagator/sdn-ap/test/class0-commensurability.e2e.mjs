@@ -3,7 +3,8 @@
 // rotation. Above the switch the first-order tesseral families are a grid; 0.6.3 to 0.6.10 left every harmonic of the slow
 // band (angle drifting slower than 0.045 n) out of it, which in low orbit nothing else carries (the table holds degree 13
 // and up there, the shallow set q = 0, w = j = 1 only): kilometers a week at 4, 5, 6, 7 and 8 revolutions a day.
-// Truth: test/lib/heo-model-truth.mjs as high-e-fit-arc's low-e cases fly it (FFM 2.2.1, named below by its SHA-256:
+// Truth: test/lib/heo-model-truth.mjs as high-e-fit-arc's low-e cases fly it (FFM 2.3.0, named below by its SHA-256; 2.2.1
+// gave the same figures to the last digit:
 // EGM96 70 x 70, DE440 Sun and Moon, NRLMSISE-00 at constant weather, B 0.044 m^2/kg, no SRP, zero EOP, RK78 1e-12 and
 // 300 s); a 72 h fit with the library's drag prior; 7 days flown on a 1 h grid; i 50, RAAN 10, argp 30, M 0.
 // Asserted: the day-7 whole-day along-track RMS at most the bound. The bounds are about twice what this build gives (the
@@ -17,9 +18,9 @@ import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 
-// the truth's FFM build (propagator/ffm 2.2.1, dist/isomorphic/module.wasm); heo-model-truth keys its cached truths by that
+// the truth's FFM build (propagator/ffm 2.3.0, dist/isomorphic/module.wasm); heo-model-truth keys its cached truths by that
 // file's bytes, so a truth of another build is never read, and another build is refused here by name
-const FFM_SHA256 = 'a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4';
+const FFM_SHA256 = 'ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934';
 {
   const ffm = createHash('sha256').update(fs.readFileSync(new URL('../../ffm/dist/isomorphic/module.wasm', import.meta.url))).digest('hex');
   assert.equal(ffm, FFM_SHA256, `the truth's FFM build is ${FFM_SHA256}, not ${ffm}: the bounds are that build's`);
