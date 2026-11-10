@@ -17,6 +17,14 @@ Amendment (0.2.2, task modules-sgp4-xp-flight-cost-20261104): re-recorded from 0
 dense times in chains of new satellites and returns 0.2.1's states bit for bit. The `.oem` and `.omm` are
 byte-identical; the `.ocm` differs in two bytes, the version in each `$OCM`'s PROVENANCE.PRODUCER.
 
+Amendment (0.3.0, DigitalArsenal/spacedatanetwork-stack#389): re-recorded from 0.3.0, built over foundation/frames
+0.3.0, whose TEME is AIAA 2006-6753's (r_PEF = R3(GMST82) r_TEME; until then the x axis was placed by GMST06). The
+`.oem` is byte-identical (block 1 is TEME). Block 2 (NASA ISS, EME2000) is turned into a TEME 58.9 mas away from
+0.2.2's about the pole at 2026-07-13 (1.94 m at its radius): its fitted set moved 0.99 m RMS, 1.70 m at worst over its
+181 epochs; MEAN_MOTION 15.48824912 to 15.4882492, ARG_OF_PERICENTER 42.9463 to 42.9462, MEAN_ANOMALY 270.2725 to
+270.2726, FIT_RMS_KM 0.163595 to 0.163584, HELD_OUT_RMS_KM 0.802918 to 0.802836, iterations 12 to 15. The `.omm`
+carries those elements; both records name 0.3.0 as PRODUCER.
+
 - `xp-fit-current.oem`: the `fit` input, one size-prefixed `$OEM` of two blocks, ORIGINATOR NASA/JSC/FOD/TOPO.
   Block 1: 48 h at 120 s propagated by the dist from the SGP4-XP set n 15.5 rev/day, e 0.0006317, i 51.64,
   RAAN 208.9163, argp 69.9862, M 25.2906, BTERM 0.005, AGOM 0.01 m**2/kg, epoch 2024-04-09T12:00:00Z, TEME;
@@ -29,8 +37,8 @@ byte-identical; the `.ocm` differs in two bytes, the version in each `$OCM`'s PR
   kept for the refusal by count.
 
 sha256: oem 5c7ff4e36c16ca536b82908b40c469c8ab1ea2ab7c70272ddefd06984c08ba77, ocm
-90ea86b69e7e4f2c955d7309869e430400a66e12256370adeb6314920eb1dc14, omm
-e85d5fc78c2cf9cfdd5efbceb509d2607bfaa880f667a9ce8646272feee82df4.
+4a63334317cb7b1c7751dca405f122b893c4d630ca7229838b0ad481f0630e12, omm
+91e130d31fcc75281b60563b4f3a4226081acf91936420e788abca7458d4fc7b.
 
 ## geo-real-sets.json
 

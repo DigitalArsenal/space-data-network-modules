@@ -49,9 +49,13 @@ Neither: every entity, up to `max_count`.
   polar motion, m and m/s, velocity relative to the rotating axes.
 - `TEME`: SGP4's own axes, m and m/s.
 - `ICRF`: GCRF (Earth-centred ICRF axes), as analysis/epoch-state derives it:
-  `foundation/frames` `gcrfToTeme` (ERFA `eraPnm06a`, `eraEe06a`) at TT from
-  UTC by ERFA's leap-second table, the velocity with the axes' rotation rate
-  by a ±600 s central difference. The vendored ERFA is compiled in.
+  `foundation/frames` `gcrfToTeme`, the TEME of AIAA 2006-6753
+  (`R3(GAST06 - GMST82) NPB06`: ERFA `eraGst06`, `eraGmst82`, `eraPnm06a`) at
+  TT from UTC by ERFA's leap-second table and UT1 = UTC, the velocity with the
+  axes' rotation rate by a ±600 s central difference. The vendored ERFA is
+  compiled in. Before 1.5.0 TEME's x axis was placed by GMST06 (`eraEe06a`):
+  a 1.4.2 GCRF answer differs by a rotation about the pole of 13.0 mas at
+  2010, 40.8 at 2020, 57.4 at 2026 (2.7, 8.3, 11.7 m at 42,164 km).
 
 `J2000`, `MCI` and `MCMF` are refused (`unsupported-frame`).
 

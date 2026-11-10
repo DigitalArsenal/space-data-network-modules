@@ -21,11 +21,5 @@
   "eopSeries": "foundation/frames/src/eop_series.hpp",
   "moduleSdk": "0.9.12",
   "threadModel": "wasi-sequential",
-  "wasmSha256": "30c2c87372a3d2107a8d0d15d62b9e9cd70c9d5103b90159cb31577819582aaa",
-  "signed": true,
-  "signer": {
-    "keyId": "module-owner-2026-10-15",
-    "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
-  },
-  "canonicalWasmSha256": "ccda8be535c5d0a669697b9a6db88259999352c8f1fae913344384110c6b2eb5"
+  "wasmSha256": "e3594aa2dedf309342e54bd0984bfccb8c754c3190fbbb6e792b7ae40da79bd5"
 }

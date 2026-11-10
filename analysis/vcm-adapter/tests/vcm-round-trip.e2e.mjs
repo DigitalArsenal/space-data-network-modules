@@ -8,7 +8,10 @@
 //   integrator setting in INTEGRATOR, each equal to what the build before the change wrote into its free-form list
 //   (tests/fixtures/vcm-round-trip.recorded.json); assertNoUserDefined;
 // - the text: byte for byte the VCM the build before the change wrote (tests/fixtures/sample-vcm.rebuilt.txt), and
-//   read again it gives the propagation input ($PRW request) the sample gives;
+//   read again it gives the propagation input ($PRW request) the sample gives. Re-pinned at 0.4.0 for the TEME of
+//   AIAA 2006-6753 (foundation/frames 0.3.0, GMST82 in place of GMST06): the ECI and EFG lines moved 1.22 m (2023-01-07,
+//   about 49 mas about the pole); the sample's own SP-written ECI and EFG are now 0.86 m from ours (2.05 m before),
+//   the rest being SP's 4-term IAU 1980 nutation;
 // - variants of the sample: a next leap second (NEXT_LEAP_EPOCH), an exercise (MESSAGE_STATUS EXERCISE and its name)
 //   and a 10x10 covariance with radiation pressure and thrust on (all four parameter kinds) come back line for line.
 //

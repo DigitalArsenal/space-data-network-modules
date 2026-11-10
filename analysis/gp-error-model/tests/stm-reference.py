@@ -4,8 +4,10 @@
 Writes tests/stm-reference.json. Nothing here calls the module:
   - SGP4: python-sgp4's pure-Python implementation (sgp4.model.Satrec,
     WGS-72, opsmode 'i'), a separate port of Vallado's code;
-  - TEME -> GCRF: pyerfa, GCRF -> TEME = Rz(ee06a) * pnm06a at TT from UTC,
-    velocities rotated with the same matrix (as the module does);
+  - TEME -> GCRF: pyerfa, the TEME of AIAA 2006-6753, GCRF -> TEME =
+    R3(GAST06 - GMST82) * NPB06 (gst06, gmst82, pnm06a) at TT from UTC and
+    UT1 = UTC, velocities rotated with the same matrix (as the module does);
+    until 2026-11-10 Rz(ee06a) * pnm06a (x axis by GMST06);
   - two-body motion: Kepler's equation in the eccentric anomaly with
     Lagrange f and g (a different formulation from the module's universal
     variables), its STM by central differences with Richardson extrapolation;
@@ -87,9 +89,10 @@ def gcrf_to_teme(dt):
     u1, u2 = erfa.dtf2d('UTC', dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second + dt.microsecond * 1e-6)
     a1, a2 = erfa.utctai(u1, u2)
     t1, t2 = erfa.taitt(a1, a2)
-    ee = erfa.ee06a(t1, t2)
-    rz = np.array([[math.cos(ee), math.sin(ee), 0], [-math.sin(ee), math.cos(ee), 0], [0, 0, 1]])
-    return rz @ erfa.pnm06a(t1, t2)
+    npb = erfa.pnm06a(t1, t2)
+    angle = erfa.gst06(u1, u2, t1, t2, npb) - erfa.gmst82(u1, u2)
+    rz = np.array([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+    return rz @ npb
 
 
 def rtn_rows(r, v):

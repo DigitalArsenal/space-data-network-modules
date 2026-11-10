@@ -1,5 +1,5 @@
 {
- "recorded": "the dist before the typed-field change",
+ "recorded": "the dist before the typed-field change; re-pinned at 0.4.0 (foundation/frames 0.3.0, the TEME of AIAA 2006-6753): report, STATE_DATA, COVARIANCE_DATA, STATE_EPOCHS and every USER_DEFINED_PARAMETERS value from the 0.4.0 run's report item of the same key",
  "archiveThrough": "2026-11-03T231700Z--2026-11-04T003200Z.json.gz",
  "gpSets": 123,
  "videoSha256": "c44e23fd93e71c3058538839e9673c2e17fbc7375c377db46d9187080d2c8d15",
@@ -20,63 +20,63 @@
   "note: calibrator track: 152 points from frame 0 at (519.4, 354.8), the tracked object",
   "note: calibrator outliers=8",
   "note: calibrator outliers=1",
-  "note: candidate track for NORAD 68762: prior O-C 423.994682 arcsec, orbit fit rms 3.696026 arcsec, chi2/dof 0.521712",
+  "note: candidate track for NORAD 68762: prior O-C 433.813087 arcsec, orbit fit rms 3.695993 arcsec, chi2/dof 0.521690",
   "timing=overlay decoded=239/239 outliers=0 duplicates=0 cadence_s=0.500207+-0.000000 jitter_rms_ms=0.29 overlay_box_px=16,13,183,24",
   "exposure_s=0.501",
   "plates solved=157/239 median_residual_arcsec=3.11 p90_of_frame_medians_arcsec=21.43 worst_frame_median_arcsec=76.01 stars_matched=7879 scale_arcsec_per_px=4.392 reference_frame=11 catalog_stars=189129",
   "unsolved_frames=113,115-116,119-182,184-187,204,206,208,210,219,233-238",
-  "site ESTIMATED lat_deg=-30.52903 lon_deg=-70.85285 height_m=1523 sigma_north_m=91 sigma_east_m=203 sigma_up_m=185",
-  "time_bias_s=-0.1001+-0.1311 (mid-exposure = tag + bias)",
-  "calibrator NORAD=59103 set=ICEYE-X36 (59103) EPOCH 2026-10-18T07:38:47.883264Z points=89 fit_rms_arcsec=3.27 chi2_per_dof=0.39 o_minus_c_rms_east_north_arcsec=2.47,2.38 ephemeris_offset_rtn_km=-0.008,-0.000,-0.001 ephemeris_sigma_rtn_km=0.20,1.00,0.20 (assumed)",
-  "target 68762 EPOCH=2026-10-18T07:28:02.008948Z",
+  "site ESTIMATED lat_deg=-30.52903 lon_deg=-70.85295 height_m=1519 sigma_north_m=91 sigma_east_m=203 sigma_up_m=186",
+  "time_bias_s=-0.0859+-0.1311 (mid-exposure = tag + bias)",
+  "calibrator NORAD=59103 set=ICEYE-X36 (59103) EPOCH 2026-10-18T07:38:47.883264Z points=89 fit_rms_arcsec=3.27 chi2_per_dof=0.39 o_minus_c_rms_east_north_arcsec=10.14,5.35 ephemeris_offset_rtn_km=-0.012,-0.107,0.002 ephemeris_sigma_rtn_km=0.20,1.00,0.20 (assumed)",
+  "target 68762 EPOCH=2026-10-18T07:28:02.023055Z",
   "target 68762 TRACK=193 points, 106 used, 14 edited",
   "target 68762 PRIOR=COSMOS 2612 (68762) EPOCH 2026-10-17T17:18:44.625312Z; covariance analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0.5-1 d, clipped",
-  "target 68762 PRIOR_O_MINUS_C_MEDIAN_ARCSEC=424.0",
+  "target 68762 PRIOR_O_MINUS_C_MEDIAN_ARCSEC=433.8",
   "target 68762 OD_RMS_ARCSEC=3.70",
   "target 68762 OD_CHI2_PER_DOF=0.522",
   "target 68762 OD_ITERATIONS=4",
-  "target 68762 OD_MINUS_PRIOR_RTN_KM=0.154,-4.933,0.023",
+  "target 68762 OD_MINUS_PRIOR_RTN_KM=0.151,-5.042,0.025",
   "target 68762 SIGMA_NOISE_RTN_KM=0.016,0.026,0.018",
-  "target 68762 SIGMA_TOTAL_RTN_KM=0.161,0.995,0.201",
+  "target 68762 SIGMA_TOTAL_RTN_KM=0.161,0.994,0.201",
   "target 68762 SIGMA_TOTAL_VELOCITY_RTN_KM_S=0.001100,0.000176,0.000130",
-  "target 68762 IOD=Gooding ranges 1836.7,1618.5,1195.4 km, 1 solution(s), |IOD - prior| 3.99 km, |IOD - OD| 1.43 km",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T07:38:48.549408Z CREATED 2026-10-18T10:32:28Z=OD-set RTN km -0.011,0.078,0.025 (|d| 0.082); prior-set RTN km -0.165,5.011,0.002 (|d| 5.014); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.021, prior 0.812",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T12:25:30.171648Z CREATED 2026-10-18T17:18:51Z=OD-set RTN km -0.031,0.041,0.023 (|d| 0.056); prior-set RTN km -0.185,4.974,0.000 (|d| 4.978); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.041, prior 0.890",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T23:34:47.631072Z CREATED 2026-10-19T02:22:42Z=OD-set RTN km -0.922,-66.574,-0.011 (|d| 66.580); prior-set RTN km -1.076,-61.640,-0.034 (|d| 61.650); set 1-sigma RTN km 0.227,6.473,0.145 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0.5-1 d, clipped); d2 (3 dof) OD 130.401, prior 70.308",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-19T07:32:51.605952Z CREATED 2026-10-19T10:07:17Z=OD-set RTN km -0.927,-65.814,0.045 (|d| 65.821); prior-set RTN km -1.081,-60.881,0.022 (|d| 60.890); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 44.803, prior 36.956",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-19T20:17:45.773088Z CREATED 2026-10-20T03:35:07Z=OD-set RTN km -0.955,-65.920,0.052 (|d| 65.927); prior-set RTN km -1.109,-60.986,0.029 (|d| 60.996); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 45.853, prior 37.871",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-20T07:26:41.121024Z CREATED 2026-10-20T11:07:25Z=OD-set RTN km 18.381,482.711,-0.041 (|d| 483.061); prior-set RTN km 18.227,487.645,-0.064 (|d| 487.985); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 6375.622, prior 5145.182",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-20T23:22:17.346432Z CREATED 2026-10-21T01:50:58Z=OD-set RTN km 18.408,483.535,-0.041 (|d| 483.885); prior-set RTN km 18.254,488.469,-0.064 (|d| 488.810); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3336.950, prior 2922.775",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T07:20:05.404704Z CREATED 2026-10-21T10:24:41Z=OD-set RTN km 18.461,484.051,-0.005 (|d| 484.403); prior-set RTN km 18.307,488.985,-0.028 (|d| 489.327); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3351.391, prior 2935.127",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T15:17:53.407680Z CREATED 2026-10-21T18:43:15Z=OD-set RTN km 18.171,481.306,-0.056 (|d| 481.649); prior-set RTN km 18.017,486.240,-0.079 (|d| 486.574); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1276.919, prior 1207.928",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T23:15:41.419296Z CREATED 2026-10-22T03:14:59Z=OD-set RTN km 18.166,481.253,-0.054 (|d| 481.596); prior-set RTN km 18.012,486.186,-0.077 (|d| 486.520); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1276.321, prior 1207.359",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T07:13:29.404992Z CREATED 2026-10-22T10:48:45Z=OD-set RTN km 18.136,480.783,-0.043 (|d| 481.125); prior-set RTN km 17.982,485.717,-0.066 (|d| 486.050); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1272.471, prior 1203.693",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T13:35:43.803744Z CREATED 2026-10-22T18:38:56Z=OD-set RTN km 18.122,480.596,-0.035 (|d| 480.938); prior-set RTN km 17.968,485.530,-0.058 (|d| 485.862); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1270.737, prior 1202.038",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T23:09:05.341824Z CREATED 2026-10-23T02:17:01Z=OD-set RTN km 18.116,480.444,-0.027 (|d| 480.785); prior-set RTN km 17.962,485.377,-0.050 (|d| 485.709); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1269.792, prior 1201.130",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-23T07:06:53.279136Z CREATED 2026-10-23T11:21:12Z=OD-set RTN km 18.066,479.686,-0.017 (|d| 480.026); prior-set RTN km 17.912,484.620,-0.040 (|d| 484.951); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1263.556, prior 1195.205",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-23T23:02:29.061312Z CREATED 2026-10-24T02:17:21Z=OD-set RTN km 18.042,479.517,0.187 (|d| 479.856); prior-set RTN km 17.888,484.450,0.164 (|d| 484.780); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.879, prior 95.516",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-24T07:00:16.933824Z CREATED 2026-10-24T10:20:41Z=OD-set RTN km 17.988,478.603,0.205 (|d| 478.941); prior-set RTN km 17.834,483.537,0.182 (|d| 483.866); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.377, prior 95.012",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-25T16:27:01.692000Z CREATED 2026-10-25T21:10:28Z=OD-set RTN km 17.942,477.970,0.246 (|d| 478.307); prior-set RTN km 17.788,482.904,0.224 (|d| 483.231)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-25T22:49:15.874752Z CREATED 2026-10-26T02:50:55Z=OD-set RTN km 17.912,477.573,0.259 (|d| 477.909); prior-set RTN km 17.758,482.507,0.236 (|d| 482.833)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-26T06:47:03.588288Z CREATED 2026-10-26T10:17:03Z=OD-set RTN km 18.083,480.749,0.287 (|d| 481.089); prior-set RTN km 17.928,485.683,0.265 (|d| 486.014)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-26T22:42:38.913408Z CREATED 2026-10-27T03:12:58Z=OD-set RTN km 18.140,481.762,0.300 (|d| 482.104); prior-set RTN km 17.986,486.696,0.277 (|d| 487.028)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-27T06:40:26.566464Z CREATED 2026-10-27T10:14:48Z=OD-set RTN km 18.099,481.221,0.302 (|d| 481.561); prior-set RTN km 17.945,486.154,0.279 (|d| 486.485)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-27T22:36:01.751616Z CREATED 2026-10-28T02:17:28Z=OD-set RTN km 18.204,482.871,0.304 (|d| 483.214); prior-set RTN km 18.050,487.804,0.281 (|d| 488.138)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-28T14:31:36.859872Z CREATED 2026-10-28T19:01:28Z=OD-set RTN km 18.331,484.748,0.316 (|d| 485.095); prior-set RTN km 18.177,489.682,0.293 (|d| 490.019)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-28T22:29:24.380736Z CREATED 2026-10-29T10:12:26Z=OD-set RTN km 18.436,486.263,0.314 (|d| 486.612); prior-set RTN km 18.282,491.196,0.291 (|d| 491.536)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-29T06:27:11.870496Z CREATED 2026-10-29T19:10:16Z=OD-set RTN km 18.323,484.739,0.324 (|d| 485.086); prior-set RTN km 18.169,489.673,0.302 (|d| 490.010)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-29T22:22:46.785216Z CREATED 2026-10-30T02:08:17Z=OD-set RTN km 18.582,488.412,0.322 (|d| 488.765); prior-set RTN km 18.427,493.345,0.299 (|d| 493.690)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T06:20:34.219680Z CREATED 2026-10-30T17:04:41Z=OD-set RTN km 18.541,487.900,0.332 (|d| 488.252); prior-set RTN km 18.387,492.833,0.309 (|d| 493.176)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T14:18:21.593664Z CREATED 2026-10-30T17:50:39Z=OD-set RTN km 18.669,489.716,0.332 (|d| 490.072); prior-set RTN km 18.515,494.650,0.309 (|d| 494.996)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T22:16:08.976288Z CREATED 2026-10-31T02:32:54Z=OD-set RTN km 18.776,491.218,0.336 (|d| 491.577); prior-set RTN km 18.622,496.152,0.313 (|d| 496.501)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-31T07:49:29.811936Z CREATED 2026-10-31T18:04:46Z=OD-set RTN km 18.987,494.125,0.336 (|d| 494.490); prior-set RTN km 18.833,499.059,0.313 (|d| 499.414)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-31T22:09:30.961728Z CREATED 2026-11-01T02:38:46Z=OD-set RTN km 19.156,496.516,0.345 (|d| 496.886); prior-set RTN km 19.002,501.450,0.322 (|d| 501.810)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-01T07:42:51.653088Z CREATED 2026-11-01T10:12:39Z=OD-set RTN km 19.081,495.507,0.345 (|d| 495.874); prior-set RTN km 18.927,500.440,0.322 (|d| 500.798)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-01T22:02:52.771776Z CREATED 2026-11-02T04:00:27Z=OD-set RTN km 19.762,504.743,0.345 (|d| 505.130); prior-set RTN km 19.608,509.676,0.322 (|d| 510.053)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-02T15:34:00.660864Z CREATED 2026-11-03T05:30:40Z=OD-set RTN km 20.736,517.639,0.360 (|d| 518.054); prior-set RTN km 20.582,522.572,0.337 (|d| 522.978)",
-  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-02T21:56:14.440992Z CREATED 2026-11-03T18:03:41Z=OD-set RTN km 20.840,518.983,0.351 (|d| 519.401); prior-set RTN km 20.686,523.916,0.328 (|d| 524.325)",
-  "target 68762 SEPARATION_FROM_CALIBRATOR_KM=4.827+-0.994 (OD; the calibrator's element set ICEYE-X36 (59103) EPOCH 2026-10-18T07:38:47.883264Z); prior 0.113",
-  "target 68762 RELATIVE_TO_CALIBRATOR_RTN_KM=0.120,-4.825,0.033 (the calibrator's RTN axes)"
+  "target 68762 IOD=Gooding ranges 1836.7,1618.5,1195.4 km, 1 solution(s), |IOD - prior| 4.09 km, |IOD - OD| 1.43 km",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T07:38:48.549408Z CREATED 2026-10-18T10:32:28Z=OD-set RTN km -0.014,-0.031,0.027 (|d| 0.043); prior-set RTN km -0.165,5.011,0.002 (|d| 5.014); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.025, prior 0.813",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T12:25:30.171648Z CREATED 2026-10-18T17:18:51Z=OD-set RTN km -0.034,-0.068,0.025 (|d| 0.080); prior-set RTN km -0.185,4.974,0.000 (|d| 4.978); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.050, prior 0.890",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T23:34:47.631072Z CREATED 2026-10-19T02:22:42Z=OD-set RTN km -0.924,-66.682,-0.009 (|d| 66.689); prior-set RTN km -1.075,-61.640,-0.034 (|d| 61.650); set 1-sigma RTN km 0.227,6.473,0.145 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0.5-1 d, clipped); d2 (3 dof) OD 130.870, prior 70.276",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-19T07:32:51.605952Z CREATED 2026-10-19T10:07:17Z=OD-set RTN km -0.930,-65.923,0.047 (|d| 65.929); prior-set RTN km -1.080,-60.881,0.022 (|d| 60.890); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 44.988, prior 36.929",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-19T20:17:45.773088Z CREATED 2026-10-20T03:35:07Z=OD-set RTN km -0.958,-66.028,0.054 (|d| 66.035); prior-set RTN km -1.108,-60.986,0.029 (|d| 60.996); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 46.041, prior 37.844",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-20T07:26:41.121024Z CREATED 2026-10-20T11:07:25Z=OD-set RTN km 18.370,482.603,-0.039 (|d| 482.953); prior-set RTN km 18.219,487.645,-0.064 (|d| 487.985); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 6367.778, prior 5142.341",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-20T23:22:17.346432Z CREATED 2026-10-21T01:50:58Z=OD-set RTN km 18.397,483.427,-0.039 (|d| 483.777); prior-set RTN km 18.246,488.469,-0.064 (|d| 488.810); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3333.054, prior 2920.984",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T07:20:05.404704Z CREATED 2026-10-21T10:24:41Z=OD-set RTN km 18.450,483.943,-0.003 (|d| 484.295); prior-set RTN km 18.299,488.985,-0.028 (|d| 489.327); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3347.485, prior 2933.330",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T15:17:53.407680Z CREATED 2026-10-21T18:43:15Z=OD-set RTN km 18.160,481.198,-0.054 (|d| 481.541); prior-set RTN km 18.010,486.240,-0.079 (|d| 486.574); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1275.588, prior 1207.217",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T23:15:41.419296Z CREATED 2026-10-22T03:14:59Z=OD-set RTN km 18.155,481.145,-0.052 (|d| 481.487); prior-set RTN km 18.005,486.186,-0.077 (|d| 486.520); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1274.991, prior 1206.648",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T07:13:29.404992Z CREATED 2026-10-22T10:48:45Z=OD-set RTN km 18.125,480.675,-0.041 (|d| 481.017); prior-set RTN km 17.974,485.717,-0.066 (|d| 486.050); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1271.143, prior 1202.983",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T13:35:43.803744Z CREATED 2026-10-22T18:38:56Z=OD-set RTN km 18.111,480.488,-0.033 (|d| 480.829); prior-set RTN km 17.961,485.530,-0.058 (|d| 485.862); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1269.411, prior 1201.329",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T23:09:05.341824Z CREATED 2026-10-23T02:17:01Z=OD-set RTN km 18.105,480.335,-0.026 (|d| 480.677); prior-set RTN km 17.954,485.377,-0.050 (|d| 485.709); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1268.466, prior 1200.422",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-23T07:06:53.279136Z CREATED 2026-10-23T11:21:12Z=OD-set RTN km 18.055,479.578,-0.015 (|d| 479.918); prior-set RTN km 17.904,484.620,-0.040 (|d| 484.951); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1262.236, prior 1194.500",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-23T23:02:29.061312Z CREATED 2026-10-24T02:17:21Z=OD-set RTN km 18.031,479.409,0.189 (|d| 479.748); prior-set RTN km 17.880,484.450,0.164 (|d| 484.780); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.793, prior 95.472",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-24T07:00:16.933824Z CREATED 2026-10-24T10:20:41Z=OD-set RTN km 17.977,478.495,0.207 (|d| 478.833); prior-set RTN km 17.826,483.537,0.182 (|d| 483.866); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.292, prior 94.968",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-25T16:27:01.692000Z CREATED 2026-10-25T21:10:28Z=OD-set RTN km 17.932,477.862,0.248 (|d| 478.198); prior-set RTN km 17.781,482.904,0.224 (|d| 483.231)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-25T22:49:15.874752Z CREATED 2026-10-26T02:50:55Z=OD-set RTN km 17.901,477.465,0.261 (|d| 477.800); prior-set RTN km 17.750,482.507,0.236 (|d| 482.833)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-26T06:47:03.588288Z CREATED 2026-10-26T10:17:03Z=OD-set RTN km 18.072,480.641,0.289 (|d| 480.981); prior-set RTN km 17.921,485.683,0.265 (|d| 486.014)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-26T22:42:38.913408Z CREATED 2026-10-27T03:12:58Z=OD-set RTN km 18.129,481.654,0.302 (|d| 481.995); prior-set RTN km 17.979,486.696,0.277 (|d| 487.028)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-27T06:40:26.566464Z CREATED 2026-10-27T10:14:48Z=OD-set RTN km 18.088,481.113,0.304 (|d| 481.453); prior-set RTN km 17.937,486.155,0.279 (|d| 486.485)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-27T22:36:01.751616Z CREATED 2026-10-28T02:17:28Z=OD-set RTN km 18.193,482.762,0.306 (|d| 483.105); prior-set RTN km 18.043,487.804,0.281 (|d| 488.138)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-28T14:31:36.859872Z CREATED 2026-10-28T19:01:28Z=OD-set RTN km 18.320,484.640,0.318 (|d| 484.986); prior-set RTN km 18.170,489.682,0.293 (|d| 490.019)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-28T22:29:24.380736Z CREATED 2026-10-29T10:12:26Z=OD-set RTN km 18.425,486.154,0.316 (|d| 486.503); prior-set RTN km 18.274,491.196,0.292 (|d| 491.536)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-29T06:27:11.870496Z CREATED 2026-10-29T19:10:16Z=OD-set RTN km 18.312,484.631,0.326 (|d| 484.977); prior-set RTN km 18.161,489.673,0.302 (|d| 490.010)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-29T22:22:46.785216Z CREATED 2026-10-30T02:08:17Z=OD-set RTN km 18.571,488.304,0.324 (|d| 488.657); prior-set RTN km 18.420,493.346,0.299 (|d| 493.690)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T06:20:34.219680Z CREATED 2026-10-30T17:04:41Z=OD-set RTN km 18.530,487.792,0.334 (|d| 488.144); prior-set RTN km 18.379,492.834,0.309 (|d| 493.176)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T14:18:21.593664Z CREATED 2026-10-30T17:50:39Z=OD-set RTN km 18.658,489.608,0.334 (|d| 489.964); prior-set RTN km 18.508,494.650,0.309 (|d| 494.996)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T22:16:08.976288Z CREATED 2026-10-31T02:32:54Z=OD-set RTN km 18.765,491.110,0.338 (|d| 491.469); prior-set RTN km 18.614,496.152,0.313 (|d| 496.501)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-31T07:49:29.811936Z CREATED 2026-10-31T18:04:46Z=OD-set RTN km 18.976,494.017,0.338 (|d| 494.382); prior-set RTN km 18.825,499.059,0.313 (|d| 499.414)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-10-31T22:09:30.961728Z CREATED 2026-11-01T02:38:46Z=OD-set RTN km 19.145,496.408,0.347 (|d| 496.777); prior-set RTN km 18.994,501.450,0.322 (|d| 501.810)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-01T07:42:51.653088Z CREATED 2026-11-01T10:12:39Z=OD-set RTN km 19.070,495.399,0.347 (|d| 495.766); prior-set RTN km 18.919,500.441,0.322 (|d| 500.798)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-01T22:02:52.771776Z CREATED 2026-11-02T04:00:27Z=OD-set RTN km 19.751,504.635,0.347 (|d| 505.021); prior-set RTN km 19.600,509.677,0.322 (|d| 510.053)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-02T15:34:00.660864Z CREATED 2026-11-03T05:30:40Z=OD-set RTN km 20.725,517.531,0.362 (|d| 517.946); prior-set RTN km 20.574,522.573,0.337 (|d| 522.978)",
+  "target 68762 CHECK COSMOS 2612 (68762) EPOCH 2026-11-02T21:56:14.440992Z CREATED 2026-11-03T18:03:41Z=OD-set RTN km 20.829,518.875,0.353 (|d| 519.293); prior-set RTN km 20.678,523.917,0.328 (|d| 524.325)",
+  "target 68762 SEPARATION_FROM_CALIBRATOR_KM=4.935+-0.994 (OD; the calibrator's element set ICEYE-X36 (59103) EPOCH 2026-10-18T07:38:47.883264Z); prior 0.113",
+  "target 68762 RELATIVE_TO_CALIBRATOR_RTN_KM=0.117,-4.934,0.035 (the calibrator's RTN axes)"
  ],
  "records": [
   {
@@ -84,7 +84,7 @@
    "USER_DEFINED_PARAMETERS": [
     [
      "EPOCH",
-     "2026-10-18T07:28:02.008948Z"
+     "2026-10-18T07:28:02.023055Z"
     ],
     [
      "TRACK",
@@ -96,7 +96,7 @@
     ],
     [
      "PRIOR_O_MINUS_C_MEDIAN_ARCSEC",
-     "424.0"
+     "433.8"
     ],
     [
      "OD_RMS_ARCSEC",
@@ -112,7 +112,7 @@
     ],
     [
      "OD_MINUS_PRIOR_RTN_KM",
-     "0.154,-4.933,0.023"
+     "0.151,-5.042,0.025"
     ],
     [
      "SIGMA_NOISE_RTN_KM",
@@ -120,7 +120,7 @@
     ],
     [
      "SIGMA_TOTAL_RTN_KM",
-     "0.161,0.995,0.201"
+     "0.161,0.994,0.201"
     ],
     [
      "SIGMA_TOTAL_VELOCITY_RTN_KM_S",
@@ -128,162 +128,162 @@
     ],
     [
      "IOD",
-     "Gooding ranges 1836.7,1618.5,1195.4 km, 1 solution(s), |IOD - prior| 3.99 km, |IOD - OD| 1.43 km"
+     "Gooding ranges 1836.7,1618.5,1195.4 km, 1 solution(s), |IOD - prior| 4.09 km, |IOD - OD| 1.43 km"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T07:38:48.549408Z CREATED 2026-10-18T10:32:28Z",
-     "OD-set RTN km -0.011,0.078,0.025 (|d| 0.082); prior-set RTN km -0.165,5.011,0.002 (|d| 5.014); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.021, prior 0.812"
+     "OD-set RTN km -0.014,-0.031,0.027 (|d| 0.043); prior-set RTN km -0.165,5.011,0.002 (|d| 5.014); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.025, prior 0.813"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T12:25:30.171648Z CREATED 2026-10-18T17:18:51Z",
-     "OD-set RTN km -0.031,0.041,0.023 (|d| 0.056); prior-set RTN km -0.185,4.974,0.000 (|d| 4.978); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.041, prior 0.890"
+     "OD-set RTN km -0.034,-0.068,0.025 (|d| 0.080); prior-set RTN km -0.185,4.974,0.000 (|d| 4.978); set 1-sigma RTN km 0.139,1.906,0.085 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0-0.5 d, clipped); d2 (3 dof) OD 0.050, prior 0.890"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-18T23:34:47.631072Z CREATED 2026-10-19T02:22:42Z",
-     "OD-set RTN km -0.922,-66.574,-0.011 (|d| 66.580); prior-set RTN km -1.076,-61.640,-0.034 (|d| 61.650); set 1-sigma RTN km 0.227,6.473,0.145 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0.5-1 d, clipped); d2 (3 dof) OD 130.401, prior 70.308"
+     "OD-set RTN km -0.924,-66.682,-0.009 (|d| 66.689); prior-set RTN km -1.075,-61.640,-0.034 (|d| 61.650); set 1-sigma RTN km 0.227,6.473,0.145 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 0.5-1 d, clipped); d2 (3 dof) OD 130.870, prior 70.276"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-19T07:32:51.605952Z CREATED 2026-10-19T10:07:17Z",
-     "OD-set RTN km -0.927,-65.814,0.045 (|d| 65.821); prior-set RTN km -1.081,-60.881,0.022 (|d| 60.890); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 44.803, prior 36.956"
+     "OD-set RTN km -0.930,-65.923,0.047 (|d| 65.929); prior-set RTN km -1.080,-60.881,0.022 (|d| 60.890); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 44.988, prior 36.929"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-19T20:17:45.773088Z CREATED 2026-10-20T03:35:07Z",
-     "OD-set RTN km -0.955,-65.920,0.052 (|d| 65.927); prior-set RTN km -1.109,-60.986,0.029 (|d| 60.996); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 45.853, prior 37.871"
+     "OD-set RTN km -0.958,-66.028,0.054 (|d| 66.035); prior-set RTN km -1.108,-60.986,0.029 (|d| 60.996); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 46.041, prior 37.844"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-20T07:26:41.121024Z CREATED 2026-10-20T11:07:25Z",
-     "OD-set RTN km 18.381,482.711,-0.041 (|d| 483.061); prior-set RTN km 18.227,487.645,-0.064 (|d| 487.985); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 6375.622, prior 5145.182"
+     "OD-set RTN km 18.370,482.603,-0.039 (|d| 482.953); prior-set RTN km 18.219,487.645,-0.064 (|d| 487.985); set 1-sigma RTN km 0.295,14.341,0.201 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 1-2 d, clipped); d2 (3 dof) OD 6367.778, prior 5142.341"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-20T23:22:17.346432Z CREATED 2026-10-21T01:50:58Z",
-     "OD-set RTN km 18.408,483.535,-0.041 (|d| 483.885); prior-set RTN km 18.254,488.469,-0.064 (|d| 488.810); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3336.950, prior 2922.775"
+     "OD-set RTN km 18.397,483.427,-0.039 (|d| 483.777); prior-set RTN km 18.246,488.469,-0.064 (|d| 488.810); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3333.054, prior 2920.984"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T07:20:05.404704Z CREATED 2026-10-21T10:24:41Z",
-     "OD-set RTN km 18.461,484.051,-0.005 (|d| 484.403); prior-set RTN km 18.307,488.985,-0.028 (|d| 489.327); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3351.391, prior 2935.127"
+     "OD-set RTN km 18.450,483.943,-0.003 (|d| 484.295); prior-set RTN km 18.299,488.985,-0.028 (|d| 489.327); set 1-sigma RTN km 0.520,34.383,0.297 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 2-3 d, clipped); d2 (3 dof) OD 3347.485, prior 2933.330"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T15:17:53.407680Z CREATED 2026-10-21T18:43:15Z",
-     "OD-set RTN km 18.171,481.306,-0.056 (|d| 481.649); prior-set RTN km 18.017,486.240,-0.079 (|d| 486.574); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1276.919, prior 1207.928"
+     "OD-set RTN km 18.160,481.198,-0.054 (|d| 481.541); prior-set RTN km 18.010,486.240,-0.079 (|d| 486.574); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1275.588, prior 1207.217"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-21T23:15:41.419296Z CREATED 2026-10-22T03:14:59Z",
-     "OD-set RTN km 18.166,481.253,-0.054 (|d| 481.596); prior-set RTN km 18.012,486.186,-0.077 (|d| 486.520); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1276.321, prior 1207.359"
+     "OD-set RTN km 18.155,481.145,-0.052 (|d| 481.487); prior-set RTN km 18.005,486.186,-0.077 (|d| 486.520); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1274.991, prior 1206.648"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T07:13:29.404992Z CREATED 2026-10-22T10:48:45Z",
-     "OD-set RTN km 18.136,480.783,-0.043 (|d| 481.125); prior-set RTN km 17.982,485.717,-0.066 (|d| 486.050); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1272.471, prior 1203.693"
+     "OD-set RTN km 18.125,480.675,-0.041 (|d| 481.017); prior-set RTN km 17.974,485.717,-0.066 (|d| 486.050); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1271.143, prior 1202.983"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T13:35:43.803744Z CREATED 2026-10-22T18:38:56Z",
-     "OD-set RTN km 18.122,480.596,-0.035 (|d| 480.938); prior-set RTN km 17.968,485.530,-0.058 (|d| 485.862); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1270.737, prior 1202.038"
+     "OD-set RTN km 18.111,480.488,-0.033 (|d| 480.829); prior-set RTN km 17.961,485.530,-0.058 (|d| 485.862); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1269.411, prior 1201.329"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-22T23:09:05.341824Z CREATED 2026-10-23T02:17:01Z",
-     "OD-set RTN km 18.116,480.444,-0.027 (|d| 480.785); prior-set RTN km 17.962,485.377,-0.050 (|d| 485.709); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1269.792, prior 1201.130"
+     "OD-set RTN km 18.105,480.335,-0.026 (|d| 480.677); prior-set RTN km 17.954,485.377,-0.050 (|d| 485.709); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1268.466, prior 1200.422"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-23T07:06:53.279136Z CREATED 2026-10-23T11:21:12Z",
-     "OD-set RTN km 18.066,479.686,-0.017 (|d| 480.026); prior-set RTN km 17.912,484.620,-0.040 (|d| 484.951); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1263.556, prior 1195.205"
+     "OD-set RTN km 18.055,479.578,-0.015 (|d| 479.918); prior-set RTN km 17.904,484.620,-0.040 (|d| 484.951); set 1-sigma RTN km 1.124,65.216,0.405 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 3-5 d, clipped); d2 (3 dof) OD 1262.236, prior 1194.500"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-23T23:02:29.061312Z CREATED 2026-10-24T02:17:21Z",
-     "OD-set RTN km 18.042,479.517,0.187 (|d| 479.856); prior-set RTN km 17.888,484.450,0.164 (|d| 484.780); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.879, prior 95.516"
+     "OD-set RTN km 18.031,479.409,0.189 (|d| 479.748); prior-set RTN km 17.880,484.450,0.164 (|d| 484.780); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.793, prior 95.472"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-24T07:00:16.933824Z CREATED 2026-10-24T10:20:41Z",
-     "OD-set RTN km 17.988,478.603,0.205 (|d| 478.941); prior-set RTN km 17.834,483.537,0.182 (|d| 483.866); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.377, prior 95.012"
+     "OD-set RTN km 17.977,478.495,0.207 (|d| 478.833); prior-set RTN km 17.826,483.537,0.182 (|d| 483.866); set 1-sigma RTN km 4.725,150.463,0.634 (analysis/gp-error-model docs/model-2026-08.json: LEO 450-600 km, age 5-7 d, clipped); d2 (3 dof) OD 95.292, prior 94.968"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-25T16:27:01.692000Z CREATED 2026-10-25T21:10:28Z",
-     "OD-set RTN km 17.942,477.970,0.246 (|d| 478.307); prior-set RTN km 17.788,482.904,0.224 (|d| 483.231)"
+     "OD-set RTN km 17.932,477.862,0.248 (|d| 478.198); prior-set RTN km 17.781,482.904,0.224 (|d| 483.231)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-25T22:49:15.874752Z CREATED 2026-10-26T02:50:55Z",
-     "OD-set RTN km 17.912,477.573,0.259 (|d| 477.909); prior-set RTN km 17.758,482.507,0.236 (|d| 482.833)"
+     "OD-set RTN km 17.901,477.465,0.261 (|d| 477.800); prior-set RTN km 17.750,482.507,0.236 (|d| 482.833)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-26T06:47:03.588288Z CREATED 2026-10-26T10:17:03Z",
-     "OD-set RTN km 18.083,480.749,0.287 (|d| 481.089); prior-set RTN km 17.928,485.683,0.265 (|d| 486.014)"
+     "OD-set RTN km 18.072,480.641,0.289 (|d| 480.981); prior-set RTN km 17.921,485.683,0.265 (|d| 486.014)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-26T22:42:38.913408Z CREATED 2026-10-27T03:12:58Z",
-     "OD-set RTN km 18.140,481.762,0.300 (|d| 482.104); prior-set RTN km 17.986,486.696,0.277 (|d| 487.028)"
+     "OD-set RTN km 18.129,481.654,0.302 (|d| 481.995); prior-set RTN km 17.979,486.696,0.277 (|d| 487.028)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-27T06:40:26.566464Z CREATED 2026-10-27T10:14:48Z",
-     "OD-set RTN km 18.099,481.221,0.302 (|d| 481.561); prior-set RTN km 17.945,486.154,0.279 (|d| 486.485)"
+     "OD-set RTN km 18.088,481.113,0.304 (|d| 481.453); prior-set RTN km 17.937,486.155,0.279 (|d| 486.485)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-27T22:36:01.751616Z CREATED 2026-10-28T02:17:28Z",
-     "OD-set RTN km 18.204,482.871,0.304 (|d| 483.214); prior-set RTN km 18.050,487.804,0.281 (|d| 488.138)"
+     "OD-set RTN km 18.193,482.762,0.306 (|d| 483.105); prior-set RTN km 18.043,487.804,0.281 (|d| 488.138)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-28T14:31:36.859872Z CREATED 2026-10-28T19:01:28Z",
-     "OD-set RTN km 18.331,484.748,0.316 (|d| 485.095); prior-set RTN km 18.177,489.682,0.293 (|d| 490.019)"
+     "OD-set RTN km 18.320,484.640,0.318 (|d| 484.986); prior-set RTN km 18.170,489.682,0.293 (|d| 490.019)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-28T22:29:24.380736Z CREATED 2026-10-29T10:12:26Z",
-     "OD-set RTN km 18.436,486.263,0.314 (|d| 486.612); prior-set RTN km 18.282,491.196,0.291 (|d| 491.536)"
+     "OD-set RTN km 18.425,486.154,0.316 (|d| 486.503); prior-set RTN km 18.274,491.196,0.292 (|d| 491.536)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-29T06:27:11.870496Z CREATED 2026-10-29T19:10:16Z",
-     "OD-set RTN km 18.323,484.739,0.324 (|d| 485.086); prior-set RTN km 18.169,489.673,0.302 (|d| 490.010)"
+     "OD-set RTN km 18.312,484.631,0.326 (|d| 484.977); prior-set RTN km 18.161,489.673,0.302 (|d| 490.010)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-29T22:22:46.785216Z CREATED 2026-10-30T02:08:17Z",
-     "OD-set RTN km 18.582,488.412,0.322 (|d| 488.765); prior-set RTN km 18.427,493.345,0.299 (|d| 493.690)"
+     "OD-set RTN km 18.571,488.304,0.324 (|d| 488.657); prior-set RTN km 18.420,493.346,0.299 (|d| 493.690)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T06:20:34.219680Z CREATED 2026-10-30T17:04:41Z",
-     "OD-set RTN km 18.541,487.900,0.332 (|d| 488.252); prior-set RTN km 18.387,492.833,0.309 (|d| 493.176)"
+     "OD-set RTN km 18.530,487.792,0.334 (|d| 488.144); prior-set RTN km 18.379,492.834,0.309 (|d| 493.176)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T14:18:21.593664Z CREATED 2026-10-30T17:50:39Z",
-     "OD-set RTN km 18.669,489.716,0.332 (|d| 490.072); prior-set RTN km 18.515,494.650,0.309 (|d| 494.996)"
+     "OD-set RTN km 18.658,489.608,0.334 (|d| 489.964); prior-set RTN km 18.508,494.650,0.309 (|d| 494.996)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-30T22:16:08.976288Z CREATED 2026-10-31T02:32:54Z",
-     "OD-set RTN km 18.776,491.218,0.336 (|d| 491.577); prior-set RTN km 18.622,496.152,0.313 (|d| 496.501)"
+     "OD-set RTN km 18.765,491.110,0.338 (|d| 491.469); prior-set RTN km 18.614,496.152,0.313 (|d| 496.501)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-31T07:49:29.811936Z CREATED 2026-10-31T18:04:46Z",
-     "OD-set RTN km 18.987,494.125,0.336 (|d| 494.490); prior-set RTN km 18.833,499.059,0.313 (|d| 499.414)"
+     "OD-set RTN km 18.976,494.017,0.338 (|d| 494.382); prior-set RTN km 18.825,499.059,0.313 (|d| 499.414)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-10-31T22:09:30.961728Z CREATED 2026-11-01T02:38:46Z",
-     "OD-set RTN km 19.156,496.516,0.345 (|d| 496.886); prior-set RTN km 19.002,501.450,0.322 (|d| 501.810)"
+     "OD-set RTN km 19.145,496.408,0.347 (|d| 496.777); prior-set RTN km 18.994,501.450,0.322 (|d| 501.810)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-11-01T07:42:51.653088Z CREATED 2026-11-01T10:12:39Z",
-     "OD-set RTN km 19.081,495.507,0.345 (|d| 495.874); prior-set RTN km 18.927,500.440,0.322 (|d| 500.798)"
+     "OD-set RTN km 19.070,495.399,0.347 (|d| 495.766); prior-set RTN km 18.919,500.441,0.322 (|d| 500.798)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-11-01T22:02:52.771776Z CREATED 2026-11-02T04:00:27Z",
-     "OD-set RTN km 19.762,504.743,0.345 (|d| 505.130); prior-set RTN km 19.608,509.676,0.322 (|d| 510.053)"
+     "OD-set RTN km 19.751,504.635,0.347 (|d| 505.021); prior-set RTN km 19.600,509.677,0.322 (|d| 510.053)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-11-02T15:34:00.660864Z CREATED 2026-11-03T05:30:40Z",
-     "OD-set RTN km 20.736,517.639,0.360 (|d| 518.054); prior-set RTN km 20.582,522.572,0.337 (|d| 522.978)"
+     "OD-set RTN km 20.725,517.531,0.362 (|d| 517.946); prior-set RTN km 20.574,522.573,0.337 (|d| 522.978)"
     ],
     [
      "CHECK COSMOS 2612 (68762) EPOCH 2026-11-02T21:56:14.440992Z CREATED 2026-11-03T18:03:41Z",
-     "OD-set RTN km 20.840,518.983,0.351 (|d| 519.401); prior-set RTN km 20.686,523.916,0.328 (|d| 524.325)"
+     "OD-set RTN km 20.829,518.875,0.353 (|d| 519.293); prior-set RTN km 20.678,523.917,0.328 (|d| 524.325)"
     ],
     [
      "SEPARATION_FROM_CALIBRATOR_KM",
-     "4.827+-0.994 (OD; the calibrator's element set ICEYE-X36 (59103) EPOCH 2026-10-18T07:38:47.883264Z); prior 0.113"
+     "4.935+-0.994 (OD; the calibrator's element set ICEYE-X36 (59103) EPOCH 2026-10-18T07:38:47.883264Z); prior 0.113"
     ],
     [
      "RELATIVE_TO_CALIBRATOR_RTN_KM",
-     "0.120,-4.825,0.033 (the calibrator's RTN axes)"
+     "0.117,-4.934,0.035 (the calibrator's RTN axes)"
     ]
    ],
    "STATE_EPOCHS": [
-    "2026-10-18T07:28:02.008948Z"
+    "2026-10-18T07:28:02.023055Z"
    ],
-   "STATE_DATA_SHA256": "4613bc642ca990a6673f49f66cca0ac0abbc95b77df06b5ed4b9d75b9170738f",
-   "COVARIANCE_DATA_SHA256": "75fe24d281f5cdc7e1d960f21546cf98be491e8d44ff71cfe0ce87f9ccb8f082"
+   "STATE_DATA_SHA256": "ad5b570b702982d889db2834c526be6201e6e42fe50046c8b96e763aa48a32fe",
+   "COVARIANCE_DATA_SHA256": "aa3b6e9d65733db94994a70f6f7668e27ef32ce42ca9d9aa4b014bf2cc57d2e0"
   }
  ]
 }
