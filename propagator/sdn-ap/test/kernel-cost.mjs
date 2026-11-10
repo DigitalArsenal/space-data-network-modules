@@ -17,6 +17,7 @@
 // order and in a shuffled order over --sample (1500) of those states spread over the span (a cache must not make the
 // output depend on the order of requests).
 //   node test/kernel-cost.mjs --diff BEFORE.wasm [--wasm AFTER.wasm] [--days 30] [--step 60] [--sample 1500] [--json FILE]
+//     [--bound M,MPS]: exit 1 when a state in time order differs by more than M meters or MPS m/s, or changes status
 import fs from "node:fs";
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
@@ -38,6 +39,7 @@ const JSON_OUT = arg("--json", null);
 const DIFF_DAYS = Number(arg("--days", 30));
 const DIFF_STEP = Number(arg("--step", 60));
 const SAMPLE = Number(arg("--sample", 1500));
+const BOUND = arg("--bound", null)?.split(",").map(Number);  // m, m/s: --diff fails when a time-order difference exceeds them
 
 const DAY = 86400000;
 const EPOCH = Date.parse("2026-06-15T00:00:00Z");
@@ -252,4 +254,10 @@ async function diff() {
 
 const result = DIFF ? await diff() : await cost();
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, `${JSON.stringify(result, null, 1)}\n`);
+if (DIFF && BOUND) {
+  const over = result.rows.filter((r) => r.time.maxPositionM > BOUND[0] || r.time.maxVelocityMps > BOUND[1] || r.time.statusMismatch > 0);
+  for (const r of over) console.log(`OVER ${r.regime} ${r.theory}: ${r.time.maxPositionM} m, ${r.time.maxVelocityMps} m/s, ${r.time.statusMismatch} status`);
+  console.log(over.length ? `KERNEL-COST DIFF FAIL: ${over.length} of ${result.rows.length} over ${BOUND[0]} m or ${BOUND[1]} m/s` : `KERNEL-COST DIFF PASS: every state of ${result.rows.length} flights within ${BOUND[0]} m and ${BOUND[1]} m/s in time order`);
+  process.exit(over.length ? 1 : 0);
+}
 process.exit(0);
