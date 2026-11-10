@@ -2,10 +2,10 @@
  "about": "SGP4-XP (US Space Force Sgp4Prop 9.1.1.0) against the module propagator/sgp4-xp: exact agreement with the library run by its own runtime, plus the Tier B anchors. No independent public reference exists for the XP theory.",
  "module": {
   "name": "@digitalarsenal/sdn-module-propagator-sgp4-xp",
-  "version": "0.2.1"
+  "version": "0.3.0"
  },
  "hashes": {
-  "dist/isomorphic/module.wasm": "816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef",
+  "dist/isomorphic/module.wasm": "d9dcd6153f7787ad50cda808652ce721901d8ae2673e410a5fe7ad28b7666b6b",
   "third_party/ussf-sgp4/Sgp4Prop.xp.wasm": "9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7",
   "third_party/ussf-sgp4/Sgp4Prop.xp.js": "0d9848bb0ed7ce6eadd85e22f5325e81492ef03355bab85a580eb421c7f22707",
   "vectors/vectors.json": "9194d2f2c2b3c367aaababa52e90de46d38cc456fbd4514f858d6c1df24fdc07",

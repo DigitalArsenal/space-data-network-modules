@@ -1,7 +1,7 @@
 [
   {
-    "test": "high-e-fit-arc",
-    "issue": "DigitalArsenal/spacedatanetwork-stack#393",
-    "text": "Since version 0.6.4, an orbit that goes around the Earth exactly six times a day with an eccentricity of 0.1 to 0.25 is predicted 1.5 to 5.9 km off along its track 7 days after a fit, 70 to 90 times worse than before; orbits away from that ratio move by less than 30 m."
+    "test": "class0-exact-resonance",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#419",
+    "text": "An orbit that goes around the Earth 8.05 times a day with an eccentricity of 0.25 (the exact 8:1 resonance with the Earth's rotation) is predicted 1.3 km off along its track 7 days after a fit, against 94 to 220 m just either side of it: no part of the model carries that resonance's gravity terms."
   }
 ]
