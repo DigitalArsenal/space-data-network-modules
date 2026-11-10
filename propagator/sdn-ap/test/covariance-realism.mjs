@@ -38,7 +38,7 @@
 // $OEM, made by analysis/reference-states).
 // JS moves bytes and does statistics on the module's numbers; it computes no orbit and no frame.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { reproduceConformance } from "./lib/conformance-step.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -96,11 +96,7 @@ if (THEORY === "SDNAP") {
     assert.ok(Math.abs(cell.meanD2Over3 - expected.meanD2Over3) <= 1e-6, "reproduced mean d2/3");
     assert.ok(Math.abs(cell.coverage95 - expected.coverage95) <= 1e-6, "reproduced coverage");
   }
-  execFileSync(process.execPath, [new URL("./conformance.e2e.mjs", import.meta.url).pathname,
-    "--reproduce", new URL("./results/conformance.json", import.meta.url).pathname], {
-    stdio: "inherit", env: { ...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ??
-      "/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle" }
-  });
+  reproduceConformance();
   console.log("PASS: frozen minimax calibration reproduced; neither theory earns a realism label.");
   process.exit(0);
 }
