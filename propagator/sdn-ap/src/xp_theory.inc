@@ -5855,6 +5855,25 @@ inline void update_active_bracket(const XpSat& s, const Node& lo, const Node& hi
   }
 }
 
+/// The bracket the tesseral cache bakes on (tess::SpAnchor, SPEC 9): set's lo and hi nodes, a, e and cos i at each.
+inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {
+  tess::SpAnchor& an = tess::g_sp_anchor;
+  const uint64_t id = (s.ctx.ctx_id << 32) ^ static_cast<uint32_t>(lo.index);
+  if (an.valid && an.id == id && an.tlo == lo.t && an.h == hi.t - lo.t) return;
+  auto at = [](const Node& q, double& a, double& e, double& c) {
+    a = std::pow(kKe / q.y[kN], kX2o3);
+    e = std::sqrt(q.y[kAf] * q.y[kAf] + q.y[kAg] * q.y[kAg]);
+    const double t2 = q.y[kChi] * q.y[kChi] + q.y[kPsi] * q.y[kPsi];
+    c = (1.0 - t2) / (1.0 + t2);
+  };
+  at(lo, an.a_lo, an.e_lo, an.c_lo);
+  at(hi, an.a_hi, an.e_hi, an.c_hi);
+  an.id = id;
+  an.tlo = lo.t;
+  an.h = hi.t - lo.t;
+  an.valid = true;
+}
+
 /// Mean equinoctial state at t on a caller-private XpSat (lock-free, zero Node copies).
 inline bool mean_at_local(XpSat& s, double t, double* y) {
   if (t == 0.0) {
@@ -5864,6 +5883,7 @@ inline bool mean_at_local(XpSat& s, double t, double* y) {
   const Node *lo = nullptr, *hi = nullptr;
   if (!bracket_ptr(s, t, lo, hi)) return false;
   if (!s.ctx.is_cov_sigma) update_active_bracket(s, *lo, *hi);
+  set_sp_anchor(s, *lo, *hi);
   hermite(*lo, *hi, t, y);
   return true;
 }
@@ -5880,6 +5900,7 @@ inline bool mean_at(XpSat& s, double t, double* y) {
   unlock(&s.lock);
   if (!ok) return false;
   if (!s.ctx.is_cov_sigma) update_active_bracket(s, lo, hi);
+  set_sp_anchor(s, lo, hi);
   hermite(lo, hi, t, y);
   return true;
 }
@@ -6033,6 +6054,12 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
 
 inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], const Bodies* shared, bool local_sat) {
   if (s.init_error != 0) return kPropRefused;
+  // the bracket this state's tesseral bakes are made on: set by mean_at, the caller's restored on return
+  struct AnchorScope {
+    tess::SpAnchor saved = tess::g_sp_anchor;
+    AnchorScope() { tess::g_sp_anchor.valid = false; }
+    ~AnchorScope() { tess::g_sp_anchor = saved; }
+  } anchor_scope;
   double y[6];
   if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) return kPropMeanMotion;
   // AP above e 0.3: the drag rates output_drag_pass adds, from the state's segment; a fit (inside its tess::FitGridScope)

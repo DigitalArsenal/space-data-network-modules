@@ -35,6 +35,55 @@ inline int64_t sp_cell_abs(double x, double w, double& center) {
   center = (k + 0.5) * w;
   return static_cast<int64_t>(k);
 }
+/// The cell of an eccentricity for a bake whose tolerance is on e^2 (e2_tol): w_small wide in e up to
+/// e_t = e2_tol / (2 w_small), then e2_tol / (2 e) wide (uniform in e^2), so the center's e^2 is within e2_tol / 2 of
+/// e's and, near e = 0, the center's e within w_small / 2 of e. Returns the cell; `center` the center's e.
+inline int64_t sp_cell_e(double e, double w_small, double e2_tol, double& center) {
+  const double e_t = e2_tol / (2.0 * w_small), u0 = e_t / (2.0 * w_small);
+  const double u = e < e_t ? e / w_small : e * e / e2_tol + u0;
+  const double k = std::floor(u), uc = k + 0.5;
+  center = uc * w_small < e_t ? uc * w_small : std::sqrt((uc - u0) * e2_tol);
+  return static_cast<int64_t>(k);
+}
+
+/// The bracket of the mean-element grid a state's mean elements come from (xp_theory.inc sets it when it brackets a
+/// time): its id (the set and the lower node), its first time and length (signed, minutes), and a, e and cos i at
+/// its two nodes. The tesseral and m-daily caches bake at states on the bracket, so what they hold depends on the
+/// bracket and the time alone.
+struct SpAnchor {
+  bool valid = false;
+  uint64_t id = 0;
+  double tlo = 0.0, h = 1.0;
+  double a_lo = 1.0, a_hi = 1.0, e_lo = 0.0, e_hi = 0.0, c_lo = 1.0, c_hi = 1.0;
+};
+inline thread_local SpAnchor g_sp_anchor{};
+/// Whether time t lies on the bracket g_sp_anchor names.
+inline bool sp_anchored(double t) {
+  const SpAnchor& an = g_sp_anchor;
+  if (!an.valid || an.h == 0.0) return false;
+  const double q = (t - an.tlo) / an.h;
+  return q >= 0.0 && q <= 1.0;
+}
+
+/// One bake level's point for time t: the bracket cut into n equal parts, n the smallest that keeps a (relative
+/// tol_a), e (tol_e on e, or on e^2 when e_sq) and cos i (tol_c) within a quarter of their tolerance of the part's
+/// center along the chord between the nodes, at most 64; the point is the center of t's part. The key is n * 64 + the
+/// part.
+inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, double tol_e, bool e_sq, double tol_c, double& a_c,
+                               double& e_c, double& c_c) {
+  const double da = std::fabs(an.a_hi - an.a_lo) / (tol_a * an.a_lo);
+  const double de = e_sq ? std::fabs(an.e_hi * an.e_hi - an.e_lo * an.e_lo) / tol_e : std::fabs(an.e_hi - an.e_lo) / tol_e;
+  const double dc = tol_c > 0.0 ? std::fabs(an.c_hi - an.c_lo) / tol_c : 0.0;
+  const double need = 2.0 * std::fmax(da, std::fmax(de, dc));
+  const int n = need < 1.0 ? 1 : (need >= 64.0 ? 64 : static_cast<int>(std::ceil(need)));
+  int k = static_cast<int>(std::floor((t - an.tlo) / an.h * n));
+  k = k < 0 ? 0 : (k >= n ? n - 1 : k);
+  const double q = (k + 0.5) / n;
+  a_c = an.a_lo + q * (an.a_hi - an.a_lo);
+  e_c = an.e_lo + q * (an.e_hi - an.e_lo);
+  c_c = an.c_lo + q * (an.c_hi - an.c_lo);
+  return static_cast<int64_t>(n) * 64 + k;
+}
 
 /// What the call selects (0: none of it). `tesseral` is the highest degree of the terms of order >= 1, `zonal` of the
 /// zonal tail. Capped per family at the degree that was measured to pay. On FFM Starlink truth, day 3: m-daily 8 -> 12
@@ -337,7 +386,8 @@ struct MdailyEvalCache {
   float f0 = -1e30f, f1 = -1e30f;
   double a = -1.0, a_bake = -1.0, e2 = -1.0;
   bool keys_valid = false;
-  int64_t kf_a = 0, kf_e = 0, kp_a = 0;  ///< the cells of the full bake (a, e^2) and of the a bake (mdaily_sync_cache)
+  uint64_t anchor_id = 0;                ///< the bracket the bakes were made on (0: state cells)
+  int64_t kf_a = 0, kf_e = 0, kp_a = 0;  ///< the points of the full bake (a, e^2) and of the a bake (mdaily_sync_cache)
   alignas(16) double c0_pair1[20][2]{};
   alignas(16) double s0_pair1[20][2]{};
   alignas(16) double c0_pair2[20][2]{};
@@ -361,16 +411,27 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
 /// The m-daily corrections in the six-component set (n-dot, e-dot, i-dot,
 /// e varpi, sin i Omega, lambda order), first order, at the mean elements k;
 /// F the object's mdaily_terms (degree even l up to `degree`).
-/// The m-daily terms baked for mean state (a_state, e2_state): in full at the center of its cell (a relative 3e-5, e^2
-/// 2e-6), then in a at the center of its cell (a relative 2e-6), so the values are a function of the state alone.
+/// The m-daily terms baked for the state (a_state, e2_state) at time t, in full (a relative 3e-5, e^2 2e-6), then in a
+/// (relative 2e-6), each at a point that is a function of the state's bracket and t (sp_anchor_point), or without the
+/// bracket of the state alone (the center of its cell).
 [[gnu::noinline]] inline void mdaily_sync_cache(MdailyEvalCache& mc, const float* F, int degree, double a_state, double e2_state,
-                                                uint64_t table_id = 0) {
+                                                double t, uint64_t table_id = 0) {
   double a_full, e2_full, a_part;
-  const int64_t kfa = sp_cell_rel(a_state, 3e-5, a_full);
-  const int64_t kfe = sp_cell_abs(e2_state, 2e-6, e2_full);
-  const int64_t kpa = sp_cell_rel(a_state, 2e-6, a_part);
+  int64_t kfa, kfe = 0, kpa;
+  const bool anchored = sp_anchored(t);
+  if (anchored) {
+    double e_f, c_f, e_p, c_p;
+    kfa = sp_anchor_point(g_sp_anchor, t, 3e-5, 2e-6, true, 0.0, a_full, e_f, c_f);
+    e2_full = e_f * e_f;
+    kpa = sp_anchor_point(g_sp_anchor, t, 2e-6, 1e30, false, 0.0, a_part, e_p, c_p);
+  } else {
+    kfa = sp_cell_rel(a_state, 3e-5, a_full);
+    kfe = sp_cell_abs(e2_state, 2e-6, e2_full);
+    kpa = sp_cell_rel(a_state, 2e-6, a_part);
+  }
+  const uint64_t aid = anchored ? g_sp_anchor.id : 0;
   const bool full = table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] ||
-                    mc.f1 != F[1] || !mc.keys_valid || kfa != mc.kf_a || kfe != mc.kf_e;
+                    mc.f1 != F[1] || !mc.keys_valid || mc.anchor_id != aid || kfa != mc.kf_a || kfe != mc.kf_e;
   if (!full && kpa == mc.kp_a) return;
   const double a = full ? a_full : a_part, e2 = e2_full;
   auto sync_f32 = [&]() {
@@ -399,6 +460,7 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
     mc.F = F;
     mc.table_id = table_id;
     mc.keys_valid = true;
+    mc.anchor_id = aid;
     mc.kf_a = kfa;
     mc.kf_e = kfe;
     mc.kp_a = INT64_MIN;
@@ -516,7 +578,7 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
     const double* sb_in = nullptr, const double* cb_in = nullptr, uint64_t table_id = 0) {
   const double a = k.a, e = k.e, e2 = e * e;
   MdailyEvalCache& mc = mdaily_eval_cache();
-  mdaily_sync_cache(mc, F, degree, a, e2, table_id);
+  mdaily_sync_cache(mc, F, degree, a, e2, t, table_id);
   double sb, cb;
   if (sb_in != nullptr && cb_in != nullptr) {
     sb = *sb_in;
@@ -1211,6 +1273,7 @@ struct SpEvalCache {
   double a_res = -1.0, e_res = -1.0, ci_res = -10.0;
   // the cells the current bakes were made at (sp_sync): base (a, e^2, cos i), ae (a, e), pe (e), res (a, cos i, e^2)
   bool keys_valid = false;
+  uint64_t anchor_id = 0;  ///< the bracket the bakes were made on (0: state cells)
   int64_t kb_a = 0, kb_e = 0, kb_c = 0, kae_a = 0, kae_e = 0, kpe = 0, kr_a = 0, kr_c = 0, kr_e = 0;
   alignas(16) float cswq_c[120]{};
   alignas(16) float cswq_s[120]{};
@@ -2487,46 +2550,61 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
 
 constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pass: the pe blocks at the ae bake's e
 
-/// The bakes for mean state (a, e, cos i): each level baked at the center of the mean state's cell of that level, so
-/// the cache's values are a function of the state alone, whatever was evaluated before (SPEC 9). Levels and cells:
-/// base (a relative 3e-5, e^2 2e-5, cos i 1.5e-4, 6e-5 from e0 0.03), ae (a relative 1.8e-6, e 2e-5), pe (e
-/// de_pe_thresh; a derivative pass keeps the pe blocks at the ae bake's e), res (a relative 2e-7, cos i 1e-6, e^2
-/// 1e-5). A level baked again bakes the levels above it again; a set with resonant blocks bakes from the base when
-/// any level moves (its resonant bake writes the e table the ae bake reads). A set's cache rebuilds blk_c from F
-/// for a base or resonant bake (sp_blk_c).
-[[gnu::noinline]] inline void sp_sync(SpEvalCache& sc, double a0, double e0, double a, double e, double ci, bool derivative) {
-  double a_b, e2_b, ci_b, a_ae, e_ae, e_pe = 0.0;
-  const int64_t kba = sp_cell_rel(a, 3e-5, a_b);
-  const int64_t kbe = sp_cell_abs(e * e, 2e-5, e2_b);
-  const int64_t kbc = sp_cell_abs(ci, e0 < 0.03 ? 1.5e-4 : 6e-5, ci_b);
-  const int64_t kaa = sp_cell_rel(a, 1.8e-6, a_ae);
-  const int64_t kae = sp_cell_abs(e, 2e-5, e_ae);
-  const int64_t kpe = (derivative || sc.n_pe_blks <= 0) ? kSpPeAtBake : sp_cell_abs(e, sc.de_pe_thresh, e_pe);
-  bool base = !sc.keys_valid || kba != sc.kb_a || kbe != sc.kb_e || kbc != sc.kb_c;
+/// The bakes for the state (a, e, cos i) at time t, each level at a point that is a function of the state's bracket
+/// and t (SPEC 9): with the bracket (g_sp_anchor, t on it), the level's part of the bracket (sp_anchor_point); without
+/// one, the center of the state's cell of that level. Levels and tolerances: base (a relative 3e-5, e^2 2e-5, cos i
+/// 1.5e-4, 6e-5 from e0 0.03), ae (a relative 1.8e-6, e 2e-5), pe (e de_pe_thresh; a derivative pass keeps the pe
+/// blocks at the ae bake's e), res (a relative 2e-7, e^2 1e-5, cos i 1e-6). A level baked again bakes the levels
+/// above it again, the resonant blocks last. A set's cache rebuilds blk_c from F for a base or resonant bake.
+[[gnu::noinline]] inline void sp_sync(SpEvalCache& sc, double a0, double e0, double a, double e, double ci, double t,
+                                      bool derivative) {
+  const SpAnchor& an = g_sp_anchor;
+  const bool anchored = sp_anchored(t);
+  const uint64_t aid = anchored ? an.id : 0;
+  const double ctol = e0 < 0.03 ? 1.5e-4 : 6e-5;
+  double a_b, e_b, ci_b, a_ae, e_ae, c_ae, e_pe = 0.0, a_pe, c_pe;
+  int64_t kba, kbe = 0, kbc = 0, kaa, kae = 0, kpe = kSpPeAtBake;
+  if (anchored) {
+    kba = sp_anchor_point(an, t, 3e-5, 2e-5, true, ctol, a_b, e_b, ci_b);
+    kaa = sp_anchor_point(an, t, 1.8e-6, 2e-5, false, 0.0, a_ae, e_ae, c_ae);
+    if (!derivative && sc.n_pe_blks > 0) kpe = sp_anchor_point(an, t, 1e30, sc.de_pe_thresh, false, 0.0, a_pe, e_pe, c_pe);
+  } else {
+    kba = sp_cell_rel(a, 3e-5, a_b);
+    kbe = sp_cell_e(e, 2.5e-4, 2e-5, e_b);
+    kbc = sp_cell_abs(ci, ctol, ci_b);
+    kaa = sp_cell_rel(a, 1.8e-6, a_ae);
+    kae = sp_cell_abs(e, 2e-5, e_ae);
+    if (!derivative && sc.n_pe_blks > 0) kpe = sp_cell_abs(e, sc.de_pe_thresh, e_pe);
+  }
+  const bool fresh = !sc.keys_valid || sc.anchor_id != aid;
+  const bool base = fresh || kba != sc.kb_a || kbe != sc.kb_e || kbc != sc.kb_c;
   bool ae = base || kaa != sc.kae_a || kae != sc.kae_e;
-  bool pe = ae || kpe != sc.kpe;
+  const bool pe = ae || kpe != sc.kpe;
   if (pe && !ae && sc.e_pe_bake != sc.e_bake) ae = true;  // the pe blocks back to the ae bake's e: the ae bake again
-  double a_r = 0.0, ci_r = 0.0, e2_r = 0.0;
+  double a_r = 0.0, ci_r = 0.0, e_r = 0.0;
   int64_t kra = 0, krc = 0, kre = 0;
-  auto res_cells = [&]() {
-    kra = sp_cell_rel(a, 2e-7, a_r);
-    krc = sp_cell_abs(ci, 1e-6, ci_r);
-    kre = sp_cell_abs(e * e, 1e-5, e2_r);
+  auto res_point = [&]() {
+    if (anchored) {
+      kra = sp_anchor_point(an, t, 2e-7, 1e-5, true, 1e-6, a_r, e_r, ci_r);
+    } else {
+      kra = sp_cell_rel(a, 2e-7, a_r);
+      krc = sp_cell_abs(ci, 1e-6, ci_r);
+      kre = sp_cell_e(e, 1.25e-4, 1e-5, e_r);
+    }
   };
   bool res = false;
   if (!base && sc.n_res_blks > 0) {
-    res_cells();
+    res_point();
     res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
-    if (res) base = ae = pe = true;
   }
   if (!base && !ae && !pe && !res) return;
   float* const own_c = sc.blk_c;
   if (base && sc.compact) sc.blk_c = sp_blk_c(sc);
   if (base) {
-    const double e_b = std::sqrt(e2_b), n_b = kKe / (a_b * std::sqrt(a_b));
-    sp_rebake_base(sc, a0, e0, a_b, e_b, n_b, std::sqrt(1.0 - e2_b), ci_b, 1.0 / a_b);
+    const double n_b = kKe / (a_b * std::sqrt(a_b));
+    sp_rebake_base(sc, a0, e0, a_b, e_b, n_b, std::sqrt(1.0 - e_b * e_b), ci_b, 1.0 / a_b);
     if (sc.n_res_blks > 0) {
-      res_cells();
+      res_point();
       res = true;
     }
   }
@@ -2534,13 +2612,14 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   if (pe && kpe != kSpPeAtBake) sp_rebake_pe_fast(sc, e_pe);
   if (res) {
     if (sc.compact && sc.blk_c == nullptr) sc.blk_c = sp_blk_c(sc);
-    const double e_r = std::sqrt(e2_r), n_r = kKe / (a_r * std::sqrt(a_r));
-    sp_rebake_res(sc, a0, e0, a_r, e_r, n_r, std::sqrt(1.0 - e2_r), ci_r, 1.0 / a_r);
+    const double n_r = kKe / (a_r * std::sqrt(a_r));
+    sp_rebake_res(sc, a0, e0, a_r, e_r, n_r, std::sqrt(1.0 - e_r * e_r), ci_r, 1.0 / a_r);
     sc.kr_a = kra;
     sc.kr_c = krc;
     sc.kr_e = kre;
   }
   if (sc.compact) sc.blk_c = own_c;
+  sc.anchor_id = aid;
   sc.kb_a = kba;
   sc.kb_e = kbe;
   sc.kb_c = kbc;
@@ -2807,7 +2886,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
   SpEvalCache& sc = *scp;
-  sp_sync(sc, a0, e0, a, e, ci, true);
+  sp_sync(sc, a0, e0, a, e, ci, t, true);
   double sb, cb, su1, cu1, sM1, cM1;
   if (sb_in != nullptr && cb_in != nullptr && su1_in != nullptr && cu1_in != nullptr && sM1_in != nullptr && cM1_in != nullptr) {
     sb = *sb_in; cb = *cb_in;
@@ -2904,7 +2983,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
   SpEvalCache& sc = *scp;
-  sp_sync(sc, a0, e0, a, e, ci, false);
+  sp_sync(sc, a0, e0, a, e, ci, t, false);
 
   float* const cm_f32 = sp_trig_cm();
   float* const sm_f32 = sp_trig_sm();
@@ -3919,7 +3998,7 @@ struct ZonalEvalCache {
   float f0 = 0.0f, f1 = 0.0f, f2 = 0.0f, f3 = 0.0f, flast = 0.0f;
   double a_ref = -1.0;
   bool keys_valid = false;
-  int64_t ka = 0;  ///< a's cell (relative 2e-3); a_ref its center
+  int64_t ka = 0;  ///< the bits of the a baked at (a_ref)
   double c[11][3]{};
 };
 inline thread_local ZonalEvalCache g_zonal_eval_cache{};
@@ -3949,9 +4028,11 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
     ZonalEvalCache& zc = zonal_eval_cache();
     const int last_i = 4 * zonal_count(degree, false) - 1;
     const float flast = last_i >= 0 ? F[last_i] : 0.0f;
-    // baked at the center of a's cell (relative 2e-3): a function of the state alone
-    double a_c;
-    const int64_t ka = sp_cell_rel(a, 2e-3, a_c);
+    // baked at the state's own a (only the mean-element rates read it, a few times a node step): a function of the
+    // state alone
+    const double a_c = a;
+    int64_t ka;
+    std::memcpy(&ka, &a, sizeof ka);
     if (table_id == 0 || zc.table_id != table_id || zc.F != F || zc.degree != degree || zc.eq_cut != eq_cut ||
         zc.f0 != F[0] || zc.f1 != F[1] || zc.f2 != F[2] || zc.f3 != F[3] || zc.flast != flast ||
         !zc.keys_valid || ka != zc.ka) {
@@ -4134,7 +4215,7 @@ struct ShallowEvalCache {
   float fg0 = 0.0f, fglast = 0.0f;
   double a_ref = -1.0;
   bool keys_valid = false;
-  int64_t ka = 0;  ///< a's cell (relative 2e-3); a_ref its center
+  int64_t ka = 0;  ///< the bits of the a baked at (a_ref)
   int n_groups = 0;
   bool ok = false;
   ShallowGroupPoly groups[kMaxGroups]{};
@@ -4154,9 +4235,11 @@ inline void shallow_six(const ShallowCoef* table, int count, double e0, double i
   const double thetag = theta_g0 + kOmegaE * t;
   const double ia = 1.0 / a;
   ShallowEvalCache& cache = shallow_eval_cache();
-  // baked at the center of a's cell (relative 2e-3): a function of the state alone
-  double a_c;
-  const int64_t ka = sp_cell_rel(a, 2e-3, a_c);
+  // baked at the state's own a (only the mean-element rates read it, a few times a node step): a function of the state
+  // alone
+  const double a_c = a;
+  int64_t ka;
+  std::memcpy(&ka, &a, sizeof ka);
   if (table_id == 0 || cache.table_id != table_id || cache.table != table || cache.count != count ||
       cache.l0 != table[0].l || cache.m0 != table[0].m || cache.fg0 != table[0].fg ||
       cache.llast != table[count - 1].l || cache.fglast != table[count - 1].fg ||
