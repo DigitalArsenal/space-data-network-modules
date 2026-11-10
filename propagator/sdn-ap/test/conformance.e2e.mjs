@@ -31,11 +31,14 @@
 // ascending order; the module's answers must not depend on the order (the
 // same bytes again in a second shuffled order).
 //
-//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE]
+//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE] [--digest-only]
 //
 // --reproduce FILE: the run must equal a stored summary (FILE, as --json writes it) in every statistic, digest and
 // acceptance flag (the oracle's name aside); the exit code is that comparison's (a tree moved or rebuilt reproduces
 // the stored run bit for bit), and the stored run's own acceptance is printed.
+// --digest-only: the module's side of that comparison without the oracle: the SGP4XP corpus's and the SGP4 control's
+// output digests and order independence must equal the stored run's (FILE, default test/results/conformance.json).
+// The stored run (2026-10-25) is XP digest 72dcf6005046; builds 0.6.5 to 0.6.7 gave 34cc810d5d99 (SPEC 16.8).
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { openModule, THEORY } from "./lib/module.mjs";
@@ -52,6 +55,7 @@ const SEED = Number(arg("--seed", 20261023));
 const REPORT_ONLY = process.argv.includes("--report-only");
 const JSON_OUT = arg("--json", null);
 const REPRODUCE = arg("--reproduce", null);
+const DIGEST_ONLY = process.argv.includes("--digest-only");
 const WORST = Number(arg("--worst", 0));  // print the N largest position differences per regime
 const SPAN_MIN = 7 * 1440;
 const TIMES = 8;
@@ -119,15 +123,9 @@ function shuffled(n) {
   return order;
 }
 
-async function measure(label, sets, oracle, module, inherent = false, second = null) {
-  // Oracle: each set alone, its times ascending.
-  const started = performance.now();
-  const reference = [];
-  for (const s of sets) reference.push(await oracle.propagate(s.lines, s.minutes));
-  const oracleMs = performance.now() - started;
-
-  // Module: all sets at once, time index by time index, in a shuffled order, twice.
-  const accepted = sets.map((s, i) => reference[i] !== null);
+// Module: all sets at once, time index by time index, in a shuffled order, twice; the SHA-256 of every output of the
+// first pass (planes and status, time index by time index: the bit-identity check) and the values the order changed.
+function flyModule(sets, module) {
   module.init(sets.map((s) => elementsOf(s.lines)));
   const answers = [[], []];
   for (const pass of [0, 1]) {
@@ -136,13 +134,11 @@ async function measure(label, sets, oracle, module, inherent = false, second = n
       answers[pass][k] = p;
     }
   }
-  // SHA-256 of every module output (planes and status, time index by time index): the bit-identity check.
   const hash = createHash("sha256");
   for (let k = 0; k < TIMES; k += 1) {
     for (const plane of ["x", "y", "z", "vx", "vy", "vz"]) hash.update(new Uint8Array(answers[0][k][plane].buffer.slice(0)));
     hash.update(new Uint8Array(answers[0][k].status.buffer.slice(0)));
   }
-  const digest = hash.digest("hex");
   let orderDependent = 0;
   for (let k = 0; k < TIMES; k += 1) {
     for (const plane of ["x", "y", "z", "vx", "vy", "vz"]) {
@@ -150,6 +146,18 @@ async function measure(label, sets, oracle, module, inherent = false, second = n
       for (let i = 0; i < a.length; i += 1) if (!Object.is(a[i], b[i])) orderDependent += 1;
     }
   }
+  return { answers, digest: hash.digest("hex"), orderDependent };
+}
+
+async function measure(label, sets, oracle, module, inherent = false, second = null) {
+  // Oracle: each set alone, its times ascending.
+  const started = performance.now();
+  const reference = [];
+  for (const s of sets) reference.push(await oracle.propagate(s.lines, s.minutes));
+  const oracleMs = performance.now() - started;
+
+  const accepted = sets.map((s, i) => reference[i] !== null);
+  const { answers, digest, orderDependent } = flyModule(sets, module);
 
   // Inherent classes (XP corpus): the shadow envelope (near-limit decisions both ways), the drag-free run, refusals.
   let envA = null, envB = null, dragFree = null;
@@ -295,6 +303,19 @@ function print(result) {
     console.log(`${t.regime.padEnd(6)} ${String(t.sets).padStart(5)} ${String(t.samples).padStart(9)} ${String(t.refused).padStart(8)} ${String(t.oracleErrors).padStart(11)} ${String(t.moduleErrors).padStart(11)}  ${t.maxM.toExponential(3).padStart(12)}  ${t.medianM.toExponential(3).padStart(12)}  ${t.maxMmPerS.toExponential(3).padStart(12)}`);
   }
   console.log(`all    max ${result.overall.maxM.toExponential(3)} m, median ${result.overall.medianM.toExponential(3)} m`);
+}
+
+if (DIGEST_ONLY) {
+  // The module's side of --reproduce alone, no oracle: the same corpora in the same order, the SGP4 control's and the
+  // SGP4XP corpus's output digests and order independence against the stored run.
+  const stored = JSON.parse(fs.readFileSync(REPRODUCE ?? new URL("./results/conformance.json", import.meta.url), "utf8"));
+  const module = await openModule();
+  const control = flyModule(corpus(SGP4_SETS, 0, 10000), module);
+  const xp = flyModule(corpus(XP_SETS, 4, 40000), module);
+  module.destroy();
+  const same = control.digest === stored.control.digest && xp.digest === stored.xp.digest && control.orderDependent === 0 && xp.orderDependent === 0;
+  console.log(`module outputs against ${REPRODUCE ?? "test/results/conformance.json"} (no oracle): XP ${xp.digest.slice(0, 12)} (stored ${stored.xp.digest.slice(0, 12)}), control ${control.digest.slice(0, 12)} (stored ${stored.control.digest.slice(0, 12)}), order-dependent values ${xp.orderDependent + control.orderDependent}: ${same ? "identical" : "DIFFERENT"}`);
+  process.exit(same ? 0 : 1);
 }
 
 const oracle = await openReference();

@@ -25,9 +25,9 @@
     "rule": "the modules checkout's copy equals modulesCommit (git diff --quiet modulesCommit -- paths)"
   },
   "packages": {
-    "propagator/sdn-ap": { "space-data-module-sdk": "0.9.14", "spacedatastandards.org": "1.276.0", "flatbuffers": "25.9.23" },
-    "propagator/sgp4": { "space-data-module-sdk": "0.9.12", "spacedatastandards.org": "1.276.0", "flatbuffers": "25.9.23" },
-    "analysis/gp-error-model": { "space-data-module-sdk": "0.9.12", "spacedatastandards.org": "1.276.0" },
+    "propagator/sdn-ap": { "space-data-module-sdk": "0.9.14", "spacedatastandards.org": "1.279.0", "flatbuffers": "25.9.23" },
+    "propagator/sgp4": { "space-data-module-sdk": "0.9.12", "spacedatastandards.org": "1.279.0", "flatbuffers": "25.9.23" },
+    "analysis/gp-error-model": { "space-data-module-sdk": "0.9.12", "spacedatastandards.org": "1.279.0" },
     "foundation/frames": { "space-data-module-sdk": "0.8.25" }
   },
   "hosts": {

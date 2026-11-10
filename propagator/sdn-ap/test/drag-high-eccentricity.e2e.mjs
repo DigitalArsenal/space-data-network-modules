@@ -27,6 +27,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 
 const FIXTURES = {
@@ -53,7 +54,8 @@ if (!isMainThread) {
     profile: workerData.c.mode === 'seed' ? r.profile.map((q) => [q.h, q.t, q.r]) : undefined});
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
-  const BASE = '4a02a6d90', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/drag-e2e';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const BASE = '4a02a6d90', scratch = path.join(scratchRoot, 'drag-e2e');
   const modules = fileURLToPath(new URL('../../../', import.meta.url));
   fs.mkdirSync(scratch, {recursive: true});
   const baseline = path.join(scratch, `release-${BASE}.wasm`);
@@ -141,7 +143,6 @@ if (!isMainThread) {
     assert.ok(Math.abs(a.t - b.t) <= 0.5 && Math.abs(a.r - b.r) <= 0.5, `${key}: drag off moved`);
   }
   // 6. XP digest
-  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  reproduceConformance();
   console.log('drag high eccentricity E2E: PASS');
 }

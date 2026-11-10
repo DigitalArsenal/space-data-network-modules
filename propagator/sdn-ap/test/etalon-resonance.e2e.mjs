@@ -12,11 +12,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {Worker} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 import {archive} from './lib/regime-windows.mjs';
 import {wasmPath} from './lib/module.mjs';
 
-const BASE = 'dcae63613', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/etalon';
+const {scratchRoot} = await import('./lib/scratch.mjs');
+const BASE = 'dcae63613', scratch = path.join(scratchRoot, 'etalon');
 const modules = fileURLToPath(new URL('../../../', import.meta.url));
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);
@@ -67,7 +69,6 @@ if (!process.argv.includes('--measure')) {
   }
   for (const [name, want] of Object.entries(EXPECTED.nonregression))
     assert.ok(Math.abs(nonregression[name].medianMeters - want) <= 0.5, `${name}: median day-3 error within 0.5 m of ${want} m`);
-  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  reproduceConformance();
   console.log('Etalon resonance E2E: PASS');
 }

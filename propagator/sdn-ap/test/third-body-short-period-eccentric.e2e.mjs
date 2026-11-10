@@ -3,7 +3,8 @@
 // coordinator after the measurement): AP 0.4.11 takes the Sun's and the Moon's short-period terms of degree 2 to 10 by
 // quadrature (SPEC 5.4) and their degree 4 to 10 averaged rates at every eccentricity (SPEC 16.8, the bound removed).
 // Test builds of this package: PROBE adds two exports to abi.inc (the theory unchanged); OFF sets
-// kThirdBodyTailDegree to 3 (degree 4 up off).
+// kThirdBodyTailDegree to 3 (degree 4 up off). PROBE reads TailSamples as f[element][node] (xp_theory.inc since 0.6.5,
+// 24d7d75f; 0.6.4 held f[node][element]): read the old way, it ran past the array and every probe value was NaN.
 // Acceptance:
 // 1. term by term (PROBE): at e 0.05, 0.3 and 0.72 in SPEC 16.8's three orientations, n 2.0059 rev/day, the quadrature
 //    terms of degree 2-3 and of degree 2-10 within 0.15 m RMS per element of a numerical integration over one orbit
@@ -23,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 
 const GEOMETRIES = {G1: [63.4, 300, 270], G2: [63.4, 60, 90], G3: [55, 180, 0]};
@@ -64,7 +66,8 @@ if (!isMainThread) {
   }
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
-  const scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/third-body-short-period';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const scratch = path.join(scratchRoot, 'third-body-short-period');
   const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
   fs.mkdirSync(scratch, {recursive: true});
   const testBuild = (name, edits) => {
@@ -97,7 +100,7 @@ int32_t sdnap_test_sp_verify(const double* yin, double d50, int32_t K, int32_t h
   tail_samples(ym, frame_of(ym), b, 2, hi, s);
   double avg[6] = {0, 0, 0, 0, 0, 0};
   for (int j = 0; j < kThirdBodyTailNodes; ++j)
-    for (int m = 0; m < 6; ++m) avg[m] += s.w[j] * s.f[j][m] / kThirdBodyTailNodes;
+    for (int m = 0; m < 6; ++m) avg[m] += s.w[j] * s.f[m][j] / kThirdBodyTailNodes;
   const auto closed = [&](const double* y, double* d) {
     const Kepler km = kepler_of(y);
     double Em = km.m + km.e * std::sin(km.m);
@@ -209,7 +212,7 @@ int32_t sdnap_test_rate_compare(const double* yin, double d50, double* out) {
   tail_samples(y, fr, b, 2, 3, s);
   for (int m = 0; m < 6; ++m) {
     out[6 + m] = 0.0;
-    for (int j = 0; j < kThirdBodyTailNodes; ++j) out[6 + m] += s.w[j] * s.f[j][m] / kThirdBodyTailNodes;
+    for (int j = 0; j < kThirdBodyTailNodes; ++j) out[6 + m] += s.w[j] * s.f[m][j] / kThirdBodyTailNodes;
   }
   return 0;
 }
@@ -273,7 +276,6 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   assert.ok(report.releaseDay7.GTO.alongTrack <= 961.5 && report.releaseDay7.GTO.radial <= 935.5, 'GTO: day 7 no worse than 961/935 m');
   // re-recorded at 0.4.15 (SPEC 16.11): 929.45 m at 0.4.14 (SPEC 16.10), 2449.15 m at 0.4.11-0.4.13
   assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 249.02) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
-  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  reproduceConformance();
   console.log('third-body short-period eccentric E2E: PASS');
 }

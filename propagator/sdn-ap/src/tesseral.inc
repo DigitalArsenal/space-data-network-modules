@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// AP (SPEC 16): SGP4XP with parts replaced, outside the SGP4-XP specification. What the call's $PCF FORCES selects
+// AP (SPEC 16): an advanced propagator that builds on the entire history of astrodynamics, outside the SGP4-XP specification. What the call's $PCF FORCES selects
 // (MAXIMUM_TESSERAL_DEGREE, MAXIMUM_DEGREE): tesseral gravity and the zonal tail; none of it is applied otherwise, so
 // the default is SGP4XP bit for bit.
 //   m-daily short-periodics: for even l and p = l/2, q = 0, Kaula's term has psi = m (Omega - theta_G): period about
@@ -45,7 +45,7 @@ constexpr double kWideE = 0.3;
 /// a set in no resonance band (class 0: low orbit, the LAGEOS band, orbits below 0.8 rev/day) flies the grid above this
 /// eccentricity, where the first-order set fails against the full field and the grid is cheaper (SPEC 16.11); a set in a
 /// resonance class (1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour) keeps kWideE: the grid does not reach the
-/// resonant share there and costs more. Read by sp_terms, sp_bound's caller and the grid acquisition at init, nowhere else.
+/// resonant share there and costs more. Read by xpt::branch_of alone (SPEC 16.7: the switch is the set's, decided at its epoch).
 constexpr double kWideENonResonant = 0.05;
 inline bool wide_set(int cls, double e0) { return e0 > (cls == 0 ? kWideENonResonant : kWideE); }
 
@@ -716,8 +716,9 @@ inline int sp_comb_bound(int degree, bool wide) {
 
 /// Fills out at the epoch mean motion n0, inclination i0 and eccentricity e0; returns the count. `cls`: the resonance class,
 /// whose terms the rates carry and this table must not. `low`: no class and the shallow set active, so a term near
-/// commensurability other than the shallow set's is kept here.
-inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, double i0, double e0, SpCombCoef* out,
+/// commensurability other than the shallow set's is kept here. `wide`: the set's branch (wide_set at its epoch, or its
+/// covariance nominal's, xpt::Branch): the families are on the grid and the table holds the near-resonant terms only.
+inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
                     SpCoef* raw_out = nullptr, int* raw_count_out = nullptr) {
   int raw_count = 0;
   const EgmTables& egm = egm_tables();
@@ -729,7 +730,6 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, double n0, d
   const double na2 = n0 * a0 * a0, keep = kSpKeepM * 1e-3 / kRe;
   const double inv_na2 = 1.0 / na2, inv_a02 = 1.0 / (a0 * a0);
   const double inv_shallow_n0 = 1.0 / (kShallowBand * n0);
-  const bool wide = wide_set(cls, e0);
   const res::TermSet carried = res::class_terms(cls);
 
   const double ia0 = 1.0 / a0;

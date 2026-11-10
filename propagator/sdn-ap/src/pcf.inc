@@ -6,7 +6,8 @@
 //   propagate, maneuver   OUTPUT (FRAME, STEP_SECONDS, MAXIMUM_STATES, and the
 //                         output times: EPOCHS, or START_TIME and STOP_TIME),
 //                         INTEGRATOR, EVENTS
-//   fit                   FIT, FORCES, INTEGRATOR
+//   fit                   FIT, FORCES, INTEGRATOR, and OUTPUT START_TIME and
+//                         STOP_TIME: the forecast the record carries (SPEC 18)
 // A flight's record is the one authority for its forces: a FORCES table on a
 // flight call is refused (configuration-refused FORCES).
 // FORCES on fit is the force model the fit runs under and writes into its
@@ -322,6 +323,19 @@ inline int read_output(const PCFOutput* p, Options& o) {
   return 0;
 }
 
+/// SPEC 18: OUTPUT on fit names the forecast the record carries: START_TIME and STOP_TIME, both or neither (neither:
+/// none); the states between are the ephemeris block's, in the set's own frame, so EPOCHS, FRAME, STEP_SECONDS and
+/// MAXIMUM_STATES away from their defaults are refused by name.
+inline int read_carry(const PCFOutput* p, Options& o) {
+  if (const int rc = read_output(p, o)) return rc;
+  if (!o.epochs_w.empty()) return refuse("OUTPUT.EPOCHS", "fit carries the block's states from OUTPUT.START_TIME to STOP_TIME");
+  if (p->FRAME() != pcfOutputFrame_UNSPECIFIED) return refuse("OUTPUT.FRAME", "a carried forecast is in the set's own TRAJ_REF_FRAME");
+  if (has(p, PCFOutput::VT_STEP_SECONDS) && p->STEP_SECONDS() != 60.0) return refuse("OUTPUT.STEP_SECONDS", "fit chooses the carried segments");
+  if (has(p, PCFOutput::VT_MAXIMUM_STATES) && p->MAXIMUM_STATES() != 500000) return refuse("OUTPUT.MAXIMUM_STATES", "fit chooses the carried segments");
+  if (o.has_start != o.has_stop) return refuse(o.has_start ? "OUTPUT.STOP_TIME" : "OUTPUT.START_TIME", "fit carries the block's states from START_TIME to STOP_TIME: both, or neither");
+  return 0;
+}
+
 /// The FORCES fields of the force model (SPEC 15, 16) on fit.
 inline bool atmosphere_field(uint16_t vt) {
   return vt == PCFForceModel::VT_ATMOSPHERE_MODEL || vt == PCFForceModel::VT_WEATHER_SOURCE ||
@@ -503,6 +517,8 @@ inline int read(Method method, bool optional = false) {
     if (const int rc = read_fit(c->FIT(), o)) return rc;
   if (tables & kTOutput)
     if (const int rc = read_output(c->OUTPUT(), o)) return rc;
+  if (method == kFit && c->OUTPUT() != nullptr)
+    if (const int rc = read_carry(c->OUTPUT(), o)) return rc;
   if (tables & kTForces)
     if (const int rc = read_forces(c->FORCES(), method == kFit, o)) return rc;
   if (method == kFit && o.theory == pcfTheory_SGP4XP && !o.forces.stock())

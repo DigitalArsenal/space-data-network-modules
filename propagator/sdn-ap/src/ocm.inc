@@ -9,15 +9,16 @@
 // the set flies on); METADATA.NORAD_CAT_ID the join key; TRAJ_REF_FRAME
 // TEMEOFDATE, or TEMEOFEPOCH at the set's epoch for AP with gravity terms;
 // ORB_AVERAGING BROUWER (KOZAI for SGP4); STATE_DATA empty; PROVENANCE this
-// module's, or the source's carried with this module as PRODUCER. Nothing goes
-// in USER_DEFINED_PARAMETERS.
+// module's, or the source's carried with this module as PRODUCER; a carried
+// forecast, when fit is asked for one, in POLYNOMIAL_POSITION_RECORDS (SPEC 18).
+// Nothing goes in USER_DEFINED_PARAMETERS.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.5";
+constexpr const char* kModuleVersion = "0.6.9";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -57,6 +58,7 @@ struct Extras {
   flatbuffers::Offset<OCMCovariancePropagation> cov_propagation = 0;
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CVR>>> cov_realism = 0;
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<flatbuffers::String>>> header_comment = 0;  ///< HEADER.COMMENT
+  flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;  ///< the carried forecast (SPEC 18)
 };
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
@@ -274,6 +276,11 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
     if (!x.cov_realism.IsNull()) b.add_COV_REALISM(x.cov_realism);
   }
   if (!provenance.IsNull()) b.add_PROVENANCE(provenance);
+  if (!x.forecast.IsNull()) {  // SPEC 18: the carried forecast, in TRAJ_REF_FRAME
+    b.add_TRAJ_TYPE(trajectoryType_POLYNOMIAL_POS);
+    b.add_POLYNOMIAL_POSITION_RECORDS(x.forecast);
+    b.add_TRAJ_BASIS(ocmTrajectoryBasis_PREDICTED);
+  }
   b.add_MEAN_ELEMENTS(mean);
   FinishOCMBuffer(fbb, b.Finish());
 }

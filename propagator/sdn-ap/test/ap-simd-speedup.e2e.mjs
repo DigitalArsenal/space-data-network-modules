@@ -8,7 +8,6 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as flatbuffers from "flatbuffers";
@@ -19,6 +18,7 @@ import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSo
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { assertNoUserDefined } from "../../../common/tests/no-user-defined.mjs";
 import { openModule, wasmPath, packageRoot } from "./lib/module.mjs";
+import { scratchTemp } from "./lib/scratch.mjs";
 import { configuration, MSIS_FORCES } from "./lib/pcf.mjs";
 import { inputs, GRID } from "./lib/fixture-inputs.mjs";
 import { elementsOf, tleLines } from "./lib/tle.mjs";
@@ -32,7 +32,7 @@ execFileSync(process.execPath, [path.join(here, "docs-version.e2e.mjs")], { stdi
 // Extract 0.6.4 baseline signed bundle from git
 const BASE_COMMIT = "cfd750eb8de2f5d7c339173ee674bc7a481da8c2";
 const BASE_SHA256 = "e98b63558d84cfd3b8509f4c4c640502e38f81cc05a0e0277fcffa7da97cf51d";
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-065-e2e-"));
+const scratch = scratchTemp("sdn-ap-065-e2e-");
 try {
   const baseBytes = execFileSync("git", ["-C", repoRoot, "show", `${BASE_COMMIT}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
   const gotSha = createHash("sha256").update(baseBytes).digest("hex");
@@ -111,7 +111,7 @@ try {
   assertNoUserDefined(ocmCurrBytes);
   assert.equal(String.fromCharCode(...odrCurrBytes.subarray(4, 8)), "$ODR");
   const ocmCurr = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(ocmCurrBytes)).unpack();
-  assert.equal(ocmCurr.PROVENANCE?.PRODUCER, "com.spacedatanetwork.sdn-ap-propagator 0.6.5");
+  assert.equal(ocmCurr.PROVENANCE?.PRODUCER, `com.spacedatanetwork.sdn-ap-propagator ${JSON.parse(fs.readFileSync(path.join(packageRoot, "plugin-manifest.json"), "utf8")).version}`);
   assert.ok(ocmCurr.ORBIT_DETERMINATION.FIT_STATISTICS.CONVERGED);
 
   // Propagate identical 0.6.4 AP $OCM on both 0.6.4 and 0.6.5 for 7 days in EME2000 and TEME

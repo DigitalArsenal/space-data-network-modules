@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 import * as flatbuffers from 'flatbuffers';
 import {OMM} from 'spacedatastandards.org/lib/js/OMM/OMM.js';
@@ -63,7 +64,8 @@ if (!isMainThread) {
   parentPort.postMessage({bterm: r.fitted.bterm, model: r.fitted.bModel, t: last ? w[last].t : null, r: last ? w[last].r : null, omm: r.omm});
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
-  const BASE = '1ec779200', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/arc-e2e';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const BASE = '1ec779200', scratch = path.join(scratchRoot, 'arc-e2e');
   const modules = fileURLToPath(new URL('../../../', import.meta.url));
   fs.mkdirSync(scratch, {recursive: true});
   const baseline = path.join(scratch, `release-${BASE}.wasm`);
@@ -133,7 +135,6 @@ if (!isMainThread) {
     console.log(JSON.stringify({lowE: f, identical: same, modelAt0416: a.model, model: b.model}));
     assert.ok(same, `${f}: the fitted set's elements bit-identical to 0.4.16's`);
   }
-  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  reproduceConformance();
   console.log('high-e fit arc E2E: PASS');
 }

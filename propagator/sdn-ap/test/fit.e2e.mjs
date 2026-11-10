@@ -30,7 +30,7 @@
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit.e2e.mjs
 import fs from "node:fs";
-import os from "node:os";
+import { scratchTemp } from "./lib/scratch.mjs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -139,7 +139,7 @@ const movedBand = (me) => bandOf(me.MEAN_MOTION) === 0 && me.ECCENTRICITY > 0.05
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const beforeBytes = execFileSync("git", ["-C", packageRoot, "show", `${BEFORE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
 check(sha256(beforeBytes) === BEFORE.sha256, `sdn-ap ${BEFORE.version} at ${BEFORE.commit.slice(0, 9)} is ${sha256(beforeBytes)}`);
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-fit-e2e-"));
+const scratch = scratchTemp("sdn-ap-fit-e2e-");
 const beforePath = path.join(scratch, `module-${BEFORE.version}.wasm`);
 fs.writeFileSync(beforePath, beforeBytes);
 const before = await createStandaloneHarness("browser", beforePath, { surface: "direct" });

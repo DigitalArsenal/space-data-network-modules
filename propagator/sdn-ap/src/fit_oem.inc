@@ -646,6 +646,7 @@ static int fit_blocks() {
         fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
+        if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
         P.t_fit = std::move(t_fit);
         P.r_fit = std::move(r_fit);
@@ -681,6 +682,7 @@ static int fit_blocks() {
           plugin_set_error("fit-failed", "The fit did not converge on the block.");
           return 3;
         }
+        if (rc == 3) return fit::refuse_branch_limit(chosen.row);
       }
       double span_used = start_given ? -1.0 : default_span;
       // SPEC 12.8: above e 0.3 with the perigee in the drag and no stated drag prior, the longest arc the ephemeris holds
@@ -999,6 +1001,10 @@ static int fit_blocks() {
                         : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
+      // SPEC 18: the forecast the record carries ($PCF OUTPUT.START_TIME to STOP_TIME), its span and end jumps in COMMENT
+      flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;
+      if (po.has_start && po.has_stop)
+        if (const int rc = carried::build(fbb, row, ocm::epoch_frame(po.forces), all, gcrf, po.start_w, po.start_f, po.stop_w, po.stop_f, forecast, comment)) return rc;
       const auto s_comment = fbb.CreateVectorOfStrings(comment);
       const auto s_od_method = fbb.CreateString("BATCH LEAST SQUARES");
       const auto s_od_algorithm = fbb.CreateString("LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS");
@@ -1025,6 +1031,7 @@ static int fit_blocks() {
       od.add_FIT_STATISTICS(statistics);
       ocm::Extras extras;
       extras.od = od.Finish();
+      extras.forecast = forecast;
       if (source != nullptr) {
         extras.provenance = ocm::copy_pvn(fbb, source, true);
         extras.carried = true;

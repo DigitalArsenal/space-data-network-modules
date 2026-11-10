@@ -7,6 +7,7 @@
 // 60 s) in OUTPUT.FRAME (TEME, GCRF or EME2000), with a covariance line per
 // state when the set carries COVARIANCE_DATA (SPEC 12). The $PCF is optional:
 // a lone $OCM flies. One request holds at most OUTPUT.MAXIMUM_STATES states.
+// A record carrying a forecast (SPEC 18) flies it inside its span.
 // -----------------------------------------------------------------------------
 
 extern "C" int propagate(void) {
@@ -44,16 +45,23 @@ extern "C" int propagate(void) {
       }
       if (const int rc = ocm::rows_cover(set, lo, hi)) return rc;
     }
+    // SPEC 18: the forecast the record carries flies inside its span; the theory is not initialized when every time is
+    // there and the record carries no covariance
+    carried::Track track;
+    if (const int rc = carried::read(set.record, set.row, track)) return rc;
+    bool all_carried = !track.empty() && (set.record->COVARIANCE_DATA() == nullptr || set.record->COVARIANCE_DATA()->size() == 0);
+    for (size_t k = 0; all_carried && k < tw.size(); ++k)
+      all_carried = track.covers(((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * 86400.0);
     atm::Atmosphere atmosphere;
     ocm::atmosphere_of(set, atmosphere);
     alignas(16) xpt::XpSat xs_stack;
     xpt::XpSat* xs = nullptr;
     Sat sat{};
     double* nodes = nullptr;
-    bool refused;
+    bool refused = false;
     cov::Propagator cprop;
     bool with_cov = false;
-    {
+    if (!all_carried) {
       ocm::Bind bind(set.forces, &atmosphere);
       if (e.theory == kTheorySgp4Xp) {
         xs = &xs_stack;
@@ -122,7 +130,25 @@ extern "C" int propagate(void) {
         const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
         double r[3], v[3], P[36];
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
-        if (with_cov && xs == nullptr) {
+        const double ts = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * 86400.0;
+        // SPEC 18: the carried forecast; GCRF and EME2000 straight from its axes (the exact matrix turns the covariance)
+        bool in_gcrf = false;
+        if (track.covers(ts)) {  // the covariance stays the theory's (version 1)
+          in_gcrf = g.axes != oem::Axes::Teme;
+          if (!(in_gcrf ? carried::at_gcrf(track, ts, r, v) : carried::at(track, ts, r, v))) {
+            std::snprintf(why, sizeof why, "No GCRF axes at %s (outside ERFA's calendar).", text);
+            rc = oem::refuse("frame-failed", why);
+            break;
+          }
+          if (with_cov) {
+            double rq[3], vq[3];
+            if (!cov::eval(cprop, t, rq, vq, P)) {
+              std::snprintf(why, sizeof why, "NORAD %u: no covariance at %s.", e.norad, text);
+              rc = oem::refuse("propagation-failed", why);
+              break;
+            }
+          }
+        } else if (with_cov && xs == nullptr) {
           int32_t nom_status = kPropOk;
           if (!cov::eval(cprop, t, r, v, P, nullptr, &nom_status)) {
             if (nom_status != kPropOk) {
@@ -150,9 +176,14 @@ extern "C" int propagate(void) {
           }
         }
         double axes[3][3];
-        if (g.axes != oem::Axes::Teme) {
+        if (in_gcrf && g.axes == oem::Axes::Eme2000) {
+          double rg[3] = {r[0], r[1], r[2]}, vg[3] = {v[0], v[1], v[2]};
+          frames::apply(bias, rg, r);
+          frames::apply(bias, vg, v);
+        }
+        if (g.axes != oem::Axes::Teme && (!in_gcrf || with_cov)) {
           double m[3][3];
-          if (frames::gcrf_to_teme(tw[k], tf[k], m) < 0) {
+          if (frames::gcrf_to_teme_output(tw[k], tf[k], m) < 0) {
             std::snprintf(why, sizeof why, "No GCRF axes at %s (outside ERFA's calendar).", text);
             rc = oem::refuse("frame-failed", why);
             break;
@@ -160,7 +191,9 @@ extern "C" int propagate(void) {
           double rg[3], vg[3];
           frames::apply_transpose(m, r, rg);
           frames::apply_transpose(m, v, vg);
-          if (g.axes == oem::Axes::Eme2000) {
+          if (in_gcrf) {
+            // the carried state is in its axes already; the matrix turns the theory's covariance only
+          } else if (g.axes == oem::Axes::Eme2000) {
             frames::apply(bias, rg, r);
             frames::apply(bias, vg, v);
           } else {

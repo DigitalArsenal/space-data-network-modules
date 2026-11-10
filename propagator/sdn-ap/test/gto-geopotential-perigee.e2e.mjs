@@ -17,6 +17,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
@@ -34,7 +35,8 @@ import {wasmPath} from './lib/module.mjs';
 import {packOem, rfm} from './lib/frames.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE = 'c938b91d8', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/gto-step';
+const {scratchRoot} = await import('./lib/scratch.mjs');
+const BASE = 'c938b91d8', scratch = path.join(scratchRoot, 'gto-step');
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);
@@ -111,6 +113,5 @@ for (const name of ['half-day', 'Molniya', '12-hour-55deg'])
   for (const k of ['alongTrack', 'radial', 'crossTrack', 'singleSample'])
     assert.ok(Math.abs(fixtures[name].release[k] - fixtures[name]['0.4.13'][k]) <= 0.5, `${name} ${k}: within 0.5 m of 0.4.13`);
 for (const [name, r] of Object.entries(integration)) assert.ok(r.rmsMeters <= 0.1, `${name}: ${r.rmsMeters} m RMS against the converged step over one ${r.span}`);
-execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-  {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+reproduceConformance();
 console.log('GTO geopotential perigee E2E: PASS');

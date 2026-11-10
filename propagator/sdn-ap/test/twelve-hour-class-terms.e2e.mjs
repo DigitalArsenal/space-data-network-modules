@@ -11,12 +11,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {Worker} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 import {archive} from './lib/regime-windows.mjs';
 import {wasmPath} from './lib/module.mjs';
 import {runSyntheticTruth} from './lib/synthetic-truth.mjs';
 
-const BASE = '48539c3ff', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/twelve-hour';
+const {scratchRoot} = await import('./lib/scratch.mjs');
+const BASE = '48539c3ff', scratch = path.join(scratchRoot, 'twelve-hour');
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 fs.mkdirSync(scratch, {recursive: true});
 
@@ -94,7 +96,6 @@ if (!process.argv.includes('--measure')) {
     assert.ok(s.days[7].alongTrack < 10, `node ${s.raan}: day-7 along-track RMS ${s.days[7].alongTrack} m under 10 m`);
   }
   for (const [name, v] of Object.entries(others)) assert.ok(v.afterMedianMeters - v.beforeMedianMeters <= 1, `${name}: median day-3 error at most 1 m above 0.4.8's`);
-  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  reproduceConformance();
   console.log('twelve-hour class terms E2E: PASS');
 }

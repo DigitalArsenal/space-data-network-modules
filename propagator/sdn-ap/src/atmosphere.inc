@@ -46,6 +46,7 @@ struct Atmosphere {
   std::string source_id;               ///< the rows' PVN.SOURCE_ID (the first row naming one)
   mutable int32_t min_driver_mjd = std::numeric_limits<int32_t>::min();  ///< earliest required driver MJD (earliest state's MJD - 1)
   mutable bool before_rows = false;    ///< an evaluation asked for a day before the first row (the call is refused)
+  mutable int32_t one_a_day = -1;      ///< `days` holds every day from its first to its last (1), not (0), not yet known (-1)
 };
 
 /// The atmosphere of the call in progress (nullptr: the theory's own); xp_init gives it to the set.
@@ -1705,16 +1706,21 @@ inline double msis_density(double d50, double lat, double lon, double h, const d
     nrlmsise00::tselec(&fl);
     return fl;
   }();
-  const auto tc = prepare_msis_time(d50, f);
+  // the day of year and UT seconds as prepare_msis_time forms them (its other terms serve msis_density_hi_trig only)
+  double D, N;
+  drag::day_of_year(d50, D, N);
+  const double day = std::floor(D);
+  const double sec = (D - day) * 86400.0;
+  const double sec_hr = sec * (1.0 / 3600.0);
   const double lat_deg = lat * (1.0 / kDeg);
   const double lon_deg = lon * (1.0 / kDeg);
-  double lst = tc.sec_hr + lon_deg * (1.0 / 15.0);
+  double lst = sec_hr + lon_deg * (1.0 / 15.0);
   lst -= 24.0 * std::floor(lst * (1.0 / 24.0));
   nrlmsise00::nrlmsise_input in{};
   nrlmsise00::nrlmsise_output out{};
   nrlmsise00::nrlmsise_flags flags = kFlags;
-  in.doy = tc.doy;
-  in.sec = tc.sec;
+  in.doy = static_cast<int>(day) + 1;
+  in.sec = sec;
   in.alt = h;
   in.g_lat = lat_deg;
   in.g_long = lon_deg;

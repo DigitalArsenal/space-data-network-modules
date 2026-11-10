@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.5 (dist ca551504, bundle f0b8352a).
+Version 0.6.9 (dist 072b233c).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -48,12 +48,22 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   MAX_SETS_PER_OBJECT, of THEORIES (SGP4, SGP4XP). SELECTION NEAREST or LATEST_BEFORE by binary search; across
   BLEND_WINDOW_SECONDS (3600) around each switch the two sets' states blend (SMOOTHSTEP weight with its derivative in
   the velocity, or HERMITE: set a plus a cubic correction landing on set b), position and velocity continuous; the
-  covariance mixture where sets carry COVARIANCE. Exports `sdnap_epochs_count`, `_stats` (records, kept, aged, capped,
+  covariance mixture where sets carry COVARIANCE. Two AP sets on different branches (SPEC 16.7), or a carried forecast and
+  a theory state (SPEC 18), are not blended: their switch is a step, `_select` gives b = -2 (branches) or -3 (carried and
+  theory) in its window and `propagate_epochs` names it in the block's COMMENT. Exports `sdnap_epochs_count`, `_stats` (records, kept, aged, capped,
   by THEORIES, not centered on the Earth, same-epoch duplicates, bytes), `_series`, `_select`, `_set_at`, `_at` (a
   batch of series at one time, TEME or Earth-fixed, with the covariance); `propagate_epochs` gives the same for a
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
   13 frames of at most 4 MiB) load in 0.1 s into 30,931 series and 106,813 sets, 17.0 MiB (577 bytes a series) before
   any series is propagated.
+- Carried forecast (SPEC 18; `test/carried-*.e2e.mjs`): `fit` with `$PCF` OUTPUT.START_TIME and STOP_TIME writes the
+  ephemeris block's states between them into the `$OCM` as Chebyshev position segments (POLYNOMIAL_POSITION_RECORDS,
+  TRAJ_TYPE POLYNOMIAL_POS, in the set's TRAJ_REF_FRAME) within 1 cm, the theory set fitted as without them and the jump
+  to the theory at each end in the OD COMMENT; `propagate`, `load_epochs` with `sdnap_epochs_set_at` and
+  `sdnap_epochs_at`, and `propagate_epochs` fly the forecast inside its span and the theory elsewhere. Measured on
+  FFM's flights at 60 s: at most 5.1 mm from the forecast, 0.2 to 2.2 mm RMS over a day; 18 to 52 KB per object-day in
+  low orbit, 1 to 7 KB above it and on eccentric orbits (10 to 22 KB and 0.2 to 5 KB at a 10 cm bound). States at most
+  0.1 rad of arc apart (60 s in low orbit); `sdnap_carried_frame_error` gives the frame's bound.
 - Configuration (SDS 1.272.0, `$PCF` 1.0.6): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
   `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
   fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults
@@ -89,7 +99,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   (a day-1 prediction); the span with the smallest tail error (a longer one only when within EXTENSION_MARGIN 0.9,
   eccentric 0.7, of the best shorter one's) is refitted on all the data. The arc grows from two revolutions by threes
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
-  down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); an eccentric block's
+  down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); a fit that stops on
+  a switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches; within 1e-8) is settled on one branch,
+  and refused fit-at-branch-limit when on each side the best set lies across the switch; an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
   no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
@@ -135,7 +147,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 `FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the other
-first-order terms to 12, near-resonant terms, shallow resonances and the half-day resonant tail to 31; each to the degree asked if lower); `HAS_MAXIMUM_DEGREE`
+first-order terms to 12, near-resonant terms, shallow resonances and the half-day resonant tail to 31; each to the degree asked if lower;
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
@@ -146,11 +159,12 @@ day-7 errors are 60.1 m for the half-day case (a sample 1 h after a perigee; the
 23 m radial), 419.4 m for Molniya with drag (its fitted drag coefficient; SPEC 16.11) and 244.3 m for GTO.
 SPEC 16.6 and `test/results/heo-model-truth.json` give the fixtures and day-1, 3 and 7 RTN errors.
 
-At a resonance-class crossing, AP rebuilds its rate and output tables together. On the decaying-GTO fixture,
-day-7 along-track errors are -25,681.230 m with rebuilding, -26,849.503 m with epoch hold, and -22,083.870 m
-for the noncrossing companion (16.290% difference; E2E bound 25%). Both half-day terms remain in the output,
-with sampled perigee along-track amplitudes 552.685 and 592.770 m. The remaining absolute error is attributed
-to unresolved perigee-drag and third-body force detail, not isolated here. SPEC 16.7 defines the fixture.
+A set's branch (resonance class, the 1,100-minute regime, the eccentricity switches) is decided at its epoch and held
+for the whole flight, so its output is continuous in time (SPEC 16.7); AP's elements are defined per branch, and the
+module never differences or blends two branches (covariance, fit, epoch store). On the decaying-GTO fixture, whose mean
+motion leaves the half-day band during the week, the day-7 along-track error is -168,218.829 m with the class held
+against -167,341.326 m when 0.6.6 and 0.6.7 rebuilt their tables for the current class, and -136,267.630 m for the noncrossing
+companion (23.4 %; E2E bound 25 %). SPEC 16.7 defines the fixture.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
@@ -231,10 +245,14 @@ rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
 
 ## Covariance realism
 
-Neither table earns a realism label. SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track and
-cross-track axis; on held-out windows 8 of 18 cells (two regimes, three axes, days 1, 3 and 7) have median |z| inside
-0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times too wide
-in-track and radially). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
+Neither table earns a realism label. The covariance is positive semidefinite by construction and is not calibrated. The
+band of SPEC 12.7 cannot establish realism: it accepts variance errors of 2.3, 0.2 and 0.01 on the three principal axes
+together, a perfect covariance fails it with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise
+sizes were tuned on the windows tested. With the model otherwise exact, the fitted sigma of B and S is too small by
+sqrt(3N - L), 46 for a 24 h arc sampled every 120 s. SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track
+and cross-track axis; on held-out windows the median |z| of 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7)
+lies inside 0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times
+too wide in-track and radially); that count does not establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
@@ -279,8 +297,27 @@ at ingest to span roughly eight days each way. Checkpoints are filled lazily. A 
 bracket only interpolates; the first distant query integrates from the epoch. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond that span,
 work grows with the time gap from the nearest preceding retained node. Checkpoint storage is bounded;
-query work is not bounded independently of lead time. AP class crossings can allocate temporary coefficient
-tables. Results do not depend on request order. SPEC 9 describes the cache and grid.
+query work is not bounded independently of lead time. An AP state depends on the order of requests: the same record flown in ascending and in random order differs by up
+to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at geosynchronous altitude; a single state
+from a fresh record differs from the ascending pass by up to 8.8 mm. Over 30 days at 60 s, reversed or shuffled against
+the ascending pass, `test/kernel-cost.mjs --diff` measures up to 0.18 m at 300 km (B 6.4e-3 m^2/kg, active weather) and
+0.29 m on a low orbit at e 0.05 with tesseral degree 31. SPEC 9 describes the cache and grid.
+
+AP's cost against SGP4's depends on the request pattern (0.6.6, `test/kernel-patterns.mjs`,
+`test/results/kernel-patterns.json`: made-up orbits, AP seeded with zonal 20, tesseral 31 at e 0.048 and below and
+NRLMSISE-00, SGP4 on the same elements, CPU per state, AP and SGP4 interleaved, median of 7 rounds, owner Mac under
+load). One record stepped alone in ascending order at 300 s: 1.2 to 2.7 times on near-circular orbits. Many records
+stepped together, every record at each instant (`sdnap_epochs_at`, 2 to 10,000 records): 34 to 40 times in low orbit,
+7.3 to 7.9 times in medium Earth orbit, 2.2 times at geosynchronous altitude; each record's tesseral and third-body
+tables are rebuilt when another record was flown last. The same states record by record: 1.1 to 3.4 times. The first
+state of a freshly loaded record in a running process: 52 to 66 times at its epoch, 28 to 96 times a day later, 123 to
+289 times a week later (3,158 to 10,833 times on a transfer orbit at e 0.72); a process pays 390 to 660 µs more once.
+Times in random order: 37 to 153 times (1,990 on the transfer orbit); a request outside the cached bracket integrates
+from the nearest checkpoint. Above e 0.05 (perigee 600 km, tesseral 31) a low orbit costs 77 to 88 times, against 2.6
+to 2.7 at e 0.02 to 0.05. Through `propagate` in TEME, 7 days at 300 s: a seeded record (no covariance) 1.2 to 2.2
+times; a fitted record writes a covariance line per state (613,304 bytes against SGP4's 185,840) and costs 4.9 to 27
+times. In GCRF and EME2000 a state costs what it costs in TEME (`test/output-frames.mjs`; the output's GCRF matrix comes
+from 6 h nodes, SPEC 16.4); with that matrix computed at each state, both records cost 31 to 47 µs per state there.
 
 
 ## SGP4XP status
@@ -341,14 +378,32 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 
 ## Tests
 
+The tests write only under one scratch root (`test/lib/scratch.mjs`): `SDN_AP_TEST_SCRATCH`, or `sdn-ap-test-scratch` under
+the operating system's temporary directory (never a home directory). They build or compute what they read there: copies of
+earlier releases from git, test builds, the propagator/ffm model-truth caches. The model truth's constant space weather is
+built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of such rows).
+
 - `test/conformance.e2e.mjs` (the task's E2E): a randomized corpus across LEO, SSO, MEO, GEO, HEO and VDS
   over 7 days against the black-box oracle; per-regime maximum and median position difference. The oracle (the
   unmodified US Space Force Sgp4Prop library behind a black-box harness) is not in this repository:
   `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default;
   `SDN_AP_ORACLE_SECOND` the other build for the reference-split class, 9.1.1.0 by default), and the E2E and
-  `spec-vectors/verify.mjs` refuse without it.
+  `spec-vectors/verify.mjs` refuse without it. `--digest-only` checks the module's side of the stored run alone (the
+  SGP4XP corpus's and the SGP4 control's output digests), no oracle. Every E2E that ends with the conformance
+  reproduction (`test/lib/conformance-step.mjs`) refuses at its start when `SDN_AP_ORACLE_ROOT` is unset;
+  `SDN_AP_ORACLE=skip` runs it with that step reduced to `--digest-only`, and says so.
 - `test/rigor/run.mjs`: the rigor suite (`test/rigor/README.md`).
 - `test/bench.mjs`: memory per object and µs per object for a 60 s step, a 1-day jump and a 7-day jump.
+- `test/kernel-cost.mjs`: AP's CPU cost per state against SGP4's and SGP4XP's in the resident epoch store (one
+  `sdnap_epochs_set_at` a state, TEME, 7 days at 300 s and 60 s, cold calls at 1 and 7 days) on made-up orbits from
+  300 km to TESS-like, with `--diff` the largest position and velocity difference between two builds at every state
+  over 30 days (in time order, reversed and shuffled).
+- `test/kernel-patterns.mjs`: AP's cost against SGP4's by request pattern: many records stepped together and record by
+  record, the first state of a fresh record at 0, 1 and 7 days, ascending, random and alternating-ends order, e 0 to
+  0.3 in low orbit, and the public `propagate` in TEME and GCRF with and without a covariance.
+- `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
+  one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
+  not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
@@ -372,6 +427,9 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
   / HERMITE; the blended covariance; `propagate_epochs` against the resident store bit for bit; and, from the local
   Space-Track archive, seven days of the catalog (its memory, selection and continuity on a sample; NOT MEASURED
   without the archive).
+- `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
+  the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
+  step between two sets on different branches and between a carried forecast and the theory (two forecasts blend).
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.
@@ -463,7 +521,9 @@ error, the set above 0.3 the nearer to the reference (SPEC 16.11).
 
 Above e 0.3 AP's drag is evaluated per perigee passage (SPEC 16.12): the mean of the passages before and after the
 rate's time, each node at the Earth angle and date of its own time on the pass, over the whole orbit, with the pass's
-short-period steps in the output so the osculating elements step at perigee where the mean elements ramp. At e 0.3 and
+short-period steps in the output so the osculating elements step at perigee where the mean elements ramp. From 0.6.6
+the output takes those rates from three evaluations per stretch of a revolution inside one grid interval (SPEC 16.12),
+not one at every state. At e 0.3 and
 below, and without drag, propagations are 0.4.15's byte for byte. Seeded at the truth's drag coefficient with the Sun
 and Moon off, AP's drag energy per pass over FFM's goes from 0.9840, 0.9907 and 0.9958 to 1.0026, 0.9991 and 0.9987
 (Molniya, GTO, 500 km perigee GTO), and the drag theory's own day-7 along-track error with the Sun and Moon on from 594 m,
