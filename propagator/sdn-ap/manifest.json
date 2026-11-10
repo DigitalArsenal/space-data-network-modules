@@ -5,7 +5,7 @@
   "type": "Propagator",
   "encrypted": false,
   "requiresProtection": false,
-  "description": "General-perturbations propagation of whole catalogs: SGP4 and SGP4XP (the US Space Force SGP4-XP theory, clean-room), batch and structure-of-arrays, bounded memory, random access in time; an AP state depends on the order of requests, by up to 12.7 mm at 500 km, 0.18 m at 300 km and 0.29 m on a low orbit at e 0.05 with tesseral degree 31 (SPEC 9; test/kernel-cost.mjs --diff).",
+  "description": "General-perturbations propagation of whole catalogs: SGP4 and SGP4XP (the US Space Force SGP4-XP theory, clean-room), batch and structure-of-arrays, bounded memory, random access in time (an AP state asked out of order costs 37 to 153 times SGP4's on near-circular orbits, against 1.2 to 2.5 times in ascending order; README, Memory and time; test/kernel-patterns.mjs); an AP state depends on the order of requests, by up to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit, 0.27 mm at geosynchronous altitude, 0.18 m at 300 km and 0.29 m on a low orbit at e 0.05 with tesseral degree 31 (SPEC 9; test/kernel-cost.mjs --diff).",
   "delivery": {
     "channel": "sdn-module-delivery",
     "catalogId": "com.spacedatanetwork.sdn-ap-propagator"

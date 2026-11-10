@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.6 (dist ee594dad).
+Version 0.6.6 (dist 6baf97f0).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1462,7 +1462,14 @@ agree to 0 mm]*. An AP state in this module depends on the order of requests: th
 order differs by up to 12.7 mm at 500 km (median 2.0 mm), 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at
 geosynchronous altitude; a single state from a fresh record differs from the ascending pass by up to 8.8 mm; over 30 days at
 60 s, reversed or shuffled against the ascending pass, test/kernel-cost.mjs --diff measures up to 0.18 m at 300 km (B 6.4e-3
-m^2/kg, active weather) and 0.29 m on a low orbit at e 0.05 with tesseral degree 31. SGP4 differs by 0 in every case. SGP4XP GEO nodes fall on
+m^2/kg, active weather) and 0.29 m on a low orbit at e 0.05 with tesseral degree 31; on a transfer orbit at e 0.72, 7 days
+at 300 s, random against ascending, 0.9 µm. SGP4 differs by 0 in every case. The same build asked the same requests in
+the same order writes the same bytes (ascending twice: 0 in every case); a comparison of two builds
+(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity)
+and prints the reversed and shuffled differences beside it. Out of order AP pays for it: a request outside the cached
+bracket integrates from the nearest checkpoint, and in random order an AP state costs 37 to 153 times SGP4's on
+near-circular orbits and 1,990 times on the transfer orbit (test/kernel-patterns.mjs order, 7 days at 300 s; 1.2 to
+2.5 times ascending). SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 

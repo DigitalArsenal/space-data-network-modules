@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.6 (dist ee594dad).
+Version 0.6.6 (dist 6baf97f0).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -291,6 +291,21 @@ from a fresh record differs from the ascending pass by up to 8.8 mm. Over 30 day
 the ascending pass, `test/kernel-cost.mjs --diff` measures up to 0.18 m at 300 km (B 6.4e-3 m^2/kg, active weather) and
 0.29 m on a low orbit at e 0.05 with tesseral degree 31. SPEC 9 describes the cache and grid.
 
+AP's cost against SGP4's depends on the request pattern (0.6.6, `test/kernel-patterns.mjs`,
+`test/results/kernel-patterns.json`: made-up orbits, AP seeded with zonal 20, tesseral 31 at e 0.048 and below and
+NRLMSISE-00, SGP4 on the same elements, CPU per state, AP and SGP4 interleaved, median of 7 rounds, owner Mac under
+load). One record stepped alone in ascending order at 300 s: 1.2 to 2.7 times on near-circular orbits. Many records
+stepped together, every record at each instant (`sdnap_epochs_at`, 2 to 10,000 records): 34 to 40 times in low orbit,
+7.3 to 7.9 times in medium Earth orbit, 2.2 times at geosynchronous altitude; each record's tesseral and third-body
+tables are rebuilt when another record was flown last. The same states record by record: 1.1 to 3.4 times. The first
+state of a freshly loaded record in a running process: 52 to 66 times at its epoch, 28 to 96 times a day later, 123 to
+289 times a week later (3,158 to 10,833 times on a transfer orbit at e 0.72); a process pays 390 to 660 µs more once.
+Times in random order: 37 to 153 times (1,990 on the transfer orbit); a request outside the cached bracket integrates
+from the nearest checkpoint. Above e 0.05 (perigee 600 km, tesseral 31) a low orbit costs 77 to 88 times, against 2.6
+to 2.7 at e 0.02 to 0.05. Through `propagate` in TEME, 7 days at 300 s: a seeded record (no covariance) 1.2 to 2.2
+times; a fitted record writes a covariance line per state (613,304 bytes against SGP4's 185,840) and costs 4.9 to 27
+times. In GCRF with explicit EPOCHS both cost 31 to 47 µs per state.
+
 
 ## SGP4XP status
 
@@ -362,6 +377,9 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
   `sdnap_epochs_set_at` a state, TEME, 7 days at 300 s and 60 s, cold calls at 1 and 7 days) on made-up orbits from
   300 km to TESS-like, with `--diff` the largest position and velocity difference between two builds at every state
   over 30 days (in time order, reversed and shuffled).
+- `test/kernel-patterns.mjs`: AP's cost against SGP4's by request pattern: many records stepped together and record by
+  record, the first state of a fresh record at 0, 1 and 7 days, ascending, random and alternating-ends order, e 0 to
+  0.3 in low orbit, and the public `propagate` in TEME and GCRF with and without a covariance.
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
