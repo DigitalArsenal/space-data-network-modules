@@ -16,8 +16,10 @@ struct Epoch {
 // explicit Epoch overload permits an independently supplied two-part UT1.
 //
 // GCRF and J2000 are aliases here: the classical FK5 axes omit frame bias.
-// MOD/TOD use IAU 1976/1980; TEME uses R3(eqeq94)*pnm80; PEF/ECEF/ITRF use
-// R3(gst94)*pnm80, with zero polar motion for these general transforms.
+// MOD/TOD use IAU 1976/1980; PEF/ECEF/ITRF use R3(gst94)*pnm80, with zero
+// polar motion for these general transforms. TEME is AIAA 2006-6753's, as
+// foundation/frames defines it: R3(GAST06 - GMST82)*pnm06a (UT1 = UTC without
+// EOP), not a member of the FK5 chain.
 // Every valid Frame pair is supported. Invalid frame values or invalid dates
 // return a flagged all-NaN matrix/state; no exceptions or identity fallback.
 Matrix3x3 getTransformMatrix(Frame from, Frame to, const Epoch& epoch);

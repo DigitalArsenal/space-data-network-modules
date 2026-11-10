@@ -53,10 +53,16 @@ Matrix3x3 frameBasis(Frame frame, const Epoch& epoch) {
         case Frame::TOD:
             eraPnm80(epoch.tt1, epoch.tt2, matrix);
             return Matrix3x3(&matrix[0][0]);
-        case Frame::TEME:
-            eraPnm80(epoch.tt1, epoch.tt2, matrix);
-            eraRz(eraEqeq94(epoch.tt1, epoch.tt2), matrix);
+        case Frame::TEME: {
+            // The TEME of AIAA 2006-6753 (sec. II.D eq. 1: r_PEF = R3(GMST82) r_TEME), term for term
+            // foundation/frames' gcrfToTeme: R3(GAST06 - GMST82) NPB06 at TT, both sidereal angles of UT1
+            // (= UTC without EOP). TEME is a defined frame, not a member of this file's FK5 chain.
+            eraPnm06a(epoch.tt1, epoch.tt2, matrix);
+            const double angle = eraGst06(epoch.ut11, epoch.ut12, epoch.tt1, epoch.tt2, matrix) -
+                                 eraGmst82(epoch.ut11, epoch.ut12);
+            eraRz(angle, matrix);
             return Matrix3x3(&matrix[0][0]);
+        }
         case Frame::ITRF:
             eraPnm80(epoch.tt1, epoch.tt2, matrix);
             eraRz(eraGst94(epoch.ut11, epoch.ut12), matrix);
