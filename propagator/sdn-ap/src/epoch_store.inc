@@ -598,7 +598,8 @@ inline uint64_t bytes_of(const Store& st) {
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   for (const Series& s : st.series) {
     b += s.object_id.capacity() + s.originator.capacity() + s.name.capacity();
-    for (const Slot& q : s.slots) b += (q.xp ? sizeof(xpt::XpSat) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) : 0);
+    // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes)
+    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) : 0);
   }
   return b;
 }

@@ -5422,12 +5422,22 @@ struct DragPassCache {
 /// What a set in a store keeps of the evaluation caches between its states (SPEC 9): the third-body tables of its
 /// bracket, its m-daily terms and its tesseral terms, held from the pool within its memory budget (CachePool). A set
 /// without them uses the thread's, as every set did before 0.6.12.
+/// One direction's grid nodes, contiguous from the epoch (node k at position k - 1), up to the checkpoint span: a time
+/// in it is a lookup, never a re-integration (run_bracket).
+struct NodeRun {
+  Node* nodes = nullptr;
+  int32_t count = 0, cap = 0;
+  int32_t hint = 0;    ///< the lower node of the last bracket (0: the epoch)
+  bool ended = false;  ///< the grid ends after the last node (a node that is not a number or does not advance)
+};
+
 struct SetCaches {
   ActiveBracket ab;
   tess::MdailyEvalCache md;
   tess::SpSetSlot sp;
+  NodeRun run[2];      ///< forward, backward
   uint64_t stamp = 0;  ///< the pool's clock when the set was last flown
-  uint64_t bytes = 0;  ///< what the pool counts for it
+  uint64_t bytes = 0;  ///< what the pool counts for it (with the node runs)
 };
 
 struct XpSat {
@@ -5452,9 +5462,10 @@ struct XpSat {
   DragPassCache drag_pass;
 };
 inline void pool_release(XpSat& s);
-/// A store's set (the epoch store's and the row store's): it may keep its caches between states (SetCaches).
+/// A store's AP set (the epoch store's and the row store's): it may keep its caches between states (SetCaches). An
+/// SGP4XP set reads none of them and keeps none.
 inline void xp_set_pooled(XpSat& s) {
-  if (s.init_error == 0) s.pooled = 1;
+  if (s.init_error == 0 && is_ap_ctx(s.ctx)) s.pooled = 1;
 }
 
 /// SPEC 16.11: the nominal set whose grids the copies initialized on this thread while a GridShareScope lives read (the covariance's
@@ -5845,6 +5856,7 @@ inline void pool_drop_locked(CachePool& p, XpSat& s) {
     tess::sp_cache_free(c->sp.cache);
   }
   p.held -= c->bytes;
+  for (NodeRun& r : c->run) std::free(r.nodes);
   const int32_t i = s.pool_index;
   XpSat* last = p.holders.back();
   p.holders[static_cast<size_t>(i)] = last;
@@ -5892,6 +5904,27 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   unlock(&p.lock);
   return c;
+}
+
+extern "C" size_t malloc_usable_size(void*);
+
+/// What one set holds in memory: the XpSat, the term tables it owns (malloc_usable_size: as the allocator holds them;
+/// a table it shares with another set counts there), the grid of its tesseral families it owns, and its caches from the
+/// pool (SetCaches with its node runs and tesseral cache).
+inline uint64_t xp_bytes(const XpSat& s) {
+  auto u = [](const void* p) -> uint64_t { return p != nullptr ? malloc_usable_size(const_cast<void*>(p)) : 0u; };
+  const RateContext& c = s.ctx;
+  uint64_t b = sizeof(XpSat);
+  if (!(c.shared_mask & 1)) b += u(c.half_day);
+  if (!(c.shared_mask & 2)) b += u(c.res_epoch);
+  if (!(c.shared_mask & 4)) b += u(c.res_taylor);
+  if (!(c.shared_mask & 8)) b += u(c.shallow);
+  if (!(c.shared_mask & 16)) b += u(c.zt);
+  if (!(c.shared_mask & 32)) b += u(c.mdaily);
+  if (!(c.shared_mask & 64)) b += u(c.sp_orig != nullptr ? c.sp_orig : c.sp) + u(c.sp_comb);
+  if (c.wide != nullptr && c.wide_owned) b += u(c.wide) + u(c.wide->m) + u(c.wide->w) + u(c.wide->v) + u(c.wide->dv);
+  if (s.caches != nullptr) b += s.caches->bytes + sp_cache_bytes(s.caches->sp.cache);
+  return b;
 }
 
 /// Frees s's caches (xp_release).
@@ -5976,14 +6009,98 @@ void sp_pool_release(SpEvalCache* cache) {
 }
 }  // namespace tess
 
-/// The bracketing nodes of t (lower, upper in the direction of t). Lazily
-/// fills the checkpoints; an AP state depends on the order of requests by up to 12.7 mm at 500 km, 0.29 m at e 0.05 with
-/// tesseral degree 31 (SPEC 9).
+/// Room for `want` nodes in run r of s's caches, charged to the pool. False when the pool has none.
+inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
+  const uint64_t delta = static_cast<uint64_t>(want - r.cap) * sizeof(Node);
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  const bool room = pool_reclaim_locked(p, delta, &s);
+  if (room) {
+    p.held += delta;
+    c.bytes += delta;
+  } else {
+    p.refused += 1;
+  }
+  unlock(&p.lock);
+  if (!room) return false;
+  Node* grown = static_cast<Node*>(std::realloc(r.nodes, static_cast<size_t>(want) * sizeof(Node)));
+  if (grown == nullptr) {
+    lock(&p.lock);
+    p.held -= delta;
+    c.bytes -= delta;
+    unlock(&p.lock);
+    return false;
+  }
+  r.nodes = grown;
+  r.cap = want;
+  return true;
+}
+
+/// The bracket of t from s's node run in direction dir (s's caches held by this thread): 1 found (lo, hi point into the
+/// run or at the epoch), 0 the grid ends before t, -1 t lies beyond the checkpoint span or the pool has no room (the
+/// checkpoints answer). The run is extended to t as bracket_ptr would integrate, filling the same checkpoints.
+inline int run_bracket(XpSat& s, SetCaches& c, int dir, int di, double t, const Node*& lo, const Node*& hi) {
+  NodeRun& r = c.run[di];
+  const double at = dir * t;
+  auto beyond = [&](const Node& n) { return dir * n.t > at; };
+  const int32_t limit = kSparse * s.stride;
+  while (r.count == 0 || !beyond(r.nodes[r.count - 1])) {
+    if (r.ended) return 0;
+    if (r.count >= limit) return -1;
+    if (r.count == r.cap && !run_grow(s, c, r, std::min(limit, std::max(16, 2 * r.cap)))) return -1;
+    const Node& cur = r.count > 0 ? r.nodes[r.count - 1] : s.epoch;
+    Node nxt;
+    // a node that is not a number, or does not advance, ends the grid: every later time is refused, never looped on
+    if (!next_node(s.ctx, cur, dir, nxt) || !std::isfinite(nxt.t) || !(dir * nxt.t > dir * cur.t)) {
+      r.ended = true;
+      return 0;
+    }
+    const int32_t idx = dir * nxt.index;
+    if (idx % s.stride == 0) {
+      const int32_t slot = idx / s.stride - 1;
+      if (slot == s.sparse_count[di] && slot < kSparse) {
+        s.sparse[di][slot] = nxt;
+        s.sparse_count[di] = slot + 1;
+      }
+    }
+    r.nodes[r.count++] = nxt;
+  }
+  auto node_at = [&](int k) -> const Node& { return k == 0 ? s.epoch : r.nodes[k - 1]; };
+  int k = r.hint;
+  if (!(k >= 0 && k < r.count && !beyond(node_at(k)) && beyond(node_at(k + 1)))) {
+    int k_lo = 0, k_hi = r.count;  // node_at(k_lo) is not beyond t, node_at(k_hi) is
+    while (k_hi - k_lo > 1) {
+      const int mid = (k_lo + k_hi) / 2;
+      if (beyond(node_at(mid))) k_hi = mid;
+      else k_lo = mid;
+    }
+    k = k_lo;
+    r.hint = k;
+  }
+  // the window holds the bracket, as bracket_ptr leaves it (drag_pass_rates reads it)
+  const Node& nlo = node_at(k);
+  if (!s.window_valid[di] || s.window[di][0].index != nlo.index) {
+    s.window[di][0] = nlo;
+    s.window[di][1] = node_at(k + 1);
+    s.window_valid[di] = 1;
+  }
+  lo = &s.window[di][0];
+  hi = &s.window[di][1];
+  return 1;
+}
+
+/// The bracketing nodes of t (lower, upper in the direction of t). A set flown with its caches finds t in its node run
+/// (run_bracket); otherwise, and beyond the run's span, the latest bracket or the furthest checkpoint at or before t
+/// and integration from it, which fills the checkpoints. The nodes do not depend on the order of requests (SPEC 9).
 inline bool bracket_ptr(XpSat& s, double t, const Node*& lo, const Node*& hi) {
   const int dir = t >= 0.0 ? 1 : -1;
   const int di = dir > 0 ? 0 : 1;
   const double at = dir * t;
   auto beyond = [&](const Node& n) { return dir * n.t > at; };
+  if (g_flown_set == &s && s.caches != nullptr) {
+    const int rc = run_bracket(s, *s.caches, dir, di, t, lo, hi);
+    if (rc >= 0) return rc == 1;
+  }
   // window hit
   if (s.window_valid[di] && !beyond(s.window[di][0]) && beyond(s.window[di][1])) {
     lo = &s.window[di][0];
@@ -6105,6 +6222,29 @@ inline bool mean_at(XpSat& s, double t, double* y) {
   return true;
 }
 
+/// The mean state at t for a state flown at another time (a schedule node's grid, wide_node): the brackets and caches
+/// that time's output reads (the window, the third-body bracket, the tesseral anchor) are left as they were, so the
+/// output does not depend on whether the grid had to be built.
+inline bool mean_at_aside(XpSat& s, double t, double* y) {
+  if (t == 0.0) {
+    for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
+    return true;
+  }
+  Node lo, hi;
+  lock(&s.lock);
+  Node window[2][2];
+  int32_t window_valid[2];
+  std::memcpy(window, s.window, sizeof window);
+  std::memcpy(window_valid, s.window_valid, sizeof window_valid);
+  const bool ok = bracket(s, t, lo, hi);
+  std::memcpy(s.window, window, sizeof window);
+  std::memcpy(s.window_valid, window_valid, sizeof window_valid);
+  unlock(&s.lock);
+  if (!ok) return false;
+  hermite(lo, hi, t, y);
+  return true;
+}
+
 /// SPEC 1.5 (amendment 6): the rates of a native-element report at t, a fresh initialization at t: a set with epoch t
 /// made from the mean elements y there (same B and AGOM, full precision), initialized (its resonance class and F, G
 /// from those elements, theta_G the 1.2 value at t), its epoch rates.
@@ -6160,7 +6300,7 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
     }
   unlock(&s.wide_lock);
   double yj[6];
-  if (!mean_at(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
+  if (!mean_at_aside(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
   const Kepler k = kepler_of(yj);
   if (!(k.e < 1.0)) return false;
   out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i, s.ctx.wide_fit != 0);
@@ -6192,7 +6332,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   const Frame fr = frame_of(y);
   const Kepler k = kepler_of(y, fr.a);
   if (!(k.e < 1.0) || !(fr.n > 0.0)) return false;
-  const double period = kTwoPi / fr.n, tp = t - k.m / fr.n;
+  const double tp_state = t - k.m / fr.n;
   constexpr int K = DragPassCache::kPoints;
   const int di = t >= 0.0 ? 0 : 1;
   const double dir = t >= 0.0 ? 1.0 : -1.0;
@@ -6201,6 +6341,18 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   const Node lo = s.window[di][0], hi = s.window[di][1];
   unlock(&s.lock);
   if (!valid || !(dir * lo.t <= dir * t && dir * t < dir * hi.t)) return false;
+  // the revolution's perigee time and period from the bracket's lower node, the same for every state of the revolution
+  // (a state's own differ by its mean anomaly's drift and its mean motion, so the first state asked would set the
+  // segment)
+  double tp, period;
+  {
+    const Frame flo = frame_of(lo.y);
+    const Kepler klo = kepler_of(lo.y, flo.a);
+    if (!(klo.e < 1.0) || !(flo.n > 0.0)) return false;
+    period = kTwoPi / flo.n;
+    const double tp_lo = lo.t - klo.m / flo.n;
+    tp = tp_lo + std::round((tp_state - tp_lo) / period) * period;
+  }
   out.ctx_id = s.ctx.ctx_id;
   out.t = t;
   DragPassCache& c = s.drag_pass;
