@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
+import { scratchTemp } from "../lib/scratch.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openModule, THEORY } from "../lib/module.mjs";
@@ -45,7 +45,7 @@ export const checks = [
         return { s, states: stale.has(s.satnum) ? [] : s.states, times: refusal === null ? listed : [...listed, refusal], refusal };
       });
       // improved mode: the base built natively (foundation/sgp4-str3, tests/states.cpp)
-      const work = fs.mkdtempSync(path.join(os.tmpdir(), "rigor-str3-"));
+      const work = scratchTemp("rigor-str3-");
       let blocks;
       try {
         const driver = path.join(work, "states");

@@ -4,18 +4,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {scratchRoot} from './scratch.mjs';
 const moduleRoot=fileURLToPath(new URL('../../',import.meta.url));
 const modulesRoot=path.resolve(moduleRoot,'../..');
 export function buildDiagnostic(name,extra,transform=s=>s){
- const root=path.join('/Users/tj/software/terrain-work/body-look/codex-apfix-d9',name);
+ // a fresh tree each time: nothing of an earlier build (sources, links, outputs) is read
+ const root=path.join(scratchRoot,name);fs.rmSync(root,{recursive:true,force:true});
  const dir=path.join(root,'propagator/sdn-ap');fs.mkdirSync(dir,{recursive:true});
- const foundation=path.join(root,'foundation');if(!fs.existsSync(foundation))fs.symlinkSync(path.join(modulesRoot,'foundation'),foundation,'dir');
+ const foundation=path.join(root,'foundation');fs.symlinkSync(path.join(modulesRoot,'foundation'),foundation,'dir');
  for(const f of ['build.mjs','package.json','plugin-manifest.json','LICENSE','NOTICE'])fs.copyFileSync(path.join(moduleRoot,f),path.join(dir,f));
  for(const d of ['src','LICENSES'])fs.cpSync(path.join(moduleRoot,d),path.join(dir,d),{recursive:true});
- // the checkout's own packages (a link left by a build from another checkout points at its pins)
- const nm=path.join(dir,'node_modules'),want=path.join(moduleRoot,'node_modules');
- if(fs.lstatSync(nm,{throwIfNoEntry:false})&&fs.readlinkSync(nm)!==want)fs.unlinkSync(nm);
- if(!fs.existsSync(nm))fs.symlinkSync(want,nm,'dir');
+ // the checkout's own packages
+ fs.symlinkSync(path.join(moduleRoot,'node_modules'),path.join(dir,'node_modules'),'dir');
  const p=path.join(dir,'src/xp_theory.inc');fs.writeFileSync(p,transform(fs.readFileSync(p,'utf8')));
  fs.appendFileSync(path.join(dir,'src/sdn_ap_module.cpp'),'\n'+extra+'\n');
  const log=fs.openSync(path.join(root,'build.log'),'w');

@@ -348,6 +348,11 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 
 ## Tests
 
+The tests write only under one scratch root (`test/lib/scratch.mjs`): `SDN_AP_TEST_SCRATCH`, or `sdn-ap-test-scratch` under
+the operating system's temporary directory (never a home directory). They build or compute what they read there: copies of
+earlier releases from git, test builds, the propagator/ffm model-truth caches. The model truth's constant space weather is
+built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of such rows).
+
 - `test/conformance.e2e.mjs` (the task's E2E): a randomized corpus across LEO, SSO, MEO, GEO, HEO and VDS
   over 7 days against the black-box oracle; per-regime maximum and median position difference. The oracle (the
   unmodified US Space Force Sgp4Prop library behind a black-box harness) is not in this repository:

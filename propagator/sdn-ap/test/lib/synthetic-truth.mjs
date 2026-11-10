@@ -21,9 +21,11 @@ import {packOem,rfm,jdOf,rotate,FRAME_PROBE} from './frames.mjs';
 import {configuration,prior,pcfPriorForm} from './pcf.mjs';
 import {seedOcm,rowsThrough,spwStream,fittedOf,flight,legacyBuild,T as OCM_TYPE} from './ocm.mjs';
 import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tests/lib/prwCodec.mjs';
+import {scratchRoot} from './scratch.mjs';
+import {spwFixtureRows} from './spw-constant.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000,FIT=3;
 const ffmPath=new URL('../../../ffm/dist/isomorphic/module.wasm',import.meta.url).pathname;
-const scratch=process.env.SDN_AP_SYNTHETIC_CACHE??'/Users/tj/software/terrain-work/body-look/codex-apfix-d9/synthetic-truth';
+const scratch=path.join(scratchRoot,'synthetic-truth');
 const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
 const iso=ms=>new Date(ms).toISOString().replace('Z','');
 function oem(lines,fit=false){
@@ -36,7 +38,7 @@ export async function runSyntheticTruth(c){
  if(c.modulePath&&legacyBuild(c.modulePath))return(await import('./synthetic-truth-0.4.mjs')).runSyntheticTruth(c);
  fs.mkdirSync(scratch,{recursive:true});
  const m=await openModule(),x=m.x,p=x.sdnap_alloc(256),a=(off,n)=>new Float64Array(m.harness.memory.buffer,p+off,n),jd=jdOf(epoch);
- const rows=JSON.parse(fs.readFileSync(process.env.FFM_SPW_FIXTURE??'/Users/tj/software/terrain-work/ffm-spw-fixture/spw-constant-20261029.json'));
+ const rows=spwFixtureRows();
  const rowList=rowsThrough(Array.isArray(rows)?rows:rows.rows),weather=spwStream(rowList);
  // fit runs under the forces the record then states: the caps, NRLMSISE-00 (c.drag) or Jacchia 1970, both on the rows
  const tess=c.tesseral??31,zon=c.zonal??20;
