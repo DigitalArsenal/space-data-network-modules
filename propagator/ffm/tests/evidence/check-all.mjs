@@ -4,11 +4,13 @@
 // raw summary scores against the shared export (GMAT limits only for GMAT).
 // Source, frame, epochs, units and tolerance rationale remain in consolidated.json.
 // No network, module rebuild, unit-test suite, or parallel child execution.
-// node propagator/ffm/tests/evidence/check-all.mjs   (from repository root)
+// FFM_XVAL_GMAT_WORK=<GMAT work folder> node propagator/ffm/tests/evidence/check-all.mjs   (from repository root;
+// the consolidation pins the GMAT diagnostic reports kept there, outside the repository)
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { here, root, childEnv, generate, applyBlocks } from './consolidate.mjs';
+import { scoredFile, scoredRecord } from './rescore-all.mjs';
 const checks = [
   ['Orekit', 'propagator/ffm/tests/evidence/orekit/check-orekit.mjs'],
   ['GMAT R2026a / R2022a', 'propagator/ffm/tests/evidence/gmat/check-gmat.mjs'],
@@ -50,6 +52,12 @@ try {
   const json = JSON.stringify(result.data, null, 2) + '\n', output = path.join(here, 'consolidated.json');
   if (!fs.existsSync(output) || fs.readFileSync(output, 'utf8') !== json)
     throw new Error('consolidated.json differs from regenerated evidence; run consolidate.mjs --write and review it.');
+  // The current build's per-build file (rescore-all.mjs) must carry what consolidated.json gives.
+  const scored = scoredFile(result.data.module.version, result.data.module.sha256), scoredName = path.relative(root, scored);
+  if (!fs.existsSync(scored)) throw new Error(`${scoredName} is missing; run rescore-all.mjs.`);
+  const expected = scoredRecord(result.data), actual = JSON.parse(fs.readFileSync(scored, 'utf8'));
+  for (const key of ['module', 'scoredOn', 'comparisons', 'dragDiagnostics', 'subset27'])
+    if (JSON.stringify(actual[key]) !== JSON.stringify(expected[key])) throw new Error(`${scoredName}: ${key} differs from consolidated.json; run rescore-all.mjs.`);
   // Writing identical bytes makes successful runs idempotent, without timestamps.
   fs.writeFileSync(output, json); fs.writeFileSync(md, result.markdown);
   for (const t of result.data.tools) {
@@ -69,6 +77,7 @@ try {
   console.log('SGP4 against its STR#3 base: per-regime maxima recomputed from the summary; the rows state no limit and count as diagnostic.');
   console.log('Drag diagnostics: GMAT steps30 and Nyx finest scores reproduced before suite re-scoring; full supported drag coverage checked; per-tool scored evidence unchanged.');
   console.log('Artifacts: consolidated.json, CONSOLIDATED.md and both generated documentation blocks match byte-for-byte.');
+  console.log(`Per-build result: ${scoredName} carries the comparisons of consolidated.json.`);
   if (failures.length) {
     console.log(`FAIL consolidated evidence E2E: ${failures.length} child contract failure(s); all 8 scripts ran; consolidated data/documents match.`);
     process.exitCode = 1;

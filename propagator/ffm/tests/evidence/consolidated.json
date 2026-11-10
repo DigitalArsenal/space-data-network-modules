@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "module": {
-    "version": "2.2.0",
-    "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+    "version": "2.3.0",
+    "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   "rescore": {
-    "date": "2026-11-04",
+    "date": "2026-11-10",
     "notRescored": [
       {
         "evidence": "orekit/summary-simple-eop.json",
@@ -162,7 +162,7 @@
         "status": "unavailable",
         "reason": "The original Orekit 13.1 jar is not retained locally; the stored trajectory and generation source are pinned. Installed 13.1.2 and 13.1.6 jars are not substituted."
       },
-      "summarySha256": "127fc51b056ef5fb229f200776b5c22c8b0b2d3e49a7f3407cbe899bd9624561",
+      "summarySha256": "67d2d612fb83afadeddfa05552571027cb8b96a8f32c26a2dd0639ef9b8d0304",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -1658,7 +1658,7 @@
         "gmatConsoleSha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
         "gmatBaseSha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26"
       },
-      "summarySha256": "5ecf13508ce13cb969020599b35f955dd86c98200acc533abb7150a17c0740ad",
+      "summarySha256": "a74804a07789d9b203ff66e64dc22fbdd907a31dcdaea3e3c82a2ea22c3a0d50",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -3413,7 +3413,7 @@
         "gmatConsoleSha256": "c8a214cf761d7d074c20bee17586a16ac9c9dca9475018e8a0866116377ab655",
         "gmatBaseSha256": "25ad1998de28ac0ac5676341b6ea8642ae7fc6fc23fee8b8b7e077392fbe6f98"
       },
-      "summarySha256": "d180f19282ee690173e07d1a365bd9391ad664a87ef63b9429ac24d2c714d295",
+      "summarySha256": "1bd7b5539bb59bc771c0af8bcc119b89f22b39d687126b846f05227c171e2038",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -4641,7 +4641,7 @@
         "binarySha256": "689b59fa8a3919ce4411e3478c458b8a9d0b07b7bfe02c60d282234b20e2db8f",
         "nyxCrateSha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
       },
-      "summarySha256": "d8d418bfb23ae0712a1a081f6cb673a273b591799e462e91931c1bf7821ad0e4",
+      "summarySha256": "d5709a161c558b9811bab33f88d9d6defa1fb9f5fe5100b39b4f02687f75ae77",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -6261,7 +6261,7 @@
         "kernelSha256": "18196bbc8fc5aaf77e2b990012bae60325ca15ad6062048c0bed23e874faf672",
         "python": "3.11.17"
       },
-      "summarySha256": "9a279d83224832641f11dd9d7cae0acd30a2fd9e176320e16245d94bbc4d2745",
+      "summarySha256": "9edf5ae34806c2c6b308b7c24dde5414f402b1b06ac0bbfe012fe8b4d246714b",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -7807,7 +7807,7 @@
         "fixtureSha256": "7a3fdd5a912240e0330d03a8b777129d7530b26eb7c79b22786e8548fc3888bb"
       },
       "provenanceLimitations": "Committed C++ driver trajectory; the package Embind API cannot configure/run propagation (duplicate registrations, station-file initialization, missing STL/Eigen bindings). No Tudat rebuild or rerun was performed.",
-      "summarySha256": "96e9d3cce48bb1879137bab5c20bfaa5fd299c5078d82c009045b95049134c86",
+      "summarySha256": "06fd8b84315afca5fd069cb528259b34c521439409b94023708006b80cda405b",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -8688,7 +8688,7 @@
           }
         }
       },
-      "summarySha256": "4f575b1e35d158d79be86fadbaa55bfc73f8c7697376926c7bf9d78440bf908d",
+      "summarySha256": "e9040725a7947b0a5ddd9f57c6481ea0454842ee1a3d831e9a6211266dd08427",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -10503,7 +10503,7 @@
         },
         "toleranceRationale": "Precession 0.001 mas; classical ERFA identity 1e-7 mas (matrix rounding, <0.021 micrometer at GEO); CIO 0.022 mas includes 0.02 mas hourly CIP interpolation; kernel reads 1 mm. Model-spread rows are diagnostic, limits are not widened."
       },
-      "summarySha256": "8c4526134e29d618139497993fee4b60d9ef1bdb9f0beea254ffc3e1d1de38c5",
+      "summarySha256": "329ca987130dd91395c80a578567e386015140d6a67de6db6caae339f66642c0",
       "counts": {
         "decomposition": 0,
         "diagnostic": 13,
@@ -10830,17 +10830,17 @@
           "met": true,
           "metrics": [
             {
-              "display": "2.0002e-10 mas",
+              "display": "0 mas",
               "label": "maximum difference",
               "limit": 1e-7,
               "limitDisplay": "1e-07 mas",
               "strict": false,
               "unit": "mas",
-              "value": 2.0001955083521162e-10
+              "value": 0
             }
           ],
-          "note": "FK5 TEME definition.",
-          "reference": "ERFA R3(eqeq94) pnm80",
+          "note": "The TEME of AIAA 2006-6753 (lib/coords since 2.3.0).",
+          "reference": "ERFA R3(gst06 - gmst82) pnm06a, UT1=UTC",
           "role": "primary",
           "status": "met"
         },
@@ -10870,17 +10870,17 @@
           "met": true,
           "metrics": [
             {
-              "display": "1.97811e-07 mas",
+              "display": "1.17245e-05 mas",
               "label": "maximum difference",
               "limit": 0.001,
               "limitDisplay": "0.001 mas",
               "strict": false,
               "unit": "mas",
-              "value": 1.9781138590004084e-7
+              "value": 0.000011724499260650525
             }
           ],
-          "note": "Separate foundation/frames IAU 2006/2000A TEME definition.",
-          "reference": "ERFA R3(ee06a) pnm06a",
+          "note": "foundation/frames gcrfToTeme: the TEME of AIAA 2006-6753.",
+          "reference": "ERFA R3(gst06 - gmst82) pnm06a, UT1=UTC",
           "role": "primary",
           "status": "met"
         },
@@ -10890,13 +10890,13 @@
           "met": null,
           "metrics": [
             {
-              "display": "77.6555 mas",
+              "display": "50.3914 mas",
               "label": "maximum difference",
               "limit": null,
               "limitDisplay": "not specified",
               "strict": false,
               "unit": "mas",
-              "value": 77.6555165255079
+              "value": 50.39137899874115
             }
           ],
           "note": "Definition spread.",
@@ -11154,7 +11154,7 @@
         "jwstEpochUtc": "2026-06-10T00:00:00.000",
         "jwstFinalEpochUtc": "2026-06-11T00:00:00.000"
       },
-      "summarySha256": "cd6a63b9190843260bd5ac1f1f2d65af1424fc7c8dfde4a99f66bcdf42849489",
+      "summarySha256": "270281a21fbc5a0f2decc2dd4629ed60786a21ac01fcefd4edc50c79f7e7fdb7",
       "counts": {
         "decomposition": 0,
         "diagnostic": 4,
@@ -11491,12 +11491,12 @@
     {
       "id": "str3",
       "label": "SGP4 against its STR#3 base",
-      "version": "foundation/sgp4-str3; module 1.4.1",
+      "version": "foundation/sgp4-str3; module 1.5.0",
       "evidence": "../../../sgp4/tests/evidence/str3/summary-str3.json",
       "pins": [
         {
           "label": "shipped WASM (propagator/sgp4 dist/browser)",
-          "sha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643"
+          "sha256": "66789d827227af78fa339693f974266634081b56b14568fd5e162f80ac7ce048"
         },
         {
           "label": "library_states.cpp",
@@ -11638,12 +11638,12 @@
     {
       "id": "xp",
       "label": "SGP4-XP",
-      "version": "9.1.1.0; module 0.2.1",
+      "version": "9.1.1.0; module 0.3.0",
       "evidence": "../../../sgp4/tests/evidence/xp/summary-xp.json",
       "pins": [
         {
           "label": "dist/isomorphic/module.wasm",
-          "sha256": "816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef"
+          "sha256": "d9dcd6153f7787ad50cda808652ce721901d8ae2673e410a5fe7ad28b7666b6b"
         },
         {
           "label": "third_party/ussf-sgp4/Sgp4Prop.xp.wasm",
@@ -11662,7 +11662,7 @@
         }
       },
       "stepSetting": "640 sets × 7 times",
-      "summarySha256": "13904736d313cc2298eef683a83b01b00401ba5a33b4e15a131d177d8edc6791",
+      "summarySha256": "11965204b2db22a58db9ef5ba0429af3e35f844c1a7327e532deff908d62027c",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -12827,12 +12827,12 @@
         {
           "label": "FFM trajectories at suite / steps30 / finest",
           "path": "tudat/ffm-tudatpy-1.0.0.json",
-          "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
+          "sha256": "96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8"
         },
         {
           "label": "Anomalous-oxygen diagnostic",
           "path": "gmat/anomalous-oxygen.json",
-          "sha256": "0972d4cb7de6c5c264544c4ea26597d21a81d71176cd8f394864bb431a4ddcfe"
+          "sha256": "cc8e11b8e168e6eb117b2122a9fac75c9ed28305bd3d619545ea98832c37c415"
         },
         {
           "label": "LEO400_F6-field-sun-moon-srp-drag.txt",
@@ -13070,12 +13070,12 @@
         {
           "label": "FFM trajectories at suite / steps30 / finest",
           "path": "tudat/ffm-tudatpy-1.0.0.json",
-          "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
+          "sha256": "96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8"
         },
         {
           "label": "Published-formula / WGS84 trajectories",
           "path": "nyx/drag-settings-diagnostic.json",
-          "sha256": "dc156bb8c11198557061749148076e6639a1e80158675d48cf4005750f7f7e4b"
+          "sha256": "47f4720b1fdc6b425bd0d54057b78aedcc0a39f5f7473a8a66d95e470c9f7fd5"
         }
       ],
       "rows": [
@@ -13222,7 +13222,7 @@
   },
   "xval": {
     "file": "xval/summary.json",
-    "sha256": "77e09653a70ef02af3f74a42ee5264ef06a788f0197e77796326c4cd61cefed3",
+    "sha256": "6f59df9655a8e30509fa278ec147bfb983a695ed77d6c0ab80f46aa42bc1d149",
     "maxima": {
       "gmat": {
         "all": {
@@ -14346,10 +14346,10 @@
       "about": "SGP4-XP (US Space Force Sgp4Prop 9.1.1.0) against the module propagator/sgp4-xp: exact agreement with the library run by its own runtime, plus the Tier B anchors. No independent public reference exists for the XP theory.",
       "module": {
         "name": "@digitalarsenal/sdn-module-propagator-sgp4-xp",
-        "version": "0.2.1"
+        "version": "0.3.0"
       },
       "hashes": {
-        "dist/isomorphic/module.wasm": "816fd137d76197f2af93501d7d71c527383f7589ab698d5d1d3544782cd2feef",
+        "dist/isomorphic/module.wasm": "d9dcd6153f7787ad50cda808652ce721901d8ae2673e410a5fe7ad28b7666b6b",
         "third_party/ussf-sgp4/Sgp4Prop.xp.wasm": "9f061110f12ac85a76ad80dc76cdb8a33ddad64e54d8dab3b6778602e16cbeb7",
         "third_party/ussf-sgp4/Sgp4Prop.xp.js": "0d9848bb0ed7ce6eadd85e22f5325e81492ef03355bab85a580eb421c7f22707",
         "vectors/vectors.json": "9194d2f2c2b3c367aaababa52e90de46d38cc456fbd4514f858d6c1df24fdc07",

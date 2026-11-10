@@ -1,6 +1,6 @@
 {
  "about": "The last re-score of this suite: FFM flown against the stored references, which are not rerun. consolidate.mjs carries the date and the evidence it did not re-score into consolidated.json and CONSOLIDATED.md; check-all.mjs prints the list.",
- "date": "2026-11-04",
+ "date": "2026-11-10",
  "notRescored": [
   {
    "evidence": "orekit/summary-simple-eop.json",

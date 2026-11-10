@@ -21,10 +21,14 @@
 //   of their switch sdnap_epochs_select gives b = -2 and weight 0, the state is the chosen set's bit for bit, and
 //   propagate_epochs names the switch time in the block's COMMENT; two sets on one side blend (b = 1, weight in (0, 1)) and
 //   their block has no COMMENT.
-// - Epoch store and carried forecasts (SPEC 14.3, 18): a record carrying its forecast (test/lib/carried.mjs, the "LEO 500
-//   km" class, span 0 to 24 h) followed 12 h later by the plain record: the switch at 6 h, inside the span, is a step
-//   (b = -3, weight 0, each side the chosen set's state bit for bit) named in propagate_epochs' COMMENT; the carried
-//   record followed by itself 12 h later (both forecasts cover the window) blends, with no COMMENT.
+// - Epoch store and carried forecasts (SPEC 14.3, 18.3): a record carrying its forecast (test/lib/carried.mjs, the "LEO
+//   500 km" class, span 0 to 24 h) followed 12 h later by the plain record: at the switch by epoch (6 h after the record's
+//   epoch, inside the span) the carried set flies alone on both sides (b = -3, weight 0, its forecast bit for bit), and
+//   after the span's end the later set alone (b = -1, its theory bit for bit); propagate_epochs labels the states
+//   CARRIED FORECAST inside the span and THEORY after it, with no "Not blended" text. The carried record followed by
+//   itself 12 h later (both forecasts cover the switch): the later set's forecast alone (b = -3), never a blend. The
+//   plain record placed so the switch by epoch falls on the span's end (to the record's epoch's sub-millisecond digits):
+//   the same labels, then ". Not blended (SPEC 14.3): " with that time (SPEC 18.8's grammar).
 // Made-up orbits only. JS only moves bytes and compares numbers the module produced.
 //   node test/branch-at-epoch.e2e.mjs
 import * as flatbuffers from "flatbuffers";
@@ -41,7 +45,7 @@ import { openModule, wasmPath } from "./lib/module.mjs";
 import { configuration, prior, pcfPriorForm } from "./lib/pcf.mjs";
 import { T, seedOcm, rowsThrough, spwStream, flight, ocmOf, repackOcm } from "./lib/ocm.mjs";
 import { packOem, rfm, jdOf } from "./lib/frames.mjs";
-import { CLASSES, carriedRecord, EPOCH as CARRIED_EPOCH } from "./lib/carried.mjs";
+import { CLASSES, carriedRecord, sourcesOf, EPOCH as CARRIED_EPOCH } from "./lib/carried.mjs";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
@@ -169,14 +173,14 @@ const arc = Array.from({ length: 145 }, (_, k) => EPOCH + k * 600000);
     /different branches/.test(comments[99011]) && comments[99012] == null, `propagate_epochs COMMENT: ${JSON.stringify(comments)}`);
 }
 
-// --- the epoch store between a carried forecast and the theory (SPEC 14.3, 18)
+// --- the epoch store between a carried forecast and the theory (SPEC 14.3, 18.3)
 {
   const c = CLASSES.find((q) => q.name === "LEO 500 km");
   const rec = await carriedRecord(h, c, { norad: 99320 });
-  // the record's epoch is its fit arc's first state (before the span's start); the second set 12 h after it, the switch half way
+  // the second set 12 h after the record's epoch, the switch by epoch half way (inside the span); the span ends at `end`
   const T0 = Date.parse(`${CARRIED_EPOCH}Z`), E0 = Date.parse(`${ocmOf(rec.ocm).MEAN_ELEMENTS.EPOCH.replace(/Z$/, "")}Z`);
-  const twelve = E0 + 12 * 3600000, sw = E0 + 6 * 3600000;
-  const moved = (bytes) => repackOcm(bytes, (t) => { t.MEAN_ELEMENTS.EPOCH = iso(twelve); if (t.TRAJ_FRAME_EPOCH) t.TRAJ_FRAME_EPOCH = iso(twelve); });
+  const twelve = E0 + 12 * 3600000, sw = E0 + 6 * 3600000, end = T0 + rec.span * 1000;
+  const moved = (bytes, to = twelve) => repackOcm(bytes, (t) => { t.MEAN_ELEMENTS.EPOCH = iso(to); if (t.TRAJ_FRAME_EPOCH) t.TRAJ_FRAME_EPOCH = iso(to); });
   const prefixed = (plain) => { const b = Buffer.alloc(4 + plain.length); b.writeUInt32LE(plain.length, 0); Buffer.from(plain).copy(b, 4); return b; };
   // one series: the carried record (span 0 to 24 h), then the plain record 12 h later; the switch at 6 h lies in the span
   const mixed = { portId: "ocm", typeRef: T("OCM"), payload: new Uint8Array(Buffer.concat([rec.ocm, moved(rec.plain)].map(prefixed))) };
@@ -187,22 +191,36 @@ const arc = Array.from({ length: 145 }, (_, k) => EPOCH + k * 600000);
   const state = (t) => { const j = jdOf(iso(t)); x.sdnap_epochs_at(j.whole, j.frac, 0, 1, 0, p + 64, p + 512, 0); return f64(64, 6); };
   const setAt = (k, t) => { const j = jdOf(iso(t)); x.sdnap_epochs_set_at(0, k, j.whole, j.frac, p + 1024); return f64(1024, 6); };
   const same = (u, v) => u.every((q, k) => q === v[k]);
-  const before = sw - 600000, after = sw + 600000;
+  const before = sw - 600000, after = sw + 600000, past = end + 600000;
   const lm = await m.harness.invoke({ methodId: "load_epochs", inputs: [configuration({ epochStore: {} }), mixed] });
-  const sm = lm.statusCode === 0 ? [select(before), select(after)] : null;
-  const steps = lm.statusCode === 0 && same(state(before), setAt(0, before)) && same(state(after), setAt(1, after));
-  console.log(`store, a carried forecast then the theory, 10 min each side of the switch: ${lm.statusCode === 0 ? `select ${JSON.stringify(sm)}` : lm.errorCode}`);
-  check(lm.statusCode === 0 && sm[0][1] === -3 && sm[0][2] === 0 && sm[1][1] === -3 && sm[1][0] === 1 && steps, `carried then theory: ${JSON.stringify(sm)}, steps ${steps}`);
+  const sm = lm.statusCode === 0 ? [select(before), select(after), select(past)] : null;
+  const flies = lm.statusCode === 0 && same(state(before), setAt(0, before)) && same(state(after), setAt(0, after)) && same(state(past), setAt(1, past));
+  console.log(`store, a carried forecast then the theory, 10 min each side of the switch by epoch and 10 min past the span: ${lm.statusCode === 0 ? `select ${JSON.stringify(sm)}` : lm.errorCode}`);
+  check(lm.statusCode === 0 && sm[0][0] === 0 && sm[0][1] === -3 && sm[0][2] === 0 && sm[1][0] === 0 && sm[1][1] === -3 && sm[1][2] === 0 &&
+    sm[2][0] === 1 && sm[2][1] === -1 && flies, `carried then theory: ${JSON.stringify(sm)}, each the chosen set's state ${flies}`);
   const lc = await m.harness.invoke({ methodId: "load_epochs", inputs: [configuration({ epochStore: {} }), carried] });
   const sc = lc.statusCode === 0 ? select(before) : null;
+  const later = lc.statusCode === 0 && same(state(before), setAt(1, before));
   console.log(`store, two carried forecasts: ${lc.statusCode === 0 ? `select ${JSON.stringify(sc)}` : lc.errorCode}`);
-  check(lc.statusCode === 0 && sc[1] === 1 && sc[2] > 0 && sc[2] < 1, `two carried: ${JSON.stringify(sc)}`);
-  const grid = configuration({ epochStore: {}, output: { START_TIME: iso(T0 + 5 * 3600000), STOP_TIME: iso(T0 + 7 * 3600000), STEP_SECONDS: 600 } });
-  const cm = blocks((await call("propagate_epochs", [grid, mixed]))[0].payload)[0].COMMENT;
-  const cc = blocks((await call("propagate_epochs", [grid, carried]))[0].payload)[0].COMMENT;
-  console.log(`propagate_epochs COMMENT: carried then theory ${JSON.stringify(cm)}; two carried ${JSON.stringify(cc)}`);
-  check(typeof cm === "string" && cm.includes(iso(sw).slice(0, 16)) && /carried forecast and the theory/.test(cm) && cc == null,
-    `carried COMMENT: ${JSON.stringify([cm, cc])}`);
+  check(lc.statusCode === 0 && sc[0] === 1 && sc[1] === -3 && sc[2] === 0 && later, `two carried: ${JSON.stringify(sc)}, the later set's forecast ${later}`);
+  // the states about the switch by epoch (inside the span), and across the span's end off the grid's points
+  const grid = (from) => configuration({ epochStore: {}, output: { START_TIME: iso(from), STOP_TIME: iso(from + 2 * 3600000), STEP_SECONDS: 600 } });
+  const runs = async (from, input) => {
+    const cm = blocks((await call("propagate_epochs", [grid(from), input]))[0].payload)[0].COMMENT;
+    return { cm, runs: sourcesOf(cm)?.map((r) => `${r.source} ${r.first}-${r.last}`) };
+  };
+  const inside = [await runs(T0 + 5 * 3600000, mixed), await runs(T0 + 5 * 3600000, carried)], across = await runs(end - 55 * 60000, mixed);
+  // the plain record placed so the switch by epoch falls on the span's end: its window holds the end, a step named
+  // after the runs (SPEC 18.8: SOURCES, then ". " and 14.3's text)
+  const onEnd = { portId: "ocm", typeRef: T("OCM"), payload: new Uint8Array(Buffer.concat([rec.ocm, moved(rec.plain, 2 * end - E0)].map(prefixed))) };
+  const atEnd = await runs(end - 55 * 60000, onEnd);
+  console.log(`propagate_epochs COMMENT: inside the span ${JSON.stringify(inside.map((q) => q.cm))}; across its end ${JSON.stringify(across.cm)}; switch on its end ${JSON.stringify(atEnd.cm)}`);
+  check(inside.every((q) => JSON.stringify(q.runs) === JSON.stringify(["CARRIED FORECAST 0-12"]) && !/Not blended/.test(q.cm)) &&
+    JSON.stringify(across.runs) === JSON.stringify(["CARRIED FORECAST 0-5", "THEORY 6-12"]) && !/Not blended/.test(across.cm),
+    `carried COMMENT: ${JSON.stringify([...inside.map((q) => q.cm), across.cm])}`);
+  check(JSON.stringify(atEnd.runs) === JSON.stringify(["CARRIED FORECAST 0-5", "THEORY 6-12"]) &&
+    typeof atEnd.cm === "string" && atEnd.cm.includes(`. Not blended (SPEC 14.3): ${iso(end).slice(0, 22)}`) && atEnd.cm.endsWith(" (a carried forecast and the theory)"),
+    `switch on the span's end, COMMENT: ${JSON.stringify(atEnd.cm)}`);
 }
 
 m.destroy?.();
