@@ -88,11 +88,17 @@ inline double minutes_between(double w0, double f0, double w1, double f1) {
 /// SPEC 17.3: the weighting the record states (OD_DATA_WEIGHTING): the data sigma sigma_r the fit weighted each TEME
 /// position component with (fit::reweight, SPEC 12.1), and WEIGHTED_RMS: the post-fit RMS of the position components
 /// over it, sqrt(sum (r_i / sigma_r)^2 / (3 states)) = FIT_RMS_KM / sqrt(3) / sigma_r.
-inline std::string weighting_text(double sigma_km) {
-  char text[200];
-  std::snprintf(text, sizeof text,
-                "EQUAL WEIGHTS: SIGMA %.6g KM PER TEME POSITION COMPONENT, THE POST-FIT RESIDUAL SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM",
-                sigma_km);
+inline std::string weighting_text(double sigma_km, const fit::Consider* cons = nullptr) {
+  char text[320];
+  if (cons == nullptr)
+    std::snprintf(text, sizeof text,
+                  "EQUAL WEIGHTS: SIGMA %.6g KM PER TEME POSITION COMPONENT, THE POST-FIT RESIDUAL SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM",
+                  sigma_km);
+  else
+    std::snprintf(text, sizeof text,
+                  "SIGMA %.6g KM PER TEME POSITION COMPONENT, THE PROFILED POST-FIT SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM; "
+                  "CONSIDER RATE ERRORS PER UNIT SIGMA: IN-TRACK %.4g /DAY^2, ECCENTRICITY %.4g /DAY, INCLINATION %.4g /DAY",
+                  sigma_km, cons->kappa[0], cons->kappa[1], cons->kappa[2]);
   return text;
 }
 inline double weighted_rms(double fit_rms_km, double sigma_km) { return fit_rms_km / std::sqrt(3.0) / sigma_km; }
@@ -149,6 +155,18 @@ inline int& epoch_placement() {
 inline int& jacobian_always() {
   static int j = 0;
   return j;
+}
+
+/// The kappa calibration (test/consider-calibration.mjs, sdnap_fit_consider_calibration): with `on`, an AP fit's consider
+/// block runs free (no penalty on c) and no term is held; `last` and `sigma_km` keep the last pass's c and data sigma.
+struct ConsiderCalibration {
+  bool on = false;
+  fit::Consider last{};
+  double sigma_km = 0.0;
+};
+inline ConsiderCalibration& consider_calibration() {
+  static ConsiderCalibration c;
+  return c;
 }
 
 }  // namespace fitoem
@@ -513,6 +531,7 @@ static int fit_blocks() {
         pcf::Prior srp{};                                ///< AGOM's prior as used (SPEC 12.1 short-arc rule)
         bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
         double sigma_km = fit::kUnitSigmaKm;             ///< the data sigma the fit weighted with (SPEC 12.1)
+        fit::Consider cons{};                            ///< an AP fit's consider block and hold rule (SPEC 12.1)
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       // SPEC 12.1: the input's own position sigma, where the block states one (a floor of the data sigma)
@@ -605,16 +624,19 @@ static int fit_blocks() {
         fitoem::start_row(s0, row);
         pcf::Prior eff_drag = drag_override != nullptr ? *drag_override : po.drag_prior;
         // SPEC 12.1: an arc shorter than pcf::kShortArcHours with FIT.SRP_PRIOR unset takes the Space Force wrapper's
-        // AGOM prior, 0 +- 0.1 m^2/kg
+        // AGOM prior, 0 +- 0.1 m^2/kg; an AP fit (the consider estimator) takes a positive one, pcf::kSrpPriorAp
+        const bool ap_fit = !po.forces.stock();
         const pcf::Prior eff_srp = srp_override != nullptr ? *srp_override
+                                   : !po.srp_prior_given && ap_fit ? pcf::kSrpPriorAp
                                    : !po.srp_prior_given && fit_end_min - fit_begin_min < pcf::kShortArcHours * 60.0
                                        ? pcf::kSrpPriorShortArc
                                        : po.srp_prior;
         // SPEC 12.8: FIT.DRAG_PRIOR unset under NRLMSISE-00 or a < 24 h minimum span takes its median by mean altitude
         // (above e 0.3 the perigee's), and under NRLMSISE-00 at 800 to 1400 km the wide sigma of the log; a stated prior
-        // is fitted as given
+        // is fitted as given. An AP fit keeps the one physical prior, median 0.01 m^2/kg and sigma of the log ln 10, in
+        // every band (SPEC 12.1)
         bool wide_band = false;
-        if (drag_override == nullptr && !po.drag_prior_given && (po.forces.msis || po.minimum_span_h < 24.0) &&
+        if (!ap_fit && drag_override == nullptr && !po.drag_prior_given && (po.forces.msis || po.minimum_span_h < 24.0) &&
             row.mean_motion_rev_day > 0.0) {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
           const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
@@ -678,7 +700,51 @@ static int fit_blocks() {
         // SPEC 12.1: the stages above weigh the data at the unit of the residual; the fit is redone at the data's own
         // sigma until that holds, so precise data outweigh the priors and noisy data leave them their weight
         double sigma_km = fit::kUnitSigmaKm;
-        fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, sigma_km, iterations);
+        // SPEC 12.1: an AP fit carries the theory's rate errors as consider terms, their sizes per unit sigma from the
+        // kappa table at this orbit and arc; the hold rule then holds a term the arc leaves prior-limited
+        fit::Consider cons{};
+        if (ap_fit && row.mean_motion_rev_day > 0.0) {
+          cons.on = true;
+          cons.free = fitoem::consider_calibration().on;
+          cons.t_end_min = *std::max_element(t_fit.begin(), t_fit.end());
+          const double arc_days = (cons.t_end_min - *std::min_element(t_fit.begin(), t_fit.end())) / kMinutesPerDay;
+          fit::consider_kappa(fit::semi_major_km(row.mean_motion_rev_day * kTwoPi / kMinutesPerDay), row.eccentricity,
+                              row.inclination_deg, arc_days, cons.kappa);
+        }
+        const int n_fit = static_cast<int>(t_fit.size());
+        fit::reweight(row, t_fit.data(), r_fit.data(), n_fit, opt, stated_km, res, sigma_km, iterations, cons.on ? &cons : nullptr);
+        if (cons.on && !cons.free) {
+          // the hold rule: a term whose marginal posterior variance (consider block included) passes half its prior's is
+          // held at the prior mean, refitted without it, and carries the prior variance in the covariance
+          cov::Set post;
+          double post_ng = 0.0;
+          if (cov::of_fit(row, opt, t_fit.data(), r_fit.data(), n_fit, fit_end_min, sigma_km, post, post_ng, &cons)) {
+            const int agom_at = 6 + (opt.fit_drag ? 1 : 0);
+            const double var_b = opt.drag_log ? post.log_sigma[0] * post.log_sigma[0] : post.C[6 * post.np + 6];
+            const double var_s = opt.agom_log ? post.log_sigma[2] * post.log_sigma[2] : post.C[agom_at * post.np + agom_at];
+            const bool hold_b = opt.fit_drag && opt.drag_sigma > 0.0 && var_b > 0.5 * opt.drag_sigma * opt.drag_sigma;
+            const bool hold_s = opt.fit_agom && opt.agom_sigma > 0.0 && var_s > 0.5 * opt.agom_sigma * opt.agom_sigma;
+            if (hold_b) {
+              cons.held_drag = true;
+              cons.held_drag_sigma = opt.drag_sigma;
+              opt.drag_sigma = opt.drag_log ? 1e-9 : 1e-12;
+              row.bterm = opt.drag_log ? std::exp(opt.drag_prior) : opt.drag_prior;
+            }
+            if (hold_s) {
+              cons.held_agom = true;
+              cons.held_agom_sigma = opt.agom_sigma;
+              opt.agom_sigma = opt.agom_log ? 1e-9 : 1e-12;
+              row.agom = opt.agom_log ? std::exp(opt.agom_prior) : opt.agom_prior;
+            }
+            if (hold_b || hold_s)
+              fit::reweight(row, t_fit.data(), r_fit.data(), n_fit, opt, stated_km, res, sigma_km, iterations, &cons);
+          }
+        }
+        if (cons.on) {
+          fitoem::consider_calibration().last = cons;
+          fitoem::consider_calibration().sigma_km = sigma_km;
+        }
+        P.cons = cons;
         P.sigma_km = sigma_km;
         P.t_fit = std::move(t_fit);
         P.r_fit = std::move(r_fit);
@@ -872,15 +938,16 @@ static int fit_blocks() {
       // SPEC 12: the fit's covariance at its solution (at the two-line digits), its epoch image the $OMM's COVARIANCE
       cov::Set fit_cov;
       double ng_rate = 0.0;
-      const bool have_cov =
-          cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, sigma_km, fit_cov, ng_rate);
+      const bool have_cov = cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, sigma_km,
+                                        fit_cov, ng_rate, chosen.cons.on ? &chosen.cons : nullptr);
       // SPEC 12.8: above e 0.3 with the perigee in the drag, on an arc shorter than 7 days, the residual is the theory's,
       // not noise, and the arc does not separate BTERM from it: the arc's width on BTERM is the offset whose signature over
       // the arc equals the RMS floor (the formal information over the residual components), combined with the prior's;
       // BTERM's row and column of the covariance take the ratio of the widths
       const double arc_hours = (fit_end_min - fit_begin_min) / 60.0;
       double floor_scale = 1.0;
-      if (have_cov && high_e_drag && arc_hours < fitoem::kHighEDragArcMinutes / 60.0 - 1e-6) {
+      // (an AP fit's consider block states the arc's information on BTERM itself: no floor ratio on top of it)
+      if (have_cov && !chosen.cons.on && high_e_drag && arc_hours < fitoem::kHighEDragArcMinutes / 60.0 - 1e-6) {
         int kind[fit::kMaxParams];
         const int np = cov::kinds_of(fit_cov.o, kind);
         for (int a = 6; a < np; ++a) {
@@ -1023,8 +1090,9 @@ static int fit_blocks() {
           CreateOCMDynamicParameterDirect(fbb, "SRP_AREA_OVER_MASS", row.agom, "m**2/kg", opt.fit_agom != 0, prwDynamicParameter_SRP_AREA_OVER_MASS)};
       const auto s_dyn = fbb.CreateVector(dyn);
       std::vector<std::string> estimated = {"MEAN_MOTION", "ECCENTRICITY", "INCLINATION", "RA_OF_ASC_NODE", "ARG_OF_PERICENTER", "MEAN_ANOMALY"};
-      if (opt.fit_drag) estimated.push_back("DRAG_AREA_OVER_MASS");
-      if (opt.fit_agom) estimated.push_back("SRP_AREA_OVER_MASS");
+      // a term the hold rule held at its prior is not estimated (its covariance row carries the prior's variance)
+      if (opt.fit_drag && !chosen.cons.held_drag) estimated.push_back("DRAG_AREA_OVER_MASS");
+      if (opt.fit_agom && !chosen.cons.held_agom) estimated.push_back("SRP_AREA_OVER_MASS");
       const auto s_estimated = fbb.CreateVectorOfStrings(estimated);
       std::vector<std::string> comment;
       comment.push_back(start_given ? "fit arc: the ephemeris block's useable interval"
@@ -1034,14 +1102,19 @@ static int fit_blocks() {
                         : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
+      // SPEC 12.1: the hold rule's marks (the term at its prior mean, its covariance row the prior's variance)
+      if (chosen.cons.held_drag) comment.push_back("prior-limited: BTERM held at its prior (the arc's posterior variance above half the prior's)");
+      if (chosen.cons.held_agom) comment.push_back("prior-limited: AGOM held at its prior (the arc's posterior variance above half the prior's)");
       // SPEC 18: the forecast the record carries ($PCF OUTPUT.START_TIME to STOP_TIME), its span and end jumps in COMMENT
       flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;
       if (po.has_start && po.has_stop)
         if (const int rc = carried::build(fbb, row, ocm::epoch_frame(po.forces), all, gcrf, po.start_w, po.start_f, po.stop_w, po.stop_f, forecast, comment)) return rc;
       const auto s_comment = fbb.CreateVectorOfStrings(comment);
       const auto s_od_method = fbb.CreateString("BATCH LEAST SQUARES");
-      const auto s_od_algorithm = fbb.CreateString("LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS OVER THE DATA SIGMA, WITH PRIORS");
-      const auto s_od_weighting = fbb.CreateString(fitoem::weighting_text(sigma_km));
+      const auto s_od_algorithm = fbb.CreateString(
+          chosen.cons.on ? "LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, GENERALIZED LEAST SQUARES WITH THE THEORY'S RATE ERRORS AS CONSIDER TERMS, WITH PRIORS"
+                         : "LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS OVER THE DATA SIGMA, WITH PRIORS");
+      const auto s_od_weighting = fbb.CreateString(fitoem::weighting_text(sigma_km, chosen.cons.on ? &chosen.cons : nullptr));
       const auto s_od_epoch = fbb.CreateString(epoch_text);
       OrbitDeterminationBuilder od(fbb);
       od.add_OD_ALGORITHM(s_od_algorithm);
@@ -1216,6 +1289,30 @@ int32_t sdnap_fit_jacobian_diagnostic(int32_t always) {
   const int32_t previous = sdnap::fitoem::jacobian_always();
   if (always == 0 || always == 1) sdnap::fitoem::jacobian_always() = always;
   return previous;
+}
+
+// The kappa calibration (SPEC 12.1, test/consider-calibration.mjs): 1 runs an AP fit's consider block free (no penalty
+// on the five rate errors) and holds nothing, 0 the default; < 0 leaves it. Returns the previous.
+SDNAP_EXPORT("sdnap_fit_consider_calibration")
+int32_t sdnap_fit_consider_calibration(int32_t on) {
+  const int32_t previous = sdnap::fitoem::consider_calibration().on ? 1 : 0;
+  if (on == 0 || on == 1) sdnap::fitoem::consider_calibration().on = on == 1;
+  return previous;
+}
+
+// The last AP fit's consider block (12 doubles): its data sigma (km), the five c (km/day^2, then km/day x 4), the kappa
+// it used (n, e, i), the profiled residual sum (km^2), and 1 / 0 for BTERM and AGOM held. Returns 0, or -1 before any.
+SDNAP_EXPORT("sdnap_fit_consider_last")
+int32_t sdnap_fit_consider_last(double* out) {
+  const sdnap::fitoem::ConsiderCalibration& c = sdnap::fitoem::consider_calibration();
+  if (out == nullptr || !c.last.on) return -1;
+  out[0] = c.sigma_km;
+  for (int q = 0; q < sdnap::fit::kConsider; ++q) out[1 + q] = c.last.c[q];
+  for (int q = 0; q < 3; ++q) out[6 + q] = c.last.kappa[q];
+  out[9] = c.last.rss_km2;
+  out[10] = c.last.held_drag ? 1.0 : 0.0;
+  out[11] = c.last.held_agom ? 1.0 : 0.0;
+  return 0;
 }
 
 // Diagnostic: the span rule's validation tail (minutes; <= 0 leaves it); returns the previous.

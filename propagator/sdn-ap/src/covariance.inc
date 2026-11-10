@@ -150,6 +150,8 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
     b.central[j] = !(b.kind[j] == kKindSrp && !o.agom_log && b.x[j] - b.h[j] <= 0.0);  // ln AGOM moves both ways
     double xp[fit::kMaxParams], xm[fit::kMaxParams];
     for (int q = 0; q < b.np; ++q) xp[q] = xm[q] = b.x[q];
+    // an AP set at AGOM <= 0 (no radiation pressure in the theory) takes the slope from 0 on the side where it acts
+    if (!b.central[j] && b.kind[j] == kKindSrp && xpt::is_ap_ctx(b.sats[0].ctx)) xp[j] = std::fmax(b.x[j], 0.0);
     xp[j] += b.h[j];
     if (!start(xp, 1 + 2 * b.slot[j])) return false;
     if (b.central[j] || !xpt::is_ap_ctx(b.sats[0].ctx)) {
@@ -342,7 +344,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
 /// non-gravitational rate r_ng (1/day). False when the normal matrix is not positive definite or the theory refuses a
 /// moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t, const double* r, int count, double arc_end_min,
-                   double sigma_km, Set& s, double& ng_rate) {
+                   double sigma_km, Set& s, double& ng_rate, const fit::Consider* cons = nullptr) {
   Bank b;
   struct Scope {
     Bank& b;
@@ -354,6 +356,12 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   double floor[6] = {};
   double ss = 0.0;
   double J[6 * kMaxAug];
+  // SPEC 12.1, an AP fit's consider block: its columns from these (the theory's own) element columns, C = J^T G and
+  // D = G^T G, so that P_p is the parameters' block of the inverse of the normal matrix with the five c
+  const bool with_c = cons != nullptr && cons->on && !cons->free;
+  constexpr int nc = fit::kConsider;
+  double C[kMaxAug * nc] = {}, D[nc * nc] = {};
+  const double a_km = fit::semi_major_km(row.mean_motion_rev_day * kTwoPi / kMinutesPerDay);
   for (int k = 0; k < count; ++k) {
     double rm[3], vm[3];
     if (!at(b, t[k], rm, vm, J)) return false;
@@ -369,6 +377,15 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
     floor[5] += u[2] * u[2];
     for (int a = 0; a < np; ++a)
       for (int c = 0; c <= a; ++c) A[a * np + c] += J[0 * np + a] * J[0 * np + c] + J[1 * np + a] * J[1 * np + c] + J[2 * np + a] * J[2 * np + c];
+    if (with_c)
+      for (int i = 0; i < 3; ++i) {
+        double g[nc];
+        fit::consider_row(&J[i * np], t[k], cons->t_end_min, a_km, g);
+        for (int a = 0; a < np; ++a)
+          for (int q = 0; q < nc; ++q) C[a * nc + q] += J[i * np + a] * g[q];
+        for (int p = 0; p < nc; ++p)
+          for (int q = 0; q < nc; ++q) D[p * nc + q] += g[p] * g[q];
+      }
   }
   const int nres = 3 * count;
   if (nres <= np) return false;
@@ -384,8 +401,60 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
     if (b.kind[a] == kKindDrag && o.drag_sigma > 0.0) A[a * np + a] += 1.0 / (o.drag_sigma * o.drag_sigma);
     if (b.kind[a] == kKindSrp && o.agom_sigma > 0.0) A[a * np + a] += 1.0 / (o.agom_sigma * o.agom_sigma);
   }
+  if (with_c) {
+    // the five c profiled out: A <- A - C D'^-1 C^T, D' = (D + K^-2) / s2, C / s2 (the Schur complement)
+    double k_inv2[nc];
+    fit::consider_weights(*cons, k_inv2);
+    double Dm[nc * nc], Di[nc * nc];
+    for (int p = 0; p < nc; ++p)
+      for (int q = 0; q < nc; ++q) Dm[p * nc + q] = (D[p * nc + q] + (p == q ? k_inv2[p] : 0.0)) / s2;
+    if (!spd_inverse(Dm, nc, Di)) return false;
+    for (int a = 0; a < np; ++a)
+      for (int c = 0; c < np; ++c) {
+        double v = 0.0;
+        for (int p = 0; p < nc; ++p)
+          for (int q = 0; q < nc; ++q) v += (C[a * nc + p] / s2) * Di[p * nc + q] * (C[c * nc + q] / s2);
+        A[a * np + c] -= v;
+      }
+  }
   double Pp[kMaxAug * kMaxAug];
   if (!spd_inverse(A, np, Pp)) return false;
+  if (cons != nullptr && (cons->held_drag || cons->held_agom)) {
+    // the hold rule (fit_oem): a held term is a consider parameter of its prior's variance Sigma_h (Schmidt): with F the
+    // estimated terms, P_FF = A_FF^-1, S = -P_FF A_Fh the estimate's sensitivity to the held term, the covariance is
+    // [[P_FF + S Sigma_h S^T, S Sigma_h], [Sigma_h S^T, Sigma_h]]
+    int f_idx[kMaxAug], h_idx[kMaxAug], nf = 0, nh = 0;
+    double sh[kMaxAug];
+    for (int a = 0; a < np; ++a) {
+      const bool held = (b.kind[a] == kKindDrag && cons->held_drag) || (b.kind[a] == kKindSrp && cons->held_agom);
+      if (held) {
+        sh[nh] = b.kind[a] == kKindDrag ? cons->held_drag_sigma : cons->held_agom_sigma;
+        h_idx[nh++] = a;
+      } else {
+        f_idx[nf++] = a;
+      }
+    }
+    double Aff[kMaxAug * kMaxAug], Pff[kMaxAug * kMaxAug], Sm[kMaxAug * kMaxAug];
+    for (int i = 0; i < nf; ++i)
+      for (int j = 0; j < nf; ++j) Aff[i * nf + j] = A[f_idx[i] * np + f_idx[j]];
+    if (!spd_inverse(Aff, nf, Pff)) return false;
+    for (int i = 0; i < nf; ++i)
+      for (int k = 0; k < nh; ++k) {
+        double v = 0.0;
+        for (int j = 0; j < nf; ++j) v -= Pff[i * nf + j] * A[f_idx[j] * np + h_idx[k]];
+        Sm[i * nh + k] = v;
+      }
+    for (int i = 0; i < nf; ++i) {
+      for (int j = 0; j < nf; ++j) {
+        double v = Pff[i * nf + j];
+        for (int k = 0; k < nh; ++k) v += Sm[i * nh + k] * sh[k] * sh[k] * Sm[j * nh + k];
+        Pp[f_idx[i] * np + f_idx[j]] = v;
+      }
+      for (int k = 0; k < nh; ++k) Pp[f_idx[i] * np + h_idx[k]] = Pp[h_idx[k] * np + f_idx[i]] = Sm[i * nh + k] * sh[k] * sh[k];
+    }
+    for (int k = 0; k < nh; ++k)
+      for (int l = 0; l < nh; ++l) Pp[h_idx[k] * np + h_idx[l]] = k == l ? sh[k] * sh[k] : 0.0;
+  }
   // the process noise and the floor's scale of the set's regime (SPEC 12.4, 12.5)
   s = Set{};
   double floor_scale = 1.0;

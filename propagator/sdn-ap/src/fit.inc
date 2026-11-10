@@ -149,6 +149,10 @@ constexpr int kSigmaPasses = 8;
 /// A pass weighted at the data sigma has its cost in chi-square units: it has converged when a step lowers the cost by
 /// less than this (a move of about 0.001 posterior sigma), as well as by less than 1e-10 of it.
 constexpr double kChiSquareTolerance = 1e-6;
+/// With the consider block (Consider) the scale moves B along the (ln B, in-track) valley slowly: up to this many passes,
+/// until sigma_r moves by at most 1 % of the sigma the pass weighted with.
+constexpr int kSigmaPassesConsider = 40;
+constexpr double kSigmaToleranceConsider = 0.01;
 
 /// Residuals of the trial row: model minus observed, km, 3 per sample.
 /// SPEC 16.11: an iteration's nominal set, held while its copies are built inside its xpt::GridShareScope (nullptr when it does not
@@ -247,6 +251,118 @@ inline void row_of(const double* x, const Options& o, ElementRow& row) {
   }
 }
 
+/// SPEC 12.1, the theory's rate errors as consider parameters (an AP fit): the residual's covariance is
+/// R = sigma^2 (I + G K^2 G^T), G five columns built from the element columns of the Jacobian with time counted from the
+/// end of the arc (tau = t - t_end): an in-track rate-of-rate (1/2 tau^2 dr/dlambda + tau (dr/dn - t dr/dlambda), per
+/// km/day^2 of in-track acceleration), the eccentricity-vector rates (tau dr/daf, tau dr/dag, per km/day of a de) and the
+/// inclination-vector rates (tau dr/dchi, tau dr/dpsi, per km/day); K = diag(kappa_n, kappa_e, kappa_e, kappa_i, kappa_i)
+/// their sizes per unit sigma. The fit minimizes min_c [|rho + G c|^2 + c^T K^-2 c] / sigma^2 plus the priors: the normal
+/// matrix is the parameters' plus the five c, and everything scales with sigma, so on exact data the block vanishes.
+constexpr int kConsider = 5;
+constexpr int kMaxAugmented = kMaxParams + kConsider;
+struct Consider {
+  bool on = false;
+  bool free = false;           ///< no penalty on c (K infinite): the calibration of kappa
+  double kappa[3] = {};        ///< per unit sigma: in-track rate-of-rate (1/day^2), e-vector and i-vector rates (1/day)
+  double t_end_min = 0.0;      ///< the columns' time origin, minutes from the epoch: the fit arc's end
+  // out of run(): the profiled consider coefficients at the solution and the profiled residual sum
+  double c[kConsider] = {};    ///< km/day^2, then km/day x 4
+  double rss_km2 = 0.0;
+  // the hold rule's outcome (fit_oem): a term held at its prior mean, and the prior sigma its covariance row carries
+  bool held_drag = false, held_agom = false;
+  double held_drag_sigma = 0.0, held_agom_sigma = 0.0;
+};
+
+/// The consider columns' contribution of one position component: `Jc` the component's element columns (km per unit of
+/// af, ag, chi, psi, lambda0 in rad, n in rad/min, contiguous), at t minutes from the epoch; `g` receives the five values
+/// (km per unit c).
+inline void consider_row(const double* Jc, double t_min, double t_end_min, double a_km, double g[kConsider]) {
+  const double tau = (t_min - t_end_min) / kMinutesPerDay;  // days
+  const double dn0 = tau / (a_km * kMinutesPerDay);         // rad/min of n per km/day^2, at t
+  g[0] = Jc[5] * dn0 + Jc[4] * (0.5 * tau * tau / a_km - t_min * dn0);
+  g[1] = Jc[0] * tau / a_km;
+  g[2] = Jc[1] * tau / a_km;
+  g[3] = Jc[2] * tau / a_km;
+  g[4] = Jc[3] * tau / a_km;
+}
+
+/// The consider penalty 1 / kappa^2 of each of the five c (0 when free).
+inline void consider_weights(const Consider& cons, double k_inv2[kConsider]) {
+  const double k[kConsider] = {cons.kappa[0], cons.kappa[1], cons.kappa[1], cons.kappa[2], cons.kappa[2]};
+  for (int i = 0; i < kConsider; ++i) k_inv2[i] = cons.free || !(k[i] > 0.0) ? 0.0 : 1.0 / (k[i] * k[i]);
+}
+
+/// The kappa table: per calibration orbit (semi-major axis km, eccentricity, inclination deg) the rate-error sizes per
+/// unit sigma at arc lengths T (days), measured by test/consider-calibration.mjs on the project's own controlled truth
+/// (propagator/ffm: EGM96 70 x 70 below a = 9,000 km and 31 x 31 above, the Sun and the Moon from DE440, no drag, no
+/// radiation pressure; four epochs, 2026-06-20 to 10-03; every window of 1, 2, 3 and 5 days ending on a whole day of 11
+/// days): kappa_n = rms(c_n) / rms(sigma), kappa_e and kappa_i the same of the vector rates' magnitudes. The windows, the
+/// builds' SHA-256 and the truth's are in test/results/consider-calibration.json.
+struct KappaNode {
+  double a_km, e, inc_deg;
+  int nt;
+  double T[6], kn[6], ke[6], ki[6];
+};
+constexpr KappaNode kKappaNodes[] = {
+    {6778.0, 0.001, 28.5, 4, {1, 2, 3, 5}, {29.7, 2.35, 1.2, 0.49}, {1.96, 1.17, 1.09, 0.979}, {0.672, 0.349, 0.313, 0.275}},  // leo-400-28
+    {6928.0, 0.0012, 53, 4, {1, 2, 3, 5}, {4.42, 2.81, 2.38, 1.44}, {1.62, 0.753, 0.579, 0.452}, {0.525, 0.171, 0.164, 0.157}},  // leo-550-53
+    {7028.0, 0.001, 97.9, 4, {1, 2, 3, 5}, {13.4, 4.61, 1.09, 0.668}, {1.01, 0.275, 0.184, 0.187}, {0.629, 0.219, 0.125, 0.0679}},  // leo-650-98
+    {7128.0, 0.0011, 74, 4, {1, 2, 3, 5}, {9.25, 2.27, 0.981, 0.759}, {0.997, 0.437, 0.337, 0.302}, {0.598, 0.152, 0.0729, 0.0457}},  // leo-750-74
+    {7278.0, 0.001, 99, 4, {1, 2, 3, 5}, {9.3, 4.11, 3.98, 3.48}, {0.775, 0.302, 0.219, 0.168}, {0.685, 0.286, 0.261, 0.235}},  // leo-900-99
+    {7478.0, 0.0009, 89, 4, {1, 2, 3, 5}, {4.14, 1.38, 0.979, 0.334}, {0.316, 0.0811, 0.0707, 0.07}, {0.399, 0.138, 0.0949, 0.0767}},  // leo-1100-89
+    {7878.0, 0.001, 52, 4, {1, 2, 3, 5}, {3.98, 0.552, 0.191, 0.0997}, {0.393, 0.213, 0.137, 0.0668}, {0.253, 0.0819, 0.0396, 0.0291}},  // leo-1500-52
+    {7450.0, 0.04, 63, 4, {1, 2, 3, 5}, {12.4, 2.21, 1.37, 0.407}, {0.714, 0.495, 0.453, 0.432}, {0.156, 0.119, 0.105, 0.102}},  // leo-e04-63
+    {8878.0, 0.001, 70, 4, {1, 2, 3, 5}, {2.26, 0.382, 0.18, 0.0407}, {0.283, 0.112, 0.0579, 0.0135}, {0.131, 0.0767, 0.0495, 0.0444}},  // leo-2500-70
+    {11378.0, 0.004, 110, 4, {1, 2, 3, 5}, {2.02, 0.277, 0.0992, 0.0441}, {0.608, 0.131, 0.0511, 0.0241}, {0.887, 0.163, 0.0823, 0.0885}},  // meo-5000-110
+    {16378.0, 0.002, 45, 4, {1, 2, 3, 5}, {4.97, 0.443, 0.179, 0.0885}, {0.84, 0.17, 0.0909, 0.0666}, {0.292, 0.0772, 0.0692, 0.0723}},  // meo-10000-45
+    {23000.0, 0.002, 40, 4, {1, 2, 3, 5}, {30.6, 4.72, 1.38, 1.26}, {0.618, 0.24, 0.134, 0.105}, {0.242, 0.0981, 0.0635, 0.0564}},  // meo-23000-40
+    {27900.0, 0.003, 52, 4, {1, 2, 3, 5}, {4.57, 0.975, 0.336, 0.273}, {1.31, 0.185, 0.171, 0.131}, {0.229, 0.151, 0.147, 0.131}},  // meo-27900-52
+    {42164.0, 0.0004, 2, 4, {1, 2, 3, 5}, {61.4, 3.64, 3.59, 3.34}, {9.64, 0.518, 0.435, 0.36}, {4.17, 1.53, 1.32, 1.13}},  // geo-2
+    {42164.0, 0.002, 30, 4, {1, 2, 3, 5}, {90.9, 4.71, 4.06, 3.44}, {12, 0.833, 0.655, 0.442}, {2, 1.31, 1.21, 1}},  // geo-30
+    {42164.0, 0.07, 43, 4, {1, 2, 3, 5}, {141, 1.39, 1.07, 0.869}, {12.5, 0.589, 0.474, 0.371}, {0.974, 0.685, 0.658, 0.566}},  // geo-e07-43
+};
+/// The kernel widths: in ln a, inclination (deg) and eccentricity.
+constexpr double kKappaWidthLnA = 0.05, kKappaWidthInc = 20.0, kKappaWidthE = 0.1;
+
+/// kappa (n, e, i) of an orbit and an arc of `arc_days`: at each calibration orbit linear in ln kappa against ln T
+/// (held at the end values outside the calibrated arcs), then a Gaussian kernel over (ln a, i, e) about the calibration
+/// orbits, normalized: continuous in every argument, so no class boundary moves the weighting by a step.
+inline void consider_kappa(double a_km, double e, double inc_deg, double arc_days, double kappa[3]) {
+  constexpr int nn = static_cast<int>(sizeof kKappaNodes / sizeof kKappaNodes[0]);
+  double d2[nn], dmin = 1e300;
+  for (int j = 0; j < nn; ++j) {
+    const KappaNode& q = kKappaNodes[j];
+    const double da = std::log(a_km / q.a_km) / kKappaWidthLnA, di = (inc_deg - q.inc_deg) / kKappaWidthInc, de = (e - q.e) / kKappaWidthE;
+    d2[j] = da * da + di * di + de * de;
+    dmin = std::fmin(dmin, d2[j]);
+  }
+  const double lt = std::log(std::fmax(arc_days, 1e-3));
+  double acc[3] = {}, sw = 0.0;
+  for (int j = 0; j < nn; ++j) {
+    const KappaNode& q = kKappaNodes[j];
+    const double wj = std::exp(-0.5 * (d2[j] - dmin));
+    if (!(wj > 1e-12)) continue;
+    const double* tabs[3] = {q.kn, q.ke, q.ki};
+    for (int c = 0; c < 3; ++c) {
+      double v;
+      if (q.nt == 1 || lt <= std::log(q.T[0])) v = std::log(tabs[c][0]);
+      else if (lt >= std::log(q.T[q.nt - 1])) v = std::log(tabs[c][q.nt - 1]);
+      else {
+        int m = 0;
+        while (m + 2 < q.nt && lt > std::log(q.T[m + 1])) ++m;
+        const double l0 = std::log(q.T[m]), l1 = std::log(q.T[m + 1]), f = (lt - l0) / (l1 - l0);
+        v = (1.0 - f) * std::log(tabs[c][m]) + f * std::log(tabs[c][m + 1]);
+      }
+      acc[c] += wj * v;
+    }
+    sw += wj;
+  }
+  for (int c = 0; c < 3; ++c) kappa[c] = std::exp(acc[c] / sw);
+}
+
+/// The semi-major axis (km) of a mean motion in rad/min.
+inline double semi_major_km(double n_rad_min) { return std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe; }
+
 /// The finite-difference fallback of run(): where no step along the analytic Jacobian (two-body motion with the J2
 /// secular drifts, the drag column through n-dot) lowers the cost, the element and drag columns are taken again by
 /// one-sided differences of the theory itself before the fit stops. Set by the caller for the fits that need it (an
@@ -258,9 +374,11 @@ inline bool& jacobian_fallback() {
 
 /// Levenberg-Marquardt. `row` holds the starting set (epoch, theory and the
 /// fixed terms) and receives the fitted one. The cost is sum |e_k|^2 / sigma_km^2 plus the priors; `data_sigma` marks
-/// sigma_km as the data's own (the cost then in chi-square units, kChiSquareTolerance its stop).
+/// sigma_km as the data's own (the cost then in chi-square units, kChiSquareTolerance its stop). With `cons` on, the
+/// residual sum is the profiled min_c |e + G c|^2 + c^T K^-2 c and the normal matrix carries the five c (Consider);
+/// cons->c and cons->rss_km2 receive them at the solution.
 inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o, double sigma_km = kUnitSigmaKm,
-                  bool data_sigma = false) {
+                  bool data_sigma = false, Consider* cons = nullptr) {
   Result out{};
   // SPEC 17.2: a parameter the theories have no sensitivity to is refused, never fitted
   if (not_modeled(o) != nullptr) {
@@ -289,10 +407,36 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
   const int agom_index = o.fit_drag ? 7 : 6;
   const bool agom_prior = o.fit_agom && o.agom_sigma > 0.0;
   const double w = 1.0 / (sigma_km * sigma_km);  // the data's weight, 1 / sigma_r^2 (km^-2)
+  // the consider block: G (nres x 5, built each iteration from the analytic element columns), its Gram matrix with the
+  // penalty, GG = G^T G + K^-2 (5 x 5)
+  const bool cons_on = cons != nullptr && cons->on;
+  double* gcol = cons_on ? static_cast<double*>(std::calloc(static_cast<size_t>(nres) * kConsider, sizeof(double))) : nullptr;
+  if (cons_on && gcol == nullptr) {
+    release();
+    out.status = -1;
+    return out;
+  }
+  double k_inv2[kConsider] = {}, GG[kConsider * kConsider] = {};
+  if (cons_on) consider_weights(*cons, k_inv2);
+  // the profiled residual sum of rr: min_c |rr + G c|^2 + c^T K^-2 c = rr.rr + c.b, b = G^T rr, c = -GG^-1 b
+  auto profiled = [&](const double* rr, double* c_out) {
+    double ss = 0.0;
+    for (int i = 0; i < nres; ++i) ss += rr[i] * rr[i];
+    if (!cons_on) return ss;
+    double b[kConsider] = {}, M[kConsider * kConsider], c[kConsider];
+    for (int i = 0; i < nres; ++i)
+      for (int q = 0; q < kConsider; ++q) b[q] += gcol[i * kConsider + q] * rr[i];
+    for (int q = 0; q < kConsider * kConsider; ++q) M[q] = GG[q];
+    for (int q = 0; q < kConsider; ++q) c[q] = -b[q];
+    if (!solve(M, c, kConsider)) return ss;
+    double cb = 0.0;
+    for (int q = 0; q < kConsider; ++q) cb += c[q] * b[q];
+    if (c_out != nullptr)
+      for (int q = 0; q < kConsider; ++q) c_out[q] = c[q];
+    return ss + cb;
+  };
   auto cost_of = [&](const double* rr, const double* xx) {
-    double c = 0.0;
-    for (int i = 0; i < nres; ++i) c += rr[i] * rr[i];
-    c *= w;
+    double c = profiled(rr, nullptr) * w;
     if (prior) {
       const double d = (xx[6] - o.drag_prior) / o.drag_sigma;
       c += d * d;
@@ -307,10 +451,12 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
   row_of(x, o, work);
   if (!residuals(work, t, r, count, res)) {
     release();
+    std::free(gcol);
     out.status = -2;
     return out;
   }
-  double cost = cost_of(res, x);
+  double cost = cost_of(res, x);  // with the consider block, set again once its columns exist (each iteration)
+  const int na = np + (cons_on ? kConsider : 0);
   double mu = 1e-3;
   bool converged = false;
   int it = 0;
@@ -352,10 +498,51 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
       for (int c = 0; c < 3; ++c)
         for (int j = 0; j < analytic; ++j) jac[(3 * k + c) * kMaxParams + j] = pos[c].d[j] * xpt::kRe;
     }
+    if (cons_on) {
+      // the consider columns from this iteration's analytic element columns (the theory's own columns, six more flights an
+      // iteration, moved B by under 0.3 % on the exact-model rows), then the cost on them
+      const double a_km = semi_major_km(x[5]);
+      for (int k = 0; k < count; ++k)
+        for (int c = 0; c < 3; ++c)
+          consider_row(&jac[(3 * k + c) * kMaxParams], t[k], cons->t_end_min, a_km, &gcol[(3 * k + c) * kConsider]);
+      for (int q = 0; q < kConsider * kConsider; ++q) GG[q] = 0.0;
+      for (int i = 0; i < nres; ++i)
+        for (int p = 0; p < kConsider; ++p)
+          for (int q = 0; q <= p; ++q) GG[p * kConsider + q] += gcol[i * kConsider + p] * gcol[i * kConsider + q];
+      for (int p = 0; p < kConsider; ++p) {
+        GG[p * kConsider + p] += k_inv2[p];
+        for (int q = 0; q < p; ++q) GG[q * kConsider + p] = GG[p * kConsider + q];
+      }
+      cost = cost_of(res, x);
+    }
+    // the element and drag columns by one-sided differences of the theory (the fall-back below; with the consider block
+    // on every iteration: the block takes the analytic columns' quadratic and rate shapes, so what separates BTERM from
+    // it is the part of the theory's own drag signature they do not carry, which the analytic column gets wrong)
+    auto fd_columns = [&]() {
+      const int analytic = o.fit_drag ? 7 : 6;
+      for (int a = 0; a < analytic; ++a) {
+        // (with the consider block the drag step is 0.1 % of the term, so the column's own curvature does not set where the
+        // fit stops)
+        const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5])
+                       : cons_on ? (o.drag_log ? 1e-3 : std::fmax(1e-3 * std::fabs(x[6]), 1e-7))
+                                 : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
+        double xh[kMaxParams];
+        for (int q = 0; q < np; ++q) xh[q] = x[q];
+        xh[a] += h;
+        ElementRow bumped = work;
+        row_of(xh, o, bumped);
+        if (!residuals(bumped, t, r, count, trial)) return false;
+        for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - res[i]) / h;
+      }
+      return true;
+    };
+    if (cons_on && jacobian_fallback()) fd_columns();
     if (o.fit_agom) {
       ElementRow bumped = work;
       const double step = std::fabs(work.agom) * 0.01 > 1e-4 ? std::fabs(work.agom) * 0.01 : 1e-4;
-      bumped.agom = work.agom + step;
+      // the theory reads AGOM <= 0 as no radiation pressure: an AP fit (the consider estimator) at AGOM <= 0 takes the
+      // slope on the side where the term acts, from 0, so the hold rule never reads the flat side as no information
+      bumped.agom = (cons_on && !o.agom_log ? std::fmax(work.agom, 0.0) : work.agom) + step;
       const NominalSat nominal(work);
       xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
       if (residuals(bumped, t, r, count, trial)) {
@@ -365,41 +552,53 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
           for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / step;
       }
     }
-    double A[kMaxParams * kMaxParams] = {}, g[kMaxParams] = {};
+    // the normal matrix, na x na: the parameters, then (with the consider block) the five c, every row in units of the
+    // cost (the data over sigma^2, the c penalty K^-2 over sigma^2, the priors as they are)
+    double A[kMaxAugmented * kMaxAugmented] = {}, g[kMaxAugmented] = {};
     auto normal = [&]() {
-    for (int q = 0; q < kMaxParams * kMaxParams; ++q) A[q] = 0.0;
-    for (int q = 0; q < kMaxParams; ++q) g[q] = 0.0;
-    for (int i = 0; i < nres; ++i)
+    for (int q = 0; q < kMaxAugmented * kMaxAugmented; ++q) A[q] = 0.0;
+    for (int q = 0; q < kMaxAugmented; ++q) g[q] = 0.0;
+    for (int i = 0; i < nres; ++i) {
       for (int a = 0; a < np; ++a) {
         g[a] -= jac[i * kMaxParams + a] * res[i];
-        for (int b = 0; b <= a; ++b) A[a * np + b] += jac[i * kMaxParams + a] * jac[i * kMaxParams + b];
+        for (int b = 0; b <= a; ++b) A[a * na + b] += jac[i * kMaxParams + a] * jac[i * kMaxParams + b];
       }
-    for (int a = 0; a < np; ++a) {
+      if (cons_on)
+        for (int q = 0; q < kConsider; ++q) {
+          const double gq = gcol[i * kConsider + q];
+          g[np + q] -= gq * res[i];
+          for (int a = 0; a < np; ++a) A[(np + q) * na + a] += gq * jac[i * kMaxParams + a];
+        }
+    }
+    if (cons_on)
+      for (int p = 0; p < kConsider; ++p)
+        for (int q = 0; q <= p; ++q) A[(np + p) * na + np + q] = GG[p * kConsider + q];
+    for (int a = 0; a < na; ++a) {
       g[a] *= w;
-      for (int b = 0; b <= a; ++b) A[a * np + b] *= w;
+      for (int b = 0; b <= a; ++b) A[a * na + b] *= w;
     }
     if (prior) {
-      A[6 * np + 6] += 1.0 / (o.drag_sigma * o.drag_sigma);
+      A[6 * na + 6] += 1.0 / (o.drag_sigma * o.drag_sigma);
       g[6] -= (x[6] - o.drag_prior) / (o.drag_sigma * o.drag_sigma);
     }
     if (agom_prior) {
-      A[agom_index * np + agom_index] += 1.0 / (o.agom_sigma * o.agom_sigma);
+      A[agom_index * na + agom_index] += 1.0 / (o.agom_sigma * o.agom_sigma);
       g[agom_index] -= (x[agom_index] - o.agom_prior) / (o.agom_sigma * o.agom_sigma);
     }
-    for (int a = 0; a < np; ++a)
-      for (int b = 0; b < a; ++b) A[b * np + a] = A[a * np + b];
+    for (int a = 0; a < na; ++a)
+      for (int b = 0; b < a; ++b) A[b * na + a] = A[a * na + b];
     };
     normal();
     bool improved = false;
     auto attempt = [&]() {
     for (int tries = 0; tries < 12 && !improved; ++tries) {
-      double M[kMaxParams * kMaxParams], dx[kMaxParams];
-      for (int a = 0; a < np * np; ++a) M[a] = A[a];
-      for (int a = 0; a < np; ++a) {
-        M[a * np + a] *= (1.0 + mu);
+      double M[kMaxAugmented * kMaxAugmented], dx[kMaxAugmented];
+      for (int a = 0; a < na * na; ++a) M[a] = A[a];
+      for (int a = 0; a < na; ++a) {
+        if (a < np) M[a * na + a] *= (1.0 + mu);  // the damping on the parameters; the c are linear
         dx[a] = g[a];
       }
-      if (solve(M, dx, np)) {
+      if (solve(M, dx, na)) {
         double xt[kMaxParams];
         for (int a = 0; a < np; ++a) xt[a] = x[a] + dx[a];
         ElementRow cand = work;
@@ -423,23 +622,10 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
     }
     };
     attempt();
-    if (!improved && jacobian_fallback() && fd_used < 2) {
+    if (!improved && jacobian_fallback() && !cons_on && fd_used < 2) {
       ++fd_used;
       // the element and drag columns by one-sided differences of the theory, then the same trial
-      const int analytic = o.fit_drag ? 7 : 6;
-      bool fd_ok = true;
-      for (int a = 0; a < analytic && fd_ok; ++a) {
-        const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
-        double xh[kMaxParams];
-        for (int q = 0; q < np; ++q) xh[q] = x[q];
-        xh[a] += h;
-        ElementRow bumped = work;
-        row_of(xh, o, bumped);
-        fd_ok = residuals(bumped, t, r, count, trial);
-        if (fd_ok)
-          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - res[i]) / h;
-      }
-      if (fd_ok) {
+      if (fd_columns()) {
         normal();
         mu = 1e-3;
         attempt();
@@ -458,7 +644,9 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
   out.max_km = mx;
   out.iterations = it;
   out.status = converged ? 0 : 1;
+  if (cons_on) cons->rss_km2 = profiled(res, cons->c);
   release();
+  std::free(gcol);
   return out;
 }
 
@@ -481,7 +669,7 @@ inline double data_sigma_km(const Result& res, int count, const Options& o, doub
 /// most kSigmaPasses times). `row`, `res` and `sigma_km` take the last fit, whose iterations add to `iterations`; a
 /// refit the theory refuses leaves the one before.
 inline void reweight(ElementRow& row, const double* t, const double* r, int count, const Options& o, double stated_km, Result& res,
-                     double& sigma_km, int& iterations) {
+                     double& sigma_km, int& iterations, Consider* cons = nullptr) {
   // near the minimum the analytic columns (two-body motion, J2 secular, the drag column through n-dot) stop short of
   // it once the data outweigh the priors: these passes take the theory's own columns where no analytic step helps
   struct FallbackScope {
@@ -489,16 +677,29 @@ inline void reweight(ElementRow& row, const double* t, const double* r, int coun
     FallbackScope() : prev(jacobian_fallback()) { jacobian_fallback() = true; }
     ~FallbackScope() { jacobian_fallback() = prev; }
   } fallback_scope;
-  for (int pass = 0; pass < kSigmaPasses; ++pass) {
-    const double next = data_sigma_km(res, count, o, stated_km);
-    if (std::fabs(next - sigma_km) <= kSigmaTolerance * sigma_km) return;
+  const bool with_c = cons != nullptr && cons->on;
+  const int dof = 3 * count - param_count(o);
+  // with the consider block the scale is that of the profiled residual sum, sigma^2 = min_c [...] / (3N - dim p), and the
+  // first pass always runs (the stages before it carry no block)
+  auto sigma_of = [&](bool profiled_rss) {
+    if (!profiled_rss) return data_sigma_km(res, count, o, stated_km);
+    const double s = std::sqrt(std::fmax(cons->rss_km2, 0.0) / (dof > 0 ? dof : 1));
+    return std::fmax(std::fmax(s, stated_km), kDataSigmaFloorKm);
+  };
+  const int passes = with_c ? kSigmaPassesConsider : kSigmaPasses;
+  const double tolerance = with_c ? kSigmaToleranceConsider : kSigmaTolerance;
+  bool profiled_rss = false;
+  for (int pass = 0; pass < passes; ++pass) {
+    const double next = sigma_of(profiled_rss);
+    if (!(with_c && pass == 0) && std::fabs(next - sigma_km) <= tolerance * sigma_km) return;
     ElementRow trial = row;
-    const Result again = run(trial, t, r, count, o, next, true);
+    const Result again = run(trial, t, r, count, o, next, true, with_c ? cons : nullptr);
     iterations += again.iterations;
     if (again.status < 0) return;
     row = trial;
     res = again;
     sigma_km = next;
+    profiled_rss = with_c;
   }
 }
 

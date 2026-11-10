@@ -72,6 +72,10 @@ constexpr Prior kSrpPriorDefault = {0.0, 0.05, pcfPriorForm_GAUSSIAN_SIGNED};
 /// AGOM's prior on an arc shorter than kShortArcHours when FIT.SRP_PRIOR is unset: the Space Force wrapper's
 /// (propagator/sgp4-xp/src/fit.hpp SGP4XP_PRIOR_SIGMA_AGOM), GAUSSIAN_SIGNED 0 +- 0.1 m^2/kg (SPEC 12.1).
 constexpr Prior kSrpPriorShortArc = {0.0, 0.1, pcfPriorForm_GAUSSIAN_SIGNED};
+/// AGOM's prior on an AP fit when FIT.SRP_PRIOR is unset (SPEC 12.1, the consider estimator): positive, not zero-mean, so a
+/// term the arc cannot determine is held near a physical value rather than at no radiation pressure: GAUSSIAN_SIGNED
+/// 0.01 +- 0.01 m^2/kg (Cr A/m of a satellite, 1.3 x 0.002 to 0.02 m^2/kg), on every arc.
+constexpr Prior kSrpPriorAp = {0.01, 0.01, pcfPriorForm_GAUSSIAN_SIGNED};
 /// An arc shorter than this takes kSrpPriorShortArc: the 24 h arcs; spans of 48 h and more keep kSrpPriorDefault.
 constexpr double kShortArcHours = 36.0;
 /// BTERM's sigma of the log when FIT.DRAG_PRIOR is unset under NRLMSISE-00 at a mean altitude of 800 to 1400 km (SPEC

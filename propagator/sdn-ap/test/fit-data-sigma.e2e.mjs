@@ -9,10 +9,10 @@
 // - Stated accuracy. The GPS-like arc with COVARIANCE_MATRIX_LINES of (0.5 km)^2 on X, Y and Z at every state: the record
 //   states 0.5 km (6 digits) and every accepted $ODR row's WEIGHT is 1 / 0.25 per km^2.
 // - Noisy input. 1,336 km (120 s), BTERM 0.005 and AGOM 0.02, with 500 m Gaussian noise on each position component
-//   (seeded): the stated data sigma within 10 % of 500 m; the arc carries no drag information, so the prior holds BTERM:
-//   the posterior sigma of ln BTERM at least 0.9 of the prior's (10 ln 10 at 800 to 1,400 km under NRLMSISE-00, SPEC
-//   12.8) and BTERM within a factor e of the prior median 0.0005; it carries little on AGOM: its posterior sigma at least
-//   half its prior's (0.1 on an arc under 36 h) and AGOM within two of it of the truth.
+//   (seeded): the stated data sigma within 10 % of 500 m; the arc carries no drag information, so the hold rule holds
+//   BTERM at the AP prior's median 0.01 (SPEC 12.1), says so in the record's OD COMMENT and leaves it out of
+//   OD_EST_PARAMETERS, and its sigma of ln BTERM is the prior's, ln 10; AGOM is held at the AP prior's 0.01 the same way
+//   or, estimated, within two of its sigma of the truth.
 // JS only moves bytes and compares numbers the module produced (and adds the seeded noise).
 //   node test/fit-data-sigma.e2e.mjs
 import * as flatbuffers from "flatbuffers";
@@ -76,7 +76,8 @@ async function fit(states, covKm2 = 0) {
   const weighting = o.ORBIT_DETERMINATION?.OD_DATA_WEIGHTING ?? "";
   return { me: o.MEAN_ELEMENTS, sB: kinds.length > 0 ? sigmaOf(0) : NaN, sS: kinds.length > 1 ? sigmaOf(1) : NaN, weighting,
     sigmaKm: Number(/SIGMA ([0-9.e+-]+) KM/.exec(weighting)?.[1]), weights: new Set(odr.EDITED_OBSERVATIONS.filter((e) => e.ACCEPTED).map((e) => e.WEIGHT)),
-    converged: o.ORBIT_DETERMINATION?.FIT_STATISTICS?.CONVERGED };
+    converged: o.ORBIT_DETERMINATION?.FIT_STATISTICS?.CONVERGED, comment: o.ORBIT_DETERMINATION?.COMMENT ?? [],
+    estimated: o.ORBIT_DETERMINATION?.OD_EST_PARAMETERS ?? [] };
 }
 
 // --- precise input: the data, not the priors, decide
@@ -102,12 +103,15 @@ const uniform = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^
 const gauss = () => Math.sqrt(-2 * Math.log(1 - uniform())) * Math.cos(2 * Math.PI * uniform());
 const noisy = (await truth("leo1336", 0.005, 0.02)).map((q) => ({ ms: q.ms, s: [q.s[0] + 0.5 * gauss(), q.s[1] + 0.5 * gauss(), q.s[2] + 0.5 * gauss(), q.s[3], q.s[4], q.s[5]] }));
 const n = await fit(noisy);
-const lnSigmaB = n.sB / n.me.BTERM, PRIOR_LN = 10 * Math.log(10);
-console.log(`1,336 km, 500 m noise: data sigma ${(1000 * n.sigmaKm).toFixed(1)} m; BTERM ${n.me.BTERM} (sigma of ln ${lnSigmaB.toFixed(2)}, prior ${PRIOR_LN.toFixed(2)}); ` +
-  `AGOM ${n.me.AGOM} (sigma ${n.sS.toExponential(3)}, prior 0.1)`);
+const lnSigmaB = n.sB / n.me.BTERM, PRIOR_LN = Math.log(10);
+const heldB = n.comment.some((c) => /^prior-limited: BTERM held/.test(c)), heldS = n.comment.some((c) => /^prior-limited: AGOM held/.test(c));
+console.log(`1,336 km, 500 m noise: data sigma ${(1000 * n.sigmaKm).toFixed(1)} m; BTERM ${n.me.BTERM}${heldB ? " held" : ""} (sigma of ln ${lnSigmaB.toFixed(3)}, prior ${PRIOR_LN.toFixed(3)}); ` +
+  `AGOM ${n.me.AGOM}${heldS ? " held" : ""} (sigma ${n.sS.toExponential(3)}, prior 0.01 +- 0.01); estimated ${n.estimated.join(", ")}`);
 check(Math.abs(n.sigmaKm / 0.5 - 1) <= 0.1, `500 m noise: data sigma ${n.sigmaKm} km`);
-check(lnSigmaB >= 0.9 * PRIOR_LN && Math.abs(Math.log(n.me.BTERM / 0.0005)) <= 1, `500 m noise: BTERM ${n.me.BTERM}, sigma of ln ${lnSigmaB}`);
-check(n.sS >= 0.05 && Math.abs(n.me.AGOM - 0.02) <= 2 * n.sS, `500 m noise: AGOM ${n.me.AGOM}, sigma ${n.sS}`);
+check(heldB && !n.estimated.includes("DRAG_AREA_OVER_MASS") && Math.abs(n.me.BTERM / 0.01 - 1) <= 1e-9 && Math.abs(lnSigmaB / PRIOR_LN - 1) <= 1e-6,
+  `500 m noise: BTERM ${n.me.BTERM}, held ${heldB}, sigma of ln ${lnSigmaB}`);
+check(heldS ? !n.estimated.includes("SRP_AREA_OVER_MASS") && Math.abs(n.me.AGOM - 0.01) <= 1e-12 && Math.abs(n.sS / 0.01 - 1) <= 1e-6
+  : Math.abs(n.me.AGOM - 0.02) <= 2 * n.sS, `500 m noise: AGOM ${n.me.AGOM}, held ${heldS}, sigma ${n.sS}`);
 
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);

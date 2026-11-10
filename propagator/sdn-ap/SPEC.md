@@ -1613,6 +1613,37 @@ $OEM does not carry. Precise input makes the priors negligible; noisy input (an 
 s about 0.5 km) leaves them their weight. Through 0.6.5 the fit weighed every component at 1 km, the unit of the
 residual, not a sigma: data good to meters counted 2,500 to 40,000 times too little against the priors.
 
+An AP fit (FORCES other than stock) weighs the theory's own error as what it is, correlated over the arc, not noise
+*[review-0 addendum 2, the referee's estimator: Aitken's generalized least squares with consider parameters]*. It
+minimizes
+
+    Phi = rho^T R^-1 rho + sum over its priors ((x - mu) / sigma)^2,   R = sigma_r^2 (I + G K^2 G^T),
+
+rho the 3N position residuals (km, TEME), G five columns built from the theory's element columns with tau = t - t_end
+(days from the arc's last state): the in-track rate-of-rate (1/2 tau^2 dr/dlambda0 + tau (dr/dn - t dr/dlambda0), per
+km/day^2), the eccentricity-vector rates (tau dr/daf, tau dr/dag, per km/day of a de) and the inclination-vector rates
+(tau dr/dchi, tau dr/dpsi), and K = diag(kappa_n, kappa_e, kappa_e, kappa_i, kappa_i) their sizes per unit sigma_r.
+The fit carries the five rates c beside its parameters (the normal matrix grows by five; the damping acts on the
+parameters only), so Phi = min_c [|rho + G c|^2 + c^T K^-2 c] / sigma_r^2 + the priors, and profiles the scale:
+sigma_r = max(s_c, sigma_OEM, 1 mm), s_c^2 = min_c [...] / (3N - dim p), redone until sigma_r moves by under 1 % (at
+most 40 passes: the scale converges slowly along the ln B and in-track valley). Everything scales with sigma_r, so on
+an exact model the block and the priors' relative weight vanish. kappa comes from the table `fit::kKappaNodes` at the
+fitted orbit's mean a, e and inclination and the arc's length: per calibration orbit log-linear in ln kappa against ln T
+(held at the end values outside 1 to 5 days), then a Gaussian kernel over ln a (width 0.05), inclination (20 deg) and e
+(0.1), normalized, so kappa is continuous in every argument and no class boundary moves the weighting by a step. The
+table is measured by `test/consider-calibration.mjs` (below). The record states sigma_r and the three kappa in
+OD_DATA_WEIGHTING and the estimator in OD_ALGORITHM.
+
+An AP fit's priors, where FIT does not state them: BTERM LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10
+in every band (no altitude median, no 10 ln 10 band: 12.8's band rule and fall-back are SGP4XP's), AGOM GAUSSIAN_SIGNED
+0.01 +- 0.01 m^2/kg on every arc (`pcf::kSrpPriorAp`: a positive radiation term; a zero-mean prior on a positive
+quantity biases a prior-limited AGOM low). The hold rule: where a term's marginal posterior variance, the consider
+block included, exceeds half its prior's, the term is held at the prior's mean (median), the fit is redone without it,
+the record says so in OD COMMENT ("prior-limited: BTERM held at its prior ..."), OD_EST_PARAMETERS leaves it out
+(OD_DYNAMIC_PARAMETERS keeps SOLVED_FOR true: the row is the prior's, carried), and the covariance carries it as a
+consider parameter of the prior's variance Sigma_h (Schmidt): with F the estimated terms, P_FF = A_FF^-1 and S = -P_FF
+A_Fh, the parameters' covariance is [[P_FF + S Sigma_h S^T, S Sigma_h], [Sigma_h S^T, Sigma_h]].
+
 At the solution (an SGP4XP set at its two-line digits, an AP set at full precision: 16.9), over the N fit states,
 
 - J_k = d r_k / d p, every column the central difference of the theory itself (steps 1e-6 in af, ag, chi, psi and
@@ -1625,11 +1656,14 @@ At the solution (an SGP4XP set at its two-line digits, an AP set at full precisi
   fits of experiments xp2-fit-design (1,214 windows, every one converged); AGOM's is GAUSSIAN_SIGNED with mean 0 and
   sigma 0.05 m^2/kg on an arc of 36 h or more and, on a shorter arc (the fit interval's first to last state), the
   Space Force wrapper's AGOM prior, GAUSSIAN_SIGNED 0 +- 0.1 m^2/kg (`propagator/sgp4-xp/src/fit.hpp`
-  SGP4XP_PRIOR_SIGMA_AGOM); a FIT.SRP_PRIOR stated with its sigma holds on every arc. Both theories the fit solves
-  (SGP4XP, and AP with its FORCES) take the rule. BTERM's prior keeps its form on short arcs: the wrapper's 0 +- 0.05
+  SGP4XP_PRIOR_SIGMA_AGOM); a FIT.SRP_PRIOR stated with its sigma holds on every arc. SGP4XP takes the rule; AP takes
+  its own priors (above). BTERM's prior keeps its form on short arcs: the wrapper's 0 +- 0.05
   moves no drag-free orbit and, below, ended at BTERM <= 0. A Gaussian on BTERM is stated by its mean and sigma
   (FIT.DRAG_PRIOR with HAS_SIGMA true): 0 +- 0.05 ended at BTERM <= 0, no drag at all, on the real ISS window of
   test/fit.e2e.mjs;
+- for an AP fit, A - C (D + K^-2)^-1 C^T / sigma_r^2 in place of A (C = sum J_k^T G_k, D = sum G_k^T G_k: the
+  consider rates profiled out, P_p the parameters' block of the inverse of the normal matrix with them), held terms as
+  above;
 - P_p = A^-1, the inverse curvature of the Phi the fit minimized; a term estimated as its log is carried back to m^2/kg
   by the Jacobian (the delta method): its rows and
   columns of P_p times the term, so sigma_B = B sigma_lnB. The $OBD gives the posterior sigma of the log and marks the
