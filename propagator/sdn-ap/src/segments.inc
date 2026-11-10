@@ -25,6 +25,7 @@ namespace segments {
 constexpr uint32_t kMaxCoefficients = 16;
 constexpr int32_t kDivisions[] = {4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256};
 constexpr int32_t kNotCovered = 1;     ///< the time is outside the row's segments
+constexpr int32_t kNoSegments = 2;     ///< the row has no segments (no division held the tolerance): fly its theory
 constexpr int32_t kNoDivision = -10;   ///< no division of the period holds the tolerance
 constexpr double kMu = 398600.4418;    ///< km^3/s^2, for the period only
 
@@ -181,12 +182,13 @@ inline int32_t build_row(uint32_t el, uint32_t i) {
         }
       }
     }
+    // the misses of the attempt (a row no division holds keeps its finest attempt's, to say why)
+    S.worst[2 * i] = worst_m;
+    S.worst[2 * i + 1] = worst_mms;
     if (ok) {
       S.inv_len[i] = 1.0 / len;
       S.built[i] = S.per_row;
       S.division[i] = k;
-      S.worst[2 * i] = worst_m;
-      S.worst[2 * i + 1] = worst_mms;
       return 0;
     }
   }
@@ -216,7 +218,9 @@ void segments_chunk(const Job& j, int32_t chunk) {
     const double fj = std::floor(u);
     int32_t e = 0;
     double r[3] = {0, 0, 0}, v[3] = {0, 0, 0};
-    if (!(fj >= 0.0) || !(fj < static_cast<double>(S.built[i]))) {
+    if (S.built[i] == 0) {
+      e = segments::kNoSegments;  // the caller flies this row's theory directly
+    } else if (!(fj >= 0.0) || !(fj < static_cast<double>(S.built[i]))) {
       e = segments::kNotCovered;
     } else {
       const uint32_t seg = static_cast<uint32_t>(fj);
@@ -288,8 +292,9 @@ int32_t sdnap_segments_select(int32_t tesseral, int32_t zonal) {
 }
 
 /// Rows [first, first + count) at one split Julian date (UTC) from their display segments: six planes as
-/// sdnap_propagate_soa, frame 0 (TEME: km, km/s) or 3 (Earth-fixed: m, m/s); `status` (optional) 0, or 1 where the
-/// time is outside the row's segments.
+/// sdnap_propagate_soa, frame 0 (TEME: km, km/s) or 3 (Earth-fixed: m, m/s); `status` (optional) 0, 1 where the time
+/// is outside the row's segments, 2 where the row has none (no division held the tolerance: the caller flies its
+/// theory directly, so no object is dropped or shown beyond the tolerance).
 SDNAP_EXPORT("sdnap_segments_at")
 int32_t sdnap_segments_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, uint32_t frame, double* out, int32_t* status) {
   const sdnap::segments::Store& S = sdnap::segments::seg_store();

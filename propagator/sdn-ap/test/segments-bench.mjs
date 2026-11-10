@@ -25,12 +25,14 @@ const sets = [];
 for (let k = 0; k < N; k++) {
   const u = rnd();
   let a, e, i;
+  // (the class label takes no draw: the mix is the same as before it was added)
+  const cls = u < 0.70 ? "low" : u < 0.80 ? "MEO" : u < 0.88 ? "GEO" : u < 0.95 ? "transfer" : "Molniya";
   if (u < 0.70) { a = RE + 300 + 1200 * rnd() ** 1.5; e = 0.02 * rnd() ** 2; i = 100 * rnd(); }
   else if (u < 0.80) { a = 26560 + 200 * (rnd() - 0.5); e = 0.02 * rnd(); i = 50 + 10 * rnd(); }
   else if (u < 0.88) { a = 42164 + 50 * (rnd() - 0.5); e = 0.001 * rnd(); i = 15 * rnd(); }
   else if (u < 0.95) { const rp = RE + 250 + 350 * rnd(); e = 0.5 + 0.25 * rnd(); a = rp / (1 - e); i = 7 + 50 * rnd(); }
   else { a = 26560; e = 0.70 + 0.04 * rnd(); i = 63.4; }
-  sets.push({ epochWhole: EPOCH_WHOLE, epochFrac: EPOCH_FRAC, meanMotion: rev(a), ecc: e, inc: i, raan: 360 * rnd(), argp: 360 * rnd(), ma: 360 * rnd(),
+  sets.push({ cls, a, epochWhole: EPOCH_WHOLE, epochFrac: EPOCH_FRAC, meanMotion: rev(a), ecc: e, inc: i, raan: 360 * rnd(), argp: 360 * rnd(), ma: 360 * rnd(),
     bterm: a < RE + 2000 ? 0.005 + 0.05 * rnd() : 0.01, agom: 0.01, norad: 100000 + k, theory: mod.THEORY.SGP4XP });
 }
 const m = await mod.openModule({ threads: THREADS });
@@ -58,19 +60,24 @@ const st = new Int32Array(mem(), status, N).slice();
 const codes = {}; st.forEach((s) => { codes[s] = (codes[s] ?? 0) + 1; });
 const div = {};
 let minCover = Infinity, segPerSecond = 0, worstM = 0, worstMms = 0;
+// rows no division held: segments_at gives them status 2 and the caller flies their theory (counted, never dropped)
+const noDivision = [];
 for (let k = 0; k < N; k++) {
   x.sdnap_segments_row(k, info);
   const [d, len, built, wm, wv] = new Float64Array(mem(), info, 5);
   div[d] = (div[d] ?? 0) + 1;
   if (built > 0) { minCover = Math.min(minCover, len * built); segPerSecond += 1 / len; worstM = Math.max(worstM, wm); worstMms = Math.max(worstMms, wv); }
+  else if (st[k] === -10) noDivision.push({ cls: sets[k].cls, altitudeKm: Math.round(sets[k].a * (1 - sets[k].ecc) - RE), e: +sets[k].ecc.toFixed(3), finestMissM: +wm.toFixed(3), finestMissMms: +wv.toFixed(3) });
 }
 const sum = (f) => batches.reduce((a, b) => a + b[f], 0);
 console.log(JSON.stringify({ N, batch: BATCH, theory: AP ? "AP (tesseral 31, zonal 20)" : "SGP4XP", threads: m.threads, perRow: PER_ROW, coef: COEF, tolM: TOLM, tolMms: TOLMMS,
   loadWallS: +(sum("loadMs") / 1000).toFixed(2), loadCpuS: +sum("loadCpuS").toFixed(2), buildWallS: +(sum("buildMs") / 1000).toFixed(2), buildCpuS: +sum("buildCpuS").toFixed(2),
   theoryRecordBytesPerSet: Math.round(storePerSet), memoryGrowthPerLoadedSet: Math.round(memPerSet), memoryMB: Math.round(mem().byteLength / 1048576), segmentBytesPerSet: +(x.sdnap_segments_bytes() / N).toFixed(1), status: codes, divisions: div,
+  noDivisionRows: noDivision.length, noDivisionByClass: noDivision.reduce((o, r) => ((o[r.cls] = (o[r.cls] ?? 0) + 1), o), {}), noDivisionSample: noDivision.slice(0, 8),
   minCoverS: +minCover.toFixed(1), segmentsPerSecondRealTime: +segPerSecond.toFixed(1), worstAtChecksM: +worstM.toFixed(4), worstAtChecksMms: +worstMms.toFixed(4) }));
 const times = Array.from({ length: STEPS }, (_, k) => (minCover * (k + 0.5)) / STEPS);
-const step = (fn) => { const ms = []; for (const s of times) { const a = performance.now(); fn(s); ms.push(performance.now() - a); } ms.sort((p, q) => p - q); return { medianMs: +ms[Math.floor(ms.length / 2)].toFixed(3), p95Ms: +ms[Math.floor(0.95 * ms.length)].toFixed(3), minMs: +ms[0].toFixed(3) }; };
+const step = (fn) => { const ms = []; for (const s of times) { const a = performance.now(); fn(s); ms.push(performance.now() - a); } ms.sort((p, q) => p - q);
+  return { medianMs: +ms[Math.floor(ms.length / 2)].toFixed(3), p99Ms: +ms[Math.min(ms.length - 1, Math.floor(0.99 * ms.length))].toFixed(3), minMs: +ms[0].toFixed(3) }; };
 const segTeme = step((s) => x.sdnap_segments_at(EPOCH_WHOLE, s / 86400, 0, N, 0, out, status));
 const segEcef = step((s) => x.sdnap_segments_at(EPOCH_WHOLE, s / 86400, 0, N, 3, out, status));
 const last = batches.at(-1);

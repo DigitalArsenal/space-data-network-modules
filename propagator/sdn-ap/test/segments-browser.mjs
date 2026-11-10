@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import { packageRoot, wasmPath } from "./lib/module.mjs";
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? Number(process.argv[i + 1]) : d; };
-const N = arg("n", 100000), THREADS = arg("threads", 15), STEPS = arg("steps", 1000);
+const N = arg("n", 100000), THREADS = arg("threads", 15), STEPS = arg("steps", 1000), AP = process.argv.includes("--ap"), BATCH = Math.min(N, arg("batch", N));
 const nm = path.join(packageRoot, "node_modules");
 const sdkRoot = path.join(nm, "space-data-module-sdk");
 const sdkExports = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8")).exports;
@@ -32,7 +32,7 @@ const page = `<!doctype html><meta charset="utf-8"><script type="importmap">${JS
 const report = (body) => fetch("/result", { method: "POST", body: JSON.stringify(body) });
 try {
   const { createBrowserModuleHarness } = await import("/nm/space-data-module-sdk/src/host/browserModuleHarness.js");
-  const N = ${N}, THREADS = ${THREADS}, STEPS = ${STEPS};
+  const N = ${N}, THREADS = ${THREADS}, STEPS = ${STEPS}, AP = ${AP}, BATCH = ${BATCH};
   // the pool's workers from the SDK's prebuilt worker bundle (space-data-module-sdk/host/worker-bundles)
   const { hostWorkerBundleUrl } = await import("/nm/space-data-module-sdk/src/host/hostWorkerBundles.js");
   const h = await createBrowserModuleHarness({ wasmSource: "/module.wasm", surface: "direct", maxThreads: Math.max(1, THREADS), enableBrowserWasiThreads: THREADS > 0,
@@ -58,14 +58,23 @@ try {
     rows.setUint32(112 * k + 104, 100000 + k, true);
     rows.setInt32(112 * k + 108, 4, true);
   }
-  const p = x.sdnap_alloc(112 * N);
-  new Uint8Array(mem(), p, 112 * N).set(new Uint8Array(rows.buffer));
-  const held = x.sdnap_init_elements(p, N);
-  x.sdnap_free(p);
+  // the sets in batches of BATCH (AP: the gravity terms selected before each load), each batch's segments built into
+  // the one segment store before the next batch replaces it
   const status = x.sdnap_alloc(4 * N), out = x.sdnap_alloc(48 * N), info = x.sdnap_alloc(64);
-  const b0 = performance.now();
-  const rc = x.sdnap_segments_build(2461328.5, 0, N, 0, 4, 8, 1, 1, status);
-  const buildMs = performance.now() - b0;
+  const p = x.sdnap_alloc(112 * BATCH);
+  let held = 0, rc = 0, loadMs = 0, buildMs = 0;
+  for (let off = 0; off < N; off += BATCH) {
+    const n = Math.min(BATCH, N - off);
+    new Uint8Array(mem(), p, 112 * n).set(new Uint8Array(rows.buffer, 112 * off, 112 * n));
+    if (AP) x.sdnap_segments_select(31, 20);
+    const l0 = performance.now();
+    held += x.sdnap_init_elements(p, n);
+    const b0 = performance.now();
+    rc = rc || x.sdnap_segments_build(2461328.5, 0, N, off, 4, 8, 1, 1, status + 4 * off);
+    loadMs += b0 - l0;
+    buildMs += performance.now() - b0;
+  }
+  x.sdnap_free(p);
   let minCover = Infinity;
   for (let k = 0; k < N; k++) { x.sdnap_segments_row(k, info); const f = new Float64Array(mem(), info, 3); if (f[2] > 0) minCover = Math.min(minCover, f[1] * f[2]); }
   const step = (frame) => {
@@ -76,9 +85,9 @@ try {
       ms.push(performance.now() - a);
     }
     ms.sort((u, v) => u - v);
-    return { medianMs: ms[Math.floor(STEPS / 2)], p95Ms: ms[Math.floor(0.95 * STEPS)], minMs: ms[0], meanMs: ms.reduce((u, v) => u + v, 0) / STEPS };
+    return { medianMs: ms[Math.floor(STEPS / 2)], p99Ms: ms[Math.min(STEPS - 1, Math.floor(0.99 * STEPS))], minMs: ms[0], maxMs: ms[STEPS - 1], meanMs: ms.reduce((u, v) => u + v, 0) / STEPS };
   };
-  await report({ ok: true, userAgent: navigator.userAgent, crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency, N, held, threads, rc, buildMs, minCoverS: minCover,
+  await report({ ok: true, userAgent: navigator.userAgent, crossOriginIsolated, hardwareConcurrency: navigator.hardwareConcurrency, N, ap: AP, batch: BATCH, held, threads, rc, loadMs, buildMs, minCoverS: minCover, statusCounts: (() => { const c = {}; new Int32Array(mem(), status, N).forEach((s) => { c[s] = (c[s] ?? 0) + 1; }); return c; })(),
     teme: step(0), ecef: step(3), memoryMB: mem().byteLength / 1048576 });
 } catch (e) {
   const cause = e && (e.cause || e.error);
