@@ -21,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 
 if (!isMainThread) {
@@ -109,7 +110,6 @@ if (!isMainThread) {
   assert.ok(Object.keys(objects).length >= 9, 'the altimetry objects replayed');
   for (const [name, o] of Object.entries(objects))
     if (o.scored) assert.ok(o.scoredHere - o.scoredAt0411 <= 10, `${name}: no more than 10 m worse than 0.4.11 on its scored windows`);
-  execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-    {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+  reproduceConformance();
   console.log('fit BTERM 700-1400 km E2E: PASS');
 }

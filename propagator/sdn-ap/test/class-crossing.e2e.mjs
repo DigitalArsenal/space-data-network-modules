@@ -8,7 +8,7 @@
 // Known B fixed in both input sets; no SRP. Signed along-track errors within 25%.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {buildDiagnostic,CLASS_PROBE} from './lib/ap-diagnostic.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 const probePath=process.env.SDN_AP_CLASS_PROBE??buildDiagnostic('class-probe',CLASS_PROBE);
@@ -35,7 +35,7 @@ if(process.env.SDN_AP_CLASS_REPORT)fs.writeFileSync(process.env.SDN_AP_CLASS_REP
 console.log(JSON.stringify({bterm:selected.bterm,day7AlongTrackMeters:[a.days[7].t,b.days[7].t],ratio,allowed:[.75,1.25],epochHoldDay7AlongTrackMeters:epochHold.days[7].t,termLongitudeAmplitudesMeters:a.classDiagnostics[0].values.slice(5,7),termPerigeeAlongTrackAmplitudesMeters:a.classDiagnostics[0].values.slice(7,9)}));
 if(!process.argv.includes('--baseline')){
  for(const r of selected.pair)for(const d of r.classDiagnostics){const crossed=d.values[0]>edge;assert.equal(d.values[2],crossed?3:2,'current class has matching tables');assert.equal(d.values[3],crossed?0:2,'rates contain only the current class');assert.equal(d.values[4],crossed?2:0,'both old terms move to output without duplication');}
- execFileSync(process.execPath,[new URL('./conformance.e2e.mjs',import.meta.url).pathname,'--reproduce',new URL('./results/conformance.json',import.meta.url).pathname],{stdio:'inherit',env:{...process.env,SDN_AP_ORACLE_ROOT:process.env.SDN_AP_ORACLE_ROOT??'/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+ reproduceConformance();
  assert.ok(Math.abs(ratio-1)<=.25,'crossing signed along-track error within 25% of companion');
  assert.ok(Math.abs(a.days[7].t)<Math.abs(epochHold.days[7].t),'rebuild has smaller absolute along-track error than epoch hold');
  for(const amplitude of a.classDiagnostics[0].values.slice(7,9))assert.ok(amplitude>500&&amplitude<650,'both sampled perigee term amplitudes remain in the measured range');
