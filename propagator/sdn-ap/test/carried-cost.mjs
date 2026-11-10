@@ -14,7 +14,7 @@
 // (per record in a warm instance, and once per process: a new instance's first load and state).
 // Orbits: 500 km, 830 km, 20,200 km, geosynchronous, e 0.1 in low orbit, e 0.72 (perigee 250 km), and the
 // eccentricities 0, 0.05, 0.1, 0.3, 0.72, 0.82 at a 600 km perigee for the steady-state row.
-// The carried records carry 8 days of a forecast made by the module (a stock SGP4XP set flown at 60 s, 30 s from e 0.3,
+// The carried records carry 8 days of a forecast made by the module (a stock SGP4XP set flown at 30 s,
 // so this script needs nothing else); --records <dir> takes carried records made elsewhere instead (<orbit>.ocm, e.g.
 // fitted to FFM's flights: their size, and so the load, is FFM's).
 //   node test/carried-cost.mjs [--rounds 15] [--n 1000] [--many 10000] [--orbits leo500,...] [--records dir] [--json out]
@@ -80,9 +80,9 @@ const apOcm = (o, norad = 90002) => seedOcm({ epoch: EPOCH, n: revPerDay(o.a), e
   msis: true, records: true, tesseral: 31, zonal: 20, rows });
 async function carriedOcm(h, name, o, days = 8) {
   if (days === 8 && RECORDS && fs.existsSync(path.join(RECORDS, `${name}.ocm`))) return new Uint8Array(fs.readFileSync(path.join(RECORDS, `${name}.ocm`)));
-  // a stock SGP4XP set's flight over `days` (in TEME; 60 s, 30 s from e 0.3), carried by an SGP4XP fit of it
+  // a stock SGP4XP set's flight over `days` (in TEME; 30 s, the arc bound's step in low orbit), carried by an SGP4XP fit
   const seed = seedOcm({ epoch: EPOCH, n: revPerDay(o.a), e: o.e, i: o.i, raan: 40, argp: 30, ma: 0, bterm: 0.002, agom: 0.01, norad: 90003 });
-  const step = o.e >= 0.3 ? 30 : 60;
+  const step = 30;
   const grid = Array.from({ length: (days * DAY) / step + 9 }, (_, k) => (k - 4) * step);
   const states = await fly(h, seed, grid, pcfOutputFrame.TEME);
   return (await fitCarried(h, { ap: false }, forecastOem(states, 12, { norad: 90003, name }), [0, days * DAY])).ocm;

@@ -456,7 +456,7 @@ static int fit_blocks() {
       // fit interval
       double us_w = all[0].whole, us_f = all[0].frac, ue_w = all[n - 1].whole, ue_f = all[n - 1].frac;
       bool held_out_rule = false;
-      const bool start_given = blk->USEABLE_START_TIME() != nullptr && fitoem::text_epoch(blk->USEABLE_START_TIME(), us_w, us_f);
+      bool start_given = blk->USEABLE_START_TIME() != nullptr && fitoem::text_epoch(blk->USEABLE_START_TIME(), us_w, us_f);
       if (blk->USEABLE_STOP_TIME() != nullptr) held_out_rule = fitoem::text_epoch(blk->USEABLE_STOP_TIME(), ue_w, ue_f);
       if (po.has_holdout) {
         // $PCF FIT.HOLDOUT_HOURS: the fit ends that long before the data does (the block's own USEABLE_STOP_TIME
@@ -466,6 +466,37 @@ static int fit_blocks() {
         ue_f = all[n - 1].frac - po.holdout_h / 24.0;
         held_out_rule = po.holdout_h > 0.0;
       }
+      // SPEC 18.7, with no USEABLE_START_TIME, USEABLE_STOP_TIME or FIT.HOLDOUT_HOURS stated. The carried record
+      // (OUTPUT.START_TIME and STOP_TIME) anchors its theory at the span's start, the observation cutoff: the arc is the
+      // block's states from START_TIME through START_TIME plus the default span (ECCENTRIC_DEFAULT_SPAN_HOURS above the
+      // threshold), at most STOP_TIME, its epoch the first, the later states held out; its covariance grows forward
+      // from there. The hand-over set (OUTPUT.START_TIME alone) is fitted to the forecast's last part: the arc ends at
+      // START_TIME by the span rule, the later states held out, its epoch the arc's last state (set below).
+      const bool carrying = po.has_start && po.has_stop, handing_over = po.has_start && !po.has_stop;
+      if ((carrying || handing_over) && !start_given && !held_out_rule && !po.has_holdout) {
+        if (carrying) {
+          const double span_h = fitoem::eccentric_block(blk, po.eccentricity_threshold) ? po.eccentric_default_span_h : po.default_span_h;
+          us_w = po.start_w;
+          us_f = po.start_f;
+          start_given = true;
+          ue_w = po.start_w;
+          ue_f = po.start_f + span_h / 24.0;
+          if (fitoem::minutes_between(po.stop_w, po.stop_f, ue_w, ue_f) > 0.0) {
+            ue_w = po.stop_w;
+            ue_f = po.stop_f;
+          }
+        } else {
+          ue_w = po.start_w;
+          ue_f = po.start_f;
+        }
+        held_out_rule = true;
+      }
+      struct PlacementScope {
+        int prev;
+        bool on;
+        explicit PlacementScope(bool set) : prev(fitoem::epoch_placement()), on(set) { if (on) fitoem::epoch_placement() = 2; }
+        ~PlacementScope() { if (on) fitoem::epoch_placement() = prev; }
+      } placement_scope{handing_over && blk->USEABLE_STOP_TIME() == nullptr && !po.has_holdout};
       // DESIGN 2e.3 fit span, the documented rule: USEABLE_START_TIME to the end of the useable interval when it is
       // given; otherwise the latest 48 h, extended to 72 h and then 120 h while the drag is stable, judged on the
       // data: an extension is kept when its fit RMS is at most max(1.2 x, 0.02 km more than) the 48 h fit's (one
@@ -906,8 +937,12 @@ static int fit_blocks() {
       const atm::Atmosphere* call_atm = atm::active();
       if (po.forces.weather_source == pcfWeatherSource_RECORDS && call_atm != nullptr) {
         auto mjd_at = [&](double minutes) { return static_cast<int32_t>(std::floor((e0.whole - 2400000.5) + e0.frac + minutes / kMinutesPerDay)); };
-        const int32_t first_day = mjd_at(fit_begin_min) - 1;
-        const int32_t last_day = std::max(mjd_at(fit_end_min), mjd_at(0.0) + static_cast<int32_t>(po.weather_horizon_days));
+        // SPEC 18.7: a record carrying a forecast flies the theory over its whole span (the covariance): from the day
+        // before the span's start too, when that is earlier than the arc's
+        const int32_t first_day = std::min(mjd_at(fit_begin_min), po.has_start && po.has_stop ? ocm::mjd_of(po.start_w, po.start_f) : std::numeric_limits<int32_t>::max()) - 1;
+        // and through the span's stop (the theory's covariance flies to it)
+        const int32_t last_day = std::max(std::max(mjd_at(fit_end_min), mjd_at(0.0) + static_cast<int32_t>(po.weather_horizon_days)),
+                                          carrying ? ocm::mjd_of(po.stop_w, po.stop_f) : std::numeric_limits<int32_t>::min());
         size_t k = 0;
         const std::vector<atm::SpwDay>& days = call_atm->days;
         for (int32_t d = first_day; d <= last_day; ++d) {
@@ -916,7 +951,7 @@ static int fit_blocks() {
             char day[16];
             atm::date_of_mjd(d, day, sizeof day);
             return atm::fail_day("weather-rows-short", day,
-                                 "The 'space_weather' rows miss a day the record carries: the day before the fit arc through the later of its last day and the epoch's plus FIT.WEATHER_HORIZON_DAYS.");
+                                 "The 'space_weather' rows miss a day the record carries: the day before the fit arc (or the carried span, the earlier) through the later of its last day and the epoch's plus FIT.WEATHER_HORIZON_DAYS.");
           }
           weather.rows.push_back(days[k]);
         }
@@ -1003,8 +1038,12 @@ static int fit_blocks() {
       if (lattice) comment.push_back("elements at the two-line text's digits");
       // SPEC 18: the forecast the record carries ($PCF OUTPUT.START_TIME to STOP_TIME), its span and end jumps in COMMENT
       flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;
-      if (po.has_start && po.has_stop)
-        if (const int rc = carried::build(fbb, row, ocm::epoch_frame(po.forces), all, gcrf, po.start_w, po.start_f, po.stop_w, po.stop_f, forecast, comment)) return rc;
+      carried::Described described;
+      if (carrying) {
+        if (const int rc = carried::build(fbb, row, ocm::epoch_frame(po.forces), all, gcrf, po.start_w, po.start_f, po.stop_w, po.stop_f, blk, source, forecast, comment, described)) return rc;
+      } else if (handing_over) {
+        carried::handover(fbb, row, ocm::epoch_frame(po.forces), all, po.start_w, po.start_f, blk, source, comment, described);
+      }
       const auto s_comment = fbb.CreateVectorOfStrings(comment);
       const auto s_od_method = fbb.CreateString("BATCH LEAST SQUARES");
       const auto s_od_algorithm = fbb.CreateString("LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS");
@@ -1032,6 +1071,9 @@ static int fit_blocks() {
       ocm::Extras extras;
       extras.od = od.Finish();
       extras.forecast = forecast;
+      extras.trajectory = described.blocks;
+      extras.span_start = described.start;
+      extras.span_stop = described.stop;
       if (source != nullptr) {
         extras.provenance = ocm::copy_pvn(fbb, source, true);
         extras.carried = true;
