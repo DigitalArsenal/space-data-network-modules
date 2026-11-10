@@ -1752,6 +1752,10 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
 
 #include "resonance.inc"
 #include "tesseral.inc"
+namespace tess {
+SpEvalCache* sp_pool_attach(const SpEvalCache&) { return nullptr; }
+void sp_pool_release(SpEvalCache* cache) { sp_cache_free(cache); }
+}  // namespace tess
 
 struct XpSat;
 
@@ -1840,6 +1844,8 @@ struct RateContext {
   int32_t sp_count;
   const tess::SpCombCoef* sp_comb;    ///< AP: combined (l, m, k) first-order tesseral terms for fast SIMD evaluation
   int32_t sp_comb_count;
+  double sp_ci0;                      ///< cos i of the set whose epoch built sp_comb: the cos i its grouping uses
+
   const tess::SpCoef* sp_orig;        ///< AP: original sp pointer for diagnostic override detection
   int32_t sp_orig_count;
   tess::WideGrid* wide;               ///< AP above tess::kWideE: the first-order tesseral families' grid (SPEC 16.11)
@@ -4900,9 +4906,8 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
     }
   }
   if (need_tess && km.e < 1.0) {
-    tess::SpEvalCache& sec_buf = tess::sp_eval_cache();
-    float* const cm_f32_buf = sec_buf.cm_f32_local;
-    float* const sm_f32_buf = sec_buf.sm_f32_local;
+    float* const cm_f32_buf = tess::sp_trig_cm();
+    float* const sm_f32_buf = tess::sp_trig_sm();
     int cm_cnt = 0;
     double cm_last = 1.0, sm_last = 0.0;
     const bool has_md = ctx.mdaily != nullptr;
@@ -4931,7 +4936,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                            &sb_pre, &cb_pre, mdt_id);
         }
         if (has_sp) {
-          tess::sp_six_with_deriv(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0,
+          tess::sp_six_with_deriv(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, ctx.theta_g0,
                                   six_sp, dsix_sp, d2_sp_dlam2_out != nullptr ? d2six_sp : nullptr,
                                   &sb_t, &cb_t,
                                   has_md ? cm_f32_buf : nullptr, has_md ? sm_f32_buf : nullptr, cm_cnt, cm_last, sm_last,
@@ -4982,7 +4987,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                            has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                            &sb_pre, &cb_pre, mdt_id);
         if (has_sp)
-          tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, six,
+          tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
                            sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
         else if (has_sp_custom)
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
@@ -5017,7 +5022,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                          has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                          &sb_pre, &cb_pre, mdt_id);
       if (has_sp)
-        tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, six,
+        tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
                          sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
       else if (has_sp_custom)
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
@@ -5525,6 +5530,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.sp_count = anchor->ctx.sp_orig_count;
       s.ctx.sp_orig = anchor->ctx.sp_orig;
       s.ctx.sp_orig_count = anchor->ctx.sp_orig_count;
+      s.ctx.sp_ci0 = anchor->ctx.sp_ci0;
       s.ctx.a0 = anchor->ctx.a0;
       s.ctx.e0 = anchor->ctx.e0;
       s.ctx.shared_mask |= 64;
@@ -5557,6 +5563,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
       s.ctx.sp_comb = comb_kept;
       s.ctx.sp_comb_count = comb_count;
+      s.ctx.sp_ci0 = std::cos(e.xincl);
       s.ctx.sp = raw_kept;
       s.ctx.sp_count = raw_count;
       s.ctx.sp_orig = raw_kept;
