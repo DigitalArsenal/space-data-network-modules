@@ -130,18 +130,18 @@ inline void eval(const double* c, uint32_t n, double tau, double p[3], double dp
   dp[2] = dz;
 }
 
-/// Row i's segments from s = 0 (the store's epoch): the smallest division of its period whose per_row segments all
-/// hold the tolerance. 0, kNoDivision, or the theory's code.
-inline int32_t build_row(uint32_t i) {
+/// Segment row i's segments from s = 0 (the store's epoch), from element row `el`'s theory: the smallest division of
+/// its period whose per_row segments all hold the tolerance. 0, kNoDivision, or the theory's code.
+inline int32_t build_row(uint32_t el, uint32_t i) {
   Store& S = seg_store();
   const uint32_t n = S.n;
   double* block = S.c + static_cast<size_t>(i) * S.per_row * 3u * n;
   S.built[i] = 0;
   S.division[i] = 0;
   S.t0[i] = 0.0;
-  S.minutes0[i] = minutes_since_epoch(i, S.w0, S.f0);
+  S.minutes0[i] = minutes_since_epoch(el, S.w0, S.f0);
   double r[3], v[3];
-  if (const int32_t e = row_propagate(i, S.minutes0[i], r, v)) return e;
+  if (const int32_t e = row_propagate(el, S.minutes0[i], r, v)) return e;
   const double rr = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]), vv = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
   const double inv_a = 2.0 / rr - vv / kMu;
   if (!(inv_a > 0.0)) return kNoDivision;
@@ -153,11 +153,11 @@ inline int32_t build_row(uint32_t i) {
     for (uint32_t j = 0; j < S.per_row && ok; ++j) {
       double* c = block + static_cast<size_t>(j) * 3u * n;
       const double a = j * len;
-      if (const int32_t e = fit_segment(i, S.minutes0[i], a, len, n, c)) return e;
+      if (const int32_t e = fit_segment(el, S.minutes0[i], a, len, n, c)) return e;
       for (const double tau : {-1.0, -0.5, 0.0, 0.5, 1.0}) {
         double p[3], dp[3], t[3];
         eval(c, n, tau, p, dp);
-        if (const int32_t e = theory_at(i, S.minutes0[i], a + 0.5 * (tau + 1.0) * len, t)) return e;
+        if (const int32_t e = theory_at(el, S.minutes0[i], a + 0.5 * (tau + 1.0) * len, t)) return e;
         const double miss = std::sqrt((p[0] - t[0]) * (p[0] - t[0]) + (p[1] - t[1]) * (p[1] - t[1]) + (p[2] - t[2]) * (p[2] - t[2]));
         worst_m = std::fmax(worst_m, static_cast<float>(miss * 1.0e3));
         if (!(miss <= S.tol_km)) ok = false;
@@ -166,10 +166,10 @@ inline int32_t build_row(uint32_t i) {
           // about 1e-13 km/s in low orbit)
           double p1[3], m1[3], p2[3], m2[3];
           const double s = a + 0.75 * len;
-          if (const int32_t e = theory_at(i, S.minutes0[i], s + 1.0, p1)) return e;
-          if (const int32_t e = theory_at(i, S.minutes0[i], s - 1.0, m1)) return e;
-          if (const int32_t e = theory_at(i, S.minutes0[i], s + 2.0, p2)) return e;
-          if (const int32_t e = theory_at(i, S.minutes0[i], s - 2.0, m2)) return e;
+          if (const int32_t e = theory_at(el, S.minutes0[i], s + 1.0, p1)) return e;
+          if (const int32_t e = theory_at(el, S.minutes0[i], s - 1.0, m1)) return e;
+          if (const int32_t e = theory_at(el, S.minutes0[i], s + 2.0, p2)) return e;
+          if (const int32_t e = theory_at(el, S.minutes0[i], s - 2.0, m2)) return e;
           double dv = 0.0;
           for (int ax = 0; ax < 3; ++ax) {
             const double d = dp[ax] * 2.0 / len - (8.0 * (p1[ax] - m1[ax]) - (p2[ax] - m2[ax])) / 12.0;
@@ -201,8 +201,9 @@ void segments_chunk(const Job& j, int32_t chunk) {
   const uint32_t begin = static_cast<uint32_t>(chunk) * kChunk;
   const uint32_t end = begin + kChunk < j.count ? begin + kChunk : j.count;
   if (j.kind == kJobSegmentsBuild) {
+    // element rows [first, first + count) into segment rows from `frame` (the offset, reused for the build)
     for (uint32_t k = begin; k < end; ++k) {
-      const int32_t e = segments::build_row(j.first + k);
+      const int32_t e = segments::build_row(j.first + k, j.frame + k);
       if (j.status != nullptr) j.status[k] = e;
     }
     return;
@@ -238,36 +239,52 @@ void segments_chunk(const Job& j, int32_t chunk) {
 }  // namespace pool
 }  // namespace sdnap
 
-/// Builds every row's display segments from the split Julian date (UTC), replacing any built before: `per_row`
-/// segments of `coefficients` (2 to 16) monomial terms per axis, each holding the row's theory within `tol_m` meters
-/// and `tol_mm_s` mm/s at its checks (segments.inc). `status` (optional): one code per row, 0 built, 1 never,
-/// -10 no division of the period holds the tolerance, else the theory's. Returns 0, or a negative code.
+/// Builds display segments from the split Julian date (UTC) for every row of the element store, into segment rows
+/// [offset, offset + count) of a segment store of `total` rows (made anew when offset is 0 or its shape differs; a
+/// worker loads its sets in batches, builds them and replaces them, and the segments stay): `per_row` segments of
+/// `coefficients` (2 to 16) monomial terms per axis, each holding the row's theory within `tol_m` meters and `tol_mm_s`
+/// mm/s at its checks (segments.inc). `status` (optional): one code per element row, 0 built, -10 no division of the
+/// period holds the tolerance, else the theory's. Returns 0, or a negative code.
 SDNAP_EXPORT("sdnap_segments_build")
-int32_t sdnap_segments_build(double jd_whole, double jd_frac, uint32_t per_row, uint32_t coefficients, double tol_m, double tol_mm_s, int32_t* status) {
+int32_t sdnap_segments_build(double jd_whole, double jd_frac, uint32_t total, uint32_t offset, uint32_t per_row, uint32_t coefficients, double tol_m, double tol_mm_s,
+                             int32_t* status) {
   const sdnap::Store& st = sdnap::store();
   if (st.count == 0) return ORBPRO_PROP_NOT_INITIALIZED;
-  if (per_row < 1 || coefficients < 2 || coefficients > sdnap::segments::kMaxCoefficients || !(tol_m > 0.0) || !(tol_mm_s > 0.0)) return ORBPRO_PROP_BAD_INPUT;
-  sdnap::segments::seg_free();
+  if (per_row < 1 || coefficients < 2 || coefficients > sdnap::segments::kMaxCoefficients || !(tol_m > 0.0) || !(tol_mm_s > 0.0) || offset > total ||
+      st.count > total - offset)
+    return ORBPRO_PROP_BAD_INPUT;
   sdnap::segments::Store& S = sdnap::segments::seg_store();
-  const uint32_t n = st.count;
-  S.rows = n; S.per_row = per_row; S.n = coefficients; S.w0 = jd_whole; S.f0 = jd_frac;
+  if (offset == 0 || S.rows != total || S.per_row != per_row || S.n != coefficients || S.w0 != jd_whole || S.f0 != jd_frac) {
+    sdnap::segments::seg_free();
+    const uint32_t n = total;
+    S.rows = n; S.per_row = per_row; S.n = coefficients; S.w0 = jd_whole; S.f0 = jd_frac;
+    S.t0 = static_cast<double*>(std::malloc(sizeof(double) * n));
+    S.inv_len = static_cast<double*>(std::malloc(sizeof(double) * n));
+    S.minutes0 = static_cast<double*>(std::malloc(sizeof(double) * n));
+    S.built = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * n));
+    S.division = static_cast<int32_t*>(std::malloc(sizeof(int32_t) * n));
+    S.worst = static_cast<float*>(std::calloc(2 * n, sizeof(float)));
+    S.c = static_cast<double*>(std::malloc(sizeof(double) * static_cast<size_t>(n) * per_row * 3u * coefficients));
+    if (!S.t0 || !S.inv_len || !S.minutes0 || !S.built || !S.division || !S.worst || !S.c) { sdnap::segments::seg_free(); return ORBPRO_PROP_BAD_INPUT; }
+    for (uint32_t i = 0; i < n; ++i) { S.built[i] = 0; S.inv_len[i] = 0.0; S.t0[i] = 0.0; S.division[i] = 0; }
+  }
   S.tol_km = tol_m * 1.0e-3; S.tol_kms = tol_mm_s * 1.0e-6;
-  S.t0 = static_cast<double*>(std::malloc(sizeof(double) * n));
-  S.inv_len = static_cast<double*>(std::malloc(sizeof(double) * n));
-  S.minutes0 = static_cast<double*>(std::malloc(sizeof(double) * n));
-  S.built = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * n));
-  S.division = static_cast<int32_t*>(std::malloc(sizeof(int32_t) * n));
-  S.worst = static_cast<float*>(std::malloc(sizeof(float) * 2 * n));
-  S.c = static_cast<double*>(std::malloc(sizeof(double) * static_cast<size_t>(n) * per_row * 3u * coefficients));
-  if (!S.t0 || !S.inv_len || !S.minutes0 || !S.built || !S.division || !S.worst || !S.c) { sdnap::segments::seg_free(); return ORBPRO_PROP_BAD_INPUT; }
-  for (uint32_t i = 0; i < n; ++i) { S.built[i] = 0; S.inv_len[i] = 0.0; S.t0[i] = 0.0; }
   sdnap::pool::Job& j = sdnap::pool::job();
   j.kind = sdnap::pool::kJobSegmentsBuild;
   j.first = 0;
-  j.count = n;
+  j.count = st.count;
+  j.frame = offset;
   j.status = status;
-  sdnap::pool::run(n);
+  sdnap::pool::run(st.count);
   return ORBPRO_PROP_OK;
+}
+
+/// The gravity terms the next sdnap_init_elements gives its SGP4XP rows (AP's, SPEC 16: 0 and 0 for the stock theory),
+/// on the theory's own flux model. A prototype's selection: the product would take them from a $PCF.
+SDNAP_EXPORT("sdnap_segments_select")
+int32_t sdnap_segments_select(int32_t tesseral, int32_t zonal) {
+  sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{tesseral, zonal};
+  return 0;
 }
 
 /// Rows [first, first + count) at one split Julian date (UTC) from their display segments: six planes as
@@ -276,7 +293,7 @@ int32_t sdnap_segments_build(double jd_whole, double jd_frac, uint32_t per_row, 
 SDNAP_EXPORT("sdnap_segments_at")
 int32_t sdnap_segments_at(double jd_whole, double jd_frac, uint32_t first, uint32_t count, uint32_t frame, double* out, int32_t* status) {
   const sdnap::segments::Store& S = sdnap::segments::seg_store();
-  if (S.rows == 0 || S.rows != sdnap::store().count) return ORBPRO_PROP_NOT_INITIALIZED;
+  if (S.rows == 0) return ORBPRO_PROP_NOT_INITIALIZED;
   if (out == nullptr) return ORBPRO_PROP_NULL_OUTPUT;
   if (first > S.rows || count > S.rows - first) return ORBPRO_PROP_BAD_ENTITY_INDEX;
   if (frame != ORBPRO_FRAME_TEME && frame != ORBPRO_FRAME_ECEF) return ORBPRO_PROP_BAD_INPUT;
