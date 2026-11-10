@@ -1,0 +1,130 @@
+{
+ "wasm": "/private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/module-0.6.6b.wasm",
+ "diff": "/private/tmp/claude-501/-Users-tj-software-spacedatanetwork-stack/46a20935-200d-48d4-95a7-fd711bf5224a/scratchpad/module-0.6.6a.wasm",
+ "rounds": 7,
+ "loadAverage": {
+  "before": [
+   49.88671875,
+   46.86376953125,
+   37.599609375
+  ],
+  "after": [
+   47.88037109375,
+   46.6416015625,
+   37.837890625
+  ],
+  "cores": 28
+ },
+ "rows": [
+  {
+   "orbit": "leo500",
+   "usPerState": {
+    "TEME step": 0.4461309523809524,
+    "TEME epochs": 0.54,
+    "GCRF step": 0.3939484126984127,
+    "GCRF epochs": 1.706,
+    "EME2000 step": 0.4435515873015873,
+    "EME2000 epochs": 1.15
+   },
+   "maxMm": {
+    "GCRF": 0.25458571047242623,
+    "EME2000": 0.25458571047242623
+   },
+   "maxMmPerS": {
+    "GCRF": 0.0002799051865796246,
+    "EME2000": 0.0002799051865796246
+   },
+   "maxMmByEpoch": {
+    "2020": 0.17647688741776474,
+    "2024": 0.20420657888333604,
+    "2026": 0.20805851351138774,
+    "2030": 0.25458571047242623,
+    "2035": 0.24373226197660433
+   },
+   "referenceMaxMm": {
+    "before": 0.24391892708108334,
+    "after": 0.000685674752586371
+   },
+   "usOneStateCall": {
+    "TEME --wasm": 85,
+    "TEME --diff": 58,
+    "GCRF --wasm": 348,
+    "GCRF --diff": 96
+   }
+  },
+  {
+   "orbit": "meo",
+   "usPerState": {
+    "TEME step": 0.4280753968253968,
+    "TEME epochs": 0.504,
+    "GCRF step": 0.4492063492063492,
+    "GCRF epochs": 0.538,
+    "EME2000 step": 0.4438492063492063,
+    "EME2000 epochs": 0.554
+   },
+   "maxMm": {
+    "GCRF": 1.0186570064466531,
+    "EME2000": 1.0186570064466531
+   },
+   "maxMmPerS": {
+    "GCRF": 0.00014343817851253854,
+    "EME2000": 0.00014343817855316096
+   },
+   "maxMmByEpoch": {
+    "2020": 0.6539699274976334,
+    "2024": 0.797161414287014,
+    "2026": 0.8196881532304888,
+    "2030": 1.0186570064466531,
+    "2035": 0.9391205198980601
+   },
+   "referenceMaxMm": {
+    "before": 0.8867784184890539,
+    "after": 0.00261374916146815
+   },
+   "usOneStateCall": {
+    "TEME --wasm": 178,
+    "TEME --diff": 177,
+    "GCRF --wasm": 693,
+    "GCRF --diff": 167
+   }
+  },
+  {
+   "orbit": "geo",
+   "usPerState": {
+    "TEME step": 0.49563492063492065,
+    "TEME epochs": 0.604,
+    "GCRF step": 0.55625,
+    "GCRF epochs": 0.634,
+    "EME2000 step": 0.6188492063492064,
+    "EME2000 epochs": 0.646
+   },
+   "maxMm": {
+    "GCRF": 1.6246473652142073,
+    "EME2000": 1.6246473652640212
+   },
+   "maxMmPerS": {
+    "GCRF": 0.0001184817216167403,
+    "EME2000": 0.00011848172164187925
+   },
+   "maxMmByEpoch": {
+    "2020": 1.0828946165976872,
+    "2024": 1.273443877067564,
+    "2026": 1.34832883314564,
+    "2030": 1.6246473652640212,
+    "2035": 1.5760282687049483
+   },
+   "referenceMaxMm": {
+    "before": 1.5022867326462301,
+    "after": 0.004226758734473
+   },
+   "usOneStateCall": {
+    "TEME --wasm": 32,
+    "TEME --diff": 36,
+    "GCRF --wasm": 603,
+    "GCRF --diff": 173
+   }
+  }
+ ],
+ "temeFlightsDiffering": 0,
+ "gmstRoundingMaxRad": 3.5504932327512506e-11
+}

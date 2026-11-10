@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// E2E (issue 316, SPEC 18): a record without a carried forecast flies bit for bit as 0.6.5 flies it, and fit without
-// OUTPUT writes 0.6.5's record. The 0.6.5 dist (modules 3a3661eaf, sha256 f0b8352a...) from git, in the system's
-// temporary folder; on the same inputs:
+// E2E (issue 316, SPEC 18): a record without a carried forecast flies bit for bit as the build before the carried
+// forecast flies it, and fit without OUTPUT writes that build's record. That build's dist (review-0's 0.6.6 at
+// d74d3129, or with CARRIED_IDENTITY_BASE=0.6.5 main's 0.6.5 at 3a3661eaf) from git, in the system's temporary folder;
+// on the same inputs:
 // - fit (the AP and XP fixture fits): the $OCM byte for byte with PRODUCER's version masked (the one field that names the
 //   build), the $ODR byte for byte with its two CIDs of that $OCM masked;
 // - propagate of each record in TEME, GCRF and EME2000 at the fixture grid: the $OEM byte for byte;
@@ -21,22 +22,28 @@ import { T, fixtureSets, flight, GRID_OUTPUT } from "./lib/ocm.mjs";
 import { configuration } from "./lib/pcf.mjs";
 import { jdOf } from "./lib/frames.mjs";
 
-const BASE_COMMIT = "3a3661eaf9caa84fc776a9959494e1ca14358db1";
-const BASE_SHA256 = "f0b8352a43f305fbdd1ad15c9894e2d28f3179528838cae8f967bf1ea5d089b7";
+// the build this branch adds the carried forecast to: review-0's 0.6.6 (the cost lane's), or 0.6.5 (main) with
+// CARRIED_IDENTITY_BASE=0.6.5
+const BASES = {
+  "0.6.6": { commit: "d74d3129db071f9aaaffba3cca421453b348d274", sha256: "5566784bd36613ed3cd4f963f6e2e52b40e08819dfe49e5362b34102413a291c" },
+  "0.6.5": { commit: "3a3661eaf9caa84fc776a9959494e1ca14358db1", sha256: "f0b8352a43f305fbdd1ad15c9894e2d28f3179528838cae8f967bf1ea5d089b7" },
+};
+const BASE_VERSION = process.env.CARRIED_IDENTITY_BASE ?? "0.6.6";
+const { commit: BASE_COMMIT, sha256: BASE_SHA256 } = BASES[BASE_VERSION];
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-carried-identity-"));
-const basePath = path.join(scratch, "sdn-ap-0.6.5.wasm");
+const basePath = path.join(scratch, `sdn-ap-${BASE_VERSION}.wasm`);
 try {
   const bytes = execFileSync("git", ["-C", path.resolve(packageRoot, "../.."), "show", `${BASE_COMMIT}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
-  check(createHash("sha256").update(bytes).digest("hex") === BASE_SHA256, "the 0.6.5 dist from git is not the shipped one");
+  check(createHash("sha256").update(bytes).digest("hex") === BASE_SHA256, `the ${BASE_VERSION} dist from git is not the committed one`);
   fs.writeFileSync(basePath, bytes);
 
   const command = (file) => createStandaloneHarness("browser", file, { surface: "command" });
   const direct = (file) => createStandaloneHarness("browser", file, { surface: "direct" });
   const [oldC, newC] = [await command(basePath), await command(wasmPath)];
   const same = (a, b) => Buffer.from(a).equals(Buffer.from(b));
-  // the version PRODUCER names, masked to 0.6.5's (both are X.Y.Z of five characters)
+  // the version PRODUCER names, masked to the base's (both are X.Y.Z of five characters)
   const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
   const version = JSON.parse(fs.readFileSync(path.join(packageRoot, "plugin-manifest.json"), "utf8")).version;
   const mask = (buf, from, to) => { const b = Buffer.from(buf); for (let at = b.indexOf(from); at >= 0; at = b.indexOf(from, at + 1)) to.copy(b, at); return b; };
@@ -44,7 +51,7 @@ try {
   // fit: the fixtures' AP and XP fits on both builds
   const oldSets = await fixtureSets(oldC), newSets = await fixtureSets(newC);
   for (const kind of ["ap", "xp"]) {
-    check(same(mask(newSets[kind], producer(version), producer("0.6.5")), oldSets[kind]), `fit ${kind}: the $OCM differs from 0.6.5's beyond PRODUCER`);
+    check(same(mask(newSets[kind], producer(version), producer(BASE_VERSION)), oldSets[kind]), `fit ${kind}: the $OCM differs from ${BASE_VERSION}'s beyond PRODUCER`);
   }
   // the residual record of one fit, its CIDs of the $OCM masked
   {
@@ -56,22 +63,22 @@ try {
     const odr = (r) => Buffer.from(r.outputs.find((q) => q.portId === "residuals").payload);
     // the CID text of each $OCM is the only difference: replace the new one's with the old one's (same length)
     const ocmA = Buffer.from(a.outputs.find((q) => q.portId === "elements").payload), ocmB = Buffer.from(b.outputs.find((q) => q.portId === "elements").payload);
-    check(same(mask(ocmB, producer(version), producer("0.6.5")), ocmA), "fit (residuals call): the $OCM differs from 0.6.5's beyond PRODUCER");
+    check(same(mask(ocmB, producer(version), producer(BASE_VERSION)), ocmA), `fit (residuals call): the $OCM differs from ${BASE_VERSION}'s beyond PRODUCER`);
     const ra = odr(a), rb = odr(b);
     const cids = (buf) => [...buf.toString("latin1").matchAll(/bafk[a-z2-7]{55}/g)].map((m) => m[0]);
     const [ca, cb] = [cids(ra), cids(rb)];
     check(ca.length === 2 && cb.length === 2, `the $ODR names its $OCM twice (${ca.length}, ${cb.length})`);
     let masked = rb;
     for (let k = 0; k < Math.min(ca.length, cb.length); k++) masked = mask(masked, Buffer.from(cb[k]), Buffer.from(ca[k]));
-    check(same(masked, ra), "fit: the $ODR differs from 0.6.5's beyond the CIDs of its $OCM");
+    check(same(masked, ra), `fit: the $ODR differs from ${BASE_VERSION}'s beyond the CIDs of its $OCM`);
   }
 
-  // propagate: each 0.6.5 record on both builds, three frames
+  // propagate: each of the base's records on both builds, three frames
   for (const kind of ["ap", "xp"]) {
     for (const frame of [pcfOutputFrame.TEME, pcfOutputFrame.GCRF, pcfOutputFrame.EME2000]) {
       const req = flight([oldSets[kind]], { output: { ...GRID_OUTPUT, FRAME: frame } });
       const a = await oldC.invoke({ methodId: "propagate", inputs: req }), b = await newC.invoke({ methodId: "propagate", inputs: req });
-      check(a.statusCode === 0 && b.statusCode === 0 && same(a.outputs[0].payload, b.outputs[0].payload), `propagate ${kind} frame ${frame}: the $OEM differs from 0.6.5's`);
+      check(a.statusCode === 0 && b.statusCode === 0 && same(a.outputs[0].payload, b.outputs[0].payload), `propagate ${kind} frame ${frame}: the $OEM differs from ${BASE_VERSION}'s`);
     }
   }
   // the epoch store: an SGP4 record from ingest_omm beside the two
@@ -99,12 +106,12 @@ try {
     }
     values.push(got);
   }
-  check(values[0].length === values[1].length && values[0].every((v, k) => Object.is(v, values[1][k])), "the epoch store's states differ from 0.6.5's");
+  check(values[0].length === values[1].length && values[0].every((v, k) => Object.is(v, values[1][k])), `the epoch store's states differ from ${BASE_VERSION}'s`);
   {
     const req = [...records.map((payload) => ({ portId: "ocm", typeRef: T("OCM"), payload })), configuration({ output: { ...GRID_OUTPUT, FRAME: pcfOutputFrame.GCRF } })];
     const a = await oldC.invoke({ methodId: "propagate_epochs", inputs: req }), b = await newC.invoke({ methodId: "propagate_epochs", inputs: req });
     check(a.statusCode === 0 && b.statusCode === 0 && a.outputs.length === b.outputs.length && a.outputs.every((o, k) => same(o.payload, b.outputs[k].payload)),
-      "propagate_epochs: the $OEM differs from 0.6.5's");
+      `propagate_epochs: the $OEM differs from ${BASE_VERSION}'s`);
   }
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
@@ -114,5 +121,5 @@ if (failures.length) {
   console.log(`CARRIED-IDENTITY FAIL: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.log("CARRIED-IDENTITY PASS: without a carried forecast, fit, propagate, the epoch store and propagate_epochs are 0.6.5's bit for bit (PRODUCER and its CIDs masked)");
+console.log(`CARRIED-IDENTITY PASS: without a carried forecast, fit, propagate, the epoch store and propagate_epochs are ${BASE_VERSION}'s bit for bit (PRODUCER and its CIDs masked)`);
 process.exit(0);

@@ -8,10 +8,11 @@
 // differentiation; everywhere else the theory, exactly as without them.
 //   - frame: TEMEOFEPOCH sets carry the forecast in their epoch axes Q0 GCRF
 //     (an inertial frame); flight turns it to TEME of date by M(t) Q0^T, M the
-//     GCRF -> TEME matrix (gcrf.inc) as a cubic through 6-hour nodes, cached
-//     per thread. TEMEOFDATE sets carry TEME of date; the velocity flown is the
-//     derivative less the frame's own turning, dM/dt M^T r, so both kinds
-//     return the module's TEME convention (the GCRF velocity turned by M).
+//     module's output matrix GCRF -> TEME (gcrf.inc gcrf_to_teme_output: the
+//     quintic through 6-hour nodes every GCRF state takes). TEMEOFDATE sets
+//     carry TEME of date; the velocity flown is the derivative less the frame's
+//     own turning, dM/dt M^T r, so both kinds return the module's TEME
+//     convention (the GCRF velocity turned by M). No ERFA call per state.
 //   - fit (OUTPUT.START_TIME to STOP_TIME on fit's $PCF) builds the segments
 //     from the block's states: densified 4x by the 4-node Hermite of their
 //     positions and velocities (by the 8-node Lagrange of the positions when
@@ -47,67 +48,30 @@ constexpr double kVelocityAgreementKm = 2.0e-5;
 constexpr double kJoinWeight = 1.0e4;
 /// Consecutive segments meet within this, s.
 constexpr double kJoinSeconds = 1.0e-3;
-/// Frame nodes per day (the cubic's spacing: 6 h).
-constexpr double kNodesPerDay = 4.0;
+/// Half the step of dM/dt's central difference, days (60 s).
+constexpr double kRateStepDays = 60.0 / 86400.0;
 
-// ---- The frame: GCRF -> TEME of date as a cubic through 6-hour nodes -----------------------------------------------
+// ---- The frame: the module's output matrix (gcrf.inc gcrf_to_teme_output) ------------------------------------------
 
-struct NodeSlot {
-  int64_t key_p1;
-  double m[9];
-};
-inline thread_local NodeSlot* g_node_cache = nullptr;
-
-/// The exact matrix (ERFA, gcrf.inc) at node k (JD k / kNodesPerDay), cached per thread.
-inline bool node(int64_t k, double out[9]) {
-  if (__builtin_expect(g_node_cache == nullptr, 0)) g_node_cache = new NodeSlot[1024]{};
-  NodeSlot& s = g_node_cache[static_cast<uint64_t>(k) & 1023u];
-  if (s.key_p1 != k + 1) {
-    const double jd = static_cast<double>(k) / kNodesPerDay;
-    const double whole = std::floor(jd);
-    double m[3][3];
-    if (frames::gcrf_to_teme(whole, jd - whole, m) < 0) return false;
-    std::memcpy(s.m, m, sizeof s.m);
-    s.key_p1 = k + 1;
-  }
-  std::memcpy(out, s.m, sizeof s.m);
-  return true;
-}
-
-struct Span {
-  int64_t base_p1 = 0;
-  double m[4][9];
-};
-inline thread_local Span g_span{};
-
-/// M (row-major 3 x 3) at the split Julian date w + f (UTC), and dM/dt per second when `md` is given: the Lagrange cubic
-/// through nodes base - 1 .. base + 2 about the 6-hour interval holding the time. False outside ERFA's calendar.
+/// M (row-major 3 x 3), GCRF -> TEME of date at the split Julian date w + f (UTC): the output matrix every GCRF state of
+/// the module takes (the quintic through 6-hour nodes, GMST82 unrounded, nodes held per thread; gcrf.inc), made
+/// orthonormal (one Newton step of the polar decomposition, M (3 I - M^T M) / 2), so M^T inverts M exactly wherever the
+/// forecast is turned back and forth; and dM/dt per second when `md` is given (the central difference over +-60 s).
+/// False outside ERFA's calendar.
 inline bool frame_at(double w, double f, double* M, double* md) {
-  const double q = kNodesPerDay * w + kNodesPerDay * f;
-  const double bf = std::floor(q);
-  const int64_t base = static_cast<int64_t>(bf);
-  Span& s = g_span;
-  if (s.base_p1 != base + 1) {
-    for (int j = 0; j < 4; ++j)
-      if (!node(base - 1 + j, s.m[j])) { s.base_p1 = 0; return false; }
-    s.base_p1 = base + 1;
-  }
-  const double x = q - bf;
-  const double l[4] = {-x * (x - 1.0) * (x - 2.0) / 6.0, (x + 1.0) * (x - 1.0) * (x - 2.0) / 2.0,
-                       -(x + 1.0) * x * (x - 2.0) / 2.0, (x + 1.0) * x * (x - 1.0) / 6.0};
-  double c[9], g[9];
-  for (int i = 0; i < 9; ++i) c[i] = l[0] * s.m[0][i] + l[1] * s.m[1][i] + l[2] * s.m[2][i] + l[3] * s.m[3][i];
-  // made orthonormal (one Newton step of the polar decomposition, M (3 I - M^T M) / 2: the cubic is a rotation to
-  // about 1e-10), so M^T inverts M exactly wherever the forecast is turned back and forth
+  double m[3][3];
+  if (frames::gcrf_to_teme_output(w, f, m) < 0) return false;
+  const double* c = &m[0][0];
+  double g[9];
   for (int i = 0; i < 3; ++i)
     for (int j = 0; j < 3; ++j) g[3 * i + j] = (i == j ? 3.0 : 0.0) - (c[i] * c[j] + c[3 + i] * c[3 + j] + c[6 + i] * c[6 + j]);
   for (int i = 0; i < 3; ++i)
     for (int j = 0; j < 3; ++j) M[3 * i + j] = 0.5 * (c[3 * i] * g[j] + c[3 * i + 1] * g[3 + j] + c[3 * i + 2] * g[6 + j]);
   if (md != nullptr) {
-    const double rate = kNodesPerDay / 86400.0;  // dx/dt per second
-    const double d[4] = {-(3.0 * x * x - 6.0 * x + 2.0) / 6.0 * rate, (3.0 * x * x - 4.0 * x - 1.0) / 2.0 * rate,
-                         -(3.0 * x * x - 2.0 * x - 2.0) / 2.0 * rate, (3.0 * x * x - 1.0) / 6.0 * rate};
-    for (int i = 0; i < 9; ++i) md[i] = d[0] * s.m[0][i] + d[1] * s.m[1][i] + d[2] * s.m[2][i] + d[3] * s.m[3][i];
+    double a[3][3], b[3][3];
+    if (frames::gcrf_to_teme_output(w, f + kRateStepDays, a) < 0 || frames::gcrf_to_teme_output(w, f - kRateStepDays, b) < 0) return false;
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j) md[3 * i + j] = (a[i][j] - b[i][j]) / (2.0 * kRateStepDays * 86400.0);
   }
   return true;
 }
@@ -119,7 +83,7 @@ inline void mul_t(const double* M, const double* a, double* out) {
   for (int i = 0; i < 3; ++i) out[i] = M[i] * a[0] + M[3 + i] * a[1] + M[6 + i] * a[2];
 }
 
-/// Q0, the set's epoch axes (GCRF -> TEMEOFEPOCH): the (orthonormal) cubic at the epoch.
+/// Q0, the set's epoch axes (GCRF -> TEMEOFEPOCH): M at the epoch.
 inline bool epoch_axes(double w, double f, double* q0) { return frame_at(w, f, q0, nullptr); }
 
 // ---- The carried track of a record ---------------------------------------------------------------------------------
@@ -756,12 +720,15 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
 }  // namespace sdnap
 
 /// The angle (rad, the largest element of the difference) between the carried forecast's GCRF -> TEME of date matrix
-/// (the cubic through 6-hour nodes) and ERFA's at the split Julian date whole + frac (UTC): SPEC 18's frame bound. NaN
-/// outside ERFA's calendar.
+/// (the module's output matrix, made orthonormal) and the exact chain at the split Julian date whole + frac (UTC): ERFA's
+/// IAU 2006/2000A with GMST82 unrounded (gcrf.inc gmst82_unrounded): SPEC 18's frame bound. NaN outside ERFA's calendar.
 SDNAP_EXPORT("sdnap_carried_frame_error")
 double sdnap_carried_frame_error(double whole, double frac) {
-  double M[9], m[3][3];
-  if (!sdnap::carried::frame_at(whole, frac, M, nullptr) || sdnap::frames::gcrf_to_teme(whole, frac, m) < 0) return std::numeric_limits<double>::quiet_NaN();
+  double M[9], m[3][3], tai1, tai2, tt1, tt2;
+  if (!sdnap::carried::frame_at(whole, frac, M, nullptr) || eraUtctai(whole, frac, &tai1, &tai2) < 0) return std::numeric_limits<double>::quiet_NaN();
+  eraTaitt(tai1, tai2, &tt1, &tt2);
+  eraPnm06a(tt1, tt2, m);
+  eraRz(eraGst06(whole, frac, tt1, tt2, m) - sdnap::frames::gmst82_unrounded(whole, frac), m);
   double worst = 0.0;
   for (int i = 0; i < 3; ++i)
     for (int j = 0; j < 3; ++j) worst = std::fmax(worst, std::fabs(M[3 * i + j] - m[i][j]));

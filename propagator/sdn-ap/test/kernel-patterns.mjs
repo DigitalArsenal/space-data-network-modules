@@ -1,0 +1,268 @@
+#!/usr/bin/env node
+// AP's cost against SGP4's under the request patterns of review 0's cost findings (stack issue #317; C2-1 to C2-5), on
+// made-up orbits: AP seeded with the headline forces (zonal 20, tesseral 31 unless --tesseral says, NRLMSISE-00 on made-up
+// quiet rows), SGP4 through ingest_omm, the same elements. Microseconds of process CPU per state (wall for single calls),
+// AP and SGP4 interleaved, median [min, max] over --rounds; a ratio taken round by round also carries the 95 % bootstrap
+// interval of its median. The load average before and after goes to the output.
+//   catalog   N records of one orbit (RAAN and mean anomaly spread) in one store, every record at each instant (time-major,
+//             sdnap_epochs_at, 60 s instants over a day from a day after the epochs, fresh store each round) and the same
+//             states record-major (sdnap_epochs_set_at); N from --counts (default 1,2,100,10000)
+//   first     the first state of a record at 0, 1 and 7 days: in a fresh instance (what a process pays once and the
+//             record pays) and in a warmed instance (what each record pays)
+//   order     one record, 7 days at 300 s: ascending, a fixed random order, alternating between the ends
+//   ecc       a low orbit (perigee 600 km, i 65) at e 0 to 0.3 across 0.05, 300 s ascending over 7 days, and its first state
+//   call      the public `propagate`: TEME START/STOP/STEP and GCRF explicit EPOCHS, 7 days at 300 s, $OEM bytes; the AP
+//             record seeded (no covariance) and fitted to the SGP4 track (carrying COVARIANCE_DATA)
+//   node test/kernel-patterns.mjs <catalog|first|order|ecc|call|all> [--wasm FILE] [--rounds 7] [--counts 1,2,100,10000]
+//     [--regimes leo500,leo830,meo,geo,gto] [--json FILE]
+import fs from "node:fs";
+import os from "node:os";
+import * as flatbuffers from "flatbuffers";
+import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+import { OMM } from "spacedatastandards.org/lib/js/OMM/OMM.js";
+import { F107DataType } from "spacedatastandards.org/lib/js/OCM/F107DataType.js";
+import { wasmPath as defaultWasm } from "./lib/module.mjs";
+import { T, seedOcm, rowsThrough, spwStream } from "./lib/ocm.mjs";
+import { configuration, MSIS_FORCES } from "./lib/pcf.mjs";
+import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
+
+const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback; };
+const MODE = process.argv[2] ?? "all";
+const WASM = arg("--wasm", defaultWasm);
+const ROUNDS = Number(arg("--rounds", 7));
+const COUNTS = arg("--counts", "1,2,100,10000").split(",").map(Number);
+const JSON_OUT = arg("--json", null);
+const DAY = 86400000, EPOCH = Date.parse("2026-06-15T00:00:00Z"), MU = 398600.4418, RE = 6378.137;
+const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
+const revPerDay = (a) => (Math.sqrt(MU / a ** 3) * 86400) / (2 * Math.PI);
+const ORBITS = {
+  leo500: { n: revPerDay(RE + 500), e: 0.001, i: 97.4, raan: 120, argp: 90, ma: 10, bterm: 3.8e-3, agom: 0.01 },
+  leo830: { n: revPerDay(RE + 830), e: 0.001, i: 98.7, raan: 120, argp: 90, ma: 10, bterm: 1.27e-3, agom: 0.01 },
+  meo: { n: 2.0056, e: 0.005, i: 55, raan: 60, argp: 40, ma: 10, bterm: 0.001, agom: 0.01 },
+  geo: { n: 1.0027, e: 0.0003, i: 0.05, raan: 80, argp: 10, ma: 10, bterm: 0.001, agom: 0.01 },
+  gto: { n: 2.26, e: 0.72, i: 27, raan: 60, argp: 180, ma: 10, bterm: 1.27e-3, agom: 0.01 },
+};
+const PICK = arg("--regimes", "leo500,leo830,meo,geo,gto").split(",");
+const ROWS = Array.from({ length: 46 }, (_, k) => ({ DATE: iso(EPOCH + (k - 5) * DAY).slice(0, 10), F107_OBS: 70, F107_OBS_CENTER81: 72, AP_AVG: 4, F107_DATA_TYPE: F107DataType.OBS }));
+const cpuUs = () => { const u = process.cpuUsage(); return u.user + u.system; };
+const wallUs = () => Number(process.hrtime.bigint()) / 1e3;
+const median = (a) => { const v = a.toSorted((x, y) => x - y), i = v.length >> 1; return v.length % 2 ? v[i] : (v[i - 1] + v[i]) / 2; };
+const spread = (a) => ({ median: median(a), min: Math.min(...a), max: Math.max(...a) });
+// a ratio taken round by round: its median, spread and the 95 % percentile-bootstrap interval of the median (2,000
+// resamples, fixed seed)
+function ratioSpread(a) {
+  let s = 12345;
+  const r = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+  const meds = Array.from({ length: 2000 }, () => median(a.map(() => a[Math.floor(r() * a.length)]))).sort((x, y) => x - y);
+  return { ...spread(a), ci95: [meds[49], meds[1949]], rounds: a.length };
+}
+const fmt = (s, d = 2) => `${s.median.toFixed(d)}${s.ci95 ? ` (95 % ${s.ci95[0].toFixed(d)} to ${s.ci95[1].toFixed(d)})` : ""} [${s.min.toFixed(d)}, ${s.max.toFixed(d)}]`;
+const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
+const jd = (ms) => { const d = ms / DAY; return [Math.floor(d) + 2440587.5, d - Math.floor(d)]; };
+const grid = (msList) => { const W = new Float64Array(msList.length), F = new Float64Array(msList.length); msList.forEach((ms, k) => { [W[k], F[k]] = jd(ms); }); return { W, F, n: msList.length }; };
+
+function apSet(r, k = 0, tesseral = undefined) {
+  return seedOcm({ epoch: iso(EPOCH), n: r.n, e: r.e, i: r.i, raan: (r.raan + 3.3 * k) % 360, argp: r.argp, ma: (r.ma + 7.1 * k) % 360, bterm: r.bterm, agom: r.agom,
+    norad: 80000 + k, name: `P${k}`, msis: true, records: true, rows: rowsThrough(ROWS), tesseral: tesseral ?? (r.e > 0.048 ? 0 : 31), zonal: 20 });
+}
+function sgp4Omm(r, k = 0) {
+  const b = new flatbuffers.Builder(256);
+  const e = b.createString(iso(EPOCH)), id = b.createString(`2026-${String(k % 1000).padStart(3, "0")}A`), orig = b.createString("SDN");
+  OMM.startOMM(b); OMM.addEpoch(b, e); OMM.addObjectId(b, id); OMM.addOriginator(b, orig);
+  OMM.addMeanMotion(b, r.n); OMM.addEccentricity(b, r.e); OMM.addInclination(b, r.i); OMM.addRaOfAscNode(b, (r.raan + 3.3 * k) % 360);
+  OMM.addArgOfPericenter(b, r.argp); OMM.addMeanAnomaly(b, (r.ma + 7.1 * k) % 360); OMM.addBstar(b, r.bterm / 12.741621); OMM.addNoradCatId(b, 80000 + k); OMM.addMeanElementTheory(b, 0);
+  OMM.finishOMMBuffer(b, OMM.endOMM(b));
+  return b.asUint8Array().slice();
+}
+async function open() {
+  const h = await createStandaloneHarness("browser", WASM, { surface: "direct", maxThreads: 1, enableBrowserWasiThreads: false });
+  const x = h.instance.exports;
+  const load = async (records) => { const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(records.map(prefixed)) }] }); if (r.statusCode !== 0) throw new Error(`load_epochs ${r.errorCode}: ${r.errorMessage}`); };
+  return { h, x, load };
+}
+async function sgp4Sets(helper, r, count) {
+  const out = [];
+  for (let k = 0; k < count; k += 2000) {
+    const omms = Array.from({ length: Math.min(2000, count - k) }, (_, j) => sgp4Omm(r, k + j));
+    const res = await helper.h.invoke({ methodId: "ingest_omm", inputs: omms.map((payload) => ({ portId: "omm", typeRef: T("OMM"), payload })) });
+    if (res.statusCode !== 0) throw new Error(`ingest_omm ${res.errorCode}`);
+    out.push(...res.outputs.map((o) => new Uint8Array(o.payload)));
+  }
+  return out;
+}
+const result = { wasm: WASM, rounds: ROUNDS };
+
+// ---- catalog: time-major against record-major -----------------------------------------------------------------------
+async function catalog(helper) {
+  const rows = [];
+  const instants = grid(Array.from({ length: 40 }, (_, k) => EPOCH + DAY + k * 60000));
+  for (const name of PICK.filter((p) => p !== "gto")) {
+    const r = ORBITS[name];
+    for (const N of COUNTS) {
+      const sets = { AP: Array.from({ length: N }, (_, k) => apSet(r, k)), SGP4: await sgp4Sets(helper, r, N) };
+      const arms = {};
+      for (const theory of ["AP", "SGP4"]) arms[theory] = { m: await open(), sets: sets[theory] };
+      for (const a of Object.values(arms)) { a.out = a.m.x.sdnap_alloc(48 * N); a.status = a.m.x.sdnap_alloc(4 * N); a.one = a.m.x.sdnap_alloc(48); }
+      // time-major: one call per instant over every series, instants 2..40 (the first leaves out each record's start)
+      const timeMajor = async (a) => {
+        await a.m.load(a.sets);
+        a.m.x.sdnap_epochs_at(instants.W[0], instants.F[0], 0, N, 0, a.out, a.status, 0);
+        const c0 = cpuUs();
+        for (let k = 1; k < 40; ++k) if (a.m.x.sdnap_epochs_at(instants.W[k], instants.F[k], 0, N, 0, a.out, a.status, 0) !== 0) throw new Error("sdnap_epochs_at");
+        return (cpuUs() - c0) / (39 * N);
+      };
+      // record-major: every record over instants 2..40, then the next
+      const recordMajor = async (a) => {
+        await a.m.load(a.sets);
+        for (let i = 0; i < N; ++i) a.m.x.sdnap_epochs_set_at(i, 0, instants.W[0], instants.F[0], a.one);
+        const c0 = cpuUs();
+        for (let i = 0; i < N; ++i) for (let k = 1; k < 40; ++k) if (a.m.x.sdnap_epochs_set_at(i, 0, instants.W[k], instants.F[k], a.one) !== 0) throw new Error("set_at");
+        return (cpuUs() - c0) / (39 * N);
+      };
+      const rounds = N >= 10000 ? Math.max(3, Math.floor(ROUNDS / 2)) : ROUNDS;
+      for (const a of Object.values(arms)) { await timeMajor(a); await recordMajor(a); }
+      const t = { AP: [], SGP4: [] }, rm = { AP: [], SGP4: [] };
+      for (let q = 0; q < rounds; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) { t[theory].push(await timeMajor(arms[theory])); rm[theory].push(await recordMajor(arms[theory])); }
+      const row = { orbit: name, records: N, timeMajor: { AP: spread(t.AP), SGP4: spread(t.SGP4), ratio: ratioSpread(t.AP.map((v, i) => v / t.SGP4[i])) },
+        recordMajor: { AP: spread(rm.AP), SGP4: spread(rm.SGP4), ratio: ratioSpread(rm.AP.map((v, i) => v / rm.SGP4[i])) } };
+      rows.push(row);
+      console.log(`catalog ${name} N=${N} | time-major: AP ${fmt(row.timeMajor.AP, 3)} SGP4 ${fmt(row.timeMajor.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.timeMajor.ratio, 1)} | record-major: AP ${fmt(row.recordMajor.AP, 3)} SGP4 ${fmt(row.recordMajor.SGP4, 3)}, AP/SGP4 ${fmt(row.recordMajor.ratio, 1)}`);
+    }
+  }
+  return rows;
+}
+
+// ---- first: per process and per record ------------------------------------------------------------------------------
+async function first(helper) {
+  const rows = [];
+  for (const name of PICK) {
+    const r = ORBITS[name], sets = { AP: [apSet(r)], SGP4: await sgp4Sets(helper, r, 1) };
+    for (const days of [0, 1, 7]) {
+      const at = jd(EPOCH + days * DAY + (days === 0 ? 60000 : 0));
+      const fresh = { AP: [], SGP4: [] }, warm = { AP: [], SGP4: [] };
+      for (let q = 0; q < ROUNDS; ++q)
+        for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) {
+          const m = await open(), out = m.x.sdnap_alloc(48);
+          await m.load(sets[theory]);
+          let t0 = wallUs();
+          if (m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out) !== 0) throw new Error("rc");
+          fresh[theory].push(wallUs() - t0);
+          // the same instance warmed: ten fresh loads flown, then the timed one
+          for (let k = 0; k < 10; ++k) { await m.load(sets[theory]); m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out); }
+          await m.load(sets[theory]);
+          t0 = wallUs();
+          m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out);
+          warm[theory].push(wallUs() - t0);
+        }
+      const row = { orbit: name, days, freshInstance: { AP: spread(fresh.AP), SGP4: spread(fresh.SGP4) }, perRecord: { AP: spread(warm.AP), SGP4: spread(warm.SGP4) } };
+      row.perProcess = { AP: row.freshInstance.AP.median - row.perRecord.AP.median, SGP4: row.freshInstance.SGP4.median - row.perRecord.SGP4.median };
+      row.perRecordRatio = row.perRecord.AP.median / row.perRecord.SGP4.median;
+      rows.push(row);
+      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)} | once per process: AP ${row.perProcess.AP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us`);
+    }
+  }
+  return rows;
+}
+
+// ---- order: ascending, random, alternating ends ---------------------------------------------------------------------
+async function order(helper) {
+  const rows = [];
+  const seq = Array.from({ length: 2016 }, (_, k) => EPOCH + (k + 1) * 300000);
+  let seed = 20261110;
+  const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const random = seq.slice();
+  for (let k = random.length - 1; k > 0; --k) { const j = Math.floor(rand() * (k + 1)); [random[k], random[j]] = [random[j], random[k]]; }
+  const far = [];
+  for (let i = 0, j = seq.length - 1; i <= j; ++i, --j) { far.push(seq[i]); if (i !== j) far.push(seq[j]); }
+  for (const name of PICK) {
+    const r = ORBITS[name], arms = {};
+    for (const [theory, set] of [["AP", apSet(r)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48) }; }
+    for (const [label, list] of [["ascending", seq], ["random", random], ["ends", far]]) {
+      const g = grid(list);
+      const sweep = (a) => { const c0 = cpuUs(); for (let k = 0; k < g.n; ++k) if (a.m.x.sdnap_epochs_set_at(0, 0, g.W[k], g.F[k], a.out) !== 0) throw new Error("rc"); return (cpuUs() - c0) / g.n; };
+      for (const a of Object.values(arms)) sweep(a);
+      const v = { AP: [], SGP4: [] };
+      const rounds = name === "gto" && label !== "ascending" ? 3 : ROUNDS;
+      for (let q = 0; q < rounds; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) v[theory].push(sweep(arms[theory]));
+      const row = { orbit: name, order: label, AP: spread(v.AP), SGP4: spread(v.SGP4), ratio: ratioSpread(v.AP.map((x, i) => x / v.SGP4[i])) };
+      rows.push(row);
+      console.log(`order ${name} ${label} | AP ${fmt(row.AP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}`);
+    }
+  }
+  return rows;
+}
+
+// ---- ecc: across e 0.05 -----------------------------------------------------------------------------------------------
+async function ecc(helper) {
+  const rows = [];
+  const g = grid(Array.from({ length: 2016 }, (_, k) => EPOCH + (k + 1) * 300000));
+  for (const e of [0, 0.02, 0.04, 0.048, 0.05, 0.052, 0.06, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3]) {
+    const r = { n: revPerDay((RE + 600) / (1 - e)), e, i: 65, raan: 60, argp: 180, ma: 10, bterm: 1.27e-3, agom: 0.01 };  // perigee 600 km
+    for (const tesseral of [31, 0]) {
+      const arms = {};
+      for (const [theory, set] of [["AP", apSet(r, 0, tesseral)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48), set }; }
+      const sweep = (a) => { const c0 = cpuUs(); for (let k = 0; k < g.n; ++k) if (a.m.x.sdnap_epochs_set_at(0, 0, g.W[k], g.F[k], a.out) !== 0) throw new Error("rc"); return (cpuUs() - c0) / g.n; };
+      for (const a of Object.values(arms)) sweep(a);
+      const v = { AP: [], SGP4: [] };
+      for (let q = 0; q < ROUNDS; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) v[theory].push(sweep(arms[theory]));
+      const firstUs = [];
+      const at = jd(EPOCH + DAY);
+      for (let q = 0; q < 5; ++q) { await arms.AP.m.load([arms.AP.set]); const t0 = wallUs(); arms.AP.m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], arms.AP.out); firstUs.push(wallUs() - t0); }
+      const row = { e, tesseral, AP: spread(v.AP), SGP4: spread(v.SGP4), ratio: ratioSpread(v.AP.map((x, i) => x / v.SGP4[i])), apFirstAt1dUs: spread(firstUs) };
+      rows.push(row);
+      console.log(`ecc perigee 600 km e ${e} tesseral ${tesseral} | AP ${fmt(row.AP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)} | AP first state at 1 d ${fmt(row.apFirstAt1dUs, 0)} us`);
+    }
+  }
+  return rows;
+}
+
+// ---- call: the public propagate ---------------------------------------------------------------------------------------
+async function call(helper) {
+  const { PCFT } = await import("spacedatastandards.org/lib/js/PCF/PCF.js");
+  const { PCFOutputT } = await import("spacedatastandards.org/lib/js/PCF/PCFOutput.js");
+  const { pcfOutputFrame } = await import("spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js");
+  const pcfBytes = (output) => { const c = new PCFT(); c.OUTPUT = Object.assign(new PCFOutputT(), output); const b = new flatbuffers.Builder(1 << 16); b.finish(c.pack(b), "$PCF"); return b.asUint8Array().slice(); };
+  const times = Array.from({ length: 2016 }, (_, k) => iso(EPOCH + (k + 1) * 300000));
+  const PCFS = {
+    "teme step": pcfBytes({ FRAME: pcfOutputFrame.TEME, START_TIME: times[0], STOP_TIME: times.at(-1), STEP_SECONDS: 300, MAXIMUM_STATES: 3000 }),
+    "teme epochs": pcfBytes({ FRAME: pcfOutputFrame.TEME, EPOCHS: times, MAXIMUM_STATES: 3000 }),
+    "gcrf step": pcfBytes({ FRAME: pcfOutputFrame.GCRF, START_TIME: times[0], STOP_TIME: times.at(-1), STEP_SECONDS: 300, MAXIMUM_STATES: 3000 }),
+    "gcrf epochs": pcfBytes({ FRAME: pcfOutputFrame.GCRF, EPOCHS: times, MAXIMUM_STATES: 3000 }),
+  };
+  const rows = [];
+  for (const name of PICK.filter((p) => p !== "gto")) {
+    const r = ORBITS[name];
+    const sgp4 = (await sgp4Sets(helper, r, 1))[0], seeded = apSet(r);
+    // AP fitted to the SGP4 set's own 3-day track at 300 s (GCRF), as the review's harness makes its AP records; the arc
+    // ends at the set's epoch, so the fitted record's weather rows begin before the first instant flown
+    const arc = await helper.h.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: sgp4 },
+      { portId: "configuration", typeRef: T("PCF"), payload: pcfBytes({ FRAME: pcfOutputFrame.GCRF, EPOCHS: Array.from({ length: 865 }, (_, k) => iso(EPOCH - 3 * DAY + k * 300000)), MAXIMUM_STATES: 1000 }) }] });
+    if (arc.statusCode !== 0) throw new Error(`arc ${arc.errorCode}`);
+    const fit = await helper.h.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: T("OEM"), payload: new Uint8Array(arc.outputs[0].payload) },
+      configuration({ theory: "AP", forces: { ...MSIS_FORCES, WEATHER_SOURCE: pcfWeatherSource.RECORDS, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20 } }),
+      { portId: "space_weather", typeRef: T("SPW"), payload: spwStream(rowsThrough(ROWS)) }] });
+    if (fit.statusCode !== 0) throw new Error(`fit ${fit.errorCode}: ${fit.errorMessage}`);
+    const fitted = new Uint8Array(fit.outputs.find((o) => o.portId === "elements").payload);
+    const records = { SGP4: sgp4, "AP seeded": seeded, "AP fitted": fitted };
+    for (const [frame, pcf] of Object.entries(PCFS)) {
+      const fly = async (ocm) => { const c0 = cpuUs(); const res = await helper.h.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: ocm }, { portId: "configuration", typeRef: T("PCF"), payload: pcf }] }); const us = cpuUs() - c0; if (res.statusCode !== 0) throw new Error(`propagate ${res.errorCode}: ${res.errorMessage}`); return { us: us / 2016, bytes: res.outputs.find((o) => o.portId === "ephemeris").payload.byteLength }; };
+      for (const ocm of Object.values(records)) await fly(ocm);
+      const v = {}, bytes = {};
+      for (let q = 0; q < ROUNDS; ++q) for (const [label, ocm] of Object.entries(records)) { const f = await fly(ocm); (v[label] ??= []).push(f.us); bytes[label] = f.bytes; }
+      const row = { orbit: name, frame, usPerState: Object.fromEntries(Object.entries(v).map(([k, a]) => [k, spread(a)])), oemBytes: bytes,
+        seededOverSgp4: ratioSpread(v["AP seeded"].map((x, i) => x / v.SGP4[i])), fittedOverSgp4: ratioSpread(v["AP fitted"].map((x, i) => x / v.SGP4[i])) };
+      rows.push(row);
+      console.log(`call ${name} ${frame} | SGP4 ${fmt(row.usPerState.SGP4, 2)}, AP seeded ${fmt(row.usPerState["AP seeded"], 2)}, AP fitted ${fmt(row.usPerState["AP fitted"], 2)} us/state | AP/SGP4 seeded ${fmt(row.seededOverSgp4, 1)}, fitted ${fmt(row.fittedOverSgp4, 1)} | $OEM bytes SGP4 ${bytes.SGP4}, AP seeded ${bytes["AP seeded"]}, AP fitted ${bytes["AP fitted"]}`);
+    }
+  }
+  return rows;
+}
+
+const helper = await open();
+result.loadAverage = { before: os.loadavg(), cores: os.cpus().length };
+for (const [name, fn] of [["catalog", catalog], ["first", first], ["order", order], ["ecc", ecc], ["call", call]])
+  if (MODE === "all" || MODE === name) result[name] = await fn(helper);
+result.loadAverage.after = os.loadavg();
+console.log(`load average (1, 5, 15 min) before ${result.loadAverage.before.map((x) => x.toFixed(1)).join(", ")}, after ${result.loadAverage.after.map((x) => x.toFixed(1)).join(", ")} on ${result.loadAverage.cores} cores`);
+if (JSON_OUT) fs.writeFileSync(JSON_OUT, `${JSON.stringify(result, null, 1)}\n`);
+process.exit(0);

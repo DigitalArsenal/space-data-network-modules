@@ -18,6 +18,7 @@
 // so this script needs nothing else); --records <dir> takes carried records made elsewhere instead (<orbit>.ocm, e.g.
 // fitted to FFM's flights: their size, and so the load, is FFM's).
 //   node test/carried-cost.mjs [--rounds 15] [--n 1000] [--many 10000] [--orbits leo500,...] [--records dir] [--json out]
+//                              [--workloads] [--no-theory]
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -35,7 +36,7 @@ import { CelestialFrame } from "spacedatastandards.org/lib/js/OCM/CelestialFrame
 import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { wasmPath } from "./lib/module.mjs";
-import { seedOcm, rowsThrough, flight, T } from "./lib/ocm.mjs";
+import { seedOcm, rowsThrough, flight, T, repackOcm } from "./lib/ocm.mjs";
 import { spwRows } from "./lib/fixture-inputs.mjs";
 import { configuration } from "./lib/pcf.mjs";
 import { jdOf } from "./lib/frames.mjs";
@@ -44,6 +45,9 @@ import { EPOCH, isoAt, revPerDay, fly, forecastOem, fitCarried, harness } from "
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback; };
 const ROUNDS = Number(arg("--rounds", 15)), N = Number(arg("--n", 1000)), MANY = Number(arg("--many", 10000));
 const RECORDS = arg("--records", null), JSON_OUT = arg("--json", null);
+// --workloads: W1 to W4 only (the patterns, the eccentricity row and the once-per-process costs left out); --no-theory:
+// without the theory beside them (its W3 takes minutes a round on eccentric orbits)
+const WORKLOADS_ONLY = process.argv.includes("--workloads"), NO_THEORY = process.argv.includes("--no-theory");
 const ORBITS = {
   leo500: { a: 6878.137, e: 0.001, i: 97.4 },
   leo830: { a: 7208.137, e: 0.001, i: 98.7 },
@@ -135,7 +139,7 @@ const build = await harness();
 // the load average before and after: timings on a busy machine read high and noisy (trust the ratios of kinds that
 // alternate in one process, not the microseconds)
 const report = { build: wasmPath, rounds: ROUNDS, n: N, machine: `${os.cpus()[0]?.model} x${os.cpus().length}`, loadBefore: os.loadavg().map((v) => +v.toFixed(1)), orbits: {} };
-const kinds = ["sgp4", "carried", "theory"];
+const kinds = NO_THEORY ? ["sgp4", "carried"] : ["sgp4", "carried", "theory"];
 for (const [name, o] of Object.entries(ORBITS)) {
   if (only && !only.includes(name)) continue;
   const rec = { sgp4: sgp4Ocm(o), theory: apOcm(o), carried: await carriedOcm(build, name, o) };
@@ -165,9 +169,16 @@ for (const [name, o] of Object.entries(ORBITS)) {
     return cpu() - c0;
   };
   row.W3 = summary(await rounds(["sgp4", "carried"], w3), ["sgp4", "carried"], N * 1440);
-  const t3 = await rounds(["sgp4", "theory"], w3, Math.max(3, Math.round(ROUNDS / 5)));
-  row.W3.theory = summary(t3, ["sgp4", "theory"], N * 1440).theory;
-  row.W3["theory/sgp4"] = summary(t3, ["sgp4", "theory"], N * 1440)["theory/sgp4"];
+  if (!NO_THEORY) {
+    const t3 = await rounds(["sgp4", "theory"], w3, Math.max(3, Math.round(ROUNDS / 5)));
+    row.W3.theory = summary(t3, ["sgp4", "theory"], N * 1440).theory;
+    row.W3["theory/sgp4"] = summary(t3, ["sgp4", "theory"], N * 1440)["theory/sgp4"];
+  }
+  if (WORKLOADS_ONLY) {
+    report.orbits[name] = row;
+    console.log(JSON.stringify({ orbit: name, ...row }));
+    continue;
+  }
   // patterns, the record loaded and its first state taken before timing
   const steady = async (k, times) => { await load([rec[k]]); at(0, times[0]); const c0 = cpu(); for (const s of times) { at(0, s); read(); } return cpu() - c0; };
   for (const step of [60, 300]) {
@@ -194,7 +205,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
   // beside each state (SPEC 12, version 1 of SPEC 18), so the same record without COVARIANCE_DATA is timed beside it
   rec.carriedNoCov = repackOcm(rec.carried, (t) => { Object.assign(t, { COVARIANCE_DATA: [], COV_PROPAGATION: null, COV_PARAMETERS: [], COV_UNITS: [],
     COV_PARAMETER_KINDS: [], COV_REALISM: [], COV_REF_FRAME: null, COV_TYPE: null, COV_SIZE: 6 }); });
-  const publicKinds = ["sgp4", "carried", "carriedNoCov", "theory"];
+  const publicKinds = ["sgp4", "carried", "carriedNoCov", ...(NO_THEORY ? [] : ["theory"])];
   for (const [label, frame] of [["publicTEME", pcfOutputFrame.TEME], ["publicGCRF", pcfOutputFrame.GCRF]]) {
     const req = (k) => flight([rec[k]], { output: { START_TIME: isoAt(300), STOP_TIME: isoAt(7 * DAY), STEP_SECONDS: 300, FRAME: frame } });
     row[label] = summary(await rounds(publicKinds, async (k) => {
@@ -211,6 +222,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
   report.orbits[name] = row;
   console.log(JSON.stringify({ orbit: name, ...row }));
 }
+if (!WORKLOADS_ONLY) {
 // interleaved --many records (carried and SGP4: the theory takes minutes per round here), each carrying one day (8 days
 // of 10,000 low-orbit records would not fit the module's 4 GiB)
 {
@@ -249,6 +261,7 @@ for (const k of kinds) {
   report.oncePerProcess[k] = { instantiateUs: c1 - c0, firstLoadUs: c2 - c1, firstStateUs: c3 - c2, status: r.statusCode };
 }
 console.log(JSON.stringify({ oncePerProcess: report.oncePerProcess }));
+}
 report.sink = sink;
 report.loadAfter = os.loadavg().map((v) => +v.toFixed(1));
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, `${JSON.stringify(report, null, 1)}\n`);

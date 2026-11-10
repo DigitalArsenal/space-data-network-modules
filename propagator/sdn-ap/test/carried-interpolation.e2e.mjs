@@ -11,8 +11,8 @@
 // - the record is the same as the plain fit's but for POLYNOMIAL_POSITION_RECORDS, TRAJ_TYPE POLYNOMIAL_POS, TRAJ_BASIS
 //   PREDICTED, the COMMENT lines on the forecast and FIT_STATISTICS.PCF_CID (its $PCF has OUTPUT): the theory set is
 //   fitted as without them;
-// - the frame of the carried forecast (the cubic through 6-hour nodes) is within 1e-10 rad of ERFA's GCRF -> TEME over
-//   30 days at 7-minute steps (sdnap_carried_frame_error).
+// - the frame of the carried forecast (the module's output matrix, made orthonormal) is within 1e-12 rad of the exact
+//   chain (ERFA, GMST82 unrounded) over 30 days at 7-minute steps (sdnap_carried_frame_error).
 // Prints the bytes per object-day and the numbers (coefficients) per object-day of each class.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/carried-interpolation.e2e.mjs
@@ -33,8 +33,8 @@ const only = process.argv.slice(2);
     const f = (k * 7) / 1440;
     worst = Math.max(worst, d.instance.exports.sdnap_carried_frame_error(2461328.5 + Math.floor(f), f - Math.floor(f)));
   }
-  check(worst < 1e-10, `frame: the carried cubic is ${worst} rad from ERFA's GCRF -> TEME`);
-  console.log(`frame: the cubic through 6-hour nodes within ${worst.toExponential(2)} rad of ERFA over 30 days`);
+  check(worst < 1e-12, `frame: the carried matrix is ${worst} rad from the exact chain`);
+  console.log(`frame: the carried matrix within ${worst.toExponential(2)} rad of the exact chain over 30 days`);
 }
 
 const h = await harness();
@@ -63,9 +63,8 @@ for (const c of CLASSES) {
     const truth = await fly(h, rec.seed, rec.fine, frame);
     const got = await fly(h, rec.ocm, rec.fine, frame);
     const again = await fly(h, second.ocm, rec.fine, frame);
-    // the forecast is given in TEME: in TEME the bound is 1 cm; in GCRF the module's two realizations of the axes (the
-    // carried cubic, the per-state ERFA matrix of the truth's flight) add up to 5e-11 rad of the radius
-    const allowance = (r) => 1e-5 + (frameName === "GCRF" ? 5e-11 * Math.hypot(...r) : 0);
+    // the forecast is given in TEME and both flights turn it to GCRF by the same output matrix: 1 cm in both
+    const allowance = () => 1e-5;
     let worst = 0, at = 0, worst2 = 0, worstV2 = 0, over = 0;
     for (let k = 0; k < truth.length; k++) {
       const e = dist(got[k].r, truth[k].r);
@@ -75,7 +74,7 @@ for (const c of CLASSES) {
       worst2 = Math.max(worst2, dist(again[k].r, got[k].r));
       worstV2 = Math.max(worstV2, dist(again[k].v, got[k].v));
     }
-    check(over < 1, `${c.name} ${frameName}: position error ${(worst * 1e6).toFixed(3)} mm at ${at} s, over 1 cm${frameName === "GCRF" ? " and 5e-11 of the radius" : ""} (positions in)`);
+    check(over < 1, `${c.name} ${frameName}: position error ${(worst * 1e6).toFixed(3)} mm at ${at} s, over 1 cm (positions in)`);
     check(worst2 < 1e-5, `${c.name} ${frameName}: position error ${(worst2 * 1e6).toFixed(3)} mm, over 1 cm (positions and velocities in)`);
     check(worstV2 < 1e-6, `${c.name} ${frameName}: velocity error ${(worstV2 * 1e6).toFixed(4)} mm/s, over 1 mm/s (positions and velocities in)`);
     row[`${frameName}mm`] = +(worst * 1e6).toFixed(3);
@@ -90,5 +89,5 @@ if (failures.length) {
   console.log(`CARRIED-INTERPOLATION FAIL: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.log(`CARRIED-INTERPOLATION PASS: ${rows.length} orbit classes within 1 cm in GCRF and TEME, the frame within 1e-10 rad`);
+console.log(`CARRIED-INTERPOLATION PASS: ${rows.length} orbit classes within 1 cm in GCRF and TEME, the frame within 1e-12 rad`);
 process.exit(0);
