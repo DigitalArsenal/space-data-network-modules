@@ -444,13 +444,15 @@ constexpr int32_t kBranchLimit = -5;
 
 /// Levenberg-Marquardt with the branch settled (SPEC 16.7: AP's elements are defined per branch, so the objective jumps
 /// at a switch and a free fit can stop on it). Away from every switch (1e-3 relative in n, 1e-3 in e) run_free's set as
-/// it is. Near one, the fit again from that set with every trial set pinned to its branch: a minimum on the branch is the
-/// answer; a minimum across the switch is fitted again pinned to the branch it reached, and its minimum is the answer
-/// when it stays there. Otherwise status kBranchLimit, `row` the last set reached.
+/// it is. Near one, the fit again from that set with every trial set pinned to its branch: when its minimum stays on the
+/// branch, the free set stands unless the pinned one's RMS is lower by more than 1e-9 relative (a free fit stalled short
+/// of the branch's minimum); a minimum across the switch is fitted again pinned to the branch it reached, and its minimum
+/// is the answer when it stays there. Otherwise status kBranchLimit, `row` the last set reached.
 inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
   Result out = run_free(row, t, r, count, o);
   const Elements e = elements_of(row);
   if (out.status < 0 || xpt::switch_near(e.xno, e.eo, ap_selected()) == nullptr) return out;
+  const ElementRow free_row = row;
   xpt::Branch b = row_branch(row);
   for (int pass = 0; pass < 2; ++pass) {
     ElementRow w = row;
@@ -461,8 +463,15 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
     }
     if (res.status < 0) return res;
     const xpt::Branch reached = row_branch(w);
+    if (reached == b) {
+      if (pass == 0 && !(res.rms_km < out.rms_km * (1.0 - 1e-9))) {
+        row = free_row;  // the pinned fit confirms the free one, to the fit's own tolerance
+        return out;
+      }
+      row = w;
+      return res;
+    }
     row = w;
-    if (reached == b) return res;
     b = reached;
     out = res;
   }
