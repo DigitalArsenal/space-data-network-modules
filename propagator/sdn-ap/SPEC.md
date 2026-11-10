@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.5 (dist ca551504, bundle f0b8352a).
+Version 0.6.6 (dist bc5aca6d).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2433,7 +2433,13 @@ per perigee passage:
   node's radius r: V = sqrt(1 + 2 e cos nu + e^2 - 2 q theta rho + q^2 cos^2 phi' rho^2 / D^2), rho = r D / p.
 - **Short-period steps.** In the output, each element y_j + (ydot_j / n)(pi - M), M in [0, 2 pi) and ydot the drag's
   rates at the output time, and lambda also + (ndot / n^2)(pi M - M^2/2 - pi^2/3), the integral of n's own sawtooth: the
-  osculating elements step at perigee where the mean elements ramp.
+  osculating elements step at perigee where the mean elements ramp. From 0.6.6 those rates are evaluated per segment,
+  the stretch of one revolution (its two passages fixed) inside one interval of the mean-element grid (the mean state
+  one cubic): the quadratic in t through the rates at the segment's three points s_0 + (k + 1/2)(s_1 - s_0)/3, each at
+  the grid's own mean state there. Three evaluations serve every output state of the segment in place of one at each;
+  against the rates at each output time the state differs by 0.23 mm and 1.4e-7 m/s at most over 30 days
+  (test/kernel-cost.mjs --diff; the largest at a 250 km perigee, B 0.01 m^2/kg, active weather). A fit keeps the rates
+  at each of its states.
 
 At e 0.3 and below, and without drag, the path is 0.4.15's, byte for byte (the XP digest and the drag-off runs below).
 

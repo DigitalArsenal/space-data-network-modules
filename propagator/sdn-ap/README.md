@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.5 (dist ca551504, bundle f0b8352a).
+Version 0.6.6 (dist bc5aca6d).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -349,6 +349,10 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
   `spec-vectors/verify.mjs` refuse without it.
 - `test/rigor/run.mjs`: the rigor suite (`test/rigor/README.md`).
 - `test/bench.mjs`: memory per object and µs per object for a 60 s step, a 1-day jump and a 7-day jump.
+- `test/kernel-cost.mjs`: AP's CPU cost per state against SGP4's and SGP4XP's in the resident epoch store (one
+  `sdnap_epochs_set_at` a state, TEME, 7 days at 300 s and 60 s, cold calls at 1 and 7 days) on made-up orbits from
+  300 km to TESS-like, with `--diff` the largest position and velocity difference between two builds at every state
+  over 30 days (in time order, reversed and shuffled).
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
@@ -463,7 +467,9 @@ error, the set above 0.3 the nearer to the reference (SPEC 16.11).
 
 Above e 0.3 AP's drag is evaluated per perigee passage (SPEC 16.12): the mean of the passages before and after the
 rate's time, each node at the Earth angle and date of its own time on the pass, over the whole orbit, with the pass's
-short-period steps in the output so the osculating elements step at perigee where the mean elements ramp. At e 0.3 and
+short-period steps in the output so the osculating elements step at perigee where the mean elements ramp. From 0.6.6
+the output takes those rates from three evaluations per stretch of a revolution inside one grid interval (SPEC 16.12),
+not one at every state. At e 0.3 and
 below, and without drag, propagations are 0.4.15's byte for byte. Seeded at the truth's drag coefficient with the Sun
 and Moon off, AP's drag energy per pass over FFM's goes from 0.9840, 0.9907 and 0.9958 to 1.0026, 0.9991 and 0.9987
 (Molniya, GTO, 500 km perigee GTO), and the drag theory's own day-7 along-track error with the Sun and Moon on from 594 m,

@@ -111,7 +111,7 @@ try {
   assertNoUserDefined(ocmCurrBytes);
   assert.equal(String.fromCharCode(...odrCurrBytes.subarray(4, 8)), "$ODR");
   const ocmCurr = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(ocmCurrBytes)).unpack();
-  assert.equal(ocmCurr.PROVENANCE?.PRODUCER, "com.spacedatanetwork.sdn-ap-propagator 0.6.5");
+  assert.equal(ocmCurr.PROVENANCE?.PRODUCER, `com.spacedatanetwork.sdn-ap-propagator ${JSON.parse(fs.readFileSync(path.join(packageRoot, "plugin-manifest.json"), "utf8")).version}`);
   assert.ok(ocmCurr.ORBIT_DETERMINATION.FIT_STATISTICS.CONVERGED);
 
   // Propagate identical 0.6.4 AP $OCM on both 0.6.4 and 0.6.5 for 7 days in EME2000 and TEME
