@@ -20,7 +20,7 @@
 // 6. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
-requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 import fs from 'node:fs';
 import {scratchTemp} from './lib/scratch.mjs';
 import {spwFixtureText} from './lib/spw-constant.mjs';
@@ -38,7 +38,7 @@ const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoo
 const scratch = scratchTemp('sdn-ap-gto-terms-');
 // The truth is pinned: the model truth's generator (propagator/ffm's dist, FFM 2.2.1 on SDS 1.279.0 at modules 9cb02c8e2) and its $SPW rows. A
 // different generator or rows changes every figure below; the figures are re-recorded with a new pin, never silently.
-const FFM_DIST_SHA256 = 'a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4';
+const FFM_DIST_SHA256 = 'ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934';
 const SPW_ROWS_SHA256 = 'd7018d1d33afa58220f3f95219f3ef3bd3802129dee5aee378fd46b6c7971f42';
 {
   const {createHash} = await import('node:crypto');

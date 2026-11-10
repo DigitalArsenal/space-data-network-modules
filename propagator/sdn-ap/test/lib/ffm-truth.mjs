@@ -7,6 +7,9 @@
 // drag, 0.22 / 0.14 m on GTO-500 with drag, 0.28 / 0.22 m half-day, 0.25 / 0.19 m 12 h at 55 deg, 2.54 / 1.91 m on GTO
 // without drag; 2.2.1 against itself at tolerance 1e-13 and a 30 s step (the truth's 1e-12 and 300 s): 0.13 / 0.10 m on
 // Molniya at day 7 (0.36 m at day 10). The truth is converged to well under a meter over the scored days.
+// FFM 2.3.0 (ea457690, modules 48a00fd6: TEME by foundation/frames' definition) flies these truths as 2.2.1 did, bit for
+// bit: the 55 truths the 13 model-truth tests made on it equal 2.2.1's byte for byte, and every printed figure is the same
+// (2026-11-10); the tests name 2.3.0 since.
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";

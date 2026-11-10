@@ -11,7 +11,7 @@
 // digest bit-exact. Unread-window confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
-requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 import fs from 'node:fs';
 import path from 'node:path';
 import {Worker} from 'node:worker_threads';

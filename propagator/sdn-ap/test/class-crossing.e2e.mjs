@@ -21,7 +21,7 @@
 //   node test/class-crossing.e2e.mjs
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
-requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import * as fb from 'flatbuffers';
@@ -32,9 +32,9 @@ import {wasmPath} from './lib/module.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 import {seedOcm, rowsThrough, flight} from './lib/ocm.mjs';
 import {spwFixtureRows} from './lib/spw-constant.mjs';
-// the truth's FFM build (propagator/ffm 2.2.1, dist/isomorphic/module.wasm); test/lib/heo-model-truth.mjs keys its cached
+// the truth's FFM build (propagator/ffm 2.3.0, dist/isomorphic/module.wasm); test/lib/heo-model-truth.mjs keys its cached
 // truths by that file's bytes, so a truth of another build is never read, and another build is refused here by name
-const FFM_SHA256='a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4';
+const FFM_SHA256='ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934';
 {
  const ffm=createHash('sha256').update(fs.readFileSync(new URL('../../ffm/dist/isomorphic/module.wasm',import.meta.url))).digest('hex');
  assert.equal(ffm,FFM_SHA256,`the truth's FFM build is ${FFM_SHA256}, not ${ffm}: the registered numbers are that build's`);
