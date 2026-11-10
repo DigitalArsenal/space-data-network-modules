@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.8 (dist df8ab715).
+Version 0.6.9 (dist 07d96b75).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -163,7 +163,7 @@ A set's branch (resonance class, the 1,100-minute regime, the eccentricity switc
 for the whole flight, so its output is continuous in time (SPEC 16.7); AP's elements are defined per branch, and the
 module never differences or blends two branches (covariance, fit, epoch store). On the decaying-GTO fixture, whose mean
 motion leaves the half-day band during the week, the day-7 along-track error is -168,218.829 m with the class held
-against -167,341.326 m when 0.6.6 rebuilt its tables for the current class, and -136,267.630 m for the noncrossing
+against -167,341.326 m when 0.6.6 and 0.6.7 rebuilt their tables for the current class, and -136,267.630 m for the noncrossing
 companion (23.4 %; E2E bound 25 %). SPEC 16.7 defines the fixture.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
