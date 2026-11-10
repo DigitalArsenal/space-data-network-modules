@@ -99,9 +99,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   (a day-1 prediction); the span with the smallest tail error (a longer one only when within EXTENSION_MARGIN 0.9,
   eccentric 0.7, of the best shorter one's) is refitted on all the data. The arc grows from two revolutions by threes
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
-  down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); within 1e-3 of a
-  switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches) the fit is settled on one branch, and
-  refused fit-at-branch-limit when on each side the best set lies across the switch; an eccentric block's
+  down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); a fit that stops on
+  a switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches; within 1e-8) is settled on one branch,
+  and refused fit-at-branch-limit when on each side the best set lies across the switch; an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
   no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments

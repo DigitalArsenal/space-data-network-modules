@@ -2254,8 +2254,9 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   a limit is continuous in the nominal's mean motion: a fitted record moved to 2e-8 and 3e-7 above 1.2033 rev/day gives the
   same covariance at 0, 1 and 3 days to 2e-4 of its largest position variance (0.6.5: 0.70).
 - Fit: the objective jumps at a switch, and a free fit can stop on it (a 72 h arc of a truth at 0.8022 rev/day ended
-  1e-16 from the limit, where one Gauss-Newton step of the full theory would have removed 73 % of its cost). Where the
-  fitted set lies within 1e-3 of a switch (relative in n, absolute in e), `fit` fits again from it with every trial set
+  1e-16 from the limit, where one Gauss-Newton step of the full theory would have removed 73 % of its cost: its trial
+  steps across are refused until it creeps onto the limit). Where the fitted set lies on a switch (within 1e-8, relative
+  in n, absolute in e; every other fit is the free one bit for bit), `fit` fits again from it with every trial set
   pinned to its branch; a minimum on that branch is the answer; a minimum across the switch is fitted again pinned to the
   branch it reached, and its minimum is the answer when it stays there; otherwise the fit is refused fit-at-branch-limit,
   naming the switch, the set's mean motion and eccentricity, and asking for another span or epoch. On the referee's

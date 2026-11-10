@@ -441,17 +441,20 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
 
 /// SPEC 16.7: a fit whose least-squares set lies on a switch (on each side the best set lies across it).
 constexpr int32_t kBranchLimit = -5;
+/// SPEC 16.7: a fitted set this close to a switch (relative in n, absolute in e) is on it.
+constexpr double kOnSwitch = 1e-8;
 
 /// Levenberg-Marquardt with the branch settled (SPEC 16.7: AP's elements are defined per branch, so the objective jumps
-/// at a switch and a free fit can stop on it). Away from every switch (1e-3 relative in n, 1e-3 in e) run_free's set as
-/// it is. Near one, the fit again from that set with every trial set pinned to its branch: when its minimum stays on the
+/// at a switch and a free fit can stop on it: its trial steps across are refused until it creeps onto the limit, within
+/// about 1e-15). Off every switch (more than 1e-8 relative in n, 1e-8 in e) run_free's set as it is, bit for bit. On one,
+/// the fit again from that set with every trial set pinned to its branch: when its minimum stays on the
 /// branch, the free set stands unless the pinned one's RMS is lower by more than 1e-9 relative (a free fit stalled short
 /// of the branch's minimum); a minimum across the switch is fitted again pinned to the branch it reached, and its minimum
 /// is the answer when it stays there. Otherwise status kBranchLimit, `row` the last set reached.
 inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
   Result out = run_free(row, t, r, count, o);
   const Elements e = elements_of(row);
-  if (out.status < 0 || xpt::switch_near(e.xno, e.eo, ap_selected()) == nullptr) return out;
+  if (out.status < 0 || xpt::switch_near(e.xno, e.eo, ap_selected(), kOnSwitch, kOnSwitch) == nullptr) return out;
   const ElementRow free_row = row;
   xpt::Branch b = row_branch(row);
   for (int pass = 0; pass < 2; ++pass) {
