@@ -31,9 +31,10 @@ int main(int argc,char**argv){
   const auto utc=instant.utc(),ut1=earth.ut1(instant),tdb=instant.tdb();
   double c2t[3][3],builtIn[3][3];earth.matrix(instant,c2t);astro::ForceModel::GcrfToEarthFixed(instant,builtIn);
   const coords::Epoch ep{instant.jd1,instant.jd2,utc.jd1,utc.jd2};
-  // SGP4's separate 2006/2000A TEME definition, at its UTC-JD API boundary.
+  // foundation/frames' TEME (AIAA 2006-6753, R3(GAST06 - GMST82) NPB06), as SGP4 takes it at its UTC-JD API
+  // boundary: TT from UTC, UT1 = UTC.
   const double day=std::floor(jdUtc-0.5)+0.5;double tai1,tai2;sdn::frames::Epoch se;
-  eraUtctai(day,jdUtc-day,&tai1,&tai2);eraTaitt(tai1,tai2,&se.tt1,&se.tt2);
+  eraUtctai(day,jdUtc-day,&tai1,&tai2);eraTaitt(tai1,tai2,&se.tt1,&se.tt2);se.ut11=day;se.ut12=jdUtc-day;
   const auto teme=sdn::frames::gcrfToTeme(se);
   json h={{"utc",line},{"leapSeconds",timesys::getLeapSeconds(jdUtc)},{"ttWhole",tt.whole},{"ttFraction",tt.fraction},
    {"tt1",instant.jd1},{"tt2",instant.jd2},{"tdb1",tdb.jd1},{"tdb2",tdb.jd2},{"utc1",utc.jd1},{"utc2",utc.jd2},{"ut11",ut1.jd1},{"ut12",ut1.jd2},

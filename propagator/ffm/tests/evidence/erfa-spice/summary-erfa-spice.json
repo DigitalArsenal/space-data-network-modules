@@ -1,8 +1,8 @@
 {
  "about": "FFM classical frames, two-part force clock and ephemeris reads against independent offline ERFA/SPICE references.",
  "module": {
-  "version": "2.2.0",
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+  "version": "2.3.0",
+  "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
  },
  "tools": {
   "pyerfa": "2.0.1.5",
@@ -282,22 +282,22 @@
   {
    "id": "coordsTeme",
    "quantity": "Classical GCRF/J2000 -> TEME",
-   "reference": "ERFA R3(eqeq94) pnm80",
+   "reference": "ERFA R3(gst06 - gmst82) pnm06a, UT1=UTC",
    "unit": "mas",
-   "note": "FK5 TEME definition.",
-   "geoM": 4.088752947333315e-11,
-   "geoMAt": "2026-08-02T21:00:00.000",
-   "gpsM": 2.5755820233428725e-11,
-   "gpsMAt": "2026-08-02T21:00:00.000",
-   "leoM": 6.5729095666246936e-12,
-   "leoMAt": "2026-08-02T21:00:00.000",
-   "max": 2.0001955083521162e-10,
-   "maxAt": "2026-08-02T21:00:00.000",
+   "note": "The TEME of AIAA 2006-6753 (lib/coords since 2.3.0).",
+   "geoM": 0,
+   "geoMAt": "2026-08-02T00:00:00.000",
+   "gpsM": 0,
+   "gpsMAt": "2026-08-02T00:00:00.000",
+   "leoM": 0,
+   "leoMAt": "2026-08-02T00:00:00.000",
+   "max": 0,
+   "maxAt": "2026-08-02T00:00:00.000",
    "met": true,
-   "poleMas": 8.945583026648831e-11,
-   "poleMasAt": "2026-08-02T21:00:00.000",
-   "spinMas": 1.789007410483619e-10,
-   "spinMasAt": "2026-08-02T21:00:00.000",
+   "poleMas": 0,
+   "poleMasAt": "2026-08-02T00:00:00.000",
+   "spinMas": 0,
+   "spinMasAt": "2026-08-02T00:00:00.000",
    "tolerance": 1e-7
   },
   {
@@ -324,22 +324,22 @@
   {
    "id": "teme",
    "quantity": "SGP4 GCRF -> TEME",
-   "reference": "ERFA R3(ee06a) pnm06a",
+   "reference": "ERFA R3(gst06 - gmst82) pnm06a, UT1=UTC",
    "unit": "mas",
-   "note": "Separate foundation/frames IAU 2006/2000A TEME definition.",
-   "geoM": 4.0436141554043405e-8,
-   "geoMAt": "2026-06-10T19:00:00.000",
-   "gpsM": 2.5471482533046253e-8,
-   "gpsMAt": "2026-06-10T19:00:00.000",
-   "leoM": 6.5003463178499445e-9,
-   "leoMAt": "2026-06-10T19:00:00.000",
-   "max": 1.9781138590004084e-7,
-   "maxAt": "2026-06-10T19:00:00.000",
+   "note": "foundation/frames gcrfToTeme: the TEME of AIAA 2006-6753.",
+   "geoM": 0.0000023966947584782277,
+   "geoMAt": "2026-06-10T08:00:00.000",
+   "gpsM": 0.0000015097228947037668,
+   "gpsMAt": "2026-06-10T08:00:00.000",
+   "leoM": 3.8528270377781276e-7,
+   "leoMAt": "2026-06-10T08:00:00.000",
+   "max": 0.000011724499260650525,
+   "maxAt": "2026-06-10T08:00:00.000",
    "met": true,
-   "poleMas": 2.2055553319622803e-8,
+   "poleMas": 2.2059165669202293e-8,
    "poleMasAt": "2026-08-02T20:00:00.000",
-   "spinMas": 1.9740867842986863e-7,
-   "spinMasAt": "2026-06-10T19:00:00.000",
+   "spinMas": 0.00001172449299263763,
+   "spinMasAt": "2026-06-10T08:00:00.000",
    "tolerance": 0.001
   },
   {
@@ -348,19 +348,19 @@
    "reference": "ERFA R3(eqeq94) pnm80",
    "unit": "mas",
    "note": "Definition spread.",
-   "geoM": 15.874159338151355,
+   "geoM": 10.300888015244054,
    "geoMAt": "2026-08-03T00:00:00.000",
-   "gpsM": 9.999430132771497,
+   "gpsM": 6.488722194338987,
    "gpsMAt": "2026-08-03T00:00:00.000",
-   "leoM": 2.551863981997492,
+   "leoM": 1.6559280116027966,
    "leoMAt": "2026-08-03T00:00:00.000",
-   "max": 77.6555165255079,
+   "max": 50.39137899874115,
    "maxAt": "2026-08-03T00:00:00.000",
    "met": null,
-   "poleMas": 50.39137696903958,
+   "poleMas": 50.39137696899233,
    "poleMasAt": "2026-08-03T00:00:00.000",
-   "spinMas": 59.08543284099372,
-   "spinMasAt": "2026-08-03T00:00:00.000",
+   "spinMas": 0.03477290276238131,
+   "spinMasAt": "2026-06-11T00:00:00.000",
    "tolerance": null
   },
   {
@@ -493,11 +493,11 @@
    "propagator/ffm/src/cpp/include/ffm/prw_codec.h": "4e676f7e3bbdcd2fddeea2c744986272020f27ba5b644ca04b7a8682c5fc4f34",
    "propagator/ffm/lib/time_convert.cpp": "c21895b449643f9016c822af5642d4736f2ab2b482ecc5f087217e282284a45d",
    "propagator/ffm/lib/time_types.h": "16bc1dea67549a20fff2fca377ce49d5dd50ff46b150e8f3e96247076a933d76",
-   "propagator/ffm/lib/coords.cpp": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677",
-   "propagator/ffm/lib/coords.h": "9e7c7c67bd735fcdc04e4f78248178cc2ac0c76dbfdbeef91193a042bf0dd4f5",
+   "propagator/ffm/lib/coords.cpp": "cd086d71b81ec828f0a1900f0a34e415bdf7c2f3dba3ce94e82589fba735afd5",
+   "propagator/ffm/lib/coords.h": "06995e9bc394a3ab754470edeb2d4be4eadaadee8961fc4c40b4b94818a3e1bb",
    "propagator/ffm/lib/force_models.cpp": "e5972241d304d5b16219e5e2fb9912cf89fa45a116fc28c5c63c5d63f00a66b5",
    "propagator/ffm/lib/ephemeris.cpp": "ecead63da40c529f633217ef38f9bd3ed976c0ce0bb5d84b30d30d432b2dfa88",
-   "foundation/frames/src/axis_engine.hpp": "693f37d79c61cc90bd3acc50530e50a4708d52da8116b4ad49f589439988e74a",
+   "foundation/frames/src/axis_engine.hpp": "dbc636a24ecf4ca3d69f826936d9ad4d3735a4cfbafa8e10f97541c07b8bd044",
    "foundation/frames/src/eop_series.hpp": "399f0b10aad4a71e2001e8e96a5647ac15e16d5533141daf88a589136a849ddb"
   },
   "measurement": {
@@ -519,11 +519,11 @@
  "fileHashes": [
   {
    "path": "ffm-frames.json",
-   "sha256": "97c0719e2febd1f4b7b081e60a4acb74bda8c0e02789548528293d8ebdaa68fd"
+   "sha256": "f84c1048b71d9776bc6089af6d248209dc2ca49ea67ab57b5c32c4c96847da7a"
   },
   {
    "path": "reference.json",
-   "sha256": "8a9830704bc5155a0beb35fc256789fbb72fb566ccb0174df660a50e75c8a405"
+   "sha256": "c3ff0c9595ca4a6b1124913ea1e950ef257c6139264a29a1bf0e29534c97eadd"
   },
   {
    "path": "tools.json",
@@ -531,19 +531,19 @@
   },
   {
    "path": "diagnosis.json",
-   "sha256": "239bc374da8d368e05d137452b70ef6068a2a44a47ff8906078ad7e846f0476d"
+   "sha256": "5bb6edc888850deaba33784774f092de59be71a5471541221747a246c6254f9b"
   },
   {
    "path": "before-after.json",
-   "sha256": "4021aa60ad4c379f325bbf7051eb4573f2a347b02ff235c368e05a97a4053ace"
+   "sha256": "d72e6b8f32f5a23fe8c5f334a1edbd639d97c78ccfa2d0360c4daf408dd4f08f"
   },
   {
    "path": "classical-frames-10k.json",
-   "sha256": "c3b2d89b0b4e53ce97ae3741f4d8180df1eb20b3c9b17fd46249ccb4a91a5958"
+   "sha256": "fa97e654d5bc1d7e0d3ef135649a851532afe5fc276afcddbdabc1ff3e9d8f0a"
   },
   {
    "path": "frame-diagnostics.cpp",
-   "sha256": "6aa88e012c8e724b3ee0037d4187d5bcc142faaee33e976b4fd88dae9d3946a2"
+   "sha256": "85118af0696f1fe17884dd5e7a0b5ce1c9a549cd17ead38813efb1e401466f07"
   },
   {
    "path": "frame-diagnostics.mjs",
@@ -555,7 +555,7 @@
   },
   {
    "path": "summarize-erfa-spice.mjs",
-   "sha256": "6b3b82236957f6babf68fed9f6f3086ea3b7e7246e8516d385f4223fcc4fb458"
+   "sha256": "f7c98dd9b27f09b0af37344fda75f4ffc4c242c03c8dd6850de182034db7f81c"
   },
   {
    "path": "check-erfa-spice.mjs",
@@ -563,7 +563,7 @@
   },
   {
    "path": "ffm_frames_native.cpp",
-   "sha256": "4b0034cdfe102c47d686fd06c9f8a134204c5158d5f8c6801e5f516482e44a89"
+   "sha256": "23e9cf0fbb607659e5b6faff6961643609b621a5fed005688fb1df0eb813ccee"
   },
   {
    "path": "ffm-frames-native.mjs",
@@ -571,7 +571,7 @@
   },
   {
    "path": "reference.py",
-   "sha256": "38c0bf2d6bdde32f0a21024372c943ba60b5492a5dc780f7e8646c37de31f0fa"
+   "sha256": "26d6ea0f498cc44cd0a7a46b27cac807a76a337cb5734f26dc8b488e5c7a1cf4"
   },
   {
    "path": "run-erfa-spice.mjs",
@@ -587,7 +587,7 @@
   },
   {
    "path": "classical-frames-reference.py",
-   "sha256": "ea1eb0b6b9e419da580b4b314b56d39b7b00f6af80d87f76902a8fd221385b7f"
+   "sha256": "36be19bd79b8d59396008376945168a5eaef31c27f9c3e9b6925ba00e86e2fae"
   },
   {
    "path": "../../../src/cpp/include/ffm/prw_environment.h",
@@ -607,11 +607,11 @@
   },
   {
    "path": "../../../lib/coords.cpp",
-   "sha256": "1ccfa7ff82bb549a77e90c14b8b49e7a6b22f9ba992655e975d85c13bf8fa677"
+   "sha256": "cd086d71b81ec828f0a1900f0a34e415bdf7c2f3dba3ce94e82589fba735afd5"
   },
   {
    "path": "../../../lib/coords.h",
-   "sha256": "9e7c7c67bd735fcdc04e4f78248178cc2ac0c76dbfdbeef91193a042bf0dd4f5"
+   "sha256": "06995e9bc394a3ab754470edeb2d4be4eadaadee8961fc4c40b4b94818a3e1bb"
   },
   {
    "path": "../../../lib/force_models.cpp",
@@ -623,7 +623,7 @@
   },
   {
    "path": "../../../../../foundation/frames/src/axis_engine.hpp",
-   "sha256": "693f37d79c61cc90bd3acc50530e50a4708d52da8116b4ad49f589439988e74a"
+   "sha256": "dbc636a24ecf4ca3d69f826936d9ad4d3735a4cfbafa8e10f97541c07b8bd044"
   },
   {
    "path": "../../../../../foundation/frames/src/eop_series.hpp",
@@ -631,15 +631,15 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   {
    "path": "../../../package.json",
-   "sha256": "088b4fb56f78a074fe096670025fd80a482e054e6331b3e15976802cdacba941"
+   "sha256": "e8ba92edacd855da17b1f9826bd3f4360353f6d90a6601ab9c2282043b47d1e0"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
   },
   {
    "path": "../../../index.js",

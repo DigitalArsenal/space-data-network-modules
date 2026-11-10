@@ -61,9 +61,9 @@ int main(int argc,char**argv){try{
   rot("c2tBuiltIn","c2tBuiltIn","c2tErfa");
   rot("coordsPrecession","coordsPrecession","pmat76AtFfmInstant");
   rot("coordsNutation","coordsNutation","nutm80AtFfmInstant");
-  rot("coordsTeme","coordsGcrfToTeme","gcrfToTemeFk5AtFfmInstant");
+  rot("coordsTeme","coordsGcrfToTeme","gcrfToTemeAtFfmInstant");
   rot("c2tBuiltInClassical","c2tBuiltIn","c2tClassicalAtFfmInstant");
-  rot("teme","gcrfToTeme","gcrfToTemeErfa06");rot("temeFk5","gcrfToTeme","gcrfToTemeFk5");
+  rot("teme","gcrfToTeme","gcrfToTemeAiaa");rot("temeFk5","gcrfToTeme","gcrfToTemeFk5");
   rot("coordsEcefCio","coordsEcef","c2tErfa");rot("coordsEcefSpice","coordsEcef","c2tSpiceItrf93");
   for(const std::string body:{"sun","moon"}){
    scalar((body+"Same").c_str(),distance(h[body],r[body+"SpiceAtFfmInstant"])*1000);

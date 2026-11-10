@@ -576,7 +576,11 @@ for (const runtimeKind of STANDALONE_RUNTIME_KINDS) {
     // the states come from (src/cpp/tests/data/test_meme.txt), this set and the
     // previous one (15.08815177) predict alike: 98.95 m and 98.91 m RMS over the
     // first hour, 4109.2 km and 4110.6 km over the first day.
-    assert.ok(Math.abs(result.MEAN_MOTION - 15.08815183) < 1e-8);
+    // Re-pinned at 0.4.0: the EME2000 states now reach TEME by the TEME of AIAA 2006-6753 (foundation/frames'
+    // axis engine, frame bias first) in place of IAU-76/FK5, which moves them about 1.6 m at this radius in 2026;
+    // the capped three-state fit moved from n 15.08815183, argp 103.2843, M 184.4143, B* 6.72249e-8 to
+    // n 15.08815205, argp 103.2856, M 184.4130, B* 2.42003e-8 (argp + M unchanged, e and i unchanged).
+    assert.ok(Math.abs(result.MEAN_MOTION - 15.08815205) < 1e-8);
     assert.ok(Math.abs(result.ECCENTRICITY - 0.0001660) < 1e-7);
     assert.ok(Math.abs(result.INCLINATION - 53.2150) < 1e-4);
     assert.ok(Number.parseFloat(result.RMS) <= 0.001);
