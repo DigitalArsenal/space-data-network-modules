@@ -5922,7 +5922,10 @@ inline uint64_t xp_bytes(const XpSat& s) {
   if (!(c.shared_mask & 16)) b += u(c.zt);
   if (!(c.shared_mask & 32)) b += u(c.mdaily);
   if (!(c.shared_mask & 64)) b += u(c.sp_orig != nullptr ? c.sp_orig : c.sp) + u(c.sp_comb);
-  if (c.wide != nullptr && c.wide_owned) b += u(c.wide) + u(c.wide->m) + u(c.wide->w) + u(c.wide->v) + u(c.wide->dv);
+  // its grid of the tesseral families (SPEC 16.11) and the node grids it holds: each one block (wide_grid_bytes)
+  if (c.wide != nullptr && c.wide_owned && c.wide_anchor == nullptr) b += sizeof(tess::WideGrid) + tess::wide_grid_bytes(*c.wide);
+  for (const tess::WideGrid* g : s.wide_node)
+    if (g != nullptr) b += sizeof(tess::WideGrid) + tess::wide_grid_bytes(*g);
   if (s.caches != nullptr) b += s.caches->bytes + sp_cache_bytes(s.caches->sp.cache);
   return b;
 }
