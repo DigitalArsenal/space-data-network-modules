@@ -27,6 +27,16 @@ struct ElementRow {
 };
 static_assert(sizeof(ElementRow) == 112, "ElementRow is 112 bytes");
 
+/// SPEC 4.2: an AP row's radiation term Y0 (ECOM2, m/s^2), in the slot of SGP4's first derivative of the mean motion
+/// (the transport is stated once, at xpt::radiation_y0): every copy of the row carries it, and elements_of hands it on.
+inline double& radiation_y0(ElementRow& row) { return row.mean_motion_dot; }
+inline double radiation_y0(const ElementRow& row) { return row.mean_motion_dot; }
+
+/// SPEC 4.2: a row from outside the module (sdnap_init_elements, sdnap_fit) that would fly a radiation term Y0 it was
+/// never given: theory SGP4XP with the first-derivative slot not 0 (an SGP4 term an SGP4XP set does not have). Refused
+/// at those entries by name (elements-other-theory), never read as Y0.
+inline bool row_states_sgp4_ndot(const ElementRow& row) { return row.theory == kTheorySgp4Xp && radiation_y0(row) != 0.0; }
+
 /// Rows hold SGP4 records (Sat) or SGP4XP records (xpt::XpSat); `slot` maps
 /// a row to its record.
 struct Store {
@@ -99,8 +109,8 @@ inline bool row_well_formed(const ElementRow& r) {
 
 /// Replaces the element set. Returns the number of rows held (refused sets
 /// are held too, flagged, so indices match the input rows), or -1 when memory
-/// is exhausted.
-inline int32_t store_init(const ElementRow* rows, uint32_t count) {
+/// is exhausted. `refused` (optional, one flag per row) holds the flagged rows refused whatever they carry.
+inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t* refused = nullptr) {
   store_free();
   Store& st = store();
   if (count == 0) return 0;
@@ -120,7 +130,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count) {
   uint32_t resonant = 0;
   for (uint32_t i = 0; i < count; ++i) {
     const Elements e = elements_of(rows[i]);
-    const bool well_formed = row_well_formed(rows[i]);
+    const bool well_formed = row_well_formed(rows[i]) && (refused == nullptr || refused[i] == 0);
     if (e.theory == kTheorySgp4Xp) {
       st.kind[i] = 1;
       st.slot[i] = st.xp_count;
