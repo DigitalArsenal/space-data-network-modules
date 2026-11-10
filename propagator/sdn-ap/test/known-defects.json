@@ -1,0 +1,7 @@
+[
+  {
+    "test": "high-e-fit-arc",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#393",
+    "text": "Since version 0.6.4, an orbit that goes around the Earth exactly six times a day with an eccentricity of 0.1 to 0.25 is predicted 1.5 to 5.9 km off along its track 7 days after a fit, 70 to 90 times worse than before; orbits away from that ratio move by less than 30 m."
+  }
+]

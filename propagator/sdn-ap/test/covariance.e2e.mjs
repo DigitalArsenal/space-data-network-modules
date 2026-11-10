@@ -10,9 +10,10 @@
 //   SDNAP_COV_NOISE and SDNAP_COV_NG_RATE; |NOISE_NON_GRAVITATIONAL_RAD_DAY2 - NON_GRAVITATIONAL_SHARE x
 //   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day).
 // - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
-//   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n) and its covariance is pinned:
-//   the SHA-256 of COVARIANCE_DATA, the six floor doubles and sdnap_covariance_at of the AP set at the fixture grid
-//   (AP_COVARIANCE_SHA256, recorded on the 0.6.1 build; the SGP4XP table and numbers are unchanged).
+//   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n); sdnap_covariance_at of the
+//   stored AP record (ap-fit-0.6.4.ocm) at the fixture grid within AP_COV_FLIGHT of 0.6.4's numbers (ap-fit-0.6.4.cov),
+//   and this build's own AP fit within AP_COV_FIT of them, its epoch covariance and floors of the stored record's (the
+//   SGP4XP table and numbers are unchanged).
 // - export_omm of the XP $OCM equals xp-fit-0.4.0.omm with USER_DEFINED_PARAMETERS, COMMENT and
 //   USER_DEFINED_EPOCH_TIMESTAMP / MICROSECONDS removed and PROVENANCE carried, BTERM and AGOM in their own fields
 //   (the 0.4.0 set's BSTAR and MEAN_MOTION_DDOT moved there): the two records packed by one builder are byte-equal;
@@ -34,11 +35,17 @@ import { assertNoUserDefined } from "../../../common/tests/no-user-defined.mjs";
 import { ensureBuilt, wasmPath } from "./lib/module.mjs";
 import { configuration, MSIS_FORCES, XP_FORCES } from "./lib/pcf.mjs";
 import { inputs, GRID } from "./lib/fixture-inputs.mjs";
-import { createHash } from "node:crypto";
 
-/// SPEC 12.5's AP DRAG row (0.6.1) and the pinned AP covariance numbers.
+/// SPEC 12.5's AP DRAG row (0.6.1).
 const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.647194501793458e-7, c: 0.112126311682426 };
-const AP_COVARIANCE_SHA256 = "f65830a2c65770bd3c94dc0208127a40861f42829da6384c8427c961307907e9";
+/// The AP covariance, the flight of fixed elements and the fit apart. Until 2026-11-10 the SHA-256 of the own fit's
+/// COVARIANCE_DATA, floors and sdnap_covariance_at (f65830a2..., recorded on 0.6.1, held through 0.6.4). 0.6.5 (24d7d75f,
+/// the analytic/SIMD covariance Jacobian and its other speed changes, SPEC 16.8) moves sdnap_covariance_at of the stored
+/// record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit) by 2.904 mm and 7.2e-5 of a time's largest covariance entry; this
+/// build's own fit stops 7.3 cm away (the fit inside its tolerance) and its covariance 1.4e-4 of the largest entry away,
+// its epoch covariance 5.6e-4 of the stored record's largest entry and its floors 1.45e-4 relative.
+const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
+const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };
 
 ensureBuilt();
 const failures = [];
@@ -139,17 +146,42 @@ if (apBytes) {
     `the AP set's noise ${JSON.stringify(acp)} (regime ${ap.COV_REALISM?.[0]?.REGIME}) is not SPEC 12.5's DRAG row`);
   const an = ap.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI, awant = acp.NON_GRAVITATIONAL_SHARE * Math.abs(acp.NON_GRAVITATIONAL_RATE_PER_DAY) * an;
   check(Math.abs(acp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 - awant) <= 1e-12 * Math.max(Math.abs(awant), Number.MIN_VALUE), "the AP set's noise invariant");
-  const qo = x.sdnap_alloc(apBytes.length), qm = x.sdnap_alloc(8 * minutes.length), qout = x.sdnap_alloc(8 * 42 * minutes.length);
-  new Uint8Array(mem(), qo, apBytes.length).set(apBytes);
-  new Float64Array(mem(), qm, minutes.length).set(minutes);
-  const aStatus = x.sdnap_covariance_at(qo, apBytes.length, qm, minutes.length, qout);
-  check(aStatus === 0, `sdnap_covariance_at of the AP set: ${aStatus}`);
-  const floorAp = ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"].map((f) => acp[f]);
-  const digest = createHash("sha256").update(Buffer.from(Float64Array.from(ap.COVARIANCE_DATA).buffer)).update(Buffer.from(Float64Array.from(floorAp).buffer))
-    .update(Buffer.from(mem().slice(qout, qout + 8 * 42 * minutes.length))).digest("hex");
-  console.log(`AP set: DRAG row s_e ${acp.NOISE_ECCENTRICITY_PER_DAY}, s_i ${acp.NOISE_INCLINATION_PER_DAY}, s_l ${acp.NOISE_MEAN_MOTION_RELATIVE}, c ${acp.NON_GRAVITATIONAL_SHARE}; covariance SHA-256 ${digest} (pinned ${AP_COVARIANCE_SHA256})`);
-  check(digest === AP_COVARIANCE_SHA256, `the AP covariance numbers ${digest} differ from the pinned ${AP_COVARIANCE_SHA256}`);
-  x.sdnap_free(qo); x.sdnap_free(qm); x.sdnap_free(qout);
+  // sdnap_covariance_at at the fixture grid against 0.6.4's numbers of the stored record (test/fixtures/ap-fit-0.6.4.cov):
+  // the stored record itself (the flight of fixed elements and covariance) within AP_COV_FLIGHT, this build's own fit within
+  // AP_COV_FIT; the own fit's epoch covariance and floors against the stored record's within AP_COV_FIT.epoch
+  const reference = new Float64Array(fixture("ap-fit-0.6.4.cov").buffer.slice(0));
+  const covAt = (bytes) => {
+    const qo = x.sdnap_alloc(bytes.length), qm = x.sdnap_alloc(8 * minutes.length), qout = x.sdnap_alloc(8 * 42 * minutes.length);
+    new Uint8Array(mem(), qo, bytes.length).set(bytes);
+    new Float64Array(mem(), qm, minutes.length).set(minutes);
+    const status = x.sdnap_covariance_at(qo, bytes.length, qm, minutes.length, qout);
+    const got = new Float64Array(mem().slice(qout, qout + 8 * 42 * minutes.length));
+    x.sdnap_free(qo); x.sdnap_free(qm); x.sdnap_free(qout);
+    const d = { status, posM: 0, velMmS: 0, covOfLargest: 0, differ: 0 };
+    for (let k = 0; k < minutes.length; k += 1) {
+      const o = 42 * k;
+      d.posM = Math.max(d.posM, 1000 * Math.hypot(got[o] - reference[o], got[o + 1] - reference[o + 1], got[o + 2] - reference[o + 2]));
+      d.velMmS = Math.max(d.velMmS, 1e6 * Math.hypot(got[o + 3] - reference[o + 3], got[o + 4] - reference[o + 4], got[o + 5] - reference[o + 5]));
+      let largest = 0;
+      for (let j = 6; j < 42; j += 1) largest = Math.max(largest, Math.abs(reference[o + j]));
+      for (let j = 6; j < 42; j += 1) d.covOfLargest = Math.max(d.covOfLargest, Math.abs(got[o + j] - reference[o + j]) / largest);
+      for (let j = 0; j < 42; j += 1) if (!Object.is(got[o + j], reference[o + j])) d.differ += 1;
+    }
+    return d;
+  };
+  const storedBytes = new Uint8Array(fixture("ap-fit-0.6.4.ocm")), stored = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(storedBytes)).unpack();
+  const flightD = covAt(storedBytes), fitD = covAt(apBytes);
+  const floors = ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"];
+  const floorRel = Math.max(...floors.map((f) => Math.abs(acp[f] - stored.COV_PROPAGATION[f]) / Math.abs(stored.COV_PROPAGATION[f])));
+  const epochLargest = Math.max(...stored.COVARIANCE_DATA.map(Math.abs));
+  const epochRel = Math.max(...ap.COVARIANCE_DATA.map((v, k) => Math.abs(v - stored.COVARIANCE_DATA[k]))) / epochLargest;
+  console.log(`AP set: DRAG row s_e ${acp.NOISE_ECCENTRICITY_PER_DAY}, s_i ${acp.NOISE_INCLINATION_PER_DAY}, s_l ${acp.NOISE_MEAN_MOTION_RELATIVE}, c ${acp.NON_GRAVITATIONAL_SHARE}`);
+  console.log(`sdnap_covariance_at against 0.6.4's of the stored record: the stored record ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
+    `this build's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of the stored record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
+  check(flightD.status === 0 && flightD.posM <= AP_COV_FLIGHT.posM && flightD.velMmS <= AP_COV_FLIGHT.velMmS && flightD.covOfLargest <= AP_COV_FLIGHT.covOfLargest,
+    `sdnap_covariance_at of the stored AP record moved: ${JSON.stringify(flightD)} against ${JSON.stringify(AP_COV_FLIGHT)}`);
+  check(fitD.status === 0 && fitD.posM <= AP_COV_FIT.posM && fitD.covOfLargest <= AP_COV_FIT.covOfLargest && epochRel <= AP_COV_FIT.epoch && floorRel <= AP_COV_FIT.floors,
+    `this build's AP fit's covariance moved: ${JSON.stringify(fitD)}, epoch ${epochRel}, floors ${floorRel} against ${JSON.stringify(AP_COV_FIT)}`);
 }
 refused("export_omm of garbage", await exportOmm(new Uint8Array(64)), "invalid-ocm");
 const exportUnder = (theory) => h.invoke({ methodId: "export_omm", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: xpBytes }, configuration({ theory })] });

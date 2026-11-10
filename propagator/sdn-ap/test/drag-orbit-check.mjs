@@ -2,6 +2,8 @@
 // independent integral over one orbit (sdnap_drag_orbit_check) on the HEO fixtures, BTERM pinned at 0.044.
 // node drag-orbit-check.mjs [samples] [module]
 import {runModelTruth} from './lib/heo-model-truth.mjs';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 const [samples = '20000', modulePath] = process.argv.slice(2);
 const FIXTURES = {
   Molniya: {n: 2, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10},

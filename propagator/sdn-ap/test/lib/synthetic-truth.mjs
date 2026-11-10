@@ -24,7 +24,7 @@ import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tes
 import {scratchRoot} from './scratch.mjs';
 import {spwFixtureRows} from './spw-constant.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000,FIT=3;
-const ffmPath=new URL('../../../ffm/dist/isomorphic/module.wasm',import.meta.url).pathname;
+import {ffmPath,checkTruth} from './ffm-truth.mjs';
 const scratch=path.join(scratchRoot,'synthetic-truth');
 const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
 const iso=ms=>new Date(ms).toISOString().replace('Z','');
@@ -65,6 +65,7 @@ export async function runSyntheticTruth(c){
  const params={epochJD:jd.whole,epochTimeScale:'UTC',targetJD:jd.whole+times.at(-1),targetTimeScale:'UTC',position:initial.out.slice(0,3),velocity:initial.out.slice(3),frame:'GCRF',sampleEpochsJD:times.map(d=>({jd:jd.whole+d,scale:'UTC'})),forces:{gravityMode:'EGM96',maxDegree:c.maxDegree??70,maxOrder:c.maxOrder??70,thirdBody:c.thirdBody??true,srp:false,drag:c.drag,massKg:1000,areaM2:(c.bterm??.044)*1000/2.2,cd:2.2},weather:{epochUTCJD:jd.whole,F107:150,F107a:150,Ap:15,Kp:3},integrator:{tolerance:c.referenceTolerance??1e-12,minStep:.01,maxStep:c.referenceMaxStep??300}};
  params.ephemerisSource='JPL_SPK';
  const kernel=fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url));
+ checkTruth();
  const key=createHash('sha256').update(fs.readFileSync(ffmPath)).update(JSON.stringify(params)).update(kernel).digest('hex');
  const file=path.join(scratch,key+'.json');let truth;
  if(fs.existsSync(file))truth=JSON.parse(fs.readFileSync(file));else{
