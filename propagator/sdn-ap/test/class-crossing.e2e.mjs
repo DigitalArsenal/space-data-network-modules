@@ -10,9 +10,9 @@
 // whole flight. The primary's mean motion leaves the half-day band (its current
 // band is the eight-hour class) and its rates and output table stay those of the
 // half-day class: the two (2,2) terms (p,q) = (0,-1), (1,1) stay in the rates and
-// never enter the output table, on both sets at every lead. Until 0.6.5 the tables
-// were rebuilt for the current class (-31,291.823 m against -32,325.032 m held, at
-// day 7 on 2026-11-03); holding them keeps the output continuous in time.
+// never enter the output table, on both sets at every lead. Through 0.6.6 the tables
+// were rebuilt for the current class (day 7: -167,341.326 m against -168,218.829 m
+// held, companion -136,267.630 m); holding them keeps the output continuous in time.
 // The SGP4XP conformance reproduction runs last (it needs the SGP4-XP oracle).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

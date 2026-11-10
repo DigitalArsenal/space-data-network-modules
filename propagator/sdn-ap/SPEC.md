@@ -2262,19 +2262,19 @@ Model truth (`test/class-crossing.e2e.mjs`): an AP mean-element GTO at 2026-10-2
 state. There is no fit. The primary has n = 2.40 rev/day, e = 0.72, i = 27 degrees, RAAN = 40 degrees, argument of perigee
 = 270 degrees, M = 0, BTERM = 0.06 m^2/kg and AGOM = 0. The companion changes only n to 2.3966852459, 0.01 rev/day below the
 half-day upper edge. FFM uses 16.6's gravity, DE440, zero EOP and the constant weather of `test/lib/spw-constant.mjs`
-(NRLMSISE-00); AP uses FORCES 31,20 and NRLMSISE-00. The primary's mean motion reaches 2.4084264 rev/day at day 7, in the
-eight-hour band; the companion's 2.4039453, inside the half-day band.
+(NRLMSISE-00); AP uses FORCES 31,20 and NRLMSISE-00. The primary's mean motion reaches 2.4084063 rev/day at day 7 held
+(2.4084264 rebuilt), in the eight-hour band; the companion's 2.4039453, inside the half-day band.
 
 | AP treatment | Primary day-7 T error (m) | Companion day-7 T error (m) | Relative difference |
 | --- | ---: | ---: | ---: |
-| Epoch class held (this version) | -168,218.829 | -136,267.605 | 23.447% |
-| Tables rebuilt for the current class (0.6.5) | -167,341.326 | -136,267.605 | 22.803% |
+| Epoch class held (this version) | -168,218.829 | -136,267.630 | 23.447% |
+| Tables rebuilt for the current class (0.6.6) | -167,341.326 | -136,267.630 | 22.803% |
 
 Holding the class costs this fixture 0.88 km of day-7 along-track error (0.5 %); the E2E allows 25 % against the companion.
 On 2026-11-03, with the earlier constant-weather file, the arms were -32,325.032 (held) and -31,291.823 m (rebuilt), the
 companion -26,506.785 m; rebuilding was kept then for its 1.0 km smaller error. It is reversed for continuity in time.
-In 0.6.5 the two (2,2) terms (p,q) = (0,-1), (1,1) left the rates at the crossing and were not in the rebuilt output table
-either (the E2E found 0 of 2 there); held, they stay in the rates on both sets at every lead. Their epoch mean-longitude
+Through 0.6.6 the two (2,2) terms (p,q) = (0,-1), (1,1) left the rates at the crossing and were not in the rebuilt output
+table either (the E2E found 0 of 2 there); held, they stay in the rates on both sets at every lead. Their epoch mean-longitude
 amplitudes a|delta lambda| are 206.886 and 147.093 m; isolating each in the module's output map and sampling 256 node phases
 at perigee gives peak along-track displacements of 552.645 and 592.729 m. `test/results/class-crossing.json` keeps every
 evaluated pair.
