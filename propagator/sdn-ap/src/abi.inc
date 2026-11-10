@@ -352,6 +352,11 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
     plugin_set_error("elements-other-theory", "An SGP4XP row carries MEAN_MOTION_DOT (SGP4's term, ElementRow.mean_motion_dot not 0).");
     return ORBPRO_PROP_BAD_INPUT;
   }
+  if (options->fit_y0 != 0) {  // SPEC 4.2: Y0 is fitted by the fit method under FORCES.ECOM2 and lives in the record
+    plugin_set_error("parameter-record-only:ECOM2_Y0",
+                     "ECOM2_Y0 is fitted by the fit method under $PCF FORCES.ECOM2 and carried in its $OCM; an ElementRow does not carry it.");
+    return ORBPRO_PROP_BAD_INPUT;
+  }
   sdnap::drag::table();
   const sdnap::fit::Result r = sdnap::fit::run(*row, minutes, positions, static_cast<int>(count), *options);
   if (stats != nullptr) {

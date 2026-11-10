@@ -351,8 +351,12 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
 /// the drag; SPEC 12.1), 0 where it did not (the post-fit residual scatter is then taken here). Fills `s` (row and
 /// options as fitted) and the non-gravitational rate r_ng (1/day). False when the normal matrix is not positive
 /// definite or the theory refuses a moved set.
-inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t, const double* r, int count, double arc_end_min,
+inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const double* t, const double* r, int count, double arc_end_min,
                    double sigma_km, Set& s, double& ng_rate) {
+  // SPEC 4.2, 17.1: an AP set's radiation term Y0 is no row of the covariance: the moved sets fly the solved Y0 the row
+  // carries, held
+  fit::Options o = fitted;
+  o.fit_y0 = 0;
   Bank b;
   struct Scope {
     Bank& b;
@@ -388,10 +392,11 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   if (!(s2 > 0.0)) return false;
   for (int a = 0; a < np; ++a)
     for (int c = 0; c <= a; ++c) A[c * np + a] = A[a * np + c] = A[a * np + c] / s2;
-  // the fit's priors (fit::run's cost): B_eff and AGOM, each one pseudo-observation of its own sigma
-  for (int a = 0; a < np; ++a) {
-    if (b.kind[a] == kKindDrag && o.drag_sigma > 0.0) A[a * np + a] += 1.0 / (o.drag_sigma * o.drag_sigma);
-    if (b.kind[a] == kKindSrp && o.agom_sigma > 0.0) A[a * np + a] += 1.0 / (o.agom_sigma * o.agom_sigma);
+  // the fit's priors (fit::priors_of, the statement fit::run's cost reads): each one pseudo-observation of its own sigma
+  fit::PriorTerm priors[3];
+  for (int q = 0, n_priors = fit::priors_of(o, priors); q < n_priors; ++q) {
+    const int a = priors[q].index;
+    if (a < np) A[a * np + a] += 1.0 / (priors[q].sigma * priors[q].sigma);
   }
   double Pp[kMaxAug * kMaxAug];
   if (!spd_inverse(A, np, Pp)) return false;
