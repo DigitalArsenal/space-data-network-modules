@@ -65,7 +65,10 @@ for (const doc of ["SPEC.md", "README.md"]) {
 const modulesRoot = path.resolve(packageRoot, "..", "..");
 const vendored = JSON.parse(read("test/vendor/orbit-accuracy-experiments-c89f2bc/experiments/xp-atmosphere-merit/build.json"));
 let registered = 0;
+const lockMissing = Object.keys(vendored.packages).filter((rel) => !fs.existsSync(path.join(modulesRoot, rel, "package-lock.json")));
+check(lockMissing.length === 0, `the registration check needs ${lockMissing.join(", ")} in the checkout: git sparse-checkout add ${lockMissing.join(" ")}`);
 for (const [rel, packages] of Object.entries(vendored.packages)) {
+  if (lockMissing.includes(rel)) continue;
   const lock = JSON.parse(fs.readFileSync(path.join(modulesRoot, rel, "package-lock.json"), "utf8")).packages;
   for (const [name, version] of Object.entries(packages)) {
     const pinned = lock[`node_modules/${name}`]?.version;

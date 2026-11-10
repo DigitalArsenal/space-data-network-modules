@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
+// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
+// moves the scoring to the module's own GCRF).
 // Registration (2026-11-03, committed before this replay runs): exploratory replay of the AP5 GN windows the gap
 // diagnosis read (experiments ap-gap: resume-gn 24 h arcs, resume-frame-gn 72 h arcs; Space Force U24 from that
 // archive). Acceptance: median paired day-3 difference XP24 (this module's default FIT) minus U24 within 10 m of zero

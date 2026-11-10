@@ -8,8 +8,11 @@
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, Etalon-like, GPS-like, e 0.25, e 0.3) flown 2 days at 600 s give
-//    byte-identical ephemerides on this build and on sdn-ap 0.6.2 (dist at modules c82160de7, SHA-256 84d50dca...).
+//    ephemerides within NO_HARM (below; byte-identical until 0.6.5) on this build and on sdn-ap 0.6.2 (dist at modules
+//    c82160de7, SHA-256 84d50dca...); the SGP4XP seed byte-identical.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import {scratchTemp} from './lib/scratch.mjs';
@@ -19,9 +22,15 @@ import {fileURLToPath} from 'node:url';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {wasmPath} from './lib/module.mjs';
 import {seedOcm, flight, T} from './lib/ocm.mjs';
+import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
 const BASE = 'c82160de7', BASE_SHA256 = '84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41';
+// 2's bound on the AP seeds (fixed elements, 48 h at 600 s): byte-identical to 0.6.2 until 0.6.5, whose speed changes
+// move a flight of fixed elements by millimeters (SPEC 16.8). Measured 2026-11-10 on 0.6.8, printed per seed: LEO 3.10,
+// GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm (velocity at most 0.0022 mm/s); the bound is 15 mm.
+// SGP4XP stays byte-identical.
+const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
 const scratch = scratchTemp('sdn-ap-themis-ripple-');
@@ -265,21 +274,22 @@ const fly = async (file, payload) => {
   await h.close?.();
   assert.equal(r.statusCode, 0, `${path.basename(file)}: ${r.errorCode} ${r.errorMessage}`);
   const bytes = new Uint8Array(r.outputs.find((o) => o.portId === 'ephemeris').payload);
-  return crypto.createHash('sha256').update(file === basePath ? Buffer.from(bytes) : asBase(bytes)).digest('hex');
+  return file === basePath ? Buffer.from(bytes) : asBase(bytes);
 };
 const noHarm = {};
+const compare = (name, a, b) => {
+  const d = oemDistance(a, b);
+  noHarm[name] = d;
+  console.log(JSON.stringify({seed: name, identical: d.bytesEqual, positionMm: 1000 * d.posM, velocityUmS: 1000 * d.velMmS, covarianceOfLargest: d.covOfLargest}));
+};
 for (const [name, s] of Object.entries(SEEDS)) {
   const payload = seedOcm({epoch, ...s});
-  const [a, b] = [await fly(wasmPath, payload), await fly(basePath, payload)];
-  noHarm[name] = a === b;
-  console.log(JSON.stringify({seed: name, identical: a === b}));
+  compare(name, await fly(wasmPath, payload), await fly(basePath, payload));
 }
 // a fitted AP set (analysis/catalog-composer's fixture, LEO), flown on the same output grid
 {
   const payload = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));
-  const [a, b] = [await fly(wasmPath, payload), await fly(basePath, payload)];
-  noHarm['fitted AP set (catalog-composer fixture)'] = a === b;
-  console.log(JSON.stringify({seed: 'fitted AP set (catalog-composer fixture)', identical: a === b}));
+  compare('fitted AP set (catalog-composer fixture)', await fly(wasmPath, payload), await fly(basePath, payload));
 }
 
 // 4. grid retention leaves no trace (exact keys; a fit's grids freed under tess::FitGridScope): in one instance a fit
@@ -373,6 +383,9 @@ for (const [name, q] of Object.entries(quadrature)) {
   assert.ok(q.maxM <= 5, `${name}: ${q.maxM} m at most`);
   assert.ok(q.roughM <= 0.1, `${name}: ${q.roughM} m second difference`);
 }
-for (const [name, same] of Object.entries(noHarm)) assert.ok(same, `${name}: byte-identical to 0.6.2`);
+for (const [name, d] of Object.entries(noHarm)) {
+  if (/SGP4XP/.test(name)) assert.ok(d.bytesEqual, `${name}: byte-identical to 0.6.2`);
+  else assert.ok(d.posM <= NO_HARM.posM && d.velMmS <= NO_HARM.velMmS && d.covOfLargest <= NO_HARM.covOfLargest, `${name}: ${JSON.stringify(d)} from 0.6.2 (within ${JSON.stringify(NO_HARM)})`);
+}
 fs.rmSync(scratch, {recursive: true, force: true});
 console.log('THEMIS ripple E2E: PASS');
