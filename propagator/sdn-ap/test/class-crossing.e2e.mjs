@@ -20,6 +20,8 @@
 // the modules produced.
 //   node test/class-crossing.e2e.mjs
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 import fs from 'node:fs';
 import {createHash} from 'node:crypto';
 import * as fb from 'flatbuffers';

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
+// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
+// moves the scoring to the module's own GCRF).
 // Registration (2026-11-03): the 12-hour class's tesseral terms on an Etalon-like synthetic orbit (n 2.13 rev/day,
 // e 0.0007, i 64.9 deg, node 0, 90, 180 and 270 deg) with no Sun or Moon: FFM EGM96 70x70 without third bodies against
 // a test build of this module with both mass ratios 0 (tesseral 31, zonal 20; 72 h fits, 7 days flown hourly).
@@ -7,6 +10,8 @@
 // 48539c3ff) and after; LAGEOS-1/2, LARES-2, IG and GE medians no more than 1 m above 0.4.8's, printed. Default-FORCES
 // digest bit-exact. Unread-window confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
 import fs from 'node:fs';
 import path from 'node:path';
 import {Worker} from 'node:worker_threads';
