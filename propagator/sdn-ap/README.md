@@ -119,7 +119,11 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
   no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
   GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg on arcs of 36 h or more and the Space Force wrapper's 0 +- 0.1 m^2/kg on shorter
-  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). On 748 already-read 24 h GNSS windows (exploratory) the
+  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). The data are weighed against these priors at 1 km under
+  drag (the fitted set's perigee below 2,500 km) and, above it, at their own sigma, the post-fit scatter, which the
+  covariance then uses too (SPEC 12.1, the fit's weighting; `test/fit-data-sigma.e2e.mjs`): at 1 km a 24 h medium Earth
+  orbit fit returned AGOM 15 % low at the median of 254 real windows and was 121 m off at day 5; at its own sigma it
+  returns 1.01 of a numerical sphere's coefficient and is 33 m off. On 748 already-read 24 h GNSS windows (exploratory) the
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
   windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
   prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never
@@ -150,7 +154,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 - Covariance rows: the state, then DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS,
   IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION when solved, in that order; COV_UNITS one per row. A record's rows the
   theories have no sensitivity to fly as constant parameters.
-- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the 1 km a priori sigma) and SEDR, and one `$ODR` per fit on
+- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the sigma OD_DATA_WEIGHTING states: 1 km under drag, the data's
+  own above it) and SEDR, and one `$ODR` per fit on
   `residuals`: a row per input state (geocentric distance observed and computed, weight, accepted).
 - `sdnap_covariance_full_at` gives the covariance of the state and the parameter rows per time; no sensitivities are
   exposed, so P8 is refused.
