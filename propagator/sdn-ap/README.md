@@ -48,7 +48,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   MAX_SETS_PER_OBJECT, of THEORIES (SGP4, SGP4XP). SELECTION NEAREST or LATEST_BEFORE by binary search; across
   BLEND_WINDOW_SECONDS (3600) around each switch the two sets' states blend (SMOOTHSTEP weight with its derivative in
   the velocity, or HERMITE: set a plus a cubic correction landing on set b), position and velocity continuous; the
-  covariance mixture where sets carry COVARIANCE. Exports `sdnap_epochs_count`, `_stats` (records, kept, aged, capped,
+  covariance mixture where sets carry COVARIANCE. Two AP sets on different branches (SPEC 16.7) are not blended: their
+  switch is a step, `_select` gives b = -2 in its window and `propagate_epochs` names it in the block's COMMENT. Exports `sdnap_epochs_count`, `_stats` (records, kept, aged, capped,
   by THEORIES, not centered on the Earth, same-epoch duplicates, bytes), `_series`, `_select`, `_set_at`, `_at` (a
   batch of series at one time, TEME or Earth-fixed, with the covariance); `propagate_epochs` gives the same for a
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
@@ -89,7 +90,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   (a day-1 prediction); the span with the smallest tail error (a longer one only when within EXTENSION_MARGIN 0.9,
   eccentric 0.7, of the best shorter one's) is refitted on all the data. The arc grows from two revolutions by threes
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
-  down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); an eccentric block's
+  down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); within 1e-3 of a
+  switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches) the fit is settled on one branch, and
+  refused fit-at-branch-limit when on each side the best set lies across the switch; an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
   no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
@@ -147,11 +150,12 @@ day-7 errors are 60.1 m for the half-day case (a sample 1 h after a perigee; the
 23 m radial), 419.4 m for Molniya with drag (its fitted drag coefficient; SPEC 16.11) and 244.3 m for GTO.
 SPEC 16.6 and `test/results/heo-model-truth.json` give the fixtures and day-1, 3 and 7 RTN errors.
 
-At a resonance-class crossing, AP rebuilds its rate and output tables together. On the decaying-GTO fixture,
-day-7 along-track errors are -25,681.230 m with rebuilding, -26,849.503 m with epoch hold, and -22,083.870 m
-for the noncrossing companion (16.290% difference; E2E bound 25%). Both half-day terms remain in the output,
-with sampled perigee along-track amplitudes 552.685 and 592.770 m. The remaining absolute error is attributed
-to unresolved perigee-drag and third-body force detail, not isolated here. SPEC 16.7 defines the fixture.
+A set's branch (resonance class, the 1,100-minute regime, the eccentricity switches) is decided at its epoch and held
+for the whole flight, so its output is continuous in time (SPEC 16.7); AP's elements are defined per branch, and the
+module never differences or blends two branches (covariance, fit, epoch store). On the decaying-GTO fixture, whose mean
+motion leaves the half-day band during the week, the day-7 along-track error is -168,218.829 m with the class held
+against -167,341.326 m when 0.6.5 rebuilt its tables for the current class, and -136,267.605 m for the noncrossing
+companion (23.4 %; E2E bound 25 %). SPEC 16.7 defines the fixture.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
@@ -284,8 +288,7 @@ at ingest to span roughly eight days each way. Checkpoints are filled lazily. A 
 bracket only interpolates; the first distant query integrates from the epoch. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond that span,
 work grows with the time gap from the nearest preceding retained node. Checkpoint storage is bounded;
-query work is not bounded independently of lead time. AP class crossings can allocate temporary coefficient
-tables. An AP state depends on the order of requests: the same record flown in ascending and in random order differs by up
+query work is not bounded independently of lead time. An AP state depends on the order of requests: the same record flown in ascending and in random order differs by up
 to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at geosynchronous altitude; a single state
 from a fresh record differs from the ascending pass by up to 8.8 mm. SPEC 9 describes the cache and grid.
 
@@ -384,6 +387,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   / HERMITE; the blended covariance; `propagate_epochs` against the resident store bit for bit; and, from the local
   Space-Track archive, seven days of the catalog (its memory, selection and continuity on a sample; NOT MEASURED
   without the archive).
+- `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
+  the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
+  step between two sets on different branches.
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.
