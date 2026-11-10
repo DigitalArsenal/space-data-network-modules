@@ -1163,6 +1163,11 @@ struct alignas(16) SpRow {
 };
 static_assert(sizeof(SpRow) == 16, "");
 
+/// The first-order tesseral terms of one set, grouped into SIMD blocks and baked at a mean state (SPEC 16). The block
+/// arrays live in one allocation (`mem`) sized for `cap_blks` blocks and `cap_rows` rows: a thread's own cache holds
+/// kMaxBlks (a set's terms are grouped there), a set's cache from the pool (SetCaches) exactly its total_blks.
+/// The bake points are cells of the mean state (sp_sync): the baked values are a function of the state's cells
+/// alone, never of the states evaluated before.
 struct SpEvalCache {
   static constexpr int kMaxBlks = 768;
   static constexpr int kMaxRows = 384;
@@ -1177,42 +1182,132 @@ struct SpEvalCache {
   double a = -1.0, e = -1.0, n = -1.0, ci = -10.0;
   double a_bake = -1.0, e_bake = -1.0, e_bake_a = -1.0, e_pe_bake = -1.0, de_pe_thresh = 5.0e-7;
   double a_res = -1.0, e_res = -1.0, ci_res = -10.0;
-  double a_ref = -1.0, da_thresh = -1.0;
-  double e_ref = -1.0, de_thresh = -1.0;
-  double ci_ref = -10.0, dci_thresh = -1.0;
-  alignas(64) float blk_hot[kMaxBlks * 32]{};
+  // the cells the current bakes were made at (sp_sync): base (a, e^2, cos i), ae (a, e), pe (e), res (a, cos i, e^2)
+  bool keys_valid = false;
+  int64_t kb_a = 0, kb_e = 0, kb_c = 0, kae_a = 0, kae_e = 0, kpe = 0, kr_a = 0, kr_c = 0, kr_e = 0;
   alignas(16) float cswq_c[120]{};
   alignas(16) float cswq_s[120]{};
-  alignas(16) float cm_f32_local[80]{};
-  alignas(16) float sm_f32_local[80]{};
-  SpRow rows[kMaxRows]{};
-  uint16_t res_blk[kMaxBlks]{};
-  uint16_t pe_blk[kMaxBlks]{};
-  uint8_t blk_is_pe[kMaxBlks]{};
-  uint8_t blk_is_res[kMaxBlks]{};
-  uint8_t blk_m0[kMaxBlks]{};
-  uint8_t blk_wq0[kMaxBlks]{};
-  uint16_t blk_mw4[kMaxBlks * 2]{};
-  float blk_wf1[kMaxBlks]{};
-  float blk_qf1[kMaxBlks]{};
-  uint8_t blk_mlane[kMaxBlks * 4]{};
-  uint8_t blk_wq[kMaxBlks * 4]{};
-  alignas(16) uint32_t blk_active[kMaxBlks * 4]{};
-  alignas(16) float blk_mf[kMaxBlks * 4]{};
-  alignas(16) float blk_w[kMaxBlks * 4]{};
-  alignas(16) float blk_q[kMaxBlks * 4]{};
-  alignas(16) float blk_c[kMaxBlks * 64]{};
-  alignas(16) float blk_p[kMaxBlks * 32]{};
-  alignas(16) float blk_a[kMaxBlks * 32]{};
-  alignas(16) float blk_e[kMaxBlks * 16]{};
+  int cap_blks = 0, cap_rows = 0;
+  size_t mem_bytes = 0;
+  uint8_t* mem = nullptr;
+  float* blk_hot = nullptr;
+  SpRow* rows = nullptr;
+  uint16_t* res_blk = nullptr;
+  uint16_t* pe_blk = nullptr;
+  uint8_t* blk_is_pe = nullptr;
+  uint8_t* blk_is_res = nullptr;
+  uint8_t* blk_mlane = nullptr;
+  uint8_t* blk_wq = nullptr;
+  uint32_t* blk_active = nullptr;
+  float* blk_mf = nullptr;
+  float* blk_w = nullptr;
+  float* blk_q = nullptr;
+  float* blk_c = nullptr;
+  float* blk_p = nullptr;
+  float* blk_a = nullptr;
+  float* blk_e = nullptr;
+};
+
+/// Lays the block arrays out in one zeroed 64-byte-aligned allocation for `blks` blocks and `rows` rows. False out of
+/// memory (the cache keeps no storage).
+inline bool sp_storage(SpEvalCache& sc, int blks, int rows) {
+  auto up = [](size_t x) { return (x + 63u) & ~static_cast<size_t>(63u); };
+  const size_t b = static_cast<size_t>(blks < 1 ? 1 : blks), r = static_cast<size_t>(rows < 1 ? 1 : rows);
+  const size_t sizes[17] = {b * 32 * 4, r * sizeof(SpRow), b * 2, b * 2, b, b, b * 4, b * 4, b * 16, b * 16, b * 16,
+                            b * 16, b * 64 * 4, b * 32 * 4, b * 32 * 4, b * 16 * 4, 0};
+  size_t off[17], total = 0;
+  for (int k = 0; k < 16; ++k) { off[k] = total; total += up(sizes[k]); }
+  uint8_t* m = static_cast<uint8_t*>(std::aligned_alloc(64, total));
+  if (m == nullptr) return false;
+  std::memset(m, 0, total);
+  sc.mem = m;
+  sc.mem_bytes = total;
+  sc.cap_blks = static_cast<int>(b);
+  sc.cap_rows = static_cast<int>(r);
+  sc.blk_hot = reinterpret_cast<float*>(m + off[0]);
+  sc.rows = reinterpret_cast<SpRow*>(m + off[1]);
+  sc.res_blk = reinterpret_cast<uint16_t*>(m + off[2]);
+  sc.pe_blk = reinterpret_cast<uint16_t*>(m + off[3]);
+  sc.blk_is_pe = m + off[4];
+  sc.blk_is_res = m + off[5];
+  sc.blk_mlane = m + off[6];
+  sc.blk_wq = m + off[7];
+  sc.blk_active = reinterpret_cast<uint32_t*>(m + off[8]);
+  sc.blk_mf = reinterpret_cast<float*>(m + off[9]);
+  sc.blk_w = reinterpret_cast<float*>(m + off[10]);
+  sc.blk_q = reinterpret_cast<float*>(m + off[11]);
+  sc.blk_c = reinterpret_cast<float*>(m + off[12]);
+  sc.blk_p = reinterpret_cast<float*>(m + off[13]);
+  sc.blk_a = reinterpret_cast<float*>(m + off[14]);
+  sc.blk_e = reinterpret_cast<float*>(m + off[15]);
+  return true;
+}
+
+/// A set's cache: `src` (grouped and baked in a thread's cache) with storage for exactly its blocks and rows.
+/// nullptr out of memory.
+inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
+  SpEvalCache* d = new (std::nothrow) SpEvalCache(src);
+  if (d == nullptr) return nullptr;
+  if (!sp_storage(*d, src.total_blks, src.n_rows)) {
+    delete d;
+    return nullptr;
+  }
+  const size_t b = static_cast<size_t>(src.total_blks), r = static_cast<size_t>(src.n_rows);
+  std::memcpy(d->blk_hot, src.blk_hot, b * 32 * sizeof(float));
+  std::memcpy(d->rows, src.rows, r * sizeof(SpRow));
+  std::memcpy(d->res_blk, src.res_blk, b * sizeof(uint16_t));
+  std::memcpy(d->pe_blk, src.pe_blk, b * sizeof(uint16_t));
+  std::memcpy(d->blk_is_pe, src.blk_is_pe, b);
+  std::memcpy(d->blk_is_res, src.blk_is_res, b);
+  std::memcpy(d->blk_mlane, src.blk_mlane, b * 4);
+  std::memcpy(d->blk_wq, src.blk_wq, b * 4);
+  std::memcpy(d->blk_active, src.blk_active, b * 4 * sizeof(uint32_t));
+  std::memcpy(d->blk_mf, src.blk_mf, b * 4 * sizeof(float));
+  std::memcpy(d->blk_w, src.blk_w, b * 4 * sizeof(float));
+  std::memcpy(d->blk_q, src.blk_q, b * 4 * sizeof(float));
+  std::memcpy(d->blk_c, src.blk_c, b * 64 * sizeof(float));
+  std::memcpy(d->blk_p, src.blk_p, b * 32 * sizeof(float));
+  std::memcpy(d->blk_a, src.blk_a, b * 32 * sizeof(float));
+  std::memcpy(d->blk_e, src.blk_e, b * 16 * sizeof(float));
+  return d;
+}
+
+inline void sp_cache_free(SpEvalCache* sc) {
+  if (sc == nullptr) return;
+  std::free(sc->mem);
+  delete sc;
+}
+
+/// What grouping a set's terms needs and keeps nowhere else, per thread.
+struct SpBuildScratch {
   uint16_t qw_slot[3][35][71]{};
   uint8_t qw_cnt[3][35]{};
   uint8_t fast_item[2600]{};
   uint16_t rem_items[2600]{};
 };
+inline thread_local SpBuildScratch* g_sp_build_scratch_ptr = nullptr;
+inline SpBuildScratch& sp_build_scratch() {
+  if (__builtin_expect(!g_sp_build_scratch_ptr, 0)) g_sp_build_scratch_ptr = new SpBuildScratch{};
+  return *g_sp_build_scratch_ptr;
+}
+
+/// The trig of the multiples of the node's and the mean anomaly's angles for one state, per thread (the m-daily part
+/// fills them, the tesseral part reads them).
+struct SpTrigScratch {
+  alignas(16) float cm[80]{};
+  alignas(16) float sm[80]{};
+};
+inline thread_local SpTrigScratch g_sp_trig_scratch{};
+inline float* sp_trig_cm() { return g_sp_trig_scratch.cm; }
+inline float* sp_trig_sm() { return g_sp_trig_scratch.sm; }
+
+/// A thread's own cache (kMaxBlks): where every set's terms are grouped, and the cache of the sets that hold none.
 inline thread_local SpEvalCache* g_sp_eval_cache_ptr = nullptr;
-inline SpEvalCache& sp_eval_cache() {
-  if (__builtin_expect(!g_sp_eval_cache_ptr, 0)) g_sp_eval_cache_ptr = new SpEvalCache{};
+inline SpEvalCache& sp_thread_cache() {
+  if (__builtin_expect(!g_sp_eval_cache_ptr, 0)) {
+    g_sp_eval_cache_ptr = new SpEvalCache{};
+    if (!sp_storage(*g_sp_eval_cache_ptr, SpEvalCache::kMaxBlks, SpEvalCache::kMaxRows)) std::abort();
+  }
   return *g_sp_eval_cache_ptr;
 }
 
@@ -1252,8 +1347,9 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   }
   if (!ok || max_m < 1) return;
   const int m_stride = max_m + 1;
-  auto& qw_slot = sc.qw_slot;
-  auto& qw_cnt = sc.qw_cnt;
+  SpBuildScratch& build = sp_build_scratch();
+  auto& qw_slot = build.qw_slot;
+  auto& qw_cnt = build.qw_cnt;
   for (int qi = 0; qi < 3; ++qi) {
     for (int w = -max_aw; w <= max_aw; ++w) {
       qw_cnt[qi][w + 17] = 0u;
@@ -1270,7 +1366,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     ++qw_cnt[qi][wi];
   }
   if (!ok) return;
-  uint8_t* const fast_item = sc.fast_item;
+  uint8_t* const fast_item = build.fast_item;
   std::memset(fast_item, 0, static_cast<size_t>(count));
   {
     auto oct_norm = [](double x, double y) -> double {
@@ -1321,12 +1417,10 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   auto alloc_blk = [&](uint8_t m0_val, uint8_t wq0_val, float wf_val, float qf_val, bool full4) -> int {
     if (cur_blk >= SpEvalCache::kMaxBlks) { ok = false; return -1; }
     const int bi = cur_blk++;
-    sc.blk_m0[bi] = m0_val;
-    sc.blk_wq0[bi] = wq0_val;
-    sc.blk_mw4[bi * 2 + 0] = static_cast<uint16_t>(m0_val) * 4u;
-    sc.blk_mw4[bi * 2 + 1] = static_cast<uint16_t>(wq0_val) * 4u;
-    sc.blk_wf1[bi] = wf_val;
-    sc.blk_qf1[bi] = qf_val;
+    (void)m0_val;
+    (void)wq0_val;
+    (void)wf_val;
+    (void)qf_val;
     sc.blk_is_pe[bi] = 0u;
     if (!full4) {
       const int lo = bi * 4;
@@ -1427,7 +1521,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   }
   const int b_contig_end = cur_blk;
   // Segment D: pack all remaining items densely 4 per block
-  uint16_t* const rem_items = sc.rem_items;
+  uint16_t* const rem_items = build.rem_items;
   int n_rem = 0;
   for (int qi = 0; qi < 3; ++qi) {
     for (int w = -max_aw; w <= max_aw; ++w) {
