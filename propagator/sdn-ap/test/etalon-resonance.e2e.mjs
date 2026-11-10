@@ -16,7 +16,8 @@ import {fileURLToPath} from 'node:url';
 import {archive} from './lib/regime-windows.mjs';
 import {wasmPath} from './lib/module.mjs';
 
-const BASE = 'dcae63613', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/etalon';
+const {scratchRoot} = await import('./lib/scratch.mjs');
+const BASE = 'dcae63613', scratch = path.join(scratchRoot, 'etalon');
 const modules = fileURLToPath(new URL('../../../', import.meta.url));
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);

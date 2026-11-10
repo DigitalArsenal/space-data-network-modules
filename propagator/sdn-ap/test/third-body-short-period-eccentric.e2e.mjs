@@ -64,7 +64,8 @@ if (!isMainThread) {
   }
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
-  const scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/third-body-short-period';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const scratch = path.join(scratchRoot, 'third-body-short-period');
   const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
   fs.mkdirSync(scratch, {recursive: true});
   const testBuild = (name, edits) => {

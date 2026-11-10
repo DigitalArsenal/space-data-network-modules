@@ -19,7 +19,7 @@
 // axes and takes medians; every state and covariance is the module's.
 //   node test/covariance-realism.e2e.mjs
 import fs from "node:fs";
-import os from "node:os";
+import { scratchTemp } from "./lib/scratch.mjs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -57,7 +57,7 @@ const modulesRoot = path.resolve(packageRoot, "../..");
 ensureBuilt();
 const beforeBytes = execFileSync("git", ["-C", modulesRoot, "show", `${BEFORE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
 check(sha256(beforeBytes) === BEFORE.sha256, `sdn-ap 0.6.0 at ${BEFORE.commit.slice(0, 9)} is ${sha256(beforeBytes)}`);
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "sdnap-covariance-realism-"));
+const scratch = scratchTemp("sdnap-covariance-realism-");
 const beforePath = path.join(scratch, "module-0.6.0.wasm");
 fs.writeFileSync(beforePath, beforeBytes);
 const builds = { "0.6.0": await createStandaloneHarness("browser", beforePath, { surface: "direct" }), "0.6.1": await createStandaloneHarness("browser", wasmPath, { surface: "direct" }) };
