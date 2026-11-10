@@ -322,9 +322,9 @@ inline int read(const OCM* o, const ElementRow& row, const uint8_t* p, size_t n,
   t.size = n;
   t.sized(recs->size());
   const uint32_t last = recs->size() - 1;
-  Segment ends[2];
-  for (const uint32_t k : {0u, last}) {
-    const int32_t s = ensure(t, k, ends[k == 0 ? 0 : 1]);
+  Segment ends[2];  // the first segment and the last (one and the same when the record carries one)
+  for (const int e : {0, 1}) {
+    const int32_t s = ensure(t, e == 0 ? 0u : last, ends[e]);
     if (s < 0) return ocm::refuse(refusal_name(s), refusal_text(s));
   }
   t.start = ends[0].start;
