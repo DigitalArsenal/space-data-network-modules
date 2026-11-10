@@ -2825,6 +2825,10 @@ machine, load average 60 to 90 on 28 cores):
 | MEO | 7.1 KB; 11.8 / 2.7; 3.9 [1.0, 26] | 8.5 KB; 9.4 / 2.0; 4.2 [1.2, 8.1] | 9.6 KB; 10.9 / 2.1; 4.9 [1.4, 41] | 13.5 KB; 12.6 / 2.0; 5.9 [0.7, 41] |
 | Geosynchronous | 7.2 KB; 7.6 / 6.8; 0.99 [0.60, 2.7] | 7.5 KB; 7.5 / 7.0; 1.00 [0.50, 1.9] | 8.5 KB; 8.2 / 7.5; 1.09 [0.49, 2.3] | 11.2 KB; 11.6 / 7.2; 1.38 [0.59, 4.0] |
 | Low, e 0.1 | 28 KB; 58 / 3.8; 6.4 [1.0, 76] | 52 KB; 72 / 12.1; 6.2 [2.0, 42] | 97 KB; 130 / 8.6; 20.4 [0.7, 143] | 185 KB; 232 / 4.8; 48 [2.4, 146] |
+| Transfer, e 0.72 | 15 KB; 54 / 3.4; 5.4 [2.1, 122] | | | |
+
+(The transfer orbit's longer records were not built in time: AP's fit on that orbit took 2 minutes for the 1-day
+record and 5 for the 2-day one under this load.)
 
 (Under this load SGP4's own W4 swings from 2 to 12 us a record; the intervals are as wide.) A fresh record passes W4
 (under 2) only where SGP4's own W4 is as dear as the record's floor: at geosynchronous altitude (SGP4's deep-space
