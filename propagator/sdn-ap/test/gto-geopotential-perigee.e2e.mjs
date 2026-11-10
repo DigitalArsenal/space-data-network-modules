@@ -34,7 +34,8 @@ import {wasmPath} from './lib/module.mjs';
 import {packOem, rfm} from './lib/frames.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE = 'c938b91d8', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/gto-step';
+const {scratchRoot} = await import('./lib/scratch.mjs');
+const BASE = 'c938b91d8', scratch = path.join(scratchRoot, 'gto-step');
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);

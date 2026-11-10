@@ -12,6 +12,7 @@ import * as fb from 'flatbuffers';
 import {SPW, SPWT} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 import {openModule} from './lib/module.mjs';
+import {spwFixtureRows} from './lib/spw-constant.mjs';
 import {rotate, jdOf, FRAME_PROBE} from './lib/frames.mjs';
 const [fixture, nobodies, out, mode = 'seed'] = process.argv.slice(2);  // mode 'pinned': after a 72 h fit with BTERM pinned at 0.044, the first day after it
 const FIXTURES = {
@@ -34,7 +35,7 @@ const norm = (v) => Math.hypot(v[0], v[1], v[2]);
 const energy = (s) => 0.5 * (s[3] ** 2 + s[4] ** 2 + s[5] ** 2) - MU / norm(s);
 // the density and the drag power along FFM's true path
 const m = await openModule(), x = m.x;
-const rows = JSON.parse(fs.readFileSync(process.env.FFM_SPW_FIXTURE ?? '/Users/tj/software/terrain-work/ffm-spw-fixture/spw-constant-20261029.json'));
+const rows = spwFixtureRows();
 const weather = Buffer.concat((Array.isArray(rows) ? rows : rows.rows).map((row) => { const b = new fb.Builder(256); SPW.finishSizePrefixedSPWBuffer(b, Object.assign(new SPWT(), row).pack(b)); return b.asUint8Array(); }));
 const rp = x.sdnap_alloc(24), rowsPtr = x.sdnap_alloc(weather.length), po = x.sdnap_alloc(56);
 new Uint8Array(m.harness.memory.buffer, rowsPtr, weather.length).set(weather);
