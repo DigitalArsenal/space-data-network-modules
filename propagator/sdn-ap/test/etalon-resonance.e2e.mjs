@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
+// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
+// moves the scoring to the module's own GCRF).
 // Registration (2026-11-03; re-scoped by the coordinator after the measurement): exploratory replay of the AP6 windows of
 // the 2026-11-03 gap diagnosis, already read: GD (Etalon-1/2, LAGEOS-1/2, LARES-2), IG and GE (GFZ MGEX), 72 h arcs, AP
 // FORCES; baseline the 0.4.7 release (git dcae63613), the module under test this build's dist. Acceptance, the measured
