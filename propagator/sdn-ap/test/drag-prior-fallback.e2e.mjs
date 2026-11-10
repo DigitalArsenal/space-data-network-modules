@@ -40,7 +40,8 @@ if (!isMainThread) {
     comment: r.fitted.comment});
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
-  const scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/drag-prior-fallback';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const scratch = path.join(scratchRoot, 'drag-prior-fallback');
   const modules = fileURLToPath(new URL('../../../', import.meta.url));
   fs.mkdirSync(scratch, {recursive: true});
   const release = (sha) => {

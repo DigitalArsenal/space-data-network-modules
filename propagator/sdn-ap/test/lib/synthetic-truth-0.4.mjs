@@ -24,9 +24,11 @@ import {openModule,wasmPath,THEORY} from './module.mjs';
 import {packOem,rfm,jdOf,rotate,FRAME_PROBE} from './frames.mjs';
 import {configuration,prior,pcfPriorForm} from './pcf.mjs';
 import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tests/lib/prwCodec.mjs';
+import {scratchRoot} from './scratch.mjs';
+import {spwFixtureRows} from './spw-constant.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000,FIT=3;
 const ffmPath=new URL('../../../ffm/dist/isomorphic/module.wasm',import.meta.url).pathname;
-const scratch=process.env.SDN_AP_SYNTHETIC_CACHE??'/Users/tj/software/terrain-work/body-look/codex-apfix-d9/synthetic-truth';
+const scratch=path.join(scratchRoot,'synthetic-truth');
 const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
 const iso=ms=>new Date(ms).toISOString().replace('Z','');
 function oem(lines,fit=false){
@@ -37,7 +39,7 @@ function oem(lines,fit=false){
 export async function runSyntheticTruth(c){
  fs.mkdirSync(scratch,{recursive:true});
  const m=await openModule(),x=m.x,p=x.sdnap_alloc(256),a=(off,n)=>new Float64Array(m.harness.memory.buffer,p+off,n),jd=jdOf(epoch);
- const rows=JSON.parse(fs.readFileSync(process.env.FFM_SPW_FIXTURE??'/Users/tj/software/terrain-work/ffm-spw-fixture/spw-constant-20261029.json'));
+ const rows=spwFixtureRows();
  const weather=Buffer.concat((Array.isArray(rows)?rows:rows.rows).map(row=>{const b=new fb.Builder(256);SPW.finishSizePrefixedSPWBuffer(b,Object.assign(new SPWT(),row).pack(b));return b.asUint8Array();}));
  const cfg=configuration({theory:'SGP4XP',forces:{EPHEMERIS_SOURCE:'',HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:c.tesseral??31,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:c.zonal??20,ENABLE_DRAG:c.drag,ATMOSPHERE_MODEL:pcfAtmosphereFamily.NRLMSISE00,WEATHER_SOURCE:pcfWeatherSource.RECORDS},fit:{DRAG_PRIOR:prior(c.drag?(c.bterm??.044):0,c.drag?(c.dragSigma??.1):1e-10),DRAG_PRIOR_FORM:pcfPriorForm.GAUSSIAN_SIGNED,SRP_PRIOR:prior(0,1e-10)},output:{OUTPUT_FRAME:pcfOutputFrame.GCRF}});
  const h=await createStandaloneHarness('browser',c.modulePath??wasmPath,{surface:'command'});

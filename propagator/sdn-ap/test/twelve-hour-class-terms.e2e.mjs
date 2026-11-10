@@ -16,7 +16,8 @@ import {archive} from './lib/regime-windows.mjs';
 import {wasmPath} from './lib/module.mjs';
 import {runSyntheticTruth} from './lib/synthetic-truth.mjs';
 
-const BASE = '48539c3ff', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/twelve-hour';
+const {scratchRoot} = await import('./lib/scratch.mjs');
+const BASE = '48539c3ff', scratch = path.join(scratchRoot, 'twelve-hour');
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 fs.mkdirSync(scratch, {recursive: true});
 
