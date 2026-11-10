@@ -2143,7 +2143,11 @@ arithmetic it is off by at most 0.0042 mm at the geostationary radius; the per-s
 to 1.5 mm there (gmst()'s rounding: up to 3.6e-11 rad), and the two differ by at most 1.6 mm and 1.2e-4 mm/s (SGP4
 sets with epochs from 2020 to 2035, 7 days each; test/output-frames.mjs). A GCRF state then costs what a TEME state
 costs, against about 31 µs with the matrix at each state; a one-state call at a date whose nodes are not yet held
-computes six nodes. The fit's GCRF inputs keep the matrix at each state. Default FORCES retains the XP path bit for bit. The one-day class retains its frame
+computes six nodes. The fit's GCRF inputs keep the matrix at each state. GMST82 itself (gmst(), store.inc) sums its
+polynomial in seconds of time near 8e8 s and turns that into radians near 6e4 rad, so it is off GMST82 in exact
+arithmetic by up to 3.6e-11 rad (1.5 mm at the geostationary radius), an error that changes from one instant to the
+next (2020 to 2035, test/output-frames.mjs); the fit's GCRF inputs and every Earth-fixed state (TEME to Earth-fixed by
+gmst()) carry that rounding. Default FORCES retains the XP path bit for bit. The one-day class retains its frame
 correction and 38-minute grid; the half-day and GTO fixtures retain their previous paths.
 
 The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS windows, 72-hour fits, the
