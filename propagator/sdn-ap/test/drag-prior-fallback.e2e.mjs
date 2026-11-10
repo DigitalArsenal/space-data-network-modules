@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
-// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
-// moves the scoring to the module's own GCRF).
+// Its read windows are scored on each module's own GCRF output since 2026-11-10 (#386); the old path (TEME through the
+// pinned foundation/frames 0.2.0, whose TEME is not the standard one, #389) is printed beside it. In low orbit the two
+// differ by about 2 m; every bound held. The TEME output through this checkout's foundation/frames 0.3.0 lands within
+// 1 mm of the module's GCRF output.
 // Registration (2026-11-03, modules-sdn-ap-drag-prior-fallback-20261103): the fit's per-window drag diagnostics and the
 // drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), the module under test
 // this build's dist.
@@ -99,7 +100,8 @@ if (!isMainThread) {
 
   for (const key of Object.keys(results).sort()) console.log(JSON.stringify({fixture: key, ...results[key], comment: undefined}));
   const median = (a) => { const v = a.toSorted((x, y) => x - y), i = v.length >> 1; return v.length % 2 ? v[i] : (v[i - 1] + v[i]) / 2; };
-  const day = (a, k) => (a?.ok && a.days?.[k] ? a.days[k].e : null);
+  // #386: days, the modules' own GCRF output (the score); daysOld, the old path (TEME through the pinned frames 0.2.0)
+  const day = (a, k, field = 'days') => (a?.ok && a[field]?.[k] ? a[field][k].e : null);
   const name = (r) => r.key.split('|')[1], cutoff = (r) => r.key.split('|')[2];
   const objects = {};
   for (const o of [...new Set(rows.map(name))].sort()) {
@@ -109,7 +111,9 @@ if (!isMainThread) {
       const p = v.filter((r) => day(r.arms[0], k) !== null && day(r.arms[1], k) !== null && day(r.arms[2], k) !== null);
       out[`day${k}`] = p.length ? {n: p.length, at0411: median(p.map((r) => day(r.arms[0], k))), at0417: median(p.map((r) => day(r.arms[1], k))),
         here: median(p.map((r) => day(r.arms[2], k))), change0417: median(p.map((r) => day(r.arms[1], k) / day(r.arms[0], k) - 1)),
-        changeHere: median(p.map((r) => day(r.arms[2], k) / day(r.arms[0], k) - 1))} : null;
+        changeHere: median(p.map((r) => day(r.arms[2], k) / day(r.arms[0], k) - 1)),
+        oldPath: {at0411: median(p.map((r) => day(r.arms[0], k, 'daysOld'))), here: median(p.map((r) => day(r.arms[2], k, 'daysOld'))),
+          changeHere: median(p.map((r) => day(r.arms[2], k, 'daysOld') / day(r.arms[0], k, 'daysOld') - 1))}} : null;
     }
     out.fallBack = v.filter((r) => /drag prior: fall-back/.test(r.arms[2]?.comment ?? '')).length;
     objects[o] = out;
@@ -124,7 +128,10 @@ if (!isMainThread) {
   // 1
   const at = (o, c) => rows.find((r) => name(r) === o && cutoff(r).startsWith(c));
   const s3a = day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3'), s3b = day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7');
-  console.log(JSON.stringify({sentinel3a20251015day3Km: s3a, sentinel3b20251025day7Km: s3b}));
+  const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).filter((a) => a.ok).map((a) => a.frames030Meters)));
+  console.log(JSON.stringify({sentinel3a20251015day3Km: s3a, sentinel3b20251025day7Km: s3b, frames030Meters,
+    oldPath: {sentinel3a20251015day3Km: day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3', 'daysOld'), sentinel3b20251025day7Km: day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7', 'daysOld')}}));
+  assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
   assert.ok(s3a !== null && s3a <= 0.130, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
   assert.ok(s3b !== null && s3b <= 0.150, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
   // 2

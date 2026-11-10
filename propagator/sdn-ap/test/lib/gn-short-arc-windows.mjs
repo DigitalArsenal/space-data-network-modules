@@ -30,6 +30,9 @@ async function replay({modulePath, norad, shard, shards, keys}) {
   const O = await import(new URL('./ocm.mjs', import.meta.url).href), openAp = (p) => (O.legacyBuild(p) ? openAp04(p) : O.openApOcm(p));
   const {windowKey} = await import(experiments + '/experiments/operator-theory/lib/regimes.mjs');
   const m = await openModules(), A = await openAp(modulePath);
+  // #386: scored on the module's own GCRF output; daysOld: its TEME output through the pinned foundation/frames 0.2.0
+  // (#389); frames030Meters: that TEME output through this checkout's foundation/frames 0.3.0 against the GCRF output
+  const X = await import(new URL('./frames-cross.mjs', import.meta.url).href), frames030 = await X.openCheckoutFrames();
   const LEADS = XM.config.scoring.leadDays, GRID = XM.config.scoring.gridSeconds * 1000;
   const MIN_BIN = XM.config.scoring.binMinimumEpochs, MIN_COV = XM.config.fit.minimumCoverage;
   const cutoffs = XM.daysOf(XM.config.period.from, XM.config.period.to);
@@ -51,7 +54,7 @@ async function replay({modulePath, norad, shard, shards, keys}) {
     const bins = Object.fromEntries(LEADS.map((k) => [k, grid.filter((l) => { const t = ms(l.epoch); return t > D0 + (k - 1) * DAY && t <= D0 + k * DAY; })]));
     const entered = LEADS.filter((k) => bins[k].length >= minBin), scored = entered.flatMap((k) => bins[k]);
     const epochs = scored.map((l) => l.epoch), truth = scored.map((l) => ({r: l.r, v: l.v})), sizes = entered.map((k) => bins[k].length);
-    const gridB = S.gridBytes(epochs);
+    const gridB = S.gridBytes(epochs), gridG = S.oemBytes({frame: 'GCRF', lines: epochs.map((epoch) => ({epoch, r: [0, 0, 0]}))});
     const score = (e) => { const days = {}; let i = 0; entered.forEach((k, j) => { const s = e.slice(i, i + sizes[j]); i += sizes[j]; const ric = [0, 1, 2].map((c) => rms(s.map((q) => q[c]))); days[k] = {e: Math.hypot(...ric), r: ric[0], t: ric[1], n: ric[2]}; }); return days; };
     const arc = (hours) => { const raw = between(D0 - hours * HOUR, D0); const coverage = raw.length > 1 ? raw.length / ((hours * 3600) / ((ms(raw[1].epoch) - ms(raw[0].epoch)) / 1000)) : 0; return coverage >= MIN_COV ? T.thinned(raw).chosen : null; };
     for (const name of arms) {
@@ -63,8 +66,10 @@ async function replay({modulePath, norad, shard, shards, keys}) {
         const pcf = S.pcfBytes({forces: {}, fit});
         const f = await A.fit(oem, pcf, undefined);
         if (!f.ok) throw new Error(f.error);
-        const st = await A.propagate(f.omm, gridB, pcf, undefined, epochs.length);
-        row.arms[name] = {ok: true, agom: (O.legacyBuild(modulePath) ? S.readFitOmm(f.omm) : O.readFitOcm(f.omm)).agom, days: score(await m.rtn(await m.toAxes(st, epochs, 'GCRF'), truth))};
+        const own = await A.propagate(f.omm, gridG, pcf, undefined, epochs.length), st = await A.propagate(f.omm, gridB, pcf, undefined, epochs.length);
+        const frames030Meters = X.largestMeters(await frames030.convert(st.map((s, k) => ({...s, epoch: epochs[k]})), 'TEME', 'GCRF'), own);
+        row.arms[name] = {ok: true, agom: (O.legacyBuild(modulePath) ? S.readFitOmm(f.omm) : O.readFitOcm(f.omm)).agom, days: score(await m.rtn(own, truth)),
+          daysOld: score(await m.rtn(await m.toAxes(st, epochs, 'GCRF'), truth)), frames030Meters};
       } catch (error) {
         row.arms[name] = {ok: false, error: String(error?.message ?? error).slice(0, 180)};
       }

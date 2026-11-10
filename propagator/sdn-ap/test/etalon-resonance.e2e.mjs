@@ -1,15 +1,17 @@
 #!/usr/bin/env node
-// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
-// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
-// moves the scoring to the module's own GCRF).
+// Scored on each module's own GCRF output since 2026-11-10 (#386). Until then the module's TEME output reached the truth's
+// GCRF through the pinned foundation/frames 0.2.0, whose TEME is not the standard one (#389): that old path is still flown
+// and asserted beside the score, at its registered figures. The figures below are the new path's, the old in brackets.
+// The TEME output through this checkout's foundation/frames 0.3.0 lands within 1 mm of the module's GCRF output.
 // Registration (2026-11-03; re-scoped by the coordinator after the measurement): exploratory replay of the AP6 windows of
 // the 2026-11-03 gap diagnosis, already read: GD (Etalon-1/2, LAGEOS-1/2, LARES-2), IG and GE (GFZ MGEX), 72 h arcs, AP
 // FORCES; baseline the 0.4.7 release (git dcae63613), the module under test this build's dist. Acceptance, the measured
 // values with margin (re-measured at 0.4.9, whose AP sets keep full precision, SPEC 16.9): Etalon-1 paired day-3 AP
-// minus FFM (archived resume-ffm F72) 26.64 m at the baseline and 6.64 m here (0.4.11: the third bodies' short-period
-// terms by quadrature, SPEC 5.4; 10.12 m at 0.4.9), Etalon-2 36.39 and 7.58 m (9.74 m at 0.4.9), each within 1 m;
-// medians here LAGEOS-1 7.81, LAGEOS-2 6.78, LARES-2 9.73, IG 17.10 and GE 45.86 m, each within 0.5 m; every number
-// printed; default-FORCES digest bit-exact. Unread-window confirmation is a separate experiments task.
+// minus FFM (archived resume-ffm F72) 23.37 [26.64] m at the baseline and 4.48 [6.64] m here (0.4.11: the third bodies'
+// short-period terms by quadrature, SPEC 5.4; [10.12] m at 0.4.9), Etalon-2 32.76 [36.39] and 5.58 [7.58] m ([9.74] m at
+// 0.4.9), each within 1 m; medians here LAGEOS-1 7.16 [7.81], LAGEOS-2 6.78 [6.78], LARES-2 8.77 [9.73], IG 14.42 [17.10]
+// and GE 35.84 [45.86] m, each within 0.5 m; every number printed; default-FORCES digest bit-exact. Unread-window
+// confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,34 +46,50 @@ const rows = (await Promise.all(['GD', 'IG', 'GE'].flatMap((group) => Array.from
   });
   worker.on('error', reject);
 }))))).flat().sort((a, b) => a.key.localeCompare(b.key));
-const d3 = (a) => (a?.ok && a.days['3'] ? 1000 * a.days['3'].e : null);
+// each figure twice (#386): on the modules' own GCRF output (days, the score) and on the old path (daysOld: TEME through
+// the pinned foundation/frames 0.2.0, #389, the path of the registration); FFM's archived F72 is GCRF throughout
+const d3 = (a, field = 'days') => (a?.ok && a[field]?.['3'] ? 1000 * a[field]['3'].e : null);
 const f3 = (key) => d3(ffm.get(key)?.arms.F72);
 const both = (r) => !r.error && d3(r.arms[0]) !== null && d3(r.arms[1]) !== null;
 const objectOf = (r) => r.key.split('|')[1];
-const etalon = {}, nonregression = {};
-for (const name of ['ETALON 1', 'ETALON 2']) {
-  const v = rows.filter((r) => r.group === 'GD' && objectOf(r) === name && both(r) && f3(r.key) !== null);
-  for (const r of v) console.log(JSON.stringify({window: r.key, ffmMeters: f3(r.key), baselineMinusFfm: d3(r.arms[0]) - f3(r.key), apMinusFfm: d3(r.arms[1]) - f3(r.key)}));
-  etalon[name] = {n: v.length, baselinePairedMinusFfmMeters: median(v.map((r) => d3(r.arms[0]) - f3(r.key))), pairedMinusFfmMeters: median(v.map((r) => d3(r.arms[1]) - f3(r.key)))};
-}
-for (const [name, pick] of [['LAGEOS 1', (r) => r.group === 'GD' && objectOf(r) === 'LAGEOS 1'], ['LAGEOS 2', (r) => r.group === 'GD' && objectOf(r) === 'LAGEOS 2'],
-  ['LARES-2', (r) => r.group === 'GD' && objectOf(r) === 'LARES-2'], ['IG', (r) => r.group === 'IG'], ['GE', (r) => r.group === 'GE']]) {
-  const v = rows.filter((r) => pick(r) && both(r));
-  nonregression[name] = {n: v.length, baselineMedianMeters: median(v.map((r) => d3(r.arms[0]))), medianMeters: median(v.map((r) => d3(r.arms[1])))};
-}
-console.log(JSON.stringify({exploratory: true, etalon, nonregression}));
-if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression}, null, 2) + '\n');
+const summarize = (field) => {
+  const etalon = {}, nonregression = {};
+  for (const name of ['ETALON 1', 'ETALON 2']) {
+    const v = rows.filter((r) => r.group === 'GD' && objectOf(r) === name && both(r) && f3(r.key) !== null);
+    if (field === 'days') for (const r of v) console.log(JSON.stringify({window: r.key, ffmMeters: f3(r.key), baselineMinusFfm: d3(r.arms[0]) - f3(r.key), apMinusFfm: d3(r.arms[1]) - f3(r.key),
+      oldPath: {baselineMinusFfm: d3(r.arms[0], 'daysOld') - f3(r.key), apMinusFfm: d3(r.arms[1], 'daysOld') - f3(r.key)}}));
+    etalon[name] = {n: v.length, baselinePairedMinusFfmMeters: median(v.map((r) => d3(r.arms[0], field) - f3(r.key))), pairedMinusFfmMeters: median(v.map((r) => d3(r.arms[1], field) - f3(r.key)))};
+  }
+  for (const [name, pick] of [['LAGEOS 1', (r) => r.group === 'GD' && objectOf(r) === 'LAGEOS 1'], ['LAGEOS 2', (r) => r.group === 'GD' && objectOf(r) === 'LAGEOS 2'],
+    ['LARES-2', (r) => r.group === 'GD' && objectOf(r) === 'LARES-2'], ['IG', (r) => r.group === 'IG'], ['GE', (r) => r.group === 'GE']]) {
+    const v = rows.filter((r) => pick(r) && both(r));
+    nonregression[name] = {n: v.length, baselineMedianMeters: median(v.map((r) => d3(r.arms[0], field))), medianMeters: median(v.map((r) => d3(r.arms[1], field)))};
+  }
+  return {etalon, nonregression};
+};
+const {etalon, nonregression} = summarize('days'), old = summarize('daysOld');
+const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).filter((a) => a.ok).map((a) => a.frames030Meters)));
+console.log(JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters}));
+if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters}, null, 2) + '\n');
+// on the modules' own GCRF output (2026-11-10, 0.6.9); OLD: the same replay on the old path, as registered
 const EXPECTED = {
+  etalon: {'ETALON 1': {baseline: 23.37, value: 4.48}, 'ETALON 2': {baseline: 32.76, value: 5.58}},
+  nonregression: {'LAGEOS 1': 7.157, 'LAGEOS 2': 6.777, 'LARES-2': 8.765, IG: 14.420, GE: 35.840},
+};
+const OLD = {
   etalon: {'ETALON 1': {baseline: 26.64, value: 6.64}, 'ETALON 2': {baseline: 36.39, value: 7.58}},
   nonregression: {'LAGEOS 1': 7.806, 'LAGEOS 2': 6.777, 'LARES-2': 9.731, IG: 17.095, GE: 45.863},
 };
 if (!process.argv.includes('--measure')) {
-  for (const [name, want] of Object.entries(EXPECTED.etalon)) {
-    assert.ok(Math.abs(etalon[name].baselinePairedMinusFfmMeters - want.baseline) <= 1, `${name}: baseline paired day-3 AP minus FFM within 1 m of ${want.baseline} m`);
-    assert.ok(Math.abs(etalon[name].pairedMinusFfmMeters - want.value) <= 1, `${name}: paired day-3 AP minus FFM within 1 m of ${want.value} m`);
+  for (const [label, want, got] of [['', EXPECTED, {etalon, nonregression}], ['old path: ', OLD, old]]) {
+    for (const [name, w] of Object.entries(want.etalon)) {
+      assert.ok(Math.abs(got.etalon[name].baselinePairedMinusFfmMeters - w.baseline) <= 1, `${label}${name}: baseline paired day-3 AP minus FFM within 1 m of ${w.baseline} m`);
+      assert.ok(Math.abs(got.etalon[name].pairedMinusFfmMeters - w.value) <= 1, `${label}${name}: paired day-3 AP minus FFM within 1 m of ${w.value} m`);
+    }
+    for (const [name, w] of Object.entries(want.nonregression))
+      assert.ok(Math.abs(got.nonregression[name].medianMeters - w) <= 0.5, `${label}${name}: median day-3 error within 0.5 m of ${w} m`);
   }
-  for (const [name, want] of Object.entries(EXPECTED.nonregression))
-    assert.ok(Math.abs(nonregression[name].medianMeters - want) <= 0.5, `${name}: median day-3 error within 0.5 m of ${want} m`);
+  assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
   reproduceConformance();
   console.log('Etalon resonance E2E: PASS');
 }
