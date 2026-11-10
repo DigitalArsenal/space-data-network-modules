@@ -2268,7 +2268,13 @@ FORCES keeps SGP4XP bit for bit (XP digest 72dcf6005046). Builds 0.6.5 to 0.6.7 
 semi-latus rectum of SGP4XP's zonal terms from af^2 + ag^2 as summed rather than from e e, a unit in the last place,
 which moved 282 of the conformance corpus's 80,974 XP samples (130 sets, 128 of them at e 0.6 to 0.75) by at most
 1.13e-5 m and one, a set whose orbit grazes the Earth's shadow so that a rounding-limited decision of 4 went the other
-way, by 0.197 m at day 7 (digest 34cc810d5d99); 0.6.8 restores the digest.
+way, by 0.197 m at day 7 (digest 34cc810d5d99); 0.6.8 restores the digest. On AP, 0.6.5's speed changes (WASM SIMD128,
+fast trigonometry, stage-cached RK3, the analytic/SIMD covariance Jacobian, single-precision tesseral tables) move a flight
+of fixed elements by at most 2.9 mm and 3.0 µm/s over the 48 h fixture grid at 550 km (test/ap-terms.e2e.mjs) and by at
+most 6.9 mm over 7 days, without growth; seven of them, each switched off in a test build, leave that unchanged, and the
+single-precision tables, which no build could isolate, remain the candidate. A fit of the fixture's 24 h arc stops at
+another point inside its tolerance: 7.3 cm along the grid and 2.1 m 7 days on (26 against 28 iterations, RMS 41.127
+against 41.130 m; test/fit.e2e.mjs).
 
 Exploratory (the 2026-11-03 AP6 windows, already read; 72 h fits, day 3, leads from the fit end): the median paired
 AP-minus-numerical-reference error falls from 26.64 to 22.42 m on Etalon-1 and from 36.39 to 23.55 m on Etalon-2
@@ -2505,6 +2511,17 @@ object-day from 0.4.14 to 0.4.15):
 | Molniya | 18.2 to 30.5 | 118.1 to 159.1 |
 
 Orbits at e 0.3 and below run 0.4.14's path, except the tesseral families of a class 0 set above e 0.05, the grid from 0.6.4.
+
+The grid's cost on one case: the Molniya fixture (e 0.74, 72 h arc, BTERM pinned at the truth's 0.044, NRLMSISE-00 at
+constant weather; test/drag-high-eccentricity.e2e.mjs) flies 7 days on from 71.22 m whole-day along-track RMS at day 7
+(0.4.16 to 0.6.2) to 83.42 m from 0.6.3 (83.38 m from 0.6.5), on both FFM truths (2.0.4: 70.86 to 83.01 m); not the grid's
+resolution (256 nodes: 83.41 m). The same change took the fitted Molniya fixture's day-7 along-track RMS from 276 to
+238 m and the half-day fixture's from 34 to 31 m (test/third-body-short-period-eccentric.e2e.mjs). The half-day
+fixture's single samples (test/heo-model-truth.e2e.mjs, 0.6.2 against 0.6.3 on the same truth) went from 27.45 / 69.63 /
+59.33 m to 61.51 / 100.31 / 30.16 m at days 1, 3 and 7 (27.54 / 69.96 / 60.10 m as registered at 0.4.17, 61.58 / 100.37 /
+30.22 m on 0.6.8): day 7 is better, and days 1 and 3 are worse. The 12 h at 55 deg
+fixture is worse at every day (22.10 / 61.24 / 55.97 to 62.87 / 77.80 / 65.11 m). The grid's cost and gain fixture by
+fixture, and the 12 m, are DigitalArsenal/spacedatanetwork-stack#391.
 
 **16.12 Drag above e 0.3.** A drag pass at perigee is narrow against the orbit: the energy goes in a step, at the
 Earth angle of the passage. From 0.4.16, above an epoch eccentricity of 0.3 (the set of 16.11), AP evaluates 3.4's drag

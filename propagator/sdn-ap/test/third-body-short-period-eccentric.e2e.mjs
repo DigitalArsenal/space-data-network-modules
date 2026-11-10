@@ -14,12 +14,15 @@
 // 2. degree 4 up off (OFF; FFM EGM96 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
 //    fixture at most 95 m and of the Molniya fixture at most 85 m;
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
-//    radial RMS within 0.5 m of half-day 34.33/23.12, Molniya 276.44/208.33 (0.4.16; 291.41/219.72 at 0.4.15) and 12 h at 55 deg 67.25/25.32 m, GTO no
-//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 60.02, 392.90 (419.70 at 0.4.15), 56.38
-//    and 249.02 m (re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04,
-//    338.22, 303.15 before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
+//    radial RMS within 0.5 m of half-day 31.45/16.88, Molniya 238.50/174.28 and 12 h at 55 deg 66.61/5.68 m, GTO no
+//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 30.22, 332.16, 64.94 and
+//    275.78 m (re-recorded 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3's grid moved them, the history at the assertions;
+//    re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04, 338.22, 303.15
+//    before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
 // 4. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 import fs from 'node:fs';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
@@ -266,16 +269,22 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   assert.ok(Math.abs(g1 - 298.2) <= 1, `G1 e 0.72: the closed form's mean-longitude error ${g1} m RMS`);
   assert.ok(report.offDay1AlongTrack['half-day'] <= 95, 'half-day day-1 along-track, degree 4 up off');
   assert.ok(report.offDay1AlongTrack.Molniya <= 85, 'Molniya day-1 along-track, degree 4 up off');
-  // re-recorded at 0.4.15 (SPEC 16.11); Molniya re-recorded at 0.4.16 (SPEC 16.12, 12.8: the drag at the perigee
-  // passages; 291.41 / 219.72 / 419.70 at 0.4.15, through the 72 h arc's fitted coefficient)
-  for (const [f, [t, r, s]] of Object.entries({'half-day': [34.33, 23.12, 60.02], Molniya: [276.44, 208.33, 392.90], '12-hour-55deg': [67.25, 25.32, 56.38]})) {
+  // re-recorded 2026-11-10 on 0.6.8 and FFM 2.2.1's truth. 0.6.3 (7154b48d, the grid in E for the first-order tesseral
+  // families above e 0.3, SPEC 16.11) moved every fixture; measured on 2.2.1, 0.6.2 against 0.6.3: half-day 34.34 / 22.97 /
+  // 59.33 to 31.44 / 16.84 / 30.17 m, Molniya 276.53 / 208.40 / 393.01 to 238.03 / 173.92 / 331.47 m, 12 h at 55 deg
+  // 67.33 / 25.13 / 55.96 to 66.68 / 5.70 / 65.12 m; 0.6.5 by at most 0.47 m since. The pins before: 0.4.15 (SPEC 16.11) and,
+  // for Molniya, 0.4.16 (SPEC 16.12, 12.8: 291.41 / 219.72 / 419.70 at 0.4.15) on FFM 2.0.4's truth (half-day 34.33 /
+  // 23.12 / 60.02, Molniya 276.44 / 208.33 / 392.90, 12 h 67.25 / 25.32 / 56.38 m)
+  for (const [f, [t, r, s]] of Object.entries({'half-day': [31.45, 16.88, 30.22], Molniya: [238.50, 174.28, 332.16], '12-hour-55deg': [66.61, 5.68, 64.94]})) {
     assert.ok(Math.abs(report.releaseDay7[f].alongTrack - t) <= 0.5, `${f}: day-7 along-track RMS ${report.releaseDay7[f].alongTrack} m`);
     assert.ok(Math.abs(report.releaseDay7[f].radial - r) <= 0.5, `${f}: day-7 radial RMS ${report.releaseDay7[f].radial} m`);
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);
   }
   assert.ok(report.releaseDay7.GTO.alongTrack <= 961.5 && report.releaseDay7.GTO.radial <= 935.5, 'GTO: day 7 no worse than 961/935 m');
-  // re-recorded at 0.4.15 (SPEC 16.11): 929.45 m at 0.4.14 (SPEC 16.10), 2449.15 m at 0.4.11-0.4.13
-  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 249.02) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
+  // re-recorded 2026-11-10 on 0.6.8 and FFM 2.2.1 (0.6.2 258.96 m, 0.6.3 275.80 m on 2.2.1; the sample is a single state
+  // and GTO's truth moved most between FFM 2.0.4 and 2.2.1, 2.5 m along-track RMS at day 7); 249.02 m at 0.4.15 on 2.0.4
+  // (SPEC 16.11), 929.45 m at 0.4.14 (SPEC 16.10), 2449.15 m at 0.4.11-0.4.13
+  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 275.78) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
   reproduceConformance();
   console.log('third-body short-period eccentric E2E: PASS');
 }
