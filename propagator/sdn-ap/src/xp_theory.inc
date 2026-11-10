@@ -1760,15 +1760,60 @@ inline uint64_t next_ctx_id() {
   return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
 }
 
+/// A set's branch (SPEC 16.7, 17.7): the switches its epoch mean motion n0 (rad/min) and eccentricity e0 decide once, for
+/// the whole flight. AP's mean elements are defined per branch: two sets on different branches are different orbits, never
+/// differenced or blended. The eccentricity switches exist only with AP's terms selected (`ap`).
+struct Branch {
+  int8_t resonance = 0;     ///< SPEC 6 class (res::band_of)
+  uint8_t long_period = 0;  ///< period >= 1100 min (SPEC 5, 9)
+  uint8_t wide_tess = 0;    ///< AP: the first-order tesseral families on the grid (tess::wide_set: 0.05 in class 0, else 0.3)
+  uint8_t wide_e = 0;       ///< AP: e0 above tess::kWideE, the zonal tail's every long-period term and the perigee drag passage
+  uint8_t series_e = 0;     ///< AP: e0 at or above res::kSeriesE, the class's G about e0 (SPEC 6.4)
+  bool operator==(const Branch& o) const {
+    return resonance == o.resonance && long_period == o.long_period && wide_tess == o.wide_tess && wide_e == o.wide_e &&
+           series_e == o.series_e;
+  }
+  bool operator!=(const Branch& o) const { return !(*this == o); }
+};
+inline Branch branch_of(double n0, double e0, bool ap) {
+  Branch b;
+  b.resonance = static_cast<int8_t>(res::band_of(n0));
+  b.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
+  if (ap) {
+    b.wide_tess = tess::wide_set(b.resonance, e0) ? 1 : 0;
+    b.wide_e = e0 > tess::kWideE ? 1 : 0;
+    b.series_e = e0 >= res::kSeriesE ? 1 : 0;
+  }
+  return b;
+}
+/// The switch two branches differ by, in words.
+inline const char* switch_name(const Branch& a, const Branch& b) {
+  if (a.long_period != b.long_period) return "1,100-minute regime limit";
+  if (a.resonance != b.resonance) return "resonance class limit";
+  if (a.wide_tess != b.wide_tess) return "eccentricity switch of the first-order tesseral families";
+  return "eccentricity switch at 0.3";
+}
+/// The switch whose limit lies within eps_n (relative, in n0) or eps_e (in e0) of the epoch elements, or nullptr.
+inline const char* switch_near(double n0, double e0, bool ap, double eps_n = 1e-3, double eps_e = 1e-3) {
+  const Branch b = branch_of(n0, e0, ap);
+  const Branch q[4] = {branch_of(n0 * (1.0 - eps_n), e0, ap), branch_of(n0 * (1.0 + eps_n), e0, ap),
+                       branch_of(n0, e0 > eps_e ? e0 - eps_e : 0.0, ap), branch_of(n0, e0 + eps_e, ap)};
+  for (const Branch& o : q)
+    if (o != b) return switch_name(b, o);
+  return nullptr;
+}
+
 /// Per-object constants of the rate function.
 struct RateContext {
   uint64_t ctx_id;
   uint64_t cov_anchor_id;
   double d50_epoch;
-  tess::Terms selected_terms;  ///< AP force selection, also used when a class changes
+  tess::Terms selected_terms;  ///< AP force selection
   double bterm, agom;
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
-  int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour)
+  int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour), held
+                        ///< for the whole flight in both theories (SPEC 6 Bands, 16.7)
+  Branch branch;        ///< the switches the epoch elements decided (resonance and long_period are its first two)
   const res::ResCoef* res_epoch;   ///< SGP4XP: the epoch class's terms at e_0, i_0, integrated (owned, xp_release)
   int32_t res_count;
   double theta_g0;      ///< Greenwich angle at epoch (SPEC 1.2)
@@ -1778,7 +1823,7 @@ struct RateContext {
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
   uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release)
-  uint8_t ap_resonance;               ///< AP: tables follow the current class; functions at the current elements
+  uint8_t ap_resonance;               ///< AP: the epoch class's terms, functions at the current elements (SPEC 16.2, 16.7)
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
   uint8_t ap_third_body;              ///< AP: the third bodies' degree 4-10 averaged rates and degree 2-10 short-period
                                       ///< terms by quadrature (SPEC 5.4, 16.8)
@@ -1798,7 +1843,7 @@ struct RateContext {
   const tess::SpCoef* sp_orig;        ///< AP: original sp pointer for diagnostic override detection
   int32_t sp_orig_count;
   tess::WideGrid* wide;               ///< AP above tess::kWideE: the first-order tesseral families' grid (SPEC 16.11)
-  uint8_t wide_owned;                 ///< this context frees `wide` (a class change's temporary shares it)
+  uint8_t wide_owned;                 ///< this context drops its reference to `wide` (xp_release)
   const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
   double wide_blend;
   uint8_t wide_fit;                   ///< initialized inside a tess::FitGridScope: the grids it builds are not kept idle
@@ -1813,11 +1858,6 @@ inline uint64_t md_table_id(const RateContext& ctx) { return (ctx.shared_mask & 
 
 inline bool is_ap_ctx(const RateContext& ctx) {
   return ctx.ap_third_body != 0 || ctx.ap_resonance != 0 || ctx.ap_frame != 0;
-}
-
-inline int ap_resonance_class(const RateContext& ctx, double n) {
-  (void)ctx;
-  return res::band_of(n);
 }
 
 /// SPEC 9 (amendment 6): the tests every rate evaluation applies to the state it is given (k2, k3, k4 and the new
@@ -3525,16 +3565,13 @@ inline void third_body_six_coefs_ap(double e, double eta, double sinc1, double i
   coef[39] = (15.0 / 16.0) * e * (3.0 * e2 + 4.0) * sw1 * sc_eta;
 }
 
-/// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test).
-[[gnu::noinline]] inline bool reclass_rates(const RateContext&, double, const double*, double*);
-[[gnu::noinline]] inline int32_t reclass_output(const RateContext&, double, const double*, double*, double*, const Bodies*);
+/// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test). AP sums the epoch
+/// class's terms whatever the current mean motion (SPEC 16.7): the class is the record's, decided at its epoch.
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
                   int dir_idx = 0, int step_idx = 0, int stage_idx = -1,
                   const Rk3StageOverride* ov = nullptr) {
   if (state_test(ctx, y) != 0) return false;
-  const int cls = ctx.ap_resonance ? ap_resonance_class(ctx, y[kN]) : 0;
-  if (ctx.ap_resonance && cls != ctx.resonance)
-    return reclass_rates(ctx, t, y, out);
+  const int cls = ctx.ap_resonance ? ctx.resonance : 0;
   const bool fast_ap = ctx.ap_third_body && (!ctx.long_period || ctx.i0 > 0.02);
   const Frame fr = fast_ap ? frame_of_fast(y) : frame_of(y);
 
@@ -4604,8 +4641,6 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
     }
   }
   if (!(ym[kN] > 0.0)) return kPropMeanMotion;
-  if (__builtin_expect(ctx.ap_resonance && ap_resonance_class(ctx, ym[kN]) != ctx.resonance, 0))
-    return reclass_output(ctx, t, ym, r_out, v_out, shared);
   double y[6] = {ym[0], ym[1], ym[2], ym[3], ym[4], ym[5]};
   bool use_shared_3b = false;
   bool use_shared_sp = false;
@@ -5406,9 +5441,23 @@ struct CovBankScope {
   CovBankScope& operator=(const CovBankScope&) = delete;
 };
 
+/// SPEC 16.7: while a BranchScope lives on a thread, a set initialized there takes this branch instead of its own epoch
+/// elements' (a covariance's moved set still takes its nominal's): every trial set of a fit (fit::run) flies one branch's
+/// theory, so the fit's objective is smooth.
+inline thread_local const Branch* g_branch_pin = nullptr;
+struct BranchScope {
+  const Branch* prev;
+  explicit BranchScope(const Branch* b) : prev(g_branch_pin) { g_branch_pin = b; }
+  ~BranchScope() { g_branch_pin = prev; }
+  BranchScope(const BranchScope&) = delete;
+  BranchScope& operator=(const BranchScope&) = delete;
+};
+
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
+/// The eccentricity switches are s.ctx.branch's (xp_init), never e.eo's own.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const tess::Terms& t = s.ctx.selected_terms;
+  const Branch& br = s.ctx.branch;
   s.ctx.n0 = n0;
   s.ctx.a0 = std::pow(kKe / n0, kX2o3);
   s.ctx.hd_e0 = e.eo;
@@ -5430,10 +5479,10 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // This one ingest-time policy is shared by fit residuals and every flight.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
-  s.ctx.drag_pass = s.ctx.ap_third_body && e.eo > tess::kWideE ? 1 : 0;
+  s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
-    if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
+    if (res != 0 && br.series_e && e.eo + 1e-3 < 1.0) {
       if (within_share && anchor->ctx.res_taylor != nullptr) {
         s.ctx.res_taylor = anchor->ctx.res_taylor;
         s.ctx.e0 = anchor->ctx.e0;
@@ -5466,10 +5515,10 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
-    const bool wide_sp = tess::wide_set(res, e.eo);
+    const bool wide_sp = br.wide_tess != 0;
     if (within_share && same_inc && anchor->ctx.sp_comb != nullptr && anchor->ctx.sp_orig != nullptr &&
         anchor->ctx.sp == anchor->ctx.sp_orig && anchor->ctx.sp_count == anchor->ctx.sp_orig_count &&
-        wide_sp == tess::wide_set(res, anchor->ctx.e0)) {
+        wide_sp == (anchor->ctx.branch.wide_tess != 0)) {
       s.ctx.sp_comb = anchor->ctx.sp_comb;
       s.ctx.sp_comb_count = anchor->ctx.sp_comb_count;
       s.ctx.sp = anchor->ctx.sp_orig;
@@ -5491,7 +5540,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
       int raw_count = 0;
       const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count);
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) {
@@ -5515,7 +5564,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     }
     if (wide_sp && s.ctx.wide == nullptr) {
       // SPEC 16.11: the families of degree 2 to spd as a grid in E, by exact key (the switch by class: tess::wide_set); a copy inside its nominal's GridShareScope reads
-      // the nominal's grid when within the share range; a class change's temporary keeps its parent's
+      // the nominal's grid when within the share range
       const tess::WideGrid* ag = grid_anchor != nullptr ? grid_anchor->ctx.wide : nullptr;
       if (ag != nullptr && ag->degree == spd && grid_anchor->ctx.resonance == res && std::fabs(e.eo - ag->e) <= tess::kShareE &&
           std::fabs(e.xincl - ag->i) <= tess::kShareI && std::fabs(s.ctx.a0 / ag->a - 1.0) <= tess::kShareA) {
@@ -5532,7 +5581,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   }
   const int zd = t.zonal > 70 ? 70 : t.zonal;
   if (zd >= 6) {
-    const bool wide = e.eo > tess::kWideE;
+    const bool wide = br.wide_e != 0;
     if (same_inc && std::fabs(e.eo - anchor->ctx.e0) <= tess::kShareE &&
         anchor->ctx.zt != nullptr && anchor->ctx.zt_degree == zd && anchor->ctx.zt_wide == (wide ? 1 : 0)) {
       s.ctx.zt = anchor->ctx.zt;
@@ -5614,12 +5663,19 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     return kPropRefused;
   }
   const double n0 = e.xno;  // Brouwer (SPEC 1.1)
-  s.ctx.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
-  const int8_t res = static_cast<int8_t>(res::band_of(n0));  // the epoch class (SPEC 6 bands)
+  s.ctx.selected_terms = tess::active();
+  // the branch, once, from the epoch elements (SPEC 6 Bands, 16.7); a covariance's moved set (inside its nominal's
+  // CovBankScope) takes its nominal's, so the columns difference one branch's theory (SPEC 12.3); a fit's trial set inside
+  // a BranchScope takes the pinned one
+  const XpSat* nominal = cov_bank_anchor();
+  s.ctx.branch = nominal != nullptr && nominal != &s ? nominal->ctx.branch
+                 : g_branch_pin != nullptr          ? *g_branch_pin
+                                                    : branch_of(n0, e.eo, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);
+  s.ctx.long_period = s.ctx.branch.long_period;
+  const int8_t res = s.ctx.branch.resonance;  // the epoch class (SPEC 6 bands)
   s.ctx.resonance = res;
   s.ctx.theta_g0 = gsto_afspc(s.ctx.d50_epoch);
   s.ctx.atmosphere = atm::active();  // the call's atmosphere, if it selected one (atmosphere.inc)
-  s.ctx.selected_terms = tess::active();
   s.ctx.e0 = e.eo;
   s.ctx.i0 = e.xincl;
   if (!ap_init(e, n0, res, s)) {
@@ -6026,7 +6082,7 @@ inline void refresh_lp_sigma_tail_srp(const RateContext& ctx, double t, const do
   const double t2 = y[kChi] * y[kChi] + y[kPsi] * y[kPsi];
   const double eta = std::sqrt(1.0 - e2);
   const double n = y[kN];
-  const int cls = ctx.ap_resonance ? ap_resonance_class(ctx, n) : 0;
+  const int cls = ctx.ap_resonance ? ctx.resonance : 0;
   Kepler k{};
   AngleTrig ag{};
   if (ctx.i0 > 0.02 && e2 > 1e-24 && t2 > 1e-24 && e2 < 1.0) {
@@ -6145,9 +6201,6 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
   auto eval_fast_stage = [&](const F64x2 vy[6], const CovStageAux& csa, F64x2& va_out, F64x2 vtb_out[6]) -> bool {
     const double n_p = vy[kN].lo(), n_m = vy[kN].hi();
     if (!(n_p > 0.0 && n_m > 0.0)) return false;
-    if ((ctx_p.ap_resonance && ap_resonance_class(ctx_p, n_p) != ctx_p.resonance) ||
-        (ctx_m.ap_resonance && ap_resonance_class(ctx_m, n_m) != ctx_m.resonance))
-      return false;
     const F64x2 ve2 = vy[kAf] * vy[kAf] + vy[kAg] * vy[kAg];
     if (!(ve2.lo() < 0.90 && ve2.hi() < 0.90)) return false;
     const F64x2 vdu_n = (vy[kN] - csa.n_lp) * csa.inv_n_lp;
@@ -6447,10 +6500,8 @@ inline bool mean_at_cov_pair_lp(const XpSat& s0, XpSat& sp, XpSat& sm, double t,
     if (!mean_at_local(sp, t, ym_p) || !mean_at_local(sm, t, ym_m)) return -1;
   }
   const bool same_cls_p = sp.ctx.long_period == s0.ctx.long_period && sp.ctx.resonance == s0.ctx.resonance &&
-                          !(sp.ctx.ap_resonance && ap_resonance_class(sp.ctx, ym_p[kN]) != sp.ctx.resonance) &&
                           (sp.ctx.wide == nullptr || sp.ctx.wide_anchor == &s0);
   const bool same_cls_m = sm.ctx.long_period == s0.ctx.long_period && sm.ctx.resonance == s0.ctx.resonance &&
-                          !(sm.ctx.ap_resonance && ap_resonance_class(sm.ctx, ym_m[kN]) != sm.ctx.resonance) &&
                           (sm.ctx.wide == nullptr || sm.ctx.wide_anchor == &s0);
   if (!same_cls_p || !same_cls_m) return 0;
   if (!s0.ctx.long_period && !can_share_3b) return 0;
@@ -6789,10 +6840,9 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
   }
   const Bodies shared = s0.ctx.ap_third_body ? bodies_at_ap(s0.ctx.d50_epoch + t / kMinutesPerDay)
                                              : bodies_at(s0.ctx.d50_epoch + t / kMinutesPerDay);
-  const bool no_reclass = !(s0.ctx.ap_resonance && ap_resonance_class(s0.ctx, ym0[kN]) != s0.ctx.resonance);
-  const bool can_share_3b = (t != 0.0) && !s0.ctx.long_period && s0.ctx.ap_third_body && no_reclass;
-  const bool can_share_sp = (t != 0.0) && (s0.ctx.mdaily != nullptr || s0.ctx.sp != nullptr || s0.ctx.wide != nullptr) && no_reclass;
-  const bool can_share_srp = (t != 0.0) && s0.ctx.agom > 0.0 && no_reclass;
+  const bool can_share_3b = (t != 0.0) && !s0.ctx.long_period && s0.ctx.ap_third_body;
+  const bool can_share_sp = (t != 0.0) && (s0.ctx.mdaily != nullptr || s0.ctx.sp != nullptr || s0.ctx.wide != nullptr);
+  const bool can_share_srp = (t != 0.0) && s0.ctx.agom > 0.0;
   double d_3b0[6] = {0, 0, 0, 0, 0, 0}, dd_3b_dlam[6] = {0, 0, 0, 0, 0, 0};
   double d_sp0[6] = {0, 0, 0, 0, 0, 0}, dd_sp_dlam[6] = {0, 0, 0, 0, 0, 0}, d2_sp_dlam2[6] = {0, 0, 0, 0, 0, 0};
   double d_srp_unit0[6] = {0, 0, 0, 0, 0, 0};
@@ -6855,7 +6905,6 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
     double yms[6];
     if (!mean_at_local(ss, t, yms)) return false;
     const bool same_cls = ss.ctx.long_period == s0.ctx.long_period && ss.ctx.resonance == s0.ctx.resonance &&
-                          !(ss.ctx.ap_resonance && ap_resonance_class(ss.ctx, yms[kN]) != ss.ctx.resonance) &&
                           (ss.ctx.wide == nullptr || ss.ctx.wide_anchor == &s0);
     const bool small_plane_diff =
         (s0.ctx.i0 > 0.02) &&
@@ -6926,47 +6975,6 @@ inline bool xp_propagate_cov_at(XpSat* sats, int np, const int* slot, const bool
     }
   }
   return true;
-}
-
-/// A class change gets one consistent set of AP tables for both rates and
-/// output. The temporary owns its coefficients; atmosphere and frame epoch
-/// remain those of the original set. No global force selection is modified.
-[[gnu::noinline]] inline bool reclass_make(const RateContext& ctx, const double* y, XpSat& tmp) {
-  if (state_test(ctx, y) != 0) return false;
-  const Kepler k = kepler_of(y);
-  tmp = XpSat{};
-  tmp.ctx = ctx;
-  tmp.ctx.ctx_id = next_ctx_id();
-  tmp.ctx.cov_anchor_id = tmp.ctx.ctx_id;
-  tmp.ctx.is_cov_sigma = 0;
-  tmp.ctx.shared_mask = 0;
-  tmp.ctx.res_epoch = nullptr; tmp.ctx.res_count = 0; tmp.ctx.res_taylor = nullptr;
-  tmp.ctx.half_day = nullptr; tmp.ctx.half_day_count = 0;
-  tmp.ctx.shallow = nullptr; tmp.ctx.shallow_count = 0;
-  tmp.ctx.zt = nullptr; tmp.ctx.mdaily = nullptr;
-  tmp.ctx.sp = nullptr; tmp.ctx.sp_count = 0;
-  tmp.ctx.sp_orig = nullptr; tmp.ctx.sp_orig_count = 0;
-  tmp.ctx.sp_comb = nullptr; tmp.ctx.sp_comb_count = 0;
-  tmp.ctx.wide_owned = 0;  // shares the parent's grid (SPEC 16.11)
-  tmp.ctx.resonance = static_cast<int8_t>(ap_resonance_class(ctx, y[kN]));
-  tmp.ctx.e0 = k.e; tmp.ctx.i0 = k.i;
-  Elements e{}; e.eo = k.e; e.xincl = k.i;
-  CovBankScope no_cov_share(nullptr);
-  return ap_init(e, y[kN], tmp.ctx.resonance, tmp);
-}
-[[gnu::noinline]] inline bool reclass_rates(const RateContext& ctx, double t, const double* y, double* out) {
-  XpSat tmp{};
-  const bool made = reclass_make(ctx, y, tmp);
-  const bool ok = made && rates(tmp.ctx, t, y, out);
-  xp_release(tmp);
-  return ok;
-}
-[[gnu::noinline]] inline int32_t reclass_output(const RateContext& ctx, double t, const double* y, double* r, double* v, const Bodies* shared) {
-  XpSat tmp{};
-  const bool made = reclass_make(ctx, y, tmp);
-  const int32_t rc = made ? output(tmp.ctx, t, y, r, v, shared) : kPropRefused;
-  xp_release(tmp);
-  return rc;
 }
 
 }  // namespace xpt

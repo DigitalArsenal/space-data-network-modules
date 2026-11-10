@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.8 (dist 51a52e99).
+Version 0.6.9 (dist 072b233c).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1141,8 +1141,7 @@ reproduces the change of n to the next node to 1e-7 of that change, before and a
 and F, G of the current elements it misses by up to 4e-3 after the crossing, and with no resonance terms by 6e-4
 to 3e-3 throughout]*. A native-element report is different: it re-initializes the set at the requested time (1.5), so its rates
 take the class of the mean motion at that time *[probe 6.9]*.
-AP differs at a class change: section 16.7 rebuilds its rate and output tables together. The epoch hold above
-is the SGP4XP behavior.
+AP holds its class the same way, with its rate and output tables of the epoch class for the whole flight (16.7).
 
 The legacy SGP4 bands (synchronous for 0.0034906585 < n < 0.0052359877 rad/min; half-day for 8.26e-3 <= n <= 9.24e-3
 and e >= 0.5) are not used for type 4.
@@ -1296,7 +1295,7 @@ epoch eccentricity to the numerical integral's precision, third order within |de
 per-term relative truncation errors reported on 2026-11-02 are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02,
 and 4-15% at 0.05. These are measured errors, not uniform bounds over all terms or eccentricities.
 The stated approximation range is |de| <= 0.02; it is not an enforced propagation-refusal condition.
-The epoch class expands about epoch e0; a rebuilt class (16.2) expands about its current eccentricity.
+The epoch class expands about epoch e0 for the whole flight (16.7).
 The added high-degree half-day tail has its own quadrature and cubic tables described in 16.2.
 
 ### 6.5 Checks against the oracle
@@ -1479,8 +1478,7 @@ A query inside an already cached bracketing interval interpolates without integr
 query integrates from the epoch through its bracket, creating checkpoints on the way. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond the stored
 span it integrates from the nearest preceding retained node, so work grows with the remaining time gap.
-The node cache has bounded storage, not a time-independent bound on query work. AP class crossings can
-allocate temporary replacement coefficient tables (16.2). Request order does not change the epoch-anchored grid; it changes an
+The node cache has bounded storage, not a time-independent bound on query work. Request order does not change the epoch-anchored grid; it changes an
 AP state by the amounts stated above.
 
 **AP one-day convergence.** The registered unfitted sets have epoch 2026-10-29 00:00 UTC,
@@ -1601,7 +1599,8 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
 
 - J_k = d r_k / d p, every column the central difference of the theory itself (steps 1e-6 in af, ag, chi, psi and
   lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM or their logs; AGOM forward where p - h <= 0,
-  the theory reading AGOM <= 0 as no SRP (its log moves both ways);
+  the theory reading AGOM <= 0 as no SRP (its log moves both ways); every moved set flies the set's own branch (16.7),
+  never the branch its own elements would decide, here and in 12.3;
 - s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance per component;
 - A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
   under LOG_NORMAL sigma is that of the log). BTERM's prior, where FIT.DRAG_PRIOR is absent or without a sigma and
@@ -1993,8 +1992,24 @@ For t in (tau_i - h_i, tau_i + h_i), s = (t - tau_i + h_i) / (2 h_i), and x_a, x
 
 Position and velocity are continuous across the window's edges; the acceleration steps by w'' (r_b - r_a) there.
 
+A blend joins two states of one kind only: two theory states of sets on one branch, or two carried forecasts (18). Every
+other switch tau_i is a step of x_b - x_a, as with W = 0, with the selected set's covariance:
+
+- two consecutive AP sets on different branches (16.7: resonance class, the 1,100-minute regime, the eccentricity switches;
+  each set's from its own epoch elements): different orbits, never blended;
+- a set that gives its carried forecast over the window and one that gives the theory, or a set whose forecast span begins
+  or ends inside the window: a blend would be neither a forecast state nor a theory state, and every state the store gives
+  is one or the other (18).
+
+Inside the window that switch would have had, `sdnap_epochs_select` gives b = -2 (branches) or -3 (a carried forecast and
+the theory) and weight 0; `propagate_epochs` writes the block's COMMENT "Not blended (SPEC 14.3): " with each switch time its
+grid crosses and its reason, "(sets on different branches)" or "(a carried forecast and the theory)". Each set's own flight
+is continuous in time (16.7), so a blend of two theory sets on one branch is continuous; a carried set's step at its span's
+end is 18's.
+
 **14.4 Covariance.** For sets that carry COVARIANCE (SPEC 12), P = (1 - w) P_a + w P_b + w (1 - w) d d^T with
-d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture.
+d = x_b - x_a (the smoothstep weight for both shapes): the covariance of the two-component mixture (a blended switch,
+14.3).
 
 **14.5 Calls.** `load_epochs`; the resident exports `sdnap_epochs_count`, `_stats` (the load's counts and the store's
 bytes), `_series` (identity and epochs), `_select` (the sets and the weight at a time), `_set_at` (one set without
@@ -2104,13 +2119,11 @@ Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
 in a 12-hour orbit (13.5 against 6.7 m) and 7.5 m in a geosynchronous orbit (7.6 against 1.1 m), RMS over a 72 h arc.
 
-Section 6's classes keep their terms. With d above 0, every AP table is rebuilt together when the current
-class differs from the epoch class. F is evaluated at the current inclination with the exact dF_632/di;
+Section 6's classes keep their terms: the epoch class's, in the rates, for the whole flight (16.7). F is evaluated at the current inclination with the exact dF_632/di;
 G_410 has e^2 coefficient 1, dG_40,-2/de includes its e^13 and e^15 terms, and G_30,-1 includes its e^27 term.
 When the local Hansen expansion of 6.4 is selected, G for the original resonance terms is exact at the epoch eccentricity to numerical-integral
 precision and third order within |de| <= 0.02, as specified in 6.4. The measured per-term relative errors
-are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05. A rebuilt class centers its expansion at the
-current eccentricity. The Laplace limit does not supply a validity bound for this local expansion.
+are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05. The Laplace limit does not supply a validity bound for this local expansion.
 
 The half-day tail uses cubic expansions of F about the epoch inclination and G about the epoch eccentricity,
 with their consistent derivatives. F comes from the normalized Legendre recurrence; G comes from shared
@@ -2216,42 +2229,67 @@ the four are 27.5, 70.0 and 60.1 m (half-day; the sample `test/heo-model-truth.e
 The numerical reference changed by 1.165 m at day 7 when its RK78 tolerance tightened from 1e-12 to 1e-13
 and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 75 s changed it by 0.255 m.
 
-**16.7 Class changes in AP.** A current class different from the epoch class rebuilds all selected AP tables
-from the current mean eccentricity, inclination and mean motion for that rate or output evaluation. The original
-frame epoch, atmosphere and force selection remain fixed. Coefficients are local to the evaluation; rebuilding
-does not modify shared force configuration. The new class uses its own Hansen expansion, and terms leaving the
-rates enter the short-period output table when its selection admits them. A term is never counted in both.
+**16.7 The branch in AP.** A set's branch is decided once, at initialization, from its epoch mean motion and
+eccentricity, and held for the whole flight, as SGP4XP holds its class (6, Bands): the resonance class (6), the regime
+(period below or above 1,100 min; 5, 9) and the eccentricity switches (the first-order tesseral families on the grid above
+0.05 in class 0 and 0.3 in the resonant classes, 16.11; above 0.3 the zonal tail's every long-period term and the perigee
+drag passage, 16.3 and 16.12; at or above 0.3 the class's G about e0, 6.4). When drag or a resonance carries the mean
+motion across a class limit, the epoch class's terms stay in the rates, with F and G at the current elements (16.2), and
+out of the output table; no table is rebuilt during a flight. A record's output is therefore continuous in time: one
+seeded set at each of the five mean motions that decide a class (e 0.001, i 55 deg), flown 2 days at 10 s, has a second
+difference of position less the two-body term of at most 0.002, 0.003, 0.004, 0.012 and 0.035 m at 0.8022, 1.2033,
+1.6045, 2.4067 and 3.6100 rev/day (0.6.5, whose tables followed the current mean motion: 89.9, 135.5, 13.7, 0.012 and
+0.035 m, the first three jumps several times a day; review 0, `math/rerun/09-output-continuity.mjs`).
 
 AP's mean elements are defined per resonance class, per regime (period below or above 1,100 min) and per eccentricity branch.
 The same six numbers on two sides of a switch are different orbits: 8 to 401 m apart at epoch and up to 33 km after 7 days at
 the regime limit. Sets on different sides must not be differenced, blended or interpolated.
 
-Model truth: an AP mean-element GTO at 2026-10-29 00:00 UTC seeds FFM with the same GCRF state. There is no fit.
-The primary has n = 2.40 rev/day, e = 0.72, i = 27 degrees, RAAN = 40 degrees, argument of perigee = 270 degrees,
-M = 0, BTERM = 0.06 m^2/kg and AGOM = 0. The companion changes only n to 2.3966852459, 0.01 rev/day below
-the half-day upper edge. FFM uses 16.6's gravity, DE440, zero EOP and constant-weather NRLMSISE-00 forces;
-AP uses FORCES 31,20 and NRLMSISE-00. The primary reaches 2.408342057 rev/day at day 7; the companion
-reaches 2.403874454 and stays inside the band.
+The branch is fixed at the epoch, so this holds between records, never along one. With the class held, two sets 2e-9 apart on
+either side of a class limit drift further apart than when both followed the current class (review 0's
+`08-boundary-jumps.mjs` at e 0.001, day 7: 1,084, 2,291, 88, 1,309 and 3,037 m at the five limits against 279, 16, 266, 49
+and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The module differences and blends one branch only:
+
+- Covariance (12.1, 12.3): each moved set flies its nominal's branch. Once the class is held, the propagated covariance about
+  a limit is continuous in the nominal's mean motion: a fitted record moved to 2e-8 and 3e-7 above 1.2033 rev/day gives the
+  same covariance at 0, 1 and 3 days to 2e-4 of its largest position variance (0.6.5: 0.70).
+- Fit: the objective jumps at a switch, and a free fit can stop on it (a 72 h arc of a truth at 0.8022 rev/day ended
+  1e-16 from the limit, where one Gauss-Newton step of the full theory would have removed 73 % of its cost: its trial
+  steps across are refused until it creeps onto the limit). Where the fitted set lies on a switch (within 1e-8, relative
+  in n, absolute in e; every other fit is the free one bit for bit), `fit` fits again from it with every trial set
+  pinned to its branch (its columns: the analytic two-body and J2 ones, and where an eccentric or short arc takes them,
+  one-sided differences of moved sets that fly the iterate's branch, as the covariance's fly the nominal's, so no column
+  holds a switch's jump); a minimum on that branch is the answer; a minimum across the switch is fitted again pinned to the
+  branch it reached, and its minimum is the answer when it stays there; otherwise the fit is refused fit-at-branch-limit,
+  naming the switch, the set's mean motion and eccentricity, and asking for another span or epoch. On the referee's
+  full-field truths (its own integrator, 31 x 31, Sun and Moon) seven fits whose mean motion lies 2e-8 to 5.6e-7 from a
+  class limit, at each of the five limits, are at the theory's least-squares minimum (a Gauss-Newton polish with the full
+  theory's Jacobian lowers the cost by at most 2.3e-8 relative, steps of at most 1 mm); arcs whose two branches' minima lie
+  across each other are refused (the 72 h arcs seeded at 0.8022 and at 1.6045 rev/day, whose 24 h arcs fit, and four of
+  eight 24 h arcs seeded up to 7e-5 below 0.8022).
+- Epoch store (14.3): two sets on different branches are not blended (nor a carried forecast with a theory state).
+
+Model truth (`test/class-crossing.e2e.mjs`): an AP mean-element GTO at 2026-10-29 00:00 UTC seeds FFM with the same GCRF
+state. There is no fit. The primary has n = 2.40 rev/day, e = 0.72, i = 27 degrees, RAAN = 40 degrees, argument of perigee
+= 270 degrees, M = 0, BTERM = 0.06 m^2/kg and AGOM = 0. The companion changes only n to 2.3966852459, 0.01 rev/day below the
+half-day upper edge. FFM uses 16.6's gravity, DE440, zero EOP and the constant weather of `test/lib/spw-constant.mjs`
+(NRLMSISE-00); AP uses FORCES 31,20 and NRLMSISE-00. The primary's mean motion reaches 2.4084063 rev/day at day 7 held
+(2.4084264 rebuilt), in the eight-hour band; the companion's 2.4039453, inside the half-day band.
 
 | AP treatment | Primary day-7 T error (m) | Companion day-7 T error (m) | Relative difference |
 | --- | ---: | ---: | ---: |
-| Class switched with epoch tables | -31,518.276 | -26,506.785 | 18.906% |
-| Epoch class held | -32,325.032 | -26,506.785 | 21.950% |
-| All AP tables rebuilt | -31,291.823 | -26,506.785 | 18.052% |
+| Epoch class held (this version) | -168,218.829 | -136,267.630 | 23.447% |
+| Tables rebuilt for the current class (0.6.6 and 0.6.7) | -167,341.326 | -136,267.630 | 22.803% |
 
-At 0.4.11 (5.4's quadrature, 16.8 at every eccentricity) the rebuilt and held arms carry -26,674.861 and
--27,708.115 m and the companion -22,815.885 m (16.914%); at 0.4.14 (16.10's step) -25,681.230, -26,849.503 and
--22,083.870 m (16.290%); at 0.4.15 (16.11) -35,994.920, -37,165.537 and -31,352.148 m (14.808%).
-Rebuilding is retained because it has the smaller FFM along-track error and consistent rate/output tables.
-The E2E allows a 25% difference from the companion and requires rebuilding to improve on epoch hold.
-The fixture's remaining absolute error is attributed to perigee-drag and third-body force detail absent from
-AP's averaged model; those contributions are not isolated here.
-The two (2,2) terms (p,q) = (0,-1), (1,1) move from the rates to the output table at the crossing. Their
-epoch mean-longitude amplitudes a|delta lambda| are 206.886 and 147.093 m. Isolating each in the module's
-output map and sampling 256 node phases at perigee gives peak absolute along-track displacements of
-552.685 and 592.770 m. These are amplitudes for this fixture, not universal constants.
-`test/class-crossing.e2e.mjs` prints the crossings, term counts and errors;
-`test/results/class-crossing.json` preserves every evaluated pair and both alternatives.
+Holding the class costs this fixture 0.88 km of day-7 along-track error (0.5 %); the E2E allows 25 % against the companion.
+On 2026-11-03, with the earlier constant-weather file, the arms were -32,325.032 (held) and -31,291.823 m (rebuilt), the
+companion -26,506.785 m; rebuilding was kept then for its 1.0 km smaller error. It is reversed for continuity in time.
+Through 0.6.8 the two (2,2) terms (p,q) = (0,-1), (1,1) left the rates at the crossing and were not in the rebuilt output
+table either (that E2E's probe found 0 of 2 there, the failure it reported from 0.6.5 on); held, they stay in the rates.
+The E2E flies the primary every 10 s from day 3 to day 7 and finds its output continuous away from perigee (jump detector
+0.14 m against 1 m; the same on 0.6.7, whose rebuilt tables kept this set's grid). Within 10 min of each perigee the
+detector reaches 129 m on both builds: the perigee drag passage (16.12) steps the output by about 86 m at perigee on this
+fixture, a discontinuity in time of its own, outside this section. `test/results/class-crossing.json` keeps the run.
 
 **16.8 Third-body terms beyond the octupole.** With d or z above 0, the epoch period below 1100 min (the regime whose
 third-body rates 5 averages; the long-period regime takes the full point-mass acceleration), AP adds to the rates each
@@ -2397,8 +2435,8 @@ grid passes it (Ajisai at e 0.05 and 0.1; LAGEOS-1 at 0.05, 0.1 and 0.2; LAGEOS-
 of 3.0 to 18.4 m on the set against 0.4 to 3.2 m on the grid) and the grid's one-epoch flight is cheaper by 88 to 408 ms
 (the set's first-order table is the larger build there); in the half-day class (GPS, GLONASS, Etalon, Molniya at e 0.05 to
 0.29) the resonant mixed share is untouched by either and the grid costs 70 to 167 ms more, so the resonant classes keep the
-set. The eight-hour and sixteen-hour classes were not measured and keep the shipped switch. A set whose class changes in
-flight re-initializes under its new class's switch (6). 0.6.4 therefore changes a flight only for a class 0 set with
+set. The eight-hour and sixteen-hour classes were not measured and keep the shipped switch. A set keeps its epoch class's
+switch for the whole flight (16.7). 0.6.4 therefore changes a flight only for a class 0 set with
 0.05 < e <= 0.3; every other set is byte-identical to 0.6.3 (PRODUCER's version aside), and the 0.6.4 validation
 (orbit-accuracy-experiments experiments/operator-theory/TESSERAL-SWITCH-BY-CLASS.md) states its cells, the catalog budget on
 persistent instances and the identity set.
@@ -2694,6 +2732,12 @@ AP's mean elements are defined per resonance class, per regime (period below or 
 The same six numbers on two sides of a switch are different orbits: 8 to 401 m apart at epoch and up to 33 km after 7 days at
 the regime limit. Sets on different sides must not be differenced, blended or interpolated.
 
+The branch is fixed at the record's epoch, from its own epoch elements, for the whole flight (16.7): a record's output is
+continuous in time wherever its mean motion and eccentricity go. The module differences and blends one branch only: a
+covariance's moved sets fly the record's branch (12.1), a fit that would end on a switch is settled on one branch or refused
+fit-at-branch-limit (16.7), and the epoch store does not blend two sets on different branches (14.3). A consumer that
+differences, blends or interpolates two records of one object must do the same.
+
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
 complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
 orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
@@ -2741,7 +2785,8 @@ flies back in GCRF to the series alone.
 `propagate`: inside the span the forecast in OUTPUT.FRAME; the theory is not initialized when every requested time is
 inside the span and the record carries no `COVARIANCE_DATA`. `load_epochs`: the store keeps the segments;
 `sdnap_epochs_set_at`, `sdnap_epochs_at` and `propagate_epochs` time the forecast by the call's split Julian date
-(`test/carried-epochs.e2e.mjs`); selection and blend (SPEC 14) are unchanged. Covariance: the theory's (SPEC 12) beside
+(`test/carried-epochs.e2e.mjs`); selection (SPEC 14) is unchanged, and a blend joins two carried forecasts or two theory
+states only: a switch between a carried forecast and the theory is a step (14.3). Covariance: the theory's (SPEC 12) beside
 the forecast's states. `sdnap_covariance_at`, `sdnap_covariance_full_at`, `events`, `maneuver` and `export_omm` use the
 theory; `export_omm` writes the set (an `$OMM` has no place for the forecast). At the span's ends the state jumps by the
 theory's distance from the forecast there (no blend), which fit states (18.4).
