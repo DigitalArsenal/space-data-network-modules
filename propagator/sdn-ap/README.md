@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.6 (dist bc5aca6d).
+Version 0.6.6 (dist ee594dad).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -135,7 +135,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 `FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the other
-first-order terms to 12, near-resonant terms, shallow resonances and the half-day resonant tail to 31; each to the degree asked if lower); `HAS_MAXIMUM_DEGREE`
+first-order terms to 12, near-resonant terms, shallow resonances and the half-day resonant tail to 31; each to the degree asked if lower;
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
@@ -231,10 +232,14 @@ rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
 
 ## Covariance realism
 
-Neither table earns a realism label. SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track and
-cross-track axis; on held-out windows 8 of 18 cells (two regimes, three axes, days 1, 3 and 7) have median |z| inside
-0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times too wide
-in-track and radially). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
+Neither table earns a realism label. The covariance is positive semidefinite by construction and is not calibrated. The
+band of SPEC 12.7 cannot establish realism: it accepts variance errors of 2.3, 0.2 and 0.01 on the three principal axes
+together, a perfect covariance fails it with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise
+sizes were tuned on the windows tested. With the model otherwise exact, the fitted sigma of B and S is too small by
+sqrt(3N - L), 46 for a 24 h arc sampled every 120 s. SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track
+and cross-track axis; on held-out windows the median |z| of 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7)
+lies inside 0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times
+too wide in-track and radially); that count does not establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
@@ -280,7 +285,11 @@ bracket only interpolates; the first distant query integrates from the epoch. On
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond that span,
 work grows with the time gap from the nearest preceding retained node. Checkpoint storage is bounded;
 query work is not bounded independently of lead time. AP class crossings can allocate temporary coefficient
-tables. Results do not depend on request order. SPEC 9 describes the cache and grid.
+tables. An AP state depends on the order of requests: the same record flown in ascending and in random order differs by up
+to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at geosynchronous altitude; a single state
+from a fresh record differs from the ascending pass by up to 8.8 mm. Over 30 days at 60 s, reversed or shuffled against
+the ascending pass, `test/kernel-cost.mjs --diff` measures up to 0.18 m at 300 km (B 6.4e-3 m^2/kg, active weather) and
+0.29 m on a low orbit at e 0.05 with tesseral degree 31. SPEC 9 describes the cache and grid.
 
 
 ## SGP4XP status
