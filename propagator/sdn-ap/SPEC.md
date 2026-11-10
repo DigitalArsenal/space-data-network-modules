@@ -1462,18 +1462,51 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
-agree to 0 mm]*. An AP state in this module depends on the order of requests: the same record flown in ascending and in random
-order differs by up to 12.7 mm at 500 km (median 2.0 mm), 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at
-geosynchronous altitude; a single state from a fresh record differs from the ascending pass by up to 8.8 mm; over 30 days at
-60 s, reversed or shuffled against the ascending pass, test/kernel-cost.mjs --diff measures up to 0.18 m at 300 km (B 6.4e-3
-m^2/kg, active weather) and 0.29 m on a low orbit at e 0.05 with tesseral degree 31; on a transfer orbit at e 0.72, 7 days
-at 300 s, random against ascending, 0.9 µm. SGP4 differs by 0 in every case. The same build asked the same requests in
-the same order writes the same bytes (ascending twice: 0 in every case); a comparison of two builds
-(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity)
-and prints the reversed and shuffled differences beside it. Out of order AP pays for it: a request outside the cached
-bracket integrates from the nearest checkpoint, and in random order an AP state costs 37 to 153 times SGP4's on
-near-circular orbits and 1,990 times on the transfer orbit (test/kernel-patterns.mjs order, 7 days at 300 s; 1.2 to
-2.5 times ascending). SGP4XP GEO nodes fall on
+agree to 0 mm]*. An AP state in this module is a function of its set and its time alone (0.6.13): the order of requests,
+the call they come in (one epoch, the first state of a call, a state inside a batch), the sets flown before or between
+them, whether the covariance is asked, and the path (`propagate`, `propagate_epochs`, the epoch store's exports) leave its
+bits unchanged, with one exception stated below. What makes it so:
+
+- Every evaluation cache an AP state reads holds a function of the set and the time. The tesseral terms are baked on the
+  state's own bracket (the a, e and cos i of its two nodes, and cells of them), the zonal tail and the shallow terms at the
+  state's a. A store's set keeps its own third-body bracket tables, m-daily terms and tesseral cache (the pool below)
+  while it holds them, the thread's otherwise, and both give the same numbers.
+- A step depends on its first node alone: rk3 evaluates the parts of node a's rates the stages hold fixed again from the
+  node's own state (before that step's corrections), never from what the step before left. The grid's nodes are the same
+  whichever node an integration starts from.
+- The drag-pass segment above e 0.3 (16.12) takes its perigee time and period from its bracket's lower node, not from the
+  first state asked.
+- The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
+  round by up to 1e-7 s at today's dates, 1 mm in low orbit. SGP4XP and SGP4 in the store keep the minutes from J2000:
+  their output is 0.6.9's bit for bit, and it differs from `propagate`'s by up to that rounding.
+
+The exception: a record that carries a covariance flies its nominal state through `propagate` by the covariance's combined
+evaluation (xp_propagate_cov_at). That evaluation takes the third-body short-period terms at the state, because their
+derivative is needed, and the Sun from the call's hourly table. Every other path interpolates both linearly across the
+bracket's sub-interval (eval_tbsp_lerp_f32, the bracket's Sun). On the AP fixture fit the two differ by 0.39 mm (stack
+#420). The same record without its covariance flies the same bits through every path.
+
+test/set-caches.e2e.mjs holds this on nine made-up orbits: 500 km, 830 km, MEO, GEO, e 0.1 and 0.25 with tesseral 31, the
+transfer orbit with and without tesseral 31, and Molniya. Against ascending order, to the bit:
+
+- random order and alternating ends over 7 days at 300 s;
+- one state of a freshly loaded record;
+- two records interleaved, at the pool's default budget and at 1 MB;
+- through `propagate`, a time asked alone against the same time in a 2,016-state call.
+
+test/carried-identity.e2e.mjs holds the paths: `propagate_epochs`, the store, and `propagate` of the record without its
+covariance give the same bits.
+
+What the caches cost in accuracy. Against a build of 0.6.9's terms that bakes every cache fresh at every state, 30 days
+at 60 s (test/kernel-cost.mjs --diff):
+
+- this module is within 0.8 to 4 mm on near-circular low orbits, 26 mm at e 0.05 with tesseral 31, and 4.5 mm at e 0.1;
+- 0.6.9's caches put its output up to 0.98 m from the same reference (500 km, high drag, active weather), 0.53 m (400 km,
+  high drag, quiet) and 0.18 m (e 0.05, tesseral 31).
+
+The change from 0.6.9 in ascending order is therefore mostly 0.6.9's own cache error. A comparison of two builds
+(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity), and
+prints the reversed and shuffled differences beside it. SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 
@@ -1483,8 +1516,30 @@ A query inside an already cached bracketing interval interpolates without integr
 query integrates from the epoch through its bracket, creating checkpoints on the way. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond the stored
 span it integrates from the nearest preceding retained node, so work grows with the remaining time gap.
-The node cache has bounded storage, not a time-independent bound on query work. Request order does not change the epoch-anchored grid; it changes an
-AP state by the amounts stated above.
+The node cache has bounded storage, not a time-independent bound on query work.
+
+**Side B: the sets' caches (0.6.13).** An AP set of the epoch store (`load_epochs`) takes its caches from one pool
+while it is flown: its third-body bracket tables, m-daily terms and tesseral cache, and its nodes
+as two runs (forward and backward) up to the checkpoint span. A time inside a run is a lookup, never a re-integration. A
+run starts from the latest node known at or before the time (the epoch, a checkpoint or the window's), and starts again
+when a time precedes it.
+
+The pool's budget defaults to 256 MB and is set by sdnap_cache_budget (MB). sdnap_cache_stats reports, as 8 doubles: the
+budget and the bytes held; the sets holding caches, and of them those holding tesseral caches; the caches reclaimed; the
+caches and tesseral caches refused; and the tesseral caches made.
+
+How room is shared:
+
+- The pool's clock ticks at every ask for room. A holder's stamp is the clock when it was last flown.
+- A set takes free room, or reclaims holders not flown since its own previous ask, least recently flown first, never
+  one being flown. A first ask takes free room only.
+- A steady cycle over more sets than fit therefore keeps its holders, and the other sets fly on the thread's caches.
+  Holders no longer flown give way.
+- A set refused room flies on the thread's caches at their cost. Its state is the same either way.
+- A smaller budget reclaims at once.
+- Each set's lock is taken once per state, without contention on one thread, and costs about 0.2 % of an AP state.
+
+Memory per set flown and cost per pattern: README, Memory and time.
 
 **AP one-day convergence.** The registered unfitted sets have epoch 2026-10-29 00:00 UTC,
 n = 1.0027 rev/day, e = 0.0002, i = 0.1 or 15 degrees, node = 40 degrees, argument of perigee = 30 degrees,

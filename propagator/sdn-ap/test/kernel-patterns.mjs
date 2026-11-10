@@ -148,7 +148,7 @@ async function first(helper) {
     const r = ORBITS[name], sets = { AP: [apSet(r)], XP: [xpSet(r)], SGP4: await sgp4Sets(helper, r, 1) };
     for (const days of [0, 1, 7]) {
       const at = jd(EPOCH + days * DAY + (days === 0 ? 60000 : 0));
-      const fresh = per(), warm = per();
+      const fresh = per(), warm = per(), loaded = per();
       for (let q = 0; q < ROUNDS; ++q)
         for (const theory of turn(q)) {
           const m = await open(), out = m.x.sdnap_alloc(48);
@@ -162,13 +162,18 @@ async function first(helper) {
           t0 = wallUs();
           m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out);
           warm[theory].push(wallUs() - t0);
+          // the record's load (load_epochs through the harness) and its first state together
+          t0 = wallUs();
+          await m.load(sets[theory]);
+          m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out);
+          loaded[theory].push(wallUs() - t0);
         }
-      const row = { orbit: name, days, freshInstance: spreads(fresh), perRecord: spreads(warm) };
+      const row = { orbit: name, days, freshInstance: spreads(fresh), perRecord: spreads(warm), perRecordWithLoad: spreads(loaded) };
       row.perProcess = Object.fromEntries(THEORIES.map((t) => [t, row.freshInstance[t].median - row.perRecord[t].median]));
       row.perRecordRatio = row.perRecord.AP.median / row.perRecord.SGP4.median;
       row.perRecordRatioXp = row.perRecord.AP.median / row.perRecord.XP.median;
       rows.push(row);
-      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} XP ${fmt(row.freshInstance.XP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} XP ${fmt(row.perRecord.XP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)}, AP/XP ${row.perRecordRatioXp.toFixed(1)} | once per process: AP ${row.perProcess.AP.toFixed(0)} XP ${row.perProcess.XP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us`);
+      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} XP ${fmt(row.freshInstance.XP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} XP ${fmt(row.perRecord.XP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)}, AP/XP ${row.perRecordRatioXp.toFixed(1)} | load and first state: AP ${fmt(row.perRecordWithLoad.AP, 0)} XP ${fmt(row.perRecordWithLoad.XP, 0)} SGP4 ${fmt(row.perRecordWithLoad.SGP4, 0)} us | once per process: AP ${row.perProcess.AP.toFixed(0)} XP ${row.perProcess.XP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us`);
     }
   }
   return rows;
