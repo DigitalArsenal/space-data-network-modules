@@ -2790,10 +2790,14 @@ on the module's own flights): largest error and D, the RMS over a lead day of th
 | Transfer, e 0.72 | 4.8 | 0.8 to 0.9 | 7,144 | 720 | 5,160 |
 | Molniya, e 0.74 | 3.2 | 0.7 | 5,564 | 576 | 4,816 |
 | THEMIS-like, e 0.82, 22.9 h | 4.1 | 0.6 to 0.7 | 4,000 | 416 | 3,211 |
-| TESS-like, 13.7 d | 1.7 | 0.2 to 1.4 | 232 | 21 | 189 |
+| TESS-like, 13.7 d | 2.3 | 0.03 to 1.9 | 232 | 21 | 189 |
 
 (The 10 cm column is the same algorithm at a 100 mm point tolerance, its largest error 9.4 cm, run outside the module.)
-The record is 1 to 3 KB without the forecast.
+The record is 1 to 3 KB without the forecast. The jump at the span's stop (theory minus forecast; AP with zonal 20,
+tesseral 31 and NRLMSISE-00 on the record's rows, fitted to the forecast's first 24 h): after 2 to 3 days 2 to 36 m
+above low orbit and at 830 to 1,336 km, 1.6 km at 500 km and 15.9 km at 300 km (drag), 0.16 to 1.7 km on the eccentric
+orbits; after 14 days 30 km for TESS; after 8 days 36 to 65 m at MEO and geosynchronous, 0.9 km at 830 km, 63 km at
+500 km, 7.1 km at e 0.1 and 85 km on the transfer orbit.
 
 ### 18.6 Version 1 does not
 
