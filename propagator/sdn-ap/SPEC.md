@@ -2281,11 +2281,12 @@ half-day upper edge. FFM uses 16.6's gravity, DE440, zero EOP and the constant w
 Holding the class costs this fixture 0.88 km of day-7 along-track error (0.5 %); the E2E allows 25 % against the companion.
 On 2026-11-03, with the earlier constant-weather file, the arms were -32,325.032 (held) and -31,291.823 m (rebuilt), the
 companion -26,506.785 m; rebuilding was kept then for its 1.0 km smaller error. It is reversed for continuity in time.
-Through 0.6.6 the two (2,2) terms (p,q) = (0,-1), (1,1) left the rates at the crossing and were not in the rebuilt output
-table either (the E2E found 0 of 2 there); held, they stay in the rates on both sets at every lead. Their epoch mean-longitude
-amplitudes a|delta lambda| are 206.886 and 147.093 m; isolating each in the module's output map and sampling 256 node phases
-at perigee gives peak along-track displacements of 552.645 and 592.729 m. `test/results/class-crossing.json` keeps every
-evaluated pair.
+Through 0.6.7 the two (2,2) terms (p,q) = (0,-1), (1,1) left the rates at the crossing and were not in the rebuilt output
+table either (that E2E's probe found 0 of 2 there, the failure it reported from 0.6.5 on); held, they stay in the rates.
+The E2E flies the primary every 10 s from day 3 to day 7 and finds its output continuous away from perigee (jump detector
+0.14 m against 1 m; the same on 0.6.7, whose rebuilt tables kept this set's grid). Within 10 min of each perigee the
+detector reaches 129 m on both builds: the perigee drag passage (16.12) steps the output by about 86 m at perigee on this
+fixture, a discontinuity in time of its own, outside this section. `test/results/class-crossing.json` keeps the run.
 
 **16.8 Third-body terms beyond the octupole.** With d or z above 0, the epoch period below 1100 min (the regime whose
 third-body rates 5 averages; the long-period regime takes the full point-mass acceleration), AP adds to the rates each
