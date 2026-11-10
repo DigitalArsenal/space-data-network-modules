@@ -1,8 +1,8 @@
 {
  "note": "FFM against Orekit 13.1 (tests/orekit-summary.mjs): the largest 3D position difference over 24 h, by case, at the suite's integrator settings, with steps of at most 30 s, and at tolerance 1e-15 with steps of at most 10 s.",
  "module": {
-  "version": "2.2.0",
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+  "version": "2.3.0",
+  "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
  },
  "reference": "tests/fixtures/orekit/orekit-reference.json",
  "orekit": {

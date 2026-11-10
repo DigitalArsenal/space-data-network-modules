@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.10 (dist 30103537).
+Version 0.6.11 (dist 287f3c4a).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1117,6 +1117,11 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 9.025) after a 72 h fit with the same forces on both sides, the day-7 error is 485 m with a 12 x 12 field, 58 m with order 9
 removed from the truth, and 1.5 to 1.8 km with the full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km
 at degree 4.
+
+A set in no class at an exact m:1 commensurability (its order-m harmonics drifting slower than 1e-3 n: 8.05 rev/day at e 0.25)
+flies without those harmonics: the first-order table and the grid of 16.11 both leave them out and no class carries them in the
+rates, 1.27 km along-track at day 7 after a 72 h fit at e 0.25 (stack #419; `test/class0-exact-resonance.e2e.mjs`, a known
+defect).
 
 **Bands.** The resonance class is decided once, at initialization, from the epoch mean motion n_0 in rad/min (the
 element set's mean motion in rev/day times 2 pi / 1440), tested in this order *[study; probe 6.2, 6.10]*:
@@ -2496,6 +2501,36 @@ switch for the whole flight (16.7). 0.6.4 therefore changes a flight only for a 
 (orbit-accuracy-experiments experiments/operator-theory/TESSERAL-SWITCH-BY-CLASS.md) states its cells, the catalog budget on
 persistent instances and the identity set.
 
+From 0.6.3 (above e 0.3) and 0.6.4 (from e 0.05) to 0.6.10, a class 0 set near an m:1 commensurability with the Earth's rotation
+flew without part of its tesseral field (stack #393). The grid left the whole slow band out of each family, as the table does
+outside low orbit; in low orbit the table leaves out only the shallow set's terms and those slower than 1e-3 n, and above the
+switch it holds nothing of degree 2 to 12, so the slow terms with q != 0 (of order e^|q|) were carried nowhere. They are
+near-resonant (periods of days to weeks, along-track as 1 / psi-dot^2), which a fit cannot absorb. From 0.6.11 the grid leaves
+out exactly what the table leaves out. Day-7 along-track RMS after a 72 h fit (FFM truth, 2.2.1 and 2.3.0 alike: EGM96 70 x 70, DE440 Sun and
+Moon, NRLMSISE-00 at constant weather, B 0.044 m^2/kg; i 50; `test/class0-commensurability.e2e.mjs`), 0.6.9 against 0.6.11,
+with 0.6.9's switch back at 0.3 beside it:
+
+| n (rev/day), e | 0.6.9 (m) | 0.6.11 (m) | switch at 0.3 (m) |
+| --- | ---: | ---: | ---: |
+| 4.0, 0.25 | 2,318 | 6 | 58 |
+| 5.0, 0.25 | 4,463 | 11 | 414 |
+| 6.0, 0.25 | 5,864 | 29 | 70 |
+| 7.0, 0.25 | 178 | 27 | 684 |
+| 8.0, 0.25 | 2,663 | 220 | 1,346 |
+| 6.0, 0.1 / 0.2 / 0.3 | 1,464 / 3,811 / 9,143 | 5 / 16 / 61 | 16 / 56 / 55 |
+| 6.0, 0.35 | 14,623 | 159 | 14,623 |
+| 4.5, 0.25 (9:2) | 47 | 5 | 19 |
+| 5.5 / 6.5, 0.25 | 66 / 42 | 31 / 42 | 38 / 55 |
+
+The fault spans about +-0.045 n about each commensurability (0.7 to 5.9 km between 5.8 and 6.2 rev/day at e 0.25; 0.6.11: 12 to
+57 m). Off every band the grid is unchanged: LAGEOS-1-like (6.386 rev/day, i 109.8) at e 0.1 and 0.2 and LAGEOS-2-like (6.47,
+i 52.7) at e 0.1, drag off, give the same bytes on 0.6.9 and 0.6.11 (2.4, 6.0 and 7.4 m at day 7; 8.8, 23.5 and 8.5 m with
+the switch at 0.3). Ajisai-like (12.44 rev/day, i 50, e 0.1) lies in the 12:1 band: 146.3 m on 0.6.9, 149.7 m on 0.6.11,
+135.1 m with the switch at 0.3. At e 0.05 every case is the first-order set's, the same in all three. The exact resonance is
+not carried: where an order-m harmonic drifts slower than 1e-3 n (8.05 rev/day at e 0.25) the table and the grid both leave it
+out and no class carries it in the rates (6), 1,272 m at day 7 on 0.6.11 (6,090 m on 0.6.9); 8.0 rev/day lies on that
+resonance's shoulder (220 m at e 0.25, 90 m at 0.2, 16 m at 0.1).
+
 Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 only; every other commensurability is absent:
 0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
@@ -2508,8 +2543,10 @@ For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, 
 first-order displacement (Lagrange's equations, each harmonic divided by its psi-dot, lambda also through n) is a periodic
 function of the anomaly, complete in j. At init it is built on 128 uniform eccentric anomalies from the family's forcing:
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
-omega_E)) / M-dot, R the six rates, the harmonics 16.2 leaves out (m-daily, the class's, the half-day class's tail,
-|psi-dot| < 0.045 n) subtracted one by one with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
+omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-daily, the class's, the half-day class's tail, and
+the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
+shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
+each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
 precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (3.1 MB a grid), and read at
 output time by the four-point periodic cubic in E, linear in the mean
 elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's mean elements at every 48 hours from its epoch
@@ -2821,7 +2858,8 @@ trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low
 An `$OCM` element set may carry a numerical forecast of its object made by another propagator (a numerical propagator
 such as propagator/ffm, or an operator's own ephemeris), stored in the record (`src/carried.inc`). Inside the forecast's
 span flight returns that forecast, not AP's theory; everywhere else the theory, exactly as without it: a record without
-one flies as 0.6.9 flies it, bit for bit (`test/carried-identity.e2e.mjs`). The record is a separate product, a way to
+one is untouched by the carried code (SGP4XP and SGP4 records fly as 0.6.9 flies them, bit for bit; an AP record flies
+alike through propagate_epochs and the store, `test/carried-identity.e2e.mjs`). The record is a separate product, a way to
 deliver another propagator's forecast with AP's flight around it. Its figures (its error against truth, which is the
 forecast's; its compression error against the forecast; the step at the span's end; bytes a day; the cost of making
 it) are its own and never AP's accuracy: AP's accuracy is the theory's alone (SPEC 16). Version 2 (0.6.10)

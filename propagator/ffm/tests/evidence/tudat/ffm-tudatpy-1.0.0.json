@@ -3,11 +3,11 @@
  "identity": [
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
