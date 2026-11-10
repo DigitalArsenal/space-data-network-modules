@@ -58,10 +58,13 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   ephemeris block's states between them into the `$OCM` as Chebyshev position segments (POLYNOMIAL_POSITION_RECORDS,
   TRAJ_TYPE POLYNOMIAL_POS, in the set's TRAJ_REF_FRAME) held to 1 cm and 0.1 mm/s against the forecast, joints
   continuous to the acceleration, with the record's statement of its span and source (TRAJECTORY_BLOCKS, METADATA
-  START_TIME and STOP_TIME); the theory is fitted to the forecast's last part (its arc ends at STOP_TIME) and the step to
-  it at each end is in the OD COMMENT. `propagate`, `load_epochs` with `sdnap_epochs_set_at` and `sdnap_epochs_at`, and
-  `propagate_epochs` fly the forecast inside its span and the theory elsewhere, every state labeled (a block per source,
-  `sdnap_epochs_source_at`); a record's segments are read when first flown. The referee's compression test on FFM
+  START_TIME and STOP_TIME); its theory is anchored at the span's start (the observation cutoff; its covariance grows
+  forward), and `fit` with OUTPUT.START_TIME alone at the stop makes the hand-over set (TRAJ_ID "HAND-OVER") fitted to
+  the forecast's last part; the steps at each end are in the OD COMMENT. `propagate`, `load_epochs` with
+  `sdnap_epochs_set_at` and `sdnap_epochs_at`, and `propagate_epochs` fly the forecast inside its span, the hand-over
+  set after it and the theory elsewhere, one block per record or series with every state's source in its COMMENT
+  (SPEC 18.8's grammar; `sdnap_epochs_source_at` for the store); a record's segments are read when first flown, safely
+  for concurrent readers. The referee's compression test on FFM
   forecasts in 12 regimes up to e 0.9 (`test/carried-compression.e2e.mjs`): at most 5 mm and 0.051 mm/s off the build's
   times, joints under 0.6 mm; 20 to 68 KB per object-day in low orbit, 0.3 to 10 KB above it and on eccentric orbits.
   States at most 0.05 rad of arc apart (30 s in low orbit); `sdnap_carried_frame_error` gives the frame's bound.

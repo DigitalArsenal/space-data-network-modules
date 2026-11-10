@@ -286,8 +286,8 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
     b.add_TRAJ_TYPE(trajectoryType_POLYNOMIAL_POS);
     b.add_POLYNOMIAL_POSITION_RECORDS(x.forecast);
     b.add_TRAJ_BASIS(ocmTrajectoryBasis_PREDICTED);
-    if (!x.trajectory.IsNull()) b.add_TRAJECTORY_BLOCKS(x.trajectory);
   }
+  if (!x.trajectory.IsNull()) b.add_TRAJECTORY_BLOCKS(x.trajectory);  // the carried record's statement, or the hand-over's
   b.add_MEAN_ELEMENTS(mean);
   FinishOCMBuffer(fbb, b.Finish());
 }

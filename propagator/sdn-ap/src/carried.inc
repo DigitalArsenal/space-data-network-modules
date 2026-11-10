@@ -26,6 +26,8 @@
 //     theory takes over where the forecast stops (fit_oem.inc).
 // -----------------------------------------------------------------------------
 
+#include <atomic>
+
 namespace sdnap {
 namespace carried {
 
@@ -132,33 +134,43 @@ inline bool epoch_axes(double w, double f, double* q0) { return frame_at(w, f, q
 //
 // Read lazily: loading a record reads its first and last segments (the span) and nothing else of its forecast; every
 // other segment is verified (its table, by its own FlatBuffers verifier: the build leaves the PPE tables out of the
-// $OCM verifier, build.mjs) and read when a state first needs it, then kept. A time inside the span is found by
-// interpolation search over the segments' start times, each segment read as the search reaches it; a time the segment
-// found does not cover (to kJoinSeconds) is a gap.
+// $OCM verifier, build.mjs) and read when a state first needs it. A time inside the span is found by interpolation
+// search over the segments' start times; a time the segment found does not cover (to kJoinSeconds) is a gap.
+//
+// Threads (SPEC 18.5). Today no Track is shared across threads: the pool (pool.inc, abi.inc `batch`) runs only the
+// row store of the propagator ABI (plugin_init_omm's rows, `row_propagate`), cut into 512-object chunks, one thread per
+// row; `propagate`, `propagate_epochs`, `load_epochs`, the `sdnap_epochs_*` exports and `fit` run on the calling
+// thread. A Track is nonetheless safe for concurrent readers by construction: its storage is sized once by read() (or
+// by fit's build) and never resized; the coefficients are read in place from the record's bytes (kept once by keep()
+// before any flight); a segment's fields are written once, by the thread that moves its state from kUnread to kBusy,
+// and published by an atomic store (release) that readers load (acquire); a thread that finds a segment kBusy reads it
+// into its own copy; the search hint is per thread. The change that first puts a Track on the pool (segment-level
+// serving, stack #394, or a pooled sdnap_epochs_at) brings the many-threads byte-identity test with it.
 
-/// What reading a segment found: kRead, or the refusal (named by refusal_name).
-enum SegmentState : int32_t { kUnread = 0, kTimed = 1, kRead = 2, kNotVerifiable = -1, kBasis = -2, kVelocity = -3, kInvalid = -4, kGap = -5, kFrame = -6 };
+/// A segment's state: kUnread, kBusy (being read by one thread), kValid, or the refusal (named by refusal_name).
+enum SegmentState : int32_t { kUnread = 0, kBusy = 1, kValid = 2, kNotVerifiable = -1, kBasis = -2, kVelocity = -3, kInvalid = -4, kGap = -5, kFrame = -6 };
 
+/// A segment as flight reads it: written once, then only read.
 struct Segment {
   double start = 0.0, mid = 0.0, half = 0.0, inv_half = 0.0;  ///< seconds from the set's epoch
-  uint32_t n = 0, off = 0;   ///< coefficients per axis; offset into Track::c (x then y then z)
-  int32_t state = kUnread;   ///< kTimed: start, mid and half read; kRead: the coefficients too; < 0 refused
+  uint32_t n = 0;                ///< coefficients per axis
+  uint32_t x = 0, y = 0, z = 0;  ///< byte offsets in Track::buf of the x, y and z coefficients (little-endian doubles)
 };
 
 /// A record's carried forecast as flight reads it: empty when the record carries none. Movable, not copyable (`buf`
-/// may point into `own`).
+/// may point into `own` or `c`).
 struct Track {
   int frame = 0;               ///< 1 TEMEOFDATE, 2 TEMEOFEPOCH
   double w = 0.0, f = 0.0;     ///< the set's epoch, split Julian date (UTC)
   double start = 0.0, stop = 0.0;  ///< the span, seconds from the epoch (closed)
   double q0[9] = {};           ///< TEMEOFEPOCH: GCRF -> the epoch axes
   std::vector<uint8_t> own;    ///< the record's bytes, when the track outlives the call that brought them (the store)
-  const uint8_t* buf = nullptr;  ///< the bytes the segments are read from: own's, or the caller's for the call
+  const uint8_t* buf = nullptr;  ///< the bytes the coefficients are read from: own's, the caller's for the call, or c's
   size_t size = 0;
   const flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>* recs = nullptr;
-  std::vector<Segment> segs;   ///< one per record, read on first use
-  std::vector<double> c;       ///< the coefficients of the segments read so far
-  uint32_t hint = 0;           ///< the segment last flown
+  mutable std::vector<Segment> segs;  ///< one per record, sized once; element k written once, before state[k] is kValid
+  std::unique_ptr<std::atomic<int32_t>[]> state;  ///< one per segment (SegmentState)
+  std::vector<double> c;       ///< fit's own track: its coefficients in memory (buf points here)
   Track() = default;
   Track(const Track&) = delete;
   Track& operator=(const Track&) = delete;
@@ -166,8 +178,23 @@ struct Track {
   Track& operator=(Track&&) = default;
   bool empty() const { return segs.empty(); }
   bool covers(double t) const { return !segs.empty() && t >= start && t <= stop; }
-  size_t bytes() const { return sizeof(Track) + own.capacity() + segs.capacity() * sizeof(Segment) + c.capacity() * sizeof(double); }
+  size_t bytes() const {
+    return sizeof(Track) + own.capacity() + segs.capacity() * (sizeof(Segment) + sizeof(std::atomic<int32_t>)) + c.capacity() * sizeof(double);
+  }
+  /// The storage of `count` segments, every one unread: once, before any flight.
+  void sized(size_t count) {
+    segs.assign(count, Segment{});
+    state.reset(new std::atomic<int32_t>[count]);
+    for (size_t k = 0; k < count; ++k) state[k].store(kUnread, std::memory_order_relaxed);
+  }
 };
+
+/// A little-endian double at p, aligned or not.
+inline double ld(const uint8_t* p) {
+  double v;
+  std::memcpy(&v, p, sizeof v);
+  return v;
+}
 
 /// The refusal code and text of a segment's state.
 inline const char* refusal_name(int32_t s) {
@@ -198,48 +225,63 @@ inline bool seconds_of(const flatbuffers::String* s, double w, double f, double&
   return true;
 }
 
-/// Segment k of t read to `want` (kTimed: its table verified, EPOCH_MID and EPOCH_HALF_SPAN; kRead: its basis, its
-/// coefficients checked and kept). Its state: kTimed or kRead, or the refusal (kept: a segment is judged once).
-inline int32_t ensure(Track& t, uint32_t k, int32_t want) {
-  Segment& s = t.segs[k];
-  if (s.state < 0 || s.state >= want) return s.state;
+/// Segment k of t read from the record: its table verified by its own verifier, EPOCH_MID and EPOCH_HALF_SPAN, its basis,
+/// no velocity coefficients, NUM_COEFFICIENTS (1 to 64) finite coefficients per axis, their offsets in t.buf. kValid
+/// with `s` filled, or the refusal. Reads the record's bytes only.
+inline int32_t materialize(const Track& t, uint32_t k, Segment& s) {
   const PPEPositionRecord* p = t.recs->Get(k);
-  if (s.state == kUnread) {
-    flatbuffers::Verifier::Options vopt;
-    vopt.check_alignment = false;
-    flatbuffers::Verifier v(t.buf, t.size, vopt);
-    if (!p->Verify(v)) return s.state = kNotVerifiable;
-    const double half = p->EPOCH_HALF_SPAN();
-    if (!seconds_of(p->EPOCH_MID(), t.w, t.f, s.mid) || !(half > 0.0) || !std::isfinite(half)) return s.state = kInvalid;
-    s.half = half;
-    s.inv_half = 1.0 / half;
-    s.start = s.mid - half;
-    s.state = kTimed;
-    if (want == kTimed) return s.state;
-  }
-  if (p->BASIS_TYPE() != polynomialBasisType_CHEBYSHEV) return s.state = kBasis;
+  flatbuffers::Verifier::Options vopt;
+  vopt.check_alignment = false;
+  flatbuffers::Verifier v(t.buf, t.size, vopt);
+  if (!p->Verify(v)) return kNotVerifiable;
+  const double half = p->EPOCH_HALF_SPAN();
+  if (!seconds_of(p->EPOCH_MID(), t.w, t.f, s.mid) || !(half > 0.0) || !std::isfinite(half)) return kInvalid;
+  s.half = half;
+  s.inv_half = 1.0 / half;
+  s.start = s.mid - half;
+  if (p->BASIS_TYPE() != polynomialBasisType_CHEBYSHEV) return kBasis;
   if (p->HAS_VELOCITY_COEFFICIENTS() || (p->VEL_COEFF_X() != nullptr && p->VEL_COEFF_X()->size() > 0) ||
       (p->VEL_COEFF_Y() != nullptr && p->VEL_COEFF_Y()->size() > 0) || (p->VEL_COEFF_Z() != nullptr && p->VEL_COEFF_Z()->size() > 0))
-    return s.state = kVelocity;
+    return kVelocity;
   const uint16_t n = p->NUM_COEFFICIENTS();
   const auto *x = p->POS_COEFF_X(), *y = p->POS_COEFF_Y(), *z = p->POS_COEFF_Z();
   if (n < 1 || n > kMaxCoefficients || x == nullptr || y == nullptr || z == nullptr || x->size() != n || y->size() != n || z->size() != n)
-    return s.state = kInvalid;
+    return kInvalid;
   s.n = n;
-  s.off = static_cast<uint32_t>(t.c.size());
-  t.c.resize(t.c.size() + 3u * n);
-  double* dst = t.c.data() + s.off;
-  for (const auto* v : {x, y, z}) {
-    std::memcpy(dst, v->data(), sizeof(double) * n);  // little-endian doubles, as the wire holds them
-    dst += n;
-  }
+  s.x = static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(x->data()) - t.buf);
+  s.y = static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(y->data()) - t.buf);
+  s.z = static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(z->data()) - t.buf);
   double check = 0.0;
-  for (uint32_t j = 0; j < 3u * n; ++j) check += t.c[s.off + j] * 0.0;  // NaN or infinity leave a NaN
-  if (check != 0.0) {
-    t.c.resize(s.off);
-    return s.state = kInvalid;
+  for (const uint32_t o : {s.x, s.y, s.z})
+    for (uint32_t j = 0; j < n; ++j) check += ld(t.buf + o + 8u * j) * 0.0;  // NaN or infinity leave a NaN
+  return check == 0.0 ? kValid : kInvalid;
+}
+
+/// Segment k of t: kValid with `out` its fields, or the refusal. The first thread to need a segment reads it and
+/// publishes it (kUnread -> kBusy -> kValid or the refusal, the last store a release); a thread that finds it kBusy
+/// reads its own copy; a judged segment is never read again.
+inline int32_t ensure(const Track& t, uint32_t k, Segment& out) {
+  std::atomic<int32_t>& st = t.state[k];
+  int32_t s = st.load(std::memory_order_acquire);
+  if (s == kValid) {
+    out = t.segs[k];
+    return kValid;
   }
-  return s.state = kRead;
+  if (s < 0) return s;
+  int32_t expected = kUnread;
+  if (s == kUnread && st.compare_exchange_strong(expected, kBusy, std::memory_order_acq_rel, std::memory_order_acquire)) {
+    const int32_t r = materialize(t, k, out);
+    if (r == kValid) t.segs[k] = out;
+    st.store(r, std::memory_order_release);
+    return r;
+  }
+  s = st.load(std::memory_order_acquire);
+  if (s == kValid) {
+    out = t.segs[k];
+    return kValid;
+  }
+  if (s < 0) return s;
+  return materialize(t, k, out);  // kBusy on another thread: this thread's own copy, not published
 }
 
 /// A track's bytes copied into it (a track that outlives the call whose bytes it reads: the store's), the record's
@@ -278,14 +320,15 @@ inline int read(const OCM* o, const ElementRow& row, const uint8_t* p, size_t n,
   t.buf = p;
   t.recs = recs;
   t.size = n;
-  t.segs.resize(recs->size());
+  t.sized(recs->size());
   const uint32_t last = recs->size() - 1;
+  Segment ends[2];
   for (const uint32_t k : {0u, last}) {
-    const int32_t s = ensure(t, k, kRead);
+    const int32_t s = ensure(t, k, ends[k == 0 ? 0 : 1]);
     if (s < 0) return ocm::refuse(refusal_name(s), refusal_text(s));
   }
-  t.start = t.segs.front().start;
-  t.stop = t.segs.back().mid + t.segs.back().half;
+  t.start = ends[0].start;
+  t.stop = ends[1].mid + ends[1].half;
   if (!(t.stop > t.start)) return ocm::refuse("carried-segment-invalid", "A carried forecast's last segment ends after its first starts.");
   if (t.frame == 2 && !epoch_axes(t.w, t.f, t.q0)) return ocm::refuse("frame-failed", "No GCRF axes at the set's epoch (outside ERFA's calendar).");
   return 0;
@@ -296,56 +339,64 @@ inline int read(const OCM* o, const ElementRow& row, const uint8_t* p, size_t n,
 /// the search reaches it. A segment the search cannot read is stepped around (the nearest readable one between the
 /// bounds probed instead), so a fault refuses only the times it holds: when t falls where only unreadable segments
 /// remain, the refusal is the first of those segments' own (kNotVerifiable, kInvalid, ...), else kGap.
-inline int64_t segment_at(Track& tr, double t) {
-  const uint32_t count = static_cast<uint32_t>(tr.segs.size());
-  auto inside = [&](uint32_t k) {
-    const Segment& s = tr.segs[k];
-    return s.state > 0 && t >= s.start - kJoinSeconds && t <= s.mid + s.half + kJoinSeconds;
+inline int64_t segment_at(const Track& tr, double t, Segment& out) {
+  // the segment this thread flew last, per thread (never in the shared track)
+  struct Hint {
+    const Track* tr = nullptr;
+    uint32_t k = 0;
   };
-  for (uint32_t k = tr.hint; k < count && k <= tr.hint + 1; ++k) {
-    if (ensure(tr, k, kTimed) < 0) break;
-    if (inside(k) && (k + 1 >= count || ensure(tr, k + 1, kTimed) < 0 || tr.segs[k + 1].start > t)) {
-      const int32_t s = ensure(tr, k, kRead);
-      if (s < 0) return s;
-      tr.hint = k;
-      return k;
+  static thread_local Hint hint;
+  const uint32_t count = static_cast<uint32_t>(tr.segs.size());
+  auto inside = [&](const Segment& s) { return t >= s.start - kJoinSeconds && t <= s.mid + s.half + kJoinSeconds; };
+  Segment a, b;
+  if (hint.tr == &tr)
+    for (uint32_t k = hint.k; k < count && k <= hint.k + 1; ++k) {
+      if (ensure(tr, k, a) != kValid) break;
+      if (inside(a) && (k + 1 >= count || ensure(tr, k + 1, b) != kValid || b.start > t)) {
+        hint.k = k;
+        out = a;
+        return k;
+      }
     }
-  }
   // lo: a segment starting at or before t; hi: one starting after it (count: the span's end)
   uint32_t lo = 0, hi = count;
   double tlo = tr.start, thi = tr.stop;
+  int32_t refused = kGap;  // the first refusal of an unreadable segment the search stepped around
   while (hi - lo > 1) {
     double g = (t - tlo) / (thi - tlo) * static_cast<double>(hi - lo);
     uint32_t mid = lo + static_cast<uint32_t>(std::fmin(std::fmax(g, 1.0), static_cast<double>(hi - lo - 1)));
-    if (ensure(tr, mid, kTimed) < 0) {
+    if (const int32_t s = ensure(tr, mid, a); s != kValid) {
       // the nearest readable segment strictly between lo and hi, above mid then below it
+      refused = s;
       uint32_t found = count;
       for (uint32_t d = 1; found == count && (mid + d < hi || mid - lo > d); ++d) {
-        if (mid + d < hi && ensure(tr, mid + d, kTimed) >= 0) found = mid + d;
-        if (found == count && mid - lo > d && ensure(tr, mid - d, kTimed) >= 0) found = mid - d;
+        if (mid + d < hi && ensure(tr, mid + d, a) == kValid) found = mid + d;
+        if (found == count && mid - lo > d && ensure(tr, mid - d, a) == kValid) found = mid - d;
       }
       if (found == count) break;  // none: t lies in lo or in the unreadable segments after it
       mid = found;
     }
-    if (tr.segs[mid].start <= t) {
+    if (a.start <= t) {
       lo = mid;
-      tlo = tr.segs[mid].start;
+      tlo = a.start;
     } else {
       hi = mid;
-      thi = tr.segs[mid].start;
+      thi = a.start;
     }
   }
-  if (!inside(lo)) return hi - lo > 1 ? tr.segs[lo + 1].state : kGap;
-  if (const int32_t s = ensure(tr, lo, kRead); s < 0) return s;
-  tr.hint = lo;
+  if (const int32_t s = ensure(tr, lo, a); s != kValid) return s;
+  if (!inside(a)) return hi - lo > 1 ? refused : kGap;
+  hint.tr = &tr;
+  hint.k = lo;
+  out = a;
   return lo;
 }
 
-/// The series of segment s at time t (seconds from the epoch): position p (km) and its derivative pd (km/s).
+/// The series of segment s at time t (seconds from the epoch): position p (km) and its derivative pd (km/s), the
+/// coefficients read in place from tr.buf.
 inline void series(const Track& tr, const Segment& s, double t, double p[3], double pd[3]) {
   const double tau = (t - s.mid) * s.inv_half;
   const uint32_t n = s.n;
-  const double* c = tr.c.data() + s.off;
   double T[kMaxCoefficients], D[kMaxCoefficients];
   T[0] = 1.0;
   D[0] = 0.0;
@@ -357,12 +408,14 @@ inline void series(const Track& tr, const Segment& s, double t, double p[3], dou
     T[k] = 2.0 * tau * T[k - 1] - T[k - 2];
     D[k] = 2.0 * T[k - 1] + 2.0 * tau * D[k - 1] - D[k - 2];
   }
+  const uint32_t offs[3] = {s.x, s.y, s.z};
   for (int a = 0; a < 3; ++a) {
-    const double* ca = c + a * n;
+    const uint8_t* ca = tr.buf + offs[a];
     double sp = 0.0, sd = 0.0;
     for (uint32_t k = 0; k < n; ++k) {
-      sp += ca[k] * T[k];
-      sd += ca[k] * D[k];
+      const double ck = ld(ca + 8u * k);
+      sp += ck * T[k];
+      sd += ck * D[k];
     }
     p[a] = sp;
     pd[a] = sd * s.inv_half;
@@ -372,11 +425,12 @@ inline void series(const Track& tr, const Segment& s, double t, double p[3], dou
 /// The carried state at t (seconds from the set's epoch, inside the span) in TEME of date (km, km/s): 0, or the
 /// segment's refusal (SegmentState < 0; kFrame outside ERFA's calendar). `jd`, the split Julian date of t when the
 /// caller has it, times the frame (a store stepping many objects to one instant computes M once: frame_at keeps it).
-inline int32_t at(Track& tr, double t, double r[3], double v[3], const double* jd = nullptr) {
-  const int64_t k = segment_at(tr, t);
+inline int32_t at(const Track& tr, double t, double r[3], double v[3], const double* jd = nullptr) {
+  Segment seg;
+  const int64_t k = segment_at(tr, t, seg);
   if (k < 0) return static_cast<int32_t>(k);
   double p[3], pd[3], M[9];
-  series(tr, tr.segs[static_cast<size_t>(k)], t, p, pd);
+  series(tr, seg, t, p, pd);
   const double fw = jd != nullptr ? jd[0] : tr.w, ff = jd != nullptr ? jd[1] : tr.f + t / 86400.0;
   if (tr.frame == 2) {
     double g[3], gv[3];
@@ -400,11 +454,12 @@ inline int32_t at(Track& tr, double t, double r[3], double v[3], const double* j
 
 /// The carried state at t in GCRF (km, km/s) without a per-state ERFA call: TEMEOFEPOCH Q0^T exactly; TEMEOFDATE M^T by
 /// the cubic, the inverse of what fit wrote (the GCRF input itself, to the series). 0, or the refusal as at().
-inline int32_t at_gcrf(Track& tr, double t, double r[3], double v[3]) {
-  const int64_t k = segment_at(tr, t);
+inline int32_t at_gcrf(const Track& tr, double t, double r[3], double v[3]) {
+  Segment seg;
+  const int64_t k = segment_at(tr, t, seg);
   if (k < 0) return static_cast<int32_t>(k);
   double p[3], pd[3];
-  series(tr, tr.segs[static_cast<size_t>(k)], t, p, pd);
+  series(tr, seg, t, p, pd);
   if (tr.frame == 2) {
     mul_t(tr.q0, p, r);
     mul_t(tr.q0, pd, v);
@@ -642,12 +697,15 @@ inline bool fit_segment(const std::vector<Point>& D, const std::vector<Point>& E
   // the window's residuals
   Track one;
   one.c = out.c;
+  one.buf = reinterpret_cast<const uint8_t*>(one.c.data());
   Segment s{};
   s.mid = out.mid;
   s.half = out.half;
   s.inv_half = 1.0 / out.half;
   s.n = static_cast<uint32_t>(n);
-  s.off = 0;
+  s.x = 0;
+  s.y = 8u * static_cast<uint32_t>(n);
+  s.z = 16u * static_cast<uint32_t>(n);
   double worst = 0.0, ss = 0.0, worst_v = 0.0;
   auto check = [&](const Point& q) {
     double p[3], pd[3];
@@ -939,17 +997,23 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
   tr.w = w;
   tr.f = f;
   std::memcpy(tr.q0, q0, sizeof q0);
-  for (const Fitted& s : best) {
-    Segment g{};
+  tr.sized(best.size());
+  for (const Fitted& s : best) tr.c.insert(tr.c.end(), s.c.begin(), s.c.end());  // sized: buf points into c below
+  tr.buf = reinterpret_cast<const uint8_t*>(tr.c.data());
+  tr.size = tr.c.size() * sizeof(double);
+  for (size_t k = 0, off = 0; k < best.size(); ++k) {
+    const Fitted& s = best[k];
+    Segment& g = tr.segs[k];
     g.mid = s.mid;
     g.half = s.half;
     g.inv_half = 1.0 / s.half;
     g.start = s.mid - s.half;
     g.n = static_cast<uint32_t>(s.n);
-    g.off = static_cast<uint32_t>(tr.c.size());
-    g.state = kRead;
-    tr.c.insert(tr.c.end(), s.c.begin(), s.c.end());
-    tr.segs.push_back(g);
+    g.x = static_cast<uint32_t>(8u * off);
+    g.y = static_cast<uint32_t>(8u * (off + s.n));
+    g.z = static_cast<uint32_t>(8u * (off + 2u * s.n));
+    off += 3u * static_cast<size_t>(s.n);
+    tr.state[k].store(kValid, std::memory_order_release);
   }
   tr.start = tr.segs.front().start;
   tr.stop = tr.segs.back().mid + tr.segs.back().half;
@@ -1006,7 +1070,10 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
   } else {
     about += "not stated by the ephemeris block";
   }
-  about += ". Covariance inside the span: the theory's (COVARIANCE_DATA, SPEC 12), no realism claim for the forecast.";
+  about += ". Covariance inside the span: the theory's (COVARIANCE_DATA, SPEC 12), from the theory's epoch at the span's start, no realism claim for "
+           "the forecast. ORBIT_DETERMINATION describes the theory's fit to the forecast's first part; the determination from observations is "
+           "the initial state's source named here. After the span: the hand-over set (fit with OUTPUT.START_TIME alone at this span's stop), "
+           "else this record's theory.";
   const auto s_about = fbb.CreateString(about);
   const auto s_id = fbb.CreateString("CARRIED FORECAST");
   const auto s_basis = fbb.CreateString("PREDICTED");
@@ -1040,6 +1107,112 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
   const auto block = tb.Finish();
   described.blocks = fbb.CreateVector(&block, 1);
   return 0;
+}
+
+/// The hand-over set's statement (SPEC 18.7): fit with OUTPUT.START_TIME alone, the set `row` fitted to the forecast's
+/// last part, its arc ending at (sw, sf) and its epoch the arc's last state. Its trajectory block TRAJ_ID "HAND-OVER",
+/// USEABLE_START_TIME the time it serves from (the carried record's stop), no segments; METADATA START_TIME the same;
+/// the fit's COMMENT the step there, the theory less the block's state at that time (TEME), when the block holds one
+/// within 1 ms. `all` the block's states (TEME of date; S as build's).
+template <class S>
+inline void handover(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, bool of_epoch, const std::vector<S>& all, double sw, double sf,
+                     const ephemerisDataBlock* blk, const PVN* source, std::vector<std::string>& comment, Described& described) {
+  const double w = row.epoch_jd_whole, f = row.epoch_jd_frac;
+  char start_text[48], line[400];
+  const double t0 = ((sw - w) + (sf - f)) * 86400.0;
+  oem::iso_text(w, f, t0 / 60.0, start_text, sizeof start_text);
+  described.start = start_text;
+  // the step at the start: the theory less the block's state there
+  size_t best = all.size();
+  double gap = 1.0e-3;
+  for (size_t k = 0; k < all.size(); ++k) {
+    const double d = std::fabs(((all[k].whole - w) + (all[k].frac - f)) * 86400.0 - t0);
+    if (d <= gap) {
+      gap = d;
+      best = k;
+    }
+  }
+  xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  const bool theory = xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk;
+  double rm[3], vm[3];
+  if (best < all.size() && all[best].has_v && theory && xpt::xp_propagate(*xs, t0 / 60.0, rm, vm) == kPropOk) {
+    double d[3], dv[3], u[3];
+    for (int k = 0; k < 3; ++k) {
+      d[k] = rm[k] - all[best].r[k];
+      dv[k] = vm[k] - all[best].v[k];
+    }
+    cov::to_uvw(all[best].r, all[best].v, d, u);
+    std::snprintf(line, sizeof line,
+                  "hand-over set from %s: theory minus forecast %.6f km (radial %.6f, in-track %.6f, cross-track %.6f km), velocity %.6f mm/s",
+                  start_text, std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]), u[0], u[1], u[2], 1.0e6 * std::sqrt(dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2]));
+  } else {
+    std::snprintf(line, sizeof line, "hand-over set from %s", start_text);
+  }
+  comment.push_back(line);
+  if (xs != nullptr) {
+    if (theory) xpt::xp_release(*xs);
+    std::free(xs);
+  }
+  std::string about = "Hand-over set (SPEC 18.7): the theory fitted to the forecast's last part, its epoch at the arc's end; it serves times from "
+                      "USEABLE_START_TIME, the stop of the carried record it follows. Forecast: ";
+  about += blk != nullptr && blk->COMMENT() != nullptr && blk->COMMENT()->size() > 0 ? blk->COMMENT()->str() : std::string("not stated by the ephemeris block");
+  about += ". ORBIT_DETERMINATION describes the theory's fit to the forecast's last part.";
+  const auto s_about = fbb.CreateString(about);
+  const auto s_id = fbb.CreateString("HAND-OVER");
+  const auto s_basis = fbb.CreateString("PREDICTED");
+  const auto s_basis_id = source != nullptr && source->SOURCE_ID() != nullptr ? fbb.CreateString(source->SOURCE_ID()->str()) : flatbuffers::Offset<flatbuffers::String>(0);
+  const auto s_center = fbb.CreateString("EARTH");
+  const auto s_frame = fbb.CreateString(of_epoch ? "TEMEOFEPOCH" : "TEMEOFDATE");
+  const auto s_start = fbb.CreateString(start_text);
+  OCMTrajectoryBlockBuilder tb(fbb);
+  tb.add_COMMENT(s_about);
+  tb.add_TRAJ_ID(s_id);
+  tb.add_TRAJ_BASIS(s_basis);
+  if (!s_basis_id.IsNull()) tb.add_TRAJ_BASIS_ID(s_basis_id);
+  tb.add_CENTER_NAME(s_center);
+  tb.add_TRAJ_REF_FRAME(s_frame);
+  tb.add_USEABLE_START_TIME(s_start);
+  const auto block = tb.Finish();
+  described.blocks = fbb.CreateVector(&block, 1);
+}
+
+/// SPEC 18.8: an output state's source.
+enum Source : uint8_t { kTheory = 0, kCarried = 1, kBlend = 2, kHandOver = 3 };
+inline const char* source_name(uint8_t s) {
+  return s == kCarried ? "CARRIED FORECAST" : s == kBlend ? "BLEND" : s == kHandOver ? "HAND-OVER" : "THEORY";
+}
+/// The COMMENT of an $OEM block whose states come from more than the theory (SPEC 18.8), every run of states from one
+/// source in output order: "SOURCES: " then runs joined by "; ", each "<source> <first>-<last> <first epoch> TO <last
+/// epoch>" (state indices from 0, both included; the epochs as the lines state them). `tw`, `tf` the states' split
+/// Julian dates (UTC).
+inline std::string sources_comment(const std::vector<uint8_t>& src, const std::vector<double>& tw, const std::vector<double>& tf) {
+  std::string out = "SOURCES:";
+  char a[48], b[48], run[160];
+  for (size_t k0 = 0; k0 < src.size();) {
+    size_t k1 = k0;
+    while (k1 + 1 < src.size() && src[k1 + 1] == src[k0]) ++k1;
+    oem::iso_text(tw[k0], tf[k0], 0.0, a, sizeof a);
+    oem::iso_text(tw[k1], tf[k1], 0.0, b, sizeof b);
+    std::snprintf(run, sizeof run, "%s %s %zu-%zu %s TO %s", k0 == 0 ? "" : ";", source_name(src[k0]), k0, k1, a, b);
+    out += run;
+    k0 = k1 + 1;
+  }
+  return out;
+}
+
+/// The time a record's hand-over set serves from (SPEC 18.7): its trajectory block TRAJ_ID "HAND-OVER" and its
+/// USEABLE_START_TIME as minutes from J2000, or false when the record is not a hand-over set.
+inline bool handover_from(const OCM* o, double& minutes) {
+  const auto* blocks = o != nullptr ? o->TRAJECTORY_BLOCKS() : nullptr;
+  if (blocks == nullptr) return false;
+  for (const OCMTrajectoryBlock* b : *blocks) {
+    if (b == nullptr || b->TRAJ_ID() == nullptr || std::strcmp(b->TRAJ_ID()->c_str(), "HAND-OVER") != 0 || b->USEABLE_START_TIME() == nullptr) continue;
+    double tw, tf;
+    if (!omm::epoch(b->USEABLE_START_TIME()->c_str(), b->USEABLE_START_TIME()->size(), tw, tf)) return false;
+    minutes = ((tw - 2451545.0) + tf) * kMinutesPerDay;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace carried

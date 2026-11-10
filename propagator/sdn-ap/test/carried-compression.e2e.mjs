@@ -9,7 +9,7 @@
 //   forecast (the record is held to 1 cm and 0.1 mm/s);
 // - at the uniform 10-s grid, the second difference of the record's position less the forecast's (the referee's
 //   09-output-continuity residual less the forecast's own) at every triplet holding a segment joint, under 0.05 m;
-// - every state of the span is labeled "CARRIED FORECAST" (its block's COMMENT);
+// - one block per record, every state of the span labeled CARRIED FORECAST by its COMMENT (SPEC 18.8's grammar);
 // - the record states its forecast (SPEC 18.6): METADATA START_TIME and STOP_TIME and TRAJECTORY_BLOCKS[0] USEABLE_START_TIME
 //   and USEABLE_STOP_TIME the span, TRAJ_BASIS PREDICTED, and in its COMMENT the ephemeris block's own COMMENT (the force
 //   model and the weather date) and ORBIT_DETERMINATION (the initial state's source).
@@ -33,6 +33,7 @@ import { wasmPath } from "./lib/module.mjs";
 import { configuration } from "./lib/pcf.mjs";
 import { packOem, rfm } from "./lib/frames.mjs";
 import { T } from "./lib/ocm.mjs";
+import { oemLines } from "./lib/carried.mjs";
 
 const ffmPath = new URL("../../ffm/dist/isomorphic/module.wasm", import.meta.url).pathname;
 const EPOCH_WHOLE = 2461328.5;  // 2026-10-15T00:00:00Z
@@ -126,8 +127,9 @@ for (const c of REGIMES) {
       const part = ts.slice(k0, k0 + 50000);
       const r = await ap.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: rec }, configuration({ output: { EPOCHS: part.map(iso), FRAME: pcfOutputFrame.GCRF } })] });
       if (r.statusCode !== 0) throw new Error(`${c.name}: propagate ${r.errorCode} ${r.errorMessage}`);
-      for (const b of OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(r.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK)
-        for (const l of b.EPHEMERIS_DATA_LINES) out.push({ r: [l.X, l.Y, l.Z], v: [l.X_DOT, l.Y_DOT, l.Z_DOT], source: b.COMMENT });
+      const blocks = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(r.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK;
+      if (blocks.length !== 1) throw new Error(`${c.name}: ${blocks.length} blocks for one record`);
+      for (const l of oemLines(r.outputs[0].payload)) out.push({ r: [l.X, l.Y, l.Z], v: [l.X_DOT, l.Y_DOT, l.Z_DOT], source: l.source });
     }
     return out;
   };
@@ -139,7 +141,7 @@ for (const c of REGIMES) {
   got.forEach((g, k) => { ep = Math.max(ep, hyp(g.r, off[k].r)); ev = Math.max(ev, hyp(g.v, off[k].v)); });
   check(ep <= 1e-4, `${c.name}: ${(ep * 1e6).toFixed(3)} mm from the forecast off the build's times, over 0.1 m`);
   check(ev <= 1e-7, `${c.name}: ${(ev * 1e6).toFixed(4)} mm/s from the forecast off the build's times, over 0.1 mm/s`);
-  check(got.every((g) => (g.source ?? "").startsWith("CARRIED FORECAST")), `${c.name}: a state of the span is not labeled CARRIED FORECAST`);
+  check(got.every((g) => g.source === "CARRIED FORECAST"), `${c.name}: a state of the span is not labeled CARRIED FORECAST`);
   // 2. the second differences at the 10-s grid, at the triplets that hold a joint
   const segs = u.POLYNOMIAL_POSITION_RECORDS;
   const midOf = (s) => (Date.parse(`${s.EPOCH_MID.slice(0, 19)}Z`) - BASE_MS) / 1000 + Number(`0${s.EPOCH_MID.slice(19)}`);

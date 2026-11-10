@@ -5,8 +5,9 @@
 // - sdnap_epochs_set_at, sdnap_epochs_at (TEME) and propagate_epochs (TEME) give propagate's states of the same record
 //   at 200 times inside the span to 1e-9 km (the store times the forecast by the call's split Julian date), at 20 after
 //   it to 1e-5 km (the theory, which the store times in minutes from J2000), and there the plain record's state;
-// - every state labeled (SPEC 18.8): propagate_epochs' blocks "CARRIED FORECAST" inside the span and "THEORY" after it,
-//   as propagate's, and sdnap_epochs_source_at 1 and 0 at the same times;
+// - every state labeled (SPEC 18.8): propagate_epochs writes one block per series, its COMMENT's runs (parsed by the
+//   grammar) CARRIED FORECAST inside the span and THEORY after it, as propagate's, and sdnap_epochs_source_at 1 and 0
+//   at the same times;
 // - records split by day (one object's forecast carried by two records, each half its span): the store flies, at every
 //   time, the set whose span holds it, as propagate flies that record (to 1e-9 km), labeled carried;
 // - the record unpacked and packed again by the SDS bindings flies the same, bit for bit;
@@ -70,11 +71,13 @@ for (let k = 0; k < outside.length; k++) check(dist(ref[inside.length + k].r, pl
   check(o.statusCode === 0, `propagate_epochs: ${o.errorCode} ${o.errorMessage}`);
   if (o.statusCode === 0) {
     const blocks = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(o.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK;
-    const lines = blocks.flatMap((b) => b.EPHEMERIS_DATA_LINES.map((l) => Object.assign(l, { source: b.COMMENT.split(":")[0] })));
+    check(blocks.length === 1, `propagate_epochs writes ${blocks.length} blocks for one series, not 1`);
+    const { oemLines } = await import("./lib/carried.mjs");
+    const lines = oemLines(o.outputs[0].payload);
     const over = Math.max(...lines.map((l, k) => Math.max(dist([l.X, l.Y, l.Z], ref[k].r), dist([l.X_DOT, l.Y_DOT, l.Z_DOT], ref[k].v)) / bound(k)));
     check(over < 1, `propagate_epochs is farther from propagate's states than the bound (${over} of it)`);
     // SPEC 18.8: every state labeled, as propagate labels it
-    check(lines.length === times.length && lines.every((l, k) => l.source === (k < inside.length ? "CARRIED FORECAST" : "THEORY") && l.source === ref[k].source.split(":")[0]),
+    check(lines.length === times.length && lines.every((l, k) => l.source === (k < inside.length ? "CARRIED FORECAST" : "THEORY") && l.source === ref[k].source),
       `propagate_epochs' labels: ${[...new Set(lines.map((l) => l.source))].join(", ")} in ${blocks.length} blocks`);
     // and sdnap_epochs_source_at at the same times
     const codes = times.map((t, k) => { const { whole, frac } = jdOf(ref[k].epoch); x.sdnap_epochs_source_at(whole, frac, gi, 1, p); return new Int32Array(d.memory.buffer, p, 1)[0]; });

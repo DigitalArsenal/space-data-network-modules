@@ -2754,16 +2754,18 @@ forecast by the call's split Julian date (`test/carried-epochs.e2e.mjs`). Select
 carried span holds t, the latest by epoch where more than one does, without a blend; elsewhere the selection and blend
 by epoch as before. Sets of one epoch carrying different spans are both kept (records split by day: one object's
 forecast in a record per day), ordered by their span's start; a later record of the same epoch and span replaces as
-before. Covariance: the theory's (SPEC 12) beside the forecast's states. `sdnap_covariance_at`,
+before. A carried record A and its hand-over set B (18.7) load as one series: inside A's span its forecast; after the
+stop B, whose epoch is the stop, by the selection by epoch; before the span A's theory, whose epoch is the span's start. Covariance: the theory's (SPEC 12) beside the forecast's states. `sdnap_covariance_at`,
 `sdnap_covariance_full_at`, `events`, `maneuver` and `export_omm` use the theory; `export_omm` writes the set (an `$OMM`
 has no place for the forecast). At the span's ends the state jumps by the theory's distance from the forecast there (no
 blend), which fit states (18.4) and 18.7 keeps small at the stop.
 
 ### 18.4 fit
 
-`$PCF` OUTPUT on fit names the forecast the record carries: START_TIME and STOP_TIME, both or neither; EPOCHS, FRAME
+`$PCF` OUTPUT on fit names the forecast the record carries: START_TIME and STOP_TIME; EPOCHS, FRAME
 other than UNSPECIFIED, STEP_SECONDS and MAXIMUM_STATES away from their defaults are refused by name
-(configuration-refused). The theory set is fitted as without OUTPUT but for its arc's end (18.7). The block's states,
+(configuration-refused); START_TIME alone makes the hand-over set (18.7), STOP_TIME alone is refused. The theory set
+is fitted as without OUTPUT but for its arc, anchored at the span's start (18.7). The block's states,
 ascending, reach from at or before START_TIME to at or after STOP_TIME (carry-order, carry-not-covered). From those
 states and up to four beyond each end:
 
@@ -2863,8 +2865,22 @@ truncated at the end, and a coefficient vector running past the end refuse the s
 the record's other states flying (`test/carried-edges.e2e.mjs`). Both verifiers run with `check_alignment = false`: a
 record cut from a size-prefixed stream is aligned to its prefix, not to its own start, so offsets in the plain view
 are 4 bytes off the builder's alignment (`ocm::view`, as every SDS input here); WebAssembly loads tolerate an unaligned
-scalar, and `ensure` copies the coefficients out with `memcpy`. A record's vector of segments costs at most 48 bytes of
-the store a segment (an element of 4 bytes in the record): a hostile record of n bytes asks at most 12 n.
+scalar, and `ensure` reads the coefficients with `memcpy`. A record's vector of segments costs at most 52 bytes of
+the store a segment (an element of 4 bytes in the record): a hostile record of n bytes asks at most 13 n.
+
+Threads. Today no carried track is shared across threads: the module's pool (`src/pool.inc`, `abi.inc` `batch`) runs
+only the propagator ABI's row store (`plugin_init_omm`'s rows, `row_propagate`), cut into 512-object chunks, one thread
+per row; `propagate`, `propagate_epochs`, `load_epochs`, the `sdnap_epochs_*` exports and `fit` run on the calling
+thread. A track is nonetheless safe for concurrent readers by construction: its storage is sized once when it is read
+and never resized; the coefficients are read in place from the record's bytes, which the store copies once at load
+before any flight; each segment's fields are written once, by the thread that moves its state from unread to busy, and
+published by an atomic store (release) that readers load (acquire), a thread finding it busy reading its own copy; the
+search's hint is per thread. The change that first puts a track on the pool (segment-level serving, #394, or a pooled
+`sdnap_epochs_at`) brings a many-threads byte-identity test with it and does not merge without it. The verifier stays
+lazy with these states, and they did not change W4: on the six orbits' 1-day records and the 8-day record at 500 km
+(paired rounds against the build before them, 100 records, 21 rounds) the load per record moved by -12 to +3 us,
+within the rounds' spread, and the first state took 0.1 to 1.0 us against 0.2 to 4.3 (the coefficients are no longer
+copied out).
 
 ### 18.6 What the record states
 
@@ -2878,6 +2894,8 @@ Existing `$OCM` fields, written by fit (`test/carried-compression.e2e.mjs` check
 | The forecast's force model and weather date | `TRAJECTORY_BLOCKS[0]` COMMENT: the ephemeris block's own COMMENT, as its producer wrote it ("not stated by the ephemeris block" when it has none) |
 | The covariance inside the span | `TRAJECTORY_BLOCKS[0]` COMMENT: "the theory's (COVARIANCE_DATA, SPEC 12), no realism claim for the forecast" |
 | The step to the theory at each end | `ORBIT_DETERMINATION.COMMENT` (18.4): position (and RTN) and velocity |
+| What ORBIT_DETERMINATION describes | `TRAJECTORY_BLOCKS[0]` COMMENT: the OD block describes the theory's fit to the forecast's first part; the determination from observations is the initial state's source named in the trajectory block |
+| What serves after the span | `TRAJECTORY_BLOCKS[0]` COMMENT: the hand-over set (18.7), else this record's theory; the hand-over set's own block TRAJ_ID "HAND-OVER", USEABLE_START_TIME the stop |
 
 Not typed today; the fields the record would need (a change to the standards package):
 
@@ -2900,17 +2918,53 @@ Not typed today; the fields the record would need (a change to the standards pac
 
 ### 18.7 The span's end
 
-The theory is fitted to the forecast's last part, so that it takes over where the forecast stops: with neither the
-block's USEABLE_STOP_TIME nor FIT.HOLDOUT_HOURS stated, fit's arc ends at OUTPUT.STOP_TIME and the block's later states
-are held out (scored in FIT_STATISTICS.HELD_OUT_*: the theory against the forecast continued). The arc's length is
-fit's documented rule (`src/fit_oem.inc`, DESIGN 2e.3: 48 h, 24 h above e 0.5, extended while the drag holds; 12.8:
-the longest arc up to 7 days above e 0.3 with the perigee in the drag; FIT.DEFAULT_SPAN_HOURS sets it), ending at the
-stop; the set's epoch is the arc's first state.
-The record carries the weather rows from the day before the span's start when that is earlier than the arc's (the
-theory's covariance flies over the whole span). Measured (AP: zonal 20, tesseral 31, NRLMSISE-00 on the forecast's
-constant weather; FFM forecasts of 9 days at 30 s, 70 x 70, Sun, Moon, radiation pressure, drag; the first 2 days
-carried; 8 objects per regime, nodes and phases spread; km, median / 95th percentile; `test/carried-span-end.e2e.mjs`
-checks the rule end to end):
+Two records of one object (`test/carried-span-end.e2e.mjs`):
+
+- **A, the carried record** (fit with OUTPUT.START_TIME and STOP_TIME). Its theory is anchored at the span's start, the
+  observation cutoff: with no USEABLE_START_TIME, USEABLE_STOP_TIME or FIT.HOLDOUT_HOURS stated, the arc is the block's
+  states from START_TIME through START_TIME plus the default span (FIT.DEFAULT_SPAN_HOURS, 48 h; ECCENTRIC_ above the
+  threshold, 24 h), at most STOP_TIME; its epoch the first, the later states held out. The theory's covariance
+  (COVARIANCE_DATA, SPEC 12) has its origin there and grows forward through the span. Its weather rows run from the day
+  before the span's start through the stop, so that covariance flies over the whole span.
+- **B, the hand-over set** (fit with OUTPUT.START_TIME alone, at A's stop). The theory fitted to the forecast's last
+  part: the arc ends at START_TIME by the span rule (DESIGN 2e.3, 12.8), its epoch the arc's last state (the stop), the
+  later states held out (FIT_STATISTICS.HELD_OUT_*: the theory against the forecast continued); its covariance grows
+  forward from the stop. It carries no forecast; its TRAJECTORY_BLOCKS[0] says what it is: TRAJ_ID "HAND-OVER",
+  USEABLE_START_TIME the stop; fit's COMMENT states its step at the stop, theory minus forecast.
+- **Together** (one series in a store, 18.3): before the span A's theory, labeled THEORY; inside it A's forecast,
+  CARRIED FORECAST; from the stop B's theory, HAND-OVER. **A alone**, after its span, flies its own theory, labeled
+  THEORY, with the step at the stop that its COMMENT states (a day or more past its arc on spans over 2 days). **B
+  alone**, before its start, flies its theory backward, labeled THEORY; from its start HAND-OVER.
+
+The steps at both ends, the theory less the forecast as fit states them (AP: zonal 20, tesseral 31, NRLMSISE-00 on
+the forecast's constant weather; FFM forecasts of 9 days at 30 s, 70 x 70, Sun, Moon, radiation pressure, drag; spans
+of 2 and 4 days from the forecast's start; median / 95th percentile over the objects, nodes and phases spread):
+
+| Regime | Span (days) | Objects | Start, now (km) | (mm/s) | Start, before (km) | (mm/s) | Stop with B, now (km) | (mm/s) | Stop, A alone (km) | (mm/s) | Stop, before (km) | (mm/s) |
+| --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |
+| Low, 500 km | 2 | 8 | 0.024 / 0.053 | 32.4 / 54.6 | 0.024 / 0.053 | 32.4 / 54.6 | 0.040 / 0.065 | 42.9 / 60.2 | 0.042 / 0.067 | 44.9 / 62.5 | 0.042 / 0.067 | 44.9 / 62.5 |
+| Low, 500 km | 4 | 8 | 0.024 / 0.053 | 32.4 / 54.6 | 0.394 / 0.634 | 441 / 699 | 0.031 / 0.102 | 38.5 / 81.7 | 0.605 / 0.764 | 660 / 871 | 0.031 / 0.064 | 27.9 / 54.6 |
+| Low, 830 km | 2 | 8 | 0.013 / 0.030 | 12.4 / 25.9 | 0.013 / 0.030 | 12.4 / 25.9 | 0.018 / 0.025 | 14.2 / 21.1 | 0.018 / 0.025 | 14.2 / 20.6 | 0.018 / 0.025 | 14.2 / 20.6 |
+| Low, 830 km | 4 | 8 | 0.013 / 0.030 | 12.4 / 25.9 | 0.099 / 0.144 | 103 / 162 | 0.013 / 0.029 | 19.1 / 35.7 | 0.121 / 0.193 | 129 / 208 | 0.013 / 0.023 | 18.4 / 30.3 |
+| MEO | 2 | 8 | 0.0051 / 0.0077 | 0.441 / 0.802 | 0.0051 / 0.0077 | 0.441 / 0.802 | 0.0047 / 0.0072 | 0.378 / 0.590 | 0.0047 / 0.0073 | 0.374 / 0.591 | 0.0047 / 0.0073 | 0.374 / 0.591 |
+| MEO | 4 | 8 | 0.0051 / 0.0077 | 0.441 / 0.802 | 0.0051 / 0.0074 | 0.462 / 0.742 | 0.0046 / 0.0069 | 0.296 / 0.672 | 0.0044 / 0.0071 | 0.483 / 0.714 | 0.0047 / 0.0069 | 0.291 / 0.672 |
+| Geosynchronous | 2 | 8 | 0.0014 / 0.0026 | 0.107 / 0.155 | 0.0014 / 0.0026 | 0.107 / 0.155 | 0.0018 / 0.0026 | 0.135 / 0.156 | 0.0018 / 0.0026 | 0.133 / 0.151 | 0.0018 / 0.0026 | 0.133 / 0.151 |
+| Geosynchronous | 4 | 8 | 0.0014 / 0.0026 | 0.107 / 0.155 | 0.010 / 0.016 | 0.708 / 1.2 | 0.0018 / 0.0026 | 0.090 / 0.205 | 0.0090 / 0.018 | 0.700 / 1.2 | 0.0017 / 0.0028 | 0.092 / 0.198 |
+| Low, e 0.1 | 2 | 4 | 0.025 / 0.031 | 22.5 / 26.9 | 0.025 / 0.029 | 22.5 / 23.9 | 0.027 / 0.040 | 16.6 / 27.6 | 0.027 / 0.041 | 16.8 / 27.6 | 0.027 / 0.038 | 18.9 / 27.3 |
+| Low, e 0.1 | 4 | 4 | 0.025 / 0.031 | 22.5 / 26.9 | 0.220 / 0.306 | 225 / 303 | 0.016 / 0.043 | 14.7 / 28.8 | 0.154 / 0.472 | 167 / 496 | 0.020 / 0.024 | 11.1 / 12.9 |
+| Transfer, e 0.72 | 2 | 4 | 0.032 / 0.049 | 35.1 / 41.2 | 0.064 / 0.068 | 46.6 / 66.2 | 0.030 / 0.045 | 4.5 / 5.3 | 0.063 / 0.090 | 7.1 / 15.7 | 0.034 / 0.051 | 4.1 / 4.8 |
+
+("Before": the arc at the stop in the carried record itself, 0.6.10's first build; e 0.1 before on 2 objects.) The
+start's step no longer grows with the span; the stop's with B is the old one; A alone at its stop is as large as the
+old start was (a day or more past its arc).
+
+The covariance grows forward (position sigma, the square root of the trace of its position block, `carried-span-end`
+on a 3-day span from 6 h into the forecast): at 500 km A 38 m at the span's start and 944 m at its stop, B 38 m at the
+stop and 933 m a day later; at geosynchronous altitude A 1.2 m and 1,269 m, B 1.3 m and 1,259 m.
+
+Before this rule (0.6.10's first build) the theory was fitted to the forecast's last part in the carried record
+itself: the step at the stop as B's now, the error past it as follows (the same forecasts, 2-day spans), and the start
+of a longer span days off the arc:
 
 | Regime | Step at the stop | Velocity step (mm/s) | 1 day past | 3 days past | 7 days past | Step, theory fitted to the first 24 h |
 | --- | --: | --: | --: | --: | --: | --: |
@@ -2926,9 +2980,8 @@ to 0.026 km median at 500 km) and the error past it larger (10.8 to 92 km at 7 d
 the best or within its spread past the stop in every regime: the rule stands. "Past the stop" is against the forecast
 continued, the same force model: the forecast's own error against the truth past its span is not in these figures.
 
-The span's start. The theory's arc ends at the stop, so at the start of a span longer than the arc the theory is days
-off its arc, flown backward: the step there grows with the span. Measured as fit states it (the same forecasts, spans
-of 2, 4 and 8 days from the forecast's start; the arc by the rule; median / 95th percentile over the objects):
+With the arc at the stop, the start of a span longer than the arc was days off it, flown backward: the step there grew
+with the span (spans of 2, 4 and 8 days; median / 95th percentile over the objects):
 
 | Regime | Span (days) | Objects | Step at the start (km) | Its velocity (mm/s) | Step at the stop (km) | Its velocity (mm/s) |
 | --- | --: | --: | --: | --: | --: | --: |
@@ -2956,21 +3009,36 @@ of 2, 4 and 8 days from the forecast's start; the arc by the rule; median / 95th
 rule extended the arc to 120 h for half the 500 km objects (the drag held); the start's step there ranges from 0.04
 to 1.2 km over the objects.
 
-A time before the span's start gets the theory, flown backward from its epoch (the arc's first state), with that step
-at the start (no blend; the record states it in fit's COMMENT and every state there is labeled THEORY, 18.8). Its
-weather rows begin the day before the span's start, so under WEATHER_SOURCE RECORDS the theory flies from the span's
-first day and refuses earlier days by name (weather-rows-short); under the theory's own flux model it flies anywhere.
-A consumer that needs states before the span uses the record the forecast's producer made before it: in a store,
-records split by day or by forecast run sit side by side and selection takes the one whose span holds the time (18.3).
+A time before the span's start now gets A's theory a step from its epoch, with the small step the table states (no
+blend; labeled THEORY, 18.8). A's weather rows begin the day before the span's start, so under WEATHER_SOURCE RECORDS
+its theory flies from the span's first day and refuses earlier days by name (weather-rows-short); under the theory's
+own flux model it flies anywhere. States further back come from the record the forecast's producer made before (18.3).
 
 ### 18.8 Labels
 
-Every output state is labeled with its source. `propagate`: a record carrying a forecast writes one `$OEM` block per
-run of consecutive states from one source, its COMMENT "CARRIED FORECAST: ..." or "THEORY: ..."; a record without one
-writes one block without a COMMENT, as before. `propagate_epochs`: the same per series, and "BLEND: ..." for states
-blended from a carried state and a theory state. The store: `sdnap_epochs_source_at(jd_whole, jd_frac, first, count,
-int32_t* out)`, one code per series at that instant: 0 the theory, 1 a carried forecast, 2 a blend of the two
-(`test/carried-edges.e2e.mjs`, `test/carried-epochs.e2e.mjs`).
+Every output state's source can be known. `propagate` writes one `$OEM` block per input record and `propagate_epochs`
+one per series, as without a forecast (a reader of block 0 gets every state). A record carrying a forecast, a hand-over
+set, or a series holding either, states each run of consecutive states from one source in its block's COMMENT, in this
+grammar (everything else writes no COMMENT, as before):
+
+```
+comment = "SOURCES: " run *( "; " run )
+run     = source " " first "-" last " " epoch " TO " epoch
+source  = "CARRIED FORECAST" / "THEORY" / "HAND-OVER" / "BLEND"
+first, last: the run's first and last state, indices from 0 in the block's order, both included; the runs cover
+             0 to the block's last state, in order
+epoch   = the run's first and last state's EPOCH, as its line states it
+```
+
+For example, a record carrying 2026-10-15T00:00 to 2026-10-16T00:00 flown at four times:
+`SOURCES: THEORY 0-0 2026-10-14T23:59:59.999000 TO 2026-10-14T23:59:59.999000; CARRIED FORECAST 1-2
+2026-10-15T00:00:00.000000 TO 2026-10-16T00:00:00.000000; THEORY 3-3 2026-10-16T00:00:00.001000 TO
+2026-10-16T00:00:00.001000` (on one line). CARRIED FORECAST: the forecast a record carries, inside its span; THEORY: a
+record's element set; HAND-OVER: a hand-over set at or after the time it serves from (18.7); BLEND: the store's blend of
+two sets' states of different sources. The store at one instant: `sdnap_epochs_source_at(jd_whole, jd_frac, first,
+count, int32_t* out)`, one code per series: 0 THEORY, 1 CARRIED FORECAST, 2 BLEND, 3 HAND-OVER. The E2Es parse the
+COMMENT by this grammar and check every state's source against it (`test/lib/carried.mjs` `oemLines`;
+`test/carried-edges.e2e.mjs`, `test/carried-epochs.e2e.mjs`, `test/carried-span-end.e2e.mjs`).
 
 ### 18.9 Bound and size
 
@@ -3008,9 +3076,11 @@ does not change (18.5). 1 cm costs nothing that matters and leaves a tenth of th
 
 ### 18.10 Version 2 does not
 
-Blend at the span's ends (the step is stated, 18.4, and kept small at the stop, 18.7); carry the forecast's covariance
-(18.6, item 3); let a `$PCF` set the bound (18.6, item 7); fly the forecast in `sdnap_covariance_at`, `events` or
-`maneuver`; make a fresh low-orbit record pass W4 (18.5).
+Blend at the span's ends (the steps are stated, 18.4, and kept small at both ends by A and B, 18.7); carry the
+forecast's covariance (18.6, item 3) or the observation fit's own (the next step: an optional `elements` port on fit
+taking the determination from observations as record A's set and covariance); let a `$PCF` set the bound (18.6, item
+7); fly the forecast in `sdnap_covariance_at`, `events` or `maneuver`; put a track on the pool; make a fresh record
+pass W4 (18.5, #394).
 
 ## References
 

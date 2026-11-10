@@ -10,9 +10,10 @@
 //   to within 0.1 mm (the segments share their end points);
 // - a record carrying COVARIANCE_DATA writes the theory's covariance beside the forecast's states, the same lines as
 //   the plain record's (version 1);
-// - every state is labeled: propagate writes a block per run of states from one source, its COMMENT "CARRIED
-//   FORECAST" or "THEORY", and sdnap_epochs_source_at gives the store's 1 or 0 at the same times (SPEC 18.8);
-// - refused by name: OUTPUT with START_TIME alone, OUTPUT.EPOCHS or OUTPUT.FRAME on fit (configuration-refused), a
+// - every state is labeled: propagate writes one block whose COMMENT states each run of states' source (SPEC 18.8's
+//   grammar, parsed and checked against the lines), CARRIED FORECAST or THEORY, and sdnap_epochs_source_at gives the
+//   store's 1 or 0 at the same times;
+// - refused by name: OUTPUT with STOP_TIME alone, OUTPUT.EPOCHS or OUTPUT.FRAME on fit (configuration-refused), a
 //   window the block does not reach (carry-not-covered), states 60 s apart in low orbit (carry-states-sparse); records
 //   with TRAJ_TYPE other than POLYNOMIAL_POS (carried-type-mismatch), a first segment of a basis other than Chebyshev
 //   (carried-basis-unsupported) or with velocity coefficients (carried-velocity-coefficients), on propagate and on
@@ -114,7 +115,7 @@ const span = rec.span;
 // refusals at fit
 {
   const fitWith = (output, oem = rec.oem) => refusal(h, "fit", [{ portId: "ephemeris", typeRef: T("OEM"), payload: oem }, configuration({ theory: "SGP4XP", forces: XP_FORCES, output })]);
-  check((await fitWith({ START_TIME: isoAt(0) })) === "configuration-refused", "OUTPUT.START_TIME alone on fit is not refused");
+  check((await fitWith({ STOP_TIME: isoAt(600) })) === "configuration-refused", "OUTPUT.STOP_TIME alone on fit is not refused");
   check((await fitWith({ EPOCHS: [isoAt(0), isoAt(60)] })) === "configuration-refused", "OUTPUT.EPOCHS on fit is not refused");
   check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(600), FRAME: pcfOutputFrame.GCRF })) === "configuration-refused", "OUTPUT.FRAME on fit is not refused");
   check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(span + 3600) })) === "carry-not-covered", "a window past the block is not refused");

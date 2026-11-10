@@ -69,10 +69,35 @@ export async function refusal(h, methodId, inputs) {
   return r.statusCode === 0 ? null : r.errorCode;
 }
 
-/** Every state of an $OEM in order, its block's COMMENT beside it as `source` (SPEC 18.8: a block per run of states
- * from one source when the record carries a forecast). */
+/**
+ * SPEC 18.8: the runs a block's COMMENT states, "SOURCES: <source> <first>-<last> <first epoch> TO <last epoch>; ...",
+ * as [{ source, first, last, from, to }], or null when the COMMENT states none. Throws on a COMMENT that starts
+ * "SOURCES:" but does not follow the grammar.
+ */
+export function sourcesOf(comment) {
+  if (!comment || !comment.startsWith("SOURCES: ")) return null;
+  return comment.slice("SOURCES: ".length).split("; ").map((run) => {
+    const m = /^(CARRIED FORECAST|HAND-OVER|THEORY|BLEND) (\d+)-(\d+) (\S+) TO (\S+)$/.exec(run);
+    if (!m) throw new Error(`a SOURCES run that does not parse: "${run}"`);
+    return { source: m[1], first: Number(m[2]), last: Number(m[3]), from: m[4], to: m[5] };
+  });
+}
+/** Every state of an $OEM in order, `source` beside it from its block's SOURCES COMMENT (null without one); the runs
+ * checked against the lines: contiguous from 0 to the last, each run's epochs the lines' own. */
 export const oemLines = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack().EPHEMERIS_DATA_BLOCK
-  .flatMap((b) => b.EPHEMERIS_DATA_LINES.map((l) => Object.assign(l, { source: b.COMMENT })));
+  .flatMap((b) => {
+    const runs = sourcesOf(b.COMMENT), lines = b.EPHEMERIS_DATA_LINES;
+    if (runs) {
+      let next = 0;
+      for (const r of runs) {
+        if (r.first !== next || r.last < r.first || r.last >= lines.length || lines[r.first].EPOCH !== r.from || lines[r.last].EPOCH !== r.to)
+          throw new Error(`a SOURCES run that does not match the lines: ${JSON.stringify(r)}`);
+        next = r.last + 1;
+      }
+      if (next !== lines.length) throw new Error(`the SOURCES runs end at state ${next}, the block holds ${lines.length}`);
+    }
+    return lines.map((l, k) => Object.assign(l, { source: runs ? runs.find((r) => k >= r.first && k <= r.last).source : null }));
+  });
 export const ocmOf = (bytes) => OCM.getRootAsOCM(new flatbuffers.ByteBuffer(new Uint8Array(bytes))).unpack();
 
 /** The seed set of a class: stock SGP4XP or AP under a cap, at perigee at the epoch. */
