@@ -216,12 +216,16 @@ int32_t sdnap_propagate_minutes_soa(const double* minutes, uint32_t first, uint3
 SDNAP_EXPORT("sdnap_threads")
 int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
 
-/// The sets' caches (SPEC 9): sets the pool's budget to `megabytes` (0 keeps it) and returns the budget in MB.
+/// The sets' caches (SPEC 9): sets the pool's budget to `megabytes` (0 keeps it) and returns the budget in MB. A smaller
+/// budget reclaims at once, the sets flown longest ago first (not one being flown).
 SDNAP_EXPORT("sdnap_cache_budget")
 uint32_t sdnap_cache_budget(uint32_t megabytes) {
   sdnap::xpt::CachePool& p = sdnap::xpt::cache_pool();
   sdnap::xpt::lock(&p.lock);
-  if (megabytes > 0) p.budget = static_cast<uint64_t>(megabytes) << 20;
+  if (megabytes > 0) {
+    p.budget = static_cast<uint64_t>(megabytes) << 20;
+    sdnap::xpt::pool_reclaim_locked(p, 0, nullptr, UINT64_MAX);
+  }
   const uint32_t mb = static_cast<uint32_t>(p.budget >> 20);
   sdnap::xpt::unlock(&p.lock);
   return mb;

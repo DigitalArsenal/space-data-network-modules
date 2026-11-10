@@ -6,8 +6,10 @@
 // - random order and alternating ends against ascending order, bit for bit;
 // - one state from a freshly loaded record against the ascending pass, bit for bit;
 // - two records interleaved (time-major) against each alone, bit for bit;
-// - the same with the pool's budget at 1 MB (sdnap_cache_budget), every set's caches reclaimed and remade as others
-//   need room: bit for bit, sdnap_cache_stats counting the reclaims and never holding more than the budget.
+// - the same with the pool's budget at 1 MB (sdnap_cache_budget); then forty 500 km sets at 1 MB stepped together (a
+//   steady cycle over more sets than fit reclaims nothing, the sets without room fly on the thread's caches), the last
+//   twenty alone (the holders no longer flown are reclaimed), the first twenty again (their runs refill from where they
+//   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
 // Through `propagate` (#420): a time asked alone against the same time inside one call of 2,016 states, bit for bit.
 // JS moves bytes and compares numbers the module produced.
 //   node test/set-caches.e2e.mjs
@@ -103,21 +105,31 @@ for (const [name, o] of Object.entries(ORBITS)) {
   console.log(`${name}: random order, alternating ends, fresh records and interleaving bit for bit`);
 }
 {
-  // a 1 MB budget reclaims: forty low-orbit sets stepped together
+  // a 1 MB budget: forty low-orbit sets stepped together (more than fit: the first to ask keep their caches, a steady
+  // cycle reclaims none, the others fly on the thread's), then the last twenty alone (the holders no longer flown give way)
   const o = ORBITS["500 km"];
   const records = Array.from({ length: 40 }, (_, k) => record(o, k));
+  const first = times.slice(0, 96), then = times.slice(96, 192), last = times.slice(192, 288);
   await load(records);
-  const alone = times.slice(0, 96).map((ms) => records.map((_, i) => at(i, ms)));
-  const before = cacheStats();
+  const alone = first.map((ms) => records.map((_, i) => at(i, ms)));
+  const aloneThen = then.map((ms) => records.map((_, i) => (i >= 20 ? at(i, ms) : null)));
+  const aloneLast = last.map((ms) => records.map((_, i) => (i < 20 ? at(i, ms) : null)));
   x.sdnap_cache_budget(1);
   await load(records);
+  const s0 = cacheStats();
   let differ = 0;
-  times.slice(0, 96).forEach((ms, k) => records.forEach((_, i) => { if (!same(at(i, ms), alone[k][i])) ++differ; }));
-  const after = cacheStats();
+  first.forEach((ms, k) => records.forEach((_, i) => { if (!same(at(i, ms), alone[k][i])) ++differ; }));
+  const s1 = cacheStats();
+  then.forEach((ms, k) => records.forEach((_, i) => { if (i >= 20 && !same(at(i, ms), aloneThen[k][i])) ++differ; }));
+  const s2 = cacheStats();
+  // the first twenty again: their caches were reclaimed, the runs refill from where each set was flown
+  last.forEach((ms, k) => records.forEach((_, i) => { if (i < 20 && !same(at(i, ms), aloneLast[k][i])) ++differ; }));
   check(differ === 0, `40 sets at a 1 MB budget against the same at 256 MB: ${differ} states differ`);
-  check(after[4] > before[4], `a 1 MB budget reclaimed no caches (${before[4]} then ${after[4]})`);
-  check(after[1] <= after[0], `the pool holds ${after[1]} bytes, over its budget ${after[0]}`);
-  console.log(`40 sets stepped together at 1 MB: bit for bit, ${after[4] - before[4]} caches reclaimed, ${after[1]} of ${after[0]} bytes held`);
+  const onThread = (s) => s[5] + s[6];  // caches and tesseral caches refused: flown on the thread's
+  check(onThread(s1) > onThread(s0) && s1[4] === s0[4], `the cycle over 40 sets at 1 MB: ${onThread(s1) - onThread(s0)} asks on the thread's caches (some expected), ${s1[4] - s0[4]} caches reclaimed (none expected)`);
+  check(s2[4] > s1[4], `the last twenty sets alone reclaimed no caches of the sets no longer flown (${s1[4]} then ${s2[4]})`);
+  check(s1[1] <= s1[0] && s2[1] <= s2[0], `the pool holds ${s1[1]} then ${s2[1]} bytes, over its budget ${s2[0]}`);
+  console.log(`40 sets at 1 MB: bit for bit; the cycle over all 40 kept its holders (${s1[2]} sets with caches, ${s1[3]} with tesseral caches, ${onThread(s1) - onThread(s0)} asks on the thread's caches, ${s1[4] - s0[4]} reclaimed); the last 20 alone reclaimed ${s2[4] - s1[4]}; ${s2[1]} of ${s2[0]} bytes held`);
   x.sdnap_cache_budget(256);
 }
 {

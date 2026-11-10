@@ -5426,9 +5426,11 @@ struct DragPassCache {
 /// in it is a lookup, never a re-integration (run_bracket).
 struct NodeRun {
   Node* nodes = nullptr;
+  Node base{};          ///< the run's first node: the epoch, a checkpoint or the window's (node k of the run is nodes[k - 1])
   int32_t count = 0, cap = 0;
-  int32_t hint = 0;    ///< the lower node of the last bracket (0: the epoch)
-  bool ended = false;  ///< the grid ends after the last node (a node that is not a number or does not advance)
+  int32_t hint = 0;     ///< the lower node of the last bracket (0: the base)
+  bool based = false;   ///< base is set
+  bool ended = false;   ///< the grid ends after the last node (a node that is not a number or does not advance)
 };
 
 struct SetCaches {
@@ -5437,6 +5439,7 @@ struct SetCaches {
   tess::SpSetSlot sp;
   NodeRun run[2];      ///< forward, backward
   uint64_t stamp = 0;  ///< the pool's clock when the set was last flown
+  uint64_t prev = 0;   ///< the stamp of the flight before
   uint64_t bytes = 0;  ///< what the pool counts for it (with the node runs)
 };
 
@@ -5449,6 +5452,7 @@ struct XpSat {
   int32_t cache_lock;  ///< held by the thread flying the set with its caches, or by the pool reclaiming them
   int32_t pool_index;  ///< its place in the pool's holders
   SetCaches* caches;
+  uint64_t asked;      ///< the pool's clock when it last asked for caches and had none (0: never)
   RateContext ctx;
   double epoch_jd_whole, epoch_jd_frac;
   Node epoch;
@@ -5827,14 +5831,18 @@ inline bool try_lock(int32_t* word) {
 }
 
 /// The sets' caches (SPEC 9): every SetCaches and the tesseral caches they hold count against one budget (default
-/// 256 MB, sdnap_cache_budget); a set that needs room takes it from the sets flown longest ago (the least recently
-/// used), never from one being flown. Its counts: sets holding caches, of them holding tesseral caches, bundles
-/// reclaimed, bundles and tesseral caches refused (no room even after reclaiming), tesseral caches made.
+/// 256 MB, sdnap_cache_budget). The pool's clock ticks at every ask for room; a holder's stamp is the clock when it was
+/// last flown. A set that needs room takes free room, or reclaims the holders flown least recently, but only those not
+/// flown since its own previous ask: a steady cycle over more sets than fit keeps its holders (each was flown within
+/// the cycle) and the others fly on the thread's caches, while holders no longer flown give way. Never one being flown.
+/// Its counts: sets holding caches, of them holding tesseral caches, bundles reclaimed, bundles and tesseral caches
+/// refused (no room even after reclaiming), tesseral caches made.
 struct CachePool {
   int32_t lock = 0;
   uint64_t budget = 256ull << 20;
   uint64_t held = 0;
   uint64_t clock = 1;
+  uint64_t floor = 0;  ///< no holder's stamp is below it (a lower bound, raised by each search for room)
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
   std::vector<XpSat*> holders;
 };
@@ -5867,40 +5875,65 @@ inline void pool_drop_locked(CachePool& p, XpSat& s) {
   s.pool_index = -1;
 }
 
-/// Under the pool's lock: frees the caches of the sets flown longest ago (not `keep`, none being flown) until `need`
-/// more bytes fit with an eighth of the budget to spare. Whether they fit.
-inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep) {
+/// Whether `need` more bytes could fit, read without the pool's lock: free room, or a holder that may have been flown
+/// last before `before` (the floor is a lower bound, so a false yes costs one search under the lock). Read unlocked, a
+/// count may be stale: the answer only picks between the set's caches and the thread's, which give the same states.
+inline bool pool_may_fit(const CachePool& p, uint64_t need, uint64_t before) {
+  return __atomic_load_n(&p.held, __ATOMIC_RELAXED) + need <= __atomic_load_n(&p.budget, __ATOMIC_RELAXED) ||
+         __atomic_load_n(&p.floor, __ATOMIC_RELAXED) < before;
+}
+
+/// Under the pool's lock: frees the caches of the sets flown longest ago, of those last flown before `before` (not
+/// `keep`, none being flown), until `need` more bytes fit with an eighth of the budget to spare. Whether they fit.
+inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, uint64_t before) {
   if (p.held + need <= p.budget) return true;
-  std::vector<XpSat*> order(p.holders);
+  if (p.floor >= before) return false;
+  std::vector<XpSat*> order;
+  for (XpSat* v : p.holders)
+    if (v->caches->stamp < before && v != keep) order.push_back(v);
   std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
   for (XpSat* v : order) {
     if (p.held + need <= p.budget && p.held <= target) break;
-    if (v == keep || !try_lock(&v->cache_lock)) continue;
+    if (!try_lock(&v->cache_lock)) continue;
     pool_drop_locked(p, *v);
     p.reclaimed += 1;
     unlock(&v->cache_lock);
   }
+  // the holders left: their lowest stamp (a holder reclaimed had the lowest; one skipped keeps the bound safe)
+  uint64_t left = UINT64_MAX;
+  for (XpSat* v : p.holders) left = std::min(left, v->caches->stamp);
+  p.floor = p.holders.empty() ? __atomic_load_n(&p.clock, __ATOMIC_RELAXED) : std::max(p.floor, left);
   return p.held + need <= p.budget;
 }
 
-/// s's caches, made within the budget (s's cache_lock held by the caller); nullptr when there is no room.
+/// s's caches, made within the budget (s's cache_lock held by the caller); nullptr when there is no room. A first ask
+/// takes free room only; a later one may reclaim holders not flown since s's previous ask.
 inline SetCaches* pool_caches_for(XpSat& s) {
   if (s.caches != nullptr) return s.caches;
   CachePool& p = cache_pool();
   const uint64_t need = sizeof(SetCaches);
+  const uint64_t tick = __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
+  const uint64_t before = s.asked;
+  s.asked = tick;
+  if (!pool_may_fit(p, need, before)) {
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
+    return nullptr;
+  }
   lock(&p.lock);
   SetCaches* c = nullptr;
-  if (pool_reclaim_locked(p, need, &s)) c = new (std::nothrow) SetCaches{};
+  if (pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
   if (c != nullptr) {
     c->bytes = need;
+    // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and
+    // the runs it makes in this flight take room only from holders not flown since then
+    c->stamp = c->prev = before;
     p.held += need;
-    p.clock += 1;
     s.pool_index = static_cast<int32_t>(p.holders.size());
     p.holders.push_back(&s);
     s.caches = c;
   } else {
-    p.refused += 1;
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
   }
   unlock(&p.lock);
   return c;
@@ -5959,6 +5992,7 @@ struct SetScope {
       return;
     }
     held = &s;
+    c->prev = c->stamp;
     c->stamp = __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED);
     g_active_bracket_set = &c->ab;
     tess::g_mdaily_set_cache = &c->md;
@@ -5980,19 +6014,25 @@ namespace tess {
 SpEvalCache* sp_pool_attach(const SpEvalCache& built) {
   XpSat* s = g_flown_set;
   if (s == nullptr || s->caches == nullptr) return nullptr;
+  CachePool& p = cache_pool();
+  // room from holders not flown since this set's previous flight (CachePool), checked before the copy is made
+  const uint64_t before = s->caches->prev;
+  __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
+  if (!pool_may_fit(p, sizeof(SpEvalCache) + built.mem_bytes, before)) {
+    __atomic_add_fetch(&p.sp_refused, 1, __ATOMIC_RELAXED);
+    return nullptr;
+  }
   SpEvalCache* d = sp_compact_copy(built);
   if (d == nullptr) return nullptr;
-  CachePool& p = cache_pool();
   const uint64_t need = sp_cache_bytes(d);
   lock(&p.lock);
-  const bool room = pool_reclaim_locked(p, need, s);
+  const bool room = pool_reclaim_locked(p, need, s, before);
   if (room) {
     p.held += need;
     p.sp_holders += 1;
     p.sp_made += 1;
-    p.clock += 1;
   } else {
-    p.sp_refused += 1;
+    __atomic_add_fetch(&p.sp_refused, 1, __ATOMIC_RELAXED);
   }
   unlock(&p.lock);
   if (!room) {
@@ -6016,13 +6056,19 @@ void sp_pool_release(SpEvalCache* cache) {
 inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
   const uint64_t delta = static_cast<uint64_t>(want - r.cap) * sizeof(Node);
   CachePool& p = cache_pool();
+  // room from holders not flown since this set's previous flight (CachePool)
+  __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
+  if (!pool_may_fit(p, delta, c.prev)) {
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
+    return false;
+  }
   lock(&p.lock);
-  const bool room = pool_reclaim_locked(p, delta, &s);
+  const bool room = pool_reclaim_locked(p, delta, &s, c.prev);
   if (room) {
     p.held += delta;
     c.bytes += delta;
   } else {
-    p.refused += 1;
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
   }
   unlock(&p.lock);
   if (!room) return false;
@@ -6040,18 +6086,40 @@ inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
 }
 
 /// The bracket of t from s's node run in direction dir (s's caches held by this thread): 1 found (lo, hi point into the
-/// run or at the epoch), 0 the grid ends before t, -1 t lies beyond the checkpoint span or the pool has no room (the
-/// checkpoints answer). The run is extended to t as bracket_ptr would integrate, filling the same checkpoints.
+/// run or at its base), 0 the grid ends before t, -1 t lies beyond the checkpoint span or the pool has no room (the
+/// checkpoints answer). The run is extended to t as bracket_ptr would integrate, filling the same checkpoints. A run
+/// starts from the latest node known at or before t (the epoch, a checkpoint, the window's), and again when t precedes
+/// its start: every one is a node of the one grid (a step depends on its first node alone, rk3), so the run's nodes
+/// are the grid's whichever node it starts from, and a set whose caches were reclaimed refills from where it was flown.
 inline int run_bracket(XpSat& s, SetCaches& c, int dir, int di, double t, const Node*& lo, const Node*& hi) {
   NodeRun& r = c.run[di];
   const double at = dir * t;
   auto beyond = [&](const Node& n) { return dir * n.t > at; };
-  const int32_t limit = kSparse * s.stride;
+  if (!r.based || beyond(r.base)) {
+    Node cur = s.epoch;
+    for (int k = 0; k < s.sparse_count[di]; ++k) {
+      if (beyond(s.sparse[di][k])) break;
+      cur = s.sparse[di][k];
+    }
+    if (s.window_valid[di]) {
+      if (!beyond(s.window[di][1]) && dir * s.window[di][1].index > dir * cur.index)
+        cur = s.window[di][1];
+      else if (!beyond(s.window[di][0]) && dir * s.window[di][0].index > dir * cur.index)
+        cur = s.window[di][0];
+    }
+    r.base = cur;
+    r.based = true;
+    r.count = 0;
+    r.hint = 0;
+    r.ended = false;
+  }
+  // nodes the run may hold: up to the checkpoint span from the epoch
+  const int32_t limit = kSparse * s.stride - dir * r.base.index;
   while (r.count == 0 || !beyond(r.nodes[r.count - 1])) {
     if (r.ended) return 0;
     if (r.count >= limit) return -1;
     if (r.count == r.cap && !run_grow(s, c, r, std::min(limit, std::max(16, 2 * r.cap)))) return -1;
-    const Node& cur = r.count > 0 ? r.nodes[r.count - 1] : s.epoch;
+    const Node& cur = r.count > 0 ? r.nodes[r.count - 1] : r.base;
     Node nxt;
     // a node that is not a number, or does not advance, ends the grid: every later time is refused, never looped on
     if (!next_node(s.ctx, cur, dir, nxt) || !std::isfinite(nxt.t) || !(dir * nxt.t > dir * cur.t)) {
@@ -6068,7 +6136,7 @@ inline int run_bracket(XpSat& s, SetCaches& c, int dir, int di, double t, const 
     }
     r.nodes[r.count++] = nxt;
   }
-  auto node_at = [&](int k) -> const Node& { return k == 0 ? s.epoch : r.nodes[k - 1]; };
+  auto node_at = [&](int k) -> const Node& { return k == 0 ? r.base : r.nodes[k - 1]; };
   int k = r.hint;
   if (!(k >= 0 && k < r.count && !beyond(node_at(k)) && beyond(node_at(k + 1)))) {
     int k_lo = 0, k_hi = r.count;  // node_at(k_lo) is not beyond t, node_at(k_hi) is
