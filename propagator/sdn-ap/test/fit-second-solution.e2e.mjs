@@ -17,7 +17,7 @@
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit-second-solution.e2e.mjs
 import fs from "node:fs";
-import os from "node:os";
+import { scratchTemp } from "./lib/scratch.mjs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -39,7 +39,7 @@ const THEMIS_A = { baseRmsKm: 0.1095, baseBterm: 0.0120, rmsRatio: 1.1, btermRat
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
 const baseBytes = execFileSync("git", ["-C", packageRoot, "show", `${BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
 if (sha256(baseBytes) !== BASE.sha256) throw new Error(`sdn-ap ${BASE.version} at ${BASE.commit} is ${sha256(baseBytes)}`);
-const basePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sdn-ap-second-start-")), "module-0.6.2.wasm");
+const basePath = path.join(scratchTemp("sdn-ap-second-start-"), "module-0.6.2.wasm");
 fs.writeFileSync(basePath, baseBytes);
 const cand = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
 const base = await createStandaloneHarness("browser", basePath, { surface: "direct" });

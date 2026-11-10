@@ -53,7 +53,8 @@ if (!isMainThread) {
     profile: workerData.c.mode === 'seed' ? r.profile.map((q) => [q.h, q.t, q.r]) : undefined});
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
-  const BASE = '4a02a6d90', scratch = '/Users/tj/software/terrain-work/body-look/codex-apfix-d9/drag-e2e';
+  const {scratchRoot} = await import('./lib/scratch.mjs');
+  const BASE = '4a02a6d90', scratch = path.join(scratchRoot, 'drag-e2e');
   const modules = fileURLToPath(new URL('../../../', import.meta.url));
   fs.mkdirSync(scratch, {recursive: true});
   const baseline = path.join(scratch, `release-${BASE}.wasm`);

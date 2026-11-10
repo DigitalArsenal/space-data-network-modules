@@ -20,7 +20,8 @@
 // 6. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
+import {scratchTemp} from './lib/scratch.mjs';
+import {spwFixtureText} from './lib/spw-constant.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -31,7 +32,7 @@ import {wasmPath} from './lib/module.mjs';
 const BASE = '8fdf5b1af';
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test builds copy the package's sources, which cannot hold their own destination
-const scratch = process.env.SDNAP_TEST_SCRATCH ?? fs.mkdtempSync(path.join(os.tmpdir(), 'sdn-ap-gto-terms-'));
+const scratch = scratchTemp('sdn-ap-gto-terms-');
 // The truth is pinned: the model truth's generator (propagator/ffm's dist, FFM 2.2.1 on SDS 1.279.0 at modules 9cb02c8e2) and its $SPW rows. A
 // different generator or rows changes every figure below; the figures are re-recorded with a new pin, never silently.
 const FFM_DIST_SHA256 = 'a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4';
@@ -40,7 +41,7 @@ const SPW_ROWS_SHA256 = 'd7018d1d33afa58220f3f95219f3ef3bd3802129dee5aee378fd46b
   const {createHash} = await import('node:crypto');
   const digest = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   assert.equal(digest(path.join(modules, 'propagator/ffm/dist/isomorphic/module.wasm')), FFM_DIST_SHA256, 'model truth generator (FFM dist) pinned');
-  assert.equal(digest(process.env.FFM_SPW_FIXTURE ?? '/Users/tj/software/terrain-work/ffm-spw-fixture/spw-constant-20261029.json'), SPW_ROWS_SHA256, 'model truth $SPW rows pinned');
+  assert.equal(createHash('sha256').update(spwFixtureText()).digest('hex'), SPW_ROWS_SHA256, 'model truth $SPW rows pinned');
 }
 fs.mkdirSync(scratch, {recursive: true});
 const baseline = path.join(scratch, `release-${BASE}.wasm`);
@@ -206,5 +207,5 @@ for (const check of checks) {
 }
 execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
   {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
-if (!process.env.SDNAP_TEST_SCRATCH) fs.rmSync(scratch, {recursive: true, force: true});
+fs.rmSync(scratch, {recursive: true, force: true});
 console.log('GTO high-degree perigee terms E2E: PASS');
