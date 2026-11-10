@@ -5660,7 +5660,7 @@ inline void lock(int32_t* word) {
 inline void unlock(int32_t* word) { __atomic_store_n(word, 0, __ATOMIC_RELEASE); }
 
 /// The bracketing nodes of t (lower, upper in the direction of t). Lazily
-/// fills the checkpoints; any order of requests gives the same nodes.
+/// fills the checkpoints; an AP state depends on the order of requests by up to 12.7 mm (SPEC 9).
 inline bool bracket_ptr(XpSat& s, double t, const Node*& lo, const Node*& hi) {
   const int dir = t >= 0.0 ? 1 : -1;
   const int di = dir > 0 ? 0 : 1;

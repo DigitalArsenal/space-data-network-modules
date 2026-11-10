@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// AP (SPEC 16): SGP4XP with parts replaced, outside the SGP4-XP specification. What the call's $PCF FORCES selects
+// AP (SPEC 16): an advanced propagator that builds on the entire history of astrodynamics, outside the SGP4-XP specification. What the call's $PCF FORCES selects
 // (MAXIMUM_TESSERAL_DEGREE, MAXIMUM_DEGREE): tesseral gravity and the zonal tail; none of it is applied otherwise, so
 // the default is SGP4XP bit for bit.
 //   m-daily short-periodics: for even l and p = l/2, q = 0, Kaula's term has psi = m (Omega - theta_G): period about
