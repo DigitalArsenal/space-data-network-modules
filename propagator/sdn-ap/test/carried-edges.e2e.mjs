@@ -17,7 +17,11 @@
 //   with TRAJ_TYPE other than POLYNOMIAL_POS (carried-type-mismatch), a first segment of a basis other than Chebyshev
 //   (carried-basis-unsupported) or with velocity coefficients (carried-velocity-coefficients), on propagate and on
 //   load_epochs; an inner segment missing (carried-gap), of another basis or short of coefficients
-//   (carried-segment-invalid) when a state first needs it (SPEC 18.5): on propagate by name, from the store as -4.
+//   (carried-segment-invalid) when a state first needs it (SPEC 18.5): on propagate by name, from the store as -4;
+// - hostile inner segments, the record's bytes edited: a table offset past the buffer's end or wrapping to before its
+//   start, a vtable truncated at the buffer's end, a coefficient vector whose length runs past the end. Each record
+//   loads; the state in that segment is refused (carried-segment-invalid; -4 from the store); every other segment's
+//   state flies as the sound record's (bit for bit on propagate, to 1e-9 km from the store).
 // JS only moves bytes and compares numbers the module produced.
 //   node test/carried-edges.e2e.mjs
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
@@ -156,6 +160,60 @@ const span = rec.span;
   }
   // the same record repacked unchanged flies
   check((await refusal(h, "propagate", flight([repackOcm(rec.ocm, () => {})], { output: { EPOCHS: [isoAt(60), isoAt(inner)] } }))) === null, "the record repacked unchanged is refused");
+
+  // hostile inner segments (SPEC 18.5: the $OCM verifier leaves each segment's table to the segment's own verifier):
+  // the record's bytes edited in place, its third segment's table offset past the buffer's end, wrapping to before its
+  // start, its vtable truncated at the buffer's end, and its x coefficients' vector length running past the end. Each
+  // loads; the state inside that segment is refused (carried-segment-invalid on propagate, -4 from the store); a state
+  // in every other segment flies bit for bit as the sound record's
+  {
+    const fb = await import("flatbuffers");
+    const { OCM } = await import("spacedatastandards.org/lib/js/OCM/OCM.js");
+    const sound = new Uint8Array(rec.ocm);
+    const where = (bytes) => {
+      const bb = new fb.ByteBuffer(bytes), root = OCM.getRootAsOCM(bb);
+      const o = bb.__offset(root.bb_pos, 20);  // POLYNOMIAL_POSITION_RECORDS, the OCM table's ninth field
+      const vec = bb.__vector(root.bb_pos + o), elem = vec + 4 * 2, table = elem + bb.readUint32(elem);
+      const xo = bb.__offset(table, 12);       // POS_COEFF_X, PPEPositionRecord's fifth field
+      return { bb, elem, table, xlen: bb.__vector(table + xo) - 4 };
+    };
+    const hostile = {
+      "table past the end": (b) => { const w = where(b); w.bb.writeUint32(w.elem, b.length - w.elem + 4096); return b; },
+      "table before the start": (b) => { const w = where(b); w.bb.writeUint32(w.elem, (2 ** 32 - w.elem - 64) >>> 0); return b; },
+      "vtable truncated at the end": (b) => {
+        const grown = new Uint8Array(b.length + 2);
+        grown.set(b);
+        grown.set([0x40, 0x00], b.length);  // a vtable whose size (64) runs 62 bytes past the end
+        const w = where(grown);
+        w.bb.writeInt32(w.table, w.table - b.length);
+        return grown;
+      },
+      "coefficients past the end": (b) => { const w = where(b); w.bb.writeUint32(w.xlen, 1 << 20); return b; },
+    };
+    const segs = ocmOf(rec.ocm).POLYNOMIAL_POSITION_RECORDS;
+    const epoch = Date.parse(`${isoAt(0)}Z`);
+    const mids = segs.map((s) => (Date.parse(`${s.EPOCH_MID.slice(0, 19)}Z`) - epoch) / 1000 + Number(`0${s.EPOCH_MID.slice(19)}`));
+    const others = mids.filter((_, k) => k !== 2);
+    const good = await fly(h, rec.ocm, others, pcfOutputFrame.TEME);
+    const { createStandaloneHarness } = await import("space-data-module-sdk/testing/isomorphic");
+    const { wasmPath } = await import("./lib/module.mjs");
+    const { jdOf } = await import("./lib/frames.mjs");
+    const d = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
+    const x = d.instance.exports, p = x.sdnap_alloc(64);
+    for (const [name, edit] of Object.entries(hostile)) {
+      const bad = edit(new Uint8Array(sound));
+      check((await refusal(h, "propagate", flight([bad], { output: { EPOCHS: [isoAt(mids[2])] } }))) === "carried-segment-invalid", `${name}: propagate does not refuse the state in that segment by name`);
+      let flown = null;
+      try { flown = await fly(h, bad, others, pcfOutputFrame.TEME); } catch (e) { flown = null; check(false, `${name}: propagate refuses the other segments' states: ${e.code}`); }
+      if (flown) check(flown.every((s, k) => s.r.every((v, j) => Object.is(v, good[k].r[j])) && s.v.every((v, j) => Object.is(v, good[k].v[j]))), `${name}: another segment's state differs from the sound record's`);
+      const loaded = await d.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: bad }] });
+      check(loaded.statusCode === 0, `${name}: load_epochs refuses the record (${loaded.errorCode})`);
+      if (loaded.statusCode !== 0) continue;
+      const at = (t) => { const { whole, frac } = jdOf(isoAt(t)); return x.sdnap_epochs_set_at(0, 0, whole, frac, p); };
+      check(at(mids[2]) === -4, `${name}: the store's state in that segment is not -4`);
+      check(others.every((t, k) => at(t) === 0 && dist(Array.from(new Float64Array(d.memory.buffer, p, 3)), good[k].r) < 1e-9), `${name}: the store refuses or changes another segment's state`);
+    }
+  }
 }
 
 if (failures.length) {

@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.10 (dist 4db94146).
+Version 0.6.10 (dist 5099cd9f).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2837,7 +2837,34 @@ MEO records stay 4 to 6 times SGP4's; a low-orbit record carries 22 to 68 KB a d
 W4 at any span by its copy alone. Records split by day (fit with OUTPUT for each day; the store keeps one
 object's day records side by side and flies the one whose span holds the time, 18.3) bring a fresh state's bytes to
 one day's; the further cut, to the segment a state needs (about 1 KB), is the server's (a record and the segment
-ranges it serves), not a module call.
+ranges it serves), not a module call (DigitalArsenal/spacedatanetwork-stack#394).
+
+Which workloads pass as of this build (pass: the 95 % interval of carried over SGP4 under 2, goal.md's line; W1 to W3
+on the 8-day records, the transfer orbit's on its 1-day record (W1, 7 days, runs past it and is not counted); W4 on
+every span measured; provisional, the closing figures are the quiet run's on the integrated build; #394 takes W4):
+
+| Orbit | W1 | W2 | W3 | W4 |
+| --- | --- | --- | --- | --- |
+| Low, 500 km | pass, 0.72 [0.40, 1.14] | **fails**, 2.2 [0.72, 8.9] | **fails**, 1.47 [1.27, 2.18] | **fails**, 14.5 to 44 |
+| Low, 830 km | pass, 0.74 [0.61, 1.42] | **fails**, 1.4 [0.57, 2.7] | pass, 1.43 [1.03, 1.99] | **fails**, 8.5 to 22 |
+| MEO | pass, 0.87 [0.40, 1.24] | pass, 0.96 [0.93, 1.03] | pass, 0.75 [0.70, 1.36] | **fails**, 3.9 to 5.9 |
+| Geosynchronous | pass, 0.58 [0.30, 1.17] | **fails**, 0.65 [0.62, 2.44] | pass, 0.46 [0.27, 0.89] | **fails**, 0.99 to 1.38, intervals to 2.3 to 4.0 |
+| Low, e 0.1 | pass, 0.96 [0.58, 1.70] | **fails**, 1.9 [0.91, 6.7] | pass, 1.57 [1.33, 1.69] | **fails**, 6.2 to 48 |
+| Transfer, e 0.72 | not counted | pass, 0.69 [0.24, 1.73] | pass, 0.43 [0.31, 0.88] | **fails**, 5.4 [2.1, 122] |
+
+A median under 1 is not a pass: W2's and W4's fresh-record loads put their intervals over 2 at this load.
+
+The `$OCM` verifier's one change (build.mjs): `OCM::Verify` checks POLYNOMIAL_POSITION_RECORDS' vector of offsets
+(`VerifyOffset`, `VerifyVector`: its extent inside the buffer) and not each segment's table. The only reads of an
+element of that vector in `src/` are `carried::ensure` (`t.recs->Get(k)`), which verifies that table with its own
+verifier before any field of it is read; `carried::read` takes the vector itself and its size, and reads the first
+and last elements through `ensure`. A table offset past the buffer's end or wrapping to before its start, a vtable
+truncated at the end, and a coefficient vector running past the end refuse the state that needs that segment and leave
+the record's other states flying (`test/carried-edges.e2e.mjs`). Both verifiers run with `check_alignment = false`: a
+record cut from a size-prefixed stream is aligned to its prefix, not to its own start, so offsets in the plain view
+are 4 bytes off the builder's alignment (`ocm::view`, as every SDS input here); WebAssembly loads tolerate an unaligned
+scalar, and `ensure` copies the coefficients out with `memcpy`. A record's vector of segments costs at most 48 bytes of
+the store a segment (an element of 4 bytes in the record): a hostile record of n bytes asks at most 12 n.
 
 ### 18.6 What the record states
 
@@ -2898,6 +2925,43 @@ Arcs of 6, 12 and 24 h ending at the stop (FIT.DEFAULT_SPAN_HOURS) make the step
 to 0.026 km median at 500 km) and the error past it larger (10.8 to 92 km at 7 days at 500 km, against 4.4); 48 h is
 the best or within its spread past the stop in every regime: the rule stands. "Past the stop" is against the forecast
 continued, the same force model: the forecast's own error against the truth past its span is not in these figures.
+
+The span's start. The theory's arc ends at the stop, so at the start of a span longer than the arc the theory is days
+off its arc, flown backward: the step there grows with the span. Measured as fit states it (the same forecasts, spans
+of 2, 4 and 8 days from the forecast's start; the arc by the rule; median / 95th percentile over the objects):
+
+| Regime | Span (days) | Objects | Step at the start (km) | Its velocity (mm/s) | Step at the stop (km) | Its velocity (mm/s) |
+| --- | --: | --: | --: | --: | --: | --: |
+| Low, 500 km | 2 | 8 | 0.024 / 0.053 | 32 / 55 | 0.042 / 0.067 | 45 / 63 |
+| | 4 | 8 | 0.39 / 0.63 | 441 / 700 | 0.031 / 0.064 | 28 / 55 |
+| | 8 | 8 | 0.36 / 1.06 | 374 / 1,201 | 0.053 / 0.081 | 59 / 86 |
+| Low, 830 km | 2 | 8 | 0.013 / 0.030 | 12 / 26 | 0.018 / 0.025 | 14 / 21 |
+| | 4 | 8 | 0.099 / 0.144 | 103 / 162 | 0.013 / 0.023 | 18 / 30 |
+| | 8 | 8 | 0.088 / 0.97 | 91 / 1,007 | 0.017 / 0.026 | 13 / 38 |
+| MEO | 2 | 8 | 0.0051 / 0.0077 | 0.44 / 0.80 | 0.0047 / 0.0073 | 0.37 / 0.59 |
+| | 4 | 8 | 0.0051 / 0.0074 | 0.46 / 0.74 | 0.0047 / 0.0069 | 0.29 / 0.67 |
+| | 8 | 8 | 0.012 / 0.026 | 1.5 / 3.3 | 0.0041 / 0.0062 | 0.79 / 1.01 |
+| Geosynchronous | 2 | 8 | 0.0014 / 0.0026 | 0.11 / 0.16 | 0.0018 / 0.0026 | 0.13 / 0.15 |
+| | 4 | 8 | 0.010 / 0.016 | 0.71 / 1.21 | 0.0017 / 0.0028 | 0.09 / 0.20 |
+| | 8 | 8 | 0.044 / 0.088 | 3.2 / 6.5 | 0.0020 / 0.0027 | 0.14 / 0.18 |
+| Low, e 0.1 | 2 | 2 | 0.025 / 0.029 | 23 / 24 | 0.027 / 0.038 | 19 / 27 |
+| | 4 | 2 | 0.22 / 0.31 | 225 / 304 | 0.020 / 0.024 | 11 / 13 |
+| | 8 | 1 | 0.52 | 543 | 0.006 | 10 |
+| Transfer, e 0.72 | 2 | 4 | 0.064 / 0.068 | 47 / 66 | 0.034 / 0.051 | 4.1 / 4.8 |
+| | 4 | 2 | 0.12 / 0.15 | 85 / 113 | 0.066 / 0.096 | 3.2 / 4.2 |
+
+(The eccentric orbits' rows have fewer objects: AP's fits there took 2 to 7 minutes each under this load.) Within a
+2-day span the arc covers the span and the start's step is the stop's size. Beyond it the start's step grows to 0.1 to
+0.5 km in low orbit at 4 days (to 1 km at the 95th percentile at 8 days) and 5 to 90 m above it. At 8 days the arc
+rule extended the arc to 120 h for half the 500 km objects (the drag held); the start's step there ranges from 0.04
+to 1.2 km over the objects.
+
+A time before the span's start gets the theory, flown backward from its epoch (the arc's first state), with that step
+at the start (no blend; the record states it in fit's COMMENT and every state there is labeled THEORY, 18.8). Its
+weather rows begin the day before the span's start, so under WEATHER_SOURCE RECORDS the theory flies from the span's
+first day and refuses earlier days by name (weather-rows-short); under the theory's own flux model it flies anywhere.
+A consumer that needs states before the span uses the record the forecast's producer made before it: in a store,
+records split by day or by forecast run sit side by side and selection takes the one whose span holds the time (18.3).
 
 ### 18.8 Labels
 

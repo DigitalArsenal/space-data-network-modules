@@ -293,7 +293,9 @@ inline int read(const OCM* o, const ElementRow& row, const uint8_t* p, size_t n,
 
 /// The segment holding t (seconds from the epoch, inside the span), read: its index, or the refusal (< 0). The
 /// segment last flown and its successor first, then interpolation search over the start times, each segment read as
-/// the search reaches it.
+/// the search reaches it. A segment the search cannot read is stepped around (the nearest readable one between the
+/// bounds probed instead), so a fault refuses only the times it holds: when t falls where only unreadable segments
+/// remain, the refusal is the first of those segments' own (kNotVerifiable, kInvalid, ...), else kGap.
 inline int64_t segment_at(Track& tr, double t) {
   const uint32_t count = static_cast<uint32_t>(tr.segs.size());
   auto inside = [&](uint32_t k) {
@@ -315,7 +317,16 @@ inline int64_t segment_at(Track& tr, double t) {
   while (hi - lo > 1) {
     double g = (t - tlo) / (thi - tlo) * static_cast<double>(hi - lo);
     uint32_t mid = lo + static_cast<uint32_t>(std::fmin(std::fmax(g, 1.0), static_cast<double>(hi - lo - 1)));
-    if (const int32_t s = ensure(tr, mid, kTimed); s < 0) return s;
+    if (ensure(tr, mid, kTimed) < 0) {
+      // the nearest readable segment strictly between lo and hi, above mid then below it
+      uint32_t found = count;
+      for (uint32_t d = 1; found == count && (mid + d < hi || mid - lo > d); ++d) {
+        if (mid + d < hi && ensure(tr, mid + d, kTimed) >= 0) found = mid + d;
+        if (found == count && mid - lo > d && ensure(tr, mid - d, kTimed) >= 0) found = mid - d;
+      }
+      if (found == count) break;  // none: t lies in lo or in the unreadable segments after it
+      mid = found;
+    }
     if (tr.segs[mid].start <= t) {
       lo = mid;
       tlo = tr.segs[mid].start;
@@ -324,8 +335,8 @@ inline int64_t segment_at(Track& tr, double t) {
       thi = tr.segs[mid].start;
     }
   }
+  if (!inside(lo)) return hi - lo > 1 ? tr.segs[lo + 1].state : kGap;
   if (const int32_t s = ensure(tr, lo, kRead); s < 0) return s;
-  if (!inside(lo)) return kGap;
   tr.hint = lo;
   return lo;
 }
