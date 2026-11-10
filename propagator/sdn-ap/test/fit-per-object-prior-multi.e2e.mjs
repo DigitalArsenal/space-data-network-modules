@@ -18,7 +18,7 @@
 //    the Sentinel-3-like object worse than under its own posterior, by the amount printed;
 // 4. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
@@ -89,6 +89,5 @@ assert.ok(Math.abs(report['SWOT-like'].trueBtermDay3 - 21.33) <= 2, `SWOT-like p
 assert.ok(report['Sentinel-3-like'].sharedDay3 > report['Sentinel-3-like'].fit2Day3,
   `Sentinel-3-like: the shared prior ${report['Sentinel-3-like'].sharedDay3} m against its own ${report['Sentinel-3-like'].fit2Day3} m`);
 console.log(JSON.stringify({sharedPriorCostOnSentinel3Like: report['Sentinel-3-like'].sharedDay3 - report['Sentinel-3-like'].fit2Day3}));
-execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-  {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+reproduceConformance();
 console.log('fit per-object prior multi E2E: PASS');

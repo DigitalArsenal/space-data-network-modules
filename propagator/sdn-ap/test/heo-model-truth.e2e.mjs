@@ -9,7 +9,7 @@
 // No JavaScript orbital dynamics. Default-FORCES XP must retain its digest.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 const cases=[
  {name:'half-day-critical',n:2.0059,e:.72,i:63.4,raan:300,argp:270,ma:10,drag:false},
@@ -37,6 +37,6 @@ const results=[];
 for(const c of cases){const result=await runModelTruth(c);results.push(result);console.log(JSON.stringify(result));}
 if(process.env.SDN_AP_HEO_REPORT)fs.writeFileSync(process.env.SDN_AP_HEO_REPORT,JSON.stringify(results,null,2)+'\n');
 for(const result of results)for(const day of [1,3,7])assert.ok(Number.isFinite(result.days[day].e),'finite forward error');
-execFileSync(process.execPath,[new URL('./conformance.e2e.mjs',import.meta.url).pathname,'--reproduce',new URL('./results/conformance.json',import.meta.url).pathname],{stdio:'inherit',env:{...process.env,SDN_AP_ORACLE_ROOT:process.env.SDN_AP_ORACLE_ROOT??'/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+reproduceConformance();
 assert.ok(Math.abs(results[0].days[7].e-60.10)<=.5,`half-day day 7: ${results[0].days[7].e} m, 0.4.15 60.10 m (0.4.11 to 0.4.14: 201.97 m; SPEC 16.11)`);
 console.log('HEO model truth E2E: PASS');

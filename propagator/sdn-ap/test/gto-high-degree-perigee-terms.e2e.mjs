@@ -24,6 +24,7 @@ import {scratchTemp} from './lib/scratch.mjs';
 import {spwFixtureText} from './lib/spw-constant.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
@@ -205,7 +206,6 @@ assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {
   for (const [k, c] of Object.entries(check.zonalRates)) assert.ok(c.differenceM <= 0.1, `zonal ${k}: ${c.differenceM} m over one orbit`);
 }
-execFileSync(process.execPath, [new URL('./conformance.e2e.mjs', import.meta.url).pathname, '--reproduce', new URL('./results/conformance.json', import.meta.url).pathname],
-  {stdio: 'inherit', env: {...process.env, SDN_AP_ORACLE_ROOT: process.env.SDN_AP_ORACLE_ROOT ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+reproduceConformance();
 fs.rmSync(scratch, {recursive: true, force: true});
 console.log('GTO high-degree perigee terms E2E: PASS');
