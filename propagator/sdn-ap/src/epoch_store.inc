@@ -414,6 +414,7 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
     drag::table();
     q.xp = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
     q.error = q.xp == nullptr ? kPropRefused : xpt::xp_init(e, *q.xp);
+    if (q.error == kPropOk) xpt::xp_set_pooled(*q.xp);
   } else {
     q.sat = static_cast<Sat*>(std::calloc(1, sizeof(Sat)));
     q.error = q.sat == nullptr ? kPropRefused : sat_init(e, gravity_wgs72(), *q.sat);

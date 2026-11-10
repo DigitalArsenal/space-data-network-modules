@@ -406,7 +406,9 @@ struct MdailyEvalCache {
   alignas(16) float c21_f[24]{}, s21_f[24]{};
 };
 inline thread_local MdailyEvalCache g_mdaily_eval_cache{};
-inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
+/// The set being flown keeps its own (xp_theory.inc SetCaches); nullptr: the thread's.
+inline thread_local MdailyEvalCache* g_mdaily_set_cache = nullptr;
+inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_set_cache != nullptr ? *g_mdaily_set_cache : g_mdaily_eval_cache; }
 
 /// The m-daily corrections in the six-component set (n-dot, e-dot, i-dot,
 /// e varpi, sin i Omega, lambda order), first order, at the mean elements k;

@@ -127,6 +127,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count) {
       xpt::XpSat& x = st.xps[st.xp_count++];
       if (well_formed) {
         xpt::xp_init(e, x);
+        xpt::xp_set_pooled(x);
       } else {
         x = xpt::XpSat{};
         x.init_error = kPropRefused;
