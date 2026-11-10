@@ -49,7 +49,7 @@ The GMAT limits apply only to GMAT. These are agreement limits from the shared p
 | Nyx | 2.6.0 | 59 | 13 | 54 | 5 | 0 | 0 |
 | tudatpy | 1.0.0 | 59 | 13 | 59 | 0 | 0 | 0 |
 | Tudat WASM | 1.0.0.dev4 | 27 | 45 | 27 | 0 | 0 | 0 |
-| Basilisk | 2.12.0 | 50 | 22 | 43 | 7 | 0 | 0 |
+| Basilisk | 2.12.0 | 50 | 22 | 50 | 0 | 0 | 0 |
 | ERFA / SPICE | 2.0.1 / CSPICE_N0067 | 13 | 0 | 12 | 1 | 13 | 0 |
 | JPL Horizons | 1.2 | 6 | 1 | 6 | 0 | 4 | 0 |
 | SGP4 against its STR#3 base | foundation/sgp4-str3; module 1.5.0 | 0 | 0 | 0 | 0 | 3 | 0 |
@@ -63,10 +63,10 @@ Maxima across each tool's supported cases, at FFM's suite setting; the Orekit fi
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | LEO400 | point mass | 0.162 mm | 0.005 mm | 0.002 mm | 0.012 mm | 0.008 mm | 0.002 mm | 0.002 mm | 0.162 mm |
 | LEO400 | field + third bodies + SRP (no drag) | 1.264 mm | 30.389 mm | 30.370 mm | 0.888 mm | 23.017 mm | 2.106 mm | 1.138 mm | 1.313 mm |
-| LEO400 | drag | 8.448 mm | 2.319 m | 1.362 m | 12.462 m | 41.170 mm | 34.302 mm | 5418.767 m | 4.074 mm |
+| LEO400 | drag | 8.448 mm | 2.319 m | 1.362 m | 12.462 m | 41.170 mm | 34.302 mm | 44.175 mm | 4.074 mm |
 | SSO700 | point mass | 0.189 mm | 0.002 mm | 0.012 mm | 0.005 mm | 0.010 mm | 0.003 mm | 0.002 mm | 0.180 mm |
 | SSO700 | field + third bodies + SRP (no drag) | 1.803 mm | 10.531 mm | 12.699 mm | 0.675 mm | 1.700 mm | 2.180 mm | 0.293 mm | 1.355 mm |
-| SSO700 | drag | 1.482 mm | 7.950 m | 180.379 mm | 61.282 mm | 2.420 mm | 53.310 mm | 58.144 m | 1.061 mm |
+| SSO700 | drag | 1.482 mm | 7.950 m | 180.379 mm | 61.282 mm | 2.420 mm | 53.310 mm | 0.764 mm | 1.061 mm |
 | GPS | point mass | 0.160 mm | 0.004 mm | 0.004 mm | 0.004 mm | 5.440e-04 mm | 0.001 mm | 0.002 mm | 0.158 mm |
 | GPS | field + third bodies + SRP (no drag) | 0.219 mm | 1.500 mm | 2.512 mm | 0.115 mm | 1.389 mm | 0.125 mm | 0.156 mm | 0.218 mm |
 | GPS | drag | — | — | — | — | — | — | — | — |
@@ -77,7 +77,7 @@ Maxima across each tool's supported cases, at FFM's suite setting; the Orekit fi
 | MOLNIYA | field + third bodies + SRP (no drag) | 9.668 mm | 4.868 mm | 29.715 mm | 0.664 mm | 9.431 mm | 9.906 mm | 0.633 mm | 9.840 mm |
 | MOLNIYA | drag | — | — | — | — | — | — | — | — |
 
-For the GMAT R2026a, Nyx and Basilisk drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic).
+For the GMAT R2026a and Nyx drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic). Basilisk drag entries are scored against the tool run with FFM's atmosphere settings; the stock-settings run is in the same comparison.
 
 ### Drag cases with the tool-side setting difference removed (diagnostic)
 
@@ -195,7 +195,7 @@ The force TDB model spread is 1.34706e-05 s; the exact-epoch Earth-rotation diff
 - **Nyx NRLMSISE-00 port:** With the published NRLMSISE-00 formulas and the WGS84 Earth shape, the five missed cases are about 0.05 m from FFM, all below the unchanged 0.1 m limit. The exact corrected residuals are recorded per case. The port defect and the cached runner Earth-shape mismatch are separated in the per-case diagnostics; they do not indicate an FFM defect. Evidence: [nyx/summary-nyx-2.6.0.json](nyx/summary-nyx-2.6.0.json).
 - **Nyx variational equation:** The STM comparison is not usable as an FFM check: Nyx uses the step-start ctx.stm and computes stm * grad, instead of grad * stage_stm, while the RK stages retain the same context. Evidence: [nyx/summary-nyx-2.6.0.json](nyx/summary-nyx-2.6.0.json).
 - **GMAT anomalous oxygen:** GMAT gtd7 excludes anomalous oxygen; FFM and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the meter-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity. Evidence: [gmat/anomalous-oxygen.json](gmat/anomalous-oxygen.json).
-- **Basilisk atmosphere altitude and conventions:** Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect. Evidence: [basilisk/summary-basilisk-2.12.0.json](basilisk/summary-basilisk-2.12.0.json).
+- **Basilisk atmosphere altitude and conventions:** These cases are scored against Basilisk run with FFM's atmosphere settings: WGS84 height and geodetic latitude, and the native gtd7d density. Basilisk's stock settings (spherical altitude and geocentric latitude, gtd7 without anomalous oxygen below 500 km) do not match FFM's, so their run is kept in each row under stock, with its measured cause. Basilisk MsisAtmosphere uses spherical altitude and geocentric latitude, and below 500 km selects gtd7 without anomalous oxygen. The export/FFM use WGS84 geodetic coordinates and gtd7d density. Changing only atmosphere coordinates removes the kilometer-scale discrepancy; additionally supplying the installed wheel's native gtd7d density removes the meter-scale residual and passes every unchanged FFM tolerance. This is a measured native model-setting limitation, not evidence of an FFM defect. Evidence: [basilisk/summary-basilisk-2.12.0.json](basilisk/summary-basilisk-2.12.0.json).
 
 ## Pins and model settings
 
@@ -362,6 +362,8 @@ Model settings:
 
 Step setting: FFM suite / steps30 / finest as defined above; reference integrator settings as listed.
 
+Matched settings (wgs84-gtd7d, 7 cases): These cases are scored against Basilisk run with FFM's atmosphere settings: WGS84 height and geodetic latitude, and the native gtd7d density. Basilisk's stock settings (spherical altitude and geocentric latitude, gtd7 without anomalous oxygen below 500 km) do not match FFM's, so their run is kept in each row under stock, with its measured cause.
+
 ### ERFA / SPICE
 
 Version: 2.0.1 / CSPICE_N0067. Evidence: [erfa-spice/summary-erfa-spice.json](erfa-spice/summary-erfa-spice.json).
@@ -445,7 +447,7 @@ Step setting: 640 sets × 7 times
 ### GMAT R2026a drag diagnostic inputs
 
 - FFM trajectories at suite / steps30 / finest: `96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8`.
-- Anomalous-oxygen diagnostic: `cc8e11b8e168e6eb117b2122a9fac75c9ed28305bd3d619545ea98832c37c415`.
+- Anomalous-oxygen diagnostic: `c764b552e40a161b5b06a3c7369736d0a1b3a0025ac7e03c46fbdd8816f18f2e`.
 - LEO400_F6-field-sun-moon-srp-drag.txt: `aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78`.
 - LEO400_F6-field-sun-moon-srp-drag.script: `a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813`.
 - LEO400_Z3-zonal20-sun-moon-srp-drag.txt: `a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2`.
@@ -462,7 +464,7 @@ Step setting: 640 sets × 7 times
 ### Nyx drag diagnostic inputs
 
 - FFM trajectories at suite / steps30 / finest: `96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8`.
-- Published-formula / WGS84 trajectories: `47f4720b1fdc6b425bd0d54057b78aedcc0a39f5f7473a8a66d95e470c9f7fd5`.
+- Published-formula / WGS84 trajectories: `99495b55e4c4c352008a70dbba9a1b9fee53caab19b5b0af98bf8b4a16c65f45`.
 
 ### Basilisk drag diagnostic inputs
 

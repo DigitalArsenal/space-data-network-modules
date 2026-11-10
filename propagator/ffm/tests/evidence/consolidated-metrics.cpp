@@ -195,8 +195,11 @@ J reduceDragDiagnostics(const J& input,const std::map<std::string,J>& exportedCa
   for(const auto& row:diagnostic.at("cases")) {
    const std::string cid=row.at("id");require(stockCases.count(cid)&&seen.insert(cid).second,id+": unknown or repeated diagnostic case "+cid);
    const auto& exported=exportedCases.at(cid);const std::string orbit=exported.at("orbit");
-   const double stock=number(row.at("stockM"));require(stock==number(stockCases.at(cid).at("suite").at("worstM")),id+" "+cid+": diagnostic stock score differs from suite");
+   // A row scored against the matched-settings run keeps its stock-settings run under "stock"; its own score is the matched one.
+   const J& toolRow=stockCases.at(cid);const bool matched=toolRow.contains("stock");
+   const double stock=number(row.at("stockM"));require(stock==number((matched?toolRow.at("stock"):toolRow).at("suite").at("worstM")),id+" "+cid+": diagnostic stock score differs from suite");
    J scored=diagnosticScore(row,exported);const double corrected=number(scored.at("suiteM"));
+   require(!matched||corrected==number(toolRow.at("suite").at("worstM")),id+" "+cid+": matched-settings score differs from the scored row");
    scored["orbit"]=orbit;scored["stockM"]=stock;scored["limitM"]=limit;scored["met"]=corrected<=limit;scored["stockMet"]=stock<=limit;result["cases"].push_back(scored);
    if(!groups.count(orbit))groups[orbit]={{"orbit",orbit},{"cases",0},{"stockM",0},{"correctedM",0},{"limitM",limit}};
    auto& group=groups.at(orbit);inc(group,"cases");group["stockM"]=std::max(number(group.at("stockM")),stock);group["correctedM"]=std::max(number(group.at("correctedM")),corrected);

@@ -70,7 +70,8 @@ function collectDragDiagnostics(summaries, exported) {
   const stock = (tool, id) => {
     const row = summaries[tool].cases.find((c) => c.id === id);
     require(row, `${tool}: diagnostic case missing from stock summary: ${id}`);
-    return row.suite.worstM;
+    // A row scored against a matched-settings run keeps its stock-settings run under stock.
+    return (row.stock ?? row).suite.worstM;
   };
   const cacheSource = pin('FFM trajectories at suite / steps30 / finest', cachePin.sha256, { path: cacheFile });
   const oxygenPin = summaries['gmat-2026'].provenance.anomalousOxygen;
@@ -132,6 +133,9 @@ function collect() {
       modelSettings: typeof s[family]?.settings === 'string' ? { configuration: s[family].settings } : s[family]?.settings ?? s.referenceSettings ?? s.protocol,
       ffmSettings: exported.protocol.stepSettings, toolIdentity: tool,
       provenanceLimitations: id === 'orekit' ? s.orekit.engineBinary : id === 'tudat-wasm' ? s.provenance.apiLimitation : undefined,
+      // Cases scored against a run with FFM's settings, and what the tool's stock-settings run of them gave.
+      ...(s.primary ? { matchedRun: { variant: s.primary.variant, statement: s.primary.statement,
+        stock: s.cases.filter((r) => r.basiliskRun).map((r) => ({ id: r.id, suiteM: r.stock.suite.worstM, met: r.stock.met, cause: r.stock.cause?.classification ?? null })) } } : {}),
     }, { kind: 'propagation', cases, skipped: s.skipped ?? [], toleranceGroup: family === 'gmat' ? 'gmat' : 'default',
       expected: { scored: verdict.total, met: verdict.met, missed: verdict.missed, ...(s.verdict.coverage ? { skipped: s.verdict.coverage.skipped } : {}) },
       ...(id === 'orekit' ? { expectedSettings: Object.fromEntries(Object.entries(s.verdict).map(([key,v]) => [key, { scored: v.total, met: v.met, missed: v.missed }])) } : {}), stmStatement });
@@ -217,7 +221,7 @@ function settingLines(value, labels = []) {
 }
 const pinsList = (pins) => pins.map((p) => `- ${p.label}: \`${p.sha256 ?? p.revision}\`.`).join('\n');
 function renderSettings(tool) {
-  return `### ${tool.label}\n\nVersion: ${tool.version}. Evidence: [${tool.evidence}](${tool.evidence}).\n\n${pinsList(tool.pins)}\n\nModel settings:\n\n${settingLines(tool.modelSettings ?? {}).join('\n')}\n\nStep setting: ${tool.stepSetting ?? 'FFM suite / steps30 / finest as defined above; reference integrator settings as listed.'}${tool.provenanceLimitations ? `\n\nProvenance limit:\n\n${settingLines(tool.provenanceLimitations, ['availability']).join('\n')}` : ''}`;
+  return `### ${tool.label}\n\nVersion: ${tool.version}. Evidence: [${tool.evidence}](${tool.evidence}).\n\n${pinsList(tool.pins)}\n\nModel settings:\n\n${settingLines(tool.modelSettings ?? {}).join('\n')}\n\nStep setting: ${tool.stepSetting ?? 'FFM suite / steps30 / finest as defined above; reference integrator settings as listed.'}${tool.matchedRun ? `\n\nMatched settings (${tool.matchedRun.variant}, ${tool.matchedRun.stock.length} cases): ${tool.matchedRun.statement}` : ''}${tool.provenanceLimitations ? `\n\nProvenance limit:\n\n${settingLines(tool.provenanceLimitations, ['availability']).join('\n')}` : ''}`;
 }
 function dragDiagnosticTable(diagnostics) {
   return table(['Tool', 'Orbit', 'Cases', 'Stock', 'Setting difference removed', 'Limit', 'Stock verdict', 'Diagnostic verdict'], diagnostics.flatMap((d) => d.rows.map((r) => [d.label, r.orbit, r.cases, r.stockDisplay, r.correctedDisplay, r.limitDisplay, r.stockMet ? 'met' : 'not met', r.met ? 'met' : 'not met'])));
@@ -253,7 +257,10 @@ function render(data) {
   const stm = table(['Tool', 'STM maximum relative column difference', 'Interpretation'], tools.map((t) => [t.label,t.stm.display,t.stm.statement]));
   const settings = tools.map(renderSettings).join('\n\n');
   const diagnosticPins = data.dragDiagnostics.map((d) => `### ${d.label} drag diagnostic inputs\n\n${pinsList(d.pins)}`).join('\n\n');
-  const dragFootnote = 'For the GMAT R2026a, Nyx and Basilisk drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic).';
+  const matchedTools = tools.filter((t) => t.matchedRun).map((t) => t.label);
+  const dragFootnote = matchedTools.length
+    ? `For the GMAT R2026a and Nyx drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic). ${matchedTools.join(' and ')} drag entries are scored against the tool run with FFM's atmosphere settings; the stock-settings run is in the same comparison.`
+    : 'For the GMAT R2026a, Nyx and Basilisk drag entries, see [the diagnostic comparison below](#drag-cases-with-the-tool-side-setting-difference-removed-diagnostic).';
   const rowTables = tools.filter((t) => !definitions.some(([id]) => id === t.id)).map(renderRows).join('\n\n');
   const ecef = table(['Classical ECEF versus CIO','Position bound'],['leoM','gpsM','geoM'].map((r,i) => [['LEO','GPS','GEO'][i],f[`ecef-${r}`]]));
   const findingText = `Classical-frame source defects remaining: ${findings.defects.length}. ERFA is the authoritative IAU 1976/1980 implementation. Before/after measurements and the velocity-axis diagnostic are in [before-after.json](erfa-spice/before-after.json).\n\n${ecef}\n\nThe remaining classical ECEF budget is UT1 = UTC, zero polar motion, no frame bias and the 1976/1980 model. These values are radius-times-angle bounds over the 50 sample epochs. Reference-suite field/drag cases supply EOP and use the CIO force-model chain.\n\nThe force TDB model spread is ${f['force-clock']}; the exact-epoch Earth-rotation difference is ${f['force-clock-rotation']}, or ${f['force-clock-leo']} at LEO radius. ${findings.forceClock.note} Evidence: [ERFA/SPICE summary](erfa-spice/summary-erfa-spice.json).\n\n${findings.toolCauses.map((x) => `- **${x.label}:** ${x.statement} Evidence: [${x.evidence}](${x.evidence}).`).join('\n')}`;
@@ -317,7 +324,7 @@ export function generate(work) {
       {label:'Nyx NRLMSISE-00 port',statement:s.nyx.verdict.drag.statement,evidence:'nyx/summary-nyx-2.6.0.json'},
       {label:'Nyx variational equation',statement:s.nyx.verdict.stm.statement,evidence:'nyx/summary-nyx-2.6.0.json'},
       {label:'GMAT anomalous oxygen',statement:s['gmat-2026'].cases.find((r)=>r.cause).cause.statement,evidence:'gmat/anomalous-oxygen.json'},
-      {label:'Basilisk atmosphere altitude and conventions',statement:s.basilisk.cases.find((r)=>r.cause).cause.statement,evidence:'basilisk/summary-basilisk-2.12.0.json'},
+      {label:'Basilisk atmosphere altitude and conventions',statement:[s.basilisk.primary?.statement,s.basilisk.cases.map((r)=>r.stock?.cause??r.cause).find(Boolean).statement].filter(Boolean).join(' '),evidence:'basilisk/summary-basilisk-2.12.0.json'},
     ]},sgp4:{str3:s.str3,xp:s.xp}};
   return {data,...render(data)};
 }
