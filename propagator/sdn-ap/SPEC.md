@@ -2637,8 +2637,10 @@ per perigee passage:
   - **Per segment.** From 0.6.6 these rates are evaluated per segment: the stretch of one revolution (its two passages
     fixed) inside one interval of the mean-element grid (the mean state one cubic). Each of p, q, s_p and s_q is the
     quadratic in t through the segment's three points s_0 + (k + 1/2)(s_1 - s_0)/3, each at the grid's own mean state
-    there. Three evaluations serve every output state of the segment in place of one at each. KERNEL_DIFF_HERE A fit
-    keeps the rates at each of its states.
+    there. Three evaluations serve every output state of the segment in place of one at each. Against the rates at each
+    output time the state differs by 0.23 mm and 1.5e-7 m/s at most over 30 days at 60 s (test/kernel-cost.mjs --diff
+    against a build that evaluates them at each state; the largest at a 250 km perigee, B 0.01 m^2/kg, active weather;
+    0.23 mm and 1.4e-7 m/s for 0.6.6's one rate). A fit keeps the rates at each of its states.
 
 At e 0.3 and below, and without drag, the path is 0.4.15's, byte for byte (the XP digest and the drag-off runs below).
 
