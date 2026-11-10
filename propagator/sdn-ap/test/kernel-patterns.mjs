@@ -65,6 +65,15 @@ function apSet(r, k = 0, tesseral = undefined) {
   return seedOcm({ epoch: iso(EPOCH), n: r.n, e: r.e, i: r.i, raan: (r.raan + 3.3 * k) % 360, argp: r.argp, ma: (r.ma + 7.1 * k) % 360, bterm: r.bterm, agom: r.agom,
     norad: 80000 + k, name: `P${k}`, msis: true, records: true, rows: rowsThrough(ROWS), tesseral: tesseral ?? (r.e > 0.048 ? 0 : 31), zonal: 20 });
 }
+// stock SGP4XP: the same elements, BTERM and AGOM, the theory's own forces
+const xpSet = (r, k = 0) => seedOcm({ epoch: iso(EPOCH), n: r.n, e: r.e, i: r.i, raan: (r.raan + 3.3 * k) % 360, argp: r.argp, ma: (r.ma + 7.1 * k) % 360,
+  bterm: r.bterm, agom: r.agom, norad: 80000 + k, name: `P${k}` });
+const THEORIES = ["AP", "XP", "SGP4"];
+const turn = (q) => THEORIES.map((_, i) => THEORIES[(i + q) % THEORIES.length]);
+const per = () => Object.fromEntries(THEORIES.map((t) => [t, []]));
+// AP's cost over SGP4's and over SGP4XP's, round by round
+const ratios = (v) => ({ ratio: ratioSpread(v.AP.map((x, i) => x / v.SGP4[i])), ratioXp: ratioSpread(v.AP.map((x, i) => x / v.XP[i])) });
+const spreads = (v) => Object.fromEntries(THEORIES.map((t) => [t, spread(v[t])]));
 function sgp4Omm(r, k = 0) {
   const b = new flatbuffers.Builder(256);
   const e = b.createString(iso(EPOCH)), id = b.createString(`2026-${String(k % 1000).padStart(3, "0")}A`), orig = b.createString("SDN");
@@ -99,9 +108,9 @@ async function catalog(helper) {
   for (const name of PICK.filter((p) => p !== "gto")) {
     const r = ORBITS[name];
     for (const N of COUNTS) {
-      const sets = { AP: Array.from({ length: N }, (_, k) => apSet(r, k)), SGP4: await sgp4Sets(helper, r, N) };
+      const sets = { AP: Array.from({ length: N }, (_, k) => apSet(r, k)), XP: Array.from({ length: N }, (_, k) => xpSet(r, k)), SGP4: await sgp4Sets(helper, r, N) };
       const arms = {};
-      for (const theory of ["AP", "SGP4"]) arms[theory] = { m: await open(), sets: sets[theory] };
+      for (const theory of THEORIES) arms[theory] = { m: await open(), sets: sets[theory] };
       for (const a of Object.values(arms)) { a.out = a.m.x.sdnap_alloc(48 * N); a.status = a.m.x.sdnap_alloc(4 * N); a.one = a.m.x.sdnap_alloc(48); }
       // time-major: one call per instant over every series, instants 2..40 (the first leaves out each record's start)
       const timeMajor = async (a) => {
@@ -121,12 +130,12 @@ async function catalog(helper) {
       };
       const rounds = N >= 10000 ? Math.max(3, Math.floor(ROUNDS / 2)) : ROUNDS;
       for (const a of Object.values(arms)) { await timeMajor(a); await recordMajor(a); }
-      const t = { AP: [], SGP4: [] }, rm = { AP: [], SGP4: [] };
-      for (let q = 0; q < rounds; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) { t[theory].push(await timeMajor(arms[theory])); rm[theory].push(await recordMajor(arms[theory])); }
-      const row = { orbit: name, records: N, timeMajor: { AP: spread(t.AP), SGP4: spread(t.SGP4), ratio: ratioSpread(t.AP.map((v, i) => v / t.SGP4[i])) },
-        recordMajor: { AP: spread(rm.AP), SGP4: spread(rm.SGP4), ratio: ratioSpread(rm.AP.map((v, i) => v / rm.SGP4[i])) } };
+      const t = per(), rm = per();
+      for (let q = 0; q < rounds; ++q) for (const theory of turn(q)) { t[theory].push(await timeMajor(arms[theory])); rm[theory].push(await recordMajor(arms[theory])); }
+      const row = { orbit: name, records: N, timeMajor: { ...spreads(t), ...ratios(t) }, recordMajor: { ...spreads(rm), ...ratios(rm) } };
       rows.push(row);
-      console.log(`catalog ${name} N=${N} | time-major: AP ${fmt(row.timeMajor.AP, 3)} SGP4 ${fmt(row.timeMajor.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.timeMajor.ratio, 1)} | record-major: AP ${fmt(row.recordMajor.AP, 3)} SGP4 ${fmt(row.recordMajor.SGP4, 3)}, AP/SGP4 ${fmt(row.recordMajor.ratio, 1)}`);
+      const line = (c) => `AP ${fmt(c.AP, 3)} XP ${fmt(c.XP, 3)} SGP4 ${fmt(c.SGP4, 3)} us/state, AP/SGP4 ${fmt(c.ratio, 1)}, AP/XP ${fmt(c.ratioXp, 1)}`;
+      console.log(`catalog ${name} N=${N} | time-major: ${line(row.timeMajor)} | record-major: ${line(row.recordMajor)}`);
     }
   }
   return rows;
@@ -136,12 +145,12 @@ async function catalog(helper) {
 async function first(helper) {
   const rows = [];
   for (const name of PICK) {
-    const r = ORBITS[name], sets = { AP: [apSet(r)], SGP4: await sgp4Sets(helper, r, 1) };
+    const r = ORBITS[name], sets = { AP: [apSet(r)], XP: [xpSet(r)], SGP4: await sgp4Sets(helper, r, 1) };
     for (const days of [0, 1, 7]) {
       const at = jd(EPOCH + days * DAY + (days === 0 ? 60000 : 0));
-      const fresh = { AP: [], SGP4: [] }, warm = { AP: [], SGP4: [] };
+      const fresh = per(), warm = per();
       for (let q = 0; q < ROUNDS; ++q)
-        for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) {
+        for (const theory of turn(q)) {
           const m = await open(), out = m.x.sdnap_alloc(48);
           await m.load(sets[theory]);
           let t0 = wallUs();
@@ -154,11 +163,12 @@ async function first(helper) {
           m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out);
           warm[theory].push(wallUs() - t0);
         }
-      const row = { orbit: name, days, freshInstance: { AP: spread(fresh.AP), SGP4: spread(fresh.SGP4) }, perRecord: { AP: spread(warm.AP), SGP4: spread(warm.SGP4) } };
-      row.perProcess = { AP: row.freshInstance.AP.median - row.perRecord.AP.median, SGP4: row.freshInstance.SGP4.median - row.perRecord.SGP4.median };
+      const row = { orbit: name, days, freshInstance: spreads(fresh), perRecord: spreads(warm) };
+      row.perProcess = Object.fromEntries(THEORIES.map((t) => [t, row.freshInstance[t].median - row.perRecord[t].median]));
       row.perRecordRatio = row.perRecord.AP.median / row.perRecord.SGP4.median;
+      row.perRecordRatioXp = row.perRecord.AP.median / row.perRecord.XP.median;
       rows.push(row);
-      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)} | once per process: AP ${row.perProcess.AP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us`);
+      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} XP ${fmt(row.freshInstance.XP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} XP ${fmt(row.perRecord.XP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)}, AP/XP ${row.perRecordRatioXp.toFixed(1)} | once per process: AP ${row.perProcess.AP.toFixed(0)} XP ${row.perProcess.XP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us`);
     }
   }
   return rows;
@@ -176,17 +186,17 @@ async function order(helper) {
   for (let i = 0, j = seq.length - 1; i <= j; ++i, --j) { far.push(seq[i]); if (i !== j) far.push(seq[j]); }
   for (const name of PICK) {
     const r = ORBITS[name], arms = {};
-    for (const [theory, set] of [["AP", apSet(r)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48) }; }
+    for (const [theory, set] of [["AP", apSet(r)], ["XP", xpSet(r)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48) }; }
     for (const [label, list] of [["ascending", seq], ["random", random], ["ends", far]]) {
       const g = grid(list);
       const sweep = (a) => { const c0 = cpuUs(); for (let k = 0; k < g.n; ++k) if (a.m.x.sdnap_epochs_set_at(0, 0, g.W[k], g.F[k], a.out) !== 0) throw new Error("rc"); return (cpuUs() - c0) / g.n; };
       for (const a of Object.values(arms)) sweep(a);
-      const v = { AP: [], SGP4: [] };
+      const v = per();
       const rounds = name === "gto" && label !== "ascending" ? 3 : ROUNDS;
-      for (let q = 0; q < rounds; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) v[theory].push(sweep(arms[theory]));
-      const row = { orbit: name, order: label, AP: spread(v.AP), SGP4: spread(v.SGP4), ratio: ratioSpread(v.AP.map((x, i) => x / v.SGP4[i])) };
+      for (let q = 0; q < rounds; ++q) for (const theory of turn(q)) v[theory].push(sweep(arms[theory]));
+      const row = { orbit: name, order: label, ...spreads(v), ...ratios(v) };
       rows.push(row);
-      console.log(`order ${name} ${label} | AP ${fmt(row.AP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}`);
+      console.log(`order ${name} ${label} | AP ${fmt(row.AP, 3)} XP ${fmt(row.XP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}, AP/XP ${fmt(row.ratioXp, 1)}`);
     }
   }
   return rows;
@@ -200,11 +210,11 @@ async function ecc(helper) {
     const r = { n: revPerDay((RE + 600) / (1 - e)), e, i: 65, raan: 60, argp: 180, ma: 10, bterm: 1.27e-3, agom: 0.01 };  // perigee 600 km
     for (const tesseral of [31, 0]) {
       const arms = {};
-      for (const [theory, set] of [["AP", apSet(r, 0, tesseral)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48), set }; }
+      for (const [theory, set] of [["AP", apSet(r, 0, tesseral)], ["XP", xpSet(r)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48), set }; }
       const sweep = (a) => { const c0 = cpuUs(); for (let k = 0; k < g.n; ++k) if (a.m.x.sdnap_epochs_set_at(0, 0, g.W[k], g.F[k], a.out) !== 0) throw new Error("rc"); return (cpuUs() - c0) / g.n; };
       for (const a of Object.values(arms)) sweep(a);
-      const v = { AP: [], SGP4: [] };
-      for (let q = 0; q < ROUNDS; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) v[theory].push(sweep(arms[theory]));
+      const v = per();
+      for (let q = 0; q < ROUNDS; ++q) for (const theory of turn(q)) v[theory].push(sweep(arms[theory]));
       const firstUs = [];
       const at = jd(EPOCH + DAY);
       for (let q = 0; q < 5; ++q) { await arms.AP.m.load([arms.AP.set]); const t0 = wallUs(); arms.AP.m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], arms.AP.out); firstUs.push(wallUs() - t0); }

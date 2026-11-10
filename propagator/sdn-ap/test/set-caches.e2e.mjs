@@ -1,0 +1,153 @@
+#!/usr/bin/env node
+// E2E (sdn-ap 0.6.12, stack issues #398 and #420): an AP state is a function of its set and its time alone.
+// Made-up AP sets with the headline forces (zonal 20, tesseral 31, NRLMSISE-00 on made-up quiet rows), near-circular
+// (500 km, 830 km, MEO, GEO) and eccentric (e 0.1 and 0.25 with tesseral 31, the transfer orbit with and without
+// tesseral 31, Molniya), 7 days at 300 s from a day after the epoch. In the epoch store (sdnap_epochs_set_at):
+// - random order and alternating ends against ascending order, bit for bit;
+// - one state from a freshly loaded record against the ascending pass, bit for bit;
+// - two records interleaved (time-major) against each alone, bit for bit;
+// - the same with the pool's budget at 1 MB (sdnap_cache_budget), every set's caches reclaimed and remade as others
+//   need room: bit for bit, sdnap_cache_stats counting the reclaims and never holding more than the budget.
+// Through `propagate` (#420): a time asked alone against the same time inside one call of 2,016 states, bit for bit.
+// JS moves bytes and compares numbers the module produced.
+//   node test/set-caches.e2e.mjs
+import * as flatbuffers from "flatbuffers";
+import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
+import { F107DataType } from "spacedatastandards.org/lib/js/OCM/F107DataType.js";
+import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
+import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
+import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
+import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
+import { ensureBuilt, wasmPath } from "./lib/module.mjs";
+import { T, seedOcm, rowsThrough } from "./lib/ocm.mjs";
+
+const failures = [];
+const check = (ok, what) => { if (!ok) failures.push(what); };
+const DAY = 86400000, EPOCH = Date.parse("2026-06-15T00:00:00Z"), MU = 398600.4418, RE = 6378.137;
+const iso = (ms) => new Date(ms).toISOString().replace("Z", "");
+const revPerDay = (a) => (Math.sqrt(MU / a ** 3) * 86400) / (2 * Math.PI);
+const ROWS = Array.from({ length: 46 }, (_, k) => ({ DATE: iso(EPOCH + (k - 5) * DAY).slice(0, 10), F107_OBS: 70, F107_OBS_CENTER81: 72, AP_AVG: 4, F107_DATA_TYPE: F107DataType.OBS }));
+const ORBITS = {
+  "500 km": { n: revPerDay(RE + 500), e: 0.001, i: 97.4, bterm: 3.8e-3, tesseral: 31 },
+  "830 km": { n: revPerDay(RE + 830), e: 0.001, i: 98.7, bterm: 1.27e-3, tesseral: 31 },
+  MEO: { n: 2.0056, e: 0.005, i: 55, bterm: 0.001, tesseral: 31 },
+  GEO: { n: 1.0027, e: 0.0003, i: 0.05, bterm: 0.001, tesseral: 31 },
+  "e 0.1, tesseral 31": { n: revPerDay((RE + 600) / 0.9), e: 0.1, i: 65, bterm: 1.27e-3, tesseral: 31 },
+  "e 0.25, tesseral 31": { n: revPerDay((RE + 600) / 0.75), e: 0.25, i: 65, bterm: 1.27e-3, tesseral: 31 },
+  "transfer orbit": { n: 2.26, e: 0.72, i: 27, bterm: 1.27e-3, tesseral: 0 },
+  "transfer orbit, tesseral 31": { n: 2.26, e: 0.72, i: 27, bterm: 1.27e-3, tesseral: 31 },
+  Molniya: { n: 2.006, e: 0.74, i: 63.4, bterm: 1.27e-3, tesseral: 0 },
+};
+const record = (o, k) => seedOcm({ epoch: iso(EPOCH), n: o.n, e: o.e, i: o.i, raan: (60 + 3.3 * k) % 360, argp: 90, ma: (10 + 7.1 * k) % 360,
+  bterm: o.bterm, agom: 0.01, norad: 80000 + k, name: `P${k}`, msis: true, records: true, rows: rowsThrough(ROWS), tesseral: o.tesseral, zonal: 20 });
+const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
+const jd = (ms) => { const d = ms / DAY; return [Math.floor(d) + 2440587.5, d - Math.floor(d)]; };
+const times = Array.from({ length: 2016 }, (_, k) => EPOCH + DAY + k * 300000);
+let seed = 20261110;
+const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+const shuffled = times.map((_, i) => i);
+for (let i = shuffled.length - 1; i > 0; --i) { const j = Math.floor(rand() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+const ends = [];
+for (let i = 0, j = times.length - 1; i <= j; ++i, --j) { ends.push(i); if (i !== j) ends.push(j); }
+const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b[q]));
+
+ensureBuilt();
+const h = await createStandaloneHarness("browser", wasmPath, { surface: "direct", maxThreads: 1, enableBrowserWasiThreads: false });
+const x = h.instance.exports;
+const out = x.sdnap_alloc(48), stats = x.sdnap_alloc(64);
+const mem = () => new Float64Array((h.memory ?? x.memory).buffer);
+const load = async (records) => {
+  const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(records.map(prefixed)) }] });
+  if (r.statusCode !== 0) throw new Error(`load_epochs ${r.errorCode}: ${r.errorMessage}`);
+};
+const at = (i, ms) => {
+  const [w, f] = jd(ms);
+  const rc = x.sdnap_epochs_set_at(i, 0, w, f, out);
+  if (rc !== 0) throw new Error(`sdnap_epochs_set_at ${rc}`);
+  return Array.from(mem().subarray(out / 8, out / 8 + 6));
+};
+const cacheStats = () => { x.sdnap_cache_stats(stats); return Array.from(mem().subarray(stats / 8, stats / 8 + 8)); };
+
+for (const [name, o] of Object.entries(ORBITS)) {
+  const one = [record(o, 0)], two = [record(o, 0), record(o, 1)];
+  await load(one);
+  const asc = times.map((ms) => at(0, ms));
+  for (const [label, order] of [["random order", shuffled], ["alternating ends", ends]]) {
+    await load(one);
+    const got = new Array(times.length);
+    for (const i of order) got[i] = at(0, times[i]);
+    const differ = got.filter((s, i) => !same(s, asc[i])).length;
+    check(differ === 0, `${name}: ${label} against ascending: ${differ} of ${times.length} states differ`);
+  }
+  let freshDiffer = 0;
+  for (let q = 0; q < 24; ++q) {
+    const i = (q * 337 + 5) % times.length;
+    await load(one);
+    if (!same(at(0, times[i]), asc[i])) ++freshDiffer;
+  }
+  check(freshDiffer === 0, `${name}: one state from a fresh record against the ascending pass: ${freshDiffer} of 24 differ`);
+  await load([record(o, 1)]);
+  const asc1 = times.map((ms) => at(0, ms));
+  for (const budget of [0, 1]) {
+    if (budget > 0) x.sdnap_cache_budget(budget);
+    await load(two);
+    let differ = 0;
+    times.forEach((ms, i) => { if (!same(at(0, ms), asc[i]) || !same(at(1, ms), asc1[i])) ++differ; });
+    check(differ === 0, `${name}: two records interleaved${budget ? " at a 1 MB budget" : ""} against each alone: ${differ} of ${times.length} instants differ`);
+    if (budget > 0) {
+      const s = cacheStats();
+      check(s[1] <= s[0], `${name}: the pool holds ${s[1]} bytes, over its budget ${s[0]}`);
+      x.sdnap_cache_budget(256);
+    }
+  }
+  console.log(`${name}: random order, alternating ends, fresh records and interleaving bit for bit`);
+}
+{
+  // a 1 MB budget reclaims: forty low-orbit sets stepped together
+  const o = ORBITS["500 km"];
+  const records = Array.from({ length: 40 }, (_, k) => record(o, k));
+  await load(records);
+  const alone = times.slice(0, 96).map((ms) => records.map((_, i) => at(i, ms)));
+  const before = cacheStats();
+  x.sdnap_cache_budget(1);
+  await load(records);
+  let differ = 0;
+  times.slice(0, 96).forEach((ms, k) => records.forEach((_, i) => { if (!same(at(i, ms), alone[k][i])) ++differ; }));
+  const after = cacheStats();
+  check(differ === 0, `40 sets at a 1 MB budget against the same at 256 MB: ${differ} states differ`);
+  check(after[4] > before[4], `a 1 MB budget reclaimed no caches (${before[4]} then ${after[4]})`);
+  check(after[1] <= after[0], `the pool holds ${after[1]} bytes, over its budget ${after[0]}`);
+  console.log(`40 sets stepped together at 1 MB: bit for bit, ${after[4] - before[4]} caches reclaimed, ${after[1]} of ${after[0]} bytes held`);
+  x.sdnap_cache_budget(256);
+}
+{
+  // through propagate (#420): a time alone against the same time in one call
+  const pcfBytes = (epochs) => { const c = new PCFT(); c.OUTPUT = Object.assign(new PCFOutputT(), { FRAME: pcfOutputFrame.TEME, EPOCHS: epochs.map(iso), MAXIMUM_STATES: 3000 });
+    const b = new flatbuffers.Builder(1 << 16); b.finish(c.pack(b), "$PCF"); return b.asUint8Array().slice(); };
+  const lines = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(bytes)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+  const fly = async (ocm, epochs) => {
+    const r = await h.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: ocm }, { portId: "configuration", typeRef: T("PCF"), payload: pcfBytes(epochs) }] });
+    if (r.statusCode !== 0) throw new Error(`propagate ${r.errorCode}: ${r.errorMessage}`);
+    return lines(new Uint8Array(r.outputs.find((p) => p.portId === "ephemeris").payload));
+  };
+  for (const [name, o] of Object.entries(ORBITS)) {
+    const ocm = record(o, 0);
+    const all = await fly(ocm, times);
+    let differ = 0;
+    for (let q = 0; q < 12; ++q) {
+      const i = (q * 337 + 11) % times.length;
+      const a = (await fly(ocm, [times[i]]))[0], b = all[i];
+      if (!(Object.is(a.X, b.X) && Object.is(a.Y, b.Y) && Object.is(a.Z, b.Z) && Object.is(a.X_DOT, b.X_DOT))) ++differ;
+    }
+    check(differ === 0, `${name}: propagate, a time alone against the same time in one call: ${differ} of 12 differ`);
+  }
+  console.log("propagate: a time alone against the same time in one call, bit for bit on every orbit");
+}
+
+if (failures.length) {
+  for (const f of failures) console.error(`FAIL ${f}`);
+  console.log(`SET-CACHES FAIL: ${failures.length} failure(s)`);
+  process.exit(1);
+}
+console.log("SET-CACHES PASS: an AP state is a function of its set and its time alone");
+process.exit(0);
