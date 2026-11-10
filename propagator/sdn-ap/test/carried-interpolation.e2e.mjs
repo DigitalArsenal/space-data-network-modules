@@ -8,7 +8,7 @@
 // step (positions and velocities that agree) are fitted again and that record compared with the first:
 // - in GCRF and in TEME, the largest position error is under 1 cm (SPEC 18's bound) on both paths, and the velocity
 //   error under 1 mm/s where velocities come in (the first record, built from an analytic theory's positions to 1 mm/s
-//   in velocity, is not smooth to 0.1 mm/s on the step's scale: the referee's 0.1 mm/s is carried-compression's, on
+//   in velocity, is not smooth to 0.1 mm/s on the step's scale: the 0.1 mm/s bound is carried-compression's, on
 //   numerical forecasts);
 // - the record is the same as the plain fit's but for POLYNOMIAL_POSITION_RECORDS, TRAJ_TYPE POLYNOMIAL_POS, TRAJ_BASIS
 //   PREDICTED, the COMMENT lines on the forecast and FIT_STATISTICS.PCF_CID (its $PCF has OUTPUT): the theory set is

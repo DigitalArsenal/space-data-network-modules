@@ -36,9 +36,15 @@ namespace carried {
 /// below sets the segments' length in low orbit (the same bytes at 1 and 10 cm); at 1 cm medium and geosynchronous
 /// records take 1.3 and 0.7 kB a day where 10 cm takes 0.8 and 0.4.
 constexpr double kToleranceKm = 5.0e-6;
-/// A segment's velocity bound against the densified forecast, km/s (0.05 mm/s, half the 0.1 mm/s the record is held to
-/// against the forecast at any time: the input's interpolant and the series between checked points take the rest).
+/// A segment's velocity bound against the densified forecast when the block's states are at most kFineArcRad apart,
+/// km/s (0.05 mm/s, half the 0.1 mm/s the record is held to against the forecast at any time: the input's interpolant and
+/// the series between checked points take the rest).
 constexpr double kVelocityToleranceKmS = 5.0e-8;
+/// The same bound when the states are more than kFineArcRad apart and at most kMaxArcRad (60 s in low orbit, the common
+/// step of an operator's ephemeris), km/s (0.1 mm/s): the 4-node Hermite's own velocity error between FFM states 60 s
+/// apart is 0.017 mm/s at 500 km and 0.075 mm/s at 300 km (measured), so the record holds about 0.2 mm/s against the
+/// forecast at any time; the position bound does not change.
+constexpr double kCoarseVelocityToleranceKmS = 1.0e-7;
 /// The velocity bound when the forecast's velocities are not its positions' derivative (built from the positions: the
 /// 8-node Lagrange's derivative is the velocity checked against), km/s (1 mm/s). Measured, that derivative between FFM
 /// states 30 s apart misses the forecast by up to 0.04 mm/s and steps by up to 0.12 mm/s where two windows meet (300
@@ -53,16 +59,22 @@ constexpr int kCandidates[] = {16, 24, 32, 48, 64};
 constexpr double kBytesSlack = 0.10;
 /// Most coefficients a record may carry per axis (reader's bound).
 constexpr uint16_t kMaxCoefficients = 64;
-/// The most arc (rad, about the Earth's center) between consecutive states a forecast is built from (30 s in low orbit
-/// and at the perigee of an e 0.9 orbit at 500 km). Measured, the 4-node Hermite's velocity error between FFM states:
-/// at most 0.002 mm/s at 30 s; at 60 s (0.066 to 0.07 rad in low orbit) 0.017 mm/s at 500 km and 0.075 at 300 km, too
-/// much of the 0.1 mm/s bound; at 120 s 1.4 mm/s.
-constexpr double kMaxArcRad = 0.05;
+/// The most arc (rad, about the Earth's center) between consecutive states a forecast is built from: 60 s in low orbit
+/// (0.066 to 0.07 rad) passes, 120 s is refused (carry-states-sparse). Measured, the 4-node Hermite's velocity error
+/// between FFM states: at most 0.002 mm/s at 30 s; at 60 s 0.017 mm/s at 500 km and 0.075 at 300 km; at 120 s 1.4 mm/s.
+constexpr double kMaxArcRad = 0.1;
+/// States at most this far apart (30 s in low orbit and at the perigee of an e 0.9 orbit at 500 km) are held to the
+/// velocity bound kVelocityToleranceKmS; farther apart, to kCoarseVelocityToleranceKmS.
+constexpr double kFineArcRad = 0.05;
 /// States whose velocities differ from their positions' 8-node Lagrange derivative by more than this in RMS (km/s: the
 /// velocity bound, 0.05 mm/s) are built from their positions alone. Measured at the steps the arc bound allows: FFM's
 /// states 0.0002 to 0.011 mm/s (the Lagrange derivative's own error mostly); an analytic theory's velocity is not its
 /// position's derivative (SGP4 and SGP4XP by 20 to 70 mm/s in low orbit).
 constexpr double kVelocityAgreementKmS = kVelocityToleranceKmS;
+/// The same test when the states are more than kFineArcRad apart (km/s, 1 mm/s): the Lagrange derivative's own error
+/// grows with the spacing's seventh power (about 2^7 times at 60 s what it is at 30 s), still an order under an analytic
+/// theory's 20 to 70 mm/s.
+constexpr double kCoarseVelocityAgreementKmS = 1.0e-6;
 /// The weight of a segment's two end points in its least squares: consecutive segments share the end point, so they meet
 /// in position and velocity (to about the tolerance over this weight squared).
 constexpr double kJoinWeight = 1.0e4;
@@ -170,6 +182,9 @@ struct Track {
   const flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>* recs = nullptr;
   mutable std::vector<Segment> segs;  ///< one per record, sized once; element k written once, before state[k] is kValid
   std::unique_ptr<std::atomic<int32_t>[]> state;  ///< one per segment (SegmentState)
+  /// One per segment: 0 not judged, 1 it meets its readable neighbors (each within kJoinSeconds), -1 it does not (kGap).
+  /// A function of the record's bytes alone; any thread may judge it, all reach the same value.
+  std::unique_ptr<std::atomic<int8_t>[]> joined;
   std::vector<double> c;       ///< fit's own track: its coefficients in memory (buf points here)
   Track() = default;
   Track(const Track&) = delete;
@@ -179,13 +194,17 @@ struct Track {
   bool empty() const { return segs.empty(); }
   bool covers(double t) const { return !segs.empty() && t >= start && t <= stop; }
   size_t bytes() const {
-    return sizeof(Track) + own.capacity() + segs.capacity() * (sizeof(Segment) + sizeof(std::atomic<int32_t>)) + c.capacity() * sizeof(double);
+    return sizeof(Track) + own.capacity() + segs.capacity() * (sizeof(Segment) + sizeof(std::atomic<int32_t>) + sizeof(std::atomic<int8_t>)) + c.capacity() * sizeof(double);
   }
-  /// The storage of `count` segments, every one unread: once, before any flight.
+  /// The storage of `count` segments, every one unread and not judged: once, before any flight.
   void sized(size_t count) {
     segs.assign(count, Segment{});
     state.reset(new std::atomic<int32_t>[count]);
-    for (size_t k = 0; k < count; ++k) state[k].store(kUnread, std::memory_order_relaxed);
+    joined.reset(new std::atomic<int8_t>[count]);
+    for (size_t k = 0; k < count; ++k) {
+      state[k].store(kUnread, std::memory_order_relaxed);
+      joined[k].store(0, std::memory_order_relaxed);
+    }
   }
 };
 
@@ -210,7 +229,7 @@ inline const char* refusal_text(int32_t s) {
   switch (s) {
     case kBasis: return "A carried segment is a Chebyshev series (BASIS_TYPE CHEBYSHEV).";
     case kVelocity: return "A carried segment states positions only: its velocity is the series' derivative.";
-    case kGap: return "Carried segments follow one another, each starting where the one before ends (within 1 ms): a time inside the span falls between two.";
+    case kGap: return "Carried segments follow one another, each starting where the one before ends (within 1 ms): a time inside the span falls between two, or in a segment that overlaps a neighbor or is out of order.";
     case kFrame: return "No GCRF axes at the time (outside ERFA's calendar).";
     case kNotVerifiable: return "A carried segment (PPEPositionRecord) does not verify.";
     default: return "A carried segment states its EPOCH_MID (ISO 8601 UTC), a positive EPOCH_HALF_SPAN and NUM_COEFFICIENTS (1 to 64) finite coefficients per axis.";
@@ -284,9 +303,32 @@ inline int32_t ensure(const Track& t, uint32_t k, Segment& out) {
   return materialize(t, k, out);  // kBusy on another thread: this thread's own copy, not published
 }
 
+/// Segment k of t as flight takes it: read (ensure) and meeting its neighbors, each readable one within kJoinSeconds
+/// (the successor starts where k ends, the predecessor ends where k starts); kValid with `out`, or the refusal (kGap
+/// where a neighbor overlaps k or leaves a gap: segments out of order or overlapping). An unreadable neighbor is not
+/// judged (its own fault refuses only its times). The judgment reads the record's bytes alone, so a time's answer
+/// never depends on the requests before it (SPEC 18.5).
+inline int32_t usable(const Track& t, uint32_t k, Segment& out) {
+  const int32_t s = ensure(t, k, out);
+  if (s != kValid) return s;
+  std::atomic<int8_t>& j = t.joined[k];
+  int8_t v = j.load(std::memory_order_acquire);
+  if (v == 0) {
+    Segment n;
+    bool ok = true;
+    if (k + 1 < t.segs.size() && ensure(t, k + 1, n) == kValid) ok = std::fabs(n.start - (out.mid + out.half)) <= kJoinSeconds;
+    if (ok && k > 0 && ensure(t, k - 1, n) == kValid) ok = std::fabs(out.start - (n.mid + n.half)) <= kJoinSeconds;
+    v = ok ? 1 : -1;
+    j.store(v, std::memory_order_release);
+  }
+  return v > 0 ? kValid : kGap;
+}
+
 /// A track's bytes copied into it (a track that outlives the call whose bytes it reads: the store's), the record's
-/// vector found again in the copy at its offset.
+/// vector found again in the copy at its offset. A track built by fit (its coefficients in memory, no record) is left
+/// as it is.
 inline void keep(Track& t) {
+  if (t.recs == nullptr) return;
   if (t.empty() || (!t.own.empty() && t.buf == t.own.data())) return;
   const size_t at = reinterpret_cast<const uint8_t*>(t.recs) - t.buf;
   t.own.assign(t.buf, t.buf + t.size);
@@ -351,7 +393,7 @@ inline int64_t segment_at(const Track& tr, double t, Segment& out) {
   Segment a, b;
   if (hint.tr == &tr)
     for (uint32_t k = hint.k; k < count && k <= hint.k + 1; ++k) {
-      if (ensure(tr, k, a) != kValid) break;
+      if (usable(tr, k, a) != kValid) break;
       if (inside(a) && (k + 1 >= count || ensure(tr, k + 1, b) != kValid || b.start > t)) {
         hint.k = k;
         out = a;
@@ -386,6 +428,7 @@ inline int64_t segment_at(const Track& tr, double t, Segment& out) {
   }
   if (const int32_t s = ensure(tr, lo, a); s != kValid) return s;
   if (!inside(a)) return hi - lo > 1 ? refused : kGap;
+  if (const int32_t s = usable(tr, lo, a); s != kValid) return s;
   hint.tr = &tr;
   hint.k = lo;
   out = a;
@@ -862,9 +905,27 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
       for (int a = 0; a < 3; ++a) p.v[a] += w1[a];
     }
   }
+  // states close enough for their interpolant to hold the forecast: at most kMaxArcRad of arc apart about the Earth;
+  // at most kFineArcRad apart, the fine velocity bound, else the coarse one (the tier the record states)
+  double widest = 0.0;
+  for (size_t i = k0 - lo; i < k1 - lo; ++i) {
+    const double* x = P[i].r;
+    const double* y = P[i + 1].r;
+    const double cx = x[1] * y[2] - x[2] * y[1], cy = x[2] * y[0] - x[0] * y[2], cz = x[0] * y[1] - x[1] * y[0];
+    const double arc = std::atan2(std::sqrt(cx * cx + cy * cy + cz * cz), x[0] * y[0] + x[1] * y[1] + x[2] * y[2]);
+    widest = std::fmax(widest, arc);
+    if (arc > kMaxArcRad) {
+      char why[200], when[48];
+      oem::iso_text(w, f, P[i].t / 60.0, when, sizeof when);
+      std::snprintf(why, sizeof why, "The block's states at %s are %.3f rad of arc apart, more than the %.2f a carried forecast is built from (60 s in low orbit).", when, arc, kMaxArcRad);
+      return ocm::refuse("carry-states-sparse", why);
+    }
+  }
+  const bool fine = widest <= kFineArcRad;
   // velocities that are not the positions' derivative (an analytic theory's: SGP4 and SGP4XP by 20 to 70 mm/s in low
   // orbit, measured) are not interpolated: the 8-node Lagrange of the positions takes over when the states' velocities
-  // differ from that interpolant's derivative by more than kVelocityAgreementKmS RMS
+  // differ from that interpolant's derivative by more than kVelocityAgreementKmS RMS (kCoarseVelocityAgreementKmS on
+  // the coarse tier)
   if (with_v && P.size() >= 8) {
     double ss = 0.0;
     size_t count = 0;
@@ -875,24 +936,13 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
       ss += d * d;
       ++count;
     }
-    if (count > 0 && !(std::sqrt(ss / static_cast<double>(count)) <= kVelocityAgreementKmS)) with_v = false;
+    if (count > 0 && !(std::sqrt(ss / static_cast<double>(count)) <= (fine ? kVelocityAgreementKmS : kCoarseVelocityAgreementKmS))) with_v = false;
   }
   const size_t nodes_used = with_v ? 4 : 8;
   if (P.size() < nodes_used) return ocm::refuse("carry-not-covered", "A carried forecast takes at least 8 states of the block when their velocities are not their positions' derivative.");
-  // densified: kDensify points per interval by the interpolant, the span's two ends among them
-  // states close enough for their interpolant to hold the forecast: at most kMaxArcRad of arc apart about the Earth
-  for (size_t i = k0 - lo; i < k1 - lo; ++i) {
-    const double* x = P[i].r;
-    const double* y = P[i + 1].r;
-    const double cx = x[1] * y[2] - x[2] * y[1], cy = x[2] * y[0] - x[0] * y[2], cz = x[0] * y[1] - x[1] * y[0];
-    const double arc = std::atan2(std::sqrt(cx * cx + cy * cy + cz * cz), x[0] * y[0] + x[1] * y[1] + x[2] * y[2]);
-    if (arc > kMaxArcRad) {
-      char why[200], when[48];
-      oem::iso_text(w, f, P[i].t / 60.0, when, sizeof when);
-      std::snprintf(why, sizeof why, "The block's states at %s are %.3f rad of arc apart, more than the %.2f a carried forecast is built from (30 s in low orbit).", when, arc, kMaxArcRad);
-      return ocm::refuse("carry-states-sparse", why);
-    }
-  }
+  // the velocity bound at the checked points, and what the record is held to against the forecast at any time
+  const double vtol = with_v ? (fine ? kVelocityToleranceKmS : kCoarseVelocityToleranceKmS) : kPositionsOnlyVelocityKmS;
+  const char* held = with_v ? (fine ? "0.1 mm/s" : "about 0.2 mm/s") : "1 mm/s";
   // the interpolant of the interval of P starting at state i: the Hermite on nodes i - 1 .. i + 2, the Lagrange on
   // i - 3 .. i + 4, held inside P
   auto interpolated = [&](size_t i, double t) {
@@ -904,6 +954,7 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
     else lagrange8(P.data() + j, t, q.r, q.v);
     return q;
   };
+  // densified: kDensify points per interval by the interpolant, the span's two ends among them
   std::vector<Point> D;
   D.reserve(P.size() * kDensify + 2);
   for (size_t i = 0; i + 1 < P.size(); ++i) {
@@ -948,7 +999,7 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
   for (const int nc : kCandidates) {
     if (b - a + 1 < static_cast<size_t>(nc)) continue;
     std::vector<Fitted> trial;
-    if (!segments(D, E, at_time, a, b, nc, with_v ? kVelocityToleranceKmS : kPositionsOnlyVelocityKmS, w, f, trial)) continue;
+    if (!segments(D, E, at_time, a, b, nc, vtol, w, f, trial)) continue;
     size_t bytes = 0;
     for (const Fitted& s : trial) bytes += record_bytes(s.n);
     fewest = std::min(fewest, bytes);
@@ -966,9 +1017,12 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
       best_n = tried_n[q];
       break;
     }
-  if (best.empty())
-    return ocm::refuse("carry-tolerance", with_v ? "No Chebyshev segments of 16 to 64 coefficients hold the forecast within 1 cm and 0.05 mm/s of its states' interpolant: the states are too sparse or the forecast is not smooth (a maneuver)."
-                                                 : "No Chebyshev segments of 16 to 64 coefficients hold the forecast within 1 cm and 1 mm/s of its positions' interpolant: the states are too sparse or the forecast is not smooth (a maneuver).");
+  if (best.empty()) {
+    char why[240];
+    std::snprintf(why, sizeof why, "No Chebyshev segments of 16 to 64 coefficients hold the forecast within 5 mm and %g mm/s of its %s: the states are too sparse or the forecast is not smooth (a maneuver).",
+                  vtol * 1.0e6, with_v ? "states' interpolant" : "positions' interpolant");
+    return ocm::refuse("carry-tolerance", why);
+  }
   std::vector<flatbuffers::Offset<PPEPositionRecord>> out;
   out.reserve(best.size());
   double worst = 0.0, worst_v = 0.0;
@@ -1017,13 +1071,14 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
   }
   tr.start = tr.segs.front().start;
   tr.stop = tr.segs.back().mid + tr.segs.back().half;
-  char start_text[48], stop_text[48], line[400];
+  char start_text[48], stop_text[48], line[640];
   oem::iso_text(w, f, tr.start / 60.0, start_text, sizeof start_text);
   oem::iso_text(w, f, tr.stop / 60.0, stop_text, sizeof stop_text);
   std::snprintf(line, sizeof line,
-                "carried forecast: %zu Chebyshev segments of %d coefficients (POLYNOMIAL_POSITION_RECORDS, %s), %s to %s, %zu bytes, at most %.2f mm and %.4f mm/s from the %s of the block's states",
+                "carried forecast: %zu Chebyshev segments of %d coefficients (POLYNOMIAL_POSITION_RECORDS, %s), %s to %s, %zu bytes, at most %.2f mm and %.4f mm/s from the %s of the block's states; "
+                "the states at most %.3f rad of arc apart (%s tier, %g mm/s at the checked points): held to 1 cm and %s against the forecast at any time",
                 best.size(), best_n, of_epoch ? "TEMEOFEPOCH" : "TEMEOFDATE", start_text, stop_text, best_bytes, worst * 1.0e6, worst_v * 1.0e6,
-                with_v ? "4-node Hermite" : "8-node Lagrange of the positions");
+                with_v ? "4-node Hermite" : "8-node Lagrange of the positions", widest, fine ? "0.05 rad" : "0.1 rad", vtol * 1.0e6, held);
   comment.push_back(line);
   xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
   const bool theory = xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk;
@@ -1059,7 +1114,10 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
   // SPEC 18.6: what the record states about its forecast, in its own trajectory block
   described.start = start_text;
   described.stop = stop_text;
-  std::string about = "Carried forecast (SPEC 18): flown inside USEABLE_START_TIME to USEABLE_STOP_TIME; outside them the theory. Force model and weather: ";
+  std::string about = "Carried forecast (SPEC 18): flown inside USEABLE_START_TIME to USEABLE_STOP_TIME; outside them the theory. ";
+  std::snprintf(line, sizeof line, "Held to 1 cm and %s against the forecast at any time (the block's states at most %.3f rad of arc apart, the %s tier; "
+                "at the checked points at most %.2f mm and %.4f mm/s). Force model and weather: ", held, widest, fine ? "0.05 rad" : "0.1 rad", worst * 1.0e6, worst_v * 1.0e6);
+  about += line;
   about += blk != nullptr && blk->COMMENT() != nullptr && blk->COMMENT()->size() > 0 ? blk->COMMENT()->str() : std::string("not stated by the ephemeris block");
   about += ". Initial state: ";
   const OEMOrbitDetermination* od = blk != nullptr ? blk->ORBIT_DETERMINATION() : nullptr;

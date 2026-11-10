@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.10 (dist 839ee43d).
+Version 0.6.10 (dist 30103537).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2747,11 +2747,15 @@ against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m 
 An AP mean set and the state AP gives for it agree to first order only: integrated numerically that state leaves the AP
 trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low orbit. AP elements must come from an AP fit.
 
-## 18. The carried forecast (side B's method, outside the SGP4-XP specification)
+## 18. The carried forecast (a separate product, outside the SGP4-XP specification)
 
-An `$OCM` element set may carry a numerical forecast of its object (`src/carried.inc`). Inside the forecast's span flight
-returns the forecast; everywhere else the theory, exactly as without it: a record without one flies as 0.6.8 (the build
-before version 2 of the carried forecast) flies it, bit for bit (`test/carried-identity.e2e.mjs`). Version 2 (0.6.10)
+An `$OCM` element set may carry a numerical forecast of its object made by another propagator (a numerical propagator
+such as propagator/ffm, or an operator's own ephemeris), stored in the record (`src/carried.inc`). Inside the forecast's
+span flight returns that forecast, not AP's theory; everywhere else the theory, exactly as without it: a record without
+one flies as 0.6.9 flies it, bit for bit (`test/carried-identity.e2e.mjs`). The record is a separate product, a way to
+deliver another propagator's forecast with AP's flight around it. Its figures (its error against truth, which is the
+forecast's; its compression error against the forecast; the step at the span's end; bytes a day; the cost of making
+it) are its own and never AP's accuracy: AP's accuracy is the theory's alone (SPEC 16). Version 2 (0.6.10)
 holds the record to 1 cm and 0.1 mm/s against the forecast at any time (18.4, 18.9), reads a fresh record's forecast
 only where it is flown (18.5), states the forecast's source in the record (18.6), fits the theory to the forecast's last
 part (18.7) and labels every output state (18.8).
@@ -2795,13 +2799,16 @@ flies back in GCRF to the series alone.
 `propagate`: inside the span the forecast in OUTPUT.FRAME; the theory is not initialized when every requested time is
 inside the span and the record carries no `COVARIANCE_DATA`. `load_epochs`: the store keeps the record's bytes (one
 copy) and reads its segments as flown (18.5); `sdnap_epochs_set_at`, `sdnap_epochs_at` and `propagate_epochs` time the
-forecast by the call's split Julian date (`test/carried-epochs.e2e.mjs`). Selection (SPEC 14) first takes a set whose
-carried span holds t, the latest by epoch where more than one does, without a blend; elsewhere the selection by epoch
-as before, where a blend joins two theory states on one branch only: a switch between a carried forecast and the theory
-is a step (14.3), and `sdnap_epochs_select` reports b = -3 there, also where the span-first rule takes a set the
-selection by epoch would have blended or stepped from (`test/branch-at-epoch.e2e.mjs`). Sets of one epoch carrying
-different spans are both kept (records split by day: one object's forecast in a record per day), ordered by their
-span's start; a later record of the same epoch and span replaces as before. A carried record A and its hand-over set B (18.7) load as one series: inside A's
+forecast by the call's split Julian date (`test/carried-epochs.e2e.mjs`), and whether a span holds the time is decided
+once, by that date, for the selection, the state and its label alike: the set taken for its span flies its forecast
+there (`test/carried-span-end.e2e.mjs`, split dates a double step apart about a stop). Selection (SPEC 14) first
+takes a set whose carried span holds t, the latest by epoch where more than one does, without a blend; elsewhere the
+selection by epoch as before, where a blend joins two theory states on one branch only: a switch between a carried
+forecast and the theory is a step (14.3), and `sdnap_epochs_select` reports b = -3 there, also where the span-first
+rule takes a set the selection by epoch would have blended or stepped from (`test/branch-at-epoch.e2e.mjs`). Sets of
+one epoch carrying different spans are both kept (records split by day: one object's forecast in a record per day),
+ordered by their span's start; a later record of the same epoch and span replaces as before. A carried record A and
+its hand-over set B (18.7) load as one series: inside A's
 span its forecast; after the stop B, whose epoch is the stop, by the selection by epoch; before the span A's theory,
 whose epoch is the span's start. Covariance: the theory's (SPEC 12) beside the forecast's states.
 `sdnap_covariance_at`, `sdnap_covariance_full_at`, `events`, `maneuver` and `export_omm` use the theory; `export_omm`
@@ -2819,10 +2826,16 @@ states and up to four beyond each end:
 
 1. Each state in GCRF (a GCRF or EME2000 block's own, undoing the fit's exact rotation; any other block's by M), then in
    the record's axes: Q0, or M with the velocity M v + dM/dt r.
-2. Consecutive states inside the span at most 0.05 rad of arc apart about the Earth's center (carry-states-sparse): 30 s
-   in low orbit and at the perigee of an e 0.9 orbit at 500 km. Measured, the 4-node Hermite's velocity error between
-   FFM states: at most 0.002 mm/s at 30 s; at 60 s (0.066 to 0.07 rad in low orbit) 0.017 mm/s at 500 km and 0.075 mm/s
-   at 300 km, too much of the 0.1 mm/s bound; 1.4 mm/s at 120 s.
+2. Consecutive states inside the span at most 0.1 rad of arc apart about the Earth's center (carry-states-sparse): 60
+   s in low orbit (0.066 to 0.07 rad, the common step of an operator's ephemeris) passes, 120 s is refused. Two tiers by
+   the widest spacing: at most 0.05 rad (30 s in low orbit and at the perigee of an e 0.9 orbit at 500 km) the velocity
+   bound at the checked points is 0.05 mm/s and the record is held to 0.1 mm/s against the forecast at any time; wider,
+   0.1 mm/s at the checked points and about 0.2 mm/s at any time. The position bound is 1 cm on both. Measured, the
+   4-node Hermite's own velocity error between FFM states: at most 0.002 mm/s at 30 s; at 60 s 0.017 mm/s at 500 km
+   and 0.075 mm/s at 300 km; 1.4 mm/s at 120 s. On the wider tier the velocity agreement that keeps the Hermite (item 3)
+   is 1 mm/s RMS (the Lagrange derivative's own error grows with the spacing's seventh power; an analytic theory's still
+   misses by 20 to 70 mm/s). The record states its tier, the widest spacing and its largest residuals at the checked
+   points in fit's COMMENT and in TRAJECTORY_BLOCKS[0] COMMENT (18.6).
 3. The interpolant: the 4-node Hermite of positions and velocities (degree 7); the 8-node Lagrange of the positions
    when a state has no velocity, or when the velocities differ from that Lagrange's derivative by more than 0.05 mm/s
    RMS (FFM's states, at the steps 2 allows: 0.0002 to 0.011 mm/s; SGP4 and SGP4XP: 20 to 70 mm/s in low orbit, an
@@ -2835,15 +2848,16 @@ states and up to four beyond each end:
    points), the velocity row times 5 mm over the velocity bound; the window's end, and its start (the segment before's
    own position, velocity and acceleration there, or the span's first point), weighted 1e4: consecutive segments meet in
    position, velocity and acceleration, so the output's second difference has no step at a joint. The velocity bound:
-   0.05 mm/s (the Hermite path); 1 mm/s against the Lagrange's derivative (the positions-only path: that derivative
-   misses FFM states 30 s apart by up to 0.04 mm/s and steps by up to 0.12 mm/s where two windows meet; an analytic
-   theory's positions hold no tighter). EPOCH_MID the window's middle at the text's microsecond. n is 16, 24, 32, 48 or
-   64: the fewest whose segments write at most 10 % more bytes (112 + 24 n a segment) than the fewest any n writes (a
-   state's arithmetic grows with n; in low orbit 64 write about 6 % fewer bytes than 32). None holds: carry-tolerance
-   (states too sparse, or a forecast that is not smooth: a maneuver).
-6. `ORBIT_DETERMINATION.COMMENT`: the segments, the span, the bytes, the largest position and velocity residuals and the
-   interpolant; at the span's start and stop, the theory minus the forecast (km, and radial, in-track and cross-track in
-   the forecast's UVW axes): the jump flight makes there.
+   0.05 mm/s (the Hermite path; 0.1 mm/s on the wider tier, item 2); 1 mm/s against the Lagrange's derivative (the
+   positions-only path: that derivative misses FFM states 30 s apart by up to 0.04 mm/s and steps by up to 0.12 mm/s
+   where two windows meet; an analytic theory's positions hold no tighter). EPOCH_MID the window's middle at the
+   text's microsecond. n is 16, 24, 32, 48 or 64: the fewest whose segments write at most 10 % more bytes (112 + 24 n
+   a segment) than the fewest any n writes (a state's arithmetic grows with n; in low orbit 64 write about 6 % fewer
+   bytes than 32). None holds: carry-tolerance (states too sparse, or a forecast that is not smooth: a maneuver).
+6. `ORBIT_DETERMINATION.COMMENT`: the segments, the span, the bytes, the largest position and velocity residuals, the
+   interpolant, the widest spacing of the states and the tier (item 2) with what it holds at any time; at the span's
+   start and stop, the theory minus the forecast (km, and radial, in-track and cross-track in the forecast's UVW
+   axes): the jump flight makes there.
 
 ### 18.5 Loading and its cost
 
@@ -2853,8 +2867,15 @@ The store copies a kept record's bytes once (a record dropped by CACHE_DAYS, MAX
 copied) and keeps a view; a state reads its segment when it first needs it (its table by its own verifier, EPOCH_MID's
 text, the coefficients copied out), and the segment stays read. A segment is found as 18.2 says: the one last flown or
 its successor first (in order, the next state's), else interpolation search over the start times (a fresh record's
-first state reads about log2 of its segment count). Measured (provisional, ratios from interleaved runs on a loaded
-machine, load average 60 to 90 on 28 cores):
+first state reads about log2 of its segment count). The segment found flies only when it meets its neighbors: each
+readable neighbor within 1 ms (the successor starts where it ends, the predecessor ends where it starts), else
+carried-gap (-4 from the store) for every time it holds; a neighbor that cannot be read is not judged (its own fault
+refuses its own times). That judgment reads the record's bytes alone, once per segment, so segments out of order or
+overlapping a neighbor are refused whichever time is asked first (`test/carried-edges.e2e.mjs`). Not judged without
+reading every segment: a record whose segments each meet their neighbors yet repeat a stretch of time (a run of
+segments written twice, the junctions refused): a time in the repeated stretch gets one of the two runs' states,
+both the record's own, which one by the search and the segment flown before. Measured (provisional, ratios from
+interleaved runs on a loaded machine, load average 60 to 90 on 28 cores):
 
 - Load of a 304 KB record (version 1's 8 days at 500 km) against version 1's build: 294 against 672 us a record (paired
   rounds, median); the host's copy of the same bytes into the module and the call alone (a payload of that size refused
@@ -2889,8 +2910,8 @@ object's day records side by side and flies the one whose span holds the time, 1
 one day's; the further cut, to the segment a state needs (about 1 KB), is the server's (a record and the segment
 ranges it serves), not a module call (DigitalArsenal/spacedatanetwork-stack#394).
 
-Which workloads pass as of this build (pass: the 95 % interval of carried over SGP4 under 2, goal.md's line; W1 to W3
-on the 8-day records, the transfer orbit's on its 1-day record (W1, 7 days, runs past it and is not counted); W4 on
+Which workloads pass as of this build (pass: the 95 % interval of carried over SGP4 under 2, the cost goal of #316;
+W1 to W3 on the 8-day records, the transfer orbit's on its 1-day record (W1, 7 days, runs past it and is not counted); W4 on
 every span measured; provisional, the closing figures are the quiet run's on the integrated build; #394 takes W4):
 
 | Orbit | W1 | W2 | W3 | W4 |
@@ -2942,6 +2963,7 @@ Existing `$OCM` fields, written by fit (`test/carried-compression.e2e.mjs` check
 | The forecast's force model and weather date | `TRAJECTORY_BLOCKS[0]` COMMENT: the ephemeris block's own COMMENT, as its producer wrote it ("not stated by the ephemeris block" when it has none) |
 | The covariance inside the span | `TRAJECTORY_BLOCKS[0]` COMMENT: "the theory's (COVARIANCE_DATA, SPEC 12), no realism claim for the forecast" |
 | The step to the theory at each end | `ORBIT_DETERMINATION.COMMENT` (18.4): position (and RTN) and velocity |
+| What it is held to against the forecast | `TRAJECTORY_BLOCKS[0]` COMMENT and `ORBIT_DETERMINATION.COMMENT`: 1 cm and 0.1 mm/s, or about 0.2 mm/s on the wider tier (18.4 item 2), the widest spacing of the states, the largest residuals at the checked points |
 | What ORBIT_DETERMINATION describes | `TRAJECTORY_BLOCKS[0]` COMMENT: the OD block describes the theory's fit to the forecast's first part; the determination from observations is the initial state's source named in the trajectory block |
 | What serves after the span | `TRAJECTORY_BLOCKS[0]` COMMENT: the hand-over set (18.7), else this record's theory; the hand-over set's own block TRAJ_ID "HAND-OVER", USEABLE_START_TIME the stop |
 
@@ -3094,10 +3116,13 @@ COMMENT by this grammar and check every state's source against it (`test/lib/car
 
 The record is held to 1 cm and 0.1 mm/s against the forecast at any time inside the span: 5 mm and 0.05 mm/s at the
 checked points (18.4), the input's interpolant (0.002 mm/s at 30 s) and the series between checked points the rest.
-The referee's compression test (ADDENDUM M2.1; `test/carried-compression.e2e.mjs`): FFM forecasts (70 x 70, Sun and
+Built from states 60 s apart in low orbit (the wider tier, 18.4 item 2), 1 cm and about 0.2 mm/s: from the same FFM
+forecasts every 60 s, at most 2.41 mm and 0.108 mm/s at 300 km (60,544 bytes a day against 67,760 from 30 s) and 3.42
+mm and 0.103 mm/s at 500 km (42,656 against 49,536); joints at most 1.40 mm.
+The compression test (`test/carried-compression.e2e.mjs`): FFM forecasts (70 x 70, Sun and
 Moon from DE440, radiation pressure, drag; GCRF every 10 s), the record built from the states every 30 s and flown at
 every other 10-s time; at the uniform 10-s grid, the second difference of the record's position less the forecast's
-at every triplet holding a joint (the referee's `09-output-continuity` residual less the forecast's own, which is the
+at every triplet holding a joint (the output-continuity residual less the forecast's own, which is the
 perturbing acceleration times h squared: 1.3 to 2.4 m in low orbit):
 
 | Regime | Span (days) | Segments of n | Bytes per object-day | Largest (mm) | Largest (mm/s) | Joints | Largest at a joint (mm) | The forecast's own residual there (m) |
@@ -3122,7 +3147,7 @@ The position bound chosen by bytes (the same builder at 1 and at 10 cm, 5 and 50
 of fewest bytes; FFM forecasts of 1, 2, 4 and 8 days at 30 s): low-orbit and e 0.1 records take the same bytes at both
 (the velocity bound sets the segments' length there: 47 KB a day at 500 km, 30 KB at 830 km, 21 KB at e 0.1); medium
 orbit 0.99 to 1.6 KB a day at 1 cm against 0.87 to 1.6 at 10 cm, geosynchronous 0.66 to 1.7 against 0.46 to 1.0. W4
-does not change (18.5). 1 cm costs nothing that matters and leaves a tenth of the referee's 0.1 m.
+does not change (18.5). 1 cm costs nothing that matters and leaves a tenth of the test's 0.1 m.
 
 ### 18.10 Version 2 does not
 

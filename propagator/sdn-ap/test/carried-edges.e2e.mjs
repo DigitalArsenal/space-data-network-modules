@@ -14,11 +14,13 @@
 //   grammar, parsed and checked against the lines), CARRIED FORECAST or THEORY, and sdnap_epochs_source_at gives the
 //   store's 1 or 0 at the same times;
 // - refused by name: OUTPUT with STOP_TIME alone, OUTPUT.EPOCHS or OUTPUT.FRAME on fit (configuration-refused), a
-//   window the block does not reach (carry-not-covered), states 60 s apart in low orbit (carry-states-sparse); records
-//   with TRAJ_TYPE other than POLYNOMIAL_POS (carried-type-mismatch), a first segment of a basis other than Chebyshev
-//   (carried-basis-unsupported) or with velocity coefficients (carried-velocity-coefficients), on propagate and on
-//   load_epochs; an inner segment missing (carried-gap), of another basis or short of coefficients
-//   (carried-segment-invalid) when a state first needs it (SPEC 18.5): on propagate by name, from the store as -4;
+//   window the block does not reach (carry-not-covered), states 120 s apart in low orbit (carry-states-sparse; 60 s
+//   passes, carried-compression); records with TRAJ_TYPE other than POLYNOMIAL_POS (carried-type-mismatch), a first
+//   segment of a basis other than Chebyshev (carried-basis-unsupported) or with velocity coefficients
+//   (carried-velocity-coefficients), on propagate and on load_epochs; an inner segment missing, two inner segments out
+//   of order, or one overlapping its neighbors (carried-gap), of another basis or short of coefficients
+//   (carried-segment-invalid) when a state first needs it (SPEC 18.5): on propagate by name, from the store as -4; the
+//   out-of-order and overlapping records refused the same whichever of their times is asked first;
 // - hostile inner segments, the record's bytes edited: a table offset past the buffer's end or wrapping to before its
 //   start, a vtable truncated at the buffer's end, a coefficient vector whose length runs past the end. Each record
 //   loads; the state in that segment is refused (carried-segment-invalid; -4 from the store); every other segment's
@@ -119,8 +121,8 @@ const span = rec.span;
   check((await fitWith({ EPOCHS: [isoAt(0), isoAt(60)] })) === "configuration-refused", "OUTPUT.EPOCHS on fit is not refused");
   check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(600), FRAME: pcfOutputFrame.GCRF })) === "configuration-refused", "OUTPUT.FRAME on fit is not refused");
   check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(span + 3600) })) === "carry-not-covered", "a window past the block is not refused");
-  const sparse = forecastOem(rec.states.filter((_, k) => k % 2 === 0), 12);
-  check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(span) }, sparse)) === "carry-states-sparse", "states 60 s apart in low orbit are not refused");
+  const sparse = forecastOem(rec.states.filter((_, k) => k % 4 === 0), 12);
+  check((await fitWith({ START_TIME: isoAt(0), STOP_TIME: isoAt(span) }, sparse)) === "carry-states-sparse", "states 120 s apart in low orbit are not refused");
 }
 
 // refusals at flight: propagate and load_epochs. A record's first and last segments (its span) are read at load; any
@@ -137,6 +139,8 @@ const span = rec.span;
     "carried-basis-unsupported": [(t) => { t.POLYNOMIAL_POSITION_RECORDS[0].BASIS_TYPE = 1; }, first, true],
     "carried-velocity-coefficients": [(t) => { const p = t.POLYNOMIAL_POSITION_RECORDS[0]; p.HAS_VELOCITY_COEFFICIENTS = true; p.VEL_COEFF_X = p.POS_COEFF_X; p.VEL_COEFF_Y = p.POS_COEFF_Y; p.VEL_COEFF_Z = p.POS_COEFF_Z; }, first, true],
     "carried-gap": [(t) => { t.POLYNOMIAL_POSITION_RECORDS.splice(2, 1); }, isoAt(inner), false],
+    "carried-gap (out of order)": [(t) => { const q = t.POLYNOMIAL_POSITION_RECORDS; [q[2], q[3]] = [q[3], q[2]]; }, isoAt(inner), false],
+    "carried-gap (overlapping)": [(t) => { t.POLYNOMIAL_POSITION_RECORDS[2].EPOCH_HALF_SPAN *= 1.5; }, isoAt(inner), false],
     "carried-basis-unsupported ": [(t) => { t.POLYNOMIAL_POSITION_RECORDS[2].BASIS_TYPE = 1; }, isoAt(inner), false],
     "carried-segment-invalid": [(t) => { t.POLYNOMIAL_POSITION_RECORDS[2].POS_COEFF_Y = t.POLYNOMIAL_POSITION_RECORDS[2].POS_COEFF_Y.slice(1); }, isoAt(inner), false],
   };
@@ -146,7 +150,7 @@ const span = rec.span;
   const d = await createStandaloneHarness("browser", wasmPath, { surface: "direct" });
   const x = d.instance.exports, p = x.sdnap_alloc(64);
   for (const [name, [edit, when, atLoad]] of Object.entries(variants)) {
-    const code = name.trim(), bad = repackOcm(rec.ocm, edit);
+    const code = name.replace(/ \(.*\)$/, "").trim(), bad = repackOcm(rec.ocm, edit);
     check((await refusal(h, "propagate", flight([bad], { output: { EPOCHS: [when] } }))) === code, `propagate does not refuse ${name} at ${when}`);
     const loaded = await d.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: bad }] });
     if (atLoad) {
@@ -157,6 +161,17 @@ const span = rec.span;
       check(x.sdnap_epochs_set_at(0, 0, whole, frac, p) === -4, `the store's state at ${when} is not refused (ORBPRO_PROP_BAD_INPUT) for ${name}`);
       check(x.sdnap_epochs_set_at(0, 0, t0.whole, t0.frac, p) === 0, `the store's state at ${first}, in a sound segment, is refused for ${name}`);
       check((await refusal(h, "propagate", flight([bad], { output: { EPOCHS: [first] } }))) === null, `propagate refuses ${first}, in a sound segment, for ${name}`);
+      // out of order or overlapping: the store's answers in the sound record's segments 1 to 4 the same asked forward
+      // or backward, each from a fresh load (SPEC 18.5: a segment is judged against its neighbors from the bytes alone)
+      if (/\(/.test(name)) {
+        const times = [1, 2, 3, 4].map((k) => midOf(segs[k]));
+        const ask = async (order) => {
+          await d.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: bad }] });
+          return Object.fromEntries(order.map((t) => { const j = jdOf(isoAt(t)); return [t, x.sdnap_epochs_set_at(0, 0, j.whole, j.frac, p)]; }));
+        };
+        const fwd = await ask(times), back = await ask([...times].reverse());
+        check(times.every((t) => fwd[t] === back[t]) && fwd[inner] === -4, `${name}: the store's answers depend on the order asked: ${JSON.stringify(times.map((t) => [fwd[t], back[t]]))}`);
+      }
     }
   }
   // the same record repacked unchanged flies

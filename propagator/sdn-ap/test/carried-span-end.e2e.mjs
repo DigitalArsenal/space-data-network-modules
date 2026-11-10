@@ -13,7 +13,9 @@
 //   km at geosynchronous altitude; in low orbit B's under the step a lone A makes at its stop;
 // - A and B in one store: 1 h before the span the theory of A, inside the span the forecast, after the stop B's states
 //   (to 1e-5 km of B flown alone); sdnap_epochs_source_at 0, 1, 1, 3, 3; propagate_epochs one block whose SOURCES
-//   (SPEC 18.8's grammar) reads THEORY, CARRIED FORECAST, HAND-OVER;
+//   (SPEC 18.8's grammar) reads THEORY, CARRIED FORECAST, HAND-OVER; at split dates a double step apart about A's
+//   stop, sdnap_epochs_at gives A's forecast where sdnap_epochs_source_at says CARRIED FORECAST and B where it says
+//   HAND-OVER, switching once (one coverage decision per instant, SPEC 18.3);
 // - alone: A after its stop flies its own theory, labeled THEORY; B before its start flies its theory, labeled
 //   THEORY, and from its start HAND-OVER.
 // Prints each case's steps and covariances.
@@ -167,6 +169,28 @@ for (const c of REGIMES) {
   });
   // the store times the theory in minutes from J2000 (about 1e-7 s of rounding): 1e-5 km, as carried-epochs
   check(worst < 1e-5, `${c.name}: after the stop the store is ${worst} km from B`);
+  // one decision at the span's stop (SPEC 18.3): split dates a double step apart about A's stop (its last segment's
+  // EPOCH_MID plus EPOCH_HALF_SPAN), through the store: CARRIED FORECAST then HAND-OVER, switching once, and each
+  // state bit for bit the state of the set its label names (A's forecast, or B), as sdnap_epochs_set_at flies that set
+  {
+    const last = A.u.POLYNOMIAL_POSITION_RECORDS.at(-1), j = jdOf(last.EPOCH_MID), stopFrac = j.frac + last.EPOCH_HALF_SPAN / 86400;
+    const bump = (v, k) => { const b = new BigInt64Array(new Float64Array([v]).buffer); b[0] += BigInt(k); return new Float64Array(b.buffer)[0]; };
+    const seq = [];
+    let consistent = true;
+    for (let k = -64; k <= 64; k++) {
+      const f = bump(stopFrac, k);
+      x.sdnap_epochs_source_at(j.whole, f, 0, 1, p);
+      const code = new Int32Array(ap.memory.buffer, p, 1)[0];
+      x.sdnap_epochs_at(j.whole, f, 0, 1, 0, p, 0, 0);
+      const s = Array.from(new Float64Array(ap.memory.buffer, p, 6));
+      x.sdnap_epochs_set_at(0, code === 1 ? 0 : 1, j.whole, f, p);
+      const own = Array.from(new Float64Array(ap.memory.buffer, p, 6));
+      seq.push(code);
+      consistent = consistent && (code === 1 || code === 3) && s.every((v, q) => Object.is(v, own[q]));
+    }
+    const switches = seq.filter((q, k) => k > 0 && q !== seq[k - 1]).length;
+    check(consistent && seq[0] === 1 && seq.at(-1) === 3 && switches === 1, `${c.name}: about A's stop the store's labels and states disagree or do not switch once: ${seq.join("")}`);
+  }
   const pe = await ap.invoke({ methodId: "propagate_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: both }, configuration({ output: { EPOCHS: times.map(iso), FRAME: pcfOutputFrame.TEME } })] });
   const peLines = pe.statusCode === 0 ? oemLines(pe.outputs[0].payload) : [];
   check(JSON.stringify(peLines.map((l) => l.source)) === JSON.stringify(["THEORY", "CARRIED FORECAST", "CARRIED FORECAST", "HAND-OVER", "HAND-OVER"]),

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E2E (issue 316, SPEC 18.4): the record's compression, the referee's test (ADDENDUM M2.1). For each regime (low orbit at
+// E2E (issue 316, SPEC 18.4): the record's compression against the forecast it carries. For each regime (low orbit at
 // 300, 500, 830 and 1,336 km, medium, geosynchronous and inclined geosynchronous orbit, a transfer orbit at e 0.72,
 // Molniya at e 0.74, a THEMIS-like orbit at e 0.82, an orbit at e 0.9 and a TESS-like orbit), a numerical forecast made by
 // propagator/ffm (EGM96 70 x 70, Sun and Moon from DE440, solar radiation pressure, drag where the orbit reaches it;
@@ -7,12 +7,15 @@
 // STOP_TIME over its span from its states every 30 s (positions and velocities); then the record is flown by propagate:
 // - at every 10-s time of the forecast not used in the build (not a multiple of 30 s), within 0.1 m and 0.1 mm/s of the
 //   forecast (the record is held to 1 cm and 0.1 mm/s);
-// - at the uniform 10-s grid, the second difference of the record's position less the forecast's (the referee's
-//   09-output-continuity residual less the forecast's own) at every triplet holding a segment joint, under 0.05 m;
+// - at the uniform 10-s grid, the second difference of the record's position less the forecast's (the output-continuity
+//   residual less the forecast's own) at every triplet holding a segment joint, under 0.05 m;
 // - one block per record, every state of the span labeled CARRIED FORECAST by its COMMENT (SPEC 18.8's grammar);
 // - the record states its forecast (SPEC 18.6): METADATA START_TIME and STOP_TIME and TRAJECTORY_BLOCKS[0] USEABLE_START_TIME
 //   and USEABLE_STOP_TIME the span, TRAJ_BASIS PREDICTED, and in its COMMENT the ephemeris block's own COMMENT (the force
-//   model and the weather date) and ORBIT_DETERMINATION (the initial state's source).
+//   model and the weather date), ORBIT_DETERMINATION (the initial state's source) and the tier it was built to.
+// In low orbit at 300 and 500 km the forecast is also fitted from its states every 60 s (0.066 to 0.07 rad of arc, the
+// common step of an operator's ephemeris; SPEC 18.4 item 2): off those times within 1 cm and 0.2 mm/s of the forecast,
+// the record stating the 0.1 rad tier (carried-edges refuses 120 s).
 // Prints, per regime, the bytes per object-day, the worst errors and the joint residuals.
 // JS only moves bytes and compares numbers the modules produced.
 //   node test/carried-compression.e2e.mjs [regime name filter ...]
@@ -106,9 +109,13 @@ async function forecast(c) {
 }
 
 const rows = [];
-for (const c of REGIMES) {
+// each regime from its states every 30 s; the two lowest also every 60 s (the 0.1 rad tier)
+const runs = REGIMES.flatMap((c) => [{ c, build: BUILD }, ...(c.name === "LEO 300 km" || c.name === "LEO 500 km" ? [{ c, build: 60 }] : [])]);
+let states = null, statesOf = null;
+for (const { c, build: BUILD } of runs) {
   if (only.length && !only.some((q) => c.name.includes(q))) continue;
-  const states = await forecast(c);
+  if (statesOf !== c) { states = await forecast(c); statesOf = c; }
+  const coarse = BUILD > 30, name = coarse ? `${c.name}, ${BUILD} s` : c.name;
   const built = states.filter((s) => s.k % (BUILD / STEP) === 0);
   const lines = built.map((s) => Object.assign(new ephemerisDataLineT(), { EPOCH: iso(s.t), X: s.r[0], Y: s.r[1], Z: s.r[2], X_DOT: s.v[0], Y_DOT: s.v[1], Z_DOT: s.v[2] }));
   const od = Object.assign(new OEMOrbitDeterminationT(), { OD_METHOD: "SYNTHETIC: an initial state from made-up elements", OD_ARC_START: lines[0].EPOCH, OD_ARC_STOP: lines[0].EPOCH, OD_OBSERVATIONS_USED: 0 });
@@ -118,7 +125,7 @@ for (const c of REGIMES) {
   const forces = { EPHEMERIS_SOURCE: "", ATMOSPHERE_MODEL: pcfAtmosphereFamily.JACCHIA70, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 8 };
   const fit = await ap.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: T("OEM"), payload: oem },
     configuration({ theory: "AP", forces, output: { START_TIME: lines[0].EPOCH, STOP_TIME: lines.at(-1).EPOCH } })] });
-  if (fit.statusCode !== 0) { failures.push(`${c.name}: fit refused: ${fit.errorCode} ${fit.errorMessage}`); continue; }
+  if (fit.statusCode !== 0) { failures.push(`${name}: fit refused: ${fit.errorCode} ${fit.errorMessage}`); continue; }
   const rec = new Uint8Array(fit.outputs.find((q) => q.portId === "elements").payload);
   const u = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(rec)).unpack();
   const fly = async (ts) => {
@@ -139,9 +146,11 @@ for (const c of REGIMES) {
   const got = await fly(off.map((s) => s.t));
   let ep = 0, ev = 0;
   got.forEach((g, k) => { ep = Math.max(ep, hyp(g.r, off[k].r)); ev = Math.max(ev, hyp(g.v, off[k].v)); });
-  check(ep <= 1e-4, `${c.name}: ${(ep * 1e6).toFixed(3)} mm from the forecast off the build's times, over 0.1 m`);
-  check(ev <= 1e-7, `${c.name}: ${(ev * 1e6).toFixed(4)} mm/s from the forecast off the build's times, over 0.1 mm/s`);
-  check(got.every((g) => g.source === "CARRIED FORECAST"), `${c.name}: a state of the span is not labeled CARRIED FORECAST`);
+  // 30 s: within 0.1 m and 0.1 mm/s (the record is held to 1 cm and 0.1 mm/s); 60 s: within the 0.1 rad tier's stated 1 cm and 0.2 mm/s
+  const [pmax, vmax] = coarse ? [1e-5, 2e-7] : [1e-4, 1e-7];
+  check(ep <= pmax, `${name}: ${(ep * 1e6).toFixed(3)} mm from the forecast off the build's times, over ${pmax * 1e6} mm`);
+  check(ev <= vmax, `${name}: ${(ev * 1e6).toFixed(4)} mm/s from the forecast off the build's times, over ${vmax * 1e6} mm/s`);
+  check(got.every((g) => g.source === "CARRIED FORECAST"), `${name}: a state of the span is not labeled CARRIED FORECAST`);
   // 2. the second differences at the 10-s grid, at the triplets that hold a joint
   const segs = u.POLYNOMIAL_POSITION_RECORDS;
   const midOf = (s) => (Date.parse(`${s.EPOCH_MID.slice(0, 19)}Z`) - BASE_MS) / 1000 + Number(`0${s.EPOCH_MID.slice(19)}`);
@@ -157,17 +166,19 @@ for (const c of REGIMES) {
     own = Math.max(own, Math.hypot(...a));
     nJ++;
   }
-  check(joins.length === 0 || nJ > 0, `${c.name}: no triplet holds a joint`);
-  check(joint <= 5e-5, `${c.name}: a second-difference residual of ${(joint * 1000).toFixed(4)} m at a joint beyond the forecast's, over 0.05 m`);
+  check(joins.length === 0 || nJ > 0, `${name}: no triplet holds a joint`);
+  check(joint <= 5e-5, `${name}: a second-difference residual of ${(joint * 1000).toFixed(4)} m at a joint beyond the forecast's, over 0.05 m`);
   // 3. the record's statement of its forecast
   const tb = u.TRAJECTORY_BLOCKS?.[0];
   const spanStart = segs.length ? midOf(segs[0]) - segs[0].EPOCH_HALF_SPAN : NaN, spanStop = segs.length ? midOf(segs.at(-1)) + segs.at(-1).EPOCH_HALF_SPAN : NaN;
   const near = (text, t) => Math.abs((Date.parse(`${text.slice(0, 19)}Z`) - BASE_MS) / 1000 + Number(`0${text.slice(19)}`) - t) < 2e-6;
   check(tb && tb.TRAJ_BASIS === "PREDICTED" && near(tb.USEABLE_START_TIME, spanStart) && near(tb.USEABLE_STOP_TIME, spanStop) &&
-    near(u.METADATA.START_TIME, spanStart) && near(u.METADATA.STOP_TIME, spanStop), `${c.name}: the record does not state its span`);
-  check(tb && tb.COMMENT.includes(FORCE_TEXT) && tb.COMMENT.includes(od.OD_METHOD), `${c.name}: the record does not state its forecast's force model, weather and initial state: ${tb?.COMMENT}`);
+    near(u.METADATA.START_TIME, spanStart) && near(u.METADATA.STOP_TIME, spanStop), `${name}: the record does not state its span`);
+  check(tb && tb.COMMENT.includes(FORCE_TEXT) && tb.COMMENT.includes(od.OD_METHOD), `${name}: the record does not state its forecast's force model, weather and initial state: ${tb?.COMMENT}`);
+  const tier = coarse ? "Held to 1 cm and about 0.2 mm/s against the forecast at any time" : "Held to 1 cm and 0.1 mm/s against the forecast at any time";
+  check(tb && tb.COMMENT.includes(tier) && tb.COMMENT.includes(coarse ? "the 0.1 rad tier" : "the 0.05 rad tier"), `${name}: the record does not state its tier (${tier}): ${tb?.COMMENT}`);
   const bytes = segs.reduce((a, s) => a + 112 + 24 * s.NUM_COEFFICIENTS, 0);
-  rows.push({ regime: c.name, days: c.days, segments: segs.length, coefficients: segs[0]?.NUM_COEFFICIENTS, bytesPerDay: Math.round(bytes / c.days),
+  rows.push({ regime: name, days: c.days, segments: segs.length, coefficients: segs[0]?.NUM_COEFFICIENTS, bytesPerDay: Math.round(bytes / c.days),
     maxMm: +(ep * 1e6).toFixed(3), maxMmS: +(ev * 1e6).toFixed(4), joints: joins.length, jointResidualMm: +(joint * 1e6).toFixed(4), ownResidualAtJointsM: +(own * 1000).toFixed(3) });
 }
 console.table(rows);
@@ -176,5 +187,5 @@ if (failures.length) {
   console.log(`CARRIED-COMPRESSION FAIL: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.log(`CARRIED-COMPRESSION PASS: ${rows.length} regimes within 0.1 m and 0.1 mm/s of the forecast off the build's times, joints under 0.05 m, every state labeled, the forecast stated`);
+console.log(`CARRIED-COMPRESSION PASS: ${rows.length} records within 0.1 m and 0.1 mm/s of the forecast off the build's times (from 60 s: 1 cm and 0.2 mm/s), joints under 0.05 m, every state labeled, the forecast and its tier stated`);
 process.exit(0);

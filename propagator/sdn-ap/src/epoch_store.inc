@@ -451,6 +451,13 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   return q;
 }
 
+/// Seconds of t from entry e's epoch as every test of a carried span takes them (SPEC 18.3: one decision per instant):
+/// from the split Julian date when the caller has it, else from the minutes. choose(), state_of() and source_at() all
+/// use this one expression on the same inputs, so the set chosen for its span flies its forecast there.
+inline double span_seconds(const Entry& e, double t, const double* jd) {
+  return jd != nullptr ? ((jd[0] - e.row.epoch_jd_whole) + (jd[1] - e.row.epoch_jd_frac)) * 86400.0 : (t - e.epoch) * 60.0;
+}
+
 /// Set k of series s at t (minutes from J2000): TEME state, and the covariance when `P` is given (false: none). `jd` (the
 /// split Julian date of t, when the caller has it) times a carried forecast to the microsecond's fraction.
 inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr) {
@@ -458,8 +465,7 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
   if (const int32_t rc = rows_cover(st, st.entries[s.first + k], t)) return rc;
   if (const carried::Track* tr = st.entries[s.first + k].track.get()) {
     // SPEC 18: inside its span the forecast the record carries; the covariance stays the theory's
-    const ElementRow& row = st.entries[s.first + k].row;
-    const double ts = jd != nullptr ? ((jd[0] - row.epoch_jd_whole) + (jd[1] - row.epoch_jd_frac)) * 86400.0 : (t - st.entries[s.first + k].epoch) * 60.0;
+    const double ts = span_seconds(st.entries[s.first + k], t, jd);
     if (tr->covers(ts)) {
       // a segment read now that does not verify or falls short of the time: the input's fault (malformed record)
       if (const int32_t e = carried::at(*tr, ts, r, v, jd)) return e == carried::kFrame ? kPropRefused : ORBPRO_PROP_BAD_INPUT;
@@ -505,7 +511,8 @@ inline int window_kind(const Entry& e, double t0, double t1) {
   return s1 < tr->start || s0 > tr->stop ? 0 : 2;
 }
 inline Choice choose_by_epoch(const Store& st, const Series& s, double t);
-inline Choice choose(const Store& st, const Series& s, double t) {
+/// `jd`: the split Julian date of t when the caller has it; the span test is span_seconds()'s, the one state_of() makes.
+inline Choice choose(const Store& st, const Series& s, double t, const double* jd = nullptr) {
   Choice c;
   if (s.count == 1) return c;
   // SPEC 18.3: a set whose carried span holds t flies there, the latest by epoch when more than one does (a fresher
@@ -514,7 +521,7 @@ inline Choice choose(const Store& st, const Series& s, double t) {
   if (s.carried) {
     const Entry* E = st.entries.data() + s.first;
     for (uint32_t k = s.count; k-- > 0;)
-      if (E[k].track && E[k].track->covers((t - E[k].epoch) * 60.0)) {
+      if (E[k].track && E[k].track->covers(span_seconds(E[k], t, jd))) {
         const Choice e = choose_by_epoch(st, s, t);
         c.a = static_cast<int32_t>(k);
         c.spanned = e.b >= 0 || e.unblended != 0;
@@ -585,7 +592,7 @@ inline Choice choose_by_epoch(const Store& st, const Series& s, double t) {
 /// why (Choice::unblended), or {NaN, 0}.
 inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr,
                   double* unblended = nullptr) {
-  const Choice c = choose(st, s, t);
+  const Choice c = choose(st, s, t, jd);
   if (unblended != nullptr) {
     unblended[0] = c.unblended ? c.tau : std::numeric_limits<double>::quiet_NaN();
     unblended[1] = c.unblended;
@@ -636,11 +643,11 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
 /// the forecast a set carries (inside its span), 2 a blend of two sets' states of different sources, 3 a hand-over set
 /// at or after the time it serves from.
 inline int32_t source_at(const Store& st, const Series& s, double w, double f) {
-  const double t = minutes_of(w, f);
-  const Choice c = choose(st, s, t);
+  const double t = minutes_of(w, f), jd[2] = {w, f};
+  const Choice c = choose(st, s, t, jd);
   auto source = [&](int32_t j) {
     const Entry& en = st.entries[s.first + static_cast<uint32_t>(j)];
-    if (en.track && en.track->covers(((w - en.row.epoch_jd_whole) + (f - en.row.epoch_jd_frac)) * 86400.0)) return int32_t{carried::kCarried};
+    if (en.track && en.track->covers(span_seconds(en, t, jd))) return int32_t{carried::kCarried};
     return en.handover <= t ? int32_t{carried::kHandOver} : int32_t{carried::kTheory};
   };
   const int32_t a = source(c.a);
@@ -894,8 +901,8 @@ SDNAP_EXPORT("sdnap_epochs_select")
 int32_t sdnap_epochs_select(uint32_t i, double jd_whole, double jd_frac, double* out) {
   auto& st = sdnap::epochs::resident();
   if (i >= st.series.size() || out == nullptr) return -1;
-  const double t = sdnap::epochs::minutes_of(jd_whole, jd_frac);
-  const auto c = sdnap::epochs::choose(st, st.series[i], t);
+  const double t = sdnap::epochs::minutes_of(jd_whole, jd_frac), jd[2] = {jd_whole, jd_frac};
+  const auto c = sdnap::epochs::choose(st, st.series[i], t, jd);
   out[0] = c.a;
   out[1] = c.unblended == 1 ? -2 : c.unblended == 2 || c.spanned ? -3 : c.b;
   double w = 0.0;
