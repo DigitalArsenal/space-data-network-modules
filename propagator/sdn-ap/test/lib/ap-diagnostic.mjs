@@ -29,9 +29,10 @@ int sdnap_test_class_probe(double minutes,double* out) {
  auto& st=epochs::resident();if(st.series.size()!=1||out==nullptr)return -1;
  auto& slot=epochs::slot_of(st,st.series[0],0,false);if(slot.xp==nullptr||slot.error)return -2;
  auto& s=*slot.xp;double y[6];if(!mean_at(s,minutes,y))return -3;
- out[0]=y[kN]*1440/kTwoPi;out[1]=s.ctx.resonance;out[2]=ap_resonance_class(s.ctx,y[kN]);
- XpSat rebuilt{};const bool changed=ap_resonance_class(s.ctx,y[kN])!=s.ctx.resonance;if(changed&&!reclass_make(s.ctx,y,rebuilt))return -4;const auto& table=changed?rebuilt.ctx:s.ctx;
- const auto ts=res::class_terms(static_cast<int>(out[2]));out[3]=out[4]=0;
+ // [2] the band of the current mean motion; the rates and the output table are the set's own, of its epoch class [1]
+ out[0]=y[kN]*1440/kTwoPi;out[1]=s.ctx.resonance;out[2]=res::band_of(y[kN]);
+ const auto& table=s.ctx;
+ const auto ts=res::class_terms(static_cast<int>(s.ctx.resonance));out[3]=out[4]=0;
  for(int p=0;p<2;++p){
   for(int j=0;j<ts.count;++j)if(ts.t[j].l==2&&ts.t[j].m==2&&ts.t[j].p==p&&ts.t[j].q==2*p-1)out[3]+=1;
   for(int j=0;j<table.sp_count;++j){const auto& c=table.sp[j];if(c.l==2&&c.m==2&&c.w==2-2*p&&c.j==1)out[4]+=1;}
@@ -50,5 +51,5 @@ int sdnap_test_class_probe(double minutes,double* out) {
   }
   out[5+p]=peak;out[7+p]=track;
  }
- if(changed)xp_release(rebuilt);return 0;
+ return 0;
 }`;

@@ -6,6 +6,14 @@
 // the forward week while its companion does not. Selection uses mean motion
 // alone; every evaluated pair is printed, and accuracy never selects a pair.
 // Known B fixed in both input sets; no SRP. Signed along-track errors within 25%.
+// SPEC 16.7 (review 0, M5): the class is the set's, decided at its epoch, for the
+// whole flight. The primary's mean motion leaves the half-day band (its current
+// band is the eight-hour class) and its rates and output table stay those of the
+// half-day class: the two (2,2) terms (p,q) = (0,-1), (1,1) stay in the rates and
+// never enter the output table, on both sets at every lead. Until 0.6.5 the tables
+// were rebuilt for the current class (-31,291.823 m against -32,325.032 m held, at
+// day 7 on 2026-11-03); holding them keeps the output continuous in time.
+// The SGP4XP conformance reproduction runs last (it needs the SGP4-XP oracle).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {execFileSync} from 'node:child_process';
@@ -25,19 +33,18 @@ for(const bterm of [.04,.06,.08,.1]){
 }
 assert.ok(selected,'registered B grid contains a crossing primary and noncrossing companion');
 const [a,b]=selected.pair,ratio=a.days[7].t/b.days[7].t;
-const holdPath=buildDiagnostic('class-hold-reference',CLASS_PROBE,s=>{
- const changed=s.replace(/inline int ap_resonance_class\(const RateContext& ctx, double n\) \{[\s\S]*?\n\}/,'inline int ap_resonance_class(const RateContext& ctx, double n) {\n  (void)n;\n  return ctx.resonance;\n}');
- assert.notEqual(changed,s,'epoch-hold diagnostic transformation applied');return changed;
-});
-const epochHold=await runModelTruth({...a.fixture,name:'epoch-hold',modulePath:holdPath,probePath:holdPath});
-console.log(JSON.stringify({epochHold}));
-if(process.env.SDN_AP_CLASS_REPORT)fs.writeFileSync(process.env.SDN_AP_CLASS_REPORT,JSON.stringify({edge,results,selected,epochHold},null,2)+'\n');
-console.log(JSON.stringify({bterm:selected.bterm,day7AlongTrackMeters:[a.days[7].t,b.days[7].t],ratio,allowed:[.75,1.25],epochHoldDay7AlongTrackMeters:epochHold.days[7].t,termLongitudeAmplitudesMeters:a.classDiagnostics[0].values.slice(5,7),termPerigeeAlongTrackAmplitudesMeters:a.classDiagnostics[0].values.slice(7,9)}));
+if(process.env.SDN_AP_CLASS_REPORT)fs.writeFileSync(process.env.SDN_AP_CLASS_REPORT,JSON.stringify({edge,results,selected},null,2)+'\n');
+console.log(JSON.stringify({bterm:selected.bterm,day7AlongTrackMeters:[a.days[7].t,b.days[7].t],ratio,allowed:[.75,1.25],termLongitudeAmplitudesMeters:a.classDiagnostics[0].values.slice(5,7),termPerigeeAlongTrackAmplitudesMeters:a.classDiagnostics[0].values.slice(7,9)}));
 if(!process.argv.includes('--baseline')){
- for(const r of selected.pair)for(const d of r.classDiagnostics){const crossed=d.values[0]>edge;assert.equal(d.values[2],crossed?3:2,'current class has matching tables');assert.equal(d.values[3],crossed?0:2,'rates contain only the current class');assert.equal(d.values[4],crossed?2:0,'both old terms move to output without duplication');}
- execFileSync(process.execPath,[new URL('./conformance.e2e.mjs',import.meta.url).pathname,'--reproduce',new URL('./results/conformance.json',import.meta.url).pathname],{stdio:'inherit',env:{...process.env,SDN_AP_ORACLE_ROOT:process.env.SDN_AP_ORACLE_ROOT??'/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
+ for(const r of selected.pair)for(const d of r.classDiagnostics){
+  const crossed=d.values[0]>edge;
+  assert.equal(d.values[1],2,'the epoch class is the half-day class');
+  assert.equal(d.values[2],crossed?3:2,'the current mean motion is in the band the probe names');
+  assert.equal(d.values[3],2,'the half-day class keeps both (2,2) terms in the rates after its mean motion leaves the band');
+  assert.equal(d.values[4],0,'neither (2,2) term enters the output table');
+ }
  assert.ok(Math.abs(ratio-1)<=.25,'crossing signed along-track error within 25% of companion');
- assert.ok(Math.abs(a.days[7].t)<Math.abs(epochHold.days[7].t),'rebuild has smaller absolute along-track error than epoch hold');
  for(const amplitude of a.classDiagnostics[0].values.slice(7,9))assert.ok(amplitude>500&&amplitude<650,'both sampled perigee term amplitudes remain in the measured range');
+ execFileSync(process.execPath,[new URL('./conformance.e2e.mjs',import.meta.url).pathname,'--reproduce',new URL('./results/conformance.json',import.meta.url).pathname],{stdio:'inherit',env:{...process.env,SDN_AP_ORACLE_ROOT:process.env.SDN_AP_ORACLE_ROOT??'/Users/tj/software/spacedatanetwork-stack/repos/main-packages/space-data-network-closed-modules/packages/sgp4-xp-oracle'}});
  console.log('Class crossing E2E: PASS');
 }
