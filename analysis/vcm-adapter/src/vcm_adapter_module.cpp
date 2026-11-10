@@ -997,8 +997,9 @@ std::string vcmTextOf(const Solution& s, const EopPoint& eop, const std::string&
     double u1 = 0, u2 = 0;
     if (eraDtf2d("UTC", s.epoch.year, s.epoch.month, s.epoch.day, s.epoch.hour, s.epoch.minute, s.epoch.second, &u1, &u2) != 0) { error = "invalid-ocm: the epoch is out of range"; return ""; }
 
-    // ECI (TEME) and EFG: GCRF = B^T EME2000, TEME from the axis engine,
-    // EFG = R3(GMST 1982 of UT1) TEME (polar motion not applied, as the VCM says).
+    // ECI (TEME) and EFG: GCRF = B^T EME2000, TEME from the axis engine (the TEME of AIAA 2006-6753,
+    // R3(GAST06 - GMST82) NPB06, of the VCM's UT1), EFG = R3(GMST 1982 of UT1) TEME (polar motion not applied, as
+    // the VCM says).
     double rb[3][3], rp[3][3], rbp[3][3];
     double tt1 = 0, tt2 = 0;
     {
@@ -1011,10 +1012,9 @@ std::string vcmTextOf(const Solution& s, const EopPoint& eop, const std::string&
     for (int k = 0; k < 2; ++k)
         for (int i = 0; i < 3; ++i) gcrf[3 * k + i] = rb[0][i] * rv[3 * k] + rb[1][i] * rv[3 * k + 1] + rb[2][i] * rv[3 * k + 2];
     sdn::frames::Epoch e;
-    e.tt1 = tt1; e.tt2 = tt2; e.ut11 = 0; e.ut12 = 0;
+    e.tt1 = tt1; e.tt2 = tt2; e.ut11 = u1; e.ut12 = u2 + s.ut1Utc / 86400.0;
     const sdn::frames::Mat3 R = sdn::frames::gcrfToTeme(e);
-    sdn::frames::Epoch e1 = e, e2 = e;
-    e1.tt2 -= 600.0 / 86400.0; e2.tt2 += 600.0 / 86400.0;
+    const sdn::frames::Epoch e1 = sdn::frames::shiftEpoch(e, -600.0), e2 = sdn::frames::shiftEpoch(e, 600.0);
     const sdn::frames::Mat3 Ra = sdn::frames::gcrfToTeme(e1), Rb = sdn::frames::gcrfToTeme(e2);
     double teme[6];
     for (int i = 0; i < 3; ++i) {

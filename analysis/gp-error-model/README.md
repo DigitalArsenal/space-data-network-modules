@@ -74,7 +74,7 @@ What it does:
 - **Comparison state, with `reference`:** each reference state (for example
   `analysis/reference-states` output), sampled at least `referenceStepSeconds`
   apart. SGP4's TEME output goes to GCRF through the `foundation/frames` axis
-  engine (IAU 2006/2000A and the equation of the equinoxes). It is compared
+  engine (the TEME of AIAA 2006-6753, `R3(GAST06 - GMST82) NPB06`). It is compared
   with every element set of that object up to the oldest age bin.
 - **Error:** prediction minus comparison, in the comparison state's RTN axes
   (R radial, N orbit normal, T = N × R). Positions are in km and velocities
@@ -464,7 +464,7 @@ Inputs:
   - Each block needs `OBJECT.NORAD_CAT_ID`, `REFERENCE_FRAME` TEME, GCRF, ICRF, EME2000 or J2000, and `TIME_SYSTEM` UTC, TAI, TT or GPS (converted to UTC through ERFA's leap-second table).
   - States come as lines or in the compact form (`STEP_SIZE`, `STATE_VECTOR_SIZE` 3, 6 or 9). A line whose velocity is all zeros has no velocity.
   - Covariance lines at a state's epoch are its covariance, in `COV_REFERENCE_FRAME` (absent: the state frame; RSW, RTN, RIC or UVW: the state's own axes).
-  - Every state goes to TEME: EME2000 through the IAU 2006 frame bias, then GCRF through `gcrfToTeme` (IAU 2006/2000A and the equation of the equinoxes).
+  - Every state goes to TEME: EME2000 through the IAU 2006 frame bias, then GCRF through `gcrfToTeme` (the TEME of AIAA 2006-6753, `R3(GAST06 - GMST82) NPB06` by IAU 2006/2000A; until 0.15.0 the x axis was placed by GMST06, 57.4 mas away at 2026).
 - `elements` (optional): a priori `$OMM` sets, the B* source or the starting elements.
 - `options` (`ELEMENT_FITS` `OPTIONS`: `SHARED` settings and per-object `FITS`; readable as below):
   - span: `from`, `to`;

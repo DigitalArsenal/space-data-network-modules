@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-10T19:15:41.160Z",
+  "generatedAt": "2026-11-10T20:26:11.848Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -133,7 +133,7 @@
       "pluginId": "com.digitalarsenal.analysis.association",
       "name": "Observation association",
       "pluginFamily": "analysis",
-      "version": "0.3.1",
+      "version": "0.4.0",
       "methodIds": [
         "associate_observations",
         "solve_assignment"
@@ -736,7 +736,7 @@
       "pluginId": "com.digitalarsenal.analysis.epoch-state",
       "name": "SDN Epoch State",
       "pluginFamily": "analysis",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "methodIds": [
         "answer_propagation_requests",
         "derive",
@@ -756,7 +756,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 6,
+      "testFileCount": 7,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -768,7 +768,8 @@
         "tests/epoch_state.test.mjs",
         "tests/fixtures.mjs",
         "tests/parity.mjs",
-        "tests/vallado-verification.json"
+        "tests/vallado-verification.json",
+        "tests/vallado-verification.py"
       ]
     },
     {
@@ -880,7 +881,7 @@
       "pluginId": "com.digitalarsenal.analysis.gp-error-model",
       "name": "GP prediction-error model",
       "pluginFamily": "analysis",
-      "version": "0.14.1",
+      "version": "0.15.0",
       "methodIds": [
         "accumulate",
         "attach_covariance",
@@ -1522,7 +1523,7 @@
       "pluginId": "com.digitalarsenal.analysis.optical-astrometry",
       "name": "Optical astrometry",
       "pluginFamily": "analysis",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "initial_orbit",
         "reduce"
@@ -1710,7 +1711,7 @@
       "pluginId": "com.digitalarsenal.analysis.reference-states",
       "name": "Reference states",
       "pluginFamily": "analysis",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "methodIds": [
         "compare_to_reference",
         "reference_states",
@@ -1901,7 +1902,7 @@
       "pluginId": "com.digitalarsenal.analysis.vcm-adapter",
       "name": "SDN VCM Adapter",
       "pluginFamily": "analysis",
-      "version": "0.3.1",
+      "version": "0.4.0",
       "methodIds": [
         "ocm",
         "read",
@@ -5639,7 +5640,7 @@
       "pluginId": "com.digitalarsenal.foundation.frames",
       "name": "Foundation Frames",
       "pluginFamily": "foundation",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "methodIds": [
         "transform_frame_position"
       ],
@@ -5656,7 +5657,7 @@
       ],
       "cxxSourceFileCount": 3,
       "cSourceFileCount": 0,
-      "testFileCount": 22,
+      "testFileCount": 23,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -5686,7 +5687,8 @@
         "tests/rfm_selectors_parity.test.mjs",
         "tests/run_body_fixed_runtimes.mjs",
         "tests/run_rfm_selector_runtimes.mjs",
-        "tests/sdk_compat.test.mjs"
+        "tests/sdk_compat.test.mjs",
+        "tests/teme.test.mjs"
       ]
     },
     {
@@ -7518,7 +7520,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 137,
+      "testFileCount": 138,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7578,6 +7580,7 @@
         "test/lib/ap-diagnostic.mjs",
         "test/lib/calibration-replay.mjs",
         "test/lib/carried.mjs",
+        "test/lib/conformance-step.mjs",
         "test/lib/experiments.mjs",
         "test/lib/fixture-inputs.mjs",
         "test/lib/frames.mjs",
@@ -7669,7 +7672,7 @@
       "pluginId": "com.digitalarsenal.propagator.sgp4-xp",
       "name": "SGP4-XP propagator and fitter (US Space Force Sgp4Prop)",
       "pluginFamily": "propagator",
-      "version": "0.2.3",
+      "version": "0.3.0",
       "methodIds": [
         "fit",
         "ingest_omm",
@@ -7735,7 +7738,7 @@
       "pluginId": "com.orbpro.sgp4",
       "name": "SGP4/SDP4 Propagator",
       "pluginFamily": "propagator",
-      "version": "1.4.2",
+      "version": "1.5.0",
       "methodIds": [
         "catalog_query",
         "ingest_omm",

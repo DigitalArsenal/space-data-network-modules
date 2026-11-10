@@ -202,8 +202,10 @@ test('an SP3 with no accuracy needs a stated one, and never gets a default', asy
 });
 
 // compare_to_reference. TEME: Vallado, Crawford, Hujsak and Kelso 2006
-// (AIAA 2006-6753), the 2004-04-06 07:51:28.386009 UTC example: TEME
-// (5094.18016210, 6127.64465950, 6380.34453270) km is the GCRF R_GCRF above.
+// (AIAA 2006-6753 Rev 2, Appendix C), the 2004-04-06 07:51:28.386009 UTC example: TEME
+// (5094.18016210, 6127.64465950, 6380.34453270) km is the GCRF R_GCRF above. Within 1 cm since 0.5.0, the
+// TEME of the paper (r_PEF = R3(GMST82) r_TEME; foundation/frames 0.3.0); 0.4.0 placed TEME's x axis by GMST06
+// and missed by 0.11 m.
 // Mahalanobis: an error (1, 2, 3) km against diag(1, 4, 9) km^2 is d2 = 3.
 const R_TEME = [5094.18016210, 6127.64465950, 6380.34453270];
 function oemOf({ frame, start, step, states, covariance, lines }) {
@@ -255,7 +257,7 @@ test('compare_to_reference: TEME -> GCRF reproduces the Vallado 2006 pair', asyn
     oemOf({ frame: 'GCRF', lines: [['2004-04-06T07:51:28.386009', R_GCRF], ['2004-04-06T09:00:00', R_GCRF]] }));
   assert.equal(report.compared, 1);
   assert.equal(report.outsideSpan, 1);
-  assert.ok(report.rows[0].errorNormKm < 0.002, `TEME -> GCRF differs from Vallado by ${report.rows[0].errorNormKm * 1000} m`);
+  assert.ok(report.rows[0].errorNormKm < 1e-5, `TEME -> GCRF differs from Vallado by ${report.rows[0].errorNormKm * 1000} m`);
   assert.equal(report.covariance, false);
   assert.ok(Number.isNaN(report.meanD2Over3) && report.samples === 0, 'no covariance: no realism statistic');
 });

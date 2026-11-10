@@ -22,7 +22,7 @@
 //   reference       the comparison state is an independent reference state
 //                   (analysis/reference-states, GCRF/UTC); SGP4's TEME output
 //                   goes to GCRF through the foundation/frames axis engine
-//                   (IAU 2006/2000A and the equation of the equinoxes).
+//                   (the TEME of AIAA 2006-6753, R3(GAST06 - GMST82) NPB06).
 // Prediction age is comparison epoch minus element-set epoch (UTC seconds,
 // SGP4's convention), forward only. The regime is the propagated set's:
 // eccentricity and mean altitude (un-Kozai'd mean motion, WGS-72).

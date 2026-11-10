@@ -322,15 +322,34 @@ inline Mat3 gcrfToToe(const Epoch& epoch) {
   return multiply(detail::fromErfa(r), gcrfToTod(epoch));
 }
 
-/// GCRF -> TEME. TEME is true of date with the origin of right ascension moved
-/// from the true equinox to the "mean equinox of date" used by SGP4, i.e. true
-/// of date rotated about the pole by the equation of the equinoxes.
+/// GCRF -> TEME, the frame SGP4 writes, as AIAA 2006-6753 defines it
+/// (Vallado, Crawford, Hujsak, Kelso, "Revisiting Spacetrack Report #3",
+/// sec. II.D eq. 1 and Appendix C eq. C-2):
+///   r_PEF = R3(GMST82) r_TEME
+/// GMST82: IAU 1982 Greenwich mean sidereal time of UT1 (Aoki et al. 1982;
+/// the paper's eq. 2; eraGmst82). PEF is the Earth-fixed frame before polar
+/// motion, by IAU 2006/2000A (IERS Conventions 2010 ch. 5):
+///   r_PEF = R3(GAST06) NPB06 r_GCRF
+/// NPB06: bias-precession-nutation, IAU 2006/2000A (eraPnm06a, at TT);
+/// GAST06: Greenwich apparent sidereal time, ERA(UT1) minus the equation of
+/// the origins (eraGst06). Hence
+///   r_TEME = R3(GAST06 - GMST82) NPB06 r_GCRF,
+/// the rotation propagator/sdn-ap uses (src/gcrf.inc). The CIP offsets dX, dY
+/// are not applied (as in TOD); UT1 is the epoch's (UTC without EOP). Through
+/// this module, TEME -> ITRF with dX = dY = 0 is W R3(GMST82), the paper's C-2.
+/// An epoch whose UT1 is not within 0.01 day of its TT (UT1 left unset) gets a
+/// NaN matrix, never a frame turned by a wrong sidereal angle.
 inline Mat3 gcrfToTeme(const Epoch& epoch) {
-  const double equationOfEquinoxes = eraEe06a(epoch.tt1, epoch.tt2);
-  double r[3][3];
-  eraIr(r);
-  eraRz(equationOfEquinoxes, r);
-  return multiply(detail::fromErfa(r), gcrfToTod(epoch));
+  if (!(std::fabs((epoch.ut11 - epoch.tt1) + (epoch.ut12 - epoch.tt2)) < 0.01)) {
+    Mat3 refused;
+    for (auto& row : refused.m) for (double& value : row) value = std::nan("");
+    return refused;
+  }
+  double npb[3][3];
+  eraPnm06a(epoch.tt1, epoch.tt2, npb);
+  const double gast = eraGst06(epoch.ut11, epoch.ut12, epoch.tt1, epoch.tt2, npb);
+  eraRz(gast - eraGmst82(epoch.ut11, epoch.ut12), npb);
+  return detail::fromErfa(npb);
 }
 
 // --- The explicitly named legacy IAU-76/FK5 route ---------------------------
