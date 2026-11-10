@@ -6,6 +6,26 @@
 //   - every recorded list value is read from its typed field with the same number, or follows from
 //     COVARIANCE_DATA (the SIGMA_TOTAL rows, dropped), or is a diagnostic the report keeps;
 //   - STATE_DATA and COVARIANCE_DATA are the recorded bytes; the report's items are the recorded items.
+// Re-pinned at 0.4.0 for the TEME of AIAA 2006-6753 (foundation/frames 0.3.0; the predicted SGP4 tracks go TEME -> GCRS
+// through it): the old source rebuilt on today's toolchain gives the recorded bytes, the new source does not, so the
+// move is the frame's. At 2026-10-18 the new TEME turns the calibrator's predicted track 59 mas about the pole, 1.7 m at
+// its radius (0.3 arcsec seen from the site). The calibration solves the clock bias and the calibrator's in-track
+// ephemeris offset together, and the two are one direction for one object (sigma 0.131 s, about 1 km in-track): the
+// solution slid along it by 14.2 ms (time bias -0.1001 to -0.0859 s; in-track offset 0 to -107 m; fit RMS 3.27 arcsec
+// either way). The target's times carry that bias, so its OD epoch moved 14.1 ms and its state 108 m in-track
+// (0.11 sigma); OD RMS 3.696026 to 3.695993 arcsec, position covariance trace 1.0554 to 1.0548 km**2. Every recorded
+// USER_DEFINED_PARAMETERS value is taken from the 0.4.0 report item of the same key, as the pre-typed build printed it.
+// The result answers a 0.3 arcsec change of the calibrator's track only along a direction the solution does not
+// determine; a move of about 100 m here is not a frame error of 100 m. The five checks that moved, 0.3.0 -> 0.4.0:
+//   report text: 46 of 63 items; time_bias_s -0.1001 -> -0.0859; site lon_deg -70.85285 -> -70.85295, height_m
+//     1523 -> 1519; calibrator o_minus_c_rms_east_north_arcsec 2.47,2.38 -> 10.14,5.35, ephemeris_offset_rtn_km
+//     -0.008,-0.000,-0.001 -> -0.012,-0.107,0.002; target prior O-C 423.994682 -> 433.813087 arcsec;
+//   STATE_DATA / COVARIANCE_DATA sha256 4613bc642ca9 / 75fe24d281f5 -> ad5b570b7029 / aa3b6e9d6573;
+//   EPOCH 2026-10-18T07:28:02.008948Z -> 07:28:02.023055Z;
+//   SIGMA_TOTAL_RTN_KM 0.161,0.995,0.201 -> 0.161,0.994,0.201 (COVARIANCE_DATA position trace 1.055356 -> 1.054827);
+//   diagnostics: PRIOR_O_MINUS_C_MEDIAN_ARCSEC 424.0 -> 433.8, OD_MINUS_PRIOR_RTN_KM 0.154,-4.933,0.023 ->
+//     0.151,-5.042,0.025, SEPARATION_FROM_CALIBRATOR_KM 4.827 -> 4.935, RELATIVE_TO_CALIBRATOR_RTN_KM in-track
+//     -4.825 -> -4.934, every CHECK row's OD-set in-track -0.108 km (480.749 -> 480.641 on the first).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

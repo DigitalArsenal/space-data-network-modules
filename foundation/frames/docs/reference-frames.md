@@ -35,6 +35,25 @@ is retained in the response.
 No downstream schema is introduced. Existing `BODY_FIXED` together with
 `AXIS_REFERENCE_BODY_ID` selects the built-in body rotations.
 
+## TEME
+
+`TRUE_EQUATOR_MEAN_EQUINOX_OF_DATE` (value 4) is the frame SGP4 writes, as
+AIAA 2006-6753 (Vallado, Crawford, Hujsak and Kelso, "Revisiting Spacetrack
+Report #3", sec. II.D eq. 1, Appendix C eq. C-2) defines it: the
+pseudo-Earth-fixed frame is `R3(GMST82(UT1))` of TEME. The PEF is reached from
+GCRF by IAU 2006/2000A, so `gcrfToTeme` is `R3(GAST06 - GMST82) NPB06`
+(`eraGst06`, `eraGmst82`, `eraPnm06a`), the rotation `propagator/sdn-ap` uses.
+CIP offsets dX, dY are not applied; TEME to ITRF with dX = dY = 0 is
+`W R3(GMST82)`. Rev 3 of the paper adds the post-1997 kinematic terms of the
+equation of the equinoxes to that step in Appendix C (up to 2.64 mas); this
+module follows eq. 1 and Rev 2, without them.
+
+Before 0.3.0 the module placed the TEME x axis by GMST06 (`R3(ee06a) NPB06`).
+The two differ by a rotation about the pole that grows about 2.78 mas a year:
+the standard x axis lies -14.6 mas east of the old one at 2000, +13.0 at 2010,
++40.8 at 2020 and +57.4 at 2026 (3.0, 2.7, 8.3 and 11.7 m at the
+geosynchronous radius; 0.50, 0.44, 1.38 and 1.95 m at 7,000 km).
+
 ## Earth convention selection
 
 The C++ engine's `celestialToItrf(AxisType, Epoch, EarthOrientation, Mat3*)` accepts `ICRF`

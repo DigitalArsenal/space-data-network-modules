@@ -1,7 +1,8 @@
 // propagator/sgp4-xp: the axes. The library works in TEME; ephemerides come in inertial and Earth-fixed axes.
 //
 // One chain, as propagator/sgp4 and analysis/epoch-state have it: foundation/frames' axis engine over the vendored
-// ERFA (IAU 2006/2000A precession-nutation, the equation of the equinoxes for TEME). GCRF, ICRF and J2000A are
+// ERFA (IAU 2006/2000A precession-nutation; TEME as AIAA 2006-6753 defines it, R3(GAST06 - GMST82) NPB06, which
+// needs the epoch's UT1: frameEpoch sets it, UT1 = UTC + the Earth orientation's UT1 - UTC). GCRF, ICRF and J2000A are
 // the same axes; J2000 and EME2000 are the mean equator and equinox of J2000, which differ from GCRF by the frame
 // bias (23 mas, 0.8 m at low Earth orbit), as analysis/gp-error-model takes them.
 // Earth-fixed axes (ITRF, WGS84, ECEF) rotate by the CIO-based IAU 2006/2000A chain with the Earth orientation

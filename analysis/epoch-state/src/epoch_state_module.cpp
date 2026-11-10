@@ -198,8 +198,9 @@ bool tt_from_utc(const UtcInstant& instant, Epoch* epoch, bool* dubious) {
     const int tai = eraUtctai(utc1, utc2, &tai1, &tai2);
     if (tai != 0 && tai != 1) return false;
     if (eraTaitt(tai1, tai2, &epoch->tt1, &epoch->tt2) != 0) return false;
-    epoch->ut11 = 0.0;
-    epoch->ut12 = 0.0;
+    // UT1 = UTC: TEME's GMST82 and GAST06 are of UT1 (no $EOP here).
+    epoch->ut11 = utc1;
+    epoch->ut12 = utc2;
     *dubious = dtf == 1 || tai == 1;
     return true;
 }
@@ -297,9 +298,8 @@ std::string derive_state(const ElementInput& in, const UtcInstant& at, double ts
 
     Epoch epoch;
     if (!tt_from_utc(at, &epoch, &out->dubious_time)) return "utc-to-tt";
-    Epoch before = epoch, after = epoch;
-    before.tt2 -= kRateHalfStepSeconds / 86400.0;
-    after.tt2 += kRateHalfStepSeconds / 86400.0;
+    const Epoch before = sdn::frames::shiftEpoch(epoch, -kRateHalfStepSeconds);
+    const Epoch after = sdn::frames::shiftEpoch(epoch, kRateHalfStepSeconds);
 
     // R maps GCRF to TEME; Rdot is its time derivative (per second).
     const Mat3 R = sdn::frames::gcrfToTeme(epoch);
@@ -364,9 +364,9 @@ std::string lineage_comment(const ElementInput& in, const std::vector<Row>& rows
         comment += "} days; ";
     }
     comment += "TEME output in km and km/s. ";
-    comment += "Frame: TEME to GCRF at the same instant, IAU 2006/2000A precession-nutation and ";
-    comment += "equation of the equinoxes (ERFA eraPnm06a, eraEe06a); TT from UTC via the ERFA ";
-    comment += "leap-second table; velocity includes the frame rotation rate. ";
+    comment += "Frame: TEME to GCRF at the same instant, TEME as AIAA 2006-6753 defines it, ";
+    comment += "R3(GAST06 - GMST82) NPB06 (ERFA eraGst06, eraGmst82, eraPnm06a); TT from UTC via the ERFA ";
+    comment += "leap-second table, UT1 = UTC; velocity includes the frame rotation rate. ";
     if (dubious) {
         comment += "Time scale: epoch outside the ERFA leap-second table (TAI-UTC taken as ERFA ";
         comment += "reports it). ";
