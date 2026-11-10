@@ -173,9 +173,15 @@ SPEC 16.6 and `test/results/heo-model-truth.json` give the fixtures and day-1, 3
 A set's branch (resonance class, the 1,100-minute regime, the eccentricity switches) is decided at its epoch and held
 for the whole flight, so its output is continuous in time (SPEC 16.7); AP's elements are defined per branch, and the
 module never differences or blends two branches (covariance, fit, epoch store). On the decaying-GTO fixture, whose mean
-motion leaves the half-day band during the week, the day-7 along-track error is -168,218.829 m with the class held
-against -167,341.326 m when 0.6.6 and 0.6.7 rebuilt their tables for the current class, and -136,267.630 m for the noncrossing
-companion (23.4 %; E2E bound 25 %). SPEC 16.7 defines the fixture.
+motion leaves the half-day band during the week, the day-7 along-track error is -22,912.217 m with the class held
+against -20,534.324 m for the noncrossing companion (11.6 %; E2E bound 25 %). SPEC 16.7 defines the fixture. Through 0.6.11
+these were -168,218.829 and -136,267.630 m (-167,341.326 m when 0.6.6 and 0.6.7 rebuilt their tables for the current
+class): the epoch state at perigee came after the whole drag pass, which FFM, seeded there, still flies in part.
+
+Above e 0.3 with drag, each perigee pass changes the osculating elements smoothly over the pass, at the pass's own width
+in the mean anomaly (SPEC 16.12). Through 0.6.11 they changed in one step at perigee, so the output jumped there: by 42
+to 77 m and 0.12 to 0.14 m/s on that fixture, and by 5.5 to 9.3 cm and 3.5e-4 m/s on Molniya. From 0.6.12 the steps are
+at most 2 mm and 6e-7 m/s, the same as with drag off.
 
 From 0.6.3 above e 0.3 and from 0.6.4 above e 0.05, to 0.6.10, a set outside every resonance class (class 0) near an m:1
 commensurability with the Earth's rotation (4, 5, 6, 7, 8 rev/day, within about 4.5 % of n) flew without its slow tesseral
@@ -454,6 +460,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
   step between two sets on different branches; inside a carried span its set alone (two forecasts never blend), the
   step to the theory at the span's end.
+- `test/perigee-drag-continuity.e2e.mjs`: SPEC 16.12: no step at perigee above e 0.3 with drag. On the transfer-orbit
+  fixture and on Molniya, at three perigees each, the position step stays at most 1 cm and the velocity step at most
+  1e-5 m/s (5 ms states); within 10 min of perigee the 10 s jump detector stays within 1.5 times the drag-off flight's.
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.

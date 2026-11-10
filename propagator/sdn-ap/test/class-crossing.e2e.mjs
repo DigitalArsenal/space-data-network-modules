@@ -11,11 +11,13 @@
 //   |d_k - (d_(k-1) + d_(k+1)) / 2|, d the second difference of position less h^2 times the two-body acceleration
 //   (mu 398600.4415 km^3/s^2), stays below 1 m away from perigee (10 min each side of each of the 9 passages left out).
 //   A step J in the output gives about 1.5 J there; the flight's own smooth terms give 0.14 m. Within 10 min of perigee
-//   the detector reaches 129 m: the perigee drag passage's step (SPEC 16.12), the same on 0.6.7, printed and not asserted.
+//   the detector is printed, not asserted: 0.92 m (0.65 m with drag off, stack #420's kinks), 129 m through 0.6.11 (the
+//   perigee drag passage's step, SPEC 16.12; test/perigee-drag-continuity.e2e.mjs asserts it).
 //   This fixture's set lies above e 0.3 (its first-order families on the grid), so 0.6.7's rebuilt tables did not change
 //   its output table and it passes this check too; continuity at the class limits proper is test/branch-at-epoch.e2e.mjs.
-// - The day-7 signed along-track error of the primary against FFM within 25 % of the companion's: -168,218.829 m against
-//   -136,267.630 m with the class held (0.6.7, its tables rebuilt for the current class: -167,341.326 m).
+// - The day-7 signed along-track error of the primary against FFM within 25 % of the companion's: -22,912.217 m against
+//   -20,534.324 m (0.6.12: the epoch state mid-pass, SPEC 16.12). Through 0.6.11, -168,218.829 against -136,267.630 m with
+//   the class held (0.6.7, its tables rebuilt for the current class: -167,341.326 m).
 // Every number comes from the built module's own calls (propagate) and FFM's. JS only moves bytes and compares numbers
 // the modules produced.
 //   node test/class-crossing.e2e.mjs
