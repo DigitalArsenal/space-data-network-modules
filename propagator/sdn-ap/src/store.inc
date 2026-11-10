@@ -77,6 +77,14 @@ inline Elements elements_of(const ElementRow& row) {
   return e;
 }
 
+/// The branch a row's set flies (SPEC 16.7: xpt::branch_of of its epoch elements, AP's switches when the call selects
+/// AP's terms).
+inline bool ap_selected() { return xpt::tess::active().tesseral > 0 || xpt::tess::active().zonal > 0; }
+inline xpt::Branch row_branch(const ElementRow& row) {
+  const Elements e = elements_of(row);
+  return xpt::branch_of(e.xno, e.eo, ap_selected());
+}
+
 /// A row the ingest takes for any theory: SGP4 or SGP4XP, every field a number and the inclination within [0, 180] deg
 /// (CCSDS 502.0-B-3). Any other row is held refused (init_error), never initialized or propagated.
 inline bool row_well_formed(const ElementRow& r) {

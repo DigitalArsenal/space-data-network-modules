@@ -18,7 +18,10 @@
 //   SMOOTHSTEP: w = 3 s^2 - 2 s^3 over the window, r = (1 - w) r_a + w r_b, v = (1 - w) v_a + w v_b + w' (r_b - r_a), so
 //   r and v are continuous (w' = 0 at both edges). HERMITE: set a's state plus a cubic Hermite correction that is zero
 //   with a zero rate at the window's start and reaches set b's position and velocity at its end. Covariance: the two-component mixture (1 - w) P_a + w P_b + w (1 - w) d d^T
-//   (d = x_b - x_a; the smoothstep weight for both shapes), for sets that carry COVARIANCE (SPEC 12).
+//   (d = x_b - x_a; the smoothstep weight for both shapes), for sets that carry COVARIANCE (SPEC 12). Two AP sets on
+//   different branches (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches) are different orbits and
+//   are never blended: their switch is a step, sdnap_epochs_select reports b = -2 in its window and propagate_epochs
+//   names its time in the block's COMMENT (SPEC 14.3).
 // - Calls: the resident exports sdnap_epochs_* over the loaded store, and `propagate_epochs`, the same on a grid for a
 //   snapshot given with the call (stateless).
 // -----------------------------------------------------------------------------
@@ -44,6 +47,7 @@ struct Entry {
   Forces forces{};
   const atm::Atmosphere* atmosphere = nullptr;
   int32_t first_day = 0, last_day = 0;  ///< RECORDS: the MJDs it flies through (its first row's day + 1, its last row's day)
+  xpt::Branch branch{};                 ///< an AP set's branch (SPEC 14.3, 16.7); every other set the default
 };
 
 /// An initialized record of one set (the lazy cache: two per series).
@@ -322,6 +326,10 @@ inline int build(Store& st, const Config& cfg) {
           en.first_day = en.atmosphere->days.front().mjd + 1;
           en.last_day = en.atmosphere->days.back().mjd;
         }
+        if (en.row.theory == kTheorySgp4Xp) {
+          ocm::Bind bind(en.forces, en.atmosphere);  // the set's own selection decides whether AP's switches exist
+          if (ap_selected()) en.branch = row_branch(en.row);
+        }
         recs[q].cov = nullptr;
         st.entries.push_back(en);
       }
@@ -411,9 +419,13 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
 }
 
 /// The selection at t: sets a (and b, the next, with weight w and the window when blending; b = -1 otherwise).
+/// `unblended`: t lies in the window of a switch whose two sets are on different branches (SPEC 14.3), so a alone,
+/// switching at tau without a blend.
 struct Choice {
   int32_t a = 0, b = -1;
   double t0 = 0, t1 = 0;      ///< the blend window
+  bool unblended = false;
+  double tau = 0;             ///< the unblended switch's time (minutes from J2000)
 };
 inline Choice choose(const Store& st, const Series& s, double t) {
   Choice c;
@@ -450,6 +462,12 @@ inline Choice choose(const Store& st, const Series& s, double t) {
     if (i < 0 || i + 1 >= static_cast<int32_t>(n)) continue;
     const double tau = switch_time(static_cast<uint32_t>(i)), h = half_width(static_cast<uint32_t>(i));
     if (h > 0.0 && t > tau - h && t < tau + h) {
+      // SPEC 14.3, 16.7: sets on different branches are different orbits, never blended; the switch is a step
+      if (E[i].branch != E[i + 1].branch) {
+        c.unblended = true;
+        c.tau = tau;
+        return c;
+      }
       c.a = i;
       c.b = i + 1;
       c.t0 = tau - h;
@@ -461,9 +479,11 @@ inline Choice choose(const Store& st, const Series& s, double t) {
 }
 
 /// Series s at t (minutes from J2000): the TEME state (km, km/s) and, when P is given, the covariance (have_p false
-/// when the sets carry none). 0, or the theory's error code.
-inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* P, bool& have_p) {
+/// when the sets carry none). 0, or the theory's error code. `unblended` (optional): the time of the switch t was not
+/// blended across (SPEC 14.3), NaN otherwise.
+inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* P, bool& have_p, double* unblended = nullptr) {
   const Choice c = choose(st, s, t);
+  if (unblended != nullptr) *unblended = c.unblended ? c.tau : std::numeric_limits<double>::quiet_NaN();
   if (c.b < 0) return state_of(st, s, static_cast<uint32_t>(c.a), t, r, v, P, have_p);
   double ra[3], va[3], rb[3], vb[3], Pa[36], Pb[36];
   bool ha = false, hb = false;
@@ -575,10 +595,12 @@ extern "C" int propagate_epochs(void) {
       double bias[3][3];
       if (g.axes == oem::Axes::Eme2000) frames::frame_bias(bias);
       bool any_cov = false;
+      std::vector<double> unblended;  // SPEC 14.3: the switches the grid crosses without a blend
       for (size_t k = 0; k < tw.size(); ++k) {
-        double r[3], v[3], P[36];
+        double r[3], v[3], P[36], ub;
         bool have_p = false;
-        const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p);
+        const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p, &ub);
+        if (ub == ub && (unblended.empty() || unblended.back() != ub)) unblended.push_back(ub);
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
         if (e == epochs::kRowsShort) {
           char day[16];
@@ -626,6 +648,14 @@ extern "C" int propagate_epochs(void) {
       if (any_cov && cov_lines.size() != lines.size()) cov_lines.clear();  // a covariance on every state or on none
       oem::iso_text(tw.front(), tf.front(), 0.0, start, sizeof start);
       oem::iso_text(tw.back(), tf.back(), 0.0, stop, sizeof stop);
+      std::string comment;
+      for (double tau : unblended) {
+        const double d = tau / kMinutesPerDay, whole = std::floor(d + 0.5) - 0.5;
+        char when[48];
+        oem::iso_text(2451545.0 + whole, d - whole, 0.0, when, sizeof when);
+        comment += comment.empty() ? "Not blended, the two sets on different branches (SPEC 14.3): " : ", ";
+        comment += when;
+      }
       const auto frame = oem::rfm_of(fbb, g.axes);
       const bool with_cov = !cov_lines.empty();
       const auto cov_frame = with_cov ? oem::rfm_of(fbb, g.axes) : flatbuffers::Offset<RFM>(0);
@@ -639,7 +669,7 @@ extern "C" int propagate_epochs(void) {
         if (!s_id.IsNull()) cb.add_OBJECT_ID(s_id);
         object = cb.Finish();
       }
-      blocks.push_back(CreateephemerisDataBlockDirect(fbb, nullptr, object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start, nullptr, nullptr,
+      blocks.push_back(CreateephemerisDataBlockDirect(fbb, comment.empty() ? nullptr : comment.c_str(), object, "EARTH", frame, nullptr, cov_frame, timingStandard_UTC, start, nullptr, nullptr,
                                                       stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6, nullptr, &lines, with_cov ? &cov_lines : nullptr));
     }
     const auto root = CreateOEMDirect(fbb, nullptr, 3.0, nullptr, s.originator.empty() ? "SDN" : s.originator.c_str(), &blocks);
@@ -717,8 +747,9 @@ int32_t sdnap_epochs_series(uint32_t i, double* out, double* epochs, uint32_t ca
   return 0;
 }
 
-/// The selection of series i at a split Julian date: out[0] set a, out[1] set b (-1 without a blend), out[2] the
-/// blend weight of b (0 without one). 0, or -1 for an unknown series.
+/// The selection of series i at a split Julian date: out[0] set a, out[1] set b (-1 without a blend; -2 inside the
+/// window of a switch not blended because its two sets are on different branches, SPEC 14.3), out[2] the blend weight
+/// of b (0 without one). 0, or -1 for an unknown series.
 SDNAP_EXPORT("sdnap_epochs_select")
 int32_t sdnap_epochs_select(uint32_t i, double jd_whole, double jd_frac, double* out) {
   auto& st = sdnap::epochs::resident();
@@ -726,7 +757,7 @@ int32_t sdnap_epochs_select(uint32_t i, double jd_whole, double jd_frac, double*
   const double t = sdnap::epochs::minutes_of(jd_whole, jd_frac);
   const auto c = sdnap::epochs::choose(st, st.series[i], t);
   out[0] = c.a;
-  out[1] = c.b;
+  out[1] = c.unblended ? -2 : c.b;
   double w = 0.0;
   if (c.b >= 0) { const double s = (t - c.t0) / (c.t1 - c.t0); w = s * s * (3.0 - 2.0 * s); }
   out[2] = w;

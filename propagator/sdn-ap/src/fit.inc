@@ -128,7 +128,8 @@ inline const char* refusal(const Options& o) {
 }
 
 struct Result {
-  int32_t status;       ///< 0 converged, 1 stopped at the iteration limit, < 0 refused (-4 a parameter not modeled)
+  int32_t status;       ///< 0 converged, 1 stopped at the iteration limit, < 0 refused (-4 a parameter not modeled,
+                        ///< -5 kBranchLimit)
   int32_t iterations;
   double rms_km;        ///< position rms over the samples
   double max_km;
@@ -241,8 +242,8 @@ inline bool& jacobian_fallback() {
 }
 
 /// Levenberg-Marquardt. `row` holds the starting set (epoch, theory and the
-/// fixed terms) and receives the fitted one.
-inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
+/// fixed terms) and receives the fitted one. Each trial set flies its own branch unless a BranchScope pins one (run).
+inline Result run_free(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
   Result out{};
   // SPEC 17.2: a parameter the theories have no sensitivity to is refused, never fitted
   if (not_modeled(o) != nullptr) {
@@ -436,6 +437,51 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
   out.status = converged ? 0 : 1;
   release();
   return out;
+}
+
+/// SPEC 16.7: a fit whose least-squares set lies on a switch (on each side the best set lies across it).
+constexpr int32_t kBranchLimit = -5;
+
+/// Levenberg-Marquardt with the branch settled (SPEC 16.7: AP's elements are defined per branch, so the objective jumps
+/// at a switch and a free fit can stop on it). Away from every switch (1e-3 relative in n, 1e-3 in e) run_free's set as
+/// it is. Near one, the fit again from that set with every trial set pinned to its branch: a minimum on the branch is the
+/// answer; a minimum across the switch is fitted again pinned to the branch it reached, and its minimum is the answer
+/// when it stays there. Otherwise status kBranchLimit, `row` the last set reached.
+inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o) {
+  Result out = run_free(row, t, r, count, o);
+  const Elements e = elements_of(row);
+  if (out.status < 0 || xpt::switch_near(e.xno, e.eo, ap_selected()) == nullptr) return out;
+  xpt::Branch b = row_branch(row);
+  for (int pass = 0; pass < 2; ++pass) {
+    ElementRow w = row;
+    Result res;
+    {
+      const xpt::BranchScope pin(&b);
+      res = run_free(w, t, r, count, o);
+    }
+    if (res.status < 0) return res;
+    const xpt::Branch reached = row_branch(w);
+    row = w;
+    if (reached == b) return res;
+    b = reached;
+    out = res;
+  }
+  out.status = kBranchLimit;
+  return out;
+}
+
+/// The named refusal of a fit that ends at kBranchLimit (`row` its last set).
+inline int refuse_branch_limit(const ElementRow& row) {
+  const Elements e = elements_of(row);
+  const char* name = xpt::switch_near(e.xno, e.eo, ap_selected());
+  char why[480];
+  std::snprintf(why, sizeof why,
+                "The arc's least-squares set lies on the %s (mean motion %.10f rev/day, eccentricity %.8f): on each side the "
+                "best set lies across it, and AP's elements are defined per branch (SPEC 16.7). Fit another span or epoch "
+                "($PCF FIT.DEFAULT_SPAN_HOURS, or the block's USEABLE_START_TIME and USEABLE_STOP_TIME).",
+                name != nullptr ? name : "switch", row.mean_motion_rev_day, row.eccentricity);
+  plugin_set_error("fit-at-branch-limit", why);
+  return 3;
 }
 
 /// The two-line text's digits: mean motion 1e-8 rev/day, eccentricity 1e-7,

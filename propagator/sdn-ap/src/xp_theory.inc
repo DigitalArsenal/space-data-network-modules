@@ -1746,6 +1746,49 @@ inline uint64_t next_ctx_id() {
   return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
 }
 
+/// A set's branch (SPEC 16.7, 17.7): the switches its epoch mean motion n0 (rad/min) and eccentricity e0 decide once, for
+/// the whole flight. AP's mean elements are defined per branch: two sets on different branches are different orbits, never
+/// differenced or blended. The eccentricity switches exist only with AP's terms selected (`ap`).
+struct Branch {
+  int8_t resonance = 0;     ///< SPEC 6 class (res::band_of)
+  uint8_t long_period = 0;  ///< period >= 1100 min (SPEC 5, 9)
+  uint8_t wide_tess = 0;    ///< AP: the first-order tesseral families on the grid (tess::wide_set: 0.05 in class 0, else 0.3)
+  uint8_t wide_e = 0;       ///< AP: e0 above tess::kWideE, the zonal tail's every long-period term and the perigee drag passage
+  uint8_t series_e = 0;     ///< AP: e0 at or above res::kSeriesE, the class's G about e0 (SPEC 6.4)
+  bool operator==(const Branch& o) const {
+    return resonance == o.resonance && long_period == o.long_period && wide_tess == o.wide_tess && wide_e == o.wide_e &&
+           series_e == o.series_e;
+  }
+  bool operator!=(const Branch& o) const { return !(*this == o); }
+};
+inline Branch branch_of(double n0, double e0, bool ap) {
+  Branch b;
+  b.resonance = static_cast<int8_t>(res::band_of(n0));
+  b.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
+  if (ap) {
+    b.wide_tess = tess::wide_set(b.resonance, e0) ? 1 : 0;
+    b.wide_e = e0 > tess::kWideE ? 1 : 0;
+    b.series_e = e0 >= res::kSeriesE ? 1 : 0;
+  }
+  return b;
+}
+/// The switch two branches differ by, in words.
+inline const char* switch_name(const Branch& a, const Branch& b) {
+  if (a.long_period != b.long_period) return "1,100-minute regime limit";
+  if (a.resonance != b.resonance) return "resonance class limit";
+  if (a.wide_tess != b.wide_tess) return "eccentricity switch of the first-order tesseral families";
+  return "eccentricity switch at 0.3";
+}
+/// The switch whose limit lies within eps_n (relative, in n0) or eps_e (in e0) of the epoch elements, or nullptr.
+inline const char* switch_near(double n0, double e0, bool ap, double eps_n = 1e-3, double eps_e = 1e-3) {
+  const Branch b = branch_of(n0, e0, ap);
+  const Branch q[4] = {branch_of(n0 * (1.0 - eps_n), e0, ap), branch_of(n0 * (1.0 + eps_n), e0, ap),
+                       branch_of(n0, e0 > eps_e ? e0 - eps_e : 0.0, ap), branch_of(n0, e0 + eps_e, ap)};
+  for (const Branch& o : q)
+    if (o != b) return switch_name(b, o);
+  return nullptr;
+}
+
 /// Per-object constants of the rate function.
 struct RateContext {
   uint64_t ctx_id;
@@ -1756,6 +1799,7 @@ struct RateContext {
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour), held
                         ///< for the whole flight in both theories (SPEC 6 Bands, 16.7)
+  Branch branch;        ///< the switches the epoch elements decided (resonance and long_period are its first two)
   const res::ResCoef* res_epoch;   ///< SGP4XP: the epoch class's terms at e_0, i_0, integrated (owned, xp_release)
   int32_t res_count;
   double theta_g0;      ///< Greenwich angle at epoch (SPEC 1.2)
@@ -5352,9 +5396,23 @@ struct CovBankScope {
   CovBankScope& operator=(const CovBankScope&) = delete;
 };
 
+/// SPEC 16.7: while a BranchScope lives on a thread, a set initialized there takes this branch instead of its own epoch
+/// elements' (a covariance's moved set still takes its nominal's): every trial set of a fit (fit::run) flies one branch's
+/// theory, so the fit's objective is smooth.
+inline thread_local const Branch* g_branch_pin = nullptr;
+struct BranchScope {
+  const Branch* prev;
+  explicit BranchScope(const Branch* b) : prev(g_branch_pin) { g_branch_pin = b; }
+  ~BranchScope() { g_branch_pin = prev; }
+  BranchScope(const BranchScope&) = delete;
+  BranchScope& operator=(const BranchScope&) = delete;
+};
+
 /// AP: the per-object tables of what the call selected (tess::active()); nothing without a selection. False out of memory.
+/// The eccentricity switches are s.ctx.branch's (xp_init), never e.eo's own.
 inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const tess::Terms& t = s.ctx.selected_terms;
+  const Branch& br = s.ctx.branch;
   s.ctx.n0 = n0;
   s.ctx.a0 = std::pow(kKe / n0, kX2o3);
   s.ctx.hd_e0 = e.eo;
@@ -5376,10 +5434,10 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // This one ingest-time policy is shared by fit residuals and every flight.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
-  s.ctx.drag_pass = s.ctx.ap_third_body && e.eo > tess::kWideE ? 1 : 0;
+  s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
-    if (res != 0 && e.eo >= res::kSeriesE && e.eo + 1e-3 < 1.0) {
+    if (res != 0 && br.series_e && e.eo + 1e-3 < 1.0) {
       if (within_share && anchor->ctx.res_taylor != nullptr) {
         s.ctx.res_taylor = anchor->ctx.res_taylor;
         s.ctx.e0 = anchor->ctx.e0;
@@ -5412,10 +5470,10 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
-    const bool wide_sp = tess::wide_set(res, e.eo);
+    const bool wide_sp = br.wide_tess != 0;
     if (within_share && same_inc && anchor->ctx.sp_comb != nullptr && anchor->ctx.sp_orig != nullptr &&
         anchor->ctx.sp == anchor->ctx.sp_orig && anchor->ctx.sp_count == anchor->ctx.sp_orig_count &&
-        wide_sp == tess::wide_set(res, anchor->ctx.e0)) {
+        wide_sp == (anchor->ctx.branch.wide_tess != 0)) {
       s.ctx.sp_comb = anchor->ctx.sp_comb;
       s.ctx.sp_comb_count = anchor->ctx.sp_comb_count;
       s.ctx.sp = anchor->ctx.sp_orig;
@@ -5437,7 +5495,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
       int raw_count = 0;
       const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count);
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) {
@@ -5478,7 +5536,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   }
   const int zd = t.zonal > 70 ? 70 : t.zonal;
   if (zd >= 6) {
-    const bool wide = e.eo > tess::kWideE;
+    const bool wide = br.wide_e != 0;
     if (same_inc && std::fabs(e.eo - anchor->ctx.e0) <= tess::kShareE &&
         anchor->ctx.zt != nullptr && anchor->ctx.zt_degree == zd && anchor->ctx.zt_wide == (wide ? 1 : 0)) {
       s.ctx.zt = anchor->ctx.zt;
@@ -5560,12 +5618,19 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     return kPropRefused;
   }
   const double n0 = e.xno;  // Brouwer (SPEC 1.1)
-  s.ctx.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
-  const int8_t res = static_cast<int8_t>(res::band_of(n0));  // the epoch class (SPEC 6 bands)
+  s.ctx.selected_terms = tess::active();
+  // the branch, once, from the epoch elements (SPEC 6 Bands, 16.7); a covariance's moved set (inside its nominal's
+  // CovBankScope) takes its nominal's, so the columns difference one branch's theory (SPEC 12.3); a fit's trial set inside
+  // a BranchScope takes the pinned one
+  const XpSat* nominal = cov_bank_anchor();
+  s.ctx.branch = nominal != nullptr && nominal != &s ? nominal->ctx.branch
+                 : g_branch_pin != nullptr          ? *g_branch_pin
+                                                    : branch_of(n0, e.eo, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);
+  s.ctx.long_period = s.ctx.branch.long_period;
+  const int8_t res = s.ctx.branch.resonance;  // the epoch class (SPEC 6 bands)
   s.ctx.resonance = res;
   s.ctx.theta_g0 = gsto_afspc(s.ctx.d50_epoch);
   s.ctx.atmosphere = atm::active();  // the call's atmosphere, if it selected one (atmosphere.inc)
-  s.ctx.selected_terms = tess::active();
   s.ctx.e0 = e.eo;
   s.ctx.i0 = e.xincl;
   if (!ap_init(e, n0, res, s)) {
