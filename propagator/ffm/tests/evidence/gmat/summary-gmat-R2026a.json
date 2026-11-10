@@ -76,25 +76,29 @@
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.000004972795351433999,
-    "steps": 2356
+    "steps": 2356,
+    "met": true
    },
    "steps30": {
     "atHour": 7,
     "sampleCount": 24,
     "worstM": 0.0000010221663288286008,
-    "steps": 2899
+    "steps": 2899,
+    "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.000005029679669841889,
-    "steps": 8609
+    "steps": 8609,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 6.724883289393081e-13
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 F1-J2",
@@ -113,25 +117,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005411263173442219,
-    "steps": 1341
+    "steps": 1341,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0006724028332699136,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0006792523804046197,
-    "steps": 8607
+    "steps": 8607,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.0050973276572806e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 F2-zonal20",
@@ -150,25 +158,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005386007282205046,
-    "steps": 1342
+    "steps": 1342,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0006753633100653463,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000664728685032025,
-    "steps": 8610
+    "steps": 8610,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.0031232996236041e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 Z1-zonal20-sun-moon",
@@ -187,25 +199,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005452268146926169,
-    "steps": 1344
+    "steps": 1344,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0006794265179825007,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0006818100668451709,
-    "steps": 8607
+    "steps": 8607,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.0106010018547758e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 Z2-zonal20-sun-moon-srp",
@@ -224,25 +240,29 @@
     "atHour": 16,
     "sampleCount": 24,
     "worstM": 0.02205546347630213,
-    "steps": 1413
+    "steps": 1413,
+    "met": true
    },
    "steps30": {
     "atHour": 16,
     "sampleCount": 24,
     "worstM": 0.022116917885174243,
-    "steps": 2959
+    "steps": 2959,
+    "met": true
    },
    "finest": {
     "atHour": 16,
     "sampleCount": 24,
     "worstM": 0.02210474886185661,
-    "steps": 8637
+    "steps": 8637,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000019629391143603642
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
@@ -262,24 +282,74 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 2.3145782352793978,
-    "steps": 1417
+    "steps": 1417,
+    "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 2.3146976246939386,
-    "steps": 2958
+    "steps": 2958,
+    "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 2.3146717375917545,
-    "steps": 8634
+    "steps": 8634,
+    "met": false
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.00001994899223493906
+   },
+   "met": false,
+   "cause": {
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "statement": "GMAT gtd7 excludes anomalous oxygen; FFM and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the meter-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity.",
+    "evidence": {
+     "file": "anomalous-oxygen.json",
+     "sourceRelease": "R2026a",
+     "ffmSetting": "steps30",
+     "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+     "drivers": {
+      "f107": 150,
+      "f107a": 150,
+      "ap": 15
+     },
+     "samples": 1441,
+     "meanDensityGtd7KgM3": 3.313926183414861e-12,
+     "meanDensityGtd7dKgM3": 3.3141000119172208e-12,
+     "eps": 0.000052453945181385464,
+     "dragEffectM": 43812.1082855002,
+     "epsTimesDragEffectM": 2.2981179262885516,
+     "ffmMinusGmatM": 2.3146976246939386,
+     "ffmMinusGmatCdScaledM": 0.0334413133340647,
+     "correctedDefaultMet": true,
+     "correctedDifferenceM": 0.0334413133340647,
+     "correctedMet": true,
+     "epsFromMeanDensities": 0.00005245394518116342,
+     "predictionMinusObservedM": -0.016579698405386978,
+     "predictionRelativeDifference": -0.007162792335599011,
+     "sources": [
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+       "lines": "284-285, 322"
+      },
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+       "lines": "1044-1054, 1338-1345, 2226-2230"
+      }
+     ],
+     "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
+    },
+    "correctedDifferenceM": 0.0334413133340647,
+    "correctedMet": true,
+    "correctedLimitM": 1.5,
+    "correctedDefaultMet": true,
+    "correctedDefaultLimitM": 0.1,
+    "residualInterpretation": "The measured corrected residual meets both the 1.5 m GMAT limit and the 0.1 m shared default."
    }
   },
   {
@@ -299,25 +369,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005772074916838602,
-    "steps": 1342
+    "steps": 1342,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007200337070576292,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007188222716043686,
-    "steps": 8613
+    "steps": 8613,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.0676341001488789e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 F4-field-sun-moon",
@@ -336,25 +410,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005718835729351589,
-    "steps": 1342
+    "steps": 1342,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007064489930696178,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007104439822579841,
-    "steps": 8608
+    "steps": 8608,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.0633586315553127e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 F5-field-sun-moon-srp",
@@ -373,25 +451,29 @@
     "atHour": 2,
     "sampleCount": 24,
     "worstM": 0.005091961133858022,
-    "steps": 1413
+    "steps": 1413,
+    "met": true
    },
    "steps30": {
     "atHour": 2,
     "sampleCount": 24,
     "worstM": 0.005088606404435741,
-    "steps": 2958
+    "steps": 2958,
+    "met": true
    },
    "finest": {
     "atHour": 2,
     "sampleCount": 24,
     "worstM": 0.005088647828452363,
-    "steps": 8640
+    "steps": 8640,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.00001962913784914297
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 F6-field-sun-moon-srp-drag",
@@ -411,24 +493,74 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 2.3193563384164464,
-    "steps": 1416
+    "steps": 1416,
+    "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 2.319486585637847,
-    "steps": 2959
+    "steps": 2959,
+    "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 2.3194688680745585,
-    "steps": 8635
+    "steps": 8635,
+    "met": false
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000021240229168564154
+   },
+   "met": false,
+   "cause": {
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "statement": "GMAT gtd7 excludes anomalous oxygen; FFM and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the meter-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity.",
+    "evidence": {
+     "file": "anomalous-oxygen.json",
+     "sourceRelease": "R2026a",
+     "ffmSetting": "steps30",
+     "id": "LEO400 F6-field-sun-moon-srp-drag",
+     "drivers": {
+      "f107": 150,
+      "f107a": 150,
+      "ap": 15
+     },
+     "samples": 1441,
+     "meanDensityGtd7KgM3": 3.3129832843739586e-12,
+     "meanDensityGtd7dKgM3": 3.3131572110436803e-12,
+     "eps": 0.00005249850506094944,
+     "dragEffectM": 43791.86632299737,
+     "epsTimesDragEffectM": 2.2990075157862986,
+     "ffmMinusGmatM": 2.319486585637847,
+     "ffmMinusGmatCdScaledM": 0.026443501257376503,
+     "correctedDefaultMet": true,
+     "correctedDifferenceM": 0.026443501257376503,
+     "correctedMet": true,
+     "epsFromMeanDensities": 0.00005249850506094944,
+     "predictionMinusObservedM": -0.02047906985154846,
+     "predictionRelativeDifference": -0.008829139163103553,
+     "sources": [
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+       "lines": "284-285, 322"
+      },
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+       "lines": "1044-1054, 1338-1345, 2226-2230"
+      }
+     ],
+     "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
+    },
+    "correctedDifferenceM": 0.026443501257376503,
+    "correctedMet": true,
+    "correctedLimitM": 1.5,
+    "correctedDefaultMet": true,
+    "correctedDefaultLimitM": 0.1,
+    "residualInterpretation": "The measured corrected residual meets both the 1.5 m GMAT limit and the 0.1 m shared default."
    }
   },
   {
@@ -448,25 +580,29 @@
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.005278333667419051,
-    "steps": 1342
+    "steps": 1342,
+    "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.005403322528275052,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.005400039008898787,
-    "steps": 8609
+    "steps": 8609,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000010156482264925788
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 T1-field-sun-moon-solid-tides",
@@ -485,25 +621,29 @@
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.030388698533536252,
-    "steps": 1341
+    "steps": 1341,
+    "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.030502109911140985,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.030510125342121223,
-    "steps": 8606
+    "steps": 8606,
+    "met": true
    },
    "stm": {
     "atHour": 23,
     "sampleCount": 24,
     "worst": 4.632860159992003e-9
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 I1-field-sun-moon-in-track",
@@ -522,25 +662,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005790273616615216,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.00071283872895486,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007041155741883707,
-    "steps": 8609
+    "steps": 8609,
+    "met": true
    },
    "stm": {
     "atHour": 23,
     "sampleCount": 24,
     "worst": 6.140743115806466e-7
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
@@ -560,24 +704,74 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 1.5275672779829002,
-    "steps": 1416
+    "steps": 1416,
+    "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 1.5276902222675302,
-    "steps": 2959
+    "steps": 2959,
+    "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 1.5276725192379907,
-    "steps": 8635
+    "steps": 8635,
+    "met": false
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000014738625872230487
+   },
+   "met": false,
+   "cause": {
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "statement": "GMAT gtd7 excludes anomalous oxygen; FFM and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the meter-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity.",
+    "evidence": {
+     "file": "anomalous-oxygen.json",
+     "sourceRelease": "R2026a",
+     "ffmSetting": "steps30",
+     "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+     "drivers": {
+      "f107": 139.8,
+      "f107a": 136,
+      "ap": 6
+     },
+     "samples": 1441,
+     "meanDensityGtd7KgM3": 2.4714783059198515e-12,
+     "meanDensityGtd7dKgM3": 2.471595343160476e-12,
+     "eps": 0.00004735515595832851,
+     "dragEffectM": 32655.217725603314,
+     "epsTimesDragEffectM": 1.5463929282491184,
+     "ffmMinusGmatM": 1.5276902222675302,
+     "ffmMinusGmatCdScaledM": 0.016577206879770316,
+     "correctedDefaultMet": true,
+     "correctedDifferenceM": 0.016577206879770316,
+     "correctedMet": true,
+     "epsFromMeanDensities": 0.00004735515595832851,
+     "predictionMinusObservedM": 0.018702705981588297,
+     "predictionRelativeDifference": 0.012242472792571861,
+     "sources": [
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+       "lines": "284-285, 322"
+      },
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+       "lines": "1044-1054, 1338-1345, 2226-2230"
+      }
+     ],
+     "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
+    },
+    "correctedDifferenceM": 0.016577206879770316,
+    "correctedMet": true,
+    "correctedLimitM": 1.5,
+    "correctedDefaultMet": true,
+    "correctedDefaultLimitM": 0.1,
+    "residualInterpretation": "The measured corrected residual meets both the 1.5 m GMAT limit and the 0.1 m shared default."
    }
   },
   {
@@ -597,25 +791,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005519868216271722,
-    "steps": 1342
+    "steps": 1342,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0006922751162804354,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0006881019073367393,
-    "steps": 8609
+    "steps": 8609,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.0340124091675612e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 G1-egm96-36x36-sun-moon",
@@ -634,25 +832,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0003695954248050007,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007153568625301755,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007118740800977874,
-    "steps": 8607
+    "steps": 8607,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 2.0478168056559736e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "LEO400 G2-egm2008-36z24t-sun-moon",
@@ -671,25 +873,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0005838487345633346,
-    "steps": 1343
+    "steps": 1343,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007084424194909841,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0007034302332538221,
-    "steps": 8610
+    "steps": 8610,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.0654230804748527e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 F0-point-mass",
@@ -708,25 +914,29 @@
     "atHour": 15,
     "sampleCount": 24,
     "worstM": 0.000002259597249798881,
-    "steps": 2199
+    "steps": 2199,
+    "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
     "worstM": 0.000004853372967819911,
-    "steps": 2900
+    "steps": 2900,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000009030767476144609,
-    "steps": 8605
+    "steps": 8605,
+    "met": true
    },
    "stm": {
     "atHour": 16,
     "sampleCount": 24,
     "worst": 7.973535287527407e-13
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 F1-J2",
@@ -745,25 +955,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00038747579237975125,
-    "steps": 1257
+    "steps": 1257,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.000463752559586326,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00046425269518840956,
-    "steps": 8603
+    "steps": 8603,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 7.747698491842206e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 F2-zonal20",
@@ -782,25 +996,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0003845555207655395,
-    "steps": 1256
+    "steps": 1256,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0004609228058624083,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00045486990575045657,
-    "steps": 8612
+    "steps": 8612,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 7.658435484712045e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 Z1-zonal20-sun-moon",
@@ -819,25 +1037,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00038499814114564785,
-    "steps": 1257
+    "steps": 1257,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00045845589991079354,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0004583799813436994,
-    "steps": 8611
+    "steps": 8611,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 7.716997831070898e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 Z2-zonal20-sun-moon-srp",
@@ -856,25 +1078,29 @@
     "atHour": 17,
     "sampleCount": 24,
     "worstM": 0.010531326192284087,
-    "steps": 1344
+    "steps": 1344,
+    "met": true
    },
    "steps30": {
     "atHour": 17,
     "sampleCount": 24,
     "worstM": 0.010584036500549362,
-    "steps": 2957
+    "steps": 2957,
+    "met": true
    },
    "finest": {
     "atHour": 17,
     "sampleCount": 24,
     "worstM": 0.010766531836750292,
-    "steps": 8675
+    "steps": 8675,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000013813892166349151
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
@@ -894,24 +1120,74 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 7.949795475845874,
-    "steps": 1342
+    "steps": 1342,
+    "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 7.949889867227415,
-    "steps": 2957
+    "steps": 2957,
+    "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 7.950247161158119,
-    "steps": 8676
+    "steps": 8676,
+    "met": false
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000014126901758282378
+   },
+   "met": false,
+   "cause": {
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "statement": "GMAT gtd7 excludes anomalous oxygen; FFM and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the meter-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity.",
+    "evidence": {
+     "file": "anomalous-oxygen.json",
+     "sourceRelease": "R2026a",
+     "ffmSetting": "steps30",
+     "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+     "drivers": {
+      "f107": 150,
+      "f107a": 150,
+      "ap": 15
+     },
+     "samples": 1441,
+     "meanDensityGtd7KgM3": 2.849662738135624e-14,
+     "meanDensityGtd7dKgM3": 2.905609622076139e-14,
+     "eps": 0.01963280889061214,
+     "dragEffectM": 413.1350852945854,
+     "epsTimesDragEffectM": 8.111002175595342,
+     "ffmMinusGmatM": 7.949889867227415,
+     "ffmMinusGmatCdScaledM": 0.1228545128357298,
+     "correctedDefaultMet": false,
+     "correctedDifferenceM": 0.1228545128357298,
+     "correctedMet": true,
+     "epsFromMeanDensities": 0.01963280889061214,
+     "predictionMinusObservedM": 0.1611123083679269,
+     "predictionRelativeDifference": 0.020265979914023142,
+     "sources": [
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+       "lines": "284-285, 322"
+      },
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+       "lines": "1044-1054, 1338-1345, 2226-2230"
+      }
+     ],
+     "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
+    },
+    "correctedDifferenceM": 0.1228545128357298,
+    "correctedMet": true,
+    "correctedLimitM": 1.5,
+    "correctedDefaultMet": false,
+    "correctedDefaultLimitM": 0.1,
+    "residualInterpretation": "0.106-0.123 m remains after constant Cd scaling: below 1.5 m, above 0.1 m. This measurement rules out another unaccounted meter-scale discrepancy in these cases; it does not isolate the remaining decimeter residual or prove that every other model detail is identical."
    }
   },
   {
@@ -931,25 +1207,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00036759482015037297,
-    "steps": 1257
+    "steps": 1257,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00043991834427619574,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00043883247829009807,
-    "steps": 8606
+    "steps": 8606,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 7.376441259618842e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 F4-field-sun-moon",
@@ -968,25 +1248,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00037474427972259956,
-    "steps": 1258
+    "steps": 1258,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0004484741148732014,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00044666381296502795,
-    "steps": 8609
+    "steps": 8609,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 7.434351046327043e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 F5-field-sun-moon-srp",
@@ -1005,25 +1289,29 @@
     "atHour": 19,
     "sampleCount": 24,
     "worstM": 0.006895469511354214,
-    "steps": 1346
+    "steps": 1346,
+    "met": true
    },
    "steps30": {
     "atHour": 19,
     "sampleCount": 24,
     "worstM": 0.006826843414687471,
-    "steps": 2957
+    "steps": 2957,
+    "met": true
    },
    "finest": {
     "atHour": 19,
     "sampleCount": 24,
     "worstM": 0.006605698515332685,
-    "steps": 8676
+    "steps": 8676,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000013814162227974244
-   }
+   },
+   "met": true
   },
   {
    "id": "SSO700 F6-field-sun-moon-srp-drag",
@@ -1043,24 +1331,74 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 7.934348726780825,
-    "steps": 1346
+    "steps": 1346,
+    "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 7.934452015178726,
-    "steps": 2957
+    "steps": 2957,
+    "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 7.934792351660651,
-    "steps": 8674
+    "steps": 8674,
+    "met": false
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000014046512769209735
+   },
+   "met": false,
+   "cause": {
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "statement": "GMAT gtd7 excludes anomalous oxygen; FFM and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the meter-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity.",
+    "evidence": {
+     "file": "anomalous-oxygen.json",
+     "sourceRelease": "R2026a",
+     "ffmSetting": "steps30",
+     "id": "SSO700 F6-field-sun-moon-srp-drag",
+     "drivers": {
+      "f107": 150,
+      "f107a": 150,
+      "ap": 15
+     },
+     "samples": 1441,
+     "meanDensityGtd7KgM3": 2.8492836415095334e-14,
+     "meanDensityGtd7dKgM3": 2.905229205716205e-14,
+     "eps": 0.019634957851031087,
+     "dragEffectM": 412.9995072518732,
+     "epsTimesDragEffectM": 8.109227917387138,
+     "ffmMinusGmatM": 7.934452015178726,
+     "ffmMinusGmatCdScaledM": 0.10587911614630166,
+     "correctedDefaultMet": false,
+     "correctedDifferenceM": 0.10587911614630166,
+     "correctedMet": true,
+     "epsFromMeanDensities": 0.019634957851031087,
+     "predictionMinusObservedM": 0.17477590220841144,
+     "predictionRelativeDifference": 0.022027469808130733,
+     "sources": [
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+       "lines": "284-285, 322"
+      },
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+       "lines": "1044-1054, 1338-1345, 2226-2230"
+      }
+     ],
+     "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
+    },
+    "correctedDifferenceM": 0.10587911614630166,
+    "correctedMet": true,
+    "correctedLimitM": 1.5,
+    "correctedDefaultMet": false,
+    "correctedDefaultLimitM": 0.1,
+    "residualInterpretation": "0.106-0.123 m remains after constant Cd scaling: below 1.5 m, above 0.1 m. This measurement rules out another unaccounted meter-scale discrepancy in these cases; it does not isolate the remaining decimeter residual or prove that every other model detail is identical."
    }
   },
   {
@@ -1081,24 +1419,74 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 6.2959581330941194,
-    "steps": 1341
+    "steps": 1341,
+    "met": false
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 6.296060832157792,
-    "steps": 2957
+    "steps": 2957,
+    "met": false
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 6.296412702071734,
-    "steps": 8674
+    "steps": 8674,
+    "met": false
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000013843527466709695
+   },
+   "met": false,
+   "cause": {
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "statement": "GMAT gtd7 excludes anomalous oxygen; FFM and Orekit use gtd7d drag-effective density. The day-mean density ratio times the independently stored drag effect accounts for the meter-scale gap. A constant Cd multiplier is an approximation to the varying density ratio: the corrected trajectory is the measured residual, not a claim of exact model identity.",
+    "evidence": {
+     "file": "anomalous-oxygen.json",
+     "sourceRelease": "R2026a",
+     "ffmSetting": "steps30",
+     "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+     "drivers": {
+      "f107": 139.8,
+      "f107a": 136,
+      "ap": 6
+     },
+     "samples": 1441,
+     "meanDensityGtd7KgM3": 1.760827370460082e-14,
+     "meanDensityGtd7dKgM3": 1.8053391577921595e-14,
+     "eps": 0.025278904723321505,
+     "dragEffectM": 255.82940181861494,
+     "epsTimesDragEffectM": 6.4670870739971,
+     "ffmMinusGmatM": 6.296060832157792,
+     "ffmMinusGmatCdScaledM": 0.12279412500475317,
+     "correctedDefaultMet": false,
+     "correctedDifferenceM": 0.12279412500475317,
+     "correctedMet": true,
+     "epsFromMeanDensities": 0.025278904723321727,
+     "predictionMinusObservedM": 0.17102624183930804,
+     "predictionRelativeDifference": 0.027164007209996056,
+     "sources": [
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+       "lines": "284-285, 322"
+      },
+      {
+       "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+       "lines": "1044-1054, 1338-1345, 2226-2230"
+      }
+     ],
+     "ffmSource": "../../../lib/nrlmsise00.cpp:92-104"
+    },
+    "correctedDifferenceM": 0.12279412500475317,
+    "correctedMet": true,
+    "correctedLimitM": 1.5,
+    "correctedDefaultMet": false,
+    "correctedDefaultLimitM": 0.1,
+    "residualInterpretation": "0.106-0.123 m remains after constant Cd scaling: below 1.5 m, above 0.1 m. This measurement rules out another unaccounted meter-scale discrepancy in these cases; it does not isolate the remaining decimeter residual or prove that every other model detail is identical."
    }
   },
   {
@@ -1118,25 +1506,29 @@
     "atHour": 22,
     "sampleCount": 24,
     "worstM": 0.0000040239071966793196,
-    "steps": 344
+    "steps": 344,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.000004166982512049601,
-    "steps": 2882
+    "steps": 2882,
+    "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
     "worstM": 0.000006049989077513652,
-    "steps": 8594
+    "steps": 8594,
+    "met": true
    },
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
     "worst": 5.450271507277139e-13
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS F1-J2",
@@ -1155,25 +1547,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.00001390766935184007,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000012818571970096597,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000013009557341326447,
-    "steps": 8593
+    "steps": 8593,
+    "met": true
    },
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
     "worst": 2.0482271622499382e-12
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS F2-zonal20",
@@ -1192,25 +1588,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000014646988211644342,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000015506891477913015,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.00001572142451692723,
-    "steps": 8595
+    "steps": 8595,
+    "met": true
    },
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
     "worst": 1.8730263763887034e-12
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS Z1-zonal20-sun-moon",
@@ -1229,25 +1629,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0000922453300071458,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00009492582378302631,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0000920369779950872,
-    "steps": 8592
+    "steps": 8592,
+    "met": true
    },
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
     "worst": 1.655341778113049e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS Z2-zonal20-sun-moon-srp",
@@ -1266,25 +1670,29 @@
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.00009587790381303572,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.00009680095782481203,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.00009631444444340382,
-    "steps": 8596
+    "steps": 8596,
+    "met": true
    },
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
     "worst": 1.7220692962600743e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS F3-field20x20",
@@ -1303,25 +1711,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000014561245102946443,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.00001631489678822726,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0000160271834339515,
-    "steps": 8595
+    "steps": 8595,
+    "met": true
    },
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
     "worst": 2.4425826332511547e-12
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS F4-field-sun-moon",
@@ -1340,25 +1752,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00009877259199676446,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0000983084110034788,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00009697429282089708,
-    "steps": 8593
+    "steps": 8593,
+    "met": true
    },
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
     "worst": 1.7188206985294538e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS F5-field-sun-moon-srp",
@@ -1377,25 +1793,29 @@
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.00009636913975774242,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.00009667956412573689,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.00009874509586538539,
-    "steps": 8596
+    "steps": 8596,
+    "met": true
    },
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
     "worst": 1.719677249193684e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS R2-field-sun-moon-relativity-iers2010",
@@ -1414,25 +1834,29 @@
     "atHour": 22,
     "sampleCount": 24,
     "worstM": 0.00038389702839230865,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00038320124662150735,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 22,
     "sampleCount": 24,
     "worstM": 0.00038337275582679654,
-    "steps": 8596
+    "steps": 8596,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 5.9379762698595145e-8
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS T1-field-sun-moon-solid-tides",
@@ -1451,25 +1875,29 @@
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.001500233864992779,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.0015002354719441753,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.0015005806502748646,
-    "steps": 8594
+    "steps": 8594,
+    "met": true
    },
    "stm": {
     "atHour": 18,
     "sampleCount": 24,
     "worst": 2.8164682610872226e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS E1-field-sun-moon-eme2000",
@@ -1488,25 +1916,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00010400382620490176,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00010373674887111434,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00010393497007324624,
-    "steps": 8596
+    "steps": 8596,
+    "met": true
    },
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
     "worst": 1.744155570852559e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS G1-egm96-70x70-sun-moon",
@@ -1525,25 +1957,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00010832906431043037,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00010962905636039768,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00010930689957117302,
-    "steps": 8595
+    "steps": 8595,
+    "met": true
    },
    "stm": {
     "atHour": 19,
     "sampleCount": 24,
     "worst": 1.80463474446083e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GPS C1-field-sun-moon-srp-intrack-jacobians",
@@ -1562,25 +1998,29 @@
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.00009975233352606323,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00009996582202776363,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00010254697327518561,
-    "steps": 8641
+    "steps": 8641,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.0000017843108072932955
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO F0-point-mass",
@@ -1599,25 +2039,29 @@
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 8.818674068605297e-7,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "atHour": 20,
     "sampleCount": 24,
     "worstM": 0.000002118811036829835,
-    "steps": 2882
+    "steps": 2882,
+    "met": true
    },
    "finest": {
     "atHour": 23,
     "sampleCount": 24,
     "worstM": 0.0000027165902111058394,
-    "steps": 8593
+    "steps": 8593,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 1.7836208292343227e-12
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO F1-J2",
@@ -1636,25 +2080,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000006119088872781913,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000006761331642273331,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0000071251576560395434,
-    "steps": 8594
+    "steps": 8594,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 4.377206803388013e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO F2-zonal20",
@@ -1673,25 +2121,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000007998926149890002,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000008401566257508863,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.000007684640959944821,
-    "steps": 8592
+    "steps": 8592,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 4.423790609247407e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO Z1-zonal20-sun-moon",
@@ -1710,25 +2162,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00013818898564207333,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00013719097215357252,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0001383118154720488,
-    "steps": 8596
+    "steps": 8596,
+    "met": true
    },
    "stm": {
     "atHour": 12,
     "sampleCount": 24,
     "worst": 4.851590436254227e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO Z2-zonal20-sun-moon-srp",
@@ -1747,25 +2203,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00015090486059448236,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00015060088574270585,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0001499186385859601,
-    "steps": 8592
+    "steps": 8592,
+    "met": true
    },
    "stm": {
     "atHour": 12,
     "sampleCount": 24,
     "worst": 4.774778491441157e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO F3-field20x20",
@@ -1784,25 +2244,29 @@
     "atHour": 22,
     "sampleCount": 24,
     "worstM": 0.00000815660810882768,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 22,
     "sampleCount": 24,
     "worstM": 0.000007532944005008879,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 19,
     "sampleCount": 24,
     "worstM": 0.0000052790964569744265,
-    "steps": 8594
+    "steps": 8594,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 4.4091586192171916e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO F4-field-sun-moon",
@@ -1821,25 +2285,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0001429163835126517,
-    "steps": 337
+    "steps": 337,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00014235522885787654,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00014076004556844016,
-    "steps": 8592
+    "steps": 8592,
+    "met": true
    },
    "stm": {
     "atHour": 12,
     "sampleCount": 24,
     "worst": 4.808916814832363e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "GEO F5-field-sun-moon-srp",
@@ -1858,25 +2326,29 @@
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00014701362927776231,
-    "steps": 336
+    "steps": 336,
+    "met": true
    },
    "steps30": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.00014394137539677513,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 21,
     "sampleCount": 24,
     "worstM": 0.0001469412928224745,
-    "steps": 8592
+    "steps": 8592,
+    "met": true
    },
    "stm": {
     "atHour": 12,
     "sampleCount": 24,
     "worst": 4.801534176031134e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F0-point-mass",
@@ -1895,25 +2367,29 @@
     "atHour": 12,
     "sampleCount": 24,
     "worstM": 0.000008254105760554454,
-    "steps": 551
+    "steps": 551,
+    "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
     "worstM": 0.000007614235112119703,
-    "steps": 2884
+    "steps": 2884,
+    "met": true
    },
    "finest": {
     "atHour": 12,
     "sampleCount": 24,
     "worstM": 0.000007187947240829458,
-    "steps": 8595
+    "steps": 8595,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 2.140510146378461e-11
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F1-J2",
@@ -1932,25 +2408,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0018773951432216793,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0017052788032814099,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0017074359546121911,
-    "steps": 8595
+    "steps": 8595,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 8.29339773684681e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F2-zonal20",
@@ -1969,25 +2449,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0018409819095199257,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0016551951028440737,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0016672004586554378,
-    "steps": 8595
+    "steps": 8595,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 8.047048745413381e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA Z1-zonal20-sun-moon",
@@ -2006,25 +2490,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0021269834233759214,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.001944372045605046,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0019621505055972227,
-    "steps": 8595
+    "steps": 8595,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 9.449567609435563e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA Z2-zonal20-sun-moon-srp",
@@ -2043,25 +2531,29 @@
     "atHour": 12,
     "sampleCount": 24,
     "worstM": 0.004868149039795106,
-    "steps": 429
+    "steps": 429,
+    "met": true
    },
    "steps30": {
     "atHour": 12,
     "sampleCount": 24,
     "worstM": 0.0049825013530918295,
-    "steps": 2896
+    "steps": 2896,
+    "met": true
    },
    "finest": {
     "atHour": 12,
     "sampleCount": 24,
     "worstM": 0.004962829139849672,
-    "steps": 8604
+    "steps": 8604,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.000025622262996196133
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F3-field20x20",
@@ -2080,25 +2572,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0018798955375319653,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0016928397528879744,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0016855019872342412,
-    "steps": 8597
+    "steps": 8597,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 8.433768862947497e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F4-field-sun-moon",
@@ -2117,25 +2613,29 @@
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.002148724049038764,
-    "steps": 416
+    "steps": 416,
+    "met": true
    },
    "steps30": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.00196163701168246,
-    "steps": 2880
+    "steps": 2880,
+    "met": true
    },
    "finest": {
     "atHour": 24,
     "sampleCount": 24,
     "worstM": 0.0019553448595951125,
-    "steps": 8596
+    "steps": 8596,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 9.661319997119313e-10
-   }
+   },
+   "met": true
   },
   {
    "id": "MOLNIYA F5-field-sun-moon-srp",
@@ -2154,25 +2654,29 @@
     "atHour": 11,
     "sampleCount": 24,
     "worstM": 0.0025363770430858286,
-    "steps": 429
+    "steps": 429,
+    "met": true
    },
    "steps30": {
     "atHour": 11,
     "sampleCount": 24,
     "worstM": 0.002475980822948892,
-    "steps": 2896
+    "steps": 2896,
+    "met": true
    },
    "finest": {
     "atHour": 11,
     "sampleCount": 24,
     "worstM": 0.002487476085156671,
-    "steps": 8604
+    "steps": 8604,
+    "met": true
    },
    "stm": {
     "atHour": 24,
     "sampleCount": 24,
     "worst": 0.00002590849674990818
-   }
+   },
+   "met": true
   }
  ],
  "skipped": [
@@ -2236,5 +2740,675 @@
    "id": "GPS C2-field-sun-moon-srp-knocke-ocean-jacobians",
    "reason": "Knocke Earth radiation: not modeled by GMAT"
   }
- ]
+ ],
+ "protocol": {
+  "source": "Pinned NASA GMAT trajectories and the shared ffm-reference-cases.json protocol; FFM scores refreshed from the shipped WASM using C++ reductions.",
+  "units": "maximum 3D position difference, meters; STM relative column difference, dimensionless",
+  "frame": "GCRF; EME2000 for explicitly marked EME2000 cases",
+  "epoch": "2026-08-02T00:00:00Z",
+  "timeScale": "UTC",
+  "durationS": 86400,
+  "sampleIntervalS": 3600,
+  "scoredSamples": 24,
+  "toleranceRationale": "Unchanged shared GMAT protocol: point mass 0.01 m, gravity 0.05 m, SRP 0.1 m, drag 1.5 m. Corrected drag also compared with the shared default 0.1 m. The JR atmosphere frame note is retained verbatim.",
+  "replayToleranceM": 0,
+  "replayToleranceRationale": "Exact replay of the same shipped WASM, inputs and settings. C++ disables fused multiply-add so kilometer-to-meter conversion rounds before subtraction as in the historical scorer; the C++ norm reproduces both stored scores exactly. worstM, atHour and integration steps must all match exactly."
+ },
+ "verdict": {
+  "release": "R2026a",
+  "setting": "suite",
+  "total": 57,
+  "met": 51,
+  "missed": 6,
+  "statement": "51 of 57 cases meet the stated GMAT limits at the suite setting. All six misses are NRLMSISE-00 drag cases at all three FFM settings; each records the anomalous-oxygen density convention and measured Cd-scaled residual. The misses remain met:false at 1.5 m.",
+  "misses": [
+   {
+    "id": "LEO400 Z3-zonal20-sun-moon-srp-drag",
+    "worstM": 2.3145782352793978,
+    "toleranceM": 1.5,
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "correctedDifferenceM": 0.0334413133340647,
+    "correctedMet": true,
+    "correctedDefaultMet": true
+   },
+   {
+    "id": "LEO400 F6-field-sun-moon-srp-drag",
+    "worstM": 2.3193563384164464,
+    "toleranceM": 1.5,
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "correctedDifferenceM": 0.026443501257376503,
+    "correctedMet": true,
+    "correctedDefaultMet": true
+   },
+   {
+    "id": "LEO400 W1-field-sun-moon-srp-drag-cssi",
+    "worstM": 1.5275672779829002,
+    "toleranceM": 1.5,
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "correctedDifferenceM": 0.016577206879770316,
+    "correctedMet": true,
+    "correctedDefaultMet": true
+   },
+   {
+    "id": "SSO700 Z3-zonal20-sun-moon-srp-drag",
+    "worstM": 7.949795475845874,
+    "toleranceM": 1.5,
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "correctedDifferenceM": 0.1228545128357298,
+    "correctedMet": true,
+    "correctedDefaultMet": false
+   },
+   {
+    "id": "SSO700 F6-field-sun-moon-srp-drag",
+    "worstM": 7.934348726780825,
+    "toleranceM": 1.5,
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "correctedDifferenceM": 0.10587911614630166,
+    "correctedMet": true,
+    "correctedDefaultMet": false
+   },
+   {
+    "id": "SSO700 W1-field-sun-moon-srp-drag-cssi",
+    "worstM": 6.2959581330941194,
+    "toleranceM": 1.5,
+    "classification": "model-setting difference (GMAT density without anomalous oxygen)",
+    "correctedDifferenceM": 0.12279412500475317,
+    "correctedMet": true,
+    "correctedDefaultMet": false
+   }
+  ],
+  "stm": {
+   "byRow": {
+    "drag": 0.000021240229168564154,
+    "fullNoDrag": 0.00002590849674990818,
+    "pointMass": 2.140510146378461e-11
+   },
+   "caseCount": 57,
+   "worstRelativeColumnDifference": 0.00002590849674990818,
+   "agreement": "reported numerical agreement; no protocol pass threshold",
+   "statement": "57 suite STM comparisons; largest relative column difference 0.00002590849674990818. Position and velocity rows are compared separately. No STM pass threshold is supplied by this protocol."
+  }
+ },
+ "fileHashes": [
+  {
+   "path": "gmat-R2026a.json",
+   "sha256": "584dab8ee23a89dd3259dfa587d1027d6f0106dd4708d81844660323cb1a5858"
+  },
+  {
+   "path": "anomalous-oxygen.json",
+   "sha256": "c764b552e40a161b5b06a3c7369736d0a1b3a0025ac7e03c46fbdd8816f18f2e"
+  },
+  {
+   "path": "../cases/ffm-reference-cases.json",
+   "sha256": "cebf372006ad44f4579a1b2e11b904e302dfdbc5a3940c854ca2fb223ba6de9a"
+  },
+  {
+   "path": "../../../dist/isomorphic/module.wasm",
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
+  },
+  {
+   "path": "../../../plugin-manifest.json",
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
+  },
+  {
+   "path": "../../../package.json",
+   "sha256": "e8ba92edacd855da17b1f9826bd3f4360353f6d90a6601ab9c2282043b47d1e0"
+  },
+  {
+   "path": "../../fixtures/orekit/orekit-reference.json",
+   "sha256": "9c8d444639bd35d33d0fa84e2bfeb719e8b42ddf044198657ed922decb2d5207"
+  },
+  {
+   "path": "../../fixtures/orekit/eop-2026-08.json",
+   "sha256": "772246c35fe1a6e644c4bd6e7690d632450710c06fe8054b726ebdc055720a6a"
+  },
+  {
+   "path": "../../fixtures/orekit/eop-2026-06.json",
+   "sha256": "7dddcf4fda6e10a05fca12c1ecf5524a8550a662f2a409a2e6ece06b850aad79"
+  },
+  {
+   "path": "../../fixtures/orekit/jb2008-2026-06.json",
+   "sha256": "c1842dac76cd17b6c60c8c61b1654e390a340a5ce09f40fe5947113c414625a6"
+  },
+  {
+   "path": "../../fixtures/orekit/spw-2026-08.json",
+   "sha256": "b2514e0bd9cd62cbeadddcf9a150a8918e3d3416af7818ab16a946d7a45d9275"
+  },
+  {
+   "path": "../../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+   "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
+  }
+ ],
+ "provenance": {
+  "sourceIdentity": [
+   {
+    "path": "evidence.mjs",
+    "sha256": "02dbbb70e5f86b066855e00a4dff233900b1219e0270275da2fc2e79ab1acf18"
+   },
+   {
+    "path": "gmat-metrics.cpp",
+    "sha256": "2987a80e6c2e00142c8ef452f37f0ebc45360b263b79db4c27400696d8e4efee"
+   },
+   {
+    "path": "check-gmat.mjs",
+    "sha256": "eb40b65ac414fb2f1248ea48641182c846891ee691e4e5a7c30b291b27af0868"
+   },
+   {
+    "path": "update-summary.mjs",
+    "sha256": "5e22dc721ee386581d636a65945772283cd4d323d4cf4ef7f0c010d8b607cb57"
+   },
+   {
+    "path": "score-gmat.mjs",
+    "sha256": "f1c84f49a1f5d40ae6ed3824d0ee56b2dc3de16122b80189c84238147e60460a"
+   },
+   {
+    "path": "anomalous-oxygen.mjs",
+    "sha256": "f48cd9a078eb356d0832e8c393dc97686580ff08f2a7851ebbc6bb6f2748da0f"
+   },
+   {
+    "path": "run-gmat.mjs",
+    "sha256": "be38fe9ae864b60dbcc09c00310c28b9fed7defeb9ad36a00036674f8cbee12b"
+   },
+   {
+    "path": "gmat-files.mjs",
+    "sha256": "97af70f61121b92a5585c8be2683062716012d962e0e350fb53c2aced1f283b5"
+   },
+   {
+    "path": "../nyx/scoring.mjs",
+    "sha256": "964f39759d2aa0d30b1f8907629eefe37e331fea8749ba598c6f1873bef7419d"
+   },
+   {
+    "path": "../nyx/score-metrics.cpp",
+    "sha256": "2ed87d76e08b87da8ff86b2470b07dade7bc533e02c09a24c274acf6c44ea8cd"
+   },
+   {
+    "path": "../tudat/scoring.mjs",
+    "sha256": "bd500d42450b571dab0d8c2c30facfdc9cf8e047ef1311c1dc593cc145e5b477"
+   },
+   {
+    "path": "../recorded-numbers.mjs",
+    "sha256": "8c1b269123ce6a044fd93261a2bcd7ae59617887b840180f0f440456a120c735"
+   },
+   {
+    "path": "../../lib/orekitCases.mjs",
+    "sha256": "2ba493b32ab992e7d36c1d1fffe138cc8700f1f27c72589208217da2fc13a83f"
+   },
+   {
+    "path": "../../lib/prwCodec.mjs",
+    "sha256": "a95c63b29a09e3d2e3a87e1b96fc8f01608774174bb8c3cae1875e6cc6512866"
+   },
+   {
+    "path": "../../../lib/nrlmsise00.cpp",
+    "sha256": "de3e389541a998c02a9d859689637da2419ec305e242e22a94b16ffcb3c5cb5b"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+    "source": "NASA GMAT NRLMSISE-00 plugin source copy",
+    "lines": "284-285, 322",
+    "statement": "Density calls gtd7_ and returns xden[5] * 1000 kg/m^3.",
+    "sha256": "2d2a5ce8bf697b7e0a1bb7e251d99dae877185c4661b76da58f411ca1eabafa6"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+    "source": "NASA GMAT NRLMSISE-00 Fortran-to-C source copy",
+    "lines": "1044-1054, 1338-1345, 2226-2230",
+    "statement": "gtd7 total mass density excludes anomalous oxygen; gtd7d adds species 9 times atomic mass 16.",
+    "sha256": "7aac10bad258766be26f5276af6cbb25beedaa658b1030d5fca4063310e3d0d9"
+   }
+  ],
+  "trajectory": {
+   "path": "gmat-R2026a.json",
+   "sha256": "584dab8ee23a89dd3259dfa587d1027d6f0106dd4708d81844660323cb1a5858"
+  },
+  "caseExport": {
+   "path": "../cases/ffm-reference-cases.json",
+   "sha256": "cebf372006ad44f4579a1b2e11b904e302dfdbc5a3940c854ca2fb223ba6de9a"
+  },
+  "anomalousOxygen": {
+   "path": "anomalous-oxygen.json",
+   "sha256": "c764b552e40a161b5b06a3c7369736d0a1b3a0025ac7e03c46fbdd8816f18f2e",
+   "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
+  },
+  "inputFiles": {
+   "eop-eop-2026-08": {
+    "file": "eop-2026-08.c04.txt",
+    "sha256": "7af753af0af02f5c52cde4a974663e0f1fc1365a74b8085c656d940a968264cc"
+   },
+   "EGM2008-2x0": {
+    "file": "EGM2008-2x0.cof",
+    "sha256": "df8ca6a02ae323b1b4691d935eafc46d9c7b0f6a0bc6ced4897a16b035f2c2ea"
+   },
+   "EGM2008-20x0": {
+    "file": "EGM2008-20x0.cof",
+    "sha256": "aedf824d8dec7cf3cb76d03e08e0101575abebf4455e32d32123e794b9b86f9a"
+   },
+   "EGM2008-20x20": {
+    "file": "EGM2008-20x20.cof",
+    "sha256": "eabb951a121ffa78ab07f13b909771aa99fc0341f3dad08fd563132187464b84"
+   },
+   "EGM2008-20x20-no-pole-tide-eop-2026-08-increments": {
+    "file": "EGM2008-20x20-no-pole-tide-eop-2026-08.cof",
+    "poleTideC21": -2.2607545398355703e-10,
+    "poleTideS21": -1.451881049208188e-10,
+    "note": "GMAT pole-tide increments subtracted from C21, S21 of this file"
+   },
+   "EGM2008-20x20-no-pole-tide-eop-2026-08": {
+    "file": "EGM2008-20x20-no-pole-tide-eop-2026-08.cof",
+    "sha256": "2075355ab3a5bdc0f98fac172d5a59fdf20412dfdbd7c936fd6c8756f2003b65"
+   },
+   "EGM96-36x36": {
+    "file": "EGM96-36x36.cof",
+    "sha256": "641d14f29f34bc694a79c7652d2abf348a4b93f02de672a05699715e893a40cc"
+   },
+   "EGM2008-36x24t24": {
+    "file": "EGM2008-36x24t24.cof",
+    "sha256": "37f22b0bb9fff4184eeb9423b3f4d365c407954377f32aacdc07738fa8dbf060"
+   },
+   "EGM96-70x70": {
+    "file": "EGM96-70x70.cof",
+    "sha256": "36188c633e344903886a845d85b1e74d29bf6740b4adbf87a222e5492c91e5f9"
+   }
+  },
+  "sourceScope": "Local NASA GMAT source copies confirm the density convention; no unrecorded source revision or fresh GMAT rerun is claimed.",
+  "historicalArtifacts": [
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/eop-2026-08.c04.txt",
+    "sha256": "7af753af0af02f5c52cde4a974663e0f1fc1365a74b8085c656d940a968264cc",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/EGM2008-2x0.cof",
+    "sha256": "df8ca6a02ae323b1b4691d935eafc46d9c7b0f6a0bc6ced4897a16b035f2c2ea",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/EGM2008-20x0.cof",
+    "sha256": "aedf824d8dec7cf3cb76d03e08e0101575abebf4455e32d32123e794b9b86f9a",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/EGM2008-20x20.cof",
+    "sha256": "eabb951a121ffa78ab07f13b909771aa99fc0341f3dad08fd563132187464b84",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/EGM2008-20x20-no-pole-tide-eop-2026-08.cof",
+    "sha256": "2075355ab3a5bdc0f98fac172d5a59fdf20412dfdbd7c936fd6c8756f2003b65",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/EGM96-36x36.cof",
+    "sha256": "641d14f29f34bc694a79c7652d2abf348a4b93f02de672a05699715e893a40cc",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/EGM2008-36x24t24.cof",
+    "sha256": "37f22b0bb9fff4184eeb9423b3f4d365c407954377f32aacdc07738fa8dbf060",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/EGM96-70x70.cof",
+    "sha256": "36188c633e344903886a845d85b1e74d29bf6740b4adbf87a222e5492c91e5f9",
+    "role": "recorded GMAT input"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_F0-point-mass.txt",
+    "sha256": "d34f29fe365624af13f6a7b5163d326e5e4b659de31c855898db635ffbea4a4a",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_F1-J2.txt",
+    "sha256": "4ff3eb45c0ff61395ae1b5bc1d215f362d62849994a90c7b7aeb54d51141753c",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_F2-zonal20.txt",
+    "sha256": "d086fd696256dcc92e5eba40e642566b0f34d34d71d163315ebb11fc1e70f00f",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_Z1-zonal20-sun-moon.txt",
+    "sha256": "79b0b28dfe28f84a2ac3c57ffa9153c7712fc614af12cdb3cd6011078cb8767b",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "49a9c39df6059efe5c0d429b936d832245af4a6913e4a711087287c10570aa5f",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_Z3-zonal20-sun-moon-srp-drag.txt",
+    "sha256": "bc19440144588ee25ac2aa23cfd32f3394956267f1d8aaba68b6dde598725343",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 Z3-zonal20-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_F3-field20x20.txt",
+    "sha256": "2cba1e8c896f0e401173add6dd1db6b5e7cc16c3494408b5dba02cbaa378f73a",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_F4-field-sun-moon.txt",
+    "sha256": "798d4fdc7dcfa08399e3abf1182dc647e866ddd663f87860ee612f8e215c4368",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_F5-field-sun-moon-srp.txt",
+    "sha256": "c3e2617b8d5e044fdcd7c5e145a959fbe043bbb77294b3c648ca29e1cf27e279",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_F6-field-sun-moon-srp-drag.txt",
+    "sha256": "3efb0c9af4b35df742362c0422dfd7e61339fef17015651f165cee34ce25b1e8",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 F6-field-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_R2-field-sun-moon-relativity-iers2010.txt",
+    "sha256": "2a61ce53ec242991983bb42eae76eef9d8ea9fb0989f20789037f6ef6f89bf97",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 R2-field-sun-moon-relativity-iers2010"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_T1-field-sun-moon-solid-tides.txt",
+    "sha256": "1687e6448a1c235c9c26d91df17377a925930cc6f7d52dd60722cca310d162ad",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 T1-field-sun-moon-solid-tides"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_I1-field-sun-moon-in-track.txt",
+    "sha256": "ef9dcc0498f8f3979d3158d32dad0bd9a1118e2c0537ce92f10352e705da4e1f",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 I1-field-sun-moon-in-track"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_W1-field-sun-moon-srp-drag-cssi.txt",
+    "sha256": "c6710e2b20216cfae1c901c36e1f96c9e2fdecb2cecc6d621673dfffe29aa4ef",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 W1-field-sun-moon-srp-drag-cssi"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_E1-field-sun-moon-eme2000.txt",
+    "sha256": "74398552a653cf9256028bc518291bb398f778b37ee0d927e7c4b95f5d25f04b",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 E1-field-sun-moon-eme2000"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_G1-egm96-36x36-sun-moon.txt",
+    "sha256": "7d6cf72c7b68684df060e9a6a697f6ec83601d964794fd28848f56ee1bd0c3d5",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 G1-egm96-36x36-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/LEO400_G2-egm2008-36z24t-sun-moon.txt",
+    "sha256": "71e2452fa0ca9863437e8762b53de4a86712859caf70289b21701f2ee762212f",
+    "role": "recorded GMAT report",
+    "caseId": "LEO400 G2-egm2008-36z24t-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_F0-point-mass.txt",
+    "sha256": "edfe2c0c17bafed9a36ecf0f740712e7e99ec8e3a011c0966be75cc79b55a2a1",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_F1-J2.txt",
+    "sha256": "74dad4b426a8114cb4f2ddf301d0e1e895aadae5bb7ae564459837b318cb8e6e",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_F2-zonal20.txt",
+    "sha256": "9be1515b7312bd7f390889706dd05c3f3e85a8c47dc3b6c13bf73dbc3fa34cd6",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_Z1-zonal20-sun-moon.txt",
+    "sha256": "f65d8477e88251032dc92745e8d9b84b9b01692a4c0253d5cc0bc23f40ac7fca",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "ce2e8edf8554e1bc151cfff5f009d4b4f4a05623796367dcdedcdb9926552c10",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_Z3-zonal20-sun-moon-srp-drag.txt",
+    "sha256": "f1460eaa3875af337948adb86f54f817d15ae035d969018571b9e2b42362bc51",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 Z3-zonal20-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_F3-field20x20.txt",
+    "sha256": "d45247cf77c753d1b3a02e0e2d998878162dfd1b60760148cf4381b97ada6b3d",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_F4-field-sun-moon.txt",
+    "sha256": "9944d14be1091e3c68215d761e3a6e300427fddb42cf7b7fe99292f94356c4b4",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_F5-field-sun-moon-srp.txt",
+    "sha256": "4eb6bf1f6745fa500bf966ec4af2f9ff2d5e326a58eb824faab0635539eeb689",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_F6-field-sun-moon-srp-drag.txt",
+    "sha256": "5bbdc06c8972fb0187c55d2712c3ef3fbca93894217257af088f0d6772c4305d",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 F6-field-sun-moon-srp-drag"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/SSO700_W1-field-sun-moon-srp-drag-cssi.txt",
+    "sha256": "055c86ceb00ce7093fd4ceb2cfef959de8e08dc2f70dcac001d1f8075481d401",
+    "role": "recorded GMAT report",
+    "caseId": "SSO700 W1-field-sun-moon-srp-drag-cssi"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_F0-point-mass.txt",
+    "sha256": "761e8527eadcb220ab83a8488a4abbdf08589a05e4449dfb8a54619c12497ffc",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_F1-J2.txt",
+    "sha256": "e6b1884a212576911b24c1818985ec53c2ded7776cbc3f4a7432a86c09b5427e",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_F2-zonal20.txt",
+    "sha256": "9d925a817f5c4d171ae57cc2e9b3a62a7154ff7a96e5f3b78de97112719d0c0f",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_Z1-zonal20-sun-moon.txt",
+    "sha256": "661c523d1e11c2dad45fe331014ed92933938b3b584872b217f79a6aaad2572d",
+    "role": "recorded GMAT report",
+    "caseId": "GPS Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "c5c64f7a02fbea7164b1673fce617d20fc07849505aade19eed0bbe83d95d267",
+    "role": "recorded GMAT report",
+    "caseId": "GPS Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_F3-field20x20.txt",
+    "sha256": "74401c767e55a979f138d5aef79129fedc0e62221e5c1228012c2aaf1b16683e",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_F4-field-sun-moon.txt",
+    "sha256": "0c5a7c63dfc3fdf4ba5affbe0eca935b23749653fa0c724449a717e3a34a58e0",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_F5-field-sun-moon-srp.txt",
+    "sha256": "65b5c89bdd7fe0599d8431314504be54e237b8632ed714d6693d781c904cf7ba",
+    "role": "recorded GMAT report",
+    "caseId": "GPS F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_R2-field-sun-moon-relativity-iers2010.txt",
+    "sha256": "24988f4b12cb1c188d5e0b1dd4fedc6a4d37022c6675c2308f8a4977bcfc728f",
+    "role": "recorded GMAT report",
+    "caseId": "GPS R2-field-sun-moon-relativity-iers2010"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_T1-field-sun-moon-solid-tides.txt",
+    "sha256": "be52e6dea92b7e35235df0c8bd7ae238aeca62c48fddd0acf641667bd8e499cb",
+    "role": "recorded GMAT report",
+    "caseId": "GPS T1-field-sun-moon-solid-tides"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_E1-field-sun-moon-eme2000.txt",
+    "sha256": "ade7494887bb8a5bdfa8ec08e835a8c6b766d843019bb2423fd0295a4370ce03",
+    "role": "recorded GMAT report",
+    "caseId": "GPS E1-field-sun-moon-eme2000"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_G1-egm96-70x70-sun-moon.txt",
+    "sha256": "75f11af6ad53ec36bd814b6f3ba78329bbeead66f864b7bfcb9d589d226400b0",
+    "role": "recorded GMAT report",
+    "caseId": "GPS G1-egm96-70x70-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GPS_C1-field-sun-moon-srp-intrack-jacobians.txt",
+    "sha256": "abc2850ab570f704969d31c59f5514cc1502a1ddf0214bb4f8aef542d53a67af",
+    "role": "recorded GMAT report",
+    "caseId": "GPS C1-field-sun-moon-srp-intrack-jacobians"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_F0-point-mass.txt",
+    "sha256": "7bbcd0b2f0bce567939729212f97a1b5194f5bb5e0973fcb83c951e803b51da7",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_F1-J2.txt",
+    "sha256": "c3145c339d867f257621a71b0dfa7ce94d35d30352e7b2d028f71f8e299038e4",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_F2-zonal20.txt",
+    "sha256": "c92f1dbf71dc577c4507e425c9f126d6caad5f42b912616b8c28f3828c7dbb3f",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_Z1-zonal20-sun-moon.txt",
+    "sha256": "a5af0a932b1a17a5fc26b2d54a7b3970fea3177fd490631ab36019cf98c3485c",
+    "role": "recorded GMAT report",
+    "caseId": "GEO Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "e3bba1b11f1e7145d21a5e4477306cb5834f832dae16b6768dfebc143c7117af",
+    "role": "recorded GMAT report",
+    "caseId": "GEO Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_F3-field20x20.txt",
+    "sha256": "8eb5126d283bcd413fd09f4141186154cf18c100d7d129eeb96525f8682b4991",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_F4-field-sun-moon.txt",
+    "sha256": "b94b828fa82beb61405c4b2efe85a74312c1a4c03b4dbca94b740d39685b593d",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/GEO_F5-field-sun-moon-srp.txt",
+    "sha256": "ee45665822ff8c3c4de8f0cbc640afecfdf76218e4575f651d7f8d5a97234ba3",
+    "role": "recorded GMAT report",
+    "caseId": "GEO F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_F0-point-mass.txt",
+    "sha256": "f72023e25a3bc43ff84b78c7af331f25092c36009beb80c5281754cb9f9454a2",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F0-point-mass"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_F1-J2.txt",
+    "sha256": "e7778b00ad8867fd0b53bd50bca2440dddfb2f264fcffe13fd5fbd4b40669d53",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F1-J2"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_F2-zonal20.txt",
+    "sha256": "0ae2bef451d5765088127751b595ed7e7897bb125248522c6c990187d1802e46",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F2-zonal20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_Z1-zonal20-sun-moon.txt",
+    "sha256": "a57a6fa10d51ba0a08717a84ee7d1d4fb661a050b680583f5d496b3ca7693c3b",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA Z1-zonal20-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_Z2-zonal20-sun-moon-srp.txt",
+    "sha256": "63a5ba555a6abd07b815b7f0e20149295045447e5cb9fd94ee60ce18953f711c",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA Z2-zonal20-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_F3-field20x20.txt",
+    "sha256": "c148cd405ab6b45974ae6ee5cd9e78c74d74fdccb493c35b240cce30550efc3f",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F3-field20x20"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_F4-field-sun-moon.txt",
+    "sha256": "b2e1fe9b58ca840c8dc1fd8241939093c9c9ee2d6b59095c0f8a7c7189d803bf",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F4-field-sun-moon"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/main/MOLNIYA_F5-field-sun-moon-srp.txt",
+    "sha256": "440c717f63df8dd8f4a0acf0cc6e445f5c61e0ba409052c2b410a9b977a56177",
+    "role": "recorded GMAT report",
+    "caseId": "MOLNIYA F5-field-sun-moon-srp"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-work/final/gmat-R2026a-stm.json",
+    "sha256": "6c0e1a1c898a5dcc92489b5c4d2ef9a583fefae73a1c5fb1def035cad0caf29e",
+    "role": "stored STM trajectory"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-R2026a/bin/GmatConsole",
+    "sha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
+    "role": "recorded GMAT executable"
+   },
+   {
+    "path": "/Users/tj/software/tools/xval/gmat-R2026a/bin/GMAT-R2026a_Beta.app/Contents/Frameworks/libGmatBase.dylib",
+    "sha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26",
+    "role": "recorded GMAT library"
+   }
+  ],
+  "hashPolicy": "Verify every available path against its declared digest; unavailable historical binaries, reports and input files are explicit provenance gaps, never silently re-pinned."
+ }
 }

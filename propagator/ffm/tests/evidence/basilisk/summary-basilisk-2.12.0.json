@@ -14729,7 +14729,7 @@
    },
    {
     "path": "README.md",
-    "sha256": "ad4c7a27ed35a3d1ea1f55c2e8f29b26cf33dfb186d18b7f71da67e02f1bf912"
+    "sha256": "4c5308e5ac1ea8173f2cb7b326ff9fc0eb36c074e0a82d31fe8cb5fa070a0770"
    },
    {
     "path": ".gitignore",
@@ -14745,7 +14745,7 @@
    },
    {
     "path": "diagnoses.json",
-    "sha256": "e764c6c6bcf2302cf9bd256f3b682558d148e0b8d678ef20dfa1774f68f1d61b"
+    "sha256": "4be8b7f99d00530fbd74c05cb4ab1bd2e99af5fb0818802ab686cd2932a57a8c"
    }
   ],
   "propagationInputs": [
@@ -18791,7 +18791,7 @@
   },
   {
    "path": "README.md",
-   "sha256": "ad4c7a27ed35a3d1ea1f55c2e8f29b26cf33dfb186d18b7f71da67e02f1bf912"
+   "sha256": "4c5308e5ac1ea8173f2cb7b326ff9fc0eb36c074e0a82d31fe8cb5fa070a0770"
   },
   {
    "path": ".gitignore",
@@ -18807,7 +18807,7 @@
   },
   {
    "path": "diagnoses.json",
-   "sha256": "e764c6c6bcf2302cf9bd256f3b682558d148e0b8d678ef20dfa1774f68f1d61b"
+   "sha256": "4be8b7f99d00530fbd74c05cb4ab1bd2e99af5fb0818802ab686cd2932a57a8c"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",

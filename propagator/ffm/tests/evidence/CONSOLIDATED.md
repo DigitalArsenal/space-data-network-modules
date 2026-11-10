@@ -447,7 +447,7 @@ Step setting: 640 sets × 7 times
 ### GMAT R2026a drag diagnostic inputs
 
 - FFM trajectories at suite / steps30 / finest: `96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8`.
-- Anomalous-oxygen diagnostic: `d0a2ad67ac68f34c98e252b165300306ae1d30d235dd392a76660af720333ce1`.
+- Anomalous-oxygen diagnostic: `c764b552e40a161b5b06a3c7369736d0a1b3a0025ac7e03c46fbdd8816f18f2e`.
 - LEO400_F6-field-sun-moon-srp-drag.txt: `aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78`.
 - LEO400_F6-field-sun-moon-srp-drag.script: `a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813`.
 - LEO400_Z3-zonal20-sun-moon-srp-drag.txt: `a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2`.
@@ -464,7 +464,7 @@ Step setting: 640 sets × 7 times
 ### Nyx drag diagnostic inputs
 
 - FFM trajectories at suite / steps30 / finest: `96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8`.
-- Published-formula / WGS84 trajectories: `078d2f192f5da469f82e204b94e80786b4a7b1584b470be190e7644862100fdd`.
+- Published-formula / WGS84 trajectories: `99495b55e4c4c352008a70dbba9a1b9fee53caab19b5b0af98bf8b4a16c65f45`.
 
 ### Basilisk drag diagnostic inputs
 

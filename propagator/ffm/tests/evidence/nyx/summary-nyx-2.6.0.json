@@ -7782,7 +7782,7 @@
   },
   "dragSettings": {
    "file": "drag-settings-diagnostic.json",
-   "sha256": "078d2f192f5da469f82e204b94e80786b4a7b1584b470be190e7644862100fdd",
+   "sha256": "99495b55e4c4c352008a70dbba9a1b9fee53caab19b5b0af98bf8b4a16c65f45",
    "classification": "model-setting-mismatch",
    "statement": "The cached runs predate the runner fix that writes WGS84 into ANISE planetary data. ANISE transform_to replaces supplied frame shape from that data; the old path uses pck08 Earth radii. The current prebuilt published-MSIS runner plus WGS84 brings every supported drag case below 0.1 m. Historical binaries are unavailable, so assignment of the cached residual to that old path is an inference from the documented source fix, file chronology, measured shape difference and corrected-run convergence.",
    "geodetic": {
@@ -8434,7 +8434,7 @@
   },
   {
    "path": "/Users/tj/software/private/review-20261110/modules-frames/propagator/ffm/tests/evidence/nyx/drag-settings-diagnostic.json",
-   "sha256": "078d2f192f5da469f82e204b94e80786b4a7b1584b470be190e7644862100fdd"
+   "sha256": "99495b55e4c4c352008a70dbba9a1b9fee53caab19b5b0af98bf8b4a16c65f45"
   },
   {
    "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/spacecraft.rs",
