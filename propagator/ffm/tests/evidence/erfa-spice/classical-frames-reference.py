@@ -3,7 +3,8 @@
 Only reference evaluation happens here. Epoch generation and every comparison,
 maximum, angular reduction and physical error bound are in the C++ harness.
 UTC input is split exactly at midnight; future leap seconds are held at ERFA's
-last published offset. UT1=UTC, no polar motion, no frame bias, FK5 TEME.
+last published offset. UT1=UTC, no polar motion, no frame bias. TEME is AIAA
+2006-6753's (lib/coords since 2.3.0): R3(GAST06 - GMST82) NPB06, not the FK5 chain.
 """
 import json
 import sys
@@ -27,7 +28,8 @@ def matrices(tt1, tt2, ut11, ut12):
     erfa.gmst82(ut11, ut12)
     sidereal = erfa.gst94(ut11, ut12)
     ident = np.broadcast_to(np.eye(3), p.shape).copy()
-    teme = erfa.rz(eqeq, ident.copy()) @ pn
+    npb = erfa.pnm06a(tt1, tt2)
+    teme = erfa.rz(erfa.gst06(ut11, ut12, tt1, tt2, npb) - erfa.gmst82(ut11, ut12), npb)
     pef = erfa.rz(sidereal, ident.copy()) @ n @ p
     fixed = erfa.pom00(np.zeros_like(eqeq), np.zeros_like(eqeq), np.zeros_like(eqeq)) @ pef
     return np.stack([teme, ident, fixed, ident, fixed, pef, pn, p], axis=1)

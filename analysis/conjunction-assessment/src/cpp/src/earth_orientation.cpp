@@ -15,8 +15,10 @@ double eraSp00(double, double);
 void eraPom00(double, double, double, double[3][3]);
 void eraC2tcio(double[3][3], double, double[3][3], double[3][3]);
 void eraBp06(double, double, double[3][3], double[3][3], double[3][3]);
-void eraPnm80(double, double, double[3][3]);
-double eraEqeq94(double, double);
+void eraPnm06a(double, double, double[3][3]);
+double eraGst06(double, double, double, double, double[3][3]);
+double eraGmst82(double, double);
+void eraRz(double, double[3][3]);
 }
 namespace conjunction {
 bool earth_orientation_at(const std::vector<EarthOrientation> &rows, double jd,
@@ -105,21 +107,23 @@ bool teme_eme2000_matrix(double jd, double r[3][3]) {
       eraUtctai(day, utcFraction, &tai1, &tai2) < 0 ||
       eraTaitt(tai1, tai2, &tt1, &tt2) < 0)
     return false;
-  // TEME -> true equator/equinox of date -> mean equator/equinox J2000.
-  // ERFA's IAU 1976/1980 precession/nutation matches the conventional TEME
-  // realization (also used by Orekit). The equation of the equinoxes is
-  // GAST-GMST, so TEME -> TOD is the active +equation rotation about z.
-  // No terrestrial rotation or UT1 approximation is involved. TT is adequate
-  // for Eqeq94's TDB argument: the <1.7 ms difference is negligible here.
-  double pn[3][3];
-  eraPnm80(tt1, tt2, pn);
-  const double equation = eraEqeq94(tt1, tt2);
-  const double c = std::cos(equation), s = std::sin(equation);
-  for (int i = 0; i < 3; ++i) {
-    r[i][0] = pn[0][i] * c + pn[1][i] * s;
-    r[i][1] = -pn[0][i] * s + pn[1][i] * c;
-    r[i][2] = pn[2][i];
-  }
+  // TEME -> GCRF -> mean equator/equinox J2000 (EME2000). TEME is AIAA
+  // 2006-6753's (sec. II.D eq. 1: r_PEF = R3(GMST82) r_TEME), term for term
+  // foundation/frames' gcrfToTeme: GCRF -> TEME = R3(GAST06 - GMST82) NPB06 at
+  // TT, both sidereal angles of UT1 = UTC (no EOP here). EME2000 = B GCRF with
+  // the IAU 2006 frame bias. Until 0.19.0 this was the FK5 R3(Eqeq94) Pnm80
+  // taken as EME2000: 0.72 m off on the paper's example, 6.8 m at 42,164 km
+  // in 2026.
+  double t[3][3], bias[3][3], prec[3][3], bp[3][3];
+  eraPnm06a(tt1, tt2, t);
+  eraRz(eraGst06(day, utcFraction, tt1, tt2, t) - eraGmst82(day, utcFraction), t);
+  eraBp06(2451545., 0, bias, prec, bp);
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) {
+      r[i][j] = 0;
+      for (int k = 0; k < 3; ++k)
+        r[i][j] += bias[i][k] * t[j][k];  // B * T^T
+    }
   return true;
 }
 } // namespace

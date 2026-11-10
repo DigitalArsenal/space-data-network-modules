@@ -22,16 +22,12 @@ bool samples(const StateSeries& series, std::vector<Sample>& out, std::string& e
         Sample s; s.source=p;
         const double sec=(p.epoch_jd-2451545.0)*86400;
         if (!ffm::toTT(std::floor(sec),sec-std::floor(sec),p.epoch_jd,timingStandard::UTC,s.tt,error))return false;
-        // Undo the parser's documented J2000->TEME rotation. GCRF input uses
-        // that same parser rotation but requires no EME2000 frame bias.
-        const auto a=eci_j2000_to_teme_matrix(p.epoch_jd);
-        double r[3]{},v[3]{},bias[3][3],precession[3][3],combined[3][3];
-        const double pr[3]={p.x,p.y,p.z},pv[3]={p.vx,p.vy,p.vz};
-        for(int i=0;i<3;++i)for(int j=0;j<3;++j){r[i]+=a[j][i]*pr[j];v[i]+=a[j][i]*pv[j];}
-        eraBp00(2451545.,0,bias,precession,combined);
+        // Undo the parser's rotation: its TEME is GCRF turned by gcrf_to_teme_matrix (EME2000/J2000 sources
+        // through the frame bias first), so GCRF is that matrix transposed, whatever the source frame.
+        const auto a=gcrf_to_teme_matrix(p.epoch_jd);
         double g[3]{},w[3]{};
-        const bool gcrf=series.meta.source_frame=="GCRF";
-        for(int i=0;i<3;++i)for(int j=0;j<3;++j){const double b=gcrf?double(i==j):bias[j][i];g[i]+=b*r[j];w[i]+=b*v[j];}
+        const double pr[3]={p.x,p.y,p.z},pv[3]={p.vx,p.vy,p.vz};
+        for(int i=0;i<3;++i)for(int j=0;j<3;++j){g[i]+=a[j][i]*pr[j];w[i]+=a[j][i]*pv[j];}
         for(double x:g)if(!std::isfinite(x)){error="invalid-state";return false;}
         for(double x:w)if(!std::isfinite(x)){error="invalid-state";return false;}
         s.state.position={g[0],g[1],g[2]};s.state.velocity={w[0],w[1],w[2]};s.state.epoch=p.epoch_jd;
