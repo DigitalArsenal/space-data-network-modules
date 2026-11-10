@@ -612,7 +612,7 @@ extern "C" int propagate_epochs(void) {
         double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
         if (g.axes != oem::Axes::Teme) {
           double m[3][3];
-          if (frames::gcrf_to_teme(tw[k], tf[k], m) < 0) { std::snprintf(why, sizeof why, "No GCRF axes at %s.", text); plugin_set_error("frame-failed", why); return 3; }
+          if (frames::gcrf_to_teme_output(tw[k], tf[k], m) < 0) { std::snprintf(why, sizeof why, "No GCRF axes at %s.", text); plugin_set_error("frame-failed", why); return 3; }
           for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j) {
               double a = 0.0;

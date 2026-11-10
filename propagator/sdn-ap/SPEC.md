@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.6 (dist 6baf97f0).
+Version 0.6.6 (dist f4667b66).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2135,7 +2135,15 @@ Its instantaneous third-body geometry does not take the epoch-axis output correc
 
 Fit residuals and propagation share `xp_propagate`, including this policy; there is no separate fit-only
 rotation. GCRF fit inputs are converted to TEME at each sample date, and GCRF output converts the propagated
-TEME state at that date. Default FORCES retains the XP path bit for bit. The one-day class retains its frame
+TEME state at that date. The output's GCRF-to-TEME matrix (`propagate`, `propagate_epochs`; EME2000 through it) is the
+quintic through the matrix at the six 6-hour nodes about the date (UTC quarter days, held per thread), each node the
+same IAU 2006/2000A chain with GMST82 summed without gmst()'s rounding: one IAU 2000A nutation series per 6 hours of
+output, not one per state, and a function of the date alone. Against the per-state chain with GMST82 in exact
+arithmetic it is off by at most 0.0042 mm at the geostationary radius; the per-state matrix it replaces was off by up
+to 1.5 mm there (gmst()'s rounding: up to 3.6e-11 rad), and the two differ by at most 1.6 mm and 1.2e-4 mm/s (SGP4
+sets with epochs from 2020 to 2035, 7 days each; test/output-frames.mjs). A GCRF state then costs what a TEME state
+costs, against about 31 µs with the matrix at each state; a one-state call at a date whose nodes are not yet held
+computes six nodes. The fit's GCRF inputs keep the matrix at each state. Default FORCES retains the XP path bit for bit. The one-day class retains its frame
 correction and 38-minute grid; the half-day and GTO fixtures retain their previous paths.
 
 The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS windows, 72-hour fits, the

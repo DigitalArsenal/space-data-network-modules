@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.6 (dist 6baf97f0).
+Version 0.6.6 (dist f4667b66).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -304,7 +304,8 @@ Times in random order: 37 to 153 times (1,990 on the transfer orbit); a request 
 from the nearest checkpoint. Above e 0.05 (perigee 600 km, tesseral 31) a low orbit costs 77 to 88 times, against 2.6
 to 2.7 at e 0.02 to 0.05. Through `propagate` in TEME, 7 days at 300 s: a seeded record (no covariance) 1.2 to 2.2
 times; a fitted record writes a covariance line per state (613,304 bytes against SGP4's 185,840) and costs 4.9 to 27
-times. In GCRF with explicit EPOCHS both cost 31 to 47 µs per state.
+times. In GCRF and EME2000 a state costs what it costs in TEME (`test/output-frames.mjs`; the output's GCRF matrix comes
+from 6 h nodes, SPEC 16.4); with that matrix computed at each state, both records cost 31 to 47 µs per state there.
 
 
 ## SGP4XP status
@@ -380,6 +381,9 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 - `test/kernel-patterns.mjs`: AP's cost against SGP4's by request pattern: many records stepped together and record by
   record, the first state of a fresh record at 0, 1 and 7 days, ascending, random and alternating-ends order, e 0 to
   0.3 in low orbit, and the public `propagate` in TEME and GCRF with and without a covariance.
+- `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
+  one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
+  not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
