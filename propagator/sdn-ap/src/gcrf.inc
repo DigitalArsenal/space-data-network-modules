@@ -29,6 +29,85 @@ inline int gcrf_to_teme(double whole, double frac, double m[3][3]) {
   return j;
 }
 
+/// GMST82 as gmst() (store.inc) has it, without its rounding: gmst() sums the polynomial in seconds of time near 8e8 s
+/// and turns that into radians near 6e4 rad, so its angle is off GMST82 in exact arithmetic by up to 3.6e-11 rad
+/// (1.5 mm at 42,164 km; 2020 to 2035, test/output-frames.mjs), changing from one instant to the next, with a mean of
+/// up to 1e-11 rad. Here the whole days since J2000 drop out as whole turns before the sum (876600 h T is 86400 s for
+/// each day), and the angle stays near 167 rad.
+inline double gmst82_unrounded(double whole, double frac) {
+  const double dw = whole - 2451545.0;  // exact: whole is an integer or half-integer Julian date
+  const double tut1 = (dw + frac) / 36525.0;
+  const double sec = 67310.54841 + 8640184.812866 * tut1 + (0.093104 - 6.2e-6 * tut1) * tut1 * tut1;
+  double day = (dw - std::floor(dw)) + (frac - std::floor(frac));
+  day -= std::floor(day);
+  double theta = std::fmod(kTwoPi * day + sec * (kTwoPi / 86400.0), kTwoPi);
+  if (theta < 0.0) theta += kTwoPi;
+  return theta;
+}
+
+/// The GCRF -> TEME matrix of an output state (`propagate`, `propagate_epochs`): the quintic through the matrix at the
+/// six 6 h nodes about the time (UTC Julian dates on quarter days), nodes held per thread. A node is gcrf_to_teme's
+/// matrix with GMST82 unrounded (gmst82_unrounded). A function of the time alone: no request order or grid enters it.
+/// One node costs what one exact matrix costs (the IAU 2000A nutation series, about 30 us); an output state then costs
+/// the quintic. test/output-frames.mjs: against the per-state chain with GMST82 in exact arithmetic, at most 0.0042 mm
+/// at geosynchronous radius (gcrf_to_teme at each state, which carries gmst()'s rounding: 1.5 mm); against
+/// gcrf_to_teme at each state, 1.6 mm. TEME -> Earth-fixed keeps gmst(), so GCRF -> TEME -> Earth-fixed equals GAST06
+/// to gmst()'s rounding (3.6e-11 rad) on this path.
+struct GcrfNodeSlot {
+  int64_t key_p1;
+  int status;
+  double m[3][3];
+};
+inline thread_local GcrfNodeSlot* g_gcrf_node_cache_ptr = nullptr;
+inline const GcrfNodeSlot& gcrf_node(int64_t k) {
+  if (__builtin_expect(!g_gcrf_node_cache_ptr, 0)) g_gcrf_node_cache_ptr = new GcrfNodeSlot[64]{};
+  GcrfNodeSlot& s = g_gcrf_node_cache_ptr[static_cast<uint64_t>(k) & 63u];
+  if (s.key_p1 != k + 1) {
+    const double whole = std::floor(static_cast<double>(k) / 4.0), frac = (static_cast<double>(k) - 4.0 * whole) / 4.0;
+    double tai1, tai2, tt1, tt2;
+    const int j = eraUtctai(whole, frac, &tai1, &tai2);
+    s.status = j;
+    if (j >= 0) {
+      eraTaitt(tai1, tai2, &tt1, &tt2);
+      eraPnm06a(tt1, tt2, s.m);
+      const double gast = eraGst06(whole, frac, tt1, tt2, s.m);
+      eraRz(gast - gmst82_unrounded(whole, frac), s.m);
+    }
+    s.key_p1 = k + 1;
+  }
+  return s;
+}
+
+inline int gcrf_to_teme_output(double whole, double frac, double m[3][3]) {
+  const double a = 4.0 * whole, fa = std::floor(a);
+  const double b = (a - fa) + 4.0 * frac, fb = std::floor(b);
+  const int64_t k = static_cast<int64_t>(fa) + static_cast<int64_t>(fb);
+  const double t = b - fb;
+  const GcrfNodeSlot* n[6];
+  int status = 0;
+  for (int q = 0; q < 6; ++q) {
+    n[q] = &gcrf_node(k - 2 + q);
+    if (n[q]->status < 0) return gcrf_to_teme(whole, frac, m);
+    if (n[q]->status > status) status = n[q]->status;
+  }
+  // Lagrange weights on the nodes k - 2 .. k + 3 at k + t: w_q = prod_{p != q} (t - x_p) / (x_q - x_p), x = -2 .. 3
+  constexpr double kDen[6] = {-120.0, 24.0, -12.0, 12.0, -24.0, 120.0};
+  double w[6];
+  for (int q = 0; q < 6; ++q) {
+    double p = 1.0;
+    for (int r = 0; r < 6; ++r)
+      if (r != q) p *= t - static_cast<double>(r - 2);
+    w[q] = p / kDen[q];
+  }
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) {
+      double s = 0.0;
+      for (int q = 0; q < 6; ++q) s += w[q] * n[q]->m[i][j];
+      m[i][j] = s;
+    }
+  return status;
+}
+
 inline void apply(const double m[3][3], const double* in, double* out) {
   for (int i = 0; i < 3; ++i) out[i] = m[i][0] * in[0] + m[i][1] * in[1] + m[i][2] * in[2];
 }

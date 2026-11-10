@@ -1318,11 +1318,18 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
         }
       }
     } else {
-      double D, N;
-      drag::day_of_year(d50, D, N);
-      const drag::DateTerms dt = drag::date_terms(fl, D, N);
-      const double sdsun = b.sun_u.z, cdsun = std::sqrt(1.0 - b.sun_u.z * b.sun_u.z);  // the Sun's declination
-      const double rasun = std::atan2(b.sun_u.y, b.sun_u.x);
+      // Jacchia 1970's date terms and the Sun's direction (node_density reads them for that model only)
+      const bool j70 = atmosphere == nullptr || atmosphere->model == atm::kJacchia70;
+      drag::DateTerms dt{};
+      double sdsun = 0.0, cdsun = 1.0, rasun = 0.0;
+      if (j70) {
+        double D, N;
+        drag::day_of_year(d50, D, N);
+        dt = drag::date_terms(fl, D, N);
+        sdsun = b.sun_u.z;  // the Sun's declination
+        cdsun = std::sqrt(1.0 - b.sun_u.z * b.sun_u.z);
+        rasun = std::atan2(b.sun_u.y, b.sun_u.x);
+      }
       const double ve = std::sqrt((1.0 - e) / (1.0 + e));
       const auto node = [&](double nu, double w) {
         double sn, cn;
@@ -1334,18 +1341,25 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
         // geocentric latitude phi' = arcsin(sin i sin u), carried as its sine and (non-negative) cosine
         const double sp = si * su, cp = std::sqrt(1.0 - sp * sp);
         const NodeHeight nh = node_height(sp, cp, r);
-        const double alpha = std::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th);
-        double H = alpha - rasun;
-        H -= kTwoPi * std::floor(H / kTwoPi);
-        double d50n = d50, thn = theta_g;
-        if (pass) {
-          // the node's time after perigee: M(nu) / n, E = 2 atan(sqrt((1 - e) / (1 + e)) tan(nu / 2))
-          const double E = 2.0 * std::atan(ve * std::tan(0.5 * nu));
-          const double tau = (E - e * std::sin(E)) / n;
-          d50n = d50 + tau / kMinutesPerDay;
-          thn = theta_g + kOmegaE * tau;
+        // above 2500 km (node_density's own test) the density is 1e-20 whatever the node's direction and time
+        double rho = 1e-20;
+        if (nh.h <= 2500.0) {
+          const double alpha = std::atan2(ag.sO * cu + ag.cO * su * th, ag.cO * cu - ag.sO * su * th);
+          double H = 0.0;
+          if (j70) {
+            H = alpha - rasun;
+            H -= kTwoPi * std::floor(H / kTwoPi);
+          }
+          double d50n = d50, thn = theta_g;
+          if (pass) {
+            // the node's time after perigee: M(nu) / n, E = 2 atan(sqrt((1 - e) / (1 + e)) tan(nu / 2))
+            const double E = 2.0 * std::atan(ve * std::tan(0.5 * nu));
+            const double tau = (E - e * std::sin(E)) / n;
+            d50n = d50 + tau / kMinutesPerDay;
+            thn = theta_g + kOmegaE * tau;
+          }
+          rho = node_density(atmosphere, dt, fl, dca, d50n, sp, cp, sdsun, cdsun, H, alpha, thn, nh);
         }
-        const double rho = node_density(atmosphere, dt, fl, dca, d50n, sp, cp, sdsun, cdsun, H, alpha, thn, nh);
         // above e 0.3 (`pass`) the co-rotating air at the node's radius r rather than the mean orbit's p / D
         const double rr = pass ? r * Dn / p : 1.0;
         const double V = pass ? std::sqrt(1.0 + 2.0 * e * cn + e * e - 2.0 * q * th * rr + q * q * cp * cp * rr * rr / (Dn * Dn))
@@ -4559,13 +4573,28 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
   return output_j2_osc(y, Ewarm, r_out, v_out);
 }
 
+/// The drag rates of a state from its segment's polynomial (drag_pass_rates) for output_drag_pass, set by
+/// xp_propagate_impl around the output of that state (of set ctx_id at t); otherwise output_drag_pass evaluates them at
+/// the state.
+struct DragPassRates {
+  uint64_t ctx_id;
+  double t;
+  double fd[6];
+};
+inline thread_local const DragPassRates* g_drag_pass_rates = nullptr;
+
 [[gnu::noinline]] inline void output_drag_pass(const RateContext& ctx, double t, const double* ym,
                                                const Bodies* shared, double* y) {
   const Frame frm = frame_of(ym);
   const Kepler km = kepler_of(ym, frm.a);
-  const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
   double fd[6] = {0, 0, 0, 0, 0, 0};
-  drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
+  const DragPassRates* held = g_drag_pass_rates;
+  if (held != nullptr && held->ctx_id == ctx.ctx_id && held->t == t) {
+    for (int j = 0; j < 6; ++j) fd[j] = held->fd[j];
+  } else {
+    const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+    drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
+  }
   const double M = km.m, n = ym[kN], saw = (kPi - M) / n;
   for (int j = 0; j < 6; ++j) y[j] += fd[j] * saw;
   y[kLam] += fd[kN] / (n * n) * (kPi * M - 0.5 * M * M - kPi * kPi / 3.0);
@@ -5357,6 +5386,19 @@ inline int32_t output(const RateContext& ctx, double t, const double* ym, double
 /// latest bracket of each direction. 96 + 2 * 2 * 112 + 2 * kSparse * 112 bytes.
 constexpr int kSparse = 12;
 
+/// AP above e 0.3 (SPEC 16.12): the drag rates the output of a state adds (output_drag_pass) over the last two segments
+/// flown, a segment the part of one revolution (keyed by its perigee time tp) inside one bracket of the mean-element grid
+/// (keyed by its lower node's time): drag_part at kPoints times of the segment (drag_pass_rates).
+struct DragPassCache {
+  static constexpr int kPoints = 3;
+  int32_t lock;
+  int32_t next;
+  int32_t held[2];
+  double tp[2], node_t[2];
+  double tk[2][kPoints];
+  double fd[2][kPoints][6];
+};
+
 struct XpSat {
   uint32_t norad;
   int32_t init_error;
@@ -5372,6 +5414,7 @@ struct XpSat {
   int32_t wide_lock;          ///< AP above tess::kWideE: the schedule nodes' grids this set holds (SPEC 16.11)
   tess::WideGrid* wide_node[2];
   int32_t wide_node_j[2];
+  DragPassCache drag_pass;
 };
 
 /// SPEC 16.11: the nominal set whose grids the copies initialized on this thread while a GridShareScope lives read (the covariance's
@@ -5725,7 +5768,8 @@ inline void lock(int32_t* word) {
 inline void unlock(int32_t* word) { __atomic_store_n(word, 0, __ATOMIC_RELEASE); }
 
 /// The bracketing nodes of t (lower, upper in the direction of t). Lazily
-/// fills the checkpoints; an AP state depends on the order of requests by up to 12.7 mm (SPEC 9).
+/// fills the checkpoints; an AP state depends on the order of requests by up to 12.7 mm at 500 km, 0.29 m at e 0.05 with
+/// tesseral degree 31 (SPEC 9).
 inline bool bracket_ptr(XpSat& s, double t, const Node*& lo, const Node*& hi) {
   const int dir = t >= 0.0 ? 1 : -1;
   const int di = dir > 0 ? 0 : 1;
@@ -5905,10 +5949,91 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   return true;
 }
 
+/// AP above e 0.3 (SPEC 16.12): the drag rates output_drag_pass adds to the state at t (mean state y there, the bracket
+/// mean_at left in the window), without the 78 atmosphere nodes of drag_part at every state. Within one revolution (from
+/// the perigee tp before t to the next) drag_part's two passes are the same, and within one bracket of the grid the mean
+/// state is one cubic (hermite), so on their intersection, the segment, drag_part's rates are a smooth function of t:
+/// they are taken as the polynomial through drag_part at kPoints times of the segment, each at the bracket's own mean
+/// state there (the state that time's output flies). kPoints evaluations serve every state of the segment; the largest
+/// difference from drag_part at every state is stated by test/kernel-cost.mjs --diff. False (the state evaluates its own)
+/// at the epoch, when the window does not bracket t, or when a point of the segment falls in another revolution.
+inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& out) {
+  if (t == 0.0) return false;
+  const Frame fr = frame_of(y);
+  const Kepler k = kepler_of(y, fr.a);
+  if (!(k.e < 1.0) || !(fr.n > 0.0)) return false;
+  const double period = kTwoPi / fr.n, tp = t - k.m / fr.n;
+  constexpr int K = DragPassCache::kPoints;
+  const int di = t >= 0.0 ? 0 : 1;
+  const double dir = t >= 0.0 ? 1.0 : -1.0;
+  lock(&s.lock);
+  const bool valid = s.window_valid[di] != 0;
+  const Node lo = s.window[di][0], hi = s.window[di][1];
+  unlock(&s.lock);
+  if (!valid || !(dir * lo.t <= dir * t && dir * t < dir * hi.t)) return false;
+  out.ctx_id = s.ctx.ctx_id;
+  out.t = t;
+  DragPassCache& c = s.drag_pass;
+  // the Lagrange polynomial through the segment's points, at t
+  auto take = [&](int q) {
+    for (int j = 0; j < 6; ++j) out.fd[j] = 0.0;
+    for (int i = 0; i < K; ++i) {
+      double w = 1.0;
+      for (int m = 0; m < K; ++m)
+        if (m != i) w *= (t - c.tk[q][m]) / (c.tk[q][i] - c.tk[q][m]);
+      for (int j = 0; j < 6; ++j) out.fd[j] += w * c.fd[q][i][j];
+    }
+  };
+  lock(&c.lock);
+  for (int q = 0; q < 2; ++q)
+    if (c.held[q] && c.node_t[q] == lo.t && std::fabs(c.tp[q] - tp) <= 0.125 * period) {
+      take(q);
+      unlock(&c.lock);
+      return true;
+    }
+  unlock(&c.lock);
+  // the segment: the revolution's stretch inside the bracket; drag_part at its points s0 + (i + 1/2) (s1 - s0) / K
+  const double s0 = std::fmax(std::fmin(lo.t, hi.t), tp), s1 = std::fmin(std::fmax(lo.t, hi.t), tp + period);
+  if (!(s1 > s0)) return false;
+  double tk[K], fk[K][6];
+  for (int i = 0; i < K; ++i) {
+    tk[i] = s0 + ((i + 0.5) / K) * (s1 - s0);
+    double yx[6];
+    hermite(lo, hi, tk[i], yx);
+    if (!(yx[kN] > 0.0)) return false;
+    const Frame fx = frame_of(yx);
+    const Kepler kx = kepler_of(yx, fx.a);
+    if (!(kx.e < 1.0) || std::fabs(tk[i] - kx.m / fx.n - tp) > 0.125 * period) return false;
+    for (int j = 0; j < 6; ++j) fk[i][j] = 0.0;
+    drag_part(s.ctx, tk[i], yx, fx, kx, angle_trig(kx), bodies_at(s.ctx.d50_epoch + tk[i] / kMinutesPerDay), fk[i]);
+  }
+  lock(&c.lock);
+  const int q = c.next;
+  c.next ^= 1;
+  c.held[q] = 1;
+  c.node_t[q] = lo.t;
+  c.tp[q] = tp;
+  for (int i = 0; i < K; ++i) {
+    c.tk[q][i] = tk[i];
+    for (int j = 0; j < 6; ++j) c.fd[q][i][j] = fk[i][j];
+  }
+  take(q);
+  unlock(&c.lock);
+  return true;
+}
+
 inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], const Bodies* shared, bool local_sat) {
   if (s.init_error != 0) return kPropRefused;
   double y[6];
   if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) return kPropMeanMotion;
+  // AP above e 0.3: the drag rates output_drag_pass adds, from the state's segment; a fit (inside its tess::FitGridScope)
+  // keeps drag_part at each of its states, so the sets it writes do not depend on the segments
+  DragPassRates pass_rates;
+  const bool held = s.ctx.drag_pass && s.ctx.bterm > 0.0 && !tess::fit_grids_now() && drag_pass_rates(s, t, y, pass_rates);
+  struct Held {
+    explicit Held(const DragPassRates* p) { g_drag_pass_rates = p; }
+    ~Held() { g_drag_pass_rates = nullptr; }
+  } scope(held ? &pass_rates : nullptr);
   int32_t status;
   if (s.ctx.wide != nullptr && s.ctx.wide_owned) {
     // the nodes around t, the same for every set of a fit; the context per call, so concurrent calls on one set share nothing

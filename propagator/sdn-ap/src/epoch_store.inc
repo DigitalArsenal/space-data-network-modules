@@ -351,6 +351,25 @@ inline int32_t rows_cover(Store& st, const Entry& en, double t) {
   const double w = 2451545.0, f0 = en.epoch / kMinutesPerDay, f1 = t / kMinutesPerDay;
   const int32_t a = ocm::mjd_of(w, std::fmin(f0, f1)), b = ocm::mjd_of(w, std::fmax(f0, f1));
   const std::vector<atm::SpwDay>& d = en.atmosphere->days;
+  int32_t one_a_day = __atomic_load_n(&en.atmosphere->one_a_day, __ATOMIC_RELAXED);
+  if (one_a_day < 0) {
+    one_a_day = d.empty() ? 0 : 1;
+    for (size_t q = 1; one_a_day && q < d.size(); ++q) one_a_day = d[q].mjd == d[q - 1].mjd + 1 ? 1 : 0;
+    __atomic_store_n(&en.atmosphere->one_a_day, one_a_day, __ATOMIC_RELAXED);
+  }
+  if (one_a_day) {
+    // every day from the first row's to the last's: the first day of a - 1 .. b without a row is before the first or after the last
+    const int32_t first = d.front().mjd, last = d.back().mjd;
+    if (a - 1 < first) {
+      st.short_day = a - 1;
+      return kRowsShort;
+    }
+    if (b > last) {
+      st.short_day = a - 1 > last + 1 ? a - 1 : last + 1;
+      return kRowsShort;
+    }
+    return 0;
+  }
   size_t k = 0;
   for (int32_t day = a - 1; day <= b; ++day) {
     while (k < d.size() && d[k].mjd < day) ++k;
@@ -615,7 +634,7 @@ extern "C" int propagate_epochs(void) {
         double axes[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
         if (g.axes != oem::Axes::Teme) {
           double m[3][3];
-          if (frames::gcrf_to_teme(tw[k], tf[k], m) < 0) { std::snprintf(why, sizeof why, "No GCRF axes at %s.", text); plugin_set_error("frame-failed", why); return 3; }
+          if (frames::gcrf_to_teme_output(tw[k], tf[k], m) < 0) { std::snprintf(why, sizeof why, "No GCRF axes at %s.", text); plugin_set_error("frame-failed", why); return 3; }
           for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j) {
               double a = 0.0;

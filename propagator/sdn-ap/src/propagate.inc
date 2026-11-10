@@ -152,7 +152,7 @@ extern "C" int propagate(void) {
         double axes[3][3];
         if (g.axes != oem::Axes::Teme) {
           double m[3][3];
-          if (frames::gcrf_to_teme(tw[k], tf[k], m) < 0) {
+          if (frames::gcrf_to_teme_output(tw[k], tf[k], m) < 0) {
             std::snprintf(why, sizeof why, "No GCRF axes at %s (outside ERFA's calendar).", text);
             rc = oem::refuse("frame-failed", why);
             break;

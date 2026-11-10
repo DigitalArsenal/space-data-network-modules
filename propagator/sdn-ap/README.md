@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.5 (dist ca551504, bundle f0b8352a).
+Version 0.6.6 (dist f4667b66).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -290,7 +290,25 @@ checkpoints exist, a query within their span integrates at most one checkpoint i
 work grows with the time gap from the nearest preceding retained node. Checkpoint storage is bounded;
 query work is not bounded independently of lead time. An AP state depends on the order of requests: the same record flown in ascending and in random order differs by up
 to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at geosynchronous altitude; a single state
-from a fresh record differs from the ascending pass by up to 8.8 mm. SPEC 9 describes the cache and grid.
+from a fresh record differs from the ascending pass by up to 8.8 mm. Over 30 days at 60 s, reversed or shuffled against
+the ascending pass, `test/kernel-cost.mjs --diff` measures up to 0.18 m at 300 km (B 6.4e-3 m^2/kg, active weather) and
+0.29 m on a low orbit at e 0.05 with tesseral degree 31. SPEC 9 describes the cache and grid.
+
+AP's cost against SGP4's depends on the request pattern (0.6.6, `test/kernel-patterns.mjs`,
+`test/results/kernel-patterns.json`: made-up orbits, AP seeded with zonal 20, tesseral 31 at e 0.048 and below and
+NRLMSISE-00, SGP4 on the same elements, CPU per state, AP and SGP4 interleaved, median of 7 rounds, owner Mac under
+load). One record stepped alone in ascending order at 300 s: 1.2 to 2.7 times on near-circular orbits. Many records
+stepped together, every record at each instant (`sdnap_epochs_at`, 2 to 10,000 records): 34 to 40 times in low orbit,
+7.3 to 7.9 times in medium Earth orbit, 2.2 times at geosynchronous altitude; each record's tesseral and third-body
+tables are rebuilt when another record was flown last. The same states record by record: 1.1 to 3.4 times. The first
+state of a freshly loaded record in a running process: 52 to 66 times at its epoch, 28 to 96 times a day later, 123 to
+289 times a week later (3,158 to 10,833 times on a transfer orbit at e 0.72); a process pays 390 to 660 µs more once.
+Times in random order: 37 to 153 times (1,990 on the transfer orbit); a request outside the cached bracket integrates
+from the nearest checkpoint. Above e 0.05 (perigee 600 km, tesseral 31) a low orbit costs 77 to 88 times, against 2.6
+to 2.7 at e 0.02 to 0.05. Through `propagate` in TEME, 7 days at 300 s: a seeded record (no covariance) 1.2 to 2.2
+times; a fitted record writes a covariance line per state (613,304 bytes against SGP4's 185,840) and costs 4.9 to 27
+times. In GCRF and EME2000 a state costs what it costs in TEME (`test/output-frames.mjs`; the output's GCRF matrix comes
+from 6 h nodes, SPEC 16.4); with that matrix computed at each state, both records cost 31 to 47 µs per state there.
 
 
 ## SGP4XP status
@@ -364,6 +382,16 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   `spec-vectors/verify.mjs` refuse without it.
 - `test/rigor/run.mjs`: the rigor suite (`test/rigor/README.md`).
 - `test/bench.mjs`: memory per object and µs per object for a 60 s step, a 1-day jump and a 7-day jump.
+- `test/kernel-cost.mjs`: AP's CPU cost per state against SGP4's and SGP4XP's in the resident epoch store (one
+  `sdnap_epochs_set_at` a state, TEME, 7 days at 300 s and 60 s, cold calls at 1 and 7 days) on made-up orbits from
+  300 km to TESS-like, with `--diff` the largest position and velocity difference between two builds at every state
+  over 30 days (in time order, reversed and shuffled).
+- `test/kernel-patterns.mjs`: AP's cost against SGP4's by request pattern: many records stepped together and record by
+  record, the first state of a fresh record at 0, 1 and 7 days, ascending, random and alternating-ends order, e 0 to
+  0.3 in low orbit, and the public `propagate` in TEME and GCRF with and without a covariance.
+- `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
+  one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
+  not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
@@ -481,7 +509,9 @@ error, the set above 0.3 the nearer to the reference (SPEC 16.11).
 
 Above e 0.3 AP's drag is evaluated per perigee passage (SPEC 16.12): the mean of the passages before and after the
 rate's time, each node at the Earth angle and date of its own time on the pass, over the whole orbit, with the pass's
-short-period steps in the output so the osculating elements step at perigee where the mean elements ramp. At e 0.3 and
+short-period steps in the output so the osculating elements step at perigee where the mean elements ramp. From 0.6.6
+the output takes those rates from three evaluations per stretch of a revolution inside one grid interval (SPEC 16.12),
+not one at every state. At e 0.3 and
 below, and without drag, propagations are 0.4.15's byte for byte. Seeded at the truth's drag coefficient with the Sun
 and Moon off, AP's drag energy per pass over FFM's goes from 0.9840, 0.9907 and 0.9958 to 1.0026, 0.9991 and 0.9987
 (Molniya, GTO, 500 km perigee GTO), and the drag theory's own day-7 along-track error with the Sun and Moon on from 594 m,
