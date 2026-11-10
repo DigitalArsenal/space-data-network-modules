@@ -22,7 +22,7 @@ import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tes
 import {scratchRoot} from './scratch.mjs';
 import {spwFixtureRows} from './spw-constant.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000;
-const ffmPath=new URL('../../../ffm/dist/isomorphic/module.wasm',import.meta.url).pathname;
+import {ffmPath,checkTruth} from './ffm-truth.mjs';
 const scratch=path.join(scratchRoot,'heo');
 const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
 const iso=ms=>new Date(ms).toISOString().replace('Z','');
@@ -80,6 +80,7 @@ export async function runModelTruth(c){
  if(c.maneuvers)params.maneuvers=c.maneuvers.map(q=>({epochJD:jd.whole+jd.frac+q.days,epochTimeScale:'UTC',deltaV:q.deltaV,frame:q.frame}));
  const kernel=fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url));
  const truthOf=async(params)=>{
+  checkTruth();
   const key=createHash('sha256').update(fs.readFileSync(ffmPath)).update(JSON.stringify(params)).update(kernel).digest('hex');
   const file=path.join(scratch,key+'.json');
   if(fs.existsSync(file))return JSON.parse(fs.readFileSync(file));
@@ -101,7 +102,10 @@ export async function runModelTruth(c){
  // that set instead of fitting
  if(c.fitInput){m.destroy();await h.close?.();return{ephemeris:{portId:'ephemeris',typeRef:type('OEM'),payload:oem(lines.slice(lead,lead+NF),c.fitUseable!==false)},configuration:cfg,spaceWeather:{portId:'space_weather',typeRef:type('SPW'),payload:weather}};}
  // c.fitTailStates: that many states after the arc ride in the fit's $OEM after its USEABLE_STOP_TIME (held out)
- const fit=seed||c.omm?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:c.fitTailStates?oem(lines.slice(lead,lead+NF).concat(tailLines.slice(first,first+c.fitTailStates)),true,lines[lead+NF-1].EPOCH):oem(lines.slice(lead,lead+NF),c.fitUseable!==false)}]);
+ // c.fitNoise {meters, seed}: independent Gaussian noise of that size on each coordinate of the fit's states (a perturbed
+ // copy of the arc; a fixed seed), the scored truth unchanged
+ const noisy=ls=>{if(!c.fitNoise)return ls;let s=c.fitNoise.seed>>>0;const u=()=>((s=(Math.imul(s,1664525)+1013904223)>>>0)+.5)/4294967296;const g=()=>Math.sqrt(-2*Math.log(u()))*Math.cos(2*Math.PI*u());const k=c.fitNoise.meters/1000;return ls.map(L=>Object.assign(new Line(),{...L,X:L.X+k*g(),Y:L.Y+k*g(),Z:L.Z+k*g()}));};
+ const fit=seed||c.omm?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:c.fitTailStates?oem(lines.slice(lead,lead+NF).concat(tailLines.slice(first,first+c.fitTailStates)),true,lines[lead+NF-1].EPOCH):oem(noisy(lines.slice(lead,lead+NF)),c.fitUseable!==false)}]);
  const omm=c.omm??seed??fit.find(v=>v.portId==='elements').payload;
  const out=await fly(omm,lines.slice(first));
  const flown=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;

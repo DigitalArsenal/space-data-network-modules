@@ -11,6 +11,8 @@ import fs from 'node:fs';
 import * as fb from 'flatbuffers';
 import {SPW, SPWT} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 import {openModule} from './lib/module.mjs';
 import {spwFixtureRows} from './lib/spw-constant.mjs';
 import {rotate, jdOf, FRAME_PROBE} from './lib/frames.mjs';

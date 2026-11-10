@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
+// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
+// moves the scoring to the module's own GCRF).
 // Registration (2026-11-03, modules-sdn-ap-fit-bterm-700-1400-km-20261103): the fit's BTERM prior at 800-1400 km
 // (SPEC 12.8). Baseline the 0.4.11 release (git a0f33bc54), the module under test this build's dist.
 // Model truth: FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant weather on both sides (no SRP); AP
@@ -16,6 +19,8 @@
 //    broken arc, as Sentinel-6B's commissioning windows do at 1.9 to 2,626 km, and is printed but not scored);
 // 5. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

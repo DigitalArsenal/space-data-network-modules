@@ -7,6 +7,8 @@
 // alone; every evaluated pair is printed, and accuracy never selects a pair.
 // Known B fixed in both input sets; no SRP. Signed along-track errors within 25%.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 import fs from 'node:fs';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {buildDiagnostic,CLASS_PROBE} from './lib/ap-diagnostic.mjs';

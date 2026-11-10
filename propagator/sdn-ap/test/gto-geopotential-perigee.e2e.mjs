@@ -14,6 +14,8 @@
 //    orbits, and at most 0.1 m over 7 days on Galileo-, BeiDou- and Etalon-like orbits;
 // 5. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';

@@ -18,6 +18,8 @@
 //    the Sentinel-3-like object worse than under its own posterior, by the amount printed;
 // 4. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';

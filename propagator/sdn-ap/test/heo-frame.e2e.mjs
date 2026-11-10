@@ -1,10 +1,15 @@
 #!/usr/bin/env node
+// Its TESS replay's scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
+// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
+// moves the scoring to the module's own GCRF). Its HEO model-truth fixtures rotate with the module's own frames.
 // Registration: replay only AP6's seven already-read TESS 72-hour windows.
 // Exploratory acceptance: median paired AP-XP day-3 difference below 50 m
 // (two-sided within 50 m until 0.4.8; one-sided since AP sets keep full precision). Re-run all four registered FFM HEO fixtures from task 2: each
 // printed day 1/3/7 3D error unchanged within 1 m. Default XP digest bit-exact.
 // Unread-window confirmation belongs to a subsequent coordinator task.
 import assert from 'node:assert/strict';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 import fs from 'node:fs';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {tessWindows} from './lib/tess-frame-windows.mjs';

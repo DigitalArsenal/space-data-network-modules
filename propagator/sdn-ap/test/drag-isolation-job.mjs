@@ -11,6 +11,8 @@
 //                     both sides, 60 minute grid over job.forecastDays days after the fit
 import fs from 'node:fs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
+import {requireTruth} from './lib/ffm-truth.mjs';
+requireTruth('a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4'); // the model truth: FFM 2.2.1 (modules 9cb02c8e)
 const [out, jobText] = process.argv.slice(2);
 const job = JSON.parse(jobText);
 const FIXTURES = {

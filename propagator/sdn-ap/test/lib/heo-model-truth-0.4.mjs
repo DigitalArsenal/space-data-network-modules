@@ -26,7 +26,7 @@ import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tes
 import {scratchRoot} from './scratch.mjs';
 import {spwFixtureRows} from './spw-constant.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000;
-const ffmPath=new URL('../../../ffm/dist/isomorphic/module.wasm',import.meta.url).pathname;
+import {ffmPath,checkTruth} from './ffm-truth.mjs';
 const scratch=path.join(scratchRoot,'heo');
 const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
 const iso=ms=>new Date(ms).toISOString().replace('Z','');
@@ -79,6 +79,7 @@ export async function runModelTruth(c){
  if(c.maneuvers)params.maneuvers=c.maneuvers.map(q=>({epochJD:jd.whole+jd.frac+q.days,epochTimeScale:'UTC',deltaV:q.deltaV,frame:q.frame}));
  const kernel=fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url));
  const truthOf=async(params)=>{
+  checkTruth();
   const key=createHash('sha256').update(fs.readFileSync(ffmPath)).update(JSON.stringify(params)).update(kernel).digest('hex');
   const file=path.join(scratch,key+'.json');
   if(fs.existsSync(file))return JSON.parse(fs.readFileSync(file));
