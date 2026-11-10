@@ -132,7 +132,9 @@ let sink = 0;
 const read = () => { sink += new Float64Array(mem(), out, 1)[0]; };
 
 const build = await harness();
-const report = { build: wasmPath, rounds: ROUNDS, n: N, machine: `${os.cpus()[0]?.model} x${os.cpus().length}`, load: os.loadavg().map((v) => +v.toFixed(1)), orbits: {} };
+// the load average before and after: timings on a busy machine read high and noisy (trust the ratios of kinds that
+// alternate in one process, not the microseconds)
+const report = { build: wasmPath, rounds: ROUNDS, n: N, machine: `${os.cpus()[0]?.model} x${os.cpus().length}`, loadBefore: os.loadavg().map((v) => +v.toFixed(1)), orbits: {} };
 const kinds = ["sgp4", "carried", "theory"];
 for (const [name, o] of Object.entries(ORBITS)) {
   if (only && !only.includes(name)) continue;
@@ -188,10 +190,14 @@ for (const [name, o] of Object.entries(ORBITS)) {
       return cpu() - c0;
     }, Math.max(5, Math.round(ROUNDS / 3))), kinds, m * 1439);
   }
-  // the public call: 2,016 states (7 days at 300 s), TEME and GCRF
+  // the public call: 2,016 states (7 days at 300 s), TEME and GCRF; the fitted record writes the theory's covariance
+  // beside each state (SPEC 12, version 1 of SPEC 18), so the same record without COVARIANCE_DATA is timed beside it
+  rec.carriedNoCov = repackOcm(rec.carried, (t) => { Object.assign(t, { COVARIANCE_DATA: [], COV_PROPAGATION: null, COV_PARAMETERS: [], COV_UNITS: [],
+    COV_PARAMETER_KINDS: [], COV_REALISM: [], COV_REF_FRAME: null, COV_TYPE: null, COV_SIZE: 6 }); });
+  const publicKinds = ["sgp4", "carried", "carriedNoCov", "theory"];
   for (const [label, frame] of [["publicTEME", pcfOutputFrame.TEME], ["publicGCRF", pcfOutputFrame.GCRF]]) {
     const req = (k) => flight([rec[k]], { output: { START_TIME: isoAt(300), STOP_TIME: isoAt(7 * DAY), STEP_SECONDS: 300, FRAME: frame } });
-    row[label] = summary(await rounds(kinds, async (k) => {
+    row[label] = summary(await rounds(publicKinds, async (k) => {
       const c0 = cpu();
       const r = await d.invoke({ methodId: "propagate", inputs: req(k) });
       if (r.statusCode !== 0) throw new Error(`propagate ${k}: ${r.errorCode} ${r.errorMessage}`);
@@ -244,5 +250,6 @@ for (const k of kinds) {
 }
 console.log(JSON.stringify({ oncePerProcess: report.oncePerProcess }));
 report.sink = sink;
+report.loadAfter = os.loadavg().map((v) => +v.toFixed(1));
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, `${JSON.stringify(report, null, 1)}\n`);
 process.exit(0);

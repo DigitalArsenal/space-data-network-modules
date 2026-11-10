@@ -131,10 +131,10 @@ extern "C" int propagate(void) {
         double r[3], v[3], P[36];
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
         const double ts = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * 86400.0;
-        // SPEC 18: the carried forecast; GCRF and EME2000 straight from its axes when no covariance is turned with it
+        // SPEC 18: the carried forecast; GCRF and EME2000 straight from its axes (the exact matrix turns the covariance)
         bool in_gcrf = false;
         if (track.covers(ts)) {  // the covariance stays the theory's (version 1)
-          in_gcrf = g.axes != oem::Axes::Teme && !with_cov;
+          in_gcrf = g.axes != oem::Axes::Teme;
           if (!(in_gcrf ? carried::at_gcrf(track, ts, r, v) : carried::at(track, ts, r, v))) {
             std::snprintf(why, sizeof why, "No GCRF axes at %s (outside ERFA's calendar).", text);
             rc = oem::refuse("frame-failed", why);
@@ -180,7 +180,8 @@ extern "C" int propagate(void) {
           double rg[3] = {r[0], r[1], r[2]}, vg[3] = {v[0], v[1], v[2]};
           frames::apply(bias, rg, r);
           frames::apply(bias, vg, v);
-        } else if (g.axes != oem::Axes::Teme && !in_gcrf) {
+        }
+        if (g.axes != oem::Axes::Teme && (!in_gcrf || with_cov)) {
           double m[3][3];
           if (frames::gcrf_to_teme(tw[k], tf[k], m) < 0) {
             std::snprintf(why, sizeof why, "No GCRF axes at %s (outside ERFA's calendar).", text);
@@ -190,7 +191,9 @@ extern "C" int propagate(void) {
           double rg[3], vg[3];
           frames::apply_transpose(m, r, rg);
           frames::apply_transpose(m, v, vg);
-          if (g.axes == oem::Axes::Eme2000) {
+          if (in_gcrf) {
+            // the carried state is in its axes already; the matrix turns the theory's covariance only
+          } else if (g.axes == oem::Axes::Eme2000) {
             frames::apply(bias, rg, r);
             frames::apply(bias, vg, v);
           } else {

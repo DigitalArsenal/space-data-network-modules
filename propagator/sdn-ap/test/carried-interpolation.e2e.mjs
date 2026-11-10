@@ -54,7 +54,8 @@ for (const c of CLASSES) {
   // positions) through a second fit (the Hermite path) against the first record, velocity included
   const second = await hermiteRecord(h, c, rec.ocm, rec.span, c.step);
   const said = (o) => ocmOf(o).ORBIT_DETERMINATION.COMMENT.find((l) => l.startsWith("carried forecast:")) ?? "";
-  check(said(rec.ocm).includes("8-node Lagrange"), `${c.name}: the theory's states (velocities not their positions' derivative) were not built from positions: ${said(rec.ocm)}`);
+  // the theory's velocities miss their positions' derivative by 20 to 70 mm/s in low orbit and on eccentric orbits
+  if (c.a < 8000 || c.e > 0.5) check(said(rec.ocm).includes("8-node Lagrange"), `${c.name}: the theory's states (velocities not their positions' derivative) were not built from positions: ${said(rec.ocm)}`);
   if (c.name === "LEO 500 km") check(said(second.ocm).includes("4-node Hermite"), `${c.name}: the record's own states were not built with their velocities: ${said(second.ocm)}`);
   const row = { name: c.name, step: c.step, days: c.days, segments: segs.length, coefficients: segs[0].NUM_COEFFICIENTS,
     bytesPerDay: Math.round((rec.ocm.length - rec.plain.length) / c.days), numbersPerDay: Math.round(segs.reduce((a, s) => a + 3 * s.NUM_COEFFICIENTS, 0) / c.days) };

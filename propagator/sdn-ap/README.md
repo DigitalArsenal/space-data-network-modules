@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.5 (dist ca551504, bundle f0b8352a).
+Version 0.6.7 (dist 0af070af).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -54,6 +54,14 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   snapshot and a grid in one stateless call. Seven days of the Space-Track catalog (2026-10-07 .. 13, 228,129 records,
   13 frames of at most 4 MiB) load in 0.1 s into 30,931 series and 106,813 sets, 17.0 MiB (577 bytes a series) before
   any series is propagated.
+- Carried forecast (SPEC 18; `test/carried-*.e2e.mjs`): `fit` with `$PCF` OUTPUT.START_TIME and STOP_TIME writes the
+  ephemeris block's states between them into the `$OCM` as Chebyshev position segments (POLYNOMIAL_POSITION_RECORDS,
+  TRAJ_TYPE POLYNOMIAL_POS, in the set's TRAJ_REF_FRAME) within 1 cm, the theory set fitted as without them and the jump
+  to the theory at each end in the OD COMMENT; `propagate`, `load_epochs` with `sdnap_epochs_set_at` and
+  `sdnap_epochs_at`, and `propagate_epochs` fly the forecast inside its span and the theory elsewhere. Measured on
+  FFM's flights at 60 s: at most 5.1 mm from the forecast, 0.2 to 2.2 mm RMS over a day; 18 to 52 KB per object-day in
+  low orbit, 1 to 7 KB above it and on eccentric orbits (10 to 22 KB and 0.2 to 5 KB at a 10 cm bound). States at most
+  0.1 rad of arc apart (60 s in low orbit); `sdnap_carried_frame_error` gives the frame's bound.
 - Configuration (SDS 1.272.0, `$PCF` 1.0.6): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
   `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
   fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults

@@ -36,10 +36,12 @@ constexpr uint16_t kMaxCoefficients = 64;
 /// 4-node Hermite of FFM states holds 0.4 mm at 0.066 rad (60 s at 500 km) and 0.4 to 5 mm up to 0.092 rad (60 s at the
 /// perigee of a transfer orbit); at 0.11 to 0.13 rad (120 s in low orbit) it misses by 5 to 1,600 mm.
 constexpr double kMaxArcRad = 0.1;
-/// States whose velocities differ from their positions' 8-node Lagrange derivative by more than this times the interval
-/// to the next state (km: 2 mm, the position a Hermite would misplace by such a velocity) are built from their positions
-/// alone (FFM's agree to about 0.01 mm/s at 60 s in low orbit; SGP4's and SGP4XP's miss by 20 to 70 mm/s, measured).
-constexpr double kVelocityAgreementKm = 2.0e-6;
+/// States whose velocities differ from their positions' 8-node Lagrange derivative, times the interval to their
+/// neighbor, by more than this in RMS (km: 20 mm) are built from their positions alone. Measured: FFM's states 3 to 11
+/// mm (60 s in low orbit and on a transfer orbit, the Lagrange derivative's own error mostly), under 0.1 mm above;
+/// SGP4XP's 37 mm at geosynchronous altitude (120 s) and 1.3 m in low orbit (60 s): an analytic theory's velocity is not
+/// its position's derivative.
+constexpr double kVelocityAgreementKm = 2.0e-5;
 /// The weight of a segment's two end points in its least squares: consecutive segments share the end point, so they meet
 /// in position and velocity (to about the tolerance over this weight squared).
 constexpr double kJoinWeight = 1.0e4;
@@ -601,17 +603,20 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
     }
   }
   // velocities that are not the positions' derivative (an analytic theory's: SGP4 and SGP4XP by 20 to 70 mm/s in low
-  // orbit, measured) are not interpolated: the 8-node Lagrange of the positions takes over when a state's velocity is
-  // more than kVelocityAgreementKm over the interval to its neighbor from that interpolant's derivative
+  // orbit, measured) are not interpolated: the 8-node Lagrange of the positions takes over when the states' velocities
+  // differ from that interpolant's derivative, times the interval to the neighbor, by more than kVelocityAgreementKm RMS
   if (with_v && P.size() >= 8) {
-    for (size_t i = 3; i + 4 < P.size() && with_v; ++i) {  // the states the interpolant centers on
+    double ss = 0.0;
+    size_t count = 0;
+    for (size_t i = 3; i + 4 < P.size(); ++i) {  // the states the interpolant centers on
       double rr[3], vv[3];
-      const size_t j = std::min(i >= 3 ? i - 3 : 0, P.size() - 8);
-      lagrange8(P.data() + j, P[i].t, rr, vv);
+      lagrange8(P.data() + (i - 3), P[i].t, rr, vv);
       const double d = std::sqrt((vv[0] - P[i].v[0]) * (vv[0] - P[i].v[0]) + (vv[1] - P[i].v[1]) * (vv[1] - P[i].v[1]) + (vv[2] - P[i].v[2]) * (vv[2] - P[i].v[2]));
-      const double gap = std::fmax(i > 0 ? P[i].t - P[i - 1].t : 0.0, i + 1 < P.size() ? P[i + 1].t - P[i].t : 0.0);
-      if (!(d * gap <= kVelocityAgreementKm)) with_v = false;
+      const double gap = std::fmax(P[i].t - P[i - 1].t, P[i + 1].t - P[i].t);
+      ss += d * gap * d * gap;
+      ++count;
     }
+    if (count > 0 && !(std::sqrt(ss / static_cast<double>(count)) <= kVelocityAgreementKm)) with_v = false;
   }
   const size_t nodes_used = with_v ? 4 : 8;
   if (P.size() < nodes_used) return ocm::refuse("carry-not-covered", "A carried forecast takes at least 8 states of the block when their velocities are not their positions' derivative.");
