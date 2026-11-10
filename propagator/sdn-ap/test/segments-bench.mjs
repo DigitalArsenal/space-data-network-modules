@@ -17,6 +17,8 @@ const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ?
 const N = arg("n", 100000), BATCH = Math.min(N, arg("batch", N)), AP = process.argv.includes("--ap"), THREADS = arg("threads", 15), PER_ROW = arg("per-row", 4),
   COEF = arg("coef", 8), TOLM = arg("tol-m", 1), TOLMMS = arg("tol-mms", 1), STEPS = arg("steps", 200);
 const MU = 398600.4418, RE = 6378.137;
+// --rows i,j,...: print these rows' outcome (class, perigee, division, misses at the checks)
+const ROWS = process.argv.includes("--rows") ? process.argv[process.argv.indexOf("--rows") + 1].split(",").map(Number) : [];
 let seed = 20261110;
 const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 const rev = (a) => (Math.sqrt(MU / a ** 3) * 86400) / (2 * Math.PI);
@@ -67,7 +69,9 @@ for (let k = 0; k < N; k++) {
   const [d, len, built, wm, wv] = new Float64Array(mem(), info, 5);
   div[d] = (div[d] ?? 0) + 1;
   if (built > 0) { minCover = Math.min(minCover, len * built); segPerSecond += 1 / len; worstM = Math.max(worstM, wm); worstMms = Math.max(worstMms, wv); }
-  else if (st[k] === -10) noDivision.push({ cls: sets[k].cls, altitudeKm: Math.round(sets[k].a * (1 - sets[k].ecc) - RE), e: +sets[k].ecc.toFixed(3), finestMissM: +wm.toFixed(3), finestMissMms: +wv.toFixed(3) });
+  if (ROWS.includes(k)) console.log(JSON.stringify({ row: k, cls: sets[k].cls, perigeeKm: Math.round(sets[k].a * (1 - sets[k].ecc) - RE), e: +sets[k].ecc.toFixed(4), status: st[k],
+    division: d, missM: +wm.toFixed(4), missMms: +wv.toFixed(4) }));
+  if (built === 0 && st[k] === -10) noDivision.push({ row: k, cls: sets[k].cls, altitudeKm: Math.round(sets[k].a * (1 - sets[k].ecc) - RE), e: +sets[k].ecc.toFixed(3), finestMissM: +wm.toFixed(3), finestMissMms: +wv.toFixed(3) });
 }
 const sum = (f) => batches.reduce((a, b) => a + b[f], 0);
 console.log(JSON.stringify({ N, batch: BATCH, theory: AP ? "AP (tesseral 31, zonal 20)" : "SGP4XP", threads: m.threads, perRow: PER_ROW, coef: COEF, tolM: TOLM, tolMms: TOLMMS,
