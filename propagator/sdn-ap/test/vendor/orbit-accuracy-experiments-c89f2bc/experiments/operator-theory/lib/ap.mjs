@@ -1,4 +1,4 @@
-// AP: SGP4XP with parts replaced (propagator/sdn-ap SPEC 16). One arm's FORCES: the drag atmosphere unless `atmosphere` is false, and the gravity terms by degree.
+// AP: an advanced propagator that builds on the entire history of astrodynamics (propagator/sdn-ap SPEC 16). One arm's FORCES: the drag atmosphere unless `atmosphere` is false, and the gravity terms by degree.
 // Before a build is pinned, the module comes from a file: openAp(file) gives fit and propagate as xp-atmosphere-merit's openModules does. Exploratory only.
 import path from 'node:path';
 import { createRequire } from 'node:module';
