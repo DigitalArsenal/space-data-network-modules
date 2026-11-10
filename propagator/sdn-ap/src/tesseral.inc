@@ -4907,6 +4907,18 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
 }
 
 /// Adds a holder to a grid already held.
+/// A held grid's bytes shared among its holders (a grid of one exact key serves every set that asks for it).
+inline double wide_grid_share(const WideGrid* g) {
+  if (g == nullptr) return 0.0;
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  int refs = 1;
+  for (int k = 0; k < c.count; ++k)
+    if (c.slot[k].g == g) { refs = c.slot[k].refs > 0 ? c.slot[k].refs : 1; break; }
+  cache_unlock(&c.word);
+  return static_cast<double>(sizeof(WideGrid) + wide_grid_bytes(*g)) / refs;
+}
+
 inline void wide_grid_ref(WideGrid* g) {
   GridCache& c = grid_cache();
   cache_lock(&c.word);

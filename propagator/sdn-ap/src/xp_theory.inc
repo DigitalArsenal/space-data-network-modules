@@ -5955,10 +5955,12 @@ inline uint64_t xp_bytes(const XpSat& s) {
   if (!(c.shared_mask & 16)) b += u(c.zt);
   if (!(c.shared_mask & 32)) b += u(c.mdaily);
   if (!(c.shared_mask & 64)) b += u(c.sp_orig != nullptr ? c.sp_orig : c.sp) + u(c.sp_comb);
-  // its grid of the tesseral families (SPEC 16.11) and the node grids it holds: each one block (wide_grid_bytes)
-  if (c.wide != nullptr && c.wide_owned && c.wide_anchor == nullptr) b += sizeof(tess::WideGrid) + tess::wide_grid_bytes(*c.wide);
-  for (const tess::WideGrid* g : s.wide_node)
-    if (g != nullptr) b += sizeof(tess::WideGrid) + tess::wide_grid_bytes(*g);
+  // its grid of the tesseral families (SPEC 16.11) and the node grids it holds: each one block, shared among the sets
+  // holding it (a grid of one exact key serves them all)
+  double grids = 0.0;
+  if (c.wide != nullptr && c.wide_owned && c.wide_anchor == nullptr) grids += tess::wide_grid_share(c.wide);
+  for (const tess::WideGrid* g : s.wide_node) grids += tess::wide_grid_share(g);
+  b += static_cast<uint64_t>(grids);
   if (s.caches != nullptr) b += s.caches->bytes + sp_cache_bytes(s.caches->sp.cache);
   return b;
 }
