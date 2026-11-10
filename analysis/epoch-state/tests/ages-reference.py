@@ -6,10 +6,13 @@ Writes tests/ages-reference.json. Nothing here calls the module:
     set by sgp4init on the elements of the TLE lines of tests/vallado-verification.json), evaluated at the elapsed time in
     minutes. The improved mode (opsmode 'i') differs on 23599, a low-inclination deep-space set whose node passes 0: by 0.9 to 1.2 km
     at 0.5 to 3 days;
-  - TEME -> GCRF: pyerfa, GCRF->TEME = Rz(ee06a)*pnm06a at TT from UTC at the row's instant, velocity with the
-    central-difference frame rate (+/-600 s), as tests/vallado-verification.json's source states.
+  - TEME -> GCRF: pyerfa, the TEME of AIAA 2006-6753, GCRF->TEME = R3(GAST06 - GMST82) NPB06 (gst06, gmst82, pnm06a)
+    at TT from UTC and UT1 = UTC at the row's instant, velocity with the central-difference frame rate (+/-600 s), as
+    tests/vallado-verification.json's source states.
 
-Run: python3 tests/ages-reference.py (python-sgp4 2.26, pyerfa 2.0.1.5, numpy).
+Run: python3 tests/ages-reference.py (python-sgp4 2.27, pyerfa 2.0.1.5, numpy). Regenerated 2026-11-10 for the TEME of
+AIAA 2006-6753 (until then Rz(ee06a)*pnm06a, x axis by GMST06): the TEME rows are unchanged, the GCRF rows moved by up
+to 11.6 m.
 """
 import json
 import math
@@ -31,9 +34,10 @@ def gcrf_to_teme(dt):
     u1, u2 = erfa.dtf2d('UTC', dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second + dt.microsecond * 1e-6)
     a1, a2 = erfa.utctai(u1, u2)
     t1, t2 = erfa.taitt(a1, a2)
-    ee = erfa.ee06a(t1, t2)
-    rz = np.array([[math.cos(ee), math.sin(ee), 0], [-math.sin(ee), math.cos(ee), 0], [0, 0, 1]])
-    return rz @ erfa.pnm06a(t1, t2)
+    npb = erfa.pnm06a(t1, t2)
+    angle = erfa.gst06(u1, u2, t1, t2, npb) - erfa.gmst82(u1, u2)
+    rz = np.array([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+    return rz @ npb
 
 
 def teme_to_gcrf(dt, r_teme, v_teme):

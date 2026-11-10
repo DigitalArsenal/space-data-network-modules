@@ -79,8 +79,8 @@ target_compile_options(sgp4_sqlite3 PRIVATE -Wno-everything)
 
 # -------- ERFA and the foundation/frames axis engine --------------------------
 # TEME and GCRF output use the stack's one TEME definition: foundation/frames'
-# axis engine (gcrfToTeme: IAU 2006/2000A precession-nutation and equation of
-# the equinoxes) over the vendored ERFA (BSD-3, derived from IAU SOFA), as
+# axis engine (gcrfToTeme: the TEME of AIAA 2006-6753, R3(GAST06 - GMST82)
+# NPB06) over the vendored ERFA (BSD-3, derived from IAU SOFA), as
 # analysis/epoch-state does. ERFA's own test drivers and its autotools version
 # file are left out.
 set(SDN_MODULES_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")

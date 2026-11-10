@@ -3,9 +3,13 @@
 // Authority: analysis/epoch-state/tests/vallado-verification.json. Vallado's
 // SGP4-VER.TLE sets (near-Earth, Molniya, GEO; 1980-2006) with their t = 0
 // TEME rows from tcppver.out as shipped in python-sgp4 2.27, and the GCRF
-// state pyerfa 2.0.1.5 computes from each row: GCRF -> TEME = Rz(ee06a)
-// pnm06a at TT from UTC, velocity with the frame rate by a +/-600 s central
-// difference. Fixture units km and km/s, module units m and m/s, UTC epochs.
+// state pyerfa 2.0.1.5 computes from each row by the TEME of AIAA 2006-6753:
+// GCRF -> TEME = R3(GAST06 - GMST82) NPB06 at TT from UTC, UT1 = UTC,
+// velocity with the frame rate by a +/-600 s central difference
+// (tests/vallado-verification.py). Until 1.5.0 the fixture and the module took
+// TEME as Rz(ee06a) pnm06a (x axis by GMST06): the fixture's GCRF moved 0.11 to
+// 2.46 m (1980 to 2006 epochs), and a 1.4.2 module fails this test by that much.
+// Fixture units km and km/s, module units m and m/s, UTC epochs.
 //
 // Checks, per set, at the set's epoch:
 // - the GCRF answer against pyerfa's GCRF: within 2e-5 m and 2e-6 m/s, the

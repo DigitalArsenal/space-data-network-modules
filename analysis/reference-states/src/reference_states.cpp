@@ -708,9 +708,10 @@ std::string upper(std::string s) {
 
 std::string frame_name(const RFM* f) { return f ? upper(text(f->NAME())) : std::string(); }
 
+// TT, and UT1 = UTC: TEME (AIAA 2006-6753, R3(GAST06 - GMST82) NPB06) takes both sidereal angles of UT1.
 bool tt_of(const Instant& t, ax::Epoch* e) {
-  e->ut11 = 0.0;
-  e->ut12 = 0.0;
+  e->ut11 = t.utc1;
+  e->ut12 = t.utc2;
   return eraTaitt(t.tai1, t.tai2, &e->tt1, &e->tt2) == 0;
 }
 

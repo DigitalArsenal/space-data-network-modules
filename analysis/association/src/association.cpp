@@ -138,13 +138,14 @@ bool earthAt(const Utc& u, Earth& out) {
   return true;
 }
 
-// Celestial-side epoch (TT) without Earth orientation, for TEME and the bias.
+// Celestial-side epoch (TT) without Earth orientation, for TEME and the bias. UT1 = UTC: TEME (AIAA 2006-6753,
+// R3(GAST06 - GMST82) NPB06) takes both sidereal angles of UT1.
 bool ttEpoch(const Utc& u, ax::Epoch& epoch) {
   double tai1, tai2;
   NEED(eraUtctai(u.jd1, u.jd2, &tai1, &tai2) == 0 && eraTaitt(tai1, tai2, &epoch.tt1, &epoch.tt2) == 0,
        "An epoch is outside ERFA's leap-second table.");
-  epoch.ut11 = epoch.tt1;
-  epoch.ut12 = epoch.tt2;
+  epoch.ut11 = u.jd1;
+  epoch.ut12 = u.jd2;
   return true;
 }
 
