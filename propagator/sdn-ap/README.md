@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.9 (dist 3b3fe676).
+Version 0.6.10 (dist 4db94146).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -56,12 +56,15 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   any series is propagated.
 - Carried forecast (SPEC 18; `test/carried-*.e2e.mjs`): `fit` with `$PCF` OUTPUT.START_TIME and STOP_TIME writes the
   ephemeris block's states between them into the `$OCM` as Chebyshev position segments (POLYNOMIAL_POSITION_RECORDS,
-  TRAJ_TYPE POLYNOMIAL_POS, in the set's TRAJ_REF_FRAME) within 1 cm, the theory set fitted as without them and the jump
-  to the theory at each end in the OD COMMENT; `propagate`, `load_epochs` with `sdnap_epochs_set_at` and
-  `sdnap_epochs_at`, and `propagate_epochs` fly the forecast inside its span and the theory elsewhere. Measured on
-  FFM's flights at 60 s: at most 5.1 mm from the forecast, 0.2 to 2.2 mm RMS over a day; 18 to 52 KB per object-day in
-  low orbit, 1 to 7 KB above it and on eccentric orbits (10 to 22 KB and 0.2 to 5 KB at a 10 cm bound). States at most
-  0.1 rad of arc apart (60 s in low orbit); `sdnap_carried_frame_error` gives the frame's bound.
+  TRAJ_TYPE POLYNOMIAL_POS, in the set's TRAJ_REF_FRAME) held to 1 cm and 0.1 mm/s against the forecast, joints
+  continuous to the acceleration, with the record's statement of its span and source (TRAJECTORY_BLOCKS, METADATA
+  START_TIME and STOP_TIME); the theory is fitted to the forecast's last part (its arc ends at STOP_TIME) and the step to
+  it at each end is in the OD COMMENT. `propagate`, `load_epochs` with `sdnap_epochs_set_at` and `sdnap_epochs_at`, and
+  `propagate_epochs` fly the forecast inside its span and the theory elsewhere, every state labeled (a block per source,
+  `sdnap_epochs_source_at`); a record's segments are read when first flown. The referee's compression test on FFM
+  forecasts in 12 regimes up to e 0.9 (`test/carried-compression.e2e.mjs`): at most 5 mm and 0.051 mm/s off the build's
+  times, joints under 0.6 mm; 20 to 68 KB per object-day in low orbit, 0.3 to 10 KB above it and on eccentric orbits.
+  States at most 0.05 rad of arc apart (30 s in low orbit); `sdnap_carried_frame_error` gives the frame's bound.
 - Configuration (SDS 1.272.0, `$PCF` 1.0.6): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
   `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
   fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults

@@ -44,9 +44,11 @@ constexpr double kVelocityToleranceKmS = 5.0e-8;
 constexpr double kPositionsOnlyVelocityKmS = 1.0e-6;
 /// Densified points per state interval (the interpolant between consecutive states).
 constexpr int kDensify = 4;
-/// Coefficient counts fit tries; the record takes the one with the fewest bytes (measured winners: 48 and 64 in low
-/// orbit, 32 on eccentric orbits, 16 to 64 above).
+/// Coefficient counts fit tries, in ascending order; the record takes the fewest coefficients whose segments write at
+/// most kBytesSlack more bytes than the fewest bytes any count writes (a state's cost grows with its coefficients: in
+/// low orbit 64 write about 6 % fewer bytes than 32 at twice the arithmetic per state).
 constexpr int kCandidates[] = {16, 24, 32, 48, 64};
+constexpr double kBytesSlack = 0.10;
 /// Most coefficients a record may carry per axis (reader's bound).
 constexpr uint16_t kMaxCoefficients = 64;
 /// The most arc (rad, about the Earth's center) between consecutive states a forecast is built from (30 s in low orbit
@@ -74,7 +76,31 @@ constexpr double kRateStepDays = 60.0 / 86400.0;
 /// orthonormal (one Newton step of the polar decomposition, M (3 I - M^T M) / 2), so M^T inverts M exactly wherever the
 /// forecast is turned back and forth; and dM/dt per second when `md` is given (the central difference over +-60 s).
 /// False outside ERFA's calendar.
+inline bool frame_at_uncached(double w, double f, double* M, double* md);
 inline bool frame_at(double w, double f, double* M, double* md) {
+  // the last matrix kept per thread: a store stepping many objects to one instant (sdnap_epochs_at) asks it of each
+  struct Last {
+    double w = std::numeric_limits<double>::quiet_NaN(), f = 0.0;
+    bool rate = false;
+    double M[9], md[9];
+  };
+  static thread_local Last last;
+  if (w == last.w && f == last.f && (md == nullptr || last.rate)) {
+    std::memcpy(M, last.M, sizeof last.M);
+    if (md != nullptr) std::memcpy(md, last.md, sizeof last.md);
+    return true;
+  }
+  const bool ok = frame_at_uncached(w, f, M, md);
+  if (ok) {
+    last.w = w;
+    last.f = f;
+    last.rate = md != nullptr;
+    std::memcpy(last.M, M, sizeof last.M);
+    if (md != nullptr) std::memcpy(last.md, md, sizeof last.md);
+  }
+  return ok;
+}
+inline bool frame_at_uncached(double w, double f, double* M, double* md) {
   double m[3][3];
   if (frames::gcrf_to_teme_output(w, f, m) < 0) return false;
   const double* c = &m[0][0];
@@ -333,23 +359,25 @@ inline void series(const Track& tr, const Segment& s, double t, double p[3], dou
 }
 
 /// The carried state at t (seconds from the set's epoch, inside the span) in TEME of date (km, km/s): 0, or the
-/// segment's refusal (SegmentState < 0; kFrame outside ERFA's calendar).
-inline int32_t at(Track& tr, double t, double r[3], double v[3]) {
+/// segment's refusal (SegmentState < 0; kFrame outside ERFA's calendar). `jd`, the split Julian date of t when the
+/// caller has it, times the frame (a store stepping many objects to one instant computes M once: frame_at keeps it).
+inline int32_t at(Track& tr, double t, double r[3], double v[3], const double* jd = nullptr) {
   const int64_t k = segment_at(tr, t);
   if (k < 0) return static_cast<int32_t>(k);
   double p[3], pd[3], M[9];
   series(tr, tr.segs[static_cast<size_t>(k)], t, p, pd);
+  const double fw = jd != nullptr ? jd[0] : tr.w, ff = jd != nullptr ? jd[1] : tr.f + t / 86400.0;
   if (tr.frame == 2) {
     double g[3], gv[3];
     mul_t(tr.q0, p, g);
     mul_t(tr.q0, pd, gv);
-    if (!frame_at(tr.w, tr.f + t / 86400.0, M, nullptr)) return kFrame;
+    if (!frame_at(fw, ff, M, nullptr)) return kFrame;
     mul(M, g, r);
     mul(M, gv, v);
     return 0;
   }
   double md[9], u[3], w[3];
-  if (!frame_at(tr.w, tr.f + t / 86400.0, M, md)) return kFrame;
+  if (!frame_at(fw, ff, M, md)) return kFrame;
   mul_t(M, p, u);
   mul(md, u, w);
   for (int a = 0; a < 3; ++a) {
@@ -843,21 +871,32 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
     while (ip + 2 < P.size() && P[ip + 1].t <= tm) ++ip;
     E[i] = interpolated(ip, tm);
   }
-  // the coefficient count with the fewest bytes
-  std::vector<Fitted> best, trial;
-  size_t best_bytes = SIZE_MAX;
-  int best_n = 0;
+  // the fewest coefficients within kBytesSlack of the fewest bytes (a state costs in proportion to its coefficients)
+  std::vector<std::vector<Fitted>> tried;
+  std::vector<size_t> tried_bytes;
+  std::vector<int> tried_n;
+  size_t fewest = SIZE_MAX;
   for (const int nc : kCandidates) {
     if (b - a + 1 < static_cast<size_t>(nc)) continue;
+    std::vector<Fitted> trial;
     if (!segments(D, E, at_time, a, b, nc, with_v ? kVelocityToleranceKmS : kPositionsOnlyVelocityKmS, w, f, trial)) continue;
     size_t bytes = 0;
     for (const Fitted& s : trial) bytes += record_bytes(s.n);
-    if (bytes < best_bytes) {
-      best_bytes = bytes;
-      best_n = nc;
-      best.swap(trial);
-    }
+    fewest = std::min(fewest, bytes);
+    tried.push_back(std::move(trial));
+    tried_bytes.push_back(bytes);
+    tried_n.push_back(nc);
   }
+  std::vector<Fitted> best;
+  size_t best_bytes = 0;
+  int best_n = 0;
+  for (size_t q = 0; q < tried.size(); ++q)
+    if (static_cast<double>(tried_bytes[q]) <= (1.0 + kBytesSlack) * static_cast<double>(fewest)) {
+      best.swap(tried[q]);
+      best_bytes = tried_bytes[q];
+      best_n = tried_n[q];
+      break;
+    }
   if (best.empty())
     return ocm::refuse("carry-tolerance", with_v ? "No Chebyshev segments of 16 to 64 coefficients hold the forecast within 1 cm and 0.05 mm/s of its states' interpolant: the states are too sparse or the forecast is not smooth (a maneuver)."
                                                  : "No Chebyshev segments of 16 to 64 coefficients hold the forecast within 1 cm and 1 mm/s of its positions' interpolant: the states are too sparse or the forecast is not smooth (a maneuver).");
@@ -924,10 +963,16 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
     if (!theory || xpt::xp_propagate(*xs, t / 60.0, rm, vm) != kPropOk) {
       std::snprintf(line, sizeof line, "carried forecast %s %s: the theory does not reach it", end == 0 ? "start" : "stop", end == 0 ? start_text : stop_text);
     } else {
-      for (int k = 0; k < 3; ++k) d[k] = rm[k] - rc_[k];
+      double dv[3];
+      for (int k = 0; k < 3; ++k) {
+        d[k] = rm[k] - rc_[k];
+        dv[k] = vm[k] - vc[k];
+      }
       cov::to_uvw(rc_, vc, d, u);
-      std::snprintf(line, sizeof line, "carried forecast %s %s: theory minus forecast %.6f km (radial %.6f, in-track %.6f, cross-track %.6f km)",
-                    end == 0 ? "start" : "stop", end == 0 ? start_text : stop_text, std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]), u[0], u[1], u[2]);
+      std::snprintf(line, sizeof line,
+                    "carried forecast %s %s: theory minus forecast %.6f km (radial %.6f, in-track %.6f, cross-track %.6f km), velocity %.6f mm/s",
+                    end == 0 ? "start" : "stop", end == 0 ? start_text : stop_text, std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]), u[0], u[1], u[2],
+                    1.0e6 * std::sqrt(dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2]));
     }
     comment.push_back(line);
   }

@@ -5,7 +5,7 @@
 // - the span is closed: at its first and last instants the record returns the forecast (within 1 cm of it), a
 //   millisecond outside them the theory, bit for bit the plain fit's state there;
 // - fit's COMMENT states the jump at each end, theory minus forecast, and it is the module's own flights' difference
-//   there to 1 m (the text rounds to the meter's thousandth: 1e-6 km);
+//   there to 1 mm (the text rounds to 1e-6 km), and the velocity step, their velocities' difference to 0.002 mm/s;
 // - at every join of two segments the state is continuous: over +-1 ms the position moves by the velocity times 2 ms
 //   to within 0.1 mm (the segments share their end points);
 // - a record carrying COVARIANCE_DATA writes the theory's covariance beside the forecast's states, the same lines as
@@ -66,6 +66,9 @@ const span = rec.span;
     const m = /theory minus forecast ([\d.]+) km \(radial (-?[\d.]+), in-track (-?[\d.]+), cross-track (-?[\d.]+) km\)/.exec(line);
     check(m && Math.abs(Number(m[1]) - dist(plain[k].r, carried[k].r)) < 1.5e-6, `the ${which} jump stated (${line}) is not the flights' difference ${dist(plain[k].r, carried[k].r)} km`);
     if (m) check(Math.abs(Math.hypot(Number(m[2]), Number(m[3]), Number(m[4])) - Number(m[1])) < 3e-6, `the ${which} jump's components do not make its size: ${line}`);
+    // and the velocity step (mm/s), the flights' velocity difference there (TEME)
+    const mv = /, velocity ([\d.]+) mm\/s$/.exec(line);
+    check(mv && Math.abs(Number(mv[1]) - dist(plain[k].v, carried[k].v) * 1e6) < 2e-3, `the ${which} velocity step stated (${line}) is not the flights' ${dist(plain[k].v, carried[k].v) * 1e6} mm/s`);
   }
 }
 

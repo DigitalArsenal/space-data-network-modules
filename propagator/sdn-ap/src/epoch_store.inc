@@ -21,8 +21,9 @@
 //   (d = x_b - x_a; the smoothstep weight for both shapes), for sets that carry COVARIANCE (SPEC 12).
 // - Calls: the resident exports sdnap_epochs_* over the loaded store, and `propagate_epochs`, the same on a grid for a
 //   snapshot given with the call (stateless).
-// - A set whose record carries a forecast (SPEC 18) returns it inside the forecast's span; selection and blend are
-//   unchanged.
+// - A set whose record carries a forecast (SPEC 18) returns it inside the forecast's span: selection first takes a set
+//   whose span holds t (the latest by epoch), unblended; elsewhere selection and blend as above. Sets of one epoch with
+//   different spans (records split by day) are both kept. Every state's source is labeled (SPEC 18.8).
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -446,7 +447,7 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
     const double ts = jd != nullptr ? ((jd[0] - row.epoch_jd_whole) + (jd[1] - row.epoch_jd_frac)) * 86400.0 : (t - st.entries[s.first + k].epoch) * 60.0;
     if (tr->covers(ts)) {
       // a segment read now that does not verify or falls short of the time: the input's fault (malformed record)
-      if (const int32_t e = carried::at(*tr, ts, r, v)) return e == carried::kFrame ? kPropRefused : ORBPRO_PROP_BAD_INPUT;
+      if (const int32_t e = carried::at(*tr, ts, r, v, jd)) return e == carried::kFrame ? kPropRefused : ORBPRO_PROP_BAD_INPUT;
       if (P != nullptr && st.entries[s.first + k].cov != nullptr) {
         Slot& q = slot_of(st, s, k, true);
         if (q.error == 0 && q.cp != nullptr) {

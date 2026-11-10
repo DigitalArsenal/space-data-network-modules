@@ -138,7 +138,8 @@ extern "C" int propagate(void) {
         source[k] = track.covers(ts);
         if (source[k]) {  // the covariance stays the theory's
           in_gcrf = g.axes != oem::Axes::Teme;
-          if (const int32_t e = in_gcrf ? carried::at_gcrf(track, ts, r, v) : carried::at(track, ts, r, v)) {
+          const double jd[2] = {tw[k], tf[k]};
+          if (const int32_t e = in_gcrf ? carried::at_gcrf(track, ts, r, v) : carried::at(track, ts, r, v, jd)) {
             // a segment read as the time first needs it: refused by name as at load
             std::snprintf(why, sizeof why, "%s (%s)", carried::refusal_text(e), text);
             rc = oem::refuse(carried::refusal_name(e), why);

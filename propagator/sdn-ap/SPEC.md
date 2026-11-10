@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.9 (dist 3b3fe676).
+Version 0.6.10 (dist 4db94146).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2706,7 +2706,7 @@ trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low
 
 An `$OCM` element set may carry a numerical forecast of its object (`src/carried.inc`). Inside the forecast's span flight
 returns the forecast; everywhere else the theory, exactly as without it: a record without one flies as 0.6.8 (the build
-before version 2 of the carried forecast) flies it, bit for bit (`test/carried-identity.e2e.mjs`). Version 2 (0.6.9)
+before version 2 of the carried forecast) flies it, bit for bit (`test/carried-identity.e2e.mjs`). Version 2 (0.6.10)
 holds the record to 1 cm and 0.1 mm/s against the forecast at any time (18.4, 18.9), reads a fresh record's forecast
 only where it is flown (18.5), states the forecast's source in the record (18.6), fits the theory to the forecast's last
 part (18.7) and labels every output state (18.8).
@@ -2788,45 +2788,161 @@ states and up to four beyond each end:
    0.05 mm/s (the Hermite path); 1 mm/s against the Lagrange's derivative (the positions-only path: that derivative
    misses FFM states 30 s apart by up to 0.04 mm/s and steps by up to 0.12 mm/s where two windows meet; an analytic
    theory's positions hold no tighter). EPOCH_MID the window's middle at the text's microsecond. n is 16, 24, 32, 48 or
-   64, the one with the fewest bytes (112 + 24 n a segment). None holds: carry-tolerance (states too sparse, or a
-   forecast that is not smooth: a maneuver).
+   64: the fewest whose segments write at most 10 % more bytes (112 + 24 n a segment) than the fewest any n writes (a
+   state's arithmetic grows with n; in low orbit 64 write about 6 % fewer bytes than 32). None holds: carry-tolerance
+   (states too sparse, or a forecast that is not smooth: a maneuver).
 6. `ORBIT_DETERMINATION.COMMENT`: the segments, the span, the bytes, the largest position and velocity residuals and the
    interpolant; at the span's start and stop, the theory minus the forecast (km, and radial, in-track and cross-track in
    the forecast's UVW axes): the jump flight makes there.
 
-### 18.5 Bound and size
+### 18.5 Loading and its cost
 
-The bound is 1 cm in position everywhere in the span: 5 mm against the densified points, the interpolant's own error
-(0.4 mm at 60 s in low orbit) and the frame (18.2). Measured on FFM's flights (70 x 70, Sun, Moon, solar radiation
-pressure, drag in low orbit; states at 60 s, the error at every 10 s between them, `test/carried-interpolation.e2e.mjs`
-on the module's own flights): largest error and D, the RMS over a lead day of the distance from the forecast:
+A record is verified once (`ocm::view`: the `$OCM` verifier checks the vector of segments, not each segment's table,
+build.mjs), its record-level fields and its first and last segments read (the span), and nothing else of its forecast.
+The store copies a kept record's bytes once (a record dropped by CACHE_DAYS, MAX_SETS_PER_OBJECT or THEORIES is never
+copied) and keeps a view; a state reads its segment when it first needs it (its table by its own verifier, EPOCH_MID's
+text, the coefficients copied out), and the segment stays read. A segment is found as 18.2 says: the one last flown or
+its successor first (in order, the next state's), else interpolation search over the start times (a fresh record's
+first state reads about log2 of its segment count). Measured (provisional, ratios from interleaved runs on a loaded
+machine, load average 60 to 90 on 28 cores):
 
-| Orbit | Largest (mm) | D (mm) | Bytes per object-day | Numbers per object-day | Bytes per object-day at 10 cm |
-| --- | --: | --: | --: | --: | --: |
-| Low, 300 km | 5.1 | 2.1 to 2.2 | 51,552 | 5,616 | 22,000 |
-| Low, 500 km | 4.8 | 2.1 to 2.2 | 38,852 | 4,224 | 18,040 |
-| Low, 830 km | 4.7 | 2.2 | 26,584 | 2,880 | 13,640 |
-| Low, 1,336 km | 4.7 | 2.1 to 2.2 | 18,264 | 1,968 | 10,560 |
-| MEO, 26,560 km | 2.4 | 0.3 to 0.8 | 2,276 | 192 | 1,032 |
-| Geosynchronous | 2.1 | 0.2 to 0.3 | 1,080 | 96 | 587 |
-| Inclined geosynchronous, e 0.075 | 1.7 | 0.5 to 0.9 | 1,117 | 96 | 880 |
-| Transfer, e 0.72 | 4.8 | 0.8 to 0.9 | 7,144 | 720 | 5,160 |
-| Molniya, e 0.74 | 3.2 | 0.7 | 5,564 | 576 | 4,816 |
-| THEMIS-like, e 0.82, 22.9 h | 4.1 | 0.6 to 0.7 | 4,000 | 416 | 3,211 |
-| TESS-like, 13.7 d | 2.3 | 0.03 to 1.9 | 232 | 21 | 189 |
+- Load of a 304 KB record (version 1's 8 days at 500 km) against version 1's build: 294 against 672 us a record (paired
+  rounds, median); the host's copy of the same bytes into the module and the call alone (a payload of that size refused
+  at its first bytes) 230 to 440 us; the store's own copy of them 14 us. The load is now the host's copy, about 0.7 to
+  1.0 us a KB here, and the record's other fields (8 to 25 us, as without a forecast).
+- W1 to W3 on 8-day records (FFM forecasts, 200 objects; carried over SGP4, median [95 % interval]): 500 km 0.72
+  [0.40, 1.14], 2.2 [0.72, 8.9], 1.47 [1.27, 2.18]; 830 km 0.74 [0.61, 1.42], 1.4 [0.57, 2.7], 1.43 [1.03, 1.99]; e 0.1
+  0.96 [0.58, 1.70], 1.9 [0.91, 6.7], 1.57 [1.33, 1.69]; MEO 0.87, 0.96, 0.75 and geosynchronous 0.58, 0.65, 0.46 (W2
+  includes the fresh record's load). Taking the fewest coefficients within 10 % of the fewest bytes (18.4) and the
+  frame once per instant moved W3 in low orbit from 2.3 to 1.4 to 1.6.
+- W4, N fresh records one state each a day from the span's start, by span (1 cm bound; record bytes, carried us a
+  record, SGP4 us a record, ratio median [95 % interval]):
 
-(The 10 cm column is the same algorithm at a 100 mm point tolerance, its largest error 9.4 cm, run outside the module.)
-The record is 1 to 3 KB without the forecast. The jump at the span's stop (theory minus forecast; AP with zonal 20,
-tesseral 31 and NRLMSISE-00 on the record's rows, fitted to the forecast's first 24 h): after 2 to 3 days 2 to 36 m
-above low orbit and at 830 to 1,336 km, 1.6 km at 500 km and 15.9 km at 300 km (drag), 0.16 to 1.7 km on the eccentric
-orbits; after 14 days 30 km for TESS; after 8 days 36 to 65 m at MEO and geosynchronous, 0.9 km at 830 km, 63 km at
-500 km, 7.1 km at e 0.1 and 85 km on the transfer orbit.
+| Orbit | 1 day | 2 days | 4 days | 8 days |
+| --- | --- | --- | --- | --- |
+| Low, 500 km | 55 KB; 102 / 7.7 us; 14.5 [1.4, 62] | 106 KB; 180 / 8.7; 24.1 [0.4, 88] | 206 KB; 302 / 10.3; 29.3 [2.0, 130] | 406 KB; 368 / 7.0; 43.6 [5.1, 200] |
+| Low, 830 km | 38 KB; 35 / 3.3; 8.5 [1.7, 88] | 69 KB; 62 / 7.7; 14.4 [1.2, 86] | 131 KB; 169 / 6.9; 16.1 [3.9, 144] | 255 KB; 260 / 12.5; 22.4 [6.7, 155] |
+| MEO | 7.1 KB; 11.8 / 2.7; 3.9 [1.0, 26] | 8.5 KB; 9.4 / 2.0; 4.2 [1.2, 8.1] | 9.6 KB; 10.9 / 2.1; 4.9 [1.4, 41] | 13.5 KB; 12.6 / 2.0; 5.9 [0.7, 41] |
+| Geosynchronous | 7.2 KB; 7.6 / 6.8; 0.99 [0.60, 2.7] | 7.5 KB; 7.5 / 7.0; 1.00 [0.50, 1.9] | 8.5 KB; 8.2 / 7.5; 1.09 [0.49, 2.3] | 11.2 KB; 11.6 / 7.2; 1.38 [0.59, 4.0] |
+| Low, e 0.1 | 28 KB; 58 / 3.8; 6.4 [1.0, 76] | 52 KB; 72 / 12.1; 6.2 [2.0, 42] | 97 KB; 130 / 8.6; 20.4 [0.7, 143] | 185 KB; 232 / 4.8; 48 [2.4, 146] |
 
-### 18.6 Version 1 does not
+(Under this load SGP4's own W4 swings from 2 to 12 us a record; the intervals are as wide.) A fresh record passes W4
+(under 2) only where SGP4's own W4 is as dear as the record's floor: at geosynchronous altitude (SGP4's deep-space
+initialization, 7 us). The floor is about 7.5 us a record at 7 KB, most of it the theory's weather rows (5.5 KB, 18.9);
+MEO records stay 4 to 6 times SGP4's; a low-orbit record carries 22 to 68 KB a day (the velocity bound, 18.9) and fails
+W4 at any span by its copy alone. Records split by day (fit with OUTPUT for each day; the store keeps one
+object's day records side by side and flies the one whose span holds the time, 18.3) bring a fresh state's bytes to
+one day's; the further cut, to the segment a state needs (about 1 KB), is the server's (a record and the segment
+ranges it serves), not a module call.
 
-Blend at the span's ends (the jump is stated, 18.4); carry the forecast's covariance (a later version writes it as
-`COVARIANCE_BLOCKS`, one `OCMCovarianceBlock` with `COV_BASIS` PREDICTED over the span, and flies it inside the span);
-let a `$PCF` set the bound (fixed at 1 cm); fly the forecast in `sdnap_covariance_at`, `events` or `maneuver`.
+### 18.6 What the record states
+
+Existing `$OCM` fields, written by fit (`test/carried-compression.e2e.mjs` checks them):
+
+| What | Where |
+| --- | --- |
+| The span's start and end | `METADATA` START_TIME and STOP_TIME; `TRAJECTORY_BLOCKS[0]` USEABLE_START_TIME and USEABLE_STOP_TIME |
+| That it is a forecast | `TRAJ_BASIS` PREDICTED; `TRAJECTORY_BLOCKS[0]` TRAJ_ID "CARRIED FORECAST", TRAJ_BASIS "PREDICTED", TRAJ_TYPE "POLYNOMIAL_POS", INTERPOLATION "CHEBYSHEV" and its degree, TRAJ_REF_FRAME (and TRAJ_FRAME_EPOCH), TRAJ_UNITS "km" |
+| The initial state's source | `TRAJECTORY_BLOCKS[0]` TRAJ_BASIS_ID (the `$PVN` SOURCE_ID given beside the block), PROPAGATOR (its PRODUCER), and in its COMMENT the ephemeris block's ORBIT_DETERMINATION (OD_METHOD, OD_ARC_START, OD_ARC_STOP, OD_OBSERVATIONS_USED); `PROVENANCE` the `$PVN` itself |
+| The forecast's force model and weather date | `TRAJECTORY_BLOCKS[0]` COMMENT: the ephemeris block's own COMMENT, as its producer wrote it ("not stated by the ephemeris block" when it has none) |
+| The covariance inside the span | `TRAJECTORY_BLOCKS[0]` COMMENT: "the theory's (COVARIANCE_DATA, SPEC 12), no realism claim for the forecast" |
+| The step to the theory at each end | `ORBIT_DETERMINATION.COMMENT` (18.4): position (and RTN) and velocity |
+
+Not typed today; the fields the record would need (a change to the standards package):
+
+1. `OCMTrajectoryBlock.PERTURBATIONS: Perturbations`: the forecast's own force model (gravity degree and order, third
+   bodies, radiation pressure, drag model) and its weather (`SW_DATA_SOURCE`, `SW_DATA_EPOCH`: the weather date), beside
+   the record's `PERTURBATIONS`, which are the theory's. On the input side the same table on
+   `ephemerisDataBlock` (`OEM`), so the producer of a forecast states it typed and fit copies it.
+2. `OCMTrajectoryBlock.ORBIT_DETERMINATION: OrbitDetermination`: the initial state's determination (method, arc,
+   observations, residuals), beside the record's `ORBIT_DETERMINATION`, which is the theory's fit.
+3. `OCMTrajectoryBlock.COV_ID: string` naming the `OCMCovarianceBlock` that holds inside the span (today the theory's
+   `COVARIANCE_DATA`; a forecast's own covariance would be a `COVARIANCE_BLOCKS` entry with `COV_BASIS` PREDICTED).
+4. Typed steps at the span's ends: `OCMTrajectoryBlock` START_STEP_KM, STOP_STEP_KM, START_STEP_KM_S, STOP_STEP_KM_S
+   (theory minus forecast), today COMMENT text.
+5. `PPEPositionRecord.EPOCH_MID_SECONDS: double` (seconds from the record's `EPOCH_TZERO` or the set's epoch) beside the
+   required EPOCH_MID text: a segment's time without parsing text (18.5 parses one text per segment read).
+6. `ephemerisDataLine.SOURCE` (an enum: THEORY, CARRIED, BLEND) or `ephemerisDataBlock.TRAJ_BASIS`: the label of 18.8,
+   today the block's COMMENT.
+7. `PCFOutput` CARRY_POSITION_TOLERANCE_M and CARRY_VELOCITY_TOLERANCE_MM_S: the bound of 18.4 set by the caller,
+   today fixed (5 mm and 0.05 mm/s at the checked points; the record held to 1 cm and 0.1 mm/s).
+
+### 18.7 The span's end
+
+The theory is fitted to the forecast's last part, so that it takes over where the forecast stops: with neither the
+block's USEABLE_STOP_TIME nor FIT.HOLDOUT_HOURS stated, fit's arc ends at OUTPUT.STOP_TIME and the block's later states
+are held out (scored in FIT_STATISTICS.HELD_OUT_*: the theory against the forecast continued). The arc's length is
+fit's documented rule (`src/fit_oem.inc`, DESIGN 2e.3: 48 h, 24 h above e 0.5, extended while the drag holds; 12.8:
+the longest arc up to 7 days above e 0.3 with the perigee in the drag; FIT.DEFAULT_SPAN_HOURS sets it), ending at the
+stop; the set's epoch is the arc's first state.
+The record carries the weather rows from the day before the span's start when that is earlier than the arc's (the
+theory's covariance flies over the whole span). Measured (AP: zonal 20, tesseral 31, NRLMSISE-00 on the forecast's
+constant weather; FFM forecasts of 9 days at 30 s, 70 x 70, Sun, Moon, radiation pressure, drag; the first 2 days
+carried; 8 objects per regime, nodes and phases spread; km, median / 95th percentile; `test/carried-span-end.e2e.mjs`
+checks the rule end to end):
+
+| Regime | Step at the stop | Velocity step (mm/s) | 1 day past | 3 days past | 7 days past | Step, theory fitted to the first 24 h |
+| --- | --: | --: | --: | --: | --: | --: |
+| Low, 500 km | 0.041 / 0.066 | 44.5 / 62.3 | 0.27 / 0.32 | 1.04 / 1.39 | 4.39 / 6.03 | 0.096 / 0.238 |
+| Low, 830 km | 0.018 / 0.025 | 14.6 / 20.1 | 0.046 / 0.079 | 0.20 / 0.28 | 0.88 / 1.23 | 0.073 / 0.168 |
+| MEO, 26,560 km | 0.0047 / 0.0077 | 0.38 / 0.64 | 0.0046 / 0.0077 | 0.0073 / 0.0103 | 0.014 / 0.027 | 0.0057 / 0.0091 |
+| Geosynchronous | 0.0020 / 0.0027 | 0.14 / 0.16 | 0.0045 / 0.0089 | 0.015 / 0.031 | 0.057 / 0.121 | 0.0046 / 0.0063 |
+| Low, e 0.1 | 0.016 / 0.041 | 10.8 / 27.1 | 0.11 / 0.23 | 0.31 / 0.96 | 1.18 / 3.54 | 0.089 / 0.149 |
+| Transfer, e 0.72 | 0.029 / 0.062 | 4.6 / 9.3 | 0.11 / 0.25 | 0.88 / 1.54 | 1.15 / 1.43 | 0.180 / 0.356 |
+
+Arcs of 6, 12 and 24 h ending at the stop (FIT.DEFAULT_SPAN_HOURS) make the step a little smaller in low orbit (0.023
+to 0.026 km median at 500 km) and the error past it larger (10.8 to 92 km at 7 days at 500 km, against 4.4); 48 h is
+the best or within its spread past the stop in every regime: the rule stands. "Past the stop" is against the forecast
+continued, the same force model: the forecast's own error against the truth past its span is not in these figures.
+
+### 18.8 Labels
+
+Every output state is labeled with its source. `propagate`: a record carrying a forecast writes one `$OEM` block per
+run of consecutive states from one source, its COMMENT "CARRIED FORECAST: ..." or "THEORY: ..."; a record without one
+writes one block without a COMMENT, as before. `propagate_epochs`: the same per series, and "BLEND: ..." for states
+blended from a carried state and a theory state. The store: `sdnap_epochs_source_at(jd_whole, jd_frac, first, count,
+int32_t* out)`, one code per series at that instant: 0 the theory, 1 a carried forecast, 2 a blend of the two
+(`test/carried-edges.e2e.mjs`, `test/carried-epochs.e2e.mjs`).
+
+### 18.9 Bound and size
+
+The record is held to 1 cm and 0.1 mm/s against the forecast at any time inside the span: 5 mm and 0.05 mm/s at the
+checked points (18.4), the input's interpolant (0.002 mm/s at 30 s) and the series between checked points the rest.
+The referee's compression test (ADDENDUM M2.1; `test/carried-compression.e2e.mjs`): FFM forecasts (70 x 70, Sun and
+Moon from DE440, radiation pressure, drag; GCRF every 10 s), the record built from the states every 30 s and flown at
+every other 10-s time; at the uniform 10-s grid, the second difference of the record's position less the forecast's
+at every triplet holding a joint (the referee's `09-output-continuity` residual less the forecast's own, which is the
+perturbing acceleration times h squared: 1.3 to 2.4 m in low orbit):
+
+| Regime | Span (days) | Segments of n | Bytes per object-day | Largest (mm) | Largest (mm/s) | Joints | Largest at a joint (mm) | The forecast's own residual there (m) |
+| --- | --: | --: | --: | --: | --: | --: | --: | --: |
+| Low, 300 km | 1 | 77 of 32 | 67,760 | 1.08 | 0.0506 | 76 | 0.43 | 1.77 |
+| Low, 500 km | 1 | 72 of 24 | 49,536 | 1.47 | 0.0501 | 71 | 0.55 | 2.37 |
+| Low, 830 km | 1 | 47 of 24 | 32,336 | 2.10 | 0.0503 | 46 | 0.58 | 1.94 |
+| Low, 1,336 km | 1 | 29 of 24 | 19,952 | 3.15 | 0.0503 | 28 | 0.49 | 1.30 |
+| MEO, 26,560 km | 2 | 4 of 24 | 1,376 | 5.00 | 0.0127 | 3 | 0.015 | 0.16 |
+| Geosynchronous | 2 | 2 of 32 | 880 | 4.99 | 0.0125 | 1 | 0.005 | 0.12 |
+| Inclined geosynchronous, e 0.075 | 2 | 2 of 32 | 880 | 4.99 | 0.0127 | 1 | 0.014 | 0.13 |
+| Transfer, e 0.72 | 1 | 14 of 24 | 9,632 | 5.00 | 0.0492 | 13 | 0.41 | 1.26 |
+| Molniya, e 0.74 | 1 | 10 of 24 | 6,880 | 5.00 | 0.0494 | 9 | 0.56 | 1.94 |
+| THEMIS-like, e 0.82 | 2 | 13 of 24 | 4,472 | 5.00 | 0.0493 | 12 | 0.56 | 0.98 |
+| e 0.9, perigee 500 km | 2 | 6 of 24 | 2,064 | 5.00 | 0.0499 | 5 | 0.43 | 0.51 |
+| TESS-like, e 0.55 | 4 | 1 of 48 | 316 | 0.02 | 0.0002 | 0 | | |
+
+Pass (0.1 m, 0.1 mm/s, 0.05 m at a joint) in every regime. The record is about 5.5 KB without the forecast (its
+theory's weather rows most of it).
+
+The position bound chosen by bytes (the same builder at 1 and at 10 cm, 5 and 50 mm at the checked points, the count
+of fewest bytes; FFM forecasts of 1, 2, 4 and 8 days at 30 s): low-orbit and e 0.1 records take the same bytes at both
+(the velocity bound sets the segments' length there: 47 KB a day at 500 km, 30 KB at 830 km, 21 KB at e 0.1); medium
+orbit 0.99 to 1.6 KB a day at 1 cm against 0.87 to 1.6 at 10 cm, geosynchronous 0.66 to 1.7 against 0.46 to 1.0. W4
+does not change (18.5). 1 cm costs nothing that matters and leaves a tenth of the referee's 0.1 m.
+
+### 18.10 Version 2 does not
+
+Blend at the span's ends (the step is stated, 18.4, and kept small at the stop, 18.7); carry the forecast's covariance
+(18.6, item 3); let a `$PCF` set the bound (18.6, item 7); fly the forecast in `sdnap_covariance_at`, `events` or
+`maneuver`; make a fresh low-orbit record pass W4 (18.5).
 
 ## References
 
