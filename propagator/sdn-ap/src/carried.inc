@@ -1,0 +1,764 @@
+// -----------------------------------------------------------------------------
+// The carried forecast (SPEC 18). An $OCM element set may carry a numerical
+// forecast of its object: Chebyshev position segments in
+// POLYNOMIAL_POSITION_RECORDS (PPE, BASIS_TYPE CHEBYSHEV, positions only),
+// TRAJ_TYPE POLYNOMIAL_POS, TRAJ_BASIS PREDICTED, in the set's own
+// TRAJ_REF_FRAME. Inside the span the segments cover (the first's start to the
+// last's end, both included) flight returns the forecast, velocity by
+// differentiation; everywhere else the theory, exactly as without them.
+//   - frame: TEMEOFEPOCH sets carry the forecast in their epoch axes Q0 GCRF
+//     (an inertial frame); flight turns it to TEME of date by M(t) Q0^T, M the
+//     GCRF -> TEME matrix (gcrf.inc) as a cubic through 6-hour nodes, cached
+//     per thread. TEMEOFDATE sets carry TEME of date; the velocity flown is the
+//     derivative less the frame's own turning, dM/dt M^T r, so both kinds
+//     return the module's TEME convention (the GCRF velocity turned by M).
+//   - fit (OUTPUT.START_TIME to STOP_TIME on fit's $PCF) builds the segments
+//     from the block's states: densified 4x by the 4-node Hermite of their
+//     positions and velocities (by the 8-node Lagrange of the positions when
+//     a state has no velocity), then the longest least-squares segments within
+//     kToleranceKm of every densified point (position, and velocity times
+//     half the segment over its coefficient count), the coefficient count of
+//     16, 24 or 32 that writes the fewest bytes.
+// -----------------------------------------------------------------------------
+
+namespace sdnap {
+namespace carried {
+
+/// A segment's bound against the densified forecast, km (position; velocity scaled to position as above).
+constexpr double kToleranceKm = 5.0e-6;
+/// Densified points per state interval (the interpolant between consecutive states).
+constexpr int kDensify = 4;
+/// Coefficient counts fit tries; the record takes the one with the fewest bytes.
+constexpr int kCandidates[] = {16, 24, 32};
+/// Most coefficients a record may carry per axis (reader's bound).
+constexpr uint16_t kMaxCoefficients = 64;
+/// The most arc (rad, about the Earth's center) between consecutive states a forecast is built from: measured, the
+/// 4-node Hermite of FFM states holds 0.4 mm at 0.066 rad (60 s at 500 km) and 0.4 to 5 mm up to 0.092 rad (60 s at the
+/// perigee of a transfer orbit); at 0.11 to 0.13 rad (120 s in low orbit) it misses by 5 to 1,600 mm.
+constexpr double kMaxArcRad = 0.1;
+/// States whose velocities differ from their positions' 8-node Lagrange derivative by more than this times the interval
+/// to the next state (km: 2 mm, the position a Hermite would misplace by such a velocity) are built from their positions
+/// alone (FFM's agree to about 0.01 mm/s at 60 s in low orbit; SGP4's and SGP4XP's miss by 20 to 70 mm/s, measured).
+constexpr double kVelocityAgreementKm = 2.0e-6;
+/// The weight of a segment's two end points in its least squares: consecutive segments share the end point, so they meet
+/// in position and velocity (to about the tolerance over this weight squared).
+constexpr double kJoinWeight = 1.0e4;
+/// Consecutive segments meet within this, s.
+constexpr double kJoinSeconds = 1.0e-3;
+/// Frame nodes per day (the cubic's spacing: 6 h).
+constexpr double kNodesPerDay = 4.0;
+
+// ---- The frame: GCRF -> TEME of date as a cubic through 6-hour nodes -----------------------------------------------
+
+struct NodeSlot {
+  int64_t key_p1;
+  double m[9];
+};
+inline thread_local NodeSlot* g_node_cache = nullptr;
+
+/// The exact matrix (ERFA, gcrf.inc) at node k (JD k / kNodesPerDay), cached per thread.
+inline bool node(int64_t k, double out[9]) {
+  if (__builtin_expect(g_node_cache == nullptr, 0)) g_node_cache = new NodeSlot[1024]{};
+  NodeSlot& s = g_node_cache[static_cast<uint64_t>(k) & 1023u];
+  if (s.key_p1 != k + 1) {
+    const double jd = static_cast<double>(k) / kNodesPerDay;
+    const double whole = std::floor(jd);
+    double m[3][3];
+    if (frames::gcrf_to_teme(whole, jd - whole, m) < 0) return false;
+    std::memcpy(s.m, m, sizeof s.m);
+    s.key_p1 = k + 1;
+  }
+  std::memcpy(out, s.m, sizeof s.m);
+  return true;
+}
+
+struct Span {
+  int64_t base_p1 = 0;
+  double m[4][9];
+};
+inline thread_local Span g_span{};
+
+/// M (row-major 3 x 3) at the split Julian date w + f (UTC), and dM/dt per second when `md` is given: the Lagrange cubic
+/// through nodes base - 1 .. base + 2 about the 6-hour interval holding the time. False outside ERFA's calendar.
+inline bool frame_at(double w, double f, double* M, double* md) {
+  const double q = kNodesPerDay * w + kNodesPerDay * f;
+  const double bf = std::floor(q);
+  const int64_t base = static_cast<int64_t>(bf);
+  Span& s = g_span;
+  if (s.base_p1 != base + 1) {
+    for (int j = 0; j < 4; ++j)
+      if (!node(base - 1 + j, s.m[j])) { s.base_p1 = 0; return false; }
+    s.base_p1 = base + 1;
+  }
+  const double x = q - bf;
+  const double l[4] = {-x * (x - 1.0) * (x - 2.0) / 6.0, (x + 1.0) * (x - 1.0) * (x - 2.0) / 2.0,
+                       -(x + 1.0) * x * (x - 2.0) / 2.0, (x + 1.0) * x * (x - 1.0) / 6.0};
+  double c[9], g[9];
+  for (int i = 0; i < 9; ++i) c[i] = l[0] * s.m[0][i] + l[1] * s.m[1][i] + l[2] * s.m[2][i] + l[3] * s.m[3][i];
+  // made orthonormal (one Newton step of the polar decomposition, M (3 I - M^T M) / 2: the cubic is a rotation to
+  // about 1e-10), so M^T inverts M exactly wherever the forecast is turned back and forth
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) g[3 * i + j] = (i == j ? 3.0 : 0.0) - (c[i] * c[j] + c[3 + i] * c[3 + j] + c[6 + i] * c[6 + j]);
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) M[3 * i + j] = 0.5 * (c[3 * i] * g[j] + c[3 * i + 1] * g[3 + j] + c[3 * i + 2] * g[6 + j]);
+  if (md != nullptr) {
+    const double rate = kNodesPerDay / 86400.0;  // dx/dt per second
+    const double d[4] = {-(3.0 * x * x - 6.0 * x + 2.0) / 6.0 * rate, (3.0 * x * x - 4.0 * x - 1.0) / 2.0 * rate,
+                         -(3.0 * x * x - 2.0 * x - 2.0) / 2.0 * rate, (3.0 * x * x - 1.0) / 6.0 * rate};
+    for (int i = 0; i < 9; ++i) md[i] = d[0] * s.m[0][i] + d[1] * s.m[1][i] + d[2] * s.m[2][i] + d[3] * s.m[3][i];
+  }
+  return true;
+}
+
+inline void mul(const double* M, const double* a, double* out) {
+  for (int i = 0; i < 3; ++i) out[i] = M[3 * i] * a[0] + M[3 * i + 1] * a[1] + M[3 * i + 2] * a[2];
+}
+inline void mul_t(const double* M, const double* a, double* out) {
+  for (int i = 0; i < 3; ++i) out[i] = M[i] * a[0] + M[3 + i] * a[1] + M[6 + i] * a[2];
+}
+
+/// Q0, the set's epoch axes (GCRF -> TEMEOFEPOCH): the (orthonormal) cubic at the epoch.
+inline bool epoch_axes(double w, double f, double* q0) { return frame_at(w, f, q0, nullptr); }
+
+// ---- The carried track of a record ---------------------------------------------------------------------------------
+
+struct Segment {
+  double start, mid, half, inv_half;  ///< seconds from the set's epoch
+  uint32_t n, off;                    ///< coefficients per axis; offset into Track::c (x then y then z)
+};
+
+/// A record's carried forecast as flight reads it: empty when the record carries none.
+struct Track {
+  int frame = 0;               ///< 1 TEMEOFDATE, 2 TEMEOFEPOCH
+  double w = 0.0, f = 0.0;     ///< the set's epoch, split Julian date (UTC)
+  double start = 0.0, stop = 0.0;  ///< the span, seconds from the epoch (closed)
+  double q0[9] = {};           ///< TEMEOFEPOCH: GCRF -> the epoch axes
+  std::vector<Segment> segs;
+  std::vector<double> c;
+  bool empty() const { return segs.empty(); }
+  bool covers(double t) const { return !segs.empty() && t >= start && t <= stop; }
+  size_t bytes() const { return sizeof(Track) + segs.capacity() * sizeof(Segment) + c.capacity() * sizeof(double); }
+};
+
+/// Seconds from (w, f) of an ISO 8601 UTC text, or false.
+inline bool seconds_of(const flatbuffers::String* s, double w, double f, double& out) {
+  double tw, tf;
+  if (s == nullptr || !omm::epoch(s->c_str(), s->size(), tw, tf)) return false;
+  out = ((tw - w) + (tf - f)) * 86400.0;
+  return true;
+}
+
+/// The carried forecast of a decoded record (`row` its set): 0 with `t` filled (empty when the record carries none), or 3
+/// refused by name. ocm::decode has checked the frame pairing.
+inline int read(const OCM* o, const ElementRow& row, Track& t) {
+  t = Track{};
+  if (o == nullptr) return 0;
+  if (o->POLYNOMIAL_OE_RECORDS() != nullptr && o->POLYNOMIAL_OE_RECORDS()->size() > 0)
+    return ocm::refuse("carried-type-unsupported", "POLYNOMIAL_OE_RECORDS are not flown: a carried forecast is POLYNOMIAL_POSITION_RECORDS.");
+  const auto* recs = o->POLYNOMIAL_POSITION_RECORDS();
+  const bool any = recs != nullptr && recs->size() > 0;
+  if (!any) {
+    if (o->TRAJ_TYPE() == trajectoryType_POLYNOMIAL_POS)
+      return ocm::refuse("carried-records-missing", "TRAJ_TYPE POLYNOMIAL_POS with no POLYNOMIAL_POSITION_RECORDS.");
+    return 0;
+  }
+  if (o->TRAJ_TYPE() != trajectoryType_POLYNOMIAL_POS)
+    return ocm::refuse("carried-type-mismatch", "POLYNOMIAL_POSITION_RECORDS beside an element set state TRAJ_TYPE POLYNOMIAL_POS.");
+  if (o->STATE_DATA() != nullptr && o->STATE_DATA()->size() > 0)
+    return ocm::refuse("carried-state-data", "An element set carries no STATE_DATA: its forecast is POLYNOMIAL_POSITION_RECORDS.");
+  t.frame = ocm::frame_kind(o->TRAJ_REF_FRAME());
+  if (t.frame != 1 && t.frame != 2) return ocm::refuse("frame-pairing-invalid", "A carried forecast is in the set's TRAJ_REF_FRAME, TEMEOFDATE or TEMEOFEPOCH.");
+  t.w = row.epoch_jd_whole;
+  t.f = row.epoch_jd_frac;
+  t.segs.reserve(recs->size());
+  {
+    size_t total = 0;
+    for (uint32_t k = 0; k < recs->size(); ++k) total += 3u * std::min<uint16_t>(recs->Get(k)->NUM_COEFFICIENTS(), kMaxCoefficients);
+    t.c.reserve(total);
+  }
+  for (uint32_t k = 0; k < recs->size(); ++k) {
+    const PPEPositionRecord* p = recs->Get(k);
+    if (p->BASIS_TYPE() != polynomialBasisType_CHEBYSHEV)
+      return ocm::refuse("carried-basis-unsupported", "A carried segment is a Chebyshev series (BASIS_TYPE CHEBYSHEV).");
+    if (p->HAS_VELOCITY_COEFFICIENTS() || (p->VEL_COEFF_X() != nullptr && p->VEL_COEFF_X()->size() > 0) ||
+        (p->VEL_COEFF_Y() != nullptr && p->VEL_COEFF_Y()->size() > 0) || (p->VEL_COEFF_Z() != nullptr && p->VEL_COEFF_Z()->size() > 0))
+      return ocm::refuse("carried-velocity-coefficients", "A carried segment states positions only: its velocity is the series' derivative.");
+    const uint16_t n = p->NUM_COEFFICIENTS();
+    const auto *x = p->POS_COEFF_X(), *y = p->POS_COEFF_Y(), *z = p->POS_COEFF_Z();
+    if (n < 1 || n > kMaxCoefficients || x == nullptr || y == nullptr || z == nullptr || x->size() != n || y->size() != n || z->size() != n)
+      return ocm::refuse("carried-segment-invalid", "A carried segment has NUM_COEFFICIENTS (1 to 64) coefficients per axis.");
+    Segment s{};
+    const double half = p->EPOCH_HALF_SPAN();
+    if (!seconds_of(p->EPOCH_MID(), t.w, t.f, s.mid) || !(half > 0.0) || !std::isfinite(half))
+      return ocm::refuse("carried-segment-invalid", "A carried segment states its EPOCH_MID (ISO 8601 UTC) and a positive EPOCH_HALF_SPAN.");
+    s.half = half;
+    s.inv_half = 1.0 / half;
+    s.start = s.mid - half;
+    s.n = n;
+    s.off = static_cast<uint32_t>(t.c.size());
+    t.c.resize(t.c.size() + 3u * n);
+    double* dst = t.c.data() + s.off;
+    for (const auto* v : {x, y, z}) {
+      std::memcpy(dst, v->data(), sizeof(double) * n);  // little-endian doubles, as the wire holds them
+      dst += n;
+    }
+    double check = 0.0;
+    for (uint32_t j = 0; j < 3u * n; ++j) check += t.c[s.off + j] * 0.0;  // NaN or infinity leave a NaN
+    if (check != 0.0) return ocm::refuse("carried-segment-invalid", "A carried coefficient is not a finite number.");
+    if (!t.segs.empty()) {
+      const Segment& b = t.segs.back();
+      if (std::fabs(s.start - (b.mid + b.half)) > kJoinSeconds)
+        return ocm::refuse("carried-gap", "Carried segments follow one another, each starting where the one before ends (within 1 ms).");
+    }
+    t.segs.push_back(s);
+  }
+  t.start = t.segs.front().start;
+  t.stop = t.segs.back().mid + t.segs.back().half;
+  if (t.frame == 2 && !epoch_axes(t.w, t.f, t.q0)) return ocm::refuse("frame-failed", "No GCRF axes at the set's epoch (outside ERFA's calendar).");
+  return 0;
+}
+
+/// The series of segment s at time t (seconds from the epoch): position p (km) and its derivative pd (km/s).
+inline void series(const Track& tr, const Segment& s, double t, double p[3], double pd[3]) {
+  const double tau = (t - s.mid) * s.inv_half;
+  const uint32_t n = s.n;
+  const double* c = tr.c.data() + s.off;
+  double T[kMaxCoefficients], D[kMaxCoefficients];
+  T[0] = 1.0;
+  D[0] = 0.0;
+  if (n > 1) {
+    T[1] = tau;
+    D[1] = 1.0;
+  }
+  for (uint32_t k = 2; k < n; ++k) {
+    T[k] = 2.0 * tau * T[k - 1] - T[k - 2];
+    D[k] = 2.0 * T[k - 1] + 2.0 * tau * D[k - 1] - D[k - 2];
+  }
+  for (int a = 0; a < 3; ++a) {
+    const double* ca = c + a * n;
+    double sp = 0.0, sd = 0.0;
+    for (uint32_t k = 0; k < n; ++k) {
+      sp += ca[k] * T[k];
+      sd += ca[k] * D[k];
+    }
+    p[a] = sp;
+    pd[a] = sd * s.inv_half;
+  }
+}
+
+/// The segment holding t (the last starting at or before it; the first before the span).
+inline const Segment& segment_at(const Track& tr, double t) {
+  size_t lo = 0, hi = tr.segs.size();
+  while (hi - lo > 1) {
+    const size_t mid = (lo + hi) >> 1;
+    if (tr.segs[mid].start <= t) lo = mid;
+    else hi = mid;
+  }
+  return tr.segs[lo];
+}
+
+/// The carried state at t (seconds from the set's epoch) in TEME of date (km, km/s): false outside ERFA's calendar.
+inline bool at(const Track& tr, double t, double r[3], double v[3]) {
+  double p[3], pd[3], M[9];
+  series(tr, segment_at(tr, t), t, p, pd);
+  if (tr.frame == 2) {
+    double g[3], gv[3];
+    mul_t(tr.q0, p, g);
+    mul_t(tr.q0, pd, gv);
+    if (!frame_at(tr.w, tr.f + t / 86400.0, M, nullptr)) return false;
+    mul(M, g, r);
+    mul(M, gv, v);
+    return true;
+  }
+  double md[9], u[3], w[3];
+  if (!frame_at(tr.w, tr.f + t / 86400.0, M, md)) return false;
+  mul_t(M, p, u);
+  mul(md, u, w);
+  for (int a = 0; a < 3; ++a) {
+    r[a] = p[a];
+    v[a] = pd[a] - w[a];
+  }
+  return true;
+}
+
+/// The carried state at t in GCRF (km, km/s) without a per-state ERFA call: TEMEOFEPOCH Q0^T exactly; TEMEOFDATE M^T by
+/// the cubic, the inverse of what fit wrote (the GCRF input itself, to the series). False outside ERFA's calendar.
+inline bool at_gcrf(const Track& tr, double t, double r[3], double v[3]) {
+  double p[3], pd[3];
+  series(tr, segment_at(tr, t), t, p, pd);
+  if (tr.frame == 2) {
+    mul_t(tr.q0, p, r);
+    mul_t(tr.q0, pd, v);
+    return true;
+  }
+  double M[9], md[9], w[3], u[3];
+  if (!frame_at(tr.w, tr.f + t / 86400.0, M, md)) return false;
+  mul_t(M, p, r);  // r_G = M^T p
+  mul(md, r, w);   // p' = M v_G + dM/dt r_G
+  for (int a = 0; a < 3; ++a) u[a] = pd[a] - w[a];
+  mul_t(M, u, v);
+  return true;
+}
+
+// ---- fit: the segments of a forecast -------------------------------------------------------------------------------
+
+struct Point {
+  double t;          ///< seconds from the set's epoch
+  double r[3], v[3]; ///< the record's frame (velocity the derivative of r)
+};
+
+/// The 4-node Hermite (positions and velocities, degree 7) of states k0 .. k0 + 3 at time x: position and velocity.
+inline void hermite4(const Point* s, double x, double out_r[3], double out_v[3]) {
+  double z[8];
+  for (int j = 0; j < 4; ++j) z[2 * j] = z[2 * j + 1] = s[j].t - s[0].t;
+  const double xx = x - s[0].t;
+  for (int a = 0; a < 3; ++a) {
+    double q[8], coef[8];
+    for (int j = 0; j < 4; ++j) q[2 * j] = q[2 * j + 1] = s[j].r[a];
+    coef[0] = q[0];
+    for (int lvl = 1; lvl < 8; ++lvl) {
+      for (int i = 0; i < 8 - lvl; ++i)
+        q[i] = (lvl == 1 && i % 2 == 0) ? s[i / 2].v[a] : (q[i + 1] - q[i]) / (z[i + lvl] - z[i]);
+      coef[lvl] = q[0];
+    }
+    double p = coef[7], dp = 0.0;
+    for (int j = 6; j >= 0; --j) {
+      dp = dp * (xx - z[j]) + p;
+      p = p * (xx - z[j]) + coef[j];
+    }
+    out_r[a] = p;
+    out_v[a] = dp;
+  }
+}
+
+/// The 8-node Lagrange interpolant (positions only, degree 7) of states s[0 .. 7] at time x: position and its derivative.
+inline void lagrange8(const Point* s, double x, double out_r[3], double out_v[3]) {
+  double l[8], d[8];
+  for (int j = 0; j < 8; ++j) {
+    double p = 1.0, dp = 0.0;
+    for (int k = 0; k < 8; ++k) {
+      if (k == j) continue;
+      const double den = s[j].t - s[k].t;
+      // d/dx of the product so far times (x - t_k) / den
+      dp = dp * (x - s[k].t) / den + p / den;
+      p *= (x - s[k].t) / den;
+    }
+    l[j] = p;
+    d[j] = dp;
+  }
+  for (int a = 0; a < 3; ++a) {
+    double p = 0.0, v = 0.0;
+    for (int j = 0; j < 8; ++j) {
+      p += l[j] * s[j].r[a];
+      v += d[j] * s[j].r[a];
+    }
+    out_r[a] = p;
+    out_v[a] = v;
+  }
+}
+
+/// Least squares by Householder QR: A (m x n, row-major, overwritten), B (m x 3, overwritten) -> X (n x 3). False when
+/// the columns are dependent.
+inline bool lsq(std::vector<double>& A, size_t m, int n, std::vector<double>& B, double* X) {
+  std::vector<double> v(m);
+  for (int j = 0; j < n; ++j) {
+    double s = 0.0;
+    for (size_t i = j; i < m; ++i) s += A[i * n + j] * A[i * n + j];
+    const double norm = std::sqrt(s);
+    if (!(norm > 0.0)) return false;
+    const double alpha = A[j * n + j] > 0.0 ? -norm : norm;
+    double vv = 0.0;
+    for (size_t i = j; i < m; ++i) {
+      v[i] = (i == static_cast<size_t>(j)) ? A[i * n + j] - alpha : A[i * n + j];
+      vv += v[i] * v[i];
+    }
+    if (!(vv > 0.0)) continue;
+    for (int c = j; c < n; ++c) {
+      double d = 0.0;
+      for (size_t i = j; i < m; ++i) d += v[i] * A[i * n + c];
+      d = 2.0 * d / vv;
+      for (size_t i = j; i < m; ++i) A[i * n + c] -= d * v[i];
+    }
+    for (int c = 0; c < 3; ++c) {
+      double d = 0.0;
+      for (size_t i = j; i < m; ++i) d += v[i] * B[i * 3 + c];
+      d = 2.0 * d / vv;
+      for (size_t i = j; i < m; ++i) B[i * 3 + c] -= d * v[i];
+    }
+  }
+  for (int c = 0; c < 3; ++c)
+    for (int j = n - 1; j >= 0; --j) {
+      double s = B[j * 3 + c];
+      for (int q = j + 1; q < n; ++q) s -= A[j * n + q] * X[q * 3 + c];
+      if (!(std::fabs(A[j * n + j]) > 0.0)) return false;
+      X[j * 3 + c] = s / A[j * n + j];
+    }
+  return true;
+}
+
+/// One fitted segment: its window (indices into the densified points), mid as written, coefficients and residuals.
+struct Fitted {
+  size_t i0 = 0, i1 = 0;
+  int n = 0;
+  double mid = 0.0, half = 0.0;
+  char mid_text[48] = {};
+  std::vector<double> c;  ///< x then y then z, n each
+  double max_km = 0.0, rms_km = 0.0;
+};
+
+/// The segment of points i0 .. i1 under n coefficients (points within kDensify outside the window join the fit), its
+/// EPOCH_MID the window's middle at the text's microsecond; true when every point of the window is within kToleranceKm.
+inline bool fit_segment(const std::vector<Point>& D, size_t lo_all, size_t hi_all, size_t i0, size_t i1, int n, double w, double f, Fitted& out) {
+  out.i0 = i0;
+  out.i1 = i1;
+  out.n = n;
+  const double a = D[i0].t, b = D[i1].t;
+  oem::iso_text(w, f, 0.5 * (a + b) / 60.0, out.mid_text, sizeof out.mid_text);
+  double mw, mf;
+  if (!omm::epoch(out.mid_text, static_cast<uint32_t>(std::strlen(out.mid_text)), mw, mf)) return false;
+  out.mid = ((mw - w) + (mf - f)) * 86400.0;
+  out.half = std::fmax(out.mid - a, b - out.mid) + 1.0e-9;  // a nanosecond over: mid -/+ half holds both ends after rounding
+  if (!(out.half > 0.0)) return false;
+  const size_t lo = i0 >= lo_all + kDensify ? i0 - kDensify : lo_all, hi = std::min(hi_all, i1 + kDensify);
+  const size_t m = 2 * (hi - lo + 1);
+  if (m < static_cast<size_t>(n)) return false;
+  std::vector<double> A(m * n), B(m * 3);
+  const double vw = out.half / n;  // velocity rows in position units
+  double T[kMaxCoefficients], Dd[kMaxCoefficients];
+  auto basis = [&](double tau) {
+    T[0] = 1.0;
+    Dd[0] = 0.0;
+    if (n > 1) {
+      T[1] = tau;
+      Dd[1] = 1.0;
+    }
+    for (int k = 2; k < n; ++k) {
+      T[k] = 2.0 * tau * T[k - 1] - T[k - 2];
+      Dd[k] = 2.0 * T[k - 1] + 2.0 * tau * Dd[k - 1] - Dd[k - 2];
+    }
+  };
+  for (size_t i = lo, row = 0; i <= hi; ++i, row += 2) {
+    basis((D[i].t - out.mid) / out.half);
+    // the window's two ends held (weight kJoinWeight): consecutive segments meet in position and velocity
+    const double jw = (i == i0 || i == i1) ? kJoinWeight : 1.0;
+    for (int k = 0; k < n; ++k) {
+      A[row * n + k] = T[k] * jw;
+      A[(row + 1) * n + k] = Dd[k] / out.half * vw * jw;
+    }
+    for (int c = 0; c < 3; ++c) {
+      B[row * 3 + c] = D[i].r[c] * jw;
+      B[(row + 1) * 3 + c] = D[i].v[c] * vw * jw;
+    }
+  }
+  std::vector<double> X(static_cast<size_t>(n) * 3);
+  if (!lsq(A, m, n, B, X.data())) return false;
+  out.c.assign(static_cast<size_t>(n) * 3, 0.0);
+  for (int k = 0; k < n; ++k)
+    for (int c = 0; c < 3; ++c) out.c[c * n + k] = X[k * 3 + c];
+  // the window's residuals
+  Track one;
+  one.c = out.c;
+  Segment s{};
+  s.mid = out.mid;
+  s.half = out.half;
+  s.inv_half = 1.0 / out.half;
+  s.n = static_cast<uint32_t>(n);
+  s.off = 0;
+  double worst = 0.0, ss = 0.0, worst_v = 0.0;
+  for (size_t i = i0; i <= i1; ++i) {
+    double p[3], pd[3];
+    series(one, s, D[i].t, p, pd);
+    const double e = std::sqrt((p[0] - D[i].r[0]) * (p[0] - D[i].r[0]) + (p[1] - D[i].r[1]) * (p[1] - D[i].r[1]) + (p[2] - D[i].r[2]) * (p[2] - D[i].r[2]));
+    const double ev = std::sqrt((pd[0] - D[i].v[0]) * (pd[0] - D[i].v[0]) + (pd[1] - D[i].v[1]) * (pd[1] - D[i].v[1]) + (pd[2] - D[i].v[2]) * (pd[2] - D[i].v[2]));
+    worst = std::fmax(worst, e);
+    worst_v = std::fmax(worst_v, ev);
+    ss += e * e;
+  }
+  out.max_km = worst;
+  out.rms_km = std::sqrt(ss / static_cast<double>(i1 - i0 + 1));
+  return std::isfinite(worst) && worst <= kToleranceKm && worst_v * vw <= kToleranceKm;
+}
+
+/// The segments of points a .. b under n coefficients: from each start the longest window within the tolerance (doubling
+/// then bisection over the allowed ends: b, or an end leaving at least n points). False when a window of n points fails.
+inline bool segments(const std::vector<Point>& D, size_t a, size_t b, int n, double w, double f, std::vector<Fitted>& out) {
+  out.clear();
+  const size_t lo_all = 0, hi_all = D.size() - 1, minpts = static_cast<size_t>(n);
+  size_t i0 = a, guess = 4 * minpts;
+  Fitted best, trial;
+  auto pass = [&](size_t e, Fitted& into) { return fit_segment(D, lo_all, hi_all, i0, e, n, w, f, into); };
+  while (i0 < b) {
+    // the ends allowed: emin .. emax (each leaving at least n points after it), and b
+    const size_t emin = i0 + minpts - 1;
+    size_t good;
+    if (b < 2 * minpts + i0 - 1) {  // no inner end: the rest in one window
+      if (!pass(b, best)) return false;
+      good = b;
+    } else {
+      const size_t emax = b - minpts;
+      if (!pass(emin, best)) return false;
+      good = emin;
+      size_t bad = SIZE_MAX;
+      size_t probe = std::min(emax, std::max(i0 + guess, emin + 1));
+      while (probe > good) {
+        if (pass(probe, trial)) {
+          std::swap(best, trial);
+          good = probe;
+          if (probe == emax) break;
+          probe = std::min(emax, i0 + 2 * (probe - i0));
+        } else {
+          bad = probe;
+          break;
+        }
+      }
+      if (bad == SIZE_MAX) {  // every inner end tried passes: the rest in one window when it does too
+        if (pass(b, trial)) {
+          std::swap(best, trial);
+          good = b;
+        }
+      } else {
+        size_t lo = good, hi = bad;  // lo passes, hi fails
+        while (hi - lo > 1) {
+          const size_t mid = lo + (hi - lo) / 2;
+          if (pass(mid, trial)) {
+            std::swap(best, trial);
+            good = lo = mid;
+          } else {
+            hi = mid;
+          }
+        }
+      }
+    }
+    out.push_back(best);
+    guess = good - i0;
+    i0 = good;
+  }
+  return true;
+}
+
+/// The bytes a PPE record of n coefficients adds to the record (measured layout: the table, its EPOCH_MID and three vectors).
+inline size_t record_bytes(int n) { return 112u + 24u * static_cast<size_t>(n); }
+
+/// The carried forecast of a fit: the block's states `all` (TEME of date, km, km/s; S has whole, frac, r, v, has_v; the
+/// block given in GCRF or EME2000 when `from_gcrf`, the fit turning each state by the exact matrix), from
+/// (sw, sf) to (ew, ef), as PPE records in `records` (built in fbb) in the frame of the set `row` (TEMEOFEPOCH when
+/// `of_epoch`), and the fit's COMMENT lines on it: the span, the segments and the jump from the forecast to the theory
+/// at each end (theory minus forecast). 0, or 3 refused by name.
+template <class S>
+inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, bool of_epoch, const std::vector<S>& all, bool from_gcrf, double sw, double sf, double ew,
+                 double ef, flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>>& records, std::vector<std::string>& comment) {
+  const double w = row.epoch_jd_whole, f = row.epoch_jd_frac;
+  const double t0 = ((sw - w) + (sf - f)) * 86400.0, t1 = ((ew - w) + (ef - f)) * 86400.0;
+  if (!(t1 > t0)) return pcf::refuse("OUTPUT.STOP_TIME", "fit carries the block's states from OUTPUT.START_TIME to a later STOP_TIME");
+  const size_t n = all.size();
+  auto ts = [&](size_t k) { return ((all[k].whole - w) + (all[k].frac - f)) * 86400.0; };
+  for (size_t k = 1; k < n; ++k)
+    if (!(ts(k) > ts(k - 1))) return ocm::refuse("carry-order", "The block's states ascend in time: a carried forecast is read in order.");
+  if (n < 4 || ts(0) > t0 || ts(n - 1) < t1)
+    return ocm::refuse("carry-not-covered", "The ephemeris block's states do not reach from OUTPUT.START_TIME to OUTPUT.STOP_TIME.");
+  size_t k0 = 0, k1 = n - 1;
+  while (k0 + 1 < n && ts(k0 + 1) <= t0) ++k0;
+  while (k1 > 0 && ts(k1 - 1) >= t1) --k1;
+  // up to 4 states beyond each end join (the interpolant's nodes); states with velocities use the 4-node Hermite, a block
+  // with a state without one the 8-node Lagrange of the positions (an analytic theory's velocity is not the derivative
+  // of its position: SGP4 and SGP4XP differ by 20 to 70 mm/s in low orbit, measured)
+  const size_t lo = k0 >= 4 ? k0 - 4 : 0, hi = std::min(n - 1, k1 + 4);
+  bool with_v = true;
+  for (size_t k = lo; k <= hi; ++k) with_v = with_v && all[k].has_v;
+  const size_t nodes = with_v ? 4 : 8;
+  if (hi - lo + 1 < nodes) return ocm::refuse("carry-not-covered", "A carried forecast takes at least 4 states of the block with velocities, 8 without.");
+  // the states in the record's frame
+  double q0[9] = {};
+  if (of_epoch && !epoch_axes(w, f, q0)) return ocm::refuse("frame-failed", "No GCRF axes at the set's epoch (outside ERFA's calendar).");
+  std::vector<Point> P(hi - lo + 1);
+  // each state in GCRF: a GCRF (or EME2000) block's own state, undoing the fit's exact matrix (ERFA, gcrf.inc), any
+  // other block's by the cubic; then in the record's axes: Q0 (TEMEOFEPOCH), or the cubic M (TEMEOFDATE, velocity its
+  // derivative M v + dM/dt r). The series sees the input's own axes and the smooth cubic only: the exact matrix's
+  // rounding (about 1e-11 rad from one call to the next) never enters it
+  for (size_t k = lo; k <= hi; ++k) {
+    const S& s = all[k];
+    Point& p = P[k - lo];
+    p.t = ts(k);
+    double m[3][3], X[9], g[3], gv[3];
+    if (from_gcrf) {
+      if (frames::gcrf_to_teme(s.whole, s.frac, m) < 0) return ocm::refuse("frame-failed", "A state's UTC is outside ERFA's calendar.");
+      std::memcpy(X, m, sizeof X);
+    } else if (!frame_at(w, f + p.t / 86400.0, X, nullptr)) {
+      return ocm::refuse("frame-failed", "A state's UTC is outside ERFA's calendar.");
+    }
+    mul_t(X, s.r, g);
+    mul_t(X, s.v, gv);
+    if (of_epoch) {
+      mul(q0, g, p.r);
+      mul(q0, gv, p.v);
+    } else {
+      double M[9], md[9], w1[3];
+      if (!frame_at(w, f + p.t / 86400.0, M, md)) return ocm::refuse("frame-failed", "A state's UTC is outside ERFA's calendar.");
+      mul(M, g, p.r);
+      mul(M, gv, p.v);
+      mul(md, g, w1);
+      for (int a = 0; a < 3; ++a) p.v[a] += w1[a];
+    }
+  }
+  // velocities that are not the positions' derivative (an analytic theory's: SGP4 and SGP4XP by 20 to 70 mm/s in low
+  // orbit, measured) are not interpolated: the 8-node Lagrange of the positions takes over when a state's velocity is
+  // more than kVelocityAgreementKm over the interval to its neighbor from that interpolant's derivative
+  if (with_v && P.size() >= 8) {
+    for (size_t i = 3; i + 4 < P.size() && with_v; ++i) {  // the states the interpolant centers on
+      double rr[3], vv[3];
+      const size_t j = std::min(i >= 3 ? i - 3 : 0, P.size() - 8);
+      lagrange8(P.data() + j, P[i].t, rr, vv);
+      const double d = std::sqrt((vv[0] - P[i].v[0]) * (vv[0] - P[i].v[0]) + (vv[1] - P[i].v[1]) * (vv[1] - P[i].v[1]) + (vv[2] - P[i].v[2]) * (vv[2] - P[i].v[2]));
+      const double gap = std::fmax(i > 0 ? P[i].t - P[i - 1].t : 0.0, i + 1 < P.size() ? P[i + 1].t - P[i].t : 0.0);
+      if (!(d * gap <= kVelocityAgreementKm)) with_v = false;
+    }
+  }
+  const size_t nodes_used = with_v ? 4 : 8;
+  if (P.size() < nodes_used) return ocm::refuse("carry-not-covered", "A carried forecast takes at least 8 states of the block when their velocities are not their positions' derivative.");
+  // densified: kDensify points per interval by the interpolant, the span's two ends among them
+  // states close enough for their interpolant to hold the forecast: at most kMaxArcRad of arc apart about the Earth
+  for (size_t i = k0 - lo; i < k1 - lo; ++i) {
+    const double* x = P[i].r;
+    const double* y = P[i + 1].r;
+    const double cx = x[1] * y[2] - x[2] * y[1], cy = x[2] * y[0] - x[0] * y[2], cz = x[0] * y[1] - x[1] * y[0];
+    const double arc = std::atan2(std::sqrt(cx * cx + cy * cy + cz * cz), x[0] * y[0] + x[1] * y[1] + x[2] * y[2]);
+    if (arc > kMaxArcRad) {
+      char why[200], when[48];
+      oem::iso_text(w, f, P[i].t / 60.0, when, sizeof when);
+      std::snprintf(why, sizeof why, "The block's states at %s are %.3f rad of arc apart, more than the %.2f a carried forecast is built from (60 s in low orbit).", when, arc, kMaxArcRad);
+      return ocm::refuse("carry-states-sparse", why);
+    }
+  }
+  // the interpolant of the interval of P starting at state i: the Hermite on nodes i - 1 .. i + 2, the Lagrange on
+  // i - 3 .. i + 4, held inside P
+  auto interpolated = [&](size_t i, double t) {
+    Point q{};
+    q.t = t;
+    const size_t back = with_v ? 1 : 3;
+    const size_t j = std::min(i >= back ? i - back : 0, P.size() - nodes_used);
+    if (with_v) hermite4(P.data() + j, t, q.r, q.v);
+    else lagrange8(P.data() + j, t, q.r, q.v);
+    return q;
+  };
+  std::vector<Point> D;
+  D.reserve(P.size() * kDensify + 2);
+  for (size_t i = 0; i + 1 < P.size(); ++i) {
+    D.push_back(with_v ? P[i] : interpolated(i, P[i].t));  // without velocities a state's own is the interpolant's derivative
+    for (int j = 1; j < kDensify; ++j) D.push_back(interpolated(i, P[i].t + (P[i + 1].t - P[i].t) * j / kDensify));
+  }
+  D.push_back(with_v ? P.back() : interpolated(P.size() - 2, P.back().t));
+  // the span's two ends among the points
+  auto end_at = [&](double t) {
+    size_t k = 0;
+    while (k < D.size() && D[k].t < t) ++k;
+    if (k < D.size() && D[k].t == t) return k;
+    size_t i = 0;
+    while (i + 2 < P.size() && P[i + 1].t <= t) ++i;
+    D.insert(D.begin() + static_cast<std::ptrdiff_t>(k), interpolated(i, t));
+    return k;
+  };
+  const size_t a = end_at(t0), b = end_at(t1);
+  if (!(b > a)) return ocm::refuse("carry-not-covered", "The ephemeris block's states do not reach from OUTPUT.START_TIME to OUTPUT.STOP_TIME.");
+  // the coefficient count with the fewest bytes
+  std::vector<Fitted> best, trial;
+  size_t best_bytes = SIZE_MAX;
+  int best_n = 0;
+  for (const int nc : kCandidates) {
+    if (b - a + 1 < static_cast<size_t>(nc)) continue;
+    if (!segments(D, a, b, nc, w, f, trial)) continue;
+    size_t bytes = 0;
+    for (const Fitted& s : trial) bytes += record_bytes(s.n);
+    if (bytes < best_bytes) {
+      best_bytes = bytes;
+      best_n = nc;
+      best.swap(trial);
+    }
+  }
+  if (best.empty())
+    return ocm::refuse("carry-tolerance", "No Chebyshev segments of 16, 24 or 32 coefficients hold the forecast within 5 mm of its states' interpolant: the states are too sparse or the forecast is not smooth (a maneuver).");
+  std::vector<flatbuffers::Offset<PPEPositionRecord>> out;
+  out.reserve(best.size());
+  double worst = 0.0;
+  for (const Fitted& s : best) {
+    const auto mid = fbb.CreateString(s.mid_text);
+    const auto cx = fbb.CreateVector(s.c.data(), static_cast<size_t>(s.n));
+    const auto cy = fbb.CreateVector(s.c.data() + s.n, static_cast<size_t>(s.n));
+    const auto cz = fbb.CreateVector(s.c.data() + 2 * s.n, static_cast<size_t>(s.n));
+    PPEPositionRecordBuilder pb(fbb);
+    pb.add_EPOCH_MID(mid);
+    pb.add_EPOCH_HALF_SPAN(s.half);
+    pb.add_NUM_COEFFICIENTS(static_cast<uint16_t>(s.n));
+    pb.add_POS_COEFF_X(cx);
+    pb.add_POS_COEFF_Y(cy);
+    pb.add_POS_COEFF_Z(cz);
+    pb.add_MAX_POSITION_RESIDUAL(s.max_km);
+    pb.add_RMS_POSITION_RESIDUAL(s.rms_km);
+    out.push_back(pb.Finish());
+    worst = std::fmax(worst, s.max_km);
+  }
+  records = fbb.CreateVector(out);
+  // the track as flight reads it, and the jump at each end: the theory less the forecast, in the forecast's UVW axes
+  Track tr;
+  tr.frame = of_epoch ? 2 : 1;
+  tr.w = w;
+  tr.f = f;
+  std::memcpy(tr.q0, q0, sizeof q0);
+  for (const Fitted& s : best) {
+    Segment g{};
+    g.mid = s.mid;
+    g.half = s.half;
+    g.inv_half = 1.0 / s.half;
+    g.start = s.mid - s.half;
+    g.n = static_cast<uint32_t>(s.n);
+    g.off = static_cast<uint32_t>(tr.c.size());
+    tr.c.insert(tr.c.end(), s.c.begin(), s.c.end());
+    tr.segs.push_back(g);
+  }
+  tr.start = tr.segs.front().start;
+  tr.stop = tr.segs.back().mid + tr.segs.back().half;
+  char start_text[48], stop_text[48], line[400];
+  oem::iso_text(w, f, tr.start / 60.0, start_text, sizeof start_text);
+  oem::iso_text(w, f, tr.stop / 60.0, stop_text, sizeof stop_text);
+  std::snprintf(line, sizeof line,
+                "carried forecast: %zu Chebyshev segments of %d coefficients (POLYNOMIAL_POSITION_RECORDS, %s), %s to %s, %zu bytes, at most %.2f mm from the %s of the block's states",
+                best.size(), best_n, of_epoch ? "TEMEOFEPOCH" : "TEMEOFDATE", start_text, stop_text, best_bytes, worst * 1.0e6,
+                with_v ? "4-node Hermite" : "8-node Lagrange of the positions");
+  comment.push_back(line);
+  xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  const bool theory = xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk;
+  for (int end = 0; end < 2; ++end) {
+    const double t = end == 0 ? tr.start : tr.stop;
+    double rc[3], vc[3], rm[3], vm[3], d[3], u[3];
+    if (!at(tr, t, rc, vc)) return ocm::refuse("frame-failed", "No GCRF axes over the carried span (outside ERFA's calendar).");
+    if (!theory || xpt::xp_propagate(*xs, t / 60.0, rm, vm) != kPropOk) {
+      std::snprintf(line, sizeof line, "carried forecast %s %s: the theory does not reach it", end == 0 ? "start" : "stop", end == 0 ? start_text : stop_text);
+    } else {
+      for (int k = 0; k < 3; ++k) d[k] = rm[k] - rc[k];
+      cov::to_uvw(rc, vc, d, u);
+      std::snprintf(line, sizeof line, "carried forecast %s %s: theory minus forecast %.6f km (radial %.6f, in-track %.6f, cross-track %.6f km)",
+                    end == 0 ? "start" : "stop", end == 0 ? start_text : stop_text, std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]), u[0], u[1], u[2]);
+    }
+    comment.push_back(line);
+  }
+  if (xs != nullptr) {
+    if (theory) xpt::xp_release(*xs);
+    std::free(xs);
+  }
+  return 0;
+}
+
+}  // namespace carried
+}  // namespace sdnap
+
+/// The angle (rad, the largest element of the difference) between the carried forecast's GCRF -> TEME of date matrix
+/// (the cubic through 6-hour nodes) and ERFA's at the split Julian date whole + frac (UTC): SPEC 18's frame bound. NaN
+/// outside ERFA's calendar.
+SDNAP_EXPORT("sdnap_carried_frame_error")
+double sdnap_carried_frame_error(double whole, double frac) {
+  double M[9], m[3][3];
+  if (!sdnap::carried::frame_at(whole, frac, M, nullptr) || sdnap::frames::gcrf_to_teme(whole, frac, m) < 0) return std::numeric_limits<double>::quiet_NaN();
+  double worst = 0.0;
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) worst = std::fmax(worst, std::fabs(M[3 * i + j] - m[i][j]));
+  return worst;
+}

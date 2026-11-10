@@ -27,6 +27,7 @@
 //   atmosphere_inputs.inc  a fit's drag atmosphere from FORCES, $SPW, $DCL
 //   oem.inc        $OEM output: axes, times, the PCF OUTPUT times
 //   ocm.inc        the $OCM element-set record: elements, forces, identity
+//   carried.inc    the forecast a record may carry: Chebyshev segments, flown inside their span (SPEC 18)
 //   ingest_omm.inc the ingest_omm invoke method: the one $OMM boundary ($OMM in, $OCM out)
 //   propagate.inc  the propagate invoke method ($OCM in, $OEM out)
 //   fit_oem.inc    the fit invoke method ($OEM in, $OCM and $ODR out)
@@ -79,6 +80,7 @@
 #include "atmosphere_inputs.inc"
 #include "oem.inc"
 #include "ocm.inc"
+#include "carried.inc"
 #include "ingest_omm.inc"
 #include "propagate.inc"
 #include "epoch_store.inc"

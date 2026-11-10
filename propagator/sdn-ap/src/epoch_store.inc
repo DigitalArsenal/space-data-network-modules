@@ -21,6 +21,8 @@
 //   (d = x_b - x_a; the smoothstep weight for both shapes), for sets that carry COVARIANCE (SPEC 12).
 // - Calls: the resident exports sdnap_epochs_* over the loaded store, and `propagate_epochs`, the same on a grid for a
 //   snapshot given with the call (stateless).
+// - A set whose record carries a forecast (SPEC 18) returns it inside the forecast's span; selection and blend are
+//   unchanged.
 // -----------------------------------------------------------------------------
 
 namespace sdnap {
@@ -44,6 +46,7 @@ struct Entry {
   Forces forces{};
   const atm::Atmosphere* atmosphere = nullptr;
   int32_t first_day = 0, last_day = 0;  ///< RECORDS: the MJDs it flies through (its first row's day + 1, its last row's day)
+  std::shared_ptr<const carried::Track> track;  ///< the forecast the record carries (SPEC 18), or none
 };
 
 /// An initialized record of one set (the lazy cache: two per series).
@@ -152,6 +155,7 @@ struct Record {
   cov::Set* cov = nullptr;
   Forces forces{};
   ocm::Weather weather;
+  std::shared_ptr<const carried::Track> track;
 };
 inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r = Record{};
@@ -168,6 +172,11 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   r.name = s.id.object_name;
   r.forces = s.forces;
   r.weather = std::move(s.weather);
+  {
+    auto track = std::make_shared<carried::Track>();
+    if (carried::read(s.record, r.row, *track) != 0) return -1;
+    if (!track->empty()) r.track = std::move(track);
+  }
   if (r.row.theory != kTheorySgp4) {
     cov::Set c;
     const int cr = cov::read(s.record, r.row, c);
@@ -316,6 +325,7 @@ inline int build(Store& st, const Config& cfg) {
         en.row = recs[q].row;
         en.epoch = epoch_of(recs[q]);
         en.cov = recs[q].cov;
+        en.track = recs[q].track;
         en.forces = recs[q].forces;
         en.atmosphere = intern(st, recs[q]);
         if (en.atmosphere != nullptr && !en.atmosphere->days.empty()) {
@@ -394,10 +404,27 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   return q;
 }
 
-/// Set k of series s at t (minutes from J2000): TEME state, and the covariance when `P` is given (false: none).
-inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, double* v, double* P, bool& have_p) {
+/// Set k of series s at t (minutes from J2000): TEME state, and the covariance when `P` is given (false: none). `jd` (the
+/// split Julian date of t, when the caller has it) times a carried forecast to the microsecond's fraction.
+inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr) {
   have_p = false;
   if (const int32_t rc = rows_cover(st, st.entries[s.first + k], t)) return rc;
+  if (const carried::Track* tr = st.entries[s.first + k].track.get()) {
+    // SPEC 18: inside its span the forecast the record carries; the covariance stays the theory's (version 1)
+    const ElementRow& row = st.entries[s.first + k].row;
+    const double ts = jd != nullptr ? ((jd[0] - row.epoch_jd_whole) + (jd[1] - row.epoch_jd_frac)) * 86400.0 : (t - st.entries[s.first + k].epoch) * 60.0;
+    if (tr->covers(ts)) {
+      if (!carried::at(*tr, ts, r, v)) return kPropRefused;
+      if (P != nullptr && st.entries[s.first + k].cov != nullptr) {
+        Slot& q = slot_of(st, s, k, true);
+        if (q.error == 0 && q.cp != nullptr) {
+          double rr[3], vv[3];
+          have_p = cov::eval(*q.cp, t - st.entries[s.first + k].epoch, rr, vv, P);
+        }
+      }
+      return kPropOk;
+    }
+  }
   Slot& q = slot_of(st, s, k, P != nullptr);
   if (q.error != 0) return q.error;
   const double dt = t - st.entries[s.first + k].epoch;
@@ -462,16 +489,16 @@ inline Choice choose(const Store& st, const Series& s, double t) {
 
 /// Series s at t (minutes from J2000): the TEME state (km, km/s) and, when P is given, the covariance (have_p false
 /// when the sets carry none). 0, or the theory's error code.
-inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* P, bool& have_p) {
+inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* P, bool& have_p, const double* jd = nullptr) {
   const Choice c = choose(st, s, t);
-  if (c.b < 0) return state_of(st, s, static_cast<uint32_t>(c.a), t, r, v, P, have_p);
+  if (c.b < 0) return state_of(st, s, static_cast<uint32_t>(c.a), t, r, v, P, have_p, jd);
   double ra[3], va[3], rb[3], vb[3], Pa[36], Pb[36];
   bool ha = false, hb = false;
   const double sfrac = (t - c.t0) / (c.t1 - c.t0);
   const double w = sfrac * sfrac * (3.0 - 2.0 * sfrac);
   if (st.cfg.shape == 0) {
-    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), t, ra, va, P != nullptr ? Pa : nullptr, ha)) return e;
-    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), t, rb, vb, P != nullptr ? Pb : nullptr, hb)) return e;
+    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), t, ra, va, P != nullptr ? Pa : nullptr, ha, jd)) return e;
+    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), t, rb, vb, P != nullptr ? Pb : nullptr, hb, jd)) return e;
     const double wdot = 6.0 * sfrac * (1.0 - sfrac) / ((c.t1 - c.t0) * 60.0);  // per second
     for (int i = 0; i < 3; ++i) {
       r[i] = (1.0 - w) * ra[i] + w * rb[i];
@@ -482,7 +509,7 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
     // so the state leaves set a with its position and velocity and arrives on set b with its own, following the orbit
     double r1a[3], v1a[3], r1b[3], v1b[3];
     bool hd;
-    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), t, ra, va, P != nullptr ? Pa : nullptr, ha)) return e;
+    if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), t, ra, va, P != nullptr ? Pa : nullptr, ha, jd)) return e;
     if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.a), c.t1, r1a, v1a, nullptr, hd)) return e;
     if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), c.t1, r1b, v1b, nullptr, hd)) return e;
     const double T = (c.t1 - c.t0) * 60.0, uu = sfrac;  // seconds
@@ -494,7 +521,7 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
       v[i] = va[i] + d01 * d + d11 * dv;
     }
     if (P != nullptr)
-      if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), t, rb, vb, Pb, hb)) return e;
+      if (const int32_t e = state_of(st, s, static_cast<uint32_t>(c.b), t, rb, vb, Pb, hb, jd)) return e;
   }
   have_p = false;
   if (P != nullptr && ha && hb) {
@@ -508,7 +535,7 @@ inline int32_t at(Store& st, Series& s, double t, double* r, double* v, double* 
 
 inline uint64_t bytes_of(const Store& st) {
   uint64_t b = st.entries.size() * sizeof(Entry) + st.series.size() * sizeof(Series);
-  for (const Entry& e : st.entries) b += e.cov != nullptr ? sizeof(cov::Set) : 0;
+  for (const Entry& e : st.entries) b += (e.cov != nullptr ? sizeof(cov::Set) : 0) + (e.track ? e.track->bytes() : 0);
   // the interned rows and nodes, one copy each
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   for (const Series& s : st.series) {
@@ -578,7 +605,8 @@ extern "C" int propagate_epochs(void) {
       for (size_t k = 0; k < tw.size(); ++k) {
         double r[3], v[3], P[36];
         bool have_p = false;
-        const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p);
+        const double jd[2] = {tw[k], tf[k]};
+        const int32_t e = epochs::at(st, s, epochs::minutes_of(tw[k], tf[k]), r, v, P, have_p, jd);
         oem::iso_text(tw[k], tf[k], 0.0, text, sizeof text);
         if (e == epochs::kRowsShort) {
           char day[16];
@@ -745,7 +773,8 @@ int32_t sdnap_epochs_at(double jd_whole, double jd_frac, uint32_t first, uint32_
   for (uint32_t k = 0; k < count; ++k) {
     double r[3], v[3], P[36];
     bool have_p = false;
-    const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p);
+    const double jd[2] = {jd_whole, jd_frac};
+    const int32_t e = sdnap::epochs::at(st, st.series[first + k], t, r, v, cov != nullptr ? P : nullptr, have_p, jd);
     if (status != nullptr) status[k] = e;
     double ro[3] = {r[0], r[1], r[2]}, vo[3] = {v[0], v[1], v[2]};
     if (e == sdnap::kPropOk && frame == 3) sdnap::teme_to_ecef_m(theta, r, v, ro, vo);
@@ -766,5 +795,6 @@ int32_t sdnap_epochs_set_at(uint32_t i, uint32_t k, double jd_whole, double jd_f
   auto& st = sdnap::epochs::resident();
   if (i >= st.series.size() || out == nullptr || k >= st.series[i].count) return -1;
   bool have_p = false;
-  return sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p);
+  const double jd[2] = {jd_whole, jd_frac};
+  return sdnap::epochs::state_of(st, st.series[i], k, sdnap::epochs::minutes_of(jd_whole, jd_frac), out, out + 3, nullptr, have_p, jd);
 }
