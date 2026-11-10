@@ -10,17 +10,11 @@
 // 8.1: 150 m). Measured 2026-11-10: 1,272 m on 0.6.11, 6,090 m on 0.6.9.
 //   node test/class0-exact-resonance.e2e.mjs
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import {createHash} from 'node:crypto';
+import {requireTruth} from './lib/ffm-truth.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
-
-// the truth's FFM build (propagator/ffm 2.3.0, dist/isomorphic/module.wasm); heo-model-truth keys its cached truths by that
-// file's bytes, so a truth of another build is never read, and another build is refused here by name
+// the bound's truth: FFM 2.3.0 (propagator/ffm/dist/isomorphic/module.wasm); another build is refused
 const FFM_SHA256 = 'ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934';
-{
-  const ffm = createHash('sha256').update(fs.readFileSync(new URL('../../ffm/dist/isomorphic/module.wasm', import.meta.url))).digest('hex');
-  assert.equal(ffm, FFM_SHA256, `the truth's FFM build is ${FFM_SHA256}, not ${ffm}: the bound is that build's`);
-}
+requireTruth(FFM_SHA256);
 const n = 8.05, e = 0.25, bound = 250;
 const r = await runModelTruth({name: `class 0 n ${n} e ${e}`, n, e, i: 50, raan: 10, argp: 30, ma: 0, drag: true, hourly: true, gridMinutes: 60});
 assert.equal(r.ffmSha256, FFM_SHA256, 'the truth flown by the named FFM build');

@@ -14,17 +14,11 @@
 //   6.0 at e 0.35, above the 0.3 switch, wrong from 0.6.3 on (the grid's first release).
 //   node test/class0-commensurability.e2e.mjs
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import {createHash} from 'node:crypto';
+import {requireTruth} from './lib/ffm-truth.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
-
-// the truth's FFM build (propagator/ffm 2.3.0, dist/isomorphic/module.wasm); heo-model-truth keys its cached truths by that
-// file's bytes, so a truth of another build is never read, and another build is refused here by name
+// the bounds' truth: FFM 2.3.0 (propagator/ffm/dist/isomorphic/module.wasm); another build is refused
 const FFM_SHA256 = 'ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934';
-{
-  const ffm = createHash('sha256').update(fs.readFileSync(new URL('../../ffm/dist/isomorphic/module.wasm', import.meta.url))).digest('hex');
-  assert.equal(ffm, FFM_SHA256, `the truth's FFM build is ${FFM_SHA256}, not ${ffm}: the bounds are that build's`);
-}
+requireTruth(FFM_SHA256);
 
 // [n rev/day, e, bound (m, day-7 along-track RMS), this build, 0.6.9]
 const CASES = [
