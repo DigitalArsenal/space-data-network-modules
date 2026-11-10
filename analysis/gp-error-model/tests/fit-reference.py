@@ -4,8 +4,10 @@
 Writes tests/fit-reference.json. Nothing here calls the module:
   - SGP4: python-sgp4 (Vallado's C++ through its accelerated wrapper, WGS-72,
     opsmode 'i'); its pure-Python port for the Vallado cases' truth elements;
-  - frames: pyerfa, GCRF -> TEME = Rz(ee06a) * pnm06a at TT from UTC, and the
-    IAU 2006 frame bias (eraBp06) for EME2000;
+  - frames: pyerfa, the TEME of AIAA 2006-6753, GCRF -> TEME =
+    R3(GAST06 - GMST82) * NPB06 at TT from UTC and UT1 = UTC (until
+    2026-11-10 Rz(ee06a) * pnm06a, x axis by GMST06), and the IAU 2006 frame
+    bias (eraBp06) for EME2000;
   - fitting: scipy.optimize.least_squares (Levenberg-Marquardt) in classical
     elements, a different parameterization and solver from the module's.
 
@@ -35,7 +37,9 @@ Kelso, T. S. (2006), Revisiting Spacetrack Report #3, AIAA 2006-6753
 (SGP4-VER.TLE and tcppver.out; free use with citation).
 
 Run: SDN_MODULES_PRIVATE_FIXTURES=<private fixtures root> python3 tests/fit-reference.py (python-sgp4 2.27, pyerfa 2.0.1.5,
-scipy 1.18.1, numpy 2.5.3).
+scipy 1.17.1, numpy 2.4.3). Regenerated 2026-11-10 for the TEME of AIAA 2006-6753: the Vallado cases (TEME) are unchanged;
+the synthetic ephemerides written in GCRF and EME2000 moved by up to 12.2 m, the noisy case's by up to 1.9 m, the ISS
+SupGP scores by up to 1.2 m.
 """
 import csv
 import json
@@ -85,8 +89,11 @@ BIAS = erfa.bp06(2451545.0, 0.0)[0]
 
 
 def gcrf_to_teme(t):
+    """The TEME of AIAA 2006-6753: R3(GAST06 - GMST82) NPB06, UT1 = UTC."""
+    d1, d2 = erfa.dtf2d('UTC', t.year, t.month, t.day, t.hour, t.minute, t.second + t.microsecond * 1e-6)
     t1, t2 = tt_of(t)
-    return erfa.rz(erfa.ee06a(t1, t2), erfa.pnm06a(t1, t2))
+    npb = erfa.pnm06a(t1, t2)
+    return erfa.rz(erfa.gst06(d1, d2, t1, t2, npb) - erfa.gmst82(d1, d2), npb)
 
 
 def satrec(epoch, el):

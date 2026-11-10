@@ -117,14 +117,14 @@ export const checks = [
   }),
   defineCheck({
     id: "vallado-teme-to-gcrf", reviewer: REVIEWERS.VALLADO, tier: "fast",
-    question: "Is TEME rotated to GCRF as the published AIAA 2006-6753 example rotates it (within 1 cm), and how far is it from an independent pyerfa rotation of the verification epochs that defines TEME through GMST06?",
-    source: "AIAA 2006-6753 sec. V TEME example (2004-04-06 07:51:28.386009 UTC); analysis/epoch-state/tests/vallado-verification.json (pyerfa 2.0.1.5 GCRF of the 33 sets at epoch)",
+    question: "Is TEME rotated to GCRF as AIAA 2006-6753 defines TEME (r_PEF = R3(GMST82) r_TEME): its Appendix C example against the GCRF of the same state (within 1 cm), and the published t=0 states of the verification sets against an independent pyerfa rotation by that definition (within 1 mm, 1 mm/s)?",
+    source: "AIAA 2006-6753 Rev 2 Appendix C TEME example (2004-04-06 07:51:28.386009 UTC); its GCRF from Vallado, Fundamentals of Astrodynamics and Applications, Example 3-15; analysis/epoch-state/tests/vallado-verification.json (pyerfa GCRF of the 7 published t=0 states, R3(GAST06 - GMST82) NPB06)",
     async run(ctx) {
       const module = await ctx.module();
       const evidence = [];
       const example = rotate(module, ...Object.values(jdOf("2004-04-06T07:51:28.386009")), [5094.18016210, 6127.64465950, 6380.34453270, -4.746131487, 0.785818041, 5.531931288], FRAME_PROBE.TEME_TO_GCRF);
       const exampleM = hypot3(example.out, [5102.508958, 6123.011401, 6378.136928]) * 1e3;
-      evidence.push(`AIAA 2006-6753 example: ${exampleM.toFixed(4)} m from the published GCRF position (printed to 1 mm; status ${example.status})`);
+      evidence.push(`AIAA 2006-6753 example: ${exampleM.toFixed(4)} m from the Example 3-15 GCRF position (printed to 1 mm; status ${example.status})`);
       const ref = JSON.parse(fs.readFileSync(here("../../../../analysis/epoch-state/tests/vallado-verification.json"), "utf8"));
       let worstR = 0, worstV = 0, bad = 0;
       for (const c of ref.cases) {
@@ -135,9 +135,10 @@ export const checks = [
         worstV = Math.max(worstV, hypot3(out.slice(3), c.gcrfV) * 1e3);
       }
       evidence.push(`${ref.cases.length} epochs against pyerfa: worst ${worstR.toExponential(3)} m, ${worstV.toExponential(3)} m/s; ${bad} refused`);
-      // the example is printed to 1 mm (bound 1 cm: the published TEME input is itself rounded); pyerfa: 1 mm, 1 mm/s
-      evidence.push("report only: the pyerfa values take TEME as Rz(ee06a) pnm06a (GMST06), the module as R3(GAST06 - GMST82) NPB06 (src/gcrf.inc, the GMST82 TEME of AIAA 2006-6753); the difference grows from 3.3 mas (2006) to 53 mas (1980)");
-      return { pass: example.status === 0 && exampleM <= 0.01 && bad === 0, evidence };
+      // the example: the Example 3-15 GCRF applied the CIP offsets this rotation leaves out (3.4 mm), bound 1 cm.
+      // pyerfa: 1 mm (gmst() rounds GMST82 to 3.6e-11 rad, 0.3 mm at these radii); 1 mm/s (the fixture adds the frame
+      // rate R' Rdot r, which this probe leaves out: under 0.4 mm/s)
+      return { pass: example.status === 0 && exampleM <= 0.01 && bad === 0 && worstR <= 1e-3 && worstV <= 1e-3, evidence };
     },
   }),
   defineCheck({

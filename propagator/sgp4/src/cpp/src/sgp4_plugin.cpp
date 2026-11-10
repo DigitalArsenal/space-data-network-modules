@@ -1998,11 +1998,11 @@ void splitUtcJulianDate(double jdUtc, double& day, double& fraction) {
 }
 
 // TEME -> GCRF at a UTC Julian date (km, km/s), as analysis/epoch-state does
-// it: R = foundation/frames gcrfToTeme (ERFA eraPnm06a and eraEe06a) at TT
-// from UTC by ERFA's leap-second table, Rdot by a +/-600 s central
-// difference, r_g = R' r_t and v_g = R' (v_t - Rdot r_g). ERFA's "dubious
-// year" (+1: before 1960 or past its table) is used, as in epoch-state: a
-// second moves R by about 1e-11 rad.
+// it: R = foundation/frames gcrfToTeme (R3(GAST06 - GMST82) NPB06, the TEME of
+// AIAA 2006-6753) at TT from UTC by ERFA's leap-second table and UT1 = UTC,
+// Rdot by a +/-600 s central difference, r_g = R' r_t and
+// v_g = R' (v_t - Rdot r_g). ERFA's "dubious year" (+1: before 1960 or past
+// its table) is used, as in epoch-state: a second moves R by about 1e-11 rad.
 bool temeToGcrf(double jdUtc, const double rTeme[3], const double vTeme[3],
                 double rGcrf[3], double vGcrf[3]) {
     namespace fr = sdn::frames;
@@ -2011,9 +2011,10 @@ bool temeToGcrf(double jdUtc, const double rTeme[3], const double vTeme[3],
     if (eraUtctai(day, fraction, &tai1, &tai2) < 0) return false;
     fr::Epoch epoch;
     if (eraTaitt(tai1, tai2, &epoch.tt1, &epoch.tt2) != 0) return false;
-    fr::Epoch before = epoch, after = epoch;
-    before.tt2 -= TEME_RATE_HALF_STEP_SECONDS / 86400.0;
-    after.tt2 += TEME_RATE_HALF_STEP_SECONDS / 86400.0;
+    epoch.ut11 = day;
+    epoch.ut12 = fraction;
+    const fr::Epoch before = fr::shiftEpoch(epoch, -TEME_RATE_HALF_STEP_SECONDS);
+    const fr::Epoch after = fr::shiftEpoch(epoch, TEME_RATE_HALF_STEP_SECONDS);
     const fr::Mat3 R = fr::gcrfToTeme(epoch);
     const fr::Mat3 Rb = fr::gcrfToTeme(before);
     const fr::Mat3 Ra = fr::gcrfToTeme(after);
