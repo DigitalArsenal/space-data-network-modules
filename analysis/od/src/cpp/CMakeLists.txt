@@ -105,8 +105,8 @@ target_include_directories(od_lib PRIVATE
 target_link_libraries(od_lib PUBLIC sgp4_lib Eigen3::Eigen)
 # frame_transform.cpp: TEME by foundation/frames' axis engine over the vendored ERFA (the WASM builds take both from
 # units.mjs; the native library compiles ERFA in).
-set(SDN_FRAMES_SRC_DIR "${CMAKE_SOURCE_DIR}/../../../../foundation/frames/src")
-set(SDN_ERFA_DIR "${CMAKE_SOURCE_DIR}/../../../../higherpop/third_party/erfa")
+set(SDN_FRAMES_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../foundation/frames/src")
+set(SDN_ERFA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../higherpop/third_party/erfa")
 target_include_directories(od_lib PRIVATE "${SDN_FRAMES_SRC_DIR}" "${SDN_ERFA_DIR}")
 if(NOT EMSCRIPTEN)
     enable_language(C)
