@@ -1112,6 +1112,12 @@ sometimes give very inaccurate results"); the 9.1 JIRA records that 18 per-harmo
 harmonic routine *[doc]*. The 9.9 oracle confirms the 9.1.1.0 study of this section wherever an effect is measurable
 (6.5).
 
+Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 only; every other commensurability is absent:
+0.5 to 1.8 km a week on a transfer orbit. On a transfer orbit of 600 x 35,786 km (2.2535 rev/day; 4n = 9.014, 9 omega_E =
+9.025) after a 72 h fit with the same forces on both sides, the day-7 error is 485 m with a 12 x 12 field, 58 m with order 9
+removed from the truth, and 1.5 to 1.8 km with the full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km
+at degree 4.
+
 **Bands.** The resonance class is decided once, at initialization, from the epoch mean motion n_0 in rad/min (the
 element set's mean motion in rev/day times 2 pi / 1440), tested in this order *[study; probe 6.2, 6.10]*:
 
@@ -1451,8 +1457,11 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   AP with a selected gravity replacement and the epoch one-day resonance class uses 38 minutes instead;
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
-The grid depends only on the epoch state, so a state does not depend on which times were requested before, nor in
-what order *[probe 9.1: direct, 1-minute stepped and backward-approach requests agree to 0 mm]*. SGP4XP GEO nodes fall on
+The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
+agree to 0 mm]*. An AP state in this module depends on the order of requests: the same record flown in ascending and in random
+order differs by up to 12.7 mm at 500 km (median 2.0 mm), 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at
+geosynchronous altitude; a single state from a fresh record differs from the ascending pass by up to 8.8 mm. SGP4 differs by 0
+in every case. SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 
@@ -1463,7 +1472,8 @@ query integrates from the epoch through its bracket, creating checkpoints on the
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond the stored
 span it integrates from the nearest preceding retained node, so work grows with the remaining time gap.
 The node cache has bounded storage, not a time-independent bound on query work. AP class crossings can
-allocate temporary replacement coefficient tables (16.2). Request order does not change the epoch-anchored grid.
+allocate temporary replacement coefficient tables (16.2). Request order does not change the epoch-anchored grid; it changes an
+AP state by the amounts stated above.
 
 **AP one-day convergence.** The registered unfitted sets have epoch 2026-10-29 00:00 UTC,
 n = 1.0027 rev/day, e = 0.0002, i = 0.1 or 15 degrees, node = 40 degrees, argument of perigee = 30 degrees,
@@ -1515,6 +1525,11 @@ lies 90 minutes on, and the step after it is the regular one again (two periods 
 90-minute step fails, or a shorter step fails, or the new node's own rates fail, the integration ends there (8,
 Refusals). 9.9 has no further fallback: the 30-minute steps of the 9.1.1.0 build (section 11) are not reached in
 9.9.
+
+The step is fixed (95 min in the long-period regime, 38 min in the one-day class) with no error control. It resolves perigee
+only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at 95 min and 0.70 at 38 min on a one-day orbit. Beyond that the theory's
+own equations are integrated with a mean-longitude error of 0.2 km a week at e 0.5 and 0.4 to 4.6 km a week at e 0.7 to 0.82 at
+95 min, and 0.09 to 0.17 km at e 0.82 at 38 min.
 
 **Output between nodes.** Cubic Hermite interpolation on the bracketing nodes (values and rates), with
 q = (t - t_k) / (t_k+1 - t_k): y(t) = (1 + 2q)(1 - q)^2 y_k + q (1 - q)^2 h y'_k + q^2 (3 - 2q) y_k+1 +
@@ -1649,7 +1664,10 @@ the prediction, with d = (t - t_a) / 1 day:
   non-gravitational part of the theory's epoch n-dot (its rates with and without BTERM; USER_DEFINED_SDNAP_COV_NG_RATE
   = n-dot_ng / n per day).
 
-Each is a column g = J(t) dp of 12.3's J(t), and Q(t) = sum g g^T. The set carries its sizes and t_a as
+Each is a column g = J(t) dp of 12.3's J(t), and Q(t) = sum g g^T. Q(t) is an epoch-element perturbation of size s d mapped by
+the columns from the epoch; its node-coupled part depends on the arc length and on where the epoch is placed (8 times a rate
+error from the arc's end, for a 72 h arc at a 24 h lead). The sizes below belong to their arcs: the SGP4XP rows to 24 h
+fits; the SDNAP DRAG row to 24 h and 17 h arcs in strong drag and 72 h and 24 h arcs near 700 km. The set carries its sizes and t_a as
 USER_DEFINED_SDNAP_COV_NOISE "s_e s_i s_l s_d t_a". They are fitted per regime (DRAG: perigee below
 2500 km; ABOVE) by maximum likelihood, the Gaussian negative log-likelihood of the
 position errors under P(t), on laser-ranged arcs of 2026-02-01 to 2026-05-31 (Ajisai, Starlette, Stella, LARETS,
@@ -1686,8 +1704,8 @@ linear in each squared size and the floor adds, so the fit re-weights the module
 re-fitted. The ABOVE row is the 2026-11-03 minimax row (the worst violation of 12.7's mean band across days 1, 2, 3
 and 7 on `operator-theory/ap/b040`), unchanged.
 
-Realism is not met. On the held-out windows 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7) are inside
-the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
+Realism is not met, and the covariance is not calibrated (12.7). On the held-out windows the median |z| of 8 of the 18
+cells (two regimes, three axes, days 1, 3 and 7) is inside the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
 0.00022005794330391744, c 0.52454406174861778) gave a 1-sigma 274 to 530 times too wide in-track and about 1,000 to
 7,600 times radially at day 1. The worst held-out |ln(median |z| / 0.674)| goes from 8.77 to 0.74. Median |z|, 0.6.0
 to 0.6.1:
@@ -1735,8 +1753,12 @@ realism"), 0 of 12 inside:
 | SGP4XP | LEO set | 3 | 0.76 | 0.992 | outside |
 
 Outside the band: SGP4XP in every cell, LAGEOS-1 at 1.38 to 1.93 throughout, the LAGEOS-2 and Etalon and LEO cells
-too large from day 2 (coverage 0.98 to 1.0). These are a measured limit of the process-noise model of 12.5, not of the
-band; the band is not widened.
+too large from day 2 (coverage 0.98 to 1.0). The band is not widened.
+
+The covariance is positive semidefinite by construction and is not calibrated. The band of SPEC 12.7 cannot establish
+realism: it accepts variance errors of 2.3, 0.2 and 0.01 on the three principal axes together, a perfect covariance fails it
+with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise sizes were tuned on the windows tested. With
+the model otherwise exact, the fitted sigma of B and S is too small by sqrt(3N - L), 46 for a 24 h arc sampled every 120 s.
 
 
 SDNAP: the held-out cells of 12.5 (per axis); neither theory's table earns a realism label.
@@ -2033,6 +2055,11 @@ AP is an advanced propagator that builds on the entire history of astrodynamics:
 (section 15) and the gravity field below. Its sets are SGP4XP sets (BTERM, AGOM) that carry a mark, and it flies on the theory's
 own grid.
 
+Given the same forces, AP's first-day error against a numerical orbit is about 20 m below 1,000 km (29 to 72 m at 450 km),
+12 m at 1,336 km, 4.5 m at 5,900 km, 4.5 to 7 m in medium orbits and 1 to 6 m in geosynchronous orbits; on eccentric orbits
+with low perigee it is 15 to 185 m on the first day and 0.1 to 3.6 km by the seventh. A numerical propagator has no such
+floor: AP equals one only where the force model limits both.
+
 **16.1 Selection.** `fit`, `propagate`, `load_epochs` and `propagate_epochs` read FORCES:
 
 | FORCES | Terms |
@@ -2042,10 +2069,15 @@ own grid.
 
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
+complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
+orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
+against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
 `maneuver` and `ingest_omm` keep SGP4XP.
 
 **16.2 Tesserals.** The field is the fully normalized EGM-96 of propagator/ffm, pinned by build.mjs. Inclination functions come
-from the Fourier coefficients of the normalized Legendre recurrence, stable to degree 70, at the epoch inclination.
+from the Fourier coefficients of the normalized Legendre recurrence, stable to degree 70, at the epoch inclination. The Cap column is a cap on families, not the degree of the field (16.1): at
+800 km the terms of degree 13 to 31 not carried are 14 m RMS.
 
 | Family | Terms | Cap | Where |
 | --- | --- | --- | --- |
@@ -2059,6 +2091,10 @@ A first-order or near-resonant term is left out when section 6's class or the sh
 by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
 its position amplitude is below 0.5 m. G is g0 + g1 e about the epoch e: below e = 0.03, q = 0 takes 1 + (l (l + 1) / 4 - w^2) e^2 and
 q = +-1 takes ((l + 1) / 2 + q w) e, above it the Hansen coefficient.
+
+Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
+terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
+in a 12-hour orbit (13.5 against 6.7 m) and 7.5 m in a geosynchronous orbit (7.6 against 1.1 m), RMS over a 72 h arc.
 
 Section 6's classes keep their terms. With d above 0, every AP table is rebuilt together when the current
 class differs from the epoch class. F is evaluated at the current inclination with the exact dF_632/di;
@@ -2074,11 +2110,18 @@ eccentric-anomaly quadrature. The class's original 29 terms retain their exact i
 
 **16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
 (w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
+For e0 at or below 0.3 the zonal tail carries, for even degrees, the secular term only; it omits their cos 2 omega pair, which
+is of the same order in e in the perigee rate and 50 to 78 % of the term kept. The perigee rate is short by 2.0e-5 rad/day at
+800 x 1,100 km, e 0.0206, i 49.8 deg: a radial error growing 3.1 m/day there, and 6 to 54 m/day at e 0.1 between 500 and
+1,200 km. Above e0 0.3 the zonal tail carries every long-period term (16.11).
 
 **16.4 Frame.** Frame policy is selected once by `xp_init` from the epoch propagation branch and the
 selected gravity replacements. With d or z above 0, epoch periods below 1100 minutes and the nonzero
 resonance classes carry epoch-axis states to TEME of date by M(t) M(t0)^T. M is the GCRF-to-TEME matrix
-of `gcrf.inc`, linear between 12-hour nodes. The nonresonant long-period branch (epoch period at least
+of `gcrf.inc`, linear between 12-hour nodes: at most 5.6e-9 rad, 0.23 m at the geostationary radius. The Earth's axis is held
+at its epoch direction during a flight. With precession alone the error from the epoch is 0.1, 0.8 and 4.1 m at 1, 3 and 7
+days at 800 km and 0.2, 1.7 and 9.0 m at 1,336 km, up to twice that with the fortnightly nutation, and below 1 m from 5,900 km
+up. The nonresonant long-period branch (epoch period at least
 1100 minutes, class 0) retains its native TEME-of-date convention without this additional rotation.
 Its instantaneous third-body geometry does not take the epoch-axis output correction.
 
@@ -2158,6 +2201,10 @@ from the current mean eccentricity, inclination and mean motion for that rate or
 frame epoch, atmosphere and force selection remain fixed. Coefficients are local to the evaluation; rebuilding
 does not modify shared force configuration. The new class uses its own Hansen expansion, and terms leaving the
 rates enter the short-period output table when its selection admits them. A term is never counted in both.
+
+AP's mean elements are defined per resonance class, per regime (period below or above 1,100 min) and per eccentricity branch.
+The same six numbers on two sides of a switch are different orbits: 8 to 401 m apart at epoch and up to 33 km after 7 days at
+the regime limit. Sets on different sides must not be differenced, blended or interpolated.
 
 Model truth: an AP mean-element GTO at 2026-10-29 00:00 UTC seeds FFM with the same GCRF state. There is no fit.
 The primary has n = 2.40 rev/day, e = 0.72, i = 27 degrees, RAAN = 40 degrees, argument of perigee = 270 degrees,
@@ -2268,7 +2315,12 @@ Etalon-2 23.55 to 9.74 m; medians LAGEOS-1 14.10 to 7.81 m, LAGEOS-2 12.24 to 6.
 prints every number. The AP covariance calibration of 12.7 is re-measured on these sets with its noise constants
 unchanged: one of its eight cells (ABOVE, day 1) is now inside the band, none was before.
 
-**16.10 The half-day class's step.** The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
+**16.10 The half-day class's step.** The step is fixed (95 min in the long-period regime, 38 min in the one-day class) with no
+error control. It resolves perigee only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at 95 min and 0.70 at 38 min on a
+one-day orbit. Beyond that the theory's own equations are integrated with a mean-longitude error of 0.2 km a week at e 0.5 and
+0.4 to 4.6 km a week at e 0.7 to 0.82 at 95 min, and 0.09 to 0.17 km at e 0.82 at 38 min.
+
+The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
 2.406 rev/day) carries resonant terms in lambda - 2 theta, whose period 2 pi / |n - 2 omega_E| is long near the
 commensurability (Molniya at 2.00 rev/day: 183 days; the half-day fixture at 2.0059 and GPS: 6.5 and 22 years) and
 short away from it (GTO at 2.40 rev/day: 2.5 days; Galileo at 1.70: 3.3 days; BeiDou at 1.86: 6.9 days); two
@@ -2325,7 +2377,17 @@ set. The eight-hour and sixteen-hour classes were not measured and keep the ship
 flight re-initializes under its new class's switch (6). 0.6.4 therefore changes a flight only for a class 0 set with
 0.05 < e <= 0.3; every other set is byte-identical to 0.6.3 (PRODUCER's version aside), and the 0.6.4 validation
 (orbit-accuracy-experiments experiments/operator-theory/TESSERAL-SWITCH-BY-CLASS.md) states its cells, the catalog budget on
-persistent instances and the identity set. For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, so each (m, w) family's
+persistent instances and the identity set.
+
+Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 only; every other commensurability is absent:
+0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
+full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
+
+Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
+terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
+in a 12-hour orbit (13.5 against 6.7 m) and 7.5 m in a geosynchronous orbit (7.6 against 1.1 m), RMS over a 72 h arc.
+
+For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, so each (m, w) family's
 first-order displacement (Lagrange's equations, each harmonic divided by its psi-dot, lambda also through n) is a periodic
 function of the anomaly, complete in j. At init it is built on 128 uniform eccentric anomalies from the family's forcing:
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
@@ -2343,7 +2405,8 @@ a thread while tess::FitGridScope lives there (thread-local; the fit holds it ar
 its last holder drops it, never kept idle, so a fit leaves no grid behind. The export sdnap_wide_grid_stats(reset, out) writes the
 grid lookups since the last reset, out[0] by sets outside a fit and out[1] by a fit's sets (reset != 0 zeroes them after reading);
 sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their bytes (out[1]) and the grids built since the
-instance began (out[2]). Against the full-field quadrature on THEMIS (e 0.82, 7 days at
+instance began (out[2]). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
+2e-3 at e 0.79. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; a
 first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in
 the table (`src/tesseral.inc:323`); the table builds none of the general set above the switch (`src/tesseral.inc:324`). Below the switch both sets are 0.4.14's: propagations at e 0.25 and 0.3 of Etalon- and GPS-like seeded
@@ -2594,6 +2657,20 @@ an SGP4XP `$OMM` with neither carries them, by the SGP4-XP element-set definitio
 read from there (program decision D13; the owner may rule to refuse instead). The ingested `$OCM`'s HEADER.COMMENT states
 the source in one fixed line: `BTERM_SOURCE=BTERM AGOM_SOURCE=AGOM` or `BTERM_SOURCE=BSTAR AGOM_SOURCE=MEAN_MOTION_DDOT`
 (an SGP4 set: no line).
+
+### 17.7 What an AP record's elements and caps mean
+
+AP's mean elements are defined per resonance class, per regime (period below or above 1,100 min) and per eccentricity branch.
+The same six numbers on two sides of a switch are different orbits: 8 to 401 m apart at epoch and up to 33 km after 7 days at
+the regime limit. Sets on different sides must not be differenced, blended or interpolated.
+
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
+complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
+orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
+against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
+
+An AP mean set and the state AP gives for it agree to first order only: integrated numerically that state leaves the AP
+trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low orbit. AP elements must come from an AP fit.
 
 ## References
 
