@@ -873,7 +873,9 @@ STM, frame/time/ephemeris and SGP4 checks, with reproducible version and checksu
 Each build's result, comparison by comparison, is kept in
 [tests/evidence/scored/](tests/evidence/scored/), named by version and wasm SHA-256. A new
 build is re-scored with `nice -n 19 node propagator/ffm/tests/evidence/rescore-all.mjs` from the
-repository root ([Re-scoring a new build](docs/cross-validation.md#re-scoring-a-new-build)).
+repository root. `FFM_XVAL_NYX_OUT` must name the stored Nyx runs, and `FFM_XVAL_GMAT_WORK` the GMAT
+diagnostic reports; both live with the tool installs, outside the repository
+([Re-scoring a new build](docs/cross-validation.md#re-scoring-a-new-build)).
 
 ## Verification
 

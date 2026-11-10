@@ -1658,7 +1658,7 @@
         "gmatConsoleSha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
         "gmatBaseSha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26"
       },
-      "summarySha256": "0a95a6ec62d6b63de54970ac6b8d0b4a287d49d320eacf22fc63edf03464096c",
+      "summarySha256": "a74804a07789d9b203ff66e64dc22fbdd907a31dcdaea3e3c82a2ea22c3a0d50",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -3413,7 +3413,7 @@
         "gmatConsoleSha256": "c8a214cf761d7d074c20bee17586a16ac9c9dca9475018e8a0866116377ab655",
         "gmatBaseSha256": "25ad1998de28ac0ac5676341b6ea8642ae7fc6fc23fee8b8b7e077392fbe6f98"
       },
-      "summarySha256": "c78f753459ff6ca618bb188b433604940a6e51608f5a1b053f5358a67e2b42b9",
+      "summarySha256": "1bd7b5539bb59bc771c0af8bcc119b89f22b39d687126b846f05227c171e2038",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -4641,7 +4641,7 @@
         "binarySha256": "689b59fa8a3919ce4411e3478c458b8a9d0b07b7bfe02c60d282234b20e2db8f",
         "nyxCrateSha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
       },
-      "summarySha256": "f032cfb605e22ce8cff5f8e8c195f448d6a3ded24b7a8d3261c54fba2d7d8c5b",
+      "summarySha256": "d5709a161c558b9811bab33f88d9d6defa1fb9f5fe5100b39b4f02687f75ae77",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -8688,7 +8688,7 @@
           }
         }
       },
-      "summarySha256": "c5ede1506ef5781db3a1d8120783f653d61e59891bf2a098222f566082eda59e",
+      "summarySha256": "e9040725a7947b0a5ddd9f57c6481ea0454842ee1a3d831e9a6211266dd08427",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -12832,7 +12832,7 @@
         {
           "label": "Anomalous-oxygen diagnostic",
           "path": "gmat/anomalous-oxygen.json",
-          "sha256": "08f9930223dd00cfbf5a87474f6df232f5b1a83c54248dd3b8477d31f3e12a6b"
+          "sha256": "cc8e11b8e168e6eb117b2122a9fac75c9ed28305bd3d619545ea98832c37c415"
         },
         {
           "label": "LEO400_F6-field-sun-moon-srp-drag.txt",
@@ -13075,7 +13075,7 @@
         {
           "label": "Published-formula / WGS84 trajectories",
           "path": "nyx/drag-settings-diagnostic.json",
-          "sha256": "642f234e69a98696c7006351985237980e1e61148a193e0fa0f9c5d9d7694819"
+          "sha256": "47f4720b1fdc6b425bd0d54057b78aedcc0a39f5f7473a8a66d95e470c9f7fd5"
         }
       ],
       "rows": [

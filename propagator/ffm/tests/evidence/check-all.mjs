@@ -4,7 +4,8 @@
 // raw summary scores against the shared export (GMAT limits only for GMAT).
 // Source, frame, epochs, units and tolerance rationale remain in consolidated.json.
 // No network, module rebuild, unit-test suite, or parallel child execution.
-// node propagator/ffm/tests/evidence/check-all.mjs   (from repository root)
+// FFM_XVAL_GMAT_WORK=<GMAT work folder> node propagator/ffm/tests/evidence/check-all.mjs   (from repository root;
+// the consolidation pins the GMAT diagnostic reports kept there, outside the repository)
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';

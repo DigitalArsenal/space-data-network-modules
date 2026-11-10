@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { xvalDir } from './rescore-all.mjs';
 export const here = path.dirname(fileURLToPath(import.meta.url));
 export const root = path.resolve(here, '../../../..');
 const read = (p) => JSON.parse(fs.readFileSync(path.resolve(here, p), 'utf8'));
@@ -76,7 +77,7 @@ function collectDragDiagnostics(summaries, exported) {
   const oxygenFile = `gmat/${oxygenPin.path}`, oxygen = checked(oxygenFile, oxygenPin.sha256);
   const gmatPins = [cacheSource, pin('Anomalous-oxygen diagnostic', oxygenPin.sha256, { path: oxygenFile })];
   const gmatCases = oxygen.rows.map((r) => {
-    const stem = path.join('/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen', r.id.replaceAll(' ', '_'));
+    const stem = path.join(xvalDir('gmat'), 'anomalous-oxygen', r.id.replaceAll(' ', '_'));
     const report = `${stem}.txt`, script = `${stem}.script`, text = fs.readFileSync(script, 'utf8');
     const cd = /GMAT Sat\.Cd = ([\d.eE+-]+);/.exec(text);
     require(cd && text.includes('GMAT FM.Drag.AtmosphereModel = NRLMSISE00;'), `${r.id}: Cd-scaled NRLMSISE-00 script missing`);

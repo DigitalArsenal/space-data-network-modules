@@ -4,8 +4,13 @@
 // library) stays as stored; no external engine is run and nothing is fetched. Only FFM's side is flown again,
 // serially, through the shipped WASM, and each tool's own scorer reduces it in C++.
 //
+//   FFM_XVAL_NYX_OUT=<folder> FFM_XVAL_GMAT_WORK=<folder> \
 //   nice -n 19 node propagator/ffm/tests/evidence/rescore-all.mjs [--date YYYY-MM-DD] [--skip-scoring]
-//        [--commit <sha> --note <text>]                                                   (from the repository root)
+//        [--commit <sha> --note <text>] [--nyx-out <folder>] [--gmat-work <folder>]       (from the repository root)
+//
+// FFM_XVAL_NYX_OUT (or --nyx-out) names the folder of the stored Nyx runs that run-nyx.mjs wrote; FFM_XVAL_GMAT_WORK
+// (or --gmat-work) the GMAT work folder holding the anomalous-oxygen/ and variants/ diagnostic reports. Both live
+// with the tool installs, outside the repository; the command refuses to start without them.
 //
 // Steps: each tool's scorer, refresh-derived-comparisons.mjs --gmat --nyx --basilisk, rescore.json's date,
 // consolidate.mjs --write, check-all.mjs, then scored/<version>-<sha256[0:8]>.json. A comparison whose limits are
@@ -28,8 +33,19 @@ const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const scoredDir = path.join(here, 'scored');
 export const scoredFile = (version, sha256) => path.join(scoredDir, `${version}-${sha256.slice(0, 8)}.json`);
 
-// The external inputs each scorer reads, as its README and summary record them.
-const NYX_OUT = '/Users/tj/software/tools/xval/nyx/out';
+// Stored tool outputs kept outside the repository, named by environment variable or option, never by a path here.
+export const XVAL = {
+  nyx: { env: 'FFM_XVAL_NYX_OUT', option: 'nyx-out',
+    what: 'the folder of the stored Nyx runs that run-nyx.mjs wrote (nyx-2.6.0-stm.json, nyx-2.6.0-msis-published.json, nyx-2.6.0-fine.json, nyx-2.6.0-naif-bpc.json)' },
+  gmat: { env: 'FFM_XVAL_GMAT_WORK', option: 'gmat-work',
+    what: 'the GMAT work folder that holds the anomalous-oxygen/ and variants/ diagnostic reports' },
+};
+export function xvalDir(key, value = process.env[XVAL[key].env]) {
+  const { env, option, what } = XVAL[key];
+  if (!value) throw new Error(`Set ${env} (or pass --${option}) to ${what}.`);
+  if (!fs.existsSync(value)) throw new Error(`${env} names ${value}, which does not exist; it should be ${what}.`);
+  return path.resolve(value);
+}
 const TUDAT_CACHE = 'propagator/ffm/tests/evidence/tudat/ffm-tudatpy-1.0.0.json';
 const EV = 'propagator/ffm/tests/evidence';
 // [label, cwd relative to the repository root, script relative to cwd, args]. Order matters:
@@ -42,7 +58,7 @@ const EV = 'propagator/ffm/tests/evidence';
 const BASILISK = ['Basilisk', '.', `${EV}/basilisk/score-basilisk.mjs`, ['--cached-only', '--cache', TUDAT_CACHE,
   '--diagnostics', `${EV}/basilisk/basilisk-wgs84-diagnostic.json`,
   '--diagnostics', `${EV}/basilisk/basilisk-wgs84-gtd7d-diagnostic.json`, '--causes', `${EV}/basilisk/diagnoses.json`]];
-const STEPS = [
+const steps = (NYX_OUT) => [
   ['ERFA / SPICE', '.', `${EV}/erfa-spice/run-erfa-spice.mjs`, ['--stored-reference']],
   ['Horizons', '.', `${EV}/horizons/run-horizons.mjs`, ['--stored-reference']],
   ['Tudat native', '.', `${EV}/tudat/score-tudat.mjs`, ['--stm', `${EV}/tudat/tudatpy-1.0.0-stm.json`]],
@@ -188,15 +204,19 @@ function writeRecord(record) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { values: o } = parseArgs({ options: { 'record-only': { type: 'boolean', default: false }, consolidated: { type: 'string' },
-    commit: { type: 'string' }, date: { type: 'string' }, 'skip-scoring': { type: 'boolean', default: false }, note: { type: 'string' } } });
+    commit: { type: 'string' }, date: { type: 'string' }, 'skip-scoring': { type: 'boolean', default: false }, note: { type: 'string' },
+    'nyx-out': { type: 'string' }, 'gmat-work': { type: 'string' } } });
   if (o['record-only']) {
     if (!o.consolidated || !o.commit) throw new Error('--record-only needs --consolidated <file> and --commit <sha>');
     writeRecord(scoredRecord(readJson(o.consolidated), { evidenceCommit: o.commit, checks: null,
       note: 'Written from the consolidated.json committed with this build\'s evidence; the check scripts were not run again.' }));
   } else {
     const started = Date.now();
+    // The derived diagnostics and consolidate.mjs (also inside check-all.mjs) read the GMAT reports from here.
+    process.env[XVAL.gmat.env] = xvalDir('gmat', o['gmat-work']);
     // --skip-scoring keeps the scored summaries and redoes only the consolidation, the checks and the per-build file.
     if (!o['skip-scoring']) {
+      const STEPS = steps(xvalDir('nyx', o['nyx-out'] ?? process.env[XVAL.nyx.env]));
       const { propagationIdentity } = await import('./tudat/scoring.mjs');
       const identity = JSON.stringify(propagationIdentity());
       for (const cache of CACHES.map((c) => path.join(root, c)))

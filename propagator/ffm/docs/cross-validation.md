@@ -506,7 +506,7 @@ Offline reproduction from `propagator/ffm`:
 
 ```sh
 node tests/evidence/erfa-spice/check-classical-frames.mjs
-node tests/evidence/erfa-spice/run-erfa-spice.mjs --flatbuffers /Users/tj/software/main-packages/flatbuffers/include
+node tests/evidence/erfa-spice/run-erfa-spice.mjs --flatbuffers <flatbuffers checkout>/include
 node tests/evidence/erfa-spice/run-orekit-frames.mjs
 node tests/evidence/erfa-spice/check-erfa-spice.mjs
 ```
@@ -525,8 +525,22 @@ One command re-scores the whole suite on the committed dist, from the
 repository root:
 
 ```sh
+export FFM_XVAL_NYX_OUT=<the Nyx runner's out/ folder>
+export FFM_XVAL_GMAT_WORK=<the GMAT work folder>
 nice -n 19 node propagator/ffm/tests/evidence/rescore-all.mjs
 ```
+
+Two stored tool outputs live with the tool installs, outside the repository.
+The command, `consolidate.mjs`, `check-all.mjs` and
+`refresh-derived-comparisons.mjs` refuse to run without them, and say which
+one is missing:
+- `FFM_XVAL_NYX_OUT` (or `--nyx-out`) names the folder `run-nyx.mjs` writes
+  the Nyx runs to: `nyx-2.6.0-stm.json`, `nyx-2.6.0-msis-published.json`,
+  `nyx-2.6.0-fine.json` and `nyx-2.6.0-naif-bpc.json`. That is the `out/`
+  folder of the Nyx runner's working directory.
+- `FFM_XVAL_GMAT_WORK` (or `--gmat-work`) names the GMAT work folder. Its
+  `anomalous-oxygen/` and `variants/` folders hold the GMAT diagnostic scripts
+  and reports.
 
 It flies FFM's side again through the shipped WASM, serially, against every
 stored reference. No reference engine is run and nothing is fetched. The steps
@@ -580,8 +594,8 @@ tool-specific scoring/annotation commands before
 `node tests/evidence/consolidate.mjs --write`.
 
 The GMAT diagnostic inputs are the provisioned local reports under
-`/Users/tj/software/tools/xval/gmat-work/{anomalous-oxygen,variants}`;
-this refresh step does not run or fetch an external reference engine.
+`$FFM_XVAL_GMAT_WORK/{anomalous-oxygen,variants}`; this refresh step does not
+run or fetch an external reference engine.
 
 ERFA/SPICE and Horizons re-score the FFM side against their stored
 pyerfa/SPICE references without running Python; each refuses if FFM's

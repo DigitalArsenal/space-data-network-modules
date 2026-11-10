@@ -11,6 +11,7 @@ import { ALL, CASES, run, buildMetrics } from './nyx/scoring.mjs';
 import { buildMetrics as buildReduction } from './orekit/scoring.mjs';
 import { readCache, storedResponse, scoreStored } from './tudat/scoring.mjs';
 import { assertRecordedNumbers } from './recorded-numbers.mjs';
+import { xvalDir } from './rescore-all.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const read=f=>JSON.parse(fs.readFileSync(path.resolve(here,f),'utf8'));
 const write=(f,o)=>fs.writeFileSync(path.resolve(here,f),JSON.stringify(o,null,1)+'\n');
@@ -39,7 +40,7 @@ try {
   const oxygen=read('gmat/anomalous-oxygen.json'),primary=read('gmat/summary-gmat-R2026a.json');
   for(const row of oxygen.rows) {
    const c=CASES.cases.find(c=>c.id===row.id);
-   const stem=path.join('/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen',row.id.replaceAll(' ','_'));
+   const stem=path.join(xvalDir('gmat'),'anomalous-oxygen',row.id.replaceAll(' ','_'));
    const script=fs.readFileSync(stem+'.script','utf8'),cd=/GMAT Sat\.Cd = ([\d.eE+-]+);/.exec(script);
    const diagnostic={eps:row.eps,baseCd:c.forces.drag.cd,Cd:Number(cd[1]),gmatReport:fs.readFileSync(stem+'.txt','utf8')};
    row.ffmMinusGmatCdScaledM=verify(native({mode:'refresh-gmat-diagnostic',diagnostic,case:c,ffm:await get(c,ALL[1])}).worstM,row.ffmMinusGmatCdScaledM,`GMAT ${row.id} scaled Cd`);
@@ -47,7 +48,7 @@ try {
    console.log(`GMAT Cd-scaled diagnostic ${row.id}: ${row.ffmMinusGmatCdScaledM} m`);
   }
   oxygen.ffmRefresh=refresh;write('gmat/anomalous-oxygen.json',oxygen);
-  const variants=read('gmat/variants.json'),dir='/Users/tj/software/tools/xval/gmat-work/variants';
+  const variants=read('gmat/variants.json'),dir=path.join(xvalDir('gmat'),'variants');
   for(const variant of variants.variants) {
    const references=fs.readdirSync(dir).filter(f=>f.startsWith(variant.id+'-')&&f.endsWith('.json')&&!f.endsWith('.summary.json')).flatMap(f=>JSON.parse(fs.readFileSync(path.join(dir,f),'utf8')).cases);
    for(const row of variant.cases){const g=references.find(g=>g.id===row.id);if(!g)throw new Error(`Missing stored variant ${variant.id} ${row.id}`);row.ffmMinusGmatM=verify(scoreStored(await get(g,ALL[1]),g,metrics).worstM,row.ffmMinusGmatM,`GMAT ${variant.id} ${row.id}`);}

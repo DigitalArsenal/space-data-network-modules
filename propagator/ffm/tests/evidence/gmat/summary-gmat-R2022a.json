@@ -2132,7 +2132,7 @@
   },
   {
    "path": "anomalous-oxygen.json",
-   "sha256": "08f9930223dd00cfbf5a87474f6df232f5b1a83c54248dd3b8477d31f3e12a6b"
+   "sha256": "cc8e11b8e168e6eb117b2122a9fac75c9ed28305bd3d619545ea98832c37c415"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -2262,7 +2262,7 @@
   },
   "anomalousOxygen": {
    "path": "anomalous-oxygen.json",
-   "sha256": "08f9930223dd00cfbf5a87474f6df232f5b1a83c54248dd3b8477d31f3e12a6b",
+   "sha256": "cc8e11b8e168e6eb117b2122a9fac75c9ed28305bd3d619545ea98832c37c415",
    "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
   },
   "inputFiles": {

@@ -13744,7 +13744,7 @@
    },
    {
     "path": "diagnoses.json",
-    "sha256": "8caa55ea8eb03560ca950bb451441c4842b2fbe5050d971e50656424ed9b2328"
+    "sha256": "019c5ce35d0e79fd929d426e74fc4673f7233a039571337a23c665a4f721f45b"
    }
   ],
   "propagationInputs": [
@@ -17806,7 +17806,7 @@
   },
   {
    "path": "diagnoses.json",
-   "sha256": "8caa55ea8eb03560ca950bb451441c4842b2fbe5050d971e50656424ed9b2328"
+   "sha256": "019c5ce35d0e79fd929d426e74fc4673f7233a039571337a23c665a4f721f45b"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
