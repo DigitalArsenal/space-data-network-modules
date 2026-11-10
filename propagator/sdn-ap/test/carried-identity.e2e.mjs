@@ -126,5 +126,5 @@ if (failures.length) {
   console.log(`CARRIED-IDENTITY FAIL: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.log(`CARRIED-IDENTITY PASS: without a carried forecast, fit, propagate, the epoch store and propagate_epochs are ${BASE_VERSION}'s bit for bit (PRODUCER and its CIDs masked)`);
+console.log(`CARRIED-IDENTITY PASS: without a carried forecast, fit writes none, and propagate, the epoch store and propagate_epochs fly ${BASE_VERSION}'s records bit for bit${process.env.SDN_AP_CARRIED_FIT_IDENTITY === "1" ? `; fit's $OCM and $ODR are ${BASE_VERSION}'s (PRODUCER and its CIDs masked)` : ""}`);
 process.exit(0);
