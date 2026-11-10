@@ -6,9 +6,10 @@
 //   and the same set under another designator, theory or originator are four series.
 // - Two sets of one series with different forces (a gravity cap): series-forces-differ; with different forecast rows
 //   (the second set's rows moved): they load and blend.
-// - propagate_epochs on the AP fixture $OCM alone gives test/fixtures/ap-fit-0.4.0.epochs.oem byte for byte (the
-//   0.4.18 dist's propagate_epochs of the 0.4.0 $OMM under FORCES and rows; its propagate output,
-//   ap-fit-0.4.0.oem, differs in the store's time arithmetic, which this record leaves as it was).
+// - propagate_epochs of the stored AP record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit of the 0.4.0 inputs) within
+//   STORE_FLIGHT of 0.6.4's (ap-fit-0.6.4.epochs.oem), and of this build's own fit of the arc within STORE_FIT (the
+//   flight and the fit apart; history and sizes at the check). The store's output differs from propagate's
+//   (ap-fit-0.6.4.oem) in the store's time arithmetic, which this record leaves as it was.
 // - A store $PCF with a FORCES table: configuration-refused FORCES; propagate_epochs without OUTPUT times:
 //   configuration-refused OUTPUT.START_TIME; a request past a set's last row: weather-rows-short:2026-11-01.
 // - The covariance from COVARIANCE_DATA and COV_PROPAGATION: the fixture $OEM above carries the store's covariance line
@@ -48,6 +49,7 @@ import { jdOf } from "./lib/frames.mjs";
 import { openModule, THEORY, wasmPath } from "./lib/module.mjs";
 import { configuration, XP_FORCES } from "./lib/pcf.mjs";
 import { T, fixtureSets, repackOcm, GRID_OUTPUT } from "./lib/ocm.mjs";
+import { oemDistance } from "./lib/oem-distance.mjs";
 import { GRID } from "./lib/fixture-inputs.mjs";
 
 const failures = [];
@@ -266,16 +268,22 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   console.log(`two sets of one series, rows moved: ${blended.statusCode === 0 ? `${x.sdnap_epochs_count()} series, ${seriesOf(0).epochs.length} sets; at 03:00 sets ${sel[0]} and ${sel[1]}, weight ${sel[2]}` : blended.errorCode}`);
   check(blended.statusCode === 0 && x.sdnap_epochs_count() === 1 && seriesOf(0).epochs.length === 2 && sel[1] === 1 && sel[2] > 0 && sel[2] < 1 && at(0, mid).status === 0,
     "two sets with different rows do not load and blend");
-  // the fixture's bytes
-  const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([ap])] });
-  check(pe.statusCode === 0, `propagate_epochs AP: ${pe.errorCode} ${pe.errorMessage}`);
-  if (pe.statusCode === 0) {
-    const got = Buffer.from(pe.outputs[0].payload);
-    const want = fs.readFileSync(new URL("fixtures/ap-fit-0.4.0.epochs.oem", import.meta.url)), plain = fs.readFileSync(new URL("fixtures/ap-fit-0.4.0.oem", import.meta.url));
-    console.log(`propagate_epochs of the AP fixture $OCM: ${got.length} B, ${got.equals(want) ? "byte-equal to" : "DIFFERENT from"} ap-fit-0.4.0.epochs.oem (against propagate's ap-fit-0.4.0.oem: ${got.equals(plain) ? "equal" : "differs"})`);
-    check(got.equals(want), "propagate_epochs differs from test/fixtures/ap-fit-0.4.0.epochs.oem");
-    const lines = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(got))).unpack().EPHEMERIS_DATA_BLOCK[0].COVARIANCE_MATRIX_LINES.length;
-    check(lines === 289, `the fixture $OEM's covariance lines: ${lines} of 289`);
+  // the flight of the stored AP record (0.6.4's fit) and this build's own fit, against 0.6.4's propagate_epochs of the
+  // stored record. History: that flight equals ap-fit-0.4.0.epochs.oem (the 0.4.18 dist's) in its states bit for bit
+  // through 0.6.4, its covariance moved at 0.6.1 (637228fb, the AP DRAG noise row re-fitted, SPEC 12.4); 0.6.5 (24d7d75f,
+  // SPEC 16.8) moves the stored record's flight by 0.629 mm and 0.796 um/s and its covariance by 7.2e-5 of a line's
+  // largest entry; this build's own fit stops 7.25 cm away along the grid (the fit inside its tolerance, ap-terms.e2e.mjs).
+  const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.epochs.oem", import.meta.url));
+  const STORE_FLIGHT = { posM: 0.001, velMmS: 0.001, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.1, velMmS: 0.1 };
+  for (const [what, record, bound] of [["the stored AP record", new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.ocm", import.meta.url))), STORE_FLIGHT], ["this build's fit", ap, STORE_FIT]]) {
+    const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
+    check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);
+    if (pe.statusCode !== 0) continue;
+    const d = oemDistance(new Uint8Array(pe.outputs[0].payload), storedFlight);
+    console.log(`propagate_epochs of ${what} against 0.6.4's of the stored record: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry`);
+    check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `${what}: ${d.states} states and ${d.covLines} covariance lines of 289, ${d.epochsDiffer} epochs differ`);
+    check(d.posM <= bound.posM && d.velMmS <= bound.velMmS && (bound.covOfLargest === undefined || d.covOfLargest <= bound.covOfLargest),
+      `propagate_epochs of ${what} moved: ${JSON.stringify(d)} against ${JSON.stringify(bound)}`);
   }
   refused("a store $PCF with FORCES", await loadSets([ap], {}).then(() => m.harness.invoke({ methodId: "load_epochs", inputs: [configuration({ forces: XP_FORCES }), one([ap])] })), "configuration-refused", "FORCES");
   refused("propagate_epochs with FORCES", await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT, forces: XP_FORCES }), one([ap])] }), "configuration-refused", "FORCES");

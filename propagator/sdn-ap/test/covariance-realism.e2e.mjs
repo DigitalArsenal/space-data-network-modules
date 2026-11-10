@@ -14,7 +14,7 @@
 //   regime, axis and day 1, 3 and 7 (lead hours 24, 72, 167): both medians side by side, the shares within 1 and 2
 //   sigma, the worst |ln(median |z| / 0.674)| of each build, and every cell whose |ln| grew.
 // Asserts: the row as above; the re-weighting at the rows' own sizes reproduces the rows' variances (1e-6 relative);
-// the 0.6.1 medians equal the re-fit's held-out cells (test/fixtures/covariance-refit-held-out.json, 1e-5 relative: six digits stored); no
+// the 0.6.1 medians equal the re-fit's held-out cells (test/fixtures/covariance-refit-held-out.json, MEDIAN_RELATIVE below: six digits stored); no
 // 0.6.1 held-out median lies outside 0.32 to 0.91. JS moves bytes, rotates the module's covariance onto the truth's
 // axes and takes medians; every state and covariance is the module's.
 //   node test/covariance-realism.e2e.mjs
@@ -40,6 +40,11 @@ import { packOem, rfm } from "./lib/frames.mjs";
 
 const ROWS = "/opt/data/sdn-archive/operator-theory/covariance-coverage";
 const BEFORE = { commit: "895b6b38de29bc284b4b50a02425a6c3a5fe81a2", sha256: "0b5280f05176fc755dbfb859fd8028fc495759d7537024c53043f498c91faa63" };
+// The floor ratio and the held-out medians as the re-fit stated them: within 1e-12 and 1e-5 relative until 0.6.5, whose fit
+// (the analytic/SIMD covariance Jacobian among its speed changes, SPEC 16.8) stops at another point inside its tolerance:
+// measured 2026-11-10 on 0.6.8, the floors at most 1.1e-3 relative off k_F times 0.6.0's (FLOOR_VU_KM2; FLOOR_VV_KM2
+// 2.3e-5), the medians at most 1.2e-5 relative off the re-fit's (strong drag 2025 24 h R 0.6346524 against 0.634645).
+const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 const ISS = { path: "analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", sha256: "fbda48d1584bee1f38ea562625280ecfe4e6643f67c417e91f2fc245ee48311f" };
 const HALF_NORMAL_MEDIAN = 0.6744897501960817, LEADS = [24, 72, 167], AXES = ["R", "I", "C"], RANGE = [0.32, 0.91];
 const REGIMES = { T: "strong drag 2025", S1: "near 700 km 2026" };
@@ -111,7 +116,7 @@ check(!!row, "no 0.6.1 or 0.6.0 COV_PROPAGATION");
 if (row) {
   for (const k of ["s_e", "s_i", "s_l", "c"]) check(Object.is(row[k], F[k]), `${k}: the module writes ${row[k]}, the re-fit ${F[k]}`);
   for (const f of ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"])
-    check(Math.abs(now[f] / was[f] - F.k_F) <= 1e-12 * F.k_F, `${f}: 0.6.1 / 0.6.0 = ${now[f] / was[f]}, k_F ${F.k_F}`);
+    check(Math.abs(now[f] / was[f] - F.k_F) <= FLOOR_RELATIVE * F.k_F, `${f}: 0.6.1 / 0.6.0 = ${now[f] / was[f]}, k_F ${F.k_F} (within ${FLOOR_RELATIVE} relative)`);
   console.log(`0.6.1 DRAG row as written: s_e ${row.s_e}, s_i ${row.s_i}, s_l ${row.s_l}, c ${row.c}, floor ${row.k_F} times 0.6.0's`);
 }
 
@@ -168,7 +173,7 @@ console.log(`0.6.1 held-out cells inside the band: ${inside} of ${cells.length} 
 // ---- the re-fit's held-out cells reproduce; none outside the report's range
 for (const e of expected.heldOut) {
   const c = cells.find((q) => q.regime === e.regime && q.h === e.h && q.ax === e.axis);
-  check(c && c.n === e.n && Math.abs(c.m1 - e.medianAbsZ) <= 1e-5 * e.medianAbsZ, `${e.regime} ${e.h} h ${e.axis}: ${c?.m1} (n ${c?.n}) against the re-fit's ${e.medianAbsZ} (n ${e.n})`);
+  check(c && c.n === e.n && Math.abs(c.m1 - e.medianAbsZ) <= MEDIAN_RELATIVE * e.medianAbsZ, `${e.regime} ${e.h} h ${e.axis}: ${c?.m1} (n ${c?.n}) against the re-fit's ${e.medianAbsZ} (n ${e.n}, within ${MEDIAN_RELATIVE} relative)`);
 }
 for (const c of cells) check(c.m1 >= RANGE[0] && c.m1 <= RANGE[1], `${REGIMES[c.regime]} ${c.h} h ${c.ax}: 0.6.1 median |z| ${c.m1} outside ${RANGE.join(" to ")}`);
 fs.rmSync(scratch, { recursive: true, force: true });
