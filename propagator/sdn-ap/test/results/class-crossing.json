@@ -1,7 +1,7 @@
 {
   "edge": 2.4066852459,
   "report": {
-    "ffmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+    "ffmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
     "bterm": 0.06,
     "day7AlongTrackMeters": [
       -168218.828947441,
@@ -42,7 +42,7 @@
           "n": -38.07149054013337
         }
       },
-      "apSha256": "8ec4a1b9ec1462eca788582b7dfbec0cb03429e494e258c03c740a58fc0d9370"
+      "apSha256": "c4f2d35f377fa4463a132fea89aad879f3e89d746a005f68eecc362ef6a79fa5"
     },
     {
       "name": "companion",
@@ -67,7 +67,7 @@
           "n": -37.32576520100395
         }
       },
-      "apSha256": "8ec4a1b9ec1462eca788582b7dfbec0cb03429e494e258c03c740a58fc0d9370"
+      "apSha256": "c4f2d35f377fa4463a132fea89aad879f3e89d746a005f68eecc362ef6a79fa5"
     }
   ]
 }
