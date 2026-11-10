@@ -2261,7 +2261,7 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   naming the switch, the set's mean motion and eccentricity, and asking for another span or epoch. On the referee's
   full-field truths (its own integrator, 31 x 31, Sun and Moon) seven fits whose mean motion lies 2e-8 to 5.6e-7 from a
   class limit, at each of the five limits, are at the theory's least-squares minimum (a Gauss-Newton polish with the full
-  theory's Jacobian lowers the cost by at most 1.8e-8 relative, steps of 0 mm); arcs whose two branches' minima lie
+  theory's Jacobian lowers the cost by at most 2.3e-8 relative, steps of at most 1 mm); arcs whose two branches' minima lie
   across each other are refused (the 72 h arcs seeded at 0.8022 and at 1.6045 rev/day, whose 24 h arcs fit, and four of
   eight 24 h arcs seeded up to 7e-5 below 0.8022).
 - Epoch store (14.3): two sets on different branches are not blended (nor a carried forecast with a theory state).
