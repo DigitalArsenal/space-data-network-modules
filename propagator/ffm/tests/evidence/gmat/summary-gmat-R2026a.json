@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against pinned NASA GMAT trajectories; maximum hourly 3D position difference over 24 h in meters, and relative STM column differences. All numerical reductions are C++.",
  "module": {
-  "version": "2.2.0",
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+  "version": "2.3.0",
+  "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
  },
  "gmat": {
   "file": "gmat-R2026a.json",
@@ -2836,7 +2836,7 @@
   },
   {
    "path": "anomalous-oxygen.json",
-   "sha256": "0972d4cb7de6c5c264544c4ea26597d21a81d71176cd8f394864bb431a4ddcfe"
+   "sha256": "08f9930223dd00cfbf5a87474f6df232f5b1a83c54248dd3b8477d31f3e12a6b"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -2844,15 +2844,15 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
   },
   {
    "path": "../../../package.json",
-   "sha256": "088b4fb56f78a074fe096670025fd80a482e054e6331b3e15976802cdacba941"
+   "sha256": "e8ba92edacd855da17b1f9826bd3f4360353f6d90a6601ab9c2282043b47d1e0"
   },
   {
    "path": "../../fixtures/orekit/orekit-reference.json",
@@ -2966,7 +2966,7 @@
   },
   "anomalousOxygen": {
    "path": "anomalous-oxygen.json",
-   "sha256": "0972d4cb7de6c5c264544c4ea26597d21a81d71176cd8f394864bb431a4ddcfe",
+   "sha256": "08f9930223dd00cfbf5a87474f6df232f5b1a83c54248dd3b8477d31f3e12a6b",
    "scope": "Recorded R2026a NRLMSISE-00 diagnostic only; no R2022a/Jacchia-Roberts correction inferred."
   },
   "inputFiles": {

@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Tudat: largest 3D position difference over 24 h at hourly samples in each exported case frame; suite/steps30/finest FFM settings and Orekit-minus-Tudat; 6x6 STM and Cd/Cr, Cd*A/m-rate, and in-track-acceleration sensitivity comparisons where available. Numerical reductions are C++.",
  "module": {
-  "version": "2.2.0",
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+  "version": "2.3.0",
+  "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
  },
  "tudat": {
   "file": "../../fixtures/tudat/tudat-wasm-reference.json",
@@ -1353,11 +1353,11 @@
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+    "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+    "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -1402,7 +1402,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-tudat-wasm.json",
-   "sha256": "6981532d5384e9d40c97207c5eb36682581c607143717b8e8f480f6e471e5128"
+   "sha256": "17d0a1a356d13cb63607ce577aff251ad87193f0e6e7258aa909d6035ae252a8"
   },
   "historicalFixture": {
    "path": "../../fixtures/tudat/tudat-wasm-reference.json",
@@ -1428,7 +1428,7 @@
   },
   {
    "path": "ffm-tudat-wasm.json",
-   "sha256": "6981532d5384e9d40c97207c5eb36682581c607143717b8e8f480f6e471e5128"
+   "sha256": "17d0a1a356d13cb63607ce577aff251ad87193f0e6e7258aa909d6035ae252a8"
   },
   {
    "path": "scoring.mjs",
@@ -1468,11 +1468,11 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
   },
   {
    "path": "../cases/ffm-reference-cases.json",

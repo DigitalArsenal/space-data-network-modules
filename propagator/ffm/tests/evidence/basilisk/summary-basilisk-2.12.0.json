@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Basilisk: maximum 3D position difference over 24 h at hourly samples, suite/steps30/finest FFM settings and Orekit-minus-Basilisk. Every numerical reduction uses the shared Nyx C++ helper. Native half-step trajectories are stored inline.",
  "module": {
-  "version": "2.2.0",
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+  "version": "2.3.0",
+  "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
  },
  "basilisk": {
   "file": "basilisk-2.12.0.json",
@@ -13744,17 +13744,17 @@
    },
    {
     "path": "diagnoses.json",
-    "sha256": "5d7ae9329f84d3b1f07a97693be721ddf7bd9132583ead847cf9a58e614b7d51"
+    "sha256": "8caa55ea8eb03560ca950bb451441c4842b2fbe5050d971e50656424ed9b2328"
    }
   ],
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+    "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+    "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -13799,7 +13799,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-basilisk-2.12.0.json",
-   "sha256": "eb8378f33fa450f99fe27b914596d891e25e5900b45adba778e72fedbda37dea"
+   "sha256": "0908cd769214f469c62195d9de50605dd3967932722d4fea2e7d7300a58da88a"
   },
   "modelProbes": {
    "path": "model-probes.json",
@@ -17691,7 +17691,7 @@
   },
   "reusedFfmCache": {
    "path": "../tudat/ffm-tudatpy-1.0.0.json",
-   "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
+   "sha256": "96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8"
   },
   "reuseRule": "All propagation input paths and SHA-256s equal the current shipped-WASM request identity; only the three state settings of supported cases are retained.",
   "basilisk": {
@@ -17746,7 +17746,7 @@
   },
   {
    "path": "ffm-basilisk-2.12.0.json",
-   "sha256": "eb8378f33fa450f99fe27b914596d891e25e5900b45adba778e72fedbda37dea"
+   "sha256": "0908cd769214f469c62195d9de50605dd3967932722d4fea2e7d7300a58da88a"
   },
   {
    "path": "scoring.mjs",
@@ -17806,15 +17806,15 @@
   },
   {
    "path": "diagnoses.json",
-   "sha256": "5d7ae9329f84d3b1f07a97693be721ddf7bd9132583ead847cf9a58e614b7d51"
+   "sha256": "8caa55ea8eb03560ca950bb451441c4842b2fbe5050d971e50656424ed9b2328"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
   },
   {
    "path": "../cases/ffm-reference-cases.json",
@@ -19765,7 +19765,7 @@
   },
   {
    "path": "../tudat/ffm-tudatpy-1.0.0.json",
-   "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
+   "sha256": "96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8"
   },
   {
    "path": "diagnose-lst.py",

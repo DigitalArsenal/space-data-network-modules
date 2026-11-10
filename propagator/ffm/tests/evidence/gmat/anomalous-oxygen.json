@@ -101,9 +101,9 @@
  ],
  "ffmRefresh": {
   "module": {
-   "version": "2.2.0",
+   "version": "2.3.0",
    "file": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   "source": {
    "path": "../refresh-derived-comparisons.mjs",
@@ -116,7 +116,7 @@
    },
    {
     "path": "../consolidated-metrics.cpp",
-    "sha256": "5e14c2ea24e16d1e638b1bb6d2610e30fd5ef95f82c2d296429ce02162e24be1"
+    "sha256": "71a3de29c4f6f712aa2b0a60f63580879e43640c7e6d0f1eb595a3d81108d0ed"
    }
   ]
  }

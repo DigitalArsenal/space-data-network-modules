@@ -1,8 +1,8 @@
 {
  "note": "FFM shipped WASM against Tudat: largest 3D position difference over 24 h at hourly samples in each exported case frame; suite/steps30/finest FFM settings and Orekit-minus-Tudat; 6x6 STM and Cd/Cr, Cd*A/m-rate, and in-track-acceleration sensitivity comparisons where available. Numerical reductions are C++.",
  "module": {
-  "version": "2.2.0",
-  "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+  "version": "2.3.0",
+  "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
  },
  "tudat": {
   "file": "tudatpy-1.0.0.json",
@@ -4095,11 +4095,11 @@
   "propagationInputs": [
    {
     "path": "../../../dist/isomorphic/module.wasm",
-    "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+    "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
    },
    {
     "path": "../../../plugin-manifest.json",
-    "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+    "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
    },
    {
     "path": "../cases/ffm-reference-cases.json",
@@ -4144,7 +4144,7 @@
   ],
   "ffmTrajectories": {
    "path": "ffm-tudatpy-1.0.0.json",
-   "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
+   "sha256": "96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8"
   },
   "tudat": {
    "identifierRename": {
@@ -4170,7 +4170,7 @@
   },
   {
    "path": "ffm-tudatpy-1.0.0.json",
-   "sha256": "76259e33e7dafe0678ddf75c571e2b1b0099b08ee35e140376b4f8140702049a"
+   "sha256": "96a9e1daed4c041621e239c114df6ceb2ea0970bd30f24b26c4f6ad815fc2de8"
   },
   {
    "path": "scoring.mjs",
@@ -4218,11 +4218,11 @@
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
-   "sha256": "d635a3d57a2c9ca91d111f74aad38b9d748d6c16199b22c6922af21c92fe2153"
+   "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
   },
   {
    "path": "../../../plugin-manifest.json",
-   "sha256": "fc0aa0a364c9286b44c370a08acef3f3e4c4578bc2c95284d73facffa768d36b"
+   "sha256": "43a1340172aab2171424ee5882f55d353f53f3bddf1dfcab6bf9c29f8e78f3ff"
   },
   {
    "path": "../cases/ffm-reference-cases.json",

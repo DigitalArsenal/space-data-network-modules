@@ -146,7 +146,7 @@ These differences are part of the measured spread:
 
 ## Results
 
-The tables below score the shipped <!-- BEGIN GENERATED XVAL BUILD -->FFM 2.2.0 artifact (module SHA-256 `d635a3d5`, scored 2026-11-04)<!-- END GENERATED XVAL BUILD --> on the original
+The tables below score the shipped <!-- BEGIN GENERATED XVAL BUILD -->FFM 2.3.0 artifact (module SHA-256 `ea457690`, scored 2026-11-10)<!-- END GENERATED XVAL BUILD --> on the original
 subset. The [72-case reference suite](#reference-suite-on-72-cases) supplies
 the wider coverage and diagnoses. The exact artifact digest is pinned in
 [the current subset summary](../tests/evidence/xval/summary.json).
@@ -229,7 +229,7 @@ was also run with Jacchia-Roberts.
 <!-- BEGIN GENERATED XVAL FINDINGS -->
 - **Agreement:** FFM agrees with every tool to within that tool's own
   distance from the others, plus its own integration error. Measured over 24 h
-  at the suite's request on the original subset (FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04), GMAT's
+  at the suite's request on the original subset (FFM 2.3.0, module SHA-256 `ea457690`, scored 2026-11-10), GMAT's
   Jacchia-Roberts drag cases aside:
   - Orekit: at most 9.668 mm.
   - GMAT: at most 15.962 mm.
@@ -239,7 +239,7 @@ was also run with Jacchia-Roberts.
     above. With drag, 12.097 m on LEO400, which is Nyx's own gap from all the others, and
     22.760 mm on SSO700.
 <!-- END GENERATED XVAL FINDINGS -->
-- **Integration error:** <!-- BEGIN GENERATED INTEGRATION ERROR -->FFM's own integration error at RK78 1e-13 and steps of at most 300 s (FFM there against FFM at 1e-15 and steps of at most 10 s, the largest over the day) is 9.801 mm in LEO 400 km and 0.455 mm at 700 km; the LEO 400 km cases with radiation pressure and drag are within 8.448 mm of Orekit at those settings, 4.092 mm with steps of at most 30 s and 4.074 mm at 1e-15 with steps of at most 10 s (FFM 2.2.0, module SHA-256 `d635a3d5`, scored 2026-11-04; README.md, Agreement with Orekit 13.1).<!-- END GENERATED INTEGRATION ERROR -->
+- **Integration error:** <!-- BEGIN GENERATED INTEGRATION ERROR -->FFM's own integration error at RK78 1e-13 and steps of at most 300 s (FFM there against FFM at 1e-15 and steps of at most 10 s, the largest over the day) is 9.801 mm in LEO 400 km and 0.455 mm at 700 km; the LEO 400 km cases with radiation pressure and drag are within 8.448 mm of Orekit at those settings, 4.092 mm with steps of at most 30 s and 4.074 mm at 1e-15 with steps of at most 10 s (FFM 2.3.0, module SHA-256 `ea457690`, scored 2026-11-10; README.md, Agreement with Orekit 13.1).<!-- END GENERATED INTEGRATION ERROR -->
 - **Spread among the tools:**
   - **Orekit and Tudat** agree best: at most 1.7 mm with gravity, Sun and
     Moon; 1.0 mm with radiation pressure; 5.4 cm with NRLMSISE-00 drag.
@@ -518,6 +518,51 @@ byte-identical responses and exit classes: PRW 72, GNSS 20, Earth
 radiation/tides 24, variational 40, finite burn 180 and kernel 24 runs per
 lane. The resident receipt has 33 requests across each of the three runtimes,
 with exact agreement. These receipts are not re-scored with the suite.
+
+### Re-scoring a new build
+
+One command re-scores the whole suite on the committed dist, from the
+repository root:
+
+```sh
+nice -n 19 node propagator/ffm/tests/evidence/rescore-all.mjs
+```
+
+It flies FFM's side again through the shipped WASM, serially, against every
+stored reference. No reference engine is run and nothing is fetched. The steps
+run in this order:
+
+1. ERFA/SPICE and Horizons with `--stored-reference`. The Nyx summary pins the
+   ERFA/SPICE summary, so these come first.
+2. The trajectory scorers: Tudat native and WASM, Orekit, GMAT R2026a and
+   R2022a, and Basilisk. FFM state caches flown on another build are removed
+   and flown again.
+3. The derived GMAT, Nyx and Basilisk diagnostics.
+4. The summaries that pin those diagnostics: the GMAT annotations, Nyx, and
+   Basilisk a second time from the same cached states.
+5. The 27-case subset (`tests/xval-summary.mjs`), SGP4-XP
+   (`propagator/sgp4/tests/evidence/xp/run-xp.mjs`) and SGP4 against its
+   STR#3 base (`propagator/sgp4/tests/evidence/str3/run-str3.mjs`).
+6. The date in `rescore.json`, then `consolidate.mjs --write`.
+7. `check-all.mjs`.
+
+Finally it writes `tests/evidence/scored/<version>-<sha256[0:8]>.json`. That
+file is the build's result, comparison by comparison. Each comparison records:
+- what it was against, and whether it ran;
+- whether every primary limit was met;
+- the rows met out of the rows scored;
+- the headline row (the one nearest its limit, or furthest past it), with its
+  limit;
+- every missed row, with its recorded cause;
+- for a comparison that did not pass, a note in plain words.
+
+A missed limit stays missed. `check-all.mjs` holds the current build's file to
+`consolidated.json`. `--skip-scoring` keeps the scored summaries and redoes only
+the consolidation, the checks and the per-build file. `--record-only
+--consolidated <file> --commit <sha>` writes the file of a build scored earlier
+from the `consolidated.json` committed with its evidence.
+
+The steps it runs are described below.
 
 `tests/evidence/refresh-derived-comparisons.mjs` refreshes the FFM side of
 stored GMAT, Nyx and Basilisk diagnostic comparisons. It uses the current
