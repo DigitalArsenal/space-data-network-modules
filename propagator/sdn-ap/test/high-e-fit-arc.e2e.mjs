@@ -20,7 +20,7 @@
 // 3. printed: 5-day arcs on both priors, and the 7-day posterior carried into the next 72 h arc (sigma of the log 0.005);
 // 4. e at most 0.3 (near-circular SWOT- and Sentinel-3-like sets and an e 0.25 set, drag on, and a drag-off Molniya fit):
 //    the fitted flight's day-7 along-track and radial RMS within LOW_BOUND (below) of 0.4.16's (byte identity of the
-//    fitted elements until 2026-11-10);
+//    fitted elements until 2026-11-10), the e 0.25 set's within TRUTH_BOUND of the truth itself;
 // 5. default-FORCES XP digest bit-exact.
 // Amended (modules-sdn-ap-ocm-write-20261103: this build writes an $OCM, no $OBD and no number in COMMENT): the 7-day arc
 // is read from the record's ORBIT_DETERMINATION.ACTUAL_OD_SPAN (168 h) and its OD COMMENT; the determination's
@@ -66,10 +66,12 @@ const K = 5;
 // meters (no byte identity through a fit: the fit stops inside its tolerance, 7.3 cm between 0.6.4's and 0.6.5's on the
 // 550 km fixture, ap-terms.e2e.mjs). Measured on 0.6.8: SWOT-like 0.0014 / 0.0001 m, Sentinel-3-like 0.015 / 0.00004 m;
 // the drag-off Molniya moved 0.96 / 7.95 m (51.71 / 35.88 to 52.67 / 27.93) at 0.6.3 (the grid above e 0.3, SPEC 16.11).
-// e 0.25 (6 rev/day, a class 0 set) went from 72.55 / 19.16 m to 5864.50 / 969.05 m at 0.6.4 (416a67e9, the tesseral
-// switch by class: a class 0 set flies the grid above e 0.05), unchanged since: a regression this bound keeps failing
-// (DigitalArsenal/spacedatanetwork-stack#393; the grid carries no 6:1 commensurability).
-const LOW_BOUND = {'SWOT-like': 0.05, 'Sentinel-3-like': 0.05, 'e 0.25': 1, 'Molniya drag off': 8.5};
+// e 0.25 (6 rev/day, a class 0 set) is bounded against the truth instead (TRUTH_BOUND): day-7 along-track / radial
+// 72.55 / 19.16 m on 0.4.16, 5864.50 / 969.05 m from 0.6.4 (416a67e9: a class 0 set flies the grid above e 0.05, which
+// carried no 6:1 commensurability) to 0.6.10, 29.08 / 7.46 m on 0.6.11 (DigitalArsenal/spacedatanetwork-stack#393);
+// 60 m along-track as in test/class0-commensurability.e2e.mjs, 15 m radial.
+const LOW_BOUND = {'SWOT-like': 0.05, 'Sentinel-3-like': 0.05, 'Molniya drag off': 8.5};
+const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}};
 const SEVEN_DAY_BOUND = {Molniya: 171.5, 'GTO-500': 325.5};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');
@@ -164,8 +166,12 @@ if (!isMainThread) {
     const same = JSON.stringify(setOf(a.omm).elements) === JSON.stringify(setOf(b.omm).elements);
     const dt = Math.abs(b.t - a.t), dr = Math.abs(b.r - a.r);
     console.log(JSON.stringify({lowE: f, identical: same, day7AlongTrack: [a.t, b.t], day7Radial: [a.r, b.r], modelAt0416: a.model, model: b.model}));
-    if (!(dt <= LOW_BOUND[f] && dr <= LOW_BOUND[f])) lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against 0.4.16's ${a.t} and ${a.r} (within ${LOW_BOUND[f]} m)` +
-      (f === 'e 0.25' ? '; 0.6.4\'s class 0 switch to the grid above e 0.05 at 6 rev/day, DigitalArsenal/spacedatanetwork-stack#393' : ''));
+    const truth = TRUTH_BOUND[f];
+    if (truth) {
+      if (!(b.t <= truth.t && b.r <= truth.r)) lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against the truth (at most ${truth.t} and ${truth.r} m)`);
+    } else if (!(dt <= LOW_BOUND[f] && dr <= LOW_BOUND[f])) {
+      lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against 0.4.16's ${a.t} and ${a.r} (within ${LOW_BOUND[f]} m)`);
+    }
   }
   assert.ok(lowFailures.length === 0, lowFailures.join('\n'));
   reproduceConformance();
