@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-10T20:26:11.848Z",
+  "generatedAt": "2026-11-10T20:55:48.453Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -283,7 +283,7 @@
       "pluginId": "conjunction-assessment",
       "name": "Conjunction Assessment Plugin",
       "pluginFamily": "analysis",
-      "version": "0.18.4",
+      "version": "0.19.0",
       "methodIds": [
         "alfano_max_probability",
         "assess_conjunction",
@@ -1361,7 +1361,7 @@
       "pluginId": "com.orbpro.od-fit-pipeline",
       "name": "OD Fit Pipeline",
       "pluginFamily": "orbit_determination",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "methodIds": [
         "fit_pipeline"
       ],
@@ -1393,7 +1393,7 @@
       "pluginId": "orbit-determination",
       "name": "Orbit Determination Plugin",
       "pluginFamily": "orbit_determination",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "methodIds": [
         "fit",
         "fit_ffm"
@@ -6659,7 +6659,7 @@
       "pluginId": "com.orbpro.ffm",
       "name": "FFM Full Force Model propagator",
       "pluginFamily": "propagator",
-      "version": "2.2.1",
+      "version": "2.3.0",
       "methodIds": [
         "describe_trajectory_segments",
         "ingest_state",
