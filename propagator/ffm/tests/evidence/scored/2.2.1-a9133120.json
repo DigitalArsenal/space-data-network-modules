@@ -1,5 +1,5 @@
 {
- "about": "FFM reference evidence scored on one build: each comparison against its stored reference. passed is true when every primary row met its limit, false with the missed rows and their recorded causes otherwise, and null for a comparison with no limit. headline is the row nearest its limit, or furthest past it. publicNote, for a comparison that did not pass, states what differs and what the recorded diagnostic shows, in words that can be printed as written.",
+ "about": "FFM reference evidence scored on one build: each comparison against its stored reference. passed is true when every primary row met its limit, false with the missed rows and their recorded causes otherwise, and null for a comparison with no limit. headline is the row nearest its limit, or furthest past it. matchedRun names the run with FFM's settings that some cases are scored against, and how many. publicNote, for a comparison that did not pass, states what differs and what the recorded diagnostic shows; for one with a matchedRun, what the tool's stock settings gave. It is written to be printed as is.",
  "module": {
   "name": "propagator/ffm",
   "version": "2.2.1",
@@ -7,7 +7,7 @@
  },
  "scoredOn": "2026-11-10",
  "evidenceCommit": "c08197778347274f1edb60b224748bb8ba02a253",
- "note": "Scored in a full clone at this commit, the main commit whose dist was FFM 2.2.1, with rescore-all.mjs, check-all.mjs and consolidate.mjs from the re-score that added this file. Every reference is that tree's. Its ERFA/SPICE references encode the TEME this build used: the FK5 TEME for lib/coords and R3(ee06a) pnm06a for foundation/frames. foundation/frames 0.3.0 (space-data-network-modules #12) and FFM 2.3.0 (#14) replaced them with the standard TEME of AIAA 2006-6753; against it, this build's lib/coords TEME differs by up to 50.4 mas at the suite's 50 epochs (the temeFk5 row of 2.3.0).",
+ "note": "Scored in a full clone at this commit, the main commit whose dist was FFM 2.2.1, with rescore-all.mjs and the evidence scripts of the re-score that last wrote this file overlaid. Every reference is that tree's. Its ERFA/SPICE references encode the TEME this build used: the FK5 TEME for lib/coords and R3(ee06a) pnm06a for foundation/frames. foundation/frames 0.3.0 (space-data-network-modules #12) and FFM 2.3.0 (#14) replaced them with the standard TEME of AIAA 2006-6753; against it, this build's lib/coords TEME differs by up to 50.4 mas at the suite's 50 epochs (the temeFk5 row of 2.3.0).",
  "checks": [
   {
    "check": "Orekit",
@@ -75,7 +75,7 @@
    "id": "gmat-2026",
    "against": "GMAT R2026a",
    "evidence": "gmat/summary-gmat-R2026a.json",
-   "summarySha256": "4d2c4b9672b8c04270daff595c0e290b1f491cc6de3d4ae90c06376614a3de3c",
+   "summarySha256": "b6aefb6d0e9ad7eaf6708c99419fb58ae23164a55c3adb40a00388c8e5480475",
    "module": "FFM 2.2.1",
    "wasmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
    "ran": true,
@@ -151,7 +151,7 @@
    "id": "gmat-2022",
    "against": "GMAT R2022a",
    "evidence": "gmat/summary-gmat-R2022a.json",
-   "summarySha256": "5a894811a0d0ba3e556117ae1f307c179351d486c92b91e592331dc4d83cc0c4",
+   "summarySha256": "fe9e5d4f4121e24da5063b1529764f8ffe0b5631b04377944b24ca539a847bd0",
    "module": "FFM 2.2.1",
    "wasmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
    "ran": true,
@@ -178,7 +178,7 @@
    "id": "nyx",
    "against": "Nyx 2.6.0",
    "evidence": "nyx/summary-nyx-2.6.0.json",
-   "summarySha256": "5827405fef0c494d1b522c5aae352535215eaa456cd5566dd89762fb528e76bb",
+   "summarySha256": "5cb0832e50613fb911932c21a94ace3489e84035fe60e894f5d61b32c15df391",
    "module": "FFM 2.2.1",
    "wasmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
    "ran": true,
@@ -300,85 +300,32 @@
    "id": "basilisk",
    "against": "Basilisk 2.12.0",
    "evidence": "basilisk/summary-basilisk-2.12.0.json",
-   "summarySha256": "743190de2896dca7e6074b3a7bc6cdc003b26e8a70f8fa612d90d99263041d9b",
+   "summarySha256": "bc082c288e680c92d53144263bd42b275ece3760dc6af9e05f10affbbcb2b68a",
    "module": "FFM 2.2.1",
    "wasmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
    "ran": true,
-   "passed": false,
+   "passed": true,
    "rows": {
     "scored": 50,
-    "met": 43,
-    "missed": 7,
+    "met": 50,
+    "missed": 0,
     "skipped": 22,
     "diagnostic": 0
    },
    "headline": {
     "quantity": "largest 3D position difference over 24 h, suite setting",
     "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
-    "value": 5418.77,
+    "value": 0.0441749,
     "unit": "m",
-    "display": "5418.767 m",
+    "display": "44.175 mm",
     "limit": 0.1
    },
-   "missed": [
-    {
-     "case": "LEO400 Z3-zonal20-sun-moon-srp-drag",
-     "value": 5250.65,
-     "unit": "m",
-     "display": "5250.646 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "LEO400 F6-field-sun-moon-srp-drag",
-     "value": 5248.32,
-     "unit": "m",
-     "display": "5248.316 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
-     "value": 5418.77,
-     "unit": "m",
-     "display": "5418.767 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "LEO400 W1-field-sun-moon-srp-drag-cssi",
-     "value": 4094.03,
-     "unit": "m",
-     "display": "4094.031 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "SSO700 Z3-zonal20-sun-moon-srp-drag",
-     "value": 58.1441,
-     "unit": "m",
-     "display": "58.144 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "SSO700 F6-field-sun-moon-srp-drag",
-     "value": 58.1286,
-     "unit": "m",
-     "display": "58.129 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "SSO700 W1-field-sun-moon-srp-drag-cssi",
-     "value": 34.8118,
-     "unit": "m",
-     "display": "34.812 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    }
-   ],
-   "publicNote": "In seven drag cases Basilisk's atmosphere was not set up like FFM's (spherical rather than WGS84 altitude and latitude, and a different NRLMSISE-00 density entry point), so their 34.8 m to 5.42 km differences against a 0.1 m limit are not a like-for-like comparison. With those settings matched, the same cases agree to within 44.2 mm."
+   "missed": [],
+   "matchedRun": {
+    "variant": "wgs84-gtd7d",
+    "cases": 7
+   },
+   "publicNote": "The seven drag cases are scored against Basilisk run with FFM's atmosphere settings (WGS84 height and geodetic latitude, and the NRLMSISE-00 density with anomalous oxygen). With Basilisk's stock settings, which differ from FFM's, the same cases differ by 34.8 m to 5.42 km."
   },
   {
    "id": "frames",

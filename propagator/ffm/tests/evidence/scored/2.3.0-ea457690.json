@@ -1,5 +1,5 @@
 {
- "about": "FFM reference evidence scored on one build: each comparison against its stored reference. passed is true when every primary row met its limit, false with the missed rows and their recorded causes otherwise, and null for a comparison with no limit. headline is the row nearest its limit, or furthest past it. publicNote, for a comparison that did not pass, states what differs and what the recorded diagnostic shows, in words that can be printed as written.",
+ "about": "FFM reference evidence scored on one build: each comparison against its stored reference. passed is true when every primary row met its limit, false with the missed rows and their recorded causes otherwise, and null for a comparison with no limit. headline is the row nearest its limit, or furthest past it. matchedRun names the run with FFM's settings that some cases are scored against, and how many. publicNote, for a comparison that did not pass, states what differs and what the recorded diagnostic shows; for one with a matchedRun, what the tool's stock settings gave. It is written to be printed as is.",
  "module": {
   "name": "propagator/ffm",
   "version": "2.3.0",
@@ -74,7 +74,7 @@
    "id": "gmat-2026",
    "against": "GMAT R2026a",
    "evidence": "gmat/summary-gmat-R2026a.json",
-   "summarySha256": "a74804a07789d9b203ff66e64dc22fbdd907a31dcdaea3e3c82a2ea22c3a0d50",
+   "summarySha256": "f5fa7f3d2fe0475f9bb71093b537ce38842d8b470f4a88b8408e6dd909e7c6c3",
    "module": "FFM 2.3.0",
    "wasmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
    "ran": true,
@@ -150,7 +150,7 @@
    "id": "gmat-2022",
    "against": "GMAT R2022a",
    "evidence": "gmat/summary-gmat-R2022a.json",
-   "summarySha256": "1bd7b5539bb59bc771c0af8bcc119b89f22b39d687126b846f05227c171e2038",
+   "summarySha256": "c71b418c6c939e9e05fc31aea4f251097236a6631a742b9e2fbae9022658d965",
    "module": "FFM 2.3.0",
    "wasmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
    "ran": true,
@@ -177,7 +177,7 @@
    "id": "nyx",
    "against": "Nyx 2.6.0",
    "evidence": "nyx/summary-nyx-2.6.0.json",
-   "summarySha256": "d5709a161c558b9811bab33f88d9d6defa1fb9f5fe5100b39b4f02687f75ae77",
+   "summarySha256": "d9e502d2d5dd60e0db43113fe6dc94bf816c1119cb38b868a0e501571f4786a5",
    "module": "FFM 2.3.0",
    "wasmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
    "ran": true,
@@ -299,85 +299,32 @@
    "id": "basilisk",
    "against": "Basilisk 2.12.0",
    "evidence": "basilisk/summary-basilisk-2.12.0.json",
-   "summarySha256": "e9040725a7947b0a5ddd9f57c6481ea0454842ee1a3d831e9a6211266dd08427",
+   "summarySha256": "881378e1165828e0c6973ab7a4540d004e888604dfaf7bf306dd6510ae97fded",
    "module": "FFM 2.3.0",
    "wasmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
    "ran": true,
-   "passed": false,
+   "passed": true,
    "rows": {
     "scored": 50,
-    "met": 43,
-    "missed": 7,
+    "met": 50,
+    "missed": 0,
     "skipped": 22,
     "diagnostic": 0
    },
    "headline": {
     "quantity": "largest 3D position difference over 24 h, suite setting",
     "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
-    "value": 5418.77,
+    "value": 0.0441749,
     "unit": "m",
-    "display": "5418.767 m",
+    "display": "44.175 mm",
     "limit": 0.1
    },
-   "missed": [
-    {
-     "case": "LEO400 Z3-zonal20-sun-moon-srp-drag",
-     "value": 5250.65,
-     "unit": "m",
-     "display": "5250.646 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "LEO400 F6-field-sun-moon-srp-drag",
-     "value": 5248.32,
-     "unit": "m",
-     "display": "5248.316 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "LEO400 B1-field-sun-moon-srp-drag-bdot",
-     "value": 5418.77,
-     "unit": "m",
-     "display": "5418.767 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "LEO400 W1-field-sun-moon-srp-drag-cssi",
-     "value": 4094.03,
-     "unit": "m",
-     "display": "4094.031 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "SSO700 Z3-zonal20-sun-moon-srp-drag",
-     "value": 58.1441,
-     "unit": "m",
-     "display": "58.144 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "SSO700 F6-field-sun-moon-srp-drag",
-     "value": 58.1286,
-     "unit": "m",
-     "display": "58.129 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    },
-    {
-     "case": "SSO700 W1-field-sun-moon-srp-drag-cssi",
-     "value": 34.8118,
-     "unit": "m",
-     "display": "34.812 m",
-     "limit": 0.1,
-     "cause": "model-setting mismatch"
-    }
-   ],
-   "publicNote": "In seven drag cases Basilisk's atmosphere was not set up like FFM's (spherical rather than WGS84 altitude and latitude, and a different NRLMSISE-00 density entry point), so their 34.8 m to 5.42 km differences against a 0.1 m limit are not a like-for-like comparison. With those settings matched, the same cases agree to within 44.2 mm."
+   "missed": [],
+   "matchedRun": {
+    "variant": "wgs84-gtd7d",
+    "cases": 7
+   },
+   "publicNote": "The seven drag cases are scored against Basilisk run with FFM's atmosphere settings (WGS84 height and geodetic latitude, and the NRLMSISE-00 density with anomalous oxygen). With Basilisk's stock settings, which differ from FFM's, the same cases differ by 34.8 m to 5.42 km."
   },
   {
    "id": "frames",

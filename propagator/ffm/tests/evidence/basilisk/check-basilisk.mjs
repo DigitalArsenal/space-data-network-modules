@@ -199,11 +199,37 @@ function inspectSummary(summaryPath, metrics) {
           && attempt.fineStepS === attempt.maxStepS / 2)), `${exported.id}: supported case is absent without a measured native convergence limitation`);
     } else check(!row && omission, `${exported.id}: unsupported force/frame/variational requirement must be skipped`);
   }
+  // The matched-settings run scores the cases it covers; the stock run of each stays in its row under stock.
+  const primaryName = summary.primary?.variant;
+  check(!summary.primary || (primaryName === 'wgs84-gtd7d' && summary.diagnostics?.[primaryName]
+    && summary.primary.file === summary.diagnostics[primaryName].file && nonempty(summary.primary.statement)),
+  'The primary run must be the wgs84-gtd7d diagnostic the summary carries, with its statement');
+  const primaryRecord = summary.diagnostics?.[primaryName] ? normalizedRecord(path.resolve(here, summary.diagnostics[primaryName].file)) : null;
+  if (summary.primary) {
+    check(same([...summary.primary.cases].sort(), primaryRecord.cases.map((c) => c.id).sort())
+      && same(rows.filter((row) => row.basiliskRun).map((row) => row.id).sort(), [...summary.primary.cases].sort()),
+    'The primary run must score exactly the cases it covers');
+  } else check(rows.every((row) => !row.basiliskRun && !row.stock), 'Rows name a primary run the summary does not declare');
   for (const row of rows) {
-    const source = record.cases.find((c) => c.id === row.id);
+    const nominal = record.cases.find((c) => c.id === row.id);
+    const source = row.basiliskRun ? primaryRecord?.cases.find((c) => c.id === row.id) : nominal;
     const exported = CASES.cases.find((c) => c.id === row.id);
     const stored = cache.cases.find((c) => c.id === row.id);
-    if (!source || !exported || !stored) { check(false, `${row.id}: missing source/cache/export case`); continue; }
+    if (!source || !nominal || !exported || !stored) { check(false, `${row.id}: missing source/cache/export case`); continue; }
+    check(!row.basiliskRun || row.basiliskRun === primaryName, `${row.id}: names a run other than the declared primary`);
+    if (row.basiliskRun) {
+      const stock = row.stock;
+      if (!stock) { check(false, `${row.id}: the stock-settings run is missing`); continue; }
+      convergenceValid(nominal, stock, exported, metrics, `${row.id} stock`);
+      for (const setting of ALL) {
+        scoreValid(stock[setting.id], row.toleranceM, stock.cause, `${row.id} stock ${setting.id}`);
+        exactFields(scoreStored(stored[setting.id], nominal, metrics), stock[setting.id],
+          ['worstM', 'atHour', 'sampleCount', 'steps'], `${row.id} stock ${setting.id}`);
+      }
+      check(stock.met === stock.suite.met, `${row.id} stock: row verdict must equal suite verdict`);
+      exactFields(scoreOrekit(nominal, metrics), stock.orekitMinusBasilisk, ['worstM', 'atHour', 'sampleCount'], `${row.id} stock Orekit-minus-Basilisk`);
+      check(same(stock.diagnostics, nominal.diagnostics), `${row.id} stock: diagnostic evidence differs from trajectory record`);
+    }
     check(row.orbit === exported.orbit && row.forceSet === exported.forceSet && row.row === exported.row
       && row.toleranceClass === exported.toleranceClass, `${row.id}: exported case metadata mismatch`);
     check(row.toleranceM === CASES.protocol.tolerancesM.default[exported.toleranceClass], `${row.id}: tolerance changed`);
@@ -221,7 +247,7 @@ function inspectSummary(summaryPath, metrics) {
   }
   check(same(summary.verdict, verdictFor(rows, skipped, record.tool)), 'Top-level verdict differs from measured rows');
   const dragRows = rows.filter((row) => CASES.cases.find((candidate) => candidate.id === row.id)?.forces.drag);
-  const dragMisses = dragRows.filter((row) => ALL.some((setting) => row[setting.id]?.met === false));
+  const dragMisses = dragRows.filter((row) => ALL.some((setting) => row[setting.id]?.met === false || row.stock?.[setting.id]?.met === false));
   check(summary.diagnostics?.wgs84 || dragMisses.length === 0, 'Drag misses require the measured WGS84 diagnostic');
   check(!summary.diagnostics?.['wgs84-gtd7d'] || summary.diagnostics?.wgs84,
     'The gtd7d diagnostic requires WGS84 trajectories for a direct anomalous-oxygen comparison');
@@ -285,6 +311,10 @@ function inspectSummary(summaryPath, metrics) {
   }
   const misses = rows.filter((row) => row.met === false);
   console.log(`Basilisk 2.12.0: ${rows.length} scored + ${skipped.length} skipped = ${covered.length}; ${misses.length} suite misses, ${misses.filter((row) => causePresent(row.cause)).length} diagnosed; all stored scores rechecked.`);
+  if (summary.primary) {
+    const stockMisses = rows.filter((row) => row.stock?.met === false);
+    console.log(`Matched settings (${primaryName}): ${summary.primary.cases.length} drag cases scored against it; their stock-settings runs, ${stockMisses.length} over the limit and ${stockMisses.filter((row) => causePresent(row.stock.cause)).length} diagnosed, rechecked beside them.`);
+  }
   console.log(`Convergence: ${rows.filter((row) => row.convergence?.met).length}/${rows.length} native half-step comparisons below 0.3 mm; STM/sensitivities unavailable and recorded.`);
   return { summary, record };
 }
