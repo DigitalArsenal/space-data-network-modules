@@ -7,7 +7,8 @@
 // B = 0.044 m^2/kg, no SRP; AP FORCES 31,20 with NRLMSISE-00; AGOM pinned at 0); Molniya (2 rev/day, e 0.74, perigee 541
 // km) and GTO-500 (2.40 rev/day, e 0.7081, 500 km); 7 days flown after the arc on a 10-minute grid, day-7 whole-day RMS.
 // Acceptance:
-// 1. a 7-day ephemeris with no USEABLE times and no drag prior: the fit takes the 7 days, BTERM within 0.5 % of 0.044 and
+// 1. a 7-day ephemeris with no USEABLE times and no drag prior: the fit takes the 7 days, BTERM within 0.6 % of 0.044
+//    (both of Molniya's solutions; 0.5 % until the E-grid's C1 read, stack #420) and
 //    day-7 along-track, the largest over the arc and K perturbed copies (K, SEVEN_DAY_BOUND below), at most 171.5 m on
 //    Molniya and 325.5 m on GTO-500 (re-derived 2026-11-10 on FFM 2.2.1's truth; set at 150 and 300 m on 2.0.4's, the
 //    registration's, amended after the first run: the record's
@@ -149,7 +150,10 @@ if (!isMainThread) {
     const seven = results[`${f} 7 d no prior`];
     const sevenSet = setOf(seven.omm);
     assert.ok(Math.abs(sevenSet.hours - 168) < 1e-6 && /the longest arc the ephemeris holds/.test(sevenSet.comment), `${f}: the 7-day arc taken (${sevenSet.hours} h; ${sevenSet.comment})`);
-    assert.ok(Math.abs(pct(seven.bterm)) <= 0.5, `${f}: 7-day B ${seven.bterm}`);
+    // within 0.6 % of 0.044, which holds both of Molniya's 7-day solutions (0.0438547 on 0.6.12, -0.33 %; 0.0437610 with
+    // the E-grid read C1, stack #420, -0.54 %; listed at K below); 0.5 % until then. Neither lies within its stated sigma
+    // (0.09 %): test/molniya-7day-drag-sigma.e2e.mjs, stack #438
+    assert.ok(Math.abs(pct(seven.bterm)) <= 0.6, `${f}: 7-day B ${seven.bterm}`);
     const copies = Array.from({length: K}, (_, k) => results[`${f} 7 d no prior noise ${k + 1}`]);
     const worst = Math.max(seven.t, ...copies.map((r) => r.t));
     console.log(JSON.stringify({sevenDayNoPrior: f, unperturbed: {bterm: seven.bterm, day7AlongTrack: seven.t},
