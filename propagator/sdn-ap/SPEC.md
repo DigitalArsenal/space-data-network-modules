@@ -2752,21 +2752,25 @@ was this rotation, all of it. Fitted over the forecast's 5 days with the full sy
 - Chandra-like (63.5 h, e 0.685): 114.6 to 66.8 m.
 - e 0.9 with perigee 5,000 km (`test/long-period-moon-output.e2e.mjs`: J2 to J5 and the Sun and Moon): 255.8 to 11.4 m.
 
-On the real windows against their precise orbits (0.6.30, gate off and on), the medians are better at day 3 and level at
-day 5: TESS's seven windows 1,594 and 1,592 m at day 3 with the forecast fit, and 2,452 and 1,868 m with the 72 h fit;
-Chandra's seven 24 and 3 m. `test/heo-frame.e2e.mjs`'s replay of TESS's same seven windows (the module's default fit of
-the 72 h of states, no drag, the RMS over each day) is worse: medians 775.7, 1,635.8 and 8,549.6 m to 1,011.7, 2,000.0 and
-9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 -103.1 to +706.0 m (its known defect, stack #479; XP takes no
-drift, so it still holds the turn). FFM fitted to the same 72 h of states (its full setting, area-to-mass solved) and scored
-the same way is 480, 1,566 and 11,452 m. On four of the windows FFM itself follows its arc no closer than 368 to 541 m.
-The rotation is not what makes AP worse there. Seeded with every force but drag and radiation, a TESS-like set goes from
-1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On this fit path on model truth without radiation pressure, its 5-day D goes
-from 1.3 to 2.9 km to 16 to 251 m; through 0.6.33 the fit took up the turn as a false area-to-mass. With FFM's radiation
-pressure in the truth, AP follows FFM's 72 h no closer than 46 to 174 m on either build. The frame's error had partly
-offset that gap in some geometries. The two replays part only on the four windows FFM cannot follow; the real rows' tool
-samples the arc at 600 s, the suite at 300 s. The one-day class (THEMIS) already took the rotation and is unchanged. A
-covariance's copy takes the same rotation through the same flag. The bodies the rates read stay in TEME of date: 0.7 arcsec in 5 days moves
-the Moon's direction by 3.4e-6 rad.
+Against the numerical forecast on the real windows (0.6.30, the change off and on; the record fitted to the forecast,
+D over 0 to 120 h), Chandra's seven windows go from a median of 96 m to 10 m (4 to 7 of 7 within 100 m), and TESS's from
+329 to 172 m. The one-day class (THEMIS) already took the rotation and is unchanged.
+
+The real windows against their precise orbits neither support nor contradict the change on TESS. TESS fires its thrusters
+about once a week, by 3 to 11 mm/s, and in each of the seven windows a firing lies in the 72 h fit arc or within 13 hours
+after the cutoff; 10 mm/s moves the orbit by about 4 km in 5 days. `test/heo-frame.e2e.mjs`'s replay of those windows (the
+module's default fit of the 72 h of states, no drag, the RMS over each day) goes from medians of 775.7, 1,635.8 and
+8,549.6 m to 1,011.7, 2,000.0 and 9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 from -103.1 to +706.0 m (its
+known defect, stack #479; XP takes no drift, so it keeps the turn).
+
+On model truth the rotation is right, and its partner is radiation pressure. Seeded with every force but drag and
+radiation, a TESS-like set goes from 1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On the 72 h fit path without
+radiation pressure in the truth, its 5-day D goes from 1.3 to 2.9 km to 16 to 251 m; through 0.6.33 the fit took up the
+turn as a false area-to-mass. With FFM's radiation pressure in the truth, AP follows FFM's 72 h no closer than 46 to 174 m
+on either build, and the frame's error had partly offset that gap in some geometries.
+
+A covariance's copy takes the same rotation through the same flag. The bodies the rates read stay in TEME of date: 0.7
+arcsec in 5 days moves the Moon's direction by 3.4e-6 rad.
 
 Fit residuals and propagation share `xp_propagate`, including this policy; there is no separate fit-only
 rotation. GCRF fit inputs are converted to TEME at each sample date, and GCRF output converts the propagated
