@@ -1116,6 +1116,8 @@ static int fit_blocks() {
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
                                      : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");
+      // SPEC 16.14: an AP set with gravity terms fitted without the solid Earth tide says so (with it, PERTURBATIONS.SOLID_TIDES_MODEL)
+      if (ocm::epoch_frame(po.forces) && !po.forces.solid_tides) comment.push_back("solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)");
       // SPEC 18: the forecast the record carries ($PCF OUTPUT.START_TIME to STOP_TIME), its span and end jumps in COMMENT
       flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;
       carried::Described described;
