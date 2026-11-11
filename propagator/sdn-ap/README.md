@@ -210,7 +210,8 @@ with mean_motion_dot not 0 is refused). The theory applies its averaged rates to
 without Y0 flies as before, bit for bit. On the real 72 h windows of experiments headline-loop (0.6.13 against 0.6.15,
 the table's own $PCF), medium Earth orbit's median at day 5 went from 35.1 to 15.1 m and the windows within 100 m of
 the numerical propagator from 200 to 250 of 251; Galileo's from 111.1 to 29.2 m and from 20 to 42 of 42. 46 of the 293
-windows are worse at day 5, the worst by 43 m. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
+windows are worse at day 5 by any amount between the two release tables (44 by more than 1 m in the radiation pull
+request's own flight), the worst by 43 m. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
 eccentric science orbits. A shorter fit can hold the Y0 of an earlier 72 h fit (FORCES.ECOM2.Y0_M_S2 = its VALUE):
 medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a covariance row. Cost: a record with Y0
 takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.14 to 5.76 ms for a week hourly, a
