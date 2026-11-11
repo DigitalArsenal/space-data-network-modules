@@ -3210,24 +3210,64 @@ state and integrator, in season.
   average, a_f-dot departs by 1.1e-4 of its scale at e 0.1, 1.1e-3 at e 0.3 and 1.2e-2 at e 0.73, in shadow only
   (4e-15 wholly sunlit). In flight that is 2.3 to 3.5 m on the transfer orbit (e 0.73, AGOM 0.02) and under 0.3 mm on
   near-circular orbits.
-- **Section 4's output-time terms carry no shadow, while its mean longitude's rate counts one** (stack issue 472).
-  Over a sunlit arc, the mean longitude's rate takes the output-time Delta n on the sunlit arc only; the mapping
-  n_osc = n_mean + Delta n takes it everywhere. And the output-time terms add, through the shadow, the periodic motion
-  of a force that is off there. In season, a flight's response to the sphere (the set minus the set with AGOM 0)
-  against a numerical flight of the same sphere and cylinder from the same two epoch states drifts along track at
-  day 7 by:
+- **The shadow's periodic motion** (stack issue 472, the second clash of 16.15). The output-time terms add, through
+  the shadow, the periodic motion of a force that is off there. What it leaves, measured as in 16.15:
 
-  | Orbit | Drift at day 7 |
-  | --- | --- |
-  | geostationary | 92 m |
-  | inclined geosynchronous | 71 m |
-  | Galileo-like | 116 m |
-  | GPS-like | 77 m |
-  | 800 km | 13 m |
-  | laser geodetic | 1.4 m |
+  | Orbit, in season | Along track at day 7 | Within-day span | Radial RMS |
+  | --- | --- | --- | --- |
+  | geostationary | -3.7 m | 6.2 m | 1.4 m |
+  | C229-like geostationary (i 1.7 deg) | -1.5 m | 8.0 m | 1.4 m |
+  | inclined geosynchronous | -5.5 m | 6.1 m | 1.2 m |
+  | Galileo-like | 13.7 m | 5.7 m | 0.9 m |
+  | GPS-like | -3.0 m | 3.0 m | 0.6 m |
+  | 800 km | -6.6 m | 1.2 m | 0.4 m |
+  | laser geodetic | -0.5 m | 0.1 m | 0.006 m |
 
-  Within each day it also errs by up to 1.3 m radial RMS. Out of season it is absent. A fit absorbs most of the drift
-  into the mean motion; the remainder is on the geostationary rows (a 2.4 to 3.3 m fit RMS against a sphere truth).
+  Out of season, as the numerical model's own baseline: -5.8 m on the C229-like set and -0.9 m Galileo-like.
+
+**16.15 The mean longitude over a sunlit arc** (stack issue 472). Section 4's averaged rates count the shadow; its
+output-time short-period terms (Kozai 1961; Aksnes 1976) do not, being periodic in E with the Sun held fixed and no
+shadow. The two clash in an eclipse season, twice:
+1. Section 4's rate of lambda over a sunlit arc takes the sunlit average of the Gauss rate plus the sunlit average of
+   the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n). The numerical average of 16.14
+   reproduces section 4's lambda rate only with Delta n added over the sunlit arc: at e 0, 2.5 times the Gauss rate's
+   average. But the output-time terms map n_osc = n_mean + Delta n over the whole revolution, the shadow included. The
+   mean longitude's rate that agrees with that mapping takes Delta n over the whole revolution.
+2. The output-time terms add, through the shadow, the periodic motion of a force that is off there.
+
+*What AP takes.* For (1), an AP set's rate of lambda over a sunlit arc adds Delta n's share over the shadow, in closed
+form:
+
+  (1 / 2 pi) int over E2 .. E1 + 2 pi of Delta n (1 - e cos E) dE = 3 F_s / (2 pi a n) [G(E1 + 2 pi) - G(E2)],
+  G(E) = A sin E - B eta cos E - e (A (E / 2 + sin E cos E / 2) + B eta sin^2 E / 2).
+
+At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/min at geostationary radius for AGOM
+0.022. It vanishes with the shadow, so the rates stay continuous (16.14) and a wholly sunlit orbit flies byte for byte.
+(2) is not carried (16.14 states its size). SGP4XP keeps section 4.
+
+*Measured.* The method:
+- A flight's response to the sphere is the set flown minus the same set with AGOM 0, from the same mean elements.
+- The numerical response is a flight of each of the two AP epoch states, with the sphere in the cylinder and without
+  it: two bodies, J2, the Sun and Moon of section 5, RK4 at 1 minute. The residual is AP's response minus the
+  numerical one; the numerical model's own shortfalls cancel to first order.
+- Made-up sets in season, 7 days on a 10 minute grid, the along-track residual at day 7:
+
+  | Orbit, in season | Section 4's rate | 16.15 | 16.15 and (2), numerical |
+  | --- | --- | --- | --- |
+  | geostationary | 91.7 m | -3.7 m | -0.8 m |
+  | C229-like geostationary | 64.7 m | -1.5 m | -4.2 m |
+  | inclined geosynchronous | 70.7 m | -5.5 m | -2.3 m |
+  | Galileo-like | 115.6 m | 13.7 m | -2.4 m |
+  | GPS-like | 76.9 m | -3.0 m | -0.07 m |
+  | 800 km | 13.1 m | -6.6 m | 1.5 m |
+  | laser geodetic | 1.4 m | -0.5 m | -0.3 m |
+
+  The last column computes (2) numerically at every output time (zero-mean periodic parts of the notched rates
+  minus those without the shadow). What it leaves equals each set's out-of-season residual: -5.8 m C229-like,
+  -0.9 m Galileo-like.
+- The closed form agrees with the same term computed numerically to centimeters in flight.
+- Between AP with and without 16.15, a 7-day flight in season moves by 103 m (geostationary) and 110 m
+  (Galileo-like), and out of season it is byte for byte.
 
 *Cost* (provisional, niced under a load of about 100): the shadow takes 265 ns against the closed form's 183 ns per
 call at Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the

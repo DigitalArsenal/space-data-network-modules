@@ -236,9 +236,13 @@ Not carried:
 - the penumbra: the numerical propagator flies a cone, AP the cylinder; 0.3 mm to 5.7 cm in 7 days, by regime;
 - section 4's sunlit-arc eccentricity-vector rate at high eccentricity (stack #466): 2.3 to 3.5 m at day 7 on a
   transfer orbit;
-- the shadow in section 4's output-time terms (stack #472): in an eclipse season a flight's response to the sphere
-  drifts along track against the same sphere flown numerically, by 13 m (800 km) to 116 m (Galileo-like) at day 7.
-  A fit absorbs most of it.
+- the shadow's periodic motion in section 4's output-time terms (stack #472): in an eclipse season, up to 1.4 m radial
+  RMS and a 3 to 8 m along-track span within the day on medium Earth orbit and geosynchronous sets.
+
+AP's mean longitude over a sunlit arc takes the output-time Delta n over the whole revolution, as the output-time
+terms map it (SPEC 16.15). Section 4's rate takes it over the sunlit arc only, and in season its response to the
+sphere drifted along track against the same sphere flown numerically: 92 m geostationary, 77 m GPS-like and 116 m
+Galileo-like at day 7. With 16.15 that is -3.7, -3.0 and 13.7 m; out of season nothing moves.
 
 E2E: `test/radiation-shadow.e2e.mjs`.
 
