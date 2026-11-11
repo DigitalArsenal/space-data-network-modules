@@ -14,7 +14,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { scratchRoot, scratchDir } from "./lib/scratch.mjs";
+import { scratchRoot, scratchDir, sharedRoot } from "./lib/scratch.mjs";
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.dirname(testDir);
@@ -69,6 +69,7 @@ const order = [...tests].sort((a, b) => (previous[b] ?? Infinity) - (previous[a]
 
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const logs = scratchDir(`run-suite-${stamp}`);
+console.log(`scratch root ${scratchRoot}${process.env.SDN_AP_TEST_SCRATCH ? " (SDN_AP_TEST_SCRATCH)" : " (this checkout's)"}; content-named caches in ${sharedRoot}`);
 console.log(`${tests.length} tests, ${jobs} at a time; logs in ${logs}`);
 
 const children = new Set();
