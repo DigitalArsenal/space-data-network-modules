@@ -304,16 +304,14 @@ double sdnap_xp_shadow_at(uint32_t index, double minutes, const double* native, 
 /// SPEC 16.14 diagnostics: AP's radiation-pressure rates on given mean elements with a given Sun. in: 11 doubles, the
 /// native elements (as sdnap_xp_rates_at: af, ag, chi, psi, lambda deg, n rev/day), the Sun's direction cosines on the
 /// perigee frame P, Q, W (normalized here), the Sun's distance (AU) and AGOM (m^2/kg). mode 0: the theory's averaged
-/// rates (srp_rates on AP's shadow); mode 1: the same sphere (section 4's force, away from the Sun) in the same cylinder
-/// (n < 0 and |r x s| < R_E) averaged over one revolution of the mean orbit, the Sun held fixed, by the Gauss equations
-/// at the midpoints of nq equal steps of the eccentric longitude weighted by r / a, a step the shadow's boundary
-/// crosses split where the boundary is (bisection on the position's own test); lambda's integrand also carries section
-/// 4's periodic mean-motion term Delta n, as section 4's mean longitude does. out: the six rates in the state order,
-/// per minute (lambda's without n). Returns 1 when AP's shadow takes a sunlit arc, 0 wholly sunlit, -1 bad input.
+/// rates (srp_rates on AP's shadow); mode 1: the same sphere in the same cylinder averaged numerically over one
+/// revolution of the mean orbit, the Sun held fixed (srp_average_numeric, nq steps); mode 2: the same with a conical
+/// shadow (umbra and penumbra). out: the six rates in the state order, per minute (lambda's without n). Returns 1 when
+/// AP's shadow takes a sunlit arc, 0 wholly sunlit, -1 bad input.
 SDNAP_EXPORT("sdnap_ap_srp_rates")
 int32_t sdnap_ap_srp_rates(const double* in, int32_t mode, int32_t nq, double* out) {
   using namespace sdnap::xpt;
-  if (in == nullptr || out == nullptr || (mode != 0 && mode != 1)) return -1;
+  if (in == nullptr || out == nullptr || mode < 0 || mode > 2) return -1;
   const double deg = 180.0 / sdnap::kPi, revday = 1440.0 / sdnap::kTwoPi;
   const double y[6] = {in[0], in[1], in[2], in[3], in[4] / deg, in[5] / revday};
   const Frame fr = frame_of(y);
@@ -339,46 +337,7 @@ int32_t sdnap_ap_srp_rates(const double* in, int32_t mode, int32_t nq, double* o
     srp_rates(y, fr, k, pf, agom, b, out, &ag, true, nullptr, true);
     return arc ? 1 : 0;
   }
-  const double Fs = kSrpPressure * agom * 3600.0 / (1000.0 * kRe * in[9] * in[9]);
-  const Vec3 acc = (-Fs) * s;
-  const double varpi = std::atan2(y[kAg], y[kAf]), dn_a = 3.0 * Fs * A / (k.a * fr.n), dn_b = 3.0 * Fs * B * fr.eta / (k.a * fr.n);
-  auto lit = [&](double F) {
-    Vec3 r, v;
-    double roa;
-    state_at_F(y, fr, F, r, v, roa);
-    const double rs = dot(r, s);
-    return !(rs < 0.0 && dot(r, r) - rs * rs < 1.0);
-  };
-  auto add = [&](double F, double w) {
-    Vec3 r, v;
-    double roa, g[6];
-    state_at_F(y, fr, F, r, v, roa);
-    gauss(y, fr, r, v, acc, g);
-    // lambda: section 4's mean longitude also counts the mean motion's periodic part on the sunlit arc (the output-time
-    // Delta n of section 4: 3 F_s (A cos E + B eta sin E) / (a n))
-    g[kLam] += dn_a * std::cos(F - varpi) + dn_b * std::sin(F - varpi);
-    for (int m = 0; m < 6; ++m) out[m] += w * roa * g[m];
-  };
-  const int N = nq > 0 ? nq : 4096;
-  const double h = sdnap::kTwoPi / N;
-  for (int j = 0; j < N; ++j) {
-    const double F0 = j * h, F1 = F0 + h;
-    const bool l0 = lit(F0), l1 = lit(F1);
-    if (l0 == l1) {
-      if (l0) add(F0 + 0.5 * h, h);
-      continue;
-    }
-    double lo = F0, hi = F1;
-    for (int it = 0; it < 60; ++it) {
-      const double mid = 0.5 * (lo + hi);
-      if (lit(mid) == l0) lo = mid;
-      else hi = mid;
-    }
-    const double Fb = 0.5 * (lo + hi);
-    if (l0) add(0.5 * (F0 + Fb), Fb - F0);
-    else add(0.5 * (Fb + F1), F1 - Fb);
-  }
-  for (int m = 0; m < 6; ++m) out[m] /= sdnap::kTwoPi;
+  srp_average_numeric(y, fr, k, s, b.sun_r, agom, mode, nq, A, B, out);
   return arc ? 1 : 0;
 }
 

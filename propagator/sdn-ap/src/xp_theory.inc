@@ -1710,6 +1710,82 @@ inline bool shadow_arc_ap(double A, double B, double e, double eta, double p, do
   return true;
 }
 
+/// SPEC 16.14 diagnostics: section 4's sphere (the force P AGOM (1 AU / r_sun)^2 away from the Sun) averaged over one
+/// revolution of the mean orbit y, the Sun held fixed (unit vector s, distance sun_r in R_E), by the Gauss equations at
+/// the midpoints of nq equal steps of the eccentric longitude weighted by r / a; lambda's integrand also carries section
+/// 4's periodic mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n), as section 4's mean longitude does (A, B
+/// the Sun's direction cosines on P and Q). shape 1: section 4's cylinder of radius R_E, a step its boundary crosses split
+/// where the boundary is (bisection on the position's own test, n < 0 and |r x s| < R_E); shape 2: a cone, the
+/// illuminated fraction of the Sun's disc (radius kSunRadiusKm) behind the Earth's (radius R_E) as seen from the
+/// satellite, a step not wholly lit or wholly dark at both ends taken in 64 equal parts. out: the six rates in the state
+/// order, per minute (lambda's without n).
+constexpr double kSunRadiusKm = 695700.0;
+inline void srp_average_numeric(const double* y, const Frame& fr, const Kepler& k, Vec3 s, double sun_r, double agom,
+                                int shape, int nq, double A, double B, double* out) {
+  for (int m = 0; m < 6; ++m) out[m] = 0.0;
+  const double rs_au = sun_r * kRe / kAu;
+  const double Fs = kSrpPressure * agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
+  const Vec3 acc = (-Fs) * s, sun = sun_r * s;
+  const double varpi = std::atan2(y[kAg], y[kAf]), dn_a = 3.0 * Fs * A / (k.a * fr.n), dn_b = 3.0 * Fs * B * fr.eta / (k.a * fr.n);
+  const double r_sun = kSunRadiusKm / kRe;
+  // the illuminated fraction at eccentric longitude F
+  auto lit = [&](double F) {
+    Vec3 r, v;
+    double roa;
+    state_at_F(y, fr, F, r, v, roa);
+    if (shape == 1) {
+      const double rs = dot(r, s);
+      return rs < 0.0 && dot(r, r) - rs * rs < 1.0 ? 0.0 : 1.0;
+    }
+    const Vec3 d = sun - r;
+    const double rn = norm(r), dn = norm(d);
+    const double a = std::asin(std::fmin(1.0, r_sun / dn)), b = std::asin(std::fmin(1.0, 1.0 / rn));
+    const double c = std::acos(std::fmax(-1.0, std::fmin(1.0, -dot(r, d) / (rn * dn))));
+    if (c >= a + b) return 1.0;
+    if (c <= b - a) return 0.0;
+    if (c <= a - b) return 1.0 - (b * b) / (a * a);
+    const double x = (c * c + a * a - b * b) / (2.0 * c), yy = std::sqrt(std::fmax(0.0, a * a - x * x));
+    const double area = a * a * std::acos(std::fmax(-1.0, std::fmin(1.0, x / a))) + b * b * std::acos(std::fmax(-1.0, std::fmin(1.0, (c - x) / b))) - c * yy;
+    return 1.0 - area / (kPi * a * a);
+  };
+  auto add = [&](double F, double w) {
+    Vec3 r, v;
+    double roa, g[6];
+    state_at_F(y, fr, F, r, v, roa);
+    gauss(y, fr, r, v, acc, g);
+    g[kLam] += dn_a * std::cos(F - varpi) + dn_b * std::sin(F - varpi);
+    for (int m = 0; m < 6; ++m) out[m] += w * roa * g[m];
+  };
+  const int N = nq > 0 ? nq : 4096;
+  const double h = kTwoPi / N;
+  for (int j = 0; j < N; ++j) {
+    const double F0 = j * h, F1 = F0 + h;
+    const double l0 = lit(F0), l1 = lit(F1);
+    if (l0 == l1 && (l0 == 0.0 || l0 == 1.0)) {
+      if (l0 == 1.0) add(F0 + 0.5 * h, h);
+      continue;
+    }
+    if (shape == 1) {
+      double lo = F0, hi = F1;
+      for (int it = 0; it < 60; ++it) {
+        const double mid = 0.5 * (lo + hi);
+        if (lit(mid) == l0) lo = mid;
+        else hi = mid;
+      }
+      const double Fb = 0.5 * (lo + hi);
+      if (l0 == 1.0) add(0.5 * (F0 + Fb), Fb - F0);
+      else add(0.5 * (Fb + F1), F1 - Fb);
+      continue;
+    }
+    const double hs = h / 64.0;
+    for (int q = 0; q < 64; ++q) {
+      const double Fm = F0 + (q + 0.5) * hs, f = lit(Fm);
+      if (f > 0.0) add(Fm, f * hs);
+    }
+  }
+  for (int m = 0; m < 6; ++m) out[m] /= kTwoPi;
+}
+
 /// AP's shadow decision (SPEC 16.14) at direction cosines A, B: shadow_arc_ap, or wholly sunlit under the diagnostic
 /// that takes no boundary at all (sdnap_shadow_policy 3, threshold 0).
 inline bool ap_sunlit_arc(double A, double B, double e, double eta, double p, double& E1, double& E2, double& sE1,
