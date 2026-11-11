@@ -3,7 +3,7 @@
 // the tesseral degree 31 (a fit's record, with the slow set), it lists every tesseral term (l, m, p, q) of the embedded field,
 // order 1 to 70, degree to 70, |q| up to 4 (12 above e 0.3), whose size over the 5-day forecast reaches 0.5 m, with the
 // weights the carriers a set of these elements builds hold of it (the rates, the family grid, the output table, the m-daily
-// family). The rule (TESSERAL-PARTITION, stack #503): every such term is carried exactly once, in every class, on both sides
+// family). The rule (stack #503): every such term is carried exactly once, in every class, on both sides
 // of every switch. The sweep: low orbit at five heights, three inclinations and e 0 to 0.05; class 0 above its switch;
 // the one-day, half-day, eight-hour and sixteen-hour classes on both sides of their switch; the 1,100-minute limit.
 // Asserted:
