@@ -4,8 +4,11 @@
 // RAAN=40, argument of perigee=30, M=20 deg, B=AGOM=0, FORCES=(31,20).
 // Compare days 1/3/7 with 95/16-minute RK3; select the longest of
 // 47.5, 38, 95/3 minutes meeting <5 m at day 7 for both fixtures.
-// Cost: median of 9 alternating cold propagation calls, 5 days at 30-min
-// cadence (241 states), after 2 warm-ups; same input and module interface.
+// Cost: 9 alternating cold propagation calls, 5 days at 30-min cadence
+// (241 states), after 2 warm-ups; same input and module interface. Each call
+// is timed in the process's CPU time (process.cpuUsage) and each arm by its
+// fastest call (from 2026-11-11: the median of wall-clock times read 2.18 on
+// two arms of the same step under a load of 98, and 1.003 alone).
 // AP6 windows were all read by the gap study. Confirmation must use new
 // cutoff windows absent from those stores, before the holds; no read window
 // can be called confirmation. Report every admitted window and both arms.
@@ -31,16 +34,19 @@ const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
 // the seeded AP set (caps 31 and 20 on the theory's flux model), alone, at the days' epochs in GCRF
 function seed(i){return seedOcm({epoch,n:1.0027,e:.0002,i,raan:40,argp:30,ma:20,norad:99004,tesseral:31,zonal:20});}
 const output=(days)=>({output:{EPOCHS:days.map(d=>new Date(t0+d*86400000).toISOString().replace('Z','')),FRAME:2}});
-async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'command'});return{h,async fly(i,days){const req={methodId:'propagate',inputs:flight([seed(i)],output(days))};const start=performance.now(),r=await h.invoke(req),ms=performance.now()-start;assert.equal(r.statusCode,0,r.errorMessage);const states=OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map(v=>[v.X,v.Y,v.Z]);return{ms,states};}};}
+async function open(file){const h=await createStandaloneHarness('browser',file,{surface:'command'});return{h,async fly(i,days){const req={methodId:'propagate',inputs:flight([seed(i)],output(days))};const start=performance.now(),cpu0=process.cpuUsage(),r=await h.invoke(req),cpu=process.cpuUsage(cpu0),ms=performance.now()-start,cpuMs=(cpu.user+cpu.system)/1000;assert.equal(r.statusCode,0,r.errorMessage);const states=OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map(v=>[v.X,v.Y,v.Z]);return{ms,cpuMs,states};}};}
 function variant(step){return buildDiagnostic('geo-step-'+String(step).replace('.','_'),' ',s=>{let v=s.replace(/constexpr double kLongPeriodStep = 95\.0;/,`constexpr double kLongPeriodStep = ${step};`);v=v.replace(/return ctx\.ap_frame && ctx\.resonance == 1 \? [^;]+ : kLongPeriodStep;/,'return kLongPeriodStep;');return v;});}
 const baselinePath=variant(95),baseline=await open(baselinePath),reference=await open(variant(95/16));
 const pilot=process.argv.includes('--pilot'),steps=pilot?[47.5,38,95/3]:['production'];
 const report={registered:{epoch,n:1.0027,e:.0002,inclinations:[.1,15],raan:40,argp:30,ma:20,forces:[31,20],referenceStepMinutes:95/16},candidates:[]};
 for(const step of steps){const candidate=await open(step==='production'?wasmPath:variant(step));const item={step,fixtures:[]};
  for(const i of [.1,15]){const days=[1,3,7],a=await baseline.fly(i,days),b=await candidate.fly(i,days),r=await reference.fly(i,days);const distance=(x,y)=>Math.hypot(...x.map((v,k)=>v-y[k]))*1000;item.fixtures.push({inclination:i,days:days.map((day,k)=>({day,baselineMeters:distance(a.states[k],r.states[k]),candidateMeters:distance(b.states[k],r.states[k])}))});}
- const dense=Array.from({length:241},(_,k)=>k/48),old=[],now=[];
- for(let k=0;k<11;k++){let a,b;if(k%2){b=await candidate.fly(.1,dense);a=await baseline.fly(.1,dense);}else{a=await baseline.fly(.1,dense);b=await candidate.fly(.1,dense);}if(k>=2){old.push(a.ms);now.push(b.ms);}}
- const median=x=>x.toSorted((a,b)=>a-b)[Math.floor(x.length/2)];item.cost={baselineMilliseconds:median(old),candidateMilliseconds:median(now),ratio:median(now)/median(old),baselineSamples:old,candidateSamples:now};
+ const dense=Array.from({length:241},(_,k)=>k/48),old=[],now=[],oldWall=[],nowWall=[];
+ for(let k=0;k<11;k++){let a,b;if(k%2){b=await candidate.fly(.1,dense);a=await baseline.fly(.1,dense);}else{a=await baseline.fly(.1,dense);b=await candidate.fly(.1,dense);}if(k>=2){old.push(a.cpuMs);now.push(b.cpuMs);oldWall.push(a.ms);nowWall.push(b.ms);}}
+ // the process's CPU time per flight (process.cpuUsage, every thread), and of each arm its fastest sample: load on the
+ // machine only adds time, so the fastest is the one it touched least (wall clock printed beside it)
+ const median=x=>x.toSorted((a,b)=>a-b)[Math.floor(x.length/2)];item.cost={baselineCpuMilliseconds:Math.min(...old),candidateCpuMilliseconds:Math.min(...now),ratio:Math.min(...now)/Math.min(...old),
+   medianCpuRatio:median(now)/median(old),baselineCpuSamples:old,candidateCpuSamples:now,baselineWallSamples:oldWall,candidateWallSamples:nowWall};
  report.candidates.push(item);console.log(JSON.stringify(item));await candidate.h.close?.();
  if(!pilot){for(const f of item.fixtures)assert.ok(f.days.at(-1).candidateMeters<5,'day-7 difference under 5 m');assert.ok(item.cost.ratio<2,'flight cost under twice baseline');}
 }
