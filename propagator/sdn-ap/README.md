@@ -211,7 +211,7 @@ every flight reads it there. NONE, the default on the wire, leaves the tide out;
 without it says so in its OD COMMENT, and flies as before, bit for bit. On model truth (16 low orbits, 690 to 1,490 km,
 FFM with the tide), the median day-5 error after a 72 h fit is 68.3 m without the term and 28.3 m with it (28.5 m with
 no tide on either side); after a 24 h fit 64.0 and 48.1 m (48.2 m). On medium, geostationary and eccentric orbits the
-tide moves the day-5 error by 0.07 to 4.1 m and the term carries it to within 0.13 m. The stated covariance does not
+tide moves the day-5 error of a 72 h fit by 0.07 to 6.5 m and the term carries it to within 0.03 m. The stated covariance does not
 shrink. E2E: `test/solid-tides.e2e.mjs`.
 
 ## The radiation term Y0 (SPEC 16.13; `fit` and every flight)

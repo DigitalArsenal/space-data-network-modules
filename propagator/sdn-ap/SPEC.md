@@ -2961,8 +2961,8 @@ tide-free field. Nothing is added at output time.
 
 *What is left out, and its size.* Degree 3 (k3m 0.093), degree 4 through k+, step 2's long-period and semidiurnal
 tables (Tables 6.5b and 6.5c, at most 16.6e-12 and 1.2e-12) and the tide's short-period part are not carried. On model
-truth (below) all of them together move AP's day-5 error by at most 0.42 m and its day-7 error by 0.67 m, and its
-in-arc fit by at most 0.05 m in low orbit and 0.17 m on the eccentric orbits. Of the parts carried, each moves the
+truth (below) all of them together move AP's day-5 error in low orbit by at most 0.42 m and its day-7 error by 0.67 m,
+and its in-arc fit by at most 0.05 m in low orbit and 0.18 m on the eccentric orbits (the short-period part at perigee). Of the parts carried, each moves the
 day-5 error by at most (largest of 17 low orbits, 72 h fits): step 2's band 0.41 m, the lag 0.39 m, the Love number
 per order against k20 for all three 1.07 m (day 7: 0.56, 0.76 and 1.57 m).
 
@@ -2982,7 +2982,7 @@ its error without the tide on either side; a Starlette-like orbit (812 x 1,100 k
 out the tide is smaller and the term carries it the same way: on a GPS-like orbit the tide in FFM alone moves AP's day-5
 error by 4.1 m and with the term AP is within 0.02 m of its level; on a geostationary set 0.07 and 0.01 m; on a
 transfer orbit (e 0.72, perigee 454 km) 1.1 and 0.03 m (day 7 of a 24 h fit: 9.2 and 0.13 m); on a THEMIS-like set
-(e 0.82, the long-period regime) 2.2 and 0.13 m.
+(e 0.82, the long-period regime) 6.5 and 0.01 m (a 24 h fit: 1.5 and 1.5 m, of 349 m).
 
 *Covariance.* The stated covariance hardly moves with the term. A 72 h fit's position sigma on the tide truth at days
 1, 3, 5 and 7, medians of the 17 low orbits, with the term: radial 7.5, 8.4, 10.4, 12.6 m, in-track 252, 1,216, 2,192,
