@@ -11,7 +11,8 @@
 //    are the rule's t_k. Outcome: the moved sets' differences are 0, the rule's within 1e-9 min (rounding).
 // 3. Model truth. FFM: EGM96 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either side. AP: a 72 h fit
 //    of the THEMIS-like set with drag and AGOM pinned at 0, flown 7 days on a 10-minute grid. Outcome: the day-5 whole-day
-//    3D RMS is within 200 m. Measured 119.6 m; 122.9 m with 0.6.16's uniform 8.2-minute step, 918.6 m at 38 min.
+//    3D RMS is within 200 m. Measured 119.7 m on 0.6.20 (119.6 m on 0.6.18); 122.9 m with 0.6.16's uniform 8.2-minute
+//    step, 918.6 m at 38 min.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -133,6 +134,6 @@ const probe = testBuild('sdn-ap-lp-nodes-', [['abi.inc', 'SDNAP_EXPORT("sdnap_fr
 const r = await runModelTruth({name: 'THEMIS-like', n, e, i: 10, raan: 30, argp: 300, ma: 0, drag: false, field: [70, 70], forces: [31, 20], hourly: true, gridMinutes: 10});
 const days = Object.fromEntries(Object.entries(r.wholeDay).map(([d, v]) => [d, {e: +v.e.toFixed(1), r: +v.r.toFixed(1), t: +v.t.toFixed(1), n: +v.n.toFixed(1)}]));
 console.log(JSON.stringify({modelTruth: {fixture: {n, e, i: 10, raan: 30, argp: 300}, fitWrmsM: +(r.fitted.wrms * 1000).toFixed(1), wholeDayM: days, apSha256: r.apSha256}}));
-assert.ok(r.wholeDay[5].e <= 200, `THEMIS-like model truth, day 5: ${r.wholeDay[5].e.toFixed(1)} m (bound 200 m; measured 119.6 m)`);
+assert.ok(r.wholeDay[5].e <= 200, `THEMIS-like model truth, day 5: ${r.wholeDay[5].e.toFixed(1)} m (bound 200 m; measured 119.7 m)`);
 console.log('Long-period perigee step E2E: PASS');
 process.exit(0);

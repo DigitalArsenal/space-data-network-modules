@@ -2792,7 +2792,7 @@ AP against itself at day 5 (as the table above; nodes a revolution on the THEMIS
 | uniform h_0 out of perigee, min(h_0, (1 - e_0 cos E) 0.5 sqrt(1 - e_0) / n_0) (43) | 1.72 m | 34.07 m | 15.14 m | 19.18 m | 0.95 m |
 | step h_0 (1 - e_0 cos E)^0.5 (35) | 30.41 m | 19.40 m | 9.79 m | 15.84 m | 1.32 m |
 
-FFM model truth on the THEMIS-like orbit (as above), days 1 / 3 / 5 / 7: 76.6 / 109.4 / 119.6 / 112.0 m (0.6.16:
+FFM model truth on the THEMIS-like orbit (as above), days 1 / 3 / 5 / 7: 76.7 / 109.5 / 119.7 / 112.2 m (0.6.16 to 0.6.20:
 76.6 / 110.0 / 122.9 / 124.9 m).
 
 The price, against 0.6.15 (`test/kernel-cost.mjs` at nice 19, alternated twice; AP in order over 7 days at 300 s):
@@ -2800,11 +2800,17 @@ The price, against 0.6.15 (`test/kernel-cost.mjs` at nice 19, alternated twice; 
 - Chandra-like: 1.06 to 1.20 times (0.6.16: 1.44).
 - TESS-like: 0.99 to 1.12 times.
 
+Against 0.6.20, the same harness alternated twice, AP over SGP4 at 300 s:
+- THEMIS-like: 44.5 and 47.8 against 187.0 and 191.2 (0.24 to 0.25 times). The first state at day 7 takes 95 to 109 ms
+  against 432 to 464 ms.
+- Chandra-like: 2.9 and 3.1 against 3.4 and 3.7 (0.83 to 0.85 times).
+- TESS-like: 2.7 and 3.1 against 3.1 and 3.1 (0.87 to 1.01 times).
+
 The integration error follows a cube law in the mean step, so its price is stated:
 - 1 m at day 5 costs 1.65 times the nodes on THEMIS-like orbits (mean step about 0.61 h_0) and about 2.5 times on
   Chandra-like orbits (about 0.40 h_0).
-- AP's theory error on these orbits is 100 m and more, so the mean step stays at 0.85 h_0 until that error falls under
-  25 m (stack #461).
+- AP's theory error on these orbits is 100 m and more, so the mean step is 0.85 h_0. A finer step pays where that error
+  is under 25 m (stack #461).
 
 The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
 2.406 rev/day) carries resonant terms in lambda - 2 theta, whose period 2 pi / |n - 2 omega_E| is long near the
