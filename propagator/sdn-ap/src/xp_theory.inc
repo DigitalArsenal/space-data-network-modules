@@ -4825,7 +4825,8 @@ inline B1Orbit b1_orbit(const double* y, const Frame& fr, Vec3 su) {
 /// radial, transverse and normal axes (cd, sd, sw), eB = eD x eY = (cd s - r_hat) / N, N = |s x r_hat| =
 /// sqrt(sd^2 + sw^2): radial -N, transverse cd sd / N, normal cd sw / N (eD taken as s, as eY is unit(s x r): the Sun's
 /// parallax, 3e-4 at the geostationary radius, is left out).
-inline double b1_point(const B1Orbit& o, double sF, double cF, double& cdu, double& sdu, double* rho) {
+/// `rho_y`, when given, also takes Y0's rates there, by y0_unit_rates' own expressions (the same bits).
+inline double b1_point(const B1Orbit& o, double sF, double cF, double& cdu, double& sdu, double* rho, double* rho_y = nullptr) {
   const double roa = 1.0 - o.k * cF - o.h * sF;
   const double X = o.a * (o.c_xx * cF + o.c_xy * sF - o.k), Y = o.a * (o.c_xy * cF + o.c_yy * sF - o.h);
   const double rn = o.a * roa, inv_rn = 1.0 / rn;
@@ -4833,6 +4834,23 @@ inline double b1_point(const B1Orbit& o, double sF, double cF, double& cdu, doub
   const double v_scale = o.na2 * inv_rn;
   const double Xd = v_scale * (o.c_xy * cF - o.c_xx * sF), Yd = v_scale * (o.c_yy * cF - o.c_xy * sF);
   const double cd = xu * o.sf + yu * o.sg, sd = xu * o.sg - yu * o.sf;
+  if (rho_y != nullptr) {  // eY's transverse and normal components (it has no radial one), as y0_unit_rates
+    const double inv_Ny = 1.0 / std::sqrt(std::fmax(1.0 - cd * cd, 1e-24));
+    const double Sy = o.sw * inv_Ny, Wy = -sd * inv_Ny;
+    const double dfy = -Sy * yu, dgy = Sy * xu;
+    const double vdy = Xd * dfy + Yd * dgy;
+    const double rvy = X * Xd + Y * Yd;
+    const double edot_fy = o.inv_mu * (2.0 * vdy * X - rvy * dfy);
+    const double edot_gy = o.inv_mu * (2.0 * vdy * Y - rvy * dgy);
+    const double omega_y = (o.chi * X - o.psi * Y) * Wy * o.inv_hn;
+    const double esy = o.h * xu - o.k * yu;
+    rho_y[kAf] = edot_fy + o.h * omega_y;
+    rho_y[kAg] = edot_gy - o.k * omega_y;
+    rho_y[kChi] = o.c_half_inv_hn * Wy * Y;
+    rho_y[kPsi] = o.c_half_inv_hn * Wy * X;
+    rho_y[kLam] = -o.eta_na_1peta * (1.0 + rn * o.inv_p) * esy * Sy - omega_y;
+    rho_y[kN] = o.neg_3n_2a * o.two_a2_mu * vdy;
+  }
   const double N = std::sqrt(std::fmax(sd * sd + o.sw * o.sw, 1e-24)), inv_N = 1.0 / N;
   cdu = cd * o.inv_cb;
   sdu = -sd * o.inv_cb;
@@ -4856,9 +4874,13 @@ inline double b1_point(const B1Orbit& o, double sF, double cF, double& cdu, doub
 
 /// SPEC 16.B1: the averaged Gauss rates of B1 cos (uc) and B1 sin (us) per unit coefficient (ER/min^2; state order,
 /// lambda's without n): cos du and sin du times the B axis's rates (b1_point), averaged over the mean anomaly of the
-/// mean orbit y on the sunlit arc the sphere's rates count, by Y0's panels (ecom2_panels).
-inline void b1_unit_rates(const RateContext& ctx, const double* y, const Frame& fr, Vec3 su, double* uc, double* us) {
+/// mean orbit y on the sunlit arc the sphere's rates count, by Y0's panels (ecom2_panels); `uy`, when given, Y0's in the
+/// same pass (y0_unit_rates' values, bit for bit: the same panels, points and expressions).
+inline void b1_unit_rates(const RateContext& ctx, const double* y, const Frame& fr, Vec3 su, double* uc, double* us,
+                          double* uy = nullptr) {
   for (int j = 0; j < 6; ++j) uc[j] = us[j] = 0.0;
+  if (uy != nullptr)
+    for (int j = 0; j < 6; ++j) uy[j] = 0.0;
   const B1Orbit o = b1_orbit(y, fr, su);
   double pts[kEcom2Panels];
   const int np = ecom2_panels(ctx, y, fr, su, pts);
@@ -4866,13 +4888,16 @@ inline void b1_unit_rates(const RateContext& ctx, const double* y, const Frame& 
     const double half = 0.5 * (pts[q + 1] - pts[q]), mid = 0.5 * (pts[q + 1] + pts[q]);
     if (!(half > 0.5e-9)) continue;  // two ends that coincide
     for (int g = 0; g < 3; ++g) {
-      double sF, cF, cdu, sdu, rho[6];
+      double sF, cF, cdu, sdu, rho[6], rho_y[6];
       fm::sincos(mid + half * kGl3X[g], sF, cF);
-      const double w = kGl3W[g] * half * b1_point(o, sF, cF, cdu, sdu, rho) * (1.0 / kTwoPi);
+      const double roa = b1_point(o, sF, cF, cdu, sdu, rho, uy != nullptr ? rho_y : nullptr);
+      const double w = kGl3W[g] * half * roa * (1.0 / kTwoPi);
       for (int j = 0; j < 6; ++j) {
         uc[j] += w * cdu * rho[j];
         us[j] += w * sdu * rho[j];
       }
+      if (uy != nullptr)
+        for (int j = 0; j < 6; ++j) uy[j] += w * rho_y[j];
     }
   }
 }
@@ -5131,15 +5156,15 @@ inline void ecom2_blocks(const RateContext& ctx, const Node& a, Node& out) {
     double yc[6], unit[6];
     hermite(a, b0, tc, yc);
     const Vec3 su = bodies_at_ap(ctx.d50_epoch + tc / kMinutesPerDay).sun_u;  // AP only (ECOM2's terms are AP's)
+    double uc[6], us[6];
+    if (b1) b1_unit_rates(ctx, yc, frame_of(yc), su, uc, us, ctx.rad_y0 != 0.0 ? unit : nullptr);  // one pass for both
     if (ctx.rad_y0 != 0.0) {
-      y0_unit_rates(ctx, yc, frame_of(yc), su, unit);
+      if (!b1) y0_unit_rates(ctx, yc, frame_of(yc), su, unit);
       const double scale = dir * length * acc;
       for (int j = 0; j < 6; ++j) add[j] += scale * unit[j];
       add[kLam] += scale * unit[kN] * (out.t - tc);
     }
     if (b1) {
-      double uc[6], us[6];
-      b1_unit_rates(ctx, yc, frame_of(yc), su, uc, us);
       const double scale = dir * length;
       for (int j = 0; j < 6; ++j) unit[j] = acc_c * uc[j] + acc_s * us[j];
       for (int j = 0; j < 6; ++j) add[j] += scale * unit[j];
