@@ -110,6 +110,34 @@ inline double gso_sigma_star(bool ap) {
   return std::fmax(std::fmax(a.s_e / g.per_km[0], a.s_i / g.per_km[1]), a.s_l / g.per_km[2]);
 }
 
+/// SPEC 12.5, 12.8, under the drag (stack #471, #463): the strong-drag class, an AP set at e 0.3 or below with its perigee
+/// under kStrongDragPerigeeKm, fitted under NRLMSISE-00 on BTERM's default prior over an arc inside one of the rows'
+/// calibrated spans. The record's sigma of ln BTERM is the arc's information on ln BTERM over m^2, combined with the
+/// prior's (SPEC 12.8's RMS-floor rule): the post-fit residual is the theory's own error, correlated along the arc, so the
+/// formal information overstates what the arc says about BTERM. The covariance takes it as a rank-1 update along BTERM's
+/// own column (every row follows its regression on BTERM, as the fit compensates a wrong drag term), and the forecast maps
+/// it; s_d keeps the DRAG row's form with the class's share c, which then carries only the rest (the density forecast).
+/// Fitted on the headline-loop strong-drag windows (Swarm A, B, C, GRACE-FO 1, 2; 2026) against the numerical
+/// propagator's fitted drag term and the precise orbits, leaving one window out.
+struct DragRow {
+  double m, c;
+  double span_lo_h, span_hi_h;  ///< the calibration fits' spans, hours (0.9 to 1.05 times)
+};
+constexpr double kStrongDragPerigeeKm = 600.0;
+constexpr DragRow kDragAP[2] = {{9.22, 0.126, 21.6, 25.2}, {14.5, 0.163, 64.8, 75.6}};
+
+/// The strong-drag row of an AP set (kDragAP), or nullptr: perigee under kStrongDragPerigeeKm, e at most 0.3, the fit's
+/// span inside a row's.
+inline const DragRow* strong_drag_row(const ElementRow& row, double span_h) {
+  if (!(row.mean_motion_rev_day > 0.0) || row.eccentricity > 0.3) return nullptr;
+  const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+  const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
+  if (!((a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kStrongDragPerigeeKm)) return nullptr;
+  for (const DragRow& d : kDragAP)
+    if (span_h >= d.span_lo_h && span_h <= d.span_hi_h) return &d;
+  return nullptr;
+}
+
 constexpr int kMaxConsider = 5;
 constexpr int kMaxAug = 6 + kMaxConsider;
 static_assert(kMaxAug == fit::kMaxParams, "the augmented state is the fit's parameter vector");

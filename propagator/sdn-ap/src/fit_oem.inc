@@ -974,6 +974,42 @@ static int fit_blocks() {
           break;
         }
       }
+      // SPEC 12.5, 12.8 (stack #471): the strong-drag class. Its sigma of ln BTERM is the arc's information over m^2 combined
+      // with the prior's, written as a rank-1 update along BTERM's own column; s_d takes the class's share c
+      std::string drag_class_note;
+      const cov::DragRow* strong = !lattice && !high_e_drag && po.forces.msis && !po.drag_prior_given && used_drag.form == pcfPriorForm_LOG_NORMAL
+                                       ? cov::strong_drag_row(row, arc_hours)
+                                       : nullptr;
+      if (have_cov && strong != nullptr && fit_cov.regime == 0) {
+        int kind[fit::kMaxParams];
+        const int np = cov::kinds_of(fit_cov.o, kind);
+        for (int a = 6; a < np; ++a) {
+          if (kind[a] != cov::kKindDrag) continue;
+          const double var_b = fit_cov.C[a * np + a];
+          const double var_f = fit_cov.log_sigma[0] * fit_cov.log_sigma[0];
+          const double var_p = used_drag.sigma * used_drag.sigma;
+          if (!(var_b > 0.0) || !(var_f > 0.0) || !(var_p > 0.0)) break;
+          const double info_arc = std::fmax(0.0, 1.0 / var_f - 1.0 / var_p);
+          if (!(info_arc * var_f > 1e-6)) break;  // a prior that pins BTERM: as fitted
+          const double var_h = 1.0 / (info_arc / (strong->m * strong->m) + 1.0 / var_p);
+          if (var_h > var_f) {
+            const double alpha = (var_h / var_f - 1.0) / var_b;
+            double u[cov::kMaxAug];
+            for (int i = 0; i < np; ++i) u[i] = fit_cov.C[i * np + a];
+            for (int i = 0; i < np; ++i)
+              for (int j = 0; j < np; ++j) fit_cov.C[i * np + j] += alpha * u[i] * u[j];
+            fit_cov.log_sigma[0] = std::sqrt(var_h);
+          }
+          const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+          fit_cov.share = strong->c;
+          fit_cov.noise[3] = strong->c * std::fabs(fit_cov.ng_rate) * n_min * kMinutesPerDay;
+          char note[200];
+          std::snprintf(note, sizeof note, "drag term: the strong-drag class (SPEC 12.8): sigma of ln BTERM %.4g (the arc's %.4g, m %.3g), s_d share %.3g",
+                        fit_cov.log_sigma[0], std::sqrt(var_f), strong->m, strong->c);
+          drag_class_note = note;
+          break;
+        }
+      }
       // held-out score: RMS, largest error, and by day after the arc
       double held_rms = 0.0, held_max = 0.0, held_stop = fit_end_min;
       std::vector<double> day_ss;
@@ -1112,6 +1148,7 @@ static int fit_blocks() {
                         : span_used < default_span ? "fit arc: shortened, the default span held no plausible set"
                         : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
+      if (!drag_class_note.empty()) comment.push_back(drag_class_note);
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"

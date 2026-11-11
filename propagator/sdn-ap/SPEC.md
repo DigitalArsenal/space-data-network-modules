@@ -1907,6 +1907,9 @@ floor the set carries in COV_PROPAGATION and adds at every time, epoch included;
 | SDNAP | DRAG | 1.8579913326733934e-07 | 1.12761105007012e-06 | 7.647194501793458e-07 | 0.112126311682426 | 1.5127596877626373 |
 | SDNAP | ABOVE | 9.6961538661171821e-07 | 8.1531127919544734e-07 | 4.753573962018311e-06 | 0 | 1 |
 
+In the strong-drag class (12.8: perigee under 600 km, 24 h and 72 h arcs, NRLMSISE-00 on the default drag prior) the
+record also states a wider sigma of ln BTERM, and c is the class's: 0.126 and 0.163.
+
 The DRAG row (0.6.1, 2026-11-05) is fitted per axis. Per radial, in-track and cross-track axis (RIC, the truth's
 axes) z = e / sigma, the forward error component over the propagated 1-sigma; calibrated, median |z| = 0.674, and the
 band [0.603, 0.754] is the one-axis image of 12.7's (0.674 x sqrt of [0.8, 1.25]). The loss is, per regime, the mean
@@ -2278,6 +2281,90 @@ past 30): its truth is cached (0.04 s), so the time is the fit's own, the Levenb
 finite-difference Jacobians each propagating the arc, which costs about 0.1 s on GTO (16.12's 1 h grid cost); its
 table rows are not measured.
 `test/high-e-fit-arc.e2e.mjs` measures every row but the pinned one.
+
+**The strong-drag class (stack #471, #463).** Under the drag the post-fit residual is the theory's own error, correlated
+along the arc, and the fit weighs it as independent data, so the formal sigma of ln BTERM overstates what the arc says
+about the term. On the headline-loop windows (below) the 72 h fits' |ln(B / B_FFM)| had a median of 2.7 to 11 stated
+sigmas (laser spheres 2.7, altimetry 9.3, near 700 km 11.2, strong drag 8.6), B_FFM being the numerical propagator's
+own fitted Cd A/m on the same window and arc. An AP set at e 0.3 or below
+with its perigee under 600 km, fitted under NRLMSISE-00 on BTERM's default prior over an arc of 21.6 to 25.2 h or 64.8 to
+75.6 h, therefore states
+
+    sigma_lnB^2 = 1 / ((1 / s_f^2 - 1 / s_p^2) / m^2 + 1 / s_p^2)
+
+with s_f the formal posterior sigma of ln BTERM and s_p the prior's. This is the arc's information on ln BTERM over m^2,
+combined with the prior's: the rule of "The arc above e 0.3" with m^2 in place of the residual components. m is 9.22
+on the 24 h row and 14.5 on the 72 h row. The covariance takes the new width as a rank-1 update along BTERM's own column,
+C + (sigma_lnB^2 / s_f^2 - 1) u u^T / C_BB with u = C[:, BTERM]. Every row follows its regression on BTERM, as the fit
+compensates a wrong drag term, so the forecast maps the width as an error of the arc's drag. Two other forms were
+measured and failed the strong-drag cells. Raising BTERM's diagonal alone maps the width as if the epoch state did not
+follow it. Scaling BTERM's row and column (the rule above e 0.3) shrinks the regression. Both took the 24 h fits' day-1
+in-track coverage from 0.96 to 0.98, outside the band. The DRAG row's s_d = c |n-dot_ng| then carries only what is left
+(the density forecast), with the class's share c: 0.126 (24 h) and 0.163 (72 h), against the DRAG row's 0.112 (12.5).
+The record's NON_GRAVITATIONAL_SHARE states it, and its OD COMMENT names the class with both widths. The class sits in
+and beside low-orbit commensurability bands, where the theory's own along-track error is 0.1 to 1.9 km at day 5 with
+the drag term right (stack #477). c was fitted on windows that carry that error as if it were drag noise, so it
+includes the bands' error. Records fitted before this rule keep their stated sigma: nothing reinterprets
+them, and a reader flies their matrix as it is written. A stated
+FIT.DRAG_PRIOR, another arc, a perigee at 600 km or above, SGP4XP, and AP without NRLMSISE-00 fit as before, byte for byte.
+
+The sizes come from the headline-loop strong-drag windows: Swarm A, B, C and GRACE-FO 1 and 2 in 2026, 24 h and 72 h
+fits, perigees 411 to 471 km. The ln BTERM sizes were fitted against B_FFM. c was fitted with the width mapped, against
+the precise orbits' in-track error at leads of 24, 72, 120 and 168 h, on the loss (coverage - 0.95)^2 + 0.25
+ln(median |z| / 0.674)^2 summed over the leads. Both were scored leaving one window out (both arcs of a window
+together). The burn rule: a window-arc counts as a burn when the numerical propagator's own 3D error at day 3 on it (arm
+FFMq) exceeds 10 km. That uses the numerical propagator's error, not a truth-only flag (stack #462). The sizes are fitted
+without the burns, and every row below is also shown on all windows with the burns counted.
+
+The record's sigma of ln BTERM against B_FFM, sdn-ap 0.6.18 > this build (n with the burns in brackets; width at the 95 %
+edge is the 95th percentile of |z| over 1.96: 1 is honest, 2 twice too narrow):
+
+| Fit arc | Pool | n | beyond 3 sigma | median abs(z) | 95 % coverage | width at the 95 % edge |
+| --: | --- | --: | --- | --- | --- | --- |
+| 24 h | burns left out | 141 | 108 > 0 | 7.11 > 0.77 | 0.16 > 0.96 | 9.01 > 0.98 |
+| 24 h | all windows | 153 (12) | 114 > 0 | 6.88 > 0.75 | 0.18 > 0.96 | 9.04 > 0.98 |
+| 72 h | burns left out | 128 | 101 > 0 | 8.59 > 0.59 | 0.16 > 0.94 | 14.9 > 1.03 |
+| 72 h | all windows | 153 (25) | 118 > 0 | 7.46 > 0.51 | 0.17 > 0.95 | 14.6 > 1.01 |
+
+The forecast's in-track z against the precise orbits, sdn-ap 0.6.18 > this build:
+
+| Fit arc | Lead h | Pool | n | 95 % coverage | beyond 3 sigma | median abs(z) | median in-track sigma (km) |
+| --: | --: | --- | --: | --- | --- | --- | --- |
+| 24 h | 24 | burns left out | 243 | 0.96 > 0.97 | 4 > 3 | 0.600 > 0.526 | 0.584 > 0.656 |
+| 24 h | 24 | all windows | 255 (12) | 0.94 > 0.94 | 8 > 6 | 0.610 > 0.531 | 0.585 > 0.660 |
+| 24 h | 72 | burns left out | 243 | 0.89 > 0.93 | 4 > 4 | 0.782 > 0.666 | 3.01 > 3.57 |
+| 24 h | 72 | all windows | 255 (12) | 0.86 > 0.90 | 12 > 11 | 0.804 > 0.683 | 3.02 > 3.59 |
+| 24 h | 120 | burns left out | 243 | 0.85 > 0.90 | 20 > 13 | 0.849 > 0.681 | 7.64 > 9.14 |
+| 24 h | 120 | all windows | 255 (12) | 0.82 > 0.87 | 28 > 20 | 0.903 > 0.701 | 7.69 > 9.24 |
+| 24 h | 168 | burns left out | 243 | 0.82 > 0.86 | 26 > 21 | 0.834 > 0.676 | 14.6 > 17.4 |
+| 24 h | 168 | all windows | 255 (12) | 0.79 > 0.84 | 34 > 28 | 0.852 > 0.708 | 14.7 > 17.6 |
+| 72 h | 24 | burns left out | 230 | 0.83 > 0.91 | 12 > 6 | 0.863 > 0.710 | 0.590 > 0.677 |
+| 72 h | 24 | all windows | 255 (25) | 0.76 > 0.85 | 31 > 19 | 0.923 > 0.802 | 0.599 > 0.695 |
+| 72 h | 72 | burns left out | 230 | 0.83 > 0.91 | 16 > 6 | 0.818 > 0.607 | 3.04 > 4.15 |
+| 72 h | 72 | all windows | 255 (25) | 0.76 > 0.86 | 29 > 15 | 0.901 > 0.656 | 3.14 > 4.29 |
+| 72 h | 120 | burns left out | 230 | 0.80 > 0.89 | 24 > 15 | 0.852 > 0.594 | 7.77 > 11.1 |
+| 72 h | 120 | all windows | 255 (25) | 0.75 > 0.86 | 35 > 21 | 1.022 > 0.729 | 8.06 > 11.4 |
+| 72 h | 168 | burns left out | 230 | 0.78 > 0.85 | 30 > 19 | 0.950 > 0.658 | 14.9 > 21.4 |
+| 72 h | 168 | all windows | 255 (25) | 0.74 > 0.82 | 41 > 25 | 1.035 > 0.714 | 15.5 > 22.2 |
+
+Both tables are this build's own records: the sizes fitted on all windows and rounded (m 9.22 and 14.5). Leaving one
+window out gives the same cells to 0.01 in coverage and to 4 windows beyond 3 sigma (72 h, day 5: 19 against 15).
+Leaving one satellite out holds on every forecast cell. On ln BTERM it holds on the 24 h fits (0.96, width 0.98), but
+on the 72 h fits a held-out satellite's tail is narrow by 1.41 (5 of 128 beyond 3 sigma, coverage 0.88). In-track
+coverage is still under the band at every lead of the 72 h fits (0.85 to 0.91) and at days 5 and 7 of the 24 h fits
+(0.90, 0.86): the class moves every cell toward the band and puts none past it on the wide side. Every state is bit for
+bit: of the 1,170 low-orbit window-arcs of the four rows (4,166 samples), the 510 in the class change only their
+covariance and the rest are bit for bit, as are a fifteenth of the above-the-drag windows (GD, GN, GN_GAL, IG, GE, WA;
+2,562 samples) and SGP4XP's records on an eighth of the four rows' windows (136 window-arcs, 2,840 samples), their
+covariance included.
+
+At 600 to 2,500 km (laser spheres, altimetry, Sentinel-1; measured on the drag-default candidate of stack #460, modules
+draft #39) the same rule (m 7.75 and 12.1 at 600 to 1,000 km, 1 and 9.22 above) takes the ln BTERM figures from 1 to 89
+beyond 3 sigma to 0 to 7 per row. It leaves the 24 h fits too wide by 1.25 to 1.75 at the 95 % edge, near 700 km at
+72 h too wide by 1.16, and altimetry at 72 h narrow in its tail by 1.55. With the width mapped, though, no share c keeps
+the spheres from widening (their in-track width is s_l's, about 0.49 km per day on every set there). A joint (c, s_l) per band narrows them but takes Sentinel-1's 72 h day-1 coverage from
+0.77 to 0.55. That band keeps the DRAG row's covariance and the formal sigma of ln BTERM (stack #463, #471).
+`test/drag-term-strong-drag-class.e2e.mjs` holds the rule on model truth.
 
 ---
 
