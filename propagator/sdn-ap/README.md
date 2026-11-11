@@ -237,7 +237,8 @@ the numerical propagator from 200 to 250 of 251; Galileo's from 111.1 to 29.2 m 
 windows are worse at day 5 by any amount between the two release tables (44 by more than 1 m in the radiation pull
 request's own flight), the worst by 43 m. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
 eccentric science orbits. A shorter fit can hold the Y0 of an earlier 72 h fit (FORCES.ECOM2.Y0_M_S2 = its VALUE):
-medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a covariance row. Cost: a record with Y0
+medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a covariance row; where it was solved the
+record's covariance is marginal over it (stack #481). Cost: a record with Y0
 takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.14 to 5.76 ms for a week hourly, a
 Galileo record; under a load of 10 on 28 cores) and nothing more per state once its grid exists. E2E:
 `test/radiation-y0.e2e.mjs`.

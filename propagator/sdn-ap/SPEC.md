@@ -3128,7 +3128,11 @@ as the last parameter, in units of 1e-9 m/s^2, its column a one-sided difference
 the larger of 1 % and 1e-10 m/s^2), with a Gaussian prior about Y0_M_S2 of sigma 1e-9 m/s^2. The cost, the normal
 equations and the covariance read one statement of the fit's priors (drag, AGOM, Y0). Elsewhere Y0 is held at Y0_M_S2:
 an arc under 72 h (a 24 h fit), a set under the drag, and the second stage of a two-stage fit (at the first stage's Y0).
-Through 0.6.18 the one-day class held it too (below). Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
+Through 0.6.18 the one-day class held it too (below). Y0 is not a covariance row (17.1): the covariance's moved sets
+fly it at its solved value. Its uncertainty is in the record all the same: where the fit solved Y0, the normal matrix
+is made over the parameters and Y0 (a second bank of moved sets, Y0 moved too, its step as the fit's column), and the
+record's parameter block is that inverse's block of the parameters, marginal over Y0. Through this change it was the
+block conditional on Y0 (stack #481). On the real 72 h
 windows of medium orbit, Galileo, inclined geosynchronous and geostationary sets the share of errors beyond the stated
 1, 2 and 3 sigma per RTN axis at days 1, 3, 5 and 7 is the same with Y0 solved as without (the stated sigma is 5 to 100
 times the error in both: stack issue 433). AGOM moves by under 1 % between the fits with and without Y0.
@@ -3351,7 +3355,8 @@ solved, in this fixed order:
 order; `COV_UNITS` has `COV_SIZE` entries (km x3, km/s x3, then the parameters' units); `COV_ORDERING` LTM;
 `COV_REF_FRAME` the record's `TRAJ_REF_FRAME`. `OD_DYNAMIC_PARAMETERS` names every row, `SOLVED_FOR` true for each;
 `fit` lists DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS and nothing it does not know, and under $PCF FORCES.ECOM2 also
-ECOM2_Y0 (16.13), which is no covariance row: its `SOLVED_FOR` says whether the fit solved it.
+ECOM2_Y0 (16.13), which is no covariance row: its `SOLVED_FOR` says whether the fit solved it, and where it did the
+rows are marginal over it.
 
 ### 17.2 Parameters the theories have no sensitivity to
 
