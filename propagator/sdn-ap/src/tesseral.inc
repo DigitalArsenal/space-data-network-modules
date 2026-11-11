@@ -49,6 +49,7 @@ constexpr double kWideE = 0.3;
 /// resonant share there and costs more. Read by xpt::branch_of alone (SPEC 16.7: the switch is the set's, decided at its epoch).
 constexpr double kWideENonResonant = 0.05;
 inline bool wide_set(int cls, double e0) { return e0 > (cls == 0 ? kWideENonResonant : kWideE); }
+constexpr int kLowMdailyCap = 16, kLowSpCap = 16;
 
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {

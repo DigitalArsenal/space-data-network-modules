@@ -5838,7 +5838,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
     }
   }
-  const int md = (t.tesseral > tess::kMdailyCap ? tess::kMdailyCap : t.tesseral) & ~1;
+  const bool low_table = res == 0 && !s.ctx.long_period && br.wide_tess == 0;
+  const int md_cap = low_table ? tess::kLowMdailyCap : tess::kMdailyCap;
+  const int md = (t.tesseral > md_cap ? md_cap : t.tesseral) & ~1;
   if (md >= 2) {
     if (same_inc && anchor->ctx.mdaily != nullptr && anchor->ctx.mdaily_degree == md) {
       s.ctx.mdaily = anchor->ctx.mdaily;
@@ -5854,7 +5856,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.mdaily_degree = md;
     }
   }
-  const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
+  const int sp_cap = low_table ? tess::kLowSpCap : tess::kSpCap;
+  const int spd = t.tesseral > sp_cap ? sp_cap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
     const bool wide_sp = br.wide_tess != 0;
