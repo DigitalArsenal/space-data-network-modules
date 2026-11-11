@@ -748,12 +748,13 @@ static int fit_blocks() {
         if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
         // SPEC 12.1: above the drag (cov::regime_of: the perigee at or above 2,500 km, where the theory's density is
-        // 1e-20 at every point of the orbit) the whole-arc fit is redone at the data's own sigma, so the priors stop
-        // pulling against data far more precise than the 1 km the stages weigh at. Under drag the 1 km stands: the
-        // residual there is the theory's own error, correlated along the arc, and at its bare scatter BTERM and AGOM
-        // absorb it (measured on the laser-ranged spheres' 24 h arcs).
+        // 1e-20 at every point of the orbit), and under the drag on an arc of pcf::kDataSigmaUnderDragMinArcHours or more,
+        // the whole-arc fit is redone at the data's own sigma: every prior then acts at its written sigma, and the
+        // covariance (cov::of_fit at that sigma) is the curvature of the cost the fit minimized (stack #489). A shorter arc
+        // under the drag keeps the stages' 1 km: there a free BTERM folds the theory's own along-track error into itself,
+        // and the band's prior is what holds it (measured on the laser-ranged spheres' 24 h arcs).
         double sigma_km = 0.0;
-        if (cov::regime_of(row) != 0) {
+        if (cov::regime_of(row) != 0 || fit_end_min - fit_begin_min >= pcf::kDataSigmaUnderDragMinArcHours * 60.0) {
           double weighted = fit::kUnitSigmaKm;
           fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, weighted, iterations);
           if (weighted != fit::kUnitSigmaKm) sigma_km = weighted;
