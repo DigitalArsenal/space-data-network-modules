@@ -18,8 +18,9 @@
 //    same change improved the fitted Molniya fixture's day-7 along-track RMS from 276 to 238 m and the half-day one's from
 //    34 to 31 m (third-body-short-period-eccentric.e2e.mjs); this test was not run at 0.6.3. The 12 m is
 //    DigitalArsenal/spacedatanetwork-stack#391. AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446: the Moon within
-//    4.1 arcsec of DE440 against 377) move it from 83.38 to 85.94 m: a lunar error had been taking 2.5 m off this
-//    fixture's other error. A change that moves it by more than 1 m either way states why and records the new figure;
+//    4.1 arcsec of DE440 against 377) move it from 83.33 m (0.6.21; 83.38 as recorded from 0.6.5) to 85.94 m: a lunar
+//    error had been taking 2.6 m off this fixture's other error. A change that moves it by more than 1 m either way states
+//    why and records the new figure;
 // 3. Molniya, BTERM fitted the catalog's way (SPEC 12.8): a 7-day arc on the band default (its B within 0.6 % of 0.044,
 //    which holds both of the arc's solutions, 0.0438547 and 0.0437610: stack #392, #438; 0.5 % before the E-grid's C1 read),
 //    its posterior carried as LOG_NORMAL with the sigma of the log at least 0.005, then the 72 h arc 7 to 10 days after
