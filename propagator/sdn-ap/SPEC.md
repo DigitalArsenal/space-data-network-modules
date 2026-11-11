@@ -3569,6 +3569,22 @@ Measured with the slow set:
   121 m), near 700 km 10 to 11 of 69 (235 to 216 m). The 24 h rows do not move.
 - The records of LAGEOS-, Etalon- and Galileo-like sets are identical to 0.6.20.
 
+What gets worse, measured. No IDS burn lies near either Sentinel-3 window.
+- Sentinel-3B 2025-10-25: day 7 goes from 112 to 402 m. Its 72 h fitted term goes from 0.87 to 0.83 of the full numerical
+  arm's, and the numerical propagator's own day 7 on that window is 1,179 m.
+- Sentinel-3A: the median paired day 3 on its read windows goes from 44.2 to 73.4 m. Its term on 2025-10-15 goes from 0.90
+  to 0.87 of the numerical arm's.
+- The ISS sample, a 6 h fit at 420 km: the error at 12 h goes from 308.5 to 316.6 m against the sample's own truth. The
+  calibration cells of SPEC 12.5 move by at most 0.0011 in median |z|. This is one sample.
+- LARETS: two windows leave the 100 m line. 2025-10-15 (a 24 h fit) goes from 73 to 288 m at day 5, and 2025-12-14 (72 h)
+  from 74 to 188 m.
+
+*Cost.* The list is built once per set, when the set is loaded, so the cold first state of a low-orbit set costs more:
+- at 1 day, 1.25 to 1.40 times 0.6.20 on six of `test/kernel-cost.mjs`'s ten low-orbit regimes and about 2.2 at 400 km;
+- at 7 days, 1.03 to 1.28 times.
+The cost per state is unchanged within the noise (0.90 to 1.07). These were measured under load; stack #492 is the shared
+list that takes the load cost off a catalog.
+
 *The diagnostic, low table.* `sdnap_slow_terms(in, rows, max_rows)` covers the low table with rows of eight doubles: l, m, p,
 q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term's size in m. It lists every term of j = 1 to
 6 and |q| up to 4 within 1.3 bands:

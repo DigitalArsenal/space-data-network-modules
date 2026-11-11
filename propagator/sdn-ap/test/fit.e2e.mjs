@@ -70,8 +70,9 @@ const cases = [
     recorded: { version: "0.6.21", cov: "ap-fit-0.6.4-0.6.21.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.4.eme2000-0.6.21.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.4.teme-0.6.21.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", fitRecord: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
-// 0.6.NN (the slow set, SPEC 16.18) moves AP's fit, which now carries the slow tesseral terms at 550 km: SLOWMOVE7D. Against
-// the fixture's own truth (propagator/ffm's 550 km trajectory) the error 48 to 72 h past the arc goes from SLOWTRUTH. So AP's
+// 0.6.NN (the slow set, SPEC 16.18) moves AP's fit, which now carries the slow tesseral terms at 550 km: 683 m from the
+// stored record at 7 days on EPOCHS, FIT_RMS 40.049 against 41.129 m (0.6.20 and 0.6.21). Against the fixture's own truth
+// (propagator/ffm's 550 km trajectory) the error 48 to 72 h past the arc goes from 114 m to 43 m. So AP's
 // fit is pinned to this build's
 // own (fitRecord, test/fixtures/ap-fit-slow.ocm: its FIT_RMS and its flight), the bounds kept; the stored record stays the
 // flight's reference against BEFORE.

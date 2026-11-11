@@ -290,9 +290,9 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // velocity 0.000 um/s, covariance 9.162e-3 of a line's largest entry. Why: the record's correlations between AGOM and
   // the state are 0.6.4's fit's, and 16.16 moves its along-track response to AGOM at 48 h from 1380.7 to 823.7 m per
   // m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within 7.1e-5 (covariance.e2e.mjs).
-  // 0.6.NN (the slow set, SPEC 16.18) moves this build's fit, which now carries the slow tesseral terms at 550 km: SLOWMOVE.
-  // Against the fixture's own truth (propagator/ffm's 550 km trajectory) the fit's error 48 to 72 h past the arc goes from
-  // SLOWTRUTH. The fit is pinned to this build's flight of its own fit (ap-fit-slow.epochs.oem), the bounds kept.
+  // 0.6.NN (the slow set, SPEC 16.18) moves this build's fit, which now carries the slow tesseral terms at 550 km: 17.8 m and
+  // 19.5 mm/s from 0.6.21's own fit's flight. Against the fixture's own truth (propagator/ffm's 550 km trajectory) the fit's
+  // error 48 to 72 h past the arc goes from 114 m (0.6.20 and 0.6.21) to 43 m. The fit is pinned to this build's flight of its own fit (ap-fit-slow.epochs.oem), the bounds kept.
   const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.epochs-0.6.21.oem", import.meta.url));
   const fitFlight = fs.readFileSync(new URL("fixtures/ap-fit-slow.epochs.oem", import.meta.url));
   const STORE_FLIGHT = { posM: 0.001, velMmS: 0.001, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.1, velMmS: 0.1 };

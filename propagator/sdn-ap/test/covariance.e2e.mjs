@@ -63,9 +63,10 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// move the covariance. A fit made and flown by the same theory does not: 0.6.21's own fit of the inputs flies to 0.6.4's
 /// numbers within 7.1e-5 (0.6.20's own fit 7.6e-5), so the own fit keeps ap-fit-0.6.4.cov as its reference; its epoch
 /// covariance moved 9.0e-5 of 0.6.18's largest entry and its floors not at all.
-/// 0.6.NN (the slow set, SPEC 16.18) moves the own fit, which now carries the slow tesseral terms at 550 km: SLOWMOVE.
-/// Against the fixture's own truth (propagator/ffm's 550 km trajectory) the fit's error 48 to 72 h past the arc goes from
-/// SLOWTRUTH. The own fit is pinned to this build's (test/fixtures/ap-fit-slow.ocm, its sdnap_covariance_at at the grid
+/// 0.6.NN (the slow set, SPEC 16.18) moves the own fit, which now carries the slow tesseral terms at 550 km: 17.8 m along
+/// the grid from 0.6.21's own fit, its covariance, epoch covariance and floors with it. Against the fixture's own truth
+/// (propagator/ffm's 550 km trajectory) the fit's error 48 to 72 h past the arc goes from 114 m (0.6.20 and 0.6.21) to 43 m.
+/// The own fit is pinned to this build's (test/fixtures/ap-fit-slow.ocm, its sdnap_covariance_at at the grid
 /// ap-fit-slow.cov), the bounds kept.
 const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };

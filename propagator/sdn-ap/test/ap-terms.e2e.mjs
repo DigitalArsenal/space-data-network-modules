@@ -78,8 +78,9 @@ const { ap, xp, rows } = await fixtureSets(h);
 // 823.7 m per m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within 7.1e-5 (covariance.e2e.mjs). The fit: this build's fit of
 // the same 24 h arc stops at another point inside its tolerance, 7.3 cm from 0.6.4's along the grid (0.6.5: 26 against 28
 // iterations, FIT_RMS 41.127 against 41.130 m).
-// 0.6.NN (the slow set, SPEC 16.18) moves the fit, which now carries the slow tesseral terms at 550 km: SLOWMOVE. Against
-// the fixture's own truth (propagator/ffm's 550 km trajectory) the error 48 to 72 h past the arc goes from SLOWTRUTH. So the
+// 0.6.NN (the slow set, SPEC 16.18) moves the fit, which now carries the slow tesseral terms at 550 km: 17.8 m from
+// 0.6.21's own fit along the grid, FIT_RMS 40.049 against 41.129 m. Against the fixture's own truth (propagator/ffm's 550 km
+// trajectory) the error 48 to 72 h past the arc goes from 114 m (0.6.20 and 0.6.21) to 43 m, over the arc 24.0 to 23.9 m. So the
 // fit is pinned to this build's own (test/fixtures/ap-fit-slow.ocm and its flight ap-fit-slow.oem), the bounds kept.
 const FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const FIT = { posM: 0.1, velMmS: 0.1, rmsM: 0.01 };

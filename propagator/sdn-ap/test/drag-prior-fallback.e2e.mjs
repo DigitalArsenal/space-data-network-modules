@@ -17,15 +17,16 @@
 //    cost the slow set's pull request states. No burn of the IDS list lies in the arc or the 7 days after it; on the
 //    scoreboard's 72 h fit of the same window the fitted term moves from 0.87 to 0.83 of the full numerical arm's;
 // 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D; on SWOT and Jason-3
-//    within 5 points of 0.4.17's;
+//    within 5 points of 0.4.17's (SWOT from 0.6.NN within 5 points of the slow set's; history at OUTSIDE_RULE);
 // 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of BASE_3 on every window (errors per
-//    lead and axis, BTERM, AGOM), those two objects' windows flown again on BASE_3 alone (history at OUTSIDE_RULE);
+//    lead and axis, BTERM, AGOM), those two objects' windows flown again on BASE_3 alone (history at OUTSIDE_RULE); from
+//    0.6.NN their day-3 medians at most OUTSIDE_SLOW, the windows' distances from BASE_3 printed;
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
 //    step 36 h into the arc takes the fall-back, on SWOT-like and Sentinel-3-like (the step flag's figures were $OBD text,
 //    gone with it: modules-sdn-ap-ocm-write-20261103);
 // 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 within 2 m of 0.4.17 at
-//    day 3 (82.0 and 63.6 m);
+//    day 3 (82.0 and 63.6 m); from 0.6.NN at most MODEL_DAY3_SLOW against the truth;
 // 6. default-FORCES XP digest bit-exact.
 // Printed: every fixture's fitted BTERM, posterior sigma of the log, fit RMS and drag path (the derivation of B, k and the
 // band median RMS); per object the DO medians at days 1, 2, 3 and 7; every DO window that takes the fall-back and why;
@@ -51,6 +52,17 @@ import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads'
 // the baseline is 0.6.21 (git 589749f6), the bound kept.
 const BASE_3 = {version: '0.6.21', commit: '589749f63'};
 const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
+// 0.6.NN (the slow set, SPEC 16.18) moves 2, 3 and 5 toward their truth, measured on this build, the 0.6.21 figures first:
+// 2: SWOT's day-3 median change against 0.4.11 -48.3 % to -90.0 % (its day-3 median 0.355 to 0.052 km against the truth),
+//    so SWOT is held within 5 points of the slow set's change;
+// 3: SARAL's day-3 median 0.129 to 0.110 km and CryoSat-2's 0.405 to 0.225 km against the truth (day 7 SARAL 0.977 to
+//    0.528, CryoSat-2 3.184 to 2.640 km), so a 3 cm comparison with BASE_3 cannot hold: their day-3 medians are bounded
+//    (OUTSIDE_SLOW) and each window's distance from BASE_3 printed;
+// 5: the model truth's day 3, SWOT-like 81.4 to 25.4 m and Sentinel-3-like 63.0 to 20.8 m (0.4.17 the same as 0.6.21), so
+//    both are bounded against the truth itself (MODEL_DAY3_SLOW).
+const SWOT_CHANGE_SLOW = -0.900;
+const OUTSIDE_SLOW = {'SARAL': 0.120, 'CRYOSAT 2': 0.245};
+const MODEL_DAY3_SLOW = {'SWOT-like': 30, 'Sentinel-3-like': 25};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
@@ -158,8 +170,13 @@ if (!isMainThread) {
   assert.ok(s3b !== null && s3b <= 0.45, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
   // 2
   for (const o of ['HAIYANG 2C', 'HAIYANG 2D']) assert.ok(objects[o].day3.changeHere <= -0.70, `${o}: day-3 median change ${objects[o].day3.changeHere}`);
-  for (const o of ['SWOT', 'JASON 3'])
-    assert.ok(Math.abs(objects[o].day3.changeHere - objects[o].day3.change0417) <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.17's ${objects[o].day3.change0417}`);
+  // SWOT against the slow set's own change from 0.6.NN (SPEC 16.18: its 14:1 family to degree 70 in the rates), Jason-3
+  // against 0.4.17's as before
+  const CHANGE_PINNED = {SWOT: SWOT_CHANGE_SLOW};
+  for (const o of ['SWOT', 'JASON 3']) {
+    const want = CHANGE_PINNED[o] ?? objects[o].day3.change0417;
+    assert.ok(Math.abs(objects[o].day3.changeHere - want) <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against ${CHANGE_PINNED[o] !== undefined ? "the slow set's" : "0.4.17's"} ${want}`);
+  }
   // 3
   for (const o of ['SARAL', 'CRYOSAT 2']) {
     const v = rows.filter((r) => name(r) === o && !r.error);
@@ -178,7 +195,10 @@ if (!isMainThread) {
       console.log(JSON.stringify({outsideTheRule: r.key, ...d, from0417: apart(r.arms[1], b)}));
       return [r, d];
     });
-    for (const [r, d] of checked)
+    // from 0.6.NN the slow set moves these fits toward the truth (history at OUTSIDE_RULE): the day-3 median is bounded
+    // (OUTSIDE_SLOW) and each window's distance from BASE_3 printed
+    if (OUTSIDE_SLOW[o] !== undefined) assert.ok(objects[o].day3.here <= OUTSIDE_SLOW[o], `${o}: day-3 median ${objects[o].day3.here} km (at most ${OUTSIDE_SLOW[o]} km)`);
+    else for (const [r, d] of checked)
       assert.ok(d.errorsMeters <= OUTSIDE_RULE.errorsM && d.btermRelative <= OUTSIDE_RULE.btermRelative && d.agom <= OUTSIDE_RULE.agom,
         `${r.key}: ${d.errorsMeters} m in the errors, BTERM ${d.btermRelative} relative, AGOM ${d.agom} from ${BASE_3.version}'s (within ${JSON.stringify(OUTSIDE_RULE)})`);
   }
@@ -190,8 +210,9 @@ if (!isMainThread) {
     assert.ok(/^fall-back/.test(r.path), `${o}: a step in the arc falls back (${r.path})`);
   }
   // 5
+  // from 0.6.NN bounded against the model truth itself (the slow set moves both toward it; history at OUTSIDE_RULE)
   for (const o of ['SWOT-like', 'Sentinel-3-like'])
-    assert.ok(Math.abs(results[`release ${o} 0.044`].day3 - results[`0.4.17 ${o} 0.044`].day3) <= 2, `${o} 0.044: day 3 within 2 m of 0.4.17`);
+    assert.ok(results[`release ${o} 0.044`].day3 <= MODEL_DAY3_SLOW[o], `${o} 0.044: day 3 ${results[`release ${o} 0.044`].day3} m (at most ${MODEL_DAY3_SLOW[o]} m; 0.4.17 ${results[`0.4.17 ${o} 0.044`].day3} m)`);
   // 6
   reproduceConformance();
   console.log('drag prior fall-back E2E: PASS');
