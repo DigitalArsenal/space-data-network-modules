@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.20 (dist 0eb48923).
+Version 0.6.21 (dist 1a280a81).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -249,6 +249,39 @@ medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a cova
 takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.14 to 5.76 ms for a week hourly, a
 Galileo record; under a load of 10 on 28 cores) and nothing more per state once its grid exists. E2E:
 `test/radiation-y0.e2e.mjs`.
+
+## AP's shadow (SPEC 16.15; every flight of an AP set with AGOM or Y0)
+
+The sphere's averaged rates take the cylindrical shadow on the mean orbit. Its entry and exit are bracketed roots
+solved to full precision; no tolerance decides between "sunlit arc" and "wholly sunlit". SGP4XP keeps section 4's
+closed form, whose 1e-12 test decided that by rounding:
+- where a boundary lay near an apse of the mean orbit;
+- always at geosynchronous radius for near-equatorial sets.
+
+Under a change of 1e-10 in the mean motion, flights in an eclipse season moved by up to 35 m (145 m on a transfer
+orbit) instead of a linear drift of 0.2 to 0.6 m. They now move linearly to 0.9 mm in 7 days.
+
+On real fitted records the same defect was worth 5 to 30 m. Two of the release table's 0.6.20 records (QZS-2G and
+Galileo IOV 2, 72 h under ECOM2) were flown with the solid tide stated and with it removed. The tide's term is about a
+meter. On 0.6.20 the two flights differed by 8.1 and 33.7 m at day 7; now they differ by 1.7 and 3.1 m, within 0.2 m
+of the same flights with the shadow out of play.
+
+The rates agree with the same sphere and cylinder averaged numerically over one revolution within 7.6e-7 of their
+scale, through grazing and with a boundary at the perigee (`sdnap_ap_srp_rates`).
+
+Not carried:
+- the penumbra: the numerical propagator flies a cone, AP the cylinder; 0.3 mm to 5.7 cm in 7 days, by regime;
+- section 4's sunlit-arc eccentricity-vector rate at high eccentricity (stack #466): 2.3 to 3.5 m at day 7 on a
+  transfer orbit;
+- the shadow's periodic motion in section 4's output-time terms (stack #472): in an eclipse season, up to 1.4 m radial
+  RMS and a 3 to 8 m along-track span within the day on medium Earth orbit and geosynchronous sets.
+
+AP's mean longitude over a sunlit arc takes the output-time Delta n over the whole revolution, as the output-time
+terms map it (SPEC 16.16). Section 4's rate takes it over the sunlit arc only, and in season its response to the
+sphere drifted along track against the same sphere flown numerically: 92 m geostationary, 77 m GPS-like and 116 m
+Galileo-like at day 7. With 16.16 that is -3.7, -3.0 and 13.7 m; out of season nothing moves.
+
+E2E: `test/radiation-shadow.e2e.mjs`.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 

@@ -4,8 +4,8 @@
 // differ by about 2 m; every bound held. The TEME output through this checkout's foundation/frames 0.3.0 lands within
 // 1 mm of the module's GCRF output.
 // Registration (2026-11-03, modules-sdn-ap-drag-prior-fallback-20261103): the fit's per-window drag diagnostics and the
-// drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), the module under test
-// this build's dist.
+// drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), and for 3 BASE_3
+// (below), the module under test this build's dist.
 // Model truth (test/lib/heo-model-truth.mjs): FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant
 // weather on both sides (no SRP); AP FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee, 7 days flown on
 // a 2-minute grid, day-3 whole-day 3D RMS. Read windows (test/lib/regime-windows.mjs): AP6's altimetry group DO, 72 h
@@ -18,10 +18,8 @@
 //    scoreboard's 72 h fit of the same window the fitted term moves from 0.87 to 0.83 of the full numerical arm's;
 // 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D; on SWOT and Jason-3
 //    within 5 points of 0.4.17's;
-// 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of 0.4.17 on every window (errors per
-//    lead and axis, BTERM, AGOM); bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by
-//    millimeters and a fit by centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8,
-//    at most 0.022 m in the errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM;
+// 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of BASE_3 on every window (errors per
+//    lead and axis, BTERM, AGOM), those two objects' windows flown again on BASE_3 alone (history at OUTSIDE_RULE);
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
 //    step 36 h into the arc takes the fall-back, on SWOT-like and Sentinel-3-like (the step flag's figures were $OBD text,
@@ -39,7 +37,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
-// 3's bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg), against 0.4.17 (measured 0.022 m, 2.3e-5, 3.6e-6)
+// 3's baseline and bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg). Against 0.4.17 (git 3c8fcb5c) until
+// 0.6.21: bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters and a fit by
+// centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8, at most 0.022 m in the
+// errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves these fits
+// from 0.4.17's by up to 2.670 m in the errors, 5.72e-4 relative in BTERM and 4.57e-5 in AGOM over the 30 windows
+// (printed as from0417; the largest on a CryoSat-2 window). The radiation rates over the sunlit arc reach these fits in
+// proportion to the AGOM they carry: 0.35 to 2.67 m where it fits at 3e-3 to 8e-3 m^2/kg, under 0.05 m where it is near
+// zero (all 15 CryoSat-2 windows and 7 of SARAL's 15 are in eclipse at the cutoff). Against the truth they move as often
+// toward it as away. CryoSat-2 is closer on 8, 7 and 8 windows at days 1, 3 and 7 and farther on 3, 4 and 6, its
+// medians (63.43, 404.5 and 3,183.9 m) within 3 cm; its largest mover goes 2.7 m toward the truth on 1.7 km at day 7.
+// SARAL moves at most 7 cm. A 3 cm comparison with 0.4.17 cannot hold once the radiation rates change, so from 0.6.21
+// the baseline is 0.6.21 (git 589749f6), the bound kept.
+const BASE_3 = {version: '0.6.21', commit: '589749f63'};
 const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
@@ -63,7 +73,7 @@ if (!isMainThread) {
     fs.writeFileSync(file, execFileSync('git', ['-C', modules, 'show', `${sha}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26}));
     return file;
   };
-  const W0411 = release('a0f33bc54'), W0417 = release('3c8fcb5c');
+  const W0411 = release('a0f33bc54'), W0417 = release('3c8fcb5c'), W3 = release(BASE_3.commit);
   const workers = Math.min(12, Number(process.env.SDN_AP_E2E_WORKERS ?? 12), os.availableParallelism());
 
   const ORBITS = {
@@ -81,25 +91,31 @@ if (!isMainThread) {
   jobs.push({key: 'release SWOT-like 0.044 tail stepped', kind: 'fixture', c: fixture('SWOT-like', 0.044, wasmPath, {fitTailStates: 720, tailManeuvers: AFTER})});
   for (let index = 0; index < 10; ++index) jobs.push({key: `DO ${index}`, kind: 'windows', index});
 
-  const results = {}, rows = [];
-  let next = 0;
-  await Promise.all(Array.from({length: workers}, async () => {
-    while (next < jobs.length) {
-      const job = jobs[next++];
-      await new Promise((resolve, reject) => {
-        const w = job.kind === 'fixture'
-          ? new Worker(new URL(import.meta.url), {workerData: {c: job.c}})
-          : new Worker(new URL('./lib/regime-windows.mjs', import.meta.url), {workerData: {regimeWindows: true, group: 'DO', index: job.index, modulePaths: [W0411, W0417, wasmPath]}});
-        w.on('message', (m) => {
-          if (job.kind === 'fixture') { results[job.key] = m; w.terminate().then(resolve); }
-          else if (m.row) rows.push(m.row);
-          else if (m.error) { w.terminate(); reject(new Error(m.error)); }
-          else if (m.done) w.terminate().then(resolve);
+  const results = {}, rows = [], rows3 = {};
+  const run = async (list, modulePaths, sink) => {
+    let next = 0;
+    await Promise.all(Array.from({length: workers}, async () => {
+      while (next < list.length) {
+        const job = list[next++];
+        await new Promise((resolve, reject) => {
+          const w = job.kind === 'fixture'
+            ? new Worker(new URL(import.meta.url), {workerData: {c: job.c}})
+            : new Worker(new URL('./lib/regime-windows.mjs', import.meta.url), {workerData: {regimeWindows: true, group: 'DO', index: job.index, modulePaths}});
+          w.on('message', (m) => {
+            if (job.kind === 'fixture') { results[job.key] = m; w.terminate().then(resolve); }
+            else if (m.row) sink({...m.row, index: job.index});
+            else if (m.error) { w.terminate(); reject(new Error(m.error)); }
+            else if (m.done) w.terminate().then(resolve);
+          });
+          w.on('error', reject);
         });
-        w.on('error', reject);
-      });
-    }
-  }));
+      }
+    }));
+  };
+  await run(jobs, [W0411, W0417, wasmPath], (row) => rows.push(row));
+  // 3: SARAL's and CryoSat-2's windows on BASE_3 alone
+  const outside = [...new Set(rows.filter((r) => ['SARAL', 'CRYOSAT 2'].includes(r.key.split('|')[1])).map((r) => r.index))];
+  await run(outside.map((index) => ({kind: 'windows', index})), [W3], (row) => { rows3[row.key] = row; });
 
   for (const key of Object.keys(results).sort()) console.log(JSON.stringify({fixture: key, ...results[key], comment: undefined}));
   const median = (a) => { const v = a.toSorted((x, y) => x - y), i = v.length >> 1; return v.length % 2 ? v[i] : (v[i - 1] + v[i]) / 2; };
@@ -148,17 +164,23 @@ if (!isMainThread) {
   for (const o of ['SARAL', 'CRYOSAT 2']) {
     const v = rows.filter((r) => name(r) === o && !r.error);
     assert.equal(v.length, 15, `${o}: 15 windows`);
-    for (const r of v) {
-      const [a, b] = [r.arms[1], r.arms[2]];
-      assert.ok(a.ok && b.ok, `${r.key}: both fits`);
-      let errM = 0;
+    // against BASE_3 (asserted) and, printed, against 0.4.17 (the earlier baseline)
+    const apart = (a, b) => {
+      let errorsMeters = 0;
       for (const [k, da] of Object.entries(a.days ?? {})) for (const axis of Object.keys(da))
-        if (typeof da[axis] === 'number') errM = Math.max(errM, 1000 * Math.abs(da[axis] - (b.days?.[k]?.[axis] ?? Infinity)));
-      const dB = Math.abs(a.bterm - b.bterm) / Math.abs(a.bterm), dA = Math.abs(a.agom - b.agom);
-      console.log(JSON.stringify({outsideTheRule: r.key, errorsMeters: errM, btermRelative: dB, agom: dA}));
-      assert.ok(errM <= OUTSIDE_RULE.errorsM && dB <= OUTSIDE_RULE.btermRelative && dA <= OUTSIDE_RULE.agom,
-        `${r.key}: ${errM} m in the errors, BTERM ${dB} relative, AGOM ${dA} from 0.4.17's (within ${JSON.stringify(OUTSIDE_RULE)})`);
-    }
+        if (typeof da[axis] === 'number') errorsMeters = Math.max(errorsMeters, 1000 * Math.abs(da[axis] - (b.days?.[k]?.[axis] ?? Infinity)));
+      return {errorsMeters, btermRelative: Math.abs(a.bterm - b.bterm) / Math.abs(a.bterm), agom: Math.abs(a.agom - b.agom)};
+    };
+    const checked = v.map((r) => {
+      const [a, b] = [rows3[r.key]?.arms[0], r.arms[2]];
+      assert.ok(a?.ok && b.ok && r.arms[1]?.ok, `${r.key}: the fits (${BASE_3.version}, 0.4.17 and this build)`);
+      const d = apart(a, b);
+      console.log(JSON.stringify({outsideTheRule: r.key, ...d, from0417: apart(r.arms[1], b)}));
+      return [r, d];
+    });
+    for (const [r, d] of checked)
+      assert.ok(d.errorsMeters <= OUTSIDE_RULE.errorsM && d.btermRelative <= OUTSIDE_RULE.btermRelative && d.agom <= OUTSIDE_RULE.agom,
+        `${r.key}: ${d.errorsMeters} m in the errors, BTERM ${d.btermRelative} relative, AGOM ${d.agom} from ${BASE_3.version}'s (within ${JSON.stringify(OUTSIDE_RULE)})`);
   }
   // 4
   assert.equal(results['release SWOT-like 0.044 tail stepped'].bterm, results['release SWOT-like 0.044 tail'].bterm, 'a step after the arc leaves BTERM');
