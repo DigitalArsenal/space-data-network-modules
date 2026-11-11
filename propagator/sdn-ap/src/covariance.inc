@@ -106,7 +106,10 @@ constexpr Parameter kParameters[kMaxConsider] = {
 inline prwDynamicParameter consider_kind(int kind) { return kParameters[kind - 6].kind; }
 inline const char* consider_name(int kind) { return kParameters[kind - 6].name; }
 inline const char* consider_units(int kind) { return kParameters[kind - 6].units; }
-inline bool modeled(int kind) { return kind < 6 || kParameters[kind - 6].modeled; }
+/// SPEC 16.13, 16.B1, 17.1: the kinds of an AP set's ECOM2 terms Y0, B1 cos and B1 sin in a bank (after the five; never
+/// rows of the record's covariance: of_fit marginalizes them out).
+constexpr int kKindY0 = 6 + kMaxConsider, kKindB1c = kKindY0 + 1, kKindB1s = kKindY0 + 2;
+inline bool modeled(int kind) { return kind < 6 || kind >= kKindY0 || kParameters[kind - 6].modeled; }
 /// The kind (6 + index) of a prwDynamicParameter, or -1 for one outside the five.
 inline int kind_of(int parameter) {
   for (int c = 0; c < kMaxConsider; ++c)
@@ -121,7 +124,8 @@ inline int kind_named(const char* name) {
 }
 
 /// Kinds of the parameter vector of options `o` (params_of order): 0-5 af, ag, chi, psi, lambda, n; then 6 BTERM,
-/// 7 BDOT, 8 AGOM, 9 in-track thrust, 10 outgassing, those the options carry.
+/// 7 BDOT, 8 AGOM, 9 in-track thrust, 10 outgassing, those the options carry; then kKindY0 where they solve Y0 and
+/// kKindB1c, kKindB1s where they solve B1 (of_fit's bank for the normal matrix only).
 inline int kinds_of(const fit::Options& o, int* kind) {
   int np = 0;
   for (; np < 6; ++np) kind[np] = np;
@@ -130,12 +134,18 @@ inline int kinds_of(const fit::Options& o, int* kind) {
   if (o.fit_agom) kind[np++] = kKindSrp;
   if (o.fit_thrust) kind[np++] = kKindThrust;
   if (o.fit_outgassing) kind[np++] = kKindOutgassing;
+  if (o.fit_y0 && np < fit::kMaxParams) kind[np++] = kKindY0;
+  if (fit::fits_b1(o) && np + 2 <= fit::kMaxParams) {
+    kind[np++] = kKindB1c;
+    kind[np++] = kKindB1s;
+  }
   return np;
 }
 
 inline double step_of(int kind, double v) {
   if (kind < 5) return 1e-6;                    // af, ag, chi, psi; lambda (rad)
   if (kind == 5) return 1e-7 * std::fabs(v);    // n (rad/min)
+  if (kind >= kKindY0) return std::fmax(std::fabs(v) * 0.01, 0.1);  // Y0, B1 in fit::kY0Unit, kB1Unit: the fit's columns
   return std::fmax(1e-3 * std::fabs(v), 1e-5);  // m^2/kg
 }
 
@@ -405,24 +415,35 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
 /// definite or the theory refuses a moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const double* t, const double* r, int count, double arc_end_min,
                    double sigma_km, Set& s, double& ng_rate) {
-  // SPEC 16.13, 16.B1, 17.1: an AP set's radiation terms (Y0, B1) are no rows of the covariance: the moved sets fly the solved
-  // terms the row carries, held
+  // SPEC 16.13, 16.B1, 17.1: an AP set's ECOM2 terms (Y0, B1 cos, B1 sin) are no rows of the covariance: the moved sets
+  // fly the solved terms the row carries, held. Their uncertainty is not: where the fit solved them, the normal matrix
+  // is made over the parameters and the terms (a second bank, `full`, moving them too) and the record's parameter block
+  // is that inverse's block of the parameters, marginal over the terms, not the block conditional on them (stack #481)
   fit::Options o = fitted;
   o.fit_y0 = 0;
-  Bank b;
+  Bank b, full;
   struct Scope {
     Bank& b;
-    ~Scope() { release(b); }
-  } scope{b};
+    Bank& full;
+    ~Scope() {
+      release(b);
+      release(full);
+    }
+  } scope{b, full};
   if (count < 8 || !init(row, o, b)) return false;
   const int np = b.np;
+  const bool marginal = fitted.fit_y0 != 0;
+  if (marginal && !init(row, fitted, full)) return false;
+  Bank& nb = marginal ? full : b;  // the bank the normal matrix is made over
+  const fit::Options& no = marginal ? fitted : o;
+  const int nn = nb.np;
   double A[kMaxAug * kMaxAug] = {};
   double floor[6] = {};
   double ss = 0.0;
   double J[6 * kMaxAug];
   for (int k = 0; k < count; ++k) {
     double rm[3], vm[3];
-    if (!at(b, t[k], rm, vm, J)) return false;
+    if (!at(nb, t[k], rm, vm, J)) return false;
     const double e[3] = {rm[0] - r[3 * k], rm[1] - r[3 * k + 1], rm[2] - r[3 * k + 2]};
     ss += e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
     double u[3];
@@ -433,25 +454,28 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
     floor[3] += u[2] * u[0];
     floor[4] += u[2] * u[1];
     floor[5] += u[2] * u[2];
-    for (int a = 0; a < np; ++a)
-      for (int c = 0; c <= a; ++c) A[a * np + c] += J[0 * np + a] * J[0 * np + c] + J[1 * np + a] * J[1 * np + c] + J[2 * np + a] * J[2 * np + c];
+    for (int a = 0; a < nn; ++a)
+      for (int c = 0; c <= a; ++c) A[a * nn + c] += J[0 * nn + a] * J[0 * nn + c] + J[1 * nn + a] * J[1 * nn + c] + J[2 * nn + a] * J[2 * nn + c];
   }
   const int nres = 3 * count;
-  if (nres <= np) return false;
+  if (nres <= nn) return false;
   // km^2 per residual component: the data variance the fit weighted with, so that P_p is the inverse curvature of the
   // cost the fit minimized (SPEC 12.1); the post-fit residual variance where the fit weighed at 1 km
-  const double s2 = sigma_km > 0.0 ? sigma_km * sigma_km : ss / static_cast<double>(nres - np);
+  const double s2 = sigma_km > 0.0 ? sigma_km * sigma_km : ss / static_cast<double>(nres - nn);
   if (!(s2 > 0.0)) return false;
-  for (int a = 0; a < np; ++a)
-    for (int c = 0; c <= a; ++c) A[c * np + a] = A[a * np + c] = A[a * np + c] / s2;
+  for (int a = 0; a < nn; ++a)
+    for (int c = 0; c <= a; ++c) A[c * nn + a] = A[a * nn + c] = A[a * nn + c] / s2;
   // the fit's priors (fit::priors_of, the statement fit::run's cost reads): each one pseudo-observation of its own sigma
   fit::PriorTerm priors[fit::kMaxPriors];
-  for (int q = 0, n_priors = fit::priors_of(o, priors); q < n_priors; ++q) {
+  for (int q = 0, n_priors = fit::priors_of(no, priors); q < n_priors; ++q) {
     const int a = priors[q].index;
-    if (a < np) A[a * np + a] += 1.0 / (priors[q].sigma * priors[q].sigma);
+    if (a < nn) A[a * nn + a] += 1.0 / (priors[q].sigma * priors[q].sigma);
   }
+  double Pn[kMaxAug * kMaxAug];
+  if (!spd_inverse(A, nn, Pn)) return false;
   double Pp[kMaxAug * kMaxAug];
-  if (!spd_inverse(A, np, Pp)) return false;
+  for (int a = 0; a < np; ++a)
+    for (int c = 0; c < np; ++c) Pp[a * np + c] = Pn[a * nn + c];  // the parameters' block (all of it without Y0)
   // the process noise and the floor's scale of the set's regime (SPEC 12.4, 12.5)
   s = Set{};
   double floor_scale = 1.0;
