@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.16 (dist 7c91f0d9).
+Version 0.6.20 (dist 5a7fa01f).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1154,7 +1154,9 @@ and e >= 0.5) are not used for type 4.
 ### 6.1 Resonant terms per class
 
 AP adds the half-day terms of degrees 6 through min(d, 31), for every even order m and p = 0..l,
-with k = m/2 and q = k - l + 2p (16.2). SGP4XP keeps the class table below.
+with k = m/2 and q = k - l + 2p (16.2). In the one-day class, at an epoch eccentricity at or below 0.3, AP adds the terms
+of degrees 5 through min(d, 31), for every order m from 1 to 16 and p = 0..l, with k = m and q = m - l + 2p (16.2; stack
+#434). SGP4XP keeps the class table below.
 Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters at 0.4.15 are 27.5/70.0/60.1
 for the half-day fixture, 45.9/27.0/419.4 for Molniya with drag (its fitted drag coefficient, 16.11), 115.3/79.2/244.3
 for GTO, and 22.2/61.4/56.4 for the 55-degree fixture (16.11). Section 16.6 defines the fixtures and signed RTN errors.
@@ -1463,18 +1465,91 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
-agree to 0 mm]*. An AP state in this module depends on the order of requests: the same record flown in ascending and in random
-order differs by up to 12.7 mm at 500 km (median 2.0 mm), 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at
-geosynchronous altitude; a single state from a fresh record differs from the ascending pass by up to 8.8 mm; over 30 days at
-60 s, reversed or shuffled against the ascending pass, test/kernel-cost.mjs --diff measures up to 0.18 m at 300 km (B 6.4e-3
-m^2/kg, active weather) and 0.29 m on a low orbit at e 0.05 with tesseral degree 31; on a transfer orbit at e 0.72, 7 days
-at 300 s, random against ascending, 0.9 µm. SGP4 differs by 0 in every case. The same build asked the same requests in
-the same order writes the same bytes (ascending twice: 0 in every case); a comparison of two builds
-(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity)
-and prints the reversed and shuffled differences beside it. Out of order AP pays for it: a request outside the cached
-bracket integrates from the nearest checkpoint, and in random order an AP state costs 37 to 153 times SGP4's on
-near-circular orbits and 1,990 times on the transfer orbit (test/kernel-patterns.mjs order, 7 days at 300 s; 1.2 to
-2.5 times ascending). SGP4XP GEO nodes fall on
+agree to 0 mm]*. An AP state in this module is a function of its set and its time alone (0.6.18): the order of requests,
+the call they come in (one epoch, the first state of a call, a state inside a batch), the sets flown before or between
+them, whether the covariance is asked, and the path (`propagate`, `propagate_epochs`, the epoch store's exports) leave its
+bits unchanged, with one exception stated below. What makes it so:
+
+- Every evaluation cache an AP state reads holds a function of the set and the time. The tesseral terms are baked on the
+  state's own bracket (the a, e and cos i of its two nodes, and cells of them), the zonal tail and the shallow terms at the
+  state's a. A store's set keeps its own third-body bracket tables, m-daily terms and tesseral cache (the pool below)
+  while it holds them, the thread's otherwise, and both give the same numbers.
+- A step depends on its first node alone: rk3 evaluates the parts of node a's rates the stages hold fixed again from the
+  node's own state (before that step's corrections), never from what the step before left. The grid's nodes are the same
+  whichever node an integration starts from.
+- The drag-pass segment above e 0.3 (16.12) takes its perigee time and period from its bracket's lower node, not from the
+  first state asked.
+- The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
+  round by up to 1e-7 s at today's dates, 1 mm in low orbit. SGP4XP and SGP4 in the store keep the minutes from J2000:
+  their output is 0.6.9's bit for bit, and it differs from `propagate`'s by up to that rounding.
+
+The exception: a record that carries a covariance flies its nominal state through `propagate` by the covariance's combined
+evaluation (xp_propagate_cov_at). That evaluation takes the third-body short-period terms at the state, because their
+derivative is needed, and the Sun from the call's hourly table. Every other path interpolates both linearly across the
+bracket's sub-interval (eval_tbsp_lerp_f32, the bracket's Sun). On the AP fixture fit the two differ by 0.39 mm (stack
+#420). The same record without its covariance flies the same bits through every path.
+
+test/set-caches.e2e.mjs holds this on nine made-up orbits: 500 km, 830 km, MEO, GEO, e 0.1 and 0.25 with tesseral 31, the
+transfer orbit with and without tesseral 31, and Molniya. Against ascending order, to the bit:
+
+- random order and alternating ends over 7 days at 300 s;
+- one state of a freshly loaded record;
+- two records interleaved, at the pool's default budget and at 1 MB;
+- through `propagate`, a time asked alone against the same time in a 2,016-state call.
+
+test/carried-identity.e2e.mjs holds the paths: `propagate_epochs`, the store, and `propagate` of the record without its
+covariance give the same bits.
+
+The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the row store, sdnap_propagate_soa on 0, 4 and
+15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
+against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
+grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
+
+What the caches cost in accuracy. The reference is a build of this module's own sources that bakes every evaluation cache
+at the state itself on every call: the tesseral base, ae, pe and resonance bakes and the m-daily terms, with the
+third-body bracket, drag-pass and half-day caches never reused. Against it, over 30 days at 60 s
+(test/kernel-cost.mjs --diff):
+
+- this module is within 0.2 to 5.6 mm on near-circular low orbits (300 to 1,400 km), 0.07 mm in MEO, 0.15 mm at GEO and
+  0.22 mm in IGSO;
+- with tesseral 31 it is within 27 mm at e 0.05, 4.9 mm at e 0.1 and 1.5 mm at e 0.2;
+- on the eccentric orbits without tesseral terms (transfer, Molniya, THEMIS, TESS, and e 0.05 to 0.2) it gives the
+  reference's own bits;
+- 0.6.15 sits up to 0.98 m from the same reference (500 km, high drag, active weather), 0.53 m (400 km, high drag, quiet)
+  and 0.18 m (e 0.05, tesseral 31). Its other near-circular rows are 2 to 40 mm away. Its rows without tesseral terms
+  are 0.13 to 0.64 mm away; that is this change's rk3 and drag-pass work, not caches. (0.6.15 against the reference
+  built before 0.6.16's long-period step.)
+
+On the epoch store's stored record (test/fixtures/ap-fit-0.6.4.ocm, 289 states over a day at 550 km), this module and
+0.6.17 are each within 1 mm of the reference: 0.84 and 0.86 mm. The fit of the same inputs
+(test/covariance.e2e.mjs) gives an epoch covariance 4.8e-5 of its largest entry from the reference's on this module, and
+1.74e-3 on 0.6.17.
+
+The fit's covariance at epoch comes from central differences of the theory over steps of 1e-7 in the elements. Taking
+steps ten times larger moves it by 3.3e-6 of its largest entry on this module, and by 1.57e-3 on 0.6.15 (the fit lane's
+measurement, stack #456). 0.6.15's cells put non-smooth changes into those differences; the sets' caches do not.
+
+Through a fit, the millimeters can become tens of meters (stack #456). The headline harness flew this change against
+0.6.15 on its 2,096 real windows. XP's output is the same bits, and AP's states move by millimeters. But every AP
+forecast there comes out of a fit, and the fit stops where no step along its columns lowers the cost, which is not a
+minimum. A millimeter can move where a loose fit stops.
+- Galileo 72 h fits with Y0 solved show it most. Their median error at 7 days went from 43.8 to 45.9 m; 41 of 42
+  windows stay within 100 m of the numerical propagator, against 42; one window moved 43.4 m.
+- The two windows that moved most were flown by three builds: 0.6.15, this build and the reference. One fitted set,
+  flown by all three, gives the same errors to 0.17 mm at every lead day. Fits of the same arc end within 0.05 m of RMS
+  of each other yet part by up to 64 m at 7 days, and by 6 m with Y0 held.
+- The largest change of one window's error is below 0.3 m on laser spheres, laser geodetic, MEO, IGSO and 24 h
+  altimetry fits. It is 0.8 to 2.6 m on 72 h altimetry, near-700 km, THEMIS 72 h and 24 h Galileo fits; 8 to 45 m
+  on geostationary, strong-drag, Chandra 168 h and TESS 72 h fits; and 68 and 286 m on commercial geostationary 72 h
+  and 24 h fits.
+- On the commercial geostationary window that moved most, the reference's fitted set flies 34 m from this build's and
+  705 m from 0.6.15's at 7 days.
+- One TESS 336 h fit moved 9.75 km: this build's fit stopped at 1,083 m of RMS, against 868 m for 0.6.15 and the
+  reference.
+
+A comparison of two builds
+(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity), and
+prints the reversed and shuffled differences beside it. SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 
@@ -1484,8 +1559,78 @@ A query inside an already cached bracketing interval interpolates without integr
 query integrates from the epoch through its bracket, creating checkpoints on the way. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond the stored
 span it integrates from the nearest preceding retained node, so work grows with the remaining time gap.
-The node cache has bounded storage, not a time-independent bound on query work. Request order does not change the epoch-anchored grid; it changes an
-AP state by the amounts stated above.
+The node cache has bounded storage, not a time-independent bound on query work.
+
+**Side B: the sets' caches (0.6.18).** An AP set of the epoch store (`load_epochs`) takes its caches from one pool
+while it is flown: its third-body bracket tables, m-daily terms and tesseral cache, and its nodes
+as two runs (forward and backward) up to the checkpoint span. A time inside a run is a lookup, never a re-integration. A
+run starts from the latest node known at or before the time (the epoch, a checkpoint or the window's), and starts again
+when a time precedes it.
+
+The pool's budget is the module's default, 256 MB. Configuration reaches a module only as a typed message, and none
+carries the budget yet (PCF.EPOCH_STORE has no such field; a standards issue asks for one), so no export sets it.
+sdnap_cache_stats reads the pool, as 8 doubles: the budget and the bytes held; the sets holding caches, and of them those
+holding tesseral caches; the caches reclaimed; the caches and tesseral caches refused; and the tesseral caches made.
+
+Caches per set flown a day (a week), by part, and the sets whose caches a budget holds:
+
+| Orbit | Total | Tesseral | Node runs | Third-body bracket | m-daily | 256 MB | 1 GB | 2 GB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 500 km | 71.5 KB (79.0) | 58.2 | 2.5 (10.0) | 5.8 | 4.6 | 3,664 | 14,658 | 29,317 |
+| 830 km | 64.2 KB (71.1) | 50.9 | 2.5 (9.4) | 5.8 | 4.6 | 4,082 | 16,328 | 32,656 |
+| low orbit, e 0.052 | 13.3 KB (20.2) | 0 | 2.5 (9.4) | 5.8 | 4.6 | 19,691 | 78,766 | 157,532 |
+| MEO | 19.8 KB | 7.1 | 1.9 | 5.8 | 4.6 | 13,252 | 53,008 | 106,017 |
+| GEO | 33.3 KB (62.1) | 2.5 | 20.0 (48.8) | 5.8 | 4.6 | 7,861 | 31,447 | 62,894 |
+| transfer orbit | 15.8 KB (22.1) | 0 | 5.0 (11.3) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
+| THEMIS-like (n 1.0496, e 0.822) | 90.8 KB (232.1) | 0 | 80.0 (221.3) | 5.8 | 4.6 | 2,886 | 11,546 | 23,093 |
+| Chandra-like (n 0.378, e 0.685) | 20.8 KB (44.6) | 0 | 10.0 (33.8) | 5.8 | 4.6 | 12,595 | 50,382 | 100,764 |
+| TESS-like (n 0.073, e 0.55) | 15.8 KB (30.8) | 0 | 5.0 (20.0) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
+
+The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 0.8 KB, in the set itself. The node
+runs of a set above e 0.3 follow its long-period step (16.10). The THEMIS-like set steps 8.2 minutes, so it holds 351 nodes
+of 160 B a day and 1,402 a week. A run holds at most the checkpoint span, 8 days or about 1,405 nodes (225 KB) a direction:
+256 MB holds the week's caches of 1,129 such sets.
+
+A catalog is flown object by object. At 10,000 low-orbit sets (500 km), measured per state at load 10 to 14:
+
+| Pattern | 256 MB (the default) | All held (1 GB) | SGP4-XP |
+| --- | --- | --- | --- |
+| Object-major | 0.93 µs, 0.85 times SGP4-XP | 0.78 µs, 0.73 times | 1.09 µs |
+| Time-major | 9.1 µs, 7.8 times | 2.25 µs, 1.9 times | 1.17 µs |
+
+A caller that screens a catalog flies it object by object, or in blocks that fit the budget. The time-major pattern (every
+set at each instant) is what display segments are for.
+
+What the exact state costs a single record, against 0.6.12, flown back to back in a cleared slot (load 15 to 25). The
+figures come from the minimum and the steady rounds: single-threaded rounds swung by up to 5 times on the shared
+machine, so a median means little.
+
+- One warm record in ascending order is 13 % slower at 500 km and 5 to 7 % at 830 km. MEO is equal; GEO is 2.3 times
+  faster and the transfer orbit 1.7 times.
+  - At 500 km the bracket-anchored bake bookkeeping at every state costs about 6 % (stack #441): bake points one
+    tolerance apart and counted once per bracket recovered 11 of 17 %.
+  - The node re-evaluation below costs about 4 % (stack #439).
+- The first state of a fresh record at 7 days is 25 to 28 % slower at 500 km and GEO (stack #439). Each node step
+  evaluates node a's held rates (third body, drag, SRP, the zonal tail) again at the node's own state, which is what
+  makes a step depend on its first node alone. Recovering it takes either carrying the held parts in each node (about
+  7 KB more per set, node runs 2.5 times larger), or restructuring the step's last stage so the node's own evaluation is
+  the one the next step holds fixed (a numerics change with its own accuracy check).
+- The full `propagate` call (GCRF, 7 days at 300 s) of a record fitted with covariance is 11 % slower at 500 km and 15 % at
+  GEO; a seeded record is equal at 500 km and 13 % slower at GEO. The integration of the nominal's nodes carries the node
+  re-evaluation.
+
+How room is shared:
+
+- The pool's clock ticks at every ask for room. A holder's stamp is the clock when it was last flown.
+- A set takes free room, or reclaims holders not flown since its own previous ask, least recently flown first, never
+  one being flown. A first ask takes free room only.
+- A steady cycle over more sets than fit therefore keeps its holders, and the other sets fly on the thread's caches.
+  Holders no longer flown give way.
+- A set refused room flies on the thread's caches at their cost. Its state is the same either way.
+- A smaller budget reclaims at once.
+- Each set's lock is taken once per state, without contention on one thread, and costs about 0.2 % of an AP state.
+
+Memory per set flown and cost per pattern: README, Memory and time.
 
 **AP one-day convergence.** The registered unfitted sets have epoch 2026-10-29 00:00 UTC,
 n = 1.0027 rev/day, e = 0.0002, i = 0.1 or 15 degrees, node = 40 degrees, argument of perigee = 30 degrees,
@@ -1772,7 +1917,8 @@ and 17 h held-B arcs) and near 700 km (Sentinel-1A, 1C; 72 h and 24 h arcs), spl
 training 2025-04-01 to 08-10 and 2026-01-01 to 03-15, held out 2025-08-21 to 12-21 and 2026-03-26 to 05-31. P(t) is
 linear in each squared size and the floor adds, so the fit re-weights the module's own per-term variances; no orbit is
 re-fitted. The ABOVE row is the 2026-11-03 minimax row (the worst violation of 12.7's mean band across days 1, 2, 3
-and 7 on `operator-theory/ap/b040`), unchanged.
+and 7 on `operator-theory/ap/b040`), unchanged; above the drag a class with a fitted row replaces it inside that
+row's calibrated condition (below, "Above the drag, by class").
 
 Realism is not met, and the covariance is not calibrated (12.7). On the held-out windows the median |z| of 8 of the 18
 cells (two regimes, three axes, days 1, 3 and 7) is inside the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
@@ -1796,6 +1942,67 @@ not its sizes: wherever the strong-drag cross-track median at day 7 is inside th
 leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km
 (0.6.0: 37.78 km) against the error 0.308 km. `test/covariance-realism.e2e.mjs` reports every held-out cell of both
 rows, the shares within 1 and 2 sigma, and the ISS figure on the built module.
+
+Above the drag, by class *[2026-11-11, stack #433; experiments headline-loop, sdn-ap 0.6.15]*. Measured on every
+first-pass window whose fitted set is above the drag (923 window-arcs per theory), the ABOVE row is too wide on
+near-circular orbits, 5 to 1,000 times: median |z| 0.001 to 0.15 on laser geodetic, medium Earth orbit, Galileo,
+inclined geosynchronous and geostationary, in track 0.001 to 0.02. It is too narrow on TESS, Chandra and commercial
+geostationary, whose truth carries burns (stack #444). A set above the drag therefore takes a row by class, decided by
+its own elements: HEO at e 0.3 or more; otherwise geosynchronous under 1.5 rev/day, medium Earth orbit under 4 rev/day
+(GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
+
+- The class's row applies only inside its calibrated condition: the data sigma the fit weighted with (12.1) and the
+  fit's span within those of the calibration fits. Outside it, and in a class without a fitted row, the ABOVE row
+  stands. A record fitted to worse data than the calibration fits, or over another span, is not made narrower without
+  measured error behind it.
+- s_d above the drag is k |AGOM| / a (rad/day^2; AGOM in m^2/kg, a in Earth radii): the unmodeled force above the drag
+  is radiation pressure, which scales with the object's area to mass, so the form carries to objects with other
+  area-to-mass ratios. One k serves the LAGEOS, medium Earth orbit and geosynchronous classes as well as a constant per
+  class (training losses with the one k against per class: LAGEOS 0.0678 against 0.0677, medium Earth orbit 0.0460
+  against 0.0458, geosynchronous 0.1242 against 0.1237). It does not explain Galileo: per satellite, AP's 72 h in-track
+  error at day 7 runs from 35 m (GPS IIF) to 492 m (Galileo FOC 15), while AGOM spans only 0.022 to 0.033 m^2/kg.
+- The record states the sizes in COV_PROPAGATION as before. Above the drag NON_GRAVITATIONAL_SHARE is 0 and
+  NOISE_NON_GRAVITATIONAL_RAD_DAY2 is the record's own statement; the read refuses only a negative or non-finite one
+  there. Under the drag the invariant s_d = c |n-dot_ng| n stands.
+
+| Theory | Class | s_e (1/day) | s_i (1/day) | s_l | k | data sigma (km) | span (h) |
+| --- | --- | --: | --: | --: | --: | --- | --- |
+| SDNAP | LAGEOS | 1.1374623058968726e-08 | 8.083584088270014e-08 | 3.831472309446551e-09 | 1.415e-05 | 0.00243 to 0.00276 | 64.8 to 75.6 |
+| SGP4XP | LAGEOS | 2.463673468245377e-07 | 6.564224575525169e-07 | 5.502200043625398e-08 | 3.216e-05 | 0.0588 to 0.0769 | 64.8 to 75.6 |
+
+Acceptance (per regime, fit arc and axis at days 1, 3, 5 and 7, scored against the precise orbits). The count of |z|
+above 3 must be at most max(as built, ceil(1 % of the windows), 1). The count inside the 95 % region must not be
+significantly below 95 % (one-sided binomial test at 5 %: 28 of 32), nor below the as-built count where that is
+already under it. A class whose row fails any cell keeps the ABOVE row. The LAGEOS rows are fitted so that every
+regime's 99th percentile of |z| is at most 2.9, on all 32 windows of LAGEOS-1, LAGEOS-2 and LARES-2 (72 h fits), and
+they hold leaving each satellite out in turn. The module's own covariance, flown, ABOVE row > LAGEOS row:
+
+| Theory | Day | Windows | median abs(z) R / T / N | abs(z) > 3 R / T / N | 95 % coverage |
+| --- | --: | --: | --- | --- | --- |
+| SDNAP | 1 | 32 | 0.126 / 0.001 / 0.242 > 1.035 / 0.652 / 0.729 | 0 / 0 / 0 > 0 / 1 / 0 | 1.00 > 0.88 |
+| SDNAP | 3 | 32 | 0.042 / 0.001 / 0.094 > 0.951 / 0.832 / 0.670 | 0 / 0 / 0 > 0 / 0 / 0 | 1.00 > 0.94 |
+| SDNAP | 5 | 31 | 0.017 / 0.000 / 0.074 > 0.585 / 0.520 / 0.569 | 0 / 0 / 0 > 0 / 0 / 1 | 1.00 > 0.90 |
+| SDNAP | 7 | 32 | 0.012 / 0.001 / 0.066 > 0.625 / 0.589 / 0.590 | 0 / 0 / 0 > 0 / 0 / 0 | 1.00 > 0.94 |
+| SGP4XP | 1 | 32 | 0.837 / 0.696 / 0.686 > 0.837 / 1.127 / 0.662 | 0 / 0 / 0 > 0 / 0 / 0 | 0.97 > 0.94 |
+| SGP4XP | 3 | 32 | 0.612 / 0.376 / 0.973 > 0.608 / 1.083 / 0.773 | 0 / 0 / 0 > 0 / 0 / 0 | 0.94 > 0.88 |
+| SGP4XP | 5 | 31 | 0.616 / 0.253 / 0.979 > 0.609 / 0.873 / 0.700 | 0 / 0 / 1 > 0 / 0 / 0 | 0.94 > 0.97 |
+| SGP4XP | 7 | 32 | 0.620 / 0.147 / 0.635 > 0.616 / 0.578 / 0.427 | 0 / 0 / 2 > 0 / 0 / 1 | 0.94 > 0.97 |
+
+AP's radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). That part is the epoch covariance, and
+the noise starts from zero at the end of the arc.
+
+The other classes keep the ABOVE row for now. Medium Earth orbit: Galileo's in-track errors run 5 to 14 times GPS's,
+and nothing the record states ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a
+row that holds the acceptance must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times
+too wide in track. That row, and its second row for sets that solve Y0 (16.13), follow once the fit's end with Y0
+solved no longer depends on rounding (stack #456). Geosynchronous: noise scaled by the record's own data sigma,
+measured next. HEO: TESS and Chandra, two objects, 14 window-arcs, measured after the eccentric integration step fix.
+THEMIS is not in this set: its perigee is in the drag.
+
+The class boundaries make the stated covariance jump where a row changes. At n = 4 rev/day (e 0.01, a 16,763 km) the
+growth per day the rows give is, for AP, 2,003 m in track and 16.3 m radially under the ABOVE row against 1.6 m and
+0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 nothing jumps yet:
+every class there keeps the ABOVE row.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
@@ -2256,12 +2463,16 @@ Given the same forces, AP's first-day error against a numerical orbit is about 2
 with low perigee it is 15 to 185 m on the first day and 0.1 to 3.6 km by the seventh. A numerical propagator has no such
 floor: AP equals one only where the force model limits both.
 
-**16.1 Selection.** `fit`, `propagate`, `load_epochs` and `propagate_epochs` read FORCES:
+**16.1 Selection.** A fit of real data states FORCES.SOLID_TIDES IERS_2010 with the gravity terms: the Earth has the
+solid tide, and without it AP's error on a low orbit after a 72 h fit is about twice as large at day 5 against a
+numerical propagator that carries it (16.14). `fit`,
+`propagate`, `load_epochs` and `propagate_epochs` read FORCES:
 
 | FORCES | Terms |
 | --- | --- |
 | HAS_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE d, 0 to 70 | the tesseral terms of 16.2, each family to its cap or d, whichever is lower |
 | HAS_MAXIMUM_DEGREE, MAXIMUM_DEGREE z, 0 to 70 | the zonal tail J6 to Jz of 16.3 (z below 6: none) |
+| SOLID_TIDES (`fit` only; IERS_2010, or NONE, the default) | the solid Earth tide in the rates, in the fit and the record (16.14) |
 | ECOM2 (`fit` only; Y0_M_S2, every other coefficient 0) | the radiation term Y0 beside the sphere, in the fit and the record (16.13) |
 
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
@@ -2282,6 +2493,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12 | at output time, first order at the mean elements |
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
+| one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
@@ -2302,6 +2514,36 @@ are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05. The Laplace limit 
 The half-day tail uses cubic expansions of F about the epoch inclination and G about the epoch eccentricity,
 with their consistent derivatives. F comes from the normalized Legendre recurrence; G comes from shared
 eccentric-anomaly quadrature. The class's original 29 terms retain their exact inclination functions.
+
+The one-day tail (from 0.6.19; stack #434) is built and evaluated the same way, with k = m: its angle is
+w omega + m (M + Omega - theta_G). Its orders run from 1 to 16; at e at or below 0.3 the amplitude cut that ends both
+tails (about 2e-16 m/s^2) stops it below degree 15, so no higher order would pass. The inclination quadrature reads which
+part of each Fourier coefficient a term takes (real for l - m even, imaginary for l - m odd) from w + m. Through 0.6.18 it
+read it from w alone, which holds only for the half-day tail's even orders; for odd orders it would zero the main terms.
+The half-day tail is unchanged bit for bit. Sets of the class above e 0.3 (the grid branch, 16.11) do not take the tail:
+there the class carries degrees 2 to 4 only, as before (THEMIS-like orbits, whose error is elsewhere).
+
+Through 0.6.18 the one-day class carried resonant gravity of degrees 2 to 4 only, and the output table drops every term
+slower than 0.045 n, so on a geosynchronous orbit degree 5 and up was carried nowhere. Each missing term acts as a
+constant along-track acceleration set by the longitude, mostly through (5,5), (5,3) and (5,1). Model truth: FFM 20 x 20
+with Sun and Moon on both sides, made-up sets at 2026-10-29, a 72 h fit, 7 days flown, whole-day 3D RMS.
+
+- Geostationary (e 0.0002, i 1.5, 12 longitudes): day 7 16.9 to 136.1 m (median 67.1 m) on 0.6.15, against 8.5 to
+  11.1 m (median 9.0 m) with the tail. The constant along-track acceleration fitted to each forecast's error, less the 4 x 4
+  run's, matches EGM96's degree 5 to 20 value on the same orbit to within 2.1e-12 m/s^2 at every longitude.
+- With the field cut to 4 x 4 on both sides (where no tail is built), the 20 x 20 day-7 error is now within 0.05 m of the
+  4 x 4 one at every longitude. The same holds on inclined geosynchronous sets (i 55, e 0.003 and 0.075, 6 nodes), where
+  the maximum falls from 49.7 and 44.5 m to 25.9 and 23.9 m. One node gets worse (11.8 to 25.9 m at e 0.003): there the
+  missing terms had partly cancelled the Moon's floor (stack #446).
+- Class members off 1:1 (n 0.82, 0.90, 1.10, 1.18 rev/day; e 0.001, i 30; 4 nodes each), whose degree 5 to 12 terms
+  move from the output table into the rates, lose nothing: day 7 moves by -0.18 to +0.38 m.
+- The output stays continuous: the 10 s jump detector's worst reading over a day is 0.36 to 0.89 mm on geostationary,
+  inclined and off-1:1 sets, against 0.36 to 0.91 mm before.
+
+What is left at 4 x 4 is AP's analytic Moon (stack #446): 7.3 to 8.0 m cross-track at day 7 on geostationary sets, 5.4 to
+25.9 m on inclined geosynchronous ones, and 1.1 to 3.6 m and 1.2 to 2.5 m with DE440's Moon in a scratch build.
+`test/one-day-resonant-tail.e2e.mjs` checks the 20 x 20 against the 4 x 4 level (0.5 m); `test/one-day-moon-floor.e2e.mjs`
+is #446's known defect.
 
 **16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
 (w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
@@ -2729,7 +2971,8 @@ omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-dai
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
 shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
-precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (3.1 MB a grid), and read at
+precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
+the slopes below, 3.1 MB before 0.6.14), and read at
 output time in E by the cubic Hermite between the two nodes about E, linear in the mean elements' offsets, times
 e^{i(w omega + m beta)}. Each node's slope is the fourth-order central difference of its four neighbours on the periodic
 grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.
@@ -2988,13 +3231,13 @@ parameter-record-only:ECOM2_Y0).
 *Fit.* $PCF FORCES.ECOM2 on `fit` puts Y0 in the fit: Y0_M_S2 is its start, its prior's mean and the value it is held
 at where it is not solved; any other ECOM2 coefficient away from 0 is refused by name (FORCES.ECOM2.D0_M_S2 ...), and so
 is the table without AP's gravity terms (FORCES.ECOM2). A flight takes no FORCES (16.1). Y0 is solved on an arc of 72 h
-or more (71 h, for an arc sampled off its ends) whose fitted set lies above the drag (perigee at or above 2,500 km) and
-is not in the one-day class: in the whole-arc fit after the staged ones and in the passes at the data's own sigma (12.1),
+or more (71 h, for an arc sampled off its ends) whose fitted set lies above the drag (perigee at or above 2,500 km): in
+the whole-arc fit after the staged ones and in the passes at the data's own sigma (12.1),
 as the last parameter, in units of 1e-9 m/s^2, its column a one-sided difference of the theory each iteration (step
 the larger of 1 % and 1e-10 m/s^2), with a Gaussian prior about Y0_M_S2 of sigma 1e-9 m/s^2. The cost, the normal
 equations and the covariance read one statement of the fit's priors (drag, AGOM, Y0). Elsewhere Y0 is held at Y0_M_S2:
-an arc under 72 h (a 24 h fit), a set under the drag, the second stage of a two-stage fit (at the first stage's Y0), and
-the one-day class. Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
+an arc under 72 h (a 24 h fit), a set under the drag, and the second stage of a two-stage fit (at the first stage's Y0).
+Through 0.6.18 the one-day class held it too (below). Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
 windows of medium orbit, Galileo, inclined geosynchronous and geostationary sets the share of errors beyond the stated
 1, 2 and 3 sigma per RTN axis at days 1, 3, 5 and 7 is the same with Y0 solved as without (the stated sigma is 5 to 100
 times the error in both: stack issue 433). AGOM moves by under 1 % between the fits with and without Y0.
@@ -3004,11 +3247,79 @@ windows of three and a zero Y0 at 7e-10 m/s^2 on two (day 7 175 and 296 m agains
 72 h recovered 0.97 to 1.22 times the value and found at most 1.4e-10 where there was none. On real windows a 48 h Y0
 still lowers the medians (medium orbit day 7 73 to 37 m, Galileo 174 to 64 m); it is not trusted.
 
-*Why not in the one-day class.* There the 72 h arc's own residual (AP against a numerical orbit of the same forces)
-aliases into Y0: on inclined geosynchronous model truth without Y0 the fit found -1.0e-10 to -1.8e-10 m/s^2 and its
-day-7 error went from 7 m to 62 to 86 m, and on real windows the medians at day 7 went from 30 to 55 m (inclined
-geosynchronous) and 173 to 227 m (geostationary). The guard goes when that class's residual is fixed (stack issues 421
-and 434).
+*The one-day class (geostationary, inclined geosynchronous).* Through 0.6.18 Y0 was held there. The class lacked its
+resonant gravity above degree 4 (stack #434), a constant along-track acceleration of up to 2e-10 m/s^2 set by the
+longitude, and a free Y0 took it up. The guard was to go when that class's residual was fixed, on the condition that a
+zero Y0 come out at most about 1e-10 m/s^2 on model truth and the real medians not get worse. From 0.6.19 the class
+carries that gravity (6.1, 16.2) and solves Y0 as the other classes do. **The condition is not met.** What is left of
+the class's residual is the Moon's position (SPEC 5, stack #446). On model truth with no Y0 in it (the radiation lane's
+sphere truths of real windows), the 72 h fit finds:
+
+- inclined geosynchronous (C005, C010, C221): -0.8e-10 to -1.4e-10 m/s^2, and the day-7 error goes from 20.0, 14.0
+  and 19.1 m to 80.7, 61.8 and 83.4 m;
+- geostationary (C018, C229, C020 twice): +1.3e-10 to +3.0e-10 m/s^2, where it helps (day 5 13.4, 14.7 and 37.7 m to
+  3.6, 5.1 and 9.0 m; C229 day 7 34.2 to 9.7 m).
+
+On made-up inclined geosynchronous sets with the field cut to 4 x 4 on both sides it finds -2.7e-10 to +1.0e-10, and at
+most 3.7e-11 with DE440's Moon in a scratch build (`test/one-day-moon-floor.e2e.mjs`, a known defect, bound 5e-11). The
+condition is met when #446 lands.
+
+The lift lands anyway, because the real windows gain on both rows. Real 72 h windows; medians at days 1, 3, 5 and 7, and
+the windows within 100 m of the numerical propagator (FFMq) at day 5. The table's harness flew 0.6.18 and 0.6.19 with
+FORCES.ECOM2 on these rows; the middle column is the tail alone, flown without it on a candidate build:
+
+| Row | 0.6.15 to 0.6.18, Y0 held | the tail, without FORCES.ECOM2 | 0.6.19, Y0 solved | Numerical (FFMc) |
+| --- | --- | --- | --- | --- |
+| geostationary | 11.67, 35.28, 95.84, 198.26 m; 23 of 32 | 12.97, 53.30, 131.01, 256.15 m; 17 of 32 | 5.84, 23.37, 88.36, 191.23 m; 26 of 32 | 2.05, 5.96, 20.31, 47.57 m |
+| inclined geosynchronous | 4.78, 13.01, 27.02, 38.70 m; 52 of 59 | 4.72, 13.45, 23.05, 40.37 m; 51 of 59 | 3.39, 12.61, 31.29, 56.37 m; 59 of 59 | 0.39, 1.45, 3.49, 6.29 m |
+
+Against 0.6.18, 13 windows move onto the line and 3 move off it.
+- Onto it: geostationary C006, C011, C016 and C018 once each, and J003 twice; inclined J002 twice and J004 five times.
+- Off it: three C020 windows, whose day-5 errors go from 61.2, 54.4 and 54.7 m to 133.3, 125.8 and 115.3 m. With the
+  tail, that satellite sits where a numerical propagator with only a sphere does, and Y0 alone does not carry its
+  radiation (stack #457).
+
+Per satellite: the recovered Y0 (measured on the candidate build) against the numerical propagator's ECOM2 Y0 (FFMc,
+five terms), medians, with the day-5 median error without Y0 (the tail alone) and with it (0.6.19):
+
+| Satellite | AP's Y0 (m/s^2) | FFMc's Y0 (m/s^2) | Day 5 without, with Y0 |
+| --- | --- | --- | --- |
+| C006 BDS-2G | -1.06e-9 | -1.23e-9 | 137.0, 23.9 m |
+| C011 BDS-2G | -0.93e-9 | -1.01e-9 | 114.9, 19.4 m |
+| C016 BDS-2G | -1.02e-9 | -0.98e-9 | 143.0, 17.5 m |
+| C018 BDS-2G | -1.17e-9 | -1.53e-9 | (burns: 74 km either way) |
+| C020 BDS-2G | -0.02e-9 | -1.52e-9 | 117.0, 115.3 m |
+| C217 BDS-3G | +0.03e-9 | -0.38e-9 | 25.1, 15.6 m |
+| J003 QZS-2G | -0.40e-9 | -2.26e-9 | 176.6, 163.8 m |
+| J002 QZS-2I | +0.44e-9 | +0.36e-9 | 116.9, 14.5 m |
+| J004 QZS-2I | -1.44e-9 | -0.93e-9 | 222.5, 20.1 m |
+| BeiDou inclined (10 satellites) | within 1e-10 of FFMc's | -1.5e-10 to +1.1e-10 | 13.2 - 44.2, 27.5 - 40.6 m |
+
+The tail makes Y0 physical. Without it, the same fit finds -0.74e-9 on C006 and C011, where FFMc has -1.23e-9 and
+-1.01e-9.
+
+J003's Y0 is poorly determined (stack #457). Between the candidate build and 0.6.19, whose states differ by under a
+millimeter, its five windows move by -29 to +47 m at day 5. One of them (2025-10-10, 77.5 to 103.8 m) crosses the middle of
+the 32 windows, which moves the row's day-5 median from 78.3 m on the candidate to 88.4 m on 0.6.19.
+
+What the lift costs: against 0.6.18, the BeiDou inclined satellites' day-5 medians grow by 2 to 23 m (median 12 m), all
+still far inside the line. The inclined row's medians rise from 27.02 to 31.29 m at day 5 and from 38.70 to 56.37 m at
+day 7. The cause is the Moon's error leaking into Y0, as on model truth.
+
+C020 and J003 (QZS-2G) need more than Y0 (stack #457). There Y0 does not lower the fit's RMS (C020: 5.86 m with and
+without), and the forecast stays where a numerical propagator with only a sphere is (FFMr, C020 135 to 157 m at day 5),
+while FFMc, with five ECOM2 terms, is at 12.3 and 14.8 m.
+
+Fitted from Y0 starts of 0, +1e-11 and -1e-11 m/s^2, two windows (C020 2025-10-04, C006 2025-10-08) end within 0.10 m of
+each other at day 7, so the fit's stopping point is not where the spread comes from. With Y0 solved, the stated
+covariance still covers the error on geostationary, BeiDou inclined and QZS windows. |z| = error over stated sigma per
+RTN axis is at most 0.21 at days 1, 3, 5 and 7 on six windows (C006, C020, C010, C224, J002, J004), against at most 0.21
+without Y0. The stated sigma is far too wide in both cases (stack #433).
+
+Commercial geostationary satellites keep station by thrusting, and Y0 does not serve them. On eight 72 h windows (Eutelsat
+117 West B, Galaxy 30, SES-15) the fit finds 2e-11 to 3e-9 m/s^2 while FFMc's Y0 takes up the maneuvers (2e-7 to 4e-6).
+The day-5 median moves from 14,739 to 14,787 m and the pass count stays 7 of 8, so that row is fitted without
+FORCES.ECOM2.
 
 *Who states it.* The term is for bodies with Sun-tracking panels. On a sphere it fits the residual instead: on six laser
 geodetic windows (Etalon, LAGEOS, LARES-2; 72 h) the median day-7 error went from 11 to 29 m (Etalon 2 12 to 38 m, LAGEOS
@@ -3031,8 +3342,100 @@ of some 60 points), 5.14 to 5.76 ms for a Galileo record flown a week hourly by 
 grid, states; medians of 40 calls, under a load of 10 on 28 cores), 3.31 to 3.39 ms for a day at 60 s. Once the grid
 exists a state costs the same.
 
-`test/radiation-y0.e2e.mjs` checks the theory, the fit, the daily fit, a held fit against the fit without the term
-byte for byte, and the refusals.
+`test/radiation-y0.e2e.mjs` checks the theory and the fit on a Galileo-like and an inclined geosynchronous orbit, the
+daily fit, a held fit against the fit without the term byte for byte, and the refusals.
+
+**16.14 The solid Earth tide.** The Moon and the Sun raise a tide in the solid Earth, and its gravity reaches the
+satellite. From 0.6.20 AP carries it on request: $PCF FORCES.SOLID_TIDES IERS_2010 on `fit`, the field and the model FFM reads
+(propagator/ffm `lib/force_models.cpp`, `lib/iers2010_tides.h`: IERS Conventions 2010, section 6.2, steps 1 and 2, on
+a tide-free field), so one configuration means the same in both propagators. NONE, the field's default on the wire,
+leaves the tide out, and a set fitted without it flies as before, bit for bit.
+
+*Theory.* The degree-2 tide raised by a body of gravitational parameter mu_b at distance r_b adds at the satellite the
+potential k2 (mu_b / r_b^3) (R^5 / r^3) P2(cos psi), psi the angle between the satellite and the body: the
+third-body quadrupole of section 5 with the radial law R^5 / r^3 in place of r^2. AP writes the two bodies' tide as
+r^-3 r.T.r, T the symmetric traceless tensor (3/2) (mu_b R^5 / r_b^3) (s s^T - I/3) summed over the Sun and the Moon of
+section 5 at the stage time, with each order m about the Earth's axis (zz; xz, yz; xx - yy, xy) weighted by its Love
+number of IERS Table 6.3: k20 0.30190, |k21| 0.29830 and |k22| 0.30102, the m = 1 and m = 2 parts turned east of the
+body by -arg(k2m) / m (0.28 and 0.12 deg: the imaginary parts -0.00144 and -0.00130, the anelastic lag). Step 2's
+diurnal band (Table 6.5a, 48 lines, K1 470.9e-12 the largest) is, seen from inertial axes, a degree-2 order-1 term
+C' cos(alpha) + S' sin(alpha) with C' = sum(ip sin b - op cos b) and S' = -sum(ip cos b + op sin b), b the line's
+Delaunay argument (GMST cancels): it is added to T once, at the set's epoch (over 10 days b moves the band by under
+3e-12 of its 5e-10). With W the orbit normal, g = T W and P = W.g, the potential averaged over the mean anomaly is exact
+in closed form, -P / (2 a^3 eta^3), and with D = 1 / (n a^5 eta^4), N the node and M the in-plane direction 90 deg past
+it, the Lagrange equations give
+
+di/dt = D g.N, sin i dOmega/dt = D g.M, d varpi/dt = D (tan(i/2) g.M - 1.5 P),
+d lambda/dt - n = D (tan(i/2) g.M - 3 eta P - 1.5 e^2 P / (1 + eta)), de/dt = dn/dt = 0,
+
+written in the equinoctial elements, regular at i = 0 and e = 0. They are added to the mean-element rates at every
+stage in both regimes (in the long-period regime also to a covariance's moved sets, which step in pairs), at the state
+of the stage. With a single k2 the average is k2 (mu_b R^5 / r_b^3) (1 - 3 (w.s)^2) / (4 a^3 eta^3); against the
+quadrupole of section 5 the tide is k2 (R/a)^5 of it on a circular orbit, 17 % at 800 km. The Moon's tide is a J2 of
+1.69e-8 about the Moon's direction, the Sun's 0.77e-8; their mean over the bodies' motion is the permanent tide, a J2
+change of +9.4e-9, which AP's tide-free J2 (1.3) does not hold and the term supplies, as FFM's step 1 does on its
+tide-free field. Nothing is added at output time.
+
+*What is left out, and its size.* Degree 3 (k3m 0.093), degree 4 through k+, step 2's long-period and semidiurnal
+tables (Tables 6.5b and 6.5c, at most 16.6e-12 and 1.2e-12) and the tide's short-period part are not carried. On model
+truth (below) all of them together move AP's day-5 error in low orbit by at most 0.42 m and its day-7 error by 0.67 m,
+and its in-arc fit by at most 0.05 m in low orbit and 0.18 m on the eccentric orbits (the short-period part at perigee). Of the parts carried, each moves the
+day-5 error by at most (largest of 17 low orbits, 72 h fits): step 2's band 0.41 m, the lag 0.39 m, the Love number
+per order against k20 for all three 1.07 m (day 7: 0.56, 0.76 and 1.57 m).
+
+*Measured* (model truth: FFM EGM96 70 x 70, Sun and Moon from DE440, 10 days from an AP-consistent state at
+2026-09-01 on a 300 s grid, with FFM's solid tide and without; AP under the headline's forces, tesseral 31, zonal 20,
+BTERM and AGOM held at 0, fitted over 72 h or 24 h and flown 7 days; whole-day 3D RMS). On 16 near-circular orbits
+(690, 800, 1,340 and 1,490 km; i 50, 66, 98, 108 deg) the median at day 5:
+
+| Fit | no tide either side | the tide in FFM only | the tide in both |
+| --- | ---: | ---: | ---: |
+| 72 h | 28.5 m | 68.3 m | 28.3 m |
+| 24 h | 48.2 m | 64.0 m | 48.1 m |
+
+By altitude (72 h, day 5, the same three columns): 690 km 92.9, 121.0, 92.8 m; 800 km 58.6, 66.5, 58.8 m; 1,340 km 14.4,
+60.7, 14.4 m; 1,490 km 15.5, 65.9, 15.6 m. On each orbit AP with the term is within 0.42 m (day 5) and 0.67 m (day 7) of
+its error without the tide on either side; a Starlette-like orbit (812 x 1,100 km) too (58.0 against 57.9 m). Further
+out the tide is smaller and the term carries it the same way: on a GPS-like orbit the tide in FFM alone moves AP's day-5
+error by 4.1 m and with the term AP is within 0.02 m of its level; on a geostationary set 0.07 and 0.01 m; on a
+transfer orbit (e 0.72, perigee 454 km) 1.1 and 0.03 m (day 7 of a 24 h fit: 9.2 and 0.13 m); on a THEMIS-like set
+(e 0.82, the long-period regime) 6.5 and 0.01 m (a 24 h fit: 1.5 and 1.5 m, of 349 m).
+
+*What the tide uncovers.* With the term AP's error is its error in a world without the tide: on a Sentinel-6A-like
+(1,336 km, i 66) and a Sentinel-1-like orbit (693 km, i 98), four nodes each, FFM with drag, a cannonball, relativity and
+70 x 70 (and without drag and radiation, and with the field at 12 x 12), AP fitted over 24 h and 72 h with FIT unset and
+with B and AGOM held at the truth's, AP with the term on the tide truth equals AP without it on the truth without the
+tide within 0.67 m at day 5 in all 96 cases. Whether the error falls depends on what else AP misses. Under FIT unset at
+1,336 km the fit holds BTERM at the band median of 12.8, 0.0005 m^2/kg against the truth's 0.02, 100 to 200 m along
+track at day 5, and the term wins on 4 of 8; with B and AGOM held, on 7 of 8. At 693 km, with B and AGOM held, AP is
+40 to 126 m at day 5 without any tide (the field above degree 12, carried in part), and the term wins on 5 of 8; with the
+field capped at 12 on both sides, on 8 of 8. On real windows the tide moves rows both ways, and two rows get worse with
+it: the altimetry rows' 24 h fits and near 700 km at 72 h. The model world names what the missing tide was offsetting
+there: the drag coefficient at its default (stack issue 460) and the field above degree 12. On real windows tesseral
+degrees 13 to 16 alone do not restore them.
+
+*Covariance.* The stated covariance hardly moves with the term. A 72 h fit's position sigma on the tide truth at days
+1, 3, 5 and 7, medians of the 17 low orbits, with the term: radial 7.5, 8.4, 10.4, 12.6 m, in-track 252, 1,216, 2,192,
+3,157 m, cross-track 10.7, 27.6, 47.8, 68.4 m; without it the same within 0.1 m but cross-track at day 1 (11.2 m). The
+errors fall more: cross-track errors beyond 1 sigma are 82, 25, 15 and 19 of 408 hourly states without the term and 67,
+3, 0 and 1 with it, as for AP without the tide on the truth without it. Radial and in-track shares do not change.
+
+*Record.* A set fitted under IERS_2010 states PERTURBATIONS.SOLID_TIDES_MODEL "IERS 2010", and every flight reads it
+there and nowhere else; an AP set with gravity terms fitted without it says so in its OD COMMENT ("solid Earth tide: not
+modeled (FORCES.SOLID_TIDES NONE)"). Refused by name: on `fit` IERS_2010 without the gravity terms or any other value
+(configuration-refused, FORCES.SOLID_TIDES); in a flight SOLID_TIDES_MODEL other than "IERS 2010"
+(solid-tides-unsupported), or on an SGP4 or SGP4XP set or an AP set whose gravity caps are both 0
+(elements-other-theory).
+
+*Why not by default.* The $PCF cannot tell SOLID_TIDES left unset from NONE written, so the module cannot apply the
+tide by default without overriding an explicit NONE (stack issue 455 asks the standard for an UNSPECIFIED value).
+
+*Cost.* About 100 floating-point operations per rate evaluation and no trigonometry; the band once per set. AP's cost
+per state with the tide over without it, `test/kernel-cost.mjs --solid-tides` on seven regimes at 300 s and 60 s, two
+alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.28) the load's.
+
+`test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
+unset, the long-period regime's stated covariance with the tide, and the refusals.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

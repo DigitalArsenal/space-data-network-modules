@@ -42,9 +42,13 @@ struct Forces {
   bool dca = false;                                           ///< DENSITY_CORRECTION DCA_COMMON_MODE
   int tesseral = 0;                                           ///< MAXIMUM_TESSERAL_DEGREE
   int zonal = 0;                                              ///< MAXIMUM_ZONAL_DEGREE (the $PCF's MAXIMUM_DEGREE): the zonal tail, J6 up
-  bool stock() const { return !msis && weather_source == pcfWeatherSource_THEORY_FLUX_MODEL && !dca && tesseral == 0 && zonal == 0; }
+  bool solid_tides = false;                                   ///< SPEC 16.14: SOLID_TIDES IERS_2010 (PERTURBATIONS.SOLID_TIDES_MODEL)
+  bool stock() const {
+    return !msis && weather_source == pcfWeatherSource_THEORY_FLUX_MODEL && !dca && tesseral == 0 && zonal == 0 && !solid_tides;
+  }
   bool same(const Forces& o) const {
-    return msis == o.msis && weather_source == o.weather_source && dca == o.dca && tesseral == o.tesseral && zonal == o.zonal;
+    return msis == o.msis && weather_source == o.weather_source && dca == o.dca && tesseral == o.tesseral && zonal == o.zonal &&
+           solid_tides == o.solid_tides;
   }
 };
 
@@ -442,16 +446,32 @@ inline int read_ecom2(const PCFForceModel* f, Options& o) {
   return 0;
 }
 
+/// SPEC 16.14: FORCES.SOLID_TIDES on fit, the field FFM reads: IERS_2010 puts AP's solid Earth tide in the rates (and the
+/// record states it, PERTURBATIONS.SOLID_TIDES_MODEL); NONE, the wire's default, leaves it out. AP's tide is flown with
+/// its gravity terms: IERS_2010 without them is refused by name, as any other value is.
+inline int read_solid_tides(const PCFForceModel* f, Forces& o) {
+  switch (f->SOLID_TIDES()) {
+    case pcfSolidTideModel_NONE: return 0;
+    case pcfSolidTideModel_IERS_2010:
+      if (o.tesseral == 0 && o.zonal == 0)
+        return refuse("FORCES.SOLID_TIDES", "AP's solid Earth tide is flown with its gravity terms (MAXIMUM_TESSERAL_DEGREE or MAXIMUM_DEGREE above 0)");
+      o.solid_tides = true;
+      return 0;
+    default: return refuse("FORCES.SOLID_TIDES", "NONE or IERS_2010");
+  }
+}
+
 inline int read_forces(const PCFForceModel* f, bool atmosphere, Options& o) {
   if (f == nullptr) return atmosphere ? refuse("FORCES.ATMOSPHERE_MODEL", "fit states the atmosphere it fits under: JACCHIA70 or NRLMSISE00") : 0;
   for (size_t k = 0; k < sizeof kForceFields / sizeof kForceFields[0]; ++k) {
     const uint16_t vt = static_cast<uint16_t>(4 + 2 * k);
-    if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE || (atmosphere && (atmosphere_field(vt) || vt == PCFForceModel::VT_ECOM2)) ||
+    if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE ||
+        (atmosphere && (atmosphere_field(vt) || vt == PCFForceModel::VT_ECOM2 || vt == PCFForceModel::VT_SOLID_TIDES)) ||
         !off_default(raw(f), vt, kForceFields[k]))
       continue;
     char name[96];
     std::snprintf(name, sizeof name, "FORCES.%s", kForceFields[k].name);
-    return refuse(name, atmosphere ? "fit states its force model by ATMOSPHERE_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, MAXIMUM_TESSERAL_DEGREE, MAXIMUM_DEGREE and ECOM2 only"
+    return refuse(name, atmosphere ? "fit states its force model by ATMOSPHERE_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, MAXIMUM_TESSERAL_DEGREE, MAXIMUM_DEGREE, ECOM2 and SOLID_TIDES only"
                                    : "the averaged theories (SGP4XP) apply their own forces here; fit and propagate select the drag atmosphere");
   }
   if (f->EPHEMERIS_SOURCE() != nullptr && f->EPHEMERIS_SOURCE()->size() != 0)
@@ -459,6 +479,7 @@ inline int read_forces(const PCFForceModel* f, bool atmosphere, Options& o) {
   if (!atmosphere) return 0;
   if (const int rc = read_gravity_terms(f, o.forces)) return rc;
   if (const int rc = read_atmosphere(f, o.forces)) return rc;
+  if (const int rc = read_solid_tides(f, o.forces)) return rc;
   return read_ecom2(f, o);
 }
 

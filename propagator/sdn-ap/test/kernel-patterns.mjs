@@ -1,20 +1,22 @@
 #!/usr/bin/env node
-// AP's cost against SGP4's under the request patterns of review 0's cost findings (stack issue #317; C2-1 to C2-5), on
-// made-up orbits: AP seeded with the headline forces (zonal 20, tesseral 31 unless --tesseral says, NRLMSISE-00 on made-up
-// quiet rows), SGP4 through ingest_omm, the same elements. Microseconds of process CPU per state (wall for single calls),
-// AP and SGP4 interleaved, median [min, max] over --rounds; a ratio taken round by round also carries the 95 % bootstrap
-// interval of its median. The load average before and after goes to the output.
+// AP's cost against SGP4's and stock SGP4XP's under the request patterns of review 0's cost findings (stack issue #317;
+// C2-1 to C2-5), on made-up orbits: AP seeded with the headline forces (zonal 20, tesseral 31 at e 0.048 and below,
+// NRLMSISE-00 on made-up quiet rows), SGP4 through ingest_omm and SGP4XP with its own forces, the same elements.
+// Microseconds of process CPU per state (wall for single calls), the three interleaved, median [min, max] over --rounds; a
+// ratio taken round by round also carries the 95 % bootstrap interval of its median. The load average before and after
+// goes to the output.
 //   catalog   N records of one orbit (RAAN and mean anomaly spread) in one store, every record at each instant (time-major,
 //             sdnap_epochs_at, 60 s instants over a day from a day after the epochs, fresh store each round) and the same
-//             states record-major (sdnap_epochs_set_at); N from --counts (default 1,2,100,10000)
+//             states record-major (sdnap_epochs_set_at); N from --counts (default 1,2,100,10000). Regime "mix": the
+//             first N sets of the carrier lane's catalog mix (mixElements)
 //   first     the first state of a record at 0, 1 and 7 days: in a fresh instance (what a process pays once and the
-//             record pays) and in a warmed instance (what each record pays)
+//             record pays), in a warmed instance (what each record pays), and the record's load with it
 //   order     one record, 7 days at 300 s: ascending, a fixed random order, alternating between the ends
 //   ecc       a low orbit (perigee 600 km, i 65) at e 0 to 0.3 across 0.05, 300 s ascending over 7 days, and its first state
 //   call      the public `propagate`: TEME START/STOP/STEP and GCRF explicit EPOCHS, 7 days at 300 s, $OEM bytes; the AP
 //             record seeded (no covariance) and fitted to the SGP4 track (carrying COVARIANCE_DATA)
 //   node test/kernel-patterns.mjs <catalog|first|order|ecc|call|all> [--wasm FILE] [--rounds 7] [--counts 1,2,100,10000]
-//     [--regimes leo500,leo830,meo,geo,gto] [--json FILE]
+//     [--regimes leo500,leo830,meo,geo,gto,mix] [--json FILE]
 import fs from "node:fs";
 import os from "node:os";
 import * as flatbuffers from "flatbuffers";
@@ -42,7 +44,8 @@ const ORBITS = {
   geo: { n: 1.0027, e: 0.0003, i: 0.05, raan: 80, argp: 10, ma: 10, bterm: 0.001, agom: 0.01 },
   gto: { n: 2.26, e: 0.72, i: 27, raan: 60, argp: 180, ma: 10, bterm: 1.27e-3, agom: 0.01 },
 };
-const PICK = arg("--regimes", "leo500,leo830,meo,geo,gto").split(",");
+// "mix" (catalog only): the carrier lane's catalog mix (mixElements)
+const PICK = arg("--regimes", "leo500,leo830,meo,geo,gto,mix").split(",");
 const ROWS = Array.from({ length: 46 }, (_, k) => ({ DATE: iso(EPOCH + (k - 5) * DAY).slice(0, 10), F107_OBS: 70, F107_OBS_CENTER81: 72, AP_AVG: 4, F107_DATA_TYPE: F107DataType.OBS }));
 const cpuUs = () => { const u = process.cpuUsage(); return u.user + u.system; };
 const wallUs = () => Number(process.hrtime.bigint()) / 1e3;
@@ -56,21 +59,51 @@ function ratioSpread(a) {
   const meds = Array.from({ length: 2000 }, () => median(a.map(() => a[Math.floor(r() * a.length)]))).sort((x, y) => x - y);
   return { ...spread(a), ci95: [meds[49], meds[1949]], rounds: a.length };
 }
+// the 1-minute load average when a row was taken, marked above 30 (such a row is flown again on a quieter machine)
+const loadMark = (row) => ` | load ${row.load1.toFixed(0)}${row.load1 > 30 ? " (above 30)" : ""}`;
 const fmt = (s, d = 2) => `${s.median.toFixed(d)}${s.ci95 ? ` (95 % ${s.ci95[0].toFixed(d)} to ${s.ci95[1].toFixed(d)})` : ""} [${s.min.toFixed(d)}, ${s.max.toFixed(d)}]`;
 const prefixed = (u) => { const b = Buffer.alloc(4 + u.length); b.writeUInt32LE(u.length, 0); Buffer.from(u).copy(b, 4); return b; };
 const jd = (ms) => { const d = ms / DAY; return [Math.floor(d) + 2440587.5, d - Math.floor(d)]; };
 const grid = (msList) => { const W = new Float64Array(msList.length), F = new Float64Array(msList.length); msList.forEach((ms, k) => { [W[k], F[k]] = jd(ms); }); return { W, F, n: msList.length }; };
 
-function apSet(r, k = 0, tesseral = undefined) {
+function apSet(r, k = 0, tesseral = undefined, norad = 80000 + k) {
   return seedOcm({ epoch: iso(EPOCH), n: r.n, e: r.e, i: r.i, raan: (r.raan + 3.3 * k) % 360, argp: r.argp, ma: (r.ma + 7.1 * k) % 360, bterm: r.bterm, agom: r.agom,
-    norad: 80000 + k, name: `P${k}`, msis: true, records: true, rows: rowsThrough(ROWS), tesseral: tesseral ?? (r.e > 0.048 ? 0 : 31), zonal: 20 });
+    norad, name: `P${norad - 80000}`, msis: true, records: true, rows: rowsThrough(ROWS), tesseral: tesseral ?? (r.e > 0.048 ? 0 : 31), zonal: 20 });
 }
-function sgp4Omm(r, k = 0) {
+// stock SGP4XP: the same elements, BTERM and AGOM, the theory's own forces
+const xpSet = (r, k = 0, norad = 80000 + k) => seedOcm({ epoch: iso(EPOCH), n: r.n, e: r.e, i: r.i, raan: (r.raan + 3.3 * k) % 360, argp: r.argp, ma: (r.ma + 7.1 * k) % 360,
+  bterm: r.bterm, agom: r.agom, norad, name: `P${norad - 80000}` });
+// the carrier lane's catalog mix (test/segments-bench.mjs on segments-display-prototype, 7cafcc7b): the first N of the same
+// seeded sequence: 70 % low orbit (300 to 1,500 km), 10 % MEO, 8 % geosynchronous, 7 % transfer orbits at e 0.5 to 0.75,
+// 5 % Molniya, its B; here AP with the headline forces (tesseral 31 at e 0.048 and below), stock SGP4XP and SGP4
+function mixElements(N) {
+  let seed = 20261110;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const out = [];
+  for (let k = 0; k < N; k++) {
+    const u = rnd();
+    let a, e, i;
+    if (u < 0.70) { a = RE + 300 + 1200 * rnd() ** 1.5; e = 0.02 * rnd() ** 2; i = 100 * rnd(); }
+    else if (u < 0.80) { a = 26560 + 200 * (rnd() - 0.5); e = 0.02 * rnd(); i = 50 + 10 * rnd(); }
+    else if (u < 0.88) { a = 42164 + 50 * (rnd() - 0.5); e = 0.001 * rnd(); i = 15 * rnd(); }
+    else if (u < 0.95) { const rp = RE + 250 + 350 * rnd(); e = 0.5 + 0.25 * rnd(); a = rp / (1 - e); i = 7 + 50 * rnd(); }
+    else { a = 26560; e = 0.70 + 0.04 * rnd(); i = 63.4; }
+    out.push({ n: revPerDay(a), e, i, raan: 360 * rnd(), argp: 360 * rnd(), ma: 360 * rnd(), bterm: a < RE + 2000 ? 0.005 + 0.05 * rnd() : 0.01, agom: 0.01 });
+  }
+  return out;
+}
+const THEORIES = ["AP", "XP", "SGP4"];
+const turn = (q) => THEORIES.map((_, i) => THEORIES[(i + q) % THEORIES.length]);
+const per = () => Object.fromEntries(THEORIES.map((t) => [t, []]));
+// AP's cost over SGP4's and over SGP4XP's, round by round
+const ratios = (v) => ({ ratio: ratioSpread(v.AP.map((x, i) => x / v.SGP4[i])), ratioXp: ratioSpread(v.AP.map((x, i) => x / v.XP[i])) });
+const spreads = (v) => Object.fromEntries(THEORIES.map((t) => [t, spread(v[t])]));
+function sgp4Omm(r, k = 0, norad = 80000 + k) {
   const b = new flatbuffers.Builder(256);
-  const e = b.createString(iso(EPOCH)), id = b.createString(`2026-${String(k % 1000).padStart(3, "0")}A`), orig = b.createString("SDN");
+  const e = b.createString(iso(EPOCH)), id = b.createString(`2026-${String((norad - 80000) % 1000).padStart(3, "0")}A`), orig = b.createString("SDN");
   OMM.startOMM(b); OMM.addEpoch(b, e); OMM.addObjectId(b, id); OMM.addOriginator(b, orig);
   OMM.addMeanMotion(b, r.n); OMM.addEccentricity(b, r.e); OMM.addInclination(b, r.i); OMM.addRaOfAscNode(b, (r.raan + 3.3 * k) % 360);
-  OMM.addArgOfPericenter(b, r.argp); OMM.addMeanAnomaly(b, (r.ma + 7.1 * k) % 360); OMM.addBstar(b, r.bterm / 12.741621); OMM.addNoradCatId(b, 80000 + k); OMM.addMeanElementTheory(b, 0);
+  OMM.addArgOfPericenter(b, r.argp); OMM.addMeanAnomaly(b, (r.ma + 7.1 * k) % 360); OMM.addBstar(b, r.bterm / 12.741621); OMM.addNoradCatId(b, norad); OMM.addMeanElementTheory(b, 0);
   OMM.finishOMMBuffer(b, OMM.endOMM(b));
   return b.asUint8Array().slice();
 }
@@ -80,10 +113,12 @@ async function open() {
   const load = async (records) => { const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(records.map(prefixed)) }] }); if (r.statusCode !== 0) throw new Error(`load_epochs ${r.errorCode}: ${r.errorMessage}`); };
   return { h, x, load };
 }
+/// SGP4 records of `count` sets: of one orbit r (RAAN and mean anomaly spread), or of a list of orbits (the mix).
 async function sgp4Sets(helper, r, count) {
   const out = [];
+  const omm = (k) => (Array.isArray(r) ? sgp4Omm(r[k], 0, 80000 + k) : sgp4Omm(r, k));
   for (let k = 0; k < count; k += 2000) {
-    const omms = Array.from({ length: Math.min(2000, count - k) }, (_, j) => sgp4Omm(r, k + j));
+    const omms = Array.from({ length: Math.min(2000, count - k) }, (_, j) => omm(k + j));
     const res = await helper.h.invoke({ methodId: "ingest_omm", inputs: omms.map((payload) => ({ portId: "omm", typeRef: T("OMM"), payload })) });
     if (res.statusCode !== 0) throw new Error(`ingest_omm ${res.errorCode}`);
     out.push(...res.outputs.map((o) => new Uint8Array(o.payload)));
@@ -99,9 +134,13 @@ async function catalog(helper) {
   for (const name of PICK.filter((p) => p !== "gto")) {
     const r = ORBITS[name];
     for (const N of COUNTS) {
-      const sets = { AP: Array.from({ length: N }, (_, k) => apSet(r, k)), SGP4: await sgp4Sets(helper, r, N) };
+      // the mix: set k its own orbit (sgp4Sets takes the list)
+      const els = name === "mix" ? mixElements(N) : null;
+      const sets = name === "mix"
+        ? { AP: els.map((el, k) => apSet(el, 0, undefined, 80000 + k)), XP: els.map((el, k) => xpSet(el, 0, 80000 + k)), SGP4: await sgp4Sets(helper, els, N) }
+        : { AP: Array.from({ length: N }, (_, k) => apSet(r, k)), XP: Array.from({ length: N }, (_, k) => xpSet(r, k)), SGP4: await sgp4Sets(helper, r, N) };
       const arms = {};
-      for (const theory of ["AP", "SGP4"]) arms[theory] = { m: await open(), sets: sets[theory] };
+      for (const theory of THEORIES) arms[theory] = { m: await open(), sets: sets[theory] };
       for (const a of Object.values(arms)) { a.out = a.m.x.sdnap_alloc(48 * N); a.status = a.m.x.sdnap_alloc(4 * N); a.one = a.m.x.sdnap_alloc(48); }
       // time-major: one call per instant over every series, instants 2..40 (the first leaves out each record's start)
       const timeMajor = async (a) => {
@@ -121,12 +160,13 @@ async function catalog(helper) {
       };
       const rounds = N >= 10000 ? Math.max(3, Math.floor(ROUNDS / 2)) : ROUNDS;
       for (const a of Object.values(arms)) { await timeMajor(a); await recordMajor(a); }
-      const t = { AP: [], SGP4: [] }, rm = { AP: [], SGP4: [] };
-      for (let q = 0; q < rounds; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) { t[theory].push(await timeMajor(arms[theory])); rm[theory].push(await recordMajor(arms[theory])); }
-      const row = { orbit: name, records: N, timeMajor: { AP: spread(t.AP), SGP4: spread(t.SGP4), ratio: ratioSpread(t.AP.map((v, i) => v / t.SGP4[i])) },
-        recordMajor: { AP: spread(rm.AP), SGP4: spread(rm.SGP4), ratio: ratioSpread(rm.AP.map((v, i) => v / rm.SGP4[i])) } };
+      const t = per(), rm = per();
+      for (let q = 0; q < rounds; ++q) for (const theory of turn(q)) { t[theory].push(await timeMajor(arms[theory])); rm[theory].push(await recordMajor(arms[theory])); }
+      const row = { orbit: name, records: N, timeMajor: { ...spreads(t), ...ratios(t) }, recordMajor: { ...spreads(rm), ...ratios(rm) } };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`catalog ${name} N=${N} | time-major: AP ${fmt(row.timeMajor.AP, 3)} SGP4 ${fmt(row.timeMajor.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.timeMajor.ratio, 1)} | record-major: AP ${fmt(row.recordMajor.AP, 3)} SGP4 ${fmt(row.recordMajor.SGP4, 3)}, AP/SGP4 ${fmt(row.recordMajor.ratio, 1)}`);
+      const line = (c) => `AP ${fmt(c.AP, 3)} XP ${fmt(c.XP, 3)} SGP4 ${fmt(c.SGP4, 3)} us/state, AP/SGP4 ${fmt(c.ratio, 1)}, AP/XP ${fmt(c.ratioXp, 1)}`;
+      console.log(`catalog ${name} N=${N} | time-major: ${line(row.timeMajor)} | record-major: ${line(row.recordMajor)}${loadMark(row)}`);
     }
   }
   return rows;
@@ -135,13 +175,13 @@ async function catalog(helper) {
 // ---- first: per process and per record ------------------------------------------------------------------------------
 async function first(helper) {
   const rows = [];
-  for (const name of PICK) {
-    const r = ORBITS[name], sets = { AP: [apSet(r)], SGP4: await sgp4Sets(helper, r, 1) };
+  for (const name of PICK.filter((p) => p !== "mix")) {
+    const r = ORBITS[name], sets = { AP: [apSet(r)], XP: [xpSet(r)], SGP4: await sgp4Sets(helper, r, 1) };
     for (const days of [0, 1, 7]) {
       const at = jd(EPOCH + days * DAY + (days === 0 ? 60000 : 0));
-      const fresh = { AP: [], SGP4: [] }, warm = { AP: [], SGP4: [] };
+      const fresh = per(), warm = per(), loaded = per();
       for (let q = 0; q < ROUNDS; ++q)
-        for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) {
+        for (const theory of turn(q)) {
           const m = await open(), out = m.x.sdnap_alloc(48);
           await m.load(sets[theory]);
           let t0 = wallUs();
@@ -153,12 +193,19 @@ async function first(helper) {
           t0 = wallUs();
           m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out);
           warm[theory].push(wallUs() - t0);
+          // the record's load (load_epochs through the harness) and its first state together
+          t0 = wallUs();
+          await m.load(sets[theory]);
+          m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], out);
+          loaded[theory].push(wallUs() - t0);
         }
-      const row = { orbit: name, days, freshInstance: { AP: spread(fresh.AP), SGP4: spread(fresh.SGP4) }, perRecord: { AP: spread(warm.AP), SGP4: spread(warm.SGP4) } };
-      row.perProcess = { AP: row.freshInstance.AP.median - row.perRecord.AP.median, SGP4: row.freshInstance.SGP4.median - row.perRecord.SGP4.median };
+      const row = { orbit: name, days, freshInstance: spreads(fresh), perRecord: spreads(warm), perRecordWithLoad: spreads(loaded) };
+      row.perProcess = Object.fromEntries(THEORIES.map((t) => [t, row.freshInstance[t].median - row.perRecord[t].median]));
       row.perRecordRatio = row.perRecord.AP.median / row.perRecord.SGP4.median;
+      row.perRecordRatioXp = row.perRecord.AP.median / row.perRecord.XP.median;
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)} | once per process: AP ${row.perProcess.AP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us`);
+      console.log(`first ${name} at ${days} d | fresh instance: AP ${fmt(row.freshInstance.AP, 1)} XP ${fmt(row.freshInstance.XP, 1)} SGP4 ${fmt(row.freshInstance.SGP4, 1)} us | per record (warm instance): AP ${fmt(row.perRecord.AP, 1)} XP ${fmt(row.perRecord.XP, 1)} SGP4 ${fmt(row.perRecord.SGP4, 2)} us, AP/SGP4 ${row.perRecordRatio.toFixed(0)}, AP/XP ${row.perRecordRatioXp.toFixed(1)} | load and first state: AP ${fmt(row.perRecordWithLoad.AP, 0)} XP ${fmt(row.perRecordWithLoad.XP, 0)} SGP4 ${fmt(row.perRecordWithLoad.SGP4, 0)} us | once per process: AP ${row.perProcess.AP.toFixed(0)} XP ${row.perProcess.XP.toFixed(0)} SGP4 ${row.perProcess.SGP4.toFixed(0)} us${loadMark(row)}`);
     }
   }
   return rows;
@@ -174,19 +221,20 @@ async function order(helper) {
   for (let k = random.length - 1; k > 0; --k) { const j = Math.floor(rand() * (k + 1)); [random[k], random[j]] = [random[j], random[k]]; }
   const far = [];
   for (let i = 0, j = seq.length - 1; i <= j; ++i, --j) { far.push(seq[i]); if (i !== j) far.push(seq[j]); }
-  for (const name of PICK) {
+  for (const name of PICK.filter((p) => p !== "mix")) {
     const r = ORBITS[name], arms = {};
-    for (const [theory, set] of [["AP", apSet(r)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48) }; }
+    for (const [theory, set] of [["AP", apSet(r)], ["XP", xpSet(r)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48) }; }
     for (const [label, list] of [["ascending", seq], ["random", random], ["ends", far]]) {
       const g = grid(list);
       const sweep = (a) => { const c0 = cpuUs(); for (let k = 0; k < g.n; ++k) if (a.m.x.sdnap_epochs_set_at(0, 0, g.W[k], g.F[k], a.out) !== 0) throw new Error("rc"); return (cpuUs() - c0) / g.n; };
       for (const a of Object.values(arms)) sweep(a);
-      const v = { AP: [], SGP4: [] };
+      const v = per();
       const rounds = name === "gto" && label !== "ascending" ? 3 : ROUNDS;
-      for (let q = 0; q < rounds; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) v[theory].push(sweep(arms[theory]));
-      const row = { orbit: name, order: label, AP: spread(v.AP), SGP4: spread(v.SGP4), ratio: ratioSpread(v.AP.map((x, i) => x / v.SGP4[i])) };
+      for (let q = 0; q < rounds; ++q) for (const theory of turn(q)) v[theory].push(sweep(arms[theory]));
+      const row = { orbit: name, order: label, ...spreads(v), ...ratios(v) };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`order ${name} ${label} | AP ${fmt(row.AP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}`);
+      console.log(`order ${name} ${label} | AP ${fmt(row.AP, 3)} XP ${fmt(row.XP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}, AP/XP ${fmt(row.ratioXp, 1)}${loadMark(row)}`);
     }
   }
   return rows;
@@ -200,17 +248,18 @@ async function ecc(helper) {
     const r = { n: revPerDay((RE + 600) / (1 - e)), e, i: 65, raan: 60, argp: 180, ma: 10, bterm: 1.27e-3, agom: 0.01 };  // perigee 600 km
     for (const tesseral of [31, 0]) {
       const arms = {};
-      for (const [theory, set] of [["AP", apSet(r, 0, tesseral)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48), set }; }
+      for (const [theory, set] of [["AP", apSet(r, 0, tesseral)], ["XP", xpSet(r)], ["SGP4", (await sgp4Sets(helper, r, 1))[0]]]) { const m = await open(); await m.load([set]); arms[theory] = { m, out: m.x.sdnap_alloc(48), set }; }
       const sweep = (a) => { const c0 = cpuUs(); for (let k = 0; k < g.n; ++k) if (a.m.x.sdnap_epochs_set_at(0, 0, g.W[k], g.F[k], a.out) !== 0) throw new Error("rc"); return (cpuUs() - c0) / g.n; };
       for (const a of Object.values(arms)) sweep(a);
-      const v = { AP: [], SGP4: [] };
-      for (let q = 0; q < ROUNDS; ++q) for (const theory of q % 2 ? ["SGP4", "AP"] : ["AP", "SGP4"]) v[theory].push(sweep(arms[theory]));
+      const v = per();
+      for (let q = 0; q < ROUNDS; ++q) for (const theory of turn(q)) v[theory].push(sweep(arms[theory]));
       const firstUs = [];
       const at = jd(EPOCH + DAY);
       for (let q = 0; q < 5; ++q) { await arms.AP.m.load([arms.AP.set]); const t0 = wallUs(); arms.AP.m.x.sdnap_epochs_set_at(0, 0, at[0], at[1], arms.AP.out); firstUs.push(wallUs() - t0); }
-      const row = { e, tesseral, AP: spread(v.AP), SGP4: spread(v.SGP4), ratio: ratioSpread(v.AP.map((x, i) => x / v.SGP4[i])), apFirstAt1dUs: spread(firstUs) };
+      const row = { e, tesseral, ...spreads(v), ...ratios(v), apFirstAt1dUs: spread(firstUs) };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`ecc perigee 600 km e ${e} tesseral ${tesseral} | AP ${fmt(row.AP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)} | AP first state at 1 d ${fmt(row.apFirstAt1dUs, 0)} us`);
+      console.log(`ecc perigee 600 km e ${e} tesseral ${tesseral} | AP ${fmt(row.AP, 3)} XP ${fmt(row.XP, 3)} SGP4 ${fmt(row.SGP4, 3)} us/state, AP/SGP4 ${fmt(row.ratio, 1)}, AP/XP ${fmt(row.ratioXp, 1)} | AP first state at 1 d ${fmt(row.apFirstAt1dUs, 0)} us${loadMark(row)}`);
     }
   }
   return rows;
@@ -230,7 +279,7 @@ async function call(helper) {
     "gcrf epochs": pcfBytes({ FRAME: pcfOutputFrame.GCRF, EPOCHS: times, MAXIMUM_STATES: 3000 }),
   };
   const rows = [];
-  for (const name of PICK.filter((p) => p !== "gto")) {
+  for (const name of PICK.filter((p) => p !== "gto" && p !== "mix")) {
     const r = ORBITS[name];
     const sgp4 = (await sgp4Sets(helper, r, 1))[0], seeded = apSet(r);
     // AP fitted to the SGP4 set's own 3-day track at 300 s (GCRF), as the review's harness makes its AP records; the arc
@@ -251,8 +300,9 @@ async function call(helper) {
       for (let q = 0; q < ROUNDS; ++q) for (const [label, ocm] of Object.entries(records)) { const f = await fly(ocm); (v[label] ??= []).push(f.us); bytes[label] = f.bytes; }
       const row = { orbit: name, frame, usPerState: Object.fromEntries(Object.entries(v).map(([k, a]) => [k, spread(a)])), oemBytes: bytes,
         seededOverSgp4: ratioSpread(v["AP seeded"].map((x, i) => x / v.SGP4[i])), fittedOverSgp4: ratioSpread(v["AP fitted"].map((x, i) => x / v.SGP4[i])) };
+      row.load1 = os.loadavg()[0];
       rows.push(row);
-      console.log(`call ${name} ${frame} | SGP4 ${fmt(row.usPerState.SGP4, 2)}, AP seeded ${fmt(row.usPerState["AP seeded"], 2)}, AP fitted ${fmt(row.usPerState["AP fitted"], 2)} us/state | AP/SGP4 seeded ${fmt(row.seededOverSgp4, 1)}, fitted ${fmt(row.fittedOverSgp4, 1)} | $OEM bytes SGP4 ${bytes.SGP4}, AP seeded ${bytes["AP seeded"]}, AP fitted ${bytes["AP fitted"]}`);
+      console.log(`call ${name} ${frame} | SGP4 ${fmt(row.usPerState.SGP4, 2)}, AP seeded ${fmt(row.usPerState["AP seeded"], 2)}, AP fitted ${fmt(row.usPerState["AP fitted"], 2)} us/state | AP/SGP4 seeded ${fmt(row.seededOverSgp4, 1)}, fitted ${fmt(row.fittedOverSgp4, 1)} | $OEM bytes SGP4 ${bytes.SGP4}, AP seeded ${bytes["AP seeded"]}, AP fitted ${bytes["AP fitted"]}${loadMark(row)}`);
     }
   }
   return rows;
