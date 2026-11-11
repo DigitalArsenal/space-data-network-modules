@@ -2813,6 +2813,38 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
 
+**The one-day class's slow band above the switch (from 0.6.MM; stack #467).** Through 0.6.18 the grid left out every term
+slower than 0.045 n, as if the class carried it in the rates. The one-day class carries only SGP4-XP's 27 terms (degrees 2 to
+4, k = m, |q| at most 4), so its other slow terms were carried nowhere:
+- j = m of degrees 5 to 12;
+- the terms of degrees 3 and 4 with |q| above 4, large at high e.
+A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at day 5 on THEMIS A's real geometry, whose angle
+drifts at 0.0444 n. A set just above the cut kept them. Each term of a one-day set above the switch is now carried in exactly
+one place:
+- the class's rates: its 27 terms;
+- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-3 n or faster (`kOneDayFloor`, the
+  table's own rule);
+- nowhere: a term slower than 1e-3 n (the floor below), and the terms above degree 12 (the table holds no near-resonant terms
+  outside low orbit).
+`sdnap_slow_terms` lists, for a set on the grid, each slow term (l, m, p, q, its angle rate over n) and where it is carried.
+On a THEMIS A-like set it lists 5 terms in the rates and 47 on the grid, of degree 2 to 12, and 768 of degree 13 to 31
+carried nowhere. `test/one-day-slow-band.e2e.mjs` reads it.
+
+FFM model truth, EGM96 70 x 70, no Sun or Moon on either side, a 72 h fit flown 7 days, day 5:
+- Made-up THEMIS A-like sets whose fitted mean motion lies in the band (1.0493 rev/day, e 0.825, i 11.9 deg; node 0, 90 and
+  180 deg): 369 / 415 / 549 m through 0.6.18, 155 / 70 / 160 m with the band.
+- Five real THEMIS geometries, from their windows' own states with the Sun, the Moon and the radiation sphere: the median
+  went from 538 to 100 m (from 162 to 994 m, to 77 to 129 m).
+
+At the switch: a one-day set at e0 0.30 takes #434's tail in the rates and the table; one at 0.3001 takes the grid with the
+band. n 1.0496 rev/day, i 10 deg, 70 x 70 with Sun and Moon, a 72 h fit, day 5:
+- At n 1.0496: 35.5 m against 13.7 m.
+- At n 1.0027: 19.9 m against 12.0 m.
+- Through 0.6.18 the same pairs were 38.7 against 14.8 m and 18.1 against 11.9 m. The jump is the table's first-order error
+  near 0.3, stated above; the band adds 1 m at 0.3001 and the tail 3 m at 0.30.
+
+The floor: TODO-FLOOR.
+
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
 in a 12-hour orbit (13.5 against 6.7 m) and 7.5 m in a geosynchronous orbit (7.6 against 1.1 m), RMS over a 72 h arc.
@@ -2823,7 +2855,8 @@ function of the anomaly, complete in j. At init it is built on 128 uniform eccen
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
 omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-daily, the class's, the half-day class's tail, and
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
-shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
+shallow set's taper and the terms slower than 1e-3 n; in the one-day class, from 0.6.MM, only the terms slower than 1e-3 n
+(below); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
 precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
 the slopes below, 3.1 MB before 0.6.14), and read at
