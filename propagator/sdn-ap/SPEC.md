@@ -1458,7 +1458,8 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
 - h_k = 4 pi / n_k, two mean periods at the mean motion n_k (rad/min) of node k, for orbits whose epoch period
   2 pi / n_0 is below 1100 minutes;
 - h = 95 minutes for orbits whose epoch period is 1100 minutes or more (this class is fixed at initialization).
-  AP with a selected gravity replacement and the epoch one-day resonance class uses 38 minutes instead;
+  AP with a selected gravity replacement and the epoch one-day resonance class uses 38 minutes instead,
+  and an AP set with e_0 above 0.3 steps at most 0.5 (1 - e_0)^(3/2) / n_0 (16.10);
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
@@ -1537,10 +1538,10 @@ lies 90 minutes on, and the step after it is the regular one again (two periods 
 Refusals). 9.9 has no further fallback: the 30-minute steps of the 9.1.1.0 build (section 11) are not reached in
 9.9.
 
-The step is fixed (95 min in the long-period regime, 38 min in the one-day class) with no error control. It resolves perigee
+The step is fixed (95 min in the long-period regime, 38 min in AP's one-day class) with no error control. It resolves perigee
 only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at 95 min and 0.70 at 38 min on a one-day orbit. Beyond that the theory's
 own equations are integrated with a mean-longitude error of 0.2 km a week at e 0.5 and 0.4 to 4.6 km a week at e 0.7 to 0.82 at
-95 min, and 0.09 to 0.17 km at e 0.82 at 38 min.
+95 min, and 0.09 to 0.17 km at e 0.82 at 38 min. From 0.6.17 an AP set above e_0 0.3 takes the shorter step of 16.10.
 
 **Output between nodes.** Cubic Hermite interpolation on the bracketing nodes (values and rates), with
 q = (t - t_k) / (t_k+1 - t_k): y(t) = (1 + 2q)(1 - q)^2 y_k + q (1 - q)^2 h y'_k + q^2 (3 - 2q) y_k+1 +
@@ -2453,10 +2454,60 @@ Etalon-2 23.55 to 9.74 m; medians LAGEOS-1 14.10 to 7.81 m, LAGEOS-2 12.24 to 6.
 prints every number. The AP covariance calibration of 12.7 is re-measured on these sets with its noise constants
 unchanged: one of its eight cells (ABOVE, day 1) is now inside the band, none was before.
 
-**16.10 The half-day class's step.** The step is fixed (95 min in the long-period regime, 38 min in the one-day class) with no
-error control. It resolves perigee only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at 95 min and 0.70 at 38 min on a
-one-day orbit. Beyond that the theory's own equations are integrated with a mean-longitude error of 0.2 km a week at e 0.5 and
-0.4 to 4.6 km a week at e 0.7 to 0.82 at 95 min, and 0.09 to 0.17 km at e 0.82 at 38 min.
+**16.10 The half-day class's step; the long-period step above e 0.3.** The step is fixed (95 min in the long-period regime,
+38 min in the one-day class) with no error control. It resolves perigee only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at
+95 min and 0.70 at 38 min on a one-day orbit. Beyond that the theory's own equations are integrated with a mean-longitude error
+of 0.2 km a week at e 0.5 and 0.4 to 4.6 km a week at e 0.7 to 0.82 at 95 min, and 0.09 to 0.17 km at e 0.82 at 38 min.
+
+From 0.6.17 an AP set in the long-period regime with e_0 above 0.3 steps
+
+  h = min(h_0, 0.5 tau), tau = (1 - e_0)^(3/2) / n_0 (n_0 in rad/min),
+
+with h_0 the step above (38 min in the one-day class, 95 min otherwise).
+- **Why tau.** In this regime the Sun and the Moon enter the rates as the full acceleration at the satellite's position (5,
+  Long-period regime), and near perigee that position turns on the time scale tau. At perigee the true anomaly advances
+  (1 + e)^(1/2) rad in tau. tau is the criterion above with h = tau.
+- **Why 0.5.** RK3's local error grows as (h / tau)^4 there. Half of tau is the largest measured fraction at which the
+  THEMIS-like orbit's own integration error falls to 0.1 m at day 5: 0.77 tau leaves 0.33 m and 1.16 tau leaves 9 m.
+- **Decided once.** The step is decided at the epoch with the set's branch (16.7; `Branch::lp_step`). It is not a switch:
+  the 0.3 it starts at is the branch's existing eccentricity switch. A moved set (the covariance's, a fit's difference
+  columns) flies its nominal's step.
+- **What does not change.** Sets at e_0 0.3 and below, every averaged-regime set and SGP4XP keep their step bit for bit.
+
+AP against itself: a seeded set (FORCES 31,20, B 0.01, AGOM 0.0125 m^2/kg, i 10 deg; Chandra-like i 72, TESS-like i 40),
+flown 7 days at 300 s, RMS over day 5 against the same set at a 2.375-minute step (one-day class) or an 11.875-minute step
+(class 0). Cells marked (rule) are the rule's step.
+
+| Orbit (n rev/day, e) | tau (min) | Day-5 RMS (m), by step |
+| --- | ---: | --- |
+| THEMIS-like (1.0496, 0.822) | 16.4 | 38 min: 174.11; 19: 8.99; 12.67: 0.33; 9.5: 0.10; 8.20 (rule): 0.08 |
+| one-day (1.0496, 0.70) | 35.9 | 38 min: 34.82; 19: 5.43; 17.94 (rule): 4.57 |
+| one-day (1.0496, 0.50) | 77.2 | 38 min (rule: h_0): 15.14; 19: 1.85 |
+| Chandra-like (0.37795, 0.685) | 107.2 | 95 min: 52.97; 53.6 (rule): 9.54; 47.5: 6.62; 23.75: 0.74 |
+| TESS-like (0.0730, 0.55) | 947.7 | 95 min (rule: h_0): 0.95; 47.5: 0.12 |
+
+What the rule leaves is the integration error of a step that already resolves the pass: 4.6 m at e 0.70, 9.5 m on the
+Chandra-like orbit, and 15 m at e 0.50, where the rule keeps 38 min.
+
+The price is the steps. On THEMIS-class orbits the long-period rates dominate the cost, so the cost follows the number of
+steps, 4.6 times as many at 8.20 min as at 38. Measured with `test/kernel-cost.mjs` (one process, 5 repeats, 0.6.15 against
+this rule on the same machine; AP in order over 7 days):
+- THEMIS-like: 37.4 to 168.3 us a state at 300 s (4.5 times) and 7.84 to 34.35 us at 60 s. One cold state at 7 days costs
+  41 to 175 ms.
+- Chandra-like: 1.52 to 2.35 us a state at 300 s (1.5 times) and 0.69 to 0.86 us at 60 s.
+- SGP4 and SGP4XP are unchanged.
+These are the sets with a period of 1,100 min or more and e above 0.3, a few dozen to a few hundred objects. A step
+shortened only near perigee would keep the accuracy at about the 38-minute cost (not done; stack #450).
+
+FFM model truth on the THEMIS-like orbit (EGM96 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either
+side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3 / 5 / 7):
+- 0.6.16 (38 min): 160.1 / 468.9 / 918.6 / 1,168.2 m.
+- From 0.6.17 (8.20 min): 76.6 / 110.0 / 122.9 / 124.9 m.
+- With the Sun and the Moon off on both sides: 76.2 / 107.5 / 120.9 / 102.7 m, at either step. The step's error was the third
+  bodies' alone.
+- Without the step's error, what remains (day 5) is AP's geopotential: J2 alone on both sides 39.8 m, J2 to J5 78.9 m, a
+  4 x 4 field 103.2 m and a 12 x 12 field 83.3 m (the J3 to J5 short-period set is not carried; 16.11).
+- `test/long-period-perigee-step.e2e.mjs` holds the model truth and the step's convergence (stack #445).
 
 The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
 2.406 rev/day) carries resonant terms in lambda - 2 theta, whose period 2 pi / |n - 2 omega_E| is long near the

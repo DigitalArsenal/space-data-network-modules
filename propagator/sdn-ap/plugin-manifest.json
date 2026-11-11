@@ -1,7 +1,7 @@
 {
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
-  "version": "0.6.15",
+  "version": "0.6.17",
   "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, an advanced propagator that builds on the entire history of astrodynamics. Element sets are $OCM records, each the whole input of its flight: theory, forces, daily space weather, density-correction nodes and covariance typed; the propagator ABI struct path (plugin_init_omm) flies stock SGP4XP only. Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded checkpoint storage per object; cached brackets interpolate, first queries build nodes, and beyond-span queries integrate from the nearest preceding retained node. Work grows with the uncached time gap: an AP state asked out of order costs 37 to 153 times SGP4's on near-circular orbits, against 1.2 to 2.5 times in ascending order (README, Memory and time; test/kernel-patterns.mjs); an AP state depends on the order of requests: the same record flown in ascending and in random order differs by up to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at geosynchronous altitude; over 30 days at 60 s, reversed or shuffled, by up to 0.18 m at 300 km and 0.29 m on a low orbit at e 0.05 with tesseral degree 31 (SPEC 9; test/kernel-cost.mjs --diff).",
   "pluginFamily": "propagator",
   "capabilities": [],
