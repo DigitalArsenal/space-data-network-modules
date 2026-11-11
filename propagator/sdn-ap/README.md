@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.14 (dist f3b51e99).
+Version 0.6.13 (dist da12ee92).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -125,7 +125,7 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   orbit fit returned AGOM 15 % low at the median of 254 real windows and was 121 m off at day 5; at its own sigma it
   returns 1.01 of a numerical sphere's coefficient and is 33 m off. On 748 already-read 24 h GNSS windows (exploratory) the
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
-  windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). From 0.6.14, weighted at the data's sigma, SGP4XP's
+  windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). From 0.6.13, weighted at the data's sigma, SGP4XP's
   24 h median day-3 error there is 145.75 m (152.29 m on 0.6.11) and its paired difference from the library -1.752 m;
   GPS IIF 41019 is worse on 149 of its 150 windows (day 3 114.7 to 155.5 m; SPEC 12.1). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
   prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never

@@ -9,9 +9,9 @@
 // 1 m; XP72 median paired change from the archived XP72 at most +2 m at days 1, 3 and 7; every archived window fits;
 // XP_PRIOR24 reproduces its archived errors within 1 mm (harness fidelity); default-FORCES digest bit-exact.
 // Unread-window confirmation is a separate experiments task.
-// Amended 2026-11-10 (sdn-ap 0.6.14, stack issue 324): a set above the drag is fitted at the data's own sigma (SPEC
+// Amended 2026-11-10 (sdn-ap 0.6.13, stack issue 324): a set above the drag is fitted at the data's own sigma (SPEC
 // 12.1), so these GNSS fits move, for SGP4XP as for AP (one estimator), and the 1 mm fidelity of XP_PRIOR24 against its
-// archived arm (reproduced by every build to 0.6.11, whose XP24 has the same medians to 0.01 m) is restated against the
+// archived arm (reproduced by every build to 0.6.12, whose XP24 has the same medians to 0.01 m) is restated against the
 // truth: XP24's and XP_PRIOR24's median errors at days 1, 3 and 7 no higher than the archived XP_PRIOR24's on the same
 // windows. (The archived XP24 is the build before the short-arc prior, 211.8 m at day 3.) Measured, 0.6.11 > this build,
 // m: XP24 55.85 / 152.29 / 365.22 > 53.67 / 145.75 / 354.28 (median paired change -2.82 / -18.61 / -24.03; 427 of 748

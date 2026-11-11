@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.14 (dist f3b51e99).
+Version 0.6.13 (dist da12ee92).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1685,7 +1685,7 @@ On 748 windows of five GNSS satellites (24 h arcs, 2026-01-01 to 2026-05-31, lea
 day-3 error of SGP4XP minus the Space Force library's fitted SGP4-XP falls from +56.107 m to -4.097 m (medians 211.8
 and 152.3 m against the library's 149.4 m); the wrapper's two prior constants stated in $PCF FIT give -4.097 m, within
 0.001 m of the AGOM prior alone. On 746 windows of 72 h arcs the errors are unchanged (median paired change 0.000 m at
-days 1, 3 and 7). `test/fit-short-arc-priors.e2e.mjs` prints both; unread-window confirmation is separate. From 0.6.14
+days 1, 3 and 7). `test/fit-short-arc-priors.e2e.mjs` prints both; unread-window confirmation is separate. From 0.6.13
 these fits, above the drag, are weighted at the data's own sigma (the fit's weighting, above), SGP4XP's as AP's: on the
 same windows SGP4XP's 24 h median day-3 error is 145.75 m against 0.6.11's 152.29 m (median paired change -18.61 m, 427
 of 748 windows better), and its paired difference from the Space Force library is -1.752 m: every satellite's fit

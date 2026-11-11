@@ -106,11 +106,11 @@ const MOLNIYA = {
 // byte-identical.
 const NO_HARM = { "LEO AP": 1, "LEO SGP4XP": 0.001 };
 // The GEO arc is this module's own flight of a set with AGOM 0.01 (geoSet), so a fit can reach zero residual and the set
-// is the truth. Through 0.6.11 the fit weighed it at 1 km against the AGOM prior and left FIT_RMS 1.050 m, its flight
-// 0.12 mm from 0.6.2's fit's over 4 days (then pinned at 0.01 m against 0.6.2). From 0.6.14 a set above the drag is fitted
+// is the truth. Through 0.6.12 the fit weighed it at 1 km against the AGOM prior and left FIT_RMS 1.050 m, its flight
+// 0.12 mm from 0.6.2's fit's over 4 days (then pinned at 0.01 m against 0.6.2). From 0.6.13 a set above the drag is fitted
 // at the data's own sigma (SPEC 12.1, stack issue 324) and the comparison is with the truth: the fit's FIT_RMS at most
 // fitRmsM, its flight over the 4 days (the 72 h arc and a day after it) at most truthM from geoSet's flight, and not
-// farther from it than 0.6.2's fit flown the same way. Measured on 0.6.14: FIT_RMS 0.0096 m and 2.177 m from the truth,
+// farther from it than 0.6.2's fit flown the same way. Measured on 0.6.13: FIT_RMS 0.0096 m and 2.177 m from the truth,
 // against 0.6.2's fit's 1.0501 m and 5.400 m.
 const GEO_AP = { fitRmsM: 0.02, truthM: 2.3 };
 {

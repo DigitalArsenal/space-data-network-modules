@@ -7,10 +7,10 @@
 // (two-sided within 50 m until 0.4.8; one-sided since AP sets keep full precision). Re-run all four registered FFM HEO fixtures from task 2: each
 // printed day 1/3/7 3D error unchanged within 1 m. Default XP digest bit-exact.
 // Unread-window confirmation belongs to a subsequent coordinator task.
-// Amended 2026-11-10 (sdn-ap 0.6.14, stack issue 324): XP reproduced the archived AP6 scoring within 1 mm through 0.6.11
+// Amended 2026-11-10 (sdn-ap 0.6.13, stack issue 324): XP reproduced the archived AP6 scoring within 1 mm through 0.6.12
 // (harness fidelity). TESS is above the drag, where a set is now fitted at the data's own sigma (SPEC 12.1), so both
 // theories' fits move; restated against the truth: each theory's median error over the seven windows at days 1, 3 and 7
-// no higher than the archived arm's (XP's archive is 0.6.11's flight). Measured, 0.6.11 > 0.6.14, medians in m: AP
+// no higher than the archived arm's (XP's archive is 0.6.11's flight). Measured, 0.6.11 > 0.6.13, medians in m: AP
 // 622.8 / 1393.9 / 6604.9 > 620.2 / 1378.9 / 6513.8 (no window worse); XP 660.4 / 1385.6 / 6540.7 > 639.0 / 1372.5 /
 // 6402.8 (2026-08-24 day 1 907.3 > 914.9, every other window and day lower or the same); 2026-07-27 unchanged for both.
 import assert from 'node:assert/strict';
