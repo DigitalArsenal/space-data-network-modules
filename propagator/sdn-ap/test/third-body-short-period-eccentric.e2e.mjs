@@ -230,6 +230,13 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
     testBuild('probe', [['abi.inc', 'SDNAP_EXPORT("sdnap_frame_probe")', PROBES]]),
     testBuild('off', [['xp_theory.inc', 'constexpr int kThirdBodyTailDegree = 10;', 'constexpr int kThirdBodyTailDegree = 3;']]),
   ];
+  // the test builds are this clone's own (2026-11-10: two clones' runs of this test shared one folder and one lost its
+  // build mid-run): two checkouts never share a default scratch root, and both builds lie under this checkout's
+  {
+    const {scratchRootFor} = await import('./lib/scratch.mjs');
+    assert.notEqual(scratchRootFor(modules), scratchRootFor(path.join(modules, 'propagator')), 'two checkouts, two default scratch roots');
+    for (const b of [PROBE, OFF]) assert.ok(!path.relative(scratchRoot, b).startsWith('..'), `${b} under this checkout's scratch root ${scratchRoot}`);
+  }
 
   const run = (data, env) => new Promise((resolve, reject) => {
     const w = new Worker(new URL(import.meta.url), {workerData: data, env: env ?? process.env});

@@ -19,11 +19,11 @@ import {packOem,rfm,jdOf,rotate,FRAME_PROBE} from './frames.mjs';
 import {configuration,prior,pcfPriorForm} from './pcf.mjs';
 import {seedOcm,rowsThrough,spwStream,fittedOf,flight,legacyBuild,T as OCM_TYPE} from './ocm.mjs';
 import {requestFor,decodeResult,encodePrw,makeTable,TYPE} from '../../../ffm/tests/lib/prwCodec.mjs';
-import {scratchRoot} from './scratch.mjs';
+import {sharedRoot,writeWhole} from './scratch.mjs';
 import {spwFixtureRows} from './spw-constant.mjs';
 const epoch='2026-10-29T00:00:00.000',t0=Date.parse(epoch+'Z'),DAY=86400000;
 import {ffmPath,checkTruth} from './ffm-truth.mjs';
-const scratch=path.join(scratchRoot,'heo');
+const scratch=path.join(sharedRoot,'heo-truth');
 const type=n=>({schemaName:n+'.fbs',fileIdentifier:'$'+n,rootTypeName:n});
 const iso=ms=>new Date(ms).toISOString().replace('Z','');
 function oem(lines,fit=false,useableStop=null){
@@ -81,14 +81,15 @@ export async function runModelTruth(c){
  const kernel=fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url));
  const truthOf=async(params)=>{
   checkTruth();
-  const key=createHash('sha256').update(fs.readFileSync(ffmPath)).update(JSON.stringify(params)).update(kernel).digest('hex');
-  const file=path.join(scratch,key+'.json');
-  if(fs.existsSync(file))return JSON.parse(fs.readFileSync(file));
-  const h=await createStandaloneHarness('browser',ffmPath,{surface:'command'});
   const req=requestFor('propagate',params,kernel);
   req.inputs.push({portId:'earth_orientation',typeRef:TYPE,payload:encodePrw('EARTH_ORIENTATION',makeTable('PRWEarthOrientation',{ROWS:Array.from({length:Math.max(14,Math.ceil(times.at(-1))+3)},(_,k)=>makeTable('EOP',{DATE:iso(t0+(k-1)*DAY)+'Z',MJD:jd.whole-2400000.5+k-1,TAI_MINUS_UTC_SECONDS:37}))}))});
+  // the cache name is the SHA-256 of FFM's build and every byte of the request, so clones share it (scratch.mjs)
+  const hash=createHash('sha256').update(fs.readFileSync(ffmPath));for(const i of req.inputs)hash.update(i.portId).update(Buffer.from(i.payload));
+  const file=path.join(scratch,hash.digest('hex')+'.json');
+  if(fs.existsSync(file))return JSON.parse(fs.readFileSync(file));
+  const h=await createStandaloneHarness('browser',ffmPath,{surface:'command'});
   const r=await h.invoke(req);assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);
-  const samples=decodeResult(r).samples;assert.equal(samples.length,times.length);fs.writeFileSync(file,JSON.stringify(samples));await h.close?.();
+  const samples=decodeResult(r).samples;assert.equal(samples.length,times.length);writeWhole(file,JSON.stringify(samples));await h.close?.();
   return samples;
  };
  const truth=await truthOf(params);
