@@ -322,11 +322,32 @@ at ingest to span roughly eight days each way. Checkpoints are filled lazily. A 
 bracket only interpolates; the first distant query integrates from the epoch. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond that span,
 work grows with the time gap from the nearest preceding retained node. Checkpoint storage is bounded;
-query work is not bounded independently of lead time. An AP state depends on the order of requests: the same record flown in ascending and in random order differs by up
-to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at geosynchronous altitude; a single state
-from a fresh record differs from the ascending pass by up to 8.8 mm. Over 30 days at 60 s, reversed or shuffled against
-the ascending pass, `test/kernel-cost.mjs --diff` measures up to 0.18 m at 300 km (B 6.4e-3 m^2/kg, active weather) and
-0.29 m on a low orbit at e 0.05 with tesseral degree 31. SPEC 9 describes the cache and grid.
+query work is not bounded independently of lead time.
+
+An AP state is a function of its set and its time alone. The order of requests, the call they come in, the sets flown
+between them, and whether the covariance is asked leave its bits unchanged (`test/set-caches.e2e.mjs`, nine orbits). A
+store's AP set keeps its own caches and node runs from one pool: a 256 MB budget by default, set with sdnap_cache_budget,
+counted by sdnap_cache_stats. SPEC 9 states how room is shared and the one exception: a record that carries a
+covariance, through `propagate`, differs by 0.39 mm.
+
+Memory per AP set flown: the module's own count (`sdnap_epochs_stats`), 250 made-up sets of each orbit, each flown a day
+at 300 s, headline forces. A loaded set that has not been flown holds 0.3 KB.
+
+| Orbit | Per set flown | Of it, caches from the pool | 30,000 such sets, without caches |
+| --- | ---: | ---: | ---: |
+| 500 km | 116 KB | 71.5 KB | 1.3 GB |
+| 830 km | 103 KB | 64.2 KB | 1.1 GB |
+| MEO (2 rev/day) | 158 KB | 19.8 KB | 4.0 GB |
+| GEO | 40 KB | 33.3 KB | 0.19 GB |
+| low orbit, e 0.052 (no tesseral terms) | 19 KB | 13.3 KB | 0.17 GB |
+| transfer orbit, e 0.72 (no tesseral terms) | 26 KB | 15.8 KB | 0.30 GB |
+| e 0.1 or transfer orbit, tesseral 31 | 3.1 to 6.4 MB | 16 to 18 KB | (stack #424) |
+
+The instance's own growth agrees with these within 10 %. The default budget holds the caches of 3,664 sets at 500 km
+and 13,252 in MEO. Sets beyond it fly on the thread's caches, with the same states.
+
+Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 3.1 MB, and a node grid while it
+is flown. One process holds at most 256 such grids, so beyond them states are refused (stack #424).
 
 AP's cost against SGP4's depends on the request pattern (0.6.6, `test/kernel-patterns.mjs`,
 `test/results/kernel-patterns.json`: made-up orbits, AP seeded with zonal 20, tesseral 31 at e 0.048 and below and
