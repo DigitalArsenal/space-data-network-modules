@@ -675,11 +675,19 @@ static int fit_blocks() {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
           const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
           const double h_km = (row.eccentricity > xpt::tess::kWideE ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
-          if (h_km >= 800.0) eff_drag.mean = 0.0005;
-          else if (h_km >= 600.0) eff_drag.mean = 0.002;
-          if (po.forces.msis && h_km >= 800.0 && h_km < 1400.0) {
+          if (po.forces.msis && row.eccentricity <= xpt::tess::kWideE && h_km >= pcf::kDragPriorFreeFloorKm &&
+              h_km < pcf::kDragPriorFreeTopKm) {
+            // SPEC 12.8: a near-circular orbit at 600 to 2,500 km under NRLMSISE-00: the arc decides (median 0.008, sigma of
+            // the log 10 ln 10, no fall-back)
+            eff_drag.mean = pcf::kDragPriorFreeMedian;
             eff_drag.sigma = pcf::kDragPriorWideLogSigma;
-            wide_band = true;
+          } else {
+            if (h_km >= 800.0) eff_drag.mean = 0.0005;
+            else if (h_km >= 600.0) eff_drag.mean = 0.002;
+            if (po.forces.msis && h_km >= 800.0 && h_km < 1400.0) {
+              eff_drag.sigma = pcf::kDragPriorWideLogSigma;
+              wide_band = true;
+            }
           }
         }
         if (drag_override == nullptr) used_drag = eff_drag;

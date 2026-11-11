@@ -79,6 +79,14 @@ constexpr double kShortArcHours = 36.0;
 /// holds (a true 0.044 ended at 0.0005-0.0008 and 1.3-4.0 km at day 3 on model truth); under 10 ln 10 it reaches the
 /// value the arc determines.
 constexpr double kDragPriorWideLogSigma = 23.02585092994045684;
+/// BTERM's prior when FIT.DRAG_PRIOR is unset under NRLMSISE-00 on a near-circular orbit (e at or below 0.3) at a mean
+/// altitude of 600 to 2,500 km (SPEC 12.8): LOG_NORMAL, median 0.008 m^2/kg, sigma of the log kDragPriorWideLogSigma, no
+/// fall-back: the arc decides. The band medians it replaces there (0.002 at 600 to 800 km, 0.0005 above) sat 2 to 40 times
+/// below the numerical propagator's fitted Cd A/m on every measured satellite (laser spheres 0.002 to 0.016, altimetry 0.01 to
+/// 0.05, Sentinel-1 0.008), and on a 24 h arc the fit stayed at them. Below 600 km, at or above 2,500 km and above e 0.3 the
+/// band rule stands.
+constexpr double kDragPriorFreeMedian = 0.008;
+constexpr double kDragPriorFreeFloorKm = 600.0, kDragPriorFreeTopKm = 2500.0;
 
 /// One call's options, every one at its documented default.
 struct Options {
