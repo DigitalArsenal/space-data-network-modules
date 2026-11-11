@@ -3,7 +3,8 @@
 // Synthetic GCRF/UTC states from module conversions; FFM EGM96 70x70, Sun/Moon,
 // DE440, zero EOP, no SRP, NRLMSISE00 only on Molniya. Constant synthetic F10.7=150, Ap=15.
 // Fit the first 72 h, then measure forward RTN errors at leads 1,3,7 days.
-// The originally registered sidereal half-day, e=.72 case: its day-7 sample within 0.5 m of 30.22 m (re-recorded
+// The originally registered sidereal half-day, e=.72 case: its day-7 sample within 0.5 m of 27.76 m (re-recorded on 0.6.22:
+// AP's own Sun and Moon, SPEC 16.15, moved it from 30.22 m; that value re-recorded
 // 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3, 7154b48d, the grid in E above e 0.3, moved it from 59.33 m and its day-1 and
 // day-3 samples from 27.45 and 69.63 m to 61.51 and 100.31 m, worse, DigitalArsenal/spacedatanetwork-stack#391; 60.10 m at
 // 0.4.15 on FFM 2.0.4, 201.97 m at 0.4.11 to 0.4.14, 1 h after a perigee); the fixtures' whole-day RMS is judged in
@@ -44,5 +45,5 @@ for(const c of cases){const result=await runModelTruth(c);results.push(result);c
 if(process.env.SDN_AP_HEO_REPORT)fs.writeFileSync(process.env.SDN_AP_HEO_REPORT,JSON.stringify(results,null,2)+'\n');
 for(const result of results)for(const day of [1,3,7])assert.ok(Number.isFinite(result.days[day].e),'finite forward error');
 reproduceConformance();
-assert.ok(Math.abs(results[0].days[7].e-30.22)<=.5,`half-day day 7: ${results[0].days[7].e} m, 0.6.8 30.22 m (0.6.3's grid above e 0.3, SPEC 16.11, from 59.33 m on 0.6.2; 0.4.15 60.10 m on FFM 2.0.4; 0.4.11 to 0.4.14: 201.97 m)`);
+assert.ok(Math.abs(results[0].days[7].e-27.76)<=.5,`half-day day 7: ${results[0].days[7].e} m, 0.6.22 27.76 m (AP's own Sun and Moon, SPEC 16.15, from 30.22 m on 0.6.8 to 0.6.19; 0.6.3's grid above e 0.3, SPEC 16.11, from 59.33 m on 0.6.2; 0.4.15 60.10 m on FFM 2.0.4; 0.4.11 to 0.4.14: 201.97 m)`);
 console.log('HEO model truth E2E: PASS');
