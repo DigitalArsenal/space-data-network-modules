@@ -9,19 +9,29 @@
 //   step window's share of light, 16.21);
 // - a TESS-like set, 13.7 days, e 0.55 (five days are under half a revolution: SPEC 4's averaged rates and first-order
 //   periodic output terms missed most of it; what remains is AP's pressure constant, 4.5e-6 N/m^2 against FFM's 4.540e-6).
+// The record (16.21): a set of the regime with an area-to-mass states PERTURBATIONS.SOLAR_RAD_PRESSURE's text and flies,
+// without it is refused (radiation-model-superseded); the text outside the regime, or without an area-to-mass, is refused
+// (radiation-model-mismatch); the module's own fit of the eclipsing case's FFM arc states the text, flies, and without the
+// text is refused.
 // SDN_AP_MODEL_TRUTH_MODULE=<module.wasm> flies another build and checks nothing past the flight.
 //   node test/long-period-radiation.e2e.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
-import {OEM} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
+import {OEM, OEMT} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
+import {CATT} from 'spacedatastandards.org/lib/js/OEM/CAT.js';
+import {ephemerisDataBlockT as Block} from 'spacedatastandards.org/lib/js/OEM/ephemerisDataBlock.js';
+import {ephemerisDataLineT as Line} from 'spacedatastandards.org/lib/js/OEM/ephemerisDataLine.js';
+import {timingStandard} from 'spacedatastandards.org/lib/js/OEM/timingStandard.js';
 import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js';
+import {pcfWeatherSource} from 'spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js';
 import {requestFor, decodeResult, encodePrw, makeTable, TYPE} from '../../ffm/tests/lib/prwCodec.mjs';
 import {ffmPath, requireTruth, checkTruth} from './lib/ffm-truth.mjs';
-import {jdOf} from './lib/frames.mjs';
+import {jdOf, packOem, rfm} from './lib/frames.mjs';
 import {wasmPath} from './lib/module.mjs';
-import {seedOcm, rowsThrough, flight} from './lib/ocm.mjs';
+import {configuration, prior, pcfPriorForm, pcfAtmosphereFamily} from './lib/pcf.mjs';
+import {seedOcm, rowsThrough, flight, spwStream, ocmOf, repackOcm, T, LP_RADIATION_MODEL} from './lib/ocm.mjs';
 import {spwFixtureRows} from './lib/spw-constant.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // FFM 2.3.0 (modules 48a00fd6)
 const modulePath = process.env.SDN_AP_MODEL_TRUTH_MODULE ?? wasmPath;
@@ -57,11 +67,12 @@ const ffmFly = async (state, srp) => {
   assert.equal(r.statusCode, 0, `FFM ${r.errorCode}: ${r.errorMessage}`);
   return decodeResult(r).samples.map((s) => [...s.position, ...s.velocity]);
 };
-const results = [];
+const results = [], truths = [];
 for (const c of CASES) {
   const seedOf = (agom) => seedOcm({epoch, n: c.n, e: c.e, i: c.i, raan: c.raan, argp: c.argp, ma: 10, bterm: 0, agom, norad: 99001, records: true, tesseral: 0, zonal: 2, rows: rowList});
   const apOn = await apFly(seedOf(AGOM)), apOff = await apFly(seedOf(0));
   const fOn = await ffmFly(apOn[0], true), fOff = await ffmFly(apOff[0], false);
+  truths.push(fOn);
   const days = {};
   for (const d of [1, 3, 5, 7]) {
     const k = d * 24, err = [0, 1, 2].map((j) => (apOn[k][j] - apOff[k][j]) - (fOn[k][j] - fOff[k][j]));
@@ -70,9 +81,49 @@ for (const c of CASES) {
   results.push({name: c.name, radiationErrorM: days, boundDay7M: c.day7});
   console.log(JSON.stringify({longPeriodRadiation: c.name, radiationErrorM: days}));
 }
+// the record's statement (SPEC 16.21): a set of the regime with an area-to-mass flies with PERTURBATIONS.SOLAR_RAD_PRESSURE's
+// text and is refused by name without it (a record fitted before the change); a set outside the regime, or without an
+// area-to-mass, is refused with it
+const refusal = async (seed) => {
+  const r = await ap.invoke({methodId: 'propagate', inputs: flight([seed], {output: {EPOCHS: [epochs[1]], FRAME: pcfOutputFrame.GCRF}})});
+  return r.statusCode === 0 ? null : r.errorCode;
+};
+const tess = CASES[1];
+const seedOf = (over) => seedOcm({epoch, n: tess.n, e: tess.e, i: tess.i, raan: tess.raan, argp: tess.argp, ma: 10, bterm: 0, agom: AGOM, norad: 99001, records: true, tesseral: 0, zonal: 2, rows: rowList, ...over});
+const refusals = {
+  stated: await refusal(seedOf({})),
+  unstated: await refusal(seedOf({radiationModel: null})),
+  outsideTheRegime: await refusal(seedOf({e: 0.29, radiationModel: LP_RADIATION_MODEL})),
+  noAreaToMass: await refusal(seedOf({agom: 0, radiationModel: LP_RADIATION_MODEL})),
+};
+// the round trip: the module's own fit of the eclipsing case's first 72 h of FFM with radiation (hourly, GCRF; the area-to-mass
+// solved, the drag term held at 0) states the text and flies; the same record without the text (as the build before this
+// change wrote it) is refused by name
+const fitLines = truths[0].slice(0, 73).map((s, k) => Object.assign(new Line(), {EPOCH: epochs[k], X: s[0], Y: s[1], Z: s[2], X_DOT: s[3], Y_DOT: s[4], Z_DOT: s[5]}));
+const fitOem = packOem(Object.assign(new OEMT(), {EPHEMERIS_DATA_BLOCK: [Object.assign(new Block(), {OBJECT: Object.assign(new CATT(), {NORAD_CAT_ID: 99001, OBJECT_NAME: 'ECLIPSING LONG-PERIOD SET'}),
+  CENTER_NAME: 'EARTH', REFERENCE_FRAME: rfm('GCRF'), TIME_SYSTEM: timingStandard.UTC, START_TIME: fitLines[0].EPOCH, STOP_TIME: fitLines.at(-1).EPOCH,
+  USEABLE_START_TIME: fitLines[0].EPOCH, USEABLE_STOP_TIME: fitLines.at(-1).EPOCH, EPHEMERIS_DATA_LINES: fitLines})]}));
+const fitted = await ap.invoke({methodId: 'fit', inputs: [
+  configuration({forces: {EPHEMERIS_SOURCE: '', HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 0, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 2,
+    ATMOSPHERE_MODEL: pcfAtmosphereFamily.JACCHIA70, WEATHER_SOURCE: pcfWeatherSource.RECORDS}, fit: {DRAG_PRIOR: prior(0, 1e-10), DRAG_PRIOR_FORM: pcfPriorForm.GAUSSIAN_SIGNED}}),
+  {portId: 'space_weather', typeRef: T('SPW'), payload: spwStream(rowList)}, {portId: 'ephemeris', typeRef: T('OEM'), payload: fitOem}]});
+assert.equal(fitted.statusCode, 0, `fit: ${fitted.errorCode}: ${fitted.errorMessage}`);
+const record = new Uint8Array(fitted.outputs.find((v) => v.portId === 'elements').payload), stated = ocmOf(record);
+const roundTrip = {agom: stated.MEAN_ELEMENTS.AGOM, text: stated.PERTURBATIONS?.SOLAR_RAD_PRESSURE ?? null, flown: await refusal(record),
+  withoutTheText: await refusal(repackOcm(record, (t) => { t.PERTURBATIONS.SOLAR_RAD_PRESSURE = null; }))};
+console.log(JSON.stringify({refusals, roundTrip}));
 await ap.close?.();
 await ffm.close?.();
-if (!process.env.SDN_AP_MODEL_TRUTH_MODULE)
+if (!process.env.SDN_AP_MODEL_TRUTH_MODULE) {
   for (const r of results) assert.ok(r.radiationErrorM[7] <= r.boundDay7M, `${r.name}: radiation's error at day 7 ${r.radiationErrorM[7]} m above ${r.boundDay7M} m`);
+  assert.equal(refusals.stated, null, 'a set of the regime that states the model flies');
+  assert.equal(refusals.unstated, 'radiation-model-superseded', 'a set of the regime that does not state it is refused by name');
+  assert.equal(refusals.outsideTheRegime, 'radiation-model-mismatch', 'a set outside the regime that states it is refused');
+  assert.equal(refusals.noAreaToMass, 'radiation-model-mismatch', 'a set without an area-to-mass that states it is refused');
+  assert.ok(roundTrip.agom > 0, `the fit solves an area-to-mass (${roundTrip.agom})`);
+  assert.equal(roundTrip.text, LP_RADIATION_MODEL, 'the fitted record states the model');
+  assert.equal(roundTrip.flown, null, 'the fitted record flies');
+  assert.equal(roundTrip.withoutTheText, 'radiation-model-superseded', 'the fitted record without the text is refused by name');
+}
 console.log('long-period radiation E2E: PASS');
 process.exit(0);

@@ -4421,6 +4421,17 @@ Every set outside that regime flies bit for bit. With a Cr A/m of 0.02 m^2/kg, t
 every force on are identical to the state: low orbit, GTO, Molniya, GPS-like, e 0.5 at 9.5 h, geostationary, IGSO, and
 the long-period class 0 and one-day class at e 0.01 and 0.29.
 
+*The record.* An AP set of that regime with an area-to-mass above 0 states `PERTURBATIONS.SOLAR_RAD_PRESSURE` "SPHERE
+(AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP", or "SPHERE (AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL
+SHADOW OVER THE STEP, AND ECOM2 Y0 (ARNOLD ET AL. 2015)" with the radiation term Y0 (16.13). A flight takes the regime from
+the record's own elements, as it takes its branch (`lp_radiation_record`, `src/ocm.inc`).
+- A record of the regime with an area-to-mass above 0 that states any other text, or none, is refused,
+  `radiation-model-superseded`. Every such record fitted before 0.6.NN is fitted again: it was fitted on SPEC 4's
+  radiation, which is kilometers from this one there in a week.
+- A record outside the regime, or without an area-to-mass above 0, that states either text is refused,
+  `radiation-model-mismatch`.
+- Every other record is read and flown as before 0.6.NN. No record written before 0.6.NN states either text.
+
 *The shadow.* AP's shadow is section 4's cylinder of radius R_E (16.15). The integrator's step in that regime is 8 to 95
 minutes, and a force switched off at the cylinder's edge inside a step puts the step's share of the eclipse in the wrong
 place. So the force takes the share of a one-step window about the moment that the satellite spends outside the cylinder,
