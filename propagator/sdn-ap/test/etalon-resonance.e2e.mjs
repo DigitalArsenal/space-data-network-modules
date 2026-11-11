@@ -80,13 +80,21 @@ if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON
 // 0.6.19 (the one-day class's resonant tail, stack #434; these fits state no FORCES.ECOM2, and with only a sphere AP now
 // sits where a numerical propagator with only a sphere does: SPEC 16.13), 0.6.14 > 0.6.19 in m: IG 13.013 > 13.448,
 // GE 35.277 > 53.297; old path IG 15.768 > 15.621, GE 45.437 > 64.231
+// GE re-pinned at 0.6.21 (SPEC 16.15 and 16.16; stack #486): 53.297 > 61.62 m at day 3 (131.0 > 149.3 m at day 5), old path
+// 64.231 > 73.14 m. These fits state no FORCES.ECOM2. Measured cause: against the numerical propagator's own sphere-only
+// fit and forecast of the same windows (FFM 70 x 70, cone shadow, AGOM solved, no ECOM2), AP moves from 10.2 to 5.9 m at
+// day 3 and from 24.8 to 10.7 m at day 5: closer on 26 of the 30 windows scored at day 3 and on 27 of the 32 at day 5,
+// farther on none (the rest are windows the change leaves bit for bit). The numerical sphere is itself 64.2 m from the
+// truth at day 3, so the old figure was AP's in-season radiation error offsetting the satellites' non-spherical
+// radiation, which a sphere does not carry. With Y0 solved on the same windows, day 3 goes from 23.4 to 11.5 m. The
+// move is 16.16's: 16.15 alone leaves the median where 0.6.20 has it.
 // 0.6.22 (AP's own Sun and Moon, SPEC 16.17, stack #446), 0.6.21 > 0.6.22 in m: Etalon-1 4.25 > 3.54, Etalon-2 5.31 >
 // 4.84, LAGEOS-1 7.170 > 7.114, LAGEOS-2 6.924 > 6.798, LARES-2 8.714 > 8.660, IG 13.448 > 7.602, GE 61.623 > 65.188;
 // old path Etalon-1 6.57 > 6.88, Etalon-2 7.62 > 7.51, LAGEOS-1 7.873 > 7.599, LAGEOS-2 6.721 > 6.781, LARES-2 9.706 >
 // 9.752, IG 15.621 > 14.609, GE 73.136 > 76.553. GE without FORCES.ECOM2 rises the way it did at 0.6.21 (stack #486): the
-// old Moon's error, like section 4's shadow, had been offsetting the satellites' non-spherical radiation, which a sphere
-// does not carry (0.6.20 > the Moon alone: 53.297 > 57.922 m); with Y0 solved on the same windows, day 3 goes from 11.5
-// to 9.8 m.
+// old Moon's error, like section 4's sunlit-arc rate before 16.16, had been offsetting the satellites' non-spherical
+// radiation, which a sphere does not carry (0.6.20 > the Moon alone: 53.297 > 57.922 m; the two moves add); with Y0
+// solved on the same windows, day 3 goes from 11.5 to 9.8 m.
 const EXPECTED = {
   etalon: {'ETALON 1': {baseline: 23.37, value: 3.54}, 'ETALON 2': {baseline: 32.76, value: 4.84}},
   nonregression: {'LAGEOS 1': 7.114, 'LAGEOS 2': 6.798, 'LARES-2': 8.660, IG: 7.602, GE: 65.188},

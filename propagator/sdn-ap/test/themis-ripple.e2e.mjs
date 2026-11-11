@@ -9,7 +9,7 @@
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
 //    fitted AP set flown 2 days at 600 s give ephemerides within NO_HARM (below) on this build and on BASE (sdn-ap 0.6.22,
-//    SHA-256 checked; sdn-ap 0.6.2 until 0.6.21, history at NO_HARM); the SGP4XP seed byte-identical.
+//    SHA-256 checked; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, history at NO_HARM); the SGP4XP seed byte-identical.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -27,13 +27,22 @@ import {configuration} from './lib/pcf.mjs';
 
 const BASE_VERSION = '0.6.22', BASE = 'f8af1e2b7', BASE_SHA256 = '2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4';
 // 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
-// until 0.6.21: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
+// until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
 // measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
 // (velocity at most 0.0022 mm/s); the bound is 15 mm. The geostationary seed moved by design from 0.6.19 (the one-day
 // class's resonant gravity above degree 4, stack #434, SPEC 16.2: 5.27 m over the 48 h), bounded apart at 6 m and 0.5
-// mm/s against 0.6.2. 0.6.21's shadow and 0.6.22's own Sun and Moon (SPEC 16.15 to 16.17, stack #446) move the seeds from
-// 0.6.2 by LEO 32.99, geostationary 7,810.69, Etalon 1,059.14, GPS 850.43, e 0.25 2,744.37 and e 0.3 3,433.72 mm
-// (velocity 36.8 to 685.7 um/s) and the fitted set by 34.68 mm (covariance 1.22e-2 of a line's largest entry); SGP4XP
+// mm/s against 0.6.2. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves them from 0.6.2: LEO 0.82, geostationary
+// 5,273.24 (the one-day tail of 0.6.19), Etalon 3.62, GPS 5.02, e 0.25 9.11 and e 0.3 10.77 mm (velocity 0.69 to 382.78
+// um/s) and the fitted set by 0.84 mm with its covariance by 1.226e-2 of a line's largest entry; SGP4XP byte-identical.
+// The seeds carry no AGOM, so 0.6.21 flies them as 0.6.20 does: their millimeters from 0.6.2 are the earlier releases'
+// changes to the theory of fixed elements. The fitted set carries the stored AP record's AGOM (-2e-7, sigma 9.5e-3
+// m^2/kg): its covariance moves by 1.2 % of a line's largest entry because the covariance's moved sets fly AGOM through
+// the shadow on 16.16's rates while its correlations come from that fit's partials (covariance.e2e.mjs: along-track
+// response to AGOM at 48 h 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 returns to its theory's numbers
+// within 7.1e-5). From 0.6.21 the baseline is 0.6.21 (git 589749f6), every AP set under the one bound, 15 mm. AP's own
+// Sun and Moon (0.6.22, SPEC 16.17, stack #446) move them from 0.6.21: LEO 33.08, geostationary 12,457.37, Etalon
+// 1,057.72, GPS 850.26, e 0.25 2,751.97 and e 0.3 3,442.84 mm (velocity 36.6 to 782.6 um/s) and the fitted set by 34.76
+// mm (covariance 2.2e-5): every AP set flies the third bodies, and the Moon moved by up to 377 arcsec; SGP4XP
 // byte-identical. From 0.6.22 the baseline is 0.6.22 (git f8af1e2b), every AP set under the one bound, 15 mm.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
