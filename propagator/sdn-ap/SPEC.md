@@ -2661,18 +2661,21 @@ the embedded EGM2008, and EGM96 is an option only. EGM2008 (Pavlis et al. 2012, 
 the real Earth. Below degree 30 or so the two fields agree closely. Above it they part, and an AP term of high degree fitted to
 an EGM2008 truth was a term of the wrong field. The measurement: 300 km, i 98, e 0, with gravity, Sun, Moon and tide on both
 sides, AP fitted to the numerical forecast over 0 to 5 days. D is the largest distance over those 5 days; the line is the
-along-track residual's first harmonic over the span (0.2 per day). AP's slow set is capped on AP's side only (0.6.27 with the
-output table to the record's degree 31, the field EGM-96):
+along-track residual's first harmonic over the span (0.2 per day). AP's slow set is capped on AP's side only. 0.6.32 is AP
+on EGM-96, 0.6.33 on EGM2008:
 
 | AP's slow set to degree | 31 | 46 | 48 | 52 | 56 | 62 | 70 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Truth EGM2008: the line, m | 333 | 27 | 22 | 34 | 56 | 72 | 76 |
-| Truth EGM2008: D, m | 423 | 172 | 154 | 147 | 165 | 180 | 175 |
-| Truth EGM96: the line, m | | 32 | | | | | 28 |
-| Truth EGM96: D, m | | 115 | | | | | 109 |
+| 0.6.32, truth EGM2008: the line, m | 333 | 27 | 21 | 36 | 56 | 72 | 76 |
+| 0.6.32, truth EGM2008: D, m | 451 | 173 | 174 | 186 | 187 | 203 | 206 |
+| 0.6.32, truth EGM-96: the line, m | | 31 | | | | | 28 |
+| 0.6.32, truth EGM-96: D, m | | 164 | | | | | 180 |
+| 0.6.33, truth EGM2008: the line, m | 335 | 18 | 13 | 45 | 17 | 33 | 33 |
+| 0.6.33, truth EGM2008: D, m | 453 | 166 | 179 | 188 | 165 | 176 | 182 |
 
-With the truth on EGM2008, every degree AP added above 48 made the line worse. With the truth on AP's own field, every degree
-helped. The field cut to 12 x 12 on both sides gives D 34 m.
+With the fields apart, every degree AP added above 48 made the line worse. With them alike, on either field, the line at
+degree 70 is 28 to 33 m and D 180 to 182 m. The field cut to 12 x 12 on both sides gives D 34 m on both versions. The rest
+of D at this height is not the field: the field moves AP's flight there by at most 1.2 m in any line of the residual.
 
 *What changes and what does not.*
 - Changed: the fully normalized C_lm, S_lm the tesserals read (degree 2 to 70, order 1 and up), and the zonal tail's C_l0

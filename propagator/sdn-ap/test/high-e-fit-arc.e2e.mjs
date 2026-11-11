@@ -11,8 +11,8 @@
 // 1. a 7-day ephemeris with no USEABLE times and no drag prior: the fit takes the 7 days, BTERM within 0.6 % of 0.044
 //    (both of Molniya's solutions; 0.5 % until the E-grid's C1 read, stack #420) and
 //    day-7 along-track, the largest over the arc and K perturbed copies (K, SEVEN_DAY_BOUND below), at most 176.0 m on
-//    Molniya (171.5 through 0.6.32, history at SEVEN_DAY_BOUND) and 325.5 m on GTO-500 (re-derived 2026-11-10 on FFM 2.2.1's truth; set at 150 and 300 m on 2.0.4's, the
-//    registration's, amended after the first run: the record's
+//    Molniya (171.5 through 0.6.32, history at SEVEN_DAY_BOUND) and 325.5 m on GTO-500 (re-derived 2026-11-10 on FFM
+//    2.2.1's truth; set at 150 and 300 m on 2.0.4's, the registration's, amended after the first run: the record's
 //    150 m is below what the 7-day arc reaches with BTERM pinned at the truth, 158.8 m on GTO-500, 218.9 m on Molniya;
 //    GTO-500 flies 291.3 m at its fitted -0.28 %, against 736.2 m on 0.4.16's 72 h wide-prior arc);
 // 2. only 72 h with no drag prior, and 72 h on the model-truth library's Gaussian prior (0.044 +- 0.1): the determination

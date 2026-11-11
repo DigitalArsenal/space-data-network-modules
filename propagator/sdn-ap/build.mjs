@@ -298,7 +298,7 @@ for (let depth = 0; partPattern.test(inlined); ++depth) {
   }
   inlined = inlined.replace(partPattern, (_, name) => parts.get(name));
 }
-// Gravity (AP's terms, SPEC 16): the fully normalized EGM-96 coefficients to degree and order 70 that this repository's
+// Gravity (AP's terms, SPEC 16): the fully normalized EGM2008 coefficients to degree and order 70 that this repository's
 // FFM carries (propagator/ffm/lib), PINNED by SHA-256. Recorded in dist/build-provenance.txt.
 const GRAVITY_PIN = Object.freeze({ file: "egm2008_data.h", sha256: "f4f49756761e4e391131a2ce12a25290948670bf889d467a13869a4c4c661250" });
 async function gravity() {
