@@ -11,7 +11,7 @@
 // minus FFM (archived resume-ffm F72) 23.37 [26.64] m at the baseline and 4.21 [6.57] m here (0.4.11: the third bodies'
 // short-period terms by quadrature, SPEC 5.4; [10.12] m at 0.4.9), Etalon-2 32.76 [36.39] and 5.31 [7.62] m ([9.74] m at
 // 0.4.9), each within 1 m; medians here LAGEOS-1 7.17 [7.81], LAGEOS-2 6.80 [6.73], LARES-2 8.70 [9.71], IG 13.45 [15.62]
-// and GE 53.30 [64.23] m (IG and GE on 0.6.20, the one-day resonant tail), each within 0.5 m; every number printed;
+// and GE 53.30 [64.23] m (IG and GE on 0.6.19, the one-day resonant tail), each within 0.5 m; every number printed;
 // default-FORCES digest bit-exact. Unread-window
 // confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
@@ -77,8 +77,8 @@ const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? 
 console.log(JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters, frames030MetersEarlierBuilds}));
 if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters}, null, 2) + '\n');
 // on the modules' own GCRF output (2026-11-11, 0.6.14); OLD: the same replay on the old path. IG and GE re-pinned at
-// 0.6.20 (the one-day class's resonant tail, stack #434; these fits state no FORCES.ECOM2, and with only a sphere AP now
-// sits where a numerical propagator with only a sphere does: SPEC 16.13), 0.6.14 > 0.6.20 in m: IG 13.013 > 13.448,
+// 0.6.19 (the one-day class's resonant tail, stack #434; these fits state no FORCES.ECOM2, and with only a sphere AP now
+// sits where a numerical propagator with only a sphere does: SPEC 16.13), 0.6.14 > 0.6.19 in m: IG 13.013 > 13.448,
 // GE 35.277 > 53.297; old path IG 15.768 > 15.621, GE 45.437 > 64.231
 const EXPECTED = {
   etalon: {'ETALON 1': {baseline: 23.37, value: 4.21}, 'ETALON 2': {baseline: 32.76, value: 5.31}},

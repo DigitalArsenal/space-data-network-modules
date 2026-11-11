@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.18 (dist cb546d93).
+Version 0.6.19 (dist 4e28bda5).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2402,15 +2402,15 @@ The half-day tail uses cubic expansions of F about the epoch inclination and G a
 with their consistent derivatives. F comes from the normalized Legendre recurrence; G comes from shared
 eccentric-anomaly quadrature. The class's original 29 terms retain their exact inclination functions.
 
-The one-day tail (from 0.6.20; stack #434) is built and evaluated the same way, with k = m: its angle is
+The one-day tail (from 0.6.19; stack #434) is built and evaluated the same way, with k = m: its angle is
 w omega + m (M + Omega - theta_G). Its orders run from 1 to 16; at e at or below 0.3 the amplitude cut that ends both
 tails (about 2e-16 m/s^2) stops it below degree 15, so no higher order would pass. The inclination quadrature reads which
-part of each Fourier coefficient a term takes (real for l - m even, imaginary for l - m odd) from w + m. Through 0.6.19 it
+part of each Fourier coefficient a term takes (real for l - m even, imaginary for l - m odd) from w + m. Through 0.6.18 it
 read it from w alone, which holds only for the half-day tail's even orders; for odd orders it would zero the main terms.
 The half-day tail is unchanged bit for bit. Sets of the class above e 0.3 (the grid branch, 16.11) do not take the tail:
 there the class carries degrees 2 to 4 only, as before (THEMIS-like orbits, whose error is elsewhere).
 
-Through 0.6.19 the one-day class carried resonant gravity of degrees 2 to 4 only, and the output table drops every term
+Through 0.6.18 the one-day class carried resonant gravity of degrees 2 to 4 only, and the output table drops every term
 slower than 0.045 n, so on a geosynchronous orbit degree 5 and up was carried nowhere. Each missing term acts as a
 constant along-track acceleration set by the longitude, mostly through (5,5), (5,3) and (5,1). Model truth: FFM 20 x 20
 with Sun and Moon on both sides, made-up sets at 2026-10-29, a 72 h fit, 7 days flown, whole-day 3D RMS.
@@ -3124,7 +3124,7 @@ as the last parameter, in units of 1e-9 m/s^2, its column a one-sided difference
 the larger of 1 % and 1e-10 m/s^2), with a Gaussian prior about Y0_M_S2 of sigma 1e-9 m/s^2. The cost, the normal
 equations and the covariance read one statement of the fit's priors (drag, AGOM, Y0). Elsewhere Y0 is held at Y0_M_S2:
 an arc under 72 h (a 24 h fit), a set under the drag, and the second stage of a two-stage fit (at the first stage's Y0).
-Through 0.6.19 the one-day class held it too (below). Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
+Through 0.6.18 the one-day class held it too (below). Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
 windows of medium orbit, Galileo, inclined geosynchronous and geostationary sets the share of errors beyond the stated
 1, 2 and 3 sigma per RTN axis at days 1, 3, 5 and 7 is the same with Y0 solved as without (the stated sigma is 5 to 100
 times the error in both: stack issue 433). AGOM moves by under 1 % between the fits with and without Y0.
@@ -3134,10 +3134,10 @@ windows of three and a zero Y0 at 7e-10 m/s^2 on two (day 7 175 and 296 m agains
 72 h recovered 0.97 to 1.22 times the value and found at most 1.4e-10 where there was none. On real windows a 48 h Y0
 still lowers the medians (medium orbit day 7 73 to 37 m, Galileo 174 to 64 m); it is not trusted.
 
-*The one-day class (geostationary, inclined geosynchronous).* Through 0.6.19 Y0 was held there. The class lacked its
+*The one-day class (geostationary, inclined geosynchronous).* Through 0.6.18 Y0 was held there. The class lacked its
 resonant gravity above degree 4 (stack #434), a constant along-track acceleration of up to 2e-10 m/s^2 set by the
 longitude, and a free Y0 took it up. The guard was to go when that class's residual was fixed, on the condition that a
-zero Y0 come out at most about 1e-10 m/s^2 on model truth and the real medians not get worse. From 0.6.20 the class
+zero Y0 come out at most about 1e-10 m/s^2 on model truth and the real medians not get worse. From 0.6.19 the class
 carries that gravity (6.1, 16.2) and solves Y0 as the other classes do. **The condition is not met.** What is left of
 the class's residual is the Moon's position (SPEC 5, stack #446). On model truth with no Y0 in it (the radiation lane's
 sphere truths of real windows), the 72 h fit finds:

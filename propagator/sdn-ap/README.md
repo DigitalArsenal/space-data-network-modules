@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.18 (dist cb546d93).
+Version 0.6.19 (dist 4e28bda5).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -173,7 +173,7 @@ carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
 (`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
 
-The one-day tail (from 0.6.20) adds the resonant terms of degrees 5 to 31 to the one-day class below e 0.3, which
+The one-day tail (from 0.6.19) adds the resonant terms of degrees 5 to 31 to the one-day class below e 0.3, which
 carried degrees 2 to 4 only. On made-up geostationary sets, AP against FFM with the same 20 x 20 field after a 72 h fit
 went from 16.9-136.1 m to 8.5-11.1 m at day 7 at 12 longitudes; what remains is AP's analytic Moon (stack #446;
 `test/one-day-resonant-tail.e2e.mjs`).
@@ -208,8 +208,8 @@ table; `test/class0-commensurability.e2e.mjs` pins it.
 
 For satellites whose solar panels track the Sun (navigation satellites), `fit` under `$PCF` FORCES.ECOM2 also solves
 ECOM2's Y0, a constant acceleration (m/s^2) along the axis normal to the Sun and the satellite's radius, beside the
-sphere's AGOM, on fits of 72 h or more above the drag; elsewhere it is held at FORCES.ECOM2.Y0_M_S2. Through 0.6.19 it
-was held in the one-day (geosynchronous) class too. From 0.6.20 that class solves it: on real 72 h windows the share
+sphere's AGOM, on fits of 72 h or more above the drag; elsewhere it is held at FORCES.ECOM2.Y0_M_S2. Through 0.6.18 it
+was held in the one-day (geosynchronous) class too. From 0.6.19 that class solves it: on real 72 h windows the share
 within 100 m of the numerical propagator at day 5 went from 23 to 26 of 32 (geostationary) and from 52 to 59 of 59
 (inclined geosynchronous). The inclined row's medians rose from 27.0 to 31.3 m at day 5 and from 38.7 to 56.2 m at
 day 7, because the Moon's position error (stack #446) leaks into Y0 there (SPEC 16.13). The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR

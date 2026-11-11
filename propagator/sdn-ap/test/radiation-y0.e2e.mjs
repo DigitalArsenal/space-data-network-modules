@@ -8,7 +8,7 @@
 //   ECOM2_Y0 SOLVED_FOR, its VALUE within Y0_TOLERANCE of the stated one, and the day-7 error is back to the sphere
 //   truth's level (DAY7_SLACK_M above AP without the term on the sphere truth, or DAY7_RATIO times it; on the inclined
 //   geosynchronous orbit above AP with the term on the sphere truth, where the Moon's error leaks into Y0, stack #446);
-//   without FORCES.ECOM2 the error on a Y0 truth is at least TERM_SIZE times that level. Through 0.6.19 the one-day class
+//   without FORCES.ECOM2 the error on a Y0 truth is at least TERM_SIZE times that level. Through 0.6.18 the one-day class
 //   held Y0 and this test pinned that hold on the inclined geosynchronous orbit (byte for byte the fit without the term).
 // - The daily fit: the arc's last 24 h fitted under FORCES.ECOM2 stating the 72 h record's Y0 holds it (SOLVED_FOR
 //   false, the same VALUE) and its day-7 error is at most 1 / DAILY_GAIN of the 24 h fit without the term.
@@ -59,8 +59,8 @@ import { scratchRoot } from "./lib/scratch.mjs";
 // without it); without the term 325 and 352 m; the daily fit 52 m against 264 m.
 const Y0_TOLERANCE = 0.25, DAY7_SLACK_M = 10, DAY7_RATIO = 1.5, TERM_SIZE = 5, DAILY_GAIN = 3;
 // the Galileo-like orbit solves Y0; the inclined geosynchronous one is in the one-day class, where Y0 is held
-// both solve Y0: through 0.6.19 the one-day class held it and this test pinned that hold on the inclined geosynchronous
-// orbit (a 72 h fit under FORCES.ECOM2 holding Y0 at 0, byte for byte the fit without it); from 0.6.20 that class carries
+// both solve Y0: through 0.6.18 the one-day class held it and this test pinned that hold on the inclined geosynchronous
+// orbit (a 72 h fit under FORCES.ECOM2 holding Y0 at 0, byte for byte the fit without it); from 0.6.19 that class carries
 // its resonant gravity above degree 4 (stack #434) and solves Y0 as the others do (SPEC 16.13)
 const ORBITS = [
   { name: "Galileo-like", n: 1.7085, e: 0.0003, i: 56, raan: 300, argp: 0, ma: 0, agom: 0.02, y0: 6e-10 },

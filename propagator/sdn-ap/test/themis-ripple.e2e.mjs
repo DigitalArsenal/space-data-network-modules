@@ -9,7 +9,7 @@
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, Etalon-like, GPS-like, e 0.25, e 0.3) flown 2 days at 600 s give
 //    ephemerides within NO_HARM (below; byte-identical until 0.6.5) on this build and on sdn-ap 0.6.2 (dist at modules
-//    c82160de7, SHA-256 84d50dca...); the geostationary seed within THEORY_CHANGED (the one-day resonant tail, 0.6.20);
+//    c82160de7, SHA-256 84d50dca...); the geostationary seed within THEORY_CHANGED (the one-day resonant tail, 0.6.19);
 //    the SGP4XP seed byte-identical.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
@@ -32,8 +32,8 @@ const BASE = 'c82160de7', BASE_SHA256 = '84d50dca4efdfea87eff7e3b4618d795c26a7d0
 // GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm (velocity at most 0.0022 mm/s); the bound is 15 mm.
 // SGP4XP stays byte-identical.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
-// The geostationary seed moves by design from 0.6.20: the one-day class carries its resonant gravity above degree 4
-// (stack #434, SPEC 16.2), 5.27 m over the 48 h on 0.6.20; its bound is 6 m, 0.5 mm/s.
+// The geostationary seed moves by design from 0.6.19: the one-day class carries its resonant gravity above degree 4
+// (stack #434, SPEC 16.2), 5.27 m over the 48 h on 0.6.19; its bound is 6 m, 0.5 mm/s.
 const THEORY_CHANGED = {'geostationary, AP': {posM: 6, velMmS: 0.5, covOfLargest: 1e-3}};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
