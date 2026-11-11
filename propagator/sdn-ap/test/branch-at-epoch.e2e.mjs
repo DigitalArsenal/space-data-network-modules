@@ -16,7 +16,8 @@
 // - Fit (SPEC 16.7): an AP truth on the sixteen-hour side 3e-8 above the limit, flown 24 h every 10 min, fits back on
 //   its own side (the fitted mean motion within 1e-9 of the truth's, the arc RMS below 1 cm); a truth half on each side
 //   (the mean of the two flights of one set at the 0.8022 limit) is refused fit-at-branch-limit, its message naming the
-//   switch.
+//   switch; a truth half on each side of the eccentricity switch at 0.3 (at 2 rev/day) is fitted, its set held at the
+//   switch on its own branch (e within 1e-6 of 0.3) and its OD COMMENT saying so (stack #504).
 // - Epoch store (SPEC 14.3): two AP sets 6 h apart on either side of the 1.2033 limit are not blended: inside the window
 //   of their switch sdnap_epochs_select gives b = -2 and weight 0, the state is the chosen set's bit for bit, and
 //   propagate_epochs names the switch time in the block's COMMENT; two sets on one side blend (b = 1, weight in (0, 1)) and
@@ -43,7 +44,7 @@ import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSo
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { openModule, wasmPath } from "./lib/module.mjs";
 import { configuration, prior, pcfPriorForm } from "./lib/pcf.mjs";
-import { T, seedOcm, rowsThrough, spwStream, flight, ocmOf, repackOcm } from "./lib/ocm.mjs";
+import { T, seedOcm, rowsThrough, spwStream, flight, ocmOf, repackOcm, readFitOcm } from "./lib/ocm.mjs";
 import { packOem, rfm, jdOf } from "./lib/frames.mjs";
 import { CLASSES, carriedRecord, sourcesOf, EPOCH as CARRIED_EPOCH } from "./lib/carried.mjs";
 
@@ -142,6 +143,17 @@ const arc = Array.from({ length: 145 }, (_, k) => EPOCH + k * 600000);
   try { await fit(mixed, arc); } catch (error) { refused = error; }
   console.log(`fit of a truth half on each side of the 0.8022 limit: ${refused ? `${refused.code}: ${refused.text}` : "fitted"}`);
   check(refused?.code === "fit-at-branch-limit" && /resonance class limit/.test(refused.text), `half on each side: ${refused ? refused.code : "fitted"}`);
+}
+{
+  // a truth half on each side of the eccentricity switch at 0.3 (the mean of the two flights of one set there, at 2 rev/day):
+  // the fit ends on one side, its set held at the switch on its own branch, and the record's OD COMMENT says so (stack #504)
+  const below = await fly(seed(2, { e: 0.3 - 1e-12 }), arc), above = await fly(seed(2, { e: 0.3 + 1e-12 }), arc);
+  const mixed = below.map((q, k) => q.map((v, c) => 0.5 * (v + above[k][c])));
+  let refused = null, rec = null;
+  try { rec = await fit(mixed, arc); } catch (error) { refused = error; }
+  const eFit = rec ? ocmOf(rec).MEAN_ELEMENTS.ECCENTRICITY : null, comment = rec ? [].concat(readFitOcm(rec).u.COMMENT ?? []).join(" | ") : "";
+  console.log(`fit of a truth half on each side of the e 0.3 switch: ${refused ? `${refused.code}: ${refused.text}` : `fitted, e ${eFit}; OD COMMENT: ${comment}`}`);
+  check(!refused && Math.abs(eFit - 0.3) <= 1e-6 && /held at the eccentricity switch on its own branch/.test(comment), `half on each side of e 0.3: ${refused ? refused.code : `e ${eFit}, ${comment}`}`);
 }
 
 // --- the epoch store across a branch

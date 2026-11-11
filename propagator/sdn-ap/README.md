@@ -116,8 +116,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   eccentric 0.7, of the best shorter one's) is refitted on all the data. The arc grows from two revolutions by threes
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
   down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); a fit that stops on
-  a switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches; within 1e-8) is settled on one branch,
-  and refused fit-at-branch-limit when on each side the best set lies across the switch; an eccentric block's
+  a switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches; within 1e-8) is settled on one branch;
+  when on each side the best set lies across the switch, a fit at a limit in n is refused fit-at-branch-limit and one at
+  an eccentricity switch ends on one side, its set held at the switch (the record's OD COMMENT says so); an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
   no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
@@ -672,7 +673,8 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   6.5, and at 6 rev/day e 0.35, each a 72 h fit flown 7 days against FFM 2.3.0 (named by its SHA-256), day-7 along-track under
   a bound. `test/class0-exact-resonance.e2e.mjs`: the exact 8:1 resonance (8.05 rev/day, e 0.25), a known defect (#419).
 - `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
-  the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
+  the covariance about a limit, a fit 3e-8 from a limit, a fit refused fit-at-branch-limit at a class limit and one held
+  on one side of the eccentricity switch at 0.3 (its OD COMMENT), and the epoch store's
   step between two sets on different branches; inside a carried span its set alone (two forecasts never blend), the
   step to the theory at the span's end.
 - `test/perigee-drag-continuity.e2e.mjs`: SPEC 16.12: no step at perigee above e 0.3 with drag. On the transfer-orbit
