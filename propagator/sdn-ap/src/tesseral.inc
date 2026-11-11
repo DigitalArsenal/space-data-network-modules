@@ -162,12 +162,6 @@ struct ShallowTerms;
 inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q);
 inline int slow_complement_lmax(const ShallowTerms* held, int degree, int8_t (&lmax)[72][35]);
 inline double band_taper(double x);
-/// The one-day class above the eccentricity switch (SPEC 16.18; stack #467): a slow term the class's rates do not carry stays
-/// on the grid unless its angle drifts slower than this times n; below it the term is carried nowhere. 1e-2 n, not the
-/// table's 1e-3 n: on a synchronous set at e 0.5 the terms between the two drift as slowly as the class's own libration,
-/// where a first-order term fails (day 5, two such sets: 105 to 58 m and 42 to 54 m at 1e-3 n; unchanged at 3e-3 and 1e-2 n);
-/// on THEMIS-like sets no term of degree 2 to 12 lies between them.
-constexpr double kOneDayFloor = 1e-2;
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
@@ -1479,12 +1473,17 @@ inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
 
 /// A set's blk_c for one bake, per thread: the lanes' coefficients from F (store_lane's layout), zero in empty lanes.
 inline thread_local float* g_sp_blk_c = nullptr;
-inline float* sp_blk_c(const SpEvalCache& sc) {
+/// The thread's blk_c storage (192 KiB), made on first use or ahead (pool::warm_thread: a pool thread makes its caches
+/// before any batch, stack #487).
+inline float* sp_blk_c_storage() {
   if (__builtin_expect(!g_sp_blk_c, 0)) {
     g_sp_blk_c = static_cast<float*>(std::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
     if (g_sp_blk_c == nullptr) std::abort();
   }
-  float* const c = g_sp_blk_c;
+  return g_sp_blk_c;
+}
+inline float* sp_blk_c(const SpEvalCache& sc) {
+  float* const c = sp_blk_c_storage();
   for (int bi = 0; bi < sc.total_blks; ++bi) {
     for (int l = 0; l < 4; ++l) {
       float* const pc = c + bi * 64 + l;
@@ -4591,6 +4590,20 @@ inline double slow_size_e_m(int l, int m, double fdg, double a, double n, double
   return 2.0 * A / (n * a * pd) * kRe * 1e3;
 }
 
+/// The forecast the field's census sizes a term over (SPEC 16.20): 5 days, in minutes.
+constexpr double kCensusSpanMin = 5.0 * 1440.0;
+/// A term's size for the field's census (SPEC 16.20, m), A = mu / a^(l+1) |C, S| (`A`): the output table's measure at full
+/// weight (sp_terms' cut) with the eccentricity vector's part counted along track (twice its radial part, as slow_size_e_m),
+/// a A [|F G| (3 |j| / (a^2 psi-dot^2) + 2 (l + 1) / (n a^2 |psi-dot|)) + (2 |F dG/de| + |dF/di G|) / (n a^2 |psi-dot|)],
+/// with |psi-dot| at least 2 / kCensusSpanMin: a term slower than that grows over the forecast, not past it. Through the mean
+/// motion it is the slow set's measure (slow_size_m) where the term is not that slow.
+inline double census_size_m(int l, int j, double A, double F, double dF, double G, double dG, double a, double n, double psidot) {
+  const double ap = std::fmax(std::fabs(psidot), 2.0 / kCensusSpanMin);
+  const double na2 = n * a * a;
+  return a * A * (std::fabs(F * G) * (3.0 * std::abs(j) / (a * a * ap * ap) + 2.0 * (l + 1) / (na2 * ap)) +
+                  (2.0 * std::fabs(F * dG) + std::fabs(dF * G)) / (na2 * ap)) * kRe * 1e3;
+}
+
 /// A slow term's G_lpq and dG/de at the epoch e (SPEC 16.18). q = 0 under e 0.03: the series to e^4. Otherwise res::exact_G,
 /// whose dG below e 2e-4 is a tabulated Hansen series's, or 0 where none is tabulated (degrees above 5): there the slow set
 /// takes dG as the central difference of exact_G's own G over e0 +- 2e-4 (G is analytic in e, odd or even in it with q). A term
@@ -4665,6 +4678,129 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
         }
       }
   return out.count;
+}
+
+/// Every class above its eccentricity switch outside low orbit (SPEC 16.18; stack #473): the slow terms its own rates do not
+/// carry, in the rates. Every (l, m, p, q) of the field to `degree` (the grid's: a family's slow harmonics without its fast
+/// ones, which nothing carries above the grid's degree, put a transfer orbit further from the numerical propagator, 134 to
+/// 165 m at degree 31) whose own rate at the epoch (J2 secular rates, as
+/// the grid takes them) is inside kShallowSelect bands and whose size reaches kSlowKeepM, except the class's terms, the
+/// half-day class's tail (16.2) and the m-daily terms (w = j = 0); the grid leaves out band_taper of each slow harmonic, the
+/// share these carry (wide_families). The angle's own rate is the flight's (the Sun and Moon move omega and Omega on a high
+/// orbit as much as J2 does), which a first-order term on the grid cannot follow. Ordered by (m, w, j), each run of l one
+/// group of the evaluation (wide_slow_six); j at most 127 (the table's index). *out (malloc'd, the caller's) holds the
+/// terms; returns their count, or -1 out of memory.
+inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, res::ResCoef** out) {
+  *out = nullptr;
+  int count = 0, room = 0;
+  const int L = degree < slow_degree_cap() ? degree : slow_degree_cap();
+  const SecularRates sr = secular_rates(n, e0, i0);
+  const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
+  const res::TermSet carried = res::class_terms(cls);
+  double F[72], dF[72];
+  for (int m = 1; m <= L; ++m)
+    for (int w = -L; w <= L; ++w) {
+      const int aw = w < 0 ? -w : w;
+      int l0 = m > aw ? m : aw;
+      if (l0 < 2) l0 = 2;
+      if ((l0 - aw) & 1) ++l0;
+      if (l0 > L || l0 >= kSlowDegree - 1) continue;  // a family the embedded field ends at once (slow_terms_low)
+      const double nu = -(w * sr.argp + m * (sr.node - kOmegaE)) / sr.mdot;
+      const int jlo = static_cast<int>(std::floor(nu - band / sr.mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + band / sr.mdot)) + 1;
+      bool any = false;
+      for (int j = jlo; j <= jhi && !any; ++j) any = std::fabs(slow_rate(sr, w, j, m)) < band && !(w == 0 && j == 0);
+      if (!any) continue;
+      normalized_Fk_dF(m, w, L, i0, F, dF);
+      for (int j = jlo; j <= jhi; ++j) {
+        const double psidot = slow_rate(sr, w, j, m);
+        if (!(std::fabs(psidot) < band) || (w == 0 && j == 0) || j < -127 || j > 127) continue;
+        const int q = j - w;
+        for (int l = l0; l <= L; l += 2) {
+          const int pp = (l - w) / 2;
+          if (pp < 0 || pp > l) continue;
+          bool own = cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2;
+          for (int t = 0; t < carried.count && !own; ++t)
+            own = carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == pp && carried.t[t].q == q;
+          if (own) continue;
+          double G, dG;
+          res::exact_G(l, pp, q, e0, G, dG);
+          if (!std::isfinite(F[l] * G) || !std::isfinite(F[l] * dG) || !std::isfinite(dF[l] * G)) continue;
+          if (!(slow_size_m(l, m, j, F[l] * G, a, psidot) >= kSlowKeepM)) continue;
+          if (count == room) {
+            room = room == 0 ? 256 : 2 * room;
+            res::ResCoef* grown = static_cast<res::ResCoef*>(std::realloc(*out, static_cast<size_t>(room) * sizeof(res::ResCoef)));
+            if (grown == nullptr) {
+              std::free(*out);
+              *out = nullptr;
+              return -1;
+            }
+            *out = grown;
+          }
+          res::ResCoef& c = (*out)[count++];
+          c.l = static_cast<int8_t>(l);
+          c.m = static_cast<int8_t>(m);
+          c.p = static_cast<int8_t>(pp);
+          c.k = static_cast<int8_t>(j);
+          c.odd = static_cast<int8_t>((l - m) & 1);
+          c.C = kEgmC[l][m];
+          c.S = kEgmS[l][m];
+          c.fg = F[l] * G;
+          c.fdg = F[l] * dG;
+          c.dfg = dF[l] * G;
+        }
+      }
+    }
+  return count;
+}
+
+/// SPEC 16.18 (stack #473): the rates of a set's slow terms above its switch (slow_terms_wide), Lagrange's equations at the
+/// current elements with F G moved linearly from e_0 and i_0, each (j, m, w) weighted by band_taper of its own rate at the
+/// J2 secular rates (the grid leaves out the rest of each harmonic, wide_families); in double, as the terms' F G reach the
+/// float's range at high degree and eccentricity.
+inline void wide_slow_six(const res::ResCoef* table, int count, double e0, double i0, double t, const Kepler& kp, double a,
+                          double n, double eta, double si, double ci, double theta_g0, double* six) {
+  if (count <= 0) return;
+  const double e = kp.e < 1e-12 ? 1e-12 : kp.e;
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
+  const SecularRates sr{-j2 * n * ci, 0.5 * j2 * n * (5.0 * ci * ci - 1.0), n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0)};
+  const double de = kp.e - e0, di = kp.i - i0, thetag = theta_g0 + kOmegaE * t, ia = 1.0 / a;
+  double amp[72];
+  amp[0] = kMu * ia;
+  for (int l = 1; l <= 71; ++l) amp[l] = amp[l - 1] * ia;
+  double sM = 0.0, sW = 0.0, sO = 0.0, sE = 0.0, sI = 0.0, sA = 0.0;
+  int gk = 0x7fff, gm = 0x7fff, gw = 0x7fff;
+  double wgt = 0.0, sp = 0.0, cp = 1.0;
+  for (int q = 0; q < count; ++q) {
+    const res::ResCoef& c = table[q];
+    const int l = c.l, m = c.m, k = c.k, w = l - 2 * c.p;
+    if (k != gk || m != gm || w != gw) {
+      gk = k;
+      gm = m;
+      gw = w;
+      wgt = band_taper(std::fabs(slow_rate(sr, w, k, m)) / (kShallowBand * n));
+      if (wgt > 0.0) fm::sincos(w * kp.argp + k * kp.m + m * (kp.node - thetag), sp, cp);
+    }
+    if (!(wgt > 0.0)) continue;
+    const double Sv = c.odd ? -c.S * cp + c.C * sp : c.C * cp + c.S * sp;
+    const double dSv = c.odd ? c.S * sp + c.C * cp : -c.C * sp + c.S * cp;
+    const double A = amp[l] * wgt;
+    const double fg = c.fg + c.fdg * de + c.dfg * di;
+    const double fgdS = A * fg * dSv;
+    sM += k * fgdS;
+    sW += w * fgdS;
+    sO += m * fgdS;
+    sE += A * c.fdg * Sv;
+    sI += A * c.dfg * Sv;
+    sA += -(l + 1) * A * fg * Sv * ia;
+  }
+  const double na2 = n * a * a, tanhalf = sin_i / (1.0 + ci);
+  six[0] += -3.0 * ia * ia * sM;
+  six[1] += (eta * eta * sM - eta * sW) / (na2 * e);
+  six[2] += (ci * sW - sO) / (na2 * eta * sin_i);
+  six[3] += (eta / na2) * sE + e * tanhalf / (na2 * eta) * sI;
+  six[4] += sI / (na2 * eta);
+  six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
 }
 
 /// Whether the slow set's list holds (l, m, p, q) beyond the shallow set's own terms (the output table yields it).
@@ -4760,9 +4896,10 @@ inline int slow_listing_low(int cap, double n, double e0, double i0, double* row
 /// Where a set on the grid (above its eccentricity switch, outside low orbit) carries each slow tesseral term, by the grid's
 /// own rules (wide_families; SPEC 16.18): every (l, m, p, q) of degree 2 to `cap` whose angle drifts slower than kShallowBand n
 /// at the set's epoch (J2 secular rates, as the grid takes them). Row of 8 (16.18's): l, m, p, q, psi-dot / n, carrier
-/// (1 the class's rates, 2 the grid, 0 carried nowhere: left out of the grid as slow, or under the floor, 4 carried nowhere:
-/// above the grid's degree, kSpCap, as the table holds no near-resonant terms outside low orbit), the rates' weight w (1 for
-/// the class's terms, 0 otherwise: no taper above the switch) and the term's size (slow_size_m, G exact at the epoch e).
+/// (1 the rates: the class's own terms, or every other at or above kSlowKeepM, slow_terms_wide; 4 carried nowhere: above the
+/// grid's degree, kSpCap, or j beyond 127; 5 carried nowhere: under the size cut), the rates' weight w (1 for the class's
+/// terms, band_taper of the term's rate for the others, the grid holding 1 - w) and the term's size (slow_size_m, G exact
+/// at the epoch e).
 /// Writes at most max_rows rows; returns the count of all of them, or -1 for a set it does not cover. `cls` the epoch class
 /// (res::band_of), n rad/min, inc rad. A diagnostic: no flight reads it.
 inline int slow_terms(int cap, int cls, double n, double e, double inc, double* rows, int max_rows) {
@@ -4797,17 +4934,17 @@ inline int slow_terms(int cap, int cls, double n, double e, double inc, double* 
           for (int t = 0; t < carried.count && where < 0; ++t)
             if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) where = 1;
           if (where < 0 && cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) where = 1;  // the half-day tail (16.2)
-          if (where < 0) {
-            if (l > grid_degree) where = 4;
-            else if (cls == 1) where = std::fabs(psidot) < kOneDayFloor * n ? 0 : 2;
-            else where = 0;
-          }
+          const bool own = where == 1;
+          double G, dG;
+          res::exact_G(l, p, q, e, G, dG);
+          const double size = slow_size_m(l, m, j, F[l] * G, a, psidot);
+          // every other slow term: the rates (slow_terms_wide) at or above the size cut, nowhere under it (stack #473)
+          if (where < 0) where = l > grid_degree || j < -127 || j > 127 ? 4 : size >= kSlowKeepM ? 1 : 5;
           if (count < max_rows) {
-            double G, dG;
-            res::exact_G(l, p, q, e, G, dG);
             double* r = rows + 8 * count;
-            r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = where; r[6] = where == 1 ? 1.0 : 0.0;
-            r[7] = slow_size_m(l, m, j, F[l] * G, a, psidot);
+            r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = where;
+            r[6] = own ? 1.0 : where == 1 ? band_taper(std::fabs(psidot) / band) : 0.0;
+            r[7] = size;
           }
           ++count;
         }
@@ -4919,6 +5056,32 @@ inline void fft_inplace(double* re, double* im, int n, bool inverse) {
   }
 }
 
+/// The share of the harmonic (l, m, p, q = j - w) that a family grid leaves out of its forcing (sp_terms' weight_of, 1 - its
+/// weight, harmonic by harmonic), carried elsewhere: the m-daily terms (w = j = 0); the half-day tail, in the half-day class's
+/// rates (16.2); the class's terms (`carried`); and inside the slow band (`in_band`, |psi-dot| = `ap` within the family's
+/// kShallowBand n), in low orbit (class 0, a period below 1,100 min: `low`) only the shallow set's terms (q = 0, w = j = 1, which
+/// the rates carry with the same taper) and the terms slower than 1e-3 n; above the switch, in every class, the share the
+/// rates carry, band_taper (slow_terms_wide, stack #473). The grid builds on it and the field's census (16.20) reads it.
+inline double wide_left_out(int cls, bool low, const res::TermSet& carried, int l, int m, int p, int w, int j, bool in_band,
+                            double ap, double n) {
+  const int q = j - w;
+  double out_ = w == 0 && j == 0 ? 1.0 : 0.0;
+  if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = 1.0;
+  for (int t = 0; t < carried.count && out_ == 0.0; ++t)
+    if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = 1.0;
+  if (out_ == 0.0 && in_band) {
+    const double x = ap / (kShallowBand * n);
+    // above the switch every class carries every other slow term in its rates too (slow_terms_wide, stack #473): the grid
+    // leaves out the share the rates carry, band_taper (SPEC 16.18 states the one-day class's rule before it)
+    if (!low) out_ = band_taper(x);
+    else if (q == 0 && w == 1 && j == 1) {
+      const double cc = std::cos(0.5 * kPi * (x - 0.9) / 0.2);
+      out_ = x <= 0.9 ? 1.0 : x < 1.1 ? cc * cc : 0.0;
+    } else out_ = ap < 1e-3 * n ? 1.0 : 0.0;
+  }
+  return out_;
+}
+
 /// One set of family grids at (n, e, i): out[f][6][kGridN] complex (re, im interleaved), families in (m, w) order with any
 /// forcing; returns the count. `cls`: the class whose terms the rates carry.
 inline int wide_families(int degree, int cls, double n, double e, double inc, int8_t* fm_out, int8_t* fw_out, double* out) {
@@ -5009,26 +5172,8 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         const double Sr = A * (odd ? -kEgmS[l][m] : kEgmC[l][m]), Si = A * (odd ? -kEgmC[l][m] : -kEgmS[l][m]);
         const int jlo = static_cast<int>(std::floor(nu - kShallowBand * n / mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + kShallowBand * n / mdot)) + 1;
         for (int j = -(degree + 64); j <= degree + 64; ++j) {
-          const int q = j - w;
-          // the share of the harmonic left out (sp_terms' weight_of, 1 - its weight)
-          double out_ = w == 0 && j == 0 ? 1.0 : 0.0;
-          // the half-day tail, carried in the half-day class's rates (16.2; sp_terms leaves it out of the table the same way)
-          if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = 1.0;
-          for (int t = 0; t < carried.count && out_ == 0.0; ++t)
-            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = 1.0;
-          if (out_ == 0.0 && j >= jlo && j <= jhi) {
-            // the slow band: in low orbit (class 0, period below 1100 min) only the shallow set's terms (q = 0, w = j = 1, which
-            // the rates carry with the same taper) and the terms drifting slower than 1e-3 n; everywhere else the whole band
-            const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)), x = ap / (kShallowBand * n);
-            // the one-day class above the switch carries only its 27 terms in the rates (left out above): every other slow
-            // term stays on the grid down to kOneDayFloor (stack #467); the other classes leave the whole band out
-            if (cls == 1) out_ = ap < kOneDayFloor * n ? 1.0 : 0.0;
-            else if (!low) out_ = x < 1.0 ? 1.0 : 0.0;
-            else if (q == 0 && w == 1 && j == 1) {
-              const double cc = std::cos(0.5 * kPi * (x - 0.9) / 0.2);
-              out_ = x <= 0.9 ? 1.0 : x < 1.1 ? cc * cc : 0.0;
-            } else out_ = ap < 1e-3 * n ? 1.0 : 0.0;
-          }
+          const double out_ = wide_left_out(cls, low, carried, l, m, p, w, j, j >= jlo && j <= jhi,
+                                            std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)), n);
           if (out_ == 0.0) continue;
           // G and dG/de at fixed M by the trapezoid on the E nodes (dM = (1 - e cos E) dE; spectral for these periodic integrands)
           double G = 0.0, dG = 0.0;
@@ -5374,9 +5519,11 @@ inline void evict_idle(GridCache& c, int keep) {
 
 
 /// The displacements in the six-component set, the grid's cubic in E at the current anomaly times e^{i (w omega + m beta)}.
+/// `a_ref` > 0: the offset in a is a_ref's, not the current mean a's (the long-period regime with the Sun and Moon, SPEC 16.11).
 inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta_g0, double* six,
-                     double E_in = std::numeric_limits<double>::quiet_NaN(), double* dsix_dlam = nullptr, double weight = 1.0) {
-  const double de = kp.e - g.e, di = kp.i - g.i, da = kp.a / g.a - 1.0;
+                     double E_in = std::numeric_limits<double>::quiet_NaN(), double* dsix_dlam = nullptr, double weight = 1.0,
+                     double a_ref = 0.0) {
+  const double de = kp.e - g.e, di = kp.i - g.i, da = (a_ref > 0.0 ? a_ref : kp.a) / g.a - 1.0;
   double E = E_in;
   if (!(E == E)) {
     E = kp.m;

@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.27 (dist af2eb204).
+Version 0.6.32 (dist 1752ddbe).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -31,7 +31,11 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   row: 0 SGP4, 4 SGP4XP; any other theory is held refused); `sdnap_propagate_soa(jdWhole, jdFrac, first, count, frame,
   out, status)` and `sdnap_propagate_minutes_soa(minutes, first, count, out, status)` write six planes (x, y, z, vx, vy,
   vz) of `count` doubles, TEME km and km/s or Earth-fixed m and m/s. `sdnap_threads(n)` starts the pool; results are
-  the same bytes at any thread count.
+  the same bytes at any thread count. A threaded batch grows no memory (SPEC 9, stack #487). A batch whose pool thread
+  stops returns -20, with every status 9, and later batches run on the calling thread. `sdnap_pool_stats(out)` reads
+  the pool's counts. Before 0.6.31 a pool thread could trap on a block in pages another thread had just grown, and
+  the calling thread then waited forever. On a loaded machine that happened in AP batches of a test build, never in the
+  shipped build with SGP4XP rows (0 of 40 processes).
 - Display quantities (the module's own conversions; `test/exports.e2e.mjs` checks each against its inverse):
   `sdnap_mean_elements_at(index, minutes, out)` the mean a (km), e, i, RAAN, argp and M (deg) of an SGP4XP row at
   minutes from its epoch (an SGP4 row is refused); `sdnap_osculating_elements(r, v, out)` the osculating elements of a
@@ -194,6 +198,11 @@ leaves no step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst da
 218 m at i 53 and from 1,905 m to 423 m at i 97.6. On real 72 h fits, AP's day-5 forecast within 100 m of the full
 numerical arm's went from 21 to 34 of 56 windows on laser spheres and from 28 to 42 of 112 on altimetry (0.6.25). SPEC 16.18
 has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`).
+
+The field's census (from 0.6.32; SPEC 16.20) lists, for a set of mean elements, every tesseral term of the field to degree 70
+whose size over a 5-day forecast reaches 0.5 m, with the weight each carrier the set builds holds of it and the term's
+period. `test/field-census.e2e.mjs` sweeps 101 sets over every class and both sides of every switch. It fails on a term
+carried twice, or carried nowhere outside the known holes, each of which is named with its issue.
 
 The half-day tail adds every even-order resonant term through degree 31. Against FFM after a 72 h fit, the
 day-7 errors are 60.1 m for the half-day case (a sample 1 h after a perigee; the day's RMS is 34 m along-track and
