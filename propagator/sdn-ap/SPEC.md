@@ -2794,8 +2794,23 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   pinned to its branch (its columns: the analytic two-body and J2 ones, and where an eccentric or short arc takes them,
   one-sided differences of moved sets that fly the iterate's branch, as the covariance's fly the nominal's, so no column
   holds a switch's jump); a minimum on that branch is the answer; a minimum across the switch is fitted again pinned to the
-  branch it reached, and its minimum is the answer when it stays there; otherwise the fit is refused fit-at-branch-limit,
-  naming the switch, the set's mean motion and eccentricity, and asking for another span or epoch. On the referee's
+  branch it reached, and its minimum is the answer when it stays there. Otherwise, at a limit in n (a resonance class
+  limit or the 1,100-minute regime limit), the fit is refused fit-at-branch-limit, naming the switch, the set's mean
+  motion and eccentricity, and asking for another span or epoch. At a switch in eccentricity (0.3, and the first-order
+  tesseral families' at 0.05) the fit ends on one side *[stack #504]*: the free set, which its refused trial steps hold
+  at the switch on its own branch, is the answer; its branch is that of its own epoch eccentricity, and the record's OD
+  COMMENT says "fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie
+  across it". Every fit is the version before's bit for bit except where some pass ends at an eccentricity switch:
+  there the held set is kept in place of the pass before. Measured on model truth (experiments synthetic-orbits, FFM 2.2.0;
+  every case of the seeded set within 0.01 of a switch in e, 212 of 965), against the version before:
+  - the 72 h fit before the cutoff, refused fit-at-branch-limit on 8 cases (seven at 0.3, one at 0.05), gives a record on each, its
+    largest distance to the truth over 0 to 120 h from 16 m to 4.8 km (the e 0.3 orbits with a low perigee, whose 72 h fits miss
+    the forecast by kilometres on either branch);
+  - the fit to the numerical forecast over 0 to 120 h, refused on 2 (0.05 and 0.3), gives records of 186 and 115 m;
+  - four fits not refused move, a pass of each having ended at the switch, each nearer the truth (652 to 644, 174.5 to 174.4,
+    25.5 to 8.6 and 19.9 to 13.5 m); the other 410 of the 424 fits are bit for bit.
+  A step of half the update inside the pinned passes cures none of the refusals: each branch's least-squares set lies across
+  the switch, wherever the steps go. On the referee's
   full-field truths (its own integrator, 31 x 31, Sun and Moon) seven fits whose mean motion lies 2e-8 to 5.6e-7 from a
   class limit, at each of the five limits, are at the theory's least-squares minimum (a Gauss-Newton polish with the full
   theory's Jacobian lowers the cost by at most 2.3e-8 relative, steps of at most 1 mm); arcs whose two branches' minima lie
@@ -4216,8 +4231,9 @@ the regime limit. Sets on different sides must not be differenced, blended or in
 
 The branch is fixed at the record's epoch, from its own epoch elements, for the whole flight (16.7): a record's output is
 continuous in time wherever its mean motion and eccentricity go. The module differences and blends one branch only: a
-covariance's moved sets fly the record's branch (12.1), a fit that would end on a switch is settled on one branch or refused
-fit-at-branch-limit (16.7), and the epoch store does not blend two sets on different branches (14.3). A consumer that
+covariance's moved sets fly the record's branch (12.1), a fit that would end on a switch is settled on one branch, held at
+an eccentricity switch on one side, or refused fit-at-branch-limit at a limit in n (16.7), and the epoch store does not
+blend two sets on different branches (14.3). A consumer that
 differences, blends or interpolates two records of one object must do the same.
 
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
