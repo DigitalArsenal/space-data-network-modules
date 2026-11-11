@@ -3614,13 +3614,62 @@ inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const
 
 [[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]);
 
-/// AP in the long-period regime above e 0.3 (SPEC 16.19): the Sun's and Moon's rates of the mean elements y, the rates that move AP's
+/// SPEC 16.21: AP in the long-period regime above e 0.3, where its Sun and Moon go through the output map (16.19), takes radiation
+/// pressure the same way: neither SPEC 4's orbit-averaged rates nor its first-order periodic output terms carry it there.
+inline bool lp_radiation_through_output(const RateContext& ctx) {
+  return ctx.long_period && ctx.ap_third_body && ctx.branch.wide_e;
+}
+
+/// SPEC 4's two carriers of radiation pressure, everywhere else (16.21): its orbit-averaged rates and its first-order periodic
+/// output terms. The gates read these, and so does the field's census (16.20), so a set's partition is the one it flies.
+inline bool radiation_averaged(const RateContext& ctx) { return !lp_radiation_through_output(ctx); }
+inline bool radiation_periodic(const RateContext& ctx) { return !lp_radiation_through_output(ctx); }
+
+/// SPEC 16.21: the share of the time window [-w, w] about now that a satellite at r (Earth radii) moving at v (straight; v per
+/// the unit of w) spends outside AP's shadow (16.15: the cylinder of radius R_E behind the Earth, toward -s). The integrator
+/// takes the long-period regime's step across a shadow boundary, so the force is the window's share of light, not a step.
+inline double radiation_lit_share(Vec3 r, Vec3 v, Vec3 s, double w) {
+  const Vec3 rc = cross(r, s), vc = cross(v, s);
+  const double A = dot(vc, vc), B = 2.0 * dot(rc, vc), C = dot(rc, rc) - 1.0;
+  double lo = -w, hi = w;
+  if (A > 0.0) {
+    const double disc = B * B - 4.0 * A * C;
+    if (!(disc > 0.0)) return 1.0;
+    const double q = std::sqrt(disc);
+    lo = std::fmax(lo, (-B - q) / (2.0 * A));
+    hi = std::fmin(hi, (-B + q) / (2.0 * A));
+  } else if (C >= 0.0) {
+    return 1.0;
+  }
+  const double a0 = dot(r, s), a1 = dot(v, s);
+  if (a1 > 0.0) hi = std::fmin(hi, -a0 / a1);
+  else if (a1 < 0.0) lo = std::fmax(lo, -a0 / a1);
+  else if (a0 >= 0.0) return 1.0;
+  if (!(hi > lo)) return 1.0;
+  return std::fmax(0.0, 1.0 - (hi - lo) / (2.0 * w));
+}
+
+/// SPEC 16.21: AP's radiation pressure at a position r (Earth radii from the Earth's center) moving at v: the cannonball
+/// acceleration away from the Sun, SPEC 4's pressure kSrpPressure at 1 AU over the square of the Sun-to-satellite distance,
+/// times agom (Cr A/m, m^2/kg), and times the share of the window [-w, w] spent outside AP's shadow. Earth radii per minute
+/// squared.
+inline Vec3 radiation_accel(Vec3 r, Vec3 v, double w, const Bodies& b, double agom) {
+  const double lit = radiation_lit_share(r, v, b.sun_u, w);
+  if (!(lit > 0.0)) return Vec3{0.0, 0.0, 0.0};
+  const Vec3 rel = r - b.sun_r * b.sun_u;
+  const double rr = norm(rel), rs_au = rr * kRe / kAu;
+  const double Fs = kSrpPressure * agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
+  return (lit * Fs / rr) * rel;
+}
+
+/// AP in the long-period regime above e 0.3 (SPEC 16.19): the Sun's and Moon's rates of the mean elements y, and with agom > 0
+/// radiation pressure's (16.21), the rates that move AP's
 /// osculating state there (SPEC 8's J2 output, output_j2_osc) by the bodies' point-mass acceleration at that state:
 /// J m = (0, a), J the output's Jacobian in the six elements (forward differences), solved by Gaussian elimination with
 /// partial pivoting. The Gauss equations at the mean state alone move the J2 output by J2's short-period Jacobian times
 /// the bodies' rates as well, a velocity of the bodies' order times J2 at once. False when the output or the solve fails
 /// (the caller keeps the Gauss rates).
-inline bool lp_third_body_through_output(const double* y, const Bodies& b, double tb[6]) {
+inline bool lp_third_body_through_output(const double* y, const Bodies& b, double tb[6], double agom, double half_window_s) {
   double x0[6], J[6][7];
   // the base state, and the eccentric anomaly every column starts its Kepler equation from
   const Kepler k0 = kepler_of(y);
@@ -3642,7 +3691,8 @@ inline bool lp_third_body_through_output(const double* y, const Bodies& b, doubl
   }
   // the bodies' acceleration at the osculating position, km/s^2 (output_j2_osc's km and km/s)
   const Vec3 r{x0[0] / kRe, x0[1] / kRe, x0[2] / kRe};
-  const Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) + third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+  Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) + third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+  if (agom > 0.0) d = d + radiation_accel(r, Vec3{x0[3] / kRe, x0[4] / kRe, x0[5] / kRe}, half_window_s, b, agom);
   const double s = kRe / 3600.0;
   J[0][6] = J[1][6] = J[2][6] = 0.0;
   J[3][6] = d.x * s;
@@ -3942,17 +3992,27 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       double tb[6];
       // AP above e 0.3: the rates that move its osculating output by the bodies' acceleration (SPEC 16.19); below it (the
       // effect is a few m there, the cost is not), SGP4XP, or where that fails: the Gauss equations at the mean state
-      const bool through_output = ctx.ap_third_body && ctx.branch.wide_e && lp_third_body_through_output(y, b, tb);
+      // and radiation pressure with them (SPEC 16.21): through the output map, or where that fails at the mean state
+      const bool lp_radiation = ctx.agom > 0.0 && lp_radiation_through_output(ctx);
+      const bool through_output = ctx.ap_third_body && ctx.branch.wide_e && lp_third_body_through_output(y, b, tb, lp_radiation ? ctx.agom : 0.0, 30.0 * ctx.branch.lp_step);
       if (through_output) {
         // tb holds them
       } else if (ap_lp_fast) {
         lp_third_body_gauss_ap(y, fr, sF_lp, cF_lp, b, tb);
+        if (lp_radiation) {
+          Vec3 r, v;
+          double roa, tr[6];
+          state_at_F(y, fr, F, r, v, roa);
+          gauss(y, fr, r, v, radiation_accel(r, v, 0.5 * ctx.branch.lp_step, b, ctx.agom), tr);
+          for (int j = 0; j < 6; ++j) tb[j] += tr[j];
+        }
       } else {
         Vec3 r, v;
         double roa;
         state_at_F(y, fr, F, r, v, roa);
-        const Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) +
-                       third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+        Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) +
+                 third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+        if (lp_radiation) d = d + radiation_accel(r, v, 0.5 * ctx.branch.lp_step, b, ctx.agom);
         gauss(y, fr, r, v, d, tb);
       }
       for (int j = 0; j < 6; ++j) out[j] += tb[j];
@@ -3965,7 +4025,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       }
     }
   }
-  if (ctx.agom > 0.0) {
+  // SPEC 4's orbit-averaged radiation rates, except where it goes through the output map (16.21)
+  if (ctx.agom > 0.0 && radiation_averaged(ctx)) {
     if (!ap_ctx) {
       srp_rates(y, fr, k, pf, ctx.agom, b, out);
     } else {
@@ -4597,7 +4658,7 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
     for (int j = 0; j < 6; ++j) y[j] += d_srp_unit_in[j] * ctx.agom;
   }
   double Ewarm = std::numeric_limits<double>::quiet_NaN();
-  const bool need_first = !ctx.long_period || (ctx.agom > 0.0 && !use_shared_srp);
+  const bool need_first = !ctx.long_period || (ctx.agom > 0.0 && !use_shared_srp && radiation_periodic(ctx));
   if (need_first) {
     const Kepler km = kepler_of(ym);
     if ((!ctx.long_period || ctx.agom > 0.0) && !(km.e < 1.0)) return kPropEccentricity;
@@ -4640,7 +4701,8 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
       six_to_equinoctial(agm, six, d);
       for (int j = 0; j < 6; ++j) y[j] += d[j];
     }
-    if (ctx.agom > 0.0 && !use_shared_srp) {
+    // SPEC 4's first-order periodic radiation terms, except where radiation goes through the output map (16.21)
+    if (ctx.agom > 0.0 && !use_shared_srp && radiation_periodic(ctx)) {
       if (!have_pfm) pfm = perifocal_of(agm);
       if (!have_sun) {
         if (shared != nullptr) {
@@ -4805,7 +4867,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
   const bool has_sp_custom =
       (ctx.sp != ctx.sp_orig || ctx.sp_count != ctx.sp_orig_count) && (ctx.sp != nullptr) && (ctx.sp_count > 0);
   const bool has_sp_any = has_sp_orig || has_sp_custom;
-  const bool need_first = (!ctx.long_period && !use_shared_3b) || (ctx.agom > 0.0 && !use_shared_srp);
+  const bool need_first = (!ctx.long_period && !use_shared_3b) || (ctx.agom > 0.0 && !use_shared_srp && radiation_periodic(ctx));
   const bool need_tess = !use_shared_sp && (ctx.mdaily != nullptr || has_sp_any || ctx.wide != nullptr);
   Kepler km{};
   double etam = 0.0;
@@ -4976,7 +5038,8 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         }
       }
     }
-    if (ctx.agom > 0.0 && !use_shared_srp) {
+    // SPEC 4's first-order periodic radiation terms, except where radiation goes through the output map (16.21)
+    if (ctx.agom > 0.0 && !use_shared_srp && radiation_periodic(ctx)) {
       const Perifocal pfm = perifocal_of(agm);
       Vec3 sun_u{};
       double sun_r = 0.0;
@@ -6110,6 +6173,25 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
   return count;
 }
 
+/// SPEC 16.20, 16.21: the census's one row beside the field, radiation pressure's (l -1, m 0, p 0, q 0, no rate), from the
+/// carriers a set builds: code 4 through the output map, 13 by SPEC 4's averaged rates and periodic output terms between
+/// them, 30 by both, 24 by one of SPEC 4's two alone. Its size is a Cr A/m of 0.01 m^2/kg at 1 AU over the 5-day forecast,
+/// a t^2 / 2 (4,199 m). Returns the count with it.
+inline int census_radiation_row(const RateContext& ctx, int count, double* rows, int max_rows) {
+  const bool through = lp_radiation_through_output(ctx), averaged = radiation_averaged(ctx), periodic = radiation_periodic(ctx);
+  const int code = through ? (averaged || periodic ? 30 : 4) : (averaged && periodic ? 13 : (averaged || periodic ? 24 : 20));
+  if (count < max_rows) {
+    double* r = rows + 10 * count;
+    const double t = 5.0 * 86400.0;
+    r[0] = -1; r[1] = 0; r[2] = 0; r[3] = 0; r[4] = 0; r[5] = code;
+    r[6] = through || averaged ? 1.0 : 0.0;
+    r[7] = code == 30 ? 2.0 : (code == 4 || code == 13 ? 1.0 : (code == 24 ? 0.5 : 0.0));
+    r[8] = 0.5 * kSrpPressure * 0.01 * t * t;
+    r[9] = 1e30;
+  }
+  return count + 1;
+}
+
 /// SPEC 16.20: the census for a set of epoch mean motion n (rad/min), e, i (rad) whose record states MAXIMUM_TESSERAL_DEGREE
 /// `cap` with the slow set (a fit's record), built as a flight builds it (ap_init) and released. -1 for elements it refuses.
 inline int field_census(int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
@@ -6133,7 +6215,8 @@ inline int field_census(int cap, double n, double e, double inc, double cut, dou
   s.ctx.resonance = s.ctx.branch.resonance;
   s.ctx.e0 = e;
   s.ctx.i0 = inc;
-  const int count = ap_init(el, n, s.ctx.resonance, s) ? census_rows(s, cap, n, e, inc, cut, rows, max_rows) : -1;
+  int count = ap_init(el, n, s.ctx.resonance, s) ? census_rows(s, cap, n, e, inc, cut, rows, max_rows) : -1;
+  if (count >= 0) count = census_radiation_row(s.ctx, count, rows, max_rows);
   xp_release(s);
   s.~XpSat();
   std::free(sp);

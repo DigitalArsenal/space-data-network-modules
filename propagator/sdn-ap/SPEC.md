@@ -4284,7 +4284,8 @@ mean elements y the solution m of J m = (0, a): J is the Jacobian of section 8's
 in the six elements by forward differences (steps 1e-7, and 1e-7 n for n, every column's Kepler equation started from the
 base's eccentric anomaly), and a is the Sun's and Moon's point-mass acceleration at the output's position. Gaussian
 elimination with partial pivoting solves it; where the output or the solve fails, the Gauss equations remain. The rates
-then move the J2 output by the bodies' acceleration and nothing else, to first order.
+then move the J2 output by the bodies' acceleration and nothing else, to first order. Radiation pressure takes the same
+path there from 0.6.NN (16.21).
 
 AP's Moon signal (each side's flight with J2 and the Moon less its flight with J2 alone, no fit, 120 h; J3 to J5 and the
 Sun's mass zero in the builds), against the numerical propagator's:
@@ -4328,14 +4329,21 @@ past it. Through the mean motion it is the slow set's measure.
 
 Rows have ten doubles: l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size, and the term's period in days (2 pi / |psi-dot|), so a carrier can be checked against the period directly.
 
+Beside the field the census lists one family, radiation pressure (from 0.6.NN): one row with l -1, m 0, p 0, q 0 and no
+rate, its code read from the same predicates the flight's gates read (4 through the output map, 13 by SPEC 4's two
+carriers, 30 if both, 24 if one of SPEC 4's alone). Its size is a Cr A/m of 0.01 m^2/kg at 1 AU over the five days, a t^2 / 2:
+4,199 m.
+
 | Code | Carried |
 | ---: | --- |
 | 1 | once, by the rates |
 | 2 | once, by the grid |
 | 3 | once, by the output table |
+| 4 | once, through the output map (radiation pressure in the long-period regime above e 0.3, 16.21) |
 | 8 | once, by the m-daily family |
 | 11 | once, by the rates and the output table between them (the band taper) |
 | 12 | once, by the rates and the grid between them (the band taper, above the switch) |
+| 13 | once, by SPEC 4's averaged rates and its periodic output terms between them (radiation pressure elsewhere) |
 | 20 | nowhere: above the degree of the carrier that the term's rate gives it |
 | 21 | nowhere: under that carrier's rate floor, or in the slow band that the grid leaves out |
 | 22 | nowhere: outside that carrier's q (or j) range |
@@ -4377,6 +4385,60 @@ went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit ab
 The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
 arc.
 
+
+**16.21 Radiation pressure of the long-period regime through the output** (from 0.6.NN; stack #479). SPEC 4 carries
+radiation pressure in two parts: rates averaged over the mean orbit with the Sun held fixed, and first-order periodic terms
+in the output. On a TESS-like orbit five days are under half of a 13.7-day revolution. The average then says little about
+the forecast, and periodic terms built with the Sun held fixed miss the rest.
+
+From 0.6.NN an AP set above e 0.3 in the long-period regime, where the Sun and Moon already go through the output (16.19),
+takes radiation pressure the same way:
+- The acceleration at the output's position joins the bodies' in J m = (0, a).
+- It is a cannonball: SPEC 4's pressure, 4.5e-6 N/m^2 at 1 AU, over the square of the Sun-to-satellite distance, away from
+  the Sun, times the record's Cr A/m.
+- SPEC 4's averaged rates and periodic output terms are off there, so radiation is carried once (16.20, code 4).
+- Where the output or the solve fails, the Gauss equations at the mean state take it.
+
+Every set outside that regime flies bit for bit. With a Cr A/m of 0.02 m^2/kg, ten seeded sets flown 7 days at 300 s with
+every force on are identical to the state: low orbit, GTO, Molniya, GPS-like, e 0.5 at 9.5 h, geostationary, IGSO, and
+the long-period class 0 and one-day class at e 0.01 and 0.29.
+
+*The shadow.* AP's shadow is section 4's cylinder of radius R_E (16.15). The integrator's step in that regime is 8 to 95
+minutes, and a force switched off at the cylinder's edge inside a step puts the step's share of the eclipse in the wrong
+place. So the force takes the share of a one-step window about the moment that the satellite spends outside the cylinder,
+in closed form along the straight line of its position and velocity. On an eclipsing orbit of 30 h at e 0.31 (node 0, J2
+and radiation alone on both sides), the day-7 error is 113 m with the shadow taken as on or off at each moment and 25 m with
+the window; J2 alone is 19 m there.
+
+*Measured.* Seeded, no fit. J2 and radiation alone on both sides: AP's builds have the Sun's and Moon's mass ratios at zero,
+FFM's cannonball has Cr 1 and A/m 0.02 m^2/kg, and AP's Cr A/m is 0.02 m^2/kg. Distance to the numerical propagator at days
+1 / 3 / 5 / 7, m:
+
+| set, node | before 0.6.NN | from 0.6.NN | J2 alone |
+| --- | ---: | ---: | ---: |
+| TESS-like (13.7 d, e 0.55), 0 | 184 / 623 / 942 / 1,076 | 3.4 / 38 / 109 / 210 | 0.1 / 0.5 / 1.2 / 2.2 |
+| TESS-like, 120 | 112 / 307 / 769 / 1,543 | 2.8 / 25 / 78 / 172 | 0.1 / 0.5 / 1.2 / 2.2 |
+| TESS-like, 240 | 156 / 119 / 321 / 704 | 3.0 / 24 / 63 / 139 | 0.1 / 0.5 / 1.2 / 2.2 |
+| Chandra-like (63.5 h, e 0.685), 0 | 5.9 / 8.9 / 31 / 10 | 3.6 / 11 / 57 / 31 | 1.6 / 3.3 / 6.8 / 9.6 |
+| Chandra-like, 120 | 5.0 / 29 / 83 / 70 | 2.6 / 9.9 / 16 / 19 | 1.6 / 3.3 / 6.7 / 9.7 |
+| Chandra-like, 240 | 4.0 / 43 / 60 / 18 | 4.3 / 31 / 43 / 20 | 1.6 / 3.3 / 6.8 / 9.6 |
+| 30 h, e 0.31, 0 | 8.8 / 10.5 / 53 / 32 | 7.0 / 8.3 / 18 / 34 | 1.5 / 8.9 / 8.6 / 19 |
+| 30 h, e 0.31, 120 | 8.2 / 3.8 / 64 / 15 | 6.3 / 7.8 / 47 / 18 | 1.5 / 8.9 / 8.7 / 19 |
+| 30 h, e 0.31, 240 | 10.7 / 8.4 / 13 / 17 | 1.0 / 13.4 / 28 / 17 | 1.5 / 9.0 / 8.5 / 19 |
+
+*The constant.* AP's pressure is SPEC 4's 4.5e-6 N/m^2, shared with SGP4XP. The numerical propagator's is 1,361 W/m^2 over
+c, 4.540e-6 N/m^2, which is 0.88 % more. A record's fitted area-to-mass absorbs the difference. A record that states a
+physical area-to-mass instead keeps it:
+- From 0.6.NN the table's figures are that difference alone: 139 to 210 m at day 7 on the TESS-like set.
+- With AP's Cr A/m scaled by 4.540 / 4.5, the same flights sit at J2's own figures: 0.1 / 0.5 / 1.3 / 2.3 m on the TESS-like
+  set, and the Chandra-like and eclipsing sets' columns above.
+
+*The cost* of the change is not measurable under the machine's load (36 to 60 at the time). On a TESS-like set (Cr A/m 0.02, a 1-minute grid over 7 days), the medians of 7 rounds were 48.0 µs a state before and 48.9 after; on a THEMIS-like set, 61.9 and 57.0. The spread from run to run was about 5 µs. The Jacobian of 16.19 is already built there, and the share of light costs one quadratic.
+
+`test/long-period-radiation.e2e.mjs` uses the module's own Sun and Moon on both sides, with J2 alone. It takes
+radiation's own error at day 7: AP's radiation displacement (with radiation minus without) against FFM's.
+- The eclipsing set: 20.0 m against 48.3 m before 0.6.NN, and 108.2 m with the shadow taken as on or off at each moment.
+- The TESS-like set: 207.7 m against 1,386.5 m.
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 
