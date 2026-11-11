@@ -18,7 +18,7 @@ import { openModule } from './lib/module.mjs';
 
 const m = await openModule();
 const x = m.x;
-const MAX = 200000, COLS = 9, CUT = 0.5;
+const MAX = 200000, COLS = 10, CUT = 0.5;
 const inp = x.sdnap_alloc(6 * 8), out = x.sdnap_alloc(MAX * COLS * 8);
 /** The census's rows for mean motion n (rev/day), e, i (deg), the record's tesseral degree cap. */
 function census(n, e, i, cap = 31) {
@@ -28,7 +28,7 @@ function census(n, e, i, cap = 31) {
   assert.ok(count <= MAX, `${count} rows fit`);
   const v = new Float64Array(m.harness.memory.buffer, out, count * COLS).slice();
   return Array.from({ length: count }, (_, k) => ({ l: v[COLS * k], m: v[COLS * k + 1], p: v[COLS * k + 2], q: v[COLS * k + 3],
-    rate: v[COLS * k + 4], code: v[COLS * k + 5], wr: v[COLS * k + 6], total: v[COLS * k + 7], size: v[COLS * k + 8] }));
+    rate: v[COLS * k + 4], code: v[COLS * k + 5], wr: v[COLS * k + 6], total: v[COLS * k + 7], size: v[COLS * k + 8], periodDays: v[COLS * k + 9] }));
 }
 // The branch a set's epoch elements give it (res::band_of, tess::wide_set, the 1,100-minute limit), in rev/day.
 const classOf = (n) => (n > 0.802 && n < 1.2034 ? 1 : n >= 1.6045 && n <= 2.4068 ? 2 : n > 2.4068 && n <= 3.6101 ? 3 : n >= 1.2034 && n <= 1.805 ? 4 : 0);
@@ -58,7 +58,7 @@ const HOLES = [
     test: (b, t) => b.wide && (t.code === 20 || t.code === 24) },
   { issue: 'stack #473', what: 'above the switch: slow terms the grid leaves out and no rate carries',
     test: (b, t) => b.wide && t.code === 21 },
-  { issue: 'stack #503', what: 'outside the low table below the switch: terms the output table\'s degree, q range or band floor leaves out and the class\'s rates do not carry',
+  { issue: 'stack #511', what: 'outside the low table below the switch: terms the output table\'s degree, q range or band floor leaves out and the class\'s rates do not carry',
     test: (b, t) => !b.lowTable && !b.wide && t.code >= 20 && t.code <= 22 },
 ];
 
@@ -89,13 +89,14 @@ for (const s of SETS) {
   for (const t of rows) {
     assert.ok(t.wr >= 0 && t.total >= 0 && t.total <= 1.001 || t.code === 30, `${s.name}: weights in range`);
     assert.notEqual(t.code, 30, `${s.name}: (${t.l}, ${t.m}, ${t.p}, ${t.q}) is carried twice (weights sum ${t.total})`);
+    assert.ok(t.rate === 0 || Math.abs(t.periodDays * Math.abs(t.rate) * s.n - 1) < 1e-6, `${s.name}: the period column is 1 / (|psi-dot / n| n)`);
     if (t.code < 20) continue;
     const h = HOLES.find((k) => k.test(b, t));
     if (!h) { unknown.push({ set: s.name, band: s.band, wide: b.wide, ...t }); continue; }
     seen.set(h, seen.get(h) + 1);
     h.largestM = Math.max(h.largestM ?? 0, t.size);
     (worst[s.band] ??= []).push({ set: s.name, hole: h.issue, l: t.l, m: t.m, p: t.p, q: t.q, j: t.l - 2 * t.p + t.q,
-      rateOverN: +t.rate.toPrecision(3), code: t.code, sizeM: +t.size.toPrecision(3) });
+      rateOverN: +t.rate.toPrecision(3), periodDays: +t.periodDays.toPrecision(3), code: t.code, sizeM: +t.size.toPrecision(3) });
   }
 }
 const ms = performance.now() - t0;

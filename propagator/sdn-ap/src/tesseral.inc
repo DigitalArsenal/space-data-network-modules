@@ -142,7 +142,7 @@ constexpr double kShallowBand = 0.045;
 constexpr int kSlowDegree = 70;
 constexpr int kSlowJMax = 6, kSlowQMax = 4;
 constexpr double kSlowKeepM = 0.5;
-/// The slow set's q range: |q| up to kSlowQMax from 0.6.NN (stack #477's second part; 0.6.25 landed q = 0), every term of it
+/// The slow set's q range: |q| up to kSlowQMax from 0.6.27 (stack #477's second part; 0.6.25 landed q = 0), every term of it
 /// by its own rate and size; tests only may narrow it (sdnap_slow_q_max).
 inline int& slow_q_max() {
   static int q = kSlowQMax;
@@ -4234,7 +4234,7 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
 /// (the grid resolves periods of 1 / band orbits). Until stack #477 a comment here said k = 2 and 3 "do not pay (2.13 against
 /// 2.03 km at day 3)": that was a series cut at degree 31 against a 70 x 70 truth, which loses a cancellation. With
 /// Terms::slow the slow set's terms follow these (kSlowDegree above): every j and q, to the field's degree, by size.
-constexpr int kShallowMax = 2048;  // the largest low-table list (|q| up to 4) is 929 terms (test/slow-set-partition's sweep)
+constexpr int kShallowMax = 2048;  // the largest low-table list (|q| up to 4) is 971 terms (test/slow-set-partition's sweep)
 
 /// A shallow term as held per object (16 bytes): the Kaula indices and the epoch products in float; the
 /// field coefficients are the pinned table's.

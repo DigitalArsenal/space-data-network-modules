@@ -5898,8 +5898,8 @@ inline int census_q_max(double e) { return e <= tess::kWideENonResonant ? tess::
 /// degree to 70, |q| up to census_q_max(e), whose size (tess::census_size_m) reaches `cut` m, with the weight each carrier the
 /// set built holds of it, read from the set's own tables: the rates (the shallow and slow list with its band taper, the class's
 /// terms, the half-day and one-day tails), the output table (its entries' weights), the m-daily family, the family grid
-/// (1 - tess::wide_left_out). Row of 9: l, m, p, q, psi-dot / n, the code, the rates' weight, the weight of all carriers, the
-/// size (m). Codes: carried once (the weights sum to 1 within 1e-3): 1 the rates, 2 the grid, 3 the output table, 8 the m-daily
+/// (1 - tess::wide_left_out). Row of 10: l, m, p, q, psi-dot / n, the code, the rates' weight, the weight of all carriers, the
+/// size (m), the term's period (days). Codes: carried once (the weights sum to 1 within 1e-3): 1 the rates, 2 the grid, 3 the output table, 8 the m-daily
 /// family, 11 the rates and the output table between them; carried nowhere, by the carrier the term's rate and degree give it:
 /// 20 above its degree, 21 under its rate floor (or out of the grid's slow band), 22 outside its q range (or its j range),
 /// 23 under its own size cut, 24 partly (the weights sum to less than 1 and the share left out reaches the cut); 30 twice
@@ -5992,8 +5992,9 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
             code = l > table_degree ? 20 : std::abs(q) > 1 ? 22 : under_floor ? 21 : 23;
           }
           if (count < max_rows) {
-            double* r = rows + 9 * count;
+            double* r = rows + 10 * count;
             r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = code; r[6] = wr; r[7] = total; r[8] = size;
+            r[9] = ap > 0.0 ? kTwoPi / ap / 1440.0 : 1e30;  // the term's period, days
           }
           ++count;
         }

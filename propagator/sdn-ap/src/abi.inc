@@ -475,8 +475,8 @@ int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
 
 /// The field's census (SPEC 16.19; stack #503): in = mean motion (rev/day), e, i (deg), the record's tesseral degree, the size
 /// cut (m); every tesseral term of the embedded field at or above the cut, with the carriers a set of these elements builds
-/// (xpt::census_rows: rows of 9 doubles, l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size
-/// in m), at most max_rows. Returns the count of all rows, or -1 for elements it refuses. A diagnostic: no flight reads it.
+/// (xpt::census_rows: rows of 10 doubles, l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size
+/// in m, the term's period in days), at most max_rows. Returns the count of all rows, or -1 for elements it refuses. A diagnostic: no flight reads it.
 SDNAP_EXPORT("sdnap_field_census")
 int32_t sdnap_field_census(const double* in, double* rows, int32_t max_rows) {
   using namespace sdnap::xpt;

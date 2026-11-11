@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T10:27:40.756Z",
+  "generatedAt": "2026-11-11T15:54:55.134Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.26",
+      "version": "0.6.27",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7576,7 +7576,7 @@
         "test/fixtures/ap-fit-0.4.0.epochs.oem",
         "test/fixtures/ap-fit-0.4.0.oem",
         "test/fixtures/ap-fit-0.4.0.omm",
-        "test/fixtures/ap-fit-0.6.25.ocm",
+        "test/fixtures/ap-fit-0.6.27.ocm",
         "test/fixtures/ap-fit-0.6.4-0.6.22.cov",
         "test/fixtures/ap-fit-0.6.4-0.6.22.oem",
         "test/fixtures/ap-fit-0.6.4.eme2000-0.6.22.oem",
