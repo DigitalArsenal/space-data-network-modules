@@ -4736,7 +4736,7 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
   E = std::fmod(E, kTwoPi);
   if (E < 0.0) E += kTwoPi;
   const double dE_dlam = dsix_dlam != nullptr ? (1.0 / (1.0 - kp.e * std::cos(E))) : 0.0;
-  // Read continuously with its slope from one cell to the next (SPEC 16.11; through 0.6.12 the four-point Lagrange cubic,
+  // Read continuously with its slope from one cell to the next (SPEC 16.11; through 0.6.13 the four-point Lagrange cubic,
   // whose slope stepped at every node). The value: the cubic Hermite between nodes i1 and i1 + 1 on the two values and
   // the two slopes the build stored beside them (wide_grid_build: the fourth-order central difference, single precision). The
   // derivative grids in e, i and a / a: the four-point Catmull-Rom cubic.

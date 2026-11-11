@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.13 (dist da12ee92).
+Version 0.6.14 (dist 2a1cf5ca).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2565,7 +2565,7 @@ e^{i(w omega + m beta)}. Each node's slope is the fourth-order central differenc
 grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.
 The derivative grids are read by the four-point Catmull-Rom cubic. Both are continuous with their slope from one interval
 to the next. Memory per family is 16,896 bytes against 10,752 (+57 %); cost per state on the low orbits that read the
-grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0.6.12 it was the four-point Lagrange cubic, whose slope
+grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0.6.13 it was the four-point Lagrange cubic, whose slope
 stepped at every node: kinks about 80 s apart near perigee, where the nodes pass fastest. On the transfer orbit with drag
 off the jump detector within 10 min of perigee read 0.395 m at 10 s and 0.031 m at 1 s; it now reads 0.032 m and 0.8 mm
 (stack #420; `test/egrid-continuity.e2e.mjs`). A grid is built at the set's mean elements at every 48 hours from its epoch

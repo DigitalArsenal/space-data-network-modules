@@ -10,7 +10,7 @@
 // A kink in the output, a step in its slope, reads about h times the step; smooth content falls as h^4.
 // Asserted: at most 0.08 m at 10 s and 5 mm at 1 s.
 // Measured 2026-11-10, transfer orbit / Molniya:
-// - through 0.6.12, the four-point Lagrange cubic in E: 0.395 / 0.229 m at 10 s and 0.031 / 0.019 m at 1 s, kinks about
+// - through 0.6.13, the four-point Lagrange cubic in E: 0.395 / 0.229 m at 10 s and 0.031 / 0.019 m at 1 s, kinks about
 //   80 s apart;
 // - with the cubic Hermite: 0.032 / 0.022 m and 0.8 / 1.1 mm.
 // Every number comes from the built module's own calls (propagate). JS only moves bytes and compares numbers the module
