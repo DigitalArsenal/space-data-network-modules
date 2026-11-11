@@ -1,10 +1,13 @@
 # sdn-ap-propagator
 
-Version 0.6.18 (dist cb546d93).
+Version 0.6.20 (dist 5a7fa01f).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
-atmosphere and gravity terms; SPEC 15, 16).
+atmosphere, gravity terms and solid Earth tide; SPEC 15, 16).
+When you fit real data with AP, state `FORCES.SOLID_TIDES = IERS_2010` beside the gravity terms: the Earth has the solid
+tide, and without it AP's error on a low orbit after a 72 h fit is about twice as large at day 5 against a numerical
+propagator that carries it (SPEC 16.14).
 An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
 `ElementRow` of theory 16 are refused.
 
@@ -86,8 +89,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
   KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
   averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
-  below) and AP's gravity terms (SPEC 16, below), on `fit` ECOM2's Y0 (SPEC 16.13, below), and any other FORCES field
-  is refused by name. INTEGRATOR is refused
+  below) and AP's gravity terms (SPEC 16, below), on `fit` the solid Earth tide (SOLID_TIDES, SPEC 16.14, below) and
+  ECOM2's Y0 (SPEC 16.13, below), and any other FORCES field is refused by name. INTEGRATOR is refused
   (the averaged theories integrate on their own grid), EVENTS when not empty. FIT (every field) and OUTPUT (TEME,
   GCRF or EME2000, at most 500,000 states) apply with their documented ranges; FIT.DRAG_PRIOR_FORM and SRP_PRIOR_FORM
   LOG_NORMAL need their prior (HAS_SIGMA true, the MEAN its median > 0), refused by name without it.
@@ -166,12 +169,17 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 `FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the other
-first-order terms to 12, near-resonant terms, shallow resonances and the half-day resonant tail to 31; each to the degree asked if lower;
+first-order terms to 12, near-resonant terms, shallow resonances and the half-day and one-day resonant tails to 31; each to the degree asked if lower;
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
 (`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
+
+The one-day tail (from 0.6.19) adds the resonant terms of degrees 5 to 31 to the one-day class below e 0.3, which
+carried degrees 2 to 4 only. On made-up geostationary sets, AP against FFM with the same 20 x 20 field after a 72 h fit
+went from 16.9-136.1 m to 8.5-11.1 m at day 7 at 12 longitudes; what remains is AP's analytic Moon (stack #446;
+`test/one-day-resonant-tail.e2e.mjs`).
 
 The half-day tail adds every even-order resonant term through degree 31. Against FFM after a 72 h fit, the
 day-7 errors are 60.1 m for the half-day case (a sample 1 h after a perigee; the day's RMS is 34 m along-track and
@@ -199,12 +207,28 @@ rev/day, 220 m at 8 (the 8:1 resonance's shoulder) and 159 m at 6 rev/day e 0.35
 The exact resonance (an order-m term slower than 1e-3 n, 8.05 rev/day at e 0.25: 1.27 km) is not carried. SPEC 16.11 has the
 table; `test/class0-commensurability.e2e.mjs` pins it.
 
+## The solid Earth tide (SPEC 16.14; `fit` and every flight)
+
+From 0.6.20, `fit` under `$PCF` FORCES.SOLID_TIDES IERS_2010 (with the gravity terms) puts the solid Earth tide in AP's theory: the
+degree-2 tide the Moon and the Sun raise, with the Love numbers of IERS 2010 per order and its frequency-dependent
+diurnal band, the same field and model FFM reads. Averaged over the orbit it has a closed form, added to the mean-element
+rates at every step; nothing is added at output time. The record states PERTURBATIONS.SOLID_TIDES_MODEL "IERS 2010" and
+every flight reads it there. NONE, the default on the wire, leaves the tide out; an AP set with gravity terms fitted
+without it says so in its OD COMMENT, and flies as before, bit for bit. On model truth (16 low orbits, 690 to 1,490 km,
+FFM with the tide), the median day-5 error after a 72 h fit is 68.3 m without the term and 28.3 m with it (28.5 m with
+no tide on either side); after a 24 h fit 64.0 and 48.1 m (48.2 m). On medium, geostationary and eccentric orbits the
+tide moves the day-5 error of a 72 h fit by 0.07 to 6.5 m and the term carries it to within 0.03 m. The stated covariance does not
+shrink. E2E: `test/solid-tides.e2e.mjs`.
+
 ## The radiation term Y0 (SPEC 16.13; `fit` and every flight)
 
 For satellites whose solar panels track the Sun (navigation satellites), `fit` under `$PCF` FORCES.ECOM2 also solves
 ECOM2's Y0, a constant acceleration (m/s^2) along the axis normal to the Sun and the satellite's radius, beside the
-sphere's AGOM, on fits of 72 h or more above the drag; elsewhere, and always in the one-day (geosynchronous) class, it
-is held at FORCES.ECOM2.Y0_M_S2. The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR
+sphere's AGOM, on fits of 72 h or more above the drag; elsewhere it is held at FORCES.ECOM2.Y0_M_S2. Through 0.6.18 it
+was held in the one-day (geosynchronous) class too. From 0.6.19 that class solves it: on real 72 h windows the share
+within 100 m of the numerical propagator at day 5 went from 23 to 26 of 32 (geostationary: six windows on, three of C020
+off, stack #457) and from 52 to 59 of 59 (inclined geosynchronous). The inclined row's medians rose from 27.0 to 31.3 m
+at day 5 and from 38.7 to 56.4 m at day 7, because the Moon's position error (stack #446) leaks into Y0 there (SPEC 16.13). The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR
 truthful) and every flight reads it there; nothing else carries it (an SGP4XP row of `sdnap_init_elements` or `sdnap_fit`
 with mean_motion_dot not 0 is refused). The theory applies its averaged rates to the mean elements in 6 h blocks; a set
 without Y0 flies as before, bit for bit. On the real 72 h windows of experiments headline-loop (0.6.13 against 0.6.15,
