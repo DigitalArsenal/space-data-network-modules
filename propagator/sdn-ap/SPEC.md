@@ -4118,6 +4118,26 @@ that piece is the grid of the fast families under the Sun and Moon (stack #479).
 `test/slow-band-every-class.e2e.mjs` checks one set of each class with `sdnap_slow_terms`, and flies one model truth at e 0.9
 (0.40 rev/day, fitted to its own 5 days): 242.7 m against 2,691.4 m before.
 
+*Every class below its switch, outside the low table (from 0.6.NN; stack #511).* The same wide slow list carries the slow
+terms of the resonant classes below their switch (e at most 0.3) and of class 0's long period (a period of 1,100 min and up, e
+at most 0.05).
+- Through 0.6.32 these sets carried their class's terms (6.1) and tails (16.2) in the rates. The output table left out every
+  other term inside one band (its weight 0 there), and no rate carried it. The census (16.20) listed 406 such terms on its
+  sweep, the largest 91 m over 5 days: the eight-hour class's (6, 6, 2, 0) at -0.006 n, at 3 rev/day, e 0.29.
+- The list is built before the output table and is the same rule as above the switch: each term by its own rate, at the
+  0.5 m cut, weighted by the band taper. The output table holds 1 - w of each term the list holds (sp_terms' `wide_held`), as
+  the low table does with the slow set. Below the switch the one-day class's tail (16.2) keeps its own terms, which the list
+  leaves out.
+- Above the switch nothing changes: the list's terms are the same, and the output table holds near-resonant terms only.
+
+On the synthetic set's 130 cases in these branches, AP fitted to the numerical forecast and D the largest distance over 0 to
+5 days, all 130 were within 100 m before and after:
+- one-day: 61 cases; half-day: 48; eight-hour: 18; sixteen-hour: 2; long period: 1;
+- the largest changes: the 3:1 commensurability's two edge cases, 16.9 to 7.0 m (off the exact commensurability) and 9.0 to
+  6.1 m (on it); no other case moves by more than 0.3 m.
+The census's hole there goes from 406 terms (91 m) to 358 (39 m). The 358 are fast terms: the output table holds |q| up to 1
+and degree up to 12.
+
 *The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
 - in low orbit (class 0 below 1100 min), through 0.6.24: the commensurabilities with j of 2 to 4 (orders 25 and up) and the
   degrees above 31. Inside the bands they put a set 0.1 to 1.9 km off at day 5 (stack #477). From 0.6.25 the low table's
@@ -4330,7 +4350,7 @@ went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit ab
 | The one-day class above its switch: under its floor, or above the grid's degree | stack #474 | 456 | 73 |
 | Above the switch, every class: terms above the grid's degree 12 | stack #497 | 189,984 | 3,910 |
 | Above the switch, low orbit: slow terms the grid leaves out and no rate carries | stack #473 | 15 | 4,060 |
-| Outside the low table, below the switch: terms the output table's degree, q range or band floor leaves out and the class's rates do not carry | stack #511 | 406 | 91 |
+| Outside the low table, below the switch: fast terms the output table's q range (\|q\| up to 1) or degree (12) leaves out (from 0.6.NN; the slow ones are the wide slow list's) | stack #511 | 358 | 39 |
 
 The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
 arc.
