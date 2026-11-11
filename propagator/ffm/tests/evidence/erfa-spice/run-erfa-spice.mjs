@@ -11,7 +11,11 @@ import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {buildFfmFrames,eopStream,FFM,REPO} from './ffm-frames-native.mjs';
 import {here} from './frame-diagnostics.mjs';
-const {values:o}=parseArgs({options:{flatbuffers:{type:'string',default:'/Users/tj/software/main-packages/flatbuffers/include'},python:{type:'string',default:process.env.XVAL_PYTHON??'/Users/tj/software/tools/xval/erfa-spice/bin/python'},naif:{type:'string',default:process.env.XVAL_NAIF??'/Users/tj/software/tools/xval/naif-kernels'},'stored-reference':{type:'boolean',default:false}}});
+import {outsidePath,recordedJson,requireOptions,rootDir} from '../paths.mjs';
+const {values:o}=parseArgs({options:{flatbuffers:{type:'string'},python:{type:'string'},naif:{type:'string'},'stored-reference':{type:'boolean',default:false}}});
+// Outside folders come from the environment (docs/cross-validation.md, Outside inputs), never from a path here.
+o.flatbuffers??=rootDir('flatbuffers include')??undefined;o.python??=process.env.XVAL_PYTHON??outsidePath('xval','erfa-spice/bin/python');o.naif??=process.env.XVAL_NAIF??outsidePath('xval','naif-kernels');
+requireOptions(o,[['flatbuffers','set XVAL_FLATBUFFERS to the include/ folder of a flatbuffers checkout'],...(o['stored-reference']?[]:[['python','set XVAL_PYTHON to the erfa-spice Python, or FFM_XVAL_TOOLS'],['naif','set XVAL_NAIF to the NAIF kernel folder, or FFM_XVAL_TOOLS']])]);
 const instants=epochs=>JSON.stringify(epochs.map(({utc,earthOrientation,tt1,tt2,ut11,ut12,etTdb})=>[utc,earthOrientation,tt1,tt2,ut11,ut12,etTdb]));
 const hash=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 const casesPath=path.join(here,'../cases/ffm-reference-cases.json'),cases=JSON.parse(fs.readFileSync(casesPath,'utf8'));

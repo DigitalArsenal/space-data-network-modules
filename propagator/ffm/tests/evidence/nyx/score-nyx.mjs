@@ -33,6 +33,7 @@ import { ALL, wasm, sha256, CASES, reference, run, buildMetrics, scoreResponse, 
 import { buildMetrics as buildPresentation } from '../orekit/scoring.mjs';
 import { readCache, scoreStored } from '../tudat/scoring.mjs';
 import { assertMatchingNumbers } from '../recorded-numbers.mjs';
+import { recordedJson } from '../paths.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: o, positionals } = parseArgs({ options: {
@@ -178,5 +179,6 @@ const summary = {
   skipped: NYX.skipped, diagnostics,
 };
 if (o.stm && !o.only && SETTINGS.length === ALL.length && ['msis-published', 'fine', 'naif-bpc'].every((key) => variants[key])) explainSummary(summary, path.resolve(path.dirname(o['msis-published']), '..'), o['input-directory']);
-fs.writeFileSync(out, `${JSON.stringify(summary, null, 1)}\n`);
+// Paths are written in recorded form (../paths.mjs): repository-relative, or a label for an outside folder.
+fs.writeFileSync(out, `${JSON.stringify(recordedJson(summary, path.dirname(path.resolve(out))), null, 1)}\n`);
 console.error(`-> ${out}`);

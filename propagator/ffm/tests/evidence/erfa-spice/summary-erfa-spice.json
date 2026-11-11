@@ -501,7 +501,7 @@
    "foundation/frames/src/eop_series.hpp": "399f0b10aad4a71e2001e8e96a5647ac15e16d5533141daf88a589136a849ddb"
   },
   "measurement": {
-   "command": "node tests/evidence/erfa-spice/run-erfa-spice.mjs --flatbuffers /Users/tj/software/main-packages/flatbuffers/include",
+   "command": "XVAL_FLATBUFFERS=<flatbuffers include> node tests/evidence/erfa-spice/run-erfa-spice.mjs",
    "units": "angles mas; position differences/bounds meters; rates m/s",
    "epochs": "50 UTC hourly samples; exact TT/UT1; rates diagnostic spans 1990–2040",
    "radiiM": {
@@ -535,7 +535,7 @@
   },
   {
    "path": "before-after.json",
-   "sha256": "d72e6b8f32f5a23fe8c5f334a1edbd639d97c78ccfa2d0360c4daf408dd4f08f"
+   "sha256": "2ca44a3a1cb7dafb2411f761b43ea04f00742bbaec6a082c5c4d83d083ce0651"
   },
   {
    "path": "classical-frames-10k.json",
@@ -555,11 +555,11 @@
   },
   {
    "path": "summarize-erfa-spice.mjs",
-   "sha256": "f7c98dd9b27f09b0af37344fda75f4ffc4c242c03c8dd6850de182034db7f81c"
+   "sha256": "c224f82562adea1519d822e40b84cf9e19ef2a773b09ac95901e5fe3473db083"
   },
   {
    "path": "check-erfa-spice.mjs",
-   "sha256": "c95f9e0ed3737ee34bc3afe91d1d34481f68a7f15392ed6a6918c74775a86e4e"
+   "sha256": "190515214033ef02ca76e59b5a8abb34200f4ab7f56f26091396cb25ab66e0b1"
   },
   {
    "path": "ffm_frames_native.cpp",
@@ -575,11 +575,11 @@
   },
   {
    "path": "run-erfa-spice.mjs",
-   "sha256": "737224ff4a53d3156e8151488f596cb6a9882311adb79756daf50575ae5c79ce"
+   "sha256": "6c5c54b9008cdb5051881cb4045c850b5e9fb5d2068ec42cf6e1c9e12ba35a23"
   },
   {
    "path": "check-classical-frames.mjs",
-   "sha256": "cd80f46df9f1f5a47cb124ba7c2d6965143bfb3aa0e0da846251c9ffaed91a7c"
+   "sha256": "fdf01133634c1b65eba014aff53c9893f4f115d54a8220c33ddf72d57ba00ab1"
   },
   {
    "path": "classical-frames.cpp",
@@ -1658,11 +1658,11 @@
    "sha256": "f16ecf0b13e95840dafaf50295fc0451200427c94b62cdf35b83ff8521872ca1"
   },
   {
-   "path": "/Users/tj/software/tools/xval/naif-kernels/naif0012.tls",
+   "path": "<xval>/naif-kernels/naif0012.tls",
    "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"
   },
   {
-   "path": "/Users/tj/software/tools/xval/naif-kernels/earth_latest_high_prec.bpc",
+   "path": "<xval>/naif-kernels/earth_latest_high_prec.bpc",
    "sha256": "16b40c07bde82878119e7b542613b4a8f4f18b1a3181fc25027e42c6f77d1528"
   },
   {

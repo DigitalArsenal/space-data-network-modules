@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { here, readJson, sha256, buildMetrics, causeFor, verdictFor, sourceFiles, externalSources } from './evidence.mjs';
+import { recordedJson } from '../paths.mjs';
 
 const work = fs.mkdtempSync(path.join(here, '.update-gmat-'));
 try {
@@ -51,7 +52,8 @@ try {
       historicalArtifacts: [],
       hashPolicy: 'Verify every available path against its declared digest; unavailable historical binaries, reports and input files are explicit provenance gaps, never silently re-pinned.',
     };
-    const historicalRoot = `/Users/tj/software/tools/xval/gmat-work/final/${release === 'R2026a' ? 'main' : 'r22'}`;
+    // Recorded as labels (../paths.mjs): the GMAT work folder and the GMAT installs live outside the repository.
+    const historicalRoot = `<gmat work>/final/${release === 'R2026a' ? 'main' : 'r22'}`;
     for (const entry of Object.values(record.inputFiles)) if (entry.sha256) {
       summary.provenance.historicalArtifacts.push({ path: `${historicalRoot}/${entry.file}`, sha256: entry.sha256, role: 'recorded GMAT input' });
     }
@@ -59,14 +61,14 @@ try {
       path: `${historicalRoot}/${row.id.replaceAll(' ', '_')}.txt`, sha256: row.reportSha256, role: 'recorded GMAT report', caseId: row.id,
     });
     if (summary.gmat.stmFile) {
-      const file = `/Users/tj/software/tools/xval/gmat-work/final/${summary.gmat.stmFile}`;
+      const file = `<gmat work>/final/${summary.gmat.stmFile}`;
       summary.provenance.historicalArtifacts.push({ path: file, sha256: summary.gmat.stmSha256, role: 'stored STM trajectory' });
     }
     if (release === 'R2026a') {
       summary.provenance.historicalArtifacts.push(
-        { path: '/Users/tj/software/tools/xval/gmat-R2026a/bin/GmatConsole', sha256: record.tool.gmatConsoleSha256, role: 'recorded GMAT executable' },
-        { path: '/Users/tj/software/tools/xval/gmat-R2026a/bin/GMAT-R2026a_Beta.app/Contents/Frameworks/libGmatBase.dylib', sha256: record.tool.gmatBaseSha256, role: 'recorded GMAT library' });
+        { path: '<xval>/gmat-R2026a/bin/GmatConsole', sha256: record.tool.gmatConsoleSha256, role: 'recorded GMAT executable' },
+        { path: '<xval>/gmat-R2026a/bin/GMAT-R2026a_Beta.app/Contents/Frameworks/libGmatBase.dylib', sha256: record.tool.gmatBaseSha256, role: 'recorded GMAT library' });
     }
-    fs.writeFileSync(path.join(here, file), `${JSON.stringify(summary, null, 1)}\n`);
+    fs.writeFileSync(path.join(here, file), `${JSON.stringify(recordedJson(summary, here), null, 1)}\n`);
   }
 } finally { fs.rmSync(work, { recursive: true, force: true }); }
