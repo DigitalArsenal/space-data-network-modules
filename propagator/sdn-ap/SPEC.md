@@ -2761,9 +2761,8 @@ about once a week, by 3 to 11 mm/s, and in each of the seven windows a firing li
 after the cutoff; 10 mm/s moves the orbit by about 4 km in 5 days. `test/heo-frame.e2e.mjs`'s replay of those windows (the
 module's default fit of the 72 h of states, no drag, the RMS over each day) goes from medians of 775.7, 1,635.8 and
 8,549.6 m to 1,011.7, 2,000.0 and 9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 from -103.1 to +706.0 m (its
-known defect, stack #479; XP takes no drift, so it keeps the turn). The suite's TESS reference at 300 s interleaves two
-sets of states: those at the in-between epochs lie 140 to 1,040 m off the line through their neighbors (the suspected
-cause, unchecked kernel by kernel, is overlapping kernels merged by epoch), and the replay fits AP to that mixed series.
+known defect, stack #479; XP takes no drift, so it keeps the turn). The replay fits AP to a series half of whose states
+are a straight-line fill between the reference's 10-minute solution states, up to about 1 km off the orbit.
 
 On model truth the rotation is right, and its partner is radiation pressure. Seeded with every force but drag and
 radiation, a TESS-like set goes from 1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On the 72 h fit path without
