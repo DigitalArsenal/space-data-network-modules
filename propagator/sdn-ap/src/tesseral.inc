@@ -133,7 +133,7 @@ inline Terms& active() {
 }
 constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
 constexpr double kShallowBand = 0.045;
-/// The one-day class above the eccentricity switch (SPEC 16.11; stack #467): a slow term the class's rates do not carry stays
+/// The one-day class above the eccentricity switch (SPEC 16.18; stack #467): a slow term the class's rates do not carry stays
 /// on the grid unless its angle drifts slower than this times n; below it the term is carried nowhere. 1e-2 n, not the
 /// table's 1e-3 n: on a synchronous set at e 0.5 the terms between the two drift as slowly as the class's own libration,
 /// where a first-order term fails (day 5, two such sets: 105 to 58 m and 42 to 54 m at 1e-3 n; unchanged at 3e-3 and 1e-2 n);
@@ -159,12 +159,13 @@ inline bool wide_set(int cls, double e0) { return e0 > (cls == 0 ? kWideENonReso
 constexpr int kOneDayTailMaxOrder = 16;
 inline bool one_day_tail(int cls, bool wide, int degree) { return cls == 1 && !wide && degree >= 5; }
 
-/// Where a set on the grid (above its eccentricity switch) carries each slow tesseral term, by the grid's own rules
-/// (wide_families): every (l, m, p, q) of degree 2 to `cap` whose angle drifts slower than kShallowBand n at the set's epoch
-/// (J2 secular rates, as the grid takes them). Row: l, m, p, q, psi-dot / n, where: 1 the class's rates, 2 the grid,
-/// 0 carried nowhere (left out of the grid as slow), 4 carried nowhere (above the grid's degree, kSpCap; the table holds no
-/// near-resonant terms outside low orbit). Writes at most max_rows rows; returns the count of all of them, or -1 for a set
-/// not on the grid. `cls` the epoch class (res::band_of), n rad/min, inc rad. A diagnostic: no flight reads it.
+/// Where a set on the grid (above its eccentricity switch, outside low orbit) carries each slow tesseral term, by the grid's
+/// own rules (wide_families; SPEC 16.18): every (l, m, p, q) of degree 2 to `cap` whose angle drifts slower than kShallowBand n
+/// at the set's epoch (J2 secular rates, as the grid takes them). Row: l, m, p, q, psi-dot / n, carrier (16.18's codes):
+/// 1 the class's rates, 2 the grid, 0 carried nowhere (left out of the grid as slow, or under the floor), 4 carried nowhere
+/// (above the grid's degree, kSpCap; the table holds no near-resonant terms outside low orbit). Writes at most max_rows rows;
+/// returns the count of all of them, or -1 for a set it does not cover. `cls` the epoch class (res::band_of), n rad/min,
+/// inc rad. A diagnostic: no flight reads it.
 inline int slow_terms(int cap, int cls, double n, double e, double inc, double* rows, int max_rows) {
   const bool low = cls == 0 && kTwoPi / n < kLongPeriodMinutes;
   if (!wide_set(cls, e) || low) return -1;

@@ -153,7 +153,7 @@ int32_t sdnap_test_ripple_verify(const double* in, double* out) {
           for (int t = 0; t < carried.count; ++t) if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == (l - w) / 2 && carried.t[t].q == j - w) out_ = true;
           if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = true;
           const double psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
-          // the grid's slow band (SPEC 16.11): the one-day class keeps every term but its own down to kOneDayFloor (stack #467)
+          // the grid's slow band (SPEC 16.18): the one-day class keeps every term but its own down to kOneDayFloor (stack #467)
           if (out_ || std::fabs(psidot) < (cls == 1 ? tess::kOneDayFloor : tess::kShallowBand) * n0) continue;
           const double Zer = (epr[at] - emr[at]) / (2 * h), Zei = (epi[at] - emi[at]) / (2 * h), Zir = (ipr[at] - imr[at]) / (2 * h), Zii = (ipi[at] - imi[at]) / (2 * h);
           // rates (a, e, i, Omega, omega, M) of this harmonic, then divided by i psi-dot (lambda also by (i psi-dot)^2 through n)

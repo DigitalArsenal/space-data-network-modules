@@ -413,10 +413,11 @@ double sdnap_hansen_g(int32_t l, int32_t p, int32_t q, double e, int32_t mode) {
   return mode == 1 ? G : dG;
 }
 
-/// Where a set above its eccentricity switch carries each slow tesseral term (SPEC 16.11; stack #467): in = mean motion
-/// (rev/day), e, i (deg), the tesseral cap; rows of 6 doubles (l, m, p, q, psi-dot / n, where: 1 the class's rates, 2 the
-/// grid, 0 nowhere: under the slow cut or the floor, 4 nowhere: above the grid's degree), at most max_rows. Returns the count
-/// of all rows, or -1 for a set not on the grid. A diagnostic: no flight reads it.
+/// Where a set carries each slow tesseral term (SPEC 16.18; stack #467): in = mean motion (rev/day), e, i (deg), the
+/// tesseral cap; rows of 6 doubles (l, m, p, q, psi-dot / n, carrier: 1 the rates, 2 the grid, 3 the output table, 0 nowhere:
+/// under the floor or the slow cut, 4 nowhere: above the carrier's degree, 5 nowhere: under the table's amplitude cut), at
+/// most max_rows. Returns the count of all rows, or -1 for a set it does not cover: it covers the sets above their switch
+/// outside low orbit, so codes 3 and 5 are not written. A diagnostic: no flight reads it.
 SDNAP_EXPORT("sdnap_slow_terms")
 int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
   using namespace sdnap::xpt;

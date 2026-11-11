@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SPEC 16.11, DigitalArsenal/spacedatanetwork-stack#467: above the eccentricity switch a one-day set carries each slow tesseral
+// SPEC 16.18, DigitalArsenal/spacedatanetwork-stack#467: above the eccentricity switch a one-day set carries each slow tesseral
 // term in exactly one place: the class's rates (SGP4-XP's 27 terms), the grid (every other term of degree 2 to 12 drifting at
 // 1e-2 n or faster), or nowhere (slower than 1e-2 n, or above degree 12).
 // 1. sdnap_slow_terms on a THEMIS A-like set (1.0493 rev/day, e 0.825, i 11.9 deg) and on a one-day set just above the switch

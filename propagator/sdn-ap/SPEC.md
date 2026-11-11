@@ -2850,42 +2850,8 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
 
-**The one-day class's slow band above the switch (from 0.6.MM; stack #467).** Through 0.6.18 the grid left out every term
-slower than 0.045 n, as if the class carried it in the rates. The one-day class carries only SGP4-XP's 27 terms (degrees 2 to
-4, k = m, |q| at most 4), so its other slow terms were carried nowhere:
-- j = m of degrees 5 to 12;
-- the terms of degrees 3 and 4 with |q| above 4, large at high e.
-A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at day 5 on THEMIS A's real geometry, whose angle
-drifts at 0.0444 n. A set just above the cut kept them. Each term of a one-day set above the switch is now carried in exactly
-one place:
-- the class's rates: its 27 terms;
-- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster (`kOneDayFloor`);
-- nowhere: a term slower than 1e-2 n (the floor below), and the terms above degree 12 (the table holds no near-resonant terms
-  outside low orbit).
-`sdnap_slow_terms` lists, for a set on the grid, each slow term (l, m, p, q, its angle rate over n) and where it is carried.
-On a THEMIS A-like set it lists 5 terms in the rates and 47 on the grid, of degree 2 to 12, and 768 of degree 13 to 31
-carried nowhere. `test/one-day-slow-band.e2e.mjs` reads it.
-
-FFM model truth, EGM96 70 x 70, no Sun or Moon on either side, a 72 h fit flown 7 days, day 5:
-- Made-up THEMIS A-like sets whose fitted mean motion lies in the band (1.0493 rev/day, e 0.825, i 11.9 deg; node 0, 90 and
-  180 deg): 369 / 415 / 549 m through 0.6.18, 155.1 / 69.5 / 160.5 m with the band.
-- Five real THEMIS geometries, from their windows' own states with the Sun, the Moon and the radiation sphere: the median
-  went from 538 to 100 m (from 162 to 994 m, to 77 to 129 m).
-
-At the switch: a one-day set at e0 0.30 takes #434's tail in the rates and the table; one at 0.3001 takes the grid with the
-band. n 1.0496 rev/day, i 10 deg, 70 x 70 with Sun and Moon, a 72 h fit, day 5:
-- At n 1.0496: 35.5 m against 13.7 m.
-- At n 1.0027: 19.9 m against 12.0 m.
-- Through 0.6.18 the same pairs were 38.7 against 14.8 m and 18.1 against 11.9 m. The jump is the table's first-order error
-  near 0.3, stated above; the band adds 1 m at 0.3001 and the tail 3 m at 0.30.
-
-The floor is 1e-2 n, not the table's 1e-3 n. Between the two, a term drifts about as slowly as the class's own resonant
-libration, where a first-order term is no longer small. Two synchronous sets at e 0.5 (1.0027 rev/day, i 30 deg, nodes 30 and
-120 deg; 70 x 70, no Sun or Moon, day 5) hold 98 terms of degree 2 to 12 there:
-- with the floor at 1e-3 n they went from 105 to 58 m and from 42 to 54 m;
-- at 3e-3 n and 1e-2 n both keep their 0.6.18 values.
-On the THEMIS-like sets and the one-day set at e 0.3001 no term of degree 2 to 12 lies between the two floors. What the floor
-and the degree cut leave out on such a synchronous set (105 m and 42 m against 2.7 m and 2.1 m with a 4 x 4 field) is stack #474.
+Which slow terms the grid keeps (from 0.6.MM, in the one-day class, every slow term the class's rates do not carry, down to
+the floor of 1e-2 n; stack #467) is 16.18's rule; its reasons and measurements are stated there.
 
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
@@ -2898,7 +2864,7 @@ H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu)))
 omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-daily, the class's, the half-day class's tail, and
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
 shallow set's taper and the terms slower than 1e-3 n; in the one-day class, from 0.6.MM, only the terms slower than 1e-2 n
-(above); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
+(16.18); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
 precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
 the slopes below, 3.1 MB before 0.6.14), and read at
@@ -3365,6 +3331,105 @@ alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.
 
 `test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
 unset, the long-period regime's stated covariance with the tide, and the refusals.
+
+**16.18 Where each tesseral term is carried.** A tesseral term (l, m, p, q) of the embedded field (EGM-96 to degree and
+order 70) has w = l - 2p, j = w + q and the angle rate psi-dot = w omega-dot + j M-dot + m (Omega-dot - omega_E), from the
+J2 secular rates at the set's epoch elements (the rates 16.2's table and 16.11's grid take). The rule: each term is carried
+in exactly one place, decided by its own psi-dot at the set's epoch, for every commensurability:
+- in the rates, integrated at the current elements with all six element rates, the mean motion's response included;
+- at output, to first order: 16.2's table below the eccentricity switch, 16.11's grid above it;
+- nowhere, stated term by term with its reason (the diagnostic below).
+
+A term is slow when |psi-dot| < 0.045 n (`kShallowBand`). For each (l, m, p) the slow j are the integers within
+0.045 n / M-dot of nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, and q = j - w. So j and q follow from the rate, and
+each term is classified by its own rate, not by its family's q = 0 rate.
+
+*Where a slow term belongs.* At output, a term's mean-motion response is an along-track term in 1 / psi-dot^2 with a fixed
+divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node.
+That is exact to first order while psi-dot holds still and stays well above the libration rate of the term's own resonance.
+Where the rate holds still the two forms agree. At 550 km beside 15:1 (i 87.35, gravity alone, the elements fitted and the
+coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h and 72 h fits:
+- 800 and 1,340 m in the rates;
+- 804 and 1,347 m on the table (stack #477).
+
+A term whose rate does not hold still belongs in the rates:
+- in low orbit, where drag moves n, and moves a k:j family's rate by j times as much, through the band and through zero.
+  There the acceptance is a decaying orbit that crosses a band edge with no kink in its output (stack #477);
+- above the switch, a term slower than its class's floor, where it drifts about as slowly as the class's own libration (the
+  one-day class below; stack #474).
+
+*The diagnostic.* `sdnap_slow_terms(in, rows, max_rows)` takes in = the mean motion (rev/day), e, i (deg) and the tesseral
+cap (2 to 70). It writes one row of six doubles per slow term of degree 2 to the cap: l, m, p, q, psi-dot / n, and the
+term's carrier:
+
+| Code | Carrier |
+| ---: | --- |
+| 1 | the rates: the class's terms (6.1), the half-day class's tail (16.2), the shallow set (16.2) |
+| 2 | the grid (16.11) |
+| 3 | the output table (16.2) |
+| 0 | nowhere: under the floor, or left out of the grid as slow |
+| 4 | nowhere: above the carrier's degree |
+| 5 | nowhere: under the table's amplitude cut (16.2) |
+
+It writes at most max_rows rows and returns the count of all of them, or -1 for a set it does not cover. It covers the sets
+above their eccentricity switch outside low orbit (class 0 below 1100 min). It returns -1 for every other set, so codes 3
+and 5 are not written. No flight reads it.
+
+*The partition test.* Each part of the rule has an E2E of one shape:
+- the rule, written in the test as a function of a row (the carrier from l, m, p, q and psi-dot / n);
+- `sdnap_slow_terms` compared with it row by row on sets inside the part's bands;
+- one model-truth flight of a set inside a band.
+
+`test/one-day-slow-band.e2e.mjs` is the one-day class's test.
+
+*The one-day class above the switch (from 0.6.MM; stack #467).* Before 0.6.MM the grid left out every term slower than
+0.045 n, as if the class carried it in the rates. The one-day class carries only SGP4-XP's 27 terms (degrees 2 to 4, k = m,
+|q| at most 4), so its other slow terms were carried nowhere:
+- j = m of degrees 5 to 12;
+- the terms of degrees 3 and 4 with |q| above 4, large at high e.
+
+A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at day 5 on THEMIS A's real geometry, whose
+angle drifts at 0.0444 n. A set just above the cut kept them. From 0.6.MM each term of a one-day set above the switch is
+carried in exactly one place:
+- the class's rates: its 27 terms;
+- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster (`kOneDayFloor`);
+- nowhere: a term slower than 1e-2 n (the floor below), and the terms above degree 12 (the table holds no near-resonant
+  terms outside low orbit).
+
+On a THEMIS A-like set the diagnostic lists 5 terms in the rates, 47 on the grid of degree 2 to 12, and 768 of degree 13 to
+31 carried nowhere. On THEMIS A's real geometry (no Sun or Moon, the field cut on both sides) degrees 13 to 31 are 1 to 17 m
+of either sign at day 5: 12 x 12 against 31 x 31 gives 50.2 against 48.9 m, 52.1 against 65.7 m and 78.7 against 62.1 m.
+
+FFM model truth, EGM96 70 x 70, no Sun or Moon on either side, a 72 h fit flown 7 days, day 5:
+- Made-up THEMIS A-like sets whose fitted mean motion lies in the band (1.0493 rev/day, e 0.825, i 11.9 deg; node 0, 90
+  and 180 deg): 369 / 415 / 549 m through 0.6.18, and 155.1 / 69.5 / 160.5 m with the band.
+- Five real THEMIS geometries, from their windows' own states with the Sun, the Moon and the radiation sphere: day 5 went
+  from 162 to 994 m (median 538 m) to 77 to 129 m (median 100 m).
+
+At the switch, a one-day set at e0 0.30 takes #434's tail in the rates and the table; one at 0.3001 takes the grid with
+the band. i 10 deg, 70 x 70 with the Sun and Moon, a 72 h fit, day 5:
+- At n 1.0496: 35.5 m at e0 0.30 against 13.7 m at 0.3001.
+- At n 1.0027: 19.9 m against 12.0 m.
+- Through 0.6.18 the same pairs were 38.7 against 14.8 m and 18.1 against 11.9 m.
+
+The jump is the table's first-order error near 0.3 (16.11). The band adds 1 m at 0.3001 and the tail 3 m at 0.30.
+
+The floor is 1e-2 n, not the table's 1e-3 n. Between the two, a term drifts about as slowly as the class's own resonant
+libration, where a first-order term is no longer small. Two synchronous sets at e 0.5 (1.0027 rev/day, i 30 deg, nodes 30
+and 120 deg; 70 x 70, no Sun or Moon, day 5) hold 98 terms of degree 2 to 12 between the two floors:
+- with the floor at 1e-3 n they went from 105 to 58 m and from 42 to 54 m;
+- at 3e-3 n and 1e-2 n both keep their 0.6.18 values.
+
+On the THEMIS-like sets and on the one-day set at e 0.3001 no term of degree 2 to 12 lies between the two floors. What the
+floor and the degree cut leave out on such a synchronous set (105 m and 42 m, against 2.7 m and 2.1 m with a 4 x 4 field) is
+stack #474.
+
+*The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
+- in low orbit (class 0 below 1100 min): the commensurabilities with j of 2 to 4 (orders 25 and up) and the degrees above
+  31. Inside the bands they put a set 0.1 to 1.9 km off at day 5 (stack #477);
+- above the switch in classes 0, 2, 3 and 4: every slow term the class's rates do not carry. A transfer orbit (2.2785
+  rev/day, e 0.7306, i 27 deg) is 2.1 km from the numerical propagator at day 5 without radiation pressure (stack #473);
+- in the one-day class: the terms under its floor and above degree 12 (stack #474).
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
