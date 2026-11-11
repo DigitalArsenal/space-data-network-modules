@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.14 (dist 2a1cf5ca).
+Version 0.6.15 (dist 8c496cf3).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1726,11 +1726,14 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   term's covariance prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands
   in poorly for a wide log-normal).
 
+An AP set's radiation term Y0 (16.13), solved or held, is not in p: the moved sets fly the Y0 the set carries.
+
 The fit's weighting *[2026-11-10, stack issue 324; real windows of experiments headline-loop]*. The fit minimizes
 
     Phi = sum |e_k|^2 / sigma_d^2 + ((x_B - mu_B) / s_B)^2 + ((x_S - mu_S) / s_S)^2
 
-over p, x_B and x_S the drag and AGOM terms (or their logs) and mu, s their priors' means and sigmas. sigma_d depends on
+over p, x_B and x_S the drag and AGOM terms (or their logs) and mu, s their priors' means and sigmas; where the fit
+solves an AP set's Y0 (16.13) the cost has one more such term, ((x_Y - mu_Y) / s_Y)^2. sigma_d depends on
 the fitted set's regime (12.5: its perigee height against 2,500 km, above which the theory's density is 1e-20 kg/m^3,
 3.3; one function, `cov::regime_of`, gives the regime the record states and the weighting):
 
@@ -2251,6 +2254,7 @@ floor: AP equals one only where the force model limits both.
 | --- | --- |
 | HAS_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE d, 0 to 70 | the tesseral terms of 16.2, each family to its cap or d, whichever is lower |
 | HAS_MAXIMUM_DEGREE, MAXIMUM_DEGREE z, 0 to 70 | the zonal tail J6 to Jz of 16.3 (z below 6: none) |
+| ECOM2 (`fit` only; Y0_M_S2, every other coefficient 0) | the radiation term Y0 beside the sphere, in the fit and the record (16.13) |
 
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
@@ -2883,6 +2887,90 @@ The shorter step reduces numerical integration error; these mixed archive change
 uniform forecast-accuracy improvement. All windows and coverage exclusions are printed by the E2E and
 stored in `test/results/geo-step-convergence.json`.
 
+**16.13 The radiation term Y0 (ECOM2).** For bodies whose solar panels track the Sun (navigation satellites), AP can
+carry one term of the empirical ECOM2 model beside the sphere of section 4: Y0, a constant acceleration (m/s^2) along
+eY = unit(eD x r), eD the unit vector to the Sun (Arnold et al. 2015, J. Geod. 89, eq. 1; the convention of
+propagator/ffm lib/gnss_srp.h). The sphere is ECOM2's direct term D0 (the two differ by (1 AU / r_sun)^2, under 0.6 %
+over 10 days), so a separate D0 would only repeat AGOM; B0 and the once-per-revolution terms are not carried. Y0 is zero
+where the sphere's rates count the orbit as in shadow (the same decision, section 4 and srp_rates).
+
+*Theory.* Y0's Gauss rates (the radial component zero) are averaged over the mean anomaly of the mean orbit on its
+sunlit arc by three-point Gauss-Legendre panels: the arc's ends, the points a quarter revolution either side of where
+the satellite passes the Sun's direction and its opposite, and, below a Sun elevation of 0.5 rad above the orbit plane,
+offsets graded by a factor 4 from that elevation (at least 0.01 rad), where eY turns fastest. The rates are applied to
+the mean elements in blocks of 6 h along the node grid, not in the rate function: each block (the first, at the epoch,
+half of one) acts at its center through one quadrature at the mean state there (the cubic between the two nodes) with
+the Sun of section 5 at that time, on the node a step arrives at: every element by its rate times the block, lambda also
+by n's change times the time from the center to the node. A step that passes no center adds nothing; the elements
+between centers are off by at most half a block's worth of the rates (0.2 m at 1e-9 m/s^2, not growing). The long-period
+covariance pair step adds the same blocks, so a sigma set flies what it flies alone. Nothing is added at output time:
+Y0's periodic part is Y0 / n^2, 0.05 m on a medium orbit to 0.2 m at geosynchronous radius at 1e-9 m/s^2. A set without
+Y0 flies as before, bit for bit (31 and 21 windows over eleven groups, record and flight bytes, against the build before).
+Measured against FFM (model truth with the sphere and Y0 = +-1e-9 m/s^2, the AP set fitted once to the sphere truth and
+flown with and without Y0): on 11 windows of medium orbit, Galileo, inclined geosynchronous and geostationary, Y0 alone
+moves the day-7 error by 120 to 990 m, and AP with the term is within 2.7 m of its sphere-truth error at day 7: the
+theory carries at least 99.6 % of the term.
+
+*Record.* The set's Y0 is one entry of ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS: PARAMETER ECOM2_Y0, VALUE in m/s\*\*2,
+UNITS m/s\*\*2, SOLVED_FOR as the fit determined it; PERTURBATIONS.SOLAR_RAD_PRESSURE names the model in words and the
+OD COMMENT says solved or held, and why. Flight refuses, by name: ECOM2_Y0 on an SGP4 or SGP4XP set or on an AP set
+whose gravity caps are both 0 (elements-other-theory), twice (parameter-repeated:ECOM2_Y0), not a number or in other
+UNITS (parameter-invalid:ECOM2_Y0), any other ECOM2 coefficient (parameter-not-modeled:<NAME>). A set with Y0 round-trips
+only as a record: inside the module Y0 rides in the row's first-derivative slot (ElementRow.mean_motion_dot), which an
+SGP4XP or AP set does not have (1.1); a row from outside of theory SGP4XP with that slot not 0 is refused
+(sdnap_init_elements holds it refused, elements-other-theory; sdnap_fit refuses it). No export returns an AP row:
+export_omm refuses AP sets (17.6), and sdnap_fit neither takes Y0 nor fits it (fit_y0 set:
+parameter-record-only:ECOM2_Y0).
+
+*Fit.* $PCF FORCES.ECOM2 on `fit` puts Y0 in the fit: Y0_M_S2 is its start, its prior's mean and the value it is held
+at where it is not solved; any other ECOM2 coefficient away from 0 is refused by name (FORCES.ECOM2.D0_M_S2 ...), and so
+is the table without AP's gravity terms (FORCES.ECOM2). A flight takes no FORCES (16.1). Y0 is solved on an arc of 72 h
+or more (71 h, for an arc sampled off its ends) whose fitted set lies above the drag (perigee at or above 2,500 km) and
+is not in the one-day class: in the whole-arc fit after the staged ones and in the passes at the data's own sigma (12.1),
+as the last parameter, in units of 1e-9 m/s^2, its column a one-sided difference of the theory each iteration (step
+the larger of 1 % and 1e-10 m/s^2), with a Gaussian prior about Y0_M_S2 of sigma 1e-9 m/s^2. The cost, the normal
+equations and the covariance read one statement of the fit's priors (drag, AGOM, Y0). Elsewhere Y0 is held at Y0_M_S2:
+an arc under 72 h (a 24 h fit), a set under the drag, the second stage of a two-stage fit (at the first stage's Y0), and
+the one-day class. Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
+windows of medium orbit, Galileo, inclined geosynchronous and geostationary sets the share of errors beyond the stated
+1, 2 and 3 sigma per RTN axis at days 1, 3, 5 and 7 is the same with Y0 solved as without (the stated sigma is 5 to 100
+times the error in both: stack issue 433). AGOM moves by under 1 % between the fits with and without Y0.
+
+*Why 72 h.* On model truth a 48 h arc does not determine Y0: Galileo's came out at 2.0 and 2.1 times its value on two
+windows of three and a zero Y0 at 7e-10 m/s^2 on two (day 7 175 and 296 m against 37 and 24 m without the term), while
+72 h recovered 0.97 to 1.22 times the value and found at most 1.4e-10 where there was none. On real windows a 48 h Y0
+still lowers the medians (medium orbit day 7 73 to 37 m, Galileo 174 to 64 m); it is not trusted.
+
+*Why not in the one-day class.* There the 72 h arc's own residual (AP against a numerical orbit of the same forces)
+aliases into Y0: on inclined geosynchronous model truth without Y0 the fit found -1.0e-10 to -1.8e-10 m/s^2 and its
+day-7 error went from 7 m to 62 to 86 m, and on real windows the medians at day 7 went from 30 to 55 m (inclined
+geosynchronous) and 173 to 227 m (geostationary). The guard goes when that class's residual is fixed (stack issues 421
+and 434).
+
+*Who states it.* The term is for bodies with Sun-tracking panels. On a sphere it fits the residual instead: on six laser
+geodetic windows (Etalon, LAGEOS, LARES-2; 72 h) the median day-7 error went from 11 to 29 m (Etalon 2 12 to 38 m, LAGEOS
+1 9 to 39 m; LARES-2 23 to 6 m), and the eccentric science orbits (TESS, Chandra, THEMIS) got worse too.
+
+*Measured gain.* Real 72 h windows, ten each, median error at day 1, 3, 5 and 7, without and with FORCES.ECOM2: medium
+Earth orbit 8.4, 20.0, 46.4, 84.4 m to 7.6, 9.6, 12.6, 15.2 m (within 100 m of the numerical propagator at day 5: 8 to
+10 of 10); Galileo 15.2, 51.4, 106.9, 181.1 m to 10.7, 13.2, 23.8, 37.5 m (6 to 10 of 10). The recovered Y0 over the
+numerical propagator's ECOM2 Y0 on the same windows: median 0.94 and 1.02.
+
+*The daily fit.* A short fit can carry the Y0 of a longer one: fit 72 h under FORCES.ECOM2 (Y0 solved), then state
+FORCES.ECOM2.Y0_M_S2 as that record's ECOM2_Y0 VALUE in each later fit shorter than 72 h, which holds it (SOLVED_FOR
+false). On the real 24 h rows, with the Y0 of a 72 h fit ending 24 h before the 24 h fit's cutoff, the median error at
+day 1, 3, 5 and 7 went from 8.5, 17.8, 35.5, 59.8 m to 8.2, 13.8, 20.7, 29.7 m on medium Earth orbit (within 100 m at day
+5: 8 to 10 of 10) and from 11.6, 32.9, 89.3, 156.7 m to 11.4, 20.4, 42.8, 63.1 m on Galileo (8 to 10 of 10); one window
+of twenty got worse (Galileo IOV 2, day 7 23 to 89 m).
+
+*Cost.* A record with Y0 takes 12 % longer to fly its first week: about 22 microseconds per block (a graded quadrature
+of some 60 points), 5.14 to 5.76 ms for a Galileo record flown a week hourly by `propagate` (decode, initialization,
+grid, states; medians of 40 calls, under a load of 10 on 28 cores), 3.31 to 3.39 ms for a day at 60 s. Once the grid
+exists a state costs the same.
+
+`test/radiation-y0.e2e.mjs` checks the theory, the fit, the daily fit, a held fit against the fit without the term
+byte for byte, and the refusals.
+
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 
@@ -2905,7 +2993,8 @@ solved, in this fixed order:
 `COV_SIZE` is 6 plus the solved count; `COV_PARAMETERS` and `COV_PARAMETER_KINDS` have `COV_SIZE - 6` entries in that
 order; `COV_UNITS` has `COV_SIZE` entries (km x3, km/s x3, then the parameters' units); `COV_ORDERING` LTM;
 `COV_REF_FRAME` the record's `TRAJ_REF_FRAME`. `OD_DYNAMIC_PARAMETERS` names every row, `SOLVED_FOR` true for each;
-`fit` lists DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS and nothing it does not know.
+`fit` lists DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS and nothing it does not know, and under $PCF FORCES.ECOM2 also
+ECOM2_Y0 (16.13), which is no covariance row: its `SOLVED_FOR` says whether the fit solved it.
 
 ### 17.2 Parameters the theories have no sensitivity to
 
@@ -2913,7 +3002,8 @@ SGP4XP and AP have no term in DRAG_AREA_OVER_MASS_RATE, IN_TRACK_ACCELERATION or
 model does not change for them. The fit options `fit_bdot`, `fit_thrust` and `fit_outgassing` (one byte each after
 `fit_agom` in the 56-byte `sdnap_fit` options) default off; set, the fit is refused before it runs (`sdnap_fit` status
 -4; `sdnap_fit_refusal` gives `parameter-not-modeled:<NAME>`). The `$PCF` has no field for them, so `fit` never sets
-them. A record that carries their rows (solved by another determination) is read and flown as constant parameters:
+them. The byte after `fit_outgassing` is `fit_y0` (16.13): only `fit` sets it; `sdnap_fit` refuses it
+(parameter-record-only:ECOM2_Y0). A record that carries their rows (solved by another determination) is read and flown as constant parameters:
 their state transition columns are zero, their variances and mutual terms constant, their cross terms with the state
 carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `P_p` the record's).
 
