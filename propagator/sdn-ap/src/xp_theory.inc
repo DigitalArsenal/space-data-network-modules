@@ -1782,6 +1782,9 @@ struct Branch {
   uint8_t wide_tess = 0;    ///< AP: the first-order tesseral families on the grid (tess::wide_set: 0.05 in class 0, else 0.3)
   uint8_t wide_e = 0;       ///< AP: e0 above tess::kWideE, the zonal tail's every long-period term and the perigee drag passage
   uint8_t series_e = 0;     ///< AP: e0 at or above res::kSeriesE, the class's G about e0 (SPEC 6.4)
+  /// The long-period regime's step, minutes (SPEC 9, 16.10): 95, AP's one-day class 38, and an AP set above e0 0.3 at most
+  /// half the perigee pass's time scale (1 - e0)^(3/2) / n0. Not a switch: a moved set flies its nominal's, as the rest.
+  double lp_step = kLongPeriodStep;
   bool operator==(const Branch& o) const {
     return resonance == o.resonance && long_period == o.long_period && wide_tess == o.wide_tess && wide_e == o.wide_e &&
            series_e == o.series_e;
@@ -1796,6 +1799,10 @@ inline Branch branch_of(double n0, double e0, bool ap) {
     b.wide_tess = tess::wide_set(b.resonance, e0) ? 1 : 0;
     b.wide_e = e0 > tess::kWideE ? 1 : 0;
     b.series_e = e0 >= res::kSeriesE ? 1 : 0;
+  }
+  if (b.long_period && ap) {
+    b.lp_step = b.resonance == 1 ? 38.0 : kLongPeriodStep;
+    if (b.wide_e) b.lp_step = std::fmin(b.lp_step, 0.5 * std::pow(1.0 - e0, 1.5) / n0);
   }
   return b;
 }
@@ -4513,11 +4520,10 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
 }
 
 /// The node after `a` in direction dir (+1, -1), with the SPEC 9 fallbacks.
-// AP's epoch one-day class needs a finer grid for the lunar-solar rates.
-// Keep the XP grid bit-exact; the cache span uses the same selected step.
-inline double long_period_step(const RateContext& ctx) {
-  return ctx.ap_frame && ctx.resonance == 1 ? 38.0 : kLongPeriodStep;
-}
+// AP's epoch one-day class needs a finer grid for the lunar-solar rates, and above e0 0.3 a step that resolves the perigee
+// pass, where the long-period regime's third-body acceleration changes fastest (Branch::lp_step). Keep the XP grid bit-exact;
+// the cache span uses the same selected step.
+inline double long_period_step(const RateContext& ctx) { return ctx.branch.lp_step; }
 
 /// The averaged regime's grid step (SPEC 9): two revolutions; AP's half-day class (SPEC 16.10) at most a 32nd of the
 /// period of its resonant angle lambda - 2 theta, 2 pi / |n - 2 omega_E|, which near the commensurability leaves the

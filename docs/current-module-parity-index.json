@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T01:17:02.791Z",
+  "generatedAt": "2026-11-11T02:24:13.713Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.15",
+      "version": "0.6.16",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 158,
+      "testFileCount": 160,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7602,6 +7602,7 @@
         "test/lib/experiments.mjs",
         "test/lib/ffm-truth.mjs",
         "test/lib/fixture-inputs.mjs",
+        "test/lib/frames-cross.mjs",
         "test/lib/frames.mjs",
         "test/lib/geo-window-confirmation.mjs",
         "test/lib/gn-short-arc-windows.mjs",
@@ -7620,6 +7621,7 @@
         "test/lib/synthetic-truth.mjs",
         "test/lib/tess-frame-windows.mjs",
         "test/lib/tle.mjs",
+        "test/long-period-perigee-step.e2e.mjs",
         "test/maneuver.e2e.mjs",
         "test/molniya-7day-drag-sigma.e2e.mjs",
         "test/output-frames.mjs",

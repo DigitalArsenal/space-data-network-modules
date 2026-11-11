@@ -72,6 +72,8 @@ REGIMES.push(
   { name: "molniya", n: 2.006, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10, bterm: 1.27e-3, agom: 0.01, weather: "quiet" },
   // THEMIS-like: period 22.9 h, perigee 900 km
   { name: "themis", n: 24 / 22.9, e: 1 - (RE + 900) / aOfPeriod(22.9), i: 10, raan: 30, argp: 300, ma: 10, bterm: 1.27e-4, agom: 0.01, weather: "quiet" },
+  // Chandra-like: period 63.5 h, e 0.685 (class 0, the long-period regime)
+  { name: "chandra", n: 1440 / 3810, e: 0.685, i: 72, raan: 330, argp: 270, ma: 10, bterm: 0.001, agom: 0.02, weather: "quiet" },
   // TESS-like: period 13.7 days, e 0.55
   { name: "tess", n: 1 / 13.7, e: 0.55, i: 40, raan: 30, argp: 120, ma: 10, bterm: 0.001, agom: 0.01, weather: "quiet" },
 );
