@@ -125,7 +125,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg on arcs of 36 h or more and the Space Force wrapper's 0 +- 0.1 m^2/kg on shorter
   arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). The data are weighed against these priors at their own
   sigma, the post-fit scatter, which the covariance then uses too, above the drag and, under the drag (the fitted set's
-  perigee below 2,500 km), on an arc of 71 h or more; a shorter arc under the drag is weighed at 1 km, a stated limit
+  perigee below 2,500 km), on an arc of 71 h or more at or below e 0.3; a shorter arc, or a set above e 0.3, under the
+  drag is weighed at 1 km, a stated limit
   (stack #489) under which each prior acts about 100 times more strongly in the estimate than the covariance states
   (SPEC 12.1, the fit's weighting; `test/fit-data-sigma.e2e.mjs`, `test/fit-cost-curvature.e2e.mjs`). On the radiation
   lane's 800 km sphere a 72 h fit's AGOM goes from 0.356 to 0.937 of the truth (`test/radiation-sphere-agom.e2e.mjs`). At 1 km a 24 h medium Earth
@@ -164,7 +165,7 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION when solved, in that order; COV_UNITS one per row. A record's rows the
   theories have no sensitivity to fly as constant parameters.
 - `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the sigma OD_DATA_WEIGHTING states: 1 km under drag on an arc
-  under 71 h, the data's own otherwise) and SEDR, and one `$ODR` per fit on
+  under 71 h or above e 0.3, the data's own otherwise) and SEDR, and one `$ODR` per fit on
   `residuals`: a row per input state (geocentric distance observed and computed, weight, accepted).
 - `sdnap_covariance_full_at` gives the covariance of the state and the parameter rows per time; no sensitivities are
   exposed, so P8 is refused.

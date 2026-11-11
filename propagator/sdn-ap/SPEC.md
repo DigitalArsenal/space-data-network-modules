@@ -1752,9 +1752,9 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM or their logs; AGOM forward where p - h <= 0,
   the theory reading AGOM <= 0 as no SRP (its log moves both ways); every moved set flies the set's own branch (16.7),
   never the branch its own elements would decide, here and in 12.3;
-- sigma_d^2, the data variance per component. Above the drag, and under the drag on an arc of 71 h or more, it is the
-  sigma_r^2 the fit itself weighted the data with (the fit's weighting, below); under drag on a shorter arc it is
-  s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance;
+- sigma_d^2, the data variance per component. Above the drag, and under the drag on an arc of 71 h or more at or below
+  e 0.3, it is the sigma_r^2 the fit itself weighted the data with (the fit's weighting, below); under drag on a
+  shorter arc or above e 0.3 it is s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance;
 - A = sum J_k^T J_k / sigma_d^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
   under LOG_NORMAL sigma is that of the log). BTERM's prior, where FIT.DRAG_PRIOR is absent or without a sigma and
   FIT.DRAG_PRIOR_FORM is unset, is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free
@@ -1793,16 +1793,19 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
   for the estimate and the covariance. A redone fit the theory refuses, or one that ends on a switch (16.7), leaves the
   1 km fit, and the record says UNIT WEIGHTS.
 - DRAG (the perigee below 2,500 km), an arc of 71 h or more (the fit interval's first to last state;
-  `pcf::kDataSigmaUnderDragMinArcHours`, the span rule of 12.8's default of a 71 h arc): as above the drag, the whole-arc
-  fit is redone at sigma_r and the covariance divides by the same sigma_r^2, so every prior acts at its written sigma in
-  the estimate as in the covariance *[stack #489, #39]*.
-- DRAG, a shorter arc. The cost keeps sigma_d = 1 km, as in every version before, and the covariance divides by s^2:
-  there the estimate and the covariance do not use one weighting, and each prior acts in the estimate as if its sigma
-  were sigma_d / s times its written one (about 100 times, at s of 10 m) while the covariance states it at its written
-  sigma. This is a stated limit, not the design (stack #489 stays open for these arcs): weighed at its bare scatter, a
-  24 h arc lets BTERM and AGOM absorb the theory's own error, which under drag is correlated along the arc, not noise
-  (below), and the band priors of 12.8 hold the term there only at 1 km. Arcs under 71 h are bit for bit those of the
-  version before.
+  `pcf::kDataSigmaUnderDragMinArcHours`) at or below e 0.3, the rule of 12.8's default of a 71 h arc: as above the
+  drag, the whole-arc fit is redone at sigma_r and the covariance divides by the same sigma_r^2, so every prior acts at
+  its written sigma in the estimate as in the covariance *[stack #489, #39]*.
+- DRAG, a shorter arc, or a set above e 0.3 on any arc. The cost keeps sigma_d = 1 km, as in every version before, and
+  the covariance divides by s^2: there the estimate and the covariance do not use one weighting, and each prior acts in
+  the estimate as if its sigma were sigma_d / s times its written one (about 100 times, at s of 10 m) while the
+  covariance states it at its written sigma. This is a stated limit, not the design (stack #489 stays open for these
+  sets). On a short arc, weighed at its bare scatter, a 24 h arc lets BTERM and AGOM absorb the theory's own error, which
+  under drag is correlated along the arc, not noise (below), and the band priors of 12.8 hold the term there only at
+  1 km. Above e 0.3 the rule was measured on no real eccentric rows; on a first look, model truth, the data's own sigma
+  moved the Molniya fixture of `test/heo-frame.e2e.mjs` 9.5 m worse at day 7 and the 7-day Molniya arc's day-7
+  along-track 125 to 143 m, while its BTERM came from 6.12 to 4.98 of its stated sigma (#438). Arcs under 71 h and sets
+  above e 0.3 are bit for bit those of the version before.
 
 Why 1 km was wrong above the drag. Against residuals of 8 m the AGOM prior 0 +- 0.1 m^2/kg acts like 0 +- 0.0008: the
 priors outweigh data good to meters. Measured on precise orbits, AP 0.6.9 against this rule (median 3D error against

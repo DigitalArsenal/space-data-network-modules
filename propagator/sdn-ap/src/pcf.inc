@@ -95,9 +95,9 @@ constexpr double kDragPriorWideLogSigma = 23.02585092994045684;
 /// the theory's own along-track error into a free BTERM and states it to 5 to 40 % (stack #460).
 constexpr double kDragPriorFreeMedian = 0.008;
 constexpr double kDragPriorFreeFloorKm = 600.0, kDragPriorFreeTopKm = 2500.0, kDragPriorFreeMinArcHours = 71.0;
-/// Under the drag, an arc of at least this many hours is fitted at the data's own sigma, as above the drag (SPEC 12.1,
-/// stack #489): the span rule of the drag default above, so a 71 h arc's priors act at their written sigma in its estimate
-/// as in its covariance. A shorter arc keeps the stages' 1 km.
+/// Under the drag, an arc of at least this many hours at or below e 0.3 is fitted at the data's own sigma, as above the
+/// drag (SPEC 12.1, stack #489): the span rule of the drag default above, so a 71 h arc's priors act at their written sigma
+/// in its estimate as in its covariance. A shorter arc, or a set above e 0.3, keeps the stages' 1 km.
 constexpr double kDataSigmaUnderDragMinArcHours = kDragPriorFreeMinArcHours;
 
 /// One call's options, every one at its documented default.

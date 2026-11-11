@@ -20,8 +20,8 @@
 //    two windows the fall-back had returned to 0.4.11 (0.087 and 0.113 km) and the new default takes back to 0.4.17's
 //    (0.312 and 1.335 km): measured 0.286 and 1.090 km (1 km: 0.314 and 1.344), losses the pull request names;
 // 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D (measured -90.9 % and
-//    -91.0 %; 1 km: -85 and -92 %); on SWOT and Jason-3 at or below 0.4.17's (measured -93.0 against -48.3 % and -84.5
-//    against -68.9 %; 1 km: -47.9 and -73.2 %);
+//    -91.0 %; 1 km: -85 and -92 %); on SWOT and Jason-3 at or below 0.4.17's and no more than 5 points under the measured
+//    change (measured -93.0 against -48.3 % and -84.5 against -68.9 %; 1 km: -47.9 and -73.2 %);
 // 3. DO: SARAL and CryoSat-2 (600-800 km, inside the new default): the median paired day-3 change against 0.4.11 at
 //    most +5 % (measured -24.7 % and -7.9 %; 1 km: -34.7 and +1.4 %; formerly bit for bit with 0.4.17, outside the old rule);
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
@@ -149,8 +149,11 @@ if (!isMainThread) {
   assert.ok(s3b !== null && s3b <= 1.40, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
   // 2
   for (const o of ['HAIYANG 2C', 'HAIYANG 2D']) assert.ok(objects[o].day3.changeHere <= -0.70, `${o}: day-3 median change ${objects[o].day3.changeHere}`);
-  for (const o of ['SWOT', 'JASON 3'])
-    assert.ok(objects[o].day3.changeHere <= objects[o].day3.change0417, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.17's ${objects[o].day3.change0417}`);
+  // at or below 0.4.17's and no lower than this build's measured change less 5 points (a term broken toward zero error fails)
+  for (const [o, measured] of [['SWOT', -0.930], ['JASON 3', -0.845]]) {
+    const c = objects[o].day3.changeHere;
+    assert.ok(c <= objects[o].day3.change0417 && c >= measured - 0.05, `${o}: day-3 median change ${c} against 0.4.17's ${objects[o].day3.change0417} and the floor ${measured - 0.05}`);
+  }
   // 3
   for (const o of ['SARAL', 'CRYOSAT 2']) {
     assert.equal(rows.filter((r) => name(r) === o && !r.error).length, 15, `${o}: 15 windows`);
