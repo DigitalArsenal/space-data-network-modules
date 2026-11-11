@@ -11,8 +11,11 @@
 // a 2-minute grid, day-3 whole-day 3D RMS. Read windows (test/lib/regime-windows.mjs): AP6's altimetry group DO, 72 h
 // arcs, as AP8 flew them (AP72); the windows were read by AP8 and its diagnosis.
 // Acceptance:
-// 1. DO: Sentinel-3A 2025-10-15 at or below 0.130 km at day 3 and Sentinel-3B 2025-10-25 at or below 0.150 km at day 7
-//    (0.4.11 0.087 and 0.113 km, 0.4.17 0.312 and 1.335 km);
+// 1. DO: Sentinel-3A 2025-10-15 at or below 0.130 km at day 3 and Sentinel-3B 2025-10-25 at or below 0.45 km at day 7
+//    (0.4.11 0.087 and 0.113 km, 0.4.17 0.312 and 1.335 km; 0.6.20 0.087 and 0.112 km). The second bound was 0.150 km until
+//    0.6.NN, whose slow set (SPEC 16.18) takes that window to 0.402 km at day 7 (Sentinel-3A's to 0.060 km at day 3): a
+//    cost the slow set's pull request states. No burn of the IDS list lies in the arc or the 7 days after it; on the
+//    scoreboard's 72 h fit of the same window the fitted term moves from 0.87 to 0.83 of the full numerical arm's;
 // 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D; on SWOT and Jason-3
 //    within 5 points of 0.4.17's;
 // 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of 0.4.17 on every window (errors per
@@ -136,7 +139,7 @@ if (!isMainThread) {
     oldPath: {sentinel3a20251015day3Km: day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3', 'daysOld'), sentinel3b20251025day7Km: day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7', 'daysOld')}}));
   assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
   assert.ok(s3a !== null && s3a <= 0.130, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
-  assert.ok(s3b !== null && s3b <= 0.150, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
+  assert.ok(s3b !== null && s3b <= 0.45, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
   // 2
   for (const o of ['HAIYANG 2C', 'HAIYANG 2D']) assert.ok(objects[o].day3.changeHere <= -0.70, `${o}: day-3 median change ${objects[o].day3.changeHere}`);
   for (const o of ['SWOT', 'JASON 3'])
