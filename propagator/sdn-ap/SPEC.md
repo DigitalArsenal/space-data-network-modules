@@ -1607,8 +1607,8 @@ machine, so a median means little.
 
 - One warm record in ascending order is 13 % slower at 500 km and 5 to 7 % at 830 km. MEO is equal; GEO is 2.3 times
   faster and the transfer orbit 1.7 times.
-  - At 500 km the bracket-anchored bake bookkeeping at every state costs about 6 % (stack #441): bake points one
-    tolerance apart and counted once per bracket recovered 11 of 17 %.
+  - At 500 km the bracket-anchored bake bookkeeping at every state cost about 6 % there (stack #441): bake points one
+    tolerance apart and counted once per bracket recovered 11 of 17 %. The warm record's bakes below replace it.
   - The node re-evaluation below costs about 4 % (stack #439).
 - The first state of a fresh record at 7 days is 25 to 28 % slower at 500 km and GEO (stack #439). Each node step
   evaluates node a's held rates (third body, drag, SRP, the zonal tail) again at the node's own state, which is what
@@ -1618,6 +1618,58 @@ machine, so a median means little.
 - The full `propagate` call (GCRF, 7 days at 300 s) of a record fitted with covariance is 11 % slower at 500 km and 15 % at
   GEO; a seeded record is equal at 500 km and 13 % slower at GEO. The integration of the nominal's nodes carries the node
   re-evaluation.
+
+**The warm record's bakes (stack #441).** A warm record stepped in order integrates nothing: its node run holds the week.
+Past the terms' sums, its states cost the bakes, and how often a state bakes depends on the set. The tesseral and
+m-daily levels cut each bracket into parts, one tolerance of a, e or cos i apart, so a set whose mean elements move
+faster across a bracket crosses more parts. Per state at 500 km, 7 days at 300 s:
+
+| Set | Base | ae | pe | Resonant |
+| --- | ---: | ---: | ---: | ---: |
+| The site's speed table's: AP fitted to 3 days of an SGP4 flight, NRLMSISE-00 on rows of F10.7 150 and Ap 15 | 0.027 | 0.234 | 0.245 | 0.301 |
+| Seeded (BTERM 3.8e-3), rows of F10.7 70 and Ap 4 | 0.027 | 0.100 | 0.112 | 0.113 |
+
+A base bake comes with every new bracket. A level baked again bakes the levels above it, so every ae and pe bake ends in
+a resonant one. Three parts of a state's bookkeeping are made to cost nothing when nothing changes, each without changing
+a value:
+
+- **The coefficients a bake reads.** A set's compact tesseral cache keeps no blk_c (its terms' coefficients by lane, 256 B
+  a block). A base bake reads every block's; a resonant bake reads the resonant blocks' alone (6 of 107 at 500 km).
+  The bake reads them from the thread's own cache when the set's cache is a copy of the grouping that cache still holds,
+  and otherwise rebuilds them from the terms, the resonant blocks alone for a resonant bake.
+  - A grouping's id (SpEvalCache::group_id) comes from one counter for the module, incremented atomically and taken at
+    the start of each grouping (sp_rebuild_cache). It is never zero, never reused, and a set's copy keeps it.
+  - Only two things write a cache's blk_c: its allocation, which zeroes it before any grouping, and the grouping itself,
+    which takes a new id first. So a copy's id equals the thread cache's only when both hold one grouping's
+    coefficients, the same bytes sp_blk_c would rebuild.
+  - A warm set flown alone rebuilds none. Before this, it rebuilt all its blocks at every resonant bake: 0.16 µs of
+    0.92 a state on the seeded set.
+- **The bracket's a, e and cos i.** These are computed from the bracket's two nodes, two pow per state, and every state
+  computed them, because xp_propagate clears the anchor on entry. It does so on purpose: an anchor left by an earlier
+  call whose span holds t would bake this state on another set's bracket.
+  - A memo keyed bit for bit on the ten mean components they come from (n, af, ag, chi, psi at each node) returns them.
+  - The memo is the set's own while its flying thread holds the set's cache lock, and the thread's otherwise. It is not
+    the anchor: sp_anchored never reads it.
+- **The call that finds nothing to bake.** An inline check (sp_keys_hold, md_keys_hold) compares t's part of the bracket
+  at each level with the cache's keys. It uses the expression the keys were made with (sp_part_key). The bake functions
+  run only when a key changes: 0.11 calls a state on the seeded set instead of 1.
+
+Measured niced on a shared machine (load 33 to 50), the builds' rounds alternated. Each figure is the minimum CPU per
+state; the speed table of a quiet slot is the claim.
+
+| Set | 0.6.17 | 0.6.20 | This build |
+| --- | ---: | ---: | ---: |
+| The site's 500 km | 0.766 µs | 1.229 | 0.826 |
+| The site's 830 km | 0.670 | 0.895 | 0.701 |
+| Seeded 500 km | 0.805 | 0.922 | 0.776 |
+| Seeded 500 km without drag | 0.681 | 0.921 | 0.754 |
+| Seeded 830 km | 0.721 | 0.764 | 0.691 |
+
+What is left above 0.6.17 on the site's set is the bakes themselves: ae 9 %, base 4 %, pe 2 % and resonant 2 % of its
+states' time in a profile with the functions' names. A base bake comes with every new bracket because the levels are
+anchored on the bracket. Interleaved sets, random times and catalog stores are no slower (README, Memory and time).
+This build adds 0.2 KB a set: 176 B to the set's caches (the anchor memo, the parts of the keys) and 48 B to a tesseral
+cache. The table of caches by part above is 0.6.18's.
 
 How room is shared:
 
