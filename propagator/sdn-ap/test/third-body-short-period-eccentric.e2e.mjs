@@ -18,7 +18,7 @@
 //    meter); Molniya with B pinned at the truth 84.01/51.16 m to 5 cm, with B fitted held to its record's statement (B
 //    within one stated sigma, the day-7 position within three along R, I and C: its two solutions, stack #392, at the
 //    assertions); the single day-7 sample printed and within 0.5 m of 27.76, 76.44 and
-//    255.35 m (re-recorded on 0.6.22, AP's own Sun and Moon, SPEC 16.15; 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3's grid
+//    255.35 m (re-recorded on 0.6.22, AP's own Sun and Moon, SPEC 16.17; 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3's grid
 //    moved them, the history at the assertions;
 //    re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04, 338.22, 303.15
 //    before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
@@ -293,7 +293,7 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   // re-recorded at 0.6.12 (the perigee passes of SPEC 16.12, its fitted coefficient 0.0446231 against 0.0446183): 238.50 /
   // 174.28 / 332.16 on 0.6.8 to 0.6.11. From the E-grid's C1 reading (stack #420) Molniya with its coefficient fitted is
   // held to what its record states, not to a value (MOLNIYA_FITTED below); the same arc with B pinned at the truth is the
-  // model's pin. AP's own Sun and Moon (SPEC 16.15, stack #446, on 0.6.19) move every fixture, both ways: half-day 31.45 /
+  // model's pin. AP's own Sun and Moon (SPEC 16.17, stack #446, on 0.6.19) move every fixture, both ways: half-day 31.45 /
   // 16.88 / 30.22 to 36.15 / 14.56 / 27.76 m, 12 h at 55 deg 66.61 / 5.68 / 64.94 to 67.31 / 7.24 / 76.44 m, Molniya with
   // B pinned 80.71 / 50.51 to 84.01 / 51.16 m, GTO's sample 275.78 to 255.35 m; the true Moon now meets these orbits'
   // averaged lunar theory (stack #421), whose error the old Moon's had partly offset.

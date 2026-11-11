@@ -284,7 +284,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   //   0.6.18 against the reference         0.841 mm  0.816 um/s  2.88e-6
   //   0.6.17 against 0.6.18                1.289 mm  1.409 um/s  2.47e-5
   // Both builds are within 1 mm of the reference and equally close to it; 0.6.4's flight is 1.35 mm from it.
-  // AP's own Sun and Moon (SPEC 16.15, stack #446) move the stored record's flight by 34.763 mm and 38.304 um/s (its
+  // AP's own Sun and Moon (SPEC 16.17, stack #446) move the stored record's flight by 34.763 mm and 38.304 um/s (its
   // covariance by 2.14e-5) and this build's fit by 117.72 mm and 130.37 um/s.
   const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.epochs-0.6.18.oem", import.meta.url));
   const STORE_FLIGHT = { posM: 0.04, velMmS: 0.045, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.15, velMmS: 0.15 };

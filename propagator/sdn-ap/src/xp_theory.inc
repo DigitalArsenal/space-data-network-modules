@@ -33,7 +33,7 @@
 //            masses in the Gauss equations
 //            averaged over the orbit; long-period regime,
 //            instantaneous point-mass Gauss equations.
-//            AP reads its own Sun and Moon (SPEC 16.15,
+//            AP reads its own Sun and Moon (SPEC 16.17,
 //            ap_bodies.inc), never bodies_at or sun_at
 //   6        resonance (resonance.inc): SPEC bands, the   structure and G_lpq
 //            EGM-96 harmonics per class, Kaula F_lmp,     series in; the rate
@@ -299,7 +299,7 @@ inline Bodies bodies_at(double d50) {
 
 #include "ap_bodies.inc"
 
-/// AP's Sun and Moon at any time (SPEC 16.15): the quintic through ap_bodies_at at the six nodes about it, the nodes on
+/// AP's Sun and Moon at any time (SPEC 16.17): the quintic through ap_bodies_at at the six nodes about it, the nodes on
 /// an absolute grid every kApBodiesNodeHours of UTC (node k at k kApBodiesNodeHours hours from 1950 January 0.0), the
 /// unit vectors renormalized to first order. Every node is a function of its time alone. Each thread keeps the nodes it
 /// has read in a store of kApBodiesStoreSlots slots, by node index (85 days at 8 h), and the six of its last read in a
@@ -3226,7 +3226,8 @@ inline bool drag_orbit_check(const RateContext& ctx, double t, const double* y, 
   const Frame fr = frame_of(y);
   const Kepler k = kepler_of(y, fr.a);
   const AngleTrig ag = angle_trig(k);
-  const Bodies b = bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+  // the Sun the set's flights read (an AP set's own, SPEC 16.17)
+  const Bodies b = ctx.ap_third_body ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay) : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
   drag_part(ctx, t, y, fr, k, ag, b, theory);
   const int N = samples < 2 ? 2 : samples & ~1;
   const double e = k.e, n = fr.n, eta = fr.eta, p = fr.a * eta * eta, th = ag.ci, cj2 = kJ2 / (4.0 * p);
@@ -5850,6 +5851,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // The nonresonant long-period branch retains its native TEME-of-date
   // convention. A second epoch-axis rotation is not part of that branch.
   // This one ingest-time policy is shared by fit residuals and every flight.
+  // The one writer of ap_frame, ap_third_body and ap_resonance (xp_init zeroes them first): the other two are set only
+  // when ap_third_body is, so ap_third_body != 0 exactly when is_ap_ctx. The callers that choose AP's Sun and Moon
+  // (bodies_at_ap, SPEC 16.17) by ap_third_body rely on it.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;

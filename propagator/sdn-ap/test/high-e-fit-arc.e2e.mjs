@@ -71,7 +71,7 @@ const K = 5;
 // 72.55 / 19.16 m on 0.4.16, 5864.50 / 969.05 m from 0.6.4 (416a67e9: a class 0 set flies the grid above e 0.05, which
 // carried no 6:1 commensurability) to 0.6.10, 29.08 / 7.46 m on 0.6.11 (DigitalArsenal/spacedatanetwork-stack#393);
 // 60 m along-track as in test/class0-commensurability.e2e.mjs, 15 m radial.
-// AP's own Sun and Moon (SPEC 16.15, stack #446, on 0.6.19) move the two low orbits' day-7 along-track by 0.73 m (SWOT-like,
+// AP's own Sun and Moon (SPEC 16.17, stack #446, on 0.6.19) move the two low orbits' day-7 along-track by 0.73 m (SWOT-like,
 // 282.17 to 282.90 m) and 0.70 m (Sentinel-3-like, 269.35 to 270.06 m), radial under 3 mm; the drag-off Molniya 51.71 /
 // 35.88 to 55.43 / 29.23 m: the low orbits' bound goes from 0.05 to 1 m.
 const LOW_BOUND = {'SWOT-like': 1, 'Sentinel-3-like': 1, 'Molniya drag off': 8.5};

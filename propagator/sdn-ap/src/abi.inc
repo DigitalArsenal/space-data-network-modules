@@ -451,8 +451,8 @@ int32_t sdnap_frame_probe(double whole, double frac, const double* in, double* o
 }
 
 /// Sun and Moon diagnostics at the UTC Julian date whole + frac: mode 0 SGP4XP's (SPEC 5, bodies_at: mean equator and
-/// equinox of date), 1 AP's series at that time (SPEC 16.15, ap_bodies_at: TEME of date), 2 what AP's flights read
-/// (bodies_at_ap: the cubic through its nodes). out (8 doubles): the Sun's unit vector and distance (km), the Moon's
+/// equinox of date), 1 AP's series at that time (SPEC 16.17, ap_bodies_at: TEME of date), 2 what AP's flights read
+/// (bodies_at_ap: the quintic through six nodes). out (8 doubles): the Sun's unit vector and distance (km), the Moon's
 /// unit vector and distance (km). Returns 0, or -1 for a bad mode or a null output.
 SDNAP_EXPORT("sdnap_bodies_probe")
 int32_t sdnap_bodies_probe(double whole, double frac, int32_t mode, double* out) {

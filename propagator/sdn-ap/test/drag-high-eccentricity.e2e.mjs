@@ -10,15 +10,16 @@
 // Acceptance:
 // 1. the drag's averaged rates against the module's independent integral over one orbit (sdnap_drag_orbit_check, 20000
 //    Simpson points per pass) at days 0, 1, 3 and 7 of each fixture's seeded set: RMS over the six elements at most 0.1 m;
-// 2. Molniya, a 72 h arc with BTERM pinned at 0.044 and AGOM at 0, 10-minute grid: along-track at most 88 m (0.4.15
-//    printed first). The bound was 80 m, set on FFM 2.0.4's truth. 0.6.3 (7154b48d: the grid in E for the first-order
-//    tesseral families above e 0.3, SPEC 16.11) moved this case from 71.22 to 83.42 m (83.38 from 0.6.5), on both truths
-//    (2.0.4: 70.86 to 83.01 m); not the grid's resolution (256 nodes: 83.41 m); the same change improved the fitted
-//    Molniya fixture's day-7 along-track RMS from 276 to 238 m and the half-day one's from 34 to 31 m
-//    (third-body-short-period-eccentric.e2e.mjs); this test was not run at 0.6.3. The
-//    12 m is DigitalArsenal/spacedatanetwork-stack#391. AP's own Sun and Moon (SPEC 16.15, stack #446: the Moon within
-//    4.1 arcsec of DE440 against 377) move it from 83.4 to 85.94 m, and the bound from 85 to 88 m: a lunar error had been
-//    taking 2.5 m off this fixture's other error;
+// 2. Molniya, a 72 h arc with BTERM pinned at 0.044 and AGOM at 0, 10-minute grid: along-track within 1 m either way of
+//    MOLNIYA_PINNED, this build's recorded figure (0.4.15 printed first). SPEC states no accuracy for this case. The test
+//    was a ceiling until 0.6.22: 80 m, set on FFM 2.0.4's truth, then 85 m. 0.6.3 (7154b48d: the grid in E for the
+//    first-order tesseral families above e 0.3, SPEC 16.11) moved this case from 71.22 m (0.4.16 to 0.6.2) to 83.42 m
+//    (83.38 from 0.6.5), on both truths (2.0.4: 70.86 to 83.01 m); not the grid's resolution (256 nodes: 83.41 m); the
+//    same change improved the fitted Molniya fixture's day-7 along-track RMS from 276 to 238 m and the half-day one's from
+//    34 to 31 m (third-body-short-period-eccentric.e2e.mjs); this test was not run at 0.6.3. The 12 m is
+//    DigitalArsenal/spacedatanetwork-stack#391. AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446: the Moon within
+//    4.1 arcsec of DE440 against 377) move it from 83.38 to 85.94 m: a lunar error had been taking 2.5 m off this
+//    fixture's other error. A change that moves it by more than 1 m either way states why and records the new figure;
 // 3. Molniya, BTERM fitted the catalog's way (SPEC 12.8): a 7-day arc on the band default (its B within 0.6 % of 0.044,
 //    which holds both of the arc's solutions, 0.0438547 and 0.0437610: stack #392, #438; 0.5 % before the E-grid's C1 read),
 //    its posterior carried as LOG_NORMAL with the sigma of the log at least 0.005, then the 72 h arc 7 to 10 days after
@@ -54,8 +55,10 @@ const FIXTURES = {
 // (stack #420) moved the three seeded flights, which nothing fits: Molniya 1214.38 / 844.45 to 1215.83 / 845.44, GTO
 // 8949.97 / 6033.96 to 8944.13 / 6030.04, GTO-500 8687.66 / 5684.49 to 8685.26 / 5682.93 (0.03 to 0.12 % of errors of
 // 1.2 to 8.9 km from an osculating seed); the drag-off fit 53.73 / 27.15 to 53.74 / 27.15. AP's own Sun and Moon (SPEC
-// 16.15, stack #446, on 0.6.19) move them to 1208.57 / 840.01, 8971.52 / 6053.53, 8711.83 / 5705.36 and 56.98 / 27.94
+// 16.17, stack #446, on 0.6.19) move them to 1208.57 / 840.01, 8971.52 / 6053.53, 8711.83 / 5705.36 and 56.98 / 27.94
 // (-0.6 to +0.3 % of the seeded flights; the drag-off fit +3.24 / +0.79 m).
+// 2's recorded figure (m, day-7 whole-day along-track RMS), 0.6.22; its history at 2.
+const MOLNIYA_PINNED = 85.94;
 const DRAG_OFF = {'Molniya seed off': [1208.57, 840.01], 'GTO seed off': [8971.52, 6053.53], 'GTO-500 seed off': [8711.83, 5705.36], 'Molniya drag off': [56.98, 27.94]};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');
@@ -135,7 +138,7 @@ if (!isMainThread) {
     }
   // 2. pinned
   console.log(JSON.stringify({molniyaPinned: {at0415: results['0.4.15 Molniya pinned'].t, release: results['release Molniya pinned'].t}}));
-  assert.ok(results['release Molniya pinned'].t <= 88, `Molniya pinned: ${results['release Molniya pinned'].t} m along-track`);
+  assert.ok(Math.abs(results['release Molniya pinned'].t - MOLNIYA_PINNED) <= 1, `Molniya pinned: ${results['release Molniya pinned'].t} m along-track, recorded ${MOLNIYA_PINNED} m (within 1 m either way)`);
   // 3. fitted
   for (const f of ['Molniya', 'GTO-500']) {
     const seven = results[`release ${f} 7-day band default`], three = results[`release ${f} 72 h carried`], lib = results[`release ${f} 72 h library prior`];

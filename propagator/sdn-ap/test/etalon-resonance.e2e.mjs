@@ -80,7 +80,7 @@ if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON
 // 0.6.19 (the one-day class's resonant tail, stack #434; these fits state no FORCES.ECOM2, and with only a sphere AP now
 // sits where a numerical propagator with only a sphere does: SPEC 16.13), 0.6.14 > 0.6.19 in m: IG 13.013 > 13.448,
 // GE 35.277 > 53.297; old path IG 15.768 > 15.621, GE 45.437 > 64.231
-// 0.6.22 (AP's own Sun and Moon, SPEC 16.15, stack #446), 0.6.19 > 0.6.22 in m: Etalon-1 4.21 > 4.08, Etalon-2 5.31 >
+// 0.6.22 (AP's own Sun and Moon, SPEC 16.17, stack #446), 0.6.19 > 0.6.22 in m: Etalon-1 4.21 > 4.08, Etalon-2 5.31 >
 // 4.85, LAGEOS-1 7.170 > 7.114, LAGEOS-2 6.800 > 6.676, LARES-2 8.698 > 8.645, IG 13.448 > 7.602, GE 53.297 > 57.922 (GE
 // without FORCES.ECOM2 rises: what the Moon's error had been offsetting there is the sphere's radiation, SPEC 16.13);
 // old path Etalon-1 6.57 > 6.88, Etalon-2 7.62 > 7.51, LAGEOS-1 7.805 > 7.534, LAGEOS-2 6.729 > 6.781, LARES-2 9.712 >

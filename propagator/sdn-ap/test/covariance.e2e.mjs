@@ -53,7 +53,7 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// The fit lane's measurement (stack #456) on the same fixture: 0.6.15 against 0.6.18 at today's steps 1.74e-3, both at
 /// steps ten times larger 1.66e-4; each against itself at the larger steps, 0.6.15 1.57e-3 and 0.6.18 3.3e-6. The
 /// step-sensitive partials are the older builds': their cells put non-smooth changes into the differences.
-/// AP's own Sun and Moon (SPEC 16.15, stack #446) move the stored record's flight by 34.676 mm (its covariance by 7.13e-5,
+/// AP's own Sun and Moon (SPEC 16.17, stack #446) move the stored record's flight by 34.676 mm (its covariance by 7.13e-5,
 /// as before) and this build's fit by 117.70 mm and 2.61e-4 of the largest covariance entry, its epoch covariance 1.99e-4
 /// of 0.6.18's largest entry and its floors 1.10e-3 relative.
 const AP_COV_FLIGHT = { posM: 0.04, velMmS: 0.045, covOfLargest: 1e-4 };

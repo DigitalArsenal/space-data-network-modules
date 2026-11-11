@@ -822,11 +822,12 @@ places) *[study; lit: IAU 1976 system]*. Positions:
   *[study; probe 5.3: this Moon reproduces the library's direction and distance to 3e-13]*
 - JPL ephemerides are used only when loaded; the oracle does not load them, and release notes 9.3-9.9 still list
   "replace analytical theory of Sun and Moon position with JPL ephemeris for SGP4-XP" as planned work *[doc]*.
-- AP does not read this section's Sun and Moon (16.15). Against DE440 over 2010-2035, read as AP read them through 0.6.16
-  (UTC as the time argument, the mean equator of date taken for TEME), they are off by 91.5 arcsec on average and 377 at
-  worst (the Moon; 38 of it the time argument, 5.5 the frame) and 10.9 and 32 arcsec (the Sun): a third-body acceleration
-  error of 3.7e-9 m/s^2 RMS at the geostationary radius. AP's own series are within 0.74 and 4.1 arcsec (Moon) and 0.44
-  and 1.1 arcsec (Sun) there, 3.7e-11 m/s^2. Known approximation: AP's bodies are in TEME of date, while its averaged
+- From 0.6.22 AP does not read this section's Sun and Moon (16.17); through 0.6.21 it did. Against DE440 over 2010-2035,
+  read as AP read them (UTC as the time argument, the mean equator of date taken for TEME; measured on 0.6.16), they are
+  off by 91.5 arcsec on average and 377 at worst (the Moon; 38 of it the time argument, 5.5 the frame) and 10.9 and 32
+  arcsec (the Sun): a third-body acceleration error of 3.7e-9 m/s^2 RMS at the geostationary radius. AP's own series are
+  within 0.74 and 4.1 arcsec (Moon) and 0.44 and 1.1 arcsec (Sun) there, 3.7e-11 m/s^2. Known approximation: AP's
+  bodies are in TEME of date, while its averaged
   regime and resonance classes hold their elements in TEME of the epoch (16.4); the two part by about 1 arcsec at day 7
   (0.42, 0.70 and 0.98 arcsec at days 3, 5 and 7), a third-body acceleration error at the geostationary radius of 1.5e-11,
   2.5e-11 and 3.5e-11 m/s^2 RMS (the Moon; the Sun 1.6e-11 at day 7) that AP does not carry.
@@ -3336,7 +3337,7 @@ alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.
 `test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
 unset, the long-period regime's stated covariance with the tide, and the refusals.
 
-**16.15 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
+**16.17 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
 `sun_at`). Every AP path reads its own (`ap_bodies_at`, src/ap_bodies.inc): the rates in both regimes, the output-time
 terms, the radiation pressure and its shadow, the radiation term Y0 (16.13), the drag passes (16.12) and the Sun of the
 drag atmospheres. Flights read it through `bodies_at_ap`, the quintic through its values at the six nodes about the time,
@@ -3354,8 +3355,11 @@ a batch whose sets lie more than 85 days apart costs more on that thread and giv
 on a leap-second day the series, a function of TT, bends where the UTC day begins and ends, which is where the quintic's
 largest errors fall, far inside the series' own 0.74 arcsec. A grid in TT would need UTC to TT at every read (ERFA's
 leap-second lookup, some 0.3 µs against about 20 ns for the read), so it stays in UTC. A batch at one time
-(`plugin_propagate_batch`, `sdnap_propagate_soa`) evaluates section 5's bodies once for its SGP4XP sets; its AP sets read
-their own, so an AP state is the same in a batch and in any other call.
+(`plugin_propagate_batch`, `sdnap_propagate_soa`) is SGP4XP's path: it flies the row store, which in the shipped module
+holds no AP set (`sdnap_init_elements`, `plugin_init`, `plugin_init_omm` and `ingest_omm` fill it with no AP terms
+selected), and it evaluates section 5's bodies once for its sets. A row that is an AP set exists only in a test build;
+`row_propagate` withholds the batch's bodies from it and it reads its own (test/set-caches.e2e.mjs, a store of AP sets
+and one mixing AP and SGP4XP sets, each bit for bit against the minutes call).
 
 *The series.* A least-squares fit to DE440 (Park et al. 2021; NAIF de440s.bsp, SHA-256 c1c7feea...49f2) at TT from
 1990 to 2060, every 0.61 days (42,514 samples), by tools/ap-bodies-fit.mjs; its coefficients are src/ap_bodies_series.inc
@@ -3384,10 +3388,10 @@ average and 0.085 at worst over 2010-2035. Section 5's Sun and Moon are in the m
 on average and 9.9 at worst from TEME.
 
 *Against DE440.* 2010-2035, 32,745 instants 0.29 days apart, DE440 turned to TEME of date by the module's GCRF-to-TEME;
-section 5 as AP read it through 0.6.16 (UTC for TT, the mean equator of date for TEME) and this section through
-`bodies_at_ap`:
+section 5 as AP read it through 0.6.21 (UTC for TT, the mean equator of date for TEME; measured on 0.6.16) and this
+section through `bodies_at_ap` (measured on 0.6.22):
 
-| | Section 5 | 16.15 |
+| | Section 5 | 16.17 |
 | --- | ---: | ---: |
 | Moon direction, mean / 95th percentile / worst (arcsec) | 91.5 / 195 / 377 | 0.74 / 1.57 / 4.14 |
 | Moon distance, RMS / worst (km) | 19.2 / 72.6 | 0.68 / 3.08 |

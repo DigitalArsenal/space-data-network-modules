@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E2E (DigitalArsenal/spacedatanetwork-stack#446): AP's Sun and Moon (SPEC 16.15) against DE440. The stored samples
+// E2E (DigitalArsenal/spacedatanetwork-stack#446): AP's Sun and Moon (SPEC 16.17) against DE440. The stored samples
 // (test/fixtures/de440-bodies-2010-2035.json: NAIF de440s.bsp, geocentric, GCRF, every 23.37 days from 2010 to 2035,
 // tools/ap-bodies-fit.mjs samples) are turned to TEME of date by the module (sdnap_frame_probe, gcrf_to_teme) and
 // compared with what AP's flights read (sdnap_bodies_probe mode 2, the quintic through the series' 8 h nodes).
@@ -11,7 +11,7 @@
 //   second difference of the unit vector (60 s apart) differs from the same 30 min away by at most 1e-6 arcsec for the
 //   Sun and 1e-4 arcsec for the Moon (measured 1.5e-9 and 1.2e-5, the Moon's mostly its own change of curvature).
 // Printed for the record, not tested: SPEC 5's Sun and Moon (SGP4XP, mode 0) on the same samples, read as AP read
-// them through 0.6.16 (UTC as the time argument, mean equator of date taken for TEME): about 90 arcsec for the Moon.
+// them through 0.6.21 (UTC as the time argument, mean equator of date taken for TEME): about 90 arcsec for the Moon.
 // JS only moves bytes and measures angles between vectors the module and the stored samples give.
 //   node test/ap-bodies.e2e.mjs
 import fs from "node:fs";

@@ -75,7 +75,7 @@ const cases = [
 // SPEC 16.8; SGP4XP 0.099 mm in EME2000, 0.6.6's GCRF from 6 h nodes, SPEC 16.4, and byte-equal in TEME). The published
 // examples (SDNAP_EXAMPLES) flown by both builds within EXAMPLE_BOUND, measured 2026-11-10: at most 9.6 mm and 1.2e-3
 // (next-china-space-station-css); the sets above e 0.3 measured and printed (THEMIS 0.95 m at most), none in the band.
-// AP's own Sun and Moon (SPEC 16.15, stack #446) move AP's flight of the stored record by 34.7 mm at the grid times
+// AP's own Sun and Moon (SPEC 16.17, stack #446) move AP's flight of the stored record by 34.7 mm at the grid times
 // (covariance 7.1e-5, as before) and 121.8 mm over EPOCHS' 7 days (covariance 1.11e-4), and its fit from 0.89 m (0.6.19)
 // to 3.18 m at 7 days; SGP4XP's bounds stay.
 const FIT_BOUND = { AP: 4, XP: 0.001, rmsM: 0.01 };
