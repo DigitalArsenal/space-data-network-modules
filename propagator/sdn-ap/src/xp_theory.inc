@@ -1906,6 +1906,7 @@ struct RateContext {
   tess::Terms selected_terms;  ///< AP force selection
   double bterm, agom;
   double rad_y0;        ///< AP: the radiation term Y0 beside the sphere, m/s^2 (SPEC 16.13); 0: none
+  double rad_b1c, rad_b1s;  ///< AP: ECOM2's once-per-revolution terms B1 cos and B1 sin, m/s^2 (SPEC 16.13); 0: none
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour), held
                         ///< for the whole flight in both theories (SPEC 6 Bands, 16.7)
@@ -3444,6 +3445,7 @@ struct CovGridCache {
   double epoch_bterm = -1.0;
   double epoch_agom = -1.0;
   double epoch_rad_y0 = 0.0;  ///< SPEC 16.13: the Y0 the cached stages were flown with
+  double epoch_rad_b1c = 0.0, epoch_rad_b1s = 0.0;  ///< and the B1 terms
   double epoch_tb[6]{};
   double epoch_drag_unit[6]{};
   double epoch_srp_unit[6]{};
@@ -4229,7 +4231,8 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
   if (is_ap_ctx(ctx) && !ctx.is_cov_sigma &&
       (cgc.anchor_id != ctx.ctx_id || cgc.d50_epoch != ctx.d50_epoch || std::fabs(cgc.n0 - ctx.n0) > 1e-9 ||
        (a_idx == 0 && (cgc.epoch_f0 != a.f[0] || cgc.epoch_bterm != ctx.bterm || cgc.epoch_agom != ctx.agom ||
-                       cgc.epoch_rad_y0 != ctx.rad_y0)))) {
+                       cgc.epoch_rad_y0 != ctx.rad_y0 || cgc.epoch_rad_b1c != ctx.rad_b1c ||
+                       cgc.epoch_rad_b1s != ctx.rad_b1s)))) {
     if (++cgc.gen == 0) cgc.gen = 1;
     cgc.anchor_id = ctx.ctx_id;
     cgc.d50_epoch = ctx.d50_epoch;
@@ -4239,6 +4242,8 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
       cgc.epoch_bterm = ctx.bterm;
       cgc.epoch_agom = ctx.agom;
       cgc.epoch_rad_y0 = ctx.rad_y0;
+      cgc.epoch_rad_b1c = ctx.rad_b1c;
+      cgc.epoch_rad_b1s = ctx.rad_b1s;
     }
     const EpochAux& ea = epoch_aux();
     const bool same_ep = ea.valid && ea.ctx_id == ctx.ctx_id;
@@ -4545,9 +4550,15 @@ inline bool y0_sunlit_arc(const RateContext& /*ctx*/, const double* y, const Fra
 /// unit(s x r) exactly, no parallax): the integrand turns within an angle
 /// of the Sun's elevation above the orbit plane where the satellite passes the Sun's direction and its opposite, so the
 /// panels are graded about those two points.
-inline void y0_unit_rates(const RateContext& ctx, const double* y, const Frame& fr, Vec3 su, double* u) {
-  for (int j = 0; j < 6; ++j) u[j] = 0.0;
-  const double k = y[kAf], h = y[kAg], chi = y[kChi], psi = y[kPsi];
+/// SPEC 16.13: the ends of the panels ECOM2's quadratures take over the sunlit arc of the mean orbit y (eccentric
+/// longitudes, ascending; their count): the arc's (y0_sunlit_arc; wholly sunlit: one revolution from the Sun's
+/// opposite), and about the satellite's passes of the Sun's direction and its opposite, where the axes eY and eB turn
+/// within an angle of the Sun's elevation above the orbit plane, the quarter revolution and offsets graded by kY0Grade
+/// from that elevation; `cut`, when finite, one more end where it falls inside the arc (the output part's kernel jumps
+/// there: b1_output).
+inline int ecom2_panels(const RateContext& ctx, const double* y, const Frame& fr, Vec3 su, double* pts,
+                        double cut = std::numeric_limits<double>::quiet_NaN()) {
+  const double k = y[kAf], h = y[kAg];
   const double eta = fr.eta;
   const double sf = dot(su, fr.f), sg = dot(su, fr.g), sw = dot(su, fr.w);
   double E1 = 0.0, E2 = 0.0;
@@ -4576,7 +4587,6 @@ inline void y0_unit_rates(const RateContext& ctx, const double* y, const Frame& 
     F2 = centers[0] + kPi;
   }
   // the panels' ends: the arc's, and about each of the two points the quarter revolution and the graded offsets
-  double pts[80];
   int np = 0;
   pts[np++] = F1;
   pts[np++] = F2;
@@ -4598,12 +4608,29 @@ inline void y0_unit_rates(const RateContext& ctx, const double* y, const Frame& 
         }
     }
   }
+  if (std::isfinite(cut)) {
+    const double c = cut + kTwoPi * std::ceil((F1 - cut) / kTwoPi);
+    if (c > F1 && c < F2) pts[np++] = c;
+  }
   for (int i = 1; i < np; ++i) {  // few points: insertion sort
     const double p = pts[i];
     int j = i - 1;
     for (; j >= 0 && pts[j] > p; --j) pts[j + 1] = pts[j];
     pts[j + 1] = p;
   }
+  return np;
+}
+constexpr int kEcom2Panels = 81;  ///< ecom2_panels' most ends: 80, and the cut
+
+inline void y0_unit_rates(const RateContext& ctx, const double* y, const Frame& fr, Vec3 su, double* u) {
+  for (int j = 0; j < 6; ++j) u[j] = 0.0;
+  const double k = y[kAf], h = y[kAg], chi = y[kChi], psi = y[kPsi];
+  const double eta = fr.eta;
+  const double sf = dot(su, fr.f), sg = dot(su, fr.g), sw = dot(su, fr.w);
+  const double beta = 1.0 / (1.0 + eta);
+  const double c_xx = 1.0 - h * h * beta, c_xy = h * k * beta, c_yy = 1.0 - k * k * beta;
+  double pts[kEcom2Panels];
+  const int np = ecom2_panels(ctx, y, fr, su, pts);
   const double na = fr.n * fr.a, na2 = na * fr.a, hn = na2 * eta;
   const double inv_hn = 1.0 / hn, inv_mu = 1.0 / kMu;
   const double two_a2_mu = 2.0 * fr.a * fr.a * inv_mu, neg_3n_2a = -1.5 * fr.n / fr.a;
@@ -4644,29 +4671,191 @@ inline void y0_unit_rates(const RateContext& ctx, const double* y, const Frame& 
   }
 }
 
-/// SPEC 16.13: Y0's part of a step from node `a` to `out`. Its averaged rates change over days (with the Sun's direction
-/// from the orbit plane), so they are not put through the rate function: each block of kY0BlockMinutes (the first, at
-/// the epoch, half of one) acts at its center c, through one quadrature at the state there (the cubic between the two
-/// nodes) with the Sun there, added to the node the step arrives at: every element by its rate times the block, lambda
-/// also by the block's change of n over the time from c to the node. A step that passes no center adds nothing; the
-/// mean elements are off by at most half a block's worth of the rates between centers (0.2 m at 1e-9 m/s^2). A pure
-/// function of the two nodes: the same grid whatever the order of requests.
-inline void y0_blocks(const RateContext& ctx, const Node& a, Node& out) {
+// --- SPEC 16.13: ECOM2's once-per-revolution terms B1 cos and B1 sin (AP) -----------------------------------------
+
+/// SPEC 16.13: the constants of the mean orbit y that the Gauss rates of ECOM2's B axis take (b1_point), with the Sun's
+/// unit vector on the orbit's axes f, g, w and the reciprocal of its part in the orbit plane.
+struct B1Orbit {
+  double k, h, chi, psi, a, c_xx, c_xy, c_yy, na2, inv_hn, inv_mu, two_a2_mu, neg_3n_2a, inv_p, two_inv_na2,
+      eta_na_1peta, c_half_inv_hn, sf, sg, sw, inv_cb;
+};
+inline B1Orbit b1_orbit(const double* y, const Frame& fr, Vec3 su) {
+  B1Orbit o{};
+  o.k = y[kAf];
+  o.h = y[kAg];
+  o.chi = y[kChi];
+  o.psi = y[kPsi];
+  o.a = fr.a;
+  const double beta = 1.0 / (1.0 + fr.eta);
+  o.c_xx = 1.0 - o.h * o.h * beta;
+  o.c_xy = o.h * o.k * beta;
+  o.c_yy = 1.0 - o.k * o.k * beta;
+  const double na = fr.n * fr.a;
+  o.na2 = na * fr.a;
+  o.inv_hn = 1.0 / (o.na2 * fr.eta);
+  o.inv_mu = 1.0 / kMu;
+  o.two_a2_mu = 2.0 * fr.a * fr.a * o.inv_mu;
+  o.neg_3n_2a = -1.5 * fr.n / fr.a;
+  o.inv_p = 1.0 / (fr.a * fr.eta * fr.eta);
+  o.two_inv_na2 = 2.0 / o.na2;
+  o.eta_na_1peta = fr.eta / (na * (1.0 + fr.eta));
+  o.c_half_inv_hn = 0.5 * fr.c * o.inv_hn;
+  o.sf = dot(su, fr.f);
+  o.sg = dot(su, fr.g);
+  o.sw = dot(su, fr.w);
+  o.inv_cb = 1.0 / std::fmax(std::sqrt(o.sf * o.sf + o.sg * o.sg), 1e-9);
+  return o;
+}
+
+/// SPEC 16.13: at the eccentric longitude F of the mean orbit (its sine and cosine): r / a (returned), cos du and sin du
+/// of the satellite's angle du from the Sun's projection on the orbit plane (Arnold et al. 2015, Fig. 1; propagator/ffm
+/// lib/gnss_srp.h ArgumentFromSun: cos du = cd / cb, sin du = -sd / cb), and the Gauss rates (tail_samples; state order,
+/// lambda's without n) of a unit acceleration (ER/min^2) along ECOM2's B axis. With s the Sun's unit vector on the
+/// radial, transverse and normal axes (cd, sd, sw), eB = eD x eY = (cd s - r_hat) / N, N = |s x r_hat| =
+/// sqrt(sd^2 + sw^2): radial -N, transverse cd sd / N, normal cd sw / N (eD taken as s, as eY is unit(s x r): the Sun's
+/// parallax, 3e-4 at the geostationary radius, is left out).
+inline double b1_point(const B1Orbit& o, double sF, double cF, double& cdu, double& sdu, double* rho) {
+  const double roa = 1.0 - o.k * cF - o.h * sF;
+  const double X = o.a * (o.c_xx * cF + o.c_xy * sF - o.k), Y = o.a * (o.c_xy * cF + o.c_yy * sF - o.h);
+  const double rn = o.a * roa, inv_rn = 1.0 / rn;
+  const double xu = X * inv_rn, yu = Y * inv_rn;
+  const double v_scale = o.na2 * inv_rn;
+  const double Xd = v_scale * (o.c_xy * cF - o.c_xx * sF), Yd = v_scale * (o.c_yy * cF - o.c_xy * sF);
+  const double cd = xu * o.sf + yu * o.sg, sd = xu * o.sg - yu * o.sf;
+  const double N = std::sqrt(std::fmax(sd * sd + o.sw * o.sw, 1e-24)), inv_N = 1.0 / N;
+  cdu = cd * o.inv_cb;
+  sdu = -sd * o.inv_cb;
+  const double R = -N, S = cd * sd * inv_N, W = cd * o.sw * inv_N;
+  const double df = R * xu - S * yu, dg = R * yu + S * xu;
+  const double vd = Xd * df + Yd * dg;
+  const double rd = X * df + Y * dg;
+  const double rv = X * Xd + Y * Yd;
+  const double edot_f = o.inv_mu * (2.0 * vd * X - rd * Xd - rv * df);
+  const double edot_g = o.inv_mu * (2.0 * vd * Y - rd * Yd - rv * dg);
+  const double omega_rot = (o.chi * X - o.psi * Y) * W * o.inv_hn;
+  const double er = o.k * xu + o.h * yu, es = o.h * xu - o.k * yu;
+  rho[kAf] = edot_f + o.h * omega_rot;
+  rho[kAg] = edot_g - o.k * omega_rot;
+  rho[kChi] = o.c_half_inv_hn * W * Y;
+  rho[kPsi] = o.c_half_inv_hn * W * X;
+  rho[kLam] = -o.two_inv_na2 * rn * R - o.eta_na_1peta * (er * R + (1.0 + rn * o.inv_p) * es * S) - omega_rot;
+  rho[kN] = o.neg_3n_2a * o.two_a2_mu * vd;
+  return roa;
+}
+
+/// SPEC 16.13: the averaged Gauss rates of B1 cos (uc) and B1 sin (us) per unit coefficient (ER/min^2; state order,
+/// lambda's without n): cos du and sin du times the B axis's rates (b1_point), averaged over the mean anomaly of the
+/// mean orbit y on the sunlit arc the sphere's rates count, by Y0's panels (ecom2_panels).
+inline void b1_unit_rates(const RateContext& ctx, const double* y, const Frame& fr, Vec3 su, double* uc, double* us) {
+  for (int j = 0; j < 6; ++j) uc[j] = us[j] = 0.0;
+  const B1Orbit o = b1_orbit(y, fr, su);
+  double pts[kEcom2Panels];
+  const int np = ecom2_panels(ctx, y, fr, su, pts);
+  for (int q = 0; q + 1 < np; ++q) {
+    const double half = 0.5 * (pts[q + 1] - pts[q]), mid = 0.5 * (pts[q + 1] + pts[q]);
+    if (!(half > 0.5e-9)) continue;  // two ends that coincide
+    for (int g = 0; g < 3; ++g) {
+      double sF, cF, cdu, sdu, rho[6];
+      fm::sincos(mid + half * kGl3X[g], sF, cF);
+      const double w = kGl3W[g] * half * b1_point(o, sF, cF, cdu, sdu, rho) * (1.0 / kTwoPi);
+      for (int j = 0; j < 6; ++j) {
+        uc[j] += w * cdu * rho[j];
+        us[j] += w * sdu * rho[j];
+      }
+    }
+  }
+}
+
+/// SPEC 16.13: B1's output part, the once-per-revolution motion its averaged rates leave out, added to the mean state ym
+/// at the output time t (minutes from the epoch). For every element the zero-mean integral over the mean longitude of its
+/// rate under B(du) = B1c cos du + B1s sin du along eB on the sunlit arc (b1_point on ecom2_panels: the rates' force,
+/// their shadow included): d_j(lambda) = (1 / n) int K1(s) rho_j(lambda - s) ds over a revolution, K1(s) = (pi - s) / (2 pi);
+/// lambda's also takes the mean motion's part, (1 / n^2) int K2(s) rho_n(lambda - s) ds, K2(s) = -(pi / 6 - s / 2 +
+/// s^2 / (4 pi)) (the kernels of the zero-mean first and second antiderivatives of a periodic function). The panels are
+/// cut at the output's own longitude, where K1 jumps. About B1 / n^2: 1.9 m at the geostationary radius for 1e-8 m/s^2.
+inline void b1_output(const RateContext& ctx, double t, const double* ym, const Bodies* shared, double* d) {
+  for (int j = 0; j < 6; ++j) d[j] = 0.0;
+  const Frame fr = frame_of(ym);
+  const Vec3 su = shared != nullptr ? shared->sun_u : bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay).sun_u;
+  const double k = ym[kAf], h = ym[kAg];
+  // the output's mean longitude in [0, 2 pi) and its eccentric longitude (lambda = F + h cos F - k sin F)
+  double lam = std::fmod(ym[kLam], kTwoPi);
+  if (lam < 0.0) lam += kTwoPi;
+  double F = lam;
+  for (int it = 0; it < 20; ++it) {
+    double sF, cF;
+    fm::sincos(F, sF, cF);
+    const double dF = (F + h * cF - k * sF - lam) / (1.0 - h * sF - k * cF);
+    F -= dF;
+    if (std::fabs(dF) < 1e-14) break;
+  }
+  const B1Orbit o = b1_orbit(ym, fr, su);
+  double pts[kEcom2Panels];
+  const int np = ecom2_panels(ctx, ym, fr, su, pts, F);
+  const double acc = 3600.0 / (1000.0 * kRe);  // m/s^2 in ER/min^2
+  const double bc = ctx.rad_b1c * acc, bs = ctx.rad_b1s * acc;
+  double s1[6] = {0, 0, 0, 0, 0, 0}, s2 = 0.0;
+  for (int q = 0; q + 1 < np; ++q) {
+    const double half = 0.5 * (pts[q + 1] - pts[q]), mid = 0.5 * (pts[q + 1] + pts[q]);
+    if (!(half > 0.5e-9)) continue;
+    for (int g = 0; g < 3; ++g) {
+      const double Fq = mid + half * kGl3X[g];
+      double sF, cF, cdu, sdu, rho[6];
+      fm::sincos(Fq, sF, cF);
+      const double roa = b1_point(o, sF, cF, cdu, sdu, rho);
+      double s = lam - (Fq + h * cF - k * sF);  // lambda - lambda', in [0, 2 pi)
+      s -= kTwoPi * std::floor(s / kTwoPi);
+      const double w = kGl3W[g] * half * roa * (bc * cdu + bs * sdu);
+      const double k1 = 0.5 - s * (1.0 / kTwoPi);
+      const double k2 = -(kPi / 6.0 - 0.5 * s + s * s * (0.25 / kPi));
+      for (int j = 0; j < 6; ++j) s1[j] += w * k1 * rho[j];
+      s2 += w * k2 * rho[kN];
+    }
+  }
+  const double inv_n = 1.0 / fr.n;
+  for (int j = 0; j < 6; ++j) d[j] = s1[j] * inv_n;
+  d[kLam] += s2 * inv_n * inv_n;
+}
+
+/// SPEC 16.13: a set flies ECOM2's terms (Y0, B1 cos, B1 sin; AP's only).
+inline bool has_ecom2(const RateContext& ctx) { return ctx.rad_y0 != 0.0 || ctx.rad_b1c != 0.0 || ctx.rad_b1s != 0.0; }
+inline bool has_b1(const RateContext& ctx) { return ctx.rad_b1c != 0.0 || ctx.rad_b1s != 0.0; }
+
+/// SPEC 16.13: ECOM2's part of a step from node `a` to `out` (Y0 and B1). Their averaged rates change over days (with the
+/// Sun's direction from the orbit plane), so they are not put through the rate function: each block of kY0BlockMinutes
+/// (the first, at the epoch, half of one) acts at its center c, through one quadrature at the state there (the cubic
+/// between the two nodes) with the Sun there, added to the node the step arrives at: every element by its rate times the
+/// block, lambda also by the block's change of n over the time from c to the node. A step that passes no center adds
+/// nothing; the mean elements are off by at most half a block's worth of the rates between centers (0.2 m at
+/// 1e-9 m/s^2). A pure function of the two nodes: the same grid whatever the order of requests.
+inline void ecom2_blocks(const RateContext& ctx, const Node& a, Node& out) {
   const double dir = out.t >= a.t ? 1.0 : -1.0;
   const double ta = dir * a.t, tb = dir * out.t;  // forward in the direction of the step
   const Node b0 = out;
   const double acc = ctx.rad_y0 * 3600.0 / (1000.0 * kRe);  // m/s^2 in ER/min^2
+  const double acc_c = ctx.rad_b1c * 3600.0 / (1000.0 * kRe), acc_s = ctx.rad_b1s * 3600.0 / (1000.0 * kRe);
+  const bool b1 = has_b1(ctx);
   double add[6] = {0, 0, 0, 0, 0, 0};
   auto block = [&](double c, double length) {
     if (!(c > ta && c <= tb)) return;
     const double tc = dir * c;
     double yc[6], unit[6];
     hermite(a, b0, tc, yc);
-    const Vec3 su = bodies_at_ap(ctx.d50_epoch + tc / kMinutesPerDay).sun_u;  // AP only (rad_y0 is AP's)
-    y0_unit_rates(ctx, yc, frame_of(yc), su, unit);
-    const double scale = dir * length * acc;
-    for (int j = 0; j < 6; ++j) add[j] += scale * unit[j];
-    add[kLam] += scale * unit[kN] * (out.t - tc);
+    const Vec3 su = bodies_at_ap(ctx.d50_epoch + tc / kMinutesPerDay).sun_u;  // AP only (ECOM2's terms are AP's)
+    if (ctx.rad_y0 != 0.0) {
+      y0_unit_rates(ctx, yc, frame_of(yc), su, unit);
+      const double scale = dir * length * acc;
+      for (int j = 0; j < 6; ++j) add[j] += scale * unit[j];
+      add[kLam] += scale * unit[kN] * (out.t - tc);
+    }
+    if (b1) {
+      double uc[6], us[6];
+      b1_unit_rates(ctx, yc, frame_of(yc), su, uc, us);
+      const double scale = dir * length;
+      for (int j = 0; j < 6; ++j) unit[j] = acc_c * uc[j] + acc_s * us[j];
+      for (int j = 0; j < 6; ++j) add[j] += scale * unit[j];
+      add[kLam] += scale * unit[kN] * (out.t - tc);
+    }
   };
   block(0.25 * kY0BlockMinutes, 0.5 * kY0BlockMinutes);
   for (double j = std::floor(ta / kY0BlockMinutes) + 1.0; j * kY0BlockMinutes <= tb; j += 1.0) block(j * kY0BlockMinutes, kY0BlockMinutes);
@@ -4689,7 +4878,7 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
     st = rk3(ctx, a, dir * h, out);
   }
   if (st != 0) return false;
-  if (ctx.rad_y0 != 0.0) y0_blocks(ctx, a, out);  // SPEC 16.13
+  if (has_ecom2(ctx)) ecom2_blocks(ctx, a, out);  // SPEC 16.13
   return true;
 }
 
@@ -4986,6 +5175,11 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
     if (use_shared_srp && ctx.agom > 0.0) {
       for (int j = 0; j < 6; ++j) y[j] += d_srp_unit_in[j] * ctx.agom;
     }
+  }
+  if (has_b1(ctx)) {  // SPEC 16.13: B1's output part
+    double db1[6];
+    b1_output(ctx, t, ym, shared, db1);
+    for (int j = 0; j < 6; ++j) y[j] += db1[j];
   }
   double Ewarm = kCov ? E_osc_in : std::numeric_limits<double>::quiet_NaN();
   double sEwarm = kCov ? sE_osc_in : 0.0, cEwarm = kCov ? cE_osc_in : 1.0;
@@ -6004,8 +6198,14 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
 /// from outside the module of theory SGP4XP with that slot not 0 is refused (abi.inc), as the $OCM decoder refuses
 /// MEAN_MOTION_DOT on an SGP4XP or AP set. Only a set flown with AP's terms reads it (xp_init); 0 is no such term. These
 /// accessors, and radiation_y0 of an ElementRow (store.inc), are the only readers and writers of the slot for Y0.
+/// ECOM2's B1 cos and B1 sin ride the same way in the slots of SGP4's B* (bstar) and of its second derivative of the mean
+/// motion (ElementRow.mean_motion_ddot, Elements.nddot_rev_day3), which an SGP4XP or AP set does not have either.
 inline double radiation_y0(const Elements& e) { return e.ndot_rev_day2; }
 inline double& radiation_y0(Elements& e) { return e.ndot_rev_day2; }
+inline double radiation_b1c(const Elements& e) { return e.bstar; }
+inline double& radiation_b1c(Elements& e) { return e.bstar; }
+inline double radiation_b1s(const Elements& e) { return e.nddot_rev_day3; }
+inline double& radiation_b1s(Elements& e) { return e.nddot_rev_day3; }
 
 /// Inside a tess::FitGridScope (SPEC 16.11) the grids this set builds above tess::kWideE are freed with it, never kept idle.
 inline int32_t xp_init(const Elements& e, XpSat& s) {
@@ -6051,7 +6251,9 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   }
   // SPEC 16.13: an AP set's radiation term Y0 (m/s^2; radiation_y0 above); SGP4XP flies none
   s.ctx.rad_y0 = s.ctx.ap_third_body ? radiation_y0(e) : 0.0;
-  if (!std::isfinite(s.ctx.rad_y0)) {
+  s.ctx.rad_b1c = s.ctx.ap_third_body ? radiation_b1c(e) : 0.0;
+  s.ctx.rad_b1s = s.ctx.ap_third_body ? radiation_b1s(e) : 0.0;
+  if (!std::isfinite(s.ctx.rad_y0) || !std::isfinite(s.ctx.rad_b1c) || !std::isfinite(s.ctx.rad_b1s)) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
@@ -6076,7 +6278,8 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
       const bool same_slow = same_plane && (s.epoch.y[0] == anchor->epoch.y[0] && s.epoch.y[1] == anchor->epoch.y[1] &&
                                             s.epoch.y[5] == anchor->epoch.y[5]);
       const bool same_all6 = same_slow && (s.epoch.y[4] == anchor->epoch.y[4]) && (s.ctx.agom == anchor->ctx.agom) &&
-                             (s.ctx.rad_y0 == anchor->ctx.rad_y0);
+                             (s.ctx.rad_y0 == anchor->ctx.rad_y0) && (s.ctx.rad_b1c == anchor->ctx.rad_b1c) &&
+                             (s.ctx.rad_b1s == anchor->ctx.rad_b1s);
       s.ctx.is_cov_sigma =
           static_cast<uint8_t>(slot | (same_slow ? 32 : 0) | (same_all6 ? 64 : 0) | (same_plane ? 128 : 0));
     } else {
@@ -6677,7 +6880,9 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   e.norad = s.norad;
   e.bterm = s.ctx.bterm;
   e.agom = s.ctx.agom;
-  radiation_y0(e) = s.ctx.rad_y0;  // SPEC 16.13: an AP set's Y0 (it does not enter the epoch rates: y0_blocks)
+  radiation_y0(e) = s.ctx.rad_y0;  // SPEC 16.13: an AP set's ECOM2 terms (they do not enter the epoch rates: ecom2_blocks)
+  radiation_b1c(e) = s.ctx.rad_b1c;
+  radiation_b1s(e) = s.ctx.rad_b1s;
   const Kepler k = kepler_of(y);
   if (k.a * (1.0 - k.e) < 1.0) return false;  // a later report whose mean perigee is below the surface: code 2 (8.4)
   e.xno = y[kN];
@@ -7151,9 +7356,9 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
         !std::isfinite(out_p.f[m]) || !std::isfinite(out_m.f[m]))
       return -1;
   }
-  // SPEC 16.13: the radiation term Y0's blocks, as next_node adds them, so a pair flies the theory its sets fly alone
-  if (ctx_p.rad_y0 != 0.0) y0_blocks(ctx_p, ap, out_p);
-  if (ctx_m.rad_y0 != 0.0) y0_blocks(ctx_m, am, out_m);
+  // SPEC 16.13: ECOM2's blocks, as next_node adds them, so a pair flies the theory its sets fly alone
+  if (has_ecom2(ctx_p)) ecom2_blocks(ctx_p, ap, out_p);
+  if (has_ecom2(ctx_m)) ecom2_blocks(ctx_m, am, out_m);
   return 0;
 }
 

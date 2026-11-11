@@ -405,8 +405,8 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
 /// definite or the theory refuses a moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const double* t, const double* r, int count, double arc_end_min,
                    double sigma_km, Set& s, double& ng_rate) {
-  // SPEC 16.13, 17.1: an AP set's radiation term Y0 is no row of the covariance: the moved sets fly the solved Y0 the row
-  // carries, held
+  // SPEC 16.13, 17.1: an AP set's radiation terms (Y0, B1) are no rows of the covariance: the moved sets fly the solved
+  // terms the row carries, held
   fit::Options o = fitted;
   o.fit_y0 = 0;
   Bank b;
@@ -445,7 +445,7 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   for (int a = 0; a < np; ++a)
     for (int c = 0; c <= a; ++c) A[c * np + a] = A[a * np + c] = A[a * np + c] / s2;
   // the fit's priors (fit::priors_of, the statement fit::run's cost reads): each one pseudo-observation of its own sigma
-  fit::PriorTerm priors[3];
+  fit::PriorTerm priors[fit::kMaxPriors];
   for (int q = 0, n_priors = fit::priors_of(o, priors); q < n_priors; ++q) {
     const int a = priors[q].index;
     if (a < np) A[a * np + a] += 1.0 / (priors[q].sigma * priors[q].sigma);

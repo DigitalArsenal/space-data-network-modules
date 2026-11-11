@@ -31,11 +31,18 @@ static_assert(sizeof(ElementRow) == 112, "ElementRow is 112 bytes");
 /// (the transport is stated once, at xpt::radiation_y0): every copy of the row carries it, and elements_of hands it on.
 inline double& radiation_y0(ElementRow& row) { return row.mean_motion_dot; }
 inline double radiation_y0(const ElementRow& row) { return row.mean_motion_dot; }
+/// SPEC 16.13: its terms B1 cos and B1 sin (m/s^2), in the slots of SGP4's B* and second derivative of the mean motion.
+inline double& radiation_b1c(ElementRow& row) { return row.bstar; }
+inline double radiation_b1c(const ElementRow& row) { return row.bstar; }
+inline double& radiation_b1s(ElementRow& row) { return row.mean_motion_ddot; }
+inline double radiation_b1s(const ElementRow& row) { return row.mean_motion_ddot; }
 
-/// SPEC 16.13: a row from outside the module (sdnap_init_elements, sdnap_fit) that would fly a radiation term Y0 it was
-/// never given: theory SGP4XP with the first-derivative slot not 0 (an SGP4 term an SGP4XP set does not have). Refused
-/// at those entries by name (elements-other-theory), never read as Y0.
-inline bool row_states_sgp4_ndot(const ElementRow& row) { return row.theory == kTheorySgp4Xp && radiation_y0(row) != 0.0; }
+/// SPEC 16.13: a row from outside the module (sdnap_init_elements, sdnap_fit) that would fly radiation terms it was
+/// never given: theory SGP4XP with a slot of SGP4's (B*, the first or second derivative of the mean motion) not 0 (terms
+/// an SGP4XP set does not have). Refused at those entries by name (elements-other-theory), never read as Y0 or B1.
+inline bool row_states_sgp4_ndot(const ElementRow& row) {
+  return row.theory == kTheorySgp4Xp && (radiation_y0(row) != 0.0 || radiation_b1c(row) != 0.0 || radiation_b1s(row) != 0.0);
+}
 
 /// Rows hold SGP4 records (Sat) or SGP4XP records (xpt::XpSat); `slot` maps
 /// a row to its record.

@@ -61,11 +61,15 @@ struct Extras {
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;  ///< the carried forecast (SPEC 18)
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OCMTrajectoryBlock>>> trajectory = 0;  ///< its statement (SPEC 18.6)
   std::string span_start, span_stop;  ///< its span: METADATA START_TIME and STOP_TIME
-  bool ecom2 = false;  ///< SPEC 16.13: the set carries the radiation term Y0 (PERTURBATIONS.SOLAR_RAD_PRESSURE names it)
+  /// SPEC 16.13: the set carries ECOM2's terms (PERTURBATIONS.SOLAR_RAD_PRESSURE names them): 0 none, 1 Y0, 2 Y0 and B1
+  int ecom2 = 0;
 };
 
-/// SPEC 16.13: PERTURBATIONS.SOLAR_RAD_PRESSURE of a set fitted with the radiation term Y0 (absent on every other set).
+/// SPEC 16.13: PERTURBATIONS.SOLAR_RAD_PRESSURE of a set fitted with the radiation term Y0, and with B1 cos and B1 sin
+/// beside it (absent on every other set).
 constexpr const char* kY0RadiationModel = "SPHERE (AGOM) AND ECOM2 Y0 (ARNOLD ET AL. 2015), SPHERE'S CYLINDRICAL SHADOW";
+constexpr const char* kB1RadiationModel =
+    "SPHERE (AGOM) AND ECOM2 Y0, B1 COS AND B1 SIN (ARNOLD ET AL. 2015), SPHERE'S CYLINDRICAL SHADOW";
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
 /// parameters in the fixed order (cov::kParameters), each named, each a prwDynamicParameter of the five, COV_UNITS
@@ -158,10 +162,11 @@ inline flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SPW>>> rows_o
 /// no atmosphere. SGP4XP and AP: EGM-96, the atmosphere as a direct map of the forces, the caps, the source; the rows
 /// with SW_DATA_SOURCE, SW_DATA_EPOCH and SW_INTERP_METHOD under RECORDS; the nodes and the $DCL CID under DCA_COMMON_MODE.
 inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBufferBuilder& fbb, int32_t row_theory, const Forces& f, const Weather* w,
-                                                           bool ecom2 = false) {
+                                                           int ecom2 = 0) {
   const bool sgp4 = row_theory == kTheorySgp4;
   const auto s_gravity = fbb.CreateString(sgp4 ? "WGS-72" : "EGM-96");
-  const auto s_srp = ecom2 ? fbb.CreateString(kY0RadiationModel) : flatbuffers::Offset<flatbuffers::String>(0);
+  const auto s_srp = ecom2 != 0 ? fbb.CreateString(ecom2 == 2 ? kB1RadiationModel : kY0RadiationModel)
+                                : flatbuffers::Offset<flatbuffers::String>(0);
   flatbuffers::Offset<ATM> atmosphere = 0;
   if (!sgp4) atmosphere = CreateATM(fbb, f.msis ? AtmosphericModelFamily_NRLMSIS00E : AtmosphericModelFamily_JXX, f.msis ? 2000 : 1970);
   const bool records = !sgp4 && f.weather_source == pcfWeatherSource_RECORDS && w != nullptr;
@@ -373,34 +378,43 @@ inline int rows_of(const Perturbations* pt, std::vector<atm::SpwDay>& rows) {
 /// SPEC 16.13: the units ECOM2_Y0's VALUE is in.
 constexpr const char* kY0Units = "m/s**2";
 
-/// SPEC 16.13: an AP set's radiation term Y0 from ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS, keyed on PARAMETER: one
-/// ECOM2_Y0 entry, VALUE finite in m/s**2, into the row (radiation_y0; absent or 0: no term). Refused by name: ECOM2_Y0
-/// on an SGP4 or SGP4XP set, or on an AP set without gravity terms, which flies none (elements-other-theory); a second
-/// entry (parameter-repeated:ECOM2_Y0); UNITS other than m/s**2 or a VALUE that is not a number (parameter-invalid:ECOM2_Y0);
-/// any other ECOM2 coefficient (parameter-not-modeled:<NAME>). The other kinds are read where they are (MEAN_ELEMENTS,
-/// the covariance's rows). 0 or 3.
+/// SPEC 16.13: an AP set's ECOM2 terms Y0, B1 cos and B1 sin from ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS, keyed on
+/// PARAMETER: at most one ECOM2_Y0, ECOM2_B1_COS and ECOM2_B1_SIN entry each, VALUE finite in m/s**2, into the row
+/// (radiation_y0, radiation_b1c, radiation_b1s; absent or 0: no term). Refused by name: one of them on an SGP4 or SGP4XP
+/// set, or on an AP set without gravity terms, which flies none (elements-other-theory); a second entry
+/// (parameter-repeated:<NAME>); UNITS other than m/s**2 or a VALUE that is not a number (parameter-invalid:<NAME>); any
+/// other ECOM2 coefficient (parameter-not-modeled:<NAME>). The other kinds are read where they are (MEAN_ELEMENTS, the
+/// covariance's rows). 0 or 3.
 inline int radiation_of(const OCM* o, Set& s) {
   const OrbitDetermination* od = o->ORBIT_DETERMINATION();
   if (od == nullptr || od->OD_DYNAMIC_PARAMETERS() == nullptr) return 0;
-  bool seen = false;
+  bool seen[3] = {false, false, false};
   for (const OCMDynamicParameter* p : *od->OD_DYNAMIC_PARAMETERS()) {
     if (p == nullptr) continue;
     const int kind = p->PARAMETER();
-    if (kind >= prwDynamicParameter_ECOM2_D0 && kind <= prwDynamicParameter_ECOM2_B3_SIN && kind != prwDynamicParameter_ECOM2_Y0) {
-      char code[64];
-      std::snprintf(code, sizeof code, "parameter-not-modeled:%s", EnumNameprwDynamicParameter(static_cast<prwDynamicParameter>(kind)));
-      return refuse(code, "Of ECOM2's coefficients AP flies Y0 (ECOM2_Y0); its direct term is the sphere's AGOM.");
+    const int term = kind == prwDynamicParameter_ECOM2_Y0 ? 0 : kind == prwDynamicParameter_ECOM2_B1_COS ? 1
+                   : kind == prwDynamicParameter_ECOM2_B1_SIN ? 2 : -1;
+    const char* name = EnumNameprwDynamicParameter(static_cast<prwDynamicParameter>(kind));
+    char code[64];
+    if (kind >= prwDynamicParameter_ECOM2_D0 && kind <= prwDynamicParameter_ECOM2_B3_SIN && term < 0) {
+      std::snprintf(code, sizeof code, "parameter-not-modeled:%s", name);
+      return refuse(code, "Of ECOM2's coefficients AP flies Y0, B1 cos and B1 sin (ECOM2_Y0, ECOM2_B1_COS, ECOM2_B1_SIN); its direct term is the sphere's AGOM.");
     }
-    if (kind != prwDynamicParameter_ECOM2_Y0) continue;
-    if (seen) return refuse("parameter-repeated:ECOM2_Y0", "OD_DYNAMIC_PARAMETERS carries ECOM2_Y0 twice.");
-    seen = true;
+    if (term < 0) continue;
+    if (seen[term]) {
+      std::snprintf(code, sizeof code, "parameter-repeated:%s", name);
+      return refuse(code, "OD_DYNAMIC_PARAMETERS carries one of ECOM2's terms twice.");
+    }
+    seen[term] = true;
     if (s.theory != meanElementSource_AP || !epoch_frame(s.forces))
       return refuse("elements-other-theory",
-                    "ECOM2_Y0 is AP's radiation term, flown with its gravity terms: an SGP4 or SGP4XP set, or an AP set whose gravity caps are both 0, carries none.");
+                    "ECOM2's terms are AP's, flown with its gravity terms: an SGP4 or SGP4XP set, or an AP set whose gravity caps are both 0, carries none.");
     const double v = p->VALUE();
-    if (!std::isfinite(v) || (p->UNITS() != nullptr && p->UNITS()->size() > 0 && std::strcmp(p->UNITS()->c_str(), kY0Units) != 0))
-      return refuse("parameter-invalid:ECOM2_Y0", "ECOM2_Y0's VALUE is a number in m/s**2 (UNITS m/s**2).");
-    radiation_y0(s.row) = v;
+    if (!std::isfinite(v) || (p->UNITS() != nullptr && p->UNITS()->size() > 0 && std::strcmp(p->UNITS()->c_str(), kY0Units) != 0)) {
+      std::snprintf(code, sizeof code, "parameter-invalid:%s", name);
+      return refuse(code, "An ECOM2 term's VALUE is a number in m/s**2 (UNITS m/s**2).");
+    }
+    (term == 0 ? radiation_y0(s.row) : term == 1 ? radiation_b1c(s.row) : radiation_b1s(s.row)) = v;
   }
   return 0;
 }

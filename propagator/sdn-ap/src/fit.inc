@@ -106,8 +106,9 @@ struct Options {
   int8_t fit_bdot;         ///< DRAG_AREA_OVER_MASS_RATE (m^2/kg/s): refused, not modeled
   int8_t fit_thrust;       ///< IN_TRACK_ACCELERATION (m/s^2): refused, not modeled
   int8_t fit_outgassing;   ///< OUTGASSING_ACCELERATION (km/s^2): refused, not modeled
-  int8_t fit_y0;           ///< SPEC 16.13: an AP set's radiation term Y0 (ECOM2_Y0), the fit method's only (fit_oem, $PCF
-                           ///< FORCES.ECOM2; prior y0_prior()); sdnap_fit refuses it (its rows do not carry Y0)
+  int8_t fit_y0;           ///< SPEC 16.13: an AP set's radiation terms, the fit method's only (fit_oem, $PCF FORCES.ECOM2;
+                           ///< priors y0_prior(), b1_prior()): bit kFitY0 Y0 (ECOM2_Y0), bit kFitB1 also B1 cos and B1 sin
+                           ///< (ECOM2_B1_COS, ECOM2_B1_SIN); sdnap_fit refuses it (its rows do not carry them)
   double agom_prior;       ///< prior mean of AGOM; of ln AGOM under agom_log
   double agom_sigma;       ///< its sigma; <= 0: no prior
   int32_t drag_log;        ///< 1: the drag parameter is ln B (B > 0 at the start)
@@ -225,6 +226,19 @@ inline Y0Prior& y0_prior() {
   return p;
 }
 
+/// SPEC 16.13: Options.fit_y0's bits, and B1's unit and prior (in kB1Unit: means B1_COS_M_S2 and B1_SIN_M_S2, one sigma)
+/// as Y0's. B1's two columns follow Y0's.
+constexpr int8_t kFitY0 = 1, kFitB1 = 2;
+inline bool fits_b1(const Options& o) { return (o.fit_y0 & kFitB1) != 0; }
+constexpr double kB1Unit = 1e-9;
+struct B1Prior {
+  double mean_c = 0.0, mean_s = 0.0, sigma = 1.0;
+};
+inline B1Prior& b1_prior() {
+  static B1Prior p;
+  return p;
+}
+
 /// The parameter vector of a row: af, ag, chi, psi, lambda0, n, then in the fixed order [drag], [drag rate], [agom],
 /// [thrust], [outgassing], [Y0]; the drag and AGOM terms as their natural logs under drag_log / agom_log, Y0 in kY0Unit.
 /// A parameter the theories have no sensitivity to holds 0 (a row carries no value for it; a covariance set's constant
@@ -242,6 +256,10 @@ inline int params_of(const ElementRow& row, const Options& o, double* x) {
   if (o.fit_thrust) x[np++] = 0.0;
   if (o.fit_outgassing) x[np++] = 0.0;
   if (o.fit_y0 && np < kMaxParams) x[np++] = radiation_y0(row) / kY0Unit;
+  if (fits_b1(o) && np + 2 <= kMaxParams) {
+    x[np++] = radiation_b1c(row) / kB1Unit;
+    x[np++] = radiation_b1s(row) / kB1Unit;
+  }
   return np;
 }
 
@@ -267,6 +285,10 @@ inline void row_of(const double* x, const Options& o, ElementRow& row) {
   if (o.fit_thrust) ++np;
   if (o.fit_outgassing) ++np;
   if (o.fit_y0 && np < kMaxParams) radiation_y0(row) = x[np++] * kY0Unit;
+  if (fits_b1(o) && np + 2 <= kMaxParams) {
+    radiation_b1c(row) = x[np++] * kB1Unit;
+    radiation_b1s(row) = x[np++] * kB1Unit;
+  }
 }
 
 /// SPEC 12.1: one prior of a fit, a pseudo-observation of the parameter at `index` of the vector (params_of order).
@@ -274,9 +296,10 @@ struct PriorTerm {
   int index;
   double mean, sigma;
 };
-/// The priors of options `o`, in the fixed order (drag, AGOM, Y0), each with its index in the parameter vector: the one
-/// statement of the priors that the cost and the normal equations (run_free) and the covariance (cov::of_fit) read.
-/// Returns their count (at most 3).
+/// The priors of options `o`, in the fixed order (drag, AGOM, Y0, B1 cos, B1 sin), each with its index in the parameter
+/// vector: the one statement of the priors that the cost and the normal equations (run_free) and the covariance
+/// (cov::of_fit) read. Returns their count (at most kMaxPriors).
+constexpr int kMaxPriors = 5;
 inline int priors_of(const Options& o, PriorTerm* out) {
   int n = 0, np = 6;
   if (o.fit_drag) {
@@ -291,6 +314,11 @@ inline int priors_of(const Options& o, PriorTerm* out) {
   if (o.fit_thrust) ++np;
   if (o.fit_outgassing) ++np;
   if (o.fit_y0 && np < kMaxParams && y0_prior().sigma > 0.0) out[n++] = {np, y0_prior().mean, y0_prior().sigma};
+  if (o.fit_y0 && np < kMaxParams) ++np;
+  if (fits_b1(o) && np + 2 <= kMaxParams && b1_prior().sigma > 0.0) {
+    out[n++] = {np, b1_prior().mean_c, b1_prior().sigma};
+    out[n++] = {np + 1, b1_prior().mean_s, b1_prior().sigma};
+  }
   return n;
 }
 
@@ -336,7 +364,8 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   const int agom_index = o.fit_drag ? 7 : 6;
   // SPEC 16.13: Y0's column follows every other parameter's (params_of)
   const int y0_index = 6 + (o.fit_drag ? 1 : 0) + (o.fit_bdot ? 1 : 0) + (o.fit_agom ? 1 : 0) + (o.fit_thrust ? 1 : 0) + (o.fit_outgassing ? 1 : 0);
-  PriorTerm priors[3];
+  const int b1_index = y0_index + 1;  // B1 cos, then B1 sin
+  PriorTerm priors[kMaxPriors];
   const int n_priors = priors_of(o, priors);
   const double w = 1.0 / (sigma_km * sigma_km);  // the data's weight, 1 / sigma^2 (km^-2)
   auto cost_of = [&](const double* rr, const double* xx) {
@@ -420,6 +449,17 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
       if (residuals(bumped, t, r, count, trial))
         for (int i = 0; i < nres; ++i) jac[i * kMaxParams + y0_index] = (trial[i] - res[i]) / step;
+    }
+    for (int c = 0; fits_b1(o) && c < 2 && b1_index + c < np; ++c) {
+      // SPEC 16.13: B1 cos's and B1 sin's columns, as Y0's, per kB1Unit
+      const int col = b1_index + c;
+      ElementRow bumped = work;
+      const double step = std::fmax(std::fabs(x[col]) * 0.01, 0.1);
+      (c == 0 ? radiation_b1c(bumped) : radiation_b1s(bumped)) = (x[col] + step) * kB1Unit;
+      const NominalSat nominal(work);
+      xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
+      if (residuals(bumped, t, r, count, trial))
+        for (int i = 0; i < nres; ++i) jac[i * kMaxParams + col] = (trial[i] - res[i]) / step;
     }
     double A[kMaxParams * kMaxParams] = {}, g[kMaxParams] = {};
     auto normal = [&]() {
@@ -571,7 +611,7 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
 /// (Y0 included: the scatter's degrees of freedom count it).
 inline int param_count(const Options& o) {
   return 6 + (o.fit_drag ? 1 : 0) + (o.fit_bdot ? 1 : 0) + (o.fit_agom ? 1 : 0) + (o.fit_thrust ? 1 : 0) + (o.fit_outgassing ? 1 : 0) +
-         (o.fit_y0 ? 1 : 0);
+         (o.fit_y0 ? 1 : 0) + (fits_b1(o) ? 2 : 0);
 }
 
 /// SPEC 12.1: the data's sigma of a fit over `count` states (km per TEME position component): max(s, stated_km,
