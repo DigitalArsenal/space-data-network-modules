@@ -11,7 +11,7 @@
 // 1. a 7-day ephemeris with no USEABLE times and no drag prior: the fit takes the 7 days, BTERM within 0.6 % of 0.044
 //    (both of Molniya's solutions; 0.5 % until the E-grid's C1 read, stack #420) and
 //    day-7 along-track, the largest over the arc and K perturbed copies (K, SEVEN_DAY_BOUND below), at most 176.0 m on
-//    Molniya (171.5 through 0.6.32, history at SEVEN_DAY_BOUND) and 325.5 m on GTO-500 (re-derived 2026-11-10 on FFM
+//    Molniya (171.5 through 0.6.34, history at SEVEN_DAY_BOUND) and 325.5 m on GTO-500 (re-derived 2026-11-10 on FFM
 //    2.2.1's truth; set at 150 and 300 m on 2.0.4's, the registration's, amended after the first run: the record's
 //    150 m is below what the 7-day arc reaches with BTERM pinned at the truth, 158.8 m on GTO-500, 218.9 m on Molniya;
 //    GTO-500 flies 291.3 m at its fitted -0.28 %, against 736.2 m on 0.4.16's 72 h wide-prior arc);
@@ -85,7 +85,7 @@ const K = 5;
 const BASE_4 = {version: '0.6.22', commit: 'f8af1e2b7'};
 const LOW_BOUND = {'Molniya drag off': 8.5};
 const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 30, r: 15}, 'Sentinel-3-like': {t: 55, r: 20}};
-// The field EGM2008 on both sides (0.6.33, SPEC 16.2; the truth's field was EGM-96 before, as AP's) takes Molniya's largest
+// The field EGM2008 on both sides (0.6.36, SPEC 16.2; the truth's field was EGM-96 before, as AP's) takes Molniya's largest
 // day-7 along-track over the arc and its copies from at most 171.5 to 175.39 m (the unperturbed arc 171.30 m): bound 176.0.
 const SEVEN_DAY_BOUND = {Molniya: 176.0, 'GTO-500': 325.5};
 const posterior = (text) => {

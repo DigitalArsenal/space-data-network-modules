@@ -12,7 +12,7 @@
 // - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
 //   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n); sdnap_covariance_at of the
 //   stored AP record (ap-fit-0.6.36.ocm, 0.6.36's fit) at the fixture grid within AP_COV_FLIGHT of 0.6.36's numbers
-//   (ap-fit-0.6.36-0.6.36.cov; 0.6.4's fit, the stored record through 0.6.33, states EGM-96 and is refused, SPEC 16.2),
+//   (ap-fit-0.6.36-0.6.36.cov; 0.6.4's fit, the stored record through 0.6.34, states EGM-96 and is refused, SPEC 16.2),
 //   and this build's own AP fit within AP_COV_FIT of this build's numbers of 0.6.36's fit of the same inputs
 //   (ap-fit-0.6.36.ocm: a fit flown by its own theory, history at AP_COV_FLIGHT); its epoch covariance and floors within
 //   AP_COV_FIT of that record's (the SGP4XP table and numbers are unchanged).
@@ -81,15 +81,14 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// (both flown by 0.6.27), FIT_RMS 40.260 against 40.049 m. Against the fixture's own truth (propagator/ffm's 550 km
 /// trajectory) the error 48 to 72 h past the arc stays at 43 m, and over the arc it goes from 23.9 to 24.1 m. So the
 /// own fit is 0.6.27's (ap-fit-0.6.27.ocm; 0.6.25's went), the bounds kept.
-/// 0.6.33 (the field EGM2008 in place of EGM-96, SPEC 16.2) moves the fit: 154.6 m and 133.1 mm/s from 0.6.27's fit
-/// (both flown by 0.6.33), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
+/// 0.6.36 (the field EGM2008 in place of EGM-96, SPEC 16.2) moves the fit: 154.6 m and 133.1 mm/s from 0.6.27's fit
+/// (both flown by 0.6.36), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
 /// trajectory) the error 48 to 72 h past the arc goes from 43 to 42 m, and over the arc from 24.1 to 24.3 m. So the own
-/// fit is 0.6.33's (ap-fit-0.6.33.ocm; 0.6.27's went), the bounds kept. The field moves the stored record's flight too:
-/// 0.6.33 records sdnap_covariance_at of it from itself again (test/fixtures/ap-fit-0.6.4-0.6.33.cov; the 0.6.22 file
-/// went), the bounds kept: against 0.6.22's numbers 7,140.576 mm, 7.584 mm/s, covariance 5.29e-3 of a time's largest entry.
+/// fit is 0.6.36's (ap-fit-0.6.36.ocm; 0.6.27's went), the bounds kept. The field moves the stored record's flight too:
+/// against 0.6.22's numbers of sdnap_covariance_at, 7,140.576 mm, 7.584 mm/s, covariance 5.29e-3 of a time's largest entry.
 /// 0.6.36 refuses a record whose GRAVITY_MODEL is not the embedded field (SPEC 16.2): 0.6.4's fit states EGM-96, so from
 /// 0.6.36 the stored record is 0.6.36's own fit (ap-fit-0.6.36.ocm) with its numbers (ap-fit-0.6.36-0.6.36.cov; the
-/// 0.6.33 file went), the bounds kept; the own fit is the same record, bit for bit 0.6.33's fit, its PRODUCER aside.
+/// 0.6.22 file went), the bounds kept; the own fit is the same record.
 const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };
 

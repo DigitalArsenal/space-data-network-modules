@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // E2E (sdn-ap 0.6.5): WASM SIMD128 + fast-trig + stage-cached RK3 + analytic/SIMD covariance Jacobian
 // for AP (theory 5), preserving bit-for-bit identity on SGP4 (type 0) and SGP4XP (type 4) against 0.6.4
-// (commit cfd750eb8), sub-centimeter AP state agreement (<= 1 cm over 7 days, against 0.6.33 from 0.6.33: step 4),
+// (commit cfd750eb8), sub-centimeter AP state agreement (<= 1 cm over 7 days, from 0.6.36 against the field change's first
+// build, git 7ebc98e4: step 4),
 // <= 1e-3 relative AP covariance agreement over 48 h with 0.6.36's recorded numbers (test/fixtures/ap-fit-0.6.36-0.6.36.cov),
 // 0.6.4's AP fit refused by this build (gravity-model-mismatch: it states EGM-96, SPEC 16.2),
 // valid $OCM/$ODR fit with zero USER_DEFINED_* fields,
@@ -41,8 +42,8 @@ try {
   assert.equal(gotSha, BASE_SHA256, `0.6.4 baseline sha256 mismatch: ${gotSha}`);
   const basePath = path.join(scratch, "sdn-ap-0.6.4.wasm");
   fs.writeFileSync(basePath, baseBytes);
-  // the AP 7-day state equivalence's baseline (step 4): 0.6.4 until 0.6.21, 0.6.22 until 0.6.32, from 0.6.33 that release
-  // (history at step 4)
+  // the AP 7-day state equivalence's baseline (step 4): 0.6.4 until 0.6.21, 0.6.22 until 0.6.34, from 0.6.36 the field
+  // change's first build (git 7ebc98e4, not a release; its own version string reads 0.6.33) (history at step 4)
   const STATE_BASE = { version: "0.6.33", commit: "7ebc98e4e44d45b812c99e708bfe8d8d334fab33", sha256: "0bd00d280330ff62e8e06ac74745520d39920c887902e3968c7a6e4991e63410" };
   const stateBaseBytes = execFileSync("git", ["-C", repoRoot, "show", `${STATE_BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
   assert.equal(createHash("sha256").update(stateBaseBytes).digest("hex"), STATE_BASE.sha256, `${STATE_BASE.version} baseline sha256 mismatch`);
@@ -128,13 +129,13 @@ try {
   assert.ok(refusedOld.statusCode !== 0 && refusedOld.errorCode === "gravity-model-mismatch", `0.6.4's fit: ${refusedOld.errorCode ?? "flown"}, expected gravity-model-mismatch`);
   console.log("PASS 0.6.4's AP fit (EGM-96) refused by this build: gravity-model-mismatch");
   const storedBytes = new Uint8Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.36.ocm")));
-  // Propagate the stored AP $OCM (from 0.6.36 0.6.36's own fit; 0.6.4's fit until 0.6.33) on STATE_BASE and this build for
+  // Propagate the stored AP $OCM (from 0.6.36 its own fit; 0.6.4's fit through 0.6.34) on STATE_BASE and this build for
   // 7 days in EME2000 and TEME, within 1 cm. Against 0.6.4 until 0.6.21 (0.6.5's speed changes: sub-centimeter); AP's own
   // Sun and Moon (0.6.22, SPEC 16.17, stack #446) move this flight from 0.6.4's by 12.179 cm in EME2000 and TEME (0.6.21
-  // within 1 cm), so from 0.6.22 the baseline is 0.6.22 (git f8af1e2b), the bound kept. The field EGM2008 (0.6.33, SPEC
-  // 16.2, stack #503) moves it from 0.6.22's by 20.137 m in EME2000 and TEME, so from 0.6.33 the baseline is 0.6.33 (git
-  // 7ebc98e4), the bound kept. From 0.6.36 the record is 0.6.36's own fit (0.6.4's is refused), flown by STATE_BASE (0.6.33,
-  // which reads EGM2008 records) and by this build.
+  // within 1 cm), so from 0.6.22 the baseline is 0.6.22 (git f8af1e2b), the bound kept. The field EGM2008 (0.6.36, SPEC
+  // 16.2, stack #503) moves it from 0.6.22's by 20.137 m in EME2000 and TEME, so from 0.6.36 the baseline is the field
+  // change's first build (git 7ebc98e4), the bound kept. From 0.6.36 the record is 0.6.36's own fit (0.6.4's is refused),
+  // flown by STATE_BASE (which reads EGM2008 records) and by this build.
   const hState = await createStandaloneHarness("browser", stateBasePath, { surface: "direct" });
   const EPOCHS = Array.from({ length: 57 }, (_, k) => new Date(Date.parse("2026-10-02T00:00:00Z") + k * 3 * 3600e3).toISOString().replace("Z", ""));
   const linesOf = (p) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(p.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
@@ -157,13 +158,14 @@ try {
   // Covariance on the stored AP $OCM over the 289 grid epochs (48 h at 10 min): this build against 0.6.36's numbers of it
   // (test/fixtures/ap-fit-0.6.36-0.6.36.cov); the 0.6.4 dist's fit is ap-fit-0.6.4.ocm byte for byte.
   // 0.6.22 (AP's own Sun and Moon, SPEC 16.17) records them from itself (the 0.6.21 file went): 2.19e-5 of a time's
-  // largest entry from 0.6.21's, the bound kept. 0.6.33 (the field EGM2008) records them from itself again (the 0.6.22
-  // file went): 5.29e-3 of a time's largest entry from 0.6.22's, the bound kept.
+  // largest entry from 0.6.21's, the bound kept. 0.6.36 (the field EGM2008) moves 0.6.4's fit's numbers by 5.29e-3 of a
+  // time's largest entry from 0.6.22's, the bound kept.
   // Through 0.6.20 the reference was the 0.6.4 dist's own numbers; 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472)
   // moves them: against the 0.6.4 dist's, 0.6.20 7.2e-5 and 0.6.21 9.217e-3 of a time's largest entry, the bound kept.
   // Why: the record's correlations between AGOM and the state are 0.6.4's fit's, and 16.16 moves its along-track response
   // to AGOM at 48 h from 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within
-  // 7.1e-5 (covariance.e2e.mjs). 0.6.36 records them from the stored record of 0.6.36, its own fit (the 0.6.33 file went).
+  // 7.1e-5 (covariance.e2e.mjs). From 0.6.36 they are this build's numbers of the stored record, its own fit (the 0.6.22
+  // file went).
   // The 0.6.4 dist still flies its own fit for the timing line, this build the stored record (two fits of the same arc).
   assert.ok(Buffer.from(ocmBaseBytes).equals(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.4.ocm"))), "the 0.6.4 dist's fit is not ap-fit-0.6.4.ocm");
   const recordedCov = new Float64Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.36-0.6.36.cov")).buffer.slice(0));

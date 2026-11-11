@@ -4,8 +4,9 @@
 // SGP4XP $OCM of sdn-ap `fit` on its own fixture inputs, and two sets turned across A's plane and refitted by sdn-ap
 // from their own flights, so each carries the covariance of its own fit (an epoch covariance belongs to its elements);
 // here, through the SDS object API, an identity, one more turned set with no covariance, a theory retyped, the weather
-// rows removed, and one SGP4 $OMM. Every sdn-ap flight here is sdn-ap 0.6.34's dist (git 0e365d3f, its SHA-256 checked),
-// the newest that flies these 0.5.2 sets: from 0.6.36 sdn-ap refuses a record that states another gravity field. A turn puts the set's plane across A's and its perigee and phase at the crossing
+// rows removed, and one SGP4 $OMM. Every sdn-ap flight here is sdn-ap 0.6.34's dist (git 0e365d3f, its SHA-256 checked):
+// from 0.6.36 sdn-ap refuses an AP record that states another gravity field than its own, so the AP sets A and B (and C, F
+// and G, made from A) would be refused there; the SGP4XP sets still fly on it. A turn puts the set's plane across A's and its perigee and phase at the crossing
 // (the plane intersection of two orbits of one inclination; the sets' own mean motion keeps the crossing each revolution):
 //   A  the AP set as recorded (covariance carried);
 //   B  the AP set turned by RA_OF_ASC_NODE + 90 deg and refitted: a fast encounter (about 8.6 km/s) each revolution;
@@ -81,9 +82,10 @@ const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}`); if (!ok) failures.push(label); };
 const T = (name) => ({ schemaName: `${name}.fbs`, fileIdentifier: `$${name}`, rootTypeName: name, wireFormat: 'flatbuffer' });
-// The sdn-ap build the registered sets fly through: they are sdn-ap 0.5.2 fits that state GRAVITY_MODEL EGM-96, which
-// sdn-ap refuses from 0.6.36 (its field is EGM2008, SPEC 16.2), so the screen flies them through 0.6.34's dist, the
-// newest that flies them, read from git and its SHA-256 checked; the registered events are valid on it.
+// The sdn-ap build the registered sets fly through: the AP sets are sdn-ap 0.5.2 fits that state GRAVITY_MODEL EGM-96,
+// which sdn-ap refuses from 0.6.36 (its field is EGM2008, SPEC 16.2), so the screen flies every set through 0.6.34's dist,
+// the newest that flies them, read from git and its SHA-256 checked. Its two SGP4XP byte comparisons against the 0.18.1
+// events fail there as on main without the pin (stack #536).
 const SDN_AP_PIN = { version: '0.6.34', commit: '0e365d3f730e7c1a77e6b869c8b1e62e26692ba5', sha256: 'a18f1243180471e254da8cb7e692d3d8cae9944821f04f9ba3b3e026be9b65cc' };
 const SDN_AP_VERSION = SDN_AP_PIN.version;
 const sdnApPinned = (() => {

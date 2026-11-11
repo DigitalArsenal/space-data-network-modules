@@ -12,8 +12,8 @@
 // - the SWOT-like record with the text taken out flies differently (the slow set's terms act): at least 1 m apart within 7 days;
 // - the slow text on an SGP4XP set is refused (elements-other-theory);
 // - the SWOT-like record stating another field, or none, is refused (gravity-model-mismatch, SPEC 16.2): "EGM-96" (the
-//   text of every AP record with gravity terms before 0.6.33), "EGM-96; slow tesseral terms to degree 70" (the slow-set
-//   records of 0.6.25 to 0.6.32), and no GRAVITY_MODEL at all; no record flies on a field it does not state.
+//   text of every AP record with gravity terms before 0.6.36), "EGM-96; slow tesseral terms to degree 70" (the slow-set
+//   records of 0.6.25 to 0.6.34), and no GRAVITY_MODEL at all; no record flies on a field it does not state.
 //   node test/slow-set-record.e2e.mjs
 import assert from 'node:assert/strict';
 import * as fb from 'flatbuffers';

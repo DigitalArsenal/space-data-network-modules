@@ -58,10 +58,10 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // that move past the bound, 8 move toward 0.674 and 6 away, and one leaves the band (0.603 to 0.754): T 167 h R, 0.7536 to
 // 0.7572.
 // So the floors and medians are pinned to 0.6.27's, the bounds kept (the cost stated in its pull request).
-// 0.6.33 (the field EGM2008, SPEC 16.2) moves the sample's fit once more: its 12 h error 322.9 to 322.7 m, FLOOR_VV_KM2 1.467 to
+// 0.6.36 (the field EGM2008, SPEC 16.2) moves the sample's fit once more: its 12 h error 322.9 to 322.7 m, FLOOR_VV_KM2 1.467 to
 // 1.476 times 0.6.0's, FLOOR_WW_KM2 1.462 to 1.451 times. The held-out cells move by at most 0.0021 in median |z| (S1 24 h R
 // 0.6474 to 0.6454): of the 11 that move past the bound, 5 move toward 0.674 and 6 away, and none crosses the band's edge.
-// So the floors and medians are pinned to 0.6.33's, the bounds kept.
+// So the floors and medians are pinned to 0.6.36's, the bounds kept.
 const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00021698074615315635, FLOOR_VU_KM2: 1.2575309946337977e-7, FLOOR_VV_KM2: 0.0013090685004767389,
   FLOOR_WU_KM2: -0.000013118733639607107, FLOOR_WV_KM2: -0.0001678823042925005, FLOOR_WW_KM2: 0.0002071323849285356 };
 const MEDIANS_PINNED = { "T 24 R": 0.641263, "T 24 C": 0.786387, "T 72 R": 0.749803, "T 72 C": 0.875654, "T 167 R": 0.756692,

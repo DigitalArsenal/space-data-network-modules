@@ -115,10 +115,9 @@ const MOLNIYA = {
 // 0.6.27 (the slow set's terms of q other than 0) moves LEO AP's fit: 84.4 m from 0.6.25's over the 4 days, FIT_RMS
 // 0.21 m higher; against the fixture's own truth the error 48 to 72 h past the arc stays at 43 m. So LEO AP is held
 // against 0.6.27's fit (test/fixtures/ap-fit-0.6.27.ocm), the bounds kept.
-// 0.6.33 (the field EGM2008 in place of EGM-96) moves LEO AP's fit: 266.2 m from 0.6.27's over the 4 days, FIT_RMS 0.11
+// 0.6.36 (the field EGM2008 in place of EGM-96) moves LEO AP's fit: 266.2 m from 0.6.27's over the 4 days, FIT_RMS 0.11
 // m lower; against the fixture's own truth the error 48 to 72 h past the arc goes from 43 to 42 m. So LEO AP is held
-// against 0.6.33's fit (test/fixtures/ap-fit-0.6.33.ocm), the bounds kept. 0.6.36 records it from itself (ap-fit-0.6.36.ocm;
-// 0.6.33's went): bit for bit 0.6.33's fit, its PRODUCER aside.
+// against 0.6.36's fit (test/fixtures/ap-fit-0.6.36.ocm), the bounds kept.
 const NO_HARM = { "LEO AP": 1, "LEO SGP4XP": 0.001 };
 const PINNED = { "LEO AP": new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.36.ocm", import.meta.url))) };
 // The GEO arc is this module's own flight of a set with AGOM 0.01 (geoSet), so a fit can reach zero residual and the set

@@ -9,7 +9,7 @@
 // - propagate_epochs of the stored AP record (test/fixtures/ap-fit-0.6.36.ocm, 0.6.36's fit of the 0.4.0 inputs) within
 //   STORE_FLIGHT of 0.6.36's flight of it (ap-fit-0.6.36.epochs-0.6.36.oem), and of this build's own fit of the arc within
 //   STORE_FIT of this build's propagate_epochs of 0.6.36's fit (the same record) (the flight and the fit apart; history,
-//   the fresh-bake reference and sizes at the check); 0.6.4's fit (ap-fit-0.6.4.ocm, the stored record through 0.6.33)
+//   the fresh-bake reference and sizes at the check); 0.6.4's fit (ap-fit-0.6.4.ocm, the stored record through 0.6.34)
 //   states EGM-96 with gravity terms and is refused by the store (gravity-model-mismatch, SPEC 16.2). The store's output
 //   differs from propagate's (ap-fit-0.6.36-0.6.36.oem) in the store's time arithmetic, which this record leaves as it was.
 // - A store $PCF with a FORCES table: configuration-refused FORCES; propagate_epochs without OUTPUT times:
@@ -271,8 +271,8 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   console.log(`two sets of one series, rows moved: ${blended.statusCode === 0 ? `${x.sdnap_epochs_count()} series, ${seriesOf(0).epochs.length} sets; at 03:00 sets ${sel[0]} and ${sel[1]}, weight ${sel[2]}` : blended.errorCode}`);
   check(blended.statusCode === 0 && x.sdnap_epochs_count() === 1 && seriesOf(0).epochs.length === 2 && sel[1] === 1 && sel[2] > 0 && sel[2] < 1 && at(0, mid).status === 0,
     "two sets with different rows do not load and blend");
-  // the flight of the stored AP record (0.6.4's fit) against 0.6.33's propagate_epochs of it (ap-fit-0.6.4.epochs-0.6.33.oem),
-  // and this build's own fit against this build's of 0.6.33's fit. History: 0.6.4's own flight of it (ap-fit-0.6.4.epochs.oem, the
+  // the flight of the stored AP record (0.6.36's fit) against 0.6.36's propagate_epochs of it (ap-fit-0.6.36.epochs-0.6.36.oem),
+  // and this build's own fit against this build's of 0.6.36's fit (the same record). History: 0.6.4's own flight of it (ap-fit-0.6.4.epochs.oem, the
   // expected flight through 0.6.17) equals ap-fit-0.4.0.epochs.oem (the 0.4.18 dist's) in its states bit for bit through
   // 0.6.4, its covariance moved at 0.6.1 (637228fb, the AP DRAG noise row re-fitted, SPEC 12.4); 0.6.5 (24d7d75f, SPEC
   // 16.8) moves the stored record's flight by 0.629 mm and 0.796 um/s and its covariance by 7.2e-5 of a line's largest
@@ -294,11 +294,11 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within 7.1e-5 (covariance.e2e.mjs). 0.6.22 (AP's own
   // Sun and Moon, SPEC 16.17, stack #446) records it from itself again (ap-fit-0.6.4.epochs-0.6.22.oem; the 0.6.21 file
   // went), the bounds kept: against the 0.6.21 file 34.763 mm, 38.304 um/s, covariance 2.19e-5 of a line's largest entry.
-  // 0.6.33 (the field EGM2008, SPEC 16.2) records it from itself again (ap-fit-0.6.4.epochs-0.6.33.oem; the 0.6.22 file went),
-  // the bounds kept: against the 0.6.22 file 7,140.574 mm, 7,584.418 um/s, covariance 5.32e-3 of a line's largest entry.
+  // 0.6.36 (the field EGM2008, SPEC 16.2) moves it from the 0.6.22 file by 7,140.574 mm, 7,584.418 um/s and a covariance of
+  // 5.32e-3 of a line's largest entry.
   // 0.6.36 refuses a record whose GRAVITY_MODEL is not the embedded field (SPEC 16.2): 0.6.4's fit states EGM-96, so from
   // 0.6.36 the stored record is 0.6.36's own fit (ap-fit-0.6.36.ocm) with its flight (ap-fit-0.6.36.epochs-0.6.36.oem; the
-  // 0.6.33 file went), the bounds kept.
+  // 0.6.22 file went), the bounds kept.
   // This build's fit: against the stored record's flight until 0.6.21; from 0.6.22 against this build's propagate_epochs
   // of 0.6.22's own fit (ap-fit-0.6.22.ocm), the bounds kept. AP's own Sun and Moon move the fit: 117.72 mm and 130.37
   // um/s from the 0.6.21 file and, both flown by 0.6.22, 92.33 mm and 101.49 um/s from the stored record's flight.
@@ -312,11 +312,10 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // (both flown by 0.6.27), FIT_RMS 40.260 against 40.049 m. Against the fixture's own truth (propagator/ffm's 550 km
   // trajectory) the error 48 to 72 h past the arc stays at 43 m, and over the arc it goes from 23.9 to 24.1 m. So the
   // own fit is 0.6.27's (ap-fit-0.6.27.ocm; 0.6.25's went), the bounds kept.
-  // 0.6.33 (the field EGM2008 in place of EGM-96, SPEC 16.2) moves the fit: 154.6 m and 133.1 mm/s from 0.6.27's fit
-  // (both flown by 0.6.33), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
+  // 0.6.36 (the field EGM2008 in place of EGM-96, SPEC 16.2) moves the fit: 154.6 m and 133.1 mm/s from 0.6.27's fit
+  // (both flown by 0.6.36), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
   // trajectory) the error 48 to 72 h past the arc goes from 43 to 42 m, and over the arc from 24.1 to 24.3 m. So the
-  // own fit is 0.6.33's (ap-fit-0.6.33.ocm; 0.6.27's went), the bounds kept. 0.6.36 records it from itself
-  // (ap-fit-0.6.36.ocm; 0.6.33's went): bit for bit 0.6.33's fit, its PRODUCER aside.
+  // own fit is 0.6.36's (ap-fit-0.6.36.ocm; 0.6.27's went), the bounds kept.
   const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.36.ocm", import.meta.url)));
   const fitRecordFlight = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([fitRecord])] });
   check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.36's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);

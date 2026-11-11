@@ -101,15 +101,15 @@ const cases = [
 // (both flown by 0.6.27), FIT_RMS 40.260 against 40.049 m. Against the fixture's own truth (propagator/ffm's 550 km
 // trajectory) the error 48 to 72 h past the arc stays at 43 m, and over the arc it goes from 23.9 to 24.1 m. So the own
 // fit is 0.6.27's (ap-fit-0.6.27.ocm; 0.6.25's went), the bounds kept.
-// 0.6.33 (the field EGM2008 in place of EGM-96, SPEC 16.2) moves the fit: 154.6 m and 133.1 mm/s from 0.6.27's fit
-// (both flown by 0.6.33), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
+// 0.6.36 (the field EGM2008 in place of EGM-96, SPEC 16.2) moves the fit: 154.6 m and 133.1 mm/s from 0.6.27's fit
+// (both flown by 0.6.36), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
 // trajectory) the error 48 to 72 h past the arc goes from 43 to 42 m, and over the arc from 24.1 to 24.3 m. So the own
-// fit is 0.6.33's (ap-fit-0.6.33.ocm; 0.6.27's went), the bounds kept. The field moves the stored record's flight too:
-// 0.6.33 records it from itself again (the 0.6.22 files went), the bounds kept: against 0.6.22's, sdnap_covariance_at
+// fit is 0.6.36's (ap-fit-0.6.36.ocm; 0.6.27's went), the bounds kept. The field moves the stored record's flight too,
+// against 0.6.22's: sdnap_covariance_at
 // 7,140.576 mm, covariance 5.29e-3; propagate EME2000 and TEME over 7 days 20,136.651 mm, 21,823.483 um/s, covariance
 // 4.74e-3. 0.6.36 refuses a record whose GRAVITY_MODEL is not the embedded field (SPEC 16.2): 0.6.4's fit states EGM-96
 // (asserted below), so from 0.6.36 AP's stored record is 0.6.36's own fit (ap-fit-0.6.36.ocm), recorded with its flight
-// (the 0.6.33 files went), the bounds kept; the reference fit is the same record, bit for bit 0.6.33's fit, its PRODUCER aside.
+// (the 0.6.22 files went), the bounds kept; the reference fit is the same record.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };
