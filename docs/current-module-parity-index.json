@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T16:53:31.771Z",
+  "generatedAt": "2026-11-11T18:11:35.669Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.29",
+      "version": "0.6.30",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 181,
+      "testFileCount": 182,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7599,6 +7599,7 @@
         "test/gto-high-degree-perigee-terms.e2e.mjs",
         "test/heo-frame.e2e.mjs",
         "test/heo-model-truth.e2e.mjs",
+        "test/high-apogee-model-truth.e2e.mjs",
         "test/high-e-fit-arc.e2e.mjs",
         "test/kernel-cost.mjs",
         "test/kernel-patterns.mjs",
