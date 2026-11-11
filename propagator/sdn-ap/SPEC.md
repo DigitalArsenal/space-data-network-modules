@@ -2770,6 +2770,11 @@ side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3
     - The branch accepts every e_0 below 1, as `xp_init` does.
     - The plain start M + e sin M with an absolute stop failed at e 0.999. Far from the epoch it took all 60 steps at
       every node once the rounding of E passed the stop.
+    - The two solves give node times a few units in the last place apart: at most 3.6e-12 min over 8 days on a THEMIS-like
+      set. With 0.6.21's continuous shadow, that moves no flight by more than rounding, with radiation on or off.
+- **The cost far from the epoch** (THEMIS-like, per state at 300 s over one day, against 0.6.20's uniform step):
+  0.94 times at day 1, 0.99 at day 30 and 1.01 at day 60; the first state at day 30 and 60 is 0.97 and 1.01 times.
+  Main's own cost at day 30 is 25 times its day-1 figure, set by the epoch store's distant checkpoints.
   - ds = min(0.5 (1 - e_0)^1.5, h_0 n_0). The mean step ds / n_0 is min(0.5 tau_p, h_0), with tau_p = (1 - e_0)^1.5 / n_0
     the perigee's time scale. That is 0.6.16's uniform step, so the node count is 0.6.16's.
   - The step in time is (1 - e_0 cos E) / (1 - 0.5 e_0 cos E) times the mean. On the THEMIS-like orbit (e_0 0.82) that is
