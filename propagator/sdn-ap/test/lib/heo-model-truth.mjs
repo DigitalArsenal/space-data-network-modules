@@ -14,6 +14,7 @@ import {SPW,SPWT} from 'spacedatastandards.org/lib/js/SPW/SPW.js';
 import {pcfAtmosphereFamily} from 'spacedatastandards.org/lib/js/PCF/pcfAtmosphereFamily.js';
 import {pcfWeatherSource} from 'spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js';
 import {pcfOutputFrame} from 'spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js';
+import {PCFEcom2T} from 'spacedatastandards.org/lib/js/PCF/PCFEcom2.js';
 import {openModule,wasmPath,THEORY} from './module.mjs';
 import {packOem,rfm,jdOf,rotate,FRAME_PROBE} from './frames.mjs';
 import {configuration,prior,pcfPriorForm} from './pcf.mjs';
@@ -44,7 +45,8 @@ export async function runModelTruth(c){
  const rowList=rowsThrough(Array.isArray(rows)?rows:rows.rows),weather=spwStream(rowList);
  // fit runs under the forces the record then states: the caps, NRLMSISE-00 (c.drag) or Jacchia 1970, both on the rows
  const tess=c.forces?.[0]??31,zon=c.forces?.[1]??20;
- const cfg=configuration({forces:{EPHEMERIS_SOURCE:'',HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:tess,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:zon,ATMOSPHERE_MODEL:c.drag?pcfAtmosphereFamily.NRLMSISE00:pcfAtmosphereFamily.JACCHIA70,WEATHER_SOURCE:pcfWeatherSource.RECORDS},...(c.fitPolicy==='default'?(c.agomPrior?{fit:{SRP_PRIOR:prior(...c.agomPrior)}}:{}):{fit:c.fitPolicy?{DRAG_PRIOR:prior(c.fitPolicy.mean,c.fitPolicy.sigma),DRAG_PRIOR_FORM:pcfPriorForm[c.fitPolicy.form],...(c.agomPrior?{SRP_PRIOR:prior(...c.agomPrior)}:{})}:{DRAG_PRIOR:prior(c.drag?(c.bterm??.044):0,c.drag?(c.dragSigma??.1):1e-10),DRAG_PRIOR_FORM:pcfPriorForm.GAUSSIAN_SIGNED,SRP_PRIOR:prior(0,1e-10)}})});
+ // c.ecom2: the fit states $PCF FORCES.ECOM2 (Y0_M_S2 0): AP solves its radiation term Y0 on a long enough arc (SPEC 16.13)
+ const cfg=configuration({forces:{EPHEMERIS_SOURCE:'',HAS_MAXIMUM_TESSERAL_DEGREE:true,MAXIMUM_TESSERAL_DEGREE:tess,HAS_MAXIMUM_DEGREE:true,MAXIMUM_DEGREE:zon,ATMOSPHERE_MODEL:c.drag?pcfAtmosphereFamily.NRLMSISE00:pcfAtmosphereFamily.JACCHIA70,WEATHER_SOURCE:pcfWeatherSource.RECORDS,...(c.ecom2?{ECOM2:new PCFEcom2T()}:{})},...(c.fitPolicy==='default'?(c.agomPrior?{fit:{SRP_PRIOR:prior(...c.agomPrior)}}:{}):{fit:c.fitPolicy?{DRAG_PRIOR:prior(c.fitPolicy.mean,c.fitPolicy.sigma),DRAG_PRIOR_FORM:pcfPriorForm[c.fitPolicy.form],...(c.agomPrior?{SRP_PRIOR:prior(...c.agomPrior)}:{})}:{DRAG_PRIOR:prior(c.drag?(c.bterm??.044):0,c.drag?(c.dragSigma??.1):1e-10),DRAG_PRIOR_FORM:pcfPriorForm.GAUSSIAN_SIGNED,SRP_PRIOR:prior(0,1e-10)}})});
  const h=await createStandaloneHarness('browser',c.modulePath??wasmPath,{surface:'command'});
  const call=async(methodId,inputs)=>{const r=await h.invoke({methodId,inputs:methodId==='fit'?[cfg,{portId:'space_weather',typeRef:type('SPW'),payload:weather},...inputs]:inputs});assert.equal(r.statusCode,0,`${r.errorCode}: ${r.errorMessage}`);return r.outputs;};
  // a flight: the set alone, its output times the lines' epochs in GCRF
