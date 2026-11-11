@@ -8,7 +8,7 @@
 //    Against a 2.375-minute step, day 5: 0.08 m at the rule's step, 0.33 m at 12.67 min, 8.99 m at 19 min, 174.11 m at 38 min.
 // 2. Model truth. FFM: EGM96 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either side. AP: a 72 h fit
 //    with drag and AGOM pinned at 0, flown 7 days on a 10-minute grid. Outcome: the day-5 whole-day 3D RMS is within 200 m.
-//    Measured 122.9 m; 918.6 m at 38 min (0.6.16). With the Sun and Moon off on both sides it is 120.9 m at either step.
+//    Measured 122.9 m; 918.6 m at 38 min (through 0.6.15). With the Sun and Moon off on both sides it is 120.9 m at either step.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit

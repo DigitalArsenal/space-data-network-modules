@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.15 (dist 8c496cf3).
+Version 0.6.16 (dist 7c91f0d9).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -512,7 +512,7 @@ day-7 GE worsens from 217.657 to 235.913 m. Numerical convergence does not estab
 improvement. SPEC 9 and 16 give the fixtures, shared-truth limitation and all leads;
 `test/geo-step-convergence.e2e.mjs` enforces <5 m, <2x cost and the unchanged XP digest.
 
-From 0.6.17 an AP set in the long-period regime above e0 0.3 steps at most half its perigee pass's time scale,
+From 0.6.16 an AP set in the long-period regime above e0 0.3 steps at most half its perigee pass's time scale,
 0.5 (1 - e0)^1.5 / n0: 8.2 min on a THEMIS-like orbit (e 0.82), where the 38-minute step left 174 m of the theory's own
 integration error at day 5 (0.08 m now), and 919 m against FFM model truth with the Sun and Moon (123 m now; SPEC 16.10,
 `test/long-period-perigee-step.e2e.mjs`, stack #445). Sets at e0 0.3 and below are unchanged.
