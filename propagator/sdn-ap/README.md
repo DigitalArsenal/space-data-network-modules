@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.23 (dist 97a46e03).
+Version 0.6.25 (dist f0eb3852).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -33,7 +33,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   vz) of `count` doubles, TEME km and km/s or Earth-fixed m and m/s. `sdnap_threads(n)` starts the pool; results are
   the same bytes at any thread count. A threaded batch grows no memory (SPEC 9, stack #487). A batch whose pool thread
   stops returns -20, with every status 9, and later batches run on the calling thread. `sdnap_pool_stats(out)` reads
-  the pool's counts.
+  the pool's counts. Before 0.6.25 a pool thread could trap on a block in pages another thread had just grown, and
+  the calling thread then waited forever. On a loaded machine that happened in AP batches of a test build, never in the
+  shipped build with SGP4XP rows (0 of 40 processes).
 - Display quantities (the module's own conversions; `test/exports.e2e.mjs` checks each against its inverse):
   `sdnap_mean_elements_at(index, minutes, out)` the mean a (km), e, i, RAAN, argp and M (deg) of an SGP4XP row at
   minutes from its epoch (an SGP4 row is refused); `sdnap_osculating_elements(r, v, out)` the osculating elements of a

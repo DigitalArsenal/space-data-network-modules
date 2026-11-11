@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.23 (dist 97a46e03).
+Version 0.6.25 (dist f0eb3852).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1547,15 +1547,23 @@ Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-thr
 - In the pool it happened in two ways:
   - threads grew the memory inside a batch: 0.6.20 failed 8 of 30 runs of the threaded test, and 0.6.21 failed 4 of 40;
   - the chunk total was stored before the room was made. A thread that woke late for one batch then claimed a chunk of
-    the following batch while the calling thread grew the memory for it. The pool's own stress (test/pool-growth.e2e.mjs: the
-    calling thread grows before every batch and every chunk fills blocks in the new pages) trapped 10 of 10 processes
-    that way, and 0 of 10 with the total stored last.
+    the following batch while the calling thread grew the memory for it.
+- The pool's own stress shows the second way. In it the calling thread grows the memory before every batch, and every
+  chunk fills blocks in the new pages (4 threads, 3,000 batches a process, fresh processes one at a time):
+  - It needs an oversubscribed machine: a pool thread descheduled between its claim and its fill. On an idle machine
+    (load about 6 to 12 on 28 cores) neither order trapped, 0 of 100 processes each.
+  - With 40 busy threads beside it (load about 50), the total stored first trapped 98 of 100 processes, and stored last
+    0 of 100.
+  - The same split had shown under other sessions' load earlier: 15 of 20 against 0 of 20.
 - A host call or a grow of zero pages on wake did not prevent it: the late thread made that call on its wake for the
   earlier batch, before the growth it then used.
-- Threads parked in the pool's wait and woken after the calling thread's growth saw it. Over 30,000 stressed batches the
-  view wait never had to yield, and 30,000 more without the wait trapped no thread.
+- The view wait:
+  - In the loaded campaign it waited in 98 of 100 processes, 318 times, never more than one yield.
+  - The waits at a thread's start count too: the calling thread grows the memory for a new thread's stack just before
+    the thread first runs.
 - This is the engine's behavior as measured, not a guarantee read in the standard. test/pool-growth.e2e.mjs runs the
-  stress, 20 processes, on every landing.
+  stress, 20 processes, on every landing, and loads the machine itself (busy threads, twice the cores, at the lowest
+  priority) so that it can fail.
 
 The timer.
 - A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
