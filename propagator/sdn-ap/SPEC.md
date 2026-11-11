@@ -2588,9 +2588,13 @@ third-body terms of 16.8. A degree set without its HAS field, or above 70, is re
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
 - **In the low table** (class 0 at or below the 0.05 switch), with tesseral cap d above 12 the short-period terms are
   complete to first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree
-  12 the table also holds the m-daily terms. With the slow set of 16.18, which takes degree 70 whatever d states, the
-  table also holds 1 - w of each slow term above d of q -1, 0 and 1, and a share under 1 is cut on the term's own size.
-  With d of 12 or less the table is the one of every other branch.
+  12 the table also holds the m-daily terms. No term is carried there inside the slow band at more than 1 - w of its
+  epoch rate (w the band taper of 16.18): a first-order term is the theory only away from commensurability, so a band
+  term the rates do not hold (under their size cut) is carried nowhere. At 300 km, i 70, d 70, where the 47:3 family
+  drifts at 6e-3 n, the band's terms of q +-1 above degree 31 carried at full weight spiked a flight with drag to
+  1,372 km (without them, or held to 1 - w, the case is 88 to 94 m). With the slow set of 16.18, which takes degree 70 whatever d states, the table also holds 1 - w of each slow
+  term above d of q -1, 0 and 1. A share under 1 is cut on the term's own size. With d of 12 or less the table is the
+  one of every other branch.
 - **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
   near-resonant terms in low orbit and the half-day tail, and nothing else.
 - **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
