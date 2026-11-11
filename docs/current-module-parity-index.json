@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T17:38:31.063Z",
+  "generatedAt": "2026-11-11T18:29:38.710Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.28",
+      "version": "0.6.32",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 181,
+      "testFileCount": 184,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7600,6 +7600,7 @@
         "test/gto-high-degree-perigee-terms.e2e.mjs",
         "test/heo-frame.e2e.mjs",
         "test/heo-model-truth.e2e.mjs",
+        "test/high-apogee-model-truth.e2e.mjs",
         "test/high-e-fit-arc.e2e.mjs",
         "test/kernel-cost.mjs",
         "test/kernel-patterns.mjs",
@@ -7630,6 +7631,7 @@
         "test/lib/synthetic-truth.mjs",
         "test/lib/tess-frame-windows.mjs",
         "test/lib/tle.mjs",
+        "test/long-period-moon-output.e2e.mjs",
         "test/long-period-perigee-step.e2e.mjs",
         "test/maneuver.e2e.mjs",
         "test/molniya-7day-drag-sigma.e2e.mjs",
@@ -7638,6 +7640,7 @@
         "test/one-day-slow-band.e2e.mjs",
         "test/output-frames.mjs",
         "test/perigee-drag-continuity.e2e.mjs",
+        "test/pool-growth.e2e.mjs",
         "test/products-parameters.e2e.mjs",
         "test/pvn-carry.e2e.mjs",
         "test/radiation-shadow.e2e.mjs",

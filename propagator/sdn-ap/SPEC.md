@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.28 (dist c2cd9ae1).
+Version 0.6.32 (dist 1752ddbe).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1524,6 +1524,65 @@ The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the r
 15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
 against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
 grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
+
+The pool and the memory (stack #487). A threaded batch grows nothing, and a pool thread uses no page it does not see.
+- Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
+  at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
+  the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
+- Inside the batch, sbrk refuses every growth on every thread.
+  - A set refused its caches flies on the thread's caches, with the same states.
+  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order.
+- A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
+  batch's total, which was stored after that size, so it reads that size.
+- Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
+  thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
+  calling thread goes on once its own view covers it.
+- sdnap_pool_stats counts the batches, refusals, deferred rows, batches that grew inside (0) and the view waits.
+
+Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
+- A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has
+  just grown. Its memory.size still reads the older size, and the bulk instruction is checked against that size. Plain
+  loads and stores of the same pages succeed.
+- This was reproduced outside the propagation code, with only the allocator, memset, memcpy and pthreads (#487).
+- In the pool it happened in two ways:
+  - threads grew the memory inside a batch: 0.6.20 failed 8 of 30 runs of the threaded test, and 0.6.21 failed 4 of 40;
+  - the chunk total was stored before the room was made. A thread that woke late for one batch then claimed a chunk of
+    the following batch while the calling thread grew the memory for it.
+- The pool's own stress shows the second way. In it the calling thread grows the memory before every batch, and every
+  chunk fills blocks in the new pages (4 threads, 3,000 batches a process, fresh processes one at a time):
+  - It needs an oversubscribed machine: a pool thread descheduled between its claim and its fill. On an idle machine
+    (load about 6 to 12 on 28 cores) neither order trapped, 0 of 100 processes each.
+  - With 40 busy threads beside it (load about 50), the total stored first trapped 98 of 100 processes, and stored last
+    0 of 100.
+  - The same split had shown under other sessions' load earlier: 15 of 20 against 0 of 20.
+- A host call or a grow of zero pages on wake did not prevent it: the late thread made that call on its wake for the
+  earlier batch, before the growth it then used.
+- The view wait:
+  - In the loaded campaign it waited in 98 of 100 processes, 318 times, never more than one yield.
+  - The waits at a thread's start count too: the calling thread grows the memory for a new thread's stack just before
+    the thread first runs.
+- This is the engine's behavior as measured, not a guarantee read in the standard. test/pool-growth.e2e.mjs runs the
+  stress, 20 processes, in every suite. With SDN_AP_POOL_GROWTH_LOAD=1 it loads the machine itself (busy threads, twice
+  the cores, at the lowest priority), so that it can fail. Without that, the default, it can fail only on a machine
+  that is busy already.
+
+The timer.
+- A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
+  last chunks without one completing. The pool is then not used again, and later batches run on the calling thread.
+- It is a count of the calling thread's polls, not wall time. The module imports no clock (loaders that build their own
+  import objects give none), and the calling thread may be a browser's main thread, which may not block on a timed
+  wait.
+- The fastest rate measured here was 2.1e9 polls a second, so 2^37 polls are 65 s, about twice the 30 s aimed at. The
+  loop then makes one poll in about one and a half clock cycles, so this machine cannot poll much faster. On a slower
+  or busier machine the count takes longer, and a suspended process does not count.
+- Starting a thread, the calling thread waits at most 2^34 yields for its own view: 89 s at the 1.9e8 yields a second
+  measured here.
+- test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks that a
+  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because chunks keep completing.
+- A trapped thread therefore no longer leaves the calling thread waiting forever: in the stress, every trapped process
+  returned the error.
+- What the timer does not cover: a thread that traps while holding the allocator's lock or a set's lock still stops any
+  thread that then waits for that lock.
 
 What the caches cost in accuracy. The reference is a build of this module's own sources that bakes every evaluation cache
 at the state itself on every call: the tesseral base, ae, pe and resonance bakes and the m-daily terms, with the
@@ -3099,7 +3158,22 @@ grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0
 stepped at every node: kinks about 80 s apart near perigee, where the nodes pass fastest. On the transfer orbit with drag
 off the jump detector within 10 min of perigee read 0.395 m at 10 s and 0.031 m at 1 s; it now reads 0.032 m and 0.8 mm
 (stack #420; `test/egrid-continuity.e2e.mjs`). A grid is built at the set's mean elements at every 48 hours from its epoch
-(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval. A grid
+(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval.
+
+*The grid's mean motion in the long-period regime.* From 0.6.30 (stack #479), an AP set in the long-period regime (epoch period
+1,100 min or more) with the Sun and Moon builds every node's grid at its epoch mean motion. It reads every grid with the
+epoch's offset in a: none on its own grids, and its own epoch's a for a copy that reads its nominal's grids. Each node's e and i,
+and the state's offsets in them, are as before. There the bodies act on the mean elements as point masses (5), so the mean
+motion moves along each revolution, by up to 4e-4 of n at a = 114,000 km (the energy relation, the Moon at one cutoff). A
+family's divisor k - nu (nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, about 4.4 m on that orbit) moves by m x 4.4
+times as much. That is as large as a near-resonant family's distance from resonance: m = 7 lies 0.03 from j = 31, m = 9 lies 0.10
+from j = 40. Through 0.6.29 every node was built at the mean motion of its instant and every state offset in a from its own
+mean a, so the grid followed that oscillation. Measured on 0.6.26 with the change alone: on a synthetic set at e 0.9 with perigee 5,000 km (i 70), with AP fitted to
+the numerical forecast over 0 to 120 h and the Moon on both sides, the field 70 x 70 against AP's degree 31 gave 3,717 m. With no
+tesseral term at all AP gave 1,175 m, and with the zonal field and the Moon alone on both sides 864 m. With the mean motion
+held it gives 970 m. With it held, the cadence no longer matters: nodes every 6 h, every 48 h, and one node for the whole
+flight give 971, 970 and 981 m. Rebuilding more often at the instant's mean motion helped only part way (2,436 m every 6 h,
+2,426 m every hour). Every other set is bit for bit: the averaged regime, AP without the Sun and Moon, and SGP4XP. A grid
 is keyed by its set's exact elements (bitwise n, e, i, the class and the degree): a lookup matches only that key, and a grid held
 from an earlier call is the same bytes a rebuild gives. A copy initialized while its nominal set's xpt::GridShareScope lives (the
 covariance's sigma sets, a fit iteration's perturbed copies) reads the nominal's grids, its schedule nodes included, linearly, when
@@ -3920,7 +3994,8 @@ A term is slow when |psi-dot| < 0.045 n (`kShallowBand`). For each (l, m, p) the
 each term is classified by its own rate, not by its family's q = 0 rate.
 
 *Where a slow term belongs.* At output, a term's mean-motion response is an along-track term in 1 / psi-dot^2 with a fixed
-divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node.
+divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node
+(at the epoch's mean motion in the long-period regime with the Sun and Moon, from 0.6.30).
 That is exact to first order while psi-dot holds still and stays well above the libration rate of the term's own resonance.
 Where the rate holds still the two forms agree. At 550 km beside 15:1 (i 87.35, gravity alone, the elements fitted and the
 coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h and 72 h fits:
@@ -4156,7 +4231,39 @@ q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term
 flies a decaying orbit whose order-15 family's weight moves from 0.90 to 0.63 over 7 days. The 10 s jump detector reads at
 most 0.008 m (bound 0.08 m), and 400 states come out bit-identical in any order of requests.
 
-**16.20 The field's census** (from 0.6.NN; stack #503). The rule: every tesseral term of the field whose effect on position reaches the
+**16.19 The Sun and Moon of the long-period regime through the output.** In the long-period regime the bodies enter the
+rates as point masses: the Gauss equations at the mean state, with the bodies' acceleration at the mean position (5). AP's
+output then adds section 8's J2 short-period map to those mean elements. So the bodies' rates moved AP's osculating state
+by the map's Jacobian times the rates as well, a velocity of the order of J2 times the bodies' own effect on the elements, at
+once. On a synthetic set at e 0.9 with apogee 305,000 km (perigee 10,000 km, i 70), AP with J2 and the Moon diverged from
+AP with J2 alone at 2.8 mm/s from the first minute, where the numerical propagator's two flights start together: after 1 min,
+0.242 m against 0.073 m. From 0.6.29, an AP set above e 0.3 in the long-period regime takes as the bodies' rates of its
+mean elements y the solution m of J m = (0, a): J is the Jacobian of section 8's output (position and velocity, km and km/s)
+in the six elements by forward differences (steps 1e-7, and 1e-7 n for n, every column's Kepler equation started from the
+base's eccentric anomaly), and a is the Sun's and Moon's point-mass acceleration at the output's position. Gaussian
+elimination with partial pivoting solves it; where the output or the solve fails, the Gauss equations remain. The rates
+then move the J2 output by the bodies' acceleration and nothing else, to first order.
+
+AP's Moon signal (each side's flight with J2 and the Moon less its flight with J2 alone, no fit, 120 h; J3 to J5 and the
+Sun's mass zero in the builds), against the numerical propagator's:
+
+| synthetic set | the Moon's signal at 120 h | error before | error from 0.6.29 |
+| --- | ---: | ---: | ---: |
+| e 0.9, perigee 5,000 km, i 70 | 1,811 km | 627 m | 28 m |
+| e 0.9, perigee 10,000 km, i 70 | 3,202 km | 622 m | 43 m |
+| e 0.5, perigee 35,786 km, i 20 | 868 km | 34 m | 27 m |
+| TESS-like (e 0.55, perigee 102,000 km) | 2,133 km | 9 m | 8 m |
+| e 0.3, perigee 35,786 km, i 55 | 90 km | 34 m | 36 m |
+| geosynchronous, e 0 | 9 km | 3 m | 2 m |
+
+The effect is large only where the J2 map is large against the bodies' pull, a low perigee under a high apogee. At e 0.3 and
+below it is a few meters while the Jacobian costs about 3 us a state on a geosynchronous flight, so below e 0.3 the Gauss
+equations stay, bit for bit. AP fitted to the numerical forecast over 0 to 120 h, J2 and the Moon on both sides: 862 m to
+453 m (perigee 5,000 km) and 825 m to 353 m (perigee 10,000 km), against 459 m and 360 m with J2 alone. SGP4XP is unchanged.
+`test/long-period-moon-output.e2e.mjs` records AP fitted over 5 days to that case on the zonal field to degree 5 with the Sun
+and Moon (FFM): D 343.8 m on 0.6.26, 255.8 m from 0.6.29.
+
+**16.20 The field's census** (from 0.6.32; stack #503). The rule: every tesseral term of the field whose effect on position reaches the
 size cut is carried exactly once, by the carrier its rate gives it, in every class, on both sides of every switch.
 `sdnap_field_census(in, rows, max_rows)` lists, for a set of epoch mean elements (in: mean motion in rev/day, e, i in degrees,
 the record's tesseral degree, the size cut in m), every term (l, m, p, q) of the embedded field, order 1 to 70 and degree to
@@ -4195,6 +4302,11 @@ Rows have ten doubles: l, m, p, q, psi-dot / n, the code, the rates' weight, all
 | 30 | twice: the weights sum to more than 1 |
 
 In the low table the carrier is the rates below 1.1 bands and the output table above.
+
+The census weighs every share at the epoch's elements, so it checks the partition at the epoch only. A shared term's weights
+need not sum to 1 later in a flight. The rates' shares (the shallow, slow and wide slow lists) follow the term's current rate.
+The output table's and the grid's are fixed when they are built: the table's at the epoch, the grid's at its node (in the
+long-period regime with the Sun and Moon, at the epoch's mean motion, 16.19).
 
 `test/field-census.e2e.mjs` sweeps the regime: 101 sets.
 - Low orbit: five heights, three inclinations, e 0 to 0.05.
