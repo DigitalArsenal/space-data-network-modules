@@ -4061,7 +4061,7 @@ the field at 70 x 70, the largest distance over 0 to 5 days, q = 0 / |q| up to 1
 - 880 km, i 97.6, e 0.001: 85 / 42 / 42 m;
 - 550 km, i 87.35, e 0.001: 159 / 67 / 67 m;
 - 550 km, i 87.35, e 0.02: 448 / 72 / 64 m;
-- 1,000 km mean altitude, i 53, e 0.04: 101 / 98 / 92 m.
+- 1,000 km mean altitude, i 53, e 0.04: 101 / 98 / 93 m.
 SYNTH_LINE
 The largest list on a sweep of 1,880 low-table sets (12 to 16.6 rev/day, eight inclinations, e 0 to 0.05) is 971 terms, under
 the list's 2,048 (`kShallowMax`); a term over it would be listed as code 7, and the partition test asserts there is none.
