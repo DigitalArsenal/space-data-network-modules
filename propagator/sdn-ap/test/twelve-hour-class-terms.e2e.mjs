@@ -4,7 +4,7 @@
 // The rule compares two builds on one path, so no bound moved. The TEME output through this checkout's foundation/frames
 // 0.3.0 lands within 1 mm of the module's GCRF output.
 // Registration (2026-11-03): the 12-hour class's tesseral terms on an Etalon-like synthetic orbit (n 2.13 rev/day,
-// e 0.0007, i 64.9 deg, node 0, 90, 180 and 270 deg) with no Sun or Moon: FFM EGM96 70x70 without third bodies against
+// e 0.0007, i 64.9 deg, node 0, 90, 180 and 270 deg) with no Sun or Moon: FFM EGM2008 70x70 without third bodies against
 // a test build of this module with both mass ratios 0 (tesseral 31, zonal 20; 72 h fits, 7 days flown hourly).
 // Acceptance: day-7 cross-track RMS under 5 m and along-track RMS under 10 m at each node. Exploratory, the already-read
 // AP6 windows: Etalon-1/2 paired day-3 AP minus FFM (archived resume-ffm F72) printed per window before (0.4.8, git

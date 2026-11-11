@@ -58,10 +58,14 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // that move past the bound, 8 move toward 0.674 and 6 away, and one leaves the band (0.603 to 0.754): T 167 h R, 0.7536 to
 // 0.7572.
 // So the floors and medians are pinned to 0.6.27's, the bounds kept (the cost stated in its pull request).
-const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00021677553193454318, FLOOR_VU_KM2: 2.6500774508688905e-7, FLOOR_VV_KM2: 0.0013005930847864295,
-  FLOOR_WU_KM2: -0.000012432207238489321, FLOOR_WV_KM2: -0.00016953453851612765, FLOOR_WW_KM2: 0.00020868838795707218 };
-const MEDIANS_PINNED = { "T 24 R": 0.643032, "T 24 C": 0.787734, "T 72 R": 0.750729, "T 72 C": 0.876057, "T 167 R": 0.757151,
-  "S1 24 R": 0.647389, "S1 24 C": 0.665963, "S1 72 R": 0.646957, "S1 72 C": 0.562886, "S1 167 R": 0.859413, "S1 167 C": 0.380437,
+// 0.6.36 (the field EGM2008, SPEC 16.2) moves the sample's fit once more: its 12 h error 322.9 to 322.7 m, FLOOR_VV_KM2 1.467 to
+// 1.476 times 0.6.0's, FLOOR_WW_KM2 1.462 to 1.451 times. The held-out cells move by at most 0.0021 in median |z| (S1 24 h R
+// 0.6474 to 0.6454): of the 11 that move past the bound, 5 move toward 0.674 and 6 away, and none crosses the band's edge.
+// So the floors and medians are pinned to 0.6.36's, the bounds kept.
+const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00021698074615315635, FLOOR_VU_KM2: 1.2575309946337977e-7, FLOOR_VV_KM2: 0.0013090685004767389,
+  FLOOR_WU_KM2: -0.000013118733639607107, FLOOR_WV_KM2: -0.0001678823042925005, FLOOR_WW_KM2: 0.0002071323849285356 };
+const MEDIANS_PINNED = { "T 24 R": 0.641263, "T 24 C": 0.786387, "T 72 R": 0.749803, "T 72 C": 0.875654, "T 167 R": 0.756692,
+  "S1 24 R": 0.645353, "S1 24 C": 0.664780, "S1 72 R": 0.645096, "S1 72 C": 0.562663, "S1 167 R": 0.857879, "S1 167 C": 0.380362,
   "T 24 I": 0.468298, "T 167 C": 0.794573, "S1 72 I": 0.487369 };
 const ISS = { path: "analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", sha256: "fbda48d1584bee1f38ea562625280ecfe4e6643f67c417e91f2fc245ee48311f" };
 const HALF_NORMAL_MEDIAN = 0.6744897501960817, LEADS = [24, 72, 167], AXES = ["R", "I", "C"], RANGE = [0.32, 0.91];

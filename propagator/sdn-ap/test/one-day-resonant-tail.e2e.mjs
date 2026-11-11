@@ -2,10 +2,10 @@
 // E2E (stack #434, SPEC 6.1 and 16.2): the one-day class's resonant tail. Through 0.6.18 that class's rates carried the
 // resonant gravity of degrees 2 to 4 only (SPEC 6.1's 27 terms), and the output table drops every term slower than 0.045 n,
 // so degree 5 and up was carried nowhere. On a geostationary set each missing term is a constant along-track acceleration
-// whose size and sign follow the longitude, mostly through EGM96's (5,5), (5,3) and (5,1).
+// whose size and sign follow the longitude, mostly through EGM2008's (5,5), (5,3) and (5,1).
 // Model truth: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256; DE440 Sun and Moon, no radiation
 // pressure, no drag, zero EOP, RK78 1e-12 and 300 s); made-up sets at 2026-10-29 00:00 UTC; a 72 h fit; 7 days flown on a
-// 1 h grid; whole-day 3D RMS. Each set is flown twice: EGM96 20 x 20 on both sides (AP FORCES 20,20) and 4 x 4 on both
+// 1 h grid; whole-day 3D RMS. Each set is flown twice: EGM2008 20 x 20 on both sides (AP FORCES 20,20) and 4 x 4 on both
 // sides (AP FORCES 4,0, where no tail is built and the class's own terms reach degree 4). The two differ only by what the
 // field's degrees 5 to 20 do and by how AP carries them.
 //   - geostationary: n 1.0027379 rev/day, e 0.0002, i 1.5 deg, argument of perigee 0, the node placed so the set sits

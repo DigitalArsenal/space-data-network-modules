@@ -6,7 +6,7 @@
 // 1. Convergence. The seeded set (FORCES 31,20, B 0.01, AGOM 0.0125 m^2/kg) flown 7 days at 300 s by the module and by a
 //    test build at half its step. Outcome: their day-5 RMS difference is within 0.5 m.
 //    Against a 2.375-minute step, day 5: 0.08 m at the rule's step, 0.33 m at 12.67 min, 8.99 m at 19 min, 174.11 m at 38 min.
-// 2. Model truth. FFM: EGM96 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either side. AP: a 72 h fit
+// 2. Model truth. FFM: EGM2008 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either side. AP: a 72 h fit
 //    with drag and AGOM pinned at 0, flown 7 days on a 10-minute grid. Outcome: the day-5 whole-day 3D RMS is within 200 m.
 //    Measured 122.9 m; 918.6 m at 38 min (through 0.6.15). With the Sun and Moon off on both sides it is 120.9 m at either step.
 import assert from 'node:assert/strict';

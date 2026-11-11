@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Registration (2026-11-03, modules-sdn-ap-fit-per-object-prior-multi-20261103): one fit call, two objects, each with
 // its own BTERM and AGOM priors (SPEC 12.8: after the call's $PCF, one $PCF per 'ephemeris' frame stating only
-// FIT.DRAG_PRIOR, FIT.SRP_PRIOR and their forms). Model truth as test/fit-bterm-700-1400-km.e2e.mjs (FFM EGM96 70x70,
+// FIT.DRAG_PRIOR, FIT.SRP_PRIOR and their forms). Model truth as test/fit-bterm-700-1400-km.e2e.mjs (FFM EGM2008 70x70,
 // Sun and Moon from DE440, NRLMSISE-00 at constant weather on both sides; AP FORCES 31,20 with NRLMSISE-00; 72 h fits;
 // day-3 3D RMS over 2-minute samples) on the SWOT-like orbit (true BTERM 0.044 m^2/kg) and the Sentinel-3-like orbit
 // (true BTERM 0.001).

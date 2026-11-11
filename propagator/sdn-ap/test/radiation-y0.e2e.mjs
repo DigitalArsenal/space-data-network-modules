@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // E2E (SPEC 16.13): AP's radiation term Y0 (ECOM2's Y axis beside the sphere), through the built module.
-// - Model truth: FFM (EGM96 20 x 20, Sun and Moon from DE440, a cannonball of the set's AGOM) from an AP-consistent
+// - Model truth: FFM (EGM2008 20 x 20, Sun and Moon from DE440, a cannonball of the set's AGOM) from an AP-consistent
 //   state at 2026-10-29, flown 10 days with the sphere alone and with the sphere plus a stated Y0 of each sign, on a
 //   Galileo-like orbit (n 1.7085 rev/day, i 56 deg) and an inclined geosynchronous one in the one-day class (n 1.00274
 //   rev/day, i 55 deg). AP is fitted over the first 72 h through `fit` under the table's forces (tesseral 31, zonal 20),
@@ -109,7 +109,7 @@ const repack = (t) => { const b = new fb.Builder(8192); OCM.finishOCMBuffer(b, t
 async function truthOf(o, initial, y0) {
   const params = { epochJD: jd.whole, epochTimeScale: "UTC", targetJD: jd.whole + times.at(-1), targetTimeScale: "UTC", position: initial.slice(0, 3), velocity: initial.slice(3),
     frame: "GCRF", sampleEpochsJD: times.map((d) => ({ jd: jd.whole + d, scale: "UTC" })), ephemerisSource: "JPL_SPK",
-    forces: { gravityMode: "EGM96", maxDegree: 20, maxOrder: 20, thirdBody: true, srp: true, drag: false, massKg: 1000, areaM2: 1000, cr: o.agom },
+    forces: { gravityMode: "EGM2008", maxDegree: 20, maxOrder: 20, thirdBody: true, srp: true, drag: false, massKg: 1000, areaM2: 1000, cr: o.agom },
     integrator: { tolerance: 1e-12, minStep: 0.01, maxStep: 300 } };
   checkTruth();
   const key = createHash("sha256").update(fs.readFileSync(ffmPath)).update(JSON.stringify({ params, y0 })).update(kernel).digest("hex");

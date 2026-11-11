@@ -11,14 +11,15 @@
 //    (two-body plus the bodies' tidal terms of the same degrees, bodies fixed, RK4, 128,000 steps); SPEC 5's
 //    closed-form degree 2-3 averaged rates within 0.1 m per day of the quadrature average (the averaged rates are
 //    unchanged); the replaced closed form's mean-longitude error at G1 e 0.72 printed and within 1 m of 298.2 m RMS;
-// 2. degree 4 up off (OFF; FFM EGM96 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
+// 2. degree 4 up off (OFF; FFM EGM2008 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
 //    fixture at most 95 m and of the Molniya fixture at most 85 m;
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
-//    radial RMS within 0.5 m of half-day 36.15/14.56 and 12 h at 55 deg 67.31/7.24 m, GTO no worse than 961/935 m (to the
-//    meter); Molniya with B pinned at the truth 84.01/51.16 m to 5 cm, with B fitted held to its record's statement (B
+//    radial RMS within 0.5 m of half-day 35.88/16.01 and 12 h at 55 deg 65.60/7.20 m, GTO no worse than 961/935 m (to the
+//    meter); Molniya with B pinned at the truth 80.11/47.70 m to 5 cm, with B fitted held to its record's statement (B
 //    within one stated sigma, the day-7 position within three along R, I and C: its two solutions, stack #392, at the
-//    assertions); the single day-7 sample printed and within 0.5 m of 27.76, 76.44 and
-//    255.35 m (re-recorded on 0.6.22, AP's own Sun and Moon, SPEC 16.17; 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3's grid
+//    assertions); the single day-7 sample printed and within 0.5 m of 27.66, 71.63 and
+//    238.36 m (re-recorded on 0.6.36, the field EGM2008, SPEC 16.2; on 0.6.22, AP's own Sun and Moon, SPEC 16.17: 27.76,
+//    76.44 and 255.35 m; 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3's grid
 //    moved them, the history at the assertions;
 //    re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04, 338.22, 303.15
 //    before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
@@ -296,8 +297,11 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   // model's pin. AP's own Sun and Moon (SPEC 16.17, stack #446, on 0.6.19) move every fixture, both ways: half-day 31.45 /
   // 16.88 / 30.22 to 36.15 / 14.56 / 27.76 m, 12 h at 55 deg 66.61 / 5.68 / 64.94 to 67.31 / 7.24 / 76.44 m, Molniya with
   // B pinned 80.71 / 50.51 to 84.01 / 51.16 m, GTO's sample 275.78 to 255.35 m; the true Moon now meets these orbits'
-  // averaged lunar theory (stack #421), whose error the old Moon's had partly offset.
-  for (const [f, [t, r, s]] of Object.entries({'half-day': [36.15, 14.56, 27.76], '12-hour-55deg': [67.31, 7.24, 76.44]})) {
+  // averaged lunar theory (stack #421), whose error the old Moon's had partly offset. The field EGM2008 on both sides (0.6.36,
+  // SPEC 16.2; the truth's field was EGM-96 before, as AP's) moves them again: half-day 36.15 / 14.56 / 27.76 to 35.88 / 16.01 /
+  // 27.66 m (radial 1.45 m worse), 12 h at 55 deg 67.31 / 7.24 / 76.44 to 65.60 / 7.20 / 71.63 m, Molniya with B pinned 84.01 /
+  // 51.16 to 80.11 / 47.70 m, GTO 180.70 / 117.62 to 175.01 / 112.39 m and its sample 255.35 to 238.36 m.
+  for (const [f, [t, r, s]] of Object.entries({'half-day': [35.88, 16.01, 27.66], '12-hour-55deg': [65.60, 7.20, 71.63]})) {
     assert.ok(Math.abs(report.releaseDay7[f].alongTrack - t) <= 0.5, `${f}: day-7 along-track RMS ${report.releaseDay7[f].alongTrack} m`);
     assert.ok(Math.abs(report.releaseDay7[f].radial - r) <= 0.5, `${f}: day-7 radial RMS ${report.releaseDay7[f].radial} m`);
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);
@@ -305,7 +309,7 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   assert.ok(report.releaseDay7.GTO.alongTrack <= 961.5 && report.releaseDay7.GTO.radial <= 935.5, 'GTO: day 7 no worse than 961/935 m');
   // Molniya with B pinned at the truth's 0.044: the model's pin, to 5 cm (80.71 / 50.51 m on 0.6.12 and with the C1
   // E-grid alike)
-  assert.ok(Math.abs(report.releaseDay7['Molniya-pinned'].alongTrack - 84.01) <= 0.05 && Math.abs(report.releaseDay7['Molniya-pinned'].radial - 51.16) <= 0.05,
+  assert.ok(Math.abs(report.releaseDay7['Molniya-pinned'].alongTrack - 80.11) <= 0.05 && Math.abs(report.releaseDay7['Molniya-pinned'].radial - 47.70) <= 0.05,
     `Molniya, B pinned: day-7 along-track ${report.releaseDay7['Molniya-pinned'].alongTrack} m and radial ${report.releaseDay7['Molniya-pinned'].radial} m`);
   // MOLNIYA_FITTED: the 72 h fit of the coefficient has two solutions that small numerical changes move it between (stack
   // #392): B 0.044623, fit RMS 21.911 m, day-7 along-track 239.68 m on 0.6.12; B 0.045722, 21.337 m, 523.53 m with the C1
@@ -319,8 +323,9 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   for (const [k, v] of Object.entries(mf.stated)) assert.ok(Math.abs(v.z) <= 3, `Molniya, B fitted: day-7 ${k} error ${v.errorM.toFixed(1)} m against the stated sigma ${v.sigmaM.toFixed(1)} m`);
   // re-recorded 2026-11-10 on 0.6.8 and FFM 2.2.1 (0.6.2 258.96 m, 0.6.3 275.80 m on 2.2.1; the sample is a single state
   // and GTO's truth moved most between FFM 2.0.4 and 2.2.1, 2.5 m along-track RMS at day 7); 249.02 m at 0.4.15 on 2.0.4
-  // (SPEC 16.11), 929.45 m at 0.4.14 (SPEC 16.10), 2449.15 m at 0.4.11-0.4.13
-  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 255.35) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
+  // (SPEC 16.11), 929.45 m at 0.4.14 (SPEC 16.10), 2449.15 m at 0.4.11-0.4.13; 255.35 m on 0.6.22 to 0.6.34 (AP's own Sun
+  // and Moon), 238.36 m from 0.6.36 (the field EGM2008 on both sides)
+  assert.ok(Math.abs(report.releaseDay7.GTO.singleSample - 238.36) <= 0.5, `GTO: day-7 sample ${report.releaseDay7.GTO.singleSample} m`);
   reproduceConformance();
   console.log('third-body short-period eccentric E2E: PASS');
 }

@@ -5,12 +5,15 @@
 // states every 300 s over 72 h fitted with the same forces: a SWOT-like set (891 km, 14:1, BTERM 0.001) and a LAGEOS-like one
 // (6.39 rev/day, BTERM 0.0005), whose largest slow term is 0.089 m, under the 0.5 m cut.
 // Asserted:
-// - the SWOT-like record states PERTURBATIONS.GRAVITY_MODEL "EGM-96; slow tesseral terms to degree 70", the LAGEOS-like one
-//   "EGM-96" (its record is the one a build without the slow set writes);
+// - the SWOT-like record states PERTURBATIONS.GRAVITY_MODEL "EGM2008; slow tesseral terms to degree 70", the LAGEOS-like one
+//   "EGM2008" (its record is the one a build without the slow set writes);
 // - the LAGEOS-like record with the slow text written in flies bit for bit as without it over 7 days (every 30 min): an empty
 //   slow set changes no state;
 // - the SWOT-like record with the text taken out flies differently (the slow set's terms act): at least 1 m apart within 7 days;
-// - the slow text on an SGP4XP set is refused (elements-other-theory).
+// - the slow text on an SGP4XP set is refused (elements-other-theory);
+// - the SWOT-like record stating another field, or none, is refused (gravity-model-mismatch, SPEC 16.2): "EGM-96" (the
+//   text of every AP record with gravity terms before 0.6.36), "EGM-96; slow tesseral terms to degree 70" (the slow-set
+//   records of 0.6.25 to 0.6.34), and no GRAVITY_MODEL at all; no record flies on a field it does not state.
 //   node test/slow-set-record.e2e.mjs
 import assert from 'node:assert/strict';
 import * as fb from 'flatbuffers';
@@ -25,7 +28,7 @@ import { configuration } from './lib/pcf.mjs';
 import { seedOcm, flight, rowsThrough, spwStream, repackOcm, ocmOf, T } from './lib/ocm.mjs';
 import { spwFixtureRows } from './lib/spw-constant.mjs';
 
-const SLOW = 'EGM-96; slow tesseral terms to degree 70';
+const SLOW = 'EGM2008; slow tesseral terms to degree 70';
 const epoch = '2026-10-29T00:00:00.000', t0 = Date.parse(epoch + 'Z');
 const iso = (s) => new Date(t0 + s * 1000).toISOString().replace('Z', '');
 const fixture = spwFixtureRows();
@@ -67,13 +70,13 @@ const swot = await fitted({ n: 13.905, e: 0.0001, i: 77.6, raan: 200, argp: 90, 
 const lageos = await fitted({ n: 6.39, e: 0.0045, i: 109.8, raan: 50, argp: 90, ma: 0, bterm: 0.0005 });
 const gm = (bytes) => ocmOf(bytes).PERTURBATIONS.GRAVITY_MODEL;
 assert.equal(gm(swot), SLOW, `the SWOT-like record states the slow set (${gm(swot)})`);
-assert.equal(gm(lageos), 'EGM-96', `the LAGEOS-like record states no slow set (${gm(lageos)})`);
+assert.equal(gm(lageos), 'EGM2008', `the LAGEOS-like record states no slow set (${gm(lageos)})`);
 
 const lageosMarked = repackOcm(lageos, (t) => { t.PERTURBATIONS.GRAVITY_MODEL = SLOW; });
 const la = await fly(lageos, week), lb = await fly(lageosMarked, week);
 assert.ok(same(la, lb), `LAGEOS-like: the slow text changes no state (largest gap ${gap(la, lb).toExponential(3)} m)`);
 
-const swotPlain = repackOcm(swot, (t) => { t.PERTURBATIONS.GRAVITY_MODEL = 'EGM-96'; });
+const swotPlain = repackOcm(swot, (t) => { t.PERTURBATIONS.GRAVITY_MODEL = 'EGM2008'; });
 const sa = await fly(swot, week), sb = await fly(swotPlain, week);
 const swotGap = gap(sa, sb);
 assert.ok(swotGap >= 1, `SWOT-like: the record's slow set acts in its flight (${swotGap.toFixed(3)} m apart within 7 days; at least 1 m)`);
@@ -83,7 +86,15 @@ const xpMarked = repackOcm(xp, (t) => { t.PERTURBATIONS.GRAVITY_MODEL = SLOW; })
 const refused = await call('propagate', flight([xpMarked], { output: { EPOCHS: [iso(3600)], FRAME: pcfOutputFrame.GCRF } }));
 assert.notEqual(refused.statusCode, 0, 'the slow text on an SGP4XP set is refused');
 assert.equal(refused.errorCode, 'elements-other-theory', `refused by name (${refused.errorCode}: ${refused.errorMessage})`);
+const otherField = {};
+for (const [label, text] of [['EGM-96', 'EGM-96'], ['the old slow text', 'EGM-96; slow tesseral terms to degree 70'], ['no GRAVITY_MODEL', null]]) {
+  const marked = repackOcm(swot, (t) => { t.PERTURBATIONS.GRAVITY_MODEL = text; });
+  const r = await call('propagate', flight([marked], { output: { EPOCHS: [iso(3600)], FRAME: pcfOutputFrame.GCRF } }));
+  assert.notEqual(r.statusCode, 0, `an AP set stating ${label} is refused`);
+  assert.equal(r.errorCode, 'gravity-model-mismatch', `${label}: refused by name (${r.errorCode}: ${r.errorMessage})`);
+  otherField[label] = r.errorCode;
+}
 await h.close?.();
-console.log(JSON.stringify({ swotGravityModel: gm(swot), lageosGravityModel: gm(lageos), swotSlowSetGapM: +swotGap.toFixed(3), lageosBitIdentical: true }));
+console.log(JSON.stringify({ swotGravityModel: gm(swot), lageosGravityModel: gm(lageos), swotSlowSetGapM: +swotGap.toFixed(3), lageosBitIdentical: true, otherField }));
 console.log('slow-set record E2E: PASS');
 process.exit(0);

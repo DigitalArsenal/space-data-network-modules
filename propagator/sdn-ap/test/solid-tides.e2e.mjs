@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // E2E (SPEC 16.14): AP's solid Earth tide, through the built module.
-// - Model truth: FFM (EGM96 70 x 70, Sun and Moon from DE440) from an AP-consistent state at 2026-09-01, flown 8 days
+// - Model truth: FFM (EGM2008 70 x 70, Sun and Moon from DE440) from an AP-consistent state at 2026-09-01, flown 8 days
 //   without the solid tide and with FFM's (FORCES.SOLID_TIDES IERS_2010: IERS 2010 section 6.2, steps 1 and 2), on two
 //   near-circular low orbits where the tide is the largest theory item at day 5 (1,490 km at 108 deg, 1,340 km at 66
 //   deg). AP is fitted through `fit` over the first 72 h (the headline's tesseral 31, zonal 20) and flown hourly to day 5
@@ -99,7 +99,7 @@ const NOT_MODELED = "solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)";
 async function truthOf(o, initial, tides) {
   const params = { epochJD: jd.whole, epochTimeScale: "UTC", targetJD: jd.whole + times.at(-1), targetTimeScale: "UTC", position: initial.slice(0, 3), velocity: initial.slice(3),
     frame: "GCRF", sampleEpochsJD: times.map((d) => ({ jd: jd.whole + d, scale: "UTC" })), ephemerisSource: "JPL_SPK",
-    forces: { gravityMode: "EGM96", maxDegree: 70, maxOrder: 70, thirdBody: true, srp: false, drag: false, massKg: 1000, areaM2: 10 },
+    forces: { gravityMode: "EGM2008", maxDegree: 70, maxOrder: 70, thirdBody: true, srp: false, drag: false, massKg: 1000, areaM2: 10 },
     integrator: { tolerance: 1e-12, minStep: 0.01, maxStep: 300 } };
   checkTruth();
   const key = createHash("sha256").update(fs.readFileSync(ffmPath)).update(JSON.stringify({ params, tides })).update(kernel).digest("hex");

@@ -65,7 +65,7 @@ export const flight = (records, pcf = null) => [
 
 /// An SGP4XP or AP $OCM made from elements, as a test's seed set (fit makes the others): theory AP unless the forces
 /// are the theory's own; `rows` the $SPW rows (SPWT objects) under RECORDS; `solidTides` states AP's solid Earth tide
-/// (PERTURBATIONS.SOLID_TIDES_MODEL IERS 2010, SPEC 16.14); `slow` the slow set (GRAVITY_MODEL "EGM-96; slow tesseral terms to
+/// (PERTURBATIONS.SOLID_TIDES_MODEL IERS 2010, SPEC 16.14); `slow` the slow set (GRAVITY_MODEL "EGM2008; slow tesseral terms to
 /// degree 70", SPEC 16.18). The module validates what it flies.
 export function seedOcm({ epoch, n, e, i, raan, argp, ma, bterm = 0, agom = 0, norad = 0, name = null, msis = false, records = false, tesseral = 0, zonal = 0, rows = [], dca = null, solidTides = false, slow = false }) {
   const stock = !msis && !records && !tesseral && !zonal && !solidTides;
@@ -82,10 +82,10 @@ export function seedOcm({ epoch, n, e, i, raan, argp, ma, bterm = 0, agom = 0, n
     RA_OF_ASC_NODE: raan, ARG_OF_PERICENTER: argp, MEAN_ANOMALY: ma, BTERM: bterm, AGOM: agom });
   const weather = records || msis;
   t.PERTURBATIONS = Object.assign(new PerturbationsT(), { ATMOSPHERIC_MODEL: new ATMT(msis ? AtmosphericModelFamily.NRLMSIS00E : AtmosphericModelFamily.JXX, msis ? 2000 : 1970),
-    GRAVITY_MODEL: "EGM-96", MAXIMUM_TESSERAL_DEGREE: tesseral, MAXIMUM_ZONAL_DEGREE: zonal,
+    GRAVITY_MODEL: tesseral > 0 || zonal > 0 ? "EGM2008" : "EGM-96", MAXIMUM_TESSERAL_DEGREE: tesseral, MAXIMUM_ZONAL_DEGREE: zonal,
     WEATHER_SOURCE: weather ? pcfWeatherSource.RECORDS : pcfWeatherSource.THEORY_FLUX_MODEL, SPACE_WEATHER: weather ? rows : [] });
   if (solidTides) t.PERTURBATIONS.SOLID_TIDES_MODEL = "IERS 2010";
-  if (slow) t.PERTURBATIONS.GRAVITY_MODEL = "EGM-96; slow tesseral terms to degree 70";
+  if (slow) t.PERTURBATIONS.GRAVITY_MODEL = "EGM2008; slow tesseral terms to degree 70";
   if (dca) Object.assign(t.PERTURBATIONS, { DENSITY_CORRECTION: 1, DENSITY_CORRECTION_CID: dca.cid ?? "bafkreitestnodes",
     DENSITY_CORRECTION_NODE_TIMES_MS: dca.ms.map(BigInt), DENSITY_CORRECTION_LOG_DENSITY_SCALE_DIMENSIONLESS: dca.s });
   const b = new flatbuffers.Builder(8192);
