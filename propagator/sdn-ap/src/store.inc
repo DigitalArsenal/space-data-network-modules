@@ -196,7 +196,13 @@ inline void row_epoch(uint32_t i, double& whole, double& frac) {
 /// Row i at t minutes from its epoch: TEME km, km/s.
 inline int32_t row_propagate(uint32_t i, double t, double r[3], double v[3], const xpt::Bodies* shared = nullptr) {
   Store& st = store();
-  if (st.kind[i] == 1) return xpt::xp_propagate(st.xps[st.slot[i]], t, r, v, shared);
+  if (st.kind[i] == 1) {
+    // a batch's shared bodies are SGP4XP's (SPEC 5). The shipped module's row store holds no AP set (its fillers select
+    // no AP terms), so a batch at one time is SGP4XP's path; a row that is an AP set exists only in a test build, and
+    // this guard keeps it on its own bodies (SPEC 16.17, bodies_at_ap)
+    xpt::XpSat& x = st.xps[st.slot[i]];
+    return xpt::xp_propagate(x, t, r, v, x.ctx.ap_third_body ? nullptr : shared);
+  }
   const Sat& s = st.sats[st.slot[i]];
   return sat_propagate(s, nodes_of(s), t, r, v);
 }

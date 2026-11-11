@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.21 (dist 7b2ada3b).
+Version 0.6.22 (dist cdefcc13).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -824,6 +824,15 @@ places) *[study; lit: IAU 1976 system]*. Positions:
   *[study; probe 5.3: this Moon reproduces the library's direction and distance to 3e-13]*
 - JPL ephemerides are used only when loaded; the oracle does not load them, and release notes 9.3-9.9 still list
   "replace analytical theory of Sun and Moon position with JPL ephemeris for SGP4-XP" as planned work *[doc]*.
+- From 0.6.22 AP does not read this section's Sun and Moon (16.17); through 0.6.21 it did. Against DE440 over 2010-2035,
+  read as AP read them (UTC as the time argument, the mean equator of date taken for TEME; measured on 0.6.16), they are
+  off by 91.5 arcsec on average and 377 at worst (the Moon; 38 of it the time argument, 5.5 the frame) and 10.9 and 32
+  arcsec (the Sun): a third-body acceleration error of 3.7e-9 m/s^2 RMS at the geostationary radius. AP's own series are
+  within 0.74 and 4.1 arcsec (Moon) and 0.44 and 1.1 arcsec (Sun) there, 3.7e-11 m/s^2. Known approximation: AP's
+  bodies are in TEME of date, while its averaged
+  regime and resonance classes hold their elements in TEME of the epoch (16.4); the two part by about 1 arcsec at day 7
+  (0.42, 0.70 and 0.98 arcsec at days 3, 5 and 7), a third-body acceleration error at the geostationary radius of 1.5e-11,
+  2.5e-11 and 3.5e-11 m/s^2 RMS (the Moon; the Sun 1.6e-11 at day 7) that AP does not carry.
 
 **In the rates, averaged regime (epoch period below 1100 min).** The third-body disturbing function averaged over
 the satellite's mean anomaly, to the octupole (Legendre degree 3), each body held fixed at its position at the
@@ -3540,6 +3549,175 @@ At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/m
   propagator's -2.26e-9). Inclined geosynchronous rows: unchanged.
 - Cost: one closed-form term (two sines and cosines) where a sunlit-arc rate is evaluated.
 
+**16.17 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
+`sun_at`). Every AP path reads its own (`ap_bodies_at`, src/ap_bodies.inc): the rates in both regimes, the output-time
+terms, the radiation pressure and its shadow, the radiation term Y0 (16.13), the drag passes (16.12) and the Sun of the
+drag atmospheres. Flights read it through `bodies_at_ap`, the quintic through its values at the six nodes about the time,
+the nodes on an absolute grid of UTC every 8 hours (node k at 8k hours from 1950 January 0.0). Against the series at the
+same instants (20,000 instants of 2010-2035) the quintic is off by 0.00017 arcsec at the median and 0.0025 at the 99.9th
+percentile for the Moon (4 cm and 0.37 m in distance), 3e-8 and 2e-7 arcsec for the Sun; the largest, 0.017 arcsec and
+1.2 m, fall on the days with a leap second, whose UTC day is 86,401 s long. The second difference of either unit vector
+(60 s apart) steps by at most 1.5e-9 arcsec (Sun) and 1.2e-5 arcsec (Moon, mostly its own change of curvature) at a node.
+A node is a function of its time alone, so no set fills or owns one: each thread keeps the nodes it has read in a store
+of 256 slots by node index (85 days) and the six it read last, and every set and every thread reads the same numbers in
+any order. A batch of records at one time evaluates a node once per thread, not once per record; a fresh record whose
+epoch another record already flew reads its nodes from the store. Two times 85 1/3 days apart (256 nodes) share a slot:
+a thread asked for them in turn evaluates again the node it gave up (about 4.2 µs a node) and reads the same numbers, so
+a batch whose sets lie more than 85 days apart costs more on that thread and gives the same states. The grid is in UTC:
+on a leap-second day the series, a function of TT, bends where the UTC day begins and ends, which is where the quintic's
+largest errors fall, far inside the series' own 0.74 arcsec. A grid in TT would need UTC to TT at every read (ERFA's
+leap-second lookup, some 0.3 µs against about 20 ns for the read), so it stays in UTC. A batch at one time
+(`plugin_propagate_batch`, `sdnap_propagate_soa`) is SGP4XP's path: it flies the row store, which in the shipped module
+holds no AP set (`sdnap_init_elements`, `plugin_init`, `plugin_init_omm` and `ingest_omm` fill it with no AP terms
+selected), and it evaluates section 5's bodies once for its sets. A row that is an AP set exists only in a test build;
+`row_propagate` withholds the batch's bodies from it and it reads its own (test/set-caches.e2e.mjs, a store of AP sets
+and one mixing AP and SGP4XP sets, each bit for bit against the minutes call).
+
+*The series.* A least-squares fit to DE440 (Park et al. 2021; NAIF de440s.bsp, SHA-256 c1c7feea...49f2) at TT from
+1990 to 2060, every 0.61 days (42,514 samples), by tools/ap-bodies-fit.mjs; its coefficients are src/ap_bodies_series.inc
+(319 arguments, 548 coefficient records). Fitted are the Moon's longitude (less its mean longitude F + Omega), latitude and
+distance, and the Earth-Moon barycenter's Sun (longitude less F - D + Omega, latitude, distance), in the mean ecliptic and
+equinox of date (IAU 2006 precession, the Fukushima-Williams angles of Capitaine, Wallace and Chapront 2003, with the
+frame bias). Each is a quadratic in tau = T - 0.25 (T in Julian centuries of TT from J2000) plus the sine and cosine of
+integer combinations of the Delaunay arguments D, l, l', F, Omega (IERS Conventions 2010, eq. 5.43; Simon et al. 1994),
+the mean longitudes of Venus, the Earth, Mars, Jupiter and Saturn (eq. 5.44) and two planetary arguments of Meeus (1998,
+ch. 47), A2 and A3. The candidates are the lunar problem's combinations to order 8, those with Omega to order 3, and the
+planets against the Earth alone and with l, D, 2D, 2D - l, F and l'; candidates slower than a period of 50 years (the
+quadratic carries them over the span) or not separable in rate from a lower-order one over the span are left out. A term
+is kept above 0.15 arcsec (Moon longitude), 0.12 arcsec (latitude), 0.15 km (distance), 0.06 arcsec (Sun longitude and
+latitude) and 25 km (Sun distance); a term above 25 times that also takes an amplitude linear in tau (over the span the
+falling eccentricity of the Earth's orbit changes the Moon's terms in l' by up to 1 arcsec and the Sun's equation of the
+center by some 12 arcsec). The fit's residuals are 0.73, 0.50 arcsec
+and 0.65 km RMS for the Moon and 0.44, 0.08 arcsec and 126 km for the barycenter's Sun. The geocentric Sun is the
+barycenter's plus mu_M / (mu_E + mu_M) times the Moon (DE440's masses; 4,671 km on average).
+
+*Time and frame.* The series take TT, from UTC through ERFA's leap-second table (`frames::utc_to_tt`, as the GCRF
+rotation of 16.4 takes it); section 5 took UTC, which put the Moon 38 arcsec behind along its path. TDB - TT (under 2 ms)
+is left out. From the mean ecliptic of date the bodies go to TEME of date by the IAU 2006 mean obliquity, the fourteen
+largest luni-solar terms of IAU 2000B's nutation (McCarthy and Luzum 2003; IERS Conventions 2010, Table 5.3a) and the
+equation of the equinoxes: against the module's own GCRF-to-TEME (IAU 2006/2000A through ERFA, 16.4) 0.05 arcsec on
+average and 0.085 at worst over 2010-2035. Section 5's Sun and Moon are in the mean equator and equinox of date, 5.5 arcsec
+on average and 9.9 at worst from TEME.
+
+*Against DE440.* 2010-2035, 32,745 instants 0.29 days apart, DE440 turned to TEME of date by the module's GCRF-to-TEME;
+section 5 as AP read it through 0.6.21 (UTC for TT, the mean equator of date for TEME; measured on 0.6.16) and this
+section through `bodies_at_ap` (measured on 0.6.22):
+
+| | Section 5 | 16.17 |
+| --- | ---: | ---: |
+| Moon direction, mean / 95th percentile / worst (arcsec) | 91.5 / 195 / 377 | 0.74 / 1.57 / 4.14 |
+| Moon distance, RMS / worst (km) | 19.2 / 72.6 | 0.68 / 3.08 |
+| Sun direction, mean / worst (arcsec) | 10.9 / 32.0 | 0.44 / 1.08 |
+| Sun distance, RMS / worst (km) | 4,420 / 11,900 | 128 / 401 |
+| Moon's acceleration error at 42,164 km, RMS radial (m/s^2) | 3.7e-9 | 3.7e-11 |
+| Moon's acceleration error at 74,600 km, RMS radial (m/s^2) | 7.0e-9 | 6.9e-11 |
+| Sun's acceleration error at 42,164 km, RMS radial (m/s^2) | 2.4e-10 | 9.1e-12 |
+
+The acceleration errors are on an equatorial ring of eight points in TEME, the third-body point-mass acceleration with
+the module's bodies against DE440's. Section 5's Moon error split into the time argument (37.7 arcsec mean), the frame
+(5.5) and its series (83.4); its Sun's into the time argument (2.8), the frame (5.6), the barycenter's offset (4.2) and
+its series (9.9). Inside the fit's span but outside 2010-2035 the series measure 0.78 arcsec mean and 4.0 at worst for the
+Moon in 1990-2009 and 0.81 and 3.4 in 2036-2060. Outside the span they extrapolate the quadratic and the linear
+amplitudes. By decade over every year a satellite's epoch can fall in, against DE440 at the same instants 0.29 days apart
+(before 1972 UTC to TT by ERFA's TAI - UTC, as `frames::utc_to_tt` takes it; measured on 0.6.22), direction in arcsec:
+
+| Years | Moon, section 5: mean / 95th percentile / worst | Moon, 16.17 | Sun, section 5: mean | Sun, 16.17 |
+| --- | ---: | ---: | ---: | ---: |
+| 1957-1959 | 84.9 / 178 / 293 | 37.0 / 60.7 / 66.4 | 9.2 | 4.3 |
+| 1960-1969 | 88.9 / 191 / 409 | 25.3 / 45.2 / 55.2 | 11.1 | 4.0 |
+| 1970-1979 | 88.6 / 189 / 377 | 15.9 / 28.8 / 32.0 | 10.7 | 2.8 |
+| 1980-1989 | 92.0 / 197 / 411 | 5.3 / 12.2 / 19.3 | 10.8 | 2.3 |
+| 1990-1999 | 92.6 / 200 / 402 | 0.81 / 1.6 / 4.0 | 10.7 | 0.31 |
+| 2050-2060 | 89.6 / 191 / 360 | 0.82 / 1.6 / 3.1 | 10.3 | 0.37 |
+| 2061-2070 | 86.6 / 185 / 366 | 6.1 / 13.9 / 19.3 | 10.7 | 2.1 |
+| 2071-2080 | 87.5 / 186 / 371 | 17.4 / 31.3 / 38.8 | 12.5 | 3.2 |
+| 2081-2090 | 84.9 / 180 / 367 | 27.7 / 50.3 / 63.6 | 9.4 | 3.6 |
+| 2091-2100 | 86.8 / 183 / 377 | 45.2 / 78.7 / 96 | 11.7 | 4.2 |
+
+From 1957 to 2100 this section's Sun and Moon are the better in every decade, in mean, 95th percentile and worst alike.
+Further out the Moon's mean error grows past section 5's: from 1930 to 2120 this section's mean is the smaller, in the
+1920s the two are level (86.6 against 85.4 arcsec), and before 1920 (111 to 116 against 84 to 86) and after 2120 (93 to
+126 against 86 to 87) section 5's is; this section's worst stays below section 5's in every decade from 1900 to 2149.
+AP flies any epoch and does not switch between the two (a switch inside a flight would be a step).
+`test/ap-bodies.e2e.mjs` checks the module against 407 stored DE440 samples of 2010-2035
+(test/fixtures/de440-bodies-2010-2035.json, the same tool): the Moon within 8 arcsec and 6 km, RMS 2.5 arcsec and 1.5 km;
+the Sun within 2 arcsec and 600 km; the cache against the series, and its smoothness at the nodes.
+
+*Known approximations.* The branches whose mean elements hold epoch axes (16.4: the averaged regime and the resonance
+classes) carry the bodies in TEME of date, not of the epoch. The two part by 0.42, 0.70 and 0.98 arcsec at 3, 5 and 7
+days (1.19 at worst; 2010-2035): at 42,164 km a third-body acceleration error of 1.5e-11, 2.5e-11 and 3.5e-11 m/s^2 RMS
+radial from the Moon (8.9e-11 at worst at day 7) and 1.6e-11 from the Sun at day 7; 6.5e-11 at 74,600 km from the Moon.
+The long-period branch of class 0 holds TEME of date and has no such residue.
+
+*Effect on real windows* (72 h fits, the GEO lane's harness of the table's rows, real truth, FORCES.ECOM2 as the table
+flies it; medians at days 1, 3, 5 and 7 and the windows within the numerical propagator's error plus 100 m at day 5; 0.6.21
+to 0.6.22):
+- Inclined geosynchronous (60 windows): 3.39, 12.61, 31.29, 56.37 m to 1.81, 3.59, 6.89, 10.77 m, 59 of 59 both; better at
+  day 5 on 56 windows. The Y0 those fits solve was the Moon's error leaking into the radiation term (16.13).
+- Geostationary (35 windows): 3.90, 11.54, 26.91, 53.89 m to 3.74, 9.78, 26.31, 53.57 m; 29 of 32 to 28 of 32 (one window,
+  96.7 m before, leaves the line at 123.6 m); better at day 5 on 17 windows, worse on 15. Without FORCES.ECOM2 (the
+  sphere alone, AGOM fitted) the same windows go from 14.51, 61.62, 149.30, 273.16 m to 15.46, 65.19, 153.71, 283.30 m:
+  the old Moon's error, like section 4's shadow before 16.15 (stack #486), had been offsetting the satellites'
+  non-spherical radiation, which a sphere does not carry (on 0.6.20 this section alone took the day-3 median from 53.30
+  to 57.92 m, adding to 0.6.21's 53.30 to 61.62 m).
+- On sphere truth (the numerical propagator fitted to the real arc, flown with the sphere alone), day 7 with Y0 solved:
+  three inclined windows 61.8 to 83.4 m down to 3.7 to 16.2 m, the false Y0 from -0.8e-10 to -1.4e-10 m/s^2 down to +6e-13
+  to +3.1e-11; two geostationary windows level (day 5 2.2 to 2.6 m, day 7 5.8 to 6.1 m). On a made-up inclined
+  geosynchronous set in season (epoch 2026-01-26, AGOM 0.015, a sphere in the truth and no Y0): Y0 +1.01e-9 to +2.3e-11
+  m/s^2, day 5 21.9 to 2.1 m (with Y0 held 11.0 to 2.1 m).
+- TESS (seven real windows of `test/heo-frame.e2e.mjs`): worse, medians 610.7, 1,390.4, 6,553.6 m to 762.8, 1,677.5,
+  8,596.8 m at days 1, 3 and 7 (four windows worse, two better, one level). The Moon is what moves it, and on model truth
+  the third body is right there (below); AP's zonal theory on that orbit is 0.9 to 1.8 km off at day 7, and the old
+  Moon's error had partly offset it (stack #479).
+- Day-3 medians of `test/etalon-resonance.e2e.mjs` (fits that state no FORCES.ECOM2): Etalon-1 4.25 to 3.54 m, Etalon-2
+  5.31 to 4.84, LAGEOS-1 7.17 to 7.11, LAGEOS-2 6.92 to 6.80, LARES-2 8.71 to 8.66, inclined geosynchronous 13.45 to 7.60
+  m, and geostationary 61.62 to 65.19 m (above).
+
+*Effect on model truth* (72 h fits, day-7 whole-day 3D RMS; 0.6.16 to this section, on main without the one-day class's
+resonant tail unless stated):
+- Gravity 4 x 4 on both sides: inclined geosynchronous orbits (i 55 deg, e 0.003, six nodes) 5.35-25.85 m to 0.94-2.03 m;
+  geostationary (i 1.5 deg, four longitudes) 8.47-10.34 m to 1.53-3.21 m, the cross-track part 7.3-7.9 m to 0.7-1.1 m,
+  and the constant along-track acceleration fitted to the forecast from up to 4.6e-11 to 3e-12 m/s^2
+  (`test/one-day-moon-floor.e2e.mjs`: at most 5 m; with ECOM2 the Y0 found within 3.8e-11 m/s^2).
+- The third body by radius, seeded (no fit; gravity 4 x 4 on both sides, coefficients held), day 7, this section against
+  the same flight with the Sun and Moon off on both sides: a THEMIS-like orbit 284, 273, 278 m against 258, 231, 249 m; a
+  Chandra-like one (period 63.5 h, e 0.685) 292, 413, 510 m against 289, 426, 510 m; a TESS-like one (13.7 days, e 0.55)
+  1,746, 829, 1,818 m against 1,769, 884, 1,805 m. With section 5's Moon: 292, 292, 200 m; 468, 699, 478 m; 2,423,
+  2,052, 2,870 m.
+- Every HEO fixture of 16.6 moves, both ways (day 7, 0.6.19 to this): half-day sample 30.22 to 27.76 m (along-track RMS
+  31.45 to 36.15 m), 12 h at 55 deg sample 64.94 to 76.44 m, GTO 192.87 / 123.44 to 180.70 / 117.62 m along-track /
+  radial, the 500 km perigee GTO 94.07 / 56.07 to 82.34 / 51.79 m, Molniya with its drag coefficient pinned at the truth
+  80.71 / 50.51 to 84.01 / 51.16 m; Molniya with it fitted lands on the other of its fit's two solutions (stack #392:
+  0.04462 to 0.04576 against the truth's 0.044, day 7 332.6 to 763.9 m), inside its record's statement.
+- A GPS-like orbit (20 x 20, four nodes): 8.1, 5.4, 13.7, 13.1 m to 13.4, 9.9, 10.0, 8.7 m. The averaged regime's own
+  lunar theory carries that orbit's floor (DigitalArsenal/spacedatanetwork-stack#421), not the ephemeris: DE440's Moon in
+  a test build moved it the same way.
+- Four low orbits (400 to 1,400 km, 20 x 20, no drag): by 0.00 to -0.14 m.
+- A THEMIS-like orbit (period 22.9 h, perigee 900 km, e 0.82; three nodes), day 5: 104, 88, 131 m to 98, 86, 106 m with
+  4 x 4 on both sides; 126, 148, 167 m to 109, 132, 137 m against 70 x 70 with AP at (31, 20).
+- With the full field on both sides the one-day class's missing resonant gravity (#434) had been partly cancelling the
+  Moon's error: an inclined geosynchronous node at 20 x 20 goes from 11.8 to 35.6 m (along-track; cross-track 4.4 to
+  0.4 m) and, on real 72 h windows flown against the numerical propagator fitted to them, two of three inclined windows
+  get worse after day 3 (6.7 to 17.2 m and 3.6 to 21.1 m at day 7; the third 7.8 to 6.6 m).
+- With the tail and this section together the cancellation is gone. At 20 x 20 on both sides, day 7: geostationary
+  8.5-10.3 m with the tail alone to 1.6-3.2 m (cross-track 7.3-7.9 to 0.7-1.1 m), inclined geosynchronous 5.4-25.9 m to
+  1.0-2.0 m, the same as at 4 x 4 within 0.05 m. On five real windows (tail alone to both), the three inclined ones from
+  14.0-20.0 m to 2.3-3.4 m at day 7, and the two geostationary ones from 13.4 to 8.5 m at day 5 and 34.2 to 20.6 m at
+  day 7 (0.6.16: 58.5 and 95.1 m). What is left on the second (about 18 of its 20.6 m at day 7) is the radiation
+  pressure: with it off on both sides the same window is 1.7 m, so it is AP's sphere against the numerical propagator's
+  in eclipse season, not the Sun or Moon (measured before 0.6.21's shadow, 16.15).
+
+*Cost.* One evaluation of the series costs about 4.2 µs against SPEC 5's 0.28 (rough, under load); with nodes 8 h apart
+a flight evaluates eight times fewer of them than SPEC 5's hourly cache did, and a fresh record whose times another
+flight already read evaluates none. Under load (115 to 120 on 28 cores, niced, 0.6.16 against this section alternated
+two to five times, `test/kernel-cost.mjs`), AP's cost per state over SGP4's at 300 s moved within the runs' spread
+(medium Earth orbit 1.28 to 1.49 against 1.11 to 1.34, geostationary 2.23 to 2.55 against 2.12 to 2.43, 500 km 2.60 to
+4.22 against 2.25 to 3.82); the first state of a fresh record a week from its epoch fell (geostationary 1,439 to 1,471 µs
+against 1,273 to 1,278, medium Earth orbit 200 to 237 against 178 to 188, apart from single spikes in both builds); and
+10,000 fresh records asked at one instant a day after their epoch cost 125.5 against 132.7 µs a record (medium Earth
+orbit), 209.1 against 237.1 (geostationary) and 126.1 against 131.0 (500 km). A process's first evaluations (about 40 µs
+for a day's nodes, 110 µs for a week's) are paid once per thread and time range.
+
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 
@@ -4098,7 +4276,16 @@ pass W4 (18.5, #394).
   statistical comparisons and scientific issues. JGR 107(A12), 1468.
 - Montenbruck, O., Gill, E. (2000). Satellite Orbits. Springer.
 - The Astronomical Almanac, section C (Sun) and D (Moon), low-precision formulas.
-- Meeus, J. (1998). Astronomical Algorithms, 2nd ed., chapter 25. Brouwer, D., Clemence, G. M. (1961). Methods of
+- Park, R. S., Folkner, W. M., Williams, J. G., Boggs, D. H. (2021). The JPL planetary and lunar ephemerides DE440 and
+  DE441. AJ 161, 105.
+- Petit, G., Luzum, B., eds. (2010). IERS Conventions (2010). IERS Technical Note 36, chapter 5 (eq. 5.43 and 5.44,
+  Table 5.3a). Simon, J. L., Bretagnon, P., Chapront, J., Chapront-Touzé, M., Francou, G., Laskar, J. (1994). Numerical
+  expressions for precession formulae and mean elements for the Moon and the planets. A&A 282, 663-683.
+- Capitaine, N., Wallace, P. T., Chapront, J. (2003). Expressions for IAU 2000 precession quantities. A&A 412, 567-586.
+  McCarthy, D. D., Luzum, B. J. (2003). An abridged model of the precession-nutation of the celestial pole. Celestial
+  Mechanics and Dynamical Astronomy 85, 37-49.
+- Chapront-Touzé, M., Chapront, J. (1983). The lunar ephemeris ELP 2000. A&A 124, 50-62 (the source of Meeus's A2 and A3).
+- Meeus, J. (1998). Astronomical Algorithms, 2nd ed., chapters 25 and 47. Brouwer, D., Clemence, G. M. (1961). Methods of
   Celestial Mechanics. Montenbruck, O., Pfleger, T. (2000). Astronomy on the Personal Computer, 4th ed., chapter 3.
 - Seidelmann, P. K., ed. (1992). Explanatory Supplement to the Astronomical Almanac.
 - US Space Force Astrodynamics Standards: release notes 7.7-9.9, JIRA summaries 8.2-9.9, Tle and Sgp4Prop

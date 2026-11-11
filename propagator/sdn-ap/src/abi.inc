@@ -490,6 +490,21 @@ int32_t sdnap_frame_probe(double whole, double frac, const double* in, double* o
   return 0;
 }
 
+/// Sun and Moon diagnostics at the UTC Julian date whole + frac: mode 0 SGP4XP's (SPEC 5, bodies_at: mean equator and
+/// equinox of date), 1 AP's series at that time (SPEC 16.17, ap_bodies_at: TEME of date), 2 what AP's flights read
+/// (bodies_at_ap: the quintic through six nodes). out (8 doubles): the Sun's unit vector and distance (km), the Moon's
+/// unit vector and distance (km). Returns 0, or -1 for a bad mode or a null output.
+SDNAP_EXPORT("sdnap_bodies_probe")
+int32_t sdnap_bodies_probe(double whole, double frac, int32_t mode, double* out) {
+  using namespace sdnap::xpt;
+  if (out == nullptr || mode < 0 || mode > 2) return -1;
+  const double d50 = (whole - sdnap::kJd1950) + frac;
+  const Bodies b = mode == 0 ? bodies_at(d50) : (mode == 1 ? ap_bodies_at(d50) : bodies_at_ap(d50));
+  const double v[8] = {b.sun_u.x, b.sun_u.y, b.sun_u.z, b.sun_r * kRe, b.moon_u.x, b.moon_u.y, b.moon_u.z, b.moon_r * kRe};
+  for (int k = 0; k < 8; ++k) out[k] = v[k];
+  return 0;
+}
+
 /// SPEC 4 diagnostics: at the mean elements of row `index` at `minutes`, the
 /// shadow test's margin: the smallest |S(nu)| over the boundary candidates with
 /// n(nu) < 0 (the test is |S| < 1e-12), negative when the sunlit arc was found;
