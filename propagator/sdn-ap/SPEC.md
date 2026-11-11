@@ -3332,6 +3332,11 @@ state and integrator, in season.
 
   Out of season, as the numerical model's own baseline: -5.8 m on the C229-like set and -0.9 m Galileo-like.
 
+*Cost* (provisional, niced under a load of about 100): the shadow takes 265 ns against the closed form's 183 ns per
+call at Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the
+transfer orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's
+per-state costs moved by 0.94 to 1.16 times, within that load's spread.
+
 **16.15 The mean longitude over a sunlit arc** (stack issue 472). Section 4's averaged rates count the shadow; its
 output-time short-period terms (Kozai 1961; Aksnes 1976) do not, being periodic in E with the Sun held fixed and no
 shadow. The two clash in an eclipse season, twice:
@@ -3375,11 +3380,19 @@ At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/m
 - The closed form agrees with the same term computed numerically to centimeters in flight.
 - Between AP with and without 16.15, a 7-day flight in season moves by 103 m (geostationary) and 110 m
   (Galileo-like), and out of season it is byte for byte.
+- Fitted to the numerical propagator's cannonball (FFM, cone, EGM96 70 x 70, Sun and Moon, no Y0 in the truth),
+  72 h, then flown, with 16.14 and 16.15 against without them, day 5 / day 7:
 
-*Cost* (provisional, niced under a load of about 100): the shadow takes 265 ns against the closed form's 183 ns per
-call at Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the
-transfer orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's
-per-state costs moved by 0.94 to 1.16 times, within that load's spread.
+  | Set | Without | With |
+  | --- | --- | --- |
+  | geostationary, made-up, in season, i 0.05 deg | 28.1 / 43.6 m | 12.9 / 17.2 m |
+  | geostationary, made-up, in season, i 2 deg | 24.3 / 41.3 m | 12.1 / 15.6 m |
+
+  The fitted AGOM moves from 2.3 % low to within 0.05 % of the truth's (times 1.0088, 16.14). On the release
+  table's real geostationary rows, 72 h fits with ECOM2 as the table flies them: the day-5 median goes from 88.4 to
+  26.9 m and the windows inside the line from 26 to 29 of 32 (QZS-2G: Y0 found -2.14e-9 against the numerical
+  propagator's -2.26e-9). Inclined geosynchronous rows: unchanged.
+- Cost: one closed-form term (two sines and cosines) where a sunlit-arc rate is evaluated.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
