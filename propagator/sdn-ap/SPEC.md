@@ -1541,7 +1541,7 @@ Refusals). 9.9 has no further fallback: the 30-minute steps of the 9.1.1.0 build
 The step is fixed (95 min in the long-period regime, 38 min in AP's one-day class) with no error control. It resolves perigee
 only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at 95 min and 0.70 at 38 min on a one-day orbit. Beyond that the theory's
 own equations are integrated with a mean-longitude error of 0.2 km a week at e 0.5 and 0.4 to 4.6 km a week at e 0.7 to 0.82 at
-95 min, and 0.09 to 0.17 km at e 0.82 at 38 min. From 0.6.17 an AP set above e_0 0.3 takes the shorter step of 16.10.
+95 min, and 0.09 to 0.17 km at e 0.82 at 38 min. From 0.6.16 an AP set above e_0 0.3 takes the shorter step of 16.10.
 
 **Output between nodes.** Cubic Hermite interpolation on the bracketing nodes (values and rates), with
 q = (t - t_k) / (t_k+1 - t_k): y(t) = (1 + 2q)(1 - q)^2 y_k + q (1 - q)^2 h y'_k + q^2 (3 - 2q) y_k+1 +
@@ -2465,7 +2465,7 @@ unchanged: one of its eight cells (ABOVE, day 1) is now inside the band, none wa
 95 min and 0.70 at 38 min on a one-day orbit. Beyond that the theory's own equations are integrated with a mean-longitude error
 of 0.2 km a week at e 0.5 and 0.4 to 4.6 km a week at e 0.7 to 0.82 at 95 min, and 0.09 to 0.17 km at e 0.82 at 38 min.
 
-From 0.6.17 an AP set in the long-period regime with e_0 above 0.3 steps
+From 0.6.16 an AP set in the long-period regime with e_0 above 0.3 steps
 
   h = min(h_0, 0.5 tau), tau = (1 - e_0)^(3/2) / n_0 (n_0 in rad/min),
 
@@ -2507,8 +2507,8 @@ shortened only near perigee would keep the accuracy at about the 38-minute cost 
 
 FFM model truth on the THEMIS-like orbit (EGM96 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either
 side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3 / 5 / 7):
-- 0.6.16 (38 min): 160.1 / 468.9 / 918.6 / 1,168.2 m.
-- From 0.6.17 (8.20 min): 76.6 / 110.0 / 122.9 / 124.9 m.
+- Through 0.6.15 (38 min): 160.1 / 468.9 / 918.6 / 1,168.2 m.
+- From 0.6.16 (8.20 min): 76.6 / 110.0 / 122.9 / 124.9 m.
 - With the Sun and the Moon off on both sides: 76.2 / 107.5 / 120.9 / 102.7 m, at either step. The step's error was the third
   bodies' alone.
 - Without the step's error, what remains (day 5) is AP's geopotential: J2 alone on both sides 39.8 m, J2 to J5 78.9 m, a
