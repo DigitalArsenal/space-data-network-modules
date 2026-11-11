@@ -1881,7 +1881,7 @@ another, and no claim here rests on that. The rows on all 28 window-arcs (7 wind
 | SGP4XP | TESS, 72 h | 1 | 7.731 / 3.975 / 1.472 > 0.521 / 0.195 / 0.821 | 6 / 6 / 0 > 0 / 0 / 0 | 0.00 > 1.00 |
 | SGP4XP | TESS, 336 h | 7 | 17.320 / 25.385 / 1.309 > 0.850 / 1.090 / 0.556 | 7 / 7 / 0 > 0 / 1 / 0 | 0.00 > 0.71 |
 | SGP4XP | Chandra, 72 h | 5 | 1.834 / 5.943 / 6.140 > 0.311 / 0.770 / 2.608 | 3 / 5 / 5 > 1 / 1 / 3 | 0.00 > 0.43 |
-| SGP4XP | Chandra, 168 h | 7 | 7.015 / 5.120 / 0.819 > 1.928 / 1.521 / 0.400 | 5 / 6 / 1 > 2 / 1 / 1 | 0.00 > 0.43 |
+| SGP4XP | Chandra, 168 h | 7 | 7.015 / 5.120 / 0.819 > 1.926 / 1.520 / 0.400 | 5 / 6 / 1 > 2 / 1 / 1 | 0.00 > 0.43 |
 
 The covariance is too narrow on Chandra at several cells (AP's cross-track at day 5 of the 72 h fits, 3.05 at the
 median), but nowhere narrower than under the ABOVE row. THEMIS is not in this set: its perigee is in the drag.
