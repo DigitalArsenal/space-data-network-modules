@@ -8,7 +8,7 @@
 //    switch) and every row's size finite and not negative; on the THEMIS A-like set the grid holds terms of degree 5 and up and
 //    terms of degree 3 and 4 with |q| above 4, the terms 0.6.18 carried nowhere.
 // 2. FFM model truth: a made-up THEMIS A-like set whose fitted mean motion lies in the band (initial elements 1.0426 rev/day,
-//    e 0.8246, i 11.9, node 90, perigee 300 deg; fitted 1.0493 rev/day). EGM96 70 x 70, Sun and Moon from DE440, no drag or
+//    e 0.8246, i 11.9, node 90, perigee 300 deg; fitted 1.0493 rev/day). EGM2008 70 x 70, Sun and Moon from DE440, no drag or
 //    radiation pressure on either side; a 72 h fit flown 7 days on a 10-minute grid. Outcome: the day-5 whole-day 3D RMS is
 //    within 150 m (measured 92.0 m; 475.6 m through 0.6.18).
 import assert from 'node:assert/strict';

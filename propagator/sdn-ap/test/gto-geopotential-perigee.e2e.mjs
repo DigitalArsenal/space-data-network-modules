@@ -3,7 +3,7 @@
 // at most a 32nd of the period of its resonant angle lambda - 2 theta instead of two revolutions. Baseline the 0.4.13
 // release (git c938b91d8); a test build REFERENCE of this package steps the class at 23.75 min (converged: 11.875 min
 // moves it by under 0.003 m in 7 days).
-// Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM96 70x70, Sun and Moon from DE440; 72 h fits from an
+// Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM2008 70x70, Sun and Moon from DE440; 72 h fits from an
 // osculating perigee; 7 days flown hourly; day-7 whole-day RMS):
 // 1. the GTO fixture (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): along-track and radial each at most 500 m,
 //    0.4.13's values printed first (960.82 / 935.27 m);

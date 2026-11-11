@@ -4,7 +4,9 @@
 // SGP4XP $OCM of sdn-ap `fit` on its own fixture inputs, and two sets turned across A's plane and refitted by sdn-ap
 // from their own flights, so each carries the covariance of its own fit (an epoch covariance belongs to its elements);
 // here, through the SDS object API, an identity, one more turned set with no covariance, a theory retyped, the weather
-// rows removed, and one SGP4 $OMM. A turn puts the set's plane across A's and its perigee and phase at the crossing
+// rows removed, and one SGP4 $OMM. Every sdn-ap flight here is sdn-ap 0.6.34's dist (git 0e365d3f, its SHA-256 checked):
+// from 0.6.36 sdn-ap refuses an AP record that states another gravity field than its own, so the AP sets A and B (and C, F
+// and G, made from A) would be refused there; the SGP4XP sets still fly on it. A turn puts the set's plane across A's and its perigee and phase at the crossing
 // (the plane intersection of two orbits of one inclination; the sets' own mean motion keeps the crossing each revolution):
 //   A  the AP set as recorded (covariance carried);
 //   B  the AP set turned by RA_OF_ASC_NODE + 90 deg and refitted: a fast encounter (about 8.6 km/s) each revolution;
@@ -60,7 +62,10 @@
 // JS builds records with the SDS object API, moves bytes and compares what the modules produced.
 //   node tests/ocm-sets-screening.e2e.mjs
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as flatbuffers from 'flatbuffers';
 import { OCM } from 'spacedatastandards.org/lib/js/OCM/OCM.js';
@@ -77,7 +82,20 @@ const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}`); if (!ok) failures.push(label); };
 const T = (name) => ({ schemaName: `${name}.fbs`, fileIdentifier: `$${name}`, rootTypeName: name, wireFormat: 'flatbuffer' });
-const SDN_AP_VERSION = JSON.parse(fs.readFileSync(here('../../../propagator/sdn-ap/plugin-manifest.json'), 'utf8')).version;
+// The sdn-ap build the registered sets fly through: the AP sets are sdn-ap 0.5.2 fits that state GRAVITY_MODEL EGM-96,
+// which sdn-ap refuses from 0.6.36 (its field is EGM2008, SPEC 16.2), so the screen flies every set through 0.6.34's dist,
+// the newest that flies them, read from git and its SHA-256 checked. Its two SGP4XP byte comparisons against the 0.18.1
+// events fail there as on main without the pin (stack #536).
+const SDN_AP_PIN = { version: '0.6.34', commit: '0e365d3f730e7c1a77e6b869c8b1e62e26692ba5', sha256: 'a18f1243180471e254da8cb7e692d3d8cae9944821f04f9ba3b3e026be9b65cc' };
+const SDN_AP_VERSION = SDN_AP_PIN.version;
+const sdnApPinned = (() => {
+  const bytes = execFileSync('git', ['-C', here('../../..'), 'show', `${SDN_AP_PIN.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
+  const got = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (got !== SDN_AP_PIN.sha256) throw new Error(`sdn-ap ${SDN_AP_PIN.version} pin: sha256 ${got}, expected ${SDN_AP_PIN.sha256}`);
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ca-sdn-ap-')), `sdn-ap-${SDN_AP_PIN.version}.wasm`);
+  fs.writeFileSync(file, bytes);
+  return file;
+})();
 
 // The registered sets and their derivations (bytes through the object API; nothing computed).
 const fixture = (name) => new Uint8Array(fs.readFileSync(here(`fixtures/ocm-sets/${name}-fit-sdn-ap-0.5.2.ocm`)));
@@ -143,7 +161,7 @@ const startJd = Date.parse(`${a.MEAN_ELEMENTS.EPOCH}Z`) / 86400000 + 2440587.5;
 const window = { startJd, durationDays: 1 };
 const controls = { thresholdKm: 20, coarseStepSec: 60, workers: 4, algorithm: 'FOSTER', fineTolSec: 0.001, combinedRadiusM: 10 };
 
-const sdnAp = await sdnApHarness('browser', here('../../../propagator/sdn-ap/dist/isomorphic/module.wasm'), { surface: 'direct' });
+const sdnAp = await sdnApHarness('browser', sdnApPinned, { surface: 'direct' });
 const conjunction = await createConjunctionCommandHarness({ runtimeKind: 'browser' });
 const flatc = await initCqrFlatc();
 const decodeRecord = (schema, bytes) => parseFlatcJson(flatc.generateJSON(publishedSchema(schema), { path: `/${schema}.bin`, data: bytes }, { defaultsJson: true }));

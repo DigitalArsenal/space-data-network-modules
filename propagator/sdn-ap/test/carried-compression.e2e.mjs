@@ -2,7 +2,7 @@
 // E2E (issue 316, SPEC 18.4): the record's compression against the forecast it carries. For each regime (low orbit at
 // 300, 500, 830 and 1,336 km, medium, geosynchronous and inclined geosynchronous orbit, a transfer orbit at e 0.72,
 // Molniya at e 0.74, a THEMIS-like orbit at e 0.82, an orbit at e 0.9 and a TESS-like orbit), a numerical forecast made by
-// propagator/ffm (EGM96 70 x 70, Sun and Moon from DE440, solar radiation pressure, drag where the orbit reaches it;
+// propagator/ffm (EGM2008 70 x 70, Sun and Moon from DE440, solar radiation pressure, drag where the orbit reaches it;
 // GCRF every 10 s) is fitted with OUTPUT.START_TIME to
 // STOP_TIME over its span from its states every 30 s (positions and velocities); then the record is flown by propagate:
 // - at every 10-s time of the forecast not used in the build (not a multiple of 30 s), within 0.1 m and 0.1 mm/s of the
@@ -42,7 +42,7 @@ const ffmPath = new URL("../../ffm/dist/isomorphic/module.wasm", import.meta.url
 const EPOCH_WHOLE = 2461328.5;  // 2026-10-15T00:00:00Z
 const BASE_MS = Date.UTC(2026, 9, 15);
 const MU = 398600.4418, STEP = 10, BUILD = 30;
-const FORCE_TEXT = "propagator/ffm: EGM96 70 x 70, Sun and Moon (DE440), solar radiation pressure, drag (cd 2.2, 10 m2, 1000 kg) on constant weather issued 2026-10-15 (F10.7 150, Ap 15)";
+const FORCE_TEXT = "propagator/ffm: EGM2008 70 x 70, Sun and Moon (DE440), solar radiation pressure, drag (cd 2.2, 10 m2, 1000 kg) on constant weather issued 2026-10-15 (F10.7 150, Ap 15)";
 const kernel = fs.readFileSync(new URL("../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp", import.meta.url));
 const REGIMES = [
   { name: "LEO 300 km", a: 6678.137, e: 0.0005, i: 51.6, days: 1, drag: true },
@@ -86,7 +86,7 @@ async function forecast(c) {
       epochJD: EPOCH_WHOLE + (k0 * STEP) / 86400, epochTimeScale: "UTC", targetJD: EPOCH_WHOLE + (k1 * STEP) / 86400, targetTimeScale: "UTC",
       position: state.slice(0, 3), velocity: state.slice(3), frame: "GCRF",
       sampleEpochsJD: Array.from({ length: k1 - k0 + 1 }, (_, j) => ({ jd: EPOCH_WHOLE + ((k0 + j) * STEP) / 86400, scale: "UTC" })),
-      forces: { gravityMode: "EGM96", maxDegree: 70, maxOrder: 70, thirdBody: true, srp: true, drag: c.drag, massKg: 1000, areaM2: 10, cd: 2.2 },
+      forces: { gravityMode: "EGM2008", maxDegree: 70, maxOrder: 70, thirdBody: true, srp: true, drag: c.drag, massKg: 1000, areaM2: 10, cd: 2.2 },
       weather: { epochUTCJD: EPOCH_WHOLE, F107: 150, F107a: 150, Ap: 15, Kp: 3 },
       integrator: { tolerance: 1e-13, minStep: 0.01, maxStep: 120 },
       ephemerisSource: "JPL_SPK",

@@ -3,7 +3,7 @@
 // analytic Moon. A known defect (test/known-defects.json) through 0.6.19, kept apart from test/one-day-resonant-tail.e2e.mjs
 // so that test stays strict; it passes from AP's own Sun and Moon (SPEC 16.17): day 7 0.94 to 2.03 m at the six nodes
 // (median 1.24 m), the Y0 found -3.8e-11 to +3.3e-11 m/s^2 (day 7 with it 1.2 to 7.7 m).
-// Model truth: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256; EGM96 4 x 4, DE440 Sun and Moon, no
+// Model truth: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256; EGM2008 4 x 4, DE440 Sun and Moon, no
 // radiation pressure, no drag, zero EOP, RK78 1e-12 and 300 s); AP FORCES 4,0; made-up inclined geosynchronous sets at
 // 2026-10-29 00:00 UTC (n 1.0027379 rev/day, e 0.003, i 55 deg, argument of perigee 270, ascending node at longitudes 0, 60,
 // ..., 300 deg); a 72 h fit; 7 days flown on a 1 h grid.
