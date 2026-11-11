@@ -2,7 +2,8 @@
 // E2E (sdn-ap 0.6.5): WASM SIMD128 + fast-trig + stage-cached RK3 + analytic/SIMD covariance Jacobian
 // for AP (theory 5), preserving bit-for-bit identity on SGP4 (type 0) and SGP4XP (type 4) against 0.6.4
 // (commit cfd750eb8), sub-centimeter AP state agreement (<= 1 cm circular/MEO/GEO, <= 5 cm high-e over 7 days),
-// <= 1e-3 relative AP covariance agreement over 24 h, valid $OCM/$ODR fit with zero USER_DEFINED_* fields,
+// <= 1e-3 relative AP covariance agreement over 48 h with 0.6.21's recorded numbers (test/fixtures/ap-fit-0.6.4-0.6.21.cov),
+// valid $OCM/$ODR fit with zero USER_DEFINED_* fields,
 // and thread-count bit-determinism.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -133,11 +134,19 @@ try {
       const dr = Math.hypot(lines1[k].X - lines0[k].X, lines1[k].Y - lines0[k].Y, lines1[k].Z - lines0[k].Z) * 1000;
       if (dr > maxDrMeters) maxDrMeters = dr;
     }
-    console.log(`PASS AP 7-day state equivalence (${pcfOutputFrame[frame]}): worst |dr| = ${(maxDrMeters * 100).toFixed(4)} cm (limit <= 1.0 cm)`);
     assert.ok(maxDrMeters <= 0.01, `AP 7-day |dr| ${maxDrMeters} m exceeds 1 cm`);
+    console.log(`PASS AP 7-day state equivalence (${pcfOutputFrame[frame]}): worst |dr| = ${(maxDrMeters * 100).toFixed(4)} cm (limit <= 1.0 cm)`);
   }
 
-  // Covariance propagation equivalence on the same AP $OCM over 289 grid epochs (24 h at 5-min cadence)
+  // Covariance on the same AP $OCM over the 289 grid epochs (48 h at 10 min): this build against 0.6.21's numbers of it
+  // (test/fixtures/ap-fit-0.6.4-0.6.21.cov; the 0.6.4 dist's fit is the stored record ap-fit-0.6.4.ocm byte for byte).
+  // Through 0.6.20 the reference was the 0.6.4 dist's own numbers; 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472)
+  // moves them: against the 0.6.4 dist's, 0.6.20 7.2e-5 and 0.6.21 9.217e-3 of a time's largest entry, the bound kept.
+  // Why: the record's correlations between AGOM and the state are 0.6.4's fit's, and 16.16 moves its along-track response
+  // to AGOM at 48 h from 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within
+  // 7.1e-5 (covariance.e2e.mjs). The 0.6.4 dist still flies it for the timing line.
+  assert.ok(Buffer.from(ocmBaseBytes).equals(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.4.ocm"))), "the 0.6.4 dist's fit is not the stored record");
+  const recordedCov = new Float64Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.4-0.6.21.cov")).buffer.slice(0));
   const covTimes = [];
   for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) covTimes.push(t);
   const evalCov = (harness, ocmBytes) => {
@@ -158,9 +167,10 @@ try {
   const currMs = performance.now() - t0Curr;
   assert.equal(cBase.status, 0);
   assert.equal(cCurr.status, 0);
+  assert.equal(recordedCov.length, 42 * covTimes.length);
   let worstCovRel = 0;
   for (let k = 0; k < covTimes.length; k++) {
-    const p0 = cBase.out.subarray(42 * k + 6, 42 * k + 42);
+    const p0 = recordedCov.subarray(42 * k + 6, 42 * k + 42);
     const p1 = cCurr.out.subarray(42 * k + 6, 42 * k + 42);
     const scale = Math.max(...Array.from(p0, Math.abs));
     for (let q = 0; q < 36; q++) {
@@ -168,8 +178,8 @@ try {
       if (rel > worstCovRel) worstCovRel = rel;
     }
   }
-  console.log(`PASS AP 289-epoch covariance equivalence: worst relative diff = ${worstCovRel.toExponential(3)} (limit <= 1e-3); telemetry 0.6.4=${baseMs.toFixed(2)} ms -> 0.6.5=${currMs.toFixed(2)} ms`);
-  assert.ok(worstCovRel <= 1e-3, `AP covariance relative diff ${worstCovRel} exceeds 1e-3`);
+  assert.ok(worstCovRel <= 1e-3, `AP covariance relative diff ${worstCovRel} against 0.6.21's numbers exceeds 1e-3`);
+  console.log(`PASS AP 289-epoch covariance against 0.6.21's numbers: worst relative diff = ${worstCovRel.toExponential(3)} (limit <= 1e-3); telemetry 0.6.4=${baseMs.toFixed(2)} ms -> this build=${currMs.toFixed(2)} ms`);
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }
