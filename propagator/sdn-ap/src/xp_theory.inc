@@ -1830,17 +1830,41 @@ inline double ap_lambda_shadow_dn(double A, double B, double e, double eta, doub
 ///   shadow, its value at M2 + [(K_n(E2) + rho_n L + c_n + dL - rate_full_lambda)(M - M2) - (rate_arc_n / n)(M - M2)^2 / 2] / n
 ///           - (K_lambda(E) - K_lambda(E2)) + c_lambda,
 /// dL = rate_full_lambda - rate_arc_lambda - (1 / 2 pi) int_shadow K_n dM (the Gauss rate's average over the shadow).
-/// The means take int_shadow K dM by 8-point Gauss-Legendre in E (K_n's in closed form). K and the rates are the
-/// caller's arrangement (AP's, or section 4's for near-equatorial long-period sets): out_at(sE, cE, d) the output-time
-/// terms at E, arc(d) and full(d) the sunlit-arc and wholly sunlit rates. K_E: the terms at the output's E; dd: what
-/// to add to them (0 for a wholly sunlit orbit, which the caller then leaves alone).
-template <class OutAt, class ArcRates, class FullRates>
-inline bool srp_output_shadow_ap(double e, double eta, double E, double sE, double cE, double a, double n, double A,
-                                 double B, double Fs, double E1, double E2, double s1, double c1, double s2, double c2,
-                                 const double* K_E, OutAt out_at, ArcRates arc_rates, FullRates full_rates, double* dd) {
+/// The means take int_shadow K dM by 8-point Gauss-Legendre in E (K_n's in closed form). The parameters depend on the
+/// slow geometry only (the mean orbit and the Sun); srp_shadow_delta evaluates the change at a state's mean longitude.
+struct SrpShadowParams {
+  bool arc = false;
+  double e = 0.0, eta = 1.0, a = 1.0, n = 1.0, varpi = 0.0, A = 0.0, B = 0.0, C = 0.0, Fs = 0.0;
+  AngleTrig ag{};
+  double lam1 = 0.0, L = 0.0, S = 0.0, inv_n = 1.0;  ///< the exit's mean longitude, the sunlit arc and the shadow (rad of M)
+  double K2[6]{}, rho[6]{}, cst[6]{}, far[6]{};
+  double far_n = 0.0, slope_n = 0.0, lam_M2 = 0.0, k_sh = 0.0, c_lam = 0.0;
+};
+
+/// SPEC 16.16 parameters of the mean state y with the Sun's unit vector su and distance sun_r (R_E); false (P.arc
+/// false) for a wholly sunlit orbit. The output-time terms and the rates in AP's arrangement.
+inline bool srp_shadow_params(const double* y, Vec3 su, double sun_r, double agom, SrpShadowParams& P) {
+  P.arc = false;
+  const Frame fr = frame_of(y);
+  const Kepler k = kepler_of(y, fr.a);
+  if (!(k.e < 1.0) || !(fr.n > 0.0)) return false;
+  const AngleTrig ag = angle_trig(k);
+  const Perifocal pf = perifocal_of(ag);
+  double A, B, C;
+  direction_cosines(pf, su, A, B, C);
+  double E1, E2, s1, c1, s2, c2;
+  if (!ap_sunlit_arc(A, B, k.e, fr.eta, (1.0 - fr.e2) * k.a, E1, E2, s1, c1, s2, c2)) return false;
+  const double rs_au = sun_r * kRe / kAu;
+  const double Fs = kSrpPressure * agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
+  const double e = k.e, eta = fr.eta, a = k.a, n = fr.n;
+  P.e = e; P.eta = eta; P.a = a; P.n = n; P.A = A; P.B = B; P.C = C; P.Fs = Fs; P.ag = ag;
+  P.varpi = std::atan2(y[kAg], y[kAf]);
+  auto out_at = [&](double s, double c, double* d) {
+    srp_output_ap(e, eta, s, c, ag.sw, ag.cw, ag.sO, ag.cO, ag.si, ag.ci, a, n, A, B, C, Fs, d);
+  };
   double far[6], ful[6], K1[6], K2[6], Ish[6] = {0, 0, 0, 0, 0, 0};
-  arc_rates(E1, E2, s1, c1, s2, c2, far);
-  full_rates(ful);
+  srp_rates_arc_ap(e, eta, ag.sw, ag.cw, ag.sO, ag.cO, ag.si, ag.ci, a, n, E1, E2, s1, c1, s2, c2, A, B, C, Fs, far);
+  srp_rates_sunlit_ap(e, eta, ag.sw, ag.cw, ag.sO, ag.cO, ag.si, ag.ci, a, n, A, B, C, Fs, ful);
   out_at(s1, c1, K1);
   out_at(s2, c2, K2);
   const double M1 = E1 - e * s1, M2 = E2 - e * s2, L = M2 - M1, S = kTwoPi - L, inv_n = 1.0 / n;
@@ -1866,7 +1890,7 @@ inline bool srp_output_shadow_ap(double e, double eta, double E, double sE, doub
     };
     Ish[kN] = 3.0 * Fs / (a * n) * (G(E1 + kTwoPi) - G(E2));
   }
-  double rho[6], cst[6];
+  double rho[6] = {0, 0, 0, 0, 0, 0}, cst[6] = {0, 0, 0, 0, 0, 0};
   for (int j : {kAf, kAg, kChi, kPsi, kN}) {
     rho[j] = (ful[j] - far[j]) * inv_n;
     const double mean = (rho[j] * L * L * 0.5 + S * (K2[j] + rho[j] * L) - far[j] * inv_n * S * S * 0.5 - Ish[j]) / kTwoPi;
@@ -1879,20 +1903,55 @@ inline bool srp_output_shadow_ap(double e, double eta, double E, double sE, doub
   const double int_sun = (rho[kN] * L * L * L / 6.0 + slope_n * L * L * 0.5) * inv_n;
   const double int_sh = S * lam_M2 + (k_sh * S * S * 0.5 - far[kN] * inv_n * S * S * S / 6.0) * inv_n - (Ish[kLam] - K2[kLam] * S);
   const double c_lam = -(int_sun + int_sh) / kTwoPi;
-  // where the output is: x from the exit along the sunlit arc, or y from the entry through the shadow
-  const double M = E - e * sE;
-  double m = std::fmod(M - M1, kTwoPi);
-  if (m < 0.0) m += kTwoPi;
-  if (m <= L) {
-    for (int j : {kAf, kAg, kChi, kPsi, kN}) dd[j] = rho[j] * m + cst[j];
-    dd[kLam] = (rho[kN] * m * m * 0.5 + slope_n * m) * inv_n + c_lam;
-  } else {
-    const double y = m - L;
-    for (int j : {kAf, kAg, kChi, kPsi, kN}) dd[j] = K2[j] - K_E[j] + rho[j] * L - far[j] * inv_n * y + cst[j];
-    dd[kLam] = lam_M2 + (k_sh * y - far[kN] * inv_n * y * y * 0.5) * inv_n - (K_E[kLam] - K2[kLam]) + c_lam;
+  P.lam1 = M1 + P.varpi;
+  P.L = L;
+  P.S = S;
+  P.inv_n = inv_n;
+  for (int j = 0; j < 6; ++j) {
+    P.K2[j] = K2[j];
+    P.rho[j] = rho[j];
+    P.cst[j] = cst[j];
+    P.far[j] = far[j];
   }
-  (void)cE;
+  P.far_n = far[kN];
+  P.slope_n = slope_n;
+  P.lam_M2 = lam_M2;
+  P.k_sh = k_sh;
+  P.c_lam = c_lam;
+  P.arc = true;
   return true;
+}
+
+/// SPEC 16.16: the change to the output-time terms at mean longitude lam (rad) from parameters P (P.arc true). Through
+/// the shadow it takes the terms at P's geometry where the state is in it: K_E when the caller's terms are those
+/// (same geometry), otherwise evaluated here (the mean anomaly lam - P.varpi on P's orbit).
+inline void srp_shadow_delta(const SrpShadowParams& P, double lam, const double* K_E, double* dd) {
+  double m = std::fmod(lam - P.lam1, kTwoPi);
+  if (m < 0.0) m += kTwoPi;
+  if (m <= P.L) {
+    for (int j : {kAf, kAg, kChi, kPsi, kN}) dd[j] = P.rho[j] * m + P.cst[j];
+    dd[kLam] = (P.rho[kN] * m * m * 0.5 + P.slope_n * m) * P.inv_n + P.c_lam;
+    return;
+  }
+  double Kp[6];
+  const double* K = K_E;
+  if (K == nullptr) {
+    // E on P's orbit at the state's mean anomaly there
+    const double M = lam - P.varpi;
+    double E = M + P.e * std::sin(M), sE = 0.0, cE = 1.0;
+    for (int it = 0; it < 30; ++it) {
+      fm::sincos(E, sE, cE);
+      const double dE = (E - P.e * sE - M) / (1.0 - P.e * cE);
+      E -= dE;
+      if (std::fabs(dE) < 1e-15) break;
+    }
+    fm::sincos(E, sE, cE);
+    srp_output_ap(P.e, P.eta, sE, cE, P.ag.sw, P.ag.cw, P.ag.sO, P.ag.cO, P.ag.si, P.ag.ci, P.a, P.n, P.A, P.B, P.C, P.Fs, Kp);
+    K = Kp;
+  }
+  const double y = m - P.L;
+  for (int j : {kAf, kAg, kChi, kPsi, kN}) dd[j] = P.K2[j] - K[j] + P.rho[j] * P.L - P.far[j] * P.inv_n * y + P.cst[j];
+  dd[kLam] = P.lam_M2 + (P.k_sh * y - P.far_n * P.inv_n * y * y * 0.5) * P.inv_n - (K[kLam] - P.K2[kLam]) + P.c_lam;
 }
 
 /// SPEC 4 averaged SRP rates on the current mean orbit (Sun held fixed over
@@ -2910,6 +2969,10 @@ struct ActiveBracket {
   alignas(16) float BT0_f[kThirdBodyTailNodes / 2 + 1][8]{};
   alignas(16) float dAT_f[kThirdBodyTailNodes / 2 + 1][8]{};
   alignas(16) float dBT_f[kThirdBodyTailNodes / 2 + 1][8]{};
+  // SPEC 16.16: the shadow's parameters at the two nodes, for the output between them (functions of the nodes alone)
+  bool sh_ready = false;
+  double sh_t0 = 0.0, sh_t1 = 0.0, sh_agom = 0.0;
+  SrpShadowParams sh0{}, sh1{};
 };
 inline thread_local ActiveBracket g_active_bracket{};
 /// The set being flown keeps its own (SetCaches); nullptr: the thread's.
@@ -4948,20 +5011,11 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
       const double Fs = kSrpPressure * ctx.agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
       double ds[6];
       srp_output(km.e, etam, Em, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, ds);
-      double E1, E2, s1, c1, s2, c2;
-      if (is_ap_ctx(ctx) && ap_sunlit_arc(A, B, km.e, etam, (1.0 - km.e * km.e) * km.a, E1, E2, s1, c1, s2, c2)) {
-        // SPEC 16.16 for an AP set on this path, in section 4's arrangement of the same terms
-        auto out_at = [&](double s, double c, double* d) {
-          srp_output(km.e, etam, std::atan2(s, c), km.argp, km.node, km.i, km.a, n, A, B, C, Fs, d);
-        };
-        auto arc_rates = [&](double e1, double e2, double, double, double, double, double* d) {
-          srp_rates_arc(km.e, etam, km.argp, km.node, km.i, km.a, n, e1, e2, A, B, C, Fs, d);
-        };
-        auto full_rates = [&](double* d) { srp_rates_sunlit(km.e, etam, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, d); };
-        double sEx, cEx, dd[6];
-        fm::sincos(Em, sEx, cEx);
-        srp_output_shadow_ap(km.e, etam, Em, sEx, cEx, km.a, n, A, B, Fs, E1, E2, s1, c1, s2, c2, ds, out_at, arc_rates,
-                             full_rates, dd);
+      SrpShadowParams P;
+      if (is_ap_ctx(ctx) && srp_shadow_params(ym, sun_u, sun_r, ctx.agom, P)) {
+        // SPEC 16.16 for an AP set on this path, at the state itself
+        double dd[6];
+        srp_shadow_delta(P, ym[kLam], ds, dd);
         for (int j = 0; j < 6; ++j) ds[j] += dd[j];
       }
       for (int j = 0; j < 6; ++j) y[j] += ds[j];
@@ -5311,24 +5365,43 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
       double ds[6];
       srp_output_ap(km.e, etam, sEm, cEm, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, ds);
       {
-        // SPEC 16.16: the shadow in the output-time terms (none for a wholly sunlit orbit)
-        double E1, E2, s1, c1, s2, c2;
-        if (ap_sunlit_arc(A, B, km.e, etam, (1.0 - km.e * km.e) * km.a, E1, E2, s1, c1, s2, c2)) {
-          auto out_at = [&](double s, double c, double* d) {
-            srp_output_ap(km.e, etam, s, c, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, d);
-          };
-          auto arc_rates = [&](double e1, double e2, double a1, double b1, double a2, double b2, double* d) {
-            srp_rates_arc_ap(km.e, etam, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, e1, e2, a1, b1, a2, b2,
-                             A, B, C, Fs, d);
-          };
-          auto full_rates = [&](double* d) {
-            srp_rates_sunlit_ap(km.e, etam, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, d);
-          };
-          double dd[6];
-          srp_output_shadow_ap(km.e, etam, std::atan2(sEm, cEm), sEm, cEm, km.a, n, A, B, Fs, E1, E2, s1, c1, s2, c2, ds,
-                               out_at, arc_rates, full_rates, dd);
-          for (int j = 0; j < 6; ++j) ds[j] += dd[j];
+        // SPEC 16.16: the shadow in the output-time terms (none for a wholly sunlit orbit). Between the two nodes of the
+        // set's bracket, the change blended in time from the parameters at each node (functions of the nodes alone);
+        // elsewhere (the epoch, a covariance sigma set) the parameters at the state itself.
+        double dd[6] = {0, 0, 0, 0, 0, 0};
+        bool have = false;
+        ActiveBracket& abm = active_bracket();
+        if (t != 0.0 && !ctx.is_cov_sigma && abm.valid && abm.ctx_id == ctx.ctx_id && abm.d50_epoch == ctx.d50_epoch &&
+            abm.hi.t != abm.lo.t && t >= std::fmin(abm.lo.t, abm.hi.t) && t <= std::fmax(abm.lo.t, abm.hi.t)) {
+          if (!(abm.sh_ready && abm.sh_t0 == abm.lo.t && abm.sh_t1 == abm.hi.t && abm.sh_agom == ctx.agom)) {
+            Vec3 su0, su1;
+            double sr0, sr1;
+            sun_at_ap(ctx.d50_epoch + abm.lo.t / kMinutesPerDay, su0, sr0);
+            sun_at_ap(ctx.d50_epoch + abm.hi.t / kMinutesPerDay, su1, sr1);
+            srp_shadow_params(abm.lo.y, su0, sr0, ctx.agom, abm.sh0);
+            srp_shadow_params(abm.hi.y, su1, sr1, ctx.agom, abm.sh1);
+            abm.sh_t0 = abm.lo.t;
+            abm.sh_t1 = abm.hi.t;
+            abm.sh_agom = ctx.agom;
+            abm.sh_ready = true;
+          }
+          if (abm.sh0.arc || abm.sh1.arc) {
+            const double u = (t - abm.lo.t) / (abm.hi.t - abm.lo.t);
+            double d0[6] = {0, 0, 0, 0, 0, 0}, d1[6] = {0, 0, 0, 0, 0, 0};
+            if (abm.sh0.arc) srp_shadow_delta(abm.sh0, ym[kLam], nullptr, d0);
+            if (abm.sh1.arc) srp_shadow_delta(abm.sh1, ym[kLam], nullptr, d1);
+            for (int j = 0; j < 6; ++j) dd[j] = (1.0 - u) * d0[j] + u * d1[j];
+            have = true;
+          }
+        } else {
+          SrpShadowParams P;
+          if (srp_shadow_params(ym, sun_u, sun_r, ctx.agom, P)) {
+            srp_shadow_delta(P, ym[kLam], ds, dd);
+            have = true;
+          }
         }
+        if (have)
+          for (int j = 0; j < 6; ++j) ds[j] += dd[j];
       }
       for (int j = 0; j < 6; ++j) y[j] += ds[j];
       if constexpr (kCov) {
