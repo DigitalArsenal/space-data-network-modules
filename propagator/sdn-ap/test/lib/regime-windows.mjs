@@ -46,12 +46,14 @@ function objects(L, group) {
     .map((s) => ({name: s.name, norad: s.norad, objectId: s.objectId ?? '', lines: s.lines, cutoffs: L.R.MGEX_CUTOFFS}));
 }
 
-async function replay({group, index, modulePaths, fit = null, moduleFrames = false}) {
+async function replay({group, index, modulePaths, fit = null}) {
   const L = await libs(), {HOUR, DAY, iso, ms, rms, XM, S, T, W} = L;
   const m = await L.M.openModules(), hosts = [];
   const TL = modules + 'propagator/sdn-ap/test/lib/';
-  const probe = moduleFrames ? {mod: await (await import(TL + 'module.mjs')).openModule(), F: await import(TL + 'frames.mjs')} : null;
-  const toGcrf = async (st, epochs) => probe ? st.map((s, k) => { const {whole, frac} = probe.F.jdOf(epochs[k]); const o = probe.F.rotate(probe.mod, whole, frac, [...s.r, ...s.v], probe.F.FRAME_PROBE.TEME_TO_GCRF).out; return {r: o.slice(0, 3), v: o.slice(3, 6)}; }) : m.toAxes(st, epochs, 'GCRF');
+  // #386: each arm is scored on its module's own GCRF output (the fit's own rotation, both ways). daysOld: the old path,
+  // its TEME output through the pinned foundation/frames 0.2.0 (#389); frames030Meters: the same TEME output through this
+  // checkout's foundation/frames 0.3.0 against the module's GCRF output (the consumer's path, a cross-check)
+  const X = await import(TL + 'frames-cross.mjs'), frames030 = await X.openCheckoutFrames();
   // each module through the SDK's isomorphic harness as ap.mjs's openAp does, the fit's $OBD kept (SPEC 12.8's diagnostics)
   const SDK = pathToFileURL(createRequire(modules + 'propagator/sdn-ap/package.json').resolve('space-data-module-sdk/testing/isomorphic')).href;
   const O = await import(TL + 'ocm.mjs');
@@ -91,6 +93,7 @@ async function replay({group, index, modulePaths, fit = null, moduleFrames = fal
       if (!entered.length) throw new Error('no lead bin');
       const scored = entered.flatMap((k) => bins[k]), epochs = scored.map((l) => l.epoch), truth = scored.map((l) => ({r: l.r, v: l.v}));
       const sizes = entered.map((k) => bins[k].length), gridB = S.gridBytes(epochs);
+      const gridG = S.oemBytes({frame: 'GCRF', lines: epochs.map((epoch) => ({epoch, r: [0, 0, 0]}))});
       const R = W.rowsO(D0 - 72 * HOUR - XM.config.conditions.rowsMarginDays * DAY, D0);
       if (R.excluded) throw new Error(R.excluded);
       const ex = {rows: S.spwBytes(R.rows)};
@@ -104,10 +107,12 @@ async function replay({group, index, modulePaths, fit = null, moduleFrames = fal
         try {
           const t0 = performance.now(), f = await A.fit(oem, pcf, ex), fitMs = performance.now() - t0;
           if (!f.ok) throw new Error(f.error);
-          const st = await A.propagate(f.omm, gridB, pcf, ex, epochs.length);
+          const own = await A.propagate(f.omm, gridG, pcf, ex, epochs.length), st = await A.propagate(f.omm, gridB, pcf, ex, epochs.length);
           const fo = A.ocm ? O.readFitOcm(f.omm) : S.readFitOmm(f.omm), ob = A.ocm ? {sigmaLnB: fo.sigmaLnB} : f.obd ? S.readObd(f.obd) : {};
+          const frames030Meters = X.largestMeters(await frames030.convert(st.map((s, k) => ({...s, epoch: epochs[k]})), 'TEME', 'GCRF'), own);
           row.arms.push({ok: true, bterm: fo.bterm, agom: fo.agom, rmsKm: fo.fitRmsKm, comment: fo.u.COMMENT, sigmaLnB: ob.sigmaLnB ?? null,
-            bModel: ob.bModel ?? null, fitMs, arcStates: thin.length, days: score(await m.rtn(await toGcrf(st, epochs), truth))});
+            bModel: ob.bModel ?? null, fitMs, arcStates: thin.length, days: score(await m.rtn(own, truth)),
+            daysOld: score(await m.rtn(await m.toAxes(st, epochs, 'GCRF'), truth)), frames030Meters});
         } catch (error) {
           row.arms.push({ok: false, error: String(error?.message ?? error).slice(0, 180)});
         }

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
-// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
-// moves the scoring to the module's own GCRF).
+// Its read windows are scored on each module's own GCRF output since 2026-11-10 (#386); the old path (TEME through the
+// pinned foundation/frames 0.2.0, whose TEME is not the standard one, #389) is printed beside it. Its assertions compare
+// two builds on one path, so no bound moved. The TEME output through this checkout's foundation/frames 0.3.0 lands within
+// 1 mm of the module's GCRF output.
 // Registration (2026-11-03, modules-sdn-ap-fit-bterm-700-1400-km-20261103): the fit's BTERM prior at 800-1400 km
 // (SPEC 12.8). Baseline the 0.4.11 release (git a0f33bc54), the module under test this build's dist.
 // Model truth: FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant weather on both sides (no SRP); AP
@@ -88,7 +89,8 @@ if (!isMainThread) {
   };
   const ffm = read(path.join(archive, 'resume-ffm'));
   const median = (a) => { const v = a.toSorted((x, y) => x - y), i = v.length >> 1; return v.length % 2 ? v[i] : (v[i - 1] + v[i]) / 2; };
-  const d3 = (a) => (a?.ok && a.days?.['3'] ? 1000 * a.days['3'].e : null);
+  // #386: days, the modules' own GCRF output (the score); daysOld, the old path (TEME through the pinned frames 0.2.0)
+  const d3 = (a, field = 'days') => (a?.ok && a[field]?.['3'] ? 1000 * a[field]['3'].e : null);
   const objects = {};
   for (const name of [...new Set(rows.map((r) => r.key.split('|')[1]))].sort()) {
     const v = rows.filter((r) => r.key.split('|')[1] === name && !r.error && d3(r.arms[0]) !== null && d3(r.arms[1]) !== null && d3(ffm.get(r.key)?.arms?.F72) !== null);
@@ -98,12 +100,20 @@ if (!isMainThread) {
       console.log(JSON.stringify({excludedWindow: r.key, ffmDay3Meters: f(r), apDay3At0411: d3(r.arms[0]), apDay3Here: d3(r.arms[1])}));
     objects[name] = {n: v.length, pairedAt0411: median(v.map((r) => d3(r.arms[0]) - f(r))), pairedHere: median(v.map((r) => d3(r.arms[1]) - f(r))),
       scored: scored.length, scoredAt0411: scored.length ? median(scored.map((r) => d3(r.arms[0]) - f(r))) : null,
-      scoredHere: scored.length ? median(scored.map((r) => d3(r.arms[1]) - f(r))) : null};
+      scoredHere: scored.length ? median(scored.map((r) => d3(r.arms[1]) - f(r))) : null,
+      oldPath: {pairedAt0411: median(v.map((r) => d3(r.arms[0], 'daysOld') - f(r))), pairedHere: median(v.map((r) => d3(r.arms[1], 'daysOld') - f(r)))}};
     console.log(JSON.stringify({readWindows: name, ...objects[name]}));
   }
   const all = rows.filter((r) => !r.error && d3(r.arms[0]) !== null && d3(r.arms[1]) !== null && d3(ffm.get(r.key)?.arms?.F72) !== null);
   console.log(JSON.stringify({readWindows: 'all', n: all.length,
-    pairedAt0411: median(all.map((r) => d3(r.arms[0]) - d3(ffm.get(r.key).arms.F72))), pairedHere: median(all.map((r) => d3(r.arms[1]) - d3(ffm.get(r.key).arms.F72)))}));
+    pairedAt0411: median(all.map((r) => d3(r.arms[0]) - d3(ffm.get(r.key).arms.F72))), pairedHere: median(all.map((r) => d3(r.arms[1]) - d3(ffm.get(r.key).arms.F72))),
+    oldPath: {pairedAt0411: median(all.map((r) => d3(r.arms[0], 'daysOld') - d3(ffm.get(r.key).arms.F72))), pairedHere: median(all.map((r) => d3(r.arms[1], 'daysOld') - d3(ffm.get(r.key).arms.F72)))}}));
+  // the module under test (the last arm) is held to 1 mm; the earlier builds (per-state matrix, gmst()'s rounding: up to
+  // 1.5 mm at the geostationary radius, SPEC 16.4) are printed
+  const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(-1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+  const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(0, -1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+  console.log(JSON.stringify({frames030Meters, frames030MetersEarlierBuilds}));
+  assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
   if (process.env.SDN_AP_FIT_BTERM_REPORT) fs.writeFileSync(process.env.SDN_AP_FIT_BTERM_REPORT, JSON.stringify({results, objects}, null, 2) + '\n');
 
   for (const f of ['SWOT-like 0.044', 'Sentinel-3-like 0.044']) {

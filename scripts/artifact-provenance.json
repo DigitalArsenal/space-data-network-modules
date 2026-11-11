@@ -4884,37 +4884,31 @@
       "declaration": null
     },
     "flows/source-products/dist/isomorphic/module.wasm": {
-      "sha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
-      "bytes": 2116177,
-      "wasmSha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
-      "canonicalModuleSha256": "cc17a8e0301fefeeca1a7397357fc018b67536b6dc590a30c2c98009aef82fb5",
+      "sha256": "a0a1120dba4bc4bff9ce118e23b78628930f8ecbaa3bb546c63fbdd23b20c2cb",
+      "bytes": 2117353,
+      "wasmSha256": "a0a1120dba4bc4bff9ce118e23b78628930f8ecbaa3bb546c63fbdd23b20c2cb",
+      "canonicalModuleSha256": "9667521a444efa3c79c3b7143c1780e9d67c1d72681627aa8709d33abfb7d856",
       "form": "raw",
       "module": null,
-      "lastCommit": "ee5548ecd492b762fc9940b5923695ad74d19198",
-      "lastCommitDate": "2026-11-04T12:56:40-05:00",
+      "lastCommit": "7618bb761e62b0c69711592175c65924e923f593",
+      "lastCommitDate": "2026-11-10T20:16:16-05:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
-        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/source-products/dist/runtime.wasm": {
-      "sha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
-      "bytes": 2116177,
-      "wasmSha256": "a18681d59d56f2252dc04902b1aeb9b9aaffb41cd27a137ae8a5ae6125e99f08",
-      "canonicalModuleSha256": "cc17a8e0301fefeeca1a7397357fc018b67536b6dc590a30c2c98009aef82fb5",
+      "sha256": "a0a1120dba4bc4bff9ce118e23b78628930f8ecbaa3bb546c63fbdd23b20c2cb",
+      "bytes": 2117353,
+      "wasmSha256": "a0a1120dba4bc4bff9ce118e23b78628930f8ecbaa3bb546c63fbdd23b20c2cb",
+      "canonicalModuleSha256": "9667521a444efa3c79c3b7143c1780e9d67c1d72681627aa8709d33abfb7d856",
       "form": "raw",
       "module": null,
-      "lastCommit": "ee5548ecd492b762fc9940b5923695ad74d19198",
-      "lastCommitDate": "2026-11-04T12:56:40-05:00",
+      "lastCommit": "7618bb761e62b0c69711592175c65924e923f593",
+      "lastCommitDate": "2026-11-10T20:16:16-05:00",
       "provenance": "inferred",
       "toolchain": null,
-      "sdkPinAtCommit": {
-        "superRepoCommit": "bcf276620dfa5c3ebf9c9bc168a3c7f0447f0fc9",
-        "sdkCommit": "f761074da639f4bc0af201a96f559f192b1d5d8b"
-      },
+      "sdkPinAtCommit": null,
       "declaration": null
     },
     "flows/space-weather/dist/runtime/isomorphic/module.wasm": {
