@@ -1817,6 +1817,84 @@ inline double ap_lambda_shadow_dn(double A, double B, double e, double eta, doub
   return 3.0 * Fs / (kTwoPi * a * n) * (G(E1 + kTwoPi) - G(E2));
 }
 
+/// SPEC 16.16: the shadow's change to the output-time radiation terms of an AP set, in closed form. Section 4's
+/// output-time terms K(E) are the antiderivatives (in the mean anomaly M) of the osculating rates less their wholly
+/// sunlit average, divided by n (to 1e-14 of their scale against the sunlit-arc formulas). With the shadow the force is
+/// off from the entry (E2, M2) to the exit (E1 + 2 pi, M1 + 2 pi), and the periodic part P of each element obeys
+/// dP/dM = (rate lit - rate_arc) / n. So, with L = M2 - M1 the sunlit arc, S = 2 pi - L, rho = (rate_full - rate_arc) / n
+/// and c the constant that gives P - K a mean of 0 over M:
+///   on the sunlit arc, P - K = rho (M - M1) + c;
+///   through the shadow, P - K = K(E2) - K(E) + rho L - (rate_arc / n)(M - M2) + c.
+/// lambda's runs through n's (its rate is n plus the Gauss rate), with lambda's rate as 16.15 states it:
+///   sunlit, [rho_n (M - M1)^2 / 2 + (c_n + dL)(M - M1)] / n + c_lambda;
+///   shadow, its value at M2 + [(K_n(E2) + rho_n L + c_n + dL - rate_full_lambda)(M - M2) - (rate_arc_n / n)(M - M2)^2 / 2] / n
+///           - (K_lambda(E) - K_lambda(E2)) + c_lambda,
+/// dL = rate_full_lambda - rate_arc_lambda - (1 / 2 pi) int_shadow K_n dM (the Gauss rate's average over the shadow).
+/// The means take int_shadow K dM by 8-point Gauss-Legendre in E (K_n's in closed form). K and the rates are the
+/// caller's arrangement (AP's, or section 4's for near-equatorial long-period sets): out_at(sE, cE, d) the output-time
+/// terms at E, arc(d) and full(d) the sunlit-arc and wholly sunlit rates. K_E: the terms at the output's E; dd: what
+/// to add to them (0 for a wholly sunlit orbit, which the caller then leaves alone).
+template <class OutAt, class ArcRates, class FullRates>
+inline bool srp_output_shadow_ap(double e, double eta, double E, double sE, double cE, double a, double n, double A,
+                                 double B, double Fs, double E1, double E2, double s1, double c1, double s2, double c2,
+                                 const double* K_E, OutAt out_at, ArcRates arc_rates, FullRates full_rates, double* dd) {
+  double far[6], ful[6], K1[6], K2[6], Ish[6] = {0, 0, 0, 0, 0, 0};
+  arc_rates(E1, E2, s1, c1, s2, c2, far);
+  full_rates(ful);
+  out_at(s1, c1, K1);
+  out_at(s2, c2, K2);
+  const double M1 = E1 - e * s1, M2 = E2 - e * s2, L = M2 - M1, S = kTwoPi - L, inv_n = 1.0 / n;
+  // int over the shadow (E2 .. E1 + 2 pi) of K dM = K (1 - e cos E) dE, Gauss-Legendre 8 points
+  constexpr double kX[4] = {0.1834346424956498, 0.5255324099163290, 0.7966664774136267, 0.9602898564975363};
+  constexpr double kW[4] = {0.3626837833783620, 0.3137066458778873, 0.2223810344533745, 0.1012285362903763};
+  const double Ea = E2, Eb = E1 + kTwoPi, half = 0.5 * (Eb - Ea), mid = 0.5 * (Eb + Ea);
+  for (int q = 0; q < 4; ++q)
+    for (int sgn = -1; sgn <= 1; sgn += 2) {
+      const double Eq = mid + sgn * half * kX[q];
+      double sq, cq, Kq[6];
+      fm::sincos(Eq, sq, cq);
+      out_at(sq, cq, Kq);
+      const double w = kW[q] * half * (1.0 - e * cq);
+      for (int j = 0; j < 6; ++j) Ish[j] += w * Kq[j];
+    }
+  // K_n's integral in closed form (16.15's G): the same quantity, exact
+  {
+    auto G = [&](double Ex) {
+      double s, c;
+      fm::sincos(Ex, s, c);
+      return A * s - B * eta * c - e * (A * (0.5 * Ex + 0.5 * s * c) + B * eta * 0.5 * s * s);
+    };
+    Ish[kN] = 3.0 * Fs / (a * n) * (G(E1 + kTwoPi) - G(E2));
+  }
+  double rho[6], cst[6];
+  for (int j : {kAf, kAg, kChi, kPsi, kN}) {
+    rho[j] = (ful[j] - far[j]) * inv_n;
+    const double mean = (rho[j] * L * L * 0.5 + S * (K2[j] + rho[j] * L) - far[j] * inv_n * S * S * 0.5 - Ish[j]) / kTwoPi;
+    cst[j] = -mean;
+  }
+  const double dL = ful[kLam] - far[kLam] - Ish[kN] / kTwoPi;
+  const double slope_n = cst[kN] + dL;
+  const double lam_M2 = (rho[kN] * L * L * 0.5 + slope_n * L) * inv_n;
+  const double k_sh = K2[kN] + rho[kN] * L + slope_n - ful[kLam];
+  const double int_sun = (rho[kN] * L * L * L / 6.0 + slope_n * L * L * 0.5) * inv_n;
+  const double int_sh = S * lam_M2 + (k_sh * S * S * 0.5 - far[kN] * inv_n * S * S * S / 6.0) * inv_n - (Ish[kLam] - K2[kLam] * S);
+  const double c_lam = -(int_sun + int_sh) / kTwoPi;
+  // where the output is: x from the exit along the sunlit arc, or y from the entry through the shadow
+  const double M = E - e * sE;
+  double m = std::fmod(M - M1, kTwoPi);
+  if (m < 0.0) m += kTwoPi;
+  if (m <= L) {
+    for (int j : {kAf, kAg, kChi, kPsi, kN}) dd[j] = rho[j] * m + cst[j];
+    dd[kLam] = (rho[kN] * m * m * 0.5 + slope_n * m) * inv_n + c_lam;
+  } else {
+    const double y = m - L;
+    for (int j : {kAf, kAg, kChi, kPsi, kN}) dd[j] = K2[j] - K_E[j] + rho[j] * L - far[j] * inv_n * y + cst[j];
+    dd[kLam] = lam_M2 + (k_sh * y - far[kN] * inv_n * y * y * 0.5) * inv_n - (K_E[kLam] - K2[kLam]) + c_lam;
+  }
+  (void)cE;
+  return true;
+}
+
 /// SPEC 4 averaged SRP rates on the current mean orbit (Sun held fixed over
 /// the orbit): the explicit formulas of the wholly sunlit orbit or of the sunlit
 /// arc E1 .. E2 (xp_spec_terms.inc), added to the rates in the state order. An AP set (ap_set) takes AP's shadow
@@ -4870,6 +4948,22 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
       const double Fs = kSrpPressure * ctx.agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
       double ds[6];
       srp_output(km.e, etam, Em, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, ds);
+      double E1, E2, s1, c1, s2, c2;
+      if (is_ap_ctx(ctx) && ap_sunlit_arc(A, B, km.e, etam, (1.0 - km.e * km.e) * km.a, E1, E2, s1, c1, s2, c2)) {
+        // SPEC 16.16 for an AP set on this path, in section 4's arrangement of the same terms
+        auto out_at = [&](double s, double c, double* d) {
+          srp_output(km.e, etam, std::atan2(s, c), km.argp, km.node, km.i, km.a, n, A, B, C, Fs, d);
+        };
+        auto arc_rates = [&](double e1, double e2, double, double, double, double, double* d) {
+          srp_rates_arc(km.e, etam, km.argp, km.node, km.i, km.a, n, e1, e2, A, B, C, Fs, d);
+        };
+        auto full_rates = [&](double* d) { srp_rates_sunlit(km.e, etam, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, d); };
+        double sEx, cEx, dd[6];
+        fm::sincos(Em, sEx, cEx);
+        srp_output_shadow_ap(km.e, etam, Em, sEx, cEx, km.a, n, A, B, Fs, E1, E2, s1, c1, s2, c2, ds, out_at, arc_rates,
+                             full_rates, dd);
+        for (int j = 0; j < 6; ++j) ds[j] += dd[j];
+      }
       for (int j = 0; j < 6; ++j) y[j] += ds[j];
       if (d_srp_unit_out != nullptr) {
         const double inv_agom = 1.0 / ctx.agom;
@@ -5216,6 +5310,26 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
       const double Fs = kSrpPressure * ctx.agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
       double ds[6];
       srp_output_ap(km.e, etam, sEm, cEm, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, ds);
+      {
+        // SPEC 16.16: the shadow in the output-time terms (none for a wholly sunlit orbit)
+        double E1, E2, s1, c1, s2, c2;
+        if (ap_sunlit_arc(A, B, km.e, etam, (1.0 - km.e * km.e) * km.a, E1, E2, s1, c1, s2, c2)) {
+          auto out_at = [&](double s, double c, double* d) {
+            srp_output_ap(km.e, etam, s, c, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, d);
+          };
+          auto arc_rates = [&](double e1, double e2, double a1, double b1, double a2, double b2, double* d) {
+            srp_rates_arc_ap(km.e, etam, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, e1, e2, a1, b1, a2, b2,
+                             A, B, C, Fs, d);
+          };
+          auto full_rates = [&](double* d) {
+            srp_rates_sunlit_ap(km.e, etam, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, d);
+          };
+          double dd[6];
+          srp_output_shadow_ap(km.e, etam, std::atan2(sEm, cEm), sEm, cEm, km.a, n, A, B, Fs, E1, E2, s1, c1, s2, c2, ds,
+                               out_at, arc_rates, full_rates, dd);
+          for (int j = 0; j < 6; ++j) ds[j] += dd[j];
+        }
+      }
       for (int j = 0; j < 6; ++j) y[j] += ds[j];
       if constexpr (kCov) {
         if (d_srp_unit_out != nullptr) {
