@@ -1481,6 +1481,15 @@ bits unchanged, with one exception stated below. What makes it so:
   whichever node an integration starts from.
 - The drag-pass segment above e 0.3 (16.12) takes its perigee time and period from its bracket's lower node, not from the
   first state asked.
+- The third body's bracket tables are the bracket's own (stack #475). The bracket's lower node chooses their builder,
+  rows and sub-interval count, and they are read only as far as the builder wrote.
+  Through 0.6.21 two things followed the state asked first instead:
+  - the builder and the sub-interval count;
+  - the rows past those written, read as the last set had left them.
+  So a state near the three mean motions where the builder changes (0.006, 0.015 and 0.035 rad/min) moved with the order
+  of requests, by up to 0.285 m (0.015 rad/min, 1e-7 above). Against 0.6.21's states asked in ascending order it is
+  now at most 14.3 mm (0.015), 5.8 mm (0.006) and 2.5 mm (0.035), and unchanged elsewhere.
+- A record's covariance is likewise a function of the record and the time (12.3).
 - The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
   round by up to 1e-7 s at today's dates, 1 mm in low orbit. SGP4XP and SGP4 in the store keep the minutes from J2000:
   their output is 0.6.9's bit for bit, and it differs from `propagate`'s by up to that rounding.
@@ -1862,6 +1871,23 @@ central differences and
 P(t) = J(t) P_p J(t)^T + Q(t) + F(x(t)).
 
 The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) is COVARIANCE.
+
+J, here and in 12.1, is made of differences of sets each flown on its own. Every moved set evaluates its rates and
+its output at its own state, as any set does. A record's covariance is then a function of the record and the time
+alone: it does not depend on the order in which times are asked, or on which records the thread flew before it.
+
+Through 0.6.21 this did not hold (stack #491):
+- The moved sets took the nominal's stage parts from the thread's cache, plus their own differences held over four
+  steps. In the long-period regime they stepped in pairs.
+- At t = 0 the short-period terms were baked on the last set's bracket.
+- The third body's bracket tables read rows the last set had left (stack #475).
+
+The 0.6.21 figures, as their own record alone in a fresh instance:
+- A record whose covariance was prepared after another record's flight ended in its first grid step was off by up to
+  440 times (a 500 km record, 805 m against 364,849 m at hour 1).
+- Asked in turn with nine other records, the one-day class at 0.9 rev/day differed by up to 21 % of its day-7 position
+  sigma.
+- Flown alone, the one-day class was 5 % from its moved sets flown on their own, LEO up to 7e-4.
 
 **12.4 Theory floor.** F is the fit's residual covariance in the UVW axes of the state (U radial, V in-track, W along
 r x v), R = (1/N) sum u_k u_k^T, u_k the residual e_k in the UVW axes of the model state at t_k; position block
@@ -3262,8 +3288,7 @@ di/dt = D g.N, sin i dOmega/dt = D g.M, d varpi/dt = D (tan(i/2) g.M - 1.5 P),
 d lambda/dt - n = D (tan(i/2) g.M - 3 eta P - 1.5 e^2 P / (1 + eta)), de/dt = dn/dt = 0,
 
 written in the equinoctial elements, regular at i = 0 and e = 0. They are added to the mean-element rates at every
-stage in both regimes (in the long-period regime also to a covariance's moved sets, which step in pairs), at the state
-of the stage. With a single k2 the average is k2 (mu_b R^5 / r_b^3) (1 - 3 (w.s)^2) / (4 a^3 eta^3); against the
+stage in both regimes (a covariance's moved sets each at their own: 12.3), at the state of the stage. With a single k2 the average is k2 (mu_b R^5 / r_b^3) (1 - 3 (w.s)^2) / (4 a^3 eta^3); against the
 quadrupole of section 5 the tide is k2 (R/a)^5 of it on a circular orbit, 17 % at 800 km. The Moon's tide is a J2 of
 1.69e-8 about the Moon's direction, the Sun's 0.77e-8; their mean over the bodies' motion is the permanent tide, a J2
 change of +9.4e-9, which AP's tide-free J2 (1.3) does not hold and the term supplies, as FFM's step 1 does on its
