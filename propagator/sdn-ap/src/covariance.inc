@@ -73,17 +73,74 @@ struct AboveRow {
 // LAGEOS: LAGEOS-1, LAGEOS-2, LARES-2, 32 windows of 72 h; k the one k of the LAGEOS, medium Earth orbit and
 // geosynchronous classes (1.415e-5 AP, 3.216e-5 SGP4XP); s_e, s_i, s_l fitted so that every regime's 99th percentile of
 // |z| per axis and lead is at most 2.9. The bounds are the calibration fits' data sigma (rounded outward) and 0.9 to
-// 1.05 times their spans. HEO, geosynchronous and medium Earth orbit keep the ABOVE row for now (SPEC 12.5).
+// 1.05 times their spans. HEO: TESS and Chandra, 14 windows, 28 window-arcs of 72 to 336 h (e 0.454 to 0.687), on
+// 0.6.16's eccentric integration step, its own k, fitted on all of them (the median of |z| per axis and lead at 0.674);
+// leave-one-window-out holds, leave-one-object-out does not from Chandra to TESS (SPEC 12.5). Every HEO size is at least
+// the ABOVE row's: AP's s_i and s_l and SGP4XP's s_l are the ABOVE row's where the fit gave less (AP 7.44e-7, 1.09e-8;
+// SGP4XP 1.19e-8), so the HEO row never states less than the ABOVE row. Geosynchronous and medium Earth orbit have no
+// AboveRow (SPEC 12.5 states why); the geosynchronous class's SigmaRow below covers fits far worse than precise orbits.
 constexpr AboveRow kAboveAP[4] = {
-    {false, 0, 0, 0, 0, 0, 0, 0, 0},  // HEO
+    {true, 6.357465071432782e-06, 8.153112791954473e-07, 4.753573962018311e-06, 2.401038715861921e-09, 0.00767, 4.22, 64.8, 352.8},  // HEO
     {false, 0, 0, 0, 0, 0, 0, 0, 0},  // geosynchronous
     {false, 0, 0, 0, 0, 0, 0, 0, 0},  // medium Earth orbit
     {true, 1.1374623058968726e-08, 8.083584088270014e-08, 3.831472309446551e-09, 1.415e-05, 0.00243, 0.00276, 64.8, 75.6}};  // LAGEOS
 constexpr AboveRow kAboveXP[4] = {
-    {false, 0, 0, 0, 0, 0, 0, 0, 0},
+    {true, 6.406459698609395e-06, 8.962738267352311e-07, 2.666e-07, 1.667570181154198e-08, 0.00826, 4.18, 64.8, 352.8},
     {false, 0, 0, 0, 0, 0, 0, 0, 0},
     {false, 0, 0, 0, 0, 0, 0, 0, 0},
     {true, 2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05, 0.0588, 0.0769, 64.8, 75.6}};
+
+/// SPEC 12.5, the geosynchronous class fitted to data far worse than its precise orbits (stack #433 part C): every size in
+/// proportion to the data sigma the fit weighted with, s = per_km x sigma (sigma in km; s_d constant over the orbit, share
+/// 0). The proportions are the SIGMA form fitted on inclined geosynchronous and geostationary 72 h fits to precise orbits
+/// (sdn-ap 0.6.19, the one-day class's resonant tail; data sigma 0.86 m to 3.5 m), carried up to the sigma of commercial
+/// geostationary fits, whose truth carries burns (stack #444); measured there (24 h and 72 h fits, data sigma 9.7 m to
+/// 2.90 km). The row applies from the sigma at which every scaled s_e, s_i and s_l reaches the ABOVE row's (gso_sigma_star:
+/// 0.151 km AP, 0.066 km SGP4XP), so it never states less than the ABOVE row, up to sigma_hi_km, on spans of 0.9 to 1.05
+/// times 24 h or 72 h; elsewhere the ABOVE row stands.
+struct SigmaRow {
+  bool fitted;
+  double per_km[4];  ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2) per km of data sigma
+  double sigma_hi_km;
+  double span_lo_h[2], span_hi_h[2];
+};
+constexpr SigmaRow kGsoSigmaAP = {true, {1.8443393922366117e-05, 1.5194136674001825e-05, 3.141503657789266e-05, 6.571123466646167e-05}, 2.91, {21.6, 64.8}, {25.2, 75.6}};
+constexpr SigmaRow kGsoSigmaXP = {true, {5.876802799646972e-06, 3.504351587051805e-05, 4.0198815288144715e-06, 1.2262905073802155e-05}, 2.91, {21.6, 64.8}, {25.2, 75.6}};
+/// The data sigma (km) from which the geosynchronous SIGMA row applies: where every scaled s_e, s_i and s_l reaches the
+/// ABOVE row's.
+inline double gso_sigma_star(bool ap) {
+  const Noise& a = (ap ? kNoiseAP : kNoiseXP)[1];
+  const SigmaRow& g = ap ? kGsoSigmaAP : kGsoSigmaXP;
+  return std::fmax(std::fmax(a.s_e / g.per_km[0], a.s_i / g.per_km[1]), a.s_l / g.per_km[2]);
+}
+
+/// SPEC 12.5, 12.8, under the drag (stack #471, #463): the strong-drag class, an AP set at e 0.3 or below with its perigee
+/// under kStrongDragPerigeeKm, fitted under NRLMSISE-00 on BTERM's default prior over an arc inside one of the rows'
+/// calibrated spans. The record's sigma of ln BTERM is the arc's information on ln BTERM over m^2, combined with the
+/// prior's (SPEC 12.8's RMS-floor rule): the post-fit residual is the theory's own error, correlated along the arc, so the
+/// formal information overstates what the arc says about BTERM. The covariance takes it as a rank-1 update along BTERM's
+/// own column (every row follows its regression on BTERM, as the fit compensates a wrong drag term), and the forecast maps
+/// it; s_d keeps the DRAG row's form with the class's share c, which then carries only the rest (the density forecast).
+/// Fitted on the headline-loop strong-drag windows (Swarm A, B, C, GRACE-FO 1, 2; 2026) against the numerical
+/// propagator's fitted drag term and the precise orbits, leaving one window out.
+struct DragRow {
+  double m, c;
+  double span_lo_h, span_hi_h;  ///< the calibration fits' spans, hours (0.9 to 1.05 times)
+};
+constexpr double kStrongDragPerigeeKm = 600.0;
+constexpr DragRow kDragAP[2] = {{9.22, 0.126, 21.6, 25.2}, {14.5, 0.163, 64.8, 75.6}};
+
+/// The strong-drag row of an AP set (kDragAP), or nullptr: perigee under kStrongDragPerigeeKm, e at most 0.3, the fit's
+/// span inside a row's.
+inline const DragRow* strong_drag_row(const ElementRow& row, double span_h) {
+  if (!(row.mean_motion_rev_day > 0.0) || row.eccentricity > 0.3) return nullptr;
+  const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+  const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
+  if (!((a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kStrongDragPerigeeKm)) return nullptr;
+  for (const DragRow& d : kDragAP)
+    if (span_h >= d.span_lo_h && span_h <= d.span_hi_h) return &d;
+  return nullptr;
+}
 
 constexpr int kMaxConsider = 5;
 constexpr int kMaxAug = 6 + kMaxConsider;
@@ -392,6 +449,14 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
       noise[2] = a.s_l;
       noise[3] = a.k * std::fabs(row.agom) / a_er;
       share = 0.0;  // above the drag s_d is the class's k |AGOM| / a, not a share of the non-gravitational rate
+      floor_scale = 1.0;
+    }
+    // the geosynchronous class fitted to data far worse than its precise orbits: the sizes in proportion to that sigma
+    const SigmaRow& g = ap ? kGsoSigmaAP : kGsoSigmaXP;
+    const bool span_ok = (span_h >= g.span_lo_h[0] && span_h <= g.span_hi_h[0]) || (span_h >= g.span_lo_h[1] && span_h <= g.span_hi_h[1]);
+    if (above_class(row) == kAboveGso && g.fitted && span_ok && sigma_km >= gso_sigma_star(ap) && sigma_km <= g.sigma_hi_km) {
+      for (int q = 0; q < 4; ++q) noise[q] = g.per_km[q] * sigma_km;
+      share = 0.0;
       floor_scale = 1.0;
     }
   }

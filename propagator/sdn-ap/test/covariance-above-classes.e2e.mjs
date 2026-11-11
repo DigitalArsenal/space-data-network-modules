@@ -9,8 +9,9 @@
 //    exactly and s_d = k |AGOM| / a (a in Earth radii, from the record's MEAN_MOTION) to 1e-5, NON_GRAVITATIONAL_SHARE 0. Stated 5 m (above the calibrated
 //    2.43 to 2.76 m): the ABOVE row. The same orbit fitted over 24 h (outside the calibrated 64.8 to 75.6 h): the ABOVE
 //    row. SGP4XP over 72 h with 65 m stated: SGP4XP's LAGEOS row.
-// 2. HEO (n 0.4 rev/day, e 0.6), 72 h, stated 100 m, and medium Earth orbit (GPS-like), 72 h, stated 3 m: the ABOVE
-//    row (neither class has a fitted row yet).
+// 2. HEO (n 0.4 rev/day, e 0.6), 72 h, stated 100 m: AP's and SGP4XP's HEO rows; stated 5 km (above the calibrated
+//    7.67 m to 4.22 km): the ABOVE row. Medium Earth orbit (GPS-like), 72 h, stated 3 m: the ABOVE row (the class has
+//    no row).
 // 3. Every record above flies with its covariance (propagate, COVARIANCE_MATRIX_LINES at 7 days), so a stated s_d above
 //    the drag is read back.
 // JS only moves bytes and compares numbers the module produced.
@@ -43,8 +44,11 @@ const aEr = (n) => (KE / (n * 2 * Math.PI / 1440)) ** (2 / 3);
 // SPEC 12.5's rows (src/covariance.inc kAboveAP, kAboveXP) and the ABOVE rows (kNoiseAP[1], kNoiseXP[1])
 const ROW = {
   AP: { LAGEOS: [1.1374623058968726e-08, 8.083584088270014e-08, 3.831472309446551e-09, 1.415e-05],
+    HEO: [6.357465071432782e-06, 8.153112791954473e-07, 4.753573962018311e-06, 2.401038715861921e-09],
     ABOVE: [9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06] },
-  SGP4XP: { LAGEOS: [2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05], ABOVE: [2.308e-07, 3.752e-07, 2.666e-07] },
+  SGP4XP: { LAGEOS: [2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05],
+    HEO: [6.406459698609395e-06, 8.962738267352311e-07, 2.666e-07, 1.667570181154198e-08],
+    ABOVE: [2.308e-07, 3.752e-07, 2.666e-07] },
 };
 const ORBITS = {
   lageos: { n: 6.386, e: 0.0045, i: 109.8, raan: 40, argp: 120, ma: 10, agom: 0.0007, bterm: 0.001 },
@@ -87,7 +91,9 @@ for (const [name, o, theory, hours, sigmaM, want] of [
   ["LAGEOS class, AP, 72 h, 5 m", ORBITS.lageos, "AP", 72, 5, "ABOVE"],
   ["LAGEOS class, AP, 24 h, 2.6 m", ORBITS.lageos, "AP", 24, 2.6, "ABOVE"],
   ["LAGEOS class, SGP4XP, 72 h, 65 m", ORBITS.lageos, "SGP4XP", 72, 65, "LAGEOS"],
-  ["HEO, AP, 72 h, 100 m", ORBITS.heo, "AP", 72, 100, "ABOVE"],
+  ["HEO, AP, 72 h, 100 m", ORBITS.heo, "AP", 72, 100, "HEO"],
+  ["HEO, AP, 72 h, 5 km", ORBITS.heo, "AP", 72, 5000, "ABOVE"],
+  ["HEO, SGP4XP, 72 h, 100 m", ORBITS.heo, "SGP4XP", 72, 100, "HEO"],
   ["medium Earth orbit, AP, 72 h, 3 m", ORBITS.gps, "AP", 72, 3, "ABOVE"],
 ]) {
   const f = await fitOf(o, theory, hours, sigmaM);

@@ -338,9 +338,35 @@ those of the calibration fits; elsewhere the ABOVE row stands. Above the drag, s
 (LAGEOS-1, LAGEOS-2, LARES-2; 72 h fits to precise orbits; data sigma 2.43 to 2.76 m for AP, 58.8 to 76.9 m for
 SGP4XP) is fitted. On its 32 windows AP's median |z| at days 1, 3, 5 and 7 goes from 0.001 to 0.24 to between 0.52 and
 1.04, the 95 % coverage is 0.88 to 0.94, and no cell has more windows above 3 than the acceptance allows (max(as built,
-1 % of the windows, 1)). The radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). Medium Earth
-orbit, geosynchronous and HEO keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the
-selection.
+1 % of the windows, 1)). The radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). The HEO class
+is fitted on two objects, TESS and Chandra (14 windows, 28 window-arcs of 72 to 336 h, e 0.454 to 0.687; data sigma
+7.67 m to 4.22 km for AP, 8.27 m to 4.17 km for SGP4XP). The 95 % coverage rises or holds on every row: AP's TESS 72 h
+fits go from 0.43 to 1.00, its TESS 336 h fits from 0.14 to 0.29 to 0.57 to 0.86; SGP4XP's rows from 0.00 to 0.43
+to 0.43 to 1.00. No HEO window's 1-sigma narrows in any direction. Leaving one window out holds. Leaving one object out fails
+for AP from Chandra to TESS, so the row is not shown to carry to an eccentric object unlike these two, and Chandra
+stays too narrow in places (AP's cross-track at day 5 of the 72 h fits, 3.05 at the median). Every HEO size is at
+least the ABOVE row's, so the row never states less than the ABOVE row. Medium Earth orbit has no class row (SPEC 12.5
+states why). `test/covariance-above-classes.e2e.mjs` holds the selection.
+
+A one-day set fitted to data far worse than precise orbits takes the geosynchronous SIGMA row (SPEC 12.5). That applies
+at a data sigma from 0.151 km (AP; 0.066 km SGP4XP) to 2.91 km, on 24 h and 72 h arcs. Every size is in proportion to
+the fit's own sigma, in the proportions fitted on inclined geosynchronous and geostationary fits to precise orbits, and
+never under the ABOVE row. On commercial geostationary fits, whose truth holds burns (stack #444), AP's 72 h coverage
+at days 1, 3, 5 and 7 goes from 0.64, 0.37, 0.19 and 0.05 to 0.84, 0.85, 0.84 and 0.85. The 24 h fits improve but stay
+far under the band (0.33 to 0.45). Inclined geosynchronous and geostationary fits to precise orbits keep the ABOVE row:
+no form passes the acceptance on them (inclined geosynchronous cross-track at day 1, AP's analytic Moon, stack #446;
+geostationary windows whose truth holds burns, stack #444). `test/covariance-geo-sigma-row.e2e.mjs` holds the rule.
+
+Under the drag the formal sigma of ln BTERM is overconfident. On the headline-loop windows the 72 h fits sit 2.7 to 11
+stated sigmas from the numerical propagator's fitted term at the median (stack #463, #471). In the strong-drag class
+(an AP set with its perigee under 600 km, 24 h and 72 h arcs, NRLMSISE-00 on the default drag prior; SPEC 12.8 "The
+strong-drag class") the record states the arc's information on ln BTERM over m^2 (m 9.22 and 14.5), combined with the
+prior's, as a rank-1 update along BTERM's column, so the forecast maps it, and s_d takes the class's share (0.126 and
+0.163). On Swarm and GRACE-FO the ln BTERM figures go from 101 to 118 windows beyond 3 sigma to none, at 0.94 to 0.96
+coverage. The in-track forecast moves toward the band at every lead: the 72 h fits' coverage goes from 0.78 to 0.83 to
+0.85 to 0.91 (all windows, the burns included: 0.74 to 0.76 to 0.82 to 0.86). Every state and every other record is
+bit for bit, and records fitted before keep their stated sigma. At 600 to 2,500 km the covariance is the DRAG row's:
+there the spheres' width is the row's s_l, and no share c removes it (stack #471). `test/drag-term-strong-drag-class.e2e.mjs` holds the rule.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
@@ -577,8 +603,11 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   a 2,600 km set states its sigma.
 - `test/covariance-above-classes.e2e.mjs`: SPEC 12.5, above the drag by class (stack #433): on the module's own
   flights, a LAGEOS-class fit inside its calibrated data sigma and span states the LAGEOS row (AP and SGP4XP) with s_d
-  = k |AGOM| / a; above that data sigma, over 24 h, and in the classes not yet fitted (HEO, medium Earth orbit) the
-  ABOVE row; every record flies with its covariance.
+  = k |AGOM| / a; an HEO fit inside its condition the HEO row; above that data sigma, over 24 h, and in medium Earth
+  orbit, which has no class row, the ABOVE row; every record flies with its covariance.
+- `test/covariance-geo-sigma-row.e2e.mjs`: SPEC 12.5, the geosynchronous SIGMA row (stack #433 part C): a one-day fit
+  at a data sigma from the threshold to 2.91 km, over 24 h or 72 h, states every size in proportion to that sigma, both
+  theories; under the threshold and over 48 h the ABOVE row.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).

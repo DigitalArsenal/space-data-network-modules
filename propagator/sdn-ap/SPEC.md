@@ -1907,6 +1907,9 @@ floor the set carries in COV_PROPAGATION and adds at every time, epoch included;
 | SDNAP | DRAG | 1.8579913326733934e-07 | 1.12761105007012e-06 | 7.647194501793458e-07 | 0.112126311682426 | 1.5127596877626373 |
 | SDNAP | ABOVE | 9.6961538661171821e-07 | 8.1531127919544734e-07 | 4.753573962018311e-06 | 0 | 1 |
 
+In the strong-drag class (12.8: perigee under 600 km, 24 h and 72 h arcs, NRLMSISE-00 on the default drag prior) the
+record also states a wider sigma of ln BTERM, and c is the class's: 0.126 and 0.163.
+
 The DRAG row (0.6.1, 2026-11-05) is fitted per axis. Per radial, in-track and cross-track axis (RIC, the truth's
 axes) z = e / sigma, the forward error component over the propagated 1-sigma; calibrated, median |z| = 0.674, and the
 band [0.603, 0.754] is the one-axis image of 12.7's (0.674 x sqrt of [0.8, 1.25]). The loss is, per regime, the mean
@@ -1969,6 +1972,12 @@ its own elements: HEO at e 0.3 or more; otherwise geosynchronous under 1.5 rev/d
 | --- | --- | --: | --: | --: | --: | --- | --- |
 | SDNAP | LAGEOS | 1.1374623058968726e-08 | 8.083584088270014e-08 | 3.831472309446551e-09 | 1.415e-05 | 0.00243 to 0.00276 | 64.8 to 75.6 |
 | SGP4XP | LAGEOS | 2.463673468245377e-07 | 6.564224575525169e-07 | 5.502200043625398e-08 | 3.216e-05 | 0.0588 to 0.0769 | 64.8 to 75.6 |
+| SDNAP | HEO | 6.357465071432782e-06 | 8.153112791954473e-07 | 4.753573962018311e-06 | 2.401038715861921e-09 | 0.00767 to 4.22 | 64.8 to 352.8 |
+| SGP4XP | HEO | 6.406459698609395e-06 | 8.962738267352311e-07 | 2.666e-07 | 1.667570181154198e-08 | 0.00826 to 4.18 | 64.8 to 352.8 |
+
+A record states its row: COV_PROPAGATION's NOISE_* fields are the row's sizes, so a class row is read from the record
+by its s_e and s_i (and s_d not 0), and the ABOVE row by its own. A set outside its class's calibrated condition gets
+the ABOVE row.
 
 Acceptance (per regime, fit arc and axis at days 1, 3, 5 and 7, scored against the precise orbits). The count of |z|
 above 3 must be at most max(as built, ceil(1 % of the windows), 1). The count inside the 95 % region must not be
@@ -1991,18 +2000,106 @@ they hold leaving each satellite out in turn. The module's own covariance, flown
 AP's radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). That part is the epoch covariance, and
 the noise starts from zero at the end of the arc.
 
-The other classes keep the ABOVE row for now. Medium Earth orbit: Galileo's in-track errors run 5 to 14 times GPS's,
-and nothing the record states ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a
-row that holds the acceptance must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times
-too wide in track. That row, and its second row for sets that solve Y0 (16.13), follow once the fit's end with Y0
-solved no longer depends on rounding (stack #456). Geosynchronous: noise scaled by the record's own data sigma,
-measured next. HEO: TESS and Chandra, two objects, 14 window-arcs, measured after the eccentric integration step fix.
-THEMIS is not in this set: its perigee is in the drag.
+HEO *[2026-11-11, sdn-ap 0.6.16's eccentric integration step]*. Two objects, TESS and Chandra: 14 windows, 28 window-
+arcs (TESS 72 h and 336 h fits, Chandra 72 h and 168 h), e 0.454 to 0.687. The calibrated condition is data sigma
+7.67 m to 4.22 km (AP) and 8.27 m to 4.17 km (SGP4XP), and fit spans of 72 to 336 h, 10 % either side. Outside it
+the ABOVE row stands. Inside it, an eccentric object unlike these two is not validated by this evidence. The rows are
+fitted on all 28 window-arcs, and every size below the ABOVE row's is raised to it, so the HEO row never states less
+than the ABOVE row, for any eccentric object inside the condition. For AP that is s_i and s_l, where the fit gave
+7.44e-7 and 1.09e-8; the fitted values would have narrowed every window's cross-track by up to 9 % and Chandra's
+in-track and radial by up to 29 %. For SGP4XP it is s_l, where the fit gave 1.19e-8: on TESS and Chandra s_e carries
+the in-track width, but at e 0.3 and 2 rev/day the fitted s_l would have stated 4.0 m of in-track growth a day against
+the ABOVE row's 89.2 m. No HEO window's 1-sigma narrows in any direction at any lead (1,932 window-lead-axis cells
+checked, both theories). Leaving each window out in turn (both its fit arcs), the row fitted on the other 13 holds the
+acceptance on it, for both theories; raising sizes to the ABOVE row's only widens it. Leaving one object out
+holds for SGP4XP both ways, and for AP from TESS to Chandra only: AP's row fitted on Chandra alone gives s_e 1.6e-9
+where TESS needs 5.5e-6, and TESS's 72 h coverage falls from 0.43 to 0.00. One eccentric object does not calibrate
+another, and no claim here rests on that. The rows on all 28 window-arcs (7 windows per row), ABOVE row > HEO row:
+
+| Theory | Object, fit arc | Day | median abs(z) R / T / N | windows abs(z) > 3, R / T / N | 95 % coverage |
+| --- | --- | --: | --- | --- | --- |
+| SDNAP | TESS, 72 h | 1 | 2.946 / 0.880 / 0.578 > 0.515 / 0.183 / 0.578 | 3 / 0 / 0 > 0 / 0 / 0 | 0.43 > 1.00 |
+| SDNAP | TESS, 72 h | 7 | 3.705 / 2.111 / 0.236 > 0.625 / 0.537 / 0.236 | 4 / 3 / 0 > 0 / 0 / 0 | 0.43 > 1.00 |
+| SDNAP | TESS, 336 h | 1 | 4.036 / 0.969 / 1.251 > 0.847 / 0.215 / 1.250 | 4 / 3 / 1 > 1 / 0 / 1 | 0.29 > 0.57 |
+| SDNAP | TESS, 336 h | 7 | 4.996 / 4.467 / 0.503 > 0.861 / 1.085 / 0.501 | 5 / 6 / 0 > 0 / 1 / 0 | 0.14 > 0.71 |
+| SDNAP | Chandra, 72 h | 1 | 0.402 / 0.471 / 0.229 > 0.240 / 0.202 / 0.229 | 1 / 2 / 2 > 1 / 0 / 2 | 0.57 > 0.71 |
+| SDNAP | Chandra, 72 h | 5 | 0.560 / 1.808 / 3.057 > 0.425 / 0.797 / 3.054 | 1 / 3 / 4 > 1 / 1 / 4 | 0.00 > 0.29 |
+| SDNAP | Chandra, 168 h | 1 | 0.993 / 1.609 / 0.271 > 0.858 / 1.185 / 0.271 | 0 / 1 / 0 > 0 / 1 / 0 | 0.71 > 0.71 |
+| SDNAP | Chandra, 168 h | 7 | 3.228 / 2.903 / 0.377 > 1.419 / 1.394 / 0.377 | 4 / 3 / 1 > 0 / 0 / 1 | 0.29 > 0.43 |
+| SGP4XP | TESS, 72 h | 1 | 7.731 / 3.975 / 1.472 > 0.521 / 0.195 / 0.821 | 6 / 6 / 0 > 0 / 0 / 0 | 0.00 > 1.00 |
+| SGP4XP | TESS, 336 h | 7 | 17.320 / 25.385 / 1.309 > 0.850 / 1.090 / 0.556 | 7 / 7 / 0 > 0 / 1 / 0 | 0.00 > 0.71 |
+| SGP4XP | Chandra, 72 h | 5 | 1.834 / 5.943 / 6.140 > 0.311 / 0.770 / 2.608 | 3 / 5 / 5 > 1 / 1 / 3 | 0.00 > 0.43 |
+| SGP4XP | Chandra, 168 h | 7 | 7.015 / 5.120 / 0.819 > 1.926 / 1.520 / 0.400 | 5 / 6 / 1 > 2 / 1 / 1 | 0.00 > 0.43 |
+
+The covariance is too narrow on Chandra at several cells (AP's cross-track at day 5 of the 72 h fits, 3.05 at the
+median), but nowhere narrower than under the ABOVE row. THEMIS is not in this set: its perigee is in the drag.
+
+Medium Earth orbit has no class row: Galileo's in-track errors run 5 to 14 times GPS's, and nothing the record states
+ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a row that holds the acceptance
+must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times too wide in track, and with Y0
+solved the fit's end depends on rounding (stack #456).
+
+Geosynchronous *[2026-11-11, sdn-ap 0.6.19's one-day resonant tail]*. The headline-loop one-day windows, both theories,
+ruling 1 as above:
+- inclined geosynchronous: 60 window-arcs of 72 h fits;
+- geostationary: 34 window-arcs of 72 h fits (data sigma 0.86 to 3.5 m for both rows);
+- commercial geostationary: 79 and 77 window-arcs of 24 h and 72 h fits (data sigma 9.7 m to 2.90 km).
+
+Three forms were fitted on inclined geosynchronous and geostationary. The SIGMA form fits best: every size in proportion
+to the record's own data sigma, with s_d constant over the orbit. Its training loss is 0.095 for AP, against 0.43 for
+the constant form and the AGOM form (SGP4XP: 0.040). At those rows' median sigma (AP 1.356 m, SGP4XP 10.21 m) its sizes
+are:
+- AP: s_e 2.500e-8, s_i 2.060e-8, s_l 4.259e-8, s_d 8.908e-8;
+- SGP4XP: s_e 6.002e-8, s_i 3.579e-7, s_l 4.106e-8, s_d 1.252e-7.
+
+Inclined geosynchronous and geostationary fits to precise orbits keep the ABOVE row: no form passes ruling 1 on them.
+- Inclined geosynchronous cross-track is too narrow at day 1 (median |z| 1.97 for AP; 9 of 60 beyond 3 sigma): AP's
+  analytic Moon's error (stack #446).
+- On geostationary 72 h fits 9 of 32 are beyond 3 sigma at day 7: windows whose truth holds burns (stack #444).
+
+Carried up to a fit's own sigma, the same proportions hold where the data are far worse than precise orbits. A one-day
+set qualifies when:
+- its data sigma is at or above the threshold where every scaled s_e, s_i and s_l reaches the ABOVE row's (0.151 km
+  for AP, 0.066 km for SGP4XP), and at most 2.91 km;
+- its span is 0.9 to 1.05 times 24 h or 72 h.
+It then states every size as its per-km proportion times that sigma, with share 0 (src/covariance.inc kGsoSigmaAP,
+kGsoSigmaXP), so it never states less than the ABOVE row. The commercial geostationary windows were held out of the fit
+(this build's records, ABOVE row > the scaled row; R / T / N):
+
+| Theory | Fit arc | Day | Windows | 95 % coverage | beyond 3 sigma R / T / N |
+| --- | --: | --: | --: | --- | --- |
+| SDNAP | 24 h | 1 | 79 | 0.30 > 0.33 | 45 / 29 / 23 > 31 / 17 / 14 |
+| SDNAP | 24 h | 3 | 78 | 0.13 > 0.38 | 39 / 31 / 48 > 18 / 10 / 22 |
+| SDNAP | 24 h | 5 | 76 | 0.07 > 0.45 | 34 / 35 / 53 > 17 / 8 / 27 |
+| SDNAP | 24 h | 7 | 76 | 0.00 > 0.43 | 34 / 31 / 67 > 20 / 5 / 30 |
+| SDNAP | 72 h | 1 | 77 | 0.64 > 0.84 | 17 / 8 / 5 > 7 / 1 / 5 |
+| SDNAP | 72 h | 3 | 75 | 0.37 > 0.85 | 22 / 7 / 32 > 3 / 0 / 7 |
+| SDNAP | 72 h | 5 | 74 | 0.19 > 0.84 | 29 / 16 / 40 > 5 / 0 / 9 |
+| SDNAP | 72 h | 7 | 74 | 0.05 > 0.85 | 28 / 27 / 56 > 6 / 1 / 11 |
+| SGP4XP | 24 h | 1 | 79 | 0.14 > 0.20 | 48 / 58 / 23 > 46 / 53 / 5 |
+| SGP4XP | 24 h | 3 | 78 | 0.08 > 0.13 | 44 / 68 / 50 > 35 / 60 / 9 |
+| SGP4XP | 24 h | 5 | 76 | 0.04 > 0.11 | 36 / 70 / 57 > 30 / 63 / 15 |
+| SGP4XP | 24 h | 7 | 76 | 0.00 > 0.12 | 42 / 74 / 69 > 33 / 58 / 21 |
+| SGP4XP | 72 h | 1 | 77 | 0.48 > 0.71 | 17 / 28 / 5 > 13 / 15 / 4 |
+| SGP4XP | 72 h | 3 | 75 | 0.24 > 0.69 | 26 / 40 / 32 > 14 / 17 / 5 |
+| SGP4XP | 72 h | 5 | 74 | 0.07 > 0.61 | 37 / 60 / 41 > 19 / 21 / 7 |
+| SGP4XP | 72 h | 7 | 74 | 0.00 > 0.65 | 34 / 70 / 57 > 15 / 18 / 9 |
+
+The 24 h fits improve but stay far under the band (0.33 to 0.45 for AP, 0.11 to 0.20 for SGP4XP). Their truth holds
+burns (stack #444), and no rate noise describes a burn. No cell has more windows beyond 3 sigma than before.
+Inclined geosynchronous and geostationary are bit for bit: none of their fits reaches the threshold. Every state is bit
+for bit.
 
 The class boundaries make the stated covariance jump where a row changes. At n = 4 rev/day (e 0.01, a 16,763 km) the
 growth per day the rows give is, for AP, 2,003 m in track and 16.3 m radially under the ABOVE row against 1.6 m and
-0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 nothing jumps yet:
-every class there keeps the ABOVE row.
+0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 (n 2 rev/day, a 26,610
+km) the HEO row starts: for AP, 25.8 m radially per day under the ABOVE row against 169 m under the HEO row, and
+1,590 m in track and 21.7 m cross-track under both (the same s_l and s_i); for SGP4XP, 6.1 m radially and 10.0 m
+cross-track against 170 m and 23.9 m, and 89.2 m in track under both (the same s_l). At the geosynchronous SIGMA row's threshold (a 42,165 km) s_l is equal on both sides
+(it sets the threshold), and the other sizes step up. For AP it is 1,263 m of in-track growth a day on both sides,
+radially 40.9 m against 117.7 m a day, cross-track 34.4 m against 96.9 m, and the row's s_d adds 210 m of in-track
+per day squared. For SGP4XP it is 70.8 m in track on both sides, 9.7 m against 16.4 m radially, 15.8 m against
+98.0 m cross-track, and 17.1 m per day squared from s_d.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
@@ -2226,6 +2323,90 @@ past 30): its truth is cached (0.04 s), so the time is the fit's own, the Levenb
 finite-difference Jacobians each propagating the arc, which costs about 0.1 s on GTO (16.12's 1 h grid cost); its
 table rows are not measured.
 `test/high-e-fit-arc.e2e.mjs` measures every row but the pinned one.
+
+**The strong-drag class (stack #471, #463).** Under the drag the post-fit residual is the theory's own error, correlated
+along the arc, and the fit weighs it as independent data, so the formal sigma of ln BTERM overstates what the arc says
+about the term. On the headline-loop windows (below) the 72 h fits' |ln(B / B_FFM)| had a median of 2.7 to 11 stated
+sigmas (laser spheres 2.7, altimetry 9.3, near 700 km 11.2, strong drag 8.6), B_FFM being the numerical propagator's
+own fitted Cd A/m on the same window and arc. An AP set at e 0.3 or below
+with its perigee under 600 km, fitted under NRLMSISE-00 on BTERM's default prior over an arc of 21.6 to 25.2 h or 64.8 to
+75.6 h, therefore states
+
+    sigma_lnB^2 = 1 / ((1 / s_f^2 - 1 / s_p^2) / m^2 + 1 / s_p^2)
+
+with s_f the formal posterior sigma of ln BTERM and s_p the prior's. This is the arc's information on ln BTERM over m^2,
+combined with the prior's: the rule of "The arc above e 0.3" with m^2 in place of the residual components. m is 9.22
+on the 24 h row and 14.5 on the 72 h row. The covariance takes the new width as a rank-1 update along BTERM's own column,
+C + (sigma_lnB^2 / s_f^2 - 1) u u^T / C_BB with u = C[:, BTERM]. Every row follows its regression on BTERM, as the fit
+compensates a wrong drag term, so the forecast maps the width as an error of the arc's drag. Two other forms were
+measured and failed the strong-drag cells. Raising BTERM's diagonal alone maps the width as if the epoch state did not
+follow it. Scaling BTERM's row and column (the rule above e 0.3) shrinks the regression. Both took the 24 h fits' day-1
+in-track coverage from 0.96 to 0.98, outside the band. The DRAG row's s_d = c |n-dot_ng| then carries only what is left
+(the density forecast), with the class's share c: 0.126 (24 h) and 0.163 (72 h), against the DRAG row's 0.112 (12.5).
+The record's NON_GRAVITATIONAL_SHARE states it, and its OD COMMENT names the class with both widths. The class sits in
+and beside low-orbit commensurability bands, where the theory's own along-track error is 0.1 to 1.9 km at day 5 with
+the drag term right (stack #477). c was fitted on windows that carry that error as if it were drag noise, so it
+includes the bands' error. Records fitted before this rule keep their stated sigma: nothing reinterprets
+them, and a reader flies their matrix as it is written. A stated
+FIT.DRAG_PRIOR, another arc, a perigee at 600 km or above, SGP4XP, and AP without NRLMSISE-00 fit as before, byte for byte.
+
+The sizes come from the headline-loop strong-drag windows: Swarm A, B, C and GRACE-FO 1 and 2 in 2026, 24 h and 72 h
+fits, perigees 411 to 471 km. The ln BTERM sizes were fitted against B_FFM. c was fitted with the width mapped, against
+the precise orbits' in-track error at leads of 24, 72, 120 and 168 h, on the loss (coverage - 0.95)^2 + 0.25
+ln(median |z| / 0.674)^2 summed over the leads. Both were scored leaving one window out (both arcs of a window
+together). The burn rule: a window-arc counts as a burn when the numerical propagator's own 3D error at day 3 on it (arm
+FFMq) exceeds 10 km. That uses the numerical propagator's error, not a truth-only flag (stack #462). The sizes are fitted
+without the burns, and every row below is also shown on all windows with the burns counted.
+
+The record's sigma of ln BTERM against B_FFM, sdn-ap 0.6.18 > this build (n with the burns in brackets; width at the 95 %
+edge is the 95th percentile of |z| over 1.96: 1 is honest, 2 twice too narrow):
+
+| Fit arc | Pool | n | beyond 3 sigma | median abs(z) | 95 % coverage | width at the 95 % edge |
+| --: | --- | --: | --- | --- | --- | --- |
+| 24 h | burns left out | 141 | 108 > 0 | 7.11 > 0.77 | 0.16 > 0.96 | 9.01 > 0.98 |
+| 24 h | all windows | 153 (12) | 114 > 0 | 6.88 > 0.75 | 0.18 > 0.96 | 9.04 > 0.98 |
+| 72 h | burns left out | 128 | 101 > 0 | 8.59 > 0.59 | 0.16 > 0.94 | 14.9 > 1.03 |
+| 72 h | all windows | 153 (25) | 118 > 0 | 7.46 > 0.51 | 0.17 > 0.95 | 14.6 > 1.01 |
+
+The forecast's in-track z against the precise orbits, sdn-ap 0.6.18 > this build:
+
+| Fit arc | Lead h | Pool | n | 95 % coverage | beyond 3 sigma | median abs(z) | median in-track sigma (km) |
+| --: | --: | --- | --: | --- | --- | --- | --- |
+| 24 h | 24 | burns left out | 243 | 0.96 > 0.97 | 4 > 3 | 0.600 > 0.526 | 0.584 > 0.656 |
+| 24 h | 24 | all windows | 255 (12) | 0.94 > 0.94 | 8 > 6 | 0.610 > 0.531 | 0.585 > 0.660 |
+| 24 h | 72 | burns left out | 243 | 0.89 > 0.93 | 4 > 4 | 0.782 > 0.666 | 3.01 > 3.57 |
+| 24 h | 72 | all windows | 255 (12) | 0.86 > 0.90 | 12 > 11 | 0.804 > 0.683 | 3.02 > 3.59 |
+| 24 h | 120 | burns left out | 243 | 0.85 > 0.90 | 20 > 13 | 0.849 > 0.681 | 7.64 > 9.14 |
+| 24 h | 120 | all windows | 255 (12) | 0.82 > 0.87 | 28 > 20 | 0.903 > 0.701 | 7.69 > 9.24 |
+| 24 h | 168 | burns left out | 243 | 0.82 > 0.86 | 26 > 21 | 0.834 > 0.676 | 14.6 > 17.4 |
+| 24 h | 168 | all windows | 255 (12) | 0.79 > 0.84 | 34 > 28 | 0.852 > 0.708 | 14.7 > 17.6 |
+| 72 h | 24 | burns left out | 230 | 0.83 > 0.91 | 12 > 6 | 0.863 > 0.710 | 0.590 > 0.677 |
+| 72 h | 24 | all windows | 255 (25) | 0.76 > 0.85 | 31 > 19 | 0.923 > 0.802 | 0.599 > 0.695 |
+| 72 h | 72 | burns left out | 230 | 0.83 > 0.91 | 16 > 6 | 0.818 > 0.607 | 3.04 > 4.15 |
+| 72 h | 72 | all windows | 255 (25) | 0.76 > 0.86 | 29 > 15 | 0.901 > 0.656 | 3.14 > 4.29 |
+| 72 h | 120 | burns left out | 230 | 0.80 > 0.89 | 24 > 15 | 0.852 > 0.594 | 7.77 > 11.1 |
+| 72 h | 120 | all windows | 255 (25) | 0.75 > 0.86 | 35 > 21 | 1.022 > 0.729 | 8.06 > 11.4 |
+| 72 h | 168 | burns left out | 230 | 0.78 > 0.85 | 30 > 19 | 0.950 > 0.658 | 14.9 > 21.4 |
+| 72 h | 168 | all windows | 255 (25) | 0.74 > 0.82 | 41 > 25 | 1.035 > 0.714 | 15.5 > 22.2 |
+
+Both tables are this build's own records: the sizes fitted on all windows and rounded (m 9.22 and 14.5). Leaving one
+window out gives the same cells to 0.01 in coverage and to 4 windows beyond 3 sigma (72 h, day 5: 19 against 15).
+Leaving one satellite out holds on every forecast cell. On ln BTERM it holds on the 24 h fits (0.96, width 0.98), but
+on the 72 h fits a held-out satellite's tail is narrow by 1.41 (5 of 128 beyond 3 sigma, coverage 0.88). In-track
+coverage is still under the band at every lead of the 72 h fits (0.85 to 0.91) and at days 5 and 7 of the 24 h fits
+(0.90, 0.86): the class moves every cell toward the band and puts none past it on the wide side. Every state is bit for
+bit: of the 1,170 low-orbit window-arcs of the four rows (4,166 samples), the 510 in the class change only their
+covariance and the rest are bit for bit, as are a fifteenth of the above-the-drag windows (GD, GN, GN_GAL, IG, GE, WA;
+2,562 samples) and SGP4XP's records on an eighth of the four rows' windows (136 window-arcs, 2,840 samples), their
+covariance included.
+
+At 600 to 2,500 km (laser spheres, altimetry, Sentinel-1; measured on the drag-default candidate of stack #460, modules
+draft #39) the same rule (m 7.75 and 12.1 at 600 to 1,000 km, 1 and 9.22 above) takes the ln BTERM figures from 1 to 89
+beyond 3 sigma to 0 to 7 per row. It leaves the 24 h fits too wide by 1.25 to 1.75 at the 95 % edge, near 700 km at
+72 h too wide by 1.16, and altimetry at 72 h narrow in its tail by 1.55. With the width mapped, though, no share c keeps
+the spheres from widening (their in-track width is s_l's, about 0.49 km per day on every set there). A joint (c, s_l) per band narrows them but takes Sentinel-1's 72 h day-1 coverage from
+0.77 to 0.55. That band keeps the DRAG row's covariance and the formal sigma of ln BTERM (stack #463, #471).
+`test/drag-term-strong-drag-class.e2e.mjs` holds the rule on model truth.
 
 ---
 
