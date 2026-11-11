@@ -3210,6 +3210,24 @@ state and integrator, in season.
   average, a_f-dot departs by 1.1e-4 of its scale at e 0.1, 1.1e-3 at e 0.3 and 1.2e-2 at e 0.73, in shadow only
   (4e-15 wholly sunlit). In flight that is 2.3 to 3.5 m on the transfer orbit (e 0.73, AGOM 0.02) and under 0.3 mm on
   near-circular orbits.
+- **Section 4's output-time terms carry no shadow, while its mean longitude's rate counts one** (stack issue 472).
+  Over a sunlit arc, the mean longitude's rate takes the output-time Delta n on the sunlit arc only; the mapping
+  n_osc = n_mean + Delta n takes it everywhere. And the output-time terms add, through the shadow, the periodic motion
+  of a force that is off there. In season, a flight's response to the sphere (the set minus the set with AGOM 0)
+  against a numerical flight of the same sphere and cylinder from the same two epoch states drifts along track at
+  day 7 by:
+
+  | Orbit | Drift at day 7 |
+  | --- | --- |
+  | geostationary | 92 m |
+  | inclined geosynchronous | 71 m |
+  | Galileo-like | 116 m |
+  | GPS-like | 77 m |
+  | 800 km | 13 m |
+  | laser geodetic | 1.4 m |
+
+  Within each day it also errs by up to 1.3 m radial RMS. Out of season it is absent. A fit absorbs most of the drift
+  into the mean motion; the remainder is on the geostationary rows (a 2.4 to 3.3 m fit RMS against a sphere truth).
 
 *Cost* (provisional, niced under a load of about 100): the shadow takes 265 ns against the closed form's 183 ns per
 call at Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the

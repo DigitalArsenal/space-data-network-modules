@@ -235,7 +235,10 @@ scale, through grazing and with a boundary at the perigee (`sdnap_ap_srp_rates`)
 Not carried:
 - the penumbra: the numerical propagator flies a cone, AP the cylinder; 0.3 mm to 5.7 cm in 7 days, by regime;
 - section 4's sunlit-arc eccentricity-vector rate at high eccentricity (stack #466): 2.3 to 3.5 m at day 7 on a
-  transfer orbit.
+  transfer orbit;
+- the shadow in section 4's output-time terms (stack #472): in an eclipse season a flight's response to the sphere
+  drifts along track against the same sphere flown numerically, by 13 m (800 km) to 116 m (Galileo-like) at day 7.
+  A fit absorbs most of it.
 
 E2E: `test/radiation-shadow.e2e.mjs`.
 
