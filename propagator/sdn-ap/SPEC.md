@@ -3098,7 +3098,22 @@ grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0
 stepped at every node: kinks about 80 s apart near perigee, where the nodes pass fastest. On the transfer orbit with drag
 off the jump detector within 10 min of perigee read 0.395 m at 10 s and 0.031 m at 1 s; it now reads 0.032 m and 0.8 mm
 (stack #420; `test/egrid-continuity.e2e.mjs`). A grid is built at the set's mean elements at every 48 hours from its epoch
-(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval. A grid
+(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval.
+
+*The grid's mean motion in the long-period regime.* From 0.6.27 (stack #479), an AP set in the long-period regime (epoch period
+1,100 min or more) with the Sun and Moon builds every node's grid at its epoch mean motion. It reads every grid with the
+epoch's offset in a: none on its own grids, and its own epoch's a for a copy that reads its nominal's grids. Each node's e and i,
+and the state's offsets in them, are as before. There the bodies act on the mean elements as point masses (5), so the mean
+motion moves along each revolution, by up to 4e-4 of n at a = 114,000 km (the energy relation, the Moon at one cutoff). A
+family's divisor k - nu (nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, about 4.4 m on that orbit) moves by m x 4.4
+times as much. That is as large as a near-resonant family's distance from resonance: m = 7 lies 0.03 from j = 31, m = 9 lies 0.10
+from j = 40. Through 0.6.26 every node was built at the mean motion of its instant and every state offset in a from its own
+mean a, so the grid followed that oscillation. On a synthetic set at e 0.9 with perigee 5,000 km (i 70), with AP fitted to
+the numerical forecast over 0 to 120 h and the Moon on both sides, the field 70 x 70 against AP's degree 31 gave 3,717 m. With no
+tesseral term at all AP gave 1,175 m, and with the zonal field and the Moon alone on both sides 864 m. With the mean motion
+held it gives 970 m. With it held, the cadence no longer matters: nodes every 6 h, every 48 h, and one node for the whole
+flight give 971, 970 and 981 m. Rebuilding more often at the instant's mean motion helped only part way (2,436 m every 6 h,
+2,426 m every hour). Every other set is bit for bit: the averaged regime, AP without the Sun and Moon, and SGP4XP. A grid
 is keyed by its set's exact elements (bitwise n, e, i, the class and the degree): a lookup matches only that key, and a grid held
 from an earlier call is the same bytes a rebuild gives. A copy initialized while its nominal set's xpt::GridShareScope lives (the
 covariance's sigma sets, a fit iteration's perturbed copies) reads the nominal's grids, its schedule nodes included, linearly, when
@@ -3919,7 +3934,8 @@ A term is slow when |psi-dot| < 0.045 n (`kShallowBand`). For each (l, m, p) the
 each term is classified by its own rate, not by its family's q = 0 rate.
 
 *Where a slow term belongs.* At output, a term's mean-motion response is an along-track term in 1 / psi-dot^2 with a fixed
-divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node.
+divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node
+(at the epoch's mean motion in the long-period regime with the Sun and Moon, from 0.6.27).
 That is exact to first order while psi-dot holds still and stays well above the libration rate of the term's own resonance.
 Where the rate holds still the two forms agree. At 550 km beside 15:1 (i 87.35, gravity alone, the elements fitted and the
 coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h and 72 h fits:
