@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.27 (dist af2eb204).
+Version 0.6.29 (dist a0405aec).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -4117,7 +4117,7 @@ q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term
 flies a decaying orbit whose order-15 family's weight moves from 0.90 to 0.63 over 7 days. The 10 s jump detector reads at
 most 0.008 m (bound 0.08 m), and 400 states come out bit-identical in any order of requests.
 
-**16.19 The field's census** (stack #503). The rule: every tesseral term of the field whose effect on position reaches the
+**16.19 The field's census** (from 0.6.29; stack #503). The rule: every tesseral term of the field whose effect on position reaches the
 size cut is carried exactly once, by the carrier its rate gives it, in every class, on both sides of every switch.
 `sdnap_field_census(in, rows, max_rows)` lists, for a set of epoch mean elements (in: mean motion in rev/day, e, i in degrees,
 the record's tesseral degree, the size cut in m), every term (l, m, p, q) of the embedded field, order 1 to 70 and degree to
