@@ -3198,9 +3198,10 @@ tide within 0.67 m at day 5 in all 96 cases. Whether the error falls depends on 
 1,336 km the fit holds BTERM at the band median of 12.8, 0.0005 m^2/kg against the truth's 0.02, 100 to 200 m along
 track at day 5, and the term wins on 4 of 8; with B and AGOM held, on 7 of 8. At 693 km, with B and AGOM held, AP is
 40 to 126 m at day 5 without any tide (the field above degree 12, carried in part), and the term wins on 5 of 8; with the
-field capped at 12 on both sides, on 8 of 8. On real windows the tide therefore moves rows both ways: the altimetry rows'
-24 h fits (the band's drag median, stack issue 460) and near 700 km at 72 h (the field above degree 12, stack issue 448)
-lose windows they held only because the missing tide offset those errors.
+field capped at 12 on both sides, on 8 of 8. On real windows the tide moves rows both ways, and two rows get worse with
+it: the altimetry rows' 24 h fits and near 700 km at 72 h. The model world names what the missing tide was offsetting
+there: the drag coefficient at its default (stack issue 460) and the field above degree 12. On real windows tesseral
+degrees 13 to 16 alone do not restore them.
 
 *Covariance.* The stated covariance hardly moves with the term. A 72 h fit's position sigma on the tide truth at days
 1, 3, 5 and 7, medians of the 17 low orbits, with the term: radial 7.5, 8.4, 10.4, 12.6 m, in-track 252, 1,216, 2,192,
