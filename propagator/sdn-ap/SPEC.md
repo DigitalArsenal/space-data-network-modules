@@ -2744,7 +2744,12 @@ was this rotation, all of it. Fitted over the forecast's 5 days with the full sy
 
 On the real windows against their precise orbits (0.6.30, gate off and on), the medians are better at day 3 and level at
 day 5: TESS's seven windows 1,594 and 1,592 m at day 3 with the forecast fit, and 2,452 and 1,868 m with the 72 h fit;
-Chandra's seven 24 and 3 m. The one-day class (THEMIS) already took the rotation and is unchanged. A covariance's copy
+Chandra's seven 24 and 3 m. `test/heo-frame.e2e.mjs`'s replay of TESS's same seven windows (the module's default fit of
+the 72 h of states, no drag, the RMS over each day) is worse: medians 775.7, 1,635.8 and 8,549.6 m to 1,011.7, 2,000.0 and
+9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 -103.1 to +706.0 m (its known defect, stack #479). At the long lead
+the two replays move the same windows the same way; why they part at days 1 to 3 is not established. The numerical
+propagator itself is 1.7 to 10.2 km off the precise orbits at day 5 on these windows. The one-day class (THEMIS) already
+took the rotation and is unchanged. A covariance's copy
 takes the same rotation through the same flag. The bodies the rates read stay in TEME of date: 0.7 arcsec in 5 days moves
 the Moon's direction by 3.4e-6 rad.
 
@@ -3948,7 +3953,8 @@ to 0.6.22):
 - TESS (seven real windows of `test/heo-frame.e2e.mjs`): worse, medians 610.7, 1,390.4, 6,553.6 m to 762.8, 1,677.5,
   8,596.8 m at days 1, 3 and 7 (four windows worse, two better, one level). The Moon is what moves it, and on model truth
   the third body is right there (below); AP's zonal theory on that orbit is 0.9 to 1.8 km off at day 7, and the old
-  Moon's error had partly offset it (stack #479).
+  Moon's error had partly offset it (stack #479). From 0.6.NN that error is known to be the frame's, not the zonal
+  theory's (16.4).
 - Day-3 medians of `test/etalon-resonance.e2e.mjs` (fits that state no FORCES.ECOM2): Etalon-1 4.25 to 3.54 m, Etalon-2
   5.31 to 4.84, LAGEOS-1 7.17 to 7.11, LAGEOS-2 6.92 to 6.80, LARES-2 8.71 to 8.66, inclined geosynchronous 13.45 to 7.60
   m, and geostationary 61.62 to 65.19 m (above).
