@@ -77,6 +77,9 @@ const sum = (f) => batches.reduce((a, b) => a + b[f], 0);
 console.log(JSON.stringify({ N, batch: BATCH, theory: AP ? "AP (tesseral 31, zonal 20)" : "SGP4XP", threads: m.threads, perRow: PER_ROW, coef: COEF, tolM: TOLM, tolMms: TOLMMS,
   loadWallS: +(sum("loadMs") / 1000).toFixed(2), loadCpuS: +sum("loadCpuS").toFixed(2), buildWallS: +(sum("buildMs") / 1000).toFixed(2), buildCpuS: +sum("buildCpuS").toFixed(2),
   theoryRecordBytesPerSet: Math.round(storePerSet), memoryGrowthPerLoadedSet: Math.round(memPerSet), memoryMB: Math.round(mem().byteLength / 1048576), segmentBytesPerSet: +(x.sdnap_segments_bytes() / N).toFixed(1), status: codes, divisions: div,
+  // rows the theory refused at load (status 1): where they fall in their batch, by class
+  refusedRows: (() => { const r = []; st.forEach((s, k) => { if (s === 1) r.push(k); }); return { count: r.length, first: r[0] ?? null, last: r.at(-1) ?? null,
+    firstInBatch: r.length ? Math.min(...r.map((k) => k % BATCH)) : null, byClass: r.reduce((o, k) => ((o[sets[k].cls] = (o[sets[k].cls] ?? 0) + 1), o), {}) }; })(),
   noDivisionRows: noDivision.length, noDivisionByClass: noDivision.reduce((o, r) => ((o[r.cls] = (o[r.cls] ?? 0) + 1), o), {}), noDivisionSample: noDivision.slice(0, 8),
   minCoverS: +minCover.toFixed(1), segmentsPerSecondRealTime: +segPerSecond.toFixed(1), worstAtChecksM: +worstM.toFixed(4), worstAtChecksMms: +worstMms.toFixed(4) }));
 const times = Array.from({ length: STEPS }, (_, k) => (minCover * (k + 0.5)) / STEPS);
