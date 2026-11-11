@@ -1884,8 +1884,9 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
   along the analytic Jacobian lowers the cost, and stop when a step lowers Phi by less than 1e-6. The block's stated
   sigma is the root of the mean of (CX_X + CY_Y + CZ_Z) / 3 over its COVARIANCE_MATRIX_LINES, 0 when it has none. The
   covariance divides by the same sigma_r^2, so P_p is the inverse curvature of the cost the fit minimized: one weighting
-  for the estimate and the covariance. A redone fit the theory refuses, or one that ends on a switch (16.7), leaves the
-  1 km fit, and the record says UNIT WEIGHTS.
+  for the estimate and the covariance. A redone fit the theory refuses, or one that ends at a limit in n (16.7), leaves
+  the pass before (the first leaves the 1 km fit, and the record says UNIT WEIGHTS); one held at an eccentricity switch
+  (16.7) is kept.
 - DRAG (the perigee below 2,500 km), an arc of 71 h or more (the fit interval's first to last state;
   `pcf::kDataSigmaUnderDragMinArcHours`) at or below e 0.3, the rule of 12.8's default of a 71 h arc: as above the
   drag, the whole-arc fit is redone at sigma_r and the covariance divides by the same sigma_r^2, so every prior acts at
@@ -2916,15 +2917,28 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   branch it reached, and its minimum is the answer when it stays there. Otherwise, at a limit in n (a resonance class
   limit or the 1,100-minute regime limit), the fit is refused fit-at-branch-limit, naming the switch, the set's mean
   motion and eccentricity, and asking for another span or epoch. At a switch in eccentricity (0.3, and the first-order
-  tesseral families' at 0.05) the fit ends on one side *[stack #504]*: the free set, which its refused trial steps hold
-  at the switch on its own branch, is the answer; its branch is that of its own epoch eccentricity, and the record's OD
-  COMMENT says "fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie
-  across it". Every fit is the version before's bit for bit except where some pass ends at an eccentricity switch:
-  there the held set is kept in place of the pass before. Measured on model truth (experiments synthetic-orbits, FFM 2.2.0;
-  every case of the seeded set within 0.01 of a switch in e, 212 of 965), against the version before:
-  - the 72 h fit before the cutoff, refused fit-at-branch-limit on 8 cases (seven at 0.3, one at 0.05), gives a record on each, its
-    largest distance to the truth over 0 to 120 h from 16 m to 4.8 km (the e 0.3 orbits with a low perigee, whose 72 h fits miss
-    the forecast by kilometres on either branch);
+  tesseral families': 0.05 in class 0, 0.3 in every other class) with no limit in n near, the fit ends on one side
+  *[stack #504]*: the free set, which its refused trial steps hold at the switch on its own branch, is the answer; its
+  branch is that of its own epoch eccentricity, and the record's OD COMMENT says "fit: held at the eccentricity switch on
+  its own branch; the least-squares sets of both branches lie across it". e exactly 0.3 is a branch of its own (the
+  class's G about e0 from 0.3 up, 6.4; the zonal tail's every long-period term and the perigee drag passage only above
+  it): a held set lies within 1e-8 of its switch, on one side of it. A held record's covariance is the curvature of the
+  cost, e free, at a set that is not the cost's minimum: its e sigma reaches across the switch, and no calibration measured
+  it there; the OD COMMENT is the record's only mark of it. Where some pass ends at an eccentricity switch, each caller
+  takes the held set where it had a refusal:
+  - the 2-revolution stage and the whole-arc pass with BTERM: the next pass starts from the set the fit leaves, whatever its
+    status; that was the last set the pinned passes reached, and is now the held set;
+  - each stage of the arc grown by threes: a refused stage left the stage before in place; a held stage is kept;
+  - the whole-arc pass with AGOM (and Y0): refused fit-at-branch-limit; now the held set is the record's;
+  - each pass at the data's own sigma (12.1): a refused pass left the pass before; a held pass is kept;
+  - `sdnap_fit`: the held set with status 0 or 1, where it returned -5 with the last set the pinned passes reached (its
+    stats carry no mark of the hold).
+  Every other fit is the version before's bit for bit. Measured on model truth (experiments synthetic-orbits, FFM 2.2.0;
+  every case of the seeded set within 0.01 of a switch in e, 212 of 965), the rule on 0.6.27 (modules 2919d35d, wasm
+  a4d3bfcb) against 0.6.27 without it (modules f6f0c2cb, wasm 0211d88b):
+  - the 72 h fit before the cutoff, refused fit-at-branch-limit on 8 cases (seven at 0.3, one at the 0.05 switch of class
+    0), gives a record on each, its largest distance to the truth over 0 to 120 h from 16 m to 4.8 km (the e 0.3 orbits
+    with a low perigee, whose 72 h fits miss the forecast by kilometers on either branch);
   - the fit to the numerical forecast over 0 to 120 h, refused on 2 (0.05 and 0.3), gives records of 186 and 115 m;
   - four fits not refused move, a pass of each having ended at the switch, each nearer the truth (652 to 644, 174.5 to 174.4,
     25.5 to 8.6 and 19.9 to 13.5 m); the other 410 of the 424 fits are bit for bit.

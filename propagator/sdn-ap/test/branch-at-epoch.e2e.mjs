@@ -17,7 +17,9 @@
 //   its own side (the fitted mean motion within 1e-9 of the truth's, the arc RMS below 1 cm); a truth half on each side
 //   (the mean of the two flights of one set at the 0.8022 limit) is refused fit-at-branch-limit, its message naming the
 //   switch; a truth half on each side of the eccentricity switch at 0.3 (at 2 rev/day) is fitted, its set held at the
-//   switch on its own branch (e within 1e-6 of 0.3) and its OD COMMENT saying so (stack #504).
+//   switch on its own branch (e within 1e-6 of 0.3, never 0.3 itself, which is a branch of its own: G's series from 0.3
+//   up, the zonal tail only above it), its OD COMMENT saying so, and the record flown back over the arc giving the
+//   fit's own stated RMS (stack #504).
 // - Epoch store (SPEC 14.3): two AP sets 6 h apart on either side of the 1.2033 limit are not blended: inside the window
 //   of their switch sdnap_epochs_select gives b = -2 and weight 0, the state is the chosen set's bit for bit, and
 //   propagate_epochs names the switch time in the block's COMMENT; two sets on one side blend (b = 1, weight in (0, 1)) and
@@ -152,8 +154,14 @@ const arc = Array.from({ length: 145 }, (_, k) => EPOCH + k * 600000);
   let refused = null, rec = null;
   try { rec = await fit(mixed, arc); } catch (error) { refused = error; }
   const eFit = rec ? ocmOf(rec).MEAN_ELEMENTS.ECCENTRICITY : null, comment = rec ? [].concat(readFitOcm(rec).u.COMMENT ?? []).join(" | ") : "";
-  console.log(`fit of a truth half on each side of the e 0.3 switch: ${refused ? `${refused.code}: ${refused.text}` : `fitted, e ${eFit}; OD COMMENT: ${comment}`}`);
-  check(!refused && Math.abs(eFit - 0.3) <= 1e-6 && /held at the eccentricity switch on its own branch/.test(comment), `half on each side of e 0.3: ${refused ? refused.code : `e ${eFit}, ${comment}`}`);
+  // e exactly 0.3 is a branch of its own (G's series from 0.3 up, the zonal tail above it): the held set is on one side
+  const side = eFit === null ? "none" : eFit < 0.3 ? "below" : eFit > 0.3 ? "above" : "on the limit";
+  // the held record flown back over the arc gives the fit's own stated RMS (the set the record carries is the one fitted)
+  const stated = rec ? readFitOcm(rec).fitRmsKm : NaN, back = rec ? await fly(rec, arc) : [];
+  const flownKm = rec ? Math.sqrt(back.reduce((s, q, k) => s + (q[0] - mixed[k][0]) ** 2 + (q[1] - mixed[k][1]) ** 2 + (q[2] - mixed[k][2]) ** 2, 0) / arc.length) : NaN;
+  console.log(`fit of a truth half on each side of the e 0.3 switch: ${refused ? `${refused.code}: ${refused.text}` : `fitted, e ${eFit} (${side} 0.3); flown back ${(flownKm * 1000).toFixed(6)} m RMS, stated ${(stated * 1000).toFixed(6)} m; OD COMMENT: ${comment}`}`);
+  check(!refused && Math.abs(eFit - 0.3) <= 1e-6 && eFit !== 0.3 && /held at the eccentricity switch on its own branch/.test(comment), `half on each side of e 0.3: ${refused ? refused.code : `e ${eFit} (${side}), ${comment}`}`);
+  check(rec && Math.abs(flownKm - stated) <= 1e-6 * stated + 1e-9, `held record flown back: ${flownKm} km RMS against the stated ${stated} km`);
 }
 
 // --- the epoch store across a branch

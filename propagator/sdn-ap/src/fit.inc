@@ -527,9 +527,12 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
 constexpr int32_t kBranchLimit = -5;
 /// SPEC 16.7: a fitted set this close to a switch (relative in n, absolute in e) is on it.
 constexpr double kOnSwitch = 1e-8;
-/// SPEC 16.7: the switch the set lies on is one of eccentricity (its branch differs within kOnSwitch below and above its e).
-inline bool on_eccentricity_switch(const Elements& e) {
+/// SPEC 16.7: the set lies on a switch of eccentricity (its branch differs within kOnSwitch below and above its e) and on
+/// no limit in n (its branch is its own within kOnSwitch relative below and above its n): a set on both is at a limit in n.
+inline bool on_eccentricity_switch_only(const Elements& e) {
   const bool ap = ap_selected();
+  const xpt::Branch b = xpt::branch_of(e.xno, e.eo, ap);
+  if (xpt::branch_of(e.xno * (1.0 - kOnSwitch), e.eo, ap) != b || xpt::branch_of(e.xno * (1.0 + kOnSwitch), e.eo, ap) != b) return false;
   return xpt::branch_of(e.xno, e.eo > kOnSwitch ? e.eo - kOnSwitch : 0.0, ap) != xpt::branch_of(e.xno, e.eo + kOnSwitch, ap);
 }
 
@@ -539,9 +542,9 @@ inline bool on_eccentricity_switch(const Elements& e) {
 /// the fit again from that set with every trial set pinned to its branch: when its minimum stays on the
 /// branch, the free set stands unless the pinned one's RMS is lower by more than 1e-9 relative (a free fit stalled short
 /// of the branch's minimum); a minimum across the switch is fitted again pinned to the branch it reached, and its minimum
-/// is the answer when it stays there. Otherwise, at an eccentricity switch, the free set stands, held at the switch on its
-/// own branch (`held_at_switch`; stack #504: the fit ends on one side); at a limit in n, status kBranchLimit, `row` the
-/// last set reached. `sigma_km` and `data_sigma` as run_free's.
+/// is the answer when it stays there. Otherwise, at an eccentricity switch with no limit in n near, the free set stands,
+/// held at the switch on its own branch (`held_at_switch`; stack #504: the fit ends on one side); at a limit in n, status
+/// kBranchLimit, `row` the last set reached. `sigma_km` and `data_sigma` as run_free's.
 inline Result run(ElementRow& row, const double* t, const double* r, int count, const Options& o, double sigma_km = kUnitSigmaKm,
                   bool data_sigma = false) {
   Result out = run_free(row, t, r, count, o, sigma_km, data_sigma);
@@ -572,9 +575,10 @@ inline Result run(ElementRow& row, const double* t, const double* r, int count, 
     out = res;
   }
   // both branches' least-squares sets lie across the switch. At an eccentricity switch (0.3, or the first-order tesseral
-  // families') the fit ends on one side: the free set, which its refused trial steps hold at the switch on its own branch,
-  // stands, and its record's branch is that of its own epoch eccentricity (stack #504; review 0's refusals at e 0.3)
-  if (on_eccentricity_switch(elements_of(free_row))) {
+  // families': 0.05 in class 0, 0.3 in every other class) with no limit in n near, the fit ends on one side: the free set,
+  // which its refused trial steps hold at the switch on its own branch, stands, and its record's branch is that of its own
+  // epoch eccentricity (stack #504)
+  if (on_eccentricity_switch_only(elements_of(free_row))) {
     row = free_row;
     out = free_out;
     out.held_at_switch = true;
@@ -603,7 +607,8 @@ inline double data_sigma_km(const Result& res, int count, const Options& o, doub
 /// SPEC 12.1: the fit at the data's own sigma. `row` and `res` hold a fit weighted at `sigma_km`; while its data sigma
 /// differs from `sigma_km` by more than kSigmaTolerance of it, the fit is redone from the last set at the data sigma
 /// (at most kSigmaPasses times). `row`, `res` and `sigma_km` take the last fit, whose iterations add to `iterations`;
-/// a refit the theory refuses, or one that ends on a switch (kBranchLimit), leaves the one before.
+/// a refit the theory refuses, or one that ends at a limit in n (kBranchLimit), leaves the one before; one held at an
+/// eccentricity switch (run's held_at_switch) is kept.
 inline void reweight(ElementRow& row, const double* t, const double* r, int count, const Options& o, double stated_km, Result& res,
                      double& sigma_km, int& iterations) {
   // once the data outweigh the priors the analytic columns (two-body motion, the J2 secular drifts, the drag column

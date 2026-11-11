@@ -122,7 +122,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); a fit that stops on
   a switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches; within 1e-8) is settled on one branch;
   when on each side the best set lies across the switch, a fit at a limit in n is refused fit-at-branch-limit and one at
-  an eccentricity switch ends on one side, its set held at the switch (the record's OD COMMENT says so); an eccentric block's
+  an eccentricity switch (0.3; the first-order tesseral families' 0.05 in class 0, 0.3 in every other class) with no
+  limit in n near ends on one side, its set held at the switch (the record's OD COMMENT says so; its covariance is the
+  curvature at a set that is not the cost's minimum, uncalibrated there); an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
   no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
