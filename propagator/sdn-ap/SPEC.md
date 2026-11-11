@@ -1459,7 +1459,8 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   2 pi / n_0 is below 1100 minutes;
 - h = 95 minutes for orbits whose epoch period is 1100 minutes or more (this class is fixed at initialization).
   AP with a selected gravity replacement and the epoch one-day resonance class uses 38 minutes instead,
-  and an AP set with e_0 above 0.3 steps at most 0.5 (1 - e_0)^(3/2) / n_0 (16.10);
+  and an AP set with e_0 above 0.3 puts its nodes evenly in the epoch orbit's eccentric anomaly at a mean step of 0.85
+  times that (16.10);
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
@@ -1684,7 +1685,7 @@ Refusals). 9.9 has no further fallback: the 30-minute steps of the 9.1.1.0 build
 The step is fixed (95 min in the long-period regime, 38 min in AP's one-day class) with no error control. It resolves perigee
 only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at 95 min and 0.70 at 38 min on a one-day orbit. Beyond that the theory's
 own equations are integrated with a mean-longitude error of 0.2 km a week at e 0.5 and 0.4 to 4.6 km a week at e 0.7 to 0.82 at
-95 min, and 0.09 to 0.17 km at e 0.82 at 38 min. From 0.6.16 an AP set above e_0 0.3 takes the shorter step of 16.10.
+95 min, and 0.09 to 0.17 km at e 0.82 at 38 min. From 0.6.16 an AP set above e_0 0.3 takes the shorter step of 16.10, and from 0.6.NN nodes even in E (16.10).
 
 **Output between nodes.** Cubic Hermite interpolation on the bracketing nodes (values and rates), with
 q = (t - t_k) / (t_k+1 - t_k): y(t) = (1 + 2q)(1 - q)^2 y_k + q (1 - q)^2 h y'_k + q^2 (3 - 2q) y_k+1 +
@@ -2719,6 +2720,54 @@ side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3
 - Without the step's error, what remains (day 5) is AP's geopotential: J2 alone on both sides 39.8 m, J2 to J5 78.9 m, a
   4 x 4 field 103.2 m and a 12 x 12 field 83.3 m (the J3 to J5 short-period set is not carried; 16.11).
 - `test/long-period-perigee-step.e2e.mjs` holds the model truth and the step's convergence (stack #445).
+
+**From 0.6.NN the nodes are even in the eccentric anomaly of the epoch orbit (stack #450).**
+- **The rule.** The step in time follows 1 - e_0 cos E: short at perigee and long at apogee. The mean step is 0.85 h_0, with
+  the guard 0.5 sqrt(1 - e_0).
+  - Node k lies at t_k = (G(E_0 + k dE) - G(E_0)) / n_0, with G(E) = E - e_0 sin E and E_0 the epoch's eccentric anomaly.
+  - dE = min(0.5 sqrt(1 - e_0), 0.85 h_0 n_0); the step from node k is t_(k+1) - t_k.
+  - On the five orbits below the second term binds. The guard binds only for e_0 near 1.
+- **A function of the set.** The node times come from the index alone, through the branch (16.7; `Branch::lp_even`). A
+  covariance's moved set and a fit's difference columns, pinned to their nominal's or iterate's branch, fly the same node
+  times. They do not follow the true perigee's slow drift against the epoch orbit, and they need not: the step changes
+  smoothly with E.
+- **RK3 needs nothing new.**
+  - Each step is a standalone RK3 from its node's held rates.
+  - The cubic Hermite takes each interval's own end times.
+  - The 6-hour Y0 blocks (16.13) fall at fixed times inside whichever step holds them.
+  - The checkpoint stride counts nodes at the mean step dE / n_0.
+- **What does not change.** e_0 at 0.3 and below, every geostationary set and SGP4XP keep their grid bit for bit.
+
+Why even in E and not 16.10's first shape:
+- The rule above it leaves the uniform step away from perigee and shortens it through the pass.
+- Equal dE gives equal resolution in E at perigee and at apogee. But the third-body rates are largest at apogee, where the
+  tidal acceleration grows with r, so the error accrues there too.
+- So the mean step, not the perigee step, sets the accuracy, and tying it to h_0 keeps the node count of 0.6.15.
+
+AP against itself at day 5 (as the table above; nodes a revolution on the THEMIS-like orbit in brackets):
+
+| Rule | THEMIS-like | one-day e 0.70 | one-day e 0.50 | Chandra-like | TESS-like |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0.6.16: min(h_0, 0.5 tau) (167) | 0.08 m | 4.57 m | 15.14 m | 9.54 m | 0.95 m |
+| even in E, mean step h_0 (36) | 4.14 m | 1.61 m | 3.15 m | 16.33 m | 2.31 m |
+| even in E, mean step 0.85 h_0 (42; this rule) | 2.60 m | 0.95 m | 1.93 m | 9.99 m | 1.41 m |
+| even in E, mean step 0.707 h_0 (51) | 1.57 m | 0.51 m | 1.12 m | 5.70 m | 0.81 m |
+| uniform h_0 out of perigee, min(h_0, (1 - e_0 cos E) 0.5 sqrt(1 - e_0) / n_0) (43) | 1.72 m | 34.07 m | 15.14 m | 19.18 m | 0.95 m |
+| step h_0 (1 - e_0 cos E)^0.5 (35) | 30.41 m | 19.40 m | 9.79 m | 15.84 m | 1.32 m |
+
+FFM model truth on the THEMIS-like orbit (as above), days 1 / 3 / 5 / 7: 76.6 / 109.4 / 119.6 / 112.0 m (0.6.16:
+76.6 / 110.0 / 122.9 / 124.9 m).
+
+The price, against 0.6.15 (`test/kernel-cost.mjs` at nice 19, alternated twice; AP in order over 7 days at 300 s):
+- THEMIS-like: 1.13 to 1.24 times (0.6.16: 4.4 to 4.6).
+- Chandra-like: 1.06 to 1.20 times (0.6.16: 1.44).
+- TESS-like: 0.99 to 1.12 times.
+
+The integration error follows a cube law in the mean step, so its price is stated:
+- 1 m at day 5 costs 1.65 times the nodes on THEMIS-like orbits (mean step about 0.61 h_0) and about 2.5 times on
+  Chandra-like orbits (about 0.40 h_0).
+- AP's theory error on these orbits is 100 m and more, so the mean step stays at 0.85 h_0 until that error falls under
+  25 m (stack #461).
 
 The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
 2.406 rev/day) carries resonant terms in lambda - 2 theta, whose period 2 pi / |n - 2 omega_E| is long near the

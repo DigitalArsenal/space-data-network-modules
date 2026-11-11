@@ -92,7 +92,7 @@ inline Elements elements_of(const ElementRow& row) {
 inline bool ap_selected() { return xpt::tess::active().tesseral > 0 || xpt::tess::active().zonal > 0; }
 inline xpt::Branch row_branch(const ElementRow& row) {
   const Elements e = elements_of(row);
-  return xpt::branch_of(e.xno, e.eo, ap_selected());
+  return xpt::branch_of(e.xno, e.eo, ap_selected(), e.xmo);
 }
 
 /// A row the ingest takes for any theory: SGP4 or SGP4XP, every field a number and the inclination within [0, 180] deg
