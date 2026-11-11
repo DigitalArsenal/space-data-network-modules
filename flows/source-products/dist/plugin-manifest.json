@@ -1,7 +1,7 @@
 {
   "pluginId": "com.digitalarsenal.flows.source-products",
   "name": "Source Products Flow",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "pluginFamily": "flow",
   "sequentialJustification": {
     "kind": "caller-level-parallelism",

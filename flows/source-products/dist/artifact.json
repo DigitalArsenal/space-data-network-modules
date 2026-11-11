@@ -1,7 +1,7 @@
 {
   "programId": "com.digitalarsenal.flows.source-products",
   "name": "Source Products Flow",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "compiler": "space-data-module flow compile (isomorphic, wasi-sequential)",
   "threadModel": "wasi-sequential",
   "nodes": 12,
