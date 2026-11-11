@@ -2586,15 +2586,20 @@ numerical propagator that carries it (16.14). `fit`,
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
-- **In the low table** (class 0 at or below the 0.05 switch), with tesseral cap d the short-period terms are complete to
-  first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree 12 the table
-  also holds the m-daily terms.
+- **In the low table** (class 0 at or below the 0.05 switch), with tesseral cap d above 12 the short-period terms are
+  complete to first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree
+  12 the table also holds the m-daily terms. With the slow set of 16.18, which takes degree 70 whatever d states, the
+  table also holds 1 - w of each slow term above d of q -1, 0 and 1, and a share under 1 is cut on the term's own size.
+  With d of 12 or less the table is the one of every other branch.
 - **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
   near-resonant terms in low orbit and the half-day tail, and nothing else.
 - **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
-  70 x 70 numerical forecast over 5 days, gravity only on both sides): D falls from 62 to 232 m to 35 to 148 m. The terms
-  are along-track and radial lines at once per revolution plus or minus about once a day, and the daily and twice-daily
-  m-daily lines.
+  70 x 70 numerical forecast over 5 days, gravity only on both sides, AP at 70): D falls from 63 to 233 m to 35 to 148 m.
+  The terms are along-track and radial lines at once per revolution plus or minus about once a day, and the daily and
+  twice-daily m-daily lines.
+- **What a record at d of 31 forgoes**: the terms of degree 32 to 70, which a family whose order is 31 or less also has.
+  With every force and the record fitted to the numerical forecast, D at 300 km, i 98 is 104 m at d 31 and 85 m at d 70;
+  at 300 km, i 55 152 and 142 m; at 400 to 650 km the two are within 4 m of each other.
 - **Off the low table** at 800 km, the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all against a 31 x 31
   field).
 
@@ -4042,7 +4047,8 @@ q = 0), order and degree 2 to 70,
 
 Each term enters the rates with the weight w of its own current rate: 1 below 0.9 bands, a cos^2 taper to 0 at 1.1. The
 output table holds 1 - w of a term the rates carry, so a term that crosses its band's edge as drag raises n moves from one to
-the other with no step. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
+the other with no step. With the record's degree d above 12 the table holds that share to the slow set's degree, for q of
+-1, 0 and 1 (16.1); with d of 12 or less it holds it to d. A slow term of |q| 2 or more has its 1 - w carried nowhere. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
 as GRAVITY_MODEL "EGM-96; slow tesseral terms to degree 70", and every flight of the record carries it. A record without
 that text flies as before.
 
