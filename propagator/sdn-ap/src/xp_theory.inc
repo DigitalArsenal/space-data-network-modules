@@ -90,6 +90,8 @@ inline double norm(Vec3 a) { return std::sqrt(dot(a, a)); }
 /// unwrapped), n (rad/min).
 enum { kAf = 0, kAg = 1, kChi = 2, kPsi = 3, kLam = 4, kN = 5 };
 
+#include "zonal_short_period.inc"
+
 struct Kepler {
   double a, e, i, node, argp, m;  // radians; angles in [0, 2 pi)
 };
@@ -1855,7 +1857,8 @@ struct RateContext {
   int32_t zt_degree;
   uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
   uint8_t drag_pass;                  ///< AP: epoch e above tess::kWideE, the drag rates of the perigee passages (SPEC 16.12)
-  const float* mdaily;                ///< AP: m-daily Fbar, dFbar/di pairs, at output time (owned, xp_release)
+  uint8_t zonal_sp_hi;                ///< AP: the J3..J<hi> short-period terms at output time (zsp, SPEC 16.3); 0: none
+  const float* mdaily;               ///< AP: m-daily Fbar, dFbar/di pairs, at output time (owned, xp_release)
   int32_t mdaily_degree;
   const tess::SpCoef* sp;             ///< AP: the other first-order tesseral terms, at output time (owned, xp_release)
   int32_t sp_count;
@@ -5274,6 +5277,30 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
       }
     }
   }
+  // the zonal short-period terms J3..J<hi> (SPEC 16.3), at the interpolated mean elements; a covariance's moved sets take
+  // the nominal's, with its lambda derivatives, as they take the tesseral terms (use_shared_sp)
+  if (ctx.zonal_sp_hi >= 3 && !use_shared_sp) {
+    double dz[6];
+    zsp::of_equinoctial(ym, ctx.zonal_sp_hi, dz);
+    for (int j = 0; j < 6; ++j) y[j] += dz[j];
+    if constexpr (kCov) {
+      if (d_sp_out != nullptr && dd_sp_dlam_out != nullptr) {
+        constexpr double h = 1e-4;
+        double yp[6], yn[6], dp[6], dn[6];
+        for (int j = 0; j < 6; ++j) yp[j] = yn[j] = ym[j];
+        yp[kLam] += h;
+        yn[kLam] -= h;
+        zsp::of_equinoctial(yp, ctx.zonal_sp_hi, dp);
+        zsp::of_equinoctial(yn, ctx.zonal_sp_hi, dn);
+        for (int j = 0; j < 6; ++j) {
+          d_sp_out[j] += dz[j];
+          dd_sp_dlam_out[j] += (dp[j] - dn[j]) / (2.0 * h);
+        }
+        if (d2_sp_dlam2_out != nullptr)
+          for (int j = 0; j < 6; ++j) d2_sp_dlam2_out[j] += (dp[j] - 2.0 * dz[j] + dn[j]) / (h * h);
+      }
+    }
+  }
   if (__builtin_expect(ctx.drag_pass && ctx.bterm > 0.0, 0)) {
     output_drag_pass(ctx, t, ym, shared, y);
   }
@@ -5711,6 +5738,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;
+  // the zonal short-period terms of degree 3 to the zonal cap (at most zsp::kMaxL); none within 1 deg of a retrograde
+  // equatorial orbit, where the equinoctial set's tan(i/2) diverges and the terms' first-order elements lose meaning (SPEC 16.3)
+  s.ctx.zonal_sp_hi = t.zonal >= 3 && e.xincl < kZonalSpMaxIncl ? static_cast<uint8_t>(std::min(t.zonal, zsp::kMaxL)) : 0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && br.series_e && e.eo + 1e-3 < 1.0) {
