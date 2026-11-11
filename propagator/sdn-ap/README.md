@@ -123,9 +123,12 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
   no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
   GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg on arcs of 36 h or more and the Space Force wrapper's 0 +- 0.1 m^2/kg on shorter
-  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). The data are weighed against these priors at 1 km under
-  drag (the fitted set's perigee below 2,500 km) and, above it, at their own sigma, the post-fit scatter, which the
-  covariance then uses too (SPEC 12.1, the fit's weighting; `test/fit-data-sigma.e2e.mjs`): at 1 km a 24 h medium Earth
+  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). The data are weighed against these priors at their own
+  sigma, the post-fit scatter, which the covariance then uses too, above the drag and, under the drag (the fitted set's
+  perigee below 2,500 km), on an arc of 71 h or more; a shorter arc under the drag is weighed at 1 km, a stated limit
+  (stack #489) under which each prior acts about 100 times more strongly in the estimate than the covariance states
+  (SPEC 12.1, the fit's weighting; `test/fit-data-sigma.e2e.mjs`, `test/fit-cost-curvature.e2e.mjs`). On the radiation
+  lane's 800 km sphere a 72 h fit's AGOM goes from 0.356 to 0.937 of the truth (`test/radiation-sphere-agom.e2e.mjs`). At 1 km a 24 h medium Earth
   orbit fit returned AGOM 15 % low at the median of 254 real windows and was 121 m off at day 5; at its own sigma it
   returns 1.01 of a numerical sphere's coefficient and is 33 m off. On 748 already-read 24 h GNSS windows (exploratory) the
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
@@ -160,8 +163,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 - Covariance rows: the state, then DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS,
   IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION when solved, in that order; COV_UNITS one per row. A record's rows the
   theories have no sensitivity to fly as constant parameters.
-- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the sigma OD_DATA_WEIGHTING states: 1 km under drag, the data's
-  own above it) and SEDR, and one `$ODR` per fit on
+- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the sigma OD_DATA_WEIGHTING states: 1 km under drag on an arc
+  under 71 h, the data's own otherwise) and SEDR, and one `$ODR` per fit on
   `residuals`: a row per input state (geocentric distance observed and computed, weight, accepted).
 - `sdnap_covariance_full_at` gives the covariance of the state and the parameter rows per time; no sensitivities are
   exposed, so P8 is refused.
@@ -261,11 +264,14 @@ the log `10 ln 10` under NRLMSISE-00 at `800-1400 km` so that the arc, not the m
 falling back to the band median's `ln 10` prior where that arc's BTERM is undetermined, moved far on a rough arc, or the
 arc holds a gap or an along-track step. An arc of `71 h` or more under NRLMSISE-00 at or below e 0.3 is judged on its
 perigee's height instead, and with the perigee at `600-2,500 km` takes median `0.008` and sigma of the log `10 ln 10`
-with no fall-back: the arc decides BTERM. The band medians sat 2 to 40 times below the numerical propagator's fitted
-Cd A/m on every satellite measured; on the headline loop's 72 h fits the laser spheres' day-5 median goes from 129 to 89 m
-and altimetry's from 756 to 496 m, while near 700 km loses 82 m at day 5 with 4 more windows within 100 m of the
-numerical propagator (SPEC 12.8). A stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an
-object's prior from its previous fit.
+with no fall-back: the arc decides BTERM, the fit weighing the data at their own sigma (SPEC 12.1). The band medians sat 2
+to 40 times below the numerical propagator's fitted Cd A/m on every satellite measured. Against the numerical
+propagator's own forecast of each window (the RMS distance over the day ending at day 5), the headline loop's 72 h fits
+come within 100 m on 48 of 56 sphere windows (median 45.6 m), 105 of 112 altimetry windows (32.8 m) and 50 of 69 near
+700 km (52.3 m), against 49, 99 and 50 of them (54.3, 50.3 and 58.8 m) with the data weighed at 1 km (SPEC 12.1). Such a
+record states BTERM's sigma of the log by SPEC 12.8's width 1: 3.14 times the arc's part, at most the population's
+spread of 1.09, named in a second COV_REALISM entry; the forecast maps the formal variance. A stated `FIT.DRAG_PRIOR` is
+fitted as given, which is how a caller carries an object's prior from its previous fit.
 
 One fit call carries each object's priors (SPEC 12.8). The two-fit sequence of a daily refit:
 

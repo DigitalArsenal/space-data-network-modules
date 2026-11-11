@@ -85,6 +85,58 @@ constexpr AboveRow kAboveXP[4] = {
     {false, 0, 0, 0, 0, 0, 0, 0, 0},
     {true, 2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05, 0.0588, 0.0769, 64.8, 75.6}};
 
+/// SPEC 12.8 "The drag term's stated width on a 71 h arc" (stack #489, #463): an AP set under NRLMSISE-00 on the 71 h
+/// default (e 0.3 or below, perigee 600 to 2,500 km, BTERM's default prior: median 0.008, sigma of the log 10 ln 10),
+/// fitted at the data's own sigma over a span inside a row, states BTERM's sigma of ln as the arc's information over m^2
+/// combined with the prior's, and never more than the row's cap: the spread of ln B over the measured population (the
+/// numerical propagator's 72 h terms), where an arc that cannot see the term would otherwise state the prior's 10 ln 10.
+/// The width is on BTERM's diagonal alone and named in a second COV_REALISM entry (kWidthTagPrefix, the rule's number, m,
+/// the prior's sigma, the cap and, where the cap binds, the formal sigma). It is stated, not mapped: a reader that knows
+/// the rule derives m, the prior's sigma and the cap from the record's own fields, checks them against the entry's text,
+/// recovers the formal variance and maps that; any other reader maps the matrix as stated and says so. A changed table
+/// is a new rule number.
+struct WidthRow {
+  double hp_lo_km, hp_hi_km, span_lo_h, span_hi_h, m, cap;
+};
+constexpr WidthRow kWidth1[] = {{600.0, 2500.0, 71.0, 75.6, 3.14, 1.09}};
+constexpr const char* kWidthTagPrefix = "sdn-ap drag-term width ";
+constexpr const char* kWidthCappedMark = "; capped, formal sigma of ln ";
+constexpr double kWidthWideLn10 = 23.02585092994045684;  ///< pcf::kDragPriorWideLogSigma, the 71 h default's sigma of the log
+
+/// Width 1's m, the prior's sigma of the log and the cap for a set, from its own elements and span (hours); false
+/// outside the rule.
+inline bool width1_of(const ElementRow& row, double span_h, bool msis, double& m, double& sigma_p, double& cap) {
+  if (!msis || !(row.mean_motion_rev_day > 0.0) || row.eccentricity > xpt::tess::kWideE) return false;
+  const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+  const double a_km = std::pow(xpt::kKe / n_min, kX2o3) * xpt::kRe;
+  const double hp = a_km * (1.0 - row.eccentricity) - xpt::kRe;
+  for (const WidthRow& w : kWidth1)
+    if (hp >= w.hp_lo_km && hp < w.hp_hi_km && span_h >= w.span_lo_h && span_h <= w.span_hi_h) {
+      m = w.m;
+      sigma_p = kWidthWideLn10;
+      cap = w.cap;
+      return true;
+    }
+  return false;
+}
+/// The COV_REALISM MODEL_ID that names width 1 with its figures; `formal` the formal sigma of ln where the cap binds, 0
+/// where it does not.
+inline void width1_text(double m, double sigma_p, double cap, double formal, char* out, size_t n) {
+  if (formal > 0.0)
+    std::snprintf(out, n, "%s1: m %.6g, prior sigma %.6g, cap %.6g%s%.17g; stated, not mapped", kWidthTagPrefix, m, sigma_p, cap, kWidthCappedMark,
+                  formal);
+  else
+    std::snprintf(out, n, "%s1: m %.6g, prior sigma %.6g, cap %.6g; stated, not mapped", kWidthTagPrefix, m, sigma_p, cap);
+}
+/// Width 1's stated variance of ln B from the formal one (`var_f`, the fit's posterior with the prior `sigma_p`): the
+/// arc's information over m^2 combined with the prior's, at most cap^2. `capped` says where the cap binds.
+inline double width1_stated(double var_f, double m, double sigma_p, double cap, bool& capped) {
+  const double var_p = sigma_p * sigma_p, info_arc = std::fmax(0.0, 1.0 / var_f - 1.0 / var_p);
+  const double var_h = 1.0 / (info_arc / (m * m) + 1.0 / var_p);
+  capped = var_h > cap * cap;
+  return capped ? cap * cap : var_h;
+}
+
 constexpr int kMaxConsider = 5;
 constexpr int kMaxAug = 6 + kMaxConsider;
 static_assert(kMaxAug == fit::kMaxParams, "the augmented state is the fit's parameter vector");
@@ -348,6 +400,9 @@ struct Set {
   double share = 0.0;                ///< c, the share of the non-gravitational n-dot that is error
   double ng_rate = 0.0;              ///< n-dot_ng / n at epoch, 1/day: s_d = c |ng_rate| n
   int regime = 0;                    ///< 0 drag, 1 above (of_fit)
+  int width_index = -1;              ///< read: BTERM's row where a named width rule's formal variance was recovered
+  double width_stated = 0.0;         ///< read: the record's stated BTERM variance there (the augmented output's)
+  char width_note[240] = {};         ///< read: a width the reader maps as stated, and why (the flight's COMMENT)
 };
 
 /// The process noise of a set (SPEC 12.5): its regime (0 perigee below kDragRegimeKm, 1 above), the non-gravitational
@@ -576,6 +631,59 @@ inline int read(const OCM* o, const ElementRow& row, Set& s) {
   s.share = cp->NON_GRAVITATIONAL_SHARE();
   s.ng_rate = cp->NON_GRAVITATIONAL_RATE_PER_DAY();
   if (!noise_invariant(row, s)) return -3;
+  // SPEC 12.8: a record that states BTERM's width by a named rule. Width 1: m, the prior's sigma and the cap derived from
+  // the record's own fields (its elements, ACTUAL_OD_SPAN, its atmosphere) and checked against the entry's text; then the
+  // formal variance mapped in place of the stated one: where the cap does not bind, 1 / s_f^2 = m^2 (1 / s^2 - 1 / s_p^2)
+  // + 1 / s_p^2; where it binds, the formal sigma the entry states, checked to reach the cap. Any other rule, or a text
+  // that does not match, maps the matrix as stated and says so.
+  if (o->COV_REALISM() != nullptr)
+    for (const CVR* cr : *o->COV_REALISM()) {
+      if (cr == nullptr || cr->MODEL_ID() == nullptr) continue;
+      const char* id = cr->MODEL_ID()->c_str();
+      const size_t pl = std::strlen(kWidthTagPrefix);
+      if (std::strncmp(id, kWidthTagPrefix, pl) != 0) continue;
+      const char* why = nullptr;
+      int at = -1;
+      for (int a = 6; a < np; ++a)
+        if (kind[a] == kKindDrag) at = a;
+      const Perturbations* pt = o->PERTURBATIONS();
+      const bool msis = pt != nullptr && pt->ATMOSPHERIC_MODEL() != nullptr && pt->ATMOSPHERIC_MODEL()->MODEL() == AtmosphericModelFamily_NRLMSIS00E &&
+                        pt->ATMOSPHERIC_MODEL()->YEAR() == 2000;
+      const double span_h = o->ORBIT_DETERMINATION() != nullptr ? o->ORBIT_DETERMINATION()->ACTUAL_OD_SPAN() * 24.0 : 0.0;
+      double m = 0.0, sp = 0.0, cap = 0.0, formal = 0.0;
+      const char* mark = std::strstr(id, kWidthCappedMark);
+      if (mark != nullptr) formal = std::strtod(mark + std::strlen(kWidthCappedMark), nullptr);
+      char expected[200];
+      if (std::strncmp(id + pl, "1:", 2) != 0) why = "a rule this reader does not know";
+      else if (at < 0 || !(row.bterm > 0.0)) why = "no BTERM row";
+      else if (!width1_of(row, span_h, msis, m, sp, cap)) why = "the record is outside the rule";
+      else if (mark != nullptr && !(formal > 0.0 && std::isfinite(formal))) why = "the entry's formal sigma does not read";
+      else {
+        width1_text(m, sp, cap, formal, expected, sizeof expected);
+        if (std::strcmp(id, expected) != 0) why = "the entry's figures are not the rule's for this record";
+      }
+      if (why == nullptr) {
+        const double b2 = row.bterm * row.bterm, sh2 = s.C[at * np + at] / b2, sp2 = sp * sp;
+        double var_f = 0.0;
+        if (mark != nullptr) {
+          bool capped = false;
+          width1_stated(formal * formal, m, sp, cap, capped);
+          if (!capped || std::fabs(sh2 - cap * cap) > 1e-9 * cap * cap) why = "the stated width is not the cap the entry names";
+          else var_f = formal * formal;
+        } else {
+          const double inv_f = m * m * (1.0 / sh2 - 1.0 / sp2) + 1.0 / sp2;
+          if (!(inv_f > 0.0) || !(sh2 > 0.0) || sh2 > cap * cap * (1.0 + 1e-9)) why = "the stated width does not invert";
+          else var_f = 1.0 / inv_f;
+        }
+        if (why == nullptr) {
+          s.width_index = at;
+          s.width_stated = s.C[at * np + at];
+          s.C[at * np + at] = b2 * var_f;
+        }
+      }
+      if (why != nullptr) std::snprintf(s.width_note, sizeof s.width_note, "covariance: %s: mapped as stated (%s)", id, why);
+      break;
+    }
   return 1;
 }
 
@@ -743,6 +851,8 @@ inline bool eval_full(Propagator& p, double t, double r[3], double v[3], double*
     }
   for (int a = 6; a < np; ++a)
     for (int c = 6; c < np; ++c) P[a * np + c] = p.Pp[a * np + c];
+  // a width stated and not mapped (SPEC 12.8): the parameter block states the record's own BTERM variance
+  if (p.s.width_index >= 6 && p.s.width_index < np) P[p.s.width_index * np + p.s.width_index] = p.s.width_stated;
   return true;
 }
 

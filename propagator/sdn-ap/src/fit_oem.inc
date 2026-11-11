@@ -988,6 +988,29 @@ static int fit_blocks() {
           break;
         }
       }
+      // SPEC 12.8 "The drag term's stated width on a 71 h arc": BTERM's sigma of ln stated by width 1 on its diagonal, not
+      // mapped, and named in a second COV_REALISM entry; only on the 71 h default the fit used at the data's own sigma, where
+      // the rule, derived from the record's own fields as a reader derives it, names that default's prior
+      char width_tag[200] = {};
+      if (have_cov && !lattice && !high_e_drag && po.forces.msis && !po.drag_prior_given && chosen.free_band && sigma_km > 0.0 &&
+          fit_cov.regime == 0) {
+        double m = 0.0, sp = 0.0, cap = 0.0;
+        if (cov::width1_of(row, arc_hours, true, m, sp, cap) && std::fabs(sp - pcf::kDragPriorWideLogSigma) <= 1e-12 * sp) {
+          int kind[fit::kMaxParams];
+          const int np = cov::kinds_of(fit_cov.o, kind);
+          for (int a = 6; a < np; ++a) {
+            if (kind[a] != cov::kKindDrag) continue;
+            const double var_f = fit_cov.log_sigma[0] * fit_cov.log_sigma[0];
+            if (!(var_f > 0.0) || !(fit_cov.C[a * np + a] > 0.0) || !(row.bterm > 0.0)) break;
+            bool capped = false;
+            const double var_s = cov::width1_stated(var_f, m, sp, cap, capped);
+            fit_cov.C[a * np + a] = row.bterm * row.bterm * var_s;
+            fit_cov.log_sigma[0] = std::sqrt(var_s);
+            cov::width1_text(m, sp, cap, capped ? std::sqrt(var_f) : 0.0, width_tag, sizeof width_tag);
+            break;
+          }
+        }
+      }
       // held-out score: RMS, largest error, and by day after the arc
       double held_rms = 0.0, held_max = 0.0, held_stop = fit_end_min;
       std::vector<double> day_ss;
@@ -1129,7 +1152,9 @@ static int fit_blocks() {
                         : span_used < default_span ? "fit arc: shortened, the default span held no plausible set"
                         : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
-      else if (chosen.free_band) comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10), no fall-back");
+      else if (chosen.free_band)
+        comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against "
+                          "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
@@ -1216,7 +1241,18 @@ static int fit_blocks() {
         cr.add_MODEL_ID(s_model);
         cr.add_REGIME(s_regime);
         cr.add_CALIBRATION(covarianceCalibration_Uncalibrated);
-        const std::vector<flatbuffers::Offset<CVR>> realism = {cr.Finish()};
+        std::vector<flatbuffers::Offset<CVR>> realism = {cr.Finish()};
+        if (width_tag[0] != '\0') {
+          // SPEC 12.8: the rule BTERM's stated width was written with (stated, not mapped)
+          const auto s_width = fbb.CreateString(width_tag);
+          const auto s_wregime = fbb.CreateString(cov::regime_name(fit_cov.regime));
+          CVRBuilder wr(fbb);
+          wr.add_RULE(covarianceRule_SourceModel);
+          wr.add_MODEL_ID(s_width);
+          wr.add_REGIME(s_wregime);
+          wr.add_CALIBRATION(covarianceCalibration_Uncalibrated);
+          realism.push_back(wr.Finish());
+        }
         extras.cov_realism = fbb.CreateVector(realism);
       }
       const CAT* object = blk->OBJECT();

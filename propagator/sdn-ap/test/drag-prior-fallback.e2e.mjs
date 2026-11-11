@@ -13,21 +13,25 @@
 // Restated with the default of a 71 h arc whose perigee is at 600 to 2,500 km (SPEC 12.8: median 0.008 under 10 ln 10, no
 // fall-back). Every arc this test fits is such an arc, so the fall-back it was registered for no longer runs on them (it
 // stands for an orbit above e 0.3); the acceptance holds what the new default does instead, the 0.4.18 figures in brackets.
+// Measured 2026-11-11 on that default with the fit at the data's own sigma (SPEC 12.1, stack #489) and BTERM stated by
+// SPEC 12.8's width 1; the figures of the default at 1 km (stack #39 as first drafted) after "1 km".
 // Acceptance:
 // 1. DO: Sentinel-3A 2025-10-15 at or below 0.33 km at day 3 and Sentinel-3B 2025-10-25 at or below 1.40 km at day 7, the
 //    two windows the fall-back had returned to 0.4.11 (0.087 and 0.113 km) and the new default takes back to 0.4.17's
-//    (0.312 and 1.335 km): measured 0.314 and 1.344 km, losses the drag-default pull request names;
-// 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D (measured -85 % and -92 %);
-//    on SWOT and Jason-3 within 5 points of 0.4.17's (measured -47.9 against -48.3 % and -73.2 against -68.9 %);
+//    (0.312 and 1.335 km): measured 0.286 and 1.090 km (1 km: 0.314 and 1.344), losses the pull request names;
+// 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D (measured -90.9 % and
+//    -91.0 %; 1 km: -85 and -92 %); on SWOT and Jason-3 at or below 0.4.17's (measured -93.0 against -48.3 % and -84.5
+//    against -68.9 %; 1 km: -47.9 and -73.2 %);
 // 3. DO: SARAL and CryoSat-2 (600-800 km, inside the new default): the median paired day-3 change against 0.4.11 at
-//    most +5 % (measured -34.7 % and +1.4 %; formerly bit for bit with 0.4.17, outside the old rule);
+//    most +5 % (measured -24.7 % and -7.9 %; 1 km: -34.7 and +1.4 %; formerly bit for bit with 0.4.17, outside the old rule);
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
 //    step 36 h into the arc, on SWOT-like and Sentinel-3-like, leaves the record stating an arc it does not fit (fit RMS
-//    above 10 km; measured 28.2 and 28.0 km) and BTERM undetermined (posterior sigma of the log at least 10, the prior's
-//    10 ln 10; measured 23.0) [0.4.18: the fall-back to the band median];
+//    above 10 km; measured 28.2 and 28.0 km) and BTERM undetermined: its formal sigma of the log at least 10 (the
+//    prior's 10 ln 10), named in the width entry, and the stated one width 1's cap, 1.09 [0.4.18: the fall-back to the
+//    band median];
 // 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 at most 100 and 72 m at
-//    day 3 (measured 94.3 and 67.3 m) [0.4.17 81.4 and 63.0 m];
+//    day 3 (measured 15.3 and 20.4 m; 1 km: 94.3 and 67.3 m) [0.4.17 81.4 and 63.0 m];
 // 6. default-FORCES XP digest bit-exact.
 // Printed: every fixture's fitted BTERM, posterior sigma of the log, fit RMS and drag path (the derivation of B, k and the
 // band median RMS); per object the DO medians at days 1, 2, 3 and 7; every DO window that takes the fall-back and why;
@@ -47,7 +51,12 @@ if (!isMainThread) {
   const {runModelTruth} = await import('./lib/heo-model-truth.mjs');
   const r = await runModelTruth(workerData.c);
   const sigma = /posterior sigma of the log ([0-9.eE+-]+)/.exec(r.fitted.bModel ?? '');
-  parentPort.postMessage({day3: r.wholeDay[3].e, bterm: r.fitted.bterm, sigmaLog: sigma ? Number(sigma[1]) : null, wrmsKm: r.fitted.wrms,
+  // SPEC 12.8's width entry, where the record states BTERM by width 1 (its formal sigma of ln where the cap binds)
+  const {ocmOf} = await import('./lib/ocm.mjs');
+  const widthEntry = (ocmOf(new Uint8Array(Buffer.from(r.omm, 'base64'))).COV_REALISM ?? []).map((c) => c.MODEL_ID).find((t) => t?.startsWith('sdn-ap drag-term width ')) ?? null;
+  const formal = widthEntry ? /formal sigma of ln ([0-9.eE+-]+)/.exec(widthEntry) : null;
+  parentPort.postMessage({widthEntry, formalSigmaLog: formal ? Number(formal[1]) : null,
+    day3: r.wholeDay[3].e, bterm: r.fitted.bterm, sigmaLog: sigma ? Number(sigma[1]) : null, wrmsKm: r.fitted.wrms,
     path: /drag prior: ([^;]*); arc/.exec(r.fitted.bModel ?? '')?.[1] ?? null, step: /along-track step test.*$/.exec(r.fitted.bModel ?? '')?.[0] ?? null,
     comment: r.fitted.comment});
 } else {
@@ -141,7 +150,7 @@ if (!isMainThread) {
   // 2
   for (const o of ['HAIYANG 2C', 'HAIYANG 2D']) assert.ok(objects[o].day3.changeHere <= -0.70, `${o}: day-3 median change ${objects[o].day3.changeHere}`);
   for (const o of ['SWOT', 'JASON 3'])
-    assert.ok(Math.abs(objects[o].day3.changeHere - objects[o].day3.change0417) <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.17's ${objects[o].day3.change0417}`);
+    assert.ok(objects[o].day3.changeHere <= objects[o].day3.change0417, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.17's ${objects[o].day3.change0417}`);
   // 3
   for (const o of ['SARAL', 'CRYOSAT 2']) {
     assert.equal(rows.filter((r) => name(r) === o && !r.error).length, 15, `${o}: 15 windows`);
@@ -152,7 +161,8 @@ if (!isMainThread) {
   for (const o of ['SWOT-like', 'Sentinel-3-like']) {
     const r = results[`release ${o} 0.044 step in the arc`];
     assert.ok(r.wrmsKm > 10, `${o}: a step in the arc leaves a fit RMS of ${r.wrmsKm} km (above 10 km)`);
-    assert.ok(r.sigmaLog >= 10, `${o}: a step in the arc leaves BTERM undetermined (posterior sigma of the log ${r.sigmaLog})`);
+    assert.ok(r.formalSigmaLog >= 10, `${o}: a step in the arc leaves BTERM undetermined (formal sigma of the log ${r.formalSigmaLog}; entry ${r.widthEntry})`);
+    assert.ok(Math.abs(r.sigmaLog - 1.09) <= 1e-9, `${o}: the record states the width rule's cap, 1.09 (stated ${r.sigmaLog})`);
   }
   // 5
   assert.ok(results['release SWOT-like 0.044'].day3 <= 100, `SWOT-like 0.044: day 3 ${results['release SWOT-like 0.044'].day3} m`);

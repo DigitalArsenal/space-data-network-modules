@@ -62,6 +62,7 @@ extern "C" int propagate(void) {
     bool refused = false;
     cov::Propagator cprop;
     bool with_cov = false;
+    std::string width_note;  ///< SPEC 12.8: a stated width this reader maps as stated, and why (the block's COMMENT)
     if (!all_carried) {
       ocm::Bind bind(set.forces, &atmosphere);
       if (e.theory == kTheorySgp4Xp) {
@@ -95,6 +96,7 @@ extern "C" int propagate(void) {
                                     : "The set's covariance does not map onto its parameters (the theory refuses a moved set or the epoch columns are singular).");
         }
         with_cov = cr == 1;
+        if (with_cov) width_note = cs.width_note;
         if (with_cov && xs->init_error == 0 && xs->ctx.d50_epoch == 0.0 && cprop.b.count > 0 &&
             xpt::is_ap_ctx(cprop.b.sats[0].ctx)) {
           xs = nullptr;
@@ -336,7 +338,8 @@ extern "C" int propagate(void) {
         if (handover)
           for (size_t k = 0; k < tw.size(); ++k)
             source[k] = ((tw[k] - 2451545.0) + tf[k]) * kMinutesPerDay >= from ? carried::kHandOver : carried::kTheory;
-        const std::string sources = track.empty() && !handover ? std::string() : carried::sources_comment(source, tw, tf);
+        std::string sources = track.empty() && !handover ? std::string() : carried::sources_comment(source, tw, tf);
+        if (!width_note.empty()) sources = sources.empty() ? width_note : sources + ". " + width_note;
         blocks.push_back(CreateephemerisDataBlockDirect(fbb, sources.empty() ? nullptr : sources.c_str(), object_offset, "EARTH", frame, nullptr, cov_frame,
                                                         timingStandard_UTC, start, nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6,
                                                         nullptr, &lines, with_cov ? &cov_lines : nullptr));

@@ -19,11 +19,10 @@
 //    windows (amended after the first run: a window where FFM's own day-3 error exceeds 10 km holds a maneuver or a
 //    broken arc, as Sentinel-6B's commissioning windows do at 1.9 to 2,626 km, and is printed but not scored);
 //    restated with the default of a 71 h arc whose perigee is at 600 to 2,500 km (SPEC 12.8, median 0.008 under 10 ln 10, no
-//    fall-back): the median over all windows at most 40 m (0.4.11 168 m, measured 23.2 m), and no object worse than 0.4.11
-//    by more than 10 m on its scored windows except CryoSat-2, held under its own bound of 115 m (0.4.11 66.3 m, measured
-//    109.1 m; stack #470: its fitted term moves closer to the numerical propagator's while the forecast loses, so a lower
-//    term was offsetting another missing piece of AP). The others gain: HY-2C 576 to 41, HY-2D 524 to 19, Jason-3 181 to
-//    32, SWOT 464 to 197 m;
+//    fall-back): the median over all windows at most 40 m (0.4.11 168 m, measured 2.5 m; 23.2 m with the data at 1 km), and
+//    no object worse than 0.4.11 by more than 10 m on its scored windows except CryoSat-2, held under its own bound of 115 m
+//    (0.4.11 66.3 m, measured -24.3 m; 109.1 m at 1 km, stack #470). Measured 2026-11-11 with the fit at the data's own
+//    sigma on 71 h arcs (SPEC 12.1, stack #489): HY-2C 576 to 26, HY-2D 524 to 9, Jason-3 181 to 6, SWOT 464 to 2 m;
 // 5. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';

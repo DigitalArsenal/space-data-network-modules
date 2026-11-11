@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// E2E (stack #463, SPEC 12.8, a known defect: test/known-defects.json): under the drag the record's stated sigma of ln BTERM
-// is overconfident. The post-fit residual there is the theory's own along-track error, correlated over the arc, and the fit
-// weighs it as independent data. On the headline-loop real windows the 72 h fits' median |ln(B_fit / B_numerical)| is 2.7 to
-// 11 stated sigmas (#463). The forecast maps the record's whole matrix, BTERM's row included, but under the drag that formal
-// variance is negligible beside SPEC 12.5's DRAG noise row, so the stated position sigma barely moves with it; the record's
-// statement of the term and a catalog's carried prior take it as it is.
+// E2E (stack #463, SPEC 12.8 "The drag term's stated width on a 71 h arc"): under the drag the record's stated sigma of ln
+// BTERM covers the term. The post-fit residual there is the theory's own along-track error, correlated over the arc, and the
+// fit weighs it as independent data, so its formal sigma is overconfident: on the headline-loop real windows the 72 h fits'
+// median |ln(B_fit / B_numerical)| was 2.7 to 11 formal sigmas (#463). On the default of a 71 h arc the record states width
+// 1 (m 3.14 times the arc's part, at most the population's spread 1.09) and maps the formal variance.
 // Truth: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256): EGM96 70 x 70, DE440 Sun and Moon, NRLMSISE-00
 // drag at constant weather on both sides (Cd A/m the true BTERM), no SRP, zero EOP, RK78 1e-12 and 300 s, from an osculating
 // perigee state; AP FORCES 31,20 with NRLMSISE-00; a 72 h fit under the default prior (FIT unset: the 600 to 2,500 km default of
 // a 71 h arc). Made-up near-circular orbits (e 0.001): 800 km at i 50 with a true BTERM of 0.02 (near the 57:4 commensurability
 // of #447) and 1,340 km at i 66 with 0.003.
-// Asserted: |ln(B_fit / B_true)| at most 2 of the record's stated sigmas of ln BTERM on both. Measured 2026-11-11: 5.14 (0.01912
-// against 0.02, sigma 0.0087) and 2.61 (0.00710 against 0.003, sigma 0.33).
+// Asserted: |ln(B_fit / B_true)| at most 2 of the record's stated sigmas of ln BTERM on both. Measured 2026-11-11 with the fit
+// at the data's own sigma and width 1: 0.26 (0.01986 against 0.02, sigma 0.0263) and 0.48 (0.00504 against 0.003, sigma
+// 1.09, the cap); with the data at 1 km and the formal sigma: 5.14 (0.01912, sigma 0.0087) and 2.61 (0.00710, sigma 0.33).
 //   node test/drag-term-sigma-honesty.e2e.mjs
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
