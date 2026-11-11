@@ -113,7 +113,13 @@ if (!process.argv.includes('--measure')) {
   // FORCES.ECOM2, so AP then sits where a numerical propagator with only a sphere does on these satellites, above 0.4.8's
   // median, which the missing gravity had partly cancelled (SPEC 16.13; the row is fitted with Y0 solved, day-3 median
   // 23.4 m). Pinned to the measured value instead (2026-11-11: 53.297 m, old path 64.231 m), within 0.5 m.
-  const GE_PIN = {afterMedianMeters: 53.297, oldPath: 64.231};
+  // GE re-pinned at 0.6.21 (SPEC 16.15 and 16.16; stack #486): 53.297 > 61.62 m at day 3 (131.0 > 149.3 m at day 5), old path
+  // 64.231 > 73.14 m. These fits state no FORCES.ECOM2. Measured cause: against the numerical propagator's own sphere-only
+  // fit and forecast of the same windows (FFM 70 x 70, cone shadow, AGOM solved, no ECOM2), AP moves from 10.2 to 5.9 m at
+  // day 3 and from 24.8 to 10.7 m at day 5, closer on 26 of 35 windows. The numerical sphere is itself 64.2 m from the
+  // truth at day 3, so the old figure was AP's in-season radiation error offsetting the satellites' non-spherical
+  // radiation, which a sphere does not carry. With Y0 solved on the same windows, day 3 goes from 23.4 to 11.5 m.
+  const GE_PIN = {afterMedianMeters: 61.62, oldPath: 73.14};
   for (const [name, v] of Object.entries(others)) {
     if (name === 'GE') {
       assert.ok(Math.abs(v.afterMedianMeters - GE_PIN.afterMedianMeters) <= 0.5, `GE: median day-3 error within 0.5 m of ${GE_PIN.afterMedianMeters} m`);

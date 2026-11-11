@@ -7,10 +7,9 @@
 //    of the difference <= 0.1 m.
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
-// 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, Etalon-like, GPS-like, e 0.25, e 0.3) flown 2 days at 600 s give
-//    ephemerides within NO_HARM (below; byte-identical until 0.6.5) on this build and on sdn-ap 0.6.2 (dist at modules
-//    c82160de7, SHA-256 84d50dca...); the geostationary seed within THEORY_CHANGED (the one-day resonant tail, 0.6.19);
-//    the SGP4XP seed byte-identical.
+// 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
+//    fitted AP set flown 2 days at 600 s give ephemerides within NO_HARM (below) on this build and on BASE (sdn-ap 0.6.21,
+//    SHA-256 checked; sdn-ap 0.6.2 until 0.6.20, history at NO_HARM); the SGP4XP seed byte-identical.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -26,15 +25,17 @@ import {seedOcm, flight, T} from './lib/ocm.mjs';
 import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE = 'c82160de7', BASE_SHA256 = '84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41';
-// 2's bound on the AP seeds (fixed elements, 48 h at 600 s): byte-identical to 0.6.2 until 0.6.5, whose speed changes
-// move a flight of fixed elements by millimeters (SPEC 16.8). Measured 2026-11-10 on 0.6.8, printed per seed: LEO 3.10,
-// GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm (velocity at most 0.0022 mm/s); the bound is 15 mm.
-// SGP4XP stays byte-identical.
+const BASE_VERSION = '0.6.21', BASE = '589749f63', BASE_SHA256 = '5deb3d761f82f5d530952163827402c189039a84af55e023fd09d5f231048a6b';
+// 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
+// until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
+// measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
+// (velocity at most 0.0022 mm/s); the bound is 15 mm. The geostationary seed moved by design from 0.6.19 (the one-day
+// class's resonant gravity above degree 4, stack #434, SPEC 16.2: 5.27 m over the 48 h), bounded apart at 6 m and 0.5
+// mm/s against 0.6.2. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves them from 0.6.2: LEO 0.82, geostationary
+// 5,273.24 (the one-day tail of 0.6.19), Etalon 3.62, GPS 5.02, e 0.25 9.11 and e 0.3 10.77 mm (velocity 0.69 to 382.78
+// um/s) and the fitted set by 0.84 mm with its covariance by 1.226e-2 of a line's largest entry; SGP4XP byte-identical:
+// REASON. From 0.6.21 the baseline is 0.6.21 (git 589749f6), every AP set under the one bound, 15 mm.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
-// The geostationary seed moves by design from 0.6.19: the one-day class carries its resonant gravity above degree 4
-// (stack #434, SPEC 16.2), 5.27 m over the 48 h on 0.6.19; its bound is 6 m, 0.5 mm/s.
-const THEORY_CHANGED = {'geostationary, AP': {posM: 6, velMmS: 0.5, covOfLargest: 1e-3}};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
 const scratch = scratchTemp('sdn-ap-themis-ripple-');
@@ -247,10 +248,10 @@ x.sdnap_free(pin);
 x.sdnap_free(pout);
 await verify.close?.();
 
-// 2. no harm at e 0.3 and below: 0.6.2's dist by git show, SHA-256 checked
+// 2. no harm at e 0.3 and below: BASE's dist by git show, SHA-256 checked
 const basePath = path.join(scratch, `sdn-ap-${BASE}.wasm`);
 const baseBytes = execFileSync('git', ['-C', modules, 'show', `${BASE}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
-assert.equal(crypto.createHash('sha256').update(baseBytes).digest('hex'), BASE_SHA256, '0.6.2 dist');
+assert.equal(crypto.createHash('sha256').update(baseBytes).digest('hex'), BASE_SHA256, `${BASE_VERSION} dist`);
 fs.writeFileSync(basePath, baseBytes);
 const AP = {tesseral: 31, zonal: 20};
 const SEEDS = {
@@ -264,12 +265,12 @@ const SEEDS = {
 };
 const epoch = '2026-10-01T00:00:00.000';
 const output = {START_TIME: epoch, STOP_TIME: '2026-10-03T00:00:00.000', STEP_SECONDS: 600};
-// this build's $OEM with PRODUCER's version read as 0.6.2's (the version string is the one difference a release step makes)
+// this build's $OEM with PRODUCER's version read as BASE's (the version string is the one difference a release step makes)
 const now = JSON.parse(fs.readFileSync(path.join(packageRoot, 'plugin-manifest.json'), 'utf8')).version;
 const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
 const asBase = (bytes) => {
   const b = Buffer.from(bytes);
-  for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer('0.6.2').copy(b, at);
+  for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BASE_VERSION).copy(b, at);
   return b;
 };
 const fly = async (file, payload) => {
@@ -388,11 +389,8 @@ for (const [name, q] of Object.entries(quadrature)) {
   assert.ok(q.roughM <= 0.1, `${name}: ${q.roughM} m second difference`);
 }
 for (const [name, d] of Object.entries(noHarm)) {
-  if (/SGP4XP/.test(name)) assert.ok(d.bytesEqual, `${name}: byte-identical to 0.6.2`);
-  else {
-    const bound = THEORY_CHANGED[name] ?? NO_HARM;
-    assert.ok(d.posM <= bound.posM && d.velMmS <= bound.velMmS && d.covOfLargest <= bound.covOfLargest, `${name}: ${JSON.stringify(d)} from 0.6.2 (within ${JSON.stringify(bound)})`);
-  }
+  if (/SGP4XP/.test(name)) assert.ok(d.bytesEqual, `${name}: byte-identical to ${BASE_VERSION}`);
+  else assert.ok(d.posM <= NO_HARM.posM && d.velMmS <= NO_HARM.velMmS && d.covOfLargest <= NO_HARM.covOfLargest, `${name}: ${JSON.stringify(d)} from ${BASE_VERSION} (within ${JSON.stringify(NO_HARM)})`);
 }
 fs.rmSync(scratch, {recursive: true, force: true});
 console.log('THEMIS ripple E2E: PASS');
