@@ -36,8 +36,9 @@ console.log(JSON.stringify({name: 'e0.9-perigee-5000', states: lines.length, D_m
 await h.close?.();
 // The recorded figure, within 1 m either way. History (this truth): 0.6.26 1,422.0 m at 84.5 h; 0.6.26 with the grid's mean
 // motion held at the epoch's alone 689.4 m at 86 h; 0.6.29 (the Sun and Moon through the output, SPEC 16.19) 1,427.4 m;
-// 0.6.30, the grid's mean motion held in the long-period regime (SPEC 16.11) on 0.6.29, 618.6 m at 83.5 h.
-const RECORDED = 618.6;
+// 0.6.30, the grid's mean motion held in the long-period regime (SPEC 16.11) on 0.6.29, 618.6 m at 83.5 h; 0.6.NN, the
+// epoch-axis turn to TEME of date for every AP set (SPEC 16.4), 599.4 m at 83.5 h.
+const RECORDED = 599.4;
 if (!process.env.SDN_AP_MODEL_TRUTH_MODULE)
   assert.ok(Math.abs(D - RECORDED) <= 1, `D over the 5 days ${D.toFixed(1)} m, recorded ${RECORDED} m (0.6.26: 1,422.0 m)`);
 console.log('High-apogee model truth E2E: PASS');

@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.30 (dist 1ad27490).
+Version 0.6.30 (dist 5cfe4995).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2665,14 +2665,29 @@ is of the same order in e in the perigee rate and 50 to 78 % of the term kept. T
 1,200 km. Above e0 0.3 the zonal tail carries every long-period term (16.11).
 
 **16.4 Frame.** Frame policy is selected once by `xp_init` from the epoch propagation branch and the
-selected gravity replacements. With d or z above 0, epoch periods below 1100 minutes and the nonzero
-resonance classes carry epoch-axis states to TEME of date by M(t) M(t0)^T. M is the GCRF-to-TEME matrix
+selected gravity replacements. With d or z above 0, every AP set carries its epoch-axis states to TEME of date by
+M(t) M(t0)^T: from 0.6.NN the long-period regime's class 0 sets too (below). M is the GCRF-to-TEME matrix
 of `gcrf.inc`, linear between 12-hour nodes: at most 5.6e-9 rad, 0.23 m at the geostationary radius. The Earth's axis is held
 at its epoch direction during a flight. With precession alone the error from the epoch is 0.1, 0.8 and 4.1 m at 1, 3 and 7
 days at 800 km and 0.2, 1.7 and 9.0 m at 1,336 km, up to twice that with the fortnightly nutation, and below 1 m from 5,900 km
-up. The nonresonant long-period branch (epoch period at least
-1100 minutes, class 0) retains its native TEME-of-date convention without this additional rotation.
-Its instantaneous third-body geometry does not take the epoch-axis output correction.
+up.
+
+*The long-period regime's class 0 sets (from 0.6.NN; stack #479, #513).* Through 0.6.30 the nonresonant long-period
+branch (epoch period at least 1,100 minutes, class 0) left this rotation out. Its output therefore kept the turn from TEME
+of the epoch to TEME of the date: 0.70 arcsec in 5 days and 0.98 in 7, times the radius. That is up to 1.27 km at day 5 at a
+TESS-like apogee of 375,000 km. Measured on model truth (FFM, `test/lib/heo-model-truth.mjs`), the seeded TESS-like set
+(4 x 4 gravity, the Sun and Moon off on both sides, no fit) was off the numerical propagator by 1,769, 884 and 1,805 m at
+day 7 on three nodes. Turned by M(t0)^T M(t), its states are off by 1.7, 2.0 and 2.0 m: the "zonal" error of that orbit
+was this rotation, all of it. Fitted over the forecast's 5 days with the full synthetic setting (0.6.30):
+- TESS-like: 99.9 to 55.4 m.
+- Chandra-like (63.5 h, e 0.685): 114.6 to 66.8 m.
+- e 0.9 with perigee 5,000 km (`test/long-period-moon-output.e2e.mjs`: J2 to J5 and the Sun and Moon): 255.8 to 11.4 m.
+
+On the real windows against their precise orbits (0.6.30, gate off and on), the medians are better at day 3 and level at
+day 5: TESS's seven windows 1,594 and 1,592 m at day 3 with the forecast fit, and 2,452 and 1,868 m with the 72 h fit;
+Chandra's seven 24 and 3 m. The one-day class (THEMIS) already took the rotation and is unchanged. A covariance's copy
+takes the same rotation through the same flag. The bodies the rates read stay in TEME of date: 0.7 arcsec in 5 days moves
+the Moon's direction by 3.4e-6 rad.
 
 Fit residuals and propagation share `xp_propagate`, including this policy; there is no separate fit-only
 rotation. GCRF fit inputs are converted to TEME at each sample date, and GCRF output converts the propagated
@@ -2694,7 +2709,9 @@ correction and 38-minute grid; the half-day and GTO fixtures retain their previo
 The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS windows, 72-hour fits, the
 original 300-second grid, and AP6's pinned foundation/frames conversion for scoring. Leads start at fit end.
 The day-3 median paired AP-minus-XP error changes from +420.105792 m to -0.000784 m (acceptance: within
-50 m of zero). This is a correction to the model's frame policy; independent-window confirmation is separate.
+50 m of zero). That replay decided the long-period class 0 sets' exception through 0.6.30. It no longer decides, for two
+reasons. It was judged on matching SGP4-XP, not on the precise orbits. And it was flown with SPEC 5's Moon, whose
+0.6 to 1.2 km error at TESS's radius (16.17) offset part of the frame's.
 From 2026-11-11 the archive replays (heo-frame's TESS windows and the AP6 and AP5 windows of five more tests) score each
 module's own GCRF output (DigitalArsenal/spacedatanetwork-stack#386). The pinned foundation/frames 0.2.0 places TEME's x
 axis by GMST06, not GMST82 (#389): its conversion of AP's TEME output sat 1.9 m from the module's GCRF output in low orbit,
