@@ -2,7 +2,7 @@
 // SPEC 16.11 and 16.18, DigitalArsenal/spacedatanetwork-stack#473: above its eccentricity switch every class, low orbit included,
 // carries the field's terms of degree 2 to 31, each once: the slow share of a term in the rates (the class's own terms, in low
 // orbit the shallow set's, every other at or above the size cut of 0.5 m, with the band taper of its rate as its weight) and
-// the fast share on the grid, whose families are built when one of their terms reaches 0.05 m there. Before, the grid left each
+// the fast share on the grid, whose families are built when one of their terms reaches 0.2 m there. Before, the grid left each
 // family's whole slow band out and no rate carried it (from #467 the one-day class kept it on the grid down to 1e-2 n), the rates
 // and the grid stopped at degree 12, and in low orbit the grid kept the band down to 1e-3 n and nothing carried the rest.
 // 1. sdnap_slow_terms, cap 31, on one set of each class above its switch: class 0 (0.40 rev/day, e 0.9, i 55 deg), one-day
@@ -11,7 +11,7 @@
 //    term of degree 2 to 31 is in the rates (the class's own or the shallow set's, or at or above the size cut, with the band
 //    taper as its weight) or under the size cut; none is carried nowhere; each set carries slow terms beyond its class's.
 // 2. sdnap_wide_families, degree 31, on the same sets: a family is built exactly when its largest term on the grid reaches
-//    0.05 m, and every set builds fewer families than the degree holds.
+//    0.2 m, and every set builds fewer families than the degree holds.
 // 3. FFM model truth on a made-up class 0 set at e 0.9 (initial elements 0.40 rev/day, e 0.9, i 55, node 63, perigee 234.5,
 //    M 274.2 deg): EGM96 70 x 70, the Sun and Moon on both sides, no drag or radiation. The set is fitted to the forecast's
 //    own 5 days on a 10-minute grid (the best record), so what remains is what the theory cannot represent. Outcome: the
@@ -23,7 +23,7 @@ import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic'
 import {wasmPath} from './lib/module.mjs';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 
-const CUT_M = 0.5, FAMILY_CUT_M = 0.05, DEGREE = 31, BOUND_M = 300;
+const CUT_M = 0.5, FAMILY_CUT_M = 0.2, DEGREE = 31, BOUND_M = 300;
 const taper = (x) => (x <= 0.9 ? 1 : x >= 1.1 ? 0 : Math.cos((0.5 * Math.PI * (x - 0.9)) / 0.2) ** 2);
 const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
 const ROW = 8, x = h.instance.exports, MAX = 60000, pin = x.sdnap_alloc(32), prow = x.sdnap_alloc(MAX * ROW * 8);

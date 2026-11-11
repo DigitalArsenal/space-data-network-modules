@@ -164,9 +164,9 @@ constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below 
 constexpr int kGridCap = 31;
 /// SPEC 16.11: a family is built on the grid when at least one of its terms reaches this many meters in the grid's share, at the
 /// low table's own position amplitude (grid_keep). Against the grid of every family at degree 31, the largest distance over 5
-/// days between the two flights: at 0.5 m 2.7 to 9.1 m, at 0.1 m 0.24 to 1.9 m, at 0.05 m under 0.85 m below e 0.9 (and 0.6 and
-/// 3.0 m at e 0.9, 512 nodes, where the 128-node grid's own error is larger).
-constexpr double kGridKeepM = 0.05;
+/// days between the two flights, below e 0.9: 2.7 to 9.1 m at 0.5 m, under 3.4 m at 0.2 m, under 1.9 m at 0.1 m, under 0.85 m
+/// at 0.05 m; a low-orbit set at e 0.1 costs 32.8, 48.2 and 72.6 us a state at 0.2, 0.1 and 0.05 m (41.1 with degree 12 alone).
+constexpr double kGridKeepM = 0.2;
 /// The switch (SPEC 16.11): above this epoch eccentricity a perigee pass spreads a term over the harmonics of M; the zonal
 /// tail carries every long-period term (xp_theory.inc, this constant), the perigee drag passage runs (SPEC 16.12, this
 /// constant) and, in the resonance classes, the first-order tesseral families are the grid of wide_grid_build.
