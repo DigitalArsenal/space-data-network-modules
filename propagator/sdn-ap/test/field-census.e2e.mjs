@@ -59,8 +59,10 @@ const HOLES = [
   // from 0.6.28 the wide slow list carries the slow band above the switch outside low orbit: the hole is low orbit's alone
   { issue: 'stack #473', what: 'above the switch in low orbit: slow terms the grid leaves out and no rate carries',
     test: (b, t) => b.wide && b.cls === 0 && !b.longPeriod && t.code === 21 },
-  { issue: 'stack #511', what: 'outside the low table below the switch: terms the output table\'s degree, q range or band floor leaves out and the class\'s rates do not carry',
-    test: (b, t) => !b.lowTable && !b.wide && t.code >= 20 && t.code <= 22 },
+  // from 0.6.NN the wide slow list carries the slow band below the switch outside the low table too (stack #511): what is left
+  // there is the output table's q range (|q| up to 1) and its degree (12)
+  { issue: 'stack #511', what: 'outside the low table below the switch: fast terms the output table\'s q range (|q| up to 1) or degree (12) leaves out',
+    test: (b, t) => !b.lowTable && !b.wide && (t.code === 20 || t.code === 22) && Math.abs(t.rate) >= 1.1 * 0.045 },
 ];
 
 const SETS = [];
