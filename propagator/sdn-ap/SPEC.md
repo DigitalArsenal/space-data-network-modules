@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.19 (dist 4e28bda5).
+Version 0.6.20 (dist 5a7fa01f).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2364,12 +2364,16 @@ Given the same forces, AP's first-day error against a numerical orbit is about 2
 with low perigee it is 15 to 185 m on the first day and 0.1 to 3.6 km by the seventh. A numerical propagator has no such
 floor: AP equals one only where the force model limits both.
 
-**16.1 Selection.** `fit`, `propagate`, `load_epochs` and `propagate_epochs` read FORCES:
+**16.1 Selection.** A fit of real data states FORCES.SOLID_TIDES IERS_2010 with the gravity terms: the Earth has the
+solid tide, and without it AP's error on a low orbit after a 72 h fit is about twice as large at day 5 against a
+numerical propagator that carries it (16.14). `fit`,
+`propagate`, `load_epochs` and `propagate_epochs` read FORCES:
 
 | FORCES | Terms |
 | --- | --- |
 | HAS_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE d, 0 to 70 | the tesseral terms of 16.2, each family to its cap or d, whichever is lower |
 | HAS_MAXIMUM_DEGREE, MAXIMUM_DEGREE z, 0 to 70 | the zonal tail J6 to Jz of 16.3 (z below 6: none) |
+| SOLID_TIDES (`fit` only; IERS_2010, or NONE, the default) | the solid Earth tide in the rates, in the fit and the record (16.14) |
 | ECOM2 (`fit` only; Y0_M_S2, every other coefficient 0) | the radiation term Y0 beside the sphere, in the fit and the record (16.13) |
 
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
@@ -3513,6 +3517,98 @@ At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/m
   26.9 m and the windows inside the line from 26 to 29 of 32 (QZS-2G: Y0 found -2.14e-9 against the numerical
   propagator's -2.26e-9). Inclined geosynchronous rows: unchanged.
 - Cost: one closed-form term (two sines and cosines) where a sunlit-arc rate is evaluated.
+
+**16.14 The solid Earth tide.** The Moon and the Sun raise a tide in the solid Earth, and its gravity reaches the
+satellite. From 0.6.20 AP carries it on request: $PCF FORCES.SOLID_TIDES IERS_2010 on `fit`, the field and the model FFM reads
+(propagator/ffm `lib/force_models.cpp`, `lib/iers2010_tides.h`: IERS Conventions 2010, section 6.2, steps 1 and 2, on
+a tide-free field), so one configuration means the same in both propagators. NONE, the field's default on the wire,
+leaves the tide out, and a set fitted without it flies as before, bit for bit.
+
+*Theory.* The degree-2 tide raised by a body of gravitational parameter mu_b at distance r_b adds at the satellite the
+potential k2 (mu_b / r_b^3) (R^5 / r^3) P2(cos psi), psi the angle between the satellite and the body: the
+third-body quadrupole of section 5 with the radial law R^5 / r^3 in place of r^2. AP writes the two bodies' tide as
+r^-3 r.T.r, T the symmetric traceless tensor (3/2) (mu_b R^5 / r_b^3) (s s^T - I/3) summed over the Sun and the Moon of
+section 5 at the stage time, with each order m about the Earth's axis (zz; xz, yz; xx - yy, xy) weighted by its Love
+number of IERS Table 6.3: k20 0.30190, |k21| 0.29830 and |k22| 0.30102, the m = 1 and m = 2 parts turned east of the
+body by -arg(k2m) / m (0.28 and 0.12 deg: the imaginary parts -0.00144 and -0.00130, the anelastic lag). Step 2's
+diurnal band (Table 6.5a, 48 lines, K1 470.9e-12 the largest) is, seen from inertial axes, a degree-2 order-1 term
+C' cos(alpha) + S' sin(alpha) with C' = sum(ip sin b - op cos b) and S' = -sum(ip cos b + op sin b), b the line's
+Delaunay argument (GMST cancels): it is added to T once, at the set's epoch (over 10 days b moves the band by under
+3e-12 of its 5e-10). With W the orbit normal, g = T W and P = W.g, the potential averaged over the mean anomaly is exact
+in closed form, -P / (2 a^3 eta^3), and with D = 1 / (n a^5 eta^4), N the node and M the in-plane direction 90 deg past
+it, the Lagrange equations give
+
+di/dt = D g.N, sin i dOmega/dt = D g.M, d varpi/dt = D (tan(i/2) g.M - 1.5 P),
+d lambda/dt - n = D (tan(i/2) g.M - 3 eta P - 1.5 e^2 P / (1 + eta)), de/dt = dn/dt = 0,
+
+written in the equinoctial elements, regular at i = 0 and e = 0. They are added to the mean-element rates at every
+stage in both regimes (in the long-period regime also to a covariance's moved sets, which step in pairs), at the state
+of the stage. With a single k2 the average is k2 (mu_b R^5 / r_b^3) (1 - 3 (w.s)^2) / (4 a^3 eta^3); against the
+quadrupole of section 5 the tide is k2 (R/a)^5 of it on a circular orbit, 17 % at 800 km. The Moon's tide is a J2 of
+1.69e-8 about the Moon's direction, the Sun's 0.77e-8; their mean over the bodies' motion is the permanent tide, a J2
+change of +9.4e-9, which AP's tide-free J2 (1.3) does not hold and the term supplies, as FFM's step 1 does on its
+tide-free field. Nothing is added at output time.
+
+*What is left out, and its size.* Degree 3 (k3m 0.093), degree 4 through k+, step 2's long-period and semidiurnal
+tables (Tables 6.5b and 6.5c, at most 16.6e-12 and 1.2e-12) and the tide's short-period part are not carried. On model
+truth (below) all of them together move AP's day-5 error in low orbit by at most 0.42 m and its day-7 error by 0.67 m,
+and its in-arc fit by at most 0.05 m in low orbit and 0.18 m on the eccentric orbits (the short-period part at perigee). Of the parts carried, each moves the
+day-5 error by at most (largest of 17 low orbits, 72 h fits): step 2's band 0.41 m, the lag 0.39 m, the Love number
+per order against k20 for all three 1.07 m (day 7: 0.56, 0.76 and 1.57 m).
+
+*Measured* (model truth: FFM EGM96 70 x 70, Sun and Moon from DE440, 10 days from an AP-consistent state at
+2026-09-01 on a 300 s grid, with FFM's solid tide and without; AP under the headline's forces, tesseral 31, zonal 20,
+BTERM and AGOM held at 0, fitted over 72 h or 24 h and flown 7 days; whole-day 3D RMS). On 16 near-circular orbits
+(690, 800, 1,340 and 1,490 km; i 50, 66, 98, 108 deg) the median at day 5:
+
+| Fit | no tide either side | the tide in FFM only | the tide in both |
+| --- | ---: | ---: | ---: |
+| 72 h | 28.5 m | 68.3 m | 28.3 m |
+| 24 h | 48.2 m | 64.0 m | 48.1 m |
+
+By altitude (72 h, day 5, the same three columns): 690 km 92.9, 121.0, 92.8 m; 800 km 58.6, 66.5, 58.8 m; 1,340 km 14.4,
+60.7, 14.4 m; 1,490 km 15.5, 65.9, 15.6 m. On each orbit AP with the term is within 0.42 m (day 5) and 0.67 m (day 7) of
+its error without the tide on either side; a Starlette-like orbit (812 x 1,100 km) too (58.0 against 57.9 m). Further
+out the tide is smaller and the term carries it the same way: on a GPS-like orbit the tide in FFM alone moves AP's day-5
+error by 4.1 m and with the term AP is within 0.02 m of its level; on a geostationary set 0.07 and 0.01 m; on a
+transfer orbit (e 0.72, perigee 454 km) 1.1 and 0.03 m (day 7 of a 24 h fit: 9.2 and 0.13 m); on a THEMIS-like set
+(e 0.82, the long-period regime) 6.5 and 0.01 m (a 24 h fit: 1.5 and 1.5 m, of 349 m).
+
+*What the tide uncovers.* With the term AP's error is its error in a world without the tide: on a Sentinel-6A-like
+(1,336 km, i 66) and a Sentinel-1-like orbit (693 km, i 98), four nodes each, FFM with drag, a cannonball, relativity and
+70 x 70 (and without drag and radiation, and with the field at 12 x 12), AP fitted over 24 h and 72 h with FIT unset and
+with B and AGOM held at the truth's, AP with the term on the tide truth equals AP without it on the truth without the
+tide within 0.67 m at day 5 in all 96 cases. Whether the error falls depends on what else AP misses. Under FIT unset at
+1,336 km the fit holds BTERM at the band median of 12.8, 0.0005 m^2/kg against the truth's 0.02, 100 to 200 m along
+track at day 5, and the term wins on 4 of 8; with B and AGOM held, on 7 of 8. At 693 km, with B and AGOM held, AP is
+40 to 126 m at day 5 without any tide (the field above degree 12, carried in part), and the term wins on 5 of 8; with the
+field capped at 12 on both sides, on 8 of 8. On real windows the tide moves rows both ways, and two rows get worse with
+it: the altimetry rows' 24 h fits and near 700 km at 72 h. The model world names what the missing tide was offsetting
+there: the drag coefficient at its default (stack issue 460) and the field above degree 12. On real windows tesseral
+degrees 13 to 16 alone do not restore them.
+
+*Covariance.* The stated covariance hardly moves with the term. A 72 h fit's position sigma on the tide truth at days
+1, 3, 5 and 7, medians of the 17 low orbits, with the term: radial 7.5, 8.4, 10.4, 12.6 m, in-track 252, 1,216, 2,192,
+3,157 m, cross-track 10.7, 27.6, 47.8, 68.4 m; without it the same within 0.1 m but cross-track at day 1 (11.2 m). The
+errors fall more: cross-track errors beyond 1 sigma are 82, 25, 15 and 19 of 408 hourly states without the term and 67,
+3, 0 and 1 with it, as for AP without the tide on the truth without it. Radial and in-track shares do not change.
+
+*Record.* A set fitted under IERS_2010 states PERTURBATIONS.SOLID_TIDES_MODEL "IERS 2010", and every flight reads it
+there and nowhere else; an AP set with gravity terms fitted without it says so in its OD COMMENT ("solid Earth tide: not
+modeled (FORCES.SOLID_TIDES NONE)"). Refused by name: on `fit` IERS_2010 without the gravity terms or any other value
+(configuration-refused, FORCES.SOLID_TIDES); in a flight SOLID_TIDES_MODEL other than "IERS 2010"
+(solid-tides-unsupported), or on an SGP4 or SGP4XP set or an AP set whose gravity caps are both 0
+(elements-other-theory).
+
+*Why not by default.* The $PCF cannot tell SOLID_TIDES left unset from NONE written, so the module cannot apply the
+tide by default without overriding an explicit NONE (stack issue 455 asks the standard for an UNSPECIFIED value).
+
+*Cost.* About 100 floating-point operations per rate evaluation and no trigonometry; the band once per set. AP's cost
+per state with the tide over without it, `test/kernel-cost.mjs --solid-tides` on seven regimes at 300 s and 60 s, two
+alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.28) the load's.
+
+`test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
+unset, the long-period regime's stated covariance with the tide, and the refusals.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

@@ -1907,6 +1907,8 @@ struct RateContext {
   double bterm, agom;
   double rad_y0;        ///< AP: the radiation term Y0 beside the sphere, m/s^2 (SPEC 16.13); 0: none
   double rad_b1c, rad_b1s;  ///< AP: ECOM2's once-per-revolution terms B1 cos and B1 sin, m/s^2 (SPEC 16.13); 0: none
+  uint8_t solid_tides;  ///< AP: the solid Earth tide in the rates (SPEC 16.14)
+  double tide_k1[2];    ///< AP: step 2's diurnal band at the epoch, the tensor's xz and yz (ER^5/min^2; SPEC 16.14)
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour), held
                         ///< for the whole flight in both theories (SPEC 6 Bands, 16.7)
@@ -3683,6 +3685,113 @@ inline void third_body_six_coefs_ap(double e, double eta, double sinc1, double i
   coef[39] = (15.0 / 16.0) * e * (3.0 * e2 + 4.0) * sw1 * sc_eta;
 }
 
+// --- AP (SPEC 16.14): the solid Earth tide ---------------------------------------------------------------------------
+namespace tide {
+
+/// IERS Conventions (2010) Table 6.3, the anelastic Love numbers of degree 2: Re k20, and |k21|, |k22| with the cosine and
+/// sine of -arg(k2m) / m, the angle (rad) by which each order's bulge leads the body (Im k21 -0.00144, Im k22 -0.00130).
+constexpr double kK20 = 0.30190;
+constexpr double kK21 = 0.29830347567535986, kC21 = 0.9999883485254338, kS21 = 0.004827298765929014;
+constexpr double kK22 = 0.30102280710936175, kC22 = 0.9999976686877476, kS22 = 0.0021593098596026012;
+
+/// IERS Conventions (2010) Table 6.5a, step 2's corrections to k21 (the diurnal band): the multipliers of the Delaunay
+/// arguments (l, l', F, D, Omega) and the in-phase and out-of-phase amplitudes (1e-12).
+struct Band {
+  int8_t n[5];
+  double ip, op;
+};
+constexpr Band kK21Band[] = {
+    {{2, 0, 2, 0, 2}, -0.1, 0.0},    {{0, 0, 2, 2, 2}, -0.1, 0.0},    {{1, 0, 2, 0, 1}, -0.1, 0.0},
+    {{1, 0, 2, 0, 2}, -0.7, 0.1},    {{-1, 0, 2, 2, 2}, -0.1, 0.0},   {{0, 0, 2, 0, 1}, -1.3, 0.1},
+    {{0, 0, 2, 0, 2}, -6.8, 0.6},    {{0, 0, 0, 2, 0}, 0.1, 0.0},     {{1, 0, 2, -2, 2}, 0.1, 0.0},
+    {{-1, 0, 2, 0, 1}, 0.1, 0.0},    {{-1, 0, 2, 0, 2}, 0.4, 0.0},    {{1, 0, 0, 0, 0}, 1.3, -0.1},
+    {{1, 0, 0, 0, 1}, 0.3, 0.0},     {{-1, 0, 0, 2, 0}, 0.3, 0.0},    {{-1, 0, 0, 2, 1}, 0.1, 0.0},
+    {{0, 1, 2, -2, 2}, -1.9, 0.1},   {{0, 0, 2, -2, 1}, 0.5, 0.0},    {{0, 0, 2, -2, 2}, -43.4, 2.9},
+    {{0, -1, 2, -2, 2}, 0.6, 0.0},   {{0, 1, 0, 0, 0}, 1.6, -0.1},    {{-2, 0, 2, 0, 1}, 0.1, 0.0},
+    {{0, 0, 0, 0, -2}, 0.1, 0.0},    {{0, 0, 0, 0, -1}, -8.8, 0.5},   {{0, 0, 0, 0, 0}, 470.9, -30.2},
+    {{0, 0, 0, 0, 1}, 68.1, -4.6},   {{0, 0, 0, 0, 2}, -1.6, 0.1},    {{-1, 0, 0, 1, 0}, 0.1, 0.0},
+    {{0, -1, 0, 0, -1}, -0.1, 0.0},  {{0, -1, 0, 0, 0}, -20.6, -0.3}, {{0, 1, -2, 2, -2}, 0.3, 0.0},
+    {{0, -1, 0, 0, 1}, -0.3, 0.0},   {{-2, 0, 0, 2, 0}, -0.2, 0.0},   {{-2, 0, 0, 2, 1}, -0.1, 0.0},
+    {{0, 0, -2, 2, -2}, -5.0, 0.3},  {{0, 0, -2, 2, -1}, 0.2, 0.0},   {{0, -1, -2, 2, -2}, -0.2, 0.0},
+    {{1, 0, 0, -2, 0}, -0.5, 0.0},   {{1, 0, 0, -2, 1}, -0.1, 0.0},   {{-1, 0, 0, 0, -1}, 0.1, 0.0},
+    {{-1, 0, 0, 0, 0}, -2.1, 0.1},   {{-1, 0, 0, 0, 1}, -0.4, 0.0},   {{0, 0, 0, -2, 0}, -0.2, 0.0},
+    {{-2, 0, 0, 0, 0}, -0.1, 0.0},   {{0, 0, -2, 0, -2}, -0.6, 0.0},  {{0, 0, -2, 0, -1}, -0.4, 0.0},
+    {{0, 0, -2, 0, 0}, -0.1, 0.0},   {{-1, 0, -2, 0, -2}, -0.1, 0.0}, {{-1, 0, -2, 0, -1}, -0.1, 0.0}};
+
+/// Step 2's diurnal band at d50 (days from 1950 January 0.0), in the set's axes, into `out` (the tensor's xz and yz,
+/// ER^5/min^2). The Earth-fixed corrections dC21, dS21 at theta = (GMST + pi) - N.F, seen from inertial axes, are
+/// C' cos(alpha) + S' sin(alpha) in right ascension with C' = sum(ip sin b - op cos b), S' = -sum(ip cos b + op sin b),
+/// b = N.F (GMST cancels): a term fixed in inertial axes but for b. Its potential (mu / r) (R / r)^2 sqrt(15) sin(phi)
+/// cos(phi) (C' cos alpha + S' sin alpha) is r^-3 r.T.r with T_xz = (sqrt(15) / 2) mu C', T_yz = (sqrt(15) / 2) mu S'. It is
+/// evaluated once, at the epoch: over 10 days b moves the band by under 3e-12 of its 5e-10 (the P1 line, 2 L_sun).
+inline void diurnal_band(double d50, double out[2]) {
+  const double T = (d50 - 18263.5) / 36525.0;
+  // IERS Conventions (2010) eq. 5.43 to T^2: l, l', F, D, Omega (arcseconds)
+  const double arg[5] = {(134.96340251 * 3600.0 + (1717915923.2178 + 31.8792 * T) * T) * kArcsec,
+                         (357.52910918 * 3600.0 + (129596581.0481 - 0.5532 * T) * T) * kArcsec,
+                         (93.27209062 * 3600.0 + (1739527262.8478 - 12.7512 * T) * T) * kArcsec,
+                         (297.85019547 * 3600.0 + (1602961601.2090 - 6.3706 * T) * T) * kArcsec,
+                         (125.04455501 * 3600.0 + (-6962890.5431 + 7.4722 * T) * T) * kArcsec};
+  double c = 0.0, s = 0.0;
+  for (const Band& w : kK21Band) {
+    double b = 0.0;
+    for (int i = 0; i < 5; ++i) b += w.n[i] * arg[i];
+    const double sb = std::sin(b), cb = std::cos(b);
+    c += w.ip * sb - w.op * cb;
+    s -= w.ip * cb + w.op * sb;
+  }
+  constexpr double k = 1.9364916731037085 * kMu * 1e-12;  // sqrt(15) / 2 mu R^2 (R 1 ER), the amplitudes in 1e-12
+  out[0] = k * c;
+  out[1] = k * s;
+}
+
+/// The tide's averaged rates, added to the equinoctial rates `out` of the state y (frame fr, its a, n, e2, eta and axes),
+/// with the bodies b of the stage and the band k1 (diurnal_band). The potential of the degree-2 tide is r^-3 r.T.r, T the
+/// symmetric traceless tensor (ER^5/min^2) of the two bodies' (3/2) mu_b R^5 / r_b^3 (s s^T - I/3), each order m of it (zz;
+/// xz, yz; xx - yy, xy about the Earth's axis) weighted by its k2m and turned by its lead, plus the band. With W the orbit
+/// normal, g = T W and P = W.g, its average over the mean anomaly is -P / (2 a^3 eta^3); with D = 1 / (n a^5 eta^4), N the
+/// node and M the in-plane direction 90 deg past it: di/dt = D g.N, sin i dOmega/dt = D g.M, d varpi/dt = D (tan(i/2) g.M
+/// - 1.5 P), d lambda/dt - n = D (tan(i/2) g.M - 3 eta P - 1.5 e^2 P / (1 + eta)); e and n do not move. In the equinoctial
+/// axes N sin Omega + M cos Omega = fr.g and N cos Omega - M sin Omega = fr.f, so chi-dot = D g.fr.g / (1 + cos i) and
+/// psi-dot = D g.fr.f / (1 + cos i), regular at i = 0 as tan(i/2) M is.
+inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const Frame& fr, double* out) {
+  double txx = 0.0, tyy = 0.0, tzz = 0.0, txy = 0.0, txz = k1[0], tyz = k1[1];
+  const Vec3 us[2] = {b.sun_u, b.moon_u};
+  const double rs[2] = {b.sun_r, b.moon_r}, ms[2] = {kSunMass, kMoonMass};
+  for (int j = 0; j < 2; ++j) {
+    const Vec3 u = us[j];
+    const double kappa = 1.5 * ms[j] * kMu / (rs[j] * rs[j] * rs[j]);
+    const double c0 = kappa * kK20 * (u.z * u.z - 1.0 / 3.0);
+    txx -= 0.5 * c0;
+    tyy -= 0.5 * c0;
+    tzz += c0;
+    const double c1 = kappa * kK21 * u.z;
+    txz += c1 * (u.x * kC21 - u.y * kS21);
+    tyz += c1 * (u.x * kS21 + u.y * kC21);
+    const double x2 = u.x * kC22 - u.y * kS22, y2 = u.x * kS22 + u.y * kC22, c2 = kappa * kK22;
+    const double d2 = 0.5 * c2 * (x2 * x2 - y2 * y2);
+    txx += d2;
+    tyy -= d2;
+    txy += c2 * x2 * y2;
+  }
+  const Vec3 W = fr.w;
+  const Vec3 g = {txx * W.x + txy * W.y + txz * W.z, txy * W.x + tyy * W.y + tyz * W.z, txz * W.x + tyz * W.y + tzz * W.z};
+  const double chi = y[kChi], psi = y[kPsi], ci = W.z;
+  const Vec3 tM = {-ci * chi, ci * psi, 2.0 * (chi * chi + psi * psi) * fr.ic};  // tan(i/2) M
+  const double P = dot(W, g), gT = dot(g, tM);
+  const double a2 = fr.a * fr.a, one_e2 = 1.0 - fr.e2;
+  const double D = 1.0 / (fr.n * a2 * a2 * fr.a * one_e2 * one_e2);
+  const double h = 0.5 * fr.c * D;  // D / (1 + cos i)
+  out[kChi] += h * dot(g, fr.g);
+  out[kPsi] += h * dot(g, fr.f);
+  const double wdot = D * (gT - 1.5 * P);
+  out[kAf] -= y[kAg] * wdot;
+  out[kAg] += y[kAf] * wdot;
+  out[kLam] += D * (gT - P * (3.0 * fr.eta + 1.5 * fr.e2 / (1.0 + fr.eta)));
+}
+
+}  // namespace tide
+
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test). AP sums the epoch
 /// class's terms whatever the current mean motion (SPEC 16.7): the class is the record's, decided at its epoch.
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
@@ -3937,6 +4046,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   }
   six_to_equinoctial(ag, six, out);
   out[kLam] += fr.n;  // the set carries lambda-dot - n
+  // SPEC 16.14: the solid Earth tide, closed form at this state (every regime; nothing at output time)
+  if (ctx.solid_tides) tide::rates_eq(ctx.tide_k1, b, y, fr, out);
   if (add_cached_lp_teq) {
     for (int m = 0; m < 6; ++m) out[m] += csa->tail_eq[m] + cgc.sigma_dtail_eq[sigma_slot][m];
   }
@@ -6257,6 +6368,9 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
+  // SPEC 16.14: an AP set's solid Earth tide, with its diurnal band at the epoch; SGP4XP flies none
+  s.ctx.solid_tides = s.ctx.ap_third_body && s.ctx.selected_terms.solid_tides ? 1 : 0;
+  if (s.ctx.solid_tides) tide::diurnal_band(s.ctx.d50_epoch, s.ctx.tide_k1);
   if (res != 0 && !s.ctx.ap_resonance) {
     // SGP4XP: the epoch class's terms at e_0, i_0 (SPEC 6.3), the library's functions (6.4)
     res::ResCoef* rc = static_cast<res::ResCoef*>(std::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));
@@ -7256,6 +7370,19 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     return true;
   };
 
+  // SPEC 16.14: each set's solid Earth tide at its own stage state, as rates() adds it
+  const bool tides = ctx_p.solid_tides || ctx_m.solid_tides;
+  auto add_tides = [&](const F64x2 vy[6], const Bodies& bb, F64x2 vr[6]) {
+    double yp[6], ym[6], tp[6] = {0, 0, 0, 0, 0, 0}, tm[6] = {0, 0, 0, 0, 0, 0};
+    for (int m = 0; m < 6; ++m) {
+      yp[m] = vy[m].lo();
+      ym[m] = vy[m].hi();
+    }
+    if (ctx_p.solid_tides) tide::rates_eq(ctx_p.tide_k1, bb, yp, frame_of_fast(yp), tp);
+    if (ctx_m.solid_tides) tide::rates_eq(ctx_m.tide_k1, bb, ym, frame_of_fast(ym), tm);
+    for (int m = 0; m < 6; ++m) vr[m] = vr[m] + F64x2(tp[m], tm[m]);
+  };
+
   F64x2 vy2[6];
   for (int m = 0; m < 6; ++m) vy2[m] = vya[m] + (3.0 / 8.0) * h * vfa[m];
   F64x2 va0, vtb0[6];
@@ -7284,6 +7411,7 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     vk2[m] = vr;
   }
   vk2[kLam] = vk2[kLam] + vy2[kN];
+  if (tides) add_tides(vy2, csa0.b, vk2);
 
   // SPEC 9 state_test on y3
   const F64x2 vy3_af = vya[kAf] + (9.0 / 16.0) * h * vk2[kAf];
@@ -7308,6 +7436,7 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     vk4[m] = vr;
   }
   vk4[kLam] = vk4[kLam] + vy4[kN];
+  if (tides) add_tides(vy4, csa1.b, vk4);
 
   F64x2 vout_y[6];
   for (int m = 0; m < 6; ++m)
@@ -7355,6 +7484,15 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     if (!std::isfinite(out_p.y[m]) || !std::isfinite(out_m.y[m]) ||
         !std::isfinite(out_p.f[m]) || !std::isfinite(out_m.f[m]))
       return -1;
+  }
+  if (tides) {
+    F64x2 vf[6];
+    for (int m = 0; m < 6; ++m) vf[m] = F64x2(out_p.f[m], out_m.f[m]);
+    add_tides(vout_y, csa2.b, vf);
+    for (int m = 0; m < 6; ++m) {
+      out_p.f[m] = vf[m].lo();
+      out_m.f[m] = vf[m].hi();
+    }
   }
   // SPEC 16.13: ECOM2's blocks, as next_node adds them, so a pair flies the theory its sets fly alone
   if (has_ecom2(ctx_p)) ecom2_blocks(ctx_p, ap, out_p);

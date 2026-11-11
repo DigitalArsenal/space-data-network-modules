@@ -5,8 +5,9 @@
 // set (MEAN_ELEMENT_THEORY SGP4, SGP4XP or AP, written; Brouwer MEAN_MOTION,
 // BTERM and AGOM for SGP4XP and AP); PERTURBATIONS the forces (ATMOSPHERIC_MODEL
 // {JXX,1970} or {NRLMSIS00E,2000}, WEATHER_SOURCE, DENSITY_CORRECTION, the
-// gravity caps, the daily SPACE_WEATHER rows and the density-correction nodes
-// the set flies on); METADATA.NORAD_CAT_ID the join key; TRAJ_REF_FRAME
+// gravity caps, the solid Earth tide (SOLID_TIDES_MODEL), the daily
+// SPACE_WEATHER rows and the density-correction nodes the set flies on);
+// METADATA.NORAD_CAT_ID the join key; TRAJ_REF_FRAME
 // TEMEOFDATE, or TEMEOFEPOCH at the set's epoch for AP with gravity terms;
 // ORB_AVERAGING BROUWER (KOZAI for SGP4); STATE_DATA empty; PROVENANCE this
 // module's, or the source's carried with this module as PRODUCER; a carried
@@ -18,7 +19,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.19";
+constexpr const char* kModuleVersion = "0.6.20";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -70,6 +71,10 @@ struct Extras {
 constexpr const char* kY0RadiationModel = "SPHERE (AGOM) AND ECOM2 Y0 (ARNOLD ET AL. 2015), SPHERE'S CYLINDRICAL SHADOW";
 constexpr const char* kB1RadiationModel =
     "SPHERE (AGOM) AND ECOM2 Y0, B1 COS AND B1 SIN (ARNOLD ET AL. 2015), SPHERE'S CYLINDRICAL SHADOW";
+
+/// SPEC 16.14: PERTURBATIONS.SOLID_TIDES_MODEL of an AP set flown with the solid Earth tide ($PCF FORCES.SOLID_TIDES
+/// IERS_2010); absent on every other set. A flight reads this text, and only this text, as the tide.
+constexpr const char* kSolidTidesModel = "IERS 2010";
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
 /// parameters in the fixed order (cov::kParameters), each named, each a prwDynamicParameter of the five, COV_UNITS
@@ -167,6 +172,7 @@ inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBuff
   const auto s_gravity = fbb.CreateString(sgp4 ? "WGS-72" : "EGM-96");
   const auto s_srp = ecom2 != 0 ? fbb.CreateString(ecom2 == 2 ? kB1RadiationModel : kY0RadiationModel)
                                 : flatbuffers::Offset<flatbuffers::String>(0);
+  const auto s_tides = !sgp4 && f.solid_tides ? fbb.CreateString(kSolidTidesModel) : flatbuffers::Offset<flatbuffers::String>(0);
   flatbuffers::Offset<ATM> atmosphere = 0;
   if (!sgp4) atmosphere = CreateATM(fbb, f.msis ? AtmosphericModelFamily_NRLMSIS00E : AtmosphericModelFamily_JXX, f.msis ? 2000 : 1970);
   const bool records = !sgp4 && f.weather_source == pcfWeatherSource_RECORDS && w != nullptr;
@@ -191,6 +197,7 @@ inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBuff
   PerturbationsBuilder b(fbb);
   if (!atmosphere.IsNull()) b.add_ATMOSPHERIC_MODEL(atmosphere);
   b.add_GRAVITY_MODEL(s_gravity);
+  if (!s_tides.IsNull()) b.add_SOLID_TIDES_MODEL(s_tides);
   if (!s_srp.IsNull()) b.add_SOLAR_RAD_PRESSURE(s_srp);
   if (!sw_source.IsNull()) b.add_SW_DATA_SOURCE(sw_source);
   if (!sw_epoch.IsNull()) b.add_SW_DATA_EPOCH(sw_epoch);
@@ -527,6 +534,16 @@ inline int decode_view(const OCM* o, Set& s) {
   } else if (has_nodes) {
     return refuse("density-correction-unselected", "Density-correction nodes with DENSITY_CORRECTION NONE.");
   }
+  // SPEC 16.14: the solid Earth tide, PERTURBATIONS.SOLID_TIDES_MODEL: absent or empty, none; "IERS 2010", AP's tide, on
+  // an AP set with gravity terms only
+  if (const flatbuffers::String* st = pt->SOLID_TIDES_MODEL(); st != nullptr && st->size() > 0) {
+    if (!oem::same_text(st->c_str(), kSolidTidesModel))
+      return refuse("solid-tides-unsupported", "PERTURBATIONS.SOLID_TIDES_MODEL is IERS 2010 (AP's solid Earth tide) or absent.");
+    if (sgp4 || !epoch_frame(f))
+      return refuse("elements-other-theory",
+                    "The solid Earth tide is AP's, flown with its gravity terms: an SGP4 or SGP4XP set, or an AP set whose gravity caps are both 0, carries none.");
+    f.solid_tides = true;
+  }
   // the theory by MEAN_ELEMENT_THEORY alone: SGP4XP flies the theory's own forces, AP any other
   if (s.theory == meanElementSource_SGP4XP && !f.stock()) return refuse("elements-other-theory", "An SGP4XP set states AP's forces (MEAN_ELEMENT_THEORY AP).");
   if (s.theory == meanElementSource_AP && f.stock()) return refuse("elements-other-theory", "An AP set states SGP4XP's own forces (MEAN_ELEMENT_THEORY SGP4XP).");
@@ -561,7 +578,7 @@ struct Bind {
   xpt::tess::Terms prev_terms;
   Bind(const Forces& f, const atm::Atmosphere* a) : prev(atm::active()), prev_terms(xpt::tess::active()) {
     atm::active() = f.weather_source == pcfWeatherSource_RECORDS ? a : nullptr;
-    xpt::tess::active() = xpt::tess::Terms{f.tesseral, f.zonal};
+    xpt::tess::active() = xpt::tess::Terms{f.tesseral, f.zonal, f.solid_tides};
   }
   ~Bind() {
     atm::active() = prev;
