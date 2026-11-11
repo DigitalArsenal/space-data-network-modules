@@ -15,7 +15,7 @@ namespace pool {
 constexpr int32_t kMaxThreads = 16;
 constexpr uint32_t kChunk = 512;
 
-enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2 };
+enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2, kJobSegmentsBuild = 3, kJobSegmentsAt = 4 };
 
 struct Job {
   int32_t generation;
@@ -34,6 +34,8 @@ struct Job {
   // per-time terms shared by every object of a batch at one time
   xpt::Bodies bodies;
   double theta;
+  // the display segments (segments.inc): the time from the segment store's epoch (s)
+  double seconds;
 };
 
 inline Job& job() {
@@ -44,6 +46,7 @@ inline Job& job() {
 inline int32_t load(const int32_t* word) { return __atomic_load_n(word, __ATOMIC_SEQ_CST); }
 
 void run_chunk(const Job& j, int32_t chunk);
+void segments_chunk(const Job& j, int32_t chunk);  // segments.inc
 
 // A chunk is claimed by compare-and-swap against the job's total, so a
 // thread that wakes late (or reads the counters across a job boundary)
