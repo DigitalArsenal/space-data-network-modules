@@ -212,9 +212,12 @@ assert.ok(fixtures.GTO.release.alongTrack <= 250 && fixtures.GTO.release.radial 
 // AP's own Sun and Moon (SPEC 16.17, stack #446, on 0.6.19) move every fixture: GTO 192.87 / 123.44 to 180.70 / 117.62,
 // GTO-500 94.07 / 56.07 to 82.34 / 51.79, half-day 31.44 / 16.84 to 36.15 / 14.56, 12 h at 55 deg 66.68 / 5.70 to 67.31 /
 // 7.24, Molniya with its coefficient pinned 80.71 / 50.51 to 84.01 / 51.16 m (the averaged lunar theory of stack #421 now
-// meets the true Moon)
-assert.ok(near(fixtures.GTO.release.alongTrack, 180.70, 2) && near(fixtures.GTO.release.radial, 117.62, 2), 'GTO within 2 m of 180.70 / 117.62');
-for (const [name, [t, r]] of Object.entries({'GTO-500': [82.34, 51.79], 'half-day': [36.15, 14.56], '12-hour-55deg': [67.31, 7.24]})) {
+// meets the true Moon). The field EGM2008 on both sides (0.6.33, SPEC 16.2; the truth's was EGM-96 before, as AP's) moves them
+// again: GTO 180.70 / 117.62 to 175.01 / 112.39, GTO-500 82.34 / 51.79 to 82.34 / 52.54 (radial 0.75 m worse), half-day 36.15 /
+// 14.56 to 35.88 / 16.01 (radial 1.45 m worse), 12 h at 55 deg 67.31 / 7.24 to 65.60 / 7.20, Molniya with its coefficient
+// pinned 84.01 / 51.16 to 80.11 / 47.70 m
+assert.ok(near(fixtures.GTO.release.alongTrack, 175.01, 2) && near(fixtures.GTO.release.radial, 112.39, 2), 'GTO within 2 m of 175.01 / 112.39');
+for (const [name, [t, r]] of Object.entries({'GTO-500': [82.34, 52.54], 'half-day': [35.88, 16.01], '12-hour-55deg': [65.60, 7.20]})) {
   assert.ok(near(fixtures[name].release.alongTrack, t, 0.5) && near(fixtures[name].release.radial, r, 0.5), `${name}: within 0.5 m of ${t} / ${r}`);
   assert.ok(fixtures[name].release.alongTrack < fixtures[name]['0.4.14'].alongTrack && fixtures[name].release.radial < fixtures[name]['0.4.14'].radial, `${name}: below 0.4.14`);
 }
@@ -229,8 +232,8 @@ for (const [name, [t, r]] of Object.entries({'GTO-500': [82.34, 51.79], 'half-da
 }
 // Molniya with its coefficient pinned at the truth: the model's pin, to 5 cm (80.71 / 50.51 m on 0.6.12 and with the C1
 // E-grid alike), and no worse than 0.4.14
-assert.ok(near(fixtures['Molniya-pinned'].release.alongTrack, 84.01, 0.05) && near(fixtures['Molniya-pinned'].release.radial, 51.16, 0.05),
-  `Molniya, coefficient pinned: day 7 ${fixtures['Molniya-pinned'].release.alongTrack} / ${fixtures['Molniya-pinned'].release.radial} m against 84.01 / 51.16`);
+assert.ok(near(fixtures['Molniya-pinned'].release.alongTrack, 80.11, 0.05) && near(fixtures['Molniya-pinned'].release.radial, 47.70, 0.05),
+  `Molniya, coefficient pinned: day 7 ${fixtures['Molniya-pinned'].release.alongTrack} / ${fixtures['Molniya-pinned'].release.radial} m against 80.11 / 47.70`);
 assert.ok(fixtures['Molniya-pinned'].release.alongTrack <= fixtures['Molniya-pinned']['0.4.14'].alongTrack, 'Molniya, coefficient pinned: along-track no worse than 0.4.14');
 assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {

@@ -296,8 +296,11 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   // model's pin. AP's own Sun and Moon (SPEC 16.17, stack #446, on 0.6.19) move every fixture, both ways: half-day 31.45 /
   // 16.88 / 30.22 to 36.15 / 14.56 / 27.76 m, 12 h at 55 deg 66.61 / 5.68 / 64.94 to 67.31 / 7.24 / 76.44 m, Molniya with
   // B pinned 80.71 / 50.51 to 84.01 / 51.16 m, GTO's sample 275.78 to 255.35 m; the true Moon now meets these orbits'
-  // averaged lunar theory (stack #421), whose error the old Moon's had partly offset.
-  for (const [f, [t, r, s]] of Object.entries({'half-day': [36.15, 14.56, 27.76], '12-hour-55deg': [67.31, 7.24, 76.44]})) {
+  // averaged lunar theory (stack #421), whose error the old Moon's had partly offset. The field EGM2008 on both sides (0.6.33,
+  // SPEC 16.2; the truth's field was EGM-96 before, as AP's) moves them again: half-day 36.15 / 14.56 / 27.76 to 35.88 / 16.01 /
+  // 27.66 m (radial 1.45 m worse), 12 h at 55 deg 67.31 / 7.24 / 76.44 to 65.60 / 7.20 / 71.63 m, Molniya with B pinned 84.01 /
+  // 51.16 to 80.11 / 47.70 m.
+  for (const [f, [t, r, s]] of Object.entries({'half-day': [35.88, 16.01, 27.66], '12-hour-55deg': [65.60, 7.20, 71.63]})) {
     assert.ok(Math.abs(report.releaseDay7[f].alongTrack - t) <= 0.5, `${f}: day-7 along-track RMS ${report.releaseDay7[f].alongTrack} m`);
     assert.ok(Math.abs(report.releaseDay7[f].radial - r) <= 0.5, `${f}: day-7 radial RMS ${report.releaseDay7[f].radial} m`);
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);
@@ -305,7 +308,7 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   assert.ok(report.releaseDay7.GTO.alongTrack <= 961.5 && report.releaseDay7.GTO.radial <= 935.5, 'GTO: day 7 no worse than 961/935 m');
   // Molniya with B pinned at the truth's 0.044: the model's pin, to 5 cm (80.71 / 50.51 m on 0.6.12 and with the C1
   // E-grid alike)
-  assert.ok(Math.abs(report.releaseDay7['Molniya-pinned'].alongTrack - 84.01) <= 0.05 && Math.abs(report.releaseDay7['Molniya-pinned'].radial - 51.16) <= 0.05,
+  assert.ok(Math.abs(report.releaseDay7['Molniya-pinned'].alongTrack - 80.11) <= 0.05 && Math.abs(report.releaseDay7['Molniya-pinned'].radial - 47.70) <= 0.05,
     `Molniya, B pinned: day-7 along-track ${report.releaseDay7['Molniya-pinned'].alongTrack} m and radial ${report.releaseDay7['Molniya-pinned'].radial} m`);
   // MOLNIYA_FITTED: the 72 h fit of the coefficient has two solutions that small numerical changes move it between (stack
   // #392): B 0.044623, fit RMS 21.911 m, day-7 along-track 239.68 m on 0.6.12; B 0.045722, 21.337 m, 523.53 m with the C1

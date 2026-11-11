@@ -8,7 +8,7 @@
 //   (the second set's rows moved): they load and blend.
 // - propagate_epochs of the stored AP record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit of the 0.4.0 inputs) within
 //   STORE_FLIGHT of 0.6.22's flight of it (ap-fit-0.6.4.epochs-0.6.22.oem), and of this build's own fit of the arc within
-//   STORE_FIT of this build's propagate_epochs of 0.6.27's fit (ap-fit-0.6.27.ocm) (the flight and the fit apart; history,
+//   STORE_FIT of this build's propagate_epochs of 0.6.33's fit (ap-fit-0.6.33.ocm) (the flight and the fit apart; history,
 //   the fresh-bake reference and sizes at the check). The store's output differs from propagate's
 //   (ap-fit-0.6.4-0.6.22.oem) in the store's time arithmetic, which this record leaves as it was.
 // - A store $PCF with a FORCES table: configuration-refused FORCES; propagate_epochs without OUTPUT times:
@@ -270,7 +270,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   check(blended.statusCode === 0 && x.sdnap_epochs_count() === 1 && seriesOf(0).epochs.length === 2 && sel[1] === 1 && sel[2] > 0 && sel[2] < 1 && at(0, mid).status === 0,
     "two sets with different rows do not load and blend");
   // the flight of the stored AP record (0.6.4's fit) against 0.6.22's propagate_epochs of it (ap-fit-0.6.4.epochs-0.6.22.oem),
-  // and this build's own fit against this build's of 0.6.27's fit. History: 0.6.4's own flight of it (ap-fit-0.6.4.epochs.oem, the
+  // and this build's own fit against this build's of 0.6.33's fit. History: 0.6.4's own flight of it (ap-fit-0.6.4.epochs.oem, the
   // expected flight through 0.6.17) equals ap-fit-0.4.0.epochs.oem (the 0.4.18 dist's) in its states bit for bit through
   // 0.6.4, its covariance moved at 0.6.1 (637228fb, the AP DRAG noise row re-fitted, SPEC 12.4); 0.6.5 (24d7d75f, SPEC
   // 16.8) moves the stored record's flight by 0.629 mm and 0.796 um/s and its covariance by 7.2e-5 of a line's largest
@@ -305,12 +305,16 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // (both flown by 0.6.27), FIT_RMS 40.260 against 40.049 m. Against the fixture's own truth (propagator/ffm's 550 km
   // trajectory) the error 48 to 72 h past the arc stays at 43 m, and over the arc it goes from 23.9 to 24.1 m. So the
   // own fit is 0.6.27's (ap-fit-0.6.27.ocm; 0.6.25's went), the bounds kept.
-  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.27.ocm", import.meta.url)));
+  // 0.6.33 (the field EGM2008 in place of EGM-96, SPEC 16.2) moves the fit: 154.6 m and 133.1 mm/s from 0.6.27's fit
+  // (both flown by 0.6.33), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
+  // trajectory) the error 48 to 72 h past the arc goes from 43 to 42 m, and over the arc from 24.1 to 24.3 m. So the
+  // own fit is 0.6.33's (ap-fit-0.6.33.ocm; 0.6.27's went), the bounds kept.
+  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.33.ocm", import.meta.url)));
   const fitRecordFlight = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([fitRecord])] });
-  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.27's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
+  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.33's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
   for (const [what, record, bound, reference, against] of [
     ["the stored AP record", new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.ocm", import.meta.url))), STORE_FLIGHT, storedFlight, "0.6.22's of the stored record"],
-    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.27's fit"]]) {
+    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.33's fit"]]) {
     const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
     check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);
     if (pe.statusCode !== 0 || fitRecordFlight.statusCode !== 0) continue;

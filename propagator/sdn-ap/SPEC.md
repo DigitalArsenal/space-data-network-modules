@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.32 (dist 1752ddbe).
+Version 0.6.33 (dist 2d2f2460).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2656,7 +2656,7 @@ set cut at a lower degree is worse than none.
 **16.2 Tesserals.** The field is the fully normalized EGM2008 of propagator/ffm (`lib/egm2008_data.h`, to degree and order
 70), pinned by build.mjs; through 0.6.32 it was EGM-96 (`lib/egm96_data.h`).
 
-*Why EGM2008 (from 0.6.NN; stack #503).* The numerical propagator AP is held to flies EGM2008: its SPHERICAL_HARMONICS field is
+*Why EGM2008 (from 0.6.33; stack #503).* The numerical propagator AP is held to flies EGM2008: its SPHERICAL_HARMONICS field is
 the embedded EGM2008, and EGM96 is an option only. EGM2008 (Pavlis et al. 2012, from ICGEM; public) is also the closer field to
 the real Earth. Below degree 30 or so the two fields agree closely. Above it they part, and an AP term of high degree fitted to
 an EGM2008 truth was a term of the wrong field. The measurement: 300 km, i 98, e 0, with gravity, Sun, Moon and tide on both

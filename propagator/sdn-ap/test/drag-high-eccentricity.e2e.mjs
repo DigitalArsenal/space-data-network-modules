@@ -19,7 +19,8 @@
 //    34 to 31 m (third-body-short-period-eccentric.e2e.mjs); this test was not run at 0.6.3. The 12 m is
 //    DigitalArsenal/spacedatanetwork-stack#391. AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446: the Moon within
 //    4.1 arcsec of DE440 against 377) move it from 83.33 m (0.6.21; 83.38 as recorded from 0.6.5) to 85.94 m: a lunar
-//    error had been taking 2.6 m off this fixture's other error. A change that moves it by more than 1 m either way states
+//    error had been taking 2.6 m off this fixture's other error. The field EGM2008 on both sides (0.6.33, SPEC 16.2; the
+//    truth's field was EGM-96 before, as AP's) moves it to 82.17 m. A change that moves it by more than 1 m either way states
 //    why and records the new figure;
 // 3. Molniya, BTERM fitted the catalog's way (SPEC 12.8): a 7-day arc on the band default (its B within 0.6 % of 0.044,
 //    which holds both of the arc's solutions, 0.0438547 and 0.0437610: stack #392, #438; 0.5 % before the E-grid's C1 read),
@@ -58,8 +59,8 @@ const FIXTURES = {
 // 1.2 to 8.9 km from an osculating seed); the drag-off fit 53.73 / 27.15 to 53.74 / 27.15. AP's own Sun and Moon (SPEC
 // 16.17, stack #446, on 0.6.19) move them to 1208.57 / 840.01, 8971.52 / 6053.53, 8711.83 / 5705.36 and 56.98 / 27.94
 // (-0.6 to +0.3 % of the seeded flights; the drag-off fit +3.24 / +0.79 m).
-// 2's recorded figure (m, day-7 whole-day along-track RMS), 0.6.22; its history at 2.
-const MOLNIYA_PINNED = 85.94;
+// 2's recorded figure (m, day-7 whole-day along-track RMS), 0.6.33; its history at 2.
+const MOLNIYA_PINNED = 82.17;
 const DRAG_OFF = {'Molniya seed off': [1208.57, 840.01], 'GTO seed off': [8971.52, 6053.53], 'GTO-500 seed off': [8711.83, 5705.36], 'Molniya drag off': [56.98, 27.94]};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');

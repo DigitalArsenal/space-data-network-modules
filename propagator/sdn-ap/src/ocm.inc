@@ -19,7 +19,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.32";
+constexpr const char* kModuleVersion = "0.6.33";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -76,7 +76,7 @@ constexpr const char* kSolidTidesModel = "IERS 2010";
 /// shallow set's (kApGravityModel on every other AP set with gravity terms, "EGM-96" on SGP4XP's and a stock AP set's). A
 /// flight reads this text, and only this text, as the slow set, so a stored record flies as it was fitted.
 constexpr const char* kSlowGravityModel = "EGM2008; slow tesseral terms to degree 70";
-/// SPEC 16.1 (from 0.6.NN): PERTURBATIONS.GRAVITY_MODEL of an AP set with gravity terms (a tesseral or zonal degree): the
+/// SPEC 16.1 (from 0.6.33): PERTURBATIONS.GRAVITY_MODEL of an AP set with gravity terms (a tesseral or zonal degree): the
 /// embedded field its tesserals and zonal tail read, EGM2008 to 70 x 70.
 constexpr const char* kApGravityModel = "EGM2008";
 
