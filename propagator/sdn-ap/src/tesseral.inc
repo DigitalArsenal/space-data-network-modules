@@ -4557,6 +4557,9 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
         if (l0 < 2) l0 = 2;
         if ((l0 - w) & 1) ++l0;
         if (l0 > L) continue;
+        // a family whose series the embedded field ends after one or two degrees (leading degree 69 or 70): left out, a limit of
+        // the field, not of the method (AP and a numerical propagator at 70 x 70 would both hold a series the real field continues)
+        if (l0 >= kSlowDegree - 1) continue;
         normalized_Fk_dF(m, w, L, i0, F, dF);
         for (int l = l0; l <= L; l += 2) {
           if (j == 1 && q == 0 && l <= shallow_degree) continue;  // the shallow set's own term
@@ -4604,7 +4607,8 @@ inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q) {
 /// SPEC 16.18's diagnostic, the low table (sdnap_slow_terms): every term of j = 1 to kSlowJMax, |q| up to kSlowQMax, orders
 /// and degrees to 70 whose own rate at the epoch is inside kShallowSelect bands, for a set of epoch mean motion n (rad/min), e,
 /// i (rad) and the stated tesseral degree `cap`. Rows of 8 doubles: l, m, p, q, psi-dot / n, the carrier (1 the rates,
-/// 3 the output table, 0 nowhere: under the table's 1e-3 n floor, 4 nowhere: above the slow set's degree, 5 nowhere: under
+/// 3 the output table, 0 nowhere: under the table's 1e-3 n floor, 4 nowhere: above the slow set's degree or in a family whose
+/// leading degree is 69 or 70 (the embedded field ends its series at once), 5 nowhere: under
 /// the size cut, 6 nowhere: a q outside the slow set's q range, at or above the size cut: stack #477's open part), the rates'
 /// weight w (the band taper at these elements; the output table holds 1 - w of a term the rates carry) and the term's size (m,
 /// slow_size_m). At most max_rows written; returns the count of all rows.
@@ -4657,7 +4661,8 @@ inline int slow_listing_low(int cap, double n, double e0, double i0, double* row
             held = c.l == l && c.m == m && c.p == p && c.k == j && c.k - (c.l - 2 * c.p) == q;
           }
           if (held) { emit(l, m, p, q, psidot, 1, wt, size); continue; }
-          if (l > Lcap) { emit(l, m, p, q, psidot, 4, 0.0, size); continue; }
+          // above the slow set's degree, or a family whose series the field ends at once (leading degree 69 or 70)
+          if (l > Lcap || l0 >= kSlowDegree - 1) { emit(l, m, p, q, psidot, 4, 0.0, size); continue; }
           const bool on_table = j == 1 && (q >= -1 && q <= 1) && m <= sd && l <= sd;
           if (on_table && std::fabs(psidot) >= 1e-3 * n) { emit(l, m, p, q, psidot, 3, 0.0, size); continue; }
           if (on_table) { emit(l, m, p, q, psidot, 0, 0.0, size); continue; }

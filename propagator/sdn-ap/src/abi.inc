@@ -496,7 +496,8 @@ void sdnap_slow_q_max(int32_t q) { sdnap::xpt::tess::slow_q_max() = q >= 0 && q 
 
 /// Where a set carries each slow tesseral term (SPEC 16.18; the low table's part): in = mean motion (rev/day), e, i (deg), the
 /// stated tesseral degree; rows of 8 doubles (l, m, p, q, psi-dot / n, carrier: 1 the rates, 3 the output table, 0 nowhere: under
-/// the table's 1e-3 n floor, 4 nowhere: above the slow set's degree, 5 nowhere: under the size cut, 6 nowhere: a q outside the
+/// the table's 1e-3 n floor, 4 nowhere: above the slow set's degree or in a family whose leading degree is 69 or 70, 5 nowhere:
+/// under the size cut, 6 nowhere: a q outside the
 /// slow set's range at or above the size cut, stack #477's open part; then the rates' weight w and the term's size in m),
 /// at most max_rows. Returns the count of all rows, or -1 for a set outside the low table (class 0, a period under 1,100 min,
 /// at or below its eccentricity switch). A diagnostic: no flight reads it.
