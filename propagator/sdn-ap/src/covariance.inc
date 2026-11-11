@@ -85,6 +85,30 @@ constexpr AboveRow kAboveXP[4] = {
     {false, 0, 0, 0, 0, 0, 0, 0, 0},
     {true, 2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05, 0.0588, 0.0769, 64.8, 75.6}};
 
+/// SPEC 12.5, the geosynchronous class fitted to data far worse than its precise orbits (stack #433 part C): every size in
+/// proportion to the data sigma the fit weighted with, s = per_km x sigma (sigma in km; s_d constant over the orbit, share
+/// 0). The proportions are the SIGMA form fitted on inclined geosynchronous and geostationary 72 h fits to precise orbits
+/// (sdn-ap 0.6.19, the one-day class's resonant tail; data sigma 0.86 m to 3.5 m), carried up to the sigma of commercial
+/// geostationary fits, whose truth carries burns (stack #444); measured there (24 h and 72 h fits, data sigma 9.7 m to
+/// 2.90 km). The row applies from the sigma at which every scaled s_e, s_i and s_l reaches the ABOVE row's (gso_sigma_star:
+/// 0.151 km AP, 0.066 km SGP4XP), so it never states less than the ABOVE row, up to sigma_hi_km, on spans of 0.9 to 1.05
+/// times 24 h or 72 h; elsewhere the ABOVE row stands.
+struct SigmaRow {
+  bool fitted;
+  double per_km[4];  ///< s_e, s_i (1/day), s_l (dn/n), s_d (rad/day^2) per km of data sigma
+  double sigma_hi_km;
+  double span_lo_h[2], span_hi_h[2];
+};
+constexpr SigmaRow kGsoSigmaAP = {true, {1.8443393922366117e-05, 1.5194136674001825e-05, 3.141503657789266e-05, 6.571123466646167e-05}, 2.91, {21.6, 64.8}, {25.2, 75.6}};
+constexpr SigmaRow kGsoSigmaXP = {true, {5.876802799646972e-06, 3.504351587051805e-05, 4.0198815288144715e-06, 1.2262905073802155e-05}, 2.91, {21.6, 64.8}, {25.2, 75.6}};
+/// The data sigma (km) from which the geosynchronous SIGMA row applies: where every scaled s_e, s_i and s_l reaches the
+/// ABOVE row's.
+inline double gso_sigma_star(bool ap) {
+  const Noise& a = (ap ? kNoiseAP : kNoiseXP)[1];
+  const SigmaRow& g = ap ? kGsoSigmaAP : kGsoSigmaXP;
+  return std::fmax(std::fmax(a.s_e / g.per_km[0], a.s_i / g.per_km[1]), a.s_l / g.per_km[2]);
+}
+
 constexpr int kMaxConsider = 5;
 constexpr int kMaxAug = 6 + kMaxConsider;
 static_assert(kMaxAug == fit::kMaxParams, "the augmented state is the fit's parameter vector");
@@ -392,6 +416,14 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
       noise[2] = a.s_l;
       noise[3] = a.k * std::fabs(row.agom) / a_er;
       share = 0.0;  // above the drag s_d is the class's k |AGOM| / a, not a share of the non-gravitational rate
+      floor_scale = 1.0;
+    }
+    // the geosynchronous class fitted to data far worse than its precise orbits: the sizes in proportion to that sigma
+    const SigmaRow& g = ap ? kGsoSigmaAP : kGsoSigmaXP;
+    const bool span_ok = (span_h >= g.span_lo_h[0] && span_h <= g.span_hi_h[0]) || (span_h >= g.span_lo_h[1] && span_h <= g.span_hi_h[1]);
+    if (above_class(row) == kAboveGso && g.fitted && span_ok && sigma_km >= gso_sigma_star(ap) && sigma_km <= g.sigma_hi_km) {
+      for (int q = 0; q < 4; ++q) noise[q] = g.per_km[q] * sigma_km;
+      share = 0.0;
       floor_scale = 1.0;
     }
   }

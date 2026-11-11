@@ -326,6 +326,14 @@ SGP4XP) is fitted. On its 32 windows AP's median |z| at days 1, 3, 5 and 7 goes 
 orbit, geosynchronous and HEO keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the
 selection.
 
+A one-day set fitted to data far worse than precise orbits takes the geosynchronous SIGMA row (SPEC 12.5). That applies
+at a data sigma from 0.151 km (AP; 0.066 km SGP4XP) to 2.91 km, on 24 h and 72 h arcs. Every size is in proportion to
+the fit's own sigma, in the proportions fitted on inclined geosynchronous and geostationary fits to precise orbits, and
+never under the ABOVE row. On commercial geostationary fits, whose truth holds burns (stack #444), AP's 72 h coverage
+at days 1, 3, 5 and 7 goes from 0.64, 0.37, 0.19 and 0.05 to 0.84, 0.85, 0.84 and 0.85. The 24 h fits improve but stay
+far under the band (0.33 to 0.45). Inclined geosynchronous and geostationary fits to precise orbits keep the ABOVE row:
+their rows wait for the radiation change and the Moon series. `test/covariance-geo-sigma-row.e2e.mjs` holds the rule.
+
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
 Held-out laser-ranged truth (ILRS combination orbits for LAGEOS and Etalon, NSGF arcs for the LEO set; GCRF): each
