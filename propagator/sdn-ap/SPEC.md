@@ -3252,8 +3252,8 @@ exists a state costs the same.
 daily fit, a held fit against the fit without the term byte for byte, and the refusals.
 
 **16.B1 ECOM2's once-per-revolution terms B1 cos and B1 sin** (stack #457). Box-shaped navigation satellites need more
-of ECOM2 than Y0. Fitted by the numerical propagator with its radiation model cut down in steps, BeiDou's C020 (BDS-2G)
-needs B1: with D0 and Y0 alone the weighted RMS of its 72 h arcs is 0.26 to 0.30 and day 5 is 103 to 135 m; with B1 it is
+of ECOM2 than Y0. Fitted by the numerical propagator with its radiation model cut down in steps, one geostationary
+BeiDou satellite needs B1: with D0 and Y0 alone the weighted RMS of its 72 h arcs is 0.26 to 0.30 and day 5 is 103 to 135 m; with B1 it is
 0.04 to 0.06 and 4.6 to 30 m (B1 cos 6.2e-9 to 1.05e-8, B1 sin 3.7e-9 to 4.2e-9 m/s^2). AP carries them beside Y0:
 a = (B1c cos du + B1s sin du) eB, eB = eD x eY, du the satellite's angle in its orbital plane from the Sun's projection
 (Arnold et al. 2015, eq. 2 and Fig. 1; propagator/ffm lib/gnss_srp.h, Ecom2Acceleration and ArgumentFromSun). With s the
@@ -3286,7 +3286,7 @@ outside with either not 0 is refused (elements-other-theory), and flight refuses
 
 *Fit.* $PCF FORCES.ECOM2's B1_COS_M_S2 and B1_SIN_M_S2 are their start, prior means and held values (prior sigma 1e-8
 m/s^2 each: where B1 is solved the data's sigma is 5e-11 to 1.4e-10 for B1 sin and 0.7e-9 to 3.1e-9 for B1 cos, and
-C020's measured B1 cos stays within one sigma). They are solved where the arc carries them: on Y0's arcs, the fit with
+that satellite's B1 cos from the numerical fits stays within one sigma). They are solved where the arc carries them: on Y0's arcs, the fit with
 Y0 and B1 (made, as the Y0-only fit, at the data's sigma) is kept where the Y0-only fit's RMS is at most 15 m and its
 own at most 0.9 of it; elsewhere the Y0-only fit stands, B1 held at its stated value, byte for byte as without the
 terms, and the OD COMMENT says which. The rule's limit is an along-track burn of 0.1 mm/s in the arc: a burn that small
@@ -3316,8 +3316,8 @@ with the terms held at the truth's, day 7 is 1.5 to 2.8 m on geostationary and i
 and 9.3 m, against the sphere record's 9.3 and 4.7 m on the sphere truth; under the rule B1 sin comes within 0.03e-9 of
 the truth's and day 7 is 9.3 and 11.4 m, against 188 and 934 m without FORCES.ECOM2.
 
-Real 72 h rows against the Y0-only fit (within 100 m of FFMq at day 5): geostationary 28 to 32 of 32 (C020 1 to 5 of
-5; day-5 median 26.0 to 16.8 m), inclined geosynchronous 59 of 59 (6.7 to 5.1 m), Galileo 42 of 42 at 72 h and 24 h
+Real 72 h rows against the Y0-only fit (within 100 m of FFMq at day 5): geostationary 28 to 32 of 32 (one geostationary
+satellite, 1 to 5 of its 5 windows; day-5 median 26.0 to 16.8 m), inclined geosynchronous 59 of 59 (6.7 to 5.1 m), Galileo 42 of 42 at 72 h and 24 h
 byte for byte (B1 solved on none). B1 is solved on 20 geostationary windows and 14 inclined geosynchronous ones. Day 5
 is worse on 5 of the geostationary windows with no burn in them, by 0.2 to 17.7 m; the largest is one window that goes
 from 24.8 to 42.5 m, still within 100 m. The cause is not established (stack #457). None of the inclined geosynchronous

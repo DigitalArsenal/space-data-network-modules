@@ -2,7 +2,7 @@
 // E2E (SPEC 16.B1): ECOM2's once-per-revolution terms B1 cos and B1 sin, through the built module.
 // - Model truth: FFM (EGM96 20 x 20, Sun and Moon from DE440, a cannonball of AGOM 0.022, the solid tide) from an
 //   AP-consistent state at 2026-10-01 (eclipse season), flown 10 days with the sphere alone and with the sphere plus
-//   ECOM2 Y0 -1.5e-9, B1 cos 8e-9 and B1 sin 4e-9 m/s^2 (C020-like), on a geostationary orbit (i 0.05 deg) and an
+//   ECOM2 Y0 -1.5e-9, B1 cos 8e-9 and B1 sin 4e-9 m/s^2 (as a geostationary BeiDou satellite's), on a geostationary orbit (i 0.05 deg) and an
 //   inclined geosynchronous one (i 55 deg). AP is fitted over the first 72 h through `fit` under the table's forces
 //   (tesseral 31, zonal 20, the solid tide) with $PCF FORCES.ECOM2 and without, and flown hourly for 7 days.
 // - The theory: the record fitted to the B1 truth with FORCES.ECOM2 stating the truth's Y0, B1 cos and B1 sin flies the
