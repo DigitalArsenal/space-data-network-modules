@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.30 (dist 5cfe4995).
+Version 0.6.32 (dist b0639ae7).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1524,6 +1524,65 @@ The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the r
 15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
 against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
 grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
+
+The pool and the memory (stack #487). A threaded batch grows nothing, and a pool thread uses no page it does not see.
+- Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
+  at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
+  the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
+- Inside the batch, sbrk refuses every growth on every thread.
+  - A set refused its caches flies on the thread's caches, with the same states.
+  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order.
+- A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
+  batch's total, which was stored after that size, so it reads that size.
+- Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
+  thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
+  calling thread goes on once its own view covers it.
+- sdnap_pool_stats counts the batches, refusals, deferred rows, batches that grew inside (0) and the view waits.
+
+Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
+- A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has
+  just grown. Its memory.size still reads the older size, and the bulk instruction is checked against that size. Plain
+  loads and stores of the same pages succeed.
+- This was reproduced outside the propagation code, with only the allocator, memset, memcpy and pthreads (#487).
+- In the pool it happened in two ways:
+  - threads grew the memory inside a batch: 0.6.20 failed 8 of 30 runs of the threaded test, and 0.6.21 failed 4 of 40;
+  - the chunk total was stored before the room was made. A thread that woke late for one batch then claimed a chunk of
+    the following batch while the calling thread grew the memory for it.
+- The pool's own stress shows the second way. In it the calling thread grows the memory before every batch, and every
+  chunk fills blocks in the new pages (4 threads, 3,000 batches a process, fresh processes one at a time):
+  - It needs an oversubscribed machine: a pool thread descheduled between its claim and its fill. On an idle machine
+    (load about 6 to 12 on 28 cores) neither order trapped, 0 of 100 processes each.
+  - With 40 busy threads beside it (load about 50), the total stored first trapped 98 of 100 processes, and stored last
+    0 of 100.
+  - The same split had shown under other sessions' load earlier: 15 of 20 against 0 of 20.
+- A host call or a grow of zero pages on wake did not prevent it: the late thread made that call on its wake for the
+  earlier batch, before the growth it then used.
+- The view wait:
+  - In the loaded campaign it waited in 98 of 100 processes, 318 times, never more than one yield.
+  - The waits at a thread's start count too: the calling thread grows the memory for a new thread's stack just before
+    the thread first runs.
+- This is the engine's behavior as measured, not a guarantee read in the standard. test/pool-growth.e2e.mjs runs the
+  stress, 20 processes, in every suite. With SDN_AP_POOL_GROWTH_LOAD=1 it loads the machine itself (busy threads, twice
+  the cores, at the lowest priority), so that it can fail. Without that, the default, it can fail only on a machine
+  that is busy already.
+
+The timer.
+- A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
+  last chunks without one completing. The pool is then not used again, and later batches run on the calling thread.
+- It is a count of the calling thread's polls, not wall time. The module imports no clock (loaders that build their own
+  import objects give none), and the calling thread may be a browser's main thread, which may not block on a timed
+  wait.
+- The fastest rate measured here was 2.1e9 polls a second, so 2^37 polls are 65 s, about twice the 30 s aimed at. The
+  loop then makes one poll in about one and a half clock cycles, so this machine cannot poll much faster. On a slower
+  or busier machine the count takes longer, and a suspended process does not count.
+- Starting a thread, the calling thread waits at most 2^34 yields for its own view: 89 s at the 1.9e8 yields a second
+  measured here.
+- test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks that a
+  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because chunks keep completing.
+- A trapped thread therefore no longer leaves the calling thread waiting forever: in the stress, every trapped process
+  returned the error.
+- What the timer does not cover: a thread that traps while holding the allocator's lock or a set's lock still stops any
+  thread that then waits for that lock.
 
 What the caches cost in accuracy. The reference is a build of this module's own sources that bakes every evaluation cache
 at the state itself on every call: the tesseral base, ae, pe and resonance bakes and the m-daily terms, with the
@@ -4220,6 +4279,78 @@ equations stay, bit for bit. AP fitted to the numerical forecast over 0 to 120 h
 453 m (perigee 5,000 km) and 825 m to 353 m (perigee 10,000 km), against 459 m and 360 m with J2 alone. SGP4XP is unchanged.
 `test/long-period-moon-output.e2e.mjs` records AP fitted over 5 days to that case on the zonal field to degree 5 with the Sun
 and Moon (FFM): D 343.8 m on 0.6.26, 255.8 m from 0.6.29.
+
+**16.20 The field's census** (from 0.6.32; stack #503). The rule: every tesseral term of the field whose effect on position reaches the
+size cut is carried exactly once, by the carrier its rate gives it, in every class, on both sides of every switch.
+`sdnap_field_census(in, rows, max_rows)` lists, for a set of epoch mean elements (in: mean motion in rev/day, e, i in degrees,
+the record's tesseral degree, the size cut in m), every term (l, m, p, q) of the embedded field, order 1 to 70 and degree to
+70, with |q| up to 4 (8 up to e 0.3, 12 above), whose size reaches the cut.
+
+The census builds the set as a flight builds it (`ap_init`, the slow set on). It then reads each carrier's own tables:
+- the rates: the shallow and slow list, with each term's band taper at the epoch; the class's terms; the half-day and one-day
+  tails;
+- the output table: each entry's weight, its coefficient over the term's F;
+- the m-daily family, to its degree;
+- the family grid: the share it keeps, 1 minus `wide_left_out`, the rule the grid is built on.
+
+*The size* is the output table's measure at full weight (16.1), with the eccentricity vector's part counted along track, twice
+its radial part:
+
+a A [|F G| (3 |j| / (a^2 psi-dot^2) + 2 (l + 1) / (n a^2 |psi-dot|)) + (2 |F dG/de| + |dF/di G|) / (n a^2 |psi-dot|)],
+
+with A = mu / a^(l+1) |C, S|. |psi-dot| is taken at least 2 / (5 days), since a slower term grows over the forecast and not
+past it. Through the mean motion it is the slow set's measure.
+
+Rows have ten doubles: l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size, and the term's period in days (2 pi / |psi-dot|), so a carrier can be checked against the period directly.
+
+| Code | Carried |
+| ---: | --- |
+| 1 | once, by the rates |
+| 2 | once, by the grid |
+| 3 | once, by the output table |
+| 8 | once, by the m-daily family |
+| 11 | once, by the rates and the output table between them (the band taper) |
+| 12 | once, by the rates and the grid between them (the band taper, above the switch) |
+| 20 | nowhere: above the degree of the carrier that the term's rate gives it |
+| 21 | nowhere: under that carrier's rate floor, or in the slow band that the grid leaves out |
+| 22 | nowhere: outside that carrier's q (or j) range |
+| 23 | nowhere: under that carrier's own size cut |
+| 24 | partly nowhere: the weights sum to less than 1, and the share left out reaches the cut (a share under it counts as carried) |
+| 30 | twice: the weights sum to more than 1 |
+
+In the low table the carrier is the rates below 1.1 bands and the output table above.
+
+The census weighs every share at the epoch's elements, so it checks the partition at the epoch only. A shared term's weights
+need not sum to 1 later in a flight. The rates' shares (the shallow, slow and wide slow lists) follow the term's current rate.
+The output table's and the grid's are fixed when they are built: the table's at the epoch, the grid's at its node (in the
+long-period regime with the Sun and Moon, at the epoch's mean motion, 16.19).
+
+`test/field-census.e2e.mjs` sweeps the regime: 101 sets.
+- Low orbit: five heights, three inclinations, e 0 to 0.05.
+- Class 0 above its switch, to e 0.9.
+- The one-day, half-day, eight-hour and sixteen-hour classes on both sides of their switch, plus a THEMIS-like set.
+- The 1,100-minute limit.
+
+The test fails on any term carried twice, and on any term carried nowhere that is outside the known holes. Each known hole is
+named with the issue that closes it. A hole that no set of the sweep shows any more also fails the test, so it is removed when
+its fix lands. The holes, measured 2026-11-11 on 0.6.28 (terms over the sweep; the largest, in m over 5 days). From 0.6.28 the
+wide slow list carries every class's slow terms above the switch to degree 12, outside low orbit; the census's hole there
+went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit above the switch:
+
+| Hole | Issue | Terms | Largest |
+| --- | --- | ---: | ---: |
+| The low table: terms the output table holds by rate but not by degree (above 12; m-daily terms too) | stack #477 | 10,740 | 74 |
+| The low table: the taper's complement (1 - w) of a slow term above the output table's degree | stack #477 | 58 | 21 |
+| The low table: fast terms of \|q\| 2 or more (the output table holds \|q\| up to 1) | stack #503 | 2,436 | 15 |
+| A carrier's own size cut measures the term below the census (the output table counts the eccentricity vector's part radially; terms under 1 m) | stack #503 | 4,037 | 1 |
+| The low table: the slow set's cut misses a term's part through the inclination (dF/di) | stack #503 | 98 | 2.3 |
+| The one-day class above its switch: under its floor, or above the grid's degree | stack #474 | 456 | 73 |
+| Above the switch, every class: terms above the grid's degree 12 | stack #497 | 189,984 | 3,910 |
+| Above the switch, low orbit: slow terms the grid leaves out and no rate carries | stack #473 | 15 | 4,060 |
+| Outside the low table, below the switch: terms the output table's degree, q range or band floor leaves out and the class's rates do not carry | stack #511 | 406 | 91 |
+
+The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
+arc.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
