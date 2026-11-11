@@ -75,6 +75,11 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   times, joints under 0.6 mm; 20 to 68 KB per object-day in low orbit, 0.3 to 10 KB above it and on eccentric orbits.
   States at most 0.1 rad of arc apart (60 s in low orbit, the common operator step, holds 1 cm and about 0.2 mm/s; at
   most 0.05 rad, 30 s, 1 cm and 0.1 mm/s); `sdnap_carried_frame_error` gives the frame's bound.
+- Display segments (SPEC 19; `test/segments.e2e.mjs`), for drawing and screening many objects, not for accuracy:
+  `sdnap_segments_build` gives each SGP4 or SGP4XP row of the element store short polynomial segments of its own
+  theory's positions (1 m, by batch into one store), and `sdnap_segments_at` returns every row at one instant from them
+  (status 2: the row has none, the caller flies its theory). 808 bytes a set; 100,000 objects a step in 0.45 ms on the
+  pool in headless Chrome, 2.70 ms on the main thread alone (`test/segments-browser.mjs`, `test/segments-bench.mjs`).
 - Configuration (SDS 1.272.0, `$PCF` 1.0.6): `propagate`, `fit` and `maneuver` take one `$PCF` on their required
   `configuration` port. Each reads THEORY and its own tables (propagate and maneuver: OUTPUT, FORCES;
   fit: FIT, FORCES); another method's tables are left to it. Fields left unset take the defaults
@@ -437,6 +442,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/kernel-patterns.mjs`: AP's cost against SGP4's by request pattern: many records stepped together and record by
   record, the first state of a fresh record at 0, 1 and 7 days, ascending, random and alternating-ends order, e 0 to
   0.3 in low orbit, and the public `propagate` in TEME and GCRF with and without a covariance.
+- `test/segments-bench.mjs`: the display segments (SPEC 19) against the direct batch path on N made-up sets: build
+  time and CPU, bytes a set, a catalog step's median and 99th percentile, the miss against the theory, a determinism
+  digest. `test/segments-browser.mjs`: the same catalog step in Chromium's headless shell (a one-file server with the
+  cross-origin isolation headers, the SDK's browser harness and thread-pool worker), on the main thread or the pool.
 - `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
   one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
   not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.

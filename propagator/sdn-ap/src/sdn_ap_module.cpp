@@ -72,6 +72,7 @@
 #include "pool.inc"
 #include "fit.inc"
 #include "abi.inc"
+#include "segments.inc"
 #include "twobody.inc"
 #include "events.inc"
 #include "omm.inc"

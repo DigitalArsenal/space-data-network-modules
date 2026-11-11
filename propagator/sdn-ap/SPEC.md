@@ -3291,6 +3291,53 @@ taking the determination from observations as record A's set and covariance); le
 7); fly the forecast in `sdnap_covariance_at`, `events` or `maneuver`; put a track on the pool; make a fresh record
 pass W4 (18.5, #394).
 
+## 19. Display segments (outside the SGP4-XP specification)
+
+For drawing and screening many objects fast (stack #423), not for accuracy: a row's segments follow its own theory to
+a stated tolerance and change nothing about the theory. SGP4 and SGP4XP rows of the element store
+(`sdnap_init_elements`); `test/segments.e2e.mjs`.
+
+**19.1 Build.** `sdnap_segments_build(jd_whole, jd_frac, total, offset, per_row, coefficients, tol_m, tol_mm_s, status)`
+gives every row of the element store `per_row` segments from the split Julian date (UTC), into rows [offset, offset +
+count) of a segment store of `total` rows. The store is made anew when offset is 0 or its shape differs, so a caller
+loads its sets in batches, builds each batch and replaces it with the next; the segments of all of them stay. A row's
+segments share one length: its period (from the theory's state at the store's epoch, by the vis-viva relation) over the
+smallest division k of 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192 or 256 whose segments all hold the tolerance at
+their checks. The checks are the theory's position at tau = -1, -1/2, 0, 1/2 and 1 (within `tol_m`), and at tau = 1/2
+the series' velocity against the five-point central difference of the theory's positions 1 and 2 s each side (within
+`tol_mm_s`). A segment interpolates the theory's positions at its n Chebyshev nodes and keeps n monomial coefficients
+in tau per axis, x and y interleaved: 24 n bytes. `status`: one code per row, 0 built, -10 no division holds, else the
+theory's. The batch runs on the pool, each row on one thread.
+
+**19.2 Evaluate.** `sdnap_segments_at(jd_whole, jd_frac, first, count, frame, out, status)` returns six planes, as
+`sdnap_propagate_soa` does: frame 0 (TEME, km and km/s) or 3 (Earth-fixed, m and m/s). The position is the series at
+tau; the velocity is the series' derivative, 2 / length times dp/dtau. `status`: 0; 1 where the time is outside the
+row's segments (before the store's epoch, or after its last segment: build again); 2 where the row has no segments.
+A caller flies a status-2 row's theory directly (`sdnap_propagate_soa` on that row), so no object is dropped or shown
+beyond the tolerance. `sdnap_segments_row(row, out)` gives the row's division (0: none), segment length (s), segments
+built and its largest position (m) and velocity (mm/s) misses at the checks (for a row without segments, its finest
+attempt's). `sdnap_segments_bytes()` gives the store's bytes.
+
+**19.3 What the segments hold.** The figures below are for 1 m and 1 mm/s, 8 coefficients and 4 segments a row: 808
+bytes a set (4 segments of 192 bytes and 40 of row state). On the made-up mix of `test/segments-bench.mjs` (70 % low
+orbit):
+- Low-orbit rows take a sixth of their period (about 16 minutes).
+- Against the theory's direct output, the position misses by 6.4 mm at the median, 0.43 m at the 99th percentile and
+  0.82 m at most (100,000 SGP4XP sets, 2,000,000 states).
+- Where one segment hands over to the next, the position steps by at most 1.2 m (`test/segments.e2e.mjs`): each
+  segment interpolates the theory on its own.
+- The velocity is the motion the positions describe: within 1 mm/s at the checks, and 0.02 mm/s of the segments' own
+  positions' derivative. It is not the theory's own velocity output, which for an analytic theory is not its
+  position's derivative: it differs from that by 12 mm/s at the median, 129 mm/s at the 99th percentile and 1.06 m/s
+  at most (SGP4XP).
+- Segments are for display. A caller that needs velocity closer to the theory's own than that asks the theory
+  (`sdnap_propagate_soa`).
+
+**19.4 Cost.** On 15 pool threads, a catalog step of 100,000 segments takes 0.45 ms at the median in headless Chrome
+(`test/segments-browser.mjs`, cross-origin isolated) and 2.70 ms on the main thread alone. The theory directly takes
+12.8 ms on 15 threads (node). A segment costs 43 us of CPU to make, so keeping 100,000 objects current costs 82 new
+segments a second at real time.
+
 ## References
 
 - Payne, T., Hoots, F., Butkus, A., Slatton, Z., and Nguyen, D. (2022).
