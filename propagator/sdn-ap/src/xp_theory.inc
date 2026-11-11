@@ -1712,9 +1712,9 @@ inline bool shadow_arc_ap(double A, double B, double e, double eta, double p, do
 
 /// SPEC 16.14 diagnostics: section 4's sphere (the force P AGOM (1 AU / r_sun)^2 away from the Sun) averaged over one
 /// revolution of the mean orbit y, the Sun held fixed (unit vector s, distance sun_r in R_E), by the Gauss equations at
-/// the midpoints of nq equal steps of the eccentric longitude weighted by r / a; lambda's integrand also carries section
-/// 4's periodic mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n), as section 4's mean longitude does (A, B
-/// the Sun's direction cosines on P and Q). shape 1: section 4's cylinder of radius R_E, a step its boundary crosses split
+/// the midpoints of nq equal steps of the eccentric longitude weighted by r / a; lambda's rate also carries section 4's
+/// periodic mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n) averaged over the whole revolution, as AP's
+/// mean longitude does (16.15; A, B the Sun's direction cosines on P and Q). shape 1: section 4's cylinder of radius R_E, a step its boundary crosses split
 /// where the boundary is (bisection on the position's own test, n < 0 and |r x s| < R_E); shape 2: a cone, the
 /// illuminated fraction of the Sun's disc (radius kSunRadiusKm) behind the Earth's (radius R_E) as seen from the
 /// satellite, a step not wholly lit or wholly dark at both ends taken in 64 equal parts. out: the six rates in the state
@@ -1753,11 +1753,18 @@ inline void srp_average_numeric(const double* y, const Frame& fr, const Kepler& 
     double roa, g[6];
     state_at_F(y, fr, F, r, v, roa);
     gauss(y, fr, r, v, acc, g);
-    g[kLam] += dn_a * std::cos(F - varpi) + dn_b * std::sin(F - varpi);
     for (int m = 0; m < 6; ++m) out[m] += w * roa * g[m];
   };
   const int N = nq > 0 ? nq : 4096;
   const double h = kTwoPi / N;
+  for (int j = 0; j < N; ++j) {
+    // lambda: Delta n over the whole revolution (16.15)
+    Vec3 r, v;
+    double roa;
+    const double Fm = (j + 0.5) * h;
+    state_at_F(y, fr, Fm, r, v, roa);
+    out[kLam] += h * roa * (dn_a * std::cos(Fm - varpi) + dn_b * std::sin(Fm - varpi));
+  }
   for (int j = 0; j < N; ++j) {
     const double F0 = j * h, F1 = F0 + h;
     const double l0 = lit(F0), l1 = lit(F1);
@@ -1794,10 +1801,27 @@ inline bool ap_sunlit_arc(double A, double B, double e, double eta, double p, do
   return shadow_arc_ap(A, B, e, eta, p, E1, E2, sE1, cE1, sE2, cE2);
 }
 
+/// SPEC 16.15: what an AP set's mean longitude adds to section 4's sunlit-arc rate. Section 4's rate of lambda over a
+/// sunlit arc counts the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n) on the sunlit arc
+/// only, while section 4's output-time terms map n_osc = n_mean + Delta n over the whole revolution (they carry no
+/// shadow): the mean longitude takes Delta n over the whole revolution, so its share over the shadow is added,
+/// (1 / 2 pi) int_{E2}^{E1 + 2 pi} Delta n (1 - e cos E) dE = 3 F_s / (2 pi a n) [G(E1 + 2 pi) - G(E2)],
+/// G(E) = A sin E - B eta cos E - e (A (E / 2 + sin E cos E / 2) + B eta sin^2 E / 2); 0 as the shadow vanishes.
+inline double ap_lambda_shadow_dn(double A, double B, double e, double eta, double a, double n, double Fs, double E1,
+                                  double E2) {
+  auto G = [&](double E) {
+    double s, c;
+    fm::sincos(E, s, c);
+    return A * s - B * eta * c - e * (A * (0.5 * E + 0.5 * s * c) + B * eta * 0.5 * s * s);
+  };
+  return 3.0 * Fs / (kTwoPi * a * n) * (G(E1 + kTwoPi) - G(E2));
+}
+
 /// SPEC 4 averaged SRP rates on the current mean orbit (Sun held fixed over
 /// the orbit): the explicit formulas of the wholly sunlit orbit or of the sunlit
 /// arc E1 .. E2 (xp_spec_terms.inc), added to the rates in the state order. An AP set (ap_set) takes AP's shadow
-/// (SPEC 16.14) and, where `ap` and its angles allow, AP's arrangement of the same formulas; SGP4XP section 4's.
+/// (SPEC 16.14) and, where `ap` and its angles allow, AP's arrangement of the same formulas; SGP4XP section 4's. An
+/// AP set's mean longitude over a sunlit arc also takes ap_lambda_shadow_dn (SPEC 16.15).
 inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, const Perifocal& pf, double agom,
                       const Bodies& b, double* out, const AngleTrig* ag_opt = nullptr, bool ap = false,
                       bool* sunlit_safe = nullptr, bool ap_set = false) {
@@ -1826,6 +1850,7 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
     } else {
       srp_rates_sunlit(k.e, fr.eta, k.argp, k.node, k.i, k.a, fr.n, A, B, C, Fs, d);
     }
+    if (arc) d[kLam] += ap_lambda_shadow_dn(A, B, k.e, fr.eta, k.a, fr.n, Fs, E1, E2);
   } else if (xp_shadow(k, b.sun_u, E1, E2)) {
     srp_rates_arc(k.e, fr.eta, k.argp, k.node, k.i, k.a, fr.n, E1, E2, A, B, C, Fs, d);
   } else {
