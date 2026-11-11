@@ -3270,10 +3270,14 @@ for 1e-8 m/s^2, 0.65 m at Galileo's): for every element the zero-mean integral o
 d_j(lambda) = (1 / n) int K1(s) rho_j(lambda - s) ds with K1(s) = (pi - s) / (2 pi), and lambda's also
 (1 / n^2) int K2(s) rho_n(lambda - s) ds with K2(s) = -(pi / 6 - s / 2 + s^2 / (4 pi)): the rates' force on the rates'
 sunlit arc. The integrals reduce to the arc's moments of the rates and their partial sums from each panel end, kept in
-a table whose key is the mean orbit rounded (k and h to 2e-5, chi and psi to 1e-4, n to 1e-8 rad/min) with the Sun at
+a table whose key is the mean orbit rounded (k and h to 5e-5, chi and psi to 1e-4, n to 1e-6 rad/min) with the Sun at
 the nearest 6 h block center: a pure function of the key, made a few times a day; a state takes its panel's part past
 its own longitude from the quadratic through the panel's three points, so it evaluates no rate. Against the same part
-evaluated at the state itself the table moves a flight by at most MEASURED mm.
+evaluated at the state itself the table moves a 7-day flight every 60 s by at most 8.6 mm geostationary, 13.9 mm
+inclined geosynchronous, 1.5 mm at MEO and 2.4 mm Galileo-like, the same in reverse order. Where the mean orbit crosses
+a key edge the flight steps: at day 7 on a geostationary set in season, 0.73 mm at an edge of n with B1 sin 4.1e-9 (the
+largest solved on the real rows) and 0.48 mm at one of chi with B1 cos 2.1e-8 (the largest), none above the scan's
+own 0.04 mm at the edges of k and h; the step goes with B1, sin for n and cos for chi.
 
 *Record and transport.* ECOM2_B1_COS and ECOM2_B1_SIN in OD_DYNAMIC_PARAMETERS beside ECOM2_Y0 (m/s\*\*2), written
 where they were solved or are not 0 (PERTURBATIONS.SOLAR_RAD_PRESSURE then names them); inside the module in the slots

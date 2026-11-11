@@ -13,6 +13,9 @@
 //   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
 // The pool's threads: 1,000 AP rows of the carrier lane's catalog mix through sdnap_propagate_soa at 20 instants, on 0
 // and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424).
+// The radiation terms: Y0 (SPEC 16.13) and B1 (16.B1, a geostationary record in eclipse season with its tables) in
+// random order, from alternating ends, fresh and interleaved with a record without them, and rows carrying them on 0 and
+// 4 pool threads, bit for bit.
 // Through `propagate` (#420): a time asked alone against the same time inside one call of 2,016 states, bit for bit.
 // JS moves bytes and compares numbers the module produced.
 //   node test/set-caches.e2e.mjs
@@ -239,6 +242,76 @@ for (const [name, o] of Object.entries(ORBITS)) {
   const y0differ = y0zero.filter((v, k) => !Object.is(v, y0four[k])).length;
   check(y0differ === 0, `Y0 rows: ${y0differ} of ${y0zero.length} values differ between 0 and 4 threads`);
   console.log(`Y0: two records equal but for ECOM2_Y0 bit for bit as each alone; 200 rows with Y0 on 0 and 4 threads bit for bit`);
+}
+{
+  // the terms B1 cos and B1 sin (SPEC 16.B1) and their tables (the key, the blocks) are a function of the set and its
+  // state: a geostationary record in eclipse season with Y0 and B1, asked in random order and from alternating ends,
+  // fresh, and interleaved with the same record carrying Y0 alone, each bit for bit as it flies in ascending order alone;
+  // and 200 rows carrying Y0 and B1 (the test build's row entry) on 0 and 4 pool threads, bit for bit
+  const B1_EPOCH = Date.parse("2026-10-01T00:00:00Z"), jdn = B1_EPOCH / DAY + 2440587.5;
+  const gmst = (((280.46061837 + 360.98564736629 * (jdn - 2451545.0)) % 360) + 360) % 360;
+  const b1times = Array.from({ length: 2016 }, (_, k) => B1_EPOCH + DAY + k * 300000);
+  const param = (kind, value) => Object.assign(new OCMDynamicParameterT(), { NAME: prwDynamicParameter[kind], VALUE: value, UNITS: "m/s**2", SOLVED_FOR: true, PARAMETER: kind });
+  const geo = (b1) => repackOcm(seedOcm({ epoch: iso(B1_EPOCH), n: 1.0027379, e: 0.0002, i: 0.05, raan: gmst, argp: 0, ma: 0, agom: 0.022,
+    norad: b1 ? 83000 : 83001, name: b1 ? "B1" : "Y0", tesseral: 31, zonal: 20, solidTides: true }), (t) => {
+    t.ORBIT_DETERMINATION = Object.assign(new OrbitDeterminationT(), { OD_DYNAMIC_PARAMETERS: [param(prwDynamicParameter.ECOM2_Y0, -1.5e-9),
+      ...(b1 ? [param(prwDynamicParameter.ECOM2_B1_COS, 1e-8), param(prwDynamicParameter.ECOM2_B1_SIN, 4e-9)] : [])] });
+  });
+  const withB1 = geo(true), y0Only = geo(false);
+  await load([withB1]);
+  const asc = b1times.map((ms) => at(0, ms));
+  await load([y0Only]);
+  const ascY0 = b1times.map((ms) => at(0, ms));
+  for (const [label, order] of [["random order", shuffled], ["alternating ends", ends]]) {
+    await load([withB1]);
+    const got = new Array(b1times.length);
+    for (const i of order) got[i] = at(0, b1times[i]);
+    const differ = got.filter((s, i) => !same(s, asc[i])).length;
+    check(differ === 0, `B1: ${label} against ascending: ${differ} of ${b1times.length} states differ`);
+  }
+  let freshDiffer = 0;
+  for (let q = 0; q < 24; ++q) {
+    const i = (q * 337 + 5) % b1times.length;
+    await load([withB1]);
+    if (!same(at(0, b1times[i]), asc[i])) ++freshDiffer;
+  }
+  check(freshDiffer === 0, `B1: one state from a fresh record against the ascending pass: ${freshDiffer} of 24 differ`);
+  await load([withB1, y0Only]);
+  let differ = 0, apart = 0;
+  b1times.forEach((ms, k) => {
+    const sa = at(0, ms), sb = at(1, ms);
+    if (!same(sa, asc[k]) || !same(sb, ascY0[k])) ++differ;
+    if (!same(sa, sb)) ++apart;
+  });
+  check(apart === b1times.length, `B1: the records with and without B1 fly apart at ${apart} of ${b1times.length} instants (all expected)`);
+  check(differ === 0, `B1: the records with and without B1 interleaved against each alone: ${differ} of ${b1times.length} instants differ`);
+  const rows = Array.from({ length: 200 }, (_, k) => ({ epochWhole: 2461328.5, epochFrac: 0, meanMotion: 1.0027, ecc: 0.0003, inc: k % 4 ? 0.05 : 2,
+    raan: (40 + 1.7 * k) % 360, argp: 30, ma: (20 + 3.1 * k) % 360, ndot: -1.5e-9, bstar: (k % 2 ? 1e-8 : -6e-9), nddot: (k % 3 ? 4e-9 : -2e-9),
+    bterm: 0.01, agom: 0.022, norad: 84000 + k, theory: THEORY.SGP4XP }));
+  const flyRows = async (threads, set = rows) => {
+    const m = await open(testBuild, threads);
+    m.x.sdnap_test_select_ap(31, 20);
+    const bytes = elementRows(set), n = set.length;
+    const p = m.x.sdnap_alloc(bytes.length);
+    new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
+    check(m.x.sdnap_test_init_rows(p, n) === n, `B1 rows, ${threads} threads: the row store took ${n} rows`);
+    const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), all = [];
+    for (let k = 0; k < 20; ++k) {
+      check(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status) === 0, `B1 rows, ${threads} threads: sdnap_propagate_soa`);
+      all.push(...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n));
+    }
+    return all;
+  };
+  const zero = await flyRows(0), four = await flyRows(4);
+  const threadDiffer = zero.filter((v, k) => !Object.is(v, four[k])).length;
+  const notOk = zero.filter((v, k) => k % (7 * rows.length) >= 6 * rows.length && v !== 0).length;
+  check(notOk === 0, `B1 rows: ${notOk} statuses not 0`);
+  check(threadDiffer === 0, `B1 rows: ${threadDiffer} of ${zero.length} values differ between 0 and 4 threads`);
+  // the rows fly their B1: the same rows with B1 0 are apart from them at the last instant, every one
+  const without = await flyRows(0, rows.map((r) => ({ ...r, bstar: 0, nddot: 0 }))), n = rows.length, last = 19 * 7 * n;
+  const moved = rows.map((_, r) => 1000 * Math.hypot(...[0, 1, 2].map((c) => zero[last + c * n + r] - without[last + c * n + r])));
+  check(Math.min(...moved) > 0.01, `B1 rows: the smallest move from B1 at the last instant is ${Math.min(...moved)} m (over 0.01 m expected)`);
+  console.log(`B1: random order, alternating ends, fresh records and interleaving with Y0 alone bit for bit; 200 rows with Y0 and B1 on 0 and 4 threads bit for bit (B1 moves each row by ${Math.min(...moved).toFixed(2)} to ${Math.max(...moved).toFixed(2)} m at day 5.25)`);
 }
 {
   // through propagate (#420): a time alone against the same time in one call
