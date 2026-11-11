@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-// E2E (stack #464 and #456; SPEC 16.14): AP's radiation-pressure rates are continuous in the set's own elements, and right.
+// E2E (stack #464 and #456; SPEC 16.15): AP's radiation-pressure rates are continuous in the set's own elements, and right.
 // 1. The rates against the numerical average, through the module's sdnap_ap_srp_rates: mode 0 the theory's averaged
 //    rates on AP's shadow, mode 1 the same sphere in the same cylinder averaged over one revolution of the mean orbit by
 //    the Gauss equations (4096 steps of the eccentric longitude, a step the boundary crosses split where it is; the
-//    mean longitude's rate with section 4's output-time Delta n over the whole revolution, SPEC 16.15), the Sun held
+//    mean longitude's rate with section 4's output-time Delta n over the whole revolution, SPEC 16.16), the Sun held
 //    fixed at 1 AU. AGOM 0.025 m^2/kg. Mean orbits: Galileo-like (n 1.7047 rev/day, e 0.0002, i 56 deg) and
 //    geostationary (n 1.00273 rev/day, e 0.0003, i 0.05 deg, which takes section 4's arrangement of the formulas).
 //    - Through grazing: the Sun's elevation above the orbit plane swept across the edge of the eclipse season
 //      (Galileo-like 11.5 to 13.0 deg, geostationary 7.5 to 9.5 deg, by 0.005 deg; the Sun 30 and 40 deg from the
-//      perigee in the plane).
+//      perigee in the plane). And on a transfer orbit (n 2.2785 rev/day, e 0.7306, i 27 deg, perigee radius 1.07),
+//      41.5 to 42.75 deg with the Sun 90 deg from the perigee: there the night half's largest S, where the shadow
+//      opens and closes, lies 37 deg from the anti-Sun direction, not at it, so the search for it is what decides.
 //    - Through a boundary at an apse: the Galileo-like orbit with the Sun 6 deg above the plane, its direction in the
 //      plane swept so that the shadow's exit, then its entry, passes the perigee (168.5 to 169.6 and 190.4 to 191.4 deg
 //      from the perigee, by 0.002 deg).
@@ -22,7 +24,8 @@
 //    e 0.0002, i 56, RAAN 329.65, argp 150, M 10 deg, AGOM 0.025; the Sun about 6 deg above the plane, a shadow boundary
 //    passing the perigee within the week) and geostationary at 2026-03-10 00:00 UTC (n 1.00273 rev/day, e 0.0003,
 //    i 0.05, RAAN 80, argp 270, M 100 deg, AGOM 0.02).
-// Measured 2026-11-11: rates within 7.6e-7 of the scale (largest on n-dot through the apse; lambda within 1e-7, where
+// Measured 2026-11-11: rates within 7.6e-7 of the scale, 1.1e-6 on the transfer orbit's grazing (largest on n-dot
+// through the apse; lambda within 1e-7 on the near-circular orbits, where
 // section 4's rate, Delta n on the sunlit arc only, departs by 1.5 times the Gauss rate's average at e 0), steps equal
 // to the average's to three digits; the nudge departure 0.21 mm (Galileo-like) and 0.013 mm (geostationary), where
 // 0.6.16's closed-form shadow and its 1e-12 test read 13.49 m and 9.86 m.
@@ -45,10 +48,12 @@ const failures = [];
 const ORBITS = {
   "Galileo-like": { n: 1.7047, e: 0.0002, i: 56 },
   geostationary: { n: 1.00273, e: 0.0003, i: 0.05 },
+  "transfer orbit": { n: 2.2785, e: 0.7306, i: 27 },
 };
 const SWEEPS = [
   { name: "grazing", orbit: "Galileo-like", axis: "beta", from: 11.5, to: 13.0, step: 0.005, other: 30 },
   { name: "grazing", orbit: "geostationary", axis: "beta", from: 7.5, to: 9.5, step: 0.005, other: 40 },
+  { name: "grazing", orbit: "transfer orbit", axis: "beta", from: 41.5, to: 42.75, step: 0.005, other: 90 },
   { name: "exit at perigee", orbit: "Galileo-like", axis: "phi", from: 168.5, to: 169.6, step: 0.002, other: 6 },
   { name: "entry at perigee", orbit: "Galileo-like", axis: "phi", from: 190.4, to: 191.4, step: 0.002, other: 6 },
 ];

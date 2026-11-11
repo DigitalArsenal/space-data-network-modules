@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.19 (dist 4e28bda5).
+Version 0.6.21 (dist 7b2ada3b).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -571,7 +571,7 @@ is that of section 5 at the evaluation time.
    E_2 at the entry, E_2 + 2 pi when E_2 < E_1; the sunlit arc runs from E_1 to E_2. If |E_2 - E_1| < 1e-12 the
    wholly sunlit formulas apply.
 
-This sequence is SGP4XP's. AP sets take 16.14's shadow, whose boundaries are continuous in the elements.
+This sequence is SGP4XP's. AP sets take 16.15's shadow, whose boundaries are continuous in the elements.
 
 The 1e-12 test is tight against the rounding of this sequence. At GEO (p^2 near 44) its roots usually miss the test,
 so the GEO eclipse season is averaged as wholly sunlit, while LEO, MEO and HEO shadows are mostly found *[study;
@@ -2356,12 +2356,16 @@ Given the same forces, AP's first-day error against a numerical orbit is about 2
 with low perigee it is 15 to 185 m on the first day and 0.1 to 3.6 km by the seventh. A numerical propagator has no such
 floor: AP equals one only where the force model limits both.
 
-**16.1 Selection.** `fit`, `propagate`, `load_epochs` and `propagate_epochs` read FORCES:
+**16.1 Selection.** A fit of real data states FORCES.SOLID_TIDES IERS_2010 with the gravity terms: the Earth has the
+solid tide, and without it AP's error on a low orbit after a 72 h fit is about twice as large at day 5 against a
+numerical propagator that carries it (16.14). `fit`,
+`propagate`, `load_epochs` and `propagate_epochs` read FORCES:
 
 | FORCES | Terms |
 | --- | --- |
 | HAS_MAXIMUM_TESSERAL_DEGREE, MAXIMUM_TESSERAL_DEGREE d, 0 to 70 | the tesseral terms of 16.2, each family to its cap or d, whichever is lower |
 | HAS_MAXIMUM_DEGREE, MAXIMUM_DEGREE z, 0 to 70 | the zonal tail J6 to Jz of 16.3 (z below 6: none) |
+| SOLID_TIDES (`fit` only; IERS_2010, or NONE, the default) | the solid Earth tide in the rates, in the fit and the record (16.14) |
 | ECOM2 (`fit` only; Y0_M_S2, every other coefficient 0) | the radiation term Y0 beside the sphere, in the fit and the record (16.13) |
 
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
@@ -3087,7 +3091,7 @@ carry one term of the empirical ECOM2 model beside the sphere of section 4: Y0, 
 eY = unit(eD x r), eD the unit vector to the Sun (Arnold et al. 2015, J. Geod. 89, eq. 1; the convention of
 propagator/ffm lib/gnss_srp.h). The sphere is ECOM2's direct term D0 (the two differ by (1 AU / r_sun)^2, under 0.6 %
 over 10 days), so a separate D0 would only repeat AGOM; B0 and the once-per-revolution terms are not carried. Y0 is zero
-where the sphere's rates count the orbit as in shadow (the same decision, 16.14 and srp_rates).
+where the sphere's rates count the orbit as in shadow (the same decision, 16.15 and srp_rates).
 
 *Theory.* Y0's Gauss rates (the radial component zero) are averaged over the mean anomaly of the mean orbit on its
 sunlit arc by three-point Gauss-Legendre panels: the arc's ends, the points a quarter revolution either side of where
@@ -3234,7 +3238,99 @@ exists a state costs the same.
 `test/radiation-y0.e2e.mjs` checks the theory and the fit on a Galileo-like and an inclined geosynchronous orbit, the
 daily fit, a held fit against the fit without the term byte for byte, and the refusals.
 
-**16.14 AP's shadow.** Every AP set takes this shadow in place of section 4's: in the sphere's rates (srp_rates)
+**16.14 The solid Earth tide.** The Moon and the Sun raise a tide in the solid Earth, and its gravity reaches the
+satellite. From 0.6.20 AP carries it on request: $PCF FORCES.SOLID_TIDES IERS_2010 on `fit`, the field and the model FFM reads
+(propagator/ffm `lib/force_models.cpp`, `lib/iers2010_tides.h`: IERS Conventions 2010, section 6.2, steps 1 and 2, on
+a tide-free field), so one configuration means the same in both propagators. NONE, the field's default on the wire,
+leaves the tide out, and a set fitted without it flies as before, bit for bit.
+
+*Theory.* The degree-2 tide raised by a body of gravitational parameter mu_b at distance r_b adds at the satellite the
+potential k2 (mu_b / r_b^3) (R^5 / r^3) P2(cos psi), psi the angle between the satellite and the body: the
+third-body quadrupole of section 5 with the radial law R^5 / r^3 in place of r^2. AP writes the two bodies' tide as
+r^-3 r.T.r, T the symmetric traceless tensor (3/2) (mu_b R^5 / r_b^3) (s s^T - I/3) summed over the Sun and the Moon of
+section 5 at the stage time, with each order m about the Earth's axis (zz; xz, yz; xx - yy, xy) weighted by its Love
+number of IERS Table 6.3: k20 0.30190, |k21| 0.29830 and |k22| 0.30102, the m = 1 and m = 2 parts turned east of the
+body by -arg(k2m) / m (0.28 and 0.12 deg: the imaginary parts -0.00144 and -0.00130, the anelastic lag). Step 2's
+diurnal band (Table 6.5a, 48 lines, K1 470.9e-12 the largest) is, seen from inertial axes, a degree-2 order-1 term
+C' cos(alpha) + S' sin(alpha) with C' = sum(ip sin b - op cos b) and S' = -sum(ip cos b + op sin b), b the line's
+Delaunay argument (GMST cancels): it is added to T once, at the set's epoch (over 10 days b moves the band by under
+3e-12 of its 5e-10). With W the orbit normal, g = T W and P = W.g, the potential averaged over the mean anomaly is exact
+in closed form, -P / (2 a^3 eta^3), and with D = 1 / (n a^5 eta^4), N the node and M the in-plane direction 90 deg past
+it, the Lagrange equations give
+
+di/dt = D g.N, sin i dOmega/dt = D g.M, d varpi/dt = D (tan(i/2) g.M - 1.5 P),
+d lambda/dt - n = D (tan(i/2) g.M - 3 eta P - 1.5 e^2 P / (1 + eta)), de/dt = dn/dt = 0,
+
+written in the equinoctial elements, regular at i = 0 and e = 0. They are added to the mean-element rates at every
+stage in both regimes (in the long-period regime also to a covariance's moved sets, which step in pairs), at the state
+of the stage. With a single k2 the average is k2 (mu_b R^5 / r_b^3) (1 - 3 (w.s)^2) / (4 a^3 eta^3); against the
+quadrupole of section 5 the tide is k2 (R/a)^5 of it on a circular orbit, 17 % at 800 km. The Moon's tide is a J2 of
+1.69e-8 about the Moon's direction, the Sun's 0.77e-8; their mean over the bodies' motion is the permanent tide, a J2
+change of +9.4e-9, which AP's tide-free J2 (1.3) does not hold and the term supplies, as FFM's step 1 does on its
+tide-free field. Nothing is added at output time.
+
+*What is left out, and its size.* Degree 3 (k3m 0.093), degree 4 through k+, step 2's long-period and semidiurnal
+tables (Tables 6.5b and 6.5c, at most 16.6e-12 and 1.2e-12) and the tide's short-period part are not carried. On model
+truth (below) all of them together move AP's day-5 error in low orbit by at most 0.42 m and its day-7 error by 0.67 m,
+and its in-arc fit by at most 0.05 m in low orbit and 0.18 m on the eccentric orbits (the short-period part at perigee). Of the parts carried, each moves the
+day-5 error by at most (largest of 17 low orbits, 72 h fits): step 2's band 0.41 m, the lag 0.39 m, the Love number
+per order against k20 for all three 1.07 m (day 7: 0.56, 0.76 and 1.57 m).
+
+*Measured* (model truth: FFM EGM96 70 x 70, Sun and Moon from DE440, 10 days from an AP-consistent state at
+2026-09-01 on a 300 s grid, with FFM's solid tide and without; AP under the headline's forces, tesseral 31, zonal 20,
+BTERM and AGOM held at 0, fitted over 72 h or 24 h and flown 7 days; whole-day 3D RMS). On 16 near-circular orbits
+(690, 800, 1,340 and 1,490 km; i 50, 66, 98, 108 deg) the median at day 5:
+
+| Fit | no tide either side | the tide in FFM only | the tide in both |
+| --- | ---: | ---: | ---: |
+| 72 h | 28.5 m | 68.3 m | 28.3 m |
+| 24 h | 48.2 m | 64.0 m | 48.1 m |
+
+By altitude (72 h, day 5, the same three columns): 690 km 92.9, 121.0, 92.8 m; 800 km 58.6, 66.5, 58.8 m; 1,340 km 14.4,
+60.7, 14.4 m; 1,490 km 15.5, 65.9, 15.6 m. On each orbit AP with the term is within 0.42 m (day 5) and 0.67 m (day 7) of
+its error without the tide on either side; a Starlette-like orbit (812 x 1,100 km) too (58.0 against 57.9 m). Further
+out the tide is smaller and the term carries it the same way: on a GPS-like orbit the tide in FFM alone moves AP's day-5
+error by 4.1 m and with the term AP is within 0.02 m of its level; on a geostationary set 0.07 and 0.01 m; on a
+transfer orbit (e 0.72, perigee 454 km) 1.1 and 0.03 m (day 7 of a 24 h fit: 9.2 and 0.13 m); on a THEMIS-like set
+(e 0.82, the long-period regime) 6.5 and 0.01 m (a 24 h fit: 1.5 and 1.5 m, of 349 m).
+
+*What the tide uncovers.* With the term AP's error is its error in a world without the tide: on a Sentinel-6A-like
+(1,336 km, i 66) and a Sentinel-1-like orbit (693 km, i 98), four nodes each, FFM with drag, a cannonball, relativity and
+70 x 70 (and without drag and radiation, and with the field at 12 x 12), AP fitted over 24 h and 72 h with FIT unset and
+with B and AGOM held at the truth's, AP with the term on the tide truth equals AP without it on the truth without the
+tide within 0.67 m at day 5 in all 96 cases. Whether the error falls depends on what else AP misses. Under FIT unset at
+1,336 km the fit holds BTERM at the band median of 12.8, 0.0005 m^2/kg against the truth's 0.02, 100 to 200 m along
+track at day 5, and the term wins on 4 of 8; with B and AGOM held, on 7 of 8. At 693 km, with B and AGOM held, AP is
+40 to 126 m at day 5 without any tide (the field above degree 12, carried in part), and the term wins on 5 of 8; with the
+field capped at 12 on both sides, on 8 of 8. On real windows the tide moves rows both ways, and two rows get worse with
+it: the altimetry rows' 24 h fits and near 700 km at 72 h. The model world names what the missing tide was offsetting
+there: the drag coefficient at its default (stack issue 460) and the field above degree 12. On real windows tesseral
+degrees 13 to 16 alone do not restore them.
+
+*Covariance.* The stated covariance hardly moves with the term. A 72 h fit's position sigma on the tide truth at days
+1, 3, 5 and 7, medians of the 17 low orbits, with the term: radial 7.5, 8.4, 10.4, 12.6 m, in-track 252, 1,216, 2,192,
+3,157 m, cross-track 10.7, 27.6, 47.8, 68.4 m; without it the same within 0.1 m but cross-track at day 1 (11.2 m). The
+errors fall more: cross-track errors beyond 1 sigma are 82, 25, 15 and 19 of 408 hourly states without the term and 67,
+3, 0 and 1 with it, as for AP without the tide on the truth without it. Radial and in-track shares do not change.
+
+*Record.* A set fitted under IERS_2010 states PERTURBATIONS.SOLID_TIDES_MODEL "IERS 2010", and every flight reads it
+there and nowhere else; an AP set with gravity terms fitted without it says so in its OD COMMENT ("solid Earth tide: not
+modeled (FORCES.SOLID_TIDES NONE)"). Refused by name: on `fit` IERS_2010 without the gravity terms or any other value
+(configuration-refused, FORCES.SOLID_TIDES); in a flight SOLID_TIDES_MODEL other than "IERS 2010"
+(solid-tides-unsupported), or on an SGP4 or SGP4XP set or an AP set whose gravity caps are both 0
+(elements-other-theory).
+
+*Why not by default.* The $PCF cannot tell SOLID_TIDES left unset from NONE written, so the module cannot apply the
+tide by default without overriding an explicit NONE (stack issue 455 asks the standard for an UNSPECIFIED value).
+
+*Cost.* About 100 floating-point operations per rate evaluation and no trigonometry; the band once per set. AP's cost
+per state with the tide over without it, `test/kernel-cost.mjs --solid-tides` on seven regimes at 300 s and 60 s, two
+alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.28) the load's.
+
+`test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
+unset, the long-period regime's stated covariance with the tide, and the refusals.
+
+**16.15 AP's shadow.** Every AP set takes this shadow in place of section 4's: in the sphere's rates (srp_rates)
 and in Y0's sunlit arc (16.13). Section 4's closed form, kept as the library computes it, decides by rounding in two
 places (stack issue 464):
 - A candidate root counts as a boundary only when |S| < 1e-12. Where a boundary lies within a few degrees of an apse of
@@ -3246,7 +3342,7 @@ places (stack issue 464):
   itself, which is rounding-limited at geosynchronous radius.
 
 Under a change of 1e-10 relative in the mean motion, 7-day flights in an eclipse season moved by up to 10 m on
-Galileo-like orbits, 35 m GPS-like, 4 to 10 m geostationary and inclined geosynchronous, 1.0 m at 800 km, 0.4 m
+Galileo-like orbits, 35 m GPS-like, 3.5 to 9.4 m geostationary and inclined geosynchronous, 1.0 m at 800 km, 0.4 m
 laser geodetic and 145 m on a transfer orbit; the change itself moves them 0.2 to 0.6 m along track, linearly. A fit that solves
 AGOM, or Y0 beside it, stopped where rounding put it (stack issue 456).
 
@@ -3273,6 +3369,18 @@ none with more than two boundaries on the night half (4,000 samples of it each).
 values), perigee radius from 1.005 to 60 Earth radii (13 values), 90 Sun elevations up to the highest whose cylinder
 reaches the orbit, 360 directions in the plane.
 
+*No shadow missed, none added*, measured against S itself: 4,000 samples of the night half, every sampled maximum
+refined by golden section to 1e-14 rad, a shadow wherever a refined maximum is above 0.
+- On the grid above, there is no miss and no false shadow among 6,318,000 geometries, 4,638,201 of them shadowed. Where
+  both see a shadow, their widths agree to 8e-7 deg of true anomaly.
+- The grazing band covers e 0 to 0.9 (18 values), perigee radius 1.005 to 6.61 Earth radii (20 values) and 360 Sun
+  directions. Each direction's grazing elevation is bisected on S, then 33 elevations below it are flown, from 1e-1 to
+  1e-12 of it below. That is 4,151,232 geometries, all shadowed. None is added. 17,283 are missed, each within about
+  1e-12 of its grazing elevation, with S's largest value at most 4.4e-16 p^2 (the rounding of S itself) and a shadow at
+  most 1.24e-5 deg of true anomaly wide.
+- Neither set has a geometry with two maxima of S on the night half. test/radiation-shadow.e2e.mjs sweeps a transfer
+  orbit through grazing where the maximum lies 37 deg from the anti-Sun direction.
+
 *Measured* (`sdnap_ap_srp_rates`: mode 0 the theory, mode 1 the same sphere and cylinder averaged numerically over
 one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow.e2e.mjs):
 - The six rates agree within 7.6e-7 of each rate's scale, through grazing (Galileo-like and geostationary) and with
@@ -3280,7 +3388,7 @@ one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow
 - The transfer orbit (e 0.73), every direction of the Sun in its plane: 7e-7, except a_f (next item).
 - The perigee-stepped nudge scans, made-up sets in season:
 
-  | Orbit | Rough flights, section 4's shadow | 16.14 |
+  | Orbit | Rough flights, section 4's shadow (0.6.20) | 16.15 |
   | --- | --- | --- |
   | Galileo-like | 24 of 120 | 0 of 120 |
   | GPS-like | 15 of 120 | 0 of 120 |
@@ -3288,13 +3396,25 @@ one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow
   | 800 km | 6 of 120 | 0 of 120 |
   | transfer orbit | 18 of 120 | 0 of 120 |
   | geostationary at i 0.05 deg | 5 of 24 | 0 of 24 |
-  | geostationary at i 2 deg | 5 of 24 | 0 of 24 |
+  | geostationary at i 2 deg | 6 of 24 | 0 of 24 |
   | inclined geosynchronous | 11 of 24 | 0 of 24 |
 
-  "Rough" means the departure from a linear drift exceeds 1 cm; with 16.14 it is at most 0.9 mm over 7 days.
+  "Rough" means the departure from a linear drift exceeds 1 cm; with 16.15 it is at most 0.9 mm over 7 days.
 - The transfer orbit's worst flight before: the exit fell 0.008 deg past the perigee, and one node evaluation
-  rejected its root (|S| = 2.7e-12) and took the orbit as wholly sunlit. 16.14 takes the arc there; the numerical
+  rejected its root (|S| = 2.7e-12) and took the orbit as wholly sunlit. 16.15 takes the arc there; the numerical
   average agrees with it.
+- Real fitted records: two of the release table's 0.6.20 records (72 h, ECOM2, the solid tide stated), each flown 7
+  days from its cutoff with the tide stated and with that entry removed, the 3D difference at the cutoff / day 3 /
+  day 5 / day 7 (m). The tide's own term is about a meter:
+
+  | Record | 0.6.20 | 16.15 and 16.16 | 0.6.20, the shadow out of play (policy 3) |
+  | --- | --- | --- | --- |
+  | QZS-2G 2025-10-12 (i 0.074 deg, Y0 -1.9e-9 m/s^2) | 3.05 / 5.12 / 6.59 / 8.11 | 0.50 / 0.92 / 1.27 / 1.66 | 0.45 / 0.86 / 1.21 / 1.62 |
+  | Galileo IOV 2 2026-03-09 | 19.24 / 22.10 / 17.47 / 33.66 | 0.97 / 1.67 / 2.33 / 3.05 | 0.90 / 1.57 / 2.15 / 2.95 |
+
+  On 0.6.20 QZS-2G's near-equatorial long-period sets took section 4's own sequence, and Galileo's radial part swings
+  by up to 4 m once per revolution. With 16.15 the radial part is 0.000 m on both, and the along-track part grows
+  smoothly.
 
 *Bits.* SGP4XP and SGP4 are section 4's and unchanged. AP sets with AGOM 0 fly byte for byte, and so do AP orbits
 wholly sunlit over the flight. In shadow, where section 4's decision was right, a flight moves by nanometers (4e-9 m
@@ -3317,8 +3437,8 @@ state and integrator, in season.
   average, a_f-dot departs by 1.1e-4 of its scale at e 0.1, 1.1e-3 at e 0.3 and 1.2e-2 at e 0.73, in shadow only
   (4e-15 wholly sunlit). In flight that is 2.3 to 3.5 m on the transfer orbit (e 0.73, AGOM 0.02) and under 0.3 mm on
   near-circular orbits.
-- **The shadow's periodic motion** (stack issue 472, the second clash of 16.15). The output-time terms add, through
-  the shadow, the periodic motion of a force that is off there. What it leaves, measured as in 16.15:
+- **The shadow's periodic motion** (stack issue 472, the second clash of 16.16). The output-time terms add, through
+  the shadow, the periodic motion of a force that is off there. What it leaves, measured as in 16.16:
 
   | Orbit, in season | Along track at day 7 | Within-day span | Radial RMS |
   | --- | --- | --- | --- |
@@ -3332,16 +3452,17 @@ state and integrator, in season.
 
   Out of season, as the numerical model's own baseline: -5.8 m on the C229-like set and -0.9 m Galileo-like.
 
-*Cost* (provisional, niced under a load of about 100): the shadow takes 265 ns against the closed form's 183 ns per
-call at Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the
-transfer orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's
-per-state costs moved by 0.94 to 1.16 times, within that load's spread.
+*Cost*, measured niced under a load of about 100: the shadow takes 265 ns against the closed form's 183 ns per call at
+Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the transfer
+orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's per-state
+costs moved by 0.94 to 1.16 times, within that load's spread. The release's speed table, flown on the final bytes in
+a quiet slot, is the cost of record.
 
-**16.15 The mean longitude over a sunlit arc** (stack issue 472). Section 4's averaged rates count the shadow; its
+**16.16 The mean longitude over a sunlit arc** (stack issue 472). Section 4's averaged rates count the shadow; its
 output-time short-period terms (Kozai 1961; Aksnes 1976) do not, being periodic in E with the Sun held fixed and no
 shadow. The two clash in an eclipse season, twice:
 1. Section 4's rate of lambda over a sunlit arc takes the sunlit average of the Gauss rate plus the sunlit average of
-   the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n). The numerical average of 16.14
+   the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n). The numerical average of 16.15
    reproduces section 4's lambda rate only with Delta n added over the sunlit arc: at e 0, 2.5 times the Gauss rate's
    average. But the output-time terms map n_osc = n_mean + Delta n over the whole revolution, the shadow included. The
    mean longitude's rate that agrees with that mapping takes Delta n over the whole revolution.
@@ -3354,8 +3475,8 @@ form:
   G(E) = A sin E - B eta cos E - e (A (E / 2 + sin E cos E / 2) + B eta sin^2 E / 2).
 
 At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/min at geostationary radius for AGOM
-0.022. It vanishes with the shadow, so the rates stay continuous (16.14) and a wholly sunlit orbit flies byte for byte.
-(2) is not carried (16.14 states its size). SGP4XP keeps section 4.
+0.022. It vanishes with the shadow, so the rates stay continuous (16.15) and a wholly sunlit orbit flies byte for byte.
+(2) is not carried (16.15 states its size). SGP4XP keeps section 4.
 
 *Measured.* The method:
 - A flight's response to the sphere is the set flown minus the same set with AGOM 0, from the same mean elements.
@@ -3364,7 +3485,7 @@ At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/m
   numerical one; the numerical model's own shortfalls cancel to first order.
 - Made-up sets in season, 7 days on a 10 minute grid, the along-track residual at day 7:
 
-  | Orbit, in season | Section 4's rate | 16.15 | 16.15 and (2), numerical |
+  | Orbit, in season | Section 4's rate | 16.16 | 16.16 and (2), numerical |
   | --- | --- | --- | --- |
   | geostationary | 91.7 m | -3.7 m | -0.8 m |
   | C229-like geostationary | 64.7 m | -1.5 m | -4.2 m |
@@ -3378,23 +3499,23 @@ At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/m
   minus those without the shadow). What it leaves equals each set's out-of-season residual: -5.8 m C229-like,
   -0.9 m Galileo-like.
 - The closed form agrees with the same term computed numerically to centimeters in flight.
-- Between AP with and without 16.15, a 7-day flight in season moves by 103 m (geostationary) and 110 m
+- Between AP with and without 16.16, a 7-day flight in season moves by 103 m (geostationary) and 110 m
   (Galileo-like), and out of season it is byte for byte.
 - Fitted to the numerical propagator's cannonball (FFM, cone, EGM96 70 x 70, Sun and Moon, no Y0 in the truth),
-  72 h, then flown, with 16.14 and 16.15 against without them, day 5 / day 7:
+  72 h, then flown, with 16.15 and 16.16 against without them, day 5 / day 7:
 
   | Set | Without | With |
   | --- | --- | --- |
   | geostationary, made-up, in season, i 0.05 deg | 28.1 / 43.6 m | 12.9 / 17.2 m |
   | geostationary, made-up, in season, i 2 deg | 24.3 / 41.3 m | 12.1 / 15.6 m |
 
-  The fitted AGOM moves from 2.3 % low to within 0.05 % of the truth's (times 1.0088, 16.14). On the release
+  The fitted AGOM moves from 2.3 % low to within 0.05 % of the truth's (times 1.0088, 16.15). On the release
   table's real geostationary rows, 72 h fits with ECOM2 as the table flies them: the day-5 median goes from 88.4 to
   26.9 m and the windows inside the line from 26 to 29 of 32 (QZS-2G: Y0 found -2.14e-9 against the numerical
   propagator's -2.26e-9). Inclined geosynchronous rows: unchanged.
 - Cost: one closed-form term (two sines and cosines) where a sunlit-arc rate is evaluated.
 
-**16.16 The shadow in the output-time terms** (stack issue 472, the second clash of 16.15). Section 4's output-time
+**16.17 The shadow in the output-time terms** (stack issue 472, the second clash of 16.16). Section 4's output-time
 terms K(E) are the antiderivatives in the mean anomaly M of the osculating rates less their wholly sunlit average,
 divided by n: against the sunlit-arc formulas, n (K(E2) - K(E1)) = 2 pi rate_arc - rate_full (M2 - M1) holds to 1e-14
 of its scale for all six elements, from e 0 to 0.73. With the shadow the force is off from the entry (M2) to the exit
@@ -3405,7 +3526,7 @@ S = 2 pi - L and rho = (rate_full - rate_arc) / n:
 - lambda's through n's: on the sunlit arc K_lambda + [rho_n (M - M1)^2 / 2 + (c_n + dL)(M - M1)] / n + c_lambda, and
   through the shadow its value at M2 + [(K_n(E2) + rho_n L + c_n + dL - rate_full_lambda)(M - M2) -
   (rate_arc_n / n)(M - M2)^2 / 2] / n - (K_lambda(E) - K_lambda(E2)) + c_lambda, with dL = rate_full_lambda -
-  rate_arc_lambda - (1 / 2 pi) int_shadow K_n dM, so that lambda's rate is 16.15's;
+  rate_arc_lambda - (1 / 2 pi) int_shadow K_n dM, so that lambda's rate is 16.16's;
 - each c gives P - K a mean of 0 over M (int_shadow K dM by 8-point Gauss-Legendre in E; K_n's in closed form). Pinning
   c at the exit instead lets the offsets follow the geometry and the residual grow within a week (geostationary span
   1.0 to 3.0 m against 0.8 to 2.0 m).
@@ -3413,9 +3534,9 @@ The parameters depend on the slow geometry only. Between the two nodes of the se
 changes from the parameters at each node, a function of the nodes alone (the epoch and covariance sigma sets take the
 parameters at the state). A wholly sunlit orbit takes nothing and flies byte for byte.
 
-*Measured* (the numerical response of 16.15, along track at day 7, then the radial RMS at day 1):
+*Measured* (the numerical response of 16.16, along track at day 7, then the radial RMS at day 1):
 
-| Set, in season | 16.15 | 16.15 and 16.16 |
+| Set, in season | 16.16 | 16.16 and 16.17 |
 | --- | --- | --- |
 | geostationary | -3.7 m, 1.26 m | -0.57 m, 0.05 m |
 | inclined geosynchronous | -5.5 m, 1.19 m | -2.4 m, 0.05 m |
@@ -3425,7 +3546,7 @@ parameters at the state). A wholly sunlit orbit takes nothing and flies byte for
 | laser geodetic | -0.46 m | -0.27 m |
 
 What remains equals each set's out-of-season residual (the numerical model's baseline). The jump detector of
-egrid-continuity reads the same with and without 16.16 across node boundaries and shadow boundaries (0.19 mm
+egrid-continuity reads the same with and without 16.17 across node boundaries and shadow boundaries (0.19 mm
 geostationary, 0.57 mm Galileo-like at 10 s).
 
 

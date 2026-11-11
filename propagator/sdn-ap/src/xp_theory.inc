@@ -1609,7 +1609,7 @@ inline bool xp_shadow(const Kepler& k, const Vec3& s, double& E1, double& E2) {
   return nominal;
 }
 
-/// SPEC 16.14: AP's shadow. Section 4's cylindrical shadow of radius R_E on the current mean orbit, with its boundaries
+/// SPEC 16.15: AP's shadow. Section 4's cylindrical shadow of radius R_E on the current mean orbit, with its boundaries
 /// continuous functions of the elements (section 4's closed form and its 1e-12 test decide by rounding where a boundary
 /// lies near an apse, and nearly always at geosynchronous radius). A, B the Sun's direction cosines on P and Q,
 /// F = A^2 + B^2, the Sun's direction in the orbit plane at phi (cos phi = A / sqrt F, sin phi = B / sqrt F) and
@@ -1710,11 +1710,11 @@ inline bool shadow_arc_ap(double A, double B, double e, double eta, double p, do
   return true;
 }
 
-/// SPEC 16.14 diagnostics: section 4's sphere (the force P AGOM (1 AU / r_sun)^2 away from the Sun) averaged over one
+/// SPEC 16.15 diagnostics: section 4's sphere (the force P AGOM (1 AU / r_sun)^2 away from the Sun) averaged over one
 /// revolution of the mean orbit y, the Sun held fixed (unit vector s, distance sun_r in R_E), by the Gauss equations at
 /// the midpoints of nq equal steps of the eccentric longitude weighted by r / a; lambda's rate also carries section 4's
 /// periodic mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n) averaged over the whole revolution, as AP's
-/// mean longitude does (16.15; A, B the Sun's direction cosines on P and Q). shape 1: section 4's cylinder of radius R_E, a step its boundary crosses split
+/// mean longitude does (16.16; A, B the Sun's direction cosines on P and Q). shape 1: section 4's cylinder of radius R_E, a step its boundary crosses split
 /// where the boundary is (bisection on the position's own test, n < 0 and |r x s| < R_E); shape 2: a cone, the
 /// illuminated fraction of the Sun's disc (radius kSunRadiusKm) behind the Earth's (radius R_E) as seen from the
 /// satellite, a step not wholly lit or wholly dark at both ends taken in 64 equal parts. out: the six rates in the state
@@ -1758,7 +1758,7 @@ inline void srp_average_numeric(const double* y, const Frame& fr, const Kepler& 
   const int N = nq > 0 ? nq : 4096;
   const double h = kTwoPi / N;
   for (int j = 0; j < N; ++j) {
-    // lambda: Delta n over the whole revolution (16.15)
+    // lambda: Delta n over the whole revolution (16.16)
     Vec3 r, v;
     double roa;
     const double Fm = (j + 0.5) * h;
@@ -1793,7 +1793,7 @@ inline void srp_average_numeric(const double* y, const Frame& fr, const Kepler& 
   for (int m = 0; m < 6; ++m) out[m] /= kTwoPi;
 }
 
-/// AP's shadow decision (SPEC 16.14) at direction cosines A, B: shadow_arc_ap, or wholly sunlit under the diagnostic
+/// AP's shadow decision (SPEC 16.15) at direction cosines A, B: shadow_arc_ap, or wholly sunlit under the diagnostic
 /// that takes no boundary at all (sdnap_shadow_policy 3, threshold 0).
 inline bool ap_sunlit_arc(double A, double B, double e, double eta, double p, double& E1, double& E2, double& sE1,
                           double& cE1, double& sE2, double& cE2) {
@@ -1801,7 +1801,7 @@ inline bool ap_sunlit_arc(double A, double B, double e, double eta, double p, do
   return shadow_arc_ap(A, B, e, eta, p, E1, E2, sE1, cE1, sE2, cE2);
 }
 
-/// SPEC 16.15: what an AP set's mean longitude adds to section 4's sunlit-arc rate. Section 4's rate of lambda over a
+/// SPEC 16.16: what an AP set's mean longitude adds to section 4's sunlit-arc rate. Section 4's rate of lambda over a
 /// sunlit arc counts the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n) on the sunlit arc
 /// only, while section 4's output-time terms map n_osc = n_mean + Delta n over the whole revolution (they carry no
 /// shadow): the mean longitude takes Delta n over the whole revolution, so its share over the shadow is added,
@@ -1817,7 +1817,7 @@ inline double ap_lambda_shadow_dn(double A, double B, double e, double eta, doub
   return 3.0 * Fs / (kTwoPi * a * n) * (G(E1 + kTwoPi) - G(E2));
 }
 
-/// SPEC 16.16: the shadow's change to the output-time radiation terms of an AP set, in closed form. Section 4's
+/// SPEC 16.17: the shadow's change to the output-time radiation terms of an AP set, in closed form. Section 4's
 /// output-time terms K(E) are the antiderivatives (in the mean anomaly M) of the osculating rates less their wholly
 /// sunlit average, divided by n (to 1e-14 of their scale against the sunlit-arc formulas). With the shadow the force is
 /// off from the entry (E2, M2) to the exit (E1 + 2 pi, M1 + 2 pi), and the periodic part P of each element obeys
@@ -1825,7 +1825,7 @@ inline double ap_lambda_shadow_dn(double A, double B, double e, double eta, doub
 /// and c the constant that gives P - K a mean of 0 over M:
 ///   on the sunlit arc, P - K = rho (M - M1) + c;
 ///   through the shadow, P - K = K(E2) - K(E) + rho L - (rate_arc / n)(M - M2) + c.
-/// lambda's runs through n's (its rate is n plus the Gauss rate), with lambda's rate as 16.15 states it:
+/// lambda's runs through n's (its rate is n plus the Gauss rate), with lambda's rate as 16.16 states it:
 ///   sunlit, [rho_n (M - M1)^2 / 2 + (c_n + dL)(M - M1)] / n + c_lambda;
 ///   shadow, its value at M2 + [(K_n(E2) + rho_n L + c_n + dL - rate_full_lambda)(M - M2) - (rate_arc_n / n)(M - M2)^2 / 2] / n
 ///           - (K_lambda(E) - K_lambda(E2)) + c_lambda,
@@ -1841,7 +1841,7 @@ struct SrpShadowParams {
   double far_n = 0.0, slope_n = 0.0, lam_M2 = 0.0, k_sh = 0.0, c_lam = 0.0;
 };
 
-/// SPEC 16.16 parameters of the mean state y with the Sun's unit vector su and distance sun_r (R_E); false (P.arc
+/// SPEC 16.17 parameters of the mean state y with the Sun's unit vector su and distance sun_r (R_E); false (P.arc
 /// false) for a wholly sunlit orbit. The output-time terms and the rates in AP's arrangement.
 inline bool srp_shadow_params(const double* y, Vec3 su, double sun_r, double agom, SrpShadowParams& P) {
   P.arc = false;
@@ -1881,7 +1881,7 @@ inline bool srp_shadow_params(const double* y, Vec3 su, double sun_r, double ago
       const double w = kW[q] * half * (1.0 - e * cq);
       for (int j = 0; j < 6; ++j) Ish[j] += w * Kq[j];
     }
-  // K_n's integral in closed form (16.15's G): the same quantity, exact
+  // K_n's integral in closed form (16.16's G): the same quantity, exact
   {
     auto G = [&](double Ex) {
       double s, c;
@@ -1922,7 +1922,7 @@ inline bool srp_shadow_params(const double* y, Vec3 su, double sun_r, double ago
   return true;
 }
 
-/// SPEC 16.16: the change to the output-time terms at mean longitude lam (rad) from parameters P (P.arc true). Through
+/// SPEC 16.17: the change to the output-time terms at mean longitude lam (rad) from parameters P (P.arc true). Through
 /// the shadow it takes the terms at P's geometry where the state is in it: K_E when the caller's terms are those
 /// (same geometry), otherwise evaluated here (the mean anomaly lam - P.varpi on P's orbit).
 inline void srp_shadow_delta(const SrpShadowParams& P, double lam, const double* K_E, double* dd) {
@@ -1957,8 +1957,8 @@ inline void srp_shadow_delta(const SrpShadowParams& P, double lam, const double*
 /// SPEC 4 averaged SRP rates on the current mean orbit (Sun held fixed over
 /// the orbit): the explicit formulas of the wholly sunlit orbit or of the sunlit
 /// arc E1 .. E2 (xp_spec_terms.inc), added to the rates in the state order. An AP set (ap_set) takes AP's shadow
-/// (SPEC 16.14) and, where `ap` and its angles allow, AP's arrangement of the same formulas; SGP4XP section 4's. An
-/// AP set's mean longitude over a sunlit arc also takes ap_lambda_shadow_dn (SPEC 16.15).
+/// (SPEC 16.15) and, where `ap` and its angles allow, AP's arrangement of the same formulas; SGP4XP section 4's. An
+/// AP set's mean longitude over a sunlit arc also takes ap_lambda_shadow_dn (SPEC 16.16).
 inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, const Perifocal& pf, double agom,
                       const Bodies& b, double* out, const AngleTrig* ag_opt = nullptr, bool ap = false,
                       bool* sunlit_safe = nullptr, bool ap_set = false) {
@@ -2064,6 +2064,8 @@ struct RateContext {
   tess::Terms selected_terms;  ///< AP force selection
   double bterm, agom;
   double rad_y0;        ///< AP: the radiation term Y0 beside the sphere, m/s^2 (SPEC 16.13); 0: none
+  uint8_t solid_tides;  ///< AP: the solid Earth tide in the rates (SPEC 16.14)
+  double tide_k1[2];    ///< AP: step 2's diurnal band at the epoch, the tensor's xz and yz (ER^5/min^2; SPEC 16.14)
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour), held
                         ///< for the whole flight in both theories (SPEC 6 Bands, 16.7)
@@ -2969,7 +2971,7 @@ struct ActiveBracket {
   alignas(16) float BT0_f[kThirdBodyTailNodes / 2 + 1][8]{};
   alignas(16) float dAT_f[kThirdBodyTailNodes / 2 + 1][8]{};
   alignas(16) float dBT_f[kThirdBodyTailNodes / 2 + 1][8]{};
-  // SPEC 16.16: the shadow's parameters at the two nodes, for the output between them (functions of the nodes alone)
+  // SPEC 16.17: the shadow's parameters at the two nodes, for the output between them (functions of the nodes alone)
   bool sh_ready = false;
   double sh_t0 = 0.0, sh_t1 = 0.0, sh_agom = 0.0;
   SrpShadowParams sh0{}, sh1{};
@@ -3843,6 +3845,113 @@ inline void third_body_six_coefs_ap(double e, double eta, double sinc1, double i
   coef[39] = (15.0 / 16.0) * e * (3.0 * e2 + 4.0) * sw1 * sc_eta;
 }
 
+// --- AP (SPEC 16.14): the solid Earth tide ---------------------------------------------------------------------------
+namespace tide {
+
+/// IERS Conventions (2010) Table 6.3, the anelastic Love numbers of degree 2: Re k20, and |k21|, |k22| with the cosine and
+/// sine of -arg(k2m) / m, the angle (rad) by which each order's bulge leads the body (Im k21 -0.00144, Im k22 -0.00130).
+constexpr double kK20 = 0.30190;
+constexpr double kK21 = 0.29830347567535986, kC21 = 0.9999883485254338, kS21 = 0.004827298765929014;
+constexpr double kK22 = 0.30102280710936175, kC22 = 0.9999976686877476, kS22 = 0.0021593098596026012;
+
+/// IERS Conventions (2010) Table 6.5a, step 2's corrections to k21 (the diurnal band): the multipliers of the Delaunay
+/// arguments (l, l', F, D, Omega) and the in-phase and out-of-phase amplitudes (1e-12).
+struct Band {
+  int8_t n[5];
+  double ip, op;
+};
+constexpr Band kK21Band[] = {
+    {{2, 0, 2, 0, 2}, -0.1, 0.0},    {{0, 0, 2, 2, 2}, -0.1, 0.0},    {{1, 0, 2, 0, 1}, -0.1, 0.0},
+    {{1, 0, 2, 0, 2}, -0.7, 0.1},    {{-1, 0, 2, 2, 2}, -0.1, 0.0},   {{0, 0, 2, 0, 1}, -1.3, 0.1},
+    {{0, 0, 2, 0, 2}, -6.8, 0.6},    {{0, 0, 0, 2, 0}, 0.1, 0.0},     {{1, 0, 2, -2, 2}, 0.1, 0.0},
+    {{-1, 0, 2, 0, 1}, 0.1, 0.0},    {{-1, 0, 2, 0, 2}, 0.4, 0.0},    {{1, 0, 0, 0, 0}, 1.3, -0.1},
+    {{1, 0, 0, 0, 1}, 0.3, 0.0},     {{-1, 0, 0, 2, 0}, 0.3, 0.0},    {{-1, 0, 0, 2, 1}, 0.1, 0.0},
+    {{0, 1, 2, -2, 2}, -1.9, 0.1},   {{0, 0, 2, -2, 1}, 0.5, 0.0},    {{0, 0, 2, -2, 2}, -43.4, 2.9},
+    {{0, -1, 2, -2, 2}, 0.6, 0.0},   {{0, 1, 0, 0, 0}, 1.6, -0.1},    {{-2, 0, 2, 0, 1}, 0.1, 0.0},
+    {{0, 0, 0, 0, -2}, 0.1, 0.0},    {{0, 0, 0, 0, -1}, -8.8, 0.5},   {{0, 0, 0, 0, 0}, 470.9, -30.2},
+    {{0, 0, 0, 0, 1}, 68.1, -4.6},   {{0, 0, 0, 0, 2}, -1.6, 0.1},    {{-1, 0, 0, 1, 0}, 0.1, 0.0},
+    {{0, -1, 0, 0, -1}, -0.1, 0.0},  {{0, -1, 0, 0, 0}, -20.6, -0.3}, {{0, 1, -2, 2, -2}, 0.3, 0.0},
+    {{0, -1, 0, 0, 1}, -0.3, 0.0},   {{-2, 0, 0, 2, 0}, -0.2, 0.0},   {{-2, 0, 0, 2, 1}, -0.1, 0.0},
+    {{0, 0, -2, 2, -2}, -5.0, 0.3},  {{0, 0, -2, 2, -1}, 0.2, 0.0},   {{0, -1, -2, 2, -2}, -0.2, 0.0},
+    {{1, 0, 0, -2, 0}, -0.5, 0.0},   {{1, 0, 0, -2, 1}, -0.1, 0.0},   {{-1, 0, 0, 0, -1}, 0.1, 0.0},
+    {{-1, 0, 0, 0, 0}, -2.1, 0.1},   {{-1, 0, 0, 0, 1}, -0.4, 0.0},   {{0, 0, 0, -2, 0}, -0.2, 0.0},
+    {{-2, 0, 0, 0, 0}, -0.1, 0.0},   {{0, 0, -2, 0, -2}, -0.6, 0.0},  {{0, 0, -2, 0, -1}, -0.4, 0.0},
+    {{0, 0, -2, 0, 0}, -0.1, 0.0},   {{-1, 0, -2, 0, -2}, -0.1, 0.0}, {{-1, 0, -2, 0, -1}, -0.1, 0.0}};
+
+/// Step 2's diurnal band at d50 (days from 1950 January 0.0), in the set's axes, into `out` (the tensor's xz and yz,
+/// ER^5/min^2). The Earth-fixed corrections dC21, dS21 at theta = (GMST + pi) - N.F, seen from inertial axes, are
+/// C' cos(alpha) + S' sin(alpha) in right ascension with C' = sum(ip sin b - op cos b), S' = -sum(ip cos b + op sin b),
+/// b = N.F (GMST cancels): a term fixed in inertial axes but for b. Its potential (mu / r) (R / r)^2 sqrt(15) sin(phi)
+/// cos(phi) (C' cos alpha + S' sin alpha) is r^-3 r.T.r with T_xz = (sqrt(15) / 2) mu C', T_yz = (sqrt(15) / 2) mu S'. It is
+/// evaluated once, at the epoch: over 10 days b moves the band by under 3e-12 of its 5e-10 (the P1 line, 2 L_sun).
+inline void diurnal_band(double d50, double out[2]) {
+  const double T = (d50 - 18263.5) / 36525.0;
+  // IERS Conventions (2010) eq. 5.43 to T^2: l, l', F, D, Omega (arcseconds)
+  const double arg[5] = {(134.96340251 * 3600.0 + (1717915923.2178 + 31.8792 * T) * T) * kArcsec,
+                         (357.52910918 * 3600.0 + (129596581.0481 - 0.5532 * T) * T) * kArcsec,
+                         (93.27209062 * 3600.0 + (1739527262.8478 - 12.7512 * T) * T) * kArcsec,
+                         (297.85019547 * 3600.0 + (1602961601.2090 - 6.3706 * T) * T) * kArcsec,
+                         (125.04455501 * 3600.0 + (-6962890.5431 + 7.4722 * T) * T) * kArcsec};
+  double c = 0.0, s = 0.0;
+  for (const Band& w : kK21Band) {
+    double b = 0.0;
+    for (int i = 0; i < 5; ++i) b += w.n[i] * arg[i];
+    const double sb = std::sin(b), cb = std::cos(b);
+    c += w.ip * sb - w.op * cb;
+    s -= w.ip * cb + w.op * sb;
+  }
+  constexpr double k = 1.9364916731037085 * kMu * 1e-12;  // sqrt(15) / 2 mu R^2 (R 1 ER), the amplitudes in 1e-12
+  out[0] = k * c;
+  out[1] = k * s;
+}
+
+/// The tide's averaged rates, added to the equinoctial rates `out` of the state y (frame fr, its a, n, e2, eta and axes),
+/// with the bodies b of the stage and the band k1 (diurnal_band). The potential of the degree-2 tide is r^-3 r.T.r, T the
+/// symmetric traceless tensor (ER^5/min^2) of the two bodies' (3/2) mu_b R^5 / r_b^3 (s s^T - I/3), each order m of it (zz;
+/// xz, yz; xx - yy, xy about the Earth's axis) weighted by its k2m and turned by its lead, plus the band. With W the orbit
+/// normal, g = T W and P = W.g, its average over the mean anomaly is -P / (2 a^3 eta^3); with D = 1 / (n a^5 eta^4), N the
+/// node and M the in-plane direction 90 deg past it: di/dt = D g.N, sin i dOmega/dt = D g.M, d varpi/dt = D (tan(i/2) g.M
+/// - 1.5 P), d lambda/dt - n = D (tan(i/2) g.M - 3 eta P - 1.5 e^2 P / (1 + eta)); e and n do not move. In the equinoctial
+/// axes N sin Omega + M cos Omega = fr.g and N cos Omega - M sin Omega = fr.f, so chi-dot = D g.fr.g / (1 + cos i) and
+/// psi-dot = D g.fr.f / (1 + cos i), regular at i = 0 as tan(i/2) M is.
+inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const Frame& fr, double* out) {
+  double txx = 0.0, tyy = 0.0, tzz = 0.0, txy = 0.0, txz = k1[0], tyz = k1[1];
+  const Vec3 us[2] = {b.sun_u, b.moon_u};
+  const double rs[2] = {b.sun_r, b.moon_r}, ms[2] = {kSunMass, kMoonMass};
+  for (int j = 0; j < 2; ++j) {
+    const Vec3 u = us[j];
+    const double kappa = 1.5 * ms[j] * kMu / (rs[j] * rs[j] * rs[j]);
+    const double c0 = kappa * kK20 * (u.z * u.z - 1.0 / 3.0);
+    txx -= 0.5 * c0;
+    tyy -= 0.5 * c0;
+    tzz += c0;
+    const double c1 = kappa * kK21 * u.z;
+    txz += c1 * (u.x * kC21 - u.y * kS21);
+    tyz += c1 * (u.x * kS21 + u.y * kC21);
+    const double x2 = u.x * kC22 - u.y * kS22, y2 = u.x * kS22 + u.y * kC22, c2 = kappa * kK22;
+    const double d2 = 0.5 * c2 * (x2 * x2 - y2 * y2);
+    txx += d2;
+    tyy -= d2;
+    txy += c2 * x2 * y2;
+  }
+  const Vec3 W = fr.w;
+  const Vec3 g = {txx * W.x + txy * W.y + txz * W.z, txy * W.x + tyy * W.y + tyz * W.z, txz * W.x + tyz * W.y + tzz * W.z};
+  const double chi = y[kChi], psi = y[kPsi], ci = W.z;
+  const Vec3 tM = {-ci * chi, ci * psi, 2.0 * (chi * chi + psi * psi) * fr.ic};  // tan(i/2) M
+  const double P = dot(W, g), gT = dot(g, tM);
+  const double a2 = fr.a * fr.a, one_e2 = 1.0 - fr.e2;
+  const double D = 1.0 / (fr.n * a2 * a2 * fr.a * one_e2 * one_e2);
+  const double h = 0.5 * fr.c * D;  // D / (1 + cos i)
+  out[kChi] += h * dot(g, fr.g);
+  out[kPsi] += h * dot(g, fr.f);
+  const double wdot = D * (gT - 1.5 * P);
+  out[kAf] -= y[kAg] * wdot;
+  out[kAg] += y[kAf] * wdot;
+  out[kLam] += D * (gT - P * (3.0 * fr.eta + 1.5 * fr.e2 / (1.0 + fr.eta)));
+}
+
+}  // namespace tide
+
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test). AP sums the epoch
 /// class's terms whatever the current mean motion (SPEC 16.7): the class is the record's, decided at its epoch.
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
@@ -4098,6 +4207,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   }
   six_to_equinoctial(ag, six, out);
   out[kLam] += fr.n;  // the set carries lambda-dot - n
+  // SPEC 16.14: the solid Earth tide, closed form at this state (every regime; nothing at output time)
+  if (ctx.solid_tides) tide::rates_eq(ctx.tide_k1, b, y, fr, out);
   if (add_cached_lp_teq) {
     for (int m = 0; m < 6; ++m) out[m] += csa->tail_eq[m] + cgc.sigma_dtail_eq[sigma_slot][m];
   }
@@ -4691,7 +4802,7 @@ constexpr double kGl3X[3] = {-0.774596669241483377036, 0.0, 0.774596669241483377
 constexpr double kGl3W[3] = {5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0};
 
 /// SPEC 16.13: the sunlit arc of the mean orbit y (eccentric anomalies E1 .. E2 from the perigee; false: wholly sunlit) as
-/// the sphere's rates decide it for an AP set (rates, srp_rates): AP's shadow (SPEC 16.14), for every AP set.
+/// the sphere's rates decide it for an AP set (rates, srp_rates): AP's shadow (SPEC 16.15), for every AP set.
 inline bool y0_sunlit_arc(const RateContext& /*ctx*/, const double* y, const Frame& fr, Vec3 su, double& E1, double& E2) {
   const Kepler kp = kepler_of(y, fr.a);
   const AngleTrig ag = angle_trig(kp);
@@ -5013,7 +5124,7 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
       srp_output(km.e, etam, Em, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, ds);
       SrpShadowParams P;
       if (is_ap_ctx(ctx) && srp_shadow_params(ym, sun_u, sun_r, ctx.agom, P)) {
-        // SPEC 16.16 for an AP set on this path, at the state itself
+        // SPEC 16.17 for an AP set on this path, at the state itself
         double dd[6];
         srp_shadow_delta(P, ym[kLam], ds, dd);
         for (int j = 0; j < 6; ++j) ds[j] += dd[j];
@@ -5365,7 +5476,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
       double ds[6];
       srp_output_ap(km.e, etam, sEm, cEm, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, ds);
       {
-        // SPEC 16.16: the shadow in the output-time terms (none for a wholly sunlit orbit). Between the two nodes of the
+        // SPEC 16.17: the shadow in the output-time terms (none for a wholly sunlit orbit). Between the two nodes of the
         // set's bracket, the change blended in time from the parameters at each node (functions of the nodes alone);
         // elsewhere (the epoch, a covariance sigma set) the parameters at the state itself.
         double dd[6] = {0, 0, 0, 0, 0, 0};
@@ -6264,6 +6375,9 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
+  // SPEC 16.14: an AP set's solid Earth tide, with its diurnal band at the epoch; SGP4XP flies none
+  s.ctx.solid_tides = s.ctx.ap_third_body && s.ctx.selected_terms.solid_tides ? 1 : 0;
+  if (s.ctx.solid_tides) tide::diurnal_band(s.ctx.d50_epoch, s.ctx.tide_k1);
   if (res != 0 && !s.ctx.ap_resonance) {
     // SGP4XP: the epoch class's terms at e_0, i_0 (SPEC 6.3), the library's functions (6.4)
     res::ResCoef* rc = static_cast<res::ResCoef*>(std::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));
@@ -7260,6 +7374,19 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     return true;
   };
 
+  // SPEC 16.14: each set's solid Earth tide at its own stage state, as rates() adds it
+  const bool tides = ctx_p.solid_tides || ctx_m.solid_tides;
+  auto add_tides = [&](const F64x2 vy[6], const Bodies& bb, F64x2 vr[6]) {
+    double yp[6], ym[6], tp[6] = {0, 0, 0, 0, 0, 0}, tm[6] = {0, 0, 0, 0, 0, 0};
+    for (int m = 0; m < 6; ++m) {
+      yp[m] = vy[m].lo();
+      ym[m] = vy[m].hi();
+    }
+    if (ctx_p.solid_tides) tide::rates_eq(ctx_p.tide_k1, bb, yp, frame_of_fast(yp), tp);
+    if (ctx_m.solid_tides) tide::rates_eq(ctx_m.tide_k1, bb, ym, frame_of_fast(ym), tm);
+    for (int m = 0; m < 6; ++m) vr[m] = vr[m] + F64x2(tp[m], tm[m]);
+  };
+
   F64x2 vy2[6];
   for (int m = 0; m < 6; ++m) vy2[m] = vya[m] + (3.0 / 8.0) * h * vfa[m];
   F64x2 va0, vtb0[6];
@@ -7288,6 +7415,7 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     vk2[m] = vr;
   }
   vk2[kLam] = vk2[kLam] + vy2[kN];
+  if (tides) add_tides(vy2, csa0.b, vk2);
 
   // SPEC 9 state_test on y3
   const F64x2 vy3_af = vya[kAf] + (9.0 / 16.0) * h * vk2[kAf];
@@ -7312,6 +7440,7 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     vk4[m] = vr;
   }
   vk4[kLam] = vk4[kLam] + vy4[kN];
+  if (tides) add_tides(vy4, csa1.b, vk4);
 
   F64x2 vout_y[6];
   for (int m = 0; m < 6; ++m)
@@ -7359,6 +7488,15 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
     if (!std::isfinite(out_p.y[m]) || !std::isfinite(out_m.y[m]) ||
         !std::isfinite(out_p.f[m]) || !std::isfinite(out_m.f[m]))
       return -1;
+  }
+  if (tides) {
+    F64x2 vf[6];
+    for (int m = 0; m < 6; ++m) vf[m] = F64x2(out_p.f[m], out_m.f[m]);
+    add_tides(vout_y, csa2.b, vf);
+    for (int m = 0; m < 6; ++m) {
+      out_p.f[m] = vf[m].lo();
+      out_m.f[m] = vf[m].hi();
+    }
   }
   // SPEC 16.13: the radiation term Y0's blocks, as next_node adds them, so a pair flies the theory its sets fly alone
   if (ctx_p.rad_y0 != 0.0) y0_blocks(ctx_p, ap, out_p);
