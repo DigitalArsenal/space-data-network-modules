@@ -33,7 +33,7 @@ const d = flown.map((f, k) => 1000 * Math.hypot(f.X - lines[k].X, f.Y - lines[k]
 const D = Math.max(...d), atH = (d.indexOf(D) * 30) / 60;
 console.log(JSON.stringify({name: 'e0.9-perigee-5000-zonal', states: lines.length, D_m: +D.toFixed(1), atH}));
 await h.close?.();
-// The recorded figure, within 1 m either way. History (this truth): 0.6.26 343.8 m at 120 h; 0.6.NN 255.8 m at 120 h, the
+// The recorded figure, within 1 m either way. History (this truth): 0.6.26 343.8 m at 120 h; 0.6.29 255.8 m at 120 h, the
 // bodies' rates through the output (SPEC 16.19).
 const RECORDED = 255.8;
 if (!process.env.SDN_AP_MODEL_TRUTH_MODULE)
