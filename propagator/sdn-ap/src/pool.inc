@@ -40,16 +40,16 @@ namespace pool {
 constexpr int32_t kMaxThreads = 16;
 constexpr uint32_t kChunk = 512;
 /// A batch whose pool thread died (it trapped, or stopped answering): the batch's return and every row's status. When
-/// the calling thread, waiting for a batch's last chunks, polls `dead_polls()` times without a chunk completing, a
-/// thread is taken for dead; the pool is then not used again (later batches run on the calling thread).
+/// the calling thread, waiting for a batch's last chunks, polls `dead_polls()` times without a row completing on any
+/// thread, a thread is taken for dead; the pool is then not used again (later batches run on the calling thread).
 constexpr int32_t kBatchPoolDead = -20;
 constexpr int32_t kRowPoolDead = 9;
-/// The polls without a completed chunk that take a pool thread for dead. A count, not wall time: the module imports no
+/// The polls without a completed row that take a pool thread for dead. A count, not wall time: the module imports no
 /// clock (the loaders that build their own import objects give none), and the calling thread may be a browser's main
 /// thread, which may not block on a timed wait. Set from the poll rate measured on the fastest machine it runs on
 /// (SPEC 9: about 30 s there with margin); on a slower or busier machine the same count takes longer, never shorter,
-/// and a suspended process does not count.
-constexpr uint64_t kDeadPollsDefault = 1ull << 37;
+/// and a suspended process does not count. 2^35 from 0.6.33: a poll also reads the running threads' row counters.
+constexpr uint64_t kDeadPollsDefault = 1ull << 35;
 /// The same for start's wait for its own view (kDeadPollsDefault's role, counted in yields).
 constexpr uint64_t kDeadYieldsDefault = 1ull << 34;
 /// The room start makes before it creates a thread: the thread's stack (wasi-libc's default, 64 KiB here: stack #487's
@@ -57,6 +57,28 @@ constexpr uint64_t kDeadYieldsDefault = 1ull << 34;
 constexpr size_t kThreadRoom = 1u << 20;
 
 enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2 };
+
+/// The heartbeat (stack #487): the rows each thread has completed, one counter per thread, each aligned to 64 bytes (slot 0
+/// the calling thread's, 1 to kMaxThreads the pool threads'), so a row's count is a store no other thread makes. The
+/// calling thread waiting for a batch reads their sum: a row completing anywhere resets its count of idle polls, so a
+/// slow chunk that keeps completing rows is never taken for dead.
+struct alignas(64) RowBeat {
+  uint64_t rows;
+};
+inline RowBeat g_row_beats[kMaxThreads + 1]{};
+inline thread_local int32_t g_beat_slot = 0;
+inline int32_t g_beat_slots = 0;  ///< pool threads given a slot
+/// One row done on this thread.
+inline void beat() {
+  RowBeat& b = g_row_beats[g_beat_slot];
+  __atomic_store_n(&b.rows, __atomic_load_n(&b.rows, __ATOMIC_RELAXED) + 1, __ATOMIC_RELAXED);
+}
+/// The rows the calling thread and the first `threads` pool threads have completed (slots 0 to `threads`).
+inline uint64_t rows_beaten(int32_t threads) {
+  uint64_t sum = 0;
+  for (int32_t k = 0; k <= threads; ++k) sum += __atomic_load_n(&g_row_beats[k].rows, __ATOMIC_RELAXED);
+  return sum;
+}
 
 struct Job {
   int32_t generation;
@@ -90,7 +112,7 @@ inline Job& job() {
 
 inline int32_t load(const int32_t* word) { return __atomic_load_n(word, __ATOMIC_SEQ_CST); }
 
-/// The polls without a completed chunk a waiting caller allows a batch before it takes a thread for dead, and the
+/// The polls without a completed row a waiting caller allows a batch before it takes a thread for dead, and the
 /// yields start allows its own view (sdnap_pool_stats reads the first; test builds set both through a hook).
 inline uint64_t& dead_polls() {
   static uint64_t n = kDeadPollsDefault;
@@ -128,7 +150,10 @@ inline bool await_view(int32_t pages, uint64_t limit = 0) {
 void run_chunk(const Job& j, int32_t chunk);
 /// Test builds only (nullptr in the shipped build): called before each chunk with the chunk and whether a pool thread
 /// (not the calling thread) runs it.
-inline void (*g_chunk_hook)(int32_t chunk, bool pool_thread) = nullptr;inline thread_local bool g_pool_thread = false;
+inline void (*g_chunk_hook)(int32_t chunk, bool pool_thread) = nullptr;
+/// Test builds only (nullptr in the shipped build): called after each row a chunk computes.
+inline void (*g_row_hook)(uint32_t row, bool pool_thread) = nullptr;
+inline thread_local bool g_pool_thread = false;
 /// Test builds only (false in the shipped build): no reserve before a threaded batch, so every growth a batch would
 /// need is refused (the refusals' fall-backs and deferrals all taken).
 inline bool g_reserve_off = false;
@@ -181,6 +206,7 @@ inline void warm_thread() {
 inline void* thread_main(void*) {
   Job& j = job();
   g_pool_thread = true;
+  g_beat_slot = __atomic_add_fetch(&g_beat_slots, 1, __ATOMIC_SEQ_CST);  // 1 to kMaxThreads (start makes at most that many)
   // start publishes the memory's size before it creates this thread: the caches are made in pages this view covers
   await_view(load(&j.pages));
   warm_thread();
@@ -230,7 +256,7 @@ inline int32_t start(int32_t requested) {
 }
 
 /// Runs the job already written into job(): every chunk, on the threads and the calling thread, and returns when all
-/// are done: 0, or kBatchPoolDead when the calling thread polled dead_polls() times without a chunk completing (the
+/// are done: 0, or kBatchPoolDead when the calling thread polled dead_polls() times without a row completing (the
 /// pool is then not used again). A threaded batch is preceded by `reserve` bytes made free on the calling thread and runs with every
 /// growth of the memory refused; the rows a refusal stopped are left in j.deferred for the calling thread.
 inline int32_t run(uint32_t count, size_t reserve) {
@@ -265,14 +291,16 @@ inline int32_t run(uint32_t count, size_t reserve) {
   run_chunks();
   int32_t rc = 0;
   if (threaded) {
-    // Done when every chunk is done and no thread can still hold a claim; each poll without a chunk completed counts
+    // Done when every chunk is done and no thread can still hold a claim; each poll without a row completed counts
     int32_t last_done = load(&j.done);
-    uint64_t idle = 0;
+    uint64_t last_rows = rows_beaten(j.threads), idle = 0;
     for (;;) {
       const int32_t d = load(&j.done);
       if (d >= chunks && load(&j.active) == 0) break;
-      if (d != last_done) {
+      const uint64_t rows = rows_beaten(j.threads);
+      if (d != last_done || rows != last_rows) {
         last_done = d;
+        last_rows = rows;
         idle = 0;
       } else if (++idle > dead_polls()) {
         // no chunk is claimed after this (a claim's compare-and-swap on `next` fails, the total reads 0); a thread only
