@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.27 (dist dd3cb9e5).
+Version 0.6.27 (dist 76d40e86).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -128,9 +128,13 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
   no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
   GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg on arcs of 36 h or more and the Space Force wrapper's 0 +- 0.1 m^2/kg on shorter
-  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). The data are weighed against these priors at 1 km under
-  drag (the fitted set's perigee below 2,500 km) and, above it, at their own sigma, the post-fit scatter, which the
-  covariance then uses too (SPEC 12.1, the fit's weighting; `test/fit-data-sigma.e2e.mjs`): at 1 km a 24 h medium Earth
+  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). The data are weighed against these priors at their own
+  sigma, the post-fit scatter, which the covariance then uses too, above the drag and, under the drag (the fitted set's
+  perigee below 2,500 km), on an arc of 71 h or more at or below e 0.3; a shorter arc, or a set above e 0.3, under the
+  drag is weighed at 1 km, a stated limit
+  (stack #489) under which each prior acts about 100 times more strongly in the estimate than the covariance states
+  (SPEC 12.1, the fit's weighting; `test/fit-data-sigma.e2e.mjs`, `test/fit-cost-curvature.e2e.mjs`). On the radiation
+  lane's 800 km sphere a 72 h fit's AGOM goes from 0.356 to 0.937 of the truth (`test/radiation-sphere-agom.e2e.mjs`). At 1 km a 24 h medium Earth
   orbit fit returned AGOM 15 % low at the median of 254 real windows and was 121 m off at day 5; at its own sigma it
   returns 1.01 of a numerical sphere's coefficient and is 33 m off. On 748 already-read 24 h GNSS windows (exploratory) the
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
@@ -165,8 +169,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 - Covariance rows: the state, then DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS,
   IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION when solved, in that order; COV_UNITS one per row. A record's rows the
   theories have no sensitivity to fly as constant parameters.
-- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the sigma OD_DATA_WEIGHTING states: 1 km under drag, the data's
-  own above it) and SEDR, and one `$ODR` per fit on
+- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the sigma OD_DATA_WEIGHTING states: 1 km under drag on an arc
+  under 71 h or above e 0.3, the data's own otherwise) and SEDR, and one `$ODR` per fit on
   `residuals`: a row per input state (geocentric distance observed and computed, weight, accepted).
 - `sdnap_covariance_full_at` gives the covariance of the state and the parameter rows per time; no sensitivities are
   exposed, so P8 is refused.
@@ -185,6 +189,14 @@ The one-day tail (from 0.6.19) adds the resonant terms of degrees 5 to 31 to the
 carried degrees 2 to 4 only. On made-up geostationary sets, AP against FFM with the same 20 x 20 field after a 72 h fit
 went from 16.9-136.1 m to 8.5-11.1 m at day 7 at 12 longitudes; what remains is AP's analytic Moon (stack #446;
 `test/one-day-resonant-tail.e2e.mjs`).
+
+The slow set (from 0.6.25) carries, in a fitted low orbit, every tesseral term of degree 2 to 70 with j = 1 to 6 and q = 0
+whose own angle drifts within 1.3 x 0.045 n at the epoch and whose along-track size reaches 0.5 m. Each term is tapered by
+its own current rate, and the output table holds the rest, so a term that drag moves through its band's edge leaves no
+step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst day-5 error after a pinned fit went from 1,584 m to
+218 m at i 53 and from 1,905 m to 423 m at i 97.6. On real 72 h fits, AP's day-5 forecast within 100 m of the full
+numerical arm's went from 21 to 34 of 56 windows on laser spheres and from 28 to 42 of 112 on altimetry. The q != 0 terms
+are stack #477's open part (SPEC 16.18; `test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`).
 
 The half-day tail adds every even-order resonant term through degree 31. Against FFM after a 72 h fit, the
 day-7 errors are 60.1 m for the half-day case (a sample 1 h after a perigee; the day's RMS is 34 m along-track and
@@ -305,8 +317,16 @@ or `< 24 h` minimum spans, `fit` enables finite-difference Jacobian fallback and
 median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`), with the sigma of
 the log `10 ln 10` under NRLMSISE-00 at `800-1400 km` so that the arc, not the median, sets BTERM there (SPEC 12.8),
 falling back to the band median's `ln 10` prior where that arc's BTERM is undetermined, moved far on a rough arc, or the
-arc holds a gap or an along-track step; a stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an
-object's prior from its previous fit.
+arc holds a gap or an along-track step. An arc of `71 h` or more under NRLMSISE-00 at or below e 0.3 is judged on its
+perigee's height instead, and with the perigee at `600-2,500 km` takes median `0.008` and sigma of the log `10 ln 10`
+with no fall-back: the arc decides BTERM, the fit weighing the data at their own sigma (SPEC 12.1). The band medians sat 2
+to 40 times below the numerical propagator's fitted Cd A/m on every satellite measured. Against the numerical
+propagator's own forecast of each window (the RMS distance over the day ending at day 5), the headline loop's 72 h fits
+come within 100 m on 48 of 56 sphere windows (median 45.6 m), 105 of 112 altimetry windows (32.8 m) and 50 of 69 near
+700 km (52.3 m), against 49, 99 and 50 of them (54.3, 50.3 and 58.8 m) with the data weighed at 1 km (SPEC 12.1). Such a
+record states BTERM's sigma of the log by SPEC 12.8's width 1: 3.14 times the arc's part, at most the population's
+spread of 1.09, named in a second COV_REALISM entry; the forecast maps the formal variance. A stated `FIT.DRAG_PRIOR` is
+fitted as given, which is how a caller carries an object's prior from its previous fit.
 
 One fit call carries each object's priors (SPEC 12.8). The two-fit sequence of a daily refit:
 
@@ -788,12 +808,12 @@ Every fit's $OBD BALLISTIC_COEFF_MODEL states an arc check: the arc's hours, its
 test on the fit residuals (per-revolution means against a quadratic and a hinge: the velocity step, its time and F;
 flagged at 0.002 m/s and F 100); where the fall-back is judged it and the $OMM COMMENT also state the drag path taken
 (SPEC 12.8). After a 72 h fit
-under NRLMSISE-00 at 800-1400 km on the band default the fit is redone under 0.4.11's band-median prior when BTERM's
+under NRLMSISE-00 at 800-1400 km on the band default (since the default of a 71 h arc, an orbit above e 0.3) the fit is redone under 0.4.11's band-median prior when BTERM's
 posterior sigma of the log exceeds 0.5, or BTERM is more than 3 sigmas from the median while the fit RMS exceeds the
 band's model-truth median (15.16 m) by 25 %, or the arc is flagged; B, k and the median come from the model-truth
 fixtures, where the fall-back is taken only where BTERM is undetermined (within 0.7 m). On AP8's read altimetry windows
-Sentinel-3A 2025-10-15 returns to 0.087 km at day 3 (0.4.17: 0.312) and Sentinel-3B 2025-10-25 to 0.113 km at day 7
-(1.335), HY-2C/D, SWOT and Jason-3 keep 0.4.17's gains, SARAL and CryoSat-2 are unchanged, and Sentinel-3 in the band
-returns to 0.4.11 with its gains as well as its losses; Jason-3 2025-10-10 is not reached. A 0.5 m/s step after the arc
-leaves the fit bit for bit; one inside it is flagged and falls back. A fit of a 72 h arc costs 2 % more outside the
-band, 20 % more where the band default is kept and 92 % more where it falls back (`test/drag-prior-fallback.e2e.mjs`).
+the fall-back had returned Sentinel-3A 2025-10-15 to 0.087 km at day 3 (0.4.17: 0.312) and Sentinel-3B 2025-10-25 to
+0.113 km at day 7 (1.335); the default of a 71 h arc, which has no fall-back, gives 0.314 and 1.344 km, and against
+0.4.11 the median day-3 change is -85 % on HY-2C, -92 % on HY-2D, -73 % on Jason-3, -48 % on SWOT, -35 % on SARAL and
++1.4 % on CryoSat-2 (stack #470). A 0.5 m/s step after the arc leaves the fit bit for bit; one inside it leaves a fit
+RMS of 28 km and BTERM undetermined (`test/drag-prior-fallback.e2e.mjs`).

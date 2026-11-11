@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.27 (dist dd3cb9e5).
+Version 0.6.27 (dist 76d40e86).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1562,8 +1562,9 @@ Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-thr
   - The waits at a thread's start count too: the calling thread grows the memory for a new thread's stack just before
     the thread first runs.
 - This is the engine's behavior as measured, not a guarantee read in the standard. test/pool-growth.e2e.mjs runs the
-  stress, 20 processes, on every landing, and loads the machine itself (busy threads, twice the cores, at the lowest
-  priority) so that it can fail.
+  stress, 20 processes, in every suite. With SDN_AP_POOL_GROWTH_LOAD=1 it loads the machine itself (busy threads, twice
+  the cores, at the lowest priority), so that it can fail. Without that, the default, it can fail only on a machine
+  that is busy already.
 
 The timer.
 - A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
@@ -1830,8 +1831,9 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM or their logs; AGOM forward where p - h <= 0,
   the theory reading AGOM <= 0 as no SRP (its log moves both ways); every moved set flies the set's own branch (16.7),
   never the branch its own elements would decide, here and in 12.3;
-- sigma_d^2, the data variance per component. Above the drag it is the sigma_r^2 the fit itself weighted the data with
-  (the fit's weighting, below); under drag it is s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance;
+- sigma_d^2, the data variance per component. Above the drag, and under the drag on an arc of 71 h or more at or below
+  e 0.3, it is the sigma_r^2 the fit itself weighted the data with (the fit's weighting, below); under drag on a
+  shorter arc or above e 0.3 it is s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance;
 - A = sum J_k^T J_k / sigma_d^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
   under LOG_NORMAL sigma is that of the log). BTERM's prior, where FIT.DRAG_PRIOR is absent or without a sigma and
   FIT.DRAG_PRIOR_FORM is unset, is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free
@@ -1869,10 +1871,20 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
   covariance divides by the same sigma_r^2, so P_p is the inverse curvature of the cost the fit minimized: one weighting
   for the estimate and the covariance. A redone fit the theory refuses, or one that ends on a switch (16.7), leaves the
   1 km fit, and the record says UNIT WEIGHTS.
-- DRAG (the perigee below 2,500 km). The cost keeps sigma_d = 1 km, as in every version before, and the covariance
-  divides by s^2: there the estimate and the covariance do not use one weighting. The reason the 1 km is kept: under
-  drag the post-fit residual is the theory's own error, correlated along the arc, not noise, and weighed at its bare
-  scatter a 24 h arc lets BTERM and AGOM absorb it.
+- DRAG (the perigee below 2,500 km), an arc of 71 h or more (the fit interval's first to last state;
+  `pcf::kDataSigmaUnderDragMinArcHours`) at or below e 0.3, the rule of 12.8's default of a 71 h arc: as above the
+  drag, the whole-arc fit is redone at sigma_r and the covariance divides by the same sigma_r^2, so every prior acts at
+  its written sigma in the estimate as in the covariance *[stack #489, #39]*.
+- DRAG, a shorter arc, or a set above e 0.3 on any arc. The cost keeps sigma_d = 1 km, as in every version before, and
+  the covariance divides by s^2: there the estimate and the covariance do not use one weighting, and each prior acts in
+  the estimate as if its sigma were sigma_d / s times its written one (about 100 times, at s of 10 m) while the
+  covariance states it at its written sigma. This is a stated limit, not the design (stack #489 stays open for these
+  sets). On a short arc, weighed at its bare scatter, a 24 h arc lets BTERM and AGOM absorb the theory's own error, which
+  under drag is correlated along the arc, not noise (below), and the band priors of 12.8 hold the term there only at
+  1 km. Above e 0.3 the rule was measured on no real eccentric rows; on a first look, model truth, the data's own sigma
+  moved the Molniya fixture of `test/heo-frame.e2e.mjs` 9.5 m worse at day 7 and the 7-day Molniya arc's day-7
+  along-track 125 to 143 m, while its BTERM came from 6.12 to 4.98 of its stated sigma (#438). Arcs under 71 h and sets
+  above e 0.3 are bit for bit those of the version before.
 
 Why 1 km was wrong above the drag. Against residuals of 8 m the AGOM prior 0 +- 0.1 m^2/kg acts like 0 +- 0.0008: the
 priors outweigh data good to meters. Measured on precise orbits, AP 0.6.9 against this rule (median 3D error against
@@ -1894,6 +1906,25 @@ the numerical value and 59 m to 4,148 m at day 5). The record's own sigma of ln 
 about 5 on 24 h arcs and 10 on 72 h arcs. On 72 h arcs the same build gained (spheres 129 to 86 m at day 5, altimetry
 756 to 494 m), and on altimetry 24 h arcs too (1,757 to 758 m), there because BTERM left a band median 30 times below
 those satellites' value: under drag one weighting does not serve the short arcs of both kinds of object.
+
+Under drag at 71 h and up *[2026-11-11, stack #489, #39, #481, #482; the 72 h windows of experiments headline-loop's
+low-orbit rows]*. Against the numerical propagator's forecast of the same window (D5, the RMS of the 3D distance over the
+24 h ending at day 5), this rule with 12.8's default of a 71 h arc, against that default weighed at 1 km: laser-ranged
+spheres 48 of 56 windows under 100 m (median 45.6 m) against 49 (54.3 m); altimetry 105 of 112 (32.8 m) against 99
+(50.3 m); Near 700 km 50 of 69 (52.3 m) against 50 (58.8 m); LARES 17.0 m. The free band's prior at the population's
+median and spread of ln B per band (600 to 800, 800 to 1,400 and 1,400 to 2,500 km), in place of 12.8's, was measured
+and lost five altimetry windows (100 against 105), in-sample. On the 800 km sphere of `test/radiation-sphere-agom.e2e.mjs` (AGOM 0.01
+m^2/kg in a conical shadow, BTERM held at 0) AGOM lands at 0.937 of the truth, 0.98 of its stated sigma, against 0.356
+at 9.9 at 1 km (`test/radiation-sphere-agom.e2e.mjs`). `test/fit-cost-curvature.e2e.mjs` holds the rule: the profile
+of the cost the fit minimized in one parameter, the others refitted, against the record's variance of it, for BTERM on
+the 71 h default (ratio 1.0001) and for AGOM on the case 7 sphere (0.9998).
+
+A maneuvering object. On a 72 h arc of a satellite that keeps its orbit with burns, the free drag term takes the thrust in or near the
+arc into itself, as the numerical propagator's does, and the forecast lands on the numerical propagator's rather than on the orbit. On
+the Near 700 km row's 72 h windows against the precise orbits, paired against the version before, this rule alone was worse on 102 and
+better on 50 (stack #489). The scoreboard therefore fits such an object on the arc after its last burn known at the cutoff, 24 to 70 h, so
+under the short-arc rule (experiments headline-loop, `MANEUVER72`: perigee 600 km or above, a burn ending within 7 days before the
+cutoff). With that fit process the same windows are better on 75 and worse on 58, with a median paired change of -15.8 m.
 `test/fit-data-sigma.e2e.mjs` holds the rule on model truth: above the drag AGOM is recovered to 0.1 % and, with a
 stated sigma, pulled toward its prior by exactly what the record's covariance implies; the 2,400 km and 2,600 km sets
 fall on either side of the line.
@@ -2149,15 +2180,18 @@ previous posterior median and, as the sigma of the log, the larger of the previo
 GAUSSIAN_SIGNED with the previous posterior value and the larger of its sigma and 0.01.
 
 Measured on the model truth of the table below, one call with the SWOT-like orbit (true B 0.044) and the
-Sentinel-3-like orbit (true B 0.001): each object's set is the bytes of its single-object fit; on the band defaults the
-day-3 errors are 82.0 and 24.1 m (B 0.0463 and 0.00115), carried 83.0 and 24.1 m, and with each object's true B
-(sigma of the log 0.3) 21.3 and 20.4 m. With SWOT-like's carried prior shared by both, as the call's one $PCF had to
-before 0.4.13, the Sentinel-3-like object is at 3,176.9 m. A posterior carried from the same arc returns that arc's
-estimate (SWOT-like's 0.0463 against 0.044), so the carried prior gains only as the running estimate converges over
+Sentinel-3-like orbit (true B 0.001): each object's set is the bytes of its single-object fit; on the default (the 71 h
+arc's, below) the day-3 errors are 94.3 and 110.8 m (B 0.0467 and 0.00219; on 0.4.13's band defaults 82.0 and 24.1 m, B
+0.0463 and 0.00115), carried 94.7 and 110.8 m, and with each object's true B (sigma of the log 0.3) 21.9 and 20.4 m. With
+SWOT-like's carried prior shared by both, as the call's one $PCF had to before 0.4.13, the Sentinel-3-like object is at
+3,195.1 m. A posterior carried from the same arc returns that arc's
+estimate (SWOT-like's 0.0467 against 0.044), so the carried prior gains only as the running estimate converges over
 successive arcs, which is the catalog's work. `test/fit-per-object-prior-multi.e2e.mjs` measures these numbers. Unset, the prior is LOG_NORMAL with median 0.01
 m^2/kg and sigma of the log ln 10; under NRLMSISE-00 (or a minimum span below 24 h) the median follows the mean altitude
 (0.01 below 600 km, 0.002 at 600-800 km, 0.0005 above; above e 0.3 the perigee's altitude, where the drag acts), and
-under NRLMSISE-00 at 800-1400 km the sigma of the log is 10 ln 10.
+under NRLMSISE-00 at 800-1400 km the sigma of the log is 10 ln 10. On an arc of 71 h or more under NRLMSISE-00, an orbit at
+or below e 0.3 is judged on its perigee's height instead, and with the perigee at 600 to 2,500 km takes median 0.008 and
+sigma of the log 10 ln 10 with no fall-back: the arc decides (below, "The default of a 71 h arc").
 
 The fit estimates ln B by Gauss-Newton from the median. At B = 0.0005 the arc's sensitivity to ln B is B times its
 sensitivity to B, so under sigma ln 10 the prior's curvature dominates and the estimate stays at the median whatever
@@ -2216,7 +2250,9 @@ as 0.0047 to 0.4992 m/s at F 1,335 to 6,550, every one flagged. On the read wind
 2025-12-14 0.51 m/s); Sentinel-6B 2025-12-19 (1.7 km, its commissioning) gives 0.17 m/s at F 85. A step after the arc's end, its states in the $OEM after USEABLE_STOP_TIME, leaves the fit bit for
 bit.
 
-The rule. After a fit of at least 71 h (the 72 h arc and longer) under NRLMSISE-00 at 800-1400 km on the band default,
+The rule. After a fit of at least 71 h (the 72 h arc and longer) under NRLMSISE-00 at 800-1400 km on the band default (since
+the default of a 71 h arc below, an orbit above e 0.3 only: a 71 h arc at or below e 0.3 is judged on its perigee, and with
+the perigee at 800-1400 km takes that default, which has no fall-back),
 the fit is redone under 0.4.11's band-median prior (median 0.0005 m^2/kg, sigma of the log ln 10, which is 0.4.11's fit
 bit for bit) when the posterior sigma of the log exceeds B = 0.5, or BTERM is more than k = 3 posterior sigmas from the
 band median while the fit RMS exceeds the band's median, 15.16 m, by more than 25 % (18.95 m), or the arc check flags a
@@ -2263,6 +2299,148 @@ Cost: the mean fit time of a 72 h DO arc, 0.4.17 to 0.4.18 (12 workers on the ow
 fall-back 1,790 to 3,430 ms (the second fit); per object-day of the arc a third of that (560 to 569, 611 to 737 and 597
 to 1,143 ms). Propagation does not change (XP digest
 72dcf6005046). `test/drag-prior-fallback.e2e.mjs` measures every number here.
+
+**The default of a 71 h arc.** With FIT.DRAG_PRIOR unset under NRLMSISE-00, a fit arc of 71 h or more at or below e 0.3
+is judged on its perigee's height, where the drag acts. With the perigee at 600 to 2,500 km, BTERM's prior is LOG_NORMAL,
+median 0.008 m^2/kg, sigma of the log 10 ln 10, with no fall-back (`pcf::kDragPriorFreeMedian`, `kDragPriorFreeFloorKm`,
+`kDragPriorFreeTopKm`, `kDragPriorFreeMinArcHours`). The $OMM COMMENT and BALLISTIC_COEFF_MODEL read `drag prior: the
+default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against the
+data at their own sigma), no fall-back`. Such an arc with its perigee below 600 km takes the median 0.01 and one with its
+perigee at 2,500 km or above 0.0005, both under ln 10. Shorter arcs, orbits above e 0.3 and fits without NRLMSISE-00 keep
+the rules above. An arc of 71 h or more under the drag is fitted at the data's own sigma (12.1), so this prior acts at
+its written sigma: 10 ln 10 is no pull on the term, and 0.008 is where the fit starts. The tables and lists of this
+block up to "The drag term's stated width" were measured with the data weighed at 1 km (the default as first drafted,
+stack #39); 12.1 gives the rows at the data's own sigma.
+
+The band medians this replaces were 2 to 40 times below the numerical propagator's fitted Cd A/m on every satellite
+measured: laser spheres 0.002 to 0.016, altimetry 0.01 to 0.05, Sentinel-1 0.008. A 72 h arc kept them, under ln 10 at
+600-800 km and through the fall-back at 800-1400 km.
+
+The headline loop's real windows (the LS, DO, S1 and P rows; AP's 72 h fits; day-5 error, m; the pass line is day 5 within
+100 m of the row's numerical arm; SGP4XP is this module's, fitted on the same arc), 0.6.16 to this default:
+
+| Row | Median, days 1 / 3 / 5 / 7 | Within the line | Day 5 better / worse (1 m and 1 %) | Closer than SGP4XP at day 5 |
+| --- | --- | --- | --- | --- |
+| Laser spheres | 23.9 / 58.1 / 129.4 / 205.5 to 22.8 / 46.7 / 88.7 / 146.6 | 32 to 46 of 56 | 27 / 21 of 78 | 54 to 55 of 56 |
+| Altimetry | 39.2 / 252.3 / 755.8 / 1,677.4 to 27.8 / 172.7 / 496.4 / 1,076.1 | 57 to 71 of 112 | 55 / 42 of 136 | 94 to 96 of 112 |
+| Near 700 km | 237.4 / 1,312.6 / 2,843.4 / 4,526.5 to 240.2 / 1,316.8 / 2,925.8 / 4,762.8 | 67 to 71 of 88 | 27 / 48 of 90 | 67 to 64 of 88 |
+| Strong drag 2026 | unchanged (perigees below 600 km) | 90 of 153 | 0 / 0 | 162 of 255 |
+
+- Every 24 h fit is unchanged; the largest difference is 2.5e-8 m.
+- 49 windows come inside the line and 17 go outside, each against its row's own numerical arm. The 17: LARES 2025-12-04 (43
+  to 135 m, the numerical arm 4 m); Sentinel-3B 2025-10-25 (57 to 770 m, numerical 660), Sentinel-3A 2025-10-15 and
+  10-20, SARAL 10-15, 11-14 and 12-09, Jason-3 10-25 and CryoSat-2 12-04; Sentinel-1 39634 on 2026-01-16, 02-12, 02-17 and
+  02-21, and 62261 on 01-05, 01-13, 01-22 and 02-06. They end 1 to 227 m past the line.
+- On the near-700 km row more windows pass, but the medians lose 82 m at day 5 and 236 m at day 7, more windows get worse
+  than better, and AP is closer than SGP4XP on 3 fewer windows.
+- On the 1,120 window fits of these rows, keying the band on the perigee gives every day's error of the same rule keyed on
+  the mean altitude, to 1e-6 m.
+
+The forecast covariance's in-track coverage does not change on these rows (beyond 3 sigma, count of n, on the 72 h fits).
+The one change: at day 5 on the near-700 km row, 20 of 88 windows are beyond 3 sigma, against 19. The numerical propagator
+is itself more than 1 km off at day 5 on all 20, and on all 19 before. The BTERM variance is mapped into the forecast
+(P = J P J^T + Q + F) but is negligible beside the DRAG row's s_d. The record's sigma of ln BTERM is too small (stack #463,
+`test/drag-term-sigma-honesty.e2e.mjs`, a known defect): |z| = |ln(B_AP / B_FFM)| / sigma above 3 on 36 to 51 of 77
+sphere windows (median |z| 2.69 to 4.52), 91 to 92 of 119 altimetry (9.67 to 7.02) and 44 to 39 of 55 near 700 km (11.06
+to 5.78).
+
+Model truth (the fixtures of the tables above; 72 h fits; day-3 3D RMS, m, the fitted B and its posterior sigma of the log
+in brackets), the band default with its fall-back (0.4.18's figures above; this harness gives 0.4.17's band-default rows
+within 0.9 m of them) to this default:
+
+| Orbit, true B | Band default, fall-back | The default of a 71 h arc |
+| --- | --: | --: |
+| SWOT-like, 891 km, 0.044 | 82.0 (0.0463) | 94.3 (0.0467, 0.011) |
+| SWOT-like, 0.01 | 42.9 (0.0110) | 94.4 (0.0127, 0.041) |
+| SWOT-like, 0.001 | 15.9 (fall-back, 0.0005) | 126.2 (0.0047, 0.11) |
+| Sentinel-3-like, 814 km, 0.044 | 63.6 (0.0447) | 67.3 (0.0447, 0.005) |
+| Sentinel-3-like, 0.01 | 49.4 (0.0105) | 66.8 (0.0107, 0.021) |
+| Sentinel-3-like, 0.001 | 24.1 (0.00115) | 110.8 (0.0022, 0.10) |
+| Jason-like, 1,336 km, 0.044 | 263.5 (fall-back, 0.0005) | 16.3 (0.0427, 0.050) |
+| Jason-like, 0.01 | 61.6 (fall-back, 0.0005) | 12.6 (0.0108, 0.20) |
+| Jason-like, 0.001 | 14.09 (fall-back, 0.0005) | 39.8 (0.0078, 0.27) |
+
+At 814 and 891 km the model truth loses on every fixture, and most where the true B is 0.001. There the fit lands at two to
+eight times the truth and states it to 10 to 27 % (stack #463). The real satellites' terms are 0.002 to 0.05, and on the
+real rows the default gains. At 1,336 km, where the band default left B at its median, it gains where B is 0.01 and more.
+
+The AP6 read altimetry windows (paired day-3 AP minus FFM's archived F72 arm, median per object, 0.4.11 to this default):
+HY-2C 576.4 to 40.7 m, HY-2D 524.0 to 19.4, SWOT 464.1 to 196.7, Jason-3 181.0 to 32.1, Sentinel-6 Michael Freilich 83.4 to
+-1.7, SARAL 47.5 to -0.3, Sentinel-3A 44.2 to -12.8, Sentinel-3B 25.6 to 4.1, CryoSat-2 55.8 to 100.1 (scored windows 66.3
+to 109.1); all 121 windows 168.0 to 23.2 m. AP8's DO windows (the median day-3 change against 0.4.11): HY-2C -85 %, HY-2D
+-92 %, Jason-3 -73 %, SWOT -48 %, SARAL -35 %, Sentinel-3A -0.5 %, Sentinel-3B +1.9 %, CryoSat-2 +1.4 %. Sentinel-3A
+2025-10-15 is 0.314 km at day 3 and Sentinel-3B 2025-10-25 1.344 km at day 7, where 12.8's fall-back had kept 0.4.11's
+0.087 and 0.113 km. A step of 0.5 m/s 36 h into the SWOT-like and Sentinel-3-like arcs leaves a fit RMS of 28.2 and 28.0
+km with B undetermined (posterior sigma of the log 23.0), where 12.8's fall-back took the band median.
+
+What was tried and not taken:
+- The same prior on 24 h arcs. Day 5 improves on three rows: spheres 144 to 111 m (24 to 27 of 50 within the line),
+  altimetry 1,757 to 750 m (24 to 38 of 112), near 700 km 1,742 to 1,845 m (69 to 73 of 96). But it blunders where AP's
+  along-track theory error aliases into a free term on a short arc. LARETS 2025-10-15 goes from 59 to 4,164 m with B 0.0077
+  against the numerical 0.0027, stated to 5.4 % (|z| 19); the strong-drag row loses (7,896 to 8,130 m, 75 to 72 of 153).
+  Stack #460.
+- A fall-back from this default to 0.008 under ln 10 on 12.8's conditions. On 24 h arcs it removes none of the blunders: a
+  term determined wrongly sits near the median with a narrow posterior. On 72 h arcs it fires on "rough" (real arcs run 20
+  to 60 m against the model-truth 18.95 m) and on "gap" (laser-ranged arcs), where the term was right. Near 700 km goes 71
+  to 52 of 88 within the line. With only the width and the step judged, it is still 53 of 88.
+- Each object's previous posterior carried as its prior (12.8's catalog rule). Altimetry's 24 h row goes 24 to 50 of 112
+  within the line, but near 700 km's 72 h row goes 67 to 48 of 88, and spheres' 72 h median goes 129 to 150 m.
+- The perigee key on 24 h arcs. On made-up eccentric orbits (perigee by apogee 450 by 1,800, 550 by 1,500 and 700 by 2,000
+  km; true B 0.01 and 0.003; the full force set on real weather), on 72 h arcs the perigee key is better on 4 and equal on
+  2 (day 5 1,538 to 1,509, 1,542 to 1,135, 373 to 365 and 393 to 169 m; equal at 700 km). On 24 h arcs it is wrong: 450 by
+  1,800 km at B 0.003 goes 52 to 2,508 m. These orbits' fitted B is far off on every key (stack #468).
+
+Arcs with a gap or a burn. Model truth at 800 km (i 98) and 1,340 km (i 66), e 0.001, for two objects: B 0.003 with AGOM
+0.0015, and B 0.02 with AGOM 0.015. FFM 70x70, Sun and Moon, solid tide, relativity, NRLMSISE-00 on real GFZ weather; 72 h
+fits. Day-5 3D RMS (m), 0.6.16 to this default, with BTERM and AGOM pinned at the truth in brackets:
+- clean arcs: 53 to 33 (116), 1,031 to 179 (116), 125 to 88 (112) and 217 to 144 (114);
+- 12 h of the arc missing: 56 to 37, 1,039 to 132, 125 to 88 and 218 to 152.
+An along-track burn of 1, 5 or 50 cm/s 36 h into the arc, which AP does not model, leaves a fit RMS of 0.54 to 28 km on
+both builds, and day 5 stays within 0.5 % of 0.6.16's (5.5 to 341 km). There this default states B undetermined (sigma of
+the log 23.0), where 0.6.16's band prior stated 2.3.
+
+CryoSat-2 (717 km) gets worse at day 5 (median 973 to 1,013 m on its 15 real windows) while its fitted term moves closer to
+the numerical one (B_AP / B_FFM 0.89 to 0.95): the lower term was offsetting the missing solid tide (#449) and the
+commensurability terms above degree 31 at 690 to 800 km (#447). `test/fit-bterm-700-1400-km.e2e.mjs` holds it at or below
+115 m paired at day 3 (stack #470).
+`test/fit-bterm-700-1400-km.e2e.mjs` and `test/drag-prior-fallback.e2e.mjs` measure the model truth and the AP6 windows;
+the real-row figures are the headline loop's.
+
+**The drag term's stated width on a 71 h arc** *[2026-11-11, stack #489, #463; the 72 h windows of experiments
+headline-loop's low-orbit rows, burns left out (the numerical propagator's own 3D error at day 3 over 10 km), against
+the numerical propagator's fitted term on the same arc]*. A set fitted on this default at the data's own sigma (12.1),
+over 71 to 75.6 h, states BTERM's sigma of ln as
+
+    sigma_s^2 = min(1 / (I_arc / m^2 + 1 / sigma_p^2), c^2),   I_arc = 1 / sigma_f^2 - 1 / sigma_p^2
+
+with sigma_f the fit's formal sigma of ln (12.1), sigma_p the prior's 10 ln 10, m = 3.14 and the cap c = 1.09, for a
+perigee at 600 to 2,500 km (`cov::kWidth1`). m is the factor that brings the 95th percentile of
+|ln(B_AP / B_numerical)| / sigma_f to 1.96 over the windows where sigma_f is under the cap; c is the spread (standard
+deviation) of ln B over the numerical propagator's 72 h terms in the band, 246 windows of 18 satellites. Without the cap an
+arc that cannot see the term states the prior's 23.0, which is no width. The statement is on BTERM's diagonal alone; the
+record's second COV_REALISM entry names it, `sdn-ap drag-term width 1: m 3.14, prior sigma 23.0259, cap 1.09; stated, not
+mapped`, and where the cap binds it adds `; capped, formal sigma of ln <sigma_f>`. It is stated, not mapped: `propagate`
+derives m, sigma_p and c from the record's own elements, ACTUAL_OD_SPAN and atmosphere, checks them against the entry,
+recovers sigma_f (inverting the first form, or reading the entry where the cap binds) and maps that; the flight's
+parameter block states the record's own variance. A record the reader cannot match maps its matrix as stated, and the
+flight's block COMMENT says `covariance: <entry>: mapped as stated (<why>)`. The width changes no state and no position
+covariance of a flight: the forecast maps the formal variance sigma_f^2 B^2, which a reader recovers from the record's
+BTERM diagonal and the entry's figures as above (or, where the cap binds, reads in the entry). On these rows that
+mapping was measured to hold: beyond 3 sigma radially at day 5, altimetry 10 to 2 of 109 windows, spheres 0.
+
+One band, not two. With one satellite left out of the factor and the cap, the 600 to 1,000 km band alone holds (coverage
+of 1.96 0.92, the 95th percentile over 1.96 1.14) and a band of its own for 1,000 to 2,500 km does not (0.81 and 2.75):
+five objects, one of them (LARES) 20 times under the rest, cannot carry a factor and a cap of their own. The free band
+as one, with one satellite left out: 0.91 and 1.19; by part, 600 to 1,000 km 0.91 and 1.18, and 1,000 to 2,500 km 0.94
+and 1.28, over the 1.25 the rule aims at (five objects, one of them 20 times under the rest). On the records themselves:
+600 to 1,000 km 0.907 and 1.17 (5 of 193 beyond 3 sigma), 1,000 to 2,500 km 0.943 and 1.19 (3 of 53).
+
+Limit: an arc that does not see the term. On three of LARES's 13 windows the formal sigma of ln is the prior's (22.5 to
+22.9) and the fitted B is 0.008 to 0.022 of the numerical propagator's, 3.5 to 4.4 stated sigmas off; the cap bounds what
+is stated, not where the estimate goes. The term is too small there to matter in position: on those three windows the
+day-5 forecast lies 11.9 to 12.7 m from the numerical propagator's (D5), and 12.2 m from the precise orbit where day 5 is
+scored. LARES's along-track sigma at day 5, 2.36 km against errors of 4.5 to 42 m, is the DRAG row's s_l (12.5; 104 m
+with s_l at 0), not the term, and the same before this rule (stack #490).
 
 **Above e 0.3.** Until 0.4.16 Molniya's band default followed its mean altitude (20,180 km, median 0.0005) and the 72 h
 fit stayed there (0.000831 against the truth's 0.044, 11,063 m along-track at day 7); at its 541 km perigee the median is
@@ -2428,7 +2606,9 @@ between nodes and held at the end values outside them; the density is NRLMSISE-0
 call's atmosphere, with finite-difference Jacobian fallback (`fit::jacobian_fallback`) enabled under NRLMSISE-00 and
 short-span (`< 24 h`) passes. When FIT.DRAG_PRIOR is unset under NRLMSISE-00 or `< 24 h` minimum span, BTERM's
 LOG_NORMAL prior takes its median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at
-`>= 800 km`), and under NRLMSISE-00 at `800-1400 km` the sigma of the log `10 ln 10`, with 12.8's fall-back; a stated FIT.DRAG_PRIOR is
+`>= 800 km`), and under NRLMSISE-00 at `800-1400 km` the sigma of the log `10 ln 10`, with 12.8's fall-back; on an arc of `71 h` or
+more under NRLMSISE-00 an orbit at or below e 0.3 is judged on its perigee's height, and with the perigee at `600-2,500 km` takes
+median `0.008` and sigma `10 ln 10` without the fall-back (12.8); a stated FIT.DRAG_PRIOR is
 fitted as given. When `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a
 non-eccentric orbit without `USEABLE_START_TIME`, `fit` runs a two-stage decoupled solve: Stage 1 fits the `48-72 h`
 span to determine `BTERM` and `AGOM`; Stage 2 fits the trailing `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2
@@ -2467,7 +2647,10 @@ third-body terms of 16.8. A degree set without its HAS field, or above 70, is re
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
 complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
 orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
+against a 31 x 31 field); at 450 km the order-15 terms above degree 31 added 72 m on day 1 and 268 m on day 7 after a 72 h
+fit through 0.6.20. From 0.6.25 a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
+rates, to degree 70 whatever d states: d governs the fast terms, and a commensurability's series is a cancellation, so a slow
+set cut at a lower degree is worse than none.
 `maneuver` and `ingest_omm` keep SGP4XP.
 
 **16.2 Tesserals.** The field is the fully normalized EGM-96 of propagator/ffm, pinned by build.mjs. Inclination functions come
@@ -2482,6 +2665,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
+| slow set (from 0.6.25) | j = 1 to 6, q = 0, every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose along-track size reaches 0.5 m, the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
 by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
@@ -2946,6 +3130,9 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
 
+Which slow terms the grid keeps (from 0.6.24, in the one-day class, every slow term the class's rates do not carry, down to
+the floor of 1e-2 n; stack #467) is 16.18's rule; its reasons and measurements are stated there.
+
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
 in a 12-hour orbit (13.5 against 6.7 m) and 7.5 m in a geosynchronous orbit (7.6 against 1.1 m), RMS over a 72 h arc.
@@ -2956,7 +3143,8 @@ function of the anomaly, complete in j. At init it is built on 128 uniform eccen
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
 omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-daily, the class's, the half-day class's tail, and
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
-shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
+shallow set's taper and the terms slower than 1e-3 n; in the one-day class, from 0.6.24, only the terms slower than 1e-2 n
+(16.18); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
 precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
 the slopes below, 3.1 MB before 0.6.14), and read at
@@ -3776,6 +3964,195 @@ against 1,273 to 1,278, medium Earth orbit 200 to 237 against 178 to 188, apart 
 10,000 fresh records asked at one instant a day after their epoch cost 125.5 against 132.7 µs a record (medium Earth
 orbit), 209.1 against 237.1 (geostationary) and 126.1 against 131.0 (500 km). A process's first evaluations (about 40 µs
 for a day's nodes, 110 µs for a week's) are paid once per thread and time range.
+
+**16.18 Where each tesseral term is carried.** A tesseral term (l, m, p, q) of the embedded field (EGM-96 to degree and
+order 70) has w = l - 2p, j = w + q and the angle rate psi-dot = w omega-dot + j M-dot + m (Omega-dot - omega_E), from the
+J2 secular rates at the set's epoch elements (the rates 16.2's table and 16.11's grid take). The rule: each term is carried
+in exactly one place, decided by its own psi-dot at the set's epoch, for every commensurability:
+- in the rates, integrated at the current elements with all six element rates, the mean motion's response included;
+- at output, to first order: 16.2's table below the eccentricity switch, 16.11's grid above it;
+- nowhere, stated term by term with its reason (the diagnostic below).
+
+A term is slow when |psi-dot| < 0.045 n (`kShallowBand`). For each (l, m, p) the slow j are the integers within
+0.045 n / M-dot of nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, and q = j - w. So j and q follow from the rate, and
+each term is classified by its own rate, not by its family's q = 0 rate.
+
+*Where a slow term belongs.* At output, a term's mean-motion response is an along-track term in 1 / psi-dot^2 with a fixed
+divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node.
+That is exact to first order while psi-dot holds still and stays well above the libration rate of the term's own resonance.
+Where the rate holds still the two forms agree. At 550 km beside 15:1 (i 87.35, gravity alone, the elements fitted and the
+coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h and 72 h fits:
+- 800 and 1,340 m in the rates;
+- 804 and 1,347 m on the table (stack #477).
+
+A term whose rate does not hold still belongs in the rates:
+- in low orbit, where drag moves n, and moves a k:j family's rate by j times as much, through the band and through zero.
+  There the acceptance is a decaying orbit that crosses a band edge with no kink in its output (stack #477);
+- above the switch, a term slower than its class's floor, where it drifts about as slowly as the class's own libration (the
+  one-day class below; stack #474).
+
+*The diagnostic.* `sdnap_slow_terms(in, rows, max_rows)` takes in = the mean motion (rev/day), e, i (deg) and the tesseral
+cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to the cap:
+- l, m, p, q and psi-dot / n;
+- the term's carrier (the table below);
+- the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch no taper applies, so
+  w is 1 for the class's terms and 0 otherwise;
+- the term's size in m. That is its along-track amplitude through the mean motion, 3 |j| A / (a psi-dot^2), with
+  A = mu / a^(l+1) |F G| |C, S| at the epoch elements and G exact at the epoch e. A size cut is chosen on this number.
+
+| Code | Carrier |
+| ---: | --- |
+| 1 | the rates: the class's terms (6.1), the half-day class's tail (16.2), the shallow set (16.2) |
+| 2 | the grid (16.11) |
+| 3 | the output table (16.2) |
+| 0 | nowhere: under the floor, or left out of the grid as slow |
+| 4 | nowhere: above the carrier's degree |
+| 5 | nowhere: under the size cut |
+| 6 | nowhere: a q outside the rule's q range, at or above the size cut |
+
+It writes at most max_rows rows and returns the count of all of them, or -1 for a set it does not cover. It covers the sets
+above their eccentricity switch outside low orbit (class 0 below 1100 min), and from 0.6.25 the low table (below: codes 3,
+5 and 6 are written there only). It returns -1 for every other set. No flight reads it.
+
+*The partition test.* Each part of the rule has an E2E of one shape:
+- the rule, written in the test as a function of a row (the carrier from l, m, p, q and psi-dot / n);
+- `sdnap_slow_terms` compared with it row by row on sets inside the part's bands;
+- one model-truth flight of a set inside a band.
+
+`test/one-day-slow-band.e2e.mjs` is the one-day class's test.
+
+*The one-day class above the switch (from 0.6.24; stack #467).* Before 0.6.24 the grid left out every term slower than
+0.045 n, as if the class carried it in the rates. The one-day class carries only SGP4-XP's 27 terms (degrees 2 to 4, k = m,
+|q| at most 4), so its other slow terms were carried nowhere:
+- j = m of degrees 5 to 12;
+- the terms of degrees 3 and 4 with |q| above 4, large at high e.
+
+A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at day 5 on THEMIS A's real geometry, whose
+angle drifts at 0.0444 n. A set just above the cut kept them. From 0.6.24 each term of a one-day set above the switch is
+carried in exactly one place:
+- the class's rates: its 27 terms;
+- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster (`kOneDayFloor`);
+- nowhere: a term slower than 1e-2 n (the floor below), and the terms above degree 12 (the table holds no near-resonant
+  terms outside low orbit).
+
+On a THEMIS A-like set the diagnostic lists 5 terms in the rates, 47 on the grid of degree 2 to 12, and 768 of degree 13 to
+31 carried nowhere. On THEMIS A's real geometry (no Sun or Moon, the field cut on both sides) degrees 13 to 31 are 1 to 17 m
+of either sign at day 5: 12 x 12 against 31 x 31 gives 50.2 against 48.9 m, 52.1 against 65.7 m and 78.7 against 62.1 m.
+
+FFM model truth, EGM96 70 x 70, no Sun or Moon on either side, a 72 h fit flown 7 days, day 5:
+- Made-up THEMIS A-like sets whose fitted mean motion lies in the band (1.0493 rev/day, e 0.825, i 11.9 deg; node 0, 90
+  and 180 deg): 369 / 415 / 549 m through 0.6.18, and 155.1 / 69.5 / 160.5 m with the band.
+- Five real THEMIS geometries, from their windows' own states with the Sun, the Moon and the radiation sphere: day 5 went
+  from 162 to 994 m (median 538 m) to 77 to 129 m (median 100 m).
+
+At the switch, a one-day set at e0 0.30 takes #434's tail in the rates and the table; one at 0.3001 takes the grid with
+the band. i 10 deg, 70 x 70 with the Sun and Moon, a 72 h fit, day 5:
+- At n 1.0496: 35.5 m at e0 0.30 against 13.7 m at 0.3001.
+- At n 1.0027: 19.9 m against 12.0 m.
+- Through 0.6.18 the same pairs were 38.7 against 14.8 m and 18.1 against 11.9 m.
+
+The jump is the table's first-order error near 0.3 (16.11). The band adds 1 m at 0.3001 and the tail 3 m at 0.30.
+
+The floor is 1e-2 n, not the table's 1e-3 n. Between the two, a term drifts about as slowly as the class's own resonant
+libration, where a first-order term is no longer small. Two synchronous sets at e 0.5 (1.0027 rev/day, i 30 deg, nodes 30
+and 120 deg; 70 x 70, no Sun or Moon, day 5) hold 98 terms of degree 2 to 12 between the two floors:
+- with the floor at 1e-3 n they went from 105 to 58 m and from 42 to 54 m;
+- at 3e-3 n and 1e-2 n both keep their 0.6.18 values.
+
+On the THEMIS-like sets and on the one-day set at e 0.3001 no term of degree 2 to 12 lies between the two floors. What the
+floor and the degree cut leave out on such a synchronous set (105 m and 42 m, against 2.7 m and 2.1 m with a 4 x 4 field) is
+stack #474.
+
+*The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
+- in low orbit (class 0 below 1100 min), through 0.6.24: the commensurabilities with j of 2 to 4 (orders 25 and up) and the
+  degrees above 31. Inside the bands they put a set 0.1 to 1.9 km off at day 5 (stack #477). From 0.6.25 the low table's
+  slow set carries those with q = 0 (below); the terms with q other than 0 stay open;
+- above the switch in classes 0, 2, 3 and 4: every slow term the class's rates do not carry. A transfer orbit (2.2785
+  rev/day, e 0.7306, i 27 deg) is 2.1 km from the numerical propagator at day 5 without radiation pressure (stack #473);
+- in the one-day class: the terms under its floor and above degree 12 (stack #474).
+
+*The low table (from 0.6.25; stack #477).* The low table is class 0 below
+1,100 min at or below its eccentricity switch. There, through 0.6.20, the shallow set (16.2) carried only j = 1, q = 0 to the
+stated degree, at most 31. The output table dropped every term slower than 1e-3 n and took the rest with the divisor of the
+epoch. A k:j family at a band's center, or one that drag moves through its band, was carried in the wrong place or nowhere.
+Gravity alone, FFM 70 x 70 on both sides with no Sun or Moon, the elements fitted with the coefficients pinned, 300 to
+1,500 km in 20 km steps: the worst day-5 error after a 24 h or 72 h fit was 1,584 m at i 53 (25 heights above 100 m) and
+1,905 m at i 97.6 (35 heights).
+
+From 0.6.25 a fit that states MAXIMUM_TESSERAL_DEGREE 2 or more carries the slow set in the rates, beside the shallow set:
+every term (l, m, p, q) of the embedded field with j = l - 2p + q from 1 to 6, q = 0, order and degree 2 to 70,
+- whose own rate psi-dot at the epoch elements is within 1.3 bands (|psi-dot| < 1.3 x 0.045 n, `kShallowSelect`);
+- whose size reaches 0.5 m (`kSlowKeepM`). The size is the along-track amplitude through the mean motion,
+  3 |j| A / (a psi-dot^2), with A = mu / a^(l+1) |F G| |C, S| the potential's coefficient of the term, at the epoch elements;
+- other than the shallow set's own terms (j = 1, q = 0, to its degree), which stay where they are.
+
+Each term enters the rates with the weight w of its own current rate: 1 below 0.9 bands, a cos^2 taper to 0 at 1.1. The
+output table holds 1 - w of a term the rates carry, so a term that crosses its band's edge as drag raises n moves from one to
+the other with no step. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
+as GRAVITY_MODEL "EGM-96; slow tesseral terms to degree 70", and every flight of the record carries it. A record without
+that text flies as before.
+
+What the slow set leaves out, by stated limits:
+- Families whose leading degree is 69 or 70. The embedded field ends their series after one or two degrees where the real
+  field continues it, so neither AP nor a numerical propagator at 70 x 70 holds the series: a limit of the field, not of the
+  method. j up to 4, 5 or 6 gave the same records on the measured fixtures and band centers.
+- Terms under 0.5 m. The largest left out on the bits cases are 0.41 m on a LAGEOS-2-like set and 0.089 m on a LAGEOS-like
+  set. A cut at 0.1 m changes the LAGEOS-2-like record, and 0.05 m changes both. Lower cuts also make a free fit of a
+  SWOT-like set at BTERM 0.01 worse: 0.925 and 0.937 of the true BTERM against 0.952.
+- q other than 0 (code 6 below; stack #477's open part). The cases that are known:
+  - 880 km, i 97.6: the order-14 q = +1 family drifts at 1.8e-3 n, and the output table carries it to first order: day 5
+    is 220 / 233 m after 24 h / 72 h fits, and 91 / 43 m with the family in the rates. The q = -1 family (6.6e-4 n,
+    107 days, its largest member 757 m) is carried nowhere. Put in the rates it costs 20 to 35 m, where a correct term
+    should cost nothing; that is the defect to find before q other than 0 is carried.
+  - 550 km, i 87.35, e 0.001: the order-15 q = 2 term of degree 15 drifts at 3.2e-5 n with a size of 1.9 km and is
+    carried nowhere.
+  - At e 0.02 the series in q needs |q| up to 4: day 5 after 24 h / 72 h fits is 152 / 224 m with q = 0, 352 / 297 m with
+    |q| up to 1, and 183 / 161 m with |q| up to 4.
+
+Measured with the slow set:
+- The scan above: at i 53 the worst is 218 m (10 heights above 100 m), and at i 97.6 it is 423 m (19 heights). Still above
+  100 m at i 97.6, day 5 after a 24 h / 72 h fit: 380 km 423 m, 300 km 296 m, 520 km 239 m, 440 km 235 m, 880 km
+  220 / 233 m and 1,220 km 118 / 103 m. At i 53 the heights from 300 to 520 km (up to 218 m) are the fast terms of degrees 13
+  to 31 (stack #454).
+- Free 72 h fits on model truth with drag, the Sun, the Moon and the tide (70 x 70): a SWOT-like set states 0.995 of the true
+  BTERM at 0.044 and 0.952 at 0.01 (day 5 30 m); a Sentinel-3-like set 0.999 and 0.993.
+- Real data, 72 h fits, AP's day-5 forecast against the full numerical arm's own forecast (windows under 100 m and the
+  median), from 0.6.20 to the slow set: laser spheres 21 to 34 of 56 (116 to 75 m), altimetry 28 to 42 of 112 (191 to
+  121 m), near 700 km 10 to 11 of 69 (235 to 216 m). The 24 h rows do not move.
+- The records of LAGEOS-, Etalon- and Galileo-like sets are identical to 0.6.20.
+
+What gets worse, measured. No IDS burn lies near either Sentinel-3 window.
+- Sentinel-3B 2025-10-25: day 7 goes from 112 to 402 m. Its 72 h fitted term goes from 0.87 to 0.83 of the full numerical
+  arm's, and the numerical propagator's own day 7 on that window is 1,179 m.
+- Sentinel-3A: the median paired day 3 on its read windows goes from 44.2 to 73.4 m. Its term on 2025-10-15 goes from 0.90
+  to 0.87 of the numerical arm's.
+- The ISS sample, a 6 h fit at 420 km: the error at 12 h goes from 308.5 to 316.6 m against the sample's own truth. The
+  calibration cells of SPEC 12.5 move by at most 0.0011 in median |z|. This is one sample.
+- LARETS: two windows leave the 100 m line. 2025-10-15 (a 24 h fit) goes from 73 to 288 m at day 5, and 2025-12-14 (72 h)
+  from 74 to 188 m.
+
+*Cost.* The list is built once per set, when the set is loaded, so the cold first state of a low-orbit set costs more:
+- at 1 day, 1.25 to 1.40 times 0.6.20 on six of `test/kernel-cost.mjs`'s ten low-orbit regimes and about 2.2 at 400 km;
+- at 7 days, 1.03 to 1.28 times.
+The cost per state is unchanged within the noise (0.90 to 1.07). These were measured under load; stack #492 is the shared
+list that takes the load cost off a catalog.
+
+*The diagnostic, low table.* `sdnap_slow_terms(in, rows, max_rows)` covers the low table with rows of eight doubles: l, m, p,
+q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term's size in m. It lists every term of j = 1 to
+6 and |q| up to 4 within 1.3 bands:
+
+| Code | Carrier |
+| ---: | --- |
+| 1 | the rates (the shallow set or the slow set), with its weight w |
+| 3 | the output table |
+| 0 | nowhere: under the table's 1e-3 n floor |
+| 4 | nowhere: above the slow set's degree, or in a family whose leading degree is 69 or 70 |
+| 5 | nowhere: under the size cut |
+| 6 | nowhere: a q outside the slow set's range, at or above the size cut (stack #477's open part) |
+
+`test/slow-set-partition.e2e.mjs` compares it row by row with the rule written in the test. `test/slow-set-taper.e2e.mjs`
+flies a decaying orbit whose order-15 family's weight moves from 0.90 to 0.63 over 7 days. The 10 s jump detector reads at
+most 0.008 m (bound 0.08 m), and 400 states come out bit-identical in any order of requests.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

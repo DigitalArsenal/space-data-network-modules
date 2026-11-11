@@ -22,7 +22,8 @@
 // 3. printed: 5-day arcs on both priors, and the 7-day posterior carried into the next 72 h arc (sigma of the log 0.005);
 // 4. e at most 0.3 (near-circular SWOT- and Sentinel-3-like sets and an e 0.25 set, drag on, and a drag-off Molniya fit):
 //    the fitted flight's day-7 along-track and radial RMS within LOW_BOUND (below) of BASE_4's (byte identity of the
-//    fitted elements until 2026-11-10), the e 0.25 set's within TRUTH_BOUND of the truth itself;
+//    fitted elements until 2026-11-10), the e 0.25 set's and (from 0.6.25, the slow set) the SWOT- and Sentinel-3-like
+//    sets' within TRUTH_BOUND of the truth itself;
 // 5. default-FORCES XP digest bit-exact.
 // Amended (modules-sdn-ap-ocm-write-20261103: this build writes an $OCM, no $OBD and no number in COMMENT): the 7-day arc
 // is read from the record's ORBIT_DETERMINATION.ACTUAL_OD_SPAN (168 h) and its OD COMMENT; the determination's
@@ -77,9 +78,13 @@ const K = 5;
 // 282.17 / 9.649 to 282.90 / 9.649 m (0.73 m), Sentinel-3-like 269.35 / 13.226 to 270.06 / 13.223 m (0.70 m), the drag-off
 // Molniya 51.71 / 35.88 to 55.43 / 29.23 m (e 0.25 against the truth: 29.30 / 7.25 m); from 0.6.22 the baseline is 0.6.22
 // (git f8af1e2b), the bounds kept.
+// SWOT-like and Sentinel-3-like are bounded against the truth from 0.6.25 (the slow set, SPEC 16.18: their 14:1 and 57:4
+// families to degree 70 in the rates). Day-7 along-track / radial on 0.6.22, then with the slow set (measured on 0.6.20's
+// base): SWOT-like 282.90 / 9.65 m to 14.39 / 10.18 m (bound 30 / 15 m); Sentinel-3-like 270.06 / 13.22 m to 27.18 / 13.10 m
+// (bound 55 / 20 m).
 const BASE_4 = {version: '0.6.22', commit: 'f8af1e2b7'};
-const LOW_BOUND = {'SWOT-like': 0.05, 'Sentinel-3-like': 0.05, 'Molniya drag off': 8.5};
-const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}};
+const LOW_BOUND = {'Molniya drag off': 8.5};
+const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 30, r: 15}, 'Sentinel-3-like': {t: 55, r: 20}};
 const SEVEN_DAY_BOUND = {Molniya: 171.5, 'GTO-500': 325.5};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');

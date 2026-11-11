@@ -1829,6 +1829,7 @@ struct RateContext {
   const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
+  int32_t slow_extra;                 ///< SPEC 16.18: of shallow_count, the slow set's own terms (beyond the shallow set's)
   const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
   int32_t zt_degree;
   uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
@@ -5600,6 +5601,19 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.mdaily_degree = md;
     }
   }
+  // SPEC 16.18, the low table (stack #477): with Terms::slow the slow set's list (the shallow set's terms, then its own) is
+  // built before the output table, which yields every term the list holds beyond the shallow set's
+  tess::ShallowTerms* slow_list = nullptr;
+  {
+    const int sd0 = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
+    if (t.slow && sd0 >= 2 && res == 0 && !s.ctx.long_period && br.wide_tess == 0) {
+      tess::ShallowTerms& sc = tess::shallow_scratch();
+      tess::shallow_terms(sd0, n0, e.eo, e.xincl, sc);
+      tess::slow_terms_low(sd0, n0, e.eo, e.xincl, sc);
+      if (sc.count > sc.old_count) slow_list = &sc;
+      s.ctx.slow_extra = sc.count - sc.old_count;
+    }
+  }
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
@@ -5629,7 +5643,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
       int raw_count = 0;
       const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count);
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) {
@@ -5721,8 +5735,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.i0 = anchor->ctx.i0;
       s.ctx.shared_mask |= 8;
     } else {
-      tess::ShallowTerms scratch;
-      const int count = tess::shallow_terms(sd, n0, e.eo, e.xincl, scratch);
+      tess::ShallowTerms& scratch = tess::shallow_scratch();
+      const int count = slow_list != nullptr ? scratch.count : tess::shallow_terms(sd, n0, e.eo, e.xincl, scratch);
       if (count > 0) {
         tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(count * sizeof(tess::ShallowCoef)));
         if (kept == nullptr) return false;

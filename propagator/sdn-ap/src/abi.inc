@@ -522,6 +522,25 @@ double sdnap_hansen_g(int32_t l, int32_t p, int32_t q, double e, int32_t mode) {
   return mode == 1 ? G : dG;
 }
 
+/// Where a set carries each slow tesseral term (SPEC 16.18; stack #467): in = mean motion (rev/day), e, i (deg), the
+/// tesseral cap; rows of 8 doubles (l, m, p, q, psi-dot / n, carrier: 1 the rates, 2 the grid, 3 the output table, 0 nowhere:
+/// under the floor or the slow cut, 4 nowhere: above the carrier's degree, 5 nowhere: under the size cut, 6 nowhere: a q
+/// outside the rule's q range at or above the size cut; then the rates' weight w and the term's size in m), at most
+/// max_rows. Returns the count of all rows, or -1 for a set it does not cover. It covers the sets above their switch outside
+/// low orbit (codes 1, 2, 0 and 4) and the low table (class 0, a period under 1,100 min, at or below its eccentricity switch:
+/// codes 1, 3, 0, 4, 5 and 6; 0 nowhere under the table's 1e-3 n floor, 4 also a family whose leading degree is 69 or 70).
+/// A diagnostic: no flight reads it.
+SDNAP_EXPORT("sdnap_slow_terms")
+int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
+  using namespace sdnap::xpt;
+  const double n = in[0] * sdnap::kTwoPi / sdnap::kMinutesPerDay, e = in[1], inc = in[2] * sdnap::kPi / 180.0;
+  const int cap = static_cast<int>(in[3]);
+  if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || cap < 2 || cap > 70) return -1;
+  const int cls = res::band_of(n);
+  if (cls == 0 && sdnap::kTwoPi / n < kLongPeriodMinutes && !tess::wide_set(cls, e)) return tess::slow_listing_low(cap, n, e, inc, rows, max_rows);
+  return tess::slow_terms(cap, cls, n, e, inc, rows, max_rows);
+}
+
 /// Frame diagnostics on a state (km, km/s; 6 doubles in, 6 out) at the UTC
 /// Julian date whole + frac. mode 0 GCRF -> TEME, 1 TEME -> GCRF (the fit's
 /// GCRF rotation, gcrf.inc), 2 TEME -> Earth-fixed, 3 Earth-fixed -> TEME
@@ -607,6 +626,17 @@ void sdnap_shadow_policy(int32_t policy) {
   sdnap::xpt::shadow_envelope() = policy == 1 || policy == 2 ? policy : 0;
   sdnap::xpt::shadow_threshold() = policy == 3 ? 0.0 : 1e-12;
 }
+
+/// SPEC 16.18, the low table (stack #477), tests only: the slow set's degree (2 to 70; anything else restores 70), so a model
+/// truth cut lower is compared like with like. No $PCF field; the default changes nothing.
+SDNAP_EXPORT("sdnap_slow_degree_cap")
+void sdnap_slow_degree_cap(int32_t cap) { sdnap::xpt::tess::slow_degree_cap() = cap >= 2 && cap <= 70 ? cap : sdnap::xpt::tess::kSlowDegree; }
+
+/// SPEC 16.18, the low table, tests only: the slow set's |q| range (0 as it lands; up to 4), while the q != 0 terms are open
+/// (stack #477).
+SDNAP_EXPORT("sdnap_slow_q_max")
+void sdnap_slow_q_max(int32_t q) { sdnap::xpt::tess::slow_q_max() = q >= 0 && q <= sdnap::xpt::tess::kSlowQMax ? q : 0; }
+
 
 /// Flip the seasonal term's hemisphere at the equator node (|phi| < 1e-14): 1 on, 0 off.
 SDNAP_EXPORT("sdnap_hemisphere_flip")

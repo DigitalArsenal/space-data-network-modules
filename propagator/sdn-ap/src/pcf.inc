@@ -43,12 +43,15 @@ struct Forces {
   int tesseral = 0;                                           ///< MAXIMUM_TESSERAL_DEGREE
   int zonal = 0;                                              ///< MAXIMUM_ZONAL_DEGREE (the $PCF's MAXIMUM_DEGREE): the zonal tail, J6 up
   bool solid_tides = false;                                   ///< SPEC 16.14: SOLID_TIDES IERS_2010 (PERTURBATIONS.SOLID_TIDES_MODEL)
+  /// SPEC 16.18, the low table: the slow set. A record states it in GRAVITY_MODEL (kSlowGravityModel) when its set carries a
+  /// term beyond the shallow set's, and its flight reads it there; a fit by this version runs with it (no $PCF field).
+  bool slow = false;
   bool stock() const {
     return !msis && weather_source == pcfWeatherSource_THEORY_FLUX_MODEL && !dca && tesseral == 0 && zonal == 0 && !solid_tides;
   }
   bool same(const Forces& o) const {
     return msis == o.msis && weather_source == o.weather_source && dca == o.dca && tesseral == o.tesseral && zonal == o.zonal &&
-           solid_tides == o.solid_tides;
+           solid_tides == o.solid_tides;  // slow is the set's own (SPEC 16.18): a series may mix sets with and without it
   }
 };
 
@@ -83,6 +86,19 @@ constexpr double kShortArcHours = 36.0;
 /// holds (a true 0.044 ended at 0.0005-0.0008 and 1.3-4.0 km at day 3 on model truth); under 10 ln 10 it reaches the
 /// value the arc determines.
 constexpr double kDragPriorWideLogSigma = 23.02585092994045684;
+/// BTERM's prior when FIT.DRAG_PRIOR is unset under NRLMSISE-00, on an arc of at least kDragPriorFreeMinArcHours, for an orbit
+/// at or below e 0.3 with its perigee at 600 to 2,500 km (SPEC 12.8; such an arc's band rule is judged on the perigee's height,
+/// so a perigee below 600 km takes the strong-drag median 0.01): LOG_NORMAL, median 0.008 m^2/kg, sigma of the log
+/// kDragPriorWideLogSigma, no fall-back: the arc decides. The band medians it replaces there (0.002 at 600 to 800 km, 0.0005
+/// above, with 12.8's fall-back) sat 2 to 40 times below the numerical propagator's fitted Cd A/m on every measured satellite
+/// (laser spheres 0.002 to 0.016, altimetry 0.01 to 0.05, Sentinel-1 0.008). Shorter arcs keep the band rule: a 24 h arc folds
+/// the theory's own along-track error into a free BTERM and states it to 5 to 40 % (stack #460).
+constexpr double kDragPriorFreeMedian = 0.008;
+constexpr double kDragPriorFreeFloorKm = 600.0, kDragPriorFreeTopKm = 2500.0, kDragPriorFreeMinArcHours = 71.0;
+/// Under the drag, an arc of at least this many hours at or below e 0.3 is fitted at the data's own sigma, as above the
+/// drag (SPEC 12.1, stack #489): the span rule of the drag default above, so a 71 h arc's priors act at their written sigma
+/// in its estimate as in its covariance. A shorter arc, or a set above e 0.3, keeps the stages' 1 km.
+constexpr double kDataSigmaUnderDragMinArcHours = kDragPriorFreeMinArcHours;
 
 /// One call's options, every one at its documented default.
 struct Options {

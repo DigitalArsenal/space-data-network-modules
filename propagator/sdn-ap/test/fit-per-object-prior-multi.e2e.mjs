@@ -13,7 +13,7 @@
 //    value and the larger of its sigma and 0.01): each object's $OMM the bytes of its single-object fit with that prior;
 //    the day-3 errors printed;
 // 2. 0.4.12's per-object path in one call (each object's true BTERM, sigma of the log 0.3): SWOT-like within 2 m of
-//    0.4.12's single-object 21.33 m; Sentinel-3-like printed;
+//    17.31 m, the slow set's (SPEC 16.18; 0.4.12's single-object 21.33 m, held through 0.6.20); Sentinel-3-like printed;
 // 3. the shared prior (SWOT-like's carried prior for both objects in the call's one $PCF, the only way before 0.4.13):
 //    the Sentinel-3-like object worse than under its own posterior, by the amount printed;
 // 4. default-FORCES XP digest bit-exact.
@@ -87,7 +87,9 @@ for (const name of NAMES) {
   assert.ok(r.posterior.bterm > 0 && r.posterior.sigmaLog > 0 && r.posterior.agom !== null && r.posterior.agomSigma > 0, `${name}: fit 1's record states the posterior`);
   assert.ok(r.fit2Posterior.bterm > 0 && r.fit2Posterior.sigmaLog > 0, `${name}: fit 2's record states the posterior`);
 }
-assert.ok(Math.abs(report['SWOT-like'].trueBtermDay3 - 21.33) <= 2, `SWOT-like per-object path: ${report['SWOT-like'].trueBtermDay3} m, 0.4.12 21.33 m`);
+// the day-3 error against the model truth: 21.33 m on 0.4.12 (and through 0.6.20), 17.31 m from 0.6.25, whose slow set
+// (SPEC 16.18) carries the SWOT-like orbit's 14:1 family to degree 70
+assert.ok(Math.abs(report['SWOT-like'].trueBtermDay3 - 17.31) <= 2, `SWOT-like per-object path: ${report['SWOT-like'].trueBtermDay3} m, the slow set's 17.31 m (0.4.12 21.33 m)`);
 assert.ok(report['Sentinel-3-like'].sharedDay3 > report['Sentinel-3-like'].fit2Day3,
   `Sentinel-3-like: the shared prior ${report['Sentinel-3-like'].sharedDay3} m against its own ${report['Sentinel-3-like'].fit2Day3} m`);
 console.log(JSON.stringify({sharedPriorCostOnSentinel3Like: report['Sentinel-3-like'].sharedDay3 - report['Sentinel-3-like'].fit2Day3}));

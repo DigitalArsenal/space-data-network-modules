@@ -154,7 +154,8 @@ inline int prepare() {
   Atmosphere& a = call_atmosphere();
   a = Atmosphere{};
   active() = nullptr;
-  xpt::tess::active() = xpt::tess::Terms{o.tesseral, o.zonal, o.solid_tides};  // AP's gravity terms and tide (SPEC 16, 16.14)
+  // AP's gravity terms and tide (SPEC 16, 16.14); a fit by this version runs the slow set (SPEC 16.18, the low table)
+  xpt::tess::active() = xpt::tess::Terms{o.tesseral, o.zonal, o.solid_tides, o.tesseral >= 2};
   std::vector<SpwDay> days;
   bool have_rows = false, have_dcl = false;
   for (uint32_t i = 0; i < plugin_get_input_count(); ++i) {

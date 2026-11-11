@@ -6,7 +6,7 @@
 //   (SPEC 17.4).
 // - MEAN_ELEMENTS printed against test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18 dist's $OMM: BTERM in
 //   BSTAR, AGOM in MEAN_MOTION_DDOT), the epoch equal; the fitted record flown 7 days within FIT_BOUND of the reference
-//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.22's fit, ap-fit-0.6.22.ocm, history
+//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.25's fit, ap-fit-0.6.25.ocm, history
 //   at FIT_BOUND); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
 // - FIT_STATISTICS: FIT_STATES as the 0.4.0 COMMENT states them, FIT_RMS_KM within FIT_BOUND.rmsM of it, ITERATIONS
@@ -67,7 +67,7 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
 
 const cases = [
   { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.4.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
-    fitReference: "ap-fit-0.6.22.ocm",
+    fitReference: "ap-fit-0.6.25.ocm",
     recorded: { version: "0.6.22", cov: "ap-fit-0.6.4-0.6.22.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.4.eme2000-0.6.22.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.4.teme-0.6.22.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
@@ -91,6 +91,10 @@ const cases = [
 // both flown by this build, the bound kept. The published
 // examples (SDNAP_EXAMPLES) flown by both builds within EXAMPLE_BOUND, measured 2026-11-10: at most 9.6 mm and 1.2e-3
 // (next-china-space-station-css); the sets above e 0.3 measured and printed (THEMIS 0.95 m at most), none in the band.
+// 0.6.25 (the slow set, SPEC 16.18) moves the fit, which now carries the slow tesseral terms at 550 km: 17.7 m and 19.4
+// mm/s from 0.6.22's fit (both flown by 0.6.25), FIT_RMS 40.049 against 41.126 m. Against the fixture's own truth
+// (propagator/ffm's 550 km trajectory) the error 48 to 72 h past the arc goes from 114 m (0.6.24) to 43 m, over the arc
+// 24.0 to 23.9 m. So the own fit is 0.6.25's (ap-fit-0.6.25.ocm; 0.6.22's went), the bounds kept.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };
@@ -128,7 +132,10 @@ for (const c of cases) {
   const comment = String(was.COMMENT);
   const states = Number(/(\d+) states fitted/.exec(comment)?.[1]), rms = /fit RMS ([\d.]+) km/.exec(comment)?.[1], iterations = Number(/(\d+) iterations/.exec(comment)?.[1]);
   check(st.FIT_STATES === states, `${c.name}: FIT_STATES ${st.FIT_STATES} against the 0.4.0 ${states}`);
-  check(Math.abs(1000 * (st.FIT_RMS_KM - Number(rms))) <= FIT_BOUND.rmsM, `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against the 0.4.0 ${rms} (within ${FIT_BOUND.rmsM} m)`);
+  // AP's FIT_RMS against its reference fit's from 0.6.25 (the slow set: 41.126 to 40.049 m; history at FIT_BOUND), XP's
+  // against the 0.4.0 COMMENT's
+  const rmsPinned = c.fitReference ? ocmOf(new Uint8Array(fixture(c.fitReference))).ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM : Number(rms);
+  check(Math.abs(1000 * (st.FIT_RMS_KM - rmsPinned)) <= FIT_BOUND.rmsM, `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against ${c.fitReference ? c.fitReference : `the 0.4.0`}'s ${rmsPinned} (within ${FIT_BOUND.rmsM} m)`);
   console.log(`${c.name}: FIT_RMS ${(1000 * st.FIT_RMS_KM).toFixed(4)} m (0.4.0 ${(1000 * Number(rms)).toFixed(3)}), ITERATIONS ${st.ITERATIONS} (0.4.0 ${iterations})`);
   check(st.CONVERGED === true, `${c.name}: CONVERGED ${st.CONVERGED}`);
   check(st.FIT_START === "2026-10-01T00:00:00.000000" && st.FIT_STOP === "2026-10-02T00:00:00.000000", `${c.name}: arc ${st.FIT_START} to ${st.FIT_STOP}`);
@@ -242,9 +249,9 @@ const covDistance = (a, b) => {
 for (const c of cases) {
   const s = stored[c.name];
   if (!s) continue;
-  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.22's fit), both
+  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.25's fit), both
   // flown by this build; its $ODR names its own $OCM
-  const refName = c.fitReference ? "0.6.22's fit" : "the stored (0.6.4's fit)";
+  const refName = c.fitReference ? "0.6.25's fit" : "the stored (0.6.4's fit)";
   const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.reference, pcfOutputFrame.TEME)];
   check(pf.statusCode === 0 && ps.statusCode === 0, `${c.name}: propagate the fitted and the reference record: ${pf.errorCode ?? "ok"} | ${ps.errorCode ?? "ok"}`);
   if (pf.statusCode === 0 && ps.statusCode === 0) {

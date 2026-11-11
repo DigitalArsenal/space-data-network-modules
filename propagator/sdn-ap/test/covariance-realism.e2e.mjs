@@ -45,6 +45,17 @@ const BEFORE = { commit: "895b6b38de29bc284b4b50a02425a6c3a5fe81a2", sha256: "0b
 // measured 2026-11-10 on 0.6.8, the floors at most 1.1e-3 relative off k_F times 0.6.0's (FLOOR_VU_KM2; FLOOR_VV_KM2
 // 2.3e-5), the medians at most 1.2e-5 relative off the re-fit's (strong drag 2025 24 h R 0.6346524 against 0.634645).
 const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
+// 0.6.25 (the slow set, SPEC 16.18) moves the ISS sample's fit (420 km, a 6 h arc), whose floors scale the DRAG row: its
+// error at the sample's last state (12 h) against the file's own truth goes from 308.5 to 316.6 m (2.6 %), FLOOR_VV_KM2
+// from 1.5128 to 1.5180 times 0.6.0's and FLOOR_WW_KM2 to 1.4626 times. One sample; the held-out cells move by at most
+// 0.0011 in median |z| (6 of 11 moved cells away from 0.674, 5 toward), while the real rows at those altitudes gain (the
+// slow set's pull request: strong drag 74 to 81 and 91 to 102 windows within 100 m of the numerical propagator). So the
+// floors and the moved medians are pinned to this build's (FLOORS_PINNED, MEDIANS_PINNED), the bounds kept; the re-fit's
+// k_F and medians are printed beside them.
+const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00023486888503762855, FLOOR_VU_KM2: -0.0000015785090659220461, FLOOR_VV_KM2: 0.0013455304755818755,
+  FLOOR_WU_KM2: -0.00001938710688143343, FLOOR_WV_KM2: -0.00016822934658166153, FLOOR_WW_KM2: 0.00020878257959815118 };
+const MEDIANS_PINNED = { "T 24 R": 0.633599, "T 24 C": 0.780153, "T 72 R": 0.744594, "T 72 C": 0.874172, "T 167 R": 0.753561,
+  "S1 24 R": 0.636808, "S1 24 C": 0.659764, "S1 72 R": 0.637268, "S1 72 C": 0.559818, "S1 167 R": 0.851372, "S1 167 C": 0.380038 };
 const ISS = { path: "analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", sha256: "fbda48d1584bee1f38ea562625280ecfe4e6643f67c417e91f2fc245ee48311f" };
 const HALF_NORMAL_MEDIAN = 0.6744897501960817, LEADS = [24, 72, 167], AXES = ["R", "I", "C"], RANGE = [0.32, 0.91];
 const REGIMES = { T: "strong drag 2025", S1: "near 700 km 2026" };
@@ -118,12 +129,16 @@ if (row) {
   // the diagonal terms relative to themselves; each cross term relative to the square root of the product of its two
   // diagonal terms (2026-11-11, stack #433: a cross term near zero, held relative to itself, read the two builds' fits
   // stopping apart; a millimeter of state change moved FLOOR_VU_KM2 5.6e-3 of itself)
-  for (const f of ["FLOOR_UU_KM2", "FLOOR_VV_KM2", "FLOOR_WW_KM2"])
-    check(Math.abs(now[f] / was[f] - F.k_F) <= FLOOR_RELATIVE * F.k_F, `${f}: 0.6.1 / 0.6.0 = ${now[f] / was[f]}, k_F ${F.k_F} (within ${FLOOR_RELATIVE} relative)`);
+  const PF = FLOORS_PINNED;
+  for (const f of ["FLOOR_UU_KM2", "FLOOR_VV_KM2", "FLOOR_WW_KM2"]) {
+    console.log(`${f}: 0.6.1 / 0.6.0 = ${now[f] / was[f]}, the re-fit's k_F ${F.k_F}`);
+    check(Math.abs(now[f] / PF[f] - 1) <= FLOOR_RELATIVE, `${f}: ${now[f]} against the slow set's ${PF[f]} (within ${FLOOR_RELATIVE} relative)`);
+  }
   for (const [f, d1, d2] of [["FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_UU_KM2"], ["FLOOR_WU_KM2", "FLOOR_WW_KM2", "FLOOR_UU_KM2"], ["FLOOR_WV_KM2", "FLOOR_WW_KM2", "FLOOR_VV_KM2"]]) {
-    const off = Math.abs(now[f] - F.k_F * was[f]) / (F.k_F * Math.sqrt(was[d1] * was[d2]));
-    console.log(`${f}: 0.6.1 against k_F times 0.6.0's ${off.toExponential(2)} of sqrt(${d1} x ${d2}); relative to itself ${Math.abs(now[f] / was[f] / F.k_F - 1).toExponential(2)}`);
-    check(off <= FLOOR_RELATIVE, `${f}: 0.6.1 against k_F times 0.6.0's differs by ${off} of the square root of ${d1} x ${d2} (within ${FLOOR_RELATIVE})`);
+    const refit = Math.abs(now[f] - F.k_F * was[f]) / (F.k_F * Math.sqrt(was[d1] * was[d2]));
+    const off = Math.abs(now[f] - PF[f]) / Math.sqrt(PF[d1] * PF[d2]);
+    console.log(`${f}: 0.6.1 against k_F times 0.6.0's ${refit.toExponential(2)} of sqrt(${d1} x ${d2}); against the slow set's ${off.toExponential(2)}`);
+    check(off <= FLOOR_RELATIVE, `${f}: against the slow set's differs by ${off} of the square root of ${d1} x ${d2} (within ${FLOOR_RELATIVE})`);
   }
   console.log(`0.6.1 DRAG row as written: s_e ${row.s_e}, s_i ${row.s_i}, s_l ${row.s_l}, c ${row.c}, floor ${row.k_F} times 0.6.0's`);
 }
@@ -181,7 +196,9 @@ console.log(`0.6.1 held-out cells inside the band: ${inside} of ${cells.length} 
 // ---- the re-fit's held-out cells reproduce; none outside the report's range
 for (const e of expected.heldOut) {
   const c = cells.find((q) => q.regime === e.regime && q.h === e.h && q.ax === e.axis);
-  check(c && c.n === e.n && Math.abs(c.m1 - e.medianAbsZ) <= MEDIAN_RELATIVE * e.medianAbsZ, `${e.regime} ${e.h} h ${e.axis}: ${c?.m1} (n ${c?.n}) against the re-fit's ${e.medianAbsZ} (n ${e.n}, within ${MEDIAN_RELATIVE} relative)`);
+  const pinned = MEDIANS_PINNED[`${e.regime} ${e.h} ${e.axis}`], want = pinned ?? e.medianAbsZ;
+  check(c && c.n === e.n && Math.abs(c.m1 - want) <= MEDIAN_RELATIVE * want,
+    `${e.regime} ${e.h} h ${e.axis}: ${c?.m1} (n ${c?.n}) against ${pinned !== undefined ? `the slow set's ${pinned} (the re-fit's ${e.medianAbsZ})` : `the re-fit's ${e.medianAbsZ}`} (n ${e.n}, within ${MEDIAN_RELATIVE} relative)`);
 }
 for (const c of cells) check(c.m1 >= RANGE[0] && c.m1 <= RANGE[1], `${REGIMES[c.regime]} ${c.h} h ${c.ax}: 0.6.1 median |z| ${c.m1} outside ${RANGE.join(" to ")}`);
 fs.rmSync(scratch, { recursive: true, force: true });

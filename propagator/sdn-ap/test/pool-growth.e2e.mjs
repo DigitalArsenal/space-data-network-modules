@@ -12,11 +12,12 @@
 // 20 fresh processes, one at a time: every one completes its 3,000 batches, none takes the pool for dead, no thread
 // traps. The engine behavior it guards against is measured, not read in the standard, so it runs on every landing.
 // What it needs to be able to fail: an oversubscribed machine. The fault needs a pool thread descheduled between its
-// claim and its fill, so on an idle machine the unfixed pool passed too (0 of 100). This test therefore loads the
-// machine itself: busy threads in its own process, twice the cores, while the processes run, everything at the lowest
-// priority (the processes inherit it), so other work keeps its share. Under that load the unfixed pool (the chunk total
-// stored before the room was made) trapped 18 of 20 processes of the same pattern.
-//   node test/pool-growth.e2e.mjs
+// claim and its fill, so on an idle machine the unfixed pool passed too (0 of 100). With SDN_AP_POOL_GROWTH_LOAD=1 the
+// test loads the machine itself: busy threads in its own process, twice the cores, while the processes run, everything
+// at the lowest priority (the processes inherit it). Under that load the unfixed pool (the chunk total stored before
+// the room was made) trapped 18 of 20 processes of the same pattern. Without it (the default, so that a suite run does
+// not load a shared machine) it can fail only when the machine is busy already.
+//   SDN_AP_POOL_GROWTH_LOAD=1 node test/pool-growth.e2e.mjs
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
@@ -125,10 +126,12 @@ int32_t sdnap_test_growth_stress(int32_t rounds, uint32_t reserve, double* out) 
 }`);
 
 const self = fileURLToPath(import.meta.url);
-// the load: this process at the lowest priority (the processes below inherit it), then twice the cores in busy threads
-os.setPriority(19);
+// the load, when asked for: this process at the lowest priority (the processes below inherit it), then twice the cores
+// in busy threads
+const loaded = process.env.SDN_AP_POOL_GROWTH_LOAD === "1";
+if (loaded) os.setPriority(19);
 const stopWord = new SharedArrayBuffer(4), busy = [];
-const LOAD = 2 * os.availableParallelism();
+const LOAD = loaded ? 2 * os.availableParallelism() : 0;
 for (let k = 0; k < LOAD; ++k) busy.push(new Worker(BUSY, { eval: true, workerData: stopWord }));
 const failures = [];
 let views = 0, mostYields = 0, poolBlocks = 0, grewAll = 0;
