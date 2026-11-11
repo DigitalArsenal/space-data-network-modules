@@ -48,8 +48,8 @@ constexpr int32_t kRowPoolDead = 9;
 /// clock (the loaders that build their own import objects give none), and the calling thread may be a browser's main
 /// thread, which may not block on a timed wait. Set from the poll rate measured on the fastest machine it runs on
 /// (SPEC 9: about 30 s there with margin); on a slower or busier machine the same count takes longer, never shorter,
-/// and a suspended process does not count.
-constexpr uint64_t kDeadPollsDefault = 1ull << 37;
+/// and a suspended process does not count. 2^35 from 0.6.33: a poll also reads the running threads' row counters.
+constexpr uint64_t kDeadPollsDefault = 1ull << 35;
 /// The same for start's wait for its own view (kDeadPollsDefault's role, counted in yields).
 constexpr uint64_t kDeadYieldsDefault = 1ull << 34;
 /// The room start makes before it creates a thread: the thread's stack (wasi-libc's default, 64 KiB here: stack #487's
@@ -73,10 +73,10 @@ inline void beat() {
   RowBeat& b = g_row_beats[g_beat_slot];
   __atomic_store_n(&b.rows, __atomic_load_n(&b.rows, __ATOMIC_RELAXED) + 1, __ATOMIC_RELAXED);
 }
-/// The rows every thread has completed.
-inline uint64_t rows_beaten() {
+/// The rows the calling thread and the first `threads` pool threads have completed (slots 0 to `threads`).
+inline uint64_t rows_beaten(int32_t threads) {
   uint64_t sum = 0;
-  for (int32_t k = 0; k <= kMaxThreads; ++k) sum += __atomic_load_n(&g_row_beats[k].rows, __ATOMIC_RELAXED);
+  for (int32_t k = 0; k <= threads; ++k) sum += __atomic_load_n(&g_row_beats[k].rows, __ATOMIC_RELAXED);
   return sum;
 }
 
@@ -293,11 +293,11 @@ inline int32_t run(uint32_t count, size_t reserve) {
   if (threaded) {
     // Done when every chunk is done and no thread can still hold a claim; each poll without a row completed counts
     int32_t last_done = load(&j.done);
-    uint64_t last_rows = rows_beaten(), idle = 0;
+    uint64_t last_rows = rows_beaten(j.threads), idle = 0;
     for (;;) {
       const int32_t d = load(&j.done);
       if (d >= chunks && load(&j.active) == 0) break;
-      const uint64_t rows = rows_beaten();
+      const uint64_t rows = rows_beaten(j.threads);
       if (d != last_done || rows != last_rows) {
         last_done = d;
         last_rows = rows;
