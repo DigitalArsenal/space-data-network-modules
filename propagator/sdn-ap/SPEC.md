@@ -2247,7 +2247,10 @@ measured and failed the strong-drag cells. Raising BTERM's diagonal alone maps t
 follow it. Scaling BTERM's row and column (the rule above e 0.3) shrinks the regression. Both took the 24 h fits' day-1
 in-track coverage from 0.96 to 0.98, outside the band. The DRAG row's s_d = c |n-dot_ng| then carries only what is left
 (the density forecast), with the class's share c: 0.126 (24 h) and 0.163 (72 h), against the DRAG row's 0.112 (12.5).
-The record's NON_GRAVITATIONAL_SHARE states it, and its OD COMMENT names the class with both widths. A stated
+The record's NON_GRAVITATIONAL_SHARE states it, and its OD COMMENT names the class with both widths. The class sits in
+and beside low-orbit commensurability bands, where the theory's own along-track error is 0.1 to 1.9 km at day 5 with
+the drag term right (stack #477). c was fitted on windows that carry that error as if it were drag noise, so it is
+refitted when #477's fix lands, and is expected to come down. A stated
 FIT.DRAG_PRIOR, another arc, a perigee at 600 km or above, SGP4XP, and AP without NRLMSISE-00 fit as before, byte for byte.
 
 The sizes come from the headline-loop strong-drag windows: Swarm A, B, C and GRACE-FO 1 and 2 in 2026, 24 h and 72 h
