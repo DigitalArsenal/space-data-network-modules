@@ -133,6 +133,11 @@ inline Terms& active() {
   return t;
 }
 constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
+/// The low table's fast side (SPEC 16.1, stack #477): in class 0 at or below the switch, the output table's first-order terms
+/// follow the record's MAXIMUM_TESSERAL_DEGREE to kFastCap, by the table's own size cut (kSpKeepM), with |l - 2p| at most
+/// kSpMaxW, and above the m-daily family's degree it also holds the m-daily terms (q = 0, l = 2p). A record that asks for
+/// degree 12 or less builds the table it built before.
+constexpr int kFastCap = 70, kSpMaxW = 17;
 constexpr double kShallowBand = 0.045;
 /// SPEC 16.18, the low table's part (stack #477): with Terms::slow, every term of the embedded field whose own angle rate
 /// at the set's epoch is inside the shallow band (selected to kShallowSelect bands) and whose along-track amplitude through
@@ -861,16 +866,18 @@ inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
   }
 }
 
-/// The upper bound of the table: at most 33 orders x 65 w values x 3 q values + kNearMax.
+/// The upper bound of the table: per degree l, l orders x (min(l, kSpMaxW) + 1) w values x 3 q values (the m-daily terms
+/// among them), + kNearMax.
 constexpr int kNearMax = 500;
 inline int sp_bound(int degree, bool wide) {
   int c = kNearMax;
-  for (int l = 2; l <= degree && !wide; ++l) c += l * (l + 1) * 3;
+  for (int l = 2; l <= degree && !wide; ++l) c += l * ((l < kSpMaxW ? l : kSpMaxW) + 1) * 3;
   return c;
 }
 inline int sp_comb_bound(int degree, bool wide) {
   if (wide) return kNearMax;
-  return (degree + 3) * (2 * degree + 1) * 3 + kNearMax;
+  const int wmax = degree < kSpMaxW ? degree : kSpMaxW;
+  return (degree + 3) * (2 * wmax + 1) * 3 + kNearMax;
 }
 
 /// Fills out at the epoch mean motion n0, inclination i0 and eccentricity e0; returns the count. `cls`: the resonance class,
@@ -879,8 +886,11 @@ inline int sp_comb_bound(int degree, bool wide) {
 /// covariance nominal's, xpt::Branch): the families are on the grid and the table holds the near-resonant terms only.
 /// `slow_held` (SPEC 16.18, the low table with Terms::slow): the slow set's list; a term it holds beyond the shallow set's own
 /// is the rates' inside the band, and the table keeps 1 minus the band taper of it (nothing in both places, nothing in neither).
+/// `mdaily_degree`: the m-daily family's degree; an m-daily term (q = 0, l = 2p) above it is this table's (the low table's
+/// fast side, a degree above kSpCap), at or below it the family's (the default: every m-daily term the family's).
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
-                    SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr) {
+                    SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
+                    int mdaily_degree = kFastCap + 2) {
   int raw_count = 0;
   const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
@@ -951,8 +961,9 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   int count = 0;
   const int max_m = low ? (near_degree > degree ? near_degree : degree) : (wide ? 0 : degree);
   for (int m = 1; m <= max_m; ++m) {
-    const int w_lo = !wide && m <= degree ? -degree : 0;
-    const int w_hi = !wide && m <= degree ? degree : 2;
+    const int wmax = degree < kSpMaxW ? degree : kSpMaxW;
+    const int w_lo = !wide && m <= degree ? -wmax : 0;
+    const int w_hi = !wide && m <= degree ? wmax : 2;
     int l_max_w[35]{};
     int l_max_aw[18]{};
     int l_max_m = 0, aw_max_m = 0;
@@ -1213,7 +1224,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
       const double* fm = Fw[2][w + 17];
 
       for (int q = -1; q <= 1; ++q) {
-        if (q == 0 && w == 0) continue;
+        if (q == 0 && w == 0 && mdaily_degree >= degree) continue;  // every m-daily term the family's
         const int j = w + q;
         const bool q_near = has_near && (j == 1);
         if (!has_gen && !q_near) continue;
@@ -1225,6 +1236,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
 
         const int l_lim = q_near ? l_max : (l_max < degree ? l_max : degree);
         for (int l = l0; l <= l_lim; l += 2) {
+          if (q == 0 && w == 0 && l <= mdaily_degree) continue;  // the m-daily family's
           if (l <= degree) {
             if (!has_gen || aw > l || j < -(l + 1) || j > l + 1) continue;
           } else {
@@ -1308,6 +1320,55 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
     }
   }
   return count;
+}
+
+/// Whether a raw table (sp_terms' raw_out, a set's ctx.sp) holds the term (l, m, p, q): the output table's own rule, term by
+/// term (stack #477: the census of the field reads it).
+inline bool sp_fast_kept_in(const SpCoef* raw, int count, int l, int m, int p, int q) {
+  const int w = l - 2 * p, j = w + q;
+  for (int k = 0; k < count; ++k)
+    if (raw[k].l == l && raw[k].m == m && raw[k].w == w && raw[k].j == j) return true;
+  return false;
+}
+/// The same for the table a set with these epoch elements builds (sp_terms with the arguments xp_init gives it in the low
+/// table: degree, near degree, class, low, the slow set's list, the m-daily family's degree), built once per argument set on
+/// the calling thread.
+inline bool sp_fast_kept(int degree, int near_degree, int l, int m, int p, int q, double n0, double e0, double i0, int cls,
+                         bool low, const ShallowTerms* slow_held = nullptr, int mdaily_degree = kFastCap + 2) {
+  struct Built {
+    int degree = -1, near_degree = -1, cls = -1, mdaily_degree = -1, count = 0, raw_count = 0;
+    bool low = false;
+    double n0 = 0, e0 = 0, i0 = 0;
+    const ShallowTerms* slow_held = nullptr;
+    SpCombCoef* comb = nullptr;
+    SpCoef* raw = nullptr;
+  };
+  static thread_local Built b;
+  if (b.degree != degree || b.near_degree != near_degree || b.cls != cls || b.low != low || b.n0 != n0 || b.e0 != e0 ||
+      b.i0 != i0 || b.slow_held != slow_held || b.mdaily_degree != mdaily_degree) {
+    std::free(b.comb);
+    std::free(b.raw);
+    b = Built{};
+    b.comb = static_cast<SpCombCoef*>(std::malloc(sp_comb_bound(degree, false) * sizeof(SpCombCoef)));
+    b.raw = static_cast<SpCoef*>(std::malloc(sp_bound(degree, false) * sizeof(SpCoef)));
+    if (b.comb == nullptr || b.raw == nullptr) {
+      std::free(b.comb);
+      std::free(b.raw);
+      b = Built{};
+      return false;
+    }
+    b.count = sp_terms(degree, near_degree, cls, low, false, n0, i0, e0, b.comb, b.raw, &b.raw_count, slow_held, mdaily_degree);
+    b.degree = degree;
+    b.near_degree = near_degree;
+    b.cls = cls;
+    b.low = low;
+    b.n0 = n0;
+    b.e0 = e0;
+    b.i0 = i0;
+    b.slow_held = slow_held;
+    b.mdaily_degree = mdaily_degree;
+  }
+  return sp_fast_kept_in(b.raw, b.raw_count, l, m, p, q);
 }
 
 alignas(16) static constexpr float kSpMSeq[76] = {

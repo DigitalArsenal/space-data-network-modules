@@ -5609,7 +5609,11 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.slow_extra = sc.count - sc.old_count;
     }
   }
-  const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
+  // the low table's fast side (stack #477): class 0 at or below the switch follows the record's degree to kFastCap; every
+  // other branch keeps kSpCap (above the switch the families are the grid's, 16.11)
+  const bool fast_low = res == 0 && !s.ctx.long_period && br.wide_tess == 0;
+  const int sp_cap = fast_low ? tess::kFastCap : tess::kSpCap;
+  const int spd = t.tesseral > sp_cap ? sp_cap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
     const bool wide_sp = br.wide_tess != 0;
@@ -5638,7 +5642,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
       int raw_count = 0;
       const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list);
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list,
+                         spd > tess::kSpCap ? md : tess::kFastCap + 2);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) {
