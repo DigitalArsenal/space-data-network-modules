@@ -2,7 +2,8 @@
 // Registration: orbit-accuracy-experiments experiments/operator-theory/THEMIS-RIPPLE-FIX.md (modules-sdn-ap-tesseral-series-ripple-20261105).
 // Above e 0.3 (SPEC 16.11) the first-order tesseral families of degree 2 to 12 are a closed-form grid in the eccentric anomaly.
 // 1. Against the full-field quadrature (each (l, m) of the pinned field evaluated directly on the Kepler ellipse, 2,048 mean anomalies
-//    by 32 arguments of perigee, |j| <= 1023, the table's admission rules), 7 days at 300 s at the mean elements of the AP (31, 20) fits
+//    by 32 arguments of perigee, |j| <= 1023, the grid's admission rules: from the version of stack #467 the one-day class leaves
+//    out only its 27 terms and the terms slower than 1e-2 n), 7 days at 300 s at the mean elements of the AP (31, 20) fits
 //    of THEMIS D 2013-02-12 and THEMIS E 2013-02-16 and at the GTO fixture's: RMS <= 1 m, maximum <= 5 m, median |second difference|
 //    of the difference <= 0.1 m.
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
@@ -162,7 +163,8 @@ int32_t sdnap_test_ripple_verify(const double* in, double* out) {
           for (int t = 0; t < carried.count; ++t) if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == (l - w) / 2 && carried.t[t].q == j - w) out_ = true;
           if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = true;
           const double psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
-          if (out_ || std::fabs(psidot) < tess::kShallowBand * n0) continue;
+          // the grid's slow band (SPEC 16.18): the one-day class keeps every term but its own down to kOneDayFloor (stack #467)
+          if (out_ || std::fabs(psidot) < (cls == 1 ? tess::kOneDayFloor : tess::kShallowBand) * n0) continue;
           const double Zer = (epr[at] - emr[at]) / (2 * h), Zei = (epi[at] - emi[at]) / (2 * h), Zir = (ipr[at] - imr[at]) / (2 * h), Zii = (ipi[at] - imi[at]) / (2 * h);
           // rates (a, e, i, Omega, omega, M) of this harmonic, then divided by i psi-dot (lambda also by (i psi-dot)^2 through n)
           double R[6][2];
