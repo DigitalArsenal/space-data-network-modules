@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.27 (dist af2eb204).
+Version 0.6.28 (dist 05675a67).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -3071,8 +3071,9 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
 
-Which slow terms the grid keeps (from 0.6.24, in the one-day class, every slow term the class's rates do not carry, down to
-the floor of 1e-2 n; stack #467) is 16.18's rule; its reasons and measurements are stated there.
+Which slow terms the grid keeps is 16.18's rule; its reasons and measurements are stated there. From 0.6.28 it keeps none: every
+class above its switch carries its slow terms of degree 2 to 12 in its rates (stack #473). From 0.6.24 to 0.6.27 the one-day
+class kept every slow term its rates did not carry on the grid, down to 1e-2 n (stack #467).
 
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
@@ -3929,24 +3930,25 @@ coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h an
 A term whose rate does not hold still belongs in the rates:
 - in low orbit, where drag moves n, and moves a k:j family's rate by j times as much, through the band and through zero.
   There the acceptance is a decaying orbit that crosses a band edge with no kink in its output (stack #477);
-- above the switch, a term slower than its class's floor, where it drifts about as slowly as the class's own libration (the
-  one-day class below; stack #474).
+- above the switch, every slow term (from 0.6.28; stack #473, #474, below). There the Sun and Moon move omega and Omega on a
+  high orbit as fast as J2 does, while the grid takes a term's divisor from J2's secular rates. A term under the one-day
+  class's floor drifts about as slowly as the class's own libration.
 
 *The diagnostic.* `sdnap_slow_terms(in, rows, max_rows)` takes in = the mean motion (rev/day), e, i (deg) and the tesseral
 cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to the cap:
 - l, m, p, q and psi-dot / n;
 - the term's carrier (the table below);
-- the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch no taper applies, so
-  w is 1 for the class's terms and 0 otherwise;
+- the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch w is 1 for the class's
+  terms and, from 0.6.28, the band taper of its own rate for every other term in the rates (the grid holds 1 - w);
 - the term's size in m. That is its along-track amplitude through the mean motion, 3 |j| A / (a psi-dot^2), with
   A = mu / a^(l+1) |F G| |C, S| at the epoch elements and G exact at the epoch e. A size cut is chosen on this number.
 
 | Code | Carrier |
 | ---: | --- |
-| 1 | the rates: the class's terms (6.1), the half-day class's tail (16.2), the shallow set (16.2) |
+| 1 | the rates: the class's terms (6.1), the half-day class's tail (16.2), the shallow set (16.2), and from 0.6.28 above the switch every other slow term at or above the size cut (below) |
 | 2 | the grid (16.11) |
 | 3 | the output table (16.2) |
-| 0 | nowhere: under the floor, or left out of the grid as slow |
+| 0 | nowhere: under the low table's floor (through 0.6.27, above the switch: under the one-day floor, or left out of the grid as slow) |
 | 4 | nowhere: above the carrier's degree |
 | 5 | nowhere: under the size cut |
 | 6 | nowhere: a q outside the rule's q range, at or above the size cut |
@@ -3969,10 +3971,10 @@ above their eccentricity switch outside low orbit (class 0 below 1100 min), and 
 - the terms of degrees 3 and 4 with |q| above 4, large at high e.
 
 A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at day 5 on THEMIS A's real geometry, whose
-angle drifts at 0.0444 n. A set just above the cut kept them. From 0.6.24 each term of a one-day set above the switch is
-carried in exactly one place:
+angle drifts at 0.0444 n. A set just above the cut kept them. From 0.6.24 to 0.6.27 each term of a one-day set above the
+switch was carried in exactly one place (from 0.6.28 the rule for every class below replaces it):
 - the class's rates: its 27 terms;
-- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster (`kOneDayFloor`);
+- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster;
 - nowhere: a term slower than 1e-2 n (the floor below), and the terms above degree 12 (the table holds no near-resonant
   terms outside low orbit).
 
@@ -4003,6 +4005,43 @@ and 120 deg; 70 x 70, no Sun or Moon, day 5) hold 98 terms of degree 2 to 12 bet
 On the THEMIS-like sets and on the one-day set at e 0.3001 no term of degree 2 to 12 lies between the two floors. What the
 floor and the degree cut leave out on such a synchronous set (105 m and 42 m, against 2.7 m and 2.1 m with a 4 x 4 field) is
 stack #474.
+
+*Every class above its switch (from 0.6.28; stack #473, with #474's floor).*
+- **The rule.** Every set above its eccentricity switch outside low orbit carries in its rates each slow term of degree 2 to
+  the grid's degree (12) that its class's terms do not, at or above the size cut of 0.5 m. In the code that is
+  `slow_terms_wide` and `wide_slow_six`.
+  - The rates are Lagrange's equations at the current elements, with F G at the epoch's e and i moved linearly.
+  - Each (j, m, w) is weighted by the band taper of its own rate. The grid holds the rest of each harmonic.
+  - The diagnostic writes code 1 with that weight, 5 under the size cut, and 4 above degree 12.
+- **Before 0.6.28.** The grid left each family's whole slow band out in every class but the one-day class, and nothing else
+  carried it. The one-day class kept the band on the grid down to the floor, and that floor and the terms under it are gone.
+- **Why the rates and not the grid.** The rates follow a term's angle with the flight's own elements. A term kept on the grid
+  takes its divisor from J2's secular rates, and on a high orbit the Sun and Moon move omega and Omega as fast as J2 does.
+  Keeping the band on the grid down to 1e-2 n took e 0.9 at 0.50 rev/day from 2.7 to 1.6 km with the field alone, but from
+  1.7 to 25 km with the Sun and Moon.
+- **Double precision.** At high degree and eccentricity the terms' F G and F dG/de leave a float's range, so the table is in
+  double.
+- **Degree 12.** The list stops at the grid's degree. Above degree 12 nothing carries a family's fast harmonics, and its slow
+  harmonics alone put the transfer orbit below at 165 m (to degree 31) and 186 m (to degree 70), against 134 m.
+
+**What the rule changes.** The numerical propagator (FFM 2.3.0, DE440s) is flown from each case's state, and AP is fitted to
+its own 0 to 120 h. D is the largest distance over that span, in m. Constant weather; the truth's drag and radiation terms
+are held at the truth's values.
+
+| Case (stack #498's elements) | 12 x 12 alone | 70 x 70 alone | everything | everything, 0.6.28 |
+| --- | ---: | ---: | ---: | ---: |
+| e 0.9, perigee 300 km, 0.50 rev/day | 2,710 to 189 | 2,770 to 176 | 1,690 | 1,490 |
+| e 0.9, perigee 1,400 km, 0.40 rev/day | 4,290 to 136 | 4,280 to 139 | 4,226 | 5,167 |
+| one-day, exactly synchronous (1.0027 rev/day, e 0.82) | 1,020 to 49 | 1,000 to 109 | 990.5 | 106.6 |
+| transfer orbit (250 km, e 0.73) | 29 to 22 | 98.8 to 95.0 | 134.1 | 128.6 |
+| e 0.7, perigee 650 km (eight-hour class) | 46.3 to 46.4 | 144.5 | 155.5 | 155.6 |
+| Molniya | | | 34.3 | 34.3 |
+
+On the e 0.9 case at 1,400 km the rule takes the field alone from 4.3 km to 139 m. With the Sun and Moon it is 0.9 km worse:
+that piece is the grid of the fast families under the Sun and Moon (stack #479).
+
+`test/slow-band-every-class.e2e.mjs` checks one set of each class with `sdnap_slow_terms`, and flies one model truth at e 0.9
+(0.40 rev/day, fitted to its own 5 days): 242.7 m against 2,691.4 m before.
 
 *The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
 - in low orbit (class 0 below 1100 min), through 0.6.24: the commensurabilities with j of 2 to 4 (orders 25 and up) and the
