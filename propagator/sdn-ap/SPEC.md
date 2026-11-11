@@ -1502,14 +1502,46 @@ The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the r
 against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
 grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
 
-What the caches cost in accuracy. Against a build of 0.6.9's terms that bakes every cache fresh at every state, 30 days
-at 60 s (test/kernel-cost.mjs --diff):
+What the caches cost in accuracy. The reference is a build of this module's own sources that bakes every evaluation cache
+at the state itself on every call: the tesseral base, ae, pe and resonance bakes and the m-daily terms, with the
+third-body bracket, drag-pass and half-day caches never reused. Against it, over 30 days at 60 s
+(test/kernel-cost.mjs --diff):
 
-- this module is within 0.8 to 4 mm on near-circular low orbits, 26 mm at e 0.05 with tesseral 31, and 4.5 mm at e 0.1;
-- 0.6.9's caches put its output up to 0.98 m from the same reference (500 km, high drag, active weather), 0.53 m (400 km,
-  high drag, quiet) and 0.18 m (e 0.05, tesseral 31).
+- this module is within 0.2 to 5.6 mm on near-circular low orbits (300 to 1,400 km), 0.07 mm in MEO, 0.15 mm at GEO and
+  0.22 mm in IGSO;
+- with tesseral 31 it is within 27 mm at e 0.05, 4.9 mm at e 0.1 and 1.5 mm at e 0.2;
+- on the eccentric orbits without tesseral terms (transfer, Molniya, THEMIS, TESS, and e 0.05 to 0.2) it gives the
+  reference's own bits;
+- 0.6.15 sits up to 0.98 m from the same reference (500 km, high drag, active weather), 0.53 m (400 km, high drag, quiet)
+  and 0.18 m (e 0.05, tesseral 31). Its other near-circular rows are 2 to 40 mm away. Its rows without tesseral terms
+  are 0.13 to 0.64 mm away, from this build's step and drag-pass changes, not from caches.
 
-The change from 0.6.9 in ascending order is therefore mostly 0.6.9's own cache error. A comparison of two builds
+On the epoch store's stored record (test/fixtures/ap-fit-0.6.4.ocm, 289 states over a day at 550 km), this module and
+0.6.15 are each within 1 mm of the reference: 0.84 and 0.86 mm.
+
+The fit's covariance at epoch comes from central differences of the theory over steps of 1e-7 in the elements. Taking
+steps ten times larger moves it by 3.3e-6 of its largest entry on this module, and by 1.57e-3 on 0.6.15 (the fit lane's
+measurement, stack #456). 0.6.15's cells put non-smooth changes into those differences; the sets' caches do not.
+
+Through a fit, the millimeters can become tens of meters (stack #456). The headline harness flew this build against
+0.6.15 on its 2,096 real windows. XP's output is the same bits, and AP's states move by millimeters. But every AP
+forecast there comes out of a fit, and the fit stops where no step along its columns lowers the cost, which is not a
+minimum. A millimeter can move where a loose fit stops.
+- Galileo 72 h fits with Y0 solved show it most. Their median error at 7 days went from 43.8 to 45.9 m; 41 of 42
+  windows stay within 100 m of the numerical propagator, against 42; one window moved 43.4 m.
+- The two windows that moved most were flown by three builds: 0.6.15, this build and the reference. One fitted set,
+  flown by all three, gives the same errors to 0.17 mm at every lead day. Fits of the same arc end within 0.05 m of RMS
+  of each other yet part by up to 64 m at 7 days, and by 6 m with Y0 held.
+- The largest change of one window's error is below 0.3 m on laser spheres, laser geodetic, MEO, IGSO and 24 h
+  altimetry fits. It is 0.8 to 2.6 m on 72 h altimetry, near-700 km, THEMIS 72 h and 24 h Galileo fits; 8 to 45 m
+  on geostationary, strong-drag, Chandra 168 h and TESS 72 h fits; and 68 and 286 m on commercial geostationary 72 h
+  and 24 h fits.
+- On the commercial geostationary window that moved most, the reference's fitted set flies 34 m from this build's and
+  705 m from 0.6.15's at 7 days.
+- One TESS 336 h fit moved 9.75 km: this build's fit stopped at 1,083 m of RMS, against 868 m for 0.6.15 and the
+  reference.
+
+A comparison of two builds
 (test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity), and
 prints the reversed and shuffled differences beside it. SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
