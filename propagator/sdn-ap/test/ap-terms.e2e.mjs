@@ -72,10 +72,11 @@ const { ap, xp, rows } = await fixtureSets(h);
 // floor being far wider); 0.6.5 (24d7d75f, its speed changes: SPEC 16.8) moves the states by 2.904 mm and 2.989 um/s and
 // the covariance by 7.2e-5 of a line's largest entry. The fit: this build's fit of the same 24 h arc stops at another point
 // inside its tolerance, 7.3 cm from 0.6.4's along the grid (0.6.5: 26 against 28 iterations, FIT_RMS 41.127 against 41.130 m).
-// AP's own Sun and Moon (SPEC 16.15, stack #446) move the flight by 35.315 mm and 38.968 um/s (the covariance by 7.12e-5 of
-// a line's largest entry, as before) and the fit by 51.77 mm (FIT_RMS 41.1280 against 41.1299 m).
+// AP's own Sun and Moon (SPEC 16.15, stack #446) move the flight by 34.676 mm and 38.386 um/s (the covariance by 7.13e-5 of
+// a line's largest entry, as before) and the fit from 31.31 mm (0.6.19) to 117.70 mm and 130.42 um/s (FIT_RMS 41.1258
+// against 41.1299 m; 48 to 72 h past the arc both 0.114 km from the truth).
 const FLIGHT = { posM: 0.04, velMmS: 0.045, covOfLargest: 1e-4 };
-const FIT = { posM: 0.1, velMmS: 0.1, rmsM: 0.01 };
+const FIT = { posM: 0.15, velMmS: 0.15, rmsM: 0.01 };
 
 // --- the flight: the stored AP record (0.6.4's fit) on the fixture grid against 0.6.4's flight of it
 const stored = fixture("ap-fit-0.6.4.ocm"), storedFlight = fixture("ap-fit-0.6.4.oem");

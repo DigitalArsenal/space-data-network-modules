@@ -12,7 +12,10 @@
 //   twenty alone (the holders no longer flown are reclaimed), the first twenty again (their runs refill from where they
 //   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
 // The pool's threads: 1,000 AP rows of the carrier lane's catalog mix through sdnap_propagate_soa at 20 instants, on 0
-// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424).
+// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424). AP's Sun and Moon (SPEC 16.15,
+// nodes of an absolute grid in each thread's store): 64 rows whose epochs lie 85 1/3 days apart, so their nodes share
+// store slots, on 0 and 4 threads against each epoch's rows alone, bit for bit; a batch at one instant
+// (sdnap_propagate_soa) against the minutes call at the same instants, bit for bit.
 // Through `propagate` (#420): a time asked alone against the same time inside one call of 2,016 states, bit for bit.
 // JS moves bytes and compares numbers the module produced.
 //   node test/set-caches.e2e.mjs
@@ -239,6 +242,61 @@ for (const [name, o] of Object.entries(ORBITS)) {
   const y0differ = y0zero.filter((v, k) => !Object.is(v, y0four[k])).length;
   check(y0differ === 0, `Y0 rows: ${y0differ} of ${y0zero.length} values differ between 0 and 4 threads`);
   console.log(`Y0: two records equal but for ECOM2_Y0 bit for bit as each alone; 200 rows with Y0 on 0 and 4 threads bit for bit`);
+}
+{
+  // AP's Sun and Moon (SPEC 16.15): nodes on an absolute 8 h grid in each thread's store of 256 nodes by index, so times
+  // 85 1/3 days apart (256 nodes) share a slot. 64 medium-orbit rows in the row store (AP's terms selected), every other
+  // one with its epoch 2,048 h after the rest, each row at the same minutes from its own epoch (a read of one row's node
+  // takes the slot of the other's): on 0 and on 4 pool threads against each epoch's rows in a store of their own (no
+  // slot shared), bit for bit; and a batch at one instant (sdnap_propagate_soa, whose shared bodies are SGP4XP's: an AP
+  // set reads its own) against the minutes call at the same instants, bit for bit.
+  const e0 = 2461328.5, shift = 2048 / 24;
+  const rows = Array.from({ length: 64 }, (_, k) => {
+    const ep = k % 2 ? e0 : e0 + shift, whole = Math.floor(ep - 0.5) + 0.5;
+    return { epochWhole: whole, epochFrac: ep - whole, meanMotion: 2.0056, ecc: 0.005, inc: 55, raan: (40 + 5.3 * k) % 360, argp: 40,
+      ma: (10 + 11.7 * k) % 360, bterm: 0.001, agom: 0.01, norad: 83000 + k, theory: THEORY.SGP4XP };
+  });
+  const minutes = Array.from({ length: 40 }, (_, k) => 1440 + 180 * k);
+  const rowStore = async (set, threads) => {
+    const m = await open(testBuild, threads);
+    m.x.sdnap_test_select_ap(31, 20);
+    const bytes = elementRows(set), n = set.length, p = m.x.sdnap_alloc(bytes.length);
+    new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
+    check(m.x.sdnap_init_elements(p, n) === n, `bodies, ${threads} threads: the row store took ${n} rows`);
+    return { m, n, mins: m.x.sdnap_alloc(8 * n), out: m.x.sdnap_alloc(48 * n), status: m.x.sdnap_alloc(4 * n) };
+  };
+  const flyMinutes = async (set, threads) => {
+    const s = await rowStore(set, threads), all = [];
+    for (const t of minutes) {
+      new Float64Array(s.m.h.memory.buffer, s.mins, s.n).fill(t);
+      check(s.m.x.sdnap_propagate_minutes_soa(s.mins, 0, s.n, s.out, s.status) === 0, `bodies, ${threads} threads: sdnap_propagate_minutes_soa`);
+      const v = new Float64Array(s.m.h.memory.buffer, s.out, 6 * s.n);
+      all.push(Array.from({ length: s.n }, (_, i) => [0, 1, 2, 3, 4, 5].map((c) => v[c * s.n + i])));
+    }
+    return all;
+  };
+  const mixed0 = await flyMinutes(rows, 0), mixed4 = await flyMinutes(rows, 4);
+  const evens = await flyMinutes(rows.filter((_, k) => k % 2 === 0), 0), odds = await flyMinutes(rows.filter((_, k) => k % 2 === 1), 0);
+  let differ = 0;
+  minutes.forEach((_, q) => rows.forEach((_, k) => {
+    const alone = (k % 2 ? odds : evens)[q][k >> 1];
+    if (!same(mixed0[q][k], alone) || !same(mixed4[q][k], alone)) ++differ;
+  }));
+  check(differ === 0, `bodies: rows 85 1/3 days apart (store slots shared) on 0 and 4 threads against each epoch's rows alone: ${differ} of ${rows.length * minutes.length} states differ`);
+  // the rows whose epochs are at 0 h, at quarter days: a batch at one instant against the minutes call
+  const set = rows.filter((_, k) => k % 2 === 1), s = await rowStore(set, 0);
+  let batchDiffer = 0;
+  for (let q = 0; q < 20; ++q) {
+    const whole = e0 + 1 + Math.floor(q / 4), frac = (q % 4) / 4;
+    check(s.m.x.sdnap_propagate_soa(whole, frac, 0, s.n, 0, s.out, s.status) === 0, "bodies: sdnap_propagate_soa");
+    const batch = Array.from(new Float64Array(s.m.h.memory.buffer, s.out, 6 * s.n));
+    new Float64Array(s.m.h.memory.buffer, s.mins, s.n).set(set.map((r) => ((whole - r.epochWhole) + (frac - r.epochFrac)) * 1440));
+    check(s.m.x.sdnap_propagate_minutes_soa(s.mins, 0, s.n, s.out, s.status) === 0, "bodies: sdnap_propagate_minutes_soa");
+    const call = Array.from(new Float64Array(s.m.h.memory.buffer, s.out, 6 * s.n));
+    batchDiffer += batch.filter((v, k) => !Object.is(v, call[k])).length;
+  }
+  check(batchDiffer === 0, `bodies: a batch at one instant against the minutes call at the same instants: ${batchDiffer} of ${20 * 6 * s.n} values differ`);
+  console.log(`AP's Sun and Moon: 64 rows 85 1/3 days apart (store slots shared) on 0 and 4 threads bit for bit as each epoch's rows alone; a batch at one instant bit for bit as the minutes call`);
 }
 {
   // through propagate (#420): a time alone against the same time in one call
