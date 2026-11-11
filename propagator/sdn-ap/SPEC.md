@@ -2661,7 +2661,8 @@ omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-dai
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
 shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
-precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (3.1 MB a grid), and read at
+precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
+the slopes below, 3.1 MB before 0.6.14), and read at
 output time in E by the cubic Hermite between the two nodes about E, linear in the mean elements' offsets, times
 e^{i(w omega + m beta)}. Each node's slope is the fourth-order central difference of its four neighbours on the periodic
 grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.
