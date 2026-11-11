@@ -4543,6 +4543,43 @@ inline double slow_size_m(int l, int m, int j, double fg, double a, double psido
   return 3.0 * std::abs(j) * A / (a * pd * pd) * kRe * 1e3;
 }
 
+/// A slow term's size through the eccentricity vector (m): the forced e-vector amplitude A_e / (n a^2 |psi-dot|), A_e =
+/// mu / a^(l+1) |F dG/de| |C, S|, times 2 a (once per revolution along track; a radially). A term of q other than 0 has G of
+/// order e^|q|, so its size through the mean motion vanishes as e does while this one does not: at e 0 a q = +-1 term acts on
+/// the orbit through e and omega alone.
+inline double slow_size_e_m(int l, int m, double fdg, double a, double n, double psidot) {
+  double amp = kMu / a;
+  for (int k = 0; k < l; ++k) amp /= a;
+  const double A = amp * std::fabs(fdg) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+  const double pd = std::fabs(psidot) > 1e-15 ? std::fabs(psidot) : 1e-15;
+  return 2.0 * A / (n * a * pd) * kRe * 1e3;
+}
+
+/// A slow term's G_lpq and dG/de at the epoch e (SPEC 16.18). q = 0 under e 0.03: the series to e^4. Otherwise res::exact_G,
+/// whose dG below e 2e-4 is a tabulated Hansen series's, or 0 where none is tabulated (degrees above 5): there the slow set
+/// takes dG as the central difference of exact_G's own G over e0 +- 2e-4 (G is analytic in e, odd or even in it with q). A term
+/// of |q| 1 has G = e (l + 1 + 2 q w) / 2 + O(e^3) at small e, so its dG/de, which drives the eccentricity vector, stays of
+/// order l as e goes to 0 while its G vanishes.
+inline void slow_G(int l, int p, int q, int j, double e0, double& G, double& dG) {
+  if (q == 0 && e0 < 0.03) {
+    const double lp = static_cast<double>(l);
+    const double c2 = 0.25 * lp * (lp + 1.0) - static_cast<double>(j) * j;
+    const double c4 = (lp * (lp + 1.0) * (lp + 2.0) * (lp + 3.0) - (8.0 * lp * (lp + 2.0) + 1.0)) * (1.0 / 64.0);
+    const double e2 = e0 * e0;
+    G = 1.0 + e2 * (c2 + c4 * e2);
+    dG = (e0 >= 2e-4 || l <= 5) ? e0 * (2.0 * c2 + 4.0 * c4 * e2) : 0.0;
+    return;
+  }
+  res::exact_G(l, p, q, e0, G, dG);
+  if (q != 0 && e0 < 2e-4) {
+    constexpr double h = 2e-4;
+    double Gp, Gm, d;
+    res::exact_G(l, p, q, e0 + h, Gp, d);
+    res::exact_G(l, p, q, e0 - h, Gm, d);
+    dG = (Gp - Gm) / (2.0 * h);
+  }
+}
+
 /// The slow set's own terms (SPEC 16.18, the low table; Terms::slow), appended to the shallow set's: every (l, m, p, q) of the
 /// field to slow_degree_cap() with j = l - 2p + q from 1 to kSlowJMax and |q| up to slow_q_max() (0 as it lands) whose own rate is inside
 /// kShallowSelect bands at the epoch and whose size reaches kSlowKeepM, except the shallow set's own (j = 1, q = 0, to its
@@ -4574,17 +4611,9 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
           const int pp = (l - w) / 2;
           if (pp < 0 || pp > l) continue;
           double G, dG;
-          if (q == 0 && e0 < 0.03) {
-            const double lp = static_cast<double>(l);
-            const double c2 = 0.25 * lp * (lp + 1.0) - static_cast<double>(j) * j;
-            const double c4 = (lp * (lp + 1.0) * (lp + 2.0) * (lp + 3.0) - (8.0 * lp * (lp + 2.0) + 1.0)) * (1.0 / 64.0);
-            const double e2 = e0 * e0;
-            G = 1.0 + e2 * (c2 + c4 * e2);
-            dG = (e0 >= 2e-4 || l <= 5) ? e0 * (2.0 * c2 + 4.0 * c4 * e2) : 0.0;
-          } else {
-            res::exact_G(l, pp, q, e0, G, dG);
-          }
-          if (slow_size_m(l, m, j, F[l] * G, a, psidot) < kSlowKeepM) continue;
+          slow_G(l, pp, q, j, e0, G, dG);
+          // the larger of its size through the mean motion and through the eccentricity vector reaches the cut
+          if (slow_size_m(l, m, j, F[l] * G, a, psidot) < kSlowKeepM && slow_size_e_m(l, m, F[l] * dG, a, n, psidot) < kSlowKeepM) continue;
           if (out.count >= kShallowMax) { ++out.over; continue; }  // counted: the diagnostic lists such a term as code 7
           res::ResCoef& c = out.c[out.count++];
           c.l = static_cast<int8_t>(l);
@@ -4655,15 +4684,9 @@ inline int slow_listing_low(int cap, double n, double e0, double i0, double* row
           const int p = (l - w) / 2;
           if (p < 0 || p > l) continue;
           double G, dG;
-          if (q == 0 && e0 < 0.03) {  // as slow_terms_low takes it
-            const double lp = static_cast<double>(l);
-            const double c2 = 0.25 * lp * (lp + 1.0) - static_cast<double>(j) * j;
-            const double c4 = (lp * (lp + 1.0) * (lp + 2.0) * (lp + 3.0) - (8.0 * lp * (lp + 2.0) + 1.0)) * (1.0 / 64.0);
-            G = 1.0 + e0 * e0 * (c2 + c4 * e0 * e0);
-          } else {
-            res::exact_G(l, p, q, e0, G, dG);
-          }
-          const double size = slow_size_m(l, m, j, F[l] * G, a, psidot);
+          slow_G(l, p, q, j, e0, G, dG);  // as slow_terms_low takes it
+          // the larger of the term's sizes through the mean motion and through the eccentricity vector (slow_terms_low's cut)
+          const double size = std::max(slow_size_m(l, m, j, F[l] * G, a, psidot), slow_size_e_m(l, m, F[l] * dG, a, n, psidot));
           bool held = false;
           for (int k = 0; !held && k < sc.count; ++k) {
             const res::ResCoef& c = sc.c[k];
