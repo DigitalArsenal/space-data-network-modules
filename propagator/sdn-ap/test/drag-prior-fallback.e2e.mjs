@@ -37,10 +37,10 @@ import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads'
 // 3's baseline and bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg). Against 0.4.17 (git 3c8fcb5c) until
 // 0.6.22: bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters and a fit by
 // centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8, at most 0.022 m in the
-// errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM. AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446) move these
-// fits from 0.4.17's by up to @@MOVE_ERR@@ m in the errors, @@MOVE_B@@ in BTERM and @@MOVE_A@@ in AGOM over the 30
-// windows; from 0.6.22 the baseline is 0.6.22 (git @@BASE_3@@), the bound kept.
-const BASE_3 = {version: '0.6.22', commit: '@@BASE_3@@'};
+// errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM. AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446; with
+// 0.6.21's shadow) move these fits from 0.4.17's by up to 3.214 m in the errors, 6.89e-4 relative in BTERM and 4.08e-5 in
+// AGOM over the 30 windows (printed as from0417); from 0.6.22 the baseline is 0.6.22 (git f8af1e2b), the bound kept.
+const BASE_3 = {version: '0.6.22', commit: 'f8af1e2b7'};
 const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';

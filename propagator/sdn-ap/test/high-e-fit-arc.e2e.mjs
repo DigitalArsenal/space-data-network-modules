@@ -2,7 +2,8 @@
 // Registration (2026-11-03, modules-sdn-ap-high-e-fit-arc-20261103): above e 0.3 with the perigee in the drag (SPEC
 // 12.8) the fit takes the longest arc the ephemeris holds up to 7 days when no drag prior is stated, and BTERM's posterior
 // width counts one independent sample per revolution (the RMS floor) with the determination naming an arc shorter than 7
-// days as not separating the coefficient. Baseline the 0.4.16 release (git 1ec779200), the module under test this build.
+// days as not separating the coefficient. Baseline (4) BASE_4 (the 0.4.16 release, git 1ec779200, until 0.6.21), the
+// module under test this build.
 // Model truth as test/lib/heo-model-truth.mjs (FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 at constant weather,
 // B = 0.044 m^2/kg, no SRP; AP FORCES 31,20 with NRLMSISE-00; AGOM pinned at 0); Molniya (2 rev/day, e 0.74, perigee 541
 // km) and GTO-500 (2.40 rev/day, e 0.7081, 500 km); 7 days flown after the arc on a 10-minute grid, day-7 whole-day RMS.
@@ -20,7 +21,7 @@
 //    against 2.42 %; the width is the offset whose signature over the arc equals the RMS floor);
 // 3. printed: 5-day arcs on both priors, and the 7-day posterior carried into the next 72 h arc (sigma of the log 0.005);
 // 4. e at most 0.3 (near-circular SWOT- and Sentinel-3-like sets and an e 0.25 set, drag on, and a drag-off Molniya fit):
-//    the fitted flight's day-7 along-track and radial RMS within LOW_BOUND (below) of 0.4.16's (byte identity of the
+//    the fitted flight's day-7 along-track and radial RMS within LOW_BOUND (below) of BASE_4's (byte identity of the
 //    fitted elements until 2026-11-10), the e 0.25 set's within TRUTH_BOUND of the truth itself;
 // 5. default-FORCES XP digest bit-exact.
 // Amended (modules-sdn-ap-ocm-write-20261103: this build writes an $OCM, no $OBD and no number in COMMENT): the 7-day arc
@@ -63,7 +64,8 @@ const FIXTURES = {
 // solutions), so 171.5 m; GTO-500 310.01 m as given and 309.97, 246.11, 309.70, 310.02, 310.03 m (BTERM 0.0438547-9, once
 // 0.0439150), so 325.5 m (300 m on 2.0.4's truth at the registration).
 const K = 5;
-// e at most 0.3 and the drag-off Molniya: the fitted flight's day-7 along-track and radial RMS against 0.4.16's, in
+// e at most 0.3 and the drag-off Molniya: the fitted flight's day-7 along-track and radial RMS against BASE_4's (0.4.16's
+// until 0.6.21), in
 // meters (no byte identity through a fit: the fit stops inside its tolerance, 7.3 cm between 0.6.4's and 0.6.5's on the
 // 550 km fixture, ap-terms.e2e.mjs). Measured on 0.6.8: SWOT-like 0.0014 / 0.0001 m, Sentinel-3-like 0.015 / 0.00004 m;
 // the drag-off Molniya moved 0.96 / 7.95 m (51.71 / 35.88 to 52.67 / 27.93) at 0.6.3 (the grid above e 0.3, SPEC 16.11).
@@ -71,10 +73,12 @@ const K = 5;
 // 72.55 / 19.16 m on 0.4.16, 5864.50 / 969.05 m from 0.6.4 (416a67e9: a class 0 set flies the grid above e 0.05, which
 // carried no 6:1 commensurability) to 0.6.10, 29.08 / 7.46 m on 0.6.11 (DigitalArsenal/spacedatanetwork-stack#393);
 // 60 m along-track as in test/class0-commensurability.e2e.mjs, 15 m radial.
-// AP's own Sun and Moon (SPEC 16.17, stack #446, on 0.6.19) move the two low orbits' day-7 along-track by 0.73 m (SWOT-like,
-// 282.17 to 282.90 m) and 0.70 m (Sentinel-3-like, 269.35 to 270.06 m), radial under 3 mm; the drag-off Molniya 51.71 /
-// 35.88 to 55.43 / 29.23 m: the low orbits' bound goes from 0.05 to 1 m.
-const LOW_BOUND = {'SWOT-like': 1, 'Sentinel-3-like': 1, 'Molniya drag off': 8.5};
+// AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446) move the fits from 0.4.16's: day-7 along-track / radial SWOT-like
+// 282.17 / 9.649 to 282.90 / 9.649 m (0.73 m), Sentinel-3-like 269.35 / 13.226 to 270.06 / 13.223 m (0.70 m), the drag-off
+// Molniya 51.71 / 35.88 to 55.43 / 29.23 m (e 0.25 against the truth: 29.30 / 7.25 m); from 0.6.22 the baseline is 0.6.22
+// (git f8af1e2b), the bounds kept.
+const BASE_4 = {version: '0.6.22', commit: 'f8af1e2b7'};
+const LOW_BOUND = {'SWOT-like': 0.05, 'Sentinel-3-like': 0.05, 'Molniya drag off': 8.5};
 const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}};
 const SEVEN_DAY_BOUND = {Molniya: 171.5, 'GTO-500': 325.5};
 const posterior = (text) => {
@@ -94,7 +98,7 @@ if (!isMainThread) {
 } else {
   const {wasmPath} = await import('./lib/module.mjs');
   const {scratchRoot} = await import('./lib/scratch.mjs');
-  const BASE = '1ec779200', scratch = path.join(scratchRoot, 'arc-e2e');
+  const BASE = BASE_4.commit, scratch = path.join(scratchRoot, 'arc-e2e');
   const modules = fileURLToPath(new URL('../../../', import.meta.url));
   fs.mkdirSync(scratch, {recursive: true});
   const baseline = path.join(scratch, `release-${BASE}.wasm`);
@@ -134,7 +138,7 @@ if (!isMainThread) {
     'Molniya drag off': {...FIXTURES.Molniya, drag: false},
   };
   for (const [f, c] of Object.entries(LOW))
-    for (const [arm, modulePath] of [['0.4.16', baseline], ['release', wasmPath]])
+    for (const [arm, modulePath] of [[BASE_4.version, baseline], ['release', wasmPath]])
       jobs.push({key: `${arm} ${f}`, c: {name: f, ...c, hourly: true, gridMinutes: 60, modulePath}});
   await run(jobs);
   const carried = [];
@@ -169,15 +173,15 @@ if (!isMainThread) {
   }
   const lowFailures = [];
   for (const f of Object.keys(LOW)) {
-    const a = results[`0.4.16 ${f}`], b = results[`release ${f}`];
+    const a = results[`${BASE_4.version} ${f}`], b = results[`release ${f}`];
     const same = JSON.stringify(setOf(a.omm).elements) === JSON.stringify(setOf(b.omm).elements);
     const dt = Math.abs(b.t - a.t), dr = Math.abs(b.r - a.r);
-    console.log(JSON.stringify({lowE: f, identical: same, day7AlongTrack: [a.t, b.t], day7Radial: [a.r, b.r], modelAt0416: a.model, model: b.model}));
+    console.log(JSON.stringify({lowE: f, identical: same, day7AlongTrack: [a.t, b.t], day7Radial: [a.r, b.r], modelAtBase: a.model, model: b.model}));
     const truth = TRUTH_BOUND[f];
     if (truth) {
       if (!(b.t <= truth.t && b.r <= truth.r)) lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against the truth (at most ${truth.t} and ${truth.r} m)`);
     } else if (!(dt <= LOW_BOUND[f] && dr <= LOW_BOUND[f])) {
-      lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against 0.4.16's ${a.t} and ${a.r} (within ${LOW_BOUND[f]} m)`);
+      lowFailures.push(`${f}: day-7 along-track ${b.t} m and radial ${b.r} m against ${BASE_4.version}'s ${a.t} and ${a.r} (within ${LOW_BOUND[f]} m)`);
     }
   }
   assert.ok(lowFailures.length === 0, lowFailures.join('\n'));
