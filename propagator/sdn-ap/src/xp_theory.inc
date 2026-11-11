@@ -308,22 +308,22 @@ inline Bodies bodies_at(double d50) {
 inline constexpr double kApBodiesNodeHours = 8.0;
 inline constexpr int kApBodiesStoreSlots = 256;
 struct ApBodiesNode {
-  int64_t key_p1;
-  Bodies b;
+  int64_t key = std::numeric_limits<int64_t>::min();  // the node index held, or none
+  Bodies b{};
 };
 inline thread_local ApBodiesNode* g_ap_bodies_store = nullptr;
 inline const Bodies& ap_bodies_node(int64_t k) {
-  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots]{};
+  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
   ApBodiesNode& s = g_ap_bodies_store[static_cast<uint64_t>(k) & (kApBodiesStoreSlots - 1)];
-  if (s.key_p1 != k + 1) {
+  if (s.key != k) {
     s.b = ap_bodies_at(static_cast<double>(k) * (kApBodiesNodeHours / 24.0));
-    s.key_p1 = k + 1;
+    s.key = k;
   }
   return s.b;
 }
 struct alignas(16) BodiesHourCache {
   alignas(16) Bodies b[6]{};
-  int64_t hkey_p1 = 0;
+  int64_t hkey = std::numeric_limits<int64_t>::min();  // the node interval held, or none
 };
 inline thread_local BodiesHourCache g_bodies_hour_cache{};
 
@@ -332,18 +332,17 @@ inline Bodies bodies_at_ap(double d50) {
   const double h = d50 * (24.0 / kApBodiesNodeHours);
   const double hfloor = std::floor(h);
   const int64_t hkey = static_cast<int64_t>(hfloor);
-  const int64_t hp1 = hkey + 1;
-  if (__builtin_expect(bc.hkey_p1 != hp1, 0)) {
-    if (bc.hkey_p1 != 0 && hp1 == bc.hkey_p1 + 1) {
+  if (__builtin_expect(bc.hkey != hkey, 0)) {
+    if (bc.hkey != std::numeric_limits<int64_t>::min() && hkey == bc.hkey + 1) {
       for (int q = 0; q < 5; ++q) bc.b[q] = bc.b[q + 1];
       bc.b[5] = ap_bodies_node(hkey + 3);
-    } else if (bc.hkey_p1 != 0 && hp1 == bc.hkey_p1 - 1) {
+    } else if (bc.hkey != std::numeric_limits<int64_t>::min() && hkey == bc.hkey - 1) {
       for (int q = 5; q > 0; --q) bc.b[q] = bc.b[q - 1];
       bc.b[0] = ap_bodies_node(hkey - 2);
     } else {
       for (int q = 0; q < 6; ++q) bc.b[q] = ap_bodies_node(hkey - 2 + q);
     }
-    bc.hkey_p1 = hp1;
+    bc.hkey = hkey;
   }
   // Lagrange weights on the nodes hkey - 2 .. hkey + 3 at hkey + u
   const double u = h - hfloor;
