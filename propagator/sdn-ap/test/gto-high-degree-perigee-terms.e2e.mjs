@@ -9,8 +9,10 @@
 //    422.11 / 459.10);
 // 2. re-recorded as improvements, each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 94.07 /
 //    56.07, half-day 31.44 / 16.84, 12 h at 55 deg 66.68 / 5.70 (0.6.3, FFM 2.2.1 truth);
-// 3. Molniya with drag, its coefficient fitted: re-recorded at 238.03 / 173.92 within 0.5 (0.6.3; 0.4.14: 460.98 / 260.43; the
-//    fitted coefficient 0.04462 against the truth's 0.044, SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103);
+// 3. Molniya with drag, its coefficient fitted: re-recorded at 239.68 / 175.18 within 0.5 (0.6.12, the perigee passes of
+//    SPEC 16.12, its fitted coefficient 0.0446231 against 0.0446183; 238.50 / 174.28 on 0.6.11, 238.03 / 173.92 at 0.6.3;
+//    0.4.14: 460.98 / 260.43; the fitted coefficient 0.04462 against the truth's 0.044, SPEC 16.11,
+//    modules-sdn-ap-drag-high-eccentricity-20261103; pinned at the truth's 0.044, 80.71 m on 0.6.12 against 80.76 m);
 //    with the coefficient pinned at the truth's 0.044: along-track no worse than 0.4.14's;
 // 4. the field cut to 4x4 on both sides, the Sun, Moon and J5 off on both sides, 2-minute samples: day-7 3D RMS at most
 //    100 (0.4.14 printed first);
@@ -202,7 +204,7 @@ for (const [name, [t, r]] of Object.entries({'GTO-500': [94.07, 56.07], 'half-da
   assert.ok(fixtures[name].release.alongTrack < fixtures[name]['0.4.14'].alongTrack && fixtures[name].release.radial < fixtures[name]['0.4.14'].radial, `${name}: below 0.4.14`);
 }
 // Molniya re-recorded at 0.6.3 (the grid, exact keys in a fit; FFM 2.2.1 truth)
-assert.ok(near(fixtures.Molniya.release.alongTrack, 238.03, 0.5) && near(fixtures.Molniya.release.radial, 173.92, 0.5), 'Molniya, coefficient fitted: within 0.5 m of 238.03 / 173.92');
+assert.ok(near(fixtures.Molniya.release.alongTrack, 239.68, 0.5) && near(fixtures.Molniya.release.radial, 175.18, 0.5), 'Molniya, coefficient fitted: within 0.5 m of 239.68 / 175.18');
 assert.ok(fixtures['Molniya-pinned'].release.alongTrack <= fixtures['Molniya-pinned']['0.4.14'].alongTrack, 'Molniya, coefficient pinned: along-track no worse than 0.4.14');
 assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {

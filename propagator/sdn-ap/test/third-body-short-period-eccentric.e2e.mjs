@@ -14,8 +14,8 @@
 // 2. degree 4 up off (OFF; FFM EGM96 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
 //    fixture at most 95 m and of the Molniya fixture at most 85 m;
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
-//    radial RMS within 0.5 m of half-day 31.45/16.88, Molniya 238.50/174.28 and 12 h at 55 deg 66.61/5.68 m, GTO no
-//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 30.22, 332.16, 64.94 and
+//    radial RMS within 0.5 m of half-day 31.45/16.88, Molniya 239.68/175.18 and 12 h at 55 deg 66.61/5.68 m, GTO no
+//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 30.22, 333.09, 64.94 and
 //    275.78 m (re-recorded 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3's grid moved them, the history at the assertions;
 //    re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04, 338.22, 303.15
 //    before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
@@ -274,8 +274,10 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   // 59.33 to 31.44 / 16.84 / 30.17 m, Molniya 276.53 / 208.40 / 393.01 to 238.03 / 173.92 / 331.47 m, 12 h at 55 deg
   // 67.33 / 25.13 / 55.96 to 66.68 / 5.70 / 65.12 m; 0.6.5 by at most 0.47 m since. The pins before: 0.4.15 (SPEC 16.11) and,
   // for Molniya, 0.4.16 (SPEC 16.12, 12.8: 291.41 / 219.72 / 419.70 at 0.4.15) on FFM 2.0.4's truth (half-day 34.33 /
-  // 23.12 / 60.02, Molniya 276.44 / 208.33 / 392.90, 12 h 67.25 / 25.32 / 56.38 m)
-  for (const [f, [t, r, s]] of Object.entries({'half-day': [31.45, 16.88, 30.22], Molniya: [238.50, 174.28, 332.16], '12-hour-55deg': [66.61, 5.68, 64.94]})) {
+  // 23.12 / 60.02, Molniya 276.44 / 208.33 / 392.90, 12 h 67.25 / 25.32 / 56.38 m). Molniya, the one fixture with drag,
+  // re-recorded at 0.6.12 (the perigee passes of SPEC 16.12, its fitted coefficient 0.0446231 against 0.0446183): 238.50 /
+  // 174.28 / 332.16 on 0.6.8 to 0.6.11
+  for (const [f, [t, r, s]] of Object.entries({'half-day': [31.45, 16.88, 30.22], Molniya: [239.68, 175.18, 333.09], '12-hour-55deg': [66.61, 5.68, 64.94]})) {
     assert.ok(Math.abs(report.releaseDay7[f].alongTrack - t) <= 0.5, `${f}: day-7 along-track RMS ${report.releaseDay7[f].alongTrack} m`);
     assert.ok(Math.abs(report.releaseDay7[f].radial - r) <= 0.5, `${f}: day-7 radial RMS ${report.releaseDay7[f].radial} m`);
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);
