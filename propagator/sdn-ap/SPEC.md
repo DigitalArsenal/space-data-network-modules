@@ -3369,6 +3369,18 @@ none with more than two boundaries on the night half (4,000 samples of it each).
 values), perigee radius from 1.005 to 60 Earth radii (13 values), 90 Sun elevations up to the highest whose cylinder
 reaches the orbit, 360 directions in the plane.
 
+*No shadow missed, none added*, measured against S itself: 4,000 samples of the night half, every sampled maximum
+refined by golden section to 1e-14 rad, a shadow wherever a refined maximum is above 0.
+- On the grid above, there is no miss and no false shadow among 6,318,000 geometries, 4,638,201 of them shadowed. Where
+  both see a shadow, their widths agree to 8e-7 deg of true anomaly.
+- The grazing band covers e 0 to 0.9 (18 values), perigee radius 1.005 to 6.61 Earth radii (20 values) and 360 Sun
+  directions. Each direction's grazing elevation is bisected on S, then 33 elevations below it are flown, from 1e-1 to
+  1e-12 of it below. That is 4,151,232 geometries, all shadowed. None is added. 17,283 are missed, each within about
+  1e-12 of its grazing elevation, with S's largest value at most 4.4e-16 p^2 (the rounding of S itself) and a shadow at
+  most 1.24e-5 deg of true anomaly wide.
+- Neither set has a geometry with two maxima of S on the night half. test/radiation-shadow.e2e.mjs sweeps a transfer
+  orbit through grazing where the maximum lies 37 deg from the anti-Sun direction.
+
 *Measured* (`sdnap_ap_srp_rates`: mode 0 the theory, mode 1 the same sphere and cylinder averaged numerically over
 one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow.e2e.mjs):
 - The six rates agree within 7.6e-7 of each rate's scale, through grazing (Galileo-like and geostationary) and with
