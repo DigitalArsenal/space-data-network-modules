@@ -3605,7 +3605,7 @@ inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const
 
 [[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]);
 
-/// AP in the long-period regime (SPEC 5.5): the Sun's and Moon's rates of the mean elements y, the rates that move AP's
+/// AP in the long-period regime (SPEC 16.19): the Sun's and Moon's rates of the mean elements y, the rates that move AP's
 /// osculating state there (SPEC 8's J2 output, output_j2_osc) by the bodies' point-mass acceleration at that state:
 /// J m = (0, a), J the output's Jacobian in the six elements (forward differences), solved by Gaussian elimination with
 /// partial pivoting. The Gauss equations at the mean state alone move the J2 output by J2's short-period Jacobian times
@@ -3929,7 +3929,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         if (ap_lp_fast && last_dF != 0.0) fm::sincos_fast(F, sF_lp, cF_lp);
       }
       double tb[6];
-      // AP: the rates that move its osculating output by the bodies' acceleration (SPEC 5.5); SGP4XP, or where that
+      // AP: the rates that move its osculating output by the bodies' acceleration (SPEC 16.19); SGP4XP, or where that
       // fails: the Gauss equations at the mean state
       const bool through_output = ctx.ap_third_body && lp_third_body_through_output(y, b, tb);
       if (through_output) {
