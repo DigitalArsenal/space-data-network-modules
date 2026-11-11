@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E2E (sdn-ap 0.6.14, stack issues #398 and #420): an AP state is a function of its set and its time alone.
+// E2E (sdn-ap 0.6.16, stack issues #398 and #420): an AP state is a function of its set and its time alone.
 // Made-up AP sets with the headline forces (zonal 20, tesseral 31, NRLMSISE-00 on made-up quiet rows), near-circular
 // (500 km, 830 km, MEO, GEO) and eccentric (e 0.1 and 0.25 with tesseral 31, the transfer orbit with and without
 // tesseral 31, Molniya), 7 days at 300 s from a day after the epoch. In the epoch store (sdnap_epochs_set_at):

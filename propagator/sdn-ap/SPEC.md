@@ -1462,7 +1462,7 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
-agree to 0 mm]*. An AP state in this module is a function of its set and its time alone (0.6.13): the order of requests,
+agree to 0 mm]*. An AP state in this module is a function of its set and its time alone (0.6.16): the order of requests,
 the call they come in (one epoch, the first state of a call, a state inside a batch), the sets flown before or between
 them, whether the covariance is asked, and the path (`propagate`, `propagate_epochs`, the epoch store's exports) leave its
 bits unchanged, with one exception stated below. What makes it so:
@@ -1523,7 +1523,7 @@ checkpoints exist, a query within their span integrates at most one checkpoint i
 span it integrates from the nearest preceding retained node, so work grows with the remaining time gap.
 The node cache has bounded storage, not a time-independent bound on query work.
 
-**Side B: the sets' caches (0.6.13).** An AP set of the epoch store (`load_epochs`) takes its caches from one pool
+**Side B: the sets' caches (0.6.16).** An AP set of the epoch store (`load_epochs`) takes its caches from one pool
 while it is flown: its third-body bracket tables, m-daily terms and tesseral cache, and its nodes
 as two runs (forward and backward) up to the checkpoint span. A time inside a run is a lookup, never a re-integration. A
 run starts from the latest node known at or before the time (the epoch, a checkpoint or the window's), and starts again

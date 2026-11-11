@@ -371,7 +371,7 @@ The instance's own growth agrees with these within 10 %. The default budget hold
 and 13,252 in MEO; 1 GB holds 14,658 and 53,008 (SPEC 9 has every orbit). Sets beyond it fly on the thread's caches, with
 the same states. A host that screens a catalog flies it object by object: at 10,000 sets at 500 km, 0.93 µs a state at
 the default budget (0.85 times SGP4-XP), against 9.1 µs time-major (7.8 times; 2.25 µs, 1.9 times, when 1 GB holds them
-all).
+all), measured at a 1-minute load of 10 to 14 on the 28-core build machine.
 
 Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 4.9 MB (with 0.6.14's slopes),
 and a node grid while it is flown: 10 MB a set flown when every set has its own elements (4.8 MB when 100 sets share one

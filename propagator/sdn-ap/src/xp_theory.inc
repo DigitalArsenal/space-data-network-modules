@@ -5646,7 +5646,7 @@ struct DragPassCache {
 
 /// What a set in a store keeps of the evaluation caches between its states (SPEC 9): the third-body tables of its
 /// bracket, its m-daily terms and its tesseral terms, held from the pool within its memory budget (CachePool). A set
-/// without them uses the thread's, as every set did before 0.6.12.
+/// without them uses the thread's, as every set did before 0.6.16.
 /// One direction's grid nodes, contiguous from the epoch (node k at position k - 1), up to the checkpoint span: a time
 /// in it is a lookup, never a re-integration (run_bracket).
 struct NodeRun {
