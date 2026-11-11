@@ -142,7 +142,7 @@ constexpr double kShallowBand = 0.045;
 constexpr int kSlowDegree = 70;
 constexpr int kSlowJMax = 6, kSlowQMax = 4;
 constexpr double kSlowKeepM = 0.5;
-/// The slow set's q range: |q| up to kSlowQMax from 0.6.NN (stack #477's second part; 0.6.25 landed q = 0), every term of it
+/// The slow set's q range: |q| up to kSlowQMax from 0.6.27 (stack #477's second part; 0.6.25 landed q = 0), every term of it
 /// by its own rate and size; tests only may narrow it (sdnap_slow_q_max).
 inline int& slow_q_max() {
   static int q = kSlowQMax;

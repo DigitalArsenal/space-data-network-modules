@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.26 (dist 1769bd15).
+Version 0.6.27 (dist af2eb204).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -187,8 +187,8 @@ went from 16.9-136.1 m to 8.5-11.1 m at day 7 at 12 longitudes; what remains is 
 `test/one-day-resonant-tail.e2e.mjs`).
 
 The slow set (from 0.6.25) carries, in a fitted low orbit, every tesseral term of degree 2 to 70 with j = 1 to 6 and |q| up
-to 4 (from 0.6.NN; q = 0 in 0.6.25) whose own angle drifts within 1.3 x 0.045 n at the epoch and whose size reaches 0.5 m
-(along track through the mean motion, or from 0.6.NN once per revolution through the eccentricity vector). Each term is
+to 4 (from 0.6.27; q = 0 in 0.6.25) whose own angle drifts within 1.3 x 0.045 n at the epoch and whose size reaches 0.5 m
+(along track through the mean motion, or from 0.6.27 once per revolution through the eccentricity vector). Each term is
 tapered by
 its own current rate, and the output table holds the rest, so a term that drag moves through its band's edge leaves no
 step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst day-5 error after a pinned fit went from 1,584 m to
