@@ -4884,7 +4884,8 @@ inline void b1_unit_rates(const RateContext& ctx, const double* y, const Frame& 
 /// lambda's also takes the mean motion's part, (1 / n^2) int K2(s) rho_n(lambda - s) ds, K2(s) = -(pi / 6 - s / 2 +
 /// s^2 / (4 pi)) (the kernels of the zero-mean first and second antiderivatives of a periodic function). The panels are
 /// cut at the output's own longitude, where K1 jumps. About B1 / n^2: 1.9 m at the geostationary radius for 1e-8 m/s^2.
-inline void b1_output(const RateContext& ctx, double t, const double* ym, const Bodies* shared, double* d) {
+/// This is the part from the output's own mean state; b1_output takes it from a table of the bracket where it can.
+inline void b1_output_direct(const RateContext& ctx, double t, const double* ym, const Bodies* shared, double* d) {
   for (int j = 0; j < 6; ++j) d[j] = 0.0;
   const Frame fr = frame_of(ym);
   const Vec3 su = shared != nullptr ? shared->sun_u : bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay).sun_u;
@@ -4926,6 +4927,175 @@ inline void b1_output(const RateContext& ctx, double t, const double* ym, const 
   const double inv_n = 1.0 / fr.n;
   for (int j = 0; j < 6; ++j) d[j] = s1[j] * inv_n;
   d[kLam] += s2 * inv_n * inv_n;
+}
+
+/// SPEC 16.13: B1's output part over one sub-interval (at most kB1TableMinutes) of the bracket a state is flown in: the
+/// mean orbit and the Sun at the sub-interval's middle, the panels' ends in eccentric and mean longitude (the latter
+/// from the first end), and the integrals the kernels reduce to. With lambda' over the arc [L_0, L_0 + 2 pi) and the
+/// output's lambda in it, s = lambda - lambda' (+ 2 pi where lambda' > lambda), so int K1(s) rho = (1/2 - lambda / (2 pi))
+/// I0 + I1 / (2 pi) - P0(lambda) and int K2(s) rho = -(pi/6 I0 - S1 / 2 + S2 / (4 pi)), S1 = lambda I0 - I1 + 2 pi P0,
+/// S2 = lambda^2 I0 - 2 lambda I1 + I2 + 4 pi (lambda P0 - P1) + 4 pi^2 P0: I_k the arc's moments of rho, P0 and P1
+/// those from lambda to the arc's end, kept at every panel end and completed at the output by the part of its panel
+/// past it (three points). A pure function of the bracket's two nodes and the sub-interval.
+constexpr double kB1TableMinutes = 360.0;
+struct B1Table {
+  uint64_t ctx_id;
+  double d50_epoch, lo_t, hi_t;
+  int32_t lo_index, hi_index, sub, np;
+  B1Orbit o;
+  double k, h, n, bc, bs, L0;
+  double F[kEcom2Panels], L[kEcom2Panels];      ///< the panels' ends: eccentric longitude, mean longitude less L0
+  double P0[kEcom2Panels][6], P1[kEcom2Panels];  ///< from each end to the arc's end: int rho_j, int lambda rho_n
+  double I0[6], I1[6], I2;                       ///< over the arc: int rho_j, int lambda rho_j, int lambda^2 rho_n
+};
+constexpr int kB1Tables = 4;  ///< a thread's tables, the last four sub-intervals flown (B1 sets are few)
+inline thread_local B1Table* g_b1_tables[kB1Tables] = {};
+inline thread_local int g_b1_next = 0;
+
+inline void b1_table_make(const RateContext& ctx, const double* y, Vec3 su, B1Table& tb) {
+  const Frame fr = frame_of(y);
+  tb.o = b1_orbit(y, fr, su);
+  tb.k = y[kAf];
+  tb.h = y[kAg];
+  tb.n = fr.n;
+  const double acc = 3600.0 / (1000.0 * kRe);  // m/s^2 in ER/min^2
+  tb.bc = ctx.rad_b1c * acc;
+  tb.bs = ctx.rad_b1s * acc;
+  double pts[kEcom2Panels];
+  const int np = ecom2_panels(ctx, y, fr, su, pts);
+  tb.np = np;
+  auto mean_longitude = [&](double F) { return F + tb.h * std::cos(F) - tb.k * std::sin(F); };
+  tb.L0 = mean_longitude(pts[0]);
+  for (int q = 0; q < np; ++q) {
+    tb.F[q] = pts[q];
+    tb.L[q] = q == 0 ? 0.0 : mean_longitude(pts[q]) - tb.L0;
+  }
+  for (int j = 0; j < 6; ++j) {
+    tb.P0[np - 1][j] = 0.0;
+    tb.I1[j] = 0.0;
+  }
+  tb.P1[np - 1] = 0.0;
+  tb.I2 = 0.0;
+  for (int q = np - 2; q >= 0; --q) {
+    double s0[6] = {0, 0, 0, 0, 0, 0}, s1[6] = {0, 0, 0, 0, 0, 0}, s2 = 0.0;
+    const double half = 0.5 * (pts[q + 1] - pts[q]), mid = 0.5 * (pts[q + 1] + pts[q]);
+    if (half > 0.5e-9) {
+      for (int g = 0; g < 3; ++g) {
+        const double Fq = mid + half * kGl3X[g];
+        double sF, cF, cdu, sdu, rho[6];
+        fm::sincos(Fq, sF, cF);
+        const double roa = b1_point(tb.o, sF, cF, cdu, sdu, rho);
+        const double Lq = Fq + tb.h * cF - tb.k * sF - tb.L0;
+        const double w = kGl3W[g] * half * roa * (tb.bc * cdu + tb.bs * sdu);
+        for (int j = 0; j < 6; ++j) {
+          s0[j] += w * rho[j];
+          s1[j] += w * Lq * rho[j];
+        }
+        s2 += w * Lq * Lq * rho[kN];
+      }
+    }
+    for (int j = 0; j < 6; ++j) {
+      tb.P0[q][j] = tb.P0[q + 1][j] + s0[j];
+      tb.I1[j] += s1[j];
+    }
+    tb.P1[q] = tb.P1[q + 1] + s1[kN];
+    tb.I2 += s2;
+  }
+  for (int j = 0; j < 6; ++j) tb.I0[j] = tb.P0[0][j];
+}
+
+inline void b1_table_eval(const B1Table& tb, double lam_out, double* d) {
+  double lam = lam_out - tb.L0;  // from the arc's first end, in [0, 2 pi)
+  lam -= kTwoPi * std::floor(lam / kTwoPi);
+  double p0[6] = {0, 0, 0, 0, 0, 0}, p1 = 0.0;
+  const int last = tb.np - 1;
+  if (lam < tb.L[last]) {  // on the arc: the part of its panel past lambda, then the ends' sums
+    int lo = 0, hi = last;
+    while (hi - lo > 1) {
+      const int m = (lo + hi) / 2;
+      if (tb.L[m] <= lam) lo = m;
+      else hi = m;
+    }
+    const double dL = tb.L[hi] - tb.L[lo];
+    double F = dL > 0.0 ? tb.F[lo] + (tb.F[hi] - tb.F[lo]) * (lam - tb.L[lo]) / dL : tb.F[lo];
+    for (int it = 0; it < 20; ++it) {
+      double sF, cF;
+      fm::sincos(F, sF, cF);
+      const double dF = (F + tb.h * cF - tb.k * sF - tb.L0 - lam) / (1.0 - tb.h * sF - tb.k * cF);
+      F -= dF;
+      if (std::fabs(dF) < 1e-14) break;
+    }
+    const double half = 0.5 * (tb.F[hi] - F), mid = 0.5 * (tb.F[hi] + F);
+    if (half > 0.0) {
+      for (int g = 0; g < 3; ++g) {
+        const double Fq = mid + half * kGl3X[g];
+        double sF, cF, cdu, sdu, rho[6];
+        fm::sincos(Fq, sF, cF);
+        const double roa = b1_point(tb.o, sF, cF, cdu, sdu, rho);
+        const double Lq = Fq + tb.h * cF - tb.k * sF - tb.L0;
+        const double w = kGl3W[g] * half * roa * (tb.bc * cdu + tb.bs * sdu);
+        for (int j = 0; j < 6; ++j) p0[j] += w * rho[j];
+        p1 += w * Lq * rho[kN];
+      }
+    }
+    for (int j = 0; j < 6; ++j) p0[j] += tb.P0[hi][j];
+    p1 += tb.P1[hi];
+  }
+  const double inv_2pi = 1.0 / kTwoPi, inv_n = 1.0 / tb.n;
+  for (int j = 0; j < 6; ++j) d[j] = inv_n * ((0.5 - lam * inv_2pi) * tb.I0[j] + tb.I1[j] * inv_2pi - p0[j]);
+  const double I0 = tb.I0[kN], I1 = tb.I1[kN];
+  const double S1 = lam * I0 - I1 + kTwoPi * p0[kN];
+  const double S2 = lam * lam * I0 - 2.0 * lam * I1 + tb.I2 + 2.0 * kTwoPi * (lam * p0[kN] - p1) + kTwoPi * kTwoPi * p0[kN];
+  d[kLam] += inv_n * inv_n * -(kPi / 6.0 * I0 - 0.5 * S1 + S2 * (0.25 / kPi));
+}
+
+/// SPEC 16.13: B1's output part at time t, mean state ym. Inside the bracket the set is being flown in (the active
+/// bracket, SPEC 9), from that bracket's table for t's sub-interval (made on the first state there, kept with the last
+/// few); elsewhere (the epoch, a covariance's moved sets) from the state itself (b1_output_direct).
+inline void b1_output(const RateContext& ctx, double t, const double* ym, const Bodies* shared, double* d) {
+  const ActiveBracket& ab = active_bracket();
+  if (t != 0.0 && ab.valid && ab.ctx_id == ctx.ctx_id && ab.d50_epoch == ctx.d50_epoch) {
+    const double span = ab.hi.t - ab.lo.t;
+    if (t >= std::fmin(ab.lo.t, ab.hi.t) && t <= std::fmax(ab.lo.t, ab.hi.t) && std::fabs(span) > 1e-6) {
+      const int n_sub = std::max(1, static_cast<int>(std::ceil(std::fabs(span) / kB1TableMinutes)));
+      const double step = span / n_sub;
+      int sub = static_cast<int>(std::floor((t - ab.lo.t) / step));
+      if (sub < 0) sub = 0;
+      if (sub >= n_sub) sub = n_sub - 1;
+      B1Table* tab = nullptr;
+      for (B1Table* c : g_b1_tables)
+        if (c != nullptr && c->ctx_id == ctx.ctx_id && c->d50_epoch == ctx.d50_epoch && c->lo_index == ab.lo.index &&
+            c->hi_index == ab.hi.index && c->lo_t == ab.lo.t && c->hi_t == ab.hi.t && c->sub == sub) {
+          tab = c;
+          break;
+        }
+      if (tab == nullptr) {
+        B1Table*& slot = g_b1_tables[g_b1_next];
+        if (slot == nullptr) slot = static_cast<B1Table*>(std::malloc(sizeof(B1Table)));
+        if (slot != nullptr) {
+          g_b1_next = (g_b1_next + 1) % kB1Tables;
+          tab = slot;
+          const double ta = ab.lo.t + sub * step, tb = sub + 1 == n_sub ? ab.hi.t : ab.lo.t + (sub + 1) * step;
+          const double tm = 0.5 * (ta + tb);
+          double ymid[6];
+          hermite(ab.lo, ab.hi, tm, ymid);
+          b1_table_make(ctx, ymid, bodies_at_ap(ctx.d50_epoch + tm / kMinutesPerDay).sun_u, *tab);
+          tab->ctx_id = ctx.ctx_id;
+          tab->d50_epoch = ctx.d50_epoch;
+          tab->lo_index = ab.lo.index;
+          tab->hi_index = ab.hi.index;
+          tab->lo_t = ab.lo.t;
+          tab->hi_t = ab.hi.t;
+          tab->sub = sub;
+        }
+      }
+      if (tab != nullptr) {
+        b1_table_eval(*tab, ym[kLam], d);
+        return;
+      }
+    }
+  }
+  b1_output_direct(ctx, t, ym, shared, d);
 }
 
 /// SPEC 16.13: a set flies ECOM2's terms (Y0, B1 cos, B1 sin; AP's only).
