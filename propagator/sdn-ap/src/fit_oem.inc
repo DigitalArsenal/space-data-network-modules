@@ -319,9 +319,13 @@ constexpr double kBandMedianBterm = 0.0005;
 /// held (at Y0_M_S2; the second stage at the first's), SOLVED_FOR false.
 constexpr double kY0MinimumArcHours = 72.0;
 constexpr double kY0PriorSigma = 1e-9;
-/// SPEC 16.B1: B1 cos and B1 sin are solved and held with Y0, on its rule, each with a Gaussian prior about the stated
-/// B1_COS_M_S2 and B1_SIN_M_S2 of sigma kB1PriorSigma (m/s^2).
+/// SPEC 16.B1: B1 cos and B1 sin, each with a Gaussian prior about the stated B1_COS_M_S2 and B1_SIN_M_S2 of sigma
+/// kB1PriorSigma (m/s^2), are solved on Y0's arcs where the arc carries them: the fit with them is kept where its RMS is
+/// at most kB1RmsRatio of the fit with Y0 alone (on model truth 0.10 to 0.39 where the truth holds B1, 0.93 to 1.00 on
+/// inclined geosynchronous and Galileo-like truths without it, 0.43 to 0.99 on geostationary ones out of eclipse season).
+/// The price: one more whole-arc fit on every window that solves Y0.
 constexpr double kB1PriorSigma = 1e-8;
+constexpr double kB1RmsRatio = 0.5;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
 // SPEC 16.13: through 0.6.18 the one-day resonance class held Y0 whatever the arc, while that class lacked its resonant
 // gravity above degree 4 (stack #434). With the class's resonant tail Y0 is solved there as elsewhere; the Moon's position
@@ -742,12 +746,28 @@ static int fit_blocks() {
         // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg, 0 +- 0.1 on a short arc; LOG_NORMAL on ln AGOM)
         fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
         // SPEC 16.13: Y0 joins the whole-arc fit (and its passes at the data's sigma) on a long enough arc above the drag
-        if (po.ecom2 && y0_hold == nullptr && fitoem::y0_solved_on(fit_end_min - fit_begin_min) && cov::regime_of(row) != 0)
-          opt.fit_y0 = fit::kFitY0 | fit::kFitB1;
+        const bool ecom2_solved =
+            po.ecom2 && y0_hold == nullptr && fitoem::y0_solved_on(fit_end_min - fit_begin_min) && cov::regime_of(row) != 0;
+        if (ecom2_solved) opt.fit_y0 = fit::kFitY0;
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
         if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
+        // SPEC 16.B1: B1 cos and B1 sin are solved where the arc carries them: the whole-arc fit with Y0 and B1, from the
+        // Y0-only solution, is kept where its RMS is at most kB1RmsRatio of the Y0-only fit's; elsewhere the Y0-only fit
+        // stands, B1 held at its stated value, byte for byte as without the term (the trial's iterations not counted)
+        if (ecom2_solved) {
+          fit::Options with_b1 = opt;
+          with_b1.fit_y0 = fit::kFitY0 | fit::kFitB1;
+          ElementRow trial = row;
+          const fit::Result res_b1 = fit::run(trial, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), with_b1);
+          if (res_b1.status >= 0 && res_b1.rms_km <= fitoem::kB1RmsRatio * res.rms_km) {
+            row = trial;
+            res = res_b1;
+            opt = with_b1;
+            iterations += res_b1.iterations;
+          }
+        }
         // SPEC 12.1: above the drag (cov::regime_of: the perigee at or above 2,500 km, where the theory's density is
         // 1e-20 at every point of the orbit) the whole-arc fit is redone at the data's own sigma, so the priors stop
         // pulling against data far more precise than the 1 km the stages weigh at. Under drag the 1 km stands: the
