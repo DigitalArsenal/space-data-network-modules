@@ -3603,6 +3603,67 @@ inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const
 
 }  // namespace tide
 
+[[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]);
+
+/// AP in the long-period regime (SPEC 5.5): the Sun's and Moon's rates of the mean elements y, the rates that move AP's
+/// osculating state there (SPEC 8's J2 output, output_j2_osc) by the bodies' point-mass acceleration at that state:
+/// J m = (0, a), J the output's Jacobian in the six elements (forward differences), solved by Gaussian elimination with
+/// partial pivoting. The Gauss equations at the mean state alone move the J2 output by J2's short-period Jacobian times
+/// the bodies' rates as well, a velocity of the bodies' order times J2 at once. False when the output or the solve fails
+/// (the caller keeps the Gauss rates).
+inline bool lp_third_body_through_output(const double* y, const Bodies& b, double tb[6]) {
+  double x0[6], J[6][7];
+  // the base state, and the eccentric anomaly every column starts its Kepler equation from
+  const Kepler k0 = kepler_of(y);
+  if (!(k0.e < 1.0)) return false;
+  double E = k0.m + k0.e * std::sin(k0.m);
+  for (int it = 0; it < 30; ++it) {
+    const double dE = (E - k0.e * std::sin(E) - k0.m) / (1.0 - k0.e * std::cos(E));
+    E -= dE;
+    if (std::fabs(dE) < 1e-15) break;
+  }
+  if (output_j2_osc(y, E, x0, x0 + 3) != kPropOk) return false;
+  for (int c = 0; c < 6; ++c) {
+    const double h = c == kN ? 1e-7 * y[kN] : 1e-7;
+    double yc[6], xc[6];
+    for (int j = 0; j < 6; ++j) yc[j] = y[j];
+    yc[c] += h;
+    if (output_j2_osc(yc, E, xc, xc + 3) != kPropOk) return false;
+    for (int q = 0; q < 6; ++q) J[q][c] = (xc[q] - x0[q]) / h;
+  }
+  // the bodies' acceleration at the osculating position, km/s^2 (output_j2_osc's km and km/s)
+  const Vec3 r{x0[0] / kRe, x0[1] / kRe, x0[2] / kRe};
+  const Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) + third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+  const double s = kRe / 3600.0;
+  J[0][6] = J[1][6] = J[2][6] = 0.0;
+  J[3][6] = d.x * s;
+  J[4][6] = d.y * s;
+  J[5][6] = d.z * s;
+  for (int c = 0; c < 6; ++c) {
+    int p = c;
+    for (int q = c + 1; q < 6; ++q)
+      if (std::fabs(J[q][c]) > std::fabs(J[p][c])) p = q;
+    if (p != c)
+      for (int j = 0; j < 7; ++j) std::swap(J[p][j], J[c][j]);
+    if (!(J[c][c] != 0.0)) return false;
+    for (int q = c + 1; q < 6; ++q) {
+      const double f = J[q][c] / J[c][c];
+      for (int j = c; j < 7; ++j) J[q][j] -= f * J[c][j];
+    }
+  }
+  double m[6];
+  for (int c = 5; c >= 0; --c) {
+    double x = J[c][6];
+    for (int j = c + 1; j < 6; ++j) x -= J[c][j] * m[j];
+    m[c] = x / J[c][c];
+  }
+  for (int j = 0; j < 6; ++j) {
+    if (!std::isfinite(m[j])) return false;
+    tb[j] = 60.0 * m[j];  // per second to per minute
+  }
+  return true;
+}
+
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test). AP sums the epoch
 /// class's terms whatever the current mean motion (SPEC 16.7): the class is the record's, decided at its epoch.
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
@@ -3868,7 +3929,12 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         if (ap_lp_fast && last_dF != 0.0) fm::sincos_fast(F, sF_lp, cF_lp);
       }
       double tb[6];
-      if (ap_lp_fast) {
+      // AP: the rates that move its osculating output by the bodies' acceleration (SPEC 5.5); SGP4XP, or where that
+      // fails: the Gauss equations at the mean state
+      const bool through_output = ctx.ap_third_body && lp_third_body_through_output(y, b, tb);
+      if (through_output) {
+        // tb holds them
+      } else if (ap_lp_fast) {
         lp_third_body_gauss_ap(y, fr, sF_lp, cF_lp, b, tb);
       } else {
         Vec3 r, v;
