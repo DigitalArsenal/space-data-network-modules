@@ -5615,6 +5615,26 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     }
   }
   const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
+  // SPEC 16.18 (stack #473, #511): outside the low table every class carries its other slow terms in the rates, above its
+  // switch and below it; built before the output table, which below the switch keeps 1 - w of each term the list holds
+  {
+    const int sd0 = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
+    if (sd0 >= 2 && !(res == 0 && !s.ctx.long_period)) {
+      if (within_share && anchor->ctx.wide_slow != nullptr) {
+        s.ctx.wide_slow = anchor->ctx.wide_slow;
+        s.ctx.wide_slow_count = anchor->ctx.wide_slow_count;
+        s.ctx.e0 = anchor->ctx.e0;
+        s.ctx.i0 = anchor->ctx.i0;
+        s.ctx.shared_mask |= 128;
+      } else {
+        res::ResCoef* list = nullptr;
+        const int count = tess::slow_terms_wide(spd, res, n0, e.eo, e.xincl, &list, br.wide_tess != 0, sd0);
+        if (count < 0) return false;
+        s.ctx.wide_slow = list;
+        s.ctx.wide_slow_count = count;
+      }
+    }
+  }
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
     const bool wide_sp = br.wide_tess != 0;
@@ -5643,7 +5663,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
       int raw_count = 0;
       const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list);
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list,
+                         wide_sp ? nullptr : s.ctx.wide_slow, wide_sp ? 0 : s.ctx.wide_slow_count);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) {
@@ -5725,22 +5746,6 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         if (void* kept = std::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
           table = static_cast<tess::HalfDayCoef*>(kept);
       s.ctx.half_day = table;
-    }
-  }
-  // SPEC 16.18 (stack #473): above its switch outside low orbit every class carries its other slow terms in the rates
-  if (sd >= 2 && br.wide_tess != 0 && !(res == 0 && !s.ctx.long_period)) {
-    if (within_share && anchor->ctx.wide_slow != nullptr) {
-      s.ctx.wide_slow = anchor->ctx.wide_slow;
-      s.ctx.wide_slow_count = anchor->ctx.wide_slow_count;
-      s.ctx.e0 = anchor->ctx.e0;
-      s.ctx.i0 = anchor->ctx.i0;
-      s.ctx.shared_mask |= 128;
-    } else {
-      res::ResCoef* list = nullptr;
-      const int count = tess::slow_terms_wide(spd, res, n0, e.eo, e.xincl, &list);
-      if (count < 0) return false;
-      s.ctx.wide_slow = list;
-      s.ctx.wide_slow_count = count;
     }
   }
   if (sd >= 2 && res == 0 && !s.ctx.long_period) {

@@ -867,14 +867,26 @@ inline int sp_comb_bound(int degree, bool wide) {
   return (degree + 3) * (2 * degree + 1) * 3 + kNearMax;
 }
 
+/// Whether the wide slow list (slow_terms_wide) holds (l, m, p, q): the rates' terms outside the low table (stack #473, #511).
+inline bool wide_slow_holds(const res::ResCoef* list, int count, int l, int m, int p, int q) {
+  for (int k = 0; k < count; ++k) {
+    const res::ResCoef& c = list[k];
+    if (c.l == l && c.m == m && c.p == p && c.k - (c.l - 2 * c.p) == q) return true;
+  }
+  return false;
+}
+
 /// Fills out at the epoch mean motion n0, inclination i0 and eccentricity e0; returns the count. `cls`: the resonance class,
 /// whose terms the rates carry and this table must not. `low`: no class and the shallow set active, so a term near
 /// commensurability other than the shallow set's is kept here. `wide`: the set's branch (wide_set at its epoch, or its
 /// covariance nominal's, xpt::Branch): the families are on the grid and the table holds the near-resonant terms only.
 /// `slow_held` (SPEC 16.18, the low table with Terms::slow): the slow set's list; a term it holds beyond the shallow set's own
 /// is the rates' inside the band, and the table keeps 1 minus the band taper of it (nothing in both places, nothing in neither).
+/// `wide_held` (stack #511): outside the low table below the switch, the wide slow list (slow_terms_wide); a term it holds is
+/// the rates' inside the band, and the table keeps 1 minus the band taper of it the same way.
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
-                    SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr) {
+                    SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
+                    const res::ResCoef* wide_held = nullptr, int wide_held_count = 0) {
   int raw_count = 0;
   const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
@@ -910,6 +922,8 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
       } else if (std::fabs(psidot) < 1e-3 * n0) {
         weight = 0.0;
       }
+    } else if (wide_held != nullptr && x < 1.3 && wide_slow_holds(wide_held, wide_held_count, l, m, p, q)) {
+      weight = 1.0 - band_taper(x);
     } else if (x < 1.0) {
       weight = 0.0;
     }
@@ -4649,7 +4663,7 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
 /// orbit as much as J2 does), which a first-order term on the grid cannot follow. Ordered by (m, w, j), each run of l one
 /// group of the evaluation (wide_slow_six); j at most 127 (the table's index). *out (malloc'd, the caller's) holds the
 /// terms; returns their count, or -1 out of memory.
-inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, res::ResCoef** out) {
+inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, res::ResCoef** out, bool wide = true, int tail_degree = 0) {
   *out = nullptr;
   int count = 0, room = 0;
   const int L = degree < slow_degree_cap() ? degree : slow_degree_cap();
@@ -4678,6 +4692,8 @@ inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, 
           const int pp = (l - w) / 2;
           if (pp < 0 || pp > l) continue;
           bool own = cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2;
+          // below the switch the one-day class's tail carries its own (sp_terms leaves it out of the table the same way)
+          if (!own && one_day_tail(cls, wide, tail_degree) && l > 4 && l <= tail_degree && m <= kOneDayTailMaxOrder && j == m) own = true;
           for (int t = 0; t < carried.count && !own; ++t)
             own = carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == pp && carried.t[t].q == q;
           if (own) continue;
