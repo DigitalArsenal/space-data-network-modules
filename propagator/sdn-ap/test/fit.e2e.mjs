@@ -75,8 +75,11 @@ const cases = [
 // SPEC 16.8; SGP4XP 0.099 mm in EME2000, 0.6.6's GCRF from 6 h nodes, SPEC 16.4, and byte-equal in TEME). The published
 // examples (SDNAP_EXAMPLES) flown by both builds within EXAMPLE_BOUND, measured 2026-11-10: at most 9.6 mm and 1.2e-3
 // (next-china-space-station-css); the sets above e 0.3 measured and printed (THEMIS 0.95 m at most), none in the band.
+// AP's own Sun and Moon (SPEC 16.15, stack #446) move AP's flight of the stored record by 35.315 mm at the grid times
+// (covariance 7.12e-5, as before) and 123.947 mm over EPOCHS' 7 days (covariance 1.11e-4), and its fit by 1.245 m at 7
+// days; SGP4XP's bound stays.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
-const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
+const FLIGHT_BOUNDS = { AP: { posM: 0.15, covOfLargest: 2e-4 }, XP: { posM: 0.01, covOfLargest: 2e-4 } };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };
 const records = {}, stored = {};
 for (const c of cases) {
@@ -239,6 +242,7 @@ for (const c of cases) {
     for (const f of ODR_NAMES_OCM) check(d2[f] === cidOf(ocm2), `${c.name} $ODR ${f}: ${d2[f]}, its $OCM is ${cidOf(ocm2)}`);
   }
   // the flight: the stored record flown by this build and by BEFORE
+  const FLIGHT_BOUND = FLIGHT_BOUNDS[c.name];
   const [a2, a1] = [covarianceAt(h, s.record), covarianceAt(before, s.record)];
   const cd = covDistance(a2.out, a1.out);
   console.log(`${c.name} flight of the stored record, sdnap_covariance_at at ${minutes.length} times, ${now} against ${BEFORE.version}: ${cd.bitEqual ? "bit-equal" : `${(1000 * cd.posM).toFixed(3)} mm, covariance ${cd.covOfLargest.toExponential(2)} of a time's largest entry`}`);

@@ -273,8 +273,10 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // through 0.6.4, its covariance moved at 0.6.1 (637228fb, the AP DRAG noise row re-fitted, SPEC 12.4); 0.6.5 (24d7d75f,
   // SPEC 16.8) moves the stored record's flight by 0.629 mm and 0.796 um/s and its covariance by 7.2e-5 of a line's
   // largest entry; this build's own fit stops 7.25 cm away along the grid (the fit inside its tolerance, ap-terms.e2e.mjs).
+  // AP's own Sun and Moon (SPEC 16.15, stack #446) move the stored record's flight by 34.652 mm and 38.327 um/s (its
+  // covariance by 7.09e-5, as before) and this build's fit by 51.90 mm.
   const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.epochs.oem", import.meta.url));
-  const STORE_FLIGHT = { posM: 0.001, velMmS: 0.001, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.1, velMmS: 0.1 };
+  const STORE_FLIGHT = { posM: 0.04, velMmS: 0.045, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.1, velMmS: 0.1 };
   for (const [what, record, bound] of [["the stored AP record", new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.ocm", import.meta.url))), STORE_FLIGHT], ["this build's fit", ap, STORE_FIT]]) {
     const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
     check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);

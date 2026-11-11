@@ -43,9 +43,11 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// the analytic/SIMD covariance Jacobian and its other speed changes, SPEC 16.8) moves sdnap_covariance_at of the stored
 /// record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit) by 2.904 mm and 7.2e-5 of a time's largest covariance entry; this
 /// build's own fit stops 7.3 cm away (the fit inside its tolerance) and its covariance 1.4e-4 of the largest entry away,
-// its epoch covariance 5.6e-4 of the stored record's largest entry and its floors 1.45e-4 relative.
-const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
-const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };
+// its epoch covariance 5.6e-4 of the stored record's largest entry and its floors 1.45e-4 relative. AP's own Sun and Moon
+// (SPEC 16.15, stack #446) move the stored record's flight by 35.315 mm (its covariance by 7.12e-5, as before) and this
+// build's fit by 51.77 mm, 1.42e-4 of the largest covariance entry, its epoch covariance 2.30e-3 and its floors 1.05e-3.
+const AP_COV_FLIGHT = { posM: 0.04, velMmS: 0.045, covOfLargest: 1e-4 };
+const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 3e-3, floors: 1.5e-3 };
 
 ensureBuilt();
 const failures = [];

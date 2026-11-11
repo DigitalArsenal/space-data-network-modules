@@ -487,6 +487,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
   one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
   not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.
+- `test/ap-bodies.e2e.mjs`: AP's Sun and Moon (SPEC 16.15) against 407 stored DE440 samples of 2010-2035, turned to TEME
+  of date by the module (the Moon within 8 arcsec and 6 km, RMS 2.5 arcsec and 1.5 km; the Sun within 2 arcsec), the
+  cache against the series (0.01 arcsec, 1 m) and its smoothness at the nodes; SPEC 5's numbers printed beside them.
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,

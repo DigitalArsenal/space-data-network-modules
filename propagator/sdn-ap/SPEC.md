@@ -3009,13 +3009,12 @@ of 256 slots by node index (85 days) and the six it read last, and every set and
 any order. A batch of records at one time evaluates a node once per thread, not once per record; a fresh record whose
 epoch another record already flew reads its nodes from the store. Two times 85 1/3 days apart (256 nodes) share a slot:
 a thread asked for them in turn evaluates again the node it gave up (about 4.2 µs a node) and reads the same numbers, so
-a batch whose sets lie more than 85 days apart costs more on that thread and gives the same states. The grid is in UTC,
-so on a day with a leap second (an 86,401 s UTC day) the series bends where the day begins and ends: the quintic's
-largest errors, 0.017 arcsec and 1.2 m (the Moon), fall there, far inside the series' own 0.74 arcsec. A grid in TT
-would need UTC to TT at every read (ERFA's leap-second lookup, some 0.3 µs against about 20 ns for the read), so it
-stays in UTC. A batch at one time (`plugin_propagate_batch`,
-`sdnap_propagate_soa`) evaluates section 5's bodies once for its SGP4XP sets; its AP sets read their own, so an AP state
-is the same in a batch and in any other call.
+a batch whose sets lie more than 85 days apart costs more on that thread and gives the same states. The grid is in UTC:
+on a leap-second day the series, a function of TT, bends where the UTC day begins and ends, which is where the quintic's
+largest errors fall, far inside the series' own 0.74 arcsec. A grid in TT would need UTC to TT at every read (ERFA's
+leap-second lookup, some 0.3 µs against about 20 ns for the read), so it stays in UTC. A batch at one time
+(`plugin_propagate_batch`, `sdnap_propagate_soa`) evaluates section 5's bodies once for its SGP4XP sets; its AP sets read
+their own, so an AP state is the same in a batch and in any other call.
 
 *The series.* A least-squares fit to DE440 (Park et al. 2021; NAIF de440s.bsp, SHA-256 c1c7feea...49f2) at TT from
 1990 to 2060, every 0.61 days (42,514 samples), by tools/ap-bodies-fit.mjs; its coefficients are src/ap_bodies_series.inc
@@ -3029,8 +3028,9 @@ ch. 47), A2 and A3. The candidates are the lunar problem's combinations to order
 planets against the Earth alone and with l, D, 2D, 2D - l, F and l'; candidates slower than a period of 50 years (the
 quadratic carries them over the span) or not separable in rate from a lower-order one over the span are left out. A term
 is kept above 0.15 arcsec (Moon longitude), 0.12 arcsec (latitude), 0.15 km (distance), 0.06 arcsec (Sun longitude and
-latitude) and 25 km (Sun distance); a term above 25 times that also takes an amplitude linear in tau (the eccentricity
-of the Earth's orbit changes the solar terms by up to 1 arcsec over the span). The fit's residuals are 0.73, 0.50 arcsec
+latitude) and 25 km (Sun distance); a term above 25 times that also takes an amplitude linear in tau (over the span the
+falling eccentricity of the Earth's orbit changes the Moon's terms in l' by up to 1 arcsec and the Sun's equation of the
+center by some 12 arcsec). The fit's residuals are 0.73, 0.50 arcsec
 and 0.65 km RMS for the Moon and 0.44, 0.08 arcsec and 126 km for the barycenter's Sun. The geocentric Sun is the
 barycenter's plus mu_M / (mu_E + mu_M) times the Moon (DE440's masses; 4,671 km on average).
 
@@ -3092,7 +3092,9 @@ resonant tail):
   1.0-2.0 m, the same as at 4 x 4 within 0.05 m. On the five real windows, days 1, 3, 5 and 7 (tail alone to both): C005
   3.1, 5.5, 12.0, 20.0 m to 1.0, 1.4, 2.2, 3.4 m; C010 3.0, 5.5, 8.3, 14.0 to 1.4, 1.7, 1.9, 2.3; C221 2.9, 5.6, 12.7,
   19.1 to 0.9, 1.3, 2.1, 3.4; the geostationary C018 at day 5 13.4 to 8.5 m and C229 at day 7 34.2 to 20.6 m (0.6.16:
-  58.5 and 95.1 m).
+  58.5 and 95.1 m). What is left on the geostationary windows (about 18 of C229's 20.6 m at day 7) is the radiation
+  pressure: with it off on both sides the same window is 1.7 m, so it is AP's sphere against the numerical propagator's
+  in eclipse season, not the Sun or Moon.
 
 *Cost.* One evaluation of the series costs about 4.2 µs against SPEC 5's 0.28 (rough, under load); with nodes 8 h apart
 a flight evaluates eight times fewer of them than SPEC 5's hourly cache did, and a fresh record whose times another
