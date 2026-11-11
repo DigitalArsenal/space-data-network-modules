@@ -3351,7 +3351,7 @@ places (stack issue 464):
   itself, which is rounding-limited at geosynchronous radius.
 
 Under a change of 1e-10 relative in the mean motion, 7-day flights in an eclipse season moved by up to 10 m on
-Galileo-like orbits, 35 m GPS-like, 4 to 10 m geostationary and inclined geosynchronous, 1.0 m at 800 km, 0.4 m
+Galileo-like orbits, 35 m GPS-like, 3.5 to 9.4 m geostationary and inclined geosynchronous, 1.0 m at 800 km, 0.4 m
 laser geodetic and 145 m on a transfer orbit; the change itself moves them 0.2 to 0.6 m along track, linearly. A fit that solves
 AGOM, or Y0 beside it, stopped where rounding put it (stack issue 456).
 
@@ -3385,7 +3385,7 @@ one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow
 - The transfer orbit (e 0.73), every direction of the Sun in its plane: 7e-7, except a_f (next item).
 - The perigee-stepped nudge scans, made-up sets in season:
 
-  | Orbit | Rough flights, section 4's shadow | 16.15 |
+  | Orbit | Rough flights, section 4's shadow (0.6.20) | 16.15 |
   | --- | --- | --- |
   | Galileo-like | 24 of 120 | 0 of 120 |
   | GPS-like | 15 of 120 | 0 of 120 |
@@ -3393,13 +3393,25 @@ one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow
   | 800 km | 6 of 120 | 0 of 120 |
   | transfer orbit | 18 of 120 | 0 of 120 |
   | geostationary at i 0.05 deg | 5 of 24 | 0 of 24 |
-  | geostationary at i 2 deg | 5 of 24 | 0 of 24 |
+  | geostationary at i 2 deg | 6 of 24 | 0 of 24 |
   | inclined geosynchronous | 11 of 24 | 0 of 24 |
 
   "Rough" means the departure from a linear drift exceeds 1 cm; with 16.15 it is at most 0.9 mm over 7 days.
 - The transfer orbit's worst flight before: the exit fell 0.008 deg past the perigee, and one node evaluation
   rejected its root (|S| = 2.7e-12) and took the orbit as wholly sunlit. 16.15 takes the arc there; the numerical
   average agrees with it.
+- Real fitted records: two of the release table's 0.6.20 records (72 h, ECOM2, the solid tide stated), each flown 7
+  days from its cutoff with the tide stated and with that entry removed, the 3D difference at the cutoff / day 3 /
+  day 5 / day 7 (m). The tide's own term is about a meter:
+
+  | Record | 0.6.20 | 16.15 and 16.16 | 0.6.20, the shadow out of play (policy 3) |
+  | --- | --- | --- | --- |
+  | QZS-2G 2025-10-12 (i 0.074 deg, Y0 -1.9e-9 m/s^2) | 3.05 / 5.12 / 6.59 / 8.11 | 0.50 / 0.92 / 1.27 / 1.66 | 0.45 / 0.86 / 1.21 / 1.62 |
+  | Galileo IOV 2 2026-03-09 | 19.24 / 22.10 / 17.47 / 33.66 | 0.97 / 1.67 / 2.33 / 3.05 | 0.90 / 1.57 / 2.15 / 2.95 |
+
+  On 0.6.20 QZS-2G's near-equatorial long-period sets took section 4's own sequence, and Galileo's radial part swings
+  by up to 4 m once per revolution. With 16.15 the radial part is 0.000 m on both, and the along-track part grows
+  smoothly.
 
 *Bits.* SGP4XP and SGP4 are section 4's and unchanged. AP sets with AGOM 0 fly byte for byte, and so do AP orbits
 wholly sunlit over the flight. In shadow, where section 4's decision was right, a flight moves by nanometers (4e-9 m
@@ -3437,10 +3449,11 @@ state and integrator, in season.
 
   Out of season, as the numerical model's own baseline: -5.8 m on the C229-like set and -0.9 m Galileo-like.
 
-*Cost* (provisional, niced under a load of about 100): the shadow takes 265 ns against the closed form's 183 ns per
-call at Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the
-transfer orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's
-per-state costs moved by 0.94 to 1.16 times, within that load's spread.
+*Cost*, measured niced under a load of about 100: the shadow takes 265 ns against the closed form's 183 ns per call at
+Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the transfer
+orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's per-state
+costs moved by 0.94 to 1.16 times, within that load's spread. The release's speed table, flown on the final bytes in
+a quiet slot, is the cost of record.
 
 **16.16 The mean longitude over a sunlit arc** (stack issue 472). Section 4's averaged rates count the shadow; its
 output-time short-period terms (Kozai 1961; Aksnes 1976) do not, being periodic in E with the Sun held fixed and no
