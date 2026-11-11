@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.20 (dist 5a7fa01f).
+Version 0.6.21 (dist 7b2ada3b).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -570,6 +570,8 @@ is that of section 5 at the evaluation time.
 8. Eccentric anomalies: E = 2 atan(tan(nu/2) k), k = sqrt((1 - e)/(e + 1)), reduced to [0, 2 pi); E_1 at the exit,
    E_2 at the entry, E_2 + 2 pi when E_2 < E_1; the sunlit arc runs from E_1 to E_2. If |E_2 - E_1| < 1e-12 the
    wholly sunlit formulas apply.
+
+This sequence is SGP4XP's. AP sets take 16.15's shadow, whose boundaries are continuous in the elements.
 
 The 1e-12 test is tight against the rounding of this sequence. At GEO (p^2 near 44) its roots usually miss the test,
 so the GEO eclipse season is averaged as wholly sunlit, while LEO, MEO and HEO shadows are mostly found *[study;
@@ -3195,7 +3197,7 @@ carry one term of the empirical ECOM2 model beside the sphere of section 4: Y0, 
 eY = unit(eD x r), eD the unit vector to the Sun (Arnold et al. 2015, J. Geod. 89, eq. 1; the convention of
 propagator/ffm lib/gnss_srp.h). The sphere is ECOM2's direct term D0 (the two differ by (1 AU / r_sun)^2, under 0.6 %
 over 10 days), so a separate D0 would only repeat AGOM; B0 and the once-per-revolution terms are not carried. Y0 is zero
-where the sphere's rates count the orbit as in shadow (the same decision, section 4 and srp_rates).
+where the sphere's rates count the orbit as in shadow (the same decision, 16.15 and srp_rates).
 
 *Theory.* Y0's Gauss rates (the radial component zero) are averaged over the mean anomaly of the mean orbit on its
 sunlit arc by three-point Gauss-Legendre panels: the arc's ends, the points a quarter revolution either side of where
@@ -3433,6 +3435,191 @@ alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.
 
 `test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
 unset, the long-period regime's stated covariance with the tide, and the refusals.
+
+**16.15 AP's shadow.** Every AP set takes this shadow in place of section 4's: in the sphere's rates (srp_rates)
+and in Y0's sunlit arc (16.13). Section 4's closed form, kept as the library computes it, decides by rounding in two
+places (stack issue 464):
+- A candidate root counts as a boundary only when |S| < 1e-12. Where a boundary lies within a few degrees of an apse of
+  the mean orbit, x = cos nu is near +-1, and sin nu = sqrt(1 - x^2) magnifies the root's rounding by 1 / sin nu.
+  |S| at the root then falls between 1e-13 and 2e-12. The rates flip between the sunlit arc and the wholly sunlit
+  orbit with the last bits of the elements, and the whole eclipse's share of the rates moves for a node step (two
+  revolutions on a Galileo orbit, 4.6 % of the eccentricity vector's rate in one case).
+- Near-equatorial long-period AP sets (inclination below 0.02 rad, a above 5 Earth radii) took section 4's sequence
+  itself, which is rounding-limited at geosynchronous radius.
+
+Under a change of 1e-10 relative in the mean motion, 7-day flights in an eclipse season moved by up to 10 m on
+Galileo-like orbits, 35 m GPS-like, 3.5 to 9.4 m geostationary and inclined geosynchronous, 1.0 m at 800 km, 0.4 m
+laser geodetic and 145 m on a transfer orbit; the change itself moves them 0.2 to 0.6 m along track, linearly. A fit that solves
+AGOM, or Y0 beside it, stopped where rounding put it (stack issue 456).
+
+*The shadow.* Section 4's cylinder of radius R_E on the current mean orbit:
+- A, B are the Sun's direction cosines on P and Q, F = A^2 + B^2, phi is the Sun's direction in the orbit plane and
+  u = nu - phi - pi the angle from the anti-Sun direction. The night half is |u| < pi/2.
+- The shadow is where S(u) = p^2 F cos^2 u + d^2 - p^2 > 0 (d = 1 + e cos nu). S is negative at both terminators
+  (S = d^2 - p^2 there, because the perigee is above the surface).
+- S's largest value on the night half decides. It is searched at u = 0, then at u = j pi/10 (|j| <= 4), then by
+  Newton's method on S' inside the neighbors of the best point. Not above 0: wholly sunlit.
+- Above 0: the entry and the exit are the roots of S on either side, each found by Newton's method kept inside its
+  bracket (bisection where a step leaves it) to full precision.
+- E1 (exit) and E2 (entry, + 2 pi when not above E1) feed section 4's formulas: AP's arrangement of them where the
+  set's angles allow, section 4's own for near-equatorial long-period sets. Section 4's test that the cylinder cannot
+  reach the orbit (F < 1 and (1 - F) a_min^2 > 1.000002) stays as the first step.
+- `sdnap_shadow_policy` 3 (no boundary) makes AP wholly sunlit too; policies 1 and 2 act on SGP4XP alone.
+
+*Continuous, not smooth.* No tolerance decides a branch, so the rates are continuous in the elements. At the season's
+edge the two roots merge, and the sunlit-arc formulas over E2 - E1 = 2 pi are those of the wholly sunlit orbit. The
+rates are not smooth there: the arc grows as the square root of the orbit's depth in the cylinder.
+
+*One sunlit arc per revolution*, as section 4 assumes, measured: 6,318,000 geometries, 4,636,757 of them shadowed,
+none with more than two boundaries on the night half (4,000 samples of it each). The grid: e from 0 to 0.9 (15
+values), perigee radius from 1.005 to 60 Earth radii (13 values), 90 Sun elevations up to the highest whose cylinder
+reaches the orbit, 360 directions in the plane.
+
+*No shadow missed, none added*, measured against S itself: 4,000 samples of the night half, every sampled maximum
+refined by golden section to 1e-14 rad, a shadow wherever a refined maximum is above 0.
+- On the grid above, there is no miss and no false shadow among 6,318,000 geometries, 4,638,201 of them shadowed. Where
+  both see a shadow, their widths agree to 8e-7 deg of true anomaly.
+- The grazing band covers e 0 to 0.9 (18 values), perigee radius 1.005 to 6.61 Earth radii (20 values) and 360 Sun
+  directions. Each direction's grazing elevation is bisected on S, then 33 elevations below it are flown, from 1e-1 to
+  1e-12 of it below. That is 4,151,232 geometries, all shadowed. None is added. 17,283 are missed, each within about
+  1e-12 of its grazing elevation, with S's largest value at most 4.4e-16 p^2 (the rounding of S itself) and a shadow at
+  most 1.24e-5 deg of true anomaly wide.
+- Neither set has a geometry with two maxima of S on the night half. test/radiation-shadow.e2e.mjs sweeps a transfer
+  orbit through grazing where the maximum lies 37 deg from the anti-Sun direction.
+
+*Measured* (`sdnap_ap_srp_rates`: mode 0 the theory, mode 1 the same sphere and cylinder averaged numerically over
+one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow.e2e.mjs):
+- The six rates agree within 7.6e-7 of each rate's scale, through grazing (Galileo-like and geostationary) and with
+  the exit or the entry crossing the perigee. Their steps along the sweep equal the average's to three digits.
+- The transfer orbit (e 0.73), every direction of the Sun in its plane: 7e-7, except a_f (next item).
+- The perigee-stepped nudge scans, made-up sets in season:
+
+  | Orbit | Rough flights, section 4's shadow (0.6.20) | 16.15 |
+  | --- | --- | --- |
+  | Galileo-like | 24 of 120 | 0 of 120 |
+  | GPS-like | 15 of 120 | 0 of 120 |
+  | laser geodetic | 3 of 120 | 0 of 120 |
+  | 800 km | 6 of 120 | 0 of 120 |
+  | transfer orbit | 18 of 120 | 0 of 120 |
+  | geostationary at i 0.05 deg | 5 of 24 | 0 of 24 |
+  | geostationary at i 2 deg | 6 of 24 | 0 of 24 |
+  | inclined geosynchronous | 11 of 24 | 0 of 24 |
+
+  "Rough" means the departure from a linear drift exceeds 1 cm; with 16.15 it is at most 0.9 mm over 7 days.
+- The transfer orbit's worst flight before: the exit fell 0.008 deg past the perigee, and one node evaluation
+  rejected its root (|S| = 2.7e-12) and took the orbit as wholly sunlit. 16.15 takes the arc there; the numerical
+  average agrees with it.
+- Real fitted records: two of the release table's 0.6.20 records (72 h, ECOM2, the solid tide stated), each flown 7
+  days from its cutoff with the tide stated and with that entry removed, the 3D difference at the cutoff / day 3 /
+  day 5 / day 7 (m). The tide's own term is about a meter:
+
+  | Record | 0.6.20 | 16.15 and 16.16 | 0.6.20, the shadow out of play (policy 3) |
+  | --- | --- | --- | --- |
+  | QZS-2G, one window in season (i 0.074 deg, Y0 -1.9e-9 m/s^2) | 3.05 / 5.12 / 6.59 / 8.11 | 0.50 / 0.92 / 1.27 / 1.66 | 0.45 / 0.86 / 1.21 / 1.62 |
+  | Galileo IOV 2, one window in season | 19.24 / 22.10 / 17.47 / 33.66 | 0.97 / 1.67 / 2.33 / 3.05 | 0.90 / 1.57 / 2.15 / 2.95 |
+
+  On 0.6.20 QZS-2G's near-equatorial long-period sets took section 4's own sequence, and Galileo's radial part swings
+  by up to 4 m once per revolution. With 16.15 the radial part is 0.000 m on both, and the along-track part grows
+  smoothly.
+
+*Bits.* SGP4XP and SGP4 are section 4's and unchanged. AP sets with AGOM 0 fly byte for byte, and so do AP orbits
+wholly sunlit over the flight. In shadow, where section 4's decision was right, a flight moves by nanometers (4e-9 m
+over 7 days on a Galileo-like set), because the boundaries are now solved to full precision.
+
+*The pressure constant.* AP keeps section 4's P = 4.5e-6 N/m^2, and SGP4XP must. The numerical propagator's
+cannonball uses the solar flux 1361 W/m^2 / c = 4.54e-6 N/m^2. A fit takes the 0.88 % into AGOM: fitted against
+FFM's sphere, AGOM comes out 0.8 to 0.9 % above FFM's coefficient, with nothing lost in forecast (three real
+geostationary windows, 2025-10). An AGOM taken from a spacecraft's physical area, mass and reflectivity instead of
+fitted is 0.88 % low in AP's units against a propagator that uses 1361 W/m^2.
+
+*Not carried, with their sizes.* Each size is the difference over 7 days of a made-up flight with the same epoch
+state and integrator, in season.
+- **The penumbra.** AP's shadow is the cylinder; the numerical propagator flies a cone with umbra and penumbra. The
+  same sphere averaged numerically in the cone (mode 2, the illuminated fraction of the Sun's disc) against the
+  cylinder: 2.7 cm Galileo-like, 2.1 cm GPS-like, 2.8 cm geostationary, 2.2 cm inclined geosynchronous, 0.3 mm laser
+  geodetic, 1.4 mm at 800 km, 5.7 cm on the transfer orbit; 0 for a wholly sunlit orbit. The penumbra lies across the
+  cylinder's edge, so the light it removes outside the edge and adds inside nearly cancel.
+- **Section 4's sunlit-arc eccentricity-vector rate at high eccentricity** (stack issue 466). Against the numerical
+  average, a_f-dot departs by 1.1e-4 of its scale at e 0.1, 1.1e-3 at e 0.3 and 1.2e-2 at e 0.73, in shadow only
+  (4e-15 wholly sunlit). In flight that is 2.3 to 3.5 m on the transfer orbit (e 0.73, AGOM 0.02) and under 0.3 mm on
+  near-circular orbits.
+- **The shadow's periodic motion** (stack issue 472, the second clash of 16.16). The output-time terms add, through
+  the shadow, the periodic motion of a force that is off there. What it leaves, measured as in 16.16:
+
+  | Orbit, in season | Along track at day 7 | Within-day span | Radial RMS |
+  | --- | --- | --- | --- |
+  | geostationary | -3.7 m | 6.2 m | 1.4 m |
+  | C229-like geostationary (i 1.7 deg) | -1.5 m | 8.0 m | 1.4 m |
+  | inclined geosynchronous | -5.5 m | 6.1 m | 1.2 m |
+  | Galileo-like | 13.7 m | 5.7 m | 0.9 m |
+  | GPS-like | -3.0 m | 3.0 m | 0.6 m |
+  | 800 km | -6.6 m | 1.2 m | 0.4 m |
+  | laser geodetic | -0.5 m | 0.1 m | 0.006 m |
+
+  Out of season, as the numerical model's own baseline: -5.8 m on the C229-like set and -0.9 m Galileo-like.
+
+*Cost*, measured niced under a load of about 100: the shadow takes 265 ns against the closed form's 183 ns per call at
+Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the transfer
+orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's per-state
+costs moved by 0.94 to 1.16 times, within that load's spread. The release's speed table, flown on the final bytes in
+a quiet slot, is the cost of record.
+
+**16.16 The mean longitude over a sunlit arc** (stack issue 472). Section 4's averaged rates count the shadow; its
+output-time short-period terms (Kozai 1961; Aksnes 1976) do not, being periodic in E with the Sun held fixed and no
+shadow. The two clash in an eclipse season, twice:
+1. Section 4's rate of lambda over a sunlit arc takes the sunlit average of the Gauss rate plus the sunlit average of
+   the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n). The numerical average of 16.15
+   reproduces section 4's lambda rate only with Delta n added over the sunlit arc: at e 0, 2.5 times the Gauss rate's
+   average. But the output-time terms map n_osc = n_mean + Delta n over the whole revolution, the shadow included. The
+   mean longitude's rate that agrees with that mapping takes Delta n over the whole revolution.
+2. The output-time terms add, through the shadow, the periodic motion of a force that is off there.
+
+*What AP takes.* For (1), an AP set's rate of lambda over a sunlit arc adds Delta n's share over the shadow, in closed
+form:
+
+  (1 / 2 pi) int over E2 .. E1 + 2 pi of Delta n (1 - e cos E) dE = 3 F_s / (2 pi a n) [G(E1 + 2 pi) - G(E2)],
+  G(E) = A sin E - B eta cos E - e (A (E / 2 + sin E cos E / 2) + B eta sin^2 E / 2).
+
+At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/min at geostationary radius for AGOM
+0.022. It vanishes with the shadow, so the rates stay continuous (16.15) and a wholly sunlit orbit flies byte for byte.
+(2) is not carried (16.15 states its size). SGP4XP keeps section 4.
+
+*Measured.* The method:
+- A flight's response to the sphere is the set flown minus the same set with AGOM 0, from the same mean elements.
+- The numerical response is a flight of each of the two AP epoch states, with the sphere in the cylinder and without
+  it: two bodies, J2, the Sun and Moon of section 5, RK4 at 1 minute. The residual is AP's response minus the
+  numerical one; the numerical model's own shortfalls cancel to first order.
+- Made-up sets in season, 7 days on a 10 minute grid, the along-track residual at day 7:
+
+  | Orbit, in season | Section 4's rate | 16.16 | 16.16 and (2), numerical |
+  | --- | --- | --- | --- |
+  | geostationary | 91.7 m | -3.7 m | -0.8 m |
+  | C229-like geostationary | 64.7 m | -1.5 m | -4.2 m |
+  | inclined geosynchronous | 70.7 m | -5.5 m | -2.3 m |
+  | Galileo-like | 115.6 m | 13.7 m | -2.4 m |
+  | GPS-like | 76.9 m | -3.0 m | -0.07 m |
+  | 800 km | 13.1 m | -6.6 m | 1.5 m |
+  | laser geodetic | 1.4 m | -0.5 m | -0.3 m |
+
+  The last column computes (2) numerically at every output time (zero-mean periodic parts of the notched rates
+  minus those without the shadow). What it leaves equals each set's out-of-season residual: -5.8 m C229-like,
+  -0.9 m Galileo-like.
+- The closed form agrees with the same term computed numerically to centimeters in flight.
+- Between AP with and without 16.16, a 7-day flight in season moves by 103 m (geostationary) and 110 m
+  (Galileo-like), and out of season it is byte for byte.
+- Fitted to the numerical propagator's cannonball (FFM, cone, EGM96 70 x 70, Sun and Moon, no Y0 in the truth),
+  72 h, then flown, with 16.15 and 16.16 against without them, day 5 / day 7:
+
+  | Set | Without | With |
+  | --- | --- | --- |
+  | geostationary, made-up, in season, i 0.05 deg | 28.1 / 43.6 m | 12.9 / 17.2 m |
+  | geostationary, made-up, in season, i 2 deg | 24.3 / 41.3 m | 12.1 / 15.6 m |
+
+  The fitted AGOM moves from 2.3 % low to within 0.05 % of the truth's (times 1.0088, 16.15). On the release
+  table's real geostationary rows, 72 h fits with ECOM2 as the table flies them: the day-5 median goes from 88.4 to
+  26.9 m and the windows inside the line from 26 to 29 of 32 (QZS-2G: Y0 found -2.14e-9 against the numerical
+  propagator's -2.26e-9). Inclined geosynchronous rows: unchanged.
+- Cost: one closed-form term (two sines and cosines) where a sunlit-arc rate is evaluated.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

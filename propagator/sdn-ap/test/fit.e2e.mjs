@@ -20,7 +20,9 @@
 // - Against the 0.6.3 dist (git, modules 03ee86234, its SHA-256 checked; 0.6.4's fits of these arcs are 0.6.3's): each
 //   fit's $ODR names its own $OCM (RUN_ID and OCM_CONTENT_ID are the CID of its $OCM's bytes); each stored record's
 //   sdnap_covariance_at at every fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in
-//   EME2000 and TEME every 6 h for 7 days within FLIGHT_BOUND on this build and on 0.6.3 (byte identity until 0.6.5). With
+//   EME2000 and TEME every 6 h for 7 days within FLIGHT_BOUND on this build and on 0.6.3 (byte identity until 0.6.5), the
+//   AP record's against 0.6.21's flight of it (ap-fit-0.6.4-0.6.21.cov, ap-fit-0.6.4.eme2000-0.6.21.oem,
+//   ap-fit-0.6.4.teme-0.6.21.oem; history at FLIGHT_BOUND). With
 //   SDNAP_EXAMPLES set to the published examples (each <id>.ocm and <id>.json), every set flies on both builds at every epoch
 //   of its window, with sdnap_covariance_at at every 12th epoch; a set outside the band 0.6.4's switch moves (class 0 by the
 //   SPEC 6 bands of its mean motion with 0.05 < e <= 0.3) and at e 0.3 or below within EXAMPLE_BOUND, a set in the band or
@@ -63,7 +65,8 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
   { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, config, ...(spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: spw }] : [])] });
 
 const cases = [
-  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.4.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS },
+  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.4.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
+    recorded: { version: "0.6.21", cov: "ap-fit-0.6.4-0.6.21.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.4.eme2000-0.6.21.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.4.teme-0.6.21.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
 // The fit and the flight apart (no byte identity through a fit). The fit: this build's fitted record flown 7 days (EPOCHS,
@@ -72,7 +75,13 @@ const cases = [
 // 28 iterations, FIT_RMS 41.127 against 41.130 m, 7.3 cm along the fixture grid and 2.10 m at 7 days on EPOCHS (the fit
 // stops inside its tolerance); SGP4XP's fit is unchanged. The flight: the stored records flown by this build and by BEFORE
 // within FLIGHT_BOUND (0.6.5's speed changes: AP 4.7 mm and 1.1e-4 of a line's largest covariance entry over EPOCHS' 7 days,
-// SPEC 16.8; SGP4XP 0.099 mm in EME2000, 0.6.6's GCRF from 6 h nodes, SPEC 16.4, and byte-equal in TEME). The published
+// SPEC 16.8; SGP4XP 0.099 mm in EME2000, 0.6.6's GCRF from 6 h nodes, SPEC 16.4, and byte-equal in TEME). 0.6.21 (SPEC
+// 16.15 and 16.16, stack #464 and #472) moves the AP record's covariance against 0.6.3, and its flight is recorded from
+// 0.6.21, the bounds kept. Against 0.6.3, 0.6.20 / 0.6.21: sdnap_covariance_at 0.839 / 0.839 mm, covariance 7.2e-5 /
+// 9.217e-3 of a time's largest entry; propagate EME2000 0.720 / 0.720 mm, 1.12e-4 / 2.222e-3; TEME 0.740 / 0.740 mm,
+// 1.12e-4 / 2.202e-3. Why: the record's correlations between AGOM and the state are 0.6.4's fit's, and 16.16 moves its
+// along-track response to AGOM at 48 h from 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's
+// numbers within 7.1e-5 (covariance.e2e.mjs). The published
 // examples (SDNAP_EXAMPLES) flown by both builds within EXAMPLE_BOUND, measured 2026-11-10: at most 9.6 mm and 1.2e-3
 // (next-china-space-station-css); the sets above e 0.3 measured and printed (THEMIS 0.95 m at most), none in the band.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
@@ -161,7 +170,8 @@ fs.writeFileSync(beforePath, beforeBytes);
 const before = await createStandaloneHarness("browser", beforePath, { surface: "direct" });
 const now = JSON.parse(fs.readFileSync(`${packageRoot}plugin-manifest.json`, "utf8")).version;
 const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
-const asBefore = (bytes) => { const b = Buffer.from(bytes); for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BEFORE.version).copy(b, at); return b; };
+const asVersion = (bytes, v) => { const b = Buffer.from(bytes); for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(v).copy(b, at); return b; };
+const asBefore = (bytes) => asVersion(bytes, BEFORE.version);
 // CIDv1, raw codec, sha2-256, base32 lower case with the 'b' prefix
 const cidOf = (bytes) => {
   const raw = Buffer.concat([Buffer.from([0x01, 0x55, 0x12, 0x20]), createHash("sha256").update(bytes).digest()]);
@@ -238,19 +248,20 @@ for (const c of cases) {
     const ocm2 = new Uint8Array(r2.outputs[0].payload), d2 = odrOf(new Uint8Array(r2.outputs[1].payload));
     for (const f of ODR_NAMES_OCM) check(d2[f] === cidOf(ocm2), `${c.name} $ODR ${f}: ${d2[f]}, its $OCM is ${cidOf(ocm2)}`);
   }
-  // the flight: the stored record flown by this build and by BEFORE
-  const [a2, a1] = [covarianceAt(h, s.record), covarianceAt(before, s.record)];
+  // the flight: the stored record flown by this build and by BEFORE (XP), or against its recorded flight (AP, 0.6.21's)
+  const rec = c.recorded, against = rec ? `${rec.version}'s recorded flight` : BEFORE.version;
+  const [a2, a1] = [covarianceAt(h, s.record), rec ? { status: 0, out: fixture(rec.cov) } : covarianceAt(before, s.record)];
   const cd = covDistance(a2.out, a1.out);
-  console.log(`${c.name} flight of the stored record, sdnap_covariance_at at ${minutes.length} times, ${now} against ${BEFORE.version}: ${cd.bitEqual ? "bit-equal" : `${(1000 * cd.posM).toFixed(3)} mm, covariance ${cd.covOfLargest.toExponential(2)} of a time's largest entry`}`);
+  console.log(`${c.name} flight of the stored record, sdnap_covariance_at at ${minutes.length} times, ${now} against ${against}: ${cd.bitEqual ? "bit-equal" : `${(1000 * cd.posM).toFixed(3)} mm, covariance ${cd.covOfLargest.toExponential(2)} of a time's largest entry`}`);
   check(a2.status === 0 && a1.status === 0 && cd.posM <= FLIGHT_BOUND.posM && cd.covOfLargest <= FLIGHT_BOUND.covOfLargest,
-    `${c.name} sdnap_covariance_at of the stored record: ${now} (${a2.status}) against ${BEFORE.version} (${a1.status}) ${JSON.stringify(cd)} (within ${JSON.stringify(FLIGHT_BOUND)})`);
+    `${c.name} sdnap_covariance_at of the stored record: ${now} (${a2.status}) against ${against} (${a1.status}) ${JSON.stringify(cd)} (within ${JSON.stringify(FLIGHT_BOUND)})`);
   for (const frame of [pcfOutputFrame.EME2000, pcfOutputFrame.TEME]) {
-    const [p2, p1] = [await flight(h, s.record, frame), await flight(before, s.record, frame)];
+    const p2 = await flight(h, s.record, frame), p1 = rec ? { statusCode: 0, outputs: [{ payload: fixture(rec[frame]) }] } : await flight(before, s.record, frame);
     const ok = p2.statusCode === 0 && p1.statusCode === 0;
-    const d = ok ? oemDistance(asBefore(new Uint8Array(p2.outputs[0].payload)), new Uint8Array(p1.outputs[0].payload)) : null;
-    if (d) console.log(`${c.name} flight of the stored record, propagate ${pcfOutputFrame[frame]} at ${EPOCHS.length} epochs over 7 days, ${now} against ${BEFORE.version}: ${d.bytesEqual ? "byte-equal (PRODUCER's version aside)" : `${(1000 * d.posM).toFixed(3)} mm, ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)}`}`);
+    const d = ok ? oemDistance(asVersion(new Uint8Array(p2.outputs[0].payload), rec ? rec.version : BEFORE.version), new Uint8Array(p1.outputs[0].payload)) : null;
+    if (d) console.log(`${c.name} flight of the stored record, propagate ${pcfOutputFrame[frame]} at ${EPOCHS.length} epochs over 7 days, ${now} against ${against}: ${d.bytesEqual ? "byte-equal (PRODUCER's version aside)" : `${(1000 * d.posM).toFixed(3)} mm, ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)}`}`);
     check(ok && d.posM <= FLIGHT_BOUND.posM && d.covOfLargest <= FLIGHT_BOUND.covOfLargest,
-      `${c.name} propagate (${pcfOutputFrame[frame]}) of the stored record: ${now} ${p2.statusCode ? p2.errorCode : "ok"} against ${BEFORE.version} ${p1.statusCode ? p1.errorCode : "ok"} ${JSON.stringify(d)}`);
+      `${c.name} propagate (${pcfOutputFrame[frame]}) of the stored record: ${now} ${p2.statusCode ? p2.errorCode : "ok"} against ${against} ${p1.statusCode ? p1.errorCode : "ok"} ${JSON.stringify(d)}`);
   }
 }
 
