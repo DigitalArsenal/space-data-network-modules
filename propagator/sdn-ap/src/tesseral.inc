@@ -5441,9 +5441,11 @@ inline void evict_idle(GridCache& c, int keep) {
 
 
 /// The displacements in the six-component set, the grid's cubic in E at the current anomaly times e^{i (w omega + m beta)}.
+/// `a_ref` > 0: the offset in a is a_ref's, not the current mean a's (the long-period regime with the Sun and Moon, SPEC 16.11).
 inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta_g0, double* six,
-                     double E_in = std::numeric_limits<double>::quiet_NaN(), double* dsix_dlam = nullptr, double weight = 1.0) {
-  const double de = kp.e - g.e, di = kp.i - g.i, da = kp.a / g.a - 1.0;
+                     double E_in = std::numeric_limits<double>::quiet_NaN(), double* dsix_dlam = nullptr, double weight = 1.0,
+                     double a_ref = 0.0) {
+  const double de = kp.e - g.e, di = kp.i - g.i, da = (a_ref > 0.0 ? a_ref : kp.a) / g.a - 1.0;
   double E = E_in;
   if (!(E == E)) {
     E = kp.m;
