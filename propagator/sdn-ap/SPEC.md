@@ -2585,11 +2585,20 @@ numerical propagator that carries it (16.14). `fit`,
 
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
-MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
-complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
-orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 added 72 m on day 1 and 268 m on day 7 after a 72 h
-fit through 0.6.20. From 0.6.25 a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
+- **In the low table** (class 0 at or below the 0.05 switch), with tesseral cap d the short-period terms are complete to
+  first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree 12 the table
+  also holds the m-daily terms.
+- **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
+  near-resonant terms in low orbit and the half-day tail, and nothing else.
+- **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
+  70 x 70 numerical forecast over 5 days, gravity only on both sides): D falls from 62 to 232 m to 35 to 148 m. The terms
+  are along-track and radial lines at once per revolution plus or minus about once a day, and the daily and twice-daily
+  m-daily lines.
+- **Off the low table** at 800 km, the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all against a 31 x 31
+  field).
+
+Through 0.6.20, at 450 km the order-15 terms above degree 31 added 72 m on day 1 and 268 m on day 7 after a 72 h fit. From 0.6.25 a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
 rates, to degree 70 whatever d states: d governs the fast terms, and a commensurability's series is a cancellation, so a slow
 set cut at a lower degree is worse than none.
 `maneuver` and `ingest_omm` keep SGP4XP.
@@ -2600,8 +2609,8 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 
 | Family | Terms | Cap | Where |
 | --- | --- | --- | --- |
-| m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 | at output time, first order at the mean elements |
-| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12 | at output time, first order at the mean elements |
+| m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 (in the low table above 12, the first-order table's to d) | at output time, first order at the mean elements |
+| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12; in the low table d to 70, \|l - 2p\| <= 17, by the 0.5 m size cut | at output time, first order at the mean elements |
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
@@ -4198,10 +4207,10 @@ covariance's moved sets fly the record's branch (12.1), a fit that would end on 
 fit-at-branch-limit (16.7), and the epoch store does not blend two sets on different branches (14.3). A consumer that
 differences, blends or interpolates two records of one object must do the same.
 
-MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
-complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
-orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field (16.1). In the low table, with tesseral cap d the
+short-period terms are complete to first order to degree min(d, 70). On every other branch they are complete to min(d, 12),
+and degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms and the half-day tail only. Off the low table at
+800 km, the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all against a 31 x 31 field).
 
 An AP mean set and the state AP gives for it agree to first order only: integrated numerically that state leaves the AP
 trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low orbit. AP elements must come from an AP fit.

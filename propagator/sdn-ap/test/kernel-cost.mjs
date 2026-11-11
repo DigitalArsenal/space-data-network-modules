@@ -14,6 +14,7 @@
 //   node test/kernel-cost.mjs [--wasm FILE] [--repeats 5] [--steps 300,60] [--regimes name,...] [--json FILE] [--solid-tides]
 //     [--slow]
 // --solid-tides: the AP sets state the solid Earth tide (PERTURBATIONS.SOLID_TIDES_MODEL IERS 2010, SPEC 16.14).
+// --tesseral N: the AP sets of the near-circular regimes state tesseral degree N (default 31; MAXIMUM_TESSERAL_DEGREE).
 // --slow: the AP sets with gravity terms state the slow set (PERTURBATIONS.GRAVITY_MODEL "EGM-96; slow tesseral terms to
 // degree 70", SPEC 16.18), as a fit in the low table writes it; a set outside the low table flies as without it.
 // Output: the largest position and velocity difference between two builds at every state of every regime's AP, SGP4XP
@@ -46,6 +47,7 @@ const SAMPLE = Number(arg("--sample", 1500));
 const BOUND = arg("--bound", null)?.split(",").map(Number);  // m, m/s: --diff fails when a time-order difference exceeds them
 const TIDES = process.argv.includes("--solid-tides");
 const SLOW = process.argv.includes("--slow");
+const TESSERAL = Number(arg("--tesseral", 31));  // the tesseral degree of the AP sets of the regimes that do not name one
 
 const DAY = 86400000;
 const EPOCH = Date.parse("2026-06-15T00:00:00Z");
@@ -114,8 +116,9 @@ async function open(file) {
 async function setsOf(m, r, norad) {
   const epoch = iso(EPOCH);
   const el = { epoch, n: r.n, e: r.e, i: r.i, raan: r.raan, argp: r.argp, ma: r.ma, bterm: r.bterm, agom: r.agom, norad, name: r.name };
-  const ap = seedOcm({ ...el, msis: true, records: true, rows: rowsThrough(rowsOf(r.weather)), tesseral: r.tesseral ?? (r.e > 0.048 ? 0 : 31), zonal: 20, solidTides: TIDES,
-    slow: SLOW && (r.tesseral ?? (r.e > 0.048 ? 0 : 31)) > 0 });
+  const tesseral = r.tesseral ?? (r.e > 0.048 ? 0 : TESSERAL);
+  const ap = seedOcm({ ...el, msis: true, records: true, rows: rowsThrough(rowsOf(r.weather)), tesseral, zonal: 20, solidTides: TIDES,
+    slow: SLOW && tesseral > 0 });
   const xp = seedOcm(el);
   const ing = await m.h.invoke({ methodId: "ingest_omm", inputs: [{ portId: "omm", typeRef: T("OMM"), payload: sgp4Omm(r, norad) }] });
   if (ing.statusCode !== 0) throw new Error(`ingest_omm ${ing.errorCode}: ${ing.errorMessage}`);
