@@ -1744,6 +1744,12 @@ inline uint64_t next_ctx_id() {
   return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
 }
 
+/// SPEC 16.12: an AP set above kWideE whose epoch perigee height (a0 (1 - e0) - 1 Earth radii) is this many km or more flies
+/// without drag. The theory's density is 1e-20 kg/m^3 above 2,500 km (SPEC 3.3): B 0.05 m^2/kg moves a flight there by 5 mm
+/// in 7 days at F10.7 210 and Ap 40 (perigee 2,550 to 4,000 km, e 0.31 to 0.82). The Sun and the Moon lower a perigee of
+/// 3,000 km by up to 69 km in 30 days at apogee 40,000 km, 582 km at 120,000 km and 1,835 km at 200,000 km.
+constexpr double kDragNoneKm = 5000.0;
+
 /// A set's branch (SPEC 16.7, 17.7): the switches its epoch mean motion n0 (rad/min) and eccentricity e0 decide once, for
 /// the whole flight. AP's mean elements are defined per branch: two sets on different branches are different orbits, never
 /// differenced or blended. The eccentricity switches exist only with AP's terms selected (`ap`).
@@ -1753,6 +1759,9 @@ struct Branch {
   uint8_t wide_tess = 0;    ///< AP: the first-order tesseral families on the grid (tess::wide_set: 0.05 in class 0, else 0.3)
   uint8_t wide_e = 0;       ///< AP: e0 above tess::kWideE, the zonal tail's every long-period term and the perigee drag passage
   uint8_t series_e = 0;     ///< AP: e0 at or above res::kSeriesE, the class's G about e0 (SPEC 6.4)
+  /// AP above kWideE: the epoch perigee height at or above kDragNoneKm (SPEC 16.12), where no drag acts: the flight takes B as
+  /// 0 (a report carries the set's own) and runs no drag passage. Not a switch: a moved set flies its nominal's, as the rest.
+  uint8_t drag_none = 0;
   /// The long-period regime's step, minutes (SPEC 9, 16.10): 95, AP's one-day class 38, and an AP set above e0 0.3 at most
   /// half the perigee pass's time scale (1 - e0)^(3/2) / n0. Not a switch: a moved set flies its nominal's, as the rest.
   double lp_step = kLongPeriodStep;
@@ -1770,6 +1779,7 @@ inline Branch branch_of(double n0, double e0, bool ap) {
     b.wide_tess = tess::wide_set(b.resonance, e0) ? 1 : 0;
     b.wide_e = e0 > tess::kWideE ? 1 : 0;
     b.series_e = e0 >= res::kSeriesE ? 1 : 0;
+    b.drag_none = b.wide_e && (std::pow(kKe / n0, kX2o3) * (1.0 - e0) - 1.0) * kRe >= kDragNoneKm ? 1 : 0;
   }
   if (b.long_period && ap) {
     b.lp_step = b.resonance == 1 ? 38.0 : kLongPeriodStep;
@@ -1801,6 +1811,7 @@ struct RateContext {
   double d50_epoch;
   tess::Terms selected_terms;  ///< AP force selection
   double bterm, agom;
+  double bterm_set;     ///< the set's own B, which a report carries (bterm is 0 under Branch::drag_none, SPEC 16.12)
   double rad_y0;        ///< AP: the radiation term Y0 beside the sphere, m/s^2 (SPEC 16.13); 0: none
   uint8_t solid_tides;  ///< AP: the solid Earth tide in the rates (SPEC 16.14)
   double tide_k1[2];    ///< AP: step 2's diurnal band at the epoch, the tensor's xz and yz (ER^5/min^2; SPEC 16.14)
@@ -5564,6 +5575,10 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;
+  if (s.ctx.ap_third_body && br.drag_none) {  // SPEC 16.12: no drag acts above kDragNoneKm
+    s.ctx.drag_pass = 0;
+    s.ctx.bterm = 0.0;
+  }
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && br.series_e && e.eo + 1e-3 < 1.0) {
@@ -5766,7 +5781,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.epoch_jd_whole = e.epoch_jd_whole;
   s.epoch_jd_frac = e.epoch_jd_frac;
   s.ctx.d50_epoch = (e.epoch_jd_whole - kJd1950) + e.epoch_jd_frac;
-  s.ctx.bterm = e.bterm;
+  s.ctx.bterm = s.ctx.bterm_set = e.bterm;
   s.ctx.agom = e.agom;
   if (!(e.xno > 0.0) || !(e.eo >= 0.0) || !(e.eo < 1.0) || !std::isfinite(e.xincl)) {
     s.init_error = kPropRefused;
@@ -6431,7 +6446,7 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   e.epoch_jd_frac = frac - whole;
   e.theory = kTheorySgp4Xp;
   e.norad = s.norad;
-  e.bterm = s.ctx.bterm;
+  e.bterm = s.ctx.bterm_set;
   e.agom = s.ctx.agom;
   radiation_y0(e) = s.ctx.rad_y0;  // SPEC 16.13: an AP set's Y0 (it does not enter the epoch rates: y0_blocks)
   const Kepler k = kepler_of(y);

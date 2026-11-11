@@ -4747,6 +4747,9 @@ inline int slow_terms(int cap, int cls, double n, double e, double inc, double* 
 /// a / a0 on kGridD (half precision).
 constexpr int kGridN = 128, kGridNE = 128, kGridD = 64;
 constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward differences of the derivative grids
+/// The families left off the grid (wide_keep): the smallest, while their sizes (wide_families: the largest position
+/// displacement a family gives at a node) sum to at most this many meters.
+constexpr double kWideDropM = 1e-2;
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
 constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;
@@ -4842,8 +4845,11 @@ inline void fft_inplace(double* re, double* im, int n, bool inverse) {
 }
 
 /// One set of family grids at (n, e, i): out[f][6][kGridN] complex (re, im interleaved), families in (m, w) order with any
-/// forcing; returns the count. `cls`: the class whose terms the rates carry.
-inline int wide_families(int degree, int cls, double n, double e, double inc, int8_t* fm_out, int8_t* fw_out, double* out) {
+/// forcing; returns the count. `cls`: the class whose terms the rates carry. `size_out` (if given): each family's size, the
+/// largest position displacement (m) its six components give at a node (radial, along-track and normal, at the node's
+/// radius, with the normal part's two components taken in phase).
+inline int wide_families(int degree, int cls, double n, double e, double inc, int8_t* fm_out, int8_t* fw_out, double* out,
+                         double* size_out = nullptr) {
   const double eta = std::sqrt(1.0 - e * e), a = std::pow(kKe / n, kX2o3), p0 = a * eta * eta;
   const double c = std::cos(inc), si = std::sin(inc), j2 = 1.5 * kJ2 / (p0 * p0);
   const double mdot = n + 0.5 * j2 * n * eta * (3.0 * c * c - 1.0), wdot = 0.5 * j2 * n * (5.0 * c * c - 1.0);
@@ -5005,6 +5011,7 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
       double* o = out + static_cast<size_t>(count) * 6 * kGridN * 2;
       const double ka = 2.0 / (n * a), ke1 = eta * eta / (na2 * e), ke2 = eta / (na2 * e), ki = (c * w - m) / (na2 * eta * si);
       const double kO = 1.0 / (na2 * eta * si), kw = c / (na2 * eta * si);
+      double size2 = 0.0;
       for (int gq = 0; gq < kGridN; ++gq) {
         const int q = gq * (NE / kGridN);
         const double Hgr = D[0][0][q], Hgi = D[0][1][q], Her = D[1][0][q], Hei = D[1][1][q], Hir = D[2][0][q], Hii = D[2][1][q];
@@ -5017,17 +5024,59 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         const double dO[2] = {kO * Hir, kO * Hii};
         const double dw[2] = {ke2 * Her - kw * Hir, ke2 * Hei - kw * Hii};
         const double dM[2] = {-ka * Har - ke1 * Her - 3.0 / (a * a) * HHMr, -ka * Hai - ke1 * Hei - 3.0 / (a * a) * HHMi};
+        double sx[2][6];
         for (int ri = 0; ri < 2; ++ri) {
           const double six[6] = {-1.5 * n / a * da[ri], de[ri], di[ri], e * (dw[ri] + dO[ri]), si * dO[ri], dM[ri] + dw[ri] + dO[ri]};
-          for (int z = 0; z < 6; ++z) o[(z * kGridN + gq) * 2 + ri] = six[z];
+          for (int z = 0; z < 6; ++z) o[(z * kGridN + gq) * 2 + ri] = sx[ri][z] = six[z];
+        }
+        if (size_out != nullptr) {
+          // the displacement over a at the node, r / a = 1 / ar: radial (r / a) da / a - cos f de + e sin f / eta dM, along-track
+          // (r / a) (dw + cos i dO + df/de de + (a / r)^2 eta dM) with dM = dlambda - dvarpi, dw + cos i dO = dvarpi -
+          // tan(i / 2) sin i dO; normal at most (r / a) (|di| + |sin i dO|)
+          const double ra = 1.0 / ar[q], th = si / (1.0 + c), fe = sf[q] * (2.0 + e * cf[q]) / (eta * eta);
+          double d2 = 0.0;
+          for (int ri = 0; ri < 2; ++ri) {
+            const double* x = sx[ri];
+            const double dvp = x[3] / e, dMl = x[5] - dvp;
+            const double dR = -ra * x[0] / (1.5 * n) - cf[q] * x[1] + e * sf[q] / eta * dMl;
+            const double dT = ra * (dvp - th * x[4] + fe * x[1] + ar[q] * ar[q] * eta * dMl);
+            d2 += dR * dR + dT * dT;
+          }
+          const double dN = ra * (std::hypot(sx[0][2], sx[1][2]) + std::hypot(sx[0][4], sx[1][4]));
+          size2 = std::fmax(size2, d2 + dN * dN);
         }
       }
+      if (size_out != nullptr) size_out[count] = a * std::sqrt(size2) * kRe * 1e3;
       fm_out[count] = static_cast<int8_t>(m);
       fw_out[count] = static_cast<int8_t>(w);
       ++count;
     }
   std::free(ws);
   return count;
+}
+
+/// The families a grid keeps of the `count` sized: the smallest left out while their sizes sum to at most kWideDropM (ties
+/// in their order), the rest in their order; from[k] (2 count ints of room) the k-th kept family's index. Returns how many.
+/// `size` is overwritten.
+inline int wide_keep(double* size, int count, int* from) {
+  int* order = from + count;
+  for (int f = 0; f < count; ++f) {
+    int k = f;
+    while (k > 0 && size[order[k - 1]] > size[f]) {
+      order[k] = order[k - 1];
+      --k;
+    }
+    order[k] = f;
+  }
+  double left = 0.0;
+  for (int k = 0; k < count && left + size[order[k]] <= kWideDropM; ++k) {
+    left += size[order[k]];
+    size[order[k]] = -1.0;
+  }
+  int kept = 0;
+  for (int f = 0; f < count; ++f)
+    if (!(size[f] < 0.0)) from[kept++] = f;
+  return kept;
 }
 
 /// The grid of an object above kWideE at its mean elements (n, e, i), with its derivative grids; false out of memory.
@@ -5071,15 +5120,23 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   double* sn = bs.sn;
   const auto fail = [&]() { release(); std::free(block); std::free(sm); return false; };
   if (bs.size < one || block == nullptr || sm == nullptr) return fail();
-  const int count = wide_families(degree, cls, n, e, inc, fm, fw, sn);
-  if (count < 0) return fail();
+  double* size = static_cast<double*>(std::malloc(static_cast<size_t>(cap) * (sizeof(double) + 2 * sizeof(int))));
+  if (size == nullptr) return fail();
+  int* from = reinterpret_cast<int*>(size + cap);
+  const int count = wide_families(degree, cls, n, e, inc, fm, fw, sn, size);
+  if (count < 0) { std::free(size); return fail(); }
+  const int kept = wide_keep(size, count, from);
+  for (int k = 0; k < kept; ++k) {
+    fm[k] = fm[from[k]];
+    fw[k] = fw[from[k]];
+  }
   // each node's value and its slope in E (per node spacing), the fourth-order central difference of its four neighbours on
   // the periodic grid from the values in double, interleaved (re, im, slope re, slope im) for wide_six's cubic Hermite
-  for (int f = 0; f < count; ++f)
+  for (int k = 0; k < kept; ++k)
     for (int z = 0; z < 6; ++z)
       for (int ri = 0; ri < 2; ++ri) {
-        const double* row = sn + static_cast<size_t>(f) * per + static_cast<size_t>(z) * kGridN * 2 + ri;
-        float* out = v + static_cast<size_t>(f) * per4 + static_cast<size_t>(z) * kGridN * 4 + ri;
+        const double* row = sn + static_cast<size_t>(from[k]) * per + static_cast<size_t>(z) * kGridN * 2 + ri;
+        float* out = v + static_cast<size_t>(k) * per4 + static_cast<size_t>(z) * kGridN * 4 + ri;
         for (int k = 0; k < kGridN; ++k) {
           const auto at = [&](int j) { return row[static_cast<size_t>((k + j + kGridN) & (kGridN - 1)) * 2]; };
           out[static_cast<size_t>(k) * 4] = static_cast<float>(at(0));
@@ -5090,20 +5147,21 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   const double hp[3][3] = {{n, e + kGridDe, inc}, {n, e, inc + kGridDi}, {n / std::pow(1.0 + kGridDa, 1.5), e, inc}};
   const double step[3] = {kGridDe, kGridDi, kGridDa};
   constexpr int skip = kGridN / kGridD;
-  for (int d = 0; d < 3; ++d) {
-    if (wide_families(degree, cls, hp[d][0], hp[d][1], hp[d][2], sm, sm + cap, sp) != count) return fail();
-    for (int f = 0; f < count; ++f)
+  for (int d = 0; d < 3 && kept > 0; ++d) {
+    if (wide_families(degree, cls, hp[d][0], hp[d][1], hp[d][2], sm, sm + cap, sp) != count) { std::free(size); return fail(); }
+    for (int f = 0; f < kept; ++f)
       for (int z = 0; z < 6; ++z)
         for (int k = 0; k < kGridD; ++k)
           for (int ri = 0; ri < 2; ++ri) {
-            const size_t at = f * per + (static_cast<size_t>(z) * kGridN + k * skip) * 2 + ri;
+            const size_t at = from[f] * per + (static_cast<size_t>(z) * kGridN + k * skip) * 2 + ri;
             dv[(static_cast<size_t>(f) * 3 + d) * dper + (static_cast<size_t>(z) * kGridD + k) * 2 + ri] =
                 to_half(static_cast<float>((sp[at] - sn[at]) / step[d]));
           }
   }
   release();
   std::free(sm);
-  g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v; g.dv = dv;
+  std::free(size);
+  g.degree = degree; g.count = kept; g.m = fm; g.w = fw; g.v = v; g.dv = dv;
   g.n = n; g.e = e; g.i = inc; g.a = std::pow(kKe / n, kX2o3);
   return true;
 }
@@ -5298,6 +5356,7 @@ inline void evict_idle(GridCache& c, int keep) {
 /// The displacements in the six-component set, the grid's cubic in E at the current anomaly times e^{i (w omega + m beta)}.
 inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta_g0, double* six,
                      double E_in = std::numeric_limits<double>::quiet_NaN(), double* dsix_dlam = nullptr, double weight = 1.0) {
+  if (g.count == 0) return;  // every family left out (wide_keep)
   const double de = kp.e - g.e, di = kp.i - g.i, da = kp.a / g.a - 1.0;
   double E = E_in;
   if (!(E == E)) {

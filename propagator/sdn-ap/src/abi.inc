@@ -472,6 +472,41 @@ int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
   return tess::slow_terms(cap, cls, n, e, inc, rows, max_rows);
 }
 
+/// The tesseral grid's families (SPEC 16.11) at in = mean motion (rev/day), e, i (deg) and the grid's degree (2 to 12), in
+/// the class of the mean motion: rows of 4 doubles (m, w, the family's size in m, 1 kept on the grid or 0 left out by
+/// tess::wide_keep), at most max_rows. Returns the count of all families, or -1 for inputs it does not cover or out of
+/// memory. A diagnostic: no flight reads it.
+SDNAP_EXPORT("sdnap_wide_families")
+int32_t sdnap_wide_families(const double* in, double* rows, int32_t max_rows) {
+  using namespace sdnap::xpt;
+  const double n = in[0] * sdnap::kTwoPi / sdnap::kMinutesPerDay, e = in[1], inc = in[2] * sdnap::kPi / 180.0;
+  const int degree = static_cast<int>(in[3]);
+  if (!(n > 0.0) || !(e > 0.0 && e < 1.0) || !(inc > 0.0 && inc < sdnap::kPi) || degree < 2 || degree > tess::kSpCap) return -1;
+  const int cap = degree * (2 * degree + 1);
+  const size_t grid = static_cast<size_t>(cap) * 6 * tess::kGridN * 2;
+  double* buf = static_cast<double*>(std::malloc((grid + 2 * cap) * sizeof(double) + 2 * cap * sizeof(int) + 2 * cap));
+  if (buf == nullptr) return -1;
+  double* size = buf + grid;
+  double* left = size + cap;
+  int* from = reinterpret_cast<int*>(left + cap);
+  int8_t* fm = reinterpret_cast<int8_t*>(from + 2 * cap);
+  const int count = tess::wide_families(degree, res::band_of(n), n, e, inc, fm, fm + cap, buf, size);
+  if (count >= 0) {
+    for (int k = 0; k < count; ++k) left[k] = size[k];
+    const int kept = tess::wide_keep(left, count, from);
+    for (int k = 0; k < count && k < max_rows; ++k) {
+      rows[4 * k] = fm[k];
+      rows[4 * k + 1] = fm[cap + k];
+      rows[4 * k + 2] = size[k];
+      rows[4 * k + 3] = 0.0;
+    }
+    for (int k = 0; k < kept; ++k)
+      if (from[k] < max_rows) rows[4 * from[k] + 3] = 1.0;
+  }
+  std::free(buf);
+  return count;
+}
+
 /// Frame diagnostics on a state (km, km/s; 6 doubles in, 6 out) at the UTC
 /// Julian date whole + frac. mode 0 GCRF -> TEME, 1 TEME -> GCRF (the fit's
 /// GCRF rotation, gcrf.inc), 2 TEME -> Earth-fixed, 3 Earth-fixed -> TEME
