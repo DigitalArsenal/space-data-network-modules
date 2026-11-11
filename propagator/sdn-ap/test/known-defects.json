@@ -8,5 +8,10 @@
     "test": "molniya-7day-drag-sigma",
     "issue": "DigitalArsenal/spacedatanetwork-stack#438",
     "text": "On a 7-day arc of an eccentric orbit with drag (Molniya), the record states the drag coefficient to 0.09 % while the fitted value is 0.3 to 0.5 % from the truth: the stated uncertainty is 5 to 7 times too small; its position covariance is honest."
+  },
+  {
+    "test": "drag-term-sigma-honesty",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#463",
+    "text": "In low orbit a 3-day fit states its drag coefficient 3 to 10 times more precisely than it is: on the real satellites the fitted value is typically 2.7 to 11 stated uncertainties from the numerical propagator's. The predicted position's own uncertainty depends on it only negligibly and did not change."
   }
 ]

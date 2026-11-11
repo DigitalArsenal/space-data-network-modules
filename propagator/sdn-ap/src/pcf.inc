@@ -80,7 +80,8 @@ constexpr double kShortArcHours = 36.0;
 /// value the arc determines.
 constexpr double kDragPriorWideLogSigma = 23.02585092994045684;
 /// BTERM's prior when FIT.DRAG_PRIOR is unset under NRLMSISE-00, on an arc of at least kDragPriorFreeMinArcHours, for an orbit
-/// at or below e 0.3 at a mean altitude of 600 to 2,500 km (SPEC 12.8): LOG_NORMAL, median 0.008 m^2/kg, sigma of the log
+/// at or below e 0.3 with its perigee at 600 to 2,500 km (SPEC 12.8; such an arc's band rule is judged on the perigee's height,
+/// so a perigee below 600 km takes the strong-drag median 0.01): LOG_NORMAL, median 0.008 m^2/kg, sigma of the log
 /// kDragPriorWideLogSigma, no fall-back: the arc decides. The band medians it replaces there (0.002 at 600 to 800 km, 0.0005
 /// above, with 12.8's fall-back) sat 2 to 40 times below the numerical propagator's fitted Cd A/m on every measured satellite
 /// (laser spheres 0.002 to 0.016, altimetry 0.01 to 0.05, Sentinel-1 0.008). Shorter arcs keep the band rule: a 24 h arc folds

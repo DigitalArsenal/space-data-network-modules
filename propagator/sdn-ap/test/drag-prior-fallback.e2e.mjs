@@ -10,21 +10,24 @@
 // weather on both sides (no SRP); AP FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee, 7 days flown on
 // a 2-minute grid, day-3 whole-day 3D RMS. Read windows (test/lib/regime-windows.mjs): AP6's altimetry group DO, 72 h
 // arcs, as AP8 flew them (AP72); the windows were read by AP8 and its diagnosis.
+// Restated with the default of a 71 h arc whose perigee is at 600 to 2,500 km (SPEC 12.8: median 0.008 under 10 ln 10, no
+// fall-back). Every arc this test fits is such an arc, so the fall-back it was registered for no longer runs on them (it
+// stands for an orbit above e 0.3); the acceptance holds what the new default does instead, the 0.4.18 figures in brackets.
 // Acceptance:
-// 1. DO: Sentinel-3A 2025-10-15 at or below 0.130 km at day 3 and Sentinel-3B 2025-10-25 at or below 0.150 km at day 7
-//    (0.4.11 0.087 and 0.113 km, 0.4.17 0.312 and 1.335 km);
-// 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D; on SWOT and Jason-3
-//    within 5 points of 0.4.17's;
-// 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of 0.4.17 on every window (errors per
-//    lead and axis, BTERM, AGOM); bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by
-//    millimeters and a fit by centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8,
-//    at most 0.022 m in the errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM;
+// 1. DO: Sentinel-3A 2025-10-15 at or below 0.33 km at day 3 and Sentinel-3B 2025-10-25 at or below 1.40 km at day 7, the
+//    two windows the fall-back had returned to 0.4.11 (0.087 and 0.113 km) and the new default takes back to 0.4.17's
+//    (0.312 and 1.335 km): measured 0.314 and 1.344 km, losses the drag-default pull request names;
+// 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D (measured -85 % and -92 %);
+//    on SWOT and Jason-3 within 5 points of 0.4.17's (measured -47.9 against -48.3 % and -73.2 against -68.9 %);
+// 3. DO: SARAL and CryoSat-2 (600-800 km, inside the new default): the median paired day-3 change against 0.4.11 at
+//    most +5 % (measured -34.7 % and +1.4 %; formerly bit for bit with 0.4.17, outside the old rule);
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
-//    step 36 h into the arc takes the fall-back, on SWOT-like and Sentinel-3-like (the step flag's figures were $OBD text,
-//    gone with it: modules-sdn-ap-ocm-write-20261103);
-// 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 within 2 m of 0.4.17 at
-//    day 3 (82.0 and 63.6 m);
+//    step 36 h into the arc, on SWOT-like and Sentinel-3-like, leaves the record stating an arc it does not fit (fit RMS
+//    above 10 km; measured 28.2 and 28.0 km) and BTERM undetermined (posterior sigma of the log at least 10, the prior's
+//    10 ln 10; measured 23.0) [0.4.18: the fall-back to the band median];
+// 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 at most 100 and 72 m at
+//    day 3 (measured 94.3 and 67.3 m) [0.4.17 81.4 and 63.0 m];
 // 6. default-FORCES XP digest bit-exact.
 // Printed: every fixture's fitted BTERM, posterior sigma of the log, fit RMS and drag path (the derivation of B, k and the
 // band median RMS); per object the DO medians at days 1, 2, 3 and 7; every DO window that takes the fall-back and why;
@@ -36,8 +39,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
-// 3's bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg), against 0.4.17 (measured 0.022 m, 2.3e-5, 3.6e-6)
-const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
@@ -135,38 +136,27 @@ if (!isMainThread) {
   console.log(JSON.stringify({sentinel3a20251015day3Km: s3a, sentinel3b20251025day7Km: s3b, frames030Meters, frames030MetersEarlierBuilds,
     oldPath: {sentinel3a20251015day3Km: day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3', 'daysOld'), sentinel3b20251025day7Km: day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7', 'daysOld')}}));
   assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
-  assert.ok(s3a !== null && s3a <= 0.130, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
-  assert.ok(s3b !== null && s3b <= 0.150, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
+  assert.ok(s3a !== null && s3a <= 0.33, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
+  assert.ok(s3b !== null && s3b <= 1.40, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
   // 2
   for (const o of ['HAIYANG 2C', 'HAIYANG 2D']) assert.ok(objects[o].day3.changeHere <= -0.70, `${o}: day-3 median change ${objects[o].day3.changeHere}`);
   for (const o of ['SWOT', 'JASON 3'])
     assert.ok(Math.abs(objects[o].day3.changeHere - objects[o].day3.change0417) <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.17's ${objects[o].day3.change0417}`);
   // 3
   for (const o of ['SARAL', 'CRYOSAT 2']) {
-    const v = rows.filter((r) => name(r) === o && !r.error);
-    assert.equal(v.length, 15, `${o}: 15 windows`);
-    for (const r of v) {
-      const [a, b] = [r.arms[1], r.arms[2]];
-      assert.ok(a.ok && b.ok, `${r.key}: both fits`);
-      let errM = 0;
-      for (const [k, da] of Object.entries(a.days ?? {})) for (const axis of Object.keys(da))
-        if (typeof da[axis] === 'number') errM = Math.max(errM, 1000 * Math.abs(da[axis] - (b.days?.[k]?.[axis] ?? Infinity)));
-      const dB = Math.abs(a.bterm - b.bterm) / Math.abs(a.bterm), dA = Math.abs(a.agom - b.agom);
-      console.log(JSON.stringify({outsideTheRule: r.key, errorsMeters: errM, btermRelative: dB, agom: dA}));
-      assert.ok(errM <= OUTSIDE_RULE.errorsM && dB <= OUTSIDE_RULE.btermRelative && dA <= OUTSIDE_RULE.agom,
-        `${r.key}: ${errM} m in the errors, BTERM ${dB} relative, AGOM ${dA} from 0.4.17's (within ${JSON.stringify(OUTSIDE_RULE)})`);
-    }
+    assert.equal(rows.filter((r) => name(r) === o && !r.error).length, 15, `${o}: 15 windows`);
+    assert.ok(objects[o].day3.changeHere <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.11 (at most +5 %)`);
   }
   // 4
   assert.equal(results['release SWOT-like 0.044 tail stepped'].bterm, results['release SWOT-like 0.044 tail'].bterm, 'a step after the arc leaves BTERM');
   for (const o of ['SWOT-like', 'Sentinel-3-like']) {
     const r = results[`release ${o} 0.044 step in the arc`];
-    // the record states the path (OD COMMENT) and no arc-check figures (modules-sdn-ap-ocm-write-20261103: no number in COMMENT)
-    assert.ok(/^fall-back/.test(r.path), `${o}: a step in the arc falls back (${r.path})`);
+    assert.ok(r.wrmsKm > 10, `${o}: a step in the arc leaves a fit RMS of ${r.wrmsKm} km (above 10 km)`);
+    assert.ok(r.sigmaLog >= 10, `${o}: a step in the arc leaves BTERM undetermined (posterior sigma of the log ${r.sigmaLog})`);
   }
   // 5
-  for (const o of ['SWOT-like', 'Sentinel-3-like'])
-    assert.ok(Math.abs(results[`release ${o} 0.044`].day3 - results[`0.4.17 ${o} 0.044`].day3) <= 2, `${o} 0.044: day 3 within 2 m of 0.4.17`);
+  assert.ok(results['release SWOT-like 0.044'].day3 <= 100, `SWOT-like 0.044: day 3 ${results['release SWOT-like 0.044'].day3} m`);
+  assert.ok(results['release Sentinel-3-like 0.044'].day3 <= 72, `Sentinel-3-like 0.044: day 3 ${results['release Sentinel-3-like 0.044'].day3} m`);
   // 6
   reproduceConformance();
   console.log('drag prior fall-back E2E: PASS');

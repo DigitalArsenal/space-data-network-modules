@@ -675,10 +675,13 @@ static int fit_blocks() {
             row.mean_motion_rev_day > 0.0) {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
           const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
-          const double h_km = (row.eccentricity > xpt::tess::kWideE ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
-          if (po.forces.msis && fit_end_min - fit_begin_min >= pcf::kDragPriorFreeMinArcHours * 60.0 &&
-              row.eccentricity <= xpt::tess::kWideE && h_km >= pcf::kDragPriorFreeFloorKm && h_km < pcf::kDragPriorFreeTopKm) {
-            // SPEC 12.8: an arc of 71 h or more at 600 to 2,500 km (e at or below 0.3) under NRLMSISE-00: the arc decides
+          // SPEC 12.8: an arc of 71 h or more under NRLMSISE-00 at or below e 0.3 is judged on its perigee's height, where the
+          // drag acts (an orbit above e 0.3 always is); a shorter arc on its mean altitude
+          const bool long_arc = po.forces.msis && fit_end_min - fit_begin_min >= pcf::kDragPriorFreeMinArcHours * 60.0 &&
+                                row.eccentricity <= xpt::tess::kWideE;
+          const double h_km = (row.eccentricity > xpt::tess::kWideE || long_arc ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
+          if (long_arc && h_km >= pcf::kDragPriorFreeFloorKm && h_km < pcf::kDragPriorFreeTopKm) {
+            // SPEC 12.8: such an arc with its perigee at 600 to 2,500 km: the arc decides
             eff_drag.mean = pcf::kDragPriorFreeMedian;
             eff_drag.sigma = pcf::kDragPriorWideLogSigma;
             free_band = true;
@@ -1124,7 +1127,7 @@ static int fit_blocks() {
                         : span_used < default_span ? "fit arc: shortened, the default span held no plausible set"
                         : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
-      else if (chosen.free_band) comment.push_back("drag prior: the 600-2,500 km default of a 71 h arc (median 0.008, sigma of the log 10 ln 10), no fall-back");
+      else if (chosen.free_band) comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (po.ecom2)
         comment.push_back(opt.fit_y0                     ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"

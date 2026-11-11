@@ -1854,7 +1854,9 @@ estimate (SWOT-like's 0.0463 against 0.044), so the carried prior gains only as 
 successive arcs, which is the catalog's work. `test/fit-per-object-prior-multi.e2e.mjs` measures these numbers. Unset, the prior is LOG_NORMAL with median 0.01
 m^2/kg and sigma of the log ln 10; under NRLMSISE-00 (or a minimum span below 24 h) the median follows the mean altitude
 (0.01 below 600 km, 0.002 at 600-800 km, 0.0005 above; above e 0.3 the perigee's altitude, where the drag acts), and
-under NRLMSISE-00 at 800-1400 km the sigma of the log is 10 ln 10.
+under NRLMSISE-00 at 800-1400 km the sigma of the log is 10 ln 10. On an arc of 71 h or more under NRLMSISE-00, an orbit at
+or below e 0.3 is judged on its perigee's height instead, and with the perigee at 600 to 2,500 km takes median 0.008 and
+sigma of the log 10 ln 10 with no fall-back: the arc decides (below, "The default of a 71 h arc").
 
 The fit estimates ln B by Gauss-Newton from the median. At B = 0.0005 the arc's sensitivity to ln B is B times its
 sensitivity to B, so under sigma ln 10 the prior's curvature dominates and the estimate stays at the median whatever
@@ -1913,7 +1915,9 @@ as 0.0047 to 0.4992 m/s at F 1,335 to 6,550, every one flagged. On the read wind
 2025-12-14 0.51 m/s); Sentinel-6B 2025-12-19 (1.7 km, its commissioning) gives 0.17 m/s at F 85. A step after the arc's end, its states in the $OEM after USEABLE_STOP_TIME, leaves the fit bit for
 bit.
 
-The rule. After a fit of at least 71 h (the 72 h arc and longer) under NRLMSISE-00 at 800-1400 km on the band default,
+The rule. After a fit of at least 71 h (the 72 h arc and longer) under NRLMSISE-00 at 800-1400 km on the band default (since
+the default of a 71 h arc below, an orbit above e 0.3 only: a 71 h arc at or below e 0.3 is judged on its perigee, and with
+the perigee at 800-1400 km takes that default, which has no fall-back),
 the fit is redone under 0.4.11's band-median prior (median 0.0005 m^2/kg, sigma of the log ln 10, which is 0.4.11's fit
 bit for bit) when the posterior sigma of the log exceeds B = 0.5, or BTERM is more than k = 3 posterior sigmas from the
 band median while the fit RMS exceeds the band's median, 15.16 m, by more than 25 % (18.95 m), or the arc check flags a
@@ -2125,7 +2129,9 @@ between nodes and held at the end values outside them; the density is NRLMSISE-0
 call's atmosphere, with finite-difference Jacobian fallback (`fit::jacobian_fallback`) enabled under NRLMSISE-00 and
 short-span (`< 24 h`) passes. When FIT.DRAG_PRIOR is unset under NRLMSISE-00 or `< 24 h` minimum span, BTERM's
 LOG_NORMAL prior takes its median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at
-`>= 800 km`), and under NRLMSISE-00 at `800-1400 km` the sigma of the log `10 ln 10`, with 12.8's fall-back; a stated FIT.DRAG_PRIOR is
+`>= 800 km`), and under NRLMSISE-00 at `800-1400 km` the sigma of the log `10 ln 10`, with 12.8's fall-back; on an arc of `71 h` or
+more under NRLMSISE-00 an orbit at or below e 0.3 is judged on its perigee's height, and with the perigee at `600-2,500 km` takes
+median `0.008` and sigma `10 ln 10` without the fall-back (12.8); a stated FIT.DRAG_PRIOR is
 fitted as given. When `FIT.MINIMUM_SPAN_HOURS < 24` and `FIT.DEFAULT_SPAN_HOURS >= 36` on a
 non-eccentric orbit without `USEABLE_START_TIME`, `fit` runs a two-stage decoupled solve: Stage 1 fits the `48-72 h`
 span to determine `BTERM` and `AGOM`; Stage 2 fits the trailing `MINIMUM_SPAN_HOURS` (e.g. `17.1 h`, the `12 h` order-2
