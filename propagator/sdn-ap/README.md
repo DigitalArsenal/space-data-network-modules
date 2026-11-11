@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.20 (dist 5a7fa01f).
+Version 0.6.21 (dist 7b2ada3b).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -252,6 +252,11 @@ closed form, whose 1e-12 test decided that by rounding:
 
 Under a change of 1e-10 in the mean motion, flights in an eclipse season moved by up to 35 m (145 m on a transfer
 orbit) instead of a linear drift of 0.2 to 0.6 m. They now move linearly to 0.9 mm in 7 days.
+
+On real fitted records the same defect was worth 5 to 30 m. Two of the release table's 0.6.20 records (QZS-2G and
+Galileo IOV 2, 72 h under ECOM2) were flown with the solid tide stated and with it removed. The tide's term is about a
+meter. On 0.6.20 the two flights differed by 8.1 and 33.7 m at day 7; now they differ by 1.7 and 3.1 m, within 0.2 m
+of the same flights with the shadow out of play.
 
 The rates agree with the same sphere and cylinder averaged numerically over one revolution within 7.6e-7 of their
 scale, through grazing and with a boundary at the perigee (`sdnap_ap_srp_rates`).
