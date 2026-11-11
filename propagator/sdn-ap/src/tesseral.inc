@@ -4605,8 +4605,9 @@ inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q) {
 /// and degrees to 70 whose own rate at the epoch is inside kShallowSelect bands, for a set of epoch mean motion n (rad/min), e,
 /// i (rad) and the stated tesseral degree `cap`. Rows of 8 doubles: l, m, p, q, psi-dot / n, the carrier (1 the rates,
 /// 3 the output table, 0 nowhere: under the table's 1e-3 n floor, 4 nowhere: above the slow set's degree, 5 nowhere: under
-/// the size cut), the rates' weight w (the band taper at these elements; the output table holds 1 - w of a term the rates
-/// carry) and the term's size (m, slow_size_m). At most max_rows written; returns the count of all rows.
+/// the size cut, 6 nowhere: a q outside the slow set's q range, at or above the size cut: stack #477's open part), the rates'
+/// weight w (the band taper at these elements; the output table holds 1 - w of a term the rates carry) and the term's size (m,
+/// slow_size_m). At most max_rows written; returns the count of all rows.
 inline int slow_listing_low(int cap, double n, double e0, double i0, double* rows, int max_rows) {
   const int sd = cap > kShallowCap ? kShallowCap : cap;
   ShallowTerms& sc = shallow_scratch();
@@ -4660,6 +4661,7 @@ inline int slow_listing_low(int cap, double n, double e0, double i0, double* row
           const bool on_table = j == 1 && (q >= -1 && q <= 1) && m <= sd && l <= sd;
           if (on_table && std::fabs(psidot) >= 1e-3 * n) { emit(l, m, p, q, psidot, 3, 0.0, size); continue; }
           if (on_table) { emit(l, m, p, q, psidot, 0, 0.0, size); continue; }
+          if (std::abs(q) > slow_q_max() && size >= kSlowKeepM) { emit(l, m, p, q, psidot, 6, 0.0, size); continue; }
           emit(l, m, p, q, psidot, 5, 0.0, size);
         }
       }
