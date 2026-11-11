@@ -567,6 +567,7 @@ static int fit_blocks() {
         bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
         bool free_band = false;                          ///< BTERM on the 600-2,500 km default of a 71 h arc (SPEC 12.8)
         double sigma_km = 0.0;  ///< the data sigma the fit weighted with, above the drag (SPEC 12.1); 0: the stages' 1 km
+        int agom_held = 0;      ///< stack #528: 1 AGOM not solved under the drag on a short arc, 2 its stage took no step (held at the prior)
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       // SPEC 12.1: the input's own position sigma, where the block states one (a floor of the data sigma)
@@ -706,7 +707,7 @@ static int fit_blocks() {
           bool prev;
           explicit FallbackScope(bool on) : prev(fit::jacobian_fallback()) { fit::jacobian_fallback() = on; }
           ~FallbackScope() { fit::jacobian_fallback() = prev; }
-        } fallback_scope{eccentric || placement != 0 || span_minutes < 1440.0 || fitoem::jacobian_always() != 0};
+        } fallback_scope{eccentric || placement != 0 || std::fmin(span_minutes, fit_end_min - fit_begin_min) < 1440.0 || fitoem::jacobian_always() != 0};
         fit::Options opt{};
         opt.max_iterations = 40;
         fit::Result res{};
@@ -737,14 +738,30 @@ static int fit_blocks() {
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
         const double first_pass_rms = res.rms_km;
-        opt.fit_agom = 1;
-        // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg, 0 +- 0.1 on a short arc; LOG_NORMAL on ln AGOM)
-        fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
+        // SPEC 12.1 (stack #528): under the drag on an arc under pcf::kDataSigmaUnderDragMinArcHours the fit weighs its data at
+        // 1 km, so AGOM's prior acts about a hundred times tighter than it states, and over such an arc the radiation term is
+        // nearly degenerate with BTERM: AGOM is not solved there. The set carries the stated prior's value (FIT.SRP_PRIOR, a
+        // caller's carried term; else the default's mean), and the record says so.
+        P.agom_held = cov::regime_of(row) == 0 && fit_end_min - fit_begin_min < pcf::kDataSigmaUnderDragMinArcHours * 60.0 ? 1 : 0;
+        if (P.agom_held) {
+          row.agom = eff_srp.mean;
+        } else {
+          opt.fit_agom = 1;
+          // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg, 0 +- 0.1 on a short arc; LOG_NORMAL on ln AGOM)
+          fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
+        }
         // SPEC 16.13: Y0 joins the whole-arc fit (and its passes at the data's sigma) on a long enough arc above the drag
         if (po.ecom2 && y0_hold == nullptr && fitoem::y0_solved_on(fit_end_min - fit_begin_min) && cov::regime_of(row) != 0)
           opt.fit_y0 = 1;
+        const double agom_start = row.agom;
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
+        // stack #528: a stage that could take no step in AGOM leaves it at its start (the prior's mean): the term is not solved,
+        // it is held at the prior, and the record says so; it is never left there silently
+        if (opt.fit_agom && row.agom == agom_start) {
+          opt.fit_agom = 0;
+          P.agom_held = 2;
+        }
         if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
         // SPEC 12.1: above the drag (cov::regime_of: the perigee at or above 2,500 km, where the theory's density is
@@ -1158,6 +1175,11 @@ static int fit_blocks() {
         comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against "
                           "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
+      // stack #528: AGOM not solved, held at its stated prior, said here (and SOLVED_FOR false in OD_DYNAMIC_PARAMETERS)
+      if (chosen.agom_held == 1)
+        comment.push_back("radiation: AGOM held at its stated prior, not solved (under the drag on an arc under 71 h the term is not observable)");
+      else if (chosen.agom_held == 2)
+        comment.push_back("radiation: AGOM held at its stated prior, not solved (the fit could take no step in it)");
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
                                      : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");
