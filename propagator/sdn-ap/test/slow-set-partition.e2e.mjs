@@ -3,17 +3,19 @@
 // sdnap_slow_terms. For a set inside each measured commensurability band (epoch mean elements, the stated tesseral degree 31)
 // it lists every term of j = 1 to 6, |q| up to 4, orders and degrees to 70 whose own angle rate is inside 1.3 shallow bands,
 // with its carrier (1 the rates, 3 the output table, 0 nowhere under the table's 1e-3 n floor, 4 nowhere above the slow set's
-// degree, 5 nowhere under the size cut), the rates' weight w and the term's size (along-track amplitude through the mean
-// motion, m).
+// degree or in a family whose leading degree is 69 or 70, 5 nowhere under the size cut, 6 nowhere: a q outside the slow set's
+// range at or above the size cut), the rates' weight w and the term's size (along-track amplitude through the mean motion, m).
 // Asserted:
 // - each (l, m, p, q) is listed once (in one place), and w is in [0, 1] (the table holds 1 - w of a term the rates carry);
-// - the rule as it lands (q = 0): every q = 0 term whose size reaches 0.5 m is in the rates, every q = 0 term in the rates beyond
-//   the shallow set's own (j = 1 to degree 31) reaches 0.5 m, and no q != 0 term is in the rates;
+// - the rule as it lands (q = 0): every q = 0 term whose size reaches 0.5 m is in the rates unless its family's leading degree
+//   is 69 or 70 (code 4: the embedded field ends that series at once), every q = 0 term in the rates beyond the shallow set's
+//   own (j = 1 to degree 31) reaches 0.5 m, and no q != 0 term is in the rates (a q != 0 term at or above 0.5 m is code 6);
 // - the named terms: at 550 km (i 87.35, 15:1) the second harmonic, order 30 at j = 2, degree 30 (the term main carried nowhere:
 //   1.2 km at day 5 with the field at 31 x 31), is in the rates; at 891 km (SWOT-like, 14:1) order 14 at j = 1 is carried to
 //   degree 35 at least and order 28 at j = 2 to degree 34 at least (where the 0.5 m cut ends each series);
-// - a set the slow set leaves alone selects nothing beyond the shallow set's own (a LAGEOS-like set at 6.39 rev/day), and a
-//   set outside the low table returns -1 (geostationary; a low orbit above its eccentricity switch, e 0.06).
+// - sets the slow set leaves alone select nothing beyond the shallow set's own (LAGEOS-like at 6.39 rev/day and LAGEOS-2-like
+//   at 6.47; their largest terms under the size cut are printed: 0.089 and 0.41 m measured 2026-11-11), and a set outside the
+//   low table returns -1 (geostationary; a low orbit above its eccentricity switch, e 0.06).
 // Printed: per set the count in the rates beyond the shallow set's, and the q != 0 terms the landing leaves on the output table
 // or nowhere, with their sizes (stack #477's open part).
 //   node test/slow-set-partition.e2e.mjs
@@ -35,6 +37,8 @@ function listing(n, e, i, cap = 31) {
     rate: v[COLS * k + 4], carrier: v[COLS * k + 5], w: v[COLS * k + 6], size: v[COLS * k + 7] }));
 }
 const j = (t) => t.l - 2 * t.p + t.q;
+/** The leading degree of the term's (m, w = j - q) family: max(m, |w|, 2), raised by one to the parity of w. */
+const lead = (t) => { const w = j(t) - t.q; let l0 = Math.max(t.m, Math.abs(w), 2); if ((l0 - w) % 2 !== 0) ++l0; return l0; };
 const SETS = {
   '550 km, i 87.35 (15:1)': [15.055, 0.001, 87.35],
   '891 km, SWOT-like (14:1)': [13.905, 0.0001, 77.6],
@@ -53,8 +57,11 @@ for (const [name, [n, e, i]] of Object.entries(SETS)) {
     assert.ok(!keys.has(k), `${name}: (l, m, p, q) = (${k}) is listed once`);
     keys.add(k);
     assert.ok(t.w >= 0 && t.w <= 1, `${name}: (${k}) weight ${t.w} in [0, 1]`);
-    if (t.q === 0 && t.size >= 0.5) assert.equal(t.carrier, 1, `${name}: (${k}) q = 0, ${t.size.toFixed(2)} m, is in the rates`);
+    if (t.q === 0 && t.size >= 0.5 && lead(t) < 69) assert.equal(t.carrier, 1, `${name}: (${k}) q = 0, ${t.size.toFixed(2)} m, is in the rates`);
+    if (lead(t) >= 69 && t.carrier !== 1) assert.equal(t.carrier, 4, `${name}: (${k}) leading degree ${lead(t)}: code 4`);
+    if (t.carrier === 1) assert.ok(lead(t) < 69 || (j(t) === 1 && t.q === 0 && t.l <= 31), `${name}: (${k}) leading degree ${lead(t)} is not in the slow set`);
     if (t.q !== 0) assert.notEqual(t.carrier, 1, `${name}: (${k}) q != 0 is not in the rates as this lands`);
+    if (t.q !== 0 && t.size >= 0.5 && lead(t) < 69 && t.carrier !== 3 && t.carrier !== 0) assert.equal(t.carrier, 6, `${name}: (${k}) q != 0 at ${t.size.toFixed(2)} m: code 6`);
     const own = j(t) === 1 && t.q === 0 && t.l <= 31;
     if (t.carrier === 1 && !own) assert.ok(t.size >= 0.5, `${name}: (${k}) in the rates beyond the shallow set's reaches 0.5 m (${t.size})`);
   }
@@ -76,10 +83,13 @@ for (const [name, [n, e, i]] of Object.entries(SETS)) {
   assert.ok(top(14, 1) >= 35, `891 km: order 14 at j = 1 to degree ${top(14, 1)}`);
   assert.ok(top(28, 2) >= 34, `891 km: order 28 at j = 2 to degree ${top(28, 2)}`);
 }
-{
-  const rows = listing(6.39, 0.0045, 109.8);
-  const extra = (rows ?? []).filter((t) => t.carrier === 1 && !(j(t) === 1 && t.q === 0 && t.l <= 31));
-  assert.equal(extra.length, 0, `LAGEOS-like: nothing in the rates beyond the shallow set's (${extra.length})`);
+for (const [name, n, e, i] of [['LAGEOS-like', 6.39, 0.0045, 109.8], ['LAGEOS-2-like', 6.47, 0.0135, 52.6]]) {
+  const rows = listing(n, e, i);
+  assert.ok(rows, `${name}: in the low table`);
+  const extra = rows.filter((t) => t.carrier === 1 && !(j(t) === 1 && t.q === 0 && t.l <= 31));
+  assert.equal(extra.length, 0, `${name}: nothing in the rates beyond the shallow set's (${extra.length})`);
+  const cut = rows.filter((t) => t.carrier === 5).sort((a, b) => b.size - a.size)[0];
+  report[name] = { rows: rows.length, inRatesBeyondShallow: 0, largestUnderTheCut: cut ? { l: cut.l, m: cut.m, q: cut.q, rateOverN: +cut.rate.toPrecision(3), sizeM: +cut.size.toPrecision(3) } : null };
 }
 assert.equal(listing(1.0027, 0.0003, 0.05), null, 'geostationary: outside the low table (-1)');
 assert.equal(listing(14.0, 0.06, 98), null, 'a low orbit at e 0.06: above its switch, outside the low table (-1)');
