@@ -200,7 +200,8 @@ struct Scope {
 
 // Diagnostic (test/atmosphere.e2e.mjs): the density (kg/m^3) a drag node takes at a TEME position r (km) and UTC time
 // (whole + frac Julian date), through the node formulas of SPEC 3.4 (r's geocentric latitude and radius, the Sun of
-// SPEC 5, the Greenwich angle of SPEC 1.2): model 0 the theory's own (SPEC 3 on the generic flux model), 1 Jacchia 1970
+// SPEC 5, the Greenwich angle of SPEC 1.2; an AP set's drag nodes take AP's Sun, SPEC 16.17, about 11 arcsec from SPEC
+// 5's on average): model 0 the theory's own (SPEC 3 on the generic flux model), 1 Jacchia 1970
 // and 2 NRLMSISE-00 on the drivers of `rows` (a 'space_weather' frame: $SPW rows, read as fit and propagate read them),
 // 3 NRLMSISE-00 on those drivers times exp(s(t)) of `dcl` (a 'density_correction' $DCL, read as fit and propagate read
 // it; models 0 to 2 take none). out: density, geodetic latitude (rad), longitude (rad, in [-pi, pi)), geodetic height

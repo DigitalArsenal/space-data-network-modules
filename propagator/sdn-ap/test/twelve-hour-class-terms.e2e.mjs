@@ -121,7 +121,11 @@ if (!process.argv.includes('--measure')) {
   // truth at day 3, so the old figure was AP's in-season radiation error offsetting the satellites' non-spherical
   // radiation, which a sphere does not carry. With Y0 solved on the same windows, day 3 goes from 23.4 to 11.5 m. The
   // move is 16.16's: 16.15 alone leaves the median where 0.6.20 has it.
-  const GE_PIN = {afterMedianMeters: 61.62, oldPath: 73.14};
+  // 0.6.22 (AP's own Sun and Moon, SPEC 16.17, stack #446): 61.623 > 65.188 m from 0.6.21, old path 73.136 > 76.553 m (the
+  // Moon alone on 0.6.20: 53.297 > 57.922 m; the two moves add). The old Moon's error, like section 4's sunlit-arc rate
+  // before 16.16, had been offsetting the satellites' non-spherical radiation, which a sphere does not carry; with Y0
+  // solved on the same windows, day 3 goes from 11.5 to 9.8 m.
+  const GE_PIN = {afterMedianMeters: 65.188, oldPath: 76.553};
   for (const [name, v] of Object.entries(others)) {
     if (name === 'GE') {
       assert.ok(Math.abs(v.afterMedianMeters - GE_PIN.afterMedianMeters) <= 0.5, `GE: median day-3 error within 0.5 m of ${GE_PIN.afterMedianMeters} m`);

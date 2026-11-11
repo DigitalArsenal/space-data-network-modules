@@ -32,7 +32,9 @@
 //            long-period regime: instantaneous point
 //            masses in the Gauss equations
 //            averaged over the orbit; long-period regime,
-//            instantaneous point-mass Gauss equations
+//            instantaneous point-mass Gauss equations.
+//            AP reads its own Sun and Moon (SPEC 16.17,
+//            ap_bodies.inc), never bodies_at or sun_at
 //   6        resonance (resonance.inc): SPEC bands, the   structure and G_lpq
 //            EGM-96 harmonics per class, Kaula F_lmp,     series in; the rate
 //            the classes' G_lpq e^28 series, Lagrange     equations SPEC-open:
@@ -53,6 +55,7 @@ namespace frames {
 inline void teme_drift(double epoch_whole, double epoch_frac, double t_minutes, double r[3], double v[3]);  // gcrf.inc
 inline bool teme_drift_matrix(double epoch_whole, double epoch_frac, double t_minutes, double R[3][3]);
 inline void apply_drift(const double R[3][3], double r[3], double v[3]);
+inline int utc_to_tt(double whole, double frac, double& tt1, double& tt2);
 }  // namespace frames
 namespace xpt {
 
@@ -201,35 +204,6 @@ inline void sun_at(double d50, Vec3& sun_u, double& sun_r, Cx* pm_out = nullptr,
   if (se_out != nullptr) *se_out = se;
 }
 
-struct SunHourCache {
-  int64_t hkey = std::numeric_limits<int64_t>::min();
-  Vec3 u0{}, du{};
-  double r0 = 0.0, dr = 0.0;
-};
-inline thread_local SunHourCache g_sun_hour_cache{};
-
-inline void sun_at_ap(double d50, Vec3& sun_u, double& sun_r) {
-  SunHourCache& sc = g_sun_hour_cache;
-  const double h = d50 * 24.0;
-  const double hfloor = std::floor(h);
-  const int64_t hkey = static_cast<int64_t>(hfloor);
-  if (sc.hkey != hkey) {
-    Vec3 u1{};
-    double r1 = 0.0;
-    sun_at(hfloor * (1.0 / 24.0), sc.u0, sc.r0);
-    sun_at((hfloor + 1.0) * (1.0 / 24.0), u1, r1);
-    sc.du = u1 - sc.u0;
-    sc.dr = r1 - sc.r0;
-    sc.hkey = hkey;
-  }
-  const double u = h - hfloor;
-  const Vec3 raw = {sc.u0.x + u * sc.du.x, sc.u0.y + u * sc.du.y, sc.u0.z + u * sc.du.z};
-  const double n2 = raw.x * raw.x + raw.y * raw.y + raw.z * raw.z;
-  const double inv_n = 1.5 - 0.5 * n2;
-  sun_u = {raw.x * inv_n, raw.y * inv_n, raw.z * inv_n};
-  sun_r = sc.r0 + u * sc.dr;
-}
-
 /// Sun and Moon at d50 (SPEC 5). The periodic series are evaluated with the
 /// sines and cosines of the fundamental arguments and their integer
 /// combinations built by complex multiplication.
@@ -323,81 +297,86 @@ inline Bodies bodies_at(double d50) {
   return b;
 }
 
+#include "ap_bodies.inc"
+
+/// AP's Sun and Moon at any time (SPEC 16.17): the quintic through ap_bodies_at at the six nodes about it, the nodes on
+/// an absolute grid every kApBodiesNodeHours of UTC (node k at k kApBodiesNodeHours hours from 1950 January 0.0), the
+/// unit vectors renormalized to first order. Every node is a function of its time alone. Each thread keeps the nodes it
+/// has read in a store of kApBodiesStoreSlots slots, by node index (85 days at 8 h), and the six of its last read in a
+/// window: no set fills or owns a node, a node is never shared between threads (so no race), and every set and every
+/// thread reads the same numbers in any order.
+inline constexpr double kApBodiesNodeHours = 8.0;
+inline constexpr int kApBodiesStoreSlots = 256;
+struct ApBodiesNode {
+  int64_t key = std::numeric_limits<int64_t>::min();  // the node index held, or none
+  Bodies b{};
+};
+inline thread_local ApBodiesNode* g_ap_bodies_store = nullptr;
+inline const Bodies& ap_bodies_node(int64_t k) {
+  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+  ApBodiesNode& s = g_ap_bodies_store[static_cast<uint64_t>(k) & (kApBodiesStoreSlots - 1)];
+  if (s.key != k) {
+    s.b = ap_bodies_at(static_cast<double>(k) * (kApBodiesNodeHours / 24.0));
+    s.key = k;
+  }
+  return s.b;
+}
 struct alignas(16) BodiesHourCache {
-  alignas(16) Bodies b[4]{};
-  int64_t hkey_p1 = 0;
+  alignas(16) Bodies b[6]{};
+  int64_t hkey = std::numeric_limits<int64_t>::min();  // the node interval held, or none
 };
 inline thread_local BodiesHourCache g_bodies_hour_cache{};
 
 inline Bodies bodies_at_ap(double d50) {
   BodiesHourCache& bc = g_bodies_hour_cache;
-  const double h = d50 * 24.0;
+  const double h = d50 * (24.0 / kApBodiesNodeHours);
   const double hfloor = std::floor(h);
   const int64_t hkey = static_cast<int64_t>(hfloor);
-  const int64_t hp1 = hkey + 1;
-  if (__builtin_expect(bc.hkey_p1 != hp1, 0)) {
-    if (bc.hkey_p1 != 0 && hp1 == bc.hkey_p1 + 1) {
-      bc.b[0] = bc.b[1];
-      bc.b[1] = bc.b[2];
-      bc.b[2] = bc.b[3];
-      bc.b[3] = bodies_at((hfloor + 2.0) * (1.0 / 24.0));
-    } else if (bc.hkey_p1 != 0 && hp1 == bc.hkey_p1 - 1) {
-      bc.b[3] = bc.b[2];
-      bc.b[2] = bc.b[1];
-      bc.b[1] = bc.b[0];
-      bc.b[0] = bodies_at((hfloor - 1.0) * (1.0 / 24.0));
+  if (__builtin_expect(bc.hkey != hkey, 0)) {
+    if (bc.hkey != std::numeric_limits<int64_t>::min() && hkey == bc.hkey + 1) {
+      for (int q = 0; q < 5; ++q) bc.b[q] = bc.b[q + 1];
+      bc.b[5] = ap_bodies_node(hkey + 3);
+    } else if (bc.hkey != std::numeric_limits<int64_t>::min() && hkey == bc.hkey - 1) {
+      for (int q = 5; q > 0; --q) bc.b[q] = bc.b[q - 1];
+      bc.b[0] = ap_bodies_node(hkey - 2);
     } else {
-      bc.b[0] = bodies_at((hfloor - 1.0) * (1.0 / 24.0));
-      bc.b[1] = bodies_at(hfloor * (1.0 / 24.0));
-      bc.b[2] = bodies_at((hfloor + 1.0) * (1.0 / 24.0));
-      bc.b[3] = bodies_at((hfloor + 2.0) * (1.0 / 24.0));
+      for (int q = 0; q < 6; ++q) bc.b[q] = ap_bodies_node(hkey - 2 + q);
     }
-    bc.hkey_p1 = hp1;
+    bc.hkey = hkey;
   }
+  // Lagrange weights on the nodes hkey - 2 .. hkey + 3 at hkey + u
   const double u = h - hfloor;
-  const double um1 = u - 1.0, up1 = u + 1.0, um2 = u - 2.0;
-  const double w0 = -(1.0 / 6.0) * u * um1 * um2;
-  const double w1 = 0.5 * up1 * um1 * um2;
-  const double w2 = -0.5 * up1 * u * um2;
-  const double w3 = (1.0 / 6.0) * up1 * u * um1;
+  constexpr double kInvDen[6] = {-1.0 / 120.0, 1.0 / 24.0, -1.0 / 12.0, 1.0 / 12.0, -1.0 / 24.0, 1.0 / 120.0};
+  const double d[6] = {u + 2.0, u + 1.0, u, u - 1.0, u - 2.0, u - 3.0};
+  double w[6];
+  for (int q = 0; q < 6; ++q) {
+    double p = kInvDen[q];
+    for (int r = 0; r < 6; ++r)
+      if (r != q) p *= d[r];
+    w[q] = p;
+  }
   alignas(16) Bodies out{};
 #ifdef __wasm_simd128__
-  const v128_t vw0 = wasm_f64x2_splat(w0), vw1 = wasm_f64x2_splat(w1);
-  const v128_t vw2 = wasm_f64x2_splat(w2), vw3 = wasm_f64x2_splat(w3);
-  const double* p0 = &bc.b[0].sun_u.x;
-  const double* p1 = &bc.b[1].sun_u.x;
-  const double* p2 = &bc.b[2].sun_u.x;
-  const double* p3 = &bc.b[3].sun_u.x;
   double* po = &out.sun_u.x;
-  for (int q = 0; q < 8; q += 2) {
-    const v128_t s01 = wasm_f64x2_add(wasm_f64x2_mul(vw0, wasm_v128_load(p0 + q)),
-                                      wasm_f64x2_mul(vw1, wasm_v128_load(p1 + q)));
-    const v128_t s23 = wasm_f64x2_add(wasm_f64x2_mul(vw2, wasm_v128_load(p2 + q)),
-                                      wasm_f64x2_mul(vw3, wasm_v128_load(p3 + q)));
-    wasm_v128_store(po + q, wasm_f64x2_add(s01, s23));
+  for (int c = 0; c < 8; c += 2) {
+    v128_t s = wasm_f64x2_mul(wasm_f64x2_splat(w[0]), wasm_v128_load(&bc.b[0].sun_u.x + c));
+    for (int q = 1; q < 6; ++q) s = wasm_f64x2_add(s, wasm_f64x2_mul(wasm_f64x2_splat(w[q]), wasm_v128_load(&bc.b[q].sun_u.x + c)));
+    wasm_v128_store(po + c, s);
   }
+#else
+  double* po = &out.sun_u.x;
+  for (int c = 0; c < 8; ++c) {
+    double s = 0.0;
+    for (int q = 0; q < 6; ++q) s += w[q] * (&bc.b[q].sun_u.x)[c];
+    po[c] = s;
+  }
+#endif
   const double sn2 = out.sun_u.x * out.sun_u.x + out.sun_u.y * out.sun_u.y + out.sun_u.z * out.sun_u.z;
   const double sinv = 1.5 - 0.5 * sn2;
   out.sun_u = {out.sun_u.x * sinv, out.sun_u.y * sinv, out.sun_u.z * sinv};
   const double mn2 = out.moon_u.x * out.moon_u.x + out.moon_u.y * out.moon_u.y + out.moon_u.z * out.moon_u.z;
   const double minv = 1.5 - 0.5 * mn2;
   out.moon_u = {out.moon_u.x * minv, out.moon_u.y * minv, out.moon_u.z * minv};
-#else
-  const Vec3 su = {w0 * bc.b[0].sun_u.x + w1 * bc.b[1].sun_u.x + w2 * bc.b[2].sun_u.x + w3 * bc.b[3].sun_u.x,
-                   w0 * bc.b[0].sun_u.y + w1 * bc.b[1].sun_u.y + w2 * bc.b[2].sun_u.y + w3 * bc.b[3].sun_u.y,
-                   w0 * bc.b[0].sun_u.z + w1 * bc.b[1].sun_u.z + w2 * bc.b[2].sun_u.z + w3 * bc.b[3].sun_u.z};
-  const double sn2 = su.x * su.x + su.y * su.y + su.z * su.z;
-  const double sinv = 1.5 - 0.5 * sn2;
-  out.sun_u = {su.x * sinv, su.y * sinv, su.z * sinv};
-  out.sun_r = w0 * bc.b[0].sun_r + w1 * bc.b[1].sun_r + w2 * bc.b[2].sun_r + w3 * bc.b[3].sun_r;
-  const Vec3 mu = {w0 * bc.b[0].moon_u.x + w1 * bc.b[1].moon_u.x + w2 * bc.b[2].moon_u.x + w3 * bc.b[3].moon_u.x,
-                   w0 * bc.b[0].moon_u.y + w1 * bc.b[1].moon_u.y + w2 * bc.b[2].moon_u.y + w3 * bc.b[3].moon_u.y,
-                   w0 * bc.b[0].moon_u.z + w1 * bc.b[1].moon_u.z + w2 * bc.b[2].moon_u.z + w3 * bc.b[3].moon_u.z};
-  const double mn2 = mu.x * mu.x + mu.y * mu.y + mu.z * mu.z;
-  const double minv = 1.5 - 0.5 * mn2;
-  out.moon_u = {mu.x * minv, mu.y * minv, mu.z * minv};
-  out.moon_r = w0 * bc.b[0].moon_r + w1 * bc.b[1].moon_r + w2 * bc.b[2].moon_r + w3 * bc.b[3].moon_r;
-#endif
   return out;
 }
 
@@ -3343,7 +3322,8 @@ inline bool drag_orbit_check(const RateContext& ctx, double t, const double* y, 
   const Frame fr = frame_of(y);
   const Kepler k = kepler_of(y, fr.a);
   const AngleTrig ag = angle_trig(k);
-  const Bodies b = bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+  // the Sun the set's flights read (an AP set's own, SPEC 16.17)
+  const Bodies b = ctx.ap_third_body ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay) : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
   drag_part(ctx, t, y, fr, k, ag, b, theory);
   const int N = samples < 2 ? 2 : samples & ~1;
   const double e = k.e, n = fr.n, eta = fr.eta, p = fr.a * eta * eta, th = ag.ci, cj2 = kJ2 / (4.0 * p);
@@ -3910,9 +3890,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
 
   const Bodies b = use_epoch_aux ? ea.b
                                  : (use_stage_aux ? csa->b
-                                                  : (ctx.ap_third_body && fr.n < 0.016 && ctx.i0 > 0.02
-                                                         ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay)
-                                                         : bodies_at(ctx.d50_epoch + t / kMinutesPerDay)));
+                                                  : (ctx.ap_third_body ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay)
+                                                                       : bodies_at(ctx.d50_epoch + t / kMinutesPerDay)));
   if (record_epoch_aux) {
     ea.ctx_id = ctx.ctx_id;
     ea.d50_epoch = ctx.d50_epoch;
@@ -4795,9 +4774,7 @@ inline void y0_blocks(const RateContext& ctx, const Node& a, Node& out) {
     const double tc = dir * c;
     double yc[6], unit[6];
     hermite(a, b0, tc, yc);
-    Vec3 su;
-    double sr;
-    sun_at(ctx.d50_epoch + tc / kMinutesPerDay, su, sr);
+    const Vec3 su = bodies_at_ap(ctx.d50_epoch + tc / kMinutesPerDay).sun_u;  // AP only (rad_y0 is AP's)
     y0_unit_rates(ctx, yc, frame_of(yc), su, unit);
     const double scale = dir * length * acc;
     for (int j = 0; j < 6; ++j) add[j] += scale * unit[j];
@@ -5016,7 +4993,7 @@ inline thread_local const DragPassRates* g_drag_pass_rates = nullptr;
   if (held != nullptr && held->ctx_id == ctx.ctx_id && held->t == t) {
     for (int j = 0; j < kDragPassValues; ++j) v[j] = held->v[j];
   } else {
-    const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
+    const Bodies b = shared != nullptr ? *shared : bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay);  // AP only
     drag_passes(ctx, t, ym, frm, km, angle_trig(km), b, v);
   }
   // SPEC 16.12's drag steps. The osculating elements change by each pass's whole effect, 2 pi p / n, over the pass,
@@ -5318,7 +5295,9 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
           sun_u = ab.sun_u0 + u_ab * ab.dsun_u;
           sun_r = ab.sun_r0 + u_ab * ab.dsun_r;
         } else {
-          sun_at_ap(ctx.d50_epoch + t / kMinutesPerDay, sun_u, sun_r);
+          const Bodies b = bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay);
+          sun_u = b.sun_u;
+          sun_r = b.sun_r;
         }
       }
       double A, B, C;
@@ -5958,6 +5937,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   // The nonresonant long-period branch retains its native TEME-of-date
   // convention. A second epoch-axis rotation is not part of that branch.
   // This one ingest-time policy is shared by fit residuals and every flight.
+  // The one writer of ap_frame, ap_third_body and ap_resonance (xp_init zeroes them first): the other two are set only
+  // when ap_third_body is, so ap_third_body != 0 exactly when is_ap_ctx. The callers that choose AP's Sun and Moon
+  // (bodies_at_ap, SPEC 16.17) by ap_third_body rely on it.
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;
@@ -6939,7 +6921,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
     const Frame fx = frame_of(yx);
     const Kepler kx = kepler_of(yx, fx.a);
     if (!(kx.e < 1.0) || std::fabs(tk[i] - kx.m / fx.n - tp) > 0.125 * period) return false;
-    drag_passes(s.ctx, tk[i], yx, fx, kx, angle_trig(kx), bodies_at(s.ctx.d50_epoch + tk[i] / kMinutesPerDay), fk[i]);
+    drag_passes(s.ctx, tk[i], yx, fx, kx, angle_trig(kx), bodies_at_ap(s.ctx.d50_epoch + tk[i] / kMinutesPerDay), fk[i]);
   }
   lock(&c.lock);
   const int q = c.next;
