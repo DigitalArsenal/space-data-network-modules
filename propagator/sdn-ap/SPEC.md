@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.22 (dist cdefcc13).
+Version 0.6.23 (dist 97a46e03).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1492,11 +1492,11 @@ bits unchanged, with one exception stated below. What makes it so:
   first state asked.
 - The third body's bracket tables are the bracket's own (stack #475). The bracket's lower node chooses their builder,
   rows and sub-interval count, and they are read only as far as the builder wrote.
-  Through 0.6.21 two things followed the state asked first instead:
+  Through 0.6.22 two things followed the state asked first instead:
   - the builder and the sub-interval count;
   - the rows past those written, read as the last set had left them.
   So a state near the three mean motions where the builder changes (0.006, 0.015 and 0.035 rad/min) moved with the order
-  of requests, by up to 0.285 m (0.015 rad/min, 1e-7 above). Against 0.6.21's states asked in ascending order it is
+  of requests, by up to 0.285 m (0.015 rad/min, 1e-7 above). Against the earlier states asked in ascending order it is
   now at most 14.3 mm (0.015), 5.8 mm (0.006) and 2.5 mm (0.035), and unchanged elsewhere.
 - A record's covariance is likewise a function of the record and the time (12.3).
 - The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
@@ -1885,15 +1885,16 @@ J, here and in 12.1, is made of differences of sets each flown on its own. Every
 its output at its own state, as any set does. A record's covariance is then a function of the record and the time
 alone: it does not depend on the order in which times are asked, or on which records the thread flew before it.
 
-Through 0.6.21 this did not hold (stack #491):
+Through 0.6.22 this did not hold (stack #491):
 - The moved sets took the nominal's stage parts from the thread's cache, plus their own differences held over four
   steps. In the long-period regime they stepped in pairs.
 - At t = 0 the short-period terms were baked on the last set's bracket.
 - The third body's bracket tables read rows the last set had left (stack #475).
 
-The 0.6.21 figures, as their own record alone in a fresh instance:
-- A record whose covariance was prepared after another record's flight ended in its first grid step was off by up to
-  440 times (a 500 km record, 805 m against 364,849 m at hour 1).
+The figures through 0.6.22 (measured on 0.6.20 and 0.6.21), against each record alone in a fresh instance:
+- A record whose covariance was prepared after a record of another orbit had been flown inside its first grid step was
+  off by up to 440 times: a made-up 500 km record, 364,849 m against 805 m at hour 1; on real records, CryoSat-2 after
+  Ajisai, 336,299 m against 992 m.
 - Asked in turn with nine other records, the one-day class at 0.9 rev/day differed by up to 21 % of its day-7 position
   sigma.
 - Flown alone, the one-day class was 5 % from its moved sets flown on their own, LEO up to 7e-4.

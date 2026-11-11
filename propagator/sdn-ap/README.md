@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.22 (dist cdefcc13).
+Version 0.6.23 (dist 97a46e03).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -370,6 +370,12 @@ rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
   impulse's times sinc(dL/2) to 1e-4 (10 and 60 minutes).
 
 ## Covariance realism
+
+From 0.6.23 a record's covariance is a function of the record and the time alone. Through 0.6.22 it depended on what
+the thread had flown before it (stack #491, SPEC 12.3). On real records, CryoSat-2's covariance asked right after
+Ajisai's gave a position sigma of 336,299 m at hour 1, against 992 m alone. Asked in turn with other records, real
+geostationary records moved by up to 0.5 %. The covariance's moved sets were also 4.75 % (geostationary) from themselves
+flown on their own. `test/set-caches.e2e.mjs` holds the rule bit for bit.
 
 Neither table earns a realism label. The covariance is positive semidefinite by construction and is not calibrated. The
 band of SPEC 12.7 cannot establish realism: it accepts variance errors of 2.3, 0.2 and 0.01 on the three principal axes

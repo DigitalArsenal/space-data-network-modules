@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T08:38:10.973Z",
+  "generatedAt": "2026-11-11T09:05:33.184Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.22",
+      "version": "0.6.23",
       "methodIds": [
         "export_omm",
         "fit",
