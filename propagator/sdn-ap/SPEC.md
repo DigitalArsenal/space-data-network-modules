@@ -3072,8 +3072,74 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
 
 Which slow terms the grid keeps is 16.18's rule; its reasons and measurements are stated there. From 0.6.28 it keeps none: every
-class above its switch carries its slow terms of degree 2 to 12 in its rates (stack #473). From 0.6.24 to 0.6.27 the one-day
-class kept every slow term its rates did not carry on the grid, down to 1e-2 n (stack #467).
+class above its switch carries its slow terms in its rates (stack #473), of degree 2 to 12 in 0.6.28 to 0.6.32 and from 0.6.33
+of degree 2 to 31, low orbit included. From 0.6.24 to 0.6.27 the one-day class kept every slow term its rates did not carry on
+the grid, down to 1e-2 n (stack #467).
+
+*Degree 31, and the families' cut (from 0.6.33; stack #473).* Above the switch the grid carries the families of degree 2 to 31
+in every class (kGridCap). Below it the table's general set stops at kSpCap (12). Through 0.6.32 the grid also stopped at 12 and
+the terms of degree 13 to 31 were carried nowhere above the switch.
+
+A family (m, w) is built when at least one of its terms (l, p, q), |j| up to 95, reaches 0.2 m (kGridKeepM) in the grid's share,
+1 - band_taper of its rate. A term is sized as the low table sizes its terms (16.2's rule for its 0.5 m cut), with G and dG/de
+exact at the set's e. `grid_keep` takes G for every j of an (l, w) by one quadrature in E (res::exact_G's integrand and nodes),
+shared by every order, and keeps the same families as a census term by term. A family whose every term is under 0.2 m is not
+built, and the grid is sized to the families it keeps. sdnap_wide_families(in, rows, max_rows) lists each family of a degree
+(in: mean motion rev/day, e, i deg, degree) as 4 doubles: m, w, its largest term's share on the grid in m, and 1 when the grid
+builds it.
+
+The cut sets both the grid's error and its cost. The cut's own cost is the largest distance over 5 days between the flights at
+the cut and with every family of degree 31. At e 0.9 the 128-node grid's own error (10 to 700 m) is larger than the cut's, so
+there the cut is measured at 512 nodes:
+
+| Cut | below e 0.9 (128 nodes) | e 0.9 at 300 and 1,400 km (512 nodes) | THEMIS A 2013-02-11's real geometry (512 nodes) |
+| ---: | ---: | ---: | ---: |
+| 0.05 m | 0.16 to 0.84 m | 0.58 and 3.0 m | 0.41 m |
+| 0.1 m | 0.24 to 1.9 m | 1.3 and 4.6 m | 1.0 m |
+| 0.2 m | 0 to 3.4 m | 3.8 and 57.7 m | 2.5 m |
+| 0.5 m | 2.7 to 9.1 m | 10.4 and 23.3 m | 3.2 m |
+
+The 1,400 km set at e 0.9 lies near a resonance: its flight moves 4.9 km between 128 and 256 nodes, and its distance to the
+numerical propagator is about 5 km. Cost per state, warm, 7 days at 300 s:
+
+| Set | through 0.6.32 (degree 12) | 0.05 m | 0.1 m | 0.2 m |
+| --- | ---: | ---: | ---: | ---: |
+| e 0.1 at 500 km (low orbit) | 41.1 us | 72.6 | 48.2 | 32.8 |
+| e 0.9 at 300 km | 213 us | 269 | 259 | 245 |
+
+The e 0.9 set's cost is mostly the slow list to degree 31 in the rates, 1,525 terms.
+
+*Memory (from 0.6.33).* Through 0.6.32 every grid held all 288 families of degree 12, 4.87 MB. A grid now holds the families the
+cut keeps (16,896 bytes a family):
+
+| Kind of set | families | MB |
+| --- | ---: | ---: |
+| e 0.05 at 500 km, i 70 (low orbit) | 294 | 5.0 |
+| e 0.1 at 300 km, i 98 (low orbit) | 328 | 5.5 |
+| e 0.1 at 500 km, i 98 (low orbit) | 280 | 4.7 |
+| e 0.1 at 1,000 km | 157 | 2.7 |
+| e 0.3 at 1,000 km | 139 | 2.3 |
+| e 0.5 at 300 km | 290 | 4.9 |
+| e 0.5 at 1,400 km | 121 | 2.0 |
+| e 0.7 at 650 km | 273 | 4.6 |
+| e 0.9 at 300 km | 547 | 9.2 |
+| e 0.9 at 1,400 km | 247 | 4.2 |
+| transfer orbit | 167 | 2.8 |
+| Molniya | 226 | 3.8 |
+| THEMIS-like | 66 | 1.1 |
+| Chandra-like | 34 | 0.6 |
+| TESS-like | 3 | 0.05 |
+| e 0.1 at 10,000 km | 36 | 0.6 |
+| e 0.7 at 20,200 km | 36 | 0.6 |
+
+The cache holds at most kGridSlots (256) grids, kGridIdle (128) of them idle, and from 0.6.33 at most kGridCeilingBytes (1 GiB):
+above it the idle grids go, oldest first, and a grid needed again is rebuilt (256 grids of the largest kind above would be 2.4
+GB of the module's 4 GB). sdnap_wide_grid_peak(out) writes the most bytes the cache has held since the instance began (out[0])
+and the ceiling (out[1]).
+
+The grid's node count is 128. The builder (wide_families) keeps its node arrays on the stack: its frame is 12,288 bytes at 128
+nodes, 20,480 at 256 and 36,864 at 512 (read from the builds), and would be 69,632 at 1,024, more than a pool thread's 64 KiB
+stack (stack #510). So the count can rise to 512 without moving those arrays to the heap.
 
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
@@ -3083,13 +3149,12 @@ For each (l, m, p), the sum over q of G_lpq e^{i(w+q)M} is (a/r)^(l+1) e^{iwf}, 
 first-order displacement (Lagrange's equations, each harmonic divided by its psi-dot, lambda also through n) is a periodic
 function of the anomaly, complete in j. At init it is built on 128 uniform eccentric anomalies from the family's forcing:
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
-omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-daily, the class's, the half-day class's tail, and
-the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
-shallow set's taper and the terms slower than 1e-3 n; in the one-day class, from 0.6.24, only the terms slower than 1e-2 n
-(16.18); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
-each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
-precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
-the slopes below, 3.1 MB before 0.6.14), and read at
+omega_E)) / M-dot, R the six rates, the harmonics the rates carry (m-daily, the class's, the half-day class's tail, and
+the band taper of every slow harmonic, 16.18; through 0.6.32 in low orbit, class 0 below 1100 min, only the shallow set's terms
+q = 0, w = j = 1 with the shallow set's taper and the terms slower than 1e-3 n) subtracted one by one,
+each by the share the rates carry, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
+precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (16,896 bytes a family:
+memory above), and read at
 output time in E by the cubic Hermite between the two nodes about E, linear in the mean elements' offsets, times
 e^{i(w omega + m beta)}. Each node's slope is the fourth-order central difference of its four neighbours on the periodic
 grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.
@@ -3126,8 +3191,9 @@ sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their byte
 instance began (out[2]). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
 2e-3 at e 0.79. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; a
-first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in
-the table (`src/tesseral.inc:323`); the table builds none of the general set above the switch (`src/tesseral.inc:324`). Below the switch both sets are 0.4.14's: propagations at e 0.25 and 0.3 of Etalon- and GPS-like seeded
+first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The table builds none of the general set above the
+switch, and from 0.6.33 none of its near-resonant terms there either: they are of degree 31 or less and on the grid (through
+0.6.32 those above degree 12 stayed in the table). Below the switch both sets are 0.4.14's: propagations at e 0.25 and 0.3 of Etalon- and GPS-like seeded
 sets and of LEO sets at e 0.05 and below are byte-identical. The method is fixed once per flight from the fitted epoch elements: `src/tesseral.inc:43` sets
 kWideE = 0.3 and `:49` kWideENonResonant = 0.05, `src/tesseral.inc:264` reads `const bool wide = wide_set(cls, e0);` when the set's terms are built at initialization
 (`src/xp_theory.inc:1473` builds the grid on the same test of the epoch eccentricity), the output tests only whether the set
@@ -3957,7 +4023,9 @@ cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to t
 - the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch w is 1 for the class's
   terms and, from 0.6.28, the band taper of its own rate for every other term in the rates (the grid holds 1 - w);
 - the term's size in m. That is its along-track amplitude through the mean motion, 3 |j| A / (a psi-dot^2), with
-  A = mu / a^(l+1) |F G| |C, S| at the epoch elements and G exact at the epoch e. A size cut is chosen on this number.
+  A = mu / a^(l+1) |F G| |C, S| at the epoch elements and G exact at the epoch e. A size cut is chosen on this number. From
+  0.6.27 in the low table and from 0.6.33 above the switch it is the larger of that and the term's size through the
+  eccentricity vector (below).
 
 | Code | Carrier |
 | ---: | --- |
@@ -3970,8 +4038,9 @@ cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to t
 | 6 | nowhere: a q outside the rule's q range, at or above the size cut |
 
 It writes at most max_rows rows and returns the count of all of them, or -1 for a set it does not cover. It covers the sets
-above their eccentricity switch outside low orbit (class 0 below 1100 min), and from 0.6.25 the low table (below: codes 3,
-5 and 6 are written there only). It returns -1 for every other set. No flight reads it.
+above their eccentricity switch (outside low orbit, class 0 below 1100 min, through 0.6.32; every class from 0.6.33), and from
+0.6.25 the low table (below: codes 3 and 6 are written there only). Above the switch code 4 is a term above the grid's degree
+(12 through 0.6.32, 31 from 0.6.33) or with |j| above 127. It returns -1 for every other set. No flight reads it.
 
 *The partition test.* Each part of the rule has an E2E of one shape:
 - the rule, written in the test as a function of a row (the carrier from l, m, p, q and psi-dot / n);
@@ -4037,8 +4106,9 @@ stack #474.
   1.7 to 25 km with the Sun and Moon.
 - **Double precision.** At high degree and eccentricity the terms' F G and F dG/de leave a float's range, so the table is in
   double.
-- **Degree 12.** The list stops at the grid's degree. Above degree 12 nothing carries a family's fast harmonics, and its slow
-  harmonics alone put the transfer orbit below at 165 m (to degree 31) and 186 m (to degree 70), against 134 m.
+- **Degree 12 through 0.6.32.** The list stopped at the grid's degree. Above degree 12 nothing carried a family's fast
+  harmonics, and its slow harmonics alone put the transfer orbit below at 165 m (to degree 31) and 186 m (to degree 70), against
+  134 m. From 0.6.33 the grid and the list both reach degree 31 (below).
 
 **What the rule changes.** The numerical propagator (FFM 2.3.0, DE440s) is flown from each case's state, and AP is fitted to
 its own 0 to 120 h. D is the largest distance over that span, in m. Constant weather; the truth's drag and radiation terms
@@ -4057,15 +4127,42 @@ On the e 0.9 case at 1,400 km the rule takes the field alone from 4.3 km to 139 
 that piece is the grid of the fast families under the Sun and Moon (stack #479).
 
 `test/slow-band-every-class.e2e.mjs` checks one set of each class with `sdnap_slow_terms`, and flies one model truth at e 0.9
-(0.40 rev/day, fitted to its own 5 days): 242.7 m against 2,691.4 m before.
+(0.40 rev/day, fitted to its own 5 days): 242.7 m on 0.6.28 against 2,691.4 m before, and 171.7 m from 0.6.33.
+
+*Degree 13 to 31, and low orbit, above the switch (from 0.6.33; stack #473).*
+- **The rule.** Above its eccentricity switch every class, low orbit included, carries the field's terms of degree 2 to 31,
+  each once: its slow share in the rates and its fast share on the grid (16.11).
+  - The rates take every slow term the class's terms do not carry, at or above 0.5 m. The size is the larger of the term's size
+    through the mean motion and through the eccentricity vector, the low table's two sizes. Each term is weighted by the band
+    taper of its rate.
+  - In low orbit the shallow set's terms (q = 0, w = j = 1) stay in the shallow set, with the same taper.
+  - The grid takes 1 - band_taper of each term, in the families 16.11's cut keeps.
+  - The diagnostic writes code 1 with the rates' weight, 5 under the size cut, and 4 above degree 31 or |j| above 127.
+- **Low orbit above the switch: the low table's rule.**
+  - Through 0.6.32 the grid there kept the band down to 1e-3 n, and the terms under that were carried nowhere: at 500 km and
+    e 0.1, the 13:1 terms of degree 13 to 31 with q other than 0.
+  - At or below the switch, the low table puts every slow term in the band in the rates, because drag moves n and carries a
+    family's rate through the band. The same rule now holds above the switch.
+  - Measured on three low orbits above the switch (real weather, AP fitted to the numerical forecast over 0 to 120 h, D in m):
+
+| Case | 0.6.28 | the band on the grid, the terms under 1e-3 n in the rates | the band in the rates with the taper |
+| --- | ---: | ---: | ---: |
+| grid-hp500-e0.1-i98 | 138.7 | 45.7 | 42.6 |
+| grid-hp300-e0.1-i98 | 143.8 | 46.0 | 45.9 |
+| grid-hp500-e0.05-i70 | refused | refused | 45.9 |
+
+  - "Refused" is fit-at-branch-limit: the best set lies on the 0.05 switch, and each side's fit ends across it.
+- **What it changes.** [acceptance cases, band and guard against 0.6.32]
 
 *The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
 - in low orbit (class 0 below 1100 min), through 0.6.24: the commensurabilities with j of 2 to 4 (orders 25 and up) and the
   degrees above 31. Inside the bands they put a set 0.1 to 1.9 km off at day 5 (stack #477). From 0.6.25 the low table's
   slow set carries those with q = 0 (below); the terms with q other than 0 stay open;
-- above the switch in classes 0, 2, 3 and 4: every slow term the class's rates do not carry. A transfer orbit (2.2785
-  rev/day, e 0.7306, i 27 deg) is 2.1 km from the numerical propagator at day 5 without radiation pressure (stack #473);
-- in the one-day class: the terms under its floor and above degree 12 (stack #474).
+- above the switch in classes 0, 2, 3 and 4, through 0.6.27: every slow term the class's rates do not carry. A transfer
+  orbit (2.2785 rev/day, e 0.7306, i 27 deg) is 2.1 km from the numerical propagator at day 5 without radiation pressure
+  (stack #473);
+- in the one-day class, through 0.6.27: the terms under its floor and above degree 12 (stack #474);
+- above the switch, through 0.6.32: the terms of degree 13 to 31, and in low orbit the slow terms under 1e-3 n.
 
 *The low table (from 0.6.25; stack #477).* The low table is class 0 below
 1,100 min at or below its eccentricity switch. There, through 0.6.20, the shallow set (16.2) carried only j = 1, q = 0 to the
