@@ -152,6 +152,11 @@ constexpr double kWideE = 0.3;
 /// resonant share there and costs more. Read by xpt::branch_of alone (SPEC 16.7: the switch is the set's, decided at its epoch).
 constexpr double kWideENonResonant = 0.05;
 inline bool wide_set(int cls, double e0) { return e0 > (cls == 0 ? kWideENonResonant : kWideE); }
+/// The one-day class's resonant tail (SPEC 6.1, 16.2; stack #434): k = m, degrees 5 to the cap, orders 1 to this, in the
+/// rates of a one-day set below kWideE. At e at most 0.3 the amplitude cut of half_day_terms ends the tail below degree 15,
+/// so no term of a higher order passes it.
+constexpr int kOneDayTailMaxOrder = 16;
+inline bool one_day_tail(int cls, bool wide, int degree) { return cls == 1 && !wide && degree >= 5; }
 
 /// Where a set on the grid (above its eccentricity switch) carries each slow tesseral term, by the grid's own rules
 /// (wide_families): every (l, m, p, q) of degree 2 to `cap` whose angle drifts slower than kShallowBand n at the set's epoch
@@ -916,6 +921,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   const auto weight_of = [&](int l, int m, int p, int q, double& psidot) -> double {
     const int w = l - 2 * p, j = w + q;
     if (cls == 2 && l > 5 && l <= near_degree && (m & 1) == 0 && j == m / 2) return 0.0;
+    if (one_day_tail(cls, wide, near_degree) && l > 4 && l <= near_degree && m <= kOneDayTailMaxOrder && j == m) return 0.0;
     for (int c = 0; c < carried.count; ++c)
       if (carried.t[c].l == l && carried.t[c].m == m && carried.t[c].p == p && carried.t[c].q == q) return 0.0;
     psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
@@ -3212,8 +3218,9 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
 }
 
 
-/// Half-day resonant tail: every even order m, k=m/2, degree 6..31.
-/// Normalized F and dF/di at the epoch; G is cubic about the epoch eccentricity.
+/// A class's resonant tail in the rates. Half-day (cls 2): every even order m, k = m/2, degree 6..31. One-day (cls 1,
+/// stack #434): every order m from 1 to kOneDayTailMaxOrder, k = m, degree 5..31. Normalized F cubic about the epoch
+/// inclination; G cubic about the epoch eccentricity; a by its ratio to the epoch's.
 struct HalfDayCoef {
   int8_t m, w, k, pad;
   float uc0, uce, ucee, uceee, uci, ucii, uciii, ucei, uceei, uceii, uca, ucaa, ucae, uceea, uceeea, ucai;
@@ -3232,10 +3239,14 @@ struct HalfDayScratch {
   size_t raw_cap = 0;
 };
 inline thread_local HalfDayScratch g_half_day_scratch{};
-inline int half_day_bound(int degree) {
-  return (degree / 2 + 1) * (2 * degree + 1);
+inline int half_day_bound(int degree, int cls = 2) {
+  return (cls == 1 ? degree + 1 : degree / 2 + 1) * (2 * degree + 1);
 }
-inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, double a0 = 1.0) {
+inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, double a0 = 1.0, int cls = 2) {
+  const bool one_day = cls == 1;
+  const int l_lo = one_day ? 5 : 6, m_lo = one_day ? 1 : 2, m_step = one_day ? 1 : 2;
+  const int m_hi = one_day ? std::min(degree, kOneDayTailMaxOrder) : degree;
+  const int k_cap = one_day ? m_hi : degree / 2;
   const EgmTables& egm = egm_tables();
   const double ia0 = 1.0 / a0;
   const double irp0 = 1.0 / (a0 * std::fmax(0.02, 1.0 - e0));
@@ -3248,12 +3259,12 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
   }
 
   int raw_max = 0;
-  for (int l = 6; l <= degree; ++l) raw_max += (l / 2) * (l + 1);
+  for (int l = l_lo; l <= degree; ++l) raw_max += (one_day ? std::min(l, m_hi) : l / 2) * (l + 1);
   const double h = 5e-4;
   constexpr int NF = 64, NF_HALF = NF / 2;
   const int N = e0 < 0.1 ? 128 : e0 < 0.8 ? 512 : e0 < 0.95 ? 2048 : 4096;
   const int N_half = e0 < 0.05 ? 24 : (N / 2);
-  const int width = 3 * (degree + 1) + 2 * (degree / 2 + 1);
+  const int width = 3 * (degree + 1) + 2 * (k_cap + 1);
   using RawTerm = HalfDayRawTerm;
   HalfDayScratch& sc = g_half_day_scratch;
   const size_t need_grid = static_cast<size_t>(N_half * width);
@@ -3294,15 +3305,15 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
   alignas(16) double A_p[36][2][18], B_p[36][2][18], col_p[2][18];
   double col[104], cku[36], sku[36];
   int raw_count = 0;
-  int max_l_used = 6;
-  for (int m = 2; m <= degree; m += 2) {
+  int max_l_used = l_lo;
+  for (int m = m_lo; m <= m_hi; m += m_step) {
     int max_l_m = 0;
-    for (int l = degree; l >= std::max(6, m); --l) {
+    for (int l = degree; l >= std::max(l_lo, m); --l) {
       if (amp_rp[l] * egm.hypot_fb[l][m] >= 1e-19) { max_l_m = l; break; }
     }
     if (max_l_m == 0) continue;
     if (max_l_m > max_l_used) max_l_used = max_l_m;
-    const int k = m / 2;
+    const int k = one_day ? m : m / 2;
     const int w_lo = e0 < 0.05 ? std::max(-max_l_m, k - 8) : -max_l_m;
     const int w_hi = e0 < 0.05 ? std::min(max_l_m, k + 8) : max_l_m;
     const int aw_max = std::max(std::abs(w_lo), std::abs(w_hi));
@@ -3339,10 +3350,12 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
         }
         for (int aw = 0; aw <= aw_max; ++aw) {
           const double ck = cku[aw], sk = sku[aw];
-          const bool odd = (aw & 1) != 0;
+          // l - m odd (l = aw mod 2): the coefficient is the imaginary part. For the half-day class's even m this is aw
+          // odd; the one-day class's odd m flip it
+          const bool odd = ((aw + m) & 1) != 0;
           const double c1 = odd ? cml * sk : cml * ck;
           const double c2 = odd ? sml * ck : sml * sk;
-          int first = std::max(6, std::max(m, aw));
+          int first = std::max(l_lo, std::max(m, aw));
           if ((first - aw) & 1) ++first;
           if (first > max_l_m) continue;
           const int par = first & 1;
@@ -3372,8 +3385,8 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
         }
       }
       for (int aw = 0; aw <= aw_max; ++aw) {
-        const bool odd = (aw & 1) != 0;
-        int first = std::max(6, std::max(m, aw));
+        const bool odd = ((aw + m) & 1) != 0;
+        int first = std::max(l_lo, std::max(m, aw));
         if ((first - aw) & 1) ++first;
         const int par = first & 1;
         double* dst_pos = Fw[s][aw + degree];
@@ -3390,7 +3403,7 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
     const double inv_12h = 1.0 / (12.0 * h), inv_12h2 = 1.0 / (12.0 * h * h), inv_2h3 = 1.0 / (2.0 * h * h * h);
     for (int w = w_lo; w <= w_hi; ++w) {
       const int aw = w < 0 ? -w : w;
-      int first = std::max(6, std::max(m, aw));
+      int first = std::max(l_lo, std::max(m, aw));
       if ((first - w) & 1) ++first;
       const double* f0 = Fw[0][w + degree];
       const double* fp = Fw[1][w + degree];
@@ -3415,7 +3428,7 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
   }
   const double dh = std::min(5e-4, (1.0 - e0) / 4.0);
   const double inv_N = 1.0 / N_half;
-  const int k_max_used = max_l_used / 2;
+  const int k_max_used = one_day ? std::min(max_l_used, m_hi) : max_l_used / 2;
   const double dE = kPi / N_half;
   double sde0, cde0, sde, cde;
   fm::sincos(0.5 * dE, sde0, cde0);
@@ -3423,7 +3436,7 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
   const int cw_base = degree + 1;
   const int sw_base = 2 * (degree + 1);
   const int ck_base = 3 * (degree + 1);
-  const int sk_base = ck_base + degree / 2 + 1;
+  const int sk_base = ck_base + k_cap + 1;
   for (int off = -2; off <= 2; ++off) {
     const double e = e0 + off * dh, eta = std::sqrt(1.0 - e * e);
     double se = sde0, ce = cde0;
@@ -3475,7 +3488,7 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
         wasm_v128_store(grid + (sk_base + kv) * N_half + j, vsk);
       }
     }
-    double* ang = grid;  // r[0] slot is unused (all raw terms have l >= 6)
+    double* ang = grid;  // r[0] slot is unused (all raw terms have l >= 5)
     double* val_row = values + (off + 2) * raw_count;
     int q = 0;
     while (q < raw_count) {
@@ -3667,9 +3680,11 @@ inline HalfDayEvalCache& half_day_eval_cache() {
   return *g_half_day_eval_cache_ptr;
 }
 inline int32_t& fit_grid_depth();
+/// `m_per_k`: the class's m / k, 2 for the half-day tail and 1 for the one-day tail (half_day_terms).
 inline void half_day_six(const HalfDayCoef* table, int count, double e0, double i0,
                         double t, const Kepler& kp, double n, double eta, double si,
-                        double ci, double theta_g0, double* six, double a0 = 1.0, uint64_t table_id = 0) {
+                        double ci, double theta_g0, double* six, double a0 = 1.0, uint64_t table_id = 0,
+                        int m_per_k = 2) {
   if (count == 0) return;
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
@@ -3771,7 +3786,7 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
 
   double sw1, cw1, sT1, cT1;
   fm::sincos(kp.argp, sw1, cw1);
-  fm::sincos(kp.m + 2.0 * (kp.node - thetag), sT1, cT1);
+  fm::sincos(kp.m + (m_per_k == 1 ? 1.0 : 2.0) * (kp.node - thetag), sT1, cT1);
   double cw_buf[71], sw_buf[71], ck[18], sk[18];
   double* const cw = cw_buf + 35;
   double* const sw = sw_buf + 35;
