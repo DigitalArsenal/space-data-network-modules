@@ -506,7 +506,7 @@ Offline reproduction from `propagator/ffm`:
 
 ```sh
 node tests/evidence/erfa-spice/check-classical-frames.mjs
-node tests/evidence/erfa-spice/run-erfa-spice.mjs --flatbuffers <flatbuffers checkout>/include
+XVAL_FLATBUFFERS=<flatbuffers checkout>/include node tests/evidence/erfa-spice/run-erfa-spice.mjs
 node tests/evidence/erfa-spice/run-orekit-frames.mjs
 node tests/evidence/erfa-spice/check-erfa-spice.mjs
 ```
@@ -525,22 +525,54 @@ One command re-scores the whole suite on the committed dist, from the
 repository root:
 
 ```sh
+export FFM_XVAL_TOOLS=<the folder of the tool installs>
 export FFM_XVAL_NYX_OUT=<the Nyx runner's out/ folder>
 export FFM_XVAL_GMAT_WORK=<the GMAT work folder>
+export XVAL_FLATBUFFERS=<a flatbuffers checkout>/include
 nice -n 19 node propagator/ffm/tests/evidence/rescore-all.mjs
 ```
 
-Two stored tool outputs live with the tool installs, outside the repository.
+The outside folders are described under [Outside inputs](#outside-inputs).
 The command, `consolidate.mjs`, `check-all.mjs` and
-`refresh-derived-comparisons.mjs` refuse to run without them, and say which
-one is missing:
-- `FFM_XVAL_NYX_OUT` (or `--nyx-out`) names the folder `run-nyx.mjs` writes
-  the Nyx runs to: `nyx-2.6.0-stm.json`, `nyx-2.6.0-msis-published.json`,
-  `nyx-2.6.0-fine.json` and `nyx-2.6.0-naif-bpc.json`. That is the `out/`
-  folder of the Nyx runner's working directory.
-- `FFM_XVAL_GMAT_WORK` (or `--gmat-work`) names the GMAT work folder. Its
-  `anomalous-oxygen/` and `variants/` folders hold the GMAT diagnostic scripts
-  and reports.
+`refresh-derived-comparisons.mjs` refuse to run without the ones they read,
+and say which one is missing.
+
+#### Outside inputs
+
+The evidence reads tool installs and stored tool outputs that live outside the
+repository. A variable names each outside folder; no script names a folder on
+anyone's machine.
+
+A recorded path is written in one of two forms
+([paths.mjs](../tests/evidence/paths.mjs)):
+- a file in the repository: relative to the file that records it;
+- a file outside it: a label, `<label>/rest`.
+
+The checks resolve a label through its variable. With the variable unset, the
+file is "unavailable", which is how it reads on any machine without that tool.
+
+| variable | label | names | needed by |
+|---|---|---|---|
+| `FFM_XVAL_TOOLS` | `<xval>` | the folder of the cross-validation tool installs and their outputs: gmat-R2026a, GMAT, gmat-src, gmat-work, nyx, mamba, bsk-venv, bsk-data, naif-kernels, erfa-spice, iers | `rescore-all.mjs` (Nyx, Horizons, the GMAT sources); the Basilisk and Tudat runners |
+| `FFM_XVAL_NYX_OUT` (`--nyx-out`) | `<nyx out>` | the folder `run-nyx.mjs` writes the Nyx runs to: `nyx-2.6.0-stm.json`, `-msis-published.json`, `-fine.json`, `-naif-bpc.json` | `rescore-all.mjs` |
+| `FFM_XVAL_GMAT_WORK` (`--gmat-work`) | `<gmat work>` | the GMAT work folder; its `anomalous-oxygen/` and `variants/` hold the GMAT diagnostic scripts and reports | `rescore-all.mjs`, `check-all.mjs`, `consolidate.mjs`, `refresh-derived-comparisons.mjs` |
+| `XVAL_FLATBUFFERS` | `<flatbuffers include>` | the `include/` folder of a flatbuffers checkout | the ERFA/SPICE and Horizons native builds |
+| `FFM_TUDAT_RESOURCES` | `<tudat resources>` | tudat-resources' resource folder (tudatpy reads it from `.tudat/resource` in the home folder) | verifying Tudat's recorded inputs |
+| `FFM_OREKIT_AUTHORITY` | `<orekit authority>` | the folder holding the Orekit `jars/` and `orekit-data/` | `run-orekit-frames.mjs`, `engines/plan.mjs`, `engines/catalog-environment.mjs` |
+| `FFM_TUDAT_SOURCE` | `<tudat source>` | a checkout of the Tudat source the maneuver vectors were extracted from | verifying `analysis/maneuver/vectors/tudat-extract.json` |
+| `FFM_HOMEBREW_PREFIX` | `<homebrew>` | the Homebrew prefix whose Python the Basilisk runs used | verifying Basilisk's recorded inputs |
+| (none) | `<past checkout>` | a checkout of this repository that recorded the file and is gone; the rest is the file's place in the repository then | never resolved |
+
+Existing per-tool variables still override their defaults:
+- `XVAL_PYTHON`, `XVAL_NAIF` and `XVAL_JWST_SOURCE` (Horizons, ERFA/SPICE);
+- `ERFA_PYTHON` (classical frames);
+- `OREKIT_JARS`, `OREKIT_DATA` and `FLATBUFFERS_INCLUDE` (Orekit frames).
+
+Path strings written before this convention were rewritten on 2026-11-10 by
+`node tests/evidence/paths.mjs --rewrite`. That command changes nothing but
+path strings, and refuses the rewrite when a parsed comparison with path
+strings masked is not empty. A rewritten tool output says so in its
+`pathRewrite` field, with the SHA-256 of the file as the tool wrote it.
 
 It flies FFM's side again through the shipped WASM, serially, against every
 stored reference. No reference engine is run and nothing is fetched. The steps

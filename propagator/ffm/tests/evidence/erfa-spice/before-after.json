@@ -3576,23 +3576,23 @@
      "sha256": "f16ecf0b13e95840dafaf50295fc0451200427c94b62cdf35b83ff8521872ca1"
     },
     {
-     "path": "../../../../../../../tools/xval/naif-kernels/naif0012.tls",
+     "path": "<xval>/naif-kernels/naif0012.tls",
      "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"
     },
     {
-     "path": "../../../../../../../tools/xval/naif-kernels/earth_latest_high_prec.bpc",
+     "path": "<xval>/naif-kernels/earth_latest_high_prec.bpc",
      "sha256": "16b40c07bde82878119e7b542613b4a8f4f18b1a3181fc25027e42c6f77d1528"
     },
     {
-     "path": "../../../../../../../tools/xval/wheels-erfa-spice/pyerfa-2.0.1.5-cp39-abi3-macosx_11_0_arm64.whl",
+     "path": "<xval>/wheels-erfa-spice/pyerfa-2.0.1.5-cp39-abi3-macosx_11_0_arm64.whl",
      "sha256": "be1aeb70390dd03a34faf96749d5cabc58437410b4aab7213c512323932427df"
     },
     {
-     "path": "../../../../../../../tools/xval/wheels-erfa-spice/spiceypy-8.3.0-cp314-cp314-macosx_11_0_arm64.whl",
+     "path": "<xval>/wheels-erfa-spice/spiceypy-8.3.0-cp314-cp314-macosx_11_0_arm64.whl",
      "sha256": "94530fe4927ef4d06d7eb4c4ba2036a448313f5b806c65aa7a3943d55e535d31"
     },
     {
-     "path": "../../../../../../../tools/xval/wheels-erfa-spice/numpy-2.5.4-cp314-cp314-macosx_14_0_arm64.whl",
+     "path": "<xval>/wheels-erfa-spice/numpy-2.5.4-cp314-cp314-macosx_14_0_arm64.whl",
      "sha256": "956555e0603a4d38019ae6925711cb9dc43195c076a928accf7ea5d50bddfe53"
     },
     {
@@ -6356,5 +6356,6 @@
     "defects": []
    }
   }
- }
+ },
+ "pathRewrite": "Its path strings were made relative or labeled on 2026-11-10 by propagator/ffm/tests/evidence/paths.mjs --rewrite; nothing else changed. SHA-256 of the file as the tool wrote it: d72e6b8f32f5a23fe8c5f334a1edbd639d97c78ccfa2d0360c4daf408dd4f08f."
 }

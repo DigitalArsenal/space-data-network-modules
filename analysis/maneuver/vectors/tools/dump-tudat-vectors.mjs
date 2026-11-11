@@ -683,6 +683,8 @@ async function main() {
     });
   }
 
+  const label = (file) => (file.startsWith(tudatRoot + path.sep) ? `<tudat source>/${path.relative(tudatRoot, file)}` : file);
+  for (const constant of [auConst, dayConst, piConst]) constant.source = label(constant.source);
   const payload = {
     "//":
       "MECHANICALLY EXTRACTED from Tudat unit-test sources by " +
@@ -690,7 +692,8 @@ async function main() {
       "Tudat is consulted as an ORACLE — it is never compiled, linked, or " +
       "depended on by any build in this repo.",
     generator: "vectors/tools/dump-tudat-vectors.mjs",
-    tudat: { root: tudatRoot, head: gitHead(tudatRoot) },
+    // The Tudat checkout lives outside this repository: it is recorded as a label, never as a folder on a machine.
+    tudat: { root: "<tudat source>", head: gitHead(tudatRoot) },
     conversions: {
       ASTRONOMICAL_UNIT: { value: AU, ...auConst },
       JULIAN_DAY: { value: JULIAN_DAY, ...dayConst },

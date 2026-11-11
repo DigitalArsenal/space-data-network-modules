@@ -11,14 +11,15 @@ protocol tolerances remain unchanged; the GMAT drag allowance does not apply.
 
 ## Reproduce offline
 
-From the repository root, run these commands **serially**:
+From the repository root, with `FFM_XVAL_TOOLS` naming the folder of the tool installs
+([Outside inputs](../../../docs/cross-validation.md#outside-inputs)), run these commands **serially**:
 
 ```sh
-/Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/run-basilisk.py --step 8
-/Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/run-basilisk.py --step 8 --only srp-drag --variant wgs84 --out propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-diagnostic.json
-/Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/run-basilisk.py --step 8 --only srp-drag --variant wgs84-gtd7d --out propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json
-/Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/investigate-basilisk.py propagator/ffm/tests/evidence/basilisk/model-probes.json
-/Users/tj/software/tools/xval/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/diagnose-lst.py --trajectories propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json
+"$FFM_XVAL_TOOLS"/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/run-basilisk.py --step 8
+"$FFM_XVAL_TOOLS"/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/run-basilisk.py --step 8 --only srp-drag --variant wgs84 --out propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-diagnostic.json
+"$FFM_XVAL_TOOLS"/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/run-basilisk.py --step 8 --only srp-drag --variant wgs84-gtd7d --out propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json
+"$FFM_XVAL_TOOLS"/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/investigate-basilisk.py propagator/ffm/tests/evidence/basilisk/model-probes.json
+"$FFM_XVAL_TOOLS"/bsk-venv/bin/python -I propagator/ffm/tests/evidence/basilisk/diagnose-lst.py --trajectories propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json
 UV_THREADPOOL_SIZE=1 node --single-threaded --wasm-num-compilation-tasks=1 propagator/ffm/tests/evidence/basilisk/score-basilisk.mjs --cached-only --cache propagator/ffm/tests/evidence/tudat/ffm-tudatpy-1.0.0.json --diagnostics propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-diagnostic.json --diagnostics propagator/ffm/tests/evidence/basilisk/basilisk-wgs84-gtd7d-diagnostic.json --causes propagator/ffm/tests/evidence/basilisk/diagnoses.json --primary wgs84-gtd7d
 UV_THREADPOOL_SIZE=1 node --single-threaded --wasm-num-compilation-tasks=1 propagator/ffm/tests/evidence/basilisk/check-basilisk.mjs
 ```

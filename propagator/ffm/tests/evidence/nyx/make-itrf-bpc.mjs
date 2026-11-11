@@ -30,12 +30,16 @@ import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { buildFfmFrames, eopStream } from '../erfa-spice/ffm-frames-native.mjs';
+import { outsidePath, requireOptions } from '../paths.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: o, positionals } = parseArgs({ options: {
-  python: { type: 'string', default: process.env.XVAL_PYTHON ?? '/Users/tj/software/tools/xval/erfa-spice/bin/python' },
-  nyx: { type: 'string' }, pca: { type: 'string', default: '/Users/tj/software/tools/xval/nyx/data/pck08.pca' },
+  python: { type: 'string' }, nyx: { type: 'string' }, pca: { type: 'string' },
 }, allowPositionals: true });
+// Outside folders come from the environment (docs/cross-validation.md, Outside inputs), never from a path here.
+o.python ??= process.env.XVAL_PYTHON ?? outsidePath('xval', 'erfa-spice/bin/python');
+o.pca ??= outsidePath('xval', 'nyx/data/pck08.pca');
+requireOptions(o, [['python', 'set XVAL_PYTHON to the erfa-spice Python, or FFM_XVAL_TOOLS'], ['pca', 'pass the Nyx pck08.pca, or set FFM_XVAL_TOOLS']]);
 const out = positionals[0];
 if (!out || !o.nyx) throw new Error('usage: make-itrf-bpc.mjs <out.bpc> --nyx <binary> [--pca <pck08.pca>] [--python <python>]');
 const nyx = (input) => JSON.parse(execFileSync(o.nyx, { input: JSON.stringify(input), encoding: 'utf8', maxBuffer: 256 << 20 }));

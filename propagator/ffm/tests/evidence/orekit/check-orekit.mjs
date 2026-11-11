@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { REFERENCE, requestInputs } from '../../lib/orekitCases.mjs';
 import { buildMetrics, scoreResponse } from './scoring.mjs';
+import { resolveRecorded } from '../paths.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const hash = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -30,7 +31,11 @@ async function main() {
   check(hash(path.resolve(here, summary.orekit.sourcePin.path)) === summary.orekit.sourcePin.sha256, 'Orekit generator source hash differs');
   check(summary.orekit?.engineBinary?.status === 'unavailable' && summary.orekit.engineBinary.reason?.length > 0, 'missing engine-binary availability record');
   check(summary.fileHashes?.some((f) => f.path === '../../fixtures/orekit/orekit-reference.json'), 'reference trajectory hash missing');
-  for (const file of summary.fileHashes ?? []) check(/^[0-9a-f]{64}$/.test(file.sha256) && hash(path.resolve(here, file.path)) === file.sha256, `hash differs: ${file.path}`);
+  // A label names an outside folder (../paths.mjs); these pins are required, so its variable must be set.
+  for (const file of summary.fileHashes ?? []) {
+    const resolved = resolveRecorded(file.path, here);
+    check(/^[0-9a-f]{64}$/.test(file.sha256) && resolved && hash(resolved) === file.sha256, resolved ? `hash differs: ${file.path}` : `${file.path}: set the variable of its folder`);
+  }
   const ids = new Set(exported.cases.map((c) => c.id));
   const covered = [...summary.cases, ...summary.skipped].map((c) => c.id);
   check(ids.size === 72 && covered.length === 72 && new Set(covered).size === 72 && covered.every((id) => ids.has(id)), 'scored/skipped coverage differs from 72-case export');
