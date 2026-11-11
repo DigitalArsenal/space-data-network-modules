@@ -165,7 +165,7 @@ inline void run_chunks() {
 }
 
 /// A thread's once-per-thread caches, made before it computes any row of a batch: the tesseral cache with its storage,
-/// its blk_c storage and grouping scratch, the half-day cache, the covariance's step cache, the drift and GCRF node slots. Made lazily
+/// its blk_c storage and grouping scratch, the half-day cache, the covariance's step cache, the Sun and Moon node store, the drift and GCRF node slots. Made lazily
 /// they were made in the batch (stack #487); every one is a pointer test once made.
 inline void warm_thread() {
   (void)xpt::tess::sp_thread_cache();
@@ -173,6 +173,7 @@ inline void warm_thread() {
   (void)xpt::tess::sp_build_scratch();
   (void)xpt::tess::half_day_eval_cache();
   (void)xpt::cov_grid_cache();
+  xpt::ap_bodies_store_make();
   (void)frames::drift_node_cache();
   frames::gcrf_node_cache_make();
 }

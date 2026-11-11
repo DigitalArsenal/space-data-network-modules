@@ -12,20 +12,38 @@
 //   twenty alone (the holders no longer flown are reclaimed), the first twenty again (their runs refill from where they
 //   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
 // The pool's threads: 1,000 AP rows of the carrier lane's catalog mix through sdnap_propagate_soa at 20 instants, on 0
-// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424).
+// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424). AP's Sun and Moon (SPEC 16.17,
+// nodes of an absolute grid in each thread's store): 64 rows whose epochs lie 85 1/3 days apart, so their nodes share
+// store slots, on 0 and 4 threads against each epoch's rows alone, bit for bit; a batch at one instant
+// (sdnap_propagate_soa, whose shared bodies are SGP4XP's) against the minutes call at the same instants, bit for bit, of
+// AP sets and of AP and SGP4XP sets mixed.
 // Through `propagate` (#420): a time asked alone against the same time inside one call of 2,016 states, bit for bit.
+// The covariance (stack #491) and the third body's bracket tables (stack #475): thirteen AP records with covariance
+// (fits of a catalog mix, and three at the mean motions where the bracket's builder changes), state and covariance at
+// five leads asked in turn, in reverse turn, shuffled and on 4 threads, against each record alone, bit for bit. The
+// 500 km record's covariance after the 815 km record's flown at lead 2 h, bit for bit. Two fits in either order, the
+// records byte for byte.
 // JS moves bytes and compares numbers the module produced.
 //   node test/set-caches.e2e.mjs
 import * as flatbuffers from "flatbuffers";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { F107DataType } from "spacedatastandards.org/lib/js/OCM/F107DataType.js";
-import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
+import { OEM, OEMT } from "spacedatastandards.org/lib/js/OEM/OEM.js";
+import { CATT } from "spacedatastandards.org/lib/js/OEM/CAT.js";
+import { ephemerisDataBlockT as EphemerisBlockT } from "spacedatastandards.org/lib/js/OEM/ephemerisDataBlock.js";
+import { timingStandard as oemTiming } from "spacedatastandards.org/lib/js/OEM/timingStandard.js";
+import { OMM, OMMT } from "spacedatastandards.org/lib/js/OMM/OMM.js";
+import { meanElementSource } from "spacedatastandards.org/lib/js/OMM/meanElementSource.js";
+import { timingStandard as ommTiming } from "spacedatastandards.org/lib/js/OMM/timingStandard.js";
+import { pcfSolidTideModel } from "spacedatastandards.org/lib/js/PCF/pcfSolidTideModel.js";
+import { configuration } from "./lib/pcf.mjs";
+import { packOem, rfm } from "./lib/frames.mjs";
 import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { ensureBuilt, wasmPath, elementRows, THEORY } from "./lib/module.mjs";
 import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
-import { T, seedOcm, rowsThrough, repackOcm } from "./lib/ocm.mjs";
+import { T, seedOcm, rowsThrough, repackOcm, ocmOf, flight, spwStream, AP_FORCES } from "./lib/ocm.mjs";
 import { OCMDynamicParameterT } from "spacedatastandards.org/lib/js/OCM/OCMDynamicParameter.js";
 import { OrbitDeterminationT } from "spacedatastandards.org/lib/js/OCM/OrbitDetermination.js";
 import { prwDynamicParameter } from "spacedatastandards.org/lib/js/OCM/prwDynamicParameter.js";
@@ -106,7 +124,18 @@ const testBuild = buildDiagnostic("set-caches-budget",
   '  sdnap::pool::g_chunk_hook = mode == 1 ? sdnap_test_trap : mode == 2 ? sdnap_test_slowed : nullptr; sdnap_test_slow = slow;\n' +
   '  if (dead_polls > 0) sdnap::pool::dead_polls() = static_cast<uint64_t>(dead_polls); sdnap::pool::g_reserve_off = reserve_off != 0; }\n' +
   'SDNAP_EXPORT("sdnap_test_yields") void sdnap_test_yields(double n) { for (double k = 0; k < n; ++k) sched_yield(); }\n' +
-  'SDNAP_EXPORT("sdnap_test_dead_yields") double sdnap_test_dead_yields() { return static_cast<double>(sdnap::pool::dead_yields()); }');
+  'SDNAP_EXPORT("sdnap_test_dead_yields") double sdnap_test_dead_yields() { return static_cast<double>(sdnap::pool::dead_yields()); }\n' +
+  // a row store whose rows from `ap_from` on are AP sets (AP's terms) and the rest SGP4XP's: one batch mixing the two
+  'SDNAP_EXPORT("sdnap_test_init_mixed") int32_t sdnap_test_init_mixed(const sdnap::ElementRow* rows, uint32_t count, uint32_t ap_from) {\n' +
+  '  sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{};\n' +
+  '  const int32_t n = sdnap::store_init(rows, count);\n' +
+  '  sdnap::Store& st = sdnap::store();\n' +
+  '  sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{31, 20};\n' +
+  '  for (uint32_t i = ap_from; n > 0 && i < count; ++i) if (st.kind[i] == 1) { sdnap::xpt::XpSat& x = st.xps[st.slot[i]];\n' +
+  '    sdnap::xpt::xp_release(x); sdnap::xpt::xp_init(sdnap::elements_of(rows[i]), x); sdnap::xpt::xp_set_pooled(x); }\n' +
+  '  sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{};\n' +
+  '  return n;\n' +
+  '}');
 const tiny = await open(testBuild);
 tiny.x.sdnap_test_cache_budget(1);
 check(tiny.stats()[0] === 2 ** 20 && shipped.stats()[0] === 256 * 2 ** 20, `budgets: the test build ${tiny.stats()[0]}, the shipped default ${shipped.stats()[0]}`);
@@ -320,6 +349,68 @@ for (const [name, o] of Object.entries(ORBITS)) {
   console.log(`Y0: two records equal but for ECOM2_Y0 bit for bit as each alone; 200 rows with Y0 on 0 and 4 threads bit for bit`);
 }
 {
+  // AP's Sun and Moon (SPEC 16.17): nodes on an absolute 8 h grid in each thread's store of 256 nodes by index, so times
+  // 85 1/3 days apart (256 nodes) share a slot. 64 medium-orbit rows in the row store (AP's terms selected), every other
+  // one with its epoch 2,048 h after the rest, each row at the same minutes from its own epoch (a read of one row's node
+  // takes the slot of the other's): on 0 and on 4 pool threads against each epoch's rows in a store of their own (no
+  // slot shared), bit for bit; and a batch at one instant (sdnap_propagate_soa, whose shared bodies are SGP4XP's: an AP
+  // set reads its own) against the minutes call at the same instants, bit for bit.
+  const e0 = 2461328.5, shift = 2048 / 24;
+  const rows = Array.from({ length: 64 }, (_, k) => {
+    const ep = k % 2 ? e0 : e0 + shift, whole = Math.floor(ep - 0.5) + 0.5;
+    return { epochWhole: whole, epochFrac: ep - whole, meanMotion: 2.0056, ecc: 0.005, inc: 55, raan: (40 + 5.3 * k) % 360, argp: 40,
+      ma: (10 + 11.7 * k) % 360, bterm: 0.001, agom: 0.01, norad: 83000 + k, theory: THEORY.SGP4XP };
+  });
+  const minutes = Array.from({ length: 40 }, (_, k) => 1440 + 180 * k);
+  // every row an AP set, or (apFrom) the rows before apFrom SGP4XP's
+  const rowStore = async (set, threads, apFrom = null) => {
+    const m = await open(testBuild, threads);
+    if (apFrom === null) m.x.sdnap_test_select_ap(31, 20);
+    const bytes = elementRows(set), n = set.length, p = m.x.sdnap_alloc(bytes.length);
+    new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
+    const held = apFrom === null ? m.x.sdnap_init_elements(p, n) : m.x.sdnap_test_init_mixed(p, n, apFrom);
+    check(held === n, `bodies, ${threads} threads: the row store took ${held} of ${n} rows`);
+    return { m, n, mins: m.x.sdnap_alloc(8 * n), out: m.x.sdnap_alloc(48 * n), status: m.x.sdnap_alloc(4 * n) };
+  };
+  const flyMinutes = async (set, threads) => {
+    const s = await rowStore(set, threads), all = [];
+    for (const t of minutes) {
+      new Float64Array(s.m.h.memory.buffer, s.mins, s.n).fill(t);
+      check(s.m.x.sdnap_propagate_minutes_soa(s.mins, 0, s.n, s.out, s.status) === 0, `bodies, ${threads} threads: sdnap_propagate_minutes_soa`);
+      const v = new Float64Array(s.m.h.memory.buffer, s.out, 6 * s.n);
+      all.push(Array.from({ length: s.n }, (_, i) => [0, 1, 2, 3, 4, 5].map((c) => v[c * s.n + i])));
+    }
+    return all;
+  };
+  const mixed0 = await flyMinutes(rows, 0), mixed4 = await flyMinutes(rows, 4);
+  const evens = await flyMinutes(rows.filter((_, k) => k % 2 === 0), 0), odds = await flyMinutes(rows.filter((_, k) => k % 2 === 1), 0);
+  let differ = 0;
+  minutes.forEach((_, q) => rows.forEach((_, k) => {
+    const alone = (k % 2 ? odds : evens)[q][k >> 1];
+    if (!same(mixed0[q][k], alone) || !same(mixed4[q][k], alone)) ++differ;
+  }));
+  check(differ === 0, `bodies: rows 85 1/3 days apart (store slots shared) on 0 and 4 threads against each epoch's rows alone: ${differ} of ${rows.length * minutes.length} states differ`);
+  // the rows whose epochs are at 0 h, at quarter days: a batch at one instant against the minutes call, all AP sets and
+  // half SGP4XP's (a batch mixing the two at one time: the SGP4XP rows take the batch's shared bodies, the AP rows not)
+  const set = rows.filter((_, k) => k % 2 === 1);
+  const batchAgainstMinutes = async (s) => {
+    let differ = 0;
+    for (let q = 0; q < 20; ++q) {
+      const whole = e0 + 1 + Math.floor(q / 4), frac = (q % 4) / 4;
+      check(s.m.x.sdnap_propagate_soa(whole, frac, 0, s.n, 0, s.out, s.status) === 0, "bodies: sdnap_propagate_soa");
+      const batch = Array.from(new Float64Array(s.m.h.memory.buffer, s.out, 6 * s.n));
+      new Float64Array(s.m.h.memory.buffer, s.mins, s.n).set(set.map((r) => ((whole - r.epochWhole) + (frac - r.epochFrac)) * 1440));
+      check(s.m.x.sdnap_propagate_minutes_soa(s.mins, 0, s.n, s.out, s.status) === 0, "bodies: sdnap_propagate_minutes_soa");
+      const call = Array.from(new Float64Array(s.m.h.memory.buffer, s.out, 6 * s.n));
+      differ += batch.filter((v, k) => !Object.is(v, call[k])).length;
+    }
+    return differ;
+  };
+  const batchDiffer = await batchAgainstMinutes(await rowStore(set, 0)), mixedDiffer = await batchAgainstMinutes(await rowStore(set, 0, set.length >> 1));
+  check(batchDiffer === 0 && mixedDiffer === 0, `bodies: a batch at one instant against the minutes call at the same instants: ${batchDiffer} (AP sets) and ${mixedDiffer} (half SGP4XP's) of ${20 * 6 * set.length} values differ`);
+  console.log(`AP's Sun and Moon: 64 rows 85 1/3 days apart (store slots shared) on 0 and 4 threads bit for bit as each epoch's rows alone; a batch at one instant bit for bit as the minutes call, of AP sets and of AP and SGP4XP sets mixed`);
+}
+{
   // through propagate (#420): a time alone against the same time in one call
   const pcfBytes = (epochs) => { const c = new PCFT(); c.OUTPUT = Object.assign(new PCFOutputT(), { FRAME: pcfOutputFrame.TEME, EPOCHS: epochs.map(iso), MAXIMUM_STATES: 3000 });
     const b = new flatbuffers.Builder(1 << 16); b.finish(c.pack(b), "$PCF"); return b.asUint8Array().slice(); };
@@ -342,11 +433,143 @@ for (const [name, o] of Object.entries(ORBITS)) {
   }
   console.log("propagate: a time alone against the same time in one call, bit for bit on every orbit");
 }
+{
+  // the covariance's rule (stack #491, SPEC 12.3) with the third body's bracket tables (stack #475): a record's state and
+  // covariance are functions of the record and the time alone. Thirteen AP records with covariance, each fitted to 72 h
+  // of its own SGP4 flight: ten orbits of a catalog mix, and three whose mean motion sits where the third body's bracket
+  // builder changes (0.006, 0.015 and 0.035 rad/min). Each is asked at leads of 1, 2, 24, 72 and 168 h:
+  // - alone in a fresh instance (the reference);
+  // - in turn with the others, in reverse turn, and in a shuffled order of every record and lead;
+  // - in turn on 4 pool threads.
+  // Every state and covariance value must match the reference bit for bit.
+  const T0 = Date.parse("2026-10-08T00:00:00Z"), jdn0 = T0 / DAY + 2440587.5;
+  const gmst0 = (((280.46061837 + 360.98564736629 * (jdn0 - 2451545.0)) % 360) + 360) % 360;
+  const RAD_MIN = 1440 / (2 * Math.PI);  // rev/day per rad/min
+  const MIX = [
+    ["leo500", { n: revPerDay(RE + 500), e: 0.001, i: 97.4, raan: 30, argp: 90, ma: 0, bstar: 3e-4 }],
+    ["leo815", { n: revPerDay(RE + 815), e: 0.0011, i: 98.65, raan: 40, argp: 90, ma: 0, bstar: 1e-4 }],
+    ["leo1200", { n: revPerDay(RE + 1200), e: 0.002, i: 87.9, raan: 120, argp: 45, ma: 30, bstar: 2e-5 }],
+    ["meo12h", { n: 2.0056, e: 0.005, i: 55, raan: 200, argp: 30, ma: 60, bstar: 0 }],
+    ["galileo", { n: 1.7085, e: 0.0003, i: 56, raan: 80, argp: 30, ma: 20, bstar: 0 }],
+    ["geo0.05", { n: 1.0027379, e: 0.0002, i: 0.05, raan: gmst0, argp: 0, ma: 0, bstar: 0 }],
+    ["geo2", { n: 1.0027379, e: 0.0002, i: 2, raan: (gmst0 + 90) % 360, argp: 0, ma: 0, bstar: 0 }],
+    ["igso55", { n: 1.0027379, e: 0.003, i: 55, raan: (gmst0 + 120) % 360, argp: 270, ma: 0, bstar: 0 }],
+    ["n0.9", { n: 0.9, e: 0.001, i: 30, raan: 10, argp: 10, ma: 10, bstar: 0 }],
+    ["transfer", { n: 2.26, e: 0.72, i: 27, raan: 50, argp: 180, ma: 0, bstar: 1e-4 }],
+  ];
+  // the thresholds and the relative offset where stack #475 measured the largest move between orders
+  const AT = [["n 0.006", 0.006, 0], ["n 0.015", 0.015, 1e-7], ["n 0.035", 0.035, 1e-7]];
+  for (const [name, n, off] of AT) MIX.push([name, { n: n * (1 + off) * RAD_MIN, e: 0.001, i: 55, raan: 60, argp: 90, ma: 0, bstar: 0, exactN: true }]);
+  const wx = [];
+  for (let ms = T0 - 100 * DAY; ms <= T0 + 45 * DAY; ms += DAY)
+    wx.push({ DATE: new Date(ms).toISOString().slice(0, 10), F107_OBS: 150, F107_OBS_CENTER81: 150, AP_AVG: 15, F107_DATA_TYPE: F107DataType.OBS });
+  const spw = spwStream(rowsThrough(wx));
+  const maker = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
+  const call = async (hh, methodId, inputs) => {
+    const r = await hh.invoke({ methodId, inputs });
+    if (r.statusCode !== 0) throw new Error(`${methodId}: ${r.errorCode} ${r.errorMessage}`);
+    return r.outputs;
+  };
+  const arc = Array.from({ length: (3 * DAY) / 300000 + 1 }, (_, k) => iso(T0 + k * 300000));
+  const fitConfig = configuration({ theory: "AP", forces: { ...AP_FORCES, SOLID_TIDES: pcfSolidTideModel.IERS_2010 }, fit: { WEATHER_HORIZON_DAYS: 30 } });
+  // the 72 h arc a record is fitted to: its SGP4 flight in GCRF every 5 min
+  const arcOf = async (o, norad) => {
+    const t = Object.assign(new OMMT(), { CCSDS_OMM_VERS: 3.0, CREATION_DATE: "", ORIGINATOR: "local", OBJECT_NAME: `MADE-UP ${norad}`, OBJECT_ID: `${norad}`,
+      CENTER_NAME: "EARTH", TIME_SYSTEM: ommTiming.UTC, MEAN_ELEMENT_THEORY: meanElementSource.SGP4, EPOCH: iso(T0), MEAN_MOTION: o.n, ECCENTRICITY: o.e,
+      INCLINATION: o.i, RA_OF_ASC_NODE: o.raan, ARG_OF_PERICENTER: o.argp, MEAN_ANOMALY: o.ma, NORAD_CAT_ID: norad, BSTAR: o.bstar, MEAN_MOTION_DOT: 0, MEAN_MOTION_DDOT: 0 });
+    const ob = new flatbuffers.Builder(512);
+    OMM.finishSizePrefixedOMMBuffer(ob, t.pack(ob));
+    const sgp4 = new Uint8Array((await call(maker, "ingest_omm", [{ portId: "omm", typeRef: T("OMM"), payload: ob.asUint8Array().slice() }])).find((x) => x.portId === "ocm").payload);
+    const flown = new Uint8Array((await call(maker, "propagate", flight([sgp4], { output: { EPOCHS: arc, FRAME: pcfOutputFrame.GCRF } }))).find((x) => x.portId === "ephemeris").payload);
+    const ls = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(flown)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+    const blk = Object.assign(new EphemerisBlockT(), { OBJECT: Object.assign(new CATT(), { NORAD_CAT_ID: norad, OBJECT_NAME: `MADE-UP ${norad}` }), CENTER_NAME: "EARTH",
+      REFERENCE_FRAME: rfm("GCRF"), TIME_SYSTEM: oemTiming.UTC, START_TIME: ls[0].EPOCH, STOP_TIME: ls.at(-1).EPOCH, USEABLE_START_TIME: ls[0].EPOCH,
+      USEABLE_STOP_TIME: ls.at(-1).EPOCH, EPHEMERIS_DATA_LINES: ls });
+    return packOem(Object.assign(new OEMT(), { EPHEMERIS_DATA_BLOCK: [blk] }));
+  };
+  const fitOf = async (hh, oem) => new Uint8Array((await call(hh, "fit", [fitConfig, { portId: "ephemeris", typeRef: T("OEM"), payload: oem },
+    { portId: "space_weather", typeRef: T("SPW"), payload: spw }])).find((x) => x.portId === "elements").payload);
+  const arcs = [], recs = [];
+  for (const [k, [name, o]] of MIX.entries()) {
+    arcs.push(await arcOf(o, 99901 + k));
+    let rec = await fitOf(maker, arcs[k]);
+    // a threshold record: its fitted elements and covariance, its mean motion set where the builder changes
+    if (o.exactN) rec = repackOcm(rec, (t) => { t.MEAN_ELEMENTS.MEAN_MOTION = o.n; });
+    check(ocmOf(rec).COV_SIZE >= 6, `covariance rule: ${name}'s fit has a covariance (COV_SIZE ${ocmOf(rec).COV_SIZE})`);
+    recs.push(rec);
+  }
+  const LEADS = [1, 2, 24, 72, 168];
+  const t0s = recs.map((u) => Date.parse(`${ocmOf(u).MEAN_ELEMENTS.EPOCH.replace(/Z$/, "")}Z`));
+  // an instance holding `list` (indices into recs), on `threads` pool threads; ask(k, lead) gives record k's state and
+  // covariance at its epoch + lead hours (TEME), 42 values
+  const store = async (list, threads = 0) => {
+    const m = await open(wasmPath, threads);
+    await m.load(list.map((k) => recs[k]));
+    const meta = m.x.sdnap_alloc(64), seriesOf = new Map();
+    for (let s = 0; s < list.length; ++s) {
+      m.x.sdnap_epochs_series(s, meta, 0, 0);
+      seriesOf.set(new Float64Array(m.h.memory.buffer, meta, 1)[0], s);
+    }
+    const out = m.x.sdnap_alloc(48), st = m.x.sdnap_alloc(4), cov = m.x.sdnap_alloc(288);
+    return (k, lead) => {
+      const s = seriesOf.get(ocmOf(recs[k]).METADATA.NORAD_CAT_ID), ms = t0s[k] + lead * 3600000, [w, f] = jd(ms);
+      if (m.x.sdnap_epochs_at(w, f, s, 1, 0, out, st, cov) !== 0 || new Int32Array(m.h.memory.buffer, st, 1)[0] !== 0) throw new Error(`${MIX[k][0]} at ${lead} h`);
+      return [...new Float64Array(m.h.memory.buffer, out, 6), ...new Float64Array(m.h.memory.buffer, cov, 36)];
+    };
+  };
+  const all = [...recs.keys()];
+  const ref = [];
+  for (const k of all) {
+    const ask = await store([k]);
+    ref[k] = LEADS.map((L) => ask(k, L));
+  }
+  const compare = (label, got) => {
+    let differ = 0, worst = "";
+    for (const k of all)
+      LEADS.forEach((L, j) => {
+        if (!same(got[k][j], ref[k][j])) { ++differ; worst ||= `${MIX[k][0]} at ${L} h`; }
+      });
+    check(differ === 0, `covariance rule, ${label}: ${differ} of ${all.length * LEADS.length} states with covariance differ from each record alone (first: ${worst})`);
+  };
+  for (const [label, order, threads] of [["in turn", all, 0], ["in reverse turn", [...all].reverse(), 0], ["in turn on 4 threads", all, 4]]) {
+    const ask = await store(all, threads), got = all.map(() => []);
+    LEADS.forEach((L, j) => { for (const k of order) got[k][j] = ask(k, L); });
+    compare(label, got);
+  }
+  {
+    let s = 20261111;
+    const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const pairs = all.flatMap((k) => LEADS.map((_, j) => [k, j]));
+    for (let q = pairs.length - 1; q > 0; --q) { const p = Math.floor(rnd() * (q + 1)); [pairs[q], pairs[p]] = [pairs[p], pairs[q]]; }
+    const ask = await store(all), got = all.map(() => []);
+    for (const [k, j] of pairs) got[k][j] = ask(k, LEADS[j]);
+    compare("shuffled", got);
+  }
+  // the smallest case of stack #491: the 815 km record's covariance asked at lead 2 h, then the 500 km record's
+  {
+    const ask = await store([1, 0]);
+    ask(1, 2);
+    const got = ask(0, 1), want = ref[0][0];
+    const sig = (v) => 1000 * Math.sqrt(v[6] + v[13] + v[20]);
+    check(same(got, want), `covariance rule: the 500 km record's covariance after the 815 km record's flown at lead 2 h: position sigma ${sig(got)} m against ${sig(want)} m alone`);
+  }
+  // fits too: two arcs fitted in either order, each in a fresh instance's sequence, each record byte for byte
+  {
+    const hx = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
+    const hy = await createStandaloneHarness("browser", wasmPath, { surface: "command" });
+    const [i, j] = [1, 8];  // the 815 km record and the one-day class at 0.9 rev/day
+    const xi = await fitOf(hx, arcs[i]), xj = await fitOf(hx, arcs[j]);
+    const yj = await fitOf(hy, arcs[j]), yi = await fitOf(hy, arcs[i]);
+    const eq = (p, q) => Buffer.compare(Buffer.from(p), Buffer.from(q)) === 0;
+    check(eq(xi, yi) && eq(xj, yj), `fit order: the ${MIX[i][0]} and ${MIX[j][0]} fits in either order give ${eq(xi, yi) ? "the same" : "different"} and ${eq(xj, yj) ? "the same" : "different"} records`);
+  }
+  console.log(`covariance rule: ${all.length} records with covariance (the catalog mix and three at the third body's builder thresholds) at ${LEADS.length} leads, alone, in turn, in reverse turn, shuffled and on 4 threads, bit for bit; the 500 km record after the 815 km one bit for bit`);
+}
 
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.log(`SET-CACHES FAIL: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.log("SET-CACHES PASS: an AP state is a function of its set and its time alone");
+console.log("SET-CACHES PASS: an AP state and its covariance are functions of the set and the time alone");
 process.exit(0);

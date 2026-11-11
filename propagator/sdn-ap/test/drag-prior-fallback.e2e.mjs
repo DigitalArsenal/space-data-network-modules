@@ -35,7 +35,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
 // 3's baseline and bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg). Against 0.4.17 (git 3c8fcb5c) until
-// 0.6.21: bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters and a fit by
+// 0.6.20: bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters and a fit by
 // centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8, at most 0.022 m in the
 // errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves these fits
 // from 0.4.17's by up to 2.670 m in the errors, 5.72e-4 relative in BTERM and 4.57e-5 in AGOM over the 30 windows
@@ -45,8 +45,11 @@ import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads'
 // toward it as away. CryoSat-2 is closer on 8, 7 and 8 windows at days 1, 3 and 7 and farther on 3, 4 and 6, its
 // medians (63.43, 404.5 and 3,183.9 m) within 3 cm; its largest mover goes 2.7 m toward the truth on 1.7 km at day 7.
 // SARAL moves at most 7 cm. A 3 cm comparison with 0.4.17 cannot hold once the radiation rates change, so from 0.6.21
-// the baseline is 0.6.21 (git 589749f6), the bound kept.
-const BASE_3 = {version: '0.6.21', commit: '589749f63'};
+// the baseline is 0.6.21 (git 589749f6), the bound kept. AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446) move these
+// fits from 0.6.21's by up to 2.451 m in the errors (a SARAL window), 2.94e-4 relative in BTERM and 2.94e-6 in AGOM over
+// the 30 windows (from 0.4.17's, with 0.6.21: up to 3.214 m, 6.89e-4 and 4.08e-5); from 0.6.22 the baseline is 0.6.22
+// (git f8af1e2b), the bound kept.
+const BASE_3 = {version: '0.6.22', commit: 'f8af1e2b7'};
 const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';

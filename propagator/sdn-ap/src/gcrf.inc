@@ -29,6 +29,20 @@ inline int gcrf_to_teme(double whole, double frac, double m[3][3]) {
   return j;
 }
 
+/// TT (two-part Julian date) at the UTC Julian date whole + frac, as gcrf_to_teme takes it: ERFA's leap-second table.
+/// Returns ERFA's status; a refused date (-1) takes TT = UTC + 69.184 s.
+inline int utc_to_tt(double whole, double frac, double& tt1, double& tt2) {
+  double tai1, tai2;
+  const int j = eraUtctai(whole, frac, &tai1, &tai2);
+  if (j < 0) {
+    tt1 = whole;
+    tt2 = frac + 69.184 / 86400.0;
+    return j;
+  }
+  eraTaitt(tai1, tai2, &tt1, &tt2);
+  return j;
+}
+
 /// GMST82 as gmst() (store.inc) has it, without its rounding: gmst() sums the polynomial in seconds of time near 8e8 s
 /// and turns that into radians near 6e4 rad, so its angle is off GMST82 in exact arithmetic by up to 3.6e-11 rad
 /// (1.5 mm at 42,164 km; 2020 to 2035, test/output-frames.mjs), changing from one instant to the next, with a mean of
