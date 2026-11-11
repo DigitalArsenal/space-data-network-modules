@@ -571,6 +571,8 @@ is that of section 5 at the evaluation time.
    E_2 at the entry, E_2 + 2 pi when E_2 < E_1; the sunlit arc runs from E_1 to E_2. If |E_2 - E_1| < 1e-12 the
    wholly sunlit formulas apply.
 
+This sequence is SGP4XP's. AP sets take 16.14's shadow, whose boundaries are continuous in the elements.
+
 The 1e-12 test is tight against the rounding of this sequence. At GEO (p^2 near 44) its roots usually miss the test,
 so the GEO eclipse season is averaged as wholly sunlit, while LEO, MEO and HEO shadows are mostly found *[study;
 probe 4.4]*. At high eccentricities the misses are frequent too *[probe 4.7]*: hourly along 7 days of seven of side
@@ -3052,7 +3054,7 @@ carry one term of the empirical ECOM2 model beside the sphere of section 4: Y0, 
 eY = unit(eD x r), eD the unit vector to the Sun (Arnold et al. 2015, J. Geod. 89, eq. 1; the convention of
 propagator/ffm lib/gnss_srp.h). The sphere is ECOM2's direct term D0 (the two differ by (1 AU / r_sun)^2, under 0.6 %
 over 10 days), so a separate D0 would only repeat AGOM; B0 and the once-per-revolution terms are not carried. Y0 is zero
-where the sphere's rates count the orbit as in shadow (the same decision, section 4 and srp_rates).
+where the sphere's rates count the orbit as in shadow (the same decision, 16.14 and srp_rates).
 
 *Theory.* Y0's Gauss rates (the radial component zero) are averaged over the mean anomaly of the mean orbit on its
 sunlit arc by three-point Gauss-Legendre panels: the arc's ends, the points a quarter revolution either side of where
@@ -3130,6 +3132,89 @@ exists a state costs the same.
 
 `test/radiation-y0.e2e.mjs` checks the theory, the fit, the daily fit, a held fit against the fit without the term
 byte for byte, and the refusals.
+
+**16.14 AP's shadow.** Every AP set takes this shadow in place of section 4's: in the sphere's rates (srp_rates)
+and in Y0's sunlit arc (16.13). Section 4's closed form, kept as the library computes it, decides by rounding in two
+places (stack issue 464):
+- A candidate root counts as a boundary only when |S| < 1e-12. Where a boundary lies within a few degrees of an apse of
+  the mean orbit, x = cos nu is near +-1, and sin nu = sqrt(1 - x^2) magnifies the root's rounding by 1 / sin nu.
+  |S| at the root then falls between 1e-13 and 2e-12. The rates flip between the sunlit arc and the wholly sunlit
+  orbit with the last bits of the elements, and the whole eclipse's share of the rates moves for a node step (two
+  revolutions on a Galileo orbit, 4.6 % of the eccentricity vector's rate in one case).
+- Near-equatorial long-period AP sets (inclination below 0.02 rad, a above 5 Earth radii) took section 4's sequence
+  itself, which is rounding-limited at geosynchronous radius.
+
+Under a change of 1e-10 relative in the mean motion, 7-day flights in an eclipse season moved by up to 10 m on
+Galileo-like orbits, 35 m GPS-like, 4 to 10 m geostationary and inclined geosynchronous, 1.0 m at 800 km, 0.4 m
+laser geodetic and 145 m on a transfer orbit; the change itself moves them 0.2 to 0.6 m along track, linearly. A fit that solves
+AGOM, or Y0 beside it, stopped where rounding put it (stack issue 456).
+
+*The shadow.* Section 4's cylinder of radius R_E on the current mean orbit:
+- A, B are the Sun's direction cosines on P and Q, F = A^2 + B^2, phi is the Sun's direction in the orbit plane and
+  u = nu - phi - pi the angle from the anti-Sun direction. The night half is |u| < pi/2.
+- The shadow is where S(u) = p^2 F cos^2 u + d^2 - p^2 > 0 (d = 1 + e cos nu). S is negative at both terminators
+  (S = d^2 - p^2 there, because the perigee is above the surface).
+- S's largest value on the night half decides. It is searched at u = 0, then at u = j pi/10 (|j| <= 4), then by
+  Newton's method on S' inside the neighbors of the best point. Not above 0: wholly sunlit.
+- Above 0: the entry and the exit are the roots of S on either side, each found by Newton's method kept inside its
+  bracket (bisection where a step leaves it) to full precision.
+- E1 (exit) and E2 (entry, + 2 pi when not above E1) feed section 4's formulas: AP's arrangement of them where the
+  set's angles allow, section 4's own for near-equatorial long-period sets. Section 4's test that the cylinder cannot
+  reach the orbit (F < 1 and (1 - F) a_min^2 > 1.000002) stays as the first step.
+- `sdnap_shadow_policy` 3 (no boundary) makes AP wholly sunlit too; policies 1 and 2 act on SGP4XP alone.
+
+*Continuous, not smooth.* No tolerance decides a branch, so the rates are continuous in the elements. At the season's
+edge the two roots merge, and the sunlit-arc formulas over E2 - E1 = 2 pi are those of the wholly sunlit orbit. The
+rates are not smooth there: the arc grows as the square root of the orbit's depth in the cylinder.
+
+*One sunlit arc per revolution*, as section 4 assumes, measured: 6,318,000 geometries, 4,636,757 of them shadowed,
+none with more than two boundaries on the night half (4,000 samples of it each). The grid: e from 0 to 0.9 (15
+values), perigee radius from 1.005 to 60 Earth radii (13 values), 90 Sun elevations up to the highest whose cylinder
+reaches the orbit, 360 directions in the plane.
+
+*Measured* (`sdnap_ap_srp_rates`: mode 0 the theory, mode 1 the same sphere and cylinder averaged numerically over
+one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow.e2e.mjs):
+- The six rates agree within 7.6e-7 of each rate's scale, through grazing (Galileo-like and geostationary) and with
+  the exit or the entry crossing the perigee. Their steps along the sweep equal the average's to three digits.
+- The transfer orbit (e 0.73), every direction of the Sun in its plane: 7e-7, except a_f (next item).
+- The perigee-stepped nudge scans, made-up sets in season:
+
+  | Orbit | Rough flights, section 4's shadow | 16.14 |
+  | --- | --- | --- |
+  | Galileo-like | 24 of 120 | 0 of 120 |
+  | GPS-like | 15 of 120 | 0 of 120 |
+  | laser geodetic | 3 of 120 | 0 of 120 |
+  | 800 km | 6 of 120 | 0 of 120 |
+  | transfer orbit | 18 of 120 | 0 of 120 |
+  | geostationary at i 0.05 deg | 5 of 24 | 0 of 24 |
+  | geostationary at i 2 deg | 5 of 24 | 0 of 24 |
+  | inclined geosynchronous | 11 of 24 | 0 of 24 |
+
+  "Rough" means the departure from a linear drift exceeds 1 cm; with 16.14 it is at most 0.9 mm over 7 days.
+- The transfer orbit's worst flight before: the exit fell 0.008 deg past the perigee, and one node evaluation
+  rejected its root (|S| = 2.7e-12) and took the orbit as wholly sunlit. 16.14 takes the arc there; the numerical
+  average agrees with it.
+
+*Bits.* SGP4XP and SGP4 are section 4's and unchanged. AP sets with AGOM 0 fly byte for byte, and so do AP orbits
+wholly sunlit over the flight. In shadow, where section 4's decision was right, a flight moves by nanometers (4e-9 m
+over 7 days on a Galileo-like set), because the boundaries are now solved to full precision.
+
+*Not carried, with their sizes.* Each size is the difference over 7 days of a made-up flight with the same epoch
+state and integrator, in season.
+- **The penumbra.** AP's shadow is the cylinder; the numerical propagator flies a cone with umbra and penumbra. The
+  same sphere averaged numerically in the cone (mode 2, the illuminated fraction of the Sun's disc) against the
+  cylinder: 2.7 cm Galileo-like, 2.1 cm GPS-like, 2.8 cm geostationary, 2.2 cm inclined geosynchronous, 0.3 mm laser
+  geodetic, 1.4 mm at 800 km, 5.7 cm on the transfer orbit; 0 for a wholly sunlit orbit. The penumbra lies across the
+  cylinder's edge, so the light it removes outside the edge and adds inside nearly cancel.
+- **Section 4's sunlit-arc eccentricity-vector rate at high eccentricity** (stack issue 466). Against the numerical
+  average, a_f-dot departs by 1.1e-4 of its scale at e 0.1, 1.1e-3 at e 0.3 and 1.2e-2 at e 0.73, in shadow only
+  (4e-15 wholly sunlit). In flight that is 2.3 to 3.5 m on the transfer orbit (e 0.73, AGOM 0.02) and under 0.3 mm on
+  near-circular orbits.
+
+*Cost* (provisional, niced under a load of about 100): the shadow takes 265 ns against the closed form's 183 ns per
+call at Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the
+transfer orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's
+per-state costs moved by 0.94 to 1.16 times, within that load's spread.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
