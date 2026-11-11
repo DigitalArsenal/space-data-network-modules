@@ -5846,6 +5846,11 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       if (table == nullptr) return false;
       s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0, res);
       if (s.ctx.half_day_count < 0) { std::free(table); return false; }
+      // the one-day tail keeps what it filled: its amplitude cut leaves a few hundred of the bound's 2,016 entries at
+      // degree 31 (the half-day class's allocation is left as it was)
+      if (res == 1 && s.ctx.half_day_count > 0)
+        if (void* kept = std::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
+          table = static_cast<tess::HalfDayCoef*>(kept);
       s.ctx.half_day = table;
     }
   }

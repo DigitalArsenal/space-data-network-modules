@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E2E (stack #434, SPEC 6.1 and 16.2): the one-day class's resonant tail. Through 0.6.15 that class's rates carried the
+// E2E (stack #434, SPEC 6.1 and 16.2): the one-day class's resonant tail. Through 0.6.19 that class's rates carried the
 // resonant gravity of degrees 2 to 4 only (SPEC 6.1's 27 terms), and the output table drops every term slower than 0.045 n,
 // so degree 5 and up was carried nowhere. On a geostationary set each missing term is a constant along-track acceleration
 // whose size and sign follow the longitude, mostly through EGM96's (5,5), (5,3) and (5,1).

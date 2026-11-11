@@ -320,7 +320,7 @@ constexpr double kBandMedianBterm = 0.0005;
 constexpr double kY0MinimumArcHours = 72.0;
 constexpr double kY0PriorSigma = 1e-9;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
-// SPEC 16.13: through 0.6.18 the one-day resonance class held Y0 whatever the arc, while that class lacked its resonant
+// SPEC 16.13: through 0.6.19 the one-day resonance class held Y0 whatever the arc, while that class lacked its resonant
 // gravity above degree 4 (stack #434). With the class's resonant tail Y0 is solved there as elsewhere; the Moon's position
 // error (stack #446) still leaks into it on model truth (no Y0 in the truth: -0.8e-10 to -1.4e-10 found on inclined
 // geosynchronous sets, +1.3e-10 to +3.0e-10 on geostationary ones), and the real windows gain anyway (SPEC 16.13).
