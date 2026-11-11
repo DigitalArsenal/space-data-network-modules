@@ -3289,7 +3289,9 @@ m/s^2 each: where B1 is solved the data's sigma is 5e-11 to 1.4e-10 for B1 sin a
 C020's measured B1 cos stays within one sigma). They are solved where the arc carries them: on Y0's arcs, the fit with
 Y0 and B1 (made, as the Y0-only fit, at the data's sigma) is kept where the Y0-only fit's RMS is at most 15 m and its
 own at most 0.9 of it; elsewhere the Y0-only fit stands, B1 held at its stated value, byte for byte as without the
-terms, and the OD COMMENT says which. The price is one more fit at the data's sigma on every window that solves Y0
+terms, and the OD COMMENT says which. The rule's limit is an along-track burn of 0.1 mm/s in the arc: a burn that small
+leaves a quiet-looking arc (2.7 to 4.4 m), the record's numbers cannot tell it from B1, B1 is then solved on 3 sets in
+10 and day 5 is 25 to 58 m worse on top of a 170 to 240 m miss from the burn itself. The price is one more fit at the data's sigma on every window that solves Y0
 (median wall time 393 to 924 ms on the geostationary windows, 316 to 587 ms inclined geosynchronous, 201 to 324 ms
 Galileo). The record's covariance is the parameter block of the inverse made over the parameters and every solved ECOM2
 term, marginal over Y0 and B1, not conditional on them (stack #481): near beta 0, B1 cos and AGOM correlate 0.99 over
@@ -3303,8 +3305,8 @@ grip. The fit RMS separates the cases: the ratio with B1 over without is 0.10 to
 truths without it and 0.96 to 1.00 on geostationary ones in season. Out of season, geostationary truths without B1 show
 0.43 to 0.99: AP's own once-per-revolution residual of about a meter there (stack #483), which B1 cos takes up; the
 records of such sets state a B1 cos that is AP's, not the truth's, until #483 is found (their day 7 moves 2.2 to 2.4 m
-either way). An along-track burn of 1 mm/s or more in the arc gives the Y0-only fit an RMS of 22 m or more and is
-refused; one of 0.1 mm/s (RMS 2.7 to 4.4 m) passes on 3 of 10 sets and is not told from B1 by the record's numbers.
+either way). An along-track burn of 1 mm/s or more in the arc gives the Y0-only fit an RMS of 22 m or more, over the
+15 m cap, so B1 stays held; one of 0.1 mm/s is the limit stated with the rule.
 
 *Measured.* Model truth (FFM 20 x 20, Sun and Moon, cannonball, the solid tide; 72 h; geostationary at i 0.05 and 2
 deg, inclined geosynchronous, Galileo-like; 2026-10-01 and 2026-12-01; Y0 -1.5e-9 with B1 cos ±8e-9 and B1 sin ±4e-9):
