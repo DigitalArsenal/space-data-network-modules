@@ -3000,6 +3000,10 @@ modeled (FORCES.SOLID_TIDES NONE)"). Refused by name: on `fit` IERS_2010 without
 *Why not by default.* The $PCF cannot tell SOLID_TIDES left unset from NONE written, so the module cannot apply the
 tide by default without overriding an explicit NONE (stack issue 455 asks the standard for an UNSPECIFIED value).
 
+*Cost.* About 100 floating-point operations per rate evaluation and no trigonometry; the band once per set. AP's cost
+per state with the tide over without it, `test/kernel-cost.mjs --solid-tides` on seven regimes at 300 s and 60 s, two
+alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.28) the load's.
+
 `test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
 unset, the long-period regime's stated covariance with the tide, and the refusals.
 
