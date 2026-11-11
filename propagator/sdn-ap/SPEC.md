@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.28 (dist 05675a67).
+Version 0.6.29 (dist c749d46e).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -4155,6 +4155,38 @@ q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term
 `test/slow-set-partition.e2e.mjs` compares it row by row with the rule written in the test. `test/slow-set-taper.e2e.mjs`
 flies a decaying orbit whose order-15 family's weight moves from 0.90 to 0.63 over 7 days. The 10 s jump detector reads at
 most 0.008 m (bound 0.08 m), and 400 states come out bit-identical in any order of requests.
+
+**16.19 The Sun and Moon of the long-period regime through the output.** In the long-period regime the bodies enter the
+rates as point masses: the Gauss equations at the mean state, with the bodies' acceleration at the mean position (5). AP's
+output then adds section 8's J2 short-period map to those mean elements. So the bodies' rates moved AP's osculating state
+by the map's Jacobian times the rates as well, a velocity of the order of J2 times the bodies' own effect on the elements, at
+once. On a synthetic set at e 0.9 with apogee 305,000 km (perigee 10,000 km, i 70), AP with J2 and the Moon diverged from
+AP with J2 alone at 2.8 mm/s from the first minute, where the numerical propagator's two flights start together: after 1 min,
+0.242 m against 0.073 m. From 0.6.29, an AP set above e 0.3 in the long-period regime takes as the bodies' rates of its
+mean elements y the solution m of J m = (0, a): J is the Jacobian of section 8's output (position and velocity, km and km/s)
+in the six elements by forward differences (steps 1e-7, and 1e-7 n for n, every column's Kepler equation started from the
+base's eccentric anomaly), and a is the Sun's and Moon's point-mass acceleration at the output's position. Gaussian
+elimination with partial pivoting solves it; where the output or the solve fails, the Gauss equations remain. The rates
+then move the J2 output by the bodies' acceleration and nothing else, to first order.
+
+AP's Moon signal (each side's flight with J2 and the Moon less its flight with J2 alone, no fit, 120 h; J3 to J5 and the
+Sun's mass zero in the builds), against the numerical propagator's:
+
+| synthetic set | the Moon's signal at 120 h | error before | error from 0.6.29 |
+| --- | ---: | ---: | ---: |
+| e 0.9, perigee 5,000 km, i 70 | 1,811 km | 627 m | 28 m |
+| e 0.9, perigee 10,000 km, i 70 | 3,202 km | 622 m | 43 m |
+| e 0.5, perigee 35,786 km, i 20 | 868 km | 34 m | 27 m |
+| TESS-like (e 0.55, perigee 102,000 km) | 2,133 km | 9 m | 8 m |
+| e 0.3, perigee 35,786 km, i 55 | 90 km | 34 m | 36 m |
+| geosynchronous, e 0 | 9 km | 3 m | 2 m |
+
+The effect is large only where the J2 map is large against the bodies' pull, a low perigee under a high apogee. At e 0.3 and
+below it is a few meters while the Jacobian costs about 3 us a state on a geosynchronous flight, so below e 0.3 the Gauss
+equations stay, bit for bit. AP fitted to the numerical forecast over 0 to 120 h, J2 and the Moon on both sides: 862 m to
+453 m (perigee 5,000 km) and 825 m to 353 m (perigee 10,000 km), against 459 m and 360 m with J2 alone. SGP4XP is unchanged.
+`test/long-period-moon-output.e2e.mjs` records AP fitted over 5 days to that case on the zonal field to degree 5 with the Sun
+and Moon (FFM): D 343.8 m on 0.6.26, 255.8 m from 0.6.29.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
