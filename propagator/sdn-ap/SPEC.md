@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.24 (dist 3e89dfd2).
+Version 0.6.25 (dist 3cfb6c49).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2409,7 +2409,10 @@ third-body terms of 16.8. A degree set without its HAS field, or above 70, is re
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
 complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
 orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
+against a 31 x 31 field); at 450 km the order-15 terms above degree 31 added 72 m on day 1 and 268 m on day 7 after a 72 h
+fit through 0.6.20. From 0.6.25 a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
+rates, to degree 70 whatever d states: d governs the fast terms, and a commensurability's series is a cancellation, so a slow
+set cut at a lower degree is worse than none.
 `maneuver` and `ingest_omm` keep SGP4XP.
 
 **16.2 Tesserals.** The field is the fully normalized EGM-96 of propagator/ffm, pinned by build.mjs. Inclination functions come
@@ -2424,6 +2427,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
+| slow set (from 0.6.25) | j = 1 to 6, q = 0, every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose along-track size reaches 0.5 m, the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
 by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
@@ -3769,8 +3773,8 @@ cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to t
 | 6 | nowhere: a q outside the rule's q range, at or above the size cut |
 
 It writes at most max_rows rows and returns the count of all of them, or -1 for a set it does not cover. It covers the sets
-above their eccentricity switch outside low orbit (class 0 below 1100 min). It returns -1 for every other set, so codes 3,
-5 and 6 are not written. No flight reads it.
+above their eccentricity switch outside low orbit (class 0 below 1100 min), and from 0.6.25 the low table (below: codes 3,
+5 and 6 are written there only). It returns -1 for every other set. No flight reads it.
 
 *The partition test.* Each part of the rule has an E2E of one shape:
 - the rule, written in the test as a function of a row (the carrier from l, m, p, q and psi-dot / n);
@@ -3822,11 +3826,95 @@ floor and the degree cut leave out on such a synchronous set (105 m and 42 m, ag
 stack #474.
 
 *The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
-- in low orbit (class 0 below 1100 min): the commensurabilities with j of 2 to 4 (orders 25 and up) and the degrees above
-  31. Inside the bands they put a set 0.1 to 1.9 km off at day 5 (stack #477);
+- in low orbit (class 0 below 1100 min), through 0.6.24: the commensurabilities with j of 2 to 4 (orders 25 and up) and the
+  degrees above 31. Inside the bands they put a set 0.1 to 1.9 km off at day 5 (stack #477). From 0.6.25 the low table's
+  slow set carries those with q = 0 (below); the terms with q other than 0 stay open;
 - above the switch in classes 0, 2, 3 and 4: every slow term the class's rates do not carry. A transfer orbit (2.2785
   rev/day, e 0.7306, i 27 deg) is 2.1 km from the numerical propagator at day 5 without radiation pressure (stack #473);
 - in the one-day class: the terms under its floor and above degree 12 (stack #474).
+
+*The low table (from 0.6.25; stack #477).* The low table is class 0 below
+1,100 min at or below its eccentricity switch. There, through 0.6.20, the shallow set (16.2) carried only j = 1, q = 0 to the
+stated degree, at most 31. The output table dropped every term slower than 1e-3 n and took the rest with the divisor of the
+epoch. A k:j family at a band's center, or one that drag moves through its band, was carried in the wrong place or nowhere.
+Gravity alone, FFM 70 x 70 on both sides with no Sun or Moon, the elements fitted with the coefficients pinned, 300 to
+1,500 km in 20 km steps: the worst day-5 error after a 24 h or 72 h fit was 1,584 m at i 53 (25 heights above 100 m) and
+1,905 m at i 97.6 (35 heights).
+
+From 0.6.25 a fit that states MAXIMUM_TESSERAL_DEGREE 2 or more carries the slow set in the rates, beside the shallow set:
+every term (l, m, p, q) of the embedded field with j = l - 2p + q from 1 to 6, q = 0, order and degree 2 to 70,
+- whose own rate psi-dot at the epoch elements is within 1.3 bands (|psi-dot| < 1.3 x 0.045 n, `kShallowSelect`);
+- whose size reaches 0.5 m (`kSlowKeepM`). The size is the along-track amplitude through the mean motion,
+  3 |j| A / (a psi-dot^2), with A = mu / a^(l+1) |F G| |C, S| the potential's coefficient of the term, at the epoch elements;
+- other than the shallow set's own terms (j = 1, q = 0, to its degree), which stay where they are.
+
+Each term enters the rates with the weight w of its own current rate: 1 below 0.9 bands, a cos^2 taper to 0 at 1.1. The
+output table holds 1 - w of a term the rates carry, so a term that crosses its band's edge as drag raises n moves from one to
+the other with no step. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
+as GRAVITY_MODEL "EGM-96; slow tesseral terms to degree 70", and every flight of the record carries it. A record without
+that text flies as before.
+
+What the slow set leaves out, by stated limits:
+- Families whose leading degree is 69 or 70. The embedded field ends their series after one or two degrees where the real
+  field continues it, so neither AP nor a numerical propagator at 70 x 70 holds the series: a limit of the field, not of the
+  method. j up to 4, 5 or 6 gave the same records on the measured fixtures and band centers.
+- Terms under 0.5 m. The largest left out on the bits cases are 0.41 m on a LAGEOS-2-like set and 0.089 m on a LAGEOS-like
+  set. A cut at 0.1 m changes the LAGEOS-2-like record, and 0.05 m changes both. Lower cuts also make a free fit of a
+  SWOT-like set at BTERM 0.01 worse: 0.925 and 0.937 of the true BTERM against 0.952.
+- q other than 0 (code 6 below; stack #477's open part). The cases that are known:
+  - 880 km, i 97.6: the order-14 q = +1 family drifts at 1.8e-3 n, and the output table carries it to first order: day 5
+    is 220 / 233 m after 24 h / 72 h fits, and 91 / 43 m with the family in the rates. The q = -1 family (6.6e-4 n,
+    107 days, its largest member 757 m) is carried nowhere. Put in the rates it costs 20 to 35 m, where a correct term
+    should cost nothing; that is the defect to find before q other than 0 is carried.
+  - 550 km, i 87.35, e 0.001: the order-15 q = 2 term of degree 15 drifts at 3.2e-5 n with a size of 1.9 km and is
+    carried nowhere.
+  - At e 0.02 the series in q needs |q| up to 4: day 5 after 24 h / 72 h fits is 152 / 224 m with q = 0, 352 / 297 m with
+    |q| up to 1, and 183 / 161 m with |q| up to 4.
+
+Measured with the slow set:
+- The scan above: at i 53 the worst is 218 m (10 heights above 100 m), and at i 97.6 it is 423 m (19 heights). Still above
+  100 m at i 97.6, day 5 after a 24 h / 72 h fit: 380 km 423 m, 300 km 296 m, 520 km 239 m, 440 km 235 m, 880 km
+  220 / 233 m and 1,220 km 118 / 103 m. At i 53 the heights from 300 to 520 km (up to 218 m) are the fast terms of degrees 13
+  to 31 (stack #454).
+- Free 72 h fits on model truth with drag, the Sun, the Moon and the tide (70 x 70): a SWOT-like set states 0.995 of the true
+  BTERM at 0.044 and 0.952 at 0.01 (day 5 30 m); a Sentinel-3-like set 0.999 and 0.993.
+- Real data, 72 h fits, AP's day-5 forecast against the full numerical arm's own forecast (windows under 100 m and the
+  median), from 0.6.20 to the slow set: laser spheres 21 to 34 of 56 (116 to 75 m), altimetry 28 to 42 of 112 (191 to
+  121 m), near 700 km 10 to 11 of 69 (235 to 216 m). The 24 h rows do not move.
+- The records of LAGEOS-, Etalon- and Galileo-like sets are identical to 0.6.20.
+
+What gets worse, measured. No IDS burn lies near either Sentinel-3 window.
+- Sentinel-3B 2025-10-25: day 7 goes from 112 to 402 m. Its 72 h fitted term goes from 0.87 to 0.83 of the full numerical
+  arm's, and the numerical propagator's own day 7 on that window is 1,179 m.
+- Sentinel-3A: the median paired day 3 on its read windows goes from 44.2 to 73.4 m. Its term on 2025-10-15 goes from 0.90
+  to 0.87 of the numerical arm's.
+- The ISS sample, a 6 h fit at 420 km: the error at 12 h goes from 308.5 to 316.6 m against the sample's own truth. The
+  calibration cells of SPEC 12.5 move by at most 0.0011 in median |z|. This is one sample.
+- LARETS: two windows leave the 100 m line. 2025-10-15 (a 24 h fit) goes from 73 to 288 m at day 5, and 2025-12-14 (72 h)
+  from 74 to 188 m.
+
+*Cost.* The list is built once per set, when the set is loaded, so the cold first state of a low-orbit set costs more:
+- at 1 day, 1.25 to 1.40 times 0.6.20 on six of `test/kernel-cost.mjs`'s ten low-orbit regimes and about 2.2 at 400 km;
+- at 7 days, 1.03 to 1.28 times.
+The cost per state is unchanged within the noise (0.90 to 1.07). These were measured under load; stack #492 is the shared
+list that takes the load cost off a catalog.
+
+*The diagnostic, low table.* `sdnap_slow_terms(in, rows, max_rows)` covers the low table with rows of eight doubles: l, m, p,
+q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term's size in m. It lists every term of j = 1 to
+6 and |q| up to 4 within 1.3 bands:
+
+| Code | Carrier |
+| ---: | --- |
+| 1 | the rates (the shallow set or the slow set), with its weight w |
+| 3 | the output table |
+| 0 | nowhere: under the table's 1e-3 n floor |
+| 4 | nowhere: above the slow set's degree, or in a family whose leading degree is 69 or 70 |
+| 5 | nowhere: under the size cut |
+| 6 | nowhere: a q outside the slow set's range, at or above the size cut (stack #477's open part) |
+
+`test/slow-set-partition.e2e.mjs` compares it row by row with the rule written in the test. `test/slow-set-taper.e2e.mjs`
+flies a decaying orbit whose order-15 family's weight moves from 0.90 to 0.63 over 7 days. The 10 s jump detector reads at
+most 0.008 m (bound 0.08 m), and 400 states come out bit-identical in any order of requests.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

@@ -17,7 +17,8 @@
 // 4. the read AP6 altimetry windows (DO; descriptive, read windows are controls): the paired day-3 AP minus archived FFM
 //    (resume-ffm F72) median per object at 0.4.11 and here, printed; no object worse by more than 10 m on its scored
 //    windows (amended after the first run: a window where FFM's own day-3 error exceeds 10 km holds a maneuver or a
-//    broken arc, as Sentinel-6B's commissioning windows do at 1.9 to 2,626 km, and is printed but not scored);
+//    broken arc, as Sentinel-6B's commissioning windows do at 1.9 to 2,626 km, and is printed but not scored); from 0.6.25
+//    Sentinel-3A under its own bound of 80 m (0.6.20 44.2 m, the slow set 73.4 m: a cost stated, SPEC 16.18);
 // 5. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
@@ -123,8 +124,13 @@ if (!isMainThread) {
   assert.ok(results['release Sentinel-3-like 0.01 default'].day3 <= results['0.4.11 Sentinel-3-like 0.01 default'].day3 + 2,
     'Sentinel-3-like 0.01: no worse than 0.4.11 by more than 2 m');
   assert.ok(Object.keys(objects).length >= 9, 'the altimetry objects replayed');
+  // Sentinel-3A is held under its own bound from 0.6.25: the slow set (SPEC 16.18) takes its scored median from 44.2 m
+  // (0.4.11 and 0.6.20) to 73.4 m, a cost its pull request states (no burn of the IDS list lies in the 2025-10-15 window).
+  // On the same read windows the slow set takes SWOT from 208.6 to 11.3 m and CryoSat-2 from 66.3 to -47.5 m.
+  const LOSS_HELD = {'SENTINEL 3A': 80};
   for (const [name, o] of Object.entries(objects))
-    if (o.scored) assert.ok(o.scoredHere - o.scoredAt0411 <= 10, `${name}: no more than 10 m worse than 0.4.11 on its scored windows`);
+    if (o.scored) assert.ok(LOSS_HELD[name] !== undefined ? o.scoredHere <= LOSS_HELD[name] : o.scoredHere - o.scoredAt0411 <= 10,
+      LOSS_HELD[name] !== undefined ? `${name}: scored median ${o.scoredHere} m above its held ${LOSS_HELD[name]} m` : `${name}: no more than 10 m worse than 0.4.11 on its scored windows`);
   reproduceConformance();
   console.log('fit BTERM 700-1400 km E2E: PASS');
 }

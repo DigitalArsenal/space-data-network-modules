@@ -19,7 +19,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.24";
+constexpr const char* kModuleVersion = "0.6.25";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -71,6 +71,11 @@ constexpr const char* kY0RadiationModel = "SPHERE (AGOM) AND ECOM2 Y0 (ARNOLD ET
 /// SPEC 16.14: PERTURBATIONS.SOLID_TIDES_MODEL of an AP set flown with the solid Earth tide ($PCF FORCES.SOLID_TIDES
 /// IERS_2010); absent on every other set. A flight reads this text, and only this text, as the tide.
 constexpr const char* kSolidTidesModel = "IERS 2010";
+
+/// SPEC 16.18, the low table (stack #477): PERTURBATIONS.GRAVITY_MODEL of an AP set whose slow set carries a term beyond the
+/// shallow set's ("EGM-96" on every other AP or SGP4XP set). A flight reads this text, and only this text, as the slow set,
+/// so a stored record flies as it was fitted.
+constexpr const char* kSlowGravityModel = "EGM-96; slow tesseral terms to degree 70";
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
 /// parameters in the fixed order (cov::kParameters), each named, each a prwDynamicParameter of the five, COV_UNITS
@@ -165,7 +170,7 @@ inline flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SPW>>> rows_o
 inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBufferBuilder& fbb, int32_t row_theory, const Forces& f, const Weather* w,
                                                            bool ecom2 = false) {
   const bool sgp4 = row_theory == kTheorySgp4;
-  const auto s_gravity = fbb.CreateString(sgp4 ? "WGS-72" : "EGM-96");
+  const auto s_gravity = fbb.CreateString(sgp4 ? "WGS-72" : f.slow && epoch_frame(f) ? kSlowGravityModel : "EGM-96");
   const auto s_srp = ecom2 ? fbb.CreateString(kY0RadiationModel) : flatbuffers::Offset<flatbuffers::String>(0);
   const auto s_tides = !sgp4 && f.solid_tides ? fbb.CreateString(kSolidTidesModel) : flatbuffers::Offset<flatbuffers::String>(0);
   flatbuffers::Offset<ATM> atmosphere = 0;
@@ -530,6 +535,13 @@ inline int decode_view(const OCM* o, Set& s) {
                     "The solid Earth tide is AP's, flown with its gravity terms: an SGP4 or SGP4XP set, or an AP set whose gravity caps are both 0, carries none.");
     f.solid_tides = true;
   }
+  // SPEC 16.18, the low table: GRAVITY_MODEL kSlowGravityModel, the slow set, on an AP set with gravity terms only; any other
+  // text flies as it always did
+  if (const flatbuffers::String* gm = pt->GRAVITY_MODEL(); gm != nullptr && oem::same_text(gm->c_str(), kSlowGravityModel)) {
+    if (sgp4 || !epoch_frame(f))
+      return refuse("elements-other-theory", "The slow set is AP's, flown with its gravity terms: an SGP4 or SGP4XP set, or an AP set whose gravity caps are both 0, carries none.");
+    f.slow = true;
+  }
   // the theory by MEAN_ELEMENT_THEORY alone: SGP4XP flies the theory's own forces, AP any other
   if (s.theory == meanElementSource_SGP4XP && !f.stock()) return refuse("elements-other-theory", "An SGP4XP set states AP's forces (MEAN_ELEMENT_THEORY AP).");
   if (s.theory == meanElementSource_AP && f.stock()) return refuse("elements-other-theory", "An AP set states SGP4XP's own forces (MEAN_ELEMENT_THEORY SGP4XP).");
@@ -564,7 +576,7 @@ struct Bind {
   xpt::tess::Terms prev_terms;
   Bind(const Forces& f, const atm::Atmosphere* a) : prev(atm::active()), prev_terms(xpt::tess::active()) {
     atm::active() = f.weather_source == pcfWeatherSource_RECORDS ? a : nullptr;
-    xpt::tess::active() = xpt::tess::Terms{f.tesseral, f.zonal, f.solid_tides};
+    xpt::tess::active() = xpt::tess::Terms{f.tesseral, f.zonal, f.solid_tides, f.slow};
   }
   ~Bind() {
     atm::active() = prev;

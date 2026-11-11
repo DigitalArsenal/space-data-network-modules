@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.24 (dist 3e89dfd2).
+Version 0.6.25 (dist 3cfb6c49).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -181,6 +181,14 @@ The one-day tail (from 0.6.19) adds the resonant terms of degrees 5 to 31 to the
 carried degrees 2 to 4 only. On made-up geostationary sets, AP against FFM with the same 20 x 20 field after a 72 h fit
 went from 16.9-136.1 m to 8.5-11.1 m at day 7 at 12 longitudes; what remains is AP's analytic Moon (stack #446;
 `test/one-day-resonant-tail.e2e.mjs`).
+
+The slow set (from 0.6.25) carries, in a fitted low orbit, every tesseral term of degree 2 to 70 with j = 1 to 6 and q = 0
+whose own angle drifts within 1.3 x 0.045 n at the epoch and whose along-track size reaches 0.5 m. Each term is tapered by
+its own current rate, and the output table holds the rest, so a term that drag moves through its band's edge leaves no
+step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst day-5 error after a pinned fit went from 1,584 m to
+218 m at i 53 and from 1,905 m to 423 m at i 97.6. On real 72 h fits, AP's day-5 forecast within 100 m of the full
+numerical arm's went from 21 to 34 of 56 windows on laser spheres and from 28 to 42 of 112 on altimetry. The q != 0 terms
+are stack #477's open part (SPEC 16.18; `test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`).
 
 The half-day tail adds every even-order resonant term through degree 31. Against FFM after a 72 h fit, the
 day-7 errors are 60.1 m for the half-day case (a sample 1 h after a perigee; the day's RMS is 34 m along-track and

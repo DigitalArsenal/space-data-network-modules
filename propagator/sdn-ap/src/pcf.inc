@@ -43,12 +43,15 @@ struct Forces {
   int tesseral = 0;                                           ///< MAXIMUM_TESSERAL_DEGREE
   int zonal = 0;                                              ///< MAXIMUM_ZONAL_DEGREE (the $PCF's MAXIMUM_DEGREE): the zonal tail, J6 up
   bool solid_tides = false;                                   ///< SPEC 16.14: SOLID_TIDES IERS_2010 (PERTURBATIONS.SOLID_TIDES_MODEL)
+  /// SPEC 16.18, the low table: the slow set. A record states it in GRAVITY_MODEL (kSlowGravityModel) when its set carries a
+  /// term beyond the shallow set's, and its flight reads it there; a fit by this version runs with it (no $PCF field).
+  bool slow = false;
   bool stock() const {
     return !msis && weather_source == pcfWeatherSource_THEORY_FLUX_MODEL && !dca && tesseral == 0 && zonal == 0 && !solid_tides;
   }
   bool same(const Forces& o) const {
     return msis == o.msis && weather_source == o.weather_source && dca == o.dca && tesseral == o.tesseral && zonal == o.zonal &&
-           solid_tides == o.solid_tides;
+           solid_tides == o.solid_tides;  // slow is the set's own (SPEC 16.18): a series may mix sets with and without it
   }
 };
 
