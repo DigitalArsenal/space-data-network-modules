@@ -312,8 +312,13 @@ struct ApBodiesNode {
   Bodies b{};
 };
 inline thread_local ApBodiesNode* g_ap_bodies_store = nullptr;
+/// The thread's node store, made on first use or ahead (pool::warm_thread: a pool thread makes its caches before any
+/// batch, stack #487).
+inline void ap_bodies_store_make() {
+  if (g_ap_bodies_store == nullptr) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+}
 inline const Bodies& ap_bodies_node(int64_t k) {
-  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) ap_bodies_store_make();
   ApBodiesNode& s = g_ap_bodies_store[static_cast<uint64_t>(k) & (kApBodiesStoreSlots - 1)];
   if (s.key != k) {
     s.b = ap_bodies_at(static_cast<double>(k) * (kApBodiesNodeHours / 24.0));
@@ -6011,7 +6016,40 @@ struct CachePool {
   const XpSat* last = nullptr;  ///< the set that asked last
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
   std::vector<XpSat*> holders;
+  std::vector<XpSat*> order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
 };
+
+/// Stack #487 (SPEC 9): inside a threaded batch (pool::run, from the workers' wake to the last one done) the module's
+/// memory does not grow. While this flag is set, sbrk refuses every growth (pool.inc), on every thread, and a block that
+/// would have needed new pages is not given: the set's caches fall back to the thread's, and a row whose state needed
+/// such a block is computed again by the calling thread after the batch (pool::run's deferral).
+inline int32_t g_batch_running = 0;
+/// Set by sbrk when it refuses on this thread; the row being computed reads and clears it (run_chunk).
+inline thread_local int32_t g_alloc_refused = 0;
+/// The pool's counts (sdnap_pool_stats): threaded batches run, growths refused, rows deferred to the calling thread,
+/// batches after which the calling thread saw a larger memory (the invariant broken: 0), the pool declared dead, the
+/// last reserve (bytes); the waits for a thread's view of the memory (pool::await_view) that had to yield, and the
+/// most yields one took.
+struct BatchStats {
+  uint64_t batches = 0, refused = 0, deferred = 0, grew = 0, dead = 0, reserve = 0;
+  uint64_t views = 0, view_yields_max = 0;
+};
+inline BatchStats& batch_stats() {
+  static BatchStats s;
+  return s;
+}
+inline void atomic_max_u64(uint64_t* word, uint64_t v) {
+  uint64_t old = __atomic_load_n(word, __ATOMIC_SEQ_CST);
+  while (v > old && !__atomic_compare_exchange_n(word, &old, v, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+  }
+}
+/// One wait for a thread's view that yielded `yields` times (pool::await_view; any thread).
+inline void batch_view_waited(uint64_t yields) {
+  BatchStats& s = batch_stats();
+  __atomic_add_fetch(&s.views, 1, __ATOMIC_SEQ_CST);
+  atomic_max_u64(&s.view_yields_max, yields);
+}
+inline bool batch_running() { return __atomic_load_n(&g_batch_running, __ATOMIC_SEQ_CST) != 0; }
 inline CachePool& cache_pool() {
   static CachePool p;
   return p;
@@ -6061,9 +6099,15 @@ inline bool pool_asked_again(CachePool& p, const XpSat& s) {
 inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, uint64_t before) {
   if (p.held + need <= p.budget) return true;
   if (p.floor >= before) return false;
-  std::vector<XpSat*> order;
+  // the scratch's room is kept with the holders' (pool_room), so filling it never allocates; inside a threaded batch a
+  // candidate beyond its room is left out rather than grow anything (stack #487)
+  std::vector<XpSat*>& order = p.order;
+  order.clear();
   for (XpSat* v : p.holders)
-    if (v->caches->stamp < before && v != keep) order.push_back(v);
+    if (v->caches->stamp < before && v != keep) {
+      if (order.size() == order.capacity() && batch_running()) break;
+      order.push_back(v);
+    }
   std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
   for (XpSat* v : order) {
@@ -6110,7 +6154,9 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   lock(&p.lock);
   SetCaches* c = nullptr;
-  if (pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
+  // inside a threaded batch the holders' list may not grow past the room kept for it (pool_room): no room, no caches
+  const bool listed = !(p.holders.size() == p.holders.capacity() && batch_running());
+  if (listed && pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
   if (c != nullptr) {
     c->bytes = need;
     // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and
@@ -6125,6 +6171,20 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   unlock(&p.lock);
   return c;
+}
+
+/// Before a threaded batch, on the calling thread (stack #487): room in the pool's two lists for `more` sets, so that no
+/// worker grows them, and the bytes the pool may still take (its budget less what it holds), which bounds what the
+/// batch's sets can allocate for their caches.
+inline uint64_t pool_room(size_t more) {
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  const size_t want = p.holders.size() + more;
+  if (p.holders.capacity() < want) p.holders.reserve(want);
+  if (p.order.capacity() < p.holders.capacity()) p.order.reserve(p.holders.capacity());
+  const uint64_t free = p.budget > p.held ? p.budget - p.held : 0;
+  unlock(&p.lock);
+  return free;
 }
 
 extern "C" size_t malloc_usable_size(void*);

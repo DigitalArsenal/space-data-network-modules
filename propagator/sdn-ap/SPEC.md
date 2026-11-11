@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.30 (dist 1ad27490).
+Version 0.6.31 (dist 6945fdc6).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1524,6 +1524,65 @@ The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the r
 15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
 against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
 grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
+
+The pool and the memory (stack #487). A threaded batch grows nothing, and a pool thread uses no page it does not see.
+- Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
+  at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
+  the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
+- Inside the batch, sbrk refuses every growth on every thread.
+  - A set refused its caches flies on the thread's caches, with the same states.
+  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order.
+- A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
+  batch's total, which was stored after that size, so it reads that size.
+- Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
+  thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
+  calling thread goes on once its own view covers it.
+- sdnap_pool_stats counts the batches, refusals, deferred rows, batches that grew inside (0) and the view waits.
+
+Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
+- A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has
+  just grown. Its memory.size still reads the older size, and the bulk instruction is checked against that size. Plain
+  loads and stores of the same pages succeed.
+- This was reproduced outside the propagation code, with only the allocator, memset, memcpy and pthreads (#487).
+- In the pool it happened in two ways:
+  - threads grew the memory inside a batch: 0.6.20 failed 8 of 30 runs of the threaded test, and 0.6.21 failed 4 of 40;
+  - the chunk total was stored before the room was made. A thread that woke late for one batch then claimed a chunk of
+    the following batch while the calling thread grew the memory for it.
+- The pool's own stress shows the second way. In it the calling thread grows the memory before every batch, and every
+  chunk fills blocks in the new pages (4 threads, 3,000 batches a process, fresh processes one at a time):
+  - It needs an oversubscribed machine: a pool thread descheduled between its claim and its fill. On an idle machine
+    (load about 6 to 12 on 28 cores) neither order trapped, 0 of 100 processes each.
+  - With 40 busy threads beside it (load about 50), the total stored first trapped 98 of 100 processes, and stored last
+    0 of 100.
+  - The same split had shown under other sessions' load earlier: 15 of 20 against 0 of 20.
+- A host call or a grow of zero pages on wake did not prevent it: the late thread made that call on its wake for the
+  earlier batch, before the growth it then used.
+- The view wait:
+  - In the loaded campaign it waited in 98 of 100 processes, 318 times, never more than one yield.
+  - The waits at a thread's start count too: the calling thread grows the memory for a new thread's stack just before
+    the thread first runs.
+- This is the engine's behavior as measured, not a guarantee read in the standard. test/pool-growth.e2e.mjs runs the
+  stress, 20 processes, in every suite. With SDN_AP_POOL_GROWTH_LOAD=1 it loads the machine itself (busy threads, twice
+  the cores, at the lowest priority), so that it can fail. Without that, the default, it can fail only on a machine
+  that is busy already.
+
+The timer.
+- A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
+  last chunks without one completing. The pool is then not used again, and later batches run on the calling thread.
+- It is a count of the calling thread's polls, not wall time. The module imports no clock (loaders that build their own
+  import objects give none), and the calling thread may be a browser's main thread, which may not block on a timed
+  wait.
+- The fastest rate measured here was 2.1e9 polls a second, so 2^37 polls are 65 s, about twice the 30 s aimed at. The
+  loop then makes one poll in about one and a half clock cycles, so this machine cannot poll much faster. On a slower
+  or busier machine the count takes longer, and a suspended process does not count.
+- Starting a thread, the calling thread waits at most 2^34 yields for its own view: 89 s at the 1.9e8 yields a second
+  measured here.
+- test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks that a
+  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because chunks keep completing.
+- A trapped thread therefore no longer leaves the calling thread waiting forever: in the stress, every trapped process
+  returned the error.
+- What the timer does not cover: a thread that traps while holding the allocator's lock or a set's lock still stops any
+  thread that then waits for that lock.
 
 What the caches cost in accuracy. The reference is a build of this module's own sources that bakes every evaluation cache
 at the state itself on every call: the tesseral base, ae, pe and resonance bakes and the m-daily terms, with the

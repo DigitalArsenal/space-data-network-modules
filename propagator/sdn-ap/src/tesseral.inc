@@ -1437,12 +1437,17 @@ inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
 
 /// A set's blk_c for one bake, per thread: the lanes' coefficients from F (store_lane's layout), zero in empty lanes.
 inline thread_local float* g_sp_blk_c = nullptr;
-inline float* sp_blk_c(const SpEvalCache& sc) {
+/// The thread's blk_c storage (192 KiB), made on first use or ahead (pool::warm_thread: a pool thread makes its caches
+/// before any batch, stack #487).
+inline float* sp_blk_c_storage() {
   if (__builtin_expect(!g_sp_blk_c, 0)) {
     g_sp_blk_c = static_cast<float*>(std::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
     if (g_sp_blk_c == nullptr) std::abort();
   }
-  float* const c = g_sp_blk_c;
+  return g_sp_blk_c;
+}
+inline float* sp_blk_c(const SpEvalCache& sc) {
+  float* const c = sp_blk_c_storage();
   for (int bi = 0; bi < sc.total_blks; ++bi) {
     for (int l = 0; l < 4; ++l) {
       float* const pc = c + bi * 64 + l;
