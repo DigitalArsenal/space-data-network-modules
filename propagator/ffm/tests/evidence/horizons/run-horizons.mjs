@@ -9,14 +9,20 @@ import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { here, ffm, repo, casesPath, cases, wasmPath, de440Path, names, targets, env, read, sha256, write,
   authenticateRaw, buildMetrics, parseRaw, compare, brief, harness, bodyStates, jwstRun } from './horizons-common.mjs';
+import { outsidePath, requireOptions } from '../paths.mjs';
+const xval = (rest) => outsidePath('xval', rest);
 
 const { values: o } = parseArgs({ options: {
-  python: { type: 'string', default: process.env.XVAL_PYTHON ?? '/Users/tj/software/tools/xval/erfa-spice/bin/python' },
-  naif: { type: 'string', default: process.env.XVAL_NAIF ?? '/Users/tj/software/tools/xval/naif-kernels' },
-  flatbuffers: { type: 'string' },
-  'jwst-source': { type: 'string', default: process.env.XVAL_JWST_SOURCE ?? '/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/examples/02_jwst_covar_monte_carlo/main.rs' },
+  python: { type: 'string' }, naif: { type: 'string' }, flatbuffers: { type: 'string' }, 'jwst-source': { type: 'string' },
   'stored-reference': { type: 'boolean', default: false },
 } });
+// Outside folders come from the environment (docs/cross-validation.md, Outside inputs), never from a path here.
+o.python ??= process.env.XVAL_PYTHON ?? xval('erfa-spice/bin/python');
+o.naif ??= process.env.XVAL_NAIF ?? xval('naif-kernels');
+o['jwst-source'] ??= process.env.XVAL_JWST_SOURCE ?? xval('nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/examples/02_jwst_covar_monte_carlo/main.rs');
+requireOptions(o, [['naif', 'set XVAL_NAIF to the NAIF kernel folder, or FFM_XVAL_TOOLS'],
+  ['jwst-source', 'set XVAL_JWST_SOURCE to the Nyx JWST example, or FFM_XVAL_TOOLS'],
+  ...(o['stored-reference'] ? [] : [['python', 'set XVAL_PYTHON to the erfa-spice Python, or FFM_XVAL_TOOLS']])]);
 
 const cause = (classification, statement, evidence) => ({ classification, statement, evidence });
 function annotate(score, explanation) {

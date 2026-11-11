@@ -2,24 +2,24 @@
   "//": "MECHANICALLY EXTRACTED from Tudat unit-test sources by vectors/tools/dump-tudat-vectors.mjs. Do not hand-edit: regenerate. Tudat is consulted as an ORACLE — it is never compiled, linked, or depended on by any build in this repo.",
   "generator": "vectors/tools/dump-tudat-vectors.mjs",
   "tudat": {
-    "root": "/Users/tj/software/worktrees/tudat-wasm",
+    "root": "<tudat source>",
     "head": "028b308759058713076755858f8ef782d75f4de8"
   },
   "conversions": {
     "ASTRONOMICAL_UNIT": {
       "value": 149597870700,
       "expression": "1.49597870700E11",
-      "source": "/Users/tj/software/worktrees/tudat-wasm/include/tudat/astro/basic_astro/physicalConstants.h"
+      "source": "<tudat source>/include/tudat/astro/basic_astro/physicalConstants.h"
     },
     "JULIAN_DAY": {
       "value": 86400,
       "expression": "86400.0",
-      "source": "/Users/tj/software/worktrees/tudat-wasm/include/tudat/astro/basic_astro/physicalConstants.h"
+      "source": "<tudat source>/include/tudat/astro/basic_astro/physicalConstants.h"
     },
     "PI": {
       "value": 3.141592653589793,
       "expression": "3.14159265358979323846",
-      "source": "/Users/tj/software/worktrees/tudat-wasm/include/tudat/math/basic/mathematicalConstants.h"
+      "source": "<tudat source>/include/tudat/math/basic/mathematicalConstants.h"
     }
   },
   "cases": [
@@ -476,5 +476,6 @@
         }
       ]
     }
-  ]
+  ],
+  "pathRewrite": "Its path strings were made relative or labeled on 2026-11-10 by propagator/ffm/tests/evidence/paths.mjs --rewrite; nothing else changed. SHA-256 of the file as the tool wrote it: d35d9b121c5f8a2ce3aea2f4523688b2b9c473472354cf0443a013ad2492d478."
 }

@@ -6,13 +6,15 @@ import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { decodeResult } from '../../lib/prwCodec.mjs';
+import { recordedJson } from '../paths.mjs';
 import { ALL, CASES, WASM, MANIFEST, sha256, reference, run, scoreResponse } from '../nyx/scoring.mjs';
 
 export { ALL, CASES, WASM, MANIFEST, sha256, reference, run, scoreResponse };
 export const here = path.dirname(fileURLToPath(import.meta.url));
 export const exportPath = path.resolve(here, '../cases/ffm-reference-cases.json');
 export const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
-export const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 1)}\n`);
+// Paths are written in recorded form (../paths.mjs): repository-relative, or a label for an outside folder.
+export const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(recordedJson(value, path.dirname(path.resolve(file))), null, 1)}\n`);
 export const pin = (file) => ({ path: path.relative(here, path.resolve(file)), sha256: sha256(file) });
 export const stmSkipped = 'Basilisk spacecraft has no variational equations for the 6x6 STM or exported parameter sensitivities; state-only cases are scored and cases explicitly requesting sensitivities are skipped.';
 

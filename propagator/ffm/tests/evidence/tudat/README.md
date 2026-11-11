@@ -25,11 +25,14 @@ build of the C++ library. This evidence task neither rebuilds nor reruns it.
 
 ## Native reproduction
 
-From the repository root, run these commands **serially**. The installed
-Python is deliberately invoked with `-I`; no network access is needed.
+From the repository root, run these commands **serially**. `FFM_XVAL_TOOLS`
+names the folder of the tool installs, and `FFM_TUDAT_RESOURCES` names
+tudat-resources' resource folder
+([Outside inputs](../../../docs/cross-validation.md#outside-inputs)). The
+installed Python is deliberately invoked with `-I`; no network access is needed.
 
 ```sh
-/Users/tj/software/tools/xval/mamba/root/envs/tudat/bin/python -I propagator/ffm/tests/evidence/tudat/run-tudat.py
+"$FFM_XVAL_TOOLS"/mamba/root/envs/tudat/bin/python -I propagator/ffm/tests/evidence/tudat/run-tudat.py
 node propagator/ffm/tests/evidence/tudat/score-tudat.mjs --stm propagator/ffm/tests/evidence/tudat/tudatpy-1.0.0-stm.json
 node propagator/ffm/tests/evidence/tudat/score-tudat.mjs --wasm --cache propagator/ffm/tests/evidence/tudat/ffm-tudatpy-1.0.0.json
 node propagator/ffm/tests/evidence/tudat/check-tudat.mjs

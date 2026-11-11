@@ -5,6 +5,7 @@
 // node tests/evidence/gmat/check-gmat.mjs [R2026a-summary] [R2022a-summary]
 import fs from 'node:fs';
 import path from 'node:path';
+import { isLabel, resolveRecorded } from '../paths.mjs';
 import { ALL, CASES, here, readJson, sha256, buildMetrics, causeFor, verdictFor, sourceFiles,
   externalSources, run, scoreResponse } from './evidence.mjs';
 
@@ -18,8 +19,9 @@ const measuredCause = (x) => nonempty(x?.classification) && nonempty(x?.statemen
 const hashes = new Map(), knownDigests = new Set();
 function verify(file, checksum, label, required = false) {
   if (!nonempty(file) || !digest(checksum)) { check(false, `${label}: invalid file/hash pin`); return; }
-  const resolved = path.resolve(here, file);
-  if (!hashes.has(resolved)) hashes.set(resolved, fs.existsSync(resolved) ? sha256(resolved) : null);
+  // A label names an outside folder (../paths.mjs); with its variable unset the file is unavailable here.
+  const resolved = resolveRecorded(file, here) ?? file;
+  if (!hashes.has(resolved)) hashes.set(resolved, isLabel(resolved) || !fs.existsSync(resolved) ? null : sha256(resolved));
   const actual = hashes.get(resolved);
   if (actual === null) {
     if (required) check(false, `${label}: required file unavailable`);
@@ -55,7 +57,7 @@ function inspect(file, release, metrics, oxygen, derived) {
   for (const file of [...sourceFiles, ...externalSources.map((x) => x.path)]) {
     const pin = summary.provenance?.sourceIdentity?.find((p) => p.path === file);
     check(pin, `${release}: missing source pin ${file}`);
-    if (pin) verify(pin.path, pin.sha256, `${release} source ${file}`, !path.isAbsolute(file));
+    if (pin) verify(pin.path, pin.sha256, `${release} source ${file}`, !path.isAbsolute(file) && !isLabel(file));
   }
   for (const pin of summary.provenance?.historicalArtifacts ?? []) verify(pin.path, pin.sha256, `${release} historical artifact`);
   check(same(summary.provenance?.inputFiles, record.inputFiles), `${release}: input-file pins differ from source record`);
