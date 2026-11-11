@@ -23,8 +23,8 @@ const CLASS = [[2, 2, 0, 0], [2, 2, 1, 2], [2, 2, 2, 4], [3, 1, 0, -2], [3, 1, 1
   [3, 2, 2, 3], [3, 3, 0, 0], [3, 3, 1, 2], [3, 3, 2, 4], [4, 1, 0, -3], [4, 1, 1, -1], [4, 1, 2, 1], [4, 1, 3, 3], [4, 2, 0, -2], [4, 2, 1, 0],
   [4, 2, 2, 2], [4, 2, 3, 4], [4, 3, 0, -1], [4, 3, 1, 1], [4, 3, 2, 3], [4, 4, 0, 0], [4, 4, 1, 2], [4, 4, 2, 4]];
 const inClass = (r) => CLASS.some(([l, m, p, q]) => r[0] === l && r[1] === m && r[2] === p && r[3] === q);
-// from #473 the class's other slow terms of degree 2 to 12 are in the rates too, at or above the size cut (0.5 m)
-const expected = (r) => (inClass(r) ? 1 : r[0] > 12 ? 4 : r[7] >= 0.5 ? 1 : 5);
+// from #473 the class's other slow terms are in the rates too, at or above the size cut (0.5 m), to the grid's degree (31)
+const expected = (r) => (inClass(r) ? 1 : r[0] > 31 ? 4 : r[7] >= 0.5 ? 1 : 5);
 // the rates' weight of a term the class does not carry: the band taper of its rate (the grid holds the rest)
 const taper = (x) => (x <= 0.9 ? 1 : x >= 1.1 ? 0 : Math.cos((0.5 * Math.PI * (x - 0.9)) / 0.2) ** 2);
 

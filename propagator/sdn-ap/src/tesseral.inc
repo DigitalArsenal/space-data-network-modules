@@ -5402,14 +5402,24 @@ struct GridSlot {
   uint32_t stamp;  // when it last became idle
   bool transient;  // built inside a fit: freed when its last holder drops it, never kept idle
 };
-/// Idle grids kept (3.1 MB each): a catalog refresh finds its objects' grids; the oldest goes first. kGridSlots bounds every grid held.
+/// Idle grids kept: a catalog refresh finds its objects' grids; the oldest goes first. kGridSlots bounds every grid held, and
+/// kGridCeilingBytes their bytes: above it the idle grids go, oldest first, until under it (a grid needed again is rebuilt; SPEC
+/// 16.11's memory table: a grid is 0.1 to 10.8 MB by orbit, so 256 of the largest would be 2.8 GB of the module's 4 GB).
 constexpr int kGridIdle = 128, kGridSlots = 256;
+constexpr double kGridCeilingBytes = 1073741824.0;
 struct GridCache {
   int32_t word;
   int count;
   uint32_t clock;
+  double peak;  ///< the most bytes the cache has held since the instance began (sdnap_wide_grid_peak)
   GridSlot slot[kGridSlots];
 };
+/// The bytes of every grid held (the cache's lock held).
+inline double held_bytes(const GridCache& c) {
+  double bytes = 0.0;
+  for (int k = 0; k < c.count; ++k) bytes += static_cast<double>(wide_grid_bytes(*c.slot[k].g));
+  return bytes;
+}
 /// Frees the oldest idle grid while more than `keep` are idle (the cache's lock held).
 inline void evict_idle(struct GridCache& c, int keep);
 inline GridCache& grid_cache() {
@@ -5458,6 +5468,16 @@ extern "C" __attribute__((export_name("sdnap_wide_grid_cache"))) int32_t sdnap_w
   return 0;
 }
 
+/// SPEC 16.11: out[0] the most bytes the grid cache has held since the instance began, out[1] its ceiling (kGridCeilingBytes).
+extern "C" __attribute__((export_name("sdnap_wide_grid_peak"))) int32_t sdnap_wide_grid_peak(double* out) {
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  out[0] = c.peak;
+  cache_unlock(&c.word);
+  out[1] = kGridCeilingBytes;
+  return 0;
+}
+
 /// SPEC 16.11: out[0] the grid lookups by sets outside a fit and out[1] those by a fit's sets since the last reset; reset != 0
 /// zeroes them after reading.
 extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_wide_grid_stats(int32_t reset, double* out) {
@@ -5497,6 +5517,10 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   cache_lock(&c.word);
   if (c.count < kGridSlots) {
     c.slot[c.count++] = GridSlot{g, cls, 1, 0, transient};
+    // the bytes held: idle grids go above the ceiling (evict_idle), and the peak is kept for sdnap_wide_grid_peak
+    evict_idle(c, kGridIdle);
+    const double bytes = held_bytes(c);
+    if (bytes > c.peak) c.peak = bytes;
     cache_unlock(&c.word);
     return g;
   }
@@ -5564,7 +5588,7 @@ inline void evict_idle(GridCache& c, int keep) {
         ++idle;
         if (oldest < 0 || c.slot[k].stamp < c.slot[oldest].stamp) oldest = k;
       }
-    if (idle <= keep || oldest < 0) return;
+    if (oldest < 0 || (idle <= keep && held_bytes(c) <= kGridCeilingBytes)) return;
     free_grid(c.slot[oldest].g);
     c.slot[oldest] = c.slot[--c.count];
   }
