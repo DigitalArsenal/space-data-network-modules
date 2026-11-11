@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.19 (dist 4e28bda5).
+Version 0.6.20 (dist 5a7fa01f).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -3237,7 +3237,7 @@ exists a state costs the same.
 daily fit, a held fit against the fit without the term byte for byte, and the refusals.
 
 **16.14 The solid Earth tide.** The Moon and the Sun raise a tide in the solid Earth, and its gravity reaches the
-satellite. AP carries it on request: $PCF FORCES.SOLID_TIDES IERS_2010 on `fit`, the field and the model FFM reads
+satellite. From 0.6.20 AP carries it on request: $PCF FORCES.SOLID_TIDES IERS_2010 on `fit`, the field and the model FFM reads
 (propagator/ffm `lib/force_models.cpp`, `lib/iers2010_tides.h`: IERS Conventions 2010, section 6.2, steps 1 and 2, on
 a tide-free field), so one configuration means the same in both propagators. NONE, the field's default on the wire,
 leaves the tide out, and a set fitted without it flies as before, bit for bit.

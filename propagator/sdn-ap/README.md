@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.19 (dist 4e28bda5).
+Version 0.6.20 (dist 5a7fa01f).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -209,7 +209,7 @@ table; `test/class0-commensurability.e2e.mjs` pins it.
 
 ## The solid Earth tide (SPEC 16.14; `fit` and every flight)
 
-`fit` under `$PCF` FORCES.SOLID_TIDES IERS_2010 (with the gravity terms) puts the solid Earth tide in AP's theory: the
+From 0.6.20, `fit` under `$PCF` FORCES.SOLID_TIDES IERS_2010 (with the gravity terms) puts the solid Earth tide in AP's theory: the
 degree-2 tide the Moon and the Sun raise, with the Love numbers of IERS 2010 per order and its frequency-dependent
 diurnal band, the same field and model FFM reads. Averaged over the orbit it has a closed form, added to the mean-element
 rates at every step; nothing is added at output time. The record states PERTURBATIONS.SOLID_TIDES_MODEL "IERS 2010" and
