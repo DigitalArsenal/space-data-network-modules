@@ -2899,7 +2899,11 @@ the floor of 1e-2 n; stack #467) is 16.18's rule; its reasons and measurements a
 six components give at a grid node, radial (r/a) da - a cos f de + (a e sin f / eta) dM, along-track r (dvarpi - tan(i/2)
 sin i dOmega + (df/de) de + (a/r)^2 eta dM) with dM = dlambda - dvarpi, and normal at most r (|di| + |sin i dOmega|)
 (`src/tesseral.inc` `wide_families`). The grid leaves out the smallest families while their sizes sum to at most 10 cm
-(`wide_keep`, `kWideDropM`); a grid that keeps no family is not read. At degree 12 a family's size spans 3e-15 m to 2.3 km on
+(`wide_keep`, `kWideDropM`); a grid that keeps no family is not read. A fit's sets (inside its `FitGridScope`) keep every
+family, so a fit is 0.6.25's and no family leaves the grid between two of its trial sets; the fitted set's flight leaves
+them out. Fitted with the cut, the 7-day Molniya arc of `test/drag-high-eccentricity.e2e.mjs` moves between its two
+solutions (stack #392) once the families left out sum to 1 um: B 0.0438062 to 0.0437220 m^2/kg (-0.44 to -0.63 % of the
+truth; day-7 along-track 50.2 to 40.9 m). At degree 12 a family's size spans 3e-15 m to 2.3 km on
 a THEMIS-like set and 6e-26 m to 15 m on a TESS-like set. `sdnap_wide_families(in, rows, max_rows)` lists them: in = the mean
 motion (rev/day), e, i (deg) and the degree (2 to 12); rows of four doubles (m, w, the size in m, 1 kept or 0 left out); it
 returns the count of all families, -1 for inputs it does not cover. A diagnostic: no flight reads it. Against 0.6.25, 7 days

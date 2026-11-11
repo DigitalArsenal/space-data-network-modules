@@ -4749,9 +4749,10 @@ constexpr int kGridN = 128, kGridNE = 128, kGridD = 64;
 constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward differences of the derivative grids
 /// The families left off the grid (wide_keep): the smallest, while their sizes (wide_families: the largest position
 /// displacement a family gives at a node) sum to at most this many meters (SPEC 16.11). Over 7 days at 300 s the flight
-/// moves by 1.1 to 3.4 cm on THEMIS-like, transfer-orbit, Molniya, Chandra-like and TESS-like sets (1.2 to 5.3 mm at 1 cm,
-/// 9 to 71 cm at 1 m), and the grid's cost goes with the families it keeps.
-constexpr double kWideDropM = 0.1;
+/// moves by 1.2 to 5.3 mm on THEMIS-like, transfer-orbit, Molniya, Chandra-like and TESS-like sets, and the grid's cost goes
+/// with the families it keeps. Not 10 cm: a family's da at an epoch is the energy of a numerical flight started from the
+/// osculating state there, and at 10 cm a Molniya's moved by 1.8 m in 7 days (0.03 m at 1 cm).
+constexpr double kWideDropM = 0.01;
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
 constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;
@@ -5095,7 +5096,8 @@ inline BuildScratch& build_scratch() {
   return s;
 }
 
-inline bool wide_grid_build(int degree, int cls, double n, double e, double inc, WideGrid& g) {
+/// `every` (a fit's set, SPEC 16.11): every family kept, none left out by wide_keep.
+inline bool wide_grid_build(int degree, int cls, double n, double e, double inc, WideGrid& g, bool every = false) {
   const int cap = degree * (2 * degree + 1);
   const size_t per = static_cast<size_t>(6) * kGridN * 2, one = static_cast<size_t>(cap) * per;
   const size_t dper = static_cast<size_t>(6) * kGridD * 2;
@@ -5127,7 +5129,11 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   int* from = reinterpret_cast<int*>(size + cap);
   const int count = wide_families(degree, cls, n, e, inc, fm, fw, sn, size);
   if (count < 0) { std::free(size); return fail(); }
-  const int kept = wide_keep(size, count, from);
+  int kept = count;
+  if (every)
+    for (int f = 0; f < count; ++f) from[f] = f;
+  else
+    kept = wide_keep(size, count, from);
   for (int k = 0; k < kept; ++k) {
     fm[k] = fm[from[k]];
     fw[k] = fw[from[k]];
@@ -5255,16 +5261,16 @@ extern "C" __attribute__((export_name("sdnap_wide_grid_stats"))) int32_t sdnap_w
   return 0;
 }
 
-/// The grid keyed by (degree, class, n, e, i), bitwise: a live or idle one with that key, else a new one; nullptr out of memory. A
-/// grid is a pure function of its key, so a hit and a rebuild give the same bytes. `transient` (a fit's set): a grid it builds is
-/// freed when its last holder drops it, never kept idle.
+/// The grid keyed by (degree, class, n, e, i), bitwise, and by `transient`: a live or idle one with that key, else a new one;
+/// nullptr out of memory. A grid is a pure function of its key, so a hit and a rebuild give the same bytes. `transient` (a fit's
+/// set): its grid keeps every family (wide_grid_build's `every`) and is freed when its last holder drops it, never kept idle.
 inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, double inc, bool transient = false) {
   __atomic_add_fetch(transient ? &grid_counts()[1] : &grid_counts()[0], 1, __ATOMIC_RELAXED);
   GridCache& c = grid_cache();
   cache_lock(&c.word);
   for (int k = 0; k < c.count; ++k) {
     const WideGrid& g = *c.slot[k].g;
-    if (g.degree == degree && c.slot[k].cls == cls && n == g.n && e == g.e && inc == g.i) {
+    if (g.degree == degree && c.slot[k].cls == cls && c.slot[k].transient == transient && n == g.n && e == g.e && inc == g.i) {
       ++c.slot[k].refs;
       WideGrid* hit = c.slot[k].g;
       cache_unlock(&c.word);
@@ -5276,7 +5282,7 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   cache_unlock(&c.word);
   WideGrid* g = static_cast<WideGrid*>(std::calloc(1, sizeof(WideGrid)));
   if (g == nullptr) return nullptr;
-  if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
+  if (!wide_grid_build(degree, cls, n, e, inc, *g, transient)) { std::free(g); return nullptr; }
   __atomic_add_fetch(&grid_counts()[2], 1, __ATOMIC_RELAXED);
   cache_lock(&c.word);
   if (c.count < kGridSlots) {
