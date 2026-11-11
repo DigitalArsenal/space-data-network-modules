@@ -113,7 +113,11 @@ if (!process.argv.includes('--measure')) {
   // FORCES.ECOM2, so AP then sits where a numerical propagator with only a sphere does on these satellites, above 0.4.8's
   // median, which the missing gravity had partly cancelled (SPEC 16.13; the row is fitted with Y0 solved, day-3 median
   // 23.4 m). Pinned to the measured value instead (2026-11-11: 53.297 m, old path 64.231 m), within 0.5 m.
-  const GE_PIN = {afterMedianMeters: 53.297, oldPath: 64.231};
+  // 0.6.22 (AP's own Sun and Moon, SPEC 16.17, stack #446): 61.623 > 65.188 m from 0.6.21, old path 73.136 > 76.553 m (the
+  // Moon alone on 0.6.20: 53.297 > 57.922 m). The old Moon's error, like section 4's shadow (stack #486), had been
+  // offsetting the satellites' non-spherical radiation, which a sphere does not carry; with Y0 solved on the same
+  // windows, day 3 goes from 11.5 to 9.8 m.
+  const GE_PIN = {afterMedianMeters: 65.188, oldPath: 76.553};
   for (const [name, v] of Object.entries(others)) {
     if (name === 'GE') {
       assert.ok(Math.abs(v.afterMedianMeters - GE_PIN.afterMedianMeters) <= 0.5, `GE: median day-3 error within 0.5 m of ${GE_PIN.afterMedianMeters} m`);

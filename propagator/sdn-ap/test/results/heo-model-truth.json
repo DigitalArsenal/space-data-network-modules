@@ -22,7 +22,7 @@
         "e": 0.7211142036211949,
         "bterm": 2.4170956828973997e-22,
         "agom": -6.347243661021392e-21,
-        "comment": "fit arc: the ephemeris block's useable interval",
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
         "sigmaLog": 413719658297.22095,
         "wrms": 0.018817756035971776,
         "accepted": 145,
@@ -116,7 +116,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "24a129c91008dbcbbd14f4e297e156a38dd9198d8082120eb38266dccb30fd40",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -175,7 +175,7 @@
         "e": 0.7412897079074353,
         "bterm": 0.04575624393167498,
         "agom": -1.3201174927725972e-29,
-        "comment": "fit arc: the ephemeris block's useable interval",
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
         "sigmaLog": 0.10962848152675737,
         "wrms": 0.021239246536265542,
         "accepted": 145,
@@ -269,7 +269,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "24a129c91008dbcbbd14f4e297e156a38dd9198d8082120eb38266dccb30fd40",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -328,7 +328,7 @@
         "e": 0.7195286578626245,
         "bterm": 3.3295009643778264e-17,
         "agom": 0,
-        "comment": "fit arc: the ephemeris block's useable interval",
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
         "sigmaLog": 3003453.1015126766,
         "wrms": 0.061087857757979445,
         "accepted": 145,
@@ -422,7 +422,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "24a129c91008dbcbbd14f4e297e156a38dd9198d8082120eb38266dccb30fd40",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -481,7 +481,7 @@
         "e": 0.7207875955439655,
         "bterm": 1.825598949548876e-22,
         "agom": -1.9192927757595513e-20,
-        "comment": "fit arc: the ephemeris block's useable interval",
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
         "sigmaLog": 547765433501.7612,
         "wrms": 0.020688286192343995,
         "accepted": 145,
@@ -575,7 +575,7 @@
           "burnSummary": []
         }
       ],
-      "apSha256": "24a129c91008dbcbbd14f4e297e156a38dd9198d8082120eb38266dccb30fd40",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -1440,5 +1440,5 @@
   },
   "version": "0.4.2",
   "currentVersion": "0.6.22",
-  "currentNote": "current[].days re-registered on 0.6.22 (AP's own Sun and Moon, SPEC 16.15, stack #446), against the same FFM 2.3.0 truth; 0.6.19 to 0.6.22, day 1 / 3 / 7, m: half-day-critical 61.57 / 100.38 / 30.22 to 64.74 / 94.65 / 27.76; Molniya 23.25 / 71.81 / 332.61 to 52.16 / 231.70 / 763.86; GTO 84.60 / 82.83 / 261.48 to 79.75 / 75.05 / 240.83; 12-hour-55deg 62.92 / 77.85 / 64.94 to 66.93 / 74.81 / 76.43. Molniya's 72 h fit of its drag coefficient lands on the other of its two solutions (stack #392: BTERM 0.0446225 to 0.0457562 against the truth's 0.044). Before: current[].days re-registered 2026-11-10 on 0.6.8 against FFM 2.2.1's truth (ffmSha256); 0.6.3 (7154b48d, the grid in E for the first-order tesseral families above e 0.3, SPEC 16.11) moved every fixture (0.6.2 to 0.6.3, day 1 / 3 / 7, m: half-day 27.45 / 69.63 / 59.33 to 61.51 / 100.31 / 30.16, Molniya 44.41 / 27.50 / 392.77 to 23.11 / 71.75 / 331.23, GTO 115.23 / 79.24 / 244.46 to 84.66 / 82.80 / 261.30, 12 h at 55 deg 22.10 / 61.24 / 55.97 to 62.87 / 77.80 / 65.11, all on 2.2.1; 0.6.5 by at most 0.68 m since); DigitalArsenal/spacedatanetwork-stack#391. days0417 keeps the 0.4.17 registration (FFM 2.0.4, ffmSha256At0417): the positions are 0.4.16's (SPEC 16.12); above e 0.3 an arc shorter than 7 days states BTERM's width from the RMS floor (SPEC 12.8), which Molniya's determination text carries"
+  "currentNote": "current[].days re-registered on 0.6.22 (AP's own Sun and Moon, SPEC 16.17, stack #446), against the same FFM 2.3.0 truth; 0.6.21 to 0.6.22, day 1 / 3 / 7, m: half-day-critical 61.57 / 100.38 / 30.22 to 64.74 / 94.65 / 27.76; Molniya 23.25 / 71.81 / 332.61 to 52.16 / 231.70 / 763.86; GTO 84.60 / 82.83 / 261.48 to 79.75 / 75.05 / 240.83; 12-hour-55deg 62.92 / 77.85 / 64.94 to 66.93 / 74.81 / 76.43. Molniya's 72 h fit of its drag coefficient lands on the other of its two solutions (stack #392: BTERM 0.0446225 to 0.0457562 against the truth's 0.044). Before: current[].days re-registered 2026-11-10 on 0.6.8 against FFM 2.2.1's truth (ffmSha256); 0.6.3 (7154b48d, the grid in E for the first-order tesseral families above e 0.3, SPEC 16.11) moved every fixture (0.6.2 to 0.6.3, day 1 / 3 / 7, m: half-day 27.45 / 69.63 / 59.33 to 61.51 / 100.31 / 30.16, Molniya 44.41 / 27.50 / 392.77 to 23.11 / 71.75 / 331.23, GTO 115.23 / 79.24 / 244.46 to 84.66 / 82.80 / 261.30, 12 h at 55 deg 22.10 / 61.24 / 55.97 to 62.87 / 77.80 / 65.11, all on 2.2.1; 0.6.5 by at most 0.68 m since); DigitalArsenal/spacedatanetwork-stack#391. days0417 keeps the 0.4.17 registration (FFM 2.0.4, ffmSha256At0417): the positions are 0.4.16's (SPEC 16.12); above e 0.3 an arc shorter than 7 days states BTERM's width from the RMS floor (SPEC 12.8), which Molniya's determination text carries"
 }

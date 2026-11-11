@@ -3613,25 +3613,28 @@ radial from the Moon (8.9e-11 at worst at day 7) and 1.6e-11 from the Sun at day
 The long-period branch of class 0 holds TEME of date and has no such residue.
 
 *Effect on real windows* (72 h fits, the GEO lane's harness of the table's rows, real truth, FORCES.ECOM2 as the table
-flies it; medians at days 1, 3, 5 and 7 and the windows within the numerical propagator's error plus 100 m at day 5; 0.6.19
-to 0.6.19 with this section):
+flies it; medians at days 1, 3, 5 and 7 and the windows within the numerical propagator's error plus 100 m at day 5; 0.6.21
+to 0.6.22):
 - Inclined geosynchronous (60 windows): 3.39, 12.61, 31.29, 56.37 m to 1.81, 3.59, 6.89, 10.77 m, 59 of 59 both; better at
   day 5 on 56 windows. The Y0 those fits solve was the Moon's error leaking into the radiation term (16.13).
-- Geostationary (35 windows): 5.84, 23.37, 88.36, 191.23 m to 5.22, 21.33, 86.28, 200.72 m, 26 of 32 to 24 of 32 (C020
-  2025-10-12, 104.0 to 131.0 m, and J003 2025-10-10, 103.8 to 138.3 m, both on the line before, leave it); with Y0 held
-  17 to 16 of 32. What is left there is the radiation pressure (16.13; stack #457).
+- Geostationary (35 windows): 3.90, 11.54, 26.91, 53.89 m to 3.74, 9.78, 26.31, 53.57 m; 29 of 32 to 28 of 32 (one window,
+  96.7 m before, leaves the line at 123.6 m); better at day 5 on 17 windows, worse on 15. Without FORCES.ECOM2 (the
+  sphere alone, AGOM fitted) the same windows go from 14.51, 61.62, 149.30, 273.16 m to 15.46, 65.19, 153.71, 283.30 m:
+  the old Moon's error, like section 4's shadow before 16.15 (stack #486), had been offsetting the satellites'
+  non-spherical radiation, which a sphere does not carry (on 0.6.20 this section alone took the day-3 median from 53.30
+  to 57.92 m, adding to 0.6.21's 53.30 to 61.62 m).
 - On sphere truth (the numerical propagator fitted to the real arc, flown with the sphere alone), day 7 with Y0 solved:
-  C005 80.7 to 8.0 m, C010 61.8 to 16.2, C221 83.4 to 3.7; the false Y0 from -0.8e-10 to -1.4e-10 m/s^2 down to +6e-13 to
-  +3.1e-11. On a made-up inclined geosynchronous set in season (epoch 2026-01-26, AGOM 0.015, a sphere in the truth and no
-  Y0): Y0 +1.08e-9 to +9.7e-11 m/s^2, day 5 20.4 to 2.8 m (with Y0 held 9.7 to 3.6 m).
+  three inclined windows 61.8 to 83.4 m down to 3.7 to 16.2 m, the false Y0 from -0.8e-10 to -1.4e-10 m/s^2 down to +6e-13
+  to +3.1e-11; two geostationary windows level (day 5 2.2 to 2.6 m, day 7 5.8 to 6.1 m). On a made-up inclined
+  geosynchronous set in season (epoch 2026-01-26, AGOM 0.015, a sphere in the truth and no Y0): Y0 +1.01e-9 to +2.3e-11
+  m/s^2, day 5 21.9 to 2.1 m (with Y0 held 11.0 to 2.1 m).
 - TESS (seven real windows of `test/heo-frame.e2e.mjs`): worse, medians 610.7, 1,390.4, 6,553.6 m to 762.8, 1,677.5,
-  8,596.8 m at days 1, 3 and 7 (four windows worse, two better). The Moon is what moves it, and on model truth the
-  third body is right there (below); AP's zonal theory on that orbit is 0.9 to 1.8 km off at day 7, and the old Moon's
-  error had partly offset it (stack #479).
-- Day-3 medians of `test/etalon-resonance.e2e.mjs` (fits that state no FORCES.ECOM2): Etalon-1 4.21 to 4.08 m, Etalon-2
-  5.31 to 4.85, LAGEOS-1 7.17 to 7.11, LAGEOS-2 6.80 to 6.68, LARES-2 8.70 to 8.65, inclined geosynchronous 13.45 to 7.60
-  m, and geostationary 53.30 to 57.92 m: on fits that hold no radiation term the geostationary row gets slightly worse,
-  the radiation's own share no longer offset by the Moon's error.
+  8,596.8 m at days 1, 3 and 7 (four windows worse, two better, one level). The Moon is what moves it, and on model truth
+  the third body is right there (below); AP's zonal theory on that orbit is 0.9 to 1.8 km off at day 7, and the old
+  Moon's error had partly offset it (stack #479).
+- Day-3 medians of `test/etalon-resonance.e2e.mjs` (fits that state no FORCES.ECOM2): Etalon-1 4.25 to 3.54 m, Etalon-2
+  5.31 to 4.84, LAGEOS-1 7.17 to 7.11, LAGEOS-2 6.92 to 6.80, LARES-2 8.71 to 8.66, inclined geosynchronous 13.45 to 7.60
+  m, and geostationary 61.62 to 65.19 m (above).
 
 *Effect on model truth* (72 h fits, day-7 whole-day 3D RMS; 0.6.16 to this section, on main without the one-day class's
 resonant tail unless stated):
@@ -3658,15 +3661,14 @@ resonant tail unless stated):
 - With the full field on both sides the one-day class's missing resonant gravity (#434) had been partly cancelling the
   Moon's error: an inclined geosynchronous node at 20 x 20 goes from 11.8 to 35.6 m (along-track; cross-track 4.4 to
   0.4 m) and, on real 72 h windows flown against the numerical propagator fitted to them, two of three inclined windows
-  get worse after day 3 (C005 6.7 to 17.2 m, C221 3.6 to 21.1 m at day 7; C010 7.8 to 6.6 m).
+  get worse after day 3 (6.7 to 17.2 m and 3.6 to 21.1 m at day 7; the third 7.8 to 6.6 m).
 - With the tail and this section together the cancellation is gone. At 20 x 20 on both sides, day 7: geostationary
   8.5-10.3 m with the tail alone to 1.6-3.2 m (cross-track 7.3-7.9 to 0.7-1.1 m), inclined geosynchronous 5.4-25.9 m to
-  1.0-2.0 m, the same as at 4 x 4 within 0.05 m. On the five real windows, days 1, 3, 5 and 7 (tail alone to both): C005
-  3.1, 5.5, 12.0, 20.0 m to 1.0, 1.4, 2.2, 3.4 m; C010 3.0, 5.5, 8.3, 14.0 to 1.4, 1.7, 1.9, 2.3; C221 2.9, 5.6, 12.7,
-  19.1 to 0.9, 1.3, 2.1, 3.4; the geostationary C018 at day 5 13.4 to 8.5 m and C229 at day 7 34.2 to 20.6 m (0.6.16:
-  58.5 and 95.1 m). What is left on the geostationary windows (about 18 of C229's 20.6 m at day 7) is the radiation
+  1.0-2.0 m, the same as at 4 x 4 within 0.05 m. On five real windows (tail alone to both), the three inclined ones from
+  14.0-20.0 m to 2.3-3.4 m at day 7, and the two geostationary ones from 13.4 to 8.5 m at day 5 and 34.2 to 20.6 m at
+  day 7 (0.6.16: 58.5 and 95.1 m). What is left on the second (about 18 of its 20.6 m at day 7) is the radiation
   pressure: with it off on both sides the same window is 1.7 m, so it is AP's sphere against the numerical propagator's
-  in eclipse season, not the Sun or Moon.
+  in eclipse season, not the Sun or Moon (measured before 0.6.21's shadow, 16.15).
 
 *Cost.* One evaluation of the series costs about 4.2 µs against SPEC 5's 0.28 (rough, under load); with nodes 8 h apart
 a flight evaluates eight times fewer of them than SPEC 5's hourly cache did, and a fresh record whose times another
