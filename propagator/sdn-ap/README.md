@@ -403,9 +403,12 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 
 ## Tests
 
-The tests write only under one scratch root (`test/lib/scratch.mjs`): `SDN_AP_TEST_SCRATCH`, or `sdn-ap-test-scratch` under
-the operating system's temporary directory (never a home directory). They build or compute what they read there: copies of
-earlier releases from git, test builds, the propagator/ffm model-truth caches. The model truth's constant space weather is
+The tests write only under their scratch roots (`test/lib/scratch.mjs`, never a home directory): `SDN_AP_TEST_SCRATCH`, or
+`sdn-ap-test-scratch-<tag>` under the operating system's temporary directory, the tag a hash of the checkout's real path,
+so two clones never share one. They build or compute what they read there: copies of earlier releases from git, test
+builds. The propagator/ffm model truths alone go to a shared folder (`sdn-ap-test-scratch-shared`, or `shared` under
+`SDN_AP_TEST_SCRATCH`): each file is named by the SHA-256 of FFM's build and every byte of its request, and written whole,
+so any clone may read what another made. The model truth's constant space weather is
 built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of such rows).
 
 - `test/conformance.e2e.mjs` (the task's E2E): a randomized corpus across LEO, SSO, MEO, GEO, HEO and VDS
