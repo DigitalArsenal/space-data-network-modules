@@ -4939,9 +4939,10 @@ inline void b1_output_direct(const RateContext& ctx, double t, const double* ym,
 /// is the three-point rule itself), so a state evaluates no rate. A table is a pure function of its key (b1_output):
 /// the mean orbit rounded (kB1RoundE, kB1RoundI, kB1RoundN) and the 6 h block whose center's Sun it takes, with the
 /// set's epoch and terms.
-/// k and h; chi and psi; n (rad/min): a key changes a few times a day at most (the mean motion's own libration, a few
-/// 1e-10 rad/min, stays inside a step of n), and the rounding moves the part by about a millimeter
-constexpr double kB1RoundE = 2e-5, kB1RoundI = 1e-4, kB1RoundN = 1e-8;
+/// k and h; chi and psi; n (rad/min): coarser than the daily lunisolar swing of the long-period regime's mean elements
+/// (about 1e-5 in k and h and the inclination vector, and 1e-7 rad/min in n at geostationary radius), so a key changes
+/// a few times a day; the part's size goes as 1 / n^2, so n's step moves it by 5e-4 of itself at most
+constexpr double kB1RoundE = 5e-5, kB1RoundI = 1e-4, kB1RoundN = 1e-6;
 struct B1Key {
   double d50_epoch, block, k, h, chi, psi, n, b1c, b1s;
   bool operator==(const B1Key& o) const {
