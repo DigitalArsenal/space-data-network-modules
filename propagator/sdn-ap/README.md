@@ -463,6 +463,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/perigee-drag-continuity.e2e.mjs`: SPEC 16.12: no step at perigee above e 0.3 with drag. On the transfer-orbit
   fixture and on Molniya, at three perigees each, the position step stays at most 1 cm and the velocity step at most
   1e-5 m/s (5 ms states); within 10 min of perigee the 10 s jump detector stays within 1.5 times the drag-off flight's.
+- `test/egrid-continuity.e2e.mjs`: SPEC 16.11: the first-order families' grid in E read continuously with its slope. On
+  the transfer orbit and on Molniya with drag off, the jump detector within 600 s of perigee stays at most 0.08 m at 10 s
+  and 5 mm at 1 s (0.395 and 0.031 m on the transfer orbit through 0.6.12, kinks about 80 s apart).
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.

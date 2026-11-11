@@ -4197,10 +4197,8 @@ struct WideGrid {
   double n, e, i, a;  // the mean elements it was built at
   int8_t* m;
   int8_t* w;
-  float* v;           // count x 6 x kGridN x (re, im): the value
+  float* v;           // count x 6 x kGridN x (re, im, slope re, slope im): the value and its slope in E per node
   uint16_t* dv;       // count x 3 (d/de, d/di, d/(da/a)) x 6 x kGridD x (re, im), half precision
-  uint16_t* sv;       // count x 6 x kGridN x (re, im): the value's slope in E per node, half precision, times its row's scale
-  float* ss;          // count x 6 x (re, im): each row's slope scale (its largest slope)
 };
 
 /// IEEE half precision, round to nearest even; finite inputs below 65504 in magnitude.
@@ -4486,14 +4484,12 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   const size_t per = static_cast<size_t>(6) * kGridN * 2, one = static_cast<size_t>(cap) * per;
   const size_t dper = static_cast<size_t>(6) * kGridD * 2;
   // one block per grid: the value, the derivative grids and the family indices (a held grid is one allocation)
-  const size_t vb = static_cast<size_t>(cap) * per * sizeof(float), db = static_cast<size_t>(cap) * 3 * dper * sizeof(uint16_t);
-  const size_t sb = static_cast<size_t>(cap) * per * sizeof(uint16_t), ssb = static_cast<size_t>(cap) * 12 * sizeof(float);
-  char* block = static_cast<char*>(std::malloc(vb + db + sb + ssb + 2 * static_cast<size_t>(cap)));
+  const size_t per4 = 2 * per;  // a family's values with their slopes interleaved
+  const size_t vb = static_cast<size_t>(cap) * per4 * sizeof(float), db = static_cast<size_t>(cap) * 3 * dper * sizeof(uint16_t);
+  char* block = static_cast<char*>(std::malloc(vb + db + 2 * static_cast<size_t>(cap)));
   float* v = reinterpret_cast<float*>(block);
   uint16_t* dv = block != nullptr ? reinterpret_cast<uint16_t*>(block + vb) : nullptr;
-  uint16_t* sv = block != nullptr ? reinterpret_cast<uint16_t*>(block + vb + db) : nullptr;
-  float* ss = block != nullptr ? reinterpret_cast<float*>(block + vb + db + sb) : nullptr;
-  int8_t* fm = block != nullptr ? reinterpret_cast<int8_t*>(block + vb + db + sb + ssb) : nullptr;
+  int8_t* fm = block != nullptr ? reinterpret_cast<int8_t*>(block + vb + db) : nullptr;
   int8_t* fw = block != nullptr ? fm + cap : nullptr;
   int8_t* sm = static_cast<int8_t*>(std::malloc(2 * cap));
   BuildScratch& bs = build_scratch();
@@ -4512,24 +4508,18 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   if (bs.size < one || block == nullptr || sm == nullptr) return fail();
   const int count = wide_families(degree, cls, n, e, inc, fm, fw, sn);
   if (count < 0) return fail();
-  for (int f = 0; f < count; ++f)
-    for (size_t k = 0; k < per; ++k) v[static_cast<size_t>(f) * per + k] = static_cast<float>(sn[f * per + k]);
-  // each node's slope in E (per node spacing), the fourth-order central difference of its four neighbours on the periodic
-  // grid, from the values in double; kept in half precision against its row's largest slope (wide_six's cubic Hermite)
+  // each node's value and its slope in E (per node spacing), the fourth-order central difference of its four neighbours on
+  // the periodic grid from the values in double, interleaved (re, im, slope re, slope im) for wide_six's cubic Hermite
   for (int f = 0; f < count; ++f)
     for (int z = 0; z < 6; ++z)
       for (int ri = 0; ri < 2; ++ri) {
         const double* row = sn + static_cast<size_t>(f) * per + static_cast<size_t>(z) * kGridN * 2 + ri;
-        double s[kGridN], big = 0.0;
+        float* out = v + static_cast<size_t>(f) * per4 + static_cast<size_t>(z) * kGridN * 4 + ri;
         for (int k = 0; k < kGridN; ++k) {
           const auto at = [&](int j) { return row[static_cast<size_t>((k + j + kGridN) & (kGridN - 1)) * 2]; };
-          s[k] = (at(-2) - 8.0 * at(-1) + 8.0 * at(1) - at(2)) / 12.0;
-          big = std::fmax(big, std::fabs(s[k]));
+          out[static_cast<size_t>(k) * 4] = static_cast<float>(at(0));
+          out[static_cast<size_t>(k) * 4 + 2] = static_cast<float>((at(-2) - 8.0 * at(-1) + 8.0 * at(1) - at(2)) / 12.0);
         }
-        const float scale = big > 0.0 ? static_cast<float>(big) : 1.0f;
-        ss[(static_cast<size_t>(f) * 6 + z) * 2 + ri] = scale;
-        uint16_t* out = sv + static_cast<size_t>(f) * per + static_cast<size_t>(z) * kGridN * 2 + ri;
-        for (int k = 0; k < kGridN; ++k) out[static_cast<size_t>(k) * 2] = to_half(static_cast<float>(s[k] / scale));
       }
   // the derivative grids, one forward difference at a time: e, i, a / a; every (kGridN / kGridD)-th node
   const double hp[3][3] = {{n, e + kGridDe, inc}, {n, e, inc + kGridDi}, {n / std::pow(1.0 + kGridDa, 1.5), e, inc}};
@@ -4548,20 +4538,19 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   }
   release();
   std::free(sm);
-  g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v; g.dv = dv; g.sv = sv; g.ss = ss;
+  g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v; g.dv = dv;
   g.n = n; g.e = e; g.i = inc; g.a = std::pow(kKe / n, kX2o3);
   return true;
 }
 
 inline void wide_grid_release(WideGrid& g) {
   std::free(g.v);  // the grid's one block (value, derivative grids, family indices)
-  g.m = g.w = nullptr; g.v = nullptr; g.dv = nullptr; g.sv = nullptr; g.ss = nullptr; g.count = 0;
+  g.m = g.w = nullptr; g.v = nullptr; g.dv = nullptr; g.count = 0;
 }
 
-/// A grid's bytes (value, its slopes and their scales, and the derivative grids).
+/// A grid's bytes (the values with their slopes, and the derivative grids).
 inline size_t wide_grid_bytes(const WideGrid& g) {
-  return static_cast<size_t>(g.count) * (6 * kGridN * 2 * (sizeof(float) + sizeof(uint16_t)) + 12 * sizeof(float) +
-                                         3 * 6 * kGridD * 2 * sizeof(uint16_t));
+  return static_cast<size_t>(g.count) * (6 * kGridN * 4 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t));
 }
 
 /// Grids held by exact key: each counted, freed when its last holder drops it, the kGridIdle most recently dropped kept until other
@@ -4749,7 +4738,7 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
   const double dE_dlam = dsix_dlam != nullptr ? (1.0 / (1.0 - kp.e * std::cos(E))) : 0.0;
   // Read continuously with its slope from one cell to the next (SPEC 16.11; through 0.6.12 the four-point Lagrange cubic,
   // whose slope stepped at every node). The value: the cubic Hermite between nodes i1 and i1 + 1 on the two values and
-  // the two slopes the build stored (wide_grid_build: the fourth-order central difference, in half precision). The
+  // the two slopes the build stored beside them (wide_grid_build: the fourth-order central difference, single precision). The
   // derivative grids in e, i and a / a: the four-point Catmull-Rom cubic.
   const double xn = E / kTwoPi * kGridN;
   const int in1 = static_cast<int>(xn);
@@ -4783,22 +4772,20 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
     cw[q] = cw[q - 1] * cw1 - sw[q - 1] * sw1;
     sw[q] = sw[q - 1] * cw1 + cw[q - 1] * sw1;
   }
-  const size_t per = static_cast<size_t>(6) * kGridN * 2, dper = static_cast<size_t>(6) * kGridD * 2;
+  const size_t per4 = static_cast<size_t>(6) * kGridN * 4, dper = static_cast<size_t>(6) * kGridD * 2;
   const float* half = half_table();
   for (int f = 0; f < g.count; ++f) {
-    const float* v = g.v + static_cast<size_t>(f) * per;
-    const uint16_t* sv = g.sv + static_cast<size_t>(f) * per;
-    const float* ss = g.ss + static_cast<size_t>(f) * 12;
+    const float* v = g.v + static_cast<size_t>(f) * per4;
     const uint16_t* dv = g.dv + static_cast<size_t>(f) * 3 * dper;
     const int wf = g.w[f], mf = g.m[f], aw = wf < 0 ? -wf : wf;
     const double cww = cw[aw], sww = wf < 0 ? -sw[aw] : sw[aw];
     const double cph = (cww * cm[mf] - sww * sm[mf]) * weight, sph = (sww * cm[mf] + cww * sm[mf]) * weight;
     for (int z = 0; z < 6; ++z) {
-      const size_t a0 = (static_cast<size_t>(z) * kGridN + idx[0]) * 2, a1 = (static_cast<size_t>(z) * kGridN + idx[1]) * 2;
-      const double scr = ss[z * 2], sci = ss[z * 2 + 1];
-      const double s0r = half[sv[a0]] * scr, s0i = half[sv[a0 + 1]] * sci, s1r = half[sv[a1]] * scr, s1i = half[sv[a1 + 1]] * sci;
-      double hr = h00 * v[a0] + h01 * v[a1] + h10 * s0r + h11 * s1r;
-      double hi = h00 * v[a0 + 1] + h01 * v[a1 + 1] + h10 * s0i + h11 * s1i;
+      const float* p0 = v + (static_cast<size_t>(z) * kGridN + idx[0]) * 4;
+      const float* p1 = v + (static_cast<size_t>(z) * kGridN + idx[1]) * 4;
+      const double s0r = p0[2], s0i = p0[3], s1r = p1[2], s1i = p1[3];
+      double hr = h00 * p0[0] + h01 * p1[0] + h10 * s0r + h11 * s1r;
+      double hi = h00 * p0[1] + h01 * p1[1] + h10 * s0i + h11 * s1i;
       for (int d = 0; d < 3; ++d) {
         const double od = off[d];
         for (int k = 0; k < 4; ++k) {
@@ -4809,8 +4796,8 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
       }
       six[z] += hr * cph - hi * sph;
       if (dsix_dlam != nullptr) {
-        double dhr = d00 * v[a0] + d01 * v[a1] + d10 * s0r + d11 * s1r;
-        double dhi = d00 * v[a0 + 1] + d01 * v[a1 + 1] + d10 * s0i + d11 * s1i;
+        double dhr = d00 * p0[0] + d01 * p1[0] + d10 * s0r + d11 * s1r;
+        double dhi = d00 * p0[1] + d01 * p1[1] + d10 * s0i + d11 * s1i;
         for (int d = 0; d < 3; ++d) {
           const double od = off[d];
           for (int k = 0; k < 4; ++k) {

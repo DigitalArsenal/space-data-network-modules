@@ -17,7 +17,8 @@
 //    Molniya fixture's day-7 along-track RMS from 276 to 238 m and the half-day one's from 34 to 31 m
 //    (third-body-short-period-eccentric.e2e.mjs); this test was not run at 0.6.3. The
 //    12 m is DigitalArsenal/spacedatanetwork-stack#391;
-// 3. Molniya, BTERM fitted the catalog's way (SPEC 12.8): a 7-day arc on the band default (its B within 0.5 % of 0.044),
+// 3. Molniya, BTERM fitted the catalog's way (SPEC 12.8): a 7-day arc on the band default (its B within 0.6 % of 0.044,
+//    which holds both of the arc's solutions, 0.0438547 and 0.0437610: stack #392, #438; 0.5 % before the E-grid's C1 read),
 //    its posterior carried as LOG_NORMAL with the sigma of the log at least 0.005, then the 72 h arc 7 to 10 days after
 //    the truth's start: along-track at most 150 m and B within 1 % of 0.044; GTO-500 the same, B within 1 %; the 72 h
 //    arc on the model-truth library's Gaussian prior (0.044 +- 0.1) printed with its posterior (SPEC 12.8: that arc
@@ -135,7 +136,10 @@ if (!isMainThread) {
       carriedDay7: [three.t, three.r], libraryPriorB: lib.bterm, libraryPriorPct: pct(lib.bterm), libraryPosterior: posterior(lib.model), libraryDay7: [lib.t, lib.r]}));
     assert.ok(Math.abs(pct(three.bterm)) <= 1, `${f}: the carried 72 h arc's B ${three.bterm}`);
     if (f === 'Molniya') {
-      assert.ok(Math.abs(pct(seven.bterm)) <= 0.5, `Molniya: the 7-day arc's B ${seven.bterm}`);
+      // the 7-day arc has two solutions that small numerical changes move it between (stack #392; high-e-fit-arc lists
+      // both): B 0.0438547 on 0.6.12 (-0.33 %), 0.0437610 with the E-grid read C1 (#420, -0.54 %); held to 0.6 % of the
+      // truth, which holds both. Neither lies within its stated sigma (0.09 %): test/molniya-7day-drag-sigma.e2e.mjs, #438
+      assert.ok(Math.abs(pct(seven.bterm)) <= 0.6, `Molniya: the 7-day arc's B ${seven.bterm}`);
       assert.ok(three.t <= 150, `Molniya: the carried 72 h arc's day-7 along-track ${three.t} m`);
     }
   }

@@ -2506,8 +2506,15 @@ the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the 
 shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
 precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (3.1 MB a grid), and read at
-output time by the four-point periodic cubic in E, linear in the mean
-elements' offsets, times e^{i(w omega + m beta)}. A grid is built at the set's mean elements at every 48 hours from its epoch
+output time in E by the cubic Hermite between the two nodes about E, linear in the mean elements' offsets, times
+e^{i(w omega + m beta)}. Each node's slope is the fourth-order central difference of its four neighbours on the periodic
+grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.
+The derivative grids are read by the four-point Catmull-Rom cubic. Both are continuous with their slope from one interval
+to the next. Memory per family is 16,896 bytes against 10,752 (+57 %); cost per state on the low orbits that read the
+grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0.6.12 it was the four-point Lagrange cubic, whose slope
+stepped at every node: kinks about 80 s apart near perigee, where the nodes pass fastest. On the transfer orbit with drag
+off the jump detector within 10 min of perigee read 0.395 m at 10 s and 0.031 m at 1 s; it now reads 0.032 m and 0.8 mm
+(stack #420; `test/egrid-continuity.e2e.mjs`). A grid is built at the set's mean elements at every 48 hours from its epoch
 (the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval. A grid
 is keyed by its set's exact elements (bitwise n, e, i, the class and the degree): a lookup matches only that key, and a grid held
 from an earlier call is the same bytes a rebuild gives. A copy initialized while its nominal set's xpt::GridShareScope lives (the
@@ -2625,8 +2632,10 @@ per perigee passage:
   (pi p_j - (p_j + q_j) M/2 + pi (q_j erfc(V) - p_j erfc(U))) / n, U = M/(sqrt2 s_p), V = (2 pi - M)/(sqrt2 s_q),
   and to lambda also n's own difference integrated over time,
   (2 pi/n^2)(p_n (M/2 - pi/6) + (q_n - p_n) M/6 - (p_n + q_n) M^2/(8 pi) + (p_n s_p ierfc(U) + q_n s_q ierfc(V))/sqrt2),
-  ierfc(x) = exp(-x^2)/sqrt(pi) - x erfc(x). Both are zero at perigee and continuous with their slopes from one
-  revolution to the next.
+  ierfc(x) = exp(-x^2)/sqrt(pi) - x erfc(x). Both are continuous with their slopes from one revolution to the next. The
+  element correction is zero at perigee; the lambda term is not: it is (2 pi p_n / n^2)(s_p / sqrt(2 pi) - pi/6) there.
+  Over one revolution the integral of the mean-motion difference is pi^2 (p_n - q_n) / n^2, while this term changes by a
+  third of that. Its zero-mean piece (q_n - p_n) M/6 is what makes the difference (stack #429).
   - **Through 0.6.11.** With p = q and no width these are the sawtooth 0.4.16 to 0.6.11 used: y_j + (ydot_j/n)(pi - M),
     and lambda + (ndot/n^2)(pi M - M^2/2 - pi^2/3), ydot the two passes' mean at the output time. That mean changes at
     perigee, so the output stepped there. On the class-crossing fixture (GTO, B 0.06 m^2/kg; 16.7) the steps were 42 to
