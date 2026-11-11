@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.18 (dist cb546d93).
+Version 0.6.19 (dist 4e28bda5).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1154,7 +1154,9 @@ and e >= 0.5) are not used for type 4.
 ### 6.1 Resonant terms per class
 
 AP adds the half-day terms of degrees 6 through min(d, 31), for every even order m and p = 0..l,
-with k = m/2 and q = k - l + 2p (16.2). SGP4XP keeps the class table below.
+with k = m/2 and q = k - l + 2p (16.2). In the one-day class, at an epoch eccentricity at or below 0.3, AP adds the terms
+of degrees 5 through min(d, 31), for every order m from 1 to 16 and p = 0..l, with k = m and q = m - l + 2p (16.2; stack
+#434). SGP4XP keeps the class table below.
 Against FFM model truth after a 72 h fit, day-1/3/7 3D errors in meters at 0.4.15 are 27.5/70.0/60.1
 for the half-day fixture, 45.9/27.0/419.4 for Molniya with drag (its fitted drag coefficient, 16.11), 115.3/79.2/244.3
 for GTO, and 22.2/61.4/56.4 for the 55-degree fixture (16.11). Section 16.6 defines the fixtures and signed RTN errors.
@@ -2378,6 +2380,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12 | at output time, first order at the mean elements |
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
+| one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
@@ -2398,6 +2401,36 @@ are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05. The Laplace limit 
 The half-day tail uses cubic expansions of F about the epoch inclination and G about the epoch eccentricity,
 with their consistent derivatives. F comes from the normalized Legendre recurrence; G comes from shared
 eccentric-anomaly quadrature. The class's original 29 terms retain their exact inclination functions.
+
+The one-day tail (from 0.6.19; stack #434) is built and evaluated the same way, with k = m: its angle is
+w omega + m (M + Omega - theta_G). Its orders run from 1 to 16; at e at or below 0.3 the amplitude cut that ends both
+tails (about 2e-16 m/s^2) stops it below degree 15, so no higher order would pass. The inclination quadrature reads which
+part of each Fourier coefficient a term takes (real for l - m even, imaginary for l - m odd) from w + m. Through 0.6.18 it
+read it from w alone, which holds only for the half-day tail's even orders; for odd orders it would zero the main terms.
+The half-day tail is unchanged bit for bit. Sets of the class above e 0.3 (the grid branch, 16.11) do not take the tail:
+there the class carries degrees 2 to 4 only, as before (THEMIS-like orbits, whose error is elsewhere).
+
+Through 0.6.18 the one-day class carried resonant gravity of degrees 2 to 4 only, and the output table drops every term
+slower than 0.045 n, so on a geosynchronous orbit degree 5 and up was carried nowhere. Each missing term acts as a
+constant along-track acceleration set by the longitude, mostly through (5,5), (5,3) and (5,1). Model truth: FFM 20 x 20
+with Sun and Moon on both sides, made-up sets at 2026-10-29, a 72 h fit, 7 days flown, whole-day 3D RMS.
+
+- Geostationary (e 0.0002, i 1.5, 12 longitudes): day 7 16.9 to 136.1 m (median 67.1 m) on 0.6.15, against 8.5 to
+  11.1 m (median 9.0 m) with the tail. The constant along-track acceleration fitted to each forecast's error, less the 4 x 4
+  run's, matches EGM96's degree 5 to 20 value on the same orbit to within 2.1e-12 m/s^2 at every longitude.
+- With the field cut to 4 x 4 on both sides (where no tail is built), the 20 x 20 day-7 error is now within 0.05 m of the
+  4 x 4 one at every longitude. The same holds on inclined geosynchronous sets (i 55, e 0.003 and 0.075, 6 nodes), where
+  the maximum falls from 49.7 and 44.5 m to 25.9 and 23.9 m. One node gets worse (11.8 to 25.9 m at e 0.003): there the
+  missing terms had partly cancelled the Moon's floor (stack #446).
+- Class members off 1:1 (n 0.82, 0.90, 1.10, 1.18 rev/day; e 0.001, i 30; 4 nodes each), whose degree 5 to 12 terms
+  move from the output table into the rates, lose nothing: day 7 moves by -0.18 to +0.38 m.
+- The output stays continuous: the 10 s jump detector's worst reading over a day is 0.36 to 0.89 mm on geostationary,
+  inclined and off-1:1 sets, against 0.36 to 0.91 mm before.
+
+What is left at 4 x 4 is AP's analytic Moon (stack #446): 7.3 to 8.0 m cross-track at day 7 on geostationary sets, 5.4 to
+25.9 m on inclined geosynchronous ones, and 1.1 to 3.6 m and 1.2 to 2.5 m with DE440's Moon in a scratch build.
+`test/one-day-resonant-tail.e2e.mjs` checks the 20 x 20 against the 4 x 4 level (0.5 m); `test/one-day-moon-floor.e2e.mjs`
+is #446's known defect.
 
 **16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
 (w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
@@ -3085,13 +3118,13 @@ parameter-record-only:ECOM2_Y0).
 *Fit.* $PCF FORCES.ECOM2 on `fit` puts Y0 in the fit: Y0_M_S2 is its start, its prior's mean and the value it is held
 at where it is not solved; any other ECOM2 coefficient away from 0 is refused by name (FORCES.ECOM2.D0_M_S2 ...), and so
 is the table without AP's gravity terms (FORCES.ECOM2). A flight takes no FORCES (16.1). Y0 is solved on an arc of 72 h
-or more (71 h, for an arc sampled off its ends) whose fitted set lies above the drag (perigee at or above 2,500 km) and
-is not in the one-day class: in the whole-arc fit after the staged ones and in the passes at the data's own sigma (12.1),
+or more (71 h, for an arc sampled off its ends) whose fitted set lies above the drag (perigee at or above 2,500 km): in
+the whole-arc fit after the staged ones and in the passes at the data's own sigma (12.1),
 as the last parameter, in units of 1e-9 m/s^2, its column a one-sided difference of the theory each iteration (step
 the larger of 1 % and 1e-10 m/s^2), with a Gaussian prior about Y0_M_S2 of sigma 1e-9 m/s^2. The cost, the normal
 equations and the covariance read one statement of the fit's priors (drag, AGOM, Y0). Elsewhere Y0 is held at Y0_M_S2:
-an arc under 72 h (a 24 h fit), a set under the drag, the second stage of a two-stage fit (at the first stage's Y0), and
-the one-day class. Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
+an arc under 72 h (a 24 h fit), a set under the drag, and the second stage of a two-stage fit (at the first stage's Y0).
+Through 0.6.18 the one-day class held it too (below). Y0 is not a covariance row (17.1): the covariance holds it at its solved value. On the real 72 h
 windows of medium orbit, Galileo, inclined geosynchronous and geostationary sets the share of errors beyond the stated
 1, 2 and 3 sigma per RTN axis at days 1, 3, 5 and 7 is the same with Y0 solved as without (the stated sigma is 5 to 100
 times the error in both: stack issue 433). AGOM moves by under 1 % between the fits with and without Y0.
@@ -3101,11 +3134,79 @@ windows of three and a zero Y0 at 7e-10 m/s^2 on two (day 7 175 and 296 m agains
 72 h recovered 0.97 to 1.22 times the value and found at most 1.4e-10 where there was none. On real windows a 48 h Y0
 still lowers the medians (medium orbit day 7 73 to 37 m, Galileo 174 to 64 m); it is not trusted.
 
-*Why not in the one-day class.* There the 72 h arc's own residual (AP against a numerical orbit of the same forces)
-aliases into Y0: on inclined geosynchronous model truth without Y0 the fit found -1.0e-10 to -1.8e-10 m/s^2 and its
-day-7 error went from 7 m to 62 to 86 m, and on real windows the medians at day 7 went from 30 to 55 m (inclined
-geosynchronous) and 173 to 227 m (geostationary). The guard goes when that class's residual is fixed (stack issues 421
-and 434).
+*The one-day class (geostationary, inclined geosynchronous).* Through 0.6.18 Y0 was held there. The class lacked its
+resonant gravity above degree 4 (stack #434), a constant along-track acceleration of up to 2e-10 m/s^2 set by the
+longitude, and a free Y0 took it up. The guard was to go when that class's residual was fixed, on the condition that a
+zero Y0 come out at most about 1e-10 m/s^2 on model truth and the real medians not get worse. From 0.6.19 the class
+carries that gravity (6.1, 16.2) and solves Y0 as the other classes do. **The condition is not met.** What is left of
+the class's residual is the Moon's position (SPEC 5, stack #446). On model truth with no Y0 in it (the radiation lane's
+sphere truths of real windows), the 72 h fit finds:
+
+- inclined geosynchronous (C005, C010, C221): -0.8e-10 to -1.4e-10 m/s^2, and the day-7 error goes from 20.0, 14.0
+  and 19.1 m to 80.7, 61.8 and 83.4 m;
+- geostationary (C018, C229, C020 twice): +1.3e-10 to +3.0e-10 m/s^2, where it helps (day 5 13.4, 14.7 and 37.7 m to
+  3.6, 5.1 and 9.0 m; C229 day 7 34.2 to 9.7 m).
+
+On made-up inclined geosynchronous sets with the field cut to 4 x 4 on both sides it finds -2.7e-10 to +1.0e-10, and at
+most 3.7e-11 with DE440's Moon in a scratch build (`test/one-day-moon-floor.e2e.mjs`, a known defect, bound 5e-11). The
+condition is met when #446 lands.
+
+The lift lands anyway, because the real windows gain on both rows. Real 72 h windows; medians at days 1, 3, 5 and 7, and
+the windows within 100 m of the numerical propagator (FFMq) at day 5. The table's harness flew 0.6.18 and 0.6.19 with
+FORCES.ECOM2 on these rows; the middle column is the tail alone, flown without it on a candidate build:
+
+| Row | 0.6.15 to 0.6.18, Y0 held | the tail, without FORCES.ECOM2 | 0.6.19, Y0 solved | Numerical (FFMc) |
+| --- | --- | --- | --- | --- |
+| geostationary | 11.67, 35.28, 95.84, 198.26 m; 23 of 32 | 12.97, 53.30, 131.01, 256.15 m; 17 of 32 | 5.84, 23.37, 88.36, 191.23 m; 26 of 32 | 2.05, 5.96, 20.31, 47.57 m |
+| inclined geosynchronous | 4.78, 13.01, 27.02, 38.70 m; 52 of 59 | 4.72, 13.45, 23.05, 40.37 m; 51 of 59 | 3.39, 12.61, 31.29, 56.37 m; 59 of 59 | 0.39, 1.45, 3.49, 6.29 m |
+
+Against 0.6.18, 13 windows move onto the line and 3 move off it.
+- Onto it: geostationary C006, C011, C016 and C018 once each, and J003 twice; inclined J002 twice and J004 five times.
+- Off it: three C020 windows, whose day-5 errors go from 61.2, 54.4 and 54.7 m to 133.3, 125.8 and 115.3 m. With the
+  tail, that satellite sits where a numerical propagator with only a sphere does, and Y0 alone does not carry its
+  radiation (stack #457).
+
+Per satellite: the recovered Y0 (measured on the candidate build) against the numerical propagator's ECOM2 Y0 (FFMc,
+five terms), medians, with the day-5 median error without Y0 (the tail alone) and with it (0.6.19):
+
+| Satellite | AP's Y0 (m/s^2) | FFMc's Y0 (m/s^2) | Day 5 without, with Y0 |
+| --- | --- | --- | --- |
+| C006 BDS-2G | -1.06e-9 | -1.23e-9 | 137.0, 23.9 m |
+| C011 BDS-2G | -0.93e-9 | -1.01e-9 | 114.9, 19.4 m |
+| C016 BDS-2G | -1.02e-9 | -0.98e-9 | 143.0, 17.5 m |
+| C018 BDS-2G | -1.17e-9 | -1.53e-9 | (burns: 74 km either way) |
+| C020 BDS-2G | -0.02e-9 | -1.52e-9 | 117.0, 115.3 m |
+| C217 BDS-3G | +0.03e-9 | -0.38e-9 | 25.1, 15.6 m |
+| J003 QZS-2G | -0.40e-9 | -2.26e-9 | 176.6, 163.8 m |
+| J002 QZS-2I | +0.44e-9 | +0.36e-9 | 116.9, 14.5 m |
+| J004 QZS-2I | -1.44e-9 | -0.93e-9 | 222.5, 20.1 m |
+| BeiDou inclined (10 satellites) | within 1e-10 of FFMc's | -1.5e-10 to +1.1e-10 | 13.2 - 44.2, 27.5 - 40.6 m |
+
+The tail makes Y0 physical. Without it, the same fit finds -0.74e-9 on C006 and C011, where FFMc has -1.23e-9 and
+-1.01e-9.
+
+J003's Y0 is poorly determined (stack #457). Between the candidate build and 0.6.19, whose states differ by under a
+millimeter, its five windows move by -29 to +47 m at day 5. One of them (2025-10-10, 77.5 to 103.8 m) crosses the middle of
+the 32 windows, which moves the row's day-5 median from 78.3 m on the candidate to 88.4 m on 0.6.19.
+
+What the lift costs: against 0.6.18, the BeiDou inclined satellites' day-5 medians grow by 2 to 23 m (median 12 m), all
+still far inside the line. The inclined row's medians rise from 27.02 to 31.29 m at day 5 and from 38.70 to 56.37 m at
+day 7. The cause is the Moon's error leaking into Y0, as on model truth.
+
+C020 and J003 (QZS-2G) need more than Y0 (stack #457). There Y0 does not lower the fit's RMS (C020: 5.86 m with and
+without), and the forecast stays where a numerical propagator with only a sphere is (FFMr, C020 135 to 157 m at day 5),
+while FFMc, with five ECOM2 terms, is at 12.3 and 14.8 m.
+
+Fitted from Y0 starts of 0, +1e-11 and -1e-11 m/s^2, two windows (C020 2025-10-04, C006 2025-10-08) end within 0.10 m of
+each other at day 7, so the fit's stopping point is not where the spread comes from. With Y0 solved, the stated
+covariance still covers the error on geostationary, BeiDou inclined and QZS windows. |z| = error over stated sigma per
+RTN axis is at most 0.21 at days 1, 3, 5 and 7 on six windows (C006, C020, C010, C224, J002, J004), against at most 0.21
+without Y0. The stated sigma is far too wide in both cases (stack #433).
+
+Commercial geostationary satellites keep station by thrusting, and Y0 does not serve them. On eight 72 h windows (Eutelsat
+117 West B, Galaxy 30, SES-15) the fit finds 2e-11 to 3e-9 m/s^2 while FFMc's Y0 takes up the maneuvers (2e-7 to 4e-6).
+The day-5 median moves from 14,739 to 14,787 m and the pass count stays 7 of 8, so that row is fitted without
+FORCES.ECOM2.
 
 *Who states it.* The term is for bodies with Sun-tracking panels. On a sphere it fits the residual instead: on six laser
 geodetic windows (Etalon, LAGEOS, LARES-2; 72 h) the median day-7 error went from 11 to 29 m (Etalon 2 12 to 38 m, LAGEOS
@@ -3128,8 +3229,8 @@ of some 60 points), 5.14 to 5.76 ms for a Galileo record flown a week hourly by 
 grid, states; medians of 40 calls, under a load of 10 on 28 cores), 3.31 to 3.39 ms for a day at 60 s. Once the grid
 exists a state costs the same.
 
-`test/radiation-y0.e2e.mjs` checks the theory, the fit, the daily fit, a held fit against the fit without the term
-byte for byte, and the refusals.
+`test/radiation-y0.e2e.mjs` checks the theory and the fit on a Galileo-like and an inclined geosynchronous orbit, the
+daily fit, a held fit against the fit without the term byte for byte, and the refusals.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
