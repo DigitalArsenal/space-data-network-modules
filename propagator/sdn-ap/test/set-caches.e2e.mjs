@@ -11,8 +11,9 @@
 //   steady cycle over more sets than fit reclaims nothing, the sets without room fly on the thread's caches), the last
 //   twenty alone (the holders no longer flown are reclaimed), the first twenty again (their runs refill from where they
 //   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
-// The pool's threads: 1,000 AP rows of the carrier lane's catalog mix through sdnap_propagate_soa at 20 instants, on 0
-// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424).
+// The pool's threads: 1,000 AP rows of the carrier lane's catalog mix and two geostationary rows (i 0.05 and 2 deg)
+// through sdnap_propagate_soa at 20 instants, on 0 and on 4 threads, bit for bit (the transfer and Molniya orbits left
+// out: stack #424).
 // Through `propagate` (#420): a time asked alone against the same time inside one call of 2,016 states, bit for bit.
 // JS moves bytes and compares numbers the module produced.
 //   node test/set-caches.e2e.mjs
@@ -41,6 +42,9 @@ const ORBITS = {
   "830 km": { n: revPerDay(RE + 830), e: 0.001, i: 98.7, bterm: 1.27e-3, tesseral: 31 },
   MEO: { n: 2.0056, e: 0.005, i: 55, bterm: 0.001, tesseral: 31 },
   GEO: { n: 1.0027, e: 0.0003, i: 0.05, bterm: 0.001, tesseral: 31 },
+  // either side of the long-period regime's old 0.02 rad gate (stack #480): the one-day tail held over a step at every
+  // inclination
+  "GEO i 2": { n: 1.0027, e: 0.0003, i: 2, bterm: 0.001, tesseral: 31 },
   "e 0.1, tesseral 31": { n: revPerDay((RE + 600) / 0.9), e: 0.1, i: 65, bterm: 1.27e-3, tesseral: 31 },
   "e 0.25, tesseral 31": { n: revPerDay((RE + 600) / 0.75), e: 0.25, i: 65, bterm: 1.27e-3, tesseral: 31 },
   "transfer orbit": { n: 2.26, e: 0.72, i: 27, bterm: 1.27e-3, tesseral: 0 },
@@ -174,6 +178,11 @@ for (const [name, o] of Object.entries(ORBITS)) {
       bterm: a < RE + 2000 ? 0.005 + 0.05 * rnd() : 0.01, agom: 0.01, norad: 100000 + k, theory: THEORY.SGP4XP };
     if (e < 0.3) rows.push(row);
   }
+  // and a near-equatorial geostationary row and one at 2 deg, either side of the long-period regime's old 0.02 rad gate
+  // (stack #480)
+  for (const [k, i] of [[0, 0.05], [1, 2]])
+    rows.push({ epochWhole: 2461328.5, epochFrac: 0, meanMotion: 1.0027, ecc: 0.0003, inc: i, raan: 80 + 40 * k, argp: 10, ma: 10 + 90 * k,
+      bterm: 0.01, agom: 0.01, norad: 101000 + k, theory: THEORY.SGP4XP });
   const fly = async (threads) => {
     const m = await open(testBuild, threads);
     m.x.sdnap_test_select_ap(31, 20);
@@ -191,7 +200,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
   const zero = await fly(0), four = await fly(4);
   const differ = zero.filter((v, k) => !Object.is(v, four[k])).length;
   check(zero.length === four.length && differ === 0, `the pool's threads: ${differ} of ${zero.length} values differ between 0 and 4 threads`);
-  console.log(`1,000 AP rows of the catalog mix through sdnap_propagate_soa: 0 and 4 pool threads bit for bit (${zero.length} values)`);
+  console.log(`${rows.length} AP rows (the catalog mix and two geostationary rows) through sdnap_propagate_soa: 0 and 4 pool threads bit for bit (${zero.length} values)`);
 }
 {
   // the radiation term Y0 (SPEC 16.13) is part of a set's identity, as BTERM and AGOM are: two records of one

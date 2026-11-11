@@ -3749,7 +3749,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   const bool record_stage_aux = ap_ctx && !is_sigma && csa != nullptr && cgc.anchor_id == ctx.ctx_id;
   const bool skip_tail = ov != nullptr && ov->tail_eq != nullptr;
   const bool cache_geo_res = ctx.ap_resonance != 0 && ctx.i0 > 0.02;
-  const bool use_lp_tail_eq = ctx.long_period && ctx.ap_third_body && ctx.i0 > 0.02;
+  // the long-period regime's tail carried in the equinoctial elements' rates (tail_eq, regular at i = 0), so a
+  // covariance's moved set takes the nominal's plus its own difference at every inclination (SPEC 16.2, stack #480)
+  const bool use_lp_tail_eq = ctx.long_period && ctx.ap_third_body;
   const bool aux_slot_valid = sigma_slot >= 1 && sigma_slot < 18 &&
                               cgc.sigma_aux_ctx_id[sigma_slot] == ctx.ctx_id;
   const bool cached_sigma_tail =
@@ -4340,7 +4342,9 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
   const double* six_tail_a = nullptr;
   double srp_a[6]{};
   const double* srp_a_unit = nullptr;
-  if (!ctx.is_cov_sigma && ctx.long_period && ctx.ap_third_body && ctx.i0 > 0.02 && std::fabs(h) <= 45.0) {
+  // SPEC 16.2: the long-period regime holds the tail (tail_eq, equinoctial) over the step's first two stages at every
+  // inclination; through 0.6.20 sets below 0.02 rad evaluated it at every stage (stack #480)
+  if (!ctx.is_cov_sigma && ctx.long_period && ctx.ap_third_body && std::fabs(h) <= 45.0) {
     if (a_idx == 0 && cgc.has_epoch_tail_eq) {
       ov_stage.tail_eq = cgc.epoch_tail_eq;
       six_tail_a = cgc.epoch_six_tail;
