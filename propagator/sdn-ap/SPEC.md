@@ -2682,6 +2682,9 @@ helped. The field cut to 12 x 12 on both sides gives D 34 m.
   propagator states its EGM2008 with GM 398600.4415 km^3/s^2 and the same radius.
 - SGP4XP reads none of this. Its resonance terms are 6.2's unnormalized EGM-96 values, and its zonals are 1.3's. The table
   (kEgmC, kEgmS) is read only by the AP terms of tesseral.inc and by the census (16.20). SGP4XP is bit for bit.
+- The resonant classes' own terms (6.1, degree 2 to 6) read 6.2's values in AP's flight too, so they keep EGM-96. There the
+  two fields differ by 1e-4 to 5e-4 of a term (1.8e-3 at (6, 3)). By degree, the rms difference of the two fields over the
+  rms of the field is 0.003 at degree 10, 0.05 at 20, 0.11 at 30, 0.17 at 40, 0.21 at 50, 0.23 at 60 and 0.30 at 70.
 - The record states the field: PERTURBATIONS.GRAVITY_MODEL is "EGM2008" on an AP set with gravity terms, and "EGM2008; slow
   tesseral terms to degree 70" with the slow set. SGP4XP's sets and a stock AP set keep "EGM-96".
 
