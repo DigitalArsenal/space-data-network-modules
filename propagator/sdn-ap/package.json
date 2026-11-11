@@ -1,6 +1,6 @@
 {
   "name": "@spacedatanetwork/sdn-ap-propagator",
-  "version": "0.6.26",
+  "version": "0.6.30",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",

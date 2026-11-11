@@ -108,7 +108,9 @@ export async function runModelTruth(c){
  // c.fitNoise {meters, seed}: independent Gaussian noise of that size on each coordinate of the fit's states (a perturbed
  // copy of the arc; a fixed seed), the scored truth unchanged
  const noisy=ls=>{if(!c.fitNoise)return ls;let s=c.fitNoise.seed>>>0;const u=()=>((s=(Math.imul(s,1664525)+1013904223)>>>0)+.5)/4294967296;const g=()=>Math.sqrt(-2*Math.log(u()))*Math.cos(2*Math.PI*u());const k=c.fitNoise.meters/1000;return ls.map(L=>Object.assign(new Line(),{...L,X:L.X+k*g(),Y:L.Y+k*g(),Z:L.Z+k*g()}));};
- const fit=seed||c.omm?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:c.fitTailStates?oem(lines.slice(lead,lead+NF).concat(tailLines.slice(first,first+c.fitTailStates)),true,lines[lead+NF-1].EPOCH):oem(noisy(lines.slice(lead,lead+NF)),c.fitUseable!==false)}]);
+ // c.fitOnForecast: the set is fitted to the forecast's own states (the truth after the arc, the best record a theory can be
+ // given: what remains is what the theory cannot represent), not to the arc
+ const fit=seed||c.omm?null:await call('fit',[{portId:'ephemeris',typeRef:type('OEM'),payload:c.fitOnForecast?oem(lines.slice(first),true):c.fitTailStates?oem(lines.slice(lead,lead+NF).concat(tailLines.slice(first,first+c.fitTailStates)),true,lines[lead+NF-1].EPOCH):oem(noisy(lines.slice(lead,lead+NF)),c.fitUseable!==false)}]);
  const omm=c.omm??seed??fit.find(v=>v.portId==='elements').payload;
  const out=await fly(omm,lines.slice(first));
  const flown=OEM.getRootAsOEM(new fb.ByteBuffer(out.find(v=>v.portId==='ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;

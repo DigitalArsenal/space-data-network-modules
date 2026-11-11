@@ -1816,7 +1816,8 @@ struct RateContext {
   double hd_e0, hd_i0, hd_a0;         ///< AP: reference e, i and a of half_day table
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
-  uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release)
+  uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release); bit 128 (wide_slow) is
+                                      ///< its last free bit: the next shared table needs a wider mask
   uint8_t ap_resonance;               ///< AP: the epoch class's terms, functions at the current elements (SPEC 16.2, 16.7)
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
   uint8_t ap_third_body;              ///< AP: the third bodies' degree 4-10 averaged rates and degree 2-10 short-period
@@ -1825,6 +1826,8 @@ struct RateContext {
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
   int32_t slow_extra;                 ///< SPEC 16.18: of shallow_count, the slow set's own terms (beyond the shallow set's)
+  const res::ResCoef* wide_slow;      ///< AP above the switch outside low orbit: the other slow terms, in the rates (owned, xp_release; stack #473)
+  int32_t wide_slow_count;
   const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
   int32_t zt_degree;
   uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
@@ -3604,6 +3607,67 @@ inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const
 
 }  // namespace tide
 
+[[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]);
+
+/// AP in the long-period regime above e 0.3 (SPEC 16.19): the Sun's and Moon's rates of the mean elements y, the rates that move AP's
+/// osculating state there (SPEC 8's J2 output, output_j2_osc) by the bodies' point-mass acceleration at that state:
+/// J m = (0, a), J the output's Jacobian in the six elements (forward differences), solved by Gaussian elimination with
+/// partial pivoting. The Gauss equations at the mean state alone move the J2 output by J2's short-period Jacobian times
+/// the bodies' rates as well, a velocity of the bodies' order times J2 at once. False when the output or the solve fails
+/// (the caller keeps the Gauss rates).
+inline bool lp_third_body_through_output(const double* y, const Bodies& b, double tb[6]) {
+  double x0[6], J[6][7];
+  // the base state, and the eccentric anomaly every column starts its Kepler equation from
+  const Kepler k0 = kepler_of(y);
+  if (!(k0.e < 1.0)) return false;
+  double E = k0.m + k0.e * std::sin(k0.m);
+  for (int it = 0; it < 30; ++it) {
+    const double dE = (E - k0.e * std::sin(E) - k0.m) / (1.0 - k0.e * std::cos(E));
+    E -= dE;
+    if (std::fabs(dE) < 1e-15) break;
+  }
+  if (output_j2_osc(y, E, x0, x0 + 3) != kPropOk) return false;
+  for (int c = 0; c < 6; ++c) {
+    const double h = c == kN ? 1e-7 * y[kN] : 1e-7;
+    double yc[6], xc[6];
+    for (int j = 0; j < 6; ++j) yc[j] = y[j];
+    yc[c] += h;
+    if (output_j2_osc(yc, E, xc, xc + 3) != kPropOk) return false;
+    for (int q = 0; q < 6; ++q) J[q][c] = (xc[q] - x0[q]) / h;
+  }
+  // the bodies' acceleration at the osculating position, km/s^2 (output_j2_osc's km and km/s)
+  const Vec3 r{x0[0] / kRe, x0[1] / kRe, x0[2] / kRe};
+  const Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) + third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+  const double s = kRe / 3600.0;
+  J[0][6] = J[1][6] = J[2][6] = 0.0;
+  J[3][6] = d.x * s;
+  J[4][6] = d.y * s;
+  J[5][6] = d.z * s;
+  for (int c = 0; c < 6; ++c) {
+    int p = c;
+    for (int q = c + 1; q < 6; ++q)
+      if (std::fabs(J[q][c]) > std::fabs(J[p][c])) p = q;
+    if (p != c)
+      for (int j = 0; j < 7; ++j) std::swap(J[p][j], J[c][j]);
+    if (!(J[c][c] != 0.0)) return false;
+    for (int q = c + 1; q < 6; ++q) {
+      const double f = J[q][c] / J[c][c];
+      for (int j = c; j < 7; ++j) J[q][j] -= f * J[c][j];
+    }
+  }
+  double m[6];
+  for (int c = 5; c >= 0; --c) {
+    double x = J[c][6];
+    for (int j = c + 1; j < 6; ++j) x -= J[c][j] * m[j];
+    m[c] = x / J[c][c];
+  }
+  for (int j = 0; j < 6; ++j) {
+    if (!std::isfinite(m[j])) return false;
+    tb[j] = 60.0 * m[j];  // per second to per minute
+  }
+  return true;
+}
+
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test). AP sums the epoch
 /// class's terms whatever the current mean motion (SPEC 16.7): the class is the record's, decided at its epoch.
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
@@ -3655,7 +3719,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     ag.cw = cv * ag.cO + sv * ag.sO;
     ag.sw = sv * ag.cO - cv * ag.sO;
     const bool need_tail_angles =
-        !skip_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0));
+        !skip_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.wide_slow != nullptr) || (ctx.zt_wide != 0));
     const bool need_k_angles = (ctx.res_epoch != nullptr) || (ctx.drag_pass != 0) || need_tail_angles ||
                                (ctx.ap_resonance && cls != 0 && !(cls == 1 && cache_geo_res)) ||
                                (ctx.agom > 0.0 && fr.e2 != 0.0 && k.a >= 5.0 && ag.si <= 0.02) ||
@@ -3744,6 +3808,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci,
                         ctx.theta_g0, dst, sh_table_id(ctx));
     }
+    if (ctx.wide_slow != nullptr)
+      tess::wide_slow_six(ctx.wide_slow, ctx.wide_slow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
     if (ctx.zt != nullptr)
       tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, dst, &ag.sw, &ag.cw,
                       zt_table_id(ctx));
@@ -3869,7 +3935,12 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         if (ap_lp_fast && last_dF != 0.0) fm::sincos_fast(F, sF_lp, cF_lp);
       }
       double tb[6];
-      if (ap_lp_fast) {
+      // AP above e 0.3: the rates that move its osculating output by the bodies' acceleration (SPEC 16.19); below it (the
+      // effect is a few m there, the cost is not), SGP4XP, or where that fails: the Gauss equations at the mean state
+      const bool through_output = ctx.ap_third_body && ctx.branch.wide_e && lp_third_body_through_output(y, b, tb);
+      if (through_output) {
+        // tb holds them
+      } else if (ap_lp_fast) {
         lp_third_body_gauss_ap(y, fr, sF_lp, cF_lp, b, tb);
       } else {
         Vec3 r, v;
@@ -5726,6 +5797,22 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.half_day = table;
     }
   }
+  // SPEC 16.18 (stack #473): above its switch outside low orbit every class carries its other slow terms in the rates
+  if (sd >= 2 && br.wide_tess != 0 && !(res == 0 && !s.ctx.long_period)) {
+    if (within_share && anchor->ctx.wide_slow != nullptr) {
+      s.ctx.wide_slow = anchor->ctx.wide_slow;
+      s.ctx.wide_slow_count = anchor->ctx.wide_slow_count;
+      s.ctx.e0 = anchor->ctx.e0;
+      s.ctx.i0 = anchor->ctx.i0;
+      s.ctx.shared_mask |= 128;
+    } else {
+      res::ResCoef* list = nullptr;
+      const int count = tess::slow_terms_wide(spd, res, n0, e.eo, e.xincl, &list);
+      if (count < 0) return false;
+      s.ctx.wide_slow = list;
+      s.ctx.wide_slow_count = count;
+    }
+  }
   if (sd >= 2 && res == 0 && !s.ctx.long_period) {
     if (within_share && anchor->ctx.shallow != nullptr) {
       s.ctx.shallow = anchor->ctx.shallow;
@@ -5871,6 +5958,9 @@ inline void xp_release(XpSat& s) {
   if (!(s.ctx.shared_mask & 8)) std::free(const_cast<tess::ShallowCoef*>(s.ctx.shallow));
   s.ctx.shallow = nullptr;
   s.ctx.shallow_count = 0;
+  if (!(s.ctx.shared_mask & 128)) std::free(const_cast<res::ResCoef*>(s.ctx.wide_slow));
+  s.ctx.wide_slow = nullptr;
+  s.ctx.wide_slow_count = 0;
   if (!(s.ctx.shared_mask & 16)) std::free(const_cast<float*>(s.ctx.zt));
   s.ctx.zt = nullptr;
   if (!(s.ctx.shared_mask & 32)) std::free(const_cast<float*>(s.ctx.mdaily));
@@ -6050,6 +6140,7 @@ inline uint64_t xp_bytes(const XpSat& s) {
   if (!(c.shared_mask & 2)) b += u(c.res_epoch);
   if (!(c.shared_mask & 4)) b += u(c.res_taylor);
   if (!(c.shared_mask & 8)) b += u(c.shallow);
+  if (!(c.shared_mask & 128)) b += u(c.wide_slow);
   if (!(c.shared_mask & 16)) b += u(c.zt);
   if (!(c.shared_mask & 32)) b += u(c.mdaily);
   if (!(c.shared_mask & 64)) b += u(c.sp_orig != nullptr ? c.sp_orig : c.sp) + u(c.sp_comb);
