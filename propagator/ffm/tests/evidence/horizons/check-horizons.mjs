@@ -12,6 +12,7 @@
 // UV_THREADPOOL_SIZE=1 node --v8-pool-size=1 propagator/ffm/tests/evidence/horizons/check-horizons.mjs
 import fs from 'node:fs';
 import path from 'node:path';
+import { resolveRecorded } from '../paths.mjs';
 import { here, ffm, names, targets, cases, wasmPath, read, sha256, authenticateRaw, buildMetrics,
   parseRaw, harness, bodyStates, compare, brief } from './horizons-common.mjs';
 
@@ -45,7 +46,9 @@ async function main() {
   function verify(entry) {
     check(nonempty(entry?.file) && /^[0-9a-f]{64}$/.test(entry?.sha256), 'invalid pinned file entry');
     if (!entry?.file) return;
-    const file = path.resolve(here, entry.file);
+    // A label names an outside folder (../paths.mjs); these pins are required, so its variable must be set.
+    const file = resolveRecorded(entry.file, here);
+    if (!file) { check(false, `${entry.file}: set the variable of its folder (docs/cross-validation.md, Outside inputs)`); return; }
     check(sha256(file) === entry.sha256, `pinned file changed: ${entry.file}`);
     pinned.add(file);
   }

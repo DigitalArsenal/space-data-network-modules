@@ -1,7 +1,7 @@
 {
  "note": "Diagnostic rerun of all eight supported drag cases using the prebuilt two-line published-MSIS variant and the current runner, which corrects ANISE planetary-data Earth shape to WGS84. FFM finest; 24 hourly propagated samples on UTC 2026-08-02/03, GCRF, meters, tolerance 0.1 m from the unmodified shared protocol. Stock/cached published evidence is preserved.",
  "binary": {
-  "file": "/Users/tj/software/tools/xval/nyx/target/release/ffm-xval-nyx-msis",
+  "file": "<xval>/nyx/target/release/ffm-xval-nyx-msis",
   "sha256": "4c1dacb9631fcdc48d2fd12cfd82986dd35623f9cd0080384c5e76fad6cb87d5"
  },
  "source": {
@@ -9,7 +9,7 @@
   "sha256": "2627f2ae9faa9a2fe21c3cf1eb7b3222dfd6d6d357ac80bff1b5f3cb00ba157f"
  },
  "input": {
-  "bpc": "/Users/tj/software/tools/xval/nyx/data/ffm-itrf-2026-08.bpc",
+  "bpc": "<xval>/nyx/data/ffm-itrf-2026-08.bpc",
   "cases": [
    {
     "drag": {
@@ -50,7 +50,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x0.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x0.cof",
      "degree": 20,
      "order": 0,
      "radiusKm": 6378.1363
@@ -140,7 +140,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x20.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x20.cof",
      "degree": 20,
      "order": 20,
      "radiusKm": 6378.1363
@@ -230,7 +230,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x20.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x20.cof",
      "degree": 20,
      "order": 20,
      "radiusKm": 6378.1363
@@ -287,7 +287,7 @@
      "cd": 2.2,
      "rateM2KgS": null,
      "weather": {
-      "csv": "/Users/tj/software/tools/xval/nyx/work/cssi.csv"
+      "csv": "<xval>/nyx/work/cssi.csv"
      }
     },
     "epochs": [
@@ -318,7 +318,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x20.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x20.cof",
      "degree": 20,
      "order": 20,
      "radiusKm": 6378.1363
@@ -408,7 +408,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x20.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x20.cof",
      "degree": 20,
      "order": 20,
      "radiusKm": 6378.1363
@@ -498,7 +498,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x0.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x0.cof",
      "degree": 20,
      "order": 0,
      "radiusKm": 6378.1363
@@ -588,7 +588,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x20.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x20.cof",
      "degree": 20,
      "order": 20,
      "radiusKm": 6378.1363
@@ -645,7 +645,7 @@
      "cd": 2.2,
      "rateM2KgS": null,
      "weather": {
-      "csv": "/Users/tj/software/tools/xval/nyx/work/cssi.csv"
+      "csv": "<xval>/nyx/work/cssi.csv"
      }
     },
     "epochs": [
@@ -676,7 +676,7 @@
      "2026-08-03T00:00:00.000"
     ],
     "field": {
-     "cof": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x20.cof",
+     "cof": "<xval>/nyx/work/EGM2008-20x20.cof",
      "degree": 20,
      "order": 20,
      "radiusKm": 6378.1363
@@ -730,12 +730,12 @@
   ],
   "fluxWm2": 1361,
   "gmKm3S2": 398600.4415,
-  "kernel": "/Users/tj/software/worktrees/space-data-network-modules--modules-ffm-evidence-repin-2-0-0-20261025/files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+  "kernel": "<past checkout>/files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
   "maxStepS": 30,
   "mode": "propagate",
   "moonGmKm3S2": 4902.8002332671,
   "occultingRadiusKm": 6378.137,
-  "pca": "/Users/tj/software/tools/xval/nyx/data/pck08.pca",
+  "pca": "<xval>/nyx/data/pck08.pca",
   "sunGmKm3S2": 132712440041.27942,
   "sunRadiusKm": 695700,
   "tolerance": 1e-13
@@ -2828,7 +2828,7 @@
   },
   "source": {
    "path": "../refresh-derived-comparisons.mjs",
-   "sha256": "099045dcfe46681fae6d97a594b108e6cb6289c257f8b5000c3e2f66935a8067"
+   "sha256": "7bb070b7dbb262fcb9b04bfa02dc2e6d7cc2cb3027645e0a0598519b75e8ed15"
   },
   "reductions": [
    {

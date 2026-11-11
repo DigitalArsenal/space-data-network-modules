@@ -16,6 +16,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ALL, CASES, buildMetrics, run, scoreResponse } from './scoring.mjs';
+import { isLabel, resolveRecorded } from '../paths.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const summaryPath = path.resolve(process.argv[2] ?? path.join(here, 'summary-nyx-2.6.0.json'));
@@ -46,10 +47,11 @@ async function main() {
     if (!nonempty(file) || !nonempty(checksum)) { gaps.add(label); return; }
     check(digest(checksum), `invalid SHA-256: ${label}`);
     if (!digest(checksum)) return;
-    const resolved = path.resolve(here, file);
+    // A label names an outside folder (../paths.mjs); with its variable unset the file is a gap here.
+    const resolved = resolveRecorded(file, here) ?? file;
     let actual = checkedFiles.get(resolved);
     if (actual === undefined) {
-      try { actual = hash(resolved); }
+      try { actual = isLabel(resolved) ? null : hash(resolved); }
       catch (error) {
         if (error.code === 'ENOENT') actual = null;
         else { errors.push(`cannot read ${label}: ${error.message}`); return; }

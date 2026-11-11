@@ -12,147 +12,147 @@
  "caseExportSha256": "cebf372006ad44f4579a1b2e11b904e302dfdbc5a3940c854ca2fb223ba6de9a",
  "inputFiles": [
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/tests/evidence/cases/ffm-reference-cases.json",
+   "path": "<past checkout>/propagator/ffm/tests/evidence/cases/ffm-reference-cases.json",
    "sha256": "1230a178f2d1f6514bb65e9cc4452280059b379af7203e4acbc4a83ae44f47b9"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+   "path": "<past checkout>/files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
    "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/tests/evidence/tudat/run-tudat.py",
+   "path": "<past checkout>/propagator/ffm/tests/evidence/tudat/run-tudat.py",
    "sha256": "95b2e7c19375270a1c2382a0404908e21051dffb3a762dd640f567c8690c73b4"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/tests/evidence/tudat/tudat-support.cpp",
+   "path": "<past checkout>/propagator/ffm/tests/evidence/tudat/tudat-support.cpp",
    "sha256": "d20daa24c708e6022bd48a7ddc0c333a912d13630538e00bdad9ed5d8852590d"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/tests/evidence/tudat/tudat-settings.cpp",
+   "path": "<past checkout>/propagator/ffm/tests/evidence/tudat/tudat-settings.cpp",
    "sha256": "e5db044a4ef8b641d7f1d4ff55d73f39e5f30119a95a9dd5be55945f4c55cf4e"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/tests/evidence/tudat/.work/eopc04_14_IAU2000.62-now.txt",
+   "path": "<past checkout>/propagator/ffm/tests/evidence/tudat/.work/eopc04_14_IAU2000.62-now.txt",
    "sha256": "4b05b087e6decab44dd7d92f61c16ba25d8d155a6ea35d013849938f81e2b5d8"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/tests/evidence/tudat/.work/weather-constant.txt",
+   "path": "<past checkout>/propagator/ffm/tests/evidence/tudat/.work/weather-constant.txt",
    "sha256": "aabbf9baec02b704ad72064f8392175fe46054debb4cc62b66bb6455bdb96f8d"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/tests/evidence/tudat/.work/weather-cssi.txt",
+   "path": "<past checkout>/propagator/ffm/tests/evidence/tudat/.work/weather-cssi.txt",
    "sha256": "d3acd213f887ad473f7fbe35aa2fa771fa465a47fcc7e8b989e3c83b2ed370f3"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/eopc04_14_IAU2000.62-now.txt",
+   "path": "<tudat resources>/earth_orientation/eopc04_14_IAU2000.62-now.txt",
    "sha256": "cc838b27572e89ff6d36ee7cbeb6a8f104f1f8e59ddf769e8c93e6515276cd32"
   },
   {
-   "path": "/Users/tj/.tudat/resource/spice_kernels/naif0012.tls",
+   "path": "<tudat resources>/spice_kernels/naif0012.tls",
    "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/conda-meta/tudatpy-1.0.0-py311h2196d89_3.json",
+   "path": "<xval>/mamba/root/envs/tudat/conda-meta/tudatpy-1.0.0-py311h2196d89_3.json",
    "sha256": "77d2a1e35719bdfe8d3198385b7cedd11eb897cb79b60872789162aab8b72d31"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/conda-meta/tudat-resources-2.4-h947b425_5.json",
+   "path": "<xval>/mamba/root/envs/tudat/conda-meta/tudat-resources-2.4-h947b425_5.json",
    "sha256": "7cd6e95e9e7860a8806961af6a639bd589bce5e267ccb8d99643e3b4688a19c6"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/lib/python3.11/site-packages/tudatpy/kernel.so",
+   "path": "<xval>/mamba/root/envs/tudat/lib/python3.11/site-packages/tudatpy/kernel.so",
    "sha256": "18196bbc8fc5aaf77e2b990012bae60325ca15ad6062048c0bed23e874faf672"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/lib/python3.11/site-packages/tudatpy/__init__.py",
+   "path": "<xval>/mamba/root/envs/tudat/lib/python3.11/site-packages/tudatpy/__init__.py",
    "sha256": "77b9158af39852d29744e2942380d7406208b7935a03071de5fed693d907b49d"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/lib/egm2008_data.h",
+   "path": "<past checkout>/propagator/ffm/lib/egm2008_data.h",
    "sha256": "f4f49756761e4e391131a2ce12a25290948670bf889d467a13869a4c4c661250"
   },
   {
-   "path": "/Users/tj/software/worktrees/space-data-network-modules--ffm-reference-crosscheck-20261016/propagator/ffm/lib/egm96_data.h",
+   "path": "<past checkout>/propagator/ffm/lib/egm96_data.h",
    "sha256": "4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/polarMotionLibrationFundamentalArgumentMultipliers.txt",
+   "path": "<tudat resources>/earth_orientation/polarMotionLibrationFundamentalArgumentMultipliers.txt",
    "sha256": "3e1b8e99338e6713a244a1afc0e821a900bb67b6951fb76a0df5571b1d2b0206"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/utcLibrationAmplitudes.txt",
+   "path": "<tudat resources>/earth_orientation/utcLibrationAmplitudes.txt",
    "sha256": "43e945689ae30f7200d87df1adba1571d912671679ecd06ef27603c147f4bca7"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/utcOceanTidesFundamentalArgumentMultipliers.txt",
+   "path": "<tudat resources>/earth_orientation/utcOceanTidesFundamentalArgumentMultipliers.txt",
    "sha256": "eb2ae730afe18e42b75f201f087057e13a99d632f0217fbef9d520084ac3c863"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/polarMotionLibrationFundamentalArgumentMultipliersQuasiDiurnalOnly.txt",
+   "path": "<tudat resources>/earth_orientation/polarMotionLibrationFundamentalArgumentMultipliersQuasiDiurnalOnly.txt",
    "sha256": "f39cc6430bf636bc2ded0fa3e869aa4de071d8cce454aec4b5e76f15d7bc30d3"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/historicalDeltaT.txt",
+   "path": "<tudat resources>/earth_orientation/historicalDeltaT.txt",
    "sha256": "4a2d068df1cdb5f39ac0e7efa04aafeea5be585afd1c9e2e4380cf8872e1f78e"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/polarMotionOceanTidesFundamentalArgumentMultipliers.txt",
+   "path": "<tudat resources>/earth_orientation/polarMotionOceanTidesFundamentalArgumentMultipliers.txt",
    "sha256": "eb2ae730afe18e42b75f201f087057e13a99d632f0217fbef9d520084ac3c863"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/utcOceanTidesAmplitudes.txt",
+   "path": "<tudat resources>/earth_orientation/utcOceanTidesAmplitudes.txt",
    "sha256": "e5a638ccddc614670804ee85d60e3c0a541ce40ad4758a71af5ce680aa615829"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/eopc04_08_IAU2000.62-now.txt",
+   "path": "<tudat resources>/earth_orientation/eopc04_08_IAU2000.62-now.txt",
    "sha256": "60c35925a5289c618a6054d0a6b2b313afa4dabeef08e348a7cac6a2682e0ea3"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/polarMotionLibrationAmplitudesQuasiDiurnalOnly.txt",
+   "path": "<tudat resources>/earth_orientation/polarMotionLibrationAmplitudesQuasiDiurnalOnly.txt",
    "sha256": "f42007fdaf5c1b380d143f63d1141c30426b73c0a93caf3a629768f0436295bf"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/polarMotionOceanTidesAmplitudes.txt",
+   "path": "<tudat resources>/earth_orientation/polarMotionOceanTidesAmplitudes.txt",
    "sha256": "47360a8ea9f386ad0cdcca319de5e996a397481a259d55fcf5c89924843ba076"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/utcLibrationFundamentalArgumentMultipliers.txt",
+   "path": "<tudat resources>/earth_orientation/utcLibrationFundamentalArgumentMultipliers.txt",
    "sha256": "901564789b3e7478d856dd9c0f37644d41810e8ef288039b59e7d52bf038c9c5"
   },
   {
-   "path": "/Users/tj/.tudat/resource/earth_orientation/polarMotionLibrationAmplitudes.txt",
+   "path": "<tudat resources>/earth_orientation/polarMotionLibrationAmplitudes.txt",
    "sha256": "09bf92da2470901a69b3f3e4a17568ab09fba3df6021e72323b9c83a933a5fb0"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/simulation/environment_setup/createRotationModel.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/simulation/environment_setup/createRotationModel.h",
    "sha256": "456bea23e4542eb7e656947aa039c4d3cfddf467862c08e76c8b2ee4796ed197"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/simulation/environment_setup/body.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/simulation/environment_setup/body.h",
    "sha256": "888ee06da91b1e0408a9c14a64cc2f25dffd5cc3246fc80799adbfe02e3768c6"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/astro/relativity/relativisticAccelerationCorrection.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/astro/relativity/relativisticAccelerationCorrection.h",
    "sha256": "0e146cfd6cbaf024af3c5f4dd12f5ee320e132cd532020e6dd35c0654f95f97e"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/simulation/estimation_setup/createAccelerationPartials.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/simulation/estimation_setup/createAccelerationPartials.h",
    "sha256": "a41e6104ca0a407f71554ec61f8f523be900ddcc232d231a22575f06c2771967"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/acceleration_partials/radiationPressureAccelerationPartial.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/acceleration_partials/radiationPressureAccelerationPartial.h",
    "sha256": "07417ada36dae62146eafa3194ac4ecc6a5da678c93a482464fdb7f0a05886c5"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/acceleration_partials/aerodynamicAccelerationPartial.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/acceleration_partials/aerodynamicAccelerationPartial.h",
    "sha256": "944de060c626e1c8d805b48472ec2d92fdf77eb727a492b71f0d09df6a20a5b0"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/estimatable_parameters/estimatableParameter.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/estimatable_parameters/estimatableParameter.h",
    "sha256": "bee0f774acedbdf09dcb40ca92b54304cf3ecaf17547e4b99e9cbcbf3cdbe759"
   },
   {
-   "path": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/acceleration_partials/relativisticAccelerationPartial.h",
+   "path": "<xval>/mamba/root/envs/tudat/include/tudat/astro/orbit_determination/acceleration_partials/relativisticAccelerationPartial.h",
    "sha256": "229140ff59a3cdff280292d2e74e282d5e9823c6e7ef8a9cb40d30fcc5d953c6"
   }
  ],
@@ -15934,5 +15934,6 @@
     }
    ]
   }
- }
+ },
+ "pathRewrite": "Its path strings were made relative or labeled on 2026-11-10 by propagator/ffm/tests/evidence/paths.mjs --rewrite; nothing else changed. SHA-256 of the file as the tool wrote it: 49aa2fe07586e1e58ce5f6dbca1016bbac1ec24b789bf16860aee3bbbbcbb805."
 }

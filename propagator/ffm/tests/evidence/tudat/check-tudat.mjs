@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isLabel, resolveRecorded } from '../paths.mjs';
 import { ALL, CASES, WASM, here, exportPath, sha256, readJson, normalizedRecord,
   buildMetrics, run, scoreResponse, scoreStored, scoreOrekit, scoreConvergence,
   scoreStm, parametersOfExtended, stmLimitation, protocolFor, causePresent, verdictFor } from './scoring.mjs';
@@ -26,8 +27,9 @@ const checked = new Map();
 
 function verifyFile(file, checksum, label, required = false) {
   if (!nonempty(file) || !digest(checksum)) { check(false, `${label}: missing path or invalid SHA-256`); return; }
-  const resolved = path.resolve(here, file);
-  if (!checked.has(resolved)) checked.set(resolved, fs.existsSync(resolved) ? sha256(resolved) : null);
+  // A label names an outside folder (../paths.mjs); with its variable unset the file is unavailable here.
+  const resolved = resolveRecorded(file, here) ?? file;
+  if (!checked.has(resolved)) checked.set(resolved, !isLabel(resolved) && fs.existsSync(resolved) ? sha256(resolved) : null);
   const actual = checked.get(resolved);
   if (actual === null) {
     if (required) check(false, `${label}: required file is unavailable: ${file}`);
@@ -93,7 +95,7 @@ function inspectSummary(summaryPath, wasm, metrics) {
   for (const entry of sourceIdentity) {
     if (!nonempty(entry.path)) { check(false, `${label}: sourceIdentity entry has no path`); continue; }
     const relative = path.relative(repositoryRoot, path.resolve(here, entry.path));
-    const repositorySource = relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+    const repositorySource = !isLabel(entry.path) && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
       && !relative.split(path.sep).includes('.work');
     verifyFile(entry.path, entry.sha256, `${label} sourceIdentity`, repositorySource);
   }

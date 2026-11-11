@@ -5,7 +5,7 @@ Base: `5c6a7de` (`origin/main` at worktree creation).
 Implementation commit: `37d9d020d033da5096bf202357b2c51c5ff180ad`.
 The following focused test/evidence commit contains this report; its exact SHA
 is in the final coordinator handoff and branch history.
-Private worktree: `/Users/tj/software/worktrees/modules-lane08-rfm-selectors`.
+Private worktree: `modules-lane08-rfm-selectors` (since removed).
 
 ## Implemented
 
@@ -114,7 +114,7 @@ added 15 packages, and audited 16 packages
 node generate-sds-headers.mjs
 Generated SDS headers FRM, RFM, EOP from spacedatastandards.org@1.219.0
 
-SDM_MODULE_SIGNING_KEYPAIR_PATH=/Users/tj/software/spacedatanetwork-stack/repos/ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json node build.mjs
+SDM_MODULE_SIGNING_KEYPAIR_PATH=<space-data-module-sdk checkout>/test/support/dev-module-signing-keypair.json node build.mjs
 Built dist/isomorphic/module.wasm against spacedatastandards.org@1.219.0 with 248 vendored ERFA sources
 
 node --test tests/sdk_compat.test.mjs
@@ -123,7 +123,7 @@ node --test tests/sdk_compat.test.mjs
 ℹ fail 0
 ℹ skipped 0
 
-SDM_WASMEDGE_BINARY=/Users/tj/.wasmedge/bin/wasmedge SDN_FRAME_TRI_RUNTIME=1 node --test tests/rfm_selectors_parity.test.mjs
+SDM_WASMEDGE_BINARY=$HOME/.wasmedge/bin/wasmedge SDN_FRAME_TRI_RUNTIME=1 node --test tests/rfm_selectors_parity.test.mjs
 # Each runtime: tests 23, pass 23, fail 0, skipped 0
 PASS production browser/V8: all 8 ratified RFM selectors, inverse/state/rate/validation checks
 PASS production native WasmEdge: all 8 ratified RFM selectors, inverse/state/rate/validation checks
@@ -132,7 +132,7 @@ PASS production container WasmEdge: all 8 ratified RFM selectors, inverse/state/
 ℹ pass 1
 ℹ fail 0
 
-PATH=/Users/tj/.wasmedge/bin:$PATH SDN_FRAME_TRI_RUNTIME=1 SDN_RUN_EOP_PARITY=1 node --test tests/*.test.mjs
+PATH=$HOME/.wasmedge/bin:$PATH SDN_FRAME_TRI_RUNTIME=1 SDN_RUN_EOP_PARITY=1 node --test tests/*.test.mjs
 111 checks, 0 failures
 PASS browser/V8: authoritative frame checks
 PASS native WasmEdge: authoritative frame checks

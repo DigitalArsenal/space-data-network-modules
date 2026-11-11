@@ -12,9 +12,11 @@ import { buildMetrics as buildReduction } from './orekit/scoring.mjs';
 import { readCache, storedResponse, scoreStored } from './tudat/scoring.mjs';
 import { assertRecordedNumbers } from './recorded-numbers.mjs';
 import { xvalDir } from './rescore-all.mjs';
+import { recordedJson } from './paths.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const read=f=>JSON.parse(fs.readFileSync(path.resolve(here,f),'utf8'));
-const write=(f,o)=>fs.writeFileSync(path.resolve(here,f),JSON.stringify(o,null,1)+'\n');
+// Paths are written in recorded form (paths.mjs): repository-relative, or a label for an outside folder.
+const write=(f,o)=>fs.writeFileSync(path.resolve(here,f),JSON.stringify(recordedJson(o,path.dirname(path.resolve(here,f))),null,1)+'\n');
 const hash=f=>createHash('sha256').update(fs.readFileSync(path.resolve(here,f))).digest('hex');
 const verify=(actual,recorded,label)=>{if(process.argv.includes('--verify-recorded'))assertRecordedNumbers(actual,recorded,label);return actual;};
 const refresh={module:{version:read('../../package.json').version,file:'../../../dist/isomorphic/module.wasm',sha256:hash('../../dist/isomorphic/module.wasm')},
