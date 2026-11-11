@@ -3359,8 +3359,13 @@ A term whose rate does not hold still belongs in the rates:
   one-day class below; stack #474).
 
 *The diagnostic.* `sdnap_slow_terms(in, rows, max_rows)` takes in = the mean motion (rev/day), e, i (deg) and the tesseral
-cap (2 to 70). It writes one row of six doubles per slow term of degree 2 to the cap: l, m, p, q, psi-dot / n, and the
-term's carrier:
+cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to the cap:
+- l, m, p, q and psi-dot / n;
+- the term's carrier (the table below);
+- the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch no taper applies, so
+  w is 1 for the class's terms and 0 otherwise;
+- the term's size in m. That is its along-track amplitude through the mean motion, 3 |j| A / (a psi-dot^2), with
+  A = mu / a^(l+1) |F G| |C, S| at the epoch elements and G exact at the epoch e. A size cut is chosen on this number.
 
 | Code | Carrier |
 | ---: | --- |
@@ -3369,11 +3374,12 @@ term's carrier:
 | 3 | the output table (16.2) |
 | 0 | nowhere: under the floor, or left out of the grid as slow |
 | 4 | nowhere: above the carrier's degree |
-| 5 | nowhere: under the table's amplitude cut (16.2) |
+| 5 | nowhere: under the size cut |
+| 6 | nowhere: a q outside the rule's q range, at or above the size cut |
 
 It writes at most max_rows rows and returns the count of all of them, or -1 for a set it does not cover. It covers the sets
-above their eccentricity switch outside low orbit (class 0 below 1100 min). It returns -1 for every other set, so codes 3
-and 5 are not written. No flight reads it.
+above their eccentricity switch outside low orbit (class 0 below 1100 min). It returns -1 for every other set, so codes 3,
+5 and 6 are not written. No flight reads it.
 
 *The partition test.* Each part of the rule has an E2E of one shape:
 - the rule, written in the test as a function of a row (the carrier from l, m, p, q and psi-dot / n);

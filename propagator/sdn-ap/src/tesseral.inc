@@ -159,53 +159,6 @@ inline bool wide_set(int cls, double e0) { return e0 > (cls == 0 ? kWideENonReso
 constexpr int kOneDayTailMaxOrder = 16;
 inline bool one_day_tail(int cls, bool wide, int degree) { return cls == 1 && !wide && degree >= 5; }
 
-/// Where a set on the grid (above its eccentricity switch, outside low orbit) carries each slow tesseral term, by the grid's
-/// own rules (wide_families; SPEC 16.18): every (l, m, p, q) of degree 2 to `cap` whose angle drifts slower than kShallowBand n
-/// at the set's epoch (J2 secular rates, as the grid takes them). Row: l, m, p, q, psi-dot / n, carrier (16.18's codes):
-/// 1 the class's rates, 2 the grid, 0 carried nowhere (left out of the grid as slow, or under the floor), 4 carried nowhere
-/// (above the grid's degree, kSpCap; the table holds no near-resonant terms outside low orbit). Writes at most max_rows rows;
-/// returns the count of all of them, or -1 for a set it does not cover. `cls` the epoch class (res::band_of), n rad/min,
-/// inc rad. A diagnostic: no flight reads it.
-inline int slow_terms(int cap, int cls, double n, double e, double inc, double* rows, int max_rows) {
-  const bool low = cls == 0 && kTwoPi / n < kLongPeriodMinutes;
-  if (!wide_set(cls, e) || low) return -1;
-  const double eta = std::sqrt(1.0 - e * e), a = std::pow(kKe / n, kX2o3), p0 = a * eta * eta;
-  const double c = std::cos(inc), j2 = 1.5 * kJ2 / (p0 * p0);
-  const double mdot = n + 0.5 * j2 * n * eta * (3.0 * c * c - 1.0), wdot = 0.5 * j2 * n * (5.0 * c * c - 1.0);
-  const double node_rate = -j2 * n * c;
-  const res::TermSet carried = res::class_terms(cls);
-  const int grid_degree = cap > kSpCap ? kSpCap : cap;
-  int count = 0;
-  for (int l = 2; l <= cap; ++l)
-    for (int m = 1; m <= l; ++m)
-      for (int p = 0; p <= l; ++p) {
-        const int w = l - 2 * p;
-        const double nu = -(w * wdot + m * (node_rate - kOmegaE)) / mdot;
-        const int jlo = static_cast<int>(std::floor(nu - kShallowBand * n / mdot)) - 1;
-        const int jhi = static_cast<int>(std::ceil(nu + kShallowBand * n / mdot)) + 1;
-        for (int j = jlo; j <= jhi; ++j) {
-          const double psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
-          if (!(std::fabs(psidot) < kShallowBand * n) || (w == 0 && j == 0)) continue;
-          const int q = j - w;
-          int where = -1;
-          for (int t = 0; t < carried.count && where < 0; ++t)
-            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) where = 1;
-          if (where < 0 && cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) where = 1;  // the half-day tail (16.2)
-          if (where < 0) {
-            if (l > grid_degree) where = 4;
-            else if (cls == 1) where = std::fabs(psidot) < kOneDayFloor * n ? 0 : 2;
-            else where = 0;
-          }
-          if (count < max_rows) {
-            double* r = rows + 6 * count;
-            r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = where;
-          }
-          ++count;
-        }
-      }
-  return count;
-}
-
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {
   double r = (m == 0 ? 1.0 : 2.0) * (2 * l + 1);
@@ -4530,6 +4483,78 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
     }
   }
   return out.count;
+}
+
+/// A term's angle rate (rad/min) at the J2 secular rates: psi-dot = w omega-dot + j M-dot + m (Omega-dot - theta-dot).
+inline double slow_rate(const SecularRates& sr, int w, int j, int m) { return w * sr.argp + j * sr.mdot + m * (sr.node - kOmegaE); }
+
+/// A slow term's along-track amplitude through the mean motion (m): 3 |j| A / (a psi-dot^2), A = mu / a^(l+1) |F G| |C, S|
+/// (the potential's coefficient of the term), at the epoch elements.
+inline double slow_size_m(int l, int m, int j, double fg, double a, double psidot) {
+  double amp = kMu / a;
+  for (int k = 0; k < l; ++k) amp /= a;
+  const double A = amp * std::fabs(fg) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+  const double pd = std::fabs(psidot) > 1e-15 ? std::fabs(psidot) : 1e-15;
+  return 3.0 * std::abs(j) * A / (a * pd * pd) * kRe * 1e3;
+}
+
+/// Where a set on the grid (above its eccentricity switch, outside low orbit) carries each slow tesseral term, by the grid's
+/// own rules (wide_families; SPEC 16.18): every (l, m, p, q) of degree 2 to `cap` whose angle drifts slower than kShallowBand n
+/// at the set's epoch (J2 secular rates, as the grid takes them). Row of 8 (16.18's): l, m, p, q, psi-dot / n, carrier
+/// (1 the class's rates, 2 the grid, 0 carried nowhere: left out of the grid as slow, or under the floor, 4 carried nowhere:
+/// above the grid's degree, kSpCap, as the table holds no near-resonant terms outside low orbit), the rates' weight w (1 for
+/// the class's terms, 0 otherwise: no taper above the switch) and the term's size (slow_size_m, G exact at the epoch e).
+/// Writes at most max_rows rows; returns the count of all of them, or -1 for a set it does not cover. `cls` the epoch class
+/// (res::band_of), n rad/min, inc rad. A diagnostic: no flight reads it.
+inline int slow_terms(int cap, int cls, double n, double e, double inc, double* rows, int max_rows) {
+  const bool low = cls == 0 && kTwoPi / n < kLongPeriodMinutes;
+  if (!wide_set(cls, e) || low) return -1;
+  const SecularRates sr = secular_rates(n, e, inc);
+  const double a = std::pow(kKe / n, kX2o3), band = kShallowBand * n;
+  const res::TermSet carried = res::class_terms(cls);
+  const int grid_degree = cap > kSpCap ? kSpCap : cap;
+  double F[72], dF[72];
+  int count = 0;
+  for (int m = 1; m <= cap; ++m)
+    for (int w = -cap; w <= cap; ++w) {
+      const double nu = -(w * sr.argp + m * (sr.node - kOmegaE)) / sr.mdot;
+      const int jlo = static_cast<int>(std::floor(nu - band / sr.mdot)) - 1;
+      const int jhi = static_cast<int>(std::ceil(nu + band / sr.mdot)) + 1;
+      bool any = false;
+      for (int j = jlo; j <= jhi && !any; ++j) any = std::fabs(slow_rate(sr, w, j, m)) < band && !(w == 0 && j == 0);
+      const int aw = w < 0 ? -w : w;
+      int l0 = m > aw ? m : aw;
+      if (l0 < 2) l0 = 2;
+      if ((l0 - aw) & 1) ++l0;
+      if (!any || l0 > cap) continue;
+      normalized_Fk_dF(m, w, cap, inc, F, dF);
+      for (int l = l0; l <= cap; l += 2) {
+        const int p = (l - w) / 2;
+        for (int j = jlo; j <= jhi; ++j) {
+          const double psidot = slow_rate(sr, w, j, m);
+          if (!(std::fabs(psidot) < band) || (w == 0 && j == 0)) continue;
+          const int q = j - w;
+          int where = -1;
+          for (int t = 0; t < carried.count && where < 0; ++t)
+            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) where = 1;
+          if (where < 0 && cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) where = 1;  // the half-day tail (16.2)
+          if (where < 0) {
+            if (l > grid_degree) where = 4;
+            else if (cls == 1) where = std::fabs(psidot) < kOneDayFloor * n ? 0 : 2;
+            else where = 0;
+          }
+          if (count < max_rows) {
+            double G, dG;
+            res::exact_G(l, p, q, e, G, dG);
+            double* r = rows + 8 * count;
+            r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = where; r[6] = where == 1 ? 1.0 : 0.0;
+            r[7] = slow_size_m(l, m, j, F[l] * G, a, psidot);
+          }
+          ++count;
+        }
+      }
+    }
+  return count;
 }
 
 /// Above kWideE (SPEC 16.11) the first-order tesseral short-periodics of degree 2 to kSpCap are not a series in M. For each

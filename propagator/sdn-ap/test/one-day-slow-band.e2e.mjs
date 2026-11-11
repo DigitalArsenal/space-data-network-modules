@@ -4,7 +4,8 @@
 // 1e-2 n or faster), or nowhere (slower than 1e-2 n, or above degree 12).
 // 1. sdnap_slow_terms on a THEMIS A-like set (1.0493 rev/day, e 0.825, i 11.9 deg) and on a one-day set just above the switch
 //    (1.0496 rev/day, e 0.3001, i 10 deg), tesseral cap 31. Outcome: every slow term has one carrier by the rules above; the
-//    class's 27 terms, and only they, are in the rates; on the THEMIS A-like set the grid holds terms of degree 5 and up and
+//    class's 27 terms, and only they, are in the rates, with the rates' weight 1 (0 on every other row: no taper above the
+//    switch) and every row's size finite and not negative; on the THEMIS A-like set the grid holds terms of degree 5 and up and
 //    terms of degree 3 and 4 with |q| above 4, the terms 0.6.18 carried nowhere.
 // 2. FFM model truth: a made-up THEMIS A-like set whose fitted mean motion lies in the band (initial elements 1.0426 rev/day,
 //    e 0.8246, i 11.9, node 90, perigee 300 deg; fitted 1.0493 rev/day). EGM96 70 x 70, Sun and Moon from DE440, no drag or
@@ -25,12 +26,13 @@ const inClass = (r) => CLASS.some(([l, m, p, q]) => r[0] === l && r[1] === m && 
 const expected = (r) => (inClass(r) ? 1 : r[0] > 12 ? 4 : Math.abs(r[4]) < 1e-2 ? 0 : 2);
 
 const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
-const x = h.instance.exports, MAX = 20000, pin = x.sdnap_alloc(32), prow = x.sdnap_alloc(MAX * 48);
+// a row (SPEC 16.18): l, m, p, q, psi-dot / n, carrier, the rates' weight w, the term's size (m)
+const ROW = 8, x = h.instance.exports, MAX = 20000, pin = x.sdnap_alloc(32), prow = x.sdnap_alloc(MAX * ROW * 8);
 const read = (el) => {
   new Float64Array(h.memory.buffer, pin, 4).set(el);
   const count = x.sdnap_slow_terms(pin, prow, MAX);
   assert.ok(count > 0 && count <= MAX, `sdnap_slow_terms: ${count}`);
-  return Array.from({length: count}, (_, k) => Array.from(new Float64Array(h.memory.buffer, prow + 48 * k, 6)));
+  return Array.from({length: count}, (_, k) => Array.from(new Float64Array(h.memory.buffer, prow + ROW * 8 * k, ROW)));
 };
 const SETS = {'THEMIS A-like': [1.0493, 0.825, 11.9, 31], 'one-day e 0.3001': [1.0496, 0.3001, 10, 31]};
 const summary = {};
@@ -44,6 +46,10 @@ for (const [name, el] of Object.entries(SETS)) {
   console.log(JSON.stringify({[name]: summary[name]}));
   assert.equal(wrong.length, 0, `${name}: ${wrong.length} terms not where the rules put them: ${JSON.stringify(wrong.slice(0, 3))}`);
   assert.ok(rows.filter((r) => r[5] === 1).every(inClass), `${name}: only the class's terms in the rates`);
+  const badW = rows.filter((r) => r[6] !== (r[5] === 1 ? 1 : 0)), badSize = rows.filter((r) => !(Number.isFinite(r[7]) && r[7] >= 0));
+  assert.equal(badW.length, 0, `${name}: the rates' weight is 1 on the class's terms and 0 elsewhere: ${JSON.stringify(badW.slice(0, 3))}`);
+  // a size is finite and not negative (a term of |q| near 50 at e 0.825 has a Hansen coefficient below the quadrature's reach: 0)
+  assert.equal(badSize.length, 0, `${name}: every size finite and not negative: ${JSON.stringify(badSize.slice(0, 3))}`);
 }
 x.sdnap_free(pin);
 x.sdnap_free(prow);
