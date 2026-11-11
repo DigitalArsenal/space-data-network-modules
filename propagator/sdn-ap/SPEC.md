@@ -2796,6 +2796,11 @@ day 1, 3, 5 and 7 went from 8.5, 17.8, 35.5, 59.8 m to 8.2, 13.8, 20.7, 29.7 m o
 5: 8 to 10 of 10) and from 11.6, 32.9, 89.3, 156.7 m to 11.4, 20.4, 42.8, 63.1 m on Galileo (8 to 10 of 10); one window
 of twenty got worse (Galileo IOV 2, day 7 23 to 89 m).
 
+*Cost.* A record with Y0 takes 12 % longer to fly its first week: about 22 microseconds per block (a graded quadrature
+of some 60 points), 5.14 to 5.76 ms for a Galileo record flown a week hourly by `propagate` (decode, initialization,
+grid, states; medians of 40 calls, under a load of 10 on 28 cores), 3.31 to 3.39 ms for a day at 60 s. Once the grid
+exists a state costs the same.
+
 `test/radiation-y0.e2e.mjs` checks the theory, the fit, the daily fit, a held fit against the fit without the term
 byte for byte, and the refusals.
 
