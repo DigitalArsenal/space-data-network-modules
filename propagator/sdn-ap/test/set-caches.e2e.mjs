@@ -25,7 +25,10 @@ import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { ensureBuilt, wasmPath, elementRows, THEORY } from "./lib/module.mjs";
 import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
-import { T, seedOcm, rowsThrough } from "./lib/ocm.mjs";
+import { T, seedOcm, rowsThrough, repackOcm } from "./lib/ocm.mjs";
+import { OCMDynamicParameterT } from "spacedatastandards.org/lib/js/OCM/OCMDynamicParameter.js";
+import { OrbitDeterminationT } from "spacedatastandards.org/lib/js/OCM/OrbitDetermination.js";
+import { prwDynamicParameter } from "spacedatastandards.org/lib/js/OCM/prwDynamicParameter.js";
 
 const failures = [];
 const check = (ok, what) => { if (!ok) failures.push(what); };
@@ -86,7 +89,10 @@ const { h, load, at } = shipped;
 // (and AP's terms for the row store, which no call selects outside a call: the pool-thread case below)
 const testBuild = buildDiagnostic("set-caches-budget",
   'SDNAP_EXPORT("sdnap_test_cache_budget") uint32_t sdnap_test_cache_budget(uint32_t mb) { return sdnap::xpt::cache_budget_mb(mb); }\n' +
-  'SDNAP_EXPORT("sdnap_test_select_ap") void sdnap_test_select_ap(int32_t t, int32_t z) { sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{t, z}; }');
+  'SDNAP_EXPORT("sdnap_test_select_ap") void sdnap_test_select_ap(int32_t t, int32_t z) { sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{t, z}; }\n' +
+  // rows carrying a radiation term Y0 (SPEC 16.13: in the row's mean_motion_dot slot), which sdnap_init_elements holds
+  // refused from outside the module
+  'SDNAP_EXPORT("sdnap_test_init_rows") int32_t sdnap_test_init_rows(const sdnap::ElementRow* rows, uint32_t count) { return sdnap::store_init(rows, count); }');
 const tiny = await open(testBuild);
 tiny.x.sdnap_test_cache_budget(1);
 check(tiny.stats()[0] === 2 ** 20 && shipped.stats()[0] === 256 * 2 ** 20, `budgets: the test build ${tiny.stats()[0]}, the shipped default ${shipped.stats()[0]}`);
@@ -186,6 +192,53 @@ for (const [name, o] of Object.entries(ORBITS)) {
   const differ = zero.filter((v, k) => !Object.is(v, four[k])).length;
   check(zero.length === four.length && differ === 0, `the pool's threads: ${differ} of ${zero.length} values differ between 0 and 4 threads`);
   console.log(`1,000 AP rows of the catalog mix through sdnap_propagate_soa: 0 and 4 pool threads bit for bit (${zero.length} values)`);
+}
+{
+  // the radiation term Y0 (SPEC 16.13) is part of a set's identity, as BTERM and AGOM are: two records of one
+  // Galileo-like orbit equal but for ECOM2_Y0, in one store and asked in turn, each bit for bit as it flies alone; and
+  // 200 rows of it carrying Y0 (the test build's row entry) on 0 and 4 pool threads, bit for bit
+  const o = { n: 1.7085, e: 0.0003, i: 56 };
+  const withY0 = (norad, y0) => repackOcm(seedOcm({ epoch: iso(EPOCH), n: o.n, e: o.e, i: o.i, raan: 40, argp: 30, ma: 20, bterm: 0.001, agom: 0.02,
+    norad, name: `G${norad}`, msis: true, records: true, rows: rowsThrough(ROWS), tesseral: 31, zonal: 20 }), (t) => {
+    t.ORBIT_DETERMINATION ??= new OrbitDeterminationT();
+    t.ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS = [Object.assign(new OCMDynamicParameterT(), {
+      NAME: prwDynamicParameter[prwDynamicParameter.ECOM2_Y0], VALUE: y0, UNITS: "m/s**2", SOLVED_FOR: false, PARAMETER: prwDynamicParameter.ECOM2_Y0 })];
+  });
+  const a = withY0(81000, 2e-9), b = withY0(81001, -3e-9);
+  const span = times.slice(0, 288);
+  await load([a]);
+  const aloneA = span.map((ms) => at(0, ms));
+  await load([b]);
+  const aloneB = span.map((ms) => at(0, ms));
+  await load([a, b]);
+  let differ = 0, apart = 0;
+  span.forEach((ms, k) => {
+    const sa = at(0, ms), sb = at(1, ms);
+    if (!same(sa, aloneA[k]) || !same(sb, aloneB[k])) ++differ;
+    if (!same(sa, sb)) ++apart;
+  });
+  check(apart === span.length, `Y0: the two records fly apart at ${apart} of ${span.length} instants (all expected)`);
+  check(differ === 0, `Y0: two records equal but for ECOM2_Y0, asked in turn, against each alone: ${differ} of ${span.length} instants differ`);
+  const rows = Array.from({ length: 200 }, (_, k) => ({ epochWhole: 2461328.5, epochFrac: 0, meanMotion: o.n, ecc: o.e, inc: o.i, raan: (40 + 1.7 * k) % 360,
+    argp: 30, ma: (20 + 3.1 * k) % 360, ndot: (k % 2 ? 2e-9 : -3e-9), bterm: 0.001, agom: 0.02, norad: 82000 + k, theory: THEORY.SGP4XP }));
+  const flyRows = async (threads) => {
+    const m = await open(testBuild, threads);
+    m.x.sdnap_test_select_ap(31, 20);
+    const bytes = elementRows(rows), n = rows.length;
+    const p = m.x.sdnap_alloc(bytes.length);
+    new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
+    check(m.x.sdnap_test_init_rows(p, n) === n, `Y0 rows, ${threads} threads: the row store took ${n} rows`);
+    const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), all = [];
+    for (let k = 0; k < 20; ++k) {
+      check(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status) === 0, `Y0 rows, ${threads} threads: sdnap_propagate_soa`);
+      all.push(...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n));
+    }
+    return all;
+  };
+  const y0zero = await flyRows(0), y0four = await flyRows(4);
+  const y0differ = y0zero.filter((v, k) => !Object.is(v, y0four[k])).length;
+  check(y0differ === 0, `Y0 rows: ${y0differ} of ${y0zero.length} values differ between 0 and 4 threads`);
+  console.log(`Y0: two records equal but for ECOM2_Y0 bit for bit as each alone; 200 rows with Y0 on 0 and 4 threads bit for bit`);
 }
 {
   // through propagate (#420): a time alone against the same time in one call
