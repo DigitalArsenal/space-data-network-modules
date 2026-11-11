@@ -52,10 +52,17 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // slow set's pull request: strong drag 74 to 81 and 91 to 102 windows within 100 m of the numerical propagator). So the
 // floors and the moved medians are pinned to this build's (FLOORS_PINNED, MEDIANS_PINNED), the bounds kept; the re-fit's
 // k_F and medians are printed beside them.
-const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00023486888503762855, FLOOR_VU_KM2: -0.0000015785090659220461, FLOOR_VV_KM2: 0.0013455304755818755,
-  FLOOR_WU_KM2: -0.00001938710688143343, FLOOR_WV_KM2: -0.00016822934658166153, FLOOR_WW_KM2: 0.00020878257959815118 };
-const MEDIANS_PINNED = { "T 24 R": 0.633599, "T 24 C": 0.780153, "T 72 R": 0.744594, "T 72 C": 0.874172, "T 167 R": 0.753561,
-  "S1 24 R": 0.636808, "S1 24 C": 0.659764, "S1 72 R": 0.637268, "S1 72 C": 0.559818, "S1 167 R": 0.851372, "S1 167 C": 0.380038 };
+// 0.6.27 (the slow set's terms of q other than 0) moves the ISS sample's fit again: its error at 12 h against the file's own
+// truth goes from 316.6 to 322.9 m (2.0 %), FLOOR_VV_KM2 from 1.518 to 1.467 times 0.6.0's, FLOOR_UU_KM2 to 1.397 and
+// FLOOR_WW_KM2 to 1.462 times. The held-out cells move by at most 0.011 in median |z| (S1 24 h R 0.6368 to 0.6474); of the 14
+// that move past the bound, 8 move toward 0.674 and 6 away, and one leaves the band (0.603 to 0.754): T 167 h R, 0.7536 to
+// 0.7572.
+// So the floors and medians are pinned to 0.6.27's, the bounds kept (the cost stated in its pull request).
+const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00021677553193454318, FLOOR_VU_KM2: 2.6500774508688905e-7, FLOOR_VV_KM2: 0.0013005930847864295,
+  FLOOR_WU_KM2: -0.000012432207238489321, FLOOR_WV_KM2: -0.00016953453851612765, FLOOR_WW_KM2: 0.00020868838795707218 };
+const MEDIANS_PINNED = { "T 24 R": 0.643032, "T 24 C": 0.787734, "T 72 R": 0.750729, "T 72 C": 0.876057, "T 167 R": 0.757151,
+  "S1 24 R": 0.647389, "S1 24 C": 0.665963, "S1 72 R": 0.646957, "S1 72 C": 0.562886, "S1 167 R": 0.859413, "S1 167 C": 0.380437,
+  "T 24 I": 0.468298, "T 167 C": 0.794573, "S1 72 I": 0.487369 };
 const ISS = { path: "analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", sha256: "fbda48d1584bee1f38ea562625280ecfe4e6643f67c417e91f2fc245ee48311f" };
 const HALF_NORMAL_MEDIAN = 0.6744897501960817, LEADS = [24, 72, 167], AXES = ["R", "I", "C"], RANGE = [0.32, 0.91];
 const REGIMES = { T: "strong drag 2025", S1: "near 700 km 2026" };
@@ -141,6 +148,7 @@ if (row) {
     check(off <= FLOOR_RELATIVE, `${f}: against the slow set's differs by ${off} of the square root of ${d1} x ${d2} (within ${FLOOR_RELATIVE})`);
   }
   console.log(`0.6.1 DRAG row as written: s_e ${row.s_e}, s_i ${row.s_i}, s_l ${row.s_l}, c ${row.c}, floor ${row.k_F} times 0.6.0's`);
+  console.log(`0.6.1 floors as written: ${JSON.stringify(Object.fromEntries(Object.keys(PF).map((f) => [f, now[f]])))}`);
 }
 
 // ---- the held-out windows

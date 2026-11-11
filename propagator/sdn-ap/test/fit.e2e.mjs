@@ -6,7 +6,7 @@
 //   (SPEC 17.4).
 // - MEAN_ELEMENTS printed against test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18 dist's $OMM: BTERM in
 //   BSTAR, AGOM in MEAN_MOTION_DDOT), the epoch equal; the fitted record flown 7 days within FIT_BOUND of the reference
-//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.25's fit, ap-fit-0.6.25.ocm, history
+//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.27's fit, ap-fit-0.6.27.ocm, history
 //   at FIT_BOUND); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
 // - FIT_STATISTICS: FIT_STATES as the 0.4.0 COMMENT states them, FIT_RMS_KM within FIT_BOUND.rmsM of it, ITERATIONS
@@ -67,7 +67,7 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
 
 const cases = [
   { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.4.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
-    fitReference: "ap-fit-0.6.25.ocm",
+    fitReference: "ap-fit-0.6.27.ocm",
     recorded: { version: "0.6.22", cov: "ap-fit-0.6.4-0.6.22.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.4.eme2000-0.6.22.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.4.teme-0.6.22.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
@@ -95,6 +95,10 @@ const cases = [
 // mm/s from 0.6.22's fit (both flown by 0.6.25), FIT_RMS 40.049 against 41.126 m. Against the fixture's own truth
 // (propagator/ffm's 550 km trajectory) the error 48 to 72 h past the arc goes from 114 m (0.6.24) to 43 m, over the arc
 // 24.0 to 23.9 m. So the own fit is 0.6.25's (ap-fit-0.6.25.ocm; 0.6.22's went), the bounds kept.
+// 0.6.27 (the slow set's terms of q other than 0, SPEC 16.18) moves the fit: 77.4 m and 45.1 mm/s from 0.6.25's fit
+// (both flown by 0.6.27), FIT_RMS 40.260 against 40.049 m. Against the fixture's own truth (propagator/ffm's 550 km
+// trajectory) the error 48 to 72 h past the arc stays at 43 m, and over the arc it goes from 23.9 to 24.1 m. So the own
+// fit is 0.6.27's (ap-fit-0.6.27.ocm; 0.6.25's went), the bounds kept.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };
@@ -249,9 +253,9 @@ const covDistance = (a, b) => {
 for (const c of cases) {
   const s = stored[c.name];
   if (!s) continue;
-  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.25's fit), both
+  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.27's fit), both
   // flown by this build; its $ODR names its own $OCM
-  const refName = c.fitReference ? "0.6.25's fit" : "the stored (0.6.4's fit)";
+  const refName = c.fitReference ? "0.6.27's fit" : "the stored (0.6.4's fit)";
   const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.reference, pcfOutputFrame.TEME)];
   check(pf.statusCode === 0 && ps.statusCode === 0, `${c.name}: propagate the fitted and the reference record: ${pf.errorCode ?? "ok"} | ${ps.errorCode ?? "ok"}`);
   if (pf.statusCode === 0 && ps.statusCode === 0) {

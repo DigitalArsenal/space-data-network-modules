@@ -8,7 +8,7 @@
 // weight w and the term's size (along-track amplitude through the mean motion, m).
 // Asserted:
 // - each (l, m, p, q) is listed once (in one place), and w is in [0, 1] (the table holds 1 - w of a term the rates carry);
-// - the rule (from 0.6.NN every q, |q| up to 4; 0.6.25 carried q = 0): every term whose size reaches 0.5 m is in the rates
+// - the rule (from 0.6.27 every q, |q| up to 4; 0.6.25 carried q = 0): every term whose size reaches 0.5 m is in the rates
 //   unless its family's leading degree is 69 or 70 (code 4: the embedded field ends that series at once), every term in the
 //   rates beyond the shallow set's own (j = 1, q = 0 to degree 31) reaches 0.5 m, and no row is code 6;
 // - the list's capacity (2,048 terms): no row is code 7 on a sweep of the low table (12 to 16.6 rev/day, 8 inclinations,
