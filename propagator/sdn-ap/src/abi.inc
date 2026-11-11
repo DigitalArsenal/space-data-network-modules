@@ -458,8 +458,8 @@ double sdnap_hansen_g(int32_t l, int32_t p, int32_t q, double e, int32_t mode) {
 /// under the floor or the slow cut, 4 nowhere: above the carrier's degree, 5 nowhere: under the size cut, 6 nowhere: a q
 /// outside the rule's q range at or above the size cut, 7 nowhere: a term the low table's rules select that its list's
 /// capacity could not hold; then the rates' weight w and the term's size in m), at most
-/// max_rows. Returns the count of all rows, or -1 for a set it does not cover. It covers the sets above their switch outside
-/// low orbit (codes 1, 2, 0 and 4) and the low table (class 0, a period under 1,100 min, at or below its eccentricity switch:
+/// max_rows. Returns the count of all rows, or -1 for a set it does not cover. It covers the sets above their switch, low orbit
+/// included (codes 1, 4 and 5), and the low table (class 0, a period under 1,100 min, at or below its eccentricity switch:
 /// codes 1, 3, 0, 4, 5 and 6; 0 nowhere under the table's 1e-3 n floor, 4 also a family whose leading degree is 69 or 70).
 /// A diagnostic: no flight reads it.
 SDNAP_EXPORT("sdnap_slow_terms")
@@ -471,6 +471,50 @@ int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
   const int cls = res::band_of(n);
   if (cls == 0 && sdnap::kTwoPi / n < kLongPeriodMinutes && !tess::wide_set(cls, e)) return tess::slow_listing_low(cap, n, e, inc, rows, max_rows);
   return tess::slow_terms(cap, cls, n, e, inc, rows, max_rows);
+}
+
+/// The grid's families above the eccentricity switch (SPEC 16.11; stack #473): in = mean motion (rev/day), e, i (deg), the
+/// degree (2 to tess::kGridCap); rows of 4 doubles (m, w, the largest share on the grid of any of the family's terms in m, 1 if
+/// the grid builds the family: that share reaches tess::kGridKeepM), every family of the degree, at most max_rows. Returns the
+/// count of all rows, or -1 for a set or degree it does not cover. A diagnostic: no flight reads it.
+SDNAP_EXPORT("sdnap_wide_families")
+int32_t sdnap_wide_families(const double* in, double* rows, int32_t max_rows) {
+  using namespace sdnap::xpt;
+  const double n = in[0] * sdnap::kTwoPi / sdnap::kMinutesPerDay, e = in[1], inc = in[2] * sdnap::kPi / 180.0;
+  const int degree = static_cast<int>(in[3]);
+  const int cls = res::band_of(n);
+  if (!(n > 0.0) || !(e > 0.0 && e < 1.0) || !(inc > 0.0 && inc < sdnap::kPi) || degree < 2 || degree > tess::kGridCap ||
+      !tess::wide_set(cls, e))
+    return -1;
+  constexpr int S = tess::kKeepStride;
+  uint8_t* keep = static_cast<uint8_t*>(std::malloc(S * S));
+  double* largest = static_cast<double*>(std::malloc(S * S * sizeof(double)));
+  if (keep == nullptr || largest == nullptr || tess::grid_keep(degree, cls, n, e, inc, keep, largest) < 0) {
+    std::free(keep);
+    std::free(largest);
+    return -1;
+  }
+  int count = 0;
+  for (int m = 1; m <= degree; ++m)
+    for (int w = -degree; w <= degree; ++w) {
+      const int aw = w < 0 ? -w : w;
+      int l0 = m > aw ? m : aw;
+      if (l0 < 2) l0 = 2;
+      if (((l0 - w) & 1) != 0) ++l0;
+      if (l0 > degree) continue;
+      const int at = m * S + (w + tess::kGridCap);
+      if (count < max_rows) {
+        double* r = rows + 4 * count;
+        r[0] = m;
+        r[1] = w;
+        r[2] = largest[at];
+        r[3] = keep[at];
+      }
+      ++count;
+    }
+  std::free(keep);
+  std::free(largest);
+  return count;
 }
 
 /// Frame diagnostics on a state (km, km/s; 6 doubles in, 6 out) at the UTC

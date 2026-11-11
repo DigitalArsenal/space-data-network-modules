@@ -5618,7 +5618,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.slow_extra = sc.count - sc.old_count;
     }
   }
-  const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
+  // SPEC 16.11 (stack #473): above the switch the grid's families reach kGridCap in every class; below it the table's kSpCap
+  const int sp_cap = br.wide_tess != 0 ? tess::kGridCap : tess::kSpCap;
+  const int spd = t.tesseral > sp_cap ? sp_cap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
     const bool wide_sp = br.wide_tess != 0;
@@ -5731,8 +5733,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.half_day = table;
     }
   }
-  // SPEC 16.18 (stack #473): above its switch outside low orbit every class carries its other slow terms in the rates
-  if (sd >= 2 && br.wide_tess != 0 && !(res == 0 && !s.ctx.long_period)) {
+  // SPEC 16.18 (stack #473): above its switch every class, low orbit included, carries its other slow terms in the rates (in
+  // low orbit the shallow set's own beside them, as the low table at or below the switch)
+  if (sd >= 2 && br.wide_tess != 0) {
     if (within_share && anchor->ctx.wide_slow != nullptr) {
       s.ctx.wide_slow = anchor->ctx.wide_slow;
       s.ctx.wide_slow_count = anchor->ctx.wide_slow_count;
@@ -5741,7 +5744,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.shared_mask |= 128;
     } else {
       res::ResCoef* list = nullptr;
-      const int count = tess::slow_terms_wide(spd, res, n0, e.eo, e.xincl, &list);
+      const int count = tess::slow_terms_wide(spd, res, n0, e.eo, e.xincl, res == 0 && !s.ctx.long_period ? sd : 0, &list);
       if (count < 0) return false;
       s.ctx.wide_slow = list;
       s.ctx.wide_slow_count = count;
