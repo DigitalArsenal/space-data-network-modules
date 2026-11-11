@@ -18,7 +18,8 @@
 // 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of 0.4.17 on every window (errors per
 //    lead and axis, BTERM, AGOM); bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by
 //    millimeters and a fit by centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8,
-//    at most 0.022 m in the errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM;
+//    at most 0.022 m in the errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM; AP's own Sun and Moon (SPEC 16.15) move
+//    them by up to 2.45 m and 2.9e-4 (the bound at OUTSIDE_RULE);
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
 //    step 36 h into the arc takes the fall-back, on SWOT-like and Sentinel-3-like (the step flag's figures were $OBD text,
@@ -36,8 +37,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
-// 3's bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg), against 0.4.17 (measured 0.022 m, 2.3e-5, 3.6e-6)
-const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
+// 3's bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg), against 0.4.17 (measured 0.022 m, 2.3e-5, 3.6e-6;
+// AP's own Sun and Moon, SPEC 16.15, stack #446, move these fits: on 0.6.19 at most 2.452 m in the errors, 2.93e-4 in
+// BTERM and 3.0e-6 in AGOM over the 30 windows, so 3 m and 5e-4)
+const OUTSIDE_RULE = {errorsM: 3, btermRelative: 5e-4, agom: 1e-5};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';

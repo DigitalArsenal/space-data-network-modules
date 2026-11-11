@@ -10,6 +10,11 @@
     "text": "A carried forecast is promised to stay within 1 cm of the forecast it was made from; for a forecast at 300 km altitude the largest gap between its stored states is 10.2 mm, just over that line: the record had less than 2 mm to spare there, and a small change to the trajectory (moving the Moon by 38 arcseconds) is enough to cross it. The other orbit classes stay within 6.5 mm."
   },
   {
+    "test": "heo-frame",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#479",
+    "text": "On seven real windows of the TESS space telescope (an orbit of 13.7 days that reaches the Moon's distance) the median prediction error is 0.78 km after one day and 8.6 km after a week, above the earlier record of 0.77 and 7.6 km: with the Moon now in its right place, an error of the model's own Earth-shape terms on that orbit (about 1 to 2 km in a week against a numerical propagator) is no longer partly offset by the old Moon's error."
+  },
+  {
     "test": "molniya-7day-drag-sigma",
     "issue": "DigitalArsenal/spacedatanetwork-stack#438",
     "text": "On a 7-day arc of an eccentric orbit with drag (Molniya), the record states the drag coefficient to 0.09 % while the fitted value is 0.3 to 0.5 % from the truth: the stated uncertainty is 5 to 7 times too small; its position covariance is honest."

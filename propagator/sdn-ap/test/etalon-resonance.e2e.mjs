@@ -80,17 +80,22 @@ if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON
 // 0.6.19 (the one-day class's resonant tail, stack #434; these fits state no FORCES.ECOM2, and with only a sphere AP now
 // sits where a numerical propagator with only a sphere does: SPEC 16.13), 0.6.14 > 0.6.19 in m: IG 13.013 > 13.448,
 // GE 35.277 > 53.297; old path IG 15.768 > 15.621, GE 45.437 > 64.231
+// 0.6.22 (AP's own Sun and Moon, SPEC 16.15, stack #446), 0.6.19 > 0.6.22 in m: Etalon-1 4.21 > 4.08, Etalon-2 5.31 >
+// 4.85, LAGEOS-1 7.170 > 7.114, LAGEOS-2 6.800 > 6.676, LARES-2 8.698 > 8.645, IG 13.448 > 7.602, GE 53.297 > 57.922 (GE
+// without FORCES.ECOM2 rises: what the Moon's error had been offsetting there is the sphere's radiation, SPEC 16.13);
+// old path Etalon-1 6.57 > 6.88, Etalon-2 7.62 > 7.51, LAGEOS-1 7.805 > 7.534, LAGEOS-2 6.729 > 6.781, LARES-2 9.712 >
+// 9.758, IG 15.621 > 14.609, GE 64.231 > 68.912
 const EXPECTED = {
-  etalon: {'ETALON 1': {baseline: 23.37, value: 4.21}, 'ETALON 2': {baseline: 32.76, value: 5.31}},
-  nonregression: {'LAGEOS 1': 7.170, 'LAGEOS 2': 6.800, 'LARES-2': 8.698, IG: 13.448, GE: 53.297},
+  etalon: {'ETALON 1': {baseline: 23.37, value: 4.08}, 'ETALON 2': {baseline: 32.76, value: 4.85}},
+  nonregression: {'LAGEOS 1': 7.114, 'LAGEOS 2': 6.676, 'LARES-2': 8.645, IG: 7.602, GE: 57.922},
 };
 // OLD on the old path, as the fit lane re-pinned it at 0.6.13 (stack issue 324: every object here is above the drag,
 // perigee 5,600 km and up, and now fitted at the data's own sigma, SPEC 12.1; 0.6.11 > 0.6.13 in m: Etalon-1 6.719 >
 // 6.568, Etalon-2 7.743 > 7.618, LAGEOS-1 7.826 > 7.805, LAGEOS-2 6.773 > 6.729, LARES-2 9.737 > 9.712, IG 17.095 >
 // 15.768, GE 45.863 > 45.437; none rose)
 const OLD = {
-  etalon: {'ETALON 1': {baseline: 26.64, value: 6.57}, 'ETALON 2': {baseline: 36.39, value: 7.62}},
-  nonregression: {'LAGEOS 1': 7.805, 'LAGEOS 2': 6.729, 'LARES-2': 9.712, IG: 15.621, GE: 64.231},
+  etalon: {'ETALON 1': {baseline: 26.64, value: 6.88}, 'ETALON 2': {baseline: 36.39, value: 7.51}},
+  nonregression: {'LAGEOS 1': 7.534, 'LAGEOS 2': 6.781, 'LARES-2': 9.758, IG: 14.609, GE: 68.912},
 };
 if (!process.argv.includes('--measure')) {
   for (const [label, want, got] of [['', EXPECTED, {etalon, nonregression}], ['old path: ', OLD, old]]) {
