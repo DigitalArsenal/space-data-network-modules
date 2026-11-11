@@ -4560,7 +4560,7 @@ inline void y0_unit_rates(const RateContext& ctx, const double* y, const Frame& 
 /// the epoch, half of one) acts at its center c, through one quadrature at the state there (the cubic between the two
 /// nodes) with the Sun there, added to the node the step arrives at: every element by its rate times the block, lambda
 /// also by the block's change of n over the time from c to the node. A step that passes no center adds nothing; the
-/// mean elements are off by at most half a block's worth of the rates between centers (0.1 m at 1e-9 m/s^2). A pure
+/// mean elements are off by at most half a block's worth of the rates between centers (0.2 m at 1e-9 m/s^2). A pure
 /// function of the two nodes: the same grid whatever the order of requests.
 inline void y0_blocks(const RateContext& ctx, const Node& a, Node& out) {
   const double dir = out.t >= a.t ? 1.0 : -1.0;
