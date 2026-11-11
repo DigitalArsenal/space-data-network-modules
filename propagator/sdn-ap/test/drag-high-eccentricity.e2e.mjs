@@ -53,8 +53,10 @@ const FIXTURES = {
 // 1214.34 / 844.43, 8950.00 / 6033.98, 8687.67 / 5684.50 and 53.76 / 27.18; 0.6.5 by at most 0.04 m. The E-grid read C1
 // (stack #420) moved the three seeded flights, which nothing fits: Molniya 1214.38 / 844.45 to 1215.83 / 845.44, GTO
 // 8949.97 / 6033.96 to 8944.13 / 6030.04, GTO-500 8687.66 / 5684.49 to 8685.26 / 5682.93 (0.03 to 0.12 % of errors of
-// 1.2 to 8.9 km from an osculating seed); the drag-off fit 53.73 / 27.15 to 53.74 / 27.15.
-const DRAG_OFF = {'Molniya seed off': [1215.83, 845.44], 'GTO seed off': [8944.13, 6030.04], 'GTO-500 seed off': [8685.26, 5682.93], 'Molniya drag off': [53.74, 27.15]};
+// 1.2 to 8.9 km from an osculating seed); the drag-off fit 53.73 / 27.15 to 53.74 / 27.15. AP's own Sun and Moon (SPEC
+// 16.15, stack #446, on 0.6.19) move them to 1208.57 / 840.01, 8971.52 / 6053.53, 8711.83 / 5705.36 and 56.98 / 27.94
+// (-0.6 to +0.3 % of the seeded flights; the drag-off fit +3.24 / +0.79 m).
+const DRAG_OFF = {'Molniya seed off': [1208.57, 840.01], 'GTO seed off': [8971.52, 6053.53], 'GTO-500 seed off': [8711.83, 5705.36], 'Molniya drag off': [56.98, 27.94]};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');
   if (log) return {sigmaLog: Number(log[1]), median: Number(log[2])};
