@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-10T23:31:04.459Z",
+  "generatedAt": "2026-11-11T00:25:43.561Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7501,7 +7501,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.12",
+      "version": "0.6.13",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7524,7 +7524,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 153,
+      "testFileCount": 154,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7562,6 +7562,7 @@
         "test/etalon-resonance.e2e.mjs",
         "test/exports.e2e.mjs",
         "test/fit-bterm-700-1400-km.e2e.mjs",
+        "test/fit-data-sigma.e2e.mjs",
         "test/fit-per-object-prior-multi.e2e.mjs",
         "test/fit-second-solution.e2e.mjs",
         "test/fit-short-arc-priors.e2e.mjs",

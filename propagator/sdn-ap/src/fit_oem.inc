@@ -85,12 +85,38 @@ inline double minutes_between(double w0, double f0, double w1, double f1) {
   return ((w1 - w0) + (f1 - f0)) * kMinutesPerDay;
 }
 
-/// SPEC 17.3: the a priori sigma of each TEME position component the fit weights with (unit weights: 1 km), the
-/// weighting it states (OD_DATA_WEIGHTING), and WEIGHTED_RMS: the post-fit RMS of the position components over that
+/// SPEC 17.3: the weighting the record states (OD_DATA_WEIGHTING): under drag the a priori sigma of each TEME position
+/// component, 1 km (unit weights, kUnitWeighting); above the drag the data's own sigma the fit weighted them with
+/// (fit::reweight, SPEC 12.1; weighting_text). WEIGHTED_RMS is the post-fit RMS of the position components over that
 /// sigma, sqrt(sum (r_i / sigma)^2 / (3 states)) = FIT_RMS_KM / sqrt(3) / sigma.
-constexpr double kMeasurementSigmaKm = 1.0;
-constexpr const char* kWeighting = "UNIT WEIGHTS: A PRIORI SIGMA 1 KM PER TEME POSITION COMPONENT";
-inline double weighted_rms(double fit_rms_km) { return fit_rms_km / std::sqrt(3.0) / kMeasurementSigmaKm; }
+constexpr const char* kUnitWeighting = "UNIT WEIGHTS: A PRIORI SIGMA 1 KM PER TEME POSITION COMPONENT";
+inline std::string weighting_text(double sigma_km) {
+  char text[200];
+  std::snprintf(text, sizeof text,
+                "EQUAL WEIGHTS: SIGMA %.6g KM PER TEME POSITION COMPONENT, THE POST-FIT RESIDUAL SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM",
+                sigma_km);
+  return text;
+}
+inline double weighted_rms(double fit_rms_km, double sigma_km) { return fit_rms_km / std::sqrt(3.0) / sigma_km; }
+
+/// SPEC 12.1: the position sigma an ephemeris block states, km per component: the root of the mean, over its
+/// COVARIANCE_MATRIX_LINES, of (CX_X + CY_Y + CZ_Z) / 3 (a trace, the same in any axes the lines are in); 0 when it
+/// states none.
+inline double stated_sigma_km(const ephemerisDataBlock* blk) {
+  const auto* lines = blk->COVARIANCE_MATRIX_LINES();
+  if (lines == nullptr) return 0.0;
+  double sum = 0.0;
+  int n = 0;
+  for (const covarianceMatrixLine* c : *lines) {
+    if (c == nullptr) continue;
+    const double v = (c->CX_X() + c->CY_Y() + c->CZ_Z()) / 3.0;
+    if (std::isfinite(v) && v > 0.0) {
+      sum += v;
+      ++n;
+    }
+  }
+  return n > 0 ? std::sqrt(sum / n) : 0.0;
+}
 
 /// SPEC 17.3: SEDR (W/kg) of a fitted set, the energy its non-gravitational forces remove (the $OCM's definition):
 /// -dE/dt = (mu / (3 a)) (n-dot_ng / n), positive under drag, from `ng_rate` (n-dot_ng / n in 1/day, the theory's
@@ -518,8 +544,11 @@ static int fit_blocks() {
         double fit_begin_min = 0.0, fit_end_min = 0.0;  ///< the fit interval's first and last state, minutes from the epoch
         pcf::Prior srp{};                                ///< AGOM's prior as used (SPEC 12.1 short-arc rule)
         bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
+        double sigma_km = 0.0;  ///< the data sigma the fit weighted with, above the drag (SPEC 12.1); 0: the stages' 1 km
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
+      // SPEC 12.1: the input's own position sigma, where the block states one (a floor of the data sigma)
+      const double stated_km = fitoem::stated_sigma_km(blk);
       pcf::Prior used_drag = po.drag_prior;
       // span_minutes ending at all[end_index]; the states after it held out (the validation tail)
       auto run_pass = [&](double span_minutes, Pass& P, uint32_t end_index, int placement_override = -1,
@@ -679,6 +708,18 @@ static int fit_blocks() {
         iterations += res.iterations;
         if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
+        // SPEC 12.1: above the drag (cov::regime_of: the perigee at or above 2,500 km, where the theory's density is
+        // 1e-20 at every point of the orbit) the whole-arc fit is redone at the data's own sigma, so the priors stop
+        // pulling against data far more precise than the 1 km the stages weigh at. Under drag the 1 km stands: the
+        // residual there is the theory's own error, correlated along the arc, and at its bare scatter BTERM and AGOM
+        // absorb it (measured on the laser-ranged spheres' 24 h arcs).
+        double sigma_km = 0.0;
+        if (cov::regime_of(row) != 0) {
+          double weighted = fit::kUnitSigmaKm;
+          fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, weighted, iterations);
+          if (weighted != fit::kUnitSigmaKm) sigma_km = weighted;
+        }
+        P.sigma_km = sigma_km;
         P.t_fit = std::move(t_fit);
         P.r_fit = std::move(r_fit);
         P.t_out = std::move(t_out);
@@ -807,7 +848,7 @@ static int fit_blocks() {
         cov::Set first_cov;
         double first_ng = 0.0;
         const bool first_have = cov::of_fit(chosen.row, chosen.opt, chosen.t_fit.data(), chosen.r_fit.data(),
-                                            static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, first_cov, first_ng);
+                                            static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, chosen.sigma_km, first_cov, first_ng);
         const double sl = first_have ? first_cov.log_sigma[0] : 0.0;
         const fitoem::ArcCheck first_arc =
             fitoem::arc_check(chosen.row, chosen.t_fit.data(), chosen.r_fit.data(), static_cast<int>(chosen.t_fit.size()));
@@ -860,6 +901,9 @@ static int fit_blocks() {
       fit::Result& res = chosen.res;
       const int iterations = chosen.iterations;
       const double fit_begin_min = chosen.fit_begin_min, fit_end_min = chosen.fit_end_min;
+      // SPEC 12.1: the sigma the fit weighted the data with: its own above the drag, the stages' 1 km under it
+      const double sigma_km = chosen.sigma_km;
+      const double weight_sigma_km = sigma_km > 0.0 ? sigma_km : fit::kUnitSigmaKm;
       // SGP4XP: the set the library reads, at the two-line text's digits searched on their lattice. An AP set (SPEC 16.1,
       // marked as 16.5 states) flies on AP only and keeps the solution's full precision (16.9).
       const bool lattice = po.forces.tesseral == 0 && po.forces.zonal == 0;
@@ -871,7 +915,8 @@ static int fit_blocks() {
       // SPEC 12: the fit's covariance at its solution (at the two-line digits), its epoch image the $OMM's COVARIANCE
       cov::Set fit_cov;
       double ng_rate = 0.0;
-      const bool have_cov = cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, fit_cov, ng_rate);
+      const bool have_cov =
+          cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, sigma_km, fit_cov, ng_rate);
       // SPEC 12.8: above e 0.3 with the perigee in the drag, on an arc shorter than 7 days, the residual is the theory's,
       // not noise, and the arc does not separate BTERM from it: the arc's width on BTERM is the offset whose signature over
       // the arc equals the RMS floor (the formal information over the residual components), combined with the prior's;
@@ -1046,8 +1091,9 @@ static int fit_blocks() {
       }
       const auto s_comment = fbb.CreateVectorOfStrings(comment);
       const auto s_od_method = fbb.CreateString("BATCH LEAST SQUARES");
-      const auto s_od_algorithm = fbb.CreateString("LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS");
-      const auto s_od_weighting = fbb.CreateString(fitoem::kWeighting);
+      const auto s_od_algorithm = fbb.CreateString(sigma_km > 0.0 ? "LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, WEIGHTED AT THE DATA SIGMA"
+                                                                  : "LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS");
+      const auto s_od_weighting = fbb.CreateString(sigma_km > 0.0 ? fitoem::weighting_text(sigma_km) : std::string(fitoem::kUnitWeighting));
       const auto s_od_epoch = fbb.CreateString(epoch_text);
       OrbitDeterminationBuilder od(fbb);
       od.add_OD_ALGORITHM(s_od_algorithm);
@@ -1060,7 +1106,7 @@ static int fit_blocks() {
       od.add_OD_DYNAMIC_PARAMETERS(s_dyn);
       // SPEC 17.3: WEIGHTED_RMS, the post-fit RMS of the position components over the a priori sigma the fit weighted
       // them with; SEDR from the fitted non-gravitational n-dot (written with the covariance that states it)
-      od.add_WEIGHTED_RMS(fitoem::weighted_rms(res.rms_km));
+      od.add_WEIGHTED_RMS(fitoem::weighted_rms(res.rms_km, weight_sigma_km));
       if (have_cov) od.add_SEDR(fitoem::sedr(row, ng_rate));
       // CCSDS elapsed counts from the epoch back to the first and last observation, written when not negative
       if (-fit_begin_min >= 0.0) od.add_DAYS_SINCE_FIRST_OBS(-fit_begin_min / kMinutesPerDay);
@@ -1157,13 +1203,13 @@ static int fit_blocks() {
           const auto s_code = rb.CreateString(model_code);
           ODREditedObservationBuilder eb(rb);
           eb.add_OBSERVATION_ID(s_id);
-          eb.add_NORMALIZED_RESIDUAL((observed - computed) / fitoem::kMeasurementSigmaKm);
+          eb.add_NORMALIZED_RESIDUAL((observed - computed) / weight_sigma_km);
           if (!s_reason.IsNull()) eb.add_REASON(s_reason);
           eb.add_EPOCH(s_epoch_k);
           eb.add_OBSERVATION_TYPE(memMeasurementType_POSITION_VECTOR);
           eb.add_OBSERVED_VALUE(observed);
           eb.add_COMPUTED_VALUE(computed);
-          eb.add_WEIGHT(accepted ? 1.0 / (fitoem::kMeasurementSigmaKm * fitoem::kMeasurementSigmaKm) : 0.0);
+          eb.add_WEIGHT(accepted ? 1.0 / (weight_sigma_km * weight_sigma_km) : 0.0);
           eb.add_ACCEPTED(accepted);
           eb.add_PERTURBATION_MODEL_CODE(s_code);
           edited.push_back(eb.Finish());
