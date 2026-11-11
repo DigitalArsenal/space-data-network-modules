@@ -189,7 +189,21 @@ void sdnap_free(void* pointer) { std::free(pointer); }
 SDNAP_EXPORT("sdnap_init_elements")
 int32_t sdnap_init_elements(const sdnap::ElementRow* rows, uint32_t count) {
   if (rows == nullptr && count > 0) return ORBPRO_PROP_BAD_INPUT;
-  const int32_t held = sdnap::store_init(rows, count);
+  // SPEC 16.13: an SGP4XP row stating SGP4's first derivative of the mean motion is held refused (elements-other-theory):
+  // inside the module that slot carries an AP set's radiation term, which enters only from a record
+  uint8_t* refused = nullptr;
+  for (uint32_t i = 0; i < count; ++i) {
+    if (!sdnap::row_states_sgp4_ndot(rows[i])) continue;
+    if (refused == nullptr) {
+      refused = static_cast<uint8_t*>(std::calloc(count, 1));
+      if (refused == nullptr) return ORBPRO_PROP_BAD_INPUT;
+      plugin_set_error("elements-other-theory",
+                       "An SGP4XP row carries MEAN_MOTION_DOT (SGP4's term, ElementRow.mean_motion_dot not 0): the row is held refused.");
+    }
+    refused[i] = 1;
+  }
+  const int32_t held = sdnap::store_init(rows, count, refused);
+  std::free(refused);
   return held < 0 ? ORBPRO_PROP_BAD_INPUT : held;
 }
 
@@ -334,6 +348,15 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
   if (row == nullptr || minutes == nullptr || positions == nullptr || options == nullptr || count < 3)
     return ORBPRO_PROP_BAD_INPUT;
   if (row->theory != sdnap::kTheorySgp4Xp) return ORBPRO_PROP_BAD_INPUT;
+  if (sdnap::row_states_sgp4_ndot(*row)) {  // SPEC 16.13, as sdnap_init_elements
+    plugin_set_error("elements-other-theory", "An SGP4XP row carries MEAN_MOTION_DOT (SGP4's term, ElementRow.mean_motion_dot not 0).");
+    return ORBPRO_PROP_BAD_INPUT;
+  }
+  if (options->fit_y0 != 0) {  // SPEC 16.13: Y0 is fitted by the fit method under FORCES.ECOM2 and lives in the record
+    plugin_set_error("parameter-record-only:ECOM2_Y0",
+                     "ECOM2_Y0 is fitted by the fit method under $PCF FORCES.ECOM2 and carried in its $OCM; an ElementRow does not carry it.");
+    return ORBPRO_PROP_BAD_INPUT;
+  }
   sdnap::drag::table();
   const sdnap::fit::Result r = sdnap::fit::run(*row, minutes, positions, static_cast<int>(count), *options);
   if (stats != nullptr) {

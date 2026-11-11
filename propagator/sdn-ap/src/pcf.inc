@@ -98,6 +98,8 @@ struct Options {
   uint32_t weather_horizon_days = 30;  ///< FIT.WEATHER_HORIZON_DAYS: the rows the $OCM carries past its epoch's day
   // FORCES (fit): the force model (SPEC 15, 16)
   Forces forces{};
+  bool ecom2 = false;      ///< SPEC 16.13: FORCES.ECOM2 present: AP's radiation term Y0 is in the fit
+  double ecom2_y0 = 0.0;   ///< its Y0_M_S2 (m/s^2): the start, the prior's mean and the value held on a short arc
   // OUTPUT
   int output_frame = pcfOutputFrame_UNSPECIFIED;
   double output_step_s = 60.0;
@@ -406,21 +408,49 @@ inline int read_atmosphere(const PCFForceModel* f, Forces& o) {
 /// FORCES for the averaged theories: their forces are the theory's own; a FORCES table carries the required
 /// EPHEMERIS_SOURCE, empty (the theory's own analytic Sun and Moon series), and on fit and propagate (`atmosphere`)
 /// the drag atmosphere's fields (SPEC 15). Any other field away from its default is refused by name.
+/// SPEC 16.13: FORCES.ECOM2 on fit: AP's radiation term Y0 beside the sphere, fitted from Y0_M_S2 (finite; the start and
+/// the prior's mean). Every other coefficient away from 0 is refused by name (AP's direct term is the sphere's AGOM;
+/// the others are not in its theory); so is the table without AP's gravity terms, which carry the term (SPEC 16).
+inline int read_ecom2(const PCFForceModel* f, Options& o) {
+  const PCFEcom2* e = f->ECOM2();
+  if (e == nullptr) return 0;
+  struct Term {
+    const char* name;
+    double value;
+  };
+  const Term others[] = {{"FORCES.ECOM2.D0_M_S2", e->D0_M_S2()},         {"FORCES.ECOM2.B0_M_S2", e->B0_M_S2()},
+                         {"FORCES.ECOM2.D2_COS_M_S2", e->D2_COS_M_S2()}, {"FORCES.ECOM2.D2_SIN_M_S2", e->D2_SIN_M_S2()},
+                         {"FORCES.ECOM2.D4_COS_M_S2", e->D4_COS_M_S2()}, {"FORCES.ECOM2.D4_SIN_M_S2", e->D4_SIN_M_S2()},
+                         {"FORCES.ECOM2.B1_COS_M_S2", e->B1_COS_M_S2()}, {"FORCES.ECOM2.B1_SIN_M_S2", e->B1_SIN_M_S2()},
+                         {"FORCES.ECOM2.B3_COS_M_S2", e->B3_COS_M_S2()}, {"FORCES.ECOM2.B3_SIN_M_S2", e->B3_SIN_M_S2()}};
+  for (const Term& t : others)
+    if (t.value != 0.0) return refuse(t.name, "of ECOM2's coefficients AP fits Y0 (Y0_M_S2); its direct term is the sphere's AGOM (FIT.SRP_PRIOR)");
+  if (!std::isfinite(e->Y0_M_S2())) return refuse("FORCES.ECOM2.Y0_M_S2", "a number, m/s^2");
+  if (o.forces.tesseral == 0 && o.forces.zonal == 0)
+    return refuse("FORCES.ECOM2", "AP's radiation term is fitted with its gravity terms (MAXIMUM_TESSERAL_DEGREE or MAXIMUM_DEGREE above 0)");
+  o.ecom2 = true;
+  o.ecom2_y0 = e->Y0_M_S2();
+  return 0;
+}
+
 inline int read_forces(const PCFForceModel* f, bool atmosphere, Options& o) {
   if (f == nullptr) return atmosphere ? refuse("FORCES.ATMOSPHERE_MODEL", "fit states the atmosphere it fits under: JACCHIA70 or NRLMSISE00") : 0;
   for (size_t k = 0; k < sizeof kForceFields / sizeof kForceFields[0]; ++k) {
     const uint16_t vt = static_cast<uint16_t>(4 + 2 * k);
-    if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE || (atmosphere && atmosphere_field(vt)) || !off_default(raw(f), vt, kForceFields[k])) continue;
+    if (vt == PCFForceModel::VT_EPHEMERIS_SOURCE || (atmosphere && (atmosphere_field(vt) || vt == PCFForceModel::VT_ECOM2)) ||
+        !off_default(raw(f), vt, kForceFields[k]))
+      continue;
     char name[96];
     std::snprintf(name, sizeof name, "FORCES.%s", kForceFields[k].name);
-    return refuse(name, atmosphere ? "fit states its force model by ATMOSPHERE_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, MAXIMUM_TESSERAL_DEGREE and MAXIMUM_DEGREE only"
+    return refuse(name, atmosphere ? "fit states its force model by ATMOSPHERE_MODEL, WEATHER_SOURCE, DENSITY_CORRECTION, MAXIMUM_TESSERAL_DEGREE, MAXIMUM_DEGREE and ECOM2 only"
                                    : "the averaged theories (SGP4XP) apply their own forces here; fit and propagate select the drag atmosphere");
   }
   if (f->EPHEMERIS_SOURCE() != nullptr && f->EPHEMERIS_SOURCE()->size() != 0)
     return refuse("FORCES.EPHEMERIS_SOURCE", "the averaged theories read their own analytic Sun and Moon series (leave it empty)");
   if (!atmosphere) return 0;
   if (const int rc = read_gravity_terms(f, o.forces)) return rc;
-  return read_atmosphere(f, o.forces);
+  if (const int rc = read_atmosphere(f, o.forces)) return rc;
+  return read_ecom2(f, o);
 }
 
 /// Reads the method's `configuration` ($PCF): 0 and the options() set, or 3 with the error set.
