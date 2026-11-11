@@ -326,9 +326,9 @@ query work is not bounded independently of lead time.
 
 An AP state is a function of its set and its time alone. The order of requests, the call they come in, the sets flown
 between them, and whether the covariance is asked leave its bits unchanged (`test/set-caches.e2e.mjs`, nine orbits). A
-store's AP set keeps its own caches and node runs from one pool: a 256 MB budget by default, set with sdnap_cache_budget,
-counted by sdnap_cache_stats. SPEC 9 states how room is shared and the one exception: a record that carries a
-covariance, through `propagate`, differs by 0.39 mm.
+store's AP set keeps its own caches and node runs from one pool, 256 MB (the module's default; no typed configuration
+carries a budget yet), read by sdnap_cache_stats. SPEC 9 states how room is shared, the caches by part and the one
+exception: a record that carries a covariance, through `propagate`, differs by 0.39 mm.
 
 Memory per AP set flown: the module's own count (`sdnap_epochs_stats`), 250 made-up sets of each orbit, each flown a day
 at 300 s, headline forces. A loaded set that has not been flown holds 0.3 KB.
@@ -344,26 +344,65 @@ at 300 s, headline forces. A loaded set that has not been flown holds 0.3 KB.
 | e 0.1 or transfer orbit, tesseral 31 | 3.1 to 6.4 MB | 16 to 18 KB | (stack #424) |
 
 The instance's own growth agrees with these within 10 %. The default budget holds the caches of 3,664 sets at 500 km
-and 13,252 in MEO. Sets beyond it fly on the thread's caches, with the same states.
+and 13,252 in MEO; 1 GB holds 14,658 and 53,008 (SPEC 9 has every orbit). Sets beyond it fly on the thread's caches, with
+the same states. A host that screens a catalog flies it object by object: at 10,000 sets at 500 km, 0.93 µs a state at
+the default budget (0.85 times SGP4-XP), against 9.1 µs time-major (7.8 times; 2.25 µs, 1.9 times, when 1 GB holds them
+all).
 
 Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 3.1 MB, and a node grid while it
 is flown. One process holds at most 256 such grids, so beyond them states are refused (stack #424).
 
-AP's cost against SGP4's depends on the request pattern (0.6.6, `test/kernel-patterns.mjs`,
-`test/results/kernel-patterns.json`: made-up orbits, AP seeded with zonal 20, tesseral 31 at e 0.048 and below and
-NRLMSISE-00, SGP4 on the same elements, CPU per state, AP and SGP4 interleaved, median of 7 rounds, owner Mac under
-load). One record stepped alone in ascending order at 300 s: 1.2 to 2.7 times on near-circular orbits. Many records
-stepped together, every record at each instant (`sdnap_epochs_at`, 2 to 10,000 records): 34 to 40 times in low orbit,
-7.3 to 7.9 times in medium Earth orbit, 2.2 times at geosynchronous altitude; each record's tesseral and third-body
-tables are rebuilt when another record was flown last. The same states record by record: 1.1 to 3.4 times. The first
-state of a freshly loaded record in a running process: 52 to 66 times at its epoch, 28 to 96 times a day later, 123 to
-289 times a week later (3,158 to 10,833 times on a transfer orbit at e 0.72); a process pays 390 to 660 µs more once.
-Times in random order: 37 to 153 times (1,990 on the transfer orbit); a request outside the cached bracket integrates
-from the nearest checkpoint. Above e 0.05 (perigee 600 km, tesseral 31) a low orbit costs 77 to 88 times, against 2.6
-to 2.7 at e 0.02 to 0.05. Through `propagate` in TEME, 7 days at 300 s: a seeded record (no covariance) 1.2 to 2.2
-times; a fitted record writes a covariance line per state (613,304 bytes against SGP4's 185,840) and costs 4.9 to 27
-times. In GCRF and EME2000 a state costs what it costs in TEME (`test/output-frames.mjs`; the output's GCRF matrix comes
-from 6 h nodes, SPEC 16.4); with that matrix computed at each state, both records cost 31 to 47 µs per state there.
+AP's cost against SGP4-XP's and SGP4's by request pattern, measured on 2026-11-10 with `test/kernel-patterns.mjs`:
+
+- made-up orbits;
+- AP seeded with zonal 20, tesseral 31 at e 0.048 and below, and NRLMSISE-00;
+- stock SGP4XP and SGP4 on the same elements;
+- CPU time per state, the three theories taken in turn, 7 rounds;
+- the 1-minute load printed beside each row.
+
+Each figure is the ratio inside one pass (AP over SGP4-XP, then over SGP4), because a ratio survives a busy machine far
+better than microseconds do.
+
+**Many records stepped together, every record at each instant (`sdnap_epochs_at`, 60 s), at 2, 100, 1,000 and 10,000
+records.**
+
+| Orbit | AP over SGP4-XP | AP over SGP4 | 0.6.11, AP over SGP4-XP |
+| --- | --- | --- | --- |
+| 500 km | 1.1 / 0.7 / 1.3 / 7.8 | 8.1 / 2.8 / 4.1 / 28 | 36 / 11 / 11 / 11 |
+| 830 km | 0.6 / 0.7 / 1.0 / 6.6 | 2.3 / 2.6 / 1.5 / 26 | 10 / 10 / 9.9 / 9.8 |
+| MEO, 10,000 records | 1.1 | 4.1 | 2.6 |
+
+At 10,000 low-orbit records the budget binds: the caches of 3,664 sets fit, and the rest fly on the thread's caches.
+The same states object by object cost 0.85 times SGP4-XP. On the carrier lane's catalog mix (70 % low orbit) at 10,000
+records: time-major 3.9 times SGP4-XP, object-major 1.5 times (the eccentric sets carry the excess).
+
+**One record in random order over 7 days at 300 s.** AP over SGP4-XP is 0.2 at 500 km and 830 km, 0.4 in MEO, 0.03 at
+GEO (SGP4-XP pays 27 to 32 µs a state there) and 19 on the transfer orbit. On 0.6.11 the same rows read 0.7 to 2.2, and
+81 on the transfer orbit.
+
+**One warm record in ascending order (W1)**, flown back to back against 0.6.12 in a cleared slot (load 15 to 25). The
+figures come from the minimum and the steady rounds: single-threaded rounds swing by up to 5 times on this shared
+machine, so a median here means little.
+
+- 500 km about 13 % slower than 0.6.12, 830 km 5 to 7 % slower: about 0.82 of SGP4-XP's cost at 500 km, against 0.71
+  on 0.6.12.
+- MEO equal; GEO 2.3 times faster; the transfer orbit 1.7 times faster.
+- What remains in low orbit: the bracket-anchored bake bookkeeping, about 6 % (stack #441), and the node re-evaluation,
+  about 4 % (stack #439).
+
+**The first state of a freshly loaded record**, warm instance: at 7 days, 25 to 28 % slower than 0.6.12 at 500 km and
+GEO (#439: each node step evaluates node a's held rates again). Against SGP4-XP: 1.3 at 500 km at 7 days and 3.3 at
+GEO. The transfer orbit's first state costs 4.8 to 19.6 ms, about 250 times SGP4-XP: its eccentric zonal tables, which
+this cache rework does not touch.
+
+**The full `propagate` call** in GCRF, 7 days at 300 s, one warm record, against 0.6.12:
+
+- a record fitted with covariance is 11 % slower at 500 km (7.0 against 6.3 µs a state) and 15 % at GEO (19.3 against
+  16.5);
+- a seeded record is equal at 500 km and 13 % slower at GEO.
+
+Above e 0.05 with tesseral 31 (perigee 600 km), a low orbit costs 18 to 20 times SGP4-XP, unchanged (stack #339).
+Without the tesseral terms it costs 0.3 to 0.4 times.
 
 
 ## SGP4XP status

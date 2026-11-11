@@ -1524,9 +1524,33 @@ as two runs (forward and backward) up to the checkpoint span. A time inside a ru
 run starts from the latest node known at or before the time (the epoch, a checkpoint or the window's), and starts again
 when a time precedes it.
 
-The pool's budget defaults to 256 MB and is set by sdnap_cache_budget (MB). sdnap_cache_stats reports, as 8 doubles: the
-budget and the bytes held; the sets holding caches, and of them those holding tesseral caches; the caches reclaimed; the
-caches and tesseral caches refused; and the tesseral caches made.
+The pool's budget is the module's default, 256 MB. Configuration reaches a module only as a typed message, and none
+carries the budget yet (PCF.EPOCH_STORE has no such field; a standards issue asks for one), so no export sets it.
+sdnap_cache_stats reads the pool, as 8 doubles: the budget and the bytes held; the sets holding caches, and of them those
+holding tesseral caches; the caches reclaimed; the caches and tesseral caches refused; and the tesseral caches made.
+
+Caches per set flown a day (a week), by part, and the sets whose caches a budget holds:
+
+| Orbit | Total | Tesseral | Node runs | Third-body bracket | m-daily | 256 MB | 1 GB | 2 GB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 500 km | 71.5 KB (79.0) | 58.2 | 2.5 (10.0) | 5.8 | 4.6 | 3,664 | 14,658 | 29,317 |
+| 830 km | 64.2 KB (71.1) | 50.9 | 2.5 (9.4) | 5.8 | 4.6 | 4,082 | 16,328 | 32,656 |
+| low orbit, e 0.052 | 13.3 KB (20.2) | 0 | 2.5 (9.4) | 5.8 | 4.6 | 19,691 | 78,766 | 157,532 |
+| MEO | 19.8 KB | 7.1 | 1.9 | 5.8 | 4.6 | 13,252 | 53,008 | 106,017 |
+| GEO | 33.3 KB (62.1) | 2.5 | 20.0 (48.8) | 5.8 | 4.6 | 7,861 | 31,447 | 62,894 |
+| transfer orbit | 15.8 KB (22.1) | 0 | 5.0 (11.3) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
+
+The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 0.8 KB, in the set itself.
+
+A catalog is flown object by object. At 10,000 low-orbit sets (500 km), measured per state at load 10 to 14:
+
+| Pattern | 256 MB (the default) | All held (1 GB) | SGP4-XP |
+| --- | --- | --- | --- |
+| Object-major | 0.93 µs, 0.85 times SGP4-XP | 0.78 µs, 0.73 times | 1.09 µs |
+| Time-major | 9.1 µs, 7.8 times | 2.25 µs, 1.9 times | 1.17 µs |
+
+A caller that screens a catalog flies it object by object, or in blocks that fit the budget. The time-major pattern (every
+set at each instant) is what display segments are for.
 
 How room is shared:
 

@@ -11,6 +11,8 @@
 //   steady cycle over more sets than fit reclaims nothing, the sets without room fly on the thread's caches), the last
 //   twenty alone (the holders no longer flown are reclaimed), the first twenty again (their runs refill from where they
 //   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
+// The pool's threads: 1,000 AP rows of the carrier lane's catalog mix through sdnap_propagate_soa at 20 instants, on 0
+// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424).
 // Through `propagate` (#420): a time asked alone against the same time inside one call of 2,016 states, bit for bit.
 // JS moves bytes and compares numbers the module produced.
 //   node test/set-caches.e2e.mjs
@@ -21,7 +23,7 @@ import { OEM } from "spacedatastandards.org/lib/js/OEM/OEM.js";
 import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
-import { ensureBuilt, wasmPath } from "./lib/module.mjs";
+import { ensureBuilt, wasmPath, elementRows, THEORY } from "./lib/module.mjs";
 import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
 import { T, seedOcm, rowsThrough } from "./lib/ocm.mjs";
 
@@ -56,9 +58,10 @@ for (let i = 0, j = times.length - 1; i <= j; ++i, --j) { ends.push(i); if (i !=
 const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b[q]));
 
 ensureBuilt();
-async function open(file) {
-  const h = await createStandaloneHarness("browser", file, { surface: "direct", maxThreads: 1, enableBrowserWasiThreads: false });
+async function open(file, threads = 0) {
+  const h = await createStandaloneHarness("browser", file, { surface: "direct", maxThreads: Math.max(1, threads), enableBrowserWasiThreads: threads > 0 });
   const x = h.instance.exports;
+  if (threads > 0) x.sdnap_threads(threads);
   const out = x.sdnap_alloc(48), stats = x.sdnap_alloc(64);
   const mem = () => new Float64Array((h.memory ?? x.memory).buffer);
   return {
@@ -80,8 +83,11 @@ const shipped = await open(wasmPath);
 const { h, load, at } = shipped;
 // the budget is the module's default (256 MB) and no export sets it (configuration reaches the module as a typed message,
 // and none carries it yet): the budget cases run on a test build of the same sources that adds the setter
-const tiny = await open(buildDiagnostic("set-caches-budget",
-  'SDNAP_EXPORT("sdnap_test_cache_budget") uint32_t sdnap_test_cache_budget(uint32_t mb) { return sdnap::xpt::cache_budget_mb(mb); }'));
+// (and AP's terms for the row store, which no call selects outside a call: the pool-thread case below)
+const testBuild = buildDiagnostic("set-caches-budget",
+  'SDNAP_EXPORT("sdnap_test_cache_budget") uint32_t sdnap_test_cache_budget(uint32_t mb) { return sdnap::xpt::cache_budget_mb(mb); }\n' +
+  'SDNAP_EXPORT("sdnap_test_select_ap") void sdnap_test_select_ap(int32_t t, int32_t z) { sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{t, z}; }');
+const tiny = await open(testBuild);
 tiny.x.sdnap_test_cache_budget(1);
 check(tiny.stats()[0] === 2 ** 20 && shipped.stats()[0] === 256 * 2 ** 20, `budgets: the test build ${tiny.stats()[0]}, the shipped default ${shipped.stats()[0]}`);
 check(shipped.x.sdnap_test_cache_budget === undefined && shipped.x.sdnap_cache_budget === undefined, "the shipped build exports a budget setter");
@@ -141,6 +147,45 @@ for (const [name, o] of Object.entries(ORBITS)) {
   check(s2[4] > s1[4], `the last twenty sets alone reclaimed no caches of the sets no longer flown (${s1[4]} then ${s2[4]})`);
   check(s1[1] <= s1[0] && s2[1] <= s2[0], `the pool holds ${s1[1]} then ${s2[1]} bytes, over its budget ${s2[0]}`);
   console.log(`40 sets at 1 MB: bit for bit; the cycle over all 40 kept its holders (${s1[2]} sets with caches, ${s1[3]} with tesseral caches, ${onThread(s1) - onThread(s0)} asks on the thread's caches, ${s1[4] - s0[4]} reclaimed); the last 20 alone reclaimed ${s2[4] - s1[4]}; ${s2[1]} of ${s2[0]} bytes held`);
+}
+{
+  // the pool's threads: 1,000 AP rows of the carrier lane's catalog mix (its seeded sequence; the transfer and Molniya
+  // orbits left out, whose family grids meet stack #424's cap and are refused by whichever thread asks last) in the row
+  // store (sdnap_init_elements, AP's terms selected, the theory's own flux model), sdnap_propagate_soa at 20 instants
+  // on 0 and on 4 pool threads: every double and status the same
+  let seed = 20261110;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const rows = [];
+  for (let k = 0; rows.length < 1000; k++) {
+    const u = rnd();
+    let a, e, i;
+    if (u < 0.70) { a = RE + 300 + 1200 * rnd() ** 1.5; e = 0.02 * rnd() ** 2; i = 100 * rnd(); }
+    else if (u < 0.80) { a = 26560 + 200 * (rnd() - 0.5); e = 0.02 * rnd(); i = 50 + 10 * rnd(); }
+    else if (u < 0.88) { a = 42164 + 50 * (rnd() - 0.5); e = 0.001 * rnd(); i = 15 * rnd(); }
+    else if (u < 0.95) { const rp = RE + 250 + 350 * rnd(); e = 0.5 + 0.25 * rnd(); a = rp / (1 - e); i = 7 + 50 * rnd(); }
+    else { a = 26560; e = 0.70 + 0.04 * rnd(); i = 63.4; }
+    const row = { epochWhole: 2461328.5, epochFrac: 0, meanMotion: revPerDay(a), ecc: e, inc: i, raan: 360 * rnd(), argp: 360 * rnd(), ma: 360 * rnd(),
+      bterm: a < RE + 2000 ? 0.005 + 0.05 * rnd() : 0.01, agom: 0.01, norad: 100000 + k, theory: THEORY.SGP4XP };
+    if (e < 0.3) rows.push(row);
+  }
+  const fly = async (threads) => {
+    const m = await open(testBuild, threads);
+    m.x.sdnap_test_select_ap(31, 20);
+    const bytes = elementRows(rows), n = rows.length;
+    const p = m.x.sdnap_alloc(bytes.length);
+    new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
+    check(m.x.sdnap_init_elements(p, n) === n, `${threads} threads: the row store took ${n} rows`);
+    const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), all = [];
+    for (let k = 0; k < 20; ++k) {
+      check(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status) === 0, `${threads} threads: sdnap_propagate_soa`);
+      all.push(...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n));
+    }
+    return all;
+  };
+  const zero = await fly(0), four = await fly(4);
+  const differ = zero.filter((v, k) => !Object.is(v, four[k])).length;
+  check(zero.length === four.length && differ === 0, `the pool's threads: ${differ} of ${zero.length} values differ between 0 and 4 threads`);
+  console.log(`1,000 AP rows of the catalog mix through sdnap_propagate_soa: 0 and 4 pool threads bit for bit (${zero.length} values)`);
 }
 {
   // through propagate (#420): a time alone against the same time in one call
