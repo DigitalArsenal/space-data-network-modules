@@ -3199,6 +3199,12 @@ one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow
 wholly sunlit over the flight. In shadow, where section 4's decision was right, a flight moves by nanometers (4e-9 m
 over 7 days on a Galileo-like set), because the boundaries are now solved to full precision.
 
+*The pressure constant.* AP keeps section 4's P = 4.5e-6 N/m^2, and SGP4XP must. The numerical propagator's
+cannonball uses the solar flux 1361 W/m^2 / c = 4.54e-6 N/m^2. A fit takes the 0.88 % into AGOM: fitted against
+FFM's sphere, AGOM comes out 0.8 to 0.9 % above FFM's coefficient, with nothing lost in forecast (three real
+geostationary windows, 2025-10). An AGOM taken from a spacecraft's physical area, mass and reflectivity instead of
+fitted is 0.88 % low in AP's units against a propagator that uses 1361 W/m^2.
+
 *Not carried, with their sizes.* Each size is the difference over 7 days of a made-up flight with the same epoch
 state and integrator, in season.
 - **The penumbra.** AP's shadow is the cylinder; the numerical propagator flies a cone with umbra and penumbra. The
