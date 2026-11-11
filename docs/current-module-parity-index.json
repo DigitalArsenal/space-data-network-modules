@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T01:53:00.781Z",
+  "generatedAt": "2026-11-11T02:05:41.532Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 159,
+      "testFileCount": 160,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7602,6 +7602,7 @@
         "test/lib/experiments.mjs",
         "test/lib/ffm-truth.mjs",
         "test/lib/fixture-inputs.mjs",
+        "test/lib/frames-cross.mjs",
         "test/lib/frames.mjs",
         "test/lib/geo-window-confirmation.mjs",
         "test/lib/gn-short-arc-windows.mjs",
