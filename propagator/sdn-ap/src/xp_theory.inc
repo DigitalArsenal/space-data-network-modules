@@ -5883,7 +5883,7 @@ inline bool try_lock(int32_t* word) {
 }
 
 /// The sets' caches (SPEC 9): every SetCaches and the tesseral caches they hold count against one budget (default
-/// 256 MB, sdnap_cache_budget). The pool's clock ticks at every ask for room; a holder's stamp is the clock when it was
+/// 256 MB; cache_budget_mb). The pool's clock ticks at every ask for room; a holder's stamp is the clock when it was
 /// last flown. A set that needs room takes free room, or reclaims the holders flown least recently, but only those not
 /// flown since its own previous ask: a steady cycle over more sets than fit keeps its holders (each was flown within
 /// the cycle) and the others fly on the thread's caches, while holders no longer flown give way. Never one being flown.
@@ -5965,6 +5965,21 @@ inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, 
   for (XpSat* v : p.holders) left = std::min(left, v->caches->stamp);
   p.floor = p.holders.empty() ? __atomic_load_n(&p.clock, __ATOMIC_RELAXED) : std::max(p.floor, left);
   return p.held + need <= p.budget;
+}
+
+/// Sets the pool's budget to `megabytes` (0 keeps it) and returns it in MB; a smaller budget reclaims at once, the sets
+/// flown longest ago first (not one being flown). No export calls it: configuration reaches the module as a typed
+/// message, and none carries the budget yet; test builds (test/lib/ap-diagnostic.mjs) and benchmarks link it.
+inline uint32_t cache_budget_mb(uint32_t megabytes) {
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  if (megabytes > 0) {
+    p.budget = static_cast<uint64_t>(megabytes) << 20;
+    pool_reclaim_locked(p, 0, nullptr, UINT64_MAX);
+  }
+  const uint32_t mb = static_cast<uint32_t>(p.budget >> 20);
+  unlock(&p.lock);
+  return mb;
 }
 
 /// s's caches, made within the budget (s's cache_lock held by the caller); nullptr when there is no room. A first ask

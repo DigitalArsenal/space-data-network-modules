@@ -56,6 +56,21 @@ struct SpAnchor {
   double tlo = 0.0, h = 1.0;
   double a_lo = 1.0, a_hi = 1.0, e_lo = 0.0, e_hi = 0.0, c_lo = 1.0, c_hi = 1.0;
 };
+/// The points per level on the bracket g_sp_anchor names (sp_anchor_point), counted once per bracket: keyed by the
+/// bracket, so it never outlives it.
+struct SpAnchorLevels {
+  uint64_t id = 0;
+  double tlo = 0.0, h = 0.0;
+  struct Level {
+    double tol_a, tol_e, tol_c;
+    bool e_sq;
+    int n;
+  };
+  static constexpr int kLevels = 6;
+  Level lv[kLevels]{};
+  int count = 0;
+};
+inline thread_local SpAnchorLevels g_sp_anchor_levels{};
 inline thread_local SpAnchor g_sp_anchor{};
 /// Whether time t lies on the bracket g_sp_anchor names.
 inline bool sp_anchored(double t) {
@@ -71,11 +86,29 @@ inline bool sp_anchored(double t) {
 /// part.
 inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, double tol_e, bool e_sq, double tol_c, double& a_c,
                                double& e_c, double& c_c) {
-  const double da = std::fabs(an.a_hi - an.a_lo) / (tol_a * an.a_lo);
-  const double de = e_sq ? std::fabs(an.e_hi * an.e_hi - an.e_lo * an.e_lo) / tol_e : std::fabs(an.e_hi - an.e_lo) / tol_e;
-  const double dc = tol_c > 0.0 ? std::fabs(an.c_hi - an.c_lo) / tol_c : 0.0;
-  const double need = 2.0 * std::fmax(da, std::fmax(de, dc));
-  const int n = need < 1.0 ? 1 : (need >= 64.0 ? 64 : static_cast<int>(std::ceil(need)));
+  // the bracket's points one tolerance apart (each point within half a tolerance of the chord it stands for, as a cell's
+  // center is), counted once per bracket and level
+  SpAnchorLevels& L = g_sp_anchor_levels;
+  if (L.id != an.id || L.tlo != an.tlo || L.h != an.h) {
+    L.id = an.id;
+    L.tlo = an.tlo;
+    L.h = an.h;
+    L.count = 0;
+  }
+  int n = 0;
+  for (int j = 0; j < L.count; ++j)
+    if (L.lv[j].tol_a == tol_a && L.lv[j].tol_e == tol_e && L.lv[j].tol_c == tol_c && L.lv[j].e_sq == e_sq) {
+      n = L.lv[j].n;
+      break;
+    }
+  if (n == 0) {
+    const double da = std::fabs(an.a_hi - an.a_lo) / (tol_a * an.a_lo);
+    const double de = e_sq ? std::fabs(an.e_hi * an.e_hi - an.e_lo * an.e_lo) / tol_e : std::fabs(an.e_hi - an.e_lo) / tol_e;
+    const double dc = tol_c > 0.0 ? std::fabs(an.c_hi - an.c_lo) / tol_c : 0.0;
+    const double need = std::fmax(da, std::fmax(de, dc));
+    n = need < 1.0 ? 1 : (need >= 64.0 ? 64 : static_cast<int>(std::ceil(need)));
+    if (L.count < SpAnchorLevels::kLevels) L.lv[L.count++] = SpAnchorLevels::Level{tol_a, tol_e, tol_c, e_sq, n};
+  }
   int k = static_cast<int>(std::floor((t - an.tlo) / an.h * n));
   k = k < 0 ? 0 : (k >= n ? n - 1 : k);
   const double q = (k + 0.5) / n;

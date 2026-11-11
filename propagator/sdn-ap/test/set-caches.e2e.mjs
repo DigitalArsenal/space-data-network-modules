@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// E2E (sdn-ap 0.6.12, stack issues #398 and #420): an AP state is a function of its set and its time alone.
+// E2E (sdn-ap 0.6.14, stack issues #398 and #420): an AP state is a function of its set and its time alone.
 // Made-up AP sets with the headline forces (zonal 20, tesseral 31, NRLMSISE-00 on made-up quiet rows), near-circular
 // (500 km, 830 km, MEO, GEO) and eccentric (e 0.1 and 0.25 with tesseral 31, the transfer orbit with and without
 // tesseral 31, Molniya), 7 days at 300 s from a day after the epoch. In the epoch store (sdnap_epochs_set_at):
 // - random order and alternating ends against ascending order, bit for bit;
 // - one state from a freshly loaded record against the ascending pass, bit for bit;
 // - two records interleaved (time-major) against each alone, bit for bit;
-// - the same with the pool's budget at 1 MB (sdnap_cache_budget); then forty 500 km sets at 1 MB stepped together (a
+// - the same with the pool's budget at 1 MB, on a test build of the same sources that adds the setter (the shipped
+//   build keeps its 256 MB default: no export sets it, no typed message carries it yet); then forty 500 km sets at 1 MB stepped together (a
 //   steady cycle over more sets than fit reclaims nothing, the sets without room fly on the thread's caches), the last
 //   twenty alone (the holders no longer flown are reclaimed), the first twenty again (their runs refill from where they
 //   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
@@ -21,6 +22,7 @@ import { PCFT } from "spacedatastandards.org/lib/js/PCF/PCF.js";
 import { PCFOutputT } from "spacedatastandards.org/lib/js/PCF/PCFOutput.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { ensureBuilt, wasmPath } from "./lib/module.mjs";
+import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
 import { T, seedOcm, rowsThrough } from "./lib/ocm.mjs";
 
 const failures = [];
@@ -54,21 +56,35 @@ for (let i = 0, j = times.length - 1; i <= j; ++i, --j) { ends.push(i); if (i !=
 const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b[q]));
 
 ensureBuilt();
-const h = await createStandaloneHarness("browser", wasmPath, { surface: "direct", maxThreads: 1, enableBrowserWasiThreads: false });
-const x = h.instance.exports;
-const out = x.sdnap_alloc(48), stats = x.sdnap_alloc(64);
-const mem = () => new Float64Array((h.memory ?? x.memory).buffer);
-const load = async (records) => {
-  const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(records.map(prefixed)) }] });
-  if (r.statusCode !== 0) throw new Error(`load_epochs ${r.errorCode}: ${r.errorMessage}`);
-};
-const at = (i, ms) => {
-  const [w, f] = jd(ms);
-  const rc = x.sdnap_epochs_set_at(i, 0, w, f, out);
-  if (rc !== 0) throw new Error(`sdnap_epochs_set_at ${rc}`);
-  return Array.from(mem().subarray(out / 8, out / 8 + 6));
-};
-const cacheStats = () => { x.sdnap_cache_stats(stats); return Array.from(mem().subarray(stats / 8, stats / 8 + 8)); };
+async function open(file) {
+  const h = await createStandaloneHarness("browser", file, { surface: "direct", maxThreads: 1, enableBrowserWasiThreads: false });
+  const x = h.instance.exports;
+  const out = x.sdnap_alloc(48), stats = x.sdnap_alloc(64);
+  const mem = () => new Float64Array((h.memory ?? x.memory).buffer);
+  return {
+    h, x,
+    load: async (records) => {
+      const r = await h.invoke({ methodId: "load_epochs", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: Buffer.concat(records.map(prefixed)) }] });
+      if (r.statusCode !== 0) throw new Error(`load_epochs ${r.errorCode}: ${r.errorMessage}`);
+    },
+    at: (i, ms) => {
+      const [w, f] = jd(ms);
+      const rc = x.sdnap_epochs_set_at(i, 0, w, f, out);
+      if (rc !== 0) throw new Error(`sdnap_epochs_set_at ${rc}`);
+      return Array.from(mem().subarray(out / 8, out / 8 + 6));
+    },
+    stats: () => { x.sdnap_cache_stats(stats); return Array.from(mem().subarray(stats / 8, stats / 8 + 8)); },
+  };
+}
+const shipped = await open(wasmPath);
+const { h, load, at } = shipped;
+// the budget is the module's default (256 MB) and no export sets it (configuration reaches the module as a typed message,
+// and none carries it yet): the budget cases run on a test build of the same sources that adds the setter
+const tiny = await open(buildDiagnostic("set-caches-budget",
+  'SDNAP_EXPORT("sdnap_test_cache_budget") uint32_t sdnap_test_cache_budget(uint32_t mb) { return sdnap::xpt::cache_budget_mb(mb); }'));
+tiny.x.sdnap_test_cache_budget(1);
+check(tiny.stats()[0] === 2 ** 20 && shipped.stats()[0] === 256 * 2 ** 20, `budgets: the test build ${tiny.stats()[0]}, the shipped default ${shipped.stats()[0]}`);
+check(shipped.x.sdnap_test_cache_budget === undefined && shipped.x.sdnap_cache_budget === undefined, "the shipped build exports a budget setter");
 
 for (const [name, o] of Object.entries(ORBITS)) {
   const one = [record(o, 0)], two = [record(o, 0), record(o, 1)];
@@ -90,17 +106,13 @@ for (const [name, o] of Object.entries(ORBITS)) {
   check(freshDiffer === 0, `${name}: one state from a fresh record against the ascending pass: ${freshDiffer} of 24 differ`);
   await load([record(o, 1)]);
   const asc1 = times.map((ms) => at(0, ms));
-  for (const budget of [0, 1]) {
-    if (budget > 0) x.sdnap_cache_budget(budget);
-    await load(two);
+  for (const m of [shipped, tiny]) {
+    await m.load(two);
     let differ = 0;
-    times.forEach((ms, i) => { if (!same(at(0, ms), asc[i]) || !same(at(1, ms), asc1[i])) ++differ; });
-    check(differ === 0, `${name}: two records interleaved${budget ? " at a 1 MB budget" : ""} against each alone: ${differ} of ${times.length} instants differ`);
-    if (budget > 0) {
-      const s = cacheStats();
-      check(s[1] <= s[0], `${name}: the pool holds ${s[1]} bytes, over its budget ${s[0]}`);
-      x.sdnap_cache_budget(256);
-    }
+    times.forEach((ms, i) => { if (!same(m.at(0, ms), asc[i]) || !same(m.at(1, ms), asc1[i])) ++differ; });
+    check(differ === 0, `${name}: two records interleaved${m === tiny ? " at a 1 MB budget" : ""} against each alone: ${differ} of ${times.length} instants differ`);
+    const s = m.stats();
+    check(s[1] <= s[0], `${name}: the pool holds ${s[1]} bytes, over its budget ${s[0]}`);
   }
   console.log(`${name}: random order, alternating ends, fresh records and interleaving bit for bit`);
 }
@@ -114,23 +126,21 @@ for (const [name, o] of Object.entries(ORBITS)) {
   const alone = first.map((ms) => records.map((_, i) => at(i, ms)));
   const aloneThen = then.map((ms) => records.map((_, i) => (i >= 20 ? at(i, ms) : null)));
   const aloneLast = last.map((ms) => records.map((_, i) => (i < 20 ? at(i, ms) : null)));
-  x.sdnap_cache_budget(1);
-  await load(records);
-  const s0 = cacheStats();
+  await tiny.load(records);
+  const s0 = tiny.stats();
   let differ = 0;
-  first.forEach((ms, k) => records.forEach((_, i) => { if (!same(at(i, ms), alone[k][i])) ++differ; }));
-  const s1 = cacheStats();
-  then.forEach((ms, k) => records.forEach((_, i) => { if (i >= 20 && !same(at(i, ms), aloneThen[k][i])) ++differ; }));
-  const s2 = cacheStats();
+  first.forEach((ms, k) => records.forEach((_, i) => { if (!same(tiny.at(i, ms), alone[k][i])) ++differ; }));
+  const s1 = tiny.stats();
+  then.forEach((ms, k) => records.forEach((_, i) => { if (i >= 20 && !same(tiny.at(i, ms), aloneThen[k][i])) ++differ; }));
+  const s2 = tiny.stats();
   // the first twenty again: their caches were reclaimed, the runs refill from where each set was flown
-  last.forEach((ms, k) => records.forEach((_, i) => { if (i < 20 && !same(at(i, ms), aloneLast[k][i])) ++differ; }));
+  last.forEach((ms, k) => records.forEach((_, i) => { if (i < 20 && !same(tiny.at(i, ms), aloneLast[k][i])) ++differ; }));
   check(differ === 0, `40 sets at a 1 MB budget against the same at 256 MB: ${differ} states differ`);
   const onThread = (s) => s[5] + s[6];  // caches and tesseral caches refused: flown on the thread's
   check(onThread(s1) > onThread(s0) && s1[4] === s0[4], `the cycle over 40 sets at 1 MB: ${onThread(s1) - onThread(s0)} asks on the thread's caches (some expected), ${s1[4] - s0[4]} caches reclaimed (none expected)`);
   check(s2[4] > s1[4], `the last twenty sets alone reclaimed no caches of the sets no longer flown (${s1[4]} then ${s2[4]})`);
   check(s1[1] <= s1[0] && s2[1] <= s2[0], `the pool holds ${s1[1]} then ${s2[1]} bytes, over its budget ${s2[0]}`);
   console.log(`40 sets at 1 MB: bit for bit; the cycle over all 40 kept its holders (${s1[2]} sets with caches, ${s1[3]} with tesseral caches, ${onThread(s1) - onThread(s0)} asks on the thread's caches, ${s1[4] - s0[4]} reclaimed); the last 20 alone reclaimed ${s2[4] - s1[4]}; ${s2[1]} of ${s2[0]} bytes held`);
-  x.sdnap_cache_budget(256);
 }
 {
   // through propagate (#420): a time alone against the same time in one call
