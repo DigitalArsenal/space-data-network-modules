@@ -4748,8 +4748,10 @@ inline int slow_terms(int cap, int cls, double n, double e, double inc, double* 
 constexpr int kGridN = 128, kGridNE = 128, kGridD = 64;
 constexpr double kGridDe = 1e-4, kGridDi = 1e-4, kGridDa = 1e-5;  // the forward differences of the derivative grids
 /// The families left off the grid (wide_keep): the smallest, while their sizes (wide_families: the largest position
-/// displacement a family gives at a node) sum to at most this many meters.
-constexpr double kWideDropM = 1e-2;
+/// displacement a family gives at a node) sum to at most this many meters (SPEC 16.11). Over 7 days at 300 s the flight
+/// moves by 1.1 to 3.4 cm on THEMIS-like, transfer-orbit, Molniya, Chandra-like and TESS-like sets (1.2 to 5.3 mm at 1 cm,
+/// 9 to 71 cm at 1 m), and the grid's cost goes with the families it keeps.
+constexpr double kWideDropM = 0.1;
 /// A grid is built at the set's mean elements at every kGridEvery minutes from its epoch (the same nodes for every set of a fit) and
 /// blended linearly into the next node's over the last kGridBlend of each interval.
 constexpr double kGridEvery = 48.0 * 60.0, kGridBlend = 0.2;

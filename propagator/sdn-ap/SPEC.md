@@ -2895,6 +2895,30 @@ full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at
 Which slow terms the grid keeps (from 0.6.24, in the one-day class, every slow term the class's rates do not carry, down to
 the floor of 1e-2 n; stack #467) is 16.18's rule; its reasons and measurements are stated there.
 
+*Which families the grid keeps* (stack #497). From 0.6.x each (m, w) family has a size: the largest position displacement its
+six components give at a grid node, radial (r/a) da - a cos f de + (a e sin f / eta) dM, along-track r (dvarpi - tan(i/2)
+sin i dOmega + (df/de) de + (a/r)^2 eta dM) with dM = dlambda - dvarpi, and normal at most r (|di| + |sin i dOmega|)
+(`src/tesseral.inc` `wide_families`). The grid leaves out the smallest families while their sizes sum to at most 10 cm
+(`wide_keep`, `kWideDropM`); a grid that keeps no family is not read. At degree 12 a family's size spans 3e-15 m to 2.3 km on
+a THEMIS-like set and 6e-26 m to 15 m on a TESS-like set. `sdnap_wide_families(in, rows, max_rows)` lists them: in = the mean
+motion (rev/day), e, i (deg) and the degree (2 to 12); rows of four doubles (m, w, the size in m, 1 kept or 0 left out); it
+returns the count of all families, -1 for inputs it does not cover. A diagnostic: no flight reads it. Against 0.6.25, 7 days
+at 300 s (FORCES 31,20; F10.7 70 and Ap 4; B 0.01 m^2/kg; the Chandra-like and TESS-like sets also take 16.12's drag line),
+and the cost per state of a warm set over 7 days at 300 s (owner Mac under load, browser host, median of 9 interleaved
+repeats; SGP4XP's set beside it):
+
+| Set | families kept of 288 | largest difference (m) | us per state, 0.6.25 to 0.6.x | SGP4XP (us) |
+| --- | --: | --: | --: | --: |
+| THEMIS-like (22.9 h, perigee 900 km, i 10) | 111 | 0.011 | 127.8 to 112.2 | 1.3 |
+| transfer orbit (2.26 rev/day, e 0.72, i 27) | 176 | 0.023 | 34.8 to 23.7 | 1.4 |
+| Molniya (2.006 rev/day, e 0.74, i 63.4) | 241 | 0.034 | | |
+| Chandra-like (63.5 h, perigee 19,000 km, i 65) | 65 | 0.026 | 28.6 to 7.1 | 1.2 |
+| TESS-like (13.7 days, perigee 102,000 km, i 40) | 11 | 0.014 | 29.7 to 1.9 | 1.1 |
+
+The cost sets take B 1.27e-3 (transfer orbit) and 1.27e-4 m^2/kg; the THEMIS-like set's cost is its drag passage's (100.7 us
+with no family on the grid), which its 900 km perigee keeps. With a budget of 1 cm the five move by 1.2 to 5.3 mm, with 1 m
+by 0.09 to 0.71 m; with no grid at all by 21.6 m (TESS-like) to 2.9 km (THEMIS-like).
+
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
 in a 12-hour orbit (13.5 against 6.7 m) and 7.5 m in a geosynchronous orbit (7.6 against 1.1 m), RMS over a 72 h arc.
@@ -3107,6 +3131,28 @@ interleaved, median of 9 runs, ms per object-day from 0.4.15 to 0.4.16):
 
 A rate evaluation takes two passes of 39 nodes against 13; the 1 min grid doubles because every output sample evaluates
 the drag's rates for its short-period steps. Orbits at e 0.3 and below, and without drag, run 0.4.15's path.
+
+**Where drag acts** (stack #497). The theory's density is 1e-20 kg/m^3 above 2,500 km (3.3). From 0.6.x a set above e 0.3
+whose epoch perigee height, (a0 (1 - e0) - 1) Earth radii from its epoch mean motion and eccentricity, is 5,000 km or more
+flies with B taken as 0 and runs no drag passage (`Branch::drag_none`, `kDragNoneKm`, `src/xp_theory.inc`). A report of it
+carries the set's own B; a moved set and a fit's trial set take their nominal's rule (16.7). Below 5,000 km a set flies as
+before. The largest position difference between B 0.05 m^2/kg and B 0 over 7 days at 300 s, F10.7 210 and Ap 40, tesseral
+0, zonal 20 (m):
+
+| e | perigee 2,000 km | 2,500 km | 2,550 km | 3,000 km | 4,000 km |
+| --- | --: | --: | --: | --: | --: |
+| 0.82 | 12.0 | 0.074 | 0.002 | 0.002 | 0.001 |
+| 0.73 | 15.1 | 0.084 | | | |
+| 0.5 | 19.7 | 0.837 | 0.004 | 0.004 | 0.004 |
+| 0.31 | | | 0.005 | 0.004 | 0.004 |
+
+At a mean perigee of 2,500 km the osculating perigee dips below the density's limit. The Sun and the Moon move a perigee:
+from 3,000 km (i 27, 63.4 and 90 deg; argp 0, 45, 90 and 135 deg; RAAN 0, 90, 180 and 270 deg; 30 days at 600 s, the
+osculating perigee of each state) it falls by up to 22 km in 30 days at apogee 20,000 km, 69 km at 40,000 km, 198 km at
+70,000 km, 582 km at 120,000 km and 1,835 km at 200,000 km, and by 1,853 km in 7 days at 350,000 km. The line at 5,000 km
+keeps 2,500 km of that margin above the density's limit. The real THEMIS windows of the table (perigee 790 to 940 km) keep
+their drag; Chandra's (19,000 km) and TESS's do not. `test/heo-cost-rules.e2e.mjs` flies a set at e 0.7 with and without B:
+the same bytes at a perigee of 5,200 km, different at 4,800 km.
 
 ---
 
