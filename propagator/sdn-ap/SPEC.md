@@ -3394,6 +3394,40 @@ At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/m
   propagator's -2.26e-9). Inclined geosynchronous rows: unchanged.
 - Cost: one closed-form term (two sines and cosines) where a sunlit-arc rate is evaluated.
 
+**16.16 The shadow in the output-time terms** (stack issue 472, the second clash of 16.15). Section 4's output-time
+terms K(E) are the antiderivatives in the mean anomaly M of the osculating rates less their wholly sunlit average,
+divided by n: against the sunlit-arc formulas, n (K(E2) - K(E1)) = 2 pi rate_arc - rate_full (M2 - M1) holds to 1e-14
+of its scale for all six elements, from e 0 to 0.73. With the shadow the force is off from the entry (M2) to the exit
+(M1 + 2 pi), and the periodic part P obeys dP/dM = (rate lit - rate_arc) / n. AP takes, with L = M2 - M1,
+S = 2 pi - L and rho = (rate_full - rate_arc) / n:
+- on the sunlit arc, P = K(E) + rho (M - M1) + c;
+- through the shadow, P = K(E2) + rho L - (rate_arc / n)(M - M2) + c;
+- lambda's through n's: on the sunlit arc K_lambda + [rho_n (M - M1)^2 / 2 + (c_n + dL)(M - M1)] / n + c_lambda, and
+  through the shadow its value at M2 + [(K_n(E2) + rho_n L + c_n + dL - rate_full_lambda)(M - M2) -
+  (rate_arc_n / n)(M - M2)^2 / 2] / n - (K_lambda(E) - K_lambda(E2)) + c_lambda, with dL = rate_full_lambda -
+  rate_arc_lambda - (1 / 2 pi) int_shadow K_n dM, so that lambda's rate is 16.15's;
+- each c gives P - K a mean of 0 over M (int_shadow K dM by 8-point Gauss-Legendre in E; K_n's in closed form). Pinning
+  c at the exit instead lets the offsets follow the geometry and the residual grow within a week (geostationary span
+  1.0 to 3.0 m against 0.8 to 2.0 m).
+The parameters depend on the slow geometry only. Between the two nodes of the set's bracket the output blends the
+changes from the parameters at each node, a function of the nodes alone (the epoch and covariance sigma sets take the
+parameters at the state). A wholly sunlit orbit takes nothing and flies byte for byte.
+
+*Measured* (the numerical response of 16.15, along track at day 7, then the radial RMS at day 1):
+
+| Set, in season | 16.15 | 16.15 and 16.16 |
+| --- | --- | --- |
+| geostationary | -3.7 m, 1.26 m | -0.57 m, 0.05 m |
+| inclined geosynchronous | -5.5 m, 1.19 m | -2.4 m, 0.05 m |
+| Galileo-like | 13.7 m, 0.71 m | -2.5 m, 0.03 m |
+| GPS-like | -3.0 m, 0.52 m | -0.19 m, 0.01 m |
+| 800 km | -6.6 m, 0.03 m | -0.5 m, 0.002 m |
+| laser geodetic | -0.46 m | -0.27 m |
+
+What remains equals each set's out-of-season residual (the numerical model's baseline). The jump detector of
+egrid-continuity reads the same with and without 16.16 across node boundaries and shadow boundaries (0.19 mm
+geostationary, 0.57 mm Galileo-like at 10 s).
+
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 
