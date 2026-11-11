@@ -195,7 +195,11 @@ inline void row_epoch(uint32_t i, double& whole, double& frac) {
 /// Row i at t minutes from its epoch: TEME km, km/s.
 inline int32_t row_propagate(uint32_t i, double t, double r[3], double v[3], const xpt::Bodies* shared = nullptr) {
   Store& st = store();
-  if (st.kind[i] == 1) return xpt::xp_propagate(st.xps[st.slot[i]], t, r, v, shared);
+  if (st.kind[i] == 1) {
+    // a batch's shared bodies are SGP4XP's (SPEC 5); an AP set reads its own (SPEC 16.14, bodies_at_ap)
+    xpt::XpSat& x = st.xps[st.slot[i]];
+    return xpt::xp_propagate(x, t, r, v, x.ctx.ap_third_body ? nullptr : shared);
+  }
   const Sat& s = st.sats[st.slot[i]];
   return sat_propagate(s, nodes_of(s), t, r, v);
 }

@@ -84,7 +84,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   a field set to a value the module cannot apply is refused by name
   (configuration-refused, "TABLE.FIELD: why"; configuration-missing without one). THEORY: propagate and maneuver read
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
-  KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
+  KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series: SGP4XP's
+  of SPEC 5; AP's own of SPEC 16.14, a fit to DE440 within 4.1 arcsec of it over 2010-2035, in the module): the
   averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
   below) and AP's gravity terms (SPEC 16, below), on `fit` ECOM2's Y0 (SPEC 16.13, below), and any other FORCES field
   is refused by name. INTEGRATOR is refused
@@ -214,6 +215,20 @@ medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a cova
 takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.14 to 5.76 ms for a week hourly, a
 Galileo record; under a load of 10 on 28 cores) and nothing more per state once its grid exists. E2E:
 `test/radiation-y0.e2e.mjs`.
+
+## AP's Sun and Moon (SPEC 16.14; every AP flight and fit)
+
+AP reads its own Sun and Moon; SGP4XP keeps SPEC 5's bit for bit. They are trigonometric series fitted to DE440 over
+1990-2060 (`tools/ap-bodies-fit.mjs`, coefficients in `src/ap_bodies_series.inc`), evaluated at TT (UTC through ERFA's
+leap seconds) and carried to TEME of date (IAU 2006 obliquity, IAU 2000B's largest nutation terms, the equation of the
+equinoxes); flights read the quintic through their values at nodes 8 h apart on an absolute grid, which every set and
+thread reads alike (each thread keeps the nodes it has read). Against DE440 over 2010-2035 the Moon is within
+0.74 arcsec on average and 4.1 at worst (SPEC 5 as AP read it through 0.6.16: 91.5 and 377, 38 of it the time argument)
+and 0.68 km RMS in distance; the Sun within 0.44 and 1.1 arcsec. The Moon's acceleration error at the geostationary
+radius falls from 3.7e-9 to 3.7e-11 m/s^2 RMS. Outside 1990-2060 the series extrapolate (1980-1989: 5.3 arcsec mean, 19 at
+worst). Not carried: the epoch-axis branches hold TEME of the epoch while the bodies are in TEME of date, about 1 arcsec
+at day 7 (3.5e-11 m/s^2 at the geostationary radius). A batch at one time gives AP sets their own bodies, not SGP4XP's.
+E2E: `test/ap-bodies.e2e.mjs` (407 stored DE440 samples).
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
