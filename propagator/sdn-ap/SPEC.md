@@ -3098,8 +3098,9 @@ stored in `test/results/geo-step-convergence.json`.
 carry one term of the empirical ECOM2 model beside the sphere of section 4: Y0, a constant acceleration (m/s^2) along
 eY = unit(eD x r), eD the unit vector to the Sun (Arnold et al. 2015, J. Geod. 89, eq. 1; the convention of
 propagator/ffm lib/gnss_srp.h). The sphere is ECOM2's direct term D0 (the two differ by (1 AU / r_sun)^2, under 0.6 %
-over 10 days), so a separate D0 would only repeat AGOM; B0 and the once-per-revolution terms are not carried. Y0 is zero
-where the sphere's rates count the orbit as in shadow (the same decision, 16.14 and srp_rates).
+over 10 days), so a separate D0 would only repeat AGOM; B0 is not carried, and the once-per-revolution terms B1 cos and
+B1 sin are 16.B1's. Y0 is zero where the sphere's rates count the orbit as in shadow (the same decision, 16.14 and
+srp_rates).
 
 *Theory.* Y0's Gauss rates (the radial component zero) are averaged over the mean anomaly of the mean orbit on its
 sunlit arc by three-point Gauss-Legendre panels: the arc's ends, the points a quarter revolution either side of where
@@ -3249,6 +3250,64 @@ exists a state costs the same.
 
 `test/radiation-y0.e2e.mjs` checks the theory and the fit on a Galileo-like and an inclined geosynchronous orbit, the
 daily fit, a held fit against the fit without the term byte for byte, and the refusals.
+
+**16.B1 ECOM2's once-per-revolution terms B1 cos and B1 sin** (stack #457). Box-shaped navigation satellites need more
+of ECOM2 than Y0. Fitted by the numerical propagator with its radiation model cut down in steps, BeiDou's C020 (BDS-2G)
+needs B1: with D0 and Y0 alone the weighted RMS of its 72 h arcs is 0.26 to 0.30 and day 5 is 103 to 135 m; with B1 it is
+0.04 to 0.06 and 4.6 to 30 m (B1 cos 6.2e-9 to 1.05e-8, B1 sin 3.7e-9 to 4.2e-9 m/s^2). AP carries them beside Y0:
+a = (B1c cos du + B1s sin du) eB, eB = eD x eY, du the satellite's angle in its orbital plane from the Sun's projection
+(Arnold et al. 2015, eq. 2 and Fig. 1; propagator/ffm lib/gnss_srp.h, Ecom2Acceleration and ArgumentFromSun). With s the
+Sun's unit vector on the radial, transverse and normal axes (cd, sd, sw), eB = (cd s - r_hat) / N, N = |s x r_hat|:
+radial -N, transverse cd sd / N, normal cd sw / N; cos du = cd / cb and sin du = -sd / cb, cb the cosine of the Sun's
+elevation above the orbit plane. eD is taken as s, as eY is unit(s x r) (the Sun's parallax, 3e-4 at geostationary
+radius, is left out). Like Y0 the terms are zero where the sphere's rates count the orbit as in shadow.
+
+*Rates.* The full Gauss rates of eB (its radial component too) times cos du and sin du, averaged over the mean anomaly on
+the sunlit arc by Y0's panels (the axes turn where eY does), in Y0's 6 h blocks and the covariance pair step's.
+
+*Output part.* The once-per-revolution motion the averaged rates leave out, about B1 / n^2 (1.9 m at geostationary radius
+for 1e-8 m/s^2, 0.65 m at Galileo's): for every element the zero-mean integral over the mean longitude of its rate,
+d_j(lambda) = (1 / n) int K1(s) rho_j(lambda - s) ds with K1(s) = (pi - s) / (2 pi), and lambda's also
+(1 / n^2) int K2(s) rho_n(lambda - s) ds with K2(s) = -(pi / 6 - s / 2 + s^2 / (4 pi)): the rates' force on the rates'
+sunlit arc. The integrals reduce to the arc's moments of the rates and their partial sums from each panel end, kept in
+a table whose key is the mean orbit rounded (k and h to 2e-5, chi and psi to 1e-4, n to 1e-8 rad/min) with the Sun at
+the nearest 6 h block center: a pure function of the key, made a few times a day; a state takes its panel's part past
+its own longitude from the quadratic through the panel's three points, so it evaluates no rate. Against the same part
+evaluated at the state itself the table moves a flight by at most MEASURED mm.
+
+*Record and transport.* ECOM2_B1_COS and ECOM2_B1_SIN in OD_DYNAMIC_PARAMETERS beside ECOM2_Y0 (m/s\*\*2), written
+where they were solved or are not 0 (PERTURBATIONS.SOLAR_RAD_PRESSURE then names them); inside the module in the slots
+of SGP4's B* and n-ddot (ElementRow.bstar, mean_motion_ddot), which an SGP4XP or AP set does not have; an SGP4XP row from
+outside with either not 0 is refused (elements-other-theory), and flight refuses the terms by name as it refuses Y0's.
+
+*Fit.* $PCF FORCES.ECOM2's B1_COS_M_S2 and B1_SIN_M_S2 are their start, prior means and held values (prior sigma 1e-8
+m/s^2 each: where B1 is solved the data's sigma is 5e-11 to 1.4e-10 for B1 sin and 0.7e-9 to 3.1e-9 for B1 cos, and
+C020's measured B1 cos stays within one sigma). They are solved where the arc carries them: on Y0's arcs, the fit with
+Y0 and B1 (made, as the Y0-only fit, at the data's sigma) is kept where the Y0-only fit's RMS is at most 15 m and its
+own at most 0.9 of it; elsewhere the Y0-only fit stands, B1 held at its stated value, byte for byte as without the
+terms, and the OD COMMENT says which. The price is one more fit at the data's sigma on every window that solves Y0
+(median wall time 393 to 924 ms on the geostationary windows, 316 to 587 ms inclined geosynchronous, 201 to 324 ms
+Galileo). The record's covariance is the parameter block of the inverse made over the parameters and every solved ECOM2
+term, marginal over Y0 and B1, not conditional on them (stack #481): near beta 0, B1 cos and AGOM correlate 0.99 over
+72 h, and the conditional AGOM sigma was 5 to 12 times too small.
+
+*Why the rule.* Solving B1 on every ECOM2 arc costs meters on truths without it (model truth, day 7 against the Y0-only
+fit: +1.4 to +2.1 m geostationary in eclipse season, +2.4 to +4.8 m inclined geosynchronous, +22 m Galileo-like out of
+season), through false B1 sin of about 1e-10 that the data fix at one to two of their own sigmas, where no prior has a
+grip. The fit RMS separates the cases: the ratio with B1 over without is 0.10 to 0.39 where the truth holds B1
+(geostationary and inclined geosynchronous, either sign), 0.93 to 1.00 on inclined geosynchronous and Galileo-like
+truths without it and 0.96 to 1.00 on geostationary ones in season. Out of season, geostationary truths without B1 show
+0.43 to 0.99: AP's own once-per-revolution residual of about a meter there (stack #483), which B1 cos takes up; the
+records of such sets state a B1 cos that is AP's, not the truth's, until #483 is found (their day 7 moves 2.2 to 2.4 m
+either way). An along-track burn of 1 mm/s or more in the arc gives the Y0-only fit an RMS of 22 m or more and is
+refused; one of 0.1 mm/s (RMS 2.7 to 4.4 m) passes on 3 of 10 sets and is not told from B1 by the record's numbers.
+
+*Measured.* Model truth (FFM 20 x 20, Sun and Moon, cannonball, the solid tide; 72 h; geostationary at i 0.05 and 2
+deg, inclined geosynchronous, Galileo-like; 2026-10-01 and 2026-12-01; Y0 -1.5e-9 with B1 cos ±8e-9 and B1 sin ±4e-9):
+with the terms held at the truth's, day 7 is 1.5 to 2.8 m on geostationary and inclined geosynchronous sets, against
+71 to 140 m for the Y0-only fit; under the rule 2.5 to 12.4 m. Real 72 h rows against the Y0-only fit (within 100 m of
+FFMq at day 5): geostationary 28 to 32 of 32 (C020 1 to 5 of 5; day-5 median 26.0 to 16.8 m), inclined geosynchronous
+59 of 59 (6.7 to 5.1 m), Galileo 42 of 42 at 72 h and 24 h byte for byte (B1 solved on none).
 
 **16.15 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
 `sun_at`). Every AP path reads its own (`ap_bodies_at`, src/ap_bodies.inc): the rates in both regimes, the output-time
