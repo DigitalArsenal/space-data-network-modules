@@ -1497,6 +1497,11 @@ transfer orbit with and without tesseral 31, and Molniya. Against ascending orde
 test/carried-identity.e2e.mjs holds the paths: `propagate_epochs`, the store, and `propagate` of the record without its
 covariance give the same bits.
 
+The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the row store, sdnap_propagate_soa on 0, 4 and
+15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
+against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
+grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
+
 What the caches cost in accuracy. Against a build of 0.6.9's terms that bakes every cache fresh at every state, 30 days
 at 60 s (test/kernel-cost.mjs --diff):
 
@@ -1551,6 +1556,24 @@ A catalog is flown object by object. At 10,000 low-orbit sets (500 km), measured
 
 A caller that screens a catalog flies it object by object, or in blocks that fit the budget. The time-major pattern (every
 set at each instant) is what display segments are for.
+
+What the exact state costs a single record, against 0.6.12, flown back to back in a cleared slot (load 15 to 25). The
+figures come from the minimum and the steady rounds: single-threaded rounds swung by up to 5 times on the shared
+machine, so a median means little.
+
+- One warm record in ascending order is 13 % slower at 500 km and 5 to 7 % at 830 km. MEO is equal; GEO is 2.3 times
+  faster and the transfer orbit 1.7 times.
+  - At 500 km the bracket-anchored bake bookkeeping at every state costs about 6 % (stack #441): bake points one
+    tolerance apart and counted once per bracket recovered 11 of 17 %.
+  - The node re-evaluation below costs about 4 % (stack #439).
+- The first state of a fresh record at 7 days is 25 to 28 % slower at 500 km and GEO (stack #439). Each node step
+  evaluates node a's held rates (third body, drag, SRP, the zonal tail) again at the node's own state, which is what
+  makes a step depend on its first node alone. Recovering it takes either carrying the held parts in each node (about
+  7 KB more per set, node runs 2.5 times larger), or restructuring the step's last stage so the node's own evaluation is
+  the one the next step holds fixed (a numerics change with its own accuracy check).
+- The full `propagate` call (GCRF, 7 days at 300 s) of a record fitted with covariance is 11 % slower at 500 km and 15 % at
+  GEO; a seeded record is equal at 500 km and 13 % slower at GEO. The integration of the nominal's nodes carries the node
+  re-evaluation.
 
 How room is shared:
 
