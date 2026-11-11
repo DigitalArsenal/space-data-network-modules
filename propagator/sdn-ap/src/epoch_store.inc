@@ -484,7 +484,7 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
   if (q.error != 0) return q.error;
   // the theory's time from the set's epoch (SPEC 9): an AP set's from the split Julian date when the caller has it, the
   // expression propagate uses, so the store and propagate fly one time (minutes from J2000 round it by up to 1e-7 s
-  // today, 1 mm in low orbit); SGP4XP and SGP4 from the minutes, as before 0.6.16 (their output stays bit for bit)
+  // today, 1 mm in low orbit); SGP4XP and SGP4 from the minutes, as before 0.6.18 (their output stays bit for bit)
   const Entry& en = st.entries[s.first + k];
   const double dt = jd != nullptr && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx)
                         ? ((jd[0] - en.row.epoch_jd_whole) + (jd[1] - en.row.epoch_jd_frac)) * kMinutesPerDay
