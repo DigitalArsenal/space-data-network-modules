@@ -2454,12 +2454,13 @@ inline void eval_tbsp(const double* y, double F, const double A[6][kThirdBodyTai
     const float BT0_f[kThirdBodyTailNodes / 2 + 1][8],
     const float dAT_f[kThirdBodyTailNodes / 2 + 1][8],
     const float dBT_f[kThirdBodyTailNodes / 2 + 1][8],
-    double* d, const double* sF_in = nullptr, const double* cF_in = nullptr) {
+    double* d, const double* sF_in = nullptr, const double* cF_in = nullptr, int rows = kThirdBodyTailNodes / 2) {
   constexpr int M = kThirdBodyTailNodes / 2;
   const double k = y[kAf], h = y[kAg];
-  const int r_max = (k * k + h * h < 4e-4)
-                        ? (y[kN] > 0.035 ? 5 : (y[kN] > 0.015 ? 6 : (y[kN] > 0.006 ? 7 : M)))
-                        : M;
+  // no row above those the tables hold (ActiveBracket::rows; zero there, so the sum is the same bits)
+  const int r_max = std::min(rows, (k * k + h * h < 4e-4)
+                                       ? (y[kN] > 0.035 ? 5 : (y[kN] > 0.015 ? 6 : (y[kN] > 0.006 ? 7 : M)))
+                                       : M);
   double sF, cF;
   if (sF_in != nullptr && cF_in != nullptr) {
     sF = *sF_in;
@@ -2544,12 +2545,14 @@ inline void eval_tbsp_lerp(const double* y, double F, double w0, double w1,
                            const double AT1[kThirdBodyTailNodes / 2 + 1][6],
                            const double BT1[kThirdBodyTailNodes / 2 + 1][6],
                            double* d, double* dd_dlam = nullptr,
-                           const double* sF_in = nullptr, const double* cF_in = nullptr) {
+                           const double* sF_in = nullptr, const double* cF_in = nullptr, int rows = kThirdBodyTailNodes / 2) {
   constexpr int M = kThirdBodyTailNodes / 2;
   const double k = y[kAf], h = y[kAg];
-  const int r_max = (dd_dlam == nullptr && (k * k + h * h < 4e-4))
-                        ? (y[kN] > 0.035 ? 5 : (y[kN] > 0.015 ? 6 : (y[kN] > 0.006 ? 7 : M)))
-                        : M;
+  // no row above those the tables hold (ActiveBracket::rows; zero there, so the sum is the same bits): the derivative
+  // pass read all 16 rows, past a 16-node build's 5 to 7 (stack #475)
+  const int r_max = std::min(rows, (dd_dlam == nullptr && (k * k + h * h < 4e-4))
+                                       ? (y[kN] > 0.035 ? 5 : (y[kN] > 0.015 ? 6 : (y[kN] > 0.006 ? 7 : M)))
+                                       : M);
   double sF, cF;
   if (sF_in != nullptr && cF_in != nullptr) {
     sF = *sF_in;
@@ -2722,6 +2725,10 @@ struct ActiveBracket {
   double sub_t_lo = 0.0, sub_t_hi = -1.0, inv_dt = 0.0;
   Vec3 sun_u0{}, sun_u1{}, dsun_u{};
   double sun_r0 = 0.0, sun_r1 = 0.0, dsun_r = 0.0;
+  /// The rows 1..rows0 of AT0/BT0 and 1..rows1 of AT1/BT1 the sub-interval's tables were built with (the 16-node tables
+  /// 5 to 7, the full ones kThirdBodyTailNodes / 2); every row above is zero. `rows` is the larger: the evaluators read no
+  /// row above it (stack #475: a row above a 16-node build held what the set flown before had left there).
+  int rows0 = 0, rows1 = 0, rows = 0;
   alignas(16) double AT0[kThirdBodyTailNodes / 2 + 1][6]{};
   alignas(16) double BT0[kThirdBodyTailNodes / 2 + 1][6]{};
   alignas(16) double AT1[kThirdBodyTailNodes / 2 + 1][6]{};
@@ -3034,6 +3041,14 @@ inline void tbsp_coefs_leo16_transposed(const double* y, const Frame& fr, const 
       BT[r][m] = B6[m][r];
     }
   }
+  // the rows above r_top zero, as the full tables' (tbsp_coefs_transposed) and a fresh table's are: a table is all its
+  // builder's (stack #475)
+  for (int r = r_top + 1; r <= kThirdBodyTailNodes / 2; ++r) {
+    for (int m = 0; m < 6; ++m) {
+      AT[r][m] = 0.0;
+      BT[r][m] = 0.0;
+    }
+  }
 }
 
 inline void tbsp_coefs_transposed(const double* y, const Frame& frm, const Bodies& b, int lo, int hi,
@@ -3065,9 +3080,16 @@ inline void tbsp_coefs_transposed(const double* y, const Frame& frm, const Bodie
     const double t_min = std::fmin(ab.lo.t, ab.hi.t), t_max = std::fmax(ab.lo.t, ab.hi.t);
     const double span = ab.hi.t - ab.lo.t;
     if (t >= t_min && t <= t_max && std::fabs(span) > 1e-6) {
-      const double max_sub = (y[kN] > 0.035 && e2 < 0.01)
+      // the bracket's choices, from its lower node: its sub-intervals, its tables' builder and their rows are the
+      // bracket's, whichever of its states is asked first (stack #475: taken from the state asked first, a set at
+      // n 0.035 rad/min had 32 of 2,016 states that depended on the order they were asked in)
+      const double* yl = ab.lo.y;
+      const double e2_b = yl[kAf] * yl[kAf] + yl[kAg] * yl[kAg];
+      const bool fast16_b = yl[kN] > 0.006 && e2_b < 4e-4;
+      const bool l4_b = yl[kN] <= 0.035, l5_b = yl[kN] <= 0.015;
+      const double max_sub = (yl[kN] > 0.035 && e2_b < 0.01)
                                  ? 250.0
-                                 : (y[kN] > 0.020 && e2 < 0.01 ? 120.0 : (y[kN] < 0.015 ? 45.0 : 90.0));
+                                 : (yl[kN] > 0.020 && e2_b < 0.01 ? 120.0 : (yl[kN] < 0.015 ? 45.0 : 90.0));
       const int n_sub = std::max(1, static_cast<int>(std::ceil(std::fabs(span) / max_sub)));
       const double step = span / n_sub;
       int idx = static_cast<int>(std::floor((t - ab.lo.t) / step));
@@ -3076,37 +3098,38 @@ inline void tbsp_coefs_transposed(const double* y, const Frame& frm, const Bodie
       if (ab.sub_idx != idx) {
         const double ta = ab.lo.t + idx * step;
         const double tb = idx + 1 == n_sub ? ab.hi.t : ab.lo.t + (idx + 1) * step;
-        if (ab.has_t1 && std::fabs(ab.t1 - ta) < 1e-9) {
+        // the rows a table built now holds (the 16-node tables zero the rows above them)
+        const int rows_built = fast16_b ? (l5_b ? 7 : (l4_b ? 6 : 5)) : M;
+        // the previous sub-interval's AT1 is this one's AT0 when it is at this one's start and its builder is this one's
+        if (ab.has_t1 && std::fabs(ab.t1 - ta) < 1e-9 && ab.rows1 == rows_built) {
           ab.sun_u0 = ab.sun_u1;
           ab.sun_r0 = ab.sun_r1;
-          if (use_fast16) {
-            const size_t n_bytes = static_cast<size_t>(inc_l5 ? 7 : (inc_l4 ? 6 : 5)) * 6 * sizeof(double);
-            std::memcpy(ab.AT0[1], ab.AT1[1], n_bytes);
-            std::memcpy(ab.BT0[1], ab.BT1[1], n_bytes);
-          } else {
-            std::memcpy(ab.AT0, ab.AT1, sizeof(ab.AT0));
-            std::memcpy(ab.BT0, ab.BT1, sizeof(ab.BT0));
-          }
+          // the whole tables: AT1 was built by its own call, which may have held other rows than this one's
+          std::memcpy(ab.AT0, ab.AT1, sizeof(ab.AT0));
+          std::memcpy(ab.BT0, ab.BT1, sizeof(ab.BT0));
+          ab.rows0 = ab.rows1;
         } else if (idx == 0) {
+          ab.rows0 = rows_built;
           const Bodies ba = bodies_at_ap(d50_epoch + ta / kMinutesPerDay);
           ab.sun_u0 = ba.sun_u;
           ab.sun_r0 = ba.sun_r;
-          if (use_fast16) tbsp_coefs_leo16_transposed(ab.lo.y, frame_of_fast(ab.lo.y), ba, ab.AT0, ab.BT0, inc_l4, inc_l5);
+          if (fast16_b) tbsp_coefs_leo16_transposed(ab.lo.y, frame_of_fast(ab.lo.y), ba, ab.AT0, ab.BT0, l4_b, l5_b);
           else tbsp_coefs_transposed(ab.lo.y, frame_of_fast(ab.lo.y), ba, lo, hi, ab.AT0, ab.BT0);
         } else {
+          ab.rows0 = rows_built;
           double ya[6];
           hermite(ab.lo, ab.hi, ta, ya);
           const Bodies ba = bodies_at_ap(d50_epoch + ta / kMinutesPerDay);
           ab.sun_u0 = ba.sun_u;
           ab.sun_r0 = ba.sun_r;
-          if (use_fast16) tbsp_coefs_leo16_transposed(ya, frame_of_fast(ya), ba, ab.AT0, ab.BT0, inc_l4, inc_l5);
+          if (fast16_b) tbsp_coefs_leo16_transposed(ya, frame_of_fast(ya), ba, ab.AT0, ab.BT0, l4_b, l5_b);
           else tbsp_coefs_transposed(ya, frame_of_fast(ya), ba, lo, hi, ab.AT0, ab.BT0);
         }
         if (idx + 1 == n_sub) {
           const Bodies bb = bodies_at_ap(d50_epoch + tb / kMinutesPerDay);
           ab.sun_u1 = bb.sun_u;
           ab.sun_r1 = bb.sun_r;
-          if (use_fast16) tbsp_coefs_leo16_transposed(ab.hi.y, frame_of_fast(ab.hi.y), bb, ab.AT1, ab.BT1, inc_l4, inc_l5);
+          if (fast16_b) tbsp_coefs_leo16_transposed(ab.hi.y, frame_of_fast(ab.hi.y), bb, ab.AT1, ab.BT1, l4_b, l5_b);
           else tbsp_coefs_transposed(ab.hi.y, frame_of_fast(ab.hi.y), bb, lo, hi, ab.AT1, ab.BT1);
         } else {
           double yb[6];
@@ -3114,18 +3137,21 @@ inline void tbsp_coefs_transposed(const double* y, const Frame& frm, const Bodie
           const Bodies bb = bodies_at_ap(d50_epoch + tb / kMinutesPerDay);
           ab.sun_u1 = bb.sun_u;
           ab.sun_r1 = bb.sun_r;
-          if (use_fast16) tbsp_coefs_leo16_transposed(yb, frame_of_fast(yb), bb, ab.AT1, ab.BT1, inc_l4, inc_l5);
+          if (fast16_b) tbsp_coefs_leo16_transposed(yb, frame_of_fast(yb), bb, ab.AT1, ab.BT1, l4_b, l5_b);
           else tbsp_coefs_transposed(yb, frame_of_fast(yb), bb, lo, hi, ab.AT1, ab.BT1);
         }
+        ab.rows1 = rows_built;
+        ab.rows = std::max(ab.rows0, ab.rows1);
         ab.dsun_u = ab.sun_u1 - ab.sun_u0;
         ab.dsun_r = ab.sun_r1 - ab.sun_r0;
-        const int r_top = use_fast16 ? (inc_l5 ? 7 : (inc_l4 ? 6 : 5)) : M;
-        for (int r = 1; r <= r_top; ++r) {
+        // the single-precision tables: every row the double ones hold, zero above
+        for (int r = 1; r <= M; ++r) {
+          const bool held = r <= ab.rows;
           for (int m = 0; m < 6; ++m) {
-            ab.AT0_f[r][m] = static_cast<float>(ab.AT0[r][m]);
-            ab.BT0_f[r][m] = static_cast<float>(ab.BT0[r][m]);
-            ab.dAT_f[r][m] = static_cast<float>(ab.AT1[r][m] - ab.AT0[r][m]);
-            ab.dBT_f[r][m] = static_cast<float>(ab.BT1[r][m] - ab.BT0[r][m]);
+            ab.AT0_f[r][m] = held ? static_cast<float>(ab.AT0[r][m]) : 0.0f;
+            ab.BT0_f[r][m] = held ? static_cast<float>(ab.BT0[r][m]) : 0.0f;
+            ab.dAT_f[r][m] = held ? static_cast<float>(ab.AT1[r][m] - ab.AT0[r][m]) : 0.0f;
+            ab.dBT_f[r][m] = held ? static_cast<float>(ab.BT1[r][m] - ab.BT0[r][m]) : 0.0f;
           }
           ab.AT0_f[r][6] = ab.AT0_f[r][7] = 0.0f;
           ab.BT0_f[r][6] = ab.BT0_f[r][7] = 0.0f;
@@ -3142,9 +3168,9 @@ inline void tbsp_coefs_transposed(const double* y, const Frame& frm, const Bodie
       }
       const double u = (t - ab.t0) * ab.inv_dt;
       if (dd_dlam == nullptr) {
-        eval_tbsp_lerp_f32(y, F, static_cast<float>(u), ab.AT0_f, ab.BT0_f, ab.dAT_f, ab.dBT_f, d, sF_in, cF_in);
+        eval_tbsp_lerp_f32(y, F, static_cast<float>(u), ab.AT0_f, ab.BT0_f, ab.dAT_f, ab.dBT_f, d, sF_in, cF_in, ab.rows);
       } else {
-        eval_tbsp_lerp(y, F, 1.0 - u, u, ab.AT0, ab.BT0, ab.AT1, ab.BT1, d, dd_dlam, sF_in, cF_in);
+        eval_tbsp_lerp(y, F, 1.0 - u, u, ab.AT0, ab.BT0, ab.AT1, ab.BT1, d, dd_dlam, sF_in, cF_in, ab.rows);
       }
       return;
     }
@@ -3171,7 +3197,7 @@ inline void tbsp_coefs_transposed(const double* y, const Frame& frm, const Bodie
                            t >= ab.sub_t_lo && t <= ab.sub_t_hi,
                        1)) {
     const double u = (t - ab.t0) * ab.inv_dt;
-    eval_tbsp_lerp_f32(y, F, static_cast<float>(u), ab.AT0_f, ab.BT0_f, ab.dAT_f, ab.dBT_f, d, sF_in, cF_in);
+    eval_tbsp_lerp_f32(y, F, static_cast<float>(u), ab.AT0_f, ab.BT0_f, ab.dAT_f, ab.dBT_f, d, sF_in, cF_in, ab.rows);
     return;
   }
   third_body_short_period_slow(y, b_opt, F, lo, hi, d, dd_dlam, d50_epoch, t, sF_in, cF_in, ctx_id);
