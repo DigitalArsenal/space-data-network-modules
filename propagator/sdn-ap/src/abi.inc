@@ -542,6 +542,17 @@ int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
   return tess::slow_terms(cap, cls, n, e, inc, rows, max_rows);
 }
 
+/// The field's census (SPEC 16.20; stack #503): in = mean motion (rev/day), e, i (deg), the record's tesseral degree, the size
+/// cut (m); every tesseral term of the embedded field at or above the cut, with the carriers a set of these elements builds
+/// (xpt::census_rows: rows of 10 doubles, l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size
+/// in m, the term's period in days), at most max_rows. Returns the count of all rows, or -1 for elements it refuses. A diagnostic: no flight reads it.
+SDNAP_EXPORT("sdnap_field_census")
+int32_t sdnap_field_census(const double* in, double* rows, int32_t max_rows) {
+  using namespace sdnap::xpt;
+  const double n = in[0] * sdnap::kTwoPi / sdnap::kMinutesPerDay, e = in[1], inc = in[2] * sdnap::kPi / 180.0;
+  return field_census(static_cast<int>(in[3]), n, e, inc, in[4], rows, max_rows);
+}
+
 /// Frame diagnostics on a state (km, km/s; 6 doubles in, 6 out) at the UTC
 /// Julian date whole + frac. mode 0 GCRF -> TEME, 1 TEME -> GCRF (the fit's
 /// GCRF rotation, gcrf.inc), 2 TEME -> Earth-fixed, 3 Earth-fixed -> TEME
