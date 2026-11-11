@@ -2757,8 +2757,10 @@ D over 0 to 120 h), Chandra's seven windows go from a median of 96 m to 10 m (4 
 329 to 172 m. The one-day class (THEMIS) already took the rotation and is unchanged.
 
 The real windows against their precise orbits neither support nor contradict the change on TESS. TESS fires its thrusters
-about once a week, by 3 to 11 mm/s, and in each of the seven windows a firing lies in the 72 h fit arc or within 13 hours
-after the cutoff; 10 mm/s moves the orbit by about 4 km in 5 days. `test/heo-frame.e2e.mjs`'s replay of those windows (the
+about weekly, six times in the span, by 7 to 11 mm/s; 10 mm/s moves the orbit by about 4 km in 5 days. In six of the
+seven windows a firing lies in the 72 h fit arc (four windows) or within 13 hours after the cutoff (two); the seventh
+has none within the first six days. In six of the seven the reference also changes from one ephemeris file to the next
+13 hours after the cutoff, with a step of 17 to 221 m. `test/heo-frame.e2e.mjs`'s replay of those windows (the
 module's default fit of the 72 h of states, no drag, the RMS over each day) goes from medians of 775.7, 1,635.8 and
 8,549.6 m to 1,011.7, 2,000.0 and 9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 from -103.1 to +706.0 m (its
 known defect, stack #479; XP takes no drift, so it keeps the turn). The replay fits AP to a series half of whose states
