@@ -20,6 +20,104 @@ namespace tess {
 
 #include "gravity_egm.h"
 
+/// Bake cells (SPEC 9): the caches below bake their terms at the center of the mean state's cell, so what they hold is
+/// a function of the state alone, never of the states evaluated before. The cell of x among cells `tol` times the
+/// power of two at or below x wide (a relative cell), and its center.
+inline int64_t sp_cell_rel(double x, double tol, double& center) {
+  const double w = tol * std::ldexp(1.0, std::ilogb(x));
+  const double k = std::floor(x / w);
+  center = (k + 0.5) * w;
+  return static_cast<int64_t>(k);
+}
+/// The cell of x among cells w wide, and its center.
+inline int64_t sp_cell_abs(double x, double w, double& center) {
+  const double k = std::floor(x / w);
+  center = (k + 0.5) * w;
+  return static_cast<int64_t>(k);
+}
+/// The cell of an eccentricity for a bake whose tolerance is on e^2 (e2_tol): w_small wide in e up to
+/// e_t = e2_tol / (2 w_small), then e2_tol / (2 e) wide (uniform in e^2), so the center's e^2 is within e2_tol / 2 of
+/// e's and, near e = 0, the center's e within w_small / 2 of e. Returns the cell; `center` the center's e.
+inline int64_t sp_cell_e(double e, double w_small, double e2_tol, double& center) {
+  const double e_t = e2_tol / (2.0 * w_small), u0 = e_t / (2.0 * w_small);
+  const double u = e < e_t ? e / w_small : e * e / e2_tol + u0;
+  const double k = std::floor(u), uc = k + 0.5;
+  center = uc * w_small < e_t ? uc * w_small : std::sqrt((uc - u0) * e2_tol);
+  return static_cast<int64_t>(k);
+}
+
+/// The bracket of the mean-element grid a state's mean elements come from (xp_theory.inc sets it when it brackets a
+/// time): its id (the set and the lower node), its first time and length (signed, minutes), and a, e and cos i at
+/// its two nodes. The tesseral and m-daily caches bake at states on the bracket, so what they hold depends on the
+/// bracket and the time alone.
+struct SpAnchor {
+  bool valid = false;
+  uint64_t id = 0;
+  double tlo = 0.0, h = 1.0;
+  double a_lo = 1.0, a_hi = 1.0, e_lo = 0.0, e_hi = 0.0, c_lo = 1.0, c_hi = 1.0;
+};
+/// The points per level on the bracket g_sp_anchor names (sp_anchor_point), counted once per bracket: keyed by the
+/// bracket, so it never outlives it.
+struct SpAnchorLevels {
+  uint64_t id = 0;
+  double tlo = 0.0, h = 0.0;
+  struct Level {
+    double tol_a, tol_e, tol_c;
+    bool e_sq;
+    int n;
+  };
+  static constexpr int kLevels = 6;
+  Level lv[kLevels]{};
+  int count = 0;
+};
+inline thread_local SpAnchorLevels g_sp_anchor_levels{};
+inline thread_local SpAnchor g_sp_anchor{};
+/// Whether time t lies on the bracket g_sp_anchor names.
+inline bool sp_anchored(double t) {
+  const SpAnchor& an = g_sp_anchor;
+  if (!an.valid || an.h == 0.0) return false;
+  const double q = (t - an.tlo) / an.h;
+  return q >= 0.0 && q <= 1.0;
+}
+
+/// One bake level's point for time t: the bracket cut into n equal parts, n the smallest that keeps a (relative
+/// tol_a), e (tol_e on e, or on e^2 when e_sq) and cos i (tol_c) within a quarter of their tolerance of the part's
+/// center along the chord between the nodes, at most 64; the point is the center of t's part. The key is n * 64 + the
+/// part.
+inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, double tol_e, bool e_sq, double tol_c, double& a_c,
+                               double& e_c, double& c_c) {
+  // the bracket's points one tolerance apart (each point within half a tolerance of the chord it stands for, as a cell's
+  // center is), counted once per bracket and level
+  SpAnchorLevels& L = g_sp_anchor_levels;
+  if (L.id != an.id || L.tlo != an.tlo || L.h != an.h) {
+    L.id = an.id;
+    L.tlo = an.tlo;
+    L.h = an.h;
+    L.count = 0;
+  }
+  int n = 0;
+  for (int j = 0; j < L.count; ++j)
+    if (L.lv[j].tol_a == tol_a && L.lv[j].tol_e == tol_e && L.lv[j].tol_c == tol_c && L.lv[j].e_sq == e_sq) {
+      n = L.lv[j].n;
+      break;
+    }
+  if (n == 0) {
+    const double da = std::fabs(an.a_hi - an.a_lo) / (tol_a * an.a_lo);
+    const double de = e_sq ? std::fabs(an.e_hi * an.e_hi - an.e_lo * an.e_lo) / tol_e : std::fabs(an.e_hi - an.e_lo) / tol_e;
+    const double dc = tol_c > 0.0 ? std::fabs(an.c_hi - an.c_lo) / tol_c : 0.0;
+    const double need = std::fmax(da, std::fmax(de, dc));
+    n = need < 1.0 ? 1 : (need >= 64.0 ? 64 : static_cast<int>(std::ceil(need)));
+    if (L.count < SpAnchorLevels::kLevels) L.lv[L.count++] = SpAnchorLevels::Level{tol_a, tol_e, tol_c, e_sq, n};
+  }
+  int k = static_cast<int>(std::floor((t - an.tlo) / an.h * n));
+  k = k < 0 ? 0 : (k >= n ? n - 1 : k);
+  const double q = (k + 0.5) / n;
+  a_c = an.a_lo + q * (an.a_hi - an.a_lo);
+  e_c = an.e_lo + q * (an.e_hi - an.e_lo);
+  c_c = an.c_lo + q * (an.c_hi - an.c_lo);
+  return static_cast<int64_t>(n) * 64 + k;
+}
+
 /// What the call selects (0: none of it). `tesseral` is the highest degree of the terms of order >= 1, `zonal` of the
 /// zonal tail. Capped per family at the degree that was measured to pay. On FFM Starlink truth, day 3: m-daily 8 -> 12
 /// 4.26 -> 2.03 km and 16 no better; shallow 21 / 31 / 41 / 70 2.15 / 1.89 / 2.02 / 2.03 km; zonal tail J2-J5 0.35 km,
@@ -321,6 +419,9 @@ struct MdailyEvalCache {
   int degree = 0;
   float f0 = -1e30f, f1 = -1e30f;
   double a = -1.0, a_bake = -1.0, e2 = -1.0;
+  bool keys_valid = false;
+  uint64_t anchor_id = 0;                ///< the bracket the bakes were made on (0: state cells)
+  int64_t kf_a = 0, kf_e = 0, kp_a = 0;  ///< the points of the full bake (a, e^2) and of the a bake (mdaily_sync_cache)
   alignas(16) double c0_pair1[20][2]{};
   alignas(16) double s0_pair1[20][2]{};
   alignas(16) double c0_pair2[20][2]{};
@@ -339,13 +440,36 @@ struct MdailyEvalCache {
   alignas(16) float c21_f[24]{}, s21_f[24]{};
 };
 inline thread_local MdailyEvalCache g_mdaily_eval_cache{};
-inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
+/// The set being flown keeps its own (xp_theory.inc SetCaches); nullptr: the thread's.
+inline thread_local MdailyEvalCache* g_mdaily_set_cache = nullptr;
+inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_set_cache != nullptr ? *g_mdaily_set_cache : g_mdaily_eval_cache; }
 
 /// The m-daily corrections in the six-component set (n-dot, e-dot, i-dot,
 /// e varpi, sin i Omega, lambda order), first order, at the mean elements k;
 /// F the object's mdaily_terms (degree even l up to `degree`).
-[[gnu::noinline]] inline void mdaily_sync_cache(MdailyEvalCache& mc, const float* F, int degree, double a, double e2,
-                                                uint64_t table_id = 0) {
+/// The m-daily terms baked for the state (a_state, e2_state) at time t, in full (a relative 3e-5, e^2 2e-6), then in a
+/// (relative 2e-6), each at a point that is a function of the state's bracket and t (sp_anchor_point), or without the
+/// bracket of the state alone (the center of its cell).
+[[gnu::noinline]] inline void mdaily_sync_cache(MdailyEvalCache& mc, const float* F, int degree, double a_state, double e2_state,
+                                                double t, uint64_t table_id = 0) {
+  double a_full, e2_full, a_part;
+  int64_t kfa, kfe = 0, kpa;
+  const bool anchored = sp_anchored(t);
+  if (anchored) {
+    double e_f, c_f, e_p, c_p;
+    kfa = sp_anchor_point(g_sp_anchor, t, 3e-5, 2e-6, true, 0.0, a_full, e_f, c_f);
+    e2_full = e_f * e_f;
+    kpa = sp_anchor_point(g_sp_anchor, t, 2e-6, 1e30, false, 0.0, a_part, e_p, c_p);
+  } else {
+    kfa = sp_cell_rel(a_state, 3e-5, a_full);
+    kfe = sp_cell_abs(e2_state, 2e-6, e2_full);
+    kpa = sp_cell_rel(a_state, 2e-6, a_part);
+  }
+  const uint64_t aid = anchored ? g_sp_anchor.id : 0;
+  const bool full = table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] ||
+                    mc.f1 != F[1] || !mc.keys_valid || mc.anchor_id != aid || kfa != mc.kf_a || kfe != mc.kf_e;
+  if (!full && kpa == mc.kp_a) return;
+  const double a = full ? a_full : a_part, e2 = e2_full;
   auto sync_f32 = [&]() {
     if (degree <= 20) {
       const int n_quad = (degree + 3) & ~3;
@@ -368,10 +492,14 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
       }
     }
   };
-  if (table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] || mc.f1 != F[1] ||
-      std::fabs(a - mc.a) > 3e-5 * a || std::fabs(e2 - mc.e2) > 2e-6) {
+  if (full) {
     mc.F = F;
     mc.table_id = table_id;
+    mc.keys_valid = true;
+    mc.anchor_id = aid;
+    mc.kf_a = kfa;
+    mc.kf_e = kfe;
+    mc.kp_a = INT64_MIN;
     mc.degree = degree;
     mc.f0 = F[0];
     mc.f1 = F[1];
@@ -449,9 +577,11 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
       mc.s_pair2[m][1] = mc.s0_pair2[m][1];
     }
     sync_f32();
-  } else if (std::fabs(a - mc.a_bake) > 2e-6 * a) {
-    mc.a_bake = a;
-    const double u_a = mc.a / a - 1.0;
+  }
+  if (kpa != mc.kp_a) {
+    mc.kp_a = kpa;
+    mc.a_bake = a_part;
+    const double u_a = mc.a / a_part - 1.0;
 #ifdef __wasm_simd128__
     const v128_t vu = wasm_f64x2_splat(u_a);
     for (int m = 1; m <= degree; ++m) {
@@ -484,13 +614,7 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_eval_cache; }
     const double* sb_in = nullptr, const double* cb_in = nullptr, uint64_t table_id = 0) {
   const double a = k.a, e = k.e, e2 = e * e;
   MdailyEvalCache& mc = mdaily_eval_cache();
-  if (__builtin_expect(table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree ||
-                           mc.f0 != F[0] || mc.f1 != F[1] ||
-                           std::fabs(a - mc.a_bake) > 2e-6 * a || std::fabs(a - mc.a) > 3e-5 * a ||
-                           std::fabs(e2 - mc.e2) > 2e-6,
-                       0)) {
-    mdaily_sync_cache(mc, F, degree, a, e2, table_id);
-  }
+  mdaily_sync_cache(mc, F, degree, a, e2, t, table_id);
   double sb, cb;
   if (sb_in != nullptr && cb_in != nullptr) {
     sb = *sb_in;
@@ -1164,6 +1288,11 @@ struct alignas(16) SpRow {
 };
 static_assert(sizeof(SpRow) == 16, "");
 
+/// The first-order tesseral terms of one set, grouped into SIMD blocks and baked at a mean state (SPEC 16). The block
+/// arrays live in one allocation (`mem`) sized for `cap_blks` blocks and `cap_rows` rows: a thread's own cache holds
+/// kMaxBlks (a set's terms are grouped there), a set's cache from the pool (SetCaches) exactly its total_blks.
+/// The bake points are cells of the mean state (sp_sync): the baked values are a function of the state's cells
+/// alone, never of the states evaluated before.
 struct SpEvalCache {
   static constexpr int kMaxBlks = 768;
   static constexpr int kMaxRows = 384;
@@ -1178,42 +1307,174 @@ struct SpEvalCache {
   double a = -1.0, e = -1.0, n = -1.0, ci = -10.0;
   double a_bake = -1.0, e_bake = -1.0, e_bake_a = -1.0, e_pe_bake = -1.0, de_pe_thresh = 5.0e-7;
   double a_res = -1.0, e_res = -1.0, ci_res = -10.0;
-  double a_ref = -1.0, da_thresh = -1.0;
-  double e_ref = -1.0, de_thresh = -1.0;
-  double ci_ref = -10.0, dci_thresh = -1.0;
-  alignas(64) float blk_hot[kMaxBlks * 32]{};
+  // the cells the current bakes were made at (sp_sync): base (a, e^2, cos i), ae (a, e), pe (e), res (a, cos i, e^2)
+  bool keys_valid = false;
+  uint64_t anchor_id = 0;  ///< the bracket the bakes were made on (0: state cells)
+  int64_t kb_a = 0, kb_e = 0, kb_c = 0, kae_a = 0, kae_e = 0, kpe = 0, kr_a = 0, kr_c = 0, kr_e = 0;
   alignas(16) float cswq_c[120]{};
   alignas(16) float cswq_s[120]{};
-  alignas(16) float cm_f32_local[80]{};
-  alignas(16) float sm_f32_local[80]{};
-  SpRow rows[kMaxRows]{};
-  uint16_t res_blk[kMaxBlks]{};
-  uint16_t pe_blk[kMaxBlks]{};
-  uint8_t blk_is_pe[kMaxBlks]{};
-  uint8_t blk_is_res[kMaxBlks]{};
-  uint8_t blk_m0[kMaxBlks]{};
-  uint8_t blk_wq0[kMaxBlks]{};
-  uint16_t blk_mw4[kMaxBlks * 2]{};
-  float blk_wf1[kMaxBlks]{};
-  float blk_qf1[kMaxBlks]{};
-  uint8_t blk_mlane[kMaxBlks * 4]{};
-  uint8_t blk_wq[kMaxBlks * 4]{};
-  alignas(16) uint32_t blk_active[kMaxBlks * 4]{};
-  alignas(16) float blk_mf[kMaxBlks * 4]{};
-  alignas(16) float blk_w[kMaxBlks * 4]{};
-  alignas(16) float blk_q[kMaxBlks * 4]{};
-  alignas(16) float blk_c[kMaxBlks * 64]{};
-  alignas(16) float blk_p[kMaxBlks * 32]{};
-  alignas(16) float blk_a[kMaxBlks * 32]{};
-  alignas(16) float blk_e[kMaxBlks * 16]{};
+  int cap_blks = 0, cap_rows = 0;
+  size_t mem_bytes = 0;
+  uint8_t* mem = nullptr;
+  float* blk_hot = nullptr;
+  SpRow* rows = nullptr;
+  uint16_t* res_blk = nullptr;
+  uint16_t* pe_blk = nullptr;
+  uint8_t* blk_is_pe = nullptr;
+  uint8_t* blk_is_res = nullptr;
+  uint8_t* blk_mlane = nullptr;
+  uint8_t* blk_wq = nullptr;
+  uint32_t* blk_active = nullptr;
+  float* blk_mf = nullptr;
+  float* blk_w = nullptr;
+  float* blk_q = nullptr;
+  float* blk_c = nullptr;     ///< the terms' coefficients by lane (F's, grouped); a set's cache holds none (sp_blk_c)
+  float* blk_p = nullptr;
+  float* blk_a = nullptr;
+  float* blk_e = nullptr;
+  uint16_t* blk_term = nullptr;  ///< the term (index into F) of each lane
+  bool compact = false;          ///< a set's cache: exactly its blocks, no blk_c
+};
+
+/// Lays the block arrays out in one zeroed 64-byte-aligned allocation for `blks` blocks and `rows` rows, with blk_c
+/// when `with_c`. False out of memory (the cache keeps no storage).
+inline bool sp_storage(SpEvalCache& sc, int blks, int rows, bool with_c) {
+  auto up = [](size_t x) { return (x + 63u) & ~static_cast<size_t>(63u); };
+  const size_t b = static_cast<size_t>(blks < 1 ? 1 : blks), r = static_cast<size_t>(rows < 1 ? 1 : rows);
+  const size_t sizes[17] = {b * 32 * 4, r * sizeof(SpRow), b * 2, b * 2, b, b, b * 4, b * 4, b * 16, b * 16, b * 16,
+                            b * 16, with_c ? b * 64 * 4 : 0, b * 32 * 4, b * 32 * 4, b * 16 * 4, b * 4 * 2};
+  size_t off[17], total = 0;
+  for (int k = 0; k < 17; ++k) { off[k] = total; total += up(sizes[k]); }
+  uint8_t* m = static_cast<uint8_t*>(std::aligned_alloc(64, total));
+  if (m == nullptr) return false;
+  std::memset(m, 0, total);
+  sc.mem = m;
+  sc.mem_bytes = total;
+  sc.cap_blks = static_cast<int>(b);
+  sc.cap_rows = static_cast<int>(r);
+  sc.blk_hot = reinterpret_cast<float*>(m + off[0]);
+  sc.rows = reinterpret_cast<SpRow*>(m + off[1]);
+  sc.res_blk = reinterpret_cast<uint16_t*>(m + off[2]);
+  sc.pe_blk = reinterpret_cast<uint16_t*>(m + off[3]);
+  sc.blk_is_pe = m + off[4];
+  sc.blk_is_res = m + off[5];
+  sc.blk_mlane = m + off[6];
+  sc.blk_wq = m + off[7];
+  sc.blk_active = reinterpret_cast<uint32_t*>(m + off[8]);
+  sc.blk_mf = reinterpret_cast<float*>(m + off[9]);
+  sc.blk_w = reinterpret_cast<float*>(m + off[10]);
+  sc.blk_q = reinterpret_cast<float*>(m + off[11]);
+  sc.blk_c = with_c ? reinterpret_cast<float*>(m + off[12]) : nullptr;
+  sc.blk_p = reinterpret_cast<float*>(m + off[13]);
+  sc.blk_a = reinterpret_cast<float*>(m + off[14]);
+  sc.blk_e = reinterpret_cast<float*>(m + off[15]);
+  sc.blk_term = reinterpret_cast<uint16_t*>(m + off[16]);
+  sc.compact = !with_c;
+  return true;
+}
+
+/// A set's cache: `src` (grouped and baked in a thread's cache) with storage for exactly its blocks and rows and
+/// without blk_c (sp_blk_c rebuilds it from F when a base or resonant bake needs it). nullptr out of memory.
+inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
+  SpEvalCache* d = new (std::nothrow) SpEvalCache(src);
+  if (d == nullptr) return nullptr;
+  if (!sp_storage(*d, src.total_blks, src.n_rows, false)) {
+    delete d;
+    return nullptr;
+  }
+  const size_t b = static_cast<size_t>(src.total_blks), r = static_cast<size_t>(src.n_rows);
+  std::memcpy(d->blk_hot, src.blk_hot, b * 32 * sizeof(float));
+  std::memcpy(d->rows, src.rows, r * sizeof(SpRow));
+  std::memcpy(d->res_blk, src.res_blk, b * sizeof(uint16_t));
+  std::memcpy(d->pe_blk, src.pe_blk, b * sizeof(uint16_t));
+  std::memcpy(d->blk_is_pe, src.blk_is_pe, b);
+  std::memcpy(d->blk_is_res, src.blk_is_res, b);
+  std::memcpy(d->blk_mlane, src.blk_mlane, b * 4);
+  std::memcpy(d->blk_wq, src.blk_wq, b * 4);
+  std::memcpy(d->blk_active, src.blk_active, b * 4 * sizeof(uint32_t));
+  std::memcpy(d->blk_mf, src.blk_mf, b * 4 * sizeof(float));
+  std::memcpy(d->blk_w, src.blk_w, b * 4 * sizeof(float));
+  std::memcpy(d->blk_q, src.blk_q, b * 4 * sizeof(float));
+  std::memcpy(d->blk_p, src.blk_p, b * 32 * sizeof(float));
+  std::memcpy(d->blk_a, src.blk_a, b * 32 * sizeof(float));
+  std::memcpy(d->blk_e, src.blk_e, b * 16 * sizeof(float));
+  std::memcpy(d->blk_term, src.blk_term, b * 4 * sizeof(uint16_t));
+  return d;
+}
+
+/// A set's blk_c for one bake, per thread: the lanes' coefficients from F (store_lane's layout), zero in empty lanes.
+inline thread_local float* g_sp_blk_c = nullptr;
+inline float* sp_blk_c(const SpEvalCache& sc) {
+  if (__builtin_expect(!g_sp_blk_c, 0)) {
+    g_sp_blk_c = static_cast<float*>(std::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
+    if (g_sp_blk_c == nullptr) std::abort();
+  }
+  float* const c = g_sp_blk_c;
+  for (int bi = 0; bi < sc.total_blks; ++bi) {
+    for (int l = 0; l < 4; ++l) {
+      float* const pc = c + bi * 64 + l;
+      const int lane = bi * 4 + l;
+      if (sc.blk_active[lane] == 0u) {
+        for (int k = 0; k < 16; ++k) pc[4 * k] = 0.0f;
+        continue;
+      }
+      const SpCombCoef& f = sc.F[sc.blk_term[lane]];
+      pc[0] = f.uc0;   pc[4] = f.us0;   pc[8] = f.dc0;   pc[12] = f.ds0;
+      pc[16] = f.dca;  pc[20] = f.dsa;  pc[24] = f.ec0;  pc[28] = f.es0;
+      pc[32] = f.eca;  pc[36] = f.esa;  pc[40] = f.ic0;  pc[44] = f.is0;
+      pc[48] = f.ica;  pc[52] = f.isa;  pc[56] = f.ice;  pc[60] = f.ise;
+    }
+  }
+  return c;
+}
+
+inline void sp_cache_free(SpEvalCache* sc) {
+  if (sc == nullptr) return;
+  std::free(sc->mem);
+  delete sc;
+}
+
+/// What grouping a set's terms needs and keeps nowhere else, per thread.
+struct SpBuildScratch {
   uint16_t qw_slot[3][35][71]{};
   uint8_t qw_cnt[3][35]{};
   uint8_t fast_item[2600]{};
   uint16_t rem_items[2600]{};
 };
+inline thread_local SpBuildScratch* g_sp_build_scratch_ptr = nullptr;
+inline SpBuildScratch& sp_build_scratch() {
+  if (__builtin_expect(!g_sp_build_scratch_ptr, 0)) g_sp_build_scratch_ptr = new SpBuildScratch{};
+  return *g_sp_build_scratch_ptr;
+}
+
+/// The trig of the multiples of the node's and the mean anomaly's angles for one state, per thread (the m-daily part
+/// fills them, the tesseral part reads them).
+struct SpTrigScratch {
+  alignas(16) float cm[80]{};
+  alignas(16) float sm[80]{};
+};
+inline thread_local SpTrigScratch g_sp_trig_scratch{};
+inline float* sp_trig_cm() { return g_sp_trig_scratch.cm; }
+inline float* sp_trig_sm() { return g_sp_trig_scratch.sm; }
+
+/// The set being flown on this thread (its caches locked by xp_propagate's scope; nullptr: none): `cache` its own
+/// tesseral cache, or nullptr while it holds none.
+struct SpSetSlot {
+  SpEvalCache* cache = nullptr;
+};
+inline thread_local SpSetSlot* g_sp_set_slot = nullptr;
+/// The pool (xp_theory.inc): a set's own copy of `built` within the memory budget, or nullptr beyond it.
+SpEvalCache* sp_pool_attach(const SpEvalCache& built);
+/// The pool: a set's tesseral cache given back.
+void sp_pool_release(SpEvalCache* cache);
+
+/// A thread's own cache (kMaxBlks): where every set's terms are grouped, and the cache of the sets that hold none.
 inline thread_local SpEvalCache* g_sp_eval_cache_ptr = nullptr;
-inline SpEvalCache& sp_eval_cache() {
-  if (__builtin_expect(!g_sp_eval_cache_ptr, 0)) g_sp_eval_cache_ptr = new SpEvalCache{};
+inline SpEvalCache& sp_thread_cache() {
+  if (__builtin_expect(!g_sp_eval_cache_ptr, 0)) {
+    g_sp_eval_cache_ptr = new SpEvalCache{};
+    if (!sp_storage(*g_sp_eval_cache_ptr, SpEvalCache::kMaxBlks, SpEvalCache::kMaxRows, true)) std::abort();
+  }
   return *g_sp_eval_cache_ptr;
 }
 
@@ -1237,6 +1498,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   sc.f0_ic = F[0].ic0;
   sc.fn_uc = F[count - 1].uc0;
   sc.a = -1.0;
+  sc.keys_valid = false;
   sc.grouped_ok = false;
   sc.res_overflow = false;
   sc.n_res_blks = 0;
@@ -1253,8 +1515,9 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   }
   if (!ok || max_m < 1) return;
   const int m_stride = max_m + 1;
-  auto& qw_slot = sc.qw_slot;
-  auto& qw_cnt = sc.qw_cnt;
+  SpBuildScratch& build = sp_build_scratch();
+  auto& qw_slot = build.qw_slot;
+  auto& qw_cnt = build.qw_cnt;
   for (int qi = 0; qi < 3; ++qi) {
     for (int w = -max_aw; w <= max_aw; ++w) {
       qw_cnt[qi][w + 17] = 0u;
@@ -1271,7 +1534,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     ++qw_cnt[qi][wi];
   }
   if (!ok) return;
-  uint8_t* const fast_item = sc.fast_item;
+  uint8_t* const fast_item = build.fast_item;
   std::memset(fast_item, 0, static_cast<size_t>(count));
   {
     auto oct_norm = [](double x, double y) -> double {
@@ -1322,12 +1585,10 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   auto alloc_blk = [&](uint8_t m0_val, uint8_t wq0_val, float wf_val, float qf_val, bool full4) -> int {
     if (cur_blk >= SpEvalCache::kMaxBlks) { ok = false; return -1; }
     const int bi = cur_blk++;
-    sc.blk_m0[bi] = m0_val;
-    sc.blk_wq0[bi] = wq0_val;
-    sc.blk_mw4[bi * 2 + 0] = static_cast<uint16_t>(m0_val) * 4u;
-    sc.blk_mw4[bi * 2 + 1] = static_cast<uint16_t>(wq0_val) * 4u;
-    sc.blk_wf1[bi] = wf_val;
-    sc.blk_qf1[bi] = qf_val;
+    (void)m0_val;
+    (void)wq0_val;
+    (void)wf_val;
+    (void)qf_val;
     sc.blk_is_pe[bi] = 0u;
     if (!full4) {
       const int lo = bi * 4;
@@ -1350,6 +1611,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     const int qi_lane = q == 0 ? 0 : (q < 0 ? 1 : 2);
     sc.blk_mlane[lane_idx] = static_cast<uint8_t>(m - 1);
     sc.blk_wq[lane_idx] = static_cast<uint8_t>(qi_lane * 40 + (w + 20));
+    sc.blk_term[lane_idx] = it;
     sc.blk_active[lane_idx] = 0xFFFFFFFFu;
     sc.blk_mf[lane_idx] = static_cast<float>(m);
     sc.blk_w[lane_idx] = static_cast<float>(w);
@@ -1428,7 +1690,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   }
   const int b_contig_end = cur_blk;
   // Segment D: pack all remaining items densely 4 per block
-  uint16_t* const rem_items = sc.rem_items;
+  uint16_t* const rem_items = build.rem_items;
   int n_rem = 0;
   for (int qi = 0; qi < 3; ++qi) {
     for (int w = -max_aw; w <= max_aw; ++w) {
@@ -1471,7 +1733,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     sc.e_bake_a = -1.0;
     sc.e_pe_bake = -1.0;
     sc.a_res = -1.0;
-    sc.da_thresh = -1.0;
+    sc.keys_valid = false;
     sc.grouped_ok = true;
   }
 }
@@ -2263,14 +2525,33 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   }
 }
 
+/// Whether sc holds F's terms grouped (the set they belong to: its table, its epoch a and e).
+inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0) {
+  return sc.F == F && sc.count == count && sc.table_tag == tag && sc.a0 == a0 && sc.e0 == e0 && sc.grouped_ok &&
+         sc.f0_uc == F[0].uc0 && sc.f0_ic == F[0].ic0 && sc.fn_uc == F[count - 1].uc0;
+}
+
+/// The cache to evaluate F with once the thread's cache `th` holds it grouped: the set's own (a copy of th, from the
+/// pool) when the set being flown can hold one, else th. A set's cache for other terms is given back first.
+[[gnu::noinline]] inline SpEvalCache* sp_claim(SpSetSlot* slot, SpEvalCache& th, const SpCombCoef* F, int count, uint32_t tag,
+                                              double a0, double e0) {
+  if (slot == nullptr) return &th;
+  if (slot->cache != nullptr && !sp_matches(*slot->cache, F, count, tag, a0, e0)) {
+    sp_pool_release(slot->cache);
+    slot->cache = nullptr;
+  }
+  if (slot->cache == nullptr) slot->cache = sp_pool_attach(th);
+  return slot->cache != nullptr ? slot->cache : &th;
+}
+
 [[gnu::noinline]] inline bool sp_init_or_fallback(
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
-    const Kepler& kp, double a, double e, double n, double eta, double sin_i, double ci, double ia,
+    const Kepler& kp, double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
     double theta_g0, const double* sb_in, const double* cb_in, const double* su1_in, const double* cu1_in,
     const double* sM1_in, const double* cM1_in, double* six, double* dsix_dlam, double* d2six_dlam2) {
   if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
       sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
-    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci);
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build);
   }
   if (!sc.grouped_ok || t == 0.0) {
     double sb, cb, su1, cu1, sM1, cM1;
@@ -2289,11 +2570,11 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
 
 [[gnu::noinline]] inline bool sp_init_or_fallback_val(
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
-    double a, double e, double n, double eta, double sin_i, double ci, double ia,
+    double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
     double sb, double cb, double su1, double cu1, double sM1, double cM1, double* six) {
   if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
       sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
-    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci);
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build);
   }
   if (!sc.grouped_ok || t == 0.0) {
     sp_six_fallback(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
@@ -2303,54 +2584,85 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   return true;
 }
 
-[[gnu::noinline]] inline void sp_rebake_sync(
-    SpEvalCache& sc, double a0, double e0, double a, double e, double n, double eta, double ci, double ia,
-    bool need_b_uil = false) {
-  const double da_tol = sc.res_overflow ? 2e-6 : 3e-5;
-  const double dn_tol = 1.6 * da_tol;
-  const double dci_tol = sc.res_overflow ? 1e-6 : (e0 < 0.03 ? 1.5e-4 : 6e-5);
-  const double e2_tol = 2e-5;
-  const double ae_da_tol = 1.8e-6;
-  const double ae_de_a_tol = need_b_uil ? 1e30 : 2.0e-5;
-  const double res_da_tol = 2e-7;
-  const double res_dci_tol = 1e-6;
-  const double res_e2_tol = 1e-5;
-  const bool e_stale = sc.res_overflow ? (std::fabs(e - sc.e) * (1.0 + 10.0 * e) > 2e-6)
-                                       : (std::fabs(e * e - sc.e * sc.e) > e2_tol);
-  if (sc.a < 0.0 || std::fabs(a - sc.a) > da_tol * sc.a || e_stale ||
-      std::fabs(ci - sc.ci) > dci_tol || std::fabs(n - sc.n) > dn_tol * sc.n) {
-    sp_rebake_base(sc, a0, e0, a, e, n, eta, ci, ia);
+constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pass: the pe blocks at the ae bake's e
+
+/// The bakes for the state (a, e, cos i) at time t, each level at a point that is a function of the state's bracket
+/// and t (SPEC 9): with the bracket (g_sp_anchor, t on it), the level's part of the bracket (sp_anchor_point); without
+/// one, the center of the state's cell of that level. Levels and tolerances: base (a relative 3e-5, e^2 2e-5, cos i
+/// 1.5e-4, 6e-5 from e0 0.03), ae (a relative 1.8e-6, e 2e-5), pe (e de_pe_thresh; a derivative pass keeps the pe
+/// blocks at the ae bake's e), res (a relative 2e-7, e^2 1e-5, cos i 1e-6). A level baked again bakes the levels
+/// above it again, the resonant blocks last. A set's cache rebuilds blk_c from F for a base or resonant bake.
+[[gnu::noinline]] inline void sp_sync(SpEvalCache& sc, double a0, double e0, double a, double e, double ci, double t,
+                                      bool derivative) {
+  const SpAnchor& an = g_sp_anchor;
+  const bool anchored = sp_anchored(t);
+  const uint64_t aid = anchored ? an.id : 0;
+  const double ctol = e0 < 0.03 ? 1.5e-4 : 6e-5;
+  double a_b, e_b, ci_b, a_ae, e_ae, c_ae, e_pe = 0.0, a_pe, c_pe;
+  int64_t kba, kbe = 0, kbc = 0, kaa, kae = 0, kpe = kSpPeAtBake;
+  if (anchored) {
+    kba = sp_anchor_point(an, t, 3e-5, 2e-5, true, ctol, a_b, e_b, ci_b);
+    kaa = sp_anchor_point(an, t, 1.8e-6, 2e-5, false, 0.0, a_ae, e_ae, c_ae);
+    if (!derivative && sc.n_pe_blks > 0) kpe = sp_anchor_point(an, t, 1e30, sc.de_pe_thresh, false, 0.0, a_pe, e_pe, c_pe);
   } else {
-    if ((need_b_uil && sc.uil_b_dirty) || std::fabs(a - sc.a_bake) > ae_da_tol * sc.a_bake ||
-        std::fabs(e - sc.e_bake_a) > ae_de_a_tol) {
-      sp_rebake_ae(sc, a0, a, e, ia, need_b_uil);
+    kba = sp_cell_rel(a, 3e-5, a_b);
+    kbe = sp_cell_e(e, 2.5e-4, 2e-5, e_b);
+    kbc = sp_cell_abs(ci, ctol, ci_b);
+    kaa = sp_cell_rel(a, 1.8e-6, a_ae);
+    kae = sp_cell_abs(e, 2e-5, e_ae);
+    if (!derivative && sc.n_pe_blks > 0) kpe = sp_cell_abs(e, sc.de_pe_thresh, e_pe);
+  }
+  const bool fresh = !sc.keys_valid || sc.anchor_id != aid;
+  const bool base = fresh || kba != sc.kb_a || kbe != sc.kb_e || kbc != sc.kb_c;
+  bool ae = base || kaa != sc.kae_a || kae != sc.kae_e;
+  const bool pe = ae || kpe != sc.kpe;
+  if (pe && !ae && sc.e_pe_bake != sc.e_bake) ae = true;  // the pe blocks back to the ae bake's e: the ae bake again
+  double a_r = 0.0, ci_r = 0.0, e_r = 0.0;
+  int64_t kra = 0, krc = 0, kre = 0;
+  auto res_point = [&]() {
+    if (anchored) {
+      kra = sp_anchor_point(an, t, 2e-7, 1e-5, true, 1e-6, a_r, e_r, ci_r);
+    } else {
+      kra = sp_cell_rel(a, 2e-7, a_r);
+      krc = sp_cell_abs(ci, 1e-6, ci_r);
+      kre = sp_cell_e(e, 1.25e-4, 1e-5, e_r);
     }
-    if (sc.n_res_blks > 0 && !sc.res_overflow &&
-        (sc.a_res < 0.0 || std::fabs(a - sc.a_res) > res_da_tol * sc.a_res ||
-         std::fabs(ci - sc.ci_res) > res_dci_tol || std::fabs(e * e - sc.e_res * sc.e_res) > res_e2_tol)) {
-      sp_rebake_res(sc, a0, e0, a, e, n, eta, ci, ia);
+  };
+  bool res = false;
+  if (!base && sc.n_res_blks > 0) {
+    res_point();
+    res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
+  }
+  if (!base && !ae && !pe && !res) return;
+  float* const own_c = sc.blk_c;
+  if (base && sc.compact) sc.blk_c = sp_blk_c(sc);
+  if (base) {
+    const double n_b = kKe / (a_b * std::sqrt(a_b));
+    sp_rebake_base(sc, a0, e0, a_b, e_b, n_b, std::sqrt(1.0 - e_b * e_b), ci_b, 1.0 / a_b);
+    if (sc.n_res_blks > 0) {
+      res_point();
+      res = true;
     }
   }
-  const bool has_res = sc.n_res_blks > 0 && !sc.res_overflow;
-  const double rem_base_a = std::fmax(0.0, std::fmin(da_tol * sc.a - std::fabs(a - sc.a),
-                                                     (dn_tol / 1.55) * sc.a - std::fabs(a - sc.a)));
-  const double rem_ae_a = std::fmax(0.0, ae_da_tol * sc.a_bake - std::fabs(a - sc.a_bake));
-  const double rem_res_a = has_res ? std::fmax(0.0, res_da_tol * sc.a_res - std::fabs(a - sc.a_res)) : 1e30;
-  sc.a_ref = a;
-  sc.da_thresh = std::fmin(rem_base_a, std::fmin(rem_ae_a, rem_res_a));
-
-  const double rem_base_e = sc.res_overflow
-      ? std::fmax(0.0, 2e-6 / (1.0 + 10.0 * (e + 2e-6)) - std::fabs(e - sc.e))
-      : std::fmax(0.0, (e2_tol - std::fabs(e * e - sc.e * sc.e)) / (2.0 * e + 1e-3));
-  const double rem_ae_e = std::fmax(0.0, ae_de_a_tol - std::fabs(e - sc.e_bake_a));
-  const double rem_res_e = has_res ? std::fmax(0.0, (res_e2_tol - std::fabs(e * e - sc.e_res * sc.e_res)) / (2.0 * e + 1e-3)) : 1e30;
-  sc.e_ref = e;
-  sc.de_thresh = std::fmin(rem_base_e, std::fmin(rem_ae_e, rem_res_e));
-
-  const double rem_base_ci = std::fmax(0.0, dci_tol - std::fabs(ci - sc.ci));
-  const double rem_res_ci = has_res ? std::fmax(0.0, res_dci_tol - std::fabs(ci - sc.ci_res)) : 1e30;
-  sc.ci_ref = ci;
-  sc.dci_thresh = std::fmin(rem_base_ci, rem_res_ci);
+  if (ae) sp_rebake_ae(sc, a0, a_ae, e_ae, 1.0 / a_ae, true);
+  if (pe && kpe != kSpPeAtBake) sp_rebake_pe_fast(sc, e_pe);
+  if (res) {
+    if (sc.compact && sc.blk_c == nullptr) sc.blk_c = sp_blk_c(sc);
+    const double n_r = kKe / (a_r * std::sqrt(a_r));
+    sp_rebake_res(sc, a0, e0, a_r, e_r, n_r, std::sqrt(1.0 - e_r * e_r), ci_r, 1.0 / a_r);
+    sc.kr_a = kra;
+    sc.kr_c = krc;
+    sc.kr_e = kre;
+  }
+  if (sc.compact) sc.blk_c = own_c;
+  sc.anchor_id = aid;
+  sc.kb_a = kba;
+  sc.kb_e = kbe;
+  sc.kb_c = kbc;
+  sc.kae_a = kaa;
+  sc.kae_e = kae;
+  sc.kpe = kpe;
+  sc.keys_valid = true;
 }
 
 [[gnu::always_inline]] inline void sp_fill_trig(SpEvalCache& sc, double cb, double sb, double cu1, double su1,
@@ -2497,8 +2809,8 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   };
   const float* const cswq_c = sc.cswq_c;
   const float* const cswq_s = sc.cswq_s;
-  const float* const cm_f32 = sc.cm_f32_local;
-  const float* const sm_f32 = sc.sm_f32_local;
+  const float* const cm_f32 = sp_trig_cm();
+  const float* const sm_f32 = sp_trig_sm();
   const v128_t* const vcm_base = reinterpret_cast<const v128_t*>(cm_f32);
   const v128_t* const vsm_base = reinterpret_cast<const v128_t*>(sm_f32);
   const v128_t* const vmseq_base = reinterpret_cast<const v128_t*>(kSpMSeq);
@@ -2573,7 +2885,7 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
 
 [[gnu::noinline]] inline void sp_six_with_deriv(
     const SpCombCoef* F, int count, double a0, double e0, double t, const Kepler& kp, double n, double eta,
-    double si, double ci, double theta_g0, double* six, double* dsix_dlam, double* d2six_dlam2,
+    double si, double ci, double ci_build, double theta_g0, double* six, double* dsix_dlam, double* d2six_dlam2,
     const double* sb_in = nullptr, const double* cb_in = nullptr,
     float* cm_f32_io = nullptr, float* sm_f32_io = nullptr, int cm_in_count = 0,
     double cm_last = 1.0, double sm_last = 0.0,
@@ -2599,26 +2911,18 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
   } else {
     for (int k = 1; k < count; ++k) tag |= static_cast<uint32_t>(static_cast<uint8_t>(F[k].pad)) << (8 * k);
   }
-  SpEvalCache& sc = sp_eval_cache();
-  if (__builtin_expect(t == 0.0 || sc.F != F || sc.count != count || sc.table_tag != tag ||
-                           sc.a0 != a0 || sc.e0 != e0 || sc.f0_uc != F[0].uc0 ||
-                           sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0 || !sc.grouped_ok,
-                       0)) {
-    if (!sp_init_or_fallback(sc, F, count, tag, a0, e0, t, kp, a, e, n, eta, sin_i, ci, ia,
+  SpSetSlot* const slot = g_sp_set_slot;
+  SpEvalCache* scp = (slot != nullptr && slot->cache != nullptr) ? slot->cache : &sp_thread_cache();
+  if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
+    SpEvalCache& th = sp_thread_cache();
+    if (!sp_init_or_fallback(th, F, count, tag, a0, e0, t, kp, a, e, n, eta, sin_i, ci, ia, ci_build,
                              theta_g0, sb_in, cb_in, su1_in, cu1_in, sM1_in, cM1_in, six, dsix_dlam, d2six_dlam2)) {
       return;
     }
+    scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
-  if (__builtin_expect(sc.a < 0.0 || sc.uil_b_dirty ||
-                           std::fabs(a - sc.a_ref) > sc.da_thresh ||
-                           std::fabs(e - sc.e_ref) > sc.de_thresh ||
-                           std::fabs(ci - sc.ci_ref) > sc.dci_thresh,
-                       0)) {
-    sp_rebake_sync(sc, a0, e0, a, e, n, eta, ci, ia, true);
-  }
-  if (__builtin_expect(sc.e_pe_bake != sc.e_bake, 0)) {
-    sp_rebake_pe_fast(sc, sc.e_bake);
-  }
+  SpEvalCache& sc = *scp;
+  sp_sync(sc, a0, e0, a, e, ci, t, true);
   double sb, cb, su1, cu1, sM1, cM1;
   if (sb_in != nullptr && cb_in != nullptr && su1_in != nullptr && cu1_in != nullptr && sM1_in != nullptr && cM1_in != nullptr) {
     sb = *sb_in; cb = *cb_in;
@@ -2642,8 +2946,8 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
       else fm::sincos_fast(kp.m, sM1, cM1);
     }
   }
-  float* const cm_f32 = cm_f32_io != nullptr ? cm_f32_io : sc.cm_f32_local;
-  float* const sm_f32 = sm_f32_io != nullptr ? sm_f32_io : sc.sm_f32_local;
+  float* const cm_f32 = cm_f32_io != nullptr ? cm_f32_io : sp_trig_cm();
+  float* const sm_f32 = sm_f32_io != nullptr ? sm_f32_io : sp_trig_sm();
   sp_fill_trig(sc, cb, sb, cu1, su1, cM1, sM1, cm_f32, sm_f32,
                cm_f32_io != nullptr ? cm_in_count : 0, cm_last, sm_last, cm_f32_io != nullptr);
   const float de_f32 = static_cast<float>(e - sc.e_bake);
@@ -2680,7 +2984,7 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
 /// The displacements in the six-component set (n, e, i, e varpi, sin i Omega, lambda), value-only hot path.
 [[gnu::noinline]] inline void sp_six_val(
     const SpCombCoef* F, int count, double a0, double e0, double t, double kp_a, double kp_e, double n, double eta,
-    double si, double ci, double* six,
+    double si, double ci, double ci_build, double* six,
     double sb, double cb, double su1, double cu1, double sM1, double cM1,
     int cm_in_count, double cm_last, double sm_last, bool has_ext_cm) {
   if (count <= 0) return;
@@ -2704,29 +3008,21 @@ inline void sp_six_deriv(const SpEvalCache& sc, float de_f32, double a, double e
     if (count >= 2) tag |= static_cast<uint32_t>(static_cast<uint8_t>(F[1].pad)) << 8;
     if (count == 3) tag |= static_cast<uint32_t>(static_cast<uint8_t>(F[2].pad)) << 16;
   }
-  SpEvalCache& sc = sp_eval_cache();
-  if (__builtin_expect(t == 0.0 || sc.F != F || sc.count != count || sc.table_tag != tag ||
-                           sc.a0 != a0 || sc.e0 != e0 || !sc.grouped_ok ||
-                           (tag == 0u && (sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0)),
-                       0)) {
-    if (!sp_init_or_fallback_val(sc, F, count, tag, a0, e0, t, a, e, n, eta, sin_i, ci, ia,
+  SpSetSlot* const slot = g_sp_set_slot;
+  SpEvalCache* scp = (slot != nullptr && slot->cache != nullptr) ? slot->cache : &sp_thread_cache();
+  if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
+    SpEvalCache& th = sp_thread_cache();
+    if (!sp_init_or_fallback_val(th, F, count, tag, a0, e0, t, a, e, n, eta, sin_i, ci, ia, ci_build,
                                  sb, cb, su1, cu1, sM1, cM1, six)) {
       return;
     }
+    scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
-  if (__builtin_expect(sc.a < 0.0 ||
-                           std::fabs(a - sc.a_ref) > sc.da_thresh ||
-                           std::fabs(e - sc.e_ref) > sc.de_thresh ||
-                           std::fabs(ci - sc.ci_ref) > sc.dci_thresh,
-                       0)) {
-    sp_rebake_sync(sc, a0, e0, a, e, n, eta, ci, ia, false);
-  }
-  if (__builtin_expect(sc.n_pe_blks > 0 && std::fabs(e - sc.e_pe_bake) > sc.de_pe_thresh, 0)) {
-    sp_rebake_pe_fast(sc, e);
-  }
+  SpEvalCache& sc = *scp;
+  sp_sync(sc, a0, e0, a, e, ci, t, false);
 
-  float* const cm_f32 = sc.cm_f32_local;
-  float* const sm_f32 = sc.sm_f32_local;
+  float* const cm_f32 = sp_trig_cm();
+  float* const sm_f32 = sp_trig_sm();
   sp_fill_trig(sc, cb, sb, cu1, su1, cM1, sM1, cm_f32, sm_f32,
                has_ext_cm ? cm_in_count : 0, cm_last, sm_last, has_ext_cm);
   const float de_f32 = static_cast<float>(e - sc.e_bake);
@@ -2864,35 +3160,6 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
   six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI + 3.0 * ia * ia * sL;
 }
 
-inline void sp_six(const SpCombCoef* F, int count, double a0, double e0, double t, const Kepler& kp, double n, double eta,
-                   double si, double ci, double theta_g0, double* six, double* dsix_dlam = nullptr,
-                   double* d2six_dlam2 = nullptr, const double* sb_in = nullptr, const double* cb_in = nullptr,
-                   float* cm_f32_io = nullptr, float* sm_f32_io = nullptr, int cm_in_count = 0,
-                   double cm_last = 1.0, double sm_last = 0.0,
-                   const double* su1_in = nullptr, const double* cu1_in = nullptr,
-                   const double* sM1_in = nullptr, const double* cM1_in = nullptr) {
-  if (dsix_dlam != nullptr) {
-    sp_six_with_deriv(F, count, a0, e0, t, kp, n, eta, si, ci, theta_g0, six, dsix_dlam, d2six_dlam2,
-                      sb_in, cb_in, cm_f32_io, sm_f32_io, cm_in_count, cm_last, sm_last,
-                      su1_in, cu1_in, sM1_in, cM1_in);
-  } else {
-    double sb, cb, su1, cu1, sM1, cM1;
-    if (sb_in != nullptr && cb_in != nullptr) { sb = *sb_in; cb = *cb_in; }
-    else fm::sincos_fast(kp.node - (theta_g0 + kOmegaE * t), sb, cb);
-    if (su1_in != nullptr && cu1_in != nullptr) { su1 = *su1_in; cu1 = *cu1_in; }
-    else fm::sincos_fast(kp.argp + kp.m, su1, cu1);
-    if (sM1_in != nullptr && cM1_in != nullptr) { sM1 = *sM1_in; cM1 = *cM1_in; }
-    else fm::sincos_fast(kp.m, sM1, cM1);
-    float* const cm_loc = sp_eval_cache().cm_f32_local;
-    float* const sm_loc = sp_eval_cache().sm_f32_local;
-    if (cm_f32_io != nullptr && cm_f32_io != cm_loc && cm_in_count > 0) {
-      std::memcpy(cm_loc, cm_f32_io, static_cast<size_t>(cm_in_count) * sizeof(float));
-      std::memcpy(sm_loc, sm_f32_io, static_cast<size_t>(cm_in_count) * sizeof(float));
-    }
-    sp_six_val(F, count, a0, e0, t, kp.a, kp.e, n, eta, si, ci, six,
-               sb, cb, su1, cu1, sM1, cM1, cm_in_count, cm_last, sm_last, cm_f32_io != nullptr);
-  }
-}
 
 /// Half-day resonant tail: every even order m, k=m/2, degree 6..31.
 /// Normalized F and dF/di at the epoch; G is cubic about the epoch eccentricity.
@@ -3766,6 +4033,8 @@ struct ZonalEvalCache {
   bool eq_cut = false;
   float f0 = 0.0f, f1 = 0.0f, f2 = 0.0f, f3 = 0.0f, flast = 0.0f;
   double a_ref = -1.0;
+  bool keys_valid = false;
+  int64_t ka = 0;  ///< the bits of the a baked at (a_ref)
   double c[11][3]{};
 };
 inline thread_local ZonalEvalCache g_zonal_eval_cache{};
@@ -3795,9 +4064,14 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
     ZonalEvalCache& zc = zonal_eval_cache();
     const int last_i = 4 * zonal_count(degree, false) - 1;
     const float flast = last_i >= 0 ? F[last_i] : 0.0f;
+    // baked at the state's own a (only the mean-element rates read it, a few times a node step): a function of the
+    // state alone
+    const double a_c = a;
+    int64_t ka;
+    std::memcpy(&ka, &a, sizeof ka);
     if (table_id == 0 || zc.table_id != table_id || zc.F != F || zc.degree != degree || zc.eq_cut != eq_cut ||
         zc.f0 != F[0] || zc.f1 != F[1] || zc.f2 != F[2] || zc.f3 != F[3] || zc.flast != flast ||
-        std::fabs(a - zc.a_ref) > 2e-3 * zc.a_ref) {
+        !zc.keys_valid || ka != zc.ka) {
       zc.table_id = table_id;
       zc.F = F;
       zc.degree = degree;
@@ -3807,15 +4081,18 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
       zc.f2 = F[2];
       zc.f3 = F[3];
       zc.flast = flast;
-      zc.a_ref = a;
+      zc.a_ref = a_c;
+      zc.ka = ka;
+      zc.keys_valid = true;
       std::memset(zc.c, 0, sizeof(zc.c));
       auto add_p = [&](int idx, double val, int p) {
         zc.c[idx][0] += val;
         zc.c[idx][1] += p * val;
         zc.c[idx][2] += 0.5 * p * (p - 1) * val;
       };
+      const double iab = 1.0 / a_c, ia2b = iab * iab;
       const float* f = F;
-      double Ar = A;
+      double Ar = kMu * ia2b * ia2b * ia2b * iab;  // mu / a^(l+1), l = 6, at the cell's center
       int l = 6;
       for (; l + 1 <= degree; l += 2) {
         if (Ar < a_cut) break;
@@ -3824,11 +4101,11 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         add_p(0, Ce * f0 * f3, l + 1);
         add_p(1, Ce * f1 * f2, l + 1);
         add_p(2, Ce * f1 * f3, l + 1);
-        const double Ce_a = -(l + 1) * Ce * ia;
+        const double Ce_a = -(l + 1) * Ce * iab;
         add_p(3, Ce_a * f0 * f2, l + 2);
         add_p(4, Ce_a * f0 * f3, l + 2);
 
-        const double Co = Ar * ia * kEgmC[l + 1][0];
+        const double Co = Ar * iab * kEgmC[l + 1][0];
         const float* fn = f + 4;
         const float* fp = f + 8;
         const double fg0 = static_cast<double>(fp[0]) * fp[2] - static_cast<double>(fn[0]) * fn[2];
@@ -3839,11 +4116,11 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         add_p(6, Co * fg1, l + 2);
         add_p(7, Co * ig0, l + 2);
         add_p(8, Co * ig1, l + 2);
-        const double Co_a = -(l + 2) * Co * ia;
+        const double Co_a = -(l + 2) * Co * iab;
         add_p(9, Co_a * fg0, l + 3);
         add_p(10, Co_a * fg1, l + 3);
         f += 12;
-        Ar *= ia2;
+        Ar *= ia2b;
       }
       if (l <= degree && Ar >= a_cut) {
         const double Ce = Ar * kEgmC[l][0];
@@ -3851,7 +4128,7 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
         add_p(0, Ce * f0 * f3, l + 1);
         add_p(1, Ce * f1 * f2, l + 1);
         add_p(2, Ce * f1 * f3, l + 1);
-        const double Ce_a = -(l + 1) * Ce * ia;
+        const double Ce_a = -(l + 1) * Ce * iab;
         add_p(3, Ce_a * f0 * f2, l + 2);
         add_p(4, Ce_a * f0 * f3, l + 2);
       }
@@ -3973,6 +4250,8 @@ struct ShallowEvalCache {
   int8_t l0 = 0, m0 = 0, llast = 0;
   float fg0 = 0.0f, fglast = 0.0f;
   double a_ref = -1.0;
+  bool keys_valid = false;
+  int64_t ka = 0;  ///< the bits of the a baked at (a_ref)
   int n_groups = 0;
   bool ok = false;
   ShallowGroupPoly groups[kMaxGroups]{};
@@ -3992,10 +4271,15 @@ inline void shallow_six(const ShallowCoef* table, int count, double e0, double i
   const double thetag = theta_g0 + kOmegaE * t;
   const double ia = 1.0 / a;
   ShallowEvalCache& cache = shallow_eval_cache();
+  // baked at the state's own a (only the mean-element rates read it, a few times a node step): a function of the state
+  // alone
+  const double a_c = a;
+  int64_t ka;
+  std::memcpy(&ka, &a, sizeof ka);
   if (table_id == 0 || cache.table_id != table_id || cache.table != table || cache.count != count ||
       cache.l0 != table[0].l || cache.m0 != table[0].m || cache.fg0 != table[0].fg ||
       cache.llast != table[count - 1].l || cache.fglast != table[count - 1].fg ||
-      std::fabs(a - cache.a_ref) > 2e-3 * cache.a_ref) {
+      !cache.keys_valid || ka != cache.ka) {
     cache.table_id = table_id;
     cache.table = table;
     cache.count = count;
@@ -4004,16 +4288,19 @@ inline void shallow_six(const ShallowCoef* table, int count, double e0, double i
     cache.fg0 = table[0].fg;
     cache.llast = table[count - 1].l;
     cache.fglast = table[count - 1].fg;
-    cache.a_ref = a;
+    cache.a_ref = a_c;
+    cache.ka = ka;
+    cache.keys_valid = true;
     cache.n_groups = 0;
     cache.ok = true;
+    const double iab = 1.0 / a_c;
     double amp0[71];
-    amp0[0] = kMu * ia;
+    amp0[0] = kMu * iab;
     int lmax = 0;
     for (int j = 0; j < count; ++j) {
       if (table[j].l > lmax) lmax = table[j].l;
     }
-    for (int l = 1; l <= lmax; ++l) amp0[l] = amp0[l - 1] * ia;
+    for (int l = 1; l <= lmax; ++l) amp0[l] = amp0[l - 1] * iab;
     int idx = 0;
     while (idx < count) {
       const int k = table[idx].k, m = table[idx].m, w = table[idx].l - 2 * table[idx].p;
@@ -4040,7 +4327,7 @@ inline void shallow_six(const ShallowCoef* table, int count, double e0, double i
         const double C = kEgmC[l][m], S_c = kEgmS[l][m];
         const double Rc = odd ? -S_c : C, Rs = odd ? C : S_c;
         const double A0 = amp0[l];
-        const double Aa0 = -(l + 1) * A0 * ia;
+        const double Aa0 = -(l + 1) * A0 * iab;
         add_p(0, A0 * sc.fg * Rc, l + 1);
         add_p(1, A0 * sc.fg * Rs, l + 1);
         add_p(2, A0 * sc.fdg * Rc, l + 1);
@@ -4666,6 +4953,18 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
 }
 
 /// Adds a holder to a grid already held.
+/// A held grid's bytes shared among its holders (a grid of one exact key serves every set that asks for it).
+inline double wide_grid_share(const WideGrid* g) {
+  if (g == nullptr) return 0.0;
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  int refs = 1;
+  for (int k = 0; k < c.count; ++k)
+    if (c.slot[k].g == g) { refs = c.slot[k].refs > 0 ? c.slot[k].refs : 1; break; }
+  cache_unlock(&c.word);
+  return static_cast<double>(sizeof(WideGrid) + wide_grid_bytes(*g)) / refs;
+}
+
 inline void wide_grid_ref(WideGrid* g) {
   GridCache& c = grid_cache();
   cache_lock(&c.word);

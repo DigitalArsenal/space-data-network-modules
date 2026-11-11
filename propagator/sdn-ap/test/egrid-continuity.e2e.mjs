@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// E2E (stack #420, SPEC 16.11): above e 0.3 the first-order tesseral families' grid in the eccentric anomaly is read
-// continuously with its slope, so the output has no kinks where its nodes pass.
+// E2E (stack #420, SPEC 16.11): where a set flies the first-order tesseral families' grid in the eccentric anomaly
+// (above e 0.05 outside the resonance classes, above e 0.3 inside them), the grid is read continuously with its slope,
+// so the output has no kinks where its nodes pass.
 // Fixtures, drag off (BTERM 0), Sun and Moon on, FORCES 31,20, AGOM 0, epoch 2026-10-29 00:00 UTC:
 // - the transfer orbit: class-crossing's primary, n 2.40 rev/day, e 0.72, i 27, RAAN 40, argp 270, M 0;
 // - Molniya: high-e-fit-arc's, n 2 rev/day, e 0.74, i 63.4, RAAN 300, argp 270, M 10.
