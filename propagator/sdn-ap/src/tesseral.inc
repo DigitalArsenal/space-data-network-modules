@@ -4576,6 +4576,18 @@ inline double census_size_m(int l, int j, double A, double F, double dF, double 
                   (2.0 * std::fabs(F * dG) + std::fabs(dF * G)) / (na2 * ap)) * kRe * 1e3;
 }
 
+/// A slow term's size above the switch (SPEC 16.18, m): the largest of the slow set's two (through the mean motion and through
+/// the eccentricity vector) and the field's census's (16.20, which also counts the inclination's part), so a term the census
+/// sizes at or above a cut is held to it. F, dF/di, G and dG/de at the epoch; n rad/min.
+inline double wide_slow_size_m(int l, int m, int j, double F, double dF, double G, double dG, double a, double n, double psidot) {
+  double amp = kMu / a;
+  for (int k = 0; k < l; ++k) amp /= a;
+  const double A = amp * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+  const double s1 = slow_size_m(l, m, j, F * G, a, psidot), s2 = slow_size_e_m(l, m, F * dG, a, n, psidot);
+  const double s3 = census_size_m(l, j, A, F, dF, G, dG, a, n, psidot);
+  return std::fmax(s1, std::fmax(s2, s3));
+}
+
 /// A slow term's G_lpq and dG/de at the epoch e (SPEC 16.18). q = 0 under e 0.03: the series to e^4. Otherwise res::exact_G,
 /// whose dG below e 2e-4 is a tabulated Hansen series's, or 0 where none is tabulated (degrees above 5): there the slow set
 /// takes dG as the central difference of exact_G's own G over e0 +- 2e-4 (G is analytic in e, odd or even in it with q). A term
@@ -4699,7 +4711,7 @@ inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, 
           double G, dG;
           res::exact_G(l, pp, q, e0, G, dG);
           if (!std::isfinite(F[l] * G) || !std::isfinite(F[l] * dG) || !std::isfinite(dF[l] * G)) continue;
-          if (!(slow_size_m(l, m, j, F[l] * G, a, psidot) >= kSlowKeepM) && !(slow_size_e_m(l, m, F[l] * dG, a, n, psidot) >= kSlowKeepM)) continue;
+          if (!(wide_slow_size_m(l, m, j, F[l], dF[l], G, dG, a, n, psidot) >= kSlowKeepM)) continue;
           if (count == room) {
             room = room == 0 ? 256 : 2 * room;
             res::ResCoef* grown = static_cast<res::ResCoef*>(std::realloc(*out, static_cast<size_t>(room) * sizeof(res::ResCoef)));
@@ -4901,8 +4913,7 @@ inline int slow_terms(int cap, int cls, double n, double e, double inc, double* 
           if (shallow) where = 1;
           double G, dG;
           res::exact_G(l, p, q, e, G, dG);
-          const double size_m = slow_size_m(l, m, j, F[l] * G, a, psidot), size_e = slow_size_e_m(l, m, F[l] * dG, a, n, psidot);
-          const double size = size_m > size_e ? size_m : size_e;
+          const double size = wide_slow_size_m(l, m, j, F[l], dF[l], G, dG, a, n, psidot);
           // every other slow term: the rates (slow_terms_wide) at or above the size cut, nowhere under it (stack #473)
           if (where < 0) where = l > grid_degree || j < -127 || j > 127 ? 4 : size >= kSlowKeepM ? 1 : 5;
           if (count < max_rows) {
@@ -5025,7 +5036,8 @@ inline void fft_inplace(double* re, double* im, int n, bool inverse) {
 /// 2 to `L` with at least one term (l, p, q), |j| up to L + 64, whose share on the grid reaches kGridKeepM. A term's size is the
 /// low table's position amplitude (sp_terms' rule for kSpKeepM: 3 |j| A F G / (a psi-dot^2) and the direct, e and i parts over
 /// psi-dot) with G and dG/de exact at e; its share on the grid is 1 - band_taper of its rate at J2's secular rates (the rates
-/// carry the rest); the class's terms, the half-day tail and the m-daily terms (w = j = 0) are the rates' alone. G_lpq depends on
+/// carry the rest); the class's terms and the half-day tail are the rates', the m-daily terms (w = j = 0) to kMdailyCap the
+/// m-daily family's (above it the grid's). G_lpq depends on
 /// (l, w, j) only, so one quadrature in E per (l, w) gives every j (res::exact_G's integrand, its nodes) for all orders.
 /// `largest` (optional, kKeepStride^2): each family's largest share in m. n rad/min. Returns the families kept, -1 on no memory.
 constexpr int kKeepStride = 64;
@@ -5103,7 +5115,7 @@ inline int grid_keep(int L, int cls, double n, double e, double inc, uint8_t* ke
         const double* g = Gt + (static_cast<size_t>(l) * W + (w + L)) * NJ * 2;
         for (int k = 0; k < NJ; ++k) {
           const int j = k - jspan;
-          if (w == 0 && j == 0) continue;
+          if (w == 0 && j == 0 && l <= kMdailyCap) continue;  // the m-daily family's (above its degree the grid's)
           const int q = j - w;
           bool own = cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2;
           for (int t = 0; t < carried.count && !own; ++t)
@@ -5140,7 +5152,8 @@ inline int grid_keep(int L, int cls, double n, double e, double inc, uint8_t* ke
 inline double wide_left_out(int cls, const res::TermSet& carried, int l, int m, int p, int w, int j, bool in_band, double ap,
                             double n) {
   const int q = j - w;
-  double out_ = w == 0 && j == 0 ? 1.0 : 0.0;
+  // the m-daily terms to the m-daily family's degree (kMdailyCap); above it, from 0.6.NN, the grid carries them
+  double out_ = w == 0 && j == 0 && l <= kMdailyCap ? 1.0 : 0.0;
   if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = 1.0;
   for (int t = 0; t < carried.count && out_ == 0.0; ++t)
     if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = 1.0;
