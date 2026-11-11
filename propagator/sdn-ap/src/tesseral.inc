@@ -160,6 +160,7 @@ inline int& slow_degree_cap() {
 }
 struct ShallowTerms;
 inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q);
+inline int slow_complement_lmax(const ShallowTerms* held, int degree, int8_t (&lmax)[72][35]);
 inline double band_taper(double x);
 /// The one-day class above the eccentricity switch (SPEC 16.18; stack #467): a slow term the class's rates do not carry stays
 /// on the grid unless its angle drifts slower than this times n; below it the term is carried nowhere. 1e-2 n, not the
@@ -836,6 +837,7 @@ struct SpTermsScratch {
   alignas(16) double AB_im[18][38];
   alignas(16) double dAB_re[18][38];
   alignas(16) double dAB_im[18][38];
+  int8_t comp_lmax[72][35];  ///< sp_terms' complement: per order m and w + 17, the highest degree of a slow-held term above the table's
 };
 inline thread_local SpTermsScratch* g_sp_terms_scratch_ptr = nullptr;
 inline SpTermsScratch& sp_terms_scratch() {
@@ -867,17 +869,17 @@ inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
 }
 
 /// The upper bound of the table: per degree l, l orders x (min(l, kSpMaxW) + 1) w values x 3 q values (the m-daily terms
-/// among them), + kNearMax.
+/// among them), + kNearMax, + `extra` (sp_terms' complement: at most one entry per slow-held term).
 constexpr int kNearMax = 500;
-inline int sp_bound(int degree, bool wide) {
-  int c = kNearMax;
+inline int sp_bound(int degree, bool wide, int extra = 0) {
+  int c = kNearMax + extra;
   for (int l = 2; l <= degree && !wide; ++l) c += l * ((l < kSpMaxW ? l : kSpMaxW) + 1) * 3;
   return c;
 }
-inline int sp_comb_bound(int degree, bool wide) {
-  if (wide) return kNearMax;
+inline int sp_comb_bound(int degree, bool wide, int extra = 0) {
+  if (wide) return kNearMax + extra;
   const int wmax = degree < kSpMaxW ? degree : kSpMaxW;
-  return (degree + 3) * (2 * wmax + 1) * 3 + kNearMax;
+  return (degree + 3) * (2 * wmax + 1) * 3 + kNearMax + extra;
 }
 
 /// Fills out at the epoch mean motion n0, inclination i0 and eccentricity e0; returns the count. `cls`: the resonance class,
@@ -888,9 +890,11 @@ inline int sp_comb_bound(int degree, bool wide) {
 /// is the rates' inside the band, and the table keeps 1 minus the band taper of it (nothing in both places, nothing in neither).
 /// `mdaily_degree`: the m-daily family's degree; an m-daily term (q = 0, l = 2p) above it is this table's (the low table's
 /// fast side, a degree above kSpCap), at or below it the family's (the default: every m-daily term the family's).
+/// `complement` (the low table's fast side, with slow_held): a slow-held term above `degree` (the slow set takes its own
+/// degree, kSlowDegree) is this table's too, by the same 1 minus the band taper and the same size cut, for q of -1, 0 and 1.
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
                     SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
-                    int mdaily_degree = kFastCap + 2) {
+                    int mdaily_degree = kFastCap + 2, bool complement = false) {
   int raw_count = 0;
   const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
@@ -958,12 +962,20 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   auto (&Fw)[3][35][72] = sp_sc.Fw;
   double col[104], dcol[104], cku[18], sku[18];
 
+  // the complement: per (m, w), the highest degree above `degree` of a slow-held term of q -1, 0 or 1 (0: none)
+  const bool comp_on = complement && low && !wide && slow_held != nullptr;
+  int comp_m = 0;
+  if (comp_on) comp_m = slow_complement_lmax(slow_held, degree, sp_sc.comp_lmax);
+  const auto comp_l = [&](int m, int w) -> int { return comp_on ? sp_sc.comp_lmax[m][w + 17] : 0; };
+
   int count = 0;
-  const int max_m = low ? (near_degree > degree ? near_degree : degree) : (wide ? 0 : degree);
+  int max_m = low ? (near_degree > degree ? near_degree : degree) : (wide ? 0 : degree);
+  if (comp_m > max_m) max_m = comp_m;
   for (int m = 1; m <= max_m; ++m) {
     const int wmax = degree < kSpMaxW ? degree : kSpMaxW;
     const int w_lo = !wide && m <= degree ? -wmax : 0;
-    const int w_hi = !wide && m <= degree ? wmax : 2;
+    int w_hi = !wide && m <= degree ? wmax : 2;
+    if (comp_on && m > degree && w_hi < kSlowJMax + 1) w_hi = kSlowJMax + 1;  // a slow term's w = j - q, j from 1 to kSlowJMax
     int l_max_w[35]{};
     int l_max_aw[18]{};
     int l_max_m = 0, aw_max_m = 0;
@@ -975,7 +987,8 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
       const bool has_gen = !wide && m <= degree && aw <= degree;
       const bool has_near = low && m >= 2 && m <= near_degree && (w == 1 || w == 0 || w == 2) &&
                             (std::fabs(w * wdot + mdot + m * (node_rate - kOmegaE)) < kNearBand * n0);
-      if (!has_gen && !has_near) continue;
+      const int lc = comp_l(m, w);
+      if (!has_gen && !has_near && lc == 0) continue;
       int lw = 0;
       if (has_near) {
         const int q_near = 1 - w;
@@ -994,6 +1007,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           if (aw <= l && (can_pass(l, m, w, -1) || can_pass(l, m, w, 0) || can_pass(l, m, w, 1))) { lw = l; break; }
         }
       }
+      if (lc > lw) lw = lc;
       l_max_w[w + 17] = lw;
       if (lw > 0) {
         if (lw > l_max_aw[aw]) l_max_aw[aw] = lw;
@@ -1222,25 +1236,27 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
       const double* f = Fw[0][w + 17];
       const double* fp = Fw[1][w + 17];
       const double* fm = Fw[2][w + 17];
+      const int lc = comp_l(m, w);
 
       for (int q = -1; q <= 1; ++q) {
         if (q == 0 && w == 0 && mdaily_degree >= degree) continue;  // every m-daily term the family's
         const int j = w + q;
         const bool q_near = has_near && (j == 1);
-        if (!has_gen && !q_near) continue;
+        if (!has_gen && !q_near && lc == 0) continue;
 
         double uc0 = 0, us0 = 0, dc0 = 0, ds0 = 0, dca = 0, dsa = 0;
         double ec0 = 0, es0 = 0, eca = 0, esa = 0;
         double ic0 = 0, is0 = 0, ica = 0, isa = 0, ice = 0, ise = 0;
         bool any = false;
 
-        const int l_lim = q_near ? l_max : (l_max < degree ? l_max : degree);
+        const int l_lim = q_near || lc > 0 ? l_max : (l_max < degree ? l_max : degree);
         for (int l = l0; l <= l_lim; l += 2) {
           if (q == 0 && w == 0 && l <= mdaily_degree) continue;  // the m-daily family's
           if (l <= degree) {
             if (!has_gen || aw > l || j < -(l + 1) || j > l + 1) continue;
-          } else {
-            if (!q_near) continue;
+          } else if (!(q_near && l <= near_degree)) {
+            // above the degree: the near-resonant terms to the near degree, and the complement of a slow-held term
+            if (l > lc || !slow_holds(slow_held, l, m, (l - w) / 2, q)) continue;
           }
           if (!can_pass(l, m, w, q)) continue;
           const int p = (l - w) / 2;
@@ -1320,55 +1336,6 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
     }
   }
   return count;
-}
-
-/// Whether a raw table (sp_terms' raw_out, a set's ctx.sp) holds the term (l, m, p, q): the output table's own rule, term by
-/// term (stack #477: the census of the field reads it).
-inline bool sp_fast_kept_in(const SpCoef* raw, int count, int l, int m, int p, int q) {
-  const int w = l - 2 * p, j = w + q;
-  for (int k = 0; k < count; ++k)
-    if (raw[k].l == l && raw[k].m == m && raw[k].w == w && raw[k].j == j) return true;
-  return false;
-}
-/// The same for the table a set with these epoch elements builds (sp_terms with the arguments xp_init gives it in the low
-/// table: degree, near degree, class, low, the slow set's list, the m-daily family's degree), built once per argument set on
-/// the calling thread.
-inline bool sp_fast_kept(int degree, int near_degree, int l, int m, int p, int q, double n0, double e0, double i0, int cls,
-                         bool low, const ShallowTerms* slow_held = nullptr, int mdaily_degree = kFastCap + 2) {
-  struct Built {
-    int degree = -1, near_degree = -1, cls = -1, mdaily_degree = -1, count = 0, raw_count = 0;
-    bool low = false;
-    double n0 = 0, e0 = 0, i0 = 0;
-    const ShallowTerms* slow_held = nullptr;
-    SpCombCoef* comb = nullptr;
-    SpCoef* raw = nullptr;
-  };
-  static thread_local Built b;
-  if (b.degree != degree || b.near_degree != near_degree || b.cls != cls || b.low != low || b.n0 != n0 || b.e0 != e0 ||
-      b.i0 != i0 || b.slow_held != slow_held || b.mdaily_degree != mdaily_degree) {
-    std::free(b.comb);
-    std::free(b.raw);
-    b = Built{};
-    b.comb = static_cast<SpCombCoef*>(std::malloc(sp_comb_bound(degree, false) * sizeof(SpCombCoef)));
-    b.raw = static_cast<SpCoef*>(std::malloc(sp_bound(degree, false) * sizeof(SpCoef)));
-    if (b.comb == nullptr || b.raw == nullptr) {
-      std::free(b.comb);
-      std::free(b.raw);
-      b = Built{};
-      return false;
-    }
-    b.count = sp_terms(degree, near_degree, cls, low, false, n0, i0, e0, b.comb, b.raw, &b.raw_count, slow_held, mdaily_degree);
-    b.degree = degree;
-    b.near_degree = near_degree;
-    b.cls = cls;
-    b.low = low;
-    b.n0 = n0;
-    b.e0 = e0;
-    b.i0 = i0;
-    b.slow_held = slow_held;
-    b.mdaily_degree = mdaily_degree;
-  }
-  return sp_fast_kept_in(b.raw, b.raw_count, l, m, p, q);
 }
 
 alignas(16) static constexpr float kSpMSeq[76] = {
@@ -4671,6 +4638,20 @@ inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q) {
     if (c.l == l && c.m == m && c.p == p && c.k - (c.l - 2 * c.p) == q) return true;
   }
   return false;
+}
+/// sp_terms' complement (the low table's fast side): per order m and w + 17, the highest degree above `degree` of a term the
+/// slow set holds beyond the shallow set's with q of -1, 0 or 1 (0: none); returns the highest such order.
+inline int slow_complement_lmax(const ShallowTerms* held, int degree, int8_t (&lmax)[72][35]) {
+  std::memset(lmax, 0, sizeof(lmax));
+  int top = 0;
+  for (int k = held->old_count; k < held->count; ++k) {
+    const res::ResCoef& c = held->c[k];
+    const int l = c.l, m = c.m, w = c.l - 2 * c.p, q = c.k - w;
+    if (l <= degree || l > kFastCap || m < 1 || m > kFastCap || q < -1 || q > 1 || w < -kSpMaxW || w > kSpMaxW) continue;
+    if (l > lmax[m][w + 17]) lmax[m][w + 17] = static_cast<int8_t>(l);
+    if (m > top) top = m;
+  }
+  return top;
 }
 
 /// SPEC 16.18's diagnostic, the low table (sdnap_slow_terms): every term of j = 1 to kSlowJMax, |q| up to kSlowQMax, orders
