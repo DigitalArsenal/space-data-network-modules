@@ -165,8 +165,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
-`FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the other
-first-order terms to 12, near-resonant terms, shallow resonances and the half-day resonant tail to 31; each to the degree asked if lower;
+`FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily and the other first-order terms
+to degree 16 for a low-orbit set below the eccentricity switch and to 12 for every other set, near-resonant terms, shallow
+resonances and the half-day resonant tail to 31; each to the degree asked if lower;
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is

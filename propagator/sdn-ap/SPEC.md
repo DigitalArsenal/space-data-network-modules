@@ -2157,19 +2157,19 @@ floor: AP equals one only where the force model limits both.
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
-complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
-orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
-`maneuver` and `ingest_omm` keep SGP4XP.
+complete to first order to degree min(d, 16) for a low-orbit set on the first-order table (class 0, epoch period below 1,100
+min, at or below the eccentricity switch) and to min(d, 12) for every other set; above that, degrees to min(d, 31) contribute
+their j = 1 near-resonant terms in low orbit and the half-day tail, and nothing else. At 690 to 800 km the terms of degree 17
+to 31 not carried are 5 to 11 m RMS of a 72 h fit (stack #454); at 450 km the order-15 terms above degree 31 add 72 m on day 1
+and 268 m on day 7 after a 72 h fit. `maneuver` and `ingest_omm` keep SGP4XP.
 
 **16.2 Tesserals.** The field is the fully normalized EGM-96 of propagator/ffm, pinned by build.mjs. Inclination functions come
-from the Fourier coefficients of the normalized Legendre recurrence, stable to degree 70, at the epoch inclination. The Cap column is a cap on families, not the degree of the field (16.1): at
-800 km the terms of degree 13 to 31 not carried are 14 m RMS.
+from the Fourier coefficients of the normalized Legendre recurrence, stable to degree 70, at the epoch inclination. The Cap column is a cap on families, not the degree of the field (16.1).
 
 | Family | Terms | Cap | Where |
 | --- | --- | --- | --- |
-| m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 | at output time, first order at the mean elements |
-| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12 | at output time, first order at the mean elements |
+| m-daily | Kaula's q = 0, l = 2p, even l, every m | 16 for a low-orbit set on the first-order table, 12 otherwise | at output time, first order at the mean elements |
+| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 16 for a low-orbit set on the first-order table, 12 otherwise (the grid above the switch included, 16.11) | at output time, first order at the mean elements |
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
@@ -2178,6 +2178,53 @@ A first-order or near-resonant term is left out when section 6's class or the sh
 by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
 its position amplitude is below 0.5 m. G is g0 + g1 e about the epoch e: below e = 0.03, q = 0 takes 1 + (l (l + 1) / 4 - w^2) e^2 and
 q = +-1 takes ((l + 1) / 2 + q w) e, above it the Hansen coefficient.
+
+**Degree 16 in low orbit (stack #448).** Through the previous release both families stopped at degree 12 in low orbit too.
+Degrees 13 to 16 then carried only their near-resonant j = 1 terms. At 690 km, i 98, on a 16 x 16 field, the along-track residue
+of a 72 h fit held these lines: 1 cycle/day 11.8 m (the m-daily terms of degrees 14 and 16, order 1); n - 1 8.5 m, n - 3 6.3 m,
+n + 1 6.0 m and n - 5 3.2 m (first-order terms of degrees 13 to 16 at low orders); 11 cycles/day 3.4 m (m-daily, order 11).
+
+Model truth, the same forces on both sides: FFM 2.3.0 from an osculating perigee state at 2026-09-01; fits on 300 s states over
+the 72 h or 24 h before the cutoff, BTERM and AGOM pinned; 7 days flown. The figures are medians over 16 made-up near-circular
+orbits (690, 800, 1,340 and 1,490 km at inclinations 50, 66, 98 and 108 deg), 3D RMS in m, from the previous release to this one.
+The gravity-only rows use test builds with the Sun's and Moon's masses at 0.
+
+| Field (caps) | in arc, 72 h fit | day 5, 72 h fit | day 5, 24 h fit |
+| --- | --- | --- | --- |
+| 16 x 16 (16, 16) | 13.8 -> 11.5 | 16.7 -> 14.7 | 35.8 -> 14.8 |
+| 20 x 20 (20, 20) | 14.2 -> 12.0 | 17.5 -> 15.5 | 31.8 -> 17.0 |
+| 31 x 31 (31, 31) | 14.1 -> 12.1 | 18.8 -> 16.9 | 37.3 -> 19.7 |
+| 70 x 70 with the Sun and Moon (31, 20) | 14.2 -> 12.4 | 28.5 -> 24.6 | 48.2 -> 28.9 |
+| as above with solid tides and relativity in the truth | 14.4 -> 12.6 | 68.4 -> 67.3 | 64.0 -> 58.9 |
+
+- At 690 km the 16 x 16 in-arc median is 19.7 -> 13.7 m and the 24 h day 5 70 -> 20 m; at 800 km, 17.4 -> 13.1 and 66 -> 15 m.
+- The in-arc RMS falls on every orbit. The forecasts move with the residue left in the arc. On the 70 x 70 row, day 5 is better on
+  6 orbits and worse on 4 after a 72 h fit, and better on 13 and worse on 4 after a 24 h fit (worse: 1,340 km i 50 and 66,
+  1,490 km i 108, 690 km i 66).
+- With tides in the truth, day 5 after a 24 h fit is worse on 9 of 17 orbits: AP carries no tides, and the tides' error had
+  partly cancelled the error these terms used to make.
+
+Every set with tesseral cap 12 or below, every SGP4XP set, and every set off the low-orbit table path (the resonance classes,
+the long-period regime, the grid above the switch) flies bit for bit as before (7 days at 60 s). The LAGEOS-like set (class 0,
+6.4 rev/day) moves by at most 5.7 mm. The table builds 20 to 30 % more terms at initialization in low orbit; the cost per state is
+unchanged within the spread (`test/kernel-cost.mjs`, leo-830 and leo-1400). `test/tesseral-degree-16.e2e.mjs` holds the 690 and
+800 km cases.
+
+**Not modeled, with measured size (low orbit).** On the same model truth, the terms and forces AP leaves out in low orbit. Each
+row is the difference between two rungs that differ by that term or force alone, medians over the 16 orbits unless an altitude
+is named. Each has an issue that states it, and a known-defect test (test/known-defects.json) where this release could write one.
+
+| Not modeled | Size | Shape | Issue |
+| --- | --- | --- | --- |
+| Solid Earth tides | day 5 after a 72 h fit 28.5 -> 68 m (1,340 km 14 -> 61 m, 1,490 km 15.5 -> 66 m); after a 24 h fit 48 -> 64 m | along-track, growing | #449 |
+| The J3 to J5 short-period terms | 8 to 10 m in the arc and at every day | flat: a constant cross-track offset of 4 to 6 m, a 2/rev cross-track term of 2.5 to 6 m, a 1/rev radial term of about 5.5 m | #451 |
+| The field above degree 31 near commensurabilities (29:2 at 690 km; 57:4 and 14:1 at 800 km) | 35 to 70 m at day 5 after a 72 h fit at 690 to 800 km, under 1 m at 1,340 to 1,490 km | along-track, growing | #447, `test/low-orbit-commensurability.e2e.mjs` |
+| Tesseral short-period terms of degree 17 to 31 | 5 to 11 m of a 72 h fit's RMS at 690 to 800 km, 2 to 3 m at 1,340 to 1,490 km | flat | #454, `test/tesseral-degree-17-31.e2e.mjs` |
+| J2 beyond first order | 3 to 4.5 m in the arc | flat: a constant radial offset at the orbit's own period, with a 2/rev radial term of up to 1.9 m | #453, `test/j2-second-order-radial.e2e.mjs` |
+| Relativity (IERS 2010) | under 0.1 m at day 7 | - | - |
+
+Drag and radiation pressure with BTERM and AGOM pinned at the truth's add nothing measurable (day 5 61 to 68 m against 68 m without
+them, NRLMSISE-00 at constant or real weather). The fitted BTERM and AGOM are the fit's (12.8), not the theory's.
 
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
@@ -2978,9 +3025,10 @@ fit-at-branch-limit (16.7), and the epoch store does not blend two sets on diffe
 differences, blends or interpolates two records of one object must do the same.
 
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
-complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
-orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
+complete to first order to degree min(d, 16) for a low-orbit set on the first-order table and to min(d, 12) for every other set
+(16.2); above that, degrees to min(d, 31) contribute their j = 1 near-resonant terms in low orbit and the half-day tail, and
+nothing else. At 690 to 800 km the terms of degree 17 to 31 not carried are 5 to 11 m RMS of a 72 h fit; at 450 km the order-15
+terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit. 16.2 lists what low orbit leaves out, with sizes.
 
 An AP mean set and the state AP gives for it agree to first order only: integrated numerically that state leaves the AP
 trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low orbit. AP elements must come from an AP fit.

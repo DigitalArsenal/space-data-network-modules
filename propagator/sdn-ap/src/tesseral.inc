@@ -48,6 +48,13 @@ constexpr double kWideE = 0.3;
 /// resonant share there and costs more. Read by xpt::branch_of alone (SPEC 16.7: the switch is the set's, decided at its epoch).
 constexpr double kWideENonResonant = 0.05;
 inline bool wide_set(int cls, double e0) { return e0 > (cls == 0 ? kWideENonResonant : kWideE); }
+/// A low-orbit set on the first-order table (class 0, epoch period below 1100 min, at or below the eccentricity switch)
+/// takes the m-daily and first-order families to degree 16 (SPEC 16.2, stack #448); every other set keeps kMdailyCap and
+/// kSpCap, the grid above the switch included. Through 0.6.15 they stopped at 12 there too, and degrees 13 to 16 carried
+/// only their near-resonant j = 1 terms: on FFM model truth of the same field (16 x 16, 72 h fits) 19.7 m in-arc RMS at
+/// 690 km and 17.4 m at 800 km against 13.7 and 13.1 m with them, and after a 24 h fit 70 and 66 m at day 5 against 20 and
+/// 15 m. 16 is the most sp_terms' scratch holds (|w| <= 17) and the m-daily table's (72 terms).
+constexpr int kLowMdailyCap = 16, kLowSpCap = 16;
 
 /// N_lm = sqrt((2 - delta_0m)(2l + 1)(l - m)! / (l + m)!), unnormalized = N_lm x normalized.
 inline double norm_factor(int l, int m) {

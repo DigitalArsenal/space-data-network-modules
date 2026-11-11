@@ -8,5 +8,20 @@
     "test": "molniya-7day-drag-sigma",
     "issue": "DigitalArsenal/spacedatanetwork-stack#438",
     "text": "On a 7-day arc of an eccentric orbit with drag (Molniya), the record states the drag coefficient to 0.09 % while the fitted value is 0.3 to 0.5 % from the truth: the stated uncertainty is 5 to 7 times too small; its position covariance is honest."
+  },
+  {
+    "test": "low-orbit-commensurability",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#447",
+    "text": "At 690 and 800 km, near orbits that repeat 29 times in 2 days or 57 times in 4 days over the turning Earth, the gravity field above degree 31 adds 35 to 70 m to the error 5 days after a 3-day fit (52 and 113 m against 13 and 20 m without it): the model carries none of those terms."
+  },
+  {
+    "test": "j2-second-order-radial",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#453",
+    "text": "In low orbit, with only the Earth's flattening on both sides, the predicted orbit sits a constant 3 to 4.5 m too high or too low: the flattening's effect is carried to first order only."
+  },
+  {
+    "test": "tesseral-degree-17-31",
+    "issue": "DigitalArsenal/spacedatanetwork-stack#454",
+    "text": "In low orbit the gravity field's short-period terms are carried to degree 16; degrees 17 to 31 leave 5 to 11 m of position error at 690 to 800 km."
   }
 ]
