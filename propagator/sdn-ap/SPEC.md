@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.16 (dist 7c91f0d9).
+Version 0.6.17 (dist 51201d11).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1774,7 +1774,8 @@ and 17 h held-B arcs) and near 700 km (Sentinel-1A, 1C; 72 h and 24 h arcs), spl
 training 2025-04-01 to 08-10 and 2026-01-01 to 03-15, held out 2025-08-21 to 12-21 and 2026-03-26 to 05-31. P(t) is
 linear in each squared size and the floor adds, so the fit re-weights the module's own per-term variances; no orbit is
 re-fitted. The ABOVE row is the 2026-11-03 minimax row (the worst violation of 12.7's mean band across days 1, 2, 3
-and 7 on `operator-theory/ap/b040`), unchanged.
+and 7 on `operator-theory/ap/b040`), unchanged; above the drag a class with a fitted row replaces it inside that
+row's calibrated condition (below, "Above the drag, by class").
 
 Realism is not met, and the covariance is not calibrated (12.7). On the held-out windows the median |z| of 8 of the 18
 cells (two regimes, three axes, days 1, 3 and 7) is inside the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
@@ -1798,6 +1799,67 @@ not its sizes: wherever the strong-drag cross-track median at day 7 is inside th
 leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km
 (0.6.0: 37.78 km) against the error 0.308 km. `test/covariance-realism.e2e.mjs` reports every held-out cell of both
 rows, the shares within 1 and 2 sigma, and the ISS figure on the built module.
+
+Above the drag, by class *[2026-11-11, stack #433; experiments headline-loop, sdn-ap 0.6.15]*. Measured on every
+first-pass window whose fitted set is above the drag (923 window-arcs per theory), the ABOVE row is too wide on
+near-circular orbits, 5 to 1,000 times: median |z| 0.001 to 0.15 on laser geodetic, medium Earth orbit, Galileo,
+inclined geosynchronous and geostationary, in track 0.001 to 0.02. It is too narrow on TESS, Chandra and commercial
+geostationary, whose truth carries burns (stack #444). A set above the drag therefore takes a row by class, decided by
+its own elements: HEO at e 0.3 or more; otherwise geosynchronous under 1.5 rev/day, medium Earth orbit under 4 rev/day
+(GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
+
+- The class's row applies only inside its calibrated condition: the data sigma the fit weighted with (12.1) and the
+  fit's span within those of the calibration fits. Outside it, and in a class without a fitted row, the ABOVE row
+  stands. A record fitted to worse data than the calibration fits, or over another span, is not made narrower without
+  measured error behind it.
+- s_d above the drag is k |AGOM| / a (rad/day^2; AGOM in m^2/kg, a in Earth radii): the unmodeled force above the drag
+  is radiation pressure, which scales with the object's area to mass, so the form carries to objects with other
+  area-to-mass ratios. One k serves the LAGEOS, medium Earth orbit and geosynchronous classes as well as a constant per
+  class (training losses with the one k against per class: LAGEOS 0.0678 against 0.0677, medium Earth orbit 0.0460
+  against 0.0458, geosynchronous 0.1242 against 0.1237). It does not explain Galileo: per satellite, AP's 72 h in-track
+  error at day 7 runs from 35 m (GPS IIF) to 492 m (Galileo FOC 15), while AGOM spans only 0.022 to 0.033 m^2/kg.
+- The record states the sizes in COV_PROPAGATION as before. Above the drag NON_GRAVITATIONAL_SHARE is 0 and
+  NOISE_NON_GRAVITATIONAL_RAD_DAY2 is the record's own statement; the read refuses only a negative or non-finite one
+  there. Under the drag the invariant s_d = c |n-dot_ng| n stands.
+
+| Theory | Class | s_e (1/day) | s_i (1/day) | s_l | k | data sigma (km) | span (h) |
+| --- | --- | --: | --: | --: | --: | --- | --- |
+| SDNAP | LAGEOS | 1.1374623058968726e-08 | 8.083584088270014e-08 | 3.831472309446551e-09 | 1.415e-05 | 0.00243 to 0.00276 | 64.8 to 75.6 |
+| SGP4XP | LAGEOS | 2.463673468245377e-07 | 6.564224575525169e-07 | 5.502200043625398e-08 | 3.216e-05 | 0.0588 to 0.0769 | 64.8 to 75.6 |
+
+Acceptance (per regime, fit arc and axis at days 1, 3, 5 and 7, scored against the precise orbits). The count of |z|
+above 3 must be at most max(as built, ceil(1 % of the windows), 1). The count inside the 95 % region must not be
+significantly below 95 % (one-sided binomial test at 5 %: 28 of 32), nor below the as-built count where that is
+already under it. A class whose row fails any cell keeps the ABOVE row. The LAGEOS rows are fitted so that every
+regime's 99th percentile of |z| is at most 2.9, on all 32 windows of LAGEOS-1, LAGEOS-2 and LARES-2 (72 h fits), and
+they hold leaving each satellite out in turn. The module's own covariance, flown, ABOVE row > LAGEOS row:
+
+| Theory | Day | Windows | median abs(z) R / T / N | abs(z) > 3 R / T / N | 95 % coverage |
+| --- | --: | --: | --- | --- | --- |
+| SDNAP | 1 | 32 | 0.126 / 0.001 / 0.242 > 1.035 / 0.652 / 0.729 | 0 / 0 / 0 > 0 / 1 / 0 | 1.00 > 0.88 |
+| SDNAP | 3 | 32 | 0.042 / 0.001 / 0.094 > 0.951 / 0.832 / 0.670 | 0 / 0 / 0 > 0 / 0 / 0 | 1.00 > 0.94 |
+| SDNAP | 5 | 31 | 0.017 / 0.000 / 0.074 > 0.585 / 0.520 / 0.569 | 0 / 0 / 0 > 0 / 0 / 1 | 1.00 > 0.90 |
+| SDNAP | 7 | 32 | 0.012 / 0.001 / 0.066 > 0.625 / 0.589 / 0.590 | 0 / 0 / 0 > 0 / 0 / 0 | 1.00 > 0.94 |
+| SGP4XP | 1 | 32 | 0.837 / 0.696 / 0.686 > 0.837 / 1.127 / 0.662 | 0 / 0 / 0 > 0 / 0 / 0 | 0.97 > 0.94 |
+| SGP4XP | 3 | 32 | 0.612 / 0.376 / 0.973 > 0.608 / 1.083 / 0.773 | 0 / 0 / 0 > 0 / 0 / 0 | 0.94 > 0.88 |
+| SGP4XP | 5 | 31 | 0.616 / 0.253 / 0.979 > 0.609 / 0.873 / 0.700 | 0 / 0 / 1 > 0 / 0 / 0 | 0.94 > 0.97 |
+| SGP4XP | 7 | 32 | 0.620 / 0.147 / 0.635 > 0.616 / 0.578 / 0.427 | 0 / 0 / 2 > 0 / 0 / 1 | 0.94 > 0.97 |
+
+AP's radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). That part is the epoch covariance, and
+the noise starts from zero at the end of the arc.
+
+The other classes keep the ABOVE row for now. Medium Earth orbit: Galileo's in-track errors run 5 to 14 times GPS's,
+and nothing the record states ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a
+row that holds the acceptance must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times
+too wide in track. That row, and its second row for sets that solve Y0 (16.13), follow once the fit's end with Y0
+solved no longer depends on rounding (stack #456). Geosynchronous: noise scaled by the record's own data sigma,
+measured next. HEO: TESS and Chandra, two objects, 14 window-arcs, measured after the eccentric integration step fix.
+THEMIS is not in this set: its perigee is in the drag.
+
+The class boundaries make the stated covariance jump where a row changes. At n = 4 rev/day (e 0.01, a 16,763 km) the
+growth per day the rows give is, for AP, 2,003 m in track and 16.3 m radially under the ABOVE row against 1.6 m and
+0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 nothing jumps yet:
+every class there keeps the ABOVE row.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P

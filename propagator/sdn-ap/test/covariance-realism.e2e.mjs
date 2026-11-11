@@ -115,8 +115,16 @@ const row = now && was ? { s_e: now.NOISE_ECCENTRICITY_PER_DAY, s_i: now.NOISE_I
 check(!!row, "no 0.6.1 or 0.6.0 COV_PROPAGATION");
 if (row) {
   for (const k of ["s_e", "s_i", "s_l", "c"]) check(Object.is(row[k], F[k]), `${k}: the module writes ${row[k]}, the re-fit ${F[k]}`);
-  for (const f of ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"])
+  // the diagonal terms relative to themselves; each cross term relative to the square root of the product of its two
+  // diagonal terms (2026-11-11, stack #433: a cross term near zero, held relative to itself, read the two builds' fits
+  // stopping apart; a millimeter of state change moved FLOOR_VU_KM2 5.6e-3 of itself)
+  for (const f of ["FLOOR_UU_KM2", "FLOOR_VV_KM2", "FLOOR_WW_KM2"])
     check(Math.abs(now[f] / was[f] - F.k_F) <= FLOOR_RELATIVE * F.k_F, `${f}: 0.6.1 / 0.6.0 = ${now[f] / was[f]}, k_F ${F.k_F} (within ${FLOOR_RELATIVE} relative)`);
+  for (const [f, d1, d2] of [["FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_UU_KM2"], ["FLOOR_WU_KM2", "FLOOR_WW_KM2", "FLOOR_UU_KM2"], ["FLOOR_WV_KM2", "FLOOR_WW_KM2", "FLOOR_VV_KM2"]]) {
+    const off = Math.abs(now[f] - F.k_F * was[f]) / (F.k_F * Math.sqrt(was[d1] * was[d2]));
+    console.log(`${f}: 0.6.1 against k_F times 0.6.0's ${off.toExponential(2)} of sqrt(${d1} x ${d2}); relative to itself ${Math.abs(now[f] / was[f] / F.k_F - 1).toExponential(2)}`);
+    check(off <= FLOOR_RELATIVE, `${f}: 0.6.1 against k_F times 0.6.0's differs by ${off} of the square root of ${d1} x ${d2} (within ${FLOOR_RELATIVE})`);
+  }
   console.log(`0.6.1 DRAG row as written: s_e ${row.s_e}, s_i ${row.s_i}, s_l ${row.s_l}, c ${row.c}, floor ${row.k_F} times 0.6.0's`);
 }
 
