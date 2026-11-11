@@ -6313,11 +6313,11 @@ inline int32_t g_batch_running = 0;
 inline thread_local int32_t g_alloc_refused = 0;
 /// The pool's counts (sdnap_pool_stats): threaded batches run, growths refused, rows deferred to the calling thread,
 /// batches after which the calling thread saw a larger memory (the invariant broken: 0), the pool declared dead, the
-/// last reserve (bytes); the waits for a thread's view of the memory (pool::await_view) that had to yield, the most
-/// yields one took and the longest (nanoseconds).
+/// last reserve (bytes); the waits for a thread's view of the memory (pool::await_view) that had to yield, and the
+/// most yields one took.
 struct BatchStats {
   uint64_t batches = 0, refused = 0, deferred = 0, grew = 0, dead = 0, reserve = 0;
-  uint64_t views = 0, view_yields_max = 0, view_ns_max = 0;
+  uint64_t views = 0, view_yields_max = 0;
 };
 inline BatchStats& batch_stats() {
   static BatchStats s;
@@ -6328,12 +6328,11 @@ inline void atomic_max_u64(uint64_t* word, uint64_t v) {
   while (v > old && !__atomic_compare_exchange_n(word, &old, v, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
   }
 }
-/// One wait for a thread's view that yielded `yields` times over `seconds` (pool::await_view; any thread).
-inline void batch_view_waited(uint64_t yields, double seconds) {
+/// One wait for a thread's view that yielded `yields` times (pool::await_view; any thread).
+inline void batch_view_waited(uint64_t yields) {
   BatchStats& s = batch_stats();
   __atomic_add_fetch(&s.views, 1, __ATOMIC_SEQ_CST);
   atomic_max_u64(&s.view_yields_max, yields);
-  atomic_max_u64(&s.view_ns_max, static_cast<uint64_t>(seconds * 1e9));
 }
 inline bool batch_running() { return __atomic_load_n(&g_batch_running, __ATOMIC_SEQ_CST) != 0; }
 inline CachePool& cache_pool() {

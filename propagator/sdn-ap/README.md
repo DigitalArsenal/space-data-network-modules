@@ -31,7 +31,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   row: 0 SGP4, 4 SGP4XP; any other theory is held refused); `sdnap_propagate_soa(jdWhole, jdFrac, first, count, frame,
   out, status)` and `sdnap_propagate_minutes_soa(minutes, first, count, out, status)` write six planes (x, y, z, vx, vy,
   vz) of `count` doubles, TEME km and km/s or Earth-fixed m and m/s. `sdnap_threads(n)` starts the pool; results are
-  the same bytes at any thread count.
+  the same bytes at any thread count. A threaded batch grows no memory (SPEC 9, stack #487). A batch whose pool thread
+  stops returns -20, with every status 9, and later batches run on the calling thread. `sdnap_pool_stats(out)` reads
+  the pool's counts.
 - Display quantities (the module's own conversions; `test/exports.e2e.mjs` checks each against its inverse):
   `sdnap_mean_elements_at(index, minutes, out)` the mean a (km), e, i, RAAN, argp and M (deg) of an SGP4XP row at
   minutes from its epoch (an SGP4 row is refused); `sdnap_osculating_elements(r, v, out)` the osculating elements of a

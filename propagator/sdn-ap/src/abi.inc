@@ -104,7 +104,7 @@ void run_chunk(const Job& j, int32_t chunk) {
 }  // namespace pool
 
 /// The bytes a threaded batch of rows [first, first + count) makes free before it starts (stack #487): for each AP row
-/// whose set holds no caches yet, 128 KiB, its first flight's largest take (its SetCaches, 11.2 KB; its tesseral copy,
+/// whose set holds no caches, 128 KiB, its first flight's largest take (its SetCaches, 11.2 KB; its tesseral copy,
 /// 61 KB at 500 km with degree 31; its first node runs, 2.5 KB a direction; measured with sdnap_debug_pool on the
 /// 500 km set, the largest of the catalog mix's low orbits), at most what the pool may still take (its admission caps
 /// every set's caches at the budget), plus 8 MiB for the rest.
@@ -282,21 +282,21 @@ int32_t sdnap_propagate_minutes_soa(const double* minutes, uint32_t first, uint3
 SDNAP_EXPORT("sdnap_threads")
 int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
 
-/// The pool, read only (stack #487, SPEC 9), 11 doubles: the threads running; the threaded batches run; the growths of
+/// The pool, read only (stack #487, SPEC 9), 10 doubles: the threads running; the threaded batches run; the growths of
 /// the memory refused inside them (every thread); the rows deferred to the calling thread after them; the batches
 /// after which the calling thread saw a larger memory (the invariant: 0); whether the pool was taken for dead (1; its
-/// later batches run on the calling thread); the wall time a waiting caller allows a batch to complete no chunk
-/// (seconds); the last batch's reserve (bytes); the waits for a thread's view of the memory that had to yield, the most
-/// yields one took, and the longest (seconds).
+/// later batches run on the calling thread); the polls without a completed chunk a waiting caller allows a batch; the
+/// last batch's reserve (bytes); the waits for a thread's view of the memory that had to yield, and the most yields one
+/// took.
 SDNAP_EXPORT("sdnap_pool_stats")
 void sdnap_pool_stats(double* out) {
   if (out == nullptr) return;
   const sdnap::xpt::BatchStats& s = sdnap::xpt::batch_stats();
-  const double v[11] = {static_cast<double>(sdnap::pool::job().threads), static_cast<double>(s.batches), static_cast<double>(s.refused),
+  const double v[10] = {static_cast<double>(sdnap::pool::job().threads), static_cast<double>(s.batches), static_cast<double>(s.refused),
                         static_cast<double>(s.deferred), static_cast<double>(s.grew), static_cast<double>(s.dead),
-                        sdnap::pool::dead_seconds(), static_cast<double>(s.reserve), static_cast<double>(s.views),
-                        static_cast<double>(s.view_yields_max), 1e-9 * static_cast<double>(s.view_ns_max)};
-  for (int k = 0; k < 11; ++k) out[k] = v[k];
+                        static_cast<double>(sdnap::pool::dead_polls()), static_cast<double>(s.reserve),
+                        static_cast<double>(s.views), static_cast<double>(s.view_yields_max)};
+  for (int k = 0; k < 10; ++k) out[k] = v[k];
 }
 
 /// The sets' caches (SPEC 9), read only (the budget is the module's default, 256 MB; xpt::cache_budget_mb sets it in
