@@ -484,6 +484,32 @@ void sdnap_shadow_policy(int32_t policy) {
   sdnap::xpt::shadow_threshold() = policy == 3 ? 0.0 : 1e-12;
 }
 
+/// SPEC 16.18, the low table (stack #477), tests only: the slow set's degree (2 to 70; anything else restores 70), so a model
+/// truth cut lower is compared like with like. No $PCF field; the default changes nothing.
+SDNAP_EXPORT("sdnap_slow_degree_cap")
+void sdnap_slow_degree_cap(int32_t cap) { sdnap::xpt::tess::slow_degree_cap() = cap >= 2 && cap <= 70 ? cap : sdnap::xpt::tess::kSlowDegree; }
+
+/// SPEC 16.18, the low table, tests only: the slow set's |q| range (0 as it lands; up to 4), while the q != 0 terms are open
+/// (stack #477).
+SDNAP_EXPORT("sdnap_slow_q_max")
+void sdnap_slow_q_max(int32_t q) { sdnap::xpt::tess::slow_q_max() = q >= 0 && q <= sdnap::xpt::tess::kSlowQMax ? q : 0; }
+
+/// Where a set carries each slow tesseral term (SPEC 16.18; the low table's part): in = mean motion (rev/day), e, i (deg), the
+/// stated tesseral degree; rows of 7 doubles (l, m, p, q, psi-dot / n, carrier: 1 the rates, 3 the output table, 0 nowhere: under
+/// the table's 1e-3 n floor, 4 nowhere: above the slow set's degree, 5 nowhere: under the size cut; and the rates' weight w),
+/// at most max_rows. Returns the count of all rows, or -1 for a set outside the low table (class 0, a period under 1,100 min,
+/// at or below its eccentricity switch). A diagnostic: no flight reads it.
+SDNAP_EXPORT("sdnap_slow_terms")
+int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
+  using namespace sdnap::xpt;
+  const double n = in[0] * sdnap::kTwoPi / sdnap::kMinutesPerDay, e = in[1], inc = in[2] * sdnap::kPi / 180.0;
+  const int cap = static_cast<int>(in[3]);
+  if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || cap < 2 || cap > 70) return -1;
+  const int cls = res::band_of(n);
+  if (cls != 0 || sdnap::kTwoPi / n >= kLongPeriodMinutes || tess::wide_set(cls, e)) return -1;
+  return tess::slow_listing_low(cap, n, e, inc, rows, max_rows);
+}
+
 /// Flip the seasonal term's hemisphere at the equator node (|phi| < 1e-14): 1 on, 0 off.
 SDNAP_EXPORT("sdnap_hemisphere_flip")
 void sdnap_hemisphere_flip(int32_t on) { sdnap::drag::diagnostics().hemisphere_flip = on ? 1 : 0; }

@@ -126,6 +126,7 @@ inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, doubl
 struct Terms {
   int tesseral = 0, zonal = 0;
   bool solid_tides = false;  ///< SPEC 16.14: the solid Earth tide in the rates (with the gravity terms only)
+  bool slow = false;         ///< SPEC 16.18 (the low table): the slow set by size, to the field's degree (stack #477)
 };
 inline Terms& active() {
   static Terms t;
@@ -133,6 +134,28 @@ inline Terms& active() {
 }
 constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
 constexpr double kShallowBand = 0.045;
+/// SPEC 16.18, the low table's part (stack #477): with Terms::slow, every term of the embedded field whose own angle rate
+/// at the set's epoch is inside the shallow band (selected to kShallowSelect bands) and whose along-track amplitude through
+/// the mean motion, 3 |j| A / (a psi-dot^2), reaches kSlowKeepM is carried in the rates beside the shallow set's own terms,
+/// for every j >= 1 and every q, to the field's degree whatever FORCES.MAXIMUM_TESSERAL_DEGREE states (that degree governs
+/// the fast terms): a commensurability's series is a cancellation, and a slow set cut at a lower degree is worse than none.
+constexpr int kSlowDegree = 70;
+constexpr int kSlowJMax = 6, kSlowQMax = 4;
+constexpr double kSlowKeepM = 0.5;
+/// The slow set's q range: 0 as it lands (stack #477); tests only may widen it to kSlowQMax (sdnap_slow_q_max) while the q != 0
+/// terms' sign-dependent effect is open.
+inline int& slow_q_max() {
+  static int q = 0;
+  return q;
+}
+/// Tests only (sdnap_slow_degree_cap): the slow set's degree, so a model truth cut lower is compared like with like.
+inline int& slow_degree_cap() {
+  static int cap = kSlowDegree;
+  return cap;
+}
+struct ShallowTerms;
+inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q);
+inline double band_taper(double x);
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
@@ -848,8 +871,10 @@ inline int sp_comb_bound(int degree, bool wide) {
 /// whose terms the rates carry and this table must not. `low`: no class and the shallow set active, so a term near
 /// commensurability other than the shallow set's is kept here. `wide`: the set's branch (wide_set at its epoch, or its
 /// covariance nominal's, xpt::Branch): the families are on the grid and the table holds the near-resonant terms only.
+/// `slow_held` (SPEC 16.18, the low table with Terms::slow): the slow set's list; a term it holds beyond the shallow set's own
+/// is the rates' inside the band, and the table keeps 1 minus the band taper of it (nothing in both places, nothing in neither).
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
-                    SpCoef* raw_out = nullptr, int* raw_count_out = nullptr) {
+                    SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr) {
   int raw_count = 0;
   const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
@@ -877,7 +902,9 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
     double weight = 1.0;
     const double x = std::fabs(psidot) * inv_shallow_n0;
     if (low) {
-      if (q == 0 && w == 1 && j == 1) {
+      if (slow_held != nullptr && !(q == 0 && w == 1 && j == 1) && x < 1.3 && slow_holds(slow_held, l, m, p, q)) {
+        weight = 1.0 - band_taper(x);
+      } else if (q == 0 && w == 1 && j == 1) {
         if (x <= 0.9) weight = 0.0;
         else if (x < 1.1) { const double c = std::cos(0.5 * kPi * (x - 0.9) / 0.2); weight = 1.0 - c * c; }
       } else if (std::fabs(psidot) < 1e-3 * n0) {
@@ -4195,13 +4222,13 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
   six[5] += -(2.0 / (n * a)) * sA + (eta * e / (na2 * (1.0 + eta))) * sE + (tanhalf / (na2 * eta)) * sI;
 }
 
-/// The shallow resonant terms. For each k = 1..3 and order m whose
-/// angle psi = k (omega + M) + m (Omega - theta) (q = 0, l - 2p = k) drifts
-/// slower than kShallowBand x n, the terms of degree l = max(m, k)..
-/// the degree with l = k mod 2: F and dF/di at the epoch inclination, G
-/// (and dG) at the epoch eccentricity, as SPEC 6 fixes them; integrated with the
-/// rates (the grid resolves periods of 1 / band orbits).
-constexpr int kShallowMax = 160;
+/// The shallow resonant terms. For k = 1 and each order m whose angle psi = k (omega + M) + m (Omega - theta) (q = 0,
+/// l - 2p = k) drifts slower than kShallowBand x n, the terms of degree l = max(m, k).. the degree with l = k mod 2: F and
+/// dF/di at the epoch inclination, G (and dG) at the epoch eccentricity, as SPEC 6 fixes them; integrated with the rates
+/// (the grid resolves periods of 1 / band orbits). Until stack #477 a comment here said k = 2 and 3 "do not pay (2.13 against
+/// 2.03 km at day 3)": that was a series cut at degree 31 against a 70 x 70 truth, which loses a cancellation. With
+/// Terms::slow the slow set's terms follow these (kSlowDegree above): every j and q, to the field's degree, by size.
+constexpr int kShallowMax = 1024;
 
 /// A shallow term as held per object (16 bytes): the Kaula indices and the epoch products in float; the
 /// field coefficients are the pinned table's.
@@ -4227,8 +4254,14 @@ inline res::ResCoef expand(const ShallowCoef& c) {
 
 struct ShallowTerms {  // the epoch scratch; xp_init keeps count entries
   int count;
+  int old_count;  ///< the shallow set's own terms (the first old_count); the slow set's follow (Terms::slow)
   res::ResCoef c[kShallowMax];
 };
+/// The epoch scratch on its thread (about 60 kB: not on the stack).
+inline ShallowTerms& shallow_scratch() {
+  static thread_local ShallowTerms s;
+  return s;
+}
 
 /// The J2 secular rates (rad/min) at mean motion n, e and i: the commensurability of a shallow term.
 struct SecularRates {
@@ -4244,21 +4277,27 @@ inline SecularRates secular_rates(double n, double e, double i) {
 /// at 1.1 (the hard band's cut at 1 made smooth, so a term crossing it as drag raises n fades instead of switching);
 /// terms are kept at initialization out to kShallowSelect bands for that.
 constexpr double kShallowSelect = 1.3;
-inline double shallow_weight(const SecularRates& sr, int k, int m, double n) {
-  const double psidot = k * (sr.mdot + sr.argp) + m * (sr.node - kOmegaE);
-  const double x = std::fabs(psidot) / (kShallowBand * n);
+/// The taper of x = |psi-dot| / (band n): 1 below 0.9, cos^2 to 0 at 1.1. The output table holds 1 minus it of a term the
+/// rates carry (SPEC 16.18).
+inline double band_taper(double x) {
   if (x <= 0.9) return 1.0;
   if (x >= 1.1) return 0.0;
   const double c = std::cos(0.5 * kPi * (x - 0.9) / 0.2);
   return c * c;
 }
+/// A term's own weight: (k = j, m, w = l - 2p); w = k is the shallow set's q = 0 term, its rate in the form it always had.
+inline double shallow_weight(const SecularRates& sr, int k, int m, double n, int w) {
+  const double psidot = w == k ? k * (sr.mdot + sr.argp) + m * (sr.node - kOmegaE) : w * sr.argp + k * sr.mdot + m * (sr.node - kOmegaE);
+  return band_taper(std::fabs(psidot) / (kShallowBand * n));
+}
+inline double shallow_weight(const SecularRates& sr, int k, int m, double n) { return shallow_weight(sr, k, m, n, k); }
 
 struct ShallowGroupPoly {
   int16_t k, m, w;
   double c[12][3];
 };
 struct ShallowEvalCache {
-  static constexpr int kMaxGroups = 16;
+  static constexpr int kMaxGroups = 128;
   const ShallowCoef* table = nullptr;
   uint64_t table_id = 0;
   int count = 0;
@@ -4364,7 +4403,7 @@ inline void shallow_six(const ShallowCoef* table, int count, double e0, double i
     const double da = cache.a_ref * ia - 1.0;
     for (int gi = 0; gi < cache.n_groups; ++gi) {
       const ShallowGroupPoly& gp = cache.groups[gi];
-      const double wgt = shallow_weight(sr, gp.k, gp.m, n);
+      const double wgt = shallow_weight(sr, gp.k, gp.m, n, gp.w);
       if (wgt > 0.0) {
         double sp = 0.0, cp = 1.0;
         fm::sincos(gp.w * kp.argp + gp.k * kp.m + gp.m * (kp.node - thetag), sp, cp);
@@ -4397,17 +4436,20 @@ inline void shallow_six(const ShallowCoef* table, int count, double e0, double i
       const int k = table[idx].k, m = table[idx].m;
       int end = idx + 1;
       while (end < count && table[end].k == k && table[end].m == m) ++end;
-      const double wgt = shallow_weight(sr, k, m, n);
-      if (wgt > 0.0) {
+      // each term's own weight: the shallow set's (w = k) as it always was, the slow set's by its own rate (SPEC 16.18)
+      const double wgt_k = shallow_weight(sr, k, m, n);
+      {
         int last_w = 0x7fff;
-        double sp = 0.0, cp = 1.0;
+        double sp = 0.0, cp = 1.0, wgt = wgt_k;
         for (int j = idx; j < end; ++j) {
           const ShallowCoef& sc = table[j];
           const int l = sc.l, w = l - 2 * sc.p;
           if (w != last_w) {
-            fm::sincos(w * kp.argp + k * kp.m + m * (kp.node - thetag), sp, cp);
+            wgt = w == k ? wgt_k : shallow_weight(sr, k, m, n, w);
+            if (wgt > 0.0) fm::sincos(w * kp.argp + k * kp.m + m * (kp.node - thetag), sp, cp);
             last_w = w;
           }
+          if (!(wgt > 0.0)) continue;
           const bool odd = ((l - m) & 1) != 0;
           const double C = kEgmC[l][m], S_c = kEgmS[l][m];
           const double Sv = odd ? -S_c * cp + C * sp : C * cp + S_c * sp;
@@ -4476,7 +4518,152 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
       c.dfg = dF[l] * G;
     }
   }
+  out.old_count = out.count;
   return out.count;
+}
+
+/// A term's angle rate (rad/min) at the J2 secular rates: psi-dot = w omega-dot + j M-dot + m (Omega-dot - theta-dot).
+inline double slow_rate(const SecularRates& sr, int w, int j, int m) { return w * sr.argp + j * sr.mdot + m * (sr.node - kOmegaE); }
+
+/// A slow term's along-track amplitude through the mean motion (m): 3 |j| A / (a psi-dot^2), A = mu / a^(l+1) |F G| |C, S|
+/// (the potential's coefficient of the term), at the epoch elements.
+inline double slow_size_m(int l, int m, int j, double fg, double a, double psidot) {
+  double amp = kMu / a;
+  for (int k = 0; k < l; ++k) amp /= a;
+  const double A = amp * std::fabs(fg) * std::hypot(kEgmC[l][m], kEgmS[l][m]);
+  const double pd = std::fabs(psidot) > 1e-15 ? std::fabs(psidot) : 1e-15;
+  return 3.0 * std::abs(j) * A / (a * pd * pd) * kRe * 1e3;
+}
+
+/// The slow set's own terms (SPEC 16.18, the low table; Terms::slow), appended to the shallow set's: every (l, m, p, q) of the
+/// field to slow_degree_cap() with j = l - 2p + q from 1 to kSlowJMax and |q| up to slow_q_max() (0 as it lands) whose own rate is inside
+/// kShallowSelect bands at the epoch and whose size reaches kSlowKeepM, except the shallow set's own (j = 1, q = 0, to its
+/// degree). Ordered by (j, m, q), each run one (j, m, w) group of the evaluation. Returns the count of the whole list.
+inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, ShallowTerms& out) {
+  const int L = slow_degree_cap() < kSlowDegree ? slow_degree_cap() : kSlowDegree;
+  if (L < 2) return out.count;
+  const SecularRates sr = secular_rates(n, e0, i0);
+  const double a = std::pow(kKe / n, kX2o3), band = kShallowSelect * kShallowBand * n;
+  const int qmax = slow_q_max() < 0 ? 0 : slow_q_max() > kSlowQMax ? kSlowQMax : slow_q_max();
+  double F[72], dF[72];
+  for (int j = 1; j <= kSlowJMax; ++j)
+    for (int m = 2; m <= L; ++m)
+      for (int q = -qmax; q <= qmax; ++q) {
+        const int w = j - q;
+        const double psidot = slow_rate(sr, w, j, m);
+        if (!(std::fabs(psidot) < band)) continue;
+        const int aw = w < 0 ? -w : w;
+        int l0 = m > aw ? m : aw;
+        if (l0 < 2) l0 = 2;
+        if ((l0 - w) & 1) ++l0;
+        if (l0 > L) continue;
+        normalized_Fk_dF(m, w, L, i0, F, dF);
+        for (int l = l0; l <= L; l += 2) {
+          if (j == 1 && q == 0 && l <= shallow_degree) continue;  // the shallow set's own term
+          const int pp = (l - w) / 2;
+          if (pp < 0 || pp > l) continue;
+          double G, dG;
+          if (q == 0 && e0 < 0.03) {
+            const double lp = static_cast<double>(l);
+            const double c2 = 0.25 * lp * (lp + 1.0) - static_cast<double>(j) * j;
+            const double c4 = (lp * (lp + 1.0) * (lp + 2.0) * (lp + 3.0) - (8.0 * lp * (lp + 2.0) + 1.0)) * (1.0 / 64.0);
+            const double e2 = e0 * e0;
+            G = 1.0 + e2 * (c2 + c4 * e2);
+            dG = (e0 >= 2e-4 || l <= 5) ? e0 * (2.0 * c2 + 4.0 * c4 * e2) : 0.0;
+          } else {
+            res::exact_G(l, pp, q, e0, G, dG);
+          }
+          if (slow_size_m(l, m, j, F[l] * G, a, psidot) < kSlowKeepM) continue;
+          if (out.count >= kShallowMax) return out.count;
+          res::ResCoef& c = out.c[out.count++];
+          c.l = static_cast<int8_t>(l);
+          c.m = static_cast<int8_t>(m);
+          c.p = static_cast<int8_t>(pp);
+          c.k = static_cast<int8_t>(j);
+          c.odd = static_cast<int8_t>((l - m) & 1);
+          c.C = kEgmC[l][m];
+          c.S = kEgmS[l][m];
+          c.fg = F[l] * G;
+          c.fdg = F[l] * dG;
+          c.dfg = dF[l] * G;
+        }
+      }
+  return out.count;
+}
+
+/// Whether the slow set's list holds (l, m, p, q) beyond the shallow set's own terms (the output table yields it).
+inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q) {
+  if (held == nullptr) return false;
+  for (int k = held->old_count; k < held->count; ++k) {
+    const res::ResCoef& c = held->c[k];
+    if (c.l == l && c.m == m && c.p == p && c.k - (c.l - 2 * c.p) == q) return true;
+  }
+  return false;
+}
+
+/// SPEC 16.18's diagnostic, the low table (sdnap_slow_terms): every term of j = 1 to kSlowJMax, |q| up to kSlowQMax, orders
+/// and degrees to 70 whose own rate at the epoch is inside kShallowSelect bands, for a set of epoch mean motion n (rad/min), e,
+/// i (rad) and the stated tesseral degree `cap`. Rows of 8 doubles: l, m, p, q, psi-dot / n, the carrier (1 the rates,
+/// 3 the output table, 0 nowhere: under the table's 1e-3 n floor, 4 nowhere: above the slow set's degree, 5 nowhere: under
+/// the size cut), the rates' weight w (the band taper at these elements; the output table holds 1 - w of a term the rates
+/// carry) and the term's size (m, slow_size_m). At most max_rows written; returns the count of all rows.
+inline int slow_listing_low(int cap, double n, double e0, double i0, double* rows, int max_rows) {
+  const int sd = cap > kShallowCap ? kShallowCap : cap;
+  ShallowTerms& sc = shallow_scratch();
+  shallow_terms(sd, n, e0, i0, sc);
+  slow_terms_low(sd, n, e0, i0, sc);
+  const SecularRates sr = secular_rates(n, e0, i0);
+  const double a = std::pow(kKe / n, kX2o3), band = kShallowBand * n;
+  const int Lcap = slow_degree_cap() < kSlowDegree ? slow_degree_cap() : kSlowDegree;
+  double F[72], dF[72];
+  int count = 0;
+  const auto emit = [&](int l, int m, int p, int q, double psidot, int carrier, double w, double size) {
+    if (count < max_rows) {
+      double* r = rows + 8 * count;
+      r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = carrier; r[6] = w; r[7] = size;
+    }
+    ++count;
+  };
+  for (int j = 1; j <= kSlowJMax; ++j)
+    for (int m = 2; m <= kSlowDegree; ++m)
+      for (int q = -kSlowQMax; q <= kSlowQMax; ++q) {
+        const int w = j - q;
+        const double psidot = slow_rate(sr, w, j, m);
+        if (!(std::fabs(psidot) < kShallowSelect * band)) continue;
+        const int aw = w < 0 ? -w : w;
+        int l0 = m > aw ? m : aw;
+        if (l0 < 2) l0 = 2;
+        if ((l0 - w) & 1) ++l0;
+        if (l0 > kSlowDegree) continue;
+        normalized_Fk_dF(m, w, kSlowDegree, i0, F, dF);
+        const double wt = band_taper(std::fabs(psidot) / band);
+        for (int l = l0; l <= kSlowDegree; l += 2) {
+          const int p = (l - w) / 2;
+          if (p < 0 || p > l) continue;
+          double G, dG;
+          if (q == 0 && e0 < 0.03) {  // as slow_terms_low takes it
+            const double lp = static_cast<double>(l);
+            const double c2 = 0.25 * lp * (lp + 1.0) - static_cast<double>(j) * j;
+            const double c4 = (lp * (lp + 1.0) * (lp + 2.0) * (lp + 3.0) - (8.0 * lp * (lp + 2.0) + 1.0)) * (1.0 / 64.0);
+            G = 1.0 + e0 * e0 * (c2 + c4 * e0 * e0);
+          } else {
+            res::exact_G(l, p, q, e0, G, dG);
+          }
+          const double size = slow_size_m(l, m, j, F[l] * G, a, psidot);
+          bool held = false;
+          for (int k = 0; !held && k < sc.count; ++k) {
+            const res::ResCoef& c = sc.c[k];
+            held = c.l == l && c.m == m && c.p == p && c.k == j && c.k - (c.l - 2 * c.p) == q;
+          }
+          if (held) { emit(l, m, p, q, psidot, 1, wt, size); continue; }
+          if (l > Lcap) { emit(l, m, p, q, psidot, 4, 0.0, size); continue; }
+          const bool on_table = j == 1 && (q >= -1 && q <= 1) && m <= sd && l <= sd;
+          if (on_table && std::fabs(psidot) >= 1e-3 * n) { emit(l, m, p, q, psidot, 3, 0.0, size); continue; }
+          if (on_table) { emit(l, m, p, q, psidot, 0, 0.0, size); continue; }
+          emit(l, m, p, q, psidot, 5, 0.0, size);
+        }
+      }
+  return count;
 }
 
 /// Above kWideE (SPEC 16.11) the first-order tesseral short-periodics of degree 2 to kSpCap are not a series in M. For each

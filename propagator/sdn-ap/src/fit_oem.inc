@@ -1042,9 +1042,12 @@ static int fit_blocks() {
       }
       // the fit's position errors in the model's radial, in-track and cross-track axes
       double uvw_ss[3] = {};
+      // SPEC 16.18, the low table: the record states the slow set when the set carries a term beyond the shallow set's
+      bool record_slow = false;
       {
         xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
         if (xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk) {
+          record_slow = xs->ctx.slow_extra > 0;
           for (size_t k = 0; k < t_fit.size(); ++k) {
             double rm[3], vm[3], u[3];
             if (xpt::xp_propagate(*xs, t_fit[k], rm, vm) != kPropOk) break;
@@ -1207,7 +1210,9 @@ static int fit_blocks() {
       if (object != nullptr && object->OBJECT_ID() != nullptr) id.object_id = object->OBJECT_ID()->str();
       if (object != nullptr && object->OBJECT_NAME() != nullptr) id.object_name = object->OBJECT_NAME()->str();
       id.originator = oem->ORIGINATOR() != nullptr ? oem->ORIGINATOR()->str() : "SDN";
-      ocm::build(fbb, row, po.forces, &weather, id, extras);
+      Forces record_forces = po.forces;
+      record_forces.slow = record_slow;
+      ocm::build(fbb, row, record_forces, &weather, id, extras);
       if (plugin_push_output("elements", "OCM.fbs", "$OCM", fbb.GetBufferPointer(), fbb.GetSize()) < 0) {
         plugin_set_error("output-failed", "The $OCM could not be emitted.");
         return 3;
