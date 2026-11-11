@@ -73,7 +73,8 @@ struct AboveRow {
 // LAGEOS: LAGEOS-1, LAGEOS-2, LARES-2, 32 windows of 72 h; k the one k of the LAGEOS, medium Earth orbit and
 // geosynchronous classes (1.415e-5 AP, 3.216e-5 SGP4XP); s_e, s_i, s_l fitted so that every regime's 99th percentile of
 // |z| per axis and lead is at most 2.9. The bounds are the calibration fits' data sigma (rounded outward) and 0.9 to
-// 1.05 times their spans. HEO, geosynchronous and medium Earth orbit keep the ABOVE row for now (SPEC 12.5).
+// 1.05 times their spans. HEO, geosynchronous and medium Earth orbit have no AboveRow (SPEC 12.5 states why; the
+// geosynchronous class's SigmaRow below covers fits far worse than precise orbits).
 constexpr AboveRow kAboveAP[4] = {
     {false, 0, 0, 0, 0, 0, 0, 0, 0},  // HEO
     {false, 0, 0, 0, 0, 0, 0, 0, 0},  // geosynchronous
