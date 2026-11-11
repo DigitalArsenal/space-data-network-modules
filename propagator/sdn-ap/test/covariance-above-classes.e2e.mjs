@@ -10,8 +10,8 @@
 //    2.43 to 2.76 m): the ABOVE row. The same orbit fitted over 24 h (outside the calibrated 64.8 to 75.6 h): the ABOVE
 //    row. SGP4XP over 72 h with 65 m stated: SGP4XP's LAGEOS row.
 // 2. HEO (n 0.4 rev/day, e 0.6), 72 h, stated 100 m: AP's and SGP4XP's HEO rows; stated 5 km (above the calibrated
-//    7.67 m to 4.22 km): the ABOVE row. Medium Earth orbit (GPS-like), 72 h, stated 3 m: the ABOVE row (no fitted row
-//    yet).
+//    7.67 m to 4.22 km): the ABOVE row. Medium Earth orbit (GPS-like), 72 h, stated 3 m: the ABOVE row (the class has
+//    no row).
 // 3. Every record above flies with its covariance (propagate, COVARIANCE_MATRIX_LINES at 7 days), so a stated s_d above
 //    the drag is read back.
 // JS only moves bytes and compares numbers the module produced.
@@ -47,7 +47,7 @@ const ROW = {
     HEO: [6.357465071432782e-06, 8.153112791954473e-07, 4.753573962018311e-06, 2.401038715861921e-09],
     ABOVE: [9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06] },
   SGP4XP: { LAGEOS: [2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05],
-    HEO: [6.406459698609395e-06, 8.962738267352311e-07, 1.1915856399679677e-08, 1.667570181154198e-08],
+    HEO: [6.406459698609395e-06, 8.962738267352311e-07, 2.666e-07, 1.667570181154198e-08],
     ABOVE: [2.308e-07, 3.752e-07, 2.666e-07] },
 };
 const ORBITS = {

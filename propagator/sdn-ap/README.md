@@ -320,8 +320,9 @@ is fitted on two objects, TESS and Chandra (14 windows, 28 window-arcs of 72 to 
 fits go from 0.43 to 1.00, its TESS 336 h fits from 0.14 to 0.29 to 0.57 to 0.86; SGP4XP's rows from 0.00 to 0.43
 to 0.43 to 1.00. No HEO window's 1-sigma narrows in any direction. Leaving one window out holds. Leaving one object out fails
 for AP from Chandra to TESS, so the row is not shown to carry to an eccentric object unlike these two, and Chandra
-stays too narrow in places (AP's cross-track at day 5 of the 72 h fits, 3.05 at the median). Medium Earth orbit and
-geosynchronous keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the selection.
+stays too narrow in places (AP's cross-track at day 5 of the 72 h fits, 3.05 at the median). Every HEO size is at
+least the ABOVE row's, so the row never states less than the ABOVE row. Medium Earth orbit and geosynchronous have no
+class row (SPEC 12.5 states why). `test/covariance-above-classes.e2e.mjs` holds the selection.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
@@ -497,8 +498,8 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   a 2,600 km set states its sigma.
 - `test/covariance-above-classes.e2e.mjs`: SPEC 12.5, above the drag by class (stack #433): on the module's own
   flights, a LAGEOS-class fit inside its calibrated data sigma and span states the LAGEOS row (AP and SGP4XP) with s_d
-  = k |AGOM| / a; above that data sigma, over 24 h, and in the classes not yet fitted (HEO, medium Earth orbit) the
-  ABOVE row; every record flies with its covariance.
+  = k |AGOM| / a; an HEO fit inside its condition the HEO row; above that data sigma, over 24 h, and in medium Earth
+  orbit, which has no class row, the ABOVE row; every record flies with its covariance.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
