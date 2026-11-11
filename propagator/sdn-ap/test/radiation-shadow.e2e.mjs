@@ -2,8 +2,9 @@
 // E2E (stack #464 and #456; SPEC 16.14): AP's radiation-pressure rates are continuous in the set's own elements, and right.
 // 1. The rates against the numerical average, through the module's sdnap_ap_srp_rates: mode 0 the theory's averaged
 //    rates on AP's shadow, mode 1 the same sphere in the same cylinder averaged over one revolution of the mean orbit by
-//    the Gauss equations (4096 steps of the eccentric longitude, a step the boundary crosses split where it is), the Sun
-//    held fixed at 1 AU. AGOM 0.025 m^2/kg. Mean orbits: Galileo-like (n 1.7047 rev/day, e 0.0002, i 56 deg) and
+//    the Gauss equations (4096 steps of the eccentric longitude, a step the boundary crosses split where it is; the
+//    mean longitude's rate with section 4's output-time Delta n over the whole revolution, SPEC 16.15), the Sun held
+//    fixed at 1 AU. AGOM 0.025 m^2/kg. Mean orbits: Galileo-like (n 1.7047 rev/day, e 0.0002, i 56 deg) and
 //    geostationary (n 1.00273 rev/day, e 0.0003, i 0.05 deg, which takes section 4's arrangement of the formulas).
 //    - Through grazing: the Sun's elevation above the orbit plane swept across the edge of the eclipse season
 //      (Galileo-like 11.5 to 13.0 deg, geostationary 7.5 to 9.5 deg, by 0.005 deg; the Sun 30 and 40 deg from the
@@ -21,9 +22,10 @@
 //    e 0.0002, i 56, RAAN 329.65, argp 150, M 10 deg, AGOM 0.025; the Sun about 6 deg above the plane, a shadow boundary
 //    passing the perigee within the week) and geostationary at 2026-03-10 00:00 UTC (n 1.00273 rev/day, e 0.0003,
 //    i 0.05, RAAN 80, argp 270, M 100 deg, AGOM 0.02).
-// Measured 2026-11-11: rates within 7.6e-7 of the scale (largest on n-dot through the apse), steps equal to the
-// average's to three digits; the nudge departure 0.29 mm (Galileo-like) and 0.008 mm (geostationary), where 0.6.16's
-// closed-form shadow and its 1e-12 test read 13.49 m and 9.86 m.
+// Measured 2026-11-11: rates within 7.6e-7 of the scale (largest on n-dot through the apse; lambda within 1e-7, where
+// section 4's rate, Delta n on the sunlit arc only, departs by 1.5 times the Gauss rate's average at e 0), steps equal
+// to the average's to three digits; the nudge departure 0.21 mm (Galileo-like) and 0.013 mm (geostationary), where
+// 0.6.16's closed-form shadow and its 1e-12 test read 13.49 m and 9.86 m.
 // Every number comes from the built module's own calls. JS only moves bytes and compares numbers the module produced.
 //   node test/radiation-shadow.e2e.mjs
 import * as fb from "flatbuffers";
