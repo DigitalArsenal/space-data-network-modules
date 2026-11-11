@@ -2615,7 +2615,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
-| slow set (from 0.6.25) | j = 1 to 6, q = 0, every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose along-track size reaches 0.5 m, the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
+| slow set (from 0.6.25) | j = 1 to 6, \|q\| up to 4 (from 0.6.NN; q = 0 in 0.6.25), every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose size reaches 0.5 m (through the mean motion, or from 0.6.NN through the eccentricity vector), the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
 by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
@@ -4030,10 +4030,14 @@ Gravity alone, FFM 70 x 70 on both sides with no Sun or Moon, the elements fitte
 1,905 m at i 97.6 (35 heights).
 
 From 0.6.25 a fit that states MAXIMUM_TESSERAL_DEGREE 2 or more carries the slow set in the rates, beside the shallow set:
-every term (l, m, p, q) of the embedded field with j = l - 2p + q from 1 to 6, q = 0, order and degree 2 to 70,
+every term (l, m, p, q) of the embedded field with j = l - 2p + q from 1 to 6, |q| up to 4 (from 0.6.NN; 0.6.25 carried
+q = 0), order and degree 2 to 70,
 - whose own rate psi-dot at the epoch elements is within 1.3 bands (|psi-dot| < 1.3 x 0.045 n, `kShallowSelect`);
-- whose size reaches 0.5 m (`kSlowKeepM`). The size is the along-track amplitude through the mean motion,
-  3 |j| A / (a psi-dot^2), with A = mu / a^(l+1) |F G| |C, S| the potential's coefficient of the term, at the epoch elements;
+- whose size reaches 0.5 m (`kSlowKeepM`). The size is the larger of two, at the epoch elements: the along-track amplitude
+  through the mean motion, 3 |j| A / (a psi-dot^2), with A = mu / a^(l+1) |F G| |C, S| the potential's coefficient of the
+  term; and from 0.6.NN the once-per-revolution amplitude through the eccentricity vector, 2 A_e / (n a |psi-dot|), with A_e
+  the same coefficient with F dG/de in place of F G. A term of q = +-1 has G = e (l + 1 + 2 q w) / 2 at small e (w = l - 2p),
+  so near e 0 its first size vanishes while its second does not;
 - other than the shallow set's own terms (j = 1, q = 0, to its degree), which stay where they are.
 
 Each term enters the rates with the weight w of its own current rate: 1 below 0.9 bands, a cos^2 taper to 0 at 1.1. The
@@ -4049,15 +4053,27 @@ What the slow set leaves out, by stated limits:
 - Terms under 0.5 m. The largest left out on the bits cases are 0.41 m on a LAGEOS-2-like set and 0.089 m on a LAGEOS-like
   set. A cut at 0.1 m changes the LAGEOS-2-like record, and 0.05 m changes both. Lower cuts also make a free fit of a
   SWOT-like set at BTERM 0.01 worse: 0.925 and 0.937 of the true BTERM against 0.952.
-- q other than 0 (code 6 below; stack #477's open part). The cases that are known:
-  - 880 km, i 97.6: the order-14 q = +1 family drifts at 1.8e-3 n, and the output table carries it to first order: day 5
-    is 220 / 233 m after 24 h / 72 h fits, and 91 / 43 m with the family in the rates. The q = -1 family (6.6e-4 n,
-    107 days, its largest member 757 m) is carried nowhere. Put in the rates it costs 20 to 35 m, where a correct term
-    should cost nothing; that is the defect to find before q other than 0 is carried.
-  - 550 km, i 87.35, e 0.001: the order-15 q = 2 term of degree 15 drifts at 3.2e-5 n with a size of 1.9 km and is
-    carried nowhere.
-  - At e 0.02 the series in q needs |q| up to 4: day 5 after 24 h / 72 h fits is 152 / 224 m with q = 0, 352 / 297 m with
-    |q| up to 1, and 183 / 161 m with |q| up to 4.
+*q other than 0 (from 0.6.NN; stack #477's second part).* 0.6.25 carried q = 0 only, and listed the slow terms of q other than
+0 at or above the size cut as code 6. Among them:
+- at 550 km (i 87.35, e 0.001), the order-15 q = 2 term of degree 15, drifting at 3.2e-5 n with a size of 1.9 km;
+- at 880 km (i 97.6), the order-14 q = -1 family at 7.0e-4 n (its largest member 757 m) and the q = +1 family at 1.8e-3 n;
+- at e 0.02, the series in q, which needs |q| up to 4.
+From 0.6.NN the slow set takes every q with |q| up to 4 by the same rule (its own rate, the 0.5 m cut), G exact at the epoch
+e. Below e 2e-4 the exact G's dG/de comes from a tabulated Hansen series, and is 0 where none is tabulated (degrees above
+5); for q other than 0 there the slow set takes dG/de as the central difference of the exact G over e +- 2e-4 (G is analytic
+in e). Without it a near-circular record (a fit of a circular orbit gives e of 1e-6 to 2e-5) has no q = +-1 forcing of its
+eccentricity vector: with gravity, Sun, Moon and tide on both sides, 70 x 70, the largest distance over 0 to 5 days after a
+72 h fit at 500 km, i 55 is 356 m
+without it and 161 m with it, and at 300 km, i 98 676 and 451 m. On 0.6.25, put in the rates with pinned fits, the q = -1 family had cost 20 to 35 m at 880 km. With AP fitted to the
+numerical propagator's own forecast (the record the catalog fit makes; BAR.md), gravity, Sun, Moon and tide on both sides and
+the field at 70 x 70, the largest distance over 0 to 5 days, q = 0 / |q| up to 1 / up to 4:
+- 880 km, i 97.6, e 0.001: 85 / 42 / 42 m;
+- 550 km, i 87.35, e 0.001: 159 / 67 / 67 m;
+- 550 km, i 87.35, e 0.02: 448 / 72 / 64 m;
+- 1,000 km mean altitude, i 53, e 0.04: 101 / 98 / 93 m.
+SYNTH_LINE
+The largest list on a sweep of 1,880 low-table sets (12 to 16.6 rev/day, eight inclinations, e 0 to 0.05) is 971 terms, under
+the list's 2,048 (`kShallowMax`); a term over it would be listed as code 7, and the partition test asserts there is none.
 
 Measured with the slow set:
 - The scan above: at i 53 the worst is 218 m (10 heights above 100 m), and at i 97.6 it is 423 m (19 heights). Still above
@@ -4098,7 +4114,8 @@ q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term
 | 0 | nowhere: under the table's 1e-3 n floor |
 | 4 | nowhere: above the slow set's degree, or in a family whose leading degree is 69 or 70 |
 | 5 | nowhere: under the size cut |
-| 6 | nowhere: a q outside the slow set's range, at or above the size cut (stack #477's open part) |
+| 6 | nowhere: a q outside the slow set's range, at or above the size cut (none from 0.6.NN: the range is the listing's) |
+| 7 | nowhere: a term the rules select that the list's capacity (`kShallowMax`, 2,048) could not hold |
 
 `test/slow-set-partition.e2e.mjs` compares it row by row with the rule written in the test. `test/slow-set-taper.e2e.mjs`
 flies a decaying orbit whose order-15 family's weight moves from 0.90 to 0.63 over 7 days. The 10 s jump detector reads at
