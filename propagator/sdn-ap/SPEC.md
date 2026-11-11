@@ -3413,11 +3413,43 @@ days (1.19 at worst; 2010-2035): at 42,164 km a third-body acceleration error of
 radial from the Moon (8.9e-11 at worst at day 7) and 1.6e-11 from the Sun at day 7; 6.5e-11 at 74,600 km from the Moon.
 The long-period branch of class 0 holds TEME of date and has no such residue.
 
-*Effect* (model truth, 72 h fits, day-7 whole-day 3D RMS; 0.6.16 to this section, on main without the one-day class's
-resonant tail):
+*Effect on real windows* (72 h fits, the GEO lane's harness of the table's rows, real truth, FORCES.ECOM2 as the table
+flies it; medians at days 1, 3, 5 and 7 and the windows within the numerical propagator's error plus 100 m at day 5; 0.6.19
+to 0.6.19 with this section):
+- Inclined geosynchronous (60 windows): 3.39, 12.61, 31.29, 56.37 m to 1.81, 3.59, 6.89, 10.77 m, 59 of 59 both; better at
+  day 5 on 56 windows. The Y0 those fits solve was the Moon's error leaking into the radiation term (16.13).
+- Geostationary (35 windows): 5.84, 23.37, 88.36, 191.23 m to 5.22, 21.33, 86.28, 200.72 m, 26 of 32 to 24 of 32 (C020
+  2025-10-12, 104.0 to 131.0 m, and J003 2025-10-10, 103.8 to 138.3 m, both on the line before, leave it); with Y0 held
+  17 to 16 of 32. What is left there is the radiation pressure (16.13; stack #457).
+- On sphere truth (the numerical propagator fitted to the real arc, flown with the sphere alone), day 7 with Y0 solved:
+  C005 80.7 to 8.0 m, C010 61.8 to 16.2, C221 83.4 to 3.7; the false Y0 from -0.8e-10 to -1.4e-10 m/s^2 down to +6e-13 to
+  +3.1e-11. On a made-up inclined geosynchronous set in season (epoch 2026-01-26, AGOM 0.015, a sphere in the truth and no
+  Y0): Y0 +1.08e-9 to +9.7e-11 m/s^2, day 5 20.4 to 2.8 m (with Y0 held 9.7 to 3.6 m).
+- TESS (seven real windows of `test/heo-frame.e2e.mjs`): worse, medians 610.7, 1,390.4, 6,553.6 m to 762.8, 1,677.5,
+  8,596.8 m at days 1, 3 and 7 (four windows worse, two better). The Moon is what moves it, and on model truth the
+  third body is right there (below); AP's zonal theory on that orbit is 0.9 to 1.8 km off at day 7, and the old Moon's
+  error had partly offset it (stack #479).
+- Day-3 medians of `test/etalon-resonance.e2e.mjs` (fits that state no FORCES.ECOM2): Etalon-1 4.21 to 4.08 m, Etalon-2
+  5.31 to 4.85, LAGEOS-1 7.17 to 7.11, LAGEOS-2 6.80 to 6.68, LARES-2 8.70 to 8.65, inclined geosynchronous 13.45 to 7.60
+  m, and geostationary 53.30 to 57.92 m: on fits that hold no radiation term the geostationary row gets slightly worse,
+  the radiation's own share no longer offset by the Moon's error.
+
+*Effect on model truth* (72 h fits, day-7 whole-day 3D RMS; 0.6.16 to this section, on main without the one-day class's
+resonant tail unless stated):
 - Gravity 4 x 4 on both sides: inclined geosynchronous orbits (i 55 deg, e 0.003, six nodes) 5.35-25.85 m to 0.94-2.03 m;
   geostationary (i 1.5 deg, four longitudes) 8.47-10.34 m to 1.53-3.21 m, the cross-track part 7.3-7.9 m to 0.7-1.1 m,
-  and the constant along-track acceleration fitted to the forecast from up to 4.6e-11 to 3e-12 m/s^2.
+  and the constant along-track acceleration fitted to the forecast from up to 4.6e-11 to 3e-12 m/s^2
+  (`test/one-day-moon-floor.e2e.mjs`: at most 5 m; with ECOM2 the Y0 found within 3.8e-11 m/s^2).
+- The third body by radius, seeded (no fit; gravity 4 x 4 on both sides, coefficients held), day 7, this section against
+  the same flight with the Sun and Moon off on both sides: a THEMIS-like orbit 284, 273, 278 m against 258, 231, 249 m; a
+  Chandra-like one (period 63.5 h, e 0.685) 292, 413, 510 m against 289, 426, 510 m; a TESS-like one (13.7 days, e 0.55)
+  1,746, 829, 1,818 m against 1,769, 884, 1,805 m. With section 5's Moon: 292, 292, 200 m; 468, 699, 478 m; 2,423,
+  2,052, 2,870 m.
+- Every HEO fixture of 16.6 moves, both ways (day 7, 0.6.19 to this): half-day sample 30.22 to 27.76 m (along-track RMS
+  31.45 to 36.15 m), 12 h at 55 deg sample 64.94 to 76.44 m, GTO 192.87 / 123.44 to 180.70 / 117.62 m along-track /
+  radial, the 500 km perigee GTO 94.07 / 56.07 to 82.34 / 51.79 m, Molniya with its drag coefficient pinned at the truth
+  80.71 / 50.51 to 84.01 / 51.16 m; Molniya with it fitted lands on the other of its fit's two solutions (stack #392:
+  0.04462 to 0.04576 against the truth's 0.044, day 7 332.6 to 763.9 m), inside its record's statement.
 - A GPS-like orbit (20 x 20, four nodes): 8.1, 5.4, 13.7, 13.1 m to 13.4, 9.9, 10.0, 8.7 m. The averaged regime's own
   lunar theory carries that orbit's floor (DigitalArsenal/spacedatanetwork-stack#421), not the ephemeris: DE440's Moon in
   a test build moved it the same way.
