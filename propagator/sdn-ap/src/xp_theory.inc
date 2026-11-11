@@ -1844,6 +1844,7 @@ struct RateContext {
   const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
   double wide_blend;
   uint8_t wide_fit;                   ///< initialized inside a tess::FitGridScope: the grids it builds are not kept idle
+  double wide_a;                      ///< the long-period regime with the Sun and Moon: the epoch's a, every node's and the grid's a offset (SPEC 16.11); 0 otherwise
   uint8_t is_cov_sigma;               ///< non-zero if initialized inside CovBankScope as a covariance sigma satellite
   XpSat* wide_anchor;                 ///< the nominal set whose grids this copy reads (GridShareScope); nullptr: its own
 };
@@ -4987,10 +4988,10 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         }
         if (ctx.wide != nullptr) {
           if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - ctx.wide_blend);
-            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - (1.0 - ctx.wide_blend));
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - ctx.wide_blend, ctx.wide_a);
+            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - (1.0 - ctx.wide_blend), ctx.wide_a);
           } else {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0);
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0, ctx.wide_a);
           }
         }
         auto conv_six = [&](const double* sx, double* eq) {
@@ -5034,10 +5035,10 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
         if (ctx.wide != nullptr) {
           if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend);
-            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend);
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend, ctx.wide_a);
+            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend, ctx.wide_a);
           } else {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0);
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0, ctx.wide_a);
           }
         }
         if (__builtin_expect(have_cv_m, 1)) {
@@ -5069,10 +5070,10 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
       if (ctx.wide != nullptr) {
         if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
-          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend);
-          tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend);
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend, ctx.wide_a);
+          tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend, ctx.wide_a);
         } else {
-          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0);
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0, ctx.wide_a);
         }
       }
       if (__builtin_expect(have_cv_m, 1)) {
@@ -5564,6 +5565,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;
+  // SPEC 16.11: in the long-period regime the Sun and Moon move the mean motion along each revolution, so the grid keeps the
+  // epoch's (the same expression as the grid's own a, so a set's own grid has no offset in a)
+  s.ctx.wide_a = s.ctx.long_period && s.ctx.ap_third_body ? std::pow(kKe / n0, kX2o3) : 0.0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && br.series_e && e.eo + 1e-3 < 1.0) {
@@ -6456,7 +6460,8 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
 }
 
 /// AP above tess::kWideE (SPEC 16.11): the grid of schedule node j, built at the set's mean elements at j kGridEvery (node 0: the
-/// set's own); `held` says whether the caller drops it. False when the mean elements there are not numbers or out of memory.
+/// set's own), at the epoch's mean motion in the long-period regime with the Sun and Moon (RateContext::wide_a); `held` says
+/// whether the caller drops it. False when the mean elements there are not numbers or out of memory.
 inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   held = false;
   if (j == 0) { out = s.ctx.wide; return true; }
@@ -6476,7 +6481,8 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   if (!mean_at_aside(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
   const Kepler k = kepler_of(yj);
   if (!(k.e < 1.0)) return false;
-  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i, s.ctx.wide_fit != 0);
+  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, s.ctx.wide_a > 0.0 ? s.ctx.wide->n : yj[kN], k.e, k.i,
+                                s.ctx.wide_fit != 0);
   if (out == nullptr) return false;
   held = true;
   // keep it in the slot farther from j
