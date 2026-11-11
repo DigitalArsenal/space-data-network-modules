@@ -565,6 +565,7 @@ static int fit_blocks() {
         double fit_begin_min = 0.0, fit_end_min = 0.0;  ///< the fit interval's first and last state, minutes from the epoch
         pcf::Prior srp{};                                ///< AGOM's prior as used (SPEC 12.1 short-arc rule)
         bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
+        bool free_band = false;                          ///< BTERM on the 600-2,500 km default of a 71 h arc (SPEC 12.8)
         double sigma_km = 0.0;  ///< the data sigma the fit weighted with, above the drag (SPEC 12.1); 0: the stages' 1 km
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
@@ -669,17 +670,28 @@ static int fit_blocks() {
         // SPEC 12.8: FIT.DRAG_PRIOR unset under NRLMSISE-00 or a < 24 h minimum span takes its median by mean altitude
         // (above e 0.3 the perigee's), and under NRLMSISE-00 at 800 to 1400 km the wide sigma of the log; a stated prior
         // is fitted as given
-        bool wide_band = false;
+        bool wide_band = false, free_band = false;
         if (drag_override == nullptr && !po.drag_prior_given && (po.forces.msis || po.minimum_span_h < 24.0) &&
             row.mean_motion_rev_day > 0.0) {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
           const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
-          const double h_km = (row.eccentricity > xpt::tess::kWideE ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
-          if (h_km >= 800.0) eff_drag.mean = 0.0005;
-          else if (h_km >= 600.0) eff_drag.mean = 0.002;
-          if (po.forces.msis && h_km >= 800.0 && h_km < 1400.0) {
+          // SPEC 12.8: an arc of 71 h or more under NRLMSISE-00 at or below e 0.3 is judged on its perigee's height, where the
+          // drag acts (an orbit above e 0.3 always is); a shorter arc on its mean altitude
+          const bool long_arc = po.forces.msis && fit_end_min - fit_begin_min >= pcf::kDragPriorFreeMinArcHours * 60.0 &&
+                                row.eccentricity <= xpt::tess::kWideE;
+          const double h_km = (row.eccentricity > xpt::tess::kWideE || long_arc ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
+          if (long_arc && h_km >= pcf::kDragPriorFreeFloorKm && h_km < pcf::kDragPriorFreeTopKm) {
+            // SPEC 12.8: such an arc with its perigee at 600 to 2,500 km: the arc decides
+            eff_drag.mean = pcf::kDragPriorFreeMedian;
             eff_drag.sigma = pcf::kDragPriorWideLogSigma;
-            wide_band = true;
+            free_band = true;
+          } else {
+            if (h_km >= 800.0) eff_drag.mean = 0.0005;
+            else if (h_km >= 600.0) eff_drag.mean = 0.002;
+            if (po.forces.msis && h_km >= 800.0 && h_km < 1400.0) {
+              eff_drag.sigma = pcf::kDragPriorWideLogSigma;
+              wide_band = true;
+            }
           }
         }
         if (drag_override == nullptr) used_drag = eff_drag;
@@ -736,12 +748,15 @@ static int fit_blocks() {
         if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
         // SPEC 12.1: above the drag (cov::regime_of: the perigee at or above 2,500 km, where the theory's density is
-        // 1e-20 at every point of the orbit) the whole-arc fit is redone at the data's own sigma, so the priors stop
-        // pulling against data far more precise than the 1 km the stages weigh at. Under drag the 1 km stands: the
-        // residual there is the theory's own error, correlated along the arc, and at its bare scatter BTERM and AGOM
-        // absorb it (measured on the laser-ranged spheres' 24 h arcs).
+        // 1e-20 at every point of the orbit), and under the drag on an arc of pcf::kDataSigmaUnderDragMinArcHours or more
+        // at or below e 0.3 (the 71 h default's rule), the whole-arc fit is redone at the data's own sigma: every prior
+        // then acts at its written sigma, and the covariance (cov::of_fit at that sigma) is the curvature of the cost the
+        // fit minimized (stack #489). A shorter arc, or a set above e 0.3, under the drag keeps the stages' 1 km: on a
+        // short arc a free BTERM folds the theory's own along-track error into itself and the band's prior is what holds
+        // it (measured on the laser-ranged spheres' 24 h arcs); the eccentric sets are owed their own measurement.
         double sigma_km = 0.0;
-        if (cov::regime_of(row) != 0) {
+        if (cov::regime_of(row) != 0 ||
+            (fit_end_min - fit_begin_min >= pcf::kDataSigmaUnderDragMinArcHours * 60.0 && row.eccentricity <= xpt::tess::kWideE)) {
           double weighted = fit::kUnitSigmaKm;
           fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, weighted, iterations);
           if (weighted != fit::kUnitSigmaKm) sigma_km = weighted;
@@ -762,6 +777,7 @@ static int fit_blocks() {
         P.fit_end_min = fit_end_min;
         P.srp = eff_srp;
         P.wide_band = wide_band;
+        P.free_band = free_band;
         return 0;
       };
       // the default span: 48 h; 24 h for eccentric orbits (e > 0.5: the lane's THEMIS and Chandra windows lost
@@ -974,6 +990,29 @@ static int fit_blocks() {
           break;
         }
       }
+      // SPEC 12.8 "The drag term's stated width on a 71 h arc": BTERM's sigma of ln stated by width 1 on its diagonal, not
+      // mapped, and named in a second COV_REALISM entry; only on the 71 h default the fit used at the data's own sigma, where
+      // the rule, derived from the record's own fields as a reader derives it, names that default's prior
+      char width_tag[200] = {};
+      if (have_cov && !lattice && !high_e_drag && po.forces.msis && !po.drag_prior_given && chosen.free_band && sigma_km > 0.0 &&
+          fit_cov.regime == 0) {
+        double m = 0.0, sp = 0.0, cap = 0.0;
+        if (cov::width1_of(row, arc_hours, true, m, sp, cap) && std::fabs(sp - pcf::kDragPriorWideLogSigma) <= 1e-12 * sp) {
+          int kind[fit::kMaxParams];
+          const int np = cov::kinds_of(fit_cov.o, kind);
+          for (int a = 6; a < np; ++a) {
+            if (kind[a] != cov::kKindDrag) continue;
+            const double var_f = fit_cov.log_sigma[0] * fit_cov.log_sigma[0];
+            if (!(var_f > 0.0) || !(fit_cov.C[a * np + a] > 0.0) || !(row.bterm > 0.0)) break;
+            bool capped = false;
+            const double var_s = cov::width1_stated(var_f, m, sp, cap, capped);
+            fit_cov.C[a * np + a] = row.bterm * row.bterm * var_s;
+            fit_cov.log_sigma[0] = std::sqrt(var_s);
+            cov::width1_text(m, sp, cap, capped ? std::sqrt(var_f) : 0.0, width_tag, sizeof width_tag);
+            break;
+          }
+        }
+      }
       // held-out score: RMS, largest error, and by day after the arc
       double held_rms = 0.0, held_max = 0.0, held_stop = fit_end_min;
       std::vector<double> day_ss;
@@ -1115,6 +1154,9 @@ static int fit_blocks() {
                         : span_used < default_span ? "fit arc: shortened, the default span held no plausible set"
                         : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
+      else if (chosen.free_band)
+        comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against "
+                          "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
@@ -1201,7 +1243,18 @@ static int fit_blocks() {
         cr.add_MODEL_ID(s_model);
         cr.add_REGIME(s_regime);
         cr.add_CALIBRATION(covarianceCalibration_Uncalibrated);
-        const std::vector<flatbuffers::Offset<CVR>> realism = {cr.Finish()};
+        std::vector<flatbuffers::Offset<CVR>> realism = {cr.Finish()};
+        if (width_tag[0] != '\0') {
+          // SPEC 12.8: the rule BTERM's stated width was written with (stated, not mapped)
+          const auto s_width = fbb.CreateString(width_tag);
+          const auto s_wregime = fbb.CreateString(cov::regime_name(fit_cov.regime));
+          CVRBuilder wr(fbb);
+          wr.add_RULE(covarianceRule_SourceModel);
+          wr.add_MODEL_ID(s_width);
+          wr.add_REGIME(s_wregime);
+          wr.add_CALIBRATION(covarianceCalibration_Uncalibrated);
+          realism.push_back(wr.Finish());
+        }
         extras.cov_realism = fbb.CreateVector(realism);
       }
       const CAT* object = blk->OBJECT();

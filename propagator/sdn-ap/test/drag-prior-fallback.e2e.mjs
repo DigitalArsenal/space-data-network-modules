@@ -4,29 +4,39 @@
 // differ by about 2 m; every bound held. The TEME output through this checkout's foundation/frames 0.3.0 lands within
 // 1 mm of the module's GCRF output.
 // Registration (2026-11-03, modules-sdn-ap-drag-prior-fallback-20261103): the fit's per-window drag diagnostics and the
-// drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), and for 3 BASE_3
-// (below), the module under test this build's dist.
+// drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), the module under test
+// this build's dist.
 // Model truth (test/lib/heo-model-truth.mjs): FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant
 // weather on both sides (no SRP); AP FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee, 7 days flown on
 // a 2-minute grid, day-3 whole-day 3D RMS. Read windows (test/lib/regime-windows.mjs): AP6's altimetry group DO, 72 h
 // arcs, as AP8 flew them (AP72); the windows were read by AP8 and its diagnosis.
+// Restated with the default of a 71 h arc whose perigee is at 600 to 2,500 km (SPEC 12.8: median 0.008 under 10 ln 10, no
+// fall-back). Every arc this test fits is such an arc, so the fall-back it was registered for no longer runs on them (it
+// stands for an orbit above e 0.3); the acceptance holds what the new default does instead, the 0.4.18 figures in brackets.
+// Measured 2026-11-11 on that default with the fit at the data's own sigma (SPEC 12.1, stack #489) and BTERM stated by
+// SPEC 12.8's width 1; the figures of the default at 1 km (stack #39 as first drafted) after "1 km".
 // Acceptance:
-// 1. DO: Sentinel-3A 2025-10-15 at or below 0.130 km at day 3 and Sentinel-3B 2025-10-25 at or below 0.45 km at day 7
-//    (0.4.11 0.087 and 0.113 km, 0.4.17 0.312 and 1.335 km; 0.6.20 0.087 and 0.112 km). The second bound was 0.150 km until
-//    0.6.25, whose slow set (SPEC 16.18) takes that window to 0.402 km at day 7 (Sentinel-3A's to 0.060 km at day 3): a
-//    cost the slow set's pull request states. No burn of the IDS list lies in the arc or the 7 days after it; on the
-//    scoreboard's 72 h fit of the same window the fitted term moves from 0.87 to 0.83 of the full numerical arm's;
-// 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D; on SWOT and Jason-3
-//    within 5 points of 0.4.17's (SWOT from 0.6.25 within 5 points of the slow set's; history at OUTSIDE_RULE);
-// 3. DO: SARAL and CryoSat-2 (600-800 km, outside the rule) within OUTSIDE_RULE of BASE_3 on every window (errors per
-//    lead and axis, BTERM, AGOM), those two objects' windows flown again on BASE_3 alone (history at OUTSIDE_RULE); from
-//    0.6.25 their day-3 medians at most OUTSIDE_SLOW, the windows' distances from BASE_3 printed;
+// 1. DO: Sentinel-3A 2025-10-15 at or below 0.33 km at day 3 and Sentinel-3B 2025-10-25 at or below 1.40 km at day 7, the
+//    two windows the fall-back had returned to 0.4.11 (0.087 and 0.113 km) and the new default takes back to 0.4.17's
+//    (0.312 and 1.335 km): measured 0.286 and 1.090 km (1 km: 0.314 and 1.344), losses the pull request names. History:
+//    0.6.20 0.087 and 0.112 km; the slow set alone (0.6.25, SPEC 16.18) 0.060 and 0.402 km, its bounds 0.130 and 0.45 km.
+//    No burn of the IDS list lies in the arc or the 7 days after it;
+// 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D (measured -90.9 % and
+//    -91.0 %; 1 km: -85 and -92 %); on SWOT and Jason-3 at or below 0.4.17's and no more than 5 points under the measured
+//    change (measured -93.0 against -48.3 % and -84.5 against -68.9 %; 1 km: -47.9 and -73.2 %);
+// 3. DO: SARAL and CryoSat-2 (600-800 km, inside the new default): the median paired day-3 change against 0.4.11 at
+//    most +5 % (measured -24.7 % and -7.9 %; 1 km: -34.7 and +1.4 %; formerly bit for bit with 0.4.17, outside the old rule);
 // 4. model truth, SWOT-like 0.044: a 0.5 m/s along-track step 12 h after the arc's end, its states in the fit's $OEM after
 //    USEABLE_STOP_TIME and the arc's states the step-free run's, gives the step-free fit's BTERM bit for bit; the same
-//    step 36 h into the arc takes the fall-back, on SWOT-like and Sentinel-3-like (the step flag's figures were $OBD text,
-//    gone with it: modules-sdn-ap-ocm-write-20261103);
-// 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 within 2 m of 0.4.17 at
-//    day 3 (82.0 and 63.6 m); from 0.6.25 at most MODEL_DAY3_SLOW against the truth;
+//    step 36 h into the arc, on SWOT-like and Sentinel-3-like, leaves the record stating an arc it does not fit (fit RMS
+//    above 10 km; measured 28.2 and 28.0 km) and BTERM undetermined: its formal sigma of the log at least 10 (the
+//    prior's 10 ln 10), named in the width entry, and the stated one width 1's cap, 1.09 [0.4.18: the fall-back to the
+//    band median];
+// 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 at most MODEL_DAY3 against
+//    the truth at day 3 (the slow set's bounds, 30 and 25 m; measured 15.3 and 20.4 m before the slow set; 1 km: 94.3 and
+//    67.3 m) [0.4.17 81.4 and 63.0 m].
+// The slow set's restatement of 3 against BASE_3 (0.6.22, git f8af1e2b) does not apply here: SARAL and CryoSat-2 are inside
+// the 71 h default, so their fits move by design and 3 holds them against 0.4.11.
 // 6. default-FORCES XP digest bit-exact.
 // Printed: every fixture's fitted BTERM, posterior sigma of the log, fit RMS and drag path (the derivation of B, k and the
 // band median RMS); per object the DO medians at days 1, 2, 3 and 7; every DO window that takes the fall-back and why;
@@ -38,34 +48,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
-// 3's baseline and bound: errors per lead and axis (m), BTERM relative, AGOM (m^2/kg). Against 0.4.17 (git 3c8fcb5c) until
-// 0.6.20: bit-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters and a fit by
-// centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8, at most 0.022 m in the
-// errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves these fits
-// from 0.4.17's by up to 2.670 m in the errors, 5.72e-4 relative in BTERM and 4.57e-5 in AGOM over the 30 windows
-// (printed as from0417; the largest on a CryoSat-2 window). The radiation rates over the sunlit arc reach these fits in
-// proportion to the AGOM they carry: 0.35 to 2.67 m where it fits at 3e-3 to 8e-3 m^2/kg, under 0.05 m where it is near
-// zero (all 15 CryoSat-2 windows and 7 of SARAL's 15 are in eclipse at the cutoff). Against the truth they move as often
-// toward it as away. CryoSat-2 is closer on 8, 7 and 8 windows at days 1, 3 and 7 and farther on 3, 4 and 6, its
-// medians (63.43, 404.5 and 3,183.9 m) within 3 cm; its largest mover goes 2.7 m toward the truth on 1.7 km at day 7.
-// SARAL moves at most 7 cm. A 3 cm comparison with 0.4.17 cannot hold once the radiation rates change, so from 0.6.21
-// the baseline is 0.6.21 (git 589749f6), the bound kept. AP's own Sun and Moon (0.6.22, SPEC 16.17, stack #446) move these
-// fits from 0.6.21's by up to 2.451 m in the errors (a SARAL window), 2.94e-4 relative in BTERM and 2.94e-6 in AGOM over
-// the 30 windows (from 0.4.17's, with 0.6.21: up to 3.214 m, 6.89e-4 and 4.08e-5); from 0.6.22 the baseline is 0.6.22
-// (git f8af1e2b), the bound kept.
-const BASE_3 = {version: '0.6.22', commit: 'f8af1e2b7'};
-const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
-// 0.6.25 (the slow set, SPEC 16.18) moves 2, 3 and 5 toward their truth, measured on this build, the 0.6.21 figures first:
-// 2: SWOT's day-3 median change against 0.4.11 -48.3 % to -90.0 % (its day-3 median 0.355 to 0.052 km against the truth),
-//    so SWOT is held within 5 points of the slow set's change;
-// 3: SARAL's day-3 median 0.129 to 0.110 km and CryoSat-2's 0.405 to 0.225 km against the truth (day 7 SARAL 0.977 to
-//    0.528, CryoSat-2 3.184 to 2.640 km), so a 3 cm comparison with BASE_3 cannot hold: their day-3 medians are bounded
-//    (OUTSIDE_SLOW) and each window's distance from BASE_3 printed;
-// 5: the model truth's day 3, SWOT-like 81.4 to 25.4 m and Sentinel-3-like 63.0 to 20.8 m (0.4.17 the same as 0.6.21), so
-//    both are bounded against the truth itself (MODEL_DAY3_SLOW).
-const SWOT_CHANGE_SLOW = -0.900;
-const OUTSIDE_SLOW = {'SARAL': 0.120, 'CRYOSAT 2': 0.245};
-const MODEL_DAY3_SLOW = {'SWOT-like': 30, 'Sentinel-3-like': 25};
+// 5's bound, the slow set's (0.6.25 moved the model truth's day 3 from 81.4 to 25.4 m on SWOT-like and from 63.0 to 20.8 m
+// on Sentinel-3-like, 0.4.17 the same as 0.6.21), held against the truth itself
+const MODEL_DAY3 = {'SWOT-like': 30, 'Sentinel-3-like': 25};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
@@ -74,7 +59,12 @@ if (!isMainThread) {
   const {runModelTruth} = await import('./lib/heo-model-truth.mjs');
   const r = await runModelTruth(workerData.c);
   const sigma = /posterior sigma of the log ([0-9.eE+-]+)/.exec(r.fitted.bModel ?? '');
-  parentPort.postMessage({day3: r.wholeDay[3].e, bterm: r.fitted.bterm, sigmaLog: sigma ? Number(sigma[1]) : null, wrmsKm: r.fitted.wrms,
+  // SPEC 12.8's width entry, where the record states BTERM by width 1 (its formal sigma of ln where the cap binds)
+  const {ocmOf} = await import('./lib/ocm.mjs');
+  const widthEntry = (ocmOf(new Uint8Array(Buffer.from(r.omm, 'base64'))).COV_REALISM ?? []).map((c) => c.MODEL_ID).find((t) => t?.startsWith('sdn-ap drag-term width ')) ?? null;
+  const formal = widthEntry ? /formal sigma of ln ([0-9.eE+-]+)/.exec(widthEntry) : null;
+  parentPort.postMessage({widthEntry, formalSigmaLog: formal ? Number(formal[1]) : null,
+    day3: r.wholeDay[3].e, bterm: r.fitted.bterm, sigmaLog: sigma ? Number(sigma[1]) : null, wrmsKm: r.fitted.wrms,
     path: /drag prior: ([^;]*); arc/.exec(r.fitted.bModel ?? '')?.[1] ?? null, step: /along-track step test.*$/.exec(r.fitted.bModel ?? '')?.[0] ?? null,
     comment: r.fitted.comment});
 } else {
@@ -88,7 +78,7 @@ if (!isMainThread) {
     fs.writeFileSync(file, execFileSync('git', ['-C', modules, 'show', `${sha}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26}));
     return file;
   };
-  const W0411 = release('a0f33bc54'), W0417 = release('3c8fcb5c'), W3 = release(BASE_3.commit);
+  const W0411 = release('a0f33bc54'), W0417 = release('3c8fcb5c');
   const workers = Math.min(12, Number(process.env.SDN_AP_E2E_WORKERS ?? 12), os.availableParallelism());
 
   const ORBITS = {
@@ -106,7 +96,7 @@ if (!isMainThread) {
   jobs.push({key: 'release SWOT-like 0.044 tail stepped', kind: 'fixture', c: fixture('SWOT-like', 0.044, wasmPath, {fitTailStates: 720, tailManeuvers: AFTER})});
   for (let index = 0; index < 10; ++index) jobs.push({key: `DO ${index}`, kind: 'windows', index});
 
-  const results = {}, rows = [], rows3 = {};
+  const results = {}, rows = [];
   const run = async (list, modulePaths, sink) => {
     let next = 0;
     await Promise.all(Array.from({length: workers}, async () => {
@@ -128,9 +118,6 @@ if (!isMainThread) {
     }));
   };
   await run(jobs, [W0411, W0417, wasmPath], (row) => rows.push(row));
-  // 3: SARAL's and CryoSat-2's windows on BASE_3 alone
-  const outside = [...new Set(rows.filter((r) => ['SARAL', 'CRYOSAT 2'].includes(r.key.split('|')[1])).map((r) => r.index))];
-  await run(outside.map((index) => ({kind: 'windows', index})), [W3], (row) => { rows3[row.key] = row; });
 
   for (const key of Object.keys(results).sort()) console.log(JSON.stringify({fixture: key, ...results[key], comment: undefined}));
   const median = (a) => { const v = a.toSorted((x, y) => x - y), i = v.length >> 1; return v.length % 2 ? v[i] : (v[i - 1] + v[i]) / 2; };
@@ -169,53 +156,31 @@ if (!isMainThread) {
   console.log(JSON.stringify({sentinel3a20251015day3Km: s3a, sentinel3b20251025day7Km: s3b, frames030Meters, frames030MetersEarlierBuilds,
     oldPath: {sentinel3a20251015day3Km: day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3', 'daysOld'), sentinel3b20251025day7Km: day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7', 'daysOld')}}));
   assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
-  assert.ok(s3a !== null && s3a <= 0.130, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
-  assert.ok(s3b !== null && s3b <= 0.45, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
+  assert.ok(s3a !== null && s3a <= 0.33, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
+  assert.ok(s3b !== null && s3b <= 1.40, `Sentinel-3B 2025-10-25 day 7 ${s3b} km`);
   // 2
   for (const o of ['HAIYANG 2C', 'HAIYANG 2D']) assert.ok(objects[o].day3.changeHere <= -0.70, `${o}: day-3 median change ${objects[o].day3.changeHere}`);
-  // SWOT against the slow set's own change from 0.6.25 (SPEC 16.18: its 14:1 family to degree 70 in the rates), Jason-3
-  // against 0.4.17's as before
-  const CHANGE_PINNED = {SWOT: SWOT_CHANGE_SLOW};
-  for (const o of ['SWOT', 'JASON 3']) {
-    const want = CHANGE_PINNED[o] ?? objects[o].day3.change0417;
-    assert.ok(Math.abs(objects[o].day3.changeHere - want) <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against ${CHANGE_PINNED[o] !== undefined ? "the slow set's" : "0.4.17's"} ${want}`);
+  // at or below 0.4.17's and no lower than this build's measured change less 5 points (a term broken toward zero error fails)
+  for (const [o, measured] of [['SWOT', -0.930], ['JASON 3', -0.845]]) {
+    const c = objects[o].day3.changeHere;
+    assert.ok(c <= objects[o].day3.change0417 && c >= measured - 0.05, `${o}: day-3 median change ${c} against 0.4.17's ${objects[o].day3.change0417} and the floor ${measured - 0.05}`);
   }
   // 3
   for (const o of ['SARAL', 'CRYOSAT 2']) {
-    const v = rows.filter((r) => name(r) === o && !r.error);
-    assert.equal(v.length, 15, `${o}: 15 windows`);
-    // against BASE_3 (asserted) and, printed, against 0.4.17 (the earlier baseline)
-    const apart = (a, b) => {
-      let errorsMeters = 0;
-      for (const [k, da] of Object.entries(a.days ?? {})) for (const axis of Object.keys(da))
-        if (typeof da[axis] === 'number') errorsMeters = Math.max(errorsMeters, 1000 * Math.abs(da[axis] - (b.days?.[k]?.[axis] ?? Infinity)));
-      return {errorsMeters, btermRelative: Math.abs(a.bterm - b.bterm) / Math.abs(a.bterm), agom: Math.abs(a.agom - b.agom)};
-    };
-    const checked = v.map((r) => {
-      const [a, b] = [rows3[r.key]?.arms[0], r.arms[2]];
-      assert.ok(a?.ok && b.ok && r.arms[1]?.ok, `${r.key}: the fits (${BASE_3.version}, 0.4.17 and this build)`);
-      const d = apart(a, b);
-      console.log(JSON.stringify({outsideTheRule: r.key, ...d, from0417: apart(r.arms[1], b)}));
-      return [r, d];
-    });
-    // from 0.6.25 the slow set moves these fits toward the truth (history at OUTSIDE_RULE): the day-3 median is bounded
-    // (OUTSIDE_SLOW) and each window's distance from BASE_3 printed
-    if (OUTSIDE_SLOW[o] !== undefined) assert.ok(objects[o].day3.here <= OUTSIDE_SLOW[o], `${o}: day-3 median ${objects[o].day3.here} km (at most ${OUTSIDE_SLOW[o]} km)`);
-    else for (const [r, d] of checked)
-      assert.ok(d.errorsMeters <= OUTSIDE_RULE.errorsM && d.btermRelative <= OUTSIDE_RULE.btermRelative && d.agom <= OUTSIDE_RULE.agom,
-        `${r.key}: ${d.errorsMeters} m in the errors, BTERM ${d.btermRelative} relative, AGOM ${d.agom} from ${BASE_3.version}'s (within ${JSON.stringify(OUTSIDE_RULE)})`);
+    assert.equal(rows.filter((r) => name(r) === o && !r.error).length, 15, `${o}: 15 windows`);
+    assert.ok(objects[o].day3.changeHere <= 0.05, `${o}: day-3 median change ${objects[o].day3.changeHere} against 0.4.11 (at most +5 %)`);
   }
   // 4
   assert.equal(results['release SWOT-like 0.044 tail stepped'].bterm, results['release SWOT-like 0.044 tail'].bterm, 'a step after the arc leaves BTERM');
   for (const o of ['SWOT-like', 'Sentinel-3-like']) {
     const r = results[`release ${o} 0.044 step in the arc`];
-    // the record states the path (OD COMMENT) and no arc-check figures (modules-sdn-ap-ocm-write-20261103: no number in COMMENT)
-    assert.ok(/^fall-back/.test(r.path), `${o}: a step in the arc falls back (${r.path})`);
+    assert.ok(r.wrmsKm > 10, `${o}: a step in the arc leaves a fit RMS of ${r.wrmsKm} km (above 10 km)`);
+    assert.ok(r.formalSigmaLog >= 10, `${o}: a step in the arc leaves BTERM undetermined (formal sigma of the log ${r.formalSigmaLog}; entry ${r.widthEntry})`);
+    assert.ok(Math.abs(r.sigmaLog - 1.09) <= 1e-9, `${o}: the record states the width rule's cap, 1.09 (stated ${r.sigmaLog})`);
   }
   // 5
-  // from 0.6.25 bounded against the model truth itself (the slow set moves both toward it; history at OUTSIDE_RULE)
   for (const o of ['SWOT-like', 'Sentinel-3-like'])
-    assert.ok(results[`release ${o} 0.044`].day3 <= MODEL_DAY3_SLOW[o], `${o} 0.044: day 3 ${results[`release ${o} 0.044`].day3} m (at most ${MODEL_DAY3_SLOW[o]} m; 0.4.17 ${results[`0.4.17 ${o} 0.044`].day3} m)`);
+    assert.ok(results[`release ${o} 0.044`].day3 <= MODEL_DAY3[o], `${o} 0.044: day 3 ${results[`release ${o} 0.044`].day3} m (at most ${MODEL_DAY3[o]} m; 0.4.17 ${results[`0.4.17 ${o} 0.044`].day3} m)`);
   // 6
   reproduceConformance();
   console.log('drag prior fall-back E2E: PASS');
