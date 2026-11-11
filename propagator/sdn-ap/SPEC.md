@@ -2984,6 +2984,18 @@ error by 4.1 m and with the term AP is within 0.02 m of its level; on a geostati
 transfer orbit (e 0.72, perigee 454 km) 1.1 and 0.03 m (day 7 of a 24 h fit: 9.2 and 0.13 m); on a THEMIS-like set
 (e 0.82, the long-period regime) 6.5 and 0.01 m (a 24 h fit: 1.5 and 1.5 m, of 349 m).
 
+*What the tide uncovers.* With the term AP's error is its error in a world without the tide: on a Sentinel-6A-like
+(1,336 km, i 66) and a Sentinel-1-like orbit (693 km, i 98), four nodes each, FFM with drag, a cannonball, relativity and
+70 x 70 (and without drag and radiation, and with the field at 12 x 12), AP fitted over 24 h and 72 h with FIT unset and
+with B and AGOM held at the truth's, AP with the term on the tide truth equals AP without it on the truth without the
+tide within 0.67 m at day 5 in all 96 cases. Whether the error falls depends on what else AP misses. Under FIT unset at
+1,336 km the fit holds BTERM at the band median of 12.8, 0.0005 m^2/kg against the truth's 0.02, 100 to 200 m along
+track at day 5, and the term wins on 4 of 8; with B and AGOM held, on 7 of 8. At 693 km, with B and AGOM held, AP is
+40 to 126 m at day 5 without any tide (the field above degree 12, carried in part), and the term wins on 5 of 8; with the
+field capped at 12 on both sides, on 8 of 8. On real windows the tide therefore moves rows both ways: the altimetry rows'
+24 h fits (the band's drag median, stack issue 460) and near 700 km at 72 h (the field above degree 12, stack issue 448)
+lose windows they held only because the missing tide offset those errors.
+
 *Covariance.* The stated covariance hardly moves with the term. A 72 h fit's position sigma on the tide truth at days
 1, 3, 5 and 7, medians of the 17 low orbits, with the term: radial 7.5, 8.4, 10.4, 12.6 m, in-track 252, 1,216, 2,192,
 3,157 m, cross-track 10.7, 27.6, 47.8, 68.4 m; without it the same within 0.1 m but cross-track at day 1 (11.2 m). The
