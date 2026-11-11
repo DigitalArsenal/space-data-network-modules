@@ -327,8 +327,9 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   double* res = static_cast<double*>(std::malloc(sizeof(double) * nres));
   double* trial = static_cast<double*>(std::malloc(sizeof(double) * nres));
   double* jac = static_cast<double*>(std::malloc(sizeof(double) * nres * kMaxParams));
-  auto release = [&]() { std::free(res); std::free(trial); std::free(jac); };
-  if (res == nullptr || trial == nullptr || jac == nullptr) {
+  double* trial_m = static_cast<double*>(std::malloc(sizeof(double) * nres));  // a central difference's step back
+  auto release = [&]() { std::free(res); std::free(trial); std::free(jac); std::free(trial_m); };
+  if (res == nullptr || trial == nullptr || jac == nullptr || trial_m == nullptr) {
     release();
     out.status = -1;
     return out;
@@ -360,7 +361,30 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   double mu = 1e-3;
   bool converged = false;
   int it = 0;
-  int fd_used = 0;
+  // #456: once a step along the analytic columns fails to lower the cost (where the fall-back is on), the element and
+  // drag columns are the theory's own central differences for the rest of the pass: the analytic columns (two-body
+  // motion, the J2 secular drifts, n-dot) stop finding descent before the minimum when the data outweigh the priors.
+  bool fd_mode = false;
+  const int analytic = o.fit_drag ? 7 : 6;
+  auto fd_columns = [&]() {
+    // SPEC 16.7: every moved set flies the iterate's branch (the pinned one inside a settle pass), so no column
+    // differences two branches
+    const xpt::Branch wb = xpt::g_branch_pin != nullptr ? *xpt::g_branch_pin : row_branch(work);
+    const xpt::BranchScope pin(&wb);
+    for (int a = 0; a < analytic; ++a) {
+      const double h = a < 5 ? 1e-6 : a == 5 ? 1e-6 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
+      double xp[kMaxParams], xm[kMaxParams];
+      for (int q = 0; q < np; ++q) xp[q] = xm[q] = x[q];
+      xp[a] += h;
+      xm[a] -= h;
+      ElementRow bp = work, bm = work;
+      row_of(xp, o, bp);
+      row_of(xm, o, bm);
+      if (!residuals(bp, t, r, count, trial) || !residuals(bm, t, r, count, trial_m)) return false;
+      for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - trial_m[i]) / (2.0 * h);
+    }
+    return true;
+  };
   for (; it < max_it && !converged; ++it) {
     // n-dot per unit drag term from the theory's own rate function at epoch
     double ndot_per_drag = 0.0;
@@ -412,14 +436,32 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       }
     }
     if (o.fit_y0 && y0_index < np) {
-      // SPEC 16.13: Y0's column, as AGOM's: a one-sided difference of the theory each iteration, per kY0Unit
-      ElementRow bumped = work;
+      // SPEC 16.13: Y0's column, a central difference of the theory each iteration, per kY0Unit (#456: a one-sided one
+      // carried the theory's rounding into the step along the flat direction Y0 shares with AGOM and the elements)
+      ElementRow bumped = work, bumped_m = work;
       const double step = std::fmax(std::fabs(x[y0_index]) * 0.01, 0.1);
       radiation_y0(bumped) = (x[y0_index] + step) * kY0Unit;
+      radiation_y0(bumped_m) = (x[y0_index] - step) * kY0Unit;
       const NominalSat nominal(work);
-      xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
-      if (residuals(bumped, t, r, count, trial))
-        for (int i = 0; i < nres; ++i) jac[i * kMaxParams + y0_index] = (trial[i] - res[i]) / step;
+      xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copies read the iteration's nominal grids
+      if (residuals(bumped, t, r, count, trial) && residuals(bumped_m, t, r, count, trial_m))
+        for (int i = 0; i < nres; ++i) jac[i * kMaxParams + y0_index] = (trial[i] - trial_m[i]) / (2.0 * step);
+    }
+    if (fd_mode && !fd_columns()) {
+      // a moved set the theory refuses: this iteration on the analytic columns
+      for (int k = 0; k < count; ++k) {
+        Dual y[6];
+        for (int j = 0; j < 6; ++j) y[j] = dvar(x[j], j);
+        Dual ndot = dconst(0.0);
+        if (o.fit_drag) {
+          ndot.v = work.bterm * ndot_per_drag;
+          ndot.d[6] = o.drag_log ? work.bterm * ndot_per_drag : ndot_per_drag;
+        }
+        Dual pos[3];
+        model_position(y, t[k], ndot, pos);
+        for (int c = 0; c < 3; ++c)
+          for (int j = 0; j < analytic; ++j) jac[(3 * k + c) * kMaxParams + j] = pos[c].d[j] * xpt::kRe;
+      }
     }
     double A[kMaxParams * kMaxParams] = {}, g[kMaxParams] = {};
     auto normal = [&]() {
@@ -444,9 +486,28 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       for (int b = 0; b < a; ++b) A[b * np + a] = A[a * np + b];
     };
     normal();
+    // #456: the distance to the minimum, the Newton decrement g^T A^-1 g (twice the cost a full Gauss-Newton step from
+    // here would remove). The fit has converged when it is under the tolerance, whatever the last damped step did: along
+    // a flat direction (Y0 with AGOM and the elements) short damped steps each lower the cost by little while the minimum
+    // is still far, and stopping on the drop leaves the end to rounding.
+    {
+      double M[kMaxParams * kMaxParams], dx[kMaxParams];
+      for (int a = 0; a < np * np; ++a) M[a] = A[a];
+      for (int a = 0; a < np; ++a) dx[a] = g[a];
+      if (solve(M, dx, np)) {
+        double decrement = 0.0;
+        for (int a = 0; a < np; ++a) decrement += g[a] * dx[a];
+        if (decrement < (data_sigma ? 2.0 * kChiSquareTolerance : 2e-10 * cost)) {
+          converged = true;
+          break;
+        }
+      }
+    }
     bool improved = false;
     auto attempt = [&]() {
-    for (int tries = 0; tries < 12 && !improved; ++tries) {
+    // #456: the damping rises until a step lowers the cost or it passes 1e10 (a steepest-descent step of negligible
+    // length), not for a fixed twelve tries: after a run of successes mu is near 1e-12, and twelve tries reach only 1
+    for (int tries = 0; (tries < 12 || mu <= 1e10) && tries < 40 && !improved; ++tries) {
       double M[kMaxParams * kMaxParams], dx[kMaxParams];
       for (int a = 0; a < np * np; ++a) M[a] = A[a];
       for (int a = 0; a < np; ++a) {
@@ -461,14 +522,12 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
         if (residuals(cand, t, r, count, trial)) {
           const double c = cost_of(trial, xt);
           if (c < cost) {
-            const double drop = cost - c, rel = drop / cost;
             for (int a = 0; a < np; ++a) x[a] = xt[a];
             for (int i = 0; i < nres; ++i) res[i] = trial[i];
             work = cand;
             cost = c;
             mu = mu * 0.3 > 1e-12 ? mu * 0.3 : 1e-12;
             improved = true;
-            if (rel < 1e-10 || (data_sigma && drop < kChiSquareTolerance)) converged = true;
             continue;
           }
         }
@@ -477,29 +536,10 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
     }
     };
     attempt();
-    if (!improved && jacobian_fallback() && fd_used < 2) {
-      ++fd_used;
-      // the element and drag columns by one-sided differences of the theory, then the same trial
-      const int analytic = o.fit_drag ? 7 : 6;
-      bool fd_ok = true;
-      {
-        // SPEC 16.7: every moved set flies the iterate's branch (the pinned one inside a settle pass), so no column
-        // differences two branches
-        const xpt::Branch wb = xpt::g_branch_pin != nullptr ? *xpt::g_branch_pin : row_branch(work);
-        const xpt::BranchScope pin(&wb);
-        for (int a = 0; a < analytic && fd_ok; ++a) {
-          const double h = a < 5 ? 1e-7 : a == 5 ? 1e-7 * std::fabs(x[5]) : std::fabs(x[6]) * 0.01 > 1e-5 ? std::fabs(x[6]) * 0.01 : 1e-5;
-          double xh[kMaxParams];
-          for (int q = 0; q < np; ++q) xh[q] = x[q];
-          xh[a] += h;
-          ElementRow bumped = work;
-          row_of(xh, o, bumped);
-          fd_ok = residuals(bumped, t, r, count, trial);
-          if (fd_ok)
-            for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - res[i]) / h;
-        }
-      }
-      if (fd_ok) {
+    if (!improved && jacobian_fallback() && !fd_mode) {
+      // the element and drag columns by central differences of the theory, then the same trial; kept for the pass
+      fd_mode = true;
+      if (fd_columns()) {
         normal();
         mu = 1e-3;
         attempt();
