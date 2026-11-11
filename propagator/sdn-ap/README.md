@@ -326,8 +326,8 @@ prior's, as a rank-1 update along BTERM's column, so the forecast maps it, and s
 0.163). On Swarm and GRACE-FO the ln BTERM figures go from 101 to 118 windows beyond 3 sigma to none, at 0.94 to 0.96
 coverage. The in-track forecast moves toward the band at every lead: the 72 h fits' coverage goes from 0.78 to 0.83 to
 0.85 to 0.91 (all windows, the burns included: 0.74 to 0.76 to 0.82 to 0.86). Every state and every other record is
-bit for bit. At 600 to 2,500 km the covariance is unchanged for now: there the spheres' width is the DRAG row's s_l,
-and no share c removes it. `test/drag-term-strong-drag-class.e2e.mjs` holds the rule.
+bit for bit, and records fitted before keep their stated sigma. At 600 to 2,500 km the covariance is the DRAG row's:
+there the spheres' width is the row's s_l, and no share c removes it (stack #471). `test/drag-term-strong-drag-class.e2e.mjs` holds the rule.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 

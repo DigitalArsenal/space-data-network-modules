@@ -2249,8 +2249,9 @@ in-track coverage from 0.96 to 0.98, outside the band. The DRAG row's s_d = c |n
 (the density forecast), with the class's share c: 0.126 (24 h) and 0.163 (72 h), against the DRAG row's 0.112 (12.5).
 The record's NON_GRAVITATIONAL_SHARE states it, and its OD COMMENT names the class with both widths. The class sits in
 and beside low-orbit commensurability bands, where the theory's own along-track error is 0.1 to 1.9 km at day 5 with
-the drag term right (stack #477). c was fitted on windows that carry that error as if it were drag noise, so it is
-refitted when #477's fix lands, and is expected to come down. A stated
+the drag term right (stack #477). c was fitted on windows that carry that error as if it were drag noise, so it
+includes the bands' error. Records fitted before this rule keep their stated sigma: nothing reinterprets
+them, and a reader flies their matrix as it is written. A stated
 FIT.DRAG_PRIOR, another arc, a perigee at 600 km or above, SGP4XP, and AP without NRLMSISE-00 fit as before, byte for byte.
 
 The sizes come from the headline-loop strong-drag windows: Swarm A, B, C and GRACE-FO 1 and 2 in 2026, 24 h and 72 h
@@ -2308,7 +2309,7 @@ draft #39) the same rule (m 7.75 and 12.1 at 600 to 1,000 km, 1 and 9.22 above) 
 beyond 3 sigma to 0 to 7 per row. It leaves the 24 h fits too wide by 1.25 to 1.75 at the 95 % edge, near 700 km at
 72 h too wide by 1.16, and altimetry at 72 h narrow in its tail by 1.55. With the width mapped, though, no share c keeps
 the spheres from widening (their in-track width is s_l's, about 0.49 km per day on every set there). A joint (c, s_l) per band narrows them but takes Sentinel-1's 72 h day-1 coverage from
-0.77 to 0.55. That band keeps today's covariance until it is refitted on the build its drag default lands on.
+0.77 to 0.55. That band keeps the DRAG row's covariance and the formal sigma of ln BTERM (stack #463, #471).
 `test/drag-term-strong-drag-class.e2e.mjs` holds the rule on model truth.
 
 ---
