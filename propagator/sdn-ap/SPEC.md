@@ -2761,7 +2761,13 @@ side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3
 **From 0.6.NN the same nodes are spread toward apogee (stack #450).**
 - **The rule.** The nodes are even in s = E - 0.5 e_0 sin E, the eccentric anomaly of an orbit of half the eccentricity, with
   E the epoch orbit's eccentric anomaly.
-  - Node k lies where s(E_k) = s(E_0) + k ds, E_k by Newton, at t_k = (G(E_k) - G(E_0)) / n_0 with G(E) = E - e_0 sin E.
+  - Node k lies where s(E_k) = s(E_0) + k ds, at t_k = (G(E_k) - G(E_0)) / n_0 with G(E) = E - e_0 sin E.
+  - E_0 and every E_k come from one Kepler solve, `kepler_E`: Newton from Danby's start M + 0.85 e sign(sin M), until the
+    correction is under the rounding of E or stops shrinking.
+    - Over 20,001 values of M in [0, 2 pi] and in [0, 2,000] rad it reaches rounding in at most 14 steps, up to e 0.9999.
+    - The branch accepts every e_0 below 1, as `xp_init` does.
+    - The plain start M + e sin M with an absolute stop failed at e 0.999. Far from the epoch it took all 60 steps at
+      every node once the rounding of E passed the stop.
   - ds = min(0.5 (1 - e_0)^1.5, h_0 n_0). The mean step ds / n_0 is min(0.5 tau_p, h_0), with tau_p = (1 - e_0)^1.5 / n_0
     the perigee's time scale. That is 0.6.16's uniform step, so the node count is 0.6.16's.
   - The step in time is (1 - e_0 cos E) / (1 - 0.5 e_0 cos E) times the mean. On the THEMIS-like orbit (e_0 0.82) that is

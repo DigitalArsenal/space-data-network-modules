@@ -1805,6 +1805,21 @@ struct Branch {
 /// the worst over four Sun and Moon geometries: below 0.6.20's worst on THEMIS-, Chandra- and TESS-like sets, at no more
 /// than its cost.
 constexpr double kLpPerigeeScale = 0.5, kLpShift = 0.5;
+/// E from M = E - e sin E, 0 <= e < 1, for the long-period nodes (SPEC 16.10): Newton from Danby's start M + 0.85 e sign(sin M),
+/// until the correction is under the rounding of E or stops shrinking (at most 60 steps). Over 20,001 values of M in
+/// [0, 2 pi] and in [0, 2,000] rad it reaches rounding in at most 14 steps up to e 0.9999; the start M + e sin M it replaces
+/// failed at e 0.999 (M 6.197) and took all 60 steps near rounding at e 0.95.
+inline double kepler_E(double M, double e) {
+  double E = M + 0.85 * e * (std::sin(M) < 0.0 ? -1.0 : 1.0), prev = HUGE_VAL;
+  for (int it = 0; it < 60; ++it) {
+    const double d = (E - e * std::sin(E) - M) / (1.0 - e * std::cos(E));
+    E -= d;
+    const double ad = std::fabs(d);
+    if (ad <= 1e-15 * std::fmax(1.0, std::fabs(E)) || ad >= prev) break;
+    prev = ad;
+  }
+  return E;
+}
 /// `m0` the epoch mean anomaly (rad): the phase of the long-period nodes above e0 0.3 (Branch::lp_even).
 inline Branch branch_of(double n0, double e0, bool ap, double m0 = 0.0) {
   Branch b;
@@ -1822,12 +1837,7 @@ inline Branch branch_of(double n0, double e0, bool ap, double m0 = 0.0) {
       b.lp_dE = std::fmin(kLpPerigeeScale * std::pow(1.0 - e0, 1.5), b.lp_step * n0);
       b.lp_e0 = e0;
       b.lp_n0 = n0;
-      double E = m0 + e0 * std::sin(m0);
-      for (int it = 0; it < 60; ++it) {
-        const double d = (E - e0 * std::sin(E) - m0) / (1.0 - e0 * std::cos(E));
-        E -= d;
-        if (std::fabs(d) < 1e-15) break;
-      }
+      const double E = kepler_E(m0, e0);
       b.lp_E0 = E;
       b.lp_G0 = E - e0 * std::sin(E);
       b.lp_step = b.lp_dE / n0;  // the mean step
@@ -1836,16 +1846,10 @@ inline Branch branch_of(double n0, double e0, bool ap, double m0 = 0.0) {
   return b;
 }
 /// The time (min from the epoch) of node k of a long-period set whose nodes are even in s (Branch::lp_even): E_k solves
-/// E - kLpShift e0 sin E = s(E0) + k ds by Newton, from E0 + k ds.
+/// E - kLpShift e0 sin E = s(E0) + k ds (kepler_E with e = kLpShift e0, at most 0.5).
 inline double lp_node_time(const Branch& b, int32_t k) {
   const double we = kLpShift * b.lp_e0;
-  const double s = b.lp_E0 - we * std::sin(b.lp_E0) + k * b.lp_dE;
-  double E = b.lp_E0 + k * b.lp_dE;
-  for (int it = 0; it < 60; ++it) {
-    const double d = (E - we * std::sin(E) - s) / (1.0 - we * std::cos(E));
-    E -= d;
-    if (std::fabs(d) < 1e-14) break;
-  }
+  const double E = kepler_E(b.lp_E0 - we * std::sin(b.lp_E0) + k * b.lp_dE, we);
   return (E - b.lp_e0 * std::sin(E) - b.lp_G0) / b.lp_n0;
 }
 /// The switch two branches differ by, in words.
