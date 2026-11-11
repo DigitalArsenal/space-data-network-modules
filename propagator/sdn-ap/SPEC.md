@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.12 (dist 9192deff).
+Version 0.6.13 (dist da12ee92).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1606,8 +1606,9 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   lambda0, 1e-7 n, max(1e-3 |p|, 1e-5) in BTERM and AGOM or their logs; AGOM forward where p - h <= 0,
   the theory reading AGOM <= 0 as no SRP (its log moves both ways); every moved set flies the set's own branch (16.7),
   never the branch its own elements would decide, here and in 12.3;
-- s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance per component;
-- A = sum J_k^T J_k / s^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
+- sigma_d^2, the data variance per component. Above the drag it is the sigma_r^2 the fit itself weighted the data with
+  (the fit's weighting, below); under drag it is s^2 = sum |e_k|^2 / (3N - dim p), the post-fit residual variance;
+- A = sum J_k^T J_k / sigma_d^2 + diag(1 / sigma^2) over the fit's priors (drag, AGOM: FIT.DRAG_PRIOR, FIT.SRP_PRIOR;
   under LOG_NORMAL sigma is that of the log). BTERM's prior, where FIT.DRAG_PRIOR is absent or without a sigma and
   FIT.DRAG_PRIOR_FORM is unset, is LOG_NORMAL with median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free
   fits of experiments xp2-fit-design (1,214 windows, every one converged); AGOM's is GAUSSIAN_SIGNED with mean 0 and
@@ -1623,6 +1624,53 @@ SRP_PRIOR_FORM: the iteration steps in the log). At the solution (an SGP4XP set 
   term's covariance prior-limited when that passes 0.5 (the term effectively unobserved: the delta method then stands
   in poorly for a wide log-normal).
 
+The fit's weighting *[2026-11-10, stack issue 324; real windows of experiments headline-loop]*. The fit minimizes
+
+    Phi = sum |e_k|^2 / sigma_d^2 + ((x_B - mu_B) / s_B)^2 + ((x_S - mu_S) / s_S)^2
+
+over p, x_B and x_S the drag and AGOM terms (or their logs) and mu, s their priors' means and sigmas. sigma_d depends on
+the fitted set's regime (12.5: its perigee height against 2,500 km, above which the theory's density is 1e-20 kg/m^3,
+3.3; one function, `cov::regime_of`, gives the regime the record states and the weighting):
+
+- ABOVE (the perigee at or above 2,500 km, where drag acts nowhere on the orbit). The staged passes (two revolutions,
+  the arc grown by threes, the whole arc with BTERM, then with AGOM) weigh at 1 km, which is enough to reach the basin.
+  The whole-arc fit is then redone at the data's own sigma, sigma_r = max(s, the block's stated sigma, 1 mm), s the
+  post-fit scatter of the pass before, and again until sigma_r is within 10 % of the sigma the pass weighted with (at
+  most 8 passes). These passes take the theory's one-sided differences for the element and drag columns where no step
+  along the analytic Jacobian lowers the cost, and stop when a step lowers Phi by less than 1e-6. The block's stated
+  sigma is the root of the mean of (CX_X + CY_Y + CZ_Z) / 3 over its COVARIANCE_MATRIX_LINES, 0 when it has none. The
+  covariance divides by the same sigma_r^2, so P_p is the inverse curvature of the cost the fit minimized: one weighting
+  for the estimate and the covariance. A redone fit the theory refuses, or one that ends on a switch (16.7), leaves the
+  1 km fit, and the record says UNIT WEIGHTS.
+- DRAG (the perigee below 2,500 km). The cost keeps sigma_d = 1 km, as in every version before, and the covariance
+  divides by s^2: there the estimate and the covariance do not use one weighting. The reason the 1 km is kept: under
+  drag the post-fit residual is the theory's own error, correlated along the arc, not noise, and weighed at its bare
+  scatter a 24 h arc lets BTERM and AGOM absorb it.
+
+Why 1 km was wrong above the drag. Against residuals of 8 m the AGOM prior 0 +- 0.1 m^2/kg acts like 0 +- 0.0008: the
+priors outweigh data good to meters. Measured on precise orbits, AP 0.6.9 against this rule (median 3D error against
+the truth over the day ending at the lead, m; AGOM as a ratio to the radiation coefficient a numerical propagator's
+sphere fits on the same arc, 5th percentile / median / 95th):
+
+| Regime, fit arc | Windows | Day 1 | Day 3 | Day 5 | Day 7 | AGOM ratio |
+| --- | --: | --: | --: | --: | --: | --- |
+| Medium Earth orbit, 24 h | 254 | 23.8 > 7.1 | 71.2 > 17.1 | 121 > 33.4 | 170 > 56.2 | 0.63 / 0.85 / 0.91 > 0.95 / 1.01 / 1.06 |
+| Medium Earth orbit, 72 h | 252 | 10.0 > 7.3 | 21.6 > 16.4 | 40.9 > 35.1 | 68.2 > 64.4 | 0.92 / 0.98 / 1.00 > 1.00 / 1.01 / 1.02 |
+| Galileo, 24 h | 42 | 19.7 > 11.3 | 58.6 > 39.0 | 122 > 94.7 | 188 > 161 | 0.64 / 0.93 / 0.97 > 0.96 / 1.02 / 1.06 |
+| Inclined geosynchronous, 72 h | 60 | 5.8 > 4.8 | 14.4 > 13.0 | 28.6 > 27.0 | 41.3 > 38.7 | 1.00 / 1.00 / 1.01 > 1.01 / 1.01 / 1.01 |
+
+Why it is kept under drag. The same weighting flown on every regime (a build that redid the fit at sigma_r whatever the
+regime) moved the laser-ranged spheres' 24 h fits from 20.8 / 51.6 / 144 / 233 m at days 1 / 3 / 5 / 7 to 24.4 / 106 /
+298 / 561 m: BTERM over the numerical propagator's went from 0.02 / 0.17 / 0.80 to 0.00 / 0.11 / 10.3 and AGOM from 0.03
+/ 0.40 / 1.63 to 0.47 / 6.8 / 41, while the fit RMS barely moved (Larets, 690 km: 24.8 to 22.0 m with BTERM 2.9 times
+the numerical value and 59 m to 4,148 m at day 5). The record's own sigma of ln BTERM at that weighting was too small by
+about 5 on 24 h arcs and 10 on 72 h arcs. On 72 h arcs the same build gained (spheres 129 to 86 m at day 5, altimetry
+756 to 494 m), and on altimetry 24 h arcs too (1,757 to 758 m), there because BTERM left a band median 30 times below
+those satellites' value: under drag one weighting does not serve the short arcs of both kinds of object.
+`test/fit-data-sigma.e2e.mjs` holds the rule on model truth: above the drag AGOM is recovered to 0.1 % and, with a
+stated sigma, pulled toward its prior by exactly what the record's covariance implies; the 2,400 km and 2,600 km sets
+fall on either side of the line.
+
 Known limit of BTERM's default start *[study 2026-10-31, noise-free synthetic tracks]*. The fit starts at the prior's
 median, 0.01 m^2/kg, and an object whose B lies far below it can stop in a local minimum. A day of an SGP4XP set's own
 states at 60 s (e 0.0003, i 51.6 deg, AGOM 0.01 m^2/kg; n 15.5, 15.2 and 14.9 rev/day for 400, 500 and 600 km), fitted
@@ -1637,7 +1685,13 @@ On 748 windows of five GNSS satellites (24 h arcs, 2026-01-01 to 2026-05-31, lea
 day-3 error of SGP4XP minus the Space Force library's fitted SGP4-XP falls from +56.107 m to -4.097 m (medians 211.8
 and 152.3 m against the library's 149.4 m); the wrapper's two prior constants stated in $PCF FIT give -4.097 m, within
 0.001 m of the AGOM prior alone. On 746 windows of 72 h arcs the errors are unchanged (median paired change 0.000 m at
-days 1, 3 and 7). `test/fit-short-arc-priors.e2e.mjs` prints both; unread-window confirmation is separate.
+days 1, 3 and 7). `test/fit-short-arc-priors.e2e.mjs` prints both; unread-window confirmation is separate. From 0.6.13
+these fits, above the drag, are weighted at the data's own sigma (the fit's weighting, above), SGP4XP's as AP's: on the
+same windows SGP4XP's 24 h median day-3 error is 145.75 m against 0.6.11's 152.29 m (median paired change -18.61 m, 427
+of 748 windows better), and its paired difference from the Space Force library is -1.752 m: every satellite's fit
+moves toward the library's. One loses: GPS IIF 41019, day 3 114.7 to 155.5 m and day 7 265.9 to 366.7 m, worse on 149
+of 150 windows, its freed AGOM 0.0293 m^2/kg against 0.0257 at 1 km and 0.0244 from its 72 h fits (SGP4XP's own
+error on a 24 h arc taken up by AGOM). The 72 h fits move -0.53 / -0.93 / -2.29 m at days 1, 3 and 7.
 
 **12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s) and F(x) the theory
 floor (12.4) at the epoch state, the $OMM carries
@@ -2753,9 +2807,13 @@ carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `
 
 ### 17.3 Statistics
 
-- Weighting: the fit weights each TEME position component with the a priori sigma 1 km (unit weights;
-  `OD_DATA_WEIGHTING` states it).
-- `WEIGHTED_RMS` = sqrt(sum (r_i / sigma)^2 / (3 N)) over the N fitted states' components = `FIT_RMS_KM` / sqrt(3) / 1 km.
+- Weighting (12.1, the fit's weighting): under drag the fit weights each TEME position component with the a priori
+  sigma 1 km, and `OD_DATA_WEIGHTING` reads `UNIT WEIGHTS: A PRIORI SIGMA 1 KM PER TEME POSITION COMPONENT`; above the
+  drag with the data's own sigma_r, and it reads `EQUAL WEIGHTS: SIGMA <sigma_r> KM PER TEME POSITION COMPONENT, THE
+  POST-FIT RESIDUAL SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM` (sigma_r to six digits). `OD_ALGORITHM`
+  ends `UNIT WEIGHTS` or `WEIGHTED AT THE DATA SIGMA` accordingly.
+- `WEIGHTED_RMS` = sqrt(sum (r_i / sigma)^2 / (3 N)) over the N fitted states' components = `FIT_RMS_KM` / sqrt(3) /
+  sigma, sigma the one `OD_DATA_WEIGHTING` states (1 km, or sigma_r).
 - `SEDR` (W/kg), the energy the non-gravitational forces remove (the `$OCM` definition): -dE/dt =
   (mu / (3 a)) (n-dot_ng / n), positive under drag, with mu / a = (n a)^2 from the set's mean motion and the theory's
   semi-major axis, and n-dot_ng / n the theory's epoch rate with BTERM less the rate without it
@@ -2777,7 +2835,7 @@ carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `
 | EPOCH | the state's UTC time |
 | OBSERVATION_TYPE | POSITION_VECTOR |
 | OBSERVED_VALUE, COMPUTED_VALUE | the state's and the fitted set's geocentric distance, km (frame independent) |
-| WEIGHT | 1 / sigma^2 = 1 per km^2 inside the fit arc; 0 outside |
+| WEIGHT | 1 / sigma^2 inside the fit arc, sigma the one `OD_DATA_WEIGHTING` states (17.3: 1 per km^2 under drag, 1 / sigma_r^2 above it); 0 outside |
 | ACCEPTED, REASON | inside the fit arc; REASON BEFORE FIT ARC or HELD OUT otherwise |
 | NORMALIZED_RESIDUAL | (observed - computed) / sigma |
 | PERTURBATION_MODEL_CODE | SGP4XP or AP, the set's theory |

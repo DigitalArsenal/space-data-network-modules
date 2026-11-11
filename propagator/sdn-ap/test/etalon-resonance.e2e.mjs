@@ -79,9 +79,13 @@ const EXPECTED = {
   etalon: {'ETALON 1': {baseline: 23.37, value: 4.48}, 'ETALON 2': {baseline: 32.76, value: 5.58}},
   nonregression: {'LAGEOS 1': 7.157, 'LAGEOS 2': 6.777, 'LARES-2': 8.765, IG: 14.420, GE: 35.840},
 };
+// OLD on the old path, as the fit lane re-pinned it at 0.6.13 (stack issue 324: every object here is above the drag,
+// perigee 5,600 km and up, and now fitted at the data's own sigma, SPEC 12.1; 0.6.11 > 0.6.13 in m: Etalon-1 6.719 >
+// 6.568, Etalon-2 7.743 > 7.618, LAGEOS-1 7.826 > 7.805, LAGEOS-2 6.773 > 6.729, LARES-2 9.737 > 9.712, IG 17.095 >
+// 15.768, GE 45.863 > 45.437; none rose)
 const OLD = {
-  etalon: {'ETALON 1': {baseline: 26.64, value: 6.64}, 'ETALON 2': {baseline: 36.39, value: 7.58}},
-  nonregression: {'LAGEOS 1': 7.806, 'LAGEOS 2': 6.777, 'LARES-2': 9.731, IG: 17.095, GE: 45.863},
+  etalon: {'ETALON 1': {baseline: 26.64, value: 6.57}, 'ETALON 2': {baseline: 36.39, value: 7.62}},
+  nonregression: {'LAGEOS 1': 7.805, 'LAGEOS 2': 6.729, 'LARES-2': 9.712, IG: 15.768, GE: 45.437},
 };
 if (!process.argv.includes('--measure')) {
   for (const [label, want, got] of [['', EXPECTED, {etalon, nonregression}], ['old path: ', OLD, old]]) {

@@ -3,7 +3,8 @@
 //
 // - The fit (fit_oem.inc, SGP4XP theory) forms the normal matrix of its parameters at the solution, every column a
 //   central difference of the theory itself, with its priors; the inverse, the measurement variance being the post-fit
-//   residual variance, is the parameter covariance. Its image at epoch (TEME position and velocity, then the solved
+//   residual variance (above the drag the sigma the fit itself weighted the data with, SPEC 12.1), is the parameter
+//   covariance. Its image at epoch (TEME position and velocity, then the solved
 //   parameters) is the $OCM's COVARIANCE_DATA (LTM, CARTPV, COV_SIZE 6 plus the parameter rows), the parameter rows
 //   named by COV_PARAMETER_KINDS in the fixed order of SPEC 17.1: DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE,
 //   SRP_AREA_OVER_MASS, IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION. The fit solves BTERM and AGOM; the theories
@@ -38,6 +39,15 @@ constexpr Noise kNoiseAP[2] = {
     {1.8579913326733934e-07, 1.12761105007012e-06, 7.647194501793458e-07, 0.112126311682426, 1.5127596877626373},
     {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0, 1.0}};
 constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
+
+/// The regime of a set: 0 (DRAG) its perigee height below kDragRegimeKm, 1 (ABOVE) at or above it, where the theory's
+/// density is 1e-20 kg/m^3 at every point of the orbit (SPEC 3.3) and drag does not act. One function for the regime
+/// the record states (SPEC 12.5) and for the weighting of the fit (SPEC 12.1).
+inline int regime_of(const ElementRow& row) {
+  const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
+  const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
+  return (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
+}
 
 constexpr int kMaxConsider = 5;
 constexpr int kMaxAug = 6 + kMaxConsider;
@@ -323,8 +333,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   std::free(s0);
   if (!ok) return false;
   const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
-  const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
-  regime = (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
+  regime = regime_of(row);
   const auto& terms = xpt::tess::active();
   const Noise& k = (terms.tesseral || terms.zonal) ? kNoiseAP[regime] : kNoiseXP[regime];
   noise[0] = k.s_e;
@@ -337,11 +346,13 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   return true;
 }
 
-/// The fit's covariance at its solution (fit_oem, SGP4XP sets): `t`, `r` the fit samples (minutes, TEME km). Fills
-/// `s` (row and options as fitted) and the non-gravitational rate r_ng (1/day). False when the normal matrix is not
-/// positive definite or the theory refuses a moved set.
+/// The fit's covariance at its solution (fit_oem, SGP4XP sets): `t`, `r` the fit samples (minutes, TEME km),
+/// `sigma_km` the data sigma the fit weighted them with where it weighted at the data's own (fit::reweight, a set above
+/// the drag; SPEC 12.1), 0 where it did not (the post-fit residual scatter is then taken here). Fills `s` (row and
+/// options as fitted) and the non-gravitational rate r_ng (1/day). False when the normal matrix is not positive
+/// definite or the theory refuses a moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t, const double* r, int count, double arc_end_min,
-                   Set& s, double& ng_rate) {
+                   double sigma_km, Set& s, double& ng_rate) {
   Bank b;
   struct Scope {
     Bank& b;
@@ -371,7 +382,9 @@ inline bool of_fit(const ElementRow& row, const fit::Options& o, const double* t
   }
   const int nres = 3 * count;
   if (nres <= np) return false;
-  const double s2 = ss / static_cast<double>(nres - np);  // km^2 per residual component
+  // km^2 per residual component: the data variance the fit weighted with, so that P_p is the inverse curvature of the
+  // cost the fit minimized (SPEC 12.1); the post-fit residual variance where the fit weighed at 1 km
+  const double s2 = sigma_km > 0.0 ? sigma_km * sigma_km : ss / static_cast<double>(nres - np);
   if (!(s2 > 0.0)) return false;
   for (int a = 0; a < np; ++a)
     for (int c = 0; c <= a; ++c) A[c * np + a] = A[a * np + c] = A[a * np + c] / s2;

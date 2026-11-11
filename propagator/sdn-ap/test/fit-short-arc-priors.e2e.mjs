@@ -11,6 +11,17 @@
 // 1 m; XP72 median paired change from the archived XP72 at most +2 m at days 1, 3 and 7; every archived window fits;
 // XP_PRIOR24 reproduces its archived errors within 1 mm (harness fidelity); default-FORCES digest bit-exact.
 // Unread-window confirmation is a separate experiments task.
+// Amended 2026-11-10 (sdn-ap 0.6.13, stack issue 324): a set above the drag is fitted at the data's own sigma (SPEC
+// 12.1), so these GNSS fits move, for SGP4XP as for AP (one estimator), and the 1 mm fidelity of XP_PRIOR24 against its
+// archived arm (reproduced by every build to 0.6.12, whose XP24 has the same medians to 0.01 m) is restated against the
+// truth: XP24's and XP_PRIOR24's median errors at days 1, 3 and 7 no higher than the archived XP_PRIOR24's on the same
+// windows. (The archived XP24 is the build before the short-arc prior, 211.8 m at day 3.) Measured, 0.6.11 > this build,
+// m: XP24 55.85 / 152.29 / 365.22 > 53.67 / 145.75 / 354.28 (median paired change -2.82 / -18.61 / -24.03; 427 of 748
+// windows better at day 3), paired day 3 minus U24 -4.097 > -1.752 m: every satellite's fit moves toward the Space Force
+// library's. One satellite loses: 41019 (GPS IIF) day 3 114.7 > 155.5 m and day 7 265.9 > 366.7 m, worse on 149 of 150
+// windows (its freed AGOM 0.0293 against 0.0257 at 1 km and 0.0244 from the 72 h fits: SGP4XP's own error on a 24 h arc
+// absorbed by AGOM). The per-satellite day-3 medians are printed (satelliteDay3Meters) so that a later change shows
+// whether 41019 came back.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -65,20 +76,39 @@ const summary = (list, f) => ({
 const perObject = norads.map((norad) => ({norad, ...summary(p24.filter((p) => p.r.norad === norad), 'days'), oldPath: summary(p24.filter((p) => p.r.norad === norad), 'daysOld')}));
 for (const o of perObject) console.log(JSON.stringify({gn24: o}));
 const total = summary(p24, 'days'), totalOld = summary(p24, 'daysOld');
+// XP_PRIOR24 against its archived arm on the archive's path: within 1 mm through 0.6.12, printed since 0.6.13
 const fidelityMeters = Math.max(...p24.flatMap((p) => Object.keys(p.archived.days).map((k) => Math.abs(m(p.tested, k, 'daysOld') - m(p.archived, k)))));
 const long72 = Object.fromEntries([1, 3, 7].map((k) => [k, median(p72.filter((p) => p.before.days[k] && p.after.daysOld[k]).map((p) => m(p.after, k, 'daysOld') - m(p.before, k)))]));
+// against the truth: this build's median error by day beside the archived XP_PRIOR24's (0.6.11's flight), same windows,
+// on the archive's path; the module's own GCRF figures printed beside
+const truthMedians = Object.fromEntries([1, 3, 7].map((k) => {
+  const v = p24.filter((p) => p.after.days[k] && p.archived.days[k] && p.tested.days[k]);
+  return [k, {n: v.length, archivedXP_PRIOR24: median(v.map((p) => m(p.archived, k))), XP24: median(v.map((p) => m(p.after, k, 'daysOld'))),
+    XP_PRIOR24: median(v.map((p) => m(p.tested, k, 'daysOld'))), ownGcrf: {XP24: median(v.map((p) => m(p.after, k))), XP_PRIOR24: median(v.map((p) => m(p.tested, k)))}}];
+}));
+// printed, not asserted: each satellite's day-3 median, this build's XP24 (old path, and own GCRF) beside 0.6.11's (the
+// archived XP_PRIOR24) and U24
+const satelliteDay3Meters = norads.map((norad) => {
+  const v = p24.filter((p) => p.r.norad === norad && p.archived.days['3']);
+  return {norad, n: v.length, XP24: median(v.map((p) => m(p.after, 3, 'daysOld'))), XP24OwnGcrf: median(v.map((p) => m(p.after, 3))),
+    archivedXP_PRIOR24: median(v.map((p) => m(p.archived, 3))), U24: median(v.map((p) => m(p.u, 3)))};
+});
+for (const s of satelliteDay3Meters) console.log(JSON.stringify({satelliteDay3Meters: s}));
 const frames030Meters = Math.max(...rows.flatMap((r) => Object.values(r.arms).filter((a) => a.ok).map((a) => a.frames030Meters)));
 const result = {
   exploratory: true, units: 'meters; forward daily-bin 3D RMS, leads from the fit end', moduleSha256: createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex'),
   windows: {replayed: rows.length, paired24: p24.length, paired72: p72.length, failures: failed},
-  gn24: total, gn24OldPath: totalOld, gn24PerObject: perObject, fidelityMaxMeters: fidelityMeters, frames030Meters,
+  gn24: total, gn24OldPath: totalOld, gn24PerObject: perObject, fidelityMaxMeters: fidelityMeters, truthMedians, satelliteDay3Meters, frames030Meters,
   gn72: {n: p72.length, medianPairedChangeMeters: long72, medianDay3Meters: {before: median(p72.map((p) => m(p.before, 3))), after: median(p72.map((p) => m(p.after, 3, 'daysOld'))), afterOwnGcrf: median(p72.map((p) => m(p.after, 3)))}},
 };
-console.log(JSON.stringify({gn24: total, gn24OldPath: totalOld, fidelityMaxMeters: fidelityMeters, gn72: result.gn72, frames030Meters, failures: failed.length}));
+console.log(JSON.stringify({gn24: total, gn24OldPath: totalOld, fidelityMaxMeters: fidelityMeters, truthMedians, gn72: result.gn72, frames030Meters, failures: failed.length}));
 if (process.env.SDN_AP_SHORT_ARC_REPORT) fs.writeFileSync(process.env.SDN_AP_SHORT_ARC_REPORT, JSON.stringify(result, null, 2) + '\n');
 if (!process.argv.includes('--measure')) {
   assert.equal(failed.length, 0, 'every archived window fits');
-  assert.ok(fidelityMeters < 0.001, 'XP_PRIOR24 on the old path reproduces the archive within 1 mm');
+  for (const [k, t] of Object.entries(truthMedians)) {
+    assert.ok(t.XP24 <= t.archivedXP_PRIOR24, `day ${k}: XP24's median error ${t.XP24} m above the archived XP_PRIOR24's ${t.archivedXP_PRIOR24} m (old path)`);
+    assert.ok(t.XP_PRIOR24 <= t.archivedXP_PRIOR24, `day ${k}: XP_PRIOR24's median error ${t.XP_PRIOR24} m above the archived ${t.archivedXP_PRIOR24} m (old path)`);
+  }
   for (const [label, t] of [['', total], ['old path: ', totalOld]]) {
     assert.ok(Math.abs(t.afterMinusUMeters) <= 10, `${label}paired day-3 XP24 minus Space Force within 10 m of zero`);
     assert.ok(t.afterMinusTestedMeters <= 1, `${label}XP24 not worse than the tested constants by more than 1 m`);
