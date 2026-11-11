@@ -565,6 +565,7 @@ static int fit_blocks() {
         double fit_begin_min = 0.0, fit_end_min = 0.0;  ///< the fit interval's first and last state, minutes from the epoch
         pcf::Prior srp{};                                ///< AGOM's prior as used (SPEC 12.1 short-arc rule)
         bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
+        bool free_band = false;                          ///< BTERM on the 600-2,500 km default of a 71 h arc (SPEC 12.8)
         double sigma_km = 0.0;  ///< the data sigma the fit weighted with, above the drag (SPEC 12.1); 0: the stages' 1 km
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
@@ -669,18 +670,18 @@ static int fit_blocks() {
         // SPEC 12.8: FIT.DRAG_PRIOR unset under NRLMSISE-00 or a < 24 h minimum span takes its median by mean altitude
         // (above e 0.3 the perigee's), and under NRLMSISE-00 at 800 to 1400 km the wide sigma of the log; a stated prior
         // is fitted as given
-        bool wide_band = false;
+        bool wide_band = false, free_band = false;
         if (drag_override == nullptr && !po.drag_prior_given && (po.forces.msis || po.minimum_span_h < 24.0) &&
             row.mean_motion_rev_day > 0.0) {
           const double n_rad_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
           const double a_km = std::pow(xpt::kKe / n_rad_min, kX2o3) * xpt::kRe;
           const double h_km = (row.eccentricity > xpt::tess::kWideE ? a_km * (1.0 - row.eccentricity) : a_km) - xpt::kRe;
-          if (po.forces.msis && row.eccentricity <= xpt::tess::kWideE && h_km >= pcf::kDragPriorFreeFloorKm &&
-              h_km < pcf::kDragPriorFreeTopKm) {
-            // SPEC 12.8: a near-circular orbit at 600 to 2,500 km under NRLMSISE-00: the arc decides (median 0.008, sigma of
-            // the log 10 ln 10, no fall-back)
+          if (po.forces.msis && fit_end_min - fit_begin_min >= pcf::kDragPriorFreeMinArcHours * 60.0 &&
+              row.eccentricity <= xpt::tess::kWideE && h_km >= pcf::kDragPriorFreeFloorKm && h_km < pcf::kDragPriorFreeTopKm) {
+            // SPEC 12.8: an arc of 71 h or more at 600 to 2,500 km (e at or below 0.3) under NRLMSISE-00: the arc decides
             eff_drag.mean = pcf::kDragPriorFreeMedian;
             eff_drag.sigma = pcf::kDragPriorWideLogSigma;
+            free_band = true;
           } else {
             if (h_km >= 800.0) eff_drag.mean = 0.0005;
             else if (h_km >= 600.0) eff_drag.mean = 0.002;
@@ -772,6 +773,7 @@ static int fit_blocks() {
         P.fit_end_min = fit_end_min;
         P.srp = eff_srp;
         P.wide_band = wide_band;
+        P.free_band = free_band;
         return 0;
       };
       // the default span: 48 h; 24 h for eccentric orbits (e > 0.5: the lane's THEMIS and Chandra windows lost
@@ -1122,6 +1124,7 @@ static int fit_blocks() {
                         : span_used < default_span ? "fit arc: shortened, the default span held no plausible set"
                         : eccentric ? "fit arc: the default span of an eccentric orbit" : "fit arc: the default span");
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
+      else if (chosen.free_band) comment.push_back("drag prior: the 600-2,500 km default of a 71 h arc (median 0.008, sigma of the log 10 ln 10), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (po.ecom2)
         comment.push_back(opt.fit_y0                     ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
