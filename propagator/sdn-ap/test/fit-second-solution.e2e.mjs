@@ -12,7 +12,8 @@
 //   (the fit has two solutions, stack #392; the history at MOLNIYA); every grid lookup of the fit a fit set's; no fit grid
 //   held after it.
 // - Below e 0.3 the fit's record flown 4 days within NO_HARM of the 0.6.2 dist's (git, modules c82160de7, its SHA-256
-//   checked; byte identity until 0.6.5) and its FIT_RMS within 0.01 m: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of
+//   checked; byte identity until 0.6.5; LEO AP from the slow set against its own fit, ap-fit-slow.ocm, at NO_HARM) and its
+//   FIT_RMS within 0.01 m: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of
 //   propagator/ffm's 550 km trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP. A GEO arc (an AP
 //   set, caps 31 and 20, flown by this module 72 h at 300 s in GCRF, refitted under the same forces) is held against its
 //   own truth, the set it was flown from (GEO_AP): FIT_RMS and the fit flown 4 days against the set's flight, and no
@@ -107,7 +108,12 @@ const MOLNIYA = {
 // the no-harm fits' flights against 0.6.2's (m over 4 days; byte identity until 0.6.5), measured 2026-11-10 on 0.6.8:
 // LEO AP 0.446 m (0.6.5's fit stops at another point inside its tolerance, FIT_RMS 41.127 against 41.130 m), LEO SGP4XP
 // byte-identical.
+// 0.6.NN (the slow set, SPEC 16.18) moves LEO AP's fit, which now carries the slow tesseral terms at 550 km: 38.6 m from
+// 0.6.2's over the 4 days, FIT_RMS 1.08 m lower. Against the fixture's own truth (propagator/ffm's 550 km trajectory) the
+// error 48 to 72 h past the arc goes from 114 m (0.6.20) to 43 m (ap-terms.e2e.mjs prints both). So LEO AP is held against
+// the slow set's fit (test/fixtures/ap-fit-slow.ocm), the bounds kept; LEO SGP4XP stays against 0.6.2's.
 const NO_HARM = { "LEO AP": 1, "LEO SGP4XP": 0.001 };
+const PINNED = { "LEO AP": new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-slow.ocm", import.meta.url))) };
 // The GEO arc is this module's own flight of a set with AGOM 0.01 (geoSet), so a fit can reach zero residual and the set
 // is the truth. Through 0.6.12 the fit weighed it at 1 km against the AGOM prior and left FIT_RMS 1.050 m, its flight
 // 0.12 mm from 0.6.2's fit's over 4 days (then pinned at 0.01 m against 0.6.2). From 0.6.13 a set above the drag is fitted
@@ -162,7 +168,7 @@ const geoTruth = await cand.invoke({ methodId: "propagate", inputs: flight([geoS
 check(geoTruth.statusCode === 0, `GEO truth flight: ${geoTruth.errorCode} ${geoTruth.errorMessage}`);
 const geoTruthOem = geoTruth.statusCode === 0 ? new Uint8Array(geoTruth.outputs.find((o) => o.portId === "ephemeris").payload) : null;
 for (const [name, oem, config, spw] of cases) {
-  const c = await fit(cand, oem, config, spw), b = await fit(base, oem, config, spw);
+  const c = await fit(cand, oem, config, spw), b = PINNED[name] ?? await fit(base, oem, config, spw);
   const same = Buffer.compare(asBase(c), Buffer.from(b)) === 0;
   const [fc, fb] = [await cand.invoke({ methodId: "propagate", inputs: flight([c], { output: span }) }), await cand.invoke({ methodId: "propagate", inputs: flight([b], { output: span }) })];
   check(fc.statusCode === 0 && fb.statusCode === 0, `${name}: flights of the two fits ${fc.errorCode ?? "ok"} | ${fb.errorCode ?? "ok"}`);
@@ -177,7 +183,7 @@ for (const [name, oem, config, spw] of cases) {
     check(stats(c).rms * 1000 <= GEO_AP.fitRmsM && tc <= GEO_AP.truthM && tc <= tb,
       `${name}: FIT_RMS ${stats(c).rms * 1000} m (at most ${GEO_AP.fitRmsM} m); the fit flown 4 days ${tc} m from its truth (at most ${GEO_AP.truthM} m, and not above 0.6.2's ${tb} m)`);
   } else
-    check(d && d.posM <= NO_HARM[name] && dRms <= 0.01, `${name}: the fit flown 4 days ${d?.posM} m from 0.6.2's (within ${NO_HARM[name]} m), FIT_RMS ${dRms} m apart (within 0.01 m)`);
+    check(d && d.posM <= NO_HARM[name] && dRms <= 0.01, `${name}: the fit flown 4 days ${d?.posM} m from ${PINNED[name] ? "the slow set's fit" : "0.6.2's"} (within ${NO_HARM[name]} m), FIT_RMS ${dRms} m apart (within 0.01 m)`);
 }
 if (geo) console.log(`GEO arc: ${OEM.getRootAsOEM(new flatbuffers.ByteBuffer(geo)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.length} states`);
 

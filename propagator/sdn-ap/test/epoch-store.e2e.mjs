@@ -8,7 +8,8 @@
 //   (the second set's rows moved): they load and blend.
 // - propagate_epochs of the stored AP record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit of the 0.4.0 inputs) within
 //   STORE_FLIGHT of 0.6.18's flight of it (ap-fit-0.6.4.epochs-0.6.18.oem), and of this build's own fit of the arc within
-//   STORE_FIT (the flight and the fit apart; history, the fresh-bake reference and sizes at the check). The store's output differs from propagate's
+//   STORE_FIT of the slow set's fit's flight (ap-fit-slow.epochs.oem; the flight and the fit apart; history, the fresh-bake
+//   reference and sizes at the check). The store's output differs from propagate's
 //   (ap-fit-0.6.4.oem) in the store's time arithmetic, which this record leaves as it was.
 // - A store $PCF with a FORCES table: configuration-refused FORCES; propagate_epochs without OUTPUT times:
 //   configuration-refused OUTPUT.START_TIME; a request past a set's last row: weather-rows-short:2026-11-01.
@@ -284,14 +285,20 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   //   0.6.18 against the reference         0.841 mm  0.816 um/s  2.88e-6
   //   0.6.17 against 0.6.18                1.289 mm  1.409 um/s  2.47e-5
   // Both builds are within 1 mm of the reference and equally close to it; 0.6.4's flight is 1.35 mm from it.
+  // 0.6.NN (the slow set, SPEC 16.18) moves this build's fit, which now carries the slow tesseral terms at 550 km: 17.8 m and
+  // 19.6 mm/s from the stored record's flight. Against the fixture's own truth (propagator/ffm's 550 km trajectory) the fit's
+  // error 48 to 72 h past the arc goes from 114 m (0.6.20) to 43 m. The fit is pinned to this build's flight of its own fit
+  // (ap-fit-slow.epochs.oem), the bounds kept.
   const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.epochs-0.6.18.oem", import.meta.url));
+  const fitFlight = fs.readFileSync(new URL("fixtures/ap-fit-slow.epochs.oem", import.meta.url));
   const STORE_FLIGHT = { posM: 0.001, velMmS: 0.001, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.1, velMmS: 0.1 };
-  for (const [what, record, bound] of [["the stored AP record", new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.ocm", import.meta.url))), STORE_FLIGHT], ["this build's fit", ap, STORE_FIT]]) {
+  for (const [what, record, bound, against, againstName] of [["the stored AP record", new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.ocm", import.meta.url))), STORE_FLIGHT, storedFlight, "0.6.18's of the stored record"],
+    ["this build's fit", ap, STORE_FIT, fitFlight, "the slow set's fit's"]]) {
     const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
     check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);
     if (pe.statusCode !== 0) continue;
-    const d = oemDistance(new Uint8Array(pe.outputs[0].payload), storedFlight);
-    console.log(`propagate_epochs of ${what} against 0.6.18's of the stored record: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry`);
+    const d = oemDistance(new Uint8Array(pe.outputs[0].payload), against);
+    console.log(`propagate_epochs of ${what} against ${againstName}: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry`);
     check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `${what}: ${d.states} states and ${d.covLines} covariance lines of 289, ${d.epochsDiffer} epochs differ`);
     check(d.posM <= bound.posM && d.velMmS <= bound.velMmS && (bound.covOfLargest === undefined || d.covOfLargest <= bound.covOfLargest),
       `propagate_epochs of ${what} moved: ${JSON.stringify(d)} against ${JSON.stringify(bound)}`);

@@ -3,8 +3,8 @@
 // for its forces; every malformed or foreign record is refused by name; ingest_omm is the one $OMM boundary.
 // - The flight: the stored AP record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit of the 0.4.0 inputs) under a $PCF with
 //   OUTPUT only (the fixture grid) within FLIGHT (below) of 0.6.4's flight of it (ap-fit-0.6.4.oem): states and
-//   covariance. The fit: this build's own fit of the same arc, flown on the grid, within FIT of that flight, its FIT_RMS
-//   within FIT.rmsM of the stored record's (history and sizes at FLIGHT). The record's own rows fly. Alone (no $PCF) the
+//   covariance. The fit: this build's own fit of the same arc, flown on the grid, within FIT of the slow set's fit's flight
+//   (ap-fit-slow.oem), its FIT_RMS within FIT.rmsM of that record's (ap-fit-slow.ocm; history and sizes at FLIGHT). The record's own rows fly. Alone (no $PCF) the
 //   fitted record gives the default grid: its epoch to one day later at 60 s, TEME, 1441 states.
 // - A $PCF with a FORCES table on propagate: configuration-refused FORCES.
 // - One record built to trigger each refusal, by name; an $OMM, $SPW, $DCL or $OEM payload on 'ocm' is refused by its
@@ -72,6 +72,10 @@ const { ap, xp, rows } = await fixtureSets(h);
 // floor being far wider); 0.6.5 (24d7d75f, its speed changes: SPEC 16.8) moves the states by 2.904 mm and 2.989 um/s and
 // the covariance by 7.2e-5 of a line's largest entry. The fit: this build's fit of the same 24 h arc stops at another point
 // inside its tolerance, 7.3 cm from 0.6.4's along the grid (0.6.5: 26 against 28 iterations, FIT_RMS 41.127 against 41.130 m).
+// 0.6.NN (the slow set, SPEC 16.18) moves the fit, which now carries the slow tesseral terms at 550 km: 17.8 m from 0.6.4's
+// along the grid, FIT_RMS 40.049 against 41.129 m (0.6.20). Against the fixture's own truth (propagator/ffm's 550 km
+// trajectory) the error 48 to 72 h past the arc goes from 114 m (0.6.20) to 43 m, and over the arc from 24.0 to 23.9 m. So the
+// fit is pinned to this build's own (test/fixtures/ap-fit-slow.ocm and its flight ap-fit-slow.oem), the bounds kept.
 const FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const FIT = { posM: 0.1, velMmS: 0.1, rmsM: 0.01 };
 
@@ -85,13 +89,14 @@ if (flownStored.statusCode === 0) {
   check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `the stored record's flight: ${d.states} states, ${d.covLines} covariance lines, ${d.epochsDiffer} epochs differ`);
   check(d.posM <= FLIGHT.posM && d.velMmS <= FLIGHT.velMmS && d.covOfLargest <= FLIGHT.covOfLargest, `the stored AP record's flight moved: ${JSON.stringify(d)} against ${JSON.stringify(FLIGHT)}`);
 }
-// --- the fit: this build's own fit of the stored arc, flown on the same grid, against 0.6.4's flight of 0.6.4's fit
+// --- the fit: this build's own fit of the stored arc, flown on the same grid, against the slow set's fit and its flight
+const fitRecord = fixture("ap-fit-slow.ocm"), fitFlight = fixture("ap-fit-slow.oem");
 const flown = await invoke("propagate", flight([ap], { output: GRID_OUTPUT }));
 check(flown.statusCode === 0, `propagate AP: ${flown.errorCode} ${flown.errorMessage}`);
 if (flown.statusCode === 0) {
-  const d = oemDistance(new Uint8Array(flown.outputs[0].payload), storedFlight);
-  const rms = ocmOf(ap).ORBIT_DETERMINATION?.FIT_STATISTICS?.FIT_RMS_KM, rmsStored = ocmOf(new Uint8Array(stored)).ORBIT_DETERMINATION?.FIT_STATISTICS?.FIT_RMS_KM;
-  console.log(`this build's fit on the fixture grid (24 h arc and the day after) against 0.6.4's fit: position ${(1000 * d.posM).toFixed(2)} mm, velocity ${(1000 * d.velMmS).toFixed(2)} um/s; FIT_RMS ${(1000 * rms).toFixed(4)} m against ${(1000 * rmsStored).toFixed(4)} m`);
+  const d = oemDistance(new Uint8Array(flown.outputs[0].payload), fitFlight);
+  const rms = ocmOf(ap).ORBIT_DETERMINATION?.FIT_STATISTICS?.FIT_RMS_KM, rmsStored = ocmOf(new Uint8Array(fitRecord)).ORBIT_DETERMINATION?.FIT_STATISTICS?.FIT_RMS_KM;
+  console.log(`this build's fit on the fixture grid (24 h arc and the day after) against the slow set's fit: position ${(1000 * d.posM).toFixed(2)} mm, velocity ${(1000 * d.velMmS).toFixed(2)} um/s; FIT_RMS ${(1000 * rms).toFixed(4)} m against ${(1000 * rmsStored).toFixed(4)} m`);
   check(d.posM <= FIT.posM && d.velMmS <= FIT.velMmS && Math.abs(rms - rmsStored) * 1000 <= FIT.rmsM, `this build's fit moved: ${(1000 * d.posM).toFixed(2)} mm, ${(1000 * d.velMmS).toFixed(2)} um/s, FIT_RMS ${rms} km against ${rmsStored} (bounds ${JSON.stringify(FIT)})`);
 }
 const alone = await invoke("propagate", flight([ap]));

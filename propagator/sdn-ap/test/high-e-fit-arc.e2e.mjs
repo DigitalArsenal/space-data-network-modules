@@ -21,7 +21,8 @@
 // 3. printed: 5-day arcs on both priors, and the 7-day posterior carried into the next 72 h arc (sigma of the log 0.005);
 // 4. e at most 0.3 (near-circular SWOT- and Sentinel-3-like sets and an e 0.25 set, drag on, and a drag-off Molniya fit):
 //    the fitted flight's day-7 along-track and radial RMS within LOW_BOUND (below) of 0.4.16's (byte identity of the
-//    fitted elements until 2026-11-10), the e 0.25 set's within TRUTH_BOUND of the truth itself;
+//    fitted elements until 2026-11-10), the e 0.25 set's and (from the slow set, SPEC 16.18) the SWOT-like set's within
+//    TRUTH_BOUND of the truth itself;
 // 5. default-FORCES XP digest bit-exact.
 // Amended (modules-sdn-ap-ocm-write-20261103: this build writes an $OCM, no $OBD and no number in COMMENT): the 7-day arc
 // is read from the record's ORBIT_DETERMINATION.ACTUAL_OD_SPAN (168 h) and its OD COMMENT; the determination's
@@ -71,8 +72,11 @@ const K = 5;
 // 72.55 / 19.16 m on 0.4.16, 5864.50 / 969.05 m from 0.6.4 (416a67e9: a class 0 set flies the grid above e 0.05, which
 // carried no 6:1 commensurability) to 0.6.10, 29.08 / 7.46 m on 0.6.11 (DigitalArsenal/spacedatanetwork-stack#393);
 // 60 m along-track as in test/class0-commensurability.e2e.mjs, 15 m radial.
-const LOW_BOUND = {'SWOT-like': 0.05, 'Sentinel-3-like': 0.05, 'Molniya drag off': 8.5};
-const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}};
+// SWOT-like is bounded against the truth from 0.6.NN (the slow set, SPEC 16.18: its 14:1 family to degree 70 in the rates):
+// day-7 along-track / radial 282.17 / 9.65 m on 0.4.16 (0.6.20 within 0.05 m of it), 14.39 / 10.18 m with the slow set;
+// 30 m along-track, 15 m radial.
+const LOW_BOUND = {'Sentinel-3-like': 0.05, 'Molniya drag off': 8.5};
+const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 30, r: 15}};
 const SEVEN_DAY_BOUND = {Molniya: 171.5, 'GTO-500': 325.5};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');

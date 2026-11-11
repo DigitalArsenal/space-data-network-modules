@@ -12,7 +12,10 @@
 // SGP4 through ingest_omm (B* = BTERM /
 // 12.741621), stock SGP4XP; the same elements, BTERM and AGOM. Made-up orbits only: no catalog data.
 //   node test/kernel-cost.mjs [--wasm FILE] [--repeats 5] [--steps 300,60] [--regimes name,...] [--json FILE] [--solid-tides]
+//     [--slow]
 // --solid-tides: the AP sets state the solid Earth tide (PERTURBATIONS.SOLID_TIDES_MODEL IERS 2010, SPEC 16.14).
+// --slow: the AP sets with gravity terms state the slow set (PERTURBATIONS.GRAVITY_MODEL "EGM-96; slow tesseral terms to
+// degree 70", SPEC 16.18), as a fit in the low table writes it; a set outside the low table flies as without it.
 // Output: the largest position and velocity difference between two builds at every state of every regime's AP, SGP4XP
 // and SGP4 set over --days (30) at --step (60 s), each build flown in time order; the second build also in reverse
 // order and in a shuffled order over --sample (1500) of those states spread over the span (a cache must not make the
@@ -42,6 +45,7 @@ const DIFF_STEP = Number(arg("--step", 60));
 const SAMPLE = Number(arg("--sample", 1500));
 const BOUND = arg("--bound", null)?.split(",").map(Number);  // m, m/s: --diff fails when a time-order difference exceeds them
 const TIDES = process.argv.includes("--solid-tides");
+const SLOW = process.argv.includes("--slow");
 
 const DAY = 86400000;
 const EPOCH = Date.parse("2026-06-15T00:00:00Z");
@@ -110,7 +114,8 @@ async function open(file) {
 async function setsOf(m, r, norad) {
   const epoch = iso(EPOCH);
   const el = { epoch, n: r.n, e: r.e, i: r.i, raan: r.raan, argp: r.argp, ma: r.ma, bterm: r.bterm, agom: r.agom, norad, name: r.name };
-  const ap = seedOcm({ ...el, msis: true, records: true, rows: rowsThrough(rowsOf(r.weather)), tesseral: r.tesseral ?? (r.e > 0.048 ? 0 : 31), zonal: 20, solidTides: TIDES });
+  const ap = seedOcm({ ...el, msis: true, records: true, rows: rowsThrough(rowsOf(r.weather)), tesseral: r.tesseral ?? (r.e > 0.048 ? 0 : 31), zonal: 20, solidTides: TIDES,
+    slow: SLOW && (r.tesseral ?? (r.e > 0.048 ? 0 : 31)) > 0 });
   const xp = seedOcm(el);
   const ing = await m.h.invoke({ methodId: "ingest_omm", inputs: [{ portId: "omm", typeRef: T("OMM"), payload: sgp4Omm(r, norad) }] });
   if (ing.statusCode !== 0) throw new Error(`ingest_omm ${ing.errorCode}: ${ing.errorMessage}`);

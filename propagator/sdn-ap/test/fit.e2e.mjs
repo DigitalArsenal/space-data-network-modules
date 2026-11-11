@@ -5,8 +5,9 @@
 //   1970 on the theory's flux model), fit returns exactly two outputs, 'elements', an $OCM, then 'residuals', its $ODR
 //   (SPEC 17.4).
 // - MEAN_ELEMENTS printed against test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18 dist's $OMM: BTERM in
-//   BSTAR, AGOM in MEAN_MOTION_DDOT), the epoch equal; the fitted record flown 7 days within FIT_BOUND of the stored record
-//   (0.6.4's fit, those elements bit for bit); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
+//   BSTAR, AGOM in MEAN_MOTION_DDOT), the epoch equal; the fitted record flown 7 days within FIT_BOUND of the pinned fit
+//   (XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: the slow set's fit, ap-fit-slow.ocm);
+//   MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
 // - FIT_STATISTICS: FIT_STATES as the 0.4.0 COMMENT states them, FIT_RMS_KM within FIT_BOUND.rmsM of it, ITERATIONS
 //   printed beside its; CONVERGED true (the 0.4.0 COMMENT states no convergence: a set was emitted only on a converged or
@@ -63,9 +64,14 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
   { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, config, ...(spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: spw }] : [])] });
 
 const cases = [
-  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.4.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS },
-  { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
+  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.4.ocm", fitRecord: "ap-fit-slow.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS },
+  { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", fitRecord: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
+// 0.6.NN (the slow set, SPEC 16.18) moves AP's fit, which now carries the slow tesseral terms at 550 km: 683 m from the stored
+// record at 7 days on EPOCHS, FIT_RMS 40.049 against 41.129 m (0.6.20). Against the fixture's own truth (propagator/ffm's
+// 550 km trajectory) the error 48 to 72 h past the arc goes from 114 m (0.6.20) to 43 m. So AP's fit is pinned to this build's
+// own (fitRecord, test/fixtures/ap-fit-slow.ocm: its FIT_RMS and its flight), the bounds kept; the stored record stays the
+// flight's reference against BEFORE.
 // The fit and the flight apart (no byte identity through a fit). The fit: this build's fitted record flown 7 days (EPOCHS,
 // TEME) against the stored record (0.6.4's fit, MEAN_ELEMENTS bit-equal to the 0.4.0 $OMM) flown by this build, within
 // FIT_BOUND[theory] m, and FIT_RMS within FIT_BOUND.rmsM of the 0.4.0 COMMENT's. 0.6.5 (24d7d75f) moved AP's fit: 26 against
@@ -102,7 +108,7 @@ for (const c of cases) {
   const moved = pairs.filter(([, got, want]) => !Object.is(got, want));
   console.log(`${c.name}: ${12 - moved.length} of 12 fields bit-equal to 0.4.0's${moved.length ? `; ${moved.map(([f, got, want]) => `${f} ${got} (0.4.0 ${want})`).join(", ")}` : ""}`);
   check(Object.is(me.EPOCH, was.EPOCH), `${c.name} EPOCH: ${me.EPOCH} against the 0.4.0 ${was.EPOCH}`);
-  stored[c.name] = { fitted: bytes, record: new Uint8Array(fixture(c.stored)) };
+  stored[c.name] = { fitted: bytes, record: new Uint8Array(fixture(c.stored)), fitRecord: new Uint8Array(fixture(c.fitRecord)) };
   check(me.MEAN_ELEMENT_THEORY === c.theory, `${c.name}: MEAN_ELEMENT_THEORY ${me.MEAN_ELEMENT_THEORY}, expected ${c.theory}`);
   const dyn = ocm.ORBIT_DETERMINATION?.OD_DYNAMIC_PARAMETERS ?? [];
   const drag = dyn.find((p) => p.PARAMETER === prwDynamicParameter.DRAG_AREA_OVER_MASS), srp = dyn.find((p) => p.PARAMETER === prwDynamicParameter.SRP_AREA_OVER_MASS);
@@ -112,7 +118,8 @@ for (const c of cases) {
   const comment = String(was.COMMENT);
   const states = Number(/(\d+) states fitted/.exec(comment)?.[1]), rms = /fit RMS ([\d.]+) km/.exec(comment)?.[1], iterations = Number(/(\d+) iterations/.exec(comment)?.[1]);
   check(st.FIT_STATES === states, `${c.name}: FIT_STATES ${st.FIT_STATES} against the 0.4.0 ${states}`);
-  check(Math.abs(1000 * (st.FIT_RMS_KM - Number(rms))) <= FIT_BOUND.rmsM, `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against the 0.4.0 ${rms} (within ${FIT_BOUND.rmsM} m)`);
+  const rmsPinned = c.fitRecord === c.stored ? Number(rms) : ocmOf(new Uint8Array(fixture(c.fitRecord))).ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM;
+  check(Math.abs(1000 * (st.FIT_RMS_KM - rmsPinned)) <= FIT_BOUND.rmsM, `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against ${c.fitRecord === c.stored ? "the 0.4.0" : c.fitRecord}'s ${rmsPinned} (within ${FIT_BOUND.rmsM} m)`);
   console.log(`${c.name}: FIT_RMS ${(1000 * st.FIT_RMS_KM).toFixed(4)} m (0.4.0 ${(1000 * Number(rms)).toFixed(3)}), ITERATIONS ${st.ITERATIONS} (0.4.0 ${iterations})`);
   check(st.CONVERGED === true, `${c.name}: CONVERGED ${st.CONVERGED}`);
   check(st.FIT_START === "2026-10-01T00:00:00.000000" && st.FIT_STOP === "2026-10-02T00:00:00.000000", `${c.name}: arc ${st.FIT_START} to ${st.FIT_STOP}`);
@@ -226,12 +233,12 @@ for (const c of cases) {
   const s = stored[c.name];
   if (!s) continue;
   // the fit: this build's fitted record against the stored record, both flown by this build; its $ODR names its own $OCM
-  const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.record, pcfOutputFrame.TEME)];
+  const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.fitRecord, pcfOutputFrame.TEME)];
   check(pf.statusCode === 0 && ps.statusCode === 0, `${c.name}: propagate the fitted and the stored record: ${pf.errorCode ?? "ok"} | ${ps.errorCode ?? "ok"}`);
   if (pf.statusCode === 0 && ps.statusCode === 0) {
     const d = oemDistance(new Uint8Array(pf.outputs[0].payload), new Uint8Array(ps.outputs[0].payload));
-    console.log(`${c.name} fit: this build's record against the stored (0.6.4's fit) over 7 days: ${(1000 * d.posM).toFixed(2)} mm, ${(1000 * d.velMmS).toFixed(2)} um/s`);
-    check(d.posM <= FIT_BOUND[c.name], `${c.name} fit: ${d.posM} m from the stored record's flight (within ${FIT_BOUND[c.name]} m)`);
+    console.log(`${c.name} fit: this build's record against ${c.fitRecord} over 7 days: ${(1000 * d.posM).toFixed(2)} mm, ${(1000 * d.velMmS).toFixed(2)} um/s`);
+    check(d.posM <= FIT_BOUND[c.name], `${c.name} fit: ${d.posM} m from ${c.fitRecord}'s flight (within ${FIT_BOUND[c.name]} m)`);
   }
   const r2 = await fit(c.config, c.spw);
   if (r2.statusCode === 0) {
