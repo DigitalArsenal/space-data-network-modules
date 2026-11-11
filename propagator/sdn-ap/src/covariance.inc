@@ -73,15 +73,19 @@ struct AboveRow {
 // LAGEOS: LAGEOS-1, LAGEOS-2, LARES-2, 32 windows of 72 h; k the one k of the LAGEOS, medium Earth orbit and
 // geosynchronous classes (1.415e-5 AP, 3.216e-5 SGP4XP); s_e, s_i, s_l fitted so that every regime's 99th percentile of
 // |z| per axis and lead is at most 2.9. The bounds are the calibration fits' data sigma (rounded outward) and 0.9 to
-// 1.05 times their spans. HEO, geosynchronous and medium Earth orbit have no AboveRow (SPEC 12.5 states why; the
-// geosynchronous class's SigmaRow below covers fits far worse than precise orbits).
+// 1.05 times their spans. HEO: TESS and Chandra, 14 windows, 28 window-arcs of 72 to 336 h (e 0.454 to 0.687), on
+// 0.6.16's eccentric integration step, its own k, fitted on all of them (the median of |z| per axis and lead at 0.674);
+// leave-one-window-out holds, leave-one-object-out does not from Chandra to TESS (SPEC 12.5). Every HEO size is at least
+// the ABOVE row's: AP's s_i and s_l and SGP4XP's s_l are the ABOVE row's where the fit gave less (AP 7.44e-7, 1.09e-8;
+// SGP4XP 1.19e-8), so the HEO row never states less than the ABOVE row. Geosynchronous and medium Earth orbit have no
+// AboveRow (SPEC 12.5 states why); the geosynchronous class's SigmaRow below covers fits far worse than precise orbits.
 constexpr AboveRow kAboveAP[4] = {
-    {false, 0, 0, 0, 0, 0, 0, 0, 0},  // HEO
+    {true, 6.357465071432782e-06, 8.153112791954473e-07, 4.753573962018311e-06, 2.401038715861921e-09, 0.00767, 4.22, 64.8, 352.8},  // HEO
     {false, 0, 0, 0, 0, 0, 0, 0, 0},  // geosynchronous
     {false, 0, 0, 0, 0, 0, 0, 0, 0},  // medium Earth orbit
     {true, 1.1374623058968726e-08, 8.083584088270014e-08, 3.831472309446551e-09, 1.415e-05, 0.00243, 0.00276, 64.8, 75.6}};  // LAGEOS
 constexpr AboveRow kAboveXP[4] = {
-    {false, 0, 0, 0, 0, 0, 0, 0, 0},
+    {true, 6.406459698609395e-06, 8.962738267352311e-07, 2.666e-07, 1.667570181154198e-08, 0.00826, 4.18, 64.8, 352.8},
     {false, 0, 0, 0, 0, 0, 0, 0, 0},
     {false, 0, 0, 0, 0, 0, 0, 0, 0},
     {true, 2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05, 0.0588, 0.0769, 64.8, 75.6}};
