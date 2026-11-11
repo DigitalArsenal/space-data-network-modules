@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.20 (dist 5a7fa01f).
+Version 0.6.22 (dist cdefcc13).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -3567,8 +3567,28 @@ The acceleration errors are on an equatorial ring of eight points in TEME, the t
 the module's bodies against DE440's. Section 5's Moon error split into the time argument (37.7 arcsec mean), the frame
 (5.5) and its series (83.4); its Sun's into the time argument (2.8), the frame (5.6), the barycenter's offset (4.2) and
 its series (9.9). Inside the fit's span but outside 2010-2035 the series measure 0.78 arcsec mean and 4.0 at worst for the
-Moon in 1990-2009 and 0.81 and 3.4 in 2036-2060. Outside the span they extrapolate the quadratic and the linear amplitudes:
-5.3 arcsec mean and 19 at worst in 1980-1989, 8.9 and 32 in 2061-2075 (Sun 2.3 and 2.5 arcsec mean).
+Moon in 1990-2009 and 0.81 and 3.4 in 2036-2060. Outside the span they extrapolate the quadratic and the linear
+amplitudes. By decade over every year a satellite's epoch can fall in, against DE440 at the same instants 0.29 days apart
+(before 1972 UTC to TT by ERFA's TAI - UTC, as `frames::utc_to_tt` takes it; measured on 0.6.22), direction in arcsec:
+
+| Years | Moon, section 5: mean / 95th percentile / worst | Moon, 16.17 | Sun, section 5: mean | Sun, 16.17 |
+| --- | ---: | ---: | ---: | ---: |
+| 1957-1959 | 84.9 / 178 / 293 | 37.0 / 60.7 / 66.4 | 9.2 | 4.3 |
+| 1960-1969 | 88.9 / 191 / 409 | 25.3 / 45.2 / 55.2 | 11.1 | 4.0 |
+| 1970-1979 | 88.6 / 189 / 377 | 15.9 / 28.8 / 32.0 | 10.7 | 2.8 |
+| 1980-1989 | 92.0 / 197 / 411 | 5.3 / 12.2 / 19.3 | 10.8 | 2.3 |
+| 1990-1999 | 92.6 / 200 / 402 | 0.81 / 1.6 / 4.0 | 10.7 | 0.31 |
+| 2050-2060 | 89.6 / 191 / 360 | 0.82 / 1.6 / 3.1 | 10.3 | 0.37 |
+| 2061-2070 | 86.6 / 185 / 366 | 6.1 / 13.9 / 19.3 | 10.7 | 2.1 |
+| 2071-2080 | 87.5 / 186 / 371 | 17.4 / 31.3 / 38.8 | 12.5 | 3.2 |
+| 2081-2090 | 84.9 / 180 / 367 | 27.7 / 50.3 / 63.6 | 9.4 | 3.6 |
+| 2091-2100 | 86.8 / 183 / 377 | 45.2 / 78.7 / 96 | 11.7 | 4.2 |
+
+From 1957 to 2100 this section's Sun and Moon are the better in every decade, in mean, 95th percentile and worst alike.
+Further out the Moon's mean error grows past section 5's: from 1930 to 2120 this section's mean is the smaller, in the
+1920s the two are level (86.6 against 85.4 arcsec), and before 1920 (111 to 116 against 84 to 86) and after 2120 (93 to
+126 against 86 to 87) section 5's is; this section's worst stays below section 5's in every decade from 1900 to 2149.
+AP flies any epoch and does not switch between the two (a switch inside a flight would be a step).
 `test/ap-bodies.e2e.mjs` checks the module against 407 stored DE440 samples of 2010-2035
 (test/fixtures/de440-bodies-2010-2035.json, the same tool): the Moon within 8 arcsec and 6 km, RMS 2.5 arcsec and 1.5 km;
 the Sun within 2 arcsec and 600 km; the cache against the series, and its smoothness at the nodes.

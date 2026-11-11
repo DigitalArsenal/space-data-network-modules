@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T04:57:53.815Z",
+  "generatedAt": "2026-11-11T06:20:25.664Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.20",
+      "version": "0.6.22",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,13 +7525,14 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 166,
+      "testFileCount": 169,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
         "src/sdn_ap_module.cpp"
       ],
       "testFiles": [
+        "test/ap-bodies.e2e.mjs",
         "test/ap-simd-speedup.e2e.mjs",
         "test/ap-terms.e2e.mjs",
         "test/atmosphere.e2e.mjs",
@@ -7579,6 +7580,7 @@
         "test/fixtures/ap-fit-0.6.4.ocm",
         "test/fixtures/ap-fit-0.6.4.oem",
         "test/fixtures/covariance-refit-held-out.json",
+        "test/fixtures/de440-bodies-2010-2035.json",
         "test/fixtures/ffm-leo-550km-53deg.json.gz",
         "test/fixtures/ffm-meo-19100km-65deg.json.gz",
         "test/fixtures/molniya-start0-fit-72h.oem",
@@ -7632,6 +7634,7 @@
         "test/perigee-drag-continuity.e2e.mjs",
         "test/products-parameters.e2e.mjs",
         "test/pvn-carry.e2e.mjs",
+        "test/radiation-shadow.e2e.mjs",
         "test/radiation-y0.e2e.mjs",
         "test/results/bench.json",
         "test/results/class-crossing.json",

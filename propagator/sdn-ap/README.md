@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.20 (dist 5a7fa01f).
+Version 0.6.22 (dist cdefcc13).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -280,9 +280,11 @@ equinoxes); flights read the quintic through their values at nodes 8 h apart on 
 thread reads alike (each thread keeps the nodes it has read). Against DE440 over 2010-2035 the Moon is within
 0.74 arcsec on average and 4.1 at worst (SPEC 5 as AP read it through 0.6.21: 91.5 and 377, 38 of it the time argument)
 and 0.68 km RMS in distance; the Sun within 0.44 and 1.1 arcsec. The Moon's acceleration error at the geostationary
-radius falls from 3.7e-9 to 3.7e-11 m/s^2 RMS. Outside 1990-2060 the series extrapolate (1980-1989: 5.3 arcsec mean, 19 at
-worst). Not carried: the epoch-axis branches hold TEME of the epoch while the bodies are in TEME of date, about 1 arcsec
-at day 7 (3.5e-11 m/s^2 at the geostationary radius). A batch at one time gives AP sets their own bodies, not SGP4XP's.
+radius falls from 3.7e-9 to 3.7e-11 m/s^2 RMS. The Moon is within 0.74 arcsec on average inside 1990-2060, growing to 25
+arcsec in the 1960s and 45 arcsec in the 2090s, and better than SPEC 5's throughout 1957-2100 (SPEC 16.17, by decade). Not
+carried: the epoch-axis branches hold TEME of the epoch while the bodies are in TEME of date, about 1 arcsec at day 7
+(3.5e-11 m/s^2 at the geostationary radius). A batch at one time (`plugin_propagate_batch`, `sdnap_propagate_soa`) is
+SGP4XP's path: the shipped module's row store holds no AP set.
 E2E: `test/ap-bodies.e2e.mjs` (407 stored DE440 samples).
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
