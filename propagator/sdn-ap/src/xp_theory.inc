@@ -1840,6 +1840,8 @@ struct RateContext {
   int32_t sp_count;
   const tess::SpCombCoef* sp_comb;    ///< AP: combined (l, m, k) first-order tesseral terms for fast SIMD evaluation
   int32_t sp_comb_count;
+  double sp_ci0;                      ///< cos i of the set whose epoch built sp_comb: the cos i its grouping uses
+
   const tess::SpCoef* sp_orig;        ///< AP: original sp pointer for diagnostic override detection
   int32_t sp_orig_count;
   tess::WideGrid* wide;               ///< AP above tess::kWideE: the first-order tesseral families' grid (SPEC 16.11)
@@ -2659,6 +2661,7 @@ struct Node {
   double t;        ///< minutes from epoch
   double y[6];
   double f[6];
+  double yu[6];    ///< the state its step's last stage was evaluated at, before the step's corrections (rk3); the epoch's own
   int32_t index;   ///< signed node index (negative: backward)
 };
 
@@ -2714,7 +2717,9 @@ struct ActiveBracket {
   alignas(16) float dBT_f[kThirdBodyTailNodes / 2 + 1][8]{};
 };
 inline thread_local ActiveBracket g_active_bracket{};
-inline ActiveBracket& active_bracket() { return g_active_bracket; }
+/// The set being flown keeps its own (SetCaches); nullptr: the thread's.
+inline thread_local ActiveBracket* g_active_bracket_set = nullptr;
+inline ActiveBracket& active_bracket() { return g_active_bracket_set != nullptr ? *g_active_bracket_set : g_active_bracket; }
 
 inline void tbsp_coefs_leo16_transposed(const double* y, const Frame& fr, const Bodies& b,
                                         double AT[kThirdBodyTailNodes / 2 + 1][6],
@@ -3744,9 +3749,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
       res::resonance_six_ap(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
     }
-    if (ctx.ap_resonance && cls == 2 && ctx.half_day != nullptr) {
+    if (ctx.ap_resonance && (cls == 2 || cls == 1) && ctx.half_day != nullptr) {
       tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
-                         fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst, ctx.hd_a0, hd_table_id(ctx));
+                         fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst, ctx.hd_a0, hd_table_id(ctx), cls == 1 ? 1 : 2);
     }
     if (ctx.shallow != nullptr) {
       tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci,
@@ -4118,6 +4123,13 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
   const int idx = std::abs(out.index);
   const int a_idx = std::abs(a.index);
   CovGridCache& cgc = cov_grid_cache();
+  // A step depends on its first node alone, never on which sets stepped before it on this thread or what the step
+  // before it left (SPEC 9): the parts of node a's rates the stages hold fixed (third body, drag, SRP, the zonal tail)
+  // are evaluated from node a itself at the start of every step: here the epoch's (EpochAux), below a later node's.
+  if (is_ap_ctx(ctx) && !ctx.is_cov_sigma && a_idx == 0) {
+    double f_epoch[6];
+    rates(ctx, 0.0, a.yu, f_epoch);
+  }
   if (is_ap_ctx(ctx) && !ctx.is_cov_sigma &&
       (cgc.anchor_id != ctx.ctx_id || cgc.d50_epoch != ctx.d50_epoch || std::fabs(cgc.n0 - ctx.n0) > 1e-9 ||
        (a_idx == 0 && (cgc.epoch_f0 != a.f[0] || cgc.epoch_bterm != ctx.bterm || cgc.epoch_agom != ctx.agom ||
@@ -4156,6 +4168,12 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
     }
   }
 
+  // a later node: the last stage of the step that made it, evaluated again at the state it was evaluated at (yu,
+  // before that step's corrections), which leaves exactly what that step left
+  if (is_ap_ctx(ctx) && !ctx.is_cov_sigma && a_idx > 0 && a_idx < CovGridCache::kMaxCovSteps) {
+    double f_node[6];
+    rates(ctx, a.t, a.yu, f_node, di, a_idx, 2, nullptr);
+  }
   Rk3StageOverride ov_stage{};
   bool any_ov = false;
   if (!ctx.is_cov_sigma && !ctx.long_period && ctx.resonance == 0 && std::fabs(h) <= 300.0 && ctx.ap_third_body) {
@@ -4271,6 +4289,7 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
   for (int j = 0; j < 6; ++j)
     out.y[j] = a.y[j] + h * ((37.0 / 225.0) * a.f[j] + (44.0 / 117.0) * k2[j] + (448.0 / 975.0) * k4[j]);
   out.t = a.t + h;
+  for (int j = 0; j < 6; ++j) out.yu[j] = out.y[j];
   if (any_ov) {
     double tb_out[6]{}, drag_out[6]{}, tail_eq_out[6]{}, six_tail_out[6]{}, srp_out[6]{};
     Rk3StageOverride ov_end{};
@@ -5109,9 +5128,8 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
     }
   }
   if (need_tess && km.e < 1.0) {
-    tess::SpEvalCache& sec_buf = tess::sp_eval_cache();
-    float* const cm_f32_buf = sec_buf.cm_f32_local;
-    float* const sm_f32_buf = sec_buf.sm_f32_local;
+    float* const cm_f32_buf = tess::sp_trig_cm();
+    float* const sm_f32_buf = tess::sp_trig_sm();
     int cm_cnt = 0;
     double cm_last = 1.0, sm_last = 0.0;
     const bool has_md = ctx.mdaily != nullptr;
@@ -5140,7 +5158,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                            &sb_pre, &cb_pre, mdt_id);
         }
         if (has_sp) {
-          tess::sp_six_with_deriv(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0,
+          tess::sp_six_with_deriv(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, ctx.theta_g0,
                                   six_sp, dsix_sp, d2_sp_dlam2_out != nullptr ? d2six_sp : nullptr,
                                   &sb_t, &cb_t,
                                   has_md ? cm_f32_buf : nullptr, has_md ? sm_f32_buf : nullptr, cm_cnt, cm_last, sm_last,
@@ -5191,7 +5209,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                            has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                            &sb_pre, &cb_pre, mdt_id);
         if (has_sp)
-          tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, six,
+          tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
                            sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
         else if (has_sp_custom)
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
@@ -5226,7 +5244,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                          has_sp ? &cm_cnt : nullptr, has_sp ? &cm_last : nullptr, has_sp ? &sm_last : nullptr,
                          &sb_pre, &cb_pre, mdt_id);
       if (has_sp)
-        tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, six,
+        tess::sp_six_val(ctx.sp_comb, ctx.sp_comb_count, ctx.a0, ctx.e0, t, km.a, km.e, ym[kN], etam, agm.si, agm.ci, ctx.sp_ci0, six,
                          sb_t, cb_t, su1_pre, cu1_pre, sM1_pre, cM1_pre, cm_cnt, cm_last, sm_last, has_md);
       else if (has_sp_custom)
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
@@ -5610,11 +5628,40 @@ struct DragPassCache {
   double v[2][kPoints][kDragPassValues];
 };
 
+/// What a set in a store keeps of the evaluation caches between its states (SPEC 9): the third-body tables of its
+/// bracket, its m-daily terms and its tesseral terms, held from the pool within its memory budget (CachePool). A set
+/// without them uses the thread's, as every set did before 0.6.18.
+/// One direction's grid nodes, contiguous from the epoch (node k at position k - 1), up to the checkpoint span: a time
+/// in it is a lookup, never a re-integration (run_bracket).
+struct NodeRun {
+  Node* nodes = nullptr;
+  Node base{};          ///< the run's first node: the epoch, a checkpoint or the window's (node k of the run is nodes[k - 1])
+  int32_t count = 0, cap = 0;
+  int32_t hint = 0;     ///< the lower node of the last bracket (0: the base)
+  bool based = false;   ///< base is set
+  bool ended = false;   ///< the grid ends after the last node (a node that is not a number or does not advance)
+};
+
+struct SetCaches {
+  ActiveBracket ab;
+  tess::MdailyEvalCache md;
+  tess::SpSetSlot sp;
+  NodeRun run[2];      ///< forward, backward
+  uint64_t stamp = 0;  ///< the pool's clock when the set was last flown
+  uint64_t prev = 0;   ///< the stamp of the flight before
+  uint64_t bytes = 0;  ///< what the pool counts for it (with the node runs)
+};
+
 struct XpSat {
   uint32_t norad;
   int32_t init_error;
   int32_t lock;
   int32_t stride;
+  uint8_t pooled;      ///< a store's set: it may hold SetCaches (xp_set_pooled)
+  int32_t cache_lock;  ///< held by the thread flying the set with its caches, or by the pool reclaiming them
+  int32_t pool_index;  ///< its place in the pool's holders
+  SetCaches* caches;
+  uint64_t asked;      ///< the pool's clock when it last asked for caches and had none (0: never)
   RateContext ctx;
   double epoch_jd_whole, epoch_jd_frac;
   Node epoch;
@@ -5627,6 +5674,12 @@ struct XpSat {
   int32_t wide_node_j[2];
   DragPassCache drag_pass;
 };
+inline void pool_release(XpSat& s);
+/// A store's AP set (the epoch store's and the row store's): it may keep its caches between states (SetCaches). An
+/// SGP4XP set reads none of them and keeps none.
+inline void xp_set_pooled(XpSat& s) {
+  if (s.init_error == 0 && is_ap_ctx(s.ctx)) s.pooled = 1;
+}
 
 /// SPEC 16.11: the nominal set whose grids the copies initialized on this thread while a GridShareScope lives read (the covariance's
 /// sigma sets); nullptr outside one.
@@ -5734,6 +5787,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.sp_count = anchor->ctx.sp_orig_count;
       s.ctx.sp_orig = anchor->ctx.sp_orig;
       s.ctx.sp_orig_count = anchor->ctx.sp_orig_count;
+      s.ctx.sp_ci0 = anchor->ctx.sp_ci0;
       s.ctx.a0 = anchor->ctx.a0;
       s.ctx.e0 = anchor->ctx.e0;
       s.ctx.shared_mask |= 64;
@@ -5766,6 +5820,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       }
       s.ctx.sp_comb = comb_kept;
       s.ctx.sp_comb_count = comb_count;
+      s.ctx.sp_ci0 = std::cos(e.xincl);
       s.ctx.sp = raw_kept;
       s.ctx.sp_count = raw_count;
       s.ctx.sp_orig = raw_kept;
@@ -5808,7 +5863,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     }
   }
   const int sd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
-  if (res == 2 && sd >= 6) {
+  // the class's resonant tail in the rates (SPEC 16.2): half-day degrees 6 to sd; one-day degrees 5 to sd below kWideE
+  // (stack #434), the terms sp_terms then leaves out of the output table
+  if ((res == 2 && sd >= 6) || tess::one_day_tail(res, br.wide_tess != 0, sd)) {
     if (same_res && anchor->ctx.half_day != nullptr && std::fabs(e.eo - anchor->ctx.hd_e0) <= tess::kShareE &&
         std::fabs(e.xincl - anchor->ctx.hd_i0) <= tess::kShareI && std::fabs(s.ctx.a0 / anchor->ctx.hd_a0 - 1.0) <= tess::kShareA) {
       s.ctx.half_day = anchor->ctx.half_day;
@@ -5818,10 +5875,15 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.hd_a0 = anchor->ctx.hd_a0;
       s.ctx.shared_mask |= 1;
     } else {
-      tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd) * sizeof(tess::HalfDayCoef)));
+      tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd, res) * sizeof(tess::HalfDayCoef)));
       if (table == nullptr) return false;
-      s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0);
+      s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0, res);
       if (s.ctx.half_day_count < 0) { std::free(table); return false; }
+      // the one-day tail keeps what it filled: its amplitude cut leaves a few hundred of the bound's 2,016 entries at
+      // degree 31 (the half-day class's allocation is left as it was)
+      if (res == 1 && s.ctx.half_day_count > 0)
+        if (void* kept = std::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
+          table = static_cast<tess::HalfDayCoef*>(kept);
       s.ctx.half_day = table;
     }
   }
@@ -5918,6 +5980,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.ctx.res_epoch = rc;
   }
   equinoctial_of(n0, e.eo, e.xincl, e.xnodeo, e.omegao, e.xmo, s.epoch.y);
+  for (int j = 0; j < 6; ++j) s.epoch.yu[j] = s.epoch.y[j];
   XpSat* anchor = cov_bank_anchor();
   if (is_ap_ctx(s.ctx) && anchor != nullptr && anchor != &s) {
     const ptrdiff_t diff = &s - anchor;
@@ -5954,6 +6017,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
 /// Frees what xp_init allocated (the resonance expansion); the XpSat stays usable
 /// for nothing but a new xp_init.
 inline void xp_release(XpSat& s) {
+  pool_release(s);
   if (!(s.ctx.shared_mask & 1)) std::free(const_cast<tess::HalfDayCoef*>(s.ctx.half_day));
   s.ctx.half_day = nullptr;
   s.ctx.half_day_count = 0;
@@ -5994,15 +6058,379 @@ inline void lock(int32_t* word) {
   while (!__atomic_compare_exchange_n(word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) expected = 0;
 }
 inline void unlock(int32_t* word) { __atomic_store_n(word, 0, __ATOMIC_RELEASE); }
+inline bool try_lock(int32_t* word) {
+  int32_t expected = 0;
+  return __atomic_compare_exchange_n(word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
+}
 
-/// The bracketing nodes of t (lower, upper in the direction of t). Lazily
-/// fills the checkpoints; an AP state depends on the order of requests by up to 12.7 mm at 500 km, 0.29 m at e 0.05 with
-/// tesseral degree 31 (SPEC 9).
+/// The sets' caches (SPEC 9): every SetCaches and the tesseral caches they hold count against one budget (default
+/// 256 MB; cache_budget_mb). The pool's clock ticks at every ask for room; a holder's stamp is the clock when it was
+/// last flown. A set that needs room takes free room, or reclaims the holders flown least recently, but only those not
+/// flown since its own previous ask: a steady cycle over more sets than fit keeps its holders (each was flown within
+/// the cycle) and the others fly on the thread's caches, while holders no longer flown give way. Never one being flown.
+/// Its counts: sets holding caches, of them holding tesseral caches, bundles reclaimed, bundles and tesseral caches
+/// refused (no room even after reclaiming), tesseral caches made.
+struct CachePool {
+  int32_t lock = 0;
+  uint64_t budget = 256ull << 20;
+  uint64_t held = 0;
+  uint64_t clock = 1;
+  uint64_t floor = 0;  ///< no holder's stamp is below it (a lower bound, raised by each search for room)
+  const XpSat* last = nullptr;  ///< the set that asked last
+  uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
+  std::vector<XpSat*> holders;
+};
+inline CachePool& cache_pool() {
+  static CachePool p;
+  return p;
+}
+inline thread_local XpSat* g_flown_set = nullptr;  ///< the set whose caches this thread holds (SetScope), or nullptr
+
+inline uint64_t sp_cache_bytes(const tess::SpEvalCache* c) { return c != nullptr ? sizeof(tess::SpEvalCache) + c->mem_bytes : 0; }
+
+/// Under the pool's lock: frees s's caches (it holds them; the caller holds its cache_lock or owns it).
+inline void pool_drop_locked(CachePool& p, XpSat& s) {
+  SetCaches* c = s.caches;
+  if (c == nullptr) return;
+  if (c->sp.cache != nullptr) {
+    p.held -= sp_cache_bytes(c->sp.cache);
+    p.sp_holders -= 1;
+    tess::sp_cache_free(c->sp.cache);
+  }
+  p.held -= c->bytes;
+  for (NodeRun& r : c->run) std::free(r.nodes);
+  const int32_t i = s.pool_index;
+  XpSat* last = p.holders.back();
+  p.holders[static_cast<size_t>(i)] = last;
+  last->pool_index = i;
+  p.holders.pop_back();
+  delete c;
+  s.caches = nullptr;
+  s.pool_index = -1;
+}
+
+/// Whether `need` more bytes could fit, read without the pool's lock: free room, or a holder that may have been flown
+/// last before `before` (the floor is a lower bound, so a false yes costs one search under the lock). Read unlocked, a
+/// count may be stale: the answer only picks between the set's caches and the thread's, which give the same states.
+inline bool pool_may_fit(const CachePool& p, uint64_t need, uint64_t before) {
+  return __atomic_load_n(&p.held, __ATOMIC_RELAXED) + need <= __atomic_load_n(&p.budget, __ATOMIC_RELAXED) ||
+         __atomic_load_n(&p.floor, __ATOMIC_RELAXED) < before;
+}
+
+/// Whether s asked last as well, no other set having asked since: a set flown in a run of its own states is served by the
+/// thread's caches, which still hold it, so it takes free room only and reclaims no other set's (object-major flight of
+/// more sets than fit would otherwise move every set's caches in and out once).
+inline bool pool_asked_again(CachePool& p, const XpSat& s) {
+  return __atomic_exchange_n(&p.last, &s, __ATOMIC_RELAXED) == &s;
+}
+
+/// Under the pool's lock: frees the caches of the sets flown longest ago, of those last flown before `before` (not
+/// `keep`, none being flown), until `need` more bytes fit with an eighth of the budget to spare. Whether they fit.
+inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, uint64_t before) {
+  if (p.held + need <= p.budget) return true;
+  if (p.floor >= before) return false;
+  std::vector<XpSat*> order;
+  for (XpSat* v : p.holders)
+    if (v->caches->stamp < before && v != keep) order.push_back(v);
+  std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
+  const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
+  for (XpSat* v : order) {
+    if (p.held + need <= p.budget && p.held <= target) break;
+    if (!try_lock(&v->cache_lock)) continue;
+    pool_drop_locked(p, *v);
+    p.reclaimed += 1;
+    unlock(&v->cache_lock);
+  }
+  // the holders left: their lowest stamp (a holder reclaimed had the lowest; one skipped keeps the bound safe)
+  uint64_t left = UINT64_MAX;
+  for (XpSat* v : p.holders) left = std::min(left, v->caches->stamp);
+  p.floor = p.holders.empty() ? __atomic_load_n(&p.clock, __ATOMIC_RELAXED) : std::max(p.floor, left);
+  return p.held + need <= p.budget;
+}
+
+/// Sets the pool's budget to `megabytes` (0 keeps it) and returns it in MB; a smaller budget reclaims at once, the sets
+/// flown longest ago first (not one being flown). No export calls it: configuration reaches the module as a typed
+/// message, and none carries the budget yet; test builds (test/lib/ap-diagnostic.mjs) and benchmarks link it.
+inline uint32_t cache_budget_mb(uint32_t megabytes) {
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  if (megabytes > 0) {
+    p.budget = static_cast<uint64_t>(megabytes) << 20;
+    pool_reclaim_locked(p, 0, nullptr, UINT64_MAX);
+  }
+  const uint32_t mb = static_cast<uint32_t>(p.budget >> 20);
+  unlock(&p.lock);
+  return mb;
+}
+
+/// s's caches, made within the budget (s's cache_lock held by the caller); nullptr when there is no room. A first ask
+/// takes free room only; a later one may reclaim holders not flown since s's previous ask.
+inline SetCaches* pool_caches_for(XpSat& s) {
+  if (s.caches != nullptr) return s.caches;
+  CachePool& p = cache_pool();
+  const uint64_t need = sizeof(SetCaches);
+  const uint64_t tick = __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
+  const uint64_t before = pool_asked_again(p, s) ? 0 : s.asked;
+  s.asked = tick;
+  if (!pool_may_fit(p, need, before)) {
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
+    return nullptr;
+  }
+  lock(&p.lock);
+  SetCaches* c = nullptr;
+  if (pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
+  if (c != nullptr) {
+    c->bytes = need;
+    // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and
+    // the runs it makes in this flight take room only from holders not flown since then
+    c->stamp = c->prev = before;
+    p.held += need;
+    s.pool_index = static_cast<int32_t>(p.holders.size());
+    p.holders.push_back(&s);
+    s.caches = c;
+  } else {
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
+  }
+  unlock(&p.lock);
+  return c;
+}
+
+extern "C" size_t malloc_usable_size(void*);
+
+/// What one set holds in memory: the XpSat, the term tables it owns (malloc_usable_size: as the allocator holds them;
+/// a table it shares with another set counts there), the grid of its tesseral families it owns, and its caches from the
+/// pool (SetCaches with its node runs and tesseral cache).
+inline uint64_t xp_bytes(const XpSat& s) {
+  auto u = [](const void* p) -> uint64_t { return p != nullptr ? malloc_usable_size(const_cast<void*>(p)) : 0u; };
+  const RateContext& c = s.ctx;
+  uint64_t b = sizeof(XpSat);
+  if (!(c.shared_mask & 1)) b += u(c.half_day);
+  if (!(c.shared_mask & 2)) b += u(c.res_epoch);
+  if (!(c.shared_mask & 4)) b += u(c.res_taylor);
+  if (!(c.shared_mask & 8)) b += u(c.shallow);
+  if (!(c.shared_mask & 16)) b += u(c.zt);
+  if (!(c.shared_mask & 32)) b += u(c.mdaily);
+  if (!(c.shared_mask & 64)) b += u(c.sp_orig != nullptr ? c.sp_orig : c.sp) + u(c.sp_comb);
+  // its grid of the tesseral families (SPEC 16.11) and the node grids it holds: each one block, shared among the sets
+  // holding it (a grid of one exact key serves them all)
+  double grids = 0.0;
+  if (c.wide != nullptr && c.wide_owned && c.wide_anchor == nullptr) grids += tess::wide_grid_share(c.wide);
+  for (const tess::WideGrid* g : s.wide_node) grids += tess::wide_grid_share(g);
+  b += static_cast<uint64_t>(grids);
+  if (s.caches != nullptr) b += s.caches->bytes + sp_cache_bytes(s.caches->sp.cache);
+  return b;
+}
+
+/// Frees s's caches (xp_release).
+inline void pool_release(XpSat& s) {
+  if (s.caches == nullptr) return;
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  pool_drop_locked(p, s);
+  unlock(&p.lock);
+}
+
+/// While a set is flown: the caches it keeps (when it is a store's set, not a covariance's moved copy, and no other
+/// thread holds them) stand in for the thread's; otherwise the thread's. Restores the caller's on exit.
+struct SetScope {
+  ActiveBracket* ab = g_active_bracket_set;
+  tess::MdailyEvalCache* md = tess::g_mdaily_set_cache;
+  tess::SpSetSlot* sp = tess::g_sp_set_slot;
+  XpSat* flown = g_flown_set;
+  XpSat* held = nullptr;
+  explicit SetScope(XpSat& s) {
+    g_active_bracket_set = nullptr;
+    tess::g_mdaily_set_cache = nullptr;
+    tess::g_sp_set_slot = nullptr;
+    g_flown_set = nullptr;
+    if (!s.pooled || s.ctx.is_cov_sigma != 0 || !try_lock(&s.cache_lock)) return;
+    SetCaches* c = pool_caches_for(s);
+    if (c == nullptr) {
+      unlock(&s.cache_lock);
+      return;
+    }
+    held = &s;
+    c->prev = c->stamp;
+    c->stamp = __atomic_load_n(&cache_pool().clock, __ATOMIC_RELAXED);
+    g_active_bracket_set = &c->ab;
+    tess::g_mdaily_set_cache = &c->md;
+    tess::g_sp_set_slot = &c->sp;
+    g_flown_set = &s;
+  }
+  ~SetScope() {
+    g_active_bracket_set = ab;
+    tess::g_mdaily_set_cache = md;
+    tess::g_sp_set_slot = sp;
+    g_flown_set = flown;
+    if (held != nullptr) unlock(&held->cache_lock);
+  }
+  SetScope(const SetScope&) = delete;
+  SetScope& operator=(const SetScope&) = delete;
+};
+
+namespace tess {
+SpEvalCache* sp_pool_attach(const SpEvalCache& built) {
+  XpSat* s = g_flown_set;
+  if (s == nullptr || s->caches == nullptr) return nullptr;
+  CachePool& p = cache_pool();
+  // room from holders not flown since this set's previous flight (CachePool), checked before the copy is made
+  const uint64_t before = pool_asked_again(p, *s) ? 0 : s->caches->prev;
+  __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
+  if (!pool_may_fit(p, sizeof(SpEvalCache) + built.mem_bytes, before)) {
+    __atomic_add_fetch(&p.sp_refused, 1, __ATOMIC_RELAXED);
+    return nullptr;
+  }
+  SpEvalCache* d = sp_compact_copy(built);
+  if (d == nullptr) return nullptr;
+  const uint64_t need = sp_cache_bytes(d);
+  lock(&p.lock);
+  const bool room = pool_reclaim_locked(p, need, s, before);
+  if (room) {
+    p.held += need;
+    p.sp_holders += 1;
+    p.sp_made += 1;
+  } else {
+    __atomic_add_fetch(&p.sp_refused, 1, __ATOMIC_RELAXED);
+  }
+  unlock(&p.lock);
+  if (!room) {
+    sp_cache_free(d);
+    return nullptr;
+  }
+  return d;
+}
+void sp_pool_release(SpEvalCache* cache) {
+  if (cache == nullptr) return;
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  p.held -= sp_cache_bytes(cache);
+  p.sp_holders -= 1;
+  unlock(&p.lock);
+  sp_cache_free(cache);
+}
+}  // namespace tess
+
+/// Room for `want` nodes in run r of s's caches, charged to the pool. False when the pool has none.
+inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
+  const uint64_t delta = static_cast<uint64_t>(want - r.cap) * sizeof(Node);
+  CachePool& p = cache_pool();
+  // room from holders not flown since this set's previous flight (CachePool)
+  __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
+  const uint64_t before = pool_asked_again(p, s) ? 0 : c.prev;
+  if (!pool_may_fit(p, delta, before)) {
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
+    return false;
+  }
+  lock(&p.lock);
+  const bool room = pool_reclaim_locked(p, delta, &s, before);
+  if (room) {
+    p.held += delta;
+    c.bytes += delta;
+  } else {
+    __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
+  }
+  unlock(&p.lock);
+  if (!room) return false;
+  Node* grown = static_cast<Node*>(std::realloc(r.nodes, static_cast<size_t>(want) * sizeof(Node)));
+  if (grown == nullptr) {
+    lock(&p.lock);
+    p.held -= delta;
+    c.bytes -= delta;
+    unlock(&p.lock);
+    return false;
+  }
+  r.nodes = grown;
+  r.cap = want;
+  return true;
+}
+
+/// The bracket of t from s's node run in direction dir (s's caches held by this thread): 1 found (lo, hi point into the
+/// run or at its base), 0 the grid ends before t, -1 t lies beyond the checkpoint span or the pool has no room (the
+/// checkpoints answer). The run is extended to t as bracket_ptr would integrate, filling the same checkpoints. A run
+/// starts from the latest node known at or before t (the epoch, a checkpoint, the window's), and again when t precedes
+/// its start: every one is a node of the one grid (a step depends on its first node alone, rk3), so the run's nodes
+/// are the grid's whichever node it starts from, and a set whose caches were reclaimed refills from where it was flown.
+inline int run_bracket(XpSat& s, SetCaches& c, int dir, int di, double t, const Node*& lo, const Node*& hi) {
+  NodeRun& r = c.run[di];
+  const double at = dir * t;
+  auto beyond = [&](const Node& n) { return dir * n.t > at; };
+  if (!r.based || beyond(r.base)) {
+    Node cur = s.epoch;
+    for (int k = 0; k < s.sparse_count[di]; ++k) {
+      if (beyond(s.sparse[di][k])) break;
+      cur = s.sparse[di][k];
+    }
+    if (s.window_valid[di]) {
+      if (!beyond(s.window[di][1]) && dir * s.window[di][1].index > dir * cur.index)
+        cur = s.window[di][1];
+      else if (!beyond(s.window[di][0]) && dir * s.window[di][0].index > dir * cur.index)
+        cur = s.window[di][0];
+    }
+    r.base = cur;
+    r.based = true;
+    r.count = 0;
+    r.hint = 0;
+    r.ended = false;
+  }
+  // nodes the run may hold: up to the checkpoint span from the epoch
+  const int32_t limit = kSparse * s.stride - dir * r.base.index;
+  while (r.count == 0 || !beyond(r.nodes[r.count - 1])) {
+    if (r.ended) return 0;
+    if (r.count >= limit) return -1;
+    if (r.count == r.cap && !run_grow(s, c, r, std::min(limit, std::max(16, 2 * r.cap)))) return -1;
+    const Node& cur = r.count > 0 ? r.nodes[r.count - 1] : r.base;
+    Node nxt;
+    // a node that is not a number, or does not advance, ends the grid: every later time is refused, never looped on
+    if (!next_node(s.ctx, cur, dir, nxt) || !std::isfinite(nxt.t) || !(dir * nxt.t > dir * cur.t)) {
+      r.ended = true;
+      return 0;
+    }
+    const int32_t idx = dir * nxt.index;
+    if (idx % s.stride == 0) {
+      const int32_t slot = idx / s.stride - 1;
+      if (slot == s.sparse_count[di] && slot < kSparse) {
+        s.sparse[di][slot] = nxt;
+        s.sparse_count[di] = slot + 1;
+      }
+    }
+    r.nodes[r.count++] = nxt;
+  }
+  auto node_at = [&](int k) -> const Node& { return k == 0 ? r.base : r.nodes[k - 1]; };
+  int k = r.hint;
+  if (!(k >= 0 && k < r.count && !beyond(node_at(k)) && beyond(node_at(k + 1)))) {
+    int k_lo = 0, k_hi = r.count;  // node_at(k_lo) is not beyond t, node_at(k_hi) is
+    while (k_hi - k_lo > 1) {
+      const int mid = (k_lo + k_hi) / 2;
+      if (beyond(node_at(mid))) k_hi = mid;
+      else k_lo = mid;
+    }
+    k = k_lo;
+    r.hint = k;
+  }
+  // the window holds the bracket, as bracket_ptr leaves it (drag_pass_rates reads it)
+  const Node& nlo = node_at(k);
+  if (!s.window_valid[di] || s.window[di][0].index != nlo.index) {
+    s.window[di][0] = nlo;
+    s.window[di][1] = node_at(k + 1);
+    s.window_valid[di] = 1;
+  }
+  lo = &s.window[di][0];
+  hi = &s.window[di][1];
+  return 1;
+}
+
+/// The bracketing nodes of t (lower, upper in the direction of t). A set flown with its caches finds t in its node run
+/// (run_bracket); otherwise, and beyond the run's span, the latest bracket or the furthest checkpoint at or before t
+/// and integration from it, which fills the checkpoints. The nodes do not depend on the order of requests (SPEC 9).
 inline bool bracket_ptr(XpSat& s, double t, const Node*& lo, const Node*& hi) {
   const int dir = t >= 0.0 ? 1 : -1;
   const int di = dir > 0 ? 0 : 1;
   const double at = dir * t;
   auto beyond = [&](const Node& n) { return dir * n.t > at; };
+  if (g_flown_set == &s && s.caches != nullptr) {
+    const int rc = run_bracket(s, *s.caches, dir, di, t, lo, hi);
+    if (rc >= 0) return rc == 1;
+  }
   // window hit
   if (s.window_valid[di] && !beyond(s.window[di][0]) && beyond(s.window[di][1])) {
     lo = &s.window[di][0];
@@ -6074,6 +6502,25 @@ inline void update_active_bracket(const XpSat& s, const Node& lo, const Node& hi
   }
 }
 
+/// The bracket the tesseral cache bakes on (tess::SpAnchor, SPEC 9): set's lo and hi nodes, a, e and cos i at each.
+inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {
+  tess::SpAnchor& an = tess::g_sp_anchor;
+  const uint64_t id = (s.ctx.ctx_id << 32) ^ static_cast<uint32_t>(lo.index);
+  if (an.valid && an.id == id && an.tlo == lo.t && an.h == hi.t - lo.t) return;
+  auto at = [](const Node& q, double& a, double& e, double& c) {
+    a = std::pow(kKe / q.y[kN], kX2o3);
+    e = std::sqrt(q.y[kAf] * q.y[kAf] + q.y[kAg] * q.y[kAg]);
+    const double t2 = q.y[kChi] * q.y[kChi] + q.y[kPsi] * q.y[kPsi];
+    c = (1.0 - t2) / (1.0 + t2);
+  };
+  at(lo, an.a_lo, an.e_lo, an.c_lo);
+  at(hi, an.a_hi, an.e_hi, an.c_hi);
+  an.id = id;
+  an.tlo = lo.t;
+  an.h = hi.t - lo.t;
+  an.valid = true;
+}
+
 /// Mean equinoctial state at t on a caller-private XpSat (lock-free, zero Node copies).
 inline bool mean_at_local(XpSat& s, double t, double* y) {
   if (t == 0.0) {
@@ -6083,6 +6530,7 @@ inline bool mean_at_local(XpSat& s, double t, double* y) {
   const Node *lo = nullptr, *hi = nullptr;
   if (!bracket_ptr(s, t, lo, hi)) return false;
   if (!s.ctx.is_cov_sigma) update_active_bracket(s, *lo, *hi);
+  set_sp_anchor(s, *lo, *hi);
   hermite(*lo, *hi, t, y);
   return true;
 }
@@ -6099,6 +6547,30 @@ inline bool mean_at(XpSat& s, double t, double* y) {
   unlock(&s.lock);
   if (!ok) return false;
   if (!s.ctx.is_cov_sigma) update_active_bracket(s, lo, hi);
+  set_sp_anchor(s, lo, hi);
+  hermite(lo, hi, t, y);
+  return true;
+}
+
+/// The mean state at t for a state flown at another time (a schedule node's grid, wide_node): the brackets and caches
+/// that time's output reads (the window, the third-body bracket, the tesseral anchor) are left as they were, so the
+/// output does not depend on whether the grid had to be built.
+inline bool mean_at_aside(XpSat& s, double t, double* y) {
+  if (t == 0.0) {
+    for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
+    return true;
+  }
+  Node lo, hi;
+  lock(&s.lock);
+  Node window[2][2];
+  int32_t window_valid[2];
+  std::memcpy(window, s.window, sizeof window);
+  std::memcpy(window_valid, s.window_valid, sizeof window_valid);
+  const bool ok = bracket(s, t, lo, hi);
+  std::memcpy(s.window, window, sizeof window);
+  std::memcpy(s.window_valid, window_valid, sizeof window_valid);
+  unlock(&s.lock);
+  if (!ok) return false;
   hermite(lo, hi, t, y);
   return true;
 }
@@ -6159,7 +6631,7 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
     }
   unlock(&s.wide_lock);
   double yj[6];
-  if (!mean_at(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
+  if (!mean_at_aside(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
   const Kepler k = kepler_of(yj);
   if (!(k.e < 1.0)) return false;
   out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i, s.ctx.wide_fit != 0);
@@ -6191,7 +6663,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   const Frame fr = frame_of(y);
   const Kepler k = kepler_of(y, fr.a);
   if (!(k.e < 1.0) || !(fr.n > 0.0)) return false;
-  const double period = kTwoPi / fr.n, tp = t - k.m / fr.n;
+  const double tp_state = t - k.m / fr.n;
   constexpr int K = DragPassCache::kPoints;
   const int di = t >= 0.0 ? 0 : 1;
   const double dir = t >= 0.0 ? 1.0 : -1.0;
@@ -6200,6 +6672,18 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   const Node lo = s.window[di][0], hi = s.window[di][1];
   unlock(&s.lock);
   if (!valid || !(dir * lo.t <= dir * t && dir * t < dir * hi.t)) return false;
+  // the revolution's perigee time and period from the bracket's lower node, the same for every state of the revolution
+  // (a state's own differ by its mean anomaly's drift and its mean motion, so the first state asked would set the
+  // segment)
+  double tp, period;
+  {
+    const Frame flo = frame_of(lo.y);
+    const Kepler klo = kepler_of(lo.y, flo.a);
+    if (!(klo.e < 1.0) || !(flo.n > 0.0)) return false;
+    period = kTwoPi / flo.n;
+    const double tp_lo = lo.t - klo.m / flo.n;
+    tp = tp_lo + std::round((tp_state - tp_lo) / period) * period;
+  }
   out.ctx_id = s.ctx.ctx_id;
   out.t = t;
   DragPassCache& c = s.drag_pass;
@@ -6252,6 +6736,13 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
 
 inline int32_t xp_propagate_impl(XpSat& s, double t, double r[3], double v[3], const Bodies* shared, bool local_sat) {
   if (s.init_error != 0) return kPropRefused;
+  SetScope set_scope(s);
+  // the bracket this state's tesseral bakes are made on: set by mean_at, the caller's restored on return
+  struct AnchorScope {
+    tess::SpAnchor saved = tess::g_sp_anchor;
+    AnchorScope() { tess::g_sp_anchor.valid = false; }
+    ~AnchorScope() { tess::g_sp_anchor = saved; }
+  } anchor_scope;
   double y[6];
   if (!(local_sat ? mean_at_local(s, t, y) : mean_at(s, t, y))) return kPropMeanMotion;
   // AP above e 0.3: the drag rates output_drag_pass adds, from the state's segment; a fit (inside its tess::FitGridScope)
@@ -6347,9 +6838,9 @@ inline void refresh_lp_sigma_tail_srp(const RateContext& ctx, double t, const do
     const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
     res::resonance_six_ap(terms, count, t, k, n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail);
   }
-  if (ctx.ap_resonance && cls == 2 && ctx.half_day != nullptr) {
+  if (ctx.ap_resonance && (cls == 2 || cls == 1) && ctx.half_day != nullptr) {
     tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
-                       n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail, ctx.hd_a0, hd_table_id(ctx));
+                       n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail, ctx.hd_a0, hd_table_id(ctx), cls == 1 ? 1 : 2);
   }
   if (ctx.shallow != nullptr) {
     tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, a, n, eta, ag.si, ag.ci, ctx.theta_g0,

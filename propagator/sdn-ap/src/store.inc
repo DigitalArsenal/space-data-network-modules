@@ -137,6 +137,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t*
       xpt::XpSat& x = st.xps[st.xp_count++];
       if (well_formed) {
         xpt::xp_init(e, x);
+        xpt::xp_set_pooled(x);
       } else {
         x = xpt::XpSat{};
         x.init_error = kPropRefused;
@@ -220,10 +221,11 @@ inline uint64_t resonant_terms_bytes() {
 
 inline uint64_t store_bytes() {
   const Store& st = store();
+  uint64_t xp = 0;  // each SGP4XP row's XpSat and the tables it owns (xp_bytes: the resonant terms among them)
+  for (uint32_t i = 0; i < st.xp_count; ++i) xp += xpt::xp_bytes(st.xps[i]);
   return static_cast<uint64_t>(st.count) * (1 + sizeof(uint32_t)) +
-         static_cast<uint64_t>(st.sat_count) * sizeof(Sat) +
-         static_cast<uint64_t>(st.xp_count) * sizeof(xpt::XpSat) +
-         static_cast<uint64_t>(st.node_objects) * 4u * kCheckpointNodes * sizeof(double) + resonant_terms_bytes();
+         static_cast<uint64_t>(st.sat_count) * sizeof(Sat) + xp +
+         static_cast<uint64_t>(st.node_objects) * 4u * kCheckpointNodes * sizeof(double);
 }
 
 /// Minutes from the epoch of row i to the split Julian date (whole, frac).

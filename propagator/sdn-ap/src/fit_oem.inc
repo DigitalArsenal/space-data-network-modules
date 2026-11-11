@@ -320,10 +320,10 @@ constexpr double kBandMedianBterm = 0.0005;
 constexpr double kY0MinimumArcHours = 72.0;
 constexpr double kY0PriorSigma = 1e-9;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
-/// SPEC 16.13: in the one-day resonance class (geosynchronous) Y0 is held whatever the arc: there the 72 h arc's own
-/// residual (AP against a numerical orbit of the same forces) aliases into Y0 (model truth without Y0: -1.0e-10 to
-/// -1.8e-10 found, day 7 from 7 m to 62 to 86 m). The guard goes when that class's residual is fixed.
-inline bool y0_held_class(const ElementRow& row) { return row_branch(row).resonance == 1; }
+// SPEC 16.13: through 0.6.18 the one-day resonance class held Y0 whatever the arc, while that class lacked its resonant
+// gravity above degree 4 (stack #434). With the class's resonant tail Y0 is solved there as elsewhere; the Moon's position
+// error (stack #446) still leaks into it on model truth (no Y0 in the truth: -0.8e-10 to -1.4e-10 found on inclined
+// geosynchronous sets, +1.3e-10 to +3.0e-10 on geostationary ones), and the real windows gain anyway (SPEC 16.13).
 
 /// The 'provenance' frames: none, or one verified $PVN (plain or size-prefixed) per 'ephemeris' frame in their order;
 /// 0 with `out` filled, or 3 refused by name.
@@ -729,9 +729,7 @@ static int fit_blocks() {
         // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg, 0 +- 0.1 on a short arc; LOG_NORMAL on ln AGOM)
         fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
         // SPEC 16.13: Y0 joins the whole-arc fit (and its passes at the data's sigma) on a long enough arc above the drag
-        // (in the one-day class it is held: fitoem::y0_held_class)
-        if (po.ecom2 && y0_hold == nullptr && fitoem::y0_solved_on(fit_end_min - fit_begin_min) && cov::regime_of(row) != 0 &&
-            !fitoem::y0_held_class(row))
+        if (po.ecom2 && y0_hold == nullptr && fitoem::y0_solved_on(fit_end_min - fit_begin_min) && cov::regime_of(row) != 0)
           opt.fit_y0 = 1;
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
@@ -1116,9 +1114,8 @@ static int fit_blocks() {
       if (band_judged) comment.push_back(fell_back ? "drag prior: fall-back to the band median's prior" : "drag prior: the band default, no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (po.ecom2)
-        comment.push_back(opt.fit_y0                     ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
-                          : fitoem::y0_held_class(row) ? "radiation: ECOM2 Y0 held at its stated value (the one-day class)"
-                                                       : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");
+        comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
+                                     : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");
       // SPEC 18: the forecast the record carries ($PCF OUTPUT.START_TIME to STOP_TIME), its span and end jumps in COMMENT
       flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;
       carried::Described described;
