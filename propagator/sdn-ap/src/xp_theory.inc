@@ -33,7 +33,7 @@
 //            masses in the Gauss equations
 //            averaged over the orbit; long-period regime,
 //            instantaneous point-mass Gauss equations.
-//            AP reads its own Sun and Moon (SPEC 16.14,
+//            AP reads its own Sun and Moon (SPEC 16.15,
 //            ap_bodies.inc), never bodies_at or sun_at
 //   6        resonance (resonance.inc): SPEC bands, the   structure and G_lpq
 //            EGM-96 harmonics per class, Kaula F_lmp,     series in; the rate
@@ -299,7 +299,7 @@ inline Bodies bodies_at(double d50) {
 
 #include "ap_bodies.inc"
 
-/// AP's Sun and Moon at any time (SPEC 16.14): the quintic through ap_bodies_at at the six nodes about it, the nodes on
+/// AP's Sun and Moon at any time (SPEC 16.15): the quintic through ap_bodies_at at the six nodes about it, the nodes on
 /// an absolute grid every kApBodiesNodeHours of UTC (node k at k kApBodiesNodeHours hours from 1950 January 0.0), the
 /// unit vectors renormalized to first order. Every node is a function of its time alone. Each thread keeps the nodes it
 /// has read in a store of kApBodiesStoreSlots slots, by node index (85 days at 8 h), and the six of its last read in a

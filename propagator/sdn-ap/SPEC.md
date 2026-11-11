@@ -822,7 +822,7 @@ places) *[study; lit: IAU 1976 system]*. Positions:
   *[study; probe 5.3: this Moon reproduces the library's direction and distance to 3e-13]*
 - JPL ephemerides are used only when loaded; the oracle does not load them, and release notes 9.3-9.9 still list
   "replace analytical theory of Sun and Moon position with JPL ephemeris for SGP4-XP" as planned work *[doc]*.
-- AP does not read this section's Sun and Moon (16.14). Against DE440 over 2010-2035, read as AP read them through 0.6.16
+- AP does not read this section's Sun and Moon (16.15). Against DE440 over 2010-2035, read as AP read them through 0.6.16
   (UTC as the time argument, the mean equator of date taken for TEME), they are off by 91.5 arcsec on average and 377 at
   worst (the Moon; 38 of it the time argument, 5.5 the frame) and 10.9 and 32 arcsec (the Sun): a third-body acceleration
   error of 3.7e-9 m/s^2 RMS at the geostationary radius. AP's own series are within 0.74 and 4.1 arcsec (Moon) and 0.44
@@ -2995,7 +2995,7 @@ exists a state costs the same.
 `test/radiation-y0.e2e.mjs` checks the theory, the fit, the daily fit, a held fit against the fit without the term
 byte for byte, and the refusals.
 
-**16.14 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
+**16.15 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
 `sun_at`). Every AP path reads its own (`ap_bodies_at`, src/ap_bodies.inc): the rates in both regimes, the output-time
 terms, the radiation pressure and its shadow, the radiation term Y0 (16.13), the drag passes (16.12) and the Sun of the
 drag atmospheres. Flights read it through `bodies_at_ap`, the quintic through its values at the six nodes about the time,
@@ -3040,7 +3040,7 @@ on average and 9.9 at worst from TEME.
 section 5 as AP read it through 0.6.16 (UTC for TT, the mean equator of date for TEME) and this section through
 `bodies_at_ap`:
 
-| | Section 5 | 16.14 |
+| | Section 5 | 16.15 |
 | --- | ---: | ---: |
 | Moon direction, mean / 95th percentile / worst (arcsec) | 91.5 / 195 / 377 | 0.74 / 1.57 / 4.14 |
 | Moon distance, RMS / worst (km) | 19.2 / 72.6 | 0.68 / 3.08 |

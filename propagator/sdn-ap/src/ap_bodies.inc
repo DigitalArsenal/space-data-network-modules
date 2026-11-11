@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------------
-// AP's Sun and Moon (SPEC 16.14). SGP4XP keeps SPEC 5's series (bodies_at, sun_at) bit for bit; every AP path reads
+// AP's Sun and Moon (SPEC 16.15). SGP4XP keeps SPEC 5's series (bodies_at, sun_at) bit for bit; every AP path reads
 // these. The series are a least-squares fit to DE440 (tools/ap-bodies-fit.mjs; the coefficients in
 // ap_bodies_series.inc): the Moon's longitude, latitude and distance, and the Earth-Moon barycenter's Sun, referred to
 // the mean ecliptic and equinox of date, as trigonometric series in the Delaunay arguments and the planetary mean

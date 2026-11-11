@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E2E (DigitalArsenal/spacedatanetwork-stack#446): AP's Sun and Moon (SPEC 16.14) against DE440. The stored samples
+// E2E (DigitalArsenal/spacedatanetwork-stack#446): AP's Sun and Moon (SPEC 16.15) against DE440. The stored samples
 // (test/fixtures/de440-bodies-2010-2035.json: NAIF de440s.bsp, geocentric, GCRF, every 23.37 days from 2010 to 2035,
 // tools/ap-bodies-fit.mjs samples) are turned to TEME of date by the module (sdnap_frame_probe, gcrf_to_teme) and
 // compared with what AP's flights read (sdnap_bodies_probe mode 2, the quintic through the series' 8 h nodes).
