@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// E2E (stack #464 and #456; SPEC 16.14): AP's radiation-pressure rates are continuous in the set's own elements, and right.
+// E2E (stack #464 and #456; SPEC 16.15): AP's radiation-pressure rates are continuous in the set's own elements, and right.
 // 1. The rates against the numerical average, through the module's sdnap_ap_srp_rates: mode 0 the theory's averaged
 //    rates on AP's shadow, mode 1 the same sphere in the same cylinder averaged over one revolution of the mean orbit by
 //    the Gauss equations (4096 steps of the eccentric longitude, a step the boundary crosses split where it is; the
-//    mean longitude's rate with section 4's output-time Delta n over the whole revolution, SPEC 16.15), the Sun held
+//    mean longitude's rate with section 4's output-time Delta n over the whole revolution, SPEC 16.16), the Sun held
 //    fixed at 1 AU. AGOM 0.025 m^2/kg. Mean orbits: Galileo-like (n 1.7047 rev/day, e 0.0002, i 56 deg) and
 //    geostationary (n 1.00273 rev/day, e 0.0003, i 0.05 deg, which takes section 4's arrangement of the formulas).
 //    - Through grazing: the Sun's elevation above the orbit plane swept across the edge of the eclipse season

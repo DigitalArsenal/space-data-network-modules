@@ -317,7 +317,7 @@ double sdnap_xp_shadow_at(uint32_t index, double minutes, const double* native, 
   return arc ? -m : m;
 }
 
-/// SPEC 16.14 diagnostics: AP's radiation-pressure rates on given mean elements with a given Sun. in: 11 doubles, the
+/// SPEC 16.15 diagnostics: AP's radiation-pressure rates on given mean elements with a given Sun. in: 11 doubles, the
 /// native elements (as sdnap_xp_rates_at: af, ag, chi, psi, lambda deg, n rev/day), the Sun's direction cosines on the
 /// perigee frame P, Q, W (normalized here), the Sun's distance (AU) and AGOM (m^2/kg). mode 0: the theory's averaged
 /// rates (srp_rates on AP's shadow); mode 1: the same sphere in the same cylinder averaged numerically over one
