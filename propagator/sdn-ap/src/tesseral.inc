@@ -156,6 +156,12 @@ inline int& slow_degree_cap() {
 struct ShallowTerms;
 inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q);
 inline double band_taper(double x);
+/// The one-day class above the eccentricity switch (SPEC 16.18; stack #467): a slow term the class's rates do not carry stays
+/// on the grid unless its angle drifts slower than this times n; below it the term is carried nowhere. 1e-2 n, not the
+/// table's 1e-3 n: on a synchronous set at e 0.5 the terms between the two drift as slowly as the class's own libration,
+/// where a first-order term fails (day 5, two such sets: 105 to 58 m and 42 to 54 m at 1e-3 n; unchanged at 3e-3 and 1e-2 n);
+/// on THEMIS-like sets no term of degree 2 to 12 lies between them.
+constexpr double kOneDayFloor = 1e-2;
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
@@ -4673,6 +4679,65 @@ inline int slow_listing_low(int cap, double n, double e0, double i0, double* row
   return count;
 }
 
+/// Where a set on the grid (above its eccentricity switch, outside low orbit) carries each slow tesseral term, by the grid's
+/// own rules (wide_families; SPEC 16.18): every (l, m, p, q) of degree 2 to `cap` whose angle drifts slower than kShallowBand n
+/// at the set's epoch (J2 secular rates, as the grid takes them). Row of 8 (16.18's): l, m, p, q, psi-dot / n, carrier
+/// (1 the class's rates, 2 the grid, 0 carried nowhere: left out of the grid as slow, or under the floor, 4 carried nowhere:
+/// above the grid's degree, kSpCap, as the table holds no near-resonant terms outside low orbit), the rates' weight w (1 for
+/// the class's terms, 0 otherwise: no taper above the switch) and the term's size (slow_size_m, G exact at the epoch e).
+/// Writes at most max_rows rows; returns the count of all of them, or -1 for a set it does not cover. `cls` the epoch class
+/// (res::band_of), n rad/min, inc rad. A diagnostic: no flight reads it.
+inline int slow_terms(int cap, int cls, double n, double e, double inc, double* rows, int max_rows) {
+  const bool low = cls == 0 && kTwoPi / n < kLongPeriodMinutes;
+  if (!wide_set(cls, e) || low) return -1;
+  const SecularRates sr = secular_rates(n, e, inc);
+  const double a = std::pow(kKe / n, kX2o3), band = kShallowBand * n;
+  const res::TermSet carried = res::class_terms(cls);
+  const int grid_degree = cap > kSpCap ? kSpCap : cap;
+  double F[72], dF[72];
+  int count = 0;
+  for (int m = 1; m <= cap; ++m)
+    for (int w = -cap; w <= cap; ++w) {
+      const double nu = -(w * sr.argp + m * (sr.node - kOmegaE)) / sr.mdot;
+      const int jlo = static_cast<int>(std::floor(nu - band / sr.mdot)) - 1;
+      const int jhi = static_cast<int>(std::ceil(nu + band / sr.mdot)) + 1;
+      bool any = false;
+      for (int j = jlo; j <= jhi && !any; ++j) any = std::fabs(slow_rate(sr, w, j, m)) < band && !(w == 0 && j == 0);
+      const int aw = w < 0 ? -w : w;
+      int l0 = m > aw ? m : aw;
+      if (l0 < 2) l0 = 2;
+      if ((l0 - aw) & 1) ++l0;
+      if (!any || l0 > cap) continue;
+      normalized_Fk_dF(m, w, cap, inc, F, dF);
+      for (int l = l0; l <= cap; l += 2) {
+        const int p = (l - w) / 2;
+        for (int j = jlo; j <= jhi; ++j) {
+          const double psidot = slow_rate(sr, w, j, m);
+          if (!(std::fabs(psidot) < band) || (w == 0 && j == 0)) continue;
+          const int q = j - w;
+          int where = -1;
+          for (int t = 0; t < carried.count && where < 0; ++t)
+            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) where = 1;
+          if (where < 0 && cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) where = 1;  // the half-day tail (16.2)
+          if (where < 0) {
+            if (l > grid_degree) where = 4;
+            else if (cls == 1) where = std::fabs(psidot) < kOneDayFloor * n ? 0 : 2;
+            else where = 0;
+          }
+          if (count < max_rows) {
+            double G, dG;
+            res::exact_G(l, p, q, e, G, dG);
+            double* r = rows + 8 * count;
+            r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = where; r[6] = where == 1 ? 1.0 : 0.0;
+            r[7] = slow_size_m(l, m, j, F[l] * G, a, psidot);
+          }
+          ++count;
+        }
+      }
+    }
+  return count;
+}
+
 /// Above kWideE (SPEC 16.11) the first-order tesseral short-periodics of degree 2 to kSpCap are not a series in M. For each
 /// (l, m, p), sum_q G_lpq e^{i (w + q) M} = (a/r)^(l+1) e^{i w f}, so each (m, w) family's displacement is a periodic
 /// function of the anomaly, complete in j: built on kGridNE uniform eccentric anomalies from the family's forcing (Lagrange's
@@ -4877,7 +4942,10 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
             // the slow band: in low orbit (class 0, period below 1100 min) only the shallow set's terms (q = 0, w = j = 1, which
             // the rates carry with the same taper) and the terms drifting slower than 1e-3 n; everywhere else the whole band
             const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)), x = ap / (kShallowBand * n);
-            if (!low) out_ = x < 1.0 ? 1.0 : 0.0;
+            // the one-day class above the switch carries only its 27 terms in the rates (left out above): every other slow
+            // term stays on the grid down to kOneDayFloor (stack #467); the other classes leave the whole band out
+            if (cls == 1) out_ = ap < kOneDayFloor * n ? 1.0 : 0.0;
+            else if (!low) out_ = x < 1.0 ? 1.0 : 0.0;
             else if (q == 0 && w == 1 && j == 1) {
               const double cc = std::cos(0.5 * kPi * (x - 0.9) / 0.2);
               out_ = x <= 0.9 ? 1.0 : x < 1.1 ? cc * cc : 0.0;

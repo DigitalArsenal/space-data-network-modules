@@ -87,7 +87,7 @@ for (const name of NAMES) {
   assert.ok(r.posterior.bterm > 0 && r.posterior.sigmaLog > 0 && r.posterior.agom !== null && r.posterior.agomSigma > 0, `${name}: fit 1's record states the posterior`);
   assert.ok(r.fit2Posterior.bterm > 0 && r.fit2Posterior.sigmaLog > 0, `${name}: fit 2's record states the posterior`);
 }
-// the day-3 error against the model truth: 21.33 m on 0.4.12 (and through 0.6.20), 17.31 m from 0.6.NN, whose slow set
+// the day-3 error against the model truth: 21.33 m on 0.4.12 (and through 0.6.20), 17.31 m from 0.6.25, whose slow set
 // (SPEC 16.18) carries the SWOT-like orbit's 14:1 family to degree 70
 assert.ok(Math.abs(report['SWOT-like'].trueBtermDay3 - 17.31) <= 2, `SWOT-like per-object path: ${report['SWOT-like'].trueBtermDay3} m, the slow set's 17.31 m (0.4.12 21.33 m)`);
 assert.ok(report['Sentinel-3-like'].sharedDay3 > report['Sentinel-3-like'].fit2Day3,

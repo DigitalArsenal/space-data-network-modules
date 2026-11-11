@@ -45,7 +45,7 @@ const BEFORE = { commit: "895b6b38de29bc284b4b50a02425a6c3a5fe81a2", sha256: "0b
 // measured 2026-11-10 on 0.6.8, the floors at most 1.1e-3 relative off k_F times 0.6.0's (FLOOR_VU_KM2; FLOOR_VV_KM2
 // 2.3e-5), the medians at most 1.2e-5 relative off the re-fit's (strong drag 2025 24 h R 0.6346524 against 0.634645).
 const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
-// 0.6.NN (the slow set, SPEC 16.18) moves the ISS sample's fit (420 km, a 6 h arc), whose floors scale the DRAG row: its
+// 0.6.25 (the slow set, SPEC 16.18) moves the ISS sample's fit (420 km, a 6 h arc), whose floors scale the DRAG row: its
 // error at the sample's last state (12 h) against the file's own truth goes from 308.5 to 316.6 m (2.6 %), FLOOR_VV_KM2
 // from 1.5128 to 1.5180 times 0.6.0's and FLOOR_WW_KM2 to 1.4626 times. One sample; the held-out cells move by at most
 // 0.0011 in median |z| (6 of 11 moved cells away from 0.674, 5 toward), while the real rows at those altitudes gain (the
