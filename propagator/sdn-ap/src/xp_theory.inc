@@ -5895,6 +5895,7 @@ struct CachePool {
   uint64_t held = 0;
   uint64_t clock = 1;
   uint64_t floor = 0;  ///< no holder's stamp is below it (a lower bound, raised by each search for room)
+  const XpSat* last = nullptr;  ///< the set that asked last
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
   std::vector<XpSat*> holders;
 };
@@ -5935,6 +5936,13 @@ inline bool pool_may_fit(const CachePool& p, uint64_t need, uint64_t before) {
          __atomic_load_n(&p.floor, __ATOMIC_RELAXED) < before;
 }
 
+/// Whether s asked last as well, no other set having asked since: a set flown in a run of its own states is served by the
+/// thread's caches, which still hold it, so it takes free room only and reclaims no other set's (object-major flight of
+/// more sets than fit would otherwise move every set's caches in and out once).
+inline bool pool_asked_again(CachePool& p, const XpSat& s) {
+  return __atomic_exchange_n(&p.last, &s, __ATOMIC_RELAXED) == &s;
+}
+
 /// Under the pool's lock: frees the caches of the sets flown longest ago, of those last flown before `before` (not
 /// `keep`, none being flown), until `need` more bytes fit with an eighth of the budget to spare. Whether they fit.
 inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, uint64_t before) {
@@ -5966,7 +5974,7 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   CachePool& p = cache_pool();
   const uint64_t need = sizeof(SetCaches);
   const uint64_t tick = __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
-  const uint64_t before = s.asked;
+  const uint64_t before = pool_asked_again(p, s) ? 0 : s.asked;
   s.asked = tick;
   if (!pool_may_fit(p, need, before)) {
     __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
@@ -6070,7 +6078,7 @@ SpEvalCache* sp_pool_attach(const SpEvalCache& built) {
   if (s == nullptr || s->caches == nullptr) return nullptr;
   CachePool& p = cache_pool();
   // room from holders not flown since this set's previous flight (CachePool), checked before the copy is made
-  const uint64_t before = s->caches->prev;
+  const uint64_t before = pool_asked_again(p, *s) ? 0 : s->caches->prev;
   __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
   if (!pool_may_fit(p, sizeof(SpEvalCache) + built.mem_bytes, before)) {
     __atomic_add_fetch(&p.sp_refused, 1, __ATOMIC_RELAXED);
@@ -6112,12 +6120,13 @@ inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
   CachePool& p = cache_pool();
   // room from holders not flown since this set's previous flight (CachePool)
   __atomic_add_fetch(&p.clock, 1, __ATOMIC_RELAXED);
-  if (!pool_may_fit(p, delta, c.prev)) {
+  const uint64_t before = pool_asked_again(p, s) ? 0 : c.prev;
+  if (!pool_may_fit(p, delta, before)) {
     __atomic_add_fetch(&p.refused, 1, __ATOMIC_RELAXED);
     return false;
   }
   lock(&p.lock);
-  const bool room = pool_reclaim_locked(p, delta, &s, c.prev);
+  const bool room = pool_reclaim_locked(p, delta, &s, before);
   if (room) {
     p.held += delta;
     c.bytes += delta;
