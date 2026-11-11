@@ -525,7 +525,8 @@ double sdnap_hansen_g(int32_t l, int32_t p, int32_t q, double e, int32_t mode) {
 /// Where a set carries each slow tesseral term (SPEC 16.18; stack #467): in = mean motion (rev/day), e, i (deg), the
 /// tesseral cap; rows of 8 doubles (l, m, p, q, psi-dot / n, carrier: 1 the rates, 2 the grid, 3 the output table, 0 nowhere:
 /// under the floor or the slow cut, 4 nowhere: above the carrier's degree, 5 nowhere: under the size cut, 6 nowhere: a q
-/// outside the rule's q range at or above the size cut; then the rates' weight w and the term's size in m), at most
+/// outside the rule's q range at or above the size cut, 7 nowhere: a term the low table's rules select that its list's
+/// capacity could not hold; then the rates' weight w and the term's size in m), at most
 /// max_rows. Returns the count of all rows, or -1 for a set it does not cover. It covers the sets above their switch outside
 /// low orbit (codes 1, 2, 0 and 4) and the low table (class 0, a period under 1,100 min, at or below its eccentricity switch:
 /// codes 1, 3, 0, 4, 5 and 6; 0 nowhere under the table's 1e-3 n floor, 4 also a family whose leading degree is 69 or 70).

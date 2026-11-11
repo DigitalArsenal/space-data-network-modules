@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T10:27:40.756Z",
+  "generatedAt": "2026-11-11T16:50:13.723Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.27",
+      "version": "0.6.28",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 179,
+      "testFileCount": 180,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7576,7 +7576,7 @@
         "test/fixtures/ap-fit-0.4.0.epochs.oem",
         "test/fixtures/ap-fit-0.4.0.oem",
         "test/fixtures/ap-fit-0.4.0.omm",
-        "test/fixtures/ap-fit-0.6.25.ocm",
+        "test/fixtures/ap-fit-0.6.27.ocm",
         "test/fixtures/ap-fit-0.6.4-0.6.22.cov",
         "test/fixtures/ap-fit-0.6.4-0.6.22.oem",
         "test/fixtures/ap-fit-0.6.4.eme2000-0.6.22.oem",
@@ -7667,6 +7667,7 @@
         "test/rigor/vallado.mjs",
         "test/run-suite.mjs",
         "test/set-caches.e2e.mjs",
+        "test/slow-band-every-class.e2e.mjs",
         "test/slow-set-band-centers.e2e.mjs",
         "test/slow-set-partition.e2e.mjs",
         "test/slow-set-record.e2e.mjs",

@@ -1821,7 +1821,8 @@ struct RateContext {
   double hd_e0, hd_i0, hd_a0;         ///< AP: reference e, i and a of half_day table
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
-  uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release)
+  uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release); bit 128 (wide_slow) is
+                                      ///< its last free bit: the next shared table needs a wider mask
   uint8_t ap_resonance;               ///< AP: the epoch class's terms, functions at the current elements (SPEC 16.2, 16.7)
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
   uint8_t ap_third_body;              ///< AP: the third bodies' degree 4-10 averaged rates and degree 2-10 short-period
@@ -1830,6 +1831,8 @@ struct RateContext {
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
   int32_t slow_extra;                 ///< SPEC 16.18: of shallow_count, the slow set's own terms (beyond the shallow set's)
+  const res::ResCoef* wide_slow;      ///< AP above the switch outside low orbit: the other slow terms, in the rates (owned, xp_release; stack #473)
+  int32_t wide_slow_count;
   const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
   int32_t zt_degree;
   uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
@@ -3659,7 +3662,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     ag.cw = cv * ag.cO + sv * ag.sO;
     ag.sw = sv * ag.cO - cv * ag.sO;
     const bool need_tail_angles =
-        !skip_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0));
+        !skip_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.wide_slow != nullptr) || (ctx.zt_wide != 0));
     const bool need_k_angles = (ctx.res_epoch != nullptr) || (ctx.drag_pass != 0) || need_tail_angles ||
                                (ctx.ap_resonance && cls != 0 && !(cls == 1 && cache_geo_res)) ||
                                (ctx.agom > 0.0 && fr.e2 != 0.0 && k.a >= 5.0 && ag.si <= 0.02) ||
@@ -3748,6 +3751,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci,
                         ctx.theta_g0, dst, sh_table_id(ctx));
     }
+    if (ctx.wide_slow != nullptr)
+      tess::wide_slow_six(ctx.wide_slow, ctx.wide_slow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
     if (ctx.zt != nullptr)
       tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, dst, &ag.sw, &ag.cw,
                       zt_table_id(ctx));
@@ -5727,6 +5732,22 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.half_day = table;
     }
   }
+  // SPEC 16.18 (stack #473): above its switch outside low orbit every class carries its other slow terms in the rates
+  if (sd >= 2 && br.wide_tess != 0 && !(res == 0 && !s.ctx.long_period)) {
+    if (within_share && anchor->ctx.wide_slow != nullptr) {
+      s.ctx.wide_slow = anchor->ctx.wide_slow;
+      s.ctx.wide_slow_count = anchor->ctx.wide_slow_count;
+      s.ctx.e0 = anchor->ctx.e0;
+      s.ctx.i0 = anchor->ctx.i0;
+      s.ctx.shared_mask |= 128;
+    } else {
+      res::ResCoef* list = nullptr;
+      const int count = tess::slow_terms_wide(spd, res, n0, e.eo, e.xincl, &list);
+      if (count < 0) return false;
+      s.ctx.wide_slow = list;
+      s.ctx.wide_slow_count = count;
+    }
+  }
   if (sd >= 2 && res == 0 && !s.ctx.long_period) {
     if (within_share && anchor->ctx.shallow != nullptr) {
       s.ctx.shallow = anchor->ctx.shallow;
@@ -5872,6 +5893,9 @@ inline void xp_release(XpSat& s) {
   if (!(s.ctx.shared_mask & 8)) std::free(const_cast<tess::ShallowCoef*>(s.ctx.shallow));
   s.ctx.shallow = nullptr;
   s.ctx.shallow_count = 0;
+  if (!(s.ctx.shared_mask & 128)) std::free(const_cast<res::ResCoef*>(s.ctx.wide_slow));
+  s.ctx.wide_slow = nullptr;
+  s.ctx.wide_slow_count = 0;
   if (!(s.ctx.shared_mask & 16)) std::free(const_cast<float*>(s.ctx.zt));
   s.ctx.zt = nullptr;
   if (!(s.ctx.shared_mask & 32)) std::free(const_cast<float*>(s.ctx.mdaily));
@@ -6106,6 +6130,7 @@ inline uint64_t xp_bytes(const XpSat& s) {
   if (!(c.shared_mask & 2)) b += u(c.res_epoch);
   if (!(c.shared_mask & 4)) b += u(c.res_taylor);
   if (!(c.shared_mask & 8)) b += u(c.shallow);
+  if (!(c.shared_mask & 128)) b += u(c.wide_slow);
   if (!(c.shared_mask & 16)) b += u(c.zt);
   if (!(c.shared_mask & 32)) b += u(c.mdaily);
   if (!(c.shared_mask & 64)) b += u(c.sp_orig != nullptr ? c.sp_orig : c.sp) + u(c.sp_comb);
