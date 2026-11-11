@@ -80,6 +80,14 @@ inline bool sp_anchored(double t) {
   return q >= 0.0 && q <= 1.0;
 }
 
+/// The part of a bracket cut into n equal parts that holds the time at q = (t - tlo) / h, as a level's key: n * 64 + the
+/// part. sp_anchor_point keys a bake with it, and the inline checks (sp_keys_hold, md_keys_hold) compare with it.
+inline int64_t sp_part_key(double q, int n) {
+  int k = static_cast<int>(std::floor(q * n));
+  k = k < 0 ? 0 : (k >= n ? n - 1 : k);
+  return static_cast<int64_t>(n) * 64 + k;
+}
+
 /// One bake level's point for time t: the bracket cut into n equal parts, n the smallest that keeps a (relative
 /// tol_a), e (tol_e on e, or on e^2 when e_sq) and cos i (tol_c) within a quarter of their tolerance of the part's
 /// center along the chord between the nodes, at most 64; the point is the center of t's part. The key is n * 64 + the
@@ -109,13 +117,13 @@ inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, doubl
     n = need < 1.0 ? 1 : (need >= 64.0 ? 64 : static_cast<int>(std::ceil(need)));
     if (L.count < SpAnchorLevels::kLevels) L.lv[L.count++] = SpAnchorLevels::Level{tol_a, tol_e, tol_c, e_sq, n};
   }
-  int k = static_cast<int>(std::floor((t - an.tlo) / an.h * n));
-  k = k < 0 ? 0 : (k >= n ? n - 1 : k);
+  const int64_t key = sp_part_key((t - an.tlo) / an.h, n);
+  const int k = static_cast<int>(key - static_cast<int64_t>(n) * 64);
   const double q = (k + 0.5) / n;
   a_c = an.a_lo + q * (an.a_hi - an.a_lo);
   e_c = an.e_lo + q * (an.e_hi - an.e_lo);
   c_c = an.c_lo + q * (an.c_hi - an.c_lo);
-  return static_cast<int64_t>(n) * 64 + k;
+  return key;
 }
 
 /// What the call selects (0: none of it). `tesseral` is the highest degree of the terms of order >= 1, `zonal` of the
@@ -427,6 +435,10 @@ struct MdailyEvalCache {
   bool keys_valid = false;
   uint64_t anchor_id = 0;                ///< the bracket the bakes were made on (0: state cells)
   int64_t kf_a = 0, kf_e = 0, kp_a = 0;  ///< the points of the full bake (a, e^2) and of the a bake (mdaily_sync_cache)
+  /// keys made on a bracket: its first time and length and the parts of each bake (md_keys_hold); false: cell keys
+  bool on_bracket = false;
+  double kb_tlo = 0.0, kb_h = 0.0;
+  int32_t n_full = 0, n_part = 0;
   alignas(16) double c0_pair1[20][2]{};
   alignas(16) double s0_pair1[20][2]{};
   alignas(16) double c0_pair2[20][2]{};
@@ -473,6 +485,14 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_set_cache != nullp
   const uint64_t aid = anchored ? g_sp_anchor.id : 0;
   const bool full = table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree || mc.f0 != F[0] ||
                     mc.f1 != F[1] || !mc.keys_valid || mc.anchor_id != aid || kfa != mc.kf_a || kfe != mc.kf_e;
+  // what md_keys_hold compares with: the keys below are the cache's when this call returns (kept, or baked now)
+  mc.on_bracket = anchored;
+  if (anchored) {
+    mc.kb_tlo = g_sp_anchor.tlo;
+    mc.kb_h = g_sp_anchor.h;
+    mc.n_full = static_cast<int32_t>(kfa >> 6);
+    mc.n_part = static_cast<int32_t>(kpa >> 6);
+  }
   if (!full && kpa == mc.kp_a) return;
   const double a = full ? a_full : a_part, e2 = e2_full;
   auto sync_f32 = [&]() {
@@ -611,6 +631,21 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_set_cache != nullp
   }
 }
 
+/// Whether mdaily_sync_cache would bake nothing for time t (stack #441): the cache holds F's terms, its keys were made
+/// on the bracket g_sp_anchor names, and t lies in the same part of it for both bakes. The same tests and keys as
+/// mdaily_sync_cache's (sp_anchored, sp_part_key), so it answers what that call would; inline, so a state that bakes
+/// nothing makes no call.
+[[gnu::always_inline]] inline bool md_keys_hold(const MdailyEvalCache& mc, const float* F, int degree, double t, uint64_t table_id) {
+  const SpAnchor& an = g_sp_anchor;
+  if (!mc.on_bracket || !mc.keys_valid || table_id == 0 || mc.table_id != table_id || mc.F != F || mc.degree != degree ||
+      mc.f0 != F[0] || mc.f1 != F[1] || !an.valid || an.h == 0.0 || an.id != mc.anchor_id || an.tlo != mc.kb_tlo ||
+      an.h != mc.kb_h)
+    return false;
+  const double q = (t - an.tlo) / an.h;
+  if (!(q >= 0.0 && q <= 1.0)) return false;
+  return sp_part_key(q, mc.n_full) == mc.kf_a && mc.kf_e == 0 && sp_part_key(q, mc.n_part) == mc.kp_a;
+}
+
 [[gnu::always_inline]] inline void mdaily_six(
     const float* F, int degree, double t, const Kepler& k, double n, double eta, double si,
     double ci, double theta_g0, double* six, double* sb_out = nullptr, double* cb_out = nullptr,
@@ -619,7 +654,7 @@ inline MdailyEvalCache& mdaily_eval_cache() { return g_mdaily_set_cache != nullp
     const double* sb_in = nullptr, const double* cb_in = nullptr, uint64_t table_id = 0) {
   const double a = k.a, e = k.e, e2 = e * e;
   MdailyEvalCache& mc = mdaily_eval_cache();
-  mdaily_sync_cache(mc, F, degree, a, e2, t, table_id);
+  if (!md_keys_hold(mc, F, degree, t, table_id)) mdaily_sync_cache(mc, F, degree, a, e2, t, table_id);
   double sb, cb;
   if (sb_in != nullptr && cb_in != nullptr) {
     sb = *sb_in;
@@ -1299,6 +1334,11 @@ static_assert(sizeof(SpRow) == 16, "");
 /// kMaxBlks (a set's terms are grouped there), a set's cache from the pool (SetCaches) exactly its total_blks.
 /// The bake points are cells of the mean state (sp_sync): the baked values are a function of the state's cells
 /// alone, never of the states evaluated before.
+/// A grouping's id (SpEvalCache::group_id), unique in the instance whichever thread groups.
+inline uint64_t sp_next_group_id() {
+  static uint64_t next = 1;
+  return __atomic_fetch_add(&next, 1, __ATOMIC_RELAXED);
+}
 struct SpEvalCache {
   static constexpr int kMaxBlks = 768;
   static constexpr int kMaxRows = 384;
@@ -1309,6 +1349,7 @@ struct SpEvalCache {
   uint32_t table_tag = 0;
   float f0_uc = -1e30f, f0_ic = -1e30f, fn_uc = -1e30f;
   bool grouped_ok = false, res_overflow = false, uil_b_dirty = false;
+  uint64_t group_id = 0;  ///< the grouping this cache holds (sp_rebuild_cache), kept by a set's copy of it (sp_compact_blk_c)
   double a0 = 0.0, e0 = 0.0, da_base = 0.0;
   double a = -1.0, e = -1.0, n = -1.0, ci = -10.0;
   double a_bake = -1.0, e_bake = -1.0, e_bake_a = -1.0, e_pe_bake = -1.0, de_pe_thresh = 5.0e-7;
@@ -1317,6 +1358,11 @@ struct SpEvalCache {
   bool keys_valid = false;
   uint64_t anchor_id = 0;  ///< the bracket the bakes were made on (0: state cells)
   int64_t kb_a = 0, kb_e = 0, kb_c = 0, kae_a = 0, kae_e = 0, kpe = 0, kr_a = 0, kr_c = 0, kr_e = 0;
+  /// keys made on a bracket: its first time and length and the parts of each level (sp_keys_hold; n_pe 0: no pe point
+  /// in the keys); false: cell keys
+  bool on_bracket = false;
+  double kb_tlo = 0.0, kb_h = 0.0;
+  int32_t n_base = 0, n_ae = 0, n_pe = 0, n_res = 0;
   alignas(16) float cswq_c[120]{};
   alignas(16) float cswq_s[120]{};
   int cap_blks = 0, cap_rows = 0;
@@ -1409,14 +1455,19 @@ inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
 }
 
 /// A set's blk_c for one bake, per thread: the lanes' coefficients from F (store_lane's layout), zero in empty lanes.
+/// `blocks` (`count` of them): those blocks only, the others left as they are (the resonant bake reads its own blocks
+/// alone: rebuilding all 107 blocks of a 500 km set for its 6 resonant ones cost 0.16 us a state, stack #441);
+/// nullptr: every block (the base bake).
 inline thread_local float* g_sp_blk_c = nullptr;
-inline float* sp_blk_c(const SpEvalCache& sc) {
+inline float* sp_blk_c(const SpEvalCache& sc, const uint16_t* blocks = nullptr, int count = 0) {
   if (__builtin_expect(!g_sp_blk_c, 0)) {
     g_sp_blk_c = static_cast<float*>(std::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
     if (g_sp_blk_c == nullptr) std::abort();
   }
   float* const c = g_sp_blk_c;
-  for (int bi = 0; bi < sc.total_blks; ++bi) {
+  const int n = blocks != nullptr ? count : sc.total_blks;
+  for (int j = 0; j < n; ++j) {
+    const int bi = blocks != nullptr ? static_cast<int>(blocks[j]) : j;
     for (int l = 0; l < 4; ++l) {
       float* const pc = c + bi * 64 + l;
       const int lane = bi * 4 + l;
@@ -1508,6 +1559,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   sc.grouped_ok = false;
   sc.res_overflow = false;
   sc.n_res_blks = 0;
+  sc.group_id = sp_next_group_id();
   if (count > 2600) return;
   int max_m = 0, max_aw = 0;
   bool ok = true;
@@ -2592,6 +2644,18 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
 
 constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pass: the pe blocks at the ae bake's e
 
+/// The coefficients a set's compact cache bakes from (blk_c) for a base bake (every block) or a resonant bake alone
+/// (`blocks`): the thread's own cache's when the compact cache is a copy of the grouping that cache still holds (the
+/// same group_id: the set's terms were grouped there and copied, sp_claim; grouping writes F's coefficients into the
+/// lanes sp_blk_c writes them to, and nothing writes them after), else rebuilt from F. A warm set flown alone rebuilds
+/// none (stack #441: the rebuild cost 7 % of the site's 500 km set's states, for the resonant blocks alone 3 %).
+inline float* sp_compact_blk_c(const SpEvalCache& sc, const uint16_t* blocks = nullptr, int count = 0) {
+  const SpEvalCache* th = g_sp_eval_cache_ptr;
+  if (th != nullptr && th != &sc && th->blk_c != nullptr && th->grouped_ok && sc.group_id != 0 && th->group_id == sc.group_id)
+    return th->blk_c;
+  return sp_blk_c(sc, blocks, count);
+}
+
 /// The bakes for the state (a, e, cos i) at time t, each level at a point that is a function of the state's bracket
 /// and t (SPEC 9): with the bracket (g_sp_anchor, t on it), the level's part of the bracket (sp_anchor_point); without
 /// one, the center of the state's cell of that level. Levels and tolerances: base (a relative 3e-5, e^2 2e-5, cos i
@@ -2639,9 +2703,23 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     res_point();
     res = pe || kra != sc.kr_a || krc != sc.kr_c || kre != sc.kr_e;
   }
-  if (!base && !ae && !pe && !res) return;
+  // what sp_keys_hold compares with: the keys the cache holds when this call returns (kept, or baked now)
+  auto note_keys = [&]() {
+    sc.on_bracket = anchored;
+    if (!anchored) return;
+    sc.kb_tlo = an.tlo;
+    sc.kb_h = an.h;
+    sc.n_base = static_cast<int32_t>(kba >> 6);
+    sc.n_ae = static_cast<int32_t>(kaa >> 6);
+    sc.n_pe = kpe != kSpPeAtBake ? static_cast<int32_t>(kpe >> 6) : 0;
+    sc.n_res = sc.n_res_blks > 0 ? static_cast<int32_t>(kra >> 6) : 0;
+  };
+  if (!base && !ae && !pe && !res) {
+    note_keys();
+    return;
+  }
   float* const own_c = sc.blk_c;
-  if (base && sc.compact) sc.blk_c = sp_blk_c(sc);
+  if (base && sc.compact) sc.blk_c = sp_compact_blk_c(sc);
   if (base) {
     const double n_b = kKe / (a_b * std::sqrt(a_b));
     sp_rebake_base(sc, a0, e0, a_b, e_b, n_b, std::sqrt(1.0 - e_b * e_b), ci_b, 1.0 / a_b);
@@ -2653,7 +2731,8 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   if (ae) sp_rebake_ae(sc, a0, a_ae, e_ae, 1.0 / a_ae, true);
   if (pe && kpe != kSpPeAtBake) sp_rebake_pe_fast(sc, e_pe);
   if (res) {
-    if (sc.compact && sc.blk_c == nullptr) sc.blk_c = sp_blk_c(sc);
+    // a resonant bake alone reads the resonant blocks' coefficients only
+    if (sc.compact && sc.blk_c == nullptr) sc.blk_c = sp_compact_blk_c(sc, sc.res_blk, sc.n_res_blks);
     const double n_r = kKe / (a_r * std::sqrt(a_r));
     sp_rebake_res(sc, a0, e0, a_r, e_r, n_r, std::sqrt(1.0 - e_r * e_r), ci_r, 1.0 / a_r);
     sc.kr_a = kra;
@@ -2669,6 +2748,27 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   sc.kae_e = kae;
   sc.kpe = kpe;
   sc.keys_valid = true;
+  note_keys();
+}
+
+/// Whether sp_sync would bake nothing for time t (stack #441): the cache's keys were made on the bracket g_sp_anchor
+/// names and t lies in the same part of it at every level. The same tests and keys as sp_sync's (sp_anchored,
+/// sp_part_key), so it answers what that call would; inline, so a state that bakes nothing makes no call.
+[[gnu::always_inline]] inline bool sp_keys_hold(const SpEvalCache& sc, double t, bool derivative) {
+  const SpAnchor& an = g_sp_anchor;
+  if (!sc.on_bracket || !sc.keys_valid || !an.valid || an.h == 0.0 || an.id != sc.anchor_id || an.tlo != sc.kb_tlo ||
+      an.h != sc.kb_h)
+    return false;
+  const double q = (t - an.tlo) / an.h;
+  if (!(q >= 0.0 && q <= 1.0)) return false;
+  if (sp_part_key(q, sc.n_base) != sc.kb_a || sc.kb_e != 0 || sc.kb_c != 0 || sp_part_key(q, sc.n_ae) != sc.kae_a || sc.kae_e != 0)
+    return false;
+  if (!derivative && sc.n_pe_blks > 0) {
+    if (sc.n_pe == 0 || sp_part_key(q, sc.n_pe) != sc.kpe) return false;
+  } else if (sc.kpe != kSpPeAtBake) {
+    return false;
+  }
+  return sc.n_res_blks == 0 || (sp_part_key(q, sc.n_res) == sc.kr_a && sc.kr_c == 0 && sc.kr_e == 0);
 }
 
 [[gnu::always_inline]] inline void sp_fill_trig(SpEvalCache& sc, double cb, double sb, double cu1, double su1,
@@ -2928,7 +3028,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
   SpEvalCache& sc = *scp;
-  sp_sync(sc, a0, e0, a, e, ci, t, true);
+  if (!sp_keys_hold(sc, t, true)) sp_sync(sc, a0, e0, a, e, ci, t, true);
   double sb, cb, su1, cu1, sM1, cM1;
   if (sb_in != nullptr && cb_in != nullptr && su1_in != nullptr && cu1_in != nullptr && sM1_in != nullptr && cM1_in != nullptr) {
     sb = *sb_in; cb = *cb_in;
@@ -3025,7 +3125,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
   }
   SpEvalCache& sc = *scp;
-  sp_sync(sc, a0, e0, a, e, ci, t, false);
+  if (!sp_keys_hold(sc, t, false)) sp_sync(sc, a0, e0, a, e, ci, t, false);
 
   float* const cm_f32 = sp_trig_cm();
   float* const sm_f32 = sp_trig_sm();
