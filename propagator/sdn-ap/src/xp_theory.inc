@@ -312,8 +312,13 @@ struct ApBodiesNode {
   Bodies b{};
 };
 inline thread_local ApBodiesNode* g_ap_bodies_store = nullptr;
+/// The thread's node store, made on first use or ahead (pool::warm_thread: a pool thread makes its caches before any
+/// batch, stack #487).
+inline void ap_bodies_store_make() {
+  if (g_ap_bodies_store == nullptr) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+}
 inline const Bodies& ap_bodies_node(int64_t k) {
-  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) ap_bodies_store_make();
   ApBodiesNode& s = g_ap_bodies_store[static_cast<uint64_t>(k) & (kApBodiesStoreSlots - 1)];
   if (s.key != k) {
     s.b = ap_bodies_at(static_cast<double>(k) * (kApBodiesNodeHours / 24.0));
@@ -1847,6 +1852,7 @@ struct RateContext {
   const tess::WideGrid* wide_next;    ///< a call's next schedule node's grid (xp_propagate), blended in by wide_blend
   double wide_blend;
   uint8_t wide_fit;                   ///< initialized inside a tess::FitGridScope: the grids it builds are not kept idle
+  double wide_a;                      ///< the long-period regime with the Sun and Moon: the epoch's a, every node's and the grid's a offset (SPEC 16.11); 0 otherwise
   uint8_t is_cov_sigma;               ///< non-zero if initialized inside CovBankScope as a covariance sigma satellite
   XpSat* wide_anchor;                 ///< the nominal set whose grids this copy reads (GridShareScope); nullptr: its own
 };
@@ -3606,6 +3612,67 @@ inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const
 
 }  // namespace tide
 
+[[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]);
+
+/// AP in the long-period regime above e 0.3 (SPEC 16.19): the Sun's and Moon's rates of the mean elements y, the rates that move AP's
+/// osculating state there (SPEC 8's J2 output, output_j2_osc) by the bodies' point-mass acceleration at that state:
+/// J m = (0, a), J the output's Jacobian in the six elements (forward differences), solved by Gaussian elimination with
+/// partial pivoting. The Gauss equations at the mean state alone move the J2 output by J2's short-period Jacobian times
+/// the bodies' rates as well, a velocity of the bodies' order times J2 at once. False when the output or the solve fails
+/// (the caller keeps the Gauss rates).
+inline bool lp_third_body_through_output(const double* y, const Bodies& b, double tb[6]) {
+  double x0[6], J[6][7];
+  // the base state, and the eccentric anomaly every column starts its Kepler equation from
+  const Kepler k0 = kepler_of(y);
+  if (!(k0.e < 1.0)) return false;
+  double E = k0.m + k0.e * std::sin(k0.m);
+  for (int it = 0; it < 30; ++it) {
+    const double dE = (E - k0.e * std::sin(E) - k0.m) / (1.0 - k0.e * std::cos(E));
+    E -= dE;
+    if (std::fabs(dE) < 1e-15) break;
+  }
+  if (output_j2_osc(y, E, x0, x0 + 3) != kPropOk) return false;
+  for (int c = 0; c < 6; ++c) {
+    const double h = c == kN ? 1e-7 * y[kN] : 1e-7;
+    double yc[6], xc[6];
+    for (int j = 0; j < 6; ++j) yc[j] = y[j];
+    yc[c] += h;
+    if (output_j2_osc(yc, E, xc, xc + 3) != kPropOk) return false;
+    for (int q = 0; q < 6; ++q) J[q][c] = (xc[q] - x0[q]) / h;
+  }
+  // the bodies' acceleration at the osculating position, km/s^2 (output_j2_osc's km and km/s)
+  const Vec3 r{x0[0] / kRe, x0[1] / kRe, x0[2] / kRe};
+  const Vec3 d = third_body_accel(r, b.sun_u, b.sun_r, kSunMass) + third_body_accel(r, b.moon_u, b.moon_r, kMoonMass);
+  const double s = kRe / 3600.0;
+  J[0][6] = J[1][6] = J[2][6] = 0.0;
+  J[3][6] = d.x * s;
+  J[4][6] = d.y * s;
+  J[5][6] = d.z * s;
+  for (int c = 0; c < 6; ++c) {
+    int p = c;
+    for (int q = c + 1; q < 6; ++q)
+      if (std::fabs(J[q][c]) > std::fabs(J[p][c])) p = q;
+    if (p != c)
+      for (int j = 0; j < 7; ++j) std::swap(J[p][j], J[c][j]);
+    if (!(J[c][c] != 0.0)) return false;
+    for (int q = c + 1; q < 6; ++q) {
+      const double f = J[q][c] / J[c][c];
+      for (int j = c; j < 7; ++j) J[q][j] -= f * J[c][j];
+    }
+  }
+  double m[6];
+  for (int c = 5; c >= 0; --c) {
+    double x = J[c][6];
+    for (int j = c + 1; j < 6; ++j) x -= J[c][j] * m[j];
+    m[c] = x / J[c][c];
+  }
+  for (int j = 0; j < 6; ++j) {
+    if (!std::isfinite(m[j])) return false;
+    tb[j] = 60.0 * m[j];  // per second to per minute
+  }
+  return true;
+}
+
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test). AP sums the epoch
 /// class's terms whatever the current mean motion (SPEC 16.7): the class is the record's, decided at its epoch.
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
@@ -3873,7 +3940,12 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         if (ap_lp_fast && last_dF != 0.0) fm::sincos_fast(F, sF_lp, cF_lp);
       }
       double tb[6];
-      if (ap_lp_fast) {
+      // AP above e 0.3: the rates that move its osculating output by the bodies' acceleration (SPEC 16.19); below it (the
+      // effect is a few m there, the cost is not), SGP4XP, or where that fails: the Gauss equations at the mean state
+      const bool through_output = ctx.ap_third_body && ctx.branch.wide_e && lp_third_body_through_output(y, b, tb);
+      if (through_output) {
+        // tb holds them
+      } else if (ap_lp_fast) {
         lp_third_body_gauss_ap(y, fr, sF_lp, cF_lp, b, tb);
       } else {
         Vec3 r, v;
@@ -4992,10 +5064,10 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         }
         if (ctx.wide != nullptr) {
           if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - ctx.wide_blend);
-            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - (1.0 - ctx.wide_blend));
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - ctx.wide_blend, ctx.wide_a);
+            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0 - (1.0 - ctx.wide_blend), ctx.wide_a);
           } else {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0);
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six_sp, Ewarm, dsix_sp, 1.0, ctx.wide_a);
           }
         }
         auto conv_six = [&](const double* sx, double* eq) {
@@ -5039,10 +5111,10 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
           tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
         if (ctx.wide != nullptr) {
           if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend);
-            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend);
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend, ctx.wide_a);
+            tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend, ctx.wide_a);
           } else {
-            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0);
+            tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0, ctx.wide_a);
           }
         }
         if (__builtin_expect(have_cv_m, 1)) {
@@ -5074,10 +5146,10 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         tess::sp_six(ctx.sp, ctx.sp_count, t, km, ym[kN], etam, agm.si, agm.ci, ctx.theta_g0, six);
       if (ctx.wide != nullptr) {
         if (ctx.wide_next != nullptr && ctx.wide_blend > 0.0) {
-          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend);
-          tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend);
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0 - ctx.wide_blend, ctx.wide_a);
+          tess::wide_six(*ctx.wide_next, t, km, ctx.theta_g0, six, Ewarm, nullptr, ctx.wide_blend, ctx.wide_a);
         } else {
-          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0);
+          tess::wide_six(*ctx.wide, t, km, ctx.theta_g0, six, Ewarm, nullptr, 1.0, ctx.wide_a);
         }
       }
       if (__builtin_expect(have_cv_m, 1)) {
@@ -5569,6 +5641,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   s.ctx.ap_frame = (t.tesseral > 0 || t.zonal > 0) && (!s.ctx.long_period || res != 0);
   s.ctx.ap_third_body = t.tesseral > 0 || t.zonal > 0;
   s.ctx.drag_pass = s.ctx.ap_third_body && br.wide_e ? 1 : 0;
+  // SPEC 16.11: in the long-period regime the Sun and Moon move the mean motion along each revolution, so the grid keeps the
+  // epoch's (the same expression as the grid's own a, so a set's own grid has no offset in a)
+  s.ctx.wide_a = s.ctx.long_period && s.ctx.ap_third_body ? std::pow(kKe / n0, kX2o3) : 0.0;
   if (t.tesseral > 0) {
     s.ctx.ap_resonance = 1;
     if (res != 0 && br.series_e && e.eo + 1e-3 < 1.0) {
@@ -6091,7 +6166,40 @@ struct CachePool {
   const XpSat* last = nullptr;  ///< the set that asked last
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
   std::vector<XpSat*> holders;
+  std::vector<XpSat*> order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
 };
+
+/// Stack #487 (SPEC 9): inside a threaded batch (pool::run, from the workers' wake to the last one done) the module's
+/// memory does not grow. While this flag is set, sbrk refuses every growth (pool.inc), on every thread, and a block that
+/// would have needed new pages is not given: the set's caches fall back to the thread's, and a row whose state needed
+/// such a block is computed again by the calling thread after the batch (pool::run's deferral).
+inline int32_t g_batch_running = 0;
+/// Set by sbrk when it refuses on this thread; the row being computed reads and clears it (run_chunk).
+inline thread_local int32_t g_alloc_refused = 0;
+/// The pool's counts (sdnap_pool_stats): threaded batches run, growths refused, rows deferred to the calling thread,
+/// batches after which the calling thread saw a larger memory (the invariant broken: 0), the pool declared dead, the
+/// last reserve (bytes); the waits for a thread's view of the memory (pool::await_view) that had to yield, and the
+/// most yields one took.
+struct BatchStats {
+  uint64_t batches = 0, refused = 0, deferred = 0, grew = 0, dead = 0, reserve = 0;
+  uint64_t views = 0, view_yields_max = 0;
+};
+inline BatchStats& batch_stats() {
+  static BatchStats s;
+  return s;
+}
+inline void atomic_max_u64(uint64_t* word, uint64_t v) {
+  uint64_t old = __atomic_load_n(word, __ATOMIC_SEQ_CST);
+  while (v > old && !__atomic_compare_exchange_n(word, &old, v, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+  }
+}
+/// One wait for a thread's view that yielded `yields` times (pool::await_view; any thread).
+inline void batch_view_waited(uint64_t yields) {
+  BatchStats& s = batch_stats();
+  __atomic_add_fetch(&s.views, 1, __ATOMIC_SEQ_CST);
+  atomic_max_u64(&s.view_yields_max, yields);
+}
+inline bool batch_running() { return __atomic_load_n(&g_batch_running, __ATOMIC_SEQ_CST) != 0; }
 inline CachePool& cache_pool() {
   static CachePool p;
   return p;
@@ -6141,9 +6249,15 @@ inline bool pool_asked_again(CachePool& p, const XpSat& s) {
 inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, uint64_t before) {
   if (p.held + need <= p.budget) return true;
   if (p.floor >= before) return false;
-  std::vector<XpSat*> order;
+  // the scratch's room is kept with the holders' (pool_room), so filling it never allocates; inside a threaded batch a
+  // candidate beyond its room is left out rather than grow anything (stack #487)
+  std::vector<XpSat*>& order = p.order;
+  order.clear();
   for (XpSat* v : p.holders)
-    if (v->caches->stamp < before && v != keep) order.push_back(v);
+    if (v->caches->stamp < before && v != keep) {
+      if (order.size() == order.capacity() && batch_running()) break;
+      order.push_back(v);
+    }
   std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
   for (XpSat* v : order) {
@@ -6190,7 +6304,9 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   lock(&p.lock);
   SetCaches* c = nullptr;
-  if (pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
+  // inside a threaded batch the holders' list may not grow past the room kept for it (pool_room): no room, no caches
+  const bool listed = !(p.holders.size() == p.holders.capacity() && batch_running());
+  if (listed && pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
   if (c != nullptr) {
     c->bytes = need;
     // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and
@@ -6205,6 +6321,20 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   unlock(&p.lock);
   return c;
+}
+
+/// Before a threaded batch, on the calling thread (stack #487): room in the pool's two lists for `more` sets, so that no
+/// worker grows them, and the bytes the pool may still take (its budget less what it holds), which bounds what the
+/// batch's sets can allocate for their caches.
+inline uint64_t pool_room(size_t more) {
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  const size_t want = p.holders.size() + more;
+  if (p.holders.capacity() < want) p.holders.reserve(want);
+  if (p.order.capacity() < p.holders.capacity()) p.order.reserve(p.holders.capacity());
+  const uint64_t free = p.budget > p.held ? p.budget - p.held : 0;
+  unlock(&p.lock);
+  return free;
 }
 
 extern "C" size_t malloc_usable_size(void*);
@@ -6631,7 +6761,8 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
 }
 
 /// AP above tess::kWideE (SPEC 16.11): the grid of schedule node j, built at the set's mean elements at j kGridEvery (node 0: the
-/// set's own); `held` says whether the caller drops it. False when the mean elements there are not numbers or out of memory.
+/// set's own), at the epoch's mean motion in the long-period regime with the Sun and Moon (RateContext::wide_a); `held` says
+/// whether the caller drops it. False when the mean elements there are not numbers or out of memory.
 inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   held = false;
   if (j == 0) { out = s.ctx.wide; return true; }
@@ -6651,7 +6782,8 @@ inline bool wide_node(XpSat& s, int j, tess::WideGrid*& out, bool& held) {
   if (!mean_at_aside(s, j * tess::kGridEvery, yj) || !(yj[kN] > 0.0)) return false;
   const Kepler k = kepler_of(yj);
   if (!(k.e < 1.0)) return false;
-  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, yj[kN], k.e, k.i, s.ctx.wide_fit != 0);
+  out = tess::wide_grid_acquire(s.ctx.wide->degree, s.ctx.resonance, s.ctx.wide_a > 0.0 ? s.ctx.wide->n : yj[kN], k.e, k.i,
+                                s.ctx.wide_fit != 0);
   if (out == nullptr) return false;
   held = true;
   // keep it in the slot farther from j
