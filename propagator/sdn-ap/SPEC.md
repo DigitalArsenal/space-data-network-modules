@@ -2052,6 +2052,15 @@ What was tried and not taken:
   2 (day 5 1,538 to 1,509, 1,542 to 1,135, 373 to 365 and 393 to 169 m; equal at 700 km). On 24 h arcs it is wrong: 450 by
   1,800 km at B 0.003 goes 52 to 2,508 m. These orbits' fitted B is far off on every key (stack #468).
 
+Arcs with a gap or a burn. Model truth at 800 km (i 98) and 1,340 km (i 66), e 0.001, for two objects: B 0.003 with AGOM
+0.0015, and B 0.02 with AGOM 0.015. FFM 70x70, Sun and Moon, solid tide, relativity, NRLMSISE-00 on real GFZ weather; 72 h
+fits. Day-5 3D RMS (m), 0.6.16 to this default, with BTERM and AGOM pinned at the truth in brackets:
+- clean arcs: 53 to 33 (116), 1,031 to 179 (116), 125 to 88 (112) and 217 to 144 (114);
+- 12 h of the arc missing: 56 to 37, 1,039 to 132, 125 to 88 and 218 to 152.
+An along-track burn of 1, 5 or 50 cm/s 36 h into the arc, which AP does not model, leaves a fit RMS of 0.54 to 28 km on
+both builds, and day 5 stays within 0.5 % of 0.6.16's (5.5 to 341 km). There this default states B undetermined (sigma of
+the log 23.0), where 0.6.16's band prior stated 2.3.
+
 CryoSat-2 (717 km) gets worse at day 5 (median 973 to 1,013 m on its 15 real windows) while its fitted term moves closer to
 the numerical one (B_AP / B_FFM 0.89 to 0.95): the lower term was offsetting the missing solid tide (#449) and the
 commensurability terms above degree 31 at 690 to 800 km (#447). `test/fit-bterm-700-1400-km.e2e.mjs` holds it at or below
