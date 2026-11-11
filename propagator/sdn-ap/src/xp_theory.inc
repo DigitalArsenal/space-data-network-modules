@@ -1782,16 +1782,31 @@ struct Branch {
   uint8_t wide_tess = 0;    ///< AP: the first-order tesseral families on the grid (tess::wide_set: 0.05 in class 0, else 0.3)
   uint8_t wide_e = 0;       ///< AP: e0 above tess::kWideE, the zonal tail's every long-period term and the perigee drag passage
   uint8_t series_e = 0;     ///< AP: e0 at or above res::kSeriesE, the class's G about e0 (SPEC 6.4)
-  /// The long-period regime's step, minutes (SPEC 9, 16.10): 95, AP's one-day class 38, and an AP set above e0 0.3 at most
-  /// half the perigee pass's time scale (1 - e0)^(3/2) / n0. Not a switch: a moved set flies its nominal's, as the rest.
+  /// The long-period regime's step, minutes (SPEC 9, 16.10): 95, AP's one-day class 38. For an AP set above e0 0.3 the mean
+  /// step (the checkpoint stride) of its nodes even in s (lp_even). Not a switch: a moved set flies its nominal's, as the rest.
   double lp_step = kLongPeriodStep;
+  /// AP above e0 0.3 in the long-period regime (SPEC 16.10; stack #450): the nodes are even in s = E - 0.5 e0 sin E (the
+  /// eccentric anomaly of an orbit of half the eccentricity), E the epoch orbit's eccentric anomaly: node k at
+  /// s(E_k) = s(E0) + k ds, its time t_k = (G(E_k) - G(E0)) / n0 with G(E) = E - e0 sin E. ds (lp_dE) =
+  /// min(0.5 (1 - e0)^1.5, h0 n0), h0 38 min (the one-day class) or 95 min: the mean step min(0.5 tau_p, h0), 0.6.16's
+  /// uniform step (tau_p = (1 - e0)^1.5 / n0 the perigee's time scale); the step in time follows
+  /// (1 - e0 cos E) / (1 - 0.5 e0 cos E).
+  uint8_t lp_even = 0;
+  double lp_dE = 0.0, lp_E0 = 0.0, lp_G0 = 0.0, lp_e0 = 0.0, lp_n0 = 0.0;
   bool operator==(const Branch& o) const {
     return resonance == o.resonance && long_period == o.long_period && wide_tess == o.wide_tess && wide_e == o.wide_e &&
            series_e == o.series_e;
   }
   bool operator!=(const Branch& o) const { return !(*this == o); }
 };
-inline Branch branch_of(double n0, double e0, bool ap) {
+/// The long-period nodes above e0 0.3 (Branch::lp_even; SPEC 16.10): even in s = E - kLpShift e0 sin E, with
+/// ds = min(kLpPerigeeScale (1 - e0)^1.5, h0 n0): 0.6.16's node count and mean step, min(0.5 tau_p, h0), spread toward
+/// apogee. Chosen on the integration error against a uniform fine step at 60 s, near perigee and at its largest over 7 days,
+/// the worst over four Sun and Moon geometries: below 0.6.20's worst on THEMIS-, Chandra- and TESS-like sets, at no more
+/// than its cost.
+constexpr double kLpPerigeeScale = 0.5, kLpShift = 0.5;
+/// `m0` the epoch mean anomaly (rad): the phase of the long-period nodes above e0 0.3 (Branch::lp_even).
+inline Branch branch_of(double n0, double e0, bool ap, double m0 = 0.0) {
   Branch b;
   b.resonance = static_cast<int8_t>(res::band_of(n0));
   b.long_period = (kTwoPi / n0) >= kLongPeriodMinutes ? 1 : 0;
@@ -1802,9 +1817,36 @@ inline Branch branch_of(double n0, double e0, bool ap) {
   }
   if (b.long_period && ap) {
     b.lp_step = b.resonance == 1 ? 38.0 : kLongPeriodStep;
-    if (b.wide_e) b.lp_step = std::fmin(b.lp_step, 0.5 * std::pow(1.0 - e0, 1.5) / n0);
+    if (b.wide_e) {
+      b.lp_even = 1;
+      b.lp_dE = std::fmin(kLpPerigeeScale * std::pow(1.0 - e0, 1.5), b.lp_step * n0);
+      b.lp_e0 = e0;
+      b.lp_n0 = n0;
+      double E = m0 + e0 * std::sin(m0);
+      for (int it = 0; it < 60; ++it) {
+        const double d = (E - e0 * std::sin(E) - m0) / (1.0 - e0 * std::cos(E));
+        E -= d;
+        if (std::fabs(d) < 1e-15) break;
+      }
+      b.lp_E0 = E;
+      b.lp_G0 = E - e0 * std::sin(E);
+      b.lp_step = b.lp_dE / n0;  // the mean step
+    }
   }
   return b;
+}
+/// The time (min from the epoch) of node k of a long-period set whose nodes are even in s (Branch::lp_even): E_k solves
+/// E - kLpShift e0 sin E = s(E0) + k ds by Newton, from E0 + k ds.
+inline double lp_node_time(const Branch& b, int32_t k) {
+  const double we = kLpShift * b.lp_e0;
+  const double s = b.lp_E0 - we * std::sin(b.lp_E0) + k * b.lp_dE;
+  double E = b.lp_E0 + k * b.lp_dE;
+  for (int it = 0; it < 60; ++it) {
+    const double d = (E - we * std::sin(E) - s) / (1.0 - we * std::cos(E));
+    E -= d;
+    if (std::fabs(d) < 1e-14) break;
+  }
+  return (E - b.lp_e0 * std::sin(E) - b.lp_G0) / b.lp_n0;
 }
 /// The switch two branches differ by, in words.
 inline const char* switch_name(const Branch& a, const Branch& b) {
@@ -4725,7 +4767,9 @@ inline void y0_blocks(const RateContext& ctx, const Node& a, Node& out) {
 
 inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out) {
   double h;
-  if (ctx.long_period)
+  if (ctx.long_period && ctx.branch.lp_even)
+    h = std::fabs(lp_node_time(ctx.branch, a.index + dir) - a.t);  // nodes even in s (SPEC 16.10)
+  else if (ctx.long_period)
     h = long_period_step(ctx);
   else
     h = averaged_step(ctx, a.y[kN]);
@@ -6084,7 +6128,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   const XpSat* nominal = cov_bank_anchor();
   s.ctx.branch = nominal != nullptr && nominal != &s ? nominal->ctx.branch
                  : g_branch_pin != nullptr          ? *g_branch_pin
-                                                    : branch_of(n0, e.eo, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0);
+                                                    : branch_of(n0, e.eo, s.ctx.selected_terms.tesseral > 0 || s.ctx.selected_terms.zonal > 0, e.xmo);
   s.ctx.long_period = s.ctx.branch.long_period;
   const int8_t res = s.ctx.branch.resonance;  // the epoch class (SPEC 6 bands)
   s.ctx.resonance = res;
@@ -7326,9 +7370,12 @@ inline bool mean_at_cov_pair_lp(const XpSat& s0, XpSat& sp, XpSat& sm, double t,
     return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
   }
 
-  const double h_step = dir * long_period_step(s0.ctx);
+  // the pair's step: the regime's, or with nodes even in s (16.10) the following node's time (a path above e0 0.3 does not
+  // take: drag_pass)
+  double h_step = dir * long_period_step(s0.ctx);
   Node nxt_p{}, nxt_m{};
   for (;;) {
+    if (s0.ctx.branch.lp_even) h_step = lp_node_time(s0.ctx.branch, cur_p.index + dir) - cur_p.t;
     nxt_p.index = cur_p.index + dir;
     nxt_m.index = cur_m.index + dir;
     if (rk3_cov_pair_lp(s0, sp.ctx, sm.ctx, cur_p, cur_m, h_step, nxt_p, nxt_m) != 0) {

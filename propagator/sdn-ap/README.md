@@ -472,7 +472,7 @@ Without the tesseral terms it costs 0.3 to 0.4 times.
 ## SGP4XP status
 
 `src/xp_theory.inc` is the semi-analytic theory of SPEC.md (side A, closed-modules main ef9e2169): six mean equinoctial elements
-integrated on an epoch-anchored grid (two mean periods, or 95 min at epoch periods of 1100 min and up; 38 min for AP with selected gravity replacements in the epoch one-day class; for an AP set above e0 0.3 in that regime at most 0.5 (1 - e0)^1.5 / n0, SPEC 16.10) by the
+integrated on an epoch-anchored grid (two mean periods, or 95 min at epoch periods of 1100 min and up; 38 min for AP with selected gravity replacements in the epoch one-day class; for an AP set above e0 0.3 in that regime nodes even in the epoch orbit's eccentric anomaly at a mean step of 0.85 times that, SPEC 16.10) by the
 third-order Runge-Kutta step with its fallbacks, cubic Hermite between nodes, Brouwer J2 short-periodics to TEME.
 
 | SPEC | state |
@@ -620,6 +620,14 @@ From 0.6.16 an AP set in the long-period regime above e0 0.3 steps at most half 
 0.5 (1 - e0)^1.5 / n0: 8.2 min on a THEMIS-like orbit (e 0.82), where the 38-minute step left 174 m of the theory's own
 integration error at day 5 (0.08 m now), and 919 m against FFM model truth with the Sun and Moon (123 m now; SPEC 16.10,
 `test/long-period-perigee-step.e2e.mjs`, stack #445). Sets at e0 0.3 and below are unchanged.
+From 0.6.NN those sets keep that node count and spread it along the orbit: the nodes are even in s = E - 0.5 e0 sin E, the
+eccentric anomaly of an orbit of half the eccentricity, so the step is about 0.3 of the mean at perigee and 1.3 at apogee on
+a THEMIS-like orbit. Against a uniform fine step at 60 s, the worst over four Sun and Moon geometries falls:
+- near perigee, from 0.79 to 0.36 m on the THEMIS-like orbit, from 30.7 to 5.8 m on a Chandra-like one and from 7.5 to 2.4 m
+  on a TESS-like one;
+- at its largest, from 1.82 to 1.08 m, from 50.2 to 8.9 m and from 11.0 to 4.4 m.
+
+The cost is no more than 0.6.20's (SPEC 16.10, stack #450).
 
 When the local Hansen expansion is selected (SPEC 6.4), the original AP resonance coefficients are exact at the epoch eccentricity
 to numerical-integral precision and third order within |de| <= 0.02. Measured per-term relative truncation
