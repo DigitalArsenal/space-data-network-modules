@@ -125,6 +125,7 @@ inline int64_t sp_anchor_point(const SpAnchor& an, double t, double tol_a, doubl
 /// 48 to 68 m, to degree 7 24 to 42 m, to degree 12 21 to 37 m, with the near-resonant terms 15 to 20 m.
 struct Terms {
   int tesseral = 0, zonal = 0;
+  bool solid_tides = false;  ///< SPEC 16.14: the solid Earth tide in the rates (with the gravity terms only)
 };
 inline Terms& active() {
   static Terms t;

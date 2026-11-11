@@ -1,10 +1,13 @@
 # sdn-ap-propagator
 
-Version 0.6.19 (dist 4e28bda5).
+Version 0.6.20 (dist 5a7fa01f).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
-atmosphere and gravity terms; SPEC 15, 16).
+atmosphere, gravity terms and solid Earth tide; SPEC 15, 16).
+When you fit real data with AP, state `FORCES.SOLID_TIDES = IERS_2010` beside the gravity terms: the Earth has the solid
+tide, and without it AP's error on a low orbit after a 72 h fit is about twice as large at day 5 against a numerical
+propagator that carries it (SPEC 16.14).
 An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
 `ElementRow` of theory 16 are refused.
 
@@ -86,8 +89,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
   KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
   averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
-  below) and AP's gravity terms (SPEC 16, below), on `fit` ECOM2's Y0 (SPEC 16.13, below), and any other FORCES field
-  is refused by name. INTEGRATOR is refused
+  below) and AP's gravity terms (SPEC 16, below), on `fit` the solid Earth tide (SOLID_TIDES, SPEC 16.14, below) and
+  ECOM2's Y0 (SPEC 16.13, below), and any other FORCES field is refused by name. INTEGRATOR is refused
   (the averaged theories integrate on their own grid), EVENTS when not empty. FIT (every field) and OUTPUT (TEME,
   GCRF or EME2000, at most 500,000 states) apply with their documented ranges; FIT.DRAG_PRIOR_FORM and SRP_PRIOR_FORM
   LOG_NORMAL need their prior (HAS_SIGMA true, the MEAN its median > 0), refused by name without it.
@@ -203,6 +206,19 @@ terms of q != 0: after a 72 h fit, 2.3 to 5.9 km along-track at day 7 at e 0.25,
 rev/day, 220 m at 8 (the 8:1 resonance's shoulder) and 159 m at 6 rev/day e 0.35; orbits off those bands fly the same bytes.
 The exact resonance (an order-m term slower than 1e-3 n, 8.05 rev/day at e 0.25: 1.27 km) is not carried. SPEC 16.11 has the
 table; `test/class0-commensurability.e2e.mjs` pins it.
+
+## The solid Earth tide (SPEC 16.14; `fit` and every flight)
+
+From 0.6.20, `fit` under `$PCF` FORCES.SOLID_TIDES IERS_2010 (with the gravity terms) puts the solid Earth tide in AP's theory: the
+degree-2 tide the Moon and the Sun raise, with the Love numbers of IERS 2010 per order and its frequency-dependent
+diurnal band, the same field and model FFM reads. Averaged over the orbit it has a closed form, added to the mean-element
+rates at every step; nothing is added at output time. The record states PERTURBATIONS.SOLID_TIDES_MODEL "IERS 2010" and
+every flight reads it there. NONE, the default on the wire, leaves the tide out; an AP set with gravity terms fitted
+without it says so in its OD COMMENT, and flies as before, bit for bit. On model truth (16 low orbits, 690 to 1,490 km,
+FFM with the tide), the median day-5 error after a 72 h fit is 68.3 m without the term and 28.3 m with it (28.5 m with
+no tide on either side); after a 24 h fit 64.0 and 48.1 m (48.2 m). On medium, geostationary and eccentric orbits the
+tide moves the day-5 error of a 72 h fit by 0.07 to 6.5 m and the term carries it to within 0.03 m. The stated covariance does not
+shrink. E2E: `test/solid-tides.e2e.mjs`.
 
 ## The radiation term Y0 (SPEC 16.13; `fit` and every flight)
 
