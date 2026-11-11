@@ -3314,9 +3314,14 @@ with the terms held at the truth's, day 7 is 1.5 to 2.8 m on geostationary and i
 71 to 140 m for the Y0-only fit; under the rule 2.5 to 12.4 m. `test/radiation-b1.e2e.mjs` (2026-10-01, i 0.05 and
 55 deg, B1 cos 8e-9 and B1 sin 4e-9): fitted with the truth's terms stated (B1 held, Y0 and AGOM solved), day 7 is 7.7
 and 9.3 m, against the sphere record's 9.3 and 4.7 m on the sphere truth; under the rule B1 sin comes within 0.03e-9 of
-the truth's and day 7 is 9.3 and 11.4 m, against 188 and 934 m without FORCES.ECOM2. Real 72 h rows against the Y0-only fit (within 100 m of
-FFMq at day 5): geostationary 28 to 32 of 32 (C020 1 to 5 of 5; day-5 median 26.0 to 16.8 m), inclined geosynchronous
-59 of 59 (6.7 to 5.1 m), Galileo 42 of 42 at 72 h and 24 h byte for byte (B1 solved on none).
+the truth's and day 7 is 9.3 and 11.4 m, against 188 and 934 m without FORCES.ECOM2.
+
+Real 72 h rows against the Y0-only fit (within 100 m of FFMq at day 5): geostationary 28 to 32 of 32 (C020 1 to 5 of
+5; day-5 median 26.0 to 16.8 m), inclined geosynchronous 59 of 59 (6.7 to 5.1 m), Galileo 42 of 42 at 72 h and 24 h
+byte for byte (B1 solved on none). B1 is solved on 20 geostationary windows and 14 inclined geosynchronous ones. Day 5
+is worse on 5 of the geostationary windows with no burn in them, by 0.2 to 17.7 m; the largest is one window that goes
+from 24.8 to 42.5 m, still within 100 m. The cause is not established (stack #457). None of the inclined geosynchronous
+windows is worse.
 
 **16.15 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
 `sun_at`). Every AP path reads its own (`ap_bodies_at`, src/ap_bodies.inc): the rates in both regimes, the output-time
