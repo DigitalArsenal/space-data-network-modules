@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Its read windows' scores carry the rotation of the pinned foundation/frames 0.2.0 (its TEME, DigitalArsenal/
-// spacedatanetwork-stack#389) at the object's radius: the module's TEME output reaches the truth's GCRF through it (#386
-// moves the scoring to the module's own GCRF).
+// Its read windows are scored on each module's own GCRF output since 2026-11-10 (#386); the old path (TEME through the
+// pinned foundation/frames 0.2.0, whose TEME is not the standard one, #389) is printed and held to the same rule beside it.
+// The rule compares two builds on one path, so no bound moved. The TEME output through this checkout's foundation/frames
+// 0.3.0 lands within 1 mm of the module's GCRF output.
 // Registration (2026-11-03): the 12-hour class's tesseral terms on an Etalon-like synthetic orbit (n 2.13 rev/day,
 // e 0.0007, i 64.9 deg, node 0, 90, 180 and 270 deg) with no Sun or Moon: FFM EGM96 70x70 without third bodies against
 // a test build of this module with both mass ratios 0 (tesseral 31, zonal 20; 72 h fits, 7 days flown hourly).
@@ -77,7 +78,8 @@ const rows = (await Promise.all(['GD', 'IG', 'GE'].flatMap((group) => Array.from
   });
   worker.on('error', reject);
 }))))).flat().sort((a, b) => a.key.localeCompare(b.key));
-const d3 = (a) => (a?.ok && a.days['3'] ? 1000 * a.days['3'].e : null);
+// #386: days, the modules' own GCRF output (the score); daysOld, the old path (TEME through the pinned frames 0.2.0)
+const d3 = (a, field = 'days') => (a?.ok && a[field]?.['3'] ? 1000 * a[field]['3'].e : null);
 const f3 = (key) => d3(ffm.get(key)?.arms.F72);
 const both = (r) => !r.error && d3(r.arms[0]) !== null && d3(r.arms[1]) !== null;
 const objectOf = (r) => r.key.split('|')[1];
@@ -85,14 +87,20 @@ const etalon = {}, others = {};
 for (const name of ['ETALON 1', 'ETALON 2']) {
   const v = rows.filter((r) => r.group === 'GD' && objectOf(r) === name && both(r) && f3(r.key) !== null);
   for (const r of v) console.log(JSON.stringify({window: r.key, ffmMeters: f3(r.key), beforeMinusFfm: d3(r.arms[0]) - f3(r.key), afterMinusFfm: d3(r.arms[1]) - f3(r.key)}));
-  etalon[name] = {n: v.length, beforePairedMinusFfmMeters: median(v.map((r) => d3(r.arms[0]) - f3(r.key))), afterPairedMinusFfmMeters: median(v.map((r) => d3(r.arms[1]) - f3(r.key)))};
+  etalon[name] = {n: v.length, beforePairedMinusFfmMeters: median(v.map((r) => d3(r.arms[0]) - f3(r.key))), afterPairedMinusFfmMeters: median(v.map((r) => d3(r.arms[1]) - f3(r.key))),
+    oldPath: {beforePairedMinusFfmMeters: median(v.map((r) => d3(r.arms[0], 'daysOld') - f3(r.key))), afterPairedMinusFfmMeters: median(v.map((r) => d3(r.arms[1], 'daysOld') - f3(r.key)))}};
 }
 for (const [name, pick] of [['LAGEOS 1', (r) => r.group === 'GD' && objectOf(r) === 'LAGEOS 1'], ['LAGEOS 2', (r) => r.group === 'GD' && objectOf(r) === 'LAGEOS 2'],
   ['LARES-2', (r) => r.group === 'GD' && objectOf(r) === 'LARES-2'], ['IG', (r) => r.group === 'IG'], ['GE', (r) => r.group === 'GE']]) {
   const v = rows.filter((r) => pick(r) && both(r));
-  others[name] = {n: v.length, beforeMedianMeters: median(v.map((r) => d3(r.arms[0]))), afterMedianMeters: median(v.map((r) => d3(r.arms[1])))};
+  others[name] = {n: v.length, beforeMedianMeters: median(v.map((r) => d3(r.arms[0]))), afterMedianMeters: median(v.map((r) => d3(r.arms[1]))),
+    oldPath: {beforeMedianMeters: median(v.map((r) => d3(r.arms[0], 'daysOld'))), afterMedianMeters: median(v.map((r) => d3(r.arms[1], 'daysOld')))}};
 }
-const summary = {synthetic, exploratory: {etalon, others}};
+// the module under test (the last arm) is held to 1 mm; the earlier builds (per-state matrix, gmst()'s rounding: up to
+// 1.5 mm at the geostationary radius, SPEC 16.4) are printed
+const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(-1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(0, -1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+const summary = {synthetic, exploratory: {etalon, others, frames030Meters, frames030MetersEarlierBuilds}};
 console.log(JSON.stringify(summary));
 if (process.env.SDN_AP_TWELVE_HOUR_REPORT) fs.writeFileSync(process.env.SDN_AP_TWELVE_HOUR_REPORT, JSON.stringify(summary, null, 2) + '\n');
 if (!process.argv.includes('--measure')) {
@@ -100,7 +108,11 @@ if (!process.argv.includes('--measure')) {
     assert.ok(s.days[7].crossTrack < 5, `node ${s.raan}: day-7 cross-track RMS ${s.days[7].crossTrack} m under 5 m`);
     assert.ok(s.days[7].alongTrack < 10, `node ${s.raan}: day-7 along-track RMS ${s.days[7].alongTrack} m under 10 m`);
   }
-  for (const [name, v] of Object.entries(others)) assert.ok(v.afterMedianMeters - v.beforeMedianMeters <= 1, `${name}: median day-3 error at most 1 m above 0.4.8's`);
+  for (const [name, v] of Object.entries(others)) {
+    assert.ok(v.afterMedianMeters - v.beforeMedianMeters <= 1, `${name}: median day-3 error at most 1 m above 0.4.8's`);
+    assert.ok(v.oldPath.afterMedianMeters - v.oldPath.beforeMedianMeters <= 1, `old path: ${name}: median day-3 error at most 1 m above 0.4.8's`);
+  }
+  assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
   reproduceConformance();
   console.log('twelve-hour class terms E2E: PASS');
 }
