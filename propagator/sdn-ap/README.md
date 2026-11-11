@@ -318,6 +318,17 @@ SGP4XP) is fitted. On its 32 windows AP's median |z| at days 1, 3, 5 and 7 goes 
 orbit, geosynchronous and HEO keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the
 selection.
 
+Under the drag the formal sigma of ln BTERM is overconfident. On the headline-loop windows the 72 h fits sit 2.7 to 11
+stated sigmas from the numerical propagator's fitted term at the median (stack #463, #471). In the strong-drag class
+(an AP set with its perigee under 600 km, 24 h and 72 h arcs, NRLMSISE-00 on the default drag prior; SPEC 12.8 "The
+strong-drag class") the record states the arc's information on ln BTERM over m^2 (m 9.22 and 14.5), combined with the
+prior's, as a rank-1 update along BTERM's column, so the forecast maps it, and s_d takes the class's share (0.126 and
+0.163). On Swarm and GRACE-FO the ln BTERM figures go from 101 to 118 windows beyond 3 sigma to none, at 0.94 to 0.96
+coverage. The in-track forecast moves toward the band at every lead: the 72 h fits' coverage goes from 0.78 to 0.83 to
+0.85 to 0.91 (all windows, the burns included: 0.74 to 0.76 to 0.82 to 0.86). Every state and every other record is
+bit for bit. At 600 to 2,500 km the covariance is unchanged for now: there the spheres' width is the DRAG row's s_l,
+and no share c removes it. `test/drag-term-strong-drag-class.e2e.mjs` holds the rule.
+
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
 Held-out laser-ranged truth (ILRS combination orbits for LAGEOS and Etalon, NSGF arcs for the LEO set; GCRF): each
