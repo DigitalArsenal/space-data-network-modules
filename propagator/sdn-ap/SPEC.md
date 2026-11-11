@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.27 (dist af2eb204).
+Version 0.6.32 (dist 1752ddbe).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1524,6 +1524,65 @@ The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the r
 15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
 against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
 grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
+
+The pool and the memory (stack #487). A threaded batch grows nothing, and a pool thread uses no page it does not see.
+- Before the batch the calling thread makes its room. The reserve is 128 KiB for each AP row whose set holds no caches,
+  at most the pool's free budget plus 1 MiB, plus 8 MiB. The calling thread then publishes the memory's size and sets
+  the rule that nothing grows. Only then does it store the batch's chunk total and wake the pool threads.
+- Inside the batch, sbrk refuses every growth on every thread.
+  - A set refused its caches flies on the thread's caches, with the same states.
+  - A row that a refusal stopped is computed again by the calling thread after the batch, in row order.
+- A pool thread runs a chunk only once its own memory.size covers the size published for the batch. Its claim read the
+  batch's total, which was stored after that size, so it reads that size.
+- Outside a batch only the calling thread grows the memory, so its view is its own. The one exception is a pool
+  thread's once-per-thread caches, made as it starts, one thread at a time. That thread publishes its size, and the
+  calling thread goes on once its own view covers it.
+- sdnap_pool_stats counts the batches, refusals, deferred rows, batches that grew inside (0) and the view waits.
+
+Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-threads glue:
+- A thread can trap (memory access out of bounds) when it bulk-fills or bulk-copies a block in pages another thread has
+  just grown. Its memory.size still reads the older size, and the bulk instruction is checked against that size. Plain
+  loads and stores of the same pages succeed.
+- This was reproduced outside the propagation code, with only the allocator, memset, memcpy and pthreads (#487).
+- In the pool it happened in two ways:
+  - threads grew the memory inside a batch: 0.6.20 failed 8 of 30 runs of the threaded test, and 0.6.21 failed 4 of 40;
+  - the chunk total was stored before the room was made. A thread that woke late for one batch then claimed a chunk of
+    the following batch while the calling thread grew the memory for it.
+- The pool's own stress shows the second way. In it the calling thread grows the memory before every batch, and every
+  chunk fills blocks in the new pages (4 threads, 3,000 batches a process, fresh processes one at a time):
+  - It needs an oversubscribed machine: a pool thread descheduled between its claim and its fill. On an idle machine
+    (load about 6 to 12 on 28 cores) neither order trapped, 0 of 100 processes each.
+  - With 40 busy threads beside it (load about 50), the total stored first trapped 98 of 100 processes, and stored last
+    0 of 100.
+  - The same split had shown under other sessions' load earlier: 15 of 20 against 0 of 20.
+- A host call or a grow of zero pages on wake did not prevent it: the late thread made that call on its wake for the
+  earlier batch, before the growth it then used.
+- The view wait:
+  - In the loaded campaign it waited in 98 of 100 processes, 318 times, never more than one yield.
+  - The waits at a thread's start count too: the calling thread grows the memory for a new thread's stack just before
+    the thread first runs.
+- This is the engine's behavior as measured, not a guarantee read in the standard. test/pool-growth.e2e.mjs runs the
+  stress, 20 processes, in every suite. With SDN_AP_POOL_GROWTH_LOAD=1 it loads the machine itself (busy threads, twice
+  the cores, at the lowest priority), so that it can fail. Without that, the default, it can fail only on a machine
+  that is busy already.
+
+The timer.
+- A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
+  last chunks without one completing. The pool is then not used again, and later batches run on the calling thread.
+- It is a count of the calling thread's polls, not wall time. The module imports no clock (loaders that build their own
+  import objects give none), and the calling thread may be a browser's main thread, which may not block on a timed
+  wait.
+- The fastest rate measured here was 2.1e9 polls a second, so 2^37 polls are 65 s, about twice the 30 s aimed at. The
+  loop then makes one poll in about one and a half clock cycles, so this machine cannot poll much faster. On a slower
+  or busier machine the count takes longer, and a suspended process does not count.
+- Starting a thread, the calling thread waits at most 2^34 yields for its own view: 89 s at the 1.9e8 yields a second
+  measured here.
+- test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks that a
+  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because chunks keep completing.
+- A trapped thread therefore no longer leaves the calling thread waiting forever: in the stress, every trapped process
+  returned the error.
+- What the timer does not cover: a thread that traps while holding the allocator's lock or a set's lock still stops any
+  thread that then waits for that lock.
 
 What the caches cost in accuracy. The reference is a build of this module's own sources that bakes every evaluation cache
 at the state itself on every call: the tesseral base, ae, pe and resonance bakes and the m-daily terms, with the
@@ -3086,8 +3145,9 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
 
-Which slow terms the grid keeps (from 0.6.24, in the one-day class, every slow term the class's rates do not carry, down to
-the floor of 1e-2 n; stack #467) is 16.18's rule; its reasons and measurements are stated there.
+Which slow terms the grid keeps is 16.18's rule; its reasons and measurements are stated there. From 0.6.28 it keeps none: every
+class above its switch carries its slow terms of degree 2 to 12 in its rates (stack #473). From 0.6.24 to 0.6.27 the one-day
+class kept every slow term its rates did not carry on the grid, down to 1e-2 n (stack #467).
 
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
@@ -3113,7 +3173,22 @@ grid (e 0.1 and 0.2, tesseral degree 31) is that of 0.6.12 within 5 %. Through 0
 stepped at every node: kinks about 80 s apart near perigee, where the nodes pass fastest. On the transfer orbit with drag
 off the jump detector within 10 min of perigee read 0.395 m at 10 s and 0.031 m at 1 s; it now reads 0.032 m and 0.8 mm
 (stack #420; `test/egrid-continuity.e2e.mjs`). A grid is built at the set's mean elements at every 48 hours from its epoch
-(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval. A grid
+(the same nodes for every set of a fit) and blended linearly into the next node's over the last fifth of each interval.
+
+*The grid's mean motion in the long-period regime.* From 0.6.30 (stack #479), an AP set in the long-period regime (epoch period
+1,100 min or more) with the Sun and Moon builds every node's grid at its epoch mean motion. It reads every grid with the
+epoch's offset in a: none on its own grids, and its own epoch's a for a copy that reads its nominal's grids. Each node's e and i,
+and the state's offsets in them, are as before. There the bodies act on the mean elements as point masses (5), so the mean
+motion moves along each revolution, by up to 4e-4 of n at a = 114,000 km (the energy relation, the Moon at one cutoff). A
+family's divisor k - nu (nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, about 4.4 m on that orbit) moves by m x 4.4
+times as much. That is as large as a near-resonant family's distance from resonance: m = 7 lies 0.03 from j = 31, m = 9 lies 0.10
+from j = 40. Through 0.6.29 every node was built at the mean motion of its instant and every state offset in a from its own
+mean a, so the grid followed that oscillation. Measured on 0.6.26 with the change alone: on a synthetic set at e 0.9 with perigee 5,000 km (i 70), with AP fitted to
+the numerical forecast over 0 to 120 h and the Moon on both sides, the field 70 x 70 against AP's degree 31 gave 3,717 m. With no
+tesseral term at all AP gave 1,175 m, and with the zonal field and the Moon alone on both sides 864 m. With the mean motion
+held it gives 970 m. With it held, the cadence no longer matters: nodes every 6 h, every 48 h, and one node for the whole
+flight give 971, 970 and 981 m. Rebuilding more often at the instant's mean motion helped only part way (2,436 m every 6 h,
+2,426 m every hour). Every other set is bit for bit: the averaged regime, AP without the Sun and Moon, and SGP4XP. A grid
 is keyed by its set's exact elements (bitwise n, e, i, the class and the degree): a lookup matches only that key, and a grid held
 from an earlier call is the same bytes a rebuild gives. A copy initialized while its nominal set's xpt::GridShareScope lives (the
 covariance's sigma sets, a fit iteration's perturbed copies) reads the nominal's grids, its schedule nodes included, linearly, when
@@ -3934,7 +4009,8 @@ A term is slow when |psi-dot| < 0.045 n (`kShallowBand`). For each (l, m, p) the
 each term is classified by its own rate, not by its family's q = 0 rate.
 
 *Where a slow term belongs.* At output, a term's mean-motion response is an along-track term in 1 / psi-dot^2 with a fixed
-divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node.
+divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node
+(at the epoch's mean motion in the long-period regime with the Sun and Moon, from 0.6.30).
 That is exact to first order while psi-dot holds still and stays well above the libration rate of the term's own resonance.
 Where the rate holds still the two forms agree. At 550 km beside 15:1 (i 87.35, gravity alone, the elements fitted and the
 coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h and 72 h fits:
@@ -3944,24 +4020,25 @@ coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h an
 A term whose rate does not hold still belongs in the rates:
 - in low orbit, where drag moves n, and moves a k:j family's rate by j times as much, through the band and through zero.
   There the acceptance is a decaying orbit that crosses a band edge with no kink in its output (stack #477);
-- above the switch, a term slower than its class's floor, where it drifts about as slowly as the class's own libration (the
-  one-day class below; stack #474).
+- above the switch, every slow term (from 0.6.28; stack #473, #474, below). There the Sun and Moon move omega and Omega on a
+  high orbit as fast as J2 does, while the grid takes a term's divisor from J2's secular rates. A term under the one-day
+  class's floor drifts about as slowly as the class's own libration.
 
 *The diagnostic.* `sdnap_slow_terms(in, rows, max_rows)` takes in = the mean motion (rev/day), e, i (deg) and the tesseral
 cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to the cap:
 - l, m, p, q and psi-dot / n;
 - the term's carrier (the table below);
-- the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch no taper applies, so
-  w is 1 for the class's terms and 0 otherwise;
+- the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch w is 1 for the class's
+  terms and, from 0.6.28, the band taper of its own rate for every other term in the rates (the grid holds 1 - w);
 - the term's size in m. That is its along-track amplitude through the mean motion, 3 |j| A / (a psi-dot^2), with
   A = mu / a^(l+1) |F G| |C, S| at the epoch elements and G exact at the epoch e. A size cut is chosen on this number.
 
 | Code | Carrier |
 | ---: | --- |
-| 1 | the rates: the class's terms (6.1), the half-day class's tail (16.2), the shallow set (16.2) |
+| 1 | the rates: the class's terms (6.1), the half-day class's tail (16.2), the shallow set (16.2), and from 0.6.28 above the switch every other slow term at or above the size cut (below) |
 | 2 | the grid (16.11) |
 | 3 | the output table (16.2) |
-| 0 | nowhere: under the floor, or left out of the grid as slow |
+| 0 | nowhere: under the low table's floor (through 0.6.27, above the switch: under the one-day floor, or left out of the grid as slow) |
 | 4 | nowhere: above the carrier's degree |
 | 5 | nowhere: under the size cut |
 | 6 | nowhere: a q outside the rule's q range, at or above the size cut |
@@ -3984,10 +4061,10 @@ above their eccentricity switch outside low orbit (class 0 below 1100 min), and 
 - the terms of degrees 3 and 4 with |q| above 4, large at high e.
 
 A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at day 5 on THEMIS A's real geometry, whose
-angle drifts at 0.0444 n. A set just above the cut kept them. From 0.6.24 each term of a one-day set above the switch is
-carried in exactly one place:
+angle drifts at 0.0444 n. A set just above the cut kept them. From 0.6.24 to 0.6.27 each term of a one-day set above the
+switch was carried in exactly one place (from 0.6.28 the rule for every class below replaces it):
 - the class's rates: its 27 terms;
-- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster (`kOneDayFloor`);
+- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster;
 - nowhere: a term slower than 1e-2 n (the floor below), and the terms above degree 12 (the table holds no near-resonant
   terms outside low orbit).
 
@@ -4018,6 +4095,43 @@ and 120 deg; 70 x 70, no Sun or Moon, day 5) hold 98 terms of degree 2 to 12 bet
 On the THEMIS-like sets and on the one-day set at e 0.3001 no term of degree 2 to 12 lies between the two floors. What the
 floor and the degree cut leave out on such a synchronous set (105 m and 42 m, against 2.7 m and 2.1 m with a 4 x 4 field) is
 stack #474.
+
+*Every class above its switch (from 0.6.28; stack #473, with #474's floor).*
+- **The rule.** Every set above its eccentricity switch outside low orbit carries in its rates each slow term of degree 2 to
+  the grid's degree (12) that its class's terms do not, at or above the size cut of 0.5 m. In the code that is
+  `slow_terms_wide` and `wide_slow_six`.
+  - The rates are Lagrange's equations at the current elements, with F G at the epoch's e and i moved linearly.
+  - Each (j, m, w) is weighted by the band taper of its own rate. The grid holds the rest of each harmonic.
+  - The diagnostic writes code 1 with that weight, 5 under the size cut, and 4 above degree 12.
+- **Before 0.6.28.** The grid left each family's whole slow band out in every class but the one-day class, and nothing else
+  carried it. The one-day class kept the band on the grid down to the floor, and that floor and the terms under it are gone.
+- **Why the rates and not the grid.** The rates follow a term's angle with the flight's own elements. A term kept on the grid
+  takes its divisor from J2's secular rates, and on a high orbit the Sun and Moon move omega and Omega as fast as J2 does.
+  Keeping the band on the grid down to 1e-2 n took e 0.9 at 0.50 rev/day from 2.7 to 1.6 km with the field alone, but from
+  1.7 to 25 km with the Sun and Moon.
+- **Double precision.** At high degree and eccentricity the terms' F G and F dG/de leave a float's range, so the table is in
+  double.
+- **Degree 12.** The list stops at the grid's degree. Above degree 12 nothing carries a family's fast harmonics, and its slow
+  harmonics alone put the transfer orbit below at 165 m (to degree 31) and 186 m (to degree 70), against 134 m.
+
+**What the rule changes.** The numerical propagator (FFM 2.3.0, DE440s) is flown from each case's state, and AP is fitted to
+its own 0 to 120 h. D is the largest distance over that span, in m. Constant weather; the truth's drag and radiation terms
+are held at the truth's values.
+
+| Case (stack #498's elements) | 12 x 12 alone | 70 x 70 alone | everything | everything, 0.6.28 |
+| --- | ---: | ---: | ---: | ---: |
+| e 0.9, perigee 300 km, 0.50 rev/day | 2,710 to 189 | 2,770 to 176 | 1,690 | 1,490 |
+| e 0.9, perigee 1,400 km, 0.40 rev/day | 4,290 to 136 | 4,280 to 139 | 4,226 | 5,167 |
+| one-day, exactly synchronous (1.0027 rev/day, e 0.82) | 1,020 to 49 | 1,000 to 109 | 990.5 | 106.6 |
+| transfer orbit (250 km, e 0.73) | 29 to 22 | 98.8 to 95.0 | 134.1 | 128.6 |
+| e 0.7, perigee 650 km (eight-hour class) | 46.3 to 46.4 | 144.5 | 155.5 | 155.6 |
+| Molniya | | | 34.3 | 34.3 |
+
+On the e 0.9 case at 1,400 km the rule takes the field alone from 4.3 km to 139 m. With the Sun and Moon it is 0.9 km worse:
+that piece is the grid of the fast families under the Sun and Moon (stack #479).
+
+`test/slow-band-every-class.e2e.mjs` checks one set of each class with `sdnap_slow_terms`, and flies one model truth at e 0.9
+(0.40 rev/day, fitted to its own 5 days): 242.7 m against 2,691.4 m before.
 
 *The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
 - in low orbit (class 0 below 1100 min), through 0.6.24: the commensurabilities with j of 2 to 4 (orders 25 and up) and the
@@ -4131,6 +4245,110 @@ q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term
 `test/slow-set-partition.e2e.mjs` compares it row by row with the rule written in the test. `test/slow-set-taper.e2e.mjs`
 flies a decaying orbit whose order-15 family's weight moves from 0.90 to 0.63 over 7 days. The 10 s jump detector reads at
 most 0.008 m (bound 0.08 m), and 400 states come out bit-identical in any order of requests.
+
+**16.19 The Sun and Moon of the long-period regime through the output.** In the long-period regime the bodies enter the
+rates as point masses: the Gauss equations at the mean state, with the bodies' acceleration at the mean position (5). AP's
+output then adds section 8's J2 short-period map to those mean elements. So the bodies' rates moved AP's osculating state
+by the map's Jacobian times the rates as well, a velocity of the order of J2 times the bodies' own effect on the elements, at
+once. On a synthetic set at e 0.9 with apogee 305,000 km (perigee 10,000 km, i 70), AP with J2 and the Moon diverged from
+AP with J2 alone at 2.8 mm/s from the first minute, where the numerical propagator's two flights start together: after 1 min,
+0.242 m against 0.073 m. From 0.6.29, an AP set above e 0.3 in the long-period regime takes as the bodies' rates of its
+mean elements y the solution m of J m = (0, a): J is the Jacobian of section 8's output (position and velocity, km and km/s)
+in the six elements by forward differences (steps 1e-7, and 1e-7 n for n, every column's Kepler equation started from the
+base's eccentric anomaly), and a is the Sun's and Moon's point-mass acceleration at the output's position. Gaussian
+elimination with partial pivoting solves it; where the output or the solve fails, the Gauss equations remain. The rates
+then move the J2 output by the bodies' acceleration and nothing else, to first order.
+
+AP's Moon signal (each side's flight with J2 and the Moon less its flight with J2 alone, no fit, 120 h; J3 to J5 and the
+Sun's mass zero in the builds), against the numerical propagator's:
+
+| synthetic set | the Moon's signal at 120 h | error before | error from 0.6.29 |
+| --- | ---: | ---: | ---: |
+| e 0.9, perigee 5,000 km, i 70 | 1,811 km | 627 m | 28 m |
+| e 0.9, perigee 10,000 km, i 70 | 3,202 km | 622 m | 43 m |
+| e 0.5, perigee 35,786 km, i 20 | 868 km | 34 m | 27 m |
+| TESS-like (e 0.55, perigee 102,000 km) | 2,133 km | 9 m | 8 m |
+| e 0.3, perigee 35,786 km, i 55 | 90 km | 34 m | 36 m |
+| geosynchronous, e 0 | 9 km | 3 m | 2 m |
+
+The effect is large only where the J2 map is large against the bodies' pull, a low perigee under a high apogee. At e 0.3 and
+below it is a few meters while the Jacobian costs about 3 us a state on a geosynchronous flight, so below e 0.3 the Gauss
+equations stay, bit for bit. AP fitted to the numerical forecast over 0 to 120 h, J2 and the Moon on both sides: 862 m to
+453 m (perigee 5,000 km) and 825 m to 353 m (perigee 10,000 km), against 459 m and 360 m with J2 alone. SGP4XP is unchanged.
+`test/long-period-moon-output.e2e.mjs` records AP fitted over 5 days to that case on the zonal field to degree 5 with the Sun
+and Moon (FFM): D 343.8 m on 0.6.26, 255.8 m from 0.6.29.
+
+**16.20 The field's census** (from 0.6.32; stack #503). The rule: every tesseral term of the field whose effect on position reaches the
+size cut is carried exactly once, by the carrier its rate gives it, in every class, on both sides of every switch.
+`sdnap_field_census(in, rows, max_rows)` lists, for a set of epoch mean elements (in: mean motion in rev/day, e, i in degrees,
+the record's tesseral degree, the size cut in m), every term (l, m, p, q) of the embedded field, order 1 to 70 and degree to
+70, with |q| up to 4 (8 up to e 0.3, 12 above), whose size reaches the cut.
+
+The census builds the set as a flight builds it (`ap_init`, the slow set on). It then reads each carrier's own tables:
+- the rates: the shallow and slow list, with each term's band taper at the epoch; the class's terms; the half-day and one-day
+  tails;
+- the output table: each entry's weight, its coefficient over the term's F;
+- the m-daily family, to its degree;
+- the family grid: the share it keeps, 1 minus `wide_left_out`, the rule the grid is built on.
+
+*The size* is the output table's measure at full weight (16.1), with the eccentricity vector's part counted along track, twice
+its radial part:
+
+a A [|F G| (3 |j| / (a^2 psi-dot^2) + 2 (l + 1) / (n a^2 |psi-dot|)) + (2 |F dG/de| + |dF/di G|) / (n a^2 |psi-dot|)],
+
+with A = mu / a^(l+1) |C, S|. |psi-dot| is taken at least 2 / (5 days), since a slower term grows over the forecast and not
+past it. Through the mean motion it is the slow set's measure.
+
+Rows have ten doubles: l, m, p, q, psi-dot / n, the code, the rates' weight, all carriers' weight, the size, and the term's period in days (2 pi / |psi-dot|), so a carrier can be checked against the period directly.
+
+| Code | Carried |
+| ---: | --- |
+| 1 | once, by the rates |
+| 2 | once, by the grid |
+| 3 | once, by the output table |
+| 8 | once, by the m-daily family |
+| 11 | once, by the rates and the output table between them (the band taper) |
+| 12 | once, by the rates and the grid between them (the band taper, above the switch) |
+| 20 | nowhere: above the degree of the carrier that the term's rate gives it |
+| 21 | nowhere: under that carrier's rate floor, or in the slow band that the grid leaves out |
+| 22 | nowhere: outside that carrier's q (or j) range |
+| 23 | nowhere: under that carrier's own size cut |
+| 24 | partly nowhere: the weights sum to less than 1, and the share left out reaches the cut (a share under it counts as carried) |
+| 30 | twice: the weights sum to more than 1 |
+
+In the low table the carrier is the rates below 1.1 bands and the output table above.
+
+The census weighs every share at the epoch's elements, so it checks the partition at the epoch only. A shared term's weights
+need not sum to 1 later in a flight. The rates' shares (the shallow, slow and wide slow lists) follow the term's current rate.
+The output table's and the grid's are fixed when they are built: the table's at the epoch, the grid's at its node (in the
+long-period regime with the Sun and Moon, at the epoch's mean motion, 16.19).
+
+`test/field-census.e2e.mjs` sweeps the regime: 101 sets.
+- Low orbit: five heights, three inclinations, e 0 to 0.05.
+- Class 0 above its switch, to e 0.9.
+- The one-day, half-day, eight-hour and sixteen-hour classes on both sides of their switch, plus a THEMIS-like set.
+- The 1,100-minute limit.
+
+The test fails on any term carried twice, and on any term carried nowhere that is outside the known holes. Each known hole is
+named with the issue that closes it. A hole that no set of the sweep shows any more also fails the test, so it is removed when
+its fix lands. The holes, measured 2026-11-11 on 0.6.28 (terms over the sweep; the largest, in m over 5 days). From 0.6.28 the
+wide slow list carries every class's slow terms above the switch to degree 12, outside low orbit; the census's hole there
+went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit above the switch:
+
+| Hole | Issue | Terms | Largest |
+| --- | --- | ---: | ---: |
+| The low table: terms the output table holds by rate but not by degree (above 12; m-daily terms too) | stack #477 | 10,740 | 74 |
+| The low table: the taper's complement (1 - w) of a slow term above the output table's degree | stack #477 | 58 | 21 |
+| The low table: fast terms of \|q\| 2 or more (the output table holds \|q\| up to 1) | stack #503 | 2,436 | 15 |
+| A carrier's own size cut measures the term below the census (the output table counts the eccentricity vector's part radially; terms under 1 m) | stack #503 | 4,037 | 1 |
+| The low table: the slow set's cut misses a term's part through the inclination (dF/di) | stack #503 | 98 | 2.3 |
+| The one-day class above its switch: under its floor, or above the grid's degree | stack #474 | 456 | 73 |
+| Above the switch, every class: terms above the grid's degree 12 | stack #497 | 189,984 | 3,910 |
+| Above the switch, low orbit: slow terms the grid leaves out and no rate carries | stack #473 | 15 | 4,060 |
+| Outside the low table, below the switch: terms the output table's degree, q range or band floor leaves out and the class's rates do not carry | stack #511 | 406 | 91 |
+
+The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
+arc.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

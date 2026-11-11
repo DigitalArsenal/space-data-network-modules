@@ -23,7 +23,10 @@ const CLASS = [[2, 2, 0, 0], [2, 2, 1, 2], [2, 2, 2, 4], [3, 1, 0, -2], [3, 1, 1
   [3, 2, 2, 3], [3, 3, 0, 0], [3, 3, 1, 2], [3, 3, 2, 4], [4, 1, 0, -3], [4, 1, 1, -1], [4, 1, 2, 1], [4, 1, 3, 3], [4, 2, 0, -2], [4, 2, 1, 0],
   [4, 2, 2, 2], [4, 2, 3, 4], [4, 3, 0, -1], [4, 3, 1, 1], [4, 3, 2, 3], [4, 4, 0, 0], [4, 4, 1, 2], [4, 4, 2, 4]];
 const inClass = (r) => CLASS.some(([l, m, p, q]) => r[0] === l && r[1] === m && r[2] === p && r[3] === q);
-const expected = (r) => (inClass(r) ? 1 : r[0] > 12 ? 4 : Math.abs(r[4]) < 1e-2 ? 0 : 2);
+// from #473 the class's other slow terms of degree 2 to 12 are in the rates too, at or above the size cut (0.5 m)
+const expected = (r) => (inClass(r) ? 1 : r[0] > 12 ? 4 : r[7] >= 0.5 ? 1 : 5);
+// the rates' weight of a term the class does not carry: the band taper of its rate (the grid holds the rest)
+const taper = (x) => (x <= 0.9 ? 1 : x >= 1.1 ? 0 : Math.cos((0.5 * Math.PI * (x - 0.9)) / 0.2) ** 2);
 
 const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
 // a row (SPEC 16.18): l, m, p, q, psi-dot / n, carrier, the rates' weight w, the term's size (m)
@@ -40,22 +43,23 @@ for (const [name, el] of Object.entries(SETS)) {
   const rows = read(el);
   const wrong = rows.filter((r) => r[5] !== expected(r));
   const by = rows.reduce((o, r) => ({...o, [r[5]]: (o[r[5]] ?? 0) + 1}), {});
-  const grid = rows.filter((r) => r[5] === 2);
-  summary[name] = {slowTerms: rows.length, rates: by[1] ?? 0, grid: by[2] ?? 0, belowFloor: by[0] ?? 0, aboveDegree12: by[4] ?? 0,
-    gridDegree5Up: grid.filter((r) => r[0] >= 5).length, gridDegree3to4HighQ: grid.filter((r) => r[0] <= 4 && Math.abs(r[3]) > 4).length};
+  const others = rows.filter((r) => r[5] === 1 && !inClass(r));
+  summary[name] = {slowTerms: rows.length, rates: by[1] ?? 0, classTerms: rows.filter(inClass).length, underSizeCut: by[5] ?? 0, aboveDegree12: by[4] ?? 0,
+    ratesDegree5Up: others.filter((r) => r[0] >= 5).length, ratesDegree3to4HighQ: others.filter((r) => r[0] <= 4 && Math.abs(r[3]) > 4).length};
   console.log(JSON.stringify({[name]: summary[name]}));
   assert.equal(wrong.length, 0, `${name}: ${wrong.length} terms not where the rules put them: ${JSON.stringify(wrong.slice(0, 3))}`);
-  assert.ok(rows.filter((r) => r[5] === 1).every(inClass), `${name}: only the class's terms in the rates`);
-  const badW = rows.filter((r) => r[6] !== (r[5] === 1 ? 1 : 0)), badSize = rows.filter((r) => !(Number.isFinite(r[7]) && r[7] >= 0));
-  assert.equal(badW.length, 0, `${name}: the rates' weight is 1 on the class's terms and 0 elsewhere: ${JSON.stringify(badW.slice(0, 3))}`);
+  const weight = (r) => (r[5] !== 1 ? 0 : inClass(r) ? 1 : taper(Math.abs(r[4]) / 0.045));
+  const badW = rows.filter((r) => Math.abs(r[6] - weight(r)) > 1e-12), badSize = rows.filter((r) => !(Number.isFinite(r[7]) && r[7] >= 0));
+  assert.equal(badW.length, 0, `${name}: the rates' weight is 1 on the class's terms, the band taper on the others: ${JSON.stringify(badW.slice(0, 3))}`);
   // a size is finite and not negative (a term of |q| near 50 at e 0.825 has a Hansen coefficient below the quadrature's reach: 0)
   assert.equal(badSize.length, 0, `${name}: every size finite and not negative: ${JSON.stringify(badSize.slice(0, 3))}`);
 }
 x.sdnap_free(pin);
 x.sdnap_free(prow);
 await h.close?.();
-assert.ok(summary['THEMIS A-like'].gridDegree5Up > 0 && summary['THEMIS A-like'].gridDegree3to4HighQ > 0,
-  `THEMIS A-like: the grid holds the terms 0.6.18 carried nowhere (${JSON.stringify(summary['THEMIS A-like'])})`);
+// from #473 the terms of degree 3 and 4 with |q| above 4 lie under the size cut on this set (the grid held them from #467)
+assert.ok(summary['THEMIS A-like'].ratesDegree5Up > 0,
+  `THEMIS A-like: the rates hold the terms of degree 5 and up that 0.6.18 carried nowhere (${JSON.stringify(summary['THEMIS A-like'])})`);
 
 const r = await runModelTruth({name: 'THEMIS A-like', n: 1.0426, e: 0.8246, i: 11.9, raan: 90, argp: 300, ma: 0, drag: false, field: [70, 70], forces: [31, 20],
   hourly: true, gridMinutes: 10});
