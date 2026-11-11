@@ -2227,6 +2227,52 @@ finite-difference Jacobians each propagating the arc, which costs about 0.1 s on
 table rows are not measured.
 `test/high-e-fit-arc.e2e.mjs` measures every row but the pinned one.
 
+**The drag term's width at 600 to 2,500 km (stack #471, #463).** Under the drag the post-fit residual is the theory's
+own error, correlated along the arc, and the formal sigma of ln BTERM overstates what the arc says about the term. On
+the headline-loop laser spheres, altimetry and Sentinel-1 windows, 72 h fits, it sits 2.7 to 11 stated sigmas from the
+numerical propagator's own fitted Cd A/m at the median. The rule here applies to an AP set at e 0.3 or below with its
+perigee at 600 to 2,500 km, fitted under NRLMSISE-00 on BTERM's default prior over a span inside one of width 1's rows.
+Such a set states
+
+    sigma_lnB^2 = 1 / ((1 / s_f^2 - 1 / s_p^2) / m^2 + 1 / s_p^2)
+
+with s_f the formal posterior sigma and s_p the prior's, on BTERM's diagonal alone. Every other entry of the matrix is
+the fit's.
+
+| Width 1 | Perigee | Fit span | m |
+| --- | --- | --- | --: |
+| row 1 | 600 to 1,000 km | 21.6 to 25.2 h | 7.75 |
+| row 2 | 600 to 1,000 km | 64.8 to 75.6 h | 11.0 |
+| row 3 | 1,000 to 2,500 km | 64.8 to 75.6 h | 3.23 |
+
+The record names the rule in a second COV_REALISM entry:
+"sdn-ap drag-term width 1: m <m>, prior sigma <s_p>; stated, not mapped", the figures in %.6g.
+
+The width is stated, not mapped. A reader that knows width 1 derives m and s_p from the record's own fields: its
+elements (the perigee, the mean altitude), ACTUAL_OD_SPAN and its atmosphere, with s_p by the band default above (10
+ln 10 at a mean altitude of 800 to 1,400 km, ln 10 otherwise). It checks that the entry's text is that rule's for the
+record, recovers the formal variance, 1 / s_f^2 = m^2 (1 / sigma_lnB^2 - 1 / s_p^2) + 1 / s_p^2, and maps that. The
+forecast is then the fit's own: on the model truth of the test below, the covariance lines of a record under width 1
+and of the same fit without it are the same to the last bit. The augmented covariance (17.5) states the record's own
+BTERM variance in its parameter block.
+
+A reader that meets a rule it does not know, or a text whose figures are not the rule's for the record, maps the matrix
+as stated. The flight's block COMMENT then says so: "covariance: <the entry>: mapped as stated (<why>)". The figures in
+the text are for a human reader; the inversion rests on the rule alone.
+
+A fit that fell back to the band median's prior, one on a stated prior, and one whose final elements put it in another
+band than its prior's state the formal width, with no entry.
+
+Width 1's sizes are the RMS-floor rule's m fitted per band and arc on the stacked low-orbit base: main 0.6.18 with the
+solid tide and the drag default of stack #460, 72 h and 24 h fits, burns left out, leaving one window out. On those
+windows the fitted BTERM carries the commensurability bands' error (stack #477), and the low-orbit slow terms are not in
+the build. A table fitted on another base is a new rule number.
+
+On that base the rule takes the ln BTERM figures beyond 3 sigma from 48 to 6 (spheres, 72 h), 71 to 11 (altimetry,
+72 h) and 41 to 0 (near 700 km, 72 h). It leaves the 72 h tails narrow by 2.0 (spheres) and 1.9 (altimetry) at the 95 %
+edge, and the 24 h fits wide by 1.25 to 1.75. `test/drag-term-width-band.e2e.mjs` holds the rule, the entry, the
+reader's recovery and both refusals on model truth.
+
 ---
 
 ## 13. (removed)

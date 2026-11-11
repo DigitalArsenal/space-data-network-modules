@@ -974,6 +974,33 @@ static int fit_blocks() {
           break;
         }
       }
+      // SPEC 12.8 "The drag term's width at 600 to 2,500 km": BTERM's sigma of ln stated by width 1 on its diagonal, not
+      // mapped; named in a second COV_REALISM entry. Only where the rule's prior, derived from the record's own fields as a
+      // reader derives it, is the prior the fit used (a fall-back, a stated prior or a band edge the final elements cross
+      // keeps the formal width).
+      char width_tag[160] = {};
+      if (have_cov && !lattice && !high_e_drag && po.forces.msis && !po.drag_prior_given && !fell_back && used_drag.form == pcfPriorForm_LOG_NORMAL &&
+          fit_cov.regime == 0) {
+        double m = 0.0, sp = 0.0;
+        if (cov::width1_of(row, (fit_end_min - fit_begin_min) / kMinutesPerDay * 24.0, true, m, sp) &&
+            std::fabs(sp - used_drag.sigma) <= 1e-12 * used_drag.sigma) {
+          int kind[fit::kMaxParams];
+          const int np = cov::kinds_of(fit_cov.o, kind);
+          for (int a = 6; a < np; ++a) {
+            if (kind[a] != cov::kKindDrag) continue;
+            const double var_f = fit_cov.log_sigma[0] * fit_cov.log_sigma[0], var_p = sp * sp;
+            if (!(var_f > 0.0) || !(fit_cov.C[a * np + a] > 0.0)) break;
+            const double info_arc = std::fmax(0.0, 1.0 / var_f - 1.0 / var_p);
+            if (!(info_arc * var_f > 1e-6)) break;
+            const double var_h = 1.0 / (info_arc / (m * m) + 1.0 / var_p);
+            if (!(var_h > var_f)) break;
+            fit_cov.C[a * np + a] = row.bterm * row.bterm * var_h;
+            fit_cov.log_sigma[0] = std::sqrt(var_h);
+            cov::width1_text(m, sp, width_tag, sizeof width_tag);
+            break;
+          }
+        }
+      }
       // held-out score: RMS, largest error, and by day after the arc
       double held_rms = 0.0, held_max = 0.0, held_stop = fit_end_min;
       std::vector<double> day_ss;
@@ -1198,7 +1225,18 @@ static int fit_blocks() {
         cr.add_MODEL_ID(s_model);
         cr.add_REGIME(s_regime);
         cr.add_CALIBRATION(covarianceCalibration_Uncalibrated);
-        const std::vector<flatbuffers::Offset<CVR>> realism = {cr.Finish()};
+        std::vector<flatbuffers::Offset<CVR>> realism = {cr.Finish()};
+        if (width_tag[0] != '\0') {
+          // SPEC 12.8: the rule BTERM's stated width was written with (stated, not mapped)
+          const auto s_width = fbb.CreateString(width_tag);
+          const auto s_wregime = fbb.CreateString(cov::regime_name(fit_cov.regime));
+          CVRBuilder wr(fbb);
+          wr.add_RULE(covarianceRule_SourceModel);
+          wr.add_MODEL_ID(s_width);
+          wr.add_REGIME(s_wregime);
+          wr.add_CALIBRATION(covarianceCalibration_Uncalibrated);
+          realism.push_back(wr.Finish());
+        }
         extras.cov_realism = fbb.CreateVector(realism);
       }
       const CAT* object = blk->OBJECT();
