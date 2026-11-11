@@ -4929,28 +4929,34 @@ inline void b1_output_direct(const RateContext& ctx, double t, const double* ym,
   d[kLam] += s2 * inv_n * inv_n;
 }
 
-/// SPEC 16.B1: B1's output part over one sub-interval (at most kB1TableMinutes) of the bracket a state is flown in: the
-/// mean orbit and the Sun at the sub-interval's middle, the panels' ends in eccentric and mean longitude (the latter
-/// from the first end), and the integrals the kernels reduce to. With lambda' over the arc [L_0, L_0 + 2 pi) and the
+/// SPEC 16.B1: B1's output part for one mean orbit and Sun: the panels' ends in eccentric and mean longitude (the
+/// latter from the first end), and the integrals the kernels reduce to. With lambda' over the arc [L_0, L_0 + 2 pi) and the
 /// output's lambda in it, s = lambda - lambda' (+ 2 pi where lambda' > lambda), so int K1(s) rho = (1/2 - lambda / (2 pi))
 /// I0 + I1 / (2 pi) - P0(lambda) and int K2(s) rho = -(pi/6 I0 - S1 / 2 + S2 / (4 pi)), S1 = lambda I0 - I1 + 2 pi P0,
 /// S2 = lambda^2 I0 - 2 lambda I1 + I2 + 4 pi (lambda P0 - P1) + 4 pi^2 P0: I_k the arc's moments of rho, P0 and P1
 /// those from lambda to the arc's end, kept at every panel end and completed at the output by the part of its panel
 /// past it: the integral of the quadratic through the panel's three Gauss-Legendre points (whose whole-panel integral
-/// is the three-point rule itself), so a state evaluates no rate. A pure function of the bracket's two nodes and the
-/// sub-interval.
-constexpr double kB1TableMinutes = 360.0;
+/// is the three-point rule itself), so a state evaluates no rate. A table is a pure function of its key (b1_output):
+/// the mean orbit rounded (kB1RoundE, kB1RoundI, kB1RoundN) and the 6 h block whose center's Sun it takes, with the
+/// set's epoch and terms.
+constexpr double kB1RoundE = 1e-6, kB1RoundI = 1e-5, kB1RoundN = 1e-10;  ///< k and h; chi and psi; n (rad/min)
+struct B1Key {
+  double d50_epoch, block, k, h, chi, psi, n, b1c, b1s;
+  bool operator==(const B1Key& o) const {
+    return d50_epoch == o.d50_epoch && block == o.block && k == o.k && h == o.h && chi == o.chi && psi == o.psi &&
+           n == o.n && b1c == o.b1c && b1s == o.b1s;
+  }
+};
 struct B1Table {
-  uint64_t ctx_id;
-  double d50_epoch, lo_t, hi_t;
-  int32_t lo_index, hi_index, sub, np;
+  B1Key key;
+  int32_t np;
   double k, h, n, L0;
   double F[kEcom2Panels], L[kEcom2Panels];      ///< the panels' ends: eccentric longitude, mean longitude less L0
   double P0[kEcom2Panels][6], P1[kEcom2Panels];  ///< from each end to the arc's end: int rho_j, int lambda rho_n
   double Q[kEcom2Panels][7][3];  ///< per panel the quadratic in u = (F - mid) / half of rho_j (j < 6) and lambda rho_n
   double I0[6], I1[6], I2;       ///< over the arc: int rho_j, int lambda rho_j, int lambda^2 rho_n
 };
-constexpr int kB1Tables = 4;  ///< a thread's tables, the last four sub-intervals flown (B1 sets are few)
+constexpr int kB1Tables = 4;  ///< a thread's tables, the last four keys flown (B1 sets are few)
 inline thread_local B1Table* g_b1_tables[kB1Tables] = {};
 inline thread_local int g_b1_next = 0;
 
@@ -5057,53 +5063,44 @@ inline void b1_table_eval(const B1Table& tb, double lam_out, double* d) {
   d[kLam] += inv_n * inv_n * -(kPi / 6.0 * I0 - 0.5 * S1 + S2 * (0.25 / kPi));
 }
 
-/// SPEC 16.B1: B1's output part at time t, mean state ym. Inside the bracket the set is being flown in (the active
-/// bracket, SPEC 9), from that bracket's table for t's sub-interval (made on the first state there, kept with the last
-/// few); elsewhere (the epoch, a covariance's moved sets) from the state itself (b1_output_direct).
+/// SPEC 16.B1: B1's output part at time t, mean state ym: the table of its key (the mean orbit rounded, and the Sun at
+/// the nearest of the centers of ECOM2's 6 h blocks, j kY0BlockMinutes; made on the first state of a key, kept with the
+/// last few), at ym's own mean longitude. The rounding moves the part by about a millimeter at most; a key changes a
+/// few times a day, so a state takes three dozen operations. Where no table can be had (no memory), from the state
+/// itself (b1_output_direct).
 inline void b1_output(const RateContext& ctx, double t, const double* ym, const Bodies* shared, double* d) {
-  const ActiveBracket& ab = active_bracket();
-  if (t != 0.0 && ab.valid && ab.ctx_id == ctx.ctx_id && ab.d50_epoch == ctx.d50_epoch) {
-    const double span = ab.hi.t - ab.lo.t;
-    if (t >= std::fmin(ab.lo.t, ab.hi.t) && t <= std::fmax(ab.lo.t, ab.hi.t) && std::fabs(span) > 1e-6) {
-      const int n_sub = std::max(1, static_cast<int>(std::ceil(std::fabs(span) / kB1TableMinutes)));
-      const double step = span / n_sub;
-      int sub = static_cast<int>(std::floor((t - ab.lo.t) / step));
-      if (sub < 0) sub = 0;
-      if (sub >= n_sub) sub = n_sub - 1;
-      B1Table* tab = nullptr;
-      for (B1Table* c : g_b1_tables)
-        if (c != nullptr && c->ctx_id == ctx.ctx_id && c->d50_epoch == ctx.d50_epoch && c->lo_index == ab.lo.index &&
-            c->hi_index == ab.hi.index && c->lo_t == ab.lo.t && c->hi_t == ab.hi.t && c->sub == sub) {
-          tab = c;
-          break;
-        }
-      if (tab == nullptr) {
-        B1Table*& slot = g_b1_tables[g_b1_next];
-        if (slot == nullptr) slot = static_cast<B1Table*>(std::malloc(sizeof(B1Table)));
-        if (slot != nullptr) {
-          g_b1_next = (g_b1_next + 1) % kB1Tables;
-          tab = slot;
-          const double ta = ab.lo.t + sub * step, tb = sub + 1 == n_sub ? ab.hi.t : ab.lo.t + (sub + 1) * step;
-          const double tm = 0.5 * (ta + tb);
-          double ymid[6];
-          hermite(ab.lo, ab.hi, tm, ymid);
-          b1_table_make(ctx, ymid, bodies_at_ap(ctx.d50_epoch + tm / kMinutesPerDay).sun_u, *tab);
-          tab->ctx_id = ctx.ctx_id;
-          tab->d50_epoch = ctx.d50_epoch;
-          tab->lo_index = ab.lo.index;
-          tab->hi_index = ab.hi.index;
-          tab->lo_t = ab.lo.t;
-          tab->hi_t = ab.hi.t;
-          tab->sub = sub;
-        }
-      }
-      if (tab != nullptr) {
-        b1_table_eval(*tab, ym[kLam], d);
-        return;
-      }
+  auto rounded = [](double v, double step) { return std::nearbyint(v / step) * step; };
+  B1Key key{};
+  key.d50_epoch = ctx.d50_epoch;
+  key.block = std::floor(t / kY0BlockMinutes + 0.5);  // the nearest of the blocks' centers, j kY0BlockMinutes
+  key.k = rounded(ym[kAf], kB1RoundE);
+  key.h = rounded(ym[kAg], kB1RoundE);
+  key.chi = rounded(ym[kChi], kB1RoundI);
+  key.psi = rounded(ym[kPsi], kB1RoundI);
+  key.n = rounded(ym[kN], kB1RoundN);
+  key.b1c = ctx.rad_b1c;
+  key.b1s = ctx.rad_b1s;
+  B1Table* tab = nullptr;
+  for (B1Table* c : g_b1_tables)
+    if (c != nullptr && c->key == key) {
+      tab = c;
+      break;
     }
+  if (tab == nullptr) {
+    B1Table*& slot = g_b1_tables[g_b1_next];
+    if (slot == nullptr) slot = static_cast<B1Table*>(std::malloc(sizeof(B1Table)));
+    if (slot == nullptr) {
+      b1_output_direct(ctx, t, ym, shared, d);
+      return;
+    }
+    g_b1_next = (g_b1_next + 1) % kB1Tables;
+    tab = slot;
+    const double y[6] = {key.k, key.h, key.chi, key.psi, 0.0, key.n};
+    const double tc = key.block * kY0BlockMinutes;
+    b1_table_make(ctx, y, bodies_at_ap(ctx.d50_epoch + tc / kMinutesPerDay).sun_u, *tab);
+    tab->key = key;
   }
-  b1_output_direct(ctx, t, ym, shared, d);
+  b1_table_eval(*tab, ym[kLam], d);
 }
 
 /// SPEC 16.13, 16.B1: a set flies ECOM2's terms (Y0, B1 cos, B1 sin; AP's only).
