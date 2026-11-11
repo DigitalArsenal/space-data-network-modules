@@ -2414,6 +2414,20 @@ read it from w alone, which holds only for the half-day tail's even orders; for 
 The half-day tail is unchanged bit for bit. Sets of the class above e 0.3 (the grid branch, 16.11) do not take the tail:
 there the class carries degrees 2 to 4 only, as before (THEMIS-like orbits, whose error is elsewhere).
 
+The tails over a step (stack #480). rk3's first two stages take the one-day tail's coefficient polynomials (the cubic
+expansions of F and G above) at the step's first node, where the previous step's last stage took them; the angles and
+everything else are each stage's own, so the step stays a function of its own state. In the long-period regime the
+tails in the rates (the two resonant tails, the shallow set and 16.3's zonal tail) are carried in the equinoctial
+elements' rates, regular at i = 0, with nothing that divides by sin i: the step's first two stages take them at its
+first node, and a covariance's moved set takes its nominal's plus its own difference, made again every fourth step.
+Both hold at every inclination.
+Through 0.6.20 sets below 0.02 rad (1.15 deg) evaluated the tails at every stage, among them a geostationary record and
+its covariance's moved sets; the gate came with 0.6.5's fast paths, with no reason given. Against that, every 60 s for
+7 days: geostationary model sets at i 0.05 deg move by at most 0.053 mm (at i 2 deg and on inclined geosynchronous sets
+nothing moves), the GE rows by at most 0.021 mm, and the propagated sigmas by at most 5.4e-8 of themselves. At i 0,
+1e-6 rad, 1e-3 deg, 0.05 deg, 0.0199 rad and 0.0201 rad, with e 0, 1e-6 and 2e-4, in eclipse season and out of it, the
+largest move is 0.124 mm (i 0.0199 rad, e 0, in season); no state is other than a number, and 0.0201 rad does not move.
+
 Through 0.6.18 the one-day class carried resonant gravity of degrees 2 to 4 only, and the output table drops every term
 slower than 0.045 n, so on a geosynchronous orbit degree 5 and up was carried nowhere. Each missing term acts as a
 constant along-track acceleration set by the longitude, mostly through (5,5), (5,3) and (5,1). Model truth: FFM 20 x 20

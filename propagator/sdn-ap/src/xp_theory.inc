@@ -3717,9 +3717,11 @@ inline void rates_eq(const double k1[2], const Bodies& b, const double* y, const
 
 /// The averaged rates f(t, y) of SPEC 9: false when the state fails the 9.9 tests (state_test). AP sums the epoch
 /// class's terms whatever the current mean motion (SPEC 16.7): the class is the record's, decided at its epoch.
+/// `y_hold`, when given: the state the one-day tail's coefficient polynomials are taken at (rk3's first two stages: the
+/// step's first node, whose own rates took them; SPEC 16.2).
 inline bool rates(const RateContext& ctx, double t, const double* y, double* out,
                   int dir_idx = 0, int step_idx = 0, int stage_idx = -1,
-                  const Rk3StageOverride* ov = nullptr) {
+                  const Rk3StageOverride* ov = nullptr, const double* y_hold = nullptr) {
   if (state_test(ctx, y) != 0) return false;
   const int cls = ctx.ap_resonance ? ctx.resonance : 0;
   const bool fast_ap = ctx.ap_third_body && (!ctx.long_period || ctx.i0 > 0.02);
@@ -3747,7 +3749,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   const bool record_stage_aux = ap_ctx && !is_sigma && csa != nullptr && cgc.anchor_id == ctx.ctx_id;
   const bool skip_tail = ov != nullptr && ov->tail_eq != nullptr;
   const bool cache_geo_res = ctx.ap_resonance != 0 && ctx.i0 > 0.02;
-  const bool use_lp_tail_eq = ctx.long_period && ctx.ap_third_body && ctx.i0 > 0.02;
+  // the long-period regime's tail carried in the equinoctial elements' rates (tail_eq, regular at i = 0), so a
+  // covariance's moved set takes the nominal's plus its own difference at every inclination (SPEC 16.2, stack #480)
+  const bool use_lp_tail_eq = ctx.long_period && ctx.ap_third_body;
   const bool aux_slot_valid = sigma_slot >= 1 && sigma_slot < 18 &&
                               cgc.sigma_aux_ctx_id[sigma_slot] == ctx.ctx_id;
   const bool cached_sigma_tail =
@@ -3881,8 +3885,23 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       res::resonance_six_ap(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
     }
     if (ctx.ap_resonance && (cls == 2 || cls == 1) && ctx.half_day != nullptr) {
+      // SPEC 16.2: the one-day tail's coefficient polynomials held over rk3's first two stages at the step's first node
+      Kepler kh{};
+      const bool held = cls == 1 && y_hold != nullptr;
+      if (held) {  // a, e and i as the rates at y_hold take them (the fast path's or kepler_of's), bit for bit
+        const double e2 = y_hold[kAf] * y_hold[kAf] + y_hold[kAg] * y_hold[kAg];
+        const double t2 = y_hold[kChi] * y_hold[kChi] + y_hold[kPsi] * y_hold[kPsi];
+        if (fast_ap && e2 > 1e-24 && t2 > 1e-24 && e2 < 1.0) {
+          kh.a = fast_a_from_n(y_hold[kN]);
+          kh.e = std::sqrt(e2);
+          kh.i = 2.0 * fm::atan(std::sqrt(t2));
+        } else {
+          kh = kepler_of(y_hold, std::pow(kKe / y_hold[kN], kX2o3));
+        }
+      }
       tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
-                         fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst, ctx.hd_a0, hd_table_id(ctx), cls == 1 ? 1 : 2);
+                         fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst, ctx.hd_a0, hd_table_id(ctx), cls == 1 ? 1 : 2,
+                         held ? &kh : nullptr);
     }
     if (ctx.shallow != nullptr) {
       tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci,
@@ -4323,7 +4342,9 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
   const double* six_tail_a = nullptr;
   double srp_a[6]{};
   const double* srp_a_unit = nullptr;
-  if (!ctx.is_cov_sigma && ctx.long_period && ctx.ap_third_body && ctx.i0 > 0.02 && std::fabs(h) <= 45.0) {
+  // SPEC 16.2: the long-period regime holds the tail (tail_eq, equinoctial) over the step's first two stages at every
+  // inclination; through 0.6.20 sets below 0.02 rad evaluated it at every stage (stack #480)
+  if (!ctx.is_cov_sigma && ctx.long_period && ctx.ap_third_body && std::fabs(h) <= 45.0) {
     if (a_idx == 0 && cgc.has_epoch_tail_eq) {
       ov_stage.tail_eq = cgc.epoch_tail_eq;
       six_tail_a = cgc.epoch_six_tail;
@@ -4401,7 +4422,7 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
   const Rk3StageOverride* ov_ptr = any_ov ? &ov_stage : nullptr;
   double y2[6], y4[6], k2[6], k4[6];
   for (int j = 0; j < 6; ++j) y2[j] = a.y[j] + (3.0 / 8.0) * h * a.f[j];
-  if (!rates(ctx, a.t + (3.0 / 8.0) * h, y2, k2, di, idx, 0, ov_ptr)) return kStageFailed;
+  if (!rates(ctx, a.t + (3.0 / 8.0) * h, y2, k2, di, idx, 0, ov_ptr, a.yu)) return kStageFailed;
   // k3 (SPEC 9): its rates do not enter the update, but its state is tested like the others
   double y3[6];
   for (int j = 0; j < 6; ++j) y3[j] = a.y[j] + (9.0 / 16.0) * h * k2[j];
@@ -4418,7 +4439,7 @@ inline int rk3(const RateContext& ctx, const Node& a, double h, Node& out) {
     ov_stage.drag = drag_s1;
   }
   for (int j = 0; j < 6; ++j) y4[j] = a.y[j] + h * (-(125.0 / 672.0) * a.f[j] + (325.0 / 336.0) * k2[j]);
-  if (!rates(ctx, a.t + (25.0 / 32.0) * h, y4, k4, di, idx, 1, ov_ptr)) return kStageFailed;
+  if (!rates(ctx, a.t + (25.0 / 32.0) * h, y4, k4, di, idx, 1, ov_ptr, a.yu)) return kStageFailed;
   for (int j = 0; j < 6; ++j)
     out.y[j] = a.y[j] + h * ((37.0 / 225.0) * a.f[j] + (44.0 / 117.0) * k2[j] + (448.0 / 975.0) * k4[j]);
   out.t = a.t + h;

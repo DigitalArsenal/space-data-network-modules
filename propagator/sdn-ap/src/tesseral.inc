@@ -3622,6 +3622,9 @@ struct HalfDayEvalCache {
   alignas(16) float b5[1152]{};
   alignas(16) float b6[1152]{};
   alignas(16) float b7[1152]{};
+  /// the table's 32 coefficients by field (uc0 .. ucai, us0 .. usai), entry by entry, for the update below lanes at a
+  /// time (filled with a new table; zero past `count`)
+  alignas(16) float coef[32][1024]{};
 };
 inline thread_local HalfDayEvalCache* g_half_day_eval_cache_ptr = nullptr;
 inline HalfDayEvalCache& half_day_eval_cache() {
@@ -3629,17 +3632,20 @@ inline HalfDayEvalCache& half_day_eval_cache() {
   return *g_half_day_eval_cache_ptr;
 }
 inline int32_t& fit_grid_depth();
-/// `m_per_k`: the class's m / k, 2 for the half-day tail and 1 for the one-day tail (half_day_terms).
+/// `m_per_k`: the class's m / k, 2 for the half-day tail and 1 for the one-day tail (half_day_terms). `hold`, when given:
+/// the state whose a, e and i the coefficient polynomials are taken at (the step's first node, SPEC 16.2; the angles and
+/// the rest are the state's own); nullptr: the state's own.
 inline void half_day_six(const HalfDayCoef* table, int count, double e0, double i0,
                         double t, const Kepler& kp, double n, double eta, double si,
                         double ci, double theta_g0, double* six, double a0 = 1.0, uint64_t table_id = 0,
-                        int m_per_k = 2) {
+                        int m_per_k = 2, const Kepler* hold = nullptr) {
   if (count == 0) return;
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
   const double thetag = theta_g0 + kOmegaE * t;
   const double ia = 1.0 / a;
-  const double da = a0 * ia - 1.0;
+  const Kepler& kt = hold != nullptr ? *hold : kp;  // the coefficient polynomials' a, e, i
+  const double da = a0 * (1.0 / kt.a) - 1.0;
 
   HalfDayEvalCache& hc = half_day_eval_cache();
   const bool cacheable = count <= 1024 && t != 0.0 && table_id != 0 && fit_grid_depth() == 0;
@@ -3647,7 +3653,7 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
       (hc.table_id != table_id || hc.table != table || hc.count != count ||
        hc.f0 != table[0].uc0 || hc.fn != table[count - 1].uc0 ||
        hc.a0 != a0 || hc.e0 != e0 || hc.i0 != i0 ||
-       a != hc.a || kp.e != hc.e || kp.i != hc.i)) {
+       kt.a != hc.a || kt.e != hc.e || kt.i != hc.i)) {
     const bool new_table = (hc.table_id != table_id || hc.table != table || hc.count != count ||
                             hc.f0 != table[0].uc0 || hc.fn != table[count - 1].uc0);
     hc.table_id = table_id;
@@ -3658,9 +3664,9 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
     hc.a0 = a0;
     hc.e0 = e0;
     hc.i0 = i0;
-    hc.a = a;
-    hc.e = kp.e;
-    hc.i = kp.i;
+    hc.a = kt.a;
+    hc.e = kt.e;
+    hc.i = kt.i;
     if (new_table) {
       int maw = 0, mk = 0, ng = 0, npad = 0;
       bool ok = true;
@@ -3702,14 +3708,81 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
       hc.n_pad = ok ? npad : 0;
       hc.max_aw = ok ? maw : 33;
       hc.max_k = ok ? mk : 16;
+      // the coefficients by field (the 32 floats of an entry follow its four bytes), zero to the next fourth entry
+      static_assert(sizeof(HalfDayCoef) == 4 + 32 * sizeof(float), "an entry's 32 floats follow its four bytes");
+      for (int j = 0; j < count; ++j) {
+        float f[32];
+        std::memcpy(f, reinterpret_cast<const unsigned char*>(&table[j]) + 4, sizeof f);
+        for (int q = 0; q < 32; ++q) hc.coef[q][j] = f[q];
+      }
+      for (int j = count; j < ((count + 3) & ~3) && j < 1024; ++j)
+        for (int q = 0; q < 32; ++q) hc.coef[q][j] = 0.0f;
     }
     if (hc.grouped_ok) {
-      const double dd = kp.e - e0, did = kp.i - i0;
+      const double dd = kt.e - e0, did = kt.i - i0;
       const double dd2_2 = 0.5 * dd, dd_6 = dd * (1.0 / 6.0);
       const double did2_2 = 0.5 * did, did_6 = did * (1.0 / 6.0);
       const double dd_di = dd * did, da2_2d = 0.5 * da;
       const float d = static_cast<float>(dd), di = static_cast<float>(did), daf = static_cast<float>(da);
       const float d2_2 = 0.5f * d, d_6f = d * (1.0f / 6.0f), di2_2 = 0.5f * di, neg_1pda = -(1.0f + daf);
+#ifdef __wasm_simd128__
+      // four entries at a time from the coefficients by field: each lane the scalar update's operations in its order
+      // (b0, b1 in double, two lanes of f64x2 per half; b2 .. b7 in float), so every coefficient is the same bits
+      const v128_t vdd = wasm_f64x2_splat(dd), vdd2 = wasm_f64x2_splat(dd2_2), vdd6 = wasm_f64x2_splat(dd_6);
+      const v128_t vdi = wasm_f64x2_splat(did), vdi2 = wasm_f64x2_splat(did2_2), vdi6 = wasm_f64x2_splat(did_6);
+      const v128_t vddi = wasm_f64x2_splat(dd_di), vda = wasm_f64x2_splat(da), vda2 = wasm_f64x2_splat(da2_2d);
+      const v128_t fd = wasm_f32x4_splat(d), fdi = wasm_f32x4_splat(di), fda = wasm_f32x4_splat(daf);
+      const v128_t fd2 = wasm_f32x4_splat(d2_2), fd6 = wasm_f32x4_splat(d_6f), fdi2 = wasm_f32x4_splat(di2_2);
+      const v128_t fneg = wasm_f32x4_splat(neg_1pda);
+      auto dadd = [](v128_t x, v128_t y) { return wasm_f64x2_add(x, y); };
+      auto dmul = [](v128_t x, v128_t y) { return wasm_f64x2_mul(x, y); };
+      auto fadd = [](v128_t x, v128_t y) { return wasm_f32x4_add(x, y); };
+      auto fmul = [](v128_t x, v128_t y) { return wasm_f32x4_mul(x, y); };
+      // b0 (o = 0) or b1 (o = 16) on the lower (upper = false) or upper half of entries j .. j + 3
+      auto phi = [&](int o, int j, bool upper) {
+        auto c = [&](int f) {
+          const v128_t v = wasm_v128_load(&hc.coef[o + f][j]);
+          return wasm_f64x2_promote_low_f32x4(upper ? wasm_i32x4_shuffle(v, v, 2, 3, 0, 1) : v);
+        };
+        v128_t s = dadd(c(0), dmul(vdd, dadd(c(1), dmul(vdd, dadd(dmul(vdd2, c(2)), dmul(vdd6, c(3)))))));
+        s = dadd(s, dmul(vdi, dadd(c(4), dmul(vdi, dadd(dmul(vdi2, c(5)), dmul(vdi6, c(6)))))));
+        s = dadd(s, dmul(vddi, dadd(dadd(c(7), dmul(vdd2, c(8))), dmul(vdi2, c(9)))));
+        const v128_t inner = dadd(dadd(dadd(c(10), dmul(vda2, c(11))),
+                                       dmul(vdd, dadd(c(12), dmul(vdd, dadd(dmul(vdd2, c(13)), dmul(vdd6, c(14))))))),
+                                  dmul(vdi, c(15)));
+        return dadd(s, dmul(vda, inner));
+      };
+      auto demote2 = [&](int o, int j) {  // the four entries' double sums, each rounded to float
+        const v128_t lo = wasm_f32x4_demote_f64x2_zero(phi(o, j, false)), hi = wasm_f32x4_demote_f64x2_zero(phi(o, j, true));
+        return wasm_i32x4_shuffle(lo, hi, 0, 1, 4, 5);
+      };
+      for (int j = 0; j < count; j += 4) {
+        auto c = [&](int f) { return wasm_v128_load(&hc.coef[f][j]); };
+        const v128_t v0 = demote2(0, j), v1 = demote2(16, j);
+        v128_t v[8];
+        v[0] = v0;
+        v[1] = v1;
+        for (int o = 0; o < 2; ++o) {
+          const int b = 16 * o;
+          v[2 + o] = fadd(fadd(fadd(c(b + 1), fmul(fd, fadd(c(b + 2), fmul(fd2, c(b + 3))))),
+                               fmul(fdi, fadd(fadd(c(b + 7), fmul(fd, c(b + 8))), fmul(fdi2, c(b + 9))))),
+                          fmul(fda, fadd(c(b + 12), fmul(fd, fadd(c(b + 13), fmul(fd2, c(b + 14)))))));
+          v[4 + o] = fadd(fadd(fadd(c(b + 4), fmul(fdi, fadd(c(b + 5), fmul(fdi2, c(b + 6))))),
+                               fmul(fd, fadd(fadd(c(b + 7), fmul(fd2, c(b + 8))), fmul(fdi, c(b + 9))))),
+                          fmul(fda, c(b + 15)));
+          v[6 + o] = fmul(fneg, fadd(fadd(fadd(c(b + 10), fmul(fda, c(b + 11))),
+                                          fmul(fd, fadd(c(b + 12), fmul(fd, fadd(fmul(fd2, c(b + 13)), fmul(fd6, c(b + 14))))))),
+                                     fmul(fdi, c(b + 15))));
+        }
+        float* const dst[8] = {hc.b0, hc.b1, hc.b2, hc.b3, hc.b4, hc.b5, hc.b6, hc.b7};
+        alignas(16) float lanes[8][4];
+        for (int q = 0; q < 8; ++q) wasm_v128_store(lanes[q], v[q]);
+        for (int l = 0; l < 4 && j + l < count; ++l) {
+          const uint16_t slot = hc.slot_of[j + l];
+          for (int q = 0; q < 8; ++q) dst[q][slot] = lanes[q][l];
+        }
+      }
+#else
       for (int j = 0; j < count; ++j) {
         const HalfDayCoef& c = table[j];
         const uint16_t slot = hc.slot_of[j];
@@ -3730,6 +3803,7 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
         hc.b6[slot] = neg_1pda * (c.uca + daf * c.ucaa + d * (c.ucae + d * (d2_2 * c.uceea + d_6f * c.uceeea)) + di * c.ucai);
         hc.b7[slot] = neg_1pda * (c.usa + daf * c.usaa + d * (c.usae + d * (d2_2 * c.useea + d_6f * c.useeea)) + di * c.usai);
       }
+#endif
     }
   }
 
@@ -3833,7 +3907,7 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
     }
 #endif
   } else {
-    const double d = kp.e - e0, di = kp.i - i0;
+    const double d = kt.e - e0, di = kt.i - i0;
     const double d2_2 = 0.5 * d, d_6 = d / 6.0;
     const double di2_2 = 0.5 * di, di_6 = di / 6.0;
     const double d_di = d * di, da2_2 = 0.5 * da, neg_1pda = -(1.0 + da);
