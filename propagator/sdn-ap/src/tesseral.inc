@@ -2661,7 +2661,8 @@ inline float* sp_compact_blk_c(const SpEvalCache& sc, const uint16_t* blocks = n
 /// one, the center of the state's cell of that level. Levels and tolerances: base (a relative 3e-5, e^2 2e-5, cos i
 /// 1.5e-4, 6e-5 from e0 0.03), ae (a relative 1.8e-6, e 2e-5), pe (e de_pe_thresh; a derivative pass keeps the pe
 /// blocks at the ae bake's e), res (a relative 2e-7, e^2 1e-5, cos i 1e-6). A level baked again bakes the levels
-/// above it again, the resonant blocks last. A set's cache rebuilds blk_c from F for a base or resonant bake.
+/// above it again, the resonant blocks last. A set's cache bakes from the coefficients sp_compact_blk_c gives it for a
+/// base or resonant bake. The keys it leaves are what sp_keys_hold compares with, inline, before calling it.
 [[gnu::noinline]] inline void sp_sync(SpEvalCache& sc, double a0, double e0, double a, double e, double ci, double t,
                                       bool derivative) {
   const SpAnchor& an = g_sp_anchor;

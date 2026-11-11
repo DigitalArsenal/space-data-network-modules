@@ -451,8 +451,14 @@ machine, so a median here means little.
 - 500 km about 13 % slower than 0.6.12, 830 km 5 to 7 % slower: about 0.82 of SGP4-XP's cost at 500 km, against 0.71
   on 0.6.12.
 - MEO equal; GEO 2.3 times faster; the transfer orbit 1.7 times faster.
-- What remains in low orbit: the bracket-anchored bake bookkeeping, about 6 % (stack #441), and the node re-evaluation,
-  about 4 % (stack #439).
+- What remained in low orbit there: the bracket-anchored bake bookkeeping, about 6 % (stack #441), and the node
+  re-evaluation, about 4 % (stack #439).
+- Stack #441: the warm set's bakes now cost nothing when nothing changes, with every state bit for bit (SPEC 9, the warm
+  record's bakes). Niced on a shared machine, the minimum CPU per state, rounds alternated:
+  - on the site speed table's 500 km set: 0.826 µs, against 1.229 on 0.6.20 and 0.766 on 0.6.17;
+  - at 830 km: 0.701, against 0.895 and 0.670.
+  - That set bakes 2.7 times as often as a seeded one: its stronger drag moves its mean elements across more parts of
+    each bracket.
 
 **The first state of a freshly loaded record**, warm instance: at 7 days, 25 to 28 % slower than 0.6.12 at 500 km and
 GEO (#439: each node step evaluates node a's held rates again). Against SGP4-XP: 1.3 at 500 km at 7 days and 3.3 at
