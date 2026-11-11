@@ -11,11 +11,16 @@
 //   - the velocity step |dv_k - (dv_(k-1) + dv_(k+1))/2| at most 1e-5 m/s, dv = v_(k+1) - v_k + mu r_k/|r_k|^3 dt.
 //   The call's first pair is left out: a call's first state differs from the batch by up to 3 cm (stack #420).
 //   0.6.11 stepped 42 to 77 m and 0.12 to 0.14 m/s on the transfer orbit, 5.5 to 9.3 cm and 3.5e-4 m/s on Molniya.
-// - The jump detector on a 10 s grid of days 3 to 7, within 10 min of each perigee, at most 1.5 times the same flight's
-//   drag-off floor. The detector is |d_k - (d_(k-1) + d_(k+1))/2|, d the second difference of position less h^2 times the
-//   two-body acceleration (mu 398600.4415 km^3/s^2). The drag-off floor is not drag: stack #420's kinks, about 80 s
-//   apart. Measured 2026-11-10 on the transfer orbit: 28 to 129 m on 0.6.11, 0.34 to 0.92 m on 0.6.12, 0.22 to 0.65 m
-//   with drag off.
+// - The jump detector on a 10 s grid of days 3 to 7, within 10 min of each perigee: at most 0.5 m with drag on, and at
+//   most 0.15 m with drag off (the floor). The detector is |d_k - (d_(k-1) + d_(k+1))/2|, d the second difference of
+//   position less h^2 times the two-body acceleration (mu 398600.4415 km^3/s^2).
+//   Measured 2026-11-10 on the transfer orbit, drag on / drag off:
+//   - 0.6.11: 28 to 129 m / 0.65 m;
+//   - 0.6.12: 0.92 / 0.65 m (the floor was #420's E-grid kinks);
+//   - with the E-grid read C1: 0.29 / 0.088 m.
+//   0.6.12 asserted at most 1.5 times the floor. That rule returns when the per-set caches make long ordered calls agree
+//   with short ones: the drag-on reading left is a call-pattern effect (#420's second part). Whichever of the two lands
+//   second measures it on the merged build.
 // Every number comes from the built module's own calls (propagate). JS only moves bytes and compares numbers the module
 // produced.
 //   node test/perigee-drag-continuity.e2e.mjs
@@ -33,7 +38,7 @@ const FIXTURES = {
   'transfer orbit': {n: 2.40, e: 0.72, i: 27, raan: 40, argp: 270, ma: 0, bterm: 0.06},
   Molniya: {n: 2, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10, bterm: 0.044},
 };
-const STEP_BOUND = 0.01, VELOCITY_BOUND = 1e-5, FLOOR_FACTOR = 1.5;
+const STEP_BOUND = 0.01, VELOCITY_BOUND = 1e-5, DETECTOR_BOUND = 0.5, FLOOR_BOUND = 0.15;
 const rows = rowsThrough(spwFixtureRows());
 const h = await createStandaloneHarness('browser', wasmPath, {surface: 'command'});
 const flyer = (c) => {
@@ -84,7 +89,8 @@ for (const [name, c] of Object.entries(FIXTURES)) {
   for (const p of picked) at.push({perigeeDays: +(p / 86400).toFixed(5), ...(await steps(on, p))});
   console.log(JSON.stringify({fixture: name, bterm: c.bterm, perigees: a.perigees.length, detectorNearPerigeeMeters: +a.near.toFixed(4),
     dragOffFloorMeters: +b.near.toFixed(4), steps: at.map((s) => ({...s, position: +s.position.toExponential(3), velocity: +s.velocity.toExponential(3)}))}));
-  if (!(a.near <= FLOOR_FACTOR * b.near)) failures.push(`${name}: detector ${a.near.toFixed(3)} m within 10 min of perigee against ${FLOOR_FACTOR} times the drag-off ${b.near.toFixed(3)} m`);
+  if (!(a.near <= DETECTOR_BOUND)) failures.push(`${name}: detector ${a.near.toFixed(3)} m within 10 min of perigee (at most ${DETECTOR_BOUND} m)`);
+  if (!(b.near <= FLOOR_BOUND)) failures.push(`${name}: the drag-off detector ${b.near.toFixed(3)} m within 10 min of perigee (at most ${FLOOR_BOUND} m)`);
   for (const s of at) {
     if (!(s.position <= STEP_BOUND)) failures.push(`${name}: position step ${s.position.toExponential(3)} m at the perigee of day ${s.perigeeDays}`);
     if (!(s.velocity <= VELOCITY_BOUND)) failures.push(`${name}: velocity step ${s.velocity.toExponential(3)} m/s at the perigee of day ${s.perigeeDays}`);

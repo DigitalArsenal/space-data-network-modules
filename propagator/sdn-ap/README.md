@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.13 (dist da12ee92).
+Version 0.6.14 (dist 2a1cf5ca).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -427,9 +427,12 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 
 ## Tests
 
-The tests write only under one scratch root (`test/lib/scratch.mjs`): `SDN_AP_TEST_SCRATCH`, or `sdn-ap-test-scratch` under
-the operating system's temporary directory (never a home directory). They build or compute what they read there: copies of
-earlier releases from git, test builds, the propagator/ffm model-truth caches. The model truth's constant space weather is
+The tests write only under their scratch roots (`test/lib/scratch.mjs`, never a home directory): `SDN_AP_TEST_SCRATCH`, or
+`sdn-ap-test-scratch-<tag>` under the operating system's temporary directory, the tag a hash of the checkout's real path,
+so two clones never share one. They build or compute what they read there: copies of earlier releases from git, test
+builds. The propagator/ffm model truths alone go to a shared folder (`sdn-ap-test-scratch-shared`, or `shared` under
+`SDN_AP_TEST_SCRATCH`): each file is named by the SHA-256 of FFM's build and every byte of its request, and written whole,
+so any clone may read what another made. The model truth's constant space weather is
 built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of such rows).
 
 - `test/conformance.e2e.mjs` (the task's E2E): a randomized corpus across LEO, SSO, MEO, GEO, HEO and VDS
@@ -491,6 +494,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/perigee-drag-continuity.e2e.mjs`: SPEC 16.12: no step at perigee above e 0.3 with drag. On the transfer-orbit
   fixture and on Molniya, at three perigees each, the position step stays at most 1 cm and the velocity step at most
   1e-5 m/s (5 ms states); within 10 min of perigee the 10 s jump detector stays within 1.5 times the drag-off flight's.
+- `test/egrid-continuity.e2e.mjs`: SPEC 16.11: the first-order families' grid in E read continuously with its slope. On
+  the transfer orbit and on Molniya with drag off, the jump detector within 600 s of perigee stays at most 0.08 m at 10 s
+  and 5 mm at 1 s (0.395 and 0.031 m on the transfer orbit through 0.6.13, kinks about 80 s apart).
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.

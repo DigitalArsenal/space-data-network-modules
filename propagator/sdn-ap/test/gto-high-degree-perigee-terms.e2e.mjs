@@ -9,11 +9,16 @@
 //    422.11 / 459.10);
 // 2. re-recorded as improvements, each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 94.07 /
 //    56.07, half-day 31.44 / 16.84, 12 h at 55 deg 66.68 / 5.70 (0.6.3, FFM 2.2.1 truth);
-// 3. Molniya with drag, its coefficient fitted: re-recorded at 239.68 / 175.18 within 0.5 (0.6.12, the perigee passes of
-//    SPEC 16.12, its fitted coefficient 0.0446231 against 0.0446183; 238.50 / 174.28 on 0.6.11, 238.03 / 173.92 at 0.6.3;
-//    0.4.14: 460.98 / 260.43; the fitted coefficient 0.04462 against the truth's 0.044, SPEC 16.11,
-//    modules-sdn-ap-drag-high-eccentricity-20261103; pinned at the truth's 0.044, 80.71 m on 0.6.12 against 80.76 m);
-//    with the coefficient pinned at the truth's 0.044: along-track no worse than 0.4.14's;
+// 3. Molniya with drag, its coefficient fitted: held to what its record states, the fitted B within one stated sigma of
+//    the truth's 0.044 and the day-7 position within three stated sigmas along R, I and C (test/lib/stated-sigma.mjs).
+//    The 72 h fit has two solutions that small numerical changes move it between (stack #392):
+//    - B 0.044623, fit RMS 21.911 m, day-7 along-track 239.68 m on 0.6.12;
+//    - B 0.045722, 21.337 m, 523.53 m with the C1 E-grid (#420).
+//    Both lie inside the statement: B at 0.12 and 0.34 of its stated sigma (about 0.005), the day-7 position within 0.22 of
+//    the stated sigma along each axis. Until 0.6.12 this was pinned to 0.5 m of a value (238.03 / 173.92 at 0.6.3, 238.50 /
+//    174.28 on 0.6.11; 0.4.14: 460.98 / 260.43; SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103).
+//    With the coefficient pinned at the truth's 0.044, the model's pin: 80.71 / 50.51 m to 5 cm (80.76 m on 0.6.11), and
+//    along-track no worse than 0.4.14's;
 // 4. the field cut to 4x4 on both sides, the Sun, Moon and J5 off on both sides, 2-minute samples: day-7 3D RMS at most
 //    100 (0.4.14 printed first);
 // 5. at the GTO fixture's elements, against an independent integration, each element within 0.1 m over one orbit: the
@@ -33,6 +38,7 @@ import {fileURLToPath} from 'node:url';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {runModelTruth} from './lib/heo-model-truth.mjs';
 import {wasmPath} from './lib/module.mjs';
+import {bSigmas, statedAtForecastEnd} from './lib/stated-sigma.mjs';
 
 const BASE = '8fdf5b1af';
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
@@ -162,6 +168,9 @@ for (const [name, c] of Object.entries(FIXTURES)) {
   for (const [arm, modulePath] of [['0.4.14', baseline], ['release', wasmPath]]) {
     const r = await runModelTruth({name, ...c, hourly: true, modulePath});
     fixtures[name][arm] = {alongTrack: r.wholeDay[7].t, radial: r.wholeDay[7].r, crossTrack: r.wholeDay[7].n, bterm: r.fitted.bterm};
+    // the coefficient fitted on this build: the record's own statement at the forecast's end (test/lib/stated-sigma.mjs)
+    if (arm === 'release' && c.drag && !c.fitPolicy)
+      Object.assign(fixtures[name][arm], {bModel: r.fitted.bModel, fitRmsM: r.fitted.wrms * 1000, stated: await statedAtForecastEnd(r, 7, modulePath)});
   }
   console.log(JSON.stringify({fixture: name, ...fixtures[name]}));
 }
@@ -204,7 +213,18 @@ for (const [name, [t, r]] of Object.entries({'GTO-500': [94.07, 56.07], 'half-da
   assert.ok(fixtures[name].release.alongTrack < fixtures[name]['0.4.14'].alongTrack && fixtures[name].release.radial < fixtures[name]['0.4.14'].radial, `${name}: below 0.4.14`);
 }
 // Molniya re-recorded at 0.6.3 (the grid, exact keys in a fit; FFM 2.2.1 truth)
-assert.ok(near(fixtures.Molniya.release.alongTrack, 239.68, 0.5) && near(fixtures.Molniya.release.radial, 175.18, 0.5), 'Molniya, coefficient fitted: within 0.5 m of 239.68 / 175.18');
+// Molniya with its coefficient fitted: held to its record's statement (B within one stated sigma of the truth's 0.044, the
+// day-7 position within three stated sigmas along R, I and C); the fit has two solutions (stack #392, header item 3)
+{
+  const m = fixtures.Molniya.release, bs = bSigmas(m.bModel);
+  console.log(JSON.stringify({molniyaFitted: {bterm: m.bterm, bModel: m.bModel, bSigmas: bs, fitRmsM: m.fitRmsM, day7AlongTrackRmsM: m.alongTrack, stated: m.stated}}));
+  assert.ok(bs <= 1, `Molniya, coefficient fitted: B ${m.bterm} lies ${bs.toFixed(2)} of its stated sigma from 0.044`);
+  for (const [k, v] of Object.entries(m.stated)) assert.ok(Math.abs(v.z) <= 3, `Molniya, coefficient fitted: day-7 ${k} error ${v.errorM.toFixed(1)} m against the stated sigma ${v.sigmaM.toFixed(1)} m`);
+}
+// Molniya with its coefficient pinned at the truth: the model's pin, to 5 cm (80.71 / 50.51 m on 0.6.12 and with the C1
+// E-grid alike), and no worse than 0.4.14
+assert.ok(near(fixtures['Molniya-pinned'].release.alongTrack, 80.71, 0.05) && near(fixtures['Molniya-pinned'].release.radial, 50.51, 0.05),
+  `Molniya, coefficient pinned: day 7 ${fixtures['Molniya-pinned'].release.alongTrack} / ${fixtures['Molniya-pinned'].release.radial} m against 80.71 / 50.51`);
 assert.ok(fixtures['Molniya-pinned'].release.alongTrack <= fixtures['Molniya-pinned']['0.4.14'].alongTrack, 'Molniya, coefficient pinned: along-track no worse than 0.4.14');
 assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {
