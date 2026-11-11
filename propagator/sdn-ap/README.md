@@ -517,6 +517,13 @@ From 0.6.16 an AP set in the long-period regime above e0 0.3 steps at most half 
 integration error at day 5 (0.08 m now), and 919 m against FFM model truth with the Sun and Moon (123 m now; SPEC 16.10,
 `test/long-period-perigee-step.e2e.mjs`, stack #445). Sets at e0 0.3 and below are unchanged.
 
+AP sets with a zonal cap of 3 or more add the first-order short-period terms of J3 to J5. They are closed form in the true
+anomaly and exact in e (`src/zonal_short_period.inc`, SPEC 16.3, stack #451). Brouwer's theory and SGP4XP carry those
+degrees in the long-period terms only. Against an integration over one orbit the terms agree to under 2 mm from e 0.001 to
+0.83 (`test/zonal-short-period.e2e.mjs`). In FFM model truth they take the 72 h fit's in-arc RMS on zonal fields from 8 to
+11 m to 2 to 5 m at 690 to 1,340 km, and from 61 to 31 m on a THEMIS-like orbit. Every such set moves: 11.6 m at 690 km,
+0.7 m in MEO, 0.56 m at GEO.
+
 When the local Hansen expansion is selected (SPEC 6.4), the original AP resonance coefficients are exact at the epoch eccentricity
 to numerical-integral precision and third order within |de| <= 0.02. Measured per-term relative truncation
 errors are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05; these are not uniform error bounds.

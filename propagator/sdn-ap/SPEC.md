@@ -1387,6 +1387,7 @@ vectors hold states for mean motions 0.9, 0.5, 0.25 and 0.1 rev/day.
    short-period corrections of Brouwer (1959, section 7), in the arrangement of the SGP4 final step (Hoots &
    Roehrich 1980): corrections to the radius r, the argument of latitude u = omega + nu, the node Omega, the
    inclination i, the radial velocity r-dot and the transverse velocity r f-dot *[lit; study; probe 8.2]*.
+   AP adds, before this step, the first-order short-period terms of J3 to J5 to the mean elements (16.3).
 6. Position and velocity from the corrected (r, u, Omega, i, r-dot, r f-dot) with the orientation vectors of the
    SGP4 final step, scaled to km and km/s (section 10).
 
@@ -2200,6 +2201,75 @@ For e0 at or below 0.3 the zonal tail carries, for even degrees, the secular ter
 is of the same order in e in the perigee rate and 50 to 78 % of the term kept. The perigee rate is short by 2.0e-5 rad/day at
 800 x 1,100 km, e 0.0206, i 49.8 deg: a radial error growing 3.1 m/day there, and 6 to 54 m/day at e 0.1 between 500 and
 1,200 km. Above e0 0.3 the zonal tail carries every long-period term (16.11).
+
+**The zonal short-period terms of degree 3 to 5 (stack #451).** Section 8 carries only Brouwer's first-order J2 terms.
+Brouwer (1959) puts J3 to J5 in the long-period terms alone, and SGP4-XP follows. Their short-period terms are of order J3, the
+size of J2^2.
+
+An AP set whose zonal cap z reaches l adds the terms of J_l, l = 3 to min(z, 5) (`src/zonal_short_period.inc`).
+- They are added at the output time to the interpolated mean elements, before section 8's step, as 16.2's tesseral terms
+  are.
+- A covariance's moved sets take the nominal's terms with their lambda derivatives, as they take the tesseral terms.
+- SGP4XP, and a set whose zonal cap is below 3, are unchanged bit for bit.
+
+The terms are closed form and exact in e:
+- For each degree, W_l = (1/n) int (R_l - <R_l>_M) dM, R_l = -mu J_l r^-(l+1) P_l(sin i sin u).
+- With dM = (r/a)^2 / eta df, the integrand is K_l (1 + e cos f)^(l-1) P_l(sin i sin(omega + f)), with
+  K_l = -mu J_l a^-(l+1) eta^-(2l-1). It is a finite trigonometric polynomial in f and omega.
+- So W_l = (K_l / n)(S(f) + c0 (f - M) + C):
+  - S is a finite trigonometric series in f;
+  - c0 is the integrand's mean over f;
+  - C makes the mean over M zero, through <e^{i m f}>_M = (-beta)^|m| (1 + |m| eta), beta = e / (1 + eta).
+- The corrections are Lagrange's equations applied to W, written for (af, ag, chi, psi, lambda, n) in forms regular at small
+  e and small i. Below e 1e-9 they are read at e = 1e-9, where they are continuous.
+- They are smooth in the set's own elements. With the mean motion stepped by 1e-10 relative, the terms' contribution has a
+  second difference of at most 0.5 micrometers at 1 h, 1 day and 3 days (690 km and THEMIS-like). The flight without them
+  reads 0.02 to 0.13 mm there.
+
+Above an epoch inclination of 179 deg the set takes none of these terms and flies as before. Within 1 deg of a retrograde
+equatorial orbit tan(i/2) diverges and the first-order corrections to chi and psi stop being small. Against the integration
+below they are good to 3 to 4 mm at 170 to 175 deg, 6 cm at 179 deg and 14 m at 179.9 deg. This is the theory's own
+singularity: its equinoctial set is the direct one.
+
+**The check** (`test/zonal-short-period.e2e.mjs` at e 0.001 and 0.83: at most 0.17 and 0.63 mm):
+- Two-body plus J3 to J5, integrated over one orbit (RK4, 200,000 steps) from the osculating state of mean + terms(M0).
+- It is compared with mean(t) + terms(M(t)), the mean elements drifting at the first-order rates of <R> from the same closed
+  form. Nothing is fitted.
+- Per coordinate, i 50 deg (the e 0.83 row at i 10 deg):
+
+| e | n (rev/day) | RMS (mm) | Maximum (mm) |
+| ---: | ---: | ---: | ---: |
+| 0.001 | 14.6 | 0.1 | 0.2 |
+| 0.05 | 14.6 | 0.1 | 0.2 |
+| 0.3 | 14.6 | 0.4 | 1.0 |
+| 0.6 | 4.0 | 0.4 | 1.6 |
+| 0.83 | 1.0496 | 0.1 | 0.6 |
+
+**FFM model truth** (zonal field only on both sides, J2 to J5; no Sun, Moon, drag or radiation; a 72 h fit). In-arc RMS:
+
+| Orbit | Without the terms | With them | J2 alone on both sides |
+| --- | ---: | ---: | ---: |
+| 690 km, i 50 | 8.4 m | 4.6 m | 4.5 m |
+| 690 km, i 66 | 10.4 m | 3.1 m | 3.1 m |
+| 690 km, i 98 | 11.0 m | 4.3 m | 4.3 m |
+| 1,340 km, i 66 | 8.6 m | 2.4 m | 2.3 m |
+| MEO (2.0056 rev/day, e 0.005) | 0.7 m | 0.1 m | |
+| THEMIS-like (e 0.822) | 61.3 m | 30.6 m | 30.6 m |
+
+- Day-1 cross-track at 690 km: 7.0 / 10.3 / 4.8 m without the terms, 1.2 / 1.6 / 0.3 m with them.
+- THEMIS-like, days 1 / 5 / 7: 64.6 / 78.9 / 89.6 m without the terms, 32.4 / 39.8 / 45.0 m with them. Those are J2 alone's
+  figures.
+- What is left is J2's second order, which section 8 does not carry: 2.3 to 4.5 m in low orbit and 30 m on the
+  THEMIS-like orbit.
+
+**Every AP set with a zonal cap of 3 or more moves.** The same seeded set flown with and without the terms, 3D RMS, flat
+over 7 days:
+- 690 km: 11.6 m (17.5 m at most). 1,340 km: 8.8 m.
+- MEO: 0.70 m. GEO: 0.56 m (J3's offset along the axis).
+- Molniya: 7.9 m. THEMIS-like: 49 m (69 m at most).
+
+The output stays continuous: the jump detectors read the same with and without the terms (THEMIS-like, 10 s: 0.0261 m;
+1 s: 1.3 mm; low orbit and Molniya likewise).
 
 **16.4 Frame.** Frame policy is selected once by `xp_init` from the epoch propagation branch and the
 selected gravity replacements. With d or z above 0, epoch periods below 1100 minutes and the nonzero
