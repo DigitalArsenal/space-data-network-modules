@@ -6214,10 +6214,10 @@
       "declaration": null
     },
     "propagator/sdn-ap/dist/isomorphic/module.wasm": {
-      "sha256": "6edc1b971d90cf9d60e31cea703335b06ffbf36295714e3890869a9cc921e98e",
+      "sha256": "612bf6b7aad7bcf3483c399e5c269e49227cfd8fc9e20317a503dc5f72473887",
       "bytes": 1432865,
-      "wasmSha256": "6edc1b971d90cf9d60e31cea703335b06ffbf36295714e3890869a9cc921e98e",
-      "canonicalModuleSha256": "f0eb3852ef88e51dc55722f50d2984d770b2cc0bb9813a45c1f0a3e7c0a3c838",
+      "wasmSha256": "612bf6b7aad7bcf3483c399e5c269e49227cfd8fc9e20317a503dc5f72473887",
+      "canonicalModuleSha256": "dd3cb9e592a7e1c64c5b72c0655cff8f2bcb247df1ccb80c8a365d1543050138",
       "form": "raw",
       "module": "propagator/sdn-ap",
       "lastCommit": "bbc47df56c2b0f62110b4eefb84845c2bca9d8c4",

@@ -1,7 +1,7 @@
 {
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
-  "version": "0.6.25",
+  "version": "0.6.27",
   "description": "General-perturbations propagation of whole catalogs in one WASM module. Theories: SGP4 (STR#3 / Vallado 2006) and SGP4XP (the US Space Force SGP4-XP theory, clean-room from the public change list and the black-box specification), and AP, an advanced propagator that builds on the entire history of astrodynamics. Element sets are $OCM records, each the whole input of its flight: theory, forces, daily space weather, density-correction nodes and covariance typed; the propagator ABI struct path (plugin_init_omm) flies stock SGP4XP only. Propagator ABI exports (plugin_init_omm, plugin_propagate, plugin_propagate_batch, plugin_entity_count, plugin_destroy; Earth-fixed meters) and a structure-of-arrays batch entry (sdnap_*; TEME or Earth-fixed). Bounded checkpoint storage per object; cached brackets interpolate, first queries build nodes, and beyond-span queries integrate from the nearest preceding retained node. An AP state is a function of its set and its time alone: the order of requests, the call they come in and the sets flown between them leave its bits unchanged (SPEC 9; test/set-caches.e2e.mjs). A store's AP sets keep their own caches and node runs from one pool (256 MB; sdnap_cache_stats reads it); sets beyond it fly on the thread's caches with the same states. Cost and memory by request pattern: README, Memory and time (test/kernel-patterns.mjs).",
   "pluginFamily": "propagator",
   "capabilities": [],
