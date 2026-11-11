@@ -5,19 +5,25 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 export { ALL, CASES, run, scoreResponse } from '../nyx/scoring.mjs';
+import { resolveRecorded } from '../paths.mjs';
 
 export const here = path.dirname(fileURLToPath(import.meta.url));
 export const readJson = (file) => JSON.parse(fs.readFileSync(path.resolve(here, file), 'utf8'));
-export const sha256 = (file) => createHash('sha256').update(fs.readFileSync(path.resolve(here, file))).digest('hex');
+// A recorded path may be a label for an outside folder (../paths.mjs); it is hashed where its variable points.
+export const sha256 = (file) => {
+  const resolved = resolveRecorded(file, here);
+  if (!resolved) throw new Error(`${file}: set the variable of its folder (docs/cross-validation.md, Outside inputs)`);
+  return createHash('sha256').update(fs.readFileSync(resolved)).digest('hex');
+};
 export const classification = 'model-setting difference (GMAT density without anomalous oxygen)';
 export const sourceFiles = ['evidence.mjs', 'gmat-metrics.cpp', 'check-gmat.mjs', 'update-summary.mjs',
   'score-gmat.mjs', 'anomalous-oxygen.mjs', 'run-gmat.mjs', 'gmat-files.mjs',
   '../nyx/scoring.mjs', '../nyx/score-metrics.cpp', '../tudat/scoring.mjs', '../recorded-numbers.mjs', '../../lib/orekitCases.mjs', '../../lib/prwCodec.mjs', '../../../lib/nrlmsise00.cpp'];
 export const externalSources = [
-  { path: '/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp',
+  { path: '<xval>/gmat-src/NRLMsise00Atmosphere.cpp',
     source: 'NASA GMAT NRLMSISE-00 plugin source copy', lines: '284-285, 322',
     statement: 'Density calls gtd7_ and returns xden[5] * 1000 kg/m^3.' },
-  { path: '/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c',
+  { path: '<xval>/gmat-src/nrlmsise00_sub.c',
     source: 'NASA GMAT NRLMSISE-00 Fortran-to-C source copy', lines: '1044-1054, 1338-1345, 2226-2230',
     statement: 'gtd7 total mass density excludes anomalous oxygen; gtd7d adds species 9 times atomic mass 16.' },
 ];

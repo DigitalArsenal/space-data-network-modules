@@ -40,9 +40,13 @@ parser.add_argument('--reps', type=int, default=1)
 parser.add_argument('--out')
 parser.add_argument('--scratch', help='directory for the written field file (default <work>)')
 parser.add_argument('--fixed-task', type=float, help='fixed tier: run at this task rate (s) instead of the plan step, labeled fixed-<s>s')
-parser.add_argument('--support', default='/Users/tj/software/tools/xval/bsk-data/supportData')
-parser.add_argument('--bpc', default='/Users/tj/software/tools/xval/naif-kernels/earth_latest_high_prec.bpc')
+# Tool folders come from FFM_XVAL_TOOLS (docs/cross-validation.md, Outside inputs), never from a path here.
+XVAL = os.environ.get('FFM_XVAL_TOOLS')
+parser.add_argument('--support', default=str(Path(XVAL) / 'bsk-data/supportData') if XVAL else None)
+parser.add_argument('--bpc', default=str(Path(XVAL) / 'naif-kernels/earth_latest_high_prec.bpc') if XVAL else None)
 args = parser.parse_args()
+if not args.support or not args.bpc:
+    raise SystemExit('Set FFM_XVAL_TOOLS (or pass --support and --bpc) to the folder of the cross-validation tool installs.')
 for key in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS', 'MKL_NUM_THREADS'):
     os.environ[key] = '1'
 WORK = Path(args.work).resolve()

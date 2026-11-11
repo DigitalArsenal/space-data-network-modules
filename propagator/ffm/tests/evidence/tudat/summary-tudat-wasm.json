@@ -1315,7 +1315,7 @@
   "sourceIdentity": [
    {
     "path": "scoring.mjs",
-    "sha256": "bd500d42450b571dab0d8c2c30facfdc9cf8e047ef1311c1dc593cc145e5b477"
+    "sha256": "c426160e5e22ef741dd050a00a4c2646b47e47700dd655bd6d34fcd1bcfc1bf2"
    },
    {
     "path": "score-tudat.mjs",
@@ -1323,7 +1323,7 @@
    },
    {
     "path": "check-tudat.mjs",
-    "sha256": "9181dcd0cfa67a1e0f1c73b6ce3a659b5c09dc57c4edf56fff412f688ef67c82"
+    "sha256": "41c185321810d2e293130cde47759e5f91f189f1c44045e12e00a688bfeb1ff3"
    },
    {
     "path": "../recorded-numbers.mjs",
@@ -1347,7 +1347,7 @@
    },
    {
     "path": "README.md",
-    "sha256": "c70d431f4eabf4af9b9ebe5232545f0920b4b4350dfbb92a884886e0940d6fc7"
+    "sha256": "2e25c45971f0b4d5320969f063de4de31ae48a7629a44387697ce1efad38dcce"
    }
   ],
   "propagationInputs": [
@@ -1432,7 +1432,7 @@
   },
   {
    "path": "scoring.mjs",
-   "sha256": "bd500d42450b571dab0d8c2c30facfdc9cf8e047ef1311c1dc593cc145e5b477"
+   "sha256": "c426160e5e22ef741dd050a00a4c2646b47e47700dd655bd6d34fcd1bcfc1bf2"
   },
   {
    "path": "score-tudat.mjs",
@@ -1440,7 +1440,7 @@
   },
   {
    "path": "check-tudat.mjs",
-   "sha256": "9181dcd0cfa67a1e0f1c73b6ce3a659b5c09dc57c4edf56fff412f688ef67c82"
+   "sha256": "41c185321810d2e293130cde47759e5f91f189f1c44045e12e00a688bfeb1ff3"
   },
   {
    "path": "../recorded-numbers.mjs",
@@ -1464,7 +1464,7 @@
   },
   {
    "path": "README.md",
-   "sha256": "c70d431f4eabf4af9b9ebe5232545f0920b4b4350dfbb92a884886e0940d6fc7"
+   "sha256": "2e25c45971f0b4d5320969f063de4de31ae48a7629a44387697ce1efad38dcce"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",

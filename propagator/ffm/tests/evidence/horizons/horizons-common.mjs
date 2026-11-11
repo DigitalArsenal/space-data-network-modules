@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { composeErfaTranslationUnit } from '../../../../../foundation/frames/erfa-amalgamation.mjs';
 import { requestFor, decodeResult, encodePrw, execution, nativeInput, TYPE, makeTable, sds } from '../../lib/prwCodec.mjs';
+import { recordedJson, rootDir } from '../paths.mjs';
 
 export const here = path.dirname(fileURLToPath(import.meta.url));
 export const ffm = path.resolve(here, '../../..');
@@ -23,7 +24,8 @@ export const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 export const targets = Object.freeze({ sun: 10, moon: 301, venus: 299, jupiter: 5, jwst: -170 });
 export const names = Object.keys(targets);
 export const env = { ...process.env, OMP_NUM_THREADS: '2', OPENBLAS_NUM_THREADS: '1', MKL_NUM_THREADS: '1', VECLIB_MAXIMUM_THREADS: '1', PYTHONDONTWRITEBYTECODE: '1' };
-export const write = (file, value) => fs.writeFileSync(path.join(here, file), JSON.stringify(value, null, 1) + '\n');
+// Paths are written in recorded form (../paths.mjs): repository-relative, or a label for an outside folder.
+export const write = (file, value) => fs.writeFileSync(path.join(here, file), JSON.stringify(recordedJson(value, path.dirname(path.join(here, file))), null, 1) + '\n');
 
 export function authenticateRaw() {
   const index = read(path.join(here, 'raw/index.json'));
@@ -53,7 +55,7 @@ export function authenticateRaw() {
 }
 
 export async function buildMetrics(work, flatbuffers) {
-  const inc = flatbuffers ?? process.env.XVAL_FLATBUFFERS ?? '/Users/tj/software/spacedatanetwork-stack/repos/main-packages/flatbuffers/include';
+  const inc = flatbuffers ?? rootDir('flatbuffers include', { required: true });
   const binary = path.join(work, 'horizons-metrics');
   const erfa = await composeErfaTranslationUnit();
   const erfaUnit = path.join(work, 'erfa-amalgamation.cpp');

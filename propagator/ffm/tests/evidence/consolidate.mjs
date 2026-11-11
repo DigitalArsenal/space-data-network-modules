@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { xvalDir } from './rescore-all.mjs';
+import { recordedJson } from './paths.mjs';
 export const here = path.dirname(fileURLToPath(import.meta.url));
 export const root = path.resolve(here, '../../../..');
 const read = (p) => JSON.parse(fs.readFileSync(path.resolve(here, p), 'utf8'));
@@ -326,7 +327,9 @@ export function generate(work) {
       {label:'GMAT anomalous oxygen',statement:s['gmat-2026'].cases.find((r)=>r.cause).cause.statement,evidence:'gmat/anomalous-oxygen.json'},
       {label:'Basilisk atmosphere altitude and conventions',statement:[s.basilisk.primary?.statement,s.basilisk.cases.map((r)=>r.stock?.cause??r.cause).find(Boolean).statement].filter(Boolean).join(' '),evidence:'basilisk/summary-basilisk-2.12.0.json'},
     ]},sgp4:{str3:s.str3,xp:s.xp}};
-  return {data,...render(data)};
+  // Every path in the record is in recorded form (paths.mjs): repository-relative, or a label for an outside folder.
+  const recorded=recordedJson(data,here);
+  return {data:recorded,...render(recorded)};
 }
 export function applyBlocks(blocks,write=false) {
   for(const b of blocks){const file=path.join(root,b.file),old=fs.readFileSync(file,'utf8');

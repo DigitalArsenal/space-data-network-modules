@@ -8,11 +8,14 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {composeErfaTranslationUnit} from '../../../../../foundation/frames/erfa-amalgamation.mjs';
 import {createFFMPropagator} from '../../../index.js';
+import {outsidePath} from '../paths.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url)),ffm=path.resolve(here,'../../..'),repo=path.resolve(ffm,'../..');
 const before=process.argv.includes('--capture-before');
 const hasEpoch=fs.readFileSync(path.join(ffm,'lib/coords.h'),'utf8').includes('struct Epoch');
-const python=process.env.ERFA_PYTHON||'/Users/tj/software/tools/xval/erfa-spice/bin/python';
+// Outside folders come from the environment (docs/cross-validation.md, Outside inputs), never from a path here.
+const python=process.env.ERFA_PYTHON||outsidePath('xval','erfa-spice/bin/python');
+if(!python)throw new Error('Set ERFA_PYTHON to the erfa-spice Python, or FFM_XVAL_TOOLS.');
 const work=fs.mkdtempSync(path.join(here,'.classical-'));
 const hash=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 const run=(exe,args,options={})=>execFileSync(exe,args,{encoding:'utf8',maxBuffer:128<<20,env:{...process.env,TMPDIR:work,TMP:work,TEMP:work},...options});

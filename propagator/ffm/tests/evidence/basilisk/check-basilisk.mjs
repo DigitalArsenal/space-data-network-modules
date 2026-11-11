@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isLabel, resolveRecorded, writtenSha256 } from '../paths.mjs';
 import { ALL, CASES, WASM, here, exportPath, sha256, readJson, normalizedRecord,
   buildMetrics, run, scoreResponse, scoreStored, scoreOrekit, scoreDifference, scoreConvergence,
   protocolFor, causePresent, verdictFor, propagationIdentity, stmSkipped } from './scoring.mjs';
@@ -27,15 +28,19 @@ const checked = new Map();
 
 function verifyFile(file, checksum, label, required = false) {
   if (!nonempty(file) || !digest(checksum)) { check(false, `${label}: missing path or invalid SHA-256`); return; }
-  const resolved = path.resolve(here, file);
-  if (!checked.has(resolved)) checked.set(resolved, fs.existsSync(resolved) ? sha256(resolved) : null);
+  // A label names an outside folder (../paths.mjs); with its variable unset the file is unavailable here.
+  const resolved = resolveRecorded(file, here) ?? file;
+  if (!checked.has(resolved)) checked.set(resolved, !isLabel(resolved) && fs.existsSync(resolved) ? sha256(resolved) : null);
   const actual = checked.get(resolved);
   if (actual === null) {
     if (required) check(false, `${label}: required file is unavailable: ${file}`);
     else missing.add(resolved);
   } else {
-    check(actual === checksum, `${label}: SHA-256 mismatch: ${file}`);
-    if (actual === checksum) verified.add(resolved);
+    // A tool output whose path strings were rewritten (../paths.mjs) declares the SHA-256 the tool wrote; a pin made
+    // before the rewrite, by another tool output, names that one.
+    const matches = actual === checksum || writtenSha256(resolved) === checksum;
+    check(matches, `${label}: SHA-256 mismatch: ${file}`);
+    if (matches) verified.add(resolved);
   }
 }
 

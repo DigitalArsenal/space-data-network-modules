@@ -162,7 +162,7 @@
         "status": "unavailable",
         "reason": "The original Orekit 13.1 jar is not retained locally; the stored trajectory and generation source are pinned. Installed 13.1.2 and 13.1.6 jars are not substituted."
       },
-      "summarySha256": "67d2d612fb83afadeddfa05552571027cb8b96a8f32c26a2dd0639ef9b8d0304",
+      "summarySha256": "ca28d543305d0f34edfab437b882f1ba46f94a5194fcf8c2f368660927fe9c86",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -1658,7 +1658,7 @@
         "gmatConsoleSha256": "1162803de3ed7172bce882b201b00e58de5b604c76a2ba02d16ac6765e7552e2",
         "gmatBaseSha256": "e55086ed22bac9529298482ddc6dfbb703cb457d06d7883ff3d2f65df8ddab26"
       },
-      "summarySha256": "f5fa7f3d2fe0475f9bb71093b537ce38842d8b470f4a88b8408e6dd909e7c6c3",
+      "summarySha256": "3b071c3b2169de3b53c4ba7943bfa2b5de0ce8302e71e4f121420387981d80bf",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -1819,11 +1819,11 @@
               "sourceRelease": "R2026a",
               "sources": [
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+                  "file": "<xval>/gmat-src/NRLMsise00Atmosphere.cpp",
                   "lines": "284-285, 322"
                 },
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+                  "file": "<xval>/gmat-src/nrlmsise00_sub.c",
                   "lines": "1044-1054, 1338-1345, 2226-2230"
                 }
               ]
@@ -1957,11 +1957,11 @@
               "sourceRelease": "R2026a",
               "sources": [
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+                  "file": "<xval>/gmat-src/NRLMsise00Atmosphere.cpp",
                   "lines": "284-285, 322"
                 },
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+                  "file": "<xval>/gmat-src/nrlmsise00_sub.c",
                   "lines": "1044-1054, 1338-1345, 2226-2230"
                 }
               ]
@@ -2095,11 +2095,11 @@
               "sourceRelease": "R2026a",
               "sources": [
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+                  "file": "<xval>/gmat-src/NRLMsise00Atmosphere.cpp",
                   "lines": "284-285, 322"
                 },
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+                  "file": "<xval>/gmat-src/nrlmsise00_sub.c",
                   "lines": "1044-1054, 1338-1345, 2226-2230"
                 }
               ]
@@ -2348,11 +2348,11 @@
               "sourceRelease": "R2026a",
               "sources": [
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+                  "file": "<xval>/gmat-src/NRLMsise00Atmosphere.cpp",
                   "lines": "284-285, 322"
                 },
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+                  "file": "<xval>/gmat-src/nrlmsise00_sub.c",
                   "lines": "1044-1054, 1338-1345, 2226-2230"
                 }
               ]
@@ -2486,11 +2486,11 @@
               "sourceRelease": "R2026a",
               "sources": [
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+                  "file": "<xval>/gmat-src/NRLMsise00Atmosphere.cpp",
                   "lines": "284-285, 322"
                 },
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+                  "file": "<xval>/gmat-src/nrlmsise00_sub.c",
                   "lines": "1044-1054, 1338-1345, 2226-2230"
                 }
               ]
@@ -2555,11 +2555,11 @@
               "sourceRelease": "R2026a",
               "sources": [
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/NRLMsise00Atmosphere.cpp",
+                  "file": "<xval>/gmat-src/NRLMsise00Atmosphere.cpp",
                   "lines": "284-285, 322"
                 },
                 {
-                  "file": "/Users/tj/software/tools/xval/gmat-src/nrlmsise00_sub.c",
+                  "file": "<xval>/gmat-src/nrlmsise00_sub.c",
                   "lines": "1044-1054, 1338-1345, 2226-2230"
                 }
               ]
@@ -3413,7 +3413,7 @@
         "gmatConsoleSha256": "c8a214cf761d7d074c20bee17586a16ac9c9dca9475018e8a0866116377ab655",
         "gmatBaseSha256": "25ad1998de28ac0ac5676341b6ea8642ae7fc6fc23fee8b8b7e077392fbe6f98"
       },
-      "summarySha256": "c71b418c6c939e9e05fc31aea4f251097236a6631a742b9e2fbae9022658d965",
+      "summarySha256": "1449ba65092e7ef407437f827b70b54ecd2a9facbe311b93256f373beb5f6285",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -4641,7 +4641,7 @@
         "binarySha256": "689b59fa8a3919ce4411e3478c458b8a9d0b07b7bfe02c60d282234b20e2db8f",
         "nyxCrateSha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
       },
-      "summarySha256": "d9e502d2d5dd60e0db43113fe6dc94bf816c1119cb38b868a0e501571f4786a5",
+      "summarySha256": "42049e1d1b30c91b71dc31fdbf45edd15097aa752273ee78f2f5b63495beba64",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -6261,7 +6261,7 @@
         "kernelSha256": "18196bbc8fc5aaf77e2b990012bae60325ca15ad6062048c0bed23e874faf672",
         "python": "3.11.17"
       },
-      "summarySha256": "9edf5ae34806c2c6b308b7c24dde5414f402b1b06ac0bbfe012fe8b4d246714b",
+      "summarySha256": "11ce8f5be917d8164084b5347592fa40d856ffc3306bf5d95d407c87e152a499",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -7807,7 +7807,7 @@
         "fixtureSha256": "7a3fdd5a912240e0330d03a8b777129d7530b26eb7c79b22786e8548fc3888bb"
       },
       "provenanceLimitations": "Committed C++ driver trajectory; the package Embind API cannot configure/run propagation (duplicate registrations, station-file initialization, missing STL/Eigen bindings). No Tudat rebuild or rerun was performed.",
-      "summarySha256": "06fd8b84315afca5fd069cb528259b34c521439409b94023708006b80cda405b",
+      "summarySha256": "e1934d53404ebd39606c941084914efd1645c477706392c09fdb52d7fc0c4529",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -8560,7 +8560,7 @@
         {
           "label": "Basilisk spacecraft binary",
           "sha256": "523c000e9be8966f6a7bc64827a8415bba6aee27543967ceb45cd44412cff9f0",
-          "path": "../../../../../../../tools/xval/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spacecraft.so"
+          "path": "<xval>/bsk-venv/lib/python3.14/site-packages/Basilisk/simulation/_spacecraft.so"
         },
         {
           "label": "Basilisk source revision",
@@ -8736,7 +8736,7 @@
           }
         ]
       },
-      "summarySha256": "881378e1165828e0c6973ab7a4540d004e888604dfaf7bf306dd6510ae97fded",
+      "summarySha256": "a215d6430f561a20f17f1c67aa8f82a5b8abb6a6f2d2192a522bc45135fe661f",
       "counts": {
         "decomposition": 0,
         "diagnostic": 0,
@@ -9848,7 +9848,7 @@
       },
       "stepSetting": "stored epochs; no integration",
       "protocol": {
-        "command": "node tests/evidence/erfa-spice/run-erfa-spice.mjs --flatbuffers /Users/tj/software/main-packages/flatbuffers/include",
+        "command": "XVAL_FLATBUFFERS=<flatbuffers include> node tests/evidence/erfa-spice/run-erfa-spice.mjs",
         "units": "angles mas; position differences/bounds meters; rates m/s",
         "epochs": "50 UTC hourly samples; exact TT/UT1; rates diagnostic spans 1990–2040",
         "radiiM": {
@@ -9858,7 +9858,7 @@
         },
         "toleranceRationale": "Precession 0.001 mas; classical ERFA identity 1e-7 mas (matrix rounding, <0.021 micrometer at GEO); CIO 0.022 mas includes 0.02 mas hourly CIP interpolation; kernel reads 1 mm. Model-spread rows are diagnostic, limits are not widened."
       },
-      "summarySha256": "329ca987130dd91395c80a578567e386015140d6a67de6db6caae339f66642c0",
+      "summarySha256": "d0093a149c98f5236633073565e82b6114f81541e2b3ddd040c17d2dd79240a0",
       "counts": {
         "decomposition": 0,
         "diagnostic": 13,
@@ -10509,7 +10509,7 @@
         "jwstEpochUtc": "2026-06-10T00:00:00.000",
         "jwstFinalEpochUtc": "2026-06-11T00:00:00.000"
       },
-      "summarySha256": "270281a21fbc5a0f2decc2dd4629ed60786a21ac01fcefd4edc50c79f7e7fdb7",
+      "summarySha256": "20b995fffb755106e23eedfa9c7cedf66825373ff94581cf2de5b09f86a64141",
       "counts": {
         "decomposition": 0,
         "diagnostic": 4,
@@ -12187,66 +12187,66 @@
         {
           "label": "Anomalous-oxygen diagnostic",
           "path": "gmat/anomalous-oxygen.json",
-          "sha256": "c764b552e40a161b5b06a3c7369736d0a1b3a0025ac7e03c46fbdd8816f18f2e"
+          "sha256": "4f06ddac4291b2d1b1ac1f7f2ac9bb2f0829221393e84fe0918cff61737756c2"
         },
         {
           "label": "LEO400_F6-field-sun-moon-srp-drag.txt",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/LEO400_F6-field-sun-moon-srp-drag.txt",
+          "path": "<gmat work>/anomalous-oxygen/LEO400_F6-field-sun-moon-srp-drag.txt",
           "sha256": "aab0dd100945207768a85fca4e3e66bc6b0f2a31361c3555114633a63d7ffa78"
         },
         {
           "label": "LEO400_F6-field-sun-moon-srp-drag.script",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/LEO400_F6-field-sun-moon-srp-drag.script",
+          "path": "<gmat work>/anomalous-oxygen/LEO400_F6-field-sun-moon-srp-drag.script",
           "sha256": "a5c9e8575312ae7c875ea93a7d4e17e0966dbcb289ded124a94d143a0dd35813"
         },
         {
           "label": "LEO400_Z3-zonal20-sun-moon-srp-drag.txt",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/LEO400_Z3-zonal20-sun-moon-srp-drag.txt",
+          "path": "<gmat work>/anomalous-oxygen/LEO400_Z3-zonal20-sun-moon-srp-drag.txt",
           "sha256": "a216e50024130da8cffe18bbcb32960034b4ec056b00fa74139a185a72b193c2"
         },
         {
           "label": "LEO400_Z3-zonal20-sun-moon-srp-drag.script",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/LEO400_Z3-zonal20-sun-moon-srp-drag.script",
+          "path": "<gmat work>/anomalous-oxygen/LEO400_Z3-zonal20-sun-moon-srp-drag.script",
           "sha256": "72c6bf52c692aa785f1d506f80a2ef71a34072a7e14db2954c55790430d126a5"
         },
         {
           "label": "LEO400_W1-field-sun-moon-srp-drag-cssi.txt",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/LEO400_W1-field-sun-moon-srp-drag-cssi.txt",
+          "path": "<gmat work>/anomalous-oxygen/LEO400_W1-field-sun-moon-srp-drag-cssi.txt",
           "sha256": "de0307c79ec62680f9e73814f29667a459458651aa763ebffa60cca849c9c14d"
         },
         {
           "label": "LEO400_W1-field-sun-moon-srp-drag-cssi.script",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/LEO400_W1-field-sun-moon-srp-drag-cssi.script",
+          "path": "<gmat work>/anomalous-oxygen/LEO400_W1-field-sun-moon-srp-drag-cssi.script",
           "sha256": "6c4a8f03b60c670ca86f2294895e3d899aff5cd5d6753255bf689a36e52e18da"
         },
         {
           "label": "SSO700_F6-field-sun-moon-srp-drag.txt",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/SSO700_F6-field-sun-moon-srp-drag.txt",
+          "path": "<gmat work>/anomalous-oxygen/SSO700_F6-field-sun-moon-srp-drag.txt",
           "sha256": "2c0449793a92997e6227f217c514dccbe466728fda7fdbe2b35a42480a1f3756"
         },
         {
           "label": "SSO700_F6-field-sun-moon-srp-drag.script",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/SSO700_F6-field-sun-moon-srp-drag.script",
+          "path": "<gmat work>/anomalous-oxygen/SSO700_F6-field-sun-moon-srp-drag.script",
           "sha256": "7ee29a8362817e6e435396e874681a16d11ae4529f6c181a24f036023e2d5fad"
         },
         {
           "label": "SSO700_Z3-zonal20-sun-moon-srp-drag.txt",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/SSO700_Z3-zonal20-sun-moon-srp-drag.txt",
+          "path": "<gmat work>/anomalous-oxygen/SSO700_Z3-zonal20-sun-moon-srp-drag.txt",
           "sha256": "0813a31f66332df71f0981d5b43542c9b1c00811633f9dad709598d17c60b3d1"
         },
         {
           "label": "SSO700_Z3-zonal20-sun-moon-srp-drag.script",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/SSO700_Z3-zonal20-sun-moon-srp-drag.script",
+          "path": "<gmat work>/anomalous-oxygen/SSO700_Z3-zonal20-sun-moon-srp-drag.script",
           "sha256": "8a3043c716696a73e600b88f32cb356d26ba03bba6d06205200fd0b559eba3d4"
         },
         {
           "label": "SSO700_W1-field-sun-moon-srp-drag-cssi.txt",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/SSO700_W1-field-sun-moon-srp-drag-cssi.txt",
+          "path": "<gmat work>/anomalous-oxygen/SSO700_W1-field-sun-moon-srp-drag-cssi.txt",
           "sha256": "d3c27ecb2c900210fdbd9c5778fa5c3191c6dba9ed52edaff8650f5b7d96d698"
         },
         {
           "label": "SSO700_W1-field-sun-moon-srp-drag-cssi.script",
-          "path": "/Users/tj/software/tools/xval/gmat-work/anomalous-oxygen/SSO700_W1-field-sun-moon-srp-drag-cssi.script",
+          "path": "<gmat work>/anomalous-oxygen/SSO700_W1-field-sun-moon-srp-drag-cssi.script",
           "sha256": "65a6f0d463bb3deb6d217ae9f096e3b5f5c008031b4a6b28354567850eae89cd"
         }
       ],
@@ -12430,7 +12430,7 @@
         {
           "label": "Published-formula / WGS84 trajectories",
           "path": "nyx/drag-settings-diagnostic.json",
-          "sha256": "99495b55e4c4c352008a70dbba9a1b9fee53caab19b5b0af98bf8b4a16c65f45"
+          "sha256": "73de9f356448982d1091b2e4a35197f87df3be57d8651975370a26d8cd9c3ecf"
         }
       ],
       "rows": [
@@ -12535,7 +12535,7 @@
         {
           "label": "WGS84 / gtd7d trajectories",
           "path": "basilisk/basilisk-wgs84-gtd7d-diagnostic.json",
-          "sha256": "8d97424ba8b6a75d14ad4be21b94a12479afe572e2438dc4aa7b58c41e469d30"
+          "sha256": "4e576a5e9c97102c43bcf996f11288255379bb35c3f5b7fdf5abf35cf7d1a4c8"
         }
       ],
       "rows": [

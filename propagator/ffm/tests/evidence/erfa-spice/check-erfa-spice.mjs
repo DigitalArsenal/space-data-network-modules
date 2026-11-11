@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {build,here,root} from './frame-diagnostics.mjs';
+import {resolveRecorded} from '../paths.mjs';
 import {buildFfmFrames,eopStream} from './ffm-frames-native.mjs';
 const errors=[],check=(ok,message)=>{if(!ok)errors.push(message);};
 const hash=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
@@ -13,7 +14,8 @@ const read=p=>JSON.parse(fs.readFileSync(p,'utf8'));
 const ids=['leap','tt','tdb','tdbSpice','forceClock','c2tSameInstant','c2tTrue','c2tClock','c2tSpice','c2tSpiceErfa','gmstSame','gmstTrue','c2tBuiltIn','coordsPrecession','coordsNutation','coordsTeme','c2tBuiltInClassical','teme','temeFk5','sunSame','sunTrue','moonSame','moonTrue','coordsEcefCio','coordsEcefSpice','coordsVelocityRates'];
 async function main(){
  const s=read(process.argv[2]??path.join(here,'summary-erfa-spice.json')),h=read(path.join(here,'ffm-frames.json')),r=read(path.join(here,'reference.json'));
- for(const f of s.fileHashes??[]){const p=path.resolve(here,f.path);check(fs.existsSync(p)&&hash(p)===f.sha256,`SHA-256 mismatch: ${f.path}`);}
+ // A label names an outside folder (../paths.mjs); these pins are required, so its variable must be set.
+ for(const f of s.fileHashes??[]){const p=resolveRecorded(f.path,here);check(p&&fs.existsSync(p)&&hash(p)===f.sha256,p?`SHA-256 mismatch: ${f.path}`:`${f.path}: set the variable of its folder (docs/cross-validation.md, Outside inputs)`);}
  check(s.module.sha256===hash(path.join(root,'propagator/ffm/dist/isomorphic/module.wasm')),'shipped module hash differs');
  check(s.module.version===read(path.join(root,'propagator/ffm/package.json')).version,'module version differs');
  check(JSON.stringify(s.module)===JSON.stringify(h.module),'FFM evidence module identity differs');

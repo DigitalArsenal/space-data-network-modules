@@ -76,7 +76,7 @@
    "spiceypy": "8.3.0",
    "cspice": "CSPICE_N0067",
    "lsk": {
-    "file": "/Users/tj/software/tools/xval/naif-kernels/naif0012.tls",
+    "file": "<xval>/naif-kernels/naif0012.tls",
     "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"
    },
    "kernelTargetIds": [
@@ -97,7 +97,7 @@
    ]
   },
   "jwstPublishedExample": {
-   "file": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/examples/02_jwst_covar_monte_carlo/main.rs",
+   "file": "<xval>/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/examples/02_jwst_covar_monte_carlo/main.rs",
    "sha256": "39a1b98d4abb09154de8ac74efacd3497ba2f3cfaa31214fd8028b7f44773fb7",
    "url": "https://docs.rs/crate/nyx-space/2.6.0/source/examples/02_jwst_covar_monte_carlo/main.rs",
    "citedSources": [
@@ -917,11 +917,11 @@
  "fileHashes": [
   {
    "file": "run-horizons.mjs",
-   "sha256": "bd35074b57f187813fec3b64a34042954ba8bf9830034c2d4e692938e5598478"
+   "sha256": "44ef5c38edc7d9a91a255fb46ad1644ee70729100307ae11316eca7e6ff9ec2f"
   },
   {
    "file": "horizons-common.mjs",
-   "sha256": "dcf1451399cbc35a64b65ca769c8bca88054e796cf76027e828682af03028fd2"
+   "sha256": "b1e5ef49b84e95a92378ecadcf66403407583321d7a67f94f36ddc41327c90a9"
   },
   {
    "file": "horizons-metrics.cpp",
@@ -933,7 +933,7 @@
   },
   {
    "file": "check-horizons.mjs",
-   "sha256": "c385b043e919192acc76f4add0d6f49ebf532786f4ce97084d6700136c31aa29"
+   "sha256": "44b587a26df8dbe6acf2c15bc75ed961420b1c75d02b95c326c6a936a13c78bb"
   },
   {
    "file": "../cases/ffm-reference-cases.json",
