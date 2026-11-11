@@ -4056,7 +4056,7 @@ in e). Without it a near-circular record (a fit of a circular orbit gives e of 1
 eccentricity vector: with gravity, Sun, Moon and tide on both sides, 70 x 70, the largest distance over 0 to 5 days after a
 72 h fit at 500 km, i 55 is 356 m
 without it and 161 m with it, and at 300 km, i 98 676 and 451 m. On 0.6.25, put in the rates with pinned fits, the q = -1 family had cost 20 to 35 m at 880 km. With AP fitted to the
-numerical propagator's own forecast (the record the catalog fit makes; BAR.md), gravity, Sun, Moon and tide on both sides and
+numerical propagator's own forecast (the record the catalog's fit makes, stack #504), gravity, Sun, Moon and tide on both sides and
 the field at 70 x 70, the largest distance over 0 to 5 days, q = 0 / |q| up to 1 / up to 4:
 - 880 km, i 97.6, e 0.001: 85 / 42 / 42 m;
 - 550 km, i 87.35, e 0.001: 159 / 67 / 67 m;
