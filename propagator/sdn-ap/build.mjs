@@ -300,7 +300,7 @@ for (let depth = 0; partPattern.test(inlined); ++depth) {
 }
 // Gravity (AP's terms, SPEC 16): the fully normalized EGM-96 coefficients to degree and order 70 that this repository's
 // FFM carries (propagator/ffm/lib), PINNED by SHA-256. Recorded in dist/build-provenance.txt.
-const GRAVITY_PIN = Object.freeze({ file: "egm96_data.h", sha256: "4d5c80b3d673696affffe9d2d17df94ecca730b1f61e0483b1bb9d6606e6a6f4" });
+const GRAVITY_PIN = Object.freeze({ file: "egm2008_data.h", sha256: "f4f49756761e4e391131a2ce12a25290948670bf889d467a13869a4c4c661250" });
 async function gravity() {
   const dir = path.join(process.env.SPACE_DATA_NETWORK_MODULES_ROOT ?? modulesRoot, "propagator", "ffm", "lib");
   const bytes = await fs.readFile(path.join(dir, GRAVITY_PIN.file));
@@ -317,9 +317,9 @@ async function gravity() {
     count += 1;
   }
   if (count < 2550) throw new Error(`gravity: ${count} coefficient records in ${GRAVITY_PIN.file}`);
-  provenance.gravity = { model: "egm96", source: shownPath(path.join(dir, GRAVITY_PIN.file)), sha256: got, records: count };
+  provenance.gravity = { model: "egm2008", source: shownPath(path.join(dir, GRAVITY_PIN.file)), sha256: got, records: count };
   const rows = (A) => A.map((r) => `    {${r.join(", ")}},`).join("\n");
-  return `// EGM96 fully normalized Stokes coefficients, degree and order <= 70 (pinned; build.mjs)\n` +
+  return `// EGM2008 fully normalized Stokes coefficients, degree and order <= 70 (pinned; build.mjs)\n` +
     `inline constexpr double kEgmC[71][71] = {\n${rows(C)}\n};\ninline constexpr double kEgmS[71][71] = {\n${rows(S)}\n};\n`;
 }
 

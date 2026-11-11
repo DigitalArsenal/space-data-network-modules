@@ -3,7 +3,7 @@
 // perigee passages' times, over the whole orbit, with the pass's short-period steps; the band default's median at the
 // perigee's altitude above e 0.3 and the carried prior's floor there (SPEC 12.8). Baseline the 0.4.15 release (git
 // 4a02a6d90), the module under test this build's dist.
-// Model truth as test/lib/heo-model-truth.mjs: FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant
+// Model truth as test/lib/heo-model-truth.mjs: FFM EGM2008 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant
 // weather (B = 0.044 m^2/kg, no SRP) on both sides; AP FORCES 31,20 with NRLMSISE-00. Fixtures: Molniya (2 rev/day, e
 // 0.74, i 63.4 deg, perigee 541 km), GTO (2.40 rev/day, e 0.72, i 27 deg, 220 km), GTO-500 (2.40 rev/day, e 0.7081,
 // 500 km). Day-7 whole-day RMS along-track / radial (m) over the 7 days flown after the arc.

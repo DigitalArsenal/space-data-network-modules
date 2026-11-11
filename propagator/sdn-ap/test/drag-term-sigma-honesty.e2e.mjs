@@ -4,7 +4,7 @@
 // fit weighs it as independent data, so its formal sigma is overconfident: on the headline-loop real windows the 72 h fits'
 // median |ln(B_fit / B_numerical)| was 2.7 to 11 formal sigmas (#463). On the default of a 71 h arc the record states width
 // 1 (m 3.14 times the arc's part, at most the population's spread 1.09) and maps the formal variance.
-// Truth: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256): EGM96 70 x 70, DE440 Sun and Moon, NRLMSISE-00
+// Truth: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256): EGM2008 70 x 70, DE440 Sun and Moon, NRLMSISE-00
 // drag at constant weather on both sides (Cd A/m the true BTERM), no SRP, zero EOP, RK78 1e-12 and 300 s, from an osculating
 // perigee state; AP FORCES 31,20 with NRLMSISE-00; a 72 h fit under the default prior (FIT unset: the 600 to 2,500 km default of
 // a 71 h arc). Made-up near-circular orbits (e 0.001): 800 km at i 50 with a true BTERM of 0.02 (near the 57:4 commensurability

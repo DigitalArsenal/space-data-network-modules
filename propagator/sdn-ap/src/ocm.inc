@@ -73,9 +73,12 @@ constexpr const char* kY0RadiationModel = "SPHERE (AGOM) AND ECOM2 Y0 (ARNOLD ET
 constexpr const char* kSolidTidesModel = "IERS 2010";
 
 /// SPEC 16.18, the low table (stack #477): PERTURBATIONS.GRAVITY_MODEL of an AP set whose slow set carries a term beyond the
-/// shallow set's ("EGM-96" on every other AP or SGP4XP set). A flight reads this text, and only this text, as the slow set,
-/// so a stored record flies as it was fitted.
-constexpr const char* kSlowGravityModel = "EGM-96; slow tesseral terms to degree 70";
+/// shallow set's (kApGravityModel on every other AP set with gravity terms, "EGM-96" on SGP4XP's and a stock AP set's). A
+/// flight reads this text, and only this text, as the slow set, so a stored record flies as it was fitted.
+constexpr const char* kSlowGravityModel = "EGM2008; slow tesseral terms to degree 70";
+/// SPEC 16.1 (from 0.6.NN): PERTURBATIONS.GRAVITY_MODEL of an AP set with gravity terms (a tesseral or zonal degree): the
+/// embedded field its tesserals and zonal tail read, EGM2008 to 70 x 70.
+constexpr const char* kApGravityModel = "EGM2008";
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
 /// parameters in the fixed order (cov::kParameters), each named, each a prwDynamicParameter of the five, COV_UNITS
@@ -165,12 +168,16 @@ inline flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SPW>>> rows_o
 }
 
 /// PERTURBATIONS of a set under `f` (`w` the rows and nodes it reads; nullptr none). SGP4: WGS-72, WEATHER_SOURCE NONE,
-/// no atmosphere. SGP4XP and AP: EGM-96, the atmosphere as a direct map of the forces, the caps, the source; the rows
+/// no atmosphere. SGP4XP and a stock AP set: EGM-96 (the theory's own terms); an AP set with gravity terms: EGM2008 (or
+/// kSlowGravityModel). Then the atmosphere as a direct map of the forces, the caps, the source; the rows
 /// with SW_DATA_SOURCE, SW_DATA_EPOCH and SW_INTERP_METHOD under RECORDS; the nodes and the $DCL CID under DCA_COMMON_MODE.
 inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBufferBuilder& fbb, int32_t row_theory, const Forces& f, const Weather* w,
                                                            bool ecom2 = false) {
   const bool sgp4 = row_theory == kTheorySgp4;
-  const auto s_gravity = fbb.CreateString(sgp4 ? "WGS-72" : f.slow && epoch_frame(f) ? kSlowGravityModel : "EGM-96");
+  const auto s_gravity = fbb.CreateString(sgp4                                  ? "WGS-72"
+                                          : f.slow && epoch_frame(f)              ? kSlowGravityModel
+                                          : (f.tesseral > 0 || f.zonal > 0)       ? kApGravityModel
+                                                                                  : "EGM-96");
   const auto s_srp = ecom2 ? fbb.CreateString(kY0RadiationModel) : flatbuffers::Offset<flatbuffers::String>(0);
   const auto s_tides = !sgp4 && f.solid_tides ? fbb.CreateString(kSolidTidesModel) : flatbuffers::Offset<flatbuffers::String>(0);
   flatbuffers::Offset<ATM> atmosphere = 0;

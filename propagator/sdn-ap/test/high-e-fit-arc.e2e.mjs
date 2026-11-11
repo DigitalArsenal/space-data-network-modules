@@ -4,7 +4,7 @@
 // width counts one independent sample per revolution (the RMS floor) with the determination naming an arc shorter than 7
 // days as not separating the coefficient. Baseline (4) BASE_4 (the 0.4.16 release, git 1ec779200, until 0.6.21), the
 // module under test this build.
-// Model truth as test/lib/heo-model-truth.mjs (FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 at constant weather,
+// Model truth as test/lib/heo-model-truth.mjs (FFM EGM2008 70x70, Sun and Moon from DE440, NRLMSISE-00 at constant weather,
 // B = 0.044 m^2/kg, no SRP; AP FORCES 31,20 with NRLMSISE-00; AGOM pinned at 0); Molniya (2 rev/day, e 0.74, perigee 541
 // km) and GTO-500 (2.40 rev/day, e 0.7081, 500 km); 7 days flown after the arc on a 10-minute grid, day-7 whole-day RMS.
 // Acceptance:

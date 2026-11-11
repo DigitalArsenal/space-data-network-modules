@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Registered before model-truth generation: modules-sdn-ap-heo-half-day-20261103.
-// Synthetic GCRF/UTC states from module conversions; FFM EGM96 70x70, Sun/Moon,
+// Synthetic GCRF/UTC states from module conversions; FFM EGM2008 70x70, Sun/Moon,
 // DE440, zero EOP, no SRP, NRLMSISE00 only on Molniya. Constant synthetic F10.7=150, Ap=15.
 // Fit the first 72 h, then measure forward RTN errors at leads 1,3,7 days.
 // The originally registered sidereal half-day, e=.72 case: its day-7 sample within 0.5 m of 27.76 m (re-recorded on 0.6.22:

@@ -2653,7 +2653,39 @@ rates, to degree 70 whatever d states: d governs the fast terms, and a commensur
 set cut at a lower degree is worse than none.
 `maneuver` and `ingest_omm` keep SGP4XP.
 
-**16.2 Tesserals.** The field is the fully normalized EGM-96 of propagator/ffm, pinned by build.mjs. Inclination functions come
+**16.2 Tesserals.** The field is the fully normalized EGM2008 of propagator/ffm (`lib/egm2008_data.h`, to degree and order
+70), pinned by build.mjs; through 0.6.32 it was EGM-96 (`lib/egm96_data.h`).
+
+*Why EGM2008 (from 0.6.NN; stack #503).* The numerical propagator AP is held to flies EGM2008: its SPHERICAL_HARMONICS field is
+the embedded EGM2008, and EGM96 is an option only. EGM2008 (Pavlis et al. 2012, from ICGEM; public) is also the closer field to
+the real Earth. Below degree 30 or so the two fields agree closely. Above it they part, and an AP term of high degree fitted to
+an EGM2008 truth was a term of the wrong field. The measurement: 300 km, i 98, e 0, with gravity, Sun, Moon and tide on both
+sides, AP fitted to the numerical forecast over 0 to 5 days. D is the largest distance over those 5 days; the line is the
+along-track residual's first harmonic over the span (0.2 per day). AP's slow set is capped on AP's side only (0.6.27 with the
+output table to the record's degree 31, the field EGM-96):
+
+| AP's slow set to degree | 31 | 46 | 48 | 52 | 56 | 62 | 70 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Truth EGM2008: the line, m | 333 | 27 | 22 | 34 | 56 | 72 | 76 |
+| Truth EGM2008: D, m | 423 | 172 | 154 | 147 | 165 | 180 | 175 |
+| Truth EGM96: the line, m | | 32 | | | | | 28 |
+| Truth EGM96: D, m | | 115 | | | | | 109 |
+
+With the truth on EGM2008, every degree AP added above 48 made the line worse. With the truth on AP's own field, every degree
+helped. The field cut to 12 x 12 on both sides gives D 34 m.
+
+*What changes and what does not.*
+- Changed: the fully normalized C_lm, S_lm the tesserals read (degree 2 to 70, order 1 and up), and the zonal tail's C_l0
+  (degree 6 to 70, 16.1).
+- Unchanged: mu (k_e of 1.3); the reference radius 6378.1363 km, the same in both fields; J2 to J5, which are 1.3's
+  constants, not the table's. AP reads no C_20 from the table, so the field's tide system does not enter. The numerical
+  propagator states its EGM2008 with GM 398600.4415 km^3/s^2 and the same radius.
+- SGP4XP reads none of this. Its resonance terms are 6.2's unnormalized EGM-96 values, and its zonals are 1.3's. The table
+  (kEgmC, kEgmS) is read only by the AP terms of tesseral.inc and by the census (16.20). SGP4XP is bit for bit.
+- The record states the field: PERTURBATIONS.GRAVITY_MODEL is "EGM2008" on an AP set with gravity terms, and "EGM2008; slow
+  tesseral terms to degree 70" with the slow set. SGP4XP's sets and a stock AP set keep "EGM-96".
+
+Inclination functions come
 from the Fourier coefficients of the normalized Legendre recurrence, stable to degree 70, at the epoch inclination. The Cap column is a cap on families, not the degree of the field (16.1): at
 800 km the terms of degree 13 to 31 not carried are 14 m RMS.
 
@@ -3981,7 +4013,7 @@ against 1,273 to 1,278, medium Earth orbit 200 to 237 against 178 to 188, apart 
 orbit), 209.1 against 237.1 (geostationary) and 126.1 against 131.0 (500 km). A process's first evaluations (about 40 µs
 for a day's nodes, 110 µs for a week's) are paid once per thread and time range.
 
-**16.18 Where each tesseral term is carried.** A tesseral term (l, m, p, q) of the embedded field (EGM-96 to degree and
+**16.18 Where each tesseral term is carried.** A tesseral term (l, m, p, q) of the embedded field (EGM2008 to degree and
 order 70) has w = l - 2p, j = w + q and the angle rate psi-dot = w omega-dot + j M-dot + m (Omega-dot - omega_E), from the
 J2 secular rates at the set's epoch elements (the rates 16.2's table and 16.11's grid take). The rule: each term is carried
 in exactly one place, decided by its own psi-dot at the set's epoch, for every commensurability:

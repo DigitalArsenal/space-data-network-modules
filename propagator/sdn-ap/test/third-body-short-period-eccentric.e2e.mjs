@@ -11,7 +11,7 @@
 //    (two-body plus the bodies' tidal terms of the same degrees, bodies fixed, RK4, 128,000 steps); SPEC 5's
 //    closed-form degree 2-3 averaged rates within 0.1 m per day of the quadrature average (the averaged rates are
 //    unchanged); the replaced closed form's mean-longitude error at G1 e 0.72 printed and within 1 m of 298.2 m RMS;
-// 2. degree 4 up off (OFF; FFM EGM96 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
+// 2. degree 4 up off (OFF; FFM EGM2008 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
 //    fixture at most 95 m and of the Molniya fixture at most 85 m;
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
 //    radial RMS within 0.5 m of half-day 36.15/14.56 and 12 h at 55 deg 67.31/7.24 m, GTO no worse than 961/935 m (to the

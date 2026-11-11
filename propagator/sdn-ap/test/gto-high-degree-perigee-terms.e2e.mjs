@@ -3,7 +3,7 @@
 // tail carries every long-period term and its first-order tesseral set every q to |q| <= 10. Baseline the 0.4.14 release
 // (git 8fdf5b1af). Test builds: VERIFY (this package with an export comparing the new terms with independent
 // integrations) and, for the 4x4 case, this package and 0.4.14's sources with the Sun's and Moon's mass ratios and J5 zero.
-// Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM96 70x70, Sun and Moon from DE440; 72 h fits from an
+// Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM2008 70x70, Sun and Moon from DE440; 72 h fits from an
 // osculating perigee; 7 days flown hourly; day-7 whole-day RMS along-track / radial, m):
 // 1. GTO (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): each at most 250 and within 2 of 180.70 / 117.62 (192.87 /
 //    123.44 before AP's own Sun and Moon, SPEC 16.17; 0.4.14: 422.11 / 459.10);

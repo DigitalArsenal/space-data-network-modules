@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // A high-apogee orbit on model truth (SPEC 16.11): e 0.9, perigee 5,000 km, apogee 210,000 km, i 70 (the synthetic set's
 // grid-hp5000-e0.9-i70 elements, seeded at perigee on test/lib/heo-model-truth.mjs's epoch). The truth: FFM (named below by
-// its SHA-256) with EGM96 70 x 70 and DE440's Sun and Moon, no radiation or drag, 30-minute states over 5 days. AP (degree
+// its SHA-256) with EGM2008 70 x 70 and DE440's Sun and Moon, no radiation or drag, 30-minute states over 5 days. AP (degree
 // 31, zonal 20, drag and radiation held at 0) fitted to those 5 days, then flown at their epochs. D, the largest 3D distance
 // to the truth, is what the theory cannot represent over 5 days: no fit before a cutoff adds to it.
 // In the long-period regime the Sun and Moon act on the mean elements as point masses and move the mean motion along each
