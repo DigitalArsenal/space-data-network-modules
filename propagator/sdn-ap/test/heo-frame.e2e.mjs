@@ -3,7 +3,8 @@
 // pinned foundation/frames 0.2.0, whose TEME is not the standard one, #389) is printed beside it, and the comparisons with
 // the archived AP6 arms are made on it. The truth's EME2000 to GCRF stays with foundation/frames (the frame bias,
 // not its TEME). The TEME output through this checkout's foundation/frames 0.3.0 lands within 1 mm of the module's GCRF
-// output. Its HEO model-truth fixtures rotate with the module's own frames.
+// output (26 µm at TESS's radius). On 0.6.14 the median paired day-3 AP minus XP is -137.5 m on the new path, -137.0 m on
+// the old. Its HEO model-truth fixtures rotate with the module's own frames.
 // Registration: replay only AP6's seven already-read TESS 72-hour windows.
 // Exploratory acceptance: median paired AP-XP day-3 difference below 50 m
 // (two-sided within 50 m until 0.4.8; one-sided since AP sets keep full precision). Re-run all four registered FFM HEO fixtures from task 2: each

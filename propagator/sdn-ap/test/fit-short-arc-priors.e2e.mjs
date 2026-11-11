@@ -2,8 +2,9 @@
 // Scored on the module's own GCRF output since 2026-11-10 (#386), and on the archive's path beside it (TEME through the
 // pinned foundation/frames 0.2.0, whose TEME is not the standard one, #389): the comparisons with archived sdn-ap arms
 // stay on that path, XP24 against the Space Force U24 is made on both. On the GNSS orbits the two paths differ by up to
-// 6.5 m (XP_PRIOR24 against its archive); XP24 minus U24 at day 3 is -4.61 m on the new path. The TEME output through
-// this checkout's foundation/frames 0.3.0 lands within 1 mm of the module's GCRF output.
+// 6.5 m (0.6.12, XP_PRIOR24 against its archive). On 0.6.14, XP24 minus U24 at day 3 is -1.46 m on the new path and
+// -1.75 m on the old; XP24's median day-3 error 145.31 m on the new path, 145.75 m on the old, 152.28 m archived. The
+// TEME output through this checkout's foundation/frames 0.3.0 lands within 1 mm of the module's GCRF output (3.7 µm).
 // Registration (2026-11-03, committed before this replay runs): exploratory replay of the AP5 GN windows the gap
 // diagnosis read (experiments ap-gap: resume-gn 24 h arcs, resume-frame-gn 72 h arcs; Space Force U24 from that
 // archive). Acceptance: median paired day-3 difference XP24 (this module's default FIT) minus U24 within 10 m of zero

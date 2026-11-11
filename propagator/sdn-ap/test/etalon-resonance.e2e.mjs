@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // Scored on each module's own GCRF output since 2026-11-10 (#386). Until then the module's TEME output reached the truth's
 // GCRF through the pinned foundation/frames 0.2.0, whose TEME is not the standard one (#389): that old path is still flown
-// and asserted beside the score, at its registered figures. The figures below are the new path's, the old in brackets.
-// The TEME output through this checkout's foundation/frames 0.3.0 lands within 1 mm of the module's GCRF output.
+// and asserted beside the score. The figures below are the new path's on 0.6.14, the old path's in brackets (the 0.6.13
+// re-pin, stack issue 324). The TEME output through this checkout's foundation/frames 0.3.0 lands within 1 mm of the
+// module's GCRF output (4.7 µm measured; the 0.4.7 baseline 1.28 mm, printed).
 // Registration (2026-11-03; re-scoped by the coordinator after the measurement): exploratory replay of the AP6 windows of
 // the 2026-11-03 gap diagnosis, already read: GD (Etalon-1/2, LAGEOS-1/2, LARES-2), IG and GE (GFZ MGEX), 72 h arcs, AP
 // FORCES; baseline the 0.4.7 release (git dcae63613), the module under test this build's dist. Acceptance, the measured
 // values with margin (re-measured at 0.4.9, whose AP sets keep full precision, SPEC 16.9): Etalon-1 paired day-3 AP
-// minus FFM (archived resume-ffm F72) 23.37 [26.64] m at the baseline and 4.48 [6.64] m here (0.4.11: the third bodies'
-// short-period terms by quadrature, SPEC 5.4; [10.12] m at 0.4.9), Etalon-2 32.76 [36.39] and 5.58 [7.58] m ([9.74] m at
-// 0.4.9), each within 1 m; medians here LAGEOS-1 7.16 [7.81], LAGEOS-2 6.78 [6.78], LARES-2 8.77 [9.73], IG 14.42 [17.10]
-// and GE 35.84 [45.86] m, each within 0.5 m; every number printed; default-FORCES digest bit-exact. Unread-window
+// minus FFM (archived resume-ffm F72) 23.37 [26.64] m at the baseline and 4.21 [6.57] m here (0.4.11: the third bodies'
+// short-period terms by quadrature, SPEC 5.4; [10.12] m at 0.4.9), Etalon-2 32.76 [36.39] and 5.31 [7.62] m ([9.74] m at
+// 0.4.9), each within 1 m; medians here LAGEOS-1 7.17 [7.81], LAGEOS-2 6.80 [6.73], LARES-2 8.70 [9.71], IG 13.01 [15.77]
+// and GE 35.28 [45.44] m, each within 0.5 m; every number printed; default-FORCES digest bit-exact. Unread-window
 // confirmation is a separate experiments task.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -74,10 +75,10 @@ const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(-1)
 const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(0, -1).filter((a) => a.ok).map((a) => a.frames030Meters)));
 console.log(JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters, frames030MetersEarlierBuilds}));
 if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters}, null, 2) + '\n');
-// on the modules' own GCRF output (2026-11-10, 0.6.9); OLD: the same replay on the old path, as registered
+// on the modules' own GCRF output (2026-11-11, 0.6.14); OLD: the same replay on the old path
 const EXPECTED = {
-  etalon: {'ETALON 1': {baseline: 23.37, value: 4.48}, 'ETALON 2': {baseline: 32.76, value: 5.58}},
-  nonregression: {'LAGEOS 1': 7.157, 'LAGEOS 2': 6.777, 'LARES-2': 8.765, IG: 14.420, GE: 35.840},
+  etalon: {'ETALON 1': {baseline: 23.37, value: 4.21}, 'ETALON 2': {baseline: 32.76, value: 5.31}},
+  nonregression: {'LAGEOS 1': 7.170, 'LAGEOS 2': 6.800, 'LARES-2': 8.698, IG: 13.013, GE: 35.277},
 };
 // OLD on the old path, as the fit lane re-pinned it at 0.6.13 (stack issue 324: every object here is above the drag,
 // perigee 5,600 km and up, and now fitted at the data's own sigma, SPEC 12.1; 0.6.11 > 0.6.13 in m: Etalon-1 6.719 >
