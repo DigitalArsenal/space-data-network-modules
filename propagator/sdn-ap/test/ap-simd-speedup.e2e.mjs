@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // E2E (sdn-ap 0.6.5): WASM SIMD128 + fast-trig + stage-cached RK3 + analytic/SIMD covariance Jacobian
 // for AP (theory 5), preserving bit-for-bit identity on SGP4 (type 0) and SGP4XP (type 4) against 0.6.4
-// (commit cfd750eb8), sub-centimeter AP state agreement (<= 1 cm circular/MEO/GEO, <= 5 cm high-e over 7 days),
-// <= 1e-3 relative AP covariance agreement over 24 h, valid $OCM/$ODR fit with zero USER_DEFINED_* fields,
+// (commit cfd750eb8), sub-centimeter AP state agreement (<= 1 cm over 7 days, against 0.6.22 from 0.6.22: step 4),
+// <= 1e-3 relative AP covariance agreement over 48 h with 0.6.22's recorded numbers (test/fixtures/ap-fit-0.6.4-0.6.22.cov),
+// valid $OCM/$ODR fit with zero USER_DEFINED_* fields,
 // and thread-count bit-determinism.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -39,6 +40,12 @@ try {
   assert.equal(gotSha, BASE_SHA256, `0.6.4 baseline sha256 mismatch: ${gotSha}`);
   const basePath = path.join(scratch, "sdn-ap-0.6.4.wasm");
   fs.writeFileSync(basePath, baseBytes);
+  // the AP 7-day state equivalence's baseline (step 4): 0.6.4 until 0.6.21, from 0.6.22 that release (history at step 4)
+  const STATE_BASE = { version: "0.6.22", commit: "f8af1e2b713eeb60379fc16da6ed66531bbe7898", sha256: "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4" };
+  const stateBaseBytes = execFileSync("git", ["-C", repoRoot, "show", `${STATE_BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
+  assert.equal(createHash("sha256").update(stateBaseBytes).digest("hex"), STATE_BASE.sha256, `${STATE_BASE.version} baseline sha256 mismatch`);
+  const stateBasePath = path.join(scratch, `sdn-ap-${STATE_BASE.version}.wasm`);
+  fs.writeFileSync(stateBasePath, stateBaseBytes);
 
   // 2. SGP4 (type 0) and SGP4XP (type 4) bit-for-bit identity against 0.6.4 across all 6 regimes
   const sampleSets = [
@@ -114,30 +121,42 @@ try {
   assert.equal(ocmCurr.PROVENANCE?.PRODUCER, `com.spacedatanetwork.sdn-ap-propagator ${JSON.parse(fs.readFileSync(path.join(packageRoot, "plugin-manifest.json"), "utf8")).version}`);
   assert.ok(ocmCurr.ORBIT_DETERMINATION.FIT_STATISTICS.CONVERGED);
 
-  // Propagate identical 0.6.4 AP $OCM on both 0.6.4 and 0.6.5 for 7 days in EME2000 and TEME
+  // Propagate the identical 0.6.4 AP $OCM on STATE_BASE and this build for 7 days in EME2000 and TEME, within 1 cm; the
+  // 0.6.4 dist's flight printed beside it. Against 0.6.4 until 0.6.21 (0.6.5's speed changes: sub-centimeter); AP's own
+  // Sun and Moon (0.6.22, SPEC 16.17, stack #446) move this flight from 0.6.4's by 12.179 cm in EME2000 and TEME (0.6.21
+  // within 1 cm), so from 0.6.22 the baseline is 0.6.22 (git f8af1e2b), the bound kept.
+  const hState = await createStandaloneHarness("browser", stateBasePath, { surface: "direct" });
   const EPOCHS = Array.from({ length: 57 }, (_, k) => new Date(Date.parse("2026-10-02T00:00:00Z") + k * 3 * 3600e3).toISOString().replace("Z", ""));
+  const linesOf = (p) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(p.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+  const worstDr = (a, b) => { let m = 0; for (let k = 0; k < a.length; k++) m = Math.max(m, Math.hypot(b[k].X - a[k].X, b[k].Y - a[k].Y, b[k].Z - a[k].Z) * 1000); return m; };
   for (const frame of [pcfOutputFrame.EME2000, pcfOutputFrame.TEME]) {
     const propInputs = [{ portId: "ocm", typeRef: T("OCM"), payload: ocmBaseBytes }, configuration({ output: { FRAME: frame, EPOCHS } })];
-    const [pBase, pCurr] = [
+    const [pBase, pState, pCurr] = [
       await hBase.invoke({ methodId: "propagate", inputs: propInputs }),
+      await hState.invoke({ methodId: "propagate", inputs: propInputs }),
       await hCurr.invoke({ methodId: "propagate", inputs: propInputs }),
     ];
     assert.equal(pBase.statusCode, 0);
+    assert.equal(pState.statusCode, 0);
     assert.equal(pCurr.statusCode, 0);
     const oemCurrBytes = new Uint8Array(pCurr.outputs[0].payload);
     assert.equal(String.fromCharCode(...oemCurrBytes.subarray(4, 8)), "$OEM");
-    const lines0 = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(pBase.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-    const lines1 = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(pCurr.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
-    let maxDrMeters = 0;
-    for (let k = 0; k < lines0.length; k++) {
-      const dr = Math.hypot(lines1[k].X - lines0[k].X, lines1[k].Y - lines0[k].Y, lines1[k].Z - lines0[k].Z) * 1000;
-      if (dr > maxDrMeters) maxDrMeters = dr;
-    }
-    console.log(`PASS AP 7-day state equivalence (${pcfOutputFrame[frame]}): worst |dr| = ${(maxDrMeters * 100).toFixed(4)} cm (limit <= 1.0 cm)`);
-    assert.ok(maxDrMeters <= 0.01, `AP 7-day |dr| ${maxDrMeters} m exceeds 1 cm`);
+    const lines1 = linesOf(pCurr), maxDrMeters = worstDr(linesOf(pState), lines1), from064 = worstDr(linesOf(pBase), lines1);
+    assert.ok(maxDrMeters <= 0.01, `AP 7-day |dr| ${maxDrMeters} m from ${STATE_BASE.version} exceeds 1 cm`);
+    console.log(`PASS AP 7-day state equivalence (${pcfOutputFrame[frame]}): worst |dr| = ${(maxDrMeters * 100).toFixed(4)} cm from ${STATE_BASE.version} (limit <= 1.0 cm); from 0.6.4 ${(from064 * 100).toFixed(4)} cm`);
   }
 
-  // Covariance propagation equivalence on the same AP $OCM over 289 grid epochs (24 h at 5-min cadence)
+  // Covariance on the same AP $OCM over the 289 grid epochs (48 h at 10 min): this build against 0.6.22's numbers of it
+  // (test/fixtures/ap-fit-0.6.4-0.6.22.cov; the 0.6.4 dist's fit is the stored record ap-fit-0.6.4.ocm byte for byte).
+  // 0.6.22 (AP's own Sun and Moon, SPEC 16.17) records them from itself (the 0.6.21 file went): 2.19e-5 of a time's
+  // largest entry from 0.6.21's, the bound kept.
+  // Through 0.6.20 the reference was the 0.6.4 dist's own numbers; 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472)
+  // moves them: against the 0.6.4 dist's, 0.6.20 7.2e-5 and 0.6.21 9.217e-3 of a time's largest entry, the bound kept.
+  // Why: the record's correlations between AGOM and the state are 0.6.4's fit's, and 16.16 moves its along-track response
+  // to AGOM at 48 h from 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within
+  // 7.1e-5 (covariance.e2e.mjs). The 0.6.4 dist still flies it for the timing line.
+  assert.ok(Buffer.from(ocmBaseBytes).equals(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.4.ocm"))), "the 0.6.4 dist's fit is not the stored record");
+  const recordedCov = new Float64Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.4-0.6.22.cov")).buffer.slice(0));
   const covTimes = [];
   for (let t = 0; t <= GRID.minutes; t += GRID.step / 60) covTimes.push(t);
   const evalCov = (harness, ocmBytes) => {
@@ -158,9 +177,10 @@ try {
   const currMs = performance.now() - t0Curr;
   assert.equal(cBase.status, 0);
   assert.equal(cCurr.status, 0);
+  assert.equal(recordedCov.length, 42 * covTimes.length);
   let worstCovRel = 0;
   for (let k = 0; k < covTimes.length; k++) {
-    const p0 = cBase.out.subarray(42 * k + 6, 42 * k + 42);
+    const p0 = recordedCov.subarray(42 * k + 6, 42 * k + 42);
     const p1 = cCurr.out.subarray(42 * k + 6, 42 * k + 42);
     const scale = Math.max(...Array.from(p0, Math.abs));
     for (let q = 0; q < 36; q++) {
@@ -168,8 +188,8 @@ try {
       if (rel > worstCovRel) worstCovRel = rel;
     }
   }
-  console.log(`PASS AP 289-epoch covariance equivalence: worst relative diff = ${worstCovRel.toExponential(3)} (limit <= 1e-3); telemetry 0.6.4=${baseMs.toFixed(2)} ms -> 0.6.5=${currMs.toFixed(2)} ms`);
-  assert.ok(worstCovRel <= 1e-3, `AP covariance relative diff ${worstCovRel} exceeds 1e-3`);
+  assert.ok(worstCovRel <= 1e-3, `AP covariance relative diff ${worstCovRel} against 0.6.22's numbers exceeds 1e-3`);
+  console.log(`PASS AP 289-epoch covariance against 0.6.22's numbers: worst relative diff = ${worstCovRel.toExponential(3)} (limit <= 1e-3); telemetry 0.6.4=${baseMs.toFixed(2)} ms -> this build=${currMs.toFixed(2)} ms`);
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }

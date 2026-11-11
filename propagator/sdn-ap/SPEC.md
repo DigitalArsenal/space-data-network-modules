@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.20 (dist 5a7fa01f).
+Version 0.6.25 (dist 3cfb6c49).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -571,6 +571,8 @@ is that of section 5 at the evaluation time.
    E_2 at the entry, E_2 + 2 pi when E_2 < E_1; the sunlit arc runs from E_1 to E_2. If |E_2 - E_1| < 1e-12 the
    wholly sunlit formulas apply.
 
+This sequence is SGP4XP's. AP sets take 16.15's shadow, whose boundaries are continuous in the elements.
+
 The 1e-12 test is tight against the rounding of this sequence. At GEO (p^2 near 44) its roots usually miss the test,
 so the GEO eclipse season is averaged as wholly sunlit, while LEO, MEO and HEO shadows are mostly found *[study;
 probe 4.4]*. At high eccentricities the misses are frequent too *[probe 4.7]*: hourly along 7 days of seven of side
@@ -822,6 +824,15 @@ places) *[study; lit: IAU 1976 system]*. Positions:
   *[study; probe 5.3: this Moon reproduces the library's direction and distance to 3e-13]*
 - JPL ephemerides are used only when loaded; the oracle does not load them, and release notes 9.3-9.9 still list
   "replace analytical theory of Sun and Moon position with JPL ephemeris for SGP4-XP" as planned work *[doc]*.
+- From 0.6.22 AP does not read this section's Sun and Moon (16.17); through 0.6.21 it did. Against DE440 over 2010-2035,
+  read as AP read them (UTC as the time argument, the mean equator of date taken for TEME; measured on 0.6.16), they are
+  off by 91.5 arcsec on average and 377 at worst (the Moon; 38 of it the time argument, 5.5 the frame) and 10.9 and 32
+  arcsec (the Sun): a third-body acceleration error of 3.7e-9 m/s^2 RMS at the geostationary radius. AP's own series are
+  within 0.74 and 4.1 arcsec (Moon) and 0.44 and 1.1 arcsec (Sun) there, 3.7e-11 m/s^2. Known approximation: AP's
+  bodies are in TEME of date, while its averaged
+  regime and resonance classes hold their elements in TEME of the epoch (16.4); the two part by about 1 arcsec at day 7
+  (0.42, 0.70 and 0.98 arcsec at days 3, 5 and 7), a third-body acceleration error at the geostationary radius of 1.5e-11,
+  2.5e-11 and 3.5e-11 m/s^2 RMS (the Moon; the Sun 1.6e-11 at day 7) that AP does not carry.
 
 **In the rates, averaged regime (epoch period below 1100 min).** The third-body disturbing function averaged over
 the satellite's mean anomaly, to the octupole (Legendre degree 3), each body held fixed at its position at the
@@ -1479,6 +1490,15 @@ bits unchanged, with one exception stated below. What makes it so:
   whichever node an integration starts from.
 - The drag-pass segment above e 0.3 (16.12) takes its perigee time and period from its bracket's lower node, not from the
   first state asked.
+- The third body's bracket tables are the bracket's own (stack #475). The bracket's lower node chooses their builder,
+  rows and sub-interval count, and they are read only as far as the builder wrote.
+  Through 0.6.22 two things followed the state asked first instead:
+  - the builder and the sub-interval count;
+  - the rows past those written, read as the last set had left them.
+  So a state near the three mean motions where the builder changes (0.006, 0.015 and 0.035 rad/min) moved with the order
+  of requests, by up to 0.285 m (0.015 rad/min, 1e-7 above). Against the earlier states asked in ascending order it is
+  now at most 14.3 mm (0.015), 5.8 mm (0.006) and 2.5 mm (0.035), and unchanged elsewhere.
+- A record's covariance is likewise a function of the record and the time (12.3).
 - The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
   round by up to 1e-7 s at today's dates, 1 mm in low orbit. SGP4XP and SGP4 in the store keep the minutes from J2000:
   their output is 0.6.9's bit for bit, and it differs from `propagate`'s by up to that rounding.
@@ -1883,6 +1903,24 @@ central differences and
 P(t) = J(t) P_p J(t)^T + Q(t) + F(x(t)).
 
 The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) is COVARIANCE.
+
+J, here and in 12.1, is made of differences of sets each flown on its own. Every moved set evaluates its rates and
+its output at its own state, as any set does. A record's covariance is then a function of the record and the time
+alone: it does not depend on the order in which times are asked, or on which records the thread flew before it.
+
+Through 0.6.22 this did not hold (stack #491):
+- The moved sets took the nominal's stage parts from the thread's cache, plus their own differences held over four
+  steps. In the long-period regime they stepped in pairs.
+- At t = 0 the short-period terms were baked on the last set's bracket.
+- The third body's bracket tables read rows the last set had left (stack #475).
+
+The figures through 0.6.22 (measured on 0.6.20 and 0.6.21), against each record alone in a fresh instance:
+- A record whose covariance was prepared after a record of another orbit had been flown inside its first grid step was
+  off by up to 440 times: a made-up 500 km record, 364,849 m against 805 m at hour 1; on real records, CryoSat-2 after
+  Ajisai, 336,299 m against 992 m.
+- Asked in turn with nine other records, the one-day class at 0.9 rev/day differed by up to 21 % of its day-7 position
+  sigma.
+- Flown alone, the one-day class was 5 % from its moved sets flown on their own, LEO up to 7e-4.
 
 **12.4 Theory floor.** F is the fit's residual covariance in the UVW axes of the state (U radial, V in-track, W along
 r x v), R = (1/N) sum u_k u_k^T, u_k the residual e_k in the UVW axes of the model state at t_k; position block
@@ -2544,7 +2582,7 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With te
 complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
 orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
 against a 31 x 31 field); at 450 km the order-15 terms above degree 31 added 72 m on day 1 and 268 m on day 7 after a 72 h
-fit through 0.6.20. From 0.6.NN a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
+fit through 0.6.20. From 0.6.25 a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
 rates, to degree 70 whatever d states: d governs the fast terms, and a commensurability's series is a cancellation, so a slow
 set cut at a lower degree is worse than none.
 `maneuver` and `ingest_omm` keep SGP4XP.
@@ -2561,7 +2599,7 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
-| slow set (from 0.6.NN) | j = 1 to 6, q = 0, every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose along-track size reaches 0.5 m, the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
+| slow set (from 0.6.25) | j = 1 to 6, q = 0, every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose along-track size reaches 0.5 m, the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
 by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
@@ -3026,6 +3064,9 @@ Above the eccentricity switch AP carries the resonances 1:1, 2:1, 3:1 and 3:2 on
 0.5 to 1.8 km a week on a transfer orbit (485 m at day 7 with a 12 x 12 field, 58 m without order 9, 1.5 to 1.8 km with the
 full field; a one-day orbit at e 0.82 is 3.65 km at degree 12 against 0.56 km at degree 4; 6).
 
+Which slow terms the grid keeps (from 0.6.24, in the one-day class, every slow term the class's rates do not carry, down to
+the floor of 1e-2 n; stack #467) is 16.18's rule; its reasons and measurements are stated there.
+
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
 in a 12-hour orbit (13.5 against 6.7 m) and 7.5 m in a geosynchronous orbit (7.6 against 1.1 m), RMS over a 72 h arc.
@@ -3036,7 +3077,8 @@ function of the anomaly, complete in j. At init it is built on 128 uniform eccen
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
 omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-daily, the class's, the half-day class's tail, and
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
-shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
+shallow set's taper and the terms slower than 1e-3 n; in the one-day class, from 0.6.24, only the terms slower than 1e-2 n
+(16.18); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
 precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
 the slopes below, 3.1 MB before 0.6.14), and read at
@@ -3265,7 +3307,7 @@ carry one term of the empirical ECOM2 model beside the sphere of section 4: Y0, 
 eY = unit(eD x r), eD the unit vector to the Sun (Arnold et al. 2015, J. Geod. 89, eq. 1; the convention of
 propagator/ffm lib/gnss_srp.h). The sphere is ECOM2's direct term D0 (the two differ by (1 AU / r_sun)^2, under 0.6 %
 over 10 days), so a separate D0 would only repeat AGOM; B0 and the once-per-revolution terms are not carried. Y0 is zero
-where the sphere's rates count the orbit as in shadow (the same decision, section 4 and srp_rates).
+where the sphere's rates count the orbit as in shadow (the same decision, 16.15 and srp_rates).
 
 *Theory.* Y0's Gauss rates (the radial component zero) are averaged over the mean anomaly of the mean orbit on its
 sunlit arc by three-point Gauss-Legendre panels: the arc's ends, the points a quarter revolution either side of where
@@ -3436,8 +3478,7 @@ di/dt = D g.N, sin i dOmega/dt = D g.M, d varpi/dt = D (tan(i/2) g.M - 1.5 P),
 d lambda/dt - n = D (tan(i/2) g.M - 3 eta P - 1.5 e^2 P / (1 + eta)), de/dt = dn/dt = 0,
 
 written in the equinoctial elements, regular at i = 0 and e = 0. They are added to the mean-element rates at every
-stage in both regimes (in the long-period regime also to a covariance's moved sets, which step in pairs), at the state
-of the stage. With a single k2 the average is k2 (mu_b R^5 / r_b^3) (1 - 3 (w.s)^2) / (4 a^3 eta^3); against the
+stage in both regimes (a covariance's moved sets each at their own: 12.3), at the state of the stage. With a single k2 the average is k2 (mu_b R^5 / r_b^3) (1 - 3 (w.s)^2) / (4 a^3 eta^3); against the
 quadrupole of section 5 the tide is k2 (R/a)^5 of it on a circular orbit, 17 % at 800 km. The Moon's tide is a J2 of
 1.69e-8 about the Moon's direction, the Sun's 0.77e-8; their mean over the bodies' motion is the permanent tide, a J2
 change of +9.4e-9, which AP's tide-free J2 (1.3) does not hold and the term supplies, as FFM's step 1 does on its
@@ -3504,7 +3545,467 @@ alternating pairs under a load of 63 to 92: median 1.013, the spread (0.84 to 1.
 `test/solid-tides.e2e.mjs` checks the term against model truth on two low orbits, NONE written against the field
 unset, the long-period regime's stated covariance with the tide, and the refusals.
 
-**16.18 Where each tesseral term is carried: the low table (from 0.6.NN; stack #477).** The low table is class 0 below
+**16.15 AP's shadow.** Every AP set takes this shadow in place of section 4's: in the sphere's rates (srp_rates)
+and in Y0's sunlit arc (16.13). Section 4's closed form, kept as the library computes it, decides by rounding in two
+places (stack issue 464):
+- A candidate root counts as a boundary only when |S| < 1e-12. Where a boundary lies within a few degrees of an apse of
+  the mean orbit, x = cos nu is near +-1, and sin nu = sqrt(1 - x^2) magnifies the root's rounding by 1 / sin nu.
+  |S| at the root then falls between 1e-13 and 2e-12. The rates flip between the sunlit arc and the wholly sunlit
+  orbit with the last bits of the elements, and the whole eclipse's share of the rates moves for a node step (two
+  revolutions on a Galileo orbit, 4.6 % of the eccentricity vector's rate in one case).
+- Near-equatorial long-period AP sets (inclination below 0.02 rad, a above 5 Earth radii) took section 4's sequence
+  itself, which is rounding-limited at geosynchronous radius.
+
+Under a change of 1e-10 relative in the mean motion, 7-day flights in an eclipse season moved by up to 10 m on
+Galileo-like orbits, 35 m GPS-like, 3.5 to 9.4 m geostationary and inclined geosynchronous, 1.0 m at 800 km, 0.4 m
+laser geodetic and 145 m on a transfer orbit; the change itself moves them 0.2 to 0.6 m along track, linearly. A fit that solves
+AGOM, or Y0 beside it, stopped where rounding put it (stack issue 456).
+
+*The shadow.* Section 4's cylinder of radius R_E on the current mean orbit:
+- A, B are the Sun's direction cosines on P and Q, F = A^2 + B^2, phi is the Sun's direction in the orbit plane and
+  u = nu - phi - pi the angle from the anti-Sun direction. The night half is |u| < pi/2.
+- The shadow is where S(u) = p^2 F cos^2 u + d^2 - p^2 > 0 (d = 1 + e cos nu). S is negative at both terminators
+  (S = d^2 - p^2 there, because the perigee is above the surface).
+- S's largest value on the night half decides. It is searched at u = 0, then at u = j pi/10 (|j| <= 4), then by
+  Newton's method on S' inside the neighbors of the best point. Not above 0: wholly sunlit.
+- Above 0: the entry and the exit are the roots of S on either side, each found by Newton's method kept inside its
+  bracket (bisection where a step leaves it) to full precision.
+- E1 (exit) and E2 (entry, + 2 pi when not above E1) feed section 4's formulas: AP's arrangement of them where the
+  set's angles allow, section 4's own for near-equatorial long-period sets. Section 4's test that the cylinder cannot
+  reach the orbit (F < 1 and (1 - F) a_min^2 > 1.000002) stays as the first step.
+- `sdnap_shadow_policy` 3 (no boundary) makes AP wholly sunlit too; policies 1 and 2 act on SGP4XP alone.
+
+*Continuous, not smooth.* No tolerance decides a branch, so the rates are continuous in the elements. At the season's
+edge the two roots merge, and the sunlit-arc formulas over E2 - E1 = 2 pi are those of the wholly sunlit orbit. The
+rates are not smooth there: the arc grows as the square root of the orbit's depth in the cylinder.
+
+*One sunlit arc per revolution*, as section 4 assumes, measured: 6,318,000 geometries, 4,636,757 of them shadowed,
+none with more than two boundaries on the night half (4,000 samples of it each). The grid: e from 0 to 0.9 (15
+values), perigee radius from 1.005 to 60 Earth radii (13 values), 90 Sun elevations up to the highest whose cylinder
+reaches the orbit, 360 directions in the plane.
+
+*No shadow missed, none added*, measured against S itself: 4,000 samples of the night half, every sampled maximum
+refined by golden section to 1e-14 rad, a shadow wherever a refined maximum is above 0.
+- On the grid above, there is no miss and no false shadow among 6,318,000 geometries, 4,638,201 of them shadowed. Where
+  both see a shadow, their widths agree to 8e-7 deg of true anomaly.
+- The grazing band covers e 0 to 0.9 (18 values), perigee radius 1.005 to 6.61 Earth radii (20 values) and 360 Sun
+  directions. Each direction's grazing elevation is bisected on S, then 33 elevations below it are flown, from 1e-1 to
+  1e-12 of it below. That is 4,151,232 geometries, all shadowed. None is added. 17,283 are missed, each within about
+  1e-12 of its grazing elevation, with S's largest value at most 4.4e-16 p^2 (the rounding of S itself) and a shadow at
+  most 1.24e-5 deg of true anomaly wide.
+- Neither set has a geometry with two maxima of S on the night half. test/radiation-shadow.e2e.mjs sweeps a transfer
+  orbit through grazing where the maximum lies 37 deg from the anti-Sun direction.
+
+*Measured* (`sdnap_ap_srp_rates`: mode 0 the theory, mode 1 the same sphere and cylinder averaged numerically over
+one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow.e2e.mjs):
+- The six rates agree within 7.6e-7 of each rate's scale, through grazing (Galileo-like and geostationary) and with
+  the exit or the entry crossing the perigee. Their steps along the sweep equal the average's to three digits.
+- The transfer orbit (e 0.73), every direction of the Sun in its plane: 7e-7, except a_f (next item).
+- The perigee-stepped nudge scans, made-up sets in season:
+
+  | Orbit | Rough flights, section 4's shadow (0.6.20) | 16.15 |
+  | --- | --- | --- |
+  | Galileo-like | 24 of 120 | 0 of 120 |
+  | GPS-like | 15 of 120 | 0 of 120 |
+  | laser geodetic | 3 of 120 | 0 of 120 |
+  | 800 km | 6 of 120 | 0 of 120 |
+  | transfer orbit | 18 of 120 | 0 of 120 |
+  | geostationary at i 0.05 deg | 5 of 24 | 0 of 24 |
+  | geostationary at i 2 deg | 6 of 24 | 0 of 24 |
+  | inclined geosynchronous | 11 of 24 | 0 of 24 |
+
+  "Rough" means the departure from a linear drift exceeds 1 cm; with 16.15 it is at most 0.9 mm over 7 days.
+- The transfer orbit's worst flight before: the exit fell 0.008 deg past the perigee, and one node evaluation
+  rejected its root (|S| = 2.7e-12) and took the orbit as wholly sunlit. 16.15 takes the arc there; the numerical
+  average agrees with it.
+- Real fitted records: two of the release table's 0.6.20 records (72 h, ECOM2, the solid tide stated), each flown 7
+  days from its cutoff with the tide stated and with that entry removed, the 3D difference at the cutoff / day 3 /
+  day 5 / day 7 (m). The tide's own term is about a meter:
+
+  | Record | 0.6.20 | 16.15 and 16.16 | 0.6.20, the shadow out of play (policy 3) |
+  | --- | --- | --- | --- |
+  | QZS-2G, one window in season (i 0.074 deg, Y0 -1.9e-9 m/s^2) | 3.05 / 5.12 / 6.59 / 8.11 | 0.50 / 0.92 / 1.27 / 1.66 | 0.45 / 0.86 / 1.21 / 1.62 |
+  | Galileo IOV 2, one window in season | 19.24 / 22.10 / 17.47 / 33.66 | 0.97 / 1.67 / 2.33 / 3.05 | 0.90 / 1.57 / 2.15 / 2.95 |
+
+  On 0.6.20 QZS-2G's near-equatorial long-period sets took section 4's own sequence, and Galileo's radial part swings
+  by up to 4 m once per revolution. With 16.15 the radial part is 0.000 m on both, and the along-track part grows
+  smoothly.
+
+*Bits.* SGP4XP and SGP4 are section 4's and unchanged. AP sets with AGOM 0 fly byte for byte, and so do AP orbits
+wholly sunlit over the flight. In shadow, where section 4's decision was right, a flight moves by nanometers (4e-9 m
+over 7 days on a Galileo-like set), because the boundaries are now solved to full precision.
+
+*The pressure constant.* AP keeps section 4's P = 4.5e-6 N/m^2, and SGP4XP must. The numerical propagator's
+cannonball uses the solar flux 1361 W/m^2 / c = 4.54e-6 N/m^2. A fit takes the 0.88 % into AGOM: fitted against
+FFM's sphere, AGOM comes out 0.8 to 0.9 % above FFM's coefficient, with nothing lost in forecast (three real
+geostationary windows, 2025-10). An AGOM taken from a spacecraft's physical area, mass and reflectivity instead of
+fitted is 0.88 % low in AP's units against a propagator that uses 1361 W/m^2.
+
+*Not carried, with their sizes.* Each size is the difference over 7 days of a made-up flight with the same epoch
+state and integrator, in season.
+- **The penumbra.** AP's shadow is the cylinder; the numerical propagator flies a cone with umbra and penumbra. The
+  same sphere averaged numerically in the cone (mode 2, the illuminated fraction of the Sun's disc) against the
+  cylinder: 2.7 cm Galileo-like, 2.1 cm GPS-like, 2.8 cm geostationary, 2.2 cm inclined geosynchronous, 0.3 mm laser
+  geodetic, 1.4 mm at 800 km, 5.7 cm on the transfer orbit; 0 for a wholly sunlit orbit. The penumbra lies across the
+  cylinder's edge, so the light it removes outside the edge and adds inside nearly cancel.
+- **Section 4's sunlit-arc eccentricity-vector rate at high eccentricity** (stack issue 466). Against the numerical
+  average, a_f-dot departs by 1.1e-4 of its scale at e 0.1, 1.1e-3 at e 0.3 and 1.2e-2 at e 0.73, in shadow only
+  (4e-15 wholly sunlit). In flight that is 2.3 to 3.5 m on the transfer orbit (e 0.73, AGOM 0.02) and under 0.3 mm on
+  near-circular orbits.
+- **The shadow's periodic motion** (stack issue 472, the second clash of 16.16). The output-time terms add, through
+  the shadow, the periodic motion of a force that is off there. What it leaves, measured as in 16.16:
+
+  | Orbit, in season | Along track at day 7 | Within-day span | Radial RMS |
+  | --- | --- | --- | --- |
+  | geostationary | -3.7 m | 6.2 m | 1.4 m |
+  | C229-like geostationary (i 1.7 deg) | -1.5 m | 8.0 m | 1.4 m |
+  | inclined geosynchronous | -5.5 m | 6.1 m | 1.2 m |
+  | Galileo-like | 13.7 m | 5.7 m | 0.9 m |
+  | GPS-like | -3.0 m | 3.0 m | 0.6 m |
+  | 800 km | -6.6 m | 1.2 m | 0.4 m |
+  | laser geodetic | -0.5 m | 0.1 m | 0.006 m |
+
+  Out of season, as the numerical model's own baseline: -5.8 m on the C229-like set and -0.9 m Galileo-like.
+
+*Cost*, measured niced under a load of about 100: the shadow takes 265 ns against the closed form's 183 ns per call at
+Galileo radius, 282 against 165 ns geostationary, 691 against 202 ns at 800 km and 821 against 171 ns on the transfer
+orbit. The shadow is evaluated at nodes and stages, about 150 to 240 times per 7-day flight. kernel-cost's per-state
+costs moved by 0.94 to 1.16 times, within that load's spread. The release's speed table, flown on the final bytes in
+a quiet slot, is the cost of record.
+
+**16.16 The mean longitude over a sunlit arc** (stack issue 472). Section 4's averaged rates count the shadow; its
+output-time short-period terms (Kozai 1961; Aksnes 1976) do not, being periodic in E with the Sun held fixed and no
+shadow. The two clash in an eclipse season, twice:
+1. Section 4's rate of lambda over a sunlit arc takes the sunlit average of the Gauss rate plus the sunlit average of
+   the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n). The numerical average of 16.15
+   reproduces section 4's lambda rate only with Delta n added over the sunlit arc: at e 0, 2.5 times the Gauss rate's
+   average. But the output-time terms map n_osc = n_mean + Delta n over the whole revolution, the shadow included. The
+   mean longitude's rate that agrees with that mapping takes Delta n over the whole revolution.
+2. The output-time terms add, through the shadow, the periodic motion of a force that is off there.
+
+*What AP takes.* For (1), an AP set's rate of lambda over a sunlit arc adds Delta n's share over the shadow, in closed
+form:
+
+  (1 / 2 pi) int over E2 .. E1 + 2 pi of Delta n (1 - e cos E) dE = 3 F_s / (2 pi a n) [G(E1 + 2 pi) - G(E2)],
+  G(E) = A sin E - B eta cos E - e (A (E / 2 + sin E cos E / 2) + B eta sin^2 E / 2).
+
+At e 0 this is 3 F_s sin(h) / (pi a n), h the shadow's half-angle: 2.8e-10 rad/min at geostationary radius for AGOM
+0.022. It vanishes with the shadow, so the rates stay continuous (16.15) and a wholly sunlit orbit flies byte for byte.
+(2) is not carried (16.15 states its size). SGP4XP keeps section 4.
+
+*Measured.* The method:
+- A flight's response to the sphere is the set flown minus the same set with AGOM 0, from the same mean elements.
+- The numerical response is a flight of each of the two AP epoch states, with the sphere in the cylinder and without
+  it: two bodies, J2, the Sun and Moon of section 5, RK4 at 1 minute. The residual is AP's response minus the
+  numerical one; the numerical model's own shortfalls cancel to first order.
+- Made-up sets in season, 7 days on a 10 minute grid, the along-track residual at day 7:
+
+  | Orbit, in season | Section 4's rate | 16.16 | 16.16 and (2), numerical |
+  | --- | --- | --- | --- |
+  | geostationary | 91.7 m | -3.7 m | -0.8 m |
+  | C229-like geostationary | 64.7 m | -1.5 m | -4.2 m |
+  | inclined geosynchronous | 70.7 m | -5.5 m | -2.3 m |
+  | Galileo-like | 115.6 m | 13.7 m | -2.4 m |
+  | GPS-like | 76.9 m | -3.0 m | -0.07 m |
+  | 800 km | 13.1 m | -6.6 m | 1.5 m |
+  | laser geodetic | 1.4 m | -0.5 m | -0.3 m |
+
+  The last column computes (2) numerically at every output time (zero-mean periodic parts of the notched rates
+  minus those without the shadow). What it leaves equals each set's out-of-season residual: -5.8 m C229-like,
+  -0.9 m Galileo-like.
+- The closed form agrees with the same term computed numerically to centimeters in flight.
+- Between AP with and without 16.16, a 7-day flight in season moves by 103 m (geostationary) and 110 m
+  (Galileo-like), and out of season it is byte for byte.
+- Fitted to the numerical propagator's cannonball (FFM, cone, EGM96 70 x 70, Sun and Moon, no Y0 in the truth),
+  72 h, then flown, with 16.15 and 16.16 against without them, day 5 / day 7:
+
+  | Set | Without | With |
+  | --- | --- | --- |
+  | geostationary, made-up, in season, i 0.05 deg | 28.1 / 43.6 m | 12.9 / 17.2 m |
+  | geostationary, made-up, in season, i 2 deg | 24.3 / 41.3 m | 12.1 / 15.6 m |
+
+  The fitted AGOM moves from 2.3 % low to within 0.05 % of the truth's (times 1.0088, 16.15). On the release
+  table's real geostationary rows, 72 h fits with ECOM2 as the table flies them: the day-5 median goes from 88.4 to
+  26.9 m and the windows inside the line from 26 to 29 of 32 (QZS-2G: Y0 found -2.14e-9 against the numerical
+  propagator's -2.26e-9). Inclined geosynchronous rows: unchanged.
+- Cost: one closed-form term (two sines and cosines) where a sunlit-arc rate is evaluated.
+
+**16.17 The Sun and Moon of AP.** AP does not read section 5's Sun and Moon; SGP4XP keeps them bit for bit (`bodies_at`,
+`sun_at`). Every AP path reads its own (`ap_bodies_at`, src/ap_bodies.inc): the rates in both regimes, the output-time
+terms, the radiation pressure and its shadow, the radiation term Y0 (16.13), the drag passes (16.12) and the Sun of the
+drag atmospheres. Flights read it through `bodies_at_ap`, the quintic through its values at the six nodes about the time,
+the nodes on an absolute grid of UTC every 8 hours (node k at 8k hours from 1950 January 0.0). Against the series at the
+same instants (20,000 instants of 2010-2035) the quintic is off by 0.00017 arcsec at the median and 0.0025 at the 99.9th
+percentile for the Moon (4 cm and 0.37 m in distance), 3e-8 and 2e-7 arcsec for the Sun; the largest, 0.017 arcsec and
+1.2 m, fall on the days with a leap second, whose UTC day is 86,401 s long. The second difference of either unit vector
+(60 s apart) steps by at most 1.5e-9 arcsec (Sun) and 1.2e-5 arcsec (Moon, mostly its own change of curvature) at a node.
+A node is a function of its time alone, so no set fills or owns one: each thread keeps the nodes it has read in a store
+of 256 slots by node index (85 days) and the six it read last, and every set and every thread reads the same numbers in
+any order. A batch of records at one time evaluates a node once per thread, not once per record; a fresh record whose
+epoch another record already flew reads its nodes from the store. Two times 85 1/3 days apart (256 nodes) share a slot:
+a thread asked for them in turn evaluates again the node it gave up (about 4.2 µs a node) and reads the same numbers, so
+a batch whose sets lie more than 85 days apart costs more on that thread and gives the same states. The grid is in UTC:
+on a leap-second day the series, a function of TT, bends where the UTC day begins and ends, which is where the quintic's
+largest errors fall, far inside the series' own 0.74 arcsec. A grid in TT would need UTC to TT at every read (ERFA's
+leap-second lookup, some 0.3 µs against about 20 ns for the read), so it stays in UTC. A batch at one time
+(`plugin_propagate_batch`, `sdnap_propagate_soa`) is SGP4XP's path: it flies the row store, which in the shipped module
+holds no AP set (`sdnap_init_elements`, `plugin_init`, `plugin_init_omm` and `ingest_omm` fill it with no AP terms
+selected), and it evaluates section 5's bodies once for its sets. A row that is an AP set exists only in a test build;
+`row_propagate` withholds the batch's bodies from it and it reads its own (test/set-caches.e2e.mjs, a store of AP sets
+and one mixing AP and SGP4XP sets, each bit for bit against the minutes call).
+
+*The series.* A least-squares fit to DE440 (Park et al. 2021; NAIF de440s.bsp, SHA-256 c1c7feea...49f2) at TT from
+1990 to 2060, every 0.61 days (42,514 samples), by tools/ap-bodies-fit.mjs; its coefficients are src/ap_bodies_series.inc
+(319 arguments, 548 coefficient records). Fitted are the Moon's longitude (less its mean longitude F + Omega), latitude and
+distance, and the Earth-Moon barycenter's Sun (longitude less F - D + Omega, latitude, distance), in the mean ecliptic and
+equinox of date (IAU 2006 precession, the Fukushima-Williams angles of Capitaine, Wallace and Chapront 2003, with the
+frame bias). Each is a quadratic in tau = T - 0.25 (T in Julian centuries of TT from J2000) plus the sine and cosine of
+integer combinations of the Delaunay arguments D, l, l', F, Omega (IERS Conventions 2010, eq. 5.43; Simon et al. 1994),
+the mean longitudes of Venus, the Earth, Mars, Jupiter and Saturn (eq. 5.44) and two planetary arguments of Meeus (1998,
+ch. 47), A2 and A3. The candidates are the lunar problem's combinations to order 8, those with Omega to order 3, and the
+planets against the Earth alone and with l, D, 2D, 2D - l, F and l'; candidates slower than a period of 50 years (the
+quadratic carries them over the span) or not separable in rate from a lower-order one over the span are left out. A term
+is kept above 0.15 arcsec (Moon longitude), 0.12 arcsec (latitude), 0.15 km (distance), 0.06 arcsec (Sun longitude and
+latitude) and 25 km (Sun distance); a term above 25 times that also takes an amplitude linear in tau (over the span the
+falling eccentricity of the Earth's orbit changes the Moon's terms in l' by up to 1 arcsec and the Sun's equation of the
+center by some 12 arcsec). The fit's residuals are 0.73, 0.50 arcsec
+and 0.65 km RMS for the Moon and 0.44, 0.08 arcsec and 126 km for the barycenter's Sun. The geocentric Sun is the
+barycenter's plus mu_M / (mu_E + mu_M) times the Moon (DE440's masses; 4,671 km on average).
+
+*Time and frame.* The series take TT, from UTC through ERFA's leap-second table (`frames::utc_to_tt`, as the GCRF
+rotation of 16.4 takes it); section 5 took UTC, which put the Moon 38 arcsec behind along its path. TDB - TT (under 2 ms)
+is left out. From the mean ecliptic of date the bodies go to TEME of date by the IAU 2006 mean obliquity, the fourteen
+largest luni-solar terms of IAU 2000B's nutation (McCarthy and Luzum 2003; IERS Conventions 2010, Table 5.3a) and the
+equation of the equinoxes: against the module's own GCRF-to-TEME (IAU 2006/2000A through ERFA, 16.4) 0.05 arcsec on
+average and 0.085 at worst over 2010-2035. Section 5's Sun and Moon are in the mean equator and equinox of date, 5.5 arcsec
+on average and 9.9 at worst from TEME.
+
+*Against DE440.* 2010-2035, 32,745 instants 0.29 days apart, DE440 turned to TEME of date by the module's GCRF-to-TEME;
+section 5 as AP read it through 0.6.21 (UTC for TT, the mean equator of date for TEME; measured on 0.6.16) and this
+section through `bodies_at_ap` (measured on 0.6.22):
+
+| | Section 5 | 16.17 |
+| --- | ---: | ---: |
+| Moon direction, mean / 95th percentile / worst (arcsec) | 91.5 / 195 / 377 | 0.74 / 1.57 / 4.14 |
+| Moon distance, RMS / worst (km) | 19.2 / 72.6 | 0.68 / 3.08 |
+| Sun direction, mean / worst (arcsec) | 10.9 / 32.0 | 0.44 / 1.08 |
+| Sun distance, RMS / worst (km) | 4,420 / 11,900 | 128 / 401 |
+| Moon's acceleration error at 42,164 km, RMS radial (m/s^2) | 3.7e-9 | 3.7e-11 |
+| Moon's acceleration error at 74,600 km, RMS radial (m/s^2) | 7.0e-9 | 6.9e-11 |
+| Sun's acceleration error at 42,164 km, RMS radial (m/s^2) | 2.4e-10 | 9.1e-12 |
+
+The acceleration errors are on an equatorial ring of eight points in TEME, the third-body point-mass acceleration with
+the module's bodies against DE440's. Section 5's Moon error split into the time argument (37.7 arcsec mean), the frame
+(5.5) and its series (83.4); its Sun's into the time argument (2.8), the frame (5.6), the barycenter's offset (4.2) and
+its series (9.9). Inside the fit's span but outside 2010-2035 the series measure 0.78 arcsec mean and 4.0 at worst for the
+Moon in 1990-2009 and 0.81 and 3.4 in 2036-2060. Outside the span they extrapolate the quadratic and the linear
+amplitudes. By decade over every year a satellite's epoch can fall in, against DE440 at the same instants 0.29 days apart
+(before 1972 UTC to TT by ERFA's TAI - UTC, as `frames::utc_to_tt` takes it; measured on 0.6.22), direction in arcsec:
+
+| Years | Moon, section 5: mean / 95th percentile / worst | Moon, 16.17 | Sun, section 5: mean | Sun, 16.17 |
+| --- | ---: | ---: | ---: | ---: |
+| 1957-1959 | 84.9 / 178 / 293 | 37.0 / 60.7 / 66.4 | 9.2 | 4.3 |
+| 1960-1969 | 88.9 / 191 / 409 | 25.3 / 45.2 / 55.2 | 11.1 | 4.0 |
+| 1970-1979 | 88.6 / 189 / 377 | 15.9 / 28.8 / 32.0 | 10.7 | 2.8 |
+| 1980-1989 | 92.0 / 197 / 411 | 5.3 / 12.2 / 19.3 | 10.8 | 2.3 |
+| 1990-1999 | 92.6 / 200 / 402 | 0.81 / 1.6 / 4.0 | 10.7 | 0.31 |
+| 2050-2060 | 89.6 / 191 / 360 | 0.82 / 1.6 / 3.1 | 10.3 | 0.37 |
+| 2061-2070 | 86.6 / 185 / 366 | 6.1 / 13.9 / 19.3 | 10.7 | 2.1 |
+| 2071-2080 | 87.5 / 186 / 371 | 17.4 / 31.3 / 38.8 | 12.5 | 3.2 |
+| 2081-2090 | 84.9 / 180 / 367 | 27.7 / 50.3 / 63.6 | 9.4 | 3.6 |
+| 2091-2100 | 86.8 / 183 / 377 | 45.2 / 78.7 / 96 | 11.7 | 4.2 |
+
+From 1957 to 2100 this section's Sun and Moon are the better in every decade, in mean, 95th percentile and worst alike.
+Further out the Moon's mean error grows past section 5's: from 1930 to 2120 this section's mean is the smaller, in the
+1920s the two are level (86.6 against 85.4 arcsec), and before 1920 (111 to 116 against 84 to 86) and after 2120 (93 to
+126 against 86 to 87) section 5's is; this section's worst stays below section 5's in every decade from 1900 to 2149.
+AP flies any epoch and does not switch between the two (a switch inside a flight would be a step).
+`test/ap-bodies.e2e.mjs` checks the module against 407 stored DE440 samples of 2010-2035
+(test/fixtures/de440-bodies-2010-2035.json, the same tool): the Moon within 8 arcsec and 6 km, RMS 2.5 arcsec and 1.5 km;
+the Sun within 2 arcsec and 600 km; the cache against the series, and its smoothness at the nodes.
+
+*Known approximations.* The branches whose mean elements hold epoch axes (16.4: the averaged regime and the resonance
+classes) carry the bodies in TEME of date, not of the epoch. The two part by 0.42, 0.70 and 0.98 arcsec at 3, 5 and 7
+days (1.19 at worst; 2010-2035): at 42,164 km a third-body acceleration error of 1.5e-11, 2.5e-11 and 3.5e-11 m/s^2 RMS
+radial from the Moon (8.9e-11 at worst at day 7) and 1.6e-11 from the Sun at day 7; 6.5e-11 at 74,600 km from the Moon.
+The long-period branch of class 0 holds TEME of date and has no such residue.
+
+*Effect on real windows* (72 h fits, the GEO lane's harness of the table's rows, real truth, FORCES.ECOM2 as the table
+flies it; medians at days 1, 3, 5 and 7 and the windows within the numerical propagator's error plus 100 m at day 5; 0.6.21
+to 0.6.22):
+- Inclined geosynchronous (60 windows): 3.39, 12.61, 31.29, 56.37 m to 1.81, 3.59, 6.89, 10.77 m, 59 of 59 both; better at
+  day 5 on 56 windows. The Y0 those fits solve was the Moon's error leaking into the radiation term (16.13).
+- Geostationary (35 windows): 3.90, 11.54, 26.91, 53.89 m to 3.74, 9.78, 26.31, 53.57 m; 29 of 32 to 28 of 32 (one window,
+  96.7 m before, leaves the line at 123.6 m); better at day 5 on 17 windows, worse on 15. Without FORCES.ECOM2 (the
+  sphere alone, AGOM fitted) the same windows go from 14.51, 61.62, 149.30, 273.16 m to 15.46, 65.19, 153.71, 283.30 m:
+  the old Moon's error, like section 4's shadow before 16.15 (stack #486), had been offsetting the satellites'
+  non-spherical radiation, which a sphere does not carry (on 0.6.20 this section alone took the day-3 median from 53.30
+  to 57.92 m, adding to 0.6.21's 53.30 to 61.62 m).
+- On sphere truth (the numerical propagator fitted to the real arc, flown with the sphere alone), day 7 with Y0 solved:
+  three inclined windows 61.8 to 83.4 m down to 3.7 to 16.2 m, the false Y0 from -0.8e-10 to -1.4e-10 m/s^2 down to +6e-13
+  to +3.1e-11; two geostationary windows level (day 5 2.2 to 2.6 m, day 7 5.8 to 6.1 m). On a made-up inclined
+  geosynchronous set in season (epoch 2026-01-26, AGOM 0.015, a sphere in the truth and no Y0): Y0 +1.01e-9 to +2.3e-11
+  m/s^2, day 5 21.9 to 2.1 m (with Y0 held 11.0 to 2.1 m).
+- TESS (seven real windows of `test/heo-frame.e2e.mjs`): worse, medians 610.7, 1,390.4, 6,553.6 m to 762.8, 1,677.5,
+  8,596.8 m at days 1, 3 and 7 (four windows worse, two better, one level). The Moon is what moves it, and on model truth
+  the third body is right there (below); AP's zonal theory on that orbit is 0.9 to 1.8 km off at day 7, and the old
+  Moon's error had partly offset it (stack #479).
+- Day-3 medians of `test/etalon-resonance.e2e.mjs` (fits that state no FORCES.ECOM2): Etalon-1 4.25 to 3.54 m, Etalon-2
+  5.31 to 4.84, LAGEOS-1 7.17 to 7.11, LAGEOS-2 6.92 to 6.80, LARES-2 8.71 to 8.66, inclined geosynchronous 13.45 to 7.60
+  m, and geostationary 61.62 to 65.19 m (above).
+
+*Effect on model truth* (72 h fits, day-7 whole-day 3D RMS; 0.6.16 to this section, on main without the one-day class's
+resonant tail unless stated):
+- Gravity 4 x 4 on both sides: inclined geosynchronous orbits (i 55 deg, e 0.003, six nodes) 5.35-25.85 m to 0.94-2.03 m;
+  geostationary (i 1.5 deg, four longitudes) 8.47-10.34 m to 1.53-3.21 m, the cross-track part 7.3-7.9 m to 0.7-1.1 m,
+  and the constant along-track acceleration fitted to the forecast from up to 4.6e-11 to 3e-12 m/s^2
+  (`test/one-day-moon-floor.e2e.mjs`: at most 5 m; with ECOM2 the Y0 found within 3.8e-11 m/s^2).
+- The third body by radius, seeded (no fit; gravity 4 x 4 on both sides, coefficients held), day 7, this section against
+  the same flight with the Sun and Moon off on both sides: a THEMIS-like orbit 284, 273, 278 m against 258, 231, 249 m; a
+  Chandra-like one (period 63.5 h, e 0.685) 292, 413, 510 m against 289, 426, 510 m; a TESS-like one (13.7 days, e 0.55)
+  1,746, 829, 1,818 m against 1,769, 884, 1,805 m. With section 5's Moon: 292, 292, 200 m; 468, 699, 478 m; 2,423,
+  2,052, 2,870 m.
+- Every HEO fixture of 16.6 moves, both ways (day 7, 0.6.19 to this): half-day sample 30.22 to 27.76 m (along-track RMS
+  31.45 to 36.15 m), 12 h at 55 deg sample 64.94 to 76.44 m, GTO 192.87 / 123.44 to 180.70 / 117.62 m along-track /
+  radial, the 500 km perigee GTO 94.07 / 56.07 to 82.34 / 51.79 m, Molniya with its drag coefficient pinned at the truth
+  80.71 / 50.51 to 84.01 / 51.16 m; Molniya with it fitted lands on the other of its fit's two solutions (stack #392:
+  0.04462 to 0.04576 against the truth's 0.044, day 7 332.6 to 763.9 m), inside its record's statement.
+- A GPS-like orbit (20 x 20, four nodes): 8.1, 5.4, 13.7, 13.1 m to 13.4, 9.9, 10.0, 8.7 m. The averaged regime's own
+  lunar theory carries that orbit's floor (DigitalArsenal/spacedatanetwork-stack#421), not the ephemeris: DE440's Moon in
+  a test build moved it the same way.
+- Four low orbits (400 to 1,400 km, 20 x 20, no drag): by 0.00 to -0.14 m.
+- A THEMIS-like orbit (period 22.9 h, perigee 900 km, e 0.82; three nodes), day 5: 104, 88, 131 m to 98, 86, 106 m with
+  4 x 4 on both sides; 126, 148, 167 m to 109, 132, 137 m against 70 x 70 with AP at (31, 20).
+- With the full field on both sides the one-day class's missing resonant gravity (#434) had been partly cancelling the
+  Moon's error: an inclined geosynchronous node at 20 x 20 goes from 11.8 to 35.6 m (along-track; cross-track 4.4 to
+  0.4 m) and, on real 72 h windows flown against the numerical propagator fitted to them, two of three inclined windows
+  get worse after day 3 (6.7 to 17.2 m and 3.6 to 21.1 m at day 7; the third 7.8 to 6.6 m).
+- With the tail and this section together the cancellation is gone. At 20 x 20 on both sides, day 7: geostationary
+  8.5-10.3 m with the tail alone to 1.6-3.2 m (cross-track 7.3-7.9 to 0.7-1.1 m), inclined geosynchronous 5.4-25.9 m to
+  1.0-2.0 m, the same as at 4 x 4 within 0.05 m. On five real windows (tail alone to both), the three inclined ones from
+  14.0-20.0 m to 2.3-3.4 m at day 7, and the two geostationary ones from 13.4 to 8.5 m at day 5 and 34.2 to 20.6 m at
+  day 7 (0.6.16: 58.5 and 95.1 m). What is left on the second (about 18 of its 20.6 m at day 7) is the radiation
+  pressure: with it off on both sides the same window is 1.7 m, so it is AP's sphere against the numerical propagator's
+  in eclipse season, not the Sun or Moon (measured before 0.6.21's shadow, 16.15).
+
+*Cost.* One evaluation of the series costs about 4.2 µs against SPEC 5's 0.28 (rough, under load); with nodes 8 h apart
+a flight evaluates eight times fewer of them than SPEC 5's hourly cache did, and a fresh record whose times another
+flight already read evaluates none. Under load (115 to 120 on 28 cores, niced, 0.6.16 against this section alternated
+two to five times, `test/kernel-cost.mjs`), AP's cost per state over SGP4's at 300 s moved within the runs' spread
+(medium Earth orbit 1.28 to 1.49 against 1.11 to 1.34, geostationary 2.23 to 2.55 against 2.12 to 2.43, 500 km 2.60 to
+4.22 against 2.25 to 3.82); the first state of a fresh record a week from its epoch fell (geostationary 1,439 to 1,471 µs
+against 1,273 to 1,278, medium Earth orbit 200 to 237 against 178 to 188, apart from single spikes in both builds); and
+10,000 fresh records asked at one instant a day after their epoch cost 125.5 against 132.7 µs a record (medium Earth
+orbit), 209.1 against 237.1 (geostationary) and 126.1 against 131.0 (500 km). A process's first evaluations (about 40 µs
+for a day's nodes, 110 µs for a week's) are paid once per thread and time range.
+
+**16.18 Where each tesseral term is carried.** A tesseral term (l, m, p, q) of the embedded field (EGM-96 to degree and
+order 70) has w = l - 2p, j = w + q and the angle rate psi-dot = w omega-dot + j M-dot + m (Omega-dot - omega_E), from the
+J2 secular rates at the set's epoch elements (the rates 16.2's table and 16.11's grid take). The rule: each term is carried
+in exactly one place, decided by its own psi-dot at the set's epoch, for every commensurability:
+- in the rates, integrated at the current elements with all six element rates, the mean motion's response included;
+- at output, to first order: 16.2's table below the eccentricity switch, 16.11's grid above it;
+- nowhere, stated term by term with its reason (the diagnostic below).
+
+A term is slow when |psi-dot| < 0.045 n (`kShallowBand`). For each (l, m, p) the slow j are the integers within
+0.045 n / M-dot of nu = -(w omega-dot + m (Omega-dot - omega_E)) / M-dot, and q = j - w. So j and q follow from the rate, and
+each term is classified by its own rate, not by its family's q = 0 rate.
+
+*Where a slow term belongs.* At output, a term's mean-motion response is an along-track term in 1 / psi-dot^2 with a fixed
+divisor. 16.2's table takes the divisor at the epoch elements; 16.11's grid takes it at the mean elements of each 48 h node.
+That is exact to first order while psi-dot holds still and stays well above the libration rate of the term's own resonance.
+Where the rate holds still the two forms agree. At 550 km beside 15:1 (i 87.35, gravity alone, the elements fitted and the
+coefficients pinned), the order-15 terms with j = 1 give at day 5, after 24 h and 72 h fits:
+- 800 and 1,340 m in the rates;
+- 804 and 1,347 m on the table (stack #477).
+
+A term whose rate does not hold still belongs in the rates:
+- in low orbit, where drag moves n, and moves a k:j family's rate by j times as much, through the band and through zero.
+  There the acceptance is a decaying orbit that crosses a band edge with no kink in its output (stack #477);
+- above the switch, a term slower than its class's floor, where it drifts about as slowly as the class's own libration (the
+  one-day class below; stack #474).
+
+*The diagnostic.* `sdnap_slow_terms(in, rows, max_rows)` takes in = the mean motion (rev/day), e, i (deg) and the tesseral
+cap (2 to 70). It writes one row of eight doubles per slow term of degree 2 to the cap:
+- l, m, p, q and psi-dot / n;
+- the term's carrier (the table below);
+- the rates' weight w, in [0, 1]. Inside a taper the output holds 1 - w of the term. Above the switch no taper applies, so
+  w is 1 for the class's terms and 0 otherwise;
+- the term's size in m. That is its along-track amplitude through the mean motion, 3 |j| A / (a psi-dot^2), with
+  A = mu / a^(l+1) |F G| |C, S| at the epoch elements and G exact at the epoch e. A size cut is chosen on this number.
+
+| Code | Carrier |
+| ---: | --- |
+| 1 | the rates: the class's terms (6.1), the half-day class's tail (16.2), the shallow set (16.2) |
+| 2 | the grid (16.11) |
+| 3 | the output table (16.2) |
+| 0 | nowhere: under the floor, or left out of the grid as slow |
+| 4 | nowhere: above the carrier's degree |
+| 5 | nowhere: under the size cut |
+| 6 | nowhere: a q outside the rule's q range, at or above the size cut |
+
+It writes at most max_rows rows and returns the count of all of them, or -1 for a set it does not cover. It covers the sets
+above their eccentricity switch outside low orbit (class 0 below 1100 min), and from 0.6.25 the low table (below: codes 3,
+5 and 6 are written there only). It returns -1 for every other set. No flight reads it.
+
+*The partition test.* Each part of the rule has an E2E of one shape:
+- the rule, written in the test as a function of a row (the carrier from l, m, p, q and psi-dot / n);
+- `sdnap_slow_terms` compared with it row by row on sets inside the part's bands;
+- one model-truth flight of a set inside a band.
+
+`test/one-day-slow-band.e2e.mjs` is the one-day class's test.
+
+*The one-day class above the switch (from 0.6.24; stack #467).* Before 0.6.24 the grid left out every term slower than
+0.045 n, as if the class carried it in the rates. The one-day class carries only SGP4-XP's 27 terms (degrees 2 to 4, k = m,
+|q| at most 4), so its other slow terms were carried nowhere:
+- j = m of degrees 5 to 12;
+- the terms of degrees 3 and 4 with |q| above 4, large at high e.
+
+A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at day 5 on THEMIS A's real geometry, whose
+angle drifts at 0.0444 n. A set just above the cut kept them. From 0.6.24 each term of a one-day set above the switch is
+carried in exactly one place:
+- the class's rates: its 27 terms;
+- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster (`kOneDayFloor`);
+- nowhere: a term slower than 1e-2 n (the floor below), and the terms above degree 12 (the table holds no near-resonant
+  terms outside low orbit).
+
+On a THEMIS A-like set the diagnostic lists 5 terms in the rates, 47 on the grid of degree 2 to 12, and 768 of degree 13 to
+31 carried nowhere. On THEMIS A's real geometry (no Sun or Moon, the field cut on both sides) degrees 13 to 31 are 1 to 17 m
+of either sign at day 5: 12 x 12 against 31 x 31 gives 50.2 against 48.9 m, 52.1 against 65.7 m and 78.7 against 62.1 m.
+
+FFM model truth, EGM96 70 x 70, no Sun or Moon on either side, a 72 h fit flown 7 days, day 5:
+- Made-up THEMIS A-like sets whose fitted mean motion lies in the band (1.0493 rev/day, e 0.825, i 11.9 deg; node 0, 90
+  and 180 deg): 369 / 415 / 549 m through 0.6.18, and 155.1 / 69.5 / 160.5 m with the band.
+- Five real THEMIS geometries, from their windows' own states with the Sun, the Moon and the radiation sphere: day 5 went
+  from 162 to 994 m (median 538 m) to 77 to 129 m (median 100 m).
+
+At the switch, a one-day set at e0 0.30 takes #434's tail in the rates and the table; one at 0.3001 takes the grid with
+the band. i 10 deg, 70 x 70 with the Sun and Moon, a 72 h fit, day 5:
+- At n 1.0496: 35.5 m at e0 0.30 against 13.7 m at 0.3001.
+- At n 1.0027: 19.9 m against 12.0 m.
+- Through 0.6.18 the same pairs were 38.7 against 14.8 m and 18.1 against 11.9 m.
+
+The jump is the table's first-order error near 0.3 (16.11). The band adds 1 m at 0.3001 and the tail 3 m at 0.30.
+
+The floor is 1e-2 n, not the table's 1e-3 n. Between the two, a term drifts about as slowly as the class's own resonant
+libration, where a first-order term is no longer small. Two synchronous sets at e 0.5 (1.0027 rev/day, i 30 deg, nodes 30
+and 120 deg; 70 x 70, no Sun or Moon, day 5) hold 98 terms of degree 2 to 12 between the two floors:
+- with the floor at 1e-3 n they went from 105 to 58 m and from 42 to 54 m;
+- at 3e-3 n and 1e-2 n both keep their 0.6.18 values.
+
+On the THEMIS-like sets and on the one-day set at e 0.3001 no term of degree 2 to 12 lies between the two floors. What the
+floor and the degree cut leave out on such a synchronous set (105 m and 42 m, against 2.7 m and 2.1 m with a 4 x 4 field) is
+stack #474.
+
+*The other parts.* Every other set carries its slow terms as 16.2 and 16.11 state. These are carried nowhere:
+- in low orbit (class 0 below 1100 min), through 0.6.24: the commensurabilities with j of 2 to 4 (orders 25 and up) and the
+  degrees above 31. Inside the bands they put a set 0.1 to 1.9 km off at day 5 (stack #477). From 0.6.25 the low table's
+  slow set carries those with q = 0 (below); the terms with q other than 0 stay open;
+- above the switch in classes 0, 2, 3 and 4: every slow term the class's rates do not carry. A transfer orbit (2.2785
+  rev/day, e 0.7306, i 27 deg) is 2.1 km from the numerical propagator at day 5 without radiation pressure (stack #473);
+- in the one-day class: the terms under its floor and above degree 12 (stack #474).
+
+*The low table (from 0.6.25; stack #477).* The low table is class 0 below
 1,100 min at or below its eccentricity switch. There, through 0.6.20, the shallow set (16.2) carried only j = 1, q = 0 to the
 stated degree, at most 31. The output table dropped every term slower than 1e-3 n and took the rest with the divisor of the
 epoch. A k:j family at a band's center, or one that drag moves through its band, was carried in the wrong place or nowhere.
@@ -3512,7 +4013,7 @@ Gravity alone, FFM 70 x 70 on both sides with no Sun or Moon, the elements fitte
 1,500 km in 20 km steps: the worst day-5 error after a 24 h or 72 h fit was 1,584 m at i 53 (25 heights above 100 m) and
 1,905 m at i 97.6 (35 heights).
 
-From 0.6.NN a fit that states MAXIMUM_TESSERAL_DEGREE 2 or more carries the slow set in the rates, beside the shallow set:
+From 0.6.25 a fit that states MAXIMUM_TESSERAL_DEGREE 2 or more carries the slow set in the rates, beside the shallow set:
 every term (l, m, p, q) of the embedded field with j = l - 2p + q from 1 to 6, q = 0, order and degree 2 to 70,
 - whose own rate psi-dot at the epoch elements is within 1.3 bands (|psi-dot| < 1.3 x 0.045 n, `kShallowSelect`);
 - whose size reaches 0.5 m (`kSlowKeepM`). The size is the along-track amplitude through the mean motion,
@@ -3553,6 +4054,22 @@ Measured with the slow set:
   median), from 0.6.20 to the slow set: laser spheres 21 to 34 of 56 (116 to 75 m), altimetry 28 to 42 of 112 (191 to
   121 m), near 700 km 10 to 11 of 69 (235 to 216 m). The 24 h rows do not move.
 - The records of LAGEOS-, Etalon- and Galileo-like sets are identical to 0.6.20.
+
+What gets worse, measured. No IDS burn lies near either Sentinel-3 window.
+- Sentinel-3B 2025-10-25: day 7 goes from 112 to 402 m. Its 72 h fitted term goes from 0.87 to 0.83 of the full numerical
+  arm's, and the numerical propagator's own day 7 on that window is 1,179 m.
+- Sentinel-3A: the median paired day 3 on its read windows goes from 44.2 to 73.4 m. Its term on 2025-10-15 goes from 0.90
+  to 0.87 of the numerical arm's.
+- The ISS sample, a 6 h fit at 420 km: the error at 12 h goes from 308.5 to 316.6 m against the sample's own truth. The
+  calibration cells of SPEC 12.5 move by at most 0.0011 in median |z|. This is one sample.
+- LARETS: two windows leave the 100 m line. 2025-10-15 (a 24 h fit) goes from 73 to 288 m at day 5, and 2025-12-14 (72 h)
+  from 74 to 188 m.
+
+*Cost.* The list is built once per set, when the set is loaded, so the cold first state of a low-orbit set costs more:
+- at 1 day, 1.25 to 1.40 times 0.6.20 on six of `test/kernel-cost.mjs`'s ten low-orbit regimes and about 2.2 at 400 km;
+- at 7 days, 1.03 to 1.28 times.
+The cost per state is unchanged within the noise (0.90 to 1.07). These were measured under load; stack #492 is the shared
+list that takes the load cost off a catalog.
 
 *The diagnostic, low table.* `sdnap_slow_terms(in, rows, max_rows)` covers the low table with rows of eight doubles: l, m, p,
 q, psi-dot / n, the carrier, the rates' weight w at these elements, and the term's size in m. It lists every term of j = 1 to
@@ -4129,7 +4646,16 @@ pass W4 (18.5, #394).
   statistical comparisons and scientific issues. JGR 107(A12), 1468.
 - Montenbruck, O., Gill, E. (2000). Satellite Orbits. Springer.
 - The Astronomical Almanac, section C (Sun) and D (Moon), low-precision formulas.
-- Meeus, J. (1998). Astronomical Algorithms, 2nd ed., chapter 25. Brouwer, D., Clemence, G. M. (1961). Methods of
+- Park, R. S., Folkner, W. M., Williams, J. G., Boggs, D. H. (2021). The JPL planetary and lunar ephemerides DE440 and
+  DE441. AJ 161, 105.
+- Petit, G., Luzum, B., eds. (2010). IERS Conventions (2010). IERS Technical Note 36, chapter 5 (eq. 5.43 and 5.44,
+  Table 5.3a). Simon, J. L., Bretagnon, P., Chapront, J., Chapront-Touzé, M., Francou, G., Laskar, J. (1994). Numerical
+  expressions for precession formulae and mean elements for the Moon and the planets. A&A 282, 663-683.
+- Capitaine, N., Wallace, P. T., Chapront, J. (2003). Expressions for IAU 2000 precession quantities. A&A 412, 567-586.
+  McCarthy, D. D., Luzum, B. J. (2003). An abridged model of the precession-nutation of the celestial pole. Celestial
+  Mechanics and Dynamical Astronomy 85, 37-49.
+- Chapront-Touzé, M., Chapront, J. (1983). The lunar ephemeris ELP 2000. A&A 124, 50-62 (the source of Meeus's A2 and A3).
+- Meeus, J. (1998). Astronomical Algorithms, 2nd ed., chapters 25 and 47. Brouwer, D., Clemence, G. M. (1961). Methods of
   Celestial Mechanics. Montenbruck, O., Pfleger, T. (2000). Astronomy on the Personal Computer, 4th ed., chapter 3.
 - Seidelmann, P. K., ed. (1992). Explanatory Supplement to the Astronomical Almanac.
 - US Space Force Astrodynamics Standards: release notes 7.7-9.9, JIRA summaries 8.2-9.9, Tle and Sgp4Prop

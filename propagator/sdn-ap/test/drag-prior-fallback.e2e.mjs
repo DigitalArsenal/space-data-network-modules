@@ -18,7 +18,9 @@
 // Acceptance:
 // 1. DO: Sentinel-3A 2025-10-15 at or below 0.33 km at day 3 and Sentinel-3B 2025-10-25 at or below 1.40 km at day 7, the
 //    two windows the fall-back had returned to 0.4.11 (0.087 and 0.113 km) and the new default takes back to 0.4.17's
-//    (0.312 and 1.335 km): measured 0.286 and 1.090 km (1 km: 0.314 and 1.344), losses the pull request names;
+//    (0.312 and 1.335 km): measured 0.286 and 1.090 km (1 km: 0.314 and 1.344), losses the pull request names. History:
+//    0.6.20 0.087 and 0.112 km; the slow set alone (0.6.25, SPEC 16.18) 0.060 and 0.402 km, its bounds 0.130 and 0.45 km.
+//    No burn of the IDS list lies in the arc or the 7 days after it;
 // 2. DO: the median paired day-3 change against 0.4.11 at or below -70 % on HY-2C and on HY-2D (measured -90.9 % and
 //    -91.0 %; 1 km: -85 and -92 %); on SWOT and Jason-3 at or below 0.4.17's and no more than 5 points under the measured
 //    change (measured -93.0 against -48.3 % and -84.5 against -68.9 %; 1 km: -47.9 and -73.2 %);
@@ -30,8 +32,11 @@
 //    above 10 km; measured 28.2 and 28.0 km) and BTERM undetermined: its formal sigma of the log at least 10 (the
 //    prior's 10 ln 10), named in the width entry, and the stated one width 1's cap, 1.09 [0.4.18: the fall-back to the
 //    band median];
-// 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 at most 100 and 72 m at
-//    day 3 (measured 15.3 and 20.4 m; 1 km: 94.3 and 67.3 m) [0.4.17 81.4 and 63.0 m];
+// 5. model truth on the default path: SWOT-like and Sentinel-3-like with a true BTERM of 0.044 at most MODEL_DAY3 against
+//    the truth at day 3 (the slow set's bounds, 30 and 25 m; measured 15.3 and 20.4 m before the slow set; 1 km: 94.3 and
+//    67.3 m) [0.4.17 81.4 and 63.0 m].
+// The slow set's restatement of 3 against BASE_3 (0.6.22, git f8af1e2b) does not apply here: SARAL and CryoSat-2 are inside
+// the 71 h default, so their fits move by design and 3 holds them against 0.4.11.
 // 6. default-FORCES XP digest bit-exact.
 // Printed: every fixture's fitted BTERM, posterior sigma of the log, fit RMS and drag path (the derivation of B, k and the
 // band median RMS); per object the DO medians at days 1, 2, 3 and 7; every DO window that takes the fall-back and why;
@@ -43,6 +48,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads';
+// 5's bound, the slow set's (0.6.25 moved the model truth's day 3 from 81.4 to 25.4 m on SWOT-like and from 63.0 to 20.8 m
+// on Sentinel-3-like, 0.4.17 the same as 0.6.21), held against the truth itself
+const MODEL_DAY3 = {'SWOT-like': 30, 'Sentinel-3-like': 25};
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
@@ -89,24 +97,27 @@ if (!isMainThread) {
   for (let index = 0; index < 10; ++index) jobs.push({key: `DO ${index}`, kind: 'windows', index});
 
   const results = {}, rows = [];
-  let next = 0;
-  await Promise.all(Array.from({length: workers}, async () => {
-    while (next < jobs.length) {
-      const job = jobs[next++];
-      await new Promise((resolve, reject) => {
-        const w = job.kind === 'fixture'
-          ? new Worker(new URL(import.meta.url), {workerData: {c: job.c}})
-          : new Worker(new URL('./lib/regime-windows.mjs', import.meta.url), {workerData: {regimeWindows: true, group: 'DO', index: job.index, modulePaths: [W0411, W0417, wasmPath]}});
-        w.on('message', (m) => {
-          if (job.kind === 'fixture') { results[job.key] = m; w.terminate().then(resolve); }
-          else if (m.row) rows.push(m.row);
-          else if (m.error) { w.terminate(); reject(new Error(m.error)); }
-          else if (m.done) w.terminate().then(resolve);
+  const run = async (list, modulePaths, sink) => {
+    let next = 0;
+    await Promise.all(Array.from({length: workers}, async () => {
+      while (next < list.length) {
+        const job = list[next++];
+        await new Promise((resolve, reject) => {
+          const w = job.kind === 'fixture'
+            ? new Worker(new URL(import.meta.url), {workerData: {c: job.c}})
+            : new Worker(new URL('./lib/regime-windows.mjs', import.meta.url), {workerData: {regimeWindows: true, group: 'DO', index: job.index, modulePaths}});
+          w.on('message', (m) => {
+            if (job.kind === 'fixture') { results[job.key] = m; w.terminate().then(resolve); }
+            else if (m.row) sink({...m.row, index: job.index});
+            else if (m.error) { w.terminate(); reject(new Error(m.error)); }
+            else if (m.done) w.terminate().then(resolve);
+          });
+          w.on('error', reject);
         });
-        w.on('error', reject);
-      });
-    }
-  }));
+      }
+    }));
+  };
+  await run(jobs, [W0411, W0417, wasmPath], (row) => rows.push(row));
 
   for (const key of Object.keys(results).sort()) console.log(JSON.stringify({fixture: key, ...results[key], comment: undefined}));
   const median = (a) => { const v = a.toSorted((x, y) => x - y), i = v.length >> 1; return v.length % 2 ? v[i] : (v[i - 1] + v[i]) / 2; };
@@ -168,8 +179,8 @@ if (!isMainThread) {
     assert.ok(Math.abs(r.sigmaLog - 1.09) <= 1e-9, `${o}: the record states the width rule's cap, 1.09 (stated ${r.sigmaLog})`);
   }
   // 5
-  assert.ok(results['release SWOT-like 0.044'].day3 <= 100, `SWOT-like 0.044: day 3 ${results['release SWOT-like 0.044'].day3} m`);
-  assert.ok(results['release Sentinel-3-like 0.044'].day3 <= 72, `Sentinel-3-like 0.044: day 3 ${results['release Sentinel-3-like 0.044'].day3} m`);
+  for (const o of ['SWOT-like', 'Sentinel-3-like'])
+    assert.ok(results[`release ${o} 0.044`].day3 <= MODEL_DAY3[o], `${o} 0.044: day 3 ${results[`release ${o} 0.044`].day3} m (at most ${MODEL_DAY3[o]} m; 0.4.17 ${results[`0.4.17 ${o} 0.044`].day3} m)`);
   // 6
   reproduceConformance();
   console.log('drag prior fall-back E2E: PASS');

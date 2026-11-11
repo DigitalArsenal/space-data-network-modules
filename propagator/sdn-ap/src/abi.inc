@@ -317,6 +317,46 @@ double sdnap_xp_shadow_at(uint32_t index, double minutes, const double* native, 
   return arc ? -m : m;
 }
 
+/// SPEC 16.15 diagnostics: AP's radiation-pressure rates on given mean elements with a given Sun. in: 11 doubles, the
+/// native elements (as sdnap_xp_rates_at: af, ag, chi, psi, lambda deg, n rev/day), the Sun's direction cosines on the
+/// perigee frame P, Q, W (normalized here), the Sun's distance (AU) and AGOM (m^2/kg). mode 0: the theory's averaged
+/// rates (srp_rates on AP's shadow); mode 1: the same sphere in the same cylinder averaged numerically over one
+/// revolution of the mean orbit, the Sun held fixed (srp_average_numeric, nq steps); mode 2: the same with a conical
+/// shadow (umbra and penumbra). out: the six rates in the state order, per minute (lambda's without n). Returns 1 when
+/// AP's shadow takes a sunlit arc, 0 wholly sunlit, -1 bad input.
+SDNAP_EXPORT("sdnap_ap_srp_rates")
+int32_t sdnap_ap_srp_rates(const double* in, int32_t mode, int32_t nq, double* out) {
+  using namespace sdnap::xpt;
+  if (in == nullptr || out == nullptr || mode < 0 || mode > 2) return -1;
+  const double deg = 180.0 / sdnap::kPi, revday = 1440.0 / sdnap::kTwoPi;
+  const double y[6] = {in[0], in[1], in[2], in[3], in[4] / deg, in[5] / revday};
+  const Frame fr = frame_of(y);
+  const Kepler k = kepler_of(y, fr.a);
+  if (!(k.e < 1.0) || !(in[9] > 0.0)) return -1;
+  const AngleTrig ag = angle_trig(k);
+  const Perifocal pf = perifocal_of(ag);
+  Vec3 s = (in[6] * pf.P + in[7] * pf.Q) + in[8] * pf.W;
+  const double sn = norm(s);
+  if (!(sn > 0.0)) return -1;
+  s = (1.0 / sn) * s;
+  Bodies b{};
+  b.sun_u = s;
+  b.sun_r = in[9] * kAu / kRe;
+  b.moon_u = s;
+  b.moon_r = b.sun_r;
+  const double agom = in[10];
+  double A, B, C, E1 = 0.0, E2 = 0.0, sE1, cE1, sE2, cE2;
+  direction_cosines(pf, s, A, B, C);
+  const bool arc = ap_sunlit_arc(A, B, k.e, fr.eta, (1.0 - fr.e2) * k.a, E1, E2, sE1, cE1, sE2, cE2);
+  for (int m = 0; m < 6; ++m) out[m] = 0.0;
+  if (mode == 0) {
+    srp_rates(y, fr, k, pf, agom, b, out, &ag, true, nullptr, true);
+    return arc ? 1 : 0;
+  }
+  srp_average_numeric(y, fr, k, s, b.sun_r, agom, mode, nq, A, B, out);
+  return arc ? 1 : 0;
+}
+
 /// CPU diagnostic: `reps` evaluations of the rate function of object `index` at
 /// its mean state at `minutes` (the caller times the call); returns the sum of
 /// the n-dot rates (keeps the work observable), NaN on a bad index.
@@ -413,6 +453,25 @@ double sdnap_hansen_g(int32_t l, int32_t p, int32_t q, double e, int32_t mode) {
   return mode == 1 ? G : dG;
 }
 
+/// Where a set carries each slow tesseral term (SPEC 16.18; stack #467): in = mean motion (rev/day), e, i (deg), the
+/// tesseral cap; rows of 8 doubles (l, m, p, q, psi-dot / n, carrier: 1 the rates, 2 the grid, 3 the output table, 0 nowhere:
+/// under the floor or the slow cut, 4 nowhere: above the carrier's degree, 5 nowhere: under the size cut, 6 nowhere: a q
+/// outside the rule's q range at or above the size cut; then the rates' weight w and the term's size in m), at most
+/// max_rows. Returns the count of all rows, or -1 for a set it does not cover. It covers the sets above their switch outside
+/// low orbit (codes 1, 2, 0 and 4) and the low table (class 0, a period under 1,100 min, at or below its eccentricity switch:
+/// codes 1, 3, 0, 4, 5 and 6; 0 nowhere under the table's 1e-3 n floor, 4 also a family whose leading degree is 69 or 70).
+/// A diagnostic: no flight reads it.
+SDNAP_EXPORT("sdnap_slow_terms")
+int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
+  using namespace sdnap::xpt;
+  const double n = in[0] * sdnap::kTwoPi / sdnap::kMinutesPerDay, e = in[1], inc = in[2] * sdnap::kPi / 180.0;
+  const int cap = static_cast<int>(in[3]);
+  if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || cap < 2 || cap > 70) return -1;
+  const int cls = res::band_of(n);
+  if (cls == 0 && sdnap::kTwoPi / n < kLongPeriodMinutes && !tess::wide_set(cls, e)) return tess::slow_listing_low(cap, n, e, inc, rows, max_rows);
+  return tess::slow_terms(cap, cls, n, e, inc, rows, max_rows);
+}
+
 /// Frame diagnostics on a state (km, km/s; 6 doubles in, 6 out) at the UTC
 /// Julian date whole + frac. mode 0 GCRF -> TEME, 1 TEME -> GCRF (the fit's
 /// GCRF rotation, gcrf.inc), 2 TEME -> Earth-fixed, 3 Earth-fixed -> TEME
@@ -447,6 +506,21 @@ int32_t sdnap_frame_probe(double whole, double frac, const double* in, double* o
     return 0;
   }
   earth_fixed_to_teme(th, in, in + 3, out, out + 3);
+  return 0;
+}
+
+/// Sun and Moon diagnostics at the UTC Julian date whole + frac: mode 0 SGP4XP's (SPEC 5, bodies_at: mean equator and
+/// equinox of date), 1 AP's series at that time (SPEC 16.17, ap_bodies_at: TEME of date), 2 what AP's flights read
+/// (bodies_at_ap: the quintic through six nodes). out (8 doubles): the Sun's unit vector and distance (km), the Moon's
+/// unit vector and distance (km). Returns 0, or -1 for a bad mode or a null output.
+SDNAP_EXPORT("sdnap_bodies_probe")
+int32_t sdnap_bodies_probe(double whole, double frac, int32_t mode, double* out) {
+  using namespace sdnap::xpt;
+  if (out == nullptr || mode < 0 || mode > 2) return -1;
+  const double d50 = (whole - sdnap::kJd1950) + frac;
+  const Bodies b = mode == 0 ? bodies_at(d50) : (mode == 1 ? ap_bodies_at(d50) : bodies_at_ap(d50));
+  const double v[8] = {b.sun_u.x, b.sun_u.y, b.sun_u.z, b.sun_r * kRe, b.moon_u.x, b.moon_u.y, b.moon_u.z, b.moon_r * kRe};
+  for (int k = 0; k < 8; ++k) out[k] = v[k];
   return 0;
 }
 
@@ -494,23 +568,6 @@ void sdnap_slow_degree_cap(int32_t cap) { sdnap::xpt::tess::slow_degree_cap() = 
 SDNAP_EXPORT("sdnap_slow_q_max")
 void sdnap_slow_q_max(int32_t q) { sdnap::xpt::tess::slow_q_max() = q >= 0 && q <= sdnap::xpt::tess::kSlowQMax ? q : 0; }
 
-/// Where a set carries each slow tesseral term (SPEC 16.18; the low table's part): in = mean motion (rev/day), e, i (deg), the
-/// stated tesseral degree; rows of 8 doubles (l, m, p, q, psi-dot / n, carrier: 1 the rates, 3 the output table, 0 nowhere: under
-/// the table's 1e-3 n floor, 4 nowhere: above the slow set's degree or in a family whose leading degree is 69 or 70, 5 nowhere:
-/// under the size cut, 6 nowhere: a q outside the
-/// slow set's range at or above the size cut, stack #477's open part; then the rates' weight w and the term's size in m),
-/// at most max_rows. Returns the count of all rows, or -1 for a set outside the low table (class 0, a period under 1,100 min,
-/// at or below its eccentricity switch). A diagnostic: no flight reads it.
-SDNAP_EXPORT("sdnap_slow_terms")
-int32_t sdnap_slow_terms(const double* in, double* rows, int32_t max_rows) {
-  using namespace sdnap::xpt;
-  const double n = in[0] * sdnap::kTwoPi / sdnap::kMinutesPerDay, e = in[1], inc = in[2] * sdnap::kPi / 180.0;
-  const int cap = static_cast<int>(in[3]);
-  if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || cap < 2 || cap > 70) return -1;
-  const int cls = res::band_of(n);
-  if (cls != 0 || sdnap::kTwoPi / n >= kLongPeriodMinutes || tess::wide_set(cls, e)) return -1;
-  return tess::slow_listing_low(cap, n, e, inc, rows, max_rows);
-}
 
 /// Flip the seasonal term's hemisphere at the equator node (|phi| < 1e-14): 1 on, 0 off.
 SDNAP_EXPORT("sdnap_hemisphere_flip")

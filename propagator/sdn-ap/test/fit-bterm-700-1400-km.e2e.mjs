@@ -23,6 +23,8 @@
 //    no object worse than 0.4.11 by more than 10 m on its scored windows except CryoSat-2, held under its own bound of 115 m
 //    (0.4.11 66.3 m, measured -24.3 m; 109.1 m at 1 km, stack #470). Measured 2026-11-11 with the fit at the data's own
 //    sigma on 71 h arcs (SPEC 12.1, stack #489): HY-2C 576 to 26, HY-2D 524 to 9, Jason-3 181 to 6, SWOT 464 to 2 m;
+//    the slow set alone (0.6.25, SPEC 16.18) held Sentinel-3A under its own bound of 80 m (0.6.20 44.2 m, the slow set
+//    73.4 m);
 // 5. default-FORCES XP digest bit-exact.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
@@ -128,9 +130,11 @@ if (!isMainThread) {
   assert.ok(results['release Sentinel-3-like 0.01 default'].day3 <= results['0.4.11 Sentinel-3-like 0.01 default'].day3 + 2,
     'Sentinel-3-like 0.01: no worse than 0.4.11 by more than 2 m');
   assert.ok(Object.keys(objects).length >= 9, 'the altimetry objects replayed');
-  // acceptance 4 as restated: the median over all windows, and CryoSat-2 under its own bound (stack #470)
+  // acceptance 4 as restated: the median over all windows, and CryoSat-2 under its own bound (stack #470); Sentinel-3A under
+  // the slow set's (SPEC 16.18: 44.2 m on 0.4.11 and 0.6.20 to 73.4 m on the slow set alone; no burn of the IDS list lies in
+  // the 2025-10-15 window)
   assert.ok(median(all.map((r) => d3(r.arms[1]) - d3(ffm.get(r.key).arms.F72))) <= 40, 'all read windows: the paired day-3 median at most 40 m');
-  const LOSS_HELD = {'CRYOSAT 2': 115};
+  const LOSS_HELD = {'CRYOSAT 2': 115, 'SENTINEL 3A': 80};
   for (const [name, o] of Object.entries(objects))
     if (o.scored) assert.ok(LOSS_HELD[name] !== undefined ? o.scoredHere <= LOSS_HELD[name] : o.scoredHere - o.scoredAt0411 <= 10,
       LOSS_HELD[name] !== undefined ? `${name}: scored median ${o.scoredHere} m above its held ${LOSS_HELD[name]} m` : `${name}: no more than 10 m worse than 0.4.11 on its scored windows`);

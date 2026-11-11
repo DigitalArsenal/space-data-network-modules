@@ -2,15 +2,15 @@
 // Registration: orbit-accuracy-experiments experiments/operator-theory/THEMIS-RIPPLE-FIX.md (modules-sdn-ap-tesseral-series-ripple-20261105).
 // Above e 0.3 (SPEC 16.11) the first-order tesseral families of degree 2 to 12 are a closed-form grid in the eccentric anomaly.
 // 1. Against the full-field quadrature (each (l, m) of the pinned field evaluated directly on the Kepler ellipse, 2,048 mean anomalies
-//    by 32 arguments of perigee, |j| <= 1023, the table's admission rules), 7 days at 300 s at the mean elements of the AP (31, 20) fits
+//    by 32 arguments of perigee, |j| <= 1023, the grid's admission rules: from the version of stack #467 the one-day class leaves
+//    out only its 27 terms and the terms slower than 1e-2 n), 7 days at 300 s at the mean elements of the AP (31, 20) fits
 //    of THEMIS D 2013-02-12 and THEMIS E 2013-02-16 and at the GTO fixture's: RMS <= 1 m, maximum <= 5 m, median |second difference|
 //    of the difference <= 0.1 m.
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
-// 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, Etalon-like, GPS-like, e 0.25, e 0.3) flown 2 days at 600 s give
-//    ephemerides within NO_HARM (below; byte-identical until 0.6.5) on this build and on sdn-ap 0.6.2 (dist at modules
-//    c82160de7, SHA-256 84d50dca...); the geostationary seed within THEORY_CHANGED (the one-day resonant tail, 0.6.19);
-//    the SGP4XP seed byte-identical.
+// 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
+//    fitted AP set flown 2 days at 600 s give ephemerides within NO_HARM (below) on this build and on BASE (sdn-ap 0.6.22,
+//    SHA-256 checked; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, history at NO_HARM); the SGP4XP seed byte-identical.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -26,15 +26,26 @@ import {seedOcm, flight, T} from './lib/ocm.mjs';
 import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE = 'c82160de7', BASE_SHA256 = '84d50dca4efdfea87eff7e3b4618d795c26a7d0a6df0e877341e69bc73161f41';
-// 2's bound on the AP seeds (fixed elements, 48 h at 600 s): byte-identical to 0.6.2 until 0.6.5, whose speed changes
-// move a flight of fixed elements by millimeters (SPEC 16.8). Measured 2026-11-10 on 0.6.8, printed per seed: LEO 3.10,
-// GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm (velocity at most 0.0022 mm/s); the bound is 15 mm.
-// SGP4XP stays byte-identical.
+const BASE_VERSION = '0.6.22', BASE = 'f8af1e2b7', BASE_SHA256 = '2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4';
+// 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
+// until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
+// measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
+// (velocity at most 0.0022 mm/s); the bound is 15 mm. The geostationary seed moved by design from 0.6.19 (the one-day
+// class's resonant gravity above degree 4, stack #434, SPEC 16.2: 5.27 m over the 48 h), bounded apart at 6 m and 0.5
+// mm/s against 0.6.2. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves them from 0.6.2: LEO 0.82, geostationary
+// 5,273.24 (the one-day tail of 0.6.19), Etalon 3.62, GPS 5.02, e 0.25 9.11 and e 0.3 10.77 mm (velocity 0.69 to 382.78
+// um/s) and the fitted set by 0.84 mm with its covariance by 1.226e-2 of a line's largest entry; SGP4XP byte-identical.
+// The seeds carry no AGOM, so 0.6.21 flies them as 0.6.20 does: their millimeters from 0.6.2 are the earlier releases'
+// changes to the theory of fixed elements. The fitted set carries the stored AP record's AGOM (-2e-7, sigma 9.5e-3
+// m^2/kg): its covariance moves by 1.2 % of a line's largest entry because the covariance's moved sets fly AGOM through
+// the shadow on 16.16's rates while its correlations come from that fit's partials (covariance.e2e.mjs: along-track
+// response to AGOM at 48 h 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 returns to its theory's numbers
+// within 7.1e-5). From 0.6.21 the baseline is 0.6.21 (git 589749f6), every AP set under the one bound, 15 mm. AP's own
+// Sun and Moon (0.6.22, SPEC 16.17, stack #446) move them from 0.6.21: LEO 33.08, geostationary 12,457.37, Etalon
+// 1,057.72, GPS 850.26, e 0.25 2,751.97 and e 0.3 3,442.84 mm (velocity 36.6 to 782.6 um/s) and the fitted set by 34.76
+// mm (covariance 2.2e-5): every AP set flies the third bodies, and the Moon moved by up to 377 arcsec; SGP4XP
+// byte-identical. From 0.6.22 the baseline is 0.6.22 (git f8af1e2b), every AP set under the one bound, 15 mm.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
-// The geostationary seed moves by design from 0.6.19: the one-day class carries its resonant gravity above degree 4
-// (stack #434, SPEC 16.2), 5.27 m over the 48 h on 0.6.19; its bound is 6 m, 0.5 mm/s.
-const THEORY_CHANGED = {'geostationary, AP': {posM: 6, velMmS: 0.5, covOfLargest: 1e-3}};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
 const scratch = scratchTemp('sdn-ap-themis-ripple-');
@@ -152,7 +163,8 @@ int32_t sdnap_test_ripple_verify(const double* in, double* out) {
           for (int t = 0; t < carried.count; ++t) if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == (l - w) / 2 && carried.t[t].q == j - w) out_ = true;
           if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = true;
           const double psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
-          if (out_ || std::fabs(psidot) < tess::kShallowBand * n0) continue;
+          // the grid's slow band (SPEC 16.18): the one-day class keeps every term but its own down to kOneDayFloor (stack #467)
+          if (out_ || std::fabs(psidot) < (cls == 1 ? tess::kOneDayFloor : tess::kShallowBand) * n0) continue;
           const double Zer = (epr[at] - emr[at]) / (2 * h), Zei = (epi[at] - emi[at]) / (2 * h), Zir = (ipr[at] - imr[at]) / (2 * h), Zii = (ipi[at] - imi[at]) / (2 * h);
           // rates (a, e, i, Omega, omega, M) of this harmonic, then divided by i psi-dot (lambda also by (i psi-dot)^2 through n)
           double R[6][2];
@@ -247,10 +259,10 @@ x.sdnap_free(pin);
 x.sdnap_free(pout);
 await verify.close?.();
 
-// 2. no harm at e 0.3 and below: 0.6.2's dist by git show, SHA-256 checked
+// 2. no harm at e 0.3 and below: BASE's dist by git show, SHA-256 checked
 const basePath = path.join(scratch, `sdn-ap-${BASE}.wasm`);
 const baseBytes = execFileSync('git', ['-C', modules, 'show', `${BASE}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
-assert.equal(crypto.createHash('sha256').update(baseBytes).digest('hex'), BASE_SHA256, '0.6.2 dist');
+assert.equal(crypto.createHash('sha256').update(baseBytes).digest('hex'), BASE_SHA256, `${BASE_VERSION} dist`);
 fs.writeFileSync(basePath, baseBytes);
 const AP = {tesseral: 31, zonal: 20};
 const SEEDS = {
@@ -264,12 +276,12 @@ const SEEDS = {
 };
 const epoch = '2026-10-01T00:00:00.000';
 const output = {START_TIME: epoch, STOP_TIME: '2026-10-03T00:00:00.000', STEP_SECONDS: 600};
-// this build's $OEM with PRODUCER's version read as 0.6.2's (the version string is the one difference a release step makes)
+// this build's $OEM with PRODUCER's version read as BASE's (the version string is the one difference a release step makes)
 const now = JSON.parse(fs.readFileSync(path.join(packageRoot, 'plugin-manifest.json'), 'utf8')).version;
 const producer = (v) => Buffer.from(`com.spacedatanetwork.sdn-ap-propagator ${v}`);
 const asBase = (bytes) => {
   const b = Buffer.from(bytes);
-  for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer('0.6.2').copy(b, at);
+  for (let at = b.indexOf(producer(now)); at >= 0; at = b.indexOf(producer(now), at + 1)) producer(BASE_VERSION).copy(b, at);
   return b;
 };
 const fly = async (file, payload) => {
@@ -388,11 +400,8 @@ for (const [name, q] of Object.entries(quadrature)) {
   assert.ok(q.roughM <= 0.1, `${name}: ${q.roughM} m second difference`);
 }
 for (const [name, d] of Object.entries(noHarm)) {
-  if (/SGP4XP/.test(name)) assert.ok(d.bytesEqual, `${name}: byte-identical to 0.6.2`);
-  else {
-    const bound = THEORY_CHANGED[name] ?? NO_HARM;
-    assert.ok(d.posM <= bound.posM && d.velMmS <= bound.velMmS && d.covOfLargest <= bound.covOfLargest, `${name}: ${JSON.stringify(d)} from 0.6.2 (within ${JSON.stringify(bound)})`);
-  }
+  if (/SGP4XP/.test(name)) assert.ok(d.bytesEqual, `${name}: byte-identical to ${BASE_VERSION}`);
+  else assert.ok(d.posM <= NO_HARM.posM && d.velMmS <= NO_HARM.velMmS && d.covOfLargest <= NO_HARM.covOfLargest, `${name}: ${JSON.stringify(d)} from ${BASE_VERSION} (within ${JSON.stringify(NO_HARM)})`);
 }
 fs.rmSync(scratch, {recursive: true, force: true});
 console.log('THEMIS ripple E2E: PASS');
