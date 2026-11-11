@@ -5,9 +5,9 @@
 //   ECOM2 Y0 -1.5e-9, B1 cos 8e-9 and B1 sin 4e-9 m/s^2 (C020-like), on a geostationary orbit (i 0.05 deg) and an
 //   inclined geosynchronous one (i 55 deg). AP is fitted over the first 72 h through `fit` under the table's forces
 //   (tesseral 31, zonal 20, the solid tide) with $PCF FORCES.ECOM2 and without, and flown hourly for 7 days.
-// - The theory: the record fitted to the sphere truth, with the truth's Y0, B1 cos and B1 sin written into it, flies the
-//   B1 truth within THEORY_SLACK_M of its own error on the sphere truth at day 7; without the terms it is at least
-//   TERM_SIZE times that far.
+// - The theory: the record fitted to the B1 truth with FORCES.ECOM2 stating the truth's Y0, B1 cos and B1 sin flies the
+//   B1 truth within THEORY_SLACK_M of the sphere record's error on the sphere truth at day 7; the sphere record, without
+//   the terms, is at least TERM_SIZE times that far from the B1 truth.
 // - The rule: on the B1 truth the record carries ECOM2_B1_COS and ECOM2_B1_SIN SOLVED_FOR (B1 sin within B1S_TOLERANCE
 //   of the stated value; B1 cos is the AGOM direction near beta 0 and is reported, not bounded), its OD COMMENT says so,
 //   and its day-7 error is at most 1 / B1_GAIN of the fit without FORCES.ECOM2. On the sphere truth B1 is held: no
@@ -47,8 +47,10 @@ import { seedOcm, flight, ocmOf } from "./lib/ocm.mjs";
 import { execution, nativeInput, encodePrw, makeTable, decodeResult, TYPE } from "../../ffm/tests/lib/prwCodec.mjs";
 import { scratchRoot } from "./lib/scratch.mjs";
 
-// Bounds, measured on this build (the printed rows): see SPEC 16.B1.
-const B1S_TOLERANCE = 0.25e-9, B1_GAIN = 5, THEORY_SLACK_M = 5, TERM_SIZE = 5;
+// Bounds, measured on this build (the printed rows; SPEC 16.B1): B1 sin within 0.022e-9 and 0.028e-9 of the truth's;
+// with the terms stated 7.7 and 9.3 m against the sphere record's 9.3 and 4.7 m; the sphere record 46 and 280 times its
+// level from the B1 truth; under the rule 20 and 82 times better than without FORCES.ECOM2.
+const B1S_TOLERANCE = 0.1e-9, B1_GAIN = 5, THEORY_SLACK_M = 6, TERM_SIZE = 5;
 const TERMS = { Y0_M_S2: -1.5e-9, B1_COS_M_S2: 8e-9, B1_SIN_M_S2: 4e-9 };
 const AGOM = 0.022;
 const epoch = "2026-10-01T00:00:00.000", t0 = Date.parse(`${epoch}Z`), DAY = 86400000, ARC = 145;
@@ -142,11 +144,15 @@ for (const o of ORBITS) {
   const sphere = await truthOf(initial.out, null), b1 = await truthOf(initial.out, TERMS);
   const arcOf = (truth) => linesOf(truth).slice(0, ARC);
 
-  // the theory: the sphere truth's record, with and without the truth's terms, against the B1 truth
-  const onSphere = await fit(arcOf(sphere), {});
-  const sphereLevel = await day7(onSphere, sphere), theory = await day7(withTerms(onSphere), b1), noTerms = await day7(onSphere, b1);
-  console.log(JSON.stringify({ orbit: o.name, theory: { sphereLevelM: sphereLevel, withTermsOnB1TruthM: theory, withoutTermsOnB1TruthM: noTerms } }));
-  check(theory <= sphereLevel + THEORY_SLACK_M, `${o.name}: the sphere record with the truth's terms flies the B1 truth at ${theory.toFixed(2)} m, against its ${sphereLevel.toFixed(2)} m on the sphere truth`);
+  // the theory: the record fitted to the B1 truth with FORCES.ECOM2 stating the truth's terms (B1's start, prior mean
+  // and held value; the fit's mean state then carries B1's once-per-revolution part at the epoch, about 2 B1 / n^2 in a,
+  // which a sphere record with the terms written in after its fit does not) against the B1 truth; the sphere truth's
+  // record, without the terms, against the B1 truth
+  const onSphere = await fit(arcOf(sphere), {}), stated = await fit(arcOf(b1), { ...TERMS });
+  const sphereLevel = await day7(onSphere, sphere), theory = await day7(stated, b1), noTerms = await day7(onSphere, b1);
+  const sc = entry(stated, PD.ECOM2_B1_COS), ss = entry(stated, PD.ECOM2_B1_SIN);
+  console.log(JSON.stringify({ orbit: o.name, theory: { sphereLevelM: sphereLevel, statedOnB1TruthM: theory, statedB1: [sc?.VALUE, ss?.VALUE, ss?.SOLVED_FOR], sphereRecordOnB1TruthM: noTerms } }));
+  check(theory <= sphereLevel + THEORY_SLACK_M, `${o.name}: the record fitted with the truth's terms stated flies the B1 truth at ${theory.toFixed(2)} m, against the sphere record's ${sphereLevel.toFixed(2)} m on the sphere truth`);
   check(noTerms >= TERM_SIZE * sphereLevel, `${o.name}: without the terms ${noTerms.toFixed(2)} m, at least ${TERM_SIZE} x ${sphereLevel.toFixed(2)} m`);
 
   // the rule on the sphere truth: B1 held

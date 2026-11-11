@@ -3309,7 +3309,10 @@ refused; one of 0.1 mm/s (RMS 2.7 to 4.4 m) passes on 3 of 10 sets and is not to
 *Measured.* Model truth (FFM 20 x 20, Sun and Moon, cannonball, the solid tide; 72 h; geostationary at i 0.05 and 2
 deg, inclined geosynchronous, Galileo-like; 2026-10-01 and 2026-12-01; Y0 -1.5e-9 with B1 cos ±8e-9 and B1 sin ±4e-9):
 with the terms held at the truth's, day 7 is 1.5 to 2.8 m on geostationary and inclined geosynchronous sets, against
-71 to 140 m for the Y0-only fit; under the rule 2.5 to 12.4 m. Real 72 h rows against the Y0-only fit (within 100 m of
+71 to 140 m for the Y0-only fit; under the rule 2.5 to 12.4 m. `test/radiation-b1.e2e.mjs` (2026-10-01, i 0.05 and
+55 deg, B1 cos 8e-9 and B1 sin 4e-9): fitted with the truth's terms stated (B1 held, Y0 and AGOM solved), day 7 is 7.7
+and 9.3 m, against the sphere record's 9.3 and 4.7 m on the sphere truth; under the rule B1 sin comes within 0.03e-9 of
+the truth's and day 7 is 9.3 and 11.4 m, against 188 and 934 m without FORCES.ECOM2. Real 72 h rows against the Y0-only fit (within 100 m of
 FFMq at day 5): geostationary 28 to 32 of 32 (C020 1 to 5 of 5; day-5 median 26.0 to 16.8 m), inclined geosynchronous
 59 of 59 (6.7 to 5.1 m), Galileo 42 of 42 at 72 h and 24 h byte for byte (B1 solved on none).
 
