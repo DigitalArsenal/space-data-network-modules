@@ -2232,6 +2232,12 @@ The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS win
 original 300-second grid, and AP6's pinned foundation/frames conversion for scoring. Leads start at fit end.
 The day-3 median paired AP-minus-XP error changes from +420.105792 m to -0.000784 m (acceptance: within
 50 m of zero). This is a correction to the model's frame policy; independent-window confirmation is separate.
+From 2026-11-11 the archive replays (heo-frame's TESS windows and the AP6 and AP5 windows of five more tests) score each
+module's own GCRF output (DigitalArsenal/spacedatanetwork-stack#386). The pinned foundation/frames 0.2.0 places TEME's x
+axis by GMST06, not GMST82 (#389): its conversion of AP's TEME output sat 1.9 m from the module's GCRF output in low orbit,
+7.3 m at 12 hours and 11.6 m at the geostationary radius. Through foundation/frames 0.3.0 the same TEME output lands within
+5 µm of it on the GNSS orbits and 26 µm at TESS's radius. On 0.6.14 the TESS day-3 median paired AP minus XP is -137.5 m on the module's GCRF and -137.0 m on the old path;
+the old path's figures are kept beside each test's.
 
 | Fit end UTC | Previous AP day 3 (m) | AP day 3 (m) | XP day 3 (m) | AP minus XP (m) |
 |---|---:|---:|---:|---:|

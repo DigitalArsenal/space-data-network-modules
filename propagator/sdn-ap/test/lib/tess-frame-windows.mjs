@@ -38,9 +38,10 @@ export async function tessWindows(modulePath){
  }
  const store='/opt/data/sdn-archive/operator-theory/ap/b040/regimes',old=new Map();
  for(const f of fs.readdirSync(store).filter(f=>/^rows-.*\.jsonl$/.test(f)))for(const line of fs.readFileSync(path.join(store,f),'utf8').split('\n').filter(Boolean)){const r=JSON.parse(line);if(r.group==='HE'&&r.norad===43435)old.set(r.cutoff.slice(0,10),r);}
+ const X=await import(new URL('./frames-cross.mjs',import.meta.url).href),frames030=await X.openCheckoutFrames();
  const a=await openAp(modulePath),outputAxes=await openAxes(),cfg={};for(const theory of ['AP','XP']){
   const obj=PCF.getRootAsPCF(new fb.ByteBuffer(S.pcfBytes({forces:theory==='AP'?apForces({}, {tesseral:31,zonal:20,atmosphere:false}):{},fit:null}))).unpack();
-  // AP6 scores TEME output after its pinned foundation/frames conversion.
+  // AP6 scored TEME output after its pinned foundation/frames conversion (the old path, kept beside the new score).
   const b=new fb.Builder(1024);PCF.finishPCFBuffer(b,obj.pack(b));cfg[theory]=b.asUint8Array().slice();
  }
  const rows=[];
@@ -50,12 +51,18 @@ export async function tessWindows(modulePath){
   const fit=lines.filter(l=>ms(l)>=cutoff-3*DAY&&ms(l)<=cutoff);assert.ok(fit.length>=.9*864,'fit coverage');
   const bins=[1,3,7].map(d=>lines.filter(l=>ms(l)>cutoff+(d-1)*DAY&&ms(l)<=cutoff+d*DAY));assert.ok(bins.every(b=>b.length>=260),'lead coverage');
   const truth=bins.flat(),grid=S.gridBytes(truth.map(l=>l.epoch)),oem=S.oemBytes({frame:'GCRF',object:{name:'TESS',norad:43435,id:'2018-038A'},lines:fit,useableStart:fit[0].epoch,useableStop:new Date(cutoff).toISOString()});
-  for(const theory of ['AP','XP']){const f=await a.fit(oem,cfg[theory]);assert.ok(f.ok,f.error);const native=await a.propagate(f.omm,grid,cfg[theory],undefined,truth.length);const states=await outputAxes.convert(native.map((v,k)=>({...v,epoch:truth[k].epoch})),'TEME','GCRF');let at=0;row[theory]={};for(let k=0;k<3;k++){let sum=0;for(const t of bins[k]){const p=states[at++];sum+=p.r.reduce((v,x,j)=>v+(x-t.r[j])**2,0);}row[theory][[1,3,7][k]]=1000*Math.sqrt(sum/bins[k].length);}}
+  // #386: scored on the module's own GCRF output; <theory>Old: its TEME output through the pinned foundation/frames 0.2.0
+  // (#389), the path AP6 was registered on; frames030Meters: that TEME output through this checkout's foundation/frames
+  // 0.3.0 against the GCRF output
+  const gridG=S.oemBytes({frame:'GCRF',lines:truth.map(l=>({epoch:l.epoch,r:[0,0,0]}))});
+  const days=(states)=>{let at=0;const out={};for(let k=0;k<3;k++){let sum=0;for(const t of bins[k]){const p=states[at++];sum+=p.r.reduce((v,x,j)=>v+(x-t.r[j])**2,0);}out[[1,3,7][k]]=1000*Math.sqrt(sum/bins[k].length);}return out;};
+  for(const theory of ['AP','XP']){const f=await a.fit(oem,cfg[theory]);assert.ok(f.ok,f.error);const own=await a.propagate(f.omm,gridG,cfg[theory],undefined,truth.length);const native=(await a.propagate(f.omm,grid,cfg[theory],undefined,truth.length)).map((v,k)=>({...v,epoch:truth[k].epoch}));
+   row[theory]=days(own);row[theory+'Old']=days(await outputAxes.convert(native,'TEME','GCRF'));row[theory+'Frames030Meters']=X.largestMeters(await frames030.convert(native,'TEME','GCRF'),own);}
   // Through 0.6.12 XP reproduced the archived AP6 scoring within 1 mm (harness fidelity). From 0.6.13 a set above the drag
   // is fitted at the data's own sigma (SPEC 12.1), so XP's TESS fits move; each theory's error against the truth is kept
-  // beside the archived one, and heo-frame.e2e.mjs bounds them.
-  row.XPMinusArchived={};row.APMinusArchived={};for(const day of [1,3,7]){row.XPMinusArchived[day]=row.XP[day]-1000*row.archivedXP[day].e;row.APMinusArchived[day]=row.AP[day]-1000*row.archivedAP[day].e;}
+  // beside the archived one on the archive's path (<theory>Old), and heo-frame.e2e.mjs bounds them.
+  row.XPMinusArchived={};row.APMinusArchived={};for(const day of [1,3,7]){row.XPMinusArchived[day]=row.XPOld[day]-1000*row.archivedXP[day].e;row.APMinusArchived[day]=row.APOld[day]-1000*row.archivedAP[day].e;}
   row.day3DifferenceMeters=row.AP[3]-row.XP[3];rows.push(row);console.log(JSON.stringify({exploratoryTess:row}));
  }
- await outputAxes.close();return{exploratory:true,units:'forward daily-bin 3D RMS meters; archived errors in km',inputs,moduleSha256:hash(fs.readFileSync(modulePath)),rows,pairedDay3DifferenceMeters:median(rows.map(r=>r.day3DifferenceMeters)),historicalPairedDay3DifferenceMeters:median(rows.map(r=>1000*(r.archivedAP[3].e-r.archivedXP[3].e)))};
+ await outputAxes.close();await frames030.close();return{exploratory:true,units:'forward daily-bin 3D RMS meters; archived errors in km',inputs,moduleSha256:hash(fs.readFileSync(modulePath)),rows,pairedDay3DifferenceMeters:median(rows.map(r=>r.day3DifferenceMeters)),pairedDay3DifferenceMetersOld:median(rows.map(r=>r.APOld[3]-r.XPOld[3])),frames030Meters:Math.max(...rows.flatMap(r=>[r.APFrames030Meters,r.XPFrames030Meters])),historicalPairedDay3DifferenceMeters:median(rows.map(r=>1000*(r.archivedAP[3].e-r.archivedXP[3].e)))};
 }
