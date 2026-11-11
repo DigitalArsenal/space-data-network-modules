@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.14 (dist e240fefb).
+Version 0.6.14 (dist f3b51e99).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2338,8 +2338,12 @@ half-day upper edge. FFM uses 16.6's gravity, DE440, zero EOP and the constant w
 
 | AP treatment | Primary day-7 T error (m) | Companion day-7 T error (m) | Relative difference |
 | --- | ---: | ---: | ---: |
-| Epoch class held (this version) | -168,218.829 | -136,267.630 | 23.447% |
+| Epoch class held, drag passes continuous (this version, 16.12) | -22,912.217 | -20,534.324 | 11.580% |
+| Epoch class held (0.6.8 to 0.6.11) | -168,218.829 | -136,267.630 | 23.447% |
 | Tables rebuilt for the current class (0.6.6 and 0.6.7) | -167,341.326 | -136,267.630 | 22.803% |
+
+From 0.6.12 the epoch state is the middle of the perigee pass at M = 0 (16.12). Through 0.6.11 it was the state after the
+whole pass, while FFM, seeded there, still flies the pass's second half: about 145 km of the primary's day-7 error.
 
 Holding the class costs this fixture 0.88 km of day-7 along-track error (0.5 %); the E2E allows 25 % against the companion.
 On 2026-11-03, with the earlier constant-weather file, the arms were -32,325.032 (held) and -31,291.823 m (rebuilt), the
@@ -2348,8 +2352,10 @@ Through 0.6.8 the two (2,2) terms (p,q) = (0,-1), (1,1) left the rates at the cr
 table either (that E2E's probe found 0 of 2 there, the failure it reported from 0.6.5 on); held, they stay in the rates.
 The E2E flies the primary every 10 s from day 3 to day 7 and finds its output continuous away from perigee (jump detector
 0.14 m against 1 m; the same on 0.6.7, whose rebuilt tables kept this set's grid). Within 10 min of each perigee the
-detector reaches 129 m on both builds: the perigee drag passage (16.12) steps the output by about 86 m at perigee on this
-fixture, a discontinuity in time of its own, outside this section. `test/results/class-crossing.json` keeps the run.
+detector reached 129 m through 0.6.11: the perigee drag passage (16.12) stepped the output by 42 to 87 m at perigee on
+this fixture. From 0.6.12 it reads 0.92 m there, against 0.65 m for the same flight with drag off: kinks about 80 s apart
+that are not drag (DigitalArsenal/spacedatanetwork-stack#420; `test/perigee-drag-continuity.e2e.mjs`).
+`test/results/class-crossing.json` keeps the run.
 
 **16.8 Third-body terms beyond the octupole.** With d or z above 0, the epoch period below 1100 min (the regime whose
 third-body rates 5 averages; the long-period regime takes the full point-mass acceleration), AP adds to the rates each
@@ -2665,15 +2671,30 @@ per perigee passage:
 - **Arc.** The arcs nu_c < |nu| < pi are added, 13 Gauss-Legendre nodes each at nu = nu_c + (pi - nu_c) s^2, s_j =
   (x_j + 1)/2, weight w_j (pi - nu_c) s_j / nu_c in the units of the perigee arc's sums; the co-rotating air at the
   node's radius r: V = sqrt(1 + 2 e cos nu + e^2 - 2 q theta rho + q^2 cos^2 phi' rho^2 / D^2), rho = r D / p.
-- **Short-period steps.** In the output, each element y_j + (ydot_j / n)(pi - M), M in [0, 2 pi) and ydot the drag's
-  rates at the output time, and lambda also + (ndot / n^2)(pi M - M^2/2 - pi^2/3), the integral of n's own sawtooth: the
-  osculating elements step at perigee where the mean elements ramp. From 0.6.6 those rates are evaluated per segment,
-  the stretch of one revolution (its two passages fixed) inside one interval of the mean-element grid (the mean state
-  one cubic): the quadratic in t through the rates at the segment's three points s_0 + (k + 1/2)(s_1 - s_0)/3, each at
-  the grid's own mean state there. Three evaluations serve every output state of the segment in place of one at each;
-  against the rates at each output time the state differs by 0.23 mm and 1.4e-7 m/s at most over 30 days
-  (test/kernel-cost.mjs --diff; the largest at a 250 km perigee, B 0.01 m^2/kg, active weather). A fit keeps the rates
-  at each of its states.
+- **Short-period steps.** The osculating elements change by each pass's whole effect over the pass, while the mean
+  elements ramp by the two passes' mean. From 0.6.12 a pass's change is spread over the pass as the cumulative of a
+  normal distribution in M of the pass's own width s: the RMS of M(nu) over the perigee arc's 13 nodes, each weighted by
+  its share of the pass's sums (at most pi/4). With p the full rates of the pass before t (at t - M/n), q those of the
+  next, M in [0, 2 pi), the output adds to each element
+  (pi p_j - (p_j + q_j) M/2 + pi (q_j erfc(V) - p_j erfc(U))) / n, U = M/(sqrt2 s_p), V = (2 pi - M)/(sqrt2 s_q),
+  and to lambda also n's own difference integrated over time,
+  (2 pi/n^2)(p_n (M/2 - pi/6) + (q_n - p_n) M/6 - (p_n + q_n) M^2/(8 pi) + (p_n s_p ierfc(U) + q_n s_q ierfc(V))/sqrt2),
+  ierfc(x) = exp(-x^2)/sqrt(pi) - x erfc(x). Both are zero at perigee and continuous with their slopes from one
+  revolution to the next.
+  - **Through 0.6.11.** With p = q and no width these are the sawtooth 0.4.16 to 0.6.11 used: y_j + (ydot_j/n)(pi - M),
+    and lambda + (ndot/n^2)(pi M - M^2/2 - pi^2/3), ydot the two passes' mean at the output time. That mean changes at
+    perigee, so the output stepped there. On the class-crossing fixture (GTO, B 0.06 m^2/kg; 16.7) the steps were 42 to
+    77 m in position and 0.12 to 0.14 m/s in velocity at each perigee. On Molniya (B 0.044) they were 5.5 to 9.3 cm and
+    3.5e-4 m/s.
+  - **From 0.6.12.** At most 2 mm and 6e-7 m/s on both, the same as with drag off (one call, 5 ms states, 30 s each side;
+    `test/perigee-drag-continuity.e2e.mjs`).
+  - **Per segment.** From 0.6.6 these rates are evaluated per segment: the stretch of one revolution (its two passages
+    fixed) inside one interval of the mean-element grid (the mean state one cubic). Each of p, q, s_p and s_q is the
+    quadratic in t through the segment's three points s_0 + (k + 1/2)(s_1 - s_0)/3, each at the grid's own mean state
+    there. Three evaluations serve every output state of the segment in place of one at each. Against the rates at each
+    output time the state differs by 0.23 mm and 1.5e-7 m/s at most over 30 days at 60 s (test/kernel-cost.mjs --diff
+    against a build that evaluates them at each state; the largest at a 250 km perigee, B 0.01 m^2/kg, active weather;
+    0.23 mm and 1.4e-7 m/s for 0.6.6's one rate). A fit keeps the rates at each of its states.
 
 At e 0.3 and below, and without drag, the path is 0.4.15's, byte for byte (the XP digest and the drag-off runs below).
 

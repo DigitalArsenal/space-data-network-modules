@@ -8,9 +8,9 @@
 //   experiment's run.mjs --save writes, NAIF's public kernel in GCRF at 300 s), AP vacuum (FORCES caps 31 and 20, Jacchia 1970 on the theory's flux model): FIT_RMS_KM at
 //   most 1.1 times the 0.6.2 base's 109.5 m (0.1205 km) and BTERM within 2 times the base's 0.0120 (0.0060 to 0.0240).
 // - Molniya start 0, fitted drag (test/fixtures/molniya-start0-fit-72h.oem, .pcf, .spw, SHA-256 pinned; the pinned FFM model
-//   truth, argp 270, 72 h arc; its fit takes the finite-difference fall-back): BTERM 0.04461633761935712 and FIT_RMS_KM
-//   0.021800715473184688 within MOLNIYA's bounds (bit for bit until 0.6.5); every grid lookup of the fit a fit set's; no fit
-//   grid held after it.
+//   truth, argp 270, 72 h arc; its fit takes the finite-difference fall-back): BTERM 0.044623127097301686 and FIT_RMS_KM
+//   0.021910711160895126 within MOLNIYA's bounds (re-recorded at 0.6.12, the history at MOLNIYA); every grid lookup of
+//   the fit a fit set's; no fit grid held after it.
 // - Below e 0.3 the fit's record flown 4 days within NO_HARM of the 0.6.2 dist's (git, modules c82160de7, its SHA-256
 //   checked; byte identity until 0.6.5) and its FIT_RMS within 0.01 m: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of
 //   propagator/ffm's 550 km trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP. A GEO arc (an AP
@@ -96,9 +96,10 @@ const MOLNIYA = {
   frames: [["ephemeris", "OEM", "molniya-start0-fit-72h.oem", "608697e99920e5a699d330a457f4ef74444a8301d186213696cb040b4b235ae2"],
     ["configuration", "PCF", "molniya-start0-fit.pcf", "21ca6686ac0f24f2e8bd7e7bd5e86f055392099e562b62a95fabf8eb3ad176ea"],
     ["space_weather", "SPW", "molniya-start0-fit.spw", "647760dfb43168f4b0c9e98cf9b86e91a108f725edfd918f6be2b870a5919ebb"]],
-  // bit for bit until 0.6.5, whose fit stops at another point inside its tolerance (SPEC 16.8): 0.04461830424914888 and
-  // 0.02180476515880898 km on 0.6.5 to 0.6.8, 4.4e-5 relative and 4.0 mm
-  bterm: 0.04461633761935712, fitRmsKm: 0.021800715473184688, btermRelative: 1e-4, fitRmsM: 0.01,
+  // re-recorded at 0.6.12, whose perigee passes change the osculating elements over the pass (SPEC 16.12): 1.5e-4 relative
+  // and 0.110 m from 0.6.11's 0.04461830424914888 and 0.02180476515880898 km (0.6.5 to 0.6.11; bit for bit before 0.6.5 at
+  // 0.04461633761935712 and 0.021800715473184688 km, 0.6.5's fit stopping at another point inside its tolerance, SPEC 16.8)
+  bterm: 0.044623127097301686, fitRmsKm: 0.021910711160895126, btermRelative: 1e-4, fitRmsM: 0.01,
 };
 // the no-harm fits' flights against 0.6.2's (m over 4 days; byte identity until 0.6.5), measured 2026-11-10 on 0.6.8:
 // LEO AP 0.446 m (0.6.5's fit stops at another point inside its tolerance, FIT_RMS 41.127 against 41.130 m), LEO SGP4XP

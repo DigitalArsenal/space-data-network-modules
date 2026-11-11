@@ -4,7 +4,10 @@
 // node tests/evidence/basilisk/score-basilisk.mjs [trajectory.json]
 //   [--cache ../tudat/ffm-tudatpy-1.0.0.json] [--causes causes.json]
 //   [--diagnostics wgs84.json] [--diagnostics wgs84-gtd7d.json]
-//   [--out summary.json] [--cached-only]
+//   [--primary wgs84-gtd7d] [--out summary.json] [--cached-only]
+// --primary scores the cases that diagnostic covers (the drag cases) against
+// it: Basilisk run with FFM's atmosphere settings. The stock-settings run of
+// each such case stays in its row, under stock, with its measured cause.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -17,7 +20,7 @@ import { ALL, CASES, WASM, here, exportPath, readJson, writeJson, pin, normalize
 
 const { values: options, positionals } = parseArgs({ allowPositionals: true, options: {
   causes: { type: 'string' }, cache: { type: 'string' }, out: { type: 'string' },
-  diagnostics: { type: 'string', multiple: true },
+  diagnostics: { type: 'string', multiple: true }, primary: { type: 'string' },
   'cached-only': { type: 'boolean', default: false },
   'verify-recorded': { type: 'string' },
 } });
@@ -55,6 +58,10 @@ async function main() {
   if (new Set(diagnosticNames).size !== diagnosticNames.length) throw new Error('Duplicate --diagnostics variant');
   if (diagnosticNames.includes('wgs84-gtd7d') && !diagnosticNames.includes('wgs84'))
     throw new Error('The wgs84-gtd7d diagnostic requires the wgs84 diagnostic for a direct anomalous-oxygen comparison');
+  // The matched-settings run: only wgs84-gtd7d sets both of FFM's atmosphere settings (WGS84 coordinates, gtd7d).
+  if (options.primary && (options.primary !== 'wgs84-gtd7d' || !diagnosticNames.includes(options.primary)))
+    throw new Error('--primary accepts only wgs84-gtd7d, given with --diagnostics');
+  const primary = options.primary ? diagnosticInputs.find(({ record: variant }) => variant.settings.variant === options.primary).record : null;
   const causes = options.causes ? readJson(options.causes) : {};
   const cache = readCache(cacheFile);
   const work = fs.mkdtempSync(path.join(here, '.score-basilisk-'));
@@ -70,14 +77,25 @@ async function main() {
           cached[setting.id] = storedResponse(await run(source, setting));
         }
       }
-      const row = { ...positionRow(source, cached, metrics), stmSkipped };
       const diagnosis = causes.cases?.find?.((c) => c.id === source.id) ?? causes[source.id] ?? source;
-      if (diagnosis.cause) row.cause = diagnosis.cause;
-      else if (diagnosis.classification) row.cause = diagnosis;
-      if (diagnosis.diagnosis) row.diagnosis = diagnosis.diagnosis;
+      const recordCause = (row) => {
+        if (diagnosis.cause) row.cause = diagnosis.cause;
+        else if (diagnosis.classification) row.cause = diagnosis;
+        if (diagnosis.diagnosis) row.diagnosis = diagnosis.diagnosis;
+        return row;
+      };
+      const matched = primary?.cases.find((candidate) => candidate.id === source.id);
+      let row;
+      if (matched) {
+        // Scored against the matched-settings run; the stock run and its measured cause are kept beside it.
+        const { id, orbit, forceSet, row: family, toleranceClass, toleranceM, ...stock } = positionRow(source, cached, metrics);
+        row = { ...positionRow(matched, cached, metrics), basiliskRun: options.primary, stmSkipped, stock: recordCause(stock) };
+        const cause = diagnosis.diagnostics?.[options.primary]?.cause;
+        if (cause && ALL.some((setting) => !row[setting.id].met)) row.cause = cause;
+      } else row = recordCause({ ...positionRow(source, cached, metrics), stmSkipped });
       if (recorded) assertMatchingNumbers(row, recorded.cases.find((candidate) => candidate.id === row.id), row.id);
       rows.push(row);
-      console.log(`${source.id}: suite=${row.suite.worstM} m; steps30=${row.steps30.worstM} m; finest=${row.finest.worstM} m; Orekit-Basilisk=${row.orekitMinusBasilisk.worstM} m; half-step=${row.convergence.worstM} m`);
+      console.log(`${source.id}${matched ? ` (${options.primary}; stock suite=${row.stock.suite.worstM} m)` : ''}: suite=${row.suite.worstM} m; steps30=${row.steps30.worstM} m; finest=${row.finest.worstM} m; Orekit-Basilisk=${row.orekitMinusBasilisk.worstM} m; half-step=${row.convergence.worstM} m`);
     }
     const diagnostics = {};
     for (const { file: diagnosticPath, record: diagnostic } of diagnosticInputs) {
@@ -94,7 +112,8 @@ async function main() {
           row.wgs84MinusVariant = scoreDifference(wgs84, source, metrics);
         }
         const diagnosis = causes.cases?.find?.((c) => c.id === source.id) ?? causes[source.id] ?? {};
-        const cause = diagnosis.diagnostics?.[name]?.cause ?? source.cause ?? rows.find((candidate) => candidate.id === source.id)?.cause;
+        const scored = rows.find((candidate) => candidate.id === source.id);
+        const cause = diagnosis.diagnostics?.[name]?.cause ?? source.cause ?? scored?.stock?.cause ?? scored?.cause;
         if (cause && ALL.some((setting) => !row[setting.id].met)) row.cause = cause;
         if (recorded) assertMatchingNumbers(row, recorded.diagnostics[name].cases.find((candidate) => candidate.id === row.id), `${name}.${row.id}`);
         console.log(`${name} ${source.id}: nominal-minus-variant=${row.nominalMinusVariant.worstM} m${row.wgs84MinusVariant ? `; wgs84-minus-variant=${row.wgs84MinusVariant.worstM} m` : ''}; suite=${row.suite.worstM} m; steps30=${row.steps30.worstM} m; finest=${row.finest.worstM} m; half-step=${row.convergence.worstM} m`);
@@ -123,6 +142,9 @@ async function main() {
         tool: record.tool, settings: record.settings, inputFiles: record.inputFiles },
       node: process.version, host: os.cpus()[0].model, settings: ALL, tolerancesM: CASES.protocol.tolerancesM.default,
       protocol: protocolFor(rows), cases: rows, skipped: record.skipped ?? [],
+      ...(primary ? { primary: { variant: options.primary, file: diagnostics[options.primary].file,
+        cases: rows.filter((row) => row.basiliskRun).map((row) => row.id),
+        statement: 'These cases are scored against Basilisk run with FFM\'s atmosphere settings: WGS84 height and geodetic latitude, and the native gtd7d density. Basilisk\'s stock settings (spherical altitude and geocentric latitude, gtd7 without anomalous oxygen below 500 km) do not match FFM\'s, so their run is kept in each row under stock, with its measured cause.' } } : {}),
       ...(diagnosticInputs.length ? { diagnostics } : {}),
       verdict: verdictFor(rows, record.skipped ?? [], record.tool),
       provenance: { sourceIdentity: sourceFiles.map(pin), propagationInputs: snapshot.identity,
