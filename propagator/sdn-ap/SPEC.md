@@ -3409,8 +3409,8 @@ one revolution by the Gauss equations, the Sun held fixed; test/radiation-shadow
 
   | Record | 0.6.20 | 16.15 and 16.16 | 0.6.20, the shadow out of play (policy 3) |
   | --- | --- | --- | --- |
-  | QZS-2G 2025-10-12 (i 0.074 deg, Y0 -1.9e-9 m/s^2) | 3.05 / 5.12 / 6.59 / 8.11 | 0.50 / 0.92 / 1.27 / 1.66 | 0.45 / 0.86 / 1.21 / 1.62 |
-  | Galileo IOV 2 2026-03-09 | 19.24 / 22.10 / 17.47 / 33.66 | 0.97 / 1.67 / 2.33 / 3.05 | 0.90 / 1.57 / 2.15 / 2.95 |
+  | QZS-2G, one window in season (i 0.074 deg, Y0 -1.9e-9 m/s^2) | 3.05 / 5.12 / 6.59 / 8.11 | 0.50 / 0.92 / 1.27 / 1.66 | 0.45 / 0.86 / 1.21 / 1.62 |
+  | Galileo IOV 2, one window in season | 19.24 / 22.10 / 17.47 / 33.66 | 0.97 / 1.67 / 2.33 / 3.05 | 0.90 / 1.57 / 2.15 / 2.95 |
 
   On 0.6.20 QZS-2G's near-equatorial long-period sets took section 4's own sequence, and Galileo's radial part swings
   by up to 4 m once per revolution. With 16.15 the radial part is 0.000 m on both, and the along-track part grows
