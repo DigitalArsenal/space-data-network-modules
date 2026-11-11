@@ -15,7 +15,7 @@
 // 3. FFM model truth on a made-up class 0 set at e 0.9 (initial elements 0.40 rev/day, e 0.9, i 55, node 63, perigee 234.5,
 //    M 274.2 deg): EGM96 70 x 70, the Sun and Moon on both sides, no drag or radiation. The set is fitted to the forecast's
 //    own 5 days on a 10-minute grid (the best record), so what remains is what the theory cannot represent. Outcome: the
-//    largest distance over the 5 days is within BOUND_M (measured MEASURED_M with degree 31 above the switch; 258.5 m on
+//    largest distance over the 5 days is within BOUND_M (measured 171.7 m with degree 31 above the switch; 258.5 m on
 //    0.6.29, the long-period Sun and Moon through the output, SPEC 16.19; 242.7 m on 0.6.28; 2,691.4 m before #473).
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
