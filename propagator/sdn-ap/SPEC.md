@@ -1568,7 +1568,13 @@ Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-thr
 
 The timer.
 - A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
-  last chunks without one completing. The pool is then not used again, and later batches run on the calling thread.
+  last chunks without a row completing on any thread. The pool is then not used again, and later batches run on the
+  calling thread.
+- The heartbeat is a row, not a chunk (from 0.6.NN; through 0.6.31 a chunk had to complete). Each thread counts the
+  rows it completes in a counter of its own, on its own cache line, and the calling thread reads their sum at each
+  poll. In a cold batch of 1,534 rows that each build a node grid (sets above their switch, flown 4 days from their
+  epoch), the calling thread on 0.6.31 waited 2.3e9 polls for one chunk. That was 1/59 of the limit at the lowest
+  priority on a busy machine, and could come within a factor of ten of it on a machine that polls fast.
 - It is a count of the calling thread's polls, not wall time. The module imports no clock (loaders that build their own
   import objects give none), and the calling thread may be a browser's main thread, which may not block on a timed
   wait.
@@ -1578,7 +1584,7 @@ The timer.
 - Starting a thread, the calling thread waits at most 2^34 yields for its own view: 89 s at the 1.9e8 yields a second
   measured here.
 - test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks that a
-  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because chunks keep completing.
+  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because rows keep completing.
 - A trapped thread therefore no longer leaves the calling thread waiting forever: in the stress, every trapped process
   returned the error.
 - What the timer does not cover: a thread that traps while holding the allocator's lock or a set's lock still stops any
