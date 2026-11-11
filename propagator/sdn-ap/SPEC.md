@@ -2776,7 +2776,12 @@ has none within the first six days. In six of the seven the reference also chang
 module's default fit of the 72 h of states, no drag, the RMS over each day) goes from medians of 775.7, 1,635.8 and
 8,549.6 m to 1,011.7, 2,000.0 and 9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 from -103.1 to +706.0 m (its
 known defect, stack #479; XP takes no drift, so it keeps the turn). The replay fits AP to a series half of whose states
-are a straight-line fill between the reference's 10-minute solution states, up to about 1 km off the orbit.
+are a straight-line fill between the reference's 10-minute solution states, up to about 1 km off the orbit. On those
+solution states alone (the test's reader since stack #479, comment 6808033865; 600 s), 0.6.34's replay is 389.6, 1,869.1
+and 15,422.3 m for AP and 784.3, 2,492.8 and 12,076.4 m for XP at days 1, 3 and 7, with AP minus XP at day 3 at -810.1 m.
+In the four windows whose fit arc holds or ends at TESS's perigee, where the fill lies farthest off the orbit, both
+theories are worse at day 7: AP 6.2 to 22.4 km against 3.1 to 10.3 km on the fill. The other three windows move by less
+than 0.6 km. The comparison with the archived AP6 arms stays on the reading those arms were scored on.
 
 On model truth the rotation is right, and its partner is radiation pressure. Seeded with every force but drag and
 radiation, a TESS-like set goes from 1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On the 72 h fit path without

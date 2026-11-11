@@ -18,6 +18,7 @@ import { wasmPath } from './module.mjs';
 import { openApOcm, noiseOf, withNoise, flight } from './ocm.mjs';
 import { experiments as external } from './experiments.mjs';
 import { scratchRoot } from './scratch.mjs';
+import { nodeLines } from './spk-nodes.mjs';
 const DAY=86400000, HOUR=3600000, UNIT=1e-6;
 const ms=s=>Date.parse(s.endsWith('Z')?s:s+'Z');
 const archive=process.env.SDN_ARCHIVE??'/opt/data/sdn-archive';
@@ -26,7 +27,8 @@ process.env.SDN_MODULES_ROOT ??= path.resolve(new URL('../../../../', import.met
 const imp=p=>import(path.join(external,'experiments',p));
 const readRows=dir=>fs.readdirSync(dir).filter(f=>/^rows-\d+\.jsonl$/.test(f)).sort().flatMap(f=>fs.readFileSync(path.join(dir,f),'utf8').split('\n').filter(Boolean).map(JSON.parse));
 const checksum=createHash('sha256').update(fs.readFileSync(wasmPath)).digest('hex');
-const filename=w=>path.join(scratch,createHash('sha256').update(checksum+"lead-bins-30min-teme-v2"+w.key+w.arm).digest('hex')+'.json.gz');
+// a TESS window's cache names the 10-minute-state reading (stack #479): the rows flown on the 300 s reading are not reused
+const filename=w=>path.join(scratch,createHash('sha256').update(checksum+"lead-bins-30min-teme-v2"+(w.group==='HE'?'-tess-nodes':'')+w.key+w.arm).digest('hex')+'.json.gz');
 function windows(){
  const base=path.join(archive,'operator-theory/ap/b040');
  const ap=new Map(readRows(path.join(base,'truth2')).map(r=>[r.key,r]));
@@ -80,8 +82,11 @@ async function replay(list){
     if(!o)throw Error('unregistered kernel');
     const files=w.group==='HE'?fs.readdirSync(o.dir).filter(f=>/^TESS_EPH_DEF_.*\.bsp$/.test(f)).sort().map(f=>path.join(o.dir,f)):[o.file];
     const raw=await spkObjectSeries(process.env.SDN_MODULES_ROOT,{files,source:'ap6-heo',id:w.group==='HE'?'TESS (-95)':o.id,name:o.name,norad:o.norad,fromUtc:o.from,toUtc:o.to,stride:1});
-    const first=Math.round(ms(raw.lines[0].epoch)/1000)*1000;
-    const thin=raw.lines.filter(l=>(Math.round(ms(l.epoch)/1000)*1000-first)%300000===0).map(l=>({...l,epoch:new Date(Math.round(ms(l.epoch)/1000)*1000).toISOString()}));
+    // the kernels' solution states alone: TESS's 10-minute states without the straight-line fill between them (lib/spk-nodes.mjs);
+    // THEMIS and Chandra have no fill and pass whole. Every 10-minute state lies on the 300 s grid below.
+    const kept=nodeLines(raw.lines);
+    const first=Math.round(ms(kept[0].epoch)/1000)*1000;
+    const thin=kept.filter(l=>(Math.round(ms(l.epoch)/1000)*1000-first)%300000===0).map(l=>({...l,epoch:new Date(Math.round(ms(l.epoch)/1000)*1000).toISOString()}));
     const axes=await openAxes(); s=await axes.convert(thin,'EME2000','GCRF'); await axes.close();
    }
    objects.set(w.norad,s);
