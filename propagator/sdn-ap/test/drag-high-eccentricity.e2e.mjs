@@ -58,10 +58,12 @@ const FIXTURES = {
 // 8949.97 / 6033.96 to 8944.13 / 6030.04, GTO-500 8687.66 / 5684.49 to 8685.26 / 5682.93 (0.03 to 0.12 % of errors of
 // 1.2 to 8.9 km from an osculating seed); the drag-off fit 53.73 / 27.15 to 53.74 / 27.15. AP's own Sun and Moon (SPEC
 // 16.17, stack #446, on 0.6.19) move them to 1208.57 / 840.01, 8971.52 / 6053.53, 8711.83 / 5705.36 and 56.98 / 27.94
-// (-0.6 to +0.3 % of the seeded flights; the drag-off fit +3.24 / +0.79 m).
+// (-0.6 to +0.3 % of the seeded flights; the drag-off fit +3.24 / +0.79 m). The field EGM2008 on both sides (0.6.33, SPEC
+// 16.2) moves them to 1211.59 / 845.02, 8966.05 / 6049.00, 8709.93 / 5704.46 and 53.83 / 24.54 (the seeded Molniya +3.0 / +5.0
+// m, the others 1.9 to 5.5 m lower; the drag-off fit -3.15 / -3.40 m).
 // 2's recorded figure (m, day-7 whole-day along-track RMS), 0.6.33; its history at 2.
 const MOLNIYA_PINNED = 82.17;
-const DRAG_OFF = {'Molniya seed off': [1208.57, 840.01], 'GTO seed off': [8971.52, 6053.53], 'GTO-500 seed off': [8711.83, 5705.36], 'Molniya drag off': [56.98, 27.94]};
+const DRAG_OFF = {'Molniya seed off': [1211.59, 845.02], 'GTO seed off': [8966.05, 6049.00], 'GTO-500 seed off': [8709.93, 5704.46], 'Molniya drag off': [53.83, 24.54]};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');
   if (log) return {sigmaLog: Number(log[1]), median: Number(log[2])};

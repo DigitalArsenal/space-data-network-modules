@@ -2,7 +2,7 @@
 // E2E (task modules-sdn-ap-ocm-fly-20261103): propagate flies $OCM records alone; the record is the one authority
 // for its forces; every malformed or foreign record is refused by name; ingest_omm is the one $OMM boundary.
 // - The flight: the stored AP record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit of the 0.4.0 inputs) under a $PCF with
-//   OUTPUT only (the fixture grid) within FLIGHT (below) of 0.6.22's flight of it (ap-fit-0.6.4-0.6.22.oem): states and
+//   OUTPUT only (the fixture grid) within FLIGHT (below) of 0.6.33's flight of it (ap-fit-0.6.4-0.6.33.oem): states and
 //   covariance. The fit: this build's own fit of the same arc, flown on the grid, within FIT of this build's flight of
 //   0.6.33's fit (test/fixtures/ap-fit-0.6.33.ocm), its FIT_RMS within FIT.rmsM of that record's (history and sizes at
 //   FLIGHT). The record's own rows fly. Alone (no $PCF) the
@@ -26,6 +26,7 @@
 // JS only moves bytes and compares numbers the module produced.
 //   node test/ap-terms.e2e.mjs
 import fs from "node:fs";
+import { recordReference } from "./lib/record.mjs";
 import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import * as flatbuffers from "flatbuffers";
@@ -67,7 +68,7 @@ const linesOf = (bytes) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(bytes)).u
 const { ap, xp, rows } = await fixtureSets(h);
 // The flight of fixed elements and the fit, pinned apart so that a change is attributed the day it happens.
 // test/fixtures/ap-fit-0.6.4.ocm is 0.6.4's fit of the 0.4.0 inputs (MEAN_ELEMENTS bit-equal to ap-fit-0.4.0.omm) and
-// ap-fit-0.6.4-0.6.22.oem 0.6.22's flight of it on the fixture grid (48 h at 600 s from the arc's start). History of that
+// ap-fit-0.6.4-0.6.33.oem 0.6.33's flight of it on the fixture grid (48 h at 600 s from the arc's start). History of that
 // flight: its states equal ap-fit-0.4.0.oem's (the 0.4.18 dist's) bit for bit through 0.6.4; its covariance moved at 0.6.1
 // (637228fb, the AP DRAG noise row re-fitted, SPEC 12.4: a line's entries by up to 8.9e4 of 0.6.4's largest, the 0.6.0
 // floor being far wider); 0.6.5 (24d7d75f, its speed changes: SPEC 16.8) moves the states by 2.904 mm and 2.989 um/s and
@@ -78,6 +79,8 @@ const { ap, xp, rows } = await fixtureSets(h);
 // 823.7 m per m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within 7.1e-5 (covariance.e2e.mjs). 0.6.22
 // (AP's own Sun and Moon, SPEC 16.17, stack #446) records it from itself again (ap-fit-0.6.4-0.6.22.oem; the 0.6.21 file
 // went), the bounds kept: against 0.6.21's flight 34.755 mm, 38.313 um/s, covariance 2.19e-5 of a line's largest entry.
+// 0.6.33 (the field EGM2008, SPEC 16.2) records it from itself again (the 0.6.22 file went), the bounds kept: against 0.6.22's flight 7,140.576 mm, 7,584.457 um/s, covariance 5.32e-3 of a line's
+// largest entry (ap-fit-0.6.4-0.6.33.oem).
 // The fit: this build's fit of the same 24 h arc stops at another point inside its tolerance, 7.3 cm from 0.6.4's along
 // the grid (0.6.5: 26 against 28 iterations, FIT_RMS 41.127 against 41.130 m). Against the stored record's flight until
 // 0.6.21; from 0.6.22 against this build's flight of 0.6.22's own fit (ap-fit-0.6.22.ocm), the bounds kept: AP's own Sun
@@ -99,12 +102,13 @@ const FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const FIT = { posM: 0.1, velMmS: 0.1, rmsM: 0.01 };
 
 // --- the flight: the stored AP record (0.6.4's fit) on the fixture grid against 0.6.22's flight of it
-const stored = fixture("ap-fit-0.6.4.ocm"), storedFlight = fixture("ap-fit-0.6.4-0.6.22.oem");
+const stored = fixture("ap-fit-0.6.4.ocm"), storedFlight = fixture("ap-fit-0.6.4-0.6.33.oem");
 const flownStored = await invoke("propagate", flight([new Uint8Array(stored)], { output: GRID_OUTPUT }));
 check(flownStored.statusCode === 0, `propagate the stored AP record: ${flownStored.errorCode} ${flownStored.errorMessage}`);
 if (flownStored.statusCode === 0) {
+  recordReference("ap-fit-0.6.4", "oem", new Uint8Array(flownStored.outputs[0].payload));
   const d = oemDistance(new Uint8Array(flownStored.outputs[0].payload), storedFlight);
-  console.log(`the stored AP record on the fixture grid against 0.6.22's flight: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry (${d.states} states, ${d.covLines} covariance lines)`);
+  console.log(`the stored AP record on the fixture grid against 0.6.33's flight: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry (${d.states} states, ${d.covLines} covariance lines)`);
   check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `the stored record's flight: ${d.states} states, ${d.covLines} covariance lines, ${d.epochsDiffer} epochs differ`);
   check(d.posM <= FLIGHT.posM && d.velMmS <= FLIGHT.velMmS && d.covOfLargest <= FLIGHT.covOfLargest, `the stored AP record's flight moved: ${JSON.stringify(d)} against ${JSON.stringify(FLIGHT)}`);
 }
