@@ -62,11 +62,11 @@ struct Extras {
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;  ///< the carried forecast (SPEC 18)
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OCMTrajectoryBlock>>> trajectory = 0;  ///< its statement (SPEC 18.6)
   std::string span_start, span_stop;  ///< its span: METADATA START_TIME and STOP_TIME
-  /// SPEC 16.13: the set carries ECOM2's terms (PERTURBATIONS.SOLAR_RAD_PRESSURE names them): 0 none, 1 Y0, 2 Y0 and B1
+  /// SPEC 16.13, 16.B1: the set carries ECOM2's terms (PERTURBATIONS.SOLAR_RAD_PRESSURE names them): 0 none, 1 Y0, 2 Y0 and B1
   int ecom2 = 0;
 };
 
-/// SPEC 16.13: PERTURBATIONS.SOLAR_RAD_PRESSURE of a set fitted with the radiation term Y0, and with B1 cos and B1 sin
+/// SPEC 16.13, 16.B1: PERTURBATIONS.SOLAR_RAD_PRESSURE of a set fitted with the radiation term Y0, and with B1 cos and B1 sin
 /// beside it (absent on every other set).
 constexpr const char* kY0RadiationModel = "SPHERE (AGOM) AND ECOM2 Y0 (ARNOLD ET AL. 2015), SPHERE'S CYLINDRICAL SHADOW";
 constexpr const char* kB1RadiationModel =
@@ -385,7 +385,7 @@ inline int rows_of(const Perturbations* pt, std::vector<atm::SpwDay>& rows) {
 /// SPEC 16.13: the units ECOM2_Y0's VALUE is in.
 constexpr const char* kY0Units = "m/s**2";
 
-/// SPEC 16.13: an AP set's ECOM2 terms Y0, B1 cos and B1 sin from ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS, keyed on
+/// SPEC 16.13, 16.B1: an AP set's ECOM2 terms Y0, B1 cos and B1 sin from ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS, keyed on
 /// PARAMETER: at most one ECOM2_Y0, ECOM2_B1_COS and ECOM2_B1_SIN entry each, VALUE finite in m/s**2, into the row
 /// (radiation_y0, radiation_b1c, radiation_b1s; absent or 0: no term). Refused by name: one of them on an SGP4 or SGP4XP
 /// set, or on an AP set without gravity terms, which flies none (elements-other-theory); a second entry

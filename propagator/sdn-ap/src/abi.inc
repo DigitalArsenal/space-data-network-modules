@@ -189,7 +189,7 @@ void sdnap_free(void* pointer) { std::free(pointer); }
 SDNAP_EXPORT("sdnap_init_elements")
 int32_t sdnap_init_elements(const sdnap::ElementRow* rows, uint32_t count) {
   if (rows == nullptr && count > 0) return ORBPRO_PROP_BAD_INPUT;
-  // SPEC 16.13: an SGP4XP row stating SGP4's B* or a derivative of the mean motion is held refused (elements-other-theory):
+  // SPEC 16.13, 16.B1: an SGP4XP row stating SGP4's B* or a derivative of the mean motion is held refused (elements-other-theory):
   // inside the module those slots carry an AP set's radiation terms, which enter only from a record
   uint8_t* refused = nullptr;
   for (uint32_t i = 0; i < count; ++i) {

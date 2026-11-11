@@ -106,7 +106,7 @@ struct Options {
   int8_t fit_bdot;         ///< DRAG_AREA_OVER_MASS_RATE (m^2/kg/s): refused, not modeled
   int8_t fit_thrust;       ///< IN_TRACK_ACCELERATION (m/s^2): refused, not modeled
   int8_t fit_outgassing;   ///< OUTGASSING_ACCELERATION (km/s^2): refused, not modeled
-  int8_t fit_y0;           ///< SPEC 16.13: an AP set's radiation terms, the fit method's only (fit_oem, $PCF FORCES.ECOM2;
+  int8_t fit_y0;           ///< SPEC 16.13, 16.B1: an AP set's radiation terms, the fit method's only (fit_oem, $PCF FORCES.ECOM2;
                            ///< priors y0_prior(), b1_prior()): bit kFitY0 Y0 (ECOM2_Y0), bit kFitB1 also B1 cos and B1 sin
                            ///< (ECOM2_B1_COS, ECOM2_B1_SIN); sdnap_fit refuses it (its rows do not carry them)
   double agom_prior;       ///< prior mean of AGOM; of ln AGOM under agom_log
@@ -226,7 +226,7 @@ inline Y0Prior& y0_prior() {
   return p;
 }
 
-/// SPEC 16.13: Options.fit_y0's bits, and B1's unit and prior (in kB1Unit: means B1_COS_M_S2 and B1_SIN_M_S2, one sigma)
+/// SPEC 16.B1: Options.fit_y0's bits, and B1's unit and prior (in kB1Unit: means B1_COS_M_S2 and B1_SIN_M_S2, one sigma)
 /// as Y0's. B1's two columns follow Y0's.
 constexpr int8_t kFitY0 = 1, kFitB1 = 2;
 inline bool fits_b1(const Options& o) { return (o.fit_y0 & kFitB1) != 0; }
@@ -451,7 +451,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
         for (int i = 0; i < nres; ++i) jac[i * kMaxParams + y0_index] = (trial[i] - res[i]) / step;
     }
     for (int c = 0; fits_b1(o) && c < 2 && b1_index + c < np; ++c) {
-      // SPEC 16.13: B1 cos's and B1 sin's columns, as Y0's, per kB1Unit
+      // SPEC 16.B1: B1 cos's and B1 sin's columns, as Y0's, per kB1Unit
       const int col = b1_index + c;
       ElementRow bumped = work;
       const double step = std::fmax(std::fabs(x[col]) * 0.01, 0.1);

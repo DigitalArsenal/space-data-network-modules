@@ -319,7 +319,7 @@ constexpr double kBandMedianBterm = 0.0005;
 /// held (at Y0_M_S2; the second stage at the first's), SOLVED_FOR false.
 constexpr double kY0MinimumArcHours = 72.0;
 constexpr double kY0PriorSigma = 1e-9;
-/// SPEC 16.13: B1 cos and B1 sin are solved and held with Y0, on its rule, each with a Gaussian prior about the stated
+/// SPEC 16.B1: B1 cos and B1 sin are solved and held with Y0, on its rule, each with a Gaussian prior about the stated
 /// B1_COS_M_S2 and B1_SIN_M_S2 of sigma kB1PriorSigma (m/s^2).
 constexpr double kB1PriorSigma = 1e-8;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
@@ -402,7 +402,7 @@ static int fit_blocks() {
     const PVN* source = sources.empty() ? nullptr : sources[ephemeris_index];
     ++ephemeris_index;
     const pcf::Options& po = frame_options;
-    // SPEC 16.13: Y0's and B1's priors for this frame's fits (fit::priors_of), in fit::kY0Unit and fit::kB1Unit
+    // SPEC 16.13, 16.B1: Y0's and B1's priors for this frame's fits (fit::priors_of), in fit::kY0Unit and fit::kB1Unit
     struct Y0PriorScope {
       fit::Y0Prior prev;
       fit::B1Prior prev_b1;
@@ -665,7 +665,7 @@ static int fit_blocks() {
         row.epoch_jd_frac = e0.frac;
         row.theory = kTheorySgp4Xp;
         fitoem::start_row(s0, row);
-        // SPEC 16.13: under FORCES.ECOM2 every stage flies Y0 and B1 from their stated values (a second stage from the
+        // SPEC 16.13, 16.B1: under FORCES.ECOM2 every stage flies Y0 and B1 from their stated values (a second stage from the
         // first's)
         if (po.ecom2) {
           radiation_y0(row) = y0_hold != nullptr ? y0_hold[0] : po.ecom2_y0;
@@ -1109,8 +1109,8 @@ static int fit_blocks() {
       std::vector<flatbuffers::Offset<OCMDynamicParameter>> dyn = {
           CreateOCMDynamicParameterDirect(fbb, "DRAG_AREA_OVER_MASS", row.bterm, "m**2/kg", opt.fit_drag != 0, prwDynamicParameter_DRAG_AREA_OVER_MASS),
           CreateOCMDynamicParameterDirect(fbb, "SRP_AREA_OVER_MASS", row.agom, "m**2/kg", opt.fit_agom != 0, prwDynamicParameter_SRP_AREA_OVER_MASS)};
-      // SPEC 16.13: under FORCES.ECOM2 the set's radiation term Y0, solved or held (the record is its only carrier), and
-      // B1 cos and B1 sin where they were solved or are not 0
+      // SPEC 16.13, 16.B1: under FORCES.ECOM2 the set's radiation term Y0, solved or held (the record is its only
+      // carrier), and B1 cos and B1 sin where they were solved or are not 0
       const bool b1_solved = fit::fits_b1(opt);
       const bool b1_carried = po.ecom2 && (b1_solved || radiation_b1c(row) != 0.0 || radiation_b1s(row) != 0.0);
       if (po.ecom2)

@@ -405,7 +405,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
 /// definite or the theory refuses a moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const double* t, const double* r, int count, double arc_end_min,
                    double sigma_km, Set& s, double& ng_rate) {
-  // SPEC 16.13, 17.1: an AP set's radiation terms (Y0, B1) are no rows of the covariance: the moved sets fly the solved
+  // SPEC 16.13, 16.B1, 17.1: an AP set's radiation terms (Y0, B1) are no rows of the covariance: the moved sets fly the solved
   // terms the row carries, held
   fit::Options o = fitted;
   o.fit_y0 = 0;
