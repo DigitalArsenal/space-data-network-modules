@@ -1577,8 +1577,14 @@ Caches per set flown a day (a week), by part, and the sets whose caches a budget
 | MEO | 19.8 KB | 7.1 | 1.9 | 5.8 | 4.6 | 13,252 | 53,008 | 106,017 |
 | GEO | 33.3 KB (62.1) | 2.5 | 20.0 (48.8) | 5.8 | 4.6 | 7,861 | 31,447 | 62,894 |
 | transfer orbit | 15.8 KB (22.1) | 0 | 5.0 (11.3) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
+| THEMIS-like (n 1.0496, e 0.822) | 90.8 KB (232.1) | 0 | 80.0 (221.3) | 5.8 | 4.6 | 2,886 | 11,546 | 23,093 |
+| Chandra-like (n 0.378, e 0.685) | 20.8 KB (44.6) | 0 | 10.0 (33.8) | 5.8 | 4.6 | 12,595 | 50,382 | 100,764 |
+| TESS-like (n 0.073, e 0.55) | 15.8 KB (30.8) | 0 | 5.0 (20.0) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
 
-The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 0.8 KB, in the set itself.
+The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 0.8 KB, in the set itself. The node
+runs of a set above e 0.3 follow its long-period step (16.10). The THEMIS-like set steps 8.2 minutes, so it holds 351 nodes
+of 160 B a day and 1,402 a week. A run holds at most the checkpoint span, 8 days or about 1,405 nodes (225 KB) a direction:
+256 MB holds the week's caches of 1,129 such sets.
 
 A catalog is flown object by object. At 10,000 low-orbit sets (500 km), measured per state at load 10 to 14:
 
