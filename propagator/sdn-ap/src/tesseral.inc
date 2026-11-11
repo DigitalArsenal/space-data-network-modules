@@ -890,11 +890,14 @@ inline int sp_comb_bound(int degree, bool wide, int extra = 0) {
 /// is the rates' inside the band, and the table keeps 1 minus the band taper of it (nothing in both places, nothing in neither).
 /// `mdaily_degree`: the m-daily family's degree; an m-daily term (q = 0, l = 2p) above it is this table's (the low table's
 /// fast side, a degree above kSpCap), at or below it the family's (the default: every m-daily term the family's).
-/// `complement` (the low table's fast side, with slow_held): a slow-held term above `degree` (the slow set takes its own
-/// degree, kSlowDegree) is this table's too, by the same 1 minus the band taper and the same size cut, for q of -1, 0 and 1.
+/// `fast_side` (the low table with the record's degree above kSpCap): no term is carried here inside the slow band at more
+/// than 1 minus the band taper of its epoch rate (a first-order term is the theory only away from commensurability; the
+/// band's terms are the rates', and one the rates do not hold, under their size cut, is carried nowhere), and with
+/// slow_held a slow-held term above `degree` (the slow set takes its own degree, kSlowDegree) is this table's too, by the
+/// same 1 minus the band taper, for q of -1, 0 and 1. A share under 1 is cut on the term's own size.
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
                     SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
-                    int mdaily_degree = kFastCap + 2, bool complement = false) {
+                    int mdaily_degree = kFastCap + 2, bool fast_side = false) {
   int raw_count = 0;
   const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
@@ -911,6 +914,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   double amp0[72];
   amp0[0] = kMu * ia0;
   for (int l = 1; l <= 70; ++l) amp0[l] = amp0[l - 1] * ia0;
+  const bool fast_on = fast_side && low && !wide;
 
   const auto weight_of = [&](int l, int m, int p, int q, double& psidot) -> double {
     const int w = l - 2 * p, j = w + q;
@@ -929,6 +933,8 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
         else if (x < 1.1) { const double c = std::cos(0.5 * kPi * (x - 0.9) / 0.2); weight = 1.0 - c * c; }
       } else if (std::fabs(psidot) < 1e-3 * n0) {
         weight = 0.0;
+      } else if (fast_on) {
+        weight = 1.0 - band_taper(x);
       }
     } else if (x < 1.0) {
       weight = 0.0;
@@ -963,7 +969,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   double col[104], dcol[104], cku[18], sku[18];
 
   // the complement: per (m, w), the highest degree above `degree` of a slow-held term of q -1, 0 or 1 (0: none)
-  const bool comp_on = complement && low && !wide && slow_held != nullptr;
+  const bool comp_on = fast_on && slow_held != nullptr;
   int comp_m = 0;
   if (comp_on) comp_m = slow_complement_lmax(slow_held, degree, sp_sc.comp_lmax);
   const auto comp_l = [&](int m, int w) -> int { return comp_on ? sp_sc.comp_lmax[m][w + 17] : 0; };
@@ -1272,9 +1278,9 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           const double ap = std::fabs(psidot);
           const double mag = a0 * A * (std::fabs(fv * G) * (3.0 * std::abs(j) * inv_a02 + 2.0 * (l + 1) * inv_na2 * ap) +
                                        (std::fabs(fv * g1) + std::fabs(dfv * G)) * inv_na2 * ap);
-          // the cut on the term's own size: a weight under 1 is the band taper's complement of a term the rates hold (the slow
-          // set or the shallow set kept it by its size), which on the fast side the table completes whatever its share
-          if (mag < keep * ap * ap * (comp_on && weight < 1.0 ? weight : 1.0)) continue;
+          // on the fast side the cut is on the term's own size: a weight under 1 is the band taper's share of a term, kept
+          // whatever the share
+          if (mag < keep * ap * ap * (fast_on && weight < 1.0 ? weight : 1.0)) continue;
 
           const double f_w = static_cast<float>(fv * weight);
           const double df_w = static_cast<float>(dfv * weight);
@@ -3181,7 +3187,7 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
   double cm[72], sm[72], cw[72], swv[72], cj[72], sj[72];
   cm[0] = cw[0] = cj[0] = 1.0;
   sm[0] = swv[0] = sj[0] = 0.0;
-  for (int q = 1; q <= 33; ++q) {
+  for (int q = 1; q <= 71; ++q) {  // a table to degree 70 (the low table's fast side): m, |w| and |j| to 71
     cm[q] = cm[q - 1] * cb - sm[q - 1] * sb;
     sm[q] = sm[q - 1] * cb + cm[q - 1] * sb;
     cw[q] = cw[q - 1] * cw1 - swv[q - 1] * sw1;
@@ -3192,7 +3198,7 @@ inline void sp_six(const SpCoef* F, int count, double t, const Kepler& kp, doubl
   const double ia = 1.0 / a;
   double amp[72];
   amp[0] = kMu * ia;
-  for (int l = 1; l <= 33; ++l) amp[l] = amp[l - 1] * ia;
+  for (int l = 1; l <= 70; ++l) amp[l] = amp[l - 1] * ia;
   double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sA = 0, sL = 0;
   for (int idx = 0; idx < count; ++idx) {
     const SpCoef& f = F[idx];

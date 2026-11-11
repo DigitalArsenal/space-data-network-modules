@@ -5633,8 +5633,8 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     } else {
       // on the fast side the table also holds the complement of the slow set's terms above the record's degree (the slow
       // set takes its own degree): at most one entry each
-      const bool comp = spd > tess::kSpCap && slow_list != nullptr;
-      const int extra = comp ? slow_list->count - slow_list->old_count : 0;
+      const bool fast_side = spd > tess::kSpCap;
+      const int extra = fast_side && slow_list != nullptr ? slow_list->count - slow_list->old_count : 0;
       tess::SpCombCoef* comb_table =
           static_cast<tess::SpCombCoef*>(std::malloc(tess::sp_comb_bound(spd, wide_sp, extra) * sizeof(tess::SpCombCoef)));
       if (comb_table == nullptr) return false;
@@ -5647,7 +5647,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       int raw_count = 0;
       const int comb_count =
           tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list,
-                         spd > tess::kSpCap ? md : tess::kFastCap + 2, comp);
+                         fast_side ? md : tess::kFastCap + 2, fast_side);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) {
