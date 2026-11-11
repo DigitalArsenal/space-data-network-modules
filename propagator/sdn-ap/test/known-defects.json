@@ -7,7 +7,7 @@
   {
     "test": "heo-frame",
     "issue": "DigitalArsenal/spacedatanetwork-stack#479",
-    "text": "On seven real windows of the TESS space telescope (an orbit of 13.7 days that reaches the Moon's distance) the median prediction error is 1.01 km after one day and 9.0 km after a week, above the earlier record of 0.77 and 7.6 km, and AP is 706 m behind SGP4-XP at day 3 (the bound is 50 m). The numerical propagator fitted and scored the same way is 0.48 km off after one day and 1.6 km after three. AP's output on that orbit is now in the right frame: with every force but radiation it follows the numerical propagator to 37 m in a week, where the frame's error was 1.8 km. The frame's error had partly offset AP's radiation pressure on that orbit: a 72-hour fit follows the numerical propagator's radiation pressure no closer than 46 to 174 m, and it misses by 1.5 to 7 km five days later."
+    "text": "On seven real windows of the TESS space telescope (an orbit of 13.7 days that reaches the Moon's distance), predictions from 72-hour fits are a median 1.01 km off after one day, 2.0 km after three days and 9.0 km after a week. The test holds them to the archived 0.77 km at one day and 7.6 km at a week, and to no more than 50 m behind SGP4-XP at three days, where they are 706 m behind. The numerical propagator, fitted and scored the same way, is 0.48, 1.57 and 11.5 km off. The cause is AP's radiation pressure on that orbit: a 72-hour fit follows the numerical propagator's radiation pressure no closer than 46 to 174 m, and misses it by 1.5 to 7 km five days later. With every force but radiation pressure, AP follows the numerical propagator to within 37 m over a week."
   },
   {
     "test": "molniya-7day-drag-sigma",
