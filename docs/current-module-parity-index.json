@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T16:50:51.116Z",
+  "generatedAt": "2026-11-11T16:50:13.723Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.29",
+      "version": "0.6.28",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7566,7 +7566,6 @@
         "test/epoch-store.e2e.mjs",
         "test/etalon-resonance.e2e.mjs",
         "test/exports.e2e.mjs",
-        "test/field-census.e2e.mjs",
         "test/fit-bterm-700-1400-km.e2e.mjs",
         "test/fit-cost-curvature.e2e.mjs",
         "test/fit-data-sigma.e2e.mjs",
@@ -7668,6 +7667,7 @@
         "test/rigor/vallado.mjs",
         "test/run-suite.mjs",
         "test/set-caches.e2e.mjs",
+        "test/slow-band-every-class.e2e.mjs",
         "test/slow-set-band-centers.e2e.mjs",
         "test/slow-set-partition.e2e.mjs",
         "test/slow-set-record.e2e.mjs",

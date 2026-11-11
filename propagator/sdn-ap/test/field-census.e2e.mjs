@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// E2E (stack #503, SPEC 16.19): the field's census, sdnap_field_census. For a set of epoch mean elements whose record states
+// E2E (stack #503, SPEC 16.20): the field's census, sdnap_field_census. For a set of epoch mean elements whose record states
 // the tesseral degree 31 (a fit's record, with the slow set), it lists every tesseral term (l, m, p, q) of the embedded field,
 // order 1 to 70, degree to 70, |q| up to 4 (12 above e 0.3), whose size over the 5-day forecast reaches 0.5 m, with the
 // weights the carriers a set of these elements builds hold of it (the rates, the family grid, the output table, the m-daily
@@ -48,7 +48,7 @@ const HOLES = [
     test: (b, t) => b.lowTable && t.code === 24 },
   { issue: 'stack #503', what: 'the low table: fast terms of |q| 2 or more (the output table holds |q| up to 1)',
     test: (b, t) => b.lowTable && t.code === 22 && tableSide(t) },
-  { issue: 'stack #503', what: 'the output table\'s cut counts the eccentricity vector\'s part radially (terms under 1 m)',
+  { issue: 'stack #503', what: 'a carrier\'s own size cut measures the term below the census (the output table counts the eccentricity vector\'s part radially; terms under 1 m)',
     test: (b, t) => t.code === 23 && t.size < 2 * CUT },
   { issue: 'stack #503', what: 'the low table: the slow set\'s cut measures a term through the mean motion and the eccentricity vector, not through the inclination (dF/di)',
     test: (b, t) => b.lowTable && t.code === 23 && !tableSide(t) },
@@ -56,8 +56,9 @@ const HOLES = [
     test: (b, t) => b.cls === 1 && b.wide && (t.code === 20 || t.code === 21) },
   { issue: 'stack #497', what: 'above the switch, every class: terms above the grid\'s degree 12',
     test: (b, t) => b.wide && (t.code === 20 || t.code === 24) },
-  { issue: 'stack #473', what: 'above the switch: slow terms the grid leaves out and no rate carries',
-    test: (b, t) => b.wide && t.code === 21 },
+  // from 0.6.28 the wide slow list carries the slow band above the switch outside low orbit: the hole is low orbit's alone
+  { issue: 'stack #473', what: 'above the switch in low orbit: slow terms the grid leaves out and no rate carries',
+    test: (b, t) => b.wide && b.cls === 0 && !b.longPeriod && t.code === 21 },
   { issue: 'stack #511', what: 'outside the low table below the switch: terms the output table\'s degree, q range or band floor leaves out and the class\'s rates do not carry',
     test: (b, t) => !b.lowTable && !b.wide && t.code >= 20 && t.code <= 22 },
 ];

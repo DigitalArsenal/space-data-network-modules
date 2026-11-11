@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.29 (dist a0405aec).
+Version 0.6.28 (dist c2cd9ae1).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -195,7 +195,7 @@ leaves no step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst da
 numerical arm's went from 21 to 34 of 56 windows on laser spheres and from 28 to 42 of 112 on altimetry (0.6.25). SPEC 16.18
 has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`).
 
-The field's census (from 0.6.29; SPEC 16.19) lists, for a set of mean elements, every tesseral term of the field to degree 70
+The field's census (from 0.6.NN; SPEC 16.20) lists, for a set of mean elements, every tesseral term of the field to degree 70
 whose size over a 5-day forecast reaches 0.5 m, with the weight each carrier the set builds holds of it and the term's
 period. `test/field-census.e2e.mjs` sweeps 101 sets over every class and both sides of every switch. It fails on a term
 carried twice, or carried nowhere outside the known holes, each of which is named with its issue.

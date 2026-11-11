@@ -1816,7 +1816,8 @@ struct RateContext {
   double hd_e0, hd_i0, hd_a0;         ///< AP: reference e, i and a of half_day table
   const tess::HalfDayCoef* half_day;  ///< AP degree 6..31 resonant tail (owned)
   int32_t half_day_count;
-  uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release)
+  uint8_t shared_mask;                ///< bitmask of borrowed pointers from anchor (not freed by xp_release); bit 128 (wide_slow) is
+                                      ///< its last free bit: the next shared table needs a wider mask
   uint8_t ap_resonance;               ///< AP: the epoch class's terms, functions at the current elements (SPEC 16.2, 16.7)
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
   uint8_t ap_third_body;              ///< AP: the third bodies' degree 4-10 averaged rates and degree 2-10 short-period
@@ -1825,6 +1826,8 @@ struct RateContext {
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
   int32_t slow_extra;                 ///< SPEC 16.18: of shallow_count, the slow set's own terms (beyond the shallow set's)
+  const res::ResCoef* wide_slow;      ///< AP above the switch outside low orbit: the other slow terms, in the rates (owned, xp_release; stack #473)
+  int32_t wide_slow_count;
   const float* zt;                    ///< AP: zonal tail, in the rates: Fbar, dFbar, g0, g1 (owned, xp_release)
   int32_t zt_degree;
   uint8_t zt_wide;                    ///< AP: the tail carries every long-period term (tess::kWideE, SPEC 16.11)
@@ -3654,7 +3657,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     ag.cw = cv * ag.cO + sv * ag.sO;
     ag.sw = sv * ag.cO - cv * ag.sO;
     const bool need_tail_angles =
-        !skip_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0));
+        !skip_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.wide_slow != nullptr) || (ctx.zt_wide != 0));
     const bool need_k_angles = (ctx.res_epoch != nullptr) || (ctx.drag_pass != 0) || need_tail_angles ||
                                (ctx.ap_resonance && cls != 0 && !(cls == 1 && cache_geo_res)) ||
                                (ctx.agom > 0.0 && fr.e2 != 0.0 && k.a >= 5.0 && ag.si <= 0.02) ||
@@ -3743,6 +3746,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci,
                         ctx.theta_g0, dst, sh_table_id(ctx));
     }
+    if (ctx.wide_slow != nullptr)
+      tess::wide_slow_six(ctx.wide_slow, ctx.wide_slow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
     if (ctx.zt != nullptr)
       tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, dst, &ag.sw, &ag.cw,
                       zt_table_id(ctx));
@@ -5722,6 +5727,22 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.half_day = table;
     }
   }
+  // SPEC 16.18 (stack #473): above its switch outside low orbit every class carries its other slow terms in the rates
+  if (sd >= 2 && br.wide_tess != 0 && !(res == 0 && !s.ctx.long_period)) {
+    if (within_share && anchor->ctx.wide_slow != nullptr) {
+      s.ctx.wide_slow = anchor->ctx.wide_slow;
+      s.ctx.wide_slow_count = anchor->ctx.wide_slow_count;
+      s.ctx.e0 = anchor->ctx.e0;
+      s.ctx.i0 = anchor->ctx.i0;
+      s.ctx.shared_mask |= 128;
+    } else {
+      res::ResCoef* list = nullptr;
+      const int count = tess::slow_terms_wide(spd, res, n0, e.eo, e.xincl, &list);
+      if (count < 0) return false;
+      s.ctx.wide_slow = list;
+      s.ctx.wide_slow_count = count;
+    }
+  }
   if (sd >= 2 && res == 0 && !s.ctx.long_period) {
     if (within_share && anchor->ctx.shallow != nullptr) {
       s.ctx.shallow = anchor->ctx.shallow;
@@ -5867,6 +5888,9 @@ inline void xp_release(XpSat& s) {
   if (!(s.ctx.shared_mask & 8)) std::free(const_cast<tess::ShallowCoef*>(s.ctx.shallow));
   s.ctx.shallow = nullptr;
   s.ctx.shallow_count = 0;
+  if (!(s.ctx.shared_mask & 128)) std::free(const_cast<res::ResCoef*>(s.ctx.wide_slow));
+  s.ctx.wide_slow = nullptr;
+  s.ctx.wide_slow_count = 0;
   if (!(s.ctx.shared_mask & 16)) std::free(const_cast<float*>(s.ctx.zt));
   s.ctx.zt = nullptr;
   if (!(s.ctx.shared_mask & 32)) std::free(const_cast<float*>(s.ctx.mdaily));
@@ -5891,16 +5915,16 @@ inline void xp_release(XpSat& s) {
   s.ctx.wide_owned = 0;
 }
 
-/// SPEC 16.19, the field's census (stack #503). The |q| it lists to: the slow set's at or below class 0's switch, then wider.
+/// SPEC 16.20, the field's census (stack #503). The |q| it lists to: the slow set's at or below class 0's switch, then wider.
 inline int census_q_max(double e) { return e <= tess::kWideENonResonant ? tess::kSlowQMax : e <= tess::kWideE ? 8 : 12; }
 
 /// The census's rows for a set `s` that ap_init built: every tesseral term (l, m, p, q) of the embedded field, order 1 to 70,
 /// degree to 70, |q| up to census_q_max(e), whose size (tess::census_size_m) reaches `cut` m, with the weight each carrier the
-/// set built holds of it, read from the set's own tables: the rates (the shallow and slow list with its band taper, the class's
+/// set built holds of it, read from the set's own tables: the rates (the shallow and slow list with its band taper, the wide slow list above the switch, the class's
 /// terms, the half-day and one-day tails), the output table (its entries' weights), the m-daily family, the family grid
 /// (1 - tess::wide_left_out). Row of 10: l, m, p, q, psi-dot / n, the code, the rates' weight, the weight of all carriers, the
 /// size (m), the term's period (days). Codes: carried once (the weights sum to 1 within 1e-3): 1 the rates, 2 the grid, 3 the output table, 8 the m-daily
-/// family, 11 the rates and the output table between them; carried nowhere, by the carrier the term's rate and degree give it:
+/// family, 11 the rates and the output table between them, 12 the rates and the grid between them (the band taper); carried nowhere, by the carrier the term's rate and degree give it:
 /// 20 above its degree, 21 under its rate floor (or out of the grid's slow band), 22 outside its q range (or its j range),
 /// 23 under its own size cut, 24 partly (the weights sum to less than 1 and the share left out reaches the cut); 30 twice
 /// (they sum to more than 1).
@@ -5954,6 +5978,11 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
             const tess::ShallowCoef& t = c.shallow[k];
             if (t.l == l && t.m == m && t.p == p && t.k == j) { wr += tess::shallow_weight(sr, j, m, n, w); break; }
           }
+          // above the switch, the wide slow list (slow_terms_wide), each term by band_taper of its own rate (wide_slow_six)
+          for (int k = 0; k < c.wide_slow_count; ++k) {
+            const res::ResCoef& t = c.wide_slow[k];
+            if (t.l == l && t.m == m && t.p == p && t.k == j) { wr += tess::band_taper(ap / band); break; }
+          }
           for (int t = 0; t < carried.count; ++t)
             if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) wr += 1.0;
           if (c.half_day != nullptr) {
@@ -5977,7 +6006,8 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
           if (total > 1.0 + 1e-3) code = 30;
           else if (total >= 1.0 - 1e-3 || (total > 1e-3 && (1.0 - total) * size < cut)) {
             const int carriers = (wr > 1e-6) + (wt > 1e-6) + (wm > 1e-6) + (wg > 1e-6);
-            code = carriers > 1 ? (wr > 1e-6 && wt > 1e-6 && carriers == 2 ? 11 : 30) : wr > 1e-6 ? 1 : wg > 1e-6 ? 2 : wt > 1e-6 ? 3 : 8;
+            code = carriers > 1 ? (carriers == 2 && wr > 1e-6 && wt > 1e-6 ? 11 : carriers == 2 && wr > 1e-6 && wg > 1e-6 ? 12 : 30)
+                   : wr > 1e-6 ? 1 : wg > 1e-6 ? 2 : wt > 1e-6 ? 3 : 8;
           } else if (total > 1e-3) code = 24;
           else if (low_table && ap < 1.1 * band) {
             // the slow set's (the rates hold a term below 1.1 bands, the output table above): its degree (and the families the
@@ -5985,7 +6015,8 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
             code = l0 >= tess::kSlowDegree - 1 || l > tess::slow_degree_cap() ? 20
                    : (std::abs(q) > tess::slow_q_max() || j < 1 || j > tess::kSlowJMax) ? 22 : 23;
           } else if (grid != nullptr) {
-            code = l > grid->degree ? 20 : 21;
+            // above the switch outside low orbit a slow term is the wide slow list's (slow_terms_wide, by its own size cut)
+            code = l > grid->degree ? 20 : !low && ap < tess::kShallowSelect * band ? 23 : 21;
           } else {
             // the output table's: its degree, its q range, its floor (1e-3 n in low orbit, the band elsewhere), its size cut
             const bool under_floor = low ? ap < 1e-3 * n : ap < band;
@@ -6004,7 +6035,7 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
   return count;
 }
 
-/// SPEC 16.19: the census for a set of epoch mean motion n (rad/min), e, i (rad) whose record states MAXIMUM_TESSERAL_DEGREE
+/// SPEC 16.20: the census for a set of epoch mean motion n (rad/min), e, i (rad) whose record states MAXIMUM_TESSERAL_DEGREE
 /// `cap` with the slow set (a fit's record), built as a flight builds it (ap_init) and released. -1 for elements it refuses.
 inline int field_census(int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
   if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || !(inc >= 0.0 && inc < kPi) || cap < 2 || cap > 70 || !(cut > 0.0)) return -1;
@@ -6189,6 +6220,7 @@ inline uint64_t xp_bytes(const XpSat& s) {
   if (!(c.shared_mask & 2)) b += u(c.res_epoch);
   if (!(c.shared_mask & 4)) b += u(c.res_taylor);
   if (!(c.shared_mask & 8)) b += u(c.shallow);
+  if (!(c.shared_mask & 128)) b += u(c.wide_slow);
   if (!(c.shared_mask & 16)) b += u(c.zt);
   if (!(c.shared_mask & 32)) b += u(c.mdaily);
   if (!(c.shared_mask & 64)) b += u(c.sp_orig != nullptr ? c.sp_orig : c.sp) + u(c.sp_comb);
