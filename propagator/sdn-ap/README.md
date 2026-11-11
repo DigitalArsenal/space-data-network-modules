@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.11 (dist 287f3c4a).
+Version 0.6.14 (dist e240fefb).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -125,7 +125,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   orbit fit returned AGOM 15 % low at the median of 254 real windows and was 121 m off at day 5; at its own sigma it
   returns 1.01 of a numerical sphere's coefficient and is 33 m off. On 748 already-read 24 h GNSS windows (exploratory) the
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
-  windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
+  windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). From 0.6.14, weighted at the data's sigma, SGP4XP's
+  24 h median day-3 error there is 145.75 m (152.29 m on 0.6.11) and its paired difference from the library -1.752 m;
+  GPS IIF 41019 is worse on 149 of its 150 windows (day 3 114.7 to 155.5 m; SPEC 12.1). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
   prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never
   <= 0. An SGP4XP set is rounded to the two-line digits and searched on their lattice (an AP set keeps full precision,
   SPEC 16.9); a term whose prior sigma, in its own
@@ -443,6 +445,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   prior, a drag prior without its sigma, the forms written GAUSSIAN_SIGNED) giving the bytes of the fit that states
   that LOG_NORMAL, on the TEME example and on the ISS window, where it ends at BTERM > 0; the LOG_NORMAL refusals by
   name; `sdnap_fit` with drag_log.
+- `test/fit-data-sigma.e2e.mjs`: SPEC 12.1, the fit's weighting (stack #324): above the drag AGOM recovered to 0.1 % on
+  the module's own GPS-like and geostationary flights with the record's data sigma under 1 m; with a stated sigma the
+  estimate pulled toward its prior by what the record's covariance implies; 2,400 km and 700 km sets keep UNIT WEIGHTS,
+  a 2,600 km set states its sigma.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).

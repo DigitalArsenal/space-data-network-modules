@@ -51,7 +51,10 @@ export async function tessWindows(modulePath){
   const bins=[1,3,7].map(d=>lines.filter(l=>ms(l)>cutoff+(d-1)*DAY&&ms(l)<=cutoff+d*DAY));assert.ok(bins.every(b=>b.length>=260),'lead coverage');
   const truth=bins.flat(),grid=S.gridBytes(truth.map(l=>l.epoch)),oem=S.oemBytes({frame:'GCRF',object:{name:'TESS',norad:43435,id:'2018-038A'},lines:fit,useableStart:fit[0].epoch,useableStop:new Date(cutoff).toISOString()});
   for(const theory of ['AP','XP']){const f=await a.fit(oem,cfg[theory]);assert.ok(f.ok,f.error);const native=await a.propagate(f.omm,grid,cfg[theory],undefined,truth.length);const states=await outputAxes.convert(native.map((v,k)=>({...v,epoch:truth[k].epoch})),'TEME','GCRF');let at=0;row[theory]={};for(let k=0;k<3;k++){let sum=0;for(const t of bins[k]){const p=states[at++];sum+=p.r.reduce((v,x,j)=>v+(x-t.r[j])**2,0);}row[theory][[1,3,7][k]]=1000*Math.sqrt(sum/bins[k].length);}}
-  for(const day of [1,3,7])assert.ok(Math.abs(row.XP[day]-1000*row.archivedXP[day].e)<.001,'XP reproduces archived AP6 scoring within 1 mm');
+  // Through 0.6.11 XP reproduced the archived AP6 scoring within 1 mm (harness fidelity). From 0.6.14 a set above the drag
+  // is fitted at the data's own sigma (SPEC 12.1), so XP's TESS fits move; each theory's error against the truth is kept
+  // beside the archived one, and heo-frame.e2e.mjs bounds them.
+  row.XPMinusArchived={};row.APMinusArchived={};for(const day of [1,3,7]){row.XPMinusArchived[day]=row.XP[day]-1000*row.archivedXP[day].e;row.APMinusArchived[day]=row.AP[day]-1000*row.archivedAP[day].e;}
   row.day3DifferenceMeters=row.AP[3]-row.XP[3];rows.push(row);console.log(JSON.stringify({exploratoryTess:row}));
  }
  await outputAxes.close();return{exploratory:true,units:'forward daily-bin 3D RMS meters; archived errors in km',inputs,moduleSha256:hash(fs.readFileSync(modulePath)),rows,pairedDay3DifferenceMeters:median(rows.map(r=>r.day3DifferenceMeters)),historicalPairedDay3DifferenceMeters:median(rows.map(r=>1000*(r.archivedAP[3].e-r.archivedXP[3].e)))};
