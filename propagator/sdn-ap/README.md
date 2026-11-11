@@ -620,10 +620,14 @@ From 0.6.16 an AP set in the long-period regime above e0 0.3 steps at most half 
 0.5 (1 - e0)^1.5 / n0: 8.2 min on a THEMIS-like orbit (e 0.82), where the 38-minute step left 174 m of the theory's own
 integration error at day 5 (0.08 m now), and 919 m against FFM model truth with the Sun and Moon (123 m now; SPEC 16.10,
 `test/long-period-perigee-step.e2e.mjs`, stack #445). Sets at e0 0.3 and below are unchanged.
-From 0.6.NN those sets put their nodes evenly in the epoch orbit's eccentric anomaly, so the step follows 1 - e0 cos E (short
-at perigee, long at apogee) at a mean step of 0.85 times the regime's (38 or 95 min). The theory's own error at day 5 is
-2.6 m on the THEMIS-like orbit and 10 m on a Chandra-like one, at 1.1 to 1.2 times 0.6.15's cost where 0.6.16 cost 4.5
-times (stack #450).
+From 0.6.NN those sets keep that node count and spread it along the orbit: the nodes are even in s = E - 0.5 e0 sin E, the
+eccentric anomaly of an orbit of half the eccentricity, so the step is about 0.3 of the mean at perigee and 1.3 at apogee on
+a THEMIS-like orbit. Against a uniform fine step at 60 s, the worst over four Sun and Moon geometries falls:
+- near perigee, from 0.79 to 0.36 m on the THEMIS-like orbit, from 30.7 to 5.8 m on a Chandra-like one and from 7.5 to 2.4 m
+  on a TESS-like one;
+- at its largest, from 1.82 to 1.08 m, from 50.2 to 8.9 m and from 11.0 to 4.4 m.
+
+The cost is no more than 0.6.20's (SPEC 16.10, stack #450).
 
 When the local Hansen expansion is selected (SPEC 6.4), the original AP resonance coefficients are exact at the epoch eccentricity
 to numerical-integral precision and third order within |de| <= 0.02. Measured per-term relative truncation

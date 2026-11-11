@@ -1783,12 +1783,14 @@ struct Branch {
   uint8_t wide_e = 0;       ///< AP: e0 above tess::kWideE, the zonal tail's every long-period term and the perigee drag passage
   uint8_t series_e = 0;     ///< AP: e0 at or above res::kSeriesE, the class's G about e0 (SPEC 6.4)
   /// The long-period regime's step, minutes (SPEC 9, 16.10): 95, AP's one-day class 38. For an AP set above e0 0.3 the mean
-  /// step (the checkpoint stride) of nodes even in the epoch orbit's eccentric anomaly (lp_even). Not a switch: a moved set
-  /// flies its nominal's, as the rest.
+  /// step (the checkpoint stride) of its nodes even in s (lp_even). Not a switch: a moved set flies its nominal's, as the rest.
   double lp_step = kLongPeriodStep;
-  /// AP above e0 0.3 in the long-period regime (SPEC 16.10; stack #450): node k at t_k = (G(E0 + k dE) - G(E0)) / n0,
-  /// G(E) = E - e0 sin E, E0 the epoch's eccentric anomaly, dE = min(0.5 sqrt(1 - e0), 0.85 h0 n0), h0 38 min (the one-day
-  /// class) or 95 min: the step in time follows 1 - e0 cos E, short at perigee and long at apogee.
+  /// AP above e0 0.3 in the long-period regime (SPEC 16.10; stack #450): the nodes are even in s = E - 0.5 e0 sin E (the
+  /// eccentric anomaly of an orbit of half the eccentricity), E the epoch orbit's eccentric anomaly: node k at
+  /// s(E_k) = s(E0) + k ds, its time t_k = (G(E_k) - G(E0)) / n0 with G(E) = E - e0 sin E. ds (lp_dE) =
+  /// min(0.5 (1 - e0)^1.5, h0 n0), h0 38 min (the one-day class) or 95 min: the mean step min(0.5 tau_p, h0), 0.6.16's
+  /// uniform step (tau_p = (1 - e0)^1.5 / n0 the perigee's time scale); the step in time follows
+  /// (1 - e0 cos E) / (1 - 0.5 e0 cos E).
   uint8_t lp_even = 0;
   double lp_dE = 0.0, lp_E0 = 0.0, lp_G0 = 0.0, lp_e0 = 0.0, lp_n0 = 0.0;
   bool operator==(const Branch& o) const {
@@ -1797,9 +1799,12 @@ struct Branch {
   }
   bool operator!=(const Branch& o) const { return !(*this == o); }
 };
-/// The guard and the mean step of the long-period nodes even in E (Branch::lp_even): dE <= kLpEvenGuard sqrt(1 - e0) and
-/// dE <= kLpEvenMean h0 n0 (SPEC 16.10).
-constexpr double kLpEvenGuard = 0.5, kLpEvenMean = 0.85;
+/// The long-period nodes above e0 0.3 (Branch::lp_even; SPEC 16.10): even in s = E - kLpShift e0 sin E, with
+/// ds = min(kLpPerigeeScale (1 - e0)^1.5, h0 n0): 0.6.16's node count and mean step, min(0.5 tau_p, h0), spread toward
+/// apogee. Chosen on the integration error against a uniform fine step at 60 s, near perigee and at its largest over 7 days,
+/// the worst over four Sun and Moon geometries: below 0.6.20's worst on THEMIS-, Chandra- and TESS-like sets, at no more
+/// than its cost.
+constexpr double kLpPerigeeScale = 0.5, kLpShift = 0.5;
 /// `m0` the epoch mean anomaly (rad): the phase of the long-period nodes above e0 0.3 (Branch::lp_even).
 inline Branch branch_of(double n0, double e0, bool ap, double m0 = 0.0) {
   Branch b;
@@ -1814,7 +1819,7 @@ inline Branch branch_of(double n0, double e0, bool ap, double m0 = 0.0) {
     b.lp_step = b.resonance == 1 ? 38.0 : kLongPeriodStep;
     if (b.wide_e) {
       b.lp_even = 1;
-      b.lp_dE = std::fmin(kLpEvenGuard * std::sqrt(1.0 - e0), kLpEvenMean * b.lp_step * n0);
+      b.lp_dE = std::fmin(kLpPerigeeScale * std::pow(1.0 - e0, 1.5), b.lp_step * n0);
       b.lp_e0 = e0;
       b.lp_n0 = n0;
       double E = m0 + e0 * std::sin(m0);
@@ -1830,9 +1835,17 @@ inline Branch branch_of(double n0, double e0, bool ap, double m0 = 0.0) {
   }
   return b;
 }
-/// The time (min from the epoch) of node k of a long-period set whose nodes are even in E (Branch::lp_even).
+/// The time (min from the epoch) of node k of a long-period set whose nodes are even in s (Branch::lp_even): E_k solves
+/// E - kLpShift e0 sin E = s(E0) + k ds by Newton, from E0 + k ds.
 inline double lp_node_time(const Branch& b, int32_t k) {
-  const double E = b.lp_E0 + k * b.lp_dE;
+  const double we = kLpShift * b.lp_e0;
+  const double s = b.lp_E0 - we * std::sin(b.lp_E0) + k * b.lp_dE;
+  double E = b.lp_E0 + k * b.lp_dE;
+  for (int it = 0; it < 60; ++it) {
+    const double d = (E - we * std::sin(E) - s) / (1.0 - we * std::cos(E));
+    E -= d;
+    if (std::fabs(d) < 1e-14) break;
+  }
   return (E - b.lp_e0 * std::sin(E) - b.lp_G0) / b.lp_n0;
 }
 /// The switch two branches differ by, in words.
@@ -4755,7 +4768,7 @@ inline void y0_blocks(const RateContext& ctx, const Node& a, Node& out) {
 inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out) {
   double h;
   if (ctx.long_period && ctx.branch.lp_even)
-    h = std::fabs(lp_node_time(ctx.branch, a.index + dir) - a.t);  // nodes even in the epoch orbit's E (SPEC 16.10)
+    h = std::fabs(lp_node_time(ctx.branch, a.index + dir) - a.t);  // nodes even in s (SPEC 16.10)
   else if (ctx.long_period)
     h = long_period_step(ctx);
   else
@@ -7357,7 +7370,8 @@ inline bool mean_at_cov_pair_lp(const XpSat& s0, XpSat& sp, XpSat& sm, double t,
     return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
   }
 
-  // the pair's step: the regime's, or with nodes even in E the next node's time (a path above e0 0.3 does not take: drag_pass)
+  // the pair's step: the regime's, or with nodes even in s (16.10) the following node's time (a path above e0 0.3 does not
+  // take: drag_pass)
   double h_step = dir * long_period_step(s0.ctx);
   Node nxt_p{}, nxt_m{};
   for (;;) {

@@ -1,18 +1,22 @@
 #!/usr/bin/env node
 // SPEC 9 and 16.10, DigitalArsenal/spacedatanetwork-stack#445 and #450: above e0 0.3 the long-period regime's nodes are even
-// in the eccentric anomaly of the epoch orbit, t_k = (G(E0 + k dE) - G(E0)) / n0, G(E) = E - e0 sin E,
-// dE = min(0.5 sqrt(1 - e0), 0.85 h0 n0), h0 38 min (the one-day class) or 95 min.
-// 1. Integration error. A THEMIS-like set (n 1.0496 rev/day, e 0.822, perigee 900 km, i 10 deg; the one-day class, 42 nodes a
-//    revolution) and a Chandra-like set (0.37795 rev/day, e 0.685, i 72; class 0, 46 nodes a revolution), FORCES 31,20,
-//    flown 7 days at 300 s by the module and by a test build at a uniform fine step (2.375 and 11.875 min). Outcome: their
-//    day-5 RMS difference is within 4 m (THEMIS-like; measured 2.60 m) and 15 m (Chandra-like; measured 9.99 m).
+// in s = E - 0.5 e0 sin E, E the epoch orbit's eccentric anomaly: s(E_k) = s(E0) + k ds, t_k = (G(E_k) - G(E0)) / n0,
+// G(E) = E - e0 sin E, ds = min(0.5 (1 - e0)^1.5, h0 n0), h0 38 min (the one-day class) or 95 min: 0.6.16's node count and
+// mean step, min(0.5 tau_p, h0), tau_p = (1 - e0)^1.5 / n0, spread toward apogee.
+// 1. Integration error, as a conjunction screen sees it. A THEMIS-like set (n 1.0496 rev/day, e 0.822, perigee 900 km, i 10
+//    deg; the one-day class) and a Chandra-like set (0.37795 rev/day, e 0.685, i 72; class 0), FORCES 31,20, drag and
+//    radiation on, at four epochs a season apart (the Sun and Moon geometry moves the step's error 2 to 10 times), each flown
+//    7 days at 60 s by the module and by a test build at a uniform fine step (2.375 and 11.875 min). Outcome: the worst over
+//    the four epochs of the difference's RMS near perigee (the lowest tenth of the radius) and of its largest value is at
+//    most 0.6.20's worst: THEMIS-like 0.789 / 1.816 m (measured 0.363 / 1.078 m), Chandra-like 30.683 / 50.215 m (measured
+//    5.779 / 8.865 m).
 // 2. One grid. In a test build: a covariance's moved set (CovBankScope) and a fit iterate's moved set (BranchScope, the
 //    iterate's branch) at elements moved from the nominal's fly exactly the nominal's node times over 400 nodes, and those
 //    are the rule's t_k. Outcome: the moved sets' differences are 0, the rule's within 1e-9 min (rounding).
 // 3. Model truth. FFM: EGM96 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either side. AP: a 72 h fit
 //    of the THEMIS-like set with drag and AGOM pinned at 0, flown 7 days on a 10-minute grid. Outcome: the day-5 whole-day
-//    3D RMS is within 200 m. Measured 119.7 m on 0.6.20 (119.6 m on 0.6.18); 122.9 m with 0.6.16's uniform 8.2-minute
-//    step, 918.6 m at 38 min.
+//    3D RMS is within 200 m. Measured 122.9 m, as with 0.6.16's uniform 8.2-minute step (918.6 m at 38 min): at this node
+//    count the step's error is under a meter and the theory's is the figure.
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -33,7 +37,7 @@ const MU = 398600.8, RE = 6378.135, n = 1.0496;
 const e = +(1 - (RE + 900) / Math.cbrt(MU / (n * 2 * Math.PI / 86400) ** 2)).toFixed(6);
 const THEMIS = {n, e, i: 10, raan: 30, argp: 300, h0: 38};
 const CHANDRA = {n: 0.37795, e: 0.685, i: 72, raan: 330, argp: 270, h0: 95};
-const nodesPerRev = (o) => 2 * Math.PI / Math.min(0.5 * Math.sqrt(1 - o.e), 0.85 * o.h0 * o.n * 2 * Math.PI / 1440);
+const nodesPerRev = (o) => 2 * Math.PI / Math.min(0.5 * (1 - o.e) ** 1.5, o.h0 * o.n * 2 * Math.PI / 1440);
 
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 function testBuild(prefix, patches) {
@@ -62,24 +66,35 @@ const fine = testBuild('sdn-ap-lp-fine-', [
   ['xp_theory.inc', '      b.lp_even = 1;', '      b.lp_even = 0;'],
   ['xp_theory.inc', '      b.lp_step = b.lp_dE / n0;  // the mean step', '      b.lp_step = b.resonance == 1 ? 2.375 : 11.875;'],
 ]);
-const epoch = '2026-10-29T00:00:00.000', t0 = Date.parse(epoch + 'Z');
-const epochs = [...Array(7 * 288)].map((_, k) => new Date(t0 + (k + 1) * 300000).toISOString().replace('Z', ''));
-const fly = async (file, set) => {
+const fly = async (file, set, epochs) => {
   const h = await createStandaloneHarness('browser', file, {surface: 'command'});
   const r = await h.invoke({methodId: 'propagate', inputs: flight([set], {output: {EPOCHS: epochs, FRAME: pcfOutputFrame.GCRF}})});
   await h.close?.();
   assert.equal(r.statusCode, 0, `${file}: ${r.errorCode} ${r.errorMessage}`);
   return OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
 };
-const convergence = {};
-for (const [name, o, bound] of [['THEMIS-like', THEMIS, 4], ['Chandra-like', CHANDRA, 15]]) {
-  const set = seedOcm({epoch, n: o.n, e: o.e, i: o.i, raan: o.raan, argp: o.argp, ma: 10, bterm: 0.01, agom: 0.0125, norad: 99001, tesseral: 31, zonal: 20});
-  const [a, b] = [await fly(wasmPath, set), await fly(fine, set)];
-  const d = a.map((p, k) => 1000 * Math.hypot(p.X - b[k].X, p.Y - b[k].Y, p.Z - b[k].Z));
-  const dayRms = (day) => Math.sqrt(d.slice((day - 1) * 288, day * 288).reduce((s, x) => s + x * x, 0) / 288);
-  convergence[name] = {nodesPerRevolution: +nodesPerRev(o).toFixed(1), rmsM: Object.fromEntries([1, 3, 5, 7].map((day) => [day, +dayRms(day).toFixed(3)])), boundM: bound};
-  console.log(JSON.stringify({[name]: convergence[name]}));
-  assert.ok(dayRms(5) <= bound, `${name} against a fine uniform step, day 5: ${dayRms(5).toFixed(3)} m (bound ${bound} m)`);
+// four Sun and Moon geometries a season apart; the bounds are 0.6.20's worst over them (its uniform step, min(0.5 tau_p, h0)):
+// THEMIS-like 0.789 m near perigee (Jan 20) and 1.816 m at worst (Jan 20), Chandra-like 30.683 m and 50.215 m (Jan 20)
+const EPOCHS = ['2026-01-20T00:00:00.000', '2026-04-20T00:00:00.000', '2026-07-20T00:00:00.000', '2026-10-29T00:00:00.000'];
+const BOUND = {'THEMIS-like': {perigee: 0.789, largest: 1.816}, 'Chandra-like': {perigee: 30.683, largest: 50.215}};
+const rms = (v) => Math.sqrt(v.reduce((s, x) => s + x * x, 0) / v.length);
+for (const [name, o] of [['THEMIS-like', THEMIS], ['Chandra-like', CHANDRA]]) {
+  const worst = {perigee: 0, largest: 0}, byEpoch = {};
+  for (const epoch of EPOCHS) {
+    const t0 = Date.parse(epoch + 'Z'), epochs = [...Array(7 * 1440)].map((_, k) => new Date(t0 + (k + 1) * 60000).toISOString().replace('Z', ''));
+    const set = seedOcm({epoch, n: o.n, e: o.e, i: o.i, raan: o.raan, argp: o.argp, ma: 10, bterm: 0.01, agom: 0.0125, norad: 99001, tesseral: 31, zonal: 20});
+    const [a, b] = [await fly(wasmPath, set, epochs), await fly(fine, set, epochs)];
+    const d = a.map((p, k) => 1000 * Math.hypot(p.X - b[k].X, p.Y - b[k].Y, p.Z - b[k].Z)), r = b.map((p) => Math.hypot(p.X, p.Y, p.Z));
+    const cut = r.toSorted((x, y) => x - y)[Math.floor(r.length / 10)];
+    const got = {perigee: rms(d.filter((_, k) => r[k] <= cut)), largest: Math.max(...d), day5: rms(d.slice(4 * 1440, 5 * 1440))};
+    byEpoch[epoch.slice(0, 10)] = {nearPerigeeM: +got.perigee.toFixed(3), largestM: +got.largest.toFixed(3), day5RmsM: +got.day5.toFixed(3)};
+    worst.perigee = Math.max(worst.perigee, got.perigee);
+    worst.largest = Math.max(worst.largest, got.largest);
+  }
+  console.log(JSON.stringify({[name]: {nodesPerRevolution: +nodesPerRev(o).toFixed(1), byEpoch, worstNearPerigeeM: +worst.perigee.toFixed(3),
+    worstLargestM: +worst.largest.toFixed(3), boundM: BOUND[name]}}));
+  for (const k of ['perigee', 'largest'])
+    assert.ok(worst[k] <= BOUND[name][k], `${name} against a fine uniform step, the worst ${k} over 4 epochs: ${worst[k].toFixed(3)} m (0.6.20's worst: ${BOUND[name][k]} m)`);
 }
 
 // 2. one grid for a nominal, its covariance's moved set and a fit iterate's moved set
@@ -134,6 +149,6 @@ const probe = testBuild('sdn-ap-lp-nodes-', [['abi.inc', 'SDNAP_EXPORT("sdnap_fr
 const r = await runModelTruth({name: 'THEMIS-like', n, e, i: 10, raan: 30, argp: 300, ma: 0, drag: false, field: [70, 70], forces: [31, 20], hourly: true, gridMinutes: 10});
 const days = Object.fromEntries(Object.entries(r.wholeDay).map(([d, v]) => [d, {e: +v.e.toFixed(1), r: +v.r.toFixed(1), t: +v.t.toFixed(1), n: +v.n.toFixed(1)}]));
 console.log(JSON.stringify({modelTruth: {fixture: {n, e, i: 10, raan: 30, argp: 300}, fitWrmsM: +(r.fitted.wrms * 1000).toFixed(1), wholeDayM: days, apSha256: r.apSha256}}));
-assert.ok(r.wholeDay[5].e <= 200, `THEMIS-like model truth, day 5: ${r.wholeDay[5].e.toFixed(1)} m (bound 200 m; measured 119.7 m)`);
+assert.ok(r.wholeDay[5].e <= 200, `THEMIS-like model truth, day 5: ${r.wholeDay[5].e.toFixed(1)} m (bound 200 m; measured 122.9 m)`);
 console.log('Long-period perigee step E2E: PASS');
 process.exit(0);

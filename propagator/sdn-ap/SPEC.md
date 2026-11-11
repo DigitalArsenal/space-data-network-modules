@@ -1687,7 +1687,7 @@ Refusals). 9.9 has no further fallback: the 30-minute steps of the 9.1.1.0 build
 The step is fixed (95 min in the long-period regime, 38 min in AP's one-day class) with no error control. It resolves perigee
 only for (1 - e)^(3/2) >= 2 pi h / P: e up to 0.44 at 95 min and 0.70 at 38 min on a one-day orbit. Beyond that the theory's
 own equations are integrated with a mean-longitude error of 0.2 km a week at e 0.5 and 0.4 to 4.6 km a week at e 0.7 to 0.82 at
-95 min, and 0.09 to 0.17 km at e 0.82 at 38 min. From 0.6.16 an AP set above e_0 0.3 takes the shorter step of 16.10, and from 0.6.NN nodes even in E (16.10).
+95 min, and 0.09 to 0.17 km at e 0.82 at 38 min. From 0.6.16 an AP set above e_0 0.3 takes the shorter step of 16.10, and from 0.6.NN its nodes even in s = E - 0.5 e_0 sin E (16.10).
 
 **Output between nodes.** Cubic Hermite interpolation on the bracketing nodes (values and rates), with
 q = (t - t_k) / (t_k+1 - t_k): y(t) = (1 + 2q)(1 - q)^2 y_k + q (1 - q)^2 h y'_k + q^2 (3 - 2q) y_k+1 +
@@ -2745,8 +2745,8 @@ this rule on the same machine; AP in order over 7 days):
   41 to 175 ms.
 - Chandra-like: 1.52 to 2.35 us a state at 300 s (1.5 times) and 0.69 to 0.86 us at 60 s.
 - SGP4 and SGP4XP are unchanged.
-These are the sets with a period of 1,100 min or more and e above 0.3, a few dozen to a few hundred objects. A step
-shortened only near perigee would keep the accuracy at about the 38-minute cost (not done; stack #450).
+These are the sets with a period of 1,100 min or more and e above 0.3, a few dozen to a few hundred objects. From 0.6.NN
+the same node count is spread along the orbit instead (below; stack #450).
 
 FFM model truth on the THEMIS-like orbit (EGM96 70 x 70, Sun and Moon from DE440, no drag or radiation pressure on either
 side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3 / 5 / 7):
@@ -2758,12 +2758,14 @@ side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3
   4 x 4 field 103.2 m and a 12 x 12 field 83.3 m (the J3 to J5 short-period set is not carried; 16.11).
 - `test/long-period-perigee-step.e2e.mjs` holds the model truth and the step's convergence (stack #445).
 
-**From 0.6.NN the nodes are even in the eccentric anomaly of the epoch orbit (stack #450).**
-- **The rule.** The step in time follows 1 - e_0 cos E: short at perigee and long at apogee. The mean step is 0.85 h_0, with
-  the guard 0.5 sqrt(1 - e_0).
-  - Node k lies at t_k = (G(E_0 + k dE) - G(E_0)) / n_0, with G(E) = E - e_0 sin E and E_0 the epoch's eccentric anomaly.
-  - dE = min(0.5 sqrt(1 - e_0), 0.85 h_0 n_0); the step from node k is t_(k+1) - t_k.
-  - On the five orbits below the second term binds. The guard binds only for e_0 near 1.
+**From 0.6.NN the same nodes are spread toward apogee (stack #450).**
+- **The rule.** The nodes are even in s = E - 0.5 e_0 sin E, the eccentric anomaly of an orbit of half the eccentricity, with
+  E the epoch orbit's eccentric anomaly.
+  - Node k lies where s(E_k) = s(E_0) + k ds, E_k by Newton, at t_k = (G(E_k) - G(E_0)) / n_0 with G(E) = E - e_0 sin E.
+  - ds = min(0.5 (1 - e_0)^1.5, h_0 n_0). The mean step ds / n_0 is min(0.5 tau_p, h_0), with tau_p = (1 - e_0)^1.5 / n_0
+    the perigee's time scale. That is 0.6.16's uniform step, so the node count is 0.6.16's.
+  - The step in time is (1 - e_0 cos E) / (1 - 0.5 e_0 cos E) times the mean. On the THEMIS-like orbit (e_0 0.82) that is
+    0.30 of it at perigee and 1.29 at apogee.
 - **A function of the set.** The node times come from the index alone, through the branch (16.7; `Branch::lp_even`). A
   covariance's moved set and a fit's difference columns, pinned to their nominal's or iterate's branch, fly the same node
   times. They do not follow the true perigee's slow drift against the epoch orbit, and they need not: the step changes
@@ -2772,45 +2774,88 @@ side; a 72 h fit flown 7 days; whole-day 3D RMS at 10-minute samples, days 1 / 3
   - Each step is a standalone RK3 from its node's held rates.
   - The cubic Hermite takes each interval's own end times.
   - The 6-hour Y0 blocks (16.13) fall at fixed times inside whichever step holds them.
-  - The checkpoint stride counts nodes at the mean step dE / n_0.
-- **What does not change.** e_0 at 0.3 and below, every geostationary set and SGP4XP keep their grid bit for bit.
+  - The checkpoint stride counts nodes at the mean step ds / n_0.
+- **What does not change.** e_0 at 0.3 and below, every geostationary set and SGP4XP keep their grid bit for bit. In
+  `test/kernel-cost.mjs --diff` against 0.6.20 (7 days at 60 s, every regime, three request orders), only AP on the three
+  long-period sets above e 0.3 moves (THEMIS-like, Chandra-like, TESS-like). The other 105 of 108 flights are byte-identical.
 
-Why even in E and not 16.10's first shape:
-- The rule above it leaves the uniform step away from perigee and shortens it through the pass.
-- Equal dE gives equal resolution in E at perigee and at apogee. But the third-body rates are largest at apogee, where the
-  tidal acceleration grows with r, so the error accrues there too.
-- So the mean step, not the perigee step, sets the accuracy, and tying it to h_0 keeps the node count of 0.6.15.
+**The bar.** The step is chosen on what a conjunction screen sees:
+- the error against a uniform fine step (2.375 min in the one-day class, 11.875 min otherwise), flown at 60 s over 7 days;
+- measured as its RMS over the lowest tenth of the radius ("near perigee") and its largest value;
+- taken as the worst over four Sun and Moon geometries a season apart.
 
-AP against itself at day 5 (as the table above; nodes a revolution on the THEMIS-like orbit in brackets):
+The rule's worst may be no larger than 0.6.16's worst on each orbit type, at no more than its cost. The geometry alone moves
+0.6.16's figure 2 to 10 times (THEMIS-like near perigee: 0.08 to 0.79 m), so one epoch cannot carry the bar in either
+direction.
+
+The sets are the step E2E's: FORCES 31,20, B 0.01 m^2/kg, AGOM 0.0125 m^2/kg, M 10 deg; TESS-like 0.0730 rev/day, e 0.55,
+i 40 deg. Near perigee / largest (m) at each 2026 epoch:
+
+| Set, rule | Jan 20 | Apr 20 | Jul 20 | Oct 29 | Worst |
+| --- | --- | --- | --- | --- | --- |
+| THEMIS-like, 0.6.16 | 0.79 / 1.82 | 0.08 / 0.23 | 0.22 / 0.54 | 0.18 / 0.39 | 0.79 / 1.82 |
+| THEMIS-like, this rule | 0.19 / 0.39 | 0.36 / 1.08 | 0.25 / 0.69 | 0.20 / 0.49 | 0.36 / 1.08 |
+| Chandra-like, 0.6.16 | 30.7 / 50.2 | 13.7 / 23.1 | 28.2 / 45.4 | 17.2 / 28.1 | 30.7 / 50.2 |
+| Chandra-like, this rule | 2.5 / 4.5 | 2.9 / 4.5 | 5.8 / 8.9 | 4.4 / 6.4 | 5.8 / 8.9 |
+| TESS-like, 0.6.16 | 3.1 / 6.7 | 5.8 / 10.0 | 2.4 / 8.6 | 7.5 / 11.0 | 7.5 / 11.0 |
+| TESS-like, this rule | 0.94 / 2.4 | 1.8 / 3.7 | 1.0 / 4.4 | 2.4 / 4.4 | 2.4 / 4.4 |
+
+On two THEMIS-like epochs 0.6.16 is the better one (April: 0.08 / 0.23 m against 0.36 / 1.08 m; October: 0.18 / 0.39 m
+against 0.20 / 0.49 m). Its low figures there follow the geometry, and its worst is the higher.
+
+What is left on Chandra-like, 5.8 m near perigee and 8.9 m at worst, is stack #488. Under 1 m would take about twice these
+nodes, or a higher-order step between them.
+
+**The cost against 0.6.20,** with `test/kernel-cost.mjs` alternated, nice 19, AP per state at 300 s:
+- THEMIS-like: 0.94 to 0.99 times;
+- Chandra-like: 0.8 to 0.98 times;
+- TESS-like: 0.94 to 1.0 times.
+
+The node count is the same, so the spread is the load's.
+
+**Model truth on the THEMIS-like orbit** (as above), days 1 / 3 / 5 / 7: 76.6 / 110.0 / 122.9 / 124.8 m. 0.6.16 to 0.6.20
+gave 76.6 / 110.0 / 122.9 / 124.9 m: at this node count the step's error is under a meter, and the figure is the theory's.
+
+**Why this shape.**
+- **The local error.** Measured along the orbit as one step against two half steps, each mean-state difference mapped to
+  along-track meters at a perigee one revolution on. It is 4th order everywhere (3.8 to 4.2, as RK3's should be) and largest
+  near perigee.
+- **Its density misleads.** The errors on either side of perigee cancel. Moving nodes toward perigee, even in 0.6 E + 0.4 nu
+  at a mean step of 0.85 h_0, doubled the error at the same node count: on kernel-cost's sets the worst went from 55.5 to
+  100.8 m on THEMIS-like and from 69.7 to 134.5 m on Chandra-like. Moving them toward apogee, along the s above, reduced it.
+- **So the error that accumulates is made on the long steps away from perigee.** It shows near perigee only because the
+  speed is highest there.
+- **The rule first drafted for #450, nodes even in E at a mean step of 0.85 h_0,** was chosen on a day-5 RMS at 300 s, which
+  does not see perigee. On the E2E's sets (October 29) it reads 4.24 / 8.85 m on THEMIS-like and 23.9 / 36.4 m on
+  Chandra-like, at 0.24 and 0.73 times the cost.
+
+**Other means measured on the same s-grid,** worst over the four epochs (THEMIS-like; Chandra-like), with their cost against
+0.6.20:
+- 0.55 tau_p: 0.46 / 1.35 m; 7.8 / 12.0 m; 0.88 to 0.92 and 0.76 to 0.92 times.
+- 0.65 tau_p: 0.52 / 1.47 m; 13.1 / 20.1 m; about 0.75 and 0.77 times. Not taken: 13 to 20 m of step error on Chandra-like
+  is a real share of a 100 m line, and buying a quarter of the time with it is the trade this change was not to make.
+
+On the 300 s day-5 RMS that this section first used, AP against itself at day 5 (nodes a revolution on the THEMIS-like
+orbit in brackets):
 
 | Rule | THEMIS-like | one-day e 0.70 | one-day e 0.50 | Chandra-like | TESS-like |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 0.6.16: min(h_0, 0.5 tau) (167) | 0.08 m | 4.57 m | 15.14 m | 9.54 m | 0.95 m |
 | even in E, mean step h_0 (36) | 4.14 m | 1.61 m | 3.15 m | 16.33 m | 2.31 m |
-| even in E, mean step 0.85 h_0 (42; this rule) | 2.60 m | 0.95 m | 1.93 m | 9.99 m | 1.41 m |
+| even in E, mean step 0.85 h_0 (42; the first draft) | 2.60 m | 0.95 m | 1.93 m | 9.99 m | 1.41 m |
 | even in E, mean step 0.707 h_0 (51) | 1.57 m | 0.51 m | 1.12 m | 5.70 m | 0.81 m |
 | uniform h_0 out of perigee, min(h_0, (1 - e_0 cos E) 0.5 sqrt(1 - e_0) / n_0) (43) | 1.72 m | 34.07 m | 15.14 m | 19.18 m | 0.95 m |
 | step h_0 (1 - e_0 cos E)^0.5 (35) | 30.41 m | 19.40 m | 9.79 m | 15.84 m | 1.32 m |
 
-FFM model truth on the THEMIS-like orbit (as above), days 1 / 3 / 5 / 7: 76.7 / 109.5 / 119.7 / 112.2 m (0.6.16 to 0.6.20:
-76.6 / 110.0 / 122.9 / 124.9 m).
+**The first draft, nodes even in E at 0.85 h_0.**
+- Model truth on the THEMIS-like orbit, days 1 / 3 / 5 / 7: 76.7 / 109.5 / 119.7 / 112.2 m.
+- Its cost against 0.6.20, AP over SGP4 at 300 s:
+  - THEMIS-like: 0.24 to 0.25 times;
+  - Chandra-like: 0.83 to 0.85 times;
+  - TESS-like: 0.87 to 1.01 times.
+- Against 0.6.15 it was 1.13 to 1.24, 1.06 to 1.20 and 0.99 to 1.12 times.
 
-The price, against 0.6.15 (`test/kernel-cost.mjs` at nice 19, alternated twice; AP in order over 7 days at 300 s):
-- THEMIS-like: 1.13 to 1.24 times (0.6.16: 4.4 to 4.6).
-- Chandra-like: 1.06 to 1.20 times (0.6.16: 1.44).
-- TESS-like: 0.99 to 1.12 times.
-
-Against 0.6.20, the same harness alternated twice, AP over SGP4 at 300 s:
-- THEMIS-like: 44.5 and 47.8 against 187.0 and 191.2 (0.24 to 0.25 times). The first state at day 7 takes 95 to 109 ms
-  against 432 to 464 ms.
-- Chandra-like: 2.9 and 3.1 against 3.4 and 3.7 (0.83 to 0.85 times).
-- TESS-like: 2.7 and 3.1 against 3.1 and 3.1 (0.87 to 1.01 times).
-
-The integration error follows a cube law in the mean step, so its price is stated:
-- 1 m at day 5 costs 1.65 times the nodes on THEMIS-like orbits (mean step about 0.61 h_0) and about 2.5 times on
-  Chandra-like orbits (about 0.40 h_0).
-- AP's theory error on these orbits is 100 m and more, so the mean step is 0.85 h_0. A finer step pays where that error
-  is under 25 m (stack #461).
+That speed came from 42 nodes a revolution on THEMIS-like against 167. Its error near perigee is above.
 
 The averaged regime steps two revolutions (9). AP's half-day class (1.604 to
 2.406 rev/day) carries resonant terms in lambda - 2 theta, whose period 2 pi / |n - 2 omega_E| is long near the
