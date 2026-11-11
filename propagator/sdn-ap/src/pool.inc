@@ -58,7 +58,7 @@ constexpr size_t kThreadRoom = 1u << 20;
 
 enum JobKind : int32_t { kJobNone = 0, kJobJd = 1, kJobMinutes = 2 };
 
-/// The heartbeat (stack #487): the rows each thread has completed, one counter per thread on its own cache line (slot 0
+/// The heartbeat (stack #487): the rows each thread has completed, one counter per thread, each aligned to 64 bytes (slot 0
 /// the calling thread's, 1 to kMaxThreads the pool threads'), so a row's count is a store no other thread makes. The
 /// calling thread waiting for a batch reads their sum: a row completing anywhere resets its count of idle polls, so a
 /// slow chunk that keeps completing rows is never taken for dead.

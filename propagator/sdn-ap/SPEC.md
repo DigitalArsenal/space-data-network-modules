@@ -1571,24 +1571,29 @@ The timer.
   while waiting for its last chunks without a row completing on any thread. The pool is then not used again, and
   later batches run on the calling thread.
 - The heartbeat is a row, not a chunk (from 0.6.33; through 0.6.32 a chunk had to complete). Each thread counts the
-  rows it completes in a counter of its own, on its own cache line, and the calling thread reads their sum at each
-  poll. In a cold batch of 1,534 rows that each build a node grid (sets above their switch, flown 4 days from their
-  epoch), the calling thread on 0.6.31 waited 2.3e9 polls for one chunk. That was 1/59 of the limit at the lowest
+  rows it completes in a counter of its own (each counter aligned to 64 bytes), and the calling thread reads their sum at
+  each poll. In a cold batch of 1,534 rows that each build a node grid (sets above their switch, flown 4 days from their
+  epoch), the calling thread on 0.6.31 waited 2.3e9 polls for one chunk. That was 1/60 of the limit at the lowest
   priority on a busy machine, and could come within a factor of ten of it on a machine that polls fast.
 - It is a count of the calling thread's polls, not wall time. The module imports no clock (loaders that build their own
   import objects give none), and the calling thread may be a browser's main thread, which may not block on a timed
   wait.
 - Through 0.6.32 the fastest rate measured here was 2.1e9 polls a second, so 2^37 polls were 65 s, about twice the
   30 s aimed at; that loop made one poll in about one and a half clock cycles.
-- From 0.6.33 a poll also reads the running threads' row counters, so it costs more. Measured under load 75 at the
-  lowest priority, the loop makes 2.4e8 polls a second, against 7.6e8 to 1.0e9 for 0.6.32's loop under load near 90.
-  So the count is 2^35: 145 s at 2.4e8 a second. At the 3 to 4 times slower poll, 0.6.32's fastest rate gives about
-  50 to 70 s, as 2^37 did before.
+- From 0.6.33 a poll also reads the running threads' row counters (threads + 1 of them), so it costs more. Measured
+  with 4 threads under load 61 to 67 at the lowest priority, the loop makes 2.1e8 polls a second, against 7.6e8 to
+  1.0e9 for 0.6.32's loop under load near 90. So the count is 2^35: 164 s at 2.1e8 a second. At the 3 to 4 times slower
+  poll, 0.6.32's fastest rate gives about 50 to 70 s, as 2^37 did before.
 - On a slower or busier machine the count takes longer, and a suspended process does not count.
 - Starting a thread, the calling thread waits at most 2^34 yields for its own view: 89 s at the 1.9e8 yields a second
   measured here.
-- test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks that a
-  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because rows keep completing.
+- test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks two
+  slowed batches, each bit for bit against the same rows unslowed:
+  - every chunk slowed by 0.4 of the count before its rows: the batch outlasts the count and completes, because chunks
+    keep completing;
+  - only the pool threads' rows slowed, each by 0.05 of the count: the calling thread finishes its own chunks and then
+    waits for the pool threads' chunks, longer than twice the count, while their rows keep completing. The batch
+    completes. Counted in chunks, the same case returns -20 (a diagnostic build whose wait resets on chunks only).
 - A trapped thread therefore no longer leaves the calling thread waiting forever: in the stress, every trapped process
   returned the error.
 - What the timer does not cover: a thread that traps while holding the allocator's lock or a set's lock still stops any
