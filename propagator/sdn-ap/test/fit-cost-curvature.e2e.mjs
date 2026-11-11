@@ -15,7 +15,7 @@
 // - a term the arc settles: BTERM, 800 km at i 50, NRLMSISE-00 drag with a true BTERM of 0.02, no SRP; the fit takes the
 //   default of a 71 h arc (SPEC 12.8). The record states BTERM's width by its rule (SPEC 12.8's width 1), so the formal
 //   variance is read back through the entry's figures, as the module's reader does.
-// - a term a prior holds at 1 km: AGOM, the radiation lane's case 7 (14.2165 rev/day, e 0.0012, i 98.6): a sphere with
+// - a term a prior holds at 1 km: AGOM, on the orbit of test/radiation-sphere-agom.e2e.mjs (14.2165 rev/day, e 0.0012, i 98.6): a sphere with
 //   AGOM 0.01 m^2/kg (Cr 1, 10 m^2, 1,000 kg) and the truth's conical shadow, no drag; the fit holds BTERM at 0 and takes
 //   AGOM's default prior (0 +- 0.05). At 1 km that prior halves AGOM; at the data's sigma it is weak.
 //   node test/fit-cost-curvature.e2e.mjs
@@ -84,7 +84,7 @@ const report = (name, x) => {
   report('BTERM, 800 km, 72 h, the 71 h default', {dataSigmaKm: s, bterm: B, statedSigmaLnB: Math.sqrt(sh2), widthEntry: id, recordVariance: varF, profileVariance: prof, ratio: prof / varF});
 }
 
-// a term a prior holds at 1 km: AGOM on the radiation lane's case 7 sphere
+// a term a prior holds at 1 km: AGOM on the 800 km sphere of test/radiation-sphere-agom.e2e.mjs
 {
   const input = await runModelTruth({name: 'curvature, AGOM', n: 14.2165, e: 0.0012, i: 98.6, raan: 326.70, argp: 90, ma: 0, drag: false, bterm: 0.022,
     ffmForces: {srp: true, cr: 1.0}, fitPolicy: {mean: 0, sigma: 1e-9, form: 'GAUSSIAN_SIGNED'}, fitDays: 3, fitInput: true});

@@ -1,12 +1,10 @@
 #!/usr/bin/env node
-// E2E (stack #481, SPEC 12.1): a 72 h fit's AGOM lands on the truth's, inside its stated sigma. This is the radiation lane's
-// case 7: an 800 km sphere (14.2165 rev/day, e 0.0012, i 98.6, RAAN 326.70), AGOM 0.01 m^2/kg, in the truth's conical shadow
+// E2E (stack #481, SPEC 12.1): a 72 h fit's AGOM lands on the truth's, inside its stated sigma. The case: an 800 km sphere (14.2165 rev/day, e 0.0012, i 98.6, RAAN 326.70), AGOM 0.01 m^2/kg, in the truth's conical shadow
 // from 2026-01-26. Through 0.6.20 the fit weighed the data at 1 km under the drag. AGOM's default prior (0 +- 0.05) then
 // acted as if it were 100 times narrower and held AGOM at 0.356 of the truth, 9.9 of its stated sigmas away. At 71 h and up
 // the fit now weighs the data at their own sigma, as above the drag (#489).
 // Truth: FFM (named below by its SHA-256), EGM96 70 x 70, DE440 Sun and Moon, a sphere's radiation pressure (Cr 1, 10 m^2,
-// 1,000 kg) in FFM's conical shadow, no drag, no tides, zero EOP, RK78 1e-12, 300 s states. Its initial GCRF state is case
-// 7's, as the radiation lane flew it. AP: FORCES 31, 20, Jacchia 1970 and no space weather; BTERM held at 0 (FIT.DRAG_PRIOR
+// 1,000 kg) in FFM's conical shadow, no drag, no tides, zero EOP, RK78 1e-12, 300 s states, from the GCRF state below. AP: FORCES 31, 20, Jacchia 1970 and no space weather; BTERM held at 0 (FIT.DRAG_PRIOR
 // GAUSSIAN_SIGNED 0 +- 1e-9); AGOM on its default prior; the first 72 h.
 // Asserted: AGOM within 10 % of 0.01, and within 2 of its stated sigmas. Measured 2026-11-11: 0.937 of the truth at 0.98
 // sigma (0.6.20: 0.356 at 9.9).

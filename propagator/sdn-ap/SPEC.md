@@ -1854,11 +1854,18 @@ low-orbit rows]*. Against the numerical propagator's forecast of the same window
 spheres 48 of 56 windows under 100 m (median 45.6 m) against 49 (54.3 m); altimetry 105 of 112 (32.8 m) against 99
 (50.3 m); Near 700 km 50 of 69 (52.3 m) against 50 (58.8 m); LARES 17.0 m. The free band's prior at the population's
 median and spread of ln B per band (600 to 800, 800 to 1,400 and 1,400 to 2,500 km), in place of 12.8's, was measured
-and lost five altimetry windows (100 against 105), in-sample. On the radiation lane's case 7 sphere (800 km, AGOM 0.01
+and lost five altimetry windows (100 against 105), in-sample. On the 800 km sphere of `test/radiation-sphere-agom.e2e.mjs` (AGOM 0.01
 m^2/kg in a conical shadow, BTERM held at 0) AGOM lands at 0.937 of the truth, 0.98 of its stated sigma, against 0.356
 at 9.9 at 1 km (`test/radiation-sphere-agom.e2e.mjs`). `test/fit-cost-curvature.e2e.mjs` holds the rule: the profile
 of the cost the fit minimized in one parameter, the others refitted, against the record's variance of it, for BTERM on
 the 71 h default (ratio 1.0001) and for AGOM on the case 7 sphere (0.9998).
+
+A maneuvering object. On a 72 h arc of a satellite that keeps its orbit with burns, the free drag term takes the thrust in or near the
+arc into itself, as the numerical propagator's does, and the forecast lands on the numerical propagator's rather than on the orbit. On
+the Near 700 km row's 72 h windows against the precise orbits, paired against the version before, this rule alone was worse on 102 and
+better on 50 (stack #489). The scoreboard therefore fits such an object on the arc after its last burn known at the cutoff, 24 to 70 h, so
+under the short-arc rule (experiments headline-loop, `MANEUVER72`: perigee 600 km or above, a burn ending within 7 days before the
+cutoff). With that fit process the same windows are better on 75 and worse on 58, with a median paired change of -15.8 m.
 `test/fit-data-sigma.e2e.mjs` holds the rule on model truth: above the drag AGOM is recovered to 0.1 % and, with a
 stated sigma, pulled toward its prior by exactly what the record's covariance implies; the 2,400 km and 2,600 km sets
 fall on either side of the line.
