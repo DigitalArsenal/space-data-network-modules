@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.32 (dist b0639ae7).
+Version 0.6.34 (dist 567ecfb8).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1567,18 +1567,28 @@ Why. Measured on Node 25.4.0 (V8 14.1.146.11), through the module SDK's wasi-thr
   that is busy already.
 
 The timer.
-- A batch returns -20, with every row's status 9, once the calling thread has polled 2^37 times while waiting for its
-  last chunks without one completing. The pool is then not used again, and later batches run on the calling thread.
+- A batch returns -20, with every row's status 9, once the calling thread has polled 2^35 times (2^37 through 0.6.32)
+  while waiting for its last chunks without a row completing on any thread. The pool is then not used again, and
+  later batches run on the calling thread.
+- The heartbeat is a row, not a chunk (from 0.6.33; through 0.6.32 a chunk had to complete). Each thread counts the
+  rows it completes in a counter of its own, on its own cache line, and the calling thread reads their sum at each
+  poll. In a cold batch of 1,534 rows that each build a node grid (sets above their switch, flown 4 days from their
+  epoch), the calling thread on 0.6.31 waited 2.3e9 polls for one chunk. That was 1/59 of the limit at the lowest
+  priority on a busy machine, and could come within a factor of ten of it on a machine that polls fast.
 - It is a count of the calling thread's polls, not wall time. The module imports no clock (loaders that build their own
   import objects give none), and the calling thread may be a browser's main thread, which may not block on a timed
   wait.
-- The fastest rate measured here was 2.1e9 polls a second, so 2^37 polls are 65 s, about twice the 30 s aimed at. The
-  loop then makes one poll in about one and a half clock cycles, so this machine cannot poll much faster. On a slower
-  or busier machine the count takes longer, and a suspended process does not count.
+- Through 0.6.32 the fastest rate measured here was 2.1e9 polls a second, so 2^37 polls were 65 s, about twice the
+  30 s aimed at; that loop made one poll in about one and a half clock cycles.
+- From 0.6.33 a poll also reads the running threads' row counters, so it costs more. Measured under load 75 at the
+  lowest priority, the loop makes 2.4e8 polls a second, against 7.6e8 to 1.0e9 for 0.6.32's loop under load near 90.
+  So the count is 2^35: 145 s at 2.4e8 a second. At the 3 to 4 times slower poll, 0.6.32's fastest rate gives about
+  50 to 70 s, as 2^37 did before.
+- On a slower or busier machine the count takes longer, and a suspended process does not count.
 - Starting a thread, the calling thread waits at most 2^34 yields for its own view: 89 s at the 1.9e8 yields a second
   measured here.
 - test/set-caches.e2e.mjs measures both rates and checks each default is at least 30 s at them. It also checks that a
-  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because chunks keep completing.
+  batch slowed past the count (every chunk slowed by 0.4 of it) completes, because rows keep completing.
 - A trapped thread therefore no longer leaves the calling thread waiting forever: in the stress, every trapped process
   returned the error.
 - What the timer does not cover: a thread that traps while holding the allocator's lock or a set's lock still stops any
@@ -2725,13 +2735,13 @@ is of the same order in e in the perigee rate and 50 to 78 % of the term kept. T
 
 **16.4 Frame.** Frame policy is selected once by `xp_init` from the epoch propagation branch and the
 selected gravity replacements. With d or z above 0, every AP set carries its epoch-axis states to TEME of date by
-M(t) M(t0)^T: from 0.6.NN the long-period regime's class 0 sets too (below). M is the GCRF-to-TEME matrix
+M(t) M(t0)^T: from 0.6.34 the long-period regime's class 0 sets too (below). M is the GCRF-to-TEME matrix
 of `gcrf.inc`, linear between 12-hour nodes: at most 5.6e-9 rad, 0.23 m at the geostationary radius. The Earth's axis is held
 at its epoch direction during a flight. With precession alone the error from the epoch is 0.1, 0.8 and 4.1 m at 1, 3 and 7
 days at 800 km and 0.2, 1.7 and 9.0 m at 1,336 km, up to twice that with the fortnightly nutation, and below 1 m from 5,900 km
 up.
 
-*The long-period regime's class 0 sets (from 0.6.NN; stack #479, #513).* Through 0.6.32 the nonresonant long-period
+*The long-period regime's class 0 sets (from 0.6.34; stack #479, #513).* Through 0.6.33 the nonresonant long-period
 branch (epoch period at least 1,100 minutes, class 0) left this rotation out. Its output therefore kept the turn from TEME
 of the epoch to TEME of the date: 0.70 arcsec in 5 days and 0.98 in 7, times the radius. That is up to 1.27 km at day 5 at a
 TESS-like apogee of 375,000 km. Measured on model truth (FFM, `test/lib/heo-model-truth.mjs`), the seeded TESS-like set
@@ -2751,12 +2761,11 @@ drift, so it still holds the turn). FFM fitted to the same 72 h of states (its f
 the same way is 480, 1,566 and 11,452 m. On four of the windows FFM itself follows its arc no closer than 368 to 541 m.
 The rotation is not what makes AP worse there. Seeded with every force but drag and radiation, a TESS-like set goes from
 1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On this fit path on model truth without radiation pressure, its 5-day D goes
-from 1.3 to 2.9 km to 16 to 251 m; through 0.6.32 the fit took up the turn as a false area-to-mass. With FFM's radiation
+from 1.3 to 2.9 km to 16 to 251 m; through 0.6.33 the fit took up the turn as a false area-to-mass. With FFM's radiation
 pressure in the truth, AP follows FFM's 72 h no closer than 46 to 174 m on either build. The frame's error had partly
 offset that gap in some geometries. The two replays part only on the four windows FFM cannot follow; the real rows' tool
 samples the arc at 600 s, the suite at 300 s. The one-day class (THEMIS) already took the rotation and is unchanged. A
-covariance's copy
-takes the same rotation through the same flag. The bodies the rates read stay in TEME of date: 0.7 arcsec in 5 days moves
+covariance's copy takes the same rotation through the same flag. The bodies the rates read stay in TEME of date: 0.7 arcsec in 5 days moves
 the Moon's direction by 3.4e-6 rad.
 
 Fit residuals and propagation share `xp_propagate`, including this policy; there is no separate fit-only
@@ -2779,7 +2788,7 @@ correction and 38-minute grid; the half-day and GTO fixtures retain their previo
 The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS windows, 72-hour fits, the
 original 300-second grid, and AP6's pinned foundation/frames conversion for scoring. Leads start at fit end.
 The day-3 median paired AP-minus-XP error changes from +420.105792 m to -0.000784 m (acceptance: within
-50 m of zero). That replay decided the long-period class 0 sets' exception through 0.6.32. It no longer decides, for two
+50 m of zero). That replay decided the long-period class 0 sets' exception through 0.6.33. It no longer decides, for two
 reasons. It was judged on matching SGP4-XP, not on the precise orbits. And it was flown with SPEC 5's Moon, whose
 0.6 to 1.2 km error at TESS's radius (16.17) offset part of the frame's.
 From 2026-11-11 the archive replays (heo-frame's TESS windows and the AP6 and AP5 windows of five more tests) score each
@@ -3959,7 +3968,7 @@ to 0.6.22):
 - TESS (seven real windows of `test/heo-frame.e2e.mjs`): worse, medians 610.7, 1,390.4, 6,553.6 m to 762.8, 1,677.5,
   8,596.8 m at days 1, 3 and 7 (four windows worse, two better, one level). The Moon is what moves it, and on model truth
   the third body is right there (below); AP's zonal theory on that orbit is 0.9 to 1.8 km off at day 7, and the old
-  Moon's error had partly offset it (stack #479). From 0.6.NN that error is known to be the frame's, not the zonal
+  Moon's error had partly offset it (stack #479). From 0.6.34 that error is known to be the frame's, not the zonal
   theory's (16.4).
 - Day-3 medians of `test/etalon-resonance.e2e.mjs` (fits that state no FORCES.ECOM2): Etalon-1 4.25 to 3.54 m, Etalon-2
   5.31 to 4.84, LAGEOS-1 7.17 to 7.11, LAGEOS-2 6.92 to 6.80, LARES-2 8.71 to 8.66, inclined geosynchronous 13.45 to 7.60

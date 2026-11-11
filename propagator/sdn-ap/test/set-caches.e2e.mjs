@@ -114,14 +114,17 @@ const testBuild = buildDiagnostic("set-caches-budget",
   // rows carrying a radiation term Y0 (SPEC 16.13: in the row's mean_motion_dot slot), which sdnap_init_elements holds
   // refused from outside the module
   'SDNAP_EXPORT("sdnap_test_init_rows") int32_t sdnap_test_init_rows(const sdnap::ElementRow* rows, uint32_t count) { return sdnap::store_init(rows, count); }\n' +
-  // the pool (stack #487): a pool thread that traps on its first chunk (mode 1) or every chunk slowed by `slow` polls
-  // (mode 2), the polls without a completed chunk that take the pool for dead, and no reserve before a threaded batch
-  // (every growth inside it refused); the rate of the yields start's wait counts
+  // the pool (stack #487): a pool thread that traps on its first chunk (mode 1), every chunk slowed by `slow` polls
+  // (mode 2) or every row slowed by `slow` polls (mode 3), the polls without a completed row that take the pool for
+  // dead, and no reserve before a threaded batch (every growth inside it refused); the rate of the yields start's wait
+  // counts
   'static double sdnap_test_slow = 0; static volatile int32_t sdnap_test_sink = 0;\n' +
   'static void sdnap_test_trap(int32_t, bool pool_thread) { if (pool_thread) __builtin_trap(); }\n' +
   'static void sdnap_test_slowed(int32_t, bool) { for (double k = 0; k < sdnap_test_slow; ++k) (void)sdnap_test_sink; }\n' +
+  'static void sdnap_test_slowed_row(uint32_t, bool) { for (double k = 0; k < sdnap_test_slow; ++k) (void)sdnap_test_sink; }\n' +
   'SDNAP_EXPORT("sdnap_test_pool") void sdnap_test_pool(int32_t mode, double dead_polls, int32_t reserve_off, double slow) {\n' +
   '  sdnap::pool::g_chunk_hook = mode == 1 ? sdnap_test_trap : mode == 2 ? sdnap_test_slowed : nullptr; sdnap_test_slow = slow;\n' +
+  '  sdnap::pool::g_row_hook = mode == 3 ? sdnap_test_slowed_row : nullptr;\n' +
   '  if (dead_polls > 0) sdnap::pool::dead_polls() = static_cast<uint64_t>(dead_polls); sdnap::pool::g_reserve_off = reserve_off != 0; }\n' +
   'SDNAP_EXPORT("sdnap_test_yields") void sdnap_test_yields(double n) { for (double k = 0; k < n; ++k) sched_yield(); }\n' +
   'SDNAP_EXPORT("sdnap_test_dead_yields") double sdnap_test_dead_yields() { return static_cast<double>(sdnap::pool::dead_yields()); }\n' +
@@ -262,11 +265,13 @@ for (const [name, o] of Object.entries(ORBITS)) {
   console.log(`a trapped pool thread: the batch returned -20 after ${DEAD_TEST.toExponential(2)} polls, the pool taken for dead, the 19 batches after it bit for bit on the calling thread (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 }
 {
-  // the pool's timer (stack #487) is a count of the calling thread's polls without a completed chunk, not wall time.
+  // the pool's timer (stack #487) is a count of the calling thread's polls without a completed row, not wall time.
   // 32,768 SGP4 rows (64 chunks) on 4 pool threads:
   // - a trapped pool thread: the time to the -20 gives the poll rate here, and the default count is at least 30 s of it;
   // - every chunk slowed by 0.4 of the count, so the batch lasts longer than the count while chunks keep completing:
   //   the batch completes, bit for bit against the same rows unslowed;
+  // - every row slowed by 0.01 of the count, so one chunk (512 rows) lasts longer than the count while its rows keep
+  //   completing (counted in chunks, the pool would be taken for dead): the batch completes, bit for bit;
   // - the rate of the yields start's own wait counts, and its default at least 30 s of them.
   const rows = Array.from({ length: 32768 }, (_, k) => ({ epochWhole: 2461328.5, epochFrac: 0, meanMotion: 15.2, ecc: 0.001, inc: 51.6,
     raan: (7.3 * k) % 360, argp: 0, ma: (11.9 * k) % 360, bstar: 1e-4, norad: k + 1, theory: THEORY.SGP4 }));
@@ -294,12 +299,17 @@ for (const [name, o] of Object.entries(ORBITS)) {
   const slowedDiffer = slowed.planes.filter((v, k) => !Object.is(v, plain.planes[k])).length;
   check(slowed.rc === 0 && slowedDiffer === 0, `the timer: a batch slowed on purpose returned ${slowed.rc} (0 expected), ${slowedDiffer} values differ from the same unslowed`);
   check(slowed.seconds > DEAD_TEST / rate, `the timer: the slowed batch lasted ${slowed.seconds.toFixed(2)} s, not longer than the count (${(DEAD_TEST / rate).toFixed(2)} s at this rate), so it shows nothing`);
+  const rowSlowed = await fly((x) => x.sdnap_test_pool(3, DEAD_TEST, 0, 0.01 * DEAD_TEST));
+  const rowSlowedDiffer = rowSlowed.planes.filter((v, k) => !Object.is(v, plain.planes[k])).length;
+  const chunkSeconds = (rowSlowed.seconds * 5) / 64;  // 64 chunks on 5 threads (4 pool threads and the calling thread)
+  check(rowSlowed.rc === 0 && rowSlowedDiffer === 0, `the timer: a batch whose rows were slowed on purpose returned ${rowSlowed.rc} (0 expected), ${rowSlowedDiffer} values differ from the same unslowed`);
+  check(chunkSeconds > DEAD_TEST / rate, `the timer: with its rows slowed a chunk lasted about ${chunkSeconds.toFixed(2)} s, not longer than the count (${(DEAD_TEST / rate).toFixed(2)} s at this rate), so it shows nothing`);
   const YIELDS = 2e6, ty = performance.now();
   plain.m.x.sdnap_test_yields(YIELDS);
   const yieldRate = YIELDS / ((performance.now() - ty) / 1000);
   const DEAD_YIELDS_DEFAULT = plain.m.x.sdnap_test_dead_yields();
   check(DEAD_YIELDS_DEFAULT / yieldRate >= 30, `the timer: start's default, ${DEAD_YIELDS_DEFAULT.toExponential(2)} yields, is ${(DEAD_YIELDS_DEFAULT / yieldRate).toFixed(1)} s at this machine's ${yieldRate.toExponential(2)} yields/s (at least 30 s expected)`);
-  console.log(`the timer: ${rate.toExponential(2)} polls/s here, the default ${defaultPolls.toExponential(2)} polls = ${(defaultPolls / rate).toFixed(0)} s; a batch slowed past the count (${slowed.seconds.toFixed(2)} s against ${(DEAD_TEST / rate).toFixed(2)} s) completed bit for bit; ${yieldRate.toExponential(2)} yields/s, start's default ${(DEAD_YIELDS_DEFAULT / yieldRate).toFixed(0)} s`);
+  console.log(`the timer: ${rate.toExponential(2)} polls/s here, the default ${defaultPolls.toExponential(2)} polls = ${(defaultPolls / rate).toFixed(0)} s; a batch slowed past the count (${slowed.seconds.toFixed(2)} s against ${(DEAD_TEST / rate).toFixed(2)} s) completed bit for bit; a batch whose chunks each outlasted the count while their rows kept completing (about ${chunkSeconds.toFixed(2)} s a chunk) completed bit for bit; ${yieldRate.toExponential(2)} yields/s, start's default ${(DEAD_YIELDS_DEFAULT / yieldRate).toFixed(0)} s`);
 }
 {
   // the radiation term Y0 (SPEC 16.13) is part of a set's identity, as BTERM and AGOM are: two records of one
