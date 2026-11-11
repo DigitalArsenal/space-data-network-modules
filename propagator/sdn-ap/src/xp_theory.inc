@@ -4939,7 +4939,9 @@ inline void b1_output_direct(const RateContext& ctx, double t, const double* ym,
 /// is the three-point rule itself), so a state evaluates no rate. A table is a pure function of its key (b1_output):
 /// the mean orbit rounded (kB1RoundE, kB1RoundI, kB1RoundN) and the 6 h block whose center's Sun it takes, with the
 /// set's epoch and terms.
-constexpr double kB1RoundE = 1e-6, kB1RoundI = 1e-5, kB1RoundN = 1e-10;  ///< k and h; chi and psi; n (rad/min)
+/// k and h; chi and psi; n (rad/min): a key changes a few times a day at most (the mean motion's own libration, a few
+/// 1e-10 rad/min, stays inside a step of n), and the rounding moves the part by about a millimeter
+constexpr double kB1RoundE = 2e-5, kB1RoundI = 1e-4, kB1RoundN = 1e-8;
 struct B1Key {
   double d50_epoch, block, k, h, chi, psi, n, b1c, b1s;
   bool operator==(const B1Key& o) const {
