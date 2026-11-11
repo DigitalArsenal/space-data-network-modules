@@ -48,8 +48,11 @@ const FIXTURES = {
 // they were 0.4.15's own (the check that the drag change left the drag-off path alone), identical on every build to 0.6.2:
 // Molniya seed off 14196.61 / 9792.92, GTO 15774.66 / 10594.85, GTO-500 13519.51 / 8820.09, the Molniya drag-off fit
 // 44.91 / 34.51. 0.6.3 (7154b48d: the grid in E above e 0.3 and the half-day tail counted once, SPEC 16.11) moved them to
-// 1214.34 / 844.43, 8950.00 / 6033.98, 8687.67 / 5684.50 and 53.76 / 27.18; 0.6.5 by at most 0.04 m.
-const DRAG_OFF = {'Molniya seed off': [1214.38, 844.45], 'GTO seed off': [8949.97, 6033.96], 'GTO-500 seed off': [8687.66, 5684.49], 'Molniya drag off': [53.73, 27.15]};
+// 1214.34 / 844.43, 8950.00 / 6033.98, 8687.67 / 5684.50 and 53.76 / 27.18; 0.6.5 by at most 0.04 m. The E-grid read C1
+// (stack #420) moved the three seeded flights, which nothing fits: Molniya 1214.38 / 844.45 to 1215.83 / 845.44, GTO
+// 8949.97 / 6033.96 to 8944.13 / 6030.04, GTO-500 8687.66 / 5684.49 to 8685.26 / 5682.93 (0.03 to 0.12 % of errors of
+// 1.2 to 8.9 km from an osculating seed); the drag-off fit 53.73 / 27.15 to 53.74 / 27.15.
+const DRAG_OFF = {'Molniya seed off': [1215.83, 845.44], 'GTO seed off': [8944.13, 6030.04], 'GTO-500 seed off': [8685.26, 5682.93], 'Molniya drag off': [53.74, 27.15]};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');
   if (log) return {sigmaLog: Number(log[1]), median: Number(log[2])};
