@@ -60,9 +60,8 @@ inline int32_t write_state(uint32_t i, double jd_whole, double jd_frac, OrbProSt
 }
 
 namespace pool {
-void run_chunk(const Job& j, int32_t chunk) {
-  const uint32_t begin = static_cast<uint32_t>(chunk) * kChunk;
-  const uint32_t end = begin + kChunk < j.count ? begin + kChunk : j.count;
+/// One object of the batch: its state and status into the output planes.
+inline void run_row(const Job& j, uint32_t i) {
   const uint32_t n = j.count;
   double* x = j.out;
   double* y = x + n;
@@ -70,26 +69,58 @@ void run_chunk(const Job& j, int32_t chunk) {
   double* vx = z + n;
   double* vy = vx + n;
   double* vz = vy + n;
-  const double theta = j.theta;
   const xpt::Bodies* shared = j.kind == kJobJd ? &j.bodies : nullptr;
-  for (uint32_t i = begin; i < end; ++i) {
-    const uint32_t row = j.first + i;
-    const double t = j.kind == kJobMinutes ? j.minutes[i] : minutes_since_epoch(row, j.jd_whole, j.jd_frac);
-    double r[3] = {0, 0, 0}, v[3] = {0, 0, 0};
-    const int32_t e = row_propagate(row, t, r, v, shared);
-    if (j.status != nullptr) j.status[i] = e;
-    if (e == kPropOk && j.kind == kJobJd && j.frame == ORBPRO_FRAME_ECEF) {
-      double ro[3], vo[3];
-      teme_to_ecef_m(theta, r, v, ro, vo);
-      x[i] = ro[0]; y[i] = ro[1]; z[i] = ro[2];
-      vx[i] = vo[0]; vy[i] = vo[1]; vz[i] = vo[2];
-    } else {
-      x[i] = r[0]; y[i] = r[1]; z[i] = r[2];
-      vx[i] = v[0]; vy[i] = v[1]; vz[i] = v[2];
-    }
+  const uint32_t row = j.first + i;
+  const double t = j.kind == kJobMinutes ? j.minutes[i] : minutes_since_epoch(row, j.jd_whole, j.jd_frac);
+  double r[3] = {0, 0, 0}, v[3] = {0, 0, 0};
+  const int32_t e = row_propagate(row, t, r, v, shared);
+  if (j.status != nullptr) j.status[i] = e;
+  if (e == kPropOk && j.kind == kJobJd && j.frame == ORBPRO_FRAME_ECEF) {
+    double ro[3], vo[3];
+    teme_to_ecef_m(j.theta, r, v, ro, vo);
+    x[i] = ro[0]; y[i] = ro[1]; z[i] = ro[2];
+    vx[i] = vo[0]; vy[i] = vo[1]; vz[i] = vo[2];
+  } else {
+    x[i] = r[0]; y[i] = r[1]; z[i] = r[2];
+    vx[i] = v[0]; vy[i] = v[1]; vz[i] = v[2];
   }
 }
+
+void run_chunk(const Job& j, int32_t chunk) {
+  const uint32_t begin = static_cast<uint32_t>(chunk) * kChunk;
+  const uint32_t end = begin + kChunk < j.count ? begin + kChunk : j.count;
+  for (uint32_t i = begin; i < end; ++i) {
+    xpt::g_alloc_refused = 0;
+    run_row(j, i);
+    // a row during which the memory's growth was refused may have been stopped short of a block it needed: the calling
+    // thread computes it again after the batch (the same state: a function of the set and the time alone, SPEC 9)
+    if (xpt::g_alloc_refused != 0 && j.deferred != nullptr) {
+      const int32_t k = __atomic_fetch_add(&job().deferred_n, 1, __ATOMIC_SEQ_CST);
+      j.deferred[k] = i;
+    }
+  }
+  xpt::g_alloc_refused = 0;
+}
 }  // namespace pool
+
+/// The bytes a threaded batch of rows [first, first + count) makes free before it starts (stack #487): for each AP row
+/// whose set holds no caches yet, 128 KiB, its first flight's largest take (its SetCaches, 11.2 KB; its tesseral copy,
+/// 61 KB at 500 km with degree 31; its first node runs, 2.5 KB a direction; measured with sdnap_debug_pool on the
+/// 500 km set, the largest of the catalog mix's low orbits), at most what the pool may still take (its admission caps
+/// every set's caches at the budget), plus 8 MiB for the rest.
+inline size_t batch_reserve(uint32_t first, uint32_t count) {
+  const Store& st = store();
+  size_t cold = 0;
+  for (uint32_t i = first; i < first + count; ++i) {
+    if (st.kind[i] != 1) continue;
+    const xpt::XpSat& s = st.xps[st.slot[i]];
+    if (s.pooled && s.caches == nullptr && s.init_error == 0) ++cold;
+  }
+  const uint64_t room = xpt::pool_room(cold);
+  if (pool::g_reserve_off) return 0;
+  const uint64_t sets = static_cast<uint64_t>(cold) * (128u << 10);
+  return static_cast<size_t>(std::min<uint64_t>(sets, room + (1u << 20)) + (8u << 20));
+}
 
 inline int32_t batch(int32_t kind, double jd_whole, double jd_frac, const double* minutes, uint32_t first,
                      uint32_t count, uint32_t frame, double* out, int32_t* status) {
@@ -114,7 +145,28 @@ inline int32_t batch(int32_t kind, double jd_whole, double jd_frac, const double
     j.bodies = xpt::bodies_at((jd_whole - kJd1950) + jd_frac);
     j.theta = frame == ORBPRO_FRAME_ECEF ? gmst(jd_whole, jd_frac) : 0.0;
   }
-  pool::run(count);
+  // a threaded batch (stack #487): room made before it on this thread, for its sets' caches and for the rows deferred
+  const bool threaded = j.threads > 0 && count > pool::kChunk && pool::load(&j.dead) == 0;
+  static std::vector<uint32_t> deferred;
+  size_t reserve = 0;
+  if (threaded) {
+    if (deferred.size() < count) deferred.resize(count);
+    reserve = batch_reserve(first, count);
+  }
+  j.deferred = threaded ? deferred.data() : nullptr;
+  const int32_t rc = pool::run(count, reserve);
+  if (rc != 0) {
+    if (status != nullptr)
+      for (uint32_t i = 0; i < count; ++i) status[i] = pool::kRowPoolDead;
+    return rc;
+  }
+  // the rows a refused growth stopped, on this thread, the memory free to grow again: in row order, the same states
+  const int32_t n_deferred = pool::load(&j.deferred_n);
+  if (n_deferred > 0) {
+    std::sort(deferred.begin(), deferred.begin() + n_deferred);
+    for (int32_t k = 0; k < n_deferred; ++k) pool::run_row(j, deferred[static_cast<size_t>(k)]);
+    xpt::batch_stats().deferred += static_cast<uint64_t>(n_deferred);
+  }
   return ORBPRO_PROP_OK;
 }
 
@@ -229,6 +281,23 @@ int32_t sdnap_propagate_minutes_soa(const double* minutes, uint32_t first, uint3
 /// limit). Returns the number running.
 SDNAP_EXPORT("sdnap_threads")
 int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
+
+/// The pool, read only (stack #487, SPEC 9), 11 doubles: the threads running; the threaded batches run; the growths of
+/// the memory refused inside them (every thread); the rows deferred to the calling thread after them; the batches
+/// after which the calling thread saw a larger memory (the invariant: 0); whether the pool was taken for dead (1; its
+/// later batches run on the calling thread); the wall time a waiting caller allows a batch to complete no chunk
+/// (seconds); the last batch's reserve (bytes); the waits for a thread's view of the memory that had to yield, the most
+/// yields one took, and the longest (seconds).
+SDNAP_EXPORT("sdnap_pool_stats")
+void sdnap_pool_stats(double* out) {
+  if (out == nullptr) return;
+  const sdnap::xpt::BatchStats& s = sdnap::xpt::batch_stats();
+  const double v[11] = {static_cast<double>(sdnap::pool::job().threads), static_cast<double>(s.batches), static_cast<double>(s.refused),
+                        static_cast<double>(s.deferred), static_cast<double>(s.grew), static_cast<double>(s.dead),
+                        sdnap::pool::dead_seconds(), static_cast<double>(s.reserve), static_cast<double>(s.views),
+                        static_cast<double>(s.view_yields_max), 1e-9 * static_cast<double>(s.view_ns_max)};
+  for (int k = 0; k < 11; ++k) out[k] = v[k];
+}
 
 /// The sets' caches (SPEC 9), read only (the budget is the module's default, 256 MB; xpt::cache_budget_mb sets it in
 /// test builds, no typed configuration carries it yet), 8 doubles: the budget and the bytes held, the sets holding caches and of them those

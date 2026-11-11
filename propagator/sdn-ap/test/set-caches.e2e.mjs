@@ -92,7 +92,12 @@ const testBuild = buildDiagnostic("set-caches-budget",
   'SDNAP_EXPORT("sdnap_test_select_ap") void sdnap_test_select_ap(int32_t t, int32_t z) { sdnap::xpt::tess::active() = sdnap::xpt::tess::Terms{t, z}; }\n' +
   // rows carrying a radiation term Y0 (SPEC 16.13: in the row's mean_motion_dot slot), which sdnap_init_elements holds
   // refused from outside the module
-  'SDNAP_EXPORT("sdnap_test_init_rows") int32_t sdnap_test_init_rows(const sdnap::ElementRow* rows, uint32_t count) { return sdnap::store_init(rows, count); }');
+  'SDNAP_EXPORT("sdnap_test_init_rows") int32_t sdnap_test_init_rows(const sdnap::ElementRow* rows, uint32_t count) { return sdnap::store_init(rows, count); }\n' +
+  // the pool (stack #487): a pool thread that traps on its first chunk, the wall time a batch may complete no chunk, and
+  // no reserve before a threaded batch (every growth inside it refused)
+  'static void sdnap_test_trap(int32_t, bool pool_thread) { if (pool_thread) __builtin_trap(); }\n' +
+  'SDNAP_EXPORT("sdnap_test_pool") void sdnap_test_pool(int32_t trap, double dead_seconds, int32_t reserve_off) {\n' +
+  '  sdnap::pool::g_chunk_hook = trap ? sdnap_test_trap : nullptr; sdnap::pool::dead_seconds() = dead_seconds; sdnap::pool::g_reserve_off = reserve_off != 0; }');
 const tiny = await open(testBuild);
 tiny.x.sdnap_test_cache_budget(1);
 check(tiny.stats()[0] === 2 ** 20 && shipped.stats()[0] === 256 * 2 ** 20, `budgets: the test build ${tiny.stats()[0]}, the shipped default ${shipped.stats()[0]}`);
@@ -174,24 +179,48 @@ for (const [name, o] of Object.entries(ORBITS)) {
       bterm: a < RE + 2000 ? 0.005 + 0.05 * rnd() : 0.01, agom: 0.01, norad: 100000 + k, theory: THEORY.SGP4XP };
     if (e < 0.3) rows.push(row);
   }
-  const fly = async (threads) => {
+  // each instant's planes and statuses, the calls' returns, sdnap_pool_stats after the last
+  const fly = async (threads, setup = () => {}) => {
     const m = await open(testBuild, threads);
     m.x.sdnap_test_select_ap(31, 20);
+    setup(m.x);
     const bytes = elementRows(rows), n = rows.length;
     const p = m.x.sdnap_alloc(bytes.length);
     new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
     check(m.x.sdnap_init_elements(p, n) === n, `${threads} threads: the row store took ${n} rows`);
-    const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), all = [];
+    const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), ps = m.x.sdnap_alloc(88), all = [], rcs = [];
     for (let k = 0; k < 20; ++k) {
-      check(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status) === 0, `${threads} threads: sdnap_propagate_soa`);
-      all.push(...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n));
+      rcs.push(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status));
+      all.push([...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n)]);
     }
-    return all;
+    m.x.sdnap_pool_stats(ps);
+    return { all, rcs, pool: Array.from(new Float64Array(m.h.memory.buffer, ps, 11)) };
   };
+  const differing = (a, b, from = 0) => a.all.slice(from).reduce((d, v, k) => d + v.filter((w, q) => !Object.is(w, b.all[from + k][q])).length, 0);
   const zero = await fly(0), four = await fly(4);
-  const differ = zero.filter((v, k) => !Object.is(v, four[k])).length;
-  check(zero.length === four.length && differ === 0, `the pool's threads: ${differ} of ${zero.length} values differ between 0 and 4 threads`);
-  console.log(`1,000 AP rows of the catalog mix through sdnap_propagate_soa: 0 and 4 pool threads bit for bit (${zero.length} values)`);
+  check(zero.rcs.every((r) => r === 0) && four.rcs.every((r) => r === 0), `sdnap_propagate_soa returned ${zero.rcs} on 0 threads, ${four.rcs} on 4`);
+  const differ = differing(four, zero), values = zero.all.length * zero.all[0].length;
+  check(differ === 0, `the pool's threads: ${differ} of ${values} values differ between 0 and 4 threads`);
+  // stack #487: the memory does not grow inside a threaded batch (its sets' room is made before it; sbrk refuses inside it)
+  const [, batches, refused, deferred, grew, dead] = four.pool;
+  check(zero.pool[1] === 0 && batches === 20 && grew === 0 && dead === 0, `the pool's batches: ${batches} threaded (20 expected), ${grew} with the memory grown inside (none expected), dead ${dead}`);
+  console.log(`1,000 AP rows of the catalog mix through sdnap_propagate_soa: 0 and 4 pool threads bit for bit (${values} values); 20 threaded batches, the memory grown inside none, ${refused} growths refused, ${deferred} rows deferred`);
+  // no reserve: every growth a batch would make is refused, its sets fly on the threads' caches and the rows stopped
+  // short are computed again on the calling thread after it; the same bits
+  const off = await fly(4, (x) => x.sdnap_test_pool(0, 30, 1));
+  const offDiffer = differing(off, zero);
+  check(off.rcs.every((r) => r === 0) && offDiffer === 0, `no reserve: ${offDiffer} of ${values} values differ from 0 threads (returns ${off.rcs})`);
+  check(off.pool[2] > 0 && off.pool[3] > 0 && off.pool[4] === 0, `no reserve: ${off.pool[2]} growths refused, ${off.pool[3]} rows deferred (some of each expected), ${off.pool[4]} batches grew the memory`);
+  console.log(`no reserve: bit for bit; ${off.pool[2]} growths refused, ${off.pool[3]} rows deferred, the memory grown inside no batch`);
+  // a pool thread that traps on its first chunk: the batch returns -20 (every status 9) when no chunk has completed for
+  // the wall time set (2 s), the pool is not used again, and the later batches on the calling thread give the same bits
+  const t0 = Date.now();
+  const trap = await fly(4, (x) => x.sdnap_test_pool(1, 2, 0));
+  const n = rows.length, first = trap.all[0].slice(6 * n);
+  check(trap.rcs[0] === -20 && first.every((s) => s === 9), `a trapped pool thread: the batch returned ${trap.rcs[0]} (-20 expected), ${first.filter((s) => s !== 9).length} statuses not 9`);
+  const trapDiffer = differing(trap, zero, 1);
+  check(trap.rcs.slice(1).every((r) => r === 0) && trapDiffer === 0 && trap.pool[5] === 1, `after a trapped pool thread: returns ${trap.rcs.slice(1)}, ${trapDiffer} values differ from 0 threads, dead ${trap.pool[5]}`);
+  console.log(`a trapped pool thread: the batch returned -20 after the 2 s wait, the pool taken for dead, the next 19 batches bit for bit on the calling thread (${((Date.now() - t0) / 1000).toFixed(1)} s)`);
 }
 {
   // the radiation term Y0 (SPEC 16.13) is part of a set's identity, as BTERM and AGOM are: two records of one

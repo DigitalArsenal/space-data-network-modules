@@ -59,6 +59,10 @@ struct GcrfNodeSlot {
   double m[3][3];
 };
 inline thread_local GcrfNodeSlot* g_gcrf_node_cache_ptr = nullptr;
+/// The thread's node slots made ahead (pool::warm_thread: a pool thread makes its caches before any batch, stack #487).
+inline void gcrf_node_cache_make() {
+  if (g_gcrf_node_cache_ptr == nullptr) g_gcrf_node_cache_ptr = new GcrfNodeSlot[64]{};
+}
 inline const GcrfNodeSlot& gcrf_node(int64_t k) {
   if (__builtin_expect(!g_gcrf_node_cache_ptr, 0)) g_gcrf_node_cache_ptr = new GcrfNodeSlot[64]{};
   GcrfNodeSlot& s = g_gcrf_node_cache_ptr[static_cast<uint64_t>(k) & 63u];
