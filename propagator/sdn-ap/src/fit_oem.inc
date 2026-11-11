@@ -320,12 +320,15 @@ constexpr double kBandMedianBterm = 0.0005;
 constexpr double kY0MinimumArcHours = 72.0;
 constexpr double kY0PriorSigma = 1e-9;
 /// SPEC 16.B1: B1 cos and B1 sin, each with a Gaussian prior about the stated B1_COS_M_S2 and B1_SIN_M_S2 of sigma
-/// kB1PriorSigma (m/s^2), are solved on Y0's arcs where the arc carries them: the fit with them is kept where its RMS is
-/// at most kB1RmsRatio of the fit with Y0 alone (on model truth 0.10 to 0.39 where the truth holds B1, 0.93 to 1.00 on
-/// inclined geosynchronous and Galileo-like truths without it, 0.43 to 0.99 on geostationary ones out of eclipse season).
-/// The price: one more whole-arc fit on every window that solves Y0.
+/// kB1PriorSigma (m/s^2), are solved on Y0's arcs where the arc carries them: the fit with them (at the data's sigma,
+/// as the Y0-only fit) is kept where the Y0-only fit's RMS is at most kB1MaxRmsKm and its own at most kB1RmsRatio of it.
+/// On model truth the ratio is 0.10 to 0.39 where the truth holds B1, 0.93 to 1.00 on inclined geosynchronous and
+/// Galileo-like truths without it, 0.43 to 0.99 on geostationary ones out of eclipse season; on the real rows 0.32 to
+/// 0.90 on the BeiDou geostationary and inclined windows where B1 lowers the day-5 error, 0.95 and above on Galileo's.
+/// The price: one more fit at the data's sigma on every window that solves Y0.
 constexpr double kB1PriorSigma = 1e-8;
-constexpr double kB1RmsRatio = 0.5;
+constexpr double kB1RmsRatio = 0.9;
+constexpr double kB1MaxRmsKm = 0.025;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
 // SPEC 16.13: through 0.6.18 the one-day resonance class held Y0 whatever the arc, while that class lacked its resonant
 // gravity above degree 4 (stack #434). With the class's resonant tail Y0 is solved there as elsewhere; the Moon's position
@@ -753,21 +756,6 @@ static int fit_blocks() {
         iterations += res.iterations;
         if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
         if (res.status < 0) return 2;
-        // SPEC 16.B1: B1 cos and B1 sin are solved where the arc carries them: the whole-arc fit with Y0 and B1, from the
-        // Y0-only solution, is kept where its RMS is at most kB1RmsRatio of the Y0-only fit's; elsewhere the Y0-only fit
-        // stands, B1 held at its stated value, byte for byte as without the term (the trial's iterations not counted)
-        if (ecom2_solved) {
-          fit::Options with_b1 = opt;
-          with_b1.fit_y0 = fit::kFitY0 | fit::kFitB1;
-          ElementRow trial = row;
-          const fit::Result res_b1 = fit::run(trial, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), with_b1);
-          if (res_b1.status >= 0 && res_b1.rms_km <= fitoem::kB1RmsRatio * res.rms_km) {
-            row = trial;
-            res = res_b1;
-            opt = with_b1;
-            iterations += res_b1.iterations;
-          }
-        }
         // SPEC 12.1: above the drag (cov::regime_of: the perigee at or above 2,500 km, where the theory's density is
         // 1e-20 at every point of the orbit) the whole-arc fit is redone at the data's own sigma, so the priors stop
         // pulling against data far more precise than the 1 km the stages weigh at. Under drag the 1 km stands: the
@@ -778,6 +766,35 @@ static int fit_blocks() {
           double weighted = fit::kUnitSigmaKm;
           fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, weighted, iterations);
           if (weighted != fit::kUnitSigmaKm) sigma_km = weighted;
+        }
+        // SPEC 16.B1: B1 cos and B1 sin are solved where the arc carries them. From the Y0-only fit (at the data's sigma),
+        // the fit with Y0 and B1 is made the same way and kept where the Y0-only fit's RMS is at most kB1MaxRmsKm (an arc
+        // without unmodeled thrust) and its own is at most kB1RmsRatio of it; elsewhere the Y0-only fit stands, B1 held at
+        // its stated value, byte for byte as without the term (the trial's iterations not counted)
+        if (ecom2_solved && res.rms_km <= fitoem::kB1MaxRmsKm) {
+          fit::Options with_b1 = opt;
+          with_b1.fit_y0 = fit::kFitY0 | fit::kFitB1;
+          ElementRow trial = row;
+          int trial_iterations = 0;
+          double trial_sigma = sigma_km > 0.0 ? sigma_km : fit::kUnitSigmaKm;
+          fit::Result res_b1;
+          {
+            const bool prev = fit::jacobian_fallback();
+            if (sigma_km > 0.0) fit::jacobian_fallback() = true;  // at the data's sigma, as fit::reweight's passes
+            res_b1 = sigma_km > 0.0 ? fit::run(trial, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), with_b1, sigma_km, true)
+                                    : fit::run(trial, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), with_b1);
+            fit::jacobian_fallback() = prev;
+          }
+          trial_iterations += res_b1.iterations;
+          if (res_b1.status >= 0 && sigma_km > 0.0)
+            fit::reweight(trial, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), with_b1, stated_km, res_b1, trial_sigma, trial_iterations);
+          if (res_b1.status >= 0 && res_b1.rms_km <= fitoem::kB1RmsRatio * res.rms_km) {
+            row = trial;
+            res = res_b1;
+            opt = with_b1;
+            if (sigma_km > 0.0) sigma_km = trial_sigma;
+            iterations += trial_iterations;
+          }
         }
         P.sigma_km = sigma_km;
         P.t_fit = std::move(t_fit);
