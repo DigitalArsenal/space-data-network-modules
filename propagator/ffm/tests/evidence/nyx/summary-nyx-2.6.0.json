@@ -47,7 +47,7 @@
    "EGM2008-36x24t24.cof": "37f22b0bb9fff4184eeb9423b3f4d365c407954377f32aacdc07738fa8dbf060",
    "EGM96-70x70.cof": "36188c633e344903886a845d85b1e74d29bf6740b4adbf87a222e5492c91e5f9"
   },
-  "stmFile": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-stm.json",
+  "stmFile": "<nyx out>/nyx-2.6.0-stm.json",
   "stmSha256": "44e1f9f557f8cf528c00646a711cca8148c9b1dc605c073413ec71ea869036a9"
  },
  "node": "v25.4.0",
@@ -2937,7 +2937,7 @@
  ],
  "diagnostics": {
   "msis-published": {
-   "file": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-msis-published.json",
+   "file": "<nyx out>/nyx-2.6.0-msis-published.json",
    "sha256": "adcee718317cdbdc4b88155077402092a9ea602d286f31d247ff17c8d5adc577",
    "tool": {
     "name": "Nyx Space (nyx-space, MPL-2.0) with ANISE and hifitime",
@@ -3355,7 +3355,7 @@
    }
   },
   "fine": {
-   "file": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-fine.json",
+   "file": "<nyx out>/nyx-2.6.0-fine.json",
    "sha256": "da26dd410bb4e490fc087b63a8fe88f7f39bd9440daa7cf20ad59e7225813a8a",
    "tool": {
     "name": "Nyx Space (nyx-space, MPL-2.0) with ANISE and hifitime",
@@ -5554,7 +5554,7 @@
    ]
   },
   "naif-bpc": {
-   "file": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-naif-bpc.json",
+   "file": "<nyx out>/nyx-2.6.0-naif-bpc.json",
    "sha256": "ea853355dd5169cf49bf5e06e7295de19408e5dd40f0abca630bfd84ff32a28d",
    "tool": {
     "name": "Nyx Space (nyx-space, MPL-2.0) with ANISE and hifitime",
@@ -7782,7 +7782,7 @@
   },
   "dragSettings": {
    "file": "drag-settings-diagnostic.json",
-   "sha256": "99495b55e4c4c352008a70dbba9a1b9fee53caab19b5b0af98bf8b4a16c65f45",
+   "sha256": "73de9f356448982d1091b2e4a35197f87df3be57d8651975370a26d8cd9c3ecf",
    "classification": "model-setting-mismatch",
    "statement": "The cached runs predate the runner fix that writes WGS84 into ANISE planetary data. ANISE transform_to replaces supplied frame shape from that data; the old path uses pck08 Earth radii. The current prebuilt published-MSIS runner plus WGS84 brings every supported drag case below 0.1 m. Historical binaries are unavailable, so assignment of the cached residual to that old path is an inference from the documented source fix, file chronology, measured shape difference and corrected-run convergence.",
    "geodetic": {
@@ -8074,7 +8074,7 @@
      "sha256": "47d0d9bb89893f354b4cd718ca3cad39f49f1cdf1a5793d57f3734e3b78f21ea"
     },
     "nyxCrate": {
-     "file": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/cache/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0.crate",
+     "file": "<xval>/nyx/cargo-home/registry/cache/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0.crate",
      "sha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
     },
     "runnerSource": {
@@ -8098,11 +8098,11 @@
    },
    "msisPublished": {
     "cargoLock": {
-     "file": "/Users/tj/software/tools/xval/nyx/msis-variant/runner/Cargo.lock",
+     "file": "<xval>/nyx/msis-variant/runner/Cargo.lock",
      "sha256": "e7dd31188bce2d7685bdcb43ee6da4bbb8f5de46642a3e4b0da30dd96509ee8d"
     },
     "nyxCrate": {
-     "file": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/cache/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0.crate",
+     "file": "<xval>/nyx/cargo-home/registry/cache/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0.crate",
      "sha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
     },
     "runnerSource": {
@@ -8134,7 +8134,7 @@
     "label": "stock Nyx runner",
     "role": "informational",
     "sha256": "689b59fa8a3919ce4411e3478c458b8a9d0b07b7bfe02c60d282234b20e2db8f",
-    "currentFile": "/Users/tj/software/tools/xval/nyx/target/release/ffm-xval-nyx",
+    "currentFile": "<xval>/nyx/target/release/ffm-xval-nyx",
     "currentSha256": null,
     "note": "Historical and current Cargo executable hashes are informational build-output observations, not reproducible identity requirements."
    },
@@ -8142,14 +8142,14 @@
     "label": "published-MSIS diagnostic runner",
     "role": "informational",
     "sha256": "f9bc1f2ccbed9257b2575ebf6c3202abaa9b338a1242d3eaa0fd6d80fa5582a6",
-    "currentFile": "/Users/tj/software/tools/xval/nyx/target/release/ffm-xval-nyx-msis",
+    "currentFile": "<xval>/nyx/target/release/ffm-xval-nyx-msis",
     "currentSha256": "4c1dacb9631fcdc48d2fd12cfd82986dd35623f9cd0080384c5e76fad6cb87d5",
     "note": "Historical and current Cargo executable hashes are informational build-output observations, not reproducible identity requirements."
    }
   ],
   "sourceScope": "The pinned runner source is the current documented reproduction recipe, including the WGS84 planetary-data correction used by drag-settings-diagnostic.json. It is not a claim that the unavailable historical executable was built from byte-identical runner source.",
   "diagnosticLock": {
-   "file": "/Users/tj/software/tools/xval/nyx/msis-variant/runner/Cargo.lock",
+   "file": "<xval>/nyx/msis-variant/runner/Cargo.lock",
    "sha256": "e7dd31188bce2d7685bdcb43ee6da4bbb8f5de46642a3e4b0da30dd96509ee8d",
    "note": "run-nyx.mjs --bin recorded the stock runner Cargo.lock, not the patched runner lock. This is the actual local patched-runner lock. The Nyx crate checksum identifies the unmodified registry crate; the separate patch identifies the two changed formulas."
   }
@@ -8222,7 +8222,7 @@
  "fileHashes": [
   {
    "path": "score-nyx.mjs",
-   "sha256": "755b856bac925724e135c55353c5515f6e934a035cc7fe338aba680f8836766c"
+   "sha256": "d6efbb5f2ca40655650473ffaefa8388fe99e75ac192d5f1f0c5e0b1267dd6f2"
   },
   {
    "path": "measure-drag-settings.mjs",
@@ -8242,7 +8242,7 @@
   },
   {
    "path": "check-nyx.mjs",
-   "sha256": "f2881588af1b4c8403e747d26ed07feabfa92d5b4b3d970a528c8feceb9f47fb"
+   "sha256": "27c639b7c8e6621fa8c9eb7e1c7f0aeaa5e46d28c237d78bec0157b84d539529"
   },
   {
    "path": "Cargo.lock",
@@ -8318,7 +8318,7 @@
   },
   {
    "path": "../erfa-spice/summary-erfa-spice.json",
-   "sha256": "329ca987130dd91395c80a578567e386015140d6a67de6db6caae339f66642c0"
+   "sha256": "d0093a149c98f5236633073565e82b6114f81541e2b3ddd040c17d2dd79240a0"
   },
   {
    "path": "../../../dist/isomorphic/module.wasm",
@@ -8334,7 +8334,7 @@
   },
   {
    "path": "../tudat/scoring.mjs",
-   "sha256": "bd500d42450b571dab0d8c2c30facfdc9cf8e047ef1311c1dc593cc145e5b477"
+   "sha256": "c426160e5e22ef741dd050a00a4c2646b47e47700dd655bd6d34fcd1bcfc1bf2"
   },
   {
    "path": "../recorded-numbers.mjs",
@@ -8349,103 +8349,103 @@
    "sha256": "cebf372006ad44f4579a1b2e11b904e302dfdbc5a3940c854ca2fb223ba6de9a"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-stm.json",
+   "path": "<nyx out>/nyx-2.6.0-stm.json",
    "sha256": "44e1f9f557f8cf528c00646a711cca8148c9b1dc605c073413ec71ea869036a9"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/cache/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0.crate",
+   "path": "<xval>/nyx/cargo-home/registry/cache/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0.crate",
    "sha256": "9e84a00fd0df9ef631f2272f52b59caa0915e77851bcf366749d8cb0594ec86f"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/data/pck08.pca",
+   "path": "<xval>/nyx/data/pck08.pca",
    "sha256": "6ddc44fb8695224e9e234427194ee4a9a40ba8ccdfb5075c984e0588cd689557"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/data/ffm-itrf-2026-08.bpc",
+   "path": "<xval>/nyx/data/ffm-itrf-2026-08.bpc",
    "sha256": "9fd90010385711b8f49f64ddce61fa4b7514e8b05ae596304d8aa992e1f6d752"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/EGM2008-2x0.cof",
+   "path": "<xval>/nyx/work/EGM2008-2x0.cof",
    "sha256": "df8ca6a02ae323b1b4691d935eafc46d9c7b0f6a0bc6ced4897a16b035f2c2ea"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x0.cof",
+   "path": "<xval>/nyx/work/EGM2008-20x0.cof",
    "sha256": "aedf824d8dec7cf3cb76d03e08e0101575abebf4455e32d32123e794b9b86f9a"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/EGM2008-20x20.cof",
+   "path": "<xval>/nyx/work/EGM2008-20x20.cof",
    "sha256": "eabb951a121ffa78ab07f13b909771aa99fc0341f3dad08fd563132187464b84"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/cssi.csv",
+   "path": "<xval>/nyx/work/cssi.csv",
    "sha256": "9ce42a8c2af22b01aa7694c7e30914b1fbdc8099a8d7b883b009a52f2622ca1a"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/EGM96-36x36.cof",
+   "path": "<xval>/nyx/work/EGM96-36x36.cof",
    "sha256": "641d14f29f34bc694a79c7652d2abf348a4b93f02de672a05699715e893a40cc"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/EGM2008-36x24t24.cof",
+   "path": "<xval>/nyx/work/EGM2008-36x24t24.cof",
    "sha256": "37f22b0bb9fff4184eeb9423b3f4d365c407954377f32aacdc07738fa8dbf060"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/EGM96-70x70.cof",
+   "path": "<xval>/nyx/work/EGM96-70x70.cof",
    "sha256": "36188c633e344903886a845d85b1e74d29bf6740b4adbf87a222e5492c91e5f9"
   },
   {
-   "path": "/Users/tj/software/private/review-20261110/modules-frames/files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
+   "path": "../../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp",
    "sha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-msis-published.json",
+   "path": "<nyx out>/nyx-2.6.0-msis-published.json",
    "sha256": "adcee718317cdbdc4b88155077402092a9ea602d286f31d247ff17c8d5adc577"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-fine.json",
+   "path": "<nyx out>/nyx-2.6.0-fine.json",
    "sha256": "da26dd410bb4e490fc087b63a8fe88f7f39bd9440daa7cf20ad59e7225813a8a"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/out/nyx-2.6.0-naif-bpc.json",
+   "path": "<nyx out>/nyx-2.6.0-naif-bpc.json",
    "sha256": "ea853355dd5169cf49bf5e06e7295de19408e5dd40f0abca630bfd84ff32a28d"
   },
   {
-   "path": "/Users/tj/software/tools/xval/naif-kernels/earth_latest_high_prec.bpc",
+   "path": "<xval>/naif-kernels/earth_latest_high_prec.bpc",
    "sha256": "16b40c07bde82878119e7b542613b4a8f4f18b1a3181fc25027e42c6f77d1528"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/msis-variant/runner/Cargo.lock",
+   "path": "<xval>/nyx/msis-variant/runner/Cargo.lock",
    "sha256": "e7dd31188bce2d7685bdcb43ee6da4bbb8f5de46642a3e4b0da30dd96509ee8d"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/density.json",
+   "path": "<xval>/nyx/work/density.json",
    "sha256": "fad83ffd8debd6806bf207a05d3ed2b08f4d00f97263775301ff53f9c714aef2"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/work/density-patched.json",
+   "path": "<xval>/nyx/work/density-patched.json",
    "sha256": "f252308fc3abd7d319bc967bfab061f449c8a4654c79cf7c762507938459bf99"
   },
   {
-   "path": "/Users/tj/software/private/review-20261110/modules-frames/third_party/nrlmsise00/nrlmsise-00.c",
+   "path": "../../../../../third_party/nrlmsise00/nrlmsise-00.c",
    "sha256": "c25e4a36a6475f0eee6802939d1425384be23d49b0e945a77fc0316bc9f0a699"
   },
   {
-   "path": "/Users/tj/software/private/review-20261110/modules-frames/third_party/nrlmsise00/README.md",
+   "path": "../../../../../third_party/nrlmsise00/README.md",
    "sha256": "7af093b320b6ef9bb4a07204222b9a1cf5369f9c619c701de58a1511175f73aa"
   },
   {
-   "path": "/Users/tj/software/private/review-20261110/modules-frames/propagator/ffm/tests/evidence/nyx/drag-settings-diagnostic.json",
-   "sha256": "99495b55e4c4c352008a70dbba9a1b9fee53caab19b5b0af98bf8b4a16c65f45"
+   "path": "drag-settings-diagnostic.json",
+   "sha256": "73de9f356448982d1091b2e4a35197f87df3be57d8651975370a26d8cd9c3ecf"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/spacecraft.rs",
+   "path": "<xval>/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/spacecraft.rs",
    "sha256": "a1ae17f25d1102ad4c0ce9ab0e367b8f1ad5793ca5e3f8fa6c9f971d010e1a3b"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/propagators/instance.rs",
+   "path": "<xval>/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/propagators/instance.rs",
    "sha256": "abbbfb50214757773d7688c05ff2ad7799a49fc269dc999a8ed4e8a1992fa1dc"
   },
   {
-   "path": "/Users/tj/software/tools/xval/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/orbital.rs",
+   "path": "<xval>/nyx/cargo-home/registry/src/index.crates.io-1949cf8c6b5b557f/nyx-space-2.6.0/src/dynamics/orbital.rs",
    "sha256": "481aa5d9e813aa17e71b2e62e8c4d87b93f0558dd31a20c9ac5d9fd0d4652c1b"
   }
  ]

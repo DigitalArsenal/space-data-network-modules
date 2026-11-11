@@ -2,7 +2,7 @@
 
 Branch: `tmpl/lane08-frames`. Implementation commit: `d8057fc280db01a4e8440d95bbbc1c24658cdf31`.
 The following test/evidence commit is the branch tip (see Git history).
-Private worktree: `/Users/tj/software/worktrees/modules-lane08-frames`.
+Private worktree: `modules-lane08-frames` (since removed).
 Base: `283026f506f0d24e15834a6e438f19f6f984abe1` (origin/main at start).
 No merge to main or stack pin update; coordinator owns landing.
 
@@ -88,12 +88,12 @@ Published sources:
 ## Commands and pass lines
 
 Working directory: `foundation/frames`. Native WasmEdge was added with
-`PATH=/Users/tj/.wasmedge/bin:$PATH`. Nodev25.4.0, SDK0.8.15,
+`PATH=$HOME/.wasmedge/bin:$PATH`. Nodev25.4.0, SDK0.8.15,
 SDK sdn-emception1.0.0, SDS1.202.0. SDK's normal build used its published
 synthetic development-signing fixture; no production signing material.
 
 ```text
-SDM_MODULE_SIGNING_KEYPAIR_PATH=/Users/tj/software/spacedatanetwork-stack/repos/ancillary-packages/space-data-module-sdk/test/support/dev-module-signing-keypair.json node build.mjs
+SDM_MODULE_SIGNING_KEYPAIR_PATH=<space-data-module-sdk checkout>/test/support/dev-module-signing-keypair.json node build.mjs
 Built dist/isomorphic/module.wasm against spacedatastandards.org@1.202.0 with 248 vendored ERFA sources
 exit0
 

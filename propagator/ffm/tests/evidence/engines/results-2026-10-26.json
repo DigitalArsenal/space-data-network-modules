@@ -3166,7 +3166,7 @@
    "copies": 26,
    "logicalCpus": 28,
    "wallS": 5.672295875,
-   "command": "/Users/tj/software/tools/xval/bsk-venv/bin/python -I tests/evidence/engines/run-basilisk.py <scratch>/work --only LEO400 COMMON tol1e-12-max300s --out {out} --scratch {out}.d",
+   "command": "<xval>/bsk-venv/bin/python -I tests/evidence/engines/run-basilisk.py <scratch>/work --only LEO400 COMMON tol1e-12-max300s --out {out} --scratch {out}.d",
    "summary": [
     {
      "id": "LEO400 COMMON tol1e-12-max300s",
@@ -3220,7 +3220,7 @@
    "copies": 26,
    "logicalCpus": 28,
    "wallS": 8.617686665999999,
-   "command": "node tests/evidence/engines/run-gmat.mjs /Users/tj/software/tools/xval/gmat-R2026a/bin/GmatConsole <scratch>/work --only LEO400 COMMON tol1e-12-max300s --out {out} --scratch {out}.d",
+   "command": "node tests/evidence/engines/run-gmat.mjs <xval>/gmat-R2026a/bin/GmatConsole <scratch>/work --only LEO400 COMMON tol1e-12-max300s --out {out} --scratch {out}.d",
    "summary": [
     {
      "id": "LEO400 COMMON tol1e-12-max300s",
@@ -3238,7 +3238,7 @@
    "copies": 26,
    "logicalCpus": 28,
    "wallS": 2.811301,
-   "command": "node tests/evidence/engines/run-nyx.mjs <scratch>/nyx-target/release/ffm-bench-nyx <scratch>/work /Users/tj/software/tools/xval/nyx/data/pck08.pca /Users/tj/software/tools/xval/naif-kernels/earth_latest_high_prec.bpc --only LEO400 COMMON tol1e-12-max300s --out {out}",
+   "command": "node tests/evidence/engines/run-nyx.mjs <scratch>/nyx-target/release/ffm-bench-nyx <scratch>/work <xval>/nyx/data/pck08.pca <xval>/naif-kernels/earth_latest_high_prec.bpc --only LEO400 COMMON tol1e-12-max300s --out {out}",
    "summary": [
     {
      "id": "LEO400 COMMON tol1e-12-max300s",
@@ -3256,7 +3256,7 @@
    "copies": 26,
    "logicalCpus": 28,
    "wallS": 12.868743959,
-   "command": "java -cp /Users/tj/software/gmat09-authority/jars/* tests/evidence/engines/OrekitBench.java /Users/tj/software/gmat09-authority/orekit-data/orekit-data-main <scratch>/work {out} single LEO400 COMMON tol1e-12-max300s 1",
+   "command": "java -cp <orekit authority>/jars/* tests/evidence/engines/OrekitBench.java <orekit authority>/orekit-data/orekit-data-main <scratch>/work {out} single LEO400 COMMON tol1e-12-max300s 1",
    "summary": [
     {
      "id": "LEO400 COMMON tol1e-12-max300s",
@@ -3274,7 +3274,7 @@
    "copies": 26,
    "logicalCpus": 28,
    "wallS": 29.579104334,
-   "command": "java -cp /Users/tj/software/gmat09-authority/jars/* tests/evidence/engines/OrekitBench.java /Users/tj/software/gmat09-authority/orekit-data/orekit-data-main <scratch>/work {out} single LEO400 FFM1 tol1e-12-max300s 1",
+   "command": "java -cp <orekit authority>/jars/* tests/evidence/engines/OrekitBench.java <orekit authority>/orekit-data/orekit-data-main <scratch>/work {out} single LEO400 FFM1 tol1e-12-max300s 1",
    "summary": [
     {
      "id": "LEO400 FFM1 tol1e-12-max300s",
@@ -3292,7 +3292,7 @@
    "copies": 26,
    "logicalCpus": 28,
    "wallS": 27.232884917,
-   "command": "/Users/tj/software/tools/xval/mamba/root/envs/tudat/bin/python -I tests/evidence/engines/run-tudat.py <scratch>/work --only LEO400 COMMON tol1e-12-max300s --out {out} --home {out}.d",
+   "command": "<xval>/mamba/root/envs/tudat/bin/python -I tests/evidence/engines/run-tudat.py <scratch>/work --only LEO400 COMMON tol1e-12-max300s --out {out} --home {out}.d",
    "summary": [
     {
      "id": "LEO400 COMMON tol1e-12-max300s",
@@ -3589,5 +3589,6 @@
   },
   "notRun": "GMAT, Tudat, Nyx and Basilisk were not run on the catalog; allThreads gives their per-object-day cost under full load",
   "notAvailable": "STK (HPOP), FreeFlyer and ODTK are not installed or licensed on this machine; no numbers are given for them"
- }
+ },
+ "pathRewrite": "Its path strings were made relative or labeled on 2026-11-10 by propagator/ffm/tests/evidence/paths.mjs --rewrite; nothing else changed. SHA-256 of the file as the tool wrote it: fcb066246318618c480c6bc03b9dad378568d2130c62d135e7aaec6fda65ea38."
 }

@@ -20,12 +20,14 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { outsidePath, recordPath } from '../paths.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ffm = path.resolve(here, '../../..');
 const repo = path.resolve(ffm, '../..');
 const { values: o, positionals } = parseArgs({ allowPositionals: true, options: {
-  finals: { type: 'string', default: '/Users/tj/software/gmat09-authority/orekit-data/orekit-data-main/Earth-Orientation-Parameters/IAU-2000/finals2000A.all' },
+  // Default: the finals file of the Orekit data under FFM_OREKIT_AUTHORITY (docs/cross-validation.md, Outside inputs).
+  finals: { type: 'string' },
   // A $EOP fixture of make-eop.mjs instead of the finals file (the E2E's
   // committed rows); the reference engines need the finals file they read.
   eop: { type: 'string' },
@@ -42,6 +44,8 @@ const EPOCH_UTC = '2026-08-02T00:00:00.000';
 const DAYS = 3, SAMPLE_S = 3600;
 
 // Earth orientation: finals2000A rows 2026-07-31 .. 2026-08-12 (MJD 61252 is 2026-07-31).
+o.finals ??= outsidePath('orekit authority', 'orekit-data/orekit-data-main/Earth-Orientation-Parameters/IAU-2000/finals2000A.all');
+if (!o.eop && !o.finals) throw new Error('Pass --eop or --finals, or set FFM_OREKIT_AUTHORITY to the folder holding orekit-data/.');
 if (o.eop) fs.copyFileSync(o.eop, path.join(work, 'eop.json'));
 else execFileSync(process.execPath, [path.join(ffm, 'tests/fixtures/orekit/make-eop.mjs'), o.finals, '61250', '61262', path.join(work, 'eop.json')], { stdio: 'inherit' });
 // The field FFM embeds, to 70x70, for Orekit (.gfc) and GMAT/Nyx (.cof).
@@ -121,7 +125,7 @@ const plan = {
   spaceWeather: { f107: K.f107, f107a: K.f107a, ap: K.ap, kp: 3 },
   data: {
     kernel: { path: KERNEL, sha256: sha256(KERNEL) },
-    finals: o.eop ? null : { path: o.finals, sha256: sha256(o.finals) },
+    finals: o.eop ? null : { path: recordPath(o.finals, process.cwd()), sha256: sha256(o.finals) },
     eop: { path: path.join(work, 'eop.json'), sha256: sha256(path.join(work, 'eop.json')) },
     gfc: { path: path.join(work, 'EGM2008-ffm-70.gfc'), sha256: sha256(path.join(work, 'EGM2008-ffm-70.gfc')) },
     cof: { path: path.join(work, 'EGM2008-ffm-70.cof'), sha256: sha256(path.join(work, 'EGM2008-ffm-70.cof')) },

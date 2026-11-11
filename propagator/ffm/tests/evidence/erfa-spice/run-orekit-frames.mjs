@@ -10,10 +10,13 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { composeErfaTranslationUnit } from '../../../../../foundation/frames/erfa-amalgamation.mjs';
 import { buildFfmFrames, eopStream, FFM, REPO } from './ffm-frames-native.mjs';
+import { outsidePath, rootDir } from '../paths.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 const work=path.join(here,'../.run-work/orekit-frames');fs.mkdirSync(work,{recursive:true});
-const jars=process.env.OREKIT_JARS??'/Users/tj/software/gmat09-authority/jars';
-const data=process.env.OREKIT_DATA??'/Users/tj/software/gmat09-authority/orekit-data/orekit-data-main';
+// Outside folders come from the environment (docs/cross-validation.md, Outside inputs), never from a path here.
+const jars=process.env.OREKIT_JARS??outsidePath('orekit authority','jars');
+const data=process.env.OREKIT_DATA??outsidePath('orekit authority','orekit-data/orekit-data-main');
+if(!jars||!data)throw new Error('Set OREKIT_JARS and OREKIT_DATA, or FFM_OREKIT_AUTHORITY to the folder holding jars/ and orekit-data/.');
 const sha=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
 const read=f=>JSON.parse(fs.readFileSync(path.join(here,f),'utf8'));
 const erfa=await composeErfaTranslationUnit();const unit=path.join(work,'orekit-erfa.cpp');fs.writeFileSync(unit,erfa.source);
@@ -47,7 +50,7 @@ fs.writeFileSync(path.join(here,'orekit-frames.json'),JSON.stringify(oracle,null
 let after=before;
 if(!process.argv.includes('--baseline')) {
   const cases=JSON.parse(fs.readFileSync(path.join(here,'../cases/ffm-reference-cases.json')));
-  const native=await buildFfmFrames(work,process.env.FLATBUFFERS_INCLUDE??'/Users/tj/software/main-packages/flatbuffers/include');
+  const native=await buildFfmFrames(work,process.env.FLATBUFFERS_INCLUDE??rootDir('flatbuffers include',{required:true}));
   const sets=new Map();for(const c of cases.cases)if(!sets.has(c.earthOrientation))sets.set(c.earthOrientation,c.sampleEpochsUtc);
   const epochs=[];for(const[id,utcs]of sets)epochs.push(...native.at(eopStream(work,cases,id),utcs).map(e=>({earthOrientation:id,...e})));
   const sources=['lib/coords.cpp','lib/time_convert.cpp','lib/time_types.h','lib/force_models.cpp','src/cpp/include/ffm/prw_environment.h','tests/evidence/erfa-spice/ffm_frames_native.cpp'];

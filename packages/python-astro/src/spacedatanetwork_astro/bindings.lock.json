@@ -2,13 +2,13 @@
   "artifacts": [
     {
       "build_provenance": null,
-      "declared_sds_dependency": "1.276.0",
+      "declared_sds_dependency": "1.279.0",
       "id": "propagator/sgp4",
-      "wasm_sha256": "2fe246b716c78a4b947cd95e70e126b7a738cbbb9775e5196f07b1fe551f4643"
+      "wasm_sha256": "66789d827227af78fa339693f974266634081b56b14568fd5e162f80ac7ce048"
     },
     {
       "build_provenance": {
-        "bytes": 2754046,
+        "bytes": 2852136,
         "clangVersion": "clang version 23.0.0git (https:/github.com/llvm/llvm-project d0734df2c434c15815b2a9086102f3329dbd0a2a)\nTarget: unknown\nThread model: posix\nInstalledDir: /Users/tj/.cache/sdn-tools/emsdk-6.0.1/upstream/bin",
         "compiler": "wasm32-wasi-clang++ (wasi-sequential)",
         "debugInfo": "stripped",
@@ -29,7 +29,7 @@
         },
         "sdk": "0.9.12",
         "sdkAccommodation": "Public SDN_WASI_CLANGXX driver compiles multiple source units and uses explicit error flags and measured linear-memory limits, idempotent constructor wrapping and per-instance static-object lifetime; SDK owns PIV, allocation, command framing, the __wasm_call_ctors direct-surface initializer, manifest embedding and validation.",
-        "sha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+        "sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
         "sharedMemory": true,
         "spacedatastandards": "1.279.0",
         "standardWasmExceptions": false,
@@ -70,7 +70,7 @@
       },
       "declared_sds_dependency": "1.279.0",
       "id": "propagator/ffm",
-      "wasm_sha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4"
+      "wasm_sha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934"
     },
     {
       "build_provenance": {
@@ -106,7 +106,8 @@
           "wasmedge"
         ],
         "sdk": "0.9.12",
-        "sourceSha256": "4b46f0b7ced260ada2469976dc9fd4bb43fec64298af6d838f98e3d6fab7a129",
+        "signed": false,
+        "sourceSha256": "dfadc00b6f62aaec75d75fb61fb2305d9fadd5e2edeaab50c2bf807ac402c363",
         "standards": {
           "package": "spacedatastandards.org",
           "schemas": {
@@ -189,57 +190,58 @@
           "usesAtomics": true
         },
         "threadModel": "emscripten-pthreads",
-        "wasmSha256": "fe7533e9168c65f31b5d98ea90bafb76024a5e035df5c7f34d252da44718bfec"
+        "wasmSha256": "ad1e9fe1abc132a4f82ef0425c87686586e161e5d77f220703ccfdf97f54170f"
       },
       "declared_sds_dependency": "1.279.0",
       "id": "analysis/conjunction-assessment",
-      "wasm_sha256": "fe7533e9168c65f31b5d98ea90bafb76024a5e035df5c7f34d252da44718bfec"
+      "wasm_sha256": "ad1e9fe1abc132a4f82ef0425c87686586e161e5d77f220703ccfdf97f54170f"
     },
     {
       "build_provenance": null,
-      "declared_sds_dependency": "1.276.0",
+      "declared_sds_dependency": "1.279.0",
       "id": "analysis/access",
-      "wasm_sha256": "1277308cfb5abafcccc7b6d61dc0ce24085a7c36960229d0013698583007b42e"
+      "wasm_sha256": "3ba1083f8cfd2c12bae6b6f0f26e36f135020f1d4d016bbd9bf4722bab20fd08"
     },
     {
       "build_provenance": {
+        "canonicalWasmSha256": "d2a4cb9c475908c3ca827efd1dd344ddc2895e3c8a383ac7741e5275097ed547",
         "erfaSourceFiles": 248,
         "parameterRosterSize": 335,
-        "spacedatastandards": "1.263.0",
-        "threadModel": "wasi-sequential"
-      },
-      "declared_sds_dependency": "1.276.0",
-      "id": "propagator/events",
-      "wasm_sha256": "1a856dc5a4903919197173159c265cbfa11d982dca8f1c590a635dab25cecd32"
-    },
-    {
-      "build_provenance": null,
-      "declared_sds_dependency": "1.276.0",
-      "id": "analysis/lambert-izzo",
-      "wasm_sha256": "6ab466391b30858b4f5719546fb89681ac3a47a3eb6758ffbb1163e72e576b25"
-    },
-    {
-      "build_provenance": null,
-      "declared_sds_dependency": "1.276.0",
-      "id": "foundation/time",
-      "wasm_sha256": "61abbb27a8358b05a1141bb983fcf1f6b5a89ba41793dece0bccf1678a4d02ed"
-    },
-    {
-      "build_provenance": {
-        "canonicalWasmSha256": "fc289225bb174bdb737dd47b8e48eadc988d61d889641b54923c7e6c98d0b41e",
-        "erfaRoot": "../../higherpop/third_party/erfa",
-        "erfaSourceFiles": 248,
         "signed": true,
         "signer": {
           "keyId": "module-owner-2026-10-15",
           "publicKeyHex": "c04e832f741859a36d6f50909668cfad836700da3dfd23cb737f4ef033265c34"
         },
-        "spacedatastandards": "1.261.0",
+        "spacedatastandards": "1.279.0",
         "threadModel": "wasi-sequential"
       },
-      "declared_sds_dependency": "1.276.0",
+      "declared_sds_dependency": "1.279.0",
+      "id": "propagator/events",
+      "wasm_sha256": "6b47a62eedda7eee58c22abbe01c5f188cf7cff8df4e6d72ba57c3ad401adaf7"
+    },
+    {
+      "build_provenance": null,
+      "declared_sds_dependency": "1.279.0",
+      "id": "analysis/lambert-izzo",
+      "wasm_sha256": "fda1053dea8bfa82e79f80e5dd2432c52cff3b19fdffac5338ab2293fc6dfc40"
+    },
+    {
+      "build_provenance": null,
+      "declared_sds_dependency": "1.279.0",
+      "id": "foundation/time",
+      "wasm_sha256": "ca6e091b1fc96e07dd085bbdbdbbfb5488b14124fa1171a4c117e4e6894506ee"
+    },
+    {
+      "build_provenance": {
+        "erfaRoot": "../../higherpop/third_party/erfa",
+        "erfaSourceFiles": 248,
+        "signed": false,
+        "spacedatastandards": "1.279.0",
+        "threadModel": "wasi-sequential"
+      },
+      "declared_sds_dependency": "1.279.0",
       "id": "foundation/frames",
-      "wasm_sha256": "7ac3240368b1156ce2eac4811e62655013b43128485c95338f6517dbbbbd3db2"
+      "wasm_sha256": "2b1cef2eff293e10e1e2c03fdfe54c14ea11632235b0347122017ae3169ce33c"
     }
   ],
   "format_version": 1,

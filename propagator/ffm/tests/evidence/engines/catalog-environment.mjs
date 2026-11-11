@@ -17,12 +17,16 @@ import { parseArgs } from 'node:util';
 import * as flatbuffers from 'flatbuffers';
 import { kernelRecord } from '../../../catalog.mjs';
 import { encodePrw, makeTable, sds } from '../../lib/prwCodec.mjs';
+import { outsidePath } from '../paths.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ffm = path.resolve(here, '../../..');
 const { values: o, positionals } = parseArgs({ allowPositionals: true, options: {
-  finals: { type: 'string', default: '/Users/tj/software/gmat09-authority/orekit-data/orekit-data-main/Earth-Orientation-Parameters/IAU-2000/finals2000A.all' },
+  // Default: the finals file of the Orekit data under FFM_OREKIT_AUTHORITY (docs/cross-validation.md, Outside inputs).
+  finals: { type: 'string' },
 } });
+o.finals ??= outsidePath('orekit authority', 'orekit-data/orekit-data-main/Earth-Orientation-Parameters/IAU-2000/finals2000A.all');
+if (!o.finals) throw new Error('Pass --finals, or set FFM_OREKIT_AUTHORITY to the folder holding orekit-data/.');
 const [outArg, from, to] = positionals;
 if (!to) throw new Error('usage: catalog-environment.mjs <out dir> <from YYYY-MM-DD> <to YYYY-MM-DD>');
 const out = path.resolve(outArg);

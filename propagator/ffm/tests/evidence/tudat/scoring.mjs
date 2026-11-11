@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createBrowserModuleHarness } from 'space-data-module-sdk/testing';
 import { requestInputs } from '../../lib/orekitCases.mjs';
 import { decodePrw, decodeResult, sds } from '../../lib/prwCodec.mjs';
+import { recordedJson } from '../paths.mjs';
 import { ALL, CASES, WASM, MANIFEST, wasm, manifest, sha256, reference,
   parametersOf as nyxParametersOf, run as runNyx, scoreResponse } from '../nyx/scoring.mjs';
 
@@ -16,7 +17,8 @@ export const here = path.dirname(fileURLToPath(import.meta.url));
 export const exportPath = path.resolve(here, '../cases/ffm-reference-cases.json');
 export const wasmFixturePath = path.resolve(here, '../../fixtures/tudat/tudat-wasm-reference.json');
 export const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
-export const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 1)}\n`);
+// Paths are written in recorded form (../paths.mjs): repository-relative, or a label for an outside folder.
+export const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(recordedJson(value, path.dirname(path.resolve(file))), null, 1)}\n`);
 export const pin = (file) => ({ path: path.relative(here, path.resolve(file)), sha256: sha256(file) });
 
 // Preserve the shared Cd/Cr columns and add every sensitivity explicitly
