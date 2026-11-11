@@ -1824,6 +1824,12 @@ its own elements: HEO at e 0.3 or more; otherwise geosynchronous under 1.5 rev/d
 | --- | --- | --: | --: | --: | --: | --- | --- |
 | SDNAP | LAGEOS | 1.1374623058968726e-08 | 8.083584088270014e-08 | 3.831472309446551e-09 | 1.415e-05 | 0.00243 to 0.00276 | 64.8 to 75.6 |
 | SGP4XP | LAGEOS | 2.463673468245377e-07 | 6.564224575525169e-07 | 5.502200043625398e-08 | 3.216e-05 | 0.0588 to 0.0769 | 64.8 to 75.6 |
+| SDNAP | HEO | 6.357465071432782e-06 | 8.153112791954473e-07 | 4.753573962018311e-06 | 2.401038715861921e-09 | 0.00767 to 4.22 | 64.8 to 352.8 |
+| SGP4XP | HEO | 6.406459698609395e-06 | 8.962738267352311e-07 | 1.1915856399679677e-08 | 1.667570181154198e-08 | 0.00826 to 4.18 | 64.8 to 352.8 |
+
+A record states its row: COV_PROPAGATION's NOISE_* fields are the row's sizes, so a class row is read from the record
+by its s_e and s_i (and s_d not 0), and the ABOVE row by its own. A set outside its class's calibrated condition gets
+the ABOVE row.
 
 Acceptance (per regime, fit arc and axis at days 1, 3, 5 and 7, scored against the precise orbits). The count of |z|
 above 3 must be at most max(as built, ceil(1 % of the windows), 1). The count inside the 95 % region must not be
@@ -1846,18 +1852,50 @@ they hold leaving each satellite out in turn. The module's own covariance, flown
 AP's radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). That part is the epoch covariance, and
 the noise starts from zero at the end of the arc.
 
+HEO *[2026-11-11, sdn-ap 0.6.16's eccentric integration step]*. Two objects, TESS and Chandra: 14 windows, 28 window-
+arcs (TESS 72 h and 336 h fits, Chandra 72 h and 168 h), e 0.454 to 0.687. The calibrated condition is data sigma
+7.67 m to 4.22 km (AP) and 8.27 m to 4.17 km (SGP4XP), and fit spans of 72 to 336 h, 10 % either side. Outside it
+the ABOVE row stands. Inside it, an eccentric object unlike these two is not validated by this evidence. The rows are
+fitted on all 28 window-arcs. AP's s_i and s_l are the ABOVE row's, where the fit gave less (7.44e-7, 1.09e-8), which
+would have narrowed every window's cross-track by up to 9 % and Chandra's in-track and radial by up to 29 %; with them no HEO window's
+1-sigma narrows in any direction at any lead (1,932 window-lead-axis cells checked). SGP4XP's row narrows none as
+fitted. Leaving each window out in turn (both its fit arcs), the row fitted on the other 13 holds the
+acceptance on it, for both theories; raising s_i and s_l to the ABOVE row's only widens it. Leaving one object out
+holds for SGP4XP both ways, and for AP from TESS to Chandra only: AP's row fitted on Chandra alone gives s_e 1.6e-9
+where TESS needs 5.5e-6, and TESS's 72 h coverage falls from 0.43 to 0.00. One eccentric object does not calibrate
+another, and no claim here rests on that. The rows on all 28 window-arcs (7 windows per row), ABOVE row > HEO row:
+
+| Theory | Object, fit arc | Day | median abs(z) R / T / N | windows abs(z) > 3, R / T / N | 95 % coverage |
+| --- | --- | --: | --- | --- | --- |
+| SDNAP | TESS, 72 h | 1 | 2.946 / 0.880 / 0.578 > 0.515 / 0.183 / 0.578 | 3 / 0 / 0 > 0 / 0 / 0 | 0.43 > 1.00 |
+| SDNAP | TESS, 72 h | 7 | 3.705 / 2.111 / 0.236 > 0.625 / 0.537 / 0.236 | 4 / 3 / 0 > 0 / 0 / 0 | 0.43 > 1.00 |
+| SDNAP | TESS, 336 h | 1 | 4.036 / 0.969 / 1.251 > 0.847 / 0.215 / 1.250 | 4 / 3 / 1 > 1 / 0 / 1 | 0.29 > 0.57 |
+| SDNAP | TESS, 336 h | 7 | 4.996 / 4.467 / 0.503 > 0.861 / 1.085 / 0.501 | 5 / 6 / 0 > 0 / 1 / 0 | 0.14 > 0.71 |
+| SDNAP | Chandra, 72 h | 1 | 0.402 / 0.471 / 0.229 > 0.240 / 0.202 / 0.229 | 1 / 2 / 2 > 1 / 0 / 2 | 0.57 > 0.71 |
+| SDNAP | Chandra, 72 h | 5 | 0.560 / 1.808 / 3.057 > 0.425 / 0.797 / 3.054 | 1 / 3 / 4 > 1 / 1 / 4 | 0.00 > 0.29 |
+| SDNAP | Chandra, 168 h | 1 | 0.993 / 1.609 / 0.271 > 0.858 / 1.185 / 0.271 | 0 / 1 / 0 > 0 / 1 / 0 | 0.71 > 0.71 |
+| SDNAP | Chandra, 168 h | 7 | 3.228 / 2.903 / 0.377 > 1.419 / 1.394 / 0.377 | 4 / 3 / 1 > 0 / 0 / 1 | 0.29 > 0.43 |
+| SGP4XP | TESS, 72 h | 1 | 7.731 / 3.975 / 1.472 > 0.521 / 0.195 / 0.821 | 6 / 6 / 0 > 0 / 0 / 0 | 0.00 > 1.00 |
+| SGP4XP | TESS, 336 h | 7 | 17.320 / 25.385 / 1.309 > 0.850 / 1.090 / 0.556 | 7 / 7 / 0 > 0 / 1 / 0 | 0.00 > 0.71 |
+| SGP4XP | Chandra, 72 h | 5 | 1.834 / 5.943 / 6.140 > 0.311 / 0.770 / 2.608 | 3 / 5 / 5 > 1 / 1 / 3 | 0.00 > 0.43 |
+| SGP4XP | Chandra, 168 h | 7 | 7.015 / 5.120 / 0.819 > 1.928 / 1.521 / 0.400 | 5 / 6 / 1 > 2 / 1 / 1 | 0.00 > 0.43 |
+
+The covariance is still too narrow on Chandra at several cells (AP's cross-track at day 5 of the 72 h fits, 3.05 at
+the median), but nowhere narrower than before. THEMIS is not in this set: its perigee is in the drag.
+
 The other classes keep the ABOVE row for now. Medium Earth orbit: Galileo's in-track errors run 5 to 14 times GPS's,
 and nothing the record states ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a
 row that holds the acceptance must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times
 too wide in track. That row, and its second row for sets that solve Y0 (16.13), follow once the fit's end with Y0
 solved no longer depends on rounding (stack #456). Geosynchronous: noise scaled by the record's own data sigma,
-measured next. HEO: TESS and Chandra, two objects, 14 window-arcs, measured after the eccentric integration step fix.
-THEMIS is not in this set: its perigee is in the drag.
+measured next.
 
 The class boundaries make the stated covariance jump where a row changes. At n = 4 rev/day (e 0.01, a 16,763 km) the
 growth per day the rows give is, for AP, 2,003 m in track and 16.3 m radially under the ABOVE row against 1.6 m and
-0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 nothing jumps yet:
-every class there keeps the ABOVE row.
+0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 (n 2 rev/day, a 26,610
+km) the HEO row starts: for AP, 25.8 m radially per day under the ABOVE row against 169 m under the HEO row, and
+1,590 m in track and 21.7 m cross-track under both (the same s_l and s_i); for SGP4XP, 89.2 m in track, 6.1 m
+radially and 10.0 m cross-track against 4.0 m, 170 m and 23.9 m.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P

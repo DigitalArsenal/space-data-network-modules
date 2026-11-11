@@ -314,9 +314,14 @@ those of the calibration fits; elsewhere the ABOVE row stands. Above the drag, s
 (LAGEOS-1, LAGEOS-2, LARES-2; 72 h fits to precise orbits; data sigma 2.43 to 2.76 m for AP, 58.8 to 76.9 m for
 SGP4XP) is fitted. On its 32 windows AP's median |z| at days 1, 3, 5 and 7 goes from 0.001 to 0.24 to between 0.52 and
 1.04, the 95 % coverage is 0.88 to 0.94, and no cell has more windows above 3 than the acceptance allows (max(as built,
-1 % of the windows, 1)). The radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). Medium Earth
-orbit, geosynchronous and HEO keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the
-selection.
+1 % of the windows, 1)). The radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). The HEO class
+is fitted on two objects, TESS and Chandra (14 windows, 28 window-arcs of 72 to 336 h, e 0.454 to 0.687; data sigma
+7.67 m to 4.22 km for AP, 8.27 m to 4.17 km for SGP4XP). The 95 % coverage rises or holds on every row: AP's TESS 72 h
+fits go from 0.43 to 1.00, its TESS 336 h fits from 0.14 to 0.29 to 0.57 to 0.86; SGP4XP's rows from 0.00 to 0.43
+to 0.43 to 1.00. No HEO window's 1-sigma narrows in any direction. Leaving one window out holds. Leaving one object out fails
+for AP from Chandra to TESS, so the row is not shown to carry to an eccentric object unlike these two, and Chandra
+stays too narrow in places (AP's cross-track at day 5 of the 72 h fits, 3.05 at the median). Medium Earth orbit and
+geosynchronous keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the selection.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
