@@ -2731,7 +2731,7 @@ at its epoch direction during a flight. With precession alone the error from the
 days at 800 km and 0.2, 1.7 and 9.0 m at 1,336 km, up to twice that with the fortnightly nutation, and below 1 m from 5,900 km
 up.
 
-*The long-period regime's class 0 sets (from 0.6.NN; stack #479, #513).* Through 0.6.30 the nonresonant long-period
+*The long-period regime's class 0 sets (from 0.6.NN; stack #479, #513).* Through 0.6.32 the nonresonant long-period
 branch (epoch period at least 1,100 minutes, class 0) left this rotation out. Its output therefore kept the turn from TEME
 of the epoch to TEME of the date: 0.70 arcsec in 5 days and 0.98 in 7, times the radius. That is up to 1.27 km at day 5 at a
 TESS-like apogee of 375,000 km. Measured on model truth (FFM, `test/lib/heo-model-truth.mjs`), the seeded TESS-like set
@@ -2746,10 +2746,16 @@ On the real windows against their precise orbits (0.6.30, gate off and on), the 
 day 5: TESS's seven windows 1,594 and 1,592 m at day 3 with the forecast fit, and 2,452 and 1,868 m with the 72 h fit;
 Chandra's seven 24 and 3 m. `test/heo-frame.e2e.mjs`'s replay of TESS's same seven windows (the module's default fit of
 the 72 h of states, no drag, the RMS over each day) is worse: medians 775.7, 1,635.8 and 8,549.6 m to 1,011.7, 2,000.0 and
-9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 -103.1 to +706.0 m (its known defect, stack #479). At the long lead
-the two replays move the same windows the same way; why they part at days 1 to 3 is not established. The numerical
-propagator itself is 1.7 to 10.2 km off the precise orbits at day 5 on these windows. The one-day class (THEMIS) already
-took the rotation and is unchanged. A covariance's copy
+9,032.8 m at days 1, 3 and 7, and AP minus XP at day 3 -103.1 to +706.0 m (its known defect, stack #479; XP takes no
+drift, so it still holds the turn). FFM fitted to the same 72 h of states (its full setting, area-to-mass solved) and scored
+the same way is 480, 1,566 and 11,452 m. On four of the windows FFM itself follows its arc no closer than 368 to 541 m.
+The rotation is not what makes AP worse there. Seeded with every force but drag and radiation, a TESS-like set goes from
+1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On this fit path on model truth without radiation pressure, its 5-day D goes
+from 1.3 to 2.9 km to 16 to 251 m; through 0.6.32 the fit took up the turn as a false area-to-mass. With FFM's radiation
+pressure in the truth, AP follows FFM's 72 h no closer than 46 to 174 m on either build. The frame's error had partly
+offset that gap in some geometries. The two replays part only on the four windows FFM cannot follow; the real rows' tool
+samples the arc at 600 s, the suite at 300 s. The one-day class (THEMIS) already took the rotation and is unchanged. A
+covariance's copy
 takes the same rotation through the same flag. The bodies the rates read stay in TEME of date: 0.7 arcsec in 5 days moves
 the Moon's direction by 3.4e-6 rad.
 
@@ -2773,7 +2779,7 @@ correction and 38-minute grid; the half-day and GTO fixtures retain their previo
 The exploratory AP6 replay on 2026-11-03 uses all seven previously read TESS windows, 72-hour fits, the
 original 300-second grid, and AP6's pinned foundation/frames conversion for scoring. Leads start at fit end.
 The day-3 median paired AP-minus-XP error changes from +420.105792 m to -0.000784 m (acceptance: within
-50 m of zero). That replay decided the long-period class 0 sets' exception through 0.6.30. It no longer decides, for two
+50 m of zero). That replay decided the long-period class 0 sets' exception through 0.6.32. It no longer decides, for two
 reasons. It was judged on matching SGP4-XP, not on the precise orbits. And it was flown with SPEC 5's Moon, whose
 0.6 to 1.2 km error at TESS's radius (16.17) offset part of the frame's.
 From 2026-11-11 the archive replays (heo-frame's TESS windows and the AP6 and AP5 windows of five more tests) score each

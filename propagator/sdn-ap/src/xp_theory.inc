@@ -5633,7 +5633,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
                             std::fabs(s.ctx.a0 / anchor->ctx.a0 - 1.0) <= tess::kShareA;
   const bool same_inc = anchor != nullptr && e.xincl == anchor->ctx.i0;
   // Every AP set carries its epoch-axis states to TEME of date (SPEC 16.4): the long-period regime's class 0 sets too, from
-  // 0.6.NN; through 0.6.30 that branch left the turn from TEME of the epoch to TEME of the date in its output.
+  // 0.6.NN; through 0.6.32 that branch left the turn from TEME of the epoch to TEME of the date in its output.
   // This one ingest-time policy is shared by fit residuals and every flight.
   // The one writer of ap_frame, ap_third_body and ap_resonance (xp_init zeroes them first): the other two are set only
   // when ap_third_body is, so ap_third_body != 0 exactly when is_ap_ctx. The callers that choose AP's Sun and Moon
