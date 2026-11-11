@@ -1272,7 +1272,9 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           const double ap = std::fabs(psidot);
           const double mag = a0 * A * (std::fabs(fv * G) * (3.0 * std::abs(j) * inv_a02 + 2.0 * (l + 1) * inv_na2 * ap) +
                                        (std::fabs(fv * g1) + std::fabs(dfv * G)) * inv_na2 * ap);
-          if (mag < keep * ap * ap) continue;
+          // the cut on the term's own size: a weight under 1 is the band taper's complement of a term the rates hold (the slow
+          // set or the shallow set kept it by its size), which on the fast side the table completes whatever its share
+          if (mag < keep * ap * ap * (comp_on && weight < 1.0 ? weight : 1.0)) continue;
 
           const double f_w = static_cast<float>(fv * weight);
           const double df_w = static_cast<float>(dfv * weight);
