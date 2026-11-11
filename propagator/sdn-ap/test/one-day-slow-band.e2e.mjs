@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // SPEC 16.11, DigitalArsenal/spacedatanetwork-stack#467: above the eccentricity switch a one-day set carries each slow tesseral
 // term in exactly one place: the class's rates (SGP4-XP's 27 terms), the grid (every other term of degree 2 to 12 drifting at
-// 1e-3 n or faster), or nowhere (slower than 1e-3 n, or above degree 12).
+// 1e-2 n or faster), or nowhere (slower than 1e-2 n, or above degree 12).
 // 1. sdnap_slow_terms on a THEMIS A-like set (1.0493 rev/day, e 0.825, i 11.9 deg) and on a one-day set just above the switch
 //    (1.0496 rev/day, e 0.3001, i 10 deg), tesseral cap 31. Outcome: every slow term has one carrier by the rules above; the
 //    class's 27 terms, and only they, are in the rates; on the THEMIS A-like set the grid holds terms of degree 5 and up and
@@ -22,7 +22,7 @@ const CLASS = [[2, 2, 0, 0], [2, 2, 1, 2], [2, 2, 2, 4], [3, 1, 0, -2], [3, 1, 1
   [3, 2, 2, 3], [3, 3, 0, 0], [3, 3, 1, 2], [3, 3, 2, 4], [4, 1, 0, -3], [4, 1, 1, -1], [4, 1, 2, 1], [4, 1, 3, 3], [4, 2, 0, -2], [4, 2, 1, 0],
   [4, 2, 2, 2], [4, 2, 3, 4], [4, 3, 0, -1], [4, 3, 1, 1], [4, 3, 2, 3], [4, 4, 0, 0], [4, 4, 1, 2], [4, 4, 2, 4]];
 const inClass = (r) => CLASS.some(([l, m, p, q]) => r[0] === l && r[1] === m && r[2] === p && r[3] === q);
-const expected = (r) => (inClass(r) ? 1 : r[0] > 12 ? 4 : Math.abs(r[4]) < 1e-3 ? 0 : 2);
+const expected = (r) => (inClass(r) ? 1 : r[0] > 12 ? 4 : Math.abs(r[4]) < 1e-2 ? 0 : 2);
 
 const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
 const x = h.instance.exports, MAX = 20000, pin = x.sdnap_alloc(32), prow = x.sdnap_alloc(MAX * 48);

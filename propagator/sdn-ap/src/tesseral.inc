@@ -133,9 +133,11 @@ inline Terms& active() {
 constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
 constexpr double kShallowBand = 0.045;
 /// The one-day class above the eccentricity switch (SPEC 16.11; stack #467): a slow term the class's rates do not carry stays
-/// on the grid unless its angle drifts slower than this times n, where a first-order term is no longer small; below it the
-/// term is carried nowhere (the table's own rule, sp_terms' 1e-3 n).
-constexpr double kOneDayFloor = 1e-3;
+/// on the grid unless its angle drifts slower than this times n; below it the term is carried nowhere. 1e-2 n, not the
+/// table's 1e-3 n: on a synchronous set at e 0.5 the terms between the two drift as slowly as the class's own libration,
+/// where a first-order term fails (day 5, two such sets: 105 to 58 m and 42 to 54 m at 1e-3 n; unchanged at 3e-3 and 1e-2 n);
+/// on THEMIS-like sets no term of degree 2 to 12 lies between them.
+constexpr double kOneDayFloor = 1e-2;
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28

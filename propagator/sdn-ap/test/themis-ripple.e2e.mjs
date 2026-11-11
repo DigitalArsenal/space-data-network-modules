@@ -3,7 +3,7 @@
 // Above e 0.3 (SPEC 16.11) the first-order tesseral families of degree 2 to 12 are a closed-form grid in the eccentric anomaly.
 // 1. Against the full-field quadrature (each (l, m) of the pinned field evaluated directly on the Kepler ellipse, 2,048 mean anomalies
 //    by 32 arguments of perigee, |j| <= 1023, the grid's admission rules: from the version of stack #467 the one-day class leaves
-//    out only its 27 terms and the terms slower than 1e-3 n), 7 days at 300 s at the mean elements of the AP (31, 20) fits
+//    out only its 27 terms and the terms slower than 1e-2 n), 7 days at 300 s at the mean elements of the AP (31, 20) fits
 //    of THEMIS D 2013-02-12 and THEMIS E 2013-02-16 and at the GTO fixture's: RMS <= 1 m, maximum <= 5 m, median |second difference|
 //    of the difference <= 0.1 m.
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's

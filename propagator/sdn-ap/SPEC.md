@@ -2822,9 +2822,8 @@ A set whose resonant angle drifts just under 0.045 n lost them: about 950 m at d
 drifts at 0.0444 n. A set just above the cut kept them. Each term of a one-day set above the switch is now carried in exactly
 one place:
 - the class's rates: its 27 terms;
-- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-3 n or faster (`kOneDayFloor`, the
-  table's own rule);
-- nowhere: a term slower than 1e-3 n (the floor below), and the terms above degree 12 (the table holds no near-resonant terms
+- the grid: every other term of degree 2 to 12, m-daily aside, whose angle drifts at 1e-2 n or faster (`kOneDayFloor`);
+- nowhere: a term slower than 1e-2 n (the floor below), and the terms above degree 12 (the table holds no near-resonant terms
   outside low orbit).
 `sdnap_slow_terms` lists, for a set on the grid, each slow term (l, m, p, q, its angle rate over n) and where it is carried.
 On a THEMIS A-like set it lists 5 terms in the rates and 47 on the grid, of degree 2 to 12, and 768 of degree 13 to 31
@@ -2832,7 +2831,7 @@ carried nowhere. `test/one-day-slow-band.e2e.mjs` reads it.
 
 FFM model truth, EGM96 70 x 70, no Sun or Moon on either side, a 72 h fit flown 7 days, day 5:
 - Made-up THEMIS A-like sets whose fitted mean motion lies in the band (1.0493 rev/day, e 0.825, i 11.9 deg; node 0, 90 and
-  180 deg): 369 / 415 / 549 m through 0.6.18, 155 / 70 / 160 m with the band.
+  180 deg): 369 / 415 / 549 m through 0.6.18, 155.1 / 69.5 / 160.5 m with the band.
 - Five real THEMIS geometries, from their windows' own states with the Sun, the Moon and the radiation sphere: the median
   went from 538 to 100 m (from 162 to 994 m, to 77 to 129 m).
 
@@ -2843,7 +2842,13 @@ band. n 1.0496 rev/day, i 10 deg, 70 x 70 with Sun and Moon, a 72 h fit, day 5:
 - Through 0.6.18 the same pairs were 38.7 against 14.8 m and 18.1 against 11.9 m. The jump is the table's first-order error
   near 0.3, stated above; the band adds 1 m at 0.3001 and the tail 3 m at 0.30.
 
-The floor: TODO-FLOOR.
+The floor is 1e-2 n, not the table's 1e-3 n. Between the two, a term drifts about as slowly as the class's own resonant
+libration, where a first-order term is no longer small. Two synchronous sets at e 0.5 (1.0027 rev/day, i 30 deg, nodes 30 and
+120 deg; 70 x 70, no Sun or Moon, day 5) hold 98 terms of degree 2 to 12 there:
+- with the floor at 1e-3 n they went from 105 to 58 m and from 42 to 54 m;
+- at 3e-3 n and 1e-2 n both keep their 0.6.18 values.
+On the THEMIS-like sets and the one-day set at e 0.3001 no term of degree 2 to 12 lies between the two floors. What the floor
+and the degree cut leave out on such a synchronous set (105 m and 42 m against 2.7 m and 2.1 m with a 4 x 4 field) is stack #474.
 
 Below the eccentricity switch (0.05 in class 0, 0.3 in the resonant classes) the first-order tesseral table keeps |q| <= 1. The
 terms dropped are of order e^2 and reach, just below the switch, 14 m at a = 7,600 km (20.6 m against 15.2 m just above it), 12 m
@@ -2855,8 +2860,8 @@ function of the anomaly, complete in j. At init it is built on 128 uniform eccen
 H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / M-dot, nu = -(w omega-dot + m (Omega-dot -
 omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-daily, the class's, the half-day class's tail, and
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
-shallow set's taper and the terms slower than 1e-3 n; in the one-day class, from 0.6.MM, only the terms slower than 1e-3 n
-(below); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
+shallow set's taper and the terms slower than 1e-3 n; in the one-day class, from 0.6.MM, only the terms slower than 1e-2 n
+(above); elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
 precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
 the slopes below, 3.1 MB before 0.6.14), and read at
