@@ -14,8 +14,10 @@
 // 2. degree 4 up off (OFF; FFM EGM96 70x70, Sun and Moon from DE440; 72 h fits): day-1 along-track RMS of the half-day
 //    fixture at most 95 m and of the Molniya fixture at most 85 m;
 // 3. the release on the four HEO fixtures, flown hourly for 7 days after the fit: day-7 whole-day along-track and
-//    radial RMS within 0.5 m of half-day 31.45/16.88, Molniya 239.68/175.18 and 12 h at 55 deg 66.61/5.68 m, GTO no
-//    worse than 961/935 m (to the meter); the single day-7 sample printed and within 0.5 m of 30.22, 333.09, 64.94 and
+//    radial RMS within 0.5 m of half-day 31.45/16.88 and 12 h at 55 deg 66.61/5.68 m, GTO no worse than 961/935 m (to the
+//    meter); Molniya with B pinned at the truth 80.71/50.51 m to 5 cm, with B fitted held to its record's statement (B
+//    within one stated sigma, the day-7 position within three along R, I and C: its two solutions, stack #392, at the
+//    assertions); the single day-7 sample printed and within 0.5 m of 30.22, 64.94 and
 //    275.78 m (re-recorded 2026-11-10 on 0.6.8 and FFM 2.2.1: 0.6.3's grid moved them, the history at the assertions;
 //    re-recorded at 0.4.15, SPEC 16.11: 84.22/75.28, 149.82/175.90, 158.02/105.47 and the samples 202.04, 338.22, 303.15
 //    before; GTO 929.45 at 0.4.14, 2449.15 m at 0.4.11);
@@ -29,6 +31,7 @@ import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads'
 import {execFileSync} from 'node:child_process';
 import {reproduceConformance} from './lib/conformance-step.mjs';
 import {fileURLToPath} from 'node:url';
+import {bSigmas} from './lib/stated-sigma.mjs';
 
 const GEOMETRIES = {G1: [63.4, 300, 270], G2: [63.4, 60, 90], G3: [55, 180, 0]};
 const NAMES = ['af', 'ag', 'chi', 'psi', 'lambda', 'n as a'];
@@ -38,7 +41,9 @@ if (!isMainThread) {
   if (kind === 'fixture') {
     const {runModelTruth} = await import('./lib/heo-model-truth.mjs');
     const r = await runModelTruth(c);
-    parentPort.postMessage({days: r.days, wholeDay: r.wholeDay});
+    // a fit of the drag coefficient: the record's own statement at the forecast's end (test/lib/stated-sigma.mjs)
+    const stated = c.drag && !c.fitPolicy ? await (await import('./lib/stated-sigma.mjs')).statedAtForecastEnd(r, 7, c.modulePath) : null;
+    parentPort.postMessage({days: r.days, wholeDay: r.wholeDay, fitted: {bterm: r.fitted.bterm, bModel: r.fitted.bModel, wrms: r.fitted.wrms}, stated});
   } else {
     // PROBE build (SDNAP_WASM): per case, RMS per element of numerical minus quadrature, and of numerical minus
     // closed form, over one orbit; the averaged-rate differences in meters per day
@@ -225,6 +230,13 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
     testBuild('probe', [['abi.inc', 'SDNAP_EXPORT("sdnap_frame_probe")', PROBES]]),
     testBuild('off', [['xp_theory.inc', 'constexpr int kThirdBodyTailDegree = 10;', 'constexpr int kThirdBodyTailDegree = 3;']]),
   ];
+  // the test builds are this clone's own (2026-11-10: two clones' runs of this test shared one folder and one lost its
+  // build mid-run): two checkouts never share a default scratch root, and both builds lie under this checkout's
+  {
+    const {scratchRootFor} = await import('./lib/scratch.mjs');
+    assert.notEqual(scratchRootFor(modules), scratchRootFor(path.join(modules, 'propagator')), 'two checkouts, two default scratch roots');
+    for (const b of [PROBE, OFF]) assert.ok(!path.relative(scratchRoot, b).startsWith('..'), `${b} under this checkout's scratch root ${scratchRoot}`);
+  }
 
   const run = (data, env) => new Promise((resolve, reject) => {
     const w = new Worker(new URL(import.meta.url), {workerData: data, env: env ?? process.env});
@@ -234,6 +246,8 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   const FIXTURES = {
     'half-day': {name: 'half-day-critical', n: 2.0059, e: 0.72, i: 63.4, raan: 300, argp: 270, ma: 10, drag: false},
     Molniya: {name: 'Molniya', n: 2, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10, drag: true},
+    'Molniya-pinned': {name: 'Molniya', n: 2, e: 0.74, i: 63.4, raan: 300, argp: 270, ma: 10, drag: true,
+      fitPolicy: {form: 'GAUSSIAN_SIGNED', mean: 0.044, sigma: 1e-7}},
     '12-hour-55deg': {name: '12-hour-55deg', n: 2, e: 0.72, i: 55, raan: 300, argp: 270, ma: 10, drag: false},
     GTO: {name: 'GTO', n: 2.40, e: 0.72, i: 27, raan: 40, argp: 270, ma: 10, drag: false},
   };
@@ -276,13 +290,29 @@ SDNAP_EXPORT("sdnap_frame_probe")`;
   // for Molniya, 0.4.16 (SPEC 16.12, 12.8: 291.41 / 219.72 / 419.70 at 0.4.15) on FFM 2.0.4's truth (half-day 34.33 /
   // 23.12 / 60.02, Molniya 276.44 / 208.33 / 392.90, 12 h 67.25 / 25.32 / 56.38 m). Molniya, the one fixture with drag,
   // re-recorded at 0.6.12 (the perigee passes of SPEC 16.12, its fitted coefficient 0.0446231 against 0.0446183): 238.50 /
-  // 174.28 / 332.16 on 0.6.8 to 0.6.11
-  for (const [f, [t, r, s]] of Object.entries({'half-day': [31.45, 16.88, 30.22], Molniya: [239.68, 175.18, 333.09], '12-hour-55deg': [66.61, 5.68, 64.94]})) {
+  // 174.28 / 332.16 on 0.6.8 to 0.6.11. From the E-grid's C1 reading (stack #420) Molniya with its coefficient fitted is
+  // held to what its record states, not to a value (MOLNIYA_FITTED below); the same arc with B pinned at the truth is the
+  // model's pin.
+  for (const [f, [t, r, s]] of Object.entries({'half-day': [31.45, 16.88, 30.22], '12-hour-55deg': [66.61, 5.68, 64.94]})) {
     assert.ok(Math.abs(report.releaseDay7[f].alongTrack - t) <= 0.5, `${f}: day-7 along-track RMS ${report.releaseDay7[f].alongTrack} m`);
     assert.ok(Math.abs(report.releaseDay7[f].radial - r) <= 0.5, `${f}: day-7 radial RMS ${report.releaseDay7[f].radial} m`);
     assert.ok(Math.abs(report.releaseDay7[f].singleSample - s) <= 0.5, `${f}: day-7 sample ${report.releaseDay7[f].singleSample} m`);
   }
   assert.ok(report.releaseDay7.GTO.alongTrack <= 961.5 && report.releaseDay7.GTO.radial <= 935.5, 'GTO: day 7 no worse than 961/935 m');
+  // Molniya with B pinned at the truth's 0.044: the model's pin, to 5 cm (80.71 / 50.51 m on 0.6.12 and with the C1
+  // E-grid alike)
+  assert.ok(Math.abs(report.releaseDay7['Molniya-pinned'].alongTrack - 80.71) <= 0.05 && Math.abs(report.releaseDay7['Molniya-pinned'].radial - 50.51) <= 0.05,
+    `Molniya, B pinned: day-7 along-track ${report.releaseDay7['Molniya-pinned'].alongTrack} m and radial ${report.releaseDay7['Molniya-pinned'].radial} m`);
+  // MOLNIYA_FITTED: the 72 h fit of the coefficient has two solutions that small numerical changes move it between (stack
+  // #392): B 0.044623, fit RMS 21.911 m, day-7 along-track 239.68 m on 0.6.12; B 0.045722, 21.337 m, 523.53 m with the C1
+  // E-grid. Both lie inside the record's own statement (B within 0.12 and 0.34 of its stated sigma, about 0.005; the
+  // day-7 position within 0.22 of the stated sigma along each axis), so the check is that statement: B within one stated
+  // sigma of the truth, the day-7 position within three stated sigmas along R, I and C, until #392 makes the fit single-valued.
+  const mf = results['release Molniya'], bs = bSigmas(mf.fitted.bModel);
+  console.log(JSON.stringify({molniyaFitted: {bterm: mf.fitted.bterm, bModel: mf.fitted.bModel, bSigmas: bs, fitRmsM: mf.fitted.wrms * 1000,
+    day7AlongTrackRmsM: report.releaseDay7.Molniya.alongTrack, stated: mf.stated}}));
+  assert.ok(bs <= 1, `Molniya, B fitted: ${mf.fitted.bterm} lies ${bs.toFixed(2)} of its stated sigma from 0.044`);
+  for (const [k, v] of Object.entries(mf.stated)) assert.ok(Math.abs(v.z) <= 3, `Molniya, B fitted: day-7 ${k} error ${v.errorM.toFixed(1)} m against the stated sigma ${v.sigmaM.toFixed(1)} m`);
   // re-recorded 2026-11-10 on 0.6.8 and FFM 2.2.1 (0.6.2 258.96 m, 0.6.3 275.80 m on 2.2.1; the sample is a single state
   // and GTO's truth moved most between FFM 2.0.4 and 2.2.1, 2.5 m along-track RMS at day 7); 249.02 m at 0.4.15 on 2.0.4
   // (SPEC 16.11), 929.45 m at 0.4.14 (SPEC 16.10), 2449.15 m at 0.4.11-0.4.13

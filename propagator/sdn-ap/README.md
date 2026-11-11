@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.12 (dist 9192deff).
+Version 0.6.14 (dist 2a1cf5ca).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -119,9 +119,15 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   xp2-fit-design (1,214 windows, every one converged); the GAUSSIAN_SIGNED 0 +- 0.05 it replaced ended at BTERM <= 0,
   no drag at all, on a real ISS window, and is asked for by stating its mean and sigma. AGOM's default is
   GAUSSIAN_SIGNED 0 +- 0.05 m^2/kg on arcs of 36 h or more and the Space Force wrapper's 0 +- 0.1 m^2/kg on shorter
-  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). On 748 already-read 24 h GNSS windows (exploratory) the
+  arcs (SPEC 12.1; a stated FIT.SRP_PRIOR holds on every arc). The data are weighed against these priors at 1 km under
+  drag (the fitted set's perigee below 2,500 km) and, above it, at their own sigma, the post-fit scatter, which the
+  covariance then uses too (SPEC 12.1, the fit's weighting; `test/fit-data-sigma.e2e.mjs`): at 1 km a 24 h medium Earth
+  orbit fit returned AGOM 15 % low at the median of 254 real windows and was 121 m off at day 5; at its own sigma it
+  returns 1.01 of a numerical sphere's coefficient and is 33 m off. On 748 already-read 24 h GNSS windows (exploratory) the
   median paired day-3 error of SGP4XP minus the Space Force library's falls from +56.107 to -4.097 m; 746 72 h
-  windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
+  windows are unchanged (`test/fit-short-arc-priors.e2e.mjs`). From 0.6.13, weighted at the data's sigma, SGP4XP's
+  24 h median day-3 error there is 145.75 m (152.29 m on 0.6.11) and its paired difference from the library -1.752 m;
+  GPS IIF 41019 is worse on 149 of its 150 windows (day 3 114.7 to 155.5 m; SPEC 12.1). Under LOG_NORMAL the iteration steps in the term's natural log, starting at the
   prior's median (the two-revolution stage holds BTERM there, every stage before the last AGOM), so the term is never
   <= 0. An SGP4XP set is rounded to the two-line digits and searched on their lattice (an AP set keeps full precision,
   SPEC 16.9); a term whose prior sigma, in its own
@@ -150,7 +156,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 - Covariance rows: the state, then DRAG_AREA_OVER_MASS, DRAG_AREA_OVER_MASS_RATE, SRP_AREA_OVER_MASS,
   IN_TRACK_ACCELERATION, OUTGASSING_ACCELERATION when solved, in that order; COV_UNITS one per row. A record's rows the
   theories have no sensitivity to fly as constant parameters.
-- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the 1 km a priori sigma) and SEDR, and one `$ODR` per fit on
+- `fit` writes WEIGHTED_RMS (FIT_RMS_KM / sqrt(3) over the sigma OD_DATA_WEIGHTING states: 1 km under drag, the data's
+  own above it) and SEDR, and one `$ODR` per fit on
   `residuals`: a row per input state (geocentric distance observed and computed, weight, accepted).
 - `sdnap_covariance_full_at` gives the covariance of the state and the parameter rows per time; no sensitivities are
   exposed, so P8 is refused.
@@ -403,9 +410,12 @@ SGP4XP cost (32,770 sets, CPU per object, measured 2026-10-23): step 1.14 µs, 1
 
 ## Tests
 
-The tests write only under one scratch root (`test/lib/scratch.mjs`): `SDN_AP_TEST_SCRATCH`, or `sdn-ap-test-scratch` under
-the operating system's temporary directory (never a home directory). They build or compute what they read there: copies of
-earlier releases from git, test builds, the propagator/ffm model-truth caches. The model truth's constant space weather is
+The tests write only under their scratch roots (`test/lib/scratch.mjs`, never a home directory): `SDN_AP_TEST_SCRATCH`, or
+`sdn-ap-test-scratch-<tag>` under the operating system's temporary directory, the tag a hash of the checkout's real path,
+so two clones never share one. They build or compute what they read there: copies of earlier releases from git, test
+builds. The propagator/ffm model truths alone go to a shared folder (`sdn-ap-test-scratch-shared`, or `shared` under
+`SDN_AP_TEST_SCRATCH`): each file is named by the SHA-256 of FFM's build and every byte of its request, and written whole,
+so any clone may read what another made. The model truth's constant space weather is
 built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of such rows).
 
 - `test/conformance.e2e.mjs` (the task's E2E): a randomized corpus across LEO, SSO, MEO, GEO, HEO and VDS
@@ -444,6 +454,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   prior, a drag prior without its sigma, the forms written GAUSSIAN_SIGNED) giving the bytes of the fit that states
   that LOG_NORMAL, on the TEME example and on the ISS window, where it ends at BTERM > 0; the LOG_NORMAL refusals by
   name; `sdnap_fit` with drag_log.
+- `test/fit-data-sigma.e2e.mjs`: SPEC 12.1, the fit's weighting (stack #324): above the drag AGOM recovered to 0.1 % on
+  the module's own GPS-like and geostationary flights with the record's data sigma under 1 m; with a stated sigma the
+  estimate pulled toward its prior by what the record's covariance implies; 2,400 km and 700 km sets keep UNIT WEIGHTS,
+  a 2,600 km set states its sigma.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
@@ -463,6 +477,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/perigee-drag-continuity.e2e.mjs`: SPEC 16.12: no step at perigee above e 0.3 with drag. On the transfer-orbit
   fixture and on Molniya, at three perigees each, the position step stays at most 1 cm and the velocity step at most
   1e-5 m/s (5 ms states); within 10 min of perigee the 10 s jump detector stays within 1.5 times the drag-off flight's.
+- `test/egrid-continuity.e2e.mjs`: SPEC 16.11: the first-order families' grid in E read continuously with its slope. On
+  the transfer orbit and on Molniya with drag off, the jump detector within 600 s of perigee stays at most 0.08 m at 10 s
+  and 5 mm at 1 s (0.395 and 0.031 m on the transfer orbit through 0.6.13, kinks about 80 s apart).
 - `test/maneuver.e2e.mjs`: the `maneuver` method (impulses, finite burns, the `$MNV` record), the fit of an arc across
   a burn (the span rule's shortening, fit-implausible), `$PCF` refusals, and the method's refusals.
 - `test/exports.e2e.mjs`: the display exports, each against its inverse.
