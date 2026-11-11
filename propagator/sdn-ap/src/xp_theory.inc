@@ -6660,6 +6660,9 @@ inline void set_sp_anchor(const XpSat& s, const Node& lo, const Node& hi) {
 /// Mean equinoctial state at t on a caller-private XpSat (lock-free, zero Node copies).
 inline bool mean_at_local(XpSat& s, double t, double* y) {
   if (t == 0.0) {
+    // stack #491: the epoch has no bracket; what output bakes there (the m-daily and tesseral terms) is the state's own,
+    // never the bracket of whichever set this thread flew last
+    tess::g_sp_anchor.valid = false;
     for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
     return true;
   }
@@ -6674,6 +6677,7 @@ inline bool mean_at_local(XpSat& s, double t, double* y) {
 /// Mean equinoctial state at t (minutes from epoch).
 inline bool mean_at(XpSat& s, double t, double* y) {
   if (t == 0.0) {
+    tess::g_sp_anchor.valid = false;  // stack #491, as mean_at_local
     for (int j = 0; j < 6; ++j) y[j] = s.epoch.y[j];
     return true;
   }
