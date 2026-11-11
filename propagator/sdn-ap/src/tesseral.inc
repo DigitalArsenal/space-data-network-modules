@@ -4234,7 +4234,7 @@ inline void zonal_six(const float* F, int degree, bool wide, const Kepler& kp, d
 /// (the grid resolves periods of 1 / band orbits). Until stack #477 a comment here said k = 2 and 3 "do not pay (2.13 against
 /// 2.03 km at day 3)": that was a series cut at degree 31 against a 70 x 70 truth, which loses a cancellation. With
 /// Terms::slow the slow set's terms follow these (kSlowDegree above): every j and q, to the field's degree, by size.
-constexpr int kShallowMax = 1024;
+constexpr int kShallowMax = 2048;  // the largest low-table list (|q| up to 4) is 929 terms (test/slow-set-partition's sweep)
 
 /// A shallow term as held per object (16 bytes): the Kaula indices and the epoch products in float; the
 /// field coefficients are the pinned table's.
@@ -4264,7 +4264,7 @@ struct ShallowTerms {  // the epoch scratch; xp_init keeps count entries
   int over;       ///< the terms the rules select that the list could not hold (kShallowMax): 0 on every set the tests sweep
   res::ResCoef c[kShallowMax];
 };
-/// The epoch scratch on its thread (about 60 kB: not on the stack).
+/// The epoch scratch on its thread (about 120 kB: not on the stack).
 inline ShallowTerms& shallow_scratch() {
   static thread_local ShallowTerms s;
   return s;
@@ -4304,7 +4304,7 @@ struct ShallowGroupPoly {
   double c[12][3];
 };
 struct ShallowEvalCache {
-  static constexpr int kMaxGroups = 128;
+  static constexpr int kMaxGroups = 512;  // the slow set's (j, m, w) groups with |q| up to 4 (128 held q = 0's)
   const ShallowCoef* table = nullptr;
   uint64_t table_id = 0;
   int count = 0;
