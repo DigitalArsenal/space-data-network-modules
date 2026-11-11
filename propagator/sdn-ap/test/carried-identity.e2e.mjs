@@ -9,8 +9,11 @@
 //   Earth-fixed) at 40 times, every double the same (Object.is); propagate_epochs, the $OEM byte for byte.
 // - AP records, inside this build: the AP fixture fit (no forecast) at 42 whole-second epochs over the fixture grid,
 //   with no SOURCES label; propagate_epochs and load_epochs with sdnap_epochs_at (the covariance asked, as
-//   propagate_epochs asks it) every double the same; propagate within 2 cm of them (it times the theory from the
-//   record's epoch, the store in minutes from J2000, and an AP state depends on the order of requests, SPEC 9).
+//   propagate_epochs asks it) every double the same; propagate of the record without its COVARIANCE_DATA every double
+//   the same as the store's (SPEC 9: the store times an AP set as propagate does, and an AP state is a function of its
+//   set and its time); with its covariance, propagate within 1 mm of them (it flies the nominal through the
+//   covariance's combined evaluation, which takes the third-body short-period terms and the Sun at the state, where
+//   the direct path interpolates them across the bracket, SPEC 9).
 // AP's comparison against 0.6.9 (the AP fit's $OCM and $ODR, its propagate, store and propagate_epochs output) was
 // dropped on 2026-11-10: it held AP's theory and fit fixed forever, so every change to either broke it by design (the
 // cache rework moves AP's output by 0.3 to 13 mm and the fit change every fit above 2,500 km). What it protects for AP,
@@ -25,7 +28,7 @@ import path from "node:path";
 import { createStandaloneHarness } from "space-data-module-sdk/testing/isomorphic";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { packageRoot, wasmPath } from "./lib/module.mjs";
-import { T, fixtureSets, flight, GRID_OUTPUT } from "./lib/ocm.mjs";
+import { T, fixtureSets, flight, GRID_OUTPUT, repackOcm } from "./lib/ocm.mjs";
 import { configuration } from "./lib/pcf.mjs";
 import { jdOf } from "./lib/frames.mjs";
 import { oemLines } from "./lib/carried.mjs";
@@ -127,11 +130,17 @@ try {
     const store = epochs.map((e) => { const { whole, frac } = jdOf(e); x.sdnap_epochs_at(whole, frac, 0, 1, 0, p, 0, cov); return Array.from(new Float64Array(d.memory.buffer, p, 6)); });
     // the store's two calls are one path: to the bit
     check(b.length === epochs.length && b.every((l, k) => state(l).every((v, q) => Object.is(v, store[k][q]))), "AP: propagate_epochs and load_epochs with sdnap_epochs_at differ");
-    // propagate times the theory from the record's epoch, the store in minutes from J2000, and an AP state depends on
-    // the order of requests (SPEC 9: up to 12.7 mm at 500 km): within 2 cm
+    // propagate of the record without its covariance: the direct path, the store's: to the bit
+    const bare = repackOcm(ap, (o) => { o.COVARIANCE_DATA = []; o.COV_PARAMETER_KINDS = []; o.COV_PROPAGATION = null; });
+    const pb = await newC.invoke({ methodId: "propagate", inputs: flight([bare], at) });
+    const c = pb.statusCode === 0 ? oemLines(pb.outputs[0].payload) : [];
+    check(c.length === epochs.length && c.every((l, k) => state(l).every((v, q) => Object.is(v, store[k][q]))),
+      `AP: propagate of the record without its covariance differs from the store (${pb.errorCode ?? "states"})`);
+    // with its covariance, propagate flies the nominal through the covariance's combined evaluation (the third-body
+    // short-period terms and the Sun at the state; the direct path interpolates them across the bracket, SPEC 9): 1 mm
     const worst = Math.max(...a.map((l, k) => Math.hypot(l.X - store[k][0], l.Y - store[k][1], l.Z - store[k][2])));
-    check(a.length === epochs.length && worst < 2e-5, `AP: propagate is ${worst} km from the store, over 2 cm`);
-    console.log(`AP: ${epochs.length} epochs; propagate_epochs and the store the same to the bit; propagate within ${(worst * 1e6).toFixed(3)} mm of them`);
+    check(a.length === epochs.length && worst < 1e-6, `AP: propagate is ${worst} km from the store, over 1 mm`);
+    console.log(`AP: ${epochs.length} epochs; propagate_epochs, the store and propagate of the record without its covariance the same to the bit; with it, propagate within ${(worst * 1e6).toFixed(3)} mm of them`);
   }
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
@@ -141,5 +150,5 @@ if (failures.length) {
   console.log(`CARRIED-IDENTITY FAIL: ${failures.length} failure(s)`);
   process.exit(1);
 }
-console.log(`CARRIED-IDENTITY PASS: without a carried forecast, the SGP4XP and SGP4 records' fit, propagate, epoch store and propagate_epochs are ${BASE_VERSION}'s bit for bit (PRODUCER masked); an AP record flies alike through propagate_epochs and the epoch store (to the bit) and propagate (within 2 cm)`);
+console.log(`CARRIED-IDENTITY PASS: without a carried forecast, the SGP4XP and SGP4 records' fit, propagate, epoch store and propagate_epochs are ${BASE_VERSION}'s bit for bit (PRODUCER masked); an AP record flies alike through propagate_epochs, the epoch store and propagate without its covariance (to the bit), and propagate with it (within 1 mm)`);
 process.exit(0);
