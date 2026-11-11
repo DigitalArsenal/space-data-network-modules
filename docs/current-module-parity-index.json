@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T02:24:13.713Z",
+  "generatedAt": "2026-11-11T02:46:40.442Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.16",
+      "version": "0.6.17",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 160,
+      "testFileCount": 161,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7548,6 +7548,7 @@
         "test/class0-commensurability.e2e.mjs",
         "test/class0-exact-resonance.e2e.mjs",
         "test/conformance.e2e.mjs",
+        "test/covariance-above-classes.e2e.mjs",
         "test/covariance-realism.e2e.mjs",
         "test/covariance-realism.mjs",
         "test/covariance.e2e.mjs",

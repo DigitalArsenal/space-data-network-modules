@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.16 (dist 7c91f0d9).
+Version 0.6.17 (dist 51201d11).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -207,8 +207,11 @@ sphere's AGOM, on fits of 72 h or more above the drag; elsewhere, and always in 
 is held at FORCES.ECOM2.Y0_M_S2. The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR
 truthful) and every flight reads it there; nothing else carries it (an SGP4XP row of `sdnap_init_elements` or `sdnap_fit`
 with mean_motion_dot not 0 is refused). The theory applies its averaged rates to the mean elements in 6 h blocks; a set
-without Y0 flies as before, bit for bit. On ten real 72 h windows each, the median day-7 error went from 84 to 15 m on
-medium Earth orbit and from 181 to 37 m on Galileo. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
+without Y0 flies as before, bit for bit. On the real 72 h windows of experiments headline-loop (0.6.13 against 0.6.15,
+the table's own $PCF), medium Earth orbit's median at day 5 went from 35.1 to 15.1 m and the windows within 100 m of
+the numerical propagator from 200 to 250 of 251; Galileo's from 111.1 to 29.2 m and from 20 to 42 of 42. 46 of the 293
+windows are worse at day 5 by any amount between the two release tables (44 by more than 1 m in the radiation pull
+request's own flight), the worst by 43 m. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
 eccentric science orbits. A shorter fit can hold the Y0 of an earlier 72 h fit (FORCES.ECOM2.Y0_M_S2 = its VALUE):
 medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a covariance row. Cost: a record with Y0
 takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.14 to 5.76 ms for a week hourly, a
@@ -302,6 +305,18 @@ sqrt(3N - L), 46 for a 24 h arc sampled every 120 s. SDNAP's DRAG row (0.6.1, SP
 and cross-track axis; on held-out windows the median |z| of 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7)
 lies inside 0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times
 too wide in-track and radially); that count does not establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
+
+Above the drag the ABOVE row is 5 to 1,000 times too wide on near-circular orbits and too narrow on TESS, Chandra and
+commercial geostationary satellites with burns (stack #433, #444; SPEC 12.5 "Above the drag, by class"). A set above
+the drag takes a row by class, from its own elements (HEO at e 0.3 or more; geosynchronous under 1.5 rev/day, medium
+Earth orbit under 4, the LAGEOS class above). The row applies only where the fit's data sigma and span lie within
+those of the calibration fits; elsewhere the ABOVE row stands. Above the drag, s_d = k |AGOM| / a. The LAGEOS class
+(LAGEOS-1, LAGEOS-2, LARES-2; 72 h fits to precise orbits; data sigma 2.43 to 2.76 m for AP, 58.8 to 76.9 m for
+SGP4XP) is fitted. On its 32 windows AP's median |z| at days 1, 3, 5 and 7 goes from 0.001 to 0.24 to between 0.52 and
+1.04, the 95 % coverage is 0.88 to 0.94, and no cell has more windows above 3 than the acceptance allows (max(as built,
+1 % of the windows, 1)). The radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). Medium Earth
+orbit, geosynchronous and HEO keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the
+selection.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
@@ -475,6 +490,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   the module's own GPS-like and geostationary flights with the record's data sigma under 1 m; with a stated sigma the
   estimate pulled toward its prior by what the record's covariance implies; 2,400 km and 700 km sets keep UNIT WEIGHTS,
   a 2,600 km set states its sigma.
+- `test/covariance-above-classes.e2e.mjs`: SPEC 12.5, above the drag by class (stack #433): on the module's own
+  flights, a LAGEOS-class fit inside its calibrated data sigma and span states the LAGEOS row (AP and SGP4XP) with s_d
+  = k |AGOM| / a; above that data sigma, over 24 h, and in the classes not yet fitted (HEO, medium Earth orbit) the
+  ABOVE row; every record flies with its covariance.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
