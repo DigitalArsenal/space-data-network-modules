@@ -312,8 +312,13 @@ struct ApBodiesNode {
   Bodies b{};
 };
 inline thread_local ApBodiesNode* g_ap_bodies_store = nullptr;
+/// The thread's node store, made on first use or ahead (pool::warm_thread: a pool thread makes its caches before any
+/// batch, stack #487).
+inline void ap_bodies_store_make() {
+  if (g_ap_bodies_store == nullptr) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+}
 inline const Bodies& ap_bodies_node(int64_t k) {
-  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) g_ap_bodies_store = new ApBodiesNode[kApBodiesStoreSlots];
+  if (__builtin_expect(g_ap_bodies_store == nullptr, 0)) ap_bodies_store_make();
   ApBodiesNode& s = g_ap_bodies_store[static_cast<uint64_t>(k) & (kApBodiesStoreSlots - 1)];
   if (s.key != k) {
     s.b = ap_bodies_at(static_cast<double>(k) * (kApBodiesNodeHours / 24.0));
@@ -5988,6 +5993,157 @@ inline void xp_release(XpSat& s) {
   s.ctx.wide_owned = 0;
 }
 
+/// SPEC 16.20, the field's census (stack #503). The |q| it lists to: the slow set's at or below class 0's switch, then wider.
+inline int census_q_max(double e) { return e <= tess::kWideENonResonant ? tess::kSlowQMax : e <= tess::kWideE ? 8 : 12; }
+
+/// The census's rows for a set `s` that ap_init built: every tesseral term (l, m, p, q) of the embedded field, order 1 to 70,
+/// degree to 70, |q| up to census_q_max(e), whose size (tess::census_size_m) reaches `cut` m, with the weight each carrier the
+/// set built holds of it, read from the set's own tables: the rates (the shallow and slow list with its band taper, the wide slow list above the switch, the class's
+/// terms, the half-day and one-day tails), the output table (its entries' weights), the m-daily family, the family grid
+/// (1 - tess::wide_left_out). Row of 10: l, m, p, q, psi-dot / n, the code, the rates' weight, the weight of all carriers, the
+/// size (m), the term's period (days). Codes: carried once (the weights sum to 1 within 1e-3): 1 the rates, 2 the grid, 3 the output table, 8 the m-daily
+/// family, 11 the rates and the output table between them, 12 the rates and the grid between them (the band taper); carried nowhere, by the carrier the term's rate and degree give it:
+/// 20 above its degree, 21 under its rate floor (or out of the grid's slow band), 22 outside its q range (or its j range),
+/// 23 under its own size cut, 24 partly (the weights sum to less than 1 and the share left out reaches the cut); 30 twice
+/// (they sum to more than 1).
+inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
+  const RateContext& c = s.ctx;
+  const int8_t cls = c.resonance;
+  const tess::SecularRates sr = tess::secular_rates(n, e, inc);
+  const double a = std::pow(kKe / n, kX2o3), band = tess::kShallowBand * n;
+  const bool low = cls == 0 && !c.long_period;  // sp_terms' and wide_families' `low`
+  const bool low_table = low && c.branch.wide_tess == 0;
+  const int Q = census_q_max(e);
+  const res::TermSet carried = c.ap_resonance && cls != 0 ? res::class_terms(cls) : res::TermSet{0, nullptr};
+  const res::TermSet grid_carried = res::class_terms(cls);
+  const int sd = cap > tess::kShallowCap ? tess::kShallowCap : cap;  // the near degree and the tails' (ap_init)
+  const int table_degree = cap > tess::kSpCap ? tess::kSpCap : cap;  // the output table's general degree (ap_init's spd)
+  const tess::WideGrid* grid = c.wide;
+  double F[72], dF[72], G[72][25], dG[72][25], amp[72];
+  amp[0] = kMu / a;
+  for (int l = 1; l <= 70; ++l) amp[l] = amp[l - 1] / a;  // mu / a^(l+1)
+  int count = 0;
+  for (int w = -70; w <= 70; ++w) {
+    const int aw = w < 0 ? -w : w;
+    int lw = aw > 2 ? aw : 2;
+    if ((lw - w) & 1) ++lw;
+    if (lw > 70) continue;
+    for (int l = lw; l <= 70; l += 2) {
+      const int p = (l - w) / 2;
+      for (int q = -Q; q <= Q; ++q) tess::slow_G(l, p, q, w + q, e, G[l][q + Q], dG[l][q + Q]);
+    }
+    for (int m = 1; m <= 70; ++m) {
+      int l0 = m > lw ? m : lw;
+      if ((l0 - w) & 1) ++l0;
+      if (l0 > 70) continue;
+      tess::normalized_Fk_dF(m, w, 70, inc, F, dF);
+      const double nu = -(w * sr.argp + m * (sr.node - kOmegaE)) / sr.mdot;
+      const int jlo = static_cast<int>(std::floor(nu - band / sr.mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + band / sr.mdot)) + 1;
+      bool on_grid = false;
+      if (grid != nullptr)
+        for (int k = 0; k < grid->count && !on_grid; ++k) on_grid = grid->m[k] == m && grid->w[k] == w;
+      for (int l = l0; l <= 70; l += 2) {
+        const int p = (l - w) / 2;
+        const double A = amp[l] * std::hypot(tess::kEgmC[l][m], tess::kEgmS[l][m]);
+        for (int q = -Q; q <= Q; ++q) {
+          const int j = w + q;
+          const double psidot = tess::slow_rate(sr, w, j, m), ap = std::fabs(psidot);
+          const double size = tess::census_size_m(l, j, A, F[l], dF[l], G[l][q + Q], dG[l][q + Q], a, n, psidot);
+          if (!(size >= cut)) continue;
+          // the rates: the shallow and slow list, the class's terms, the tails
+          double wr = 0.0;
+          for (int k = 0; k < c.shallow_count; ++k) {
+            const tess::ShallowCoef& t = c.shallow[k];
+            if (t.l == l && t.m == m && t.p == p && t.k == j) { wr += tess::shallow_weight(sr, j, m, n, w); break; }
+          }
+          // above the switch, the wide slow list (slow_terms_wide), each term by band_taper of its own rate (wide_slow_six)
+          for (int k = 0; k < c.wide_slow_count; ++k) {
+            const res::ResCoef& t = c.wide_slow[k];
+            if (t.l == l && t.m == m && t.p == p && t.k == j) { wr += tess::band_taper(ap / band); break; }
+          }
+          for (int t = 0; t < carried.count; ++t)
+            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) wr += 1.0;
+          if (c.half_day != nullptr) {
+            if (cls == 2 && l > 5 && l <= sd && (m & 1) == 0 && j == m / 2) wr += 1.0;
+            if (cls == 1 && l > 4 && l <= sd && m <= tess::kOneDayTailMaxOrder && j == m) wr += 1.0;
+          }
+          // the output table, by its entries' weights (each entry holds F times its weight)
+          double wt = 0.0;
+          for (int k = 0; k < c.sp_count; ++k) {
+            const tess::SpCoef& t = c.sp[k];
+            if (t.l == l && t.m == m && t.w == w && t.j == j) { wt += std::fabs(F[l]) > 1e-30 ? t.f / F[l] : 1.0; break; }
+          }
+          const double wm = c.mdaily != nullptr && w == 0 && j == 0 && l <= c.mdaily_degree ? 1.0 : 0.0;
+          const double wg = on_grid && l <= grid->degree
+                                ? 1.0 - tess::wide_left_out(cls, grid_carried, l, m, p, w, j, j >= jlo && j <= jhi, ap, n)
+                                : 0.0;
+          const double total = wr + wt + wm + wg;
+          int code;
+          // a share left out whose own size, (1 - total) times the term's, is under the cut counts as carried (the cut applies
+          // to what is left out, as the output table's weighted cut does)
+          if (total > 1.0 + 1e-3) code = 30;
+          else if (total >= 1.0 - 1e-3 || (total > 1e-3 && (1.0 - total) * size < cut)) {
+            const int carriers = (wr > 1e-6) + (wt > 1e-6) + (wm > 1e-6) + (wg > 1e-6);
+            code = carriers > 1 ? (carriers == 2 && wr > 1e-6 && wt > 1e-6 ? 11 : carriers == 2 && wr > 1e-6 && wg > 1e-6 ? 12 : 30)
+                   : wr > 1e-6 ? 1 : wg > 1e-6 ? 2 : wt > 1e-6 ? 3 : 8;
+          } else if (total > 1e-3) code = 24;
+          else if (low_table && ap < 1.1 * band) {
+            // the slow set's (the rates hold a term below 1.1 bands, the output table above): its degree (and the families the
+            // field ends at once), its q and j ranges, its size cut
+            code = l0 >= tess::kSlowDegree - 1 || l > tess::slow_degree_cap() ? 20
+                   : (std::abs(q) > tess::slow_q_max() || j < 1 || j > tess::kSlowJMax) ? 22 : 23;
+          } else if (grid != nullptr) {
+            // above the switch a slow term is the wide slow list's (slow_terms_wide, by its own size cut; low orbit included from
+            // 0.6.NN), a fast one the grid's (a family the cut leaves off holds only terms under tess::kGridKeepM)
+            code = l > grid->degree ? 20 : ap < tess::kShallowSelect * band ? 23 : 21;
+          } else {
+            // the output table's: its degree, its q range, its floor (1e-3 n in low orbit, the band elsewhere), its size cut
+            const bool under_floor = low ? ap < 1e-3 * n : ap < band;
+            code = l > table_degree ? 20 : std::abs(q) > 1 ? 22 : under_floor ? 21 : 23;
+          }
+          if (count < max_rows) {
+            double* r = rows + 10 * count;
+            r[0] = l; r[1] = m; r[2] = p; r[3] = q; r[4] = psidot / n; r[5] = code; r[6] = wr; r[7] = total; r[8] = size;
+            r[9] = ap > 0.0 ? kTwoPi / ap / 1440.0 : 1e30;  // the term's period, days
+          }
+          ++count;
+        }
+      }
+    }
+  }
+  return count;
+}
+
+/// SPEC 16.20: the census for a set of epoch mean motion n (rad/min), e, i (rad) whose record states MAXIMUM_TESSERAL_DEGREE
+/// `cap` with the slow set (a fit's record), built as a flight builds it (ap_init) and released. -1 for elements it refuses.
+inline int field_census(int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
+  if (!(n > 0.0) || !(e >= 0.0 && e < 1.0) || !(inc >= 0.0 && inc < kPi) || cap < 2 || cap > 70 || !(cut > 0.0)) return -1;
+  Elements el{};
+  el.epoch_jd_whole = 2461000.5;
+  el.xno = n;
+  el.eo = e;
+  el.xincl = inc;
+  XpSat* sp = static_cast<XpSat*>(std::malloc(sizeof(XpSat)));
+  if (sp == nullptr) return -1;
+  new (sp) XpSat{};
+  XpSat& s = *sp;
+  s.ctx.ctx_id = next_ctx_id();
+  s.ctx.cov_anchor_id = s.ctx.ctx_id;
+  s.ctx.selected_terms = tess::Terms{};
+  s.ctx.selected_terms.tesseral = cap;
+  s.ctx.selected_terms.slow = true;
+  s.ctx.branch = branch_of(n, e, true);
+  s.ctx.long_period = s.ctx.branch.long_period;
+  s.ctx.resonance = s.ctx.branch.resonance;
+  s.ctx.e0 = e;
+  s.ctx.i0 = inc;
+  const int count = ap_init(el, n, s.ctx.resonance, s) ? census_rows(s, cap, n, e, inc, cut, rows, max_rows) : -1;
+  xp_release(s);
+  s.~XpSat();
+  std::free(sp);
+  return count;
+}
+
 inline void lock(int32_t* word) {
   int32_t expected = 0;
   while (!__atomic_compare_exchange_n(word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) expected = 0;
@@ -6014,7 +6170,40 @@ struct CachePool {
   const XpSat* last = nullptr;  ///< the set that asked last
   uint64_t sp_holders = 0, reclaimed = 0, refused = 0, sp_refused = 0, sp_made = 0;
   std::vector<XpSat*> holders;
+  std::vector<XpSat*> order;  ///< pool_reclaim_locked's scratch, its capacity kept with the holders' (pool_room)
 };
+
+/// Stack #487 (SPEC 9): inside a threaded batch (pool::run, from the workers' wake to the last one done) the module's
+/// memory does not grow. While this flag is set, sbrk refuses every growth (pool.inc), on every thread, and a block that
+/// would have needed new pages is not given: the set's caches fall back to the thread's, and a row whose state needed
+/// such a block is computed again by the calling thread after the batch (pool::run's deferral).
+inline int32_t g_batch_running = 0;
+/// Set by sbrk when it refuses on this thread; the row being computed reads and clears it (run_chunk).
+inline thread_local int32_t g_alloc_refused = 0;
+/// The pool's counts (sdnap_pool_stats): threaded batches run, growths refused, rows deferred to the calling thread,
+/// batches after which the calling thread saw a larger memory (the invariant broken: 0), the pool declared dead, the
+/// last reserve (bytes); the waits for a thread's view of the memory (pool::await_view) that had to yield, and the
+/// most yields one took.
+struct BatchStats {
+  uint64_t batches = 0, refused = 0, deferred = 0, grew = 0, dead = 0, reserve = 0;
+  uint64_t views = 0, view_yields_max = 0;
+};
+inline BatchStats& batch_stats() {
+  static BatchStats s;
+  return s;
+}
+inline void atomic_max_u64(uint64_t* word, uint64_t v) {
+  uint64_t old = __atomic_load_n(word, __ATOMIC_SEQ_CST);
+  while (v > old && !__atomic_compare_exchange_n(word, &old, v, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+  }
+}
+/// One wait for a thread's view that yielded `yields` times (pool::await_view; any thread).
+inline void batch_view_waited(uint64_t yields) {
+  BatchStats& s = batch_stats();
+  __atomic_add_fetch(&s.views, 1, __ATOMIC_SEQ_CST);
+  atomic_max_u64(&s.view_yields_max, yields);
+}
+inline bool batch_running() { return __atomic_load_n(&g_batch_running, __ATOMIC_SEQ_CST) != 0; }
 inline CachePool& cache_pool() {
   static CachePool p;
   return p;
@@ -6064,9 +6253,15 @@ inline bool pool_asked_again(CachePool& p, const XpSat& s) {
 inline bool pool_reclaim_locked(CachePool& p, uint64_t need, const XpSat* keep, uint64_t before) {
   if (p.held + need <= p.budget) return true;
   if (p.floor >= before) return false;
-  std::vector<XpSat*> order;
+  // the scratch's room is kept with the holders' (pool_room), so filling it never allocates; inside a threaded batch a
+  // candidate beyond its room is left out rather than grow anything (stack #487)
+  std::vector<XpSat*>& order = p.order;
+  order.clear();
   for (XpSat* v : p.holders)
-    if (v->caches->stamp < before && v != keep) order.push_back(v);
+    if (v->caches->stamp < before && v != keep) {
+      if (order.size() == order.capacity() && batch_running()) break;
+      order.push_back(v);
+    }
   std::sort(order.begin(), order.end(), [](const XpSat* x, const XpSat* y) { return x->caches->stamp < y->caches->stamp; });
   const uint64_t target = p.budget - std::min(p.budget, std::max(need, p.budget / 8));
   for (XpSat* v : order) {
@@ -6113,7 +6308,9 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   lock(&p.lock);
   SetCaches* c = nullptr;
-  if (pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
+  // inside a threaded batch the holders' list may not grow past the room kept for it (pool_room): no room, no caches
+  const bool listed = !(p.holders.size() == p.holders.capacity() && batch_running());
+  if (listed && pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
   if (c != nullptr) {
     c->bytes = need;
     // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and
@@ -6128,6 +6325,20 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   }
   unlock(&p.lock);
   return c;
+}
+
+/// Before a threaded batch, on the calling thread (stack #487): room in the pool's two lists for `more` sets, so that no
+/// worker grows them, and the bytes the pool may still take (its budget less what it holds), which bounds what the
+/// batch's sets can allocate for their caches.
+inline uint64_t pool_room(size_t more) {
+  CachePool& p = cache_pool();
+  lock(&p.lock);
+  const size_t want = p.holders.size() + more;
+  if (p.holders.capacity() < want) p.holders.reserve(want);
+  if (p.order.capacity() < p.holders.capacity()) p.order.reserve(p.holders.capacity());
+  const uint64_t free = p.budget > p.held ? p.budget - p.held : 0;
+  unlock(&p.lock);
+  return free;
 }
 
 extern "C" size_t malloc_usable_size(void*);

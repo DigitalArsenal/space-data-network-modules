@@ -1445,12 +1445,17 @@ inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
 
 /// A set's blk_c for one bake, per thread: the lanes' coefficients from F (store_lane's layout), zero in empty lanes.
 inline thread_local float* g_sp_blk_c = nullptr;
-inline float* sp_blk_c(const SpEvalCache& sc) {
+/// The thread's blk_c storage (192 KiB), made on first use or ahead (pool::warm_thread: a pool thread makes its caches
+/// before any batch, stack #487).
+inline float* sp_blk_c_storage() {
   if (__builtin_expect(!g_sp_blk_c, 0)) {
     g_sp_blk_c = static_cast<float*>(std::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
     if (g_sp_blk_c == nullptr) std::abort();
   }
-  float* const c = g_sp_blk_c;
+  return g_sp_blk_c;
+}
+inline float* sp_blk_c(const SpEvalCache& sc) {
+  float* const c = sp_blk_c_storage();
   for (int bi = 0; bi < sc.total_blks; ++bi) {
     for (int l = 0; l < 4; ++l) {
       float* const pc = c + bi * 64 + l;
@@ -4557,6 +4562,20 @@ inline double slow_size_e_m(int l, int m, double fdg, double a, double n, double
   return 2.0 * A / (n * a * pd) * kRe * 1e3;
 }
 
+/// The forecast the field's census sizes a term over (SPEC 16.20): 5 days, in minutes.
+constexpr double kCensusSpanMin = 5.0 * 1440.0;
+/// A term's size for the field's census (SPEC 16.20, m), A = mu / a^(l+1) |C, S| (`A`): the output table's measure at full
+/// weight (sp_terms' cut) with the eccentricity vector's part counted along track (twice its radial part, as slow_size_e_m),
+/// a A [|F G| (3 |j| / (a^2 psi-dot^2) + 2 (l + 1) / (n a^2 |psi-dot|)) + (2 |F dG/de| + |dF/di G|) / (n a^2 |psi-dot|)],
+/// with |psi-dot| at least 2 / kCensusSpanMin: a term slower than that grows over the forecast, not past it. Through the mean
+/// motion it is the slow set's measure (slow_size_m) where the term is not that slow.
+inline double census_size_m(int l, int j, double A, double F, double dF, double G, double dG, double a, double n, double psidot) {
+  const double ap = std::fmax(std::fabs(psidot), 2.0 / kCensusSpanMin);
+  const double na2 = n * a * a;
+  return a * A * (std::fabs(F * G) * (3.0 * std::abs(j) / (a * a * ap * ap) + 2.0 * (l + 1) / (na2 * ap)) +
+                  (2.0 * std::fabs(F * dG) + std::fabs(dF * G)) / (na2 * ap)) * kRe * 1e3;
+}
+
 /// A slow term's G_lpq and dG/de at the epoch e (SPEC 16.18). q = 0 under e 0.03: the series to e^4. Otherwise res::exact_G,
 /// whose dG below e 2e-4 is a tabulated Hansen series's, or 0 where none is tabulated (degrees above 5): there the slow set
 /// takes dG as the central difference of exact_G's own G over e0 +- 2e-4 (G is analytic in e, odd or even in it with q). A term
@@ -5112,6 +5131,23 @@ inline int grid_keep(int L, int cls, double n, double e, double inc, uint8_t* ke
   return kept;
 }
 
+/// The share of the harmonic (l, m, p, q = j - w) that a family grid leaves out of its forcing (sp_terms' weight_of, 1 - its
+/// weight, harmonic by harmonic), carried elsewhere: the m-daily terms (w = j = 0); the half-day tail, in the half-day class's
+/// rates (16.2); the class's terms (`carried`); and inside the slow band (`in_band`, |psi-dot| = `ap` within the family's
+/// kShallowBand n), in every class, low orbit included, the share the rates carry, band_taper (the shallow set's terms, q = 0,
+/// w = j = 1, in low orbit; every other in slow_terms_wide, stack #473; through 0.6.MM low orbit left out only the shallow set's
+/// terms and those slower than 1e-3 n). The grid builds on it and the field's census (16.20) reads it.
+inline double wide_left_out(int cls, const res::TermSet& carried, int l, int m, int p, int w, int j, bool in_band, double ap,
+                            double n) {
+  const int q = j - w;
+  double out_ = w == 0 && j == 0 ? 1.0 : 0.0;
+  if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = 1.0;
+  for (int t = 0; t < carried.count && out_ == 0.0; ++t)
+    if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = 1.0;
+  if (out_ == 0.0 && in_band) out_ = band_taper(ap / (kShallowBand * n));
+  return out_;
+}
+
 /// One set of family grids at (n, e, i): out[f][6][kGridN] complex (re, im interleaved), families in (m, w) order with any
 /// forcing; returns the count. `cls`: the class whose terms the rates carry. `keep` (grid_keep's): the families built; every
 /// family when null.
@@ -5204,20 +5240,8 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         const double Sr = A * (odd ? -kEgmS[l][m] : kEgmC[l][m]), Si = A * (odd ? -kEgmC[l][m] : -kEgmS[l][m]);
         const int jlo = static_cast<int>(std::floor(nu - kShallowBand * n / mdot)) - 1, jhi = static_cast<int>(std::ceil(nu + kShallowBand * n / mdot)) + 1;
         for (int j = -(degree + 64); j <= degree + 64; ++j) {
-          const int q = j - w;
-          // the share of the harmonic left out (sp_terms' weight_of, 1 - its weight)
-          double out_ = w == 0 && j == 0 ? 1.0 : 0.0;
-          // the half-day tail, carried in the half-day class's rates (16.2; sp_terms leaves it out of the table the same way)
-          if (cls == 2 && l > 5 && (m & 1) == 0 && j == m / 2) out_ = 1.0;
-          for (int t = 0; t < carried.count && out_ == 0.0; ++t)
-            if (carried.t[t].l == l && carried.t[t].m == m && carried.t[t].p == p && carried.t[t].q == q) out_ = 1.0;
-          if (out_ == 0.0 && j >= jlo && j <= jhi) {
-            // the slow band, in every class and in low orbit too: the rates carry each slow harmonic's band_taper (the shallow
-            // set's terms, q = 0, w = j = 1, in low orbit; every other in slow_terms_wide, stack #473), and the grid leaves
-            // that share out (SPEC 16.18; through 0.6.28 low orbit left out only the shallow set's terms and those under 1e-3 n)
-            const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)), x = ap / (kShallowBand * n);
-            out_ = band_taper(x);
-          }
+          const double out_ = wide_left_out(cls, carried, l, m, p, w, j, j >= jlo && j <= jhi,
+                                            std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)), n);
           if (out_ == 0.0) continue;
           // G and dG/de at fixed M by the trapezoid on the E nodes (dM = (1 - e cos E) dE; spectral for these periodic integrands)
           double G = 0.0, dG = 0.0;

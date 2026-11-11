@@ -1,7 +1,7 @@
 {
   "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
   "name": "SDN-AP Propagator",
-  "version": "0.6.30",
+  "version": "0.6.32",
   "type": "Propagator",
   "encrypted": false,
   "requiresProtection": false,
