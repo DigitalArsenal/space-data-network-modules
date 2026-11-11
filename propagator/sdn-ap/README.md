@@ -348,7 +348,7 @@ at 300 s, headline forces. A loaded set that has not been flown holds 0.3 KB.
 | GEO | 40 KB | 33.3 KB | 0.19 GB |
 | low orbit, e 0.052 (no tesseral terms) | 19 KB | 13.3 KB | 0.17 GB |
 | transfer orbit, e 0.72 (no tesseral terms) | 26 KB | 15.8 KB | 0.30 GB |
-| e 0.1 or transfer orbit, tesseral 31 | 3.1 to 6.4 MB | 16 to 18 KB | (stack #424) |
+| e 0.1 or transfer orbit, tesseral 31 | 4.8 to 10 MB | 16 to 18 KB | (stack #424) |
 
 The instance's own growth agrees with these within 10 %. The default budget holds the caches of 3,664 sets at 500 km
 and 13,252 in MEO; 1 GB holds 14,658 and 53,008 (SPEC 9 has every orbit). Sets beyond it fly on the thread's caches, with
@@ -356,8 +356,9 @@ the same states. A host that screens a catalog flies it object by object: at 10,
 the default budget (0.85 times SGP4-XP), against 9.1 µs time-major (7.8 times; 2.25 µs, 1.9 times, when 1 GB holds them
 all).
 
-Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 3.1 MB, and a node grid while it
-is flown. One process holds at most 256 such grids, so beyond them states are refused (stack #424).
+Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 4.9 MB (with 0.6.14's slopes),
+and a node grid while it is flown: 10 MB a set flown when every set has its own elements (4.8 MB when 100 sets share one
+epoch grid). One process holds at most 256 such grids, so beyond them states are refused (stack #424).
 
 AP's cost against SGP4-XP's and SGP4's by request pattern, measured on 2026-11-10 with `test/kernel-patterns.mjs`:
 
