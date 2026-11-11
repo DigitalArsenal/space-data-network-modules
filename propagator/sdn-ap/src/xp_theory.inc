@@ -930,7 +930,8 @@ inline double node_density(const atm::Atmosphere* atmosphere, const drag::DateTe
 /// `atmosphere` (null: the theory's own) selects the density (node_density); theta_g is the Greenwich angle at d50.
 /// AP above e 0.3 (SPEC 16.12, `pass`): d50 and theta_g are those of a perigee passage, each node takes the Earth angle and
 /// date of its own time on that pass (M(nu) / n after perigee), the arcs beyond nu_c to apogee are added (13 nodes each,
-/// nu = nu_c + (pi - nu_c) s^2), and `scale` multiplies the rates.
+/// nu = nu_c + (pi - nu_c) s^2), and `scale` multiplies the rates; `width`, when given there, receives the pass's width in
+/// the mean anomaly: the RMS of M(nu) over the perigee arc's nodes, each weighted by its share of the pass's sums.
 constexpr double kDragGx[13] = {-0.98418305471858814, -0.91759839922297803, -0.80157809073330988,
                                 -0.64234933944034023, -0.44849275103644692, -0.23045831595513480, 0.0,
                                 0.23045831595513480, 0.44849275103644692, 0.64234933944034023,
@@ -951,8 +952,9 @@ inline constexpr GxPiTrig kGxPiTrig = []() constexpr {
 
 inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag, double bterm,
                        const Bodies& b, double d50, const atm::Atmosphere* atmosphere, double theta_g, double* out,
-                       bool pass = false, double scale = 1.0, bool ap_fast = false) {
+                       bool pass = false, double scale = 1.0, bool ap_fast = false, double* width = nullptr) {
   (void)y;
+  if (width != nullptr) *width = 0.0;
   const double* const gx = kDragGx;
   const double* const gw = kDragGw;
   const double e = k.e, a = fr.a, n = fr.n, eta = fr.eta;
@@ -1331,6 +1333,9 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
         rasun = std::atan2(b.sun_u.y, b.sun_u.x);
       }
       const double ve = std::sqrt((1.0 - e) / (1.0 + e));
+      // the pass's width (`width`): the perigee arc's nodes' second moment of M(nu), each weighted by its K
+      bool core = width != nullptr;
+      double Wk = 0.0, Wm2 = 0.0;
       const auto node = [&](double nu, double w) {
         double sn, cn;
         fm::sincos(nu, sn, cn);
@@ -1375,8 +1380,16 @@ inline void drag_rates(const double* y, const Frame& fr, const Kepler& k, const 
         Suu += K * cu * cu * iD2;
         Ss += K * sn * (1.0 - q * th * iD2);
         Sw += K * (Dn * cn + e + cn) * iD2;
+        if (core) {
+          const double E = 2.0 * std::atan(ve * std::tan(0.5 * nu));
+          const double Mn = E - e * std::sin(E);
+          Wk += K;
+          Wm2 += K * Mn * Mn;
+        }
       };
       for (int j = 0; j < 13; ++j) node(nuc * gx[j], gw[j]);
+      if (core && Wk > 0.0) *width = std::sqrt(Wm2 / Wk);
+      core = false;
       if (pass && nuc < kPi) {
         // the arcs nu_c < |nu| < pi: int g dnu = sum w_j (pi - nu_c) s_j g(nu_j), s_j = (x_j + 1) / 2, in the units of the
         // perigee arc's sums (whose integral is nu_c sum w_j g)
@@ -3195,6 +3208,20 @@ inline void drag_part(const RateContext& ctx, double t, const double* y, const F
   }
 }
 
+/// AP above e 0.3 (SPEC 16.12): the two passages drag_part averages, apart, for the output's drag steps: v[0..5] the full
+/// rates of the passage before t (at t - M/n), v[6..11] those of the next, v[12] and v[13] their widths in the mean anomaly.
+constexpr int kDragPassValues = 14;
+inline void drag_passes(const RateContext& ctx, double t, const double* y, const Frame& fr, const Kepler& k,
+                        const AngleTrig& ag, const Bodies& b, double* v) {
+  const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
+  for (int j = 0; j < kDragPassValues; ++j) v[j] = 0.0;
+  for (int s = 0; s < 2; ++s) {
+    const double tq = tp + s * period;
+    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
+               v + 6 * s, true, 1.0, false, v + 12 + s);
+  }
+}
+
 /// Diagnostics (SPEC 16.12): the drag's averaged rates at mean state y and time t (`theory`, state order) against an
 /// independent integral over the same passes: the Gauss equations of -(1/2) rho B |v_rel| v_rel along the mean orbit, the
 /// density (node_density) and the co-rotating air at the radius of SPEC 3.4 (mean orbit plus the J2 short-period radius),
@@ -4575,13 +4602,13 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
   return output_j2_osc(y, Ewarm, r_out, v_out);
 }
 
-/// The drag rates of a state from its segment's polynomial (drag_pass_rates) for output_drag_pass, set by
-/// xp_propagate_impl around the output of that state (of set ctx_id at t); otherwise output_drag_pass evaluates them at
-/// the state.
+/// The two passages' drag rates and widths of a state (drag_passes) from its segment's polynomial (drag_pass_rates) for
+/// output_drag_pass, set by xp_propagate_impl around the output of that state (of set ctx_id at t); otherwise
+/// output_drag_pass evaluates them at the state.
 struct DragPassRates {
   uint64_t ctx_id;
   double t;
-  double fd[6];
+  double v[kDragPassValues];
 };
 inline thread_local const DragPassRates* g_drag_pass_rates = nullptr;
 
@@ -4589,17 +4616,42 @@ inline thread_local const DragPassRates* g_drag_pass_rates = nullptr;
                                                const Bodies* shared, double* y) {
   const Frame frm = frame_of(ym);
   const Kepler km = kepler_of(ym, frm.a);
-  double fd[6] = {0, 0, 0, 0, 0, 0};
+  double v[kDragPassValues];
   const DragPassRates* held = g_drag_pass_rates;
   if (held != nullptr && held->ctx_id == ctx.ctx_id && held->t == t) {
-    for (int j = 0; j < 6; ++j) fd[j] = held->fd[j];
+    for (int j = 0; j < kDragPassValues; ++j) v[j] = held->v[j];
   } else {
     const Bodies b = shared != nullptr ? *shared : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
-    drag_part(ctx, t, ym, frm, km, angle_trig(km), b, fd);
+    drag_passes(ctx, t, ym, frm, km, angle_trig(km), b, v);
   }
-  const double M = km.m, n = ym[kN], saw = (kPi - M) / n;
-  for (int j = 0; j < 6; ++j) y[j] += fd[j] * saw;
-  y[kLam] += fd[kN] / (n * n) * (kPi * M - 0.5 * M * M - kPi * kPi / 3.0);
+  // SPEC 16.12's drag steps. The osculating elements change by each pass's whole effect, 2 pi p / n, over the pass,
+  // the cumulative of a normal distribution in M of the pass's width; the mean elements ramp by the two passes' mean.
+  // Their difference over the revolution, M in [0, 2 pi) from the pass p to the pass q:
+  //   (pi p - (p + q) M / 2 + pi (q erfc(V) - p erfc(U))) / n, U = M / (sqrt2 s_p), V = (2 pi - M) / (sqrt2 s_q),
+  // zero at either perigee and continuous with its slope from one revolution to the next; lambda adds n's own difference
+  // integrated over time, (2 pi / n^2)(p_n (M/2 - pi/6) + (q_n - p_n) M/6 - (p_n + q_n) M^2/(8 pi)
+  // + (p_n s_p ierfc(U) + q_n s_q ierfc(V)) / sqrt2), ierfc(x) = exp(-x^2)/sqrt(pi) - x erfc(x), continuous likewise.
+  // With p = q and no width these are 0.6.9's sawtooth (pi - M) p / n and (p_n / n^2)(pi M - M^2/2 - pi^2/3).
+  // A width is held below pi/4, where the step has settled (erfc 5.6) before the next perigee.
+  const double* p = v;
+  const double* q = v + 6;
+  constexpr double kSqrt2 = 1.4142135623730951, kInvSqrtPi = 0.56418958354775628;
+  const double sp = std::fmin(std::fmax(v[12], 1e-9), 0.25 * kPi), sq = std::fmin(std::fmax(v[13], 1e-9), 0.25 * kPi);
+  const double M = km.m, n = ym[kN];
+  const double U = M / (kSqrt2 * sp), V = (kTwoPi - M) / (kSqrt2 * sq);
+  double eU = 0.0, eV = 0.0, iU = 0.0, iV = 0.0;
+  if (U < 6.0) {
+    eU = std::erfc(U);
+    iU = std::exp(-U * U) * kInvSqrtPi - U * eU;
+  }
+  if (V < 6.0) {
+    eV = std::erfc(V);
+    iV = std::exp(-V * V) * kInvSqrtPi - V * eV;
+  }
+  for (int j = 0; j < 6; ++j) y[j] += (kPi * p[j] - 0.5 * (p[j] + q[j]) * M + kPi * (q[j] * eV - p[j] * eU)) / n;
+  y[kLam] += kTwoPi / (n * n) *
+             (p[kN] * (0.5 * M - kPi / 6.0) + (q[kN] - p[kN]) * M / 6.0 - (p[kN] + q[kN]) * M * M / (8.0 * kPi) +
+              (p[kN] * sp * iU + q[kN] * sq * iV) / kSqrt2);
 }
 
 struct CovNomOsc {
@@ -5390,7 +5442,7 @@ constexpr int kSparse = 12;
 
 /// AP above e 0.3 (SPEC 16.12): the drag rates the output of a state adds (output_drag_pass) over the last two segments
 /// flown, a segment the part of one revolution (keyed by its perigee time tp) inside one bracket of the mean-element grid
-/// (keyed by its lower node's time): drag_part at kPoints times of the segment (drag_pass_rates).
+/// (keyed by its lower node's time): drag_passes at kPoints times of the segment (drag_pass_rates).
 struct DragPassCache {
   static constexpr int kPoints = 3;
   int32_t lock;
@@ -5398,7 +5450,7 @@ struct DragPassCache {
   int32_t held[2];
   double tp[2], node_t[2];
   double tk[2][kPoints];
-  double fd[2][kPoints][6];
+  double v[2][kPoints][kDragPassValues];
 };
 
 struct XpSat {
@@ -5978,12 +6030,12 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   DragPassCache& c = s.drag_pass;
   // the Lagrange polynomial through the segment's points, at t
   auto take = [&](int q) {
-    for (int j = 0; j < 6; ++j) out.fd[j] = 0.0;
+    for (int j = 0; j < kDragPassValues; ++j) out.v[j] = 0.0;
     for (int i = 0; i < K; ++i) {
       double w = 1.0;
       for (int m = 0; m < K; ++m)
         if (m != i) w *= (t - c.tk[q][m]) / (c.tk[q][i] - c.tk[q][m]);
-      for (int j = 0; j < 6; ++j) out.fd[j] += w * c.fd[q][i][j];
+      for (int j = 0; j < kDragPassValues; ++j) out.v[j] += w * c.v[q][i][j];
     }
   };
   lock(&c.lock);
@@ -5997,7 +6049,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   // the segment: the revolution's stretch inside the bracket; drag_part at its points s0 + (i + 1/2) (s1 - s0) / K
   const double s0 = std::fmax(std::fmin(lo.t, hi.t), tp), s1 = std::fmin(std::fmax(lo.t, hi.t), tp + period);
   if (!(s1 > s0)) return false;
-  double tk[K], fk[K][6];
+  double tk[K], fk[K][kDragPassValues];
   for (int i = 0; i < K; ++i) {
     tk[i] = s0 + ((i + 0.5) / K) * (s1 - s0);
     double yx[6];
@@ -6006,8 +6058,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
     const Frame fx = frame_of(yx);
     const Kepler kx = kepler_of(yx, fx.a);
     if (!(kx.e < 1.0) || std::fabs(tk[i] - kx.m / fx.n - tp) > 0.125 * period) return false;
-    for (int j = 0; j < 6; ++j) fk[i][j] = 0.0;
-    drag_part(s.ctx, tk[i], yx, fx, kx, angle_trig(kx), bodies_at(s.ctx.d50_epoch + tk[i] / kMinutesPerDay), fk[i]);
+    drag_passes(s.ctx, tk[i], yx, fx, kx, angle_trig(kx), bodies_at(s.ctx.d50_epoch + tk[i] / kMinutesPerDay), fk[i]);
   }
   lock(&c.lock);
   const int q = c.next;
@@ -6017,7 +6068,7 @@ inline bool drag_pass_rates(XpSat& s, double t, const double* y, DragPassRates& 
   c.tp[q] = tp;
   for (int i = 0; i < K; ++i) {
     c.tk[q][i] = tk[i];
-    for (int j = 0; j < 6; ++j) c.fd[q][i][j] = fk[i][j];
+    for (int j = 0; j < kDragPassValues; ++j) c.v[q][i][j] = fk[i][j];
   }
   take(q);
   unlock(&c.lock);
