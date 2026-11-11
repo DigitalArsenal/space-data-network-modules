@@ -3629,17 +3629,20 @@ inline HalfDayEvalCache& half_day_eval_cache() {
   return *g_half_day_eval_cache_ptr;
 }
 inline int32_t& fit_grid_depth();
-/// `m_per_k`: the class's m / k, 2 for the half-day tail and 1 for the one-day tail (half_day_terms).
+/// `m_per_k`: the class's m / k, 2 for the half-day tail and 1 for the one-day tail (half_day_terms). `hold`, when given:
+/// the state whose a, e and i the coefficient polynomials are taken at (the step's first node, SPEC 16.2; the angles and
+/// the rest are the state's own); nullptr: the state's own.
 inline void half_day_six(const HalfDayCoef* table, int count, double e0, double i0,
                         double t, const Kepler& kp, double n, double eta, double si,
                         double ci, double theta_g0, double* six, double a0 = 1.0, uint64_t table_id = 0,
-                        int m_per_k = 2) {
+                        int m_per_k = 2, const Kepler* hold = nullptr) {
   if (count == 0) return;
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
   const double thetag = theta_g0 + kOmegaE * t;
   const double ia = 1.0 / a;
-  const double da = a0 * ia - 1.0;
+  const Kepler& kt = hold != nullptr ? *hold : kp;  // the coefficient polynomials' a, e, i
+  const double da = a0 * (1.0 / kt.a) - 1.0;
 
   HalfDayEvalCache& hc = half_day_eval_cache();
   const bool cacheable = count <= 1024 && t != 0.0 && table_id != 0 && fit_grid_depth() == 0;
@@ -3647,7 +3650,7 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
       (hc.table_id != table_id || hc.table != table || hc.count != count ||
        hc.f0 != table[0].uc0 || hc.fn != table[count - 1].uc0 ||
        hc.a0 != a0 || hc.e0 != e0 || hc.i0 != i0 ||
-       a != hc.a || kp.e != hc.e || kp.i != hc.i)) {
+       kt.a != hc.a || kt.e != hc.e || kt.i != hc.i)) {
     const bool new_table = (hc.table_id != table_id || hc.table != table || hc.count != count ||
                             hc.f0 != table[0].uc0 || hc.fn != table[count - 1].uc0);
     hc.table_id = table_id;
@@ -3658,9 +3661,9 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
     hc.a0 = a0;
     hc.e0 = e0;
     hc.i0 = i0;
-    hc.a = a;
-    hc.e = kp.e;
-    hc.i = kp.i;
+    hc.a = kt.a;
+    hc.e = kt.e;
+    hc.i = kt.i;
     if (new_table) {
       int maw = 0, mk = 0, ng = 0, npad = 0;
       bool ok = true;
@@ -3704,7 +3707,7 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
       hc.max_k = ok ? mk : 16;
     }
     if (hc.grouped_ok) {
-      const double dd = kp.e - e0, did = kp.i - i0;
+      const double dd = kt.e - e0, did = kt.i - i0;
       const double dd2_2 = 0.5 * dd, dd_6 = dd * (1.0 / 6.0);
       const double did2_2 = 0.5 * did, did_6 = did * (1.0 / 6.0);
       const double dd_di = dd * did, da2_2d = 0.5 * da;
@@ -3833,7 +3836,7 @@ inline void half_day_six(const HalfDayCoef* table, int count, double e0, double 
     }
 #endif
   } else {
-    const double d = kp.e - e0, di = kp.i - i0;
+    const double d = kt.e - e0, di = kt.i - i0;
     const double d2_2 = 0.5 * d, d_6 = d / 6.0;
     const double di2_2 = 0.5 * di, di_6 = di / 6.0;
     const double d_di = d * di, da2_2 = 0.5 * da, neg_1pda = -(1.0 + da);
