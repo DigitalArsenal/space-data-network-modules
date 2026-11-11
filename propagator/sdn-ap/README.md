@@ -6,7 +6,8 @@ General-perturbations propagation of whole catalogs in one isomorphic WASM modul
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
 atmosphere, gravity terms and solid Earth tide; SPEC 15, 16).
 When you fit real data with AP, state `FORCES.SOLID_TIDES = IERS_2010` beside the gravity terms: the Earth has the solid
-tide, and without it a low orbit's error after a 72 h fit is about twice as large at day 5 (SPEC 16.14).
+tide, and without it AP's error on a low orbit after a 72 h fit is about twice as large at day 5 against a numerical
+propagator that carries it (SPEC 16.14).
 An `$OMM` whose MEAN_ELEMENT_THEORY is neither SGP4 nor SGP4XP, a `$PCF` whose THEORY is not UNSPECIFIED, SGP4 or SGP4XP and an
 `ElementRow` of theory 16 are refused.
 

@@ -2353,7 +2353,8 @@ with low perigee it is 15 to 185 m on the first day and 0.1 to 3.6 km by the sev
 floor: AP equals one only where the force model limits both.
 
 **16.1 Selection.** A fit of real data states FORCES.SOLID_TIDES IERS_2010 with the gravity terms: the Earth has the
-solid tide, and without it a low orbit's error after a 72 h fit is about twice as large at day 5 (16.14). `fit`,
+solid tide, and without it AP's error on a low orbit after a 72 h fit is about twice as large at day 5 against a
+numerical propagator that carries it (16.14). `fit`,
 `propagate`, `load_epochs` and `propagate_epochs` read FORCES:
 
 | FORCES | Terms |
