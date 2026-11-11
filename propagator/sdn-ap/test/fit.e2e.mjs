@@ -132,7 +132,10 @@ for (const c of cases) {
   const comment = String(was.COMMENT);
   const states = Number(/(\d+) states fitted/.exec(comment)?.[1]), rms = /fit RMS ([\d.]+) km/.exec(comment)?.[1], iterations = Number(/(\d+) iterations/.exec(comment)?.[1]);
   check(st.FIT_STATES === states, `${c.name}: FIT_STATES ${st.FIT_STATES} against the 0.4.0 ${states}`);
-  check(Math.abs(1000 * (st.FIT_RMS_KM - Number(rms))) <= FIT_BOUND.rmsM, `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against the 0.4.0 ${rms} (within ${FIT_BOUND.rmsM} m)`);
+  // AP's FIT_RMS against its reference fit's from 0.6.25 (the slow set: 41.126 to 40.049 m; history at FIT_BOUND), XP's
+  // against the 0.4.0 COMMENT's
+  const rmsPinned = c.fitReference ? ocmOf(new Uint8Array(fixture(c.fitReference))).ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM : Number(rms);
+  check(Math.abs(1000 * (st.FIT_RMS_KM - rmsPinned)) <= FIT_BOUND.rmsM, `${c.name}: FIT_RMS_KM ${st.FIT_RMS_KM} against ${c.fitReference ? c.fitReference : `the 0.4.0`}'s ${rmsPinned} (within ${FIT_BOUND.rmsM} m)`);
   console.log(`${c.name}: FIT_RMS ${(1000 * st.FIT_RMS_KM).toFixed(4)} m (0.4.0 ${(1000 * Number(rms)).toFixed(3)}), ITERATIONS ${st.ITERATIONS} (0.4.0 ${iterations})`);
   check(st.CONVERGED === true, `${c.name}: CONVERGED ${st.CONVERGED}`);
   check(st.FIT_START === "2026-10-01T00:00:00.000000" && st.FIT_STOP === "2026-10-02T00:00:00.000000", `${c.name}: arc ${st.FIT_START} to ${st.FIT_STOP}`);
