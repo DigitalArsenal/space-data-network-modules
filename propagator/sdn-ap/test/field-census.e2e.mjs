@@ -52,8 +52,6 @@ const HOLES = [
     test: (b, t) => t.code === 23 && t.size < 2 * CUT },
   { issue: 'stack #503', what: 'the low table: the slow set\'s cut measures a term through the mean motion and the eccentricity vector, not through the inclination (dF/di)',
     test: (b, t) => b.lowTable && t.code === 23 && !tableSide(t) },
-  { issue: 'stack #474', what: 'the one-day class above its switch: terms under its floor or above the grid\'s degree',
-    test: (b, t) => b.cls === 1 && b.wide && (t.code === 20 || t.code === 21) },
   // from 0.6.NN the grid and the wide slow list reach degree 31 above the switch, low orbit included (stack #473)
   { issue: 'stack #497', what: 'above the switch, every class: terms above the grid\'s degree 31',
     test: (b, t) => b.wide && (t.code === 20 || t.code === 24) },
