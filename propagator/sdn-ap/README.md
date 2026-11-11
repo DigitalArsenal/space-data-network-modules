@@ -224,7 +224,12 @@ or `< 24 h` minimum spans, `fit` enables finite-difference Jacobian fallback and
 median by mean altitude (`0.01` below `600 km`, `0.002` at `600-800 km`, `0.0005` at `>= 800 km`), with the sigma of
 the log `10 ln 10` under NRLMSISE-00 at `800-1400 km` so that the arc, not the median, sets BTERM there (SPEC 12.8),
 falling back to the band median's `ln 10` prior where that arc's BTERM is undetermined, moved far on a rough arc, or the
-arc holds a gap or an along-track step; a stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an
+arc holds a gap or an along-track step. An arc of `71 h` or more under NRLMSISE-00 at or below e 0.3 is judged on its
+perigee's height instead, and with the perigee at `600-2,500 km` takes median `0.008` and sigma of the log `10 ln 10`
+with no fall-back: the arc decides BTERM. The band medians sat 2 to 40 times below the numerical propagator's fitted
+Cd A/m on every satellite measured; on the headline loop's 72 h fits the laser spheres' day-5 median goes from 129 to 89 m
+and altimetry's from 756 to 496 m, while near 700 km loses 82 m at day 5 with 4 more windows within 100 m of the
+numerical propagator (SPEC 12.8). A stated `FIT.DRAG_PRIOR` is fitted as given, which is how a caller carries an
 object's prior from its previous fit.
 
 One fit call carries each object's priors (SPEC 12.8). The two-fit sequence of a daily refit:
@@ -621,12 +626,12 @@ Every fit's $OBD BALLISTIC_COEFF_MODEL states an arc check: the arc's hours, its
 test on the fit residuals (per-revolution means against a quadratic and a hinge: the velocity step, its time and F;
 flagged at 0.002 m/s and F 100); where the fall-back is judged it and the $OMM COMMENT also state the drag path taken
 (SPEC 12.8). After a 72 h fit
-under NRLMSISE-00 at 800-1400 km on the band default the fit is redone under 0.4.11's band-median prior when BTERM's
+under NRLMSISE-00 at 800-1400 km on the band default (since the default of a 71 h arc, an orbit above e 0.3) the fit is redone under 0.4.11's band-median prior when BTERM's
 posterior sigma of the log exceeds 0.5, or BTERM is more than 3 sigmas from the median while the fit RMS exceeds the
 band's model-truth median (15.16 m) by 25 %, or the arc is flagged; B, k and the median come from the model-truth
 fixtures, where the fall-back is taken only where BTERM is undetermined (within 0.7 m). On AP8's read altimetry windows
-Sentinel-3A 2025-10-15 returns to 0.087 km at day 3 (0.4.17: 0.312) and Sentinel-3B 2025-10-25 to 0.113 km at day 7
-(1.335), HY-2C/D, SWOT and Jason-3 keep 0.4.17's gains, SARAL and CryoSat-2 are unchanged, and Sentinel-3 in the band
-returns to 0.4.11 with its gains as well as its losses; Jason-3 2025-10-10 is not reached. A 0.5 m/s step after the arc
-leaves the fit bit for bit; one inside it is flagged and falls back. A fit of a 72 h arc costs 2 % more outside the
-band, 20 % more where the band default is kept and 92 % more where it falls back (`test/drag-prior-fallback.e2e.mjs`).
+the fall-back had returned Sentinel-3A 2025-10-15 to 0.087 km at day 3 (0.4.17: 0.312) and Sentinel-3B 2025-10-25 to
+0.113 km at day 7 (1.335); the default of a 71 h arc, which has no fall-back, gives 0.314 and 1.344 km, and against
+0.4.11 the median day-3 change is -85 % on HY-2C, -92 % on HY-2D, -73 % on Jason-3, -48 % on SWOT, -35 % on SARAL and
++1.4 % on CryoSat-2 (stack #470). A 0.5 m/s step after the arc leaves the fit bit for bit; one inside it leaves a fit
+RMS of 28 km and BTERM undetermined (`test/drag-prior-fallback.e2e.mjs`).
