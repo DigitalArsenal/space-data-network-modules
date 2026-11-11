@@ -3151,36 +3151,47 @@ On made-up inclined geosynchronous sets with the field cut to 4 x 4 on both side
 most 3.7e-11 with DE440's Moon in a scratch build (`test/one-day-moon-floor.e2e.mjs`, a known defect, bound 5e-11). The
 condition is met when #446 lands.
 
-The lift lands anyway, because the real windows gain on both rows. Real 72 h windows, the same build fitted without and
-with FORCES.ECOM2; medians at days 1, 3, 5 and 7, and the windows within 100 m of the numerical propagator (FFMq) at day 5:
+The lift lands anyway, because the real windows gain on both rows. Real 72 h windows; medians at days 1, 3, 5 and 7, and
+the windows within 100 m of the numerical propagator (FFMq) at day 5. The table's harness flew 0.6.18 and 0.6.19 with
+FORCES.ECOM2 on these rows; the middle column is the tail alone, flown without it on a candidate build:
 
-| Row | 0.6.15, Y0 held | the tail, without FORCES.ECOM2 | the tail, Y0 solved | Numerical (FFMc) |
+| Row | 0.6.15 to 0.6.18, Y0 held | the tail, without FORCES.ECOM2 | 0.6.19, Y0 solved | Numerical (FFMc) |
 | --- | --- | --- | --- | --- |
-| geostationary | 11.7, 35.3, 95.8, 198.3 m; 23 of 32 | 13.0, 53.3, 131.0, 256.2 m; 17 of 32 | 5.8, 23.4, 78.3, 191.2 m; 26 of 32 | 2.0, 5.9, 20.2, 47.8 m |
-| inclined geosynchronous | 4.8, 13.0, 27.0, 38.7 m; 52 of 59 | 4.7, 13.5, 23.1, 40.4 m; 51 of 59 | 3.4, 12.6, 31.3, 56.2 m; 59 of 59 | 0.4, 1.5, 3.6, 6.7 m |
+| geostationary | 11.67, 35.28, 95.84, 198.26 m; 23 of 32 | 12.97, 53.30, 131.01, 256.15 m; 17 of 32 | 5.84, 23.37, 88.36, 191.23 m; 26 of 32 | 2.05, 5.96, 20.31, 47.57 m |
+| inclined geosynchronous | 4.78, 13.01, 27.02, 38.70 m; 52 of 59 | 4.72, 13.45, 23.05, 40.37 m; 51 of 59 | 3.39, 12.61, 31.29, 56.37 m; 59 of 59 | 0.39, 1.45, 3.49, 6.29 m |
 
-No window crosses the line the wrong way. Per satellite, the recovered Y0 against the numerical propagator's ECOM2 Y0
-(FFMc, five terms), medians, with the day-5 median error without and with Y0:
+Against 0.6.18, 13 windows move onto the line and 3 move off it.
+- Onto it: geostationary C006, C011, C016 and C018 once each, and J003 twice; inclined J002 twice and J004 five times.
+- Off it: three C020 windows, whose day-5 errors go from 61.2, 54.4 and 54.7 m to 133.3, 125.8 and 115.3 m. With the
+  tail, that satellite sits where a numerical propagator with only a sphere does, and Y0 alone does not carry its
+  radiation (stack #457).
+
+Per satellite: the recovered Y0 (measured on the candidate build) against the numerical propagator's ECOM2 Y0 (FFMc,
+five terms), medians, with the day-5 median error without Y0 (the tail alone) and with it (0.6.19):
 
 | Satellite | AP's Y0 (m/s^2) | FFMc's Y0 (m/s^2) | Day 5 without, with Y0 |
 | --- | --- | --- | --- |
 | C006 BDS-2G | -1.06e-9 | -1.23e-9 | 137.0, 23.9 m |
 | C011 BDS-2G | -0.93e-9 | -1.01e-9 | 114.9, 19.4 m |
-| C016 BDS-2G | -1.02e-9 | -0.98e-9 | 143.0, 17.6 m |
+| C016 BDS-2G | -1.02e-9 | -0.98e-9 | 143.0, 17.5 m |
 | C018 BDS-2G | -1.17e-9 | -1.53e-9 | (burns: 74 km either way) |
 | C020 BDS-2G | -0.02e-9 | -1.52e-9 | 117.0, 115.3 m |
 | C217 BDS-3G | +0.03e-9 | -0.38e-9 | 25.1, 15.6 m |
-| J003 QZS-2G | -0.40e-9 | -2.26e-9 | 176.6, 160.9 m |
+| J003 QZS-2G | -0.40e-9 | -2.26e-9 | 176.6, 163.8 m |
 | J002 QZS-2I | +0.44e-9 | +0.36e-9 | 116.9, 14.5 m |
 | J004 QZS-2I | -1.44e-9 | -0.93e-9 | 222.5, 20.1 m |
-| BeiDou inclined (10 satellites) | within 1e-10 of FFMc's | -1.5e-10 to +1.1e-10 | 13.2 - 44.2, 27.5 - 40.5 m |
+| BeiDou inclined (10 satellites) | within 1e-10 of FFMc's | -1.5e-10 to +1.1e-10 | 13.2 - 44.2, 27.5 - 40.6 m |
 
-The tail makes Y0 physical. Without it, the same fit finds -0.74e-9 on C006 and C011, where FFMc has -1.23e-9 and -1.01e-9.
+The tail makes Y0 physical. Without it, the same fit finds -0.74e-9 on C006 and C011, where FFMc has -1.23e-9 and
+-1.01e-9.
 
-What the lift costs: against 0.6.15, the BeiDou inclined satellites' day-5 medians grow by 2 to 23 m (median 12 m), all
-still far inside the line. The
-inclined row's medians rise from 27.0 to 31.3 m at day 5 and from 38.7 to 56.2 m at day 7. The cause is the Moon's error
-leaking into Y0, as on model truth.
+J003's Y0 is poorly determined (stack #457). Between the candidate build and 0.6.19, whose states differ by under a
+millimeter, its five windows move by -29 to +47 m at day 5. One of them (2025-10-10, 77.5 to 103.8 m) crosses the middle of
+the 32 windows, which moves the row's day-5 median from 78.3 m on the candidate to 88.4 m on 0.6.19.
+
+What the lift costs: against 0.6.18, the BeiDou inclined satellites' day-5 medians grow by 2 to 23 m (median 12 m), all
+still far inside the line. The inclined row's medians rise from 27.02 to 31.29 m at day 5 and from 38.70 to 56.37 m at
+day 7. The cause is the Moon's error leaking into Y0, as on model truth.
 
 C020 and J003 (QZS-2G) need more than Y0 (stack #457). There Y0 does not lower the fit's RMS (C020: 5.86 m with and
 without), and the forecast stays where a numerical propagator with only a sphere is (FFMr, C020 135 to 157 m at day 5),

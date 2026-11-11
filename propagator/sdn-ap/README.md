@@ -210,9 +210,9 @@ For satellites whose solar panels track the Sun (navigation satellites), `fit` u
 ECOM2's Y0, a constant acceleration (m/s^2) along the axis normal to the Sun and the satellite's radius, beside the
 sphere's AGOM, on fits of 72 h or more above the drag; elsewhere it is held at FORCES.ECOM2.Y0_M_S2. Through 0.6.18 it
 was held in the one-day (geosynchronous) class too. From 0.6.19 that class solves it: on real 72 h windows the share
-within 100 m of the numerical propagator at day 5 went from 23 to 26 of 32 (geostationary) and from 52 to 59 of 59
-(inclined geosynchronous). The inclined row's medians rose from 27.0 to 31.3 m at day 5 and from 38.7 to 56.2 m at
-day 7, because the Moon's position error (stack #446) leaks into Y0 there (SPEC 16.13). The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR
+within 100 m of the numerical propagator at day 5 went from 23 to 26 of 32 (geostationary: six windows on, three of C020
+off, stack #457) and from 52 to 59 of 59 (inclined geosynchronous). The inclined row's medians rose from 27.0 to 31.3 m
+at day 5 and from 38.7 to 56.4 m at day 7, because the Moon's position error (stack #446) leaks into Y0 there (SPEC 16.13). The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR
 truthful) and every flight reads it there; nothing else carries it (an SGP4XP row of `sdnap_init_elements` or `sdnap_fit`
 with mean_motion_dot not 0 is refused). The theory applies its averaged rates to the mean elements in 6 h blocks; a set
 without Y0 flies as before, bit for bit. On the real 72 h windows of experiments headline-loop (0.6.13 against 0.6.15,
