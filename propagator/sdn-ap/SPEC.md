@@ -3007,7 +3007,13 @@ percentile for the Moon (4 cm and 0.37 m in distance), 3e-8 and 2e-7 arcsec for 
 A node is a function of its time alone, so no set fills or owns one: each thread keeps the nodes it has read in a store
 of 256 slots by node index (85 days) and the six it read last, and every set and every thread reads the same numbers in
 any order. A batch of records at one time evaluates a node once per thread, not once per record; a fresh record whose
-epoch another record already flew reads its nodes from the store. A batch at one time (`plugin_propagate_batch`,
+epoch another record already flew reads its nodes from the store. Two times 85 1/3 days apart (256 nodes) share a slot:
+a thread asked for them in turn evaluates again the node it gave up (about 4.2 µs a node) and reads the same numbers, so
+a batch whose sets lie more than 85 days apart costs more on that thread and gives the same states. The grid is in UTC,
+so on a day with a leap second (an 86,401 s UTC day) the series bends where the day begins and ends: the quintic's
+largest errors, 0.017 arcsec and 1.2 m (the Moon), fall there, far inside the series' own 0.74 arcsec. A grid in TT
+would need UTC to TT at every read (ERFA's leap-second lookup, some 0.3 µs against about 20 ns for the read), so it
+stays in UTC. A batch at one time (`plugin_propagate_batch`,
 `sdnap_propagate_soa`) evaluates section 5's bodies once for its SGP4XP sets; its AP sets read their own, so an AP state
 is the same in a batch and in any other call.
 
@@ -3081,6 +3087,23 @@ resonant tail):
   Moon's error: an inclined geosynchronous node at 20 x 20 goes from 11.8 to 35.6 m (along-track; cross-track 4.4 to
   0.4 m) and, on real 72 h windows flown against the numerical propagator fitted to them, two of three inclined windows
   get worse after day 3 (C005 6.7 to 17.2 m, C221 3.6 to 21.1 m at day 7; C010 7.8 to 6.6 m).
+- With the tail and this section together the cancellation is gone. At 20 x 20 on both sides, day 7: geostationary
+  8.5-10.3 m with the tail alone to 1.6-3.2 m (cross-track 7.3-7.9 to 0.7-1.1 m), inclined geosynchronous 5.4-25.9 m to
+  1.0-2.0 m, the same as at 4 x 4 within 0.05 m. On the five real windows, days 1, 3, 5 and 7 (tail alone to both): C005
+  3.1, 5.5, 12.0, 20.0 m to 1.0, 1.4, 2.2, 3.4 m; C010 3.0, 5.5, 8.3, 14.0 to 1.4, 1.7, 1.9, 2.3; C221 2.9, 5.6, 12.7,
+  19.1 to 0.9, 1.3, 2.1, 3.4; the geostationary C018 at day 5 13.4 to 8.5 m and C229 at day 7 34.2 to 20.6 m (0.6.16:
+  58.5 and 95.1 m).
+
+*Cost.* One evaluation of the series costs about 4.2 µs against SPEC 5's 0.28 (rough, under load); with nodes 8 h apart
+a flight evaluates eight times fewer of them than SPEC 5's hourly cache did, and a fresh record whose times another
+flight already read evaluates none. Under load (115 to 120 on 28 cores, niced, 0.6.16 against this section alternated
+two to five times, `test/kernel-cost.mjs`), AP's cost per state over SGP4's at 300 s moved within the runs' spread
+(medium Earth orbit 1.28 to 1.49 against 1.11 to 1.34, geostationary 2.23 to 2.55 against 2.12 to 2.43, 500 km 2.60 to
+4.22 against 2.25 to 3.82); the first state of a fresh record a week from its epoch fell (geostationary 1,439 to 1,471 µs
+against 1,273 to 1,278, medium Earth orbit 200 to 237 against 178 to 188, apart from single spikes in both builds); and
+10,000 fresh records asked at one instant a day after their epoch cost 125.5 against 132.7 µs a record (medium Earth
+orbit), 209.1 against 237.1 (geostationary) and 126.1 against 131.0 (500 km). A process's first evaluations (about 40 µs
+for a day's nodes, 110 µs for a week's) are paid once per thread and time range.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
