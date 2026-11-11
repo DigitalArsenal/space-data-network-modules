@@ -328,7 +328,9 @@ constexpr double kY0PriorSigma = 1e-9;
 /// The price: one more fit at the data's sigma on every window that solves Y0.
 constexpr double kB1PriorSigma = 1e-8;
 constexpr double kB1RmsRatio = 0.9;
-constexpr double kB1MaxRmsKm = 0.025;
+/// the cap on the Y0-only fit's RMS: quiet navigation arcs are at most 12 m (Galileo), an along-track burn of 1 mm/s in
+/// a 72 h arc already 22 to 57 m on model truth
+constexpr double kB1MaxRmsKm = 0.015;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
 // SPEC 16.13: through 0.6.18 the one-day resonance class held Y0 whatever the arc, while that class lacked its resonant
 // gravity above degree 4 (stack #434). With the class's resonant tail Y0 is solved there as elsewhere; the Moon's position
