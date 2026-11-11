@@ -1588,134 +1588,222 @@ inline bool xp_shadow(const Kepler& k, const Vec3& s, double& E1, double& E2) {
   return nominal;
 }
 
-inline double fast_cbrt(double x) {
-  if (x == 0.0) return 0.0;
-  const double ax = x < 0.0 ? -x : x;
-  if (ax < 1e-300) return x < 0.0 ? -std::cbrt(ax) : std::cbrt(ax);
-  uint64_t bits = 0;
-  std::memcpy(&bits, &ax, sizeof(bits));
-  bits = bits / 3u + 0x2aa0000000000000ULL;
-  double y = 0.0;
-  std::memcpy(&y, &bits, sizeof(y));
-  for (int i = 0; i < 3; ++i) {
-    const double y3 = y * y * y;
-    y *= (y3 + ax + ax) / (y3 + y3 + ax);
-  }
-  return x < 0.0 ? -y : y;
-}
-
-inline bool shadow_sequence_ap(double A, double B, double e, double eta, double p, double& E1, double& E2,
-                               double& sE1, double& cE1, double& sE2, double& cE2) {
-  const double G = B * B, H = A * A, F = G + H, e2 = e * e;
+/// SPEC 16.15: AP's shadow. Section 4's cylindrical shadow of radius R_E on the current mean orbit, with its boundaries
+/// continuous functions of the elements (section 4's closed form and its 1e-12 test decide by rounding where a boundary
+/// lies near an apse, and nearly always at geosynchronous radius). A, B the Sun's direction cosines on P and Q,
+/// F = A^2 + B^2, the Sun's direction in the orbit plane at phi (cos phi = A / sqrt F, sin phi = B / sqrt F) and
+/// u = nu - phi - pi the angle from the anti-Sun direction: the night half is |u| < pi/2 (n = -sqrt(F) cos u < 0), the
+/// shadow is where S(u) = p^2 F cos^2 u + d^2 - p^2 > 0 (d = 1 + e cos nu), and S < 0 at both terminators (u = +-pi/2,
+/// S = d^2 - p^2: the perigee is above the surface). S's largest value on the night half decides (found from u = 0, the
+/// nine points u = j pi/10, |j| <= 4, and Newton's method on S' kept inside the neighbors of the best one): not above 0,
+/// wholly sunlit; above 0, at some u_s, the entry is the root of S on (-pi/2, u_s) and the exit the root on (u_s, pi/2),
+/// each by Newton's method kept inside its bracket (bisection where a step leaves it) to full precision. No tolerance
+/// decides the branch: as the orbit leaves the season the two roots merge and the sunlit-arc rates, over E2 - E1 = 2 pi,
+/// are those of the wholly sunlit orbit. One sunlit arc per revolution, as section 4. True with the arc E1 (exit) .. E2
+/// (entry, + 2 pi when not above E1) and their sines and cosines; false: wholly sunlit.
+inline bool shadow_arc_ap(double A, double B, double e, double eta, double p, double& E1, double& E2,
+                          double& sE1, double& cE1, double& sE2, double& cE2) {
+  const double F = A * A + B * B;
   const double a_min = p / (1.0 + e);
-  if (F < 1.0 && (1.0 - F) * a_min * a_min > 1.000002) return false;
-  const double j = (1.0 / p) * (1.0 / p), h = j * j, k = G - H, g = 1.0 - G, m = j * (-2.0);
-  const double c4 = (F * F + (h * e2) * e2) + e2 * (k * m);
-  const double c3 = (e * e2) * (4.0 * h) + (e * (-4.0 * j)) * k;
-  const double c2 = ((((H * (-4.0)) * G + (k + k) * g) + (g * m) * e2) + (6.0 * h) * e2) + k * m;
-  const double c1 = (4.0 * h) * e + (e * (-4.0 * j)) * g;
-  const double c0 = ((g * m + h) + g * g);
-  if (c4 == 0.0) return false;
-  const double a3 = c3 / c4, a2 = c2 / c4, a1 = c1 / c4, a0 = c0 / c4;
-  const double f = a3 * (-0.25), f2 = f * f, f3 = f2 * f, f4 = f2 * f2, b3 = 3.0 * a3;
-  const double P = (a2 + 6.0 * f2) + b3 * f;
-  const double Q = ((a1 + (a2 + a2) * f) + 4.0 * f3) + b3 * f2;
-  const double W = (((((a0 + a1 * f) + a2 * f2) + f4) + a3 * f3) * (-4.0)) + P * P;
-  const double P2 = P * P, P3 = P2 * P;
-  const double s3 = (((Q * Q) * (-27.0) + P3 * 16.0) + (P * (-18.0)) * W) / 27.0;
-  const double s1 = (3.0 * W + P2 * (-4.0)) / 3.0;
-  const double s1_3 = s1 * s1 * s1;
-  const double D = (s3 * s3) * 0.25 + s1_3 / 27.0;
-  double t1, t2, t3;
-  if (D > 0.0) {
-    const double sqD = std::sqrt(D);
-    t1 = fast_cbrt(s3 * (-0.5) + sqD) + fast_cbrt(s3 * (-0.5) - sqD);
-    t2 = t3 = 0.0;
-  } else if (D == 0.0) {
-    t1 = 2.0 * fast_cbrt(s3 * (-0.5));
-    t2 = t3 = fast_cbrt(s3 * 0.5);
-  } else if (D < 0.0) {
-    const double w = std::sqrt((-s1_3) / 27.0), c = -s3 / (w + w);
-    const double phi = std::atan2(std::sqrt(std::fmax(0.0, 1.0 - c * c)), c) / 3.0;
-    const double u = 2.0 * std::sqrt(s1 / (-3.0));
-    double sphi, cphi;
-    fm::sincos(phi, sphi, cphi);
-    t1 = u * cphi;
-    t2 = u * (-0.5 * cphi - 0.86602540378443864676 * sphi);
-    t3 = u * (-0.5 * cphi + 0.86602540378443864676 * sphi);
-  } else {
-    t1 = t2 = t3 = 0.0;
-  }
-  const double z1 = (P * (-2.0)) / 3.0 + t1, z2 = (P * (-2.0)) / 3.0 + t2, z3 = (P * (-2.0)) / 3.0 + t3;
-  double z = z2 > z3 ? z2 : z3;
-  z = z1 > z ? z1 : z;
-  if (z < 0.0) return false;
-  const double r = std::sqrt(z), q = Q / r;
-  const double D1 = ((((P + z) - q) * 0.5) * (-4.0)) + z, D2 = ((((P + z) + q) * 0.5) * (-4.0)) + z;
-  double ys[4];
-  int ny = 0;
-  if (D1 >= 0.0) {
-    const double sq1 = std::sqrt(D1);
-    ys[ny++] = (sq1 - r) * 0.5;
-    ys[ny++] = (-r - sq1) * 0.5;
-  }
-  if (D2 >= 0.0) {
-    const double sq2 = std::sqrt(D2);
-    ys[ny++] = (r + sq2) * 0.5;
-    ys[ny++] = (r - sq2) * 0.5;
-  }
-  double cns[4], sns[4];
-  int base = 0;
-  for (int q2 = 0; q2 < ny; ++q2) {
-    const double x = f + ys[q2];
-    if (!(x >= -1.0 && x <= 1.0)) continue;
-    cns[base] = x;
-    sns[base] = std::sqrt(std::fmax(0.0, 1.0 - x * x));
-    ++base;
-  }
-  if (base == 0) return false;
-  const double threshold = shadow_threshold();
-  const double pp = p * p;
-  double cn_entry = 1.0, sn_entry = 0.0, cn_exit = 1.0, sn_exit = 0.0;
-  int found = 0;
-  for (int pass = 0; pass < 2; ++pass) {
-    const double sgn = pass == 0 ? 1.0 : -1.0;
-    for (int q2 = 0; q2 < base; ++q2) {
-      const double cn = cns[q2];
-      const double sn = sgn * sns[q2];
-      const double nv = A * cn + B * sn, d = e * cn + 1.0;
-      const double S = ((pp * nv) * nv + d * d) - pp;
-      if (!(nv < 0.0 && std::fabs(S) < threshold)) continue;
-      ++found;
-      if (found > 2) continue;
-      const double dS = ((e * d) * (-2.0)) * sn + (((-A) * sn + B * cn) * pp) * (nv + nv);
-      if (dS > 0.0) { cn_entry = cn; sn_entry = sn; }
-      else { cn_exit = cn; sn_exit = sn; }
+  // no point of the orbit can be in the cylinder: S <= p^2 F + (1 + e)^2 - p^2 < 0
+  if (!(F > 0.0) || (F < 1.0 && (1.0 - F) * a_min * a_min > 1.000002)) return false;
+  const double c = std::sqrt(F), cph = A / c, sph = B / c, pp = p * p, k2 = pp * F;
+  struct Pt {
+    double S, dS, d2S, cn, sn;
+  };
+  // S, dS/du, d2S/du2 and cos nu, sin nu at u (cos nu = -(cos phi cos u - sin phi sin u), sin nu = -(sin phi cos u +
+  // cos phi sin u))
+  auto at = [&](double u) {
+    double su, cu;
+    fm::sincos(u, su, cu);
+    Pt q;
+    q.cn = sph * su - cph * cu;
+    q.sn = -(sph * cu + cph * su);
+    const double d = 1.0 + e * q.cn;
+    q.S = (d * d - pp) + k2 * (cu * cu);
+    q.dS = -2.0 * (k2 * (cu * su) + e * d * q.sn);
+    q.d2S = -2.0 * k2 * (cu * cu - su * su) + 2.0 * e * (e * q.sn * q.sn - d * q.cn);
+    return q;
+  };
+  constexpr double kHalfPi = 0.5 * kPi, kStep = 0.1 * kPi;
+  double us = 0.0;
+  Pt q = at(0.0);
+  if (!(q.S > 0.0)) {
+    int best = 0;
+    for (int j = -4; j <= 4; ++j) {
+      if (j == 0) continue;
+      const Pt t = at(j * kStep);
+      if (t.S > q.S) { q = t; best = j; }
     }
+    us = best * kStep;
+    // the largest S near the best point: Newton's method on S', kept inside the best point's neighbors, until S > 0
+    // or S' vanishes
+    double lo = std::fmax(-kHalfPi, us - kStep), hi = std::fmin(kHalfPi, us + kStep);
+    for (int it = 0; it < 80 && !(q.S > 0.0); ++it) {
+      if (q.dS > 0.0) lo = us;
+      else hi = us;
+      double un = q.d2S < 0.0 ? us - q.dS / q.d2S : 0.5 * (lo + hi);
+      if (!(un > lo && un < hi)) un = 0.5 * (lo + hi);
+      const bool last = std::fabs(un - us) <= 1e-15 || hi - lo <= 1e-15;
+      us = un;
+      q = at(us);
+      if (last) break;
+    }
+    if (!(q.S > 0.0)) return false;
   }
-  if (found < 2) return false;
+  // the root of S between u_neg (S < 0) and u_pos (S > 0), from u0
+  auto root = [&](double u_neg, double u_pos, double u0) {
+    double u = u0;
+    for (int it = 0; it < 100; ++it) {
+      const Pt t = at(u);
+      if (t.S == 0.0) return t;
+      if (t.S < 0.0) u_neg = u;
+      else u_pos = u;
+      const double lo = std::fmin(u_neg, u_pos), hi = std::fmax(u_neg, u_pos);
+      double un = t.dS != 0.0 ? u - t.S / t.dS : 0.5 * (lo + hi);
+      if (!(un > lo && un < hi)) un = 0.5 * (lo + hi);
+      if (std::fabs(un - u) <= 1e-15 || hi - lo <= 1e-15) return at(un);
+      u = un;
+    }
+    return at(u);
+  };
+  // the start from the circular orbit's boundary: k2 cos^2 u = p^2 - d^2 with d held at u_s
+  const double ds = 1.0 + e * q.cn;
+  const double c0 = std::sqrt(std::fmax(0.0, std::fmin(1.0, (pp - ds * ds) / k2)));
+  const double u0 = std::acos(c0);
+  const double ue = -u0 > -kHalfPi && -u0 < us ? -u0 : 0.5 * (us - kHalfPi);
+  const double ux = u0 > us && u0 < kHalfPi ? u0 : 0.5 * (us + kHalfPi);
+  const Pt entry = root(-kHalfPi, us, ue), exit = root(kHalfPi, us, ux);
   constexpr double kTwoPiD = 6.283185307179586;
-  const double inv_d1 = 1.0 / (1.0 + e * cn_exit);
-  sE1 = eta * sn_exit * inv_d1;
-  cE1 = (e + cn_exit) * inv_d1;
+  const double inv_d1 = 1.0 / (1.0 + e * exit.cn);
+  sE1 = eta * exit.sn * inv_d1;
+  cE1 = (e + exit.cn) * inv_d1;
   E1 = std::atan2(sE1, cE1);
   if (E1 < 0.0) E1 += kTwoPiD;
-  const double inv_d2 = 1.0 / (1.0 + e * cn_entry);
-  sE2 = eta * sn_entry * inv_d2;
-  cE2 = (e + cn_entry) * inv_d2;
+  const double inv_d2 = 1.0 / (1.0 + e * entry.cn);
+  sE2 = eta * entry.sn * inv_d2;
+  cE2 = (e + entry.cn) * inv_d2;
   E2 = std::atan2(sE2, cE2);
   if (E2 < 0.0) E2 += kTwoPiD;
-  if (E2 < E1) E2 += kTwoPiD;
-  if (std::fabs(E2 - E1) < 1e-12) return false;
+  if (E2 <= E1) E2 += kTwoPiD;
   return true;
+}
+
+/// SPEC 16.15 diagnostics: section 4's sphere (the force P AGOM (1 AU / r_sun)^2 away from the Sun) averaged over one
+/// revolution of the mean orbit y, the Sun held fixed (unit vector s, distance sun_r in R_E), by the Gauss equations at
+/// the midpoints of nq equal steps of the eccentric longitude weighted by r / a; lambda's rate also carries section 4's
+/// periodic mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n) averaged over the whole revolution, as AP's
+/// mean longitude does (16.16; A, B the Sun's direction cosines on P and Q). shape 1: section 4's cylinder of radius R_E, a step its boundary crosses split
+/// where the boundary is (bisection on the position's own test, n < 0 and |r x s| < R_E); shape 2: a cone, the
+/// illuminated fraction of the Sun's disc (radius kSunRadiusKm) behind the Earth's (radius R_E) as seen from the
+/// satellite, a step not wholly lit or wholly dark at both ends taken in 64 equal parts. out: the six rates in the state
+/// order, per minute (lambda's without n).
+constexpr double kSunRadiusKm = 695700.0;
+inline void srp_average_numeric(const double* y, const Frame& fr, const Kepler& k, Vec3 s, double sun_r, double agom,
+                                int shape, int nq, double A, double B, double* out) {
+  for (int m = 0; m < 6; ++m) out[m] = 0.0;
+  const double rs_au = sun_r * kRe / kAu;
+  const double Fs = kSrpPressure * agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
+  const Vec3 acc = (-Fs) * s, sun = sun_r * s;
+  const double varpi = std::atan2(y[kAg], y[kAf]), dn_a = 3.0 * Fs * A / (k.a * fr.n), dn_b = 3.0 * Fs * B * fr.eta / (k.a * fr.n);
+  const double r_sun = kSunRadiusKm / kRe;
+  // the illuminated fraction at eccentric longitude F
+  auto lit = [&](double F) {
+    Vec3 r, v;
+    double roa;
+    state_at_F(y, fr, F, r, v, roa);
+    if (shape == 1) {
+      const double rs = dot(r, s);
+      return rs < 0.0 && dot(r, r) - rs * rs < 1.0 ? 0.0 : 1.0;
+    }
+    const Vec3 d = sun - r;
+    const double rn = norm(r), dn = norm(d);
+    const double a = std::asin(std::fmin(1.0, r_sun / dn)), b = std::asin(std::fmin(1.0, 1.0 / rn));
+    const double c = std::acos(std::fmax(-1.0, std::fmin(1.0, -dot(r, d) / (rn * dn))));
+    if (c >= a + b) return 1.0;
+    if (c <= b - a) return 0.0;
+    if (c <= a - b) return 1.0 - (b * b) / (a * a);
+    const double x = (c * c + a * a - b * b) / (2.0 * c), yy = std::sqrt(std::fmax(0.0, a * a - x * x));
+    const double area = a * a * std::acos(std::fmax(-1.0, std::fmin(1.0, x / a))) + b * b * std::acos(std::fmax(-1.0, std::fmin(1.0, (c - x) / b))) - c * yy;
+    return 1.0 - area / (kPi * a * a);
+  };
+  auto add = [&](double F, double w) {
+    Vec3 r, v;
+    double roa, g[6];
+    state_at_F(y, fr, F, r, v, roa);
+    gauss(y, fr, r, v, acc, g);
+    for (int m = 0; m < 6; ++m) out[m] += w * roa * g[m];
+  };
+  const int N = nq > 0 ? nq : 4096;
+  const double h = kTwoPi / N;
+  for (int j = 0; j < N; ++j) {
+    // lambda: Delta n over the whole revolution (16.16)
+    Vec3 r, v;
+    double roa;
+    const double Fm = (j + 0.5) * h;
+    state_at_F(y, fr, Fm, r, v, roa);
+    out[kLam] += h * roa * (dn_a * std::cos(Fm - varpi) + dn_b * std::sin(Fm - varpi));
+  }
+  for (int j = 0; j < N; ++j) {
+    const double F0 = j * h, F1 = F0 + h;
+    const double l0 = lit(F0), l1 = lit(F1);
+    if (l0 == l1 && (l0 == 0.0 || l0 == 1.0)) {
+      if (l0 == 1.0) add(F0 + 0.5 * h, h);
+      continue;
+    }
+    if (shape == 1) {
+      double lo = F0, hi = F1;
+      for (int it = 0; it < 60; ++it) {
+        const double mid = 0.5 * (lo + hi);
+        if (lit(mid) == l0) lo = mid;
+        else hi = mid;
+      }
+      const double Fb = 0.5 * (lo + hi);
+      if (l0 == 1.0) add(0.5 * (F0 + Fb), Fb - F0);
+      else add(0.5 * (Fb + F1), F1 - Fb);
+      continue;
+    }
+    const double hs = h / 64.0;
+    for (int q = 0; q < 64; ++q) {
+      const double Fm = F0 + (q + 0.5) * hs, f = lit(Fm);
+      if (f > 0.0) add(Fm, f * hs);
+    }
+  }
+  for (int m = 0; m < 6; ++m) out[m] /= kTwoPi;
+}
+
+/// AP's shadow decision (SPEC 16.15) at direction cosines A, B: shadow_arc_ap, or wholly sunlit under the diagnostic
+/// that takes no boundary at all (sdnap_shadow_policy 3, threshold 0).
+inline bool ap_sunlit_arc(double A, double B, double e, double eta, double p, double& E1, double& E2, double& sE1,
+                          double& cE1, double& sE2, double& cE2) {
+  if (shadow_threshold() == 0.0) return false;
+  return shadow_arc_ap(A, B, e, eta, p, E1, E2, sE1, cE1, sE2, cE2);
+}
+
+/// SPEC 16.16: what an AP set's mean longitude adds to section 4's sunlit-arc rate. Section 4's rate of lambda over a
+/// sunlit arc counts the output-time mean-motion term Delta n = 3 F_s (A cos E + B eta sin E) / (a n) on the sunlit arc
+/// only, while section 4's output-time terms map n_osc = n_mean + Delta n over the whole revolution (they carry no
+/// shadow): the mean longitude takes Delta n over the whole revolution, so its share over the shadow is added,
+/// (1 / 2 pi) int_{E2}^{E1 + 2 pi} Delta n (1 - e cos E) dE = 3 F_s / (2 pi a n) [G(E1 + 2 pi) - G(E2)],
+/// G(E) = A sin E - B eta cos E - e (A (E / 2 + sin E cos E / 2) + B eta sin^2 E / 2); 0 as the shadow vanishes.
+inline double ap_lambda_shadow_dn(double A, double B, double e, double eta, double a, double n, double Fs, double E1,
+                                  double E2) {
+  auto G = [&](double E) {
+    double s, c;
+    fm::sincos(E, s, c);
+    return A * s - B * eta * c - e * (A * (0.5 * E + 0.5 * s * c) + B * eta * 0.5 * s * s);
+  };
+  return 3.0 * Fs / (kTwoPi * a * n) * (G(E1 + kTwoPi) - G(E2));
 }
 
 /// SPEC 4 averaged SRP rates on the current mean orbit (Sun held fixed over
 /// the orbit): the explicit formulas of the wholly sunlit orbit or of the sunlit
-/// arc E1 .. E2 (xp_spec_terms.inc), added to the rates in the state order.
+/// arc E1 .. E2 (xp_spec_terms.inc), added to the rates in the state order. An AP set (ap_set) takes AP's shadow
+/// (SPEC 16.15) and, where `ap` and its angles allow, AP's arrangement of the same formulas; SGP4XP section 4's. An
+/// AP set's mean longitude over a sunlit arc also takes ap_lambda_shadow_dn (SPEC 16.16).
 inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, const Perifocal& pf, double agom,
                       const Bodies& b, double* out, const AngleTrig* ag_opt = nullptr, bool ap = false,
-                      bool* sunlit_safe = nullptr) {
+                      bool* sunlit_safe = nullptr, bool ap_set = false) {
   double A, B, C;
   direction_cosines(pf, b.sun_u, A, B, C);
   if (sunlit_safe != nullptr) {
@@ -1725,15 +1813,23 @@ inline void srp_rates(const double* /*y*/, const Frame& fr, const Kepler& k, con
   const double rs_au = b.sun_r * kRe / kAu;
   const double Fs = kSrpPressure * agom * 3600.0 / (1000.0 * kRe * rs_au * rs_au);
   double E1, E2, d[6];
-  if (ap && ag_opt != nullptr && shadow_envelope() == 0 && (!fr.e2 || k.a < 5.0 || ag_opt->si > 0.02)) {
+  if (ap_set) {
     double sE1, cE1, sE2, cE2;
-    if (shadow_sequence_ap(A, B, k.e, fr.eta, (1.0 - fr.e2) * k.a, E1, E2, sE1, cE1, sE2, cE2)) {
-      srp_rates_arc_ap(k.e, fr.eta, ag_opt->sw, ag_opt->cw, ag_opt->sO, ag_opt->cO, ag_opt->si, ag_opt->ci,
-                       k.a, fr.n, E1, E2, sE1, cE1, sE2, cE2, A, B, C, Fs, d);
+    const bool arc = ap_sunlit_arc(A, B, k.e, fr.eta, (1.0 - fr.e2) * k.a, E1, E2, sE1, cE1, sE2, cE2);
+    if (ap && ag_opt != nullptr && (!fr.e2 || k.a < 5.0 || ag_opt->si > 0.02)) {
+      if (arc) {
+        srp_rates_arc_ap(k.e, fr.eta, ag_opt->sw, ag_opt->cw, ag_opt->sO, ag_opt->cO, ag_opt->si, ag_opt->ci,
+                         k.a, fr.n, E1, E2, sE1, cE1, sE2, cE2, A, B, C, Fs, d);
+      } else {
+        srp_rates_sunlit_ap(k.e, fr.eta, ag_opt->sw, ag_opt->cw, ag_opt->sO, ag_opt->cO, ag_opt->si, ag_opt->ci,
+                            k.a, fr.n, A, B, C, Fs, d);
+      }
+    } else if (arc) {
+      srp_rates_arc(k.e, fr.eta, k.argp, k.node, k.i, k.a, fr.n, E1, E2, A, B, C, Fs, d);
     } else {
-      srp_rates_sunlit_ap(k.e, fr.eta, ag_opt->sw, ag_opt->cw, ag_opt->sO, ag_opt->cO, ag_opt->si, ag_opt->ci,
-                          k.a, fr.n, A, B, C, Fs, d);
+      srp_rates_sunlit(k.e, fr.eta, k.argp, k.node, k.i, k.a, fr.n, A, B, C, Fs, d);
     }
+    if (arc) d[kLam] += ap_lambda_shadow_dn(A, B, k.e, fr.eta, k.a, fr.n, Fs, E1, E2);
   } else if (xp_shadow(k, b.sun_u, E1, E2)) {
     srp_rates_arc(k.e, fr.eta, k.argp, k.node, k.i, k.a, fr.n, E1, E2, A, B, C, Fs, d);
   } else {
@@ -4120,7 +4216,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         }
       } else {
         double ds[6] = {0, 0, 0, 0, 0, 0};
-        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
+        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp, nullptr, true);
         for (int m = 0; m < 6; ++m) {
           out[m] += ds[m];
           if (allow_srp_step_cache && sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_df_srp[sigma_slot][m] = ds[m] - ea.srp_unit[m] * ctx.agom;
@@ -4131,7 +4227,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         for (int m = 0; m < 6; ++m) out[m] += csa->srp_unit[m] * ctx.agom;
       } else if (allow_srp_step_cache && (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0))) {
         double ds[6] = {0, 0, 0, 0, 0, 0};
-        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
+        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp, nullptr, true);
         for (int m = 0; m < 6; ++m) {
           out[m] += ds[m];
           if (sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_df_srp[sigma_slot][m] = ds[m] - csa->srp_unit[m] * ctx.agom;
@@ -4140,13 +4236,13 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         for (int m = 0; m < 6; ++m) out[m] += csa->srp_unit[m] * ctx.agom + cgc.sigma_df_srp[sigma_slot][m];
       } else {
         double ds[6] = {0, 0, 0, 0, 0, 0};
-        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
+        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp, nullptr, true);
         for (int m = 0; m < 6; ++m) out[m] += ds[m];
       }
     } else {
       double ds[6] = {0, 0, 0, 0, 0, 0};
       bool sunlit_safe = false;
-      srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp, &sunlit_safe);
+      srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp, &sunlit_safe, true);
       for (int m = 0; m < 6; ++m) out[m] += ds[m];
       if (ov != nullptr && ov->srp_out != nullptr) {
         for (int m = 0; m < 6; ++m) ov->srp_out[m] = ds[m];
@@ -4544,23 +4640,13 @@ constexpr double kGl3X[3] = {-0.774596669241483377036, 0.0, 0.774596669241483377
 constexpr double kGl3W[3] = {5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0};
 
 /// SPEC 16.13: the sunlit arc of the mean orbit y (eccentric anomalies E1 .. E2 from the perigee; false: wholly sunlit) as
-/// the sphere's rates decide it for an AP set (rates, srp_rates): the AP sequence for a set that is not long-period or
-/// whose epoch inclination is above 0.02 rad, at the conformance setting 0, for a circular orbit, below 5 ER or with
-/// sin i above 0.02; SPEC 4's sequence otherwise. The shadow diagnostics (shadow_margin_*) keep what the rates set.
-inline bool y0_sunlit_arc(const RateContext& ctx, const double* y, const Frame& fr, Vec3 su, double& E1, double& E2) {
+/// the sphere's rates decide it for an AP set (rates, srp_rates): AP's shadow (SPEC 16.15), for every AP set.
+inline bool y0_sunlit_arc(const RateContext& /*ctx*/, const double* y, const Frame& fr, Vec3 su, double& E1, double& E2) {
   const Kepler kp = kepler_of(y, fr.a);
   const AngleTrig ag = angle_trig(kp);
-  if ((!ctx.long_period || ctx.i0 > 0.02) && shadow_envelope() == 0 && (!fr.e2 || kp.a < 5.0 || ag.si > 0.02)) {
-    double A, B, C, sE1, cE1, sE2, cE2;
-    direction_cosines(perifocal_of(ag), su, A, B, C);
-    return shadow_sequence_ap(A, B, kp.e, fr.eta, (1.0 - fr.e2) * kp.a, E1, E2, sE1, cE1, sE2, cE2);
-  }
-  const double m1 = shadow_margin_slot(), m2 = shadow_margin2(), mnu = shadow_margin_nu();
-  const bool arc = xp_shadow(kp, su, E1, E2);
-  shadow_margin_slot() = m1;
-  shadow_margin2() = m2;
-  shadow_margin_nu() = mnu;
-  return arc;
+  double A, B, C, sE1, cE1, sE2, cE2;
+  direction_cosines(perifocal_of(ag), su, A, B, C);
+  return ap_sunlit_arc(A, B, kp.e, fr.eta, (1.0 - fr.e2) * kp.a, E1, E2, sE1, cE1, sE2, cE2);
 }
 
 /// SPEC 16.13: the Gauss rates (state order, lambda's without n) of a unit acceleration (ER/min^2) along ECOM2's Y axis,
@@ -6983,7 +7069,7 @@ inline void refresh_lp_sigma_tail_srp(const RateContext& ctx, double t, const do
       fr_min.eta = eta;
       const Perifocal pf = perifocal_of(ag);
       double ds[6] = {0, 0, 0, 0, 0, 0};
-      srp_rates(y, fr_min, k, pf, ctx.agom, csa.b, ds, &ag, ctx.i0 > 0.02);
+      srp_rates(y, fr_min, k, pf, ctx.agom, csa.b, ds, &ag, ctx.i0 > 0.02, nullptr, true);
       for (int m = 0; m < 6; ++m) cgc.sigma_df_srp[slot][m] = ds[m] - csa.srp_unit[m] * ctx.agom;
     }
   }
