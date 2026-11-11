@@ -339,8 +339,16 @@ those of the calibration fits; elsewhere the ABOVE row stands. Above the drag, s
 SGP4XP) is fitted. On its 32 windows AP's median |z| at days 1, 3, 5 and 7 goes from 0.001 to 0.24 to between 0.52 and
 1.04, the 95 % coverage is 0.88 to 0.94, and no cell has more windows above 3 than the acceptance allows (max(as built,
 1 % of the windows, 1)). The radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). Medium Earth
-orbit, geosynchronous and HEO keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the
-selection.
+orbit and HEO have the ABOVE row. `test/covariance-above-classes.e2e.mjs` holds the selection.
+
+A one-day set fitted to data far worse than precise orbits takes the geosynchronous SIGMA row (SPEC 12.5). That applies
+at a data sigma from 0.151 km (AP; 0.066 km SGP4XP) to 2.91 km, on 24 h and 72 h arcs. Every size is in proportion to
+the fit's own sigma, in the proportions fitted on inclined geosynchronous and geostationary fits to precise orbits, and
+never under the ABOVE row. On commercial geostationary fits, whose truth holds burns (stack #444), AP's 72 h coverage
+at days 1, 3, 5 and 7 goes from 0.64, 0.37, 0.19 and 0.05 to 0.84, 0.85, 0.84 and 0.85. The 24 h fits improve but stay
+far under the band (0.33 to 0.45). Inclined geosynchronous and geostationary fits to precise orbits keep the ABOVE row:
+no form passes the acceptance on them (inclined geosynchronous cross-track at day 1, AP's analytic Moon, stack #446;
+geostationary windows whose truth holds burns, stack #444). `test/covariance-geo-sigma-row.e2e.mjs` holds the rule.
 
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
@@ -577,8 +585,11 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   a 2,600 km set states its sigma.
 - `test/covariance-above-classes.e2e.mjs`: SPEC 12.5, above the drag by class (stack #433): on the module's own
   flights, a LAGEOS-class fit inside its calibrated data sigma and span states the LAGEOS row (AP and SGP4XP) with s_d
-  = k |AGOM| / a; above that data sigma, over 24 h, and in the classes not yet fitted (HEO, medium Earth orbit) the
+  = k |AGOM| / a; above that data sigma, over 24 h, and in the classes with no row (HEO, medium Earth orbit) the
   ABOVE row; every record flies with its covariance.
+- `test/covariance-geo-sigma-row.e2e.mjs`: SPEC 12.5, the geosynchronous SIGMA row (stack #433 part C): a one-day fit
+  at a data sigma from the threshold to 2.91 km, over 24 h or 72 h, states every size in proportion to that sigma, both
+  theories; under the threshold and over 48 h the ABOVE row.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).

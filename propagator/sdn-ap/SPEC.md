@@ -1991,18 +1991,70 @@ they hold leaving each satellite out in turn. The module's own covariance, flown
 AP's radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). That part is the epoch covariance, and
 the noise starts from zero at the end of the arc.
 
-The other classes keep the ABOVE row for now. Medium Earth orbit: Galileo's in-track errors run 5 to 14 times GPS's,
-and nothing the record states ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a
-row that holds the acceptance must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times
-too wide in track. That row, and its second row for sets that solve Y0 (16.13), follow once the fit's end with Y0
-solved no longer depends on rounding (stack #456). Geosynchronous: noise scaled by the record's own data sigma,
-measured next. HEO: TESS and Chandra, two objects, 14 window-arcs, measured after the eccentric integration step fix.
-THEMIS is not in this set: its perigee is in the drag.
+Medium Earth orbit has no class row: Galileo's in-track errors run 5 to 14 times GPS's, and nothing the record states
+ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a row that holds the acceptance
+must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times too wide in track, and with Y0
+solved the fit's end depends on rounding (stack #456).
+
+Geosynchronous *[2026-11-11, sdn-ap 0.6.19's one-day resonant tail]*. The headline-loop one-day windows, both theories,
+ruling 1 as above:
+- inclined geosynchronous: 60 window-arcs of 72 h fits;
+- geostationary: 34 window-arcs of 72 h fits (data sigma 0.86 to 3.5 m for both rows);
+- commercial geostationary: 79 and 77 window-arcs of 24 h and 72 h fits (data sigma 9.7 m to 2.90 km).
+
+Three forms were fitted on inclined geosynchronous and geostationary. The SIGMA form fits best: every size in proportion
+to the record's own data sigma, with s_d constant over the orbit. Its training loss is 0.095 for AP, against 0.43 for
+the constant form and the AGOM form (SGP4XP: 0.040). At those rows' median sigma (AP 1.356 m, SGP4XP 10.21 m) its sizes
+are:
+- AP: s_e 2.500e-8, s_i 2.060e-8, s_l 4.259e-8, s_d 8.908e-8;
+- SGP4XP: s_e 6.002e-8, s_i 3.579e-7, s_l 4.106e-8, s_d 1.252e-7.
+
+Inclined geosynchronous and geostationary fits to precise orbits keep the ABOVE row: no form passes ruling 1 on them.
+- Inclined geosynchronous cross-track is too narrow at day 1 (median |z| 1.97 for AP; 9 of 60 beyond 3 sigma): AP's
+  analytic Moon's error (stack #446).
+- On geostationary 72 h fits 9 of 32 are beyond 3 sigma at day 7: windows whose truth holds burns (stack #444).
+
+Carried up to a fit's own sigma, the same proportions hold where the data are far worse than precise orbits. A one-day
+set qualifies when:
+- its data sigma is at or above the threshold where every scaled s_e, s_i and s_l reaches the ABOVE row's (0.151 km
+  for AP, 0.066 km for SGP4XP), and at most 2.91 km;
+- its span is 0.9 to 1.05 times 24 h or 72 h.
+It then states every size as its per-km proportion times that sigma, with share 0 (src/covariance.inc kGsoSigmaAP,
+kGsoSigmaXP), so it never states less than the ABOVE row. The commercial geostationary windows were held out of the fit
+(this build's records, ABOVE row > the scaled row; R / T / N):
+
+| Theory | Fit arc | Day | Windows | 95 % coverage | beyond 3 sigma R / T / N |
+| --- | --: | --: | --: | --- | --- |
+| SDNAP | 24 h | 1 | 79 | 0.30 > 0.33 | 45 / 29 / 23 > 31 / 17 / 14 |
+| SDNAP | 24 h | 3 | 78 | 0.13 > 0.38 | 39 / 31 / 48 > 18 / 10 / 22 |
+| SDNAP | 24 h | 5 | 76 | 0.07 > 0.45 | 34 / 35 / 53 > 17 / 8 / 27 |
+| SDNAP | 24 h | 7 | 76 | 0.00 > 0.43 | 34 / 31 / 67 > 20 / 5 / 30 |
+| SDNAP | 72 h | 1 | 77 | 0.64 > 0.84 | 17 / 8 / 5 > 7 / 1 / 5 |
+| SDNAP | 72 h | 3 | 75 | 0.37 > 0.85 | 22 / 7 / 32 > 3 / 0 / 7 |
+| SDNAP | 72 h | 5 | 74 | 0.19 > 0.84 | 29 / 16 / 40 > 5 / 0 / 9 |
+| SDNAP | 72 h | 7 | 74 | 0.05 > 0.85 | 28 / 27 / 56 > 6 / 1 / 11 |
+| SGP4XP | 24 h | 1 | 79 | 0.14 > 0.20 | 48 / 58 / 23 > 46 / 53 / 5 |
+| SGP4XP | 24 h | 3 | 78 | 0.08 > 0.13 | 44 / 68 / 50 > 35 / 60 / 9 |
+| SGP4XP | 24 h | 5 | 76 | 0.04 > 0.11 | 36 / 70 / 57 > 30 / 63 / 15 |
+| SGP4XP | 24 h | 7 | 76 | 0.00 > 0.12 | 42 / 74 / 69 > 33 / 58 / 21 |
+| SGP4XP | 72 h | 1 | 77 | 0.48 > 0.71 | 17 / 28 / 5 > 13 / 15 / 4 |
+| SGP4XP | 72 h | 3 | 75 | 0.24 > 0.69 | 26 / 40 / 32 > 14 / 17 / 5 |
+| SGP4XP | 72 h | 5 | 74 | 0.07 > 0.61 | 37 / 60 / 41 > 19 / 21 / 7 |
+| SGP4XP | 72 h | 7 | 74 | 0.00 > 0.65 | 34 / 70 / 57 > 15 / 18 / 9 |
+
+The 24 h fits improve but stay far under the band (0.33 to 0.45 for AP, 0.11 to 0.20 for SGP4XP). Their truth holds
+burns (stack #444), and no rate noise describes a burn. No cell has more windows beyond 3 sigma than before.
+Inclined geosynchronous and geostationary are bit for bit: none of their fits reaches the threshold. Every state is bit
+for bit.
 
 The class boundaries make the stated covariance jump where a row changes. At n = 4 rev/day (e 0.01, a 16,763 km) the
 growth per day the rows give is, for AP, 2,003 m in track and 16.3 m radially under the ABOVE row against 1.6 m and
-0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 nothing jumps yet:
-every class there keeps the ABOVE row.
+0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 nothing jumps: every
+class there has the ABOVE row. At the geosynchronous SIGMA row's threshold (a 42,165 km) s_l is equal on both sides
+(it sets the threshold), and the other sizes step up. For AP it is 1,263 m of in-track growth a day on both sides,
+radially 40.9 m against 117.7 m a day, cross-track 34.4 m against 96.9 m, and the row's s_d adds 210 m of in-track
+per day squared. For SGP4XP it is 70.8 m in track on both sides, 9.7 m against 16.4 m radially, 15.8 m against
+98.0 m cross-track, and 17.1 m per day squared from s_d.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
