@@ -357,6 +357,103 @@ int32_t sdnap_ap_srp_rates(const double* in, int32_t mode, int32_t nq, double* o
   return arc ? 1 : 0;
 }
 
+/// SPEC 16.19 diagnostics: the shadow's change to the output-time radiation terms at mean anomaly M (deg) of the mean
+/// orbit `in` (as sdnap_ap_srp_rates). mode 0: the theory's (srp_shadow_params and srp_shadow_delta); mode 1: the
+/// same numerically, the zero-mean periodic parts in M of the sphere's Gauss rates in the cylinder less those without
+/// the shadow, lambda's through n's (trapezoids on nq equal steps of E). out: the six changes in the state order
+/// (lambda in rad); mode 1 also writes out[6..11], the wholly sunlit orbit's zero-mean periodic parts at M computed the
+/// same way, and out[12..17], section 4's output-time terms K at M less their mean (18 doubles). Returns 1 with a sunlit
+/// arc, 0 wholly sunlit (out 0), -1 bad input.
+SDNAP_EXPORT("sdnap_ap_srp_shadow_periodic")
+int32_t sdnap_ap_srp_shadow_periodic(const double* in, double M_deg, int32_t mode, int32_t nq, double* out) {
+  using namespace sdnap::xpt;
+  if (in == nullptr || out == nullptr || mode < 0 || mode > 1) return -1;
+  const double deg = 180.0 / sdnap::kPi, revday = 1440.0 / sdnap::kTwoPi;
+  const double y[6] = {in[0], in[1], in[2], in[3], in[4] / deg, in[5] / revday};
+  const Frame fr = frame_of(y);
+  const Kepler k = kepler_of(y, fr.a);
+  if (!(k.e < 1.0) || !(in[9] > 0.0)) return -1;
+  const AngleTrig ag = angle_trig(k);
+  const Perifocal pf = perifocal_of(ag);
+  Vec3 s = (in[6] * pf.P + in[7] * pf.Q) + in[8] * pf.W;
+  const double sn = norm(s);
+  if (!(sn > 0.0)) return -1;
+  s = (1.0 / sn) * s;
+  const double sun_r = in[9] * kAu / kRe, agom = in[10];
+  for (int m = 0; m < 6; ++m) out[m] = 0.0;
+  SrpShadowParams P;
+  if (!srp_shadow_params(y, s, sun_r, agom, P)) return 0;
+  const double varpi = std::atan2(y[kAg], y[kAf]), M = M_deg / deg;
+  if (mode == 0) {
+    srp_shadow_delta(P, M + varpi, nullptr, out);
+    return 1;
+  }
+  const int N = nq > 0 ? nq : 2048;
+  std::vector<double> f(6 * (N + 1)), lit(N + 1), Mq(N + 1), I(2 * 6 * (N + 1));
+  const Vec3 acc = (-P.Fs) * s;
+  for (int q = 0; q <= N; ++q) {
+    const double E = sdnap::kTwoPi * q / N;
+    Vec3 r, v;
+    double roa;
+    state_at_F(y, fr, E + varpi, r, v, roa);
+    gauss(y, fr, r, v, acc, &f[6 * q]);
+    const double rs = dot(r, s);
+    lit[q] = (rs < 0.0 && dot(r, r) - rs * rs < 1.0) ? 0.0 : 1.0;
+    Mq[q] = E - k.e * std::sin(E);
+  }
+  for (int var = 0; var < 2; ++var) {
+    auto l = [&](int q) { return var == 0 ? lit[q] : 1.0; };
+    auto Iv = [&](int q, int j) -> double& { return I[(var * (N + 1) + q) * 6 + j]; };
+    double mean[6] = {0, 0, 0, 0, 0, 0};
+    for (int q = 0; q < N; ++q)
+      for (int j = 0; j < 6; ++j) mean[j] += 0.5 * (f[6 * q + j] * l(q) + f[6 * (q + 1) + j] * l(q + 1)) * (Mq[q + 1] - Mq[q]);
+    for (int j = 0; j < 6; ++j) mean[j] /= sdnap::kTwoPi;
+    auto integrate = [&](int j, auto g) {
+      Iv(0, j) = 0.0;
+      for (int q = 0; q < N; ++q) Iv(q + 1, j) = Iv(q, j) + 0.5 * (g(q) + g(q + 1)) * (Mq[q + 1] - Mq[q]);
+      double avg = 0.0;
+      for (int q = 0; q < N; ++q) avg += 0.5 * (Iv(q, j) + Iv(q + 1, j)) * (Mq[q + 1] - Mq[q]);
+      avg /= sdnap::kTwoPi;
+      for (int q = 0; q <= N; ++q) Iv(q, j) -= avg;
+    };
+    for (int j : {kAf, kAg, kChi, kPsi, kN}) integrate(j, [&](int q) { return (f[6 * q + j] * l(q) - mean[j]) / fr.n; });
+    integrate(kLam, [&](int q) { return (Iv(q, kN) + f[6 * q + kLam] * l(q) - mean[kLam]) / fr.n; });
+  }
+  // E at M, then linear between the grid's points
+  double E = M + k.e * std::sin(M);
+  for (int it = 0; it < 50; ++it) {
+    const double dE = (E - k.e * std::sin(E) - M) / (1.0 - k.e * std::cos(E));
+    E -= dE;
+    if (std::fabs(dE) < 1e-15) break;
+  }
+  double x = E / sdnap::kTwoPi * N;
+  x -= N * std::floor(x / N);
+  const int q0 = static_cast<int>(x) % N;
+  const double w = x - std::floor(x);
+  for (int j = 0; j < 6; ++j) {
+    const double d0 = I[(0 * (N + 1) + q0) * 6 + j] - I[(1 * (N + 1) + q0) * 6 + j];
+    const double d1 = I[(0 * (N + 1) + q0 + 1) * 6 + j] - I[(1 * (N + 1) + q0 + 1) * 6 + j];
+    out[j] = (1.0 - w) * d0 + w * d1;
+    // out[6..11]: the wholly sunlit periodic parts at M, numerical (zero mean); out[12..17]: section 4's K at M less
+    // its mean over M
+    out[6 + j] = (1.0 - w) * I[(1 * (N + 1) + q0) * 6 + j] + w * I[(1 * (N + 1) + q0 + 1) * 6 + j];
+  }
+  {
+    double Km[6] = {0, 0, 0, 0, 0, 0}, KE[6], sq, cq;
+    for (int q = 0; q < N; ++q) {
+      const double Eq = sdnap::kTwoPi * (q + 0.5) / N;
+      sdnap::fm::sincos(Eq, sq, cq);
+      double Kq[6];
+      srp_output_ap(P.e, P.eta, sq, cq, P.ag.sw, P.ag.cw, P.ag.sO, P.ag.cO, P.ag.si, P.ag.ci, P.a, P.n, P.A, P.B, P.C, P.Fs, Kq);
+      for (int j = 0; j < 6; ++j) Km[j] += Kq[j] * (1.0 - k.e * cq) / N;
+    }
+    sdnap::fm::sincos(E, sq, cq);
+    srp_output_ap(P.e, P.eta, sq, cq, P.ag.sw, P.ag.cw, P.ag.sO, P.ag.cO, P.ag.si, P.ag.ci, P.a, P.n, P.A, P.B, P.C, P.Fs, KE);
+    for (int j = 0; j < 6; ++j) out[12 + j] = KE[j] - Km[j];
+  }
+  return 1;
+}
+
 /// CPU diagnostic: `reps` evaluations of the rate function of object `index` at
 /// its mean state at `minutes` (the caller times the call); returns the sum of
 /// the n-dot rates (keeps the work observable), NaN on a bad index.

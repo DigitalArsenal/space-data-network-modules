@@ -1817,7 +1817,7 @@ inline double ap_lambda_shadow_dn(double A, double B, double e, double eta, doub
   return 3.0 * Fs / (kTwoPi * a * n) * (G(E1 + kTwoPi) - G(E2));
 }
 
-/// SPEC 16.17: the shadow's change to the output-time radiation terms of an AP set, in closed form. Section 4's
+/// SPEC 16.19: the shadow's change to the output-time radiation terms of an AP set, in closed form. Section 4's
 /// output-time terms K(E) are the antiderivatives (in the mean anomaly M) of the osculating rates less their wholly
 /// sunlit average, divided by n (to 1e-14 of their scale against the sunlit-arc formulas). With the shadow the force is
 /// off from the entry (E2, M2) to the exit (E1 + 2 pi, M1 + 2 pi), and the periodic part P of each element obeys
@@ -1841,7 +1841,7 @@ struct SrpShadowParams {
   double far_n = 0.0, slope_n = 0.0, lam_M2 = 0.0, k_sh = 0.0, c_lam = 0.0;
 };
 
-/// SPEC 16.17 parameters of the mean state y with the Sun's unit vector su and distance sun_r (R_E); false (P.arc
+/// SPEC 16.19 parameters of the mean state y with the Sun's unit vector su and distance sun_r (R_E); false (P.arc
 /// false) for a wholly sunlit orbit. The output-time terms and the rates in AP's arrangement.
 inline bool srp_shadow_params(const double* y, Vec3 su, double sun_r, double agom, SrpShadowParams& P) {
   P.arc = false;
@@ -1922,7 +1922,7 @@ inline bool srp_shadow_params(const double* y, Vec3 su, double sun_r, double ago
   return true;
 }
 
-/// SPEC 16.17: the change to the output-time terms at mean longitude lam (rad) from parameters P (P.arc true). Through
+/// SPEC 16.19: the change to the output-time terms at mean longitude lam (rad) from parameters P (P.arc true). Through
 /// the shadow it takes the terms at P's geometry where the state is in it: K_E when the caller's terms are those
 /// (same geometry), otherwise evaluated here (the mean anomaly lam - P.varpi on P's orbit).
 inline void srp_shadow_delta(const SrpShadowParams& P, double lam, const double* K_E, double* dd) {
@@ -2971,7 +2971,7 @@ struct ActiveBracket {
   alignas(16) float BT0_f[kThirdBodyTailNodes / 2 + 1][8]{};
   alignas(16) float dAT_f[kThirdBodyTailNodes / 2 + 1][8]{};
   alignas(16) float dBT_f[kThirdBodyTailNodes / 2 + 1][8]{};
-  // SPEC 16.17: the shadow's parameters at the two nodes, for the output between them (functions of the nodes alone)
+  // SPEC 16.19: the shadow's parameters at the two nodes, for the output between them (functions of the nodes alone)
   bool sh_ready = false;
   double sh_t0 = 0.0, sh_t1 = 0.0, sh_agom = 0.0;
   SrpShadowParams sh0{}, sh1{};
@@ -5124,7 +5124,7 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
       srp_output(km.e, etam, Em, km.argp, km.node, km.i, km.a, n, A, B, C, Fs, ds);
       SrpShadowParams P;
       if (is_ap_ctx(ctx) && srp_shadow_params(ym, sun_u, sun_r, ctx.agom, P)) {
-        // SPEC 16.17 for an AP set on this path, at the state itself
+        // SPEC 16.19 for an AP set on this path, at the state itself
         double dd[6];
         srp_shadow_delta(P, ym[kLam], ds, dd);
         for (int j = 0; j < 6; ++j) ds[j] += dd[j];
@@ -5476,7 +5476,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
       double ds[6];
       srp_output_ap(km.e, etam, sEm, cEm, agm.sw, agm.cw, agm.sO, agm.cO, agm.si, agm.ci, km.a, n, A, B, C, Fs, ds);
       {
-        // SPEC 16.17: the shadow in the output-time terms (none for a wholly sunlit orbit). Between the two nodes of the
+        // SPEC 16.19: the shadow in the output-time terms (none for a wholly sunlit orbit). Between the two nodes of the
         // set's bracket, the change blended in time from the parameters at each node (functions of the nodes alone);
         // elsewhere (the epoch, a covariance sigma set) the parameters at the state itself.
         double dd[6] = {0, 0, 0, 0, 0, 0};
