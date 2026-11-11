@@ -7,9 +7,10 @@
 // - Two sets of one series with different forces (a gravity cap): series-forces-differ; with different forecast rows
 //   (the second set's rows moved): they load and blend.
 // - propagate_epochs of the stored AP record (test/fixtures/ap-fit-0.6.4.ocm, 0.6.4's fit of the 0.4.0 inputs) within
-//   STORE_FLIGHT of 0.6.18's flight of it (ap-fit-0.6.4.epochs-0.6.18.oem), and of this build's own fit of the arc within
-//   STORE_FIT (the flight and the fit apart; history, the fresh-bake reference and sizes at the check). The store's output differs from propagate's
-//   (ap-fit-0.6.4.oem) in the store's time arithmetic, which this record leaves as it was.
+//   STORE_FLIGHT of 0.6.22's flight of it (ap-fit-0.6.4.epochs-0.6.22.oem), and of this build's own fit of the arc within
+//   STORE_FIT of this build's propagate_epochs of 0.6.22's fit (ap-fit-0.6.22.ocm) (the flight and the fit apart; history,
+//   the fresh-bake reference and sizes at the check). The store's output differs from propagate's
+//   (ap-fit-0.6.4-0.6.22.oem) in the store's time arithmetic, which this record leaves as it was.
 // - A store $PCF with a FORCES table: configuration-refused FORCES; propagate_epochs without OUTPUT times:
 //   configuration-refused OUTPUT.START_TIME; a request past a set's last row: weather-rows-short:2026-11-01.
 // - The covariance from COVARIANCE_DATA and COV_PROPAGATION: the fixture $OEM above carries the store's covariance line
@@ -268,8 +269,8 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   console.log(`two sets of one series, rows moved: ${blended.statusCode === 0 ? `${x.sdnap_epochs_count()} series, ${seriesOf(0).epochs.length} sets; at 03:00 sets ${sel[0]} and ${sel[1]}, weight ${sel[2]}` : blended.errorCode}`);
   check(blended.statusCode === 0 && x.sdnap_epochs_count() === 1 && seriesOf(0).epochs.length === 2 && sel[1] === 1 && sel[2] > 0 && sel[2] < 1 && at(0, mid).status === 0,
     "two sets with different rows do not load and blend");
-  // the flight of the stored AP record (0.6.4's fit) and this build's own fit, against 0.6.18's propagate_epochs of the
-  // stored record (ap-fit-0.6.4.epochs-0.6.18.oem). History: 0.6.4's own flight of it (ap-fit-0.6.4.epochs.oem, the
+  // the flight of the stored AP record (0.6.4's fit) against 0.6.22's propagate_epochs of it (ap-fit-0.6.4.epochs-0.6.22.oem),
+  // and this build's own fit against this build's of 0.6.22's fit. History: 0.6.4's own flight of it (ap-fit-0.6.4.epochs.oem, the
   // expected flight through 0.6.17) equals ap-fit-0.4.0.epochs.oem (the 0.4.18 dist's) in its states bit for bit through
   // 0.6.4, its covariance moved at 0.6.1 (637228fb, the AP DRAG noise row re-fitted, SPEC 12.4); 0.6.5 (24d7d75f, SPEC
   // 16.8) moves the stored record's flight by 0.629 mm and 0.796 um/s and its covariance by 7.2e-5 of a line's largest
@@ -284,14 +285,29 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   //   0.6.18 against the reference         0.841 mm  0.816 um/s  2.88e-6
   //   0.6.17 against 0.6.18                1.289 mm  1.409 um/s  2.47e-5
   // Both builds are within 1 mm of the reference and equally close to it; 0.6.4's flight is 1.35 mm from it.
-  const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.epochs-0.6.18.oem", import.meta.url));
+  // 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) records it from itself again (ap-fit-0.6.4.epochs-0.6.21.oem; the
+  // 0.6.18 file went), the bounds kept. Against the 0.6.18 file, 0.6.20 / 0.6.21: byte-equal / position 0.000 mm,
+  // velocity 0.000 um/s, covariance 9.162e-3 of a line's largest entry. Why: the record's correlations between AGOM and
+  // the state are 0.6.4's fit's, and 16.16 moves its along-track response to AGOM at 48 h from 1380.7 to 823.7 m per
+  // m^2/kg; a fit made and flown by 0.6.21 flies to 0.6.4's numbers within 7.1e-5 (covariance.e2e.mjs). 0.6.22 (AP's own
+  // Sun and Moon, SPEC 16.17, stack #446) records it from itself again (ap-fit-0.6.4.epochs-0.6.22.oem; the 0.6.21 file
+  // went), the bounds kept: against the 0.6.21 file 34.763 mm, 38.304 um/s, covariance 2.19e-5 of a line's largest entry.
+  // This build's fit: against the stored record's flight until 0.6.21; from 0.6.22 against this build's propagate_epochs
+  // of 0.6.22's own fit (ap-fit-0.6.22.ocm), the bounds kept. AP's own Sun and Moon move the fit: 117.72 mm and 130.37
+  // um/s from the 0.6.21 file and, both flown by 0.6.22, 92.33 mm and 101.49 um/s from the stored record's flight.
+  const storedFlight = fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.epochs-0.6.22.oem", import.meta.url));
   const STORE_FLIGHT = { posM: 0.001, velMmS: 0.001, covOfLargest: 1e-4 }, STORE_FIT = { posM: 0.1, velMmS: 0.1 };
-  for (const [what, record, bound] of [["the stored AP record", new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.ocm", import.meta.url))), STORE_FLIGHT], ["this build's fit", ap, STORE_FIT]]) {
+  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.22.ocm", import.meta.url)));
+  const fitRecordFlight = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([fitRecord])] });
+  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.22's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
+  for (const [what, record, bound, reference, against] of [
+    ["the stored AP record", new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.4.ocm", import.meta.url))), STORE_FLIGHT, storedFlight, "0.6.22's of the stored record"],
+    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.22's fit"]]) {
     const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
     check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);
-    if (pe.statusCode !== 0) continue;
-    const d = oemDistance(new Uint8Array(pe.outputs[0].payload), storedFlight);
-    console.log(`propagate_epochs of ${what} against 0.6.18's of the stored record: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry`);
+    if (pe.statusCode !== 0 || fitRecordFlight.statusCode !== 0) continue;
+    const d = oemDistance(new Uint8Array(pe.outputs[0].payload), reference);
+    console.log(`propagate_epochs of ${what} against ${against}: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry`);
     check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `${what}: ${d.states} states and ${d.covLines} covariance lines of 289, ${d.epochsDiffer} epochs differ`);
     check(d.posM <= bound.posM && d.velMmS <= bound.velMmS && (bound.covOfLargest === undefined || d.covOfLargest <= bound.covOfLargest),
       `propagate_epochs of ${what} moved: ${JSON.stringify(d)} against ${JSON.stringify(bound)}`);

@@ -18,12 +18,15 @@
       "name": "half-day-critical",
       "fitted": {
         "epoch": "2026-10-29T00:00:00.000000",
-        "n": 1.9939591071627882,
-        "e": 0.7211141738995464,
-        "bterm": 7.158083095739183e-22,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 7.1580831e-22 +- 1e-10 m^2/kg",
-        "wrms": 0.03711081615238842,
-        "accepted": 145
+        "n": 1.9939591167822808,
+        "e": 0.7211142036211949,
+        "bterm": 2.4170956828973997e-22,
+        "agom": -6.347243661021392e-21,
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
+        "sigmaLog": 413719658297.22095,
+        "wrms": 0.018817756035971776,
+        "accepted": 145,
+        "bModel": "posterior 2.4170956828973997e-22 +- 1.0000000000000002e-10 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -55,65 +58,65 @@
         {
           "epochJD": 2461346.5008007237,
           "position": [
-            -5962.585881051308,
-            6842.945324369627,
-            -3715.941234664442
+            -5962.585921607884,
+            6842.9455656438195,
+            -3715.941071382666
           ],
           "velocity": [
-            1.1280785933701802,
-            -6.6843352574316075,
-            -4.515990642327027
+            1.1280785025408098,
+            -6.684335153285718,
+            -4.51599069909834
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 1507,
-          "integrationRejections": 35,
+          "integrationSteps": 1503,
+          "integrationRejections": 39,
           "burnSummary": []
         },
         {
           "epochJD": 2461348.5008007237,
           "position": [
-            -6212.068097500851,
-            10037.591041078349,
-            -1165.7104539470167
+            -6212.068102005965,
+            10037.591486793663,
+            -1165.7100338644482
           ],
           "velocity": [
-            0.054989968703574935,
-            -5.262537007391501,
-            -4.957003141061343
+            0.054989843232371896,
+            -5.262536804656255,
+            -4.957003164627761
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 2185,
-          "integrationRejections": 60,
+          "integrationSteps": 2181,
+          "integrationRejections": 64,
           "burnSummary": []
         },
         {
           "epochJD": 2461352.5008007246,
           "position": [
-            -5516.461732965688,
-            14552.013210276986,
-            4074.029212413728
+            -5516.461494011657,
+            14552.01402935882,
+            4074.0304022624227
           ],
           "velocity": [
-            -0.961489772127497,
-            -3.2893091491444806,
-            -4.781877860551339
+            -0.9614899030477977,
+            -3.289308803267485,
+            -4.781877763326912
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 3541,
-          "integrationRejections": 99,
+          "integrationSteps": 3537,
+          "integrationRejections": 103,
           "burnSummary": []
         }
       ],
-      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -122,11 +125,26 @@
       "perigeeKm": 1058.1099495745584,
       "fitHours": 72,
       "days": {
-        "1": { "e": 61.57538906147411, "r": 24.083473658025614, "t": -55.21094673415916, "n": -12.777566096598072 },
-        "3": { "e": 100.37333998943004, "r": 55.0520811454322, "t": -81.44699206069971, "n": -20.259892064243186 },
-        "7": { "e": 30.217284352170417, "r": 19.713925350539075, "t": -4.079260644676387, "n": -22.53453024773514 }
+        "1": {
+          "e": 64.73816855568239,
+          "r": 27.59378802155366,
+          "t": -57.441079795711026,
+          "n": -11.407702769105892
+        },
+        "3": {
+          "e": 94.64508667579348,
+          "r": 56.53431560580756,
+          "t": -73.9438553086808,
+          "n": -17.142632614049774
+        },
+        "7": {
+          "e": 27.75640934594518,
+          "r": 13.96567533700934,
+          "t": 16.27243374237116,
+          "n": -17.623452336618467
+        }
       },
-      "ffmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+      "ffmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
       "days0417": {
         "1": {
           "e": 27.53793388864421,
@@ -153,12 +171,15 @@
       "name": "Molniya",
       "fitted": {
         "epoch": "2026-10-29T00:00:00.000000",
-        "n": 1.985161476415658,
-        "e": 0.7412896556851021,
-        "bterm": 0.04478178960773632,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0.044 +- 0.1 m^2/kg; posterior 0.0447817896 +- 0.0100390742 m^2/kg; drag coefficient not separable on this arc (e above 0.3, 72.0 h of 168 h): posterior width from the RMS floor, formal sigma 0.000483775122 m^2/kg",
-        "wrms": 0.042677330968808234,
-        "accepted": 145
+        "n": 1.9851613944517106,
+        "e": 0.7412897079074353,
+        "bterm": 0.04575624393167498,
+        "agom": -1.3201174927725972e-29,
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
+        "sigmaLog": 0.10962848152675737,
+        "wrms": 0.021239246536265542,
+        "accepted": 145,
+        "bModel": "posterior 0.04575624393167498 +- 0.005016187542597435 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -190,65 +211,65 @@
         {
           "epochJD": 2461346.5008007237,
           "position": [
-            -5238.887760669612,
-            14361.434043169993,
-            4786.86162748163
+            -5238.887732163741,
+            14361.434135822257,
+            4786.861766495927
           ],
           "velocity": [
-            -0.9939581564855224,
-            -3.2267083391763376,
-            -4.8440519912681355
+            -0.993958170916136,
+            -3.2267082994697485,
+            -4.844051977929593
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 1519,
-          "integrationRejections": 48,
+          "integrationSteps": 1514,
+          "integrationRejections": 47,
           "burnSummary": []
         },
         {
           "epochJD": 2461348.5008007237,
           "position": [
-            -3555.321463472363,
-            17609.046474966628,
-            10665.731312145304
+            -3555.3213685161813,
+            17609.04660431924,
+            10665.731601206777
           ],
           "velocity": [
-            -1.391948755019239,
-            -1.8760557193656822,
-            -4.2186340305395875
+            -1.3919487654023728,
+            -1.8760556671282373,
+            -4.218633998603759
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 2209,
-          "integrationRejections": 71,
+          "integrationSteps": 2204,
+          "integrationRejections": 74,
           "burnSummary": []
         },
         {
           "epochJD": 2461352.5008007246,
           "position": [
-            528.8224430316135,
-            20520.36508033104,
-            20166.859060496812
+            528.822753064205,
+            20520.365193754253,
+            20166.85970964651
           ],
           "velocity": [
-            -1.533116931888139,
-            -0.5362110877039025,
-            -3.1874696671712774
+            -1.5331169296607328,
+            -0.5362110189322957,
+            -3.187469598783675
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 3586,
-          "integrationRejections": 114,
+          "integrationSteps": 3581,
+          "integrationRejections": 117,
           "burnSummary": []
         }
       ],
-      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -257,11 +278,26 @@
       "perigeeKm": 540.5229276448972,
       "fitHours": 72,
       "days": {
-        "1": { "e": 23.094160657954358, "r": 4.339043020718148, "t": -5.130245713000971, "n": -22.095102196731272 },
-        "3": { "e": 71.98456349257116, "r": -46.11280500399314, "t": 48.0681094184507, "n": -27.29182025471306 },
-        "7": { "e": 331.9122662612701, "r": -241.46168367135627, "t": 227.1214608275932, "n": -16.6688285379082 }
+        "1": {
+          "e": 52.16410959769883,
+          "r": -31.143149968859436,
+          "t": 36.72248912531312,
+          "n": -20.066323344826422
+        },
+        "3": {
+          "e": 231.69579016149493,
+          "r": -161.34026449179993,
+          "t": 164.6774964168761,
+          "n": -23.09935943149309
+        },
+        "7": {
+          "e": 763.8615084871078,
+          "r": -557.5553164716811,
+          "t": 522.0077767249077,
+          "n": -11.151424172826607
+        }
       },
-      "ffmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+      "ffmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
       "days0417": {
         "1": {
           "e": 44.40804023595768,
@@ -288,12 +324,15 @@
       "name": "GTO",
       "fitted": {
         "epoch": "2026-10-29T00:00:00.000000",
-        "n": 2.4043687366910866,
-        "e": 0.719528633783678,
-        "bterm": 3.929180412118312e-17,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 3.92918041e-17 +- 1e-10 m^2/kg",
-        "wrms": 0.08046247877132404,
-        "accepted": 145
+        "n": 2.4043687659607973,
+        "e": 0.7195286578626245,
+        "bterm": 3.3295009643778264e-17,
+        "agom": 0,
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
+        "sigmaLog": 3003453.1015126766,
+        "wrms": 0.061087857757979445,
+        "accepted": 145,
+        "bModel": "posterior 3.3295009643778264e-17 +- 9.999999997950031e-11 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -325,65 +364,65 @@
         {
           "epochJD": 2461346.5008007237,
           "position": [
-            -27636.12566833734,
-            21127.192440720646,
-            17254.850970456242
+            -27636.12592157842,
+            21127.191573203778,
+            17254.850701192074
           ],
           "velocity": [
-            -0.5654038555255557,
-            -1.7335192771972947,
-            -0.5166708262283034
+            -0.5654037658876138,
+            -1.7335193473477153,
+            -0.516670883018316
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 1617,
-          "integrationRejections": 78,
+          "integrationSteps": 1612,
+          "integrationRejections": 77,
           "burnSummary": []
         },
         {
           "epochJD": 2461348.5008007237,
           "position": [
-            -20361.299704730292,
-            29116.772259505768,
-            18167.79610662619
+            -20361.300869506304,
+            29116.77173768826,
+            18167.79625744186
           ],
           "velocity": [
-            -1.5995655122643055,
-            -0.6525053541049424,
-            0.23325344490912484
+            -1.5995654199381488,
+            -0.6525054894268842,
+            0.23325336098174218
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 2357,
-          "integrationRejections": 121,
+          "integrationSteps": 2352,
+          "integrationRejections": 120,
           "burnSummary": []
         },
         {
           "epochJD": 2461352.5008007246,
           "position": [
-            8304.243950417815,
-            9119.096033457376,
-            1295.4614880449094
+            8304.242800190625,
+            9119.103690833543,
+            1295.4650125108062
           ],
           "velocity": [
-            -0.924452570832165,
-            6.195523288904417,
-            2.848541596968715
+            -0.9244547214552172,
+            6.195520931807556,
+            2.8485412634041234
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 3831,
-          "integrationRejections": 198,
+          "integrationSteps": 3826,
+          "integrationRejections": 197,
           "burnSummary": []
         }
       ],
-      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -392,11 +431,26 @@
       "perigeeKm": 219.96729979299926,
       "fitHours": 72,
       "days": {
-        "1": { "e": 84.65205932278481, "r": 50.5344345698958, "t": -67.21843648444616, "n": -9.691432653415069 },
-        "3": { "e": 82.806114833936, "r": 38.93274843328498, "t": -69.67390488557837, "n": 22.059934979888745 },
-        "7": { "e": 261.2761982128191, "r": -157.97520440007472, "t": -207.5951047065398, "n": 14.606815162100565 }
+        "1": {
+          "e": 79.74747951525549,
+          "r": 49.54919135761449,
+          "t": -61.94427914258942,
+          "n": -8.212454343712077
+        },
+        "3": {
+          "e": 75.04911917376235,
+          "r": 38.193928635115526,
+          "t": -61.175664991338145,
+          "n": 20.763721175185605
+        },
+        "7": {
+          "e": 240.8270716102378,
+          "r": -146.83369290163873,
+          "t": -190.71572582321662,
+          "n": 8.065790286979041
+        }
       },
-      "ffmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+      "ffmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
       "days0417": {
         "1": {
           "e": 115.26699040587033,
@@ -423,12 +477,15 @@
       "name": "12-hour-55deg",
       "fitted": {
         "epoch": "2026-10-29T00:00:00.000000",
-        "n": 1.9913251550289361,
-        "e": 0.7207876082347004,
-        "bterm": 5.088161170615002e-22,
-        "bModel": "BTERM (SGP4XP), Gaussian prior 0 +- 1e-10 m^2/kg; posterior 5.08816117e-22 +- 1e-10 m^2/kg",
-        "wrms": 0.037654742314389776,
-        "accepted": 145
+        "n": 1.9913251561019123,
+        "e": 0.7207875955439655,
+        "bterm": 1.825598949548876e-22,
+        "agom": -1.9192927757595513e-20,
+        "comment": "fit arc: the ephemeris block's useable interval; solid Earth tide: not modeled (FORCES.SOLID_TIDES NONE)",
+        "sigmaLog": 547765433501.7612,
+        "wrms": 0.020688286192343995,
+        "accepted": 145,
+        "bModel": "posterior 1.825598949548876e-22 +- 1e-10 m^2/kg"
       },
       "classDiagnostics": [],
       "fixture": {
@@ -460,65 +517,65 @@
         {
           "epochJD": 2461346.5008007237,
           "position": [
-            -6467.519080221498,
-            9387.695265597233,
-            -1556.8987109835118
+            -6467.519068976369,
+            9387.69544691643,
+            -1556.898571808209
           ],
           "velocity": [
-            -0.35689817252686834,
-            -5.845206094132053,
-            -4.479797802653186
+            -0.3568982249575493,
+            -5.845206018084836,
+            -4.4797978153245195
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 1510,
-          "integrationRejections": 54,
+          "integrationSteps": 1509,
+          "integrationRejections": 57,
           "burnSummary": []
         },
         {
           "epochJD": 2461348.5008007237,
           "position": [
-            -5773.162156141482,
-            13193.175843276396,
-            1810.6357757461697
+            -5773.162066427488,
+            13193.176152626987,
+            1810.6360988726121
           ],
           "velocity": [
-            -1.2428644597300116,
-            -4.288496161022583,
-            -4.478678323490187
+            -1.2428645138065197,
+            -4.288496037320013,
+            -4.478678306432951
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 2191,
-          "integrationRejections": 83,
+          "integrationSteps": 2190,
+          "integrationRejections": 86,
           "burnSummary": []
         },
         {
           "epochJD": 2461352.5008007246,
           "position": [
-            -3222.3290992603484,
-            18161.667872382077,
-            8072.02429242025
+            -3222.328721615785,
+            18161.668374009398,
+            8072.0251011389
           ],
           "velocity": [
-            -1.8348947774503075,
-            -2.4283594103943797,
-            -3.92370530816168
+            -1.834894809465414,
+            -2.4283592283900015,
+            -3.9237052268988704
           ],
           "frame": "GCRF",
           "epochTimeScale": "TDB",
           "positionUnits": "km",
           "velocityUnits": "km/s",
-          "integrationSteps": 3556,
-          "integrationRejections": 141,
+          "integrationSteps": 3555,
+          "integrationRejections": 145,
           "burnSummary": []
         }
       ],
-      "apSha256": "7d4920ee23f4aecd9f29ef933f4abe98d6cc463b561b3dd7c5f12bbff6ff4c6c",
+      "apSha256": "2d599d86f03528cbe49e1946dd64046144b283fd7e0f7768fab3b6d4f2a72ef4",
       "epoch": "2026-10-29T00:00:00.000",
       "reference": "FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15",
       "kernelSha256": "e612a95953ca8211c629bdb632d4c7483cc339f0e963592bd8cae4a7d24ad7ef",
@@ -527,11 +584,26 @@
       "perigeeKm": 1072.7273836175818,
       "fitHours": 72,
       "days": {
-        "1": { "e": 62.912965297105686, "r": 32.891345695224366, "t": -51.67883875178189, "n": -14.335208617226245 },
-        "3": { "e": 77.85636956889786, "r": 54.982278769506436, "t": -50.687291078845746, "n": -21.664760022890864 },
-        "7": { "e": 64.93497987571523, "r": -11.760901607951794, "t": 60.2785606266005, "n": -21.088573531959618 }
+        "1": {
+          "e": 66.93044907702527,
+          "r": 36.669874002798615,
+          "t": -54.54997330355871,
+          "n": -12.621638833851312
+        },
+        "3": {
+          "e": 74.81301077251847,
+          "r": 56.50770589136758,
+          "t": -45.5289273505472,
+          "n": -18.19292527473966
+        },
+        "7": {
+          "e": 76.42997630274496,
+          "r": -14.018746916763549,
+          "t": 73.26479594243862,
+          "n": -16.6518974304648
+        }
       },
-      "ffmSha256": "a9133120775291c4dfbf9151d0617850be560934943a178419fdd8e3fed765e4",
+      "ffmSha256": "ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934",
       "days0417": {
         "1": {
           "e": 22.16988032461208,
@@ -1367,6 +1439,6 @@
     "GTO": "not isolated"
   },
   "version": "0.4.2",
-  "currentVersion": "0.6.8",
-  "currentNote": "current[].days re-registered 2026-11-10 on 0.6.8 against FFM 2.2.1's truth (ffmSha256); 0.6.3 (7154b48d, the grid in E for the first-order tesseral families above e 0.3, SPEC 16.11) moved every fixture (0.6.2 to 0.6.3, day 1 / 3 / 7, m: half-day 27.45 / 69.63 / 59.33 to 61.51 / 100.31 / 30.16, Molniya 44.41 / 27.50 / 392.77 to 23.11 / 71.75 / 331.23, GTO 115.23 / 79.24 / 244.46 to 84.66 / 82.80 / 261.30, 12 h at 55 deg 22.10 / 61.24 / 55.97 to 62.87 / 77.80 / 65.11, all on 2.2.1; 0.6.5 by at most 0.68 m since); DigitalArsenal/spacedatanetwork-stack#391. days0417 keeps the 0.4.17 registration (FFM 2.0.4, ffmSha256At0417): the positions are 0.4.16's (SPEC 16.12); above e 0.3 an arc shorter than 7 days states BTERM's width from the RMS floor (SPEC 12.8), which Molniya's determination text carries"
+  "currentVersion": "0.6.22",
+  "currentNote": "current[].days re-registered on 0.6.22 (AP's own Sun and Moon, SPEC 16.17, stack #446), against the same FFM 2.3.0 truth; 0.6.21 to 0.6.22, day 1 / 3 / 7, m: half-day-critical 61.57 / 100.38 / 30.22 to 64.74 / 94.65 / 27.76; Molniya 23.25 / 71.81 / 332.61 to 52.16 / 231.70 / 763.86; GTO 84.60 / 82.83 / 261.48 to 79.75 / 75.05 / 240.83; 12-hour-55deg 62.92 / 77.85 / 64.94 to 66.93 / 74.81 / 76.43. Molniya's 72 h fit of its drag coefficient lands on the other of its two solutions (stack #392: BTERM 0.0446225 to 0.0457562 against the truth's 0.044). Before: current[].days re-registered 2026-11-10 on 0.6.8 against FFM 2.2.1's truth (ffmSha256); 0.6.3 (7154b48d, the grid in E for the first-order tesseral families above e 0.3, SPEC 16.11) moved every fixture (0.6.2 to 0.6.3, day 1 / 3 / 7, m: half-day 27.45 / 69.63 / 59.33 to 61.51 / 100.31 / 30.16, Molniya 44.41 / 27.50 / 392.77 to 23.11 / 71.75 / 331.23, GTO 115.23 / 79.24 / 244.46 to 84.66 / 82.80 / 261.30, 12 h at 55 deg 22.10 / 61.24 / 55.97 to 62.87 / 77.80 / 65.11, all on 2.2.1; 0.6.5 by at most 0.68 m since); DigitalArsenal/spacedatanetwork-stack#391. days0417 keeps the 0.4.17 registration (FFM 2.0.4, ffmSha256At0417): the positions are 0.4.16's (SPEC 16.12); above e 0.3 an arc shorter than 7 days states BTERM's width from the RMS floor (SPEC 12.8), which Molniya's determination text carries"
 }

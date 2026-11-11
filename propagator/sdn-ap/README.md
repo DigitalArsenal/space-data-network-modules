@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.20 (dist 5a7fa01f).
+Version 0.6.24 (dist 3e89dfd2).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -87,7 +87,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   a field set to a value the module cannot apply is refused by name
   (configuration-refused, "TABLE.FIELD: why"; configuration-missing without one). THEORY: propagate and maneuver read
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
-  KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
+  KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series: SGP4XP's
+  of SPEC 5; AP's own of SPEC 16.17, a fit to DE440 within 4.1 arcsec of it over 2010-2035, in the module): the
   averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
   below) and AP's gravity terms (SPEC 16, below), on `fit` the solid Earth tide (SOLID_TIDES, SPEC 16.14, below) and
   ECOM2's Y0 (SPEC 16.13, below), and any other FORCES field is refused by name. INTEGRATOR is refused
@@ -242,6 +243,55 @@ takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.
 Galileo record; under a load of 10 on 28 cores) and nothing more per state once its grid exists. E2E:
 `test/radiation-y0.e2e.mjs`.
 
+## AP's shadow (SPEC 16.15; every flight of an AP set with AGOM or Y0)
+
+The sphere's averaged rates take the cylindrical shadow on the mean orbit. Its entry and exit are bracketed roots
+solved to full precision; no tolerance decides between "sunlit arc" and "wholly sunlit". SGP4XP keeps section 4's
+closed form, whose 1e-12 test decided that by rounding:
+- where a boundary lay near an apse of the mean orbit;
+- always at geosynchronous radius for near-equatorial sets.
+
+Under a change of 1e-10 in the mean motion, flights in an eclipse season moved by up to 35 m (145 m on a transfer
+orbit) instead of a linear drift of 0.2 to 0.6 m. They now move linearly to 0.9 mm in 7 days.
+
+On real fitted records the same defect was worth 5 to 30 m. Two of the release table's 0.6.20 records (QZS-2G and
+Galileo IOV 2, 72 h under ECOM2) were flown with the solid tide stated and with it removed. The tide's term is about a
+meter. On 0.6.20 the two flights differed by 8.1 and 33.7 m at day 7; now they differ by 1.7 and 3.1 m, within 0.2 m
+of the same flights with the shadow out of play.
+
+The rates agree with the same sphere and cylinder averaged numerically over one revolution within 7.6e-7 of their
+scale, through grazing and with a boundary at the perigee (`sdnap_ap_srp_rates`).
+
+Not carried:
+- the penumbra: the numerical propagator flies a cone, AP the cylinder; 0.3 mm to 5.7 cm in 7 days, by regime;
+- section 4's sunlit-arc eccentricity-vector rate at high eccentricity (stack #466): 2.3 to 3.5 m at day 7 on a
+  transfer orbit;
+- the shadow's periodic motion in section 4's output-time terms (stack #472): in an eclipse season, up to 1.4 m radial
+  RMS and a 3 to 8 m along-track span within the day on medium Earth orbit and geosynchronous sets.
+
+AP's mean longitude over a sunlit arc takes the output-time Delta n over the whole revolution, as the output-time
+terms map it (SPEC 16.16). Section 4's rate takes it over the sunlit arc only, and in season its response to the
+sphere drifted along track against the same sphere flown numerically: 92 m geostationary, 77 m GPS-like and 116 m
+Galileo-like at day 7. With 16.16 that is -3.7, -3.0 and 13.7 m; out of season nothing moves.
+
+E2E: `test/radiation-shadow.e2e.mjs`.
+
+## AP's Sun and Moon (SPEC 16.17; every AP flight and fit)
+
+AP reads its own Sun and Moon; SGP4XP keeps SPEC 5's bit for bit. They are trigonometric series fitted to DE440 over
+1990-2060 (`tools/ap-bodies-fit.mjs`, coefficients in `src/ap_bodies_series.inc`), evaluated at TT (UTC through ERFA's
+leap seconds) and carried to TEME of date (IAU 2006 obliquity, IAU 2000B's largest nutation terms, the equation of the
+equinoxes); flights read the quintic through their values at nodes 8 h apart on an absolute grid, which every set and
+thread reads alike (each thread keeps the nodes it has read). Against DE440 over 2010-2035 the Moon is within
+0.74 arcsec on average and 4.1 at worst (SPEC 5 as AP read it through 0.6.21: 91.5 and 377, 38 of it the time argument)
+and 0.68 km RMS in distance; the Sun within 0.44 and 1.1 arcsec. The Moon's acceleration error at the geostationary
+radius falls from 3.7e-9 to 3.7e-11 m/s^2 RMS. The Moon is within 0.74 arcsec on average inside 1990-2060, growing to 25
+arcsec in the 1960s and 45 arcsec in the 2090s, and better than SPEC 5's throughout 1957-2100 (SPEC 16.17, by decade). Not
+carried: the epoch-axis branches hold TEME of the epoch while the bodies are in TEME of date, about 1 arcsec at day 7
+(3.5e-11 m/s^2 at the geostationary radius). A batch at one time (`plugin_propagate_batch`, `sdnap_propagate_soa`) is
+SGP4XP's path: the shipped module's row store holds no AP set.
+E2E: `test/ap-bodies.e2e.mjs` (407 stored DE440 samples).
+
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 SGP4XP's drag is section 3's (Jacchia 1970 on the generic flux model) unless the call's `$PCF` FORCES selects another;
@@ -320,6 +370,12 @@ rows, 3 NRLMSISE-00 on the rows times exp(s(t)) of a `$DCL`.
   impulse's times sinc(dL/2) to 1e-4 (10 and 60 minutes).
 
 ## Covariance realism
+
+From 0.6.23 a record's covariance is a function of the record and the time alone. Through 0.6.22 it depended on what
+the thread had flown before it (stack #491, SPEC 12.3). On real records, CryoSat-2's covariance asked right after
+Ajisai's gave a position sigma of 336,299 m at hour 1, against 992 m alone. Asked in turn with other records, real
+geostationary records moved by up to 0.5 %. The covariance's moved sets were also 4.75 % (geostationary) from themselves
+flown on their own. `test/set-caches.e2e.mjs` holds the rule bit for bit.
 
 Neither table earns a realism label. The covariance is positive semidefinite by construction and is not calibrated. The
 band of SPEC 12.7 cannot establish realism: it accepts variance errors of 2.3, 0.2 and 0.01 on the three principal axes
@@ -557,6 +613,9 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
 - `test/output-frames.mjs`: the cost of a `propagate` state in TEME, GCRF and EME2000 (grids and explicit EPOCHS, and
   one-state calls), and with `--diff BEFORE.wasm` the GCRF and EME2000 states of two builds compared (TEME bytes must
   not move) and each build against the per-state IAU 2006/2000A chain with GMST82 in exact arithmetic.
+- `test/ap-bodies.e2e.mjs`: AP's Sun and Moon (SPEC 16.17) against 407 stored DE440 samples of 2010-2035, turned to TEME
+  of date by the module (the Moon within 8 arcsec and 6 km, RMS 2.5 arcsec and 1.5 km; the Sun within 2 arcsec), the
+  cache against the series (0.01 arcsec, 1 m) and its smoothness at the nodes; SPEC 5's numbers printed beside them.
 - `test/fit.e2e.mjs`: the GCRF rotation on the Vallado et al. 2006 TEME example (within 1 cm), the fit of one day
   of states in TEME, GCRF and ITRF (the latter two within 1 m of the first) and the `$OBD` against the `$OMM`;
   frames from the enumeration alone, refusals of undeclared and conflicting frames; `propagate` on 4-day TEME,
