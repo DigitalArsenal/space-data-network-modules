@@ -4146,7 +4146,7 @@ Rows have nine doubles: l, m, p, q, psi-dot / n, the code, the rates' weight, al
 | 21 | nowhere: under that carrier's rate floor, or in the slow band that the grid leaves out |
 | 22 | nowhere: outside that carrier's q (or j) range |
 | 23 | nowhere: under that carrier's own size cut |
-| 24 | partly nowhere: the weights sum to less than 1 |
+| 24 | partly nowhere: the weights sum to less than 1, and the share left out reaches the cut (a share under it counts as carried) |
 | 30 | twice: the weights sum to more than 1 |
 
 In the low table the carrier is the rates below 1.1 bands and the output table above.
@@ -4164,12 +4164,12 @@ its fix lands. The holes, measured 2026-11-11 (terms over the sweep; the largest
 | Hole | Issue | Terms | Largest |
 | --- | --- | ---: | ---: |
 | The low table: terms the output table holds by rate but not by degree (above 12; m-daily terms too) | stack #477 | 10,740 | 74 |
-| The low table: the taper's complement (1 - w) of a slow term above the output table's degree | stack #477 | 144 | 21 |
+| The low table: the taper's complement (1 - w) of a slow term above the output table's degree | stack #477 | 58 | 21 |
 | The low table: fast terms of \|q\| 2 or more (the output table holds \|q\| up to 1) | stack #503 | 2,436 | 15 |
 | The output table's cut counts the eccentricity vector's part radially (terms under 1 m) | stack #503 | 4,036 | 1 |
 | The low table: the slow set's cut misses a term's part through the inclination (dF/di) | stack #503 | 98 | 2.3 |
 | The one-day class above its switch: under its floor, or above the grid's degree | stack #474 | 860 | 1,630 |
-| Above the switch, every class: terms above the grid's degree 12 | stack #497 | 189,995 | 3,910 |
+| Above the switch, every class: terms above the grid's degree 12 | stack #497 | 189,984 | 3,910 |
 | Above the switch: slow terms the grid leaves out and no rate carries | stack #473 | 978 | 19,000 |
 | Outside the low table, below the switch: terms the output table's degree, q range or band floor leaves out and the class's rates do not carry | stack #503 | 406 | 91 |
 

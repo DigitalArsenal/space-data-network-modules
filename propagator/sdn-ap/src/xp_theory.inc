@@ -5902,7 +5902,8 @@ inline int census_q_max(double e) { return e <= tess::kWideENonResonant ? tess::
 /// size (m). Codes: carried once (the weights sum to 1 within 1e-3): 1 the rates, 2 the grid, 3 the output table, 8 the m-daily
 /// family, 11 the rates and the output table between them; carried nowhere, by the carrier the term's rate and degree give it:
 /// 20 above its degree, 21 under its rate floor (or out of the grid's slow band), 22 outside its q range (or its j range),
-/// 23 under its own size cut, 24 partly (the weights sum to less than 1); 30 twice (they sum to more than 1).
+/// 23 under its own size cut, 24 partly (the weights sum to less than 1 and the share left out reaches the cut); 30 twice
+/// (they sum to more than 1).
 inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, double cut, double* rows, int max_rows) {
   const RateContext& c = s.ctx;
   const int8_t cls = c.resonance;
@@ -5971,8 +5972,10 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
                                 : 0.0;
           const double total = wr + wt + wm + wg;
           int code;
+          // a share left out whose own size, (1 - total) times the term's, is under the cut counts as carried (the cut applies
+          // to what is left out, as the output table's weighted cut does)
           if (total > 1.0 + 1e-3) code = 30;
-          else if (total >= 1.0 - 1e-3) {
+          else if (total >= 1.0 - 1e-3 || (total > 1e-3 && (1.0 - total) * size < cut)) {
             const int carriers = (wr > 1e-6) + (wt > 1e-6) + (wm > 1e-6) + (wg > 1e-6);
             code = carriers > 1 ? (wr > 1e-6 && wt > 1e-6 && carriers == 2 ? 11 : 30) : wr > 1e-6 ? 1 : wg > 1e-6 ? 2 : wt > 1e-6 ? 3 : 8;
           } else if (total > 1e-3) code = 24;
