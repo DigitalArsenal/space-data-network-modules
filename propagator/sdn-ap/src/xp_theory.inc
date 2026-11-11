@@ -3880,9 +3880,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
       res::resonance_six_ap(terms, count, t, k, fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst);
     }
-    if (ctx.ap_resonance && cls == 2 && ctx.half_day != nullptr) {
+    if (ctx.ap_resonance && (cls == 2 || cls == 1) && ctx.half_day != nullptr) {
       tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
-                         fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst, ctx.hd_a0, hd_table_id(ctx));
+                         fr.n, fr.eta, ag.si, ag.ci, ctx.theta_g0, dst, ctx.hd_a0, hd_table_id(ctx), cls == 1 ? 1 : 2);
     }
     if (ctx.shallow != nullptr) {
       tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, fr.a, fr.n, fr.eta, ag.si, ag.ci,
@@ -5996,7 +5996,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
     }
   }
   const int sd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
-  if (res == 2 && sd >= 6) {
+  // the class's resonant tail in the rates (SPEC 16.2): half-day degrees 6 to sd; one-day degrees 5 to sd below kWideE
+  // (stack #434), the terms sp_terms then leaves out of the output table
+  if ((res == 2 && sd >= 6) || tess::one_day_tail(res, br.wide_tess != 0, sd)) {
     if (same_res && anchor->ctx.half_day != nullptr && std::fabs(e.eo - anchor->ctx.hd_e0) <= tess::kShareE &&
         std::fabs(e.xincl - anchor->ctx.hd_i0) <= tess::kShareI && std::fabs(s.ctx.a0 / anchor->ctx.hd_a0 - 1.0) <= tess::kShareA) {
       s.ctx.half_day = anchor->ctx.half_day;
@@ -6006,10 +6008,15 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.hd_a0 = anchor->ctx.hd_a0;
       s.ctx.shared_mask |= 1;
     } else {
-      tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd) * sizeof(tess::HalfDayCoef)));
+      tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd, res) * sizeof(tess::HalfDayCoef)));
       if (table == nullptr) return false;
-      s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0);
+      s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0, res);
       if (s.ctx.half_day_count < 0) { std::free(table); return false; }
+      // the one-day tail keeps what it filled: its amplitude cut leaves a few hundred of the bound's 2,016 entries at
+      // degree 31 (the half-day class's allocation is left as it was)
+      if (res == 1 && s.ctx.half_day_count > 0)
+        if (void* kept = std::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
+          table = static_cast<tess::HalfDayCoef*>(kept);
       s.ctx.half_day = table;
     }
   }
@@ -6967,9 +6974,9 @@ inline void refresh_lp_sigma_tail_srp(const RateContext& ctx, double t, const do
     const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
     res::resonance_six_ap(terms, count, t, k, n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail);
   }
-  if (ctx.ap_resonance && cls == 2 && ctx.half_day != nullptr) {
+  if (ctx.ap_resonance && (cls == 2 || cls == 1) && ctx.half_day != nullptr) {
     tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
-                       n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail, ctx.hd_a0, hd_table_id(ctx));
+                       n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail, ctx.hd_a0, hd_table_id(ctx), cls == 1 ? 1 : 2);
   }
   if (ctx.shallow != nullptr) {
     tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, a, n, eta, ag.si, ag.ci, ctx.theta_g0,
