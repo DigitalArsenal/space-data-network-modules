@@ -49,6 +49,42 @@ inline int regime_of(const ElementRow& row) {
   return (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
 }
 
+/// SPEC 12.5, above the drag: the class of a set by its own elements: HEO at e 0.3 or more; otherwise geosynchronous
+/// under 1.5 rev/day, medium Earth orbit under 4 rev/day, and the LAGEOS class above (LAGEOS, LARES-2).
+enum AboveClass { kAboveHeo = 0, kAboveGso = 1, kAboveMeo = 2, kAboveLageos = 3 };
+inline int above_class(const ElementRow& row) {
+  if (row.eccentricity >= 0.3) return kAboveHeo;
+  if (row.mean_motion_rev_day < 1.5) return kAboveGso;
+  if (row.mean_motion_rev_day < 4.0) return kAboveMeo;
+  return kAboveLageos;
+}
+/// SPEC 12.5, a class's process noise above the drag (stack #433, 2026-11-11): s_e, s_i (1/day), s_l (dn/n) and k, the
+/// size of the non-gravitational n-dot per unit of the set's radiation term, s_d = k |AGOM| / a (rad/day^2; AGOM in
+/// m^2/kg, a in Earth radii): the unmodeled force above the drag is radiation pressure, which scales with the area to
+/// mass. Fitted on fits to precise orbits (experiments headline-loop, sdn-ap 0.6.15), the row applies only inside its
+/// calibrated condition: the data sigma the fit weighted with (12.1) and the fit's span within those of the calibration
+/// fits. Outside it, and in a class with no fitted row (fitted false), the regime's row of kNoiseAP / kNoiseXP stands.
+struct AboveRow {
+  bool fitted;
+  double s_e, s_i, s_l, k;
+  double sigma_lo_km, sigma_hi_km;  ///< the calibration fits' data sigma, km
+  double span_lo_h, span_hi_h;      ///< the calibration fits' spans, hours
+};
+// LAGEOS: LAGEOS-1, LAGEOS-2, LARES-2, 32 windows of 72 h; k the one k of the LAGEOS, medium Earth orbit and
+// geosynchronous classes (1.415e-5 AP, 3.216e-5 SGP4XP); s_e, s_i, s_l fitted so that every regime's 99th percentile of
+// |z| per axis and lead is at most 2.9. The bounds are the calibration fits' data sigma (rounded outward) and 0.9 to
+// 1.05 times their spans. HEO, geosynchronous and medium Earth orbit keep the ABOVE row for now (SPEC 12.5).
+constexpr AboveRow kAboveAP[4] = {
+    {false, 0, 0, 0, 0, 0, 0, 0, 0},  // HEO
+    {false, 0, 0, 0, 0, 0, 0, 0, 0},  // geosynchronous
+    {false, 0, 0, 0, 0, 0, 0, 0, 0},  // medium Earth orbit
+    {true, 1.1374623058968726e-08, 8.083584088270014e-08, 3.831472309446551e-09, 1.415e-05, 0.00243, 0.00276, 64.8, 75.6}};  // LAGEOS
+constexpr AboveRow kAboveXP[4] = {
+    {false, 0, 0, 0, 0, 0, 0, 0, 0},
+    {false, 0, 0, 0, 0, 0, 0, 0, 0},
+    {false, 0, 0, 0, 0, 0, 0, 0, 0},
+    {true, 2.463673468245377e-07, 6.564224575525169e-07, 5.502200043625398e-08, 3.216e-05, 0.0588, 0.0769, 64.8, 75.6}};
+
 constexpr int kMaxConsider = 5;
 constexpr int kMaxAug = 6 + kMaxConsider;
 static_assert(kMaxAug == fit::kMaxParams, "the augmented state is the fit's parameter vector");
@@ -316,8 +352,11 @@ struct Set {
 
 /// The process noise of a set (SPEC 12.5): its regime (0 perigee below kDragRegimeKm, 1 above), the non-gravitational
 /// n-dot / n at epoch (1/day; the theory's epoch rates with and without BTERM) and the sizes s_e, s_i, s_l, s_d
-/// with the noise start t_a (minutes), and the floor's scale k_F. False when the theory refuses the set.
-inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& regime, double* noise, double& share, double& floor_scale) {
+/// with the noise start t_a (minutes), and the floor's scale k_F. Above the drag a set inside its class's calibrated
+/// condition (`sigma_km` the data sigma its fit weighted with, 0 for none; `span_h` the fit's span) takes the class's
+/// row (kAboveAP, kAboveXP). False when the theory refuses the set.
+inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double span_h, double& ng_rate, int& regime, double* noise,
+                     double& share, double& floor_scale) {
   ng_rate = 0.0;
   ElementRow none = row;
   none.bterm = 0.0;
@@ -335,7 +374,8 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   regime = regime_of(row);
   const auto& terms = xpt::tess::active();
-  const Noise& k = (terms.tesseral || terms.zonal) ? kNoiseAP[regime] : kNoiseXP[regime];
+  const bool ap = terms.tesseral || terms.zonal;
+  const Noise& k = ap ? kNoiseAP[regime] : kNoiseXP[regime];
   noise[0] = k.s_e;
   noise[1] = k.s_i;
   noise[2] = k.s_l;
@@ -343,6 +383,18 @@ inline bool noise_of(const ElementRow& row, double t_a, double& ng_rate, int& re
   noise[4] = t_a;
   share = k.c;
   floor_scale = k.k_F;
+  if (regime == 1) {
+    const AboveRow& a = (ap ? kAboveAP : kAboveXP)[above_class(row)];
+    if (a.fitted && sigma_km >= a.sigma_lo_km && sigma_km <= a.sigma_hi_km && span_h >= a.span_lo_h && span_h <= a.span_hi_h) {
+      const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
+      noise[0] = a.s_e;
+      noise[1] = a.s_i;
+      noise[2] = a.s_l;
+      noise[3] = a.k * std::fabs(row.agom) / a_er;
+      share = 0.0;  // above the drag s_d is the class's k |AGOM| / a, not a share of the non-gravitational rate
+      floor_scale = 1.0;
+    }
+  }
   return true;
 }
 
@@ -403,7 +455,8 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   // the process noise and the floor's scale of the set's regime (SPEC 12.4, 12.5)
   s = Set{};
   double floor_scale = 1.0;
-  if (!noise_of(row, arc_end_min, ng_rate, s.regime, s.noise, s.share, floor_scale)) return false;
+  const double span_h = (t[count - 1] - t[0]) / 60.0;
+  if (!noise_of(row, arc_end_min, sigma_km, span_h, ng_rate, s.regime, s.noise, s.share, floor_scale)) return false;
   s.ng_rate = ng_rate;
   for (double& f : floor) f = f / static_cast<double>(count) * floor_scale;
   // epoch image: state block J0 Pp J0^T + floor, cross J0 Pp, consider Pp
@@ -453,8 +506,10 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
 inline const char* noise_model_id() { return xpt::tess::active().tesseral || xpt::tess::active().zonal ? "sdn-ap AP process noise" : "sdn-ap SGP4XP process noise"; }
 inline const char* regime_name(int regime) { return regime == 0 ? "DRAG" : "ABOVE"; }
 
-/// s_d against c |ng_rate| n (n in rad/day), relative: the invariant of COV_PROPAGATION.
+/// s_d against c |ng_rate| n (n in rad/day), relative: the invariant of COV_PROPAGATION under the drag. Above the drag
+/// s_d is the record's own statement (this module writes k |AGOM| / a, SPEC 12.5): finite and not negative.
 inline bool noise_invariant(const ElementRow& row, const Set& s) {
+  if (regime_of(row) == 1) return std::isfinite(s.noise[3]) && s.noise[3] >= 0.0;
   const double n_day = row.mean_motion_rev_day * kTwoPi;
   const double want = s.share * std::fabs(s.ng_rate) * n_day;
   return std::fabs(s.noise[3] - want) <= 1e-12 * std::fmax(std::fabs(s.noise[3]), std::fabs(want));

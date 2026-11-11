@@ -230,6 +230,22 @@ int32_t sdnap_propagate_minutes_soa(const double* minutes, uint32_t first, uint3
 SDNAP_EXPORT("sdnap_threads")
 int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
 
+/// The sets' caches (SPEC 9), read only (the budget is the module's default, 256 MB; xpt::cache_budget_mb sets it in
+/// test builds, no typed configuration carries it yet), 8 doubles: the budget and the bytes held, the sets holding caches and of them those
+/// holding tesseral caches, the caches reclaimed (least recently flown first), the caches and tesseral caches refused
+/// (no room after reclaiming), and the tesseral caches made.
+SDNAP_EXPORT("sdnap_cache_stats")
+void sdnap_cache_stats(double* out) {
+  if (out == nullptr) return;
+  sdnap::xpt::CachePool& p = sdnap::xpt::cache_pool();
+  sdnap::xpt::lock(&p.lock);
+  const double v[8] = {static_cast<double>(p.budget), static_cast<double>(p.held), static_cast<double>(p.holders.size()),
+                       static_cast<double>(p.sp_holders), static_cast<double>(p.reclaimed), static_cast<double>(p.refused),
+                       static_cast<double>(p.sp_refused), static_cast<double>(p.sp_made)};
+  sdnap::xpt::unlock(&p.lock);
+  for (int k = 0; k < 8; ++k) out[k] = v[k];
+}
+
 /// Bytes the element store holds (records and checkpoints).
 SDNAP_EXPORT("sdnap_store_bytes")
 double sdnap_store_bytes(void) { return static_cast<double>(sdnap::store_bytes()); }

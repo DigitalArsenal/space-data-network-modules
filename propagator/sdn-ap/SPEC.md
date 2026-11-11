@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.16 (dist 7c91f0d9).
+Version 0.6.18 (dist cb546d93).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1463,18 +1463,91 @@ backward (t < 0). Node 0 is the epoch state with its rates. The step from node k
   the checkpoint stride uses that same step. Default FORCES retains the 95-minute XP grid.
 
 The grid depends only on the epoch state *[probe 9.1: the library's direct, 1-minute stepped and backward-approach requests
-agree to 0 mm]*. An AP state in this module depends on the order of requests: the same record flown in ascending and in random
-order differs by up to 12.7 mm at 500 km (median 2.0 mm), 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at
-geosynchronous altitude; a single state from a fresh record differs from the ascending pass by up to 8.8 mm; over 30 days at
-60 s, reversed or shuffled against the ascending pass, test/kernel-cost.mjs --diff measures up to 0.18 m at 300 km (B 6.4e-3
-m^2/kg, active weather) and 0.29 m on a low orbit at e 0.05 with tesseral degree 31; on a transfer orbit at e 0.72, 7 days
-at 300 s, random against ascending, 0.9 µm. SGP4 differs by 0 in every case. The same build asked the same requests in
-the same order writes the same bytes (ascending twice: 0 in every case); a comparison of two builds
-(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity)
-and prints the reversed and shuffled differences beside it. Out of order AP pays for it: a request outside the cached
-bracket integrates from the nearest checkpoint, and in random order an AP state costs 37 to 153 times SGP4's on
-near-circular orbits and 1,990 times on the transfer orbit (test/kernel-patterns.mjs order, 7 days at 300 s; 1.2 to
-2.5 times ascending). SGP4XP GEO nodes fall on
+agree to 0 mm]*. An AP state in this module is a function of its set and its time alone (0.6.18): the order of requests,
+the call they come in (one epoch, the first state of a call, a state inside a batch), the sets flown before or between
+them, whether the covariance is asked, and the path (`propagate`, `propagate_epochs`, the epoch store's exports) leave its
+bits unchanged, with one exception stated below. What makes it so:
+
+- Every evaluation cache an AP state reads holds a function of the set and the time. The tesseral terms are baked on the
+  state's own bracket (the a, e and cos i of its two nodes, and cells of them), the zonal tail and the shallow terms at the
+  state's a. A store's set keeps its own third-body bracket tables, m-daily terms and tesseral cache (the pool below)
+  while it holds them, the thread's otherwise, and both give the same numbers.
+- A step depends on its first node alone: rk3 evaluates the parts of node a's rates the stages hold fixed again from the
+  node's own state (before that step's corrections), never from what the step before left. The grid's nodes are the same
+  whichever node an integration starts from.
+- The drag-pass segment above e 0.3 (16.12) takes its perigee time and period from its bracket's lower node, not from the
+  first state asked.
+- The epoch store times an AP set from the split Julian date, with the expression `propagate` uses. Minutes from J2000
+  round by up to 1e-7 s at today's dates, 1 mm in low orbit. SGP4XP and SGP4 in the store keep the minutes from J2000:
+  their output is 0.6.9's bit for bit, and it differs from `propagate`'s by up to that rounding.
+
+The exception: a record that carries a covariance flies its nominal state through `propagate` by the covariance's combined
+evaluation (xp_propagate_cov_at). That evaluation takes the third-body short-period terms at the state, because their
+derivative is needed, and the Sun from the call's hourly table. Every other path interpolates both linearly across the
+bracket's sub-interval (eval_tbsp_lerp_f32, the bracket's Sun). On the AP fixture fit the two differ by 0.39 mm (stack
+#420). The same record without its covariance flies the same bits through every path.
+
+test/set-caches.e2e.mjs holds this on nine made-up orbits: 500 km, 830 km, MEO, GEO, e 0.1 and 0.25 with tesseral 31, the
+transfer orbit with and without tesseral 31, and Molniya. Against ascending order, to the bit:
+
+- random order and alternating ends over 7 days at 300 s;
+- one state of a freshly loaded record;
+- two records interleaved, at the pool's default budget and at 1 MB;
+- through `propagate`, a time asked alone against the same time in a 2,016-state call.
+
+test/carried-identity.e2e.mjs holds the paths: `propagate_epochs`, the store, and `propagate` of the record without its
+covariance give the same bits.
+
+The pool's threads change no state. Over 1,000 AP rows of a catalog mix in the row store, sdnap_propagate_soa on 0, 4 and
+15 threads gives one digest; 0.6.12 differed at 120 values between 0 and 4 threads (test/set-caches.e2e.mjs holds 0
+against 4). The exception today is stack #424: above e 0.048 with tesseral terms, a process holds at most 256 family
+grids. Beyond them a state is refused, and which eccentric set is refused depends on which thread asked first.
+
+What the caches cost in accuracy. The reference is a build of this module's own sources that bakes every evaluation cache
+at the state itself on every call: the tesseral base, ae, pe and resonance bakes and the m-daily terms, with the
+third-body bracket, drag-pass and half-day caches never reused. Against it, over 30 days at 60 s
+(test/kernel-cost.mjs --diff):
+
+- this module is within 0.2 to 5.6 mm on near-circular low orbits (300 to 1,400 km), 0.07 mm in MEO, 0.15 mm at GEO and
+  0.22 mm in IGSO;
+- with tesseral 31 it is within 27 mm at e 0.05, 4.9 mm at e 0.1 and 1.5 mm at e 0.2;
+- on the eccentric orbits without tesseral terms (transfer, Molniya, THEMIS, TESS, and e 0.05 to 0.2) it gives the
+  reference's own bits;
+- 0.6.15 sits up to 0.98 m from the same reference (500 km, high drag, active weather), 0.53 m (400 km, high drag, quiet)
+  and 0.18 m (e 0.05, tesseral 31). Its other near-circular rows are 2 to 40 mm away. Its rows without tesseral terms
+  are 0.13 to 0.64 mm away; that is this change's rk3 and drag-pass work, not caches. (0.6.15 against the reference
+  built before 0.6.16's long-period step.)
+
+On the epoch store's stored record (test/fixtures/ap-fit-0.6.4.ocm, 289 states over a day at 550 km), this module and
+0.6.17 are each within 1 mm of the reference: 0.84 and 0.86 mm. The fit of the same inputs
+(test/covariance.e2e.mjs) gives an epoch covariance 4.8e-5 of its largest entry from the reference's on this module, and
+1.74e-3 on 0.6.17.
+
+The fit's covariance at epoch comes from central differences of the theory over steps of 1e-7 in the elements. Taking
+steps ten times larger moves it by 3.3e-6 of its largest entry on this module, and by 1.57e-3 on 0.6.15 (the fit lane's
+measurement, stack #456). 0.6.15's cells put non-smooth changes into those differences; the sets' caches do not.
+
+Through a fit, the millimeters can become tens of meters (stack #456). The headline harness flew this change against
+0.6.15 on its 2,096 real windows. XP's output is the same bits, and AP's states move by millimeters. But every AP
+forecast there comes out of a fit, and the fit stops where no step along its columns lowers the cost, which is not a
+minimum. A millimeter can move where a loose fit stops.
+- Galileo 72 h fits with Y0 solved show it most. Their median error at 7 days went from 43.8 to 45.9 m; 41 of 42
+  windows stay within 100 m of the numerical propagator, against 42; one window moved 43.4 m.
+- The two windows that moved most were flown by three builds: 0.6.15, this build and the reference. One fitted set,
+  flown by all three, gives the same errors to 0.17 mm at every lead day. Fits of the same arc end within 0.05 m of RMS
+  of each other yet part by up to 64 m at 7 days, and by 6 m with Y0 held.
+- The largest change of one window's error is below 0.3 m on laser spheres, laser geodetic, MEO, IGSO and 24 h
+  altimetry fits. It is 0.8 to 2.6 m on 72 h altimetry, near-700 km, THEMIS 72 h and 24 h Galileo fits; 8 to 45 m
+  on geostationary, strong-drag, Chandra 168 h and TESS 72 h fits; and 68 and 286 m on commercial geostationary 72 h
+  and 24 h fits.
+- On the commercial geostationary window that moved most, the reference's fitted set flies 34 m from this build's and
+  705 m from 0.6.15's at 7 days.
+- One TESS 336 h fit moved 9.75 km: this build's fit stopped at 1,083 m of RMS, against 868 m for 0.6.15 and the
+  reference.
+
+A comparison of two builds
+(test/kernel-cost.mjs --diff --bound M,MPS) holds the time-order pass to its stated tolerance (0,0 for byte identity), and
+prints the reversed and shuffled differences beside it. SGP4XP GEO nodes fall on
 multiples of 95 minutes *[probe 9.2: native elements between epoch and 95 minutes are reproduced by cubic Hermite
 interpolation of the two node values and rates to 1e-8 of their change, against 6e-5 for a 96-minute grid]*.
 
@@ -1484,8 +1557,78 @@ A query inside an already cached bracketing interval interpolates without integr
 query integrates from the epoch through its bracket, creating checkpoints on the way. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond the stored
 span it integrates from the nearest preceding retained node, so work grows with the remaining time gap.
-The node cache has bounded storage, not a time-independent bound on query work. Request order does not change the epoch-anchored grid; it changes an
-AP state by the amounts stated above.
+The node cache has bounded storage, not a time-independent bound on query work.
+
+**Side B: the sets' caches (0.6.18).** An AP set of the epoch store (`load_epochs`) takes its caches from one pool
+while it is flown: its third-body bracket tables, m-daily terms and tesseral cache, and its nodes
+as two runs (forward and backward) up to the checkpoint span. A time inside a run is a lookup, never a re-integration. A
+run starts from the latest node known at or before the time (the epoch, a checkpoint or the window's), and starts again
+when a time precedes it.
+
+The pool's budget is the module's default, 256 MB. Configuration reaches a module only as a typed message, and none
+carries the budget yet (PCF.EPOCH_STORE has no such field; a standards issue asks for one), so no export sets it.
+sdnap_cache_stats reads the pool, as 8 doubles: the budget and the bytes held; the sets holding caches, and of them those
+holding tesseral caches; the caches reclaimed; the caches and tesseral caches refused; and the tesseral caches made.
+
+Caches per set flown a day (a week), by part, and the sets whose caches a budget holds:
+
+| Orbit | Total | Tesseral | Node runs | Third-body bracket | m-daily | 256 MB | 1 GB | 2 GB |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 500 km | 71.5 KB (79.0) | 58.2 | 2.5 (10.0) | 5.8 | 4.6 | 3,664 | 14,658 | 29,317 |
+| 830 km | 64.2 KB (71.1) | 50.9 | 2.5 (9.4) | 5.8 | 4.6 | 4,082 | 16,328 | 32,656 |
+| low orbit, e 0.052 | 13.3 KB (20.2) | 0 | 2.5 (9.4) | 5.8 | 4.6 | 19,691 | 78,766 | 157,532 |
+| MEO | 19.8 KB | 7.1 | 1.9 | 5.8 | 4.6 | 13,252 | 53,008 | 106,017 |
+| GEO | 33.3 KB (62.1) | 2.5 | 20.0 (48.8) | 5.8 | 4.6 | 7,861 | 31,447 | 62,894 |
+| transfer orbit | 15.8 KB (22.1) | 0 | 5.0 (11.3) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
+| THEMIS-like (n 1.0496, e 0.822) | 90.8 KB (232.1) | 0 | 80.0 (221.3) | 5.8 | 4.6 | 2,886 | 11,546 | 23,093 |
+| Chandra-like (n 0.378, e 0.685) | 20.8 KB (44.6) | 0 | 10.0 (33.8) | 5.8 | 4.6 | 12,595 | 50,382 | 100,764 |
+| TESS-like (n 0.073, e 0.55) | 15.8 KB (30.8) | 0 | 5.0 (20.0) | 5.8 | 4.6 | 16,578 | 66,313 | 132,626 |
+
+The rest of the caches is 0.4 KB a set. Each set also carries its drag-pass segments, 0.8 KB, in the set itself. The node
+runs of a set above e 0.3 follow its long-period step (16.10). The THEMIS-like set steps 8.2 minutes, so it holds 351 nodes
+of 160 B a day and 1,402 a week. A run holds at most the checkpoint span, 8 days or about 1,405 nodes (225 KB) a direction:
+256 MB holds the week's caches of 1,129 such sets.
+
+A catalog is flown object by object. At 10,000 low-orbit sets (500 km), measured per state at load 10 to 14:
+
+| Pattern | 256 MB (the default) | All held (1 GB) | SGP4-XP |
+| --- | --- | --- | --- |
+| Object-major | 0.93 µs, 0.85 times SGP4-XP | 0.78 µs, 0.73 times | 1.09 µs |
+| Time-major | 9.1 µs, 7.8 times | 2.25 µs, 1.9 times | 1.17 µs |
+
+A caller that screens a catalog flies it object by object, or in blocks that fit the budget. The time-major pattern (every
+set at each instant) is what display segments are for.
+
+What the exact state costs a single record, against 0.6.12, flown back to back in a cleared slot (load 15 to 25). The
+figures come from the minimum and the steady rounds: single-threaded rounds swung by up to 5 times on the shared
+machine, so a median means little.
+
+- One warm record in ascending order is 13 % slower at 500 km and 5 to 7 % at 830 km. MEO is equal; GEO is 2.3 times
+  faster and the transfer orbit 1.7 times.
+  - At 500 km the bracket-anchored bake bookkeeping at every state costs about 6 % (stack #441): bake points one
+    tolerance apart and counted once per bracket recovered 11 of 17 %.
+  - The node re-evaluation below costs about 4 % (stack #439).
+- The first state of a fresh record at 7 days is 25 to 28 % slower at 500 km and GEO (stack #439). Each node step
+  evaluates node a's held rates (third body, drag, SRP, the zonal tail) again at the node's own state, which is what
+  makes a step depend on its first node alone. Recovering it takes either carrying the held parts in each node (about
+  7 KB more per set, node runs 2.5 times larger), or restructuring the step's last stage so the node's own evaluation is
+  the one the next step holds fixed (a numerics change with its own accuracy check).
+- The full `propagate` call (GCRF, 7 days at 300 s) of a record fitted with covariance is 11 % slower at 500 km and 15 % at
+  GEO; a seeded record is equal at 500 km and 13 % slower at GEO. The integration of the nominal's nodes carries the node
+  re-evaluation.
+
+How room is shared:
+
+- The pool's clock ticks at every ask for room. A holder's stamp is the clock when it was last flown.
+- A set takes free room, or reclaims holders not flown since its own previous ask, least recently flown first, never
+  one being flown. A first ask takes free room only.
+- A steady cycle over more sets than fit therefore keeps its holders, and the other sets fly on the thread's caches.
+  Holders no longer flown give way.
+- A set refused room flies on the thread's caches at their cost. Its state is the same either way.
+- A smaller budget reclaims at once.
+- Each set's lock is taken once per state, without contention on one thread, and costs about 0.2 % of an AP state.
+
+Memory per set flown and cost per pattern: README, Memory and time.
 
 **AP one-day convergence.** The registered unfitted sets have epoch 2026-10-29 00:00 UTC,
 n = 1.0027 rev/day, e = 0.0002, i = 0.1 or 15 degrees, node = 40 degrees, argument of perigee = 30 degrees,
@@ -1772,7 +1915,8 @@ and 17 h held-B arcs) and near 700 km (Sentinel-1A, 1C; 72 h and 24 h arcs), spl
 training 2025-04-01 to 08-10 and 2026-01-01 to 03-15, held out 2025-08-21 to 12-21 and 2026-03-26 to 05-31. P(t) is
 linear in each squared size and the floor adds, so the fit re-weights the module's own per-term variances; no orbit is
 re-fitted. The ABOVE row is the 2026-11-03 minimax row (the worst violation of 12.7's mean band across days 1, 2, 3
-and 7 on `operator-theory/ap/b040`), unchanged.
+and 7 on `operator-theory/ap/b040`), unchanged; above the drag a class with a fitted row replaces it inside that
+row's calibrated condition (below, "Above the drag, by class").
 
 Realism is not met, and the covariance is not calibrated (12.7). On the held-out windows the median |z| of 8 of the 18
 cells (two regimes, three axes, days 1, 3 and 7) is inside the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
@@ -1796,6 +1940,67 @@ not its sizes: wherever the strong-drag cross-track median at day 7 is inside th
 leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km
 (0.6.0: 37.78 km) against the error 0.308 km. `test/covariance-realism.e2e.mjs` reports every held-out cell of both
 rows, the shares within 1 and 2 sigma, and the ISS figure on the built module.
+
+Above the drag, by class *[2026-11-11, stack #433; experiments headline-loop, sdn-ap 0.6.15]*. Measured on every
+first-pass window whose fitted set is above the drag (923 window-arcs per theory), the ABOVE row is too wide on
+near-circular orbits, 5 to 1,000 times: median |z| 0.001 to 0.15 on laser geodetic, medium Earth orbit, Galileo,
+inclined geosynchronous and geostationary, in track 0.001 to 0.02. It is too narrow on TESS, Chandra and commercial
+geostationary, whose truth carries burns (stack #444). A set above the drag therefore takes a row by class, decided by
+its own elements: HEO at e 0.3 or more; otherwise geosynchronous under 1.5 rev/day, medium Earth orbit under 4 rev/day
+(GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
+
+- The class's row applies only inside its calibrated condition: the data sigma the fit weighted with (12.1) and the
+  fit's span within those of the calibration fits. Outside it, and in a class without a fitted row, the ABOVE row
+  stands. A record fitted to worse data than the calibration fits, or over another span, is not made narrower without
+  measured error behind it.
+- s_d above the drag is k |AGOM| / a (rad/day^2; AGOM in m^2/kg, a in Earth radii): the unmodeled force above the drag
+  is radiation pressure, which scales with the object's area to mass, so the form carries to objects with other
+  area-to-mass ratios. One k serves the LAGEOS, medium Earth orbit and geosynchronous classes as well as a constant per
+  class (training losses with the one k against per class: LAGEOS 0.0678 against 0.0677, medium Earth orbit 0.0460
+  against 0.0458, geosynchronous 0.1242 against 0.1237). It does not explain Galileo: per satellite, AP's 72 h in-track
+  error at day 7 runs from 35 m (GPS IIF) to 492 m (Galileo FOC 15), while AGOM spans only 0.022 to 0.033 m^2/kg.
+- The record states the sizes in COV_PROPAGATION as before. Above the drag NON_GRAVITATIONAL_SHARE is 0 and
+  NOISE_NON_GRAVITATIONAL_RAD_DAY2 is the record's own statement; the read refuses only a negative or non-finite one
+  there. Under the drag the invariant s_d = c |n-dot_ng| n stands.
+
+| Theory | Class | s_e (1/day) | s_i (1/day) | s_l | k | data sigma (km) | span (h) |
+| --- | --- | --: | --: | --: | --: | --- | --- |
+| SDNAP | LAGEOS | 1.1374623058968726e-08 | 8.083584088270014e-08 | 3.831472309446551e-09 | 1.415e-05 | 0.00243 to 0.00276 | 64.8 to 75.6 |
+| SGP4XP | LAGEOS | 2.463673468245377e-07 | 6.564224575525169e-07 | 5.502200043625398e-08 | 3.216e-05 | 0.0588 to 0.0769 | 64.8 to 75.6 |
+
+Acceptance (per regime, fit arc and axis at days 1, 3, 5 and 7, scored against the precise orbits). The count of |z|
+above 3 must be at most max(as built, ceil(1 % of the windows), 1). The count inside the 95 % region must not be
+significantly below 95 % (one-sided binomial test at 5 %: 28 of 32), nor below the as-built count where that is
+already under it. A class whose row fails any cell keeps the ABOVE row. The LAGEOS rows are fitted so that every
+regime's 99th percentile of |z| is at most 2.9, on all 32 windows of LAGEOS-1, LAGEOS-2 and LARES-2 (72 h fits), and
+they hold leaving each satellite out in turn. The module's own covariance, flown, ABOVE row > LAGEOS row:
+
+| Theory | Day | Windows | median abs(z) R / T / N | abs(z) > 3 R / T / N | 95 % coverage |
+| --- | --: | --: | --- | --- | --- |
+| SDNAP | 1 | 32 | 0.126 / 0.001 / 0.242 > 1.035 / 0.652 / 0.729 | 0 / 0 / 0 > 0 / 1 / 0 | 1.00 > 0.88 |
+| SDNAP | 3 | 32 | 0.042 / 0.001 / 0.094 > 0.951 / 0.832 / 0.670 | 0 / 0 / 0 > 0 / 0 / 0 | 1.00 > 0.94 |
+| SDNAP | 5 | 31 | 0.017 / 0.000 / 0.074 > 0.585 / 0.520 / 0.569 | 0 / 0 / 0 > 0 / 0 / 1 | 1.00 > 0.90 |
+| SDNAP | 7 | 32 | 0.012 / 0.001 / 0.066 > 0.625 / 0.589 / 0.590 | 0 / 0 / 0 > 0 / 0 / 0 | 1.00 > 0.94 |
+| SGP4XP | 1 | 32 | 0.837 / 0.696 / 0.686 > 0.837 / 1.127 / 0.662 | 0 / 0 / 0 > 0 / 0 / 0 | 0.97 > 0.94 |
+| SGP4XP | 3 | 32 | 0.612 / 0.376 / 0.973 > 0.608 / 1.083 / 0.773 | 0 / 0 / 0 > 0 / 0 / 0 | 0.94 > 0.88 |
+| SGP4XP | 5 | 31 | 0.616 / 0.253 / 0.979 > 0.609 / 0.873 / 0.700 | 0 / 0 / 1 > 0 / 0 / 0 | 0.94 > 0.97 |
+| SGP4XP | 7 | 32 | 0.620 / 0.147 / 0.635 > 0.616 / 0.578 / 0.427 | 0 / 0 / 2 > 0 / 0 / 1 | 0.94 > 0.97 |
+
+AP's radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). That part is the epoch covariance, and
+the noise starts from zero at the end of the arc.
+
+The other classes keep the ABOVE row for now. Medium Earth orbit: Galileo's in-track errors run 5 to 14 times GPS's,
+and nothing the record states ranks them (data sigma: Spearman +0.13 to +0.35 on GPS, -0.02 to -0.43 on Galileo); a
+row that holds the acceptance must be tuned to Galileo's tail, which leaves GPS-class satellites about 5 to 10 times
+too wide in track. That row, and its second row for sets that solve Y0 (16.13), follow once the fit's end with Y0
+solved no longer depends on rounding (stack #456). Geosynchronous: noise scaled by the record's own data sigma,
+measured next. HEO: TESS and Chandra, two objects, 14 window-arcs, measured after the eccentric integration step fix.
+THEMIS is not in this set: its perigee is in the drag.
+
+The class boundaries make the stated covariance jump where a row changes. At n = 4 rev/day (e 0.01, a 16,763 km) the
+growth per day the rows give is, for AP, 2,003 m in track and 16.3 m radially under the ABOVE row against 1.6 m and
+0.19 m under the LAGEOS row; for SGP4XP, 112 m and 3.9 m against 23 m and 4.1 m. At e = 0.3 nothing jumps yet:
+every class there keeps the ABOVE row.
 
 **12.6 Calls.** `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME state and P(t)
 (42 doubles); `propagate` writes a covariance line per state (COVARIANCE_MATRIX_LINES, the block's own axes: P
@@ -2620,7 +2825,8 @@ omega_E)) / M-dot, R the six rates, the harmonics 16.2's table leaves out (m-dai
 the slow band as the table leaves it: in low orbit, class 0 below 1100 min, the shallow set's terms q = 0, w = j = 1 with the
 shallow set's taper and the terms slower than 1e-3 n; elsewhere every term with |psi-dot| < 0.045 n) subtracted one by one,
 each by the share the table leaves out, with G and dG/de by the trapezoid on those nodes. Kept on those nodes in single
-precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (3.1 MB a grid), and read at
+precision, its derivatives in e, i and a / a (forward differences) on 64 of them in half precision (about 4.9 MB a grid with
+the slopes below, 3.1 MB before 0.6.14), and read at
 output time in E by the cubic Hermite between the two nodes about E, linear in the mean elements' offsets, times
 e^{i(w omega + m beta)}. Each node's slope is the fourth-order central difference of its four neighbours on the periodic
 grid, computed once when the grid is built and kept in single precision beside the node's value: four reads, as before.

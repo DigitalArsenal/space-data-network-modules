@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.16 (dist 7c91f0d9).
+Version 0.6.18 (dist cb546d93).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -207,8 +207,11 @@ sphere's AGOM, on fits of 72 h or more above the drag; elsewhere, and always in 
 is held at FORCES.ECOM2.Y0_M_S2. The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR
 truthful) and every flight reads it there; nothing else carries it (an SGP4XP row of `sdnap_init_elements` or `sdnap_fit`
 with mean_motion_dot not 0 is refused). The theory applies its averaged rates to the mean elements in 6 h blocks; a set
-without Y0 flies as before, bit for bit. On ten real 72 h windows each, the median day-7 error went from 84 to 15 m on
-medium Earth orbit and from 181 to 37 m on Galileo. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
+without Y0 flies as before, bit for bit. On the real 72 h windows of experiments headline-loop (0.6.13 against 0.6.15,
+the table's own $PCF), medium Earth orbit's median at day 5 went from 35.1 to 15.1 m and the windows within 100 m of
+the numerical propagator from 200 to 250 of 251; Galileo's from 111.1 to 29.2 m and from 20 to 42 of 42. 46 of the 293
+windows are worse at day 5 by any amount between the two release tables (44 by more than 1 m in the radiation pull
+request's own flight), the worst by 43 m. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
 eccentric science orbits. A shorter fit can hold the Y0 of an earlier 72 h fit (FORCES.ECOM2.Y0_M_S2 = its VALUE):
 medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a covariance row. Cost: a record with Y0
 takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.14 to 5.76 ms for a week hourly, a
@@ -303,6 +306,18 @@ and cross-track axis; on held-out windows the median |z| of 8 of the 18 cells (t
 lies inside 0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times
 too wide in-track and radially); that count does not establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
 
+Above the drag the ABOVE row is 5 to 1,000 times too wide on near-circular orbits and too narrow on TESS, Chandra and
+commercial geostationary satellites with burns (stack #433, #444; SPEC 12.5 "Above the drag, by class"). A set above
+the drag takes a row by class, from its own elements (HEO at e 0.3 or more; geosynchronous under 1.5 rev/day, medium
+Earth orbit under 4, the LAGEOS class above). The row applies only where the fit's data sigma and span lie within
+those of the calibration fits; elsewhere the ABOVE row stands. Above the drag, s_d = k |AGOM| / a. The LAGEOS class
+(LAGEOS-1, LAGEOS-2, LARES-2; 72 h fits to precise orbits; data sigma 2.43 to 2.76 m for AP, 58.8 to 76.9 m for
+SGP4XP) is fitted. On its 32 windows AP's median |z| at days 1, 3, 5 and 7 goes from 0.001 to 0.24 to between 0.52 and
+1.04, the 95 % coverage is 0.88 to 0.94, and no cell has more windows above 3 than the acceptance allows (max(as built,
+1 % of the windows, 1)). The radial at days 1 and 3 stays somewhat narrow at the median (1.04, 0.95). Medium Earth
+orbit, geosynchronous and HEO keep the ABOVE row for now. `test/covariance-above-classes.e2e.mjs` holds the
+selection.
+
 SGP4XP measurements below: 2026-10-25, module f20f5a059b76.
 
 Held-out laser-ranged truth (ILRS combination orbits for LAGEOS and Etalon, NSGF arcs for the LEO set; GCRF): each
@@ -346,27 +361,88 @@ at ingest to span roughly eight days each way. Checkpoints are filled lazily. A 
 bracket only interpolates; the first distant query integrates from the epoch. Once the intervening
 checkpoints exist, a query within their span integrates at most one checkpoint interval. Beyond that span,
 work grows with the time gap from the nearest preceding retained node. Checkpoint storage is bounded;
-query work is not bounded independently of lead time. An AP state depends on the order of requests: the same record flown in ascending and in random order differs by up
-to 12.7 mm at 500 km, 3.8 mm at 830 km, 0.2 mm in medium Earth orbit and 0.27 mm at geosynchronous altitude; a single state
-from a fresh record differs from the ascending pass by up to 8.8 mm. Over 30 days at 60 s, reversed or shuffled against
-the ascending pass, `test/kernel-cost.mjs --diff` measures up to 0.18 m at 300 km (B 6.4e-3 m^2/kg, active weather) and
-0.29 m on a low orbit at e 0.05 with tesseral degree 31. SPEC 9 describes the cache and grid.
+query work is not bounded independently of lead time.
 
-AP's cost against SGP4's depends on the request pattern (0.6.6, `test/kernel-patterns.mjs`,
-`test/results/kernel-patterns.json`: made-up orbits, AP seeded with zonal 20, tesseral 31 at e 0.048 and below and
-NRLMSISE-00, SGP4 on the same elements, CPU per state, AP and SGP4 interleaved, median of 7 rounds, owner Mac under
-load). One record stepped alone in ascending order at 300 s: 1.2 to 2.7 times on near-circular orbits. Many records
-stepped together, every record at each instant (`sdnap_epochs_at`, 2 to 10,000 records): 34 to 40 times in low orbit,
-7.3 to 7.9 times in medium Earth orbit, 2.2 times at geosynchronous altitude; each record's tesseral and third-body
-tables are rebuilt when another record was flown last. The same states record by record: 1.1 to 3.4 times. The first
-state of a freshly loaded record in a running process: 52 to 66 times at its epoch, 28 to 96 times a day later, 123 to
-289 times a week later (3,158 to 10,833 times on a transfer orbit at e 0.72); a process pays 390 to 660 µs more once.
-Times in random order: 37 to 153 times (1,990 on the transfer orbit); a request outside the cached bracket integrates
-from the nearest checkpoint. Above e 0.05 (perigee 600 km, tesseral 31) a low orbit costs 77 to 88 times, against 2.6
-to 2.7 at e 0.02 to 0.05. Through `propagate` in TEME, 7 days at 300 s: a seeded record (no covariance) 1.2 to 2.2
-times; a fitted record writes a covariance line per state (613,304 bytes against SGP4's 185,840) and costs 4.9 to 27
-times. In GCRF and EME2000 a state costs what it costs in TEME (`test/output-frames.mjs`; the output's GCRF matrix comes
-from 6 h nodes, SPEC 16.4); with that matrix computed at each state, both records cost 31 to 47 µs per state there.
+An AP state is a function of its set and its time alone. The order of requests, the call they come in, the sets flown
+between them, and whether the covariance is asked leave its bits unchanged (`test/set-caches.e2e.mjs`, nine orbits). A
+store's AP set keeps its own caches and node runs from one pool, 256 MB (the module's default; no typed configuration
+carries a budget yet), read by sdnap_cache_stats. SPEC 9 states how room is shared, the caches by part and the one
+exception: a record that carries a covariance, through `propagate`, differs by 0.39 mm.
+
+Memory per AP set flown: the module's own count (`sdnap_epochs_stats`), 250 made-up sets of each orbit, each flown a day
+at 300 s, headline forces. A loaded set that has not been flown holds 0.3 KB.
+
+| Orbit | Per set flown | Of it, caches from the pool | 30,000 such sets, without caches |
+| --- | ---: | ---: | ---: |
+| 500 km | 116 KB | 71.5 KB | 1.3 GB |
+| 830 km | 103 KB | 64.2 KB | 1.1 GB |
+| MEO (2 rev/day) | 158 KB | 19.8 KB | 4.0 GB |
+| GEO | 40 KB | 33.3 KB | 0.19 GB |
+| low orbit, e 0.052 (no tesseral terms) | 19 KB | 13.3 KB | 0.17 GB |
+| transfer orbit, e 0.72 (no tesseral terms) | 26 KB | 15.8 KB | 0.30 GB |
+| e 0.1 or transfer orbit, tesseral 31 | 4.8 to 10 MB | 16 to 18 KB | (stack #424) |
+
+The instance's own growth agrees with these within 10 %. The default budget holds the caches of 3,664 sets at 500 km
+and 13,252 in MEO; 1 GB holds 14,658 and 53,008 (SPEC 9 has every orbit). Sets beyond it fly on the thread's caches, with
+the same states. A host that screens a catalog flies it object by object: at 10,000 sets at 500 km, 0.93 µs a state at
+the default budget (0.85 times SGP4-XP), against 9.1 µs time-major (7.8 times; 2.25 µs, 1.9 times, when 1 GB holds them
+all), measured at a 1-minute load of 10 to 14 on the 28-core build machine.
+
+Above e 0.048 with tesseral terms, each set holds a grid of its tesseral families of about 4.9 MB (with 0.6.14's slopes),
+and a node grid while it is flown: 10 MB a set flown when every set has its own elements (4.8 MB when 100 sets share one
+epoch grid). One process holds at most 256 such grids, so beyond them states are refused (stack #424).
+
+AP's cost against SGP4-XP's and SGP4's by request pattern, measured on 2026-11-10 with `test/kernel-patterns.mjs`:
+
+- made-up orbits;
+- AP seeded with zonal 20, tesseral 31 at e 0.048 and below, and NRLMSISE-00;
+- stock SGP4XP and SGP4 on the same elements;
+- CPU time per state, the three theories taken in turn, 7 rounds;
+- the 1-minute load printed beside each row.
+
+Each figure is the ratio inside one pass (AP over SGP4-XP, then over SGP4), because a ratio survives a busy machine far
+better than microseconds do.
+
+**Many records stepped together, every record at each instant (`sdnap_epochs_at`, 60 s), at 2, 100, 1,000 and 10,000
+records.**
+
+| Orbit | AP over SGP4-XP | AP over SGP4 | 0.6.11, AP over SGP4-XP |
+| --- | --- | --- | --- |
+| 500 km | 1.1 / 0.7 / 1.3 / 7.8 | 8.1 / 2.8 / 4.1 / 28 | 36 / 11 / 11 / 11 |
+| 830 km | 0.6 / 0.7 / 1.0 / 6.6 | 2.3 / 2.6 / 1.5 / 26 | 10 / 10 / 9.9 / 9.8 |
+| MEO, 10,000 records | 1.1 | 4.1 | 2.6 |
+
+At 10,000 low-orbit records the budget binds: the caches of 3,664 sets fit, and the rest fly on the thread's caches.
+The same states object by object cost 0.85 times SGP4-XP. On the carrier lane's catalog mix (70 % low orbit) at 10,000
+records: time-major 3.9 times SGP4-XP, object-major 1.5 times (the eccentric sets carry the excess).
+
+**One record in random order over 7 days at 300 s.** AP over SGP4-XP is 0.2 at 500 km and 830 km, 0.4 in MEO, 0.03 at
+GEO (SGP4-XP pays 27 to 32 µs a state there) and 19 on the transfer orbit. On 0.6.11 the same rows read 0.7 to 2.2, and
+81 on the transfer orbit.
+
+**One warm record in ascending order (W1)**, flown back to back against 0.6.12 in a cleared slot (load 15 to 25). The
+figures come from the minimum and the steady rounds: single-threaded rounds swing by up to 5 times on this shared
+machine, so a median here means little.
+
+- 500 km about 13 % slower than 0.6.12, 830 km 5 to 7 % slower: about 0.82 of SGP4-XP's cost at 500 km, against 0.71
+  on 0.6.12.
+- MEO equal; GEO 2.3 times faster; the transfer orbit 1.7 times faster.
+- What remains in low orbit: the bracket-anchored bake bookkeeping, about 6 % (stack #441), and the node re-evaluation,
+  about 4 % (stack #439).
+
+**The first state of a freshly loaded record**, warm instance: at 7 days, 25 to 28 % slower than 0.6.12 at 500 km and
+GEO (#439: each node step evaluates node a's held rates again). Against SGP4-XP: 1.3 at 500 km at 7 days and 3.3 at
+GEO. The transfer orbit's first state costs 4.8 to 19.6 ms, about 250 times SGP4-XP: its eccentric zonal tables, which
+this cache rework does not touch.
+
+**The full `propagate` call** in GCRF, 7 days at 300 s, one warm record, against 0.6.12:
+
+- a record fitted with covariance is 11 % slower at 500 km (7.0 against 6.3 µs a state) and 15 % at GEO (19.3 against
+  16.5);
+- a seeded record is equal at 500 km and 13 % slower at GEO.
+
+Above e 0.05 with tesseral 31 (perigee 600 km), a low orbit costs 18 to 20 times SGP4-XP, unchanged (stack #339).
+Without the tesseral terms it costs 0.3 to 0.4 times.
 
 
 ## SGP4XP status
@@ -475,6 +551,10 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   the module's own GPS-like and geostationary flights with the record's data sigma under 1 m; with a stated sigma the
   estimate pulled toward its prior by what the record's covariance implies; 2,400 km and 700 km sets keep UNIT WEIGHTS,
   a 2,600 km set states its sigma.
+- `test/covariance-above-classes.e2e.mjs`: SPEC 12.5, above the drag by class (stack #433): on the module's own
+  flights, a LAGEOS-class fit inside its calibrated data sigma and span states the LAGEOS row (AP and SGP4XP) with s_d
+  = k |AGOM| / a; above that data sigma, over 24 h, and in the classes not yet fitted (HEO, medium Earth orbit) the
+  ABOVE row; every record flies with its covariance.
 - `test/covariance.e2e.mjs`: the covariance record of an SGP4XP fit (positive definite, its rows),
   `sdnap_covariance_at` against it at the epoch and against `propagate`'s TEME and GCRF covariance lines, the process
   noise against its closed form, and the refusals (no COVARIANCE, an SGP4 set, a malformed row).
