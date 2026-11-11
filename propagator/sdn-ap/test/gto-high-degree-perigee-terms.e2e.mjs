@@ -5,11 +5,13 @@
 // integrations) and, for the 4x4 case, this package and 0.4.14's sources with the Sun's and Moon's mass ratios and J5 zero.
 // Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM2008 70x70, Sun and Moon from DE440; 72 h fits from an
 // osculating perigee; 7 days flown hourly; day-7 whole-day RMS along-track / radial, m):
-// 1. GTO (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): each at most 250 and within 2 of 180.70 / 117.62 (192.87 /
-//    123.44 before AP's own Sun and Moon, SPEC 16.17; 0.4.14: 422.11 / 459.10);
-// 2. re-recorded as improvements, each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 82.34 /
-//    51.79, half-day 36.15 / 14.56, 12 h at 55 deg 67.31 / 7.24 (SPEC 16.17; 94.07 / 56.07, 31.44 / 16.84 and 66.68 / 5.70
-//    at 0.6.3, FFM 2.2.1 truth);
+// 1. GTO (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): each at most 250 and within 2 of 175.01 / 112.39 (the field
+//    EGM2008, 0.6.33; 180.70 / 117.62 before it, 192.87 / 123.44 before AP's own Sun and Moon, SPEC 16.17; 0.4.14:
+//    422.11 / 459.10);
+// 2. each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 82.34 / 52.54, half-day 35.88 / 16.01,
+//    12 h at 55 deg 65.60 / 7.20 (the field EGM2008, 0.6.33: the GTO-500 radial 0.75 m and the half-day radial 1.45 m
+//    worse, the rest better, from 82.34 / 51.79, 36.15 / 14.56 and 67.31 / 7.24; 94.07 / 56.07, 31.44 / 16.84 and
+//    66.68 / 5.70 at 0.6.3, FFM 2.2.1 truth);
 // 3. Molniya with drag, its coefficient fitted: held to what its record states, the fitted B within one stated sigma of
 //    the truth's 0.044 and the day-7 position within three stated sigmas along R, I and C (test/lib/stated-sigma.mjs).
 //    The 72 h fit has two solutions that small numerical changes move it between (stack #392):
@@ -18,8 +20,8 @@
 //    Both lie inside the statement: B at 0.12 and 0.34 of its stated sigma (about 0.005), the day-7 position within 0.22 of
 //    the stated sigma along each axis. Until 0.6.12 this was pinned to 0.5 m of a value (238.03 / 173.92 at 0.6.3, 238.50 /
 //    174.28 on 0.6.11; 0.4.14: 460.98 / 260.43; SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103).
-//    With the coefficient pinned at the truth's 0.044, the model's pin: 84.01 / 51.16 m to 5 cm (SPEC 16.17; 80.71 /
-//    50.51 m before, 80.76 m on 0.6.11), and
+//    With the coefficient pinned at the truth's 0.044, the model's pin: 80.11 / 47.70 m to 5 cm (the field EGM2008, 0.6.33;
+//    84.01 / 51.16 m before it, SPEC 16.17; 80.71 / 50.51 m before that, 80.76 m on 0.6.11), and
 //    along-track no worse than 0.4.14's;
 // 4. the field cut to 4x4 on both sides, the Sun, Moon and J5 off on both sides, 2-minute samples: day-7 3D RMS at most
 //    100 (0.4.14 printed first);

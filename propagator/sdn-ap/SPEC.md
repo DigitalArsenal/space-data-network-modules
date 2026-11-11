@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.36 (dist 00000000).
+Version 0.6.36 (dist 5b1e8505).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2672,7 +2672,9 @@ set cut at a lower degree is worse than none.
 70), pinned by build.mjs; through 0.6.32 it was EGM-96 (`lib/egm96_data.h`).
 
 *Why EGM2008 (from 0.6.33; stack #503).* The numerical propagator AP is held to flies EGM2008: its SPHERICAL_HARMONICS field is
-the embedded EGM2008, and EGM96 is an option only. EGM2008 (Pavlis et al. 2012, from ICGEM; public) is also the closer field to
+the embedded EGM2008, and EGM96 is an option only. EGM2008 (Pavlis et al. 2012; the model of the U.S. National
+Geospatial-Intelligence Agency, published by it and distributed by ICGEM; its license basis is recorded in NOTICE as
+unresolved, as the EGM96 model's is) is also the closer field to
 the real Earth. Below degree 30 or so the two fields agree closely. Above it they part, and an AP term of high degree fitted to
 an EGM2008 truth was a term of the wrong field. The measurement: 300 km, i 98, e 0, with gravity, Sun, Moon and tide on both
 sides, AP fitted to the numerical forecast over 0 to 5 days. D is the largest distance over those 5 days; the line is the
@@ -2701,10 +2703,17 @@ of D at this height is not the field: the field moves AP's flight there by at mo
 - SGP4XP reads none of this. Its resonance terms are 6.2's unnormalized EGM-96 values, and its zonals are 1.3's. The table
   (kEgmC, kEgmS) is read only by the AP terms of tesseral.inc and by the census (16.20). SGP4XP is bit for bit.
 - The resonant classes' own terms (6.1, degree 2 to 6) read 6.2's values in AP's flight too, so they keep EGM-96. There the
-  two fields differ by 1e-4 to 5e-4 of a term (1.8e-3 at (6, 3)). By degree, the rms difference of the two fields over the
+  two fields differ by 8.9e-5 to 5e-4 of a term (1.8e-3 at (6, 3)). J2 to J5 are 1.3's EGM-96 values; the numerical
+  propagator's EGM2008 takes its own, which differ from them by 4.7e-7, 9.7e-5, 1.7e-4 and 2.0e-3 of each. Measured with the
+  rest alike (J2 to J5, the Sun and Moon on both sides, AP fitted to the forecast): the largest distance over 5 days moves by
+  at most 0.6 m between the two truths, over 19 near-circular and e 0.05 orbits from 300 to 1,400 km. By degree, the rms difference of the two fields over the
   rms of the field is 0.003 at degree 10, 0.05 at 20, 0.11 at 30, 0.17 at 40, 0.21 at 50, 0.23 at 60 and 0.30 at 70.
 - The record states the field: PERTURBATIONS.GRAVITY_MODEL is "EGM2008" on an AP set with gravity terms, and "EGM2008; slow
   tesseral terms to degree 70" with the slow set. SGP4XP's sets and a stock AP set keep "EGM-96".
+- From 0.6.36 a flight refuses an AP set with gravity terms whose GRAVITY_MODEL is neither of those texts, or absent
+  (gravity-model-mismatch): a record fitted on another field is fitted again, never flown on this one. Every AP record
+  with gravity terms written before 0.6.33 states "EGM-96" (or "EGM-96; slow tesseral terms to degree 70"), so every such
+  record is refused. SGP4 and SGP4XP sets are not checked: their fields are the theory's own (1.3, 6.2).
 
 Inclination functions come
 from the Fourier coefficients of the normalized Legendre recurrence, stable to degree 70, at the epoch inclination. The Cap column is a cap on families, not the degree of the field (16.1): at
@@ -2837,10 +2846,12 @@ windows AP then leads XP by a median 137.5 m at day 3 (per window -298.4 to +101
 degrees, and `ingest_omm` any marked set (`gravity-terms-mismatch`).
 
 **16.6 HEO model truth.** Synthetic GCRF states at 2026-10-29 00:00 UTC, fitted over 72 h through `fit`,
-then propagated 1, 3 and 7 days after the fit ends. FFM uses EGM96 70x70, Sun and Moon from DE440, zero EOP,
+then propagated 1, 3 and 7 days after the fit ends. FFM uses EGM2008 70x70 (EGM96 70x70 through 0.6.32), Sun and Moon
+from DE440, zero EOP,
 no SRP, and NRLMSISE-00 only for Molniya (Cd A/m = 0.044 m^2/kg; constant F10.7 = 150, Ap = 15).
 AP uses FORCES 31,20. Initial states, kernel and module hashes, signed errors and numerical-reference checks
-are in `test/results/heo-model-truth.json` (2026-11-03); `test/heo-model-truth.e2e.mjs` reproduces the comparison.
+are in `test/results/heo-model-truth.json` (2026-11-03; current[] re-registered on 0.6.36 on the EGM2008 truth, 0.6.22's
+figures beside); `test/heo-model-truth.e2e.mjs` reproduces the comparison.
 
 All cases start at perigee, with argument of perigee 270 degrees. The half-day and Molniya cases have RAAN
 300 degrees; GTO has RAAN 40 degrees. These are measured cases, not bounds for all HEO objects. The published
@@ -4201,8 +4212,9 @@ q = 0), order and degree 2 to 70,
 Each term enters the rates with the weight w of its own current rate: 1 below 0.9 bands, a cos^2 taper to 0 at 1.1. The
 output table holds 1 - w of a term the rates carry, so a term that crosses its band's edge as drag raises n moves from one to
 the other with no step. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
-as GRAVITY_MODEL "EGM-96; slow tesseral terms to degree 70", and every flight of the record carries it. A record without
-that text flies as before.
+as GRAVITY_MODEL "EGM2008; slow tesseral terms to degree 70", and every flight of the record carries it; an AP record
+with gravity terms that states "EGM2008" flies without it. Through 0.6.32 the text was "EGM-96; slow tesseral terms to
+degree 70"; from 0.6.36 such a record is refused (gravity-model-mismatch, 16.2).
 
 What the slow set leaves out, by stated limits:
 - Families whose leading degree is 69 or 70. The embedded field ends their series after one or two degrees where the real

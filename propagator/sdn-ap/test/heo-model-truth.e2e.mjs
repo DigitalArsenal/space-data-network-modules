@@ -9,7 +9,8 @@
 // day-3 samples from 27.45 and 69.63 m to 61.51 and 100.31 m, worse, DigitalArsenal/spacedatanetwork-stack#391; 60.10 m at
 // 0.4.15 on FFM 2.0.4, 201.97 m at 0.4.11 to 0.4.14, 1 h after a perigee); the fixtures' whole-day RMS is judged in
 // third-body-short-period-eccentric.e2e.mjs, every fixture's day 1, 3 and 7 in heo-frame.e2e.mjs
-// (test/results/heo-model-truth.json, re-registered on 0.6.8 with the 0.4.17 figures beside).
+// (test/results/heo-model-truth.json, re-registered on 0.6.36 on the EGM2008 truth with 0.6.22's figures beside, days0622,
+// and on 0.6.8 with the 0.4.17 figures beside, days0417).
 // Retain the literal 12 h, 55-degree diagnostic plus Molniya and GTO as reported bounds.
 // No JavaScript orbital dynamics. Default-FORCES XP must retain its digest.
 import assert from 'node:assert/strict';

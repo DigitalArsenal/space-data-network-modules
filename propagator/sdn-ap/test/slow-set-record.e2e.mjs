@@ -10,7 +10,10 @@
 // - the LAGEOS-like record with the slow text written in flies bit for bit as without it over 7 days (every 30 min): an empty
 //   slow set changes no state;
 // - the SWOT-like record with the text taken out flies differently (the slow set's terms act): at least 1 m apart within 7 days;
-// - the slow text on an SGP4XP set is refused (elements-other-theory).
+// - the slow text on an SGP4XP set is refused (elements-other-theory);
+// - the SWOT-like record stating another field, or none, is refused (gravity-model-mismatch, SPEC 16.2): "EGM-96" (the
+//   text of every AP record with gravity terms before 0.6.33), "EGM-96; slow tesseral terms to degree 70" (the slow-set
+//   records of 0.6.25 to 0.6.32), and no GRAVITY_MODEL at all; no record flies on a field it does not state.
 //   node test/slow-set-record.e2e.mjs
 import assert from 'node:assert/strict';
 import * as fb from 'flatbuffers';
@@ -83,7 +86,15 @@ const xpMarked = repackOcm(xp, (t) => { t.PERTURBATIONS.GRAVITY_MODEL = SLOW; })
 const refused = await call('propagate', flight([xpMarked], { output: { EPOCHS: [iso(3600)], FRAME: pcfOutputFrame.GCRF } }));
 assert.notEqual(refused.statusCode, 0, 'the slow text on an SGP4XP set is refused');
 assert.equal(refused.errorCode, 'elements-other-theory', `refused by name (${refused.errorCode}: ${refused.errorMessage})`);
+const otherField = {};
+for (const [label, text] of [['EGM-96', 'EGM-96'], ['the old slow text', 'EGM-96; slow tesseral terms to degree 70'], ['no GRAVITY_MODEL', null]]) {
+  const marked = repackOcm(swot, (t) => { t.PERTURBATIONS.GRAVITY_MODEL = text; });
+  const r = await call('propagate', flight([marked], { output: { EPOCHS: [iso(3600)], FRAME: pcfOutputFrame.GCRF } }));
+  assert.notEqual(r.statusCode, 0, `an AP set stating ${label} is refused`);
+  assert.equal(r.errorCode, 'gravity-model-mismatch', `${label}: refused by name (${r.errorCode}: ${r.errorMessage})`);
+  otherField[label] = r.errorCode;
+}
 await h.close?.();
-console.log(JSON.stringify({ swotGravityModel: gm(swot), lageosGravityModel: gm(lageos), swotSlowSetGapM: +swotGap.toFixed(3), lageosBitIdentical: true }));
+console.log(JSON.stringify({ swotGravityModel: gm(swot), lageosGravityModel: gm(lageos), swotSlowSetGapM: +swotGap.toFixed(3), lageosBitIdentical: true, otherField }));
 console.log('slow-set record E2E: PASS');
 process.exit(0);
