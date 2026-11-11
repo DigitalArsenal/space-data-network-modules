@@ -86,7 +86,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   UNSPECIFIED as each set's own (another value must match it); fit fits SGP4XP (UNSPECIFIED, SGP4XP); FFM and
   KEPLER are refused. FORCES carries an empty EPHEMERIS_SOURCE (the theories' own analytic Sun and Moon series): the
   averaged theories apply their own forces; on `fit` and `propagate` it also selects SGP4XP's drag atmosphere (SPEC 15,
-  below) and AP's gravity terms (SPEC 16, below), and any other FORCES field is refused by name. INTEGRATOR is refused
+  below) and AP's gravity terms (SPEC 16, below), on `fit` ECOM2's Y0 (SPEC 16.13, below), and any other FORCES field
+  is refused by name. INTEGRATOR is refused
   (the averaged theories integrate on their own grid), EVENTS when not empty. FIT (every field) and OUTPUT (TEME,
   GCRF or EME2000, at most 500,000 states) apply with their documented ranges; FIT.DRAG_PRIOR_FORM and SRP_PRIOR_FORM
   LOG_NORMAL need their prior (HAS_SIGMA true, the MEAN its median > 0), refused by name without it.
@@ -190,6 +191,20 @@ terms of q != 0: after a 72 h fit, 2.3 to 5.9 km along-track at day 7 at e 0.25,
 rev/day, 220 m at 8 (the 8:1 resonance's shoulder) and 159 m at 6 rev/day e 0.35; orbits off those bands fly the same bytes.
 The exact resonance (an order-m term slower than 1e-3 n, 8.05 rev/day at e 0.25: 1.27 km) is not carried. SPEC 16.11 has the
 table; `test/class0-commensurability.e2e.mjs` pins it.
+
+## The radiation term Y0 (SPEC 16.13; `fit` and every flight)
+
+For satellites whose solar panels track the Sun (navigation satellites), `fit` under `$PCF` FORCES.ECOM2 also solves
+ECOM2's Y0, a constant acceleration (m/s^2) along the axis normal to the Sun and the satellite's radius, beside the
+sphere's AGOM, on fits of 72 h or more above the drag; elsewhere, and always in the one-day (geosynchronous) class, it
+is held at FORCES.ECOM2.Y0_M_S2. The record carries it as ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS ECOM2_Y0 (SOLVED_FOR
+truthful) and every flight reads it there; nothing else carries it (an SGP4XP row of `sdnap_init_elements` or `sdnap_fit`
+with mean_motion_dot not 0 is refused). The theory applies its averaged rates to the mean elements in 6 h blocks; a set
+without Y0 flies as before, bit for bit. On ten real 72 h windows each, the median day-7 error went from 84 to 15 m on
+medium Earth orbit and from 181 to 37 m on Galileo. Not for spheres (laser geodetic satellites: 11 to 29 m at day 7) or
+eccentric science orbits. A shorter fit can hold the Y0 of an earlier 72 h fit (FORCES.ECOM2.Y0_M_S2 = its VALUE):
+medium Earth orbit 24 h fits went from 35.5 to 20.7 m at day 5. Y0 is not a covariance row. E2E:
+`test/radiation-y0.e2e.mjs`.
 
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
