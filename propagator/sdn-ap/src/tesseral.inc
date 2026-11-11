@@ -142,10 +142,10 @@ constexpr double kShallowBand = 0.045;
 constexpr int kSlowDegree = 70;
 constexpr int kSlowJMax = 6, kSlowQMax = 4;
 constexpr double kSlowKeepM = 0.5;
-/// The slow set's q range: 0 as it lands (stack #477); tests only may widen it to kSlowQMax (sdnap_slow_q_max) while the q != 0
-/// terms' sign-dependent effect is open.
+/// The slow set's q range: |q| up to kSlowQMax from 0.6.NN (stack #477's second part; 0.6.25 landed q = 0), every term of it
+/// by its own rate and size; tests only may narrow it (sdnap_slow_q_max).
 inline int& slow_q_max() {
-  static int q = 0;
+  static int q = kSlowQMax;
   return q;
 }
 /// Tests only (sdnap_slow_degree_cap): the slow set's degree, so a model truth cut lower is compared like with like.
@@ -4261,6 +4261,7 @@ inline res::ResCoef expand(const ShallowCoef& c) {
 struct ShallowTerms {  // the epoch scratch; xp_init keeps count entries
   int count;
   int old_count;  ///< the shallow set's own terms (the first old_count); the slow set's follow (Terms::slow)
+  int over;       ///< the terms the rules select that the list could not hold (kShallowMax): 0 on every set the tests sweep
   res::ResCoef c[kShallowMax];
 };
 /// The epoch scratch on its thread (about 60 kB: not on the stack).
@@ -4486,6 +4487,7 @@ inline void shallow_six(const ShallowCoef* table, int count, double e0, double i
 
 inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerms& out) {
   out.count = 0;
+  out.over = 0;
   const int lmax = degree > 70 ? 70 : degree;
   if (lmax < 2) return 0;
   const SecularRates sr = secular_rates(n, e0, i0);
@@ -4498,7 +4500,7 @@ inline int shallow_terms(int degree, double n, double e0, double i0, ShallowTerm
     int l0 = m > k ? m : k;
     if ((l0 - k) & 1) ++l0;
     for (int l = l0; l <= lmax; l += 2) {
-      if (out.count >= kShallowMax) break;
+      if (out.count >= kShallowMax) { ++out.over; continue; }
       const int pp = (l - k) / 2;
       double G, dG;
       if (e0 < 0.03) {
@@ -4583,7 +4585,7 @@ inline int slow_terms_low(int shallow_degree, double n, double e0, double i0, Sh
             res::exact_G(l, pp, q, e0, G, dG);
           }
           if (slow_size_m(l, m, j, F[l] * G, a, psidot) < kSlowKeepM) continue;
-          if (out.count >= kShallowMax) return out.count;
+          if (out.count >= kShallowMax) { ++out.over; continue; }  // counted: the diagnostic lists such a term as code 7
           res::ResCoef& c = out.c[out.count++];
           c.l = static_cast<int8_t>(l);
           c.m = static_cast<int8_t>(m);
@@ -4615,7 +4617,8 @@ inline bool slow_holds(const ShallowTerms* held, int l, int m, int p, int q) {
 /// i (rad) and the stated tesseral degree `cap`. Rows of 8 doubles: l, m, p, q, psi-dot / n, the carrier (1 the rates,
 /// 3 the output table, 0 nowhere: under the table's 1e-3 n floor, 4 nowhere: above the slow set's degree or in a family whose
 /// leading degree is 69 or 70 (the embedded field ends its series at once), 5 nowhere: under
-/// the size cut, 6 nowhere: a q outside the slow set's q range, at or above the size cut: stack #477's open part), the rates'
+/// the size cut, 6 nowhere: a q outside the slow set's q range, at or above the size cut, 7 nowhere: a term the rules select
+/// that the list's capacity (kShallowMax) could not hold, 0 rows on every set the tests sweep), the rates'
 /// weight w (the band taper at these elements; the output table holds 1 - w of a term the rates carry) and the term's size (m,
 /// slow_size_m). At most max_rows written; returns the count of all rows.
 inline int slow_listing_low(int cap, double n, double e0, double i0, double* rows, int max_rows) {
@@ -4669,6 +4672,8 @@ inline int slow_listing_low(int cap, double n, double e0, double i0, double* row
           if (held) { emit(l, m, p, q, psidot, 1, wt, size); continue; }
           // above the slow set's degree, or a family whose series the field ends at once (leading degree 69 or 70)
           if (l > Lcap || l0 >= kSlowDegree - 1) { emit(l, m, p, q, psidot, 4, 0.0, size); continue; }
+          // a term the shallow set's or the slow set's rule selects that the list could not hold (kShallowMax)
+          if ((j == 1 && q == 0 && l <= sd) || (std::abs(q) <= slow_q_max() && size >= kSlowKeepM)) { emit(l, m, p, q, psidot, 7, 0.0, size); continue; }
           const bool on_table = j == 1 && (q >= -1 && q <= 1) && m <= sd && l <= sd;
           if (on_table && std::fabs(psidot) >= 1e-3 * n) { emit(l, m, p, q, psidot, 3, 0.0, size); continue; }
           if (on_table) { emit(l, m, p, q, psidot, 0, 0.0, size); continue; }
