@@ -4936,17 +4936,19 @@ inline void b1_output_direct(const RateContext& ctx, double t, const double* ym,
 /// I0 + I1 / (2 pi) - P0(lambda) and int K2(s) rho = -(pi/6 I0 - S1 / 2 + S2 / (4 pi)), S1 = lambda I0 - I1 + 2 pi P0,
 /// S2 = lambda^2 I0 - 2 lambda I1 + I2 + 4 pi (lambda P0 - P1) + 4 pi^2 P0: I_k the arc's moments of rho, P0 and P1
 /// those from lambda to the arc's end, kept at every panel end and completed at the output by the part of its panel
-/// past it (three points). A pure function of the bracket's two nodes and the sub-interval.
+/// past it: the integral of the quadratic through the panel's three Gauss-Legendre points (whose whole-panel integral
+/// is the three-point rule itself), so a state evaluates no rate. A pure function of the bracket's two nodes and the
+/// sub-interval.
 constexpr double kB1TableMinutes = 360.0;
 struct B1Table {
   uint64_t ctx_id;
   double d50_epoch, lo_t, hi_t;
   int32_t lo_index, hi_index, sub, np;
-  B1Orbit o;
-  double k, h, n, bc, bs, L0;
+  double k, h, n, L0;
   double F[kEcom2Panels], L[kEcom2Panels];      ///< the panels' ends: eccentric longitude, mean longitude less L0
   double P0[kEcom2Panels][6], P1[kEcom2Panels];  ///< from each end to the arc's end: int rho_j, int lambda rho_n
-  double I0[6], I1[6], I2;                       ///< over the arc: int rho_j, int lambda rho_j, int lambda^2 rho_n
+  double Q[kEcom2Panels][7][3];  ///< per panel the quadratic in u = (F - mid) / half of rho_j (j < 6) and lambda rho_n
+  double I0[6], I1[6], I2;       ///< over the arc: int rho_j, int lambda rho_j, int lambda^2 rho_n
 };
 constexpr int kB1Tables = 4;  ///< a thread's tables, the last four sub-intervals flown (B1 sets are few)
 inline thread_local B1Table* g_b1_tables[kB1Tables] = {};
@@ -4954,13 +4956,13 @@ inline thread_local int g_b1_next = 0;
 
 inline void b1_table_make(const RateContext& ctx, const double* y, Vec3 su, B1Table& tb) {
   const Frame fr = frame_of(y);
-  tb.o = b1_orbit(y, fr, su);
+  const B1Orbit o = b1_orbit(y, fr, su);
   tb.k = y[kAf];
   tb.h = y[kAg];
   tb.n = fr.n;
   const double acc = 3600.0 / (1000.0 * kRe);  // m/s^2 in ER/min^2
-  tb.bc = ctx.rad_b1c * acc;
-  tb.bs = ctx.rad_b1s * acc;
+  const double bc = ctx.rad_b1c * acc, bs = ctx.rad_b1s * acc;
+  const double r = kGl3X[2], inv_2r = 0.5 / r, inv_2r2 = 0.5 / (r * r);
   double pts[kEcom2Panels];
   const int np = ecom2_panels(ctx, y, fr, su, pts);
   tb.np = np;
@@ -4979,19 +4981,29 @@ inline void b1_table_make(const RateContext& ctx, const double* y, Vec3 su, B1Ta
   for (int q = np - 2; q >= 0; --q) {
     double s0[6] = {0, 0, 0, 0, 0, 0}, s1[6] = {0, 0, 0, 0, 0, 0}, s2 = 0.0;
     const double half = 0.5 * (pts[q + 1] - pts[q]), mid = 0.5 * (pts[q + 1] + pts[q]);
+    for (int j = 0; j < 7; ++j) tb.Q[q][j][0] = tb.Q[q][j][1] = tb.Q[q][j][2] = 0.0;
     if (half > 0.5e-9) {
+      double v[3][7];  // the integrands at the three points: rho_j weighted by r / a and B(du), and lambda rho_n
       for (int g = 0; g < 3; ++g) {
         const double Fq = mid + half * kGl3X[g];
         double sF, cF, cdu, sdu, rho[6];
         fm::sincos(Fq, sF, cF);
-        const double roa = b1_point(tb.o, sF, cF, cdu, sdu, rho);
+        const double roa = b1_point(o, sF, cF, cdu, sdu, rho);
         const double Lq = Fq + tb.h * cF - tb.k * sF - tb.L0;
-        const double w = kGl3W[g] * half * roa * (tb.bc * cdu + tb.bs * sdu);
+        const double gq = roa * (bc * cdu + bs * sdu);
+        const double w = kGl3W[g] * half * gq;
         for (int j = 0; j < 6; ++j) {
           s0[j] += w * rho[j];
           s1[j] += w * Lq * rho[j];
+          v[g][j] = gq * rho[j];
         }
+        v[g][6] = gq * Lq * rho[kN];
         s2 += w * Lq * Lq * rho[kN];
+      }
+      for (int j = 0; j < 7; ++j) {
+        tb.Q[q][j][0] = v[1][j];
+        tb.Q[q][j][1] = (v[2][j] - v[0][j]) * inv_2r;
+        tb.Q[q][j][2] = (v[2][j] + v[0][j] - 2.0 * v[1][j]) * inv_2r2;
       }
     }
     for (int j = 0; j < 6; ++j) {
@@ -5025,18 +5037,14 @@ inline void b1_table_eval(const B1Table& tb, double lam_out, double* d) {
       F -= dF;
       if (std::fabs(dF) < 1e-14) break;
     }
-    const double half = 0.5 * (tb.F[hi] - F), mid = 0.5 * (tb.F[hi] + F);
-    if (half > 0.0) {
-      for (int g = 0; g < 3; ++g) {
-        const double Fq = mid + half * kGl3X[g];
-        double sF, cF, cdu, sdu, rho[6];
-        fm::sincos(Fq, sF, cF);
-        const double roa = b1_point(tb.o, sF, cF, cdu, sdu, rho);
-        const double Lq = Fq + tb.h * cF - tb.k * sF - tb.L0;
-        const double w = kGl3W[g] * half * roa * (tb.bc * cdu + tb.bs * sdu);
-        for (int j = 0; j < 6; ++j) p0[j] += w * rho[j];
-        p1 += w * Lq * rho[kN];
-      }
+    // the panel's quadratics integrated from u to its end (u = 1)
+    const double half = 0.5 * (tb.F[hi] - tb.F[lo]), mid = 0.5 * (tb.F[hi] + tb.F[lo]);
+    if (half > 0.5e-9) {
+      const double u = (F - mid) / half;
+      const double a0 = half * (1.0 - u), a1 = half * 0.5 * (1.0 - u * u), a2 = half * (1.0 / 3.0) * (1.0 - u * u * u);
+      const double (*Q)[3] = tb.Q[lo];
+      for (int j = 0; j < 6; ++j) p0[j] = a0 * Q[j][0] + a1 * Q[j][1] + a2 * Q[j][2];
+      p1 = a0 * Q[6][0] + a1 * Q[6][1] + a2 * Q[6][2];
     }
     for (int j = 0; j < 6; ++j) p0[j] += tb.P0[hi][j];
     p1 += tb.P1[hi];
