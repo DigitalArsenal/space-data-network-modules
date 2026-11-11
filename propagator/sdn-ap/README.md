@@ -218,6 +218,27 @@ takes 12 % longer to fly its first week (about 22 microseconds per 6 h block, 5.
 Galileo record; under a load of 10 on 28 cores) and nothing more per state once its grid exists. E2E:
 `test/radiation-y0.e2e.mjs`.
 
+## AP's shadow (SPEC 16.14; every flight of an AP set with AGOM or Y0)
+
+The sphere's averaged rates take the cylindrical shadow on the mean orbit. Its entry and exit are bracketed roots
+solved to full precision; no tolerance decides between "sunlit arc" and "wholly sunlit". SGP4XP keeps section 4's
+closed form, whose 1e-12 test decided that by rounding:
+- where a boundary lay near an apse of the mean orbit;
+- always at geosynchronous radius for near-equatorial sets.
+
+Under a change of 1e-10 in the mean motion, flights in an eclipse season moved by up to 35 m (145 m on a transfer
+orbit) instead of a linear drift of 0.2 to 0.6 m. They now move linearly to 0.9 mm in 7 days.
+
+The rates agree with the same sphere and cylinder averaged numerically over one revolution within 7.6e-7 of their
+scale, through grazing and with a boundary at the perigee (`sdnap_ap_srp_rates`).
+
+Not carried:
+- the penumbra: the numerical propagator flies a cone, AP the cylinder; 0.3 mm to 5.7 cm in 7 days, by regime;
+- section 4's sunlit-arc eccentricity-vector rate at high eccentricity (stack #466): 2.3 to 3.5 m at day 7 on a
+  transfer orbit.
+
+E2E: `test/radiation-shadow.e2e.mjs`.
+
 ## Drag atmosphere (SPEC 15; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 SGP4XP's drag is section 3's (Jacchia 1970 on the generic flux model) unless the call's `$PCF` FORCES selects another;
