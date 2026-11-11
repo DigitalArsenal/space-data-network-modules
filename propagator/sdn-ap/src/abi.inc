@@ -92,6 +92,8 @@ void run_chunk(const Job& j, int32_t chunk) {
   for (uint32_t i = begin; i < end; ++i) {
     xpt::g_alloc_refused = 0;
     run_row(j, i);
+    if (g_row_hook != nullptr) g_row_hook(i, g_pool_thread);
+    pool::beat();  // the heartbeat the waiting calling thread reads (stack #487)
     // a row during which the memory's growth was refused may have been stopped short of a block it needed: the calling
     // thread computes it again after the batch (the same state: a function of the set and the time alone, SPEC 9)
     if (xpt::g_alloc_refused != 0 && j.deferred != nullptr) {
@@ -285,7 +287,7 @@ int32_t sdnap_threads(int32_t threads) { return sdnap::pool::start(threads); }
 /// The pool, read only (stack #487, SPEC 9), 10 doubles: the threads running; the threaded batches run; the growths of
 /// the memory refused inside them (every thread); the rows deferred to the calling thread after them; the batches
 /// after which the calling thread saw a larger memory (the invariant: 0); whether the pool was taken for dead (1; its
-/// later batches run on the calling thread); the polls without a completed chunk a waiting caller allows a batch; the
+/// later batches run on the calling thread); the polls without a completed row a waiting caller allows a batch; the
 /// last batch's reserve (bytes); the waits for a thread's view of the memory that had to yield, and the most yields one
 /// took.
 SDNAP_EXPORT("sdnap_pool_stats")
