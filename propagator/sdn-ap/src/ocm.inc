@@ -18,7 +18,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.14";
+constexpr const char* kModuleVersion = "0.6.15";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -61,7 +61,11 @@ struct Extras {
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;  ///< the carried forecast (SPEC 18)
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OCMTrajectoryBlock>>> trajectory = 0;  ///< its statement (SPEC 18.6)
   std::string span_start, span_stop;  ///< its span: METADATA START_TIME and STOP_TIME
+  bool ecom2 = false;  ///< SPEC 16.13: the set carries the radiation term Y0 (PERTURBATIONS.SOLAR_RAD_PRESSURE names it)
 };
+
+/// SPEC 16.13: PERTURBATIONS.SOLAR_RAD_PRESSURE of a set fitted with the radiation term Y0 (absent on every other set).
+constexpr const char* kY0RadiationModel = "SPHERE (AGOM) AND ECOM2 Y0 (ARNOLD ET AL. 2015), SPHERE'S CYLINDRICAL SHADOW";
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
 /// parameters in the fixed order (cov::kParameters), each named, each a prwDynamicParameter of the five, COV_UNITS
@@ -153,9 +157,11 @@ inline flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SPW>>> rows_o
 /// PERTURBATIONS of a set under `f` (`w` the rows and nodes it reads; nullptr none). SGP4: WGS-72, WEATHER_SOURCE NONE,
 /// no atmosphere. SGP4XP and AP: EGM-96, the atmosphere as a direct map of the forces, the caps, the source; the rows
 /// with SW_DATA_SOURCE, SW_DATA_EPOCH and SW_INTERP_METHOD under RECORDS; the nodes and the $DCL CID under DCA_COMMON_MODE.
-inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBufferBuilder& fbb, int32_t row_theory, const Forces& f, const Weather* w) {
+inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBufferBuilder& fbb, int32_t row_theory, const Forces& f, const Weather* w,
+                                                           bool ecom2 = false) {
   const bool sgp4 = row_theory == kTheorySgp4;
   const auto s_gravity = fbb.CreateString(sgp4 ? "WGS-72" : "EGM-96");
+  const auto s_srp = ecom2 ? fbb.CreateString(kY0RadiationModel) : flatbuffers::Offset<flatbuffers::String>(0);
   flatbuffers::Offset<ATM> atmosphere = 0;
   if (!sgp4) atmosphere = CreateATM(fbb, f.msis ? AtmosphericModelFamily_NRLMSIS00E : AtmosphericModelFamily_JXX, f.msis ? 2000 : 1970);
   const bool records = !sgp4 && f.weather_source == pcfWeatherSource_RECORDS && w != nullptr;
@@ -180,6 +186,7 @@ inline flatbuffers::Offset<Perturbations> perturbations_of(flatbuffers::FlatBuff
   PerturbationsBuilder b(fbb);
   if (!atmosphere.IsNull()) b.add_ATMOSPHERIC_MODEL(atmosphere);
   b.add_GRAVITY_MODEL(s_gravity);
+  if (!s_srp.IsNull()) b.add_SOLAR_RAD_PRESSURE(s_srp);
   if (!sw_source.IsNull()) b.add_SW_DATA_SOURCE(sw_source);
   if (!sw_epoch.IsNull()) b.add_SW_DATA_EPOCH(sw_epoch);
   if (!sw_interp.IsNull()) b.add_SW_INTERP_METHOD(sw_interp);
@@ -221,7 +228,7 @@ inline void build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, co
     me.add_AGOM(row.agom);
   }
   const auto mean = me.Finish();
-  const auto perturbations = perturbations_of(fbb, row.theory, f, w);
+  const auto perturbations = perturbations_of(fbb, row.theory, f, w, x.ecom2);
   // HEADER and METADATA
   const auto s_version = fbb.CreateString("3.0");
   const auto s_originator = fbb.CreateString(id.originator.empty() ? "SDN" : id.originator);
@@ -363,6 +370,41 @@ inline int rows_of(const Perturbations* pt, std::vector<atm::SpwDay>& rows) {
   return 0;
 }
 
+/// SPEC 16.13: the units ECOM2_Y0's VALUE is in.
+constexpr const char* kY0Units = "m/s**2";
+
+/// SPEC 16.13: an AP set's radiation term Y0 from ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS, keyed on PARAMETER: one
+/// ECOM2_Y0 entry, VALUE finite in m/s**2, into the row (radiation_y0; absent or 0: no term). Refused by name: ECOM2_Y0
+/// on an SGP4 or SGP4XP set, or on an AP set without gravity terms, which flies none (elements-other-theory); a second
+/// entry (parameter-repeated:ECOM2_Y0); UNITS other than m/s**2 or a VALUE that is not a number (parameter-invalid:ECOM2_Y0);
+/// any other ECOM2 coefficient (parameter-not-modeled:<NAME>). The other kinds are read where they are (MEAN_ELEMENTS,
+/// the covariance's rows). 0 or 3.
+inline int radiation_of(const OCM* o, Set& s) {
+  const OrbitDetermination* od = o->ORBIT_DETERMINATION();
+  if (od == nullptr || od->OD_DYNAMIC_PARAMETERS() == nullptr) return 0;
+  bool seen = false;
+  for (const OCMDynamicParameter* p : *od->OD_DYNAMIC_PARAMETERS()) {
+    if (p == nullptr) continue;
+    const int kind = p->PARAMETER();
+    if (kind >= prwDynamicParameter_ECOM2_D0 && kind <= prwDynamicParameter_ECOM2_B3_SIN && kind != prwDynamicParameter_ECOM2_Y0) {
+      char code[64];
+      std::snprintf(code, sizeof code, "parameter-not-modeled:%s", EnumNameprwDynamicParameter(static_cast<prwDynamicParameter>(kind)));
+      return refuse(code, "Of ECOM2's coefficients AP flies Y0 (ECOM2_Y0); its direct term is the sphere's AGOM.");
+    }
+    if (kind != prwDynamicParameter_ECOM2_Y0) continue;
+    if (seen) return refuse("parameter-repeated:ECOM2_Y0", "OD_DYNAMIC_PARAMETERS carries ECOM2_Y0 twice.");
+    seen = true;
+    if (s.theory != meanElementSource_AP || !epoch_frame(s.forces))
+      return refuse("elements-other-theory",
+                    "ECOM2_Y0 is AP's radiation term, flown with its gravity terms: an SGP4 or SGP4XP set, or an AP set whose gravity caps are both 0, carries none.");
+    const double v = p->VALUE();
+    if (!std::isfinite(v) || (p->UNITS() != nullptr && p->UNITS()->size() > 0 && std::strcmp(p->UNITS()->c_str(), kY0Units) != 0))
+      return refuse("parameter-invalid:ECOM2_Y0", "ECOM2_Y0's VALUE is a number in m/s**2 (UNITS m/s**2).");
+    radiation_y0(s.row) = v;
+  }
+  return 0;
+}
+
 /// Decodes one $OCM element set (plain or size-prefixed): 0 with `s` filled, or 3 with the named refusal set.
 inline int decode_view(const OCM* o, Set& s);
 inline int decode(const uint8_t* p, uint32_t n, Set& s) {
@@ -474,6 +516,7 @@ inline int decode_view(const OCM* o, Set& s) {
   // the theory by MEAN_ELEMENT_THEORY alone: SGP4XP flies the theory's own forces, AP any other
   if (s.theory == meanElementSource_SGP4XP && !f.stock()) return refuse("elements-other-theory", "An SGP4XP set states AP's forces (MEAN_ELEMENT_THEORY AP).");
   if (s.theory == meanElementSource_AP && f.stock()) return refuse("elements-other-theory", "An AP set states SGP4XP's own forces (MEAN_ELEMENT_THEORY SGP4XP).");
+  if (const int rc = radiation_of(o, s)) return rc;
   // the frame pairing: TEMEOFDATE, or TEMEOFEPOCH at the set's epoch for AP with gravity terms
   const int frame = frame_kind(o->TRAJ_REF_FRAME());
   const bool want_epoch = !sgp4 && epoch_frame(f);
