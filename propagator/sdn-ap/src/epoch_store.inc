@@ -433,6 +433,7 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
     drag::table();
     q.xp = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
     q.error = q.xp == nullptr ? kPropRefused : xpt::xp_init(e, *q.xp);
+    if (q.error == kPropOk) xpt::xp_set_pooled(*q.xp);
   } else {
     q.sat = static_cast<Sat*>(std::calloc(1, sizeof(Sat)));
     q.error = q.sat == nullptr ? kPropRefused : sat_init(e, gravity_wgs72(), *q.sat);
@@ -481,7 +482,13 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
   }
   Slot& q = slot_of(st, s, k, P != nullptr);
   if (q.error != 0) return q.error;
-  const double dt = t - st.entries[s.first + k].epoch;
+  // the theory's time from the set's epoch (SPEC 9): an AP set's from the split Julian date when the caller has it, the
+  // expression propagate uses, so the store and propagate fly one time (minutes from J2000 round it by up to 1e-7 s
+  // today, 1 mm in low orbit); SGP4XP and SGP4 from the minutes, as before 0.6.18 (their output stays bit for bit)
+  const Entry& en = st.entries[s.first + k];
+  const double dt = jd != nullptr && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx)
+                        ? ((jd[0] - en.row.epoch_jd_whole) + (jd[1] - en.row.epoch_jd_frac)) * kMinutesPerDay
+                        : t - en.epoch;
   const int32_t e = q.xp != nullptr ? xpt::xp_propagate(*q.xp, dt, r, v) : sat_propagate(*q.sat, q.nodes, dt, r, v);
   if (e != kPropOk) return e;
   if (P != nullptr && q.cp != nullptr) {
@@ -668,7 +675,8 @@ inline uint64_t bytes_of(const Store& st) {
   for (const auto& a : st.atmospheres) b += sizeof(atm::Atmosphere) + a->days.size() * sizeof(atm::SpwDay) + a->dca_ms.size() * (sizeof(int64_t) + 2 * sizeof(double));
   for (const Series& s : st.series) {
     b += s.object_id.capacity() + s.originator.capacity() + s.name.capacity();
-    for (const Slot& q : s.slots) b += (q.xp ? sizeof(xpt::XpSat) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) : 0);
+    // a set: its XpSat, the term tables it owns and its caches from the pool (xp_bytes)
+    for (const Slot& q : s.slots) b += (q.xp ? xpt::xp_bytes(*q.xp) : 0) + (q.sat ? sizeof(Sat) : 0) + (q.nodes ? 32u * kCheckpointNodes : 0) + (q.cp ? sizeof(cov::Propagator) : 0);
   }
   return b;
 }
