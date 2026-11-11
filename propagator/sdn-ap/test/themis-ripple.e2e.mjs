@@ -33,8 +33,13 @@ const BASE_VERSION = '0.6.21', BASE = '589749f63', BASE_SHA256 = '5deb3d761f82f5
 // class's resonant gravity above degree 4, stack #434, SPEC 16.2: 5.27 m over the 48 h), bounded apart at 6 m and 0.5
 // mm/s against 0.6.2. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves them from 0.6.2: LEO 0.82, geostationary
 // 5,273.24 (the one-day tail of 0.6.19), Etalon 3.62, GPS 5.02, e 0.25 9.11 and e 0.3 10.77 mm (velocity 0.69 to 382.78
-// um/s) and the fitted set by 0.84 mm with its covariance by 1.226e-2 of a line's largest entry; SGP4XP byte-identical:
-// REASON. From 0.6.21 the baseline is 0.6.21 (git 589749f6), every AP set under the one bound, 15 mm.
+// um/s) and the fitted set by 0.84 mm with its covariance by 1.226e-2 of a line's largest entry; SGP4XP byte-identical.
+// The seeds carry no AGOM, so 0.6.21 flies them as 0.6.20 does: their millimeters from 0.6.2 are the earlier releases'
+// changes to the theory of fixed elements. The fitted set carries the stored AP record's AGOM (-2e-7, sigma 9.5e-3
+// m^2/kg): its covariance moves by 1.2 % of a line's largest entry because the covariance's moved sets fly AGOM through
+// the shadow on 16.16's rates while its correlations come from that fit's partials (covariance.e2e.mjs: along-track
+// response to AGOM at 48 h 1380.7 to 823.7 m per m^2/kg; a fit made and flown by 0.6.21 returns to its theory's numbers
+// within 7.1e-5). From 0.6.21 the baseline is 0.6.21 (git 589749f6), every AP set under the one bound, 15 mm.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination

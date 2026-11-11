@@ -39,8 +39,13 @@ import {Worker, isMainThread, parentPort, workerData} from 'node:worker_threads'
 // centimeters (the fit stops inside its tolerance; SPEC 16.8): measured 2026-11-10 on 0.6.8, at most 0.022 m in the
 // errors, 2.3e-5 relative in BTERM and 3.6e-6 in AGOM. 0.6.21 (SPEC 16.15 and 16.16, stack #464 and #472) moves these fits
 // from 0.4.17's by up to 2.670 m in the errors, 5.72e-4 relative in BTERM and 4.57e-5 in AGOM over the 30 windows
-// (printed as from0417; the largest CryoSat-2 2025-11-24): REASON. From 0.6.21 the baseline is 0.6.21 (git 589749f6), the
-// bound kept.
+// (printed as from0417; the largest on a CryoSat-2 window). The radiation rates over the sunlit arc reach these fits in
+// proportion to the AGOM they carry: 0.35 to 2.67 m where it fits at 3e-3 to 8e-3 m^2/kg, under 0.05 m where it is near
+// zero (all 15 CryoSat-2 windows and 7 of SARAL's 15 are in eclipse at the cutoff). Against the truth they move as often
+// toward it as away. CryoSat-2 is closer on 8, 7 and 8 windows at days 1, 3 and 7 and farther on 3, 4 and 6, its
+// medians (63.43, 404.5 and 3,183.9 m) within 3 cm; its largest mover goes 2.7 m toward the truth on 1.7 km at day 7.
+// SARAL moves at most 7 cm. A 3 cm comparison with 0.4.17 cannot hold once the radiation rates change, so from 0.6.21
+// the baseline is 0.6.21 (git 589749f6), the bound kept.
 const BASE_3 = {version: '0.6.21', commit: '589749f63'};
 const OUTSIDE_RULE = {errorsM: 0.03, btermRelative: 5e-5, agom: 1e-5};
 import {execFileSync} from 'node:child_process';

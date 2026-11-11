@@ -83,9 +83,11 @@ if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON
 // GE re-pinned at 0.6.21 (SPEC 16.15 and 16.16; stack #486): 53.297 > 61.62 m at day 3 (131.0 > 149.3 m at day 5), old path
 // 64.231 > 73.14 m. These fits state no FORCES.ECOM2. Measured cause: against the numerical propagator's own sphere-only
 // fit and forecast of the same windows (FFM 70 x 70, cone shadow, AGOM solved, no ECOM2), AP moves from 10.2 to 5.9 m at
-// day 3 and from 24.8 to 10.7 m at day 5, closer on 26 of 35 windows. The numerical sphere is itself 64.2 m from the
+// day 3 and from 24.8 to 10.7 m at day 5: closer on 26 of the 30 windows scored at day 3 and on 27 of the 32 at day 5,
+// farther on none (the rest are windows the change leaves bit for bit). The numerical sphere is itself 64.2 m from the
 // truth at day 3, so the old figure was AP's in-season radiation error offsetting the satellites' non-spherical
-// radiation, which a sphere does not carry. With Y0 solved on the same windows, day 3 goes from 23.4 to 11.5 m.
+// radiation, which a sphere does not carry. With Y0 solved on the same windows, day 3 goes from 23.4 to 11.5 m. The
+// move is 16.16's: 16.15 alone leaves the median where 0.6.20 has it.
 const EXPECTED = {
   etalon: {'ETALON 1': {baseline: 23.37, value: 4.21}, 'ETALON 2': {baseline: 32.76, value: 5.31}},
   nonregression: {'LAGEOS 1': 7.170, 'LAGEOS 2': 6.800, 'LARES-2': 8.698, IG: 13.448, GE: 61.62},
