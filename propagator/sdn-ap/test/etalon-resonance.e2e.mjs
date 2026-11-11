@@ -68,8 +68,11 @@ const summarize = (field) => {
   return {etalon, nonregression};
 };
 const {etalon, nonregression} = summarize('days'), old = summarize('daysOld');
-const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).filter((a) => a.ok).map((a) => a.frames030Meters)));
-console.log(JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters}));
+// the module under test (the last arm) is held to 1 mm; the earlier builds (per-state matrix, gmst()'s rounding: up to
+// 1.5 mm at the geostationary radius, SPEC 16.4) are printed
+const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(-1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(0, -1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+console.log(JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters, frames030MetersEarlierBuilds}));
 if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON_REPORT, JSON.stringify({exploratory: true, etalon, nonregression, oldPath: old, frames030Meters}, null, 2) + '\n');
 // on the modules' own GCRF output (2026-11-10, 0.6.9); OLD: the same replay on the old path, as registered
 const EXPECTED = {

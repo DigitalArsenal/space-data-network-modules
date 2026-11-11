@@ -96,8 +96,11 @@ for (const [name, pick] of [['LAGEOS 1', (r) => r.group === 'GD' && objectOf(r) 
   others[name] = {n: v.length, beforeMedianMeters: median(v.map((r) => d3(r.arms[0]))), afterMedianMeters: median(v.map((r) => d3(r.arms[1]))),
     oldPath: {beforeMedianMeters: median(v.map((r) => d3(r.arms[0], 'daysOld'))), afterMedianMeters: median(v.map((r) => d3(r.arms[1], 'daysOld')))}};
 }
-const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).filter((a) => a.ok).map((a) => a.frames030Meters)));
-const summary = {synthetic, exploratory: {etalon, others, frames030Meters}};
+// the module under test (the last arm) is held to 1 mm; the earlier builds (per-state matrix, gmst()'s rounding: up to
+// 1.5 mm at the geostationary radius, SPEC 16.4) are printed
+const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(-1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(0, -1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+const summary = {synthetic, exploratory: {etalon, others, frames030Meters, frames030MetersEarlierBuilds}};
 console.log(JSON.stringify(summary));
 if (process.env.SDN_AP_TWELVE_HOUR_REPORT) fs.writeFileSync(process.env.SDN_AP_TWELVE_HOUR_REPORT, JSON.stringify(summary, null, 2) + '\n');
 if (!process.argv.includes('--measure')) {

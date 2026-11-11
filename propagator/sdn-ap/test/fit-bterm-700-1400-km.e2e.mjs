@@ -108,8 +108,11 @@ if (!isMainThread) {
   console.log(JSON.stringify({readWindows: 'all', n: all.length,
     pairedAt0411: median(all.map((r) => d3(r.arms[0]) - d3(ffm.get(r.key).arms.F72))), pairedHere: median(all.map((r) => d3(r.arms[1]) - d3(ffm.get(r.key).arms.F72))),
     oldPath: {pairedAt0411: median(all.map((r) => d3(r.arms[0], 'daysOld') - d3(ffm.get(r.key).arms.F72))), pairedHere: median(all.map((r) => d3(r.arms[1], 'daysOld') - d3(ffm.get(r.key).arms.F72)))}}));
-  const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).filter((a) => a.ok).map((a) => a.frames030Meters)));
-  console.log(JSON.stringify({frames030Meters}));
+  // the module under test (the last arm) is held to 1 mm; the earlier builds (per-state matrix, gmst()'s rounding: up to
+  // 1.5 mm at the geostationary radius, SPEC 16.4) are printed
+  const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(-1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+  const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(0, -1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+  console.log(JSON.stringify({frames030Meters, frames030MetersEarlierBuilds}));
   assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
   if (process.env.SDN_AP_FIT_BTERM_REPORT) fs.writeFileSync(process.env.SDN_AP_FIT_BTERM_REPORT, JSON.stringify({results, objects}, null, 2) + '\n');
 

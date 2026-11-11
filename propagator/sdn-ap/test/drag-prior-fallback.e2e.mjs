@@ -128,8 +128,11 @@ if (!isMainThread) {
   // 1
   const at = (o, c) => rows.find((r) => name(r) === o && cutoff(r).startsWith(c));
   const s3a = day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3'), s3b = day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7');
-  const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).filter((a) => a.ok).map((a) => a.frames030Meters)));
-  console.log(JSON.stringify({sentinel3a20251015day3Km: s3a, sentinel3b20251025day7Km: s3b, frames030Meters,
+  // the module under test (the last arm) is held to 1 mm; the earlier builds (per-state matrix, gmst()'s rounding: up to
+  // 1.5 mm at the geostationary radius, SPEC 16.4) are printed
+  const frames030Meters = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(-1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+  const frames030MetersEarlierBuilds = Math.max(...rows.flatMap((r) => (r.arms ?? []).slice(0, -1).filter((a) => a.ok).map((a) => a.frames030Meters)));
+  console.log(JSON.stringify({sentinel3a20251015day3Km: s3a, sentinel3b20251025day7Km: s3b, frames030Meters, frames030MetersEarlierBuilds,
     oldPath: {sentinel3a20251015day3Km: day(at('SENTINEL 3A', '2025-10-15')?.arms[2], '3', 'daysOld'), sentinel3b20251025day7Km: day(at('SENTINEL 3B', '2025-10-25')?.arms[2], '7', 'daysOld')}}));
   assert.ok(frames030Meters <= 1e-3, `foundation/frames 0.3.0 on the TEME output within ${frames030Meters} m of the module's GCRF output (1 mm)`);
   assert.ok(s3a !== null && s3a <= 0.130, `Sentinel-3A 2025-10-15 day 3 ${s3a} km`);
