@@ -106,7 +106,7 @@ struct Options {
   int8_t fit_bdot;         ///< DRAG_AREA_OVER_MASS_RATE (m^2/kg/s): refused, not modeled
   int8_t fit_thrust;       ///< IN_TRACK_ACCELERATION (m/s^2): refused, not modeled
   int8_t fit_outgassing;   ///< OUTGASSING_ACCELERATION (km/s^2): refused, not modeled
-  int8_t fit_y0;           ///< SPEC 4.2: an AP set's radiation term Y0 (ECOM2_Y0), the fit method's only (fit_oem, $PCF
+  int8_t fit_y0;           ///< SPEC 16.13: an AP set's radiation term Y0 (ECOM2_Y0), the fit method's only (fit_oem, $PCF
                            ///< FORCES.ECOM2; prior y0_prior()); sdnap_fit refuses it (its rows do not carry Y0)
   double agom_prior;       ///< prior mean of AGOM; of ln AGOM under agom_log
   double agom_sigma;       ///< its sigma; <= 0: no prior
@@ -211,11 +211,11 @@ inline bool solve(double* A, double* b, int n) {
   return true;
 }
 
-/// SPEC 4.2: Y0's unit in the parameter vector, m/s^2 (the normal matrix stays conditioned: an arc's column per unit is
+/// SPEC 16.13: Y0's unit in the parameter vector, m/s^2 (the normal matrix stays conditioned: an arc's column per unit is
 /// of the order of the elements').
 constexpr double kY0Unit = 1e-9;
 
-/// SPEC 4.2: Y0's prior, in kY0Unit: mean the value FORCES.ECOM2 states (Y0_M_S2, the start), sigma kY0PriorSigma. Set by
+/// SPEC 16.13: Y0's prior, in kY0Unit: mean the value FORCES.ECOM2 states (Y0_M_S2, the start), sigma kY0PriorSigma. Set by
 /// the fit method for its call (fit_oem); one value for every fit of the call.
 struct Y0Prior {
   double mean = 0.0, sigma = 1.0;
@@ -334,7 +334,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
     return out;
   }
   const int agom_index = o.fit_drag ? 7 : 6;
-  // SPEC 4.2: Y0's column follows every other parameter's (params_of)
+  // SPEC 16.13: Y0's column follows every other parameter's (params_of)
   const int y0_index = 6 + (o.fit_drag ? 1 : 0) + (o.fit_bdot ? 1 : 0) + (o.fit_agom ? 1 : 0) + (o.fit_thrust ? 1 : 0) + (o.fit_outgassing ? 1 : 0);
   PriorTerm priors[3];
   const int n_priors = priors_of(o, priors);
@@ -412,7 +412,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       }
     }
     if (o.fit_y0 && y0_index < np) {
-      // SPEC 4.2: Y0's column, as AGOM's: a one-sided difference of the theory each iteration, per kY0Unit
+      // SPEC 16.13: Y0's column, as AGOM's: a one-sided difference of the theory each iteration, per kY0Unit
       ElementRow bumped = work;
       const double step = std::fmax(std::fabs(x[y0_index]) * 0.01, 0.1);
       radiation_y0(bumped) = (x[y0_index] + step) * kY0Unit;

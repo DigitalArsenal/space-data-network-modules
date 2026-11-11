@@ -27,12 +27,12 @@ struct ElementRow {
 };
 static_assert(sizeof(ElementRow) == 112, "ElementRow is 112 bytes");
 
-/// SPEC 4.2: an AP row's radiation term Y0 (ECOM2, m/s^2), in the slot of SGP4's first derivative of the mean motion
+/// SPEC 16.13: an AP row's radiation term Y0 (ECOM2, m/s^2), in the slot of SGP4's first derivative of the mean motion
 /// (the transport is stated once, at xpt::radiation_y0): every copy of the row carries it, and elements_of hands it on.
 inline double& radiation_y0(ElementRow& row) { return row.mean_motion_dot; }
 inline double radiation_y0(const ElementRow& row) { return row.mean_motion_dot; }
 
-/// SPEC 4.2: a row from outside the module (sdnap_init_elements, sdnap_fit) that would fly a radiation term Y0 it was
+/// SPEC 16.13: a row from outside the module (sdnap_init_elements, sdnap_fit) that would fly a radiation term Y0 it was
 /// never given: theory SGP4XP with the first-derivative slot not 0 (an SGP4 term an SGP4XP set does not have). Refused
 /// at those entries by name (elements-other-theory), never read as Y0.
 inline bool row_states_sgp4_ndot(const ElementRow& row) { return row.theory == kTheorySgp4Xp && radiation_y0(row) != 0.0; }

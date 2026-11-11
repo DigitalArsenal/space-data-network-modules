@@ -312,12 +312,12 @@ constexpr double kBandMedianRmsKm = 0.01516;
 constexpr double kFallbackRmsRatio = 1.25;
 constexpr double kBandMedianBterm = 0.0005;
 
-/// SPEC 4.2: an AP set's radiation term Y0 under $PCF FORCES.ECOM2. It is solved on an arc of at least kY0MinimumArcHours
+/// SPEC 16.13: an AP set's radiation term Y0 under $PCF FORCES.ECOM2. It is solved on an arc of at least kY0MinimumArcHours
 /// (less one hour: the first and last states of a span sampled off its ends) whose fitted set lies above the drag
 /// (cov::regime_of), as one more column of the cost at the data's own sigma, with a Gaussian prior about the stated
 /// Y0_M_S2 of sigma kY0PriorSigma (m/s^2); on a shorter arc, under the drag, and in a two-stage fit's second stage it is
 /// held (at Y0_M_S2; the second stage at the first's), SOLVED_FOR false.
-constexpr double kY0MinimumArcHours = 48.0;
+constexpr double kY0MinimumArcHours = 72.0;
 constexpr double kY0PriorSigma = 1e-9;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
 
@@ -395,7 +395,7 @@ static int fit_blocks() {
     const PVN* source = sources.empty() ? nullptr : sources[ephemeris_index];
     ++ephemeris_index;
     const pcf::Options& po = frame_options;
-    // SPEC 4.2: Y0's prior for this frame's fits (fit::priors_of), in fit::kY0Unit
+    // SPEC 16.13: Y0's prior for this frame's fits (fit::priors_of), in fit::kY0Unit
     struct Y0PriorScope {
       fit::Y0Prior prev;
       explicit Y0PriorScope(const pcf::Options& o) : prev(fit::y0_prior()) {
@@ -653,7 +653,7 @@ static int fit_blocks() {
         row.epoch_jd_frac = e0.frac;
         row.theory = kTheorySgp4Xp;
         fitoem::start_row(s0, row);
-        // SPEC 4.2: under FORCES.ECOM2 every stage flies Y0 from its stated value (a second stage from the first's)
+        // SPEC 16.13: under FORCES.ECOM2 every stage flies Y0 from its stated value (a second stage from the first's)
         if (po.ecom2) radiation_y0(row) = y0_hold != nullptr ? *y0_hold : po.ecom2_y0;
         pcf::Prior eff_drag = drag_override != nullptr ? *drag_override : po.drag_prior;
         // SPEC 12.1: an arc shorter than pcf::kShortArcHours with FIT.SRP_PRIOR unset takes the Space Force wrapper's
@@ -724,7 +724,7 @@ static int fit_blocks() {
         opt.fit_agom = 1;
         // the $PCF FIT.SRP_PRIOR on AGOM (default 0 +- 0.05 m^2/kg, 0 +- 0.1 on a short arc; LOG_NORMAL on ln AGOM)
         fitoem::set_prior(eff_srp, opt.agom_log, opt.agom_prior, opt.agom_sigma);
-        // SPEC 4.2: Y0 joins the whole-arc fit (and its passes at the data's sigma) on a long enough arc above the drag
+        // SPEC 16.13: Y0 joins the whole-arc fit (and its passes at the data's sigma) on a long enough arc above the drag
         if (po.ecom2 && y0_hold == nullptr && fitoem::y0_solved_on(fit_end_min - fit_begin_min) && cov::regime_of(row) != 0) opt.fit_y0 = 1;
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
@@ -1091,7 +1091,7 @@ static int fit_blocks() {
       std::vector<flatbuffers::Offset<OCMDynamicParameter>> dyn = {
           CreateOCMDynamicParameterDirect(fbb, "DRAG_AREA_OVER_MASS", row.bterm, "m**2/kg", opt.fit_drag != 0, prwDynamicParameter_DRAG_AREA_OVER_MASS),
           CreateOCMDynamicParameterDirect(fbb, "SRP_AREA_OVER_MASS", row.agom, "m**2/kg", opt.fit_agom != 0, prwDynamicParameter_SRP_AREA_OVER_MASS)};
-      // SPEC 4.2: under FORCES.ECOM2 the set's radiation term Y0, solved or held (the record is its only carrier)
+      // SPEC 16.13: under FORCES.ECOM2 the set's radiation term Y0, solved or held (the record is its only carrier)
       if (po.ecom2)
         dyn.push_back(CreateOCMDynamicParameterDirect(fbb, "ECOM2_Y0", radiation_y0(row), ocm::kY0Units, opt.fit_y0 != 0, prwDynamicParameter_ECOM2_Y0));
       const auto s_dyn = fbb.CreateVector(dyn);
@@ -1110,7 +1110,7 @@ static int fit_blocks() {
       if (lattice) comment.push_back("elements at the two-line text's digits");
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
-                                     : "radiation: ECOM2 Y0 held at its stated value (an arc under 48 h, a set under the drag, or a second stage)");
+                                     : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");
       // SPEC 18: the forecast the record carries ($PCF OUTPUT.START_TIME to STOP_TIME), its span and end jumps in COMMENT
       flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;
       carried::Described described;

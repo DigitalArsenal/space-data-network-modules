@@ -98,7 +98,7 @@ struct Options {
   uint32_t weather_horizon_days = 30;  ///< FIT.WEATHER_HORIZON_DAYS: the rows the $OCM carries past its epoch's day
   // FORCES (fit): the force model (SPEC 15, 16)
   Forces forces{};
-  bool ecom2 = false;      ///< SPEC 4.2: FORCES.ECOM2 present: AP's radiation term Y0 is in the fit
+  bool ecom2 = false;      ///< SPEC 16.13: FORCES.ECOM2 present: AP's radiation term Y0 is in the fit
   double ecom2_y0 = 0.0;   ///< its Y0_M_S2 (m/s^2): the start, the prior's mean and the value held on a short arc
   // OUTPUT
   int output_frame = pcfOutputFrame_UNSPECIFIED;
@@ -408,7 +408,7 @@ inline int read_atmosphere(const PCFForceModel* f, Forces& o) {
 /// FORCES for the averaged theories: their forces are the theory's own; a FORCES table carries the required
 /// EPHEMERIS_SOURCE, empty (the theory's own analytic Sun and Moon series), and on fit and propagate (`atmosphere`)
 /// the drag atmosphere's fields (SPEC 15). Any other field away from its default is refused by name.
-/// SPEC 4.2: FORCES.ECOM2 on fit: AP's radiation term Y0 beside the sphere, fitted from Y0_M_S2 (finite; the start and
+/// SPEC 16.13: FORCES.ECOM2 on fit: AP's radiation term Y0 beside the sphere, fitted from Y0_M_S2 (finite; the start and
 /// the prior's mean). Every other coefficient away from 0 is refused by name (AP's direct term is the sphere's AGOM;
 /// the others are not in its theory); so is the table without AP's gravity terms, which carry the term (SPEC 16).
 inline int read_ecom2(const PCFForceModel* f, Options& o) {

@@ -61,10 +61,10 @@ struct Extras {
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<PPEPositionRecord>>> forecast = 0;  ///< the carried forecast (SPEC 18)
   flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<OCMTrajectoryBlock>>> trajectory = 0;  ///< its statement (SPEC 18.6)
   std::string span_start, span_stop;  ///< its span: METADATA START_TIME and STOP_TIME
-  bool ecom2 = false;  ///< SPEC 4.2: the set carries the radiation term Y0 (PERTURBATIONS.SOLAR_RAD_PRESSURE names it)
+  bool ecom2 = false;  ///< SPEC 16.13: the set carries the radiation term Y0 (PERTURBATIONS.SOLAR_RAD_PRESSURE names it)
 };
 
-/// SPEC 4.2: PERTURBATIONS.SOLAR_RAD_PRESSURE of a set fitted with the radiation term Y0 (absent on every other set).
+/// SPEC 16.13: PERTURBATIONS.SOLAR_RAD_PRESSURE of a set fitted with the radiation term Y0 (absent on every other set).
 constexpr const char* kY0RadiationModel = "SPHERE (AGOM) AND ECOM2 Y0 (ARNOLD ET AL. 2015), SPHERE'S CYLINDRICAL SHADOW";
 
 /// SPEC 17.3: the refusal of a covariance about to be written, or nullptr. Its rows are the state block and the solved
@@ -370,10 +370,10 @@ inline int rows_of(const Perturbations* pt, std::vector<atm::SpwDay>& rows) {
   return 0;
 }
 
-/// SPEC 4.2: the units ECOM2_Y0's VALUE is in.
+/// SPEC 16.13: the units ECOM2_Y0's VALUE is in.
 constexpr const char* kY0Units = "m/s**2";
 
-/// SPEC 4.2: an AP set's radiation term Y0 from ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS, keyed on PARAMETER: one
+/// SPEC 16.13: an AP set's radiation term Y0 from ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS, keyed on PARAMETER: one
 /// ECOM2_Y0 entry, VALUE finite in m/s**2, into the row (radiation_y0; absent or 0: no term). Refused by name: ECOM2_Y0
 /// on an SGP4 or SGP4XP set, or on an AP set without gravity terms, which flies none (elements-other-theory); a second
 /// entry (parameter-repeated:ECOM2_Y0); UNITS other than m/s**2 or a VALUE that is not a number (parameter-invalid:ECOM2_Y0);

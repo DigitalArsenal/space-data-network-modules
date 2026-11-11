@@ -1823,7 +1823,7 @@ struct RateContext {
   double d50_epoch;
   tess::Terms selected_terms;  ///< AP force selection
   double bterm, agom;
-  double rad_y0;        ///< AP: the radiation term Y0 beside the sphere, m/s^2 (SPEC 4.2); 0: none
+  double rad_y0;        ///< AP: the radiation term Y0 beside the sphere, m/s^2 (SPEC 16.13); 0: none
   uint8_t long_period;  ///< epoch period >= 1100 min (SPEC 5, 9)
   int8_t resonance;     ///< SPEC 6 class at the epoch (0 none, 1 one-day, 2 half-day, 3 eight-hour, 4 sixteen-hour), held
                         ///< for the whole flight in both theories (SPEC 6 Bands, 16.7)
@@ -3356,7 +3356,7 @@ struct CovGridCache {
   double epoch_f0 = 0.0;
   double epoch_bterm = -1.0;
   double epoch_agom = -1.0;
-  double epoch_rad_y0 = 0.0;  ///< SPEC 4.2: the Y0 the cached stages were flown with
+  double epoch_rad_y0 = 0.0;  ///< SPEC 16.13: the Y0 the cached stages were flown with
   double epoch_tb[6]{};
   double epoch_drag_unit[6]{};
   double epoch_srp_unit[6]{};
@@ -4418,9 +4418,9 @@ inline double averaged_step(const RateContext& ctx, double n) {
   return slip > 0.0 ? std::fmin(two_revolutions, kTwoPi / slip / 32.0) : two_revolutions;
 }
 
-// --- SPEC 4.2: the radiation term Y0 (AP) ---------------------------------------
+// --- SPEC 16.13: the radiation term Y0 (AP) ---------------------------------------
 
-/// SPEC 4.2: the block Y0's averaged rates are applied in, minutes, and the quadrature's panels: 3-point Gauss-Legendre,
+/// SPEC 16.13: the block Y0's averaged rates are applied in, minutes, and the quadrature's panels: 3-point Gauss-Legendre,
 /// graded by kY0Grade from the Sun's elevation above the orbit plane (not below kY0MinScale) out to a quarter
 /// revolution; no grading from kY0NoGrade up (rad).
 constexpr double kY0BlockMinutes = 360.0;
@@ -4428,7 +4428,7 @@ constexpr double kY0MinScale = 0.01, kY0Grade = 4.0, kY0NoGrade = 0.5;
 constexpr double kGl3X[3] = {-0.774596669241483377036, 0.0, 0.774596669241483377036};
 constexpr double kGl3W[3] = {5.0 / 9.0, 8.0 / 9.0, 5.0 / 9.0};
 
-/// SPEC 4.2: the sunlit arc of the mean orbit y (eccentric anomalies E1 .. E2 from the perigee; false: wholly sunlit) as
+/// SPEC 16.13: the sunlit arc of the mean orbit y (eccentric anomalies E1 .. E2 from the perigee; false: wholly sunlit) as
 /// the sphere's rates decide it for an AP set (rates, srp_rates): the AP sequence for a set that is not long-period or
 /// whose epoch inclination is above 0.02 rad, at the conformance setting 0, for a circular orbit, below 5 ER or with
 /// sin i above 0.02; SPEC 4's sequence otherwise. The shadow diagnostics (shadow_margin_*) keep what the rates set.
@@ -4448,7 +4448,7 @@ inline bool y0_sunlit_arc(const RateContext& ctx, const double* y, const Frame& 
   return arc;
 }
 
-/// SPEC 4.2: the Gauss rates (state order, lambda's without n) of a unit acceleration (ER/min^2) along ECOM2's Y axis,
+/// SPEC 16.13: the Gauss rates (state order, lambda's without n) of a unit acceleration (ER/min^2) along ECOM2's Y axis,
 /// eY = unit(eD x r) with eD the Sun's direction (Arnold et al. 2015, eq. 1; propagator/ffm lib/gnss_srp.h), averaged
 /// over the mean anomaly of the mean orbit y on the arc the sphere's rates count as sunlit (y0_sunlit_arc, SPEC 4).
 /// With s the Sun's unit vector on the radial, transverse and normal axes (cd, sd, sw), eY = (sw t - sd w) / N,
@@ -4555,7 +4555,7 @@ inline void y0_unit_rates(const RateContext& ctx, const double* y, const Frame& 
   }
 }
 
-/// SPEC 4.2: Y0's part of a step from node `a` to `out`. Its averaged rates change over days (with the Sun's direction
+/// SPEC 16.13: Y0's part of a step from node `a` to `out`. Its averaged rates change over days (with the Sun's direction
 /// from the orbit plane), so they are not put through the rate function: each block of kY0BlockMinutes (the first, at
 /// the epoch, half of one) acts at its center c, through one quadrature at the state there (the cubic between the two
 /// nodes) with the Sun there, added to the node the step arrives at: every element by its rate times the block, lambda
@@ -4602,7 +4602,7 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
     st = rk3(ctx, a, dir * h, out);
   }
   if (st != 0) return false;
-  if (ctx.rad_y0 != 0.0) y0_blocks(ctx, a, out);  // SPEC 4.2
+  if (ctx.rad_y0 != 0.0) y0_blocks(ctx, a, out);  // SPEC 16.13
   return true;
 }
 
@@ -5865,7 +5865,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
   return true;
 }
 
-/// SPEC 4.2, the transport of Y0: an AP set's radiation term Y0 (ECOM2, m/s^2) has no field of its own in the 112-byte
+/// SPEC 16.13, the transport of Y0: an AP set's radiation term Y0 (ECOM2, m/s^2) has no field of its own in the 112-byte
 /// ElementRow (an ABI the engine reads) or in Elements, so inside the module it rides in the slot of SGP4's first
 /// derivative of the mean motion (ElementRow.mean_motion_dot, Elements.ndot_rev_day2), which an SGP4XP or AP set does
 /// not have (SPEC 1.1). It enters only from the record's ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS (ocm.inc); a row
@@ -5917,7 +5917,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
     s.init_error = kPropRefused;
     return kPropRefused;
   }
-  // SPEC 4.2: an AP set's radiation term Y0 (m/s^2; radiation_y0 above); SGP4XP flies none
+  // SPEC 16.13: an AP set's radiation term Y0 (m/s^2; radiation_y0 above); SGP4XP flies none
   s.ctx.rad_y0 = s.ctx.ap_third_body ? radiation_y0(e) : 0.0;
   if (!std::isfinite(s.ctx.rad_y0)) {
     s.init_error = kPropRefused;
@@ -6135,7 +6135,7 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   e.norad = s.norad;
   e.bterm = s.ctx.bterm;
   e.agom = s.ctx.agom;
-  radiation_y0(e) = s.ctx.rad_y0;  // SPEC 4.2: an AP set's Y0 (it does not enter the epoch rates: y0_blocks)
+  radiation_y0(e) = s.ctx.rad_y0;  // SPEC 16.13: an AP set's Y0 (it does not enter the epoch rates: y0_blocks)
   const Kepler k = kepler_of(y);
   if (k.a * (1.0 - k.e) < 1.0) return false;  // a later report whose mean perigee is below the surface: code 2 (8.4)
   e.xno = y[kN];
@@ -6590,7 +6590,7 @@ inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const Rate
         !std::isfinite(out_p.f[m]) || !std::isfinite(out_m.f[m]))
       return -1;
   }
-  // SPEC 4.2: the radiation term Y0's blocks, as next_node adds them, so a pair flies the theory its sets fly alone
+  // SPEC 16.13: the radiation term Y0's blocks, as next_node adds them, so a pair flies the theory its sets fly alone
   if (ctx_p.rad_y0 != 0.0) y0_blocks(ctx_p, ap, out_p);
   if (ctx_m.rad_y0 != 0.0) y0_blocks(ctx_m, am, out_m);
   return 0;
