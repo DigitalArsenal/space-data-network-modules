@@ -715,11 +715,10 @@ to numerical-integral precision and third order within |de| <= 0.02. Measured pe
 errors are 1.1e-4 at |de| = 0.01, 1.5e-3 at 0.02, and 4-15% at 0.05; these are not uniform error bounds.
 SPEC 6.4 and 16.2 distinguish this approximation from the added high-degree half-day tail.
 
-The nonresonant long-period AP branch uses one native TEME-of-date path in fitting and propagation, without
-an additional epoch-axis rotation (SPEC 16.4). On the seven already-read AP6 TESS windows, the exploratory
-median paired day-3 AP-minus-XP error falls from +420.105792 to -0.000784 m, within the 50 m bound. All four
-synthetic HEO fixtures retain their day-1/3/7 errors exactly (0.000 m change, <1 m allowed), and XP retains
-its digest. `test/heo-frame.e2e.mjs` prints every window and fixture; unread-window confirmation is separate.
+Every AP set carries its epoch-axis states to TEME of date by M(t) M(t0)^T, in fitting and propagation alike
+(SPEC 16.4). That includes the long-period regime's class 0 sets, the sets with epoch periods of about 1,795
+minutes and more. A covariance's sigma sets take the same rotation as their nominal. SGP4XP takes no such
+rotation. `test/heo-frame.e2e.mjs` prints the TESS replay's every window and the four synthetic HEO fixtures.
 
 AP adds each third body's tidal terms of degree 4 to 10 to the averaged rates of orbits with periods below 1100 min
 (SPEC 16.8; XP's stop at degree 3). On the eleven already-read AP6 windows of each (exploratory), the median paired

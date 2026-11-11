@@ -134,9 +134,8 @@ inline void apply_transpose(const double m[3][3], const double* in, double* out)
   for (int i = 0; i < 3; ++i) out[i] = m[0][i] * in[0] + m[1][i] * in[1] + m[2][i] * in[2];
 }
 
-/// AP (SPEC 16.4): for the branches whose mean elements hold epoch axes,
-/// carry the state to TEME of date. The nonresonant long-period branch does
-/// not take this correction; xp_init selects that policy once for fit and flight.
+/// AP (SPEC 16.4): every AP set's mean elements hold epoch axes; carry its
+/// state to TEME of date. ap_init sets that policy once, for fit and flight alike.
 /// The rotation is M(t) M(t0)^T, with M linear between 12 h nodes
 /// (the matrix turns about 1e-7 rad between them; the shortest nutation term of note is 5 days), held per thread.
 struct DriftNodeSlot {
