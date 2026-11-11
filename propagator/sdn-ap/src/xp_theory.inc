@@ -533,24 +533,6 @@ struct F64x2 {
 [[gnu::always_inline]] inline F64x2 operator*(F64x2 a, double b) { return a * F64x2(b); }
 [[gnu::always_inline]] inline F64x2 f64x2_sqrt(F64x2 a) { return F64x2(wasm_f64x2_sqrt(a.v)); }
 
-inline F64x2 fast_a_from_n_f64x2(F64x2 vn) {
-  const F64x2 vx = F64x2(kMu) / (vn * vn);
-  uint64_t u0 = 0, u1 = 0;
-  const double x0 = vx.lo(), x1 = vx.hi();
-  std::memcpy(&u0, &x0, 8);
-  std::memcpy(&u1, &x1, 8);
-  u0 = u0 / 3 + 0x2a9f7893e46d0000ULL;
-  u1 = u1 / 3 + 0x2a9f7893e46d0000ULL;
-  double a0 = 0.0, a1 = 0.0;
-  std::memcpy(&a0, &u0, 8);
-  std::memcpy(&a1, &u1, 8);
-  F64x2 va(a0, a1);
-  F64x2 va3 = va * va * va;
-  va = va * (va3 + 2.0 * vx) / (2.0 * va3 + vx);
-  va3 = va * va * va;
-  va = va * (va3 + 2.0 * vx) / (2.0 * va3 + vx);
-  return va;
-}
 #endif
 
 inline void lp_third_body_gauss_ap(const double* y, const Frame& fr, double sf, double cf,
@@ -638,92 +620,6 @@ inline void lp_third_body_gauss_ap(const double* y, const Frame& fr, double sf, 
   tb[kLam] = -(2.0 * roa * inv_na) * R - (fr.eta * inv_na * beta) * (er * R + (1.0 + rn * inv_p) * es * S) - omega_rot;
   tb[kN] = -1.5 * fr.n * inv_a * adot;
 }
-
-#ifdef __wasm_simd128__
-inline void lp_tb_gauss_pair_f64x2(const F64x2 vy[6], F64x2 va, F64x2 vsf, F64x2 vcf,
-                                   const Bodies& b, F64x2 vtb[6]) {
-  const F64x2 vk = vy[kAf], vh = vy[kAg], vchi = vy[kChi], vpsi = vy[kPsi], vn = vy[kN];
-  const F64x2 vchi2 = vchi * vchi, vpsi2 = vpsi * vpsi, v2cp = 2.0 * vchi * vpsi;
-  const F64x2 vc = 1.0 + vchi2 + vpsi2;
-  const F64x2 vic = F64x2(1.0) / vc;
-  const F64x2 vfx = (1.0 - vchi2 + vpsi2) * vic, vfy = v2cp * vic, vfz = (-2.0 * vchi) * vic;
-  const F64x2 vgx = v2cp * vic, vgy = (1.0 + vchi2 - vpsi2) * vic, vgz = (2.0 * vpsi) * vic;
-  const F64x2 vwx = (2.0 * vchi) * vic, vwy = (-2.0 * vpsi) * vic, vwz = (1.0 - vchi2 - vpsi2) * vic;
-
-  const F64x2 ve2 = vk * vk + vh * vh;
-  const F64x2 veta = f64x2_sqrt(1.0 - ve2);
-  const F64x2 vroa = 1.0 - vk * vcf - vh * vsf;
-  const F64x2 vrn = va * vroa;
-  const F64x2 vop_eta = 1.0 + veta;
-  const F64x2 vna = vn * va;
-  const F64x2 vinv_p1 = F64x2(1.0) / (vop_eta * vrn);
-  const F64x2 vinv_na_eta = F64x2(1.0) / (vna * veta);
-  const F64x2 vbeta = vinv_p1 * vrn;
-  const F64x2 vinv_rn = vinv_p1 * vop_eta;
-  const F64x2 vinv_a = vinv_rn * vroa;
-  const F64x2 vinv_na = vinv_na_eta * veta;
-  const F64x2 vinv_eta = vinv_na_eta * vna;
-  const F64x2 vinv_hn = vinv_na_eta * vinv_a;
-
-  const F64x2 vcxx = 1.0 - vh * vh * vbeta, vcxy = vh * vk * vbeta, vcyy = 1.0 - vk * vk * vbeta;
-  const F64x2 vX = va * (vcxx * vcf + vcxy * vsf - vk);
-  const F64x2 vY = va * (vcxy * vcf + vcyy * vsf - vh);
-  const F64x2 vs_vel = vna * va * vinv_rn;
-  const F64x2 vXd = vs_vel * (vcxy * vcf - vcxx * vsf);
-  const F64x2 vYd = vs_vel * (vcyy * vcf - vcxy * vsf);
-
-  const Vec3 sv_s = b.sun_r * b.sun_u;
-  const Vec3 sv_m = b.moon_r * b.moon_u;
-  const F64x2 vxs0 = sv_s.x * vfx + sv_s.y * vfy + sv_s.z * vfz;
-  const F64x2 vys0 = sv_s.x * vgx + sv_s.y * vgy + sv_s.z * vgz;
-  const F64x2 vzs0 = sv_s.x * vwx + sv_s.y * vwy + sv_s.z * vwz;
-  const F64x2 vxm0 = sv_m.x * vfx + sv_m.y * vfy + sv_m.z * vfz;
-  const F64x2 vym0 = sv_m.x * vgx + sv_m.y * vgy + sv_m.z * vgz;
-  const F64x2 vzm0 = sv_m.x * vwx + sv_m.y * vwy + sv_m.z * vwz;
-
-  const F64x2 vds_f = vxs0 - vX, vds_g = vys0 - vY;
-  const F64x2 vdm_f = vxm0 - vX, vdm_g = vym0 - vY;
-  const F64x2 vds2 = vds_f * vds_f + vds_g * vds_g + vzs0 * vzs0;
-  const F64x2 vdm2 = vdm_f * vdm_f + vdm_g * vdm_g + vzm0 * vzm0;
-  const F64x2 vdsn = f64x2_sqrt(vds2), vdmn = f64x2_sqrt(vdm2);
-  const v128_t vsr = wasm_f64x2_make(b.sun_r, b.moon_r);
-  const v128_t vc_ind = wasm_f64x2_div(wasm_f64x2_make(kSunMass * kMu, kMoonMass * kMu),
-                                       wasm_f64x2_mul(wasm_f64x2_mul(vsr, vsr), vsr));
-  const double c_ind_s = wasm_f64x2_extract_lane(vc_ind, 0);
-  const double c_ind_m = wasm_f64x2_extract_lane(vc_ind, 1);
-  const F64x2 vc_dir_s = F64x2(kSunMass * kMu) / (vds2 * vdsn);
-  const F64x2 vc_dir_m = F64x2(kMoonMass * kMu) / (vdm2 * vdmn);
-
-  const F64x2 vdf = (vc_dir_s * vds_f - c_ind_s * vxs0) + (vc_dir_m * vdm_f - c_ind_m * vxm0);
-  const F64x2 vdg = (vc_dir_s * vds_g - c_ind_s * vys0) + (vc_dir_m * vdm_g - c_ind_m * vym0);
-  const F64x2 vW = (vc_dir_s - c_ind_s) * vzs0 + (vc_dir_m - c_ind_m) * vzm0;
-
-  const F64x2 vxu = vX * vinv_rn, vyu = vY * vinv_rn;
-  const F64x2 vR = vdf * vxu + vdg * vyu;
-  const F64x2 vS = vdg * vxu - vdf * vyu;
-  const F64x2 vvd = vXd * vdf + vYd * vdg;
-  constexpr double kInvMu = 1.0 / kMu;
-  const F64x2 vadot = (2.0 * kInvMu) * va * va * vvd;
-  const F64x2 vrd = vX * vdf + vY * vdg;
-  const F64x2 vrv = vX * vXd + vY * vYd;
-  const F64x2 vtwo_vd = 2.0 * vvd;
-  const F64x2 vedot_f = kInvMu * (vtwo_vd * vX - vrd * vXd - vrv * vdf);
-  const F64x2 vedot_g = kInvMu * (vtwo_vd * vY - vrd * vYd - vrv * vdg);
-  const F64x2 vc_W = (0.5 * vc * vinv_hn) * vW;
-  const F64x2 vomega_rot = (vchi * vX - vpsi * vY) * vW * vinv_hn;
-  const F64x2 ver = vk * vxu + vh * vyu;
-  const F64x2 ves = vh * vxu - vk * vyu;
-  const F64x2 vinv_p = vinv_a * vinv_eta * vinv_eta;
-
-  vtb[kAf] = vedot_f + vh * vomega_rot;
-  vtb[kAg] = vedot_g - vk * vomega_rot;
-  vtb[kChi] = vc_W * vY;
-  vtb[kPsi] = vc_W * vX;
-  vtb[kLam] = -(2.0 * vroa * vinv_na) * vR -
-              (veta * vinv_na * vbeta) * (ver * vR + (1.0 + vrn * vinv_p) * ves * vS) - vomega_rot;
-  vtb[kN] = -1.5 * vn * vinv_a * vadot;
-}
-#endif
 
 template <int K>
 inline double ipow(double x) {
@@ -3304,20 +3200,15 @@ inline bool drag_orbit_check(const RateContext& ctx, double t, const double* y, 
   return true;
 }
 
+/// The nominal's parts of its epoch rates that rk3 holds over its first step (SPEC 9); a covariance's moved sets read
+/// none of it (stack #491: each is flown on its own).
 struct EpochAux {
   uint64_t ctx_id = 0;
-  double d50_epoch = -1e30;
-  double n0 = 0.0;
-  Bodies b{};
   double tb[6]{};
   double drag_unit[6]{};
   double srp_unit[6]{};
   double six_tail[6]{};
   double tail_eq[6]{};
-  double lam_lp = 0.0;
-  double F_lp = 0.0;
-  double s0_lp = 0.0;
-  double c0_lp = 1.0;
   bool valid = false;
   bool has_tb = false;
   bool has_drag = false;
@@ -3325,42 +3216,31 @@ struct EpochAux {
   bool srp_sunlit_safe = false;
   bool has_tail = false;
   bool has_tail_eq = false;
-  bool has_F_lp = false;
-  bool has_sc0_lp = false;
 };
 inline thread_local EpochAux g_epoch_aux{};
 inline EpochAux& epoch_aux() { return g_epoch_aux; }
 
+/// A step's stage parts, recorded by the set being stepped for its own rk3 (SPEC 9).
 struct CovStageAux {
   uint32_t gen = 0;
-  double t = -1e30;
-  Bodies b{};
   double tb[6]{};
   double drag_unit[6]{};
   double srp_unit[6]{};
   double six_tail[6]{};
   double tail_eq[6]{};
-  double lam_lp = 0.0;
-  double F_lp = 0.0;
-  double sF_lp = 0.0;
-  double cF_lp = 1.0;
-  double n_lp = 0.0;
-  double inv_n_lp = 0.0;
-  double a_lp = 0.0;
-  double s0_lp = 0.0;
-  double c0_lp = 1.0;
   bool has_tb = false;
   bool has_drag = false;
   bool has_srp = false;
   bool srp_sunlit_safe = false;
   bool has_tail = false;
   bool has_tail_eq = false;
-  bool has_F_lp = false;
-  bool has_sc0_lp = false;
 };
 struct CovStepAux {
   CovStageAux st[3];
 };
+/// The thread's step parts of the set it steps (anchor_id: its ctx_id; gen: bumped when another set or another epoch
+/// takes it). Through 0.6.20 a covariance's moved sets read the nominal's parts here plus their own held differences,
+/// so their flight, and the covariance, depended on what the thread had flown before (stack #491).
 struct CovGridCache {
   static constexpr int kMaxCovSteps = 420;
   uint32_t gen = 1;
@@ -3381,17 +3261,6 @@ struct CovGridCache {
   bool has_epoch_srp = false;
   bool epoch_srp_safe = false;
   bool has_epoch_tail_eq = false;
-  double sigma_df_drag[18][6]{};
-  double sigma_df_srp[18][6]{};
-  double sigma_dsix_tail[18][6]{};
-  double sigma_dtail_eq[18][6]{};
-  uint64_t sigma_aux_ctx_id[18]{};
-  double sigma_aux_d50[18]{};
-  double sigma_aux_n0[18]{};
-  double sigma_zonal_eq[18][6]{};
-  uint32_t sigma_zonal_gen[18]{};
-  int32_t sigma_zonal_idx[18]{};
-  int8_t sigma_zonal_di[18]{};
   CovStepAux steps[2][kMaxCovSteps]{};
 };
 inline thread_local CovGridCache* g_cov_grid_cache_ptr = nullptr;
@@ -3471,90 +3340,6 @@ inline void zonal_six_ap(double e, double n, double s, double c, double eta, dou
   six[4] = sodot;
   six[5] = ldot;
 }
-
-#ifdef __wasm_simd128__
-inline bool zonal_eq_pair_f64x2(const F64x2 vy[6], F64x2 va, F64x2 vzonal_eq[6]) {
-  const F64x2 vk = vy[kAf], vh = vy[kAg], vchi = vy[kChi], vpsi = vy[kPsi], vn = vy[kN];
-  const F64x2 ve2 = vk * vk + vh * vh;
-  const F64x2 vt2 = vchi * vchi + vpsi * vpsi;
-  if (!(ve2.lo() > 1e-24 && ve2.hi() > 1e-24 && ve2.lo() < 0.99 && ve2.hi() < 0.99 &&
-        vt2.lo() > 1e-24 && vt2.hi() > 1e-24))
-    return false;
-  const F64x2 ve = f64x2_sqrt(ve2);
-  const F64x2 vt_inc = f64x2_sqrt(vt2);
-  const F64x2 vom_e2 = 1.0 - ve2;
-  const F64x2 veta = f64x2_sqrt(vom_e2);
-  const F64x2 vc_fr = 1.0 + vt2;
-  const F64x2 vic = F64x2(1.0) / vc_fr;
-  const F64x2 vinv_et = F64x2(1.0) / (ve * vt_inc);
-  const F64x2 vinv_e = vinv_et * vt_inc;
-  const F64x2 vinv_t = vinv_et * ve;
-  const F64x2 vc = (1.0 - vt2) * vic;
-  const F64x2 vs = (2.0 * vt_inc) * vic;
-  const F64x2 vsO = vchi * vinv_t;
-  const F64x2 vcO = vpsi * vinv_t;
-  const F64x2 vcv = vk * vinv_e;
-  const F64x2 vsv = vh * vinv_e;
-  const F64x2 vcw1 = vcv * vcO + vsv * vsO;
-  const F64x2 vsw1 = vsv * vcO - vcv * vsO;
-  const F64x2 vp = va * vom_e2;
-  const F64x2 vinv_cp1 = 0.5 * vc_fr;
-
-  const F64x2 vcw1_2 = vcw1 * vcw1;
-  const F64x2 vcw2 = vcw1_2 - vsw1 * vsw1, vsw2 = 2.0 * vsw1 * vcw1;
-  const F64x2 vcw3 = vcw2 * vcw1 - vsw2 * vsw1, vsw3 = vsw2 * vcw1 + vcw2 * vsw1;
-  const F64x2 vcw4 = vcw3 * vcw1 - vsw3 * vsw1;
-  const F64x2 vsinc2 = 2.0 * vs * vc;
-  const F64x2 ve4 = ve2 * ve2, vem1p1 = -vom_e2;
-  const F64x2 vs2 = vs * vs, vs4 = vs2 * vs2;
-  const F64x2 vc2 = vc * vc, vc3 = vc2 * vc, vc4 = vc2 * vc2, vc5 = vc4 * vc;
-  const F64x2 vep_den = vom_e2 + veta;
-  const F64x2 vinv_p = F64x2(1.0) / vp;
-  const F64x2 vinv_prod = F64x2(1.0) / (vem1p1 * vep_den);
-  const F64x2 vinv_e2m1 = vinv_prod * vep_den;
-  const F64x2 vinv_ep = vinv_prod * vem1p1;
-  const F64x2 vinv_p2 = vinv_p * vinv_p, vinv_p3 = vinv_p2 * vinv_p, vinv_p4 = vinv_p2 * vinv_p2, vinv_p5 = vinv_p4 * vinv_p;
-
-  const F64x2 vj5_poly1 = 126.0 * vc4 * ve2 * vcw1 - 63.0 * vc4 * ve2 * vcw3 + 168.0 * vc4 * vcw1 - 84.0 * vc2 * ve2 * vcw1 +
-                          70.0 * vc2 * ve2 * vcw3 - 112.0 * vc2 * vcw1 + 6.0 * ve2 * vcw1 - 7.0 * ve2 * vcw3 + 8.0 * vcw1;
-  const F64x2 vedot =
-      (kJ2 * kJ2) * ((-3.0 / 32.0) * ve * vn * vs2 * vem1p1 * (15.0 * vs2 - 14.0) * vsw2 * vinv_p4)
-      + kJ3 * ((-3.0 / 8.0) * vn * vs * vem1p1 * (5.0 * vs2 - 4.0) * vcw1 * vinv_p3)
-      + kJ4 * ((-15.0 / 32.0) * ve * vn * vs2 * vem1p1 * (7.0 * vs2 - 6.0) * vsw2 * vinv_p4)
-      + kJ5 * ((-15.0 / 256.0) * vn * vs * vem1p1 * vj5_poly1 * vinv_p5);
-  const F64x2 vidot =
-      (kJ2 * kJ2) * ((3.0 / 64.0) * ve2 * vn * (14.0 - 15.0 * vs2) * vsinc2 * vsw2 * vinv_p4)
-      + kJ3 * ((3.0 / 8.0) * vc * ve * vn * (4.0 - 5.0 * vs2) * vcw1 * vinv_p3)
-      + kJ4 * ((15.0 / 64.0) * ve2 * vn * (6.0 - 7.0 * vs2) * vsinc2 * vsw2 * vinv_p4)
-      + kJ5 * ((-15.0 / 256.0) * vc * ve * vn * vj5_poly1 * vinv_p5);
-  const F64x2 vevdot =
-      kJ2 * ((3.0 / 4.0) * ve * vn * ((-2.0) * vc - 5.0 * vs2 + 4.0) * vinv_p2)
-      + (kJ2 * kJ2) * ((3.0 / 128.0) * ve * vn * (240.0 * vc * ve2 * vs2 * vcw1_2 - 140.0 * vc * ve2 * vs2 - 112.0 * vc * ve2 * vcw1_2 + 40.0 * vc * ve2 + 144.0 * vc * veta * vs2 - 96.0 * vc * veta + 160.0 * vc * vs2 - 144.0 * vc + 540.0 * ve2 * vs4 * vcw1_2 - 315.0 * ve2 * vs4 - 632.0 * ve2 * vs2 * vcw1_2 + 280.0 * ve2 * vs2 + 112.0 * ve2 * vcw1_2 + 360.0 * veta * vs4 - 528.0 * veta * vs2 + 192.0 * veta + 120.0 * vs4 * vcw1_2 + 370.0 * vs4 - 112.0 * vs2 * vcw1_2 - 768.0 * vs2 + 384.0) * vinv_p4)
-      + kJ3 * ((3.0 / 8.0) * vn * vs * (5.0 * vc3 * ve2 - 10.0 * vc2 * ve2 - 30.0 * vc * ve2 * vs2 + 15.0 * vc * ve2 - 5.0 * vc * vs2 + 4.0 * vc - 30.0 * ve2 * vs2 + 26.0 * ve2 - 5.0 * vs2 + 4.0) * vsw1 * vinv_p3 * vinv_cp1)
-      + kJ4 * ((15.0 / 128.0) * ve * vn * (56.0 * vc * ve2 * vs2 * vcw2 - 84.0 * vc * ve2 * vs2 - 24.0 * vc * ve2 * vcw2 + 48.0 * vc * ve2 - 56.0 * vc * vs2 + 32.0 * vc + 126.0 * ve2 * vs4 * vcw2 - 189.0 * ve2 * vs4 - 140.0 * ve2 * vs2 * vcw2 + 252.0 * ve2 * vs2 + 24.0 * ve2 * vcw2 - 72.0 * ve2 + 28.0 * vs4 * vcw2 - 196.0 * vs4 - 24.0 * vs2 * vcw2 + 248.0 * vs2 - 64.0) * vinv_p4)
-      + kJ5 * ((5.0 / 256.0) * vn * vs * ((-2646.0) * vc5 * ve4 * vsw1 + 441.0 * vc5 * ve4 * vsw3 - 5670.0 * vc5 * ve2 * vsw1 + 189.0 * vc5 * ve2 * vsw3 - 504.0 * vc5 * vsw1 - 2268.0 * vc4 * ve4 * vsw1 + 378.0 * vc4 * ve4 * vsw3 - 5166.0 * vc4 * ve2 * vsw1 + 189.0 * vc4 * ve2 * vsw3 - 504.0 * vc4 * vsw1 + 1512.0 * vc3 * ve4 * vs2 * vsw1 - 252.0 * vc3 * ve4 * vs2 * vsw3 + 1764.0 * vc3 * ve4 * vsw1 - 490.0 * vc3 * ve4 * vsw3 + 2016.0 * vc3 * ve2 * vs2 * vsw1 + 3780.0 * vc3 * ve2 * vsw1 - 210.0 * vc3 * ve2 * vsw3 + 336.0 * vc3 * vsw1 + 1512.0 * vc2 * ve4 * vsw1 - 420.0 * vc2 * ve4 * vsw3 + 3444.0 * vc2 * ve2 * vsw1 - 210.0 * vc2 * ve2 * vsw3 + 336.0 * vc2 * vsw1 - 504.0 * vc * ve4 * vs2 * vsw1 + 140.0 * vc * ve4 * vs2 * vsw3 - 126.0 * vc * ve4 * vsw1 + 49.0 * vc * ve4 * vsw3 - 672.0 * vc * ve2 * vs2 * vsw1 - 270.0 * vc * ve2 * vsw1 + 21.0 * vc * ve2 * vsw3 - 24.0 * vc * vsw1 - 108.0 * ve4 * vsw1 + 42.0 * ve4 * vsw3 - 246.0 * ve2 * vsw1 + 21.0 * ve2 * vsw3 - 24.0 * vsw1) * vinv_p5 * vinv_cp1);
-  const F64x2 vsodot =
-      kJ2 * ((-3.0 / 2.0) * vc * vn * vs * vinv_p2)
-      + (kJ2 * kJ2) * ((3.0 / 32.0) * vc * vn * vs * (30.0 * ve2 * vs2 * vcw2 - 5.0 * ve2 * vs2 - 14.0 * ve2 * vcw2 - 4.0 * ve2 + 36.0 * veta * vs2 - 24.0 * veta + 40.0 * vs2 - 36.0) * vinv_p4)
-      + kJ3 * ((3.0 / 8.0) * vc * ve * vn * (4.0 - 15.0 * vs2) * vsw1 * vinv_p3)
-      + kJ4 * ((15.0 / 32.0) * vc * vn * vs * (14.0 * ve2 * vs2 * vcw2 - 21.0 * ve2 * vs2 - 6.0 * ve2 * vcw2 + 12.0 * ve2 - 14.0 * vs2 + 8.0) * vinv_p4)
-      + kJ5 * ((5.0 / 256.0) * vc * ve * vn * ((-378.0) * vc4 * ve2 * vsw1 + 63.0 * vc4 * ve2 * vsw3 - 504.0 * vc4 * vsw1 + 1512.0 * vc2 * ve2 * vs2 * vsw1 - 252.0 * vc2 * ve2 * vs2 * vsw3 + 252.0 * vc2 * ve2 * vsw1 - 70.0 * vc2 * ve2 * vsw3 + 2016.0 * vc2 * vs2 * vsw1 + 336.0 * vc2 * vsw1 - 504.0 * ve2 * vs2 * vsw1 + 140.0 * ve2 * vs2 * vsw3 - 18.0 * ve2 * vsw1 + 7.0 * ve2 * vsw3 - 672.0 * vs2 * vsw1 - 24.0 * vsw1) * vinv_p5);
-  const F64x2 vldot =
-      kJ2 * ((3.0 / 4.0) * vn * ((-2.0) * vc - 3.0 * veta * vs2 + 2.0 * veta - 5.0 * vs2 + 4.0) * vinv_p2)
-      + (kJ2 * kJ2) * ((3.0 / 1024.0) * vn * (960.0 * vc * ve4 * vs2 * vcw2 - 160.0 * vc * ve4 * vs2 - 448.0 * vc * ve4 * vcw2 - 128.0 * vc * ve4 + 1152.0 * vc * ve2 * veta * vs2 - 768.0 * vc * ve2 * veta - 960.0 * vc * ve2 * vs2 * vcw2 + 1440.0 * vc * ve2 * vs2 + 448.0 * vc * ve2 * vcw2 - 1024.0 * vc * ve2 - 1152.0 * vc * veta * vs2 + 768.0 * vc * veta - 1280.0 * vc * vs2 + 1152.0 * vc + 2256.0 * ve4 * veta * vs4 * vcw2 - 27.0 * ve4 * veta * vs4 * vcw4 - 806.0 * ve4 * veta * vs4 - 2016.0 * ve4 * veta * vs2 * vcw2 - 80.0 * ve4 * veta * vs2 + 368.0 * ve4 * veta + 2160.0 * ve4 * vs4 * vcw2 - 1512.0 * ve4 * vs4 - 2528.0 * ve4 * vs2 * vcw2 + 1248.0 * ve4 * vs2 + 448.0 * ve4 * vcw2 - 64.0 * ve4 + 288.0 * ve2 * veta * vs4 * vcw2 + 1312.0 * ve2 * veta * vs4 + 448.0 * ve2 * veta * vs2 * vcw2 - 3584.0 * ve2 * veta * vs2 + 1280.0 * ve2 * veta - 1680.0 * ve2 * vs4 * vcw2 + 6104.0 * ve2 * vs4 + 2080.0 * ve2 * vs2 * vcw2 - 9376.0 * ve2 * vs2 - 448.0 * ve2 * vcw2 + 3648.0 * ve2 + 480.0 * veta * vs4 * vcw2 - 6176.0 * veta * vs4 - 448.0 * veta * vs2 * vcw2 + 8704.0 * veta * vs2 - 3328.0 * veta - 480.0 * vs4 * vcw2 - 4592.0 * vs4 + 448.0 * vs2 * vcw2 + 8128.0 * vs2 - 3584.0) * vinv_p4 * vinv_e2m1)
-      + kJ3 * ((-3.0 / 8.0) * ve * vn * vs * (5.0 * vc3 * ve2 - 5.0 * vc3 * veta - 5.0 * vc3 - 10.0 * vc2 * ve2 + 10.0 * vc2 * veta + 10.0 * vc2 - 20.0 * vc * ve2 * veta * vs2 + 16.0 * vc * ve2 * veta - 50.0 * vc * ve2 * vs2 + 31.0 * vc * ve2 + 55.0 * vc * veta * vs2 - 35.0 * vc * veta + 50.0 * vc * vs2 - 31.0 * vc - 20.0 * ve2 * veta * vs2 + 16.0 * ve2 * veta - 50.0 * ve2 * vs2 + 42.0 * ve2 + 55.0 * veta * vs2 - 46.0 * veta + 50.0 * vs2 - 42.0) * vsw1 * vinv_p3 * vinv_cp1 * vinv_ep)
-      + kJ4 * ((15.0 / 128.0) * vn * (56.0 * vc * ve2 * vs2 * vcw2 - 84.0 * vc * ve2 * vs2 - 24.0 * vc * ve2 * vcw2 + 48.0 * vc * ve2 - 56.0 * vc * vs2 + 32.0 * vc + 70.0 * ve2 * veta * vs4 * vcw2 - 105.0 * ve2 * veta * vs4 - 60.0 * ve2 * veta * vs2 * vcw2 + 120.0 * ve2 * veta * vs2 - 24.0 * ve2 * veta + 126.0 * ve2 * vs4 * vcw2 - 189.0 * ve2 * vs4 - 140.0 * ve2 * vs2 * vcw2 + 252.0 * ve2 * vs2 + 24.0 * ve2 * vcw2 - 72.0 * ve2 - 28.0 * veta * vs4 * vcw2 + 24.0 * veta * vs2 * vcw2 + 28.0 * vs4 * vcw2 - 196.0 * vs4 - 24.0 * vs2 * vcw2 + 248.0 * vs2 - 64.0) * vinv_p4)
-      + kJ5 * ((5.0 / 256.0) * ve * vn * vs * (2268.0 * vc5 * ve4 * veta * vsw1 - 378.0 * vc5 * ve4 * veta * vsw3 + 4914.0 * vc5 * ve4 * vsw1 - 819.0 * vc5 * ve4 * vsw3 - 4032.0 * vc5 * ve2 * veta * vsw1 + 1008.0 * vc5 * ve2 * veta * vsw3 + 1638.0 * vc5 * ve2 * vsw1 + 819.0 * vc5 * ve2 * vsw3 - 7056.0 * vc5 * veta * vsw1 - 6552.0 * vc5 * vsw1 + 2268.0 * vc4 * ve4 * veta * vsw1 - 378.0 * vc4 * ve4 * veta * vsw3 + 4536.0 * vc4 * ve4 * vsw1 - 756.0 * vc4 * ve4 * vsw3 - 3654.0 * vc4 * ve2 * veta * vsw1 + 945.0 * vc4 * ve2 * veta * vsw3 + 1512.0 * vc4 * ve2 * vsw1 + 756.0 * vc4 * ve2 * vsw3 - 6552.0 * vc4 * veta * vsw1 - 6048.0 * vc4 * vsw1 - 1512.0 * vc3 * ve4 * veta * vsw1 + 420.0 * vc3 * ve4 * veta * vsw3 - 1512.0 * vc3 * ve4 * vs2 * vsw1 + 252.0 * vc3 * ve4 * vs2 * vsw3 - 3276.0 * vc3 * ve4 * vsw1 + 910.0 * vc3 * ve4 * vsw3 + 1512.0 * vc3 * ve2 * veta * vs2 * vsw1 - 252.0 * vc3 * ve2 * veta * vs2 * vsw3 + 2688.0 * vc3 * ve2 * veta * vsw1 - 1120.0 * vc3 * ve2 * veta * vsw3 - 504.0 * vc3 * ve2 * vs2 * vsw1 - 252.0 * vc3 * ve2 * vs2 * vsw3 - 1092.0 * vc3 * ve2 * vsw1 - 910.0 * vc3 * ve2 * vsw3 + 2016.0 * vc3 * veta * vs2 * vsw1 + 4704.0 * vc3 * veta * vsw1 + 2016.0 * vc3 * vs2 * vsw1 + 4368.0 * vc3 * vsw1 - 1512.0 * vc2 * ve4 * veta * vsw1 + 420.0 * vc2 * ve4 * veta * vsw3 - 3024.0 * vc2 * ve4 * vsw1 + 840.0 * vc2 * ve4 * vsw3 + 2436.0 * vc2 * ve2 * veta * vsw1 - 1050.0 * vc2 * ve2 * veta * vsw3 - 1008.0 * vc2 * ve2 * vsw1 - 840.0 * vc2 * ve2 * vsw3 + 4368.0 * vc2 * veta * vsw1 + 4032.0 * vc2 * vsw1 + 108.0 * vc * ve4 * veta * vsw1 - 42.0 * vc * ve4 * veta * vsw3 + 504.0 * vc * ve4 * vs2 * vsw1 - 140.0 * vc * ve4 * vs2 * vsw3 + 234.0 * vc * ve4 * vsw1 - 91.0 * vc * ve4 * vsw3 - 504.0 * vc * ve2 * veta * vs2 * vsw1 + 140.0 * vc * ve2 * veta * vs2 * vsw3 - 192.0 * vc * ve2 * veta * vsw1 + 112.0 * vc * ve2 * veta * vsw3 + 168.0 * vc * ve2 * vs2 * vsw1 + 140.0 * vc * ve2 * vs2 * vsw3 + 78.0 * vc * ve2 * vsw1 + 91.0 * vc * ve2 * vsw3 - 672.0 * vc * veta * vs2 * vsw1 - 336.0 * vc * veta * vsw1 - 672.0 * vc * vs2 * vsw1 - 312.0 * vc * vsw1 + 108.0 * ve4 * veta * vsw1 - 42.0 * ve4 * veta * vsw3 + 216.0 * ve4 * vsw1 - 84.0 * ve4 * vsw3 - 174.0 * ve2 * veta * vsw1 + 105.0 * ve2 * veta * vsw3 + 72.0 * ve2 * vsw1 + 84.0 * ve2 * vsw3 - 312.0 * veta * vsw1 - 288.0 * vsw1) * vinv_p5 * vinv_cp1 * vinv_ep);
-
-  vzonal_eq[kAf] = vedot * vcv - vevdot * vsv;
-  vzonal_eq[kAg] = vedot * vsv + vevdot * vcv;
-  vzonal_eq[kChi] = (vidot * vsO + vsodot * vcO) * vinv_cp1;
-  vzonal_eq[kPsi] = (vidot * vcO - vsodot * vsO) * vinv_cp1;
-  vzonal_eq[kLam] = vldot;
-  vzonal_eq[kN] = F64x2(0.0);
-  return true;
-}
-#endif
 
 inline void third_body_six_coefs_ap(double e, double eta, double sinc1, double inv_cp1, double sw1, double cw1, double* coef) {
   const double e2 = e * e, em1p1 = (e - 1.0) * (e + 1.0);
@@ -3728,33 +3513,16 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   CovGridCache& cgc = cov_grid_cache();
   EpochAux& ea = epoch_aux();
   const bool ap_ctx = is_ap_ctx(ctx);
+  // A covariance's moved set is flown on its own (stack #491): it reads nothing the nominal or another set left in
+  // this thread's caches; only the nominal records the parts its own rk3 holds over a step (SPEC 9)
   const bool is_sigma = ap_ctx && (ctx.is_cov_sigma != 0);
-  const int sigma_slot = ctx.is_cov_sigma & 31;
-  const bool exact_orb_match = (ctx.is_cov_sigma & 32) != 0;
-  const bool same_all6 = (ctx.is_cov_sigma & 64) != 0;
-  const bool same_plane = !is_sigma || (ctx.is_cov_sigma & 128) != 0;
-  (void)same_plane;
-  const bool use_epoch_aux = is_sigma && stage_idx == -1 && t == 0.0 && ea.valid &&
-                             ea.ctx_id == ctx.cov_anchor_id && ea.d50_epoch == ctx.d50_epoch &&
-                             std::fabs(ctx.n0 - ea.n0) < 1e-3;
   const bool record_epoch_aux = ap_ctx && !is_sigma && stage_idx == -1 && t == 0.0;
-  CovStageAux* csa = (ap_ctx && stage_idx >= 0 && step_idx > 0 && step_idx < CovGridCache::kMaxCovSteps)
+  CovStageAux* csa = (ap_ctx && !is_sigma && stage_idx >= 0 && step_idx > 0 && step_idx < CovGridCache::kMaxCovSteps)
                          ? &cgc.steps[dir_idx][step_idx].st[stage_idx]
                          : nullptr;
-  const bool use_stage_aux = is_sigma && csa != nullptr && cgc.anchor_id == ctx.cov_anchor_id &&
-                             cgc.d50_epoch == ctx.d50_epoch &&
-                             std::fabs(ctx.n0 - cgc.n0) < 1e-3 && csa->gen == cgc.gen && std::fabs(csa->t - t) < 0.5;
-  const bool record_stage_aux = ap_ctx && !is_sigma && csa != nullptr && cgc.anchor_id == ctx.ctx_id;
+  const bool record_stage_aux = csa != nullptr && cgc.anchor_id == ctx.ctx_id;
   const bool skip_tail = ov != nullptr && ov->tail_eq != nullptr;
   const bool cache_geo_res = ctx.ap_resonance != 0 && ctx.i0 > 0.02;
-  const bool use_lp_tail_eq = ctx.long_period && ctx.ap_third_body && ctx.i0 > 0.02;
-  const bool aux_slot_valid = sigma_slot >= 1 && sigma_slot < 18 &&
-                              cgc.sigma_aux_ctx_id[sigma_slot] == ctx.ctx_id;
-  const bool cached_sigma_tail =
-      skip_tail ||
-      (use_stage_aux && aux_slot_valid && sigma_slot >= 1 && sigma_slot < 18 &&
-       !(stage_idx == 2 && (step_idx & 3) == 0) &&
-       (use_lp_tail_eq ? csa->has_tail_eq : (csa->has_tail && ctx.i0 > 0.02)));
 
   Kepler k{};
   AngleTrig ag{};
@@ -3783,7 +3551,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     ag.cw = cv * ag.cO + sv * ag.sO;
     ag.sw = sv * ag.cO - cv * ag.sO;
     const bool need_tail_angles =
-        !cached_sigma_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0));
+        !skip_tail && ((cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0));
     const bool need_k_angles = (ctx.res_epoch != nullptr) || (ctx.drag_pass != 0) || need_tail_angles ||
                                (ctx.ap_resonance && cls != 0 && !(cls == 1 && cache_geo_res)) ||
                                (ctx.agom > 0.0 && fr.e2 != 0.0 && k.a >= 5.0 && ag.si <= 0.02) ||
@@ -3812,16 +3580,10 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   if (fast_ap) zonal_six_ap(k.e, fr.n, s, c, fr.eta, p, ag.sw, ag.cw, inv_cp1, six);
   else zonal_six(k.e, fr.n, s, c, fr.eta, p, k.argp, k.i, six);
 
-  const Bodies b = use_epoch_aux ? ea.b
-                                 : (use_stage_aux ? csa->b
-                                                  : (ctx.ap_third_body && fr.n < 0.016 && ctx.i0 > 0.02
-                                                         ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay)
-                                                         : bodies_at(ctx.d50_epoch + t / kMinutesPerDay)));
+  const Bodies b = ctx.ap_third_body && fr.n < 0.016 && ctx.i0 > 0.02 ? bodies_at_ap(ctx.d50_epoch + t / kMinutesPerDay)
+                                                                     : bodies_at(ctx.d50_epoch + t / kMinutesPerDay);
   if (record_epoch_aux) {
     ea.ctx_id = ctx.ctx_id;
-    ea.d50_epoch = ctx.d50_epoch;
-    ea.n0 = ctx.n0;
-    ea.b = b;
     ea.valid = true;
     ea.has_tb = false;
     ea.has_drag = false;
@@ -3829,23 +3591,14 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     ea.srp_sunlit_safe = false;
     ea.has_tail = false;
     ea.has_tail_eq = false;
-    ea.has_F_lp = false;
-    ea.has_sc0_lp = false;
   } else if (record_stage_aux) {
     csa->gen = cgc.gen;
-    csa->t = t;
-    csa->b = b;
-    csa->n_lp = fr.n;
-    csa->inv_n_lp = 1.0 / fr.n;
-    csa->a_lp = fr.a;
     csa->has_tb = false;
     csa->has_drag = false;
     csa->has_srp = false;
     csa->srp_sunlit_safe = false;
     csa->has_tail = false;
     csa->has_tail_eq = false;
-    csa->has_F_lp = false;
-    csa->has_sc0_lp = false;
   }
 
   const Perifocal pf = perifocal_of(ag);
@@ -3892,47 +3645,8 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, fr.n, fr.eta, ag.si, ag.ci, dst, &ag.sw, &ag.cw,
                       zt_table_id(ctx));
   };
-  bool add_cached_lp_teq = false;
   if (!skip_tail) {
-    if (use_lp_tail_eq && use_epoch_aux && ea.has_tail_eq) {
-      double st_tail[6] = {0, 0, 0, 0, 0, 0}, teq_cur[6];
-      eval_tail(st_tail);
-      six_to_equinoctial(ag, st_tail, teq_cur);
-      for (int m = 0; m < 6; ++m) {
-        six[m] += st_tail[m];
-        if (sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_dtail_eq[sigma_slot][m] = teq_cur[m] - ea.tail_eq[m];
-      }
-    } else if (use_lp_tail_eq && use_stage_aux && csa->has_tail_eq && sigma_slot >= 1 && sigma_slot < 18) {
-      if (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0)) {
-        double st_tail[6] = {0, 0, 0, 0, 0, 0}, teq_cur[6];
-        eval_tail(st_tail);
-        six_to_equinoctial(ag, st_tail, teq_cur);
-        for (int m = 0; m < 6; ++m) {
-          six[m] += st_tail[m];
-          cgc.sigma_dtail_eq[sigma_slot][m] = teq_cur[m] - csa->tail_eq[m];
-        }
-      } else {
-        add_cached_lp_teq = true;
-      }
-    } else if (!use_lp_tail_eq && use_epoch_aux && ea.has_tail && ctx.i0 > 0.02) {
-      double st_tail[6] = {0, 0, 0, 0, 0, 0};
-      eval_tail(st_tail);
-      for (int m = 0; m < 6; ++m) {
-        six[m] += st_tail[m];
-        if (sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_dsix_tail[sigma_slot][m] = st_tail[m] - ea.six_tail[m];
-      }
-    } else if (!use_lp_tail_eq && use_stage_aux && csa->has_tail && ctx.i0 > 0.02 && sigma_slot >= 1 && sigma_slot < 18) {
-      if (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0)) {
-        double st_tail[6] = {0, 0, 0, 0, 0, 0};
-        eval_tail(st_tail);
-        for (int m = 0; m < 6; ++m) {
-          six[m] += st_tail[m];
-          cgc.sigma_dsix_tail[sigma_slot][m] = st_tail[m] - csa->six_tail[m];
-        }
-      } else {
-        for (int m = 0; m < 6; ++m) six[m] += csa->six_tail[m] + cgc.sigma_dsix_tail[sigma_slot][m];
-      }
-    } else if (record_epoch_aux || record_stage_aux || (ov != nullptr && ov->tail_eq_out != nullptr)) {
+    if (record_epoch_aux || record_stage_aux || (ov != nullptr && ov->tail_eq_out != nullptr)) {
       double six_before_tail[6];
       for (int m = 0; m < 6; ++m) six_before_tail[m] = six[m];
       eval_tail(six);
@@ -3972,18 +3686,11 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   out[kLam] += fr.n;  // the set carries lambda-dot - n
   // SPEC 16.14: the solid Earth tide, closed form at this state (every regime; nothing at output time)
   if (ctx.solid_tides) tide::rates_eq(ctx.tide_k1, b, y, fr, out);
-  if (add_cached_lp_teq) {
-    for (int m = 0; m < 6; ++m) out[m] += csa->tail_eq[m] + cgc.sigma_dtail_eq[sigma_slot][m];
-  }
   if (skip_tail) {
     for (int m = 0; m < 6; ++m) out[m] += ov->tail_eq[m];
   }
   if (ctx.ap_third_body && !ctx.long_period) {
-    if (use_epoch_aux && ea.has_tb) {
-      for (int m = 0; m < 6; ++m) out[m] += ea.tb[m];
-    } else if (use_stage_aux && csa->has_tb) {
-      for (int m = 0; m < 6; ++m) out[m] += csa->tb[m];
-    } else if (ov != nullptr && ov->tb != nullptr) {
+    if (ov != nullptr && ov->tb != nullptr) {
       for (int m = 0; m < 6; ++m) out[m] += ov->tb[m];
       if (record_stage_aux) {
         for (int m = 0; m < 6; ++m) csa->tb[m] = ov->tb[m];
@@ -4006,38 +3713,15 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     }
   }
   if (ctx.long_period) {
-    if (same_all6 && use_epoch_aux && ea.has_tb) {
-      for (int j = 0; j < 6; ++j) out[j] += ea.tb[j];
-    } else if (same_all6 && use_stage_aux && csa->has_tb) {
-      for (int j = 0; j < 6; ++j) out[j] += csa->tb[j];
-    } else {
+    {
       // Instantaneous geometry: the satellite from the equinoctial Kepler
       // equation lambda = F + ag cos F - af sin F (Halley iteration, at most 25 steps).
       const double lam = y[kLam];
       double F = 0.0, sF_lp = 0.0, cF_lp = 1.0;
-      double s0_rec = 0.0, c0_rec = 1.0;
-      bool have_sc0_rec = false;
       const bool ap_lp_fast = ctx.ap_third_body && ctx.i0 > 0.02;
       if (ap_lp_fast && fr.e2 <= 3e-4) {
         double s0, c0;
-        if (use_epoch_aux && ea.has_sc0_lp && std::fabs(lam - ea.lam_lp) < 0.02) {
-          const double dl = lam - ea.lam_lp, dl2 = dl * dl;
-          const double cdl = 1.0 - dl2 * (0.5 - dl2 * (1.0 / 24.0));
-          const double sdl = dl * (1.0 - dl2 * ((1.0 / 6.0) - dl2 * (1.0 / 120.0)));
-          s0 = ea.s0_lp * cdl + ea.c0_lp * sdl;
-          c0 = ea.c0_lp * cdl - ea.s0_lp * sdl;
-        } else if (use_stage_aux && csa->has_sc0_lp && std::fabs(lam - csa->lam_lp) < 0.02) {
-          const double dl = lam - csa->lam_lp, dl2 = dl * dl;
-          const double cdl = 1.0 - dl2 * (0.5 - dl2 * (1.0 / 24.0));
-          const double sdl = dl * (1.0 - dl2 * ((1.0 / 6.0) - dl2 * (1.0 / 120.0)));
-          s0 = csa->s0_lp * cdl + csa->c0_lp * sdl;
-          c0 = csa->c0_lp * cdl - csa->s0_lp * sdl;
-        } else {
-          fm::sincos_fast(lam, s0, c0);
-          s0_rec = s0;
-          c0_rec = c0;
-          have_sc0_rec = true;
-        }
+        fm::sincos_fast(lam, s0, c0);
         const double es = y[kAf] * s0 - y[kAg] * c0;
         const double ec = y[kAf] * c0 + y[kAg] * s0;
         const double inv_ome0 = 1.0 / (1.0 - ec);
@@ -4052,11 +3736,7 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
         sF_lp = s0 * cu + c0 * su;
         cF_lp = c0 * cu - s0 * su;
       } else {
-        if (use_epoch_aux && ea.has_F_lp && std::fabs(lam - ea.lam_lp) < 0.05) {
-          F = ea.F_lp + (lam - ea.lam_lp);
-        } else if (use_stage_aux && csa->has_F_lp && std::fabs(lam - csa->lam_lp) < 0.05) {
-          F = csa->F_lp + (lam - csa->lam_lp);
-        } else if (ap_lp_fast) {
+        if (ap_lp_fast) {
           double s0, c0;
           fm::sincos_fast(lam, s0, c0);
           F = lam + y[kAf] * s0 - y[kAg] * c0;
@@ -4100,27 +3780,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
       if (record_epoch_aux) {
         for (int j = 0; j < 6; ++j) ea.tb[j] = tb[j];
         ea.has_tb = true;
-        ea.lam_lp = lam;
-        ea.F_lp = F;
-        ea.has_F_lp = true;
-        if (have_sc0_rec) {
-          ea.s0_lp = s0_rec;
-          ea.c0_lp = c0_rec;
-          ea.has_sc0_lp = true;
-        }
       } else if (record_stage_aux) {
         for (int j = 0; j < 6; ++j) csa->tb[j] = tb[j];
         csa->has_tb = true;
-        csa->lam_lp = lam;
-        csa->F_lp = F;
-        csa->sF_lp = sF_lp;
-        csa->cF_lp = cF_lp;
-        csa->has_F_lp = true;
-        if (have_sc0_rec) {
-          csa->s0_lp = s0_rec;
-          csa->c0_lp = c0_rec;
-          csa->has_sc0_lp = true;
-        }
       }
     }
   }
@@ -4128,42 +3790,9 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     if (!ap_ctx) {
       srp_rates(y, fr, k, pf, ctx.agom, b, out);
     } else {
-    const bool share_srp_rate = same_all6 || (!ctx.long_period && exact_orb_match);
-    const bool allow_srp_step_cache = !ctx.long_period || ctx.i0 > 0.02;
     const bool ap_srp = ctx.ap_third_body && (!ctx.long_period || ctx.i0 > 0.02);
     if (ov != nullptr && ov->srp != nullptr) {
       for (int m = 0; m < 6; ++m) out[m] += ov->srp[m];
-    } else if (use_epoch_aux && ea.has_srp) {
-      if (share_srp_rate || exact_orb_match) {
-        for (int m = 0; m < 6; ++m) out[m] += ea.srp_unit[m] * ctx.agom;
-        if (allow_srp_step_cache && sigma_slot >= 1 && sigma_slot < 18) {
-          for (int m = 0; m < 6; ++m) cgc.sigma_df_srp[sigma_slot][m] = 0.0;
-        }
-      } else {
-        double ds[6] = {0, 0, 0, 0, 0, 0};
-        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
-        for (int m = 0; m < 6; ++m) {
-          out[m] += ds[m];
-          if (allow_srp_step_cache && sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_df_srp[sigma_slot][m] = ds[m] - ea.srp_unit[m] * ctx.agom;
-        }
-      }
-    } else if (use_stage_aux && csa->has_srp) {
-      if (share_srp_rate) {
-        for (int m = 0; m < 6; ++m) out[m] += csa->srp_unit[m] * ctx.agom;
-      } else if (allow_srp_step_cache && (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0))) {
-        double ds[6] = {0, 0, 0, 0, 0, 0};
-        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
-        for (int m = 0; m < 6; ++m) {
-          out[m] += ds[m];
-          if (sigma_slot >= 1 && sigma_slot < 18) cgc.sigma_df_srp[sigma_slot][m] = ds[m] - csa->srp_unit[m] * ctx.agom;
-        }
-      } else if (allow_srp_step_cache && sigma_slot >= 1 && sigma_slot < 18) {
-        for (int m = 0; m < 6; ++m) out[m] += csa->srp_unit[m] * ctx.agom + cgc.sigma_df_srp[sigma_slot][m];
-      } else {
-        double ds[6] = {0, 0, 0, 0, 0, 0};
-        srp_rates(y, fr, k, pf, ctx.agom, b, ds, &ag, ap_srp);
-        for (int m = 0; m < 6; ++m) out[m] += ds[m];
-      }
     } else {
       double ds[6] = {0, 0, 0, 0, 0, 0};
       bool sunlit_safe = false;
@@ -4189,36 +3818,6 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
   if (ctx.bterm > 0.0) {
     if (ov != nullptr && ov->drag != nullptr) {
       for (int m = 0; m < 6; ++m) out[m] += ov->drag[m];
-    } else if (!ctx.drag_pass && use_epoch_aux && ea.has_drag) {
-      if (exact_orb_match) {
-        for (int m = 0; m < 6; ++m) out[m] += ea.drag_unit[m] * ctx.bterm;
-      } else {
-        double dd[6] = {0, 0, 0, 0, 0, 0};
-        drag_part(ctx, t, y, fr, k, ag, b, dd);
-        for (int m = 0; m < 6; ++m) {
-          out[m] += dd[m];
-          if (sigma_slot >= 1 && sigma_slot < 18) {
-            cgc.sigma_df_drag[sigma_slot][m] = dd[m] - ea.drag_unit[m] * ctx.bterm;
-          }
-        }
-      }
-    } else if (!ctx.drag_pass && use_stage_aux && csa->has_drag) {
-      if (exact_orb_match) {
-        for (int m = 0; m < 6; ++m) out[m] += csa->drag_unit[m] * ctx.bterm;
-      } else if (!aux_slot_valid || (stage_idx == 2 && (step_idx & 3) == 0)) {
-        double dd[6] = {0, 0, 0, 0, 0, 0};
-        drag_part(ctx, t, y, fr, k, ag, b, dd);
-        for (int m = 0; m < 6; ++m) {
-          out[m] += dd[m];
-          if (sigma_slot >= 1 && sigma_slot < 18) {
-            cgc.sigma_df_drag[sigma_slot][m] = dd[m] - csa->drag_unit[m] * ctx.bterm;
-          }
-        }
-      } else if (sigma_slot >= 1 && sigma_slot < 18) {
-        for (int m = 0; m < 6; ++m) out[m] += csa->drag_unit[m] * ctx.bterm + cgc.sigma_df_drag[sigma_slot][m];
-      } else {
-        drag_part(ctx, t, y, fr, k, ag, b, out);
-      }
     } else if (!ctx.drag_pass && (record_epoch_aux || record_stage_aux || (ov != nullptr && ov->drag_out != nullptr))) {
       double dd[6] = {0, 0, 0, 0, 0, 0};
       drag_part(ctx, t, y, fr, k, ag, b, dd);
@@ -4237,11 +3836,6 @@ inline bool rates(const RateContext& ctx, double t, const double* y, double* out
     } else {
       drag_part(ctx, t, y, fr, k, ag, b, out);
     }
-  }
-  if ((use_epoch_aux || (use_stage_aux && !aux_slot_valid)) && sigma_slot >= 1 && sigma_slot < 18) {
-    cgc.sigma_aux_ctx_id[sigma_slot] = ctx.ctx_id;
-    cgc.sigma_aux_d50[sigma_slot] = ctx.d50_epoch;
-    cgc.sigma_aux_n0[sigma_slot] = ctx.n0;
   }
   return true;
 }
@@ -6932,439 +6526,6 @@ inline int32_t xp_propagate_local(XpSat& s, double t, double r[3], double v[3], 
 }
 
 #ifdef __wasm_simd128__
-inline void refresh_lp_sigma_tail_srp(const RateContext& ctx, double t, const double y[6], double a,
-                                      const CovStageAux& csa, int slot) {
-  CovGridCache& cgc = cov_grid_cache();
-  const double e2 = y[kAf] * y[kAf] + y[kAg] * y[kAg];
-  const double t2 = y[kChi] * y[kChi] + y[kPsi] * y[kPsi];
-  const double eta = std::sqrt(1.0 - e2);
-  const double n = y[kN];
-  const int cls = ctx.ap_resonance ? ctx.resonance : 0;
-  Kepler k{};
-  AngleTrig ag{};
-  if (ctx.i0 > 0.02 && e2 > 1e-24 && t2 > 1e-24 && e2 < 1.0) {
-    k.a = a;
-    const v128_t vet = wasm_f64x2_sqrt(wasm_f64x2_make(e2, t2));
-    const v128_t viv = wasm_f64x2_div(wasm_f64x2_splat(1.0), vet);
-    k.e = wasm_f64x2_extract_lane(vet, 0);
-    const double t_inc = wasm_f64x2_extract_lane(vet, 1);
-    const double inv_e = wasm_f64x2_extract_lane(viv, 0);
-    const double inv_t = wasm_f64x2_extract_lane(viv, 1);
-    const double ic = 1.0 / (1.0 + t2);
-    ag.ci = (1.0 - t2) * ic;
-    ag.si = 2.0 * t_inc * ic;
-    ag.sO = y[kChi] * inv_t;
-    ag.cO = y[kPsi] * inv_t;
-    const double cv = y[kAf] * inv_e, sv = y[kAg] * inv_e;
-    ag.cw = cv * ag.cO + sv * ag.sO;
-    ag.sw = sv * ag.cO - cv * ag.sO;
-    const bool need_k = (cls != 0) || (ctx.shallow != nullptr) || (ctx.zt_wide != 0) ||
-                        (ctx.agom > 0.0 && e2 != 0.0 && k.a >= 5.0 && ag.si <= 0.02);
-    if (need_k) {
-      const double varpi = fm::atan2(y[kAg], y[kAf]);
-      const double node_raw = fm::atan2(y[kChi], y[kPsi]);
-      k.node = fast_wrap(node_raw);
-      k.argp = fast_wrap(varpi - node_raw);
-      k.m = fast_wrap(y[kLam] - varpi);
-      k.i = 2.0 * fm::atan(t_inc);
-    }
-  } else {
-    k = kepler_of(y, a);
-    ag = angle_trig(k);
-  }
-  double st_tail[6] = {0, 0, 0, 0, 0, 0};
-  if (cls == 1 && ctx.ap_resonance) {
-    res::ResCoef terms[29];
-    const int count = res::ap_terms(cls, k.e, ag.si, ag.ci, ctx.res_taylor, ctx.resonance, ctx.e0, terms);
-    res::resonance_six_ap(terms, count, t, k, n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail);
-  }
-  if (ctx.ap_resonance && (cls == 2 || cls == 1) && ctx.half_day != nullptr) {
-    tess::half_day_six(ctx.half_day, ctx.half_day_count, ctx.hd_e0, ctx.hd_i0, t, k,
-                       n, eta, ag.si, ag.ci, ctx.theta_g0, st_tail, ctx.hd_a0, hd_table_id(ctx), cls == 1 ? 1 : 2);
-  }
-  if (ctx.shallow != nullptr) {
-    tess::shallow_six(ctx.shallow, ctx.shallow_count, ctx.e0, ctx.i0, t, k, a, n, eta, ag.si, ag.ci, ctx.theta_g0,
-                      st_tail, sh_table_id(ctx));
-  }
-  if (ctx.zt != nullptr) {
-    tess::zonal_six(ctx.zt, ctx.zt_degree, ctx.zt_wide != 0, k, n, eta, ag.si, ag.ci, st_tail, &ag.sw, &ag.cw,
-                    zt_table_id(ctx));
-  }
-  double teq[6];
-  six_to_equinoctial(ag, st_tail, teq);
-  for (int m = 0; m < 6; ++m) cgc.sigma_dtail_eq[slot][m] = teq[m] - csa.tail_eq[m];
-
-  if (ctx.agom > 0.0 && csa.has_srp) {
-    if ((ctx.is_cov_sigma & 64) != 0) {
-      for (int m = 0; m < 6; ++m) cgc.sigma_df_srp[slot][m] = 0.0;
-    } else {
-      Frame fr_min{};
-      fr_min.a = a;
-      fr_min.n = n;
-      fr_min.e2 = e2;
-      fr_min.eta = eta;
-      const Perifocal pf = perifocal_of(ag);
-      double ds[6] = {0, 0, 0, 0, 0, 0};
-      srp_rates(y, fr_min, k, pf, ctx.agom, csa.b, ds, &ag, ctx.i0 > 0.02);
-      for (int m = 0; m < 6; ++m) cgc.sigma_df_srp[slot][m] = ds[m] - csa.srp_unit[m] * ctx.agom;
-    }
-  }
-  cgc.sigma_aux_ctx_id[slot] = ctx.ctx_id;
-  cgc.sigma_aux_d50[slot] = ctx.d50_epoch;
-  cgc.sigma_aux_n0[slot] = ctx.n0;
-}
-
-inline int rk3_cov_pair_lp(const XpSat& s0, const RateContext& ctx_p, const RateContext& ctx_m,
-                           const Node& ap, const Node& am, double h, Node& out_p, Node& out_m) {
-  if (ap.index != am.index || ap.t != am.t || out_p.index != out_m.index) return -1;
-  if (ctx_p.res_epoch != nullptr || ctx_m.res_epoch != nullptr || shadow_envelope() != 0) return -1;
-  const int di = out_p.index >= 0 ? 0 : 1;
-  const int idx = std::abs(out_p.index);
-  const int a_idx = std::abs(ap.index);
-  if (idx <= 0 || idx >= CovGridCache::kMaxCovSteps) return -1;
-  CovGridCache& cgc = cov_grid_cache();
-  if (cgc.anchor_id != s0.ctx.ctx_id || cgc.d50_epoch != s0.ctx.d50_epoch || std::fabs(cgc.n0 - s0.ctx.n0) > 1e-3) return -1;
-  const CovStageAux& csa0 = cgc.steps[di][idx].st[0];
-  const CovStageAux& csa1 = cgc.steps[di][idx].st[1];
-  const CovStageAux& csa2 = cgc.steps[di][idx].st[2];
-  if (csa0.gen != cgc.gen || csa1.gen != cgc.gen || csa2.gen != cgc.gen) return -1;
-  if (std::fabs(csa2.t - (ap.t + h)) > 1e-6) return -1;
-  if (!csa0.has_F_lp || !csa1.has_F_lp || !csa2.has_F_lp) return -1;
-  if (!csa0.has_tail_eq || !csa1.has_tail_eq || !csa2.has_tail_eq) return -1;
-  const bool need_srp = (ctx_p.agom > 0.0 || ctx_m.agom > 0.0);
-  if (need_srp && (!csa0.has_srp || !csa1.has_srp || !csa2.has_srp)) return -1;
-
-  const int slot_p = ctx_p.is_cov_sigma & 31;
-  const int slot_m = ctx_m.is_cov_sigma & 31;
-  if (slot_p < 1 || slot_p >= 18 || slot_m < 1 || slot_m >= 18 || slot_p == slot_m) return -1;
-
-  F64x2 vya[6], vfa[6];
-  for (int m = 0; m < 6; ++m) {
-    vya[m] = F64x2(ap.y[m], am.y[m]);
-    vfa[m] = F64x2(ap.f[m], am.f[m]);
-  }
-
-  F64x2 vzonal_a[6];
-  if (cgc.sigma_zonal_gen[slot_p] == cgc.gen && cgc.sigma_zonal_idx[slot_p] == a_idx &&
-      cgc.sigma_zonal_di[slot_p] == di &&
-      cgc.sigma_zonal_gen[slot_m] == cgc.gen && cgc.sigma_zonal_idx[slot_m] == a_idx &&
-      cgc.sigma_zonal_di[slot_m] == di) {
-    for (int m = 0; m < 6; ++m) vzonal_a[m] = F64x2(cgc.sigma_zonal_eq[slot_p][m], cgc.sigma_zonal_eq[slot_m][m]);
-  } else {
-    const F64x2 va_a = fast_a_from_n_f64x2(vya[kN]);
-    if (!zonal_eq_pair_f64x2(vya, va_a, vzonal_a)) return -1;
-  }
-
-  auto eval_fast_stage = [&](const F64x2 vy[6], const CovStageAux& csa, F64x2& va_out, F64x2 vtb_out[6]) -> bool {
-    const double n_p = vy[kN].lo(), n_m = vy[kN].hi();
-    if (!(n_p > 0.0 && n_m > 0.0)) return false;
-    const F64x2 ve2 = vy[kAf] * vy[kAf] + vy[kAg] * vy[kAg];
-    if (!(ve2.lo() < 0.90 && ve2.hi() < 0.90)) return false;
-    const F64x2 vdu_n = (vy[kN] - csa.n_lp) * csa.inv_n_lp;
-    if (!(std::fabs(vdu_n.lo()) < 2e-3 && std::fabs(vdu_n.hi()) < 2e-3)) return false;
-    va_out = csa.a_lp * (1.0 + vdu_n * ((-2.0 / 3.0) + vdu_n * ((5.0 / 9.0) + vdu_n * ((-40.0 / 81.0) + vdu_n * (110.0 / 243.0)))));
-
-    const bool same_all6_both = ((ctx_p.is_cov_sigma & 64) != 0) && ((ctx_m.is_cov_sigma & 64) != 0) && csa.has_tb;
-    if (same_all6_both &&
-        std::fabs(vy[kLam].lo() - csa.lam_lp) < 1e-13 &&
-        std::fabs(vy[kLam].hi() - csa.lam_lp) < 1e-13) {
-      for (int m = 0; m < 6; ++m) vtb_out[m] = F64x2(csa.tb[m]);
-      return true;
-    }
-
-    const double sF0 = csa.sF_lp, cF0 = csa.cF_lp, F0 = csa.F_lp;
-    const F64x2 vesF0 = vy[kAf] * sF0 - vy[kAg] * cF0;
-    const F64x2 vecF0 = vy[kAf] * cF0 + vy[kAg] * sF0;
-    const F64x2 vfv0 = (F0 - vy[kLam]) - vesF0;
-    const F64x2 vf1 = 1.0 - vecF0;
-    const F64x2 vinv_f1 = F64x2(1.0) / vf1;
-    const F64x2 vr1 = (-vfv0) * vinv_f1;
-    const double r1_p = vr1.lo(), r1_m = vr1.hi();
-    if (!(std::fabs(r1_p) < 0.05 && std::fabs(r1_m) < 0.05)) return false;
-    const F64x2 vf2_o_f1 = vesF0 * vinv_f1;
-    const F64x2 vf3_o_f1 = vecF0 * vinv_f1;
-    const F64x2 vr1_2 = vr1 * vr1;
-    const F64x2 vu0 = vr1 * (1.0 - 0.5 * vr1 * vf2_o_f1 +
-                             vr1_2 * (0.5 * vf2_o_f1 * vf2_o_f1 - (1.0 / 6.0) * vf3_o_f1));
-    const F64x2 vu2 = vu0 * vu0;
-    const F64x2 vcu0 = 1.0 - vu2 * (0.5 - vu2 * ((1.0 / 24.0) - vu2 * (1.0 / 720.0)));
-    const F64x2 vsu0 = vu0 * (1.0 - vu2 * ((1.0 / 6.0) - vu2 * ((1.0 / 120.0) - vu2 * (1.0 / 5040.0))));
-    F64x2 vsF = sF0 * vcu0 + cF0 * vsu0;
-    F64x2 vcF = cF0 * vcu0 - sF0 * vsu0;
-    if (ve2.lo() > 1.6e-5 || ve2.hi() > 1.6e-5 || std::fabs(r1_p) > 0.003 || std::fabs(r1_m) > 0.003) {
-      const F64x2 vesF1 = vy[kAf] * vsF - vy[kAg] * vcF;
-      const F64x2 vecF1 = vy[kAf] * vcF + vy[kAg] * vsF;
-      const F64x2 vfv1 = (F0 - vy[kLam]) + vu0 - vesF1;
-      const F64x2 vduF = vfv1 / (1.0 - vecF1);
-      const F64x2 vh2 = 1.0 - 0.5 * vduF * vduF;
-      const F64x2 vs_prev = vsF;
-      vsF = vs_prev * vh2 - vcF * vduF;
-      vcF = vcF * vh2 + vs_prev * vduF;
-    }
-    lp_tb_gauss_pair_f64x2(vy, va_out, vsF, vcF, csa.b, vtb_out);
-    return true;
-  };
-
-  // SPEC 16.14: each set's solid Earth tide at its own stage state, as rates() adds it
-  const bool tides = ctx_p.solid_tides || ctx_m.solid_tides;
-  auto add_tides = [&](const F64x2 vy[6], const Bodies& bb, F64x2 vr[6]) {
-    double yp[6], ym[6], tp[6] = {0, 0, 0, 0, 0, 0}, tm[6] = {0, 0, 0, 0, 0, 0};
-    for (int m = 0; m < 6; ++m) {
-      yp[m] = vy[m].lo();
-      ym[m] = vy[m].hi();
-    }
-    if (ctx_p.solid_tides) tide::rates_eq(ctx_p.tide_k1, bb, yp, frame_of_fast(yp), tp);
-    if (ctx_m.solid_tides) tide::rates_eq(ctx_m.tide_k1, bb, ym, frame_of_fast(ym), tm);
-    for (int m = 0; m < 6; ++m) vr[m] = vr[m] + F64x2(tp[m], tm[m]);
-  };
-
-  F64x2 vy2[6];
-  for (int m = 0; m < 6; ++m) vy2[m] = vya[m] + (3.0 / 8.0) * h * vfa[m];
-  F64x2 va0, vtb0[6];
-  if (!eval_fast_stage(vy2, csa0, va0, vtb0)) return -1;
-
-  if (cgc.sigma_aux_ctx_id[slot_p] != ctx_p.ctx_id) {
-    double y2p[6];
-    for (int m = 0; m < 6; ++m) y2p[m] = vy2[m].lo();
-    refresh_lp_sigma_tail_srp(ctx_p, csa0.t, y2p, va0.lo(), csa0, slot_p);
-  }
-  if (cgc.sigma_aux_ctx_id[slot_m] != ctx_m.ctx_id) {
-    double y2m[6];
-    for (int m = 0; m < 6; ++m) y2m[m] = vy2[m].hi();
-    refresh_lp_sigma_tail_srp(ctx_m, csa0.t, y2m, va0.hi(), csa0, slot_m);
-  }
-
-  const F64x2 vagom(ctx_p.agom, ctx_m.agom);
-  F64x2 vk2[6];
-  for (int m = 0; m < 6; ++m) {
-    F64x2 vr = vzonal_a[m] + vtb0[m] + csa0.tail_eq[m] +
-               F64x2(cgc.sigma_dtail_eq[slot_p][m], cgc.sigma_dtail_eq[slot_m][m]);
-    if (need_srp) {
-      vr = vr + csa0.srp_unit[m] * vagom +
-           F64x2(cgc.sigma_df_srp[slot_p][m], cgc.sigma_df_srp[slot_m][m]);
-    }
-    vk2[m] = vr;
-  }
-  vk2[kLam] = vk2[kLam] + vy2[kN];
-  if (tides) add_tides(vy2, csa0.b, vk2);
-
-  // SPEC 9 state_test on y3
-  const F64x2 vy3_af = vya[kAf] + (9.0 / 16.0) * h * vk2[kAf];
-  const F64x2 vy3_ag = vya[kAg] + (9.0 / 16.0) * h * vk2[kAg];
-  const F64x2 vy3_n = vya[kN] + (9.0 / 16.0) * h * vk2[kN];
-  const F64x2 ve2_3 = vy3_af * vy3_af + vy3_ag * vy3_ag;
-  if (!(vy3_n.lo() > 0.0 && vy3_n.hi() > 0.0 && ve2_3.lo() < 0.999999 && ve2_3.hi() < 0.999999)) return -1;
-
-  F64x2 vy4[6];
-  for (int m = 0; m < 6; ++m) vy4[m] = vya[m] + h * (-(125.0 / 672.0) * vfa[m] + (325.0 / 336.0) * vk2[m]);
-  F64x2 va1, vtb1[6];
-  if (!eval_fast_stage(vy4, csa1, va1, vtb1)) return -1;
-
-  F64x2 vk4[6];
-  for (int m = 0; m < 6; ++m) {
-    F64x2 vr = vzonal_a[m] + vtb1[m] + csa1.tail_eq[m] +
-               F64x2(cgc.sigma_dtail_eq[slot_p][m], cgc.sigma_dtail_eq[slot_m][m]);
-    if (need_srp) {
-      vr = vr + csa1.srp_unit[m] * vagom +
-           F64x2(cgc.sigma_df_srp[slot_p][m], cgc.sigma_df_srp[slot_m][m]);
-    }
-    vk4[m] = vr;
-  }
-  vk4[kLam] = vk4[kLam] + vy4[kN];
-  if (tides) add_tides(vy4, csa1.b, vk4);
-
-  F64x2 vout_y[6];
-  for (int m = 0; m < 6; ++m)
-    vout_y[m] = vya[m] + h * ((37.0 / 225.0) * vfa[m] + (44.0 / 117.0) * vk2[m] + (448.0 / 975.0) * vk4[m]);
-
-  F64x2 va2, vtb2[6], vzonal_b[6];
-  if (!eval_fast_stage(vout_y, csa2, va2, vtb2)) return -1;
-  if (!zonal_eq_pair_f64x2(vout_y, va2, vzonal_b)) return -1;
-
-  for (int m = 0; m < 6; ++m) {
-    vout_y[m] = vout_y[m] + (0.5 * h) * (vzonal_b[m] - vzonal_a[m]);
-    cgc.sigma_zonal_eq[slot_p][m] = vzonal_b[m].lo();
-    cgc.sigma_zonal_eq[slot_m][m] = vzonal_b[m].hi();
-  }
-  cgc.sigma_zonal_gen[slot_p] = cgc.gen;
-  cgc.sigma_zonal_idx[slot_p] = idx;
-  cgc.sigma_zonal_di[slot_p] = static_cast<int8_t>(di);
-  cgc.sigma_zonal_gen[slot_m] = cgc.gen;
-  cgc.sigma_zonal_idx[slot_m] = idx;
-  cgc.sigma_zonal_di[slot_m] = static_cast<int8_t>(di);
-
-  const double t_out = ap.t + h;
-  out_p.t = t_out;
-  out_m.t = t_out;
-  for (int m = 0; m < 6; ++m) {
-    out_p.y[m] = vout_y[m].lo();
-    out_m.y[m] = vout_y[m].hi();
-  }
-
-  if ((idx & 3) == 0) {
-    refresh_lp_sigma_tail_srp(ctx_p, t_out, out_p.y, va2.lo(), csa2, slot_p);
-    refresh_lp_sigma_tail_srp(ctx_m, t_out, out_m.y, va2.hi(), csa2, slot_m);
-  }
-
-  for (int m = 0; m < 6; ++m) {
-    F64x2 vr = vzonal_b[m] + vtb2[m] + csa2.tail_eq[m] +
-               F64x2(cgc.sigma_dtail_eq[slot_p][m], cgc.sigma_dtail_eq[slot_m][m]);
-    if (need_srp) {
-      vr = vr + csa2.srp_unit[m] * vagom +
-           F64x2(cgc.sigma_df_srp[slot_p][m], cgc.sigma_df_srp[slot_m][m]);
-    }
-    if (m == kLam) vr = vr + vout_y[kN];
-    out_p.f[m] = vr.lo();
-    out_m.f[m] = vr.hi();
-    if (!std::isfinite(out_p.y[m]) || !std::isfinite(out_m.y[m]) ||
-        !std::isfinite(out_p.f[m]) || !std::isfinite(out_m.f[m]))
-      return -1;
-  }
-  if (tides) {
-    F64x2 vf[6];
-    for (int m = 0; m < 6; ++m) vf[m] = F64x2(out_p.f[m], out_m.f[m]);
-    add_tides(vout_y, csa2.b, vf);
-    for (int m = 0; m < 6; ++m) {
-      out_p.f[m] = vf[m].lo();
-      out_m.f[m] = vf[m].hi();
-    }
-  }
-  // SPEC 16.13: the radiation term Y0's blocks, as next_node adds them, so a pair flies the theory its sets fly alone
-  if (ctx_p.rad_y0 != 0.0) y0_blocks(ctx_p, ap, out_p);
-  if (ctx_m.rad_y0 != 0.0) y0_blocks(ctx_m, am, out_m);
-  return 0;
-}
-
-inline void hermite_pair_same_grid(const Node& ap, const Node& bp, const Node& am, const Node& bm,
-                                   double t, double* yp, double* ym) {
-  const double h = bp.t - ap.t;
-  const double q = (t - ap.t) / h;
-  if (q == 0.0) {
-    for (int j = 0; j < 6; ++j) {
-      yp[j] = ap.y[j];
-      ym[j] = am.y[j];
-    }
-    return;
-  }
-  const double omq = 1.0 - q;
-  const double omq2 = omq * omq, q2 = q * q;
-  const v128_t v00 = wasm_f64x2_splat((1.0 + 2.0 * q) * omq2);
-  const v128_t v10 = wasm_f64x2_splat((q * omq2) * h);
-  const v128_t v01 = wasm_f64x2_splat(q2 * (3.0 - 2.0 * q));
-  const v128_t v11 = wasm_f64x2_splat((q2 * (q - 1.0)) * h);
-  for (int j = 0; j < 6; j += 2) {
-    const v128_t p0 = wasm_f64x2_add(wasm_f64x2_mul(v00, wasm_v128_load(ap.y + j)),
-                                     wasm_f64x2_mul(v10, wasm_v128_load(ap.f + j)));
-    const v128_t p1 = wasm_f64x2_add(p0, wasm_f64x2_mul(v01, wasm_v128_load(bp.y + j)));
-    wasm_v128_store(yp + j, wasm_f64x2_add(p1, wasm_f64x2_mul(v11, wasm_v128_load(bp.f + j))));
-
-    const v128_t m0 = wasm_f64x2_add(wasm_f64x2_mul(v00, wasm_v128_load(am.y + j)),
-                                     wasm_f64x2_mul(v10, wasm_v128_load(am.f + j)));
-    const v128_t m1 = wasm_f64x2_add(m0, wasm_f64x2_mul(v01, wasm_v128_load(bm.y + j)));
-    wasm_v128_store(ym + j, wasm_f64x2_add(m1, wasm_f64x2_mul(v11, wasm_v128_load(bm.f + j))));
-  }
-  if (!(yp[kN] > 0.0)) {
-    for (int j = 0; j < 6; ++j) yp[j] = omq * ap.y[j] + q * bp.y[j];
-  }
-  if (!(ym[kN] > 0.0)) {
-    for (int j = 0; j < 6; ++j) ym[j] = omq * am.y[j] + q * bm.y[j];
-  }
-}
-
-inline bool mean_at_cov_pair_lp(const XpSat& s0, XpSat& sp, XpSat& sm, double t, double* ym_p, double* ym_m) {
-  if (t == 0.0) {
-    for (int j = 0; j < 6; ++j) {
-      ym_p[j] = sp.epoch.y[j];
-      ym_m[j] = sm.epoch.y[j];
-    }
-    return true;
-  }
-  if (!(s0.ctx.long_period && s0.ctx.ap_third_body && s0.ctx.i0 > 0.02 && !s0.ctx.drag_pass &&
-        sp.ctx.long_period && sm.ctx.long_period &&
-        sp.ctx.ap_frame == s0.ctx.ap_frame && sm.ctx.ap_frame == s0.ctx.ap_frame &&
-        sp.ctx.resonance == s0.ctx.resonance && sm.ctx.resonance == s0.ctx.resonance &&
-        !sp.ctx.drag_pass && !sm.ctx.drag_pass &&
-        std::fabs(sp.ctx.bterm) < 10.0 && std::fabs(sm.ctx.bterm) < 10.0 &&
-        s0.ctx.a0 * (1.0 - s0.ctx.e0) > 1.50)) {
-    return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
-  }
-  const int dir = t >= 0.0 ? 1 : -1;
-  const int di = dir > 0 ? 0 : 1;
-  const double at = dir * t;
-  auto beyond = [&](const Node& n) { return dir * n.t > at; };
-
-  if (sp.window_valid[di] && sm.window_valid[di] &&
-      !beyond(sp.window[di][0]) && beyond(sp.window[di][1]) &&
-      !beyond(sm.window[di][0]) && beyond(sm.window[di][1])) {
-    if (sp.window[di][0].t == sm.window[di][0].t && sp.window[di][1].t == sm.window[di][1].t) {
-      hermite_pair_same_grid(sp.window[di][0], sp.window[di][1], sm.window[di][0], sm.window[di][1], t, ym_p, ym_m);
-    } else {
-      hermite(sp.window[di][0], sp.window[di][1], t, ym_p);
-      hermite(sm.window[di][0], sm.window[di][1], t, ym_m);
-    }
-    return true;
-  }
-
-  Node cur_p = sp.epoch, cur_m = sm.epoch;
-  for (int k = 0; k < sp.sparse_count[di]; ++k) {
-    if (beyond(sp.sparse[di][k])) break;
-    cur_p = sp.sparse[di][k];
-  }
-  if (sp.window_valid[di]) {
-    if (!beyond(sp.window[di][1]) && dir * sp.window[di][1].index > dir * cur_p.index)
-      cur_p = sp.window[di][1];
-    else if (!beyond(sp.window[di][0]) && dir * sp.window[di][0].index > dir * cur_p.index)
-      cur_p = sp.window[di][0];
-  }
-  for (int k = 0; k < sm.sparse_count[di]; ++k) {
-    if (beyond(sm.sparse[di][k])) break;
-    cur_m = sm.sparse[di][k];
-  }
-  if (sm.window_valid[di]) {
-    if (!beyond(sm.window[di][1]) && dir * sm.window[di][1].index > dir * cur_m.index)
-      cur_m = sm.window[di][1];
-    else if (!beyond(sm.window[di][0]) && dir * sm.window[di][0].index > dir * cur_m.index)
-      cur_m = sm.window[di][0];
-  }
-  if (cur_p.index != cur_m.index || cur_p.t != cur_m.t || sp.stride != sm.stride) {
-    return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
-  }
-
-  const double h_step = dir * long_period_step(s0.ctx);
-  Node nxt_p{}, nxt_m{};
-  for (;;) {
-    nxt_p.index = cur_p.index + dir;
-    nxt_m.index = cur_m.index + dir;
-    if (rk3_cov_pair_lp(s0, sp.ctx, sm.ctx, cur_p, cur_m, h_step, nxt_p, nxt_m) != 0) {
-      return mean_at_local(sp, t, ym_p) && mean_at_local(sm, t, ym_m);
-    }
-    if (!(dir * nxt_p.t > dir * cur_p.t)) return false;
-    const int32_t idx = dir * nxt_p.index;
-    if (idx % sp.stride == 0) {
-      const int32_t slot = idx / sp.stride - 1;
-      if (slot == sp.sparse_count[di] && slot < kSparse) {
-        sp.sparse[di][slot] = nxt_p;
-        sp.sparse_count[di] = slot + 1;
-      }
-      if (slot == sm.sparse_count[di] && slot < kSparse) {
-        sm.sparse[di][slot] = nxt_m;
-        sm.sparse_count[di] = slot + 1;
-      }
-    }
-    if (beyond(nxt_p)) break;
-    cur_p = nxt_p;
-    cur_m = nxt_m;
-  }
-  sp.window[di][0] = cur_p;
-  sp.window[di][1] = nxt_p;
-  sp.window_valid[di] = 1;
-  sm.window[di][0] = cur_m;
-  sm.window[di][1] = nxt_m;
-  sm.window_valid[di] = 1;
-  hermite_pair_same_grid(cur_p, nxt_p, cur_m, nxt_m, t, ym_p, ym_m);
-  return true;
-}
-
 [[gnu::noinline]] inline int eval_cov_pair_j2_fast(
     XpSat& s0, XpSat& sp, XpSat& sm, double t, const double* ym0, const CovNomOsc& nom_osc,
     bool can_share_3b, bool can_share_sp, bool can_share_srp,
@@ -7378,11 +6539,8 @@ inline bool mean_at_cov_pair_lp(const XpSat& s0, XpSat& sp, XpSat& sm, double t,
       (sp.ctx.drag_pass && sp.ctx.bterm > 0.0) || (sm.ctx.drag_pass && sm.ctx.bterm > 0.0))
     return 0;
   double ym_p[6], ym_m[6];
-  if (s0.ctx.long_period) {
-    if (!mean_at_cov_pair_lp(s0, sp, sm, t, ym_p, ym_m)) return -1;
-  } else {
-    if (!mean_at_local(sp, t, ym_p) || !mean_at_local(sm, t, ym_m)) return -1;
-  }
+  // each moved set flown on its own (stack #491)
+  if (!mean_at_local(sp, t, ym_p) || !mean_at_local(sm, t, ym_m)) return -1;
   const bool same_cls_p = sp.ctx.long_period == s0.ctx.long_period && sp.ctx.resonance == s0.ctx.resonance &&
                           (sp.ctx.wide == nullptr || sp.ctx.wide_anchor == &s0);
   const bool same_cls_m = sm.ctx.long_period == s0.ctx.long_period && sm.ctx.resonance == s0.ctx.resonance &&
