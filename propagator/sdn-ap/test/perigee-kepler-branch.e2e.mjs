@@ -22,15 +22,18 @@
 //    RAAN 40, argp 270, FORCES 31,20, BTERM 0, AGOM 0, epoch 2026-04-13, its state at its epoch for N_B mean anomalies over a
 //    turn. The detector is |r_k - (r_(k-1) + r_(k+1))/2| on the radius against the mean anomaly. Asserted: at most BOUND_B,
 //    and at least one solve ended within rounding (sdnap_kepler_unconverged 2 above 0: the count reads this build's solves).
-// C. Section 8's solve (output_j2_osc, SGP4XP's sets) keeps the warm start's branch too (from 0.6.38; through 0.6.37 it solved
-//    for k.m on the other branch for the milliseconds of a passage in which the two lie either side of 0). Fixture: the 4:1
-//    orbit's SGP4XP twin (no gravity terms, BTERM 0, AGOM 0.02), the first three perigees after day 1, each at 1 ms over 4 s
+// C. Section 8's solve (output_j2_osc, SGP4XP's sets): from 0.6.38 a Newton that ends far from its root takes the bisection
+//    (through 0.6.37 the state took E from the last of its 30 steps, for the milliseconds of a passage in which the warm
+//    start's anomaly and k.m lie either side of 0). Fixture: the 4:1
+//    orbit's SGP4XP twin (no gravity terms, BTERM 0, AGOM 0.02), the first three perigees after day 1 (a 10 s scan, whose least radius can lie 5 s from the passage), each at 1 ms over 6 s
 //    either side. The detector is each state's distance from the midpoint of its two neighbors (smooth motion reads about
-//    3 um). Asserted: at most BOUND_C, and no solve of section 8 ended far from its root (sdnap_kepler_unconverged 1 is 0).
+//    3 um). Asserted: at most BOUND_C, and the windows were met (sdnap_kepler_unconverged 1 above 0: solves of section 8 that
+//    ended far from their root and took the bisection).
 // Over A and B: no solve ended far from its root (sdnap_kepler_unconverged 0 is 0).
 // Measured on 0.6.38: A 0.69, 0.35 and 0.26 mm (4:1) and 1.04, 1.26 and 1.70 mm (e 0.9); B 41 m (the smooth radius at the
-// perigee's anomalies), 23 solves within rounding; C 2.96, 2.94 and 3.04 um; no solve far from its root. On 0.6.37: A and B as
-// on 0.6.38; C 8.2, 10.4 and 12.7 km, 67 solves of section 8 far from their root. Through 0.6.36: A 25.4, 33.0 and 40.1 km
+// perigee's anomalies), 23 solves within rounding, no AP solve far from its root; C 2.96, 2.94 and 3.04 um, 67 solves of section
+// 8 far from their root, each bisected. On 0.6.37: A and B as on 0.6.38; C 8.2, 10.4 and 12.7 km, the same 67 solves far from
+// their root, each taken as its last step left it. Through 0.6.36: A 25.4, 33.0 and 40.1 km
 // (4:1) and 408,900 km and 188,000 km at two of the three e 0.9 passages; B 6,140.7 km at M 333.42 deg; no count.
 // Every number comes from the built module's own calls (propagate). JS only moves bytes and compares numbers the module
 // produced.
@@ -115,11 +118,11 @@ for (const [name, c] of Object.entries(FIXTURES)) {
   for (let k = 1; k + 1 < rn.length && perigees.length < 3; ++k) if (rn[k] < rn[k - 1] && rn[k] <= rn[k + 1]) perigees.push(86400 + 10 * k);
   const rows = [];
   for (const p of perigees) {
-    const ms0 = (p - 4) * 1000, [st] = await lines([seed], Array.from({length: 8001}, (_, j) => iso(ms0 + j)));
+    const ms0 = (p - 6) * 1000, [st] = await lines([seed], Array.from({length: 12001}, (_, j) => iso(ms0 + j)));
     let worst = 0, at = null;
     for (let q = 1; q + 1 < st.length; ++q) {
       const v = 1000 * Math.hypot(...[0, 1, 2].map((z) => st[q][z] - 0.5 * (st[q - 1][z] + st[q + 1][z])));
-      if (v > worst) { worst = v; at = q - 4000; }
+      if (v > worst) { worst = v; at = q - 6000; }
     }
     rows.push({perigeeH: +(p / 3600).toFixed(3), detectorM: +worst.toExponential(3), atMsFromPerigee: at});
     if (!(worst <= BOUND_C)) failures.push(`SGP4XP: the passage at ${(p / 3600).toFixed(3)} h reads ${worst.toExponential(3)} m, ${at} ms from perigee (at most ${BOUND_C} m)`);
@@ -127,7 +130,7 @@ for (const [name, c] of Object.entries(FIXTURES)) {
   if (perigees.length < 3) failures.push(`SGP4XP: the scan found ${perigees.length} perigees, not 3`);
   const far8 = counted ? x.sdnap_kepler_unconverged(0, 1) : null;
   report.sgp4xp = {passages: rows, endedFarFromRoot: far8};
-  if (counted && far8 !== 0) failures.push(`SGP4XP: ${far8} solves of section 8 ended far from their root`);
+  if (counted && !(far8 > 0)) failures.push('SGP4XP: no solve of section 8 ended far from its root: the windows were not met');
 }
 
 const far = counted ? x.sdnap_kepler_unconverged(0, 0) : null;

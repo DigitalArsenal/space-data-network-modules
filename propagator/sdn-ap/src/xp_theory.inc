@@ -4522,13 +4522,9 @@ inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
   // Kepler's equation M = E - e sin E (Newton, to machine precision), started
   // from the mean solution when the Sun and Moon corrections were applied.
   double E = k.m + e * std::sin(k.m);
-  // the mean anomaly Newton solves for: k.m on the warm start's branch (stack #550, SPEC 16.21: for the milliseconds of a
-  // perigee passage in which the warm start's anomaly and k.m lie either side of 0, k.m is 2 pi from the start's branch)
-  double m_t = k.m;
   if (Ewarm == Ewarm) {
     double dm = k.m - (Ewarm - e * std::sin(Ewarm));
     dm -= kTwoPi * std::floor((dm + kPi) / kTwoPi);
-    m_t = k.m + kTwoPi * std::round(((Ewarm - e * std::sin(Ewarm)) - k.m) * (1.0 / kTwoPi));
     E = Ewarm + dm;
   }
   bool met = false;
@@ -4536,7 +4532,7 @@ inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
   for (int it = 0; it < 30; ++it) {
     double sEi, cEi;
     fm::sincos(E, sEi, cEi);
-    const double dE = (E - e * sEi - m_t) / (1.0 - e * cEi);
+    const double dE = (E - e * sEi - k.m) / (1.0 - e * cEi);
     E -= dE;
     last = dE;
     if (std::fabs(dE) < 1e-15) {
@@ -4545,13 +4541,17 @@ inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
     }
   }
   if (!met && std::fabs(last) >= 1e-12) {
-    // Newton ended its 30 steps far from the root: counted, and E taken by bisection on [m_t - e, m_t + e] (an ending within
-    // rounding of the root is solved as it stands, its sine and cosine taken below)
+    // stack #550, SPEC 16.21: Newton ended its 30 steps with its last step 1e-12 or more (for the milliseconds of a perigee passage in which
+    // the warm start's anomaly and k.m lie either side of 0 it starts a turn from k.m and, unless its step 2 pi / (1 - e cos E)
+    // is a whole number of turns, never converges): counted, and E taken by bisection on [k.m - e, k.m + e], where
+    // E - e sin E - k.m, increasing, changes sign. Every solve that converges is 0.6.37's bit for bit (one that converges a
+    // turn from k.m has the same sine and cosine), and an ending within rounding of the root stands, its sine and cosine
+    // taken below.
     __atomic_fetch_add(&g_kepler_unconverged[1], 1u, __ATOMIC_RELAXED);
-    double lo = m_t - e, hi = m_t + e;
-    for (int b = 0; b < 128 && hi - lo > 1e-15 * (1.0 + std::fabs(m_t)); ++b) {
+    double lo = k.m - e, hi = k.m + e;
+    for (int b = 0; b < 128 && hi - lo > 1e-15 * (1.0 + std::fabs(k.m)); ++b) {
       const double mid = 0.5 * (lo + hi);
-      if (mid - e * std::sin(mid) - m_t < 0.0) lo = mid;
+      if (mid - e * std::sin(mid) - k.m < 0.0) lo = mid;
       else hi = mid;
     }
     E = 0.5 * (lo + hi);
