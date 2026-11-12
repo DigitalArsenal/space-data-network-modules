@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.40 (dist cfdd1a2c).
+Version 0.6.41 (dist fa1f1cd2).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -307,6 +307,27 @@ sphere drifted along track against the same sphere flown numerically: 92 m geost
 Galileo-like at day 7. With 16.16 that is -3.7, -3.0 and 13.7 m; out of season nothing moves.
 
 E2E: `test/radiation-shadow.e2e.mjs`.
+
+## Radiation pressure of the long-period regime (SPEC 16.22; AP above e 0.3 at a period of 1,100 minutes or more)
+
+From 0.6.41 an AP set with gravity terms whose epoch elements lie above e 0.3 at a period of 1,100 minutes or more takes
+radiation pressure where its Sun and Moon already go (SPEC 16.19): the sphere's acceleration at the output's position,
+in the light the satellite has over a one-step window about the moment (16.15's cylinder, crossed along the straight
+line). SPEC 4's averaged rates and periodic terms are off there. Seeded, with J2 and radiation alone on both sides, a
+TESS-like set's day-7 distance to the numerical propagator goes from 704 to 1,543 m to 139 to 210 m, by node. What
+remains is AP's pressure constant, 4.5e-6 N/m^2 against the numerical propagator's 4.540e-6. Every other set flies bit
+for bit.
+
+The record states the model. Such a set with an area-to-mass above 0 writes `PERTURBATIONS.SOLAR_RAD_PRESSURE` "SPHERE
+(AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP" (with ", AND ECOM2 Y0 (ARNOLD ET AL. 2015)" when it
+carries Y0, exactly when the record carries an `ECOM2_Y0` entry).
+- A record of that regime with an area-to-mass above 0 that does not state it is refused, `radiation-model-superseded`.
+  Every such record fitted before 0.6.41 is fitted again.
+- These are refused `radiation-model-mismatch`: a record that states it outside the regime, or without an area-to-mass
+  above 0; the Y0 text without an `ECOM2_Y0` entry; the plain text with one.
+- A record outside the regime, or without an area-to-mass above 0, that states neither text reads and flies as before.
+
+E2E: `test/long-period-radiation.e2e.mjs`.
 
 ## AP's Sun and Moon (SPEC 16.17; every AP flight and fit)
 
