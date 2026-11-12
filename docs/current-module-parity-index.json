@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T03:25:39.316Z",
+  "generatedAt": "2026-11-12T04:09:30.864Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.38",
+      "version": "0.6.39",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 187,
+      "testFileCount": 189,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7563,6 +7563,7 @@
         "test/drag-prior-fallback.e2e.mjs",
         "test/drag-term-sigma-honesty.e2e.mjs",
         "test/egrid-continuity.e2e.mjs",
+        "test/epoch-floor.e2e.mjs",
         "test/epoch-store.e2e.mjs",
         "test/etalon-resonance.e2e.mjs",
         "test/exports.e2e.mjs",
@@ -7583,6 +7584,7 @@
         "test/fixtures/ap-fit-0.6.36.epochs-0.6.36.oem",
         "test/fixtures/ap-fit-0.6.36.ocm",
         "test/fixtures/ap-fit-0.6.36.teme-0.6.36.oem",
+        "test/fixtures/ap-fit-0.6.39.ocm",
         "test/fixtures/ap-fit-0.6.4.ocm",
         "test/fixtures/covariance-refit-held-out.json",
         "test/fixtures/de440-bodies-2010-2035.json",

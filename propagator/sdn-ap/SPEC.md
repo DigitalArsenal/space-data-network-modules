@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.38 (dist 9786d0b5).
+Version 0.6.39 (dist 41230eb6).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1966,24 +1966,28 @@ moves toward the library's. One loses: GPS IIF 41019, day 3 114.7 to 155.5 m and
 of 150 windows, its freed AGOM 0.0293 m^2/kg against 0.0257 at 1 km and 0.0244 from its 72 h fits (SGP4XP's own
 error on a 24 h arc taken up by AGOM). The 72 h fits move -0.53 / -0.93 / -2.29 m at days 1, 3 and 7.
 
-**12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s) and F(x) the theory
-floor (12.4) at the epoch state, the $OMM carries
+**12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s), F(x) the theory floor
+(12.4) at a state x, and x_F the state the epoch floor is taken at (12.4: from 0.6.39 the two-body state of an AP record's
+mean elements; x(0), the theory's epoch state, for an SGP4XP record), the $OMM carries
 
-- COVARIANCE = J_0 P_p J_0^T + F(x(0)), lower triangle (21 values, km^2, km^2/s, km^2/s^2), COV_REFERENCE_FRAME TEME;
+- COVARIANCE = J_0 P_p J_0^T + F(x_F), lower triangle (21 values, km^2, km^2/s, km^2/s^2), COV_REFERENCE_FRAME TEME;
 - USER_DEFINED_SDNAP_COV_DRAG, _AGOM (those fitted, in that order): for the k-th of them the
   space-separated row of its covariance with X, Y, Z, X_DOT, Y_DOT, Z_DOT at epoch (J_0 P_p), with the earlier ones,
   then its variance (6 + k + 1 numbers);
 - USER_DEFINED_SDNAP_COV_FLOOR_UVW (6 numbers, km^2: uu, vu, vv, wu, wv, ww; the floor F of 12.4, k_F of 12.5 applied), _COV_NOISE (12.5), _COV_NG_RATE (1/day)
   and _COV_REGIME (DRAG or ABOVE).
 
-**12.3 Propagation.** A set is read back as the augmented epoch covariance C (state block COVARIANCE - F(x(0)),
-consider rows as written). The columns J_0 = [J_x J_c] (elements, consider) give the parameters of a state:
+**12.3 Propagation.** A set is read back as the augmented epoch covariance C (state block COVARIANCE - F(x_F), at the
+state the writer took it at, 12.4; consider rows as written). The columns J_0 = [J_x J_c] (elements, consider) give the parameters of a state:
 T = [[J_x^-1, -J_x^-1 J_c], [0, I]], P_p = T C T^T. At t minutes from the epoch, J(t) = d x(t) / d p by the same
 central differences and
 
 P(t) = J(t) P_p J(t)^T + Q(t) + F(x(t)).
 
-The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) is COVARIANCE.
+The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) = COVARIANCE - F(x_F) + F(x(0)): COVARIANCE itself for
+an SGP4XP record. For an AP record the two floors differ by the theory's short-period terms between the two-body and the
+flown state, about 1e-3 rad of axis and 2e-3 of the angular rate squared: on the seven cases of 12.4's measurement, P(0)
+differs from COVARIANCE by up to 0.6 % of a variance on its diagonal, 3.7 mm and 0.037 mm/s in sigma.
 
 J, here and in 12.1, is made of differences of sets each flown on its own. Every moved set evaluates its rates and
 its output at its own state, as any set does. A record's covariance is then a function of the record and the time
@@ -2008,6 +2012,40 @@ r x v), R = (1/N) sum u_k u_k^T, u_k the residual e_k in the UVW axes of the mod
 R in TEME axes, velocity block w^2 R (w = |r x v| / |r|^2), no position-velocity block, times the regime's k_F (12.5).
 It is the part of the error a mean-element theory leaves at every time (short-period terms it does not carry) and does
 not shrink with N.
+
+*Where the epoch covariance carries it* (from 0.6.39; stack #551). The record's COVARIANCE_DATA includes F at epoch; a
+reader takes it off before mapping the epoch covariance onto the parameters, and adds it at every time at the flown
+state. What the subtraction leaves is a small part of the total (4.9e-4 of it in along-track velocity on the stored
+fixture's 550 km fit, far less on a fit to a numerical forecast), so the reader must take off exactly what the writer put
+on. For an AP record (MEAN_ELEMENT_THEORY AP, with gravity terms or without: one rule read from the record alone, the
+same in the writer, the reader and the gate) both take F at one state: the two-body state of the record's own mean
+elements (TEME; mu and the radius of 1.3, a = (k_e / n)^(2/3), no recovery), a fixed formula on the record's written
+numbers. That formula (twobody::state_of) must never change: `test/epoch-floor.e2e.mjs` holds its state for three element
+sets bit for bit. A change to the theory's epoch state between the writer and the reader then moves nothing the reader
+takes off: read with its gravity caps moved, so that its flown epoch state moves (31 m at 550 km and i 52.9), a record's
+remainder is the same bit for bit as computed from the record, and the reader's P(0) agrees with it within 1e-12 of its
+largest entry. A set written and flown by one build flies as before (to 1e-11 of a time's largest
+entry on the test's cases). An SGP4XP record's F stays at its theory's epoch state, which conformance holds bit for bit.
+Through 0.6.38 an AP record's F was taken at the theory's epoch state on both sides; a reader whose theory has moved then
+takes off another F. Read by a later theory, 0.6.36's own records came out up to 85 times narrower in along-track
+variance at the arc's end, or negative (300 km, i 5 deg), or wider (550 km, i 52.9). So an AP record whose
+PROVENANCE.PRODUCER is not exactly "com.spacedatanetwork.sdn-ap-propagator X.Y.Z" (three decimal integers, nothing after
+them) with X.Y.Z at 0.6.39 or later has its covariance refused by name, cov-floor-at-theory-state; its states fly. propagate writes such a block without
+covariance lines, its COMMENT naming the refusal; load_epochs keeps the set without its covariance; sdnap_covariance_at
+returns -7. Fitted again, the set carries its covariance.
+
+*A record is read by the build that wrote it or a later one* (stack #562). Read by an earlier build, nothing is promised.
+From 0.6.39 on, its covariance is wrong there and is not refused: an earlier build takes the floor off at its own theory
+state from a record that carries it at the two-body state. On 0.6.39's records fitted to zero residual and flown by 0.6.37,
+the along-track variance at 24 h (the arc's end) against 0.6.39's own flight:
+
+| Case | 300 km, i 5 | 300 km, i 28.5 | 300 km, i 90 | 420 km, i 97 | 550 km, i 52.9 | 700 km, i 63.4 | 1,200 km, i 0.5 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Along-track variance, times 0.6.39's | -538 | -273 | +269 | +235 | -12.2 | +81.7 | -268 |
+
+At 48 h the process noise dominates; the 700 km case is still 45 % wide. The builds this reaches are 0.6.36 to 0.6.38,
+none released, and the released 0.6.34, which cannot fly a 0.6.36 record's states rightly either (it flies them on
+EGM-96).
 
 **12.5 Process noise.** What a mean-element theory gets wrong over days are its element rates. From the end of the
 fit arc t_a (minutes from the epoch; from the epoch backward for t < 0) the rates carry errors constant over
