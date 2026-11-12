@@ -93,8 +93,8 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// (both flown by 0.6.38), FIT_RMS 40.125 against 40.153 m. Against the fixture's own truth (propagator/ffm's 550 km
 /// trajectory) the error 48 to 72 h past the arc stays at 42 m, and over the arc at 24.3 m. So the own fit is 0.6.38's
 /// (ap-fit-0.6.38.ocm), the bounds kept; the stored record stays 0.6.36's fit.
-/// The term moves the stored record's numbers too: against 0.6.36's, 2,151.657 mm, 2.363 mm/s, covariance 9.53e-7 of a
-/// time's largest entry. They are recorded from this build (ap-fit-0.6.36-0.6.38.cov; the 0.6.36 file went), the bounds
+/// The term moves the stored record's numbers too: against 0.6.36's, 2,151.657 mm, 2.361 mm/s, covariance 9.61e-2 of a
+/// time's largest entry (why: stack #551 and ap-terms.e2e.mjs; this build's own fit against its own numbers, 0). They are recorded from this build (ap-fit-0.6.36-0.6.38.cov; the 0.6.36 file went), the bounds
 /// kept.
 const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };

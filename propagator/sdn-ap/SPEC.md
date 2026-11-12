@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.38 (dist 140ab1b1).
+Version 0.6.38 (dist 004ff543).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -4458,9 +4458,19 @@ near-circular orbit then sits above the true one by
   dr = (R_E^4 / a^3) [ J2^2 (199 cos^4 i - 80 cos^2 i + 25) / 32 - J4 (15/64)(35 sin^4 i - 40 sin^2 i + 8) ]
 
 where a is the mean semi-major axis and i the mean inclination. AP's output (every AP set with gravity terms) adds -dr to
-the radius at the same angular rate: the transverse speed is scaled by the same ratio, -dr times the angular rate (1.1
-cm/s at 10 m in low orbit), and the radial speed is kept. The main output path, its fallback (e or i exactly 0, or
-corrections above 0.02 rad) and the covariance's sigma-set pairs take the same term, each set at its own a and i.
+the radius. The velocity: the transverse speed is scaled so that the state's osculating energy (the speed squared over two
+less mu over r) is unchanged, and the radial speed is kept; on a circular orbit that raises the transverse speed by dr
+times the angular rate (1.1 cm/s at 10 m in low orbit). It is not the time derivative of the corrected positions, and
+neither was the velocity before the term: AP's output velocity is not the rate of its output positions (stack #549). At
+500 km and e 0.001 the transverse gap is 53 mm/s at i 27 deg and 8 mm/s at i 98 deg without the term, 13 and 12 mm/s
+with it. Why the energy and not the angular rate: the radius error had been offsetting that gap in energy, so the same
+angular rate would move the energy by about four times dr of semi-major axis, and a numerical flight started from AP's
+output state would drift up to ten times faster along-track (seeded at a 500 km perigee and i 27 deg, the day-7
+along-track RMS is 7.8 km on 0.6.36, 77 km at the same angular rate, 7.8 km at the same energy). Once the velocity is the
+positions' rate, the term's velocity is the same-rate form. The fit's residuals are positions only, so the fitted
+elements are the same either way; the epoch covariance's velocity part moves by about 1e-6 of itself. The main output
+path, its fallback (e or i exactly 0, or corrections above 0.02 rad) and the covariance's sigma-set pairs take the same
+term, each set at its own a and i.
 SGP4XP's output (section 8) is unchanged, bit for bit. J2 and J4 are 1.3's (EGM-96's). The numerical propagator's EGM2008
 J4 differs by 1.7e-4 of itself, which would move the J4 part by at most 3 mm.
 

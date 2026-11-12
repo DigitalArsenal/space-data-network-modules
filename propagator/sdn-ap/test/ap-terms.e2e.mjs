@@ -85,9 +85,15 @@ const { ap, xp, rows } = await fixtureSets(h);
 // 0.6.36 refuses a record whose GRAVITY_MODEL is not the embedded field (SPEC 16.2): 0.6.4's fit states EGM-96 and is
 // refused, so from 0.6.36 the stored record is 0.6.36's own fit of the same inputs (ap-fit-0.6.36.ocm), recorded with its
 // flight (ap-fit-0.6.36-0.6.36.oem; ap-fit-0.6.4-0.6.22.oem went), the bounds kept.
-// 0.6.38 (the zonal theory's constant radial term, SPEC 16.21) moves it by 2,151.657 mm, 2,363.023 um/s and a covariance
-// of 9.52e-7 of a line's largest entry, and records it from itself (ap-fit-0.6.36-0.6.38.oem; the 0.6.36 file went), the
-// bounds kept.
+// 0.6.38 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.21) moves it by 2,151.657 mm,
+// 2,360.664 um/s and a covariance of 8.77e-2 of a line's largest entry, and records it from itself
+// (ap-fit-0.6.36-0.6.38.oem; the 0.6.36 file went), the bounds kept. The covariance moves more than the states (stack
+// #551): the record's epoch covariance carries 0.6.36's floor, whose velocity part is the position floor times the
+// angular rate squared, and this build takes off its own; the term at the same osculating energy raises the angular rate
+// by 6.2e-7 of itself, and the record's covariance less the floor is 4.9e-4 of it in along-track velocity, so the mean
+// motion's variance and the along-track growth move (the position covariance +9.6 % at 24 h). A fit made and flown by
+// this build agrees with itself (the own fit below: 0). At the same angular rate (b9353ad2, not a release) the
+// covariance moved 9.52e-7 with the same states.
 // The fit: this build's fit of the same 24 h arc stops at another point inside its tolerance, 7.3 cm from 0.6.4's along
 // the grid (0.6.5: 26 against 28 iterations, FIT_RMS 41.127 against 41.130 m). Against the stored record's flight until
 // 0.6.21; from 0.6.22 against this build's flight of 0.6.22's own fit (ap-fit-0.6.22.ocm), the bounds kept: AP's own Sun

@@ -299,8 +299,8 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // 0.6.36 refuses a record whose GRAVITY_MODEL is not the embedded field (SPEC 16.2): 0.6.4's fit states EGM-96, so from
   // 0.6.36 the stored record is 0.6.36's own fit (ap-fit-0.6.36.ocm) with its flight (ap-fit-0.6.36.epochs-0.6.36.oem; the
   // 0.6.22 file went), the bounds kept.
-  // 0.6.38 (the zonal theory's constant radial term, SPEC 16.21) moves it by 2,151.657 mm, 2,363.023 um/s and a covariance
-  // of 9.53e-7 of a line's largest entry, and records it from itself (ap-fit-0.6.36.epochs-0.6.38.oem; the 0.6.36 file
+  // 0.6.38 (the zonal theory's constant radial term, SPEC 16.21) moves it by 2,151.657 mm, 2,360.664 um/s and a covariance
+  // of 8.77e-2 of a line's largest entry (why: stack #551 and ap-terms.e2e.mjs), and records it from itself (ap-fit-0.6.36.epochs-0.6.38.oem; the 0.6.36 file
   // went), the bounds kept.
   // This build's fit: against the stored record's flight until 0.6.21; from 0.6.22 against this build's propagate_epochs
   // of 0.6.22's own fit (ap-fit-0.6.22.ocm), the bounds kept. AP's own Sun and Moon move the fit: 117.72 mm and 130.37

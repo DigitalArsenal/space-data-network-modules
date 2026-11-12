@@ -115,8 +115,8 @@ const cases = [
 // trajectory) the error 48 to 72 h past the arc stays at 42 m, and over the arc at 24.3 m. So the own fit is 0.6.38's
 // (ap-fit-0.6.38.ocm), the bounds kept; the stored record stays 0.6.36's fit.
 // The term moves the stored record's flight too, against 0.6.36's: sdnap_covariance_at 2,151.657 mm, covariance
-// 9.53e-7; propagate EME2000 and TEME over 7 days 2,151.682 mm, 2,362.219 um/s, covariance 5.83e-7. They are recorded
-// from this build (the 0.6.36 files went), the bounds kept.
+// 9.61e-2; propagate EME2000 and TEME over 7 days 2,151.682 mm, 2,360.655 um/s, covariance 8.31e-2 (why: stack #551
+// and ap-terms.e2e.mjs). They are recorded from this build (the 0.6.36 files went), the bounds kept.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };

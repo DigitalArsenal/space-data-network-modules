@@ -139,10 +139,15 @@ for (const c of REGIMES) {
   check(aStart && aStart.km < c.stepKm, `${c.name}: A's step at the start ${aStart?.km} km, over ${c.stepKm}`);
   // in the drag B carries the hand-over better than a lone A (whose theory is a day and more past its arc there): over
   // the forecast's held-out hours after the stop B's largest distance to the forecast is under a lone A's; at
-  // geosynchronous altitude the two are alike (the theory holds over the span). Through 0.6.36 the check was B's step at
-  // the stop against a lone A's; 0.6.38 (the zonal theory's constant radial term, SPEC 16.21) moves those steps to 17.0
-  // and 15.8 m (15.1 and 22.3 m on 0.6.36), while over the held-out hours B's largest distance goes from 101.9 to 100.5 m
-  // and a lone A's from 108.7 to 116.6 m.
+  // geosynchronous altitude the two are alike (the theory holds over the span).
+  // History. Through 0.6.36 the check was B's step at the stop under a lone A's step there, one instant. 0.6.38 (the
+  // zonal theory's constant radial term, SPEC 16.21) takes the theory's mean radial bias (about +9 m at 500 km and i
+  // 97.4) off both: in low orbit B's step goes from 15.1 to 17.0 m and a lone A's from 22.3 to 15.8 m, so the
+  // one-instant check failed although B still carries the hand-over better. Over the forecast's 18 held-out hours after
+  // the stop (2,161 states, 30 s), measured on both builds (the term's positions are the same at either velocity form):
+  // B's largest distance 101.9 m on 0.6.36 and 100.5 m on 0.6.38 (RMS 34.3 and 32.2 m), a lone A's 108.7 and 116.6 m
+  // (RMS 39.7 and 40.0 m); at geosynchronous altitude B 1.43 and 1.50 m, a lone A 1.89 and 2.03 m. The check is that
+  // held-out comparison from 0.6.38; B's step at the stop stays bounded by stepKm.
   const held = states.filter((s) => s.t > STOP + 1e-6), heldT = held.map((s) => s.t), heldB = await fly(B.rec, heldT), heldA = await fly(A.rec, heldT);
   const heldBKm = Math.max(...held.map((s, k) => hyp(s.r, heldB[k].r))), heldAKm = Math.max(...held.map((s, k) => hyp(s.r, heldA[k].r)));
   check(bStop && bStop.km < c.stepKm && (!c.drag || heldBKm < heldAKm),
