@@ -506,6 +506,15 @@ uint32_t sdnap_kepler_unconverged(int32_t reset, int32_t which) {
   return reset != 0 ? __atomic_exchange_n(c, 0u, __ATOMIC_RELAXED) : __atomic_load_n(c, __ATOMIC_RELAXED);
 }
 
+/// SPEC 12.1: the fit passes since the last reset that ended at their iteration ceiling with the cost still falling.
+/// `which` 0: under fit::kPassCeiling (a fit that solves no drag term); 1: under any other ceiling (fit::kDragPassCeiling,
+/// or an sdnap_fit caller's own). `reset` non-zero reads the count and sets it to 0 in one step. A diagnostic.
+SDNAP_EXPORT("sdnap_fit_ceiling_met")
+uint32_t sdnap_fit_ceiling_met(int32_t reset, int32_t which) {
+  uint32_t* c = &sdnap::fit::g_ceiling_met[which == 1 ? 1 : 0];
+  return reset != 0 ? __atomic_exchange_n(c, 0u, __ATOMIC_RELAXED) : __atomic_load_n(c, __ATOMIC_RELAXED);
+}
+
 /// Cost probe: `count` rate evaluations of row `index` at its epoch state and
 /// time `minutes` (the experiment of DESIGN 2.0's per-evaluation figures).
 SDNAP_EXPORT("sdnap_rate_probe")

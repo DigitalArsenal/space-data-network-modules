@@ -1903,6 +1903,31 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
   along-track 125 to 143 m, while its BTERM came from 6.12 to 4.98 of its stated sigma (#438). Arcs under 71 h and sets
   above e 0.3 are bit for bit those of the version before.
 
+The iteration ceiling *[stack #479, #541]*. A pass ends when it converges: when a step lowers the cost by less than 1e-6
+(a pass at the data's sigma, chi-square units) or by less than 1e-10 of it, or when no step lowers it. Otherwise it ends at
+its ceiling: the record then states CONVERGED false in FIT_STATISTICS and, in the OD COMMENT, "fit: not converged; the last
+pass ended at its ceiling of N iterations with the cost still falling", and `sdnap_fit_ceiling_met(reset, which)` counts the
+pass (which 0: at 1,000; 1: at any other ceiling). A fit that solves no drag term, the set above the drag (12.5) or a drag
+term its prior holds (a sigma above 0 and at most 1e-6, of BTERM or of its log), has a ceiling of 1,000 iterations a pass.
+A fit that solves a drag term keeps 40 a pass, as every version before: under the drag the cost is flat along the drag
+term. Of nine real 72 h fits of the laser-ranged spheres that end at 40, the same fits run to convergence leave the fit
+RMS unchanged to 0.1 m while BTERM falls by 1 to 63 %, and the forecast follows the point the iterations stop at: the
+largest distance to the numerical forecast over five days is worse on 5 (by 2.7 to 26.6 m), better on 3 and unchanged on
+1, and day 5 against the reference worse on 4 (by 2.2 to 18.0 m), better on 2 and unchanged on 1, with no day 5 on 2. On
+model truth at 800 to 900 km (FFM 70 x 70, NRLMSISE-00 at constant weather, 72 h fits) the least-squares minimum along
+BTERM lies 0.28 to 0.5 % off the truth's term, a 0.5 % move of BTERM changes the fit RMS by 3 to 60 mm of 13 m and day 7
+by 25 to 70 m, and a fit stopped at its ceiling and one run to its minimum differ by tens of meters at day 7 (stack #541).
+Neither is shown to be the better forecast, so the ceiling stays at 40, where the released figures were measured, until
+#541 gives the drag term a determined minimum.
+
+Measured on the real windows above the drag with 400 iterations a pass in place of 40 (sdn-ap 0.6.41 otherwise): of 1,889
+fits of the arc before the cutoff and 1,887 fits to the numerical forecast over 0 to 120 h (the long-period rows at 72,
+168 and 336 h, medium Earth orbit, the geosynchronous rows), one ended at 40: a 336 h arc of a highly elliptical orbit,
+89 iterations in all. It converges in 110, its largest distance to the numerical forecast over 0 to 120 h from 915.8 to
+430.6 m and its error against the reference at day 5 from 5,352 to 4,959 m (the numerical propagator's own, 4,615 m).
+Every other pass converged under 40 (the largest total 36 iterations), so it takes the same arithmetic under either
+ceiling: those records are bit for bit those of the version before, and so is every fit that solves a drag term.
+
 Why 1 km was wrong above the drag. Against residuals of 8 m the AGOM prior 0 +- 0.1 m^2/kg acts like 0 +- 0.0008: the
 priors outweigh data good to meters. Measured on precise orbits, AP 0.6.9 against this rule (median 3D error against
 the truth over the day ending at the lead, m; AGOM as a ratio to the radiation coefficient a numerical propagator's
@@ -2746,6 +2771,12 @@ numerical propagator that carries it (16.14). `fit`,
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
+- **Above the switch** (every class above its eccentricity switch, the long-period regime above e 0.3 among them), the
+  flight carries tesseral terms of degree 2 to 12 whatever d states: the short-period grid and the m-daily family stop at
+  12 (16.11, 16.18), and the terms above degree 12 are carried nowhere (16.20's hole of stack #497). The zonal tail follows
+  z, as averaged rates only. So a record there at d 31 or 70 flies the terms of a record at 12: at e 0.9 with its perigee
+  at 300 km (0.503 rev/day, i 20) the census lists 3,898 terms of degree 13 to 31 carried nowhere, the largest 279 m over
+  five days, and 1,144 of degree 32 to 70, the largest 15 m.
 - **In the low table** (class 0 at or below the 0.05 switch; from 0.6.42, stack #477), with tesseral cap d above 12 the short-period terms are
   complete to first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree
   12 the table also holds the m-daily terms. No term is carried there inside the slow band at more than 1 - w of its
