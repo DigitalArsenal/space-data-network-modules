@@ -35,8 +35,9 @@ requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934')
 const CASES = [
   { name: 'perigee 1,000 km, e 0.9, i 0.5', epoch: '2026-02-01T00:00:00.000', n: 0.433161637, e: 0.9007033, i: 0.596598, raan: 192.20718, argp: 153.97925, ma: 37.15461, floorKm: 800, rising: false },
   { name: 'perigee 500 km, e 0.9, i 55 (the truth\'s perigee rises)', epoch: '2026-09-05T00:00:00.000', n: 0.481293675, e: 0.8991996, i: 55.095212, raan: 272.4614, argp: 301.26643, ma: 105.0206, floorKm: 400, rising: true },
-  // the other side: perigee 110 km at e 0.9 with a large BTERM, whose truth descends below 100 km (re-entry) in about 62 h
-  { name: 'perigee 110 km, e 0.9, i 28.5, BTERM 0.6 (the truth re-enters)', epoch: '2026-10-29T00:00:00.000', n: 0.52531856, e: 0.9, i: 28.5, raan: 40, argp: 180, ma: 0, b: 0.6, reenters: true },
+  // the other side: perigee 110 km at e 0.9, argument of perigee 90 degrees, BTERM 0.1; AP crosses at about 17.37 h,
+  // before the numerical truth descends below 100 km (re-entry) at about 40.48 h
+  { name: 'perigee 110 km, e 0.9, i 28.5, BTERM 0.1 (the truth re-enters)', epoch: '2026-10-29T00:00:00.000', n: 0.5253185593164899, e: 0.9, i: 28.5, raan: 40, argp: 90, ma: 0, b: 0.1, reenters: true },
 ];
 const TRUTH_B = 0.022, DAY = 864e5, MU = 398600.4418, iso = (ms) => new Date(ms).toISOString().replace('Z', '');
 const kernel = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
