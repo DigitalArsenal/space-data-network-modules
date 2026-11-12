@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.47 (dist 6d24961f).
+Version 0.6.47 (dist 2dd21625).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -5053,6 +5053,19 @@ keeps its own.
   that crosses inside the arc is refused `decayed-in-arc:<time>` and no record is written; one whose mean perigee is under
   400 km and that crosses within 7 days of its epoch is written with "decays at <time>" in its OD COMMENT. Every reader
   finds the same crossing from the record.
+- Refused trials in a fit. A trial set that crosses inside the arc is a refused step, never the end of a pass. The fit's
+  fallback differences each column of its Jacobian above the iterate (the elements, the drag term, AGOM, Y0); a column whose
+  set above is refused as decayed is taken below the iterate, (residuals - trial) / h, the same column. A pass in which a
+  column is refused on both sides tested no step: it ends with status 2, not at a minimum, the record states CONVERGED false
+  and its OD COMMENT reads "fit: not converged; the last pass stopped because a column of its Jacobian could not be
+  differenced: the set decays a step to either side inside the arc". Only a refusal of an AP set that decays takes this path;
+  every other refusal, and every fit in which no column is refused, is as before to the bit. A pass whose starting set decays
+  inside the arc (refused at its first evaluation) is refused `decayed-in-arc:<time>` as a written set that does; the fit does
+  not move its own start until a set flies. A written set that decays after its arc but before a held-out state of the block
+  writes that state as not accepted, reason DECAYED, with no computed value, and does not refuse the record.
+  `test/decay-fit.e2e.mjs`: a made-up set at a 200 km perigee whose drag crosses the rule 2 to 3 h after a 120 h arc, fitted to
+  FFM's states: the first form of the rule (a refused column ending its pass as converged) read AGOM 0 and a fit RMS 1.21 times
+  0.6.45's; this build reads 1.01 times, AGOM solved.
 - What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
   does not describe (they were up to 31,250 km off).
 - `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.45's bit for bit
