@@ -1907,7 +1907,8 @@ The iteration ceiling *[stack #479, #541]*. A pass ends when it converges: when 
 (a pass at the data's sigma, chi-square units) or by less than 1e-10 of it, or when no step lowers it. Otherwise it ends at
 its ceiling: the record then states CONVERGED false in FIT_STATISTICS and, in the OD COMMENT, "fit: not converged; the last
 pass ended at its ceiling of N iterations with the cost still falling", and `sdnap_fit_ceiling_met(reset, which)` counts the
-pass (which 0: at 1,000; 1: at any other ceiling). A fit that solves no drag term, the set above the drag (12.5) or a drag
+pass (which 0: at 1,000; 1: at any other ceiling). The record states its last pass: an earlier pass that ends at its
+ceiling is counted, not written. A fit that solves no drag term, the set above the drag (12.5) or a drag
 term its prior holds (a sigma above 0 and at most 1e-6, of BTERM or of its log), has a ceiling of 1,000 iterations a pass.
 A fit that solves a drag term keeps 40 a pass, as every version before: under the drag the cost is flat along the drag
 term. Of nine real 72 h fits of the laser-ranged spheres that end at 40, the same fits run to convergence leave the fit
@@ -1920,13 +1921,25 @@ by 25 to 70 m, and a fit stopped at its ceiling and one run to its minimum diffe
 Neither is shown to be the better forecast, so the ceiling stays at 40, where the released figures were measured, until
 #541 gives the drag term a determined minimum.
 
+What a holder comparing record bytes sees: a record whose last pass ends at its ceiling now carries the OD COMMENT line
+above, which no version before wrote. Under the drag such a fit keeps 40 and takes the arithmetic of the version before,
+so its elements, statistics and flights are unchanged and its bytes differ by that line alone: on 0.6.41's table, nine of
+the 78 72 h fits of the laser-ranged spheres and one 72 h fit near 700 km. No committed test reaches the line. From the
+experiments repository, `node experiments/synthetic-orbits/run.mjs --modules-commit <commit> --modules-root <modules
+checkout> --fit forecast-span --only grid-hp200-e0.3-i70` writes it: on 0.6.44 the row's record holds "fit: not converged;
+the last pass ended at its ceiling of 40 iterations with the cost still falling".
+
 Measured on the real windows above the drag with 400 iterations a pass in place of 40 (sdn-ap 0.6.41 otherwise): of 1,889
 fits of the arc before the cutoff and 1,887 fits to the numerical forecast over 0 to 120 h (the long-period rows at 72,
 168 and 336 h, medium Earth orbit, the geosynchronous rows), one ended at 40: a 336 h arc of a highly elliptical orbit,
 89 iterations in all. It converges in 110, its largest distance to the numerical forecast over 0 to 120 h from 915.8 to
 430.6 m and its error against the reference at day 5 from 5,352 to 4,959 m (the numerical propagator's own, 4,615 m).
 Every other pass converged under 40 (the largest total 36 iterations), so it takes the same arithmetic under either
-ceiling: those records are bit for bit those of the version before, and so is every fit that solves a drag term.
+ceiling: those records are bit for bit those of the version before. A pass that does not converge above the drag is
+bounded by nothing but its ceiling: it ends only by converging (no step lowering the cost among them), by a failed flight
+of its starting set, or at 1,000, and a
+fit runs at most a start on two revolutions, its staged arcs, the whole arc, the arc with AGOM and 8 passes at the data's
+sigma. The longest fit above the drag measured is that 336 h arc: 61.5 s of fit at 40, 91.9 s run to convergence.
 
 Why 1 km was wrong above the drag. Against residuals of 8 m the AGOM prior 0 +- 0.1 m^2/kg acts like 0 +- 0.0008: the
 priors outweigh data good to meters. Measured on precise orbits, AP 0.6.9 against this rule (median 3D error against
@@ -2771,12 +2784,16 @@ numerical propagator that carries it (16.14). `fit`,
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
-- **Above the switch** (every class above its eccentricity switch, the long-period regime above e 0.3 among them), the
-  flight carries tesseral terms of degree 2 to 12 whatever d states: the short-period grid and the m-daily family stop at
-  12 (16.11, 16.18), and the terms above degree 12 are carried nowhere (16.20's hole of stack #497). The zonal tail follows
-  z, as averaged rates only. So a record there at d 31 or 70 flies the terms of a record at 12: at e 0.9 with its perigee
-  at 300 km (0.503 rev/day, i 20) the census lists 3,898 terms of degree 13 to 31 carried nowhere, the largest 279 m over
-  five days, and 1,144 of degree 32 to 70, the largest 15 m.
+- **Above the switch, nothing above degree 12** in the long-period regime (no resonance class and a period of 1,100
+  minutes or more, above its 0.05 switch) and in the one-day, eight-hour and sixteen-hour classes above e 0.3: the flight
+  carries tesseral terms of degree 2 to 12 whatever d states. The first-order families (the grid in E) and the m-daily
+  family stop at 12 (16.11, 16.18), and every term above degree 12 is carried nowhere (16.20's hole of stack #497). The
+  zonal tail follows z, as averaged rates only. Two branches above their switch carry more: a set with no resonance class
+  and a period under 1,100 minutes carries its near-resonant terms (in the output) and its shallow resonances (in the
+  rates) to degree min(d, 31); the half-day class carries its tail, degrees 6 to min(d, 31), in the rates, on both sides
+  of e 0.3. The census figures are of the long-period case (no class, above both switches): at e 0.9 with its perigee at
+  300 km (0.503 rev/day, i 20) a record at d 31 and one at d 70 carry the same terms, all of degree 2 to 12; 3,898 terms
+  of degree 13 to 31 are carried nowhere, the largest 279 m over five days, and 1,144 of degree 32 to 70, the largest 15 m.
 - **In the low table** (class 0 at or below the 0.05 switch; from 0.6.42, stack #477), with tesseral cap d above 12 the short-period terms are
   complete to first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree
   12 the table also holds the m-daily terms. No term is carried there inside the slow band at more than 1 - w of its

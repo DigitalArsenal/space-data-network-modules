@@ -10,10 +10,13 @@
 //   the same (only the producer's version differs); no ceiling line; both counters 0;
 // - under the drag, a drag term solved (800 km, e 0, i 55; a drag truth, NRLMSISE-00 at constant weather, B 0.005, with an
 //   in-track impulse of 0.5 m/s at 96 h, inside the span, that no set follows; 137 iterations in all over its passes on
-//   0.6.42): MEAN_ELEMENTS, FIT_STATISTICS and the OD COMMENT field for field 0.6.42's (a drag fit keeps 40); no ceiling
-//   line; both counters 0;
+//   0.6.42): MEAN_ELEMENTS, FIT_STATISTICS and the OD COMMENT field for field 0.6.42's (a drag fit keeps 40). Three of its
+//   earlier passes end at 40 and the counter reads them (which 1: 3); its last pass converges, so the record states
+//   CONVERGED true and carries no ceiling line;
 // - the counter: a raw fit (sdnap_fit) stopped by its caller's own ceiling of 2 iterations is counted once under "any other
-//   ceiling" (which 1); at the default ceiling the same fit converges and is not counted.
+//   ceiling" (which 1); at the default ceiling the same fit converges and is not counted. The counter is the instance's
+//   own: after such a pass it reads 1 on the instance that ran the fit and 0 on a fresh one, so the invoked fits are run
+//   and read on the direct surface (the command surface instantiates the module afresh for every invoke).
 // Not covered by a committed test: the OD COMMENT's ceiling line on a fit whose last pass ends at 40. No model-truth drag fit
 // tried here ends there (each converged in its last pass); the cases that do are fits of real data, which are not committed:
 // nine 72 h fits of laser-ranged spheres (stack #541), and 43 of 715 synthetic catalog fits of the 0.6.38 census at
@@ -21,7 +24,8 @@
 //   node experiments/synthetic-orbits/run.mjs --modules-commit <commit> --modules-root <modules checkout>
 //     --fit forecast-span --only grid-hp200-e0.3-i70
 // (on 0.6.38 its catalog fit ended at 40, 159 iterations in all); the row holds the record, whose FIT_STATISTICS and OD
-// COMMENT say how it ended.
+// COMMENT say how it ended: on 0.6.44 the OD COMMENT holds "fit: not converged; the last pass ended at its ceiling of 40
+// iterations with the cost still falling".
 //   node test/fit-ceiling.e2e.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -49,12 +53,13 @@ import { spwConstantText } from './lib/spw-constant.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // FFM 2.3.0 (modules 48a00fd6)
 const BEFORE = { version: '0.6.42', commit: '86786933e33415d306ac4eca8e7ab31939da6321', sha256: '3c389abfd8ce2ea1767f4d3040449e6ca9097f2edc31321d78cf6ca5f300e2df' };
 const CASES = [
-  // above the drag: on 0.6.42 converged in 12 iterations
+  // above the drag: on 0.6.42 converged in 11 iterations, no pass at a ceiling
   { name: 'above the drag: e 0.9, perigee 10,000 km, i 55, the Sun and Moon', epoch: '2026-02-20T00:00:00.000', n: 0.1309803096, e: 0.9, i: 55, raan: 39.8, argp: 61.2, ma: 150.9,
-    bodies: true, truthB: 0, burnKms: 0, stagesMet: false },
-  // under the drag, across an impulse: on 0.6.42 137 iterations in all over its passes, each converged under 40
+    bodies: true, truthB: 0, burnKms: 0, met: [0, 0] },
+  // under the drag, across an impulse: on 0.6.42 137 iterations in all over its passes; three earlier passes end at 40,
+  // the last converges
   { name: 'under the drag: 800 km, e 0, i 55, an in-track impulse of 0.5 m/s inside the span', epoch: '2026-04-21T00:00:00.000', n: 14.2752968371, e: 0, i: 55, raan: 123, argp: 190.5, ma: 85.9,
-    bodies: false, truthB: 0.005, burnKms: 0.0005 },
+    bodies: false, truthB: 0.005, burnKms: 0.0005, met: [0, 3] },
 ];
 const DAY = 864e5, iso = (ms) => new Date(ms).toISOString().replace('Z', '');
 const kernel = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
@@ -63,8 +68,10 @@ const beforeBytes = execFileSync('git', ['-C', packageRoot, 'show', `${BEFORE.co
 assert.equal(sha256(beforeBytes), BEFORE.sha256, `sdn-ap ${BEFORE.version} at ${BEFORE.commit.slice(0, 9)}`);
 const beforePath = path.join(scratchTemp('sdn-ap-fit-ceiling-'), `sdn-ap-${BEFORE.version}.wasm`);
 fs.writeFileSync(beforePath, beforeBytes);
-const now = await createStandaloneHarness('browser', wasmPath, { surface: 'command' });
-const was = await createStandaloneHarness('browser', beforePath, { surface: 'command' });
+// the direct surface: each invoke runs on the instance whose exports are read (the command surface instantiates the
+// module afresh for every invoke, so a counter read from `now.instance` after one would be another instance's)
+const now = await createStandaloneHarness('browser', wasmPath, { surface: 'direct' });
+const was = await createStandaloneHarness('browser', beforePath, { surface: 'direct' });
 const ffm = await createStandaloneHarness('browser', ffmPath, { surface: 'command' });
 const x = now.instance?.exports;
 assert.ok(x?.sdnap_fit_ceiling_met, 'this build exports sdnap_fit_ceiling_met');
@@ -115,7 +122,7 @@ for (const c of CASES) {
   assert.equal(sa.CONVERGED, true, `${c.name}: CONVERGED ${sa.CONVERGED}`);
   assert.deepEqual(ca, cb, `${c.name}: the OD COMMENT 0.6.42's`);
   assert.ok(!ca.some((l) => l.startsWith('fit: not converged')), `${c.name}: no ceiling line`);
-  assert.deepEqual(met, [0, 0], `${c.name}: no pass met a ceiling`);
+  assert.deepEqual(met, c.met, `${c.name}: the passes at a ceiling (at 1,000; at any other) ${JSON.stringify(c.met)}`);
 }
 // the counter: one pass of the raw fit (sdnap_fit) stopped by its caller's own ceiling of 2 iterations, on a start off the
 // states' set, is counted once under "any other ceiling"; the same fit at the default ceiling converges and is not counted
@@ -144,6 +151,16 @@ assert.ok(capped.status === 1 && capped.iterations === 2, `the raw fit at a ceil
 assert.deepEqual(capped.met, [0, 1], 'the pass at its caller\'s ceiling counted once, under any other ceiling');
 assert.ok(free.status === 0, `the raw fit at the default ceiling converges: status ${free.status}`);
 assert.deepEqual(free.met, [0, 0], 'a converged pass is not counted');
+// the counter is the instance's own: after a pass at its caller's ceiling it reads non-zero on the instance that ran the
+// fit and zero on a fresh one (why the invoked fits above are read on the direct surface)
+rawFit(2);
+const fresh = await openModule();
+const here = [mx.sdnap_fit_ceiling_met(0, 0), mx.sdnap_fit_ceiling_met(0, 1)];
+const there = [fresh.x.sdnap_fit_ceiling_met(0, 0), fresh.x.sdnap_fit_ceiling_met(0, 1)];
+console.log(JSON.stringify({ counterInstance: { ranTheFit: here, fresh: there } }));
+assert.deepEqual(here, [0, 1], 'the counter reads the pass on the instance that ran the fit');
+assert.deepEqual(there, [0, 0], 'a fresh instance reads 0');
+fresh.destroy();
 m.destroy();
 await now.close?.();
 await was.close?.();
