@@ -9,7 +9,7 @@
 //    (the class's own, or at or above the size cut, with the band taper as its weight) or under the size cut; none is
 //    carried nowhere at or above it, and each set carries slow terms beyond its class's.
 // 2. FFM model truth on a made-up class 0 set at e 0.9 (initial elements 0.40 rev/day, e 0.9, i 55, node 63, perigee 234.5,
-//    M 274.2 deg): EGM96 70 x 70, the Sun and Moon on both sides, no drag or radiation. The set is fitted to the forecast's
+//    M 274.2 deg): EGM2008 70 x 70, the Sun and Moon on both sides, no drag or radiation. The set is fitted to the forecast's
 //    own 5 days on a 10-minute grid (the best record), so what remains is what the theory cannot represent. Outcome: the
 //    largest distance over the 5 days is within BOUND_M (measured 33.1 m on 0.6.34, the epoch-axis turn to TEME of date for
 //    every AP set, SPEC 16.4; 181.1 m on 0.6.30, the grid's mean motion held in the

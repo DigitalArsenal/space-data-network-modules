@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.34 (dist 567ecfb8).
+Version 0.6.36 (dist 4e939b31).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -181,7 +181,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 first-order terms to 12, near-resonant terms, shallow resonances and the half-day and one-day resonant tails to 31; each to the degree asked if lower;
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
-carried to TEME of its date. The field is EGM-96, pinned from propagator/ffm/lib by `build.mjs`. With both at 0 or unset the theory is
+carried to TEME of its date. The field is EGM2008 (from 0.6.36; EGM-96 through 0.6.34), pinned from propagator/ffm/lib by `build.mjs`. From 0.6.36 a flight
+refuses an AP set with gravity terms whose PERTURBATIONS.GRAVITY_MODEL is not that field (gravity-model-mismatch): every
+such record written before 0.6.36 is fitted again. With both at 0 or unset the theory is
 SGP4XP bit for bit. A set fitted with them records `SDNAP_GRAVITY_TERMS`, and a call with other degrees refuses it
 (`gravity-terms-mismatch`); `ingest_omm` refuses any such set. E2E: `test/ap-terms.e2e.mjs`.
 

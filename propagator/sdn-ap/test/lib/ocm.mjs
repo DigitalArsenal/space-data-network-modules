@@ -68,7 +68,7 @@ export const LP_RADIATION_MODEL = "SPHERE (AGOM) THROUGH THE OUTPUT MAP, CYLINDR
 
 /// An SGP4XP or AP $OCM made from elements, as a test's seed set (fit makes the others): theory AP unless the forces
 /// are the theory's own; `rows` the $SPW rows (SPWT objects) under RECORDS; `solidTides` states AP's solid Earth tide
-/// (PERTURBATIONS.SOLID_TIDES_MODEL IERS 2010, SPEC 16.14); `slow` the slow set (GRAVITY_MODEL "EGM-96; slow tesseral terms to
+/// (PERTURBATIONS.SOLID_TIDES_MODEL IERS 2010, SPEC 16.14); `slow` the slow set (GRAVITY_MODEL "EGM2008; slow tesseral terms to
 /// degree 70", SPEC 16.18); `radiationModel` its PERTURBATIONS.SOLAR_RAD_PRESSURE (undefined: the text an AP set above
 /// e 0.3 in the long-period regime with an area-to-mass states, SPEC 16.21, and none on any other; null: none; a string:
 /// that). The module validates what it flies.
@@ -87,10 +87,10 @@ export function seedOcm({ epoch, n, e, i, raan, argp, ma, bterm = 0, agom = 0, n
     RA_OF_ASC_NODE: raan, ARG_OF_PERICENTER: argp, MEAN_ANOMALY: ma, BTERM: bterm, AGOM: agom });
   const weather = records || msis;
   t.PERTURBATIONS = Object.assign(new PerturbationsT(), { ATMOSPHERIC_MODEL: new ATMT(msis ? AtmosphericModelFamily.NRLMSIS00E : AtmosphericModelFamily.JXX, msis ? 2000 : 1970),
-    GRAVITY_MODEL: "EGM-96", MAXIMUM_TESSERAL_DEGREE: tesseral, MAXIMUM_ZONAL_DEGREE: zonal,
+    GRAVITY_MODEL: tesseral > 0 || zonal > 0 ? "EGM2008" : "EGM-96", MAXIMUM_TESSERAL_DEGREE: tesseral, MAXIMUM_ZONAL_DEGREE: zonal,
     WEATHER_SOURCE: weather ? pcfWeatherSource.RECORDS : pcfWeatherSource.THEORY_FLUX_MODEL, SPACE_WEATHER: weather ? rows : [] });
   if (solidTides) t.PERTURBATIONS.SOLID_TIDES_MODEL = "IERS 2010";
-  if (slow) t.PERTURBATIONS.GRAVITY_MODEL = "EGM-96; slow tesseral terms to degree 70";
+  if (slow) t.PERTURBATIONS.GRAVITY_MODEL = "EGM2008; slow tesseral terms to degree 70";
   // SPEC 16.21: the long-period regime is an epoch period of 1,100 minutes or more (MEAN_MOTION is rev/day)
   const lpRadiation = ofEpoch && agom > 0 && e > 0.3 && 1440 / n >= 1100;
   const srp = radiationModel === undefined ? (lpRadiation ? LP_RADIATION_MODEL : null) : radiationModel;

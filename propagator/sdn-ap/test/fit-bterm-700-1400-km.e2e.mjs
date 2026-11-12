@@ -5,7 +5,7 @@
 // 1 mm of the module's GCRF output.
 // Registration (2026-11-03, modules-sdn-ap-fit-bterm-700-1400-km-20261103): the fit's BTERM prior at 800-1400 km
 // (SPEC 12.8). Baseline the 0.4.11 release (git a0f33bc54), the module under test this build's dist.
-// Model truth: FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant weather on both sides (no SRP); AP
+// Model truth: FFM EGM2008 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant weather on both sides (no SRP); AP
 // FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee; 7 days flown on a 2-minute grid; day-3 3D RMS.
 // Acceptance:
 // 1. the default path (FIT.DRAG_PRIOR unset): at most 300 m on the SWOT-like (n 13.905 rev/day, 891 km, i 77.6 deg) and

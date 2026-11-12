@@ -1,4 +1,4 @@
-// Model truth for one synthetic orbit: FFM (EGM96 to the given degree and order, Sun and Moon from DE440 when asked) from
+// Model truth for one synthetic orbit: FFM (EGM2008 to the given degree and order, Sun and Moon from DE440 when asked) from
 // an AP-consistent state, AP fitted over 72 h through `fit`, then flown hourly for 7 days; errors per hour and their
 // daily RMS in the reference's RTN axes. Module-only state generation and projection; derived from heo-model-truth.mjs.
 import assert from 'node:assert/strict';
@@ -62,7 +62,7 @@ export async function runSyntheticTruth(c){
  }
  const times=[...Array(145)].map((_,k)=>k/48).concat([...Array(168)].map((_,k)=>3+(k+1)/24));
  const first=145;
- const params={epochJD:jd.whole,epochTimeScale:'UTC',targetJD:jd.whole+times.at(-1),targetTimeScale:'UTC',position:initial.out.slice(0,3),velocity:initial.out.slice(3),frame:'GCRF',sampleEpochsJD:times.map(d=>({jd:jd.whole+d,scale:'UTC'})),forces:{gravityMode:'EGM96',maxDegree:c.maxDegree??70,maxOrder:c.maxOrder??70,thirdBody:c.thirdBody??true,srp:false,drag:c.drag,massKg:1000,areaM2:(c.bterm??.044)*1000/2.2,cd:2.2},weather:{epochUTCJD:jd.whole,F107:150,F107a:150,Ap:15,Kp:3},integrator:{tolerance:c.referenceTolerance??1e-12,minStep:.01,maxStep:c.referenceMaxStep??300}};
+ const params={epochJD:jd.whole,epochTimeScale:'UTC',targetJD:jd.whole+times.at(-1),targetTimeScale:'UTC',position:initial.out.slice(0,3),velocity:initial.out.slice(3),frame:'GCRF',sampleEpochsJD:times.map(d=>({jd:jd.whole+d,scale:'UTC'})),forces:{gravityMode:'EGM2008',maxDegree:c.maxDegree??70,maxOrder:c.maxOrder??70,thirdBody:c.thirdBody??true,srp:false,drag:c.drag,massKg:1000,areaM2:(c.bterm??.044)*1000/2.2,cd:2.2},weather:{epochUTCJD:jd.whole,F107:150,F107a:150,Ap:15,Kp:3},integrator:{tolerance:c.referenceTolerance??1e-12,minStep:.01,maxStep:c.referenceMaxStep??300}};
  params.ephemerisSource='JPL_SPK';
  const kernel=fs.readFileSync(new URL('../../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp',import.meta.url));
  checkTruth();
@@ -92,7 +92,7 @@ export async function runSyntheticTruth(c){
   for(const day of [0,1,3,7]){const minutes=(t0+((c.mode==='seed'?0:FIT)+day)*DAY-fitEpoch)/60000;assert.equal(px.sdnap_test_class_probe(minutes,pp),0);classDiagnostics.push({day,values:Array.from(new Float64Array(ph.memory.buffer,pp,9))});}
   px.sdnap_free(pp);await ph.close?.();
  }
- const result={name:c.name,fitted:{epoch:parsed.epoch,n:parsed.n,e:parsed.e,bterm:parsed.bterm},classDiagnostics,classProbeSha256:c.probePath?createHash('sha256').update(fs.readFileSync(c.probePath)).digest('hex'):undefined,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(c.modulePath??wasmPath)).digest('hex'),epoch,reference:'FFM EGM96 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
+ const result={name:c.name,fitted:{epoch:parsed.epoch,n:parsed.n,e:parsed.e,bterm:parsed.bterm},classDiagnostics,classProbeSha256:c.probePath?createHash('sha256').update(fs.readFileSync(c.probePath)).digest('hex'):undefined,fixture:{...c,initialization:c.mode==='seed'?'AP mean-element epoch state':'osculating perigee (argument of latitude equals argument of perigee)',initialGcrfKm:initial.out,fitEnd:iso(t0+(c.mode==='seed'?0:FIT)*DAY),referenceIntegrator:params.integrator},referenceStates:truth.slice(first),apSha256:createHash('sha256').update(fs.readFileSync(c.modulePath??wasmPath)).digest('hex'),epoch,reference:'FFM EGM2008 70x70, Sun/Moon DE440, zero EOP, constant F10.7 150/Ap 15',kernelSha256:createHash('sha256').update(kernel).digest('hex'),n:c.n,e:c.e,perigeeKm:semimajor*(1-c.e)-6378.135,fitHours:c.mode==='seed'?0:72,days:{},ffmSha256:createHash('sha256').update(fs.readFileSync(ffmPath)).digest('hex')};
  result.profile=[];
  for(let k=0;k<flown.length;k++){
   const ref=truth[first+k],f=flown[k],err=[f.X-ref.position[0],f.Y-ref.position[1],f.Z-ref.position[2]];
