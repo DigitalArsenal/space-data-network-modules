@@ -457,7 +457,10 @@ and cross-track axis. On 0.6.42's own flights of the low table's records (tesser
 (strong drag 2026, laser spheres, altimetry and near 700 km; three axes; days 1, 3, 5 and 7) have their median |z| inside
 0.603 to 0.754. Too wide: cross-track outside near 700 km at day 1 and everywhere from day 3 (2.6 to 8.2 times from day
 3), in-track outside strong drag, and the radial of the laser spheres from day 3 and of altimetry at days 3 and 5. Too
-narrow: strong drag 2026's in-track at every day and its radial at days 5 and 7. SPEC 12.5 names each cell's cause. That count does not
+narrow: strong drag 2026's in-track at every day and its radial at days 5 and 7. SPEC 12.5 names each cell's cause. From
+0.6.45 the DRAG row's drag share on a strong-drag record of the low table (its own stated drag rate at or above 2.4e-6 per
+day, a smooth step in the rate from 7.6e-7) is 1.162 times the row's; a weak-drag record keeps the row's share, and every
+record keeps its radial floor factor (SPEC 12.5, stack #568). That count does not
 establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every judged cell with its shares within 1
 and 3 sigma, and the ISS figure.
 

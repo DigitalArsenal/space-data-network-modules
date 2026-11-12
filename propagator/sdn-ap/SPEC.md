@@ -2160,7 +2160,7 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
   zonal degree 70 has no drift, and there the stated cross-track is too wide: in strong drag 2026 0.40 at day 1 to 0.12 at
   day 7, about 2 to 5 times too wide, a loss of realism in size where it was 1.5 to 2 times too narrow; elsewhere 0.55 to
   0.60 at day 1 and 0.08 to 0.26 from day 3 (0.6.42). The sizes s_i are set on records at zonal degree 20 (stack #531).
-- The DRAG row's s_i at zonal degree 70 (from 0.6.43, stack #531). An AP record in the DRAG regime whose stated zonal degree
+- The DRAG row's s_i at zonal degree 70 (from 0.6.45, stack #531). An AP record in the DRAG regime whose stated zonal degree
   (PERTURBATIONS.MAXIMUM_ZONAL_DEGREE, the fit's FORCES.MAXIMUM_DEGREE) is 70 writes s_i times kSiZonal70, exp(-2.2) =
   0.1108: 1.2494e-7 per day against 1.1276e-6. Every other field of the row is the row's, and a record at any other zonal
   degree writes the row as it is, bit for bit. A record at a zonal degree from 21 to 69 keeps the full s_i on purpose: the
@@ -2169,11 +2169,38 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
   - The factor is the maximum-likelihood fit of the cross-track |z| (days 1, 2, 3, 5 and 7) on the split rule's 326 choice
     windows of 0.6.42's own flights of records at 31/70 (strong drag 2025, laser spheres, altimetry), on a grid of 0.005 in
     its logarithm. It is judged on the other 422 (strong drag 2026 and near 700 km entirely, laser spheres and altimetry).
-  - Judged, cross-track: 1 of 18 cells inside the band on 0.6.42, 12 of 18 on 0.6.43, none too narrow. On the 14 the test
+  - Judged, cross-track: 1 of 18 cells inside the band on 0.6.42, 12 of 18 with the factor, none too narrow. On the 14 the test
     holds (days 1, 3, 5, 7): 1 to 9. Strong drag 2026 goes 0.40, 0.16, 0.13 and 0.12 to 0.54, 0.61, 0.70 and 0.75 at days 1,
     3, 5 and 7. Radial and in-track move by at most 1.9e-4 in median |z|, none at three decimals.
   - Still too wide: strong drag 2026 at day 1 (0.54) and the laser spheres and altimetry at days 5 and 7 (0.53 to 0.58).
-- In-track takes no factor: the floor is not what sets it.
+- The DRAG row's drag share on strong drag (from 0.6.45, stack #568). An AP set in the DRAG regime of the low table's fast side
+  (a record at a tesseral degree above 12) writes the share c times 1 + (kDragShareStrong - 1) S(|r|), kDragShareStrong =
+  exp(0.150) = 1.1618, with r its own stated drag rate (COV_PROPAGATION.NON_GRAVITATIONAL_RATE_PER_DAY, the fit's n-dot / n
+  from its drag term at the epoch's weather). S is a cos^2 step in log10 |r| centred on 1.35e-6 per day with a half-width of
+  0.25 decade: 0 at or below 7.6e-7, 1 at or above 2.4e-6. The record states the share it was written with
+  (NON_GRAVITATIONAL_SHARE), so a reader takes it from the record and a record written before this rule flies as it was.
+  - The key and the step were fixed from the keys alone, before any fit. Over the registered 748 windows the weak-drag
+    records (laser spheres, altimetry, near 700 km) state at most 6.94e-7 per day and the strong-drag records at least
+    2.61e-6. The step's midpoint is the gap's geometric centre and its slope lies inside the gap, so no window of the set is
+    on it and no weak-drag record changes. Between 7.6e-7 and 2.4e-6 the share is an interpolation no window has measured.
+  - The factor is the maximum-likelihood fit of the radial and in-track |z| (days 1, 2, 3, 5 and 7) on the 236 strong-drag
+    2025 choice windows of 0.6.43's own flights of records at 31/70, with s_i times kSiZonal70, on a grid of 0.005 in its
+    logarithm. It is judged on strong drag 2026. No factor was moved after the judged cells were read.
+  - Judged, strong drag 2026, median |z| at days 1, 3, 5 and 7: radial 0.677, 0.828, 0.845 and 0.806 on 0.6.43 to 0.666,
+    0.754, 0.754 and 0.712 (0.6.42: 0.660, 0.748, 0.788, 0.770); in-track 0.862, 0.902, 0.908 and 0.893 to 0.831, 0.797,
+    0.792 and 0.774 (0.6.42: 0.864, 0.896, 0.906, 0.894). Every radial cell is inside the band; day 3's is 0.006 above
+    0.6.42's. In-track is still too narrow at every lead, by less: a strong-drag record still understates its in-track
+    uncertainty.
+  - Not used. A radial floor factor fitted with it for strong drag (the floor's sigma times 1.246 there, the share times
+    1.133) takes strong drag 2026's day-1 radial out of the band on the wide side (0.600): it buys days 3 to 7 through the
+    floor, and on its own choice windows makes day 1 0.478. A share keyed on the record's own weather (the Ap of the day
+    before the cutoff its $SPW rows state, a cos^2 step from 12 to 18; 1.094 quiet and 1.228 in storms) fits 2025 better
+    (the log-likelihood by 277 with the floor factor) and beats the single factor on no judged cell of 2026.
+  - The weak-drag side keeps today's radial floor factor, exp(0.095), though the cells it leaves too wide (laser spheres and
+    altimetry at day 1, altimetry at day 7, near 700 km at day 1) ask for about 0.8: at that factor near 700 km's radial at
+    days 2 and 3 leaves the band on the narrow side (0.850 and 0.919), the fault of its 24-hour fits, whose error grows 1.5 m
+    a day against the 0.5 m a day they state (stack #568).
+- In-track takes no factor of its own: the floor is not what sets it.
 - Cells outside the band at the factors, by cause (`test/covariance-realism.e2e.mjs` names each): strong drag 2026 radial at
   days 5 and 7 and in-track at every day, too narrow (the drag share c, 0.1121, against the 2026 storms, and the density
   forecast; stacks #531, #527); the laser spheres' radial at days 3 to 7 and altimetry's at days 3 and 5, too wide (one

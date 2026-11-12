@@ -56,6 +56,28 @@ constexpr double kFloorRadialFastSide = 1.0996588551261028;
 /// zonal degree keeps today's s_i.
 constexpr double kSiZonal70 = 0.11080315836233387;
 constexpr int kSiZonalDegree = 70;
+/// SPEC 12.5: the DRAG row's drag share c on strong drag (stack #568). The key is the record's own stated drag rate,
+/// COV_PROPAGATION.NON_GRAVITATIONAL_RATE_PER_DAY |r|; the share is c (1 + (kDragShareStrong - 1) S(|r|)), S a cos^2 step in
+/// log10 |r| centred on kDragKeyMid with half-width kDragKeyHalfDecades, fixed from the keys alone before any fit: the
+/// registered windows' weak-drag records state at most 6.94e-7 per day and their strong-drag records at least 2.61e-6, so S is 0
+/// at or below 7.6e-7 (no weak-drag record changes) and 1 at or above 2.4e-6, and no window of the set is on the slope. The
+/// factor is the maximum-likelihood fit of the radial and in-track |z| (days 1 to 7) on the 236 strong-drag 2025 choice windows
+/// of 0.6.43's own flights at tesseral 31 / zonal 70 (exp(0.150), on a grid of 0.005 in its logarithm), judged on strong drag
+/// 2026. It acts where it is fitted: an AP set in the DRAG regime in the low table above kSpCap (low_fast_side).
+constexpr double kDragShareStrong = 1.1618342427282831;
+constexpr double kDragKeyMid = 1.35e-6;
+constexpr double kDragKeyHalfDecades = 0.25;
+/// S(|r|) of kDragShareStrong: 0 at or below kDragKeyMid 10^-kDragKeyHalfDecades, 1 at or above kDragKeyMid
+/// 10^kDragKeyHalfDecades, 1 - cos^2 of the fraction of the way across in log10 |r| between.
+inline double drag_key_step(double rate_per_day) {
+  const double r = std::fabs(rate_per_day);
+  if (!(r > 0.0)) return 0.0;
+  const double x = std::log10(r / kDragKeyMid);
+  if (x <= -kDragKeyHalfDecades) return 0.0;
+  if (x >= kDragKeyHalfDecades) return 1.0;
+  const double c = std::cos(0.5 * kPi * (x + kDragKeyHalfDecades) / (2.0 * kDragKeyHalfDecades));
+  return 1.0 - c * c;
+}
 
 /// SPEC 12.4 (stack #551): the first release whose AP records carry their epoch floor at the two-body state of their
 /// mean elements. An AP record another producer, or this module before it, wrote carries its floor at its writer's
@@ -112,6 +134,13 @@ inline int regime_of(const ElementRow& row) {
   const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   const double a_er = std::pow(xpt::kKe / n_min, kX2o3);
   return (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
+}
+
+/// SPEC 12.5, 16.1: an AP set of the low table's fast side (the record states a tesseral degree above kSpCap; class 0, not
+/// the long-period regime, at or below its eccentricity switch), where kFloorRadialFastSide and kDragShareStrong are fitted.
+inline bool low_fast_side(const ElementRow& row) {
+  const xpt::Branch br = xpt::branch_of(row.mean_motion_rev_day * kTwoPi / kMinutesPerDay, row.eccentricity, true);
+  return xpt::tess::active().tesseral > xpt::tess::kSpCap && br.resonance == 0 && !br.long_period && br.wide_tess == 0;
 }
 
 /// SPEC 12.5, above the drag: the class of a set by its own elements: HEO above e 0.3 (strictly, as the theory's switches,
@@ -522,9 +551,10 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
   // the DRAG row's s_i at a record's zonal degree 70 (kSiZonal70, SPEC 12.5)
   noise[1] = ap && regime == 0 && terms.zonal == kSiZonalDegree ? k.s_i * kSiZonal70 : k.s_i;
   noise[2] = k.s_l;
-  noise[3] = k.c * std::fabs(ng_rate) * n_min * kMinutesPerDay;
+  // the drag share on strong drag (kDragShareStrong, SPEC 12.5), keyed on the drag rate the record states
+  share = ap && regime == 0 && low_fast_side(row) ? k.c * (1.0 + (kDragShareStrong - 1.0) * drag_key_step(ng_rate)) : k.c;
+  noise[3] = share * std::fabs(ng_rate) * n_min * kMinutesPerDay;
   noise[4] = t_a;
-  share = k.c;
   floor_scale = k.k_F;
   if (regime == 1) {
     const AboveRow& a = (ap ? kAboveAP : kAboveXP)[above_class(row)];
@@ -605,14 +635,11 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   // the low table's fast side (SPEC 12.5, 16.1): the radial floor's sigma times kFloorRadialFastSide, D F D with
   // D = diag(f, 1, 1) in UVW (UU by f^2, VU and WU by f), in the DRAG regime (perigee below kDragRegimeKm), where the
   // factor is fitted and judged
-  {
-    const xpt::Branch br = xpt::branch_of(row.mean_motion_rev_day * kTwoPi / kMinutesPerDay, row.eccentricity, true);
-    if (s.regime == 0 && xpt::tess::active().tesseral > xpt::tess::kSpCap && br.resonance == 0 && !br.long_period && br.wide_tess == 0) {
-      const double f = kFloorRadialFastSide;
-      floor[0] *= f * f;
-      floor[1] *= f;
-      floor[3] *= f;
-    }
+  if (s.regime == 0 && low_fast_side(row)) {
+    const double f = kFloorRadialFastSide;
+    floor[0] *= f * f;
+    floor[1] *= f;
+    floor[3] *= f;
   }
   // epoch image: state block J0 Pp J0^T + floor, cross J0 Pp, consider Pp
   double r0[3], v0[3];
