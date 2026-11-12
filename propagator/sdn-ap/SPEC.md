@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.36 (dist 4e939b31).
+Version 0.6.38 (dist 140ab1b1).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -4449,6 +4449,55 @@ went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit ab
 
 The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
 arc.
+
+**16.21 The zonal theory's constant radial term** (from 0.6.38; stack #503, #532). Section 2's rates are Brouwer's
+secular and long-period rates to second order, and section 8's output adds the first-order J2 short-period terms. Held
+to the same mean rates as the dynamics (the argument of latitude's and the node's), the theory's mean radius on a
+near-circular orbit then sits above the true one by
+
+  dr = (R_E^4 / a^3) [ J2^2 (199 cos^4 i - 80 cos^2 i + 25) / 32 - J4 (15/64)(35 sin^4 i - 40 sin^2 i + 8) ]
+
+where a is the mean semi-major axis and i the mean inclination. AP's output (every AP set with gravity terms) adds -dr to
+the radius at the same angular rate: the transverse speed is scaled by the same ratio, -dr times the angular rate (1.1
+cm/s at 10 m in low orbit), and the radial speed is kept. The main output path, its fallback (e or i exactly 0, or
+corrections above 0.02 rad) and the covariance's sigma-set pairs take the same term, each set at its own a and i.
+SGP4XP's output (section 8) is unchanged, bit for bit. J2 and J4 are 1.3's (EGM-96's). The numerical propagator's EGM2008
+J4 differs by 1.7e-4 of itself, which would move the J4 part by at most 3 mm.
+
+*Derivation.*
+- The J4 part is first order. The mean radial equation of a near-circular orbit, r^3 w^2 = mu (1 - 5 J4 (R/r)^4 <P4>),
+  has <P4> = (105 S^2 - 120 S + 24)/64 with S = sin^2 i. It is set against the theory's in-plane rate
+  w = n [1 + (15/32)(-35 S^2 + 40 S - 8) J4 (R/a)^4], which is 2's lambda-dot - Omega-dot + Omega-dot cos i at e = 0,
+  with r = a. Together they give -(15/64)(35 S^2 - 40 S + 8) J4 (R/a)^4 a.
+- The J2^2 part is exact at i = 0. The equatorial circle obeys w^2 r^3 = mu (1 + (3/2) J2 (R/r)^2). The theory's
+  lambda-dot is n [1 + 3 x + 14.625 x^2], with x = J2 (R/a)^2 (Brouwer's own coefficient is 11.25), and its radius is
+  r = a (1 - (3/2) x). Together they give (9/2) x^2 a.
+- At other inclinations the second-order polynomial comes from the dynamics. J2 alone was flown by a fixed-step
+  integrator and compared with 2's rates at the same mean rates of the argument of latitude and the node. J2 was scaled by
+  1 and by 0.5 and the result extrapolated to second order.
+  - The polynomial ends at 25/32 at i = 90 deg and at 9/2 at i = 0.
+  - Third order is under 1 % in low orbit.
+- With EGM's J4 / J2^2 = -1.382 the two parts sum to 17.55 (c^2 - 0.494)(c^2 - 0.202), with c = cos i: about +11 m at
+  i 87.5 and 420 km, -2.4 m at i 55, and +42 m near the equator.
+
+*Measured.* AP is fitted to the numerical propagator's forecast over 0 to 5 days, with J2 to J5 and the Sun and Moon on
+both sides.
+- Over 300 to 1,400 km and 7 inclinations (42 near-circular cases), the closed form is within 0.31 m of the offset AP
+  showed through 0.6.36.
+- With the term, the largest offset left is 0.3 m, at i 45 and 63.4 deg where there was none.
+
+*Eccentricity* (measured, not derived; stack #532). The term is applied at every eccentricity. The offset left after it:
+
+| a - R | e | Largest offset left |
+| --- | --- | --- |
+| 1,200 km | 0.05 or less | 1.3 m (test/zonal-radius-term.e2e.mjs's case at i 28.5) |
+| 1,200 km | 0.1 | 1.7 m |
+| 4,000 km | 0.3 | 9.1 m (21.0 m without it) |
+
+**16.22 Records refused by name.** plugin-manifest.json's "Refused by name" lists for propagate, load_epochs,
+propagate_epochs, maneuver and export_omm name every refusal the record decoder makes. That includes solid-tides-unsupported
+(16.14), gravity-model-mismatch (16.2), parameter-repeated:ECOM2_Y0 and parameter-invalid:ECOM2_Y0 (16.13), which were
+missing through 0.6.36 (stack #540).
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
