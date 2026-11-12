@@ -2,19 +2,21 @@
 // E2E (SPEC 12.4, stack #551): an AP record's epoch floor is put on by the writer and taken off by the reader at the two-body
 // state of the record's own mean elements, so no change to a theory's epoch state moves what a reader takes off; an AP record
 // written before that has its covariance refused by name and its states fly.
-// Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by 0.6.38
-// (git f8fd3240, the release before this one, its SHA-256 checked), and that arc fitted by 0.6.38 and by this build.
+// Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by BASE, and
+// that arc fitted by BASE and by this build. BASE is a build before the cure whose theory is this build's: from the low
+// table's fast side (stack #477, SPEC 16.1) its first build with the band guard (git 258d824d, version string 0.6.36, its
+// SHA-256 checked), since the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, the base until then).
 // - The cure (a reader whose theory's epoch state differs from the writer's): this build's record read again with its
 //   gravity caps moved from 31 and 20 to 12 and 6, so its flown epoch state moves and the two-body state of its mean
 //   elements does not (at i 52.9 by 31 m; near the equator the caps leave the epoch state as it was, and one case must
 //   move by more than MOVED_KM). The epoch covariance less the floor the reader takes off (sdnap_test_epoch_floor) is the
 //   same bit for bit; and on both, at minute 0, P(0) less the floor at the flown state equals that remainder within
 //   IDENTITY of P(0)'s largest entry.
-// - A set's own flight is as it was: this build's record flown by this build against 0.6.38's record flown by 0.6.38,
+// - A set's own flight is as it was: this build's record flown by this build against BASE's record flown by BASE,
 //   sdnap_covariance_at hourly to 48 h, within SELF.
 // - Caps 0 (an AP set without gravity terms): this build's record flies its covariance with the floor at the two-body
-//   state (one rule for every AP record), and 0.6.38's has it refused.
-// - 0.6.38's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of 0.6.38's
+//   state (one rule for every AP record), and BASE's has it refused.
+// - BASE's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of BASE's
 //   flight of it (a flight without covariance takes the state path, one with it the covariance's nominal: they part by
 //   about 0.3 mm on any build), no covariance lines, the block's COMMENT naming cov-floor-at-theory-state.
 // - The gate reads PROVENANCE.PRODUCER exactly: this module at 0.6.39 or later as X.Y.Z accepted, anything else refused
@@ -47,7 +49,7 @@ import {T, seedOcm, flight, rowsThrough, repackOcm, ocmOf} from './lib/ocm.mjs';
 import {scratchTemp} from './lib/scratch.mjs';
 
 ensureBuilt();
-const BASE = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
+const BASE = {version: '0.6.36', commit: '258d824d2c83da8aa0f9ad2325273cfe478ae5d8', sha256: '01f8fd18eb97107b4cd1e0d7694f31787bcddf7cbb61f44255d83e3f45f3f56f'};
 const SELF = {ofLargest: 1e-11, along: 1e-10}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
 // the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)
 const TWO_BODY = [
