@@ -168,6 +168,11 @@ inline double band_taper(double x);
 constexpr double kNearBand = 0.2;   // the j = 1 orders kept above the general set's degree, in units of n
 constexpr double kSpKeepM = 0.5;    // a term whose position amplitude is below this many meters is not kept: 0.2 m
                                     // gives 15 to 20 m of fit RMS, 0.5 m 16 to 21, 1 m 18 to 23, 2 m 23 to 28
+/// A line is cut whole or kept whole (stack #572): when a term of (l, m) at element frequency j = l - 2p + q passes kSpKeepM,
+/// every term of the same (l, m) at j - 1, j and j + 1 (its q +- 1 partners and the neighbouring p rows, which reach the same
+/// position line through the eccentricity vector) is kept down to this size. Cut one by one, a partner under kSpKeepM left
+/// the kept term's line uncancelled: 1.1 to 1.6 m of opposite phase where the line is 0.05 to 0.3 m.
+constexpr double kSpPartnerKeepM = 0.05;
 /// The switch (SPEC 16.11): above this epoch eccentricity a perigee pass spreads a term over the harmonics of M; the zonal
 /// tail carries every long-period term (xp_theory.inc, this constant), the perigee drag passage runs (SPEC 16.12, this
 /// constant) and, in the resonance classes, the first-order tesseral families are the grid of wide_grid_build.
@@ -941,7 +946,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   const double mdot = n0 + 0.5 * j2 * n0 * eta * (3.0 * c0 * c0 - 1.0), wdot = 0.5 * j2 * n0 * (5.0 * c0 * c0 - 1.0);
   const double node_rate = -j2 * n0 * c0;
   const double h = 1e-5, inv_2h = 1.0 / (2.0 * h);
-  const double na2 = n0 * a0 * a0, keep = kSpKeepM * 1e-3 / kRe;
+  const double na2 = n0 * a0 * a0, keep = kSpKeepM * 1e-3 / kRe, keep_partner = kSpPartnerKeepM * 1e-3 / kRe;
   const double inv_na2 = 1.0 / na2, inv_a02 = 1.0 / (a0 * a0);
   const double inv_shallow_n0 = 1.0 / (kShallowBand * n0);
   const res::TermSet carried = res::class_terms(cls);
@@ -1006,7 +1011,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
     const double a0_AFb = a0 * amp0[l] * egm.hypot_fb[l][m];
     const double lhs = a0_AFb * (Gb * (3.0 * std::abs(j) * inv_a02 + 2.0 * ll * inv_na2 * ap) +
                                  (ll * ll + l * Gb) * inv_na2 * ap);
-    return lhs >= keep * ap * ap;
+    return lhs >= keep_partner * ap * ap;  // a bound: the partners' floor, the lowest size a kept term can have
   };
 
   double si3[3], ci3[3];
@@ -1028,6 +1033,8 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   const auto comp_l = [&](int m, int w) -> int { return comp_on ? sp_sc.comp_lmax[m][w + 17] : 0; };
 
   int count = 0;
+  // per order m: kept_j[l][j + 42], a term of (l, m) at element frequency j passes kSpKeepM (the first pass of the order)
+  bool kept_j[72][84];
   int max_m = low ? (near_degree > degree ? near_degree : degree) : (wide ? 0 : degree);
   if (comp_m > max_m) max_m = comp_m;
   for (int m = 1; m <= max_m; ++m) {
@@ -1282,6 +1289,10 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
       }
     }
 
+    // two passes over the order's terms: the first marks the (l, j) whose term passes kSpKeepM, the second writes the table,
+    // a term under kSpKeepM kept to kSpPartnerKeepM where a term of its (l, m) at j - 1, j or j + 1 passed (a line kept whole)
+    std::memset(kept_j, 0, sizeof(kept_j));
+    for (int pass = 0; pass < 2; ++pass) {
     for (int w = w_lo; w <= w_hi; ++w) {
       const int l_max = l_max_w[w + 17];
       if (l_max == 0) continue;
@@ -1333,7 +1344,14 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
                                        (std::fabs(fv * g1) + std::fabs(dfv * G)) * inv_na2 * ap);
           // on the fast side the cut is on the term's own size: a weight under 1 is the band taper's share of a term, kept
           // whatever the share
-          if (mag < keep * ap * ap * (fast_on && weight < 1.0 ? weight : 1.0)) continue;
+          const double share = fast_on && weight < 1.0 ? weight : 1.0;
+          const bool passes = mag >= keep * ap * ap * share;
+          const int jx = j + 42;  // |j| at most kSpMaxW + 1 here
+          if (pass == 0) {
+            if (passes) kept_j[l][jx] = true;
+            continue;
+          }
+          if (!passes && !(mag >= keep_partner * ap * ap * share && (kept_j[l][jx - 1] || kept_j[l][jx] || kept_j[l][jx + 1]))) continue;
 
           const double f_w = static_cast<float>(fv * weight);
           const double df_w = static_cast<float>(dfv * weight);
@@ -1384,6 +1402,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           };
         }
       }
+    }
     }
   }
   if (raw_count_out != nullptr) *raw_count_out = raw_count;
