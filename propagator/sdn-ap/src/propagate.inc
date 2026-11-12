@@ -132,7 +132,7 @@ extern "C" int propagate(void) {
       flatbuffers::uoffset_t vt_ephem = 0, vt_cov = 0;
       double bias[3][3];
       if (g.axes == oem::Axes::Eme2000) frames::frame_bias(bias);
-      // SPEC 8.5 (stack #564): an AP set's epochs past its decay crossing are refused by name (decayed:<time>) and the ones
+      // SPEC 16.25 (stack #564): an AP set's epochs past its decay crossing are refused by name (decayed:<time>) and the ones
       // before it answered; with covariance the crossing is the earliest of the nominal's and its moved sets' (SPEC 12.3)
       std::vector<uint8_t> past(tw.size(), 0);
       size_t past_n = 0;
@@ -190,7 +190,7 @@ extern "C" int propagate(void) {
         } else if (with_cov && xs == nullptr) {
           int32_t nom_status = kPropOk;
           if (!cov::eval(cprop, t, r, v, P, nullptr, &nom_status)) {
-            if (mark_past(k, t)) continue;  // SPEC 8.5: past the crossing of the nominal or a moved set
+            if (mark_past(k, t)) continue;  // SPEC 16.25: past the crossing of the nominal or a moved set
             if (nom_status != kPropOk) {
               std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", e.norad, text, static_cast<int>(nom_status));
             } else {
@@ -201,7 +201,7 @@ extern "C" int propagate(void) {
           }
         } else {
           const int32_t status = xs != nullptr ? xpt::xp_propagate_local(*xs, t, r, v) : sat_propagate(sat, nodes, t, r, v);
-          if (status == kPropDecayed && mark_past(k, t)) continue;  // SPEC 8.5
+          if (status == kPropDecayed && mark_past(k, t)) continue;  // SPEC 16.25
           if (status != kPropOk) {
             std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", e.norad, text, static_cast<int>(status));
             rc = oem::refuse("propagation-failed", why);
@@ -360,7 +360,7 @@ extern "C" int propagate(void) {
           }
         }
       }
-      // SPEC 8.5: the crossing's UTC time; every epoch past it refused, the call too when no epoch is before it
+      // SPEC 16.25: the crossing's UTC time; every epoch past it refused, the call too when no epoch is before it
       char cross_text[48] = {};
       if (rc == 0 && crossed) {
         const double jd_frac = e.epoch_jd_frac + cross_min / kMinutesPerDay, jd_whole = e.epoch_jd_whole + std::floor(jd_frac);
@@ -368,7 +368,7 @@ extern "C" int propagate(void) {
         if (past_n == tw.size()) {
           char name[80];
           std::snprintf(name, sizeof name, "decayed:%s", cross_text);
-          std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 8.5): every requested epoch is past it.", e.norad, cross_text);
+          std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 16.25): every requested epoch is past it.", e.norad, cross_text);
           rc = oem::refuse(name, why);
         } else {
           size_t n = 0;
@@ -402,7 +402,7 @@ extern "C" int propagate(void) {
             source[k] = ((tw[k] - 2451545.0) + tf[k]) * kMinutesPerDay >= from ? carried::kHandOver : carried::kTheory;
         std::string sources = track.empty() && !handover ? std::string() : carried::sources_comment(source, tw, tf);
         if (!width_note.empty()) sources = sources.empty() ? width_note : sources + ". " + width_note;
-        // SPEC 8.5: a block that stops at the set's decay names it and counts the epochs refused after it; the crossing is the
+        // SPEC 16.25: a block that stops at the set's decay names it and counts the epochs refused after it; the crossing is the
         // block's usable limit on its side of the epoch
         if (crossed) {
           char note[120];

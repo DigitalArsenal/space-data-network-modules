@@ -221,7 +221,7 @@ int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* m
   ocm::Bind bind(set.forces, &a);
   cov::Propagator p;
   if (const int pr = cov::prepare(cs, p)) return pr;
-  // SPEC 8.5 (stack #564): a time past the decay crossing of the nominal or of any moved set (no difference can be formed once
+  // SPEC 16.25 (stack #564): a time past the decay crossing of the nominal or of any moved set (no difference can be formed once
   // one has crossed) gets 42 NaN, and the call returns 4 (decayed) with every other time filled
   bool past = false;
   for (uint32_t k = 0; k < count; ++k) {

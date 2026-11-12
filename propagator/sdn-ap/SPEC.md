@@ -4834,6 +4834,50 @@ boundary in which no position lies off its neighbors' curve (the fourth differen
 14,401 states. It holds the record's refusals above, and
 the round trip of the module's own fit.
 
+**16.25 Decay** (stack #564). An AP flight is refused, as decayed, from the first time either of these holds:
+- (a) with drag, the set loses more perigee radius over one revolution, or over the grid's next step where that is longer,
+  than one density scale height at its mean perigee: |d(a (1 - e))/dt| max(P, h_next) > H(h_p);
+- (b) its mean perigee height a (1 - e) - R_E is under 100 km (kDecayFloorKm; Jacchia 1970 has no density under 90 km).
+
+SGP4XP keeps the library's decay at a mean perigee radius under 1 R_E (section 10), so its conformance is unchanged, and SGP4
+keeps its own.
+- Why a step. The theory averages the drag over a revolution, which holds while the perigee density changes little within
+  one, and its grid steps two revolutions at a time in low orbit. On #564's seeds the last good node loses 0.58 H a
+  revolution and 1.15 H over its 2.9 h step; the node after it is not an orbit (mean perigee -283 km), and every state
+  interpolated between the two was off from the first minute (31,250 km at 70.57 h). h_next is the step the grid takes
+  from that node (next_node's), a function of the set alone, so the crossing is the record's and the same in any call order.
+  The crossing therefore depends on the grid's step rule and moves if that rule ever changes: a version that changes the
+  step states the crossing times that move. It refuses up to a step earlier than the per-revolution reading would: #564's
+  two seeds are flown to 136.7 km (perigee 200 km, e 0.001, BTERM 0.01) and 160.7 km (perigee 220 km, e 0.01, BTERM 0.1).
+- What goes in. da/dt and de/dt are the node's own mean rates (its step's, every force: gravity's mean rates of a and e are
+  meters a revolution, against the 5 km, kDecayTestKm, at which the test starts). H is the scale height of the set's own
+  atmosphere and weather at its mean perigee, from two density evaluations 1 km either side along the mean perigee's
+  direction, made only once the loss passes 5 km. The test changes no step, rate or state: a time before the crossing is
+  answered as before, to the bit.
+- Eccentric orbits. Drag near perigee takes the apogee down: the semi-major axis falls while the perigee radius barely
+  moves, so the rule is on the perigee radius, which ends the flight. At BTERM 0.01 and a 150 km perigee the semi-major axis
+  loses 3.80 km a revolution at e 0.7 and the perigee radius 0.6 m (H 17.6 km); near e 0 the two are close.
+- Where it is found. On the grid's nodes as they are made outward from the epoch (the cached node run and the uncached
+  integration alike), once per direction, kept with the set beside its checkpoints and window; no node past the crossing
+  node is made. Its time is the root of the test's quantity (ln(loss / H), or 100 km - h_p), linear between the last node
+  before it and the first past it, with no further rate evaluation. An epoch that already meets the rule is decayed at every
+  time.
+- What a caller gets past it. A state: status 4 (kPropDecayed) and the plugin ABI's ORBPRO_STATE_DECAYED; the row store's
+  planes are not numbers. `propagate` and `propagate_epochs` answer the epochs before the crossing: the block stops at the
+  last of them, its USEABLE_STOP_TIME is the crossing and its COMMENT reads "decayed:<time>; <n> epochs after it refused"; a
+  call asking only for times past it is refused `decayed:<time>`. `sdnap_covariance_at` gives every time past the earliest
+  crossing of the nominal or any of its moved sets (no difference can be formed once one has crossed) 42 NaN and returns 4.
+  `fit`: a trial set that crosses inside the arc is a failed evaluation (the damping takes a smaller step); a written set
+  that crosses inside the arc is refused `decayed-in-arc:<time>` and no record is written; one whose mean perigee is under
+  400 km and that crosses within 7 days of its epoch is written with "decays at <time>" in its OD COMMENT. Every reader
+  finds the same crossing from the record.
+- What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
+  does not describe (they were up to 31,250 km off).
+- `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.42's bit for bit
+  and the jump detector at most 2.88 m over them; the epoch store gives the same states before the crossing and status 4
+  after it in time order, reversed and shuffled; sets at a 500 km perigee and at a 300 km perigee with e 0.3 fly 7 days
+  bit for bit; `sdnap_covariance_at` returns 4 past a record's crossing.
+
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 
 What `fit` and the covariance exports hand to the product writers P1 to P9 (`spacedatastandards.org` `lib/js/PROD`):

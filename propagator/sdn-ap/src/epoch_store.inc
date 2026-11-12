@@ -460,7 +460,7 @@ inline double span_seconds(const Entry& e, double t, const double* jd) {
   return jd != nullptr ? ((jd[0] - e.row.epoch_jd_whole) + (jd[1] - e.row.epoch_jd_frac)) * 86400.0 : (t - e.epoch) * 60.0;
 }
 
-/// SPEC 8.5 (stack #564): the decay crossing (split Julian date, UTC) of the last AP set state_of found a time past, on this
+/// SPEC 16.25 (stack #564): the decay crossing (split Julian date, UTC) of the last AP set state_of found a time past, on this
 /// thread: propagate_epochs names it in its refusal and its block.
 inline thread_local double g_decay_jd[2] = {0.0, 0.0};
 inline thread_local bool g_decay_seen = false;
@@ -496,7 +496,7 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
                         ? ((jd[0] - en.row.epoch_jd_whole) + (jd[1] - en.row.epoch_jd_frac)) * kMinutesPerDay
                         : t - en.epoch;
   const int32_t e = q.xp != nullptr ? xpt::xp_propagate(*q.xp, dt, r, v) : sat_propagate(*q.sat, q.nodes, dt, r, v);
-  // SPEC 8.5 (stack #564): an AP set past its decay crossing; the crossing's split Julian date for the call's refusal by name
+  // SPEC 16.25 (stack #564): an AP set past its decay crossing; the crossing's split Julian date for the call's refusal by name
   if (e == kPropDecayed && q.xp != nullptr && xpt::is_ap_ctx(q.xp->ctx) && xpt::decay_past(*q.xp, dt)) {
     const double c = q.xp->decay_t[dt >= 0.0 ? 0 : 1] / kMinutesPerDay + en.row.epoch_jd_frac;
     g_decay_jd[0] = en.row.epoch_jd_whole + std::floor(c);
@@ -752,7 +752,7 @@ extern "C" int propagate_epochs(void) {
       if (g.axes == oem::Axes::Eme2000) frames::frame_bias(bias);
       bool any_cov = false;
       std::vector<std::pair<double, double>> unblended;  // SPEC 14.3: the switches the grid crosses without a blend, and why
-      // SPEC 8.5 (stack #564): the epochs past an AP set's decay crossing are refused by name, those before it answered
+      // SPEC 16.25 (stack #564): the epochs past an AP set's decay crossing are refused by name, those before it answered
       std::vector<double> kw, kf;
       size_t past_n = 0;
       double cross_jd[2] = {0.0, 0.0};
@@ -824,7 +824,7 @@ extern "C" int propagate_epochs(void) {
         if (kw.empty()) {
           char name[80];
           std::snprintf(name, sizeof name, "decayed:%s", cross_text);
-          std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 8.5): every requested epoch is past it.", s.norad, cross_text);
+          std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 16.25): every requested epoch is past it.", s.norad, cross_text);
           plugin_set_error(name, why);
           return 3;
         }
@@ -863,7 +863,7 @@ extern "C" int propagate_epochs(void) {
         for (size_t k = 0; k < tw.size(); ++k) src[k] = static_cast<uint8_t>(epochs::source_at(st, s, tw[k], tf[k]));
         comment = comment.empty() ? carried::sources_comment(src, tw, tf) : carried::sources_comment(src, tw, tf) + ". " + comment;
       }
-      // SPEC 8.5: a block that stops at a set's decay names it, counts the epochs refused after it, and takes it as its usable limit
+      // SPEC 16.25: a block that stops at a set's decay names it, counts the epochs refused after it, and takes it as its usable limit
       const bool cross_after = past_n > 0 && ((cross_jd[0] - tw.back()) + (cross_jd[1] - tf.back())) >= 0.0;
       if (past_n > 0) {
         char note[120];

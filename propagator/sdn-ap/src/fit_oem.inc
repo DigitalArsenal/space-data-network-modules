@@ -160,7 +160,7 @@ namespace fitoem {
 
 /// An Earth set whose fit RMS exceeds this is refused (fit-implausible), km.
 constexpr double kImplausibleRmsKm = 100.0;
-/// SPEC 8.5 (stack #564): the forecast after a written AP set's epoch over which its decay crossing is stated in the record's
+/// SPEC 16.25 (stack #564): the forecast after a written AP set's epoch over which its decay crossing is stated in the record's
 /// OD COMMENT ("decays at <time>"; the 7 days the catalog flies its records over), for a set whose mean perigee is under
 /// kDecayCheckPerigeeKm: the forward flight is made only for those (a set above it is not checked, and a reader still finds
 /// its crossing from the record whenever it flies past one).
@@ -1091,7 +1091,7 @@ static int fit_blocks() {
       double uvw_ss[3] = {};
       // SPEC 16.18, the low table: the record states the slow set when the set carries a term beyond the shallow set's
       bool record_slow = false;
-      // SPEC 8.5 (stack #564): the written set's decay crossing inside the fit's arc (the record is refused,
+      // SPEC 16.25 (stack #564): the written set's decay crossing inside the fit's arc (the record is refused,
       // decayed-in-arc:<time>) or within kDecayForecastDays after its epoch (written, its OD COMMENT "decays at <time>")
       bool decayed_in_arc = false, decays_ahead = false;
       double decay_min = 0.0;
@@ -1132,7 +1132,7 @@ static int fit_blocks() {
       if (decayed_in_arc) {
         char name[80], why[200];
         std::snprintf(name, sizeof name, "decayed-in-arc:%s", decay_text);
-        std::snprintf(why, sizeof why, "The fitted set decays at %s, inside the fit's arc (SPEC 8.5): the theory cannot represent the arc's end, so no record is written.", decay_text);
+        std::snprintf(why, sizeof why, "The fitted set decays at %s, inside the fit's arc (SPEC 16.25): the theory cannot represent the arc's end, so no record is written.", decay_text);
         plugin_set_error(name, why);
         return 3;
       }
@@ -1196,7 +1196,7 @@ static int fit_blocks() {
         comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against "
                           "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
-      if (decays_ahead) comment.push_back(std::string("decays at ") + decay_text);  // SPEC 8.5
+      if (decays_ahead) comment.push_back(std::string("decays at ") + decay_text);  // SPEC 16.25
       // SPEC 16.7 (stack #504): a fit whose two branches' least-squares sets lie across an eccentricity switch ends on one side
       if (res.held_at_switch)
         comment.push_back("fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie across it");
