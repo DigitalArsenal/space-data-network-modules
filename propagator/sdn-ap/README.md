@@ -129,7 +129,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   when on each side the best set lies across the switch, a fit at a limit in n is refused fit-at-branch-limit and one at
   an eccentricity switch (0.3; the first-order tesseral families' 0.05 in class 0, 0.3 in every other class) with no
   limit in n near ends on one side, its set held at the switch (the record's OD COMMENT says so; its covariance is the
-  curvature at a set that is not the cost's minimum, uncalibrated there); an eccentric block's
+  curvature at a set that is not the cost's minimum, uncalibrated there), and the same pass then runs once on each
+  side's branch: a side's record whose e lies on its own side and whose arc RMS is lower takes the held set's place,
+  and the OD COMMENT says what each side read; an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
   no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments

@@ -3154,6 +3154,19 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
     641.2, 799.0 to 797.5, 206.8 to 206.1, 25.4 to 8.4 and 20.3 to 14.2 m), one farther (e 0.3 at 1,000 km, i 55: 195.7
     to 678.1 m, now held at the switch, its fit RMS 18.3 to 16.9 m), and nine within 0.1 m;
   - the other 399 of the 424 fits are bit for bit.
+  After a hold *[stack #558]*: where the record a fit chose ends held at an eccentricity switch (the whole fit's pass,
+  not R17's second stage), the same pass runs again once per side, every set within 0.01 of a switch in e taking that
+  side's flags (`xpt::ForceSideScope`: the fit's own thread only, set for the pass and cleared after it, so no flight and
+  no other fit reads it). A side's record replaces the held one where its e lies on its own side (at or under the limit
+  on the below side, above it on the above side), so the branch it was fitted on is the one its epoch eccentricity
+  decides, and its arc's fit RMS is lower than the held record's by more than 1e-9 relative; of two such, the lower
+  stands. The pick reads the fit's own RMS only, never a truth. The OD COMMENT adds one line saying what each side read
+  and which record was kept: "fit: the above side's record of the eccentricity switch at 0.30 (arc RMS 29.9 m) in place
+  of the set held at the switch (e 0.3000000000, arc RMS 44.3 m); ..." or "fit: the set held at the switch stands (arc
+  RMS 44.3 m); ...", each side then as "the below side's record: e ..., arc RMS ... m", "the below side's set lies across
+  the switch (e ..., arc RMS ... m)" or "the below side gives no record". A held record that stands keeps its mean
+  elements, covariance and states bit for bit; only that line is new. Every fit that ends held at no switch is the
+  version before's bit for bit. MEASURED_558
   A step of half the update inside the pinned passes cures none of the refusals (measured on 0.6.27): each branch's
   least-squares set lies across the switch, wherever the steps go. On the referee's
   full-field truths (its own integrator, 31 x 31, Sun and Moon) seven fits whose mean motion lies 2e-8 to 5.6e-7 from a
