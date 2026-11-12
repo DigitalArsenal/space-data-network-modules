@@ -3213,16 +3213,76 @@ inline double eccentric_longitude(const double* y) {
   return F;
 }
 
+inline bool lp_radiation_through_output(const RateContext& ctx);
+inline bool lp_third_body_through_output(const double* y, const Bodies& b, double tb[6], double agom, double half_window_s);
+
+/// 8-point Gauss-Legendre nodes and weights on [-1, 1] (passage_state).
+constexpr double kPassGx[8] = {-0.96028985649753623, -0.79666647741362674, -0.52553240991632899, -0.18343464249564980,
+                               0.18343464249564980,  0.52553240991632899,  0.79666647741362674,  0.96028985649753623};
+constexpr double kPassGw[8] = {0.10122853629037626, 0.22238103445337447, 0.31370664587788729, 0.36268378337836198,
+                               0.36268378337836198, 0.31370664587788729, 0.22238103445337447, 0.10122853629037626};
+
+/// SPEC 16.12, from 0.6.42 (stack #547): the orbit a perigee passage's drag is taken on. In the long-period regime above
+/// e 0.3 the Sun's and Moon's rates of the mean elements (16.19), and radiation's there (16.22), act along the orbit, so the
+/// mean perigee radius moves within one revolution (3.5 km each way at e 0.9 with the perigee at 120 km and the apogee at
+/// 118,600 km), and a passage's drag taken on the orbit at t depended on t. yq is y moved by those rates from t to the
+/// passage (`next`: the one after t, else the one before), along the mean orbit at t: 8 Gauss-Legendre nodes in the
+/// eccentric anomaly from t's to the passage's, each node at its own time with its own Sun and Moon (first order in the
+/// bodies). The move is weighted by w: 1 with the mean perigee under 500 km, 0 at 700 km and above, a smoothstep between.
+/// False, yq untouched, outside that regime, where w is 0, or where the bodies' rates fail: the passage's drag is then
+/// taken on y. A function of the set's context, t and y alone: nothing is kept between calls.
+inline bool passage_state(const RateContext& ctx, double t, const double* y, const Frame& fr, const Kepler& k, bool next,
+                          double* yq) {
+  if (!lp_radiation_through_output(ctx) || !(k.e < 1.0) || !(fr.n > 0.0)) return false;
+  const double hp = (fr.a * (1.0 - k.e) - 1.0) * kRe;
+  if (!(hp < 700.0)) return false;
+  const double x = hp <= 500.0 ? 1.0 : (700.0 - hp) / 200.0, w = x * x * (3.0 - 2.0 * x);
+  const double e = k.e, M0 = k.m;
+  double E = kPi;
+  for (int it = 0; it < 60; ++it) {
+    const double dE = (E - e * std::sin(E) - M0) / (1.0 - e * std::cos(E));
+    E -= dE;
+    if (std::fabs(dE) < 1e-14) break;
+  }
+  const double Eq = next ? kTwoPi : 0.0, half = 0.5 * (Eq - E), mid = 0.5 * (Eq + E);
+  double d[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+  for (int i = 0; i < 8; ++i) {
+    const double Ei = mid + half * kPassGx[i];
+    double sEi, cEi;
+    fm::sincos(Ei, sEi, cEi);
+    const double Mi = Ei - e * sEi;
+    double yi[6] = {y[0], y[1], y[2], y[3], y[4], y[5]};
+    yi[kLam] = y[kLam] + (Mi - M0);
+    const Bodies bi = bodies_at_ap(ctx.d50_epoch + (t + (Mi - M0) / fr.n) / kMinutesPerDay);
+    double tb[6];
+    if (!lp_third_body_through_output(yi, bi, tb, ctx.agom > 0.0 ? ctx.agom : 0.0, 30.0 * ctx.branch.lp_step)) return false;
+    const double wt = kPassGw[i] * half * (1.0 - e * cEi) / fr.n;
+    for (int j = 0; j < 6; ++j) d[j] += wt * tb[j];
+  }
+  for (int j = 0; j < 6; ++j) yq[j] = y[j] + w * d[j];
+  yq[kLam] = y[kLam];
+  return true;
+}
+
 /// The drag's part of the averaged rates (SPEC 3.4), added to `out`. AP above e 0.3 (SPEC 16.12): the mean of the
-/// perigee passages before and after t, each at its own time.
+/// perigee passages before and after t, each at its own time, and in the long-period regime on the orbit at the passage
+/// (passage_state).
 inline void drag_part(const RateContext& ctx, double t, const double* y, const Frame& fr, const Kepler& k, const AngleTrig& ag,
                       const Bodies& b, double* out) {
   if (ctx.drag_pass) {
     const double tp = t - k.m / fr.n, period = kTwoPi / fr.n;
     for (int s = 0; s < 2; ++s) {
       const double tq = tp + s * period;
-      drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
-                 out, true, 0.5);
+      double yq[6];
+      if (passage_state(ctx, t, y, fr, k, s == 1, yq)) {
+        const Frame fq = frame_of(yq);
+        const Kepler kq = kepler_of(yq, fq.a);
+        drag_rates(yq, fq, kq, angle_trig(kq), ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere,
+                   ctx.theta_g0 + kOmegaE * tq, out, true, 0.5);
+      } else {
+        drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
+                   out, true, 0.5);
+      }
     }
   } else {
     drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + t / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * t, out,
@@ -3231,7 +3291,8 @@ inline void drag_part(const RateContext& ctx, double t, const double* y, const F
 }
 
 /// AP above e 0.3 (SPEC 16.12): the two passages drag_part averages, apart, for the output's drag steps: v[0..5] the full
-/// rates of the passage before t (at t - M/n), v[6..11] those of the next, v[12] and v[13] their widths in the mean anomaly.
+/// rates of the passage before t (at t - M/n), v[6..11] those of the next, v[12] and v[13] their widths in the mean anomaly;
+/// each on the orbit at its passage in the long-period regime (passage_state), as drag_part.
 constexpr int kDragPassValues = 14;
 inline void drag_passes(const RateContext& ctx, double t, const double* y, const Frame& fr, const Kepler& k,
                         const AngleTrig& ag, const Bodies& b, double* v) {
@@ -3239,8 +3300,16 @@ inline void drag_passes(const RateContext& ctx, double t, const double* y, const
   for (int j = 0; j < kDragPassValues; ++j) v[j] = 0.0;
   for (int s = 0; s < 2; ++s) {
     const double tq = tp + s * period;
-    drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
-               v + 6 * s, true, 1.0, false, v + 12 + s);
+    double yq[6];
+    if (passage_state(ctx, t, y, fr, k, s == 1, yq)) {
+      const Frame fq = frame_of(yq);
+      const Kepler kq = kepler_of(yq, fq.a);
+      drag_rates(yq, fq, kq, angle_trig(kq), ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere,
+                 ctx.theta_g0 + kOmegaE * tq, v + 6 * s, true, 1.0, false, v + 12 + s);
+    } else {
+      drag_rates(y, fr, k, ag, ctx.bterm, b, ctx.d50_epoch + tq / kMinutesPerDay, ctx.atmosphere, ctx.theta_g0 + kOmegaE * tq,
+                 v + 6 * s, true, 1.0, false, v + 12 + s);
+    }
   }
 }
 
