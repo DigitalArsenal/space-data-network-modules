@@ -2978,9 +2978,11 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   *[stack #504]*: the free set, which its refused trial steps hold at the switch on its own branch, is the answer; its
   branch is that of its own epoch eccentricity, and the record's OD COMMENT says "fit: held at the eccentricity switch on
   its own branch; the least-squares sets of both branches lie across it". The above side begins strictly above the limit
-  (from 0.6.37: at eccentricity exactly 0.3 an AP set reads the class's G as the below side does), so a held set
-  approached from below is at the limit, on the below side, and one approached from above is at the first value above
-  it. The 0.05 switch is one flag with one comparison (the families on the grid strictly above 0.05, tess::wide_set), so
+  (from 0.6.37: at eccentricity exactly 0.3 an AP set reads the class's G as the below side does). What the rule
+  guarantees is a held set within 1e-8 of its switch, on its own side: at or under the limit on the below side, above it
+  on the above side. On the 13 held records of the measurement below, the four on the below side lie 6.9e-17 to 2.5e-15
+  under the limit and the nine on the above side 5.6e-17 to 1.0e-13 above it; none is the limit itself. The branch test's
+  truth half on each side, fitted from below, is held at 0.3 itself. The 0.05 switch is one flag with one comparison (the families on the grid strictly above 0.05, tess::wide_set), so
   a set at exactly 0.05 was already the below side's. A held record's covariance is the curvature of the
   cost, e free, at a set that is not the cost's minimum: its e sigma reaches across the switch, and no calibration measured
   it there; the OD COMMENT is the record's only mark of it. Where some pass ends at an eccentricity switch, each caller
@@ -2992,17 +2994,23 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   - each pass at the data's own sigma (12.1): a refused pass left the pass before; a held pass is kept;
   - `sdnap_fit`: the held set with status 0 or 1, where it returned -5 with the last set the pinned passes reached (its
     stats carry no mark of the hold).
-  Every other fit is the version before's bit for bit. Measured on model truth (experiments synthetic-orbits, FFM 2.2.0;
-  every case of the seeded set within 0.01 of a switch in e, 212 of 965), the rule on 0.6.27 (modules 2919d35d, wasm
-  a4d3bfcb) against 0.6.27 without it (modules f6f0c2cb, wasm 0211d88b):
+  Every other fit and flight is the version before's bit for bit, except a set at exactly e 0.3: its class's G now comes
+  from the polynomial and its covariance class above the drag is the below side's (the themis-ripple test's e 0.3 seed,
+  at 2.4 rev/day, moves by 5.1e-6 mm). Measured on model truth (experiments synthetic-orbits, FFM 2.2.0; every case of
+  the seeded set within 0.01 of a switch in e, 212 of 965), 0.6.37 (wasm 08e7125e: this rule and the series switch
+  strictly above 0.3; the release's build differs from it only in the covariance class at exactly 0.3, which moves no fit)
+  against 0.6.36 (wasm bf1b5898):
   - the 72 h fit before the cutoff, refused fit-at-branch-limit on 8 cases (seven at 0.3, one at the 0.05 switch of class
-    0), gives a record on each, its largest distance to the truth over 0 to 120 h from 16 m to 4.8 km (the e 0.3 orbits
-    with a low perigee, whose 72 h fits miss the forecast by kilometers on either branch);
-  - the fit to the numerical forecast over 0 to 120 h, refused on 2 (0.05 and 0.3), gives records of 186 and 115 m;
-  - four fits not refused move, a pass of each having ended at the switch, each nearer the truth (652 to 644, 174.5 to 174.4,
-    25.5 to 8.6 and 19.9 to 13.5 m); the other 410 of the 424 fits are bit for bit.
-  A step of half the update inside the pinned passes cures none of the refusals: each branch's least-squares set lies across
-  the switch, wherever the steps go. On the referee's
+    0), gives a record on each, its largest distance to the truth over 0 to 120 h 16, 144, 1,079, 1,183, 1,545, 1,551,
+    2,239 and 4,739 m (the six of a kilometer or more: the e 0.3 orbits with a perigee of 300 to 650 km, and the e 0.05
+    orbit at 400 km, i 98);
+  - the fit to the numerical forecast over 0 to 120 h, refused on 2 (0.05 and 0.3), gives records of 242 and 115 m;
+  - 15 fits of the 72 h arc not refused move, a pass of each having ended at the switch: five nearer the truth (649.8 to
+    641.2, 799.0 to 797.5, 206.8 to 206.1, 25.4 to 8.4 and 20.3 to 14.2 m), one farther (e 0.3 at 1,000 km, i 55: 195.7
+    to 678.1 m, now held at the switch, its fit RMS 18.3 to 16.9 m), and nine within 0.1 m;
+  - the other 399 of the 424 fits are bit for bit.
+  A step of half the update inside the pinned passes cures none of the refusals (measured on 0.6.27): each branch's
+  least-squares set lies across the switch, wherever the steps go. On the referee's
   full-field truths (its own integrator, 31 x 31, Sun and Moon) seven fits whose mean motion lies 2e-8 to 5.6e-7 from a
   class limit, at each of the five limits, are at the theory's least-squares minimum (a Gauss-Newton polish with the full
   theory's Jacobian lowers the cost by at most 2.3e-8 relative, steps of at most 1 mm); arcs whose two branches' minima lie
@@ -4330,7 +4338,8 @@ the field at 70 x 70, the largest distance over 0 to 5 days, q = 0 / |q| up to 1
 On the synthetic set of stack #498 (the numerical propagator the truth, AP fitted to its forecast over 0 to 5 days, the largest
 distance over those 5 days), the low-orbit band's 205 cases (near-circular 650 to 2,000 km, e 0.05 to 0.1) went from 150 to
 149 within 100 m, with a median of 64.1 to 61.5 m and a worst of 3,998 to 2,966 m (0.6.26 to 0.6.27). The case lost,
-e 0.05 at 500 km, i 70, is refused at the 0.05 switch, its best set lying across the switch from either side. The largest
+e 0.05 at 500 km, i 70, was refused at the 0.05 switch through 0.6.36, its best set lying across the switch from either
+side; from 0.6.37 it is held at the switch on its own branch (16.7), at 241.9 m, so the count stands. The largest
 gains are at a 200 km perigee, e 0.05: 3,998 to 284 m at i 70, 914 to 257 m at i 55.
 The largest list on a sweep of 1,880 low-table sets (12 to 16.6 rev/day, eight inclinations, e 0 to 0.05) is 971 terms, under
 the list's 2,048 (`kShallowMax`); a term over it would be listed as code 7, and the partition test asserts there is none.
