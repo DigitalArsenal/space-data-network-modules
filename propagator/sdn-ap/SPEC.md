@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.37 (dist de3f0b87).
+Version 0.6.38 (dist 9d7ca316).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -4496,11 +4496,17 @@ sine and cosine were then left at 0 and 1, a perigee state: on a long-period set
 its epoch for 20,000 mean anomalies, 69 (0.35 %) came out at the perigee radius, up to 27,000 km from their place. A GEO set
 (e 1e-5, i 0.05) held none.
 
-Section 8's solve (output_j2_osc) starts from Ewarm + dm and runs Newton for every state, with no series, so the branch window
-opens at every perigee passage for dm / n, whatever the size of dm. It serves SGP4XP's sets, AP's output where e^2 or
-tan^2 (i/2) is at most 1e-24, and the long-period regime's output Jacobian (16.19), whose columns shift lambda, af and ag by
-1e-7 from the base E. This version counts its Newtons that end 1e-12 or more from the root (sdnap_kepler_unconverged 1) and
-leaves its arithmetic as it was.
+Section 8's solve (output_j2_osc) starts from Ewarm + dm and runs Newton for every state, with no series. It serves SGP4XP's
+sets, AP's output where e^2 or tan^2 (i/2) is at most 1e-24, and the long-period regime's output Jacobian (16.19), whose
+columns shift lambda, af and ag by 1e-7 from the base E. From 0.6.38 it solves for m_t, k.m on the warm start's branch, as
+above (exactly k.m wherever the two lie on the same side of 0), and a Newton that ends 1e-12 or more from the root takes the
+bisection and is counted (sdnap_kepler_unconverged 1); one that ends within rounding stands, its sine and cosine taken from E
+as every state's are. Through 0.6.37 it solved for k.m itself, and the branch window opened at every perigee passage for
+dm / n, whatever the size of dm: on the SGP4XP twins of the synthetic set's 408 cases at e 0.3 and above (no gravity terms,
+BTERM 0.022, AGOM 0.012), flown every 1 ms for 15 s either side of every perigee passage over 5 days, 1,702 of 1,814 passages
+at e 0.5 held a state 1 m or more off (up to 1,304 km), 1 of 5 at e 0.82 (4,342 km) and 108 of 157 at e 0.9 (up to 328,667
+km); none at e 0.3 or e 0.6 to 0.74, where Newton reached the root one turn away. Its dm is SGP4XP's own short-period terms
+(the Sun's, the Moon's, radiation): 2.4e-6 to 6.3e-6 rad at perigee on a 4:1 orbit at e 0.5, a window of 8 to 22 ms.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
