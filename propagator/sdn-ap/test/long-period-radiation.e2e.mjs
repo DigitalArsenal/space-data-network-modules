@@ -9,7 +9,7 @@
 //   step window's share of light, 16.22). The test holds that its flight enters and leaves AP's cylinder (the module's Sun,
 //   sdnap_bodies_probe), and flies it at 1 s from an hour before an entry to an hour after the exit, at least 3 h and so
 //   across a step boundary: no position lies off its neighbors' curve (the fourth difference) by more than 1 mm (measured on
-//   0.6.NN: 1.2 um over 14,401 states);
+//   0.6.41: 1.2 um over 14,401 states);
 // - a TESS-like set, 13.7 days, e 0.55 (five days are under half a revolution: SPEC 4's averaged rates and first-order
 //   periodic output terms missed most of it; what remains is AP's pressure constant, 4.5e-6 N/m^2 against FFM's 4.540e-6).
 // The record (16.22): a set of the regime with an area-to-mass above 0 states PERTURBATIONS.SOLAR_RAD_PRESSURE's text and
@@ -45,10 +45,10 @@ const modulePath = process.env.SDN_AP_MODEL_TRUTH_MODULE ?? wasmPath;
 const AGOM = 0.02, RE_KM = 6378.137;
 const LP_Y0_RADIATION_MODEL = `${LP_RADIATION_MODEL}, AND ECOM2 Y0 (ARNOLD ET AL. 2015)`;
 const CASES = [
-  // measured on 0.6.NN, radiation's error at day 7: 20.0 m (0.6.34, SPEC 4's carriers: 48.3 m; with the shadow as on or
+  // measured on 0.6.41, radiation's error at day 7: 20.0 m (0.6.34, SPEC 4's carriers: 48.3 m; with the shadow as on or
   // off at each evaluation: 108.2 m)
   {name: 'eclipsing, 30 h, e 0.31, i 30', n: 0.8, e: 0.31, i: 30, raan: 0, argp: 270, day7: 40},
-  // measured on 0.6.NN: 207.7 m (0.6.34: 1,386.5 m; with AP's constant at FFM's, 2.3 m in a J2-only build)
+  // measured on 0.6.41: 207.7 m (0.6.34: 1,386.5 m; with AP's constant at FFM's, 2.3 m in a J2-only build)
   {name: 'TESS-like, 13.7 d, e 0.55, i 40', n: 1 / 13.7, e: 0.55, i: 40, raan: 0, argp: 120, day7: 300},
 ];
 const epoch = '2026-10-29T00:00:00.000', t0 = Date.parse(epoch + 'Z'), DAY = 864e5, jd = jdOf(epoch);
