@@ -5725,9 +5725,20 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         return false;
       }
       int raw_count = 0;
+      // the fast side's band guard (sp_terms' n_end): the mean motion at the record's span's end at the set's own drag rate at
+      // its epoch
+      double n_end = 0.0;
+      if (fast_side && s.ctx.bterm > 0.0) {
+        double y0[6], dd[6] = {0, 0, 0, 0, 0, 0};
+        equinoctial_of(n0, e.eo, e.xincl, e.xnodeo, e.omegao, e.xmo, y0);
+        const Frame fr0 = frame_of(y0);
+        const Kepler k0 = kepler_of(y0, fr0.a);
+        drag_part(s.ctx, 0.0, y0, fr0, k0, angle_trig(k0), s.ctx.ap_third_body ? bodies_at_ap(s.ctx.d50_epoch) : bodies_at(s.ctx.d50_epoch), dd);
+        if (std::isfinite(dd[kN]) && dd[kN] > 0.0) n_end = n0 + dd[kN] * tess::kFastSpanMinutes;
+      }
       const int comb_count =
           tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list,
-                         fast_side ? md : tess::kFastCap + 2, fast_side);
+                         fast_side ? md : tess::kFastCap + 2, fast_side, n_end);
       tess::SpCombCoef* comb_kept =
           static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) {

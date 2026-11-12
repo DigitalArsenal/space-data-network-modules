@@ -139,6 +139,9 @@ constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
 /// degree 12 or less builds the table it built before.
 constexpr int kFastCap = 70, kSpMaxW = 17;
 constexpr double kShallowBand = 0.045;
+/// The record's span from its epoch for the fast side's band guard (sp_terms' n_end): a 72 h fit's arc and the five days
+/// after it, the span xp_init lays its grid over.
+constexpr double kFastSpanMinutes = 8.0 * 1440.0;
 /// SPEC 16.18, the low table's part (stack #477): with Terms::slow, every term of the embedded field whose own angle rate
 /// at the set's epoch is inside the shallow band (selected to kShallowSelect bands) and whose along-track amplitude through
 /// the mean motion, 3 |j| A / (a psi-dot^2), reaches kSlowKeepM is carried in the rates beside the shallow set's own terms,
@@ -889,9 +892,14 @@ inline int sp_comb_bound(int degree, bool wide, int extra = 0) {
 /// band's terms are the rates', and one the rates do not hold, under their size cut, is carried nowhere), and with
 /// slow_held a slow-held term above `degree` (the slow set takes its own degree, kSlowDegree) is this table's too, by the
 /// same 1 minus the band taper, for q of -1, 0 and 1. A share under 1 is cut on the term's own size.
+/// `n_end` (the fast side, 0 for none): the mean motion at the record's span's end at the set's own drag rate. The table's
+/// share of a term is then the smaller of its two ends' (1 minus the larger band taper), and none where the term's rate
+/// changes sign between them: a term the drag carries into or through the band is the rates' over the span, which carry it
+/// at its current rate, so the two never hold more than the whole term (the evaluator divides by the current rate, which a
+/// term that crosses takes through zero). A set that barely decays keeps its epoch shares.
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
                     SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
-                    int mdaily_degree = kFastCap + 2, bool fast_side = false) {
+                    int mdaily_degree = kFastCap + 2, bool fast_side = false, double n_end = 0.0) {
   int raw_count = 0;
   const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
@@ -909,6 +917,16 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   amp0[0] = kMu * ia0;
   for (int l = 1; l <= 70; ++l) amp0[l] = amp0[l - 1] * ia0;
   const bool fast_on = fast_side && low && !wide;
+  // the J2 rates at the span's end (n_end): e and i held, the drag moves n
+  const bool guard = fast_on && n_end > n0;
+  double mdot_e = 0.0, wdot_e = 0.0, node_e = 0.0, inv_shallow_ne = 0.0;
+  if (guard) {
+    const double ae = std::pow(kKe / n_end, kX2o3), pe = ae * eta * eta, j2e = 1.5 * kJ2 / (pe * pe);
+    mdot_e = n_end + 0.5 * j2e * n_end * eta * (3.0 * c0 * c0 - 1.0);
+    wdot_e = 0.5 * j2e * n_end * (5.0 * c0 * c0 - 1.0);
+    node_e = -j2e * n_end * c0;
+    inv_shallow_ne = 1.0 / (kShallowBand * n_end);
+  }
 
   const auto weight_of = [&](int l, int m, int p, int q, double& psidot) -> double {
     const int w = l - 2 * p, j = w + q;
@@ -932,6 +950,13 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
       }
     } else if (x < 1.0) {
       weight = 0.0;
+    }
+    if (guard && weight > 0.0) {
+      const double psidot_e = w * wdot_e + j * mdot_e + m * (node_e - kOmegaE);
+      if (psidot_e * psidot <= 0.0) return 0.0;
+      const double t0 = band_taper(x), t1 = band_taper(std::fabs(psidot_e) * inv_shallow_ne);
+      const double kept = 1.0 - (t1 > t0 ? t1 : t0);
+      if (kept < weight) weight = kept;
     }
     return weight;
   };
