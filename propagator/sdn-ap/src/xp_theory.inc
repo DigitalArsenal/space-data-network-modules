@@ -5815,7 +5815,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
         s.ctx.shared_mask |= 4;
       } else {
         const res::TermSet ts = res::class_terms(res);
-        res::GTaylor* g = static_cast<res::GTaylor*>(std::malloc(ts.count * sizeof(res::GTaylor)));
+        res::GTaylor* g = static_cast<res::GTaylor*>(sdnap::mem::malloc(ts.count * sizeof(res::GTaylor)));
         if (g == nullptr) return false;
         for (int j = 0; j < ts.count; ++j) g[j] = res::g_taylor(ts.t[j].l, ts.t[j].p, ts.t[j].q, e.eo);
         s.ctx.res_taylor = g;
@@ -5829,11 +5829,17 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.mdaily_degree = md;
       s.ctx.shared_mask |= 32;
     } else {
-      double scratch[2 * 72];
+      // the terms' inclination functions in double on the heap (stack #497: sized by the degree, never on the stack)
+      double* scratch = static_cast<double*>(sdnap::mem::malloc(2 * static_cast<size_t>(tess::mdaily_term_count(md)) * sizeof(double)));
+      if (scratch == nullptr) return false;
       const int count = tess::mdaily_terms(md, e.xincl, scratch);
-      float* kept = static_cast<float*>(std::malloc(2 * count * sizeof(float)));
-      if (kept == nullptr) return false;
+      float* kept = static_cast<float*>(sdnap::mem::malloc(2 * count * sizeof(float)));
+      if (kept == nullptr) {
+        std::free(scratch);
+        return false;
+      }
       for (int q = 0; q < 2 * count; ++q) kept[q] = static_cast<float>(scratch[q]);
+      std::free(scratch);
       s.ctx.mdaily = kept;
       s.ctx.mdaily_degree = md;
     }
@@ -5897,9 +5903,9 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
           tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, table->comb, table->raw, &raw_count, slow_list,
                          fast_side ? md : tess::kFastCap + 2, fast_side, n_end);
       tess::SpCombCoef* comb_kept =
-          static_cast<tess::SpCombCoef*>(std::malloc((comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
+          static_cast<tess::SpCombCoef*>(sdnap::mem::malloc((comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
       if (comb_kept == nullptr) return false;
-      tess::SpCoef* raw_kept = static_cast<tess::SpCoef*>(std::malloc((raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
+      tess::SpCoef* raw_kept = static_cast<tess::SpCoef*>(sdnap::mem::malloc((raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
       if (raw_kept == nullptr) {
         std::free(comb_kept);
         return false;
@@ -5942,7 +5948,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.shared_mask |= 16;
     } else {
       const int zc = tess::zonal_count(zd, wide);
-      float* kept = static_cast<float*>(std::malloc(4 * zc * sizeof(float)));
+      float* kept = static_cast<float*>(sdnap::mem::malloc(4 * zc * sizeof(float)));
       if (kept == nullptr) return false;
       tess::zonal_visit_terms(zd, wide, e.xincl, e.eo, kept);
       s.ctx.zt = kept;
@@ -5963,14 +5969,14 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.hd_a0 = anchor->ctx.hd_a0;
       s.ctx.shared_mask |= 1;
     } else {
-      tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(std::malloc(tess::half_day_bound(sd, res) * sizeof(tess::HalfDayCoef)));
+      tess::HalfDayCoef* table = static_cast<tess::HalfDayCoef*>(sdnap::mem::malloc(tess::half_day_bound(sd, res) * sizeof(tess::HalfDayCoef)));
       if (table == nullptr) return false;
       s.ctx.half_day_count = tess::half_day_terms(sd, e.xincl, e.eo, table, s.ctx.hd_a0, res);
       if (s.ctx.half_day_count < 0) { std::free(table); return false; }
       // the one-day tail keeps what it filled: its amplitude cut leaves a few hundred of the bound's 2,016 entries at
       // degree 31 (the half-day class's allocation is left as it was)
       if (res == 1 && s.ctx.half_day_count > 0)
-        if (void* kept = std::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
+        if (void* kept = sdnap::mem::realloc(table, static_cast<size_t>(s.ctx.half_day_count) * sizeof(tess::HalfDayCoef)))
           table = static_cast<tess::HalfDayCoef*>(kept);
       s.ctx.half_day = table;
     }
@@ -6002,7 +6008,7 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       tess::ShallowTerms& scratch = tess::shallow_scratch();
       const int count = slow_list != nullptr ? scratch.count : tess::shallow_terms(sd, n0, e.eo, e.xincl, scratch);
       if (count > 0) {
-        tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(std::malloc(count * sizeof(tess::ShallowCoef)));
+        tess::ShallowCoef* kept = static_cast<tess::ShallowCoef*>(sdnap::mem::malloc(count * sizeof(tess::ShallowCoef)));
         if (kept == nullptr) return false;
         for (int j = 0; j < count; ++j)
           kept[j] = tess::ShallowCoef{scratch.c[j].l, scratch.c[j].m, scratch.c[j].p, scratch.c[j].k, static_cast<float>(scratch.c[j].fg),
@@ -6026,6 +6032,14 @@ inline double radiation_y0(const Elements& e) { return e.ndot_rev_day2; }
 inline double& radiation_y0(Elements& e) { return e.ndot_rev_day2; }
 
 /// Inside a tess::FitGridScope (SPEC 16.11) the grids this set builds above tess::kWideE are freed with it, never kept idle.
+inline void xp_release(XpSat& s);
+/// SPEC 1.6 (stack #497): a set that fails after ap_init took memory releases it here, on every failing return, so a caller
+/// that frees the XpSat without xp_release leaks no table and no grid reference (a referenced grid is never evicted).
+inline int32_t xp_init_refused(XpSat& s) {
+  xp_release(s);
+  s.init_error = kPropRefused;
+  return kPropRefused;
+}
 inline void decay_epoch(XpSat& s);  // SPEC 16.25, below
 inline int32_t xp_init(const Elements& e, XpSat& s) {
   s = XpSat{};
@@ -6064,26 +6078,17 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.ctx.atmosphere = atm::active();  // the call's atmosphere, if it selected one (atmosphere.inc)
   s.ctx.e0 = e.eo;
   s.ctx.i0 = e.xincl;
-  if (!ap_init(e, n0, res, s)) {
-    s.init_error = kPropRefused;
-    return kPropRefused;
-  }
+  if (!ap_init(e, n0, res, s)) return xp_init_refused(s);
   // SPEC 16.13: an AP set's radiation term Y0 (m/s^2; radiation_y0 above); SGP4XP flies none
   s.ctx.rad_y0 = s.ctx.ap_third_body ? radiation_y0(e) : 0.0;
-  if (!std::isfinite(s.ctx.rad_y0)) {
-    s.init_error = kPropRefused;
-    return kPropRefused;
-  }
+  if (!std::isfinite(s.ctx.rad_y0)) return xp_init_refused(s);
   // SPEC 16.14: an AP set's solid Earth tide, with its diurnal band at the epoch; SGP4XP flies none
   s.ctx.solid_tides = s.ctx.ap_third_body && s.ctx.selected_terms.solid_tides ? 1 : 0;
   if (s.ctx.solid_tides) tide::diurnal_band(s.ctx.d50_epoch, s.ctx.tide_k1);
   if (res != 0 && !s.ctx.ap_resonance) {
     // SGP4XP: the epoch class's terms at e_0, i_0 (SPEC 6.3), the library's functions (6.4)
-    res::ResCoef* rc = static_cast<res::ResCoef*>(std::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));
-    if (rc == nullptr) {
-      s.init_error = kPropRefused;
-      return kPropRefused;
-    }
+    res::ResCoef* rc = static_cast<res::ResCoef*>(sdnap::mem::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));
+    if (rc == nullptr) return xp_init_refused(s);
     s.ctx.res_count = res::current_terms(res, e.eo, std::sin(e.xincl), std::cos(e.xincl), rc);
     s.ctx.res_epoch = rc;
   }
@@ -6111,10 +6116,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.epoch.index = 0;
   bool finite = rates(s.ctx, 0.0, s.epoch.y, s.epoch.f);
   for (int j = 0; finite && j < 6; ++j) finite = std::isfinite(s.epoch.y[j]) && std::isfinite(s.epoch.f[j]);
-  if (!finite) {  // an epoch state or rate that is not a number never starts a grid
-    s.init_error = kPropRefused;
-    return kPropRefused;
-  }
+  if (!finite) return xp_init_refused(s);  // an epoch state or rate that is not a number never starts a grid
   const double step = s.ctx.long_period ? long_period_step(s.ctx) : averaged_step(s.ctx, n0);
   const double span = 8.0 * kMinutesPerDay;
   int32_t stride = static_cast<int32_t>(std::ceil(span / (kSparse * step)));
@@ -6315,7 +6317,7 @@ inline int field_census(int cap, double n, double e, double inc, double cut, dou
   el.xno = n;
   el.eo = e;
   el.xincl = inc;
-  XpSat* sp = static_cast<XpSat*>(std::malloc(sizeof(XpSat)));
+  XpSat* sp = static_cast<XpSat*>(sdnap::mem::malloc(sizeof(XpSat)));
   if (sp == nullptr) return -1;
   new (sp) XpSat{};
   XpSat& s = *sp;
@@ -6503,7 +6505,7 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   SetCaches* c = nullptr;
   // inside a threaded batch the holders' list may not grow past the room kept for it (pool_room): no room, no caches
   const bool listed = !(p.holders.size() == p.holders.capacity() && batch_running());
-  if (listed && pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
+  if (listed && pool_reclaim_locked(p, need, &s, before)) c = sdnap::mem::counted(new (std::nothrow) SetCaches{});
   if (c != nullptr) {
     c->bytes = need;
     // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and
@@ -6671,7 +6673,7 @@ inline bool run_grow(XpSat& s, SetCaches& c, NodeRun& r, int32_t want) {
   }
   unlock(&p.lock);
   if (!room) return false;
-  Node* grown = static_cast<Node*>(std::realloc(r.nodes, static_cast<size_t>(want) * sizeof(Node)));
+  Node* grown = static_cast<Node*>(sdnap::mem::realloc(r.nodes, static_cast<size_t>(want) * sizeof(Node)));
   if (grown == nullptr) {
     lock(&p.lock);
     p.held -= delta;
@@ -7068,7 +7070,7 @@ inline bool report_rates(const XpSat& s, double t, const double* y, double* f) {
   e.xnodeo = k.node;
   e.omegao = k.argp;
   e.xmo = k.m;
-  XpSat* x = static_cast<XpSat*>(std::calloc(1, sizeof(XpSat)));
+  XpSat* x = static_cast<XpSat*>(sdnap::mem::calloc(1, sizeof(XpSat)));
   if (x == nullptr) return false;
   const atm::Atmosphere* prev_atm = atm::active();
   atm::active() = s.ctx.atmosphere;

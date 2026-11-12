@@ -49,4 +49,79 @@ inline Gravity gravity_wgs72() {
   return make_gravity(398600.8, 6378.135, 0.001082616, -0.00000253881, -0.00000165597, 0.0);
 }
 
+/// Memory accounting (SPEC 1.6; stack #497): every heap allocation of the module's own code goes through these, so a method
+/// can tell an allocation that failed from a theory or a fit that failed, and refuse by name ("out-of-memory"). The count is
+/// the instance's (every thread's); a method compares it with its own mark (CallMark). std::vector and operator new are not
+/// counted: under -fno-exceptions their failure traps, as before.
+namespace mem {
+inline uint32_t g_failures = 0;
+inline uint64_t g_largest_failed = 0;
+inline void note_failure(size_t n) {
+  __atomic_add_fetch(&g_failures, 1u, __ATOMIC_RELAXED);
+  uint64_t cur = __atomic_load_n(&g_largest_failed, __ATOMIC_RELAXED);
+  while (static_cast<uint64_t>(n) > cur &&
+         !__atomic_compare_exchange_n(&g_largest_failed, &cur, static_cast<uint64_t>(n), false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+  }
+}
+inline void* malloc(size_t n) {
+  void* p = std::malloc(n);
+  if (p == nullptr && n > 0) note_failure(n);
+  return p;
+}
+inline void* calloc(size_t k, size_t n) {
+  void* p = std::calloc(k, n);
+  if (p == nullptr && k > 0 && n > 0) note_failure(k * n);
+  return p;
+}
+inline void* realloc(void* q, size_t n) {
+  void* p = std::realloc(q, n);
+  if (p == nullptr && n > 0) note_failure(n);
+  return p;
+}
+inline void* aligned_alloc(size_t align, size_t n) {
+  void* p = std::aligned_alloc(align, n);
+  if (p == nullptr && n > 0) note_failure(n);
+  return p;
+}
+/// A nothrow new's result, counted when it failed.
+template <class T>
+inline T* counted(T* p) {
+  if (p == nullptr) note_failure(sizeof(T));
+  return p;
+}
+inline uint32_t failures() { return __atomic_load_n(&g_failures, __ATOMIC_RELAXED); }
+/// The failures counted when the calling thread's method began.
+inline thread_local uint32_t g_call_mark = 0;
+// The largest failed request is the instance's, reset by every method: were two methods ever to overlap on one instance, only
+// the size the message names could be another call's (the count compared with each call's own mark stays right).
+struct CallMark {
+  CallMark() {
+    g_call_mark = failures();
+    __atomic_store_n(&g_largest_failed, 0, __ATOMIC_RELAXED);
+  }
+};
+/// True, with the method's error set to "out-of-memory", when an allocation failed since the method began: a set the
+/// theory could not initialize or a fit that could not finish for want of memory is refused as such, never as the theory's
+/// refusal of the elements or a fit that did not converge.
+inline bool refuse_if_out_of_memory() {
+  const uint32_t now = failures();
+  if (now == g_call_mark) return false;
+  char why[200];
+  std::snprintf(why, sizeof why,
+                "An allocation failed (%u since the call began, the largest %llu bytes): the module's memory is exhausted.",
+                now - g_call_mark, static_cast<unsigned long long>(__atomic_load_n(&g_largest_failed, __ATOMIC_RELAXED)));
+  plugin_set_error("out-of-memory", why);
+  return true;
+}
+/// A method's end (SPEC 1.6): a method during which one of the module's own allocations failed refuses by name, whatever it
+/// would have answered. A fit can absorb a failed flight as a step that did not improve, a covariance that could not be
+/// prepared can be dropped: such a call never returns success, and never another reason, and emits no output.
+inline int finish(int rc) {
+  if (failures() == g_call_mark) return rc;
+  plugin_reset_output_state();
+  refuse_if_out_of_memory();
+  return 3;
+}
+}  // namespace mem
+
 }  // namespace sdnap

@@ -132,7 +132,12 @@ inline int push_mnv(const Burn& burn, const Elements& pre, const Elements& post,
 }  // namespace evm
 }  // namespace sdnap
 
+static int maneuver_call(void);
 extern "C" int maneuver(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(maneuver_call());
+}
+static int maneuver_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   uint32_t sets = 0;
@@ -211,7 +216,8 @@ extern "C" int maneuver(void) {
     Elements post{};
     events::Boundary bd;
     if (!events::maneuver_map(cur, t_c, b.dv, b.duration_s, post, bd)) {
-      plugin_set_error("maneuver-failed", "The inverse map did not converge at a burn (or the set does not reach it).");
+      if (mem::refuse_if_out_of_memory()) return 3;
+      plugin_set_error("maneuver-failed","The inverse map did not converge at a burn (or the set does not reach it).");
       return 3;
     }
     if (const int rc = evm::push_set(post, set.id)) return rc;
@@ -226,11 +232,12 @@ extern "C" int maneuver(void) {
   std::vector<xpt::XpSat*> sats;
   drag::table();
   for (const Elements& e : chain) {
-    xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+    xpt::XpSat* s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
     if (s == nullptr || xpt::xp_init(e, *s) != kPropOk) {
       for (xpt::XpSat* q : sats) { xpt::xp_release(*q); std::free(q); }
       if (s != nullptr) xpt::xp_release(*s);
       std::free(s);
+      if (mem::refuse_if_out_of_memory()) return 3;
       plugin_set_error("element-set-refused", "A set of the chain is refused.");
       return 3;
     }

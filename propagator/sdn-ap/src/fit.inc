@@ -173,7 +173,7 @@ inline uint32_t g_ceiling_met[2] = {0, 0};
 struct NominalSat {
   xpt::XpSat* s = nullptr;
   explicit NominalSat(const ElementRow& row) {
-    s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+    s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
     if (s != nullptr && xpt::xp_init(elements_of(row), *s) != kPropOk) { std::free(s); s = nullptr; }
   }
   ~NominalSat() {
@@ -187,7 +187,7 @@ struct NominalSat {
 /// rule); any other refusal, and every SGP4XP one, leaves it false.
 inline bool residuals(const ElementRow& row, const double* t, const double* r, int count, double* res, bool* ap_decayed = nullptr) {
   Elements e = elements_of(row);
-  xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  xpt::XpSat* s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
   if (s == nullptr) return false;
   if (ap_decayed != nullptr) *ap_decayed = false;
   bool ok = xpt::xp_init(e, *s) == kPropOk;
@@ -346,10 +346,14 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   const int max_it = o.max_iterations > 0 ? o.max_iterations : 30;
   double x[kMaxParams];
   const int np = params_of(row, o, x);
-  double* res = static_cast<double*>(std::malloc(sizeof(double) * nres));
-  double* trial = static_cast<double*>(std::malloc(sizeof(double) * nres));
+  // SPEC 1.6 (stack #497): a pass during which one of the module's allocations failed answers status -1, whatever it reached.
+  // A flight refused for want of memory reads as a step that did not improve, as a start refused (-2), or, after a bump past
+  // the decay rule (SPEC 16.25), as a column refused on both sides (2): none of them is the fit's answer.
+  const uint32_t mem_mark = sdnap::mem::failures();
+  double* res = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * nres));
+  double* trial = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * nres));
   // zeroed: a column whose difference is refused (SPEC 16.25) is never read before it is written
-  double* jac = static_cast<double*>(std::calloc(static_cast<size_t>(nres) * kMaxParams, sizeof(double)));
+  double* jac = static_cast<double*>(sdnap::mem::calloc(static_cast<size_t>(nres) * kMaxParams, sizeof(double)));
   auto release = [&]() { std::free(res); std::free(trial); std::free(jac); };
   if (res == nullptr || trial == nullptr || jac == nullptr) {
     release();
@@ -376,7 +380,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   row_of(x, o, work);
   if (!residuals(work, t, r, count, res)) {
     release();
-    out.status = -2;
+    out.status = sdnap::mem::failures() != mem_mark ? -1 : -2;
     return out;
   }
   double cost = cost_of(res, x);
@@ -394,13 +398,13 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       ElementRow probe = work;
       if (probe.bterm == 0.0) probe.bterm = 1e-3;
       Elements e = elements_of(probe);
-      xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+      xpt::XpSat* s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
       if (s != nullptr && xpt::xp_init(e, *s) == kPropOk) {
         ElementRow none = probe;
         none.bterm = 0.0;
         Elements e0 = elements_of(none);
         xpt::GridShareScope share(s);  // SPEC 16.11: the drag-free copy reads the probe's grids
-        xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+        xpt::XpSat* s0 = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
         if (s0 != nullptr && xpt::xp_init(e0, *s0) == kPropOk)
           ndot_per_drag = (s->epoch.f[xpt::kN] - s0->epoch.f[xpt::kN]) / probe.bterm;
         if (s0 != nullptr) xpt::xp_release(*s0);
@@ -596,7 +600,8 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   out.max_km = mx;
   out.iterations = it;
   out.status = converged ? 0 : (stopped_on_column ? kColumnRefused : 1);
-  if (!converged && !stopped_on_column) __atomic_fetch_add(&g_ceiling_met[max_it >= kPassCeiling ? 0 : 1], 1u, __ATOMIC_RELAXED);
+  if (sdnap::mem::failures() != mem_mark) out.status = -1;  // SPEC 1.6, above
+  else if (!converged && !stopped_on_column) __atomic_fetch_add(&g_ceiling_met[max_it >= kPassCeiling ? 0 : 1], 1u, __ATOMIC_RELAXED);
   release();
   return out;
 }

@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.47 (dist 46049045).
+Version 0.6.48 (dist 444f25e4).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -136,6 +136,77 @@ function at those elements, but as of a new epoch: what initialization fixes, am
 the resonance function values F and G (6.3), is taken from the elements at t instead of the epoch, and theta_G is
 the 1.2 value at t. At t = 0 report and integrator agree; later the reported rates are not the rates the
 integrator used, and the elements of later times do not follow from integrating them.
+
+### 1.6 Memory *[stack #497]*
+
+The module's own malloc, calloc, realloc and aligned_alloc calls, and its two nothrow news (the theories' tables and
+grids, the set caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which counts the
+allocations that fail and the largest request.
+
+**A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
+`propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
+would otherwise have answered. That includes the decay answers of SPEC 16.25:
+- `decayed:<time>` and `decayed-in-arc:<time>`;
+- a record whose held-out states past the crossing read DECAYED;
+- a record whose last pass stopped on a column it could not difference.
+
+The message names how many allocations failed since the method began and the largest.
+Through 0.6.47 such a call answered one of five ways:
+- the theory's refusal of the elements (`element-set-refused`);
+- a state not reached (`propagation-failed`);
+- a fit that did not converge (`fit-failed`), or an implausible one;
+- a decay answer. A fit's start refused for want of memory was tested for a crossing in the arc, and a column whose
+  flight below a decaying bump failed for want of memory stopped the pass as a column refused on both sides (status 2);
+- success. A fit absorbs a failed flight as a step that did not improve, and a covariance that could not be prepared was
+  dropped or refused as `invalid-covariance`. So the record could depend on how much memory was free.
+
+**A fit pass** (`fit::run_free`) during which an allocation failed answers status -1, whatever it reached: never 0, 1 or 2,
+and never -2 (a start the theory refused). The `sdnap_fit` export then gives status -1 and the error `out-of-memory`, and
+leaves its row as it came.
+
+In one instance's run of the 19 real THEMIS and Chandra windows with a measuring build at tesseral degree 31, the last four
+catalog fits read "fit-failed: The fit did not converge on the block". By then the instance had reached the 2,048 MB the
+module SDK's host gives a module by default, 1,858 MB of it idle grids. Each of the four fits when run alone.
+
+**What a failed initialization leaves.** A set whose initialization fails after the theory took memory releases it
+(`xp_init`, on every failing return), so no table and no grid reference outlives it. An epoch-store slot whose
+initialization failed for want of memory answers that state with the theory's refusal code. It is not kept: the next call
+initializes it again.
+
+**The resident exports**, which have no method error (`sdnap_epochs_*`, the row store's `sdnap_propagate_*`), answer a
+state whose set could not be initialized with the theory's refusal code, as before. `sdnap_wide_grid_cache` and
+`sdnap_wide_grid_budget` show the instance's grids and bytes.
+
+**Outside the rule** (no call mark; what each does when one of the module's allocations fails):
+- `sdnap_covariance_at` and `sdnap_covariance_full_at`: a covariance bank that cannot be prepared answers their existing
+  refusal code -3, and so does a time the bank cannot reach.
+- `sdnap_epochs_at` (and the other `sdnap_epochs_*` readers) with a covariance asked: a bank that cannot be built, or a moved
+  set's flight that fails, gives status 0 and the state without its covariance.
+- `ingest_omm`, refused `out-of-memory`: by then the old row store is dropped (the new store's build begins by freeing it).
+  When the new store's arrays could be had, it is installed; a row whose set failed to initialize for want of memory holds
+  the theory's refusal. Its $OCM outputs are discarded with the refusal.
+- `load_epochs`, refused for any reason: the old snapshot is gone (the store's build begins by clearing it). A record's
+  carried forecast is read with operator new (below), so it traps rather than counts. The forecast check that flies a set
+  at the carried span's ends (`carried::build`) is reached only by `fit`; there a set that cannot be initialized writes "the
+  theory does not reach it", and the fit then answers `out-of-memory`.
+
+**Not counted, and trapping (as before) when they fail:**
+- std::vector and operator new under -fno-exceptions, including the paths a caller's input sizes:
+  - a fit's states;
+  - the output times (up to OUTPUT.MAXIMUM_STATES);
+  - the records of a load;
+  - the $OMM sets, the burns, the $SPW rows;
+  - a carried forecast's segments;
+  - every output's FlatBufferBuilder.
+- The per-thread stores a thread allocates on its first use of AP's terms, fixed in size, not sized by any input: the GCRF
+  and drift node caches (`new`), the bodies' store (`new`) and the short-period evaluator's thread cache (it aborts).
+
+**Counted, then aborting when it fails:** the short-period evaluator's per-thread block (192 KiB, aligned_alloc through the
+accounting; the failure is counted, then the thread aborts).
+
+**The stack.** No array whose size follows the grid's anomalies or a degree lies on it: the grid builder's anomaly arrays
+(9 x 128 doubles) and the m-daily family's inclination functions are on the heap. The fixed-size arrays indexed by the
+m-daily and grid caps (kMdailyCap, kSpCap) are checked against them at compile time.
 
 ---
 
@@ -3584,7 +3655,27 @@ a thread while tess::FitGridScope lives there (thread-local; the fit holds it ar
 its last holder drops it, never kept idle, so a fit leaves no grid behind. The export sdnap_wide_grid_stats(reset, out) writes the
 grid lookups since the last reset, out[0] by sets outside a fit and out[1] by a fit's sets (reset != 0 zeroes them after reading);
 sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their bytes (out[1]) and the grids built since the
-instance began (out[2]). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
+instance began (out[2]).
+
+*The cache's bound (stack #497).*
+- **The count:** at most 256 grids.
+- **The bytes:** while an idle grid remains to be freed, at most kGridCacheBytes (512 MiB) of grids, live and idle, counting
+  the grid about to be built at its size; the least recently used idle grid goes first. A grid in use is never freed, so live
+  grids alone may exceed the bound.
+- **A grid's bytes** are what it allocates (WideGrid::alloc_bytes): its block, sized for every family (m, w) of its degree
+  with their indices, and the WideGrid. At degree 12 on 128 anomalies that is 5,069,464 bytes (kGridMaxBytes); at degree 2,
+  169,044. Beside them sit the build's two double-precision family sets (3.7 MB each at degree 12, kept for the instance's
+  life). sdnap_wide_grid_cache and sdnap_wide_grid_budget report the same held bytes.
+- **The setter:** sdnap_wide_grid_budget(bytes, out) sets the bound when bytes is 1 or more (whole bytes, at most SIZE_MAX;
+  1 keeps no idle grid), only reads it otherwise. It writes the bound (out[0]), the bytes held (out[1]), the grids held
+  (out[2]) and those idle (out[3]).
+- **States never move:** the bound decides which grids are kept, never a grid's bytes. Measured bit for bit
+  (`test/grid-cache.e2e.mjs`):
+  - at the default bound, a 1-byte bound and a bound that holds a few grids;
+  - with a cold, warm or shuffled cache;
+  - on 1 and 8 pool threads.
+
+Through 0.6.47 idle grids were bounded by their count alone (128 x 5,069,464 bytes: about 650 MB, 618.8 MiB, at degree 12). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
 2e-3 at e 0.79. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; a
 first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in
@@ -5078,14 +5169,17 @@ keeps its own.
   line of the block is dropped, those of the states before the crossing too (for a crossing before the epoch the block states its
   USEABLE_START_TIME whatever is answered). In a series with a blend (SPEC 14): an epoch
   inside a blend window that holds a set's crossing, where the blend needs the crossed set's state, is refused and counted among
-  the epochs after the crossing though it lies before it. A third case, a Hermite blend of another shape than 0 with a covariance in
-  the record: the blend's probe at its window's end asks no covariance, so where a moved set of the covariance crossed before the
-  nominal and the nominal crosses at or before that end, the block names the nominal's crossing, while a call that also asks an
-  epoch past the window names the moved set's.
+  the epochs after the crossing though it lies before it.
 - Covariance and the crossing. The crossing a call with covariance names is the earliest of the nominal's and every moved set's:
-  each is run to the call's furthest epoch on each side before the epochs are answered, so the name does not depend on the order
-  or the list of the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the
-  furthest epoch of both). `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
+  at the first epoch the call refuses, wherever it stands in the list and whatever the refusal (a decay or another), each set the
+  covariance started is run to the call's furthest epoch on each side, so the name does not depend on the order or the list of
+  the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the furthest epoch of
+  both); a call that refuses no epoch runs nothing more, since an epoch answered with its covariance lies before every set's
+  crossing. In a call with covariance, a Hermite blend's two probes at its window's end ask no covariance of their own. The earlier set's probe follows
+  that set's own epoch, which started its covariance, so it names that record's earliest crossing. The later set's probe names
+  its record's earliest crossing only when an earlier epoch of the call already started that set's covariance; on a fresh
+  store it names the later set's nominal crossing (as 0.6.47 did), so the name for the later set depends on the call's earlier
+  epochs. `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
   that carries no forecast, never writes the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
   `decayed:<epoch>` in `propagate` and `propagate_epochs`, and `sdnap_covariance_at` and `sdnap_covariance_full_at` give 42 (or
   the full width of) NaN at every time and return 4.

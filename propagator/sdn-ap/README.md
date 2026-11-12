@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.47 (dist 46049045).
+Version 0.6.48 (dist 444f25e4).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -54,6 +54,12 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   caller's own); `reset` non-zero reads and clears it in one step. Such a record states CONVERGED false and, in a line of
   its OD COMMENT no version before wrote, says so: a fit under the drag that ends at 40 keeps the elements, statistics and
   flights of the version before, and its record's bytes differ by that line alone.
+- Memory (SPEC 1.6, 16.11; `test/grid-cache.e2e.mjs`): a method during which one of the module's own allocations failed
+  refuses with errorCode `out-of-memory` and emits nothing, never success nor another reason (a decay answer, SPEC 16.25,
+  included); `sdnap_fit` then gives status -1 and leaves its row as it came.
+  `sdnap_wide_grid_budget(bytes, out)` sets the grid cache's byte bound (512 MiB by default; live and idle grids, each at
+  its allocated bytes, the least recently used idle grid freed first) when bytes is 1 or more (1 keeps no idle grid), and
+  writes the bound, the bytes held, the grids held and those idle. The bound decides which grids are kept, never a state.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME

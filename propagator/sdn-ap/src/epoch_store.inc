@@ -430,16 +430,26 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   q.index = static_cast<int32_t>(k);
   const Entry& en = st.entries[s.first + k];
   const Elements e = elements_of(en.row);
+  // SPEC 1.6 (stack #497): a slot whose initialization failed for want of memory is not kept as refused: it answers this
+  // call with the failure and is initialized again by the next
+  const uint32_t mem_mark = sdnap::mem::failures();
+  struct Retry {
+    Slot& q;
+    uint32_t mark;
+    ~Retry() {
+      if (q.error != 0 && sdnap::mem::failures() != mark) q.index = -1;
+    }
+  } retry{q, mem_mark};
   if (en.row.theory == kTheorySgp4Xp) {
     drag::table();
-    q.xp = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+    q.xp = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
     q.error = q.xp == nullptr ? kPropRefused : xpt::xp_init(e, *q.xp);
     if (q.error == kPropOk) xpt::xp_set_pooled(*q.xp);
   } else {
-    q.sat = static_cast<Sat*>(std::calloc(1, sizeof(Sat)));
+    q.sat = static_cast<Sat*>(sdnap::mem::calloc(1, sizeof(Sat)));
     q.error = q.sat == nullptr ? kPropRefused : sat_init(e, gravity_wgs72(), *q.sat);
     if (q.error == kPropOk && q.sat->deep.iresfl != 0) {
-      q.nodes = static_cast<double*>(std::malloc(sizeof(double) * 4u * kCheckpointNodes));
+      q.nodes = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * 4u * kCheckpointNodes));
       if (q.nodes != nullptr) {
         q.sat->checkpoint_count = kCheckpointNodes;
         fill_checkpoints(*q.sat, q.nodes, kCheckpointNodes);
@@ -505,7 +515,9 @@ inline int32_t state_of(Store& st, Series& s, uint32_t k, double t, double* r, d
     const double sd = dt >= 0.0 ? 1.0 : -1.0;
     double tc = 0.0;
     if (q.xp != nullptr && xpt::decay_crossing(*q.xp, dt, tc)) { first = tc; any = true; }  // under the set's lock: shared
-    if (P != nullptr && q.cp != nullptr) {
+    // the bank when the slot has one (a covariance asked for this call), also for a probe that asks no covariance of its own: the
+    // Hermite blend's probe at its window's end must name the record's crossing, not the nominal's
+    if (q.cp != nullptr) {
       for (int k = 0; k < q.cp->b.count; ++k) {
         if (!cov::live_slot(q.cp->b, k)) continue;  // only the slots the bank started
         double r2[3], v2[3];
@@ -735,7 +747,12 @@ inline uint64_t bytes_of(const Store& st) {
 }  // namespace sdnap
 
 /// `load_epochs`: replaces the resident store with the call's snapshot (SPEC 14).
+static int load_epochs_call(void);
 extern "C" int load_epochs(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(load_epochs_call());
+}
+static int load_epochs_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   uint32_t frames = 0;
@@ -749,7 +766,12 @@ extern "C" int load_epochs(void) {
 /// `propagate_epochs`: the store of the call's own snapshot at the $PCF OUTPUT times (EPOCHS, or START_TIME to STOP_TIME):
 /// one $OEM per series, the blended TEME / GCRF / EME2000 states and, for series whose sets carry COVARIANCE, a
 /// covariance line per state.
+static int propagate_epochs_call(void);
 extern "C" int propagate_epochs(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(propagate_epochs_call());
+}
+static int propagate_epochs_call(void) {
   using namespace sdnap;
   plugin_reset_output_state();
   uint32_t frames = 0;
@@ -819,6 +841,7 @@ extern "C" int propagate_epochs(void) {
           return atm::fail_day("weather-rows-short", day, "A set's SPACE_WEATHER rows do not reach a day the request flies it through.");
         }
         if (e != kPropOk) {
+          if (mem::refuse_if_out_of_memory()) return 3;
           std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", s.norad, text, static_cast<int>(e));
           plugin_set_error("propagation-failed", why);
           return 3;
@@ -903,9 +926,9 @@ extern "C" int propagate_epochs(void) {
         comment = comment.empty() ? carried::sources_comment(src, tw, tf) : carried::sources_comment(src, tw, tf) + ". " + comment;
       }
       // SPEC 16.25: a block that stops at a set's decay names it, counts the epochs refused after it, and takes it as its usable limit
-      // a crossing before the epoch is the block's usable start; a crossing after it, its usable stop when no epoch is answered after it
-      // (a later set of the series may answer epochs past an earlier set's crossing: the block then states neither limit and its
-      // COMMENT names the refused run)
+      // a crossing before the epoch is the block's usable start whatever is answered; a crossing after it, its usable stop when no epoch
+      // is answered after it (a later set of the series may answer epochs past an earlier set's crossing: for a crossing after the
+      // epoch the block then states neither limit and its COMMENT names the refused run)
       bool answered_after = false;
       if (past_n > 0 && !cross_back)
         for (size_t q = 0; q < kw.size() && !answered_after; ++q) answered_after = ((kw[q] - cross_jd[0]) + (kf[q] - cross_jd[1])) > 0.0;

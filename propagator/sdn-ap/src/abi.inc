@@ -185,7 +185,7 @@ inline int32_t batch(int32_t kind, double jd_whole, double jd_frac, const double
 SDNAP_EXPORT("plugin_init_omm")
 int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count) {
   if (records == nullptr && count > 0) return ORBPRO_PROP_BAD_INPUT;
-  sdnap::ElementRow* rows = static_cast<sdnap::ElementRow*>(std::malloc(sizeof(sdnap::ElementRow) * (count ? count : 1)));
+  sdnap::ElementRow* rows = static_cast<sdnap::ElementRow*>(sdnap::mem::malloc(sizeof(sdnap::ElementRow) * (count ? count : 1)));
   if (rows == nullptr) return ORBPRO_PROP_BAD_INPUT;
   for (uint32_t i = 0; i < count; ++i) rows[i] = sdnap::row_of_omm(records[i], sdnap::omm_theory());
   const int32_t held = sdnap::store_init(rows, count);
@@ -239,7 +239,7 @@ void plugin_destroy(void) { sdnap::store_free(); }
 
 /// Module heap for host buffers.
 SDNAP_EXPORT("sdnap_alloc")
-void* sdnap_alloc(uint32_t bytes) { return std::malloc(bytes ? bytes : 1); }
+void* sdnap_alloc(uint32_t bytes) { return sdnap::mem::malloc(bytes ? bytes : 1); }
 
 SDNAP_EXPORT("sdnap_free")
 void sdnap_free(void* pointer) { std::free(pointer); }
@@ -255,7 +255,7 @@ int32_t sdnap_init_elements(const sdnap::ElementRow* rows, uint32_t count) {
   for (uint32_t i = 0; i < count; ++i) {
     if (!sdnap::row_states_sgp4_ndot(rows[i])) continue;
     if (refused == nullptr) {
-      refused = static_cast<uint8_t*>(std::calloc(count, 1));
+      refused = static_cast<uint8_t*>(sdnap::mem::calloc(count, 1));
       if (refused == nullptr) return ORBPRO_PROP_BAD_INPUT;
       plugin_set_error("elements-other-theory",
                        "An SGP4XP row carries MEAN_MOTION_DOT (SGP4's term, ElementRow.mean_motion_dot not 0): the row is held refused.");
@@ -474,7 +474,8 @@ int32_t sdnap_init_error(uint32_t index) {
 /// natural log, its prior mean and sigma those of the log; the row's term must
 /// then start > 0). `stats` (4 doubles): status (-5: the least-squares set lies on a limit in n, SPEC 16.7; at an
 /// eccentricity switch the set is held there, status 0 or 1; 2: a pass stopped because a column of its Jacobian could not be
-/// differenced in either direction, both sets decaying inside the arc, SPEC 16.25), iterations, rms km, max km.
+/// differenced in either direction, both sets decaying inside the arc, SPEC 16.25; -1: one of the module's allocations failed
+/// during the call, the error out-of-memory and `row` left as it came, SPEC 1.6), iterations, rms km, max km.
 /// Returns 0 or a negative code.
 SDNAP_EXPORT("sdnap_fit")
 int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* positions, uint32_t count,
@@ -491,8 +492,15 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
                      "ECOM2_Y0 is fitted by the fit method under $PCF FORCES.ECOM2 and carried in its $OCM; an ElementRow does not carry it.");
     return ORBPRO_PROP_BAD_INPUT;
   }
+  // SPEC 1.6 (stack #497): an allocation that failed during the fit is named, never a status 0, 1 or 2 and never a fitted row
+  const sdnap::mem::CallMark call_mark;
+  const sdnap::ElementRow given = *row;
   sdnap::drag::table();
-  const sdnap::fit::Result r = sdnap::fit::run(*row, minutes, positions, static_cast<int>(count), *options);
+  sdnap::fit::Result r = sdnap::fit::run(*row, minutes, positions, static_cast<int>(count), *options);
+  if (sdnap::mem::refuse_if_out_of_memory()) {
+    *row = given;
+    r.status = -1;
+  }
   if (stats != nullptr) {
     stats[0] = r.status;
     stats[1] = r.iterations;
