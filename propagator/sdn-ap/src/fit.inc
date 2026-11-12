@@ -153,6 +153,15 @@ constexpr int kSigmaPasses = 8;
 /// A pass weighted at the data's sigma has its cost in chi-square units: it has converged when a step lowers the cost
 /// by less than this (a move of about 0.001 posterior sigma), as well as by less than 1e-10 of it.
 constexpr double kChiSquareTolerance = 1e-6;
+/// SPEC 12.1, the iteration ceiling of a pass. A pass ends when it converges (above), or at its ceiling with the cost still
+/// falling, the record then stating CONVERGED false. A fit that solves no drag term (the set above the drag, or a drag term
+/// its prior holds, fitoem::drag_held) has kPassCeiling a pass, which no measured fit reaches; a fit that solves a drag term
+/// keeps kDragPassCeiling, the ceiling of every version before: there the cost is flat along the drag term, so the iteration
+/// count, not the data, picks the point (stack #541). g_ceiling_met counts the passes that ended at a ceiling: [0] at
+/// kPassCeiling, [1] at any other (kDragPassCeiling, or an sdnap_fit caller's own).
+constexpr int kPassCeiling = 1000;
+constexpr int kDragPassCeiling = 40;
+inline uint32_t g_ceiling_met[2] = {0, 0};
 
 /// Residuals of the trial row: model minus observed, km, 3 per sample.
 /// SPEC 16.11: an iteration's nominal set, held while its copies are built inside its xpt::GridShareScope (nullptr when it does not
@@ -519,6 +528,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   out.max_km = mx;
   out.iterations = it;
   out.status = converged ? 0 : 1;
+  if (!converged) __atomic_fetch_add(&g_ceiling_met[max_it >= kPassCeiling ? 0 : 1], 1u, __ATOMIC_RELAXED);
   release();
   return out;
 }

@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.43 (dist daf4d27e).
+Version 0.6.44 (dist 7388d698).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -48,6 +48,12 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   step was 1e-12 or more (then solved by bisection), 1 section 8's whose last step was 1e-12 or more (then solved by
   bisection), 2 AP's whose last step was under 1e-12 (solved; section 8's such endings are in no count); `reset` non-zero
   reads and clears it in one step.
+- The fit's iteration ceiling (SPEC 12.1): `sdnap_fit_ceiling_met(reset, which)` counts the fit passes that ended at their
+  ceiling with the cost still falling: `which` 0 at 1,000 a pass (a fit that solves no drag term: the set above the drag,
+  or a drag term its prior holds), 1 at any other ceiling (40 a pass where the fit solves a drag term, or an `sdnap_fit`
+  caller's own); `reset` non-zero reads and clears it in one step. Such a record states CONVERGED false and, in a line of
+  its OD COMMENT no version before wrote, says so: a fit under the drag that ends at 40 keeps the elements, statistics and
+  flights of the version before, and its record's bytes differ by that line alone.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME
