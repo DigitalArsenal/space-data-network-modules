@@ -794,8 +794,10 @@ static int fit_blocks() {
           double weighted = fit::kUnitSigmaKm;
           P.along_factor = 1.0;
           if (short_ap && !t_fit.empty()) {
+            // the set's own non-gravitational rate; a set the theory refuses at its epoch has none (noise_of refuses that
+            // record's covariance too), and its tau is the floor
             double rate = 0.0;
-            cov::ng_rate_of(row, rate);
+            if (!cov::ng_rate_of(row, rate)) rate = 0.0;
             const double tau = std::fmax(fitoem::kAlongTrackTauFloor, fitoem::kAlongTrackTauPerRootRate * std::sqrt(std::fmin(std::fabs(rate), fitoem::kAlongTrackRateCap)));
             // dt as the arc's span over its states (the factor sqrt(tau N / revolutions), at least one revolution counted)
             const double revolutions = std::fmax(1.0, (fit_end_min - fit_begin_min) / period);

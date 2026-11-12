@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.48 (dist a34c7418).
+Version 0.6.48 (dist 06be88bf).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1895,12 +1895,14 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
 - DRAG, an AP set on an arc shorter than 71 h at or below e 0.3 *[stack #489]*. The whole-arc fit is redone at sigma_r
   as above, with each state's along-track residual weighed at sigma_r sqrt(tau / dt) and its radial and cross-track
   residuals at sigma_r, in the state's own axes (radial, along the track, normal to the orbit; from the observed
-  positions, the velocity from the state's neighbors in time, so the weights do not move with the iterate). dt is the
+  positions, the velocity from the state's neighbors in time, so the weights do not move with the iterate; a state whose
+  axes cannot be formed, its neighbors in time at its own epoch, is weighed at sigma_r on all three). dt is the
   arc's span over its states and tau, in periods, the correlation time of the theory's along-track error over a short
   arc under the drag: max(0.181, 232.7 sqrt(|r|)), r the set's non-gravitational rate per day (the rate the record
   states in COV_PROPAGATION, of the set the 1 km passes reach), held at 4.111e-5 where tau reads 1.49; the factor is at
-  least 1. The covariance takes the same weights, so P_p is the inverse curvature of the cost the fit minimized and every
-  prior acts at its written sigma against the data so weighed. The record states it in OD_DATA_WEIGHTING (both sigmas,
+  least 1. The covariance takes the same weights in the same axes, so P_p is the inverse curvature of the cost the fit
+  minimized and every prior acts at its written sigma against the data so weighed. The record states it in
+  OD_DATA_WEIGHTING (both sigmas,
   the factor, tau and dt); WEIGHTED_RMS is each state's residual over its own sigmas, sqrt(sum |L_k e_k|^2 / 3N) /
   sigma_r with L_k = [U; V / f; W]; the $ODR's TEME components carry sigma_r, the radial and cross-track sigma.
   - Why: the residual of a short arc under the drag is the theory's along-track error, correlated along the arc, not

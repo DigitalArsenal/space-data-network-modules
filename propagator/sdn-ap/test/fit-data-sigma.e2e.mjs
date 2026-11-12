@@ -21,6 +21,8 @@
 //    accepted $ODR WEIGHT 1 / that sigma^2, the along-track at sigma sqrt(tau / dt), tau at least 0.181 periods and the
 //    factor sqrt(tau P / dt) to 1e-3, P the record's period); the second its data sigma and ABOVE. A 700 km set states the
 //    along-track weighting too. SGP4XP's fit of the 700 km arc (stock forces) states UNIT WEIGHTS at 1 km, as before.
+// 4. A repeated epoch: the 0.4.0 fixture's 24 h arc with its first state given twice fits within 0.1 m in FIT_RMS of the
+//    arc itself, under the along-track weighting (the repeated state, without axes, at sigma on all three).
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit-data-sigma.e2e.mjs
 import * as flatbuffers from "flatbuffers";
@@ -35,7 +37,9 @@ import { ODR } from "spacedatastandards.org/lib/js/ODR/ODR.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { prwDynamicParameter } from "spacedatastandards.org/lib/js/OCM/prwDynamicParameter.js";
 import { ensureBuilt, wasmPath } from "./lib/module.mjs";
-import { configuration, fitConfiguration } from "./lib/pcf.mjs";
+import { configuration, fitConfiguration, MSIS_FORCES } from "./lib/pcf.mjs";
+import { pcfWeatherSource } from "spacedatastandards.org/lib/js/PCF/pcfWeatherSource.js";
+import { inputs } from "./lib/fixture-inputs.mjs";
 import { T, AP_FORCES, ocmOf, seedOcm, rowsThrough, spwStream, flight } from "./lib/ocm.mjs";
 import { packOem, rfm } from "./lib/frames.mjs";
 
@@ -139,6 +143,29 @@ for (const [name, regime] of [["below", "DRAG"], ["above", "ABOVE"], ["leo700", 
   const f = await fit(await truth(ORBITS.leo700), 0, "SGP4XP");
   console.log(`leo700, SGP4XP: '${f.weighting}', WEIGHT ${[...f.weights].join(", ")} per km^2`);
   check(f.weighting === UNIT && f.weights.size === 1 && [...f.weights][0] === 1, `leo700, SGP4XP: under the drag the record states '${f.weighting}', WEIGHT ${[...f.weights].join(", ")}`);
+}
+// --- 4. a state whose neighbor in time shares its epoch has no along-track axis and is weighed at sigma on all three
+// (SPEC 12.1): the 0.4.0 fixture's 24 h arc (propagator/ffm's 550 km trajectory) with its first state given twice fits as
+// the arc does. Measured on 0.6.48: FIT_RMS 16.805 against the arc's 16.827 m, BTERM 3.97e-5 against 3.83e-5; the
+// rule's first build (git d17c6a62) took the repeated state's axes from a zero velocity, the weighed pass gave way and the
+// record was the 1 km pass's (FIT_RMS 37.272 m, BTERM 2.02e-3).
+{
+  const { arc, rows: fixtureRows } = inputs();
+  const twice = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(arc)).unpack();
+  const lines = twice.EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
+  lines.unshift(Object.assign(new LineT(), { ...lines[0] }));
+  const fixtureFit = async (payload) => {
+    const r = await h.invoke({ methodId: "fit", inputs: [{ portId: "ephemeris", typeRef: T("OEM"), payload }, configuration({ theory: "AP", forces: { ...MSIS_FORCES,
+      HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31, HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: 20, WEATHER_SOURCE: pcfWeatherSource.RECORDS } }),
+      { portId: "space_weather", typeRef: T("SPW"), payload: fixtureRows.bytes }] });
+    if (r.statusCode !== 0) throw new Error(`fit: ${r.errorCode} ${r.errorMessage}`);
+    const o = ocmOf(new Uint8Array(r.outputs.find((v) => v.portId === "elements").payload));
+    return { rmsM: o.ORBIT_DETERMINATION.FIT_STATISTICS.FIT_RMS_KM * 1000, bterm: o.MEAN_ELEMENTS.BTERM, weighting: o.ORBIT_DETERMINATION.OD_DATA_WEIGHTING ?? "" };
+  };
+  const [once, two] = [await fixtureFit(arc), await fixtureFit(packOem(twice))];
+  console.log(`the fixture's arc: FIT_RMS ${once.rmsM.toFixed(3)} m, BTERM ${once.bterm}; its first state given twice: FIT_RMS ${two.rmsM.toFixed(3)} m, BTERM ${two.bterm}`);
+  check(/; ALONG-TRACK /.test(two.weighting) && Math.abs(two.rmsM - once.rmsM) <= 0.1,
+    `the fixture's arc with its first state given twice: FIT_RMS ${two.rmsM} m against the arc's ${once.rmsM} m (within 0.1 m), '${two.weighting}'`);
 }
 
 if (failures.length) {

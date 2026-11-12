@@ -326,9 +326,15 @@ struct AlongTrackScope {
 /// 9 doubles: |L e|^2 is the residual e's square with its along-track part over f^2.
 inline void along_track_rows(const double* rr, const double* vv, double f, double* L) {
   const double rn = std::sqrt(rr[0] * rr[0] + rr[1] * rr[1] + rr[2] * rr[2]);
-  const double U[3] = {rr[0] / rn, rr[1] / rn, rr[2] / rn};
   double W[3] = {rr[1] * vv[2] - rr[2] * vv[1], rr[2] * vv[0] - rr[0] * vv[2], rr[0] * vv[1] - rr[1] * vv[0]};
   const double wn = std::sqrt(W[0] * W[0] + W[1] * W[1] + W[2] * W[2]);
+  // a frame that cannot be formed (no velocity: a state whose neighbors in time share its epoch, or a lone state; a zero or
+  // non-finite position): the identity, all three components at sigma
+  if (!(rn > 0.0) || !(wn > 0.0) || !std::isfinite(rn) || !std::isfinite(wn)) {
+    for (int j = 0; j < 9; ++j) L[j] = (j % 4 == 0) ? 1.0 : 0.0;
+    return;
+  }
+  const double U[3] = {rr[0] / rn, rr[1] / rn, rr[2] / rn};
   for (double& q : W) q /= wn;
   const double V[3] = {W[1] * U[2] - W[2] * U[1], W[2] * U[0] - W[0] * U[2], W[0] * U[1] - W[1] * U[0]};
   for (int j = 0; j < 3; ++j) {

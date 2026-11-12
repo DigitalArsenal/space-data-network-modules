@@ -599,6 +599,10 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   double floor[6] = {};
   double ss = 0.0;
   double J[6 * kMaxAug];
+  // SPEC 12.1 (stack #489): the cost's own frames (fit::along_track_frames, from the observed positions), so the covariance
+  // weighs each state's rows as the cost did
+  const std::vector<double> Lk = fit::g_along_track_factor > 1.0 ? fit::along_track_frames(t, r, count, fit::g_along_track_factor)
+                                                                 : std::vector<double>();
   for (int k = 0; k < count; ++k) {
     double rm[3], vm[3];
     if (!at(b, t[k], rm, vm, J)) return false;
@@ -612,11 +616,11 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
     floor[3] += u[2] * u[0];
     floor[4] += u[2] * u[1];
     floor[5] += u[2] * u[2];
-    if (fit::g_along_track_factor > 1.0) {
+    if (!Lk.empty()) {
       // SPEC 12.1 (stack #489): the rows taken through the state's L (its own axes, the along-track over the factor), as the
       // cost weighed them, so that P_p is the inverse curvature of that cost
-      double L[9], Jt[3 * kMaxAug];
-      fit::along_track_rows(rm, vm, fit::g_along_track_factor, L);
+      const double* L = Lk.data() + 9 * static_cast<size_t>(k);
+      double Jt[3 * kMaxAug];
       for (int i = 0; i < 3; ++i)
         for (int a = 0; a < np; ++a) Jt[i * np + a] = L[3 * i] * J[0 * np + a] + L[3 * i + 1] * J[1 * np + a] + L[3 * i + 2] * J[2 * np + a];
       for (int a = 0; a < np; ++a)
