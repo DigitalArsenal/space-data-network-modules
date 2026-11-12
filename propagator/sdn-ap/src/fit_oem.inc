@@ -773,7 +773,7 @@ static int fit_blocks() {
           double weighted = fit::kUnitSigmaKm;
           const double revolutions = std::fmax(1.0, (fit_end_min - fit_begin_min) / period);
           constexpr double kDiagTauRevolutions = 1.0;
-          constexpr bool kDiagAlongTrackOnly = true;  // C1 false, C2 true
+          constexpr bool kDiagAlongTrackOnly = false;  // C1 false, C2 true
           const double f = short_drag ? std::sqrt(kDiagTauRevolutions * static_cast<double>(t_fit.size()) / revolutions) : 1.0;
           const double scale = kDiagAlongTrackOnly ? 1.0 : f;
           P.along_factor = kDiagAlongTrackOnly ? f : 1.0;
