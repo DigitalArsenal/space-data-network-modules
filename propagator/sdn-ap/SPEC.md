@@ -4480,30 +4480,49 @@ takes radiation pressure the same way:
 - Where the output or the solve fails, the Gauss equations at the mean state take it.
 
 Every set outside that regime flies bit for bit. With a Cr A/m of 0.02 m^2/kg, ten seeded sets flown 7 days at 300 s with
-every force on are identical to 0.6.36's flights, state for state: low orbit, GTO, Molniya, GPS-like, e 0.5 at 9.5 h, geostationary, IGSO, and
-the long-period class 0 and one-day class at e 0.01 and 0.29.
+every force on are identical to 0.6.36's flights, state for state:
+- low orbit, GTO, Molniya, GPS-like, e 0.5 at 9.5 h, geostationary and IGSO;
+- the long-period class 0 at e 0.01 and at e 0.29;
+- the one-day class at e 0.29.
+
+*The anomaly.* There SPEC 4's periodic radiation terms are off, so the output does not make the mean Kepler solve that
+served them. A plain output then solves the osculating anomaly from the cold start, as such a set without an area-to-mass
+always has, and never from a warm start (stack #550's path). A covariance output still starts from the nominal's
+osculating anomaly. A wide grid's terms (16.11) are read at the anomaly `tess::wide_six` solves itself from the mean
+anomaly: Newton from E = M to a step under 1e-14, at most 50 steps. 0.6.36 passed it the mean solve's E, solved to 1e-15.
 
 *The record.* An AP set of that regime with an area-to-mass above 0 states `PERTURBATIONS.SOLAR_RAD_PRESSURE` "SPHERE
-(AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP", or "SPHERE (AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL
-SHADOW OVER THE STEP, AND ECOM2 Y0 (ARNOLD ET AL. 2015)" with the radiation term Y0 (16.13). A flight takes the regime from
-the record's own elements, as it takes its branch (`lp_radiation_record`, `src/ocm.inc`).
+(AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP". With the radiation term Y0 (16.13) it states "SPHERE (AGOM)
+THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP, AND ECOM2 Y0 (ARNOLD ET AL. 2015)", exactly when
+`ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS` carries an `ECOM2_Y0` entry. A flight takes the regime from the record's own
+elements, as it takes its branch (`lp_radiation_record`, `src/ocm.inc`). The reader compares the text without regard to
+case.
 - A record of the regime with an area-to-mass above 0 that states any other text, or none, is refused,
   `radiation-model-superseded`. Every such record fitted before 0.6.NN is fitted again: it was fitted on SPEC 4's
   radiation, which is kilometers from this one there in a week.
-- A record outside the regime, or without an area-to-mass above 0, that states either text is refused,
-  `radiation-model-mismatch`.
-- Every other record is read and flown as before 0.6.NN. No record written before 0.6.NN states either text.
+- These are refused `radiation-model-mismatch`:
+  - a record that states either text outside the regime, or with an area-to-mass of 0 or below;
+  - a record of the regime that states the Y0 text without an `ECOM2_Y0` entry;
+  - a record of the regime that states the plain text with one.
+- A record outside the regime, or without an area-to-mass above 0, that states neither text is read and flown as before
+  0.6.NN. No build before 0.6.NN writes either text. Any other text there is not read (stack #559).
 
-*The shadow.* AP's shadow is section 4's cylinder of radius R_E (16.15). The integrator's step in that regime is 8 to 95
-minutes, and a force switched off at the cylinder's edge inside a step puts the step's share of the eclipse in the wrong
-place. So the force takes the share of a one-step window about the moment that the satellite spends outside the cylinder,
-in closed form along the straight line of its position and velocity. On an eclipsing orbit of 30 h at e 0.31 (node 0, J2
-and radiation alone on both sides), the day-7 error is 123 m with the shadow taken as on or off at each moment and 34 m with
-the window, 25 m with the window and the numerical propagator's pressure constant; J2 alone is 19 m there.
+*The shadow.* AP's shadow is section 4's cylinder of radius R_E (16.15). The integrator's step in that regime is the
+smaller of 95 minutes (38 in the one-day class) and 0.5 (1 - e0)^1.5 / n0, n0 the epoch's mean motion in radians a minute
+(16.19). That is 7.0 to 7.4 minutes on the e 0.9 sets of about 2,800 minutes, 2.8 minutes at e 0.9 and 1,100 minutes, and
+1.0 minute at e 0.95 and 1,100 minutes. A force switched off at the cylinder's edge inside a step puts the step's share of
+the eclipse in the wrong place. So the force takes the share of a one-step window about the moment that the satellite
+spends outside the cylinder, in closed form along the straight line of its position and velocity.
 
-*Measured.* Seeded, no fit. J2 and radiation alone on both sides: AP's builds (0.6.36 and 0.6.NN) have the Sun's and Moon's mass ratios at zero,
-FFM's cannonball has Cr 1 and A/m 0.02 m^2/kg, and AP's Cr A/m is 0.02 m^2/kg. Distance to the numerical propagator at days
-1 / 3 / 5 / 7, m:
+On an eclipsing orbit of 30 h at e 0.31 (node 0, J2 and radiation alone on both sides), the day-7 distances are:
+- 123 m with the shadow taken as on or off at each moment;
+- 34 m with the window;
+- 25 m with the window and the numerical propagator's pressure constant;
+- 19 m with J2 alone.
+
+*Measured.* Seeded, no fit. J2 and radiation alone on both sides: AP's builds (0.6.36 and 0.6.NN) have the Sun's and
+Moon's mass ratios at zero, FFM's cannonball has Cr 1 and A/m 0.02 m^2/kg, and AP's Cr A/m is 0.02 m^2/kg. Distance to the
+numerical propagator at days 1 / 3 / 5 / 7, m:
 
 | set, node | before 0.6.NN | from 0.6.NN | J2 alone |
 | --- | ---: | ---: | ---: |
@@ -4517,19 +4536,30 @@ FFM's cannonball has Cr 1 and A/m 0.02 m^2/kg, and AP's Cr A/m is 0.02 m^2/kg. D
 | 30 h, e 0.31, 120 | 8.2 / 3.8 / 64 / 15 | 6.3 / 7.8 / 47 / 18 | 1.5 / 8.9 / 8.7 / 19 |
 | 30 h, e 0.31, 240 | 10.7 / 8.4 / 13 / 17 | 1.0 / 13.4 / 28 / 17 | 1.5 / 9.0 / 8.5 / 19 |
 
-*The constant.* AP's pressure is SPEC 4's 4.5e-6 N/m^2, shared with SGP4XP. The numerical propagator's is 1,361 W/m^2 over
-c, 4.540e-6 N/m^2, which is 0.88 % more. A record's fitted area-to-mass absorbs the difference. A record that states a
-physical area-to-mass instead keeps it:
-- From 0.6.NN the table's figures are that difference alone: 139 to 210 m at day 7 on the TESS-like set.
-- With AP's Cr A/m scaled by 4.540 / 4.5, the same flights sit at J2's own figures: 0.1 / 0.5 / 1.3 / 2.3 m on the TESS-like
-  set, and the Chandra-like and eclipsing sets' columns above.
+*The constant.* AP's radiation pressure constant is SPEC 4's 4.5e-6 N/m^2, shared with SGP4XP. That is 0.88 % under the
+numerical propagator's 1,361 W/m^2 over c, 4.540e-6 N/m^2.
+- A record's fitted area-to-mass absorbs the ratio.
+- A seeded, physical one does not, and from 0.6.NN the table's figures are that ratio alone: 139 to 210 m at day 7 on the
+  TESS-like set.
+- With the numerical propagator's constant in place of AP's, the TESS-like set flies to 0.1 / 0.5 / 1.3 / 2.2 m and the
+  Chandra-like set to 1.6 / 3.3 / 6.8 / 9.6 m, J2's own figures.
+- With that constant the eclipsing set flies to 1.4 / 10 / 2.0 / 25, 1.5 / 8.9 / 8.9 / 19 and 1.5 / 8.6 / 10 / 17 m at nodes
+  0, 120 and 240.
 
-*The cost* of the change is not measurable under the machine's load (36 to 60 at the time). On a TESS-like set (Cr A/m 0.02, a 1-minute grid over 7 days), the medians of 7 rounds were 48.0 µs a state before and 48.9 after; on a THEMIS-like set, 61.9 and 57.0. The spread from run to run was about 5 µs. The Jacobian of 16.19 is already built there, and the share of light costs one quadratic.
+*The cost.* It was measured on a loaded machine, on a TESS-like set (Cr A/m 0.02, a 1-minute grid over 7 days): the
+medians of 7 rounds were 48.0 µs a state before and 48.9 after. On a THEMIS-like set they were 61.9 and 57.0. The
+spread from run to run was about 5 µs, so the change makes no difference above that spread. The Jacobian of 16.19 is
+already built there, and the share of light costs one quadratic.
 
-`test/long-period-radiation.e2e.mjs` uses the module's own Sun and Moon on both sides, with J2 alone. It takes
-radiation's own error at day 7: AP's radiation displacement (with radiation minus without) against FFM's.
-- The eclipsing set: 20.0 m against 48.3 m before 0.6.NN, and 108.2 m with the shadow taken as on or off at each moment.
-- The TESS-like set: 207.7 m against 1,386.5 m.
+`test/long-period-radiation.e2e.mjs`: AP's arms read the module's own Sun and Moon, FFM's DE440's, with J2 alone on both.
+It takes radiation's own error at day 7, AP's radiation displacement (with radiation minus without) against FFM's:
+- the eclipsing set: 20.0 m, against 48.3 m before 0.6.NN and 108.2 m with the shadow taken as on or off at each moment;
+- the TESS-like set: 207.7 m, against 1,386.5 m.
+
+It also holds the eclipsing set's flight through AP's shadow: an entry and an exit, and a 1 s scan across them and a step
+boundary in which no position lies off its neighbors' curve (the fourth difference) by more than 1 mm; the largest is 1.2 µm over
+14,401 states. It holds the record's refusals above, and
+the round trip of the module's own fit.
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 

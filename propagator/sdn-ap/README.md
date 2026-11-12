@@ -312,11 +312,12 @@ for bit.
 
 The record states the model. Such a set with an area-to-mass above 0 writes `PERTURBATIONS.SOLAR_RAD_PRESSURE` "SPHERE
 (AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP" (with ", AND ECOM2 Y0 (ARNOLD ET AL. 2015)" when it
-carries Y0).
-- A record of that regime with an area-to-mass that does not state it is refused, `radiation-model-superseded`. Every
-  such record fitted before 0.6.NN is fitted again.
-- A record that states it outside the regime, or without an area-to-mass, is refused, `radiation-model-mismatch`.
-- Every other record reads and flies as before.
+carries Y0, exactly when the record carries an `ECOM2_Y0` entry).
+- A record of that regime with an area-to-mass above 0 that does not state it is refused, `radiation-model-superseded`.
+  Every such record fitted before 0.6.NN is fitted again.
+- These are refused `radiation-model-mismatch`: a record that states it outside the regime, or without an area-to-mass
+  above 0; the Y0 text without an `ECOM2_Y0` entry; the plain text with one.
+- A record outside the regime, or without an area-to-mass above 0, that states neither text reads and flies as before.
 
 E2E: `test/long-period-radiation.e2e.mjs`.
 
