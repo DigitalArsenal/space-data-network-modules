@@ -11,7 +11,10 @@
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
 //    fitted AP set (0.6.36's fit, test/fixtures/ap-fit-0.6.36.ocm) flown 2 days at 600 s give ephemerides within NO_HARM
 //    (below) on this build and on BASE (the low table's fast side's first build with the epoch floor of SPEC 12.4, git 9855dadd,
-//    SHA-256 checked, its own version string 0.6.39; the fast side's first build, git 73331c6a, version string 0.6.36, before it;
+//    SHA-256 checked, its own version string 0.6.39; it must be a build of this theory, since no harm is held at 15 mm and the
+//    fast side moves a low-table set 60 to 96 m from a build without it, and a build with the epoch floor, since a reader before
+//    it takes 0.6.36's record's floor off at its own theory state; the fast side's first build, git 73331c6a, version string
+//    0.6.36, before it;
 //    the field change's first build, git 7ebc98e4, its version string 0.6.33, from 0.6.36; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture (sdn-ap 0.5.1's
 //    fit, GRAVITY_MODEL EGM-96) refused (gravity-model-mismatch, SPEC 16.2).
 import assert from 'node:assert/strict';

@@ -5,7 +5,10 @@
 // Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by BASE, and
 // that arc fitted by BASE and by this build. BASE is a build before the cure whose theory is this build's: from the low
 // table's fast side (stack #477, SPEC 16.1) its first build with the band guard (git 258d824d, version string 0.6.36, its
-// SHA-256 checked), since the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, the base until then).
+// SHA-256 checked). It must be: a set's own flight and a pre-cure record's states are held against the base's to 1e-11 of a
+// covariance's largest entry and 1 mm, and the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, the
+// base until then) by 8.9 to 37.9 m in these cases. The refusal is also read on a record main wrote: each case's arc
+// fitted by 0.6.38 (MAIN, SHA-256 checked) and flown here has its covariance refused by name and its states flown.
 // - The cure (a reader whose theory's epoch state differs from the writer's): this build's record read again with its
 //   gravity caps moved from 31 and 20 to 12 and 6, so its flown epoch state moves and the two-body state of its mean
 //   elements does not (at i 52.9 by 31 m; near the equator the caps leave the epoch state as it was, and one case must
@@ -50,6 +53,7 @@ import {scratchTemp} from './lib/scratch.mjs';
 
 ensureBuilt();
 const BASE = {version: '0.6.36', commit: '258d824d2c83da8aa0f9ad2325273cfe478ae5d8', sha256: '01f8fd18eb97107b4cd1e0d7694f31787bcddf7cbb61f44255d83e3f45f3f56f'};
+const MAIN = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
 const SELF = {ofLargest: 1e-11, along: 1e-10}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
 // the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)
 const TWO_BODY = [
@@ -63,6 +67,11 @@ const basePath = path.join(scratchTemp('sdn-ap-epoch-floor-'), `sdn-ap-${BASE.ve
 fs.writeFileSync(basePath, baseBytes);
 const base = await createStandaloneHarness('browser', basePath, {surface: 'direct'});
 const cur = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
+const mainBytes = execFileSync('git', ['-C', modules, 'show', `${MAIN.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
+assert.equal(createHash('sha256').update(mainBytes).digest('hex'), MAIN.sha256, `${MAIN.version} sha256`);
+const mainPath = path.join(scratchTemp('sdn-ap-epoch-floor-main-'), `sdn-ap-${MAIN.version}.wasm`);
+fs.writeFileSync(mainPath, mainBytes);
+const mainH = await createStandaloneHarness('browser', mainPath, {surface: 'direct'});
 
 const RE = 6378.1363, MU = 398600.4418, t0 = Date.parse('2026-10-01T00:00:00Z');
 const iso = (ms) => new Date(ms).toISOString().replace('Z', '');
@@ -168,6 +177,12 @@ for (const c of CASES) {
   check(oc.status === -7, `${c.name}: sdnap_covariance_at of ${BASE.version}'s record: ${oc.status}, expected -7`);
   check(statesM <= STATES_M && cb.COVARIANCE_MATRIX_LINES.length === 0 && String(cb.COMMENT ?? '').startsWith('cov-floor-at-theory-state:'),
     `${c.name}: propagate of ${BASE.version}'s record: ${pc.statusCode === 0 ? `${lines} states ${statesM} m from ${BASE.version}'s, ${cb.COVARIANCE_MATRIX_LINES.length} covariance lines, COMMENT ${cb.COMMENT}` : pc.errorCode}`);
+  // the record main wrote (0.6.38): refused by name here, its states flown
+  const m38 = await fitBy(mainH), mo = covAt(cur, m38);
+  const pm = await cur.invoke({methodId: 'propagate', inputs: flight([m38], out)}), cm = pm.statusCode === 0 ? statesOf(pm) : null;
+  row.mainRecord = {covarianceAt: mo.status, propagate: pm.statusCode, states: cm?.EPHEMERIS_DATA_LINES.length, covLines: cm?.COVARIANCE_MATRIX_LINES.length};
+  check(mo.status === -7 && cm && cm.EPHEMERIS_DATA_LINES.length === 3 && cm.COVARIANCE_MATRIX_LINES.length === 0 && String(cm.COMMENT ?? '').startsWith('cov-floor-at-theory-state:'),
+    `${c.name}: ${MAIN.version}'s record on this build: ${JSON.stringify(row.mainRecord)}, COMMENT ${cm?.COMMENT} (refused by name, its states flown)`);
   console.log(JSON.stringify(row));
 }
 
