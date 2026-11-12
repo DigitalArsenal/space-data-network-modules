@@ -120,7 +120,7 @@ const MOLNIYA = {
 // against 0.6.36's fit (test/fixtures/ap-fit-0.6.36.ocm), the bounds kept.
 // 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves LEO
 // AP's fit, a 550 km set in the low table at tesseral 31: main 0.6.41 (git afdd1568, wasm bec591fe) holds it within 1 m
-// of 0.6.36's fit, and 0.6.42's (git b7a7191e, wasm f771420f) is 102.621 m from it over the 4 days (both flown by 0.6.42),
+// of 0.6.36's fit, and 0.6.42's (git b7a7191e, wasm f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) is 102.621 m from it over the 4 days (both flown by 0.6.42),
 // FIT_RMS 2.880 m lower (37.273 against 40.153 m): the fast side fits the arc closer. A pin before the fast side holds the
 // fit to another theory's, so LEO AP is held against 0.6.42's fit (test/fixtures/ap-fit-0.6.42.ocm, fit.e2e.mjs's fit of
 // the same inputs), the bounds kept. LEO SGP4XP stays against 0.6.2's, at its bound.
