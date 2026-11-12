@@ -2835,8 +2835,8 @@ theories are worse at day 7: AP 6.2 to 22.4 km against 3.1 to 10.3 km on the fil
 than 0.6 km. The comparison with the archived AP6 arms stays on the reading those arms were scored on.
 
 From 0.6.NN, with radiation pressure through the output map (16.22), the replay on the solution states is 333.6, 1,631.4
-and 11,782.0 m for AP at days 1, 3 and 7 (0.6.36: 389.6, 1,867.7 and 15,409.5 m), with AP minus XP at day 3 at -1,671.3 m.
-On the archive's reading it is 1,014.8, 2,245.8 and 5,037.3 m (0.6.36: 1,011.7, 2,000.1 and 9,032.8 m), so day 3 is above
+and 11,782.0 m for AP at days 1, 3 and 7 (0.6.37: 389.6, 1,867.7 and 15,409.5 m), with AP minus XP at day 3 at -1,671.3 m.
+On the archive's reading it is 1,014.8, 2,245.8 and 5,037.3 m (0.6.37: 1,011.7, 2,000.1 and 9,032.8 m), so day 3 is above
 the archived 2,009 m. With AGOM held at 0 the two builds fly the same replay to 0.01 m (1,505.7, 6,462.2 and 42,488.5 m):
 the difference is the radiation term's alone. On the fill, in the three of the seven windows that are worse at day 3, the
 fitted AGOM moves from the solution states' fit by -8 to +48 %, and from 0.6.NN that AGOM acts in full on the forecast.
@@ -4532,7 +4532,7 @@ takes radiation pressure the same way:
 - Where the output or the solve fails, the Gauss equations at the mean state take it.
 
 Every set outside that regime flies bit for bit. With a Cr A/m of 0.02 m^2/kg, ten seeded sets flown 7 days at 300 s with
-every force on are identical to 0.6.36's flights, state for state:
+every force on are identical to 0.6.37's flights, state for state:
 - low orbit, GTO, Molniya, GPS-like, e 0.5 at 9.5 h, geostationary and IGSO;
 - the long-period class 0 at e 0.01 and at e 0.29;
 - the one-day class at e 0.29.
