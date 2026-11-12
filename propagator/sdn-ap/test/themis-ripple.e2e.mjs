@@ -54,13 +54,19 @@ const BASE_VERSION = '0.6.36', BASE = '73331c6a9', BASE_SHA256 = 'f1b29efffc0706
 // that build's own version string), every AP set under the one bound, 15 mm. From 0.6.36
 // a record stating another field is refused (SPEC 16.2): the fitted set until then, analysis/catalog-composer's fixture
 // (ap-fit-sdn-ap-0.5.1.ocm, GRAVITY_MODEL EGM-96), is asserted refused, and the fitted set is 0.6.36's own fit of the
-// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too. The low table's fast side (stack #477, SPEC
-// 16.1: the output table to the record's tesseral degree) moves from 7ebc98e4 the LEO seed by 95,893.02 mm (velocity
-// 66,912.77 um/s) and the fitted 550 km set by 59,929.89 mm (velocity 47,483.28 um/s; covariance 0.374 of a line's largest
-// entry, the floor that follows the fit's residual, SPEC 12.5): both are in the low table at tesseral degree 31. The
-// geostationary, Etalon-like, GPS-like, e 0.25 and e 0.3 seeds are outside it and byte-identical, and SGP4XP byte-identical.
-// From the fast side the baseline is its first build (git 73331c6a, not a release; BASE_VERSION is that build's own version
-// string), every AP set under the one bound, 15 mm.
+// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too. From 0.6.40 (the fit at a switch, stack #504) an AP set at
+// exactly e 0.3 is the below side's: the class's term from the polynomial, not the series about e0, and the covariance
+// class below HEO. The e 0.3 seed (2.4 rev/day, the half-day class) moves from the baseline by 5.1e-6 mm (velocity 8.3e-7
+// um/s, its covariance unchanged); every other set is byte-identical.
+// The low table's fast side (stack #477, SPEC 16.1: the output table to the record's tesseral degree) moves from 7ebc98e4
+// the LEO seed by 95,893.02 mm (velocity 66,912.77 um/s) and the fitted 550 km set by 59,929.89 mm (velocity 47,483.28
+// um/s): both are in the low table at tesseral degree 31. The fitted set's flown covariance moved 0.374 of a line's largest
+// entry while a reader took the record's floor off at its own theory's epoch state (stack #551); with the floor at the
+// two-body state of the record's mean elements (0.6.39, SPEC 12.4), 0.6.39's fit of the arc (ap-fit-0.6.39.ocm) flown on
+// 0.6.39 and on the fast side moves 2.1e-5 of a line's largest entry. The geostationary, Etalon-like, GPS-like, e 0.25 and
+// e 0.3 seeds are outside the low table and byte-identical, and SGP4XP byte-identical. From the fast side the baseline is
+// its first build (git 73331c6a, not a release; BASE_VERSION is that build's own version string), every AP set under the
+// one bound, 15 mm.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination

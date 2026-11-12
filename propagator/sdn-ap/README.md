@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.39 (dist 41230eb6).
+Version 0.6.40 (dist cfdd1a2c).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -125,8 +125,11 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   eccentric 0.7, of the best shorter one's) is refitted on all the data. The arc grows from two revolutions by threes
   to the fit interval. `fit` shortens a span whose fit RMS passes FIT.IMPLAUSIBLE_RMS_KM (100 km) to its latest half,
   down to FIT.MINIMUM_SPAN_HOURS (24 h), and refuses an Earth arc still beyond it (fit-implausible); a fit that stops on
-  a switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches; within 1e-8) is settled on one branch,
-  and refused fit-at-branch-limit when on each side the best set lies across the switch; an eccentric block's
+  a switch (SPEC 16.7: class, the 1,100-minute regime, the eccentricity switches; within 1e-8) is settled on one branch;
+  when on each side the best set lies across the switch, a fit at a limit in n is refused fit-at-branch-limit and one at
+  an eccentricity switch (0.3; the first-order tesseral families' 0.05 in class 0, 0.3 in every other class) with no
+  limit in n near ends on one side, its set held at the switch (the record's OD COMMENT says so; its covariance is the
+  curvature at a set that is not the cost's minimum, uncalibrated there); an eccentric block's
   fits (e > FIT.ECCENTRICITY_THRESHOLD) take the theory's one-sided differences for the element and drag columns where
   no step along the analytic Jacobian lowers the cost. BTERM and AGOM carry FIT.DRAG_PRIOR and FIT.SRP_PRIOR. BTERM's
   default is LOG_NORMAL, median 0.01 m^2/kg and sigma of the log ln 10, the prior of the free fits of experiments
@@ -425,7 +428,7 @@ too wide in-track and radially); that count does not establish realism (SPEC 12.
 
 Above the drag the ABOVE row is 5 to 1,000 times too wide on near-circular orbits and too narrow on TESS, Chandra and
 commercial geostationary satellites with burns (stack #433, #444; SPEC 12.5 "Above the drag, by class"). A set above
-the drag takes a row by class, from its own elements (HEO at e 0.3 or more; geosynchronous under 1.5 rev/day, medium
+the drag takes a row by class, from its own elements (HEO above e 0.3; geosynchronous under 1.5 rev/day, medium
 Earth orbit under 4, the LAGEOS class above). The row applies only where the fit's data sigma and span lie within
 those of the calibration fits; elsewhere the ABOVE row stands. Above the drag, s_d = k |AGOM| / a. The LAGEOS class
 (LAGEOS-1, LAGEOS-2, LARES-2; 72 h fits to precise orbits; data sigma 2.43 to 2.76 m for AP, 58.8 to 76.9 m for
@@ -702,9 +705,11 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   6.5, and at 6 rev/day e 0.35, each a 72 h fit flown 7 days against FFM 2.3.0 (named by its SHA-256), day-7 along-track under
   a bound. `test/class0-exact-resonance.e2e.mjs`: the exact 8:1 resonance (8.05 rev/day, e 0.25), a known defect (#419).
 - `test/branch-at-epoch.e2e.mjs`: SPEC 16.7 and 14.3: continuity in time at the five class limits and the regime limit,
-  the covariance about a limit, a fit 3e-8 from a limit and a fit refused fit-at-branch-limit, and the epoch store's
-  step between two sets on different branches; inside a carried span its set alone (two forecasts never blend), the
-  step to the theory at the span's end.
+  the covariance about a limit, a fit 3e-8 from a limit, a fit refused fit-at-branch-limit at a class limit and one held
+  on one side of the eccentricity switch at 0.3 (at or under 0.3 from below, its OD COMMENT, flown back to its stated
+  RMS), and the epoch store's step between two sets on different branches; at e 0.3 a set at exactly 0.3 blends with one
+  the next double down (one branch) and not with one the next double up; inside a carried span its set alone (two
+  forecasts never blend), the step to the theory at the span's end.
 - `test/perigee-drag-continuity.e2e.mjs`: SPEC 16.12: no step at perigee above e 0.3 with drag. On the transfer-orbit
   fixture and on Molniya, at three perigees each, the position step stays at most 1 cm and the velocity step at most
   1e-5 m/s (5 ms states); within 10 min of perigee the 10 s jump detector stays within 1.5 times the drag-off flight's.
