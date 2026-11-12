@@ -2834,6 +2834,14 @@ In the four windows whose fit arc holds or ends at TESS's perigee, where the fil
 theories are worse at day 7: AP 6.2 to 22.4 km against 3.1 to 10.3 km on the fill. The other three windows move by less
 than 0.6 km. The comparison with the archived AP6 arms stays on the reading those arms were scored on.
 
+From 0.6.NN, with radiation pressure through the output map (16.21), the replay on the solution states is 333.6, 1,631.4
+and 11,782.0 m for AP at days 1, 3 and 7 (0.6.36: 389.6, 1,867.7 and 15,409.5 m), with AP minus XP at day 3 at -1,671.3 m.
+On the archive's reading it is 1,014.8, 2,245.8 and 5,037.3 m (0.6.36: 1,011.7, 2,000.1 and 9,032.8 m), so day 3 is above
+the archived 2,009 m. With AGOM held at 0 the two builds fly the same replay to 0.01 m (1,505.7, 6,462.2 and 42,488.5 m):
+the difference is the radiation term's alone. On the fill the fitted AGOM moves from the solution states' fit by -8 to
++48 % in the three windows that are worse at day 3 (2026-07-27, 08-10 and 08-24), and from 0.6.NN that AGOM acts in full on
+the forecast.
+
 On model truth the rotation is right, and its partner is radiation pressure. Seeded with every force but drag and
 radiation, a TESS-like set goes from 1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On the 72 h fit path without
 radiation pressure in the truth, its 5-day D goes from 1.3 to 2.9 km to 16 to 251 m; through 0.6.33 the fit took up the
@@ -4473,7 +4481,7 @@ takes radiation pressure the same way:
 - Where the output or the solve fails, the Gauss equations at the mean state take it.
 
 Every set outside that regime flies bit for bit. With a Cr A/m of 0.02 m^2/kg, ten seeded sets flown 7 days at 300 s with
-every force on are identical to the state: low orbit, GTO, Molniya, GPS-like, e 0.5 at 9.5 h, geostationary, IGSO, and
+every force on are identical to 0.6.36's flights, state for state: low orbit, GTO, Molniya, GPS-like, e 0.5 at 9.5 h, geostationary, IGSO, and
 the long-period class 0 and one-day class at e 0.01 and 0.29.
 
 *The record.* An AP set of that regime with an area-to-mass above 0 states `PERTURBATIONS.SOLAR_RAD_PRESSURE` "SPHERE
