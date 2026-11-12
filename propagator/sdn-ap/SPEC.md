@@ -4480,10 +4480,10 @@ exactly a case whose Newton ended far from its root; the other 395 flew the same
 
 | Orbit (perigee, e) | Inclinations | States off at 1 s over the passages | Largest displacement |
 |---|---|---|---|
-| 2,000 km, e 0.5 (4:1, 4.0025 rev/day) | 20, 55, 70, 98, 165 | 142 to 401 of 20 passages | 23 to 83 km |
-| 2,000 km, e 0.5 | 130 | 15 | 8.7 km |
-| 800 km, e 0.5 (5:1, 5.047 rev/day) | 70, 98 | 152 of 25 and 30 of 26 | 19.3 and 9.0 km |
-| 200 to 1,000 km, e 0.9 (0.43 to 0.52 rev/day) | 0.5 and 20 (200 km), 70 (400 km), 98 and 130 (1,000 km) | 21 to 53 of 2 or 3 | 100,000 to 136,000 km |
+| 2,000 km, e 0.5 (4:1, 4.0025 rev/day) | 20, 55, 70, 98, 165 | 142 to 401 states over 20 passages | 23 to 83 km |
+| 2,000 km, e 0.5 | 130 | 15 states over 20 passages | 8.7 km |
+| 800 km, e 0.5 (5:1, 5.047 rev/day) | 70, 98 | 152 states over 25 passages and 30 over 26 | 19.3 and 9.0 km |
+| 200 to 1,000 km, e 0.9 (0.43 to 0.52 rev/day) | 0.5 and 20 (200 km), 70 (400 km), 98 and 130 (1,000 km) | 21 to 53 states over 2 or 3 passages | 100,000 to 136,000 km |
 
 At e 0.5 the low-orbit grid's slow harmonics near the commensurability move the anomaly (16.18), and the block's states lay on
 the orbit's own path, displaced along it, for up to 20 s a passage. At e 0.9 the drag steps at perigee (16.12) move it, and the
