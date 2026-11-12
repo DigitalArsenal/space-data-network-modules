@@ -1870,24 +1870,36 @@ inline bool is_ap_ctx(const RateContext& ctx) {
 /// (R_E) and cos^2 of the mean inclination. Held to the dynamics' mean rates, the theory's mean radius of a near-circular
 /// orbit sits (R_E^4 / a^3) [J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)] above the true one (c, s
 /// the cosine and sine of i; J2 and J4 of 1.3): the J4 part first order, the J2^2 part exact at i = 0 (9/2) and from the
-/// dynamics' second order elsewhere (25/32 at i = 90 deg). AP's output adds its negative, at the same angular rate, at
-/// every eccentricity (its eccentric terms are stack #532).
+/// dynamics' second order elsewhere (25/32 at i = 90 deg). AP's output adds its negative, at the same osculating energy,
+/// at every eccentricity (its eccentric terms are stack #532).
 inline double zonal_radius_term(double a, double c2) {
   const double s2 = 1.0 - c2, ia = 1.0 / a;
   return -(ia * ia * ia) * (kJ2 * kJ2 * (199.0 * c2 * c2 - 80.0 * c2 + 25.0) * (1.0 / 32.0) -
                             kJ4 * (15.0 / 64.0) * (35.0 * s2 * s2 - 40.0 * s2 + 8.0));
 }
 
-/// SPEC 16.21: a Cartesian state (km, km/s) moved radially by d km at the same angular rate: the position along r-hat by d,
-/// the transverse velocity by d times the angular rate, the radial velocity kept.
+/// SPEC 16.21: the factor on the transverse speed rf (R_E/min) of a state at radius r (R_E) moved radially by d (R_E) that
+/// keeps its osculating energy, rf^2 / 2 + rdot^2 / 2 - mu / r (the radial speed kept): sqrt(1 - 2 mu d / (r (r + d) rf^2)).
+inline double energy_speed_factor(double r, double d, double rf) {
+  const double q = 1.0 - 2.0 * kMu * d / (r * (r + d) * rf * rf);
+  return q > 0.0 ? std::sqrt(q) : 1.0;
+}
+
+/// SPEC 16.21: a Cartesian state (km, km/s) moved radially by d km at the same osculating energy: the position along r-hat
+/// by d, the transverse velocity scaled by energy_speed_factor, the radial velocity kept.
 inline void radial_shift(double r[3], double v[3], double d) {
   const double rn = std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
   if (!(rn > 0.0)) return;
-  const double k = d / rn, vr = (r[0] * v[0] + r[1] * v[1] + r[2] * v[2]) / rn;
+  const double vr = (r[0] * v[0] + r[1] * v[1] + r[2] * v[2]) / rn;
+  double vt2 = 0.0;
+  for (int j = 0; j < 3; ++j) { const double vt = v[j] - vr * r[j] / rn; vt2 += vt * vt; }
+  if (!(vt2 > 0.0)) return;
+  constexpr double kMinPerS = 60.0;
+  const double f = energy_speed_factor(rn / kRe, d / kRe, std::sqrt(vt2) * kMinPerS / kRe);
   for (int j = 0; j < 3; ++j) {
     const double rh = r[j] / rn, vt = v[j] - vr * rh;
     r[j] += d * rh;
-    v[j] += k * vt;
+    v[j] += (f - 1.0) * vt;
   }
 }
 
@@ -5424,9 +5436,9 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
                                 c * n_a * e * snu * (3.0 * th2 - 1.0) * (aor2 * inv_1peta + inv_eta * inv_eta * inv_eta));
     const double drfdot = eta * (-n_a * aor2 * dr +
                                  n_a * (a * aor) * d * si * si * (3.0 * c2u + e * (3.0 * cw1 + cw3)));
-    // SPEC 16.21: the zonal theory's constant radial term, at the same angular rate (the transverse speed moves with it)
-    const double dr2 = zonal_radius_term(a, th * th);
-    const double rk = r + dr + dr2, rdotk = rdot0 + drdot, rfdotk = (rfdot0 + drfdot) * (1.0 + dr2 / (r + dr));
+    // SPEC 16.21: the zonal theory's constant radial term, at the same osculating energy (the transverse speed moves with it)
+    const double dr2 = zonal_radius_term(a, th * th), rk0 = r + dr, rf0 = rfdot0 + drfdot;
+    const double rk = rk0 + dr2, rdotk = rdot0 + drdot, rfdotk = rf0 * energy_speed_factor(rk0, dr2, rf0);
     const double cu0 = cw * cnu - sw * snu, su0 = sw * cnu + cw * snu;
     double sinsu, cossu, snod, cnod, sini, cosi;
     if (__builtin_expect(std::fabs(du) < 0.02 && std::fabs(dnode) < 0.02 && std::fabs(di) < 0.02, 1)) {
@@ -7244,8 +7256,11 @@ inline int32_t xp_propagate_local(XpSat& s, double t, double r[3], double v[3], 
   const v128_t vrk_re = wasm_f64x2_mul(wasm_f64x2_add(vrk0, vdr2), wasm_f64x2_splat(kRe));
   const v128_t vvs = wasm_f64x2_splat(kRe / 60.0);
   const v128_t vrdk_vs = wasm_f64x2_mul(wasm_f64x2_add(vrdot0, vdrdot), vvs);
-  const v128_t vrfdk_vs = wasm_f64x2_mul(wasm_f64x2_mul(wasm_f64x2_add(vrfdot0, vdrfdot),
-                                                       wasm_f64x2_add(vone, wasm_f64x2_div(vdr2, vrk0))), vvs);
+  const v128_t vrf0 = wasm_f64x2_add(vrfdot0, vdrfdot);
+  const v128_t vef = wasm_f64x2_make(
+      energy_speed_factor(wasm_f64x2_extract_lane(vrk0, 0), wasm_f64x2_extract_lane(vdr2, 0), wasm_f64x2_extract_lane(vrf0, 0)),
+      energy_speed_factor(wasm_f64x2_extract_lane(vrk0, 1), wasm_f64x2_extract_lane(vdr2, 1), wasm_f64x2_extract_lane(vrf0, 1)));
+  const v128_t vrfdk_vs = wasm_f64x2_mul(wasm_f64x2_mul(vrf0, vef), vvs);
 
   const v128_t vcu0 = wasm_f64x2_sub(wasm_f64x2_mul(vcw, vcnu), wasm_f64x2_mul(vsw, vsnu));
   const v128_t vsu0 = wasm_f64x2_add(wasm_f64x2_mul(vsw, vcnu), wasm_f64x2_mul(vcw, vsnu));
