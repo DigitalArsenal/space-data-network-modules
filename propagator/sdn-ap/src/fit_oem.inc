@@ -1365,8 +1365,12 @@ static int fit_blocks() {
 
 /// The fit: $PCF THEORY UNSPECIFIED, SGP4XP or AP; the FORCES decide the theory written (stock: SGP4XP at the two-line
 /// digits; otherwise AP).
+static int fit_call(void);
 extern "C" int fit(void) {
   sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(fit_call());
+}
+static int fit_call(void) {
   plugin_reset_output_state();
   if (const int rc = sdnap::pcf::read(sdnap::pcf::kFit)) return rc;
   if (const int rc = sdnap::atm::prepare()) return rc;  // SPEC 15: the drag atmosphere the call selects

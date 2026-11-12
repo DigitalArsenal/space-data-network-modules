@@ -430,6 +430,16 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   q.index = static_cast<int32_t>(k);
   const Entry& en = st.entries[s.first + k];
   const Elements e = elements_of(en.row);
+  // SPEC 1.6 (stack #497): a slot whose initialization failed for want of memory is not kept as refused: it answers this
+  // call with the failure and is initialized again by the next
+  const uint32_t mem_mark = sdnap::mem::failures();
+  struct Retry {
+    Slot& q;
+    uint32_t mark;
+    ~Retry() {
+      if (q.error != 0 && sdnap::mem::failures() != mark) q.index = -1;
+    }
+  } retry{q, mem_mark};
   if (en.row.theory == kTheorySgp4Xp) {
     drag::table();
     q.xp = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
@@ -686,9 +696,13 @@ inline uint64_t bytes_of(const Store& st) {
 }  // namespace sdnap
 
 /// `load_epochs`: replaces the resident store with the call's snapshot (SPEC 14).
+static int load_epochs_call(void);
 extern "C" int load_epochs(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(load_epochs_call());
+}
+static int load_epochs_call(void) {
   using namespace sdnap;
-  mem::CallMark call_mark;
   plugin_reset_output_state();
   uint32_t frames = 0;
   if (const int rc = ocm::admit(frames)) return rc;
@@ -701,9 +715,13 @@ extern "C" int load_epochs(void) {
 /// `propagate_epochs`: the store of the call's own snapshot at the $PCF OUTPUT times (EPOCHS, or START_TIME to STOP_TIME):
 /// one $OEM per series, the blended TEME / GCRF / EME2000 states and, for series whose sets carry COVARIANCE, a
 /// covariance line per state.
+static int propagate_epochs_call(void);
 extern "C" int propagate_epochs(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(propagate_epochs_call());
+}
+static int propagate_epochs_call(void) {
   using namespace sdnap;
-  mem::CallMark call_mark;
   plugin_reset_output_state();
   uint32_t frames = 0;
   if (const int rc = ocm::admit(frames)) return rc;

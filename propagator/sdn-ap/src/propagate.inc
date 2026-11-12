@@ -11,9 +11,13 @@
 // COMMENT states every state's source (SPEC 18.8).
 // -----------------------------------------------------------------------------
 
+static int propagate_call(void);
 extern "C" int propagate(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(propagate_call());
+}
+static int propagate_call(void) {
   using namespace sdnap;
-  mem::CallMark call_mark;
   plugin_reset_output_state();
   uint32_t count = 0;
   if (const int rc = ocm::admit(count)) return rc;

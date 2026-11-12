@@ -139,20 +139,50 @@ integrator used, and the elements of later times do not follow from integrating 
 
 ### 1.6 Memory *[stack #497]*
 
-Every heap allocation of the module's own code (the theories' tables and grids, the fit's arrays, the stores) goes through
-one accounting (`sdnap::mem`). When one fails within a method (`propagate`, `propagate_epochs`, `load_epochs`, `fit`,
-`maneuver`, `ingest_omm`, `export_omm`), the method refuses with errorCode `out-of-memory`, naming how many allocations
-failed since it began and the largest. It does so where it would otherwise report the theory's refusal of the elements
-(`element-set-refused`), a state not reached (`propagation-failed`), a fit that did not converge (`fit-failed`) or an
-implausible one. Through 0.6.45 such a failure was reported as one of those: in one instance's run of the 19 real THEMIS
-and Chandra windows with a measuring build at tesseral degree 31, the last four catalog fits read "fit-failed: The fit did
-not converge on the block" once the instance had reached the 2,048 MB the module SDK's host gives a module by default,
-1,858 MB of it idle grids; each of the four fits when run alone. A failure inside std::vector or operator new is not counted:
-under -fno-exceptions it traps, as before.
+The module's own malloc, calloc, realloc and aligned_alloc calls, and its two nothrow news (the theories' tables and
+grids, the set caches, the fit's arrays, the stores), go through one accounting (`sdnap::mem`), which counts the
+allocations that fail and the largest request.
 
-No array whose size follows the grid's anomalies or a degree lies on the stack: the grid builder's anomaly arrays (9 x 128
-doubles) and the m-daily family's inclination functions are on the heap, and every fixed-size array indexed by a cap
-(kMdailyCap, kSpCap) is checked against it at compile time.
+**A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
+`propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
+would otherwise have answered. The message names how many allocations failed since the method began and the largest.
+Through 0.6.47 such a call answered one of four ways:
+- the theory's refusal of the elements (`element-set-refused`);
+- a state not reached (`propagation-failed`);
+- a fit that did not converge (`fit-failed`), or an implausible one;
+- success. A fit absorbs a failed flight as a step that did not improve, and a covariance that could not be prepared was
+  dropped or refused as `invalid-covariance`. So the record could depend on how much memory was free.
+
+In one instance's run of the 19 real THEMIS and Chandra windows with a measuring build at tesseral degree 31, the last four
+catalog fits read "fit-failed: The fit did not converge on the block". By then the instance had reached the 2,048 MB the
+module SDK's host gives a module by default, 1,858 MB of it idle grids. Each of the four fits when run alone.
+
+**What a failed initialization leaves.** A set whose initialization fails after the theory took memory releases it
+(`xp_init`, on every failing return), so no table and no grid reference outlives it. An epoch-store slot whose
+initialization failed for want of memory answers that state with the theory's refusal code. It is not kept: the next call
+initializes it again.
+
+**The resident exports**, which have no method error (`sdnap_epochs_*`, the row store's `sdnap_propagate_*`), answer a
+state whose set could not be initialized with the theory's refusal code, as before. `sdnap_wide_grid_cache` and
+`sdnap_wide_grid_budget` show the instance's grids and bytes.
+
+**Not counted, and trapping (as before) when they fail:**
+- std::vector and operator new under -fno-exceptions, including the paths a caller's input sizes:
+  - a fit's states;
+  - the output times (up to OUTPUT.MAXIMUM_STATES);
+  - the records of a load;
+  - the $OMM sets, the burns, the $SPW rows;
+  - a carried forecast's segments;
+  - every output's FlatBufferBuilder.
+- The per-thread stores a thread allocates on its first use of AP's terms. Each is a fixed size, not sized by any input:
+  - the GCRF and drift node caches (`new`);
+  - the bodies' store (`new`);
+  - the short-period evaluator's block (192 KiB, aligned_alloc; it aborts on failure, counted first);
+  - its thread cache (aborts).
+
+**The stack.** No array whose size follows the grid's anomalies or a degree lies on it: the grid builder's anomaly arrays
+(9 x 128 doubles) and the m-daily family's inclination functions are on the heap. The fixed-size arrays indexed by the
+m-daily and grid caps (kMdailyCap, kSpCap) are checked against them at compile time.
 
 ---
 
@@ -3601,14 +3631,27 @@ a thread while tess::FitGridScope lives there (thread-local; the fit holds it ar
 its last holder drops it, never kept idle, so a fit leaves no grid behind. The export sdnap_wide_grid_stats(reset, out) writes the
 grid lookups since the last reset, out[0] by sets outside a fit and out[1] by a fit's sets (reset != 0 zeroes them after reading);
 sdnap_wide_grid_cache(out) writes the grids the cache holds (out[0]), their bytes (out[1]) and the grids built since the
-instance began (out[2]). *The cache's bound (stack #497).* The cache holds at most 256 grids, and while an idle grid remains
-to be freed, at most kGridCacheBytes (512 MiB) of grids, live and idle, counting the grid about to be built at its largest;
-the least recently used idle grid goes first. A grid in use is never freed, so live grids alone may exceed the bound. The
-largest grid a set builds is kGridMaxBytes, degree 12 on 128 anomalies: 5.1 MB, beside the build's two double-precision
-family sets (3.7 MB each, kept for the instance's life). sdnap_wide_grid_budget(bytes, out) sets the bound when bytes > 0
-and writes it (out[0]), the bytes held (out[1]), the grids held (out[2]) and those idle (out[3]). The bound decides which
-grids are kept, never a grid's bytes: under any bound, a cold or warm cache and 1 or 8 pool threads, every state is bit for
-bit (`test/grid-cache.e2e.mjs`). Through 0.6.45 idle grids were bounded by their count alone (128: about 630 MB at degree 12). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
+instance began (out[2]).
+
+*The cache's bound (stack #497).*
+- **The count:** at most 256 grids.
+- **The bytes:** while an idle grid remains to be freed, at most kGridCacheBytes (512 MiB) of grids, live and idle, counting
+  the grid about to be built at its size; the least recently used idle grid goes first. A grid in use is never freed, so live
+  grids alone may exceed the bound.
+- **A grid's bytes** are what it allocates (WideGrid::alloc_bytes): its block, sized for every family (m, w) of its degree
+  with their indices, and the WideGrid. At degree 12 on 128 anomalies that is 5,069,464 bytes (kGridMaxBytes); at degree 2,
+  169,044. Beside them sit the build's two double-precision family sets (3.7 MB each at degree 12, kept for the instance's
+  life). sdnap_wide_grid_cache and sdnap_wide_grid_budget report the same held bytes.
+- **The setter:** sdnap_wide_grid_budget(bytes, out) sets the bound when bytes is 1 or more (whole bytes, at most SIZE_MAX;
+  1 keeps no idle grid), only reads it otherwise. It writes the bound (out[0]), the bytes held (out[1]), the grids held
+  (out[2]) and those idle (out[3]).
+- **States never move:** the bound decides which grids are kept, never a grid's bytes. Measured bit for bit
+  (`test/grid-cache.e2e.mjs`):
+  - at the default bound, a 1-byte bound and a bound that holds a few grids;
+  - with a cold, warm or shuffled cache;
+  - on 1 and 8 pool threads.
+
+Through 0.6.47 idle grids were bounded by their count alone (128: about 630 MB at degree 12). The 128-node rule is exact to 1e-13 to degree 20; at degree 31 its relative error is 1e-6 at e 0.72 and
 2e-3 at e 0.79. Against the full-field quadrature on THEMIS (e 0.82, 7 days at
 300 s): 0.12 m RMS, 2.6 m at most, 3 mm second difference, and 0.09 m RMS with the eccentricity drifting 3e-3 a week; a
 first-order series in M, the set the grid replaces, was 65 m RMS and 2.96 m. The near-resonant terms above degree 12 stay in

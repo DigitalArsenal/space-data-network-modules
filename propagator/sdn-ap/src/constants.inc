@@ -78,9 +78,22 @@ inline void* realloc(void* q, size_t n) {
   if (p == nullptr && n > 0) note_failure(n);
   return p;
 }
+inline void* aligned_alloc(size_t align, size_t n) {
+  void* p = std::aligned_alloc(align, n);
+  if (p == nullptr && n > 0) note_failure(n);
+  return p;
+}
+/// A nothrow new's result, counted when it failed.
+template <class T>
+inline T* counted(T* p) {
+  if (p == nullptr) note_failure(sizeof(T));
+  return p;
+}
 inline uint32_t failures() { return __atomic_load_n(&g_failures, __ATOMIC_RELAXED); }
 /// The failures counted when the calling thread's method began.
 inline thread_local uint32_t g_call_mark = 0;
+// The largest failed request is the instance's, reset by every method: were two methods ever to overlap on one instance, only
+// the size the message names could be another call's (the count compared with each call's own mark stays right).
 struct CallMark {
   CallMark() {
     g_call_mark = failures();
@@ -99,6 +112,15 @@ inline bool refuse_if_out_of_memory() {
                 now - g_call_mark, static_cast<unsigned long long>(__atomic_load_n(&g_largest_failed, __ATOMIC_RELAXED)));
   plugin_set_error("out-of-memory", why);
   return true;
+}
+/// A method's end (SPEC 1.6): a method during which one of the module's own allocations failed refuses by name, whatever it
+/// would have answered. A fit can absorb a failed flight as a step that did not improve, a covariance that could not be
+/// prepared can be dropped: such a call never returns success, and never another reason, and emits no output.
+inline int finish(int rc) {
+  if (failures() == g_call_mark) return rc;
+  plugin_reset_output_state();
+  refuse_if_out_of_memory();
+  return 3;
 }
 }  // namespace mem
 

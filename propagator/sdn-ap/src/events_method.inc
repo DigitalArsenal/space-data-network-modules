@@ -132,9 +132,13 @@ inline int push_mnv(const Burn& burn, const Elements& pre, const Elements& post,
 }  // namespace evm
 }  // namespace sdnap
 
+static int maneuver_call(void);
 extern "C" int maneuver(void) {
+  sdnap::mem::CallMark call_mark;
+  return sdnap::mem::finish(maneuver_call());
+}
+static int maneuver_call(void) {
   using namespace sdnap;
-  mem::CallMark call_mark;
   plugin_reset_output_state();
   uint32_t sets = 0;
   if (const int rc = ocm::admit(sets)) return rc;

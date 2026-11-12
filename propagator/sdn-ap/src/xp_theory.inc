@@ -6030,6 +6030,14 @@ inline double radiation_y0(const Elements& e) { return e.ndot_rev_day2; }
 inline double& radiation_y0(Elements& e) { return e.ndot_rev_day2; }
 
 /// Inside a tess::FitGridScope (SPEC 16.11) the grids this set builds above tess::kWideE are freed with it, never kept idle.
+inline void xp_release(XpSat& s);
+/// SPEC 1.6 (stack #497): a set that fails after ap_init took memory releases it here, on every failing return, so a caller
+/// that frees the XpSat without xp_release leaks no table and no grid reference (a referenced grid is never evicted).
+inline int32_t xp_init_refused(XpSat& s) {
+  xp_release(s);
+  s.init_error = kPropRefused;
+  return kPropRefused;
+}
 inline int32_t xp_init(const Elements& e, XpSat& s) {
   s = XpSat{};
   s.ctx.ctx_id = next_ctx_id();
@@ -6067,26 +6075,17 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.ctx.atmosphere = atm::active();  // the call's atmosphere, if it selected one (atmosphere.inc)
   s.ctx.e0 = e.eo;
   s.ctx.i0 = e.xincl;
-  if (!ap_init(e, n0, res, s)) {
-    s.init_error = kPropRefused;
-    return kPropRefused;
-  }
+  if (!ap_init(e, n0, res, s)) return xp_init_refused(s);
   // SPEC 16.13: an AP set's radiation term Y0 (m/s^2; radiation_y0 above); SGP4XP flies none
   s.ctx.rad_y0 = s.ctx.ap_third_body ? radiation_y0(e) : 0.0;
-  if (!std::isfinite(s.ctx.rad_y0)) {
-    s.init_error = kPropRefused;
-    return kPropRefused;
-  }
+  if (!std::isfinite(s.ctx.rad_y0)) return xp_init_refused(s);
   // SPEC 16.14: an AP set's solid Earth tide, with its diurnal band at the epoch; SGP4XP flies none
   s.ctx.solid_tides = s.ctx.ap_third_body && s.ctx.selected_terms.solid_tides ? 1 : 0;
   if (s.ctx.solid_tides) tide::diurnal_band(s.ctx.d50_epoch, s.ctx.tide_k1);
   if (res != 0 && !s.ctx.ap_resonance) {
     // SGP4XP: the epoch class's terms at e_0, i_0 (SPEC 6.3), the library's functions (6.4)
     res::ResCoef* rc = static_cast<res::ResCoef*>(sdnap::mem::malloc(res::class_terms(res).count * sizeof(res::ResCoef)));
-    if (rc == nullptr) {
-      s.init_error = kPropRefused;
-      return kPropRefused;
-    }
+    if (rc == nullptr) return xp_init_refused(s);
     s.ctx.res_count = res::current_terms(res, e.eo, std::sin(e.xincl), std::cos(e.xincl), rc);
     s.ctx.res_epoch = rc;
   }
@@ -6114,10 +6113,7 @@ inline int32_t xp_init(const Elements& e, XpSat& s) {
   s.epoch.index = 0;
   bool finite = rates(s.ctx, 0.0, s.epoch.y, s.epoch.f);
   for (int j = 0; finite && j < 6; ++j) finite = std::isfinite(s.epoch.y[j]) && std::isfinite(s.epoch.f[j]);
-  if (!finite) {  // an epoch state or rate that is not a number never starts a grid
-    s.init_error = kPropRefused;
-    return kPropRefused;
-  }
+  if (!finite) return xp_init_refused(s);  // an epoch state or rate that is not a number never starts a grid
   const double step = s.ctx.long_period ? long_period_step(s.ctx) : averaged_step(s.ctx, n0);
   const double span = 8.0 * kMinutesPerDay;
   int32_t stride = static_cast<int32_t>(std::ceil(span / (kSparse * step)));
@@ -6505,7 +6501,7 @@ inline SetCaches* pool_caches_for(XpSat& s) {
   SetCaches* c = nullptr;
   // inside a threaded batch the holders' list may not grow past the room kept for it (pool_room): no room, no caches
   const bool listed = !(p.holders.size() == p.holders.capacity() && batch_running());
-  if (listed && pool_reclaim_locked(p, need, &s, before)) c = new (std::nothrow) SetCaches{};
+  if (listed && pool_reclaim_locked(p, need, &s, before)) c = sdnap::mem::counted(new (std::nothrow) SetCaches{});
   if (c != nullptr) {
     c->bytes = need;
     // SetScope moves the stamp to prev as the flight starts: the set's previous ask (0: none), so the tesseral cache and

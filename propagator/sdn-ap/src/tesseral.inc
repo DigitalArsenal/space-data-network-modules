@@ -1485,7 +1485,7 @@ inline bool sp_storage(SpEvalCache& sc, int blks, int rows, bool with_c) {
                             b * 16, with_c ? b * 64 * 4 : 0, b * 32 * 4, b * 32 * 4, b * 16 * 4, b * 4 * 2};
   size_t off[17], total = 0;
   for (int k = 0; k < 17; ++k) { off[k] = total; total += up(sizes[k]); }
-  uint8_t* m = static_cast<uint8_t*>(std::aligned_alloc(64, total));
+  uint8_t* m = static_cast<uint8_t*>(sdnap::mem::aligned_alloc(64, total));
   if (m == nullptr) return false;
   std::memset(m, 0, total);
   sc.mem = m;
@@ -1516,7 +1516,7 @@ inline bool sp_storage(SpEvalCache& sc, int blks, int rows, bool with_c) {
 /// A set's cache: `src` (grouped and baked in a thread's cache) with storage for exactly its blocks and rows and
 /// without blk_c (sp_blk_c rebuilds it from F when a base or resonant bake needs it). nullptr out of memory.
 inline SpEvalCache* sp_compact_copy(const SpEvalCache& src) {
-  SpEvalCache* d = new (std::nothrow) SpEvalCache(src);
+  SpEvalCache* d = sdnap::mem::counted(new (std::nothrow) SpEvalCache(src));
   if (d == nullptr) return nullptr;
   if (!sp_storage(*d, src.total_blks, src.n_rows, false)) {
     delete d;
@@ -1548,7 +1548,7 @@ inline thread_local float* g_sp_blk_c = nullptr;
 /// before any batch, stack #487).
 inline float* sp_blk_c_storage() {
   if (__builtin_expect(!g_sp_blk_c, 0)) {
-    g_sp_blk_c = static_cast<float*>(std::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
+    g_sp_blk_c = static_cast<float*>(sdnap::mem::aligned_alloc(64, static_cast<size_t>(SpEvalCache::kMaxBlks) * 64 * sizeof(float)));
     if (g_sp_blk_c == nullptr) std::abort();
   }
   return g_sp_blk_c;
@@ -5047,6 +5047,7 @@ struct WideGrid {
   int8_t* w;
   float* v;           // count x 6 x kGridN x (re, im, slope re, slope im): the value and its slope in E per node
   uint16_t* dv;       // count x 3 (d/de, d/di, d/(da/a)) x 6 x kGridD x (re, im), half precision
+  size_t alloc_bytes; // the bytes the grid holds as allocated: its block (sized for every family of its degree) and the WideGrid
 };
 
 /// IEEE half precision, round to nearest even; finite inputs below 65504 in magnitude.
@@ -5407,6 +5408,7 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   release();
   std::free(sm);
   g.degree = degree; g.count = count; g.m = fm; g.w = fw; g.v = v; g.dv = dv;
+  g.alloc_bytes = sizeof(WideGrid) + vb + db + 2 * static_cast<size_t>(cap);  // the block as allocated, with the WideGrid
   g.n = n; g.e = e; g.i = inc; g.a = std::pow(kKe / n, kX2o3);
   return true;
 }
@@ -5420,10 +5422,11 @@ inline void wide_grid_release(WideGrid& g) {
 inline size_t wide_grid_bytes(const WideGrid& g) {
   return static_cast<size_t>(g.count) * (6 * kGridN * 4 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t));
 }
-/// The most a grid of `degree` can hold, with its WideGrid: every family (m, w) of degree 2 to `degree`.
+/// The bytes a grid of `degree` allocates (WideGrid::alloc_bytes): its block, sized for every family (m, w) of degree 2 to
+/// `degree` with their indices, and the WideGrid.
 constexpr size_t wide_grid_bytes_bound(int degree) {
   return sizeof(WideGrid) + static_cast<size_t>(degree) * static_cast<size_t>(2 * degree + 1) *
-                                (6 * kGridN * 4 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t));
+                                (6 * kGridN * 4 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t) + 2);
 }
 /// The largest grid a set builds (SPEC 16.11): degree kSpCap on kGridN anomalies (5.1 MB at 12 and 128).
 constexpr size_t kGridMaxBytes = wide_grid_bytes_bound(kSpCap);
@@ -5448,8 +5451,8 @@ struct GridCache {
   int32_t word;
   int count;
   uint32_t clock;
-  size_t bytes;   // the held grids' bytes (wide_grid_bytes and the WideGrid), live and idle
-  size_t budget;  // the bound on them; 0 until the first use (kGridCacheBytes)
+  size_t bytes;                     // the held grids' allocated bytes (WideGrid::alloc_bytes), live and idle
+  size_t budget = kGridCacheBytes;  // the bound on them (sdnap_wide_grid_budget, under the lock)
   GridSlot slot[kGridSlots];
 };
 /// Frees the least recently used idle grid while more than `keep` are idle or the held bytes with `extra` more exceed the
@@ -5457,7 +5460,6 @@ struct GridCache {
 inline void evict_idle(struct GridCache& c, int keep, size_t extra = 0);
 inline GridCache& grid_cache() {
   static GridCache c{};
-  if (c.budget == 0) c.budget = kGridCacheBytes;
   return c;
 }
 inline void cache_lock(int32_t* w) {
@@ -5542,7 +5544,7 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   cache_lock(&c.word);
   if (c.count < kGridSlots) {
     c.slot[c.count++] = GridSlot{g, cls, 1, 0, transient};
-    c.bytes += sizeof(WideGrid) + wide_grid_bytes(*g);
+    c.bytes += g->alloc_bytes;
     cache_unlock(&c.word);
     return g;
   }
@@ -5551,13 +5553,14 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
   return nullptr;
 }
 
-/// SPEC 16.11: the cache's byte bound. bytes > 0 sets it; out[0] the bound, out[1] the held bytes, out[2] the grids held,
-/// out[3] those idle (held by no set).
+/// SPEC 16.11: the cache's byte bound. bytes of 1 or more sets it (whole bytes, at most the address space: SIZE_MAX); a smaller
+/// value only reads. out[0] the bound, out[1] the held bytes, out[2] the grids held, out[3] those idle (held by no set).
 extern "C" __attribute__((export_name("sdnap_wide_grid_budget"))) int32_t sdnap_wide_grid_budget(double bytes, double* out) {
   GridCache& c = grid_cache();
   cache_lock(&c.word);
-  if (bytes > 0.0) {
-    c.budget = static_cast<size_t>(bytes);
+  if (bytes >= 1.0) {
+    constexpr double kMax = static_cast<double>(SIZE_MAX);
+    c.budget = bytes >= kMax ? SIZE_MAX : static_cast<size_t>(bytes);
     evict_idle(c, kGridIdle);
   }
   if (out != nullptr) {
@@ -5602,7 +5605,7 @@ inline void wide_grid_drop(WideGrid* g) {
     if (c.slot[k].g == g) {
       if (--c.slot[k].refs == 0) {
         if (c.slot[k].transient) {  // built inside a fit: not kept idle
-          c.bytes -= sizeof(WideGrid) + wide_grid_bytes(*c.slot[k].g);
+          c.bytes -= c.slot[k].g->alloc_bytes;
           free_grid(c.slot[k].g);
           c.slot[k] = c.slot[--c.count];
         } else {
@@ -5620,7 +5623,7 @@ inline void cache_contents(double& slots, double& bytes) {
   cache_lock(&c.word);
   slots = c.count;
   bytes = 0.0;
-  for (int k = 0; k < c.count; ++k) bytes += static_cast<double>(wide_grid_bytes(*c.slot[k].g));
+  bytes = static_cast<double>(c.bytes);  // the same count sdnap_wide_grid_budget reports: each grid's allocated bytes
   cache_unlock(&c.word);
 }
 
@@ -5633,7 +5636,7 @@ inline void evict_idle(GridCache& c, int keep, size_t extra) {
         if (oldest < 0 || c.slot[k].stamp < c.slot[oldest].stamp) oldest = k;
       }
     if (oldest < 0 || (idle <= keep && c.bytes + extra <= c.budget)) return;
-    c.bytes -= sizeof(WideGrid) + wide_grid_bytes(*c.slot[oldest].g);
+    c.bytes -= c.slot[oldest].g->alloc_bytes;
     free_grid(c.slot[oldest].g);
     c.slot[oldest] = c.slot[--c.count];
   }

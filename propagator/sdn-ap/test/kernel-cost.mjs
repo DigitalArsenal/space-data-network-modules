@@ -89,6 +89,16 @@ for (const e of [0.05, 0.1, 0.2])
   for (const tesseral of [0, 31])
     REGIMES.push({ name: `leo-e${e}${tesseral ? "-t31" : ""}`, n: revPerDay((RE + 500) / (1 - e)), e, i: 63, raan: 40, argp: 60, ma: 10, bterm: 0.001,
       agom: 0.01, weather: "quiet", tesseral });
+// Sets that build the first-order grid above e 0.3 (stack #497): the resonance classes (half-day, one-day, eight-hour,
+// sixteen-hour) and the long-period regime, each with the tesseral terms to degree 31 (their grid in the eccentric anomaly).
+for (const r of REGIMES.filter((q) => ["gto", "molniya", "themis", "chandra", "tess"].includes(q.name)))
+  REGIMES.push({ ...r, name: `${r.name}-t31`, tesseral: 31 });
+REGIMES.push(
+  { name: "eight-hour-e0.5-t31", n: 3.0, e: 0.5, i: 55, raan: 20, argp: 200, ma: 10, bterm: 0.001, agom: 0.01, weather: "quiet", tesseral: 31 },
+  { name: "sixteen-hour-e0.5-t31", n: 1.5, e: 0.5, i: 40, raan: 220, argp: 100, ma: 10, bterm: 0.001, agom: 0.01, weather: "quiet", tesseral: 31 },
+  { name: "long-period-e0.9-t31", n: revPerDay((RE + 1000) / 0.1), e: 0.9, i: 55, raan: 120, argp: 30, ma: 10, bterm: 0.001, agom: 0.01, weather: "quiet",
+    tesseral: 31 },
+);
 const regimes = PICK ? REGIMES.filter((r) => PICK.includes(r.name)) : REGIMES;
 if (!regimes.length) throw new Error(`no regime among ${PICK}`);
 
