@@ -2834,8 +2834,12 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
     38,000); the sets' caches when they fly (about 50 MB per 1,000 here) and a batch's reserve come on top.
   - With the reserve, the memory after the first threaded batch on 4 threads is 237.4, 257.4 and 260.9 MB at 12, 31 and 70
     (0.6.41: 238.4, 257.6 and 257.6 MB).
-- **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
-  near-resonant terms in low orbit and the half-day tail, and nothing else.
+- **On every other branch** the first-order terms and the m-daily family stop at degree min(d, 12). They are not complete to
+  it: in the resonance classes and the long-period regime the table leaves out every term within one shallow band (0.045 n)
+  of commensurability, and above the eccentricity switch the families are the grid's. Degrees 13 to min(d, 31) contribute
+  only: in class 0 with a period under 1,100 minutes, the j = 1 near-resonant terms and the shallow set; in the half-day
+  class its tail; in the one-day class at e 0.3 or below its tail (degrees 5 to 31). Everywhere else nothing above degree 12
+  is carried, whatever d states.
 - **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
   70 x 70 numerical forecast over 5 days, gravity only on both sides, AP at 70): D falls from 63 to 233 m to 35 to 148 m.
   The terms are along-track and radial lines at once per revolution plus or minus about once a day, and the daily and
@@ -2908,14 +2912,15 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 | --- | --- | --- | --- |
 | m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 (in the low table above 12, the first-order table's to d) | at output time, first order at the mean elements |
 | first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12; in the low table d to 70, \|l - 2p\| <= 17, by the 0.5 m size cut | at output time, first order at the mean elements |
-| near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
+| near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time; class 0 with a period under 1,100 minutes only (the resonance classes and the long-period regime carry none) |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
 | shallow resonances | k = 1, q = 0, l = 1 mod 2, m from 2, angle drifting slower than 0.045 n | 31 | in the rates, each (k, m) tapered by its current distance from commensurability; orbits outside the classes of section 6 only |
 | slow set (from 0.6.25) | j = 1 to 6, \|q\| up to 4 (from 0.6.27; q = 0 in 0.6.25), every order and degree whose own angle drifts within 1.3 x 0.045 n at the epoch and whose size reaches 0.5 m (through the mean motion, or from 0.6.27 through the eccentricity vector), the shallow set's own terms aside | 70 | in the rates of a fitted set in the low table, each term tapered by its own current rate; the output table holds the rest of a tapered term (16.18) |
 
 A first-order or near-resonant term is left out when section 6's class or the shallow set carries it in the rates (the shallow set
-by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n, and when
+by the same taper, so a term crossing its band moves from one to the other), when its angle drifts slower than 0.001 n (class 0
+with a period under 1,100 minutes; in the resonance classes and the long-period regime, slower than one shallow band, 0.045 n), and when
 its position amplitude is below 0.5 m. G is g0 + g1 e about the epoch e: below e = 0.03, q = 0 takes 1 + (l (l + 1) / 4 - w^2) e^2 and
 q = +-1 takes ((l + 1) / 2 + q w) e, above it the Hansen coefficient.
 
@@ -4432,6 +4437,9 @@ stack #474.
   - The rates are Lagrange's equations at the current elements, with F G at the epoch's e and i moved linearly.
   - Each (j, m, w) is weighted by the band taper of its own rate. The grid holds the rest of each harmonic.
   - The diagnostic writes code 1 with that weight, 5 under the size cut, and 4 above degree 12.
+  - "Outside low orbit" excludes class 0 with a period under 1,100 minutes: above its switch (0.05) that branch carries
+    neither the slow set (the low table's, at or below the switch) nor this wide set, only the shallow set's j = 1 terms in the
+    rates. Its other slow terms are in the grid; the census lists the branch as stack #473's hole (16.20).
 - **Before 0.6.28.** The grid left each family's whole slow band out in every class but the one-day class, and nothing else
   carried it. The one-day class kept the band on the grid down to the floor, and that floor and the terms under it are gone.
 - **Why the rates and not the grid.** The rates follow a term's angle with the flight's own elements. A term kept on the grid
