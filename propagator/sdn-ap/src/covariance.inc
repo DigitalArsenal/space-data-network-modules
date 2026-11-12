@@ -65,7 +65,8 @@ inline bool epoch_floor_state(const ElementRow& row, double r[3], double v[3]) {
 }
 
 /// SPEC 12.4: whether an AP record's epoch covariance carries its floor at the two-body state of its mean elements: its
-/// PROVENANCE.PRODUCER is this module at kEpochFloorSince or later.
+/// PROVENANCE.PRODUCER is exactly "com.spacedatanetwork.sdn-ap-propagator X.Y.Z" (three decimal integers, nothing after
+/// them) with X.Y.Z at kEpochFloorSince or later, compared part by part as numbers. Any other text, or none, is not.
 inline bool floor_at_mean_elements(const OCM* o) {
   const PVN* pv = o->PROVENANCE();
   const flatbuffers::String* pr = pv == nullptr ? nullptr : pv->PRODUCER();
@@ -73,7 +74,16 @@ inline bool floor_at_mean_elements(const OCM* o) {
   constexpr size_t n = sizeof kPrefix - 1;
   if (pr == nullptr || pr->size() <= n || std::strncmp(pr->c_str(), kPrefix, n) != 0) return false;
   int v[3] = {0, 0, 0};
-  if (std::sscanf(pr->c_str() + n, "%d.%d.%d", &v[0], &v[1], &v[2]) != 3) return false;
+  const char* c = pr->c_str() + n;
+  for (int k = 0; k < 3; ++k) {
+    if (*c < '0' || *c > '9') return false;
+    long x = 0;
+    while (*c >= '0' && *c <= '9' && x < 100000) x = 10 * x + (*c++ - '0');
+    if (*c >= '0' && *c <= '9') return false;
+    v[k] = static_cast<int>(x);
+    if (k < 2 && *c++ != '.') return false;
+  }
+  if (*c != '\0') return false;
   for (int k = 0; k < 3; ++k)
     if (v[k] != kEpochFloorSince[k]) return v[k] > kEpochFloorSince[k];
   return true;
@@ -426,12 +436,23 @@ inline void add_floor(const double* F, const double r[3], const double v[3], dou
   }
 }
 
+/// SPEC 12.4: the floor the epoch covariance carries, added to P (6 x 6): an AP record's (ap: its MEAN_ELEMENT_THEORY AP)
+/// at the two-body state of its mean elements (epoch_floor_state), any other at the theory's epoch state (r0, v0). The
+/// writer (of_fit) puts it on and the reader (prepare) takes it off with this one function.
+inline bool epoch_floor(const ElementRow& row, bool ap, const double* floor, const double r0[3], const double v0[3], double* P) {
+  double rf[3], vf[3];
+  if (ap && !epoch_floor_state(row, rf, vf)) return false;
+  add_floor(floor, ap ? rf : r0, ap ? vf : v0, P);
+  return true;
+}
+
 /// A covariance-bearing set: the row, its parameter layout, the epoch covariance (COVARIANCE, 6 x 6, the floor
 /// included), the consider rows, the floor and the process noise.
 struct Set {
   ElementRow row{};
   fit::Options o{};
   int np = 0;
+  bool ap = false;  ///< SPEC 12.4: the record's MEAN_ELEMENT_THEORY is AP, so its epoch floor is at the two-body state
   double C[kMaxAug * kMaxAug] = {};  ///< augmented epoch covariance (np x np): state block total, then the parameters
   double log_sigma[kMaxConsider] = {};  ///< of_fit: the posterior sigma of ln B ([0]), ln AGOM ([2]) where the fit estimated the log (else 0)
   double floor[6] = {};
@@ -498,7 +519,7 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
 /// options as fitted) and the non-gravitational rate r_ng (1/day). False when the normal matrix is not positive
 /// definite or the theory refuses a moved set.
 inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const double* t, const double* r, int count, double arc_end_min,
-                   double sigma_km, Set& s, double& ng_rate) {
+                   double sigma_km, Set& s, double& ng_rate, bool ap) {
   // SPEC 16.13, 17.1: an AP set's radiation term Y0 is no row of the covariance: the moved sets fly the solved Y0 the row
   // carries, held
   fit::Options o = fitted;
@@ -573,12 +594,10 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
         for (int c = 0; c < np; ++c) v += J[i * np + a] * Pp[a * np + c] * J[j * np + c];
       S6[i * 6 + j] = v;
     }
-  // SPEC 12.4: an AP set's epoch floor at the two-body state of the mean elements it writes, the state every reader
-  // takes it off at
-  const bool ap = xpt::is_ap_ctx(b.sats[0].ctx);
-  double rf[3], vf[3];
-  if (ap && !epoch_floor_state(row, rf, vf)) return false;
-  add_floor(floor, ap ? rf : r0, ap ? vf : v0, S6);
+  // SPEC 12.4: the epoch floor at the state every reader takes it off at (epoch_floor: an AP record's at the two-body
+  // state of the mean elements it writes)
+  s.ap = ap;
+  if (!epoch_floor(row, ap, floor, r0, v0, S6)) return false;
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < 6; ++j) s.C[i * np + j] = 0.5 * (S6[i * 6 + j] + S6[j * 6 + i]);
   for (int a = 6; a < np; ++a)
@@ -626,6 +645,8 @@ inline bool noise_invariant(const ElementRow& row, const Set& s) {
 inline int read(const OCM* o, const ElementRow& row, Set& s) {
   s = Set{};
   s.row = row;
+  const OCMMeanElements* me = o->MEAN_ELEMENTS();
+  s.ap = me != nullptr && me->MEAN_ELEMENT_THEORY() == meanElementSource_AP;
   const auto* cv = o->COVARIANCE_DATA();
   if (cv == nullptr || cv->size() == 0) return 0;
   if ((o->COV_TYPE() != nullptr && std::strcmp(o->COV_TYPE()->c_str(), "CARTPV") != 0) || o->COV_ORDERING() != covarianceOrdering_LTM) return -1;
@@ -731,8 +752,7 @@ inline int read(const OCM* o, const ElementRow& row, Set& s) {
       break;
     }
   // SPEC 12.4: an AP record's floor at its writer's theory state cannot be taken off at this build's
-  const OCMMeanElements* me = o->MEAN_ELEMENTS();
-  if (me != nullptr && me->MEAN_ELEMENT_THEORY() == meanElementSource_AP && !floor_at_mean_elements(o)) return -4;
+  if (s.ap && !floor_at_mean_elements(o)) return -4;
   return 1;
 }
 
@@ -757,10 +777,7 @@ inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr) {
   double C[kMaxAug * kMaxAug];
   for (int q = 0; q < np * np; ++q) C[q] = s.C[q];
   double F[36] = {};
-  const bool ap = xpt::is_ap_ctx(p.b.sats[0].ctx);
-  double rf[3], vf[3];
-  if (ap && !epoch_floor_state(s.row, rf, vf)) return -3;
-  add_floor(s.floor, ap ? rf : r0, ap ? vf : v0, F);
+  if (!epoch_floor(s.row, s.ap, s.floor, r0, v0, F)) return -3;
   for (int i = 0; i < 6; ++i)
     for (int j = 0; j < 6; ++j) C[i * np + j] -= F[i * 6 + j];
   // T: parameters from (epoch state, consider): the inverse of the epoch element columns
@@ -797,6 +814,29 @@ inline int prepare(const Set& s, Propagator& p, xpt::XpSat* nominal = nullptr) {
 }
 
 /// The state (TEME km, km/s) and its 6 x 6 covariance (row-major; km^2, km^2/s, km^2/s^2) at `t` minutes from epoch.
+/// SPEC 12.4, for test/epoch-floor.e2e.mjs: a prepared set's epoch floor in parts, 150 doubles in `out`: the state the
+/// floor comes off at (6: the two-body state of an AP record, else the theory's epoch state), the flown epoch state (6),
+/// F there and F at the flown state (36 each, 6 x 6 row-major) and the epoch covariance's state block less the first (36).
+inline bool epoch_floor_parts(Propagator& p, double* out) {
+  const Set& s = p.s;
+  double J[6 * kMaxAug], r0[3], v0[3];
+  if (!at(p.b, 0.0, r0, v0, J)) return false;
+  double rf[3], vf[3];
+  if (s.ap) {
+    if (!epoch_floor_state(s.row, rf, vf)) return false;
+  } else {
+    for (int k = 0; k < 3; ++k) { rf[k] = r0[k]; vf[k] = v0[k]; }
+  }
+  double Ff[36] = {}, F0[36] = {};
+  add_floor(s.floor, rf, vf, Ff);
+  add_floor(s.floor, r0, v0, F0);
+  for (int k = 0; k < 3; ++k) { out[k] = rf[k]; out[3 + k] = vf[k]; out[6 + k] = r0[k]; out[9 + k] = v0[k]; }
+  for (int q = 0; q < 36; ++q) { out[12 + q] = Ff[q]; out[48 + q] = F0[q]; }
+  for (int i = 0; i < 6; ++i)
+    for (int j = 0; j < 6; ++j) out[84 + i * 6 + j] = s.C[i * s.np + j] - Ff[i * 6 + j];
+  return true;
+}
+
 inline bool eval(Propagator& p, double t, double r[3], double v[3], double* P, double* J_out = nullptr, int32_t* nom_status = nullptr) {
   const int np = p.b.np;
   double J_buf[6 * kMaxAug];

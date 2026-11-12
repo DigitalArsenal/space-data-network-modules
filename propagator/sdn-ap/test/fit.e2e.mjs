@@ -6,7 +6,7 @@
 //   (SPEC 17.4).
 // - MEAN_ELEMENTS printed against test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18 dist's $OMM: BTERM in
 //   BSTAR, AGOM in MEAN_MOTION_DDOT), the epoch equal; the fitted record flown 7 days within FIT_BOUND of the reference
-//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.36's fit, ap-fit-0.6.36.ocm, history
+//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.38's fit, ap-fit-0.6.38.ocm, history
 //   at FIT_BOUND); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
 // - FIT_STATISTICS: FIT_STATES as the 0.4.0 COMMENT states them, FIT_RMS_KM within FIT_BOUND.rmsM of it, ITERATIONS
@@ -22,8 +22,9 @@
 //   fit's $ODR names its own $OCM (RUN_ID and OCM_CONTENT_ID are the CID of its $OCM's bytes); each stored record's
 //   sdnap_covariance_at at every fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in
 //   EME2000 and TEME every 6 h for 7 days within FLIGHT_BOUND on this build and on 0.6.3 (byte identity until 0.6.5), the
-//   AP record's (ap-fit-0.6.36.ocm, 0.6.36's fit; 0.6.4's states EGM-96 and is refused, SPEC 16.2) against 0.6.36's flight
-//   of it (ap-fit-0.6.36-0.6.36.cov, ap-fit-0.6.36.eme2000-0.6.36.oem, ap-fit-0.6.36.teme-0.6.36.oem; history at
+//   AP record's (ap-fit-0.6.38.ocm, 0.6.38's fit of the same inputs with 0.6.36's mean elements; 0.6.4's states EGM-96 and
+//   is refused, SPEC 16.2; 0.6.36's has its covariance refused, SPEC 12.4) against 0.6.36's flight of 0.6.36's fit
+//   (ap-fit-0.6.36-0.6.36.cov, ap-fit-0.6.36.eme2000-0.6.36.oem, ap-fit-0.6.36.teme-0.6.36.oem; history at
 //   FLIGHT_BOUND). With
 //   SDNAP_EXAMPLES set to the published examples (each <id>.ocm and <id>.json), every set flies on both builds at every epoch
 //   of its window, with sdnap_covariance_at at every 12th epoch; a set outside the band 0.6.4's switch moves (class 0 by the

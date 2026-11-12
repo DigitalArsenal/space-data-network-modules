@@ -228,6 +228,40 @@ int32_t sdnap_covariance_at(const uint8_t* ocm, uint32_t length, const double* m
   return 0;
 }
 
+/// SPEC 12.4, for test/epoch-floor.e2e.mjs: the two-body state of a decoded set's mean elements (cov::epoch_floor_state), 6
+/// doubles in `out` (TEME, km, km/s): the state an AP record's epoch floor is put on and taken off at. 0, -1 not decodable,
+/// -3 no state.
+SDNAP_EXPORT("sdnap_test_two_body_state")
+int32_t sdnap_test_two_body_state(const uint8_t* ocm, uint32_t length, double* out) {
+  using namespace sdnap;
+  if (ocm == nullptr || out == nullptr) return -1;
+  ocm::Set set;
+  if (ocm::decode(ocm, length, set) != 0) return -1;
+  return cov::epoch_floor_state(set.row, out, out + 3) ? 0 : -3;
+}
+
+/// SPEC 12.4, for test/epoch-floor.e2e.mjs: an $OCM set's epoch floor in parts (cov::epoch_floor_parts: 150 doubles in
+/// `out`). 0, or the codes of sdnap_covariance_at.
+SDNAP_EXPORT("sdnap_test_epoch_floor")
+int32_t sdnap_test_epoch_floor(const uint8_t* ocm, uint32_t length, double* out) {
+  using namespace sdnap;
+  if (ocm == nullptr || out == nullptr) return -1;
+  ocm::Set set;
+  if (ocm::decode(ocm, length, set) != 0) return -1;
+  if (set.row.theory != kTheorySgp4Xp) return -4;
+  cov::Set cs;
+  const int rc = cov::read(set.record, set.row, cs);
+  if (rc == 0) return -2;
+  if (rc == -4) return -7;
+  if (rc < 0) return -6;
+  atm::Atmosphere a;
+  ocm::atmosphere_of(set, a);
+  ocm::Bind bind(set.forces, &a);
+  cov::Propagator p;
+  if (const int pr = cov::prepare(cs, p)) return pr;
+  return cov::epoch_floor_parts(p, out) ? 0 : -3;
+}
+
 /// The augmented covariance of an $OCM set (SPEC 17.5), as sdnap_covariance_at reads and flies it: at each of `count`
 /// times (`minutes` from its epoch) `out` gets 6 + N(N+1)/2 doubles, N the record's COV_SIZE: the TEME state (km,
 /// km/s), then the lower triangle row by row (COV_ORDERING LTM, the $OCM's COVARIANCE_DATA layout) of the covariance of

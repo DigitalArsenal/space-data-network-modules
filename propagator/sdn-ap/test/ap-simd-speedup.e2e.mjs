@@ -3,7 +3,8 @@
 // for AP (theory 5), preserving bit-for-bit identity on SGP4 (type 0) and SGP4XP (type 4) against 0.6.4
 // (commit cfd750eb8), sub-centimeter AP state agreement (<= 1 cm over 7 days, from 0.6.36 against the field change's first
 // build, git 7ebc98e4: step 4),
-// <= 1e-3 relative AP covariance agreement over 48 h with 0.6.36's recorded numbers (test/fixtures/ap-fit-0.6.36-0.6.36.cov),
+// <= 1e-3 relative AP covariance agreement over 48 h of the stored record (0.6.38's own fit) with 0.6.36's recorded numbers
+// of 0.6.36's fit (test/fixtures/ap-fit-0.6.36-0.6.36.cov),
 // 0.6.4's AP fit refused by this build (gravity-model-mismatch: it states EGM-96, SPEC 16.2),
 // valid $OCM/$ODR fit with zero USER_DEFINED_* fields,
 // and thread-count bit-determinism.
@@ -131,13 +132,17 @@ try {
   // from 0.6.38 the stored record is 0.6.38's own fit (0.6.36's mean elements; its epoch floor at their two-body state, SPEC
   // 12.4), whose covariance is held against 0.6.36's numbers of 0.6.36's fit: a set's own flight is as it was
   const storedBytes = new Uint8Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.38.ocm")));
-  // Propagate the stored AP $OCM (from 0.6.36 its own fit; 0.6.4's fit through 0.6.34) on STATE_BASE and this build for
+  // Propagate the stored AP $OCM (from 0.6.38 its own fit; 0.6.36's fit at 0.6.36; 0.6.4's fit through 0.6.34) on STATE_BASE
+  // and this build for
   // 7 days in EME2000 and TEME, within 1 cm. Against 0.6.4 until 0.6.21 (0.6.5's speed changes: sub-centimeter); AP's own
   // Sun and Moon (0.6.22, SPEC 16.17, stack #446) move this flight from 0.6.4's by 12.179 cm in EME2000 and TEME (0.6.21
   // within 1 cm), so from 0.6.22 the baseline is 0.6.22 (git f8af1e2b), the bound kept. The field EGM2008 (0.6.36, SPEC
   // 16.2, stack #503) moves it from 0.6.22's by 20.137 m in EME2000 and TEME, so from 0.6.36 the baseline is the field
   // change's first build (git 7ebc98e4), the bound kept. From 0.6.36 the record is 0.6.36's own fit (0.6.4's is refused),
-  // flown by STATE_BASE (which reads EGM2008 records) and by this build.
+  // flown by STATE_BASE (which reads EGM2008 records) and by this build. STATE_BASE is older than SPEC 12.4's epoch floor:
+  // it flies this build's record for its states only; that record's covariance on that base is not meaningful (an earlier
+  // build takes the floor off at its own theory state, stack #562), so the covariance is held below against 0.6.36's
+  // numbers, flown by this build.
   const hState = await createStandaloneHarness("browser", stateBasePath, { surface: "direct" });
   const EPOCHS = Array.from({ length: 57 }, (_, k) => new Date(Date.parse("2026-10-02T00:00:00Z") + k * 3 * 3600e3).toISOString().replace("Z", ""));
   const linesOf = (p) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(p.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES;
