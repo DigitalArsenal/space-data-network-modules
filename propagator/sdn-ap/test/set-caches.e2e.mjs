@@ -83,8 +83,10 @@ const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b
 const DEAD_TEST = 2 ** 28, DEAD_RATE = 2 ** 31;
 // the memory the pool case's row store build may take (MB, the module's memory as the host sees it; stack #477): 0.6.42
 // with each set's table built in its thread's scratch measures 51.75 MB (main 0.6.41 51.94 MB); the bound is a quarter
-// over it. A build that took each table at its bound and cut it down after measured 223.94 MB.
-const ROW_STORE_MB = 64;
+// over it. A build that took each table at its bound and cut it down after measured 223.94 MB. The line rule (stack #572,
+// 0.6.49) measures 71.44 MB; with the raw term list kept only for the census and the half-day class's table at its count
+// (stack #583, 0.6.50) 35.75 MB, the bound a quarter over it.
+const ROW_STORE_MB = 45;
 
 ensureBuilt();
 async function open(file, threads = 0) {
