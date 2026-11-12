@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.38 (dist 4fe8da9d).
+Version 0.6.40 (dist cfdd1a2c).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1306,8 +1306,8 @@ exceptions *[study; probe 6.3, 6.5, 6.6]*:
   derivative of the polynomial through e^27 of the previous item, as the 16 h class uses it.
 
 **AP eccentricity approximation.** Section 16.2 uses the corrected Maclaurin coefficients below
-`kSeriesE = 0.3`. When the expansion center satisfies e0 > 0.3 and e0 + 0.001 < 1 (from 0.6.38 strictly above,
-as the other eccentricity switches: a set at exactly 0.3 is the below side's; through 0.6.37 e0 >= 0.3), the original
+`kSeriesE = 0.3`. When the expansion center satisfies e0 > 0.3 and e0 + 0.001 < 1 (from 0.6.40 strictly above,
+as the other eccentricity switches: a set at exactly 0.3 is the below side's; through 0.6.39 e0 >= 0.3), the original
 resonance terms use the Hansen integral at e0 and a third-order Taylor expansion in de = e - e0 for
 current e >= 0.3; otherwise they use the corrected Maclaurin polynomial. They are exact at the
 epoch eccentricity to the numerical integral's precision, third order within |de| <= 0.02. The measured
@@ -1968,24 +1968,28 @@ moves toward the library's. One loses: GPS IIF 41019, day 3 114.7 to 155.5 m and
 of 150 windows, its freed AGOM 0.0293 m^2/kg against 0.0257 at 1 km and 0.0244 from its 72 h fits (SGP4XP's own
 error on a 24 h arc taken up by AGOM). The 72 h fits move -0.53 / -0.93 / -2.29 m at days 1, 3 and 7.
 
-**12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s) and F(x) the theory
-floor (12.4) at the epoch state, the $OMM carries
+**12.2 Epoch covariance and its record.** With J_0 = d x(0) / d p (x the TEME state, km, km/s), F(x) the theory floor
+(12.4) at a state x, and x_F the state the epoch floor is taken at (12.4: from 0.6.39 the two-body state of an AP record's
+mean elements; x(0), the theory's epoch state, for an SGP4XP record), the $OMM carries
 
-- COVARIANCE = J_0 P_p J_0^T + F(x(0)), lower triangle (21 values, km^2, km^2/s, km^2/s^2), COV_REFERENCE_FRAME TEME;
+- COVARIANCE = J_0 P_p J_0^T + F(x_F), lower triangle (21 values, km^2, km^2/s, km^2/s^2), COV_REFERENCE_FRAME TEME;
 - USER_DEFINED_SDNAP_COV_DRAG, _AGOM (those fitted, in that order): for the k-th of them the
   space-separated row of its covariance with X, Y, Z, X_DOT, Y_DOT, Z_DOT at epoch (J_0 P_p), with the earlier ones,
   then its variance (6 + k + 1 numbers);
 - USER_DEFINED_SDNAP_COV_FLOOR_UVW (6 numbers, km^2: uu, vu, vv, wu, wv, ww; the floor F of 12.4, k_F of 12.5 applied), _COV_NOISE (12.5), _COV_NG_RATE (1/day)
   and _COV_REGIME (DRAG or ABOVE).
 
-**12.3 Propagation.** A set is read back as the augmented epoch covariance C (state block COVARIANCE - F(x(0)),
-consider rows as written). The columns J_0 = [J_x J_c] (elements, consider) give the parameters of a state:
+**12.3 Propagation.** A set is read back as the augmented epoch covariance C (state block COVARIANCE - F(x_F), at the
+state the writer took it at, 12.4; consider rows as written). The columns J_0 = [J_x J_c] (elements, consider) give the parameters of a state:
 T = [[J_x^-1, -J_x^-1 J_c], [0, I]], P_p = T C T^T. At t minutes from the epoch, J(t) = d x(t) / d p by the same
 central differences and
 
 P(t) = J(t) P_p J(t)^T + Q(t) + F(x(t)).
 
-The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) is COVARIANCE.
+The state transition matrix is J(t) T; at t = 0 it is [I 0], so P(0) = COVARIANCE - F(x_F) + F(x(0)): COVARIANCE itself for
+an SGP4XP record. For an AP record the two floors differ by the theory's short-period terms between the two-body and the
+flown state, about 1e-3 rad of axis and 2e-3 of the angular rate squared: on the seven cases of 12.4's measurement, P(0)
+differs from COVARIANCE by up to 0.6 % of a variance on its diagonal, 3.7 mm and 0.037 mm/s in sigma.
 
 J, here and in 12.1, is made of differences of sets each flown on its own. Every moved set evaluates its rates and
 its output at its own state, as any set does. A record's covariance is then a function of the record and the time
@@ -2010,6 +2014,40 @@ r x v), R = (1/N) sum u_k u_k^T, u_k the residual e_k in the UVW axes of the mod
 R in TEME axes, velocity block w^2 R (w = |r x v| / |r|^2), no position-velocity block, times the regime's k_F (12.5).
 It is the part of the error a mean-element theory leaves at every time (short-period terms it does not carry) and does
 not shrink with N.
+
+*Where the epoch covariance carries it* (from 0.6.39; stack #551). The record's COVARIANCE_DATA includes F at epoch; a
+reader takes it off before mapping the epoch covariance onto the parameters, and adds it at every time at the flown
+state. What the subtraction leaves is a small part of the total (4.9e-4 of it in along-track velocity on the stored
+fixture's 550 km fit, far less on a fit to a numerical forecast), so the reader must take off exactly what the writer put
+on. For an AP record (MEAN_ELEMENT_THEORY AP, with gravity terms or without: one rule read from the record alone, the
+same in the writer, the reader and the gate) both take F at one state: the two-body state of the record's own mean
+elements (TEME; mu and the radius of 1.3, a = (k_e / n)^(2/3), no recovery), a fixed formula on the record's written
+numbers. That formula (twobody::state_of) must never change: `test/epoch-floor.e2e.mjs` holds its state for three element
+sets bit for bit. A change to the theory's epoch state between the writer and the reader then moves nothing the reader
+takes off: read with its gravity caps moved, so that its flown epoch state moves (31 m at 550 km and i 52.9), a record's
+remainder is the same bit for bit as computed from the record, and the reader's P(0) agrees with it within 1e-12 of its
+largest entry. A set written and flown by one build flies as before (to 1e-11 of a time's largest
+entry on the test's cases). An SGP4XP record's F stays at its theory's epoch state, which conformance holds bit for bit.
+Through 0.6.38 an AP record's F was taken at the theory's epoch state on both sides; a reader whose theory has moved then
+takes off another F. Read by a later theory, 0.6.36's own records came out up to 85 times narrower in along-track
+variance at the arc's end, or negative (300 km, i 5 deg), or wider (550 km, i 52.9). So an AP record whose
+PROVENANCE.PRODUCER is not exactly "com.spacedatanetwork.sdn-ap-propagator X.Y.Z" (three decimal integers, nothing after
+them) with X.Y.Z at 0.6.39 or later has its covariance refused by name, cov-floor-at-theory-state; its states fly. propagate writes such a block without
+covariance lines, its COMMENT naming the refusal; load_epochs keeps the set without its covariance; sdnap_covariance_at
+returns -7. Fitted again, the set carries its covariance.
+
+*A record is read by the build that wrote it or a later one* (stack #562). Read by an earlier build, nothing is promised.
+From 0.6.39 on, its covariance is wrong there and is not refused: an earlier build takes the floor off at its own theory
+state from a record that carries it at the two-body state. On 0.6.39's records fitted to zero residual and flown by 0.6.37,
+the along-track variance at 24 h (the arc's end) against 0.6.39's own flight:
+
+| Case | 300 km, i 5 | 300 km, i 28.5 | 300 km, i 90 | 420 km, i 97 | 550 km, i 52.9 | 700 km, i 63.4 | 1,200 km, i 0.5 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Along-track variance, times 0.6.39's | -538 | -273 | +269 | +235 | -12.2 | +81.7 | -268 |
+
+At 48 h the process noise dominates; the 700 km case is still 45 % wide. The builds this reaches are 0.6.36 to 0.6.38,
+none released, and the released 0.6.34, which cannot fly a 0.6.36 record's states rightly either (it flies them on
+EGM-96).
 
 **12.5 Process noise.** What a mean-element theory gets wrong over days are its element rates. From the end of the
 fit arc t_a (minutes from the epoch; from the epoch backward for t < 0) the rates carry errors constant over
@@ -2092,8 +2130,8 @@ first-pass window whose fitted set is above the drag (923 window-arcs per theory
 near-circular orbits, 5 to 1,000 times: median |z| 0.001 to 0.15 on laser geodetic, medium Earth orbit, Galileo,
 inclined geosynchronous and geostationary, in track 0.001 to 0.02. It is too narrow on TESS, Chandra and commercial
 geostationary, whose truth carries burns (stack #444). A set above the drag therefore takes a row by class, decided by
-its own elements: HEO above e 0.3 (from 0.6.38 strictly above, as the theory's switches, so a set at exactly 0.3 is
-the below side's in class as in theory; through 0.6.37 at 0.3 or more); otherwise geosynchronous under 1.5 rev/day,
+its own elements: HEO above e 0.3 (from 0.6.40 strictly above, as the theory's switches, so a set at exactly 0.3 is
+the below side's in class as in theory; through 0.6.39 at 0.3 or more); otherwise geosynchronous under 1.5 rev/day,
 medium Earth orbit under 4 rev/day (GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
 
 - The class's row applies only inside its calibrated condition: the data sigma the fit weighted with (12.1) and the
@@ -2943,7 +2981,7 @@ eccentricity, and held for the whole flight, as SGP4XP holds its class (6, Bands
 (period below or above 1,100 min; 5, 9) and the eccentricity switches (the first-order tesseral families on the grid above
 0.05 in class 0 and 0.3 in the resonant classes, 16.11; above 0.3 the zonal tail's every long-period term and the perigee
 drag passage, 16.3 and 16.12; above 0.3 the class's G about e0, 6.4). Each switch's above side begins strictly above
-its limit, so a set at the limit itself is on the below side (from 0.6.38; through 0.6.37 the class's G about e0 began
+its limit, so a set at the limit itself is on the below side (from 0.6.40; through 0.6.39 the class's G about e0 began
 at 0.3 itself, and a set at exactly 0.3 was on a branch of its own). When drag or a resonance carries the mean
 motion across a class limit, the epoch class's terms stay in the rates, with F and G at the current elements (16.2), and
 out of the output table; no table is rebuilt during a flight. A record's output is therefore continuous in time: one
@@ -4541,11 +4579,29 @@ sine and cosine were then left at 0 and 1, a perigee state: on a long-period set
 its epoch for 20,000 mean anomalies, 69 (0.35 %) came out at the perigee radius, up to 27,000 km from their place. A GEO set
 (e 1e-5, i 0.05) held none.
 
-Section 8's solve (output_j2_osc) starts from Ewarm + dm and runs Newton for every state, with no series, so the branch window
-opens at every perigee passage for dm / n, whatever the size of dm. It serves SGP4XP's sets, AP's output where e^2 or
-tan^2 (i/2) is at most 1e-24, and the long-period regime's output Jacobian (16.19), whose columns shift lambda, af and ag by
-1e-7 from the base E. This version counts its Newtons that end 1e-12 or more from the root (sdnap_kepler_unconverged 1) and
-leaves its arithmetic as it was.
+Section 8's solve (output_j2_osc) runs Newton for every state, with no series, from Ewarm + dm where there is a warm start and
+from k.m + e sin k.m where there is none (an SGP4XP set of 1100 min and more with AGOM 0 or a shared radiation term; AP's
+output where e^2 or tan^2 (i/2) is at most 1e-24). It serves SGP4XP's sets, that AP output, and the long-period regime's
+output Jacobian (16.19), whose six columns are formed by shifting each element by 1e-7 (n by 1e-7 n) from the base E, and of
+which lambda, af and ag move the anomaly. Its Newton solves for k.m. For the milliseconds of a perigee passage in which the
+warm start's anomaly and k.m lie either side of 0 it starts a turn from k.m, and unless its step, 2 pi / (1 - e cos E), is a
+whole number of turns, it either converges to the root a turn away (the same sine and cosine) or does not converge at all,
+its steps alternating in sign at about two turns. From a cold start it can end unconverged at e 0.995 and above (a replay of
+the loop: 164 of 200,000 anomalies at e 0.995, 927 at e 0.999, none through e 0.99). From 0.6.38 a
+Newton whose last step was 1e-12 or more is counted (sdnap_kepler_unconverged 1) and its E taken by bisection on [k.m - e,
+k.m + e]; every solve that converges, and one whose last step was under 1e-12, is 0.6.37's bit for bit, so the only states
+that differ from 0.6.37 are those far endings. An AP long-period set above e 0.3 whose rates evaluation forms a column whose
+solve ended far gets another rate from 0.6.38 (the old column's partial was off by about 1e4 for that evaluation and was
+taken, only its finiteness checked), and its later states move with it; none of the synthetic set's 965 cases every 300 s,
+408 at 1 s through their passages, or the 529 seeded real windows met one. The cure differs in form from AP's because this
+solve serves SGP4XP, which is held bit for bit from build to build: solving for the anomaly on the warm start's branch, as
+AP's solve does, would change the last bits of every state whose Newton converges a turn away (on the synthetic set's SGP4XP
+twins every 300 s over 5 days, 1,488 states of 64 near-circular cases moved, by under 1 mm). Through 0.6.37 the windows'
+states took E from the last of the 30 steps: on the SGP4XP twins of the synthetic set's 408 cases at e 0.3 and above (no gravity terms,
+BTERM 0.022, AGOM 0.012), flown every 1 ms for 15 s either side of every perigee passage over 5 days, 1,702 of 1,814 passages
+at e 0.5 held a state 1 m or more off (up to 1,304 km), 1 of 5 at e 0.82 (4,342 km) and 108 of 157 at e 0.9 (up to 328,667
+km); none at e 0.3 or e 0.6 to 0.74, where Newton reached the root one turn away. Its dm is SGP4XP's own short-period terms
+(the Sun's, the Moon's, radiation): 2.4e-6 to 6.3e-6 rad at perigee on a 4:1 orbit at e 0.5, a window of 8 to 22 ms.
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

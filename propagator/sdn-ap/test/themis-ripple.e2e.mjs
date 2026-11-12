@@ -54,7 +54,7 @@ const BASE_VERSION = '0.6.33', BASE = '7ebc98e4e', BASE_SHA256 = '0bd00d280330ff
 // that build's own version string), every AP set under the one bound, 15 mm. From 0.6.36
 // a record stating another field is refused (SPEC 16.2): the fitted set until then, analysis/catalog-composer's fixture
 // (ap-fit-sdn-ap-0.5.1.ocm, GRAVITY_MODEL EGM-96), is asserted refused, and the fitted set is 0.6.36's own fit of the
-// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too. From 0.6.38 (the fit at a switch, stack #504) an AP set at
+// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too. From 0.6.40 (the fit at a switch, stack #504) an AP set at
 // exactly e 0.3 is the below side's: the class's term from the polynomial, not the series about e0, and the covariance
 // class below HEO. The e 0.3 seed (2.4 rev/day, the half-day class) moves from the baseline by 5.1e-6 mm (velocity 8.3e-7
 // um/s, its covariance unchanged); every other set is byte-identical.
@@ -320,8 +320,16 @@ for (const [name, s] of Object.entries(SEEDS)) {
 // a fitted AP set (0.6.36's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
 // (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96 with gravity terms) refused by this build
 {
+  // from 0.6.39 (SPEC 12.4) this build flies its own fit of the arc (ap-fit-0.6.39.ocm) and the base (0.6.33's build, git
+  // 7ebc98e4, whose states 0.6.36 flies bit for bit) flies 0.6.36's fit (ap-fit-0.6.36.ocm), whose floor is at the theory
+  // state that base shares: the same mean elements, the same states, the covariance within 1.3e-11 of a line's largest
+  // entry; 0.6.36's fit flies its states here with its covariance refused by name
   const payload = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.36.ocm')));
-  compare('fitted AP set (0.6.36\'s fit)', await fly(wasmPath, payload), await fly(basePath, payload));
+  const own = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.39.ocm')));
+  compare('fitted AP set (this build\'s own fit; 0.6.36\'s on the base)', await fly(wasmPath, own), await fly(basePath, payload));
+  const pre = oemDistance(await fly(wasmPath, payload), await fly(basePath, payload));
+  console.log(JSON.stringify({preFloorRecord: '0.6.36\'s fit', positionMm: 1000 * pre.posM, covarianceLines: pre.covLines}));
+  assert.ok(pre.posM <= NO_HARM.posM && pre.velMmS <= NO_HARM.velMmS && pre.covLines === 0 && pre.covLinesDiffer === true, `0.6.36's fit on this build: ${JSON.stringify(pre)} (its states as the base's, no covariance)`);
   const old = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));
   const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
   const r = await h.invoke({methodId: 'propagate', inputs: flight([old], {output})});
