@@ -2838,9 +2838,8 @@ From 0.6.NN, with radiation pressure through the output map (16.21), the replay 
 and 11,782.0 m for AP at days 1, 3 and 7 (0.6.36: 389.6, 1,867.7 and 15,409.5 m), with AP minus XP at day 3 at -1,671.3 m.
 On the archive's reading it is 1,014.8, 2,245.8 and 5,037.3 m (0.6.36: 1,011.7, 2,000.1 and 9,032.8 m), so day 3 is above
 the archived 2,009 m. With AGOM held at 0 the two builds fly the same replay to 0.01 m (1,505.7, 6,462.2 and 42,488.5 m):
-the difference is the radiation term's alone. On the fill the fitted AGOM moves from the solution states' fit by -8 to
-+48 % in the three windows that are worse at day 3 (2026-07-27, 08-10 and 08-24), and from 0.6.NN that AGOM acts in full on
-the forecast.
+the difference is the radiation term's alone. On the fill, in the three of the seven windows that are worse at day 3, the
+fitted AGOM moves from the solution states' fit by -8 to +48 %, and from 0.6.NN that AGOM acts in full on the forecast.
 
 On model truth the rotation is right, and its partner is radiation pressure. Seeded with every force but drag and
 radiation, a TESS-like set goes from 1.0 to 1.8 km to 20 to 37 m from FFM at day 7. On the 72 h fit path without
@@ -4499,16 +4498,16 @@ the record's own elements, as it takes its branch (`lp_radiation_record`, `src/o
 minutes, and a force switched off at the cylinder's edge inside a step puts the step's share of the eclipse in the wrong
 place. So the force takes the share of a one-step window about the moment that the satellite spends outside the cylinder,
 in closed form along the straight line of its position and velocity. On an eclipsing orbit of 30 h at e 0.31 (node 0, J2
-and radiation alone on both sides), the day-7 error is 113 m with the shadow taken as on or off at each moment and 25 m with
-the window; J2 alone is 19 m there.
+and radiation alone on both sides), the day-7 error is 123 m with the shadow taken as on or off at each moment and 34 m with
+the window, 25 m with the window and the numerical propagator's pressure constant; J2 alone is 19 m there.
 
-*Measured.* Seeded, no fit. J2 and radiation alone on both sides: AP's builds have the Sun's and Moon's mass ratios at zero,
+*Measured.* Seeded, no fit. J2 and radiation alone on both sides: AP's builds (0.6.36 and 0.6.NN) have the Sun's and Moon's mass ratios at zero,
 FFM's cannonball has Cr 1 and A/m 0.02 m^2/kg, and AP's Cr A/m is 0.02 m^2/kg. Distance to the numerical propagator at days
 1 / 3 / 5 / 7, m:
 
 | set, node | before 0.6.NN | from 0.6.NN | J2 alone |
 | --- | ---: | ---: | ---: |
-| TESS-like (13.7 d, e 0.55), 0 | 184 / 623 / 942 / 1,076 | 3.4 / 38 / 109 / 210 | 0.1 / 0.5 / 1.2 / 2.2 |
+| TESS-like (13.7 d, e 0.55), 0 | 185 / 623 / 942 / 1,076 | 3.4 / 38 / 109 / 210 | 0.1 / 0.5 / 1.2 / 2.2 |
 | TESS-like, 120 | 112 / 307 / 769 / 1,543 | 2.8 / 25 / 78 / 172 | 0.1 / 0.5 / 1.2 / 2.2 |
 | TESS-like, 240 | 156 / 119 / 321 / 704 | 3.0 / 24 / 63 / 139 | 0.1 / 0.5 / 1.2 / 2.2 |
 | Chandra-like (63.5 h, e 0.685), 0 | 5.9 / 8.9 / 31 / 10 | 3.6 / 11 / 57 / 31 | 1.6 / 3.3 / 6.8 / 9.6 |
