@@ -4466,11 +4466,10 @@ neither was the velocity before the term: AP's output velocity is not the rate o
 with it. Why the energy and not the angular rate: the radius error had been offsetting that gap in energy, so the same
 angular rate would move the energy by about four times dr of semi-major axis, and a numerical flight started from AP's
 output state would drift up to ten times faster along-track (seeded at a 500 km perigee and i 27 deg, the day-7
-along-track RMS is 7.8 km on 0.6.36, 77 km at the same angular rate, 7.8 km at the same energy). Once the velocity is the
-positions' rate, the term's velocity is the same-rate form. The fit's residuals are positions only, so the fitted
-elements are the same either way; the epoch covariance's velocity part moves by about 1e-6 of itself. The main output
-path, its fallback (e or i exactly 0, or corrections above 0.02 rad) and the covariance's sigma-set pairs take the same
-term, each set at its own a and i.
+along-track RMS is 7.8 km on 0.6.36, 77 km at the same angular rate, 7.8 km at the same energy). The fit's residuals
+are positions only, so the fitted elements are the same either way; the epoch covariance's velocity part moves by about
+1e-6 of itself. The main output path, its fallback (where e^2 or tan^2(i/2) is at most 1e-24) and the covariance's
+sigma-set pairs take the same term, each set at its own a and i.
 SGP4XP's output (section 8) is unchanged, bit for bit. J2 and J4 are 1.3's (EGM-96's). The numerical propagator's EGM2008
 J4 differs by 1.7e-4 of itself, which would move the J4 part by at most 3 mm.
 
@@ -4482,11 +4481,18 @@ J4 differs by 1.7e-4 of itself, which would move the J4 part by at most 3 mm.
 - The J2^2 part is exact at i = 0. The equatorial circle obeys w^2 r^3 = mu (1 + (3/2) J2 (R/r)^2). The theory's
   lambda-dot is n [1 + 3 x + 14.625 x^2], with x = J2 (R/a)^2 (Brouwer's own coefficient is 11.25), and its radius is
   r = a (1 - (3/2) x). Together they give (9/2) x^2 a.
-- At other inclinations the second-order polynomial comes from the dynamics. J2 alone was flown by a fixed-step
-  integrator and compared with 2's rates at the same mean rates of the argument of latitude and the node. J2 was scaled by
-  1 and by 0.5 and the result extrapolated to second order.
-  - The polynomial ends at 25/32 at i = 90 deg and at 9/2 at i = 0.
-  - Third order is under 1 % in low orbit.
+- At other inclinations the J2^2 polynomial is fitted, not derived. J2 alone was flown by a fixed-step integrator and
+  compared with 2's rates at the same mean rates of the argument of latitude and the node, J2 scaled by 1 and by 0.5 and
+  the result extrapolated to second order; a quadratic in S fitted to that from i 10 to 90 deg, (397.97 S^2 - 635.95 S
+  + 287.99)/64, was rounded to the rationals above.
+  - At i = 0 it meets the exact 9/2.
+  - At i = 90 deg it gives 25/32, where the exact value is 13/16 = 26/32: a polar orbit is planar under J2, and its
+    forced solution in Binet form, matched to the theory at the same mean rates, gives 13/16. The fit is low there by
+    J2^2 R_E^4 / (32 a^3), 0.19 m at 420 km: the leftover at the polar cases of `test/zonal-radius-term.e2e.mjs`
+    (+0.16 and +0.18 m).
+  - Between, its error is not known exactly. The elimination bounds it, together with third order, J3, J5 and the Sun
+    and Moon: the offset left is -0.4 to +0.2 m (below).
+  - Third order is under 1 % in low orbit: -0.8 % near the equator at 400 km, about -0.3 m there.
 - With EGM's J4 / J2^2 = -1.382 the two parts sum to 17.55 (c^2 - 0.494)(c^2 - 0.202), with c = cos i: about +11 m at
   i 87.5 and 420 km, -2.4 m at i 55, and +42 m near the equator.
 
@@ -4494,20 +4500,28 @@ J4 differs by 1.7e-4 of itself, which would move the J4 part by at most 3 mm.
 both sides.
 - Over 300 to 1,400 km and 7 inclinations (42 near-circular cases), the closed form is within 0.31 m of the offset AP
   showed through 0.6.36.
-- With the term, the largest offset left is 0.3 m, at i 45 and 63.4 deg where there was none.
+- With the term, the offset left is -0.4 to +0.2 m: -0.4 to -0.1 m at i 5 to 63.4 deg (the largest at 300 km and i
+  5, where third order is about -0.3 m), +0.1 to +0.2 m at i 87.5 and 98 deg (the fit's shortfall at the pole). At i 45
+  and 63.4, where there was none, it leaves -0.1 to -0.3 m.
+- Before the term the offset was -2.6 to +44.7 m: largest near the equator, below the true radius at i 55, about 0 at
+  i 45 and 63.4.
 
 *Eccentricity* (measured, not derived; stack #532). The term is applied at every eccentricity. The offset left after it:
 
 | a - R | e | Largest offset left |
 | --- | --- | --- |
 | 1,200 km | 0.05 or less | 1.3 m (test/zonal-radius-term.e2e.mjs's case at i 28.5) |
-| 1,200 km | 0.1 | 1.7 m |
+| 1,200 km | 0.1 | 1.8 m |
 | 4,000 km | 0.3 | 9.1 m (21.0 m without it) |
 
 **16.22 Records refused by name.** plugin-manifest.json's "Refused by name" lists for propagate, load_epochs,
-propagate_epochs, maneuver and export_omm name every refusal the record decoder makes. That includes solid-tides-unsupported
-(16.14), gravity-model-mismatch (16.2), parameter-repeated:ECOM2_Y0 and parameter-invalid:ECOM2_Y0 (16.13), which were
-missing through 0.6.36 (stack #540).
+propagate_epochs and maneuver name every refusal the record decoder makes; export_omm's names those an SGP4 or SGP4XP
+record can reach after the method's own checks (an AP set is refused first, theory-not-exportable:AP, and a record whose
+forces are not its theory's, forces-not-exportable, before the decoder reads it). Missing through 0.6.36 (stack #540):
+solid-tides-unsupported (16.14), gravity-model-mismatch (16.2), parameter-repeated:ECOM2_Y0, parameter-invalid:ECOM2_Y0
+and parameter-not-modeled:<name> (16.13); export_omm's list also lacked unsupported-center, weather-rows-unselected and
+the density-correction refusals an SGP4XP record reaches, and named three it cannot return (gravity-model-mismatch,
+parameter-repeated:ECOM2_Y0 and parameter-invalid:ECOM2_Y0).
 
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)

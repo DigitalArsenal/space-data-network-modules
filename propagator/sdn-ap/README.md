@@ -206,8 +206,8 @@ radius on a near-circular orbit sat (R_E^4 / a^3)[J2^2 (199 c^4 - 80 c^2 + 25) /
 above the true one (c and s the cosine and sine of i): about +11 m at i 87.5 and 420 km, -2.4 m at i 55, +42 m near the
 equator. Every AP set with gravity terms takes that off its radius, at the same osculating energy (AP's output velocity
 is not the rate of its positions, stack #549); SGP4XP is unchanged. Against FFM with J2 to J5 and the Sun and Moon,
-fitted over 0 to 5 days, the largest offset left is 0.3 m on 42 near-circular cases from 300 to 1,400 km, 1.3 m at e
-0.05, 1.7 m at e 0.1 and 9.1 m at e 0.3 (the eccentric terms are stack #532; `test/zonal-radius-term.e2e.mjs`).
+fitted over 0 to 5 days, the offset left is -0.4 to +0.2 m on 42 near-circular cases from 300 to 1,400 km, at most 1.3 m
+at e 0.05, 1.8 m at e 0.1 and 9.1 m at e 0.3 (the eccentric terms are stack #532; `test/zonal-radius-term.e2e.mjs`).
 
 The field's census (from 0.6.32; SPEC 16.20) lists, for a set of mean elements, every tesseral term of the field to degree 70
 whose size over a 5-day forecast reaches 0.5 m, with the weight each carrier the set builds holds of it and the term's

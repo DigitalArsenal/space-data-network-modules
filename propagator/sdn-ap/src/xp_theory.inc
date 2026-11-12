@@ -1869,9 +1869,9 @@ inline bool is_ap_ctx(const RateContext& ctx) {
 /// SPEC 16.21 (stack #503, #532): the constant radial term the zonal theory leaves out, R_E, for the mean semi-major axis a
 /// (R_E) and cos^2 of the mean inclination. Held to the dynamics' mean rates, the theory's mean radius of a near-circular
 /// orbit sits (R_E^4 / a^3) [J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)] above the true one (c, s
-/// the cosine and sine of i; J2 and J4 of 1.3): the J4 part first order, the J2^2 part exact at i = 0 (9/2) and from the
-/// dynamics' second order elsewhere (25/32 at i = 90 deg). AP's output adds its negative, at the same osculating energy,
-/// at every eccentricity (its eccentric terms are stack #532).
+/// the cosine and sine of i; J2 and J4 of 1.3): the J4 part first order, the J2^2 part exact at i = 0 (9/2) and fitted
+/// to the dynamics' second order elsewhere (25/32 at i = 90 deg, exact 13/16). AP's output adds its negative, at the
+/// same osculating energy, at every eccentricity (its eccentric terms are stack #532).
 inline double zonal_radius_term(double a, double c2) {
   const double s2 = 1.0 - c2, ia = 1.0 / a;
   return -(ia * ia * ia) * (kJ2 * kJ2 * (199.0 * c2 * c2 - 80.0 * c2 + 25.0) * (1.0 / 32.0) -
@@ -5517,7 +5517,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
   }
   const int32_t rc = output_j2_osc(y, Ewarm, r_out, v_out);
   if (rc == kPropOk) {
-    // SPEC 16.21: the constant radial term on this path too (e or i exactly 0, or the corrections above 0.02 rad)
+    // SPEC 16.21: the constant radial term on this path too (where e^2 or tan^2(i/2) is at most 1e-24)
     const double t2f = y[kChi] * y[kChi] + y[kPsi] * y[kPsi], thf = (1.0 - t2f) / (1.0 + t2f);
     radial_shift(r_out, v_out, zonal_radius_term(fast_a_from_n(y[kN]), thf * thf) * kRe);
   }
