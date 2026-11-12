@@ -147,7 +147,9 @@ for (const c of REGIMES) {
   // the stop (2,161 states, 30 s), measured on both builds (the term's positions are the same at either velocity form):
   // B's largest distance 101.9 m on 0.6.36 and 100.5 m on 0.6.43 (RMS 34.3 and 32.2 m), a lone A's 108.7 and 116.6 m
   // (RMS 39.7 and 40.0 m); at geosynchronous altitude B 1.43 and 1.50 m, a lone A 1.89 and 2.03 m. The check is that
-  // held-out comparison from 0.6.43; B's step at the stop stays bounded by stepKm.
+  // held-out comparison from 0.6.43; B's step at the stop stays bounded by stepKm. On 0.6.42's base (the low table's fast
+  // side; git 86786933 against the term on it, 217233ca) B's step goes from 15.6 to 11.6 m and a lone A's from 18.7 to
+  // 10.4 m; over the held-out hours B's largest distance 49.2 to 49.1 m and a lone A's 68.0 to 78.1 m.
   const held = states.filter((s) => s.t > STOP + 1e-6), heldT = held.map((s) => s.t), heldB = await fly(B.rec, heldT), heldA = await fly(A.rec, heldT);
   const heldBKm = Math.max(...held.map((s, k) => hyp(s.r, heldB[k].r))), heldAKm = Math.max(...held.map((s, k) => hyp(s.r, heldA[k].r)));
   check(bStop && bStop.km < c.stepKm && (!c.drag || heldBKm < heldAKm),
