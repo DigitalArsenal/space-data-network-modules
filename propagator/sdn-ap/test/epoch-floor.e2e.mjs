@@ -33,8 +33,12 @@
 //     cases. From 0.6.48 (SPEC 12.1, stack #489: an AP set fitted under the drag on an arc shorter than 71 h at or below e
 //     0.3 is weighed at the data's own sigma, its along-track residual at sigma times sqrt(tau / dt)) every case's fit
 //     moves, the caps-0 case's among them (its record on 0.6.48 0.999 of a time's largest entry from BASE's record on
-//     BASE), so it too is held against SELF_BASE; the refusal of BASE's record and the check across a theory change
-//     (below) stay.
+//     BASE), so it too is held against SELF_BASE. The property is held from 0.6.48 by a case at caps 0 above the drag
+//     (3,000 km, i 5; its perigee above SPEC 12.5's 2,500 km): a set there has been fitted at the data's own sigma since
+//     0.6.13, before BASE, and no change since moves its fit, so its record on this build is BASE's record on BASE
+//     (measured 1.07e-14 of a time's largest entry, the along-track variance 1.14e-14 relative). A case at 300 km on a
+//     72 h arc cannot hold it: arcs of 71 h or more under the drag are fitted at the data's own sigma only since a build
+//     after the cure (stack #489), so its record is 8.4e-2 of a time's largest entry from BASE's.
 //   - The cases hold the build-to-build identity against SELF_BASE: from 0.6.48 that rule's first build (git d17c6a62,
 //     wasm 867c835e, SHA-256 checked); from 0.6.43 through 0.6.47 the radial term's
 //     first build on 0.6.42 (git a5293c54, wasm f33e071f); through 0.6.42, 0.6.42's first build with
@@ -65,7 +69,7 @@
 //   floor's build at 0.6.39) has 0.6.36's fit's mean elements bit for bit.
 // Cases: 300 km at i 5 and 1,200 km at i 0.5 (where 0.6.36's records read by a later theory came out narrowest, or with a
 // negative along-track variance: stack #551), 550 km at i 52.9 (the fixture's orbit, where they came out wider), 300 km
-// at i 5 with caps 0, and 550 km at i 52.9 with caps 12 and 12.
+// at i 5 with caps 0, 550 km at i 52.9 with caps 12 and 12, and 3,000 km at i 5 with caps 0 (the cure's property).
 //   node test/epoch-floor.e2e.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -168,6 +172,7 @@ const CASES = [
   {name: '300 km, i 5', hp: 300, i: 5, caps: [31, 20], own: 'self'}, {name: '1,200 km, i 0.5', hp: 1200, i: 0.5, caps: [31, 20], own: 'self'},
   {name: '550 km, i 52.9', hp: 550, i: 52.9, caps: [31, 20], own: 'self'}, {name: '300 km, i 5, caps 0', hp: 300, i: 5, caps: [0, 0], own: 'self'},
   {name: '550 km, i 52.9, caps 12 and 12', hp: 550, i: 52.9, caps: [12, 12], own: 'self'},
+  {name: '3,000 km, i 5, caps 0', hp: 3000, i: 5, caps: [0, 0], own: 'base'},
 ];
 let producerRecord = null, standInMovedKm = 0;
 for (const c of CASES) {
