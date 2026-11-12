@@ -8,7 +8,9 @@
 // within the record's span (on the case's fitted record, the m = 48, j = 3 terms of degree 53 to 69).
 // Flown every 60 s for eight days, or for the most whole days the module flies before it refuses the set as decayed. The jump detector is
 // |d_k - (d_(k-1) + d_(k+1))/2|, d the second difference of position less h^2 times the two-body acceleration
-// (mu 398600.4415 km^3/s^2); smooth content falls as h^4.
+// (mu 398600.4415 km^3/s^2): half the fourth difference of the states. One state displaced by delta reads 3 delta (the
+// fourth difference's 6 delta, halved); a block of states displaced together by delta reads 1.5 delta at its edge; smooth
+// content falls as h^4.
 // Asserted: at most BOUND_M (30 m) over the flight.
 // Measured 2026-11-12 (the set is refused after day 5, at 147 km): without the guard (git fefd9be4) 1,970 km at 101.07 h, where
 // the terms' rate passes zero; with it 2.98 m at 105.15 h, the drag near 150 km.
