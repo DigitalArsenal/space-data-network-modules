@@ -5128,8 +5128,8 @@ keeps its own.
   part of the perigee radius's rate, da/dt (1 - e) - a de/dt, is about 0 on a highly eccentric orbit; the Sun and the Moon move
   the mean perigee of such an orbit by more than a scale height a revolution, rising or falling, and that is not decay. A first
   form of the rule read the whole mean rate of the perigee radius, every force, in absolute value, and refused 23 synthetic
-  orbits at e 0.9 (apogee 118,000 to 134,000 km) whose numerical truth never decays, and refused the converged records of six of
-  them (stack #594: four at the epoch, two within the first two days, three of the six with a RISING perigee). The rule reads the
+  orbits at e 0.9 (apogee 118,000 to 134,000 km) whose numerical truth never decays, and refused the fitted records of six of
+  them (five marked CONVERGED; stack #594: four at the epoch, two within the first two days, three of the six with a RISING perigee). The rule reads the
   drag term's part alone, evaluated at the node (the gate below), and counts it only as a fall. On near-circular orbits drag is the whole of the perigee's rate (gravity is 0.2 % of it on the
   seeds below), so their crossings move by that much and no more.
 - What goes in. da/dt and de/dt are the drag term's own mean rates at the node's mean state (a full evaluation of the drag part
