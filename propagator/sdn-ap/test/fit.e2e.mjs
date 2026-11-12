@@ -6,7 +6,7 @@
 //   (SPEC 17.4).
 // - MEAN_ELEMENTS printed against test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18 dist's $OMM: BTERM in
 //   BSTAR, AGOM in MEAN_MOTION_DDOT), the epoch equal; the fitted record flown 7 days within FIT_BOUND of the reference
-//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.43's fit, ap-fit-0.6.43.ocm, history
+//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.48's fit, ap-fit-0.6.48.ocm, history
 //   at FIT_BOUND); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
 // - FIT_STATISTICS: FIT_STATES as the 0.4.0 COMMENT states them, FIT_RMS_KM within FIT_BOUND.rmsM of it, ITERATIONS
@@ -68,7 +68,7 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
 
 const cases = [
   { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.42.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
-    fitReference: "ap-fit-0.6.43.ocm",
+    fitReference: "ap-fit-0.6.48.ocm",
     recorded: { version: "0.6.43", cov: "ap-fit-0.6.42-0.6.43.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.42.eme2000-0.6.43.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.42.teme-0.6.43.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
@@ -135,6 +135,17 @@ const cases = [
 // (1.3 cm higher). Against the fixture's own truth (propagator/ffm's 550 km trajectory) the error over the arc stays at
 // 16.4 m and 48 to 72 h past it goes from 45 to 46 m. So the reference fit is 0.6.43's (ap-fit-0.6.43.ocm, this test's
 // AP fit); the stored record stays 0.6.42's fit.
+// 0.6.48 (SPEC 12.1, stack #489: an AP set fitted under the drag on an arc shorter than 71 h at or below e 0.3 is weighed at
+// the data's own sigma, its along-track residual at sigma times sqrt(tau / dt)) moves the fit: 21,922.836 m and 24,038.211
+// mm/s over 7 days from 0.6.43's fit (both flown by 0.6.48), FIT_RMS 16.827 against 37.286 m, BTERM 3.83e-5 against
+// 2.04e-3 m^2/kg (the trajectory has no drag). Against the fixture's own truth (propagator/ffm's 550 km trajectory, 96 h)
+// the 3D error 1 and 3 days past the set's epoch goes from 86.4 to 21.6 m and from 2,507.6 to 88.1 m (RMS over the arc
+// 37.3 to 16.8 m, 48 to 72 h past the arc 3,691.8 to 103.3 m); on that trajectory carried to 8 days by FFM 2.3.0 from its
+// first state (EGM-96 70 x 70, IERS 2010 solid tides and relativity, DE440 Sun and Moon, no drag; within 15.2 m of the
+// fixture over its 96 h) 5 and 7 days past the epoch from 8,082.9 to 207.3 m and from 16,681.3 to 325.7 m. So the
+// reference fit is 0.6.48's (ap-fit-0.6.48.ocm, this test's AP fit; 0.6.43's went); the stored record stays 0.6.42's fit,
+// its flight unchanged (bit- and byte-equal to 0.6.43's recorded flight). The SGP4XP record, its base and bounds are
+// unchanged.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };
@@ -291,9 +302,9 @@ const covDistance = (a, b) => {
 for (const c of cases) {
   const s = stored[c.name];
   if (!s) continue;
-  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.43's fit, ap-fit-0.6.43.ocm), both
+  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.48's fit, ap-fit-0.6.48.ocm), both
   // flown by this build; its $ODR names its own $OCM
-  const refName = c.fitReference ? "0.6.43's fit" : "the stored (0.6.4's fit)";
+  const refName = c.fitReference ? "0.6.48's fit" : "the stored (0.6.4's fit)";
   const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.reference, pcfOutputFrame.TEME)];
   check(pf.statusCode === 0 && ps.statusCode === 0, `${c.name}: propagate the fitted and the reference record: ${pf.errorCode ?? "ok"} | ${ps.errorCode ?? "ok"}`);
   if (pf.statusCode === 0 && ps.statusCode === 0) {

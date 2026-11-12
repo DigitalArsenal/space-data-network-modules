@@ -8,7 +8,7 @@
 //   (the second set's rows moved): they load and blend.
 // - propagate_epochs of the stored AP record (test/fixtures/ap-fit-0.6.42.ocm, 0.6.42's fit of the 0.4.0 inputs) within
 //   STORE_FLIGHT of 0.6.43's flight of it (ap-fit-0.6.42.epochs-0.6.43.oem), and of this build's own fit of the arc within
-//   STORE_FIT of this build's propagate_epochs of 0.6.43's fit (ap-fit-0.6.43.ocm) (the flight and the fit apart; history,
+//   STORE_FIT of this build's propagate_epochs of 0.6.48's fit (ap-fit-0.6.48.ocm) (the flight and the fit apart; history,
 //   the fresh-bake reference and sizes at the check); 0.6.36's fit (ap-fit-0.6.36.ocm) is stored without its covariance and
 //   its states within STORE_FLIGHT of this build's flight of 0.6.39's fit (the same mean elements); 0.6.4's fit
 //   (ap-fit-0.6.4.ocm, the stored record through 0.6.34) states EGM-96 with gravity terms and is refused by the store
@@ -339,13 +339,18 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // it from itself (ap-fit-0.6.42.epochs-0.6.43.oem; the 0.6.42 file went), the bounds kept. It moves the fit: 317.33
   // mm and 347.12 um/s on the grid from 0.6.42's fit (both flown by 0.6.43), FIT_RMS 37.286 against 37.273 m. So the
   // own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.42's fit.
+  // 0.6.48 (SPEC 12.1, stack #489: an AP set fitted under the drag on an arc shorter than 71 h at or below e 0.3 is weighed
+  // at the data's own sigma, its along-track residual at sigma times sqrt(tau / dt)) moves the fit: 842,729.292 mm and
+  // 920,478.405 um/s on the grid from 0.6.43's fit (both flown by 0.6.48), FIT_RMS 16.827 against 37.286 m; against the
+  // fixture's own truth it is closer at every day (history in test/fit.e2e.mjs). So the own fit is 0.6.48's
+  // (ap-fit-0.6.48.ocm; 0.6.43's went); the stored record stays 0.6.42's fit, its flight byte-equal to 0.6.43's.
   const storedRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.42.ocm", import.meta.url)));
-  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.43.ocm", import.meta.url)));
+  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.48.ocm", import.meta.url)));
   const fitRecordFlight = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([fitRecord])] });
-  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.43's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
+  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.48's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
   for (const [what, record, bound, reference, against] of [
     ["the stored AP record", storedRecord, STORE_FLIGHT, storedFlight, "0.6.43's of the stored record"],
-    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.43's fit"]]) {
+    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.48's fit"]]) {
     const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
     check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);
     if (pe.statusCode !== 0 || fitRecordFlight.statusCode !== 0) continue;

@@ -1,16 +1,16 @@
 {
-  "what": "sdn-ap stated covariance against its own errors on the judged windows, records at tesseral 31 / zonal 70, at the radial factor exp(0.095), the s_i factor exp(-2.2) and the strong-drag share factor exp(0.150)",
+  "what": "sdn-ap stated covariance against its own errors on the judged windows, records at tesseral 31 / zonal 70, as flown by 0.6.48: the radial factor exp(0.095), the s_i factor exp(-2.2) and the strong-drag share factor exp(0.150) on",
   "build": {
-    "commit": "217233cab56052072297fa15223be0fcd821e20d",
-    "wasmSha256": "f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935",
-    "version": "0.6.43"
+    "commit": "d17c6a62f6d3b0cd32d3e6e1dac27536a9150591",
+    "wasmSha256": "867c835e0d0ba0b6fbb54a03f75dd88bc20561049fcb6702859b2c937fbce88c",
+    "version": "0.6.48"
   },
   "pcf": [
-    "AP_TIDES at 31/70"
+    "AP_Z70_TIDES at 31/70"
   ],
   "rows": {
     "file": "rows-31-70-si-drag-terms.jsonl",
-    "sha256": "6b8e460eff61540cf688b806b51d47b392e0b292be0636a3a145b7b7081cf022",
+    "sha256": "46825c3a7364fb2c1c7cb9477e190b35f9f56bfa5340ff656ff2b8f2f3dc1c6f",
     "windows": 748,
     "choice": 326,
     "judged": 422,
@@ -36,7 +36,7 @@
         "judged": 48
       }
     },
-    "note": "0.6.43's own flights (wasm f33e071f) with the radial factor exp(0.095) on, each sample with the s_i term's and the drag rate's term's share of its variance apart (R, I, C)"
+    "note": "0.6.48's own flights (wasm 867c835e) with every factor on, each sample with the s_i term's and the drag rate's term's share of its variance apart (R, I, C)"
   },
   "splitRule": {
     "file": "size-split-rule.json",
@@ -45,9 +45,9 @@
   "factorFit": {
     "what": "f on the floor sigma per axis, maximum likelihood over the choice windows, days 1, 2, 3, 5, 7",
     "grid": "exp(-1.5 to 2.5 by 0.02)",
-    "R": 1.150273798857229,
-    "I": 1.2460767305873828,
-    "C": 0.5945205479701948,
+    "R": 0.9801986733067566,
+    "I": 1.0000000000000013,
+    "C": 0.7866278610665542,
     "samples": 74495
   },
   "factorOff": 1.0996588551261028,
@@ -61,7 +61,7 @@
       "midpointPerDay": 0.00000135,
       "halfWidthDecades": 0.25
     },
-    "note": "the DRAG row's s_i times exp(-2.2) (a record whose stated zonal degree is 70; stack #531) and its drag share times 1 + (exp(0.150) - 1) S(|r|) (stack #568), by arithmetic on the rows: v + (k^2 - 1) s + (g^2 - 1) d per axis"
+    "note": "as flown: the rows' build carries the DRAG row's s_i times exp(-2.2) (a record whose stated zonal degree is 70; stack #531) and its drag share times 1 + (exp(0.150) - 1) S(|r|) (stack #568), so the test's re-weighting v + (k^2 - 1) s + (g^2 - 1) d per axis is at k = g = 1"
   },
   "band": [
     0.603,
@@ -91,16 +91,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.7354439173464409,
-        "within1": 0.6378676470588235,
-        "within3": 0.9810729847494554
+        "medianAbsZ": 0.6974913309179626,
+        "within1": 0.6633986928104575,
+        "within3": 0.982911220043573
       },
       "registered": {
-        "medianAbsZ": 0.6657230661421902,
-        "within1": 0.6877723311546841,
-        "within3": 0.985770697167756
+        "medianAbsZ": 0.6478601537452284,
+        "within1": 0.6983251633986928,
+        "within3": 0.9852260348583878
       },
-      "floorShareMedian": 0.8975176724711462
+      "floorShareMedian": 0.8224876191028917
     },
     {
       "regime": "P",
@@ -110,16 +110,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.8622856718894727,
-        "within1": 0.5592320261437909,
-        "within3": 0.9100626361655774
+        "medianAbsZ": 0.830961151521098,
+        "within1": 0.5731889978213508,
+        "within3": 0.9139433551198257
       },
       "registered": {
-        "medianAbsZ": 0.8309693064020576,
-        "within1": 0.5731209150326797,
-        "within3": 0.9138071895424836
+        "medianAbsZ": 0.830961151521098,
+        "within1": 0.5731889978213508,
+        "within3": 0.9139433551198257
       },
-      "floorShareMedian": 0.016539476680574337,
+      "floorShareMedian": 0.01794135179965828,
       "outsideBand": "too narrow: strong drag 2026 in-track at every lead, less narrow than 0.6.42 with the drag share times exp(0.150) (stack #568); the density forecast's (stack #527)"
     },
     {
@@ -130,16 +130,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.3973204352406874,
-        "within1": 0.886437908496732,
+        "medianAbsZ": 0.5389474854762561,
+        "within1": 0.7811138344226579,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5385658801387975,
-        "within1": 0.7781862745098039,
+        "medianAbsZ": 0.5389474854762561,
+        "within1": 0.7811138344226579,
         "within3": 1
       },
-      "floorShareMedian": 0.49590438559425454,
+      "floorShareMedian": 0.9310415450374099,
       "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows; a size by regime is stack #531's"
     },
     {
@@ -150,16 +150,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.8542563902047463,
-        "within1": 0.5657679738562091,
-        "within3": 0.9333469498910676
+        "medianAbsZ": 0.7263977396418495,
+        "within1": 0.6337826797385621,
+        "within3": 0.9423338779956427
       },
       "registered": {
-        "medianAbsZ": 0.7535744975862779,
-        "within1": 0.6191448801742919,
-        "within3": 0.9435593681917211
+        "medianAbsZ": 0.7106882767088138,
+        "within1": 0.6418845315904139,
+        "within3": 0.9444444444444444
       },
-      "floorShareMedian": 0.28185084763905555
+      "floorShareMedian": 0.17050100667862528
     },
     {
       "regime": "P",
@@ -169,16 +169,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.9022069309349634,
-        "within1": 0.5366966230936819,
-        "within3": 0.9046160130718954
-      },
-      "registered": {
-        "medianAbsZ": 0.796729208440323,
-        "within1": 0.5878948801742919,
+        "medianAbsZ": 0.8094373237394724,
+        "within1": 0.5840822440087146,
         "within3": 0.9320533769063181
       },
-      "floorShareMedian": 0.00009236163914378562,
+      "registered": {
+        "medianAbsZ": 0.8094373237394724,
+        "within1": 0.5840822440087146,
+        "within3": 0.9320533769063181
+      },
+      "floorShareMedian": 0.00009656769115583494,
       "outsideBand": "too narrow: strong drag 2026 in-track at every lead, less narrow than 0.6.42 with the drag share times exp(0.150) (stack #568); the density forecast's (stack #527)"
     },
     {
@@ -189,16 +189,17 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.15918469907395316,
-        "within1": 0.9995915032679739,
-        "within3": 1
+        "medianAbsZ": 0.5903030823714027,
+        "within1": 0.7335920479302832,
+        "within3": 0.9994553376906318
       },
       "registered": {
-        "medianAbsZ": 0.6096078209434603,
-        "within1": 0.7181372549019608,
-        "within3": 0.9993191721132898
+        "medianAbsZ": 0.5903030823714027,
+        "within1": 0.7335920479302832,
+        "within3": 0.9994553376906318
       },
-      "floorShareMedian": 0.04348234014319342
+      "floorShareMedian": 0.6757383215994328,
+      "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows; a size by regime is stack #531's"
     },
     {
       "regime": "P",
@@ -208,16 +209,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.8573175474104724,
-        "within1": 0.5671977124183006,
-        "within3": 0.9259940087145969
+        "medianAbsZ": 0.7077645794189968,
+        "within1": 0.6497140522875817,
+        "within3": 0.940291394335512
       },
       "registered": {
-        "medianAbsZ": 0.7539249376573098,
-        "within1": 0.6264978213507625,
-        "within3": 0.9368191721132898
+        "medianAbsZ": 0.7018926149288911,
+        "within1": 0.6543436819172114,
+        "within3": 0.9424019607843137
       },
-      "floorShareMedian": 0.11232956590909857
+      "floorShareMedian": 0.06229919344509258
     },
     {
       "regime": "P",
@@ -227,16 +228,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.9075295878589433,
-        "within1": 0.5300925925925926,
-        "within3": 0.8862336601307189
+        "medianAbsZ": 0.7880579446407797,
+        "within1": 0.5742102396514162,
+        "within3": 0.8944035947712419
       },
       "registered": {
-        "medianAbsZ": 0.792429850709234,
-        "within1": 0.5804738562091504,
-        "within3": 0.8969226579520697
+        "medianAbsZ": 0.7880579446407797,
+        "within1": 0.5742102396514162,
+        "within3": 0.8944035947712419
       },
-      "floorShareMedian": 0.00001099280971362894,
+      "floorShareMedian": 0.000011026720292990062,
       "outsideBand": "too narrow: strong drag 2026 in-track at every lead, less narrow than 0.6.42 with the drag share times exp(0.150) (stack #568); the density forecast's (stack #527)"
     },
     {
@@ -247,16 +248,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.1271793653994583,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.6564402641517892,
+        "within1": 0.6911083877995643,
+        "within3": 0.9981617647058824
       },
       "registered": {
-        "medianAbsZ": 0.6910388266768179,
-        "within1": 0.6710239651416122,
-        "within3": 0.9985021786492375
+        "medianAbsZ": 0.6564402641517892,
+        "within1": 0.6911083877995643,
+        "within3": 0.9981617647058824
       },
-      "floorShareMedian": 0.011719875674026386
+      "floorShareMedian": 0.36267460374318616
     },
     {
       "regime": "P",
@@ -266,16 +267,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.811716552514296,
-        "within1": 0.599400871459695,
-        "within3": 0.9425381263616558
+        "medianAbsZ": 0.670817117112464,
+        "within1": 0.6776279956427015,
+        "within3": 0.9664351851851852
       },
       "registered": {
-        "medianAbsZ": 0.7116401369716816,
-        "within1": 0.6574754901960784,
-        "within3": 0.9606481481481481
+        "medianAbsZ": 0.6679598073148765,
+        "within1": 0.6800789760348583,
+        "within3": 0.9671160130718954
       },
-      "floorShareMedian": 0.024522574040561684
+      "floorShareMedian": 0.014016657686576655
     },
     {
       "regime": "P",
@@ -285,16 +286,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.8934254309101672,
-        "within1": 0.5323393246187363,
-        "within3": 0.857911220043573
+        "medianAbsZ": 0.7768901601356111,
+        "within1": 0.5741421568627451,
+        "within3": 0.8685321350762527
       },
       "registered": {
-        "medianAbsZ": 0.7740273308852991,
-        "within1": 0.5822440087145969,
-        "within3": 0.8724128540305011
+        "medianAbsZ": 0.7768901601356111,
+        "within1": 0.5741421568627451,
+        "within3": 0.8685321350762527
       },
-      "floorShareMedian": 0.0000026864292270358766,
+      "floorShareMedian": 0.000002685742135519347,
       "outsideBand": "too narrow: strong drag 2026 in-track at every lead, less narrow than 0.6.42 with the drag share times exp(0.150) (stack #568); the density forecast's (stack #527)"
     },
     {
@@ -305,16 +306,16 @@
       "windows": 306,
       "samples": 14688,
       "atOne": {
-        "medianAbsZ": 0.12068689343526459,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.6921806421986504,
+        "within1": 0.687431917211329,
+        "within3": 0.9967320261437909
       },
       "registered": {
-        "medianAbsZ": 0.7310146867596534,
-        "within1": 0.6691857298474946,
-        "within3": 0.9973447712418301
+        "medianAbsZ": 0.6921806421986504,
+        "within1": 0.687431917211329,
+        "within3": 0.9967320261437909
       },
-      "floorShareMedian": 0.004630433844145386
+      "floorShareMedian": 0.17736810899075103
     },
     {
       "regime": "LS",
@@ -324,17 +325,17 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.5861660259642647,
-        "within1": 0.7537037037037037,
+        "medianAbsZ": 0.5820071965385207,
+        "within1": 0.7527777777777778,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5358322225704804,
-        "within1": 0.8018518518518518,
+        "medianAbsZ": 0.5327404862877669,
+        "within1": 0.7972222222222223,
         "within3": 1
       },
-      "floorShareMedian": 0.978854418255058,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.9786504484585649,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "LS",
@@ -344,16 +345,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.0466470397729816,
+        "medianAbsZ": 0.03935496855845437,
         "within1": 0.9972222222222222,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.04665413144709382,
+        "medianAbsZ": 0.03935496855845437,
         "within1": 0.9972222222222222,
         "within3": 1
       },
-      "floorShareMedian": 0.0015363475871190493,
+      "floorShareMedian": 0.0016328685075171082,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -364,16 +365,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.5489260539798055,
-        "within1": 0.85,
-        "within3": 1
-      },
-      "registered": {
-        "medianAbsZ": 0.663933402689874,
+        "medianAbsZ": 0.6624486770990545,
         "within1": 0.7361111111111112,
         "within3": 1
       },
-      "floorShareMedian": 0.7513115376492386
+      "registered": {
+        "medianAbsZ": 0.6624486770990545,
+        "within1": 0.7361111111111112,
+        "within3": 1
+      },
+      "floorShareMedian": 0.9920448626669229
     },
     {
       "regime": "LS",
@@ -383,17 +384,17 @@
       "windows": 28,
       "samples": 817,
       "atOne": {
-        "medianAbsZ": 0.5131674545621077,
-        "within1": 0.8323133414932681,
+        "medianAbsZ": 0.503879431364676,
+        "within1": 0.8494492044063647,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.47943822839137545,
-        "within1": 0.8506731946144431,
+        "medianAbsZ": 0.4754227302997131,
+        "within1": 0.8629130966952264,
         "within3": 1
       },
-      "floorShareMedian": 0.7008663393188292,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.6929895656315637,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "LS",
@@ -403,16 +404,16 @@
       "windows": 28,
       "samples": 817,
       "atOne": {
-        "medianAbsZ": 0.020382100161998838,
+        "medianAbsZ": 0.021033365837498673,
         "within1": 1,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.02039180931037685,
+        "medianAbsZ": 0.021033365837498673,
         "within1": 1,
         "within3": 1
       },
-      "floorShareMedian": 0.00006160918025946613,
+      "floorShareMedian": 0.00006610725877334618,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -423,16 +424,16 @@
       "windows": 28,
       "samples": 817,
       "atOne": {
-        "medianAbsZ": 0.19896658313709487,
-        "within1": 0.9987760097919217,
-        "within3": 1
-      },
-      "registered": {
-        "medianAbsZ": 0.6330964704443888,
+        "medianAbsZ": 0.6397847407643673,
         "within1": 0.7662178702570379,
         "within3": 1
       },
-      "floorShareMedian": 0.10636778411598861
+      "registered": {
+        "medianAbsZ": 0.6397847407643673,
+        "within1": 0.7662178702570379,
+        "within3": 1
+      },
+      "floorShareMedian": 0.901731205569853
     },
     {
       "regime": "LS",
@@ -442,17 +443,17 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.4410838859325878,
-        "within1": 0.8842592592592593,
+        "medianAbsZ": 0.4275633915794168,
+        "within1": 0.8907407407407407,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.4221054600129439,
-        "within1": 0.9,
+        "medianAbsZ": 0.4091847032008313,
+        "within1": 0.9027777777777778,
         "within3": 1
       },
-      "floorShareMedian": 0.4811601515543573,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.48536312499709156,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "LS",
@@ -462,16 +463,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.02048669947650409,
+        "medianAbsZ": 0.020253338962899464,
         "within1": 1,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.02051090637674305,
+        "medianAbsZ": 0.020253338962899464,
         "within1": 1,
         "within3": 1
       },
-      "floorShareMedian": 0.00001967086103475109,
+      "floorShareMedian": 0.00002120410154746781,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -482,16 +483,16 @@
       "windows": 28,
       "samples": 1080,
       "atOne": {
-        "medianAbsZ": 0.11849532612726452,
-        "within1": 1,
+        "medianAbsZ": 0.5663530707830036,
+        "within1": 0.8148148148148148,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5650573788389316,
-        "within1": 0.812962962962963,
+        "medianAbsZ": 0.5663530707830036,
+        "within1": 0.8148148148148148,
         "within3": 1
       },
-      "floorShareMedian": 0.03325111157618622,
+      "floorShareMedian": 0.7307355531893819,
       "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows; a size by regime is stack #531's"
     },
     {
@@ -502,17 +503,17 @@
       "windows": 28,
       "samples": 753,
       "atOne": {
-        "medianAbsZ": 0.40882015527577076,
-        "within1": 0.9057104913678619,
+        "medianAbsZ": 0.3963136343827056,
+        "within1": 0.9136786188579017,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.3988211358474621,
-        "within1": 0.9176626826029216,
+        "medianAbsZ": 0.3870227078467897,
+        "within1": 0.9256308100929614,
         "within3": 1
       },
-      "floorShareMedian": 0.30877651060839956,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.3188669851948926,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "LS",
@@ -522,16 +523,16 @@
       "windows": 28,
       "samples": 753,
       "atOne": {
-        "medianAbsZ": 0.019971801187639093,
+        "medianAbsZ": 0.020402712571091847,
         "within1": 1,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.020024758229645268,
+        "medianAbsZ": 0.020402712571091847,
         "within1": 1,
         "within3": 1
       },
-      "floorShareMedian": 0.00000950497883587777,
+      "floorShareMedian": 0.000010226315842061665,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -542,16 +543,16 @@
       "windows": 28,
       "samples": 753,
       "atOne": {
-        "medianAbsZ": 0.0824299274941625,
-        "within1": 1,
+        "medianAbsZ": 0.5358863221209444,
+        "within1": 0.798140770252324,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5306109941048643,
-        "within1": 0.8034528552456839,
+        "medianAbsZ": 0.5358863221209444,
+        "within1": 0.798140770252324,
         "within3": 1
       },
-      "floorShareMedian": 0.01311372047920612,
+      "floorShareMedian": 0.5149607680872724,
       "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows; a size by regime is stack #531's"
     },
     {
@@ -562,17 +563,17 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.5852008524624519,
-        "within1": 0.7276041666666667,
-        "within3": 0.9994791666666667
-      },
-      "registered": {
-        "medianAbsZ": 0.5346313253234231,
-        "within1": 0.7703125,
+        "medianAbsZ": 0.5657627023717828,
+        "within1": 0.7583333333333333,
         "within3": 1
       },
-      "floorShareMedian": 0.9820204072972429,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "registered": {
+        "medianAbsZ": 0.5166755264154121,
+        "within1": 0.8015625,
+        "within3": 1
+      },
+      "floorShareMedian": 0.9773589571120176,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "DO",
@@ -582,16 +583,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.09197464943498526,
-        "within1": 0.9895833333333334,
+        "medianAbsZ": 0.048346098608068246,
+        "within1": 0.9942708333333333,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.09199970807199957,
-        "within1": 0.9895833333333334,
+        "medianAbsZ": 0.048346098608068246,
+        "within1": 0.9942708333333333,
         "within3": 1
       },
-      "floorShareMedian": 0.0017256347830897118,
+      "floorShareMedian": 0.0015868774466442053,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -602,16 +603,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.5848308825295012,
-        "within1": 0.8390625,
+        "medianAbsZ": 0.67643336479641,
+        "within1": 0.7447916666666666,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.6756910774731721,
-        "within1": 0.7432291666666667,
+        "medianAbsZ": 0.67643336479641,
+        "within1": 0.7447916666666666,
         "within3": 1
       },
-      "floorShareMedian": 0.7830161676302005
+      "floorShareMedian": 0.9929002775828882
     },
     {
       "regime": "DO",
@@ -621,17 +622,17 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.5864126704181232,
-        "within1": 0.7151041666666667,
-        "within3": 0.984375
+        "medianAbsZ": 0.5112985888705474,
+        "within1": 0.796875,
+        "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5492294817735688,
-        "within1": 0.7427083333333333,
-        "within3": 0.990625
+        "medianAbsZ": 0.4786894804999344,
+        "within1": 0.8296875,
+        "within3": 1
       },
-      "floorShareMedian": 0.7538308399604561,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.7087017221202332,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "DO",
@@ -641,16 +642,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.06112358318396913,
-        "within1": 0.9776041666666667,
+        "medianAbsZ": 0.03419415612054174,
+        "within1": 1,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.061146233654720494,
-        "within1": 0.9776041666666667,
+        "medianAbsZ": 0.03419415612054174,
+        "within1": 1,
         "within3": 1
       },
-      "floorShareMedian": 0.00006873261350960661,
+      "floorShareMedian": 0.0000653956080700273,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -661,16 +662,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.23742353460534538,
-        "within1": 1,
-        "within3": 1
-      },
-      "registered": {
-        "medianAbsZ": 0.6380825831198768,
+        "medianAbsZ": 0.6280054567140485,
         "within1": 0.7640625,
         "within3": 1
       },
-      "floorShareMedian": 0.1283826506780934
+      "registered": {
+        "medianAbsZ": 0.6280054567140485,
+        "within1": 0.7640625,
+        "within3": 1
+      },
+      "floorShareMedian": 0.9184018485944887
     },
     {
       "regime": "DO",
@@ -680,17 +681,17 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.5388511909819798,
-        "within1": 0.7489583333333333,
-        "within3": 0.9630208333333333
+        "medianAbsZ": 0.44464917390553194,
+        "within1": 0.8552083333333333,
+        "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5186007089410962,
-        "within1": 0.7625,
-        "within3": 0.9677083333333333
+        "medianAbsZ": 0.42639434546527855,
+        "within1": 0.8671875,
+        "within3": 1
       },
-      "floorShareMedian": 0.5007751118451838,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.42845165717016725,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "DO",
@@ -700,16 +701,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.09165511806774596,
-        "within1": 0.8765625,
+        "medianAbsZ": 0.06330183519023806,
+        "within1": 1,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.09167373623306418,
-        "within1": 0.8765625,
+        "medianAbsZ": 0.06330183519023806,
+        "within1": 1,
         "within3": 1
       },
-      "floorShareMedian": 0.000020928539358574554,
+      "floorShareMedian": 0.000020462958997803106,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -720,16 +721,16 @@
       "windows": 40,
       "samples": 1920,
       "atOne": {
-        "medianAbsZ": 0.1309637514198675,
-        "within1": 1,
+        "medianAbsZ": 0.5737134508870936,
+        "within1": 0.7885416666666667,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5844766965273325,
-        "within1": 0.778125,
+        "medianAbsZ": 0.5737134508870936,
+        "within1": 0.7885416666666667,
         "within3": 1
       },
-      "floorShareMedian": 0.036995088091173495,
+      "floorShareMedian": 0.7508620614814226,
       "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows; a size by regime is stack #531's"
     },
     {
@@ -740,17 +741,17 @@
       "windows": 40,
       "samples": 1820,
       "atOne": {
-        "medianAbsZ": 0.5631218389528173,
-        "within1": 0.6686813186813186,
-        "within3": 0.9043956043956044
+        "medianAbsZ": 0.4634308730713951,
+        "within1": 0.7824175824175824,
+        "within3": 0.9505494505494505
       },
       "registered": {
-        "medianAbsZ": 0.5453508745100248,
-        "within1": 0.6796703296703297,
-        "within3": 0.9137362637362637
+        "medianAbsZ": 0.4504180034919816,
+        "within1": 0.7972527472527473,
+        "within3": 0.951098901098901
       },
-      "floorShareMedian": 0.33328887399734985,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.2859525811089628,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "DO",
@@ -760,16 +761,16 @@
       "windows": 40,
       "samples": 1820,
       "atOne": {
-        "medianAbsZ": 0.245021736961622,
-        "within1": 0.7670329670329671,
+        "medianAbsZ": 0.16642424571367165,
+        "within1": 0.9675824175824176,
         "within3": 0.9857142857142858
       },
       "registered": {
-        "medianAbsZ": 0.24508163590788823,
-        "within1": 0.7670329670329671,
+        "medianAbsZ": 0.16642424571367165,
+        "within1": 0.9675824175824176,
         "within3": 0.9857142857142858
       },
-      "floorShareMedian": 0.000009960541776582072,
+      "floorShareMedian": 0.00000980006768081175,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -780,16 +781,16 @@
       "windows": 40,
       "samples": 1820,
       "atOne": {
-        "medianAbsZ": 0.09844668308287054,
-        "within1": 0.9912087912087912,
-        "within3": 0.9994505494505495
-      },
-      "registered": {
-        "medianAbsZ": 0.5450783781211883,
-        "within1": 0.7752747252747253,
+        "medianAbsZ": 0.5271380974127386,
+        "within1": 0.789010989010989,
         "within3": 0.987912087912088
       },
-      "floorShareMedian": 0.016165744262405732,
+      "registered": {
+        "medianAbsZ": 0.5271380974127386,
+        "within1": 0.789010989010989,
+        "within3": 0.987912087912088
+      },
+      "floorShareMedian": 0.561906488402589,
       "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows; a size by regime is stack #531's"
     },
     {
@@ -800,17 +801,17 @@
       "windows": 48,
       "samples": 2207,
       "atOne": {
-        "medianAbsZ": 0.5971195557345368,
-        "within1": 0.7562301767104667,
+        "medianAbsZ": 0.5741219418431245,
+        "within1": 0.7544177616674218,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5446167202877972,
-        "within1": 0.8042591753511554,
+        "medianAbsZ": 0.524164375509113,
+        "within1": 0.797009515178976,
         "within3": 1
       },
-      "floorShareMedian": 0.9834349066078812,
-      "outsideBand": "too wide: the weak-drag radial at today's floor factor exp(0.095), which 0.6.43's removal of the +10 m bias leaves too wide; the weak-drag side waits on near 700 km's 24-hour fits (stacks #568, #489)"
+      "floorShareMedian": 0.9725679429671978,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "S1",
@@ -820,16 +821,16 @@
       "windows": 48,
       "samples": 2207,
       "atOne": {
-        "medianAbsZ": 0.22141925947976912,
-        "within1": 0.9855006796556411,
+        "medianAbsZ": 0.05668206038052176,
+        "within1": 0.9972813774354327,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.2214474209253727,
-        "within1": 0.9855006796556411,
+        "medianAbsZ": 0.05668206038052176,
+        "within1": 0.9972813774354327,
         "within3": 1
       },
-      "floorShareMedian": 0.0023859659923408127,
+      "floorShareMedian": 0.0019467890395873818,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -840,16 +841,16 @@
       "windows": 48,
       "samples": 2207,
       "atOne": {
-        "medianAbsZ": 0.6040879280461389,
-        "within1": 0.8187584956955143,
+        "medianAbsZ": 0.6785869363387802,
+        "within1": 0.7485274127775261,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.6836625308116019,
-        "within1": 0.7521522428636158,
+        "medianAbsZ": 0.6785869363387802,
+        "within1": 0.7485274127775261,
         "within3": 1
       },
-      "floorShareMedian": 0.8179465308634878
+      "floorShareMedian": 0.9913586885050598
     },
     {
       "regime": "S1",
@@ -859,16 +860,17 @@
       "windows": 48,
       "samples": 2157,
       "atOne": {
-        "medianAbsZ": 0.783581240618275,
-        "within1": 0.6342141863699583,
-        "within3": 1
+        "medianAbsZ": 0.6152807942805837,
+        "within1": 0.7199814557255447,
+        "within3": 0.9972183588317107
       },
       "registered": {
-        "medianAbsZ": 0.7258884014214668,
-        "within1": 0.6736207695873899,
-        "within3": 1
+        "medianAbsZ": 0.5750904670804486,
+        "within1": 0.7528975428836346,
+        "within3": 0.9981455725544738
       },
-      "floorShareMedian": 0.7826308328624593
+      "floorShareMedian": 0.7035683546781496,
+      "outsideBand": "too wide: the weak-drag radial at the floor factor exp(0.095), fitted on errors that carried the +10 m bias 0.6.43 removed and before 0.6.48 fitted the 24-hour arcs at the data's own sigma (stack #489), which lowers the errors further; a factor for the weak-drag side is stack #568's"
     },
     {
       "regime": "S1",
@@ -878,16 +880,16 @@
       "windows": 48,
       "samples": 2157,
       "atOne": {
-        "medianAbsZ": 0.3701005273417725,
-        "within1": 0.923041261010663,
+        "medianAbsZ": 0.0695445621818112,
+        "within1": 0.9777468706536857,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.3701535633593177,
-        "within1": 0.923041261010663,
+        "medianAbsZ": 0.0695445621818112,
+        "within1": 0.9777468706536857,
         "within3": 1
       },
-      "floorShareMedian": 0.00009085543856189506,
+      "floorShareMedian": 0.00008027295390174784,
       "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
@@ -898,16 +900,16 @@
       "windows": 48,
       "samples": 2157,
       "atOne": {
-        "medianAbsZ": 0.26068392215389585,
-        "within1": 1,
+        "medianAbsZ": 0.6471513730313599,
+        "within1": 0.7547519703291609,
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.6426723420538191,
-        "within1": 0.7552155771905424,
+        "medianAbsZ": 0.6471513730313599,
+        "within1": 0.7547519703291609,
         "within3": 1
       },
-      "floorShareMedian": 0.15563168082771967
+      "floorShareMedian": 0.9293051922244896
     }
   ]
 }
