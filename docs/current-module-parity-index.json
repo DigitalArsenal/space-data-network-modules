@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T00:01:15.169Z",
+  "generatedAt": "2026-11-12T00:51:19.499Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 186,
+      "testFileCount": 187,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7584,6 +7584,7 @@
         "test/fixtures/ap-fit-0.6.36.ocm",
         "test/fixtures/ap-fit-0.6.36.teme-0.6.36.oem",
         "test/fixtures/ap-fit-0.6.4.ocm",
+        "test/fixtures/covariance-judged-31-70.json",
         "test/fixtures/covariance-refit-held-out.json",
         "test/fixtures/de440-bodies-2010-2035.json",
         "test/fixtures/ffm-leo-550km-53deg.json.gz",
