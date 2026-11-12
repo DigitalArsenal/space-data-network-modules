@@ -22,6 +22,11 @@ and the corrections AIAA 2006-6753 documents); [NOTICE](NOTICE) names what the b
 Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`, no exception handling) writes
 `dist/isomorphic/module.wasm`; it reads ERFA from this repository. No build data is fetched.
 
+AP's zonal tail at epoch eccentricity at or below 0.3 carries long-period harmonics through |w| = 6 in its mean-element
+rates (SPEC 16.3, stack #595). Its eccentricity coefficients come from a finite Hansen sum and are re-anchored beyond
+0.002 from their reference. The same-field tests bound the day-1 and day-5 once-per-revolution in-track terms by 10 m
+on the 400 km/e0.05/i55 and 300 km/e0.01/i55 pairs. The output map and the terms above e 0.3 retain their definitions.
+
 ## Interface
 
 - Propagator ABI: `plugin_init_omm`, `plugin_init`, `plugin_propagate`, `plugin_propagate_batch`,

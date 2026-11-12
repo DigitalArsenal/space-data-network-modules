@@ -3092,12 +3092,33 @@ What is left at 4 x 4 is AP's analytic Moon (stack #446): 7.3 to 8.0 m cross-tra
 `test/one-day-resonant-tail.e2e.mjs` checks the 20 x 20 against the 4 x 4 level (0.5 m); `test/one-day-moon-floor.e2e.mjs`
 is #446's known defect.
 
-**16.3 Zonal tail.** J6 to Jz in the rates: the secular terms of even l (p = l/2, q = 0) and the long-period terms of odd l
-(w = +-1, q = -w), first order, F and dF/di at the epoch inclination and G linearized at the epoch eccentricity.
-For e0 at or below 0.3 the zonal tail carries, for even degrees, the secular term only; it omits their cos 2 omega pair, which
-is of the same order in e in the perigee rate and 50 to 78 % of the term kept. The perigee rate is short by 2.0e-5 rad/day at
-800 x 1,100 km, e 0.0206, i 49.8 deg: a radial error growing 3.1 m/day there, and 6 to 54 m/day at e 0.1 between 500 and
-1,200 km. Above e0 0.3 the zonal tail carries every long-period term (16.11).
+**16.3 Zonal tail.** J6 to Jz in the rates, first order, with F and dF/di at the epoch inclination. At epoch eccentricity
+e0 at or below 0.3 the tail carries the secular terms of even l (w = l - 2p = 0, q = 0), the w = +-1 long-period terms
+of odd l, and the long-period terms with 2 <= |w| <= 6 (q = -w, even w on even degrees and odd w on odd degrees).
+The secular and w = +-1 terms retain their epoch linearization. Each added term has G = e^k (a + b e^2), k = |w|,
+matching the value and analytic slope of the finite Hansen sum at e_r = max(e0, 0.01):
+
+X_0^{-(l+1),k}(e) = (1 - e^2)^-(l - 1/2) sum_d C(l-1, 2d+k) C(2d+k, d) (e/2)^(2d+k), 2d+k <= l-1.
+
+G and its derivative are exactly zero when k > l - 1, including J6 at |w| = 6. The factor e^k preserves the circular
+limit. When |max(e, 0.01) - e_r| > 0.002, the cached coefficients of these added terms are rebuilt at max(e, 0.01),
+keeping the table's epoch inclination functions. This anchor is a function of the set and the state, so time order,
+reverse order and shuffled evaluation choose the same rates. Borrowed tables retain their original anchor.
+
+The cutoff at |w| = 6 is measured (stack #595): carrying +-2 alone leaves 15 to 19 m of the once-per-revolution
+in-track term at e 0.3; carrying every harmonic instead of |w| <= 6 changes the measured pairs by at most 0.2 m.
+On the hp400/e0.05/i55 synthetic pair, fitted over days 0 to 5 with the same degree-70 order-0 field and solid tide,
+drag and radiation off, the day-1/day-5 term falls from 98.0/101.6 m to 3.0/2.1 m, and the largest 3D distance from
+126.3 to 14.6 m. The hp300/e0.01/i55 pair falls from 36.8/39.5 m to 3.3/2.9 m, and from 51.4 to 15.4 m in 3D.
+Those measurements compare 0.6.48 with the added harmonics; the numerical truth also carries the Sun, Moon and relativity.
+`test/zonal-long-period.e2e.mjs` bounds both day-1/day-5 terms by 10 m and the largest 3D distance by 20 m on FFM 2.3.0
+truths. `test/zonal-long-period-table.e2e.mjs` checks the finite sum, the table and its anchor, and bounds the change
+from the full-harmonic control by 1 m over five days at e0 0.2999 and 0.3001, with identical elements within each comparison.
+
+Above e0 0.3 every long-period term and its existing linearized G remain as 16.11 defines them. These are mean-element
+rates only: section 8's output map has no added zonal-tail term. SGP4XP and SGP4 select no AP zonal tail.
+The inclination work array (16,128 bytes) and the evaluation cache (123 coefficient doubles, plus its keys) are thread-local.
+Shared per-set tables are immutable; re-anchoring changes only the calling thread's evaluation cache.
 
 **16.4 Frame.** Frame policy is selected once, by `ap_init`, from the record's gravity terms. With d or z above 0,
 every AP set carries its epoch-axis states to TEME of date by M(t) M(t0)^T: from 0.6.34 the long-period regime's class 0
@@ -3261,7 +3282,8 @@ drag passage, 16.3 and 16.12; above 0.3 the class's G about e0, 6.4). Each switc
 its limit, so a set at the limit itself is on the below side (from 0.6.40; through 0.6.39 the class's G about e0 began
 at 0.3 itself, and a set at exactly 0.3 was on a branch of its own). When drag or a resonance carries the mean
 motion across a class limit, the epoch class's terms stay in the rates, with F and G at the current elements (16.2), and
-out of the output table; no table is rebuilt during a flight. A record's output is therefore continuous in time: one
+out of the output table; their membership is fixed during a flight (16.3's eccentricity re-anchor changes coefficients only).
+A record's output is therefore continuous in time: one
 seeded set at each of the five mean motions that decide a class (e 0.001, i 55 deg), flown 2 days at 10 s, has a second
 difference of position less the two-body term of at most 0.002, 0.003, 0.004, 0.012 and 0.035 m at 0.8022, 1.2033,
 1.6045, 2.4067 and 3.6100 rev/day (0.6.5, whose tables followed the current mean motion: 89.9, 135.5, 13.7, 0.012 and

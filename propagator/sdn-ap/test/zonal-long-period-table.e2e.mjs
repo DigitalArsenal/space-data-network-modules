@@ -6,7 +6,6 @@
 // The 0.3 switch is isolated against a control with the full zonal harmonics on both sides, with every other
 // switch held as production selects it. Comparing the two eccentricities directly includes their physical separation.
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import * as fb from 'flatbuffers';
 import {createStandaloneHarness} from 'space-data-module-sdk/testing/isomorphic';
 import {OEM} from 'spacedatastandards.org/lib/js/OEM/OEM.js';
@@ -19,7 +18,7 @@ const extra=String.raw`
 SDNAP_EXPORT("sdnap_test_zonal_table")
 int sdnap_test_zonal_table(double e0, double e, double* out) {
   using namespace sdnap::xpt;
-  float table[4 * 455]; tess::zonal_visit_terms(70, false, 55 * kDeg, e0, table);
+  float table[4 * 455]; tess::zonal_visit_terms(70, false, 55 * sdnap::kDeg, e0, table);
   int idx = 0, count = 0;
   for (int l = 6; l <= 70; ++l) {
     idx += (l & 1) ? 2 : 1;
@@ -36,10 +35,10 @@ int sdnap_test_zonal_table(double e0, double e, double* out) {
 SDNAP_EXPORT("sdnap_test_zonal_reanchor")
 void sdnap_test_zonal_reanchor(double e0, double e, double* out) {
   using namespace sdnap::xpt;
-  float table[4 * 455]; tess::zonal_visit_terms(70, false, 55 * kDeg, e0, table);
+  float table[4 * 455]; tess::zonal_visit_terms(70, false, 55 * sdnap::kDeg, e0, table);
   const double er = e0 > 0.01 ? e0 : 0.01;
   const double at = tess::tail_w_anchor(e, er);
-  const Kepler k{1.5, e, 55 * kDeg, 0.4, 1.7, 0.8};
+  const Kepler k{1.5, e, 55 * sdnap::kDeg, 0.4, 1.7, 0.8};
   const double n = std::sqrt(kMu / (k.a * k.a * k.a)), eta = std::sqrt(1 - e * e);
   for (int j = 0; j < 12; ++j) out[j] = 0;
   tess::zonal_six(table, 70, false, k, n, eta, std::sin(k.i), std::cos(k.i), out, nullptr, nullptr, 1, er);
