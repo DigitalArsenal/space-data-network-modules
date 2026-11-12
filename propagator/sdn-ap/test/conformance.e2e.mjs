@@ -40,13 +40,14 @@
 // where the osculating and the mean anomaly straddle 0, that is within the
 // anomaly's short-period correction divided by the mean motion at the passage,
 // milliseconds on these records; the largest offset seen from the passage is
-// -549 ms, on the 4:1 record. --perigee-only runs this part alone.
+// -549 ms, on the 4:1 record. --perigee-only runs this part alone; --corpus-only leaves it out, for a change that cannot
+// reach SGP4XP's output solve (section 8), and says so in its output and its --json summary.
 //
 // The module is asked for the times in a shuffled order, the oracle in
 // ascending order; the module's answers must not depend on the order (the
 // same bytes again in a second shuffled order).
 //
-//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE] [--digest-only] [--perigee-only]
+//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE] [--digest-only [--dump FILE]] [--perigee-only | --corpus-only]
 //
 // --reproduce FILE: the run must equal a stored summary (FILE, as --json writes it) in every statistic, digest and
 // acceptance flag (the oracle's name aside); the exit code is that comparison's (a tree moved or rebuilt reproduces
@@ -72,6 +73,9 @@ const JSON_OUT = arg("--json", null);
 const REPRODUCE = arg("--reproduce", null);
 const DIGEST_ONLY = process.argv.includes("--digest-only");
 const PERIGEE_ONLY = process.argv.includes("--perigee-only");
+const CORPUS_ONLY = process.argv.includes("--corpus-only");
+const DUMP = arg("--dump", null);
+if (PERIGEE_ONLY && CORPUS_ONLY) throw new Error("--perigee-only and --corpus-only are each other's opposite");
 const WORST = Number(arg("--worst", 0));  // print the N largest position differences per regime
 const SPAN_MIN = 7 * 1440;
 const TIMES = 8;
@@ -384,8 +388,18 @@ if (DIGEST_ONLY) {
   const stored = JSON.parse(fs.readFileSync(REPRODUCE ?? new URL("./results/conformance.json", import.meta.url), "utf8"));
   const module = await openModule();
   const control = flyModule(corpus(SGP4_SETS, 0, 10000), module);
-  const xp = flyModule(corpus(XP_SETS, 4, 40000), module);
+  const xpSets = corpus(XP_SETS, 4, 40000);
+  const xp = flyModule(xpSets, module);
   module.destroy();
+  // --dump FILE: the SGP4XP corpus's sets (FILE.json: lines and minutes) and every first-pass output (FILE.bin: for each time index,
+  // the x, y and z planes, km TEME; FILE.status.bin: each status), so two builds' states can be compared state by state
+  if (DUMP) {
+    fs.writeFileSync(`${DUMP}.json`, JSON.stringify({ seed: SEED, times: TIMES, sets: xpSets.map((s) => ({ lines: s.lines, minutes: s.minutes })) }));
+    const planes = [], status = [];
+    for (let k = 0; k < TIMES; k += 1) { for (const p of ["x", "y", "z"]) planes.push(...xp.answers[0][k][p]); status.push(...xp.answers[0][k].status); }
+    fs.writeFileSync(`${DUMP}.bin`, Buffer.from(new Float64Array(planes).buffer));
+    fs.writeFileSync(`${DUMP}.status.bin`, Buffer.from(new Int32Array(status).buffer));
+  }
   const same = control.digest === stored.control.digest && xp.digest === stored.xp.digest && control.orderDependent === 0 && xp.orderDependent === 0;
   console.log(`module outputs against ${REPRODUCE ?? "test/results/conformance.json"} (no oracle): XP ${xp.digest.slice(0, 12)} (stored ${stored.xp.digest.slice(0, 12)}), control ${control.digest.slice(0, 12)} (stored ${stored.control.digest.slice(0, 12)}), order-dependent values ${xp.orderDependent + control.orderDependent}: ${same ? "identical" : "DIFFERENT"}`);
   process.exit(same ? 0 : 1);
@@ -459,9 +473,11 @@ let hansenWorst = 0;
 for (const e of [0.1, 0.2]) for (const [l, p, q] of hansenRows) hansenWorst = Math.max(hansenWorst, Math.abs(module.hansen(l, p, q, e, 1) - module.hansen(l, p, q, e, 0)));
 console.log(`\nSPEC 6 eccentricity series: ${hansenRows.length} G_lpq, max |series - exact| ${hansenWorst.toExponential(2)} at e <= 0.2`);
 
-// Perigee passages (stack #550): every sample within 1 m of the oracle.
-const perigee = await perigeePassages(oracle, module);
-printPerigee(perigee);
+// Perigee passages (stack #550): every sample within 1 m of the oracle. --corpus-only leaves the part out (a change that cannot
+// reach SGP4XP's output solve): the run then says so, and its pass is the corpus's alone.
+const perigee = CORPUS_ONLY ? null : await perigeePassages(oracle, module);
+if (perigee) printPerigee(perigee);
+else console.log("\nperigee passages: not run (--corpus-only)");
 
 const acceptance = {
   xpSets: xp.overall.sets >= 10000,
@@ -473,11 +489,11 @@ const acceptance = {
   spec6Eccentricity: hansenRows.length === 56 && hansenWorst <= 1e-12,
 };
 // the perigee part's own flag, kept beside the corpus's so that a stored run of the corpus alone still compares
-const perigeeAcceptance = { perigeePassages: perigee.missing === 0 && perigee.overOneMeter === 0 };
-const pass = Object.values(acceptance).every(Boolean) && perigeeAcceptance.perigeePassages;
+const perigeeAcceptance = perigee ? { perigeePassages: perigee.missing === 0 && perigee.overOneMeter === 0 } : { perigeePassages: "not run" };
+const pass = Object.values(acceptance).every(Boolean) && (perigee ? perigeeAcceptance.perigeePassages : true);
 const summary = { task: "sdn-ap-sgp4xp-conformance-tail-20261025", oracle: oracle.name, second: second.name, seed: SEED, control, xp,
   equatorNode: { cases: eqCases.length, differ: eqDiffer.length, fixedByFlip: eqFixed.length }, spec6Eccentricity: { terms: hansenRows.length, maxSeriesMinusExact: hansenWorst },
-  perigeePassages: { ...perigee, ms: undefined }, acceptance, perigeeAcceptance, pass };
+  perigeePassages: perigee ? { ...perigee, ms: undefined } : null, acceptance, perigeeAcceptance, pass, ...(CORPUS_ONLY ? { corpusOnly: true } : {}) };
 // Full-precision statistics are kept (exactMaxM, exactMedianM) so that a change can be held to a stated bound.
 for (const result of [control, xp]) for (const t of result.table) { t.exactMaxM = t.maxM; t.exactMedianM = t.medianM; t.maxM = +t.maxM.toPrecision(4); t.medianM = +t.medianM.toPrecision(4); t.maxMmPerS = +t.maxMmPerS.toPrecision(4); t.medianMmPerS = +t.medianMmPerS.toPrecision(4); }
 if (JSON_OUT) fs.writeFileSync(JSON_OUT, `${JSON.stringify(summary, null, 1)}\n`);
@@ -488,7 +504,7 @@ if (REPRODUCE) {
   // every statistic, digest and flag; not the oracle's wall-clock time (a stored run from before the perigee part is compared
   // on the corpus's fields alone)
   const comparable = (x) => JSON.stringify(x, (k, v) => (k === "oracleMs" ? undefined : v));
-  const fields = ["seed", "control", "xp", "equatorNode", "spec6Eccentricity", "acceptance", ...(stored.perigeePassages ? ["perigeePassages", "perigeeAcceptance", "pass"] : [])];
+  const fields = ["seed", "control", "xp", "equatorNode", "spec6Eccentricity", "acceptance", ...(stored.perigeePassages && !CORPUS_ONLY ? ["perigeePassages", "perigeeAcceptance", "pass"] : [])];
   const differing = fields.filter((f) => comparable({ v: summary[f] }) !== comparable({ v: stored[f] }));
   reproduced = differing.length === 0;
   console.log(`reproduces ${REPRODUCE}: ${reproduced ? "identical (XP digest " + summary.xp.digest.slice(0, 12) + ", control " + summary.control.digest.slice(0, 12) + ")" : "differs in " + differing.join(", ")}; the stored run: ${stored.pass ? "PASS" : "FAIL"}`);

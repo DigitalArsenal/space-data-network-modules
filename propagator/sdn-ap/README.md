@@ -638,12 +638,14 @@ built by `test/lib/spw-constant.mjs` (`FFM_SPW_FIXTURE` names another file of su
   over 7 days against the black-box oracle; per-regime maximum and median position difference; and the perigee-passage
   part: ten eccentric records flown every 1 ms for 3 s either side of each one's first perigee passages, five at e 0.5
   and above and two below (the oracle's own radius minima), every sample within 1 m (acceptance `perigeePassages`, kept
-  apart from the corpus's digests; `--perigee-only` runs it alone). The oracle (the
+  apart from the corpus's digests; `--perigee-only` runs it alone, and `--corpus-only` leaves it out for a change that
+  cannot reach SGP4XP's output solve, saying so in its output and summary). The oracle (the
   unmodified US Space Force Sgp4Prop library behind a black-box harness) is not in this repository:
   `SDN_AP_ORACLE_ROOT` names its directory (`SDN_AP_ORACLE_VERSION` its leg, 9.9 by default;
   `SDN_AP_ORACLE_SECOND` the other build for the reference-split class, 9.1.1.0 by default), and the E2E and
   `spec-vectors/verify.mjs` refuse without it. `--digest-only` checks the module's side of the stored run alone (the
-  SGP4XP corpus's and the SGP4 control's output digests), no oracle. The other E2Es end with that digest check
+  SGP4XP corpus's and the SGP4 control's output digests), no oracle; with `--dump FILE` it also writes the SGP4XP
+  corpus's sets and every output state and status, so two builds can be compared state by state. The other E2Es end with that digest check
   (`test/lib/conformance-step.mjs`, about 9 s); the oracle comparison is this E2E's alone.
 - `test/run-suite.mjs`: every E2E in parallel (14 at a time by default), a table of exit code and time per test at
   the end, logs under the scratch root; its KNOWN_DEFECTS list names tests that fail for an open issue.
