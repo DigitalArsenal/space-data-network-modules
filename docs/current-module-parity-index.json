@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T23:26:07.545Z",
+  "generatedAt": "2026-11-12T02:47:03.095Z",
   "moduleCount": 160,
   "parityScopeModuleCount": 60,
   "isomorphicWasmCount": 154,
@@ -7502,7 +7502,7 @@
       "pluginId": "com.spacedatanetwork.sdn-ap-propagator",
       "name": "SDN-AP Propagator",
       "pluginFamily": "propagator",
-      "version": "0.6.36",
+      "version": "0.6.37",
       "methodIds": [
         "export_omm",
         "fit",
@@ -7525,7 +7525,7 @@
       ],
       "cxxSourceFileCount": 1,
       "cSourceFileCount": 0,
-      "testFileCount": 186,
+      "testFileCount": 187,
       "parityScope": true,
       "action": "review-before-parity-use",
       "sourceFiles": [
@@ -7642,6 +7642,7 @@
         "test/one-day-slow-band.e2e.mjs",
         "test/output-frames.mjs",
         "test/perigee-drag-continuity.e2e.mjs",
+        "test/perigee-kepler-branch.e2e.mjs",
         "test/pool-growth.e2e.mjs",
         "test/products-parameters.e2e.mjs",
         "test/pvn-carry.e2e.mjs",
