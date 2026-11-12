@@ -11,15 +11,19 @@
 //    from propagator/sdn-ap's propagate in EME2000 and TEME: the J2K and ECI lines
 //    hold those states to the message's digits (8 decimals of km, 12 of km/s),
 //    the epoch line the set's epoch, the coefficients its BTERM and AGOM, and the
-//    lines the set has no value for are left out.
+//    lines the set has no value for are left out. The set is sdn-ap 0.5.2's fit and states GRAVITY_MODEL EGM-96, which
+//    sdn-ap refuses from 0.6.36 (its field is EGM2008), so AP here is sdn-ap 0.6.34's dist (git 0e365d3f), read with
+//    git show and its SHA-256 checked.
 // 3. That set at epochs finer than the millisecond: the message's epoch is the
 //    set's rounded to the millisecond (.000600 s to .001, .000400 s to .000,
 //    and 2026-12-31T23:59:59.999500 carried to 2027 001 00:00:00.000); the J2K
 //    and ECI lines hold AP's propagate at the rounded epoch to the message's
 //    digits, and a state at any other time is refused (state-epoch-mismatch).
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -38,7 +42,19 @@ const root = path.join(here, "..");
 const files = path.join(root, "..");
 const modules = path.join(files, "..");
 const dist = (dir) => ({ wasm: path.join(dir, "dist", "isomorphic", "module.wasm"), manifest: path.join(dir, "plugin-manifest.json") });
-const WRITER = dist(root), READER = dist(path.join(files, "orbit-products")), AP = dist(path.join(modules, "propagator", "sdn-ap"));
+// sdn-ap pinned at 0.6.34 (the AP fixture states EGM-96; sdn-ap refuses it from 0.6.36): its dist and manifest from git
+const SDN_AP_PIN = { version: "0.6.34", commit: "0e365d3f730e7c1a77e6b869c8b1e62e26692ba5", sha256: "a18f1243180471e254da8cb7e692d3d8cae9944821f04f9ba3b3e026be9b65cc" };
+const pinnedAp = () => {
+  const show = (rel) => execFileSync("git", ["-C", modules, "show", `${SDN_AP_PIN.commit}:propagator/sdn-ap/${rel}`], { maxBuffer: 1 << 26 });
+  const wasm = show("dist/isomorphic/module.wasm");
+  const got = createHash("sha256").update(wasm).digest("hex");
+  if (got !== SDN_AP_PIN.sha256) throw new Error(`sdn-ap ${SDN_AP_PIN.version} pin: sha256 ${got}, expected ${SDN_AP_PIN.sha256}`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vcm-sdn-ap-"));
+  fs.writeFileSync(path.join(dir, "module.wasm"), wasm);
+  fs.writeFileSync(path.join(dir, "plugin-manifest.json"), show("plugin-manifest.json"));
+  return { wasm: path.join(dir, "module.wasm"), manifest: path.join(dir, "plugin-manifest.json") };
+};
+const WRITER = dist(root), READER = dist(path.join(files, "orbit-products")), AP = pinnedAp();
 const SAMPLE = path.join(files, "orbit-products", "fixtures", "vcm_v2_sample.txt");
 const skip = [WRITER, READER, AP].some((d) => !fs.existsSync(d.wasm)) && "build files/vcm-text first (npm run build)";
 

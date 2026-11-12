@@ -3,7 +3,7 @@
 // from 2026-01-26. Through 0.6.20 the fit weighed the data at 1 km under the drag. AGOM's default prior (0 +- 0.05) then
 // acted as if it were 100 times narrower and held AGOM at 0.356 of the truth, 9.9 of its stated sigmas away. At 71 h and up
 // the fit now weighs the data at their own sigma, as above the drag (#489).
-// Truth: FFM (named below by its SHA-256), EGM96 70 x 70, DE440 Sun and Moon, a sphere's radiation pressure (Cr 1, 10 m^2,
+// Truth: FFM (named below by its SHA-256), EGM2008 70 x 70, DE440 Sun and Moon, a sphere's radiation pressure (Cr 1, 10 m^2,
 // 1,000 kg) in FFM's conical shadow, no drag, no tides, zero EOP, RK78 1e-12, 300 s states, from the GCRF state below. AP: FORCES 31, 20, Jacchia 1970 and no space weather; BTERM held at 0 (FIT.DRAG_PRIOR
 // GAUSSIAN_SIGNED 0 +- 1e-9); AGOM on its default prior; the first 72 h.
 // Asserted: AGOM within 10 % of 0.01, and within 2 of its stated sigmas. Measured 2026-11-11: 0.937 of the truth at 0.98
@@ -38,7 +38,7 @@ const iso = (ms) => new Date(ms).toISOString().replace('Z', '');
 const jd = jdOf(epoch), times = [...Array(N)].map((_, k) => k * STEP / DAY);
 const params = {epochJD: jd.whole, epochTimeScale: 'UTC', targetJD: jd.whole + times.at(-1), targetTimeScale: 'UTC', position: initial.slice(0, 3), velocity: initial.slice(3), frame: 'GCRF',
   sampleEpochsJD: times.map((d) => ({jd: jd.whole + d, scale: 'UTC'})), ephemerisSource: 'JPL_SPK',
-  forces: {gravityMode: 'EGM96', maxDegree: 70, maxOrder: 70, thirdBody: true, srp: true, drag: false, massKg: 1000, areaM2: 10, cr: TRUE_AGOM * 1000 / 10},
+  forces: {gravityMode: 'EGM2008', maxDegree: 70, maxOrder: 70, thirdBody: true, srp: true, drag: false, massKg: 1000, areaM2: 10, cr: TRUE_AGOM * 1000 / 10},
   integrator: {tolerance: 1e-12, minStep: 0.01, maxStep: 300}};
 const kernel = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
 checkTruth();

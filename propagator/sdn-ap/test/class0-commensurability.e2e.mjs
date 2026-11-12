@@ -5,7 +5,7 @@
 // and up there, the shallow set q = 0, w = j = 1 only): kilometers a week at 4, 5, 6, 7 and 8 revolutions a day.
 // Truth: test/lib/heo-model-truth.mjs as high-e-fit-arc's low-e cases fly it (FFM 2.3.0, named below by its SHA-256; 2.2.1
 // gave the same figures to the last digit:
-// EGM96 70 x 70, DE440 Sun and Moon, NRLMSISE-00 at constant weather, B 0.044 m^2/kg, no SRP, zero EOP, RK78 1e-12 and
+// EGM2008 70 x 70, DE440 Sun and Moon, NRLMSISE-00 at constant weather, B 0.044 m^2/kg, no SRP, zero EOP, RK78 1e-12 and
 // 300 s); a 72 h fit with the library's drag prior; 7 days flown on a 1 h grid; i 50, RAAN 10, argp 30, M 0.
 // Asserted: the day-7 whole-day along-track RMS at most the bound. The bounds are about twice what this build gives (the
 // 2026-11-10 measurement in the comment), the before figure 0.6.9's (main c0819777, the fault).

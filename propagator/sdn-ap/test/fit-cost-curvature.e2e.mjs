@@ -10,7 +10,7 @@
 // For a quadratic cost the second difference over that step is 2 / variance; asserted: the ratio of that variance to the
 // record's formal variance is between 0.98 and 1.02. Measured 2026-11-11: 1.00006 (BTERM) and 0.99984 (AGOM). On the
 // build before (the data at 1 km under the drag) the AGOM case's ratio is 332, and the BTERM case states no width.
-// Two cases, on test/lib/heo-model-truth.mjs truths (FFM, named below by its SHA-256; EGM96 70 x 70, DE440 Sun and Moon,
+// Two cases, on test/lib/heo-model-truth.mjs truths (FFM, named below by its SHA-256; EGM2008 70 x 70, DE440 Sun and Moon,
 // zero EOP, RK78 1e-12, 30-minute states over a 72 h arc):
 // - a term the arc settles: BTERM, 800 km at i 50, NRLMSISE-00 drag with a true BTERM of 0.02, no SRP; the fit takes the
 //   default of a 71 h arc (SPEC 12.8). The record states BTERM's width by its rule (SPEC 12.8's width 1), so the formal

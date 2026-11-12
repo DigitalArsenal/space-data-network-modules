@@ -3,13 +3,15 @@
 // tail carries every long-period term and its first-order tesseral set every q to |q| <= 10. Baseline the 0.4.14 release
 // (git 8fdf5b1af). Test builds: VERIFY (this package with an export comparing the new terms with independent
 // integrations) and, for the 4x4 case, this package and 0.4.14's sources with the Sun's and Moon's mass ratios and J5 zero.
-// Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM96 70x70, Sun and Moon from DE440; 72 h fits from an
+// Acceptance, FFM model truth as test/lib/heo-model-truth.mjs (EGM2008 70x70, Sun and Moon from DE440; 72 h fits from an
 // osculating perigee; 7 days flown hourly; day-7 whole-day RMS along-track / radial, m):
-// 1. GTO (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): each at most 250 and within 2 of 180.70 / 117.62 (192.87 /
-//    123.44 before AP's own Sun and Moon, SPEC 16.17; 0.4.14: 422.11 / 459.10);
-// 2. re-recorded as improvements, each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 82.34 /
-//    51.79, half-day 36.15 / 14.56, 12 h at 55 deg 67.31 / 7.24 (SPEC 16.17; 94.07 / 56.07, 31.44 / 16.84 and 66.68 / 5.70
-//    at 0.6.3, FFM 2.2.1 truth);
+// 1. GTO (n 2.40 rev/day, e 0.72, i 27 deg; perigee 220 km): each at most 250 and within 2 of 175.01 / 112.39 (the field
+//    EGM2008, 0.6.36; 180.70 / 117.62 before it, 192.87 / 123.44 before AP's own Sun and Moon, SPEC 16.17; 0.4.14:
+//    422.11 / 459.10);
+// 2. each within 0.5 of the value here and below 0.4.14's: the 500 km perigee GTO 82.34 / 52.54, half-day 35.88 / 16.01,
+//    12 h at 55 deg 65.60 / 7.20 (the field EGM2008, 0.6.36: the GTO-500 radial 0.75 m and the half-day radial 1.45 m
+//    worse, the rest better, from 82.34 / 51.79, 36.15 / 14.56 and 67.31 / 7.24; 94.07 / 56.07, 31.44 / 16.84 and
+//    66.68 / 5.70 at 0.6.3, FFM 2.2.1 truth);
 // 3. Molniya with drag, its coefficient fitted: held to what its record states, the fitted B within one stated sigma of
 //    the truth's 0.044 and the day-7 position within three stated sigmas along R, I and C (test/lib/stated-sigma.mjs).
 //    The 72 h fit has two solutions that small numerical changes move it between (stack #392):
@@ -18,8 +20,8 @@
 //    Both lie inside the statement: B at 0.12 and 0.34 of its stated sigma (about 0.005), the day-7 position within 0.22 of
 //    the stated sigma along each axis. Until 0.6.12 this was pinned to 0.5 m of a value (238.03 / 173.92 at 0.6.3, 238.50 /
 //    174.28 on 0.6.11; 0.4.14: 460.98 / 260.43; SPEC 16.11, modules-sdn-ap-drag-high-eccentricity-20261103).
-//    With the coefficient pinned at the truth's 0.044, the model's pin: 84.01 / 51.16 m to 5 cm (SPEC 16.17; 80.71 /
-//    50.51 m before, 80.76 m on 0.6.11), and
+//    With the coefficient pinned at the truth's 0.044, the model's pin: 80.11 / 47.70 m to 5 cm (the field EGM2008, 0.6.36;
+//    84.01 / 51.16 m before it, SPEC 16.17; 80.71 / 50.51 m before that, 80.76 m on 0.6.11), and
 //    along-track no worse than 0.4.14's;
 // 4. the field cut to 4x4 on both sides, the Sun, Moon and J5 off on both sides, 2-minute samples: day-7 3D RMS at most
 //    100 (0.4.14 printed first);
@@ -212,9 +214,12 @@ assert.ok(fixtures.GTO.release.alongTrack <= 250 && fixtures.GTO.release.radial 
 // AP's own Sun and Moon (SPEC 16.17, stack #446, on 0.6.19) move every fixture: GTO 192.87 / 123.44 to 180.70 / 117.62,
 // GTO-500 94.07 / 56.07 to 82.34 / 51.79, half-day 31.44 / 16.84 to 36.15 / 14.56, 12 h at 55 deg 66.68 / 5.70 to 67.31 /
 // 7.24, Molniya with its coefficient pinned 80.71 / 50.51 to 84.01 / 51.16 m (the averaged lunar theory of stack #421 now
-// meets the true Moon)
-assert.ok(near(fixtures.GTO.release.alongTrack, 180.70, 2) && near(fixtures.GTO.release.radial, 117.62, 2), 'GTO within 2 m of 180.70 / 117.62');
-for (const [name, [t, r]] of Object.entries({'GTO-500': [82.34, 51.79], 'half-day': [36.15, 14.56], '12-hour-55deg': [67.31, 7.24]})) {
+// meets the true Moon). The field EGM2008 on both sides (0.6.36, SPEC 16.2; the truth's was EGM-96 before, as AP's) moves them
+// again: GTO 180.70 / 117.62 to 175.01 / 112.39, GTO-500 82.34 / 51.79 to 82.34 / 52.54 (radial 0.75 m worse), half-day 36.15 /
+// 14.56 to 35.88 / 16.01 (radial 1.45 m worse), 12 h at 55 deg 67.31 / 7.24 to 65.60 / 7.20, Molniya with its coefficient
+// pinned 84.01 / 51.16 to 80.11 / 47.70 m
+assert.ok(near(fixtures.GTO.release.alongTrack, 175.01, 2) && near(fixtures.GTO.release.radial, 112.39, 2), 'GTO within 2 m of 175.01 / 112.39');
+for (const [name, [t, r]] of Object.entries({'GTO-500': [82.34, 52.54], 'half-day': [35.88, 16.01], '12-hour-55deg': [65.60, 7.20]})) {
   assert.ok(near(fixtures[name].release.alongTrack, t, 0.5) && near(fixtures[name].release.radial, r, 0.5), `${name}: within 0.5 m of ${t} / ${r}`);
   assert.ok(fixtures[name].release.alongTrack < fixtures[name]['0.4.14'].alongTrack && fixtures[name].release.radial < fixtures[name]['0.4.14'].radial, `${name}: below 0.4.14`);
 }
@@ -229,8 +234,8 @@ for (const [name, [t, r]] of Object.entries({'GTO-500': [82.34, 51.79], 'half-da
 }
 // Molniya with its coefficient pinned at the truth: the model's pin, to 5 cm (80.71 / 50.51 m on 0.6.12 and with the C1
 // E-grid alike), and no worse than 0.4.14
-assert.ok(near(fixtures['Molniya-pinned'].release.alongTrack, 84.01, 0.05) && near(fixtures['Molniya-pinned'].release.radial, 51.16, 0.05),
-  `Molniya, coefficient pinned: day 7 ${fixtures['Molniya-pinned'].release.alongTrack} / ${fixtures['Molniya-pinned'].release.radial} m against 84.01 / 51.16`);
+assert.ok(near(fixtures['Molniya-pinned'].release.alongTrack, 80.11, 0.05) && near(fixtures['Molniya-pinned'].release.radial, 47.70, 0.05),
+  `Molniya, coefficient pinned: day 7 ${fixtures['Molniya-pinned'].release.alongTrack} / ${fixtures['Molniya-pinned'].release.radial} m against 80.11 / 47.70`);
 assert.ok(fixtures['Molniya-pinned'].release.alongTrack <= fixtures['Molniya-pinned']['0.4.14'].alongTrack, 'Molniya, coefficient pinned: along-track no worse than 0.4.14');
 assert.ok(four.release <= 100, `4x4: ${four.release} m`);
 for (const check of checks) {

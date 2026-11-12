@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // E2E (issue 316, SPEC 18.7): the carried record and its hand-over set. A numerical forecast made by propagator/ffm
-// (EGM96 70 x 70, Sun and Moon from DE440, solar radiation pressure, drag; GCRF every 30 s, 4 days) carries 3 days from
+// (EGM2008 70 x 70, Sun and Moon from DE440, solar radiation pressure, drag; GCRF every 30 s, 4 days) carries 3 days from
 // 6 h after its start (record A: fit with OUTPUT.START_TIME and STOP_TIME); the hand-over set B is fit with
 // OUTPUT.START_TIME alone at A's stop. In low orbit (500 km) and at geosynchronous altitude:
 // - A's theory is anchored at the span's start, the observation cutoff: its EPOCH and its arc's first state within one
@@ -74,7 +74,7 @@ async function forecast(c, days) {
       epochJD: EPOCH_WHOLE + (k0 * STEP) / DAY, epochTimeScale: "UTC", targetJD: EPOCH_WHOLE + (k1 * STEP) / DAY, targetTimeScale: "UTC",
       position: state.slice(0, 3), velocity: state.slice(3), frame: "GCRF",
       sampleEpochsJD: Array.from({ length: k1 - k0 + 1 }, (_, j) => ({ jd: EPOCH_WHOLE + ((k0 + j) * STEP) / DAY, scale: "UTC" })),
-      forces: { gravityMode: "EGM96", maxDegree: 70, maxOrder: 70, thirdBody: true, srp: true, drag: c.drag, massKg: 1000, areaM2: 10, cd: 2.2 },
+      forces: { gravityMode: "EGM2008", maxDegree: 70, maxOrder: 70, thirdBody: true, srp: true, drag: c.drag, massKg: 1000, areaM2: 10, cd: 2.2 },
       weather: { epochUTCJD: EPOCH_WHOLE, F107: 150, F107a: 150, Ap: 15, Kp: 3 }, integrator: { tolerance: 1e-13, minStep: 0.01, maxStep: 120 },
       ephemerisSource: "JPL_SPK",
     };

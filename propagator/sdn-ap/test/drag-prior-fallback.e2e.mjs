@@ -6,7 +6,7 @@
 // Registration (2026-11-03, modules-sdn-ap-drag-prior-fallback-20261103): the fit's per-window drag diagnostics and the
 // drag prior's fall-back (SPEC 12.8). Baselines 0.4.11 (git a0f33bc54) and 0.4.17 (git 3c8fcb5c), the module under test
 // this build's dist.
-// Model truth (test/lib/heo-model-truth.mjs): FFM EGM96 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant
+// Model truth (test/lib/heo-model-truth.mjs): FFM EGM2008 70x70, Sun and Moon from DE440, NRLMSISE-00 drag at constant
 // weather on both sides (no SRP); AP FORCES 31,20 with NRLMSISE-00; 72 h fits from an osculating perigee, 7 days flown on
 // a 2-minute grid, day-3 whole-day 3D RMS. Read windows (test/lib/regime-windows.mjs): AP6's altimetry group DO, 72 h
 // arcs, as AP8 flew them (AP72); the windows were read by AP8 and its diagnosis.

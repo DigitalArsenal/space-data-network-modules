@@ -14,7 +14,7 @@
 //   node test/kernel-cost.mjs [--wasm FILE] [--repeats 5] [--steps 300,60] [--regimes name,...] [--json FILE] [--solid-tides]
 //     [--slow]
 // --solid-tides: the AP sets state the solid Earth tide (PERTURBATIONS.SOLID_TIDES_MODEL IERS 2010, SPEC 16.14).
-// --slow: the AP sets with gravity terms state the slow set (PERTURBATIONS.GRAVITY_MODEL "EGM-96; slow tesseral terms to
+// --slow: the AP sets with gravity terms state the slow set (PERTURBATIONS.GRAVITY_MODEL "EGM2008; slow tesseral terms to
 // degree 70", SPEC 16.18), as a fit in the low table writes it; a set outside the low table flies as without it.
 // Output: the largest position and velocity difference between two builds at every state of every regime's AP, SGP4XP
 // and SGP4 set over --days (30) at --step (60 s), each build flown in time order; the second build also in reverse

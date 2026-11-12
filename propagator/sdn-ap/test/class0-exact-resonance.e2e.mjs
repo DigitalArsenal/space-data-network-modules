@@ -3,7 +3,7 @@
 // rev/day at e 0.25, where its order-8 harmonics drift slower than 1e-3 n). The first-order table and the grid both leave
 // those harmonics out and no class carries them in the rates: a known defect (test/known-defects.json), kept apart from
 // test/class0-commensurability.e2e.mjs so that test stays strict.
-// Truth and fit as that test's: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256: EGM96 70 x 70, DE440
+// Truth and fit as that test's: test/lib/heo-model-truth.mjs (FFM 2.3.0, named below by its SHA-256: EGM2008 70 x 70, DE440
 // Sun and Moon, NRLMSISE-00 at constant weather, B 0.044 m^2/kg, no SRP, zero EOP, RK78 1e-12 and 300 s); a 72 h fit with the
 // library's drag prior; 7 days flown on a 1 h grid; i 50, RAAN 10, argp 30, M 0.
 // Asserted: the day-7 whole-day along-track RMS at most 250 m, what its neighbours meet on 0.6.11 (7.95: 94 m, 8.0: 220 m,
