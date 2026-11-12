@@ -5,8 +5,8 @@
 // Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by BASE, and
 // that arc fitted by BASE and by this build. BASE is a build before the cure whose theory is this build's: from the low
 // table's fast side (stack #477, SPEC 16.1) its first build with the band guard (git 258d824d, version string 0.6.36, its
-// SHA-256 checked). It must be: a set's own flight and a pre-cure record's states are held against the base's to 1e-11 of a
-// covariance's largest entry and 1 mm, and the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, wasm
+// SHA-256 checked). It must be: a pre-cure record's states are held against the base's flight of them to 1 mm (a set's own
+// flight is held against SELF_BASE, below), and the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, wasm
 // 1933b5da, the base until then): each case's arc fitted by 0.6.38 and that record flown at 0, 24 and 48 h by 0.6.38 and by
 // 0.6.42 (git b7a7191e, wasm f771420f; 258d824d reads the same) is at most 37.95 m apart at 300 km, i 5, 20.76 m at
 // 1,200 km, i 0.5 and 8.89 m at 550 km, i 52.9 (main 0.6.39, git 94351f34, wasm 7a857d63: within 0.1 mm of 0.6.38's).
@@ -18,8 +18,17 @@
 //   move by more than MOVED_KM). The epoch covariance less the floor the reader takes off (sdnap_test_epoch_floor) is the
 //   same bit for bit; and on both, at minute 0, P(0) less the floor at the flown state equals that remainder within
 //   IDENTITY of P(0)'s largest entry.
-// - A set's own flight is as it was: this build's record flown by this build against BASE's record flown by BASE,
-//   sdnap_covariance_at hourly to 48 h, within SELF.
+// - A set's own flight is as it was: this build's record flown by this build against another build's record of the same
+//   arc flown by that build, sdnap_covariance_at hourly to 48 h, within SELF.
+//   - The cure's property (a pre-cure build's own flight equals the cured build's) is held where this change moves neither
+//     the theory nor the floor: the case at caps 0 against BASE, and the case at caps 12 and 12 (no fast side, no radial
+//     floor factor) against MAIN, main's own pre-cure release (measured on 0.6.42: 2.7e-14 and 5.4e-13 of a time's largest
+//     entry, the along-track variance 2.8e-14 and 1.3e-12 relative).
+//   - The three cases at caps 31 and 20 hold only the build-to-build identity, against SELF_BASE: 0.6.42's first build with
+//     its radial floor factor exp(0.095) (git b7a7191e, wasm f771420f, SHA-256 checked). They must: the low table's records
+//     take that factor in the DRAG regime (SPEC 12.5), BASE carries exp(0.10), which moves them by 2.83e-3 to 4.31e-3 of a
+//     time's largest entry (printed), and no build before the cure carries exp(0.095). Across the cure itself they were held
+//     to 1e-11 between the fast side's builds before and after it (258d824d and 9855dadd, both at exp(0.10)).
 // - Caps 0 (an AP set without gravity terms): this build's record flies its covariance with the floor at the two-body
 //   state (one rule for every AP record), and BASE's has it refused.
 // - BASE's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of BASE's
@@ -35,8 +44,8 @@
 // - 0.6.39's fit of the 0.4.0 inputs (ap-fit-0.6.39.ocm, the stored record of 0.6.39 to 0.6.41, written by the epoch
 //   floor's build at 0.6.39) has 0.6.36's fit's mean elements bit for bit.
 // Cases: 300 km at i 5 and 1,200 km at i 0.5 (where 0.6.36's records read by a later theory came out narrowest, or with a
-// negative along-track variance: stack #551), 550 km at i 52.9 (the fixture's orbit, where they came out wider), and 300 km
-// at i 5 with caps 0.
+// negative along-track variance: stack #551), 550 km at i 52.9 (the fixture's orbit, where they came out wider), 300 km
+// at i 5 with caps 0, and 550 km at i 52.9 with caps 12 and 12.
 //   node test/epoch-floor.e2e.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -58,6 +67,7 @@ import {scratchTemp} from './lib/scratch.mjs';
 ensureBuilt();
 const BASE = {version: '0.6.36', commit: '258d824d2c83da8aa0f9ad2325273cfe478ae5d8', sha256: '01f8fd18eb97107b4cd1e0d7694f31787bcddf7cbb61f44255d83e3f45f3f56f'};
 const MAIN = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
+const SELF_BASE = {version: '0.6.42', commit: 'b7a7191e040e1cacff97feb30a4410364c0bdbbf', sha256: 'f771420f535bbef9721d491f8193b235d5105ac6a886dd5ca3e10b488cf882b8'};
 const SELF = {ofLargest: 1e-11, along: 1e-10}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
 // the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)
 const TWO_BODY = [
@@ -76,6 +86,11 @@ assert.equal(createHash('sha256').update(mainBytes).digest('hex'), MAIN.sha256, 
 const mainPath = path.join(scratchTemp('sdn-ap-epoch-floor-main-'), `sdn-ap-${MAIN.version}.wasm`);
 fs.writeFileSync(mainPath, mainBytes);
 const mainH = await createStandaloneHarness('browser', mainPath, {surface: 'direct'});
+const selfBytes = execFileSync('git', ['-C', modules, 'show', `${SELF_BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
+assert.equal(createHash('sha256').update(selfBytes).digest('hex'), SELF_BASE.sha256, `${SELF_BASE.version} (${SELF_BASE.commit.slice(0, 8)}) sha256`);
+const selfPath = path.join(scratchTemp('sdn-ap-epoch-floor-self-'), `sdn-ap-${SELF_BASE.version}.wasm`);
+fs.writeFileSync(selfPath, selfBytes);
+const selfH = await createStandaloneHarness('browser', selfPath, {surface: 'direct'});
 
 const RE = 6378.1363, MU = 398600.4418, t0 = Date.parse('2026-10-01T00:00:00Z');
 const iso = (ms) => new Date(ms).toISOString().replace('Z', '');
@@ -121,9 +136,12 @@ const identity = (rec) => {
 };
 const statesOf = (r) => OEM.getRootAsOEM(new flatbuffers.ByteBuffer(new Uint8Array(r.outputs[0].payload))).unpack().EPHEMERIS_DATA_BLOCK[0];
 
+// `own`: whose own record and flight a case's own flight is held against (SELF), within SELF: 'self' SELF_BASE (the
+// build-to-build identity), 'base' BASE and 'main' MAIN (pre-cure builds: the cure's property)
 const CASES = [
-  {name: '300 km, i 5', hp: 300, i: 5, caps: [31, 20]}, {name: '1,200 km, i 0.5', hp: 1200, i: 0.5, caps: [31, 20]},
-  {name: '550 km, i 52.9', hp: 550, i: 52.9, caps: [31, 20]}, {name: '300 km, i 5, caps 0', hp: 300, i: 5, caps: [0, 0]},
+  {name: '300 km, i 5', hp: 300, i: 5, caps: [31, 20], own: 'self'}, {name: '1,200 km, i 0.5', hp: 1200, i: 0.5, caps: [31, 20], own: 'self'},
+  {name: '550 km, i 52.9', hp: 550, i: 52.9, caps: [31, 20], own: 'self'}, {name: '300 km, i 5, caps 0', hp: 300, i: 5, caps: [0, 0], own: 'base'},
+  {name: '550 km, i 52.9, caps 12 and 12', hp: 550, i: 52.9, caps: [12, 12], own: 'main'},
 ];
 let producerRecord = null, standInMovedKm = 0;
 for (const c of CASES) {
@@ -163,12 +181,15 @@ for (const c of CASES) {
     check(same && idm.gap <= IDENTITY,
       `${c.name}: read with the gravity caps at 12 and 6: remainder ${same ? 'the same' : 'moved'}, flown epoch state moved ${flownMovedKm} km, identity ${idm.gap}`);
   }
-  // a set's own flight is as it was
-  const [ob, mc] = [covAt(base, old), covAt(cur, mine)];
-  const self = ob.status === 0 && mc.status === 0 ? apart(ob.out, mc.out) : null;
-  row.self = self;
+  // a set's own flight is as it was, against the case's `own` build (and against BASE, printed)
+  const ownH = c.own === 'main' ? mainH : c.own === 'base' ? base : selfH;
+  const ownName = c.own === 'main' ? `${MAIN.version} (${MAIN.commit.slice(0, 8)})` : c.own === 'base' ? `${BASE.version} (${BASE.commit.slice(0, 8)})` : `${SELF_BASE.version} (${SELF_BASE.commit.slice(0, 8)})`;
+  const [ob, os, mc] = [covAt(base, old), covAt(ownH, c.own === 'base' ? old : await fitBy(ownH)), covAt(cur, mine)];
+  const self = os.status === 0 && mc.status === 0 ? apart(os.out, mc.out) : null;
+  row.self = {against: ownName, ...self};
+  row.selfAgainstBase = ob.status === 0 && mc.status === 0 ? apart(ob.out, mc.out) : null;
   check(self && self.ofLargest <= SELF.ofLargest && self.along <= SELF.along,
-    `${c.name}: this build's record on this build against ${BASE.version}'s on ${BASE.version}: ${JSON.stringify(self ?? [ob.status, mc.status])} (within ${JSON.stringify(SELF)})`);
+    `${c.name}: this build's record on this build against ${ownName}'s on it: ${JSON.stringify(self ?? [os.status, mc.status])} (within ${JSON.stringify(SELF)})`);
   // the record written before: its covariance refused by name, its states flown as the base flies them
   const oc = covAt(cur, old);
   const out = {output: {EPOCHS: [iso(t0), iso(t0 + 86400000), iso(t0 + 2 * 86400000)], FRAME: pcfOutputFrame.GCRF}};
