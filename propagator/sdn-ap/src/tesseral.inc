@@ -1010,7 +1010,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
     const double Gb = q == 0 ? 1.0 + (l * l) * e02 : ll * e_floor;
     const double a0_AFb = a0 * amp0[l] * egm.hypot_fb[l][m];
     const double lhs = a0_AFb * (Gb * (3.0 * std::abs(j) * inv_a02 + 2.0 * ll * inv_na2 * ap) +
-                                 (ll * ll + l * Gb) * inv_na2 * ap);
+                                 (2.0 * ll * ll + l * Gb) * inv_na2 * ap);
     return lhs >= keep_partner * ap * ap;  // a bound: the partners' floor, the lowest size a kept term can have
   };
 
@@ -1341,7 +1341,9 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           const double A = amp0[l] * sv * weight;
           const double ap = std::fabs(psidot);
           const double mag = a0 * A * (std::fabs(fv * G) * (3.0 * std::abs(j) * inv_a02 + 2.0 * (l + 1) * inv_na2 * ap) +
-                                       (std::fabs(fv * g1) + std::fabs(dfv * G)) * inv_na2 * ap);
+                                       (2.0 * std::fabs(fv * g1) + std::fabs(dfv * G)) * inv_na2 * ap);
+          // the size is the census's (SPEC 16.20): the eccentricity vector's part counted as it acts along track, twice its
+          // radial part
           // on the fast side the cut is on the term's own size: a weight under 1 is the band taper's share of a term, kept
           // whatever the share
           const double share = fast_on && weight < 1.0 ? weight : 1.0;
