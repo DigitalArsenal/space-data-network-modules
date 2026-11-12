@@ -11,8 +11,10 @@
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
 //    fitted AP set (0.6.39's fit, test/fixtures/ap-fit-0.6.39.ocm; 0.6.36's fit has its covariance refused on both) flown 2
 //    days at 600 s give ephemerides within NO_HARM
-//    (below) on this build and on BASE (the low table's fast side's first build with the epoch floor of SPEC 12.4, git 9855dadd,
-//    SHA-256 checked, its own version string 0.6.39; it must be a build of this theory, since no harm is held at 15 mm and the
+//    (below) on this build and on BASE (from 0.6.43 the zonal theory's constant radial term's first build on 0.6.42, git
+//    a5293c54, SHA-256 checked, its own version string 0.6.43; until then the low table's fast side's first build with the
+//    epoch floor of SPEC 12.4, git 9855dadd, its own version string 0.6.39; it must be a build of this theory, since no
+//    harm is held at 15 mm and the
 //    fast side moves a low-table set 60 to 96 m from a build without it, and a build with the epoch floor, since a reader before
 //    it takes 0.6.36's record's floor off at its own theory state; the fast side's first build, git 73331c6a, version string
 //    0.6.36, before it;
@@ -33,7 +35,7 @@ import {seedOcm, flight, T} from './lib/ocm.mjs';
 import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE_VERSION = '0.6.39', BASE = '9855dadd6', BASE_SHA256 = '302ec56172e8f44efa660979d9117e102913ba4caf65acdd9beca81af57c759b';
+const BASE_VERSION = '0.6.43', BASE = 'a5293c54b', BASE_SHA256 = 'f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935';
 // 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
 // until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
 // measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
@@ -80,6 +82,12 @@ const BASE_VERSION = '0.6.39', BASE = '9855dadd6', BASE_SHA256 = '302ec56172e8f4
 // not a release), which flies 0.6.39's fit of the arc as this build does: a base before the epoch floor takes 0.6.36's
 // record's floor off at its own fast-side theory state, 0.272 of a line's largest entry from where 0.6.36 put it on (the
 // figure above).
+// The zonal theory's constant radial term (0.6.43, SPEC 16.23) moves them from 9855dadd: LEO 2,029.98, geostationary 183.49,
+// Etalon 14.37, GPS 37.90, e 0.25 462.26 and e 0.3 462.26 mm (velocity 2.23 to 2,227.31 um/s), and the fitted set (0.6.39's
+// fit) by 2,151.66 mm, its covariance by 9.40e-7 of a line's largest entry: every AP set with gravity terms carries the
+// term, about (R_E / a)^3 of the Earth's radius times J2 squared; SGP4XP byte-identical. From 0.6.43 the baseline is the
+// term's first build on 0.6.42 (git a5293c54, not a release), every AP set under the one bound, 15 mm; it carries the fast
+// side and the epoch floor.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
