@@ -191,7 +191,9 @@ the table's size cut of 0.5 m, and none inside the slow band at more than 1 - w 
 band guard; on every other branch m-daily
 and the other first-order terms to 12 and near-resonant terms to 31; shallow resonances and the half-day and one-day
 resonant tails to 31; each to the degree asked if lower;
-MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1; in the low table the slow set below takes
+degree 70 whatever degree is asked, so a record at tesseral 31, 20 or 12 still flies slow terms to degree 70, as its
+GRAVITY_MODEL states: "EGM2008; slow tesseral terms to degree 70"); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM2008 (from 0.6.36; EGM-96 through 0.6.34), pinned from propagator/ffm/lib by `build.mjs`. From 0.6.36 a flight
 refuses an AP set with gravity terms whose PERTURBATIONS.GRAVITY_MODEL is not that field (gravity-model-mismatch): every
@@ -204,14 +206,18 @@ carried degrees 2 to 4 only. On made-up geostationary sets, AP against FFM with 
 went from 16.9-136.1 m to 8.5-11.1 m at day 7 at 12 longitudes; what remains is AP's analytic Moon (stack #446;
 `test/one-day-resonant-tail.e2e.mjs`).
 
-The slow set (from 0.6.25) carries, in a fitted low orbit, every tesseral term of degree 2 to 70 with j = 1 to 6 and |q| up
+The slow set (from 0.6.25) carries, in a fitted low orbit, whatever MAXIMUM_TESSERAL_DEGREE the record states, every tesseral
+term of degree 2 to 70 with j = 1 to 6 and |q| up
 to 4 (from 0.6.27; q = 0 in 0.6.25) whose own angle drifts within 1.3 x 0.045 n at the epoch and whose size reaches 0.5 m
 (along track through the mean motion, or from 0.6.27 once per revolution through the eccentricity vector). Each term is
 tapered by its own current rate, and the output table holds the rest, so a term that drag moves through its band's edge
 leaves no step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst day-5 error after a pinned fit went from 1,584 m to
 218 m at i 53 and from 1,905 m to 423 m at i 97.6. On real 72 h fits, AP's day-5 forecast within 100 m of the full
 numerical arm's went from 21 to 34 of 56 windows on laser spheres and from 28 to 42 of 112 on altimetry (0.6.25). SPEC 16.18
-has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`).
+has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`). Against a model
+truth cut below degree 70, AP is compared like with like only with `sdnap_slow_degree_cap` set to the truth's degree (a test
+hook; no flight reads it): against a 31 x 31 truth, a record at tesseral 31 flies slow terms of degree 32 to 70 that the
+truth leaves out.
 
 The field's census (from 0.6.32; SPEC 16.20) lists, for a set of mean elements, every tesseral term of the field to degree 70
 whose size over a 5-day forecast reaches 0.5 m, with the weight each carrier the set builds holds of it and the term's
