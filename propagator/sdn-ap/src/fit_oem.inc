@@ -571,6 +571,7 @@ static int fit_blocks() {
         bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
         bool free_band = false;                          ///< BTERM on the 600-2,500 km default of a 71 h arc (SPEC 12.8)
         double sigma_km = 0.0;  ///< the data sigma the fit weighted with, above the drag (SPEC 12.1); 0: the stages' 1 km
+        double along_factor = 1.0;  ///< DIAGNOSTIC (stack #489, design C2): the along-track sigma's factor the pass weighed with
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       // SPEC 12.1: the input's own position sigma, where the block states one (a floor of the data sigma)
@@ -762,10 +763,22 @@ static int fit_blocks() {
         // short arc a free BTERM folds the theory's own along-track error into itself and the band's prior is what holds
         // it (measured on the laser-ranged spheres' 24 h arcs); the eccentric sets are owed their own measurement.
         double sigma_km = 0.0;
-        if (cov::regime_of(row) != 0 ||
-            (fit_end_min - fit_begin_min >= pcf::kDataSigmaUnderDragMinArcHours * 60.0 && row.eccentricity <= xpt::tess::kWideE)) {
+        // DIAGNOSTIC (stack #489, design C1): under the drag on an arc shorter than 71 h at or below e 0.3, the data at their
+        // own sigma times sqrt(tau / dt), tau = kDiagTauRevolutions periods and dt the arc's state spacing (the information
+        // counted as one independent sample per tau), in the cost and in the covariance alike
+        const bool long_rule = cov::regime_of(row) != 0 ||
+                               (fit_end_min - fit_begin_min >= pcf::kDataSigmaUnderDragMinArcHours * 60.0 && row.eccentricity <= xpt::tess::kWideE);
+        const bool short_drag = !long_rule && row.eccentricity <= xpt::tess::kWideE;
+        if (long_rule || short_drag) {
           double weighted = fit::kUnitSigmaKm;
-          fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, weighted, iterations);
+          const double revolutions = std::fmax(1.0, (fit_end_min - fit_begin_min) / period);
+          constexpr double kDiagTauRevolutions = 1.0;
+          constexpr bool kDiagAlongTrackOnly = true;  // C1 false, C2 true
+          const double f = short_drag ? std::sqrt(kDiagTauRevolutions * static_cast<double>(t_fit.size()) / revolutions) : 1.0;
+          const double scale = kDiagAlongTrackOnly ? 1.0 : f;
+          P.along_factor = kDiagAlongTrackOnly ? f : 1.0;
+          const fit::AlongTrackScope along(P.along_factor);
+          fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, weighted, iterations, scale);
           if (weighted != fit::kUnitSigmaKm) sigma_km = weighted;
         }
         P.sigma_km = sigma_km;
@@ -897,6 +910,7 @@ static int fit_blocks() {
           (chosen.fit_end_min - chosen.fit_begin_min) / 60.0 >= fitoem::kFallbackArcHours) {
         cov::Set first_cov;
         double first_ng = 0.0;
+        const fit::AlongTrackScope along_first(chosen.along_factor);
         const bool first_have = cov::of_fit(chosen.row, chosen.opt, chosen.t_fit.data(), chosen.r_fit.data(),
                                             static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, chosen.sigma_km, first_cov, first_ng,
                                             ocm::theory_of(chosen.row.theory, po.forces) == meanElementSource_AP);
@@ -967,6 +981,7 @@ static int fit_blocks() {
       // SPEC 12: the fit's covariance at its solution (at the two-line digits), its epoch image the $OMM's COVARIANCE
       cov::Set fit_cov;
       double ng_rate = 0.0;
+      const fit::AlongTrackScope along_cov(chosen.along_factor);
       const bool have_cov =
           cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, sigma_km, fit_cov, ng_rate,
                       ocm::theory_of(row.theory, po.forces) == meanElementSource_AP);

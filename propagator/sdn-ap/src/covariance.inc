@@ -606,6 +606,16 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
     floor[3] += u[2] * u[0];
     floor[4] += u[2] * u[1];
     floor[5] += u[2] * u[2];
+    if (fit::g_along_factor > 1.0) {
+      // DIAGNOSTIC (stack #489, design C2): the rows through the state's L, as the cost weighed them
+      double L[9], Jt[3 * kMaxAug];
+      fit::along_rows(rm, vm, fit::g_along_factor, L);
+      for (int i = 0; i < 3; ++i)
+        for (int a = 0; a < np; ++a) Jt[i * np + a] = L[3 * i] * J[0 * np + a] + L[3 * i + 1] * J[1 * np + a] + L[3 * i + 2] * J[2 * np + a];
+      for (int a = 0; a < np; ++a)
+        for (int c = 0; c <= a; ++c) A[a * np + c] += Jt[0 * np + a] * Jt[0 * np + c] + Jt[1 * np + a] * Jt[1 * np + c] + Jt[2 * np + a] * Jt[2 * np + c];
+      continue;
+    }
     for (int a = 0; a < np; ++a)
       for (int c = 0; c <= a; ++c) A[a * np + c] += J[0 * np + a] * J[0 * np + c] + J[1 * np + a] * J[1 * np + c] + J[2 * np + a] * J[2 * np + c];
   }

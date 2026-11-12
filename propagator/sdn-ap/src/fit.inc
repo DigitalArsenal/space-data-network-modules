@@ -313,6 +313,40 @@ inline bool& jacobian_fallback() {
   return b;
 }
 
+/// DIAGNOSTIC (stack #489, design C2): while above 1, the cost and the covariance weigh each state's along-track residual
+/// at the data sigma times this factor, its radial and cross-track residuals at the data sigma (each state's own axes).
+inline thread_local double g_along_factor = 1.0;
+struct AlongTrackScope {
+  double prev;
+  explicit AlongTrackScope(double f) : prev(g_along_factor) { g_along_factor = f; }
+  ~AlongTrackScope() { g_along_factor = prev; }
+};
+/// The rows of L = diag(1, 1/f, 1) [U; V; W] at a state (U radial, W along the orbit normal, V = W x U), 9 doubles.
+inline void along_rows(const double* rr, const double* vv, double f, double* L) {
+  const double rn = std::sqrt(rr[0] * rr[0] + rr[1] * rr[1] + rr[2] * rr[2]);
+  double U[3] = {rr[0] / rn, rr[1] / rn, rr[2] / rn};
+  double W[3] = {rr[1] * vv[2] - rr[2] * vv[1], rr[2] * vv[0] - rr[0] * vv[2], rr[0] * vv[1] - rr[1] * vv[0]};
+  const double wn = std::sqrt(W[0] * W[0] + W[1] * W[1] + W[2] * W[2]);
+  for (double& q : W) q /= wn;
+  const double V[3] = {W[1] * U[2] - W[2] * U[1], W[2] * U[0] - W[0] * U[2], W[0] * U[1] - W[1] * U[0]};
+  for (int j = 0; j < 3; ++j) { L[j] = U[j]; L[3 + j] = V[j] / f; L[6 + j] = W[j]; }
+}
+/// Every state's L from the observed positions, the velocity from its neighbors in time.
+inline std::vector<double> along_frames(const double* t, const double* r, int count, double f) {
+  std::vector<double> L(9 * static_cast<size_t>(count));
+  std::vector<int> order(count);
+  for (int k = 0; k < count; ++k) order[k] = k;
+  std::sort(order.begin(), order.end(), [&](int a, int b) { return t[a] < t[b]; });
+  for (int i = 0; i < count; ++i) {
+    const int k = order[i], a = order[i > 0 ? i - 1 : i], b = order[i + 1 < count ? i + 1 : i];
+    const double dt = t[b] - t[a];
+    double v[3];
+    for (int j = 0; j < 3; ++j) v[j] = dt != 0.0 ? (r[3 * b + j] - r[3 * a + j]) / dt : 0.0;
+    along_rows(r + 3 * k, v, f, L.data() + 9 * k);
+  }
+  return L;
+}
+
 /// Levenberg-Marquardt. `row` holds the starting set (epoch, theory and the
 /// fixed terms) and receives the fitted one. Each trial set flies its own branch unless a BranchScope pins one (run).
 /// The cost is sum |e_k|^2 / sigma_km^2 plus the priors; `data_sigma` marks sigma_km as the data's own (the cost then
@@ -349,9 +383,19 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   PriorTerm priors[3];
   const int n_priors = priors_of(o, priors);
   const double w = 1.0 / (sigma_km * sigma_km);  // the data's weight, 1 / sigma^2 (km^-2)
+  // DIAGNOSTIC (stack #489, design C2): each state's residual and Jacobian rows taken through its L
+  const bool c2 = g_along_factor > 1.0;
+  const std::vector<double> Lk = c2 ? along_frames(t, r, count, g_along_factor) : std::vector<double>();
   auto cost_of = [&](const double* rr, const double* xx) {
     double c = 0.0;
-    for (int i = 0; i < nres; ++i) c += rr[i] * rr[i];
+    if (c2)
+      for (int k = 0; k < count; ++k)
+        for (int i = 0; i < 3; ++i) {
+          const double v = Lk[9 * k + 3 * i] * rr[3 * k] + Lk[9 * k + 3 * i + 1] * rr[3 * k + 1] + Lk[9 * k + 3 * i + 2] * rr[3 * k + 2];
+          c += v * v;
+        }
+    else
+      for (int i = 0; i < nres; ++i) c += rr[i] * rr[i];
     c *= w;
     for (int q = 0; q < n_priors; ++q) {
       const double d = (xx[priors[q].index] - priors[q].mean) / priors[q].sigma;
@@ -435,6 +479,20 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
     auto normal = [&]() {
     for (int q = 0; q < kMaxParams * kMaxParams; ++q) A[q] = 0.0;
     for (int q = 0; q < kMaxParams; ++q) g[q] = 0.0;
+    if (c2)
+      for (int k = 0; k < count; ++k)
+        for (int i = 0; i < 3; ++i) {
+          const double* L = Lk.data() + 9 * k + 3 * i;
+          double jr[kMaxParams];
+          for (int a = 0; a < np; ++a)
+            jr[a] = L[0] * jac[(3 * k) * kMaxParams + a] + L[1] * jac[(3 * k + 1) * kMaxParams + a] + L[2] * jac[(3 * k + 2) * kMaxParams + a];
+          const double rv = L[0] * res[3 * k] + L[1] * res[3 * k + 1] + L[2] * res[3 * k + 2];
+          for (int a = 0; a < np; ++a) {
+            g[a] -= jr[a] * rv;
+            for (int b = 0; b <= a; ++b) A[a * np + b] += jr[a] * jr[b];
+          }
+        }
+    else
     for (int i = 0; i < nres; ++i)
       for (int a = 0; a < np; ++a) {
         g[a] -= jac[i * kMaxParams + a] * res[i];
@@ -620,7 +678,7 @@ inline double data_sigma_km(const Result& res, int count, const Options& o, doub
 /// a refit the theory refuses, or one that ends at a limit in n (kBranchLimit), leaves the one before; one held at an
 /// eccentricity switch (run's held_at_switch) is kept.
 inline void reweight(ElementRow& row, const double* t, const double* r, int count, const Options& o, double stated_km, Result& res,
-                     double& sigma_km, int& iterations) {
+                     double& sigma_km, int& iterations, double scale = 1.0) {
   // once the data outweigh the priors the analytic columns (two-body motion, the J2 secular drifts, the drag column
   // through n-dot) stop short of the minimum: these passes take the theory's own columns where no analytic step helps
   struct FallbackScope {
@@ -629,7 +687,8 @@ inline void reweight(ElementRow& row, const double* t, const double* r, int coun
     ~FallbackScope() { jacobian_fallback() = prev; }
   } fallback_scope;
   for (int pass = 0; pass < kSigmaPasses; ++pass) {
-    const double next = data_sigma_km(res, count, o, stated_km);
+    // DIAGNOSTIC (stack #489, design C): `scale` counts the information as fewer independent samples than states
+    const double next = data_sigma_km(res, count, o, stated_km) * scale;
     if (std::fabs(next - sigma_km) <= kSigmaTolerance * sigma_km) return;
     ElementRow trial = row;
     const Result again = run(trial, t, r, count, o, next, true);
