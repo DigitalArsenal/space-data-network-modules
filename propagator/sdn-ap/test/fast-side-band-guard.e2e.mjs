@@ -9,7 +9,7 @@
 // fixture rows; epoch 2026-10-29 00:00 UTC). Drag takes the rate of terms inside the band's edge at the epoch through zero
 // at 101.07 h (on the case's fitted record, the m = 48, j = 3 terms of degree 53 to 69).
 // Flown every 60 s for eight days, or to the set's decay crossing (SPEC 16.25, stack #564: the call answers the epochs before
-// it and its block's COMMENT names it; before 0.6.46, the most whole days the module flew before it refused). The jump detector
+// it and its block's COMMENT names it; before 0.6.47, the most whole days the module flew before it refused). The jump detector
 // is |d_k - (d_(k-1) + d_(k+1))/2|, d the second difference of position less h^2 times the two-body acceleration
 // (mu 398600.4415 km^3/s^2): half the fourth difference of the states. One state displaced by delta reads 3 delta (the
 // fourth difference's 6 delta, halved); a block of states displaced together by delta reads 1.5 delta at its edge; smooth

@@ -5,14 +5,14 @@
 // - Two decaying seeds (#564's: AP records 31/20 with the slow set and the solid tide, Jacchia 1970 on the fixture's constant
 //   rows, epoch 2026-10-29; perigee 200 km, e 0.001, BTERM 0.01, and perigee 220 km, e 0.01, BTERM 0.1), `propagate` every
 //   60 s for 4 days: the block stops before the crossing, its COMMENT "decayed:<time>; <n> epochs after it refused" and its
-//   USEABLE_STOP_TIME the crossing; every state answered is 0.6.42's (modules 86786933) bit for bit; the jump detector (half
+//   USEABLE_STOP_TIME the crossing; every state answered is 0.6.45's (modules b1a08e44) bit for bit; the jump detector (half
 //   the fourth difference of the states at 60 s, less two-body) reads at most BOUND_M over them. A call asking only for
 //   times past the crossing is refused `decayed:<time>`, the same time.
 // - The same seeds in the epoch store (load_epochs, sdnap_epochs_set_at) every 10 min, in time order, reversed and shuffled,
 //   each from a fresh load: every time before the crossing the same state to the bit in all three orders, every time past
 //   it status 4. The crossing is the record's, not the call's.
 // - Two sets that never reach the rule in 7 days (perigee 500 km near-circular; perigee 300 km at e 0.3, where drag takes the
-//   apogee down and the perigee barely moves): `propagate` every 60 s for 7 days is 0.6.42's bit for bit, with no COMMENT.
+//   apogee down and the perigee barely moves): `propagate` every 60 s for 7 days is 0.6.45's bit for bit, with no COMMENT.
 // - sdnap_covariance_at of an AP record moved onto a decaying orbit (test/fixtures/ap-fit-0.6.42.ocm, its elements set to
 //   perigee 200 km, e 0.001, BTERM 0.01, its s_d restated): status 4, NaN at every time past the record's crossing, every
 //   time a day before it filled.
@@ -32,7 +32,7 @@ import { seedOcm, flight, rowsThrough, repackOcm, T } from './lib/ocm.mjs';
 import { spwFixtureRows } from './lib/spw-constant.mjs';
 import { scratchTemp } from './lib/scratch.mjs';
 
-const BASE = { commit: '86786933', sha256: '3c389abf' };  // 0.6.42, the build before the rule
+const BASE = { commit: 'b1a08e44', sha256: 'edc9b14b' };  // 0.6.45, the build before the rule
 const MU = 398600.4418, RE = 6378.137, H = 60, BOUND_M = 4.5;
 const epoch = '2026-10-29T00:00:00.000', t0 = Date.parse(epoch + 'Z');
 const iso = (s) => new Date(t0 + s * 1000).toISOString().replace('Z', '');
@@ -47,9 +47,9 @@ const seedOf = (c) => seedOcm({ epoch, n: nOf(c.hp, c.e), e: c.e, i: 55, raan: 4
 ensureBuilt();
 const modulesRoot = path.resolve(packageRoot, '../..');
 const baseBytes = execFileSync('git', ['-C', modulesRoot, 'show', `${BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], { maxBuffer: 1 << 26 });
-check(crypto.createHash('sha256').update(baseBytes).digest('hex').startsWith(BASE.sha256), `0.6.42 at ${BASE.commit} is not ${BASE.sha256}`);
+check(crypto.createHash('sha256').update(baseBytes).digest('hex').startsWith(BASE.sha256), `0.6.45 at ${BASE.commit} is not ${BASE.sha256}`);
 const scratch = scratchTemp('sdnap-decay-');
-const basePath = path.join(scratch, 'module-0.6.42.wasm');
+const basePath = path.join(scratch, 'module-0.6.45.wasm');
 fs.writeFileSync(basePath, baseBytes);
 const now = await createStandaloneHarness('browser', wasmPath, { surface: 'direct' });
 const base = await createStandaloneHarness('browser', basePath, { surface: 'direct' });
@@ -97,7 +97,7 @@ for (const c of SEEDS) {
   check(f.lines.length + Number(m[2]) === secs.length, `${c.name}: ${f.lines.length} answered and ${m[2]} refused of ${secs.length}`);
   check(f.lines.every((l) => msOf(l.epoch) < crossMs), `${c.name}: an answered epoch at or past the crossing`);
   const b = await fly(base, seed, secs.slice(0, f.lines.length));
-  check(!!b.lines && b.lines.every((l, k) => sameBits(l.s, f.lines[k].s)), `${c.name}: a state before the crossing differs from 0.6.42's (${b.error ?? ''})`);
+  check(!!b.lines && b.lines.every((l, k) => sameBits(l.s, f.lines[k].s)), `${c.name}: a state before the crossing differs from 0.6.45's (${b.error ?? ''})`);
   const worst = detector(f.lines.map((l) => l.s.slice(0, 3)));
   check(worst <= BOUND_M, `${c.name}: the jump detector reads ${worst.toFixed(3)} m before the crossing (at most ${BOUND_M} m)`);
   const after = await fly(now, seed, secs.filter((s) => t0 + s * 1000 > crossMs + 3600e3));
@@ -126,8 +126,8 @@ for (const c of [{ name: 'perigee 500 km, e 0.001, BTERM 0.01', hp: 500, e: 0.00
   const seed = seedOf(c), secs = Array.from({ length: (7 * 86400) / H + 1 }, (_, j) => j * H);
   const f = await fly(now, seed, secs), b = await fly(base, seed, secs);
   check(!!f.lines && !!b.lines && f.lines.length === secs.length && !f.comment && f.lines.every((l, k) => sameBits(l.s, b.lines[k].s)),
-    `${c.name}: 7 days at 60 s are not 0.6.42's bit for bit (${f.error ?? f.comment ?? ''} | ${b.error ?? ''})`);
-  console.log(`${c.name}: ${f.lines?.length ?? 0} states over 7 days, 0.6.42's bit for bit`);
+    `${c.name}: 7 days at 60 s are not 0.6.45's bit for bit (${f.error ?? f.comment ?? ''} | ${b.error ?? ''})`);
+  console.log(`${c.name}: ${f.lines?.length ?? 0} states over 7 days, 0.6.45's bit for bit`);
 }
 
 // sdnap_covariance_at past a record's crossing

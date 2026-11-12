@@ -5055,7 +5055,7 @@ keeps its own.
   finds the same crossing from the record.
 - What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
   does not describe (they were up to 31,250 km off).
-- `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.42's bit for bit
+- `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.45's bit for bit
   and the jump detector at most 2.88 m over them; the epoch store gives the same states before the crossing and status 4
   after it in time order, reversed and shuffled; sets at a 500 km perigee and at a 300 km perigee with e 0.3 fly 7 days
   bit for bit; `sdnap_covariance_at` returns 4 past a record's crossing.
