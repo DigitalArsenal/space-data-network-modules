@@ -16,9 +16,9 @@
 // with AP's terms selected (a test build that adds the selector), sdnap_propagate_soa at 20 instants on 1 thread, on 8 (five
 // 512-row chunks: threaded batches) and on 8 at a 1-byte bound: every row flies, bit for bit.
 // A failed allocation is refused by name ("out-of-memory"), never success and never another reason:
-// - an instance held to 256 MB and filled through sdnap_alloc to about 4 MB free: `propagate` of the class 0 set and `fit` of
-//   that set's own states answer out-of-memory, and the cache then holds no grid (a set that failed to initialize keeps no
-//   reference); an epoch-store state answers the theory's refusal code; with the memory freed, the same `propagate` and the
+// - an instance held to 256 MB and filled through sdnap_alloc to about 3 MB free: `propagate` of the class 0 set and `fit` of
+//   that set's own states answer out-of-memory, and the cache then holds as many grids as a fresh instance (a set that failed
+//   to initialize keeps no reference); an epoch-store state answers the theory's refusal code; with the memory freed, the same `propagate` and the
 //   same epoch-store state are bit for bit a fresh instance's;
 // - the same test build fails the N-th allocation of a `fit` (N at a fifth, a half and four fifths of the fit's own count):
 //   each answers out-of-memory, and the same fit on the same instance afterwards writes the fresh instance's record, byte
