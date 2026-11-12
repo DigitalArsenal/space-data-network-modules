@@ -146,7 +146,7 @@ try {
   // build takes the floor off at its own theory state, stack #562), so the covariance is held below against 0.6.42's
   // numbers, flown by this build. The low table's fast side (0.6.42, SPEC 16.1, stack #477) moves this 550 km set, in the
   // low table at tesseral 31: main 0.6.41 (git afdd1568, wasm bec591fe) flies 0.6.39's fit within 1 cm of 7ebc98e4, and
-  // 0.6.42 (git b7a7191e, wasm f771420f) flies it 49.816 m from it in EME2000 and TEME. A base before the fast side holds
+  // 0.6.42 (git b7a7191e, wasm f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) flies it 49.816 m from it in EME2000 and TEME. A base before the fast side holds
   // the flight to another theory's, so from 0.6.42 the baseline is the fast side's first build with the band guard (git
   // 258d824d), which flies the low table as this build does, the bound kept. The SGP4 and SGP4XP base (0.6.4) and its
   // bit-for-bit identity are unchanged.

@@ -48,6 +48,14 @@ constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee
 /// 422 others (exp(0.095), at steps of 0.005 in its logarithm; stack #477). The in-track and cross-track floors keep k_F
 /// alone. It acts in the DRAG regime only (perigee below kDragRegimeKm), where it is fitted and judged.
 constexpr double kFloorRadialFastSide = 1.0996588551261028;
+/// SPEC 12.5: the DRAG row's s_i factor for an AP record whose stated zonal degree is kSiZonalDegree (stack #531). The
+/// row's s_i was fitted on records at zonal degree 20, whose node drifts by the zonal terms of degree 21 to 70 they leave
+/// out; a record at 70 carries them, and at today's s_i its stated cross-track is about 2 to 5 times too wide. The factor is
+/// the maximum-likelihood fit of the cross-track |z| on the 326 choice windows of 0.6.42's own flights of records at
+/// tesseral 31 / zonal 70 (exp(-2.2), on a grid of 0.005 in its logarithm), judged on the 422 others. A record at any other
+/// zonal degree keeps today's s_i.
+constexpr double kSiZonal70 = 0.11080315836233387;
+constexpr int kSiZonalDegree = 70;
 
 /// SPEC 12.4 (stack #551): the first release whose AP records carry their epoch floor at the two-body state of their
 /// mean elements. An AP record another producer, or this module before it, wrote carries its floor at its writer's
@@ -511,7 +519,8 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
   const bool ap = terms.tesseral || terms.zonal;
   const Noise& k = ap ? kNoiseAP[regime] : kNoiseXP[regime];
   noise[0] = k.s_e;
-  noise[1] = k.s_i;
+  // the DRAG row's s_i at a record's zonal degree 70 (kSiZonal70, SPEC 12.5)
+  noise[1] = ap && regime == 0 && terms.zonal == kSiZonalDegree ? k.s_i * kSiZonal70 : k.s_i;
   noise[2] = k.s_l;
   noise[3] = k.c * std::fabs(ng_rate) * n_min * kMinutesPerDay;
   noise[4] = t_a;

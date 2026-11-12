@@ -10,7 +10,8 @@
 //   SDNAP_COV_NOISE and SDNAP_COV_NG_RATE; |NOISE_NON_GRAVITATIONAL_RAD_DAY2 - NON_GRAVITATIONAL_SHARE x
 //   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day).
 // - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
-//   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n); sdnap_covariance_at of the
+//   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n); the same fit at zonal 70
+//   writes s_i times exp(-2.2) and the rest of the row bit for bit, at zonal 50 the row bit for bit; sdnap_covariance_at of the
 //   stored AP record (ap-fit-0.6.42.ocm, 0.6.42's fit) at the fixture grid within AP_COV_FLIGHT of 0.6.42's numbers
 //   (ap-fit-0.6.42-0.6.42.cov; 0.6.4's fit, the stored record through 0.6.34, states EGM-96 and is refused, SPEC 16.2;
 //   0.6.36's fit, written before the epoch floor at its mean elements' two-body state, is refused, SPEC 12.4), and this
@@ -42,6 +43,8 @@ import { inputs, GRID } from "./lib/fixture-inputs.mjs";
 
 /// SPEC 12.5's AP DRAG row (0.6.1).
 const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.647194501793458e-7, c: 0.112126311682426 };
+// SPEC 12.5's kSiZonal70 (0.6.43, stack #531): exp(-2.2), the DRAG row's s_i factor at a record's stated zonal degree 70
+const SI_ZONAL70 = 0.11080315836233387;
 /// The AP covariance, the flight of fixed elements and the fit apart. Until 2026-11-10 the SHA-256 of the own fit's
 /// COVARIANCE_DATA, floors and sdnap_covariance_at (f65830a2..., recorded on 0.6.1, held through 0.6.4). 0.6.5 (24d7d75f,
 /// the analytic/SIMD covariance Jacobian and its other speed changes, SPEC 16.8) moves sdnap_covariance_at of the stored
@@ -98,7 +101,7 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// flies its states as 0.6.36 flew them, its covariance refused by name.
 /// 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves this
 /// 550 km set, which is in the low table at tesseral 31. Main 0.6.41 (git afdd1568, wasm bec591fe) gives 0.6.39's fit's
-/// numbers within AP_COV_FLIGHT of 0.6.36's; on 0.6.42 (git b7a7191e, wasm f771420f) they are 59,929.891 mm from them,
+/// numbers within AP_COV_FLIGHT of 0.6.36's; on 0.6.42 (git b7a7191e, wasm f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) they are 59,929.891 mm from them,
 /// the covariance 2.07e-5 of a time's largest entry. Its own fit is 10,706.11 mm from 0.6.39's fit (both by 0.6.42), the
 /// covariance 1.66e-1 of a time's largest entry, the epoch covariance 1.10e-1 of that record's largest entry and the
 /// floors 1.52 relative: the fast side fits the arc closer (FIT_RMS 37.27 against 40.15 m), the floor is the fit's own
@@ -206,6 +209,17 @@ if (apBytes) {
   check(Object.is(acp.NOISE_ECCENTRICITY_PER_DAY, AP_DRAG.s_e) && Object.is(acp.NOISE_INCLINATION_PER_DAY, AP_DRAG.s_i) &&
     Object.is(acp.NOISE_MEAN_MOTION_RELATIVE, AP_DRAG.s_l) && Object.is(acp.NON_GRAVITATIONAL_SHARE, AP_DRAG.c) && ap.COV_REALISM?.[0]?.REGIME === "DRAG",
     `the AP set's noise ${JSON.stringify(acp)} (regime ${ap.COV_REALISM?.[0]?.REGIME}) is not SPEC 12.5's DRAG row`);
+  // SPEC 12.5 (stack #531): a record whose stated zonal degree is 70 takes the DRAG row's s_i times SI_ZONAL70, every other
+  // field of the row as at zonal 20; a record at 50 (between 20 and 70) keeps today's s_i
+  for (const [zonal, want] of [[70, AP_DRAG.s_i * SI_ZONAL70], [50, AP_DRAG.s_i]]) {
+    const z = await fit(configuration({ theory: "AP", forces: { ...MSIS_FORCES, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31,
+      HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: zonal, WEATHER_SOURCE: pcfWeatherSource.RECORDS } }), rows.bytes);
+    const zr = z ? OCM.getRootAsOCM(new flatbuffers.ByteBuffer(z)).unpack() : null, zcp = zr?.COV_PROPAGATION;
+    console.log(`the AP set at zonal ${zonal}: s_i ${zcp?.NOISE_INCLINATION_PER_DAY} (DRAG row ${AP_DRAG.s_i}), regime ${zr?.COV_REALISM?.[0]?.REGIME}`);
+    check(zcp && Object.is(zcp.NOISE_INCLINATION_PER_DAY, want) && Object.is(zcp.NOISE_ECCENTRICITY_PER_DAY, AP_DRAG.s_e) &&
+      Object.is(zcp.NOISE_MEAN_MOTION_RELATIVE, AP_DRAG.s_l) && Object.is(zcp.NON_GRAVITATIONAL_SHARE, AP_DRAG.c) && zr.COV_REALISM?.[0]?.REGIME === "DRAG",
+      `the AP set at zonal ${zonal}: noise ${JSON.stringify(zcp)}, s_i expected ${want}`);
+  }
   const an = ap.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI, awant = acp.NON_GRAVITATIONAL_SHARE * Math.abs(acp.NON_GRAVITATIONAL_RATE_PER_DAY) * an;
   check(Math.abs(acp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 - awant) <= 1e-12 * Math.max(Math.abs(awant), Number.MIN_VALUE), "the AP set's noise invariant");
   // sdnap_covariance_at at the fixture grid: the stored record itself (the flight of fixed elements and covariance) against

@@ -12,20 +12,25 @@
 //   flown on (0.6.42, modules 3e4dcbbe, SHA-256 checked, with ROWS_FACTOR in its floors) differs only by FLOOR_UU times
 //   (f / ROWS_FACTOR)^2 and FLOOR_VU and FLOOR_WU times f / ROWS_FACTOR, with f = RADIAL_FACTOR, and has the same mean
 //   elements: so this build flies the registered windows as the rows' build did, but for the factor.
-// - The registered windows (stack #477, the final build's own flights): 748 windows of the low table (strong drag 2025 and
-//   2026, laser spheres, burn-free altimetry, near 700 km), each fitted by the rows' build at tesseral 31 / zonal 70 (the
-//   degrees the low table's records take from 0.6.42) and flown with its own covariance; every 30 min on days 1, 2, 3, 5 and
-//   7 (near 700 km 1 to 3) the error and the variance as flown in the truth's R, I and C, and the record's floor, with the
-//   factor taken off (the floors over ROWS_FACTOR^2 and ROWS_FACTOR, the radial variance with them). This build's variance
-//   is that variance with the radial floor re-weighted, v + (f^2 - 1) FLOOR_UU (the in-track and cross-track as flown).
-//   Per regime, day and axis over the judged windows (the split rule's other set): the median |z|, pooled over every
-//   sample of the day, and the shares within 1 and 3 sigma.
-// Asserts: the DRAG row and the floors as above; the factor; every judged cell equals the registered cell
-// (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the band [0.603, 0.754] are exactly the
-// registered ones, each named with its cause. Realism is not met: 8 of the 42 judged cells are inside the band. JS moves
-// bytes, rotates the module's covariance onto the truth's axes and takes medians; every state and covariance is the module's.
+// - The registered windows (stacks #477 and #531): 0.6.42's own flights at 3e4dcbbe (the rows' build, with its radial
+//   factor exp(0.10)) of 748 windows of the low table (strong drag 2025 and 2026, laser spheres, burn-free altimetry, near
+//   700 km; the saved list operator-theory/covariance-coverage-windows/windows-c2f7fd4049bb.txt), each fitted at tesseral
+//   31 / zonal 70 (the degrees the low table's records take from 0.6.42) and flown with its own covariance; every 30 min on
+//   days 1, 2, 3, 5 and 7 (near 700 km 1 to 3) the error and the variance as flown in the truth's R, I and C, the share of
+//   each variance the DRAG row's s_i term gives (s_R, s_I, s_C), and the record's floor as flown. This build's variance is
+//   that variance with the radial floor re-weighted and the s_i term scaled (the record states zonal degree 70):
+//   v_R + (f^2 - ROWS_FACTOR^2) FLOOR_UU / ROWS_FACTOR^2 + (k^2 - 1) s_R, v_I + (k^2 - 1) s_I, v_C + (k^2 - 1) s_C, with
+//   f = RADIAL_FACTOR and k = SI_FACTOR (P(t) is linear in each squared size, SPEC 12.5). Per regime, day and axis over the
+//   judged windows (the split rule's other set): the median |z|, pooled over every sample of the day, and the shares
+//   within 1 and 3 sigma.
+// Asserts: the DRAG row and the floors as above; the factor; the rows' s_i is the DRAG row's; every judged cell equals the
+// registered cell (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the band [0.603, 0.754]
+// are exactly the registered ones, each named with its cause. Realism is not met: 16 of the 42 judged cells are inside the
+// band (8 on 0.6.42, before the s_i factor). JS moves bytes, rotates the module's covariance onto the truth's axes and takes
+// medians; every state and covariance is the module's.
 // Until 0.6.42 the test judged 0.6.0's flights of held-out windows re-weighted with the build's variances. On 0.6.42 (git
-// b7a7191e, wasm f771420f; main 0.6.41's test, git afdd1568, run on it), whose floors follow its closer fit, those cells read
+// b7a7191e, wasm f771420f, which the final 0.6.42, git 61048ba9, wasm 3c389abf, flies bit for bit; main 0.6.41's test, git
+// afdd1568, run on it), whose floors follow its closer fit, those cells read
 // 3 of 18 inside the band (8 on main 0.6.41), the radial up to 1.084 (near 700 km, 24 h) and cross-track 1.017 (strong drag
 // 2025, 24 h): they set 0.6.0's errors against this build's variance. What replaces each
 // of its assertions: the 14 pinned held-out medians, by the 42 judged cells of this build's own flights, registered; the
@@ -53,12 +58,15 @@ import { ensureBuilt, packageRoot, wasmPath } from "./lib/module.mjs";
 import { configuration, XP_FORCES } from "./lib/pcf.mjs";
 import { packOem, rfm } from "./lib/frames.mjs";
 
-// the registered rows (stack #477): the build's own flights, records at tesseral 31 / zonal 70, and the build they were flown on
-const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-1ddff52cf42c/rows-31-70-factor-off.jsonl", sha256: "dc54dafd6da1816734de29cd7f1319e6f023f783d664240e6090912149881be6" };
+// the registered rows (stacks #477, #531): 0.6.42's own flights, records at tesseral 31 / zonal 70, each sample with the s_i
+// term's share of its variance, and the build they were flown on
+const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-1ddff52cf42c/rows-31-70-si-terms.jsonl", sha256: "7c09a378af17c0fdc0decfaae17209d0a57bef5848328f028d7fabfe4f2fa928" };
 const ROWS_BUILD = { commit: "3e4dcbbedc21d07f1443f6bcf1082c9e9569b5a1", sha256: "1ddff52cf42c6f3e9b1c8dfe470d0d70e22b6afcb187838fbe4b7ceb5c333487" };
 // SPEC 12.5's kFloorRadialFastSide, the radial floor's sigma factor in the low table's fast side (DRAG regime), and the one the
-// rows' build carried, which the rows have taken off
+// rows' build carried, which the rows were flown with
 const RADIAL_FACTOR = Math.exp(0.095), ROWS_FACTOR = Math.exp(0.10);
+// SPEC 12.5's kSiZonal70 (0.6.43, stack #531): the DRAG row's s_i factor at a record's stated zonal degree 70, and the DRAG row's s_i
+const SI_FACTOR = 0.11080315836233387, DRAG_SI = 1.12761105007012e-6;
 const BEFORE ={ commit: "895b6b38de29bc284b4b50a02425a6c3a5fe81a2", sha256: "0b5280f05176fc755dbfb859fd8028fc495759d7537024c53043f498c91faa63" };
 // The floor ratio and the held-out medians as the re-fit stated them: within 1e-12 and 1e-5 relative until 0.6.5, whose fit
 // (the analytic/SIMD covariance Jacobian among its speed changes, SPEC 16.8) stops at another point inside its tolerance:
@@ -200,9 +208,11 @@ for (const l of String(rowsText).split("\n")) {
   const w = JSON.parse(l);
   if (w.set !== "judged") continue;
   windows += 1;
-  const floorR = w.cp.FLOOR_UU_KM2;
-  for (const [sec, eR, eI, eC, vR, vI, vC] of w.samples) {
-    const day = Math.ceil(sec / 86400), v = [vR + (RADIAL_FACTOR * RADIAL_FACTOR - 1) * floorR, vI, vC], e = [eR, eI, eC];
+  check(Object.is(w.cp.NOISE_INCLINATION_PER_DAY, DRAG_SI), `window ${w.id}: the rows' s_i ${w.cp.NOISE_INCLINATION_PER_DAY}, the DRAG row's ${DRAG_SI}`);
+  const floorOff = w.cp.FLOOR_UU_KM2 / (ROWS_FACTOR * ROWS_FACTOR), k2 = SI_FACTOR * SI_FACTOR - 1;
+  for (const [sec, eR, eI, eC, vR, vI, vC, sR, sI, sC] of w.samples) {
+    const day = Math.ceil(sec / 86400), e = [eR, eI, eC];
+    const v = [vR + (RADIAL_FACTOR * RADIAL_FACTOR - ROWS_FACTOR * ROWS_FACTOR) * floorOff + k2 * sR, vI + k2 * sI, vC + k2 * sC];
     AXES.forEach((ax, x) => { const k = `${w.regime} ${day} ${ax}`; (zs.get(k) ?? zs.set(k, { w: new Set(), z: [] }).get(k)).z.push(Math.abs(e[x]) / Math.sqrt(v[x])); zs.get(k).w.add(w.id); });
   }
 }
@@ -225,8 +235,9 @@ console.log(`judged cells inside the band: ${inside} of ${judged.judged.length} 
 // Cross-track on records at zonal degree 20 (the low table's records through 0.6.41): too narrow at day 1 in strong drag
 // (1.045 at day 1 in 2026 on main 0.6.39's own flights, git 94351f34, wasm 7a857d63; 1.303 on the fast side's own flights at
 // 31/20, git 9855dadd, wasm 302ec561, whose cross-track takes no factor), the node drift of a record that leaves
-// out the zonal terms of degree 21 to 70 (SPEC 12.5, stack #531); a record at zonal degree 70 has none of it, and its
-// cross-track, too wide, is registered above.
+// out the zonal terms of degree 21 to 70 (SPEC 12.5, stack #531); a record at zonal degree 70 has none of it. At today's s_i
+// its cross-track was too wide (0.6.42: 0.08 to 0.40 from day 3, 1 of 14 cross-track cells inside); from 0.6.43 it takes
+// s_i times SI_FACTOR, registered above (9 of 14 inside, none too narrow).
 fs.rmSync(scratch, { recursive: true, force: true });
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);

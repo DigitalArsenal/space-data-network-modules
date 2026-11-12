@@ -13,7 +13,8 @@
 //    days at 600 s give ephemerides within NO_HARM
 //    (below) on this build and on BASE (the low table's fast side's first build with the epoch floor of SPEC 12.4, git 9855dadd,
 //    SHA-256 checked, its own version string 0.6.39; it must be a build of this theory, since no harm is held at 15 mm and the
-//    fast side moves a low-table set 60 to 96 m from a build without it, and a build with the epoch floor, since a reader before
+//    fast side moves a low-table set 60 to 96 m from a build without it (the fitted set and the LEO seed, 7ebc98e4 against
+//    73331c6a and the final 0.6.42, 61048ba9: below), and a build with the epoch floor, since a reader before
 //    it takes 0.6.36's record's floor off at its own theory state; the fast side's first build, git 73331c6a, version string
 //    0.6.36, before it;
 //    the field change's first build, git 7ebc98e4, its version string 0.6.33, from 0.6.36; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture (sdn-ap 0.5.1's
@@ -64,14 +65,15 @@ const BASE_VERSION = '0.6.39', BASE = '9855dadd6', BASE_SHA256 = '302ec56172e8f4
 // class below HEO. The e 0.3 seed (2.4 rev/day, the half-day class) moves from the baseline by 5.1e-6 mm (velocity 8.3e-7
 // um/s, its covariance unchanged); every other set is byte-identical.
 // The low table's fast side (stack #477, SPEC 16.1: the output table to the record's tesseral degree) moves from 7ebc98e4
-// the LEO seed by 95,893.02 mm (velocity 66,912.77 um/s) and the fitted 550 km set by 59,929.89 mm (velocity 47,483.28
+// (wasm 0bd00d28) to its first build (73331c6a, wasm f1b29eff; the final 0.6.42, git 61048ba9, wasm 3c389abf, reads the
+// same) the LEO seed by 95,893.02 mm (velocity 66,912.77 um/s) and the fitted 550 km set by 59,929.89 mm (velocity 47,483.28
 // um/s): both are in the low table at tesseral degree 31. While a reader took the record's floor off at its own theory's
 // epoch state (stack #551), the fitted set's flown covariance moved with the theory: 0.6.36's fit flown by 7ebc98e4 (or by
 // main 0.6.36, git c8b0972b, which flies it bit for bit) and by the fast side before the epoch floor (73331c6a, or 258d824d
 // with the band guard) is 0.272 of a line's largest entry apart on this test's grid (2 days at 600 s), its states
 // 59,929.89 mm. The 0.374 this text gave when the baseline moved to 73331c6a is not what those builds read: they read
 // 0.272. With the floor at the two-body state of the record's mean elements (0.6.39, SPEC 12.4), 0.6.39's fit of the arc
-// (ap-fit-0.6.39.ocm) flown by main 0.6.39 (git 94351f34, wasm 7a857d63) and by 0.6.42 (git b7a7191e, wasm f771420f) is
+// (ap-fit-0.6.39.ocm) flown by main 0.6.39 (git 94351f34, wasm 7a857d63) and by 0.6.42 (git b7a7191e, wasm f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) is
 // 2.11e-5 of a line's largest entry apart, its states 59,929.89 mm; 9855dadd and 0.6.42 fly it bit for bit. The
 // geostationary, Etalon-like, GPS-like, e 0.25 and
 // e 0.3 seeds are outside the low table and byte-identical, and SGP4XP byte-identical. From the fast side the baseline is

@@ -8,7 +8,7 @@
 // SHA-256 checked). It must be: a pre-cure record's states are held against the base's flight of them to 1 mm (a set's own
 // flight is held against SELF_BASE, below), and the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, wasm
 // 1933b5da, the base until then): each case's arc fitted by 0.6.38 and that record flown at 0, 24 and 48 h by 0.6.38 and by
-// 0.6.42 (git b7a7191e, wasm f771420f; 258d824d reads the same) is at most 37.95 m apart at 300 km, i 5, 20.76 m at
+// 0.6.42 (git b7a7191e, wasm f771420f; 258d824d and the final 0.6.42, git 61048ba9, wasm 3c389abf, read the same) is at most 37.95 m apart at 300 km, i 5, 20.76 m at
 // 1,200 km, i 0.5 and 8.89 m at 550 km, i 52.9 (main 0.6.39, git 94351f34, wasm 7a857d63: within 0.1 mm of 0.6.38's).
 // The refusal is also read on a record main wrote: each case's arc
 // fitted by 0.6.38 (MAIN, SHA-256 checked) and flown here has its covariance refused by name and its states flown.

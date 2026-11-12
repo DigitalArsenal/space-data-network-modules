@@ -2159,14 +2159,27 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
   zonal terms of degree 21 to 70 that it leaves out (about 12 m of cross-track a day at 440 km, i 88; stack #531). A record at
   zonal degree 70 has no drift, and there the stated cross-track is too wide: in strong drag 2026 0.40 at day 1 to 0.12 at
   day 7, about 2 to 5 times too wide, a loss of realism in size where it was 1.5 to 2 times too narrow; elsewhere 0.55 to
-  0.60 at day 1 and 0.08 to 0.26 from day 3. The sizes s_i are set on records at zonal degree 20 (stack #531).
+  0.60 at day 1 and 0.08 to 0.26 from day 3 (0.6.42). The sizes s_i are set on records at zonal degree 20 (stack #531).
+- The DRAG row's s_i at zonal degree 70 (from 0.6.43, stack #531). An AP record in the DRAG regime whose stated zonal degree
+  (PERTURBATIONS.MAXIMUM_ZONAL_DEGREE, the fit's FORCES.MAXIMUM_DEGREE) is 70 writes s_i times kSiZonal70, exp(-2.2) =
+  0.1108: 1.2494e-7 per day against 1.1276e-6. Every other field of the row is the row's, and a record at any other zonal
+  degree writes the row as it is, bit for bit. A record between 20 and 70 leaves out part of the drift, by an amount not
+  measured, so it keeps today's s_i. The record states the s_i it was fitted with, so a record written before 0.6.43 flies as
+  it was.
+  - The factor is the maximum-likelihood fit of the cross-track |z| (days 1, 2, 3, 5 and 7) on the split rule's 326 choice
+    windows of 0.6.42's own flights of records at 31/70 (strong drag 2025, laser spheres, altimetry), on a grid of 0.005 in
+    its logarithm. It is judged on the other 422 (strong drag 2026 and near 700 km entirely, laser spheres and altimetry).
+  - Judged, cross-track: 1 of 18 cells inside the band on 0.6.42, 12 of 18 on 0.6.43, none too narrow. On the 14 the test
+    holds (days 1, 3, 5, 7): 1 to 9. Strong drag 2026 goes 0.40, 0.16, 0.13 and 0.12 to 0.54, 0.61, 0.70 and 0.75 at days 1,
+    3, 5 and 7. Radial and in-track move by at most 1.9e-4 in median |z|, none at three decimals.
+  - Still too wide: strong drag 2026 at day 1 (0.54) and the laser spheres and altimetry at days 5 and 7 (0.53 to 0.58).
 - In-track takes no factor: the floor is not what sets it.
-- Cells outside the band at the factor, by cause (`test/covariance-realism.e2e.mjs` names each): strong drag 2026 radial at
+- Cells outside the band at the factors, by cause (`test/covariance-realism.e2e.mjs` names each): strong drag 2026 radial at
   days 5 and 7 and in-track at every day, too narrow (the drag share c, 0.1121, against the 2026 storms, and the density
   forecast; stacks #531, #527); the laser spheres' radial at days 3 to 7 and altimetry's at days 3 and 5, too wide (one
   floor factor serves them with near 700 km and strong drag 2026); in-track of the laser spheres, altimetry and near 700 km
-  at every day, too wide (the sizes are set on strong drag); cross-track of every row from day 3, and at day 1 outside near
-  700 km, too wide (as above).
+  at every day, too wide (the sizes are set on strong drag); cross-track of strong drag 2026 at day 1 and of the laser
+  spheres and altimetry at days 5 and 7, too wide (one s_i factor serves every low row).
 
 Above the drag, by class *[2026-11-11, stack #433; experiments headline-loop, sdn-ap 0.6.15]*. Measured on every
 first-pass window whose fitted set is above the drag (923 window-arcs per theory), the ABOVE row is too wide on
@@ -2789,7 +2802,9 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
   - Built in the scratch, the same rows take 31.5, 51.8 and 55.2 MB at d 12, 31 and 70 (0.6.41: 32.6, 51.9 and 51.9 MB,
     its table stopping at 12), linear in the number of sets (at 31: 15.2, 27.8 and 51.8 MB for 250, 500 and 1,000 rows),
     with 0.2 to 0.4 MB left free inside. The tables kept are 19.8, 26.0 and 27.2 MB (0.6.41: 19.8, 21.0, 21.0). Under the
-    module's maximum of 2 GiB the build alone fits about 38,000 such sets at 31 and 35,800 at 70 (0.6.41 about 38,000).
+    module's maximum of 2 GiB, with the 71.8 MB the module's memory holds before the build (its statics and tables in the
+    test's host, before the first set), the build alone fits about 38,000 such sets at 31 and 35,800 at 70 (0.6.41 about
+    38,000); the sets' caches when they fly (about 50 MB per 1,000 here) and a batch's reserve come on top.
   - With the reserve, the memory after the first threaded batch on 4 threads is 237.4, 257.4 and 260.9 MB at 12, 31 and 70
     (0.6.41: 238.4, 257.6 and 257.6 MB).
 - **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1

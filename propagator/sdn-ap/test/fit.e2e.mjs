@@ -120,7 +120,7 @@ const cases = [
 // 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves this
 // 550 km set, which is in the low table at tesseral 31. Main 0.6.41 (git afdd1568, wasm bec591fe) holds the stored record's
 // flight within FLIGHT_BOUND of 0.6.36's and its fit within FIT_BOUND of 0.6.39's; on 0.6.42 (git b7a7191e, wasm
-// f771420f) the stored record's sdnap_covariance_at is 59,929.891 mm from 0.6.36's (covariance 2.07e-5 of a time's
+// f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) the stored record's sdnap_covariance_at is 59,929.891 mm from 0.6.36's (covariance 2.07e-5 of a time's
 // largest entry) and its propagate over 7 days in EME2000 and TEME 49,816.056 mm and 38,839.353 um/s (covariance 1.49e-5);
 // the fit is 539,401.04 mm and 591,281.83 um/s from 0.6.39's at 7 days (both flown by 0.6.42), FIT_RMS 37.273 against
 // 40.153 m: the fast side fits the arc closer. A base before the fast side holds these to another theory's flight, so
@@ -284,7 +284,7 @@ const covDistance = (a, b) => {
 for (const c of cases) {
   const s = stored[c.name];
   if (!s) continue;
-  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.36's fit), both
+  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.42's fit, ap-fit-0.6.42.ocm), both
   // flown by this build; its $ODR names its own $OCM
   const refName = c.fitReference ? "0.6.42's fit" : "the stored (0.6.4's fit)";
   const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.reference, pcfOutputFrame.TEME)];

@@ -326,7 +326,7 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // flies its states as 0.6.36 flew them, its covariance refused by name.
   // 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves this
   // 550 km set, which is in the low table at tesseral 31. Main 0.6.41 (git afdd1568, wasm bec591fe) flies 0.6.39's fit
-  // within STORE_FLIGHT of 0.6.36's flight; on 0.6.42 (git b7a7191e, wasm f771420f) it is 59,929.895 mm and 47,483.254
+  // within STORE_FLIGHT of 0.6.36's flight; on 0.6.42 (git b7a7191e, wasm f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) it is 59,929.895 mm and 47,483.254
   // um/s from it, the covariance 2.07e-5 of a line's largest entry. Its own fit is 10,706.088 mm and 11,917.659 um/s from
   // 0.6.39's fit (both flown by 0.6.42), the covariance 1.92e-1 of a line's largest entry: the fast side fits the arc
   // closer (FIT_RMS 37.27 against 40.15 m), the floor is the fit's own residual covariance (SPEC 12.4), and the low

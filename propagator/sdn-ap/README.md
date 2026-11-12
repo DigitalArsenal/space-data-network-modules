@@ -186,7 +186,9 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 `FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (in the low table with a degree above
-12, from 0.6.42, every first-order term and the m-daily terms to the degree asked, up to 70; on every other branch m-daily
+12, from 0.6.42, the first-order terms with |l - 2p| up to 17 and the m-daily terms to the degree asked, up to 70, each above
+the table's size cut of 0.5 m, and none inside the slow band at more than 1 - w of its epoch rate: SPEC 16.1's band rule and
+band guard; on every other branch m-daily
 and the other first-order terms to 12 and near-resonant terms to 31; shallow resonances and the half-day and one-day
 resonant tails to 31; each to the degree asked if lower;
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`

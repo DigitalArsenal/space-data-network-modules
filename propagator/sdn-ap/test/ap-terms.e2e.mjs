@@ -112,7 +112,7 @@ const { ap, xp, rows } = await fixtureSets(h);
 // flies its states as 0.6.36 flew them, its covariance refused by name.
 // 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves this
 // 550 km set, which is in the low table at tesseral 31. Main 0.6.41 (git afdd1568, wasm bec591fe) flies 0.6.39's fit
-// within FLIGHT of 0.6.36's flight; 0.6.42 (git b7a7191e, wasm f771420f) flies it 59,929.891 mm and 47,483.284 um/s from
+// within FLIGHT of 0.6.36's flight; 0.6.42 (git b7a7191e, wasm f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) flies it 59,929.891 mm and 47,483.284 um/s from
 // it, the covariance 2.11e-5 of a line's largest entry, and 0.6.36's fit's states the same 59,929.940 mm. Its own fit of the
 // arc is 10,706.11 mm and 11,917.68 um/s from 0.6.39's fit (both flown by 0.6.42), FIT_RMS 37.2731 against 40.1528 m: the
 // fast side fits the arc closer. A base before the fast side holds these to another theory's flight, so from 0.6.42 the

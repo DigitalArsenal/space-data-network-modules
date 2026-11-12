@@ -1,5 +1,5 @@
 {
-  "what": "sdn-ap stated covariance against its own errors on the judged windows, records at 31/70/factor/off (tesseral/zonal)",
+  "what": "sdn-ap stated covariance against its own errors on the judged windows, records at tesseral 31 / zonal 70, at the radial factor exp(0.095) and the s_i factor exp(-2.2)",
   "build": {
     "commit": "3e4dcbbedc21d07f1443f6bcf1082c9e9569b5a1",
     "wasmSha256": "1ddff52cf42c6f3e9b1c8dfe470d0d70e22b6afcb187838fbe4b7ceb5c333487",
@@ -9,8 +9,8 @@
     "AP_TIDES at 31/70"
   ],
   "rows": {
-    "file": "rows-31-70-factor-off.jsonl",
-    "sha256": "dc54dafd6da1816734de29cd7f1319e6f023f783d664240e6090912149881be6",
+    "file": "rows-31-70-si-terms.jsonl",
+    "sha256": "7c09a378af17c0fdc0decfaae17209d0a57bef5848328f028d7fabfe4f2fa928",
     "windows": 748,
     "choice": 326,
     "judged": 422,
@@ -35,7 +35,8 @@
         "choice": 0,
         "judged": 48
       }
-    }
+    },
+    "note": "flown with the radial factor exp(0.10) on, each sample with the s_i terms' share of its variance apart (R, I, C)"
   },
   "splitRule": {
     "file": "size-split-rule.json",
@@ -53,7 +54,8 @@
     "R": 1.0996588551261028,
     "I": 1,
     "C": 1,
-    "note": "radial only, fitted on 0.6.42's own flights of records at 31/70 with the factor off (exp(0.095), steps of 0.005 in its logarithm), the degrees the low table's records take from 0.6.42; no in-track or cross-track factor (stack #477)"
+    "siFactor": 0.11080315836233387,
+    "note": "radial factor exp(0.095) and the DRAG row's s_i times exp(-2.2) (0.6.43, a record whose stated zonal degree is 70; stack #531), both by arithmetic on the rows: v_R + (f^2 - exp(0.10)^2) FLOOR_UU / exp(0.10)^2 + (k^2 - 1) s_R, v_I + (k^2 - 1) s_I, v_C + (k^2 - 1) s_C"
   },
   "band": [
     0.603,
@@ -74,7 +76,7 @@
         "within3": 0.9863834422657952
       },
       "registered": {
-        "medianAbsZ": 0.6597418311547869,
+        "medianAbsZ": 0.6597418317365986,
         "within1": 0.7261710239651417,
         "within3": 0.9899237472766884
       },
@@ -93,8 +95,8 @@
         "within3": 0.9102668845315904
       },
       "registered": {
-        "medianAbsZ": 0.8642525773128964,
-        "within1": 0.5571895424836601,
+        "medianAbsZ": 0.864325621955341,
+        "within1": 0.5570533769063181,
         "within3": 0.9102668845315904
       },
       "floorShareMedian": 0.016524031167971232,
@@ -113,12 +115,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.39643021645650645,
-        "within1": 0.8872549019607843,
+        "medianAbsZ": 0.5361050067147362,
+        "within1": 0.7798202614379085,
         "within3": 1
       },
       "floorShareMedian": 0.49414464368711164,
-      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+      "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows (strong drag 2025, the laser spheres, altimetry and near 700 km); a size by regime is stack #531's"
     },
     {
       "regime": "P",
@@ -133,7 +135,7 @@
         "within3": 0.9425381263616558
       },
       "registered": {
-        "medianAbsZ": 0.7476043494810198,
+        "medianAbsZ": 0.7476044208671844,
         "within1": 0.6242510893246187,
         "within3": 0.9480528322440087
       },
@@ -152,7 +154,7 @@
         "within3": 0.9044798474945533
       },
       "registered": {
-        "medianAbsZ": 0.895719278013626,
+        "medianAbsZ": 0.8957457230408061,
         "within1": 0.5381944444444444,
         "within3": 0.9044798474945533
       },
@@ -172,12 +174,11 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.15904090029343426,
-        "within1": 0.9995915032679739,
-        "within3": 1
+        "medianAbsZ": 0.6099664461183418,
+        "within1": 0.7170479302832244,
+        "within3": 0.9992510893246187
       },
-      "floorShareMedian": 0.043465060365598295,
-      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+      "floorShareMedian": 0.043465060365598295
     },
     {
       "regime": "P",
@@ -192,7 +193,7 @@
         "within3": 0.9319852941176471
       },
       "registered": {
-        "medianAbsZ": 0.7884597535986553,
+        "medianAbsZ": 0.7884607654611651,
         "within1": 0.6111791938997821,
         "within3": 0.9373638344226579
       },
@@ -212,7 +213,7 @@
         "within3": 0.8858932461873639
       },
       "registered": {
-        "medianAbsZ": 0.9063403166359021,
+        "medianAbsZ": 0.9063497274413463,
         "within1": 0.53125,
         "within3": 0.8858932461873639
       },
@@ -232,12 +233,11 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.12706139461008575,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.7019245798891853,
+        "within1": 0.6600626361655774,
+        "within3": 0.9974128540305011
       },
-      "floorShareMedian": 0.011713196695796135,
-      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+      "floorShareMedian": 0.011713196695796135
     },
     {
       "regime": "P",
@@ -252,7 +252,7 @@
         "within3": 0.9480528322440087
       },
       "registered": {
-        "medianAbsZ": 0.7702241469255648,
+        "medianAbsZ": 0.7702260885721679,
         "within1": 0.6262935729847494,
         "within3": 0.9502995642701525
       },
@@ -272,7 +272,7 @@
         "within3": 0.8578431372549019
       },
       "registered": {
-        "medianAbsZ": 0.8936225731553962,
+        "medianAbsZ": 0.893632193988602,
         "within1": 0.5321350762527233,
         "within3": 0.8578431372549019
       },
@@ -292,12 +292,11 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.12073921203330581,
-        "within1": 1,
-        "within3": 1
+        "medianAbsZ": 0.7510348734543854,
+        "within1": 0.6461737472766884,
+        "within3": 0.9951661220043573
       },
-      "floorShareMedian": 0.004631124787710502,
-      "outsideBand": "too wide: the cross-track sizes and floor are set on records at zonal degree 20, whose node drift a record at 70 does not have: an over-statement (stack #531)"
+      "floorShareMedian": 0.004631124787710502
     },
     {
       "regime": "LS",
@@ -312,7 +311,7 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.6404847420536677,
+        "medianAbsZ": 0.6404950815895605,
         "within1": 0.775,
         "within3": 1
       },
@@ -331,12 +330,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.045683294885893996,
+        "medianAbsZ": 0.04568966823903427,
         "within1": 0.9972222222222222,
         "within3": 1
       },
       "floorShareMedian": 0.0015406165937724761,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "LS",
@@ -351,12 +350,11 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5490035200173478,
-        "within1": 0.85,
+        "medianAbsZ": 0.6639959497372252,
+        "within1": 0.7351851851851852,
         "within3": 1
       },
-      "floorShareMedian": 0.7504211721821243,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "floorShareMedian": 0.7504211721821243
     },
     {
       "regime": "LS",
@@ -371,7 +369,7 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5655306930055505,
+        "medianAbsZ": 0.5655322564234562,
         "within1": 0.8274173806609547,
         "within3": 1
       },
@@ -391,12 +389,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.019575038962663438,
+        "medianAbsZ": 0.019585199739698685,
         "within1": 1,
         "within3": 1
       },
       "floorShareMedian": 0.00006161310334294476,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "LS",
@@ -411,12 +409,11 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.1989386745368659,
-        "within1": 0.9987760097919217,
+        "medianAbsZ": 0.6320623723631213,
+        "within1": 0.7674418604651163,
         "within3": 1
       },
-      "floorShareMedian": 0.10636709642623937,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "floorShareMedian": 0.10636709642623937
     },
     {
       "regime": "LS",
@@ -431,7 +428,7 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5018905140781572,
+        "medianAbsZ": 0.5018927769306649,
         "within1": 0.8759259259259259,
         "within3": 1
       },
@@ -451,12 +448,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.019473064591554096,
+        "medianAbsZ": 0.019477200461295734,
         "within1": 1,
         "within3": 1
       },
       "floorShareMedian": 0.000019682439839078193,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "LS",
@@ -471,12 +468,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.11840628685913834,
-        "within1": 1,
+        "medianAbsZ": 0.5655022699756717,
+        "within1": 0.812037037037037,
         "within3": 1
       },
       "floorShareMedian": 0.03324249265384102,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows (strong drag 2025, the laser spheres, altimetry and near 700 km); a size by regime is stack #531's"
     },
     {
       "regime": "LS",
@@ -491,7 +488,7 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.4427237715283379,
+        "medianAbsZ": 0.4427239057107185,
         "within1": 0.8924302788844621,
         "within3": 1
       },
@@ -511,12 +508,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.01895468991022165,
+        "medianAbsZ": 0.018978133693535338,
         "within1": 1,
         "within3": 1
       },
       "floorShareMedian": 0.00000951568579677513,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "LS",
@@ -531,12 +528,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.08242443119174651,
-        "within1": 1,
+        "medianAbsZ": 0.530358039547039,
+        "within1": 0.8034528552456839,
         "within3": 1
       },
       "floorShareMedian": 0.013113851070844958,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows (strong drag 2025, the laser spheres, altimetry and near 700 km); a size by regime is stack #531's"
     },
     {
       "regime": "DO",
@@ -551,7 +548,7 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.6499545466632362,
+        "medianAbsZ": 0.6499554437026792,
         "within1": 0.7661458333333333,
         "within3": 1
       },
@@ -570,12 +567,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.09453362856372577,
+        "medianAbsZ": 0.09456386068287624,
         "within1": 0.9895833333333334,
         "within3": 1
       },
       "floorShareMedian": 0.001733584142983653,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "DO",
@@ -590,12 +587,11 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.5849333752184414,
-        "within1": 0.8411458333333334,
+        "medianAbsZ": 0.6744046476293589,
+        "within1": 0.74375,
         "within3": 1
       },
-      "floorShareMedian": 0.7815479874715339,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "floorShareMedian": 0.7815479874715339
     },
     {
       "regime": "DO",
@@ -610,7 +606,7 @@
         "within3": 0.9958333333333333
       },
       "registered": {
-        "medianAbsZ": 0.597383602426428,
+        "medianAbsZ": 0.5973839803331394,
         "within1": 0.7520833333333333,
         "within3": 0.9984375
       },
@@ -630,12 +626,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.06344002572664861,
+        "medianAbsZ": 0.06345075390997178,
         "within1": 0.9776041666666667,
         "within3": 1
       },
       "floorShareMedian": 0.00006901052100898954,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "DO",
@@ -650,12 +646,11 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.23752512252035743,
-        "within1": 1,
+        "medianAbsZ": 0.6374417390967635,
+        "within1": 0.7640625,
         "within3": 1
       },
-      "floorShareMedian": 0.12832252623303064,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "floorShareMedian": 0.12832252623303064
     },
     {
       "regime": "DO",
@@ -670,7 +665,7 @@
         "within3": 0.9786458333333333
       },
       "registered": {
-        "medianAbsZ": 0.5833819498880982,
+        "medianAbsZ": 0.5834198389606868,
         "within1": 0.7541666666666667,
         "within3": 0.9869791666666666
       },
@@ -690,12 +685,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.09556543844870094,
+        "medianAbsZ": 0.09558514542123256,
         "within1": 0.8786458333333333,
         "within3": 1
       },
       "floorShareMedian": 0.000021018613126245658,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "DO",
@@ -710,12 +705,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.13076499519967627,
-        "within1": 1,
+        "medianAbsZ": 0.5818914927533694,
+        "within1": 0.7770833333333333,
         "within3": 1
       },
       "floorShareMedian": 0.036992092884429076,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows (strong drag 2025, the laser spheres, altimetry and near 700 km); a size by regime is stack #531's"
     },
     {
       "regime": "DO",
@@ -730,7 +725,7 @@
         "within3": 0.9362637362637363
       },
       "registered": {
-        "medianAbsZ": 0.6064350889464475,
+        "medianAbsZ": 0.6064440959342013,
         "within1": 0.7131868131868132,
         "within3": 0.945054945054945
       },
@@ -749,12 +744,12 @@
         "within3": 0.9857142857142858
       },
       "registered": {
-        "medianAbsZ": 0.26958575902020143,
+        "medianAbsZ": 0.2696548868371462,
         "within1": 0.7675824175824176,
         "within3": 0.9857142857142858
       },
       "floorShareMedian": 0.00001000510920250133,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "DO",
@@ -769,12 +764,12 @@
         "within3": 0.9994505494505495
       },
       "registered": {
-        "medianAbsZ": 0.09826233374279583,
-        "within1": 0.9912087912087912,
-        "within3": 0.9994505494505495
+        "medianAbsZ": 0.5424467761610444,
+        "within1": 0.7747252747252747,
+        "within3": 0.987912087912088
       },
       "floorShareMedian": 0.0161648625845553,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: cross-track at s_i times exp(-2.2), one size for every low row, fitted on the choice windows (strong drag 2025, the laser spheres, altimetry and near 700 km); a size by regime is stack #531's"
     },
     {
       "regime": "S1",
@@ -789,7 +784,7 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.6866028588692044,
+        "medianAbsZ": 0.686602860642436,
         "within1": 0.7516991391028546,
         "within3": 1
       },
@@ -808,12 +803,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.21860812215227804,
+        "medianAbsZ": 0.21863642824944976,
         "within1": 0.9859537834164024,
         "within3": 1
       },
       "floorShareMedian": 0.0023944114972748727,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "S1",
@@ -828,8 +823,8 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.6032595504492696,
-        "within1": 0.8187584956955143,
+        "medianAbsZ": 0.6831921628891207,
+        "within1": 0.7521522428636158,
         "within3": 1
       },
       "floorShareMedian": 0.8163514293420543
@@ -847,7 +842,7 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.7001589416575857,
+        "medianAbsZ": 0.7001595522011473,
         "within1": 0.6578581363004172,
         "within3": 1
       },
@@ -866,12 +861,12 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.3685057739528856,
+        "medianAbsZ": 0.368558696198142,
         "within1": 0.923041261010663,
         "within3": 1
       },
       "floorShareMedian": 0.00009093191930318235,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "outsideBand": "too wide: the low rows' sizes (s_e, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
     },
     {
       "regime": "S1",
@@ -886,12 +881,27 @@
         "within3": 1
       },
       "registered": {
-        "medianAbsZ": 0.260553852103805,
-        "within1": 1,
+        "medianAbsZ": 0.6425473700641281,
+        "within1": 0.7552155771905424,
         "within3": 1
       },
-      "floorShareMedian": 0.15558304736420175,
-      "outsideBand": "too wide: the low rows' sizes (s_e, s_i, s_l, c) are set on strong drag and are too wide outside it (stack #531)"
+      "floorShareMedian": 0.15558304736420175
     }
-  ]
+  ],
+  "siFit": {
+    "k": 0.11080315836232964,
+    "module": 0.11080315836233387,
+    "grid": "exp(-4 to 1 by 0.005) on the sigma",
+    "days": [
+      1,
+      2,
+      3,
+      5,
+      7
+    ],
+    "axis": "C (cross-track)",
+    "criterion": "Gaussian negative log-likelihood",
+    "fittedOn": "the split rule's 326 choice windows (strong drag 2025, laser spheres, altimetry)",
+    "judgedOn": "the 422 others (strong drag 2026, near 700 km, laser spheres, altimetry)"
+  }
 }
