@@ -9,11 +9,11 @@
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
-//    fitted AP set (0.6.36's fit, test/fixtures/ap-fit-0.6.36.ocm) flown 2 days at 600 s give ephemerides within NO_HARM
-//    (below) on this build and on BASE (the radial term's first build, git 79e97cd6, SHA-256 checked, its own version string
-//    0.6.43; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, the field change's first build at 0.6.36, history
-//    at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture (sdn-ap 0.5.1's
-//    fit, GRAVITY_MODEL EGM-96) refused (gravity-model-mismatch, SPEC 16.2).
+//    fitted AP set (0.6.39's fit, test/fixtures/ap-fit-0.6.39.ocm) flown 2 days at 600 s give ephemerides within NO_HARM
+//    (below) on this build and on BASE (the radial term's first build on 0.6.39, git 36ebd1e6, SHA-256 checked, its own
+//    version string 0.6.43; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, the field change's first build
+//    from 0.6.36 to 0.6.42, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture
+//    (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96) refused (gravity-model-mismatch, SPEC 16.2).
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -29,7 +29,7 @@ import {seedOcm, flight, T} from './lib/ocm.mjs';
 import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE_VERSION = '0.6.38', BASE = '79e97cd63', BASE_SHA256 = 'ba860b1c6826323e60bf79fd003b09c64c7ccba90af2e027611fe2362bfb8cb1';
+const BASE_VERSION = '0.6.43', BASE = '36ebd1e67', BASE_SHA256 = 'f0e7bd7d8c222bf12099d23fb35363fefe6a5ff1fcdad253191452c353a49790';
 // 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
 // until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
 // measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
@@ -57,11 +57,12 @@ const BASE_VERSION = '0.6.38', BASE = '79e97cd63', BASE_SHA256 = 'ba860b1c682632
 // (ap-fit-sdn-ap-0.5.1.ocm, GRAVITY_MODEL EGM-96), is asserted refused, and the fitted set is 0.6.36's own fit of the
 // 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too.
 // The zonal theory's constant radial term (0.6.43, SPEC 16.22) moves them from 7ebc98e4: LEO 2,029.97, geostationary 183.49,
-// Etalon 14.37, GPS 37.90, e 0.25 462.26 and e 0.3 462.26 mm (velocity 2.23 to 2,227.31 um/s), and the fitted set by
-// 2,151.66 mm (covariance 8.77e-2 of a line's largest entry: the record carries 0.6.36's floor, stack #551 and
-// ap-terms.e2e.mjs): every AP set with gravity terms carries the term, about
-// (R_E / a)^3 of the Earth's radius times J2 squared; SGP4XP byte-identical. From 0.6.43 the baseline is the term's first
-// build (git 79e97cd6, not a release), every AP set under the one bound, 15 mm.
+// Etalon 14.37, GPS 37.90, e 0.25 462.26 and e 0.3 462.26 mm (velocity 2.23 to 2,227.31 um/s), and the fitted set (this
+// build's flight of 0.6.39's fit against 7ebc98e4's of 0.6.36's, the same mean elements) by 2,151.66 mm, its covariance by
+// 8.40e-7 of a line's largest entry (both records carry their floor where their reader takes it off, SPEC 12.4):
+// every AP set with gravity terms carries the term, about (R_E / a)^3 of the Earth's radius times J2 squared; SGP4XP
+// byte-identical. From 0.6.43 the baseline is the term's first build on 0.6.39 (git 36ebd1e6, not a release), every AP set
+// under the one bound, 15 mm; that base carries SPEC 12.4's epoch floor, so both fly 0.6.39's fit with its covariance.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
@@ -321,17 +322,19 @@ for (const [name, s] of Object.entries(SEEDS)) {
   const payload = seedOcm({epoch, ...s});
   compare(name, await fly(wasmPath, payload), await fly(basePath, payload));
 }
-// a fitted AP set (0.6.36's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
+// a fitted AP set (0.6.39's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
 // (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96 with gravity terms) refused by this build
 {
   // from 0.6.39 (SPEC 12.4) this build flies its own fit of the arc (ap-fit-0.6.39.ocm) and the base (0.6.33's build, git
   // 7ebc98e4, whose states 0.6.36 flies bit for bit) flies 0.6.36's fit (ap-fit-0.6.36.ocm), whose floor is at the theory
   // state that base shares: the same mean elements, the same states, the covariance within 1.3e-11 of a line's largest
-  // entry; 0.6.36's fit flies its states here with its covariance refused by name
+  // entry; 0.6.36's fit flies its states here with its covariance refused by name. From 0.6.43 the base (git 36ebd1e6)
+  // carries the epoch floor too and both fly 0.6.39's fit; 0.6.36's fit on this build is held against the base's flight
+  // of 0.6.39's fit (its states, no covariance)
   const payload = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.36.ocm')));
   const own = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.39.ocm')));
-  compare('fitted AP set (this build\'s own fit; 0.6.36\'s on the base)', await fly(wasmPath, own), await fly(basePath, payload));
-  const pre = oemDistance(await fly(wasmPath, payload), await fly(basePath, payload));
+  compare('fitted AP set (0.6.39\'s fit)', await fly(wasmPath, own), await fly(basePath, own));
+  const pre = oemDistance(await fly(wasmPath, payload), await fly(basePath, own));
   console.log(JSON.stringify({preFloorRecord: '0.6.36\'s fit', positionMm: 1000 * pre.posM, covarianceLines: pre.covLines}));
   assert.ok(pre.posM <= NO_HARM.posM && pre.velMmS <= NO_HARM.velMmS && pre.covLines === 0 && pre.covLinesDiffer === true, `0.6.36's fit on this build: ${JSON.stringify(pre)} (its states as the base's, no covariance)`);
   const old = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));

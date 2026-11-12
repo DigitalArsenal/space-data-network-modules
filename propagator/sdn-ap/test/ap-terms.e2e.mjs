@@ -109,12 +109,15 @@ const { ap, xp, rows } = await fixtureSets(h);
 // held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 // flies its states as 0.6.36 flew them, its covariance refused by name.
 // 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.22) moves the stored record's
-// flight by FLIGHT_MOVE, and records it from itself (ap-fit-0.6.39-0.6.43.oem; the 0.6.36 file went), the bounds kept.
-// The covariance moves with the states: the record carries its epoch floor at the two-body state of its mean elements
-// (SPEC 12.4), so the term does not move what the reader takes off (on a record written before 0.6.39 it did, by 8.77e-2
-// of a line's largest entry with the same states, stack #551). 0.6.36's fit
-// is held against the same flight: its mean elements are 0.6.39's bit for bit.
-// 0.6.43 moves the fit: FIT_MOVE. So the own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.39's fit.
+// flight by 2,151.657 mm, 2,360.664 um/s and a covariance of 8.40e-7 of a line's largest entry, and records it from
+// itself (ap-fit-0.6.39-0.6.43.oem; the 0.6.36 file went), the bounds kept. The covariance moves with the states: the
+// record carries its epoch floor at the two-body state of its mean elements (SPEC 12.4), so the term does not move what
+// the reader takes off (on a record written before 0.6.39 it did, by 8.77e-2 of a line's largest entry with the same
+// states, stack #551). 0.6.36's fit is held against the same flight: its mean elements are 0.6.39's bit for bit.
+// 0.6.43 moves the fit: 40.6 m and 44.6 mm/s over 7 days from 0.6.39's fit (both flown by 0.6.43; on the grid 1,312.71
+// mm and 1,442.71 um/s), FIT_RMS 40.125 against 40.153 m. Against the fixture's own truth (propagator/ffm's 550 km
+// trajectory) the error 48 to 72 h past the arc stays at 42 m, and over the arc at 24.3 m. So the own fit is 0.6.43's
+// (ap-fit-0.6.43.ocm); the stored record stays 0.6.39's fit.
 const FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const FIT = { posM: 0.1, velMmS: 0.1, rmsM: 0.01 };
 
@@ -129,9 +132,10 @@ if (flownStored.statusCode === 0) {
   check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `the stored record's flight: ${d.states} states, ${d.covLines} covariance lines, ${d.epochsDiffer} epochs differ`);
   check(d.posM <= FLIGHT.posM && d.velMmS <= FLIGHT.velMmS && d.covOfLargest <= FLIGHT.covOfLargest, `the stored AP record's flight moved: ${JSON.stringify(d)} against ${JSON.stringify(FLIGHT)}`);
 }
-// --- SPEC 12.4: 0.6.36's fit, written before the epoch floor at its mean elements' two-body state, flies its states within
-// FLIGHT of 0.6.43's flight of 0.6.39's fit, whose mean elements are its own (0.324 mm: a flight without covariance takes
-// the state path, one with it the covariance's nominal); its covariance is refused by name (cov-floor-at-theory-state, the block's COMMENT)
+// --- SPEC 12.4: 0.6.36's fit, written before the epoch floor at its mean elements' two-body state, flies its states
+// within FLIGHT of 0.6.43's flight of 0.6.39's fit, whose mean elements are its own (0.324 mm: a flight without
+// covariance takes the state path, one with it the covariance's nominal); its covariance is refused by name
+// (cov-floor-at-theory-state, the block's COMMENT)
 {
   const old = await invoke("propagate", flight([new Uint8Array(fixture("ap-fit-0.6.36.ocm"))], { output: GRID_OUTPUT }));
   check(old.statusCode === 0, `propagate 0.6.36's fit: ${old.errorCode} ${old.errorMessage}`);

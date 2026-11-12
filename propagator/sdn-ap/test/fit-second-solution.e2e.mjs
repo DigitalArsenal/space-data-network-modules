@@ -12,14 +12,13 @@
 //   (the fit has two solutions, stack #392; the history at MOLNIYA); every grid lookup of the fit a fit set's; no fit grid
 //   held after it.
 // - Below e 0.3 the fit's record flown 4 days within NO_HARM of the 0.6.2 dist's (git, modules c82160de7, its SHA-256
-//   checked; byte identity until 0.6.5; LEO AP from 0.6.36 against the release's own fit, ap-fit-0.6.38.ocm, at NO_HARM) and its
-//   FIT_RMS within 0.01 m: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of
-//   propagator/ffm's 550 km trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP. A GEO arc (an AP
-//   set, caps 31 and 20, flown by this module 72 h at 300 s in GCRF, refitted under the same forces) is held against its
-//   own truth, the set it was flown from (GEO_AP): FIT_RMS and the fit flown 4 days against the set's flight, and no
-//   farther from it than 0.6.2's fit.
-// JS only moves bytes and compares numbers the module produced.
-//   node test/fit-second-solution.e2e.mjs
+//   checked; byte identity until 0.6.5; LEO AP from 0.6.36 against the release's own fit, ap-fit-0.6.43.ocm, at
+//   NO_HARM) and its FIT_RMS within 0.01 m: the LEO fixture (test/lib/fixture-inputs.mjs, 24 h of propagator/ffm's 550
+//   km trajectory) under AP's forces with NRLMSISE-00 rows and under stock SGP4XP. A GEO arc (an AP set, caps 31 and
+//   20, flown by this module 72 h at 300 s in GCRF, refitted under the same forces) is held against its own truth, the
+//   set it was flown from (GEO_AP): FIT_RMS and the fit flown 4 days against the set's flight, and no farther from it
+//   than 0.6.2's fit. JS only moves bytes and compares numbers the module produced. node
+//   test/fit-second-solution.e2e.mjs
 import fs from "node:fs";
 import { scratchTemp } from "./lib/scratch.mjs";
 import path from "node:path";
@@ -120,9 +119,9 @@ const MOLNIYA = {
 // against 0.6.36's fit (test/fixtures/ap-fit-0.6.36.ocm), the bounds kept.
 // 0.6.43 (the zonal theory's constant radial term, SPEC 16.22) moves LEO AP's fit: 8.48 m from 0.6.36's over the 4 days,
 // FIT_RMS 0.03 m lower; against the fixture's own truth the error 48 to 72 h past the arc stays at 42 m. So LEO AP is
-// held against 0.6.38's fit (test/fixtures/ap-fit-0.6.38.ocm), the bounds kept.
+// held against 0.6.43's fit (test/fixtures/ap-fit-0.6.43.ocm), the bounds kept.
 const NO_HARM = { "LEO AP": 1, "LEO SGP4XP": 0.001 };
-const PINNED = { "LEO AP": new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.38.ocm", import.meta.url))) };
+const PINNED = { "LEO AP": new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.43.ocm", import.meta.url))) };
 // The GEO arc is this module's own flight of a set with AGOM 0.01 (geoSet), so a fit can reach zero residual and the set
 // is the truth. Through 0.6.12 the fit weighed it at 1 km against the AGOM prior and left FIT_RMS 1.050 m, its flight
 // 0.12 mm from 0.6.2's fit's over 4 days (then pinned at 0.01 m against 0.6.2). From 0.6.13 a set above the drag is fitted
