@@ -3,26 +3,33 @@
 // errors on the judged windows of this build's own flights (SPEC 12.5). Realism is not claimed: the band is not met.
 // - The built module's AP fit of the NASA ISS sample (analysis/od/tests/data/supgp-reference/iss, the demo's sample: its
 //   states up to the file's midpoint, $PCF THEORY AP, FORCES JACCHIA70 on THEORY_FLUX_MODEL, degree 20, tesseral 31)
-//   writes COV_PROPAGATION with the 0.6.1 DRAG row: s_e, s_i, s_l and the share c equal the re-fit's values bit for bit,
+//   writes COV_PROPAGATION with the 0.6.1 DRAG row: s_e, s_i and s_l equal the re-fit's values bit for bit and the share
+//   is the re-fit's c times 1 + (kDragShareStrong - 1) S(|r|) at the record's own stated drag rate (SPEC 12.5, 0.6.45),
 //   and its floor is k_F times the floor of the 0.6.0 build's fit of the same sample (sdn-ap 0.6.0 by `git show` at
 //   modules 895b6b38, SHA-256 checked).
 // - The ISS figure: each build flies its fit to the file's last state (12 h from its start, EME2000); the in-track
 //   1-sigma (the position covariance projected on the truth state's in-track axis) and the error, both builds.
 // - The radial floor factor (SPEC 12.5, stack #477): the same fit by this build and by the build the registered rows were
-//   flown on (0.6.42, modules 3e4dcbbe, SHA-256 checked, with ROWS_FACTOR in its floors) differs only by FLOOR_UU times
-//   (f / ROWS_FACTOR)^2 and FLOOR_VU and FLOOR_WU times f / ROWS_FACTOR, with f = RADIAL_FACTOR, and has the same mean
-//   elements: so this build flies the registered windows as the rows' build did, but for the factor.
-// - The registered windows (stack #477, the final build's own flights): 748 windows of the low table (strong drag 2025 and
-//   2026, laser spheres, burn-free altimetry, near 700 km), each fitted by the rows' build at tesseral 31 / zonal 70 (the
+//   flown on (0.6.43, modules 217233ca, SHA-256 checked, with ROWS_FACTOR in its floors) differs only by FLOOR_UU times
+//   (f / ROWS_FACTOR)^2 and FLOOR_VU and FLOOR_WU times f / ROWS_FACTOR, with f = RADIAL_FACTOR, and the share by the drag
+//   share's step, and has the same mean elements: so this build flies the registered windows as the rows' build did, but for
+//   the factors.
+// - The registered windows (stacks #477, #531, #568): 0.6.43's own flights (the rows' build) of 748 windows of the low table
+//   (strong drag 2025 and 2026, laser spheres, burn-free altimetry, near 700 km), each fitted at tesseral 31 / zonal 70 (the
 //   degrees the low table's records take from 0.6.42) and flown with its own covariance; every 30 min on days 1, 2, 3, 5 and
-//   7 (near 700 km 1 to 3) the error and the variance as flown in the truth's R, I and C, and the record's floor, with the
-//   factor taken off (the floors over ROWS_FACTOR^2 and ROWS_FACTOR, the radial variance with them). This build's variance
-//   is that variance with the radial floor re-weighted, v + (f^2 - 1) FLOOR_UU (the in-track and cross-track as flown).
+//   7 (near 700 km 1 to 3) the error and the variance as flown in the truth's R, I and C, the share of each variance the DRAG
+//   row's s_i term gives (s) and the drag rate's term gives (d), and the record's floor and COV_PROPAGATION as flown. This
+//   build's variance is that variance with the radial floor re-weighted, the s_i term scaled (every record states zonal
+//   degree 70) and the drag term scaled by the square of the share's change:
+//   v_R + (f^2 - ROWS_FACTOR^2) FLOOR_UU / ROWS_FACTOR^2 + (k^2 - 1) s_R + (g^2 - 1) d_R, v_I + (k^2 - 1) s_I + (g^2 - 1) d_I,
+//   v_C + (k^2 - 1) s_C + (g^2 - 1) d_C, with f = RADIAL_FACTOR, k = SI_FACTOR and g = 1 + (DRAG_SHARE_STRONG - 1) S(|r|) for
+//   the record's own stated drag rate r (P(t) is linear in each squared size, SPEC 12.5).
 //   Per regime, day and axis over the judged windows (the split rule's other set): the median |z|, pooled over every
 //   sample of the day, and the shares within 1 and 3 sigma.
-// Asserts: the DRAG row and the floors as above; the factor; every judged cell equals the registered cell
-// (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the band [0.603, 0.754] are exactly the
-// registered ones, each named with its cause. Realism is not met: 8 of the 42 judged cells are inside the band. JS moves
+// Asserts: the DRAG row and the floors as above; the factor and the share's step; the rows' s_i is the DRAG row's; every
+// judged cell equals the registered cell (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the
+// band [0.603, 0.754] are exactly the registered ones, each named with its cause. Realism is not met: 14 of the 42 judged
+// cells are inside the band (3 on 0.6.43, 8 on 0.6.42). JS moves
 // bytes, rotates the module's covariance onto the truth's axes and takes medians; every state and covariance is the module's.
 // Until 0.6.42 the test judged 0.6.0's flights of held-out windows re-weighted with the build's variances. On 0.6.42 (git
 // b7a7191e, wasm f771420f; main 0.6.41's test, git afdd1568, run on it), whose floors follow its closer fit, those cells read
@@ -53,12 +60,26 @@ import { ensureBuilt, packageRoot, wasmPath } from "./lib/module.mjs";
 import { configuration, XP_FORCES } from "./lib/pcf.mjs";
 import { packOem, rfm } from "./lib/frames.mjs";
 
-// the registered rows (stack #477): the build's own flights, records at tesseral 31 / zonal 70, and the build they were flown on
-const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-1ddff52cf42c/rows-31-70-factor-off.jsonl", sha256: "dc54dafd6da1816734de29cd7f1319e6f023f783d664240e6090912149881be6" };
-const ROWS_BUILD = { commit: "3e4dcbbedc21d07f1443f6bcf1082c9e9569b5a1", sha256: "1ddff52cf42c6f3e9b1c8dfe470d0d70e22b6afcb187838fbe4b7ceb5c333487" };
+// the registered rows (stacks #477, #531, #568): 0.6.43's own flights, records at tesseral 31 / zonal 70, each sample with the
+// s_i term's and the drag rate's term's share of its variance, and the build they were flown on
+const ROWS = { path: "/opt/data/sdn-archive/operator-theory/covariance-coverage-f33e071fc77c/rows-31-70-si-drag-terms.jsonl", sha256: "6b8e460eff61540cf688b806b51d47b392e0b292be0636a3a145b7b7081cf022" };
+const ROWS_BUILD = { commit: "217233cab56052072297fa15223be0fcd821e20d", sha256: "f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935" };
 // SPEC 12.5's kFloorRadialFastSide, the radial floor's sigma factor in the low table's fast side (DRAG regime), and the one the
-// rows' build carried, which the rows have taken off
-const RADIAL_FACTOR = Math.exp(0.095), ROWS_FACTOR = Math.exp(0.10);
+// rows' build carried, which the rows were flown with
+const RADIAL_FACTOR = Math.exp(0.095), ROWS_FACTOR = Math.exp(0.095);
+// SPEC 12.5's kSiZonal70 (0.6.45, stack #531): the DRAG row's s_i factor at a record's stated zonal degree 70, and the DRAG row's s_i
+const SI_FACTOR = 0.11080315836233387, DRAG_SI = 1.12761105007012e-6;
+// SPEC 12.5's kDragShareStrong (0.6.45, stack #568): the DRAG row's share c times 1 + (K - 1) S(|r|) on the low table's fast
+// side, S the cos^2 step in log10 (|r| / 1.35e-6) of half-width 0.25 decade (0 at or below 7.6e-7 per day, 1 at or above 2.4e-6)
+const DRAG_SHARE_STRONG = 1.1618342427282831, DRAG_KEY_MID = 1.35e-6, DRAG_KEY_HALF = 0.25;
+const dragKeyStep = (rate) => {
+  const x = Math.log10(Math.abs(rate) / DRAG_KEY_MID);
+  if (!(Math.abs(rate) > 0) || x <= -DRAG_KEY_HALF) return 0;
+  if (x >= DRAG_KEY_HALF) return 1;
+  const c = Math.cos(0.5 * Math.PI * (x + DRAG_KEY_HALF) / (2 * DRAG_KEY_HALF));
+  return 1 - c * c;
+};
+const shareFactor = (rate) => 1 + (DRAG_SHARE_STRONG - 1) * dragKeyStep(rate);
 const BEFORE ={ commit: "895b6b38de29bc284b4b50a02425a6c3a5fe81a2", sha256: "0b5280f05176fc755dbfb859fd8028fc495759d7537024c53043f498c91faa63" };
 // The floor ratio and the held-out medians as the re-fit stated them: within 1e-12 and 1e-5 relative until 0.6.5, whose fit
 // (the analytic/SIMD covariance Jacobian among its speed changes, SPEC 16.8) stops at another point inside its tolerance:
@@ -87,8 +108,31 @@ const FLOOR_RELATIVE = 2e-3, MEDIAN_RELATIVE = 5e-5;
 // floors are pinned to this build's. The held-out windows of 0.6.0's flights re-weighted with this build's variances are
 // replaced by the build's own flights (the registered rows above): the floor shrinks with the fit's residual, and what a
 // stated covariance is judged on is the build's own errors.
-const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00009038457492534002, FLOOR_VU_KM2: -0.0000020407312816137013, FLOOR_VV_KM2: 0.0004379503542741541,
-  FLOOR_WU_KM2: 0.000006004698113649276, FLOOR_WV_KM2: 0.000004202943063050906, FLOOR_WW_KM2: 0.00006200737685181363 };
+// 0.6.43 (the zonal theory's constant radial term, SPEC 16.23) moves every low-table fit, so the registered rows are its own
+// flights of the same 748 windows (covariance-coverage-f33e071fc77c, the build at git 217233ca, the factor exp(0.095) it
+// carries taken off; ROWS_FACTOR is RADIAL_FACTOR) and the judged cells are registered on them. Against 0.6.42's rows judged
+// the same way: in the band 8 to 3, too narrow 6 to 7, too wide 28 to 32, of 42. Leaving the band: on the wide side the day-1
+// radial of near 700 km (0.687 to 0.545), altimetry (0.650 to 0.535) and the laser spheres (0.640 to 0.536) and altimetry's
+// day-7 radial (0.606 to 0.545); on the narrow side, the unsafe one for a screen, strong drag 2026's day-3 radial (0.748 to
+// 0.828). Narrower where they were too narrow: strong drag 2026 radial days 5 and 7 (0.788 to 0.845, 0.770 to 0.806) and
+// in-track days 3 and 5 (0.896 to 0.902, 0.906 to 0.908). Why: the term removes a +10 m radial bias that sat in the errors
+// and never in the floor (the fit's residual covariance, about its mean), and the factor exp(0.095) was fitted on errors that
+// carried it: the day-1 radial RMS falls 8.1 to 5.5 m (spheres), 9.1 to 5.8 m (altimetry), 10.6 to 6.2 m (near 700 km), 14.4
+// to 9.9 m (strong drag 2025), while strong drag 2026's day 5 rises 109.9 to 112.0 m, its drag-driven radial excursion no
+// longer cancelled in part by the bias (stack #565). The factor by regime is stack #568. The ISS sample's fit moves: its 12 h
+// error 265.1 to 263.3 m, FLOOR_UU_KM2 2.0 % larger, FLOOR_VV_KM2 0.9 % smaller, FLOOR_WW_KM2 as it was; FLOORS_PINNED is
+// this build's.
+// 0.6.45 (stacks #531, #568) changes no fit and no floor: the DRAG row's s_i times exp(-2.2) at zonal degree 70 and the drag
+// share times exp(0.150) on strong drag, by the step on the record's own drag rate. The registered rows are 0.6.43's own
+// flights with each sample's s_i and drag terms apart (rows-31-70-si-drag-terms.jsonl, the same flights as 0.6.43's
+// registered rows: without the factors they give 0.6.43's 42 cells to 2e-16 relative), and the cells are registered at the
+// factors. Against 0.6.42: in the band 8 to 14 (3 on 0.6.43). The four weak-drag radial cells 0.6.43 takes out of the band on
+// the wide side stay out (near 700 km, altimetry and the laser spheres at day 1, 0.545, 0.535, 0.536; altimetry at day 7,
+// 0.545): the weak-drag side keeps exp(0.095) (stack #568). Strong drag 2026's in-track stays too narrow at every lead, less
+// than on 0.6.42 (0.864, 0.896, 0.906, 0.894 to 0.831, 0.797, 0.792, 0.774 at days 1, 3, 5, 7), and its day-3 radial is 0.754
+// against 0.6.42's 0.748, inside the band. Every strong drag 2026 radial cell is inside (0.666, 0.754, 0.754, 0.712).
+const FLOORS_PINNED = { FLOOR_UU_KM2: 0.00009222349489320216, FLOOR_VU_KM2: -0.0000031370232835827193, FLOOR_VV_KM2: 0.00043417978537513166,
+  FLOOR_WU_KM2: -0.000010709838259212625, FLOOR_WV_KM2: 0.000004215804512073688, FLOOR_WW_KM2: 0.00006200777184276415 };
 const ISS = { path: "analysis/od/tests/data/supgp-reference/iss/ISS.OEM_J2K_EPH.trimmed.txt", sha256: "fbda48d1584bee1f38ea562625280ecfe4e6643f67c417e91f2fc245ee48311f" };
 const AXES = ["R", "I", "C"];
 const expected = JSON.parse(fs.readFileSync(fileURLToPath(new URL("fixtures/covariance-refit-held-out.json", import.meta.url)), "utf8"));
@@ -161,7 +205,10 @@ const now = iss["0.6.1"]?.cp, was = iss["0.6.0"]?.cp, F = expected.fitted;
 const row = now && was ? { s_e: now.NOISE_ECCENTRICITY_PER_DAY, s_i: now.NOISE_INCLINATION_PER_DAY, s_l: now.NOISE_MEAN_MOTION_RELATIVE, c: now.NON_GRAVITATIONAL_SHARE, k_F: now.FLOOR_VV_KM2 / was.FLOOR_VV_KM2 } : null;
 check(!!row, "no 0.6.1 or 0.6.0 COV_PROPAGATION");
 if (row) {
-  for (const k of ["s_e", "s_i", "s_l", "c"]) check(Object.is(row[k], F[k]), `${k}: the module writes ${row[k]}, the re-fit ${F[k]}`);
+  for (const k of ["s_e", "s_i", "s_l"]) check(Object.is(row[k], F[k]), `${k}: the module writes ${row[k]}, the re-fit ${F[k]}`);
+  // the share by the drag share's step at the record's own stated drag rate (0.6.45; the ISS fit, 420 km, is strong drag)
+  const wantC = F.c * shareFactor(now.NON_GRAVITATIONAL_RATE_PER_DAY);
+  check(Math.abs(row.c - wantC) <= 1e-14 * F.c, `c: the module writes ${row.c}, the re-fit's c by the step ${wantC}`);
   // the diagonal terms relative to themselves; each cross term relative to the square root of the product of its two
   // diagonal terms (2026-11-11, stack #433: a cross term near zero, held relative to itself, read the two builds' fits
   // stopping apart; a millimeter of state change moved FLOOR_VU_KM2 5.6e-3 of itself)
@@ -187,6 +234,8 @@ check(!!now && !!rowsCp && iss["0.6.1"].elements === iss.rows.elements, "the ISS
 if (now && rowsCp) {
   const f = RADIAL_FACTOR / ROWS_FACTOR, want = { FLOOR_UU_KM2: f * f, FLOOR_VU_KM2: f, FLOOR_WU_KM2: f, FLOOR_VV_KM2: 1, FLOOR_WV_KM2: 1, FLOOR_WW_KM2: 1 };
   for (const [k, w] of Object.entries(want)) check(Math.abs(now[k] / rowsCp[k] / w - 1) <= 1e-12, `${k}: this build / the rows' build ${now[k] / rowsCp[k]}, the factor's ${w}`);
+  const g = shareFactor(rowsCp.NON_GRAVITATIONAL_RATE_PER_DAY);
+  check(Math.abs(now.NON_GRAVITATIONAL_SHARE / rowsCp.NON_GRAVITATIONAL_SHARE / g - 1) <= 1e-12, `the share: this build / the rows' build ${now.NON_GRAVITATIONAL_SHARE / rowsCp.NON_GRAVITATIONAL_SHARE}, the step's ${g}`);
   console.log(`the radial floor factor: FLOOR_UU_KM2 x ${(now.FLOOR_UU_KM2 / rowsCp.FLOOR_UU_KM2).toFixed(6)}, FLOOR_VU_KM2 x ${(now.FLOOR_VU_KM2 / rowsCp.FLOOR_VU_KM2).toFixed(6)}, FLOOR_WU_KM2 x ${(now.FLOOR_WU_KM2 / rowsCp.FLOOR_WU_KM2).toFixed(6)} against the rows' build (f / the rows' factor ${f.toFixed(6)})`);
 }
 
@@ -200,9 +249,12 @@ for (const l of String(rowsText).split("\n")) {
   const w = JSON.parse(l);
   if (w.set !== "judged") continue;
   windows += 1;
-  const floorR = w.cp.FLOOR_UU_KM2;
-  for (const [sec, eR, eI, eC, vR, vI, vC] of w.samples) {
-    const day = Math.ceil(sec / 86400), v = [vR + (RADIAL_FACTOR * RADIAL_FACTOR - 1) * floorR, vI, vC], e = [eR, eI, eC];
+  check(Object.is(w.cp.NOISE_INCLINATION_PER_DAY, DRAG_SI), `window ${w.id}: the rows' s_i ${w.cp.NOISE_INCLINATION_PER_DAY}, the DRAG row's ${DRAG_SI}`);
+  const floorOff = w.cp.FLOOR_UU_KM2 / (ROWS_FACTOR * ROWS_FACTOR), k2 = SI_FACTOR * SI_FACTOR - 1;
+  const g = shareFactor(w.cp.NON_GRAVITATIONAL_RATE_PER_DAY), g2 = g * g - 1;
+  for (const [sec, eR, eI, eC, vR, vI, vC, sR, sI, sC, dR, dI, dC] of w.samples) {
+    const day = Math.ceil(sec / 86400), e = [eR, eI, eC];
+    const v = [vR + (RADIAL_FACTOR * RADIAL_FACTOR - ROWS_FACTOR * ROWS_FACTOR) * floorOff + k2 * sR + g2 * dR, vI + k2 * sI + g2 * dI, vC + k2 * sC + g2 * dC];
     AXES.forEach((ax, x) => { const k = `${w.regime} ${day} ${ax}`; (zs.get(k) ?? zs.set(k, { w: new Set(), z: [] }).get(k)).z.push(Math.abs(e[x]) / Math.sqrt(v[x])); zs.get(k).w.add(w.id); });
   }
 }

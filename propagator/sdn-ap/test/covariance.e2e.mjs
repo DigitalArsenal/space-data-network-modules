@@ -10,11 +10,14 @@
 //   SDNAP_COV_NOISE and SDNAP_COV_NG_RATE; |NOISE_NON_GRAVITATIONAL_RAD_DAY2 - NON_GRAVITATIONAL_SHARE x
 //   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day).
 // - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
-//   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n); sdnap_covariance_at of the
-//   stored AP record (ap-fit-0.6.42.ocm, 0.6.42's fit) at the fixture grid within AP_COV_FLIGHT of 0.6.42's numbers
-//   (ap-fit-0.6.42-0.6.42.cov; 0.6.4's fit, the stored record through 0.6.34, states EGM-96 and is refused, SPEC 16.2;
+//   SPEC 12.5 (s_e, s_i, s_l bit for bit; the share c times 1 + (kDragShareStrong - 1) S(|rate|) within 1e-14 of c, the
+//   fixture's record on the step's slope, 0.6.45; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = share |rate| n); the same fit at zonal 70
+//   writes s_i times exp(-2.2) and the rest of the row as at 20, at zonal 50 the row as at 20; sdnap_covariance_at of the
+//   stored AP record (ap-fit-0.6.42.ocm, 0.6.42's fit) at the fixture grid within AP_COV_FLIGHT of 0.6.43's numbers
+//   (ap-fit-0.6.42-0.6.43.cov; 0.6.4's fit, the stored record through 0.6.34, states EGM-96 and is refused, SPEC 16.2;
 //   0.6.36's fit, written before the epoch floor at its mean elements' two-body state, is refused, SPEC 12.4), and this
-//   build's own AP fit within AP_COV_FIT of this build's numbers of 0.6.42's fit of the same inputs (ap-fit-0.6.42.ocm: a
+//   build's own AP fit within AP_COV_FIT of this build's numbers of 0.6.43's fit of the same inputs (ap-fit-0.6.43.ocm, its
+//   share and s_d restated as this build's own fit states them, 0.6.45: a
 //   fit flown by its own theory, history at AP_COV_FLIGHT); its epoch covariance and floors within AP_COV_FIT of that
 //   record's (the SGP4XP table and numbers are unchanged).
 // - export_omm of the XP $OCM equals xp-fit-0.4.0.omm with USER_DEFINED_PARAMETERS, COMMENT and
@@ -42,6 +45,21 @@ import { inputs, GRID } from "./lib/fixture-inputs.mjs";
 
 /// SPEC 12.5's AP DRAG row (0.6.1).
 const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.647194501793458e-7, c: 0.112126311682426 };
+// SPEC 12.5's kSiZonal70 (0.6.45, stack #531): exp(-2.2), the DRAG row's s_i factor at a record's stated zonal degree 70
+const SI_ZONAL70 = 0.11080315836233387;
+// SPEC 12.5's kDragShareStrong (0.6.45, stack #568): on the low table's fast side the DRAG row's share is c (1 + (K - 1) S(|r|)),
+// r the record's own NON_GRAVITATIONAL_RATE_PER_DAY and S the cos^2 step in log10 (|r| / 1.35e-6) of half-width 0.25 decade (0 at
+// or below 7.6e-7 per day, 1 at or above 2.4e-6). The fixture's inputs state 1.25e-6 per day: a record on the step's slope.
+const DRAG_SHARE_STRONG = 1.1618342427282831, DRAG_KEY_MID = 1.35e-6, DRAG_KEY_HALF = 0.25;
+const dragKeyStep = (rate) => {
+  const x = Math.log10(Math.abs(rate) / DRAG_KEY_MID);
+  if (!(Math.abs(rate) > 0) || x <= -DRAG_KEY_HALF) return 0;
+  if (x >= DRAG_KEY_HALF) return 1;
+  const c = Math.cos(0.5 * Math.PI * (x + DRAG_KEY_HALF) / (2 * DRAG_KEY_HALF));
+  return 1 - c * c;
+};
+const shareOf = (rate) => AP_DRAG.c * (1 + (DRAG_SHARE_STRONG - 1) * dragKeyStep(rate));
+const sameShare = (cp) => Math.abs(cp.NON_GRAVITATIONAL_SHARE - shareOf(cp.NON_GRAVITATIONAL_RATE_PER_DAY)) <= 1e-14 * AP_DRAG.c;
 /// The AP covariance, the flight of fixed elements and the fit apart. Until 2026-11-10 the SHA-256 of the own fit's
 /// COVARIANCE_DATA, floors and sdnap_covariance_at (f65830a2..., recorded on 0.6.1, held through 0.6.4). 0.6.5 (24d7d75f,
 /// the analytic/SIMD covariance Jacobian and its other speed changes, SPEC 16.8) moves sdnap_covariance_at of the stored
@@ -98,7 +116,7 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// flies its states as 0.6.36 flew them, its covariance refused by name.
 /// 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves this
 /// 550 km set, which is in the low table at tesseral 31. Main 0.6.41 (git afdd1568, wasm bec591fe) gives 0.6.39's fit's
-/// numbers within AP_COV_FLIGHT of 0.6.36's; on 0.6.42 (git b7a7191e, wasm f771420f) they are 59,929.891 mm from them,
+/// numbers within AP_COV_FLIGHT of 0.6.36's; on 0.6.42 (git b7a7191e, wasm f771420f; the final 0.6.42, git 61048ba9, wasm 3c389abf, flies the same bits) they are 59,929.891 mm from them,
 /// the covariance 2.07e-5 of a time's largest entry. Its own fit is 10,706.11 mm from 0.6.39's fit (both by 0.6.42), the
 /// covariance 1.66e-1 of a time's largest entry, the epoch covariance 1.10e-1 of that record's largest entry and the
 /// floors 1.52 relative: the fast side fits the arc closer (FIT_RMS 37.27 against 40.15 m), the floor is the fit's own
@@ -106,6 +124,16 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// side holds these to another theory's numbers, so from 0.6.42 the stored record is 0.6.42's own fit (ap-fit-0.6.42.ocm)
 /// with its numbers (ap-fit-0.6.42-0.6.42.cov; ap-fit-0.6.36-0.6.36.cov went), and the own fit is the same record, the
 /// bounds kept.
+/// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
+/// numbers by 2,151.662 mm and a covariance of 2.28e-6 of a time's largest entry, and records them from itself
+/// (ap-fit-0.6.42-0.6.43.cov; the 0.6.42 file went), the bounds kept: the record carries its epoch floor at the
+/// two-body state of its mean elements (SPEC 12.4), so its covariance moves with the states (on a record written before
+/// 0.6.39 the term moved what the reader takes off, stack #551). It moves the fit: 317.33 mm on the grid and a
+/// covariance of 2.04e-2 of a time's largest entry from 0.6.42's fit (both flown by 0.6.43); its epoch covariance by
+/// 1.31e-2 of that record's largest entry and its floors (the fit's residual covariance, SPEC 12.4) by up to 4.3 times
+/// themselves (FLOOR_WU_KM2, the smallest, which changes sign; FLOOR_UU_KM2 3.0 %, FLOOR_WV_KM2 6.2 %, the rest under
+/// 0.3 %); FIT_RMS 37.286 against 37.273 m. So the own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays
+/// 0.6.42's fit.
 const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };
 
@@ -204,13 +232,27 @@ if (apBytes) {
   refused("export_omm of the AP set", await exportOmm(apBytes), "theory-not-exportable:AP");
   const ap = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(apBytes)).unpack(), acp = ap.COV_PROPAGATION;
   check(Object.is(acp.NOISE_ECCENTRICITY_PER_DAY, AP_DRAG.s_e) && Object.is(acp.NOISE_INCLINATION_PER_DAY, AP_DRAG.s_i) &&
-    Object.is(acp.NOISE_MEAN_MOTION_RELATIVE, AP_DRAG.s_l) && Object.is(acp.NON_GRAVITATIONAL_SHARE, AP_DRAG.c) && ap.COV_REALISM?.[0]?.REGIME === "DRAG",
-    `the AP set's noise ${JSON.stringify(acp)} (regime ${ap.COV_REALISM?.[0]?.REGIME}) is not SPEC 12.5's DRAG row`);
+    Object.is(acp.NOISE_MEAN_MOTION_RELATIVE, AP_DRAG.s_l) && sameShare(acp) && ap.COV_REALISM?.[0]?.REGIME === "DRAG",
+    `the AP set's noise ${JSON.stringify(acp)} (regime ${ap.COV_REALISM?.[0]?.REGIME}) is not SPEC 12.5's DRAG row (share expected ${shareOf(acp.NON_GRAVITATIONAL_RATE_PER_DAY)})`);
+  // the fixture's record is on the step's slope: its share is strictly between c and c K
+  check(acp.NON_GRAVITATIONAL_SHARE > AP_DRAG.c && acp.NON_GRAVITATIONAL_SHARE < AP_DRAG.c * DRAG_SHARE_STRONG,
+    `the AP set's share ${acp.NON_GRAVITATIONAL_SHARE} at the stated rate ${acp.NON_GRAVITATIONAL_RATE_PER_DAY} per day is not on the step's slope`);
+  // SPEC 12.5 (stack #531): a record whose stated zonal degree is 70 takes the DRAG row's s_i times SI_ZONAL70, every other
+  // field of the row as at zonal 20; a record at 50 (between 20 and 70) keeps today's s_i
+  for (const [zonal, want] of [[70, AP_DRAG.s_i * SI_ZONAL70], [50, AP_DRAG.s_i]]) {
+    const z = await fit(configuration({ theory: "AP", forces: { ...MSIS_FORCES, HAS_MAXIMUM_TESSERAL_DEGREE: true, MAXIMUM_TESSERAL_DEGREE: 31,
+      HAS_MAXIMUM_DEGREE: true, MAXIMUM_DEGREE: zonal, WEATHER_SOURCE: pcfWeatherSource.RECORDS } }), rows.bytes);
+    const zr = z ? OCM.getRootAsOCM(new flatbuffers.ByteBuffer(z)).unpack() : null, zcp = zr?.COV_PROPAGATION;
+    console.log(`the AP set at zonal ${zonal}: s_i ${zcp?.NOISE_INCLINATION_PER_DAY} (DRAG row ${AP_DRAG.s_i}), regime ${zr?.COV_REALISM?.[0]?.REGIME}`);
+    check(zcp && Object.is(zcp.NOISE_INCLINATION_PER_DAY, want) && Object.is(zcp.NOISE_ECCENTRICITY_PER_DAY, AP_DRAG.s_e) &&
+      Object.is(zcp.NOISE_MEAN_MOTION_RELATIVE, AP_DRAG.s_l) && sameShare(zcp) && zr.COV_REALISM?.[0]?.REGIME === "DRAG",
+      `the AP set at zonal ${zonal}: noise ${JSON.stringify(zcp)}, s_i expected ${want}`);
+  }
   const an = ap.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI, awant = acp.NON_GRAVITATIONAL_SHARE * Math.abs(acp.NON_GRAVITATIONAL_RATE_PER_DAY) * an;
   check(Math.abs(acp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 - awant) <= 1e-12 * Math.max(Math.abs(awant), Number.MIN_VALUE), "the AP set's noise invariant");
   // sdnap_covariance_at at the fixture grid: the stored record itself (the flight of fixed elements and covariance) against
-  // 0.6.42's numbers of it (test/fixtures/ap-fit-0.6.42-0.6.42.cov) within AP_COV_FLIGHT; this build's own fit against
-  // this build's numbers of 0.6.42's fit (ap-fit-0.6.42.ocm), a fit flown by its own build, within AP_COV_FIT; the own
+  // 0.6.43's numbers of it (test/fixtures/ap-fit-0.6.42-0.6.43.cov) within AP_COV_FLIGHT; this build's own fit against
+  // this build's numbers of 0.6.43's fit (ap-fit-0.6.43.ocm), a fit flown by its own build, within AP_COV_FIT; the own
   // fit's epoch covariance and floors against that record's within AP_COV_FIT.epoch and AP_COV_FIT.floors
   const covRaw = (bytes) => {
     const qo = x.sdnap_alloc(bytes.length), qm = x.sdnap_alloc(8 * minutes.length), qout = x.sdnap_alloc(8 * 42 * minutes.length);
@@ -244,17 +286,25 @@ if (apBytes) {
   const preFloor = covRaw(new Uint8Array(fixture("ap-fit-0.6.36.ocm")));
   check(preFloor.status === -7, `sdnap_covariance_at of 0.6.36's fit: status ${preFloor.status}, expected -7 (cov-floor-at-theory-state)`);
   const ofFixture = (name) => new Float64Array(fixture(name).buffer.slice(0));
-  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.42.ocm")), fitRecordCov = covRaw(fitRecordBytes);
-  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.42's fit: ${fitRecordCov.status}`);
-  const flightD = covAt(storedBytes, ofFixture("ap-fit-0.6.42-0.6.42.cov")), fitD = covAt(apBytes, fitRecordCov.got);
+  // 0.6.45 (kDragShareStrong) states another share on the same fit: 0.6.43's record with its share and s_d restated as this
+  // build's own fit states them (the record unpacked and packed again), so the comparison is of the fit and its flight
+  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.43.ocm"));
+  const restated = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fitRecordBytes)).unpack();
+  restated.COV_PROPAGATION.NON_GRAVITATIONAL_SHARE = acp.NON_GRAVITATIONAL_SHARE;
+  restated.COV_PROPAGATION.NOISE_NON_GRAVITATIONAL_RAD_DAY2 = acp.NOISE_NON_GRAVITATIONAL_RAD_DAY2;
+  const rb = new flatbuffers.Builder(4096);
+  OCM.finishOCMBuffer(rb, restated.pack(rb));
+  const fitRecordCov = covRaw(rb.asUint8Array());
+  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.43's fit, its share restated: ${fitRecordCov.status}`);
+  const flightD = covAt(storedBytes, ofFixture("ap-fit-0.6.42-0.6.43.cov")), fitD = covAt(apBytes, fitRecordCov.got);
   const floors = ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"];
   const recorded = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fitRecordBytes)).unpack();
   const floorRel = Math.max(...floors.map((f) => Math.abs(acp[f] - recorded.COV_PROPAGATION[f]) / Math.abs(recorded.COV_PROPAGATION[f])));
   const epochLargest = Math.max(...recorded.COVARIANCE_DATA.map(Math.abs));
   const epochRel = Math.max(...ap.COVARIANCE_DATA.map((v, k) => Math.abs(v - recorded.COVARIANCE_DATA[k]))) / epochLargest;
   console.log(`AP set: DRAG row s_e ${acp.NOISE_ECCENTRICITY_PER_DAY}, s_i ${acp.NOISE_INCLINATION_PER_DAY}, s_l ${acp.NOISE_MEAN_MOTION_RELATIVE}, c ${acp.NON_GRAVITATIONAL_SHARE}`);
-  console.log(`sdnap_covariance_at: the stored record against 0.6.42's of it ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
-    `this build's fit against this build's of 0.6.42's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
+  console.log(`sdnap_covariance_at: the stored record against 0.6.43's of it ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
+    `this build's fit against this build's of 0.6.43's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
   check(flightD.status === 0 && flightD.posM <= AP_COV_FLIGHT.posM && flightD.velMmS <= AP_COV_FLIGHT.velMmS && flightD.covOfLargest <= AP_COV_FLIGHT.covOfLargest,
     `sdnap_covariance_at of the stored AP record moved: ${JSON.stringify(flightD)} against ${JSON.stringify(AP_COV_FLIGHT)}`);
   check(fitD.status === 0 && fitD.posM <= AP_COV_FIT.posM && fitD.covOfLargest <= AP_COV_FIT.covOfLargest && epochRel <= AP_COV_FIT.epoch && floorRel <= AP_COV_FIT.floors,

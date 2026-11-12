@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.42 (dist 8bf870fe).
+Version 0.6.45 (dist 50180661).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -48,6 +48,12 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   step was 1e-12 or more (then solved by bisection), 1 section 8's whose last step was 1e-12 or more (then solved by
   bisection), 2 AP's whose last step was under 1e-12 (solved; section 8's such endings are in no count); `reset` non-zero
   reads and clears it in one step.
+- The fit's iteration ceiling (SPEC 12.1): `sdnap_fit_ceiling_met(reset, which)` counts the fit passes that ended at their
+  ceiling with the cost still falling: `which` 0 at 1,000 a pass (a fit that solves no drag term: the set above the drag,
+  or a drag term its prior holds), 1 at any other ceiling (40 a pass where the fit solves a drag term, or an `sdnap_fit`
+  caller's own); `reset` non-zero reads and clears it in one step. Such a record states CONVERGED false and, in a line of
+  its OD COMMENT no version before wrote, says so: a fit under the drag that ends at 40 keeps the elements, statistics and
+  flights of the version before, and its record's bytes differ by that line alone.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME
@@ -186,10 +192,15 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
 `FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (in the low table with a degree above
-12, from 0.6.42, every first-order term and the m-daily terms to the degree asked, up to 70; on every other branch m-daily
-and the other first-order terms to 12 and near-resonant terms to 31; shallow resonances and the half-day and one-day
-resonant tails to 31; each to the degree asked if lower;
-MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
+12, from 0.6.42, the first-order terms with |l - 2p| up to 17 and the m-daily terms to the degree asked, up to 70, each above
+the table's size cut of 0.5 m, and none inside the slow band at more than 1 - w of its epoch rate: SPEC 16.1's band rule and
+band guard; on every other branch m-daily
+and the other first-order terms to 12; in class 0 with a period under 1,100 minutes near-resonant terms and shallow
+resonances to 31; the half-day and one-day resonant tails to 31 (the one-day tail at e 0.3 or below); each to the degree
+asked if lower; elsewhere nothing above 12;
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1; in the low table the slow set below takes
+degree 70 whatever degree is asked, so a record at tesseral 31, 20 or 12 still flies slow terms to degree 70, as its
+GRAVITY_MODEL states: "EGM2008; slow tesseral terms to degree 70"); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM2008 (from 0.6.36; EGM-96 through 0.6.34), pinned from propagator/ffm/lib by `build.mjs`. From 0.6.36 a flight
 refuses an AP set with gravity terms whose PERTURBATIONS.GRAVITY_MODEL is not that field (gravity-model-mismatch): every
@@ -202,14 +213,26 @@ carried degrees 2 to 4 only. On made-up geostationary sets, AP against FFM with 
 went from 16.9-136.1 m to 8.5-11.1 m at day 7 at 12 longitudes; what remains is AP's analytic Moon (stack #446;
 `test/one-day-resonant-tail.e2e.mjs`).
 
-The slow set (from 0.6.25) carries, in a fitted low orbit, every tesseral term of degree 2 to 70 with j = 1 to 6 and |q| up
+The slow set (from 0.6.25) carries, in a fitted low orbit, whatever MAXIMUM_TESSERAL_DEGREE the record states, every tesseral
+term of degree 2 to 70 with j = 1 to 6 and |q| up
 to 4 (from 0.6.27; q = 0 in 0.6.25) whose own angle drifts within 1.3 x 0.045 n at the epoch and whose size reaches 0.5 m
 (along track through the mean motion, or from 0.6.27 once per revolution through the eccentricity vector). Each term is
 tapered by its own current rate, and the output table holds the rest, so a term that drag moves through its band's edge
 leaves no step. Gravity alone against FFM 70 x 70, 300 to 1,500 km, the worst day-5 error after a pinned fit went from 1,584 m to
 218 m at i 53 and from 1,905 m to 423 m at i 97.6. On real 72 h fits, AP's day-5 forecast within 100 m of the full
 numerical arm's went from 21 to 34 of 56 windows on laser spheres and from 28 to 42 of 112 on altimetry (0.6.25). SPEC 16.18
-has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`).
+has the q != 0 part's measurements (`test/slow-set-partition.e2e.mjs`, `test/slow-set-taper.e2e.mjs`). Against a model
+truth cut below degree 70, AP is compared like with like only with `sdnap_slow_degree_cap` set to the truth's degree (a test
+hook; no flight reads it): against a 31 x 31 truth, a record at tesseral 31 flies slow terms of degree 32 to 70 that the
+truth leaves out.
+
+The zonal theory's constant radial term (from 0.6.43; SPEC 16.23). Held to the dynamics' mean rates, the theory's mean
+radius on a near-circular orbit sat (R_E^4 / a^3)[J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)]
+above the true one (c and s the cosine and sine of i): about +11 m at i 87.5 and 420 km, -2.4 m at i 55, +42 m near the
+equator. Every AP set with gravity terms takes that off its radius, at the same osculating energy (AP's output velocity
+is not the rate of its positions, stack #549); SGP4XP is unchanged. Against FFM with J2 to J5 and the Sun and Moon,
+fitted over 0 to 5 days, the offset left is -0.4 to +0.2 m on 42 near-circular cases from 300 to 1,400 km, at most 1.3 m
+at e 0.05, 1.8 m at e 0.1 and 9.1 m at e 0.3 (the eccentric terms are stack #532; `test/zonal-radius-term.e2e.mjs`).
 
 The field's census (from 0.6.32; SPEC 16.20) lists, for a set of mean elements, every tesseral term of the field to degree 70
 whose size over a 5-day forecast reaches 0.5 m, with the weight each carrier the set builds holds of it and the term's
@@ -460,7 +483,10 @@ and cross-track axis. On 0.6.42's own flights of the low table's records (tesser
 (strong drag 2026, laser spheres, altimetry and near 700 km; three axes; days 1, 3, 5 and 7) have their median |z| inside
 0.603 to 0.754. Too wide: cross-track outside near 700 km at day 1 and everywhere from day 3 (2.6 to 8.2 times from day
 3), in-track outside strong drag, and the radial of the laser spheres from day 3 and of altimetry at days 3 and 5. Too
-narrow: strong drag 2026's in-track at every day and its radial at days 5 and 7. SPEC 12.5 names each cell's cause. That count does not
+narrow: strong drag 2026's in-track at every day and its radial at days 5 and 7. SPEC 12.5 names each cell's cause. From
+0.6.45 the DRAG row's drag share on a strong-drag record of the low table (its own stated drag rate at or above 2.41e-6 per
+day, a smooth step in the rate from 7.59e-7) is 1.162 times the row's; a weak-drag record keeps the row's share, and every
+record keeps its radial floor factor (SPEC 12.5, stack #568). That count does not
 establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every judged cell with its shares within 1
 and 3 sigma, and the ISS figure.
 

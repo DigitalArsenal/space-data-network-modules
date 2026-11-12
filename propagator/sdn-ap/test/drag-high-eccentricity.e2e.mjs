@@ -60,10 +60,15 @@ const FIXTURES = {
 // 16.17, stack #446, on 0.6.19) move them to 1208.57 / 840.01, 8971.52 / 6053.53, 8711.83 / 5705.36 and 56.98 / 27.94
 // (-0.6 to +0.3 % of the seeded flights; the drag-off fit +3.24 / +0.79 m). The field EGM2008 on both sides (0.6.36, SPEC
 // 16.2) moves them to 1211.59 / 845.02, 8966.05 / 6049.00, 8709.93 / 5704.46 and 53.83 / 24.54 (the seeded Molniya +3.0 / +5.0
-// m, the others 1.9 to 5.5 m lower; the drag-off fit -3.15 / -3.40 m).
+// m, the others 1.9 to 5.5 m lower; the drag-off fit -3.15 / -3.40 m). The zonal theory's constant radial term (0.6.43,
+// SPEC 16.23, at the same osculating energy) moves them to 1211.59 / 845.01, 8967.37 / 6049.09, 8711.17 / 5704.51 and
+// 53.82 / 24.53 (the seeded GTO and GTO-500 +1.32 / +0.09 and +1.24 / +0.05 m, 0.015 %; the seeded Molniya and the
+// drag-off fit under 0.01 m). The seeded flights start the truth from AP's own output state, so they measure that state's
+// energy against AP's mean motion; at the same angular rate the term would have moved the GTO and GTO-500 flights to
+// 10554.78 / 7112.17 and 10299.52 / 6737.99 m (AP's output velocity is not the rate of its positions: stack #549).
 // 2's recorded figure (m, day-7 whole-day along-track RMS), 0.6.36; its history at 2.
 const MOLNIYA_PINNED = 82.17;
-const DRAG_OFF = {'Molniya seed off': [1211.59, 845.02], 'GTO seed off': [8966.05, 6049.00], 'GTO-500 seed off': [8709.93, 5704.46], 'Molniya drag off': [53.83, 24.54]};
+const DRAG_OFF = {'Molniya seed off': [1211.59, 845.01], 'GTO seed off': [8967.37, 6049.09], 'GTO-500 seed off': [8711.17, 5704.51], 'Molniya drag off': [53.82, 24.53]};
 const posterior = (text) => {
   const log = /posterior sigma of the log ([0-9.eE+-]+); posterior median ([0-9.eE+-]+)/.exec(text ?? '');
   if (log) return {sigmaLog: Number(log[1]), median: Number(log[2])};
