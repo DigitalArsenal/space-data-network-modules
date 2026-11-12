@@ -1827,7 +1827,7 @@ struct RateContext {
   uint8_t ap_frame;                   ///< AP: selected epoch-axis branch needs TEME-of-date output correction (SPEC 16.4)
   uint8_t ap_third_body;              ///< AP: the third bodies' degree 4-10 averaged rates and degree 2-10 short-period
                                       ///< terms by quadrature (SPEC 5.4, 16.8)
-  const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 >= res::kSeriesE (owned, xp_release)
+  const res::GTaylor* res_taylor;     ///< AP: the epoch class's G about e_0 > res::kSeriesE (owned, xp_release)
   const tess::ShallowCoef* shallow;   ///< AP: shallow resonant terms, in the rates (owned, xp_release)
   int32_t shallow_count;
   int32_t slow_extra;                 ///< SPEC 16.18: of shallow_count, the slow set's own terms (beyond the shallow set's)

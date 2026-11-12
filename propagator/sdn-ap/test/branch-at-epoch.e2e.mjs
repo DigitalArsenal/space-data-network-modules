@@ -16,14 +16,15 @@
 // - Fit (SPEC 16.7): an AP truth on the sixteen-hour side 3e-8 above the limit, flown 24 h every 10 min, fits back on
 //   its own side (the fitted mean motion within 1e-9 of the truth's, the arc RMS below 1 cm); a truth half on each side
 //   (the mean of the two flights of one set at the 0.8022 limit) is refused fit-at-branch-limit, its message naming the
-//   switch; a truth half on each side of the eccentricity switch at 0.3 (at 2 rev/day) is fitted, its set held at the
-//   switch on its own branch (e within 1e-6 of 0.3, never 0.3 itself, which is a branch of its own: G's series from 0.3
-//   up, the zonal tail only above it), its OD COMMENT saying so, and the record flown back over the arc giving the
-//   fit's own stated RMS (stack #504).
+//   switch; a truth half on each side of the eccentricity switch at 0.3 (at 2 rev/day) is fitted from below and held at
+//   the switch on its own branch: e at or under 0.3 and within 1e-6 of it (0.3 itself on this build, the below side's
+//   from 0.6.37, whose above side begins strictly above 0.3), its OD COMMENT saying so, and the record flown back over
+//   the arc giving the fit's own stated RMS within 1 mm (stack #504).
 // - Epoch store (SPEC 14.3): two AP sets 6 h apart on either side of the 1.2033 limit are not blended: inside the window
 //   of their switch sdnap_epochs_select gives b = -2 and weight 0, the state is the chosen set's bit for bit, and
 //   propagate_epochs names the switch time in the block's COMMENT; two sets on one side blend (b = 1, weight in (0, 1)) and
-//   their block has no COMMENT.
+//   their block has no COMMENT. At e 0.3 (2 rev/day): a set at exactly 0.3 and one the next double down, 6 h apart,
+//   blend (one branch: 0.3 is the below side's), and a set at 0.3 and one the next double up do not (b = -2; stack #504).
 // - Epoch store and carried forecasts (SPEC 14.3, 18.3): a record carrying its forecast (test/lib/carried.mjs, the "LEO
 //   500 km" class, span 0 to 24 h) followed 12 h later by the plain record: at the switch by epoch (6 h after the record's
 //   epoch, inside the span) the carried set flies alone on both sides (b = -3, weight 0, its forecast bit for bit), and

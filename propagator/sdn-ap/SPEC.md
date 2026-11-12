@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.37 (dist 76f023df).
+Version 0.6.37 (dist ba82c115).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2092,8 +2092,9 @@ first-pass window whose fitted set is above the drag (923 window-arcs per theory
 near-circular orbits, 5 to 1,000 times: median |z| 0.001 to 0.15 on laser geodetic, medium Earth orbit, Galileo,
 inclined geosynchronous and geostationary, in track 0.001 to 0.02. It is too narrow on TESS, Chandra and commercial
 geostationary, whose truth carries burns (stack #444). A set above the drag therefore takes a row by class, decided by
-its own elements: HEO at e 0.3 or more; otherwise geosynchronous under 1.5 rev/day, medium Earth orbit under 4 rev/day
-(GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
+its own elements: HEO above e 0.3 (from 0.6.37 strictly above, as the theory's switches, so a set at exactly 0.3 is
+the below side's in class as in theory; through 0.6.36 at 0.3 or more); otherwise geosynchronous under 1.5 rev/day,
+medium Earth orbit under 4 rev/day (GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
 
 - The class's row applies only inside its calibrated condition: the data sigma the fit weighted with (12.1) and the
   fit's span within those of the calibration fits. Outside it, and in a class without a fitted row, the ABOVE row

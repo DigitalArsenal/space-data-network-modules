@@ -49,11 +49,12 @@ inline int regime_of(const ElementRow& row) {
   return (a_er * (1.0 - row.eccentricity) - 1.0) * xpt::kRe < kDragRegimeKm ? 0 : 1;
 }
 
-/// SPEC 12.5, above the drag: the class of a set by its own elements: HEO at e 0.3 or more; otherwise geosynchronous
+/// SPEC 12.5, above the drag: the class of a set by its own elements: HEO above e 0.3 (strictly, as the theory's switches,
+/// so a set at exactly 0.3 is the below side's in theory and class alike; stack #504); otherwise geosynchronous
 /// under 1.5 rev/day, medium Earth orbit under 4 rev/day, and the LAGEOS class above (LAGEOS, LARES-2).
 enum AboveClass { kAboveHeo = 0, kAboveGso = 1, kAboveMeo = 2, kAboveLageos = 3 };
 inline int above_class(const ElementRow& row) {
-  if (row.eccentricity >= 0.3) return kAboveHeo;
+  if (row.eccentricity > xpt::tess::kWideE) return kAboveHeo;
   if (row.mean_motion_rev_day < 1.5) return kAboveGso;
   if (row.mean_motion_rev_day < 4.0) return kAboveMeo;
   return kAboveLageos;
