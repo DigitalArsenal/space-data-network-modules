@@ -54,7 +54,10 @@ const BASE_VERSION = '0.6.33', BASE = '7ebc98e4e', BASE_SHA256 = '0bd00d280330ff
 // that build's own version string), every AP set under the one bound, 15 mm. From 0.6.36
 // a record stating another field is refused (SPEC 16.2): the fitted set until then, analysis/catalog-composer's fixture
 // (ap-fit-sdn-ap-0.5.1.ocm, GRAVITY_MODEL EGM-96), is asserted refused, and the fitted set is 0.6.36's own fit of the
-// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too.
+// 550 km arc (test/fixtures/ap-fit-0.6.36.ocm), which the baseline flies too. From 0.6.40 (the fit at a switch, stack #504) an AP set at
+// exactly e 0.3 is the below side's: the class's term from the polynomial, not the series about e0, and the covariance
+// class below HEO. The e 0.3 seed (2.4 rev/day, the half-day class) moves from the baseline by 5.1e-6 mm (velocity 8.3e-7
+// um/s, its covariance unchanged); every other set is byte-identical.
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination

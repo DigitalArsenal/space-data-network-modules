@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.39 (dist 41230eb6).
+Version 0.6.40 (dist cfdd1a2c).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1306,7 +1306,8 @@ exceptions *[study; probe 6.3, 6.5, 6.6]*:
   derivative of the polynomial through e^27 of the previous item, as the 16 h class uses it.
 
 **AP eccentricity approximation.** Section 16.2 uses the corrected Maclaurin coefficients below
-`kSeriesE = 0.3`. When the expansion center satisfies e0 >= 0.3 and e0 + 0.001 < 1, the original
+`kSeriesE = 0.3`. When the expansion center satisfies e0 > 0.3 and e0 + 0.001 < 1 (from 0.6.40 strictly above,
+as the other eccentricity switches: a set at exactly 0.3 is the below side's; through 0.6.39 e0 >= 0.3), the original
 resonance terms use the Hansen integral at e0 and a third-order Taylor expansion in de = e - e0 for
 current e >= 0.3; otherwise they use the corrected Maclaurin polynomial. They are exact at the
 epoch eccentricity to the numerical integral's precision, third order within |de| <= 0.02. The measured
@@ -1884,8 +1885,9 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
   along the analytic Jacobian lowers the cost, and stop when a step lowers Phi by less than 1e-6. The block's stated
   sigma is the root of the mean of (CX_X + CY_Y + CZ_Z) / 3 over its COVARIANCE_MATRIX_LINES, 0 when it has none. The
   covariance divides by the same sigma_r^2, so P_p is the inverse curvature of the cost the fit minimized: one weighting
-  for the estimate and the covariance. A redone fit the theory refuses, or one that ends on a switch (16.7), leaves the
-  1 km fit, and the record says UNIT WEIGHTS.
+  for the estimate and the covariance. A redone fit the theory refuses, or one that ends at a limit in n (16.7), leaves
+  the pass before (the first leaves the 1 km fit, and the record says UNIT WEIGHTS); one held at an eccentricity switch
+  (16.7) is kept.
 - DRAG (the perigee below 2,500 km), an arc of 71 h or more (the fit interval's first to last state;
   `pcf::kDataSigmaUnderDragMinArcHours`) at or below e 0.3, the rule of 12.8's default of a 71 h arc: as above the
   drag, the whole-arc fit is redone at sigma_r and the covariance divides by the same sigma_r^2, so every prior acts at
@@ -2128,8 +2130,9 @@ first-pass window whose fitted set is above the drag (923 window-arcs per theory
 near-circular orbits, 5 to 1,000 times: median |z| 0.001 to 0.15 on laser geodetic, medium Earth orbit, Galileo,
 inclined geosynchronous and geostationary, in track 0.001 to 0.02. It is too narrow on TESS, Chandra and commercial
 geostationary, whose truth carries burns (stack #444). A set above the drag therefore takes a row by class, decided by
-its own elements: HEO at e 0.3 or more; otherwise geosynchronous under 1.5 rev/day, medium Earth orbit under 4 rev/day
-(GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
+its own elements: HEO above e 0.3 (from 0.6.40 strictly above, as the theory's switches, so a set at exactly 0.3 is
+the below side's in class as in theory; through 0.6.39 at 0.3 or more); otherwise geosynchronous under 1.5 rev/day,
+medium Earth orbit under 4 rev/day (GNSS, Etalon), and the LAGEOS class above (LAGEOS, LARES-2).
 
 - The class's row applies only inside its calibrated condition: the data sigma the fit weighted with (12.1) and the
   fit's span within those of the calibration fits. Outside it, and in a class without a fitted row, the ABOVE row
@@ -2977,7 +2980,9 @@ and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 7
 eccentricity, and held for the whole flight, as SGP4XP holds its class (6, Bands): the resonance class (6), the regime
 (period below or above 1,100 min; 5, 9) and the eccentricity switches (the first-order tesseral families on the grid above
 0.05 in class 0 and 0.3 in the resonant classes, 16.11; above 0.3 the zonal tail's every long-period term and the perigee
-drag passage, 16.3 and 16.12; at or above 0.3 the class's G about e0, 6.4). When drag or a resonance carries the mean
+drag passage, 16.3 and 16.12; above 0.3 the class's G about e0, 6.4). Each switch's above side begins strictly above
+its limit, so a set at the limit itself is on the below side (from 0.6.40; through 0.6.39 the class's G about e0 began
+at 0.3 itself, and a set at exactly 0.3 was on a branch of its own). When drag or a resonance carries the mean
 motion across a class limit, the epoch class's terms stay in the rates, with F and G at the current elements (16.2), and
 out of the output table; no table is rebuilt during a flight. A record's output is therefore continuous in time: one
 seeded set at each of the five mean motions that decide a class (e 0.001, i 55 deg), flown 2 days at 10 s, has a second
@@ -3004,8 +3009,47 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   pinned to its branch (its columns: the analytic two-body and J2 ones, and where an eccentric or short arc takes them,
   one-sided differences of moved sets that fly the iterate's branch, as the covariance's fly the nominal's, so no column
   holds a switch's jump); a minimum on that branch is the answer; a minimum across the switch is fitted again pinned to the
-  branch it reached, and its minimum is the answer when it stays there; otherwise the fit is refused fit-at-branch-limit,
-  naming the switch, the set's mean motion and eccentricity, and asking for another span or epoch. On the referee's
+  branch it reached, and its minimum is the answer when it stays there. Otherwise, at a limit in n (a resonance class
+  limit or the 1,100-minute regime limit), the fit is refused fit-at-branch-limit, naming the switch, the set's mean
+  motion and eccentricity, and asking for another span or epoch. At a switch in eccentricity (0.3, and the first-order
+  tesseral families': 0.05 in class 0, 0.3 in every other class) with no limit in n near, the fit ends on one side
+  *[stack #504]*: the free set, which its refused trial steps hold at the switch on its own branch, is the answer; its
+  branch is that of its own epoch eccentricity, and the record's OD COMMENT says "fit: held at the eccentricity switch on
+  its own branch; the least-squares sets of both branches lie across it". The above side begins strictly above the limit
+  (with the fit at a switch: at eccentricity exactly 0.3 an AP set reads the class's G as the below side does). What the rule
+  guarantees is a held set within 1e-8 of its switch, on its own side: at or under the limit on the below side, above it
+  on the above side. On the 13 held records of the measurement below, the four on the below side lie 6.9e-17 to 2.5e-15
+  under the limit and the nine on the above side 5.6e-17 to 1.0e-13 above it; none is the limit itself. The branch test's
+  truth half on each side, fitted from below, is held at 0.3 itself. The 0.05 switch is one flag with one comparison (the families on the grid strictly above 0.05, tess::wide_set), so
+  a set at exactly 0.05 was already the below side's. A held record's covariance is the curvature of the
+  cost, e free, at a set that is not the cost's minimum: its e sigma reaches across the switch, and no calibration measured
+  it there; the OD COMMENT is the record's only mark of it. Where some pass ends at an eccentricity switch, each caller
+  takes the held set where it had a refusal:
+  - the 2-revolution stage and the whole-arc pass with BTERM: the next pass starts from the set the fit leaves, whatever its
+    status; that was the last set the pinned passes reached, and is now the held set;
+  - each stage of the arc grown by threes: a refused stage left the stage before in place; a held stage is kept;
+  - the whole-arc pass with AGOM (and Y0): refused fit-at-branch-limit; now the held set is the record's;
+  - each pass at the data's own sigma (12.1): a refused pass left the pass before; a held pass is kept;
+  - `sdnap_fit`: the held set with status 0 or 1, where it returned -5 with the last set the pinned passes reached (its
+    stats carry no mark of the hold).
+  Every other fit and flight is the version before's bit for bit, except a set at exactly e 0.3: its class's G now comes
+  from the polynomial and its covariance class above the drag is the below side's (the themis-ripple test's e 0.3 seed,
+  at 2.4 rev/day, moves by 5.1e-6 mm). Measured on model truth (experiments synthetic-orbits, FFM 2.2.0; every case of
+  the seeded set within 0.01 of a switch in e, 212 of 965), the fit at a switch on the 0.6.36 base (wasm 08e7125e: this
+  rule and the series switch strictly above 0.3, without the covariance class's change at 0.3, which moves no fit)
+  against 0.6.36 (wasm bf1b5898); seven of its cases (the six of a kilometer or more below and e 0.3 at 1,000 km, i 55),
+  re-flown on the 0.6.37 base, are bit for bit on both fits:
+  - the 72 h fit before the cutoff, refused fit-at-branch-limit on 8 cases (seven at 0.3, one at the 0.05 switch of class
+    0), gives a record on each, its largest distance to the truth over 0 to 120 h 16, 144, 1,079, 1,183, 1,545, 1,551,
+    2,239 and 4,739 m (the six of a kilometer or more: the e 0.3 orbits with a perigee of 300 to 650 km, and the e 0.05
+    orbit at 400 km, i 98);
+  - the fit to the numerical forecast over 0 to 120 h, refused on 2 (0.05 and 0.3), gives records of 242 and 115 m;
+  - 15 fits of the 72 h arc not refused move, a pass of each having ended at the switch: five nearer the truth (649.8 to
+    641.2, 799.0 to 797.5, 206.8 to 206.1, 25.4 to 8.4 and 20.3 to 14.2 m), one farther (e 0.3 at 1,000 km, i 55: 195.7
+    to 678.1 m, now held at the switch, its fit RMS 18.3 to 16.9 m), and nine within 0.1 m;
+  - the other 399 of the 424 fits are bit for bit.
+  A step of half the update inside the pinned passes cures none of the refusals (measured on 0.6.27): each branch's
+  least-squares set lies across the switch, wherever the steps go. On the referee's
   full-field truths (its own integrator, 31 x 31, Sun and Moon) seven fits whose mean motion lies 2e-8 to 5.6e-7 from a
   class limit, at each of the five limits, are at the theory's least-squares minimum (a Gauss-Newton polish with the full
   theory's Jacobian lowers the cost by at most 2.3e-8 relative, steps of at most 1 mm); arcs whose two branches' minima lie
@@ -4333,7 +4377,8 @@ the field at 70 x 70, the largest distance over 0 to 5 days, q = 0 / |q| up to 1
 On the synthetic set of stack #498 (the numerical propagator the truth, AP fitted to its forecast over 0 to 5 days, the largest
 distance over those 5 days), the low-orbit band's 205 cases (near-circular 650 to 2,000 km, e 0.05 to 0.1) went from 150 to
 149 within 100 m, with a median of 64.1 to 61.5 m and a worst of 3,998 to 2,966 m (0.6.26 to 0.6.27). The case lost,
-e 0.05 at 500 km, i 70, is refused at the 0.05 switch, its best set lying across the switch from either side. The largest
+e 0.05 at 500 km, i 70, was refused at the 0.05 switch through 0.6.36, its best set lying across the switch from either
+side; with the fit at a switch it is held there on its own branch (16.7), at 241.9 m, so the count stands. The largest
 gains are at a 200 km perigee, e 0.05: 3,998 to 284 m at i 70, 914 to 257 m at i 55.
 The largest list on a sweep of 1,880 low-table sets (12 to 16.6 rev/day, eight inclinations, e 0 to 0.05) is 971 terms, under
 the list's 2,048 (`kShallowMax`); a term over it would be listed as code 7, and the partition test asserts there is none.
@@ -4657,8 +4702,9 @@ the regime limit. Sets on different sides must not be differenced, blended or in
 
 The branch is fixed at the record's epoch, from its own epoch elements, for the whole flight (16.7): a record's output is
 continuous in time wherever its mean motion and eccentricity go. The module differences and blends one branch only: a
-covariance's moved sets fly the record's branch (12.1), a fit that would end on a switch is settled on one branch or refused
-fit-at-branch-limit (16.7), and the epoch store does not blend two sets on different branches (14.3). A consumer that
+covariance's moved sets fly the record's branch (12.1), a fit that would end on a switch is settled on one branch, held at
+an eccentricity switch on one side, or refused fit-at-branch-limit at a limit in n (16.7), and the epoch store does not
+blend two sets on different branches (14.3). A consumer that
 differences, blends or interpolates two records of one object must do the same.
 
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are

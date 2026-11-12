@@ -1160,6 +1160,9 @@ static int fit_blocks() {
         comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against "
                           "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
+      // SPEC 16.7 (stack #504): a fit whose two branches' least-squares sets lie across an eccentricity switch ends on one side
+      if (res.held_at_switch)
+        comment.push_back("fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie across it");
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
                                      : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");
