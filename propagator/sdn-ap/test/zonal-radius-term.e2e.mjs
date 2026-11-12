@@ -4,10 +4,10 @@
 // Sun and Moon from DE440; AP with gravity terms (tesseral cap 0, zonal cap 5: J2 to J5 and its own Sun and Moon), fitted
 // over 72 h and flown hourly for 7 days. Mean radial error (AP minus FFM, the reference's RTN) over days 1 to 5:
 // - on this build, at most 0.5 m on the circular cases and 1.5 m at e 0.05;
-// - on the circular cases, on 0.6.39 (git 94351f34, its SHA-256 checked), the release before the term, within 0.5 m of the
+// - on the circular cases, on 0.6.42 (git 86786933, its SHA-256 checked), the release before the term, within 0.5 m of the
 //   closed form (R_E^4 / a^3) [J2^2 (199 c^4 - 80 c^2 + 25) / 32 - J4 (15/64)(35 s^4 - 40 s^2 + 8)] (at e 0.05 the offset
-//   departs from that e = 0 form by 1.3 m, measured on 0.6.36 and 0.6.39: stack #532);
-// - this build's offset no larger in size than 0.6.39's by more than 0.3 m.
+//   departs from that e = 0 form by 1.3 m, measured on 0.6.36, 0.6.39 and 0.6.42: stack #532);
+// - this build's offset no larger in size than 0.6.42's by more than 0.3 m.
 // Cases: circular at 420 km, i 87.5, 55 and 98 deg, and i 5 deg (near the equator, the largest); e 0.05 at a = R + 1,200 km,
 // i 28.5 deg. Measured on 0.6.43: 0.18, -0.17, 0.16, -0.34 and -1.31 m (before the term 10.88, -2.43, 9.58, 42.37 and
 // 11.12 m).
@@ -24,7 +24,7 @@ import {runSyntheticTruth} from './lib/synthetic-truth.mjs';
 import {scratchTemp} from './lib/scratch.mjs';
 
 const MU = 398600.4415, RE = 6378.1363, J2 = 1.08262668355315e-3, J4 = -1.619621591367e-6;
-const BASE = {version: '0.6.39', commit: '94351f345a32c659e0beec0d87dfb14100e2ea23', sha256: '7a857d632d044cd3830456cdcb8fbac5cb95a201087a417c530773f2e0bc295a'};
+const BASE = {version: '0.6.42', commit: '86786933e33415d306ac4eca8e7ab31939da6321', sha256: '3c389abfd8ce2ea1767f4d3040449e6ca9097f2edc31321d78cf6ca5f300e2df'};
 const modules = fileURLToPath(new URL('../../../', import.meta.url));
 const baseBytes = execFileSync('git', ['-C', modules, 'show', `${BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
 assert.equal(createHash('sha256').update(baseBytes).digest('hex'), BASE.sha256, `${BASE.version} baseline sha256`);
