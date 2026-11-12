@@ -259,8 +259,8 @@ these were -168,218.829 and -136,267.630 m (-167,341.326 m when 0.6.6 and 0.6.7 
 class): the epoch state at perigee came after the whole drag pass, which FFM, seeded there, still flies in part.
 
 An AP flight ends at its decay (SPEC 16.25, stack #564). The decay comes when the set loses more perigee radius over a
-revolution, or over the grid's next step where that is longer, than one density scale height at its mean perigee, or when
-its mean perigee falls under 100 km. That time is the record's, the same in any call order.
+revolution, or over the grid's next step where that is longer, than one density scale height at its mean perigee (drag's own
+part of the perigee radius's rate, counted only where it lowers the perigee), or when its mean perigee falls under 100 km. That time is the record's, the same in any call order.
 - Past it, a state has status 4 (ORBPRO_STATE_DECAYED).
 - `propagate` and `propagate_epochs` answer the epochs before it, the block stating "decayed:<time>; <n> epochs after it
   refused", and refuse a call with none before it as `decayed:<time>`.

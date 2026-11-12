@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // E2E (stack #594; SPEC 16.25): the decay rule reads what DRAG does to the perigee, not the Sun's and the Moon's. On an orbit at e 0.9 (apogee
-// 118,000 to 134,000 km) the mean perigee radius moves by more than a density scale height a revolution under the Sun and the Moon alone,
-// rising or falling, with no decay: drag at perigee lowers the semi-major axis and the eccentricity together, so its own part of the
+// 131,000 and 140,000 km here) the mean perigee radius moves by more than a density scale height a revolution under the Sun and the Moon
+// alone, rising or falling, with no decay: drag at perigee lowers the semi-major axis and the eccentricity together, so its own part of the
 // perigee's rate is about 0. Two made-up sets at e 0.9, their truth the numerical propagator (FFM, named below by its SHA-256) flown from AP's
 // own seeded GCRF state, EGM2008 70 x 70, the Sun and Moon, NRLMSISE-00 drag at constant weather, 120 h every 300 s:
-// - perigee 1,000 km, i 0.5: the truth's perigee falls 949 to 825 km and never goes under 800 km;
-// - perigee 500 km, i 55: the truth's perigee RISES, 555 to 627 km over the five days.
+// - perigee 1,000 km, i 0.5: the truth's perigee never goes under 800 km (asserted);
+// - perigee 500 km, i 55: the truth's perigee RISES, more than 20 km in the first 24 h (asserted).
 // Each is fitted by this build (not refused decayed-in-arc: the first form of the rule read the Sun's and the Moon's rate as decay and
-// refused them), and the record it writes is propagated over its arc: every state answered, the perigee of the record's states following
-// the truth's.
+// refused them), the fit converges with an RMS under 0.25 km (a fit that converges somewhere else fails), and the record it writes is
+// propagated over its arc: every state answered, the perigee of the record's states following the truth's.
+// The other side: a set at e 0.9 whose truth DOES re-enter inside the span is still refused, by the floor test (b), at a time before the
+// truth's re-entry (its end of the numerical propagator), and no state after the refusal is answered.
 //   node test/decay-eccentric.e2e.mjs
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -33,6 +35,8 @@ requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934')
 const CASES = [
   { name: 'perigee 1,000 km, e 0.9, i 0.5', epoch: '2026-02-01T00:00:00.000', n: 0.433161637, e: 0.9007033, i: 0.596598, raan: 192.20718, argp: 153.97925, ma: 37.15461, floorKm: 800, rising: false },
   { name: 'perigee 500 km, e 0.9, i 55 (the truth\'s perigee rises)', epoch: '2026-09-05T00:00:00.000', n: 0.481293675, e: 0.8991996, i: 55.095212, raan: 272.4614, argp: 301.26643, ma: 105.0206, floorKm: 400, rising: true },
+  // the other side: perigee 110 km at e 0.9 with a large BTERM, whose truth descends below 100 km (re-entry) in about 62 h
+  { name: 'perigee 110 km, e 0.9, i 28.5, BTERM 0.6 (the truth re-enters)', epoch: '2026-10-29T00:00:00.000', n: 0.52531856, e: 0.9, i: 28.5, raan: 40, argp: 180, ma: 0, b: 0.6, reenters: true },
 ];
 const TRUTH_B = 0.022, DAY = 864e5, MU = 398600.4418, iso = (ms) => new Date(ms).toISOString().replace('Z', '');
 const kernel = fs.readFileSync(new URL('../../../files/orbit-products/tests/fixtures/de440/de440-2026.bsp', import.meta.url));
@@ -49,7 +53,8 @@ const perigeeKm = (s) => {
 for (const c of CASES) {
   const t0 = Date.parse(c.epoch + 'Z'), jd = jdOf(c.epoch), jd0 = jd.whole + jd.frac, mjd0 = Math.floor(jd0 - 2400000.5);
   const rows = rowsThrough(JSON.parse(spwConstantText(c.epoch.slice(0, 10), 45)));
-  const seed = seedOcm({ epoch: c.epoch, n: c.n, e: c.e, i: c.i, raan: c.raan, argp: c.argp, ma: c.ma, bterm: TRUTH_B, agom: 0, norad: 99564, msis: true, records: true, tesseral: 31, zonal: 20, rows });
+  const B = c.b ?? TRUTH_B;
+  const seed = seedOcm({ epoch: c.epoch, n: c.n, e: c.e, i: c.i, raan: c.raan, argp: c.argp, ma: c.ma, bterm: B, agom: 0, norad: 99564, msis: true, records: true, tesseral: 31, zonal: 20, rows });
   const start = await now.invoke({ methodId: 'propagate', inputs: flight([seed], { output: { EPOCHS: [c.epoch], FRAME: pcfOutputFrame.GCRF } }) });
   assert.equal(start.statusCode, 0, `${c.name}: ${start.errorCode}: ${start.errorMessage}`);
   const s0 = OEM.getRootAsOEM(new fb.ByteBuffer(start.outputs.find((v) => v.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES[0];
@@ -57,12 +62,31 @@ for (const c of CASES) {
   checkTruth();
   const params = { epochJD: jd0, epochTimeScale: 'UTC', targetJD: jd0 + 5.01, targetTimeScale: 'UTC', position: [s0.X, s0.Y, s0.Z], velocity: [s0.X_DOT, s0.Y_DOT, s0.Z_DOT], frame: 'GCRF',
     sampleEpochsJD: seconds.map((s) => ({ jd: jd0 + s / 86400, scale: 'UTC' })),
-    forces: { gravityMode: 'EGM2008', maxDegree: 70, maxOrder: 70, thirdBody: true, srp: false, drag: true, dragModel: 'NRLMSISE00', massKg: 1000, areaM2: (TRUTH_B * 1000) / 2.2, cr: 1.0, cd: 2.2 },
+    forces: { gravityMode: 'EGM2008', maxDegree: 70, maxOrder: 70, thirdBody: true, srp: false, drag: true, dragModel: 'NRLMSISE00', massKg: 1000, areaM2: (B * 1000) / 2.2, cr: 1.0, cd: 2.2 },
     weather: { epochUTCJD: jd0, F107: 150, F107a: 150, Ap: 15, Kp: 3 }, integrator: { tolerance: 1e-12, minStep: 0.01, maxStep: 300 }, ephemerisSource: 'JPL_SPK' };
   const rq = requestFor('propagate', params, kernel);
   rq.inputs.push({ portId: 'earth_orientation', typeRef: TYPE, payload: encodePrw('EARTH_ORIENTATION', makeTable('PRWEarthOrientation', { ROWS: Array.from({ length: 15 }, (_, k) => makeTable('EOP', { DATE: new Date((mjd0 + k - 1 - 40587) * DAY).toISOString(), MJD: mjd0 + k - 1, XP: 0, YP: 0, DUT1: 0, LOD: 0 })) })) });
   const fr = await ffm.invoke(rq);
-  assert.equal(fr.statusCode, 0, `${c.name}: FFM ${fr.errorCode}: ${fr.errorMessage}`);
+  if (!c.reenters) assert.equal(fr.statusCode, 0, `${c.name}: FFM ${fr.errorCode}: ${fr.errorMessage}`);
+  if (c.reenters) {
+    // the truth ends at its re-entry; this build refuses the record by the floor test at a time before it, answers every epoch up to
+    // the crossing and none after it
+    assert.notEqual(fr.statusCode, 0, `${c.name}: the numerical propagator does not re-enter within the span`);
+    const re = /at (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)/.exec(String(fr.errorMessage));
+    assert.ok(re && /reentry/.test(String(fr.errorMessage)), `${c.name}: FFM stopped for another reason: ${fr.errorMessage}`);
+    const reH = (Date.parse(re[1] + 'Z') - t0) / 3.6e6;
+    const ep = Array.from({ length: 241 }, (_, k) => iso(t0 + k * 1800e3));
+    const fl = await now.invoke({ methodId: 'propagate', inputs: flight([seed], { output: { EPOCHS: ep, FRAME: pcfOutputFrame.GCRF } }) });
+    assert.equal(fl.statusCode, 0, `${c.name}: ${fl.errorCode}`);
+    const blk = OEM.getRootAsOEM(new fb.ByteBuffer(fl.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
+    const cm = /^decayed:(\S+);/.exec(blk.COMMENT ?? '');
+    assert.ok(cm, `${c.name}: not refused as decayed within the span (${blk.COMMENT})`);
+    const crossH = (Date.parse(cm[1] + 'Z') - t0) / 3.6e6;
+    assert.ok(crossH < reH, `${c.name}: the refusal at ${crossH.toFixed(2)} h is not before the truth's re-entry at ${reH.toFixed(2)} h`);
+    assert.ok(blk.EPHEMERIS_DATA_LINES.length >= Math.floor(crossH * 2) - 1 && blk.EPHEMERIS_DATA_LINES.length < 241, `${c.name}: ${blk.EPHEMERIS_DATA_LINES.length} states answered, the refusal at ${crossH.toFixed(2)} h`);
+    console.log(JSON.stringify({ decayEccentric: c.name, truthReentryH: +reH.toFixed(2), refusedAtH: +crossH.toFixed(2), answered: blk.EPHEMERIS_DATA_LINES.length }));
+    continue;
+  }
   const states = decodeResult(fr).samples;
   const truthPerigee = states.map((s) => perigeeKm([...s.position, ...s.velocity]));
   const truthMin = Math.min(...truthPerigee.filter((_, k) => k % 12 === 0));
@@ -78,6 +102,7 @@ for (const c of CASES) {
   assert.equal(fit.statusCode, 0, `${c.name}: the fit is refused: ${fit.errorCode}: ${String(fit.errorMessage).slice(0, 160)}`);
   const recordBytes = fit.outputs.find((v) => v.portId === 'elements').payload;
   const record = ocmOf(recordBytes), st = record.ORBIT_DETERMINATION.FIT_STATISTICS;
+  assert.ok(st.CONVERGED === true && st.FIT_RMS_KM < 0.25, `${c.name}: the fit's RMS is ${st.FIT_RMS_KM} km, converged ${st.CONVERGED} (the fit reaches 0.04 to 0.11 km)`);
   // the record flown over its arc: every epoch answered, none refused as decayed
   const epochs = Array.from({ length: 241 }, (_, k) => iso(t0 + k * 1800e3));
   const fl = await now.invoke({ methodId: 'propagate', inputs: flight([recordBytes], { output: { EPOCHS: epochs, FRAME: pcfOutputFrame.GCRF } }) });
