@@ -2163,9 +2163,9 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
 - The DRAG row's s_i at zonal degree 70 (from 0.6.43, stack #531). An AP record in the DRAG regime whose stated zonal degree
   (PERTURBATIONS.MAXIMUM_ZONAL_DEGREE, the fit's FORCES.MAXIMUM_DEGREE) is 70 writes s_i times kSiZonal70, exp(-2.2) =
   0.1108: 1.2494e-7 per day against 1.1276e-6. Every other field of the row is the row's, and a record at any other zonal
-  degree writes the row as it is, bit for bit. A record between 20 and 70 leaves out part of the drift, by an amount not
-  measured, so it keeps today's s_i. The record states the s_i it was fitted with, so a record written before 0.6.43 flies as
-  it was.
+  degree writes the row as it is, bit for bit. A record at a zonal degree from 21 to 69 keeps the full s_i on purpose: the
+  factor was fitted on records at 70 alone, and a record below 70 still leaves out the drift of the zonal degrees above
+  its own. The record states the s_i it was fitted with, so a record written before this rule flies as it was.
   - The factor is the maximum-likelihood fit of the cross-track |z| (days 1, 2, 3, 5 and 7) on the split rule's 326 choice
     windows of 0.6.42's own flights of records at 31/70 (strong drag 2025, laser spheres, altimetry), on a grid of 0.005 in
     its logarithm. It is judged on the other 422 (strong drag 2026 and near 700 km entirely, laser spheres and altimetry).
