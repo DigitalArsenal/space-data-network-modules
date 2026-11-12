@@ -1347,7 +1347,10 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
             const double share = fast_on && weight < 1.0 ? weight : 1.0;
             const int jx = j + 42;  // |j| at most kSpMaxW + 1 here
             if (pass == 0) {
-              if (keeps(mag, ap, share, false)) kept_j[l][jx] = true;
+              // a lane below 0.9 bands at the epoch is the rates' whole there (the table holds 0 of it): it marks no line, as a
+              // group the table takes from the band does not
+              const bool marks = !(lane && std::fabs(psidot) * inv_shallow_n0 <= 0.9);
+              if (marks && keeps(mag, ap, share, false)) kept_j[l][jx] = true;
               continue;
             }
             if (!keeps(mag, ap, share, kept_j[l][jx - 1] || kept_j[l][jx] || kept_j[l][jx + 1])) continue;
