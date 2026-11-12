@@ -193,7 +193,8 @@ inline int decode_record(const uint8_t* p, uint32_t n, Record& r) {
   if (r.row.theory != kTheorySgp4) {
     cov::Set c;
     const int cr = cov::read(s.record, r.row, c);
-    if (cr < 0)
+    // SPEC 12.4: an AP record whose floor is at its writer's theory state is stored without its covariance (cr -4)
+    if (cr < 0 && cr != -4)
       return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                          "A set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."), -1;
     if (cr == 1) r.cov = new cov::Set(c);
