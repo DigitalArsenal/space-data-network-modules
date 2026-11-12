@@ -19,7 +19,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.45";
+constexpr const char* kModuleVersion = "0.6.49";
 
 /// SPEC 12.4: the gate's PRODUCER prefix is this module's id and a space, and the first release whose AP records carry the
 /// epoch floor at the two-body state is not above this build's version, so neither can drift from what this build writes.
