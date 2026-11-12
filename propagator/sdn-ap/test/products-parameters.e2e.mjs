@@ -92,10 +92,10 @@ for (const [name, config, spw, code] of [["XP", configuration({ theory: "SGP4XP"
   const edited = odr.EDITED_OBSERVATIONS, accepted = edited.filter((e) => e.ACCEPTED).length;
   const codes = new Set(edited.map((e) => e.PERTURBATION_MODEL_CODE));
   check(edited.length === inputCount && accepted === st.FIT_STATES && odr.OCM_CONTENT_ID === cidOf(bytes) && codes.size === 1 && codes.has(code) &&
-    edited.every((e) => e.OBSERVATION_TYPE === 8 && e.EPOCH && Number.isFinite(e.OBSERVED_VALUE) && Number.isFinite(e.COMPUTED_VALUE)),
+    edited.every((e) => e.OBSERVATION_TYPE === 8 && e.EPOCH && Number.isFinite(e.OBSERVED_VALUE) && (e.REASON === 'DECAYED' || Number.isFinite(e.COMPUTED_VALUE))),  // SPEC 16.25: a DECAYED row has no computed value
     `${name} $ODR: ${edited.length} rows for ${inputCount} inputs, ${accepted} accepted for FIT_STATES ${st.FIT_STATES}, OCM_CONTENT_ID ${odr.OCM_CONTENT_ID} against ${cidOf(bytes)}, codes ${[...codes]}`);
   check(!Object.keys(new ODRT()).some((k) => /USER_DEFINED/.test(k)), "the $ODR carries a user-defined list");
-  const worst = Math.max(...edited.map((e) => Math.abs(e.OBSERVED_VALUE - e.COMPUTED_VALUE)));
+  const worst = Math.max(...edited.filter((e) => Number.isFinite(e.COMPUTED_VALUE)).map((e) => Math.abs(e.OBSERVED_VALUE - e.COMPUTED_VALUE)));
   console.log(`${name}: COV_SIZE ${o.COV_SIZE}, COV_UNITS ${o.COV_UNITS.length}; WEIGHTED_RMS ${od.WEIGHTED_RMS} (FIT_RMS_KM ${st.FIT_RMS_KM}); SEDR ${od.SEDR} W/kg; ` +
     `$ODR ${edited.length} rows for ${inputCount} input states, ${accepted} accepted (FIT_STATES ${st.FIT_STATES}), largest |O - C| ${worst.toExponential(3)} km, code ${[...codes]}`);
 }
