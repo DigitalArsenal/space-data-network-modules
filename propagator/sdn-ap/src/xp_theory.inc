@@ -1757,7 +1757,7 @@ struct Branch {
   uint8_t long_period = 0;  ///< period >= 1100 min (SPEC 5, 9)
   uint8_t wide_tess = 0;    ///< AP: the first-order tesseral families on the grid (tess::wide_set: 0.05 in class 0, else 0.3)
   uint8_t wide_e = 0;       ///< AP: e0 above tess::kWideE, the zonal tail's every long-period term and the perigee drag passage
-  uint8_t series_e = 0;     ///< AP: e0 at or above res::kSeriesE, the class's G about e0 (SPEC 6.4)
+  uint8_t series_e = 0;     ///< AP: e0 above res::kSeriesE, the class's G about e0 (SPEC 6.4)
   /// The long-period regime's step, minutes (SPEC 9, 16.10): 95, AP's one-day class 38, and an AP set above e0 0.3 at most
   /// half the perigee pass's time scale (1 - e0)^(3/2) / n0. Not a switch: a moved set flies its nominal's, as the rest.
   double lp_step = kLongPeriodStep;
@@ -1774,7 +1774,7 @@ inline Branch branch_of(double n0, double e0, bool ap) {
   if (ap) {
     b.wide_tess = tess::wide_set(b.resonance, e0) ? 1 : 0;
     b.wide_e = e0 > tess::kWideE ? 1 : 0;
-    b.series_e = e0 >= res::kSeriesE ? 1 : 0;
+    b.series_e = e0 > res::kSeriesE ? 1 : 0;  // strictly above, as the other two: e0 exactly 0.3 is the below side (stack #504)
   }
   if (b.long_period && ap) {
     b.lp_step = b.resonance == 1 ? 38.0 : kLongPeriodStep;

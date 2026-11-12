@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.37 (dist 4f7e5614).
+Version 0.6.37 (dist 76f023df).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -1306,7 +1306,8 @@ exceptions *[study; probe 6.3, 6.5, 6.6]*:
   derivative of the polynomial through e^27 of the previous item, as the 16 h class uses it.
 
 **AP eccentricity approximation.** Section 16.2 uses the corrected Maclaurin coefficients below
-`kSeriesE = 0.3`. When the expansion center satisfies e0 >= 0.3 and e0 + 0.001 < 1, the original
+`kSeriesE = 0.3`. When the expansion center satisfies e0 > 0.3 and e0 + 0.001 < 1 (from 0.6.37 strictly above,
+as the other eccentricity switches: a set at exactly 0.3 is the below side's; through 0.6.36 e0 >= 0.3), the original
 resonance terms use the Hansen integral at e0 and a third-order Taylor expansion in de = e - e0 for
 current e >= 0.3; otherwise they use the corrected Maclaurin polynomial. They are exact at the
 epoch eccentricity to the numerical integral's precision, third order within |de| <= 0.02. The measured
@@ -2940,7 +2941,9 @@ and maximum step halved from 300 s to 150 s; a further tightening to 1e-14 and 7
 eccentricity, and held for the whole flight, as SGP4XP holds its class (6, Bands): the resonance class (6), the regime
 (period below or above 1,100 min; 5, 9) and the eccentricity switches (the first-order tesseral families on the grid above
 0.05 in class 0 and 0.3 in the resonant classes, 16.11; above 0.3 the zonal tail's every long-period term and the perigee
-drag passage, 16.3 and 16.12; at or above 0.3 the class's G about e0, 6.4). When drag or a resonance carries the mean
+drag passage, 16.3 and 16.12; above 0.3 the class's G about e0, 6.4). Each switch's above side begins strictly above
+its limit, so a set at the limit itself is on the below side (from 0.6.37; through 0.6.36 the class's G about e0 began
+at 0.3 itself, and a set at exactly 0.3 was on a branch of its own). When drag or a resonance carries the mean
 motion across a class limit, the epoch class's terms stay in the rates, with F and G at the current elements (16.2), and
 out of the output table; no table is rebuilt during a flight. A record's output is therefore continuous in time: one
 seeded set at each of the five mean motions that decide a class (e 0.001, i 55 deg), flown 2 days at 10 s, has a second
@@ -2973,9 +2976,11 @@ and 3,682 m on 0.6.5; at the epoch unchanged, 67, 90, 18, 28 and 24 m). The modu
   tesseral families': 0.05 in class 0, 0.3 in every other class) with no limit in n near, the fit ends on one side
   *[stack #504]*: the free set, which its refused trial steps hold at the switch on its own branch, is the answer; its
   branch is that of its own epoch eccentricity, and the record's OD COMMENT says "fit: held at the eccentricity switch on
-  its own branch; the least-squares sets of both branches lie across it". e exactly 0.3 is a branch of its own (the
-  class's G about e0 from 0.3 up, 6.4; the zonal tail's every long-period term and the perigee drag passage only above
-  it): a held set lies within 1e-8 of its switch, on one side of it. A held record's covariance is the curvature of the
+  its own branch; the least-squares sets of both branches lie across it". The above side begins strictly above the limit
+  (from 0.6.37: at eccentricity exactly 0.3 an AP set reads the class's G as the below side does), so a held set
+  approached from below is at the limit, on the below side, and one approached from above is at the first value above
+  it. The 0.05 switch is one flag with one comparison (the families on the grid strictly above 0.05, tess::wide_set), so
+  a set at exactly 0.05 was already the below side's. A held record's covariance is the curvature of the
   cost, e free, at a set that is not the cost's minimum: its e sigma reaches across the switch, and no calibration measured
   it there; the OD COMMENT is the record's only mark of it. Where some pass ends at an eccentricity switch, each caller
   takes the held set where it had a refusal:

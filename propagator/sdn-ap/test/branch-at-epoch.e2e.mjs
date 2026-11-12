@@ -148,19 +148,19 @@ const arc = Array.from({ length: 145 }, (_, k) => EPOCH + k * 600000);
 }
 {
   // a truth half on each side of the eccentricity switch at 0.3 (the mean of the two flights of one set there, at 2 rev/day):
-  // the fit ends on one side, its set held at the switch on its own branch, and the record's OD COMMENT says so (stack #504)
+  // the fit ends on one side, its set held at the switch on its own branch, and the record's OD COMMENT says so (stack #504).
+  // The above side begins strictly above 0.3, so a set held from below is at or under 0.3, on the below side
   const below = await fly(seed(2, { e: 0.3 - 1e-12 }), arc), above = await fly(seed(2, { e: 0.3 + 1e-12 }), arc);
   const mixed = below.map((q, k) => q.map((v, c) => 0.5 * (v + above[k][c])));
   let refused = null, rec = null;
   try { rec = await fit(mixed, arc); } catch (error) { refused = error; }
   const eFit = rec ? ocmOf(rec).MEAN_ELEMENTS.ECCENTRICITY : null, comment = rec ? [].concat(readFitOcm(rec).u.COMMENT ?? []).join(" | ") : "";
-  // e exactly 0.3 is a branch of its own (G's series from 0.3 up, the zonal tail above it): the held set is on one side
-  const side = eFit === null ? "none" : eFit < 0.3 ? "below" : eFit > 0.3 ? "above" : "on the limit";
+  const side = eFit === null ? "none" : eFit < 0.3 ? "below 0.3" : eFit === 0.3 ? "at 0.3, the below side" : "above 0.3";
   // the held record flown back over the arc gives the fit's own stated RMS (the set the record carries is the one fitted)
   const stated = rec ? readFitOcm(rec).fitRmsKm : NaN, back = rec ? await fly(rec, arc) : [];
   const flownKm = rec ? Math.sqrt(back.reduce((s, q, k) => s + (q[0] - mixed[k][0]) ** 2 + (q[1] - mixed[k][1]) ** 2 + (q[2] - mixed[k][2]) ** 2, 0) / arc.length) : NaN;
-  console.log(`fit of a truth half on each side of the e 0.3 switch: ${refused ? `${refused.code}: ${refused.text}` : `fitted, e ${eFit} (${side} 0.3); flown back ${(flownKm * 1000).toFixed(6)} m RMS, stated ${(stated * 1000).toFixed(6)} m; OD COMMENT: ${comment}`}`);
-  check(!refused && Math.abs(eFit - 0.3) <= 1e-6 && eFit !== 0.3 && /held at the eccentricity switch on its own branch/.test(comment), `half on each side of e 0.3: ${refused ? refused.code : `e ${eFit} (${side}), ${comment}`}`);
+  console.log(`fit of a truth half on each side of the e 0.3 switch: ${refused ? `${refused.code}: ${refused.text}` : `fitted, e ${eFit} (${side}); flown back ${(flownKm * 1000).toFixed(6)} m RMS, stated ${(stated * 1000).toFixed(6)} m; OD COMMENT: ${comment}`}`);
+  check(!refused && eFit <= 0.3 && 0.3 - eFit <= 1e-6 && /held at the eccentricity switch on its own branch/.test(comment), `half on each side of e 0.3: ${refused ? refused.code : `e ${eFit} (${side}), ${comment}`}`);
   // within 1 mm: the fit's residuals are in TEME, the flight's in GCRF (the frames' round trip, some 1e-5 m here)
   check(rec && Math.abs(flownKm - stated) <= 1e-6, `held record flown back: ${flownKm} km RMS against the stated ${stated} km`);
 }
@@ -192,6 +192,24 @@ const arc = Array.from({ length: 145 }, (_, k) => EPOCH + k * 600000);
   console.log(`propagate_epochs COMMENT: across ${JSON.stringify(comments[99011])}; one side ${JSON.stringify(comments[99012])}`);
   check(typeof comments[99011] === "string" && comments[99011].includes("2026-10-01T03:00:00") && /SPEC 14\.3/.test(comments[99011]) &&
     /different branches/.test(comments[99011]) && comments[99012] == null, `propagate_epochs COMMENT: ${JSON.stringify(comments)}`);
+}
+// --- e exactly 0.3 is the below side's branch (stack #504): in the epoch store, a set at 0.3 and one a step below it (the
+// next double down) 6 h later blend, as sets on one branch do; a set at 0.3 and one a step above it do not (b = -2)
+{
+  const prefixed = (plain) => { const b = Buffer.alloc(4 + plain.length); b.writeUInt32LE(plain.length, 0); Buffer.from(plain).copy(b, 4); return b; };
+  const six = EPOCH + 6 * 3600000, mid = EPOCH + 3 * 3600000, down = 0.29999999999999993, up = 0.30000000000000004;
+  const pairs = [[0.3, down, 99021], [0.3, up, 99022]].map(([e1, e2, norad]) => [seed(2, { e: e1, norad }), seed(2, { e: e2, epochMs: six, norad })]);
+  const snapshot = { portId: "ocm", typeRef: T("OCM"), payload: new Uint8Array(Buffer.concat(pairs.flat().map(prefixed))) };
+  const loaded = await m.harness.invoke({ methodId: "load_epochs", inputs: [configuration({ epochStore: {} }), snapshot] });
+  check(loaded.statusCode === 0 && x.sdnap_epochs_count() === 2, `load_epochs at e 0.3: ${loaded.errorCode} ${loaded.errorMessage}`);
+  const p = x.sdnap_alloc(4096), f64 = (o, n) => Array.from(new Float64Array(mem(), p + o, n));
+  const select = (i, t) => { const j = jdOf(iso(t)); x.sdnap_epochs_select(i, j.whole, j.frac, p); return f64(0, 3); };
+  const norads = [0, 1].map((i) => { x.sdnap_epochs_series(i, p, 0, 0); return f64(0, 1)[0]; });
+  const sDown = select(norads.indexOf(99021), mid), sUp = select(norads.indexOf(99022), mid);
+  console.log(`store at e 0.3, between its set and one a step below / above it: select ${JSON.stringify(sDown)} / ${JSON.stringify(sUp)}`);
+  check(sDown[1] === 1 && sDown[2] > 0 && sDown[2] < 1, `e 0.3 and a step below on one branch: select ${sDown}`);
+  check(sUp[1] === -2, `e 0.3 and a step above on two branches: select ${sUp}`);
+  x.sdnap_free(p);
 }
 
 // --- the epoch store between a carried forecast and the theory (SPEC 14.3, 18.3)
