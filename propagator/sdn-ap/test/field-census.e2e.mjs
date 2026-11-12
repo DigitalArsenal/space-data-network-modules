@@ -11,7 +11,7 @@
 // - every term carried nowhere (codes 20 to 24) belongs to a known hole below, each named with its issue; a hole that no set
 //   of the sweep shows any more fails the test (remove it when its pull request lands);
 // - the census of a set is the same twice (no state carried between calls) and returns -1 for elements it refuses;
-// - beside the field, radiation pressure's one row (l -1, m 0; SPEC 16.21) is carried once: through the output map (code 4)
+// - beside the field, radiation pressure's one row (l -1, m 0; SPEC 16.22) is carried once: through the output map (code 4)
 //   in the long-period regime above e 0.3, by SPEC 4's averaged rates and periodic output terms (13) elsewhere, the sweep
 //   holding both.
 // Printed: per band the ten largest terms carried nowhere, with their hole.
@@ -90,7 +90,7 @@ for (const s of SETS) {
   assert.ok(rows, `${s.name}: the census answers`);
   rowsTotal += rows.length;
   const b = branchOf(s.n, s.e);
-  // radiation pressure's one row (SPEC 16.20, 16.21): through the output map in the long-period regime above e 0.3, by SPEC 4's
+  // radiation pressure's one row (SPEC 16.20, 16.22): through the output map in the long-period regime above e 0.3, by SPEC 4's
   // averaged rates and periodic output terms elsewhere; once either way
   const radiation = rows.filter((t) => t.l === -1 && t.m === 0);
   assert.equal(radiation.length, 1, `${s.name}: one radiation row`);

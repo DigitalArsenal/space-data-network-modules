@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// Radiation pressure in the long-period regime above e 0.3 through the output map (SPEC 16.21), on model truth, seeded (no
+// Radiation pressure in the long-period regime above e 0.3 through the output map (SPEC 16.22), on model truth, seeded (no
 // fit). AP sets with J2 alone (no tesseral term), seeded at a mean anomaly of 10 degrees on test/lib/heo-model-truth.mjs's
 // epoch, flown hourly over 7 days with a Cr A/m of 0.02 m^2/kg and without; AP's arms read the module's own Sun and Moon.
 // Each arm's truth is FFM (named below by its SHA-256) started from that arm's own state at the epoch, with J2 alone, DE440's
 // Sun and Moon, and a cannonball of Cr 1 and A/m 0.02 m^2/kg, or none. Radiation's own error is what remains of AP's
 // radiation displacement (with minus without) against FFM's, so the two arms' gravity and third-body errors cancel:
 // - an eclipsing set, 30 h, e 0.31 (the integrator's step crosses the shadow's edge every revolution: the force is the
-//   step window's share of light, 16.21). The test holds that its flight enters and leaves AP's cylinder (the module's Sun,
+//   step window's share of light, 16.22). The test holds that its flight enters and leaves AP's cylinder (the module's Sun,
 //   sdnap_bodies_probe), and flies it at 1 s from an hour before an entry to an hour after the exit, at least 3 h and so
 //   across a step boundary: no position lies off its neighbors' curve (the fourth difference) by more than 1 mm (measured on
 //   0.6.NN: 1.2 um over 14,401 states);
 // - a TESS-like set, 13.7 days, e 0.55 (five days are under half a revolution: SPEC 4's averaged rates and first-order
 //   periodic output terms missed most of it; what remains is AP's pressure constant, 4.5e-6 N/m^2 against FFM's 4.540e-6).
-// The record (16.21): a set of the regime with an area-to-mass above 0 states PERTURBATIONS.SOLAR_RAD_PRESSURE's text and
+// The record (16.22): a set of the regime with an area-to-mass above 0 states PERTURBATIONS.SOLAR_RAD_PRESSURE's text and
 // flies, and without it is refused (radiation-model-superseded). Refused radiation-model-mismatch: the text outside the
 // regime by eccentricity or by period, on an SGP4XP set, with an area-to-mass of 0 or below 0, the Y0 text without an
 // ECOM2_Y0 entry, the plain text with one. The Y0 text with its entry flies. The module's own fit of the eclipsing case's FFM
@@ -113,7 +113,7 @@ for (let k = 2; k + 2 < scan.length; k += 1) {
 }
 const shadow = {hoursInShadow: shade.filter(Boolean).length, entryHour: entry, exitHour: exit, scanStates: scan.length, largestFourthDifferenceM: +fourth.toExponential(3)};
 console.log(JSON.stringify({shadow}));
-// the record's statement (SPEC 16.21)
+// the record's statement (SPEC 16.22)
 const refusal = async (seed) => {
   const r = await ap.invoke({methodId: 'propagate', inputs: flight([seed], {output: {EPOCHS: [epochs[1]], FRAME: pcfOutputFrame.GCRF}})});
   return r.statusCode === 0 ? null : r.errorCode;

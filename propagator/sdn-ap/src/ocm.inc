@@ -19,7 +19,7 @@ namespace sdnap {
 namespace ocm {
 
 constexpr const char* kModuleId = "com.spacedatanetwork.sdn-ap-propagator";
-constexpr const char* kModuleVersion = "0.6.36";
+constexpr const char* kModuleVersion = "0.6.37";
 constexpr const char* kWeatherInterpolation =
     "DAILY: F10.7 OF THE PREVIOUS DAY, 81-DAY CENTERED MEAN AND DAILY AP OF THE DAY, NO INTERPOLATION";
 
@@ -82,7 +82,7 @@ constexpr const char* kSlowGravityModel = "EGM2008; slow tesseral terms to degre
 /// gravity-model-mismatch: no record flies on a field it does not state.
 constexpr const char* kApGravityModel = "EGM2008";
 
-/// SPEC 16.21: PERTURBATIONS.SOLAR_RAD_PRESSURE of an AP set whose radiation pressure goes through the output map (the
+/// SPEC 16.22: PERTURBATIONS.SOLAR_RAD_PRESSURE of an AP set whose radiation pressure goes through the output map (the
 /// long-period regime above e 0.3, an area-to-mass above 0), and of such a set with the radiation term Y0 beside it. A
 /// flight reads this text: such a set without it is refused by name (a record fitted before the change flew SPEC 4's
 /// radiation there, kilometers apart), a set outside the regime with it is refused too, and so is the Y0 text without the
@@ -91,7 +91,7 @@ constexpr const char* kLpRadiationModel = "SPHERE (AGOM) THROUGH THE OUTPUT MAP,
 constexpr const char* kLpY0RadiationModel =
     "SPHERE (AGOM) THROUGH THE OUTPUT MAP, CYLINDRICAL SHADOW OVER THE STEP, AND ECOM2 Y0 (ARNOLD ET AL. 2015)";
 
-/// SPEC 16.21: whether a set's radiation pressure goes through the output map, from what its record states: AP with gravity
+/// SPEC 16.22: whether a set's radiation pressure goes through the output map, from what its record states: AP with gravity
 /// terms, its epoch elements in the long-period regime above e 0.3 (xpt::branch_of, as a flight takes its branch), an
 /// area-to-mass above 0.
 inline bool lp_radiation_record(const ElementRow& row, const Forces& f) {
@@ -447,7 +447,7 @@ inline int radiation_of(const OCM* o, Set& s) {
   return 0;
 }
 
-/// SPEC 16.21: whether ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS carries an ECOM2_Y0 entry (radiation_of reads its value).
+/// SPEC 16.22: whether ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS carries an ECOM2_Y0 entry (radiation_of reads its value).
 inline bool states_y0(const OCM* o) {
   const OrbitDetermination* od = o->ORBIT_DETERMINATION();
   if (od == nullptr || od->OD_DYNAMIC_PARAMETERS() == nullptr) return false;
@@ -591,7 +591,7 @@ inline int decode_view(const OCM* o, Set& s) {
     return refuse("gravity-model-mismatch",
                   "An AP set with gravity terms states PERTURBATIONS.GRAVITY_MODEL EGM2008, the embedded field (\"EGM2008; slow tesseral terms to degree 70\" with the slow set); a record of another field is fitted again.");
   if (const int rc = radiation_of(o, s)) return rc;
-  // SPEC 16.21: the radiation model the record states against the one this build flies for its elements, and the text's Y0
+  // SPEC 16.22: the radiation model the record states against the one this build flies for its elements, and the text's Y0
   // suffix against the record's ECOM2_Y0 entry (the writer states the one exactly when it writes the other)
   {
     const flatbuffers::String* sr = pt != nullptr ? pt->SOLAR_RAD_PRESSURE() : nullptr;
@@ -600,13 +600,13 @@ inline int decode_view(const OCM* o, Set& s) {
     const bool lp = !sgp4 && s.theory == meanElementSource_AP && lp_radiation_record(s.row, f);
     if (lp && !lp_text)
       return refuse("radiation-model-superseded",
-                    "An AP set above e 0.3 in the long-period regime with an area-to-mass flies radiation pressure through the output map (SPEC 16.21), and this record states another model in PERTURBATIONS.SOLAR_RAD_PRESSURE: fit it again.");
+                    "An AP set above e 0.3 in the long-period regime with an area-to-mass flies radiation pressure through the output map (SPEC 16.22), and this record states another model in PERTURBATIONS.SOLAR_RAD_PRESSURE: fit it again.");
     if (!lp && lp_text)
       return refuse("radiation-model-mismatch",
                     "PERTURBATIONS.SOLAR_RAD_PRESSURE names radiation pressure through the output map, which only an AP set above e 0.3 in the long-period regime with an area-to-mass above 0 flies.");
     if (lp && y0_text != states_y0(o))
       return refuse("radiation-model-mismatch",
-                    "PERTURBATIONS.SOLAR_RAD_PRESSURE states ECOM2 Y0 exactly when ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS carries ECOM2_Y0 (SPEC 16.21): this record states one without the other.");
+                    "PERTURBATIONS.SOLAR_RAD_PRESSURE states ECOM2 Y0 exactly when ORBIT_DETERMINATION.OD_DYNAMIC_PARAMETERS carries ECOM2_Y0 (SPEC 16.22): this record states one without the other.");
   }
   // the frame pairing: TEMEOFDATE, or TEMEOFEPOCH at the set's epoch for AP with gravity terms
   const int frame = frame_kind(o->TRAJ_REF_FRAME());

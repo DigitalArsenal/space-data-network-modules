@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.36 (dist 4e939b31).
+Version 0.6.37 (dist de3f0b87).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2834,7 +2834,7 @@ In the four windows whose fit arc holds or ends at TESS's perigee, where the fil
 theories are worse at day 7: AP 6.2 to 22.4 km against 3.1 to 10.3 km on the fill. The other three windows move by less
 than 0.6 km. The comparison with the archived AP6 arms stays on the reading those arms were scored on.
 
-From 0.6.NN, with radiation pressure through the output map (16.21), the replay on the solution states is 333.6, 1,631.4
+From 0.6.NN, with radiation pressure through the output map (16.22), the replay on the solution states is 333.6, 1,631.4
 and 11,782.0 m for AP at days 1, 3 and 7 (0.6.36: 389.6, 1,867.7 and 15,409.5 m), with AP minus XP at day 3 at -1,671.3 m.
 On the archive's reading it is 1,014.8, 2,245.8 and 5,037.3 m (0.6.36: 1,011.7, 2,000.1 and 9,032.8 m), so day 3 is above
 the archived 2,009 m. With AGOM held at 0 the two builds fly the same replay to 0.01 m (1,505.7, 6,462.2 and 42,488.5 m):
@@ -4365,7 +4365,7 @@ in the six elements by forward differences (steps 1e-7, and 1e-7 n for n, every 
 base's eccentric anomaly), and a is the Sun's and Moon's point-mass acceleration at the output's position. Gaussian
 elimination with partial pivoting solves it; where the output or the solve fails, the Gauss equations remain. The rates
 then move the J2 output by the bodies' acceleration and nothing else, to first order. Radiation pressure takes the same
-path there from 0.6.NN (16.21).
+path there from 0.6.NN (16.22).
 
 AP's Moon signal (each side's flight with J2 and the Moon less its flight with J2 alone, no fit, 120 h; J3 to J5 and the
 Sun's mass zero in the builds), against the numerical propagator's:
@@ -4419,7 +4419,7 @@ carriers, 30 if both, 24 if one of SPEC 4's alone). Its size is a Cr A/m of 0.01
 | 1 | once, by the rates |
 | 2 | once, by the grid |
 | 3 | once, by the output table |
-| 4 | once, through the output map (radiation pressure in the long-period regime above e 0.3, 16.21) |
+| 4 | once, through the output map (radiation pressure in the long-period regime above e 0.3, 16.22) |
 | 8 | once, by the m-daily family |
 | 11 | once, by the rates and the output table between them (the band taper) |
 | 12 | once, by the rates and the grid between them (the band taper, above the switch) |
@@ -4465,8 +4465,60 @@ went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit ab
 The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
 arc.
 
+**16.21 The output's Kepler solve** (from 0.6.37; stack #550). An AP output state takes the eccentric anomaly E of its
+osculating elements (the mean elements with the corrections the output adds before its J2 step: the Sun's and Moon's
+short-period terms, radiation, the tesseral terms and the drag steps) from M = E - e sin E. The warm start Ewarm is the mean
+elements' E (in a covariance sigma point that shares the nominal's terms, the nominal's osculating E), and dm the difference
+of M and Ewarm - e sin Ewarm, reduced to (-pi, pi]. The fast path is every state but the epoch state of a long-period set
+within 0.02 rad of the equator.
 
-**16.21 Radiation pressure of the long-period regime through the output** (from 0.6.NN; stack #479). SPEC 4 carries
+- After the epoch, with e at most 0.08 and no tesseral grid: the series from the mean longitude;
+- on the fast path, |dm / (1 - e cos Ewarm)| under 0.004: E = Ewarm plus the third-order series in dm;
+- on the fast path, e at most 0.018 (below 1100 min) or 0.008 (above): the small-e series of M;
+- otherwise Newton, from Ewarm + dm / (1 - e cos Ewarm) on the fast path and Ewarm + dm off it, for m_t = M + 2 pi
+  round((Ewarm - e sin Ewarm - M) / 2 pi), M on the start's branch. m_t is M exactly wherever the two anomalies lie on the same
+  side of 0, and where Newton meets its tolerance the solve is 0.6.36's;
+- a Newton that ends its 30 steps within 1e-12 of the root is solved, its sine and cosine taken from that E, and counted apart
+  (sdnap_kepler_unconverged 2); one that ends farther gives way to bisection on [m_t - e, m_t + e], where E - e sin E - m_t,
+  increasing, changes sign, and is counted (sdnap_kepler_unconverged 0). The counts are every caller's (output states,
+  covariance sigma points, fit evaluations).
+
+Through 0.6.36 the solve had two faults.
+
+*The branch.* Newton solved for M itself. For the seconds of a perigee passage in which the mean and the osculating anomaly lie
+either side of 0, M was 2 pi from the start's branch: the first residual was 2 pi and each step 2 pi / (1 - e cos E), and unless
+that is a whole number of turns (at e 0.5 exactly, 4 pi) the 30th step left E off the root, its sine and cosine retaken from it.
+The series takes dm up to 0.004 (1 - e cos Ewarm), so this needed the output's corrections to move the anomaly by more than
+that at perigee. Measured on the synthetic set (seed 498, every case at e 0.3 and above, 408, as AP seed records with FORCES
+31,20, BTERM 0.022 and AGOM 0.012, at 1 s through every perigee passage over 5 days): 13 cases held such states, each
+exactly a case whose Newton ended far from its root; the other 395 flew the same on both to the bit.
+
+| Orbit (perigee, e) | Inclinations | States off at 1 s over the passages | Largest displacement |
+|---|---|---|---|
+| 2,000 km, e 0.5 (4:1, 4.0025 rev/day) | 20, 55, 70, 98, 165 | 142 to 401 states over 20 passages | 23 to 83 km |
+| 2,000 km, e 0.5 | 130 | 15 states over 20 passages | 8.7 km |
+| 800 km, e 0.5 (5:1, 5.047 rev/day) | 70, 98 | 152 states over 25 passages and 30 over 26 | 19.3 and 9.0 km |
+| 200 to 1,000 km, e 0.9 (0.43 to 0.52 rev/day) | 0.5 and 20 (200 km), 70 (400 km), 98 and 130 (1,000 km) | 21 to 53 states over 2 or 3 passages | 100,000 to 136,000 km |
+
+At e 0.5 the low-orbit grid's slow harmonics near the commensurability move the anomaly (16.18), and the block's states lay on
+the orbit's own path, displaced along it, for up to 20 s a passage. At e 0.9 the drag steps at perigee (16.12) move it, and the
+state lay up to the orbit's diameter away. Perigee 2,000 km at e 0.5 and i 0.5, perigee 500 km at e 0.7 and perigee 400 km at
+e 0.5 held none.
+
+*The rounding.* Off the fast path Newton stops only at |dE| < 1e-15. With E between 4 and 2 pi the residual moves in steps of
+one ulp, and with 1 - e cos E under 0.89 Newton can cycle between two neighboring doubles at the root for all 30 steps. The
+sine and cosine were then left at 0 and 1, a perigee state: on a long-period set at 1.2 rev/day, e 0.5, i 0.5, its state at
+its epoch for 20,000 mean anomalies, 69 (0.35 %) came out at the perigee radius, up to 27,000 km from their place. A GEO set
+(e 1e-5, i 0.05) held none.
+
+Section 8's solve (output_j2_osc) starts from Ewarm + dm and runs Newton for every state, with no series, so the branch window
+opens at every perigee passage for dm / n, whatever the size of dm. It serves SGP4XP's sets, AP's output where e^2 or
+tan^2 (i/2) is at most 1e-24, and the long-period regime's output Jacobian (16.19), whose columns shift lambda, af and ag by
+1e-7 from the base E. This version counts its Newtons that end 1e-12 or more from the root (sdnap_kepler_unconverged 1) and
+leaves its arithmetic as it was.
+
+
+**16.22 Radiation pressure of the long-period regime through the output** (from 0.6.NN; stack #479). SPEC 4 carries
 radiation pressure in two parts: rates averaged over the mean orbit with the Sun held fixed, and first-order periodic terms
 in the output. On a TESS-like orbit five days are under half of a 13.7-day revolution. The average then says little about
 the forecast, and periodic terms built with the Sun held fixed miss the rest.
@@ -4487,7 +4539,8 @@ every force on are identical to 0.6.36's flights, state for state:
 
 *The anomaly.* There SPEC 4's periodic radiation terms are off, so the output does not make the mean Kepler solve that
 served them. A plain output then solves the osculating anomaly from the cold start, as such a set without an area-to-mass
-always has, and never from a warm start (stack #550's path). A covariance output still starts from the nominal's
+always has, and never from a warm start (16.21). Where Newton does not meet its tolerance there, 16.21's bisection and
+counts apply. A covariance output still starts from the nominal's
 osculating anomaly. A wide grid's terms (16.11) are read at the anomaly `tess::wide_six` solves itself from the mean
 anomaly: Newton from E = M to a step under 1e-14, at most 50 steps. 0.6.36 passed it the mean solve's E, solved to 1e-15.
 
