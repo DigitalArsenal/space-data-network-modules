@@ -43,6 +43,10 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   `sdnap_mean_motion_of(a, e, i)` the mean motion (rev/day) an SGP4XP set carries for a mean a (km), the inverse of
   `sdnap_mean_elements_at` (a round trip within 1e-12 relative from LEO to GEO); `sdnap_frame_to_uvw(r, v, vec, out)` a
   vector's radial, in-track and cross-track components and `sdnap_uvw_to_frame` its mirror.
+- The osculating Kepler solve (SPEC 16.21; `test/perigee-kepler-branch.e2e.mjs`): `sdnap_kepler_unconverged(reset, which)`
+  counts the solves, every caller's, whose Newton ended its 30 steps without meeting its tolerance: `which` 0 AP's ending
+  far from the root (then solved by bisection), 1 section 8's ending far from it (counted only), 2 AP's ending within 1e-12
+  of it (solved); `reset` non-zero reads and clears it in one step.
 - Covariance (SPEC 12; `test/covariance.e2e.mjs`): `fit` writes, for its SGP4XP sets, the fit's covariance at its epoch
   as COVARIANCE (TEME, 21 values) with USER_DEFINED_SDNAP_COV_x rows (the BTERM and AGOM parameters' covariances, the
   theory floor, the process noise); `sdnap_covariance_at(omm, length, minutes, count, out)` gives, per time, the TEME

@@ -30,7 +30,7 @@ const iso = (s) => new Date(t0 + s * 1000).toISOString().replace('Z', '');
 const set = {n: 4.0025, e: 0.5, i: 20, raan: 347.2, argp: 232, ma: 57.4};
 const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
 const x = h.instance.exports, counted = typeof x.sdnap_kepler_unconverged === 'function';
-if (counted) x.sdnap_kepler_unconverged(1);
+if (counted) x.sdnap_kepler_unconverged(1, 0);
 const seed = seedOcm({epoch, ...set, bterm: 0, norad: 99550, msis: false, records: false, tesseral: 31, zonal: 20});
 const fly = async (secs) => {
   const r = await h.invoke({methodId: 'propagate', inputs: flight([seed], {output: {EPOCHS: secs.map(iso), FRAME: pcfOutputFrame.GCRF}})});
@@ -61,7 +61,7 @@ for (const perigee of perigees) {
   if (!(worst <= BOUND_M)) failures.push(`the passage at ${(perigee / 3600).toFixed(3)} h reads ${worst.toExponential(3)} m, ${at} s from perigee (at most ${BOUND_M} m)`);
 }
 // every state of the flights solved by Newton or the series: none took the bisection
-const unconverged = counted ? x.sdnap_kepler_unconverged(0) : null;
+const unconverged = counted ? x.sdnap_kepler_unconverged(0, 0) : null;
 if (!counted) failures.push('the build has no sdnap_kepler_unconverged: a solve that does not converge is not counted');
 else if (unconverged !== 0) failures.push(`${unconverged} output states took the bisection (Newton did not converge in 30 steps)`);
 await h.close?.();
