@@ -14,7 +14,9 @@
 //   variances and their mutual terms constant (0 of 3179 differ from the record's) and the 6 x 6 state block equal to the 8-row record's
 //   sdnap_covariance_at (0 of 7803 differ); the X / IN_TRACK_ACCELERATION term at epoch equals the record's; propagate flies it
 //   to the 8-row record's bytes. Rows out of the fixed order, or not solved for, are refused (-6).
-// - ORBIT_DETERMINATION.WEIGHTED_RMS = FIT_RMS_KM / sqrt(3) (sigma 1 km a component); SEDR, the energy removed
+// - ORBIT_DETERMINATION.WEIGHTED_RMS = FIT_RMS_KM / sqrt(3) (sigma 1 km a component) for SGP4XP; for AP, whose 24 h fit
+//   under the drag weighs its along-track residuals at the data sigma times a factor f (stack #489, OD_DATA_WEIGHTING), each
+//   state's residual over its own sigmas, between FIT_RMS_KM / sqrt(3) / (sigma f) and FIT_RMS_KM / sqrt(3) / sigma; SEDR, the energy removed
 //   (the $OCM's definition), finite and positive under drag: the sign of NON_GRAVITATIONAL_RATE_PER_DAY. Stored rows:
 //   the first 0.6.0 build (modules a54ff2245) wrote SEDR as the signed dE/dt, negative under drag; an $OCM it wrote
 //   reads here with the opposite sign, its magnitude unchanged. On 2026-11-05 no tracked $OCM in this repository (259
@@ -84,8 +86,15 @@ for (const [name, config, spw, code] of [["XP", configuration({ theory: "SGP4XP"
   const dyn = od.OD_DYNAMIC_PARAMETERS;
   check(dyn.length === 2 && o.COV_PARAMETER_KINDS.every((k) => dyn.some((p) => p.PARAMETER === k && p.SOLVED_FOR)),
     `${name}: OD_DYNAMIC_PARAMETERS ${dyn.map((p) => `${p.NAME}:${p.SOLVED_FOR}`).join(", ")}`);
-  const wantRms = st.FIT_RMS_KM / Math.sqrt(3) / 1;
-  check(Number.isFinite(od.WEIGHTED_RMS) && Object.is(od.WEIGHTED_RMS, wantRms), `${name}: WEIGHTED_RMS ${od.WEIGHTED_RMS} against FIT_RMS_KM / sqrt(3) ${wantRms}`);
+  const along = /^RADIAL AND CROSS-TRACK SIGMA ([0-9.e+-]+) KM, .*SQRT\(TAU \/ DT\) = ([0-9.e+-]+),/.exec(od.OD_DATA_WEIGHTING ?? "");
+  if (along) {
+    const sigma = Number(along[1]), f = Number(along[2]), hi = st.FIT_RMS_KM / Math.sqrt(3) / sigma, lo = hi / f;
+    check(Number.isFinite(od.WEIGHTED_RMS) && od.WEIGHTED_RMS >= lo * (1 - 1e-9) && od.WEIGHTED_RMS <= hi * (1 + 1e-9),
+      `${name}: WEIGHTED_RMS ${od.WEIGHTED_RMS} not between FIT_RMS_KM / sqrt(3) over sigma f (${lo}) and over sigma (${hi})`);
+  } else {
+    const wantRms = st.FIT_RMS_KM / Math.sqrt(3) / 1;
+    check(Number.isFinite(od.WEIGHTED_RMS) && Object.is(od.WEIGHTED_RMS, wantRms), `${name}: WEIGHTED_RMS ${od.WEIGHTED_RMS} against FIT_RMS_KM / sqrt(3) ${wantRms}`);
+  }
   const rate = o.COV_PROPAGATION.NON_GRAVITATIONAL_RATE_PER_DAY;
   check(Number.isFinite(od.SEDR) && od.SEDR > 0 && Math.sign(od.SEDR) === Math.sign(rate), `${name}: SEDR ${od.SEDR} with the non-gravitational rate ${rate}`);
   const odr = ODR.getRootAsODR(new flatbuffers.ByteBuffer(odrBytes)).unpack();

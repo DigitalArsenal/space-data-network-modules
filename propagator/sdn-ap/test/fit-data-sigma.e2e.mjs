@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// E2E (stack issue 324): above the drag the fit weighs the data at their own sigma and the record's covariance uses
-// that same sigma (SPEC 12.1); under drag the 1 km weighting of the staged passes stands.
+// E2E (stack issues 324, 489): above the drag the fit weighs the data at their own sigma and the record's covariance uses
+// that same sigma (SPEC 12.1); under the drag on a 24 h arc AP's fit weighs them at their own sigma too, the along-track
+// at that sigma times sqrt(tau / dt), and SGP4XP's keeps 1 km.
 // Model truth: the module's own flight of an AP set (caps 31 and 20, NRLMSISE-00 on constant daily rows) with a known
 // AGOM, in GCRF, the 24 h fit arc starting at the set's epoch, so that zero residual is attainable; fit on the module's
 // default priors (no FIT table).
@@ -15,8 +16,11 @@
 //    estimate x (1 - P / P0) of a true x, so the fitted AGOM is 0.02 (1 - sigma_S^2 / 0.01) within 1 % of 0.02, sigma_S
 //    the record's AGOM sigma. (0.6.10 fits AGOM 31 % low whatever is stated, while its covariance, divided by the
 //    scatter that pull leaves, implies 0.0 %.)
-// 3. The line is the theory's own: circular sets at 2,400 km and 2,600 km, AGOM 0.02. The first record states UNIT
-//    WEIGHTS at 1 km and the regime DRAG, the second its data sigma and ABOVE. A 700 km set states UNIT WEIGHTS.
+// 3. The line is the theory's own: circular sets at 2,400 km and 2,600 km, AGOM 0.02. The first record states the
+//    regime DRAG and, on this 24 h arc, the along-track weighting (radial and cross-track at the data sigma, every
+//    accepted $ODR WEIGHT 1 / that sigma^2, the along-track at sigma sqrt(tau / dt), tau at least 0.181 periods and the
+//    factor sqrt(tau P / dt) to 1e-3, P the record's period); the second its data sigma and ABOVE. A 700 km set states the
+//    along-track weighting too. SGP4XP's fit of the 700 km arc (stock forces) states UNIT WEIGHTS at 1 km, as before.
 // JS only moves bytes and compares numbers the module produced.
 //   node test/fit-data-sigma.e2e.mjs
 import * as flatbuffers from "flatbuffers";
@@ -31,7 +35,7 @@ import { ODR } from "spacedatastandards.org/lib/js/ODR/ODR.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { prwDynamicParameter } from "spacedatastandards.org/lib/js/OCM/prwDynamicParameter.js";
 import { ensureBuilt, wasmPath } from "./lib/module.mjs";
-import { configuration } from "./lib/pcf.mjs";
+import { configuration, fitConfiguration } from "./lib/pcf.mjs";
 import { T, AP_FORCES, ocmOf, seedOcm, rowsThrough, spwStream, flight } from "./lib/ocm.mjs";
 import { packOem, rfm } from "./lib/frames.mjs";
 
@@ -68,15 +72,17 @@ async function fly(record, times) {
 const truth = (o) => fly(seedOf(o), Array.from({ length: 86400 / o.step + 1 }, (_, k) => EPOCH + k * o.step * 1000));
 
 /** The fit of GCRF states (`covKm2`: each state's stated position variance per component, km^2, or none). */
-async function fit(states, covKm2 = 0) {
+async function fit(states, covKm2 = 0, theory = "AP") {
   const lines = states.map((q) => Object.assign(new LineT(), { EPOCH: iso(q.ms), X: q.s[0], Y: q.s[1], Z: q.s[2], X_DOT: q.s[3], Y_DOT: q.s[4], Z_DOT: q.s[5] }));
   const block = Object.assign(new BlockT(), { OBJECT: Object.assign(new CATT(), { NORAD_CAT_ID: 99001, OBJECT_NAME: "FIT DATA SIGMA E2E" }), CENTER_NAME: "EARTH",
     REFERENCE_FRAME: rfm("GCRF"), TIME_SYSTEM: timingStandard.UTC, START_TIME: lines[0].EPOCH, STOP_TIME: lines.at(-1).EPOCH,
     USEABLE_START_TIME: lines[0].EPOCH, USEABLE_STOP_TIME: lines.at(-1).EPOCH, EPHEMERIS_DATA_LINES: lines,
     COVARIANCE_MATRIX_LINES: covKm2 > 0 ? lines.map((l) => Object.assign(new CovLineT(), { EPOCH: l.EPOCH, CX_X: covKm2, CY_Y: covKm2, CZ_Z: covKm2 })) : [] });
   const oem = packOem(Object.assign(new OEMT(), { EPHEMERIS_DATA_BLOCK: [block] }));
-  const r = await h.invoke({ methodId: "fit", inputs: [configuration({ theory: "AP", forces: AP_FORCES }), { portId: "space_weather", typeRef: T("SPW"), payload: spwStream(spw) },
-    { portId: "ephemeris", typeRef: T("OEM"), payload: oem }] });
+  // SGP4XP (stock forces) reads the theory's own flux model: no space_weather rows
+  const r = await h.invoke({ methodId: "fit", inputs: theory === "AP"
+    ? [configuration({ theory: "AP", forces: AP_FORCES }), { portId: "space_weather", typeRef: T("SPW"), payload: spwStream(spw) }, { portId: "ephemeris", typeRef: T("OEM"), payload: oem }]
+    : [fitConfiguration({}), { portId: "ephemeris", typeRef: T("OEM"), payload: oem }] });
   if (r.statusCode !== 0) throw new Error(`fit: ${r.errorCode} ${r.errorMessage}`);
   const record = new Uint8Array(r.outputs.find((v) => v.portId === "elements").payload);
   const o = ocmOf(record);
@@ -114,13 +120,25 @@ for (const name of ["gps", "geo"]) {
   check(Math.abs(f.me.AGOM - expected) <= 0.01 * o.agom, `stated 0.5 km: AGOM ${f.me.AGOM}, the record's covariance implies ${expected} (1 % of ${o.agom} allowed)`);
 }
 
-// --- 3. the line is the theory's 2,500 km; under drag the fit weighs at 1 km as before
+// --- 3. the line is the theory's 2,500 km; under the drag on this 24 h arc AP weighs the along-track at sigma sqrt(tau / dt)
 for (const [name, regime] of [["below", "DRAG"], ["above", "ABOVE"], ["leo700", "DRAG"]]) {
   const f = await fit(await truth(ORBITS[name]));
   console.log(`${name}: regime ${f.regime}, '${f.weighting}', WEIGHT ${[...f.weights].map((w) => w.toPrecision(6)).join(", ")} per km^2`);
   check(f.regime === regime, `${name}: regime ${f.regime}, expected ${regime}`);
-  if (regime === "DRAG") check(f.weighting === UNIT && f.weights.size === 1 && [...f.weights][0] === 1, `${name}: under drag the record states '${f.weighting}', WEIGHT ${[...f.weights].join(", ")}`);
-  else check(/^EQUAL WEIGHTS: SIGMA /.test(f.weighting) && f.sigmaKm < 1e-3, `${name}: above the drag the record states '${f.weighting}'`);
+  if (regime === "DRAG") {
+    const m = /^RADIAL AND CROSS-TRACK SIGMA ([0-9.e+-]+) KM, .*; ALONG-TRACK ([0-9.e+-]+) KM, THAT SIGMA TIMES SQRT\(TAU \/ DT\) = ([0-9.e+-]+), TAU ([0-9.e+-]+) PERIODS, DT ([0-9.e+-]+) S$/.exec(f.weighting);
+    const sigma = m ? Number(m[1]) : NaN, factor = m ? Number(m[3]) : NaN, tau = m ? Number(m[4]) : NaN, dt = m ? Number(m[5]) : NaN;
+    const periodS = 86400 / f.me.MEAN_MOTION;
+    check(m && factor > 1 && tau >= 0.181 && Math.abs(factor / Math.sqrt((tau * periodS) / dt) - 1) <= 1e-3 && Math.abs(Number(m[2]) / (sigma * factor) - 1) <= 1e-4,
+      `${name}: under the drag AP's record states '${f.weighting}'`);
+    check(f.weights.size === 1 && Math.abs([...f.weights][0] * sigma ** 2 - 1) <= 1e-5, `${name}: $ODR WEIGHT ${[...f.weights].join(", ")} is not 1 / sigma^2 of ${sigma} km`);
+  } else check(/^EQUAL WEIGHTS: SIGMA /.test(f.weighting) && f.sigmaKm < 1e-3, `${name}: above the drag the record states '${f.weighting}'`);
+}
+// SGP4XP under the drag on a short arc keeps 1 km (stack #489: its records are those of the version before)
+{
+  const f = await fit(await truth(ORBITS.leo700), 0, "SGP4XP");
+  console.log(`leo700, SGP4XP: '${f.weighting}', WEIGHT ${[...f.weights].join(", ")} per km^2`);
+  check(f.weighting === UNIT && f.weights.size === 1 && [...f.weights][0] === 1, `leo700, SGP4XP: under the drag the record states '${f.weighting}', WEIGHT ${[...f.weights].join(", ")}`);
 }
 
 if (failures.length) {
