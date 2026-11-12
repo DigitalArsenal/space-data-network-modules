@@ -128,7 +128,9 @@ try {
   const refusedOld = await hCurr.invoke({ methodId: "propagate", inputs: [{ portId: "ocm", typeRef: T("OCM"), payload: ocmBaseBytes }] });
   assert.ok(refusedOld.statusCode !== 0 && refusedOld.errorCode === "gravity-model-mismatch", `0.6.4's fit: ${refusedOld.errorCode ?? "flown"}, expected gravity-model-mismatch`);
   console.log("PASS 0.6.4's AP fit (EGM-96) refused by this build: gravity-model-mismatch");
-  const storedBytes = new Uint8Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.36.ocm")));
+  // from 0.6.39 the stored record is 0.6.39's own fit (0.6.36's mean elements; its epoch floor at their two-body state, SPEC
+  // 12.4), whose covariance is held against 0.6.36's numbers of 0.6.36's fit: a set's own flight is as it was
+  const storedBytes = new Uint8Array(fs.readFileSync(path.join(here, "fixtures/ap-fit-0.6.39.ocm")));
   // Propagate the stored AP $OCM (from 0.6.36 its own fit; 0.6.4's fit through 0.6.34) on STATE_BASE and this build for
   // 7 days in EME2000 and TEME, within 1 cm. Against 0.6.4 until 0.6.21 (0.6.5's speed changes: sub-centimeter); AP's own
   // Sun and Moon (0.6.22, SPEC 16.17, stack #446) move this flight from 0.6.4's by 12.179 cm in EME2000 and TEME (0.6.21

@@ -68,8 +68,8 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
   { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, config, ...(spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: spw }] : [])] });
 
 const cases = [
-  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.36.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
-    fitReference: "ap-fit-0.6.36.ocm",
+  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.39.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
+    fitReference: "ap-fit-0.6.39.ocm",
     recorded: { version: "0.6.36", cov: "ap-fit-0.6.36-0.6.36.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.36.eme2000-0.6.36.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.36.teme-0.6.36.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
@@ -110,6 +110,12 @@ const cases = [
 // 4.74e-3. 0.6.36 refuses a record whose GRAVITY_MODEL is not the embedded field (SPEC 16.2): 0.6.4's fit states EGM-96
 // (asserted below), so from 0.6.36 AP's stored record is 0.6.36's own fit (ap-fit-0.6.36.ocm), recorded with its flight
 // (the 0.6.22 files went), the bounds kept; the reference fit is the same record.
+// 0.6.39 (SPEC 12.4, stack #551: an AP set's epoch floor put on and taken off at the two-body state of its own mean
+// elements) refuses the covariance of an AP record written before it (cov-floor-at-theory-state; its states fly), 0.6.36's
+// fit among them. So from 0.6.39 the stored record is 0.6.39's own fit of the same inputs (ap-fit-0.6.39.ocm: 0.6.36's mean
+// elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
+// held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
+// flies its states as 0.6.36 flew them, its covariance refused by name.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };
@@ -266,7 +272,7 @@ for (const c of cases) {
   if (!s) continue;
   // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.36's fit), both
   // flown by this build; its $ODR names its own $OCM
-  const refName = c.fitReference ? "0.6.36's fit" : "the stored (0.6.4's fit)";
+  const refName = c.fitReference ? "0.6.39's fit" : "the stored (0.6.4's fit)";
   const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.reference, pcfOutputFrame.TEME)];
   check(pf.statusCode === 0 && ps.statusCode === 0, `${c.name}: propagate the fitted and the reference record: ${pf.errorCode ?? "ok"} | ${ps.errorCode ?? "ok"}`);
   if (pf.statusCode === 0 && ps.statusCode === 0) {
@@ -289,7 +295,7 @@ for (const c of cases) {
   for (const frame of [pcfOutputFrame.EME2000, pcfOutputFrame.TEME]) {
     const p2 = await flight(h, s.record, frame), p1 = rec ? { statusCode: 0, outputs: [{ payload: fixture(rec[frame]) }] } : await flight(before, s.record, frame);
     const ok = p2.statusCode === 0 && p1.statusCode === 0;
-    if (rec && p2.statusCode === 0) recordReference(`ap-fit-0.6.36.${frame === pcfOutputFrame.EME2000 ? "eme2000" : "teme"}`, "oem", new Uint8Array(p2.outputs[0].payload));
+    if (rec && p2.statusCode === 0) recordReference(`ap-fit-0.6.39.${frame === pcfOutputFrame.EME2000 ? "eme2000" : "teme"}`, "oem", new Uint8Array(p2.outputs[0].payload));
     const d = ok ? oemDistance(asVersion(new Uint8Array(p2.outputs[0].payload), rec ? rec.version : BEFORE.version), new Uint8Array(p1.outputs[0].payload)) : null;
     if (d) console.log(`${c.name} flight of the stored record, propagate ${pcfOutputFrame[frame]} at ${EPOCHS.length} epochs over 7 days, ${now} against ${against}: ${d.bytesEqual ? "byte-equal (PRODUCER's version aside)" : `${(1000 * d.posM).toFixed(3)} mm, ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)}`}`);
     check(ok && d.posM <= FLIGHT_BOUND.posM && d.covOfLargest <= FLIGHT_BOUND.covOfLargest,
