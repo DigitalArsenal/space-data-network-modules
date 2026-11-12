@@ -4468,40 +4468,26 @@ inline void sp_band_six(const SpCombCoef* F, int count, double a0, double e0, do
   const double beta_dot = sr.node - kOmegaE;
   const double ia = 1.0 / a, da = a0 * ia - 1.0, de = e_in - e0;
   const double alpha_A = -2.0 * ia / (n * a), beta_L = 3.0 * ia * ia;
-  int max_m = 0, max_aw = 0;
-  for (int idx = 0; idx < count; ++idx) {
-    const int aw = F[idx].w < 0 ? -F[idx].w : F[idx].w;
-    if (F[idx].m > max_m) max_m = F[idx].m;
-    if (aw > max_aw) max_aw = aw;
-  }
-  double cm[72], sm[72], cu_buf[2 * kSpMaxW + 1], su_buf[2 * kSpMaxW + 1];
-  double* const cu = cu_buf + kSpMaxW;
-  double* const su = su_buf + kSpMaxW;
-  cm[0] = cu[0] = 1.0;
-  sm[0] = su[0] = 0.0;
-  for (int q = 1; q <= max_aw; ++q) {
-    cu[q] = cu[q - 1] * cu1 - su[q - 1] * su1;
-    su[q] = su[q - 1] * cu1 + cu[q - 1] * su1;
-    cu[-q] = cu[q];
-    su[-q] = -su[q];
-  }
-  for (int q = 1; q <= max_m; ++q) {
-    cm[q] = cm[q - 1] * cb - sm[q - 1] * sb;
-    sm[q] = sm[q - 1] * cb + cm[q - 1] * sb;
-  }
   double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sL = 0;
   double dsM = 0, dsW = 0, dsO = 0, dsE = 0, dsI = 0, dsL = 0;
   double d2sM = 0, d2sW = 0, d2sO = 0, d2sE = 0, d2sI = 0, d2sL = 0;
+  bool any = false;
   for (int idx = 0; idx < count; ++idx) {
     const SpCombCoef& f = F[idx];
     const int m = f.m, w = f.w, j = f.j, qv = j - w;
     const double wt = band_lane_weight(sr, j, m, n, w);
-    if (!(wt > 0.0)) continue;  // below 0.9 bands: the rates hold all of it
+    if (!(wt > 0.0)) continue;  // below 0.9 bands: the rates hold all of it, and the lane costs its share only
+    any = true;
     const double psidot = w * sr.argp + j * sr.mdot + m * beta_dot;
-    const double c0 = cu[w], s0 = su[w];
+    // the lane's own multiples of the angles (most lanes sit below 0.9 bands, so no table of every order is made)
+    double cmm, smm, c0, s0;
+    complex_pow(cb, sb, m, cmm, smm);
+    complex_pow(cu1, su1, w < 0 ? -w : w, c0, s0);
+    if (w < 0) s0 = -s0;
+    const double cm_m = cmm, sm_m = smm;
     const double cwjq = qv == 0 ? c0 : (qv > 0 ? c0 * cM1 - s0 * sM1 : c0 * cM1 + s0 * sM1);
     const double swjq = qv == 0 ? s0 : (qv > 0 ? s0 * cM1 + c0 * sM1 : s0 * cM1 - c0 * sM1);
-    const double cp = cwjq * cm[m] - swjq * sm[m], sp = swjq * cm[m] + cwjq * sm[m];
+    const double cp = cwjq * cm_m - swjq * sm_m, sp = swjq * cm_m + cwjq * sm_m;
     const double ip1 = 1.0 / psidot, inv_p = wt * ip1;
     const double uc = (f.uc0 + (-f.dc0 - 0.5 * f.dca * da) * da + (f.ec0 + f.eca * da) * de) * inv_p;
     const double us = (f.us0 + (-f.ds0 - 0.5 * f.dsa * da) * da + (f.es0 + f.esa * da) * de) * inv_p;
@@ -4522,6 +4508,7 @@ inline void sp_band_six(const SpCombCoef* F, int count, double a0, double e0, do
       }
     }
   }
+  if (!any) return;
   const double na2 = n * a * a, tanhalf = sin_i / (1.0 + ci);
   const double eta_m1 = -(e_in * e_in) / (1.0 + eta);  // eta - 1, without the cancellation
   const auto put = [&](double* dst, double vM, double vW, double vO, double vE, double vI, double vL) {
