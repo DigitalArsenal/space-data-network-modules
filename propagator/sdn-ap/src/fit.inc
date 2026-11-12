@@ -313,6 +313,47 @@ inline bool& jacobian_fallback() {
   return b;
 }
 
+/// SPEC 12.1 (stack #489): while above 1, the cost and the covariance weigh each state's along-track residual (the state's own
+/// radial, along-track and cross-track axes) at the data sigma times this factor, its radial and cross-track residuals at the
+/// data sigma. Set by fit_oem for AP's whole-arc passes on a short arc under the drag; 1 everywhere else.
+inline thread_local double g_along_track_factor = 1.0;
+struct AlongTrackScope {
+  double prev;
+  explicit AlongTrackScope(double f) : prev(g_along_track_factor) { g_along_track_factor = f; }
+  ~AlongTrackScope() { g_along_track_factor = prev; }
+};
+/// The rows of L = [U; V / f; W] at a state of position rr and velocity vv (U radial, W along the orbit normal, V = W x U),
+/// 9 doubles: |L e|^2 is the residual e's square with its along-track part over f^2.
+inline void along_track_rows(const double* rr, const double* vv, double f, double* L) {
+  const double rn = std::sqrt(rr[0] * rr[0] + rr[1] * rr[1] + rr[2] * rr[2]);
+  const double U[3] = {rr[0] / rn, rr[1] / rn, rr[2] / rn};
+  double W[3] = {rr[1] * vv[2] - rr[2] * vv[1], rr[2] * vv[0] - rr[0] * vv[2], rr[0] * vv[1] - rr[1] * vv[0]};
+  const double wn = std::sqrt(W[0] * W[0] + W[1] * W[1] + W[2] * W[2]);
+  for (double& q : W) q /= wn;
+  const double V[3] = {W[1] * U[2] - W[2] * U[1], W[2] * U[0] - W[0] * U[2], W[0] * U[1] - W[1] * U[0]};
+  for (int j = 0; j < 3; ++j) {
+    L[j] = U[j];
+    L[3 + j] = V[j] / f;
+    L[6 + j] = W[j];
+  }
+}
+/// Every fitted state's L, its axes from the observed positions (the velocity from the state's neighbors in time), so the
+/// weights do not move with the iterate.
+inline std::vector<double> along_track_frames(const double* t, const double* r, int count, double f) {
+  std::vector<double> L(9 * static_cast<size_t>(count));
+  std::vector<int> order(static_cast<size_t>(count));
+  for (int k = 0; k < count; ++k) order[k] = k;
+  std::sort(order.begin(), order.end(), [&](int a, int b) { return t[a] < t[b]; });
+  for (int i = 0; i < count; ++i) {
+    const int k = order[i], a = order[i > 0 ? i - 1 : i], b = order[i + 1 < count ? i + 1 : i];
+    const double dt = t[b] - t[a];
+    double v[3];
+    for (int j = 0; j < 3; ++j) v[j] = dt != 0.0 ? (r[3 * b + j] - r[3 * a + j]) / dt : 0.0;
+    along_track_rows(r + 3 * k, v, f, L.data() + 9 * k);
+  }
+  return L;
+}
+
 /// Levenberg-Marquardt. `row` holds the starting set (epoch, theory and the
 /// fixed terms) and receives the fitted one. Each trial set flies its own branch unless a BranchScope pins one (run).
 /// The cost is sum |e_k|^2 / sigma_km^2 plus the priors; `data_sigma` marks sigma_km as the data's own (the cost then
@@ -349,9 +390,20 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   PriorTerm priors[3];
   const int n_priors = priors_of(o, priors);
   const double w = 1.0 / (sigma_km * sigma_km);  // the data's weight, 1 / sigma^2 (km^-2)
+  // SPEC 12.1 (stack #489): with an along-track factor each state's residual and Jacobian rows are taken through its L
+  const bool along = g_along_track_factor > 1.0;
+  const std::vector<double> Lk = along ? along_track_frames(t, r, count, g_along_track_factor) : std::vector<double>();
   auto cost_of = [&](const double* rr, const double* xx) {
     double c = 0.0;
-    for (int i = 0; i < nres; ++i) c += rr[i] * rr[i];
+    if (along)
+      for (int k = 0; k < count; ++k)
+        for (int i = 0; i < 3; ++i) {
+          const double* L = Lk.data() + 9 * k + 3 * i;
+          const double v = L[0] * rr[3 * k] + L[1] * rr[3 * k + 1] + L[2] * rr[3 * k + 2];
+          c += v * v;
+        }
+    else
+      for (int i = 0; i < nres; ++i) c += rr[i] * rr[i];
     c *= w;
     for (int q = 0; q < n_priors; ++q) {
       const double d = (xx[priors[q].index] - priors[q].mean) / priors[q].sigma;
@@ -435,11 +487,25 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
     auto normal = [&]() {
     for (int q = 0; q < kMaxParams * kMaxParams; ++q) A[q] = 0.0;
     for (int q = 0; q < kMaxParams; ++q) g[q] = 0.0;
-    for (int i = 0; i < nres; ++i)
-      for (int a = 0; a < np; ++a) {
-        g[a] -= jac[i * kMaxParams + a] * res[i];
-        for (int b = 0; b <= a; ++b) A[a * np + b] += jac[i * kMaxParams + a] * jac[i * kMaxParams + b];
-      }
+    if (along)
+      for (int k = 0; k < count; ++k)
+        for (int i = 0; i < 3; ++i) {
+          const double* L = Lk.data() + 9 * k + 3 * i;
+          double jr[kMaxParams];
+          for (int a = 0; a < np; ++a)
+            jr[a] = L[0] * jac[(3 * k) * kMaxParams + a] + L[1] * jac[(3 * k + 1) * kMaxParams + a] + L[2] * jac[(3 * k + 2) * kMaxParams + a];
+          const double rv = L[0] * res[3 * k] + L[1] * res[3 * k + 1] + L[2] * res[3 * k + 2];
+          for (int a = 0; a < np; ++a) {
+            g[a] -= jr[a] * rv;
+            for (int b = 0; b <= a; ++b) A[a * np + b] += jr[a] * jr[b];
+          }
+        }
+    else
+      for (int i = 0; i < nres; ++i)
+        for (int a = 0; a < np; ++a) {
+          g[a] -= jac[i * kMaxParams + a] * res[i];
+          for (int b = 0; b <= a; ++b) A[a * np + b] += jac[i * kMaxParams + a] * jac[i * kMaxParams + b];
+        }
     for (int a = 0; a < np; ++a) {
       g[a] *= w;
       for (int b = 0; b <= a; ++b) A[a * np + b] *= w;

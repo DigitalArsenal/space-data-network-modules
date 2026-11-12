@@ -526,8 +526,9 @@ struct Set {
 /// with the noise start t_a (minutes), and the floor's scale k_F. Above the drag a set inside its class's calibrated
 /// condition (`sigma_km` the data sigma its fit weighted with, 0 for none; `span_h` the fit's span) takes the class's
 /// row (kAboveAP, kAboveXP). False when the theory refuses the set.
-inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double span_h, double& ng_rate, int& regime, double* noise,
-                     double& share, double& floor_scale) {
+/// A set's non-gravitational rate per day: its drag term's n-dot over n at epoch (the set less the set with BTERM 0), the rate
+/// the record states (COV_PROPAGATION NON_GRAVITATIONAL_RATE_PER_DAY); false where the set does not initialize.
+inline bool ng_rate_of(const ElementRow& row, double& ng_rate) {
   ng_rate = 0.0;
   ElementRow none = row;
   none.bterm = 0.0;
@@ -541,7 +542,12 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
   if (s0 != nullptr) xpt::xp_release(*s0);
   std::free(s1);
   std::free(s0);
-  if (!ok) return false;
+  return ok;
+}
+
+inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double span_h, double& ng_rate, int& regime, double* noise,
+                     double& share, double& floor_scale) {
+  if (!ng_rate_of(row, ng_rate)) return false;
   const double n_min = row.mean_motion_rev_day * kTwoPi / kMinutesPerDay;
   regime = regime_of(row);
   const auto& terms = xpt::tess::active();
@@ -606,6 +612,17 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
     floor[3] += u[2] * u[0];
     floor[4] += u[2] * u[1];
     floor[5] += u[2] * u[2];
+    if (fit::g_along_track_factor > 1.0) {
+      // SPEC 12.1 (stack #489): the rows taken through the state's L (its own axes, the along-track over the factor), as the
+      // cost weighed them, so that P_p is the inverse curvature of that cost
+      double L[9], Jt[3 * kMaxAug];
+      fit::along_track_rows(rm, vm, fit::g_along_track_factor, L);
+      for (int i = 0; i < 3; ++i)
+        for (int a = 0; a < np; ++a) Jt[i * np + a] = L[3 * i] * J[0 * np + a] + L[3 * i + 1] * J[1 * np + a] + L[3 * i + 2] * J[2 * np + a];
+      for (int a = 0; a < np; ++a)
+        for (int c = 0; c <= a; ++c) A[a * np + c] += Jt[0 * np + a] * Jt[0 * np + c] + Jt[1 * np + a] * Jt[1 * np + c] + Jt[2 * np + a] * Jt[2 * np + c];
+      continue;
+    }
     for (int a = 0; a < np; ++a)
       for (int c = 0; c <= a; ++c) A[a * np + c] += J[0 * np + a] * J[0 * np + c] + J[1 * np + a] * J[1 * np + c] + J[2 * np + a] * J[2 * np + c];
   }

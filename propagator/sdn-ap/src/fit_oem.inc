@@ -98,6 +98,24 @@ inline std::string weighting_text(double sigma_km) {
   return text;
 }
 inline double weighted_rms(double fit_rms_km, double sigma_km) { return fit_rms_km / std::sqrt(3.0) / sigma_km; }
+/// SPEC 12.1 (stack #489): AP's fit under the drag on an arc shorter than 71 h at or below e 0.3 weighs each state's along-track
+/// residual at the data sigma times sqrt(tau / dt), dt the arc's state spacing and tau the correlation time of the theory's
+/// along-track error over the arc, in periods: max(kAlongTrackTauFloor, kAlongTrackTauPerRootRate sqrt(|r|)), r the set's
+/// non-gravitational rate per day held at kAlongTrackRateCap. The three constants are measured on the 24 h fits' own residuals
+/// (experiments headline-loop's low rows, the registered split's choice windows: the floor on the laser spheres and altimetry,
+/// the slope on strong drag 2025; the cap the largest rate measured, where tau reads 1.49 periods). Between 6.1e-7 and 2.4e-6
+/// per day no window measured tau: the form there is an interpolation.
+constexpr double kAlongTrackTauFloor = 0.181;
+constexpr double kAlongTrackTauPerRootRate = 232.7;
+constexpr double kAlongTrackRateCap = 4.111e-5;
+inline std::string along_track_weighting_text(double sigma_km, double factor, double tau, double dt_s) {
+  char text[320];
+  std::snprintf(text, sizeof text,
+                "RADIAL AND CROSS-TRACK SIGMA %.6g KM, THE POST-FIT RESIDUAL SCATTER, NOT BELOW THE EPHEMERIS' STATED COVARIANCE OR 1 MM; "
+                "ALONG-TRACK %.6g KM, THAT SIGMA TIMES SQRT(TAU / DT) = %.4g, TAU %.4g PERIODS, DT %.6g S",
+                sigma_km, sigma_km * factor, factor, tau, dt_s);
+  return text;
+}
 
 /// SPEC 12.1: the position sigma an ephemeris block states, km per component: the root of the mean, over its
 /// COVARIANCE_MATRIX_LINES, of (CX_X + CY_Y + CZ_Z) / 3 (a trace, the same in any axes the lines are in); 0 when it
@@ -571,6 +589,9 @@ static int fit_blocks() {
         bool wide_band = false;                          ///< BTERM on the 800-1400 km band default (SPEC 12.8)
         bool free_band = false;                          ///< BTERM on the 600-2,500 km default of a 71 h arc (SPEC 12.8)
         double sigma_km = 0.0;  ///< the data sigma the fit weighted with, above the drag (SPEC 12.1); 0: the stages' 1 km
+        double along_factor = 1.0;  ///< SPEC 12.1 (stack #489): the along-track residuals' factor on that sigma; 1 elsewhere
+        double along_tau = 0.0;     ///< its tau, periods
+        double along_dt_s = 0.0;    ///< its dt, the arc's state spacing, s
       };
       const bool eccentric = fitoem::eccentric_block(blk, po.eccentricity_threshold);
       // SPEC 12.1: the input's own position sigma, where the block states one (a floor of the data sigma)
@@ -760,11 +781,30 @@ static int fit_blocks() {
         // then acts at its written sigma, and the covariance (cov::of_fit at that sigma) is the curvature of the cost the
         // fit minimized (stack #489). A shorter arc, or a set above e 0.3, under the drag keeps the stages' 1 km: on a
         // short arc a free BTERM folds the theory's own along-track error into itself and the band's prior is what holds
-        // it (measured on the laser-ranged spheres' 24 h arcs); the eccentric sets are owed their own measurement.
+        // it (measured on the laser-ranged spheres' 24 h arcs); the eccentric sets are owed their own measurement. From stack
+        // #489, AP's fit (not SGP4XP's) on such a short arc at or below e 0.3 is redone at the data's own sigma as well, with
+        // each state's along-track residual at that sigma times sqrt(tau / dt): the residual of a short arc under the drag is
+        // the theory's along-track error, correlated over tau, so the arc's states count as one independent sample per tau
+        // along the track; the covariance takes the same weights.
         double sigma_km = 0.0;
-        if (cov::regime_of(row) != 0 ||
-            (fit_end_min - fit_begin_min >= pcf::kDataSigmaUnderDragMinArcHours * 60.0 && row.eccentricity <= xpt::tess::kWideE)) {
+        const bool long_rule = cov::regime_of(row) != 0 ||
+                               (fit_end_min - fit_begin_min >= pcf::kDataSigmaUnderDragMinArcHours * 60.0 && row.eccentricity <= xpt::tess::kWideE);
+        const bool short_ap = !long_rule && row.eccentricity <= xpt::tess::kWideE && ocm::theory_of(row.theory, po.forces) == meanElementSource_AP;
+        if (long_rule || short_ap) {
           double weighted = fit::kUnitSigmaKm;
+          P.along_factor = 1.0;
+          if (short_ap && !t_fit.empty()) {
+            double rate = 0.0;
+            cov::ng_rate_of(row, rate);
+            const double tau = std::fmax(fitoem::kAlongTrackTauFloor, fitoem::kAlongTrackTauPerRootRate * std::sqrt(std::fmin(std::fabs(rate), fitoem::kAlongTrackRateCap)));
+            // dt as the arc's span over its states (the factor sqrt(tau N / revolutions), at least one revolution counted)
+            const double revolutions = std::fmax(1.0, (fit_end_min - fit_begin_min) / period);
+            P.along_tau = tau;
+            P.along_dt_s = revolutions * period * 60.0 / static_cast<double>(t_fit.size());
+            const double per = static_cast<double>(t_fit.size()) / revolutions;  // states per revolution
+            P.along_factor = std::fmax(1.0, std::sqrt(tau * per));
+          }
+          const fit::AlongTrackScope along(P.along_factor);
           fit::reweight(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt, stated_km, res, weighted, iterations);
           if (weighted != fit::kUnitSigmaKm) sigma_km = weighted;
         }
@@ -897,6 +937,7 @@ static int fit_blocks() {
           (chosen.fit_end_min - chosen.fit_begin_min) / 60.0 >= fitoem::kFallbackArcHours) {
         cov::Set first_cov;
         double first_ng = 0.0;
+        const fit::AlongTrackScope along_first(chosen.along_factor);
         const bool first_have = cov::of_fit(chosen.row, chosen.opt, chosen.t_fit.data(), chosen.r_fit.data(),
                                             static_cast<int>(chosen.t_fit.size()), chosen.fit_end_min, chosen.sigma_km, first_cov, first_ng,
                                             ocm::theory_of(chosen.row.theory, po.forces) == meanElementSource_AP);
@@ -967,6 +1008,8 @@ static int fit_blocks() {
       // SPEC 12: the fit's covariance at its solution (at the two-line digits), its epoch image the $OMM's COVARIANCE
       cov::Set fit_cov;
       double ng_rate = 0.0;
+      // SPEC 12.1 (stack #489): the covariance weighs the along-track residuals as the fit did
+      const fit::AlongTrackScope along_cov(chosen.along_factor);
       const bool have_cov =
           cov::of_fit(row, opt, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), fit_end_min, sigma_km, fit_cov, ng_rate,
                       ocm::theory_of(row.theory, po.forces) == meanElementSource_AP);
@@ -1195,7 +1238,9 @@ static int fit_blocks() {
       const auto s_od_method = fbb.CreateString("BATCH LEAST SQUARES");
       const auto s_od_algorithm = fbb.CreateString(sigma_km > 0.0 ? "LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, WEIGHTED AT THE DATA SIGMA"
                                                                   : "LEVENBERG-MARQUARDT ON TEME POSITION RESIDUALS, UNIT WEIGHTS");
-      const auto s_od_weighting = fbb.CreateString(sigma_km > 0.0 ? fitoem::weighting_text(sigma_km) : std::string(fitoem::kUnitWeighting));
+      const auto s_od_weighting = fbb.CreateString(sigma_km > 0.0 ? (chosen.along_factor > 1.0 ? fitoem::along_track_weighting_text(sigma_km, chosen.along_factor, chosen.along_tau, chosen.along_dt_s)
+                                                                                             : fitoem::weighting_text(sigma_km))
+                                                                  : std::string(fitoem::kUnitWeighting));
       const auto s_od_epoch = fbb.CreateString(epoch_text);
       OrbitDeterminationBuilder od(fbb);
       od.add_OD_ALGORITHM(s_od_algorithm);
@@ -1208,7 +1253,23 @@ static int fit_blocks() {
       od.add_OD_DYNAMIC_PARAMETERS(s_dyn);
       // SPEC 17.3: WEIGHTED_RMS, the post-fit RMS of the position components over the a priori sigma the fit weighted
       // them with; SEDR from the fitted non-gravitational n-dot (written with the covariance that states it)
-      od.add_WEIGHTED_RMS(fitoem::weighted_rms(res.rms_km, weight_sigma_km));
+      // (SPEC 12.1, stack #489: with an along-track factor, each state's residual over its own sigmas, as the cost weighed it)
+      double weighted_rms = fitoem::weighted_rms(res.rms_km, weight_sigma_km);
+      if (chosen.along_factor > 1.0 && !t_fit.empty()) {
+        std::vector<double> rr(3 * t_fit.size());
+        if (fit::residuals(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), rr.data())) {
+          const std::vector<double> L = fit::along_track_frames(t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), chosen.along_factor);
+          double ss = 0.0;
+          for (size_t k = 0; k < t_fit.size(); ++k)
+            for (int i = 0; i < 3; ++i) {
+              const double* l = L.data() + 9 * k + 3 * i;
+              const double v = l[0] * rr[3 * k] + l[1] * rr[3 * k + 1] + l[2] * rr[3 * k + 2];
+              ss += v * v;
+            }
+          weighted_rms = std::sqrt(ss / (3.0 * static_cast<double>(t_fit.size()))) / weight_sigma_km;
+        }
+      }
+      od.add_WEIGHTED_RMS(weighted_rms);
       if (have_cov) od.add_SEDR(fitoem::sedr(row, ng_rate));
       // CCSDS elapsed counts from the epoch back to the first and last observation, written when not negative
       if (-fit_begin_min >= 0.0) od.add_DAYS_SINCE_FIRST_OBS(-fit_begin_min / kMinutesPerDay);

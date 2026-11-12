@@ -1892,16 +1892,45 @@ the fitted set's regime (12.5: its perigee height against 2,500 km, above which 
   `pcf::kDataSigmaUnderDragMinArcHours`) at or below e 0.3, the rule of 12.8's default of a 71 h arc: as above the
   drag, the whole-arc fit is redone at sigma_r and the covariance divides by the same sigma_r^2, so every prior acts at
   its written sigma in the estimate as in the covariance *[stack #489, #39]*.
-- DRAG, a shorter arc, or a set above e 0.3 on any arc. The cost keeps sigma_d = 1 km, as in every version before, and
+- DRAG, an AP set on an arc shorter than 71 h at or below e 0.3 *[stack #489]*. The whole-arc fit is redone at sigma_r
+  as above, with each state's along-track residual weighed at sigma_r sqrt(tau / dt) and its radial and cross-track
+  residuals at sigma_r, in the state's own axes (radial, along the track, normal to the orbit; from the observed
+  positions, the velocity from the state's neighbors in time, so the weights do not move with the iterate). dt is the
+  arc's span over its states and tau, in periods, the correlation time of the theory's along-track error over a short
+  arc under the drag: max(0.181, 232.7 sqrt(|r|)), r the set's non-gravitational rate per day (the rate the record
+  states in COV_PROPAGATION, of the set the 1 km passes reach), held at 4.111e-5 where tau reads 1.49; the factor is at
+  least 1. The covariance takes the same weights, so P_p is the inverse curvature of the cost the fit minimized and every
+  prior acts at its written sigma against the data so weighed. The record states it in OD_DATA_WEIGHTING (both sigmas,
+  the factor, tau and dt); WEIGHTED_RMS is each state's residual over its own sigmas, sqrt(sum |L_k e_k|^2 / 3N) /
+  sigma_r with L_k = [U; V / f; W]; the $ODR's TEME components carry sigma_r, the radial and cross-track sigma.
+  - Why: the residual of a short arc under the drag is the theory's along-track error, correlated along the arc, not
+    noise, so its states count as one independent sample per tau along the track. Weighed at its bare scatter a 24 h
+    arc lets BTERM and AGOM absorb that error (the laser spheres of 0.6.10: 20.8 / 51.6 / 144 / 233 m at days 1 / 3 / 5
+    / 7 to 24.4 / 106 / 298 / 561 m); weighed at 1 km, as through 0.6.45, the band priors of 12.8 held the term instead,
+    each prior acting in the estimate as if its sigma were s / sigma_d times its written one (about a hundredth of it, at
+    s of 10 m: some 100 times narrower than written) while the covariance stated it at its written sigma, so a held
+    term was stated with the data's width (near 700 km's 24 h records: BTERM at the band's 0.002 m^2/kg, 71 to 84 %
+    under the same cutoffs' 72 h terms, stated to 27 %; stack #568).
+  - tau, measured *[2026-11-12, experiments headline-loop's low rows, AP's own 24 h fits flown back at their 300 s arc
+    states]*: the integral correlation time of the along-track residual, fitted on the choice windows of the
+    covariance-coverage split (the floor on the laser spheres and altimetry, 108 windows; the slope on strong drag 2025,
+    943) and judged on the rest. Judged, tau over the form reads 0.98 on strong drag 2026 (0.48 / 0.89 / 1.23 by thirds of
+    the rate: the row is steeper than the form), 1.07 on altimetry, 0.84 on the laser spheres and 0.75 on near 700 km,
+    whose windows are all judged; at one rate tau scatters 0.4 to 1.6 times. Between 6.1e-7 and 2.4e-6 per day 3 windows
+    of 1,054 lie: the form there is an interpolation no window measured. The radial and cross-track residuals are
+    correlated over 0.2 to 0.3 periods too; weighing them by their own tau as well (or all three at the along-track
+    factor) put 14 of the 18 radial 24 h covariance cells too wide, against 10 here, and moved no forecast.
+  - SGP4XP keeps sigma_d = 1 km on these arcs and its records are bit for bit: weighed the same way its 24 h fits of
+    the low rows lost (altimetry at day 5 3,078 to 3,956 m median, its squared error 12 times; the laser spheres 2,081
+    to 2,727 m).
+- DRAG, an SGP4XP set on an arc shorter than 71 h, or a set above e 0.3 on any arc. The cost keeps sigma_d = 1 km and
   the covariance divides by s^2: there the estimate and the covariance do not use one weighting, and each prior acts in
-  the estimate as if its sigma were sigma_d / s times its written one (about 100 times, at s of 10 m) while the
-  covariance states it at its written sigma. This is a stated limit, not the design (stack #489 stays open for these
-  sets). On a short arc, weighed at its bare scatter, a 24 h arc lets BTERM and AGOM absorb the theory's own error, which
-  under drag is correlated along the arc, not noise (below), and the band priors of 12.8 hold the term there only at
-  1 km. Above e 0.3 the rule was measured on no real eccentric rows; on a first look, model truth, the data's own sigma
-  moved the Molniya fixture of `test/heo-frame.e2e.mjs` 9.5 m worse at day 7 and the 7-day Molniya arc's day-7
-  along-track 125 to 143 m, while its BTERM came from 6.12 to 4.98 of its stated sigma (#438). Arcs under 71 h and sets
-  above e 0.3 are bit for bit those of the version before.
+  the estimate as if its sigma were s / sigma_d times its written one (about a hundredth of it, at s of 10 m: the prior
+  acts some 100 times narrower than written) while the covariance states it at its written sigma. This is a stated
+  limit, not the design. Above e 0.3 the rule was measured on no real eccentric rows; on a first look, model truth, the
+  data's own sigma moved the Molniya fixture of `test/heo-frame.e2e.mjs` 9.5 m worse at day 7 and the 7-day Molniya
+  arc's day-7 along-track 125 to 143 m, while its BTERM came from 6.12 to 4.98 of its stated sigma (#438). These sets
+  are bit for bit those of the version before.
 
 The iteration ceiling *[stack #479, #541]*. A pass ends when it converges: when a step lowers the cost by less than 1e-6
 (a pass at the data's sigma, chi-square units) or by less than 1e-10 of it, or when no step lowers it. Otherwise it ends at
