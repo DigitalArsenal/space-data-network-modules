@@ -576,6 +576,16 @@ int32_t sdnap_field_census(const double* in, double* rows, int32_t max_rows) {
   return field_census(static_cast<int>(in[3]), n, e, inc, in[4], rows, max_rows);
 }
 
+/// The field's census of a set built at its epoch elements and read at another mean motion (stack #555, the band lanes'
+/// partition as drag moves n): in = the epoch's mean motion (rev/day), e, i (deg), the record's tesseral degree, the size cut
+/// (m), and the mean motion to read at (rev/day), e and i held. Rows as sdnap_field_census's. A diagnostic: no flight reads it.
+SDNAP_EXPORT("sdnap_field_census_at")
+int32_t sdnap_field_census_at(const double* in, double* rows, int32_t max_rows) {
+  using namespace sdnap::xpt;
+  const double k = sdnap::kTwoPi / sdnap::kMinutesPerDay;
+  return field_census(static_cast<int>(in[3]), in[0] * k, in[1], in[2] * sdnap::kPi / 180.0, in[4], rows, max_rows, in[5] * k);
+}
+
 /// Frame diagnostics on a state (km, km/s; 6 doubles in, 6 out) at the UTC
 /// Julian date whole + frac. mode 0 GCRF -> TEME, 1 TEME -> GCRF (the fit's
 /// GCRF rotation, gcrf.inc), 2 TEME -> Earth-fixed, 3 Earth-fixed -> TEME

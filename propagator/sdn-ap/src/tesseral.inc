@@ -139,9 +139,10 @@ constexpr int kMdailyCap = 12, kSpCap = 12, kShallowCap = 31;
 /// degree 12 or less builds the table it built before.
 constexpr int kFastCap = 70, kSpMaxW = 17;
 constexpr double kShallowBand = 0.045;
-/// The record's span from its epoch for the fast side's band guard (sp_terms' n_end): a 72 h fit's arc and the five days
-/// after it, the span xp_init lays its grid over.
-constexpr double kFastSpanMinutes = 8.0 * 1440.0;
+/// The shallow and slow sets keep a term out to kShallowSelect bands at the epoch (the band taper fades a term crossing the
+/// band's edge as drag moves n); on the low table's fast side a (m, w, j) group inside it at the epoch is a band lane
+/// (sp_terms' band list, SPEC 16.1).
+constexpr double kShallowSelect = 1.3;
 /// SPEC 16.18, the low table's part (stack #477): with Terms::slow, every term of the embedded field whose own angle rate
 /// at the set's epoch is inside the shallow band (selected to kShallowSelect bands) and whose along-track amplitude through
 /// the mean motion, 3 |j| A / (a psi-dot^2), reaches kSlowKeepM is carried in the rates beside the shallow set's own terms,
@@ -919,22 +920,22 @@ inline int sp_comb_bound(int degree, bool wide, int extra = 0) {
 /// is the rates' inside the band, and the table keeps 1 minus the band taper of it (nothing in both places, nothing in neither).
 /// `mdaily_degree`: the m-daily family's degree; an m-daily term (q = 0, l = 2p) above it is this table's (the low table's
 /// fast side, a degree above kSpCap), at or below it the family's (the default: every m-daily term the family's).
-/// `fast_side` (the low table with the record's degree above kSpCap): no term is carried here inside the slow band at more
-/// than 1 minus the band taper of its epoch rate (a first-order term is the theory only away from commensurability; the
-/// band's terms are the rates', and one the rates do not hold, under their size cut, is carried nowhere), and with
-/// slow_held a slow-held term above `degree` (the slow set takes its own degree, kSlowDegree) is this table's too, by the
-/// same 1 minus the band taper, for q of -1, 0 and 1. A share under 1 is cut on the term's own size.
-/// `n_end` (the fast side, 0 for none): the mean motion 8 days on at the set's own drag rate at the epoch, a straight line
-/// with e and i held. The table's share of a term is then the smaller of its two ends' (1 minus the larger band taper), and
-/// none where the term's rate changes sign between them. For n between n0 and n_end the table and the rates (which carry a
-/// band term at its current rate) never hold more than the whole term, and the table holds no term whose rate passes zero
-/// (the evaluator divides by the current rate). A term the guard takes from the table is the rates' where the slow set holds
-/// it and carried nowhere where it does not. Not covered: n outside [n0, n_end] (a flight before the epoch, past 8 days, or
-/// decaying faster than the epoch's rate; SPEC 16.1). A set that barely decays keeps its epoch shares.
+/// `fast_side` (the low table with the record's degree above kSpCap): a first-order term is the theory only away from
+/// commensurability, so a term inside the band is the rates' (one the rates do not hold, under their size cut, is carried
+/// nowhere), and with slow_held a slow-held term above `degree` (the slow set takes its own degree, kSlowDegree) is this
+/// table's too, for q of -1, 0 and 1. With `band_cap` (SPEC 16.1, stack #555) every (m, w, j) group whose rate is inside
+/// kShallowSelect bands at the epoch is a band lane: written whole (weight 1) at the top of `out` and `raw_out`, downward from
+/// out[band_cap - 1] and raw_out[raw_cap - 1] (the two ends of one table: the main entries and the lanes are distinct terms
+/// of the bound's), its count in *band_count_out and *band_raw_count_out, and cut on its own size at its rate or at 0.9 bands,
+/// the least rate at which it is held here. sp_band_six takes 1 minus the band taper of a lane at the rate of the state it is
+/// evaluated at, the partner of the rates' share (shallow_weight), so the two carry each band term once at every state, before
+/// the epoch or after, at any decay. A group outside kShallowSelect bands at the epoch is held whole; the bakes fade one the
+/// drag brings into the band (sp_band_fade).
 inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, double n0, double i0, double e0, SpCombCoef* out,
                     SpCoef* raw_out = nullptr, int* raw_count_out = nullptr, const ShallowTerms* slow_held = nullptr,
-                    int mdaily_degree = kFastCap + 2, bool fast_side = false, double n_end = 0.0) {
-  int raw_count = 0;
+                    int mdaily_degree = kFastCap + 2, bool fast_side = false, int band_cap = 0, int raw_cap = 0,
+                    int* band_count_out = nullptr, int* band_raw_count_out = nullptr) {
+  int raw_count = 0, band_count = 0, band_raw_count = 0;
   const EgmTables& egm = egm_tables();
   const double eta = std::sqrt(1.0 - e0 * e0), a0 = std::pow(kKe / n0, kX2o3), p0 = a0 * eta * eta;
   const double c0 = std::cos(i0), j2 = 1.5 * kJ2 / (p0 * p0);
@@ -951,16 +952,10 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   amp0[0] = kMu * ia0;
   for (int l = 1; l <= 70; ++l) amp0[l] = amp0[l - 1] * ia0;
   const bool fast_on = fast_side && low && !wide;
-  // the J2 rates at the span's end (n_end): e and i held, the drag moves n
-  const bool guard = fast_on && n_end > n0;
-  double mdot_e = 0.0, wdot_e = 0.0, node_e = 0.0, inv_shallow_ne = 0.0;
-  if (guard) {
-    const double ae = std::pow(kKe / n_end, kX2o3), pe = ae * eta * eta, j2e = 1.5 * kJ2 / (pe * pe);
-    mdot_e = n_end + 0.5 * j2e * n_end * eta * (3.0 * c0 * c0 - 1.0);
-    wdot_e = 0.5 * j2e * n_end * (5.0 * c0 * c0 - 1.0);
-    node_e = -j2e * n_end * c0;
-    inv_shallow_ne = 1.0 / (kShallowBand * n_end);
-  }
+  // band lanes (stack #555): a group inside kShallowSelect bands at the epoch, whole, its share taken where it is evaluated
+  const bool lanes = fast_on && band_cap > 0;
+  const double band_floor = 0.9 * kShallowBand * n0;  // the least rate at which a lane is held here
+  const auto lane_of = [&](double ap) { return lanes && ap * inv_shallow_n0 < kShallowSelect; };
 
   const auto weight_of = [&](int l, int m, int p, int q, double& psidot) -> double {
     const int w = l - 2 * p, j = w + q;
@@ -969,6 +964,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
     for (int c = 0; c < carried.count; ++c)
       if (carried.t[c].l == l && carried.t[c].m == m && carried.t[c].p == p && carried.t[c].q == q) return 0.0;
     psidot = w * wdot + j * mdot + m * (node_rate - kOmegaE);
+    if (lane_of(std::fabs(psidot))) return 1.0;
     double weight = 1.0;
     const double x = std::fabs(psidot) * inv_shallow_n0;
     if (low) {
@@ -985,13 +981,6 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
     } else if (x < 1.0) {
       weight = 0.0;
     }
-    if (guard && weight > 0.0) {
-      const double psidot_e = w * wdot_e + j * mdot_e + m * (node_e - kOmegaE);
-      if (psidot_e * psidot <= 0.0) return 0.0;
-      const double t0 = band_taper(x), t1 = band_taper(std::fabs(psidot_e) * inv_shallow_ne);
-      const double kept = 1.0 - (t1 > t0 ? t1 : t0);
-      if (kept < weight) weight = kept;
-    }
     return weight;
   };
 
@@ -999,8 +988,12 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
   const double e02 = e0 * e0;
   const auto can_pass = [&](int l, int m, int w, int q) {
     const int j = w + q;
-    const double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE));
-    if (ap < 1e-3 * n0) return false;
+    double ap = std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE));
+    if (lane_of(ap)) {
+      if (ap < band_floor) ap = band_floor;
+    } else if (ap < 1e-3 * n0) {
+      return false;
+    }
     const double ll = l + 1.0;
     const double Gb = q == 0 ? 1.0 + (l * l) * e02 : ll * e_floor;
     const double a0_AFb = a0 * amp0[l] * egm.hypot_fb[l][m];
@@ -1302,6 +1295,7 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
         const int j = w + q;
         const bool q_near = has_near && (j == 1);
         if (!has_gen && !q_near && lc == 0) continue;
+        const bool lane = lane_of(std::fabs(w * wdot + j * mdot + m * (node_rate - kOmegaE)));
 
         double uc0 = 0, us0 = 0, dc0 = 0, ds0 = 0, dca = 0, dsa = 0;
         double ec0 = 0, es0 = 0, eca = 0, esa = 0;
@@ -1328,7 +1322,8 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           const double G = g0 + g1 * e0;
           const double sv = egm.hypot_cs[l][m];
           const double A = amp0[l] * sv * weight;
-          const double ap = std::fabs(psidot);
+          double ap = std::fabs(psidot);
+          if (lane && ap < band_floor) ap = band_floor;  // a lane's size where it is held here
           const double mag = a0 * A * (std::fabs(fv * G) * (3.0 * std::abs(j) * inv_a02 + 2.0 * (l + 1) * inv_na2 * ap) +
                                        (std::fabs(fv * g1) + std::fabs(dfv * G)) * inv_na2 * ap);
           // on the fast side the cut is on the term's own size: a weight under 1 is the band taper's share of a term, kept
@@ -1340,9 +1335,11 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           const double g0_f = static_cast<float>(g0);
           const double g1_f = static_cast<float>(g1);
           if (raw_out != nullptr) {
-            raw_out[raw_count++] = SpCoef{static_cast<int8_t>(l), static_cast<int8_t>(m), static_cast<int8_t>(w),
-                                          static_cast<int8_t>(j), static_cast<float>(f_w), static_cast<float>(df_w),
-                                          static_cast<float>(g0_f), static_cast<float>(g1_f)};
+            const SpCoef rc{static_cast<int8_t>(l), static_cast<int8_t>(m), static_cast<int8_t>(w),
+                            static_cast<int8_t>(j), static_cast<float>(f_w), static_cast<float>(df_w),
+                            static_cast<float>(g0_f), static_cast<float>(g1_f)};
+            if (lane) raw_out[raw_cap - 1 - band_raw_count++] = rc;
+            else raw_out[raw_count++] = rc;
           }
           const double G0 = g0_f + g1_f * e0;
           const double A0 = amp0[l];
@@ -1375,18 +1372,22 @@ inline int sp_terms(int degree, int near_degree, int cls, bool low, bool wide, d
           any = true;
         }
         if (any) {
-          out[count++] = SpCombCoef{
+          const SpCombCoef cc{
               static_cast<int8_t>(m),   static_cast<int8_t>(w),   static_cast<int8_t>(j),   0,
               static_cast<float>(uc0),  static_cast<float>(us0),  static_cast<float>(dc0),  static_cast<float>(ds0),
               static_cast<float>(dca),  static_cast<float>(dsa),  static_cast<float>(ec0),  static_cast<float>(es0),
               static_cast<float>(eca),  static_cast<float>(esa),  static_cast<float>(ic0),  static_cast<float>(is0),
               static_cast<float>(ica),  static_cast<float>(isa),  static_cast<float>(ice),  static_cast<float>(ise),
           };
+          if (lane) out[band_cap - 1 - band_count++] = cc;
+          else out[count++] = cc;
         }
       }
     }
   }
   if (raw_count_out != nullptr) *raw_count_out = raw_count;
+  if (band_count_out != nullptr) *band_count_out = band_count;
+  if (band_raw_count_out != nullptr) *band_raw_count_out = band_raw_count;
   if (count > 0) {
     static uint32_t g_sp_gen = 0;
     uint32_t gen = __atomic_add_fetch(&g_sp_gen, 1u, __ATOMIC_RELAXED);
@@ -1462,7 +1463,24 @@ struct SpEvalCache {
   float* blk_e = nullptr;
   uint16_t* blk_term = nullptr;  ///< the term (index into F) of each lane
   bool compact = false;          ///< a set's cache: exactly its blocks, no blk_c
+  bool band_fade = false;        ///< the low table's fast side: the bakes fade a lane inside the band (sp_band_fade)
 };
+
+/// SPEC 16.1 (stack #555): on the low table's fast side a group outside kShallowSelect bands at the epoch is the main table's
+/// whole; one the drag brings inside 1.1 bands is faded by 1 minus the band taper at the bake's own cell, and dropped below
+/// 0.9 bands (its rate may pass zero there; the rates do not hold it). Called on a block whose lane `l` the bake found inside
+/// 1.1 bands: scales what the bake stored of it (`hot` 8 rows, `p`, `a` 8 rows each when not null, `e` 4 rows) by the
+/// weight at the cell's rate `psidot` for mean motion `n`.
+inline void sp_band_fade(int l, double psidot, double n, float* hot, float* p, float* a, float* e) {
+  const double x = std::fabs(psidot) / (kShallowBand * n);
+  const float wt = x <= 0.9 ? 0.0f : static_cast<float>(1.0 - band_taper(x));
+  for (int k = 0; k < 8; ++k) {
+    hot[4 * k + l] = wt == 0.0f ? 0.0f : hot[4 * k + l] * wt;
+    if (p != nullptr) p[4 * k + l] = wt == 0.0f ? 0.0f : p[4 * k + l] * wt;
+    if (a != nullptr) a[4 * k + l] = wt == 0.0f ? 0.0f : a[4 * k + l] * wt;
+  }
+  for (int k = 0; k < 4; ++k) e[4 * k + l] = wt == 0.0f ? 0.0f : e[4 * k + l] * wt;
+}
 
 /// Lays the block arrays out in one zeroed 64-byte-aligned allocation for `blks` blocks and `rows` rows, with blk_c
 /// when `with_c`. False out of memory (the cache keeps no storage).
@@ -1621,10 +1639,11 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
 }
 
 [[gnu::noinline]] inline void sp_rebuild_cache(SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag,
-                                               double a0, double e0, double ci) {
+                                               double a0, double e0, double ci, bool band_fade) {
   sc.F = F;
   sc.count = count;
   sc.table_tag = tag;
+  sc.band_fade = band_fade;
   sc.a0 = a0;
   sc.e0 = e0;
   sc.f0_uc = F[0].uc0;
@@ -1946,6 +1965,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   const v128_t v_dalpha = wasm_f32x4_splat(static_cast<float>(dalpha_ddda));
   const v128_t v_beta_L = wasm_f32x4_splat(static_cast<float>(beta_L));
   const v128_t v_dbeta_L = wasm_f32x4_splat(static_cast<float>(dbeta_ddda));
+  const v128_t v_band_lim = wasm_f32x4_splat(static_cast<float>(1.1 * kShallowBand * n));
   const int nblks = sc.total_blks;
   for (int bi = 0; bi < nblks; ++bi) {
     const int lane_off = bi * 4;
@@ -1969,6 +1989,8 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       sc.res_blk[sc.n_res_blks++] = static_cast<uint16_t>(bi);
       sc.blk_is_res[bi] = 1u;
     }
+    const bool fade = sc.band_fade &&
+                      wasm_v128_any_true(wasm_v128_and(wasm_f32x4_lt(wasm_f32x4_abs(v_psidot), v_band_lim), v_active));
     const float* const pc = sc.blk_c + bi * 64;
     float* const pp = sc.blk_p + bi * 32;
     float* const pec = sc.blk_hot + bi * 32;
@@ -2035,6 +2057,14 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     wasm_v128_store(pe + 4, wasm_f32x4_mul(ise, v_ip));
     wasm_v128_store(pe + 8, wasm_f32x4_mul(wasm_f32x4_sub(wasm_f32x4_mul(v_nalpha, eca), wasm_f32x4_mul(v_bj, ec_ip)), v_ip));
     wasm_v128_store(pe + 12, wasm_f32x4_mul(wasm_f32x4_sub(wasm_f32x4_mul(v_nalpha, esa), wasm_f32x4_mul(v_bj, es_ip)), v_ip));
+    if (__builtin_expect(fade, 0)) {
+      for (int l = 0; l < 4; ++l) {
+        if (sc.blk_active[lane_off + l] == 0u) continue;
+        const double wv = sc.blk_w[lane_off + l], j = wv + sc.blk_q[lane_off + l], mv = sc.blk_mf[lane_off + l];
+        const double psidot = wv * wdot + j * mdot + mv * beta_dot;
+        if (std::fabs(psidot) < 1.1 * kShallowBand * n) sp_band_fade(l, psidot, n, pec, pp, pa, pe);
+      }
+    }
   }
 #else
   for (int bi = 0; bi < sc.total_blks; ++bi) {
@@ -2101,6 +2131,8 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       pe[4 + l] = static_cast<float>(ise * inv_psidot);
       pe[8 + l] = static_cast<float>((-alpha_A * eca - beta_L * j * ec_ip) * inv_psidot);
       pe[12 + l] = static_cast<float>((-alpha_A * esa - beta_L * j * es_ip) * inv_psidot);
+      const double psidot = wv * wdot + j * mdot + mv * beta_dot;
+      if (sc.band_fade && std::fabs(psidot) < 1.1 * kShallowBand * n) sp_band_fade(l, psidot, n, pec, pp, pa, pe);
     }
     if (is_res) {
       sc.res_blk[sc.n_res_blks++] = static_cast<uint16_t>(bi);
@@ -2154,13 +2186,21 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     const double cwjq = qv == 0 ? c0 : (qv > 0 ? c0 * cM1 - s0 * sM1 : c0 * cM1 + s0 * sM1);
     const double swjq = qv == 0 ? s0 : (qv > 0 ? s0 * cM1 + c0 * sM1 : s0 * cM1 - c0 * sM1);
     const double cp = cwjq * cm[m] - swjq * sm[m], sp = swjq * cm[m] + cwjq * sm[m];
-    const double inv_p = 1.0 / (w * wdot + m * beta_dot + j * mdot);
+    const double psidot = w * wdot + m * beta_dot + j * mdot;
+    double wt = 1.0;  // the fast side's fade of a group the drag brought inside the band (sp_band_fade)
+    if (sc.band_fade && std::fabs(psidot) < 1.1 * kShallowBand * n) {
+      const double x = std::fabs(psidot) / (kShallowBand * n);
+      if (x <= 0.9) continue;
+      wt = 1.0 - band_taper(x);
+    }
+    const double inv_p = wt / psidot;
     const double uc = (f.uc0 + (-f.dc0 - 0.5 * f.dca * da) * da + (f.ec0 + f.eca * da) * de) * inv_p;
     const double us = (f.us0 + (-f.ds0 - 0.5 * f.dsa * da) * da + (f.es0 + f.esa * da) * de) * inv_p;
     const double ec = (f.ec0 + f.eca * da) * inv_p, es = (f.es0 + f.esa * da) * inv_p;
     const double ic = (f.ic0 + f.ica * da + f.ice * de) * inv_p, is = (f.is0 + f.isa * da + f.ise * de) * inv_p;
     const double dc = f.dc0 + (f.dc0 + f.dca) * da - f.eca * de, ds = f.ds0 + (f.ds0 + f.dsa) * da - f.esa * de;
-    const double lc = alpha_A * (dc * inv_p) - beta_L * (j * uc * inv_p), ls = alpha_A * (ds * inv_p) - beta_L * (j * us * inv_p);
+    const double ip1 = 1.0 / psidot;  // the second power of the rate in lc and ls: wt once (in uc and us), the rate twice
+    const double lc = alpha_A * (dc * inv_p) - beta_L * (j * uc * ip1), ls = alpha_A * (ds * inv_p) - beta_L * (j * us * ip1);
     const double idS = uc * cp + us * sp, tE = ec * sp - es * cp, tI = ic * sp - is * cp, tL = lc * sp - ls * cp;
     sM += j * idS; sW += w * idS; sO += m * idS; sE += tE; sI += tI; sL += tL;
     if (dsix_dlam != nullptr) {
@@ -2290,6 +2330,7 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
   const v128_t v_alpha = wasm_f32x4_splat(static_cast<float>(alpha_A));
   const v128_t v_nalpha = wasm_f32x4_splat(static_cast<float>(-alpha_A));
   const v128_t v_beta_L = wasm_f32x4_splat(static_cast<float>(beta_L));
+  const v128_t v_band_lim = wasm_f32x4_splat(static_cast<float>(1.1 * kShallowBand * n));
   for (int rk = 0; rk < sc.n_res_blks; ++rk) {
     const int bi = sc.res_blk[rk];
     const int lane_off = bi * 4;
@@ -2350,6 +2391,15 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
     wasm_v128_store(pe + 4, pe4);
     wasm_v128_store(pe + 8, pe8);
     wasm_v128_store(pe + 12, pe12);
+    if (__builtin_expect(sc.band_fade, 0) &&
+        wasm_v128_any_true(wasm_v128_and(wasm_f32x4_lt(wasm_f32x4_abs(v_psidot), v_band_lim), v_active))) {
+      for (int l = 0; l < 4; ++l) {
+        if (sc.blk_active[lane_off + l] == 0u) continue;
+        const double wv = sc.blk_w[lane_off + l], j = wv + sc.blk_q[lane_off + l], mv = sc.blk_mf[lane_off + l];
+        const double psidot = wv * wdot + j * mdot + mv * beta_dot;
+        if (std::fabs(psidot) < 1.1 * kShallowBand * n) sp_band_fade(l, psidot, n, pec, nullptr, nullptr, pe);
+      }
+    }
   }
 #else
   for (int rk = 0; rk < sc.n_res_blks; ++rk) {
@@ -2385,6 +2435,8 @@ inline void sp_split16_f32(double x, float& hi, float& lo) {
       pu[12 + l] = static_cast<float>((pc[44 + l] + pc[52 + l] * da + pc[60 + l] * de_bake) * inv_psidot) + pe[4 + l] * dpe;
       pu[16 + l] = static_cast<float>(alpha_A * dc_b * inv_psidot - beta_L * j * uc_b * inv_psidot2) + pe[8 + l] * dpe;
       pu[20 + l] = static_cast<float>(alpha_A * ds_b * inv_psidot - beta_L * j * us_b * inv_psidot2) + pe[12 + l] * dpe;
+      const double psidot = wv * wdot + j * mdot + mv * beta_dot;
+      if (sc.band_fade && std::fabs(psidot) < 1.1 * kShallowBand * n) sp_band_fade(l, psidot, n, pec, nullptr, nullptr, pe);
     }
   }
 #endif
@@ -2681,10 +2733,10 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
     const Kepler& kp, double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
     double theta_g0, const double* sb_in, const double* cb_in, const double* su1_in, const double* cu1_in,
-    const double* sM1_in, const double* cM1_in, double* six, double* dsix_dlam, double* d2six_dlam2) {
+    const double* sM1_in, const double* cM1_in, double* six, double* dsix_dlam, double* d2six_dlam2, bool band_fade) {
   if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
       sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
-    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build);
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build, band_fade);
   }
   if (!sc.grouped_ok || t == 0.0) {
     double sb, cb, su1, cu1, sM1, cM1;
@@ -2704,10 +2756,10 @@ inline bool sp_matches(const SpEvalCache& sc, const SpCombCoef* F, int count, ui
 [[gnu::noinline]] inline bool sp_init_or_fallback_val(
     SpEvalCache& sc, const SpCombCoef* F, int count, uint32_t tag, double a0, double e0, double t,
     double a, double e, double n, double eta, double sin_i, double ci, double ia, double ci_build,
-    double sb, double cb, double su1, double cu1, double sM1, double cM1, double* six) {
+    double sb, double cb, double su1, double cu1, double sM1, double cM1, double* six, bool band_fade) {
   if (sc.F != F || sc.count != count || sc.table_tag != tag || sc.a0 != a0 || sc.e0 != e0 ||
       sc.f0_uc != F[0].uc0 || sc.f0_ic != F[0].ic0 || sc.fn_uc != F[count - 1].uc0) {
-    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build);
+    sp_rebuild_cache(sc, F, count, tag, a0, e0, ci_build, band_fade);
   }
   if (!sc.grouped_ok || t == 0.0) {
     sp_six_fallback(sc, F, count, a0, e0, a, e, n, eta, sin_i, ci, ia, sb, cb, su1, cu1, sM1, cM1,
@@ -3023,7 +3075,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     float* cm_f32_io = nullptr, float* sm_f32_io = nullptr, int cm_in_count = 0,
     double cm_last = 1.0, double sm_last = 0.0,
     const double* su1_in = nullptr, const double* cu1_in = nullptr,
-    const double* sM1_in = nullptr, const double* cM1_in = nullptr) {
+    const double* sM1_in = nullptr, const double* cM1_in = nullptr, bool band_fade = false) {
   if (count <= 0) return;
   const double a = kp.a, e = kp.e < 1e-12 ? 1e-12 : kp.e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
@@ -3049,7 +3101,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
     SpEvalCache& th = sp_thread_cache();
     if (!sp_init_or_fallback(th, F, count, tag, a0, e0, t, kp, a, e, n, eta, sin_i, ci, ia, ci_build,
-                             theta_g0, sb_in, cb_in, su1_in, cu1_in, sM1_in, cM1_in, six, dsix_dlam, d2six_dlam2)) {
+                             theta_g0, sb_in, cb_in, su1_in, cu1_in, sM1_in, cM1_in, six, dsix_dlam, d2six_dlam2, band_fade)) {
       return;
     }
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
@@ -3119,7 +3171,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
     const SpCombCoef* F, int count, double a0, double e0, double t, double kp_a, double kp_e, double n, double eta,
     double si, double ci, double ci_build, double* six,
     double sb, double cb, double su1, double cu1, double sM1, double cM1,
-    int cm_in_count, double cm_last, double sm_last, bool has_ext_cm) {
+    int cm_in_count, double cm_last, double sm_last, bool has_ext_cm, bool band_fade = false) {
   if (count <= 0) return;
   const double a = kp_a, e = kp_e < 1e-12 ? 1e-12 : kp_e;
   const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
@@ -3146,7 +3198,7 @@ constexpr int64_t kSpPeAtBake = INT64_MIN;  ///< the pe cell of a derivative pas
   if (__builtin_expect(t == 0.0 || !sp_matches(*scp, F, count, tag, a0, e0), 0)) {
     SpEvalCache& th = sp_thread_cache();
     if (!sp_init_or_fallback_val(th, F, count, tag, a0, e0, t, a, e, n, eta, sin_i, ci, ia, ci_build,
-                                 sb, cb, su1, cu1, sM1, cM1, six)) {
+                                 sb, cb, su1, cu1, sM1, cM1, six, band_fade)) {
       return;
     }
     scp = sp_claim(slot, th, F, count, tag, a0, e0);
@@ -4377,7 +4429,6 @@ inline SecularRates secular_rates(double n, double e, double i) {
 /// The weight of a shallow (k, m) at the current elements: x = |psi-dot| / (band n), 1 below 0.9, a cos^2 taper to 0
 /// at 1.1 (the hard band's cut at 1 made smooth, so a term crossing it as drag raises n fades instead of switching);
 /// terms are kept at initialization out to kShallowSelect bands for that.
-constexpr double kShallowSelect = 1.3;
 /// The taper of x = |psi-dot| / (band n): 1 below 0.9, cos^2 to 0 at 1.1. The output table holds 1 minus it of a term the
 /// rates carry (SPEC 16.18).
 inline double band_taper(double x) {
@@ -4392,6 +4443,100 @@ inline double shallow_weight(const SecularRates& sr, int k, int m, double n, int
   return band_taper(std::fabs(psidot) / (kShallowBand * n));
 }
 inline double shallow_weight(const SecularRates& sr, int k, int m, double n) { return shallow_weight(sr, k, m, n, k); }
+
+/// The J2 secular rates at a state as the rates take them (shallow_six): mean a, n, eta and cos i.
+inline SecularRates secular_rates_at(double a, double n, double eta, double ci) {
+  const double p_sl = a * eta * eta, j2 = 1.5 * kJ2 / (p_sl * p_sl);
+  return {-j2 * n * ci, 0.5 * j2 * n * (5.0 * ci * ci - 1.0), n + 0.5 * j2 * n * eta * (3.0 * ci * ci - 1.0)};
+}
+/// The output table's share of a band lane (m, w, j) at the state's rates: 1 minus the rates' (shallow_weight), so the two
+/// carry the term once at every state.
+inline double band_lane_weight(const SecularRates& sr, int j, int m, double n, int w) { return 1.0 - shallow_weight(sr, j, m, n, w); }
+
+/// SPEC 16.1 (stack #555): the band lanes of the low table's fast side (sp_terms' band list), each at its share at the
+/// state's own rate (band_lane_weight) and its rate at the state: none below 0.9 bands, so a lane whose rate passes zero
+/// is never divided by it. The same terms as the main table (SpCombCoef: about the epoch a0 and e0), in double, from the state's
+/// angles: sin and cos of the node less the Greenwich angle (sb, cb), of argp + M (su1, cu1) and of M (sM1, cM1). Adds to six
+/// and, when not null, to its first and second derivatives in lambda. What it writes is on the stack and in six.
+inline void sp_band_six(const SpCombCoef* F, int count, double a0, double e0, double a, double e_in, double n, double eta,
+                        double si, double ci, double sb, double cb, double su1, double cu1, double sM1, double cM1,
+                        double* six, double* dsix_dlam, double* d2six_dlam2) {
+  if (count <= 0) return;
+  const double e = e_in < 1e-12 ? 1e-12 : e_in;
+  const double sin_i = std::fabs(si) < 1e-12 ? (si < 0.0 ? -1e-12 : 1e-12) : si;
+  const SecularRates sr = secular_rates_at(a, n, eta, ci);
+  const double beta_dot = sr.node - kOmegaE;
+  const double ia = 1.0 / a, da = a0 * ia - 1.0, de = e_in - e0;
+  const double alpha_A = -2.0 * ia / (n * a), beta_L = 3.0 * ia * ia;
+  int max_m = 0, max_aw = 0;
+  for (int idx = 0; idx < count; ++idx) {
+    const int aw = F[idx].w < 0 ? -F[idx].w : F[idx].w;
+    if (F[idx].m > max_m) max_m = F[idx].m;
+    if (aw > max_aw) max_aw = aw;
+  }
+  double cm[72], sm[72], cu_buf[2 * kSpMaxW + 1], su_buf[2 * kSpMaxW + 1];
+  double* const cu = cu_buf + kSpMaxW;
+  double* const su = su_buf + kSpMaxW;
+  cm[0] = cu[0] = 1.0;
+  sm[0] = su[0] = 0.0;
+  for (int q = 1; q <= max_aw; ++q) {
+    cu[q] = cu[q - 1] * cu1 - su[q - 1] * su1;
+    su[q] = su[q - 1] * cu1 + cu[q - 1] * su1;
+    cu[-q] = cu[q];
+    su[-q] = -su[q];
+  }
+  for (int q = 1; q <= max_m; ++q) {
+    cm[q] = cm[q - 1] * cb - sm[q - 1] * sb;
+    sm[q] = sm[q - 1] * cb + cm[q - 1] * sb;
+  }
+  double sM = 0, sW = 0, sO = 0, sE = 0, sI = 0, sL = 0;
+  double dsM = 0, dsW = 0, dsO = 0, dsE = 0, dsI = 0, dsL = 0;
+  double d2sM = 0, d2sW = 0, d2sO = 0, d2sE = 0, d2sI = 0, d2sL = 0;
+  for (int idx = 0; idx < count; ++idx) {
+    const SpCombCoef& f = F[idx];
+    const int m = f.m, w = f.w, j = f.j, qv = j - w;
+    const double wt = band_lane_weight(sr, j, m, n, w);
+    if (!(wt > 0.0)) continue;  // below 0.9 bands: the rates hold all of it
+    const double psidot = w * sr.argp + j * sr.mdot + m * beta_dot;
+    const double c0 = cu[w], s0 = su[w];
+    const double cwjq = qv == 0 ? c0 : (qv > 0 ? c0 * cM1 - s0 * sM1 : c0 * cM1 + s0 * sM1);
+    const double swjq = qv == 0 ? s0 : (qv > 0 ? s0 * cM1 + c0 * sM1 : s0 * cM1 - c0 * sM1);
+    const double cp = cwjq * cm[m] - swjq * sm[m], sp = swjq * cm[m] + cwjq * sm[m];
+    const double ip1 = 1.0 / psidot, inv_p = wt * ip1;
+    const double uc = (f.uc0 + (-f.dc0 - 0.5 * f.dca * da) * da + (f.ec0 + f.eca * da) * de) * inv_p;
+    const double us = (f.us0 + (-f.ds0 - 0.5 * f.dsa * da) * da + (f.es0 + f.esa * da) * de) * inv_p;
+    const double ec = (f.ec0 + f.eca * da) * inv_p, es = (f.es0 + f.esa * da) * inv_p;
+    const double ic = (f.ic0 + f.ica * da + f.ice * de) * inv_p, is = (f.is0 + f.isa * da + f.ise * de) * inv_p;
+    const double dc = f.dc0 + (f.dc0 + f.dca) * da - f.eca * de, ds = f.ds0 + (f.ds0 + f.dsa) * da - f.esa * de;
+    const double lc = alpha_A * (dc * inv_p) - beta_L * (j * uc * ip1), ls = alpha_A * (ds * inv_p) - beta_L * (j * us * ip1);
+    const double idS = uc * cp + us * sp, tE = ec * sp - es * cp, tI = ic * sp - is * cp, tL = lc * sp - ls * cp;
+    sM += j * idS; sW += w * idS; sO += m * idS; sE += tE; sI += tI; sL += tL;
+    if (dsix_dlam != nullptr) {
+      const double didS = j * (-uc * sp + us * cp);
+      dsM += j * didS; dsW += w * didS; dsO += m * didS;
+      dsE += j * (ec * cp + es * sp); dsI += j * (ic * cp + is * sp); dsL += j * (lc * cp + ls * sp);
+      if (d2six_dlam2 != nullptr) {
+        const double nj2 = -static_cast<double>(j * j);
+        d2sM += nj2 * j * idS; d2sW += nj2 * w * idS; d2sO += nj2 * m * idS;
+        d2sE += nj2 * tE; d2sI += nj2 * tI; d2sL += nj2 * tL;
+      }
+    }
+  }
+  const double na2 = n * a * a, tanhalf = sin_i / (1.0 + ci);
+  const double eta_m1 = -(e_in * e_in) / (1.0 + eta);  // eta - 1, without the cancellation
+  const auto put = [&](double* dst, double vM, double vW, double vO, double vE, double vI, double vL) {
+    const double vQ = vM - vW;  // the q part: sum of q idS
+    dst[0] += -3.0 * ia * ia * vM;
+    dst[1] += eta * (eta * vQ + eta_m1 * vW) / (na2 * e);
+    dst[2] += (ci * vW - vO) / (na2 * eta * sin_i);
+    dst[3] += (eta / na2) * vE + e * tanhalf / (na2 * eta) * vI;
+    dst[4] += vI / (na2 * eta);
+    dst[5] += vL + (eta * e / (na2 * (1.0 + eta))) * vE + (tanhalf / (na2 * eta)) * vI;
+  };
+  put(six, sM, sW, sO, sE, sI, sL);
+  if (dsix_dlam != nullptr) put(dsix_dlam, dsM, dsW, dsO, dsE, dsI, dsL);
+  if (d2six_dlam2 != nullptr) put(d2six_dlam2, d2sM, d2sW, d2sO, d2sE, d2sI, d2sL);
+}
 
 struct ShallowGroupPoly {
   int16_t k, m, w;
