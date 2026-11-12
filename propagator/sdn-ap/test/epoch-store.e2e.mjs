@@ -316,22 +316,22 @@ for (const [label, cfg] of [["NEAREST, SMOOTHSTEP", {}], ["NEAREST, HERMITE", { 
   // (both flown by 0.6.36), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
   // trajectory) the error 48 to 72 h past the arc goes from 43 to 42 m, and over the arc from 24.1 to 24.3 m. So the
   // own fit is 0.6.36's (ap-fit-0.6.36.ocm; 0.6.27's went), the bounds kept.
-  // 0.6.38 (SPEC 12.4, stack #551: an AP set's epoch floor put on and taken off at the two-body state of its own mean
+  // 0.6.39 (SPEC 12.4, stack #551: an AP set's epoch floor put on and taken off at the two-body state of its own mean
   // elements) refuses the covariance of an AP record written before it (cov-floor-at-theory-state; its states fly), 0.6.36's
-  // fit among them. So from 0.6.38 the stored record is 0.6.38's own fit of the same inputs (ap-fit-0.6.38.ocm: 0.6.36's mean
+  // fit among them. So from 0.6.39 the stored record is 0.6.39's own fit of the same inputs (ap-fit-0.6.39.ocm: 0.6.36's mean
   // elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
   // held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
   // flies its states as 0.6.36 flew them, its covariance refused by name.
-  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.38.ocm", import.meta.url)));
+  const fitRecord = new Uint8Array(fs.readFileSync(new URL("fixtures/ap-fit-0.6.39.ocm", import.meta.url)));
   const fitRecordFlight = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([fitRecord])] });
-  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.38's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
+  check(fitRecordFlight.statusCode === 0, `propagate_epochs 0.6.39's fit: ${fitRecordFlight.errorCode} ${fitRecordFlight.errorMessage}`);
   for (const [what, record, bound, reference, against] of [
     ["the stored AP record", fitRecord, STORE_FLIGHT, storedFlight, "0.6.36's of the stored record"],
-    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.38's fit"]]) {
+    ["this build's fit", ap, STORE_FIT, new Uint8Array(fitRecordFlight.outputs?.[0]?.payload ?? []), "this build's of 0.6.39's fit"]]) {
     const pe = await command.invoke({ methodId: "propagate_epochs", inputs: [store({}, { output: GRID_OUTPUT }), one([record])] });
     check(pe.statusCode === 0, `propagate_epochs ${what}: ${pe.errorCode} ${pe.errorMessage}`);
     if (pe.statusCode !== 0 || fitRecordFlight.statusCode !== 0) continue;
-    if (what === "the stored AP record") recordReference("ap-fit-0.6.38.epochs", "oem", new Uint8Array(pe.outputs[0].payload));
+    if (what === "the stored AP record") recordReference("ap-fit-0.6.39.epochs", "oem", new Uint8Array(pe.outputs[0].payload));
     const d = oemDistance(new Uint8Array(pe.outputs[0].payload), reference);
     console.log(`propagate_epochs of ${what} against ${against}: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry`);
     check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `${what}: ${d.states} states and ${d.covLines} covariance lines of 289, ${d.epochsDiffer} epochs differ`);

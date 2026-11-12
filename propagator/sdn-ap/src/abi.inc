@@ -498,7 +498,7 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
 /// SPEC 16.21 (stack #550): the osculating Kepler solves since the last reset (every caller's: output states, covariance sigma
 /// points, fit evaluations, the long-period regime's output Jacobian) whose Newton ended its 30 steps without meeting its
 /// tolerance. `which` 0: AP's (output_impl) whose last step was 1e-12 or more, solved by the bisection; 1: section 8's
-/// (output_j2_osc) whose last step was 1e-12 or more, counted only; 2: AP's whose last step was under 1e-12 (within rounding of
+/// (output_j2_osc) whose last step was 1e-12 or more, solved by the bisection; 2: AP's whose last step was under 1e-12 (within rounding of
 /// the root), solved. `reset` non-zero reads the count and sets it to 0 in one step. A diagnostic.
 SDNAP_EXPORT("sdnap_kepler_unconverged")
 uint32_t sdnap_kepler_unconverged(int32_t reset, int32_t which) {

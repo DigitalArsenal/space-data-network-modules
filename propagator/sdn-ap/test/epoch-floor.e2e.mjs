@@ -2,26 +2,26 @@
 // E2E (SPEC 12.4, stack #551): an AP record's epoch floor is put on by the writer and taken off by the reader at the two-body
 // state of the record's own mean elements, so no change to a theory's epoch state moves what a reader takes off; an AP record
 // written before that has its covariance refused by name and its states fly.
-// Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by 0.6.37
-// (git dbcb3173, the release before this one, its SHA-256 checked), and that arc fitted by 0.6.37 and by this build.
+// Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by 0.6.38
+// (git f8fd3240, the release before this one, its SHA-256 checked), and that arc fitted by 0.6.38 and by this build.
 // - The cure (a reader whose theory's epoch state differs from the writer's): this build's record read again with its
 //   gravity caps moved from 31 and 20 to 12 and 6, so its flown epoch state moves and the two-body state of its mean
 //   elements does not (at i 52.9 by 31 m; near the equator the caps leave the epoch state as it was, and one case must
 //   move by more than MOVED_KM). The epoch covariance less the floor the reader takes off (sdnap_test_epoch_floor) is the
 //   same bit for bit; and on both, at minute 0, P(0) less the floor at the flown state equals that remainder within
 //   IDENTITY of P(0)'s largest entry.
-// - A set's own flight is as it was: this build's record flown by this build against 0.6.37's record flown by 0.6.37,
+// - A set's own flight is as it was: this build's record flown by this build against 0.6.38's record flown by 0.6.38,
 //   sdnap_covariance_at hourly to 48 h, within SELF.
 // - Caps 0 (an AP set without gravity terms): this build's record flies its covariance with the floor at the two-body
-//   state (one rule for every AP record), and 0.6.37's has it refused.
-// - 0.6.37's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of 0.6.37's
+//   state (one rule for every AP record), and 0.6.38's has it refused.
+// - 0.6.38's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of 0.6.38's
 //   flight of it (a flight without covariance takes the state path, one with it the covariance's nominal: they part by
 //   about 0.3 mm on any build), no covariance lines, the block's COMMENT naming cov-floor-at-theory-state.
-// - The gate reads PROVENANCE.PRODUCER exactly: this module at 0.6.38 or later as X.Y.Z accepted, anything else refused.
+// - The gate reads PROVENANCE.PRODUCER exactly: this module at 0.6.39 or later as X.Y.Z accepted, anything else refused.
 // - The two-body state (twobody::state_of through epoch_floor_state) of three element sets bit for bit (TWO_BODY): every
-//   record written from 0.6.38 on carries its floor at it, so it must never move; a change to it refuses no record and
+//   record written from 0.6.39 on carries its floor at it, so it must never move; a change to it refuses no record and
 //   moves every later reader's floor.
-// - The stored fixture record, this build's own fit (ap-fit-0.6.38.ocm), has 0.6.36's fit's mean elements bit for bit.
+// - The stored fixture record, this build's own fit (ap-fit-0.6.39.ocm), has 0.6.36's fit's mean elements bit for bit.
 // Cases: 300 km at i 5 and 1,200 km at i 0.5 (where 0.6.36's records read by a later theory came out narrowest, or with a
 // negative along-track variance: stack #551), 550 km at i 52.9 (the fixture's orbit, where they came out wider), and 300 km
 // at i 5 with caps 0.
@@ -44,9 +44,9 @@ import {T, seedOcm, flight, rowsThrough, repackOcm, ocmOf} from './lib/ocm.mjs';
 import {scratchTemp} from './lib/scratch.mjs';
 
 ensureBuilt();
-const BASE = {version: '0.6.37', commit: 'dbcb31733ae463d12ccb44442949366fa8c513ed', sha256: 'ab2534f3c0fff66012962717a92b9799d17c782b42706c1d5e1a5ead74d91da1'};
+const BASE = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
 const SELF = {ofLargest: 1e-11, along: 1e-10}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
-// the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38 (IEEE 754 hex, km and km/s)
+// the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)
 const TWO_BODY = [
   ['4093b9d48c182380', '40b49e65f890b127', '40afdb86f9e97c32', 'c019ddfa467d95f6', 'bff6ea35419b85d0', '400ee1ede45a0864'],
   ['c0da7a2feffb8a9e', 'c0df8bb18ea6e5e0', 'c0514ae8e3edf45d', '4002d6761bf6ee1e', 'bfff9e2ee457b2ea', '3f5e0f26a7a71755'],
@@ -170,10 +170,10 @@ for (const c of CASES) {
 check(standInMovedKm > MOVED_KM, `the stand-in moved no case's flown epoch state by more than ${MOVED_KM} km (${standInMovedKm})`);
 
 // the gate reads PROVENANCE.PRODUCER exactly
-const PRODUCERS = [['com.spacedatanetwork.sdn-ap-propagator 0.6.38', 0], ['com.spacedatanetwork.sdn-ap-propagator 0.6.99', 0],
-  ['com.spacedatanetwork.sdn-ap-propagator 1.0.0', 0], ['com.spacedatanetwork.sdn-ap-propagator 0.6.37', -7],
-  ['com.spacedatanetwork.sdn-ap-propagator 0.6.38-rc1', -7], ['com.spacedatanetwork.sdn-ap-propagator 0.6.38.1', -7],
-  ['com.spacedatanetwork.sdn-ap-propagator 0.6.38+x', -7], ['com.spacedatanetwork.sdn-ap-propagator 0.6', -7],
+const PRODUCERS = [['com.spacedatanetwork.sdn-ap-propagator 0.6.39', 0], ['com.spacedatanetwork.sdn-ap-propagator 0.6.99', 0],
+  ['com.spacedatanetwork.sdn-ap-propagator 1.0.0', 0], ['com.spacedatanetwork.sdn-ap-propagator 0.6.38', -7],
+  ['com.spacedatanetwork.sdn-ap-propagator 0.6.39-rc1', -7], ['com.spacedatanetwork.sdn-ap-propagator 0.6.39.1', -7],
+  ['com.spacedatanetwork.sdn-ap-propagator 0.6.39+x', -7], ['com.spacedatanetwork.sdn-ap-propagator 0.6', -7],
   ['org.example.other-propagator 1.0.0', -7], [null, -7]];
 for (const [producer, want] of PRODUCERS) {
   const rec = repackOcm(producerRecord, (u) => { u.PROVENANCE.PRODUCER = producer; });
@@ -194,10 +194,10 @@ check(TWO_BODY !== null && JSON.stringify(got) === JSON.stringify(TWO_BODY), `th
 
 // the stored fixture record's mean elements are 0.6.36's fit's bit for bit
 const fixture = (f) => new Uint8Array(fs.readFileSync(new URL(`fixtures/${f}`, import.meta.url)));
-const [meNew, meOld] = [ocmOf(fixture('ap-fit-0.6.38.ocm')).MEAN_ELEMENTS, ocmOf(fixture('ap-fit-0.6.36.ocm')).MEAN_ELEMENTS];
+const [meNew, meOld] = [ocmOf(fixture('ap-fit-0.6.39.ocm')).MEAN_ELEMENTS, ocmOf(fixture('ap-fit-0.6.36.ocm')).MEAN_ELEMENTS];
 const meFields = Object.keys(meOld).filter((k) => typeof meOld[k] === 'number' || typeof meOld[k] === 'string' || typeof meOld[k] === 'bigint');
 const meDiffer = meFields.filter((k) => !Object.is(meNew[k], meOld[k]));
-check(meFields.length >= 8 && meDiffer.length === 0, `ap-fit-0.6.38.ocm's MEAN_ELEMENTS against ap-fit-0.6.36.ocm's: ${meDiffer.join(', ')} differ (of ${meFields.length})`);
+check(meFields.length >= 8 && meDiffer.length === 0, `ap-fit-0.6.39.ocm's MEAN_ELEMENTS against ap-fit-0.6.36.ocm's: ${meDiffer.join(', ')} differ (of ${meFields.length})`);
 console.log(JSON.stringify({fixtureMeanElements: {fields: meFields.length, differ: meDiffer}}));
 
 if (failures.length) {

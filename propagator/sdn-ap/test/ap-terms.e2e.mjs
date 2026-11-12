@@ -102,21 +102,21 @@ const { ap, xp, rows } = await fixtureSets(h);
 // (both flown by 0.6.36), FIT_RMS 40.153 against 40.260 m. Against the fixture's own truth (propagator/ffm's 550 km
 // trajectory) the error 48 to 72 h past the arc goes from 43 to 42 m, and over the arc from 24.1 to 24.3 m. So the own
 // fit is 0.6.36's (ap-fit-0.6.36.ocm; 0.6.27's went), the bounds kept.
-// 0.6.38 (SPEC 12.4, stack #551: an AP set's epoch floor put on and taken off at the two-body state of its own mean
+// 0.6.39 (SPEC 12.4, stack #551: an AP set's epoch floor put on and taken off at the two-body state of its own mean
 // elements) refuses the covariance of an AP record written before it (cov-floor-at-theory-state; its states fly), 0.6.36's
-// fit among them. So from 0.6.38 the stored record is 0.6.38's own fit of the same inputs (ap-fit-0.6.38.ocm: 0.6.36's mean
+// fit among them. So from 0.6.39 the stored record is 0.6.39's own fit of the same inputs (ap-fit-0.6.39.ocm: 0.6.36's mean
 // elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
 // held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 // flies its states as 0.6.36 flew them, its covariance refused by name.
 const FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const FIT = { posM: 0.1, velMmS: 0.1, rmsM: 0.01 };
 
-// --- the flight: the stored AP record (0.6.38's fit) on the fixture grid against 0.6.36's flight of 0.6.36's fit
-const stored = fixture("ap-fit-0.6.38.ocm"), storedFlight = fixture("ap-fit-0.6.36-0.6.36.oem");
+// --- the flight: the stored AP record (0.6.39's fit) on the fixture grid against 0.6.36's flight of 0.6.36's fit
+const stored = fixture("ap-fit-0.6.39.ocm"), storedFlight = fixture("ap-fit-0.6.36-0.6.36.oem");
 const flownStored = await invoke("propagate", flight([new Uint8Array(stored)], { output: GRID_OUTPUT }));
 check(flownStored.statusCode === 0, `propagate the stored AP record: ${flownStored.errorCode} ${flownStored.errorMessage}`);
 if (flownStored.statusCode === 0) {
-  recordReference("ap-fit-0.6.38", "oem", new Uint8Array(flownStored.outputs[0].payload));
+  recordReference("ap-fit-0.6.39", "oem", new Uint8Array(flownStored.outputs[0].payload));
   const d = oemDistance(new Uint8Array(flownStored.outputs[0].payload), storedFlight);
   console.log(`the stored AP record on the fixture grid against 0.6.36's flight: ${d.bytesEqual ? "byte-equal" : "differs"}; position ${(1000 * d.posM).toFixed(3)} mm, velocity ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)} of a line's largest entry (${d.states} states, ${d.covLines} covariance lines)`);
   check(d.states === 289 && d.covLines === 289 && d.epochsDiffer === 0, `the stored record's flight: ${d.states} states, ${d.covLines} covariance lines, ${d.epochsDiffer} epochs differ`);
@@ -136,15 +136,15 @@ if (flownStored.statusCode === 0) {
       String(block.COMMENT ?? "").startsWith("cov-floor-at-theory-state:"), `0.6.36's fit: ${JSON.stringify(d)}, ${block.COVARIANCE_MATRIX_LINES.length} covariance lines, COMMENT ${block.COMMENT}`);
   }
 }
-// --- the fit: this build's own fit of the stored arc, flown on the same grid, against this build's flight of 0.6.38's fit
-const fitRecord = fixture("ap-fit-0.6.38.ocm");
+// --- the fit: this build's own fit of the stored arc, flown on the same grid, against this build's flight of 0.6.39's fit
+const fitRecord = fixture("ap-fit-0.6.39.ocm");
 const flown = await invoke("propagate", flight([ap], { output: GRID_OUTPUT }));
 const flownRecord = await invoke("propagate", flight([new Uint8Array(fitRecord)], { output: GRID_OUTPUT }));
-check(flown.statusCode === 0 && flownRecord.statusCode === 0, `propagate AP: ${flown.errorCode ?? "ok"} ${flown.errorMessage ?? ""} | 0.6.38's fit: ${flownRecord.errorCode ?? "ok"}`);
+check(flown.statusCode === 0 && flownRecord.statusCode === 0, `propagate AP: ${flown.errorCode ?? "ok"} ${flown.errorMessage ?? ""} | 0.6.39's fit: ${flownRecord.errorCode ?? "ok"}`);
 if (flown.statusCode === 0 && flownRecord.statusCode === 0) {
   const d = oemDistance(new Uint8Array(flown.outputs[0].payload), new Uint8Array(flownRecord.outputs[0].payload));
   const rms = ocmOf(ap).ORBIT_DETERMINATION?.FIT_STATISTICS?.FIT_RMS_KM, rmsStored = ocmOf(new Uint8Array(fitRecord)).ORBIT_DETERMINATION?.FIT_STATISTICS?.FIT_RMS_KM;
-  console.log(`this build's fit on the fixture grid (24 h arc and the day after) against 0.6.38's fit: position ${(1000 * d.posM).toFixed(2)} mm, velocity ${(1000 * d.velMmS).toFixed(2)} um/s; FIT_RMS ${(1000 * rms).toFixed(4)} m against ${(1000 * rmsStored).toFixed(4)} m`);
+  console.log(`this build's fit on the fixture grid (24 h arc and the day after) against 0.6.39's fit: position ${(1000 * d.posM).toFixed(2)} mm, velocity ${(1000 * d.velMmS).toFixed(2)} um/s; FIT_RMS ${(1000 * rms).toFixed(4)} m against ${(1000 * rmsStored).toFixed(4)} m`);
   check(d.posM <= FIT.posM && d.velMmS <= FIT.velMmS && Math.abs(rms - rmsStored) * 1000 <= FIT.rmsM, `this build's fit moved: ${(1000 * d.posM).toFixed(2)} mm, ${(1000 * d.velMmS).toFixed(2)} um/s, FIT_RMS ${rms} km against ${rmsStored} (bounds ${JSON.stringify(FIT)})`);
 }
 const alone = await invoke("propagate", flight([ap]));

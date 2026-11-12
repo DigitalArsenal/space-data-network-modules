@@ -89,9 +89,9 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// 0.6.36 refuses a record whose GRAVITY_MODEL is not the embedded field (SPEC 16.2): 0.6.4's fit states EGM-96, so from
 /// 0.6.36 the stored record is 0.6.36's own fit (ap-fit-0.6.36.ocm) with its numbers (ap-fit-0.6.36-0.6.36.cov; the
 /// 0.6.22 file went), the bounds kept; the own fit is the same record.
-/// 0.6.38 (SPEC 12.4, stack #551: an AP set's epoch floor put on and taken off at the two-body state of its own mean
+/// 0.6.39 (SPEC 12.4, stack #551: an AP set's epoch floor put on and taken off at the two-body state of its own mean
 /// elements) refuses the covariance of an AP record written before it (cov-floor-at-theory-state; its states fly), 0.6.36's
-/// fit among them. So from 0.6.38 the stored record is 0.6.38's own fit of the same inputs (ap-fit-0.6.38.ocm: 0.6.36's mean
+/// fit among them. So from 0.6.39 the stored record is 0.6.39's own fit of the same inputs (ap-fit-0.6.39.ocm: 0.6.36's mean
 /// elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
 /// held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 /// flies its states as 0.6.36 flew them, its covariance refused by name.
@@ -224,8 +224,8 @@ if (apBytes) {
     }
     return d;
   };
-  const storedBytes = new Uint8Array(fixture("ap-fit-0.6.38.ocm"));
-  recordReference("ap-fit-0.6.38", "cov", covRaw(storedBytes).got);
+  const storedBytes = new Uint8Array(fixture("ap-fit-0.6.39.ocm"));
+  recordReference("ap-fit-0.6.39", "cov", covRaw(storedBytes).got);
   // 0.6.4's fit states GRAVITY_MODEL EGM-96 with gravity terms: refused (SPEC 16.2), no number written
   const oldField = covRaw(new Uint8Array(fixture("ap-fit-0.6.4.ocm")));
   check(oldField.status !== 0, `sdnap_covariance_at of 0.6.4's fit (EGM-96): status ${oldField.status}, expected a refusal`);
@@ -233,8 +233,8 @@ if (apBytes) {
   const preFloor = covRaw(new Uint8Array(fixture("ap-fit-0.6.36.ocm")));
   check(preFloor.status === -7, `sdnap_covariance_at of 0.6.36's fit: status ${preFloor.status}, expected -7 (cov-floor-at-theory-state)`);
   const ofFixture = (name) => new Float64Array(fixture(name).buffer.slice(0));
-  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.38.ocm")), fitRecordCov = covRaw(fitRecordBytes);
-  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.38's fit: ${fitRecordCov.status}`);
+  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.39.ocm")), fitRecordCov = covRaw(fitRecordBytes);
+  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.39's fit: ${fitRecordCov.status}`);
   const flightD = covAt(storedBytes, ofFixture("ap-fit-0.6.36-0.6.36.cov")), fitD = covAt(apBytes, fitRecordCov.got);
   const floors = ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"];
   const recorded = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fitRecordBytes)).unpack();
@@ -243,7 +243,7 @@ if (apBytes) {
   const epochRel = Math.max(...ap.COVARIANCE_DATA.map((v, k) => Math.abs(v - recorded.COVARIANCE_DATA[k]))) / epochLargest;
   console.log(`AP set: DRAG row s_e ${acp.NOISE_ECCENTRICITY_PER_DAY}, s_i ${acp.NOISE_INCLINATION_PER_DAY}, s_l ${acp.NOISE_MEAN_MOTION_RELATIVE}, c ${acp.NON_GRAVITATIONAL_SHARE}`);
   console.log(`sdnap_covariance_at: the stored record against 0.6.36's of it ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
-    `this build's fit against this build's of 0.6.38's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
+    `this build's fit against this build's of 0.6.39's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
   check(flightD.status === 0 && flightD.posM <= AP_COV_FLIGHT.posM && flightD.velMmS <= AP_COV_FLIGHT.velMmS && flightD.covOfLargest <= AP_COV_FLIGHT.covOfLargest,
     `sdnap_covariance_at of the stored AP record moved: ${JSON.stringify(flightD)} against ${JSON.stringify(AP_COV_FLIGHT)}`);
   check(fitD.status === 0 && fitD.posM <= AP_COV_FIT.posM && fitD.covOfLargest <= AP_COV_FIT.covOfLargest && epochRel <= AP_COV_FIT.epoch && floorRel <= AP_COV_FIT.floors,

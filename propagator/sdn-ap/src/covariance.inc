@@ -45,12 +45,12 @@ constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee
 /// SPEC 12.4 (stack #551): the first release whose AP records carry their epoch floor at the two-body state of their
 /// mean elements. An AP record another producer, or this module before it, wrote carries its floor at its writer's
 /// theory state: its covariance is refused by name (kFloorRefusal), its states fly.
-constexpr int kEpochFloorSince[3] = {0, 6, 38};
+constexpr int kEpochFloorSince[3] = {0, 6, 39};
 constexpr const char* kFloorRefusal = "cov-floor-at-theory-state";
 constexpr const char* kFloorRefusalNote =
     "cov-floor-at-theory-state: the covariance is refused and the states fly. The record's epoch covariance carries its "
     "floor at its writer's theory state (an AP record written before SPEC 12.4's epoch floor at the two-body state of "
-    "its mean elements, sdn-ap 0.6.38); fitted again, the set carries its covariance.";
+    "its mean elements, sdn-ap 0.6.39); fitted again, the set carries its covariance.";
 
 /// SPEC 12.4: the state an AP set's epoch floor is put on and taken off at: the two-body state of the set's own mean
 /// elements (TEME, km and km/s; SPEC 1.3's k_e and radius, a = (k_e / n)^(2/3), no recovery), a fixed formula on the
