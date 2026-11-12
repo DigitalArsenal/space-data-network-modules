@@ -842,6 +842,38 @@ inline SpTermsScratch& sp_terms_scratch() {
   return *g_sp_terms_scratch_ptr;
 }
 
+/// The tables sp_terms fills at their bounds (sp_comb_bound, sp_bound), per thread (stack #477): a set's build fills them
+/// here and keeps a copy at its counts. A build that took each table at its bound and cut it down after left the rest
+/// free between the sets' tables, a hole the next build's bound does not fit (on 1,000 sets of a catalog mix at tesseral 31:
+/// 224 MB of heap against 52 MB, 167 MB of it free inside). Grown to the largest bound this thread has asked for (755 KB at
+/// tesseral 31, 3.1 MB at 70) and kept for the thread's life, as the other per-thread scratch is; never shared.
+struct SpTableScratch {
+  SpCombCoef* comb = nullptr;
+  SpCoef* raw = nullptr;
+  size_t comb_cap = 0, raw_cap = 0;
+};
+inline thread_local SpTableScratch g_sp_table_scratch{};
+/// This thread's scratch with room for `comb` and `raw` entries, or nullptr out of memory (what it held is kept). Its
+/// contents are not kept across a growth: sp_terms writes every entry it counts.
+inline SpTableScratch* sp_table_scratch(size_t comb, size_t raw) {
+  SpTableScratch& sc = g_sp_table_scratch;
+  if (comb > sc.comb_cap) {
+    SpCombCoef* p = static_cast<SpCombCoef*>(std::malloc(comb * sizeof(SpCombCoef)));
+    if (p == nullptr) return nullptr;
+    std::free(sc.comb);
+    sc.comb = p;
+    sc.comb_cap = comb;
+  }
+  if (raw > sc.raw_cap) {
+    SpCoef* p = static_cast<SpCoef*>(std::malloc(raw * sizeof(SpCoef)));
+    if (p == nullptr) return nullptr;
+    std::free(sc.raw);
+    sc.raw = p;
+    sc.raw_cap = raw;
+  }
+  return &sc;
+}
+
 /// G about e0 for one term: g0 + g1 e.
 inline void sp_g(int l, int p, int q, double e0, double& g0, double& g1) {
   const int w = l - 2 * p;
