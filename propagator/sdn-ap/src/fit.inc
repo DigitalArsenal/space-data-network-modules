@@ -169,7 +169,7 @@ inline uint32_t g_ceiling_met[2] = {0, 0};
 struct NominalSat {
   xpt::XpSat* s = nullptr;
   explicit NominalSat(const ElementRow& row) {
-    s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+    s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
     if (s != nullptr && xpt::xp_init(elements_of(row), *s) != kPropOk) { std::free(s); s = nullptr; }
   }
   ~NominalSat() {
@@ -181,7 +181,7 @@ struct NominalSat {
 
 inline bool residuals(const ElementRow& row, const double* t, const double* r, int count, double* res) {
   Elements e = elements_of(row);
-  xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  xpt::XpSat* s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
   if (s == nullptr) return false;
   bool ok = xpt::xp_init(e, *s) == kPropOk;
   for (int k = 0; ok && k < count; ++k) {
@@ -334,9 +334,9 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   const int max_it = o.max_iterations > 0 ? o.max_iterations : 30;
   double x[kMaxParams];
   const int np = params_of(row, o, x);
-  double* res = static_cast<double*>(std::malloc(sizeof(double) * nres));
-  double* trial = static_cast<double*>(std::malloc(sizeof(double) * nres));
-  double* jac = static_cast<double*>(std::malloc(sizeof(double) * nres * kMaxParams));
+  double* res = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * nres));
+  double* trial = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * nres));
+  double* jac = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * nres * kMaxParams));
   auto release = [&]() { std::free(res); std::free(trial); std::free(jac); };
   if (res == nullptr || trial == nullptr || jac == nullptr) {
     release();
@@ -378,13 +378,13 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       ElementRow probe = work;
       if (probe.bterm == 0.0) probe.bterm = 1e-3;
       Elements e = elements_of(probe);
-      xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+      xpt::XpSat* s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
       if (s != nullptr && xpt::xp_init(e, *s) == kPropOk) {
         ElementRow none = probe;
         none.bterm = 0.0;
         Elements e0 = elements_of(none);
         xpt::GridShareScope share(s);  // SPEC 16.11: the drag-free copy reads the probe's grids
-        xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+        xpt::XpSat* s0 = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
         if (s0 != nullptr && xpt::xp_init(e0, *s0) == kPropOk)
           ndot_per_drag = (s->epoch.f[xpt::kN] - s0->epoch.f[xpt::kN]) / probe.bterm;
         if (s0 != nullptr) xpt::xp_release(*s0);

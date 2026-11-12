@@ -208,6 +208,8 @@ inline void iso_text(double jd_whole, double jd_frac, double minutes, char* out,
 }
 
 inline int refuse(const char* code, const char* message) {
+  // a state the flight could not reach for want of memory is refused as such (SPEC 1.6), not as the theory's failure
+  if (std::strcmp(code, "propagation-failed") == 0 && mem::refuse_if_out_of_memory()) return 3;
   plugin_set_error(code, message);
   return 3;
 }

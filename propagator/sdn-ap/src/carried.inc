@@ -1080,7 +1080,7 @@ inline int build(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row, boo
                 best.size(), best_n, of_epoch ? "TEMEOFEPOCH" : "TEMEOFDATE", start_text, stop_text, best_bytes, worst * 1.0e6, worst_v * 1.0e6,
                 with_v ? "4-node Hermite" : "8-node Lagrange of the positions", widest, fine ? "0.05 rad" : "0.1 rad", vtol * 1.0e6, held);
   comment.push_back(line);
-  xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  xpt::XpSat* xs = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
   const bool theory = xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk;
   int rc = 0;
   for (int end = 0; end < 2 && rc == 0; ++end) {
@@ -1190,7 +1190,7 @@ inline void handover(flatbuffers::FlatBufferBuilder& fbb, const ElementRow& row,
       best = k;
     }
   }
-  xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  xpt::XpSat* xs = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
   const bool theory = xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk;
   double rm[3], vm[3];
   if (best < all.size() && all[best].has_v && theory && xpt::xp_propagate(*xs, t0 / 60.0, rm, vm) == kPropOk) {

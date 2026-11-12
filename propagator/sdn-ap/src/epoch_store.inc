@@ -432,14 +432,14 @@ inline Slot& slot_of(Store& st, Series& s, uint32_t k, bool with_cov) {
   const Elements e = elements_of(en.row);
   if (en.row.theory == kTheorySgp4Xp) {
     drag::table();
-    q.xp = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+    q.xp = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
     q.error = q.xp == nullptr ? kPropRefused : xpt::xp_init(e, *q.xp);
     if (q.error == kPropOk) xpt::xp_set_pooled(*q.xp);
   } else {
-    q.sat = static_cast<Sat*>(std::calloc(1, sizeof(Sat)));
+    q.sat = static_cast<Sat*>(sdnap::mem::calloc(1, sizeof(Sat)));
     q.error = q.sat == nullptr ? kPropRefused : sat_init(e, gravity_wgs72(), *q.sat);
     if (q.error == kPropOk && q.sat->deep.iresfl != 0) {
-      q.nodes = static_cast<double*>(std::malloc(sizeof(double) * 4u * kCheckpointNodes));
+      q.nodes = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * 4u * kCheckpointNodes));
       if (q.nodes != nullptr) {
         q.sat->checkpoint_count = kCheckpointNodes;
         fill_checkpoints(*q.sat, q.nodes, kCheckpointNodes);
@@ -688,6 +688,7 @@ inline uint64_t bytes_of(const Store& st) {
 /// `load_epochs`: replaces the resident store with the call's snapshot (SPEC 14).
 extern "C" int load_epochs(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
   uint32_t frames = 0;
   if (const int rc = ocm::admit(frames)) return rc;
@@ -702,6 +703,7 @@ extern "C" int load_epochs(void) {
 /// covariance line per state.
 extern "C" int propagate_epochs(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
   uint32_t frames = 0;
   if (const int rc = ocm::admit(frames)) return rc;
@@ -753,6 +755,7 @@ extern "C" int propagate_epochs(void) {
           return atm::fail_day("weather-rows-short", day, "A set's SPACE_WEATHER rows do not reach a day the request flies it through.");
         }
         if (e != kPropOk) {
+          if (mem::refuse_if_out_of_memory()) return 3;
           std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", s.norad, text, static_cast<int>(e));
           plugin_set_error("propagation-failed", why);
           return 3;

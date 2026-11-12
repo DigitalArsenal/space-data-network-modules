@@ -229,7 +229,7 @@ inline ArcCheck arc_check(const ElementRow& row, const double* t, const double* 
   const double period = kMinutesPerDay / row.mean_motion_rev_day, t0 = t[order[0]];
   c.gap = c.gap_minutes > kArcGapRevolutions * period;
   const Elements e = elements_of(row);
-  xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  xpt::XpSat* s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
   if (s == nullptr) return c;
   bool ok = xpt::xp_init(e, *s) == kPropOk;
   std::vector<double> sum_t, sum_a;
@@ -801,6 +801,7 @@ static int fit_blocks() {
           return 3;
         }
         if (rc == 2) {
+          if (sdnap::mem::refuse_if_out_of_memory()) return 3;
           plugin_set_error("fit-failed", "The fit did not converge on the block.");
           return 3;
         }
@@ -1049,6 +1050,7 @@ static int fit_blocks() {
         char why[200];
         std::snprintf(why, sizeof why, "The fit's RMS is %.3f km, beyond the %.0f km bound of an Earth set (FIT.IMPLAUSIBLE_RMS_KM): the arc does not hold one set.", res.rms_km,
                       po.implausible_rms_km);
+        if (sdnap::mem::refuse_if_out_of_memory()) return 3;
         plugin_set_error("fit-implausible", why);
         return 3;
       }
@@ -1093,7 +1095,7 @@ static int fit_blocks() {
       // SPEC 16.18, the low table: the record states the slow set when the set carries a term beyond the shallow set's
       bool record_slow = false;
       {
-        xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+        xpt::XpSat* xs = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
         if (xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk) {
           record_slow = xs->ctx.slow_extra > 0;
           for (size_t k = 0; k < t_fit.size(); ++k) {
@@ -1301,7 +1303,7 @@ static int fit_blocks() {
         flatbuffers::FlatBufferBuilder rb(1024 + 160u * n);
         std::vector<flatbuffers::Offset<ODREditedObservation>> edited;
         edited.reserve(n);
-        xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+        xpt::XpSat* xs = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
         bool ok = xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk;
         for (uint32_t k = 0; ok && k < n; ++k) {
           const double t = fitoem::minutes_between(e0.whole, e0.frac, all[k].whole, all[k].frac);
@@ -1333,6 +1335,7 @@ static int fit_blocks() {
         if (xs != nullptr) xpt::xp_release(*xs);
         std::free(xs);
         if (!ok) {
+          if (sdnap::mem::refuse_if_out_of_memory()) return 3;
           plugin_set_error("fit-failed", "The fitted set does not reach a state of the block: no residual record.");
           return 3;
         }
@@ -1363,6 +1366,7 @@ static int fit_blocks() {
 /// The fit: $PCF THEORY UNSPECIFIED, SGP4XP or AP; the FORCES decide the theory written (stock: SGP4XP at the two-line
 /// digits; otherwise AP).
 extern "C" int fit(void) {
+  sdnap::mem::CallMark call_mark;
   plugin_reset_output_state();
   if (const int rc = sdnap::pcf::read(sdnap::pcf::kFit)) return rc;
   if (const int rc = sdnap::atm::prepare()) return rc;  // SPEC 15: the drag atmosphere the call selects

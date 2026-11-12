@@ -33,6 +33,7 @@ inline bool stock_forces(const OCM* o, int theory) {
 
 extern "C" int export_omm(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
   if (const int rc = pcf::read(pcf::kExport, true)) return rc;
   uint32_t count = 0;

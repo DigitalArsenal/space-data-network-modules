@@ -13,6 +13,7 @@
 
 extern "C" int propagate(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
   uint32_t count = 0;
   if (const int rc = ocm::admit(count)) return rc;
@@ -72,7 +73,7 @@ extern "C" int propagate(void) {
       } else {
         refused = sat_init(e, gravity_wgs72(), sat) != kPropOk;
         if (!refused && sat.deep.iresfl != 0) {
-          nodes = static_cast<double*>(std::malloc(sizeof(double) * 4u * kCheckpointNodes));
+          nodes = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * 4u * kCheckpointNodes));
           if (nodes != nullptr) {
             sat.checkpoint_count = kCheckpointNodes;
             fill_checkpoints(sat, nodes, kCheckpointNodes);
@@ -81,6 +82,7 @@ extern "C" int propagate(void) {
       }
       if (refused) {
         if (xs != nullptr) xpt::xp_release(*xs);
+        if (mem::refuse_if_out_of_memory()) return 3;
         plugin_set_error("element-set-refused", "The element set describes no orbit this module propagates.");
         return 3;
       }

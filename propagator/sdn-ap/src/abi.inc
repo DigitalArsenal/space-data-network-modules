@@ -179,7 +179,7 @@ inline int32_t batch(int32_t kind, double jd_whole, double jd_frac, const double
 SDNAP_EXPORT("plugin_init_omm")
 int32_t plugin_init_omm(const OrbProOMMRecord* records, uint32_t count) {
   if (records == nullptr && count > 0) return ORBPRO_PROP_BAD_INPUT;
-  sdnap::ElementRow* rows = static_cast<sdnap::ElementRow*>(std::malloc(sizeof(sdnap::ElementRow) * (count ? count : 1)));
+  sdnap::ElementRow* rows = static_cast<sdnap::ElementRow*>(sdnap::mem::malloc(sizeof(sdnap::ElementRow) * (count ? count : 1)));
   if (rows == nullptr) return ORBPRO_PROP_BAD_INPUT;
   for (uint32_t i = 0; i < count; ++i) rows[i] = sdnap::row_of_omm(records[i], sdnap::omm_theory());
   const int32_t held = sdnap::store_init(rows, count);
@@ -233,7 +233,7 @@ void plugin_destroy(void) { sdnap::store_free(); }
 
 /// Module heap for host buffers.
 SDNAP_EXPORT("sdnap_alloc")
-void* sdnap_alloc(uint32_t bytes) { return std::malloc(bytes ? bytes : 1); }
+void* sdnap_alloc(uint32_t bytes) { return sdnap::mem::malloc(bytes ? bytes : 1); }
 
 SDNAP_EXPORT("sdnap_free")
 void sdnap_free(void* pointer) { std::free(pointer); }
@@ -249,7 +249,7 @@ int32_t sdnap_init_elements(const sdnap::ElementRow* rows, uint32_t count) {
   for (uint32_t i = 0; i < count; ++i) {
     if (!sdnap::row_states_sgp4_ndot(rows[i])) continue;
     if (refused == nullptr) {
-      refused = static_cast<uint8_t*>(std::calloc(count, 1));
+      refused = static_cast<uint8_t*>(sdnap::mem::calloc(count, 1));
       if (refused == nullptr) return ORBPRO_PROP_BAD_INPUT;
       plugin_set_error("elements-other-theory",
                        "An SGP4XP row carries MEAN_MOTION_DOT (SGP4's term, ElementRow.mean_motion_dot not 0): the row is held refused.");

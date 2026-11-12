@@ -117,10 +117,10 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t*
   uint32_t nxp = 0;
   for (uint32_t i = 0; i < count; ++i) nxp += rows[i].theory == kTheorySgp4Xp ? 1 : 0;
   const uint32_t nsat = count - nxp;
-  st.kind = static_cast<uint8_t*>(std::malloc(count));
-  st.slot = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * count));
-  st.sats = nsat ? static_cast<Sat*>(std::malloc(sizeof(Sat) * nsat)) : nullptr;
-  st.xps = nxp ? static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat) * nxp)) : nullptr;
+  st.kind = static_cast<uint8_t*>(sdnap::mem::malloc(count));
+  st.slot = static_cast<uint32_t*>(sdnap::mem::malloc(sizeof(uint32_t) * count));
+  st.sats = nsat ? static_cast<Sat*>(sdnap::mem::malloc(sizeof(Sat) * nsat)) : nullptr;
+  st.xps = nxp ? static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat) * nxp)) : nullptr;
   if (!st.kind || !st.slot || (nsat && !st.sats) || (nxp && !st.xps)) {
     store_free();
     return -1;
@@ -158,7 +158,7 @@ inline int32_t store_init(const ElementRow* rows, uint32_t count, const uint8_t*
   st.count = count;
   if (resonant > 0) {
     const size_t per = 4u * kCheckpointNodes;
-    st.nodes = static_cast<double*>(std::malloc(sizeof(double) * per * resonant));
+    st.nodes = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * per * resonant));
     if (st.nodes == nullptr) {
       store_free();
       return -1;

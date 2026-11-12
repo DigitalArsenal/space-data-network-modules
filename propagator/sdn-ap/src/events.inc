@@ -58,7 +58,7 @@ inline bool eq_of_state(const double* r, const double* v, double* q) {
 
 /// The output state at t minutes from a set's epoch (TEME km, km/s); false when the set is refused or decays.
 inline bool state_of_set(const Elements& e, double t, double* r, double* v) {
-  xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  xpt::XpSat* s = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
   if (s == nullptr) return false;
   drag::table();
   bool ok = xpt::xp_init(e, *s) == kPropOk && xpt::xp_propagate(*s, t, r, v) == kPropOk;

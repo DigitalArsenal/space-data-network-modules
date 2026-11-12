@@ -316,7 +316,7 @@ inline bool init(const ElementRow& row, const fit::Options& o, Bank& b, xpt::XpS
   int moved = 0;
   for (int j = 0; j < b.np; ++j) b.slot[j] = modeled(b.kind[j]) ? moved++ : -1;
   const int total = 1 + 2 * moved;
-  b.sats = static_cast<xpt::XpSat*>(std::calloc(static_cast<size_t>(total), sizeof(xpt::XpSat)));
+  b.sats = static_cast<xpt::XpSat*>(sdnap::mem::calloc(static_cast<size_t>(total), sizeof(xpt::XpSat)));
   if (b.sats == nullptr) return false;
   drag::table();
   auto start = [&](const double* x, int slot) {
@@ -531,8 +531,8 @@ inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double 
   ng_rate = 0.0;
   ElementRow none = row;
   none.bterm = 0.0;
-  xpt::XpSat* s1 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
-  xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+  xpt::XpSat* s1 = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
+  xpt::XpSat* s0 = static_cast<xpt::XpSat*>(sdnap::mem::calloc(1, sizeof(xpt::XpSat)));
   drag::table();
   const bool ok = s1 != nullptr && s0 != nullptr && xpt::xp_init(elements_of(row), *s1) == kPropOk;
   if (ok && xpt::xp_init(elements_of(none), *s0) == kPropOk && s1->epoch.y[xpt::kN] > 0.0)

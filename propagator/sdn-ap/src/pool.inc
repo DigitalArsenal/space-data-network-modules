@@ -238,7 +238,7 @@ inline int32_t start(int32_t requested) {
     const int32_t target = load(&j.warmed) + 1;
     // room for the thread's stack and thread-local block first, so that pthread_create takes them below the size
     // published here rather than growing past it
-    g_reserve_block = std::malloc(kThreadRoom);
+    g_reserve_block = sdnap::mem::malloc(kThreadRoom);
     std::free(g_reserve_block);
     g_reserve_block = nullptr;
     __atomic_store_n(&j.pages, view_pages(), __ATOMIC_SEQ_CST);
@@ -270,7 +270,7 @@ inline int32_t run(uint32_t count, size_t reserve) {
   if (threaded) {
     warm_thread();  // the calling thread computes chunks too: its caches are made before the batch, as the workers' are
     if (reserve > 0) {
-      g_reserve_block = std::malloc(reserve);
+      g_reserve_block = sdnap::mem::malloc(reserve);
       std::free(g_reserve_block);
       g_reserve_block = nullptr;
     }

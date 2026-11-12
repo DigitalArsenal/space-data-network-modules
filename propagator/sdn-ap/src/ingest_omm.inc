@@ -15,6 +15,7 @@
 
 extern "C" int ingest_omm(void) {
   using namespace sdnap;
+  mem::CallMark call_mark;
   plugin_reset_output_state();
   std::vector<ElementRow> rows;
   std::vector<std::pair<const uint8_t*, uint32_t>> records;

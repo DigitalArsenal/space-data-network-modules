@@ -434,6 +434,12 @@ inline void normalized_Fk_dF(int m, int k, int lmax, double i0, double* F0, doub
 /// The m-daily terms' inclination functions at the epoch inclination i0: for even
 /// l = 2..degree and m = 1..l in that order, Fbar_l,m,l/2 and its derivative in i
 /// in F[2 j], F[2 j + 1]; returns the term count.
+/// The m-daily terms of degree 2 to `degree` (even l, m = 1..l): mdaily_terms' count.
+constexpr int mdaily_term_count(int degree) {
+  int count = 0;
+  for (int l = 2; l <= degree; l += 2) count += l;
+  return count;
+}
 inline int mdaily_terms(int degree, double i0, double* F) {
   int count = 0;
   double f[72], df[72];
@@ -476,6 +482,10 @@ struct MdailyEvalCache {
   alignas(16) float c20_f[24]{}, s20_f[24]{};
   alignas(16) float c21_f[24]{}, s21_f[24]{};
 };
+// stack #497: the cache's rows are indexed by the order m up to the m-daily degree (kMdailyCap) and padded to quads
+static_assert(kMdailyCap < 20, "MdailyEvalCache's per-order rows hold orders 1 to kMdailyCap");
+static_assert(((kMdailyCap + 3) & ~3) <= 24, "MdailyEvalCache's single-precision rows hold kMdailyCap orders padded to quads");
+static_assert(kMdailyCap + 1 < 72, "mdaily_terms' inclination functions hold degrees to kMdailyCap");
 inline thread_local MdailyEvalCache g_mdaily_eval_cache{};
 /// The set being flown keeps its own (xp_theory.inc SetCaches); nullptr: the thread's.
 inline thread_local MdailyEvalCache* g_mdaily_set_cache = nullptr;
@@ -836,6 +846,8 @@ struct SpTermsScratch {
   alignas(16) double dAB_im[18][38];
   int8_t comp_lmax[72][35];  ///< sp_terms' complement: per order m and w + 17, the highest degree of a slow-held term above the table's
 };
+// stack #497: the general table's rows are indexed by w + 17 and |w| for |w| up to its degree (kSpCap), the degrees to 70
+static_assert(kSpCap <= 17, "SpTermsScratch's w rows (35) and |w| rows (18) hold |w| up to kSpCap");
 inline thread_local SpTermsScratch* g_sp_terms_scratch_ptr = nullptr;
 inline SpTermsScratch& sp_terms_scratch() {
   if (__builtin_expect(!g_sp_terms_scratch_ptr, 0)) g_sp_terms_scratch_ptr = new SpTermsScratch{};
@@ -858,14 +870,14 @@ inline thread_local SpTableScratch g_sp_table_scratch{};
 inline SpTableScratch* sp_table_scratch(size_t comb, size_t raw) {
   SpTableScratch& sc = g_sp_table_scratch;
   if (comb > sc.comb_cap) {
-    SpCombCoef* p = static_cast<SpCombCoef*>(std::malloc(comb * sizeof(SpCombCoef)));
+    SpCombCoef* p = static_cast<SpCombCoef*>(sdnap::mem::malloc(comb * sizeof(SpCombCoef)));
     if (p == nullptr) return nullptr;
     std::free(sc.comb);
     sc.comb = p;
     sc.comb_cap = comb;
   }
   if (raw > sc.raw_cap) {
-    SpCoef* p = static_cast<SpCoef*>(std::malloc(raw * sizeof(SpCoef)));
+    SpCoef* p = static_cast<SpCoef*>(sdnap::mem::malloc(raw * sizeof(SpCoef)));
     if (p == nullptr) return nullptr;
     std::free(sc.raw);
     sc.raw = p;
@@ -3347,19 +3359,19 @@ inline int half_day_terms(int degree, double i0, double e0, HalfDayCoef* out, do
   const size_t need_vals = std::max<size_t>(5 * raw_max, 5 * 65 * 36);
   const size_t need_raw = static_cast<size_t>(raw_max > 0 ? raw_max : 1);
   if (need_grid > sc.grid_cap) {
-    double* p = static_cast<double*>(std::realloc(sc.grid, need_grid * sizeof(double)));
+    double* p = static_cast<double*>(sdnap::mem::realloc(sc.grid, need_grid * sizeof(double)));
     if (p == nullptr) return -1;
     sc.grid = p;
     sc.grid_cap = need_grid;
   }
   if (need_vals > sc.values_cap) {
-    double* p = static_cast<double*>(std::realloc(sc.values, need_vals * sizeof(double)));
+    double* p = static_cast<double*>(sdnap::mem::realloc(sc.values, need_vals * sizeof(double)));
     if (p == nullptr) return -1;
     sc.values = p;
     sc.values_cap = need_vals;
   }
   if (need_raw > sc.raw_cap) {
-    RawTerm* p = static_cast<RawTerm*>(std::realloc(sc.raw, need_raw * sizeof(RawTerm)));
+    RawTerm* p = static_cast<RawTerm*>(sdnap::mem::realloc(sc.raw, need_raw * sizeof(RawTerm)));
     if (p == nullptr) return -1;
     sc.raw = p;
     sc.raw_cap = need_raw;
@@ -4787,7 +4799,7 @@ inline int slow_terms_wide(int degree, int cls, double n, double e0, double i0, 
           if (!(slow_size_m(l, m, j, F[l] * G, a, psidot) >= kSlowKeepM)) continue;
           if (count == room) {
             room = room == 0 ? 256 : 2 * room;
-            res::ResCoef* grown = static_cast<res::ResCoef*>(std::realloc(*out, static_cast<size_t>(room) * sizeof(res::ResCoef)));
+            res::ResCoef* grown = static_cast<res::ResCoef*>(sdnap::mem::realloc(*out, static_cast<size_t>(room) * sizeof(res::ResCoef)));
             if (grown == nullptr) {
               std::free(*out);
               *out = nullptr;
@@ -5149,7 +5161,19 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
   const double mdot = n + 0.5 * j2 * n * eta * (3.0 * c * c - 1.0), wdot = 0.5 * j2 * n * (5.0 * c * c - 1.0);
   const double node_rate = -j2 * n * c, na2 = n * a * a;
   constexpr int NE = kGridNE;
-  double E[NE], M[NE], cf[NE], sf[NE], ar[NE], sE[NE], fwang[NE];
+  // every array of the anomalies on the heap (stack #497: no array sized by the node count on the stack): the 11 complex
+  // working rows, then E, M, cos f, sin f, a/r, sin E, f and the phase's cosine and sine
+  double* ws = static_cast<double*>(sdnap::mem::malloc(static_cast<size_t>(11 * 2 + 9) * NE * sizeof(double)));
+  if (ws == nullptr) return -1;
+  double* const E = ws + 22 * NE;
+  double* const M = E + NE;
+  double* const cf = M + NE;
+  double* const sf = cf + NE;
+  double* const ar = sf + NE;
+  double* const sE = ar + NE;
+  double* const fwang = sE + NE;
+  double* const cph_ = fwang + NE;
+  double* const sph_ = cph_ + NE;
   for (int k = 0; k < NE; ++k) {
     E[k] = kTwoPi * k / NE;
     sE[k] = std::sin(E[k]);
@@ -5163,8 +5187,6 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
   const bool low = cls == 0 && kTwoPi / n < kLongPeriodMinutes;  // sp_terms' `low`: no class, the shallow set active
   const double h = 1e-5;
   double f[72], fp[72], fmn[72];
-  double* ws = static_cast<double*>(std::malloc(static_cast<size_t>(11) * 2 * NE * sizeof(double)));
-  if (ws == nullptr) return -1;
   double (*gr)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws);           // g', g, g_e, g_i, g_a
   double (*D)[2][NE] = reinterpret_cast<double (*)[2][NE]>(ws + 5 * 2 * NE);  // their transforms and H[H[g]]
   double (*X)[NE] = reinterpret_cast<double (*)[NE]>(ws + 10 * 2 * NE);
@@ -5255,7 +5277,6 @@ inline int wide_families(int degree, int cls, double n, double e, double inc, in
         }
       }
       // H = e^{-i nu e sin E} IFFT(FFT(R (1 - e cos E) e^{i nu e sin E}) / (i (k - nu))) / mdot
-      double cph_[NE], sph_[NE];
       for (int q = 0; q < NE; ++q) { cph_[q] = std::cos(nu * e * sE[q]); sph_[q] = std::sin(nu * e * sE[q]); }
       const auto op = [&](double (*r)[NE], double (*o)[NE]) {
         for (int q = 0; q < NE; ++q) {
@@ -5333,20 +5354,20 @@ inline bool wide_grid_build(int degree, int cls, double n, double e, double inc,
   // one block per grid: the value, the derivative grids and the family indices (a held grid is one allocation)
   const size_t per4 = 2 * per;  // a family's values with their slopes interleaved
   const size_t vb = static_cast<size_t>(cap) * per4 * sizeof(float), db = static_cast<size_t>(cap) * 3 * dper * sizeof(uint16_t);
-  char* block = static_cast<char*>(std::malloc(vb + db + 2 * static_cast<size_t>(cap)));
+  char* block = static_cast<char*>(sdnap::mem::malloc(vb + db + 2 * static_cast<size_t>(cap)));
   float* v = reinterpret_cast<float*>(block);
   uint16_t* dv = block != nullptr ? reinterpret_cast<uint16_t*>(block + vb) : nullptr;
   int8_t* fm = block != nullptr ? reinterpret_cast<int8_t*>(block + vb + db) : nullptr;
   int8_t* fw = block != nullptr ? fm + cap : nullptr;
-  int8_t* sm = static_cast<int8_t*>(std::malloc(2 * cap));
+  int8_t* sm = static_cast<int8_t*>(sdnap::mem::malloc(2 * cap));
   BuildScratch& bs = build_scratch();
   for (int32_t expected = 0; !__atomic_compare_exchange_n(&bs.word, &expected, 1, false, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);) expected = 0;
   const auto release = [&]() { __atomic_store_n(&bs.word, 0, __ATOMIC_RELEASE); };
   if (bs.size < one) {
     std::free(bs.sp);
     std::free(bs.sn);
-    bs.sp = static_cast<double*>(std::malloc(one * sizeof(double)));
-    bs.sn = static_cast<double*>(std::malloc(one * sizeof(double)));
+    bs.sp = static_cast<double*>(sdnap::mem::malloc(one * sizeof(double)));
+    bs.sn = static_cast<double*>(sdnap::mem::malloc(one * sizeof(double)));
     bs.size = bs.sp != nullptr && bs.sn != nullptr ? one : 0;
   }
   double* sp = bs.sp;
@@ -5399,6 +5420,13 @@ inline void wide_grid_release(WideGrid& g) {
 inline size_t wide_grid_bytes(const WideGrid& g) {
   return static_cast<size_t>(g.count) * (6 * kGridN * 4 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t));
 }
+/// The most a grid of `degree` can hold, with its WideGrid: every family (m, w) of degree 2 to `degree`.
+constexpr size_t wide_grid_bytes_bound(int degree) {
+  return sizeof(WideGrid) + static_cast<size_t>(degree) * static_cast<size_t>(2 * degree + 1) *
+                                (6 * kGridN * 4 * sizeof(float) + 3 * 6 * kGridD * 2 * sizeof(uint16_t));
+}
+/// The largest grid a set builds (SPEC 16.11): degree kSpCap on kGridN anomalies (5.1 MB at 12 and 128).
+constexpr size_t kGridMaxBytes = wide_grid_bytes_bound(kSpCap);
 
 /// Grids held by exact key: each counted, freed when its last holder drops it, the kGridIdle most recently dropped kept until other
 /// grids are built (a grid a fit built is freed at once).
@@ -5408,18 +5436,28 @@ struct GridSlot {
   uint32_t stamp;  // when it last became idle
   bool transient;  // built inside a fit: freed when its last holder drops it, never kept idle
 };
-/// Idle grids kept (3.1 MB each): a catalog refresh finds its objects' grids; the oldest goes first. kGridSlots bounds every grid held.
+/// Idle grids kept: a catalog refresh finds its objects' grids; the least recently used goes first. kGridSlots bounds every grid
+/// held. SPEC 16.11 (stack #497): the cache is also bounded by bytes, live and idle together (kGridCacheBytes by default,
+/// sdnap_wide_grid_budget sets it): an idle grid is freed while the cache's bytes, with the grid about to be built, exceed the
+/// bound; a grid in use is never freed. A grid at the tesseral cap (12 above the switch) on 128 anomalies is at most
+/// kGridMaxBytes. The bound changes which grids are kept, never a grid's bytes: a grid is a pure function of its key.
 constexpr int kGridIdle = 128, kGridSlots = 256;
+constexpr size_t kGridCacheBytes = static_cast<size_t>(512) << 20;
+static_assert(kGridMaxBytes * 64 <= kGridCacheBytes, "the cache's default bound holds at least 64 of the largest grids");
 struct GridCache {
   int32_t word;
   int count;
   uint32_t clock;
+  size_t bytes;   // the held grids' bytes (wide_grid_bytes and the WideGrid), live and idle
+  size_t budget;  // the bound on them; 0 until the first use (kGridCacheBytes)
   GridSlot slot[kGridSlots];
 };
-/// Frees the oldest idle grid while more than `keep` are idle (the cache's lock held).
-inline void evict_idle(struct GridCache& c, int keep);
+/// Frees the least recently used idle grid while more than `keep` are idle or the held bytes with `extra` more exceed the
+/// budget (the cache's lock held).
+inline void evict_idle(struct GridCache& c, int keep, size_t extra = 0);
 inline GridCache& grid_cache() {
   static GridCache c{};
+  if (c.budget == 0) c.budget = kGridCacheBytes;
   return c;
 }
 inline void cache_lock(int32_t* w) {
@@ -5493,22 +5531,45 @@ inline WideGrid* wide_grid_acquire(int degree, int cls, double n, double e, doub
       return hit;
     }
   }
-  // a build: the oldest idle grid goes first beyond kGridIdle - 1, so a worker holds a bounded number
-  evict_idle(c, kGridIdle - 1);
+  // a build: the least recently used idle grid goes first beyond kGridIdle - 1, and while the held bytes with this grid's
+  // largest size exceed the budget, so a worker holds a bounded number and the instance a bounded size
+  evict_idle(c, kGridIdle - 1, wide_grid_bytes_bound(degree));
   cache_unlock(&c.word);
-  WideGrid* g = static_cast<WideGrid*>(std::calloc(1, sizeof(WideGrid)));
+  WideGrid* g = static_cast<WideGrid*>(sdnap::mem::calloc(1, sizeof(WideGrid)));
   if (g == nullptr) return nullptr;
   if (!wide_grid_build(degree, cls, n, e, inc, *g)) { std::free(g); return nullptr; }
   __atomic_add_fetch(&grid_counts()[2], 1, __ATOMIC_RELAXED);
   cache_lock(&c.word);
   if (c.count < kGridSlots) {
     c.slot[c.count++] = GridSlot{g, cls, 1, 0, transient};
+    c.bytes += sizeof(WideGrid) + wide_grid_bytes(*g);
     cache_unlock(&c.word);
     return g;
   }
   cache_unlock(&c.word);
   free_grid(g);
   return nullptr;
+}
+
+/// SPEC 16.11: the cache's byte bound. bytes > 0 sets it; out[0] the bound, out[1] the held bytes, out[2] the grids held,
+/// out[3] those idle (held by no set).
+extern "C" __attribute__((export_name("sdnap_wide_grid_budget"))) int32_t sdnap_wide_grid_budget(double bytes, double* out) {
+  GridCache& c = grid_cache();
+  cache_lock(&c.word);
+  if (bytes > 0.0) {
+    c.budget = static_cast<size_t>(bytes);
+    evict_idle(c, kGridIdle);
+  }
+  if (out != nullptr) {
+    int idle = 0;
+    for (int k = 0; k < c.count; ++k) idle += c.slot[k].refs == 0 ? 1 : 0;
+    out[0] = static_cast<double>(c.budget);
+    out[1] = static_cast<double>(c.bytes);
+    out[2] = static_cast<double>(c.count);
+    out[3] = static_cast<double>(idle);
+  }
+  cache_unlock(&c.word);
+  return 0;
 }
 
 /// Adds a holder to a grid already held.
@@ -5541,6 +5602,7 @@ inline void wide_grid_drop(WideGrid* g) {
     if (c.slot[k].g == g) {
       if (--c.slot[k].refs == 0) {
         if (c.slot[k].transient) {  // built inside a fit: not kept idle
+          c.bytes -= sizeof(WideGrid) + wide_grid_bytes(*c.slot[k].g);
           free_grid(c.slot[k].g);
           c.slot[k] = c.slot[--c.count];
         } else {
@@ -5562,7 +5624,7 @@ inline void cache_contents(double& slots, double& bytes) {
   cache_unlock(&c.word);
 }
 
-inline void evict_idle(GridCache& c, int keep) {
+inline void evict_idle(GridCache& c, int keep, size_t extra) {
   for (;;) {
     int idle = 0, oldest = -1;
     for (int k = 0; k < c.count; ++k)
@@ -5570,7 +5632,8 @@ inline void evict_idle(GridCache& c, int keep) {
         ++idle;
         if (oldest < 0 || c.slot[k].stamp < c.slot[oldest].stamp) oldest = k;
       }
-    if (idle <= keep || oldest < 0) return;
+    if (oldest < 0 || (idle <= keep && c.bytes + extra <= c.budget)) return;
+    c.bytes -= sizeof(WideGrid) + wide_grid_bytes(*c.slot[oldest].g);
     free_grid(c.slot[oldest].g);
     c.slot[oldest] = c.slot[--c.count];
   }
@@ -5624,6 +5687,7 @@ inline void wide_six(const WideGrid& g, double t, const Kepler& kp, double theta
   double sb, cb, sw1, cw1;
   fm::sincos(beta, sb, cb);
   fm::sincos(kp.argp, sw1, cw1);
+  static_assert(kSpCap < 36, "wide_six's multiples of the angles hold orders and w to the grid's degree (kSpCap)");
   double cm[36], sm[36], cw[36], sw[36];
   cm[0] = cw[0] = 1.0;
   sm[0] = sw[0] = 0.0;
