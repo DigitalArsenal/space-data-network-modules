@@ -14,7 +14,10 @@
 // - the sets are built with BTERM 0, so the band guard of SPEC 16.1 does not act here (SPEC 16.20 gives what it leaves
 //   carried nowhere on sets with drag);
 // - the low table's sets at a record of 70: no term above any carrier's degree, and every term left nowhere in a hole;
-// - the census of a set is the same twice (no state carried between calls) and returns -1 for elements it refuses.
+// - the census of a set is the same twice (no state carried between calls) and returns -1 for elements it refuses;
+// - beside the field, radiation pressure's one row (l -1, m 0; SPEC 16.22) is carried once: through the output map (code 4)
+//   in the long-period regime above e 0.3, by SPEC 4's averaged rates and periodic output terms (13) elsewhere, the sweep
+//   holding both.
 // Printed: per band the ten largest terms carried nowhere, with their hole.
 //   node test/field-census.e2e.mjs
 import assert from 'node:assert/strict';
@@ -85,7 +88,7 @@ SETS.push({ band: 'one-day', name: '1.0027 rev/day, e 0.82, i 10', n: 1.0027, e:
 for (const n of [1.30, 1.32, 0.7]) SETS.push({ band: 'class 0, period near 1,100 min', name: `${n} rev/day, e 0.01, i 55`, n, e: 0.01, i: 55 });
 
 const seen = new Map(HOLES.map((h) => [h, 0]));
-const unknown = [], worst = {}, record = { terms: 0, largestM: 0 };
+const unknown = [], worst = {}, record = { terms: 0, largestM: 0 }, radiationCodes = {};
 let rowsTotal = 0;
 const t0 = performance.now();
 for (const s of SETS) {
@@ -93,6 +96,13 @@ for (const s of SETS) {
   assert.ok(rows, `${s.name}: the census answers`);
   rowsTotal += rows.length;
   const b = branchOf(s.n, s.e);
+  // radiation pressure's one row (SPEC 16.20, 16.22): through the output map in the long-period regime above e 0.3, by SPEC 4's
+  // averaged rates and periodic output terms elsewhere; once either way
+  const radiation = rows.filter((t) => t.l === -1 && t.m === 0);
+  assert.equal(radiation.length, 1, `${s.name}: one radiation row`);
+  const through = b.longPeriod && s.e > 0.3;
+  assert.equal(radiation[0].code, through ? 4 : 13, `${s.name}: radiation carried once, ${through ? 'through the output map' : "by SPEC 4's rates and output terms"} (code ${radiation[0].code})`);
+  radiationCodes[radiation[0].code] = (radiationCodes[radiation[0].code] ?? 0) + 1;
   for (const t of rows) {
     assert.ok(t.wr >= 0 && t.total >= 0 && t.total <= 1.001 || t.code === 30, `${s.name}: weights in range`);
     assert.notEqual(t.code, 30, `${s.name}: (${t.l}, ${t.m}, ${t.p}, ${t.q}) is carried twice (weights sum ${t.total})`);
@@ -130,7 +140,8 @@ for (const [band, list] of Object.entries(worst)) {
   list.sort((a, b) => b.sizeM - a.sizeM);
   console.log(JSON.stringify({ band, nowhere: list.length, largest: list.slice(0, 10) }));
 }
-console.log(JSON.stringify({ sets: SETS.length, rows: rowsTotal, ms: Math.round(ms),
+assert.ok(radiationCodes[4] > 0 && radiationCodes[13] > 0, `the sweep holds sets on both sides of radiation's switch: ${JSON.stringify(radiationCodes)}`);
+console.log(JSON.stringify({ sets: SETS.length, rows: rowsTotal, ms: Math.round(ms), radiationCodes,
   aboveTheRecord: { degree: RECORD, terms: record.terms, largestM: +record.largestM.toPrecision(3) }, lowTableAtRecord70InHoles: record70, holes: HOLES.map((h) => ({ issue: h.issue, what: h.what, terms: seen.get(h), largestM: +(h.largestM ?? 0).toPrecision(3) })) }));
 unknown.sort((a, b) => b.size - a.size);
 const groups = {};
