@@ -83,8 +83,11 @@ const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b
 const DEAD_TEST = 2 ** 28, DEAD_RATE = 2 ** 31;
 // the memory the pool case's row store build may take (MB, the module's memory as the host sees it; stack #477): 0.6.42
 // with each set's table built in its thread's scratch measures 51.75 MB (main 0.6.41 51.94 MB); the bound is a quarter
-// over it. A build that took each table at its bound and cut it down after measured 223.94 MB.
-const ROW_STORE_MB = 64;
+// over it. A build that took each table at its bound and cut it down after measured 223.94 MB. 0.6.49 (the output table keeps
+// a line whole, SPEC 16.1, stack #572) carries about twice the table's terms: 51.75 MB on 0.6.45 (git b1a08e44) to 71.44 MB,
+// about 52 KB to 71 KB per stored AP row (+38 %); the bound is a quarter over it (the table's size per row is a later
+// item on stack #572).
+const ROW_STORE_MB = 89;
 
 ensureBuilt();
 async function open(file, threads = 0) {
