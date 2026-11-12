@@ -160,6 +160,34 @@ namespace fitoem {
 
 /// An Earth set whose fit RMS exceeds this is refused (fit-implausible), km.
 constexpr double kImplausibleRmsKm = 100.0;
+/// SPEC 16.25 (stack #564): the forecast after a written AP set's epoch over which its decay crossing is stated in the record's
+/// OD COMMENT ("decays at <time>"; the 7 days the catalog flies its records over), for a set whose mean perigee is under
+/// kDecayCheckPerigeeKm: the forward flight is made only for those (a set above it is not checked, and a reader still finds
+/// its crossing from the record whenever it flies past one).
+constexpr double kDecayForecastDays = 7.0;
+constexpr double kDecayCheckPerigeeKm = 400.0;
+/// SPEC 16.25: where an AP set crosses the rule inside the arc `t` (minutes from its epoch): the minute of the crossing.
+inline bool decay_in_arc(const ElementRow& row, const std::vector<double>& t, double& minute) {
+  xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  bool found = false;
+  if (xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk) {
+    if (xpt::is_ap_ctx(xs->ctx)) {
+      for (size_t k = 0; k < t.size(); ++k) {
+        double rm[3], vm[3];
+        const int32_t st = xpt::xp_propagate(*xs, t[k], rm, vm);
+        if (st == kPropDecayed && xpt::decay_past(*xs, t[k])) {
+          minute = xs->decay_t[t[k] >= 0.0 ? 0 : 1];
+          found = true;
+          break;
+        }
+        if (st != kPropOk) break;
+      }
+    }
+    xpt::xp_release(*xs);
+  }
+  std::free(xs);
+  return found;
+}
 
 /// Whether a block's first state (with a velocity) has an osculating eccentricity above `e_min` about the Earth.
 inline bool eccentric_block(const ephemerisDataBlock* blk, double e_min) {
@@ -562,6 +590,7 @@ static int fit_blocks() {
         uint32_t first = 0;
         fitoem::Sample e0{};
         ElementRow row{};
+        double decay_min = 0.0;  ///< SPEC 16.25: where run_pass returned 4, the minute the starting set crosses the rule
         fit::Options opt{};
         fit::Result res{};
         int iterations = 0;
@@ -753,7 +782,17 @@ static int fit_blocks() {
         res = fit::run(row, t_fit.data(), r_fit.data(), static_cast<int>(t_fit.size()), opt);
         iterations += res.iterations;
         if (res.status == fit::kBranchLimit) { P.row = row; return 3; }  // SPEC 16.7
-        if (res.status < 0) return 2;
+        if (res.status < 0) {
+          // SPEC 16.25: a pass whose starting set decays inside the full arc (refused at its first evaluation, where the
+          // whole-arc drag pass's status above was not read) is named for what it is
+          double decay_at = 0.0;
+          if (res.status == -2 && fitoem::decay_in_arc(row, t_fit, decay_at)) {
+            P.row = row;
+            P.decay_min = decay_at;
+            return 4;
+          }
+          return 2;
+        }
         // SPEC 12.1: above the drag (cov::regime_of: the perigee at or above 2,500 km, where the theory's density is
         // 1e-20 at every point of the orbit), and under the drag on an arc of pcf::kDataSigmaUnderDragMinArcHours or more
         // at or below e 0.3 (the 71 h default's rule), the whole-arc fit is redone at the data's own sigma: every prior
@@ -805,6 +844,16 @@ static int fit_blocks() {
           return 3;
         }
         if (rc == 3) return fit::refuse_branch_limit(chosen.row);
+        if (rc == 4) {
+          // SPEC 16.25: the pass's starting set decays inside the arc: refused as the written set that does is
+          char decay_text[48], name[80], why[220];
+          const double c = chosen.row.epoch_jd_frac + chosen.decay_min / kMinutesPerDay;
+          oem::iso_text(chosen.row.epoch_jd_whole + std::floor(c), c - std::floor(c), 0.0, decay_text, sizeof decay_text);
+          std::snprintf(name, sizeof name, "decayed-in-arc:%s", decay_text);
+          std::snprintf(why, sizeof why, "The set the fit starts from decays at %s, inside the fit's arc (SPEC 16.25): the theory cannot represent the arc's end, so no record is written.", decay_text);
+          plugin_set_error(name, why);
+          return 3;
+        }
       }
       double span_used = start_given ? -1.0 : default_span;
       // SPEC 12.8: above e 0.3 with the perigee in the drag and no stated drag prior, the longest arc the ephemeris holds
@@ -1026,11 +1075,21 @@ static int fit_blocks() {
       double held_rms = 0.0, held_max = 0.0, held_stop = fit_end_min;
       std::vector<double> day_ss;
       std::vector<uint32_t> day_n;
+      // SPEC 16.25: the held-out states past the written set's decay crossing are not scored (the set has no state there); the
+      // statistics are of the held-out states before it, and their count is stated (HELD_OUT_STATES), or none when there is none
+      size_t held_n = t_out.size();
       if (!t_out.empty()) {
+        double crossing_min = 0.0;
+        if (fitoem::decay_in_arc(row, t_out, crossing_min)) {
+          held_n = 0;
+          while (held_n < t_out.size() && t_out[held_n] <= crossing_min) ++held_n;
+        }
+      }
+      if (held_n > 0) {
         std::vector<double> rr(r_out.size());
-        if (fit::residuals(row, t_out.data(), r_out.data(), static_cast<int>(t_out.size()), rr.data())) {
+        if (fit::residuals(row, t_out.data(), r_out.data(), static_cast<int>(held_n), rr.data())) {
           double ss = 0.0;
-          for (size_t k = 0; k < t_out.size(); ++k) {
+          for (size_t k = 0; k < held_n; ++k) {
             const double e2 = rr[3 * k] * rr[3 * k] + rr[3 * k + 1] * rr[3 * k + 1] + rr[3 * k + 2] * rr[3 * k + 2];
             ss += e2;
             held_max = std::fmax(held_max, std::sqrt(e2));
@@ -1040,7 +1099,7 @@ static int fit_blocks() {
             day_ss[day - 1] += e2;
             ++day_n[day - 1];
           }
-          held_rms = std::sqrt(ss / static_cast<double>(t_out.size()));
+          held_rms = std::sqrt(ss / static_cast<double>(held_n));
         }
       }
       if (!(res.rms_km <= po.implausible_rms_km)) {
@@ -1092,20 +1151,50 @@ static int fit_blocks() {
       double uvw_ss[3] = {};
       // SPEC 16.18, the low table: the record states the slow set when the set carries a term beyond the shallow set's
       bool record_slow = false;
+      // SPEC 16.25 (stack #564): the written set's decay crossing inside the fit's arc (the record is refused,
+      // decayed-in-arc:<time>) or within kDecayForecastDays after its epoch (written, its OD COMMENT "decays at <time>")
+      bool decayed_in_arc = false, decays_ahead = false;
+      double decay_min = 0.0;
       {
         xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
         if (xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk) {
           record_slow = xs->ctx.slow_extra > 0;
           for (size_t k = 0; k < t_fit.size(); ++k) {
             double rm[3], vm[3], u[3];
-            if (xpt::xp_propagate(*xs, t_fit[k], rm, vm) != kPropOk) break;
+            const int32_t st = xpt::xp_propagate(*xs, t_fit[k], rm, vm);
+            if (st == kPropDecayed && xpt::decay_past(*xs, t_fit[k])) {
+              decayed_in_arc = true;
+              decay_min = xs->decay_t[t_fit[k] >= 0.0 ? 0 : 1];
+            }
+            if (st != kPropOk) break;
             const double e[3] = {rm[0] - r_fit[3 * k], rm[1] - r_fit[3 * k + 1], rm[2] - r_fit[3 * k + 2]};
             cov::to_uvw(rm, vm, e, u);
             for (int j = 0; j < 3; ++j) uvw_ss[j] += u[j] * u[j];
           }
+          // a set whose mean perigee is low enough to reach the rule within the forecast is flown to its end
+          const double hp_km = (std::pow(xpt::kKe / (row.mean_motion_rev_day * kTwoPi / kMinutesPerDay), kX2o3) * (1.0 - row.eccentricity) - 1.0) * xpt::kRe;
+          if (!decayed_in_arc && xpt::is_ap_ctx(xs->ctx) && hp_km < fitoem::kDecayCheckPerigeeKm) {
+            double rq[3], vq[3];
+            if (xpt::xp_propagate(*xs, fitoem::kDecayForecastDays * kMinutesPerDay, rq, vq) == kPropDecayed && xpt::decay_past(*xs, fitoem::kDecayForecastDays * kMinutesPerDay)) {
+              decays_ahead = true;
+              decay_min = xs->decay_t[0];
+            }
+          }
           xpt::xp_release(*xs);
         }
         std::free(xs);
+      }
+      char decay_text[48] = {};
+      if (decayed_in_arc || decays_ahead) {
+        const double c = row.epoch_jd_frac + decay_min / kMinutesPerDay;
+        oem::iso_text(row.epoch_jd_whole + std::floor(c), c - std::floor(c), 0.0, decay_text, sizeof decay_text);
+      }
+      if (decayed_in_arc) {
+        char name[80], why[200];
+        std::snprintf(name, sizeof name, "decayed-in-arc:%s", decay_text);
+        std::snprintf(why, sizeof why, "The fitted set decays at %s, inside the fit's arc (SPEC 16.25): the theory cannot represent the arc's end, so no record is written.", decay_text);
+        plugin_set_error(name, why);
+        return 3;
       }
       // $OCM
       flatbuffers::FlatBufferBuilder fbb(4096);
@@ -1122,7 +1211,7 @@ static int fit_blocks() {
       const auto s_pcf_cid = fbb.CreateString(fitoem::configuration_cid());
       const auto s_fit_start = fbb.CreateString(start_text);
       const auto s_fit_stop = fbb.CreateString(stop_text);
-      const auto s_held_stop = t_out.empty() ? 0 : fbb.CreateString(held_text);
+      const auto s_held_stop = held_n == 0 ? 0 : fbb.CreateString(held_text);
       OCMFitStatisticsBuilder fs(fbb);
       fs.add_FIT_STATES(static_cast<uint32_t>(t_fit.size()));
       fs.add_FIT_RMS_KM(res.rms_km);
@@ -1132,9 +1221,9 @@ static int fit_blocks() {
       fs.add_FIT_CROSS_TRACK_RMS_KM(std::sqrt(uvw_ss[2] / fitted));
       fs.add_ITERATIONS(static_cast<uint32_t>(iterations));
       fs.add_CONVERGED(res.status == 0);
-      if (!t_out.empty()) {
+      if (held_n > 0) {
         fs.add_HELD_OUT_STOP(s_held_stop);
-        fs.add_HELD_OUT_STATES(static_cast<uint32_t>(t_out.size()));
+        fs.add_HELD_OUT_STATES(static_cast<uint32_t>(held_n));
         fs.add_HELD_OUT_RMS_KM(held_rms);
         fs.add_HELD_OUT_MAX_KM(held_max);
         if (!s_held_days.IsNull()) fs.add_HELD_OUT_DAYS(s_held_days);
@@ -1167,12 +1256,19 @@ static int fit_blocks() {
         comment.push_back("drag prior: the default of a 71 h arc with its perigee at 600-2,500 km (median 0.008, sigma of the log 10 ln 10, weighed against "
                           "the data at their own sigma), no fall-back");
       if (lattice) comment.push_back("elements at the two-line text's digits");
+      if (decays_ahead) comment.push_back(std::string("decays at ") + decay_text);  // SPEC 16.25
+      // SPEC 16.25: a set that decays within the forecast and whose covariance could not be formed says so (a set moved for it may
+      // be refused where the set itself is not); no other record gains the line
+      if (decays_ahead && !have_cov) comment.push_back(std::string("covariance: not stated for this set, which decays at ") + decay_text);
       // SPEC 16.7 (stack #504): a fit whose two branches' least-squares sets lie across an eccentricity switch ends on one side
       if (res.held_at_switch)
         comment.push_back("fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie across it");
       // SPEC 12.1: a fit whose last pass ended at its iteration ceiling with the cost still falling (FIT_STATISTICS CONVERGED
       // false) says so
-      if (res.status != 0) {
+      if (res.status == fit::kColumnRefused) {
+        // SPEC 16.25: the last pass stopped with no step tested
+        comment.push_back("fit: not converged; the last pass stopped because a column of its Jacobian could not be differenced: the set decays inside the arc a step to either side");
+      } else if (res.status != 0) {
         char ceiling[160];
         std::snprintf(ceiling, sizeof ceiling, "fit: not converged; the last pass ended at its ceiling of %d iterations with the cost still falling",
                       opt.max_iterations);
@@ -1306,15 +1402,19 @@ static int fit_blocks() {
         for (uint32_t k = 0; ok && k < n; ++k) {
           const double t = fitoem::minutes_between(e0.whole, e0.frac, all[k].whole, all[k].frac);
           double rm[3], vm[3];
-          if (xpt::xp_propagate(*xs, t, rm, vm) != kPropOk) { ok = false; break; }
+          const int32_t pst = xpt::xp_propagate(*xs, t, rm, vm);
+          // SPEC 16.25: a written set that decays after its arc but before a state of the block (a held-out one) does not lose the
+          // record: the state is written as not accepted, its reason the decay; a set that decays inside the arc was refused above
+          const bool decayed_here = pst == kPropDecayed && xpt::is_ap_ctx(xs->ctx) && !(t >= fit_begin_min && t <= fit_end_min);
+          if (pst != kPropOk && !decayed_here) { ok = false; break; }
           const double observed = std::sqrt(all[k].r[0] * all[k].r[0] + all[k].r[1] * all[k].r[1] + all[k].r[2] * all[k].r[2]);
-          const double computed = std::sqrt(rm[0] * rm[0] + rm[1] * rm[1] + rm[2] * rm[2]);
-          const bool accepted = t >= fit_begin_min && t <= fit_end_min;
+          const double computed = decayed_here ? std::numeric_limits<double>::quiet_NaN() : std::sqrt(rm[0] * rm[0] + rm[1] * rm[1] + rm[2] * rm[2]);
+          const bool accepted = !decayed_here && t >= fit_begin_min && t <= fit_end_min;
           char id[48], epoch_k[48];
           std::snprintf(id, sizeof id, "%u.%u.%u", static_cast<unsigned>(ephemeris_index), static_cast<unsigned>(block_index), static_cast<unsigned>(k + 1));
           oem::iso_text(all[k].whole, all[k].frac, 0.0, epoch_k, sizeof epoch_k);
           const auto s_id = rb.CreateString(id);
-          const auto s_reason = accepted ? flatbuffers::Offset<flatbuffers::String>(0) : rb.CreateString(t < fit_begin_min ? "BEFORE FIT ARC" : "HELD OUT");
+          const auto s_reason = accepted ? flatbuffers::Offset<flatbuffers::String>(0) : rb.CreateString(decayed_here ? "DECAYED" : t < fit_begin_min ? "BEFORE FIT ARC" : "HELD OUT");
           const auto s_epoch_k = rb.CreateString(epoch_k);
           const auto s_code = rb.CreateString(model_code);
           ODREditedObservationBuilder eb(rb);
@@ -1341,7 +1441,9 @@ static int fit_blocks() {
         const auto s_content = rb.CreateString(ocm_cid);
         ODRBuilder ob(rb);
         ob.add_RUN_ID(s_run);
-        ob.add_CONVERGENCE_REASON(res.status == 0 ? odrConvergenceReason_CONVERGED : odrConvergenceReason_MAXIMUM_ITERATIONS);
+        // status 2 (SPEC 16.25: a pass that could not difference a column) is no ceiling: the OD COMMENT names it
+        ob.add_CONVERGENCE_REASON(res.status == 0 ? odrConvergenceReason_CONVERGED
+                                  : res.status == fit::kColumnRefused ? odrConvergenceReason_UNSPECIFIED : odrConvergenceReason_MAXIMUM_ITERATIONS);
         ob.add_EDITED_OBSERVATIONS(s_edited);
         ob.add_OCM_CONTENT_ID(s_content);
         FinishODRBuffer(rb, ob.Finish());

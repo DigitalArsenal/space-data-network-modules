@@ -8,7 +8,8 @@
 // BTERM 0.022, a typical satellite's drag term; FORCES 31,20 with the slow set and the solid tide; Jacchia 1970 on the
 // fixture rows; epoch 2026-10-29 00:00 UTC). Drag takes the rate of terms inside the band's edge at the epoch through zero
 // at 101.07 h (on the case's fitted record, the m = 48, j = 3 terms of degree 53 to 69).
-// Flown every 60 s for eight days, or for the most whole days the module flies before it refuses the set. The jump detector
+// Flown every 60 s for eight days, or to the set's decay crossing (SPEC 16.25, stack #564: the call answers the epochs before
+// it and its block's COMMENT names it; before 0.6.47, the most whole days the module flew before it refused). The jump detector
 // is |d_k - (d_(k-1) + d_(k+1))/2|, d the second difference of position less h^2 times the two-body acceleration
 // (mu 398600.4415 km^3/s^2): half the fourth difference of the states. One state displaced by delta reads 3 delta (the
 // fourth difference's 6 delta, halved); a block of states displaced together by delta reads 1.5 delta at its edge; smooth
@@ -40,21 +41,22 @@ const h = await createStandaloneHarness('browser', wasmPath, { surface: 'command
 const fly = async (secs) => {
   const r = await h.invoke({ methodId: 'propagate', inputs: flight([seed], { output: { EPOCHS: secs.map(iso), FRAME: pcfOutputFrame.GCRF } }) });
   if (r.statusCode !== 0) return { error: `${r.errorCode}: ${r.errorMessage}` };
-  return { lines: OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack()
-    .EPHEMERIS_DATA_BLOCK[0].EPHEMERIS_DATA_LINES.map((l) => [l.X, l.Y, l.Z]) };
+  const b = OEM.getRootAsOEM(new fb.ByteBuffer(r.outputs.find((o) => o.portId === 'ephemeris').payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
+  return { lines: b.EPHEMERIS_DATA_LINES.map((l) => [l.X, l.Y, l.Z]), decayed: /^decayed:(\S+);/.exec(b.COMMENT ?? '')?.[1] ?? null };
 };
 const failures = [];
 // the span the set reaches: whole days down from eight while the flight is refused
-let st = null, days = 8, refusal = null;
+let st = null, days = 8, refusal = null, decayed = null;
 for (; days >= 1; --days) {
   const f = await fly(Array.from({ length: (days * 86400) / H + 1 }, (_, j) => j * H));
-  if (f.lines) { st = f.lines; break; }
+  if (f.lines) { st = f.lines; decayed = f.decayed; break; }
   refusal = f.error;
 }
+const flownH = st === null ? 0 : ((st.length - 1) * H) / 3600;
 let worst = 0, at = 0, lowKm = null;
 if (st === null) failures.push(`the set is refused at every span from 8 days to 1 (${refusal})`);
 else {
-  if (!(days * 24 > CROSSING_H)) failures.push(`the flight reaches ${days} days, short of the crossing at ${CROSSING_H} h`);
+  if (!(flownH > CROSSING_H)) failures.push(`the flight reaches ${flownH.toFixed(2)} h, short of the crossing at ${CROSSING_H} h`);
   const d = [];
   for (let q = 1; q < st.length - 1; ++q) {
     const r = st[q], r3 = Math.hypot(...r) ** 3;
@@ -68,7 +70,7 @@ else {
   if (!(worst <= BOUND_M)) failures.push(`the jump detector reads ${worst.toExponential(3)} m at ${(at / 3600).toFixed(3)} h (at most ${BOUND_M} m)`);
 }
 await h.close?.();
-console.log(JSON.stringify({ flownDays: st === null ? 0 : days, lowestKm: lowKm === null ? null : +lowKm.toFixed(1), detectorM: +worst.toExponential(3), atH: +(at / 3600).toFixed(3) }));
+console.log(JSON.stringify({ flownH: +flownH.toFixed(3), decayedAt: decayed, lowestKm: lowKm === null ? null : +lowKm.toFixed(1), detectorM: +worst.toExponential(3), atH: +(at / 3600).toFixed(3) }));
 if (failures.length) {
   console.error(`FAIL\n- ${failures.join('\n- ')}`);
   process.exit(1);

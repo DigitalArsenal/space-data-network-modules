@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.45 (dist 50180661).
+Version 0.6.47 (dist 46049045).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -5006,7 +5006,8 @@ both sides.
 | 4,000 km | 0.3 | 9.1 m (21.0 m without it) |
 
 **16.24 Records refused by name.** plugin-manifest.json's "Refused by name" lists for propagate, load_epochs,
-propagate_epochs and maneuver name every refusal the record decoder makes; export_omm's names those an SGP4 or SGP4XP
+propagate_epochs and maneuver name every refusal the record decoder makes (propagate and propagate_epochs also name
+decayed:<time>, and fit decayed-in-arc:<time>, SPEC 16.25: refusals of a flight and of a fit, which the decoder does not make); export_omm's names those an SGP4 or SGP4XP
 record can reach after the method's own checks (an AP set is refused first, theory-not-exportable:AP, and a record whose
 forces are not its theory's, forces-not-exportable, before the decoder reads it). Missing through 0.6.42 (stack #540):
 solid-tides-unsupported (16.14), gravity-model-mismatch (16.2), parameter-repeated:ECOM2_Y0, parameter-invalid:ECOM2_Y0
@@ -5016,6 +5017,100 @@ reaches); export_omm's list also lacked unsupported-center, weather-rows-unselec
 an SGP4XP record reaches, and named three it cannot return (gravity-model-mismatch, parameter-repeated:ECOM2_Y0 and
 parameter-invalid:ECOM2_Y0).
 
+**16.25 Decay** (stack #564). An AP flight is refused, as decayed, from the first time either of these holds:
+- (a) with drag, the set loses more perigee radius over one revolution, or over the grid's next step where that is longer,
+  than one density scale height at its mean perigee: |d(a (1 - e))/dt| max(P, h_next) > H(h_p);
+- (b) its mean perigee height a (1 - e) - R_E is under 100 km (kDecayFloorKm; Jacchia 1970 has no density under 90 km).
+
+SGP4XP keeps the library's decay at a mean perigee radius under 1 R_E (section 10), so its conformance is unchanged, and SGP4
+keeps its own.
+- Why a step. The theory averages the drag over a revolution, which holds while the perigee density changes little within
+  one, and its grid steps two revolutions at a time in low orbit. On #564's seeds the last good node loses 0.58 H a
+  revolution and 1.15 H over its 2.9 h step; the node after it is not an orbit (mean perigee -283 km), and every state
+  interpolated between the two was off from the first minute (31,250 km at 70.57 h). h_next is the step the grid takes
+  from that node (next_node's), a function of the set alone, so the crossing is the record's and the same in any call order.
+  The crossing therefore depends on the grid's step rule and moves if that rule ever changes: a version that changes the
+  step states the crossing times that move. It refuses up to a step earlier than the per-revolution reading would: #564's
+  two seeds are flown to 136.7 km (perigee 200 km, e 0.001, BTERM 0.01) and 160.7 km (perigee 220 km, e 0.01, BTERM 0.1).
+- What goes in. da/dt and de/dt are the node's own mean rates (its step's, every force: gravity's mean rates of a and e are
+  meters a revolution, against the 5 km, kDecayTestKm, at which the test starts). H is the scale height of the set's own
+  atmosphere and weather at its mean perigee, from two density evaluations 1 km either side along the mean perigee's
+  direction, made only once the loss passes 5 km. The test changes no step, rate or state: a time before the crossing is
+  answered as before, to the bit.
+- Eccentric orbits. Drag near perigee takes the apogee down: the semi-major axis falls while the perigee radius barely
+  moves, so the rule is on the perigee radius, which ends the flight. At BTERM 0.01 and a 150 km perigee the semi-major axis
+  loses 3.80 km a revolution at e 0.7 and the perigee radius 0.6 m (H 17.6 km); near e 0 the two are close.
+- Where it is found. On the grid's nodes as they are made outward from the epoch (the cached node run and the uncached
+  integration alike), once per direction, kept with the set beside its checkpoints and window; no node past the crossing
+  node is made. Its time is the root of the test's quantity (ln(loss / H), or 100 km - h_p), linear between the last node
+  before it and the first past it, with no further rate evaluation. An epoch that already meets the rule is decayed at every
+  time.
+- What a caller gets past it. A state: status 4 (kPropDecayed) and the plugin ABI's ORBPRO_STATE_DECAYED; the row store's
+  planes are not numbers. `propagate` and `propagate_epochs` answer the epochs before the crossing: the block stops at the
+  last of them, its USEABLE_STOP_TIME is the crossing and its COMMENT reads "decayed:<time>; <n> epochs after it refused"; a
+  call asking only for times past it is refused `decayed:<time>`. `sdnap_covariance_at` gives every time past the earliest
+  crossing of the nominal or any of its moved sets (no difference can be formed once one has crossed) 42 NaN and returns 4.
+  `fit`: a trial set that crosses inside the arc is a failed evaluation (the damping takes a smaller step); a written set
+  that crosses inside the arc is refused `decayed-in-arc:<time>` and no record is written; one whose mean perigee is under
+  400 km and that crosses within 7 days of its epoch is written with "decays at <time>" in its OD COMMENT. Every reader
+  finds the same crossing from the record.
+- Refused trials in a fit. A trial set that crosses inside the arc is a refused step, never the end of a pass. The fit's
+  fallback differences each column of its Jacobian above the iterate (the elements, the drag term, AGOM, Y0); a column whose
+  set above is refused as decayed is taken below the iterate, (residuals - trial) / h, the same column. A pass in which a
+  column is refused on both sides cannot be said to be at a minimum, and an iteration with such a column cannot declare
+  convergence: the pass ends with status 2, the record states CONVERGED false and its OD COMMENT reads "fit: not converged;
+  the last pass stopped because a column of its Jacobian could not be differenced: the set decays inside the arc a step to
+  either side". (The AGOM column's step below the iterate is at most half the iterate's AGOM, and there is none where the
+  iterate's AGOM is not positive, since an AGOM of 0 or less switches the radiation off: that column is then refused, with
+  no value read from it.) Only a refusal of an AP set that decays takes this path;
+  every other refusal, and every fit in which no column is refused, is as before to the bit. A pass whose starting set decays
+  inside the arc (refused at its first evaluation) is refused `decayed-in-arc:<time>` as a written set that does; the fit does
+  not move its own start until a set flies. A written set that decays after its arc but before a held-out state of the block
+  writes that state as not accepted, reason DECAYED, with no computed value, and does not refuse the record.
+  `test/decay-fit.e2e.mjs`: a made-up set at a 200 km perigee whose drag crosses the rule 2 to 3 h after a 120 h arc, fitted to
+  FFM's states: the first form of the rule (a refused column ending its pass as converged) read AGOM 0 and a fit RMS 1.21 times
+  0.6.45's; this build reads 1.01 times, AGOM solved.
+- Two stated cases. A record that carries a forecast (SPEC 18). In `propagate` the block's USEABLE_STOP_TIME is the theory's
+  crossing even when states of the carried forecast after it are in the block (those states are the forecast's), and a carried
+  forecast's covariance past the crossing refuses the call, propagation-failed, "no covariance". In `propagate_epochs` the carried
+  forecast's states after the crossing are answered (status 0) and count as answered after it, so for a crossing after the epoch the
+  block states no USEABLE_STOP_TIME, and the block carries no covariance at all: the carried states have none, so every covariance
+  line of the block is dropped, those of the states before the crossing too (for a crossing before the epoch the block states its
+  USEABLE_START_TIME whatever is answered). In a series with a blend (SPEC 14): an epoch
+  inside a blend window that holds a set's crossing, where the blend needs the crossed set's state, is refused and counted among
+  the epochs after the crossing though it lies before it. A third case, a Hermite blend of another shape than 0 with a covariance in
+  the record: the blend's probe at its window's end asks no covariance, so where a moved set of the covariance crossed before the
+  nominal and the nominal crosses at or before that end, the block names the nominal's crossing, while a call that also asks an
+  epoch past the window names the moved set's.
+- Covariance and the crossing. The crossing a call with covariance names is the earliest of the nominal's and every moved set's:
+  each is run to the call's furthest epoch on each side before the epochs are answered, so the name does not depend on the order
+  or the list of the epochs asked (two calls on one record name the same crossing when the crossing lies at or before the
+  furthest epoch of both). `propagate_epochs` refuses an epoch past a moved set's crossing as `propagate` does, and, for a record
+  that carries no forecast, never writes the block without its covariance. An AP record whose epoch already meets the rule and carries a covariance is refused
+  `decayed:<epoch>` in `propagate` and `propagate_epochs`, and `sdnap_covariance_at` and `sdnap_covariance_full_at` give 42 (or
+  the full width of) NaN at every time and return 4.
+- Held-out statistics. The held-out states past a written set's crossing are not scored: HELD_OUT_RMS_KM, HELD_OUT_MAX_KM and the
+  day statistics are of the held-out states before it, HELD_OUT_STATES counts those, and none are stated when there is none.
+- Wide sets (e above 0.3). A state in the last fifth of a 48 h interval is blended toward the next schedule node's grid. Where
+  that node lies past the crossing, the state is answered from the interval's own grid alone and is not refused: asking such a
+  state runs the grid to the next node and so finds the crossing, so the answer is the same in any call order. These states are
+  not 0.6.45's to the bit (0.6.45 blended toward a grid built from a state past the crossing, which is no orbit); the measured
+  difference is stated with the test, `test/decay-wide.e2e.mjs`. A set at or below e 0.3, and every state of a wide set outside
+  those hours, is 0.6.45's to the bit before the crossing.
+- Limit of the rule above e 0.3. For a set above e 0.3 the rule can come days after the orbit really re-enters: drag at perigee takes
+  the apogee down while the mean perigee barely moves, so the perigee loss the rule reads stays small until late. Measured on
+  made-up sets, both on NRLMSISE-00, the numerical propagator flown from AP's own start state: perigee 110 km, e 0.7, BTERM 0.2
+  (balloon-like) re-enters at 40.3 h and the rule has no crossing within 10 days; perigee 110 km, e 0.5, BTERM 0.045 (not
+  balloon-like) re-enters at 79.3 h and the rule's crossing is at 66.8 h, before it. Where the rule comes late or not at all, AP
+  answers states far from the numerical propagator. This is not made worse by the rule (without it the flight had no end); a rule
+  for these sets has to use the loss per perigee passage against the energy the orbit has left, or the numerical propagator's
+  own crossing as the yardstick (stack #582).
+- What gets worse: a decaying set loses its states from the crossing to the surface, its last revolutions, which the theory
+  does not describe (they were up to 31,250 km off).
+- `test/decay.e2e.mjs`: the two seeds decay at 70.133 h and 47.064 h, every state before the crossing 0.6.45's bit for bit
+  and the jump detector at most 2.88 m over them; the epoch store gives the same states before the crossing and status 4
+  after it in time order, reversed and shuffled; sets at a 500 km perigee and at a 300 km perigee with e 0.3 fly 7 days
+  bit for bit; `sdnap_covariance_at` returns 4 past a record's crossing.
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 
@@ -5087,7 +5182,9 @@ carried by the state columns (`P(t) = J(t) P_p J(t)^T`, the parameter block of `
 | NORMALIZED_RESIDUAL | (observed - computed) / sigma |
 | PERTURBATION_MODEL_CODE | SGP4XP or AP, the set's theory |
 
-The residual is OBSERVED_VALUE minus COMPUTED_VALUE. A fit whose inputs have no per-observation form writes no rows,
+The residual is OBSERVED_VALUE minus COMPUTED_VALUE. A state of the block past the written set's decay crossing and outside
+the fit's arc (SPEC 16.25) is written not accepted, REASON DECAYED, WEIGHT 0, its COMPUTED_VALUE and NORMALIZED_RESIDUAL
+not-a-number (no value: an unset field would read as 0); a reader of the residuals takes the accepted rows. A fit whose inputs have no per-observation form writes no rows,
 and P9 is then refused downstream.
 
 ### 17.5 Covariance per epoch

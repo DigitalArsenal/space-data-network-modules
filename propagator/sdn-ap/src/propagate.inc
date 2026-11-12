@@ -92,6 +92,17 @@ extern "C" int propagate(void) {
         // SPEC 12.4: an AP record whose floor is at its writer's theory state flies its states, its covariance refused
         if (cr == -4) width_note = cov::kFloorRefusalNote;
         if ((cr < 0 && cr != -4) || pr != 0) {
+          // SPEC 16.25: an AP record whose epoch already meets the rule is decayed at every time, its moved sets with it: named so
+          // (the covariance's bank took the nominal over from xs: it is the bank's first set that carries the decay)
+          const xpt::XpSat* nominal_set = cprop.b.count > 0 ? &cprop.b.sats[0] : xs;
+          if (xpt::is_ap_ctx(nominal_set->ctx) && xpt::decay_at_epoch(*nominal_set, 0.0)) {
+            char epoch_text[48], name[80], why_text[160];
+            oem::iso_text(e.epoch_jd_whole, e.epoch_jd_frac, 0.0, epoch_text, sizeof epoch_text);
+            std::snprintf(name, sizeof name, "decayed:%s", epoch_text);
+            std::snprintf(why_text, sizeof why_text, "NORAD %u meets the decay rule at its epoch %s (SPEC 16.25): every requested epoch is past it.", e.norad, epoch_text);
+            xpt::xp_release(*xs);
+            return ocm::refuse(name, why_text);
+          }
           xpt::xp_release(*xs);
           return ocm::refuse(cr == -2 ? "cov-parameter-kind-unspecified" : cr == -3 ? "cov-propagation-invariant" : "invalid-covariance",
                              cr < 0 ? "The set's COVARIANCE_DATA, COV_PARAMETER_KINDS or COV_PROPAGATION are malformed."
@@ -132,6 +143,53 @@ extern "C" int propagate(void) {
       flatbuffers::uoffset_t vt_ephem = 0, vt_cov = 0;
       double bias[3][3];
       if (g.axes == oem::Axes::Eme2000) frames::frame_bias(bias);
+      // SPEC 16.25 (stack #564): an AP set's epochs past its decay crossing are refused by name (decayed:<time>) and the ones
+      // before it answered; with covariance the crossing is the earliest of the nominal's and its moved sets' (SPEC 12.3)
+      std::vector<uint8_t> past(tw.size(), 0);
+      size_t past_n = 0;
+      double cross_min = 0.0;
+      bool crossed = false;
+      const bool ap_set = (xs != nullptr && xpt::is_ap_ctx(xs->ctx)) || (with_cov && xs == nullptr && cprop.b.count > 0 && xpt::is_ap_ctx(cprop.b.sats[0].ctx));
+      // the crossing on t's side that t is past, from the set (xs) or the covariance's bank; false when t is past none
+      auto crossing_of = [&](double t, double& tc) {
+        const int di = t >= 0.0 ? 0 : 1, dir = t >= 0.0 ? 1 : -1;
+        bool any = false;
+        auto take = [&](const xpt::XpSat& q) {
+          if (!xpt::decay_past(q, t)) return;
+          if (!any || dir * q.decay_t[di] < dir * tc) tc = q.decay_t[di];
+          any = true;
+        };
+        if (xs != nullptr) take(*xs);
+        else
+          for (int q = 0; q < cprop.b.count; ++q) take(cprop.b.sats[q]);
+        return any;
+      };
+      auto mark_past = [&](size_t k, double t) {
+        double tc = 0.0;
+        if (!ap_set || !crossing_of(t, tc)) return false;
+        past[k] = 1;
+        ++past_n;
+        if (!crossed || std::fabs(tc) < std::fabs(cross_min)) cross_min = tc;
+        crossed = true;
+        return true;
+      };
+      // SPEC 16.25: the crossing a covariance's call names is the record's: every set (the nominal and each moved one) is run to the
+      // call's furthest epoch on each side first, so every crossing at or before it is found whatever order the epochs come in
+      if (ap_set && with_cov && xs == nullptr) {
+        double tmax = 0.0, tmin = 0.0;
+        for (size_t k = 0; k < tw.size(); ++k) {
+          const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
+          tmax = std::fmax(tmax, t);
+          tmin = std::fmin(tmin, t);
+        }
+        auto reach = [&](xpt::XpSat& q) {
+          double rr[3], vv[3];
+          if (tmax > 0.0) xpt::xp_propagate(q, tmax, rr, vv);
+          if (tmin < 0.0) xpt::xp_propagate(q, tmin, rr, vv);
+        };
+        for (int q = 0; q < cprop.b.count; ++q)
+          if (cov::live_slot(cprop.b, q)) reach(cprop.b.sats[q]);  // only the slots the bank started
+      }
       for (size_t k = 0; k < tw.size(); ++k) {
         const double t = ((tw[k] - e.epoch_jd_whole) + (tf[k] - e.epoch_jd_frac)) * kMinutesPerDay;
         double r[3], v[3], P[36];
@@ -160,6 +218,7 @@ extern "C" int propagate(void) {
         } else if (with_cov && xs == nullptr) {
           int32_t nom_status = kPropOk;
           if (!cov::eval(cprop, t, r, v, P, nullptr, &nom_status)) {
+            if (mark_past(k, t)) continue;  // SPEC 16.25: past the crossing of the nominal or a moved set
             if (nom_status != kPropOk) {
               std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", e.norad, text, static_cast<int>(nom_status));
             } else {
@@ -170,6 +229,7 @@ extern "C" int propagate(void) {
           }
         } else {
           const int32_t status = xs != nullptr ? xpt::xp_propagate_local(*xs, t, r, v) : sat_propagate(sat, nodes, t, r, v);
+          if (status == kPropDecayed && mark_past(k, t)) continue;  // SPEC 16.25
           if (status != kPropOk) {
             std::snprintf(why, sizeof why, "NORAD %u does not propagate to %s (code %d).", e.norad, text, static_cast<int>(status));
             rc = oem::refuse("propagation-failed", why);
@@ -328,6 +388,34 @@ extern "C" int propagate(void) {
           }
         }
       }
+      // SPEC 16.25: the crossing's UTC time; every epoch past it refused, the call too when no epoch is before it
+      char cross_text[48] = {};
+      if (rc == 0 && crossed) {
+        const double jd_frac = e.epoch_jd_frac + cross_min / kMinutesPerDay, jd_whole = e.epoch_jd_whole + std::floor(jd_frac);
+        oem::iso_text(jd_whole, jd_frac - std::floor(jd_frac), 0.0, cross_text, sizeof cross_text);
+        if (past_n == tw.size()) {
+          char name[80];
+          std::snprintf(name, sizeof name, "decayed:%s", cross_text);
+          std::snprintf(why, sizeof why, "NORAD %u decays at %s (SPEC 16.25): every requested epoch is past it.", e.norad, cross_text);
+          rc = oem::refuse(name, why);
+        } else {
+          size_t n = 0;
+          for (size_t k = 0; k < tw.size(); ++k) {
+            if (past[k]) continue;
+            tw[n] = tw[k];
+            tf[n] = tf[k];
+            lines[n] = lines[k];
+            source[n] = source[k];
+            if (with_cov) cov_lines[n] = cov_lines[k];
+            ++n;
+          }
+          tw.resize(n);
+          tf.resize(n);
+          lines.resize(n);
+          source.resize(n);
+          if (with_cov) cov_lines.resize(n);
+        }
+      }
       if (rc == 0) {
         const auto frame = oem::rfm_of(fbb, g.axes);
         const auto cov_frame = with_cov ? oem::rfm_of(fbb, g.axes) : flatbuffers::Offset<RFM>(0);
@@ -342,8 +430,17 @@ extern "C" int propagate(void) {
             source[k] = ((tw[k] - 2451545.0) + tf[k]) * kMinutesPerDay >= from ? carried::kHandOver : carried::kTheory;
         std::string sources = track.empty() && !handover ? std::string() : carried::sources_comment(source, tw, tf);
         if (!width_note.empty()) sources = sources.empty() ? width_note : sources + ". " + width_note;
+        // SPEC 16.25: a block that stops at the set's decay names it and counts the epochs refused after it; the crossing is the
+        // block's usable limit on its side of the epoch
+        if (crossed) {
+          char note[120];
+          std::snprintf(note, sizeof note, "decayed:%s; %zu epochs after it refused", cross_text, past_n);
+          sources = sources.empty() ? std::string(note) : sources + ". " + note;
+        }
+        const char* useable_start = crossed && cross_min < 0.0 ? cross_text : nullptr;
+        const char* useable_stop = crossed && cross_min >= 0.0 ? cross_text : nullptr;
         blocks.push_back(CreateephemerisDataBlockDirect(fbb, sources.empty() ? nullptr : sources.c_str(), object_offset, "EARTH", frame, nullptr, cov_frame,
-                                                        timingStandard_UTC, start, nullptr, nullptr, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6,
+                                                        timingStandard_UTC, start, useable_start, useable_stop, stop, nullptr, 0, g.explicit_times ? 0.0 : g.step, 6,
                                                         nullptr, &lines, with_cov ? &cov_lines : nullptr));
       }
     }

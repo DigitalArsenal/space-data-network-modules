@@ -132,9 +132,13 @@ inline const char* refusal(const Options& o) {
   return nullptr;
 }
 
+/// SPEC 16.25: the pass stopped because one of its Jacobian columns could not be differenced in either direction (both sets
+/// refused as decayed inside the arc): no step was tested, so it is not converged.
+constexpr int32_t kColumnRefused = 2;
+
 struct Result {
-  int32_t status;       ///< 0 converged, 1 stopped at the iteration limit, < 0 refused (-4 a parameter not modeled,
-                        ///< -5 kBranchLimit)
+  int32_t status;       ///< 0 converged, 1 stopped at the iteration limit, 2 kColumnRefused, < 0 refused (-4 a parameter
+                        ///< not modeled, -5 kBranchLimit)
   int32_t iterations;
   double rms_km;        ///< position rms over the samples
   double max_km;
@@ -179,14 +183,22 @@ struct NominalSat {
   NominalSat& operator=(const NominalSat&) = delete;
 };
 
-inline bool residuals(const ElementRow& row, const double* t, const double* r, int count, double* res) {
+/// `ap_decayed`, when given, is set where the set was refused as decayed inside the arc (SPEC 16.25: an AP set that crosses the
+/// rule); any other refusal, and every SGP4XP one, leaves it false.
+inline bool residuals(const ElementRow& row, const double* t, const double* r, int count, double* res, bool* ap_decayed = nullptr) {
   Elements e = elements_of(row);
   xpt::XpSat* s = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
   if (s == nullptr) return false;
+  if (ap_decayed != nullptr) *ap_decayed = false;
   bool ok = xpt::xp_init(e, *s) == kPropOk;
   for (int k = 0; ok && k < count; ++k) {
     double rm[3], vm[3];
-    if (xpt::xp_propagate(*s, t[k], rm, vm) != kPropOk) { ok = false; break; }
+    const int32_t st = xpt::xp_propagate(*s, t[k], rm, vm);
+    if (st != kPropOk) {
+      if (ap_decayed != nullptr && st == kPropDecayed && xpt::is_ap_ctx(s->ctx)) *ap_decayed = true;
+      ok = false;
+      break;
+    }
     for (int j = 0; j < 3; ++j) res[3 * k + j] = rm[j] - r[3 * k + j];
   }
   xpt::xp_release(*s);
@@ -336,7 +348,8 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   const int np = params_of(row, o, x);
   double* res = static_cast<double*>(std::malloc(sizeof(double) * nres));
   double* trial = static_cast<double*>(std::malloc(sizeof(double) * nres));
-  double* jac = static_cast<double*>(std::malloc(sizeof(double) * nres * kMaxParams));
+  // zeroed: a column whose difference is refused (SPEC 16.25) is never read before it is written
+  double* jac = static_cast<double*>(std::calloc(static_cast<size_t>(nres) * kMaxParams, sizeof(double)));
   auto release = [&]() { std::free(res); std::free(trial); std::free(jac); };
   if (res == nullptr || trial == nullptr || jac == nullptr) {
     release();
@@ -369,9 +382,12 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   double cost = cost_of(res, x);
   double mu = 1e-3;
   bool converged = false;
+  bool stopped_on_column = false;
+  bool column_refused = false;
   int it = 0;
   int fd_used = 0;
   for (; it < max_it && !converged; ++it) {
+    column_refused = false;
     // n-dot per unit drag term from the theory's own rate function at epoch
     double ndot_per_drag = 0.0;
     if (o.fit_drag) {
@@ -414,11 +430,30 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       bumped.agom = work.agom + step;
       const NominalSat nominal(work);
       xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
-      if (residuals(bumped, t, r, count, trial)) {
+      bool decayed = false;
+      double sign = 1.0, used = step;
+      bool column_ok = residuals(bumped, t, r, count, trial, &decayed);
+      if (!column_ok && decayed) {
+        // SPEC 16.25: the bump lies past the decay rule: the difference below the iterate is the same column where the set below is
+        // on the iterate's curve: an AGOM at or under 0 switches the radiation off (not a point of the same curve), so the step
+        // below is at most half the iterate's AGOM and there is none where the iterate's AGOM is not positive
+        const double below = work.agom > 0.0 ? std::fmin(step, 0.5 * work.agom) : 0.0;
+        if (below > 0.0) {
+          bumped.agom = work.agom - below;
+          sign = -1.0;
+          used = below;
+          column_ok = residuals(bumped, t, r, count, trial);
+        }
+        if (!column_ok) {
+          column_refused = true;
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = 0.0;
+        }
+      }
+      if (column_ok) {
         if (o.agom_log)  // per unit ln AGOM: AGOM times the column per unit AGOM
-          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = work.agom * ((trial[i] - res[i]) / step);
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = work.agom * ((trial[i] - res[i]) / (sign * used));
         else
-          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / step;
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + agom_index] = (trial[i] - res[i]) / (sign * used);
       }
     }
     if (o.fit_y0 && y0_index < np) {
@@ -428,8 +463,21 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       radiation_y0(bumped) = (x[y0_index] + step) * kY0Unit;
       const NominalSat nominal(work);
       xpt::GridShareScope share(nominal.s);  // SPEC 16.11: the column's copy reads the iteration's nominal grids
-      if (residuals(bumped, t, r, count, trial))
-        for (int i = 0; i < nres; ++i) jac[i * kMaxParams + y0_index] = (trial[i] - res[i]) / step;
+      bool decayed = false;
+      double sign = 1.0;
+      bool column_ok = residuals(bumped, t, r, count, trial, &decayed);
+      if (!column_ok && decayed) {
+        // SPEC 16.25: as AGOM's column, the difference below the iterate
+        radiation_y0(bumped) = (x[y0_index] - step) * kY0Unit;
+        sign = -1.0;
+        column_ok = residuals(bumped, t, r, count, trial);
+        if (!column_ok) {
+          column_refused = true;
+          for (int i = 0; i < nres; ++i) jac[i * kMaxParams + y0_index] = 0.0;
+        }
+      }
+      if (column_ok)
+        for (int i = 0; i < nres; ++i) jac[i * kMaxParams + y0_index] = (trial[i] - res[i]) / (sign * step);
     }
     double A[kMaxParams * kMaxParams] = {}, g[kMaxParams] = {};
     auto normal = [&]() {
@@ -491,7 +539,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
       ++fd_used;
       // the element and drag columns by one-sided differences of the theory, then the same trial
       const int analytic = o.fit_drag ? 7 : 6;
-      bool fd_ok = true;
+      bool fd_ok = true, decayed_column = false;
       {
         // SPEC 16.7: every moved set flies the iterate's branch (the pinned one inside a settle pass), so no column
         // differences two branches
@@ -504,17 +552,37 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
           xh[a] += h;
           ElementRow bumped = work;
           row_of(xh, o, bumped);
-          fd_ok = residuals(bumped, t, r, count, trial);
-          if (fd_ok)
+          bool decayed = false;
+          fd_ok = residuals(bumped, t, r, count, trial, &decayed);
+          if (fd_ok) {
             for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (trial[i] - res[i]) / h;
+          } else if (decayed) {
+            // SPEC 16.25: the bump lies on the decayed side of the rule (a set that crosses inside the arc is refused), which
+            // says nothing about the column: the difference taken below the iterate, (res - trial) / h, is the same column
+            // (a refusal elsewhere, and both sides refused, still end the fallback as before)
+            xh[a] = x[a] - h;
+            ElementRow below = work;
+            row_of(xh, o, below);
+            fd_ok = residuals(below, t, r, count, trial);
+            if (fd_ok)
+              for (int i = 0; i < nres; ++i) jac[i * kMaxParams + a] = (res[i] - trial[i]) / h;
+            else
+              decayed_column = true;
+          }
         }
       }
       if (fd_ok) {
         normal();
         mu = 1e-3;
         attempt();
+      } else if (decayed_column) {
+        column_refused = true;
       }
     }
+    // SPEC 16.25: a pass that could not difference a column in either direction tested no step: it is not at a minimum
+    // an iteration with a column refused on both sides cannot declare convergence (its small step was taken on a Jacobian without that column)
+    if (converged && column_refused) { converged = false; stopped_on_column = true; ++it; break; }
+    if (!improved && column_refused) { stopped_on_column = true; ++it; break; }  // the pass made this iteration: counted as a converged pass counts its last
     if (!improved) converged = true;  // no step lowers the cost: at the minimum
   }
   double ss = 0.0, mx = 0.0;
@@ -527,8 +595,8 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   out.rms_km = std::sqrt(ss / (count > 0 ? count : 1));
   out.max_km = mx;
   out.iterations = it;
-  out.status = converged ? 0 : 1;
-  if (!converged) __atomic_fetch_add(&g_ceiling_met[max_it >= kPassCeiling ? 0 : 1], 1u, __ATOMIC_RELAXED);
+  out.status = converged ? 0 : (stopped_on_column ? kColumnRefused : 1);
+  if (!converged && !stopped_on_column) __atomic_fetch_add(&g_ceiling_met[max_it >= kPassCeiling ? 0 : 1], 1u, __ATOMIC_RELAXED);
   release();
   return out;
 }
