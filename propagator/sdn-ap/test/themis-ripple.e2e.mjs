@@ -9,7 +9,8 @@
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
-//    fitted AP set (0.6.36's fit, test/fixtures/ap-fit-0.6.36.ocm) flown 2 days at 600 s give ephemerides within NO_HARM
+//    fitted AP set (0.6.39's fit, test/fixtures/ap-fit-0.6.39.ocm; 0.6.36's fit has its covariance refused on both) flown 2
+//    days at 600 s give ephemerides within NO_HARM
 //    (below) on this build and on BASE (the low table's fast side's first build with the epoch floor of SPEC 12.4, git 9855dadd,
 //    SHA-256 checked, its own version string 0.6.39; it must be a build of this theory, since no harm is held at 15 mm and the
 //    fast side moves a low-table set 60 to 96 m from a build without it, and a build with the epoch floor, since a reader before
@@ -64,15 +65,21 @@ const BASE_VERSION = '0.6.39', BASE = '9855dadd6', BASE_SHA256 = '302ec56172e8f4
 // um/s, its covariance unchanged); every other set is byte-identical.
 // The low table's fast side (stack #477, SPEC 16.1: the output table to the record's tesseral degree) moves from 7ebc98e4
 // the LEO seed by 95,893.02 mm (velocity 66,912.77 um/s) and the fitted 550 km set by 59,929.89 mm (velocity 47,483.28
-// um/s): both are in the low table at tesseral degree 31. The fitted set's flown covariance moved 0.374 of a line's largest
-// entry while a reader took the record's floor off at its own theory's epoch state (stack #551); with the floor at the
-// two-body state of the record's mean elements (0.6.39, SPEC 12.4), 0.6.39's fit of the arc (ap-fit-0.6.39.ocm) flown on
-// 0.6.39 and on the fast side moves 2.1e-5 of a line's largest entry. The geostationary, Etalon-like, GPS-like, e 0.25 and
+// um/s): both are in the low table at tesseral degree 31. While a reader took the record's floor off at its own theory's
+// epoch state (stack #551), the fitted set's flown covariance moved with the theory: 0.6.36's fit flown by 7ebc98e4 (or by
+// main 0.6.36, git c8b0972b, which flies it bit for bit) and by the fast side before the epoch floor (73331c6a, or 258d824d
+// with the band guard) is 0.272 of a line's largest entry apart on this test's grid (2 days at 600 s), its states
+// 59,929.89 mm. The 0.374 this text gave when the baseline moved to 73331c6a is not what those builds read: they read
+// 0.272. With the floor at the two-body state of the record's mean elements (0.6.39, SPEC 12.4), 0.6.39's fit of the arc
+// (ap-fit-0.6.39.ocm) flown by main 0.6.39 (git 94351f34, wasm 7a857d63) and by 0.6.42 (git b7a7191e, wasm f771420f) is
+// 2.11e-5 of a line's largest entry apart, its states 59,929.89 mm; 9855dadd and 0.6.42 fly it bit for bit. The
+// geostationary, Etalon-like, GPS-like, e 0.25 and
 // e 0.3 seeds are outside the low table and byte-identical, and SGP4XP byte-identical. From the fast side the baseline is
 // its first build (git 73331c6a, not a release; BASE_VERSION is that build's own version string), every AP set under the
 // one bound, 15 mm. With the epoch floor merged in (0.6.39) the baseline is the fast side's first build with it (git 9855dadd,
 // not a release), which flies 0.6.39's fit of the arc as this build does: a base before the epoch floor takes 0.6.36's
-// record's floor off at its own fast-side theory state, 0.27 of a line's largest entry from where 0.6.36 put it on.
+// record's floor off at its own fast-side theory state, 0.272 of a line's largest entry from where 0.6.36 put it on (the
+// figure above).
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination

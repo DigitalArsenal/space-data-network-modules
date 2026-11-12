@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.42 (dist 3565615c).
+Version 0.6.42 (dist 8bf870fe).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2102,8 +2102,9 @@ re-fitted. The ABOVE row is the 2026-11-03 minimax row (the worst violation of 1
 and 7 on `operator-theory/ap/b040`), unchanged; above the drag a class with a fitted row replaces it inside that
 row's calibrated condition (below, "Above the drag, by class").
 
-Realism is not met, and the covariance is not calibrated (12.7). On the held-out windows the median |z| of 8 of the 18
-cells (two regimes, three axes, days 1, 3 and 7) is inside the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
+Realism is not met, and the covariance is not calibrated (12.7). At the row's fit (0.6.1), on the held-out windows of 0.6.0's
+flights re-weighted with the row, the median |z| of 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7) is inside
+the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
 0.00022005794330391744, c 0.52454406174861778) gave a 1-sigma 274 to 530 times too wide in-track and about 1,000 to
 7,600 times radially at day 1. The worst held-out |ln(median |z| / 0.674)| goes from 8.77 to 0.74. Median |z|, 0.6.0
 to 0.6.1:
@@ -2117,14 +2118,17 @@ to 0.6.1:
 | Near 700 km | 3 | 1.50e-4 to 0.638 | 1.63e-3 to 0.487 | 0.207 to 0.560 |
 | Near 700 km | 7 | 1.05e-4 to 0.852 | 2.28e-3 to 0.674 | 0.116 to 0.380 |
 
-Strong-drag cross-track is now overconfident at days 1 and 3 (0.78 to 0.87; 0.6.0 was inside or wide there), and near
-700 km in-track at day 1 and cross-track at day 7 remain too wide (0.32, 0.38). The limit is the form of the noise,
+On 0.6.1, strong-drag cross-track is overconfident at days 1 and 3 (0.78 to 0.87; 0.6.0 was inside or wide there), and
+near 700 km in-track at day 1 and cross-track at day 7 are too wide (0.32, 0.38). The limit is the form of the noise,
 not its sizes: wherever the strong-drag cross-track median at day 7 is inside the band, the near-700 km one is 0.17 to
 0.32, for every s_i and k_F; a row per regime, or a cross-track size growing with the non-gravitational rate, still
-leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km
-(0.6.0: 37.78 km) against the error 0.308 km. From 0.6.42 `test/covariance-realism.e2e.mjs` reports the judged cells of
-the build's own flights (below): each cell's median |z| and its shares within 1 and 3 sigma, and the ISS figure on the built
-module.
+leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km on
+0.6.1 (0.6.0: 37.78 km) against the error 0.308 km.
+
+These 18 cells set 0.6.0's errors against a build's variances, so they judge one build's covariance on another build's
+orbits: on 0.6.42 the same re-weighting reads 3 of the 18 inside the band, the radial up to 1.084. From 0.6.42
+`test/covariance-realism.e2e.mjs` judges the build's own flights instead (below): each judged cell's median |z| and its
+shares within 1 and 3 sigma, and the ISS figure on the built module.
 
 The low table's fast side (16.1, stack #477; from 0.6.42). The floor is the fit's own residual covariance (12.4), so a theory
 that fits its arc better states a smaller uncertainty. Measured on each build's own flights (748 windows of the low table:
@@ -2150,11 +2154,12 @@ RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track
   wide). Three too-narrow cells get narrower, strong drag 2026 in-track at days 1 to 3 (0.832 to 0.864, 0.900 to 0.928,
   0.883 to 0.896): the floor is 0 to 3 % of in-track, so no floor factor moves them; they are the density forecast's
   (stack #527).
-- Cross-track takes no factor. On records at zonal degree 20 its strong-drag cells at day 1 are too narrow (2026: 1.045 on
-  0.6.39, 1.303 on 0.6.42's fit at 31/20): the node drift of such a record, the zonal terms of degree 21 to 70 that it leaves
-  out (about 12 m of cross-track a day at 440 km, i 88; stack #531). A record at zonal degree 70 has no drift, and there the
-  stated cross-track is too wide: 0.40 at day 1 in strong drag 2026 and 0.55 to 0.60 elsewhere, 0.08 to 0.26 from day 3. That
-  is a known over-statement (the sizes s_i are set on records at zonal 20; stack #531).
+- Cross-track takes no factor. On records at zonal degree 20 its strong-drag cells are too narrow (2026, days 1 to 7: 1.045
+  to 1.317 on 0.6.39, 1.5 to 2 times too narrow; day 1 1.303 on 0.6.42's fit at 31/20): the node drift of such a record, the
+  zonal terms of degree 21 to 70 that it leaves out (about 12 m of cross-track a day at 440 km, i 88; stack #531). A record at
+  zonal degree 70 has no drift, and there the stated cross-track is too wide: in strong drag 2026 0.40 at day 1 to 0.12 at
+  day 7, about 2 to 5 times too wide, a loss of realism in size where it was 1.5 to 2 times too narrow; elsewhere 0.55 to
+  0.60 at day 1 and 0.08 to 0.26 from day 3. The sizes s_i are set on records at zonal degree 20 (stack #531).
 - In-track takes no factor: the floor is not what sets it.
 - Cells outside the band at the factor, by cause (`test/covariance-realism.e2e.mjs` names each): strong drag 2026 radial at
   days 5 and 7 and in-track at every day, too narrow (the drag share c, 0.1121, against the 2026 storms, and the density
@@ -2259,7 +2264,8 @@ with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise
 the model otherwise exact, the fitted sigma of B and S is too small by sqrt(3N - L), 46 for a 24 h arc sampled every 120 s.
 
 
-SDNAP: the held-out cells of 12.5 (per axis); neither theory's table earns a realism label.
+SDNAP: the judged cells of 12.5 (per axis, on the build's own flights; on 0.6.42's flights of records at 31/70, 8 of 42
+inside the band); neither theory's table earns a realism label.
 
 **12.8 The drag prior of a fit.** `fit` estimates BTERM under its $PCF FIT.DRAG_PRIOR (MEAN, SIGMA, FORM); a stated
 prior is fitted as given on every fit.
@@ -2762,15 +2768,30 @@ MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
     accelerating re-entry, a storm in the record's rows). The catalog's fit takes the first state of its 0 to 120 h
     interval as the epoch and flies forward 5 days, so it meets only the third; a 72 h fit flown to day 7 is 10 days from
     its epoch.
-  - The jump detector of test/fast-side-band-guard.e2e.mjs, on 102 flights that include each case outside the span (3 days
-    back, 30 days forward, BTERM up to 4 times the case's, a storm in the rows, re-entering seeds flown to refusal), reads
-    under 4.5 m on all but two. Those two are the flight's last minutes above 100 km, and they read the same without the
-    fast side (stack #564).
+  - The jump detector of test/fast-side-band-guard.e2e.mjs, on 100 flights that include each case outside the span, reads
+    under 4.5 m on all but two: the test's set at BTERM 1, 2 and 4 times its own (3), the same with a storm in its rows (2),
+    72 re-entering seeds flown to refusal (20 of them refused before day 1), the 21 near-circular regimes of
+    test/kernel-cost.mjs 30 days forward, and 2 sets flown 3 days back. The two are re-entering seeds in the flight's last
+    minutes above 100 km, and they read the same without the fast side (stack #564).
   - At perigee 200 km, e 0.01, i 55 (the 72 h fit; a truth that falls to 145 km by day 3), the m = 48, j = 3 terms of
     degree 53 to 69 (w 2 to 4, 16 terms) were inside the band's edge at the epoch (x 0.94 to 0.96). The table kept 0.08
     to 0.20 of each; the rates took the rest, and all of it once x fell below 0.9. Their rate passes zero 49.4 h after the
     cutoff, where the flight without the guard spiked to 13,161 km. With the guard D is 58,272 m, beside 57,834 m for the
     table of every other branch.
+- **Where a set's table is built** (from 0.6.42). The table is filled in the building thread's scratch at its bound
+  (tess::SpTableScratch: 755 KB at d 31 and 3.1 MB at 70, against 160 KB at 12) and kept at its counts (68 bytes a combined
+  entry, 20 a raw one). The scratch is the thread's, never shared, grown to the largest bound it has asked for and kept for
+  the thread's life. Sets are built on the calling thread (the row store's sdnap_init_elements, the epoch store, fit's
+  trial sets, the covariance's moved sets); the pool's threads fly sets built before a batch and hold none.
+  - A table taken at its bound and cut down after leaves the rest free between the sets' tables, a hole no later bound
+    fits. On 1,000 rows of a catalog mix (test/set-caches.e2e.mjs's, 783 in the low table) at 31/20 the row store's build
+    took 223.9 MB of memory that way, 167.4 MB of it free inside the heap, against 51.9 MB on 0.6.41.
+  - Built in the scratch, the same rows take 31.5, 51.8 and 55.2 MB at d 12, 31 and 70 (0.6.41: 32.6, 51.9 and 51.9 MB,
+    its table stopping at 12), linear in the number of sets (at 31: 15.2, 27.8 and 51.8 MB for 250, 500 and 1,000 rows),
+    with 0.2 to 0.4 MB left free inside. The tables kept are 19.8, 26.0 and 27.2 MB (0.6.41: 19.8, 21.0, 21.0). Under the
+    module's maximum of 2 GiB the build alone fits about 38,000 such sets at 31 and 35,800 at 70 (0.6.41 about 38,000).
+  - With the reserve, the memory after the first threaded batch on 4 threads is 237.4, 257.4 and 260.9 MB at 12, 31 and 70
+    (0.6.41: 238.4, 257.6 and 257.6 MB).
 - **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
   near-resonant terms in low orbit and the half-day tail, and nothing else.
 - **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
@@ -4427,8 +4448,12 @@ q = 0), order and degree 2 to 70,
 - other than the shallow set's own terms (j = 1, q = 0, to its degree), which stay where they are.
 
 Each term enters the rates with the weight w of its own current rate: 1 below 0.9 bands, a cos^2 taper to 0 at 1.1. The
-output table holds 1 - w of a term the rates carry, so a term that crosses its band's edge as drag raises n moves from one to
-the other with no step. With the record's degree d above 12 the table holds that share to the slow set's degree, for q of
+output table holds a share of the term set once, at the epoch elements: 1 - w at the epoch's rate, and with 16.1's band guard
+(the low table above degree 12, a set with drag) 1 - the larger of w at n0 and at n_end, and none where the rate changes sign
+between them. The rates' share follows the current rate continuously and the table's stays as set, so a term crossing its
+band's edge as drag moves n makes no step in either. At the epoch the two hold the whole term (with the guard, no more than
+it). Once n has moved, without the guard they hold more than the whole term where w has risen and less where it has fallen;
+with the guard they hold no more than it for n between n0 and n_end, and the rest is carried nowhere. With the record's degree d above 12 the table holds that share to the slow set's degree, for q of
 -1, 0 and 1 (16.1); with d of 12 or less it holds it to d. A slow term of |q| 2 or more has its 1 - w carried nowhere. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
 as GRAVITY_MODEL "EGM2008; slow tesseral terms to degree 70", and every flight of the record carries it; an AP record
 with gravity terms that states "EGM2008" flies without it. Through 0.6.34 the text was "EGM-96; slow tesseral terms to

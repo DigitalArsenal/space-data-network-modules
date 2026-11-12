@@ -24,9 +24,10 @@
 // (test/fixtures/covariance-judged-31-70.json, MEDIAN_RELATIVE); the cells outside the band [0.603, 0.754] are exactly the
 // registered ones, each named with its cause. Realism is not met: 8 of the 42 judged cells are inside the band. JS moves
 // bytes, rotates the module's covariance onto the truth's axes and takes medians; every state and covariance is the module's.
-// Until 0.6.42 the test judged 0.6.0's flights of held-out windows re-weighted with the build's variances. On this build,
-// whose floors follow its closer fit, those cells read 3 of 18 inside the band, the radial up to 1.084 (near 700 km, 24 h)
-// and cross-track 1.017 (strong drag 2025, 24 h): they set 0.6.0's errors against this build's variance. What replaces each
+// Until 0.6.42 the test judged 0.6.0's flights of held-out windows re-weighted with the build's variances. On 0.6.42 (git
+// b7a7191e, wasm f771420f; main 0.6.41's test, git afdd1568, run on it), whose floors follow its closer fit, those cells read
+// 3 of 18 inside the band (8 on main 0.6.41), the radial up to 1.084 (near 700 km, 24 h) and cross-track 1.017 (strong drag
+// 2025, 24 h): they set 0.6.0's errors against this build's variance. What replaces each
 // of its assertions: the 14 pinned held-out medians, by the 42 judged cells of this build's own flights, registered; the
 // range 0.32 to 0.91, by every cell outside the band registered with its cause; the re-weighting identity at 1e-6, by the
 // factor's identity at 1e-12 on the ISS fit with equal mean elements; the hold-out exclusion, by the split rule's choice
@@ -222,7 +223,8 @@ for (const c of judged.judged) {
 }
 console.log(`judged cells inside the band: ${inside} of ${judged.judged.length} (realism not met; every cell outside carries its cause)`);
 // Cross-track on records at zonal degree 20 (the low table's records through 0.6.41): too narrow at day 1 in strong drag
-// (1.045 at day 1 in 2026 on main 0.6.39, 1.303 on this build's own flights at 31/20), the node drift of a record that leaves
+// (1.045 at day 1 in 2026 on main 0.6.39's own flights, git 94351f34, wasm 7a857d63; 1.303 on the fast side's own flights at
+// 31/20, git 9855dadd, wasm 302ec561, whose cross-track takes no factor), the node drift of a record that leaves
 // out the zonal terms of degree 21 to 70 (SPEC 12.5, stack #531); a record at zonal degree 70 has none of it, and its
 // cross-track, too wide, is registered above.
 fs.rmSync(scratch, { recursive: true, force: true });

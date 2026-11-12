@@ -6,8 +6,11 @@
 // that arc fitted by BASE and by this build. BASE is a build before the cure whose theory is this build's: from the low
 // table's fast side (stack #477, SPEC 16.1) its first build with the band guard (git 258d824d, version string 0.6.36, its
 // SHA-256 checked). It must be: a set's own flight and a pre-cure record's states are held against the base's to 1e-11 of a
-// covariance's largest entry and 1 mm, and the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, the
-// base until then) by 8.9 to 37.9 m in these cases. The refusal is also read on a record main wrote: each case's arc
+// covariance's largest entry and 1 mm, and the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, wasm
+// 1933b5da, the base until then): each case's arc fitted by 0.6.38 and that record flown at 0, 24 and 48 h by 0.6.38 and by
+// 0.6.42 (git b7a7191e, wasm f771420f; 258d824d reads the same) is at most 37.95 m apart at 300 km, i 5, 20.76 m at
+// 1,200 km, i 0.5 and 8.89 m at 550 km, i 52.9 (main 0.6.39, git 94351f34, wasm 7a857d63: within 0.1 mm of 0.6.38's).
+// The refusal is also read on a record main wrote: each case's arc
 // fitted by 0.6.38 (MAIN, SHA-256 checked) and flown here has its covariance refused by name and its states flown.
 // - The cure (a reader whose theory's epoch state differs from the writer's): this build's record read again with its
 //   gravity caps moved from 31 and 20 to 12 and 6, so its flown epoch state moves and the two-body state of its mean
@@ -29,7 +32,8 @@
 // - The two-body state (twobody::state_of through epoch_floor_state) of three element sets bit for bit (TWO_BODY): every
 //   record written from 0.6.39 on carries its floor at it, so it must never move; a change to it refuses no record and
 //   moves every later reader's floor.
-// - The stored fixture record, this build's own fit (ap-fit-0.6.39.ocm), has 0.6.36's fit's mean elements bit for bit.
+// - 0.6.39's fit of the 0.4.0 inputs (ap-fit-0.6.39.ocm, the stored record of 0.6.39 to 0.6.41, written by the epoch
+//   floor's build at 0.6.39) has 0.6.36's fit's mean elements bit for bit.
 // Cases: 300 km at i 5 and 1,200 km at i 0.5 (where 0.6.36's records read by a later theory came out narrowest, or with a
 // negative along-track variance: stack #551), 550 km at i 52.9 (the fixture's orbit, where they came out wider), and 300 km
 // at i 5 with caps 0.

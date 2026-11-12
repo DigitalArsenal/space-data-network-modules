@@ -84,7 +84,8 @@ const K = 5;
 // (bound 55 / 20 m).
 // Sentinel-3-like from the low table's fast side (stack #477): the record's output table carries the tesseral terms to its
 // degree. The 72 h fit then takes the drag term further from the truth on this orbit, +0.279 % against 0.6.36's +0.045 %,
-// and the along-track error grows from day 4 (day 5 22.6 to 30.0 m, day 7 29.6 to 55.5 m). With the drag term held at the
+// and the along-track error grows from day 4 (day 5 22.6 to 30.0 m, day 7 29.6 to 55.5 m: 0.6.36, modules c8b0972b, against the
+// fast side on that base, 258d824d; on 0.6.42, git 1d5008c5, 30.02 and 55.49 m). With the drag term held at the
 // truth's 0.044 the fast side is better on every day (days 1 / 3 / 5 / 7: 16.3 / 18.0 / 21.0 / 24.5 m on 0.6.36, 10.3 /
 // 13.1 / 15.8 / 20.8 m with it). The fit's drag term on short arcs near 800 km is stack #541. Bounded at day 5 (33 m, which
 // 0.6.36 and the fast side both meet) and at day 7 (60 m, loosened from 55 m: the fast side's 55.5 m with a small margin).
