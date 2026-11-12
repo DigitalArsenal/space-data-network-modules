@@ -9,11 +9,15 @@
 // 3. The 12 THEMIS windows as recorded on this source's build against the base: median roughness under 0.2 m; the paired ratio's
 //    upper bootstrap bound at days 1, 3 and 7 at or below 1.05.
 // 2. No harm at e 0.3 and below: AP (31, 20) seeded sets (LEO, geostationary, Etalon-like, GPS-like, e 0.25, e 0.3) and a
-//    fitted AP set (0.6.39's fit, test/fixtures/ap-fit-0.6.39.ocm) flown 2 days at 600 s give ephemerides within NO_HARM
-//    (below) on this build and on BASE (the radial term's first build on 0.6.39, git 36ebd1e6, SHA-256 checked, its own
-//    version string 0.6.43; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, the field change's first build
-//    from 0.6.36 to 0.6.42, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture
-//    (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96) refused (gravity-model-mismatch, SPEC 16.2).
+//    fitted AP set (0.6.39's fit, test/fixtures/ap-fit-0.6.39.ocm; 0.6.36's fit has its covariance refused on both) flown 2
+//    days at 600 s give ephemerides within NO_HARM
+//    (below) on this build and on BASE (the low table's fast side's first build with the epoch floor of SPEC 12.4, git 9855dadd,
+//    SHA-256 checked, its own version string 0.6.39; it must be a build of this theory, since no harm is held at 15 mm and the
+//    fast side moves a low-table set 60 to 96 m from a build without it, and a build with the epoch floor, since a reader before
+//    it takes 0.6.36's record's floor off at its own theory state; the fast side's first build, git 73331c6a, version string
+//    0.6.36, before it;
+//    the field change's first build, git 7ebc98e4, its version string 0.6.33, from 0.6.36; sdn-ap 0.6.2 until 0.6.20, 0.6.21 at 0.6.21, 0.6.22 to 0.6.34, history at NO_HARM); the SGP4XP seed byte-identical; analysis/catalog-composer's AP fixture (sdn-ap 0.5.1's
+//    fit, GRAVITY_MODEL EGM-96) refused (gravity-model-mismatch, SPEC 16.2).
 import assert from 'node:assert/strict';
 import {requireTruth} from './lib/ffm-truth.mjs';
 requireTruth('ea4576901f9e8dc21af2c24feb7887645706ef934488cb9756a0b5c21ab47934'); // the model truth: FFM 2.3.0 (modules 48a00fd6), 2.2.1's truth bit for bit
@@ -29,7 +33,7 @@ import {seedOcm, flight, T} from './lib/ocm.mjs';
 import {oemDistance} from './lib/oem-distance.mjs';
 import {configuration} from './lib/pcf.mjs';
 
-const BASE_VERSION = '0.6.43', BASE = '36ebd1e67', BASE_SHA256 = 'f0e7bd7d8c222bf12099d23fb35363fefe6a5ff1fcdad253191452c353a49790';
+const BASE_VERSION = '0.6.39', BASE = '9855dadd6', BASE_SHA256 = '302ec56172e8f44efa660979d9117e102913ba4caf65acdd9beca81af57c759b';
 // 2's bound on the AP seeds (fixed elements, 48 h at 600 s). Against sdn-ap 0.6.2 (modules c82160de7, SHA-256 84d50dca...)
 // until 0.6.20: byte-identical until 0.6.5, whose speed changes move a flight of fixed elements by millimeters (SPEC 16.8);
 // measured 2026-11-10 on 0.6.8, per seed: LEO 3.10, GEO 0.41, Etalon 3.62, GPS 5.01, e 0.25 9.11 and e 0.3 10.66 mm
@@ -59,13 +63,23 @@ const BASE_VERSION = '0.6.43', BASE = '36ebd1e67', BASE_SHA256 = 'f0e7bd7d8c222b
 // exactly e 0.3 is the below side's: the class's term from the polynomial, not the series about e0, and the covariance
 // class below HEO. The e 0.3 seed (2.4 rev/day, the half-day class) moves from the baseline by 5.1e-6 mm (velocity 8.3e-7
 // um/s, its covariance unchanged); every other set is byte-identical.
-// The zonal theory's constant radial term (0.6.43, SPEC 16.23) moves them from 7ebc98e4: LEO 2,029.97, geostationary 183.49,
-// Etalon 14.37, GPS 37.90, e 0.25 462.26 and e 0.3 462.26 mm (velocity 2.23 to 2,227.31 um/s), and the fitted set (this
-// build's flight of 0.6.39's fit against 7ebc98e4's of 0.6.36's, the same mean elements) by 2,151.66 mm, its covariance by
-// 8.40e-7 of a line's largest entry (both records carry their floor where their reader takes it off, SPEC 12.4):
-// every AP set with gravity terms carries the term, about (R_E / a)^3 of the Earth's radius times J2 squared; SGP4XP
-// byte-identical. From 0.6.43 the baseline is the term's first build on 0.6.39 (git 36ebd1e6, not a release), every AP set
-// under the one bound, 15 mm; that base carries SPEC 12.4's epoch floor, so both fly 0.6.39's fit with its covariance.
+// The low table's fast side (stack #477, SPEC 16.1: the output table to the record's tesseral degree) moves from 7ebc98e4
+// the LEO seed by 95,893.02 mm (velocity 66,912.77 um/s) and the fitted 550 km set by 59,929.89 mm (velocity 47,483.28
+// um/s): both are in the low table at tesseral degree 31. While a reader took the record's floor off at its own theory's
+// epoch state (stack #551), the fitted set's flown covariance moved with the theory: 0.6.36's fit flown by 7ebc98e4 (or by
+// main 0.6.36, git c8b0972b, which flies it bit for bit) and by the fast side before the epoch floor (73331c6a, or 258d824d
+// with the band guard) is 0.272 of a line's largest entry apart on this test's grid (2 days at 600 s), its states
+// 59,929.89 mm. The 0.374 this text gave when the baseline moved to 73331c6a is not what those builds read: they read
+// 0.272. With the floor at the two-body state of the record's mean elements (0.6.39, SPEC 12.4), 0.6.39's fit of the arc
+// (ap-fit-0.6.39.ocm) flown by main 0.6.39 (git 94351f34, wasm 7a857d63) and by 0.6.42 (git b7a7191e, wasm f771420f) is
+// 2.11e-5 of a line's largest entry apart, its states 59,929.89 mm; 9855dadd and 0.6.42 fly it bit for bit. The
+// geostationary, Etalon-like, GPS-like, e 0.25 and
+// e 0.3 seeds are outside the low table and byte-identical, and SGP4XP byte-identical. From the fast side the baseline is
+// its first build (git 73331c6a, not a release; BASE_VERSION is that build's own version string), every AP set under the
+// one bound, 15 mm. With the epoch floor merged in (0.6.39) the baseline is the fast side's first build with it (git 9855dadd,
+// not a release), which flies 0.6.39's fit of the arc as this build does: a base before the epoch floor takes 0.6.36's
+// record's floor off at its own fast-side theory state, 0.272 of a line's largest entry from where 0.6.36 put it on (the
+// figure above).
 const NO_HARM = {posM: 0.015, velMmS: 0.01, covOfLargest: 1e-3};
 const modules = fileURLToPath(new URL('../../../', import.meta.url)), packageRoot = path.join(modules, 'propagator/sdn-ap');
 // a scratch outside the package: the test build copies the package's sources, which cannot hold its own destination
@@ -325,21 +339,19 @@ for (const [name, s] of Object.entries(SEEDS)) {
   const payload = seedOcm({epoch, ...s});
   compare(name, await fly(wasmPath, payload), await fly(basePath, payload));
 }
-// a fitted AP set (0.6.39's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
+// a fitted AP set (0.6.36's own fit of the 550 km arc, LEO), flown on the same output grid; the catalog-composer fixture
 // (sdn-ap 0.5.1's fit, GRAVITY_MODEL EGM-96 with gravity terms) refused by this build
 {
-  // from 0.6.39 (SPEC 12.4) this build flies its own fit of the arc (ap-fit-0.6.39.ocm) and the base (0.6.33's build, git
-  // 7ebc98e4, whose states 0.6.36 flies bit for bit) flies 0.6.36's fit (ap-fit-0.6.36.ocm), whose floor is at the theory
-  // state that base shares: the same mean elements, the same states, the covariance within 1.3e-11 of a line's largest
-  // entry; 0.6.36's fit flies its states here with its covariance refused by name. From 0.6.43 the base (git 36ebd1e6)
-  // carries the epoch floor too and both fly 0.6.39's fit; 0.6.36's fit on this build is held against the base's flight
-  // of 0.6.39's fit (its states, no covariance)
+  // from 0.6.39 (SPEC 12.4) this build and the base fly 0.6.39's fit of the arc (ap-fit-0.6.39.ocm), whose floor is at the
+  // two-body state of its mean elements, with its covariance; 0.6.36's fit (ap-fit-0.6.36.ocm) flies its states on both with
+  // its covariance refused by name
   const payload = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.36.ocm')));
   const own = new Uint8Array(fs.readFileSync(path.join(packageRoot, 'test/fixtures/ap-fit-0.6.39.ocm')));
   compare('fitted AP set (0.6.39\'s fit)', await fly(wasmPath, own), await fly(basePath, own));
-  const pre = oemDistance(await fly(wasmPath, payload), await fly(basePath, own));
+  assert.ok(noHarm['fitted AP set (0.6.39\'s fit)'].covLines > 0, '0.6.39\'s fit flies its covariance on this build and on the base');
+  const pre = oemDistance(await fly(wasmPath, payload), await fly(basePath, payload));
   console.log(JSON.stringify({preFloorRecord: '0.6.36\'s fit', positionMm: 1000 * pre.posM, covarianceLines: pre.covLines}));
-  assert.ok(pre.posM <= NO_HARM.posM && pre.velMmS <= NO_HARM.velMmS && pre.covLines === 0 && pre.covLinesDiffer === true, `0.6.36's fit on this build: ${JSON.stringify(pre)} (its states as the base's, no covariance)`);
+  assert.ok(pre.posM <= NO_HARM.posM && pre.velMmS <= NO_HARM.velMmS && pre.covLines === 0 && pre.covLinesDiffer !== true, `0.6.36's fit on this build: ${JSON.stringify(pre)} (its states as the base's, no covariance on either)`);
   const old = new Uint8Array(fs.readFileSync(path.join(modules, 'analysis/catalog-composer/tests/fixtures/ap-fit-sdn-ap-0.5.1.ocm')));
   const h = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
   const r = await h.invoke({methodId: 'propagate', inputs: flight([old], {output})});

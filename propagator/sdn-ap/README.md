@@ -1,6 +1,6 @@
 # sdn-ap-propagator
 
-Version 0.6.43 (dist 1669fa1b).
+Version 0.6.43 (dist daf4d27e).
 
 General-perturbations propagation of whole catalogs in one isomorphic WASM module (browser and WasmEdge), with two
 theories and AP, an advanced propagator that builds on the entire history of astrodynamics ($PCF FORCES selects its drag
@@ -185,8 +185,10 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
 
 ## AP's gravity terms (SPEC 16; `fit`, `propagate`, `load_epochs` and `propagate_epochs`)
 
-`FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (m-daily to degree 12, the other
-first-order terms to 12, near-resonant terms, shallow resonances and the half-day and one-day resonant tails to 31; each to the degree asked if lower;
+`FORCES.HAS_MAXIMUM_TESSERAL_DEGREE` and `MAXIMUM_TESSERAL_DEGREE` add tesseral gravity (in the low table with a degree above
+12, from 0.6.42, every first-order term and the m-daily terms to the degree asked, up to 70; on every other branch m-daily
+and the other first-order terms to 12 and near-resonant terms to 31; shallow resonances and the half-day and one-day
+resonant tails to 31; each to the degree asked if lower;
 MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field: SPEC 16.1); `HAS_MAXIMUM_DEGREE`
 and `MAXIMUM_DEGREE` add the zonal tail from J6. With either set, mean elements hold the axes of the set's epoch and each state is
 carried to TEME of its date. The field is EGM2008 (from 0.6.36; EGM-96 through 0.6.34), pinned from propagator/ffm/lib by `build.mjs`. From 0.6.36 a flight
@@ -451,9 +453,13 @@ band of SPEC 12.7 cannot establish realism: it accepts variance errors of 2.3, 0
 together, a perfect covariance fails it with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise
 sizes were tuned on the windows tested. With the model otherwise exact, the fitted sigma of B and S is too small by
 sqrt(3N - L), 46 for a 24 h arc sampled every 120 s. SDNAP's DRAG row (0.6.1, SPEC 12.5) is fitted per radial, in-track
-and cross-track axis; on held-out windows the median |z| of 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7)
-lies inside 0.603 to 0.754, the rest between 0.32 and 0.91 (0.6.0: 1 of 18, its 1-sigma hundreds to thousands of times
-too wide in-track and radially); that count does not establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every cell for both rows and the ISS figure.
+and cross-track axis. On 0.6.42's own flights of the low table's records (tesseral 31, zonal 70), 8 of the 42 judged cells
+(strong drag 2026, laser spheres, altimetry and near 700 km; three axes; days 1, 3, 5 and 7) have their median |z| inside
+0.603 to 0.754. Too wide: cross-track outside near 700 km at day 1 and everywhere from day 3 (2.6 to 8.2 times from day
+3), in-track outside strong drag, and the radial of the laser spheres from day 3 and of altimetry at days 3 and 5. Too
+narrow: strong drag 2026's in-track at every day and its radial at days 5 and 7. SPEC 12.5 names each cell's cause. That count does not
+establish realism (SPEC 12.7). `node test/covariance-realism.e2e.mjs` prints every judged cell with its shares within 1
+and 3 sigma, and the ISS figure.
 
 Above the drag the ABOVE row is 5 to 1,000 times too wide on near-circular orbits and too narrow on TESS, Chandra and
 commercial geostationary satellites with burns (stack #433, #444; SPEC 12.5 "Above the drag, by class"). A set above

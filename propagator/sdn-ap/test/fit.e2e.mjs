@@ -6,8 +6,8 @@
 //   (SPEC 17.4).
 // - MEAN_ELEMENTS printed against test/fixtures/ap-fit-0.4.0.omm and xp-fit-0.4.0.omm (the 0.4.18 dist's $OMM: BTERM in
 //   BSTAR, AGOM in MEAN_MOTION_DDOT), the epoch equal; the fitted record flown 7 days within FIT_BOUND of the reference
-//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.43's fit, ap-fit-0.6.43.ocm,
-//   history at FIT_BOUND); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
+//   record (SGP4XP: the stored record, 0.6.4's fit, those elements bit for bit; AP: 0.6.42's fit, ap-fit-0.6.42.ocm, history
+//   at FIT_BOUND); MEAN_ELEMENT_THEORY AP (5) and SGP4XP (1).
 // - OD_DYNAMIC_PARAMETERS: DRAG_AREA_OVER_MASS and SRP_AREA_OVER_MASS, VALUE bit-equal to BTERM and AGOM.
 // - FIT_STATISTICS: FIT_STATES as the 0.4.0 COMMENT states them, FIT_RMS_KM within FIT_BOUND.rmsM of it, ITERATIONS
 //   printed beside its; CONVERGED true (the 0.4.0 COMMENT states no convergence: a set was emitted only on a converged or
@@ -21,15 +21,17 @@
 // - Against the 0.6.3 dist (git, modules 03ee86234, its SHA-256 checked; 0.6.4's fits of these arcs are 0.6.3's): each
 //   fit's $ODR names its own $OCM (RUN_ID and OCM_CONTENT_ID are the CID of its $OCM's bytes); each stored record's
 //   sdnap_covariance_at at every fixture grid time (state and covariance, 42 doubles a time) and its propagate $OEM in
-//   EME2000 and TEME every 6 h for 7 days within FLIGHT_BOUND on this build and on 0.6.3 (byte identity until 0.6.5),
-//   the AP record's (ap-fit-0.6.39.ocm, 0.6.39's fit of the same inputs with 0.6.36's mean elements; 0.6.4's states
-//   EGM-96 and is refused, SPEC 16.2; 0.6.36's has its covariance refused, SPEC 12.4) against 0.6.43's flight of it
-//   (ap-fit-0.6.39-0.6.43.cov, ap-fit-0.6.39.eme2000-0.6.43.oem, ap-fit-0.6.39.teme-0.6.43.oem; history at
-//   FLIGHT_BOUND). With SDNAP_EXAMPLES set to the published examples (each <id>.ocm and <id>.json), every set flies on
-//   both builds at every epoch of its window, with sdnap_covariance_at at every 12th epoch; a set outside the band
-//   0.6.4's switch moves (class 0 by the SPEC 6 bands of its mean motion with 0.05 < e <= 0.3) and at e 0.3 or below
-//   within EXAMPLE_BOUND, a set in the band or above e 0.3 measured and printed (nothing masked). JS only moves bytes
-//   and compares numbers the module produced. node test/fit.e2e.mjs
+//   EME2000 and TEME every 6 h for 7 days within FLIGHT_BOUND on this build and on 0.6.3 (byte identity until 0.6.5), the
+//   AP record's (ap-fit-0.6.42.ocm, 0.6.42's fit of the same inputs, which this test's own fit writes with SDNAP_RECORD_DIR
+//   set; 0.6.4's states EGM-96 and is refused, SPEC 16.2; 0.6.36's has its covariance refused, SPEC 12.4) against 0.6.42's
+//   flight of it (ap-fit-0.6.42-0.6.42.cov, ap-fit-0.6.42.eme2000-0.6.42.oem, ap-fit-0.6.42.teme-0.6.42.oem; history at
+//   FLIGHT_BOUND). With
+//   SDNAP_EXAMPLES set to the published examples (each <id>.ocm and <id>.json), every set flies on both builds at every epoch
+//   of its window, with sdnap_covariance_at at every 12th epoch; a set outside the band 0.6.4's switch moves (class 0 by the
+//   SPEC 6 bands of its mean motion with 0.05 < e <= 0.3) and at e 0.3 or below within EXAMPLE_BOUND, a set in the band or
+//   above e 0.3 measured and printed (nothing masked).
+// JS only moves bytes and compares numbers the module produced.
+//   node test/fit.e2e.mjs
 import fs from "node:fs";
 import { recordReference } from "./lib/record.mjs";
 import { scratchTemp } from "./lib/scratch.mjs";
@@ -67,9 +69,9 @@ const fit = (config, spw = rows.bytes) => h.invoke({ methodId: "fit", inputs: [
   { portId: "ephemeris", typeRef: T("OEM"), payload: arc }, config, ...(spw ? [{ portId: "space_weather", typeRef: T("SPW"), payload: spw }] : [])] });
 
 const cases = [
-  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.39.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
-    fitReference: "ap-fit-0.6.43.ocm",
-    recorded: { version: "0.6.43", cov: "ap-fit-0.6.39-0.6.43.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.39.eme2000-0.6.43.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.39.teme-0.6.43.oem" } },
+  { name: "AP", fixture: "ap-fit-0.4.0.omm", stored: "ap-fit-0.6.42.ocm", config: configuration({ theory: "AP", forces: AP_FORCES }), spw: rows.bytes, theory: 5, weather: pcfWeatherSource.RECORDS,
+    fitReference: "ap-fit-0.6.42.ocm",
+    recorded: { version: "0.6.42", cov: "ap-fit-0.6.42-0.6.42.cov", [pcfOutputFrame.EME2000]: "ap-fit-0.6.42.eme2000-0.6.42.oem", [pcfOutputFrame.TEME]: "ap-fit-0.6.42.teme-0.6.42.oem" } },
   { name: "XP", fixture: "xp-fit-0.4.0.omm", stored: "xp-fit-0.6.4.ocm", config: configuration({ theory: "SGP4XP", forces: XP_FORCES }), spw: null, theory: 1, weather: pcfWeatherSource.THEORY_FLUX_MODEL },
 ];
 // The fit and the flight apart (no byte identity through a fit). The fit: this build's fitted record flown 7 days (EPOCHS,
@@ -115,15 +117,17 @@ const cases = [
 // elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
 // held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 // flies its states as 0.6.36 flew them, its covariance refused by name.
-// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
-// flight: sdnap_covariance_at 2,151.657 mm, covariance 1.55e-6; propagate EME2000 and TEME over 7 days 2,151.682 mm,
-// 2,360.655 um/s, covariance 6.74e-7 (the record carries its epoch floor at the two-body state of its mean elements,
-// SPEC 12.4, so its covariance moves with the states); it records it from itself (ap-fit-0.6.39-0.6.43.cov,
-// ap-fit-0.6.39.eme2000-0.6.43.oem, ap-fit-0.6.39.teme-0.6.43.oem; the 0.6.36 files went), the bounds kept. It moves
-// the fit: 40.6 m and 44.6 mm/s over 7 days from 0.6.39's fit (both flown by 0.6.43), FIT_RMS 40.125 against 40.153 m.
-// Against the fixture's own truth (propagator/ffm's 550 km trajectory) the error 48 to 72 h past the arc stays at 42 m,
-// and over the arc at 24.3 m. So the reference fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.39's
-// fit.
+// 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves this
+// 550 km set, which is in the low table at tesseral 31. Main 0.6.41 (git afdd1568, wasm bec591fe) holds the stored record's
+// flight within FLIGHT_BOUND of 0.6.36's and its fit within FIT_BOUND of 0.6.39's; on 0.6.42 (git b7a7191e, wasm
+// f771420f) the stored record's sdnap_covariance_at is 59,929.891 mm from 0.6.36's (covariance 2.07e-5 of a time's
+// largest entry) and its propagate over 7 days in EME2000 and TEME 49,816.056 mm and 38,839.353 um/s (covariance 1.49e-5);
+// the fit is 539,401.04 mm and 591,281.83 um/s from 0.6.39's at 7 days (both flown by 0.6.42), FIT_RMS 37.273 against
+// 40.153 m: the fast side fits the arc closer. A base before the fast side holds these to another theory's flight, so
+// from 0.6.42 the stored record is 0.6.42's own fit of the same inputs (ap-fit-0.6.42.ocm, this test's AP fit, recorded
+// with SDNAP_RECORD_DIR), recorded with its flight (ap-fit-0.6.42-0.6.42.cov, ap-fit-0.6.42.eme2000-0.6.42.oem,
+// ap-fit-0.6.42.teme-0.6.42.oem; the 0.6.36 files went), and the reference fit is the same record, the bounds kept. The
+// SGP4XP record and its base (0.6.3) and bounds are unchanged.
 const FIT_BOUND = { AP: 3, XP: 0.001, rmsM: 0.01 };
 const FLIGHT_BOUND = { posM: 0.01, covOfLargest: 2e-4 };
 const EXAMPLE_BOUND = { posM: 0.05, covOfLargest: 2.5e-3 };
@@ -136,6 +140,8 @@ for (const c of cases) {
     r.outputs[1].portId === "residuals" && r.outputs[1].typeRef?.fileIdentifier === "$ODR",
     `${c.name}: outputs ${r.outputs.map((o) => `${o.portId}:${o.typeRef?.fileIdentifier}`).join(", ")}`);
   const bytes = new Uint8Array(r.outputs[0].payload);
+  // the stored AP record of a release whose theory moves the fit (SDNAP_RECORD_DIR, test/lib/record.mjs): this fit itself
+  if (c.name === "AP") recordReference("ap-fit", "ocm", bytes);
   check(String.fromCharCode(...bytes.subarray(4, 8)) === "$OCM", `${c.name}: not an $OCM`);
   try { assertNoUserDefined(bytes); } catch (e) { check(false, `${c.name}: ${e.message}`); }
   const ocm = ocmOf(bytes), was = ommOf(fixture(c.fixture)), me = ocm.MEAN_ELEMENTS;
@@ -278,9 +284,9 @@ const covDistance = (a, b) => {
 for (const c of cases) {
   const s = stored[c.name];
   if (!s) continue;
-  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.43's fit), both
+  // the fit: this build's fitted record against the reference record (SGP4XP: the stored record; AP: 0.6.36's fit), both
   // flown by this build; its $ODR names its own $OCM
-  const refName = c.fitReference ? "0.6.43's fit" : "the stored (0.6.4's fit)";
+  const refName = c.fitReference ? "0.6.42's fit" : "the stored (0.6.4's fit)";
   const [pf, ps] = [await flight(h, s.fitted, pcfOutputFrame.TEME), await flight(h, s.reference, pcfOutputFrame.TEME)];
   check(pf.statusCode === 0 && ps.statusCode === 0, `${c.name}: propagate the fitted and the reference record: ${pf.errorCode ?? "ok"} | ${ps.errorCode ?? "ok"}`);
   if (pf.statusCode === 0 && ps.statusCode === 0) {
@@ -293,7 +299,7 @@ for (const c of cases) {
     const ocm2 = new Uint8Array(r2.outputs[0].payload), d2 = odrOf(new Uint8Array(r2.outputs[1].payload));
     for (const f of ODR_NAMES_OCM) check(d2[f] === cidOf(ocm2), `${c.name} $ODR ${f}: ${d2[f]}, its $OCM is ${cidOf(ocm2)}`);
   }
-  // the flight: the stored record flown by this build and by BEFORE (XP), or against its recorded flight (AP, 0.6.43's)
+  // the flight: the stored record flown by this build and by BEFORE (XP), or against its recorded flight (AP, 0.6.42's)
   const rec = c.recorded, against = rec ? `${rec.version}'s recorded flight` : BEFORE.version;
   const [a2, a1] = [covarianceAt(h, s.record), rec ? { status: 0, out: fixture(rec.cov) } : covarianceAt(before, s.record)];
   const cd = covDistance(a2.out, a1.out);
@@ -303,7 +309,7 @@ for (const c of cases) {
   for (const frame of [pcfOutputFrame.EME2000, pcfOutputFrame.TEME]) {
     const p2 = await flight(h, s.record, frame), p1 = rec ? { statusCode: 0, outputs: [{ payload: fixture(rec[frame]) }] } : await flight(before, s.record, frame);
     const ok = p2.statusCode === 0 && p1.statusCode === 0;
-    if (rec && p2.statusCode === 0) recordReference(`ap-fit-0.6.39.${frame === pcfOutputFrame.EME2000 ? "eme2000" : "teme"}`, "oem", new Uint8Array(p2.outputs[0].payload));
+    if (rec && p2.statusCode === 0) recordReference(`ap-fit-0.6.42.${frame === pcfOutputFrame.EME2000 ? "eme2000" : "teme"}`, "oem", new Uint8Array(p2.outputs[0].payload));
     const d = ok ? oemDistance(asVersion(new Uint8Array(p2.outputs[0].payload), rec ? rec.version : BEFORE.version), new Uint8Array(p1.outputs[0].payload)) : null;
     if (d) console.log(`${c.name} flight of the stored record, propagate ${pcfOutputFrame[frame]} at ${EPOCHS.length} epochs over 7 days, ${now} against ${against}: ${d.bytesEqual ? "byte-equal (PRODUCER's version aside)" : `${(1000 * d.posM).toFixed(3)} mm, ${(1000 * d.velMmS).toFixed(3)} um/s, covariance ${d.covOfLargest.toExponential(2)}`}`);
     check(ok && d.posM <= FLIGHT_BOUND.posM && d.covOfLargest <= FLIGHT_BOUND.covOfLargest,

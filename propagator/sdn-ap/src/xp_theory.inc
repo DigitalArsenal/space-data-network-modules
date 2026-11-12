@@ -5849,7 +5849,11 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.slow_extra = sc.count - sc.old_count;
     }
   }
-  const int spd = t.tesseral > tess::kSpCap ? tess::kSpCap : t.tesseral;
+  // the low table's fast side (stack #477): class 0 at or below the switch follows the record's degree to kFastCap; every
+  // other branch keeps kSpCap (above the switch the families are the grid's, 16.11)
+  const bool fast_low = res == 0 && !s.ctx.long_period && br.wide_tess == 0;
+  const int sp_cap = fast_low ? tess::kFastCap : tess::kSpCap;
+  const int spd = t.tesseral > sp_cap ? sp_cap : t.tesseral;
   if (spd >= 2) {
     const int nd = t.tesseral > tess::kShallowCap ? tess::kShallowCap : t.tesseral;
     const bool wide_sp = br.wide_tess != 0;
@@ -5867,32 +5871,39 @@ inline bool ap_init(const Elements& e, double n0, int8_t res, XpSat& s) {
       s.ctx.e0 = anchor->ctx.e0;
       s.ctx.shared_mask |= 64;
     } else {
-      tess::SpCombCoef* comb_table =
-          static_cast<tess::SpCombCoef*>(std::malloc(tess::sp_comb_bound(spd, wide_sp) * sizeof(tess::SpCombCoef)));
-      if (comb_table == nullptr) return false;
-      tess::SpCoef* raw_table =
-          static_cast<tess::SpCoef*>(std::malloc(tess::sp_bound(spd, wide_sp) * sizeof(tess::SpCoef)));
-      if (raw_table == nullptr) {
-        std::free(comb_table);
-        return false;
-      }
+      // on the fast side the table also holds the complement of the slow set's terms above the record's degree (the slow
+      // set takes its own degree): at most one entry each
+      const bool fast_side = spd > tess::kSpCap;
+      const int extra = fast_side && slow_list != nullptr ? slow_list->count - slow_list->old_count : 0;
+      // filled in this thread's scratch at the bounds, kept at the counts (tess::SpTableScratch: no hole left behind)
+      tess::SpTableScratch* table = tess::sp_table_scratch(static_cast<size_t>(tess::sp_comb_bound(spd, wide_sp, extra)),
+                                                           static_cast<size_t>(tess::sp_bound(spd, wide_sp, extra)));
+      if (table == nullptr) return false;
       int raw_count = 0;
-      const int comb_count =
-          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, comb_table, raw_table, &raw_count, slow_list);
-      tess::SpCombCoef* comb_kept =
-          static_cast<tess::SpCombCoef*>(std::realloc(comb_table, (comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
-      if (comb_kept == nullptr) {
-        std::free(comb_table);
-        std::free(raw_table);
-        return false;
+      // the fast side's band guard (sp_terms' n_end): the mean motion at the record's span's end at the set's own drag rate at
+      // its epoch
+      double n_end = 0.0;
+      if (fast_side && s.ctx.bterm > 0.0) {
+        double y0[6], dd[6] = {0, 0, 0, 0, 0, 0};
+        equinoctial_of(n0, e.eo, e.xincl, e.xnodeo, e.omegao, e.xmo, y0);
+        const Frame fr0 = frame_of(y0);
+        const Kepler k0 = kepler_of(y0, fr0.a);
+        drag_part(s.ctx, 0.0, y0, fr0, k0, angle_trig(k0), s.ctx.ap_third_body ? bodies_at_ap(s.ctx.d50_epoch) : bodies_at(s.ctx.d50_epoch), dd);
+        if (std::isfinite(dd[kN]) && dd[kN] > 0.0) n_end = n0 + dd[kN] * tess::kFastSpanMinutes;
       }
-      tess::SpCoef* raw_kept =
-          static_cast<tess::SpCoef*>(std::realloc(raw_table, (raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
+      const int comb_count =
+          tess::sp_terms(spd, nd, res, res == 0 && !s.ctx.long_period, wide_sp, n0, e.xincl, e.eo, table->comb, table->raw, &raw_count, slow_list,
+                         fast_side ? md : tess::kFastCap + 2, fast_side, n_end);
+      tess::SpCombCoef* comb_kept =
+          static_cast<tess::SpCombCoef*>(std::malloc((comb_count > 0 ? comb_count : 1) * sizeof(tess::SpCombCoef)));
+      if (comb_kept == nullptr) return false;
+      tess::SpCoef* raw_kept = static_cast<tess::SpCoef*>(std::malloc((raw_count > 0 ? raw_count : 1) * sizeof(tess::SpCoef)));
       if (raw_kept == nullptr) {
         std::free(comb_kept);
-        std::free(raw_table);
         return false;
       }
+      if (comb_count > 0) std::memcpy(comb_kept, table->comb, static_cast<size_t>(comb_count) * sizeof(tess::SpCombCoef));
+      if (raw_count > 0) std::memcpy(raw_kept, table->raw, static_cast<size_t>(raw_count) * sizeof(tess::SpCoef));
       s.ctx.sp_comb = comb_kept;
       s.ctx.sp_comb_count = comb_count;
       s.ctx.sp_ci0 = std::cos(e.xincl);
@@ -6174,7 +6185,9 @@ inline int census_rows(const XpSat& s, int cap, double n, double e, double inc, 
   const res::TermSet carried = c.ap_resonance && cls != 0 ? res::class_terms(cls) : res::TermSet{0, nullptr};
   const res::TermSet grid_carried = res::class_terms(cls);
   const int sd = cap > tess::kShallowCap ? tess::kShallowCap : cap;  // the near degree and the tails' (ap_init)
-  const int table_degree = cap > tess::kSpCap ? tess::kSpCap : cap;  // the output table's general degree (ap_init's spd)
+  // the output table's general degree (ap_init's spd: the low table's fast side follows the record to kFastCap, stack #477)
+  const int table_cap = low_table ? tess::kFastCap : tess::kSpCap;
+  const int table_degree = cap > table_cap ? table_cap : cap;
   const tess::WideGrid* grid = c.wide;
   double F[72], dF[72], G[72][25], dG[72][25], amp[72];
   amp[0] = kMu / a;

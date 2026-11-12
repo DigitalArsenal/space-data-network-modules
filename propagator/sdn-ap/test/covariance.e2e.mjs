@@ -11,11 +11,12 @@
 //   |NON_GRAVITATIONAL_RATE_PER_DAY| x n| <= 1e-12 relative (n in rad/day).
 // - The AP fit (gravity caps 31 and 20, NRLMSISE-00 on the fixture rows, the DRAG regime) writes the 0.6.1 DRAG row of
 //   SPEC 12.5 (s_e, s_i, s_l, c bit for bit; NOISE_NON_GRAVITATIONAL_RAD_DAY2 = c |rate| n); sdnap_covariance_at of the
-//   stored AP record (ap-fit-0.6.39.ocm, 0.6.39's fit) at the fixture grid within AP_COV_FLIGHT of 0.6.43's numbers
-//   (ap-fit-0.6.39-0.6.43.cov; 0.6.4's fit, the stored record through 0.6.34, states EGM-96 and is refused, SPEC 16.2),
-//   and this build's own AP fit within AP_COV_FIT of this build's numbers of 0.6.43's fit of the same inputs
-//   (ap-fit-0.6.43.ocm: a fit flown by its own theory, history at AP_COV_FLIGHT); its epoch covariance and floors within
-//   AP_COV_FIT of that record's (the SGP4XP table and numbers are unchanged).
+//   stored AP record (ap-fit-0.6.42.ocm, 0.6.42's fit) at the fixture grid within AP_COV_FLIGHT of 0.6.42's numbers
+//   (ap-fit-0.6.42-0.6.42.cov; 0.6.4's fit, the stored record through 0.6.34, states EGM-96 and is refused, SPEC 16.2;
+//   0.6.36's fit, written before the epoch floor at its mean elements' two-body state, is refused, SPEC 12.4), and this
+//   build's own AP fit within AP_COV_FIT of this build's numbers of 0.6.42's fit of the same inputs (ap-fit-0.6.42.ocm: a
+//   fit flown by its own theory, history at AP_COV_FLIGHT); its epoch covariance and floors within AP_COV_FIT of that
+//   record's (the SGP4XP table and numbers are unchanged).
 // - export_omm of the XP $OCM equals xp-fit-0.4.0.omm with USER_DEFINED_PARAMETERS, COMMENT and
 //   USER_DEFINED_EPOCH_TIMESTAMP / MICROSECONDS removed and PROVENANCE carried, BTERM and AGOM in their own fields
 //   (the 0.4.0 set's BSTAR and MEAN_MOTION_DDOT moved there): the two records packed by one builder are byte-equal;
@@ -95,15 +96,16 @@ const AP_DRAG = { s_e: 1.8579913326733934e-7, s_i: 1.12761105007012e-6, s_l: 7.6
 /// elements bit for bit, its COVARIANCE_DATA's state block carrying the floor at the two-body state), and its flight is
 /// held against 0.6.36's flight of 0.6.36's fit, which it equals to rounding (a set's own flight is as it was); 0.6.36's fit
 /// flies its states as 0.6.36 flew them, its covariance refused by name.
-/// 0.6.43 (the zonal theory's constant radial term at the same osculating energy, SPEC 16.23) moves the stored record's
-/// numbers by 2,151.657 mm and a covariance of 1.55e-6 of a time's largest entry, and records them from itself
-/// (ap-fit-0.6.39-0.6.43.cov; the 0.6.36 file went), the bounds kept: the record carries its epoch floor at the
-/// two-body state of its mean elements (SPEC 12.4), so its covariance moves with the states (on a record written before
-/// 0.6.39 the term moved what the reader takes off, stack #551). It moves the fit: 1,312.71 mm on the grid and a
-/// covariance of 1.72e-2 of a time's largest entry from 0.6.39's fit (both flown by 0.6.43); its epoch covariance by
-/// 1.03e-2 of that record's largest entry and its floors (the fit's residual covariance, SPEC 12.4) by up to 0.58 of
-/// themselves (FLOOR_WU_KM2, the smallest; FLOOR_UU_KM2 1.9 %, the rest under 0.3 %); FIT_RMS 40.125 against 40.153 m.
-/// So the own fit is 0.6.43's (ap-fit-0.6.43.ocm); the stored record stays 0.6.39's fit.
+/// 0.6.42 (the low table's fast side, SPEC 16.1, stack #477: the output table to the record's tesseral degree) moves this
+/// 550 km set, which is in the low table at tesseral 31. Main 0.6.41 (git afdd1568, wasm bec591fe) gives 0.6.39's fit's
+/// numbers within AP_COV_FLIGHT of 0.6.36's; on 0.6.42 (git b7a7191e, wasm f771420f) they are 59,929.891 mm from them,
+/// the covariance 2.07e-5 of a time's largest entry. Its own fit is 10,706.11 mm from 0.6.39's fit (both by 0.6.42), the
+/// covariance 1.66e-1 of a time's largest entry, the epoch covariance 1.10e-1 of that record's largest entry and the
+/// floors 1.52 relative: the fast side fits the arc closer (FIT_RMS 37.27 against 40.15 m), the floor is the fit's own
+/// residual covariance (SPEC 12.4), and the low table's radial floor takes exp(0.095) (SPEC 12.5). A base before the fast
+/// side holds these to another theory's numbers, so from 0.6.42 the stored record is 0.6.42's own fit (ap-fit-0.6.42.ocm)
+/// with its numbers (ap-fit-0.6.42-0.6.42.cov; ap-fit-0.6.36-0.6.36.cov went), and the own fit is the same record, the
+/// bounds kept.
 const AP_COV_FLIGHT = { posM: 0.004, velMmS: 0.004, covOfLargest: 1e-4 };
 const AP_COV_FIT = { posM: 0.1, covOfLargest: 2.5e-4, epoch: 7.5e-4, floors: 2.5e-4 };
 
@@ -206,10 +208,10 @@ if (apBytes) {
     `the AP set's noise ${JSON.stringify(acp)} (regime ${ap.COV_REALISM?.[0]?.REGIME}) is not SPEC 12.5's DRAG row`);
   const an = ap.MEAN_ELEMENTS.MEAN_MOTION * 2 * Math.PI, awant = acp.NON_GRAVITATIONAL_SHARE * Math.abs(acp.NON_GRAVITATIONAL_RATE_PER_DAY) * an;
   check(Math.abs(acp.NOISE_NON_GRAVITATIONAL_RAD_DAY2 - awant) <= 1e-12 * Math.max(Math.abs(awant), Number.MIN_VALUE), "the AP set's noise invariant");
-  // sdnap_covariance_at at the fixture grid: the stored record itself (the flight of fixed elements and covariance)
-  // against 0.6.43's numbers of it (test/fixtures/ap-fit-0.6.39-0.6.43.cov) within AP_COV_FLIGHT; this build's own fit
-  // against this build's numbers of 0.6.43's fit (ap-fit-0.6.43.ocm), a fit flown by its own build, within AP_COV_FIT;
-  // the own fit's epoch covariance and floors against that record's within AP_COV_FIT.epoch and AP_COV_FIT.floors
+  // sdnap_covariance_at at the fixture grid: the stored record itself (the flight of fixed elements and covariance) against
+  // 0.6.42's numbers of it (test/fixtures/ap-fit-0.6.42-0.6.42.cov) within AP_COV_FLIGHT; this build's own fit against
+  // this build's numbers of 0.6.42's fit (ap-fit-0.6.42.ocm), a fit flown by its own build, within AP_COV_FIT; the own
+  // fit's epoch covariance and floors against that record's within AP_COV_FIT.epoch and AP_COV_FIT.floors
   const covRaw = (bytes) => {
     const qo = x.sdnap_alloc(bytes.length), qm = x.sdnap_alloc(8 * minutes.length), qout = x.sdnap_alloc(8 * 42 * minutes.length);
     new Uint8Array(mem(), qo, bytes.length).set(bytes);
@@ -233,8 +235,8 @@ if (apBytes) {
     }
     return d;
   };
-  const storedBytes = new Uint8Array(fixture("ap-fit-0.6.39.ocm"));
-  recordReference("ap-fit-0.6.39", "cov", covRaw(storedBytes).got);
+  const storedBytes = new Uint8Array(fixture("ap-fit-0.6.42.ocm"));
+  recordReference("ap-fit-0.6.42", "cov", covRaw(storedBytes).got);
   // 0.6.4's fit states GRAVITY_MODEL EGM-96 with gravity terms: refused (SPEC 16.2), no number written
   const oldField = covRaw(new Uint8Array(fixture("ap-fit-0.6.4.ocm")));
   check(oldField.status !== 0, `sdnap_covariance_at of 0.6.4's fit (EGM-96): status ${oldField.status}, expected a refusal`);
@@ -242,17 +244,17 @@ if (apBytes) {
   const preFloor = covRaw(new Uint8Array(fixture("ap-fit-0.6.36.ocm")));
   check(preFloor.status === -7, `sdnap_covariance_at of 0.6.36's fit: status ${preFloor.status}, expected -7 (cov-floor-at-theory-state)`);
   const ofFixture = (name) => new Float64Array(fixture(name).buffer.slice(0));
-  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.43.ocm")), fitRecordCov = covRaw(fitRecordBytes);
-  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.43's fit: ${fitRecordCov.status}`);
-  const flightD = covAt(storedBytes, ofFixture("ap-fit-0.6.39-0.6.43.cov")), fitD = covAt(apBytes, fitRecordCov.got);
+  const fitRecordBytes = new Uint8Array(fixture("ap-fit-0.6.42.ocm")), fitRecordCov = covRaw(fitRecordBytes);
+  check(fitRecordCov.status === 0, `sdnap_covariance_at of 0.6.42's fit: ${fitRecordCov.status}`);
+  const flightD = covAt(storedBytes, ofFixture("ap-fit-0.6.42-0.6.42.cov")), fitD = covAt(apBytes, fitRecordCov.got);
   const floors = ["FLOOR_UU_KM2", "FLOOR_VU_KM2", "FLOOR_VV_KM2", "FLOOR_WU_KM2", "FLOOR_WV_KM2", "FLOOR_WW_KM2"];
   const recorded = OCM.getRootAsOCM(new flatbuffers.ByteBuffer(fitRecordBytes)).unpack();
   const floorRel = Math.max(...floors.map((f) => Math.abs(acp[f] - recorded.COV_PROPAGATION[f]) / Math.abs(recorded.COV_PROPAGATION[f])));
   const epochLargest = Math.max(...recorded.COVARIANCE_DATA.map(Math.abs));
   const epochRel = Math.max(...ap.COVARIANCE_DATA.map((v, k) => Math.abs(v - recorded.COVARIANCE_DATA[k]))) / epochLargest;
   console.log(`AP set: DRAG row s_e ${acp.NOISE_ECCENTRICITY_PER_DAY}, s_i ${acp.NOISE_INCLINATION_PER_DAY}, s_l ${acp.NOISE_MEAN_MOTION_RELATIVE}, c ${acp.NON_GRAVITATIONAL_SHARE}`);
-  console.log(`sdnap_covariance_at: the stored record against 0.6.43's of it ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
-    `this build's fit against this build's of 0.6.43's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
+  console.log(`sdnap_covariance_at: the stored record against 0.6.42's of it ${flightD.differ} of ${42 * minutes.length} doubles differ, position ${(1000 * flightD.posM).toFixed(3)} mm, covariance ${flightD.covOfLargest.toExponential(2)} of a time's largest entry; ` +
+    `this build's fit against this build's of 0.6.42's fit ${(1000 * fitD.posM).toFixed(2)} mm, ${fitD.covOfLargest.toExponential(2)}; its epoch covariance ${epochRel.toExponential(2)} of that record's largest entry, its floors ${floorRel.toExponential(2)} relative`);
   check(flightD.status === 0 && flightD.posM <= AP_COV_FLIGHT.posM && flightD.velMmS <= AP_COV_FLIGHT.velMmS && flightD.covOfLargest <= AP_COV_FLIGHT.covOfLargest,
     `sdnap_covariance_at of the stored AP record moved: ${JSON.stringify(flightD)} against ${JSON.stringify(AP_COV_FLIGHT)}`);
   check(fitD.status === 0 && fitD.posM <= AP_COV_FIT.posM && fitD.covOfLargest <= AP_COV_FIT.covOfLargest && epochRel <= AP_COV_FIT.epoch && floorRel <= AP_COV_FIT.floors,

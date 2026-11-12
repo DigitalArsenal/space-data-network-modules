@@ -2,30 +2,29 @@
 // E2E (SPEC 12.4, stack #551): an AP record's epoch floor is put on by the writer and taken off by the reader at the two-body
 // state of the record's own mean elements, so no change to a theory's epoch state moves what a reader takes off; an AP record
 // written before that has its covariance refused by name and its states fly.
-// Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by 0.6.38
-// (git f8fd3240, the last release before the rule, its SHA-256 checked), and that arc fitted by 0.6.38, by 0.6.39 (git
-// 94351f34, the rule's release), by SELF_BASE and by this build.
+// Per case, an AP set (NRLMSISE-00 on the fixture rows; caps 31 and 20, or both 0) is flown 24 h at 600 s in GCRF by BASE, and
+// that arc fitted by BASE and by this build. BASE is a build before the cure whose theory is this build's: from the low
+// table's fast side (stack #477, SPEC 16.1) its first build with the band guard (git 258d824d, version string 0.6.36, its
+// SHA-256 checked). It must be: a set's own flight and a pre-cure record's states are held against the base's to 1e-11 of a
+// covariance's largest entry and 1 mm, and the fast side moves a low-table set's states from 0.6.38's (git f8fd3240, wasm
+// 1933b5da, the base until then): each case's arc fitted by 0.6.38 and that record flown at 0, 24 and 48 h by 0.6.38 and by
+// 0.6.42 (git b7a7191e, wasm f771420f; 258d824d reads the same) is at most 37.95 m apart at 300 km, i 5, 20.76 m at
+// 1,200 km, i 0.5 and 8.89 m at 550 km, i 52.9 (main 0.6.39, git 94351f34, wasm 7a857d63: within 0.1 mm of 0.6.38's).
+// The refusal is also read on a record main wrote: each case's arc
+// fitted by 0.6.38 (MAIN, SHA-256 checked) and flown here has its covariance refused by name and its states flown.
 // - The cure (a reader whose theory's epoch state differs from the writer's): this build's record read again with its
 //   gravity caps moved from 31 and 20 to 12 and 6, so its flown epoch state moves and the two-body state of its mean
 //   elements does not (at i 52.9 by 31 m; near the equator the caps leave the epoch state as it was, and one case must
 //   move by more than MOVED_KM). The epoch covariance less the floor the reader takes off (sdnap_test_epoch_floor) is the
 //   same bit for bit; and on both, at minute 0, P(0) less the floor at the flown state equals that remainder within
 //   IDENTITY of P(0)'s largest entry.
-// - A set's own flight is as it was: this build's record flown by this build against SELF_BASE's record flown by
-//   SELF_BASE, sdnap_covariance_at hourly to 48 h, within SELF (SELF_BASE: 0.6.38 at 0.6.39; from 0.6.43 the zonal
-//   theory's constant radial term's first build on 0.6.39, git 36ebd1e6, since the term moves a set's own flight, SPEC
-//   16.23).
-// - Across a theory change (from 0.6.43, the case that found stack #551): 0.6.39's record flown by this build against
-//   0.6.39's flight of it, sdnap_covariance_at hourly to 48 h, within ACROSS (measured with the radial term on this
-//   test's cases: up to 1.6e-5 of a time's largest entry and 1.4e-5 in along-track variance, 0 at caps 0, which carry no
-//   term; over seven cases fitted to zero residual, under 1.7e-5; 0.6.36's records under the same term came out negative
-//   or 85 times too narrow).
+// - A set's own flight is as it was: this build's record flown by this build against BASE's record flown by BASE,
+//   sdnap_covariance_at hourly to 48 h, within SELF.
 // - Caps 0 (an AP set without gravity terms): this build's record flies its covariance with the floor at the two-body
-//   state (one rule for every AP record), and 0.6.38's has it refused.
-// - 0.6.38's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of this
-//   build's flight of the same record with PRODUCER 0.6.39, which flies its covariance (a flight without covariance takes
-//   the state path, one with it the covariance's nominal: they part by about 0.3 mm on any build; through 0.6.42 against
-//   0.6.38's own flight of it), no covariance lines, the block's COMMENT naming cov-floor-at-theory-state.
+//   state (one rule for every AP record), and BASE's has it refused.
+// - BASE's record on this build: sdnap_covariance_at -7; propagate status 0, its three states within STATES_M of BASE's
+//   flight of it (a flight without covariance takes the state path, one with it the covariance's nominal: they part by
+//   about 0.3 mm on any build), no covariance lines, the block's COMMENT naming cov-floor-at-theory-state.
 // - The gate reads PROVENANCE.PRODUCER exactly: this module at 0.6.39 or later as X.Y.Z accepted, anything else refused
 //   (0.6.38, a release on main, writes its floor at the theory state).
 // - The remainder is the hook's (sdnap_test_epoch_floor computes it from the record alone, at the state the reader's own
@@ -33,7 +32,8 @@
 // - The two-body state (twobody::state_of through epoch_floor_state) of three element sets bit for bit (TWO_BODY): every
 //   record written from 0.6.39 on carries its floor at it, so it must never move; a change to it refuses no record and
 //   moves every later reader's floor.
-// - The stored fixture record, this build's own fit (ap-fit-0.6.39.ocm), has 0.6.36's fit's mean elements bit for bit.
+// - 0.6.39's fit of the 0.4.0 inputs (ap-fit-0.6.39.ocm, the stored record of 0.6.39 to 0.6.41, written by the epoch
+//   floor's build at 0.6.39) has 0.6.36's fit's mean elements bit for bit.
 // Cases: 300 km at i 5 and 1,200 km at i 0.5 (where 0.6.36's records read by a later theory came out narrowest, or with a
 // negative along-track variance: stack #551), 550 km at i 52.9 (the fixture's orbit, where they came out wider), and 300 km
 // at i 5 with caps 0.
@@ -56,25 +56,26 @@ import {T, seedOcm, flight, rowsThrough, repackOcm, ocmOf} from './lib/ocm.mjs';
 import {scratchTemp} from './lib/scratch.mjs';
 
 ensureBuilt();
-const BASE = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
-const CURE = {version: '0.6.39', commit: '94351f345a32c659e0beec0d87dfb14100e2ea23', sha256: '7a857d632d044cd3830456cdcb8fbac5cb95a201087a417c530773f2e0bc295a'};
-const SELF_BASE = {version: '0.6.43', commit: '36ebd1e67796f6e3689c334ec7f823925623c93a', sha256: 'f0e7bd7d8c222bf12099d23fb35363fefe6a5ff1fcdad253191452c353a49790'};
-const SELF = {ofLargest: 1e-11, along: 1e-10}, ACROSS = {ofLargest: 1e-4, along: 1e-4}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
+const BASE = {version: '0.6.36', commit: '258d824d2c83da8aa0f9ad2325273cfe478ae5d8', sha256: '01f8fd18eb97107b4cd1e0d7694f31787bcddf7cbb61f44255d83e3f45f3f56f'};
+const MAIN = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
+const SELF = {ofLargest: 1e-11, along: 1e-10}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
 // the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)
 const TWO_BODY = [
   ['4093b9d48c182380', '40b49e65f890b127', '40afdb86f9e97c32', 'c019ddfa467d95f6', 'bff6ea35419b85d0', '400ee1ede45a0864'],
   ['c0da7a2feffb8a9e', 'c0df8bb18ea6e5e0', 'c0514ae8e3edf45d', '4002d6761bf6ee1e', 'bfff9e2ee457b2ea', '3f5e0f26a7a71755'],
   ['40ae8ecae16aac92', 'c0c1b781e4709029', 'c0a1e98f8a44d4c6', '40140fb17d6844b8', 'c00d9c36d7701362', '4013e9662b6b1fdb']];
-const modules = fileURLToPath(new URL('../../../', import.meta.url)), scratchDir = scratchTemp('sdn-ap-epoch-floor-');
-const harnessOf = async (b) => {
-  const bytes = execFileSync('git', ['-C', modules, 'show', `${b.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
-  assert.equal(createHash('sha256').update(bytes).digest('hex'), b.sha256, `${b.version} (${b.commit.slice(0, 8)}) baseline sha256`);
-  const p = path.join(scratchDir, `sdn-ap-${b.commit.slice(0, 8)}.wasm`);
-  fs.writeFileSync(p, bytes);
-  return createStandaloneHarness('browser', p, {surface: 'direct'});
-};
-const [base, cure, selfBase] = [await harnessOf(BASE), await harnessOf(CURE), await harnessOf(SELF_BASE)];
+const modules = fileURLToPath(new URL('../../../', import.meta.url));
+const baseBytes = execFileSync('git', ['-C', modules, 'show', `${BASE.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
+assert.equal(createHash('sha256').update(baseBytes).digest('hex'), BASE.sha256, `${BASE.version} baseline sha256`);
+const basePath = path.join(scratchTemp('sdn-ap-epoch-floor-'), `sdn-ap-${BASE.version}.wasm`);
+fs.writeFileSync(basePath, baseBytes);
+const base = await createStandaloneHarness('browser', basePath, {surface: 'direct'});
 const cur = await createStandaloneHarness('browser', wasmPath, {surface: 'direct'});
+const mainBytes = execFileSync('git', ['-C', modules, 'show', `${MAIN.commit}:propagator/sdn-ap/dist/isomorphic/module.wasm`], {maxBuffer: 1 << 26});
+assert.equal(createHash('sha256').update(mainBytes).digest('hex'), MAIN.sha256, `${MAIN.version} sha256`);
+const mainPath = path.join(scratchTemp('sdn-ap-epoch-floor-main-'), `sdn-ap-${MAIN.version}.wasm`);
+fs.writeFileSync(mainPath, mainBytes);
+const mainH = await createStandaloneHarness('browser', mainPath, {surface: 'direct'});
 
 const RE = 6378.1363, MU = 398600.4418, t0 = Date.parse('2026-10-01T00:00:00Z');
 const iso = (ms) => new Date(ms).toISOString().replace('Z', '');
@@ -140,7 +141,7 @@ for (const c of CASES) {
     assert.equal(f.statusCode, 0, `${c.name}: fit ${f.errorCode} ${f.errorMessage}`);
     return new Uint8Array(f.outputs.find((o) => o.portId === 'elements').payload);
   };
-  const old = await fitBy(base), mine = await fitBy(cur), cured = await fitBy(cure), selfRec = await fitBy(selfBase);
+  const old = await fitBy(base), mine = await fitBy(cur);
   if (!producerRecord) producerRecord = mine;
   const row = {name: c.name};
   // the identity at minute 0, and (caps 31 and 20) the reader whose epoch state differs
@@ -163,22 +164,15 @@ for (const c of CASES) {
       `${c.name}: read with the gravity caps at 12 and 6: remainder ${same ? 'the same' : 'moved'}, flown epoch state moved ${flownMovedKm} km, identity ${idm.gap}`);
   }
   // a set's own flight is as it was
-  const [ob, mc] = [covAt(selfBase, selfRec), covAt(cur, mine)];
+  const [ob, mc] = [covAt(base, old), covAt(cur, mine)];
   const self = ob.status === 0 && mc.status === 0 ? apart(ob.out, mc.out) : null;
   row.self = self;
   check(self && self.ofLargest <= SELF.ofLargest && self.along <= SELF.along,
-    `${c.name}: this build's record on this build against ${SELF_BASE.commit.slice(0, 8)}'s on ${SELF_BASE.commit.slice(0, 8)}: ${JSON.stringify(self ?? [ob.status, mc.status])} (within ${JSON.stringify(SELF)})`);
-  // across a theory change: the rule's release's record on this build against that release's flight of it
-  const [cc, cm] = [covAt(cure, cured), covAt(cur, cured)];
-  const across = cc.status === 0 && cm.status === 0 ? apart(cc.out, cm.out) : null;
-  row.across = across;
-  check(across && across.ofLargest <= ACROSS.ofLargest && across.along <= ACROSS.along,
-    `${c.name}: ${CURE.version}'s record on this build against ${CURE.version}'s flight of it: ${JSON.stringify(across ?? [cc.status, cm.status])} (within ${JSON.stringify(ACROSS)})`);
+    `${c.name}: this build's record on this build against ${BASE.version}'s on ${BASE.version}: ${JSON.stringify(self ?? [ob.status, mc.status])} (within ${JSON.stringify(SELF)})`);
   // the record written before: its covariance refused by name, its states flown as the base flies them
   const oc = covAt(cur, old);
   const out = {output: {EPOCHS: [iso(t0), iso(t0 + 86400000), iso(t0 + 2 * 86400000)], FRAME: pcfOutputFrame.GCRF}};
-  const relabeled = repackOcm(old, (u) => { u.PROVENANCE.PRODUCER = `com.spacedatanetwork.sdn-ap-propagator ${CURE.version}`; });
-  const [pb, pc] = [await cur.invoke({methodId: 'propagate', inputs: flight([relabeled], out)}), await cur.invoke({methodId: 'propagate', inputs: flight([old], out)})];
+  const [pb, pc] = [await base.invoke({methodId: 'propagate', inputs: flight([old], out)}), await cur.invoke({methodId: 'propagate', inputs: flight([old], out)})];
   const bb = pb.statusCode === 0 ? statesOf(pb) : null, cb = pc.statusCode === 0 ? statesOf(pc) : null;
   const lines = cb ? cb.EPHEMERIS_DATA_LINES.length : 0;
   const statesM = bb && cb && lines === 3 && bb.EPHEMERIS_DATA_LINES.length === 3
@@ -186,7 +180,13 @@ for (const c of CASES) {
   Object.assign(row, {preFloorStatus: oc.status, preFloorStates: lines, preFloorStatesM: statesM, preFloorCovLines: cb?.COVARIANCE_MATRIX_LINES.length});
   check(oc.status === -7, `${c.name}: sdnap_covariance_at of ${BASE.version}'s record: ${oc.status}, expected -7`);
   check(statesM <= STATES_M && cb.COVARIANCE_MATRIX_LINES.length === 0 && String(cb.COMMENT ?? '').startsWith('cov-floor-at-theory-state:'),
-    `${c.name}: propagate of ${BASE.version}'s record: ${pc.statusCode === 0 ? `${lines} states ${statesM} m from the relabeled record's, ${cb.COVARIANCE_MATRIX_LINES.length} covariance lines, COMMENT ${cb.COMMENT}` : pc.errorCode}`);
+    `${c.name}: propagate of ${BASE.version}'s record: ${pc.statusCode === 0 ? `${lines} states ${statesM} m from ${BASE.version}'s, ${cb.COVARIANCE_MATRIX_LINES.length} covariance lines, COMMENT ${cb.COMMENT}` : pc.errorCode}`);
+  // the record main wrote (0.6.38): refused by name here, its states flown
+  const m38 = await fitBy(mainH), mo = covAt(cur, m38);
+  const pm = await cur.invoke({methodId: 'propagate', inputs: flight([m38], out)}), cm = pm.statusCode === 0 ? statesOf(pm) : null;
+  row.mainRecord = {covarianceAt: mo.status, propagate: pm.statusCode, states: cm?.EPHEMERIS_DATA_LINES.length, covLines: cm?.COVARIANCE_MATRIX_LINES.length};
+  check(mo.status === -7 && cm && cm.EPHEMERIS_DATA_LINES.length === 3 && cm.COVARIANCE_MATRIX_LINES.length === 0 && String(cm.COMMENT ?? '').startsWith('cov-floor-at-theory-state:'),
+    `${c.name}: ${MAIN.version}'s record on this build: ${JSON.stringify(row.mainRecord)}, COMMENT ${cm?.COMMENT} (refused by name, its states flown)`);
   console.log(JSON.stringify(row));
 }
 
