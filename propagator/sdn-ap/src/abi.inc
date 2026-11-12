@@ -495,6 +495,15 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
   return r.status < 0 ? ORBPRO_PROP_UNPHYSICAL : ORBPRO_PROP_OK;
 }
 
+/// SPEC 16.21 (stack #550): the AP output states since the last reset whose osculating Kepler solve did not converge in Newton's
+/// 30 steps and took the bisection instead; `reset` non-zero sets the count back to 0 after reading it. A diagnostic.
+SDNAP_EXPORT("sdnap_kepler_unconverged")
+uint32_t sdnap_kepler_unconverged(int32_t reset) {
+  const uint32_t n = __atomic_load_n(&sdnap::xpt::g_kepler_unconverged, __ATOMIC_RELAXED);
+  if (reset != 0) __atomic_store_n(&sdnap::xpt::g_kepler_unconverged, 0u, __ATOMIC_RELAXED);
+  return n;
+}
+
 /// Cost probe: `count` rate evaluations of row `index` at its epoch state and
 /// time `minutes` (the experiment of DESIGN 2.0's per-evaluation figures).
 SDNAP_EXPORT("sdnap_rate_probe")

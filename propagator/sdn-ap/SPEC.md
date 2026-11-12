@@ -4450,6 +4450,30 @@ went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit ab
 The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
 arc.
 
+**16.21 The output's Kepler solve** (from 0.6.NN; stack #550). An AP output state takes the eccentric anomaly E of its
+osculating elements (the mean elements with the Sun, Moon, radiation, tesseral and drag-step corrections, before section 8's
+J2 step) from M = E - e sin E, starting from the warm start, the mean elements' E (Ewarm), and dm, the difference of the two
+anomalies reduced to (-pi, pi]:
+
+- |dm / (1 - e cos Ewarm)| under 0.004: E = Ewarm plus the third-order series in dm;
+- otherwise (and with e at most 0.018 in the regime below 1100 min, 0.008 above it, the small-e series of M): Newton from
+  Ewarm + dm / (1 - e cos Ewarm), solving for M on the start's branch, m_t = M + 2 pi round((Ewarm - e sin Ewarm - M) / 2 pi).
+  Where the two anomalies lie on the same side of 0, m_t is M exactly and the solve is 0.6.36's bit for bit;
+- Newton that has not met its tolerance in 30 steps gives way to bisection on [m_t - e, m_t + e], where E - e sin E - m_t,
+  increasing, changes sign, and the state is counted (sdnap_kepler_unconverged). No flight of the suite takes it.
+
+Through 0.6.36 Newton solved for M itself. For the seconds of a perigee passage in which the mean anomaly and the osculating
+anomaly lie either side of 0, M was 2 pi from the start's branch: the first residual was 2 pi, each step about 4 pi, and after
+30 steps E stood up to 3e-3 rad from the root, its sine and cosine taken as they were. The series takes dm up to 0.004 (1 - e)
+at perigee, so this needed the output's corrections to move the anomaly by more than that, which near a commensurability the
+low-orbit grid's slow harmonics do (16.18). At the 4:1 commensurability (4.0025 rev/day, e 0.5, perigee 2,000 km) dm is
+0.0059 rad at perigee, and every passage held a block of 20 consecutive seconds, from the passage of the osculating anomaly to
+that of the mean one, whose states lay on the orbit's own path but displaced along it: up to 17 km on the test's set at
+29 h (test/perigee-kepler-branch.e2e.mjs), 31 to 87 km on sets fitted at the same perigee and eccentricity at i 20, 55 and
+70. Section 8's solve
+(output_j2_osc) starts the same way from Ewarm + dm and solves for M; its dm is the Sun's and Moon's short-period terms and
+radiation alone, and it is kept bit for bit.
+
 
 ## 17. Products: the producer contract (side B's method, outside the SGP4-XP specification)
 
