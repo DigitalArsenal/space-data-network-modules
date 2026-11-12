@@ -18,7 +18,7 @@
 //   (the mean of the two flights of one set at the 0.8022 limit) is refused fit-at-branch-limit, its message naming the
 //   switch; a truth half on each side of the eccentricity switch at 0.3 (at 2 rev/day) is fitted from below and held at
 //   the switch on its own branch: e at or under 0.3 and within 1e-6 of it (0.3 itself on this build, the below side's
-//   from 0.6.37, whose above side begins strictly above 0.3), its OD COMMENT saying so, and the record flown back over
+//   from 0.6.38, whose above side begins strictly above 0.3), its OD COMMENT saying so, and the record flown back over
 //   the arc giving the fit's own stated RMS within 1 mm (stack #504).
 // - Epoch store (SPEC 14.3): two AP sets 6 h apart on either side of the 1.2033 limit are not blended: inside the window
 //   of their switch sdnap_epochs_select gives b = -2 and weight 0, the state is the chosen set's bit for bit, and

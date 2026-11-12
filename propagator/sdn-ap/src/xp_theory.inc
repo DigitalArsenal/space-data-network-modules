@@ -4505,6 +4505,15 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
 
 // --- SPEC 8: osculating output ------------------------------------------------
 
+/// Osculating Kepler solves (stack #550; SPEC 16.21) of every caller (output states, covariance sigma points, fit evaluations,
+/// the long-period regime's output Jacobian), read and reset by sdnap_kepler_unconverged:
+/// [0] AP's (output_impl) whose Newton ended its 30 steps with a last step of 1e-12 or more (far from the root), which then
+///     take the bisection;
+/// [1] section 8's (output_j2_osc) that ended so, counted only (its arithmetic unchanged);
+/// [2] AP's whose Newton ended its 30 steps within 1e-12 of the root (the tolerance meeting rounding), solved, their sine and
+///     cosine taken from that E.
+inline uint32_t g_kepler_unconverged[3] = {0, 0, 0};
+
 [[gnu::noinline]] inline int32_t output_j2_osc(const double* y, double Ewarm, double r_out[3], double v_out[3]) {
   const Kepler k = kepler_of(y);
   if (!(k.e < 1.0)) return kPropEccentricity;
@@ -4518,13 +4527,20 @@ inline bool next_node(const RateContext& ctx, const Node& a, int dir, Node& out)
     dm -= kTwoPi * std::floor((dm + kPi) / kTwoPi);
     E = Ewarm + dm;
   }
+  bool met = false;
+  double last = 0.0;
   for (int it = 0; it < 30; ++it) {
     double sEi, cEi;
     fm::sincos(E, sEi, cEi);
     const double dE = (E - e * sEi - k.m) / (1.0 - e * cEi);
     E -= dE;
-    if (std::fabs(dE) < 1e-15) break;
+    last = dE;
+    if (std::fabs(dE) < 1e-15) {
+      met = true;
+      break;
+    }
   }
+  if (!met && std::fabs(last) >= 1e-12) __atomic_fetch_add(&g_kepler_unconverged[1], 1u, __ATOMIC_RELAXED);
   const double eta = std::sqrt(1.0 - e * e);
   double sE, cE;
   fm::sincos(E, sE, cE);
@@ -5299,10 +5315,15 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
         cE = cm0 * cu - sm0 * su;
         solved_kepler = true;
       }
+      // the mean anomaly Newton solves for: m_ang on the warm start's branch (stack #550). For a few seconds of a perigee
+      // passage the mean and the osculating anomaly lie either side of 0; there m_ang is 2 pi from the start's branch, and
+      // Newton, solving for it, stepped about 4 pi each iteration and left E off by up to 3e-3 rad after its 30.
+      double m_t = m_ang;
       if (!solved_kepler) {
         if (Ewarm == Ewarm) {
           double dm = m_ang - (Ewarm - e * sEwarm);
           dm -= kTwoPi * std::floor((dm + kPi) * (1.0 / kTwoPi));
+          m_t = m_ang + kTwoPi * std::round(((Ewarm - e * sEwarm) - m_ang) * (1.0 / kTwoPi));
           E = fast_ang ? (Ewarm + dm / (1.0 - e * cEwarm)) : (Ewarm + dm);
         } else if (fast_ang) {
           double sm0, cm0;
@@ -5316,7 +5337,7 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
           double sEi, cEi;
           if (fast_ang) fm::sincos_fast(E, sEi, cEi);
           else fm::sincos(E, sEi, cEi);
-          const double dE = (E - e * sEi - m_ang) / (1.0 - e * cEi);
+          const double dE = (E - e * sEi - m_t) / (1.0 - e * cEi);
           E -= dE;
           last_dE = dE;
           if (fast_ang ? (std::fabs(dE) < 5e-6 && e * dE * dE < (1.0 - e) * 1e-15) : (std::fabs(dE) < 1e-15)) {
@@ -5327,9 +5348,25 @@ inline int32_t output_impl(const RateContext& ctx, double t, const double* ym, d
             break;
           }
         }
-        if (std::fabs(last_dE) >= 1e-8) {
+        if (last_dE != 0.0 && std::fabs(last_dE) < 1e-12) {
+          // Newton ended its 30 steps within rounding of the root (stack #550: the 1e-15 tolerance of the non-fast path can
+          // cycle between neighboring doubles of E; through 0.6.36 the sine and cosine were then left at 0 and 1, a perigee
+          // state): solved, its sine and cosine taken from E, counted apart
+          __atomic_fetch_add(&g_kepler_unconverged[2], 1u, __ATOMIC_RELAXED);
           if (fast_ang) fm::sincos_fast(E, sE, cE);
           else fm::sincos(E, sE, cE);
+        } else if (last_dE != 0.0) {
+          // Newton ended its 30 steps far from the root (through 0.6.36 E was then taken as it stood): counted, and E taken by
+          // bisection on [m_t - e, m_t + e], where E - e sin E - m_t, increasing, changes sign
+          __atomic_fetch_add(&g_kepler_unconverged[0], 1u, __ATOMIC_RELAXED);
+          double lo = m_t - e, hi = m_t + e;
+          for (int b = 0; b < 128 && hi - lo > 1e-15 * (1.0 + std::fabs(m_t)); ++b) {
+            const double mid = 0.5 * (lo + hi);
+            if (mid - e * std::sin(mid) - m_t < 0.0) lo = mid;
+            else hi = mid;
+          }
+          E = 0.5 * (lo + hi);
+          fm::sincos(E, sE, cE);
         }
       }
       dF_osc = fast_wrap(E - m_ang);
