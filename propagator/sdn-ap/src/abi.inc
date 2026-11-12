@@ -474,7 +474,8 @@ int32_t sdnap_init_error(uint32_t index) {
 /// natural log, its prior mean and sigma those of the log; the row's term must
 /// then start > 0). `stats` (4 doubles): status (-5: the least-squares set lies on a limit in n, SPEC 16.7; at an
 /// eccentricity switch the set is held there, status 0 or 1; 2: a pass stopped because a column of its Jacobian could not be
-/// differenced in either direction, both sets decaying inside the arc, SPEC 16.25), iterations, rms km, max km.
+/// differenced in either direction, both sets decaying inside the arc, SPEC 16.25; -1: one of the module's allocations failed
+/// during the call, the error out-of-memory and `row` left as it came, SPEC 1.6), iterations, rms km, max km.
 /// Returns 0 or a negative code.
 SDNAP_EXPORT("sdnap_fit")
 int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* positions, uint32_t count,
@@ -491,8 +492,15 @@ int32_t sdnap_fit(sdnap::ElementRow* row, const double* minutes, const double* p
                      "ECOM2_Y0 is fitted by the fit method under $PCF FORCES.ECOM2 and carried in its $OCM; an ElementRow does not carry it.");
     return ORBPRO_PROP_BAD_INPUT;
   }
+  // SPEC 1.6 (stack #497): an allocation that failed during the fit is named, never a status 0, 1 or 2 and never a fitted row
+  const sdnap::mem::CallMark call_mark;
+  const sdnap::ElementRow given = *row;
   sdnap::drag::table();
-  const sdnap::fit::Result r = sdnap::fit::run(*row, minutes, positions, static_cast<int>(count), *options);
+  sdnap::fit::Result r = sdnap::fit::run(*row, minutes, positions, static_cast<int>(count), *options);
+  if (sdnap::mem::refuse_if_out_of_memory()) {
+    *row = given;
+    r.status = -1;
+  }
   if (stats != nullptr) {
     stats[0] = r.status;
     stats[1] = r.iterations;

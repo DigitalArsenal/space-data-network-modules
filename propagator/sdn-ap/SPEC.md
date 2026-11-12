@@ -145,13 +145,24 @@ allocations that fail and the largest request.
 
 **A method during which one of them failed refuses with errorCode `out-of-memory` and emits nothing.** That holds for
 `propagate`, `propagate_epochs`, `load_epochs`, `fit`, `maneuver`, `ingest_omm` and `export_omm`, whatever the method
-would otherwise have answered. The message names how many allocations failed since the method began and the largest.
-Through 0.6.47 such a call answered one of four ways:
+would otherwise have answered. That includes the decay answers of SPEC 16.25:
+- `decayed:<time>` and `decayed-in-arc:<time>`;
+- a record whose held-out states past the crossing read DECAYED;
+- a record whose last pass stopped on a column it could not difference.
+
+The message names how many allocations failed since the method began and the largest.
+Through 0.6.47 such a call answered one of five ways:
 - the theory's refusal of the elements (`element-set-refused`);
 - a state not reached (`propagation-failed`);
 - a fit that did not converge (`fit-failed`), or an implausible one;
+- a decay answer. A fit's start refused for want of memory was tested for a crossing in the arc, and a column whose
+  flight below a decaying bump failed for want of memory stopped the pass as a column refused on both sides (status 2);
 - success. A fit absorbs a failed flight as a step that did not improve, and a covariance that could not be prepared was
   dropped or refused as `invalid-covariance`. So the record could depend on how much memory was free.
+
+**A fit pass** (`fit::run_free`) during which an allocation failed answers status -1, whatever it reached: never 0, 1 or 2,
+and never -2 (a start the theory refused). The `sdnap_fit` export then gives status -1 and the error `out-of-memory`, and
+leaves its row as it came.
 
 In one instance's run of the 19 real THEMIS and Chandra windows with a measuring build at tesseral degree 31, the last four
 catalog fits read "fit-failed: The fit did not converge on the block". By then the instance had reached the 2,048 MB the

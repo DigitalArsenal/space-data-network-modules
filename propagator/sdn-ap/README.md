@@ -55,7 +55,8 @@ Build: `npm run build` (module SDK compiler lane, clang `wasm32-wasip1-threads`,
   its OD COMMENT no version before wrote, says so: a fit under the drag that ends at 40 keeps the elements, statistics and
   flights of the version before, and its record's bytes differ by that line alone.
 - Memory (SPEC 1.6, 16.11; `test/grid-cache.e2e.mjs`): a method during which one of the module's own allocations failed
-  refuses with errorCode `out-of-memory` and emits nothing, never success nor another reason.
+  refuses with errorCode `out-of-memory` and emits nothing, never success nor another reason (a decay answer, SPEC 16.25,
+  included); `sdnap_fit` then gives status -1 and leaves its row as it came.
   `sdnap_wide_grid_budget(bytes, out)` sets the grid cache's byte bound (512 MiB by default; live and idle grids, each at
   its allocated bytes, the least recently used idle grid freed first) when bytes is 1 or more (1 keeps no idle grid), and
   writes the bound, the bytes held, the grids held and those idle. The bound decides which grids are kept, never a state.

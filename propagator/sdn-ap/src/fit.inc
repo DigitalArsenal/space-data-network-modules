@@ -346,6 +346,10 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   const int max_it = o.max_iterations > 0 ? o.max_iterations : 30;
   double x[kMaxParams];
   const int np = params_of(row, o, x);
+  // SPEC 1.6 (stack #497): a pass during which one of the module's allocations failed answers status -1, whatever it reached.
+  // A flight refused for want of memory reads as a step that did not improve, as a start refused (-2), or, after a bump past
+  // the decay rule (SPEC 16.25), as a column refused on both sides (2): none of them is the fit's answer.
+  const uint32_t mem_mark = sdnap::mem::failures();
   double* res = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * nres));
   double* trial = static_cast<double*>(sdnap::mem::malloc(sizeof(double) * nres));
   // zeroed: a column whose difference is refused (SPEC 16.25) is never read before it is written
@@ -376,7 +380,7 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   row_of(x, o, work);
   if (!residuals(work, t, r, count, res)) {
     release();
-    out.status = -2;
+    out.status = sdnap::mem::failures() != mem_mark ? -1 : -2;
     return out;
   }
   double cost = cost_of(res, x);
@@ -596,7 +600,8 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   out.max_km = mx;
   out.iterations = it;
   out.status = converged ? 0 : (stopped_on_column ? kColumnRefused : 1);
-  if (!converged && !stopped_on_column) __atomic_fetch_add(&g_ceiling_met[max_it >= kPassCeiling ? 0 : 1], 1u, __ATOMIC_RELAXED);
+  if (sdnap::mem::failures() != mem_mark) out.status = -1;  // SPEC 1.6, above
+  else if (!converged && !stopped_on_column) __atomic_fetch_add(&g_ceiling_met[max_it >= kPassCeiling ? 0 : 1], 1u, __ATOMIC_RELAXED);
   release();
   return out;
 }

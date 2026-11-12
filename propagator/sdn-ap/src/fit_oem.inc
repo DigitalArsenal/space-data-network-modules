@@ -168,7 +168,7 @@ constexpr double kDecayForecastDays = 7.0;
 constexpr double kDecayCheckPerigeeKm = 400.0;
 /// SPEC 16.25: where an AP set crosses the rule inside the arc `t` (minutes from its epoch): the minute of the crossing.
 inline bool decay_in_arc(const ElementRow& row, const std::vector<double>& t, double& minute) {
-  xpt::XpSat* xs = static_cast<xpt::XpSat*>(std::malloc(sizeof(xpt::XpSat)));
+  xpt::XpSat* xs = static_cast<xpt::XpSat*>(sdnap::mem::malloc(sizeof(xpt::XpSat)));
   bool found = false;
   if (xs != nullptr && xpt::xp_init(elements_of(row), *xs) == kPropOk) {
     if (xpt::is_ap_ctx(xs->ctx)) {

@@ -16,13 +16,19 @@
 // with AP's terms selected (a test build that adds the selector), sdnap_propagate_soa at 20 instants on 1 thread, on 8 (five
 // 512-row chunks: threaded batches) and on 8 at a 1-byte bound: every row flies, bit for bit.
 // A failed allocation is refused by name ("out-of-memory"), never success and never another reason:
-// - an instance held to 256 MB and filled through sdnap_alloc to about 3 MB free: `propagate` of the class 0 set and `fit` of
+// - an instance held to 256 MB and filled through sdnap_alloc to about 4 MB free: `propagate` of the class 0 set and `fit` of
 //   that set's own states answer out-of-memory, and the cache then holds as many grids as a fresh instance (a set that failed
 //   to initialize keeps no reference); an epoch-store state answers the theory's refusal code; with the memory freed, the same `propagate` and the
 //   same epoch-store state are bit for bit a fresh instance's;
 // - the same test build fails the N-th allocation of a `fit` (N at a fifth, a half and four fifths of the fit's own count):
 //   each answers out-of-memory, and the same fit on the same instance afterwards writes the fresh instance's record, byte
-//   for byte.
+//   for byte;
+// - the decay answers (SPEC 16.25) as well: a set at perigee 200 km, e 0.001 whose flight ends at its decay crossing within
+//   four days, fitted on its own states (12 hours ending at the crossing: decayed-in-arc or a record that states where it
+//   decays; 24 hours ending 6 hours before it, with held-out states to it and three past it: a record whose residuals mark
+//   those three DECAYED), each with an allocation failed at a fifth, a half and four fifths of its count: out-of-memory, and
+//   the fresh answer afterwards;
+// - the raw fit (sdnap_fit) the same way: status -1 and its row as it came, then the fresh status, statistics and row.
 // JS moves bytes and compares numbers the module produced.
 //   node test/grid-cache.e2e.mjs
 import assert from "node:assert/strict";
@@ -35,9 +41,10 @@ import { ephemerisDataLineT as Line } from "spacedatastandards.org/lib/js/OEM/ep
 import { timingStandard } from "spacedatastandards.org/lib/js/OEM/timingStandard.js";
 import { pcfOutputFrame } from "spacedatastandards.org/lib/js/PCF/pcfOutputFrame.js";
 import { pcfAtmosphereFamily } from "spacedatastandards.org/lib/js/PCF/pcfAtmosphereFamily.js";
-import { ensureBuilt, wasmPath, elementRows, THEORY } from "./lib/module.mjs";
+import { ODR } from "spacedatastandards.org/lib/js/ODR/main.js";
+import { ensureBuilt, wasmPath, elementRows, THEORY, openModule } from "./lib/module.mjs";
 import { buildDiagnostic } from "./lib/ap-diagnostic.mjs";
-import { T, seedOcm, flight } from "./lib/ocm.mjs";
+import { T, seedOcm, flight, ocmOf } from "./lib/ocm.mjs";
 import { configuration } from "./lib/pcf.mjs";
 import { packOem, rfm } from "./lib/frames.mjs";
 
@@ -251,5 +258,91 @@ for (const part of [0.2, 0.5, 0.8]) {
   assert.ok(recordOf(again).equals(refRecord), `after a failure at ${part} of the fit, the record is the fresh instance's, byte for byte`);
 }
 console.log(`a fit failing its allocation at a fifth, a half and four fifths of its ${count}: out-of-memory each time, and the fresh record afterwards`);
+
+// the decay answers (SPEC 16.25) are no answer after a failed allocation: a set at perigee 200 km, e 0.001, BTERM 0.01 (Jacchia
+// 1970 on the theory's flux), whose flight ends at its decay crossing within four days, fitted on its own states
+const D0 = Date.parse("2026-10-29T00:00:00Z"), HOUR = 3600000;
+const msOf = (text) => Date.parse(text.endsWith("Z") ? text : `${text}Z`);
+const decaySeed = (bterm) => seedOcm({ epoch: iso(D0), n: revPerDay((RE + 200) / 0.999), e: 0.001, i: 55, raan: 40, argp: 90, ma: 0, bterm, norad: 99564, tesseral: 31, zonal: 20 });
+const span = await flightOf(fresh.h, decaySeed(0.01), Array.from({ length: 4 * 288 + 1 }, (_, k) => D0 + k * 300000));
+assert.equal(span.statusCode, 0, `the seed's four days: ${span.errorCode}`);
+const spanBlock = OEM.getRootAsOEM(new flatbuffers.ByteBuffer(span.outputs.find((v) => v.portId === "ephemeris").payload)).unpack().EPHEMERIS_DATA_BLOCK[0];
+const crossing = /^decayed:(\S+); \d+ epochs after it refused$/.exec(spanBlock.COMMENT ?? "");
+assert.ok(crossing, `the seed decays within four days: COMMENT ${spanBlock.COMMENT}`);
+const crossMs = msOf(crossing[1]);
+const lineOf = (l) => Object.assign(new Line(), { EPOCH: l.EPOCH, X: l.X, Y: l.Y, Z: l.Z, X_DOT: l.X_DOT, Y_DOT: l.Y_DOT, Z_DOT: l.Z_DOT });
+const seedLines = spanBlock.EPHEMERIS_DATA_LINES.map(lineOf);
+const within = (a, b) => seedLines.filter((l) => msOf(l.EPOCH) >= a && msOf(l.EPOCH) < b);
+const oemOf = (lines, useStart, useStop) => packOem(Object.assign(new OEMT(), { EPHEMERIS_DATA_BLOCK: [Object.assign(new Block(), {
+  OBJECT: Object.assign(new CATT(), { NORAD_CAT_ID: 99564, OBJECT_NAME: "TEST" }), CENTER_NAME: "EARTH", REFERENCE_FRAME: rfm("GCRF"), TIME_SYSTEM: timingStandard.UTC,
+  START_TIME: lines[0].EPOCH, STOP_TIME: lines.at(-1).EPOCH, USEABLE_START_TIME: useStart, USEABLE_STOP_TIME: useStop, EPHEMERIS_DATA_LINES: lines })] }));
+// the arc's 12 hours before the crossing: the fitted set, or a bumped one, meets the rule at the arc's end
+const lastHours = within(crossMs - 12 * HOUR, crossMs);
+// 24 hours of arc ending 6 hours before the crossing, then held-out states: the seed's to the crossing, and three past it (a set
+// at half the drag term flies there) that the written set has no state at
+const arcEnd = within(crossMs - 30 * HOUR, crossMs - 6 * HOUR);
+const twin = await flightOf(fresh.h, decaySeed(0.005), [0.5, 1, 1.5].map((h) => crossMs + h * HOUR));
+assert.equal(twin.statusCode, 0, `the twin past the seed's crossing: ${twin.errorCode}`);
+const pastLines = statesOf(twin).map(lineOf);
+assert.equal(pastLines.length, 3, "the twin flies past the seed's crossing");
+const heldLines = [...arcEnd, ...within(crossMs - 6 * HOUR, crossMs), ...pastLines];
+const fitBytes = (h, bytes) => h.invoke({ methodId: "fit", inputs: [cfg, { portId: "ephemeris", typeRef: T("OEM"), payload: bytes }] });
+const answerOf = (r) => r.statusCode === 0 ? JSON.stringify(r.outputs.map((v) => [v.portId, Buffer.from(v.payload).toString("hex")])) : `${r.errorCode}: ${r.errorMessage}`;
+const decayCases = [
+  { name: "an arc ending at the crossing", bytes: oemOf(lastHours, lastHours[0].EPOCH, lastHours.at(-1).EPOCH),
+    decays: (r) => (r.errorCode ?? "").startsWith("decayed-in-arc:") ||
+      (r.statusCode === 0 && (ocmOf(r.outputs.find((v) => v.portId === "elements").payload).ORBIT_DETERMINATION.COMMENT ?? []).some((l) => l.startsWith("decays at "))) },
+  { name: "held-out states past the crossing", bytes: oemOf(heldLines, arcEnd[0].EPOCH, arcEnd.at(-1).EPOCH),
+    decays: (r) => r.statusCode === 0 && ODR.getRootAsODR(new flatbuffers.ByteBuffer(r.outputs.find((v) => v.portId === "residuals").payload)).unpack()
+      .EDITED_OBSERVATIONS.filter((e) => e.REASON === "DECAYED").length === pastLines.length },
+];
+for (const c of decayCases) {
+  // the count from the second of two fits (the first may fill what the instance keeps)
+  const ref = await fitBytes(F.h, c.bytes);
+  F.x.sdnap_test_allocs(1);
+  assert.equal(answerOf(await fitBytes(F.h, c.bytes)), answerOf(ref), `${c.name}: the same answer twice`);
+  const n = F.x.sdnap_test_allocs(1);
+  assert.ok(c.decays(ref), `${c.name}: a decay answer (${ref.errorCode ?? "a record"}: ${ref.errorMessage ?? ""})`);
+  for (const part of [0.2, 0.5, 0.8]) {
+    F.x.sdnap_test_fail_after(Math.round(part * n));
+    const r = await fitBytes(F.h, c.bytes);
+    F.x.sdnap_test_fail_after(0);
+    assert.equal(r.errorCode, "out-of-memory", `${c.name}, its allocation ${Math.round(part * n)} of ${n} failed: ${r.errorCode}: ${r.errorMessage}`);
+    assert.equal(answerOf(await fitBytes(F.h, c.bytes)), answerOf(ref), `${c.name}: after a failure at ${part}, the fresh answer`);
+  }
+  console.log(`${c.name} (${ref.statusCode === 0 ? "a record" : ref.errorCode}): out-of-memory at a fifth, a half and four fifths of its ${n} allocations, the fresh answer afterwards`);
+}
+
+// the raw fit (sdnap_fit) failing an allocation part way: status -1 and the row as it came; then the fresh status and row
+const M = await openModule();
+const rawSet = { epochWhole: 2461314.5, epochFrac: 0, meanMotion: 15.07, ecc: 0.001, inc: 53, raan: 10, argp: 20, ma: 30, bterm: 0, agom: 0, norad: 90401, theory: THEORY.SGP4XP };
+M.init([rawSet]);
+const rawMinutes = Array.from({ length: 25 }, (_, k) => 60 * k), rawPositions = [];
+for (const t of rawMinutes) { const p = M.atMinutes([t]); rawPositions.push(p.x[0], p.y[0], p.z[0]); }
+const fmem = () => (F.h.memory ?? F.x.memory).buffer, startRow = elementRows([{ ...rawSet, meanMotion: 15.0705, ma: 30.05 }]);
+const rowPtr = F.x.sdnap_alloc(112), tPtr = F.x.sdnap_alloc(8 * 25), rPtr = F.x.sdnap_alloc(8 * 75), optPtr = F.x.sdnap_alloc(56), statsPtr = F.x.sdnap_alloc(32);
+const rawFit = () => {
+  new Uint8Array(fmem(), rowPtr, 112).set(startRow);
+  new Float64Array(fmem(), tPtr, 25).set(rawMinutes);
+  new Float64Array(fmem(), rPtr, 75).set(rawPositions);
+  new Uint8Array(fmem(), optPtr, 56).fill(0);
+  const rc = F.x.sdnap_fit(rowPtr, tPtr, rPtr, 25, optPtr, statsPtr);
+  return { rc, stats: Array.from(new Float64Array(fmem(), statsPtr, 4)), row: Buffer.from(new Uint8Array(fmem(), rowPtr, 112)) };
+};
+const rawRef = rawFit();
+F.x.sdnap_test_allocs(1);
+assert.ok(same(rawFit().stats, rawRef.stats), "the raw fit twice alike");
+const rawCount = F.x.sdnap_test_allocs(1);
+assert.ok(rawRef.rc === 0 && rawRef.stats[0] === 0, `the raw fit converges: rc ${rawRef.rc}, status ${rawRef.stats[0]}`);
+for (const part of [0.2, 0.5, 0.8]) {
+  F.x.sdnap_test_fail_after(Math.max(1, Math.round(part * rawCount)));
+  const r = rawFit();
+  F.x.sdnap_test_fail_after(0);
+  assert.ok(r.rc !== 0 && r.stats[0] === -1, `the raw fit, its allocation ${Math.round(part * rawCount)} of ${rawCount} failed: rc ${r.rc}, status ${r.stats[0]}`);
+  assert.ok(r.row.equals(Buffer.from(startRow)), "the raw fit's row as it came");
+  const again = rawFit();
+  assert.ok(again.rc === 0 && same(again.stats, rawRef.stats) && again.row.equals(rawRef.row), "the raw fit afterwards: the fresh status, statistics and row");
+}
+console.log(`the raw fit failing its allocation at a fifth, a half and four fifths of its ${rawCount}: status -1, the row as it came, the fresh fit afterwards`);
 console.log("grid cache E2E: PASS");
 process.exit(0);
