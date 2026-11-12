@@ -526,6 +526,25 @@ struct Set {
 /// with the noise start t_a (minutes), and the floor's scale k_F. Above the drag a set inside its class's calibrated
 /// condition (`sigma_km` the data sigma its fit weighted with, 0 for none; `span_h` the fit's span) takes the class's
 /// row (kAboveAP, kAboveXP). False when the theory refuses the set.
+/// DIAGNOSTIC (stack #489, designs C1 to C3): a set's non-gravitational rate per day, as noise_of states it (the drag term's n-dot
+/// over n), for the fit's weighting before the record is written.
+inline double diag_ng_rate_of(const ElementRow& row) {
+  double rate = 0.0;
+  ElementRow none = row;
+  none.bterm = 0.0;
+  xpt::XpSat* s1 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+  xpt::XpSat* s0 = static_cast<xpt::XpSat*>(std::calloc(1, sizeof(xpt::XpSat)));
+  drag::table();
+  const bool ok = s1 != nullptr && s0 != nullptr && xpt::xp_init(elements_of(row), *s1) == kPropOk;
+  if (ok && xpt::xp_init(elements_of(none), *s0) == kPropOk && s1->epoch.y[xpt::kN] > 0.0)
+    rate = (s1->epoch.f[xpt::kN] - s0->epoch.f[xpt::kN]) / s1->epoch.y[xpt::kN] * kMinutesPerDay;
+  if (s1 != nullptr) xpt::xp_release(*s1);
+  if (s0 != nullptr) xpt::xp_release(*s0);
+  std::free(s1);
+  std::free(s0);
+  return rate;
+}
+
 inline bool noise_of(const ElementRow& row, double t_a, double sigma_km, double span_h, double& ng_rate, int& regime, double* noise,
                      double& share, double& floor_scale) {
   ng_rate = 0.0;
@@ -606,10 +625,10 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
     floor[3] += u[2] * u[0];
     floor[4] += u[2] * u[1];
     floor[5] += u[2] * u[2];
-    if (fit::g_along_factor > 1.0) {
-      // DIAGNOSTIC (stack #489, design C2): the rows through the state's L, as the cost weighed them
+    if (fit::axis_weighting()) {
+      // DIAGNOSTIC (stack #489, designs C2 and C3): the rows through the state's L, as the cost weighed them
       double L[9], Jt[3 * kMaxAug];
-      fit::along_rows(rm, vm, fit::g_along_factor, L);
+      fit::axis_rows(rm, vm, L);
       for (int i = 0; i < 3; ++i)
         for (int a = 0; a < np; ++a) Jt[i * np + a] = L[3 * i] * J[0 * np + a] + L[3 * i + 1] * J[1 * np + a] + L[3 * i + 2] * J[2 * np + a];
       for (int a = 0; a < np; ++a)

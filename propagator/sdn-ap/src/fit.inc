@@ -313,26 +313,29 @@ inline bool& jacobian_fallback() {
   return b;
 }
 
-/// DIAGNOSTIC (stack #489, design C2): while above 1, the cost and the covariance weigh each state's along-track residual
-/// at the data sigma times this factor, its radial and cross-track residuals at the data sigma (each state's own axes).
-inline thread_local double g_along_factor = 1.0;
-struct AlongTrackScope {
-  double prev;
-  explicit AlongTrackScope(double f) : prev(g_along_factor) { g_along_factor = f; }
-  ~AlongTrackScope() { g_along_factor = prev; }
+/// DIAGNOSTIC (stack #489, designs C2 and C3): while any is above 1, the cost and the covariance weigh each state's radial,
+/// along-track and cross-track residuals (its own axes) at the data sigma times these factors.
+inline thread_local double g_axis[3] = {1.0, 1.0, 1.0};
+inline bool axis_weighting() { return g_axis[0] > 1.0 || g_axis[1] > 1.0 || g_axis[2] > 1.0; }
+struct AxisScope {
+  double prev[3];
+  explicit AxisScope(const double* f) {
+    for (int i = 0; i < 3; ++i) { prev[i] = g_axis[i]; g_axis[i] = f[i]; }
+  }
+  ~AxisScope() { for (int i = 0; i < 3; ++i) g_axis[i] = prev[i]; }
 };
-/// The rows of L = diag(1, 1/f, 1) [U; V; W] at a state (U radial, W along the orbit normal, V = W x U), 9 doubles.
-inline void along_rows(const double* rr, const double* vv, double f, double* L) {
+/// The rows of L = diag(1/fR, 1/fT, 1/fN) [U; V; W] at a state (U radial, W along the orbit normal, V = W x U), 9 doubles.
+inline void axis_rows(const double* rr, const double* vv, double* L) {
   const double rn = std::sqrt(rr[0] * rr[0] + rr[1] * rr[1] + rr[2] * rr[2]);
   double U[3] = {rr[0] / rn, rr[1] / rn, rr[2] / rn};
   double W[3] = {rr[1] * vv[2] - rr[2] * vv[1], rr[2] * vv[0] - rr[0] * vv[2], rr[0] * vv[1] - rr[1] * vv[0]};
   const double wn = std::sqrt(W[0] * W[0] + W[1] * W[1] + W[2] * W[2]);
   for (double& q : W) q /= wn;
   const double V[3] = {W[1] * U[2] - W[2] * U[1], W[2] * U[0] - W[0] * U[2], W[0] * U[1] - W[1] * U[0]};
-  for (int j = 0; j < 3; ++j) { L[j] = U[j]; L[3 + j] = V[j] / f; L[6 + j] = W[j]; }
+  for (int j = 0; j < 3; ++j) { L[j] = U[j] / g_axis[0]; L[3 + j] = V[j] / g_axis[1]; L[6 + j] = W[j] / g_axis[2]; }
 }
 /// Every state's L from the observed positions, the velocity from its neighbors in time.
-inline std::vector<double> along_frames(const double* t, const double* r, int count, double f) {
+inline std::vector<double> axis_frames(const double* t, const double* r, int count) {
   std::vector<double> L(9 * static_cast<size_t>(count));
   std::vector<int> order(count);
   for (int k = 0; k < count; ++k) order[k] = k;
@@ -342,7 +345,7 @@ inline std::vector<double> along_frames(const double* t, const double* r, int co
     const double dt = t[b] - t[a];
     double v[3];
     for (int j = 0; j < 3; ++j) v[j] = dt != 0.0 ? (r[3 * b + j] - r[3 * a + j]) / dt : 0.0;
-    along_rows(r + 3 * k, v, f, L.data() + 9 * k);
+    axis_rows(r + 3 * k, v, L.data() + 9 * k);
   }
   return L;
 }
@@ -383,9 +386,9 @@ inline Result run_free(ElementRow& row, const double* t, const double* r, int co
   PriorTerm priors[3];
   const int n_priors = priors_of(o, priors);
   const double w = 1.0 / (sigma_km * sigma_km);  // the data's weight, 1 / sigma^2 (km^-2)
-  // DIAGNOSTIC (stack #489, design C2): each state's residual and Jacobian rows taken through its L
-  const bool c2 = g_along_factor > 1.0;
-  const std::vector<double> Lk = c2 ? along_frames(t, r, count, g_along_factor) : std::vector<double>();
+  // DIAGNOSTIC (stack #489, designs C2 and C3): each state's residual and Jacobian rows taken through its L
+  const bool c2 = axis_weighting();
+  const std::vector<double> Lk = c2 ? axis_frames(t, r, count) : std::vector<double>();
   auto cost_of = [&](const double* rr, const double* xx) {
     double c = 0.0;
     if (c2)
