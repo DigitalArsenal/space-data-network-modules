@@ -95,9 +95,12 @@ if (process.env.SDN_AP_ETALON_REPORT) fs.writeFileSync(process.env.SDN_AP_ETALON
 // old Moon's error, like section 4's sunlit-arc rate before 16.16, had been offsetting the satellites' non-spherical
 // radiation, which a sphere does not carry (0.6.20 > the Moon alone: 53.297 > 57.922 m; the two moves add); with Y0
 // solved on the same windows, day 3 goes from 11.5 to 9.8 m.
+// 0.6.49 (the output table keeps a line whole, SPEC 16.1, stack #572), re-pinned to this build; 0.6.45 > 0.6.49 in m:
+// Etalon-1 3.540 > 3.702, Etalon-2 4.843 > 4.366, LAGEOS-1 7.077 > 6.697, LAGEOS-2 6.744 > 6.064, LARES-2 8.649 > 8.018,
+// IG 7.597 > 7.670, GE 65.087 > 65.087 (LAGEOS-2 left the 0.5 m band around the 0.6.22 pin, 6.798, on the better side).
 const EXPECTED = {
-  etalon: {'ETALON 1': {baseline: 23.37, value: 3.54}, 'ETALON 2': {baseline: 32.76, value: 4.84}},
-  nonregression: {'LAGEOS 1': 7.114, 'LAGEOS 2': 6.798, 'LARES-2': 8.660, IG: 7.602, GE: 65.188},
+  etalon: {'ETALON 1': {baseline: 23.37, value: 3.70}, 'ETALON 2': {baseline: 32.76, value: 4.37}},
+  nonregression: {'LAGEOS 1': 6.697, 'LAGEOS 2': 6.064, 'LARES-2': 8.018, IG: 7.670, GE: 65.087},
 };
 // OLD on the old path, as the fit lane re-pinned it at 0.6.13 (stack issue 324: every object here is above the drag,
 // perigee 5,600 km and up, and now fitted at the data's own sigma, SPEC 12.1; 0.6.11 > 0.6.13 in m: Etalon-1 6.719 >

@@ -30,8 +30,11 @@
 //     case at caps 12 and 12 (no fast side, no radial floor factor) was held against MAIN, main's own pre-cure release
 //     (measured on 0.6.42: 2.7e-14 and 5.4e-13 of a time's largest entry, the along-track variance 2.8e-14 and 1.3e-12
 //     relative); from 0.6.43 the radial term moves it, so it is held against SELF_BASE with the caps-31/20 cases.
-//   - The cases with gravity terms hold only the build-to-build identity, against SELF_BASE: from 0.6.43 the radial term's
-//     first build on 0.6.42 (git a5293c54, wasm f33e071f, SHA-256 checked); through 0.6.42, 0.6.42's first build with
+//   - The cases with gravity terms hold only the build-to-build identity, against SELF_BASE: from 0.6.49 the output table's
+//     line rule's first build on 0.6.45 (git c31c608a, wasm c23a50ba, SHA-256 checked; the rule moves every fit with
+//     tesseral terms, SPEC 16.1, stack #572, so 0.6.43's record with this build's drag share restated no longer meets the
+//     record's noise identity and is refused, -6); from 0.6.43 the radial term's first build on 0.6.42 (git a5293c54,
+//     wasm f33e071f); through 0.6.42, 0.6.42's first build with
 //     its radial floor factor exp(0.095) (git b7a7191e, wasm f771420f). They must: the low table's records
 //     take that factor in the DRAG regime (SPEC 12.5), BASE carries exp(0.10), which moves them by 2.83e-3 to 4.31e-3 of a
 //     time's largest entry (printed), and no build before the cure carries exp(0.095). Across the cure itself they were held
@@ -81,7 +84,7 @@ import {scratchTemp} from './lib/scratch.mjs';
 ensureBuilt();
 const BASE = {version: '0.6.36', commit: '258d824d2c83da8aa0f9ad2325273cfe478ae5d8', sha256: '01f8fd18eb97107b4cd1e0d7694f31787bcddf7cbb61f44255d83e3f45f3f56f'};
 const MAIN = {version: '0.6.38', commit: 'f8fd3240fe360f7b7649e9daf9e4d7b09ba21bd0', sha256: '1933b5da4d2c3c4bca644a9f88e43584d85b8f6f455762879294a8cf1a66c75b'};
-const SELF_BASE = {version: '0.6.43', commit: 'a5293c54ba6ab58483d7fd7bb5e93d6212d532e7', sha256: 'f33e071fc77ccca6198ed7641c348957a947606460276fc9e8a926892a991935'};
+const SELF_BASE = {version: '0.6.49', commit: 'c31c608a2614cdc1387cf49157d1244830fb4623', sha256: 'c23a50ba44094584a7498f3bff354a6e7ced5b0272a9ef2e6316260fd44ec382'};
 const CURE = {version: '0.6.39', commit: '94351f345a32c659e0beec0d87dfb14100e2ea23', sha256: '7a857d632d044cd3830456cdcb8fbac5cb95a201087a417c530773f2e0bc295a'};
 const SELF = {ofLargest: 1e-11, along: 1e-10}, ACROSS = {ofLargest: 1e-3, along: 1e-3}, STATES_M = 0.001, MOVED_KM = 1e-4, IDENTITY = 1e-12;
 // the two-body state of TWO_BODY_SETS' mean elements, recorded on 0.6.38, the same on 0.6.39 (IEEE 754 hex, km and km/s)

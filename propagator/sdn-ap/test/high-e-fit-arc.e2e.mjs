@@ -98,9 +98,15 @@ const K = 5;
 // is 2 to 10 cm worse along-track on days 1, 3 and 5 (10.27 / 13.12 / 15.78 to 10.37 / 13.18 / 15.80 m) and 1.9 to 3.5 m
 // better radially in the same cells, better in the orbit's plane on every day. The cost is the fit's drag term on short arcs
 // near 800 to 900 km, stack #541, where the bound comes back: SWOT-like's day 7 is bounded at 45 m, loosened from 30 m.
+// SWOT-like from the output table's line rule (0.6.49, SPEC 16.1, stack #572): day 7 along-track 43.57 to 49.62 m (radial
+// 7.48 to 6.25 m), against 0.6.45 (git b1a08e44), because the fitted drag term moves from 0.53 % to 0.71 % from the truth.
+// With the drag term held at the truth's 0.044 the rule is better on every day, along-track and radially (days 1 / 3 / 5 /
+// 7 along-track: 8.90 / 13.77 / 12.76 / 19.08 m on 0.6.45, 5.18 / 9.47 / 10.43 / 14.23 m with it). Sentinel-3-like with the
+// rule: day 7 57.42 to 53.75 m, day 5 30.91 to 30.30 m, better on every day. The cost is again the fit's drag term on short
+// arcs near 800 to 900 km (stack #541): SWOT-like's day 7 is bounded at 55 m, loosened from 45 m.
 const BASE_4 = {version: '0.6.22', commit: 'f8af1e2b7'};
 const LOW_BOUND = {'Molniya drag off': 8.5};
-const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 45, r: 15}, 'Sentinel-3-like': {t: 60, r: 20, t5: 33}};
+const TRUTH_BOUND = {'e 0.25': {t: 60, r: 15}, 'SWOT-like': {t: 55, r: 15}, 'Sentinel-3-like': {t: 60, r: 20, t5: 33}};
 // The field EGM2008 on both sides (0.6.36, SPEC 16.2; the truth's field was EGM-96 before, as AP's) takes Molniya's largest
 // day-7 along-track over the arc and its copies from at most 171.5 to 175.39 m (the unperturbed arc 171.30 m): bound 176.0.
 const SEVEN_DAY_BOUND = {Molniya: 176.0, 'GTO-500': 325.5};
