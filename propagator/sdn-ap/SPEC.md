@@ -1,6 +1,6 @@
 # SGP4-XP: mathematical specification (clean room, side A)
 
-Version 0.6.41 (dist fa1f1cd2).
+Version 0.6.42 (dist 8bf870fe).
 
 **License note.** The US Space Force Sgp4Prop library is used under the USSF open source agreement
 (`space-data-network-modules/propagator/sgp4-xp/third_party/ussf-sgp4/AGREEMENT.txt`; the 9.9 package carries the
@@ -2102,8 +2102,9 @@ re-fitted. The ABOVE row is the 2026-11-03 minimax row (the worst violation of 1
 and 7 on `operator-theory/ap/b040`), unchanged; above the drag a class with a fitted row replaces it inside that
 row's calibrated condition (below, "Above the drag, by class").
 
-Realism is not met, and the covariance is not calibrated (12.7). On the held-out windows the median |z| of 8 of the 18
-cells (two regimes, three axes, days 1, 3 and 7) is inside the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
+Realism is not met, and the covariance is not calibrated (12.7). At the row's fit (0.6.1), on the held-out windows of 0.6.0's
+flights re-weighted with the row, the median |z| of 8 of the 18 cells (two regimes, three axes, days 1, 3 and 7) is inside
+the band, against 1 for 0.6.0, whose DRAG row (s_e 0.0030020720101006817, s_i 1.3729304605949328e-06, s_l
 0.00022005794330391744, c 0.52454406174861778) gave a 1-sigma 274 to 530 times too wide in-track and about 1,000 to
 7,600 times radially at day 1. The worst held-out |ln(median |z| / 0.674)| goes from 8.77 to 0.74. Median |z|, 0.6.0
 to 0.6.1:
@@ -2117,13 +2118,55 @@ to 0.6.1:
 | Near 700 km | 3 | 1.50e-4 to 0.638 | 1.63e-3 to 0.487 | 0.207 to 0.560 |
 | Near 700 km | 7 | 1.05e-4 to 0.852 | 2.28e-3 to 0.674 | 0.116 to 0.380 |
 
-Strong-drag cross-track is now overconfident at days 1 and 3 (0.78 to 0.87; 0.6.0 was inside or wide there), and near
-700 km in-track at day 1 and cross-track at day 7 remain too wide (0.32, 0.38). The limit is the form of the noise,
+On 0.6.1, strong-drag cross-track is overconfident at days 1 and 3 (0.78 to 0.87; 0.6.0 was inside or wide there), and
+near 700 km in-track at day 1 and cross-track at day 7 are too wide (0.32, 0.38). The limit is the form of the noise,
 not its sizes: wherever the strong-drag cross-track median at day 7 is inside the band, the near-700 km one is 0.17 to
 0.32, for every s_i and k_F; a row per regime, or a cross-track size growing with the non-gravitational rate, still
-leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km
-(0.6.0: 37.78 km) against the error 0.308 km. `test/covariance-realism.e2e.mjs` reports every held-out cell of both
-rows, the shares within 1 and 2 sigma, and the ISS figure on the built module.
+leaves held-out cells outside. On the demo's ISS sample the in-track 1-sigma 12 h from the file's start is 0.147 km on
+0.6.1 (0.6.0: 37.78 km) against the error 0.308 km.
+
+These 18 cells set 0.6.0's errors against a build's variances, so they judge one build's covariance on another build's
+orbits: on 0.6.42 the same re-weighting reads 3 of the 18 inside the band, the radial up to 1.084. From 0.6.42
+`test/covariance-realism.e2e.mjs` judges the build's own flights instead (below): each judged cell's median |z| and its
+shares within 1 and 3 sigma, and the ISS figure on the built module.
+
+The low table's fast side (16.1, stack #477; from 0.6.42). The floor is the fit's own residual covariance (12.4), so a theory
+that fits its arc better states a smaller uncertainty. Measured on each build's own flights (748 windows of the low table:
+strong drag 2025 and 2026, laser spheres, burn-free altimetry, near 700 km; records at 31/20), the fast side takes the fit's
+RMS to 0.71 of what it was and the floor's sigma to 0.90 radially, 0.61 in-track and 0.77 cross-track.
+- Radially, an AP set in the low table in the DRAG regime whose record states a tesseral degree above 12 takes its floor's
+  sigma times kFloorRadialFastSide, exp(0.095) = 1.0997 (the floor's UU times 1.209, VU and WU times 1.0997). It is the
+  maximum-likelihood fit (steps of 0.005 in its logarithm) of the radial |z| on 326 choice windows of 0.6.42's own flights
+  of records at tesseral 31 / zonal 70 (the low table's records from 0.6.42) with the factor off, judged on the other 422
+  (the split rule's SHA-256 d3177de7). Judged, median |z| with the factor off and with it:
+
+  | Row | Day 1 | Day 3 | Day 5 | Day 7 |
+  | --- | --- | --- | --- | --- |
+  | Strong drag 2026 | 0.72 to 0.66 | 0.79 to 0.75 | 0.81 to 0.79 | 0.78 to 0.77 |
+  | Near 700 km | 0.754 to 0.69 | 0.76 to 0.70 | | |
+  | Laser spheres | 0.70 to 0.64 | 0.61 to 0.57 | 0.53 to 0.50 | 0.46 to 0.44 |
+  | Altimetry | 0.71 to 0.65 | 0.64 to 0.597 | 0.62 to 0.58 | 0.64 to 0.606 |
+
+  Its cost is the laser spheres' and altimetry's radial, wide from day 3, getting wider. One factor, not a size by regime:
+  a size by regime is the covariance study's (stack #531).
+- Against the records before 0.6.42 (0.6.39 at 31/20), on the 54 judged cells of days 1, 2, 3, 5 and 7: 11 inside the band
+  then, 12 now. Two of 0.6.39's inside cells leave it, altimetry radial at days 3 and 5 (0.636 to 0.597, 0.642 to 0.583, too
+  wide). Three too-narrow cells get narrower, strong drag 2026 in-track at days 1 to 3 (0.832 to 0.864, 0.900 to 0.928,
+  0.883 to 0.896): the floor is 0 to 3 % of in-track, so no floor factor moves them; they are the density forecast's
+  (stack #527).
+- Cross-track takes no factor. On records at zonal degree 20 its strong-drag cells are too narrow (2026, days 1 to 7: 1.045
+  to 1.317 on 0.6.39, 1.5 to 2 times too narrow; day 1 1.303 on 0.6.42's fit at 31/20): the node drift of such a record, the
+  zonal terms of degree 21 to 70 that it leaves out (about 12 m of cross-track a day at 440 km, i 88; stack #531). A record at
+  zonal degree 70 has no drift, and there the stated cross-track is too wide: in strong drag 2026 0.40 at day 1 to 0.12 at
+  day 7, about 2 to 5 times too wide, a loss of realism in size where it was 1.5 to 2 times too narrow; elsewhere 0.55 to
+  0.60 at day 1 and 0.08 to 0.26 from day 3. The sizes s_i are set on records at zonal degree 20 (stack #531).
+- In-track takes no factor: the floor is not what sets it.
+- Cells outside the band at the factor, by cause (`test/covariance-realism.e2e.mjs` names each): strong drag 2026 radial at
+  days 5 and 7 and in-track at every day, too narrow (the drag share c, 0.1121, against the 2026 storms, and the density
+  forecast; stacks #531, #527); the laser spheres' radial at days 3 to 7 and altimetry's at days 3 and 5, too wide (one
+  floor factor serves them with near 700 km and strong drag 2026); in-track of the laser spheres, altimetry and near 700 km
+  at every day, too wide (the sizes are set on strong drag); cross-track of every row from day 3, and at day 1 outside near
+  700 km, too wide (as above).
 
 Above the drag, by class *[2026-11-11, stack #433; experiments headline-loop, sdn-ap 0.6.15]*. Measured on every
 first-pass window whose fitted set is above the drag (923 window-arcs per theory), the ABOVE row is too wide on
@@ -2221,7 +2264,8 @@ with probability 0.65 at 20 independent forecasts and 0.15 at 200, and the noise
 the model otherwise exact, the fitted sigma of B and S is too small by sqrt(3N - L), 46 for a 24 h arc sampled every 120 s.
 
 
-SDNAP: the held-out cells of 12.5 (per axis); neither theory's table earns a realism label.
+SDNAP: the judged cells of 12.5 (per axis, on the build's own flights; on 0.6.42's flights of records at 31/70, 8 of 42
+inside the band); neither theory's table earns a realism label.
 
 **12.8 The drag prior of a fit.** `fit` estimates BTERM under its $PCF FIT.DRAG_PRIOR (MEAN, SIGMA, FORM); a stated
 prior is fitted as given on every fit.
@@ -2701,11 +2745,66 @@ numerical propagator that carries it (16.14). `fit`,
 
 With both at 0 or unset the theory is SGP4XP bit for bit. Either above 0 also selects the frame policy of 16.4 and the
 third-body terms of 16.8. A degree set without its HAS field, or above 70, is refused by name.
-MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
-complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
-orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 added 72 m on day 1 and 268 m on day 7 after a 72 h
-fit through 0.6.20. From 0.6.25 a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field.
+- **In the low table** (class 0 at or below the 0.05 switch; from 0.6.42, stack #477), with tesseral cap d above 12 the short-period terms are
+  complete to first order to degree min(d, 70). |l - 2p| goes to 17, and the table's own size cut is 0.5 m. Above degree
+  12 the table also holds the m-daily terms. No term is carried there inside the slow band at more than 1 - w of its
+  epoch rate (w the band taper of 16.18): a first-order term is the theory only away from commensurability, so a band
+  term the rates do not hold (under their size cut) is carried nowhere. At 300 km, i 70, d 70, where the 47:3 family
+  drifts at 6e-3 n, the band's terms of q +-1 above degree 31 carried at full weight spiked a flight with drag to
+  1,372 km (without them, or held to 1 - w, the case is 88 to 94 m). With the slow set of 16.18, which takes degree 70 whatever d states, the table also holds 1 - w of each slow
+  term above d of q -1, 0 and 1. A share under 1 is cut on the term's own size. With d of 12 or less the table is the
+  one of every other branch.
+- **The band guard** (the low table above degree 12, a set with drag). The epoch's share holds while the term's rate stays
+  where it was. The rates carry a band term at its current rate, the table at its epoch rate, and drag moves n. So the table
+  takes each term's rate at two mean motions: the epoch's n0, and n_end = n0 + n-dot 8 days, with n-dot the set's own drag
+  rate at the epoch and e and i held (a straight line forward over the record's span: a 72 h fit's arc and five days). It
+  keeps the smaller of the two shares (1 - w at each), and none where the rate changes sign between them.
+  - For n between n0 and n_end, the table and the rates never hold more than the whole term, and the table holds no term
+    whose rate passes zero (the evaluator divides by the current rate). A term the guard takes from the table is the
+    rates' where the slow set holds it, and is carried nowhere where it does not (outside the slow set's 1.3 bands at the
+    epoch, or under its size cut). A set that barely decays keeps its epoch shares.
+  - Not covered: a flight before the epoch, a flight past eight days, and decay faster than the epoch's rate (an
+    accelerating re-entry, a storm in the record's rows). The catalog's fit takes the first state of its 0 to 120 h
+    interval as the epoch and flies forward 5 days, so it meets only the third; a 72 h fit flown to day 7 is 10 days from
+    its epoch.
+  - The jump detector of test/fast-side-band-guard.e2e.mjs, on 100 flights that include each case outside the span, reads
+    under 4.5 m on all but two: the test's set at BTERM 1, 2 and 4 times its own (3), the same with a storm in its rows (2),
+    72 re-entering seeds flown to refusal (20 of them refused before day 1), the 21 near-circular regimes of
+    test/kernel-cost.mjs 30 days forward, and 2 sets flown 3 days back. The two are re-entering seeds in the flight's last
+    minutes above 100 km, and they read the same without the fast side (stack #564).
+  - At perigee 200 km, e 0.01, i 55 (the 72 h fit; a truth that falls to 145 km by day 3), the m = 48, j = 3 terms of
+    degree 53 to 69 (w 2 to 4, 16 terms) were inside the band's edge at the epoch (x 0.94 to 0.96). The table kept 0.08
+    to 0.20 of each; the rates took the rest, and all of it once x fell below 0.9. Their rate passes zero 49.4 h after the
+    cutoff, where the flight without the guard spiked to 13,161 km. With the guard D is 58,272 m, beside 57,834 m for the
+    table of every other branch.
+- **Where a set's table is built** (from 0.6.42). The table is filled in the building thread's scratch at its bound
+  (tess::SpTableScratch: 755 KB at d 31 and 3.1 MB at 70, against 160 KB at 12) and kept at its counts (68 bytes a combined
+  entry, 20 a raw one). The scratch is the thread's, never shared, grown to the largest bound it has asked for and kept for
+  the thread's life. Sets are built on the calling thread (the row store's sdnap_init_elements, the epoch store, fit's
+  trial sets, the covariance's moved sets); the pool's threads fly sets built before a batch and hold none.
+  - A table taken at its bound and cut down after leaves the rest free between the sets' tables, a hole no later bound
+    fits. On 1,000 rows of a catalog mix (test/set-caches.e2e.mjs's, 783 in the low table) at 31/20 the row store's build
+    took 223.9 MB of memory that way, 167.4 MB of it free inside the heap, against 51.9 MB on 0.6.41.
+  - Built in the scratch, the same rows take 31.5, 51.8 and 55.2 MB at d 12, 31 and 70 (0.6.41: 32.6, 51.9 and 51.9 MB,
+    its table stopping at 12), linear in the number of sets (at 31: 15.2, 27.8 and 51.8 MB for 250, 500 and 1,000 rows),
+    with 0.2 to 0.4 MB left free inside. The tables kept are 19.8, 26.0 and 27.2 MB (0.6.41: 19.8, 21.0, 21.0). Under the
+    module's maximum of 2 GiB the build alone fits about 38,000 such sets at 31 and 35,800 at 70 (0.6.41 about 38,000).
+  - With the reserve, the memory after the first threaded batch on 4 threads is 237.4, 257.4 and 260.9 MB at 12, 31 and 70
+    (0.6.41: 238.4, 257.6 and 257.6 MB).
+- **On every other branch** they are complete to degree min(d, 12) only. Degrees 13 to min(d, 31) contribute their j = 1
+  near-resonant terms in low orbit and the half-day tail, and nothing else.
+- **What the degrees 13 to 70 carry in low orbit** (#498's near-circular cases at 300 to 650 km, the record fitted to a
+  70 x 70 numerical forecast over 5 days, gravity only on both sides, AP at 70): D falls from 63 to 233 m to 35 to 148 m.
+  The terms are along-track and radial lines at once per revolution plus or minus about once a day, and the daily and
+  twice-daily m-daily lines.
+- **What a record at d of 31 forgoes**: the terms of degree 32 to 70, which a family whose order is 31 or less also has.
+  With every force and the record fitted to the numerical forecast, D at 300 km, i 98 is 104 m at d 31 and 85 m at d 70;
+  at 300 km, i 55 152 and 142 m; at 400 to 650 km the two are within 4 m of each other.
+- **Off the low table** at 800 km, the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all against a 31 x 31
+  field).
+
+Through 0.6.20, at 450 km the order-15 terms above degree 31 added 72 m on day 1 and 268 m on day 7 after a 72 h fit. From 0.6.25 a fit in the low table that states d of 2 or more also carries the slow set of 16.18 in the
 rates, to degree 70 whatever d states: d governs the fast terms, and a commensurability's series is a cancellation, so a slow
 set cut at a lower degree is worse than none.
 `maneuver` and `ingest_omm` keep SGP4XP.
@@ -2765,8 +2864,8 @@ from the Fourier coefficients of the normalized Legendre recurrence, stable to d
 
 | Family | Terms | Cap | Where |
 | --- | --- | --- | --- |
-| m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 | at output time, first order at the mean elements |
-| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12 | at output time, first order at the mean elements |
+| m-daily | Kaula's q = 0, l = 2p, even l, every m | 12 (in the low table above 12, the first-order table's to d) | at output time, first order at the mean elements |
+| first-order | every other q in {-1, 0, 1} with \|j\| <= l + 1: the q = +-1 terms are O(e) in G and O(1) in the eccentricity vector, so they carry the radial m-daily signal and, for odd l with j = 0, a line amplified by n / psi-dot | 12; in the low table d to 70, \|l - 2p\| <= 17, by the 0.5 m size cut | at output time, first order at the mean elements |
 | near-resonant | j = 1 above that degree, at orders whose angle drifts slower than 0.2 n: q = 0 with w = 1 outside the shallow band, q = +1 with w = 0, q = -1 with w = 2 | 31 | at output time |
 | half-day resonant tail | l = 6..d, every even m <= l, p = 0..l, k = m/2, q = k - l + 2p; 5,291 additional terms at degree 31 | 31 | in the rates of the half-day class; excluded from the output-time table |
 | one-day resonant tail | l = 5..d, every m from 1 to 16, p = 0..l, k = m, q = m - l + 2p (below e 0.05 only \|q\| <= 8) | 31 | in the rates of the one-day class at epoch e at or below 0.3; excluded from the output-time table |
@@ -4349,8 +4448,13 @@ q = 0), order and degree 2 to 70,
 - other than the shallow set's own terms (j = 1, q = 0, to its degree), which stay where they are.
 
 Each term enters the rates with the weight w of its own current rate: 1 below 0.9 bands, a cos^2 taper to 0 at 1.1. The
-output table holds 1 - w of a term the rates carry, so a term that crosses its band's edge as drag raises n moves from one to
-the other with no step. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
+output table holds a share of the term set once, at the epoch elements: 1 - w at the epoch's rate, and with 16.1's band guard
+(the low table above degree 12, a set with drag) 1 - the larger of w at n0 and at n_end, and none where the rate changes sign
+between them. The rates' share follows the current rate continuously and the table's stays as set, so a term crossing its
+band's edge as drag moves n makes no step in either. At the epoch the two hold the whole term (with the guard, no more than
+it). Once n has moved, without the guard they hold more than the whole term where w has risen and less where it has fallen;
+with the guard they hold no more than it for n between n0 and n_end, and the rest is carried nowhere. With the record's degree d above 12 the table holds that share to the slow set's degree, for q of
+-1, 0 and 1 (16.1); with d of 12 or less it holds it to d. A slow term of |q| 2 or more has its 1 - w carried nowhere. The slow set takes degree 70 whatever MAXIMUM_TESSERAL_DEGREE states (16.1). The record states it
 as GRAVITY_MODEL "EGM2008; slow tesseral terms to degree 70", and every flight of the record carries it; an AP record
 with gravity terms that states "EGM2008" flies without it. Through 0.6.34 the text was "EGM-96; slow tesseral terms to
 degree 70"; from 0.6.36 such a record is refused (gravity-model-mismatch, 16.2).
@@ -4475,7 +4579,13 @@ size cut is carried exactly once, by the carrier its rate gives it, in every cla
 the record's tesseral degree, the size cut in m), every term (l, m, p, q) of the embedded field, order 1 to 70 and degree to
 70, with |q| up to 4 (8 up to e 0.3, 12 above), whose size reaches the cut.
 
-The census builds the set as a flight builds it (`ap_init`, the slow set on). It then reads each carrier's own tables:
+The census builds the set as a flight builds it (`ap_init`, the slow set on), with BTERM 0. The band guard of 16.1 acts
+only on a set with drag, so the census's counts are those of a set without it. On a set with drag the guard takes from the
+output table the share of a term whose rate moves toward the band over the guard's span, and at the epoch that share is
+carried nowhere (measured 2026-11-12, the table built with the guard and without it): at perigee 300 km, e 0.001, i 51.6,
+BTERM 0.0064, 17 terms, 19.2 m summed, the largest 4.3 m (l 42, m 32, j 2); at 420 km, i 51.6, BTERM 0.01, 8 terms, 0.03
+m summed; on the guard test's set (perigee 200 km, BTERM 0.022) the 16 terms whose rate passes zero, 6.8 m summed, the
+largest 1.5 m. It then reads each carrier's own tables:
 - the rates: the shallow and slow list, with each term's band taper at the epoch; the class's terms; the half-day and one-day
   tails;
 - the output table: each entry's weight, its coefficient over the term's F;
@@ -4529,21 +4639,30 @@ long-period regime with the Sun and Moon, at the epoch's mean motion, 16.19).
 
 The test fails on any term carried twice, and on any term carried nowhere that is outside the known holes. Each known hole is
 named with the issue that closes it. A hole that no set of the sweep shows any more also fails the test, so it is removed when
-its fix lands. The holes, measured 2026-11-11 on 0.6.28 (terms over the sweep; the largest, in m over 5 days). From 0.6.28 the
-wide slow list carries every class's slow terms above the switch to degree 12, outside low orbit; the census's hole there
-went from 978 terms (the largest 19 km, at e 0.9) to the 15 left in low orbit above the switch:
+its fix lands.
+
+In the low table the output table follows the record's degree to 70 (16.1, stack #477); the slow set takes degree 70
+whatever the record states (16.18). A term above the record's degree is outside what the record asks for, so the test
+counts it apart, not as a hole: at
+the sweep's degree 31, 2,028 terms, the largest 18.5 m (at 300 km). The same low-table sets at a record of
+70 show no term above any carrier's degree, and the test asserts that every term they leave nowhere (9,538, the largest
+15.3 m, of \|q\| 2 at e 0.05) is in a hole below.
+
+The holes, measured 2026-11-11 with 16.1's fast side on the field EGM2008 (terms over the sweep; the largest, in m over 5 days). From 0.6.28 the wide slow
+list carries every class's slow terms above the switch to degree 12, outside low orbit; the census's hole there went from 978
+terms (the largest 19 km, at e 0.9) to the 15 left in low orbit above the switch. Before 16.1's fast side the low table's
+output table stopped at degree 12 (measured on 0.6.32): 10,740 terms to 74 m, and 58 band-taper complements to 21 m,
+carried nowhere (stack #477, closed by the fast side):
 
 | Hole | Issue | Terms | Largest |
 | --- | --- | ---: | ---: |
-| The low table: terms the output table holds by rate but not by degree (above 12; m-daily terms too) | stack #477 | 10,740 | 74 |
-| The low table: the taper's complement (1 - w) of a slow term above the output table's degree | stack #477 | 58 | 21 |
-| The low table: fast terms of \|q\| 2 or more (the output table holds \|q\| up to 1) | stack #503 | 2,436 | 15 |
-| A carrier's own size cut measures the term below the census (the output table counts the eccentricity vector's part radially; terms under 1 m) | stack #503 | 4,037 | 1 |
-| The low table: the slow set's cut misses a term's part through the inclination (dF/di) | stack #503 | 98 | 2.3 |
-| The one-day class above its switch: under its floor, or above the grid's degree | stack #474 | 456 | 73 |
-| Above the switch, every class: terms above the grid's degree 12 | stack #497 | 189,984 | 3,910 |
+| The low table: terms of \|q\| 2 or more on the output table's side, fast or the taper's complement (1 - w) of a slow one (the output table holds \|q\| up to 1) | stack #503 | 2,942 | 15 |
+| A carrier's own size cut measures the term, or the share it leaves out, below the census (the output table counts the eccentricity vector's part radially; under 1 m) | stack #503 | 6,077 | 1 |
+| The low table: the slow set's cut misses a term's part through the inclination (dF/di); the output table holds only its band share | stack #503 | 92 | 2.6 |
+| The one-day class above its switch: under its floor, or above the grid's degree | stack #474 | 459 | 73 |
+| Above the switch, every class: terms above the grid's degree 12 | stack #497 | 190,164 | 3,910 |
 | Above the switch, low orbit: slow terms the grid leaves out and no rate carries | stack #473 | 15 | 4,060 |
-| Outside the low table, below the switch: terms the output table's degree, q range or band floor leaves out and the class's rates do not carry | stack #511 | 406 | 91 |
+| Outside the low table, below the switch: terms the output table's degree, q range or band floor leaves out and the class's rates do not carry | stack #511 | 407 | 91 |
 
 The sizes are each term's own forced amplitude. They are not a forecast's error: a fit absorbs part of a term slower than the
 arc.
@@ -4818,10 +4937,12 @@ an eccentricity switch on one side, or refused fit-at-branch-limit at a limit in
 blend two sets on different branches (14.3). A consumer that
 differences, blends or interpolates two records of one object must do the same.
 
-MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field. With tesseral cap d the short-period terms are
-complete to first order to degree min(d, 12) only; degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms in low
-orbit and the half-day tail, and nothing else. At 800 km the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all
-against a 31 x 31 field); at 450 km the order-15 terms above degree 31 add 72 m on day 1 and 268 m on day 7 after a 72 h fit.
+MAXIMUM_TESSERAL_DEGREE is a cap on families, not the degree of a field (16.1). In the low table, with tesseral cap d above
+12 the short-period terms are complete to first order to degree min(d, 70), with |l - 2p| up to 17, the table's own 0.5 m
+size cut, and 16.1's band rule and band guard (a term inside the slow band is the table's at most 1 - w). On every other
+branch they are complete to min(d, 12),
+and degrees 13 to min(d, 31) contribute their j = 1 near-resonant terms and the half-day tail only. Off the low table at
+800 km, the terms of degree 13 to 31 not carried are 14 m RMS (18.9 m in all against a 31 x 31 field).
 
 An AP mean set and the state AP gives for it agree to first order only: integrated numerically that state leaves the AP
 trajectory at dn/n = k J2^2 (R/a)^4, k from 1.8 to 9.6, 0.7 to 4.5 km/day in low orbit. AP elements must come from an AP fit.

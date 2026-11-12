@@ -41,6 +41,13 @@ constexpr Noise kNoiseAP[2] = {
     {1.8579913326733934e-07, 1.12761105007012e-06, 7.647194501793458e-07, 0.112126311682426, 1.5127596877626373},
     {9.696153866117182e-07, 8.153112791954473e-07, 4.753573962018311e-06, 0, 1.0}};
 constexpr double kDragRegimeKm = 2500.0;  ///< the noise regimes' split: perigee height
+/// SPEC 12.5: the radial floor's sigma factor of an AP set in the low table whose record states a tesseral degree above
+/// kSpCap (the output table's fast side, SPEC 16.1, stack #477). The floor is the fit's residual covariance, and the fast
+/// side fits the arc closer, so the floor fell by 10 to 45 %; the factor is the maximum-likelihood fit of the radial
+/// |z| on 326 choice windows of 0.6.42's own flights of records at tesseral 31 / zonal 70 with the factor off, judged on
+/// 422 others (exp(0.095), at steps of 0.005 in its logarithm; stack #477). The in-track and cross-track floors keep k_F
+/// alone. It acts in the DRAG regime only (perigee below kDragRegimeKm), where it is fitted and judged.
+constexpr double kFloorRadialFastSide = 1.0996588551261028;
 
 /// SPEC 12.4 (stack #551): the first release whose AP records carry their epoch floor at the two-body state of their
 /// mean elements. An AP record another producer, or this module before it, wrote carries its floor at its writer's
@@ -586,6 +593,18 @@ inline bool of_fit(const ElementRow& row, const fit::Options& fitted, const doub
   if (!noise_of(row, arc_end_min, sigma_km, span_h, ng_rate, s.regime, s.noise, s.share, floor_scale)) return false;
   s.ng_rate = ng_rate;
   for (double& f : floor) f = f / static_cast<double>(count) * floor_scale;
+  // the low table's fast side (SPEC 12.5, 16.1): the radial floor's sigma times kFloorRadialFastSide, D F D with
+  // D = diag(f, 1, 1) in UVW (UU by f^2, VU and WU by f), in the DRAG regime (perigee below kDragRegimeKm), where the
+  // factor is fitted and judged
+  {
+    const xpt::Branch br = xpt::branch_of(row.mean_motion_rev_day * kTwoPi / kMinutesPerDay, row.eccentricity, true);
+    if (s.regime == 0 && xpt::tess::active().tesseral > xpt::tess::kSpCap && br.resonance == 0 && !br.long_period && br.wide_tess == 0) {
+      const double f = kFloorRadialFastSide;
+      floor[0] *= f * f;
+      floor[1] *= f;
+      floor[3] *= f;
+    }
+  }
   // epoch image: state block J0 Pp J0^T + floor, cross J0 Pp, consider Pp
   double r0[3], v0[3];
   if (!at(b, 0.0, r0, v0, J)) return false;

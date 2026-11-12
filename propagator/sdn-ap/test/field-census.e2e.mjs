@@ -9,7 +9,11 @@
 // Asserted:
 // - no term is carried twice (code 30), and a term's weights are in [0, 1.001];
 // - every term carried nowhere (codes 20 to 24) belongs to a known hole below, each named with its issue; a hole that no set
-//   of the sweep shows any more fails the test (remove it when its pull request lands);
+//   of the sweep shows any more fails the test. In the low table a term above the record's degree is counted apart: there
+//   the output table follows the record's degree (stack #477);
+// - the sets are built with BTERM 0, so the band guard of SPEC 16.1 does not act here (SPEC 16.20 gives what it leaves
+//   carried nowhere on sets with drag);
+// - the low table's sets at a record of 70: no term above any carrier's degree, and every term left nowhere in a hole;
 // - the census of a set is the same twice (no state carried between calls) and returns -1 for elements it refuses;
 // - beside the field, radiation pressure's one row (l -1, m 0; SPEC 16.22) is carried once: through the output map (code 4)
 //   in the long-period regime above e 0.3, by SPEC 4's averaged rates and periodic output terms (13) elsewhere, the sweep
@@ -43,18 +47,20 @@ const SLOW = 1.3 * 0.045;  // the slow set's selection band, in n
 const slowRate = (t) => Math.abs(t.rate) < SLOW;
 const tableSide = (t) => Math.abs(t.rate) >= 1.1 * 0.045;  // the low table: the output table holds a term from 1.1 bands
 
+// The record's degree: the sets' records state 31. In the low table every carrier follows it (the output table to 70, stack
+// #477), so a term above it is outside what the record asks for, not a hole; the same sets at a record of 70 carry every
+// such term (asserted below).
+const RECORD = 31;
+const aboveRecord = (b, t) => b.lowTable && t.code === 20 && t.l > RECORD;
+
 // Known holes: the terms the theory carries nowhere today, each with the issue that closes it.
 const HOLES = [
-  { issue: 'stack #477', what: 'the low table: terms the output table holds by rate but not by degree (above 12, the m-daily terms too)',
-    test: (b, t) => b.lowTable && t.code === 20 && tableSide(t) },
-  { issue: 'stack #477', what: 'the low table: the band taper\'s complement (1 - w) of a slow term above the output table\'s degree',
-    test: (b, t) => b.lowTable && t.code === 24 },
-  { issue: 'stack #503', what: 'the low table: fast terms of |q| 2 or more (the output table holds |q| up to 1)',
-    test: (b, t) => b.lowTable && t.code === 22 && tableSide(t) },
-  { issue: 'stack #503', what: 'a carrier\'s own size cut measures the term below the census (the output table counts the eccentricity vector\'s part radially; terms under 1 m)',
-    test: (b, t) => t.code === 23 && t.size < 2 * CUT },
-  { issue: 'stack #503', what: 'the low table: the slow set\'s cut measures a term through the mean motion and the eccentricity vector, not through the inclination (dF/di)',
-    test: (b, t) => b.lowTable && t.code === 23 && !tableSide(t) },
+  { issue: 'stack #503', what: 'the low table: terms of |q| 2 or more on the output table\'s side, fast or the band taper\'s complement (1 - w) of a slow one (the output table holds |q| up to 1)',
+    test: (b, t) => b.lowTable && ((t.code === 22 && tableSide(t)) || (t.code === 24 && Math.abs(t.q) >= 2)) },
+  { issue: 'stack #503', what: 'a carrier\'s own size cut measures the term (or the share it leaves out) below the census (the output table counts the eccentricity vector\'s part radially; under 1 m)',
+    test: (b, t) => (t.code === 23 && t.size < 2 * CUT) || (b.lowTable && t.code === 24 && (1 - t.total) * t.size < 2 * CUT) },
+  { issue: 'stack #503', what: 'the low table: the slow set\'s cut measures a term through the mean motion and the eccentricity vector, not through the inclination (dF/di); the output table holds only its band share',
+    test: (b, t) => b.lowTable && !tableSide(t) && (t.code === 23 || (t.code === 24 && t.wr < 1e-6)) },
   { issue: 'stack #474', what: 'the one-day class above its switch: terms under its floor or above the grid\'s degree',
     test: (b, t) => b.cls === 1 && b.wide && (t.code === 20 || t.code === 21) },
   { issue: 'stack #497', what: 'above the switch, every class: terms above the grid\'s degree 12',
@@ -82,7 +88,7 @@ SETS.push({ band: 'one-day', name: '1.0027 rev/day, e 0.82, i 10', n: 1.0027, e:
 for (const n of [1.30, 1.32, 0.7]) SETS.push({ band: 'class 0, period near 1,100 min', name: `${n} rev/day, e 0.01, i 55`, n, e: 0.01, i: 55 });
 
 const seen = new Map(HOLES.map((h) => [h, 0]));
-const unknown = [], worst = {}, radiationCodes = {};
+const unknown = [], worst = {}, record = { terms: 0, largestM: 0 }, radiationCodes = {};
 let rowsTotal = 0;
 const t0 = performance.now();
 for (const s of SETS) {
@@ -102,6 +108,7 @@ for (const s of SETS) {
     assert.notEqual(t.code, 30, `${s.name}: (${t.l}, ${t.m}, ${t.p}, ${t.q}) is carried twice (weights sum ${t.total})`);
     assert.ok(t.rate === 0 || Math.abs(t.periodDays * Math.abs(t.rate) * s.n - 1) < 1e-6, `${s.name}: the period column is 1 / (|psi-dot / n| n)`);
     if (t.code < 20) continue;
+    if (aboveRecord(b, t)) { record.terms += 1; record.largestM = Math.max(record.largestM, t.size); continue; }
     const h = HOLES.find((k) => k.test(b, t));
     if (!h) { unknown.push({ set: s.name, band: s.band, wide: b.wide, ...t }); continue; }
     seen.set(h, seen.get(h) + 1);
@@ -111,6 +118,19 @@ for (const s of SETS) {
   }
 }
 const ms = performance.now() - t0;
+// the low table's sets at a record of 70: no term above any carrier's degree, and what is left nowhere is in the holes
+const record70 = { terms: 0, largestM: 0, largestInHole: null };
+for (const s of SETS.filter((k) => k.band === 'low table')) {
+  const rows = census(s.n, s.e, s.i, 70), b = branchOf(s.n, s.e);
+  for (const t of rows) {
+    if (t.code < 20) continue;
+    assert.notEqual(t.code, 20, `${s.name}, record 70: (${t.l}, ${t.m}, ${t.p}, ${t.q}) is above every carrier's degree`);
+    const h = HOLES.find((k) => k.test(b, t));
+    assert.ok(h, `${s.name}, record 70: (${t.l}, ${t.m}, ${t.p}, ${t.q}) code ${t.code}, ${t.size.toPrecision(3)} m, is carried nowhere outside the known holes`);
+    record70.terms += 1;
+    if (t.size > record70.largestM) { record70.largestM = +t.size.toPrecision(3); record70.largestInHole = h.what; }
+  }
+}
 // the same census twice; and a refusal
 const again = census(SETS[1].n, SETS[1].e, SETS[1].i), first = census(SETS[1].n, SETS[1].e, SETS[1].i);
 assert.deepEqual(again, first, 'the census of a set is the same twice');
@@ -121,7 +141,8 @@ for (const [band, list] of Object.entries(worst)) {
   console.log(JSON.stringify({ band, nowhere: list.length, largest: list.slice(0, 10) }));
 }
 assert.ok(radiationCodes[4] > 0 && radiationCodes[13] > 0, `the sweep holds sets on both sides of radiation's switch: ${JSON.stringify(radiationCodes)}`);
-console.log(JSON.stringify({ sets: SETS.length, rows: rowsTotal, ms: Math.round(ms), radiationCodes, holes: HOLES.map((h) => ({ issue: h.issue, what: h.what, terms: seen.get(h), largestM: +(h.largestM ?? 0).toPrecision(3) })) }));
+console.log(JSON.stringify({ sets: SETS.length, rows: rowsTotal, ms: Math.round(ms), radiationCodes,
+  aboveTheRecord: { degree: RECORD, terms: record.terms, largestM: +record.largestM.toPrecision(3) }, lowTableAtRecord70InHoles: record70, holes: HOLES.map((h) => ({ issue: h.issue, what: h.what, terms: seen.get(h), largestM: +(h.largestM ?? 0).toPrecision(3) })) }));
 unknown.sort((a, b) => b.size - a.size);
 const groups = {};
 for (const t of unknown) {

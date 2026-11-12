@@ -12,7 +12,8 @@
 //   twenty alone (the holders no longer flown are reclaimed), the first twenty again (their runs refill from where they
 //   were flown): bit for bit against 256 MB, sdnap_cache_stats counting it and never holding more than the budget.
 // The pool's threads: 1,000 AP rows of the carrier lane's catalog mix through sdnap_propagate_soa at 20 instants, on 0
-// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424). AP's Sun and Moon (SPEC 16.17,
+// and on 4 threads, bit for bit (the transfer and Molniya orbits left out: stack #424); the memory their row store's build
+// takes at most ROW_STORE_MB (stack #477: a set's table built where it leaves no hole). AP's Sun and Moon (SPEC 16.17,
 // nodes of an absolute grid in each thread's store): 64 rows whose epochs lie 85 1/3 days apart, so their nodes share
 // store slots, on 0 and 4 threads against each epoch's rows alone, bit for bit; a batch at one instant
 // (sdnap_propagate_soa, whose shared bodies are SGP4XP's) against the minutes call at the same instants, bit for bit, of
@@ -80,6 +81,10 @@ const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b
 // the pool's timer in the test build (polls of the calling thread without a completed row): a short count for the
 // trapped and slowed batches, and a long one whose time gives the poll rate
 const DEAD_TEST = 2 ** 28, DEAD_RATE = 2 ** 31;
+// the memory the pool case's row store build may take (MB, the module's memory as the harness sees it; stack #477): 0.6.42
+// with each set's table built in its thread's scratch measures 51.75 MB (main 0.6.41 51.94 MB); the bound is a quarter
+// over it. A build that took each table at its bound and cut it down after measured 223.94 MB.
+const ROW_STORE_MB = 64;
 
 ensureBuilt();
 async function open(file, threads = 0) {
@@ -229,18 +234,27 @@ for (const [name, o] of Object.entries(ORBITS)) {
     const bytes = elementRows(rows), n = rows.length;
     const p = m.x.sdnap_alloc(bytes.length);
     new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
+    // the memory the row store's build takes, as the harness sees the module's memory (stack #477)
+    const before = m.h.memory.buffer.byteLength;
     check(m.x.sdnap_init_elements(p, n) === n, `${threads} threads: the row store took ${n} rows`);
+    const storeMB = (m.h.memory.buffer.byteLength - before) / 1048576;
     const out = m.x.sdnap_alloc(48 * n), status = m.x.sdnap_alloc(4 * n), ps = m.x.sdnap_alloc(88), all = [], rcs = [];
     for (let k = 0; k < 20; ++k) {
       rcs.push(m.x.sdnap_propagate_soa(2461328.5, 0.5 + 0.25 * k, 0, n, 0, out, status));
       all.push([...new Float64Array(m.h.memory.buffer, out, 6 * n), ...new Int32Array(m.h.memory.buffer, status, n)]);
     }
     m.x.sdnap_pool_stats(ps);
-    return { all, rcs, pool: Array.from(new Float64Array(m.h.memory.buffer, ps, 10)) };
+    return { all, rcs, storeMB, pool: Array.from(new Float64Array(m.h.memory.buffer, ps, 10)) };
   };
   const differing = (a, b, from = 0) => a.all.slice(from).reduce((d, v, k) => d + v.filter((w, q) => !Object.is(w, b.all[from + k][q])).length, 0);
   const zero = await fly(0), four = await fly(4);
   check(zero.rcs.every((r) => r === 0) && four.rcs.every((r) => r === 0), `sdnap_propagate_soa returned ${zero.rcs} on 0 threads, ${four.rcs} on 4`);
+  // the row store's build at AP 31/20 (stack #477): each set fills its output table in its thread's scratch at the table's
+  // bound and keeps a copy at its counts (ROW_STORE_MB); a build that took each table at its bound and cut it down after took
+  // 224 MB here, 167 MB of it left free inside the heap between the sets' tables, and refused no growth without the reserve
+  check(zero.storeMB <= ROW_STORE_MB && four.storeMB <= ROW_STORE_MB,
+    `the row store's build of ${rows.length} AP rows at 31/20 took ${zero.storeMB.toFixed(2)} MB (0 threads) and ${four.storeMB.toFixed(2)} MB (4 threads) of memory (at most ${ROW_STORE_MB} MB)`);
+  console.log(`the row store's build of ${rows.length} AP rows at 31/20: ${zero.storeMB.toFixed(2)} MB of memory on 0 threads, ${four.storeMB.toFixed(2)} MB on 4 (at most ${ROW_STORE_MB} MB)`);
   const differ = differing(four, zero), values = zero.all.length * zero.all[0].length;
   check(differ === 0, `the pool's threads: ${differ} of ${values} values differ between 0 and 4 threads`);
   // stack #487: the memory does not grow inside a threaded batch (its sets' room is made before it; sbrk refuses inside it)
