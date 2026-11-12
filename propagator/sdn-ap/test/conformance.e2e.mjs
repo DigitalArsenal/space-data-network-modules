@@ -47,7 +47,7 @@
 // ascending order; the module's answers must not depend on the order (the
 // same bytes again in a second shuffled order).
 //
-//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE] [--digest-only] [--perigee-only | --corpus-only]
+//   node test/conformance.e2e.mjs [--sets N] [--seed S] [--report-only] [--json FILE] [--reproduce FILE] [--digest-only [--dump FILE]] [--perigee-only | --corpus-only]
 //
 // --reproduce FILE: the run must equal a stored summary (FILE, as --json writes it) in every statistic, digest and
 // acceptance flag (the oracle's name aside); the exit code is that comparison's (a tree moved or rebuilt reproduces
@@ -74,6 +74,7 @@ const REPRODUCE = arg("--reproduce", null);
 const DIGEST_ONLY = process.argv.includes("--digest-only");
 const PERIGEE_ONLY = process.argv.includes("--perigee-only");
 const CORPUS_ONLY = process.argv.includes("--corpus-only");
+const DUMP = arg("--dump", null);
 if (PERIGEE_ONLY && CORPUS_ONLY) throw new Error("--perigee-only and --corpus-only are each other's opposite");
 const WORST = Number(arg("--worst", 0));  // print the N largest position differences per regime
 const SPAN_MIN = 7 * 1440;
@@ -387,8 +388,18 @@ if (DIGEST_ONLY) {
   const stored = JSON.parse(fs.readFileSync(REPRODUCE ?? new URL("./results/conformance.json", import.meta.url), "utf8"));
   const module = await openModule();
   const control = flyModule(corpus(SGP4_SETS, 0, 10000), module);
-  const xp = flyModule(corpus(XP_SETS, 4, 40000), module);
+  const xpSets = corpus(XP_SETS, 4, 40000);
+  const xp = flyModule(xpSets, module);
   module.destroy();
+  // --dump FILE: the SGP4XP corpus's sets (FILE.json: lines and minutes) and every first-pass output (FILE.bin: for each time index,
+  // the x, y and z planes, km TEME; FILE.status.bin: each status), so two builds' states can be compared state by state
+  if (DUMP) {
+    fs.writeFileSync(`${DUMP}.json`, JSON.stringify({ seed: SEED, times: TIMES, sets: xpSets.map((s) => ({ lines: s.lines, minutes: s.minutes })) }));
+    const planes = [], status = [];
+    for (let k = 0; k < TIMES; k += 1) { for (const p of ["x", "y", "z"]) planes.push(...xp.answers[0][k][p]); status.push(...xp.answers[0][k].status); }
+    fs.writeFileSync(`${DUMP}.bin`, Buffer.from(new Float64Array(planes).buffer));
+    fs.writeFileSync(`${DUMP}.status.bin`, Buffer.from(new Int32Array(status).buffer));
+  }
   const same = control.digest === stored.control.digest && xp.digest === stored.xp.digest && control.orderDependent === 0 && xp.orderDependent === 0;
   console.log(`module outputs against ${REPRODUCE ?? "test/results/conformance.json"} (no oracle): XP ${xp.digest.slice(0, 12)} (stored ${stored.xp.digest.slice(0, 12)}), control ${control.digest.slice(0, 12)} (stored ${stored.control.digest.slice(0, 12)}), order-dependent values ${xp.orderDependent + control.orderDependent}: ${same ? "identical" : "DIFFERENT"}`);
   process.exit(same ? 0 : 1);
