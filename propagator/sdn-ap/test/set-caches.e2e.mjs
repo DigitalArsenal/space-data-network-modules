@@ -81,7 +81,7 @@ const same = (a, b) => a.length === b.length && a.every((v, q) => Object.is(v, b
 // the pool's timer in the test build (polls of the calling thread without a completed row): a short count for the
 // trapped and slowed batches, and a long one whose time gives the poll rate
 const DEAD_TEST = 2 ** 28, DEAD_RATE = 2 ** 31;
-// the memory the pool case's row store build may take (MB, the module's memory as the harness sees it; stack #477): 0.6.42
+// the memory the pool case's row store build may take (MB, the module's memory as the host sees it; stack #477): 0.6.42
 // with each set's table built in its thread's scratch measures 51.75 MB (main 0.6.41 51.94 MB); the bound is a quarter
 // over it. A build that took each table at its bound and cut it down after measured 223.94 MB.
 const ROW_STORE_MB = 64;
@@ -234,7 +234,7 @@ for (const [name, o] of Object.entries(ORBITS)) {
     const bytes = elementRows(rows), n = rows.length;
     const p = m.x.sdnap_alloc(bytes.length);
     new Uint8Array(m.h.memory.buffer, p, bytes.length).set(bytes);
-    // the memory the row store's build takes, as the harness sees the module's memory (stack #477)
+    // the memory the row store's build takes, as the host sees the module's memory (stack #477)
     const before = m.h.memory.buffer.byteLength;
     check(m.x.sdnap_init_elements(p, n) === n, `${threads} threads: the row store took ${n} rows`);
     const storeMB = (m.h.memory.buffer.byteLength - before) / 1048576;

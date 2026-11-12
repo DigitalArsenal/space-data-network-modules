@@ -320,6 +320,10 @@ constexpr double kBandMedianBterm = 0.0005;
 constexpr double kY0MinimumArcHours = 72.0;
 constexpr double kY0PriorSigma = 1e-9;
 inline bool y0_solved_on(double arc_minutes) { return arc_minutes >= (kY0MinimumArcHours - 1.0) * 60.0; }
+/// SPEC 12.1, the iteration ceiling: a drag term its prior holds (a sigma above 0 and at most kHeldPriorSigma, of BTERM in
+/// m^2/kg or of its log), which the fit then solves no more than the theory's density above the drag lets it
+constexpr double kHeldPriorSigma = 1e-6;
+inline bool drag_held(const pcf::Prior& p) { return p.sigma > 0.0 && p.sigma <= kHeldPriorSigma; }
 // SPEC 16.13: through 0.6.18 the one-day resonance class held Y0 whatever the arc, while that class lacked its resonant
 // gravity above degree 4 (stack #434). With the class's resonant tail Y0 is solved there as elsewhere; the Moon's position
 // error (stack #446) still leaks into it on model truth (no Y0 in the truth: -0.8e-10 to -1.4e-10 found on inclined
@@ -708,7 +712,10 @@ static int fit_blocks() {
           ~FallbackScope() { fit::jacobian_fallback() = prev; }
         } fallback_scope{eccentric || placement != 0 || span_minutes < 1440.0 || fitoem::jacobian_always() != 0};
         fit::Options opt{};
-        opt.max_iterations = 40;
+        // SPEC 12.1, the iteration ceiling (stack #479, #541): a fit that solves no drag term (the set above the drag, or
+        // a drag term its prior holds) runs each pass to convergence under fit::kPassCeiling; a fit that solves one keeps
+        // fit::kDragPassCeiling, where the cost is flat along the drag term
+        opt.max_iterations = cov::regime_of(row) != 0 || fitoem::drag_held(eff_drag) ? fit::kPassCeiling : fit::kDragPassCeiling;
         fit::Result res{};
         int iterations = 0;
         const double period = kMinutesPerDay / row.mean_motion_rev_day;
@@ -1217,7 +1224,16 @@ static int fit_blocks() {
       // SPEC 16.7 (stack #504): a fit whose two branches' least-squares sets lie across an eccentricity switch ends on one side
       if (res.held_at_switch)
         comment.push_back("fit: held at the eccentricity switch on its own branch; the least-squares sets of both branches lie across it");
+      // SPEC 16.7 (stack #558): after a hold, what each side's pass read and which record the fit kept
       if (!side_note.empty()) comment.push_back(side_note);
+      // SPEC 12.1: a fit whose last pass ended at its iteration ceiling with the cost still falling (FIT_STATISTICS CONVERGED
+      // false) says so
+      if (res.status != 0) {
+        char ceiling[160];
+        std::snprintf(ceiling, sizeof ceiling, "fit: not converged; the last pass ended at its ceiling of %d iterations with the cost still falling",
+                      opt.max_iterations);
+        comment.push_back(ceiling);
+      }
       if (po.ecom2)
         comment.push_back(opt.fit_y0 ? "radiation: ECOM2 Y0 solved beside the sphere's AGOM; not a covariance row"
                                      : "radiation: ECOM2 Y0 held at its stated value (an arc under 72 h, a set under the drag, or a second stage)");

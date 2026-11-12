@@ -10,7 +10,8 @@
 //   states held out; TRAJECTORY_BLOCKS[0] TRAJ_ID "HAND-OVER", USEABLE_START_TIME the stop, no segments; its covariance
 //   smaller at the stop than a day later;
 // - the steps fit states, theory minus forecast: A's at the start and B's at the stop under 0.1 km in low orbit and 0.02
-//   km at geosynchronous altitude; in low orbit B's under the step a lone A makes at its stop;
+//   km at geosynchronous altitude; in low orbit, over the forecast's held-out hours after the stop (18 h), B's largest
+//   distance to the forecast under a lone A's;
 // - A and B in one store: 1 h before the span the theory of A, inside the span the forecast, after the stop B's states
 //   (to 1e-5 km of B flown alone); sdnap_epochs_source_at 0, 1, 1, 3, 3; propagate_epochs one block whose SOURCES
 //   (SPEC 18.8's grammar) reads THEORY, CARRIED FORECAST, HAND-OVER; at split dates a double step apart about A's
@@ -136,9 +137,23 @@ for (const c of REGIMES) {
   const aStart = step(A.u.ORBIT_DETERMINATION.COMMENT.find((l) => l.startsWith("carried forecast start"))), aStop = step(A.u.ORBIT_DETERMINATION.COMMENT.find((l) => l.startsWith("carried forecast stop")));
   const bStop = step(B.u.ORBIT_DETERMINATION.COMMENT.find((l) => l.startsWith("hand-over set from")));
   check(aStart && aStart.km < c.stepKm, `${c.name}: A's step at the start ${aStart?.km} km, over ${c.stepKm}`);
-  // in the drag B's step is under a lone A's (A's theory is a day past its arc there); at geosynchronous altitude the
-  // two are alike (the theory holds over the span)
-  check(bStop && bStop.km < c.stepKm && (!c.drag || bStop.km < aStop.km), `${c.name}: B's step at the stop ${bStop?.km} km, over ${c.stepKm} or, in the drag, over a lone A's ${aStop?.km} km`);
+  // in the drag B carries the hand-over better than a lone A (whose theory is a day and more past its arc there): over
+  // the forecast's held-out hours after the stop B's largest distance to the forecast is under a lone A's; at
+  // geosynchronous altitude the two are alike (the theory holds over the span).
+  // History. Through 0.6.36 the check was B's step at the stop under a lone A's step there, one instant. 0.6.43 (the
+  // zonal theory's constant radial term, SPEC 16.23) takes the theory's mean radial bias (about +9 m at 500 km and i
+  // 97.4) off both: in low orbit B's step goes from 15.1 to 17.0 m and a lone A's from 22.3 to 15.8 m, so the
+  // one-instant check failed although B still carries the hand-over better. Over the forecast's 18 held-out hours after
+  // the stop (2,161 states, 30 s), measured on both builds (the term's positions are the same at either velocity form):
+  // B's largest distance 101.9 m on 0.6.36 and 100.5 m on 0.6.43 (RMS 34.3 and 32.2 m), a lone A's 108.7 and 116.6 m
+  // (RMS 39.7 and 40.0 m); at geosynchronous altitude B 1.43 and 1.50 m, a lone A 1.89 and 2.03 m. The check is that
+  // held-out comparison from 0.6.43; B's step at the stop stays bounded by stepKm. On 0.6.42's base (the low table's fast
+  // side; git 86786933 against the term on it, 217233ca) B's step goes from 15.6 to 11.6 m and a lone A's from 18.7 to
+  // 10.4 m; over the held-out hours B's largest distance 49.2 to 49.1 m and a lone A's 68.0 to 78.1 m.
+  const held = states.filter((s) => s.t > STOP + 1e-6), heldT = held.map((s) => s.t), heldB = await fly(B.rec, heldT), heldA = await fly(A.rec, heldT);
+  const heldBKm = Math.max(...held.map((s, k) => hyp(s.r, heldB[k].r))), heldAKm = Math.max(...held.map((s, k) => hyp(s.r, heldA[k].r)));
+  check(bStop && bStop.km < c.stepKm && (!c.drag || heldBKm < heldAKm),
+    `${c.name}: B's step at the stop ${bStop?.km} km over ${c.stepKm}, or in the drag B's largest distance over the held-out hours ${heldBKm} km over a lone A's ${heldAKm} km`);
   // the covariance grows forward
   const covA = await fly(A.rec, [START, STOP], true), covB = await fly(B.rec, [STOP, STOP + DAY - 600], true);
   check(covA[0].sigmaKm < covA[1].sigmaKm, `${c.name}: A's covariance ${covA[0].sigmaKm} km at the start, ${covA[1].sigmaKm} km at the stop: it does not grow forward`);
@@ -195,7 +210,7 @@ for (const c of REGIMES) {
   const peLines = pe.statusCode === 0 ? oemLines(pe.outputs[0].payload) : [];
   check(JSON.stringify(peLines.map((l) => l.source)) === JSON.stringify(["THEORY", "CARRIED FORECAST", "CARRIED FORECAST", "HAND-OVER", "HAND-OVER"]),
     `${c.name}: propagate_epochs' sources ${peLines.map((l) => l.source).join(", ")} (${pe.errorCode ?? ""})`);
-  rows.push({ regime: c.name, epochA: A.u.MEAN_ELEMENTS.EPOCH, epochB: B.u.MEAN_ELEMENTS.EPOCH, startKm: aStart?.km, startMmS: aStart?.mmS, stopLoneAKm: aStop?.km, stopBKm: bStop?.km, stopBMmS: bStop?.mmS,
+  rows.push({ regime: c.name, epochA: A.u.MEAN_ELEMENTS.EPOCH, epochB: B.u.MEAN_ELEMENTS.EPOCH, startKm: aStart?.km, startMmS: aStart?.mmS, stopLoneAKm: aStop?.km, stopBKm: bStop?.km, stopBMmS: bStop?.mmS, heldBKm: +heldBKm.toFixed(5), heldLoneAKm: +heldAKm.toFixed(5),
     sigmaAStartKm: +covA[0].sigmaKm.toFixed(5), sigmaAStopKm: +covA[1].sigmaKm.toFixed(5), sigmaBStopKm: +covB[0].sigmaKm.toFixed(5), sigmaBDayKm: +covB[1].sigmaKm.toFixed(5) });
 }
 console.table(rows);
